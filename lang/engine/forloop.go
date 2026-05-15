@@ -22,7 +22,8 @@ func runForLoop(r *Registry, start, end, step int64, iterName string, body Value
 	if body.Data == nil {
 		return nil, fmt.Errorf("for: body must be a concrete list, got type literal")
 	}
-	bodySlice := body.AsList().Slice()
+	_lst, _ := AsList(body)
+	bodySlice := _lst.Slice()
 
 	// Install the iterator variable for the first iteration.
 	InstallDef(r, iterName, NewInteger(start))
@@ -63,22 +64,22 @@ func parseRange(elems []Value) (start, end, step int64, err error) {
 		if !elems[0].VType.Matches(TInteger) {
 			return 0, 0, 0, fmt.Errorf("range: expected integer, got %s", elems[0].VType)
 		}
-		_as0, _ := elems[0].AsInteger()
+		_as0, _ := AsInteger(elems[0])
 		return 0, _as0, 1, nil
 	case 2:
 		if !elems[0].VType.Matches(TInteger) || !elems[1].VType.Matches(TInteger) {
 			return 0, 0, 0, fmt.Errorf("range: expected integers")
 		}
-		_as2, _ := elems[0].AsInteger()
-		_as1, _ := elems[1].AsInteger()
+		_as2, _ := AsInteger(elems[0])
+		_as1, _ := AsInteger(elems[1])
 		return _as2, _as1, 1, nil
 	case 3:
 		if !elems[0].VType.Matches(TInteger) || !elems[1].VType.Matches(TInteger) || !elems[2].VType.Matches(TInteger) {
 			return 0, 0, 0, fmt.Errorf("range: expected integers")
 		}
-		_as5, _ := elems[0].AsInteger()
-		_as4, _ := elems[1].AsInteger()
-		_as3, _ := elems[2].AsInteger()
+		_as5, _ := AsInteger(elems[0])
+		_as4, _ := AsInteger(elems[1])
+		_as3, _ := AsInteger(elems[2])
 		return _as5, _as4, _as3, nil
 	default:
 		return 0, 0, 0, fmt.Errorf("range: expected 1-3 elements, got %d", len(elems))

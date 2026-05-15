@@ -40,7 +40,7 @@ func TestPipeBarrierFnDef(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewString("hello"), engine.NewWord("f"), engine.NewInteger(42),
 	})
-	_as0, _ := result[0].AsString()
+	_as0, _ := engine.AsString(result[0])
 	if len(result) != 1 || _as0 != "42hello" {
 		t.Errorf(`"hello" f 42 = %v, want "42hello"`, result)
 	}
@@ -49,7 +49,7 @@ func TestPipeBarrierFnDef(t *testing.T) {
 	result = runAQL(t, r, []engine.Value{
 		engine.NewString("world"), engine.NewInteger(7), engine.NewWord("f"),
 	})
-	_as1, _ := result[0].AsString()
+	_as1, _ := engine.AsString(result[0])
 	if len(result) != 1 || _as1 != "7world" {
 		t.Errorf(`"world" 7 f = %v, want "7world"`, result)
 	}
@@ -80,11 +80,11 @@ func TestPipeBarrierPreventsGreedyForward(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("expected 2 results, got %d: %v", len(result), result)
 	}
-	_as2, _ := result[0].AsString()
+	_as2, _ := engine.AsString(result[0])
 	if _as2 != "result1" {
 		t.Errorf("first get = %v, want 'result1'", result[0])
 	}
-	_as3, _ := result[1].AsString()
+	_as3, _ := engine.AsString(result[1])
 	if _as3 != "result2" {
 		t.Errorf("second get = %v, want 'result2'", result[1])
 	}

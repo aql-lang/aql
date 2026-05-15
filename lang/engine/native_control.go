@@ -101,13 +101,14 @@ func doListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("do: argument must be a concrete list, got type literal")
 	}
-	return doEvalList(r, args[0].AsList().Slice())
+	_lst, _ := AsList(args[0])
+	return doEvalList(r, _lst.Slice())
 }
 
 func doListReturnsFn(args []Value, r *Registry) []Value {
 	body := args[0]
-	if body.IsWord() {
-		w, _ := body.AsWord()
+	if IsWord(body) {
+		w, _ := AsWord(body)
 		if v, ok := r.Defs.Top(w.Name); ok {
 			body = v
 		}
@@ -155,7 +156,7 @@ func doEvalDataList(r *Registry, elems []Value) ([]Value, error) {
 // names a registered function.
 func doPromoteToWord(r *Registry, v Value) Value {
 	if v.VType.Matches(TString) || v.VType.Matches(TAtom) {
-		name, _ := v.AsString()
+		name, _ := AsString(v)
 		if r.Lookup(name) != nil {
 			return NewWord(name)
 		}
@@ -166,8 +167,9 @@ func doPromoteToWord(r *Registry, v Value) Value {
 // doEvalMapValue recursively evaluates list values within a map. Used
 // by `do` to walk a map literal and evaluate any embedded code lists.
 func doEvalMapValue(r *Registry, v Value) (Value, error) {
-	if v.VType.Equal(TList) && v.Data != nil && !v.IsTypedList() && !v.IsTableType() {
-		results, err := doEvalDataList(r, v.AsList().Slice())
+	if v.VType.Equal(TList) && v.Data != nil && !IsTypedList(v) && !IsTableType(v) {
+		_lst, _ := AsList(v)
+		results, err := doEvalDataList(r, _lst.Slice())
 		if err != nil {
 			return Value{}, err
 		}
@@ -176,8 +178,8 @@ func doEvalMapValue(r *Registry, v Value) (Value, error) {
 		}
 		return NewList(results), nil
 	}
-	if v.VType.Equal(TMap) && v.Data != nil && !v.IsTypedMap() && !v.IsRecordType() && !v.IsOptionsType() {
-		m := v.AsMap()
+	if v.VType.Equal(TMap) && v.Data != nil && !IsTypedMap(v) && !IsRecordType(v) && !IsOptionsType(v) {
+		m, _ := AsMap(v)
 		out := NewOrderedMap()
 		for _, key := range m.Keys() {
 			val, _ := m.Get(key)
@@ -199,8 +201,9 @@ func if3Handler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	thenBranch := spliceArg(args[1])
 	elseBranch := spliceArg(args[2])
 
-	if cond.VType.Equal(TList) && cond.Data != nil && !cond.IsTypedList() && !cond.IsTableType() {
-		condSlice := cond.AsList().Slice()
+	if cond.VType.Equal(TList) && cond.Data != nil && !IsTypedList(cond) && !IsTableType(cond) {
+		_lst, _ := AsList(cond)
+		condSlice := _lst.Slice()
 		id := NextMarkID()
 		tokens := make([]Value, 0, len(condSlice)+2)
 		tokens = append(tokens, NewMark(id, condSlice...))
@@ -222,8 +225,9 @@ func if2Handler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	cond := args[0]
 	thenBranch := spliceArg(args[1])
 
-	if cond.VType.Equal(TList) && cond.Data != nil && !cond.IsTypedList() && !cond.IsTableType() {
-		condSlice := cond.AsList().Slice()
+	if cond.VType.Equal(TList) && cond.Data != nil && !IsTypedList(cond) && !IsTableType(cond) {
+		_lst, _ := AsList(cond)
+		condSlice := _lst.Slice()
 		id := NextMarkID()
 		tokens := make([]Value, 0, len(condSlice)+2)
 		tokens = append(tokens, NewMark(id, condSlice...))
@@ -310,7 +314,8 @@ func ifListHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("if: clause-list argument must be a concrete list, got a type literal")
 	}
-	return ifClause(args[0].AsList().Slice()), nil
+	_lst, _ := AsList(args[0])
+	return ifClause(_lst.Slice()), nil
 }
 
 // ifListReturnsFn type-checks the clause-list form: the result is the
@@ -323,7 +328,8 @@ func ifListReturnsFn(args []Value, r *Registry) []Value {
 	if !IsConcrete(args[0]) || !args[0].VType.Equal(TList) {
 		return []Value{NewCarrier(TAny)}
 	}
-	elems := args[0].AsList().Slice()
+	_lst, _ := AsList(args[0])
+	elems := _lst.Slice()
 
 	var joined []Value
 	add := func(stk []Value) {
@@ -365,7 +371,8 @@ func forRangeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("for: range must be a concrete list, got type literal")
 	}
-	rangeSpec := args[0].AsList().Slice()
+	_lst, _ := AsList(args[0])
+	rangeSpec := _lst.Slice()
 	body := args[1]
 	start, end, step, err := parseRange(rangeSpec)
 	if err != nil {
@@ -403,7 +410,8 @@ func errorHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		return nil, fmt.Errorf("error: handler must be a concrete list, got type literal")
 	}
 	sub := New(r)
-	body := args[0].AsList().Slice()
+	_lst, _ := AsList(args[0])
+	body := _lst.Slice()
 	input := make([]Value, 0, 1+len(body))
 	input = append(input, args[1])
 	input = append(input, body...)

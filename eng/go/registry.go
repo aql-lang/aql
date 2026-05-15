@@ -17,6 +17,7 @@ import (
 //   - r.Defs    (*DefTable)    — def-name shadowing stacks
 //   - r.Types   (*TypeTable)   — type-name shadowing stacks
 //   - r.Check   (CheckState)   — static-analysis state
+//
 // New stack-like concerns should follow the same pattern.
 type Registry struct {
 	// Defs holds the stacked bodies for `def`-defined words. See deftable.go.
@@ -37,28 +38,28 @@ type Registry struct {
 	// `def`'s shadowing semantics so users can introduce a temporary
 	// alias inside a sub-program and revert it without registry
 	// surgery.
-	Types             *TypeTable                                         // dynamic types installed by the `type` word; each push mints a fresh Type
+	Types *TypeTable // dynamic types installed by the `type` word; each push mints a fresh Type
 	// Capabilities holds host-installed plugin slots. See capability.go.
 	Capabilities *CapabilityRegistry
-	Output            io.Writer                                          // output writer for print/printstr and stdout
-	ErrOutput         io.Writer                                          // error output writer for stderr
-	Input             io.Reader                                          // input reader for stdin
+	Output       io.Writer // output writer for print/printstr and stdout
+	ErrOutput    io.Writer // error output writer for stderr
+	Input        io.Reader // input reader for stdin
 	// Modules owns module-loading state: the load set, the
 	// module-ID counter, the host's init callback, and the native-
 	// module resolver. See modules.go.
-	Modules *ModuleRegistry
+	Modules   *ModuleRegistry
 	ParseFunc func(string) ([]Value, error) // parser callback (set externally to avoid circular import)
 	// Contexts is the scoped context stack; top = current engine's context Store. See contextstack.go.
 	Contexts *ContextStack
 	// Args is the per-call args list stack. See argsstack.go.
-	Args *ArgsStack
-	Manager           any                                                // external manager (e.g. UniversalManager) for SDK operations
-	SDKCache          map[string]any                                     // cached SDK instances keyed by spec name
-	BaseDir           string                                             // base directory for resolving relative file paths (set by loadFileModule)
-	Source            string                                             // most recent source text for error reporting
-	errs              []error                                            // registration errors accumulated during setup
-	ready             bool                                               // true after initial setup; triggers dynamic help generation
-	OnRegisterHook    func(name string)                                  // called when a function is registered after startup
+	Args           *ArgsStack
+	Manager        any               // external manager (e.g. UniversalManager) for SDK operations
+	SDKCache       map[string]any    // cached SDK instances keyed by spec name
+	BaseDir        string            // base directory for resolving relative file paths (set by loadFileModule)
+	Source         string            // most recent source text for error reporting
+	errs           []error           // registration errors accumulated during setup
+	ready          bool              // true after initial setup; triggers dynamic help generation
+	OnRegisterHook func(name string) // called when a function is registered after startup
 
 	// Check holds all static type-checking state, bundled together
 	// so the future predicate-sandbox work (TYPE-SYSTEM-REVIEW.md
@@ -418,7 +419,7 @@ func (r *Registry) Err() error {
 // composing a NativeFunc slice instead of mutating a Registry.
 func UnaryNumOpNative(name string, op func(float64) float64) NativeFunc {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		v, _ := args[0].AsNumber()
+		v, _ := AsNumber(args[0])
 		return []Value{NewDecimal(op(v))}, nil
 	}
 	return NativeFunc{
@@ -436,8 +437,8 @@ func UnaryNumOpNative(name string, op func(float64) float64) NativeFunc {
 // [decimal, decimal], [number, decimal], and [decimal, number].
 func BinaryNumOpNative(name string, op func(a, b float64) (float64, error)) NativeFunc {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		a, _ := args[0].AsNumber()
-		b, _ := args[1].AsNumber()
+		a, _ := AsNumber(args[0])
+		b, _ := AsNumber(args[1])
 		result, err := op(a, b)
 		if err != nil {
 			return nil, err
@@ -490,28 +491,28 @@ func ValToString(v Value) string {
 		// payload type.
 		return renderDepScalar(v)
 	case v.VType.Matches(TString):
-		_as8, _ := v.AsString()
+		_as8, _ := AsString(v)
 		return _as8
-	case v.IsAtom():
-		_as9, _ := v.AsAtom()
+	case IsAtom(v):
+		_as9, _ := AsAtom(v)
 		return _as9
 	case v.VType.Matches(TDecimal):
-		_as10, _ := v.AsDecimal()
+		_as10, _ := AsDecimal(v)
 		return formatDecimal(_as10)
 	case v.VType.Matches(TInteger):
-		_as11, _ := v.AsInteger()
+		_as11, _ := AsInteger(v)
 		return strconv.FormatInt(_as11, 10)
 	case v.VType.Matches(TBoolean):
-		_as12, _ := v.AsBoolean()
+		_as12, _ := AsBoolean(v)
 		if _as12 {
 			return "true"
 		}
 		return "false"
-	case v.IsPath():
-		_as13, _ := v.AsPath()
+	case IsPath(v):
+		_as13, _ := AsPath(v)
 		return _as13.String()
-	case v.IsWord():
-		_as14, _ := v.AsWord()
+	case IsWord(v):
+		_as14, _ := AsWord(v)
 		return _as14.Name
 	default:
 		return v.String()
@@ -579,11 +580,11 @@ func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
 	if name == "" {
 		return v
 	}
-	if tv, ok := reg.Types.TopBody(name); ok && tv.IsObjectType() {
+	if tv, ok := reg.Types.TopBody(name); ok && IsObjectType(tv) {
 		return tv
 	}
 	if top, ok := reg.Defs.Top(name); ok {
-		if top.IsObjectType() {
+		if IsObjectType(top) {
 			return top
 		}
 	}
@@ -595,17 +596,32 @@ func StoreKey(v Value) string {
 	if v.Data == nil {
 		return v.VType.String()
 	}
-	if v.IsWord() {
-		_as15, _ := v.AsWord()
+	if IsWord(v) {
+		_as15, _ := AsWord(v)
 		return _as15.Name
 	}
 	if v.VType.Matches(TString) {
-		_as16, _ := v.AsString()
+		_as16, _ := AsString(v)
 		return _as16
 	}
-	if v.IsAtom() {
-		_as17, _ := v.AsAtom()
+	if IsAtom(v) {
+		_as17, _ := AsAtom(v)
 		return _as17
+	}
+	if v.VType.Matches(TInteger) {
+		n, _ := AsInteger(v)
+		return strconv.FormatInt(n, 10)
+	}
+	if v.VType.Matches(TDecimal) {
+		f, _ := AsDecimal(v)
+		return FormatDecimal(f)
+	}
+	if v.VType.Matches(TBoolean) {
+		b, _ := AsBoolean(v)
+		if b {
+			return "true"
+		}
+		return "false"
 	}
 	return fmt.Sprintf("%v", v.Data)
 }
@@ -782,10 +798,10 @@ func (r *Registry) ResolveTypedName(name string) (Value, bool) {
 // downstream error messages can surface "type Bbd" rather than the
 // rendered value form.
 func (r *Registry) ResolveTypedNameValue(v Value) (resolved Value, name string, ok bool) {
-	if !v.IsWord() {
+	if !IsWord(v) {
 		return v, "", true
 	}
-	w, _ := v.AsWord()
+	w, _ := AsWord(v)
 	rv, hit := r.ResolveTypedName(w.Name)
 	if !hit {
 		return v, w.Name, false

@@ -4,8 +4,66 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/aql-lang/aql/eng"
 	"github.com/aql-lang/aql/lang/engine/help"
 )
+
+// TTimeout / TInterval are owned by the lang/engine package — the
+// timeout/interval handlers live in this file. Registered via
+// eng.Builtin.RegisterExternalBuiltin in the var initialisers so
+// any package-level vars (signature slices) that reference them
+// see a non-nil pointer at slice-init time. FixedIDs 4000-4001
+// come from the documented lang/engine range (4000-4999).
+var (
+	TTimeout  = registerTimerType("Object/Timeout", 4000, timeoutFormatBehavior{})
+	TInterval = registerTimerType("Object/Interval", 4001, intervalFormatBehavior{})
+)
+
+func registerTimerType(path string, fixedID int, behavior eng.TypeBehavior) *eng.Type {
+	t, err := eng.Builtin.RegisterExternalBuiltin(path, fixedID, behavior)
+	if err != nil {
+		panic(fmt.Sprintf("native_misc: register %s: %v", path, err))
+	}
+	return t
+}
+
+// NewTimeout constructs a Timeout value carrying the given
+// TimeoutInfo payload. Moved out of eng at Step 8 — the kernel
+// no longer carries a constructor for a type it doesn't own.
+func NewTimeout(info *TimeoutInfo) Value {
+	return eng.NewValueRaw(TTimeout, info)
+}
+
+// NewInterval constructs an Interval value carrying the given
+// IntervalInfo payload. See NewTimeout.
+func NewInterval(info *IntervalInfo) Value {
+	return eng.NewValueRaw(TInterval, info)
+}
+
+// timeoutFormatBehavior renders a Timeout as "Timeout(id,Nms)".
+// Moved from eng/coretype_format_behaviors.go at Step 8.
+type timeoutFormatBehavior struct{}
+
+func (timeoutFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
+func (timeoutFormatBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
+func (timeoutFormatBehavior) Format(v Value) string {
+	if ti, ok := v.Data.(*TimeoutInfo); ok {
+		return fmt.Sprintf("Timeout(%s,%dms)", ti.ID, ti.Ms)
+	}
+	return "Timeout(nil)"
+}
+
+// intervalFormatBehavior renders an Interval as "Interval(id,Nms)".
+type intervalFormatBehavior struct{}
+
+func (intervalFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
+func (intervalFormatBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
+func (intervalFormatBehavior) Format(v Value) string {
+	if ii, ok := v.Data.(*IntervalInfo); ok {
+		return fmt.Sprintf("Interval(%s,%dms)", ii.ID, ii.Ms)
+	}
+	return "Interval(nil)"
+}
 
 // miscNatives covers the smaller engine word groupings: file I/O
 // (read, write, stdin, stdout, stderr), help, module/import,
@@ -222,17 +280,17 @@ func init() {
 
 // extractPath returns the path string from a String or Path value.
 func extractPath(v Value) string {
-	if v.IsPath() {
-		_as5, _ := v.AsPath()
+	if IsPath(v) {
+		_as5, _ := AsPath(v)
 		return _as5.String()
 	}
-	_as6, _ := v.AsString()
+	_as6, _ := AsString(v)
 	return _as6
 }
 
 // returnPath wraps the result path: if input was a Path, return Path; else String.
 func returnPath(v Value, pathStr string) Value {
-	if v.IsPath() {
+	if IsPath(v) {
 		return v
 	}
 	return NewString(pathStr)
@@ -341,7 +399,8 @@ func moduleHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("module: argument must be a concrete list, got type literal")
 	}
-	desc, err := RunModuleBody(r, args[0].AsList().Slice())
+	_lst, _ := AsList(args[0])
+	desc, err := RunModuleBody(r, _lst.Slice())
 	if err != nil {
 		return nil, fmt.Errorf("module: %w", err)
 	}
@@ -349,21 +408,22 @@ func moduleHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 }
 
 func importAllHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	desc, _ := args[0].AsModule()
+	desc, _ := AsModule(args[0])
 	installExports(r, desc, nil)
 	return nil, nil
 }
 
 func importRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	desc, _ := args[1].AsModule()
+	desc, _ := AsModule(args[1])
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("import: rename list must be a concrete list, got type literal")
 	}
-	return nil, installRenamedExports(r, desc, args[0].AsList().Slice())
+	_lst, _ := AsList(args[0])
+	return nil, installRenamedExports(r, desc, _lst.Slice())
 }
 
 func importSingleRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	desc, _ := args[1].AsModule()
+	desc, _ := AsModule(args[1])
 	newName, _ := args[0].AsConcreteAtom()
 	return nil, installSingleRename(r, desc, newName)
 }
@@ -407,7 +467,8 @@ func importFileRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 		if err != nil {
 			return nil, err
 		}
-		return nil, installRenamedExports(r, desc, args[0].AsList().Slice())
+		_lst, _ := AsList(args[0])
+		return nil, installRenamedExports(r, desc, _lst.Slice())
 	}
 	if isDataFile(path) {
 		return nil, fmt.Errorf("import: rename not supported for data files (%s)", path)
@@ -416,7 +477,8 @@ func importFileRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 	if err != nil {
 		return nil, err
 	}
-	return nil, installRenamedExports(r, desc, args[0].AsList().Slice())
+	_lst, _ := AsList(args[0])
+	return nil, installRenamedExports(r, desc, _lst.Slice())
 }
 
 // import: [atom/q list] -> [] — inline module: import module [body]
@@ -430,7 +492,8 @@ func importInlineHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	if !IsConcrete(args[1]) {
 		return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 	}
-	desc, err := RunModuleBody(r, args[1].AsList().Slice())
+	_lst, _ := AsList(args[1])
+	desc, err := RunModuleBody(r, _lst.Slice())
 	if err != nil {
 		return nil, fmt.Errorf("import module: %w", err)
 	}
@@ -449,11 +512,13 @@ func importInlineRenameHandler(args []Value, _ map[string]Value, _ []Value, r *R
 	if !IsConcrete(args[2]) {
 		return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 	}
-	desc, err := RunModuleBody(r, args[2].AsList().Slice())
+	_lst2, _ := AsList(args[2])
+	desc, err := RunModuleBody(r, _lst2.Slice())
 	if err != nil {
 		return nil, fmt.Errorf("import module: %w", err)
 	}
-	return nil, installRenamedExports(r, desc, args[0].AsList().Slice())
+	_lst, _ := AsList(args[0])
+	return nil, installRenamedExports(r, desc, _lst.Slice())
 }
 
 func importInlineSingleRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -464,7 +529,8 @@ func importInlineSingleRenameHandler(args []Value, _ map[string]Value, _ []Value
 	if !IsConcrete(args[2]) {
 		return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 	}
-	desc, err := RunModuleBody(r, args[2].AsList().Slice())
+	_lst, _ := AsList(args[2])
+	desc, err := RunModuleBody(r, _lst.Slice())
 	if err != nil {
 		return nil, fmt.Errorf("import module: %w", err)
 	}
@@ -504,19 +570,19 @@ func doTimeout(r *Registry, args []Value, isList bool) ([]Value, error) {
 func awaitWithOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	// args[0] = Options, args[1] = List (parallels)
 	mode := "all"
-	if oi, err := args[0].AsOptionsType(); err == nil {
+	if oi, err := AsOptionsType(args[0]); err == nil {
 		if v, ok := oi.Fields.Get("mode"); ok {
-			if s, err := v.AsString(); err == nil {
+			if s, err := AsString(v); err == nil {
 				mode = s
-			} else if a, err := v.AsAtom(); err == nil {
+			} else if a, err := AsAtom(v); err == nil {
 				mode = a
 			}
 		}
-	} else if optsMap := args[0].AsMap(); optsMap != nil {
+	} else if optsMap, _ := AsMap(args[0]); optsMap != nil {
 		if v, ok := optsMap.Get("mode"); ok {
-			if s, err := v.AsString(); err == nil {
+			if s, err := AsString(v); err == nil {
 				mode = s
-			} else if a, err := v.AsAtom(); err == nil {
+			} else if a, err := AsAtom(v); err == nil {
 				mode = a
 			}
 		}
@@ -532,7 +598,8 @@ func doAwait(r *Registry, mode string, parallels Value) ([]Value, error) {
 	if parallels.Data == nil {
 		return nil, fmt.Errorf("await: parallels must be a concrete list, got type literal")
 	}
-	elems := parallels.AsList().Slice()
+	_lst, _ := AsList(parallels)
+	elems := _lst.Slice()
 	if len(elems) == 0 {
 		return []Value{NewList([]Value{})}, nil
 	}

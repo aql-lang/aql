@@ -57,33 +57,36 @@ var (
 	TArray          = mustType("Object/Array")
 	TResource       = mustType("Object/Resource")
 	TResourceEntity = mustType("Object/Resource/Entity")
-	TFetchFunction  = mustType("Object/Fetch")
-	TFetchRequest   = mustType("Object/Fetch/Request")
-	TFetchResponse  = mustType("Object/Fetch/Response")
-	TError          = mustType("Object/Error")
-	TType           = mustType("Type")
-	TScalarType     = mustType("Type/ScalarType")
-	TNodeType       = mustType("Type/NodeType")
-	TObjectType     = mustType("Type/ObjectType")
-	TDate           = mustType("Scalar/Time/Date")
-	TDateTime       = mustType("Scalar/Time/DateTime")
-	TInstant        = mustType("Scalar/Time/Instant")
-	TTimeOfDay      = mustType("Scalar/Time/TimeOfDay")
-	TDuration       = mustType("Scalar/Time/Duration")
-	TCalDuration    = mustType("Scalar/Time/Duration/CalDuration")
-	TClkDuration    = mustType("Scalar/Time/Duration/ClkDuration")
-	TTimezone       = mustType("Scalar/Time/Timezone")
-	TMatrix         = mustType("Scalar/Number/Matrix")
-	TTimeout        = mustType("Object/Timeout")
-	TDependent      = mustType("Type/Dependent")
-	TDepInteger     = mustType("Type/Dependent/DepInteger")
-	TInterval       = mustType("Object/Interval")
+	// TFetchFunction / TFetchRequest / TFetchResponse moved to
+	// lang/native/fetch.go (Step 8 migration); registered via
+	// RegisterExternalBuiltin at lang/native package init.
+	TError      = mustType("Object/Error")
+	TType       = mustType("Type")
+	TScalarType = mustType("Type/ScalarType")
+	TNodeType   = mustType("Type/NodeType")
+	TObjectType = mustType("Type/ObjectType")
+	// Scalar/Time and descendants moved to
+	// lang/engine/native_temporal.go (Step 8). They live in
+	// lang/engine (not lang/internal/nativemod/time) because
+	// date-arithmetic handlers in lang/engine/native_math.go
+	// reference these types at package-init time — colocating
+	// avoids the import-cycle constraint.
+	// TMatrix moved to lang/internal/nativemod/matrix.go (Step 8).
+	// TTimeout moved to lang/engine/native_misc.go (Step 8).
+	TDependent  = mustType("Type/Dependent")
+	TDepInteger = mustType("Type/Dependent/DepInteger")
+	// TInterval moved to lang/engine/native_misc.go (Step 8).
 )
 
 // typeNames is the user-facing name → Type map for bare-word type
-// resolution. It is a snapshot of the Builtin TypeTable taken at init
-// (Builtin is read-only post-init). Used by the parser and engine.
-var typeNames = func() map[string]*Type {
+// resolution. Built at init from the Builtin TypeTable; refreshed
+// whenever a new externally-registered builtin is added via
+// RegisterExternalBuiltin. The parser and engine consult this map
+// to resolve bare type-name words (e.g. `Integer`, `Date`, plugin-
+// supplied names) to their *Type.
+var typeNames = buildTypeNames()
+
+func buildTypeNames() map[string]*Type {
 	m := make(map[string]*Type, len(Builtin.byName))
 	for name, stack := range Builtin.byName {
 		if len(stack) == 0 || stack[0].Def == nil {
@@ -92,7 +95,14 @@ var typeNames = func() map[string]*Type {
 		m[name] = stack[0].Def
 	}
 	return m
-}()
+}
+
+// refreshTypeNames rebuilds the typeNames snapshot. Called by
+// RegisterExternalBuiltin so freshly-installed types are immediately
+// resolvable by bare-name lookup in the parser.
+func refreshTypeNames() {
+	typeNames = buildTypeNames()
+}
 
 // TypeNameTable returns the canonical mapping of all well-known type
 // names to their Type. Used by both the parser and engine.
@@ -207,12 +217,13 @@ func (t *Type) Matches(pattern *Type) bool {
 	if t.IsAncestor(pattern) {
 		return true
 	}
-	if leaf := DependentLeafFromType(t); leaf != "" {
-		if base, ok := DependentLeafBaseType(leaf); ok {
-			if base.Matches(pattern) {
-				return true
-			}
-		}
+	// Dependent-scalar override: a Dep<X> value satisfies any slot
+	// typed as X (its underlying base). The BaseType pointer on the
+	// *Type is populated at registration via builtinDecl.BasePath;
+	// the historical hardcoded leaf-name switch in depscalar.go is
+	// now a per-Type field (Step 9 of TYPE-DECOUPLING.0.md).
+	if t.BaseType != nil && t.BaseType.Matches(pattern) {
+		return true
 	}
 	return false
 }
@@ -271,17 +282,22 @@ func (t *Type) Equal(other *Type) bool {
 // MetatypeFor returns the metatype for a given type.
 // Scalar subtypes → TScalarType, Node subtypes → TNodeType,
 // Object subtypes → TObjectType, everything else → TType.
+//
+// The mapping is driven by *Type.Metatype, set at registration via
+// builtinDecl.MetatypePath on the three anchor roots (Scalar, Node,
+// Object). Descendants of those roots inherit the anchor by walking
+// up the Parent chain. Step 9 of TYPE-DECOUPLING.0.md replaced the
+// historical root-name switch with this field-driven lookup so a
+// new root with its own metatype can be added by declaring its
+// MetatypePath, no central function edit required.
 func MetatypeFor(t *Type) *Type {
 	if t == nil || t.Parent == nil {
 		return TType
 	}
-	switch t.Root() {
-	case TScalar:
-		return TScalarType
-	case TNode:
-		return TNodeType
-	case TObject:
-		return TObjectType
+	for d := t; d != nil; d = d.Parent {
+		if d.Metatype != nil {
+			return d.Metatype
+		}
 	}
 	return TType
 }

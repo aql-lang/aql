@@ -35,8 +35,8 @@ func numericBinaryHandler(
 			b, _ := args[1].AsConcreteInteger()
 			return singleResult(intFn(a, b))
 		}
-		a, _ := args[0].AsNumber()
-		b, _ := args[1].AsNumber()
+		a, _ := AsNumber(args[0])
+		b, _ := AsNumber(args[1])
 		return singleResult(decFn(a, b))
 	}
 }

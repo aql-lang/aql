@@ -30,7 +30,7 @@ func (f *TextFormat) Decode(content string) ([]Value, error) {
 
 func (f *TextFormat) Encode(v Value) (string, error) {
 	if v.VType.Matches(TString) {
-		_as0, _ := v.AsString()
+		_as0, _ := AsString(v)
 		return _as0, nil
 	}
 	return v.String(), nil
@@ -146,11 +146,11 @@ func (f *LinesFormat) Decode(content string) ([]Value, error) {
 
 func (f *LinesFormat) Encode(v Value) (string, error) {
 	if v.VType.Equal(TList) {
-		if elems, ok := v.Data.([]Value); ok {
+		if elems, err := AsMutableList(v); err == nil {
 			parts := make([]string, len(elems))
 			for i, e := range elems {
 				if e.VType.Matches(TString) {
-					_as1, _ := e.AsString()
+					_as1, _ := AsString(e)
 					parts[i] = _as1
 				} else {
 					parts[i] = e.String()
@@ -273,17 +273,21 @@ func encodeDelimited(v Value, sep string) (string, error) {
 	case TableData:
 		columns = data.Record.Fields.Keys()
 		rows = data.Rows
-	case QueryBuilder:
-		td, err := data.Materialize()
-		if err != nil {
-			return "", fmt.Errorf("encode: %w", err)
+	case ExtensionPayload:
+		if qb, ok := data.Body.(QueryBuilder); ok {
+			td, err := qb.Materialize()
+			if err != nil {
+				return "", fmt.Errorf("encode: %w", err)
+			}
+			columns = td.Record.Fields.Keys()
+			rows = td.Rows
+		} else {
+			return v.String(), nil
 		}
-		columns = td.Record.Fields.Keys()
-		rows = td.Rows
-	case []Value:
-		rows = data
+	case ListPayload:
+		rows = data.Elems
 		if len(rows) > 0 {
-			if m, ok := rows[0].Data.(*OrderedMap); ok {
+			if m, err := AsMutableMap(rows[0]); err == nil {
 				columns = m.Keys()
 			}
 		}
@@ -301,8 +305,8 @@ func encodeDelimited(v Value, sep string) (string, error) {
 	sb.WriteByte('\n')
 	// Data rows.
 	for _, row := range rows {
-		m, ok := row.Data.(*OrderedMap)
-		if !ok {
+		m, err := AsMutableMap(row)
+		if err != nil {
 			continue
 		}
 		parts := make([]string, len(columns))
@@ -313,7 +317,7 @@ func encodeDelimited(v Value, sep string) (string, error) {
 				continue
 			}
 			if val.VType.Matches(TString) {
-				s, _ := val.AsString()
+				s, _ := AsString(val)
 				if strings.ContainsAny(s, sep+"\"\n\r") {
 					s = "\"" + strings.ReplaceAll(s, "\"", "\"\"") + "\""
 				}

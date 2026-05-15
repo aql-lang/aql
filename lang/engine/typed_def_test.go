@@ -34,7 +34,7 @@ func TestTypedDefIntegerSuccess(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result for x, got %v", result)
 	}
-	got, _ := result[0].AsInteger()
+	got, _ := AsInteger(result[0])
 	if got != 1 {
 		t.Errorf("x = %d, want 1", got)
 	}
@@ -81,7 +81,7 @@ func TestTypedDefAnonymousDepIntegerSuccess(t *testing.T) {
 	})
 	// n should resolve to 11.
 	result := runAQL(t, r, []Value{NewWord("n")})
-	got, _ := result[0].AsInteger()
+	got, _ := AsInteger(result[0])
 	if got != 11 {
 		t.Errorf("n = %d, want 11", got)
 	}
@@ -128,7 +128,7 @@ func TestTypedDefNamedTypeSuccess(t *testing.T) {
 	})
 
 	result := runAQL(t, r, []Value{NewWord("n")})
-	got, _ := result[0].AsInteger()
+	got, _ := AsInteger(result[0])
 	if got != 11 {
 		t.Errorf("n = %d, want 11", got)
 	}

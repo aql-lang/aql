@@ -79,7 +79,8 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 						return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
 					}
 					_as1, _ := eargs[0].AsConcreteAtom()
-					exportHandler(_as1, eargs[1].AsMap())
+					_m, _ := AsMap(eargs[1])
+					exportHandler(_as1, _m)
 					return nil, nil
 				},
 				Returns: []*Type{},
@@ -91,7 +92,8 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 						return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
 					}
 					_as2, _ := eargs[0].AsConcreteString()
-					exportHandler(_as2, eargs[1].AsMap())
+					_m, _ := AsMap(eargs[1])
+					exportHandler(_as2, _m)
 					return nil, nil
 				},
 				Returns: []*Type{},
@@ -102,7 +104,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	// Promote strings to words for code evaluation inside module.
 	promoteToWord := func(v Value) Value {
 		if v.VType.Matches(TString) || v.VType.Matches(TAtom) {
-			name, _ := v.AsString()
+			name, _ := AsString(v)
 			if modReg.Lookup(name) != nil {
 				return NewWord(name)
 			}
@@ -335,7 +337,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 	if renameList[0].VType.Equal(TList) {
 		// Multiple rename pairs: [[from1 to1] [from2 to2] ...]
 		for _, pair := range renameList {
-			pairElems := pair.AsList()
+			pairElems, _ := AsList(pair)
 			if pairElems.Len() != 2 {
 				return fmt.Errorf("import: rename pair must have exactly 2 elements")
 			}
@@ -383,13 +385,13 @@ func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
 // the def body is returned. Otherwise the value is returned as-is.
 func resolveModuleExport(modReg *Registry, v Value) Value {
 	var name string
-	if v.IsWord() {
-		_as3, _ := v.AsWord()
+	if IsWord(v) {
+		_as3, _ := AsWord(v)
 		name = _as3.Name
 	} else if v.VType.Matches(TString) {
-		name, _ = v.AsString()
-	} else if v.IsAtom() {
-		name, _ = v.AsAtom()
+		name, _ = AsString(v)
+	} else if IsAtom(v) {
+		name, _ = AsAtom(v)
 	} else {
 		return v
 	}
@@ -460,16 +462,16 @@ func resolveNativeMod(r *Registry, path string) error {
 
 // valToAtomOrString extracts a string from a Value that is an atom, string, or word.
 func valToAtomOrString(v Value) string {
-	if v.IsWord() {
-		_as4, _ := v.AsWord()
+	if IsWord(v) {
+		_as4, _ := AsWord(v)
 		return _as4.Name
 	}
-	if v.IsAtom() {
-		_as5, _ := v.AsAtom()
+	if IsAtom(v) {
+		_as5, _ := AsAtom(v)
 		return _as5
 	}
 	if v.VType.Matches(TString) {
-		_as6, _ := v.AsString()
+		_as6, _ := AsString(v)
 		return _as6
 	}
 	return v.String()

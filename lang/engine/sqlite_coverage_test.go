@@ -291,32 +291,32 @@ func TestSqlResultToAQLValue(t *testing.T) {
 
 	// Integer
 	v = sqlResultToAQLValue(int64(42), TInteger)
-	_as0, _ := v.AsInteger()
+	_as0, _ := AsInteger(v)
 	if _as0 != 42 {
-		_as1, _ := v.AsInteger()
+		_as1, _ := AsInteger(v)
 		t.Errorf("expected 42, got %d", _as1)
 	}
 
 	// Number
 	v = sqlResultToAQLValue(float64(3.14), TNumber)
-	_as2, _ := v.AsNumber()
+	_as2, _ := AsNumber(v)
 	if _as2 != 3.14 {
-		_as3, _ := v.AsNumber()
+		_as3, _ := AsNumber(v)
 		t.Errorf("expected 3.14, got %f", _as3)
 	}
 
 	// Boolean
 	v = sqlResultToAQLValue(int64(1), TBoolean)
-	_as4, _ := v.AsBoolean()
+	_as4, _ := AsBoolean(v)
 	if !_as4 {
 		t.Error("expected true")
 	}
 
 	// String
 	v = sqlResultToAQLValue("hello", TString)
-	_as5, _ := v.AsString()
+	_as5, _ := AsString(v)
 	if _as5 != "hello" {
-		_as6, _ := v.AsString()
+		_as6, _ := AsString(v)
 		t.Errorf("expected hello, got %s", _as6)
 	}
 }

@@ -46,43 +46,43 @@ func TestFetchStringHandler(t *testing.T) {
 	}
 
 	resp := result[0]
-	if !resp.VType.Equal(engine.TFetchResponse) {
-		t.Errorf("expected type %s, got %s", engine.TFetchResponse, resp.VType)
+	if !resp.VType.Equal(TFetchResponse) {
+		t.Errorf("expected type %s, got %s", TFetchResponse, resp.VType)
 	}
 
-	m := resp.AsMap()
+	m, _ := engine.AsMap(resp)
 
 	okVal, _ := m.Get("ok")
-	okb, _ := okVal.AsBoolean()
+	okb, _ := engine.AsBoolean(okVal)
 	if !okb {
 		t.Error("expected ok to be true")
 	}
 
 	statusVal, _ := m.Get("status")
-	stati, _ := statusVal.AsInteger()
+	stati, _ := engine.AsInteger(statusVal)
 	if stati != 200 {
 		t.Errorf("expected status 200, got %d", stati)
 	}
 
 	bodyVal, _ := m.Get("body")
-	bodys, _ := bodyVal.AsString()
+	bodys, _ := engine.AsString(bodyVal)
 	if bodys != `{"hello":"world"}` {
 		t.Errorf("expected body '{\"hello\":\"world\"}', got %q", bodys)
 	}
 
 	urlVal, _ := m.Get("url")
-	urls, _ := urlVal.AsString()
+	urls, _ := engine.AsString(urlVal)
 	if urls != ts.URL {
 		t.Errorf("expected url %q, got %q", ts.URL, urls)
 	}
 
 	headersVal, _ := m.Get("headers")
-	hm := headersVal.AsMap()
+	hm, _ := engine.AsMap(headersVal)
 	xCustom, ok := hm.Get("x-custom")
 	if !ok {
 		t.Error("expected x-custom header in response")
 	} else {
-		xcs, _ := xCustom.AsString()
+		xcs, _ := engine.AsString(xCustom)
 		if xcs != "test-value" {
 			t.Errorf("expected x-custom 'test-value', got %q", xcs)
 		}
@@ -131,19 +131,19 @@ func TestFetchMapHandler(t *testing.T) {
 		t.Errorf("expected body '{\"name\":\"test\"}', got %q", receivedBody)
 	}
 
-	resp := result[0].AsMap()
+	resp, _ := engine.AsMap(result[0])
 	okVal, _ := resp.Get("ok")
-	okb, _ := okVal.AsBoolean()
+	okb, _ := engine.AsBoolean(okVal)
 	if !okb {
 		t.Error("expected ok to be true for 201")
 	}
 	statusVal, _ := resp.Get("status")
-	stati, _ := statusVal.AsInteger()
+	stati, _ := engine.AsInteger(statusVal)
 	if stati != 201 {
 		t.Errorf("expected status 201, got %d", stati)
 	}
 	bodyVal, _ := resp.Get("body")
-	bodys, _ := bodyVal.AsString()
+	bodys, _ := engine.AsString(bodyVal)
 	if bodys != "created" {
 		t.Errorf("expected body 'created', got %q", bodys)
 	}
@@ -174,9 +174,9 @@ func TestFetchStringMapHandler(t *testing.T) {
 		t.Errorf("expected PUT, got %q", receivedMethod)
 	}
 
-	resp := result[0].AsMap()
+	resp, _ := engine.AsMap(result[0])
 	statusVal, _ := resp.Get("status")
-	stati, _ := statusVal.AsInteger()
+	stati, _ := engine.AsInteger(statusVal)
 	if stati != 200 {
 		t.Errorf("expected status 200, got %d", stati)
 	}
@@ -237,19 +237,19 @@ func TestFetchResponseNotOk(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp := result[0].AsMap()
+	resp, _ := engine.AsMap(result[0])
 	okVal, _ := resp.Get("ok")
-	okb, _ := okVal.AsBoolean()
+	okb, _ := engine.AsBoolean(okVal)
 	if okb {
 		t.Error("expected ok to be false for 404")
 	}
 	statusVal, _ := resp.Get("status")
-	stati, _ := statusVal.AsInteger()
+	stati, _ := engine.AsInteger(statusVal)
 	if stati != 404 {
 		t.Errorf("expected status 404, got %d", stati)
 	}
 	bodyVal, _ := resp.Get("body")
-	bodys, _ := bodyVal.AsString()
+	bodys, _ := engine.AsString(bodyVal)
 	if bodys != "not found" {
 		t.Errorf("expected body 'not found', got %q", bodys)
 	}
@@ -277,14 +277,14 @@ func TestFetchRedirect(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp := result[0].AsMap()
+	resp, _ := engine.AsMap(result[0])
 	urlVal, _ := resp.Get("url")
-	urls, _ := urlVal.AsString()
+	urls, _ := engine.AsString(urlVal)
 	if urls != final.URL {
 		t.Errorf("expected final url %q, got %q", final.URL, urls)
 	}
 	bodyVal, _ := resp.Get("body")
-	bodys, _ := bodyVal.AsString()
+	bodys, _ := engine.AsString(bodyVal)
 	if bodys != "final" {
 		t.Errorf("expected body 'final', got %q", bodys)
 	}
@@ -327,15 +327,15 @@ func TestFetchResponseHeaders(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp := result[0].AsMap()
+	resp, _ := engine.AsMap(result[0])
 	headersVal, _ := resp.Get("headers")
-	hm := headersVal.AsMap()
+	hm, _ := engine.AsMap(headersVal)
 
 	ct, ok := hm.Get("content-type")
 	if !ok {
 		t.Error("expected content-type header")
 	} else {
-		cts, _ := ct.AsString()
+		cts, _ := engine.AsString(ct)
 		if cts != "application/json" {
 			t.Errorf("expected 'application/json', got %q", cts)
 		}
@@ -345,7 +345,7 @@ func TestFetchResponseHeaders(t *testing.T) {
 	if !ok {
 		t.Error("expected x-request-id header")
 	} else {
-		xrids, _ := xrid.AsString()
+		xrids, _ := engine.AsString(xrid)
 		if xrids != "abc123" {
 			t.Errorf("expected 'abc123', got %q", xrids)
 		}
@@ -371,7 +371,7 @@ func TestFetchResponseType(t *testing.T) {
 	if !resp.VType.Matches(engine.TObject) {
 		t.Errorf("expected response to match Object, got %s", resp.VType)
 	}
-	if !resp.VType.Equal(engine.TFetchResponse) {
+	if !resp.VType.Equal(TFetchResponse) {
 		t.Errorf("expected type Object/Fetch/Response, got %s", resp.VType)
 	}
 }
@@ -391,14 +391,14 @@ func TestFetchServerError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp := result[0].AsMap()
+	resp, _ := engine.AsMap(result[0])
 	okVal, _ := resp.Get("ok")
-	okb, _ := okVal.AsBoolean()
+	okb, _ := engine.AsBoolean(okVal)
 	if okb {
 		t.Error("expected ok to be false for 500")
 	}
 	statusVal, _ := resp.Get("status")
-	stati, _ := statusVal.AsInteger()
+	stati, _ := engine.AsInteger(statusVal)
 	if stati != 500 {
 		t.Errorf("expected status 500, got %d", stati)
 	}

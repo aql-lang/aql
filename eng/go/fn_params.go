@@ -61,31 +61,31 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 	if inputSig.Data == nil {
 		return nil, 0, fmt.Errorf("function spec: input signature must be a concrete list, got type literal")
 	}
-	elems := inputSig.AsList()
+	elems, _ := AsList(inputSig)
 	var params []FnParam
 	barrierPos := 0
 
 	for i := 0; i < elems.Len(); i++ {
 		elem := elems.Get(i)
 
-		_as1, _ := elem.AsWord()
-		if elem.IsWord() && _as1.Name == "?" {
+		_as1, _ := AsWord(elem)
+		if IsWord(elem) && _as1.Name == "?" {
 			if len(params) > 0 {
 				params[len(params)-1].Optional = true
 			}
 			continue
 		}
 
-		_as2, _ := elem.AsWord()
-		if elem.IsWord() && _as2.Name == "|" {
+		_as2, _ := AsWord(elem)
+		if IsWord(elem) && _as2.Name == "|" {
 			barrierPos = len(params)
 			continue
 		}
 
 		switch {
 		case elem.VType.Equal(TMap) && elem.Data != nil:
-			m := elem.AsMutableMap()
-			if m != nil && m.Implicit {
+			m, err := AsMutableMap(elem)
+			if err == nil && m != nil && m.Implicit {
 				keys := m.Keys()
 				if len(keys) != 1 {
 					return nil, 0, fmt.Errorf("function spec: parameter map must have exactly one key")
@@ -97,8 +97,8 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 					optional = true
 				}
 				typeVal, _ := m.Get(keys[0])
-				if typeVal.IsParenExpr() && r != nil {
-					items := typeVal.AsParenExpr()
+				if IsParenExpr(typeVal) && r != nil {
+					items, _ := AsParenExpr(typeVal)
 					sub := New(r)
 					input := make([]Value, 0, len(items)+2)
 					input = append(input, NewOpenParen())
@@ -109,8 +109,8 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 						typeVal = result[0]
 					}
 				}
-				if typeVal.IsDisjunct() {
-					_as3, _ := typeVal.AsDisjunct()
+				if IsDisjunct(typeVal) {
+					_as3, _ := AsDisjunct(typeVal)
 					alts := _as3.Alternatives
 					for _, alt := range alts {
 						if alt.VType.Equal(TNone) {
@@ -143,8 +143,8 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 				params = append(params, FnParam{Type: paramType, Pattern: pattern})
 			}
 
-		case elem.IsWord():
-			_as4, _ := elem.AsWord()
+		case IsWord(elem):
+			_as4, _ := AsWord(elem)
 			name := _as4.Name
 			// `name:*Type` colon-delimited form. Used by minimal
 			// tokenizers (e.g. the aqleng spec runner, whose
@@ -211,7 +211,7 @@ func ParseFnReturns(outputSig Value) ([]*Type, error) {
 		}
 		return []*Type{t}, nil
 	}
-	elems := outputSig.AsList()
+	elems, _ := AsList(outputSig)
 	if elems.Len() == 0 {
 		return nil, nil
 	}
@@ -232,8 +232,8 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 	if v.Data == nil {
 		return v.VType, nil, nil
 	}
-	if v.IsWord() {
-		_as5, _ := v.AsWord()
+	if IsWord(v) {
+		_as5, _ := AsWord(v)
 		name := _as5.Name
 		if defVal := LookupDefType(r, name); defVal != nil {
 			return ResolveDefType(*defVal)
@@ -242,7 +242,7 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 		return t, nil, err
 	}
 	if v.VType.Matches(TString) {
-		name, _ := v.AsString()
+		name, _ := AsString(v)
 		if defVal := LookupDefType(r, name); defVal != nil {
 			return ResolveDefType(*defVal)
 		}
@@ -250,7 +250,7 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 		return t, nil, err
 	}
 	if v.VType.Matches(TAtom) {
-		name, _ := v.AsString()
+		name, _ := AsString(v)
 		if defVal := LookupDefType(r, name); defVal != nil {
 			return ResolveDefType(*defVal)
 		}
@@ -312,13 +312,13 @@ func LookupDefType(r *Registry, name string) *Value {
 // ResolveDefType converts a def'd type value (record, options, plain
 // type literal) into a sig type + pattern.
 func ResolveDefType(v Value) (*Type, *Value, error) {
-	if v.IsRecordType() {
-		rt, _ := v.AsRecordType()
+	if IsRecordType(v) {
+		rt, _ := AsRecordType(v)
 		pat := NewMap(rt.Fields)
 		return TMap, &pat, nil
 	}
-	if v.IsOptionsType() {
-		_as6, _ := v.AsOptionsType()
+	if IsOptionsType(v) {
+		_as6, _ := AsOptionsType(v)
 		pat := NewOptionsType(_as6.Fields)
 		return TMap, &pat, nil
 	}

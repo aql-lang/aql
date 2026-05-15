@@ -4,8 +4,8 @@ package engine
 // its elements are returned wrapped in parens so the main engine evaluates
 // them as a sub-expression. Scalars are returned as-is.
 func spliceArg(v Value) []Value {
-	if v.VType.Equal(TList) && v.Data != nil && !v.IsTypedList() && !v.IsTableType() {
-		elems := v.AsList()
+	if v.VType.Equal(TList) && v.Data != nil && !IsTypedList(v) && !IsTableType(v) {
+		elems, _ := AsList(v)
 		result := make([]Value, 0, elems.Len()+2)
 		result = append(result, NewOpenParen())
 		result = append(result, elems.Slice()...)
@@ -19,7 +19,7 @@ func spliceArg(v Value) []Value {
 // list — i.e. something to be evaluated as a code body rather than used
 // as a literal value.
 func isCodeBody(v Value) bool {
-	return v.VType.Equal(TList) && v.Data != nil && !v.IsTypedList() && !v.IsTableType()
+	return v.VType.Equal(TList) && v.Data != nil && !IsTypedList(v) && !IsTableType(v)
 }
 
 // ifClause turns the element slice of a clause-list `[c1 b1 c2 b2 … else]`
@@ -49,7 +49,8 @@ func ifClause(elems []Value) []Value {
 	elseBranch := ifClause(elems[2:])
 
 	if isCodeBody(cond) {
-		condSlice := cond.AsList().Slice()
+		_lst, _ := AsList(cond)
+		condSlice := _lst.Slice()
 		id := NextMarkID()
 		tokens := make([]Value, 0, len(condSlice)+2)
 		tokens = append(tokens, NewMark(id, condSlice...))

@@ -28,7 +28,7 @@ func RegisterMirrorTestWord(r *engine.Registry, name string, arity int) {
 	handler := func(a []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 		result := int64(0)
 		for i := 0; i < arity; i++ {
-			v, _ := a[i].AsInteger()
+			v, _ := engine.AsInteger(a[i])
 			mul := int64(1)
 			for j := 0; j < arity-1-i; j++ {
 				mul *= 10
@@ -107,7 +107,7 @@ func TestForwardMirror1Arg(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("got %d results, want 1", len(result))
 			}
-			v, _ := result[0].AsInteger()
+			v, _ := engine.AsInteger(result[0])
 			if v != canonical {
 				t.Errorf("got %d, want %d", v, canonical)
 			}
@@ -135,7 +135,7 @@ func TestForwardMirror2Args(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("got %d results, want 1", len(result))
 			}
-			v, _ := result[0].AsInteger()
+			v, _ := engine.AsInteger(result[0])
 			if v != canonical {
 				t.Errorf("got %d, want %d", v, canonical)
 			}
@@ -160,7 +160,7 @@ func TestForwardMirror2ArgsInvalid(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d results, want 1", len(result))
 	}
-	v, _ := result[0].AsInteger()
+	v, _ := engine.AsInteger(result[0])
 	if v == 12 {
 		t.Errorf("a f b should NOT equal f a b; both gave %d", v)
 	}
@@ -189,7 +189,7 @@ func TestForwardMirror3Args(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("got %d results, want 1", len(result))
 			}
-			v, _ := result[0].AsInteger()
+			v, _ := engine.AsInteger(result[0])
 			if v != canonical {
 				t.Errorf("got %d, want %d", v, canonical)
 			}
@@ -217,7 +217,7 @@ func TestForwardMirror4Args(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("got %d results, want 1", len(result))
 			}
-			v, _ := result[0].AsInteger()
+			v, _ := engine.AsInteger(result[0])
 			if v != canonical {
 				t.Errorf("got %d, want %d", v, canonical)
 			}
@@ -245,7 +245,7 @@ func TestForwardMirror5Args(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("got %d results, want 1", len(result))
 			}
-			v, _ := result[0].AsInteger()
+			v, _ := engine.AsInteger(result[0])
 			if v != canonical {
 				t.Errorf("got %d, want %d", v, canonical)
 			}
@@ -276,7 +276,7 @@ func TestForwardMirror6Args(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("got %d results, want 1", len(result))
 			}
-			v, _ := result[0].AsInteger()
+			v, _ := engine.AsInteger(result[0])
 			if v != canonical {
 				t.Errorf("got %d, want %d", v, canonical)
 			}
@@ -307,7 +307,7 @@ func TestForwardMirror7Args(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("got %d results, want 1", len(result))
 			}
-			v, _ := result[0].AsInteger()
+			v, _ := engine.AsInteger(result[0])
 			if v != canonical {
 				t.Errorf("got %d, want %d", v, canonical)
 			}
@@ -347,7 +347,7 @@ func TestForwardMirror3ArgsInvalidPlacements(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("got %d results, want 1", len(result))
 			}
-			v, _ := result[0].AsInteger()
+			v, _ := engine.AsInteger(result[0])
 			if v == canonical {
 				t.Errorf("%s should NOT produce %d (same as canonical mirror form)", inv.label, canonical)
 			}
@@ -380,7 +380,7 @@ func TestForwardMirrorSubVerification(t *testing.T) {
 			if err != nil {
 				t.Fatalf("error: %v", err)
 			}
-			v, _ := result[0].AsInteger()
+			v, _ := engine.AsInteger(result[0])
 			if v != 7 {
 				t.Errorf("got %d, want 7", v)
 			}
@@ -402,7 +402,7 @@ func TestForwardMirrorSubVerification(t *testing.T) {
 			if err != nil {
 				t.Fatalf("error: %v", err)
 			}
-			v, _ := result[0].AsInteger()
+			v, _ := engine.AsInteger(result[0])
 			if v != -7 {
 				t.Errorf("got %d, want -7", v)
 			}

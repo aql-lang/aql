@@ -778,10 +778,10 @@ func TestModuleValueType(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
 	v := result[0]
-	if !v.IsModule() {
+	if !engine.IsModule(v) {
 		t.Fatal("expected module type")
 	}
-	desc, _ := v.AsModule()
+	desc, _ := engine.AsModule(v)
 	if desc.ID == "" {
 		t.Error("expected non-empty module ID")
 	}

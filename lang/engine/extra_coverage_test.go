@@ -168,7 +168,7 @@ func TestExtraStringInteger(t *testing.T) {
 
 func TestExtraAsNumberInteger(t *testing.T) {
 	v := NewInteger(42)
-	n, _ := v.AsNumber()
+	n, _ := AsNumber(v)
 	if n != 42.0 {
 		t.Errorf("AsNumber() on integer = %f, want 42.0", n)
 	}
@@ -176,7 +176,7 @@ func TestExtraAsNumberInteger(t *testing.T) {
 
 func TestExtraAsNumberDecimal(t *testing.T) {
 	v := NewDecimal(3.14)
-	n, _ := v.AsNumber()
+	n, _ := AsNumber(v)
 	if n != 3.14 {
 		t.Errorf("AsNumber() on decimal = %f, want 3.14", n)
 	}
@@ -192,7 +192,8 @@ func TestExtraAsListTableData(t *testing.T) {
 	row.Set("col", NewString("val"))
 	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
 	v := Value{VType: TList, Data: td}
-	list := v.AsList().Slice()
+	_lst, _ := AsList(v)
+	list := _lst.Slice()
 	if len(list) != 1 {
 		t.Fatalf("AsList() on TableData got %d rows, want 1", len(list))
 	}
@@ -206,7 +207,7 @@ func TestExtraAsTableTypeTableData(t *testing.T) {
 	rec := RecordTypeInfo{Fields: fields}
 	td := TableData{Record: rec, Rows: []Value{}}
 	v := Value{VType: TList, Data: td}
-	tt, _ := v.AsTableType()
+	tt, _ := AsTableType(v)
 	if tt.Record.Fields.Len() != 1 {
 		t.Errorf("AsTableType() on TableData: got %d fields, want 1", tt.Record.Fields.Len())
 	}
@@ -217,7 +218,7 @@ func TestExtraAsTableTypeTableTypeInfo(t *testing.T) {
 	fields.Set("a", NewTypeLiteral(TString))
 	tti := TableTypeInfo{Record: RecordTypeInfo{Fields: fields}}
 	v := Value{VType: TList, Data: tti}
-	tt, _ := v.AsTableType()
+	tt, _ := AsTableType(v)
 	if tt.Record.Fields.Len() != 1 {
 		t.Errorf("AsTableType() on TableTypeInfo: got %d fields, want 1", tt.Record.Fields.Len())
 	}
@@ -226,14 +227,14 @@ func TestExtraAsTableTypeTableTypeInfo(t *testing.T) {
 func TestExtraIsTableTypeNonTable(t *testing.T) {
 	// A plain list is not a table type.
 	v := NewList([]Value{NewInteger(1)})
-	if v.IsTableType() {
+	if IsTableType(v) {
 		t.Error("plain list should not be a table type")
 	}
 	// A map is not a table type.
 	om := NewOrderedMap()
 	om.Set("x", NewInteger(1))
 	vm := NewMap(om)
-	if vm.IsTableType() {
+	if IsTableType(vm) {
 		t.Error("map should not be a table type")
 	}
 }
@@ -250,10 +251,11 @@ func TestExtraCSVDecodeEncode(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("CSV decode: got %d values, want 1", len(vals))
 	}
-	if !vals[0].IsTableType() {
+	if !IsTableType(vals[0]) {
 		t.Fatal("CSV decode: result should be a table type")
 	}
-	rows := vals[0].AsList().Slice()
+	_lst, _ := AsList(vals[0])
+	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("CSV decode: got %d rows, want 2", len(rows))
 	}
@@ -278,7 +280,8 @@ func TestExtraTSVDecodeEncode(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("TSV decode: got %d values, want 1", len(vals))
 	}
-	rows := vals[0].AsList().Slice()
+	_lst, _ := AsList(vals[0])
+	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("TSV decode: got %d rows, want 2", len(rows))
 	}
@@ -409,7 +412,8 @@ func TestExtraUnifyListsSameSuccess(t *testing.T) {
 	if !ok {
 		t.Fatal("identical lists should unify")
 	}
-	elems := result.AsList().Slice()
+	_lst, _ := AsList(result)
+	elems := _lst.Slice()
 	if len(elems) != 2 {
 		t.Errorf("unified list has %d elems, want 2", len(elems))
 	}
@@ -424,9 +428,9 @@ func TestExtraUnifyMapsSuccess(t *testing.T) {
 	if !ok {
 		t.Fatal("identical maps should unify")
 	}
-	m := result.AsMap()
+	m, _ := AsMap(result)
 	v, _ := m.Get("x")
-	_as0, _ := v.AsNumber()
+	_as0, _ := AsNumber(v)
 	if _as0 != 1.0 {
 		t.Errorf("unified map x = %v, want 1", v)
 	}
@@ -506,7 +510,8 @@ func TestExtraUnifyListTypeLiteral(t *testing.T) {
 	if !ok {
 		t.Fatal("list type literal should unify with concrete list")
 	}
-	if len(result.AsList().Slice()) != 1 {
+	_lst1, _ := AsList(result)
+	if len(_lst1.Slice()) != 1 {
 		t.Errorf("result should be the concrete list")
 	}
 }
@@ -519,7 +524,8 @@ func TestExtraUnifyListTypeLiteralReverse(t *testing.T) {
 	if !ok {
 		t.Fatal("concrete list should unify with list type literal")
 	}
-	if len(result.AsList().Slice()) != 1 {
+	_lst, _ := AsList(result)
+	if len(_lst.Slice()) != 1 {
 		t.Errorf("result should be the concrete list")
 	}
 }
@@ -533,7 +539,8 @@ func TestExtraUnifyMapTypeLiteral(t *testing.T) {
 	if !ok {
 		t.Fatal("map type literal should unify with concrete map")
 	}
-	if result.AsMap().Len() != 1 {
+	_m, _ := AsMap(result)
+	if _m.Len() != 1 {
 		t.Errorf("result should be the concrete map")
 	}
 }
@@ -547,7 +554,8 @@ func TestExtraUnifyMapTypeLiteralReverse(t *testing.T) {
 	if !ok {
 		t.Fatal("concrete map should unify with map type literal")
 	}
-	if result.AsMap().Len() != 1 {
+	_m, _ := AsMap(result)
+	if _m.Len() != 1 {
 		t.Errorf("result should be the concrete map")
 	}
 }
@@ -727,7 +735,7 @@ func TestExtraStepEndNoForward(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{NewInteger(1), NewEnd()})
-	_as1, _ := result[0].AsNumber()
+	_as1, _ := AsNumber(result[0])
 	if len(result) != 1 || _as1 != 1.0 {
 		t.Errorf("end with no forward: got %v, want [1]", result)
 	}
@@ -742,7 +750,7 @@ func TestExtraStepEndAfterForward(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("add"), NewInteger(2), NewEnd(),
 	})
-	_as2, _ := result[0].AsNumber()
+	_as2, _ := AsNumber(result[0])
 	if len(result) != 1 || _as2 != 3.0 {
 		t.Errorf("1 add 2 end: got %v, want [3]", result)
 	}
@@ -934,7 +942,7 @@ func TestExtraValuesEqualTypeLiteralVsConcrete(t *testing.T) {
 		t.Fatalf("unify: got %d results", len(result))
 	}
 	// Should succeed (subtype relationship)
-	_as3, _ := result[1].AsBoolean()
+	_as3, _ := AsBoolean(result[1])
 	if !_as3 {
 		t.Error("integer type literal should unify with concrete integer")
 	}
@@ -954,7 +962,7 @@ func TestExtraValuesEqualDecimalsDirect(t *testing.T) {
 	}
 	// Different decimals should fail to unify (same type, different values)
 	// ValuesEqual falls through to default fmt.Sprintf comparison
-	_as4, _ := result[1].AsBoolean()
+	_as4, _ := AsBoolean(result[1])
 	if _as4 {
 		t.Error("different decimals should not unify")
 	}
@@ -995,7 +1003,7 @@ func TestExtraUnifyDisjunct(t *testing.T) {
 	if !ok {
 		t.Fatal("disjunct should unify with matching alternative")
 	}
-	_as5, _ := result.AsNumber()
+	_as5, _ := AsNumber(result)
 	if _as5 != 2.0 {
 		t.Errorf("unified value = %v, want 2", result)
 	}
@@ -1015,7 +1023,7 @@ func TestExtraUnifyDisjunctReverse(t *testing.T) {
 	if !ok {
 		t.Fatal("value should unify with disjunct containing it")
 	}
-	_as6, _ := result.AsString()
+	_as6, _ := AsString(result)
 	if _as6 != "b" {
 		t.Errorf("unified value = %v, want 'b'", result)
 	}

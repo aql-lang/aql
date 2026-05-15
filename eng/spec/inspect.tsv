@@ -125,10 +125,8 @@ inspect Entity	{type:'Type',struct:'Entity',kind:literal}
 inspect Table	{type:'Type',struct:'Table',kind:literal}	
 inspect Record	{type:'Type',struct:'Record',kind:literal}	
 inspect Options	{type:'Type',struct:'Options',kind:literal}	
-inspect Array	{type:'Type',struct:'Array',kind:literal}	
-inspect Timeout	{type:'Type',struct:'Timeout',kind:literal}	
-inspect Interval	{type:'Type',struct:'Interval',kind:literal}	
-inspect Function	{type:'Type',struct:'Function',kind:literal}	
+inspect Array	{type:'Type',struct:'Array',kind:literal}
+inspect Function	{type:'Type',struct:'Function',kind:literal}
 inspect Disjunct	{type:'Type',struct:'Disjunct',kind:literal}	
 inspect Enum	{type:'Type',struct:'Enum',kind:literal}	
 inspect Type	{type:'Type',struct:'Type',kind:literal}	

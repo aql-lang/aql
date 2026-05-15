@@ -520,12 +520,12 @@ type ForwardInfo struct {
 type Value struct {
 	ID        string
 	VType     *Type
-	Data      interface{}
-	Quoted    bool   // true when value was produced by the quote word; prevents auto-evaluation
-	Eval      bool   // true for parser-created lists that should auto-evaluate at end of Run
-	Pos       SrcPos // source position for error reporting (zero value = unknown)
-	Undefined bool   // true when atom was created from an undefined word (error if left on result stack)
-	Carrier   bool   // true when this is a static-typecheck carrier (type-only, Data stripped of concrete payload)
+	Data      Payload // the kernel-known data payload; see payload.go for variants
+	Quoted    bool    // true when value was produced by the quote word; prevents auto-evaluation
+	Eval      bool    // true for parser-created lists that should auto-evaluate at end of Run
+	Pos       SrcPos  // source position for error reporting (zero value = unknown)
+	Undefined bool    // true when atom was created from an undefined word (error if left on result stack)
+	Carrier   bool    // true when this is a static-typecheck carrier (type-only, Data stripped of concrete payload)
 }
 
 // idRand is the package-level RNG used for ID generation.
@@ -578,8 +578,13 @@ func IDPrefixForType(t *Type) string {
 	return "T_"
 }
 
-// NewValueRaw creates a Value with an auto-generated ID based on the type category.
-func NewValueRaw(t *Type, data interface{}) Value {
+// NewValueRaw creates a Value with an auto-generated ID based on the
+// type category. data must be a Payload — the sealed interface
+// implemented by all kernel-known payload variants and by every
+// eng-defined struct/pointer type used as a payload. After Step 5g,
+// passing a raw int64 / string / time.Time / etc. is a compile error
+// — wrap it in IntPayload / StrPayload / TimePayload / etc. first.
+func NewValueRaw(t *Type, data Payload) Value {
 	return Value{
 		ID:    GenerateID(IDPrefixForType(t)),
 		VType: t,
@@ -602,9 +607,9 @@ func NewValueRaw(t *Type, data interface{}) Value {
 // emptiness without resorting to a length comparison.
 func NewString(s string) Value {
 	if s == "" {
-		return NewValueRaw(TStringEmpty, s)
+		return NewValueRaw(TStringEmpty, StrPayload{S: s})
 	}
-	return NewValueRaw(TStringProper, s)
+	return NewValueRaw(TStringProper, StrPayload{S: s})
 }
 
 // NewInteger creates a number/integer value with VType = Scalar/Number/Integer.
@@ -612,12 +617,12 @@ func NewString(s string) Value {
 // Signature.Patterns, not through a per-value type-path leaf. See
 // the NewString comment for the rationale.
 func NewInteger(n int64) Value {
-	return NewValueRaw(TInteger, n)
+	return NewValueRaw(TInteger, IntPayload{N: n})
 }
 
 // NewDecimal creates a number/decimal value with a float64 payload.
 func NewDecimal(f float64) Value {
-	return NewValueRaw(TDecimal, f)
+	return NewValueRaw(TDecimal, DecPayload{F: f})
 }
 
 // FormatDecimal renders a float64 with a guaranteed decimal point so the
@@ -642,18 +647,18 @@ func formatDecimal(f float64) string { return FormatDecimal(f) }
 // NewBoolean creates a boolean value. The boolean payload (true/false) is the
 // value; there are no Boolean/True or Boolean/False sub-types.
 func NewBoolean(b bool) Value {
-	return NewValueRaw(TBoolean, b)
+	return NewValueRaw(TBoolean, BoolPayload{B: b})
 }
 
 // NewList creates a list value from a slice of Values.
 func NewList(elems []Value) Value {
-	return NewValueRaw(TList, elems)
+	return NewValueRaw(TList, ListPayload{Elems: elems})
 }
 
 // NewEvalList creates a list value that is marked for auto-evaluation
 // at the end of execution. Used by the parser for source-code lists.
 func NewEvalList(elems []Value) Value {
-	v := NewValueRaw(TList, elems)
+	v := NewValueRaw(TList, ListPayload{Elems: elems})
 	v.Eval = true
 	return v
 }
@@ -666,13 +671,13 @@ func NewTypedList(child Value) Value {
 
 // NewMap creates a map value from an ordered map of string keys to Values.
 func NewMap(entries *OrderedMap) Value {
-	return NewValueRaw(TMap, entries)
+	return NewValueRaw(TMap, MapPayload{M: entries})
 }
 
 // NewEvalMap creates a map value marked for auto-evaluation at end of
 // execution. Used by the parser for source-code maps.
 func NewEvalMap(entries *OrderedMap) Value {
-	v := NewValueRaw(TMap, entries)
+	v := NewValueRaw(TMap, MapPayload{M: entries})
 	v.Eval = true
 	return v
 }
@@ -697,19 +702,21 @@ func NewTypedMapWithEntries(child Value, entries []ChildEntry) Value {
 // (e.g., [x:Integer]), while explicit maps are structural patterns.
 func NewImplicitMap(entries *OrderedMap) Value {
 	entries.Implicit = true
-	return NewValueRaw(TMap, entries)
+	return NewValueRaw(TMap, MapPayload{M: entries})
 }
 
 // IsImplicitMap reports whether v is a Map value whose backing
 // OrderedMap was constructed from implicit-pair syntax (e.g.
 // `{x:Integer}` or `[x:Integer]` inside an fn sig). Used to
 // discriminate record-shape patterns from concrete maps.
-func (v Value) IsImplicitMap() bool {
+func IsImplicitMap(v Value) bool {
 	if !v.VType.Equal(TMap) || v.Data == nil {
 		return false
 	}
-	m, ok := v.Data.(*OrderedMap)
-	return ok && m != nil && m.Implicit
+	if mp, ok := v.Data.(MapPayload); ok {
+		return mp.M != nil && mp.M.Implicit
+	}
+	return false
 }
 
 // NewTypedMap creates a typed map value with a child type constraint.
@@ -740,14 +747,14 @@ func NewTableType(record RecordTypeInfo) Value {
 
 // NewAtom creates an atom value from a bare unquoted word.
 func NewAtom(name string) Value {
-	return NewValueRaw(TAtom, name)
+	return NewValueRaw(TAtom, AtomPayload{Name: name})
 }
 
 // NewPath creates a Path value from parts and an absolute flag.
 func NewPath(parts []string, abs bool) Value {
 	p := make([]string, len(parts))
 	copy(p, parts)
-	return NewValueRaw(TPath, PathInfo{Parts: p, Abs: abs})
+	return NewValueRaw(TPath, PathPayload{Info: PathInfo{Parts: p, Abs: abs}})
 }
 
 // NewTypeLiteral creates a value representing a type itself (e.g. "number", "string").
@@ -766,14 +773,38 @@ type noneSentinel struct{}
 // NewNone creates the value `none` — the unique inhabitant of the
 // None type. Distinct from NewTypeLiteral(TNone) (the type itself).
 func NewNone() Value {
-	return NewValueRaw(TNone, noneSentinel{})
+	return NewValueRaw(TNone, NonePayload{})
+}
+
+// Is reports whether v satisfies type t, routed through t.Behavior.
+// The canonical dispatch point for "is v a T?" — used by handlers,
+// the matcher, and `is` / `guard`. Default Behavior delegates to the
+// lattice walk (v.VType.Matches(t)); types with custom Behavior
+// override (predicate types invoke their body, record types check
+// field-by-field conformance, etc.).
+//
+// Safe on nil t: returns false. Safe on nil Behavior: callers should
+// not encounter this state because every Type registered through
+// the kernel paths carries a non-nil Behavior, but the method
+// defends against it anyway.
+func (v Value) Is(t *Type) bool {
+	if t == nil {
+		return false
+	}
+	if t.Behavior == nil {
+		return v.VType.Matches(t)
+	}
+	return t.Behavior.Match(v, t)
 }
 
 // IsNone reports whether v is the value `none` (not the None type
 // literal). The check distinguishes the inhabitant from the type.
-func (v Value) IsNone() bool {
+func IsNone(v Value) bool {
 	if !v.VType.Equal(TNone) {
 		return false
+	}
+	if _, ok := v.Data.(NonePayload); ok {
+		return true
 	}
 	_, ok := v.Data.(noneSentinel)
 	return ok
@@ -823,7 +854,7 @@ func NewEnd() Value {
 // autoEvalMap evaluates these by running the items in a sub-engine with
 // paren markers, producing a single result value.
 func NewParenExpr(items []Value) Value {
-	return NewValueRaw(TParenExpr, items)
+	return NewValueRaw(TParenExpr, ParenExprPayload{Toks: items})
 }
 
 // InterpPart represents one segment of an interpolated string.
@@ -838,7 +869,7 @@ type InterpPart struct {
 // literal and expression parts. The engine evaluates expression parts in
 // a sub-engine, converts results to strings, and concatenates everything.
 func NewInterpString(parts []InterpPart) Value {
-	return NewValueRaw(TInterpString, parts)
+	return NewValueRaw(TInterpString, InterpStringPayload{Parts: parts})
 }
 
 // NewMark creates a mark value with the given unique ID and the body to
@@ -993,57 +1024,12 @@ type MatrixData struct {
 	Cols int
 }
 
-// NewDate creates a Date value from a time.Time (date only, midnight UTC).
-func NewDate(t time.Time) Value {
-	return NewValueRaw(TDate, t)
-}
-
-// AsDate returns the time.Time for a Date value.
-func (v Value) AsDate() time.Time {
-	if t, ok := v.Data.(time.Time); ok {
-		return t
-	}
-	return time.Time{}
-}
-
-// NewDateTime creates a DateTime value from a time.Time (date+time, no timezone).
-func NewDateTime(t time.Time) Value {
-	return NewValueRaw(TDateTime, t)
-}
-
-// AsDateTime returns the time.Time for a DateTime value.
-func (v Value) AsDateTime() time.Time {
-	if t, ok := v.Data.(time.Time); ok {
-		return t
-	}
-	return time.Time{}
-}
-
-// NewInstant creates an Instant value from a time.Time (absolute UTC timestamp).
-func NewInstant(t time.Time) Value {
-	return NewValueRaw(TInstant, t.UTC())
-}
-
-// AsInstant returns the time.Time for an Instant value.
-func (v Value) AsInstant() time.Time {
-	if t, ok := v.Data.(time.Time); ok {
-		return t
-	}
-	return time.Time{}
-}
-
-// NewTimeOfDay creates a TimeOfDay value from a time.Duration (offset from midnight).
-func NewTimeOfDay(d time.Duration) Value {
-	return NewValueRaw(TTimeOfDay, d)
-}
-
-// AsTimeOfDay returns the time.Duration for a TimeOfDay value.
-func (v Value) AsTimeOfDay() time.Duration {
-	if d, ok := v.Data.(time.Duration); ok {
-		return d
-	}
-	return 0
-}
+// As* accessors for Scalar/Time/* moved to
+// lang/engine/native_temporal.go (Step 6/7). The kernel no longer
+// carries methods named for types it doesn't own. CalDurationData
+// stays here because the payload struct is kernel-owned (it has the
+// payloadMarker) — only the user-facing constructor / accessor
+// surface moved.
 
 // CalDurationData holds a calendar duration (years, months, days).
 type CalDurationData struct {
@@ -1052,57 +1038,8 @@ type CalDurationData struct {
 	Days   int
 }
 
-// NewCalDuration creates a CalDuration value.
-func NewCalDuration(years, months, days int) Value {
-	return NewValueRaw(TCalDuration, CalDurationData{Years: years, Months: months, Days: days})
-}
-
-// AsCalDuration returns the CalDurationData for a CalDuration value.
-func (v Value) AsCalDuration() (CalDurationData, bool) {
-	if d, ok := v.Data.(CalDurationData); ok {
-		return d, true
-	}
-	return CalDurationData{}, false
-}
-
-// NewClkDuration creates a ClkDuration value from a time.Duration.
-func NewClkDuration(d time.Duration) Value {
-	return NewValueRaw(TClkDuration, d)
-}
-
-// AsClkDuration returns the time.Duration for a ClkDuration value.
-func (v Value) AsClkDuration() (time.Duration, bool) {
-	if d, ok := v.Data.(time.Duration); ok {
-		return d, true
-	}
-	return 0, false
-}
-
-// NewTimezone creates a Timezone value from a *time.Location.
-func NewTimezone(loc *time.Location) Value {
-	return NewValueRaw(TTimezone, loc)
-}
-
-// AsTimezone returns the *time.Location for a Timezone value.
-func (v Value) AsTimezone() *time.Location {
-	if loc, ok := v.Data.(*time.Location); ok {
-		return loc
-	}
-	return nil
-}
-
-// NewMatrix creates a Matrix value from a MatrixData.
-func NewMatrix(m MatrixData) Value {
-	return NewValueRaw(TMatrix, m)
-}
-
-// AsMatrix returns the MatrixData for a Matrix value.
-func (v Value) AsMatrix() MatrixData {
-	if m, ok := v.Data.(MatrixData); ok {
-		return m
-	}
-	return MatrixData{}
-}
+// NewMatrix moved to lang/internal/nativemod/matrix.go (Step 8).
+// AsMatrix moved to lang/internal/nativemod/matrix.go (Step 6/7).
 
 // ErrorInfo holds the details of an AQL error value.
 type ErrorInfo struct {
@@ -1115,12 +1052,12 @@ func NewError(err error) Value {
 }
 
 // IsError reports whether this value is an error.
-func (v Value) IsError() bool {
+func IsError(v Value) bool {
 	return v.VType.Equal(TError)
 }
 
 // AsError returns the ErrorInfo for an error value.
-func (v Value) AsError() (ErrorInfo, error) {
+func AsError(v Value) (ErrorInfo, error) {
 	info, ok := v.Data.(ErrorInfo)
 	if !ok {
 		return ErrorInfo{}, fmt.Errorf("AsError: not an error value (got %T)", v.Data)
@@ -1135,24 +1072,10 @@ type TimeoutInfo struct {
 	Timer *time.Timer // underlying Go timer (nil after cancel)
 }
 
-// NewTimeout creates a Timeout value.
-func NewTimeout(info *TimeoutInfo) Value {
-	return NewValueRaw(TTimeout, info)
-}
-
-// IsTimeout reports whether this value is a Timeout.
-func (v Value) IsTimeout() bool {
-	return v.VType.Equal(TTimeout)
-}
-
-// AsTimeout returns the TimeoutInfo for a Timeout value.
-func (v Value) AsTimeout() (*TimeoutInfo, error) {
-	info, ok := v.Data.(*TimeoutInfo)
-	if !ok {
-		return nil, fmt.Errorf("AsTimeout: not a timeout value (got %T)", v.Data)
-	}
-	return info, nil
-}
+// NewTimeout, IsTimeout, AsTimeout moved to lang/engine/native_misc.go
+// (Step 8). Callers that need them use engine.NewTimeout /
+// engine.AsTimeout, etc. The IsTimeout method is replaced by
+// `v.VType.Equal(engine.TTimeout)` at call sites.
 
 // IntervalInfo holds a repeating interval handle.
 type IntervalInfo struct {
@@ -1162,88 +1085,73 @@ type IntervalInfo struct {
 	Done   chan struct{} // closed to signal cancellation
 }
 
-// NewInterval creates an Interval value.
-func NewInterval(info *IntervalInfo) Value {
-	return NewValueRaw(TInterval, info)
-}
+// NewInterval moved to lang/engine/native_misc.go (Step 8).
 
-// IsInterval reports whether this value is an Interval.
-func (v Value) IsInterval() bool {
-	return v.VType.Equal(TInterval)
-}
-
-// AsInterval returns the IntervalInfo for an Interval value.
-func (v Value) AsInterval() (*IntervalInfo, error) {
-	info, ok := v.Data.(*IntervalInfo)
-	if !ok {
-		return nil, fmt.Errorf("AsInterval: not an interval value (got %T)", v.Data)
-	}
-	return info, nil
-}
+// IsInterval and AsInterval moved to lang/engine/native_misc.go (Step 8).
 
 // IsWord reports whether this value is a word (function reference).
-func (v Value) IsWord() bool {
+func IsWord(v Value) bool {
 	return v.VType.Equal(TWord)
 }
 
 // IsForward reports whether this value is a forward primitive.
-func (v Value) IsForward() bool {
+func IsForward(v Value) bool {
 	return v.VType.Equal(TForward)
 }
 
 // IsBoolean reports whether this value is a boolean type.
-func (v Value) IsBoolean() bool {
+func IsBoolean(v Value) bool {
 	return v.VType.Matches(TBoolean)
 }
 
 // IsOpenParen reports whether this value is an open-paren marker.
-func (v Value) IsOpenParen() bool {
+func IsOpenParen(v Value) bool {
 	return v.VType.Equal(TOpenParen)
 }
 
 // IsCloseParen reports whether this value is a close-paren marker.
-func (v Value) IsCloseParen() bool {
+func IsCloseParen(v Value) bool {
 	return v.VType.Equal(TCloseParen)
 }
 
 // IsEnd reports whether this value is an end-marker.
-func (v Value) IsEnd() bool {
+func IsEnd(v Value) bool {
 	return v.VType.Equal(TEnd)
 }
 
 // IsParenExpr reports whether this value is a paren expression.
-func (v Value) IsParenExpr() bool {
+func IsParenExpr(v Value) bool {
 	return v.VType.Equal(TParenExpr)
 }
 
 // AsParenExpr returns the items in a paren expression value.
-func (v Value) AsParenExpr() []Value {
-	if items, ok := v.Data.([]Value); ok {
-		return items
+func AsParenExpr(v Value) ([]Value, error) {
+	if pp, ok := v.Data.(ParenExprPayload); ok {
+		return pp.Toks, nil
 	}
-	return nil
+	return nil, fmt.Errorf("AsParenExpr: not a paren-expr value (got %T)", v.Data)
 }
 
 // IsInterpString reports whether this value is an interpolated string.
-func (v Value) IsInterpString() bool {
+func IsInterpString(v Value) bool {
 	return v.VType.Equal(TInterpString)
 }
 
 // AsInterpString returns the parts of an interpolated string value.
-func (v Value) AsInterpString() []InterpPart {
-	if parts, ok := v.Data.([]InterpPart); ok {
-		return parts
+func AsInterpString(v Value) ([]InterpPart, error) {
+	if ip, ok := v.Data.(InterpStringPayload); ok {
+		return ip.Parts, nil
 	}
-	return nil
+	return nil, fmt.Errorf("AsInterpString: not an interp-string value (got %T)", v.Data)
 }
 
 // IsMark reports whether this value is a mark.
-func (v Value) IsMark() bool {
+func IsMark(v Value) bool {
 	return v.VType.Equal(TMark)
 }
 
 // AsMark returns the MarkInfo, panics if not a mark.
-func (v Value) AsMark() (MarkInfo, error) {
+func AsMark(v Value) (MarkInfo, error) {
 	info, ok := v.Data.(MarkInfo)
 	if !ok {
 		return MarkInfo{}, fmt.Errorf("AsMark: not a mark value (got %T)", v.Data)
@@ -1252,12 +1160,12 @@ func (v Value) AsMark() (MarkInfo, error) {
 }
 
 // IsMove reports whether this value is a move.
-func (v Value) IsMove() bool {
+func IsMove(v Value) bool {
 	return v.VType.Equal(TMove)
 }
 
 // AsMove returns the MoveInfo, panics if not a move.
-func (v Value) AsMove() (MoveInfo, error) {
+func AsMove(v Value) (MoveInfo, error) {
 	info, ok := v.Data.(MoveInfo)
 	if !ok {
 		return MoveInfo{}, fmt.Errorf("AsMove: not a move value (got %T)", v.Data)
@@ -1266,12 +1174,12 @@ func (v Value) AsMove() (MoveInfo, error) {
 }
 
 // IsReturnCheck reports whether this value is a return-check marker.
-func (v Value) IsReturnCheck() bool {
+func IsReturnCheck(v Value) bool {
 	return v.VType.Equal(TReturnCheck)
 }
 
 // AsReturnCheck returns the ReturnCheckInfo, panics if not a return-check.
-func (v Value) AsReturnCheck() (ReturnCheckInfo, error) {
+func AsReturnCheck(v Value) (ReturnCheckInfo, error) {
 	info, ok := v.Data.(ReturnCheckInfo)
 	if !ok {
 		return ReturnCheckInfo{}, fmt.Errorf("AsReturnCheck: not a return-check value (got %T)", v.Data)
@@ -1280,12 +1188,12 @@ func (v Value) AsReturnCheck() (ReturnCheckInfo, error) {
 }
 
 // IsDefCleanup reports whether this value is a def-cleanup marker.
-func (v Value) IsDefCleanup() bool {
+func IsDefCleanup(v Value) bool {
 	return v.VType.Equal(TDefCleanup)
 }
 
 // AsDefCleanup returns the DefCleanupInfo, panics if not a def-cleanup.
-func (v Value) AsDefCleanup() (DefCleanupInfo, error) {
+func AsDefCleanup(v Value) (DefCleanupInfo, error) {
 	info, ok := v.Data.(DefCleanupInfo)
 	if !ok {
 		return DefCleanupInfo{}, fmt.Errorf("AsDefCleanup: not a def-cleanup value (got %T)", v.Data)
@@ -1296,13 +1204,13 @@ func (v Value) AsDefCleanup() (DefCleanupInfo, error) {
 // IsDisjunct reports whether this value is a disjunction type — a
 // plain Disjunct (Type/Disjunct) or any subtype such as an Enum
 // (Type/Disjunct/Enum).
-func (v Value) IsDisjunct() bool {
+func IsDisjunct(v Value) bool {
 	_, ok := v.Data.(DisjunctInfo)
 	return ok && v.VType.Matches(TDisjunct)
 }
 
 // AsDisjunct returns the DisjunctInfo, panics if not a disjunct.
-func (v Value) AsDisjunct() (DisjunctInfo, error) {
+func AsDisjunct(v Value) (DisjunctInfo, error) {
 	info, ok := v.Data.(DisjunctInfo)
 	if !ok {
 		return DisjunctInfo{}, fmt.Errorf("AsDisjunct: not a disjunct value (got %T)", v.Data)
@@ -1311,13 +1219,13 @@ func (v Value) AsDisjunct() (DisjunctInfo, error) {
 }
 
 // IsObjectType reports whether this value is an object type definition.
-func (v Value) IsObjectType() bool {
+func IsObjectType(v Value) bool {
 	_, ok := v.Data.(ObjectTypeInfo)
 	return ok && v.VType.Matches(TObject)
 }
 
 // AsObjectType returns the ObjectTypeInfo, panics if not an object type.
-func (v Value) AsObjectType() (ObjectTypeInfo, error) {
+func AsObjectType(v Value) (ObjectTypeInfo, error) {
 	info, ok := v.Data.(ObjectTypeInfo)
 	if !ok {
 		return ObjectTypeInfo{}, fmt.Errorf("AsObjectType: not an object type value (got %T)", v.Data)
@@ -1326,43 +1234,43 @@ func (v Value) AsObjectType() (ObjectTypeInfo, error) {
 }
 
 // IsStore reports whether this value is a Store instance.
-func (v Value) IsStore() bool {
+func IsStore(v Value) bool {
 	_, ok := v.Data.(*StoreInstanceInfo)
 	return ok && v.VType.Matches(TStore)
 }
 
-// AsStore returns the StoreInstanceInfo pointer. Returns nil if not a store.
-func (v Value) AsStore() *StoreInstanceInfo {
+// AsStore returns the StoreInstanceInfo pointer. Returns an error if not a store.
+func AsStore(v Value) (*StoreInstanceInfo, error) {
 	si, ok := v.Data.(*StoreInstanceInfo)
 	if !ok {
-		return nil
+		return nil, fmt.Errorf("AsStore: not a store value (got %T)", v.Data)
 	}
-	return si
+	return si, nil
 }
 
 // IsArray reports whether this value is an Array instance.
-func (v Value) IsArray() bool {
+func IsArray(v Value) bool {
 	_, ok := v.Data.(*ArrayInstanceInfo)
 	return ok && v.VType.Matches(TArray)
 }
 
-// AsArray returns the ArrayInstanceInfo pointer. Returns nil if not an array.
-func (v Value) AsArray() *ArrayInstanceInfo {
+// AsArray returns the ArrayInstanceInfo pointer. Returns an error if not an array.
+func AsArray(v Value) (*ArrayInstanceInfo, error) {
 	ai, ok := v.Data.(*ArrayInstanceInfo)
 	if !ok {
-		return nil
+		return nil, fmt.Errorf("AsArray: not an array value (got %T)", v.Data)
 	}
-	return ai
+	return ai, nil
 }
 
 // IsObjectInstance reports whether this value is an object instance.
-func (v Value) IsObjectInstance() bool {
+func IsObjectInstance(v Value) bool {
 	_, ok := v.Data.(ObjectInstanceInfo)
 	return ok && v.VType.Matches(TObject)
 }
 
 // AsObjectInstance returns the ObjectInstanceInfo, panics if not an object instance.
-func (v Value) AsObjectInstance() (ObjectInstanceInfo, error) {
+func AsObjectInstance(v Value) (ObjectInstanceInfo, error) {
 	info, ok := v.Data.(ObjectInstanceInfo)
 	if !ok {
 		return ObjectInstanceInfo{}, fmt.Errorf("AsObjectInstance: not an object instance value (got %T)", v.Data)
@@ -1371,12 +1279,12 @@ func (v Value) AsObjectInstance() (ObjectInstanceInfo, error) {
 }
 
 // IsModule reports whether this value is a module descriptor.
-func (v Value) IsModule() bool {
+func IsModule(v Value) bool {
 	return v.VType.Equal(TModule)
 }
 
 // AsModule returns the ModuleDesc, panics if not a module.
-func (v Value) AsModule() (ModuleDesc, error) {
+func AsModule(v Value) (ModuleDesc, error) {
 	info, ok := v.Data.(ModuleDesc)
 	if !ok {
 		return ModuleDesc{}, fmt.Errorf("AsModule: not a module value (got %T)", v.Data)
@@ -1386,56 +1294,54 @@ func (v Value) AsModule() (ModuleDesc, error) {
 
 // IsAtom reports whether this value is an atom.
 // IsPath reports whether this value is a Path.
-func (v Value) IsPath() bool {
-	_, ok := v.Data.(PathInfo)
+func IsPath(v Value) bool {
+	_, ok := v.Data.(PathPayload)
 	return ok && v.VType.Equal(TPath)
 }
 
 // AsPath returns the PathInfo, or an error if the value is not a path.
-func (v Value) AsPath() (PathInfo, error) {
-	info, ok := v.Data.(PathInfo)
-	if !ok {
-		return PathInfo{}, fmt.Errorf("AsPath: not a path value (got %T)", v.Data)
+func AsPath(v Value) (PathInfo, error) {
+	if pp, ok := v.Data.(PathPayload); ok {
+		return pp.Info, nil
 	}
-	return info, nil
+	return PathInfo{}, fmt.Errorf("AsPath: not a path value (got %T)", v.Data)
 }
 
-func (v Value) IsAtom() bool {
+func IsAtom(v Value) bool {
 	return v.VType.Equal(TAtom)
 }
 
 // AsAtom returns the string payload. Returns "" if Data is nil.
-func (v Value) AsAtom() (string, error) {
+func AsAtom(v Value) (string, error) {
 	if v.Data == nil {
 		return "", fmt.Errorf("AsAtom: nil data")
 	}
-	s, ok := v.Data.(string)
-	if !ok {
-		return "", fmt.Errorf("AsAtom: not an atom value (got %T)", v.Data)
+	if ap, ok := v.Data.(AtomPayload); ok {
+		return ap.Name, nil
 	}
-	return s, nil
+	return "", fmt.Errorf("AsAtom: not an atom value (got %T)", v.Data)
 }
 
 // IsTypedList reports whether this value is a typed list (has child type constraint).
-func (v Value) IsTypedList() bool {
+func IsTypedList(v Value) bool {
 	_, ok := v.Data.(ChildTypeInfo)
 	return ok && v.VType.Equal(TList)
 }
 
 // IsTypedMap reports whether this value is a typed map (has child type constraint).
-func (v Value) IsTypedMap() bool {
+func IsTypedMap(v Value) bool {
 	_, ok := v.Data.(ChildTypeInfo)
 	return ok && v.VType.Equal(TMap)
 }
 
 // IsRecordType reports whether this value is a record type (map with field schema).
-func (v Value) IsRecordType() bool {
+func IsRecordType(v Value) bool {
 	_, ok := v.Data.(RecordTypeInfo)
 	return ok && v.VType.Equal(TMap)
 }
 
 // AsRecordType returns the RecordTypeInfo, panics if not a record type.
-func (v Value) AsRecordType() (RecordTypeInfo, error) {
+func AsRecordType(v Value) (RecordTypeInfo, error) {
 	info, ok := v.Data.(RecordTypeInfo)
 	if !ok {
 		return RecordTypeInfo{}, fmt.Errorf("AsRecordType: not a record type value (got %T)", v.Data)
@@ -1444,13 +1350,13 @@ func (v Value) AsRecordType() (RecordTypeInfo, error) {
 }
 
 // IsOptionsType reports whether this value is an options type (map with defaults/constraints).
-func (v Value) IsOptionsType() bool {
+func IsOptionsType(v Value) bool {
 	_, ok := v.Data.(OptionsTypeInfo)
 	return ok && v.VType.Equal(TMap)
 }
 
 // AsOptionsType returns the OptionsTypeInfo, panics if not an options type.
-func (v Value) AsOptionsType() (OptionsTypeInfo, error) {
+func AsOptionsType(v Value) (OptionsTypeInfo, error) {
 	info, ok := v.Data.(OptionsTypeInfo)
 	if !ok {
 		return OptionsTypeInfo{}, fmt.Errorf("AsOptionsType: not an options type value (got %T)", v.Data)
@@ -1459,12 +1365,15 @@ func (v Value) AsOptionsType() (OptionsTypeInfo, error) {
 }
 
 // IsTableType reports whether this value is a table type (list with record schema).
-func (v Value) IsTableType() bool {
+func IsTableType(v Value) bool {
 	if v.VType.Equal(TList) {
 		if _, ok := v.Data.(TableTypeInfo); ok {
 			return true
 		}
 		if _, ok := v.Data.(TableData); ok {
+			return true
+		}
+		if _, ok := v.Data.(MaterializerPayload); ok {
 			return true
 		}
 		if _, ok := v.Data.(Materializer); ok {
@@ -1475,9 +1384,12 @@ func (v Value) IsTableType() bool {
 }
 
 // AsTableType returns the TableTypeInfo, panics if not a table type.
-func (v Value) AsTableType() (TableTypeInfo, error) {
+func AsTableType(v Value) (TableTypeInfo, error) {
 	if td, ok := v.Data.(TableData); ok {
 		return TableTypeInfo{Record: td.Record}, nil
+	}
+	if mp, ok := v.Data.(MaterializerPayload); ok {
+		return TableTypeInfo{Record: mp.M.SourceRecord()}, nil
 	}
 	if mz, ok := v.Data.(Materializer); ok {
 		return TableTypeInfo{Record: mz.SourceRecord()}, nil
@@ -1490,7 +1402,7 @@ func (v Value) AsTableType() (TableTypeInfo, error) {
 }
 
 // AsChildType returns the ChildTypeInfo, panics if not a typed list or typed map.
-func (v Value) AsChildType() (ChildTypeInfo, error) {
+func AsChildType(v Value) (ChildTypeInfo, error) {
 	info, ok := v.Data.(ChildTypeInfo)
 	if !ok {
 		return ChildTypeInfo{}, fmt.Errorf("AsChildType: not a child type value (got %T)", v.Data)
@@ -1499,7 +1411,7 @@ func (v Value) AsChildType() (ChildTypeInfo, error) {
 }
 
 // AsWord returns the WordInfo, panics if not a word.
-func (v Value) AsWord() (WordInfo, error) {
+func AsWord(v Value) (WordInfo, error) {
 	info, ok := v.Data.(WordInfo)
 	if !ok {
 		return WordInfo{}, fmt.Errorf("AsWord: not a word value (got %T)", v.Data)
@@ -1508,7 +1420,7 @@ func (v Value) AsWord() (WordInfo, error) {
 }
 
 // AsForward returns the ForwardInfo, panics if not a forward.
-func (v Value) AsForward() (ForwardInfo, error) {
+func AsForward(v Value) (ForwardInfo, error) {
 	info, ok := v.Data.(ForwardInfo)
 	if !ok {
 		return ForwardInfo{}, fmt.Errorf("AsForward: not a forward value (got %T)", v.Data)
@@ -1517,117 +1429,126 @@ func (v Value) AsForward() (ForwardInfo, error) {
 }
 
 // AsString returns the string payload. Returns "" if Data is nil (type literal).
-func (v Value) AsString() (string, error) {
+func AsString(v Value) (string, error) {
 	if v.Data == nil {
 		return "", fmt.Errorf("AsString: nil data")
 	}
-	s, ok := v.Data.(string)
-	if !ok {
-		return "", fmt.Errorf("AsString: not a string value (got %T)", v.Data)
+	if sp, ok := v.Data.(StrPayload); ok {
+		return sp.S, nil
 	}
-	return s, nil
+	return "", fmt.Errorf("AsString: not a string value (got %T)", v.Data)
 }
 
 // AsInteger returns the int64 payload. Returns 0 if Data is nil (type literal).
-func (v Value) AsInteger() (int64, error) {
+func AsInteger(v Value) (int64, error) {
 	if v.Data == nil {
 		return 0, fmt.Errorf("AsInteger: nil data")
 	}
-	n, ok := v.Data.(int64)
-	if !ok {
-		return 0, fmt.Errorf("AsInteger: not an integer value (got %T)", v.Data)
+	if ip, ok := v.Data.(IntPayload); ok {
+		return ip.N, nil
 	}
-	return n, nil
+	return 0, fmt.Errorf("AsInteger: not an integer value (got %T)", v.Data)
 }
 
 // AsDecimal returns the float64 payload. Returns 0.0 if Data is nil (type literal).
-func (v Value) AsDecimal() (float64, error) {
+func AsDecimal(v Value) (float64, error) {
 	if v.Data == nil {
 		return 0.0, fmt.Errorf("AsDecimal: nil data")
 	}
-	f, ok := v.Data.(float64)
-	if !ok {
-		return 0.0, fmt.Errorf("AsDecimal: not a decimal value (got %T)", v.Data)
+	if dp, ok := v.Data.(DecPayload); ok {
+		return dp.F, nil
 	}
-	return f, nil
+	return 0.0, fmt.Errorf("AsDecimal: not a decimal value (got %T)", v.Data)
 }
 
 // AsNumber returns the numeric value as float64 regardless of whether it is
 // an integer or decimal.
-func (v Value) AsNumber() (float64, error) {
+func AsNumber(v Value) (float64, error) {
 	if v.VType.Matches(TDecimal) {
-		f, err := v.AsDecimal()
+		f, err := AsDecimal(v)
 		return f, err
 	}
-	n, err := v.AsInteger()
+	n, err := AsInteger(v)
 	return float64(n), err
 }
 
 // AsBoolean returns the bool payload. Returns false if Data is nil (type literal).
-func (v Value) AsBoolean() (bool, error) {
+func AsBoolean(v Value) (bool, error) {
 	if v.Data == nil {
 		return false, fmt.Errorf("AsBoolean: nil data")
 	}
-	b, ok := v.Data.(bool)
-	if !ok {
-		return false, fmt.Errorf("AsBoolean: not a boolean value (got %T)", v.Data)
+	if bp, ok := v.Data.(BoolPayload); ok {
+		return bp.B, nil
 	}
-	return b, nil
+	return false, fmt.Errorf("AsBoolean: not a boolean value (got %T)", v.Data)
 }
 
 // AsList returns the []Value payload, or nil if the data is not a []Value.
 // Also works for TableData and Materializer, returning the rows.
 // For Materializer, this triggers materialization.
 // AsList returns a read-only view of the list payload.
-// Returns a ReadList with nil backing if the data is not a list.
-func (v Value) AsList() ReadList {
+// Returns an error if the value lacks a list-shaped payload.
+// Type literals (Data == nil) and unsupported payload types are
+// reported as errors so callers can't silently treat a non-list
+// value as an empty list.
+func AsList(v Value) (ReadList, error) {
 	if v.Data == nil {
-		return ReadList{}
+		return ReadList{}, fmt.Errorf("AsList: nil data")
+	}
+	// Post Step 5c variant first; legacy []Value second.
+	if lp, ok := v.Data.(ListPayload); ok {
+		return ReadList{elems: lp.Elems}, nil
 	}
 	if td, ok := v.Data.(TableData); ok {
-		return ReadList{elems: td.Rows}
+		return ReadList{elems: td.Rows}, nil
+	}
+	if mp, ok := v.Data.(MaterializerPayload); ok {
+		td, err := mp.M.Materialize()
+		if err != nil {
+			return ReadList{}, fmt.Errorf("AsList: materialize: %w", err)
+		}
+		return ReadList{elems: td.Rows}, nil
 	}
 	if mz, ok := v.Data.(Materializer); ok {
 		td, err := mz.Materialize()
 		if err != nil {
-			return ReadList{}
+			return ReadList{}, fmt.Errorf("AsList: materialize: %w", err)
 		}
-		return ReadList{elems: td.Rows}
-	}
-	if elems, ok := v.Data.([]Value); ok {
-		return ReadList{elems: elems}
+		return ReadList{elems: td.Rows}, nil
 	}
 	// Typed list carrying both a child constraint and concrete
 	// elements (`[v0 :T v1]`). Surface the elements so list-aware
 	// operations (lengthq, firstq, is) see them.
 	if ci, ok := v.Data.(ChildTypeInfo); ok && len(ci.Elements) > 0 {
-		return ReadList{elems: ci.Elements}
+		return ReadList{elems: ci.Elements}, nil
 	}
-	return ReadList{}
+	return ReadList{}, fmt.Errorf("AsList: not a list payload (got %T)", v.Data)
 }
 
 // AsMutableList returns the underlying []Value slice for mutation.
 // Only valid for internal construction paths — never for immutable Node values.
-func (v Value) AsMutableList() []Value {
+// Returns an error if the value lacks a mutable list payload.
+func AsMutableList(v Value) ([]Value, error) {
 	if v.Data == nil {
-		return nil
+		return nil, fmt.Errorf("AsMutableList: nil data")
 	}
-	elems, ok := v.Data.([]Value)
-	if !ok {
-		return nil
+	if lp, ok := v.Data.(ListPayload); ok {
+		return lp.Elems, nil
 	}
-	return elems
+	return nil, fmt.Errorf("AsMutableList: not a list payload (got %T)", v.Data)
 }
 
-// AsMap returns a read-only view of the map payload, or nil if the data is
-// not an *OrderedMap. Node values (Map, Options) are immutable — use this
-// for all read access.
-func (v Value) AsMap() ReadMap {
+// AsMap returns a read-only view of the map payload.
+// Returns an error if the value lacks a map-shaped payload.
+// Type literals (Data == nil) and unsupported payload types are
+// reported as errors so callers can't silently treat a non-map
+// value as an empty map.
+func AsMap(v Value) (ReadMap, error) {
 	if v.Data == nil {
-		return nil
+		return nil, fmt.Errorf("AsMap: nil data")
 	}
-	if om, ok := v.Data.(*OrderedMap); ok {
-		return om
+	if mp, ok := v.Data.(MapPayload); ok {
+		return mp.M, nil
 	}
 	// Typed map carrying both a child constraint and concrete entries
 	// (`{k:v :T}`). Surface the entries as an OrderedMap so map-aware
@@ -1637,57 +1558,76 @@ func (v Value) AsMap() ReadMap {
 		for _, e := range ci.Entries {
 			om.Set(e.Key, e.Value)
 		}
-		return om
+		return om, nil
 	}
-	return nil
+	return nil, fmt.Errorf("AsMap: not a map payload (got %T)", v.Data)
 }
 
 // AsMutableMap returns the underlying *OrderedMap for mutation. Only valid
 // for Object instances and internal construction — never for Node values.
-func (v Value) AsMutableMap() *OrderedMap {
+// Returns an error if the value lacks a mutable map payload.
+func AsMutableMap(v Value) (*OrderedMap, error) {
 	if v.Data == nil {
-		return nil
+		return nil, fmt.Errorf("AsMutableMap: nil data")
 	}
-	om, ok := v.Data.(*OrderedMap)
-	if !ok {
-		return nil
+	if mp, ok := v.Data.(MapPayload); ok {
+		return mp.M, nil
 	}
-	return om
+	return nil, fmt.Errorf("AsMutableMap: not a map payload (got %T)", v.Data)
 }
 
 // String returns a human-readable representation.
 func (v Value) String() string {
+	// Behavior-driven format delegation: types that supply a custom
+	// TypeBehavior route through their Format. Walks the Parent
+	// chain so descendants of a type with a custom Behavior inherit
+	// it (e.g. TInspect inherits mapFormatBehavior via its TMap
+	// parent). The DefaultBehavior sentinel falls through to the
+	// kernel switch below.
+	//
+	// Type literals (Data==nil) are NOT delegated — they render as
+	// their leaf type name uniformly across all types, including
+	// types with custom Behaviors. See the Data==nil arm in the
+	// switch below.
+	if v.Data != nil && v.VType != nil {
+		for t := v.VType; t != nil; t = t.Parent {
+			if t.Behavior != nil && t.Behavior != DefaultBehavior {
+				return t.Behavior.Format(v)
+			}
+		}
+	}
 	switch {
-	case v.IsWord():
-		w, _ := v.AsWord()
+	case IsWord(v):
+		w, _ := AsWord(v)
 		return fmt.Sprintf("word(%s)", w.Name)
-	case v.IsForward():
-		f, _ := v.AsForward()
+	case IsForward(v):
+		f, _ := AsForward(v)
 		return fmt.Sprintf("forward(%s,%d/%d)", f.FuncName, f.CollectedArgs, f.ExpectedArgs)
-	case v.IsOpenParen():
+	case IsOpenParen(v):
 		return "("
-	case v.IsCloseParen():
+	case IsCloseParen(v):
 		return ")"
-	case v.IsEnd():
+	case IsEnd(v):
 		return "end"
-	case v.IsParenExpr():
-		return fmt.Sprintf("paren(%v)", v.AsParenExpr())
-	case v.IsMark():
-		_as2, _ := v.AsMark()
+	case IsParenExpr(v):
+		_pe, _ := AsParenExpr(v)
+		return fmt.Sprintf("paren(%v)", _pe)
+	case IsMark(v):
+		_as2, _ := AsMark(v)
 		return fmt.Sprintf("mark(%s)", _as2.ID)
-	case v.IsMove():
-		m, _ := v.AsMove()
+	case IsMove(v):
+		m, _ := AsMove(v)
 		return fmt.Sprintf("move(%s,%s)", m.To, m.Reason)
-	case v.IsReturnCheck():
-		rc, _ := v.AsReturnCheck()
+	case IsReturnCheck(v):
+		rc, _ := AsReturnCheck(v)
 		return fmt.Sprintf("returncheck(%s)", rc.FuncName)
-	case v.IsDefCleanup():
+	case IsDefCleanup(v):
 		return "__dc"
-	case v.IsModule():
-		md, _ := v.AsModule()
+	case IsModule(v):
+		md, _ := AsModule(v)
 		return fmt.Sprintf("module(%s)", md.ID)
-	case v.IsError():
-		_as3, _ := v.AsError()
+	case IsError(v):
+		_as3, _ := AsError(v)
 		return fmt.Sprintf("error(%s)", _as3.Message)
 	case v.Data == nil:
 		// Type literal with no specific value (e.g. "Integer", "List").
@@ -1701,125 +1641,47 @@ func (v Value) String() string {
 		// payload would be cast to the wrong concrete type.
 		return renderDepScalar(v)
 	case v.VType.Matches(TString):
-		return fmt.Sprintf("'%s'", v.Data)
+		s, _ := AsString(v)
+		return fmt.Sprintf("'%s'", s)
 	case v.VType.Equal(TAtom):
-		s, _ := v.Data.(string)
+		s, _ := AsAtom(v)
 		return s
 	case v.VType.Matches(TDecimal):
-		_as4, _ := v.AsDecimal()
+		_as4, _ := AsDecimal(v)
 		return formatDecimal(_as4)
 	case v.VType.Matches(TInteger):
-		return fmt.Sprintf("%d", v.Data)
+		n, _ := AsInteger(v)
+		return fmt.Sprintf("%d", n)
 	case v.VType.Matches(TBoolean):
-		_as5, _ := v.AsBoolean()
+		_as5, _ := AsBoolean(v)
 		if _as5 {
 			return "true"
 		}
 		return "false"
-	case v.VType.Matches(TInstant):
-		if t, ok := v.Data.(time.Time); ok {
-			return t.Format(time.RFC3339Nano)
-		}
-		return "Instant(nil)"
-	case v.VType.Matches(TDateTime):
-		if t, ok := v.Data.(time.Time); ok {
-			return t.Format("2006-01-02T15:04:05.999999999")
-		}
-		return "DateTime(nil)"
-	case v.VType.Matches(TDate):
-		if t, ok := v.Data.(time.Time); ok {
-			return t.Format("2006-01-02")
-		}
-		return "Date(nil)"
-	case v.VType.Matches(TTimeOfDay):
-		if d, ok := v.Data.(time.Duration); ok {
-			h := int(d.Hours())
-			m := int(d.Minutes()) % 60
-			s := int(d.Seconds()) % 60
-			ns := d.Nanoseconds() % 1e9
-			if ns != 0 {
-				return fmt.Sprintf("%02d:%02d:%02d.%09d", h, m, s, ns)
-			}
-			return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
-		}
-		return "TimeOfDay(nil)"
-	case v.VType.Matches(TCalDuration):
-		if cd, ok := v.Data.(CalDurationData); ok {
-			return fmt.Sprintf("P%dY%dM%dD", cd.Years, cd.Months, cd.Days)
-		}
-		return "CalDuration(nil)"
-	case v.VType.Matches(TClkDuration):
-		if d, ok := v.Data.(time.Duration); ok {
-			return d.String()
-		}
-		return "ClkDuration(nil)"
-	case v.VType.Matches(TTimezone):
-		if loc, ok := v.Data.(*time.Location); ok {
-			return loc.String()
-		}
-		return "Timezone(nil)"
-	case v.VType.Matches(TMatrix):
-		if m, ok := v.Data.(MatrixData); ok {
-			return fmt.Sprintf("Matrix(%dx%d)", m.Rows, m.Cols)
-		}
-		return "Matrix(nil)"
-	case v.IsPath():
-		_as6, _ := v.AsPath()
+	// Domain types (Instant, DateTime, Date, TimeOfDay, CalDuration,
+	// ClkDuration, Timezone, Matrix, Timeout, Interval) now render
+	// via their per-Type Behavior installed by
+	// coretype_format_behaviors.go and dispatched at the top of this
+	// function. Their old switch arms have been removed.
+	case IsPath(v):
+		_as6, _ := AsPath(v)
 		return _as6.String()
-	case v.VType.Equal(TList):
-		if tt, ok := v.Data.(TableTypeInfo); ok {
-			parts := make([]string, 0, tt.Record.Fields.Len())
-			for _, k := range tt.Record.Fields.Keys() {
-				val, _ := tt.Record.Fields.Get(k)
-				parts = append(parts, k+":"+val.String())
-			}
-			return "table{" + strings.Join(parts, ",") + "}"
-		}
-		if td, ok := v.Data.(TableData); ok {
-			parts := make([]string, 0, td.Record.Fields.Len())
-			for _, k := range td.Record.Fields.Keys() {
-				val, _ := td.Record.Fields.Get(k)
-				parts = append(parts, k+":"+val.String())
-			}
-			rowParts := make([]string, len(td.Rows))
-			for i, row := range td.Rows {
-				rowParts[i] = row.String()
-			}
-			return "table{" + strings.Join(parts, ",") + "}[" + strings.Join(rowParts, ",") + "]"
-		}
-		if mz, ok := v.Data.(Materializer); ok {
-			td, err := mz.Materialize()
-			if err != nil {
-				return "query(error:" + err.Error() + ")"
-			}
-			v2 := NewValueRaw(TList, td)
-			return v2.String()
-		}
-		if ct, ok := v.Data.(ChildTypeInfo); ok {
-			return "[:" + ct.Child.String() + "]"
-		}
-		elems := v.AsList().Slice()
-		parts := make([]string, len(elems))
-		for i, e := range elems {
-			parts[i] = e.String()
-		}
-		return "[" + strings.Join(parts, ",") + "]"
-	case v.IsArray():
-		arr := v.AsArray()
+	// TList rendering moved to listFormatBehavior in
+	// coretype_list_map_behaviors.go (Step 10). The top-of-function
+	// Behavior dispatch routes List values there.
+	case IsArray(v):
+		arr, _ := AsArray(v)
 		parts := make([]string, arr.Len())
 		for i := 0; i < arr.Len(); i++ {
 			e, _ := arr.Get(i)
 			parts[i] = e.String()
 		}
 		return "Array[" + strings.Join(parts, ",") + "]"
-	case v.IsTimeout():
-		ti, _ := v.AsTimeout()
-		return fmt.Sprintf("Timeout(%s,%dms)", ti.ID, ti.Ms)
-	case v.IsInterval():
-		ii, _ := v.AsInterval()
-		return fmt.Sprintf("Interval(%s,%dms)", ii.ID, ii.Ms)
-	case v.IsObjectInstance():
-		oi, _ := v.AsObjectInstance()
+	// Timeout / Interval render via their per-Type Behavior — see
+	// coretype_format_behaviors.go. Their arms have been removed
+	// from this switch.
+	case IsObjectInstance(v):
+		oi, _ := AsObjectInstance(v)
 		allFields := oi.AllFields()
 		parts := make([]string, 0, allFields.Len())
 		for _, k := range allFields.Keys() {
@@ -1831,8 +1693,8 @@ func (v Value) String() string {
 			name = "Object/" + oi.TypeRef.ID
 		}
 		return name + "{" + strings.Join(parts, ",") + "}"
-	case v.IsObjectType():
-		ot, _ := v.AsObjectType()
+	case IsObjectType(v):
+		ot, _ := AsObjectType(v)
 		allFields := ot.AllFields()
 		parts := make([]string, 0, allFields.Len())
 		for _, k := range allFields.Keys() {
@@ -1844,40 +1706,17 @@ func (v Value) String() string {
 			name = "Object/" + ot.ID
 		}
 		return "object<" + name + ">{" + strings.Join(parts, ",") + "}"
-	case v.IsDisjunct():
-		di, _ := v.AsDisjunct()
+	case IsDisjunct(v):
+		di, _ := AsDisjunct(v)
 		parts := make([]string, len(di.Alternatives))
 		for i, alt := range di.Alternatives {
 			parts[i] = alt.String()
 		}
 		return strings.Join(parts, "|")
-	case v.VType.Matches(TMap):
-		if ct, ok := v.Data.(ChildTypeInfo); ok {
-			return "{:" + ct.Child.String() + "}"
-		}
-		if rt, ok := v.Data.(RecordTypeInfo); ok {
-			parts := make([]string, 0, rt.Fields.Len())
-			for _, k := range rt.Fields.Keys() {
-				val, _ := rt.Fields.Get(k)
-				parts = append(parts, k+":"+val.String())
-			}
-			return "record{" + strings.Join(parts, ",") + "}"
-		}
-		if ot, ok := v.Data.(OptionsTypeInfo); ok {
-			parts := make([]string, 0, ot.Fields.Len())
-			for _, k := range ot.Fields.Keys() {
-				val, _ := ot.Fields.Get(k)
-				parts = append(parts, k+":"+val.String())
-			}
-			return "options{" + strings.Join(parts, ",") + "}"
-		}
-		m := v.AsMap()
-		parts := make([]string, 0, m.Len())
-		for _, k := range m.Keys() {
-			val, _ := m.Get(k)
-			parts = append(parts, k+":"+val.String())
-		}
-		return "{" + strings.Join(parts, ",") + "}"
+	// TMap rendering moved to mapFormatBehavior in
+	// coretype_list_map_behaviors.go (Step 10). The top-of-function
+	// Behavior dispatch routes Map values (and TMap-rooted subtypes
+	// like RecordType/OptionsType) there.
 	default:
 		return fmt.Sprintf("%v(%v)", v.VType, v.Data)
 	}
@@ -1892,14 +1731,14 @@ func IsTypeValue(v Value) bool {
 	}
 
 	// Options type, record type, typed list/map, table type, object type.
-	if v.IsOptionsType() || v.IsRecordType() || v.IsTypedList() ||
-		v.IsTypedMap() || v.IsTableType() || v.IsObjectType() {
+	if IsOptionsType(v) || IsRecordType(v) || IsTypedList(v) ||
+		IsTypedMap(v) || IsTableType(v) || IsObjectType(v) {
 		return true
 	}
 
 	// Concrete list: check each element recursively.
 	if v.VType.Matches(TList) && v.Data != nil {
-		elems := v.AsList()
+		elems, _ := AsList(v)
 		if !elems.IsNil() {
 			for _, elem := range elems.Slice() {
 				if IsTypeValue(elem) {
@@ -1911,7 +1750,7 @@ func IsTypeValue(v Value) bool {
 
 	// Concrete map: check each value recursively.
 	if v.VType.Matches(TMap) && v.Data != nil {
-		m := v.AsMap()
+		m, _ := AsMap(v)
 		if m != nil {
 			for _, key := range m.Keys() {
 				val, _ := m.Get(key)

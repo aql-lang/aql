@@ -74,12 +74,12 @@ func registerCoreEnum(r *Registry) {
 				}
 				var childType Value
 				hasChild := false
-				if list.IsTypedList() {
-					ci, _ := list.AsChildType()
+				if IsTypedList(list) {
+					ci, _ := AsChildType(list)
 					childType = ci.Child
 					hasChild = childType.VType != nil
 				}
-				elems := list.AsList()
+				elems, _ := AsList(list)
 				alts := make([]Value, 0, elems.Len())
 				for i := 0; i < elems.Len(); i++ {
 					e := elems.Get(i)
@@ -87,8 +87,8 @@ func registerCoreEnum(r *Registry) {
 					// typically named, and in word context the parser
 					// produces Words. Convert here so users don't need
 					// to wrap each element in `quote`.
-					if e.IsWord() {
-						w, _ := e.AsWord()
+					if IsWord(e) {
+						w, _ := AsWord(e)
 						e = NewAtom(w.Name)
 					}
 					if hasChild && !IsValueOfType(e, childType) {
@@ -123,7 +123,7 @@ func registerCoreTypeWord(r *Registry) {
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				name, _ := args[0].AsConcreteAtom()
 				body := args[1]
-				if err := installType(reg, name, body); err != nil {
+				if err := InstallType(reg, name, body); err != nil {
 					return nil, err
 				}
 				return nil, nil
@@ -257,7 +257,7 @@ func PathOf(t Value) Value {
 // registerCoreTypeof for the dispatch rules.
 func TypeOf(v Value) Value {
 	// The VALUE `none` (Data != nil, VType == TNone) → None type literal.
-	if v.IsNone() {
+	if IsNone(v) {
 		return NewTypeLiteral(TNone)
 	}
 	// A type literal (Data == nil) → `Type`. Metatypes are collapsed:
@@ -269,7 +269,7 @@ func TypeOf(v Value) Value {
 	// Typed list `[:T]` or typed map `{:T}` — Node-family TYPE
 	// declarations carrying a child-type constraint, not concrete
 	// containers. They are types → `Type`.
-	if v.IsTypedList() || v.IsTypedMap() {
+	if IsTypedList(v) || IsTypedMap(v) {
 		return NewTypeLiteral(TType)
 	}
 	// An implicit-map record shape (every entry's value is itself a
@@ -300,7 +300,7 @@ func IsRecordShape(v Value) bool {
 	if !v.VType.Equal(TMap) || v.Data == nil {
 		return false
 	}
-	m := v.AsMap()
+	m, _ := AsMap(v)
 	if m == nil || m.Len() == 0 {
 		return false
 	}
@@ -369,12 +369,12 @@ func registerCoreIs(r *Registry) {
 //     subtype of T's via the type lattice.
 //   - T is anything else: structural unification on (v, t).
 func IsValueOfType(v, t Value) bool {
-	if t.IsTypedList() {
+	if IsTypedList(t) {
 		if !v.VType.Equal(TList) || v.Data == nil {
 			return false
 		}
-		ci, _ := t.AsChildType()
-		lst := v.AsList()
+		ci, _ := AsChildType(t)
+		lst, _ := AsList(v)
 		if lst.IsNil() {
 			return false
 		}
@@ -385,12 +385,12 @@ func IsValueOfType(v, t Value) bool {
 		}
 		return true
 	}
-	if t.IsTypedMap() {
+	if IsTypedMap(t) {
 		if !v.VType.Equal(TMap) || v.Data == nil {
 			return false
 		}
-		ci, _ := t.AsChildType()
-		vMap := v.AsMap()
+		ci, _ := AsChildType(t)
+		vMap, _ := AsMap(v)
 		if vMap == nil {
 			return false
 		}
@@ -408,12 +408,12 @@ func IsValueOfType(v, t Value) bool {
 	// fields via the Unify fallback when t's field is a literal.
 	// Subtypes like RecordTypeInfo / OptionsTypeInfo (whose AsMap
 	// returns nil) fall through to Unify below.
-	if t.VType.Equal(TMap) && t.Data != nil && t.AsMap() != nil {
+	if _tMap, _tErr := AsMap(t); t.VType.Equal(TMap) && t.Data != nil && _tErr == nil && _tMap != nil {
 		if !v.VType.Equal(TMap) || v.Data == nil {
 			return false
 		}
-		vMap := v.AsMap()
-		tMap := t.AsMap()
+		vMap, _ := AsMap(v)
+		tMap, _ := AsMap(t)
 		if vMap == nil || tMap == nil {
 			return false
 		}
@@ -454,14 +454,22 @@ func IsValueOfType(v, t Value) bool {
 			}
 			return v.Data == nil || IsTypeBody(v) || IsRecordShape(v) || v.VType.Matches(TType)
 		}
-		return v.VType.Matches(t.VType)
+		// Canonical dispatch site: route through Behavior so custom
+		// type semantics (predicate types, dependent scalars, future
+		// plugin types) get consulted. Default Behavior delegates to
+		// the historical lattice walk.
+		return v.Is(t.VType)
 	}
 	_, ok := Unify(v, t)
 	return ok
 }
 
-// installType validates a (name, body) pair and pushes the body onto
-// the type stack. Mirrors production aql validateAndInstallType.
+// InstallType is the single kernel entry point for installing a
+// named type body (`type Foo body`). Validates the body shape,
+// rejects name clashes, and pushes onto the registry's type
+// stack. Used by both the eng-internal core `type` word and the
+// production aql `type` word in lang/engine. Changes to
+// type-installation policy go here, not in a per-surface duplicate.
 //
 // Body acceptance is broad: a structural type body (IsTypeBody — type
 // literal, disjunct, implicit map, typed list/map, ObjectType, …) OR a
@@ -473,7 +481,7 @@ func IsValueOfType(v, t Value) bool {
 // When the body is an anonymous ObjectType (from the `object` word),
 // binding it under NAME renames it `Object/NAME` (or `<parent>/NAME`
 // when it inherits) so `typeof` / `is` report the nominal name.
-func installType(r *Registry, name string, body Value) error {
+func InstallType(r *Registry, name string, body Value) error {
 	if !IsTypeBody(body) && !IsLiteralTypeBody(body) {
 		return &AqlError{
 			Code:   "type_error",
@@ -503,8 +511,8 @@ func installType(r *Registry, name string, body Value) error {
 			Detail: "type " + name + ": name clash — already a def'd value",
 		}
 	}
-	if body.IsObjectType() {
-		info, _ := body.AsObjectType()
+	if IsObjectType(body) {
+		info, _ := AsObjectType(body)
 		if info.Parent != nil {
 			info.Name = info.Parent.Name + "/" + name
 		} else {

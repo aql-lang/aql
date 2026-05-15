@@ -383,9 +383,9 @@ func TestUnifyIntegerWithNumberType(t *testing.T) {
 	if !ok {
 		t.Fatal("Unify(42, number) should succeed")
 	}
-	_as0, _ := result.AsInteger()
+	_as0, _ := AsInteger(result)
 	if _as0 != 42 {
-		_as1, _ := result.AsInteger()
+		_as1, _ := AsInteger(result)
 		t.Errorf("expected 42, got %d", _as1)
 	}
 }
@@ -399,9 +399,9 @@ func TestUnifyIntegerWithIntegerType(t *testing.T) {
 	if !ok {
 		t.Fatal("Unify(7, number/integer) should succeed")
 	}
-	_as2, _ := result.AsInteger()
+	_as2, _ := AsInteger(result)
 	if _as2 != 7 {
-		_as3, _ := result.AsInteger()
+		_as3, _ := AsInteger(result)
 		t.Errorf("expected 7, got %d", _as3)
 	}
 }
@@ -428,9 +428,9 @@ func TestUnifySameIntegerLiteralSucceeds(t *testing.T) {
 	if !ok {
 		t.Fatal("Unify(10, 10) should succeed")
 	}
-	_as4, _ := result.AsInteger()
+	_as4, _ := AsInteger(result)
 	if _as4 != 10 {
-		_as5, _ := result.AsInteger()
+		_as5, _ := AsInteger(result)
 		t.Errorf("expected 10, got %d", _as5)
 	}
 }
@@ -569,12 +569,13 @@ func TestUnifyListsWithDeepTypedValues(t *testing.T) {
 	if !ok {
 		t.Fatal("Unify of identical integer lists should succeed")
 	}
-	elems := result.AsList().Slice()
+	_lst, _ := AsList(result)
+	elems := _lst.Slice()
 	if len(elems) != 2 {
 		t.Fatalf("expected 2 elements, got %d", len(elems))
 	}
-	_as7, _ := elems[0].AsInteger()
-	_as6, _ := elems[1].AsInteger()
+	_as7, _ := AsInteger(elems[0])
+	_as6, _ := AsInteger(elems[1])
 	if _as7 != 1 || _as6 != 2 {
 		t.Errorf("unexpected values: %v", elems)
 	}
@@ -595,14 +596,14 @@ func TestUnifyMapsWithDeepTypedValues(t *testing.T) {
 	if !ok {
 		t.Fatal("Unify of identical integer-valued maps should succeed")
 	}
-	rm := result.AsMap()
+	rm, _ := AsMap(result)
 	xv, _ := rm.Get("X")
 	yv, _ := rm.Get("y")
-	_as9, _ := xv.AsInteger()
-	_as8, _ := yv.AsInteger()
+	_as9, _ := AsInteger(xv)
+	_as8, _ := AsInteger(yv)
 	if _as9 != 10 || _as8 != 20 {
-		_as11, _ := xv.AsInteger()
-		_as10, _ := yv.AsInteger()
+		_as11, _ := AsInteger(xv)
+		_as10, _ := AsInteger(yv)
 		t.Errorf("unexpected map values: x=%d y=%d", _as11, _as10)
 	}
 }

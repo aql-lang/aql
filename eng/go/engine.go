@@ -106,13 +106,13 @@ func (e *Engine) isFnShapeTypedBindingContext() bool {
 		return false
 	}
 	for i := e.pointer - 1; i >= 0; i-- {
-		if e.stack[i].IsOpenParen() {
+		if IsOpenParen(e.stack[i]) {
 			return false
 		}
-		if !e.stack[i].IsForward() {
+		if !IsForward(e.stack[i]) {
 			continue
 		}
-		fwd, _ := e.stack[i].AsForward()
+		fwd, _ := AsForward(e.stack[i])
 		if fwd.FuncName != "def" || fwd.Sig == nil {
 			return false
 		}
@@ -131,13 +131,13 @@ func (e *Engine) isFnShapeTypedBindingContext() bool {
 		if mapIdx < 0 || mapIdx >= len(e.stack) {
 			return false
 		}
-		m := e.stack[mapIdx].AsMap()
+		m, _ := AsMap(e.stack[mapIdx])
 		if m == nil || m.Len() != 1 {
 			return false
 		}
 		constraint, _ := m.Get(m.Keys()[0])
-		if constraint.IsWord() {
-			cw, _ := constraint.AsWord()
+		if IsWord(constraint) {
+			cw, _ := AsWord(constraint)
 			if tv, ok := e.registry.ResolveTypedName(cw.Name); ok {
 				constraint = tv
 			}
@@ -268,34 +268,34 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		}
 
 		switch {
-		case val.IsWord():
+		case IsWord(val):
 			if err := e.stepWord(val); err != nil {
 				return nil, err
 			}
 
-		case val.IsForward():
+		case IsForward(val):
 			e.pointer++
 
-		case val.IsOpenParen():
+		case IsOpenParen(val):
 			e.pointer++
 
-		case val.IsCloseParen():
+		case IsCloseParen(val):
 			if err := e.stepCloseParen(); err != nil {
 				return nil, err
 			}
 
-		case val.IsEnd():
+		case IsEnd(val):
 			if err := e.stepEnd(); err != nil {
 				return nil, err
 			}
 
-		case val.IsParenExpr():
+		case IsParenExpr(val):
 			// ParenExpr values are only used inside maps (created by
 			// the parser for paren groups in data context). They should
 			// not appear on the main stack; skip if encountered.
 			e.pointer++
 
-		case val.IsInterpString():
+		case IsInterpString(val):
 			result, err := e.evalInterpString(val)
 			if err != nil {
 				return nil, err
@@ -305,18 +305,18 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 			// stepLiteral so forward collection works correctly.
 			e.stack[e.pointer] = result
 
-		case val.IsMark():
+		case IsMark(val):
 			e.stepMark(val)
 
-		case val.IsMove():
+		case IsMove(val):
 			if err := e.stepMove(val); err != nil {
 				return nil, err
 			}
 
-		case val.IsReturnCheck():
+		case IsReturnCheck(val):
 			e.pointer++
 
-		case val.IsDefCleanup():
+		case IsDefCleanup(val):
 			e.stepDefCleanup(val)
 			e.pointer++
 
@@ -354,7 +354,7 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 	}
 
 	for _, v := range e.stack {
-		if v.IsOpenParen() {
+		if IsOpenParen(v) {
 			return nil, e.syntaxError("unmatched opening parenthesis", "(")
 		}
 	}
@@ -393,7 +393,7 @@ func (e *Engine) resolveOrphanedForwards() error {
 	for attempt := 0; attempt < 222; attempt++ {
 		fwdIdx := -1
 		for i, v := range e.stack {
-			if v.IsForward() {
+			if IsForward(v) {
 				fwdIdx = i
 				break
 			}
@@ -402,7 +402,7 @@ func (e *Engine) resolveOrphanedForwards() error {
 			return nil
 		}
 
-		fwd, _ := e.stack[fwdIdx].AsForward()
+		fwd, _ := AsForward(e.stack[fwdIdx])
 		funcIdx := fwd.FuncIndex
 		collectedCount := fwd.CollectedArgs
 		stackArgCount := fwd.StackArgs
@@ -423,21 +423,21 @@ func (e *Engine) resolveOrphanedForwards() error {
 			}
 			val := e.stack[e.pointer]
 			switch {
-			case val.IsWord():
+			case IsWord(val):
 				if err := e.stepWord(val); err != nil {
 					return err
 				}
-			case val.IsCloseParen():
+			case IsCloseParen(val):
 				if err := e.stepCloseParen(); err != nil {
 					return err
 				}
-			case val.IsEnd():
+			case IsEnd(val):
 				if err := e.stepEnd(); err != nil {
 					return err
 				}
-			case val.IsForward():
+			case IsForward(val):
 				e.pointer++
-			case val.IsOpenParen():
+			case IsOpenParen(val):
 				e.pointer++
 			default:
 				if err := e.stepLiteral(); err != nil {
@@ -473,18 +473,18 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 		tok := e.stack[scanIdx]
 
 		// Boundary conditions: stop scanning.
-		if tok.IsForward() || tok.VType.Matches(TMark) || tok.VType.Matches(TMove) ||
+		if IsForward(tok) || tok.VType.Matches(TMark) || tok.VType.Matches(TMove) ||
 			tok.VType.Matches(TInternal) || tok.VType.Matches(TReturnCheck) {
 			break
 		}
 
 		// Boundary tokens: end / ) stop the pre-eval scan.
-		if tok.IsEnd() || tok.IsCloseParen() {
+		if IsEnd(tok) || IsCloseParen(tok) {
 			break
 		}
 
 		// Open paren: evaluate the sub-expression in-place.
-		if tok.IsOpenParen() {
+		if IsOpenParen(tok) {
 			savedPointer := e.pointer
 			e.pointer = scanIdx
 
@@ -505,12 +505,12 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 				}
 				v := e.stack[e.pointer]
 
-				if v.IsOpenParen() {
+				if IsOpenParen(v) {
 					depth++
 					e.pointer++
 					continue
 				}
-				if v.IsCloseParen() {
+				if IsCloseParen(v) {
 					depth--
 					if err := e.stepCloseParen(); err != nil {
 						e.pointer = savedPointer
@@ -524,28 +524,28 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 
 				// Normal evaluation inside paren.
 				switch {
-				case v.IsWord():
+				case IsWord(v):
 					if err := e.stepWord(v); err != nil {
 						e.pointer = savedPointer
 						return err
 					}
-				case v.IsEnd():
+				case IsEnd(v):
 					if err := e.stepEnd(); err != nil {
 						e.pointer = savedPointer
 						return err
 					}
-				case v.IsMark():
+				case IsMark(v):
 					e.stepMark(v)
-				case v.IsMove():
+				case IsMove(v):
 					if err := e.stepMove(v); err != nil {
 						e.pointer = savedPointer
 						return err
 					}
-				case v.IsForward():
+				case IsForward(v):
 					e.pointer++
-				case v.IsReturnCheck():
+				case IsReturnCheck(v):
 					e.pointer++
-				case v.IsDefCleanup():
+				case IsDefCleanup(v):
 					e.stepDefCleanup(v)
 					e.pointer++
 				default:
@@ -573,8 +573,8 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 			continue
 		}
 
-		if tok.IsWord() {
-			ww, _ := tok.AsWord()
+		if IsWord(tok) {
+			ww, _ := AsWord(tok)
 			// Function word: count as resolved (may be captured by
 			// QuoteArgs/TWord matching). Don't stop — continue scanning
 			// so that parens beyond function words are pre-evaluated
@@ -600,7 +600,7 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 // values, and the Run-loop switch dispatches them directly. stepWord
 // therefore deals only with regular named words.
 func (e *Engine) stepWord(val Value) error {
-	w, _ := val.AsWord()
+	w, _ := AsWord(val)
 
 	// If there is a pending forward whose next slot is /q-marked
 	// (QuoteArgs), capture this Word as data (converted to an Atom
@@ -668,8 +668,8 @@ func (e *Engine) stepWord(val Value) error {
 			// Type literals (Data == nil) are values, not bodies — they
 			// fall through to stepLiteral so the type itself is pushed
 			// onto the stack rather than splicing nothing.
-			if top.VType.Equal(TList) && top.Data != nil && !top.IsTypedList() && !top.IsTableType() && !top.Quoted {
-				elems := top.AsList()
+			if top.VType.Equal(TList) && top.Data != nil && !IsTypedList(top) && !IsTableType(top) && !top.Quoted {
+				elems, _ := AsList(top)
 				expanded := make([]Value, elems.Len())
 				copy(expanded, elems.Slice())
 				stackSplice(&e.stack, e.pointer, 1, expanded...)
@@ -864,7 +864,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	for i := range match.Args {
 		if match.Args[i].Eval && !match.Args[i].Quoted {
 			if match.Args[i].VType.Equal(TMap) &&
-				match.Args[i].Data != nil && !match.Args[i].IsTypedMap() && !match.Args[i].IsRecordType() && !match.Args[i].IsOptionsType() {
+				match.Args[i].Data != nil && !IsTypedMap(match.Args[i]) && !IsRecordType(match.Args[i]) && !IsOptionsType(match.Args[i]) {
 				// NoEvalMapArgs (separate from the list-only
 				// NoEvalArgs) suppresses map auto-evaluation at this
 				// slot. Used by def's typed-name sig so a Word at the
@@ -878,7 +878,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 					}
 				}
 			} else if match.Args[i].VType.Equal(TList) &&
-				match.Args[i].Data != nil && !match.Args[i].IsTypedList() && !match.Args[i].IsTableType() {
+				match.Args[i].Data != nil && !IsTypedList(match.Args[i]) && !IsTableType(match.Args[i]) {
 				// NoEvalArgs suppresses list auto-evaluation for code-body
 				// positions (def body, if branches, for body, etc.).
 				noEval := match.Sig.NoEvalArgs != nil && match.Sig.NoEvalArgs[i]
@@ -906,9 +906,9 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	if e.registry.Check.IsActive() && !match.Sig.RunInCheckMode {
 		name := ""
 		var pos SrcPos
-		if e.pointer < len(e.stack) && e.stack[e.pointer].IsWord() {
+		if e.pointer < len(e.stack) && IsWord(e.stack[e.pointer]) {
 			pos = e.stack[e.pointer].Pos
-			if w, err := e.stack[e.pointer].AsWord(); err == nil {
+			if w, err := AsWord(e.stack[e.pointer]); err == nil {
 				name = w.Name
 			}
 		}
@@ -923,7 +923,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		if match.Sig.FullStack && match.Sig.CheckFullStackFn != nil {
 			base := 0
 			for i := e.pointer - 1; i >= 0; i-- {
-				if e.stack[i].IsOpenParen() {
+				if IsOpenParen(e.stack[i]) {
 					base = i + 1
 					break
 				}
@@ -954,7 +954,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		// only replace within the current paren scope, not below it.
 		base := 0
 		for i := e.pointer - 1; i >= 0; i-- {
-			if e.stack[i].IsOpenParen() {
+			if IsOpenParen(e.stack[i]) {
 				base = i + 1
 				break
 			}
@@ -1101,10 +1101,10 @@ func (e *Engine) rearrangeForForward(stackArgs, forwardArgs int) {
 func (e *Engine) resolvedIndicesBefore(n int) []int {
 	var indices []int
 	for i := e.pointer - 1; i >= 0 && len(indices) < n; i-- {
-		if e.stack[i].IsOpenParen() {
+		if IsOpenParen(e.stack[i]) {
 			break
 		}
-		if e.stack[i].IsForward() || e.stack[i].IsMark() || e.stack[i].IsMove() {
+		if IsForward(e.stack[i]) || IsMark(e.stack[i]) || IsMove(e.stack[i]) {
 			continue
 		}
 		indices = append(indices, i)
@@ -1126,7 +1126,7 @@ func (e *Engine) resolvedStackBeforeFrom(from int, excludeIndices []int) []Value
 	}
 	var stack []Value
 	for i := from; i < e.pointer; i++ {
-		if exclude[i] || e.stack[i].IsForward() || e.stack[i].IsOpenParen() || e.stack[i].IsMark() || e.stack[i].IsMove() {
+		if exclude[i] || IsForward(e.stack[i]) || IsOpenParen(e.stack[i]) || IsMark(e.stack[i]) || IsMove(e.stack[i]) {
 			continue
 		}
 		stack = append(stack, e.stack[i])
@@ -1165,10 +1165,10 @@ func (e *Engine) stepLiteral() error {
 	// Look backwards for the nearest forward entry, stopping at open-paren barriers.
 	fwdIdx := -1
 	for i := valIdx - 1; i >= 0; i-- {
-		if e.stack[i].IsOpenParen() {
+		if IsOpenParen(e.stack[i]) {
 			break
 		}
-		if e.stack[i].IsForward() {
+		if IsForward(e.stack[i]) {
 			fwdIdx = i
 			break
 		}
@@ -1188,7 +1188,7 @@ func (e *Engine) stepLiteral() error {
 		return nil
 	}
 
-	fwd, _ := e.stack[fwdIdx].AsForward()
+	fwd, _ := AsForward(e.stack[fwdIdx])
 	funcIdx := fwd.FuncIndex
 
 	// Check if the value matches the next expected arg positionally.
@@ -1205,7 +1205,7 @@ func (e *Engine) stepLiteral() error {
 		matches := sigTypeMatches(val, fwd.Sig.Args[nextIdx])
 		if !matches && fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx] &&
 			val.VType.Equal(TWord) && TAtom.Matches(fwd.Sig.Args[nextIdx]) {
-			w, _ := val.AsWord()
+			w, _ := AsWord(val)
 			e.stack[valIdx] = NewAtom(w.Name)
 			matches = true
 		}
@@ -1254,8 +1254,8 @@ func (e *Engine) stepLiteral() error {
 			funcIdx--
 		}
 
-		if funcIdx < len(e.stack) && e.stack[funcIdx].IsWord() {
-			w, _ := e.stack[funcIdx].AsWord()
+		if funcIdx < len(e.stack) && IsWord(e.stack[funcIdx]) {
+			w, _ := AsWord(e.stack[funcIdx])
 			e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
 		}
 
@@ -1284,13 +1284,13 @@ func (e *Engine) autoEvalStack() error {
 		if !val.Eval || val.Quoted {
 			continue
 		}
-		if val.VType.Equal(TList) && val.Data != nil && !val.IsTypedList() && !val.IsTableType() {
+		if val.VType.Equal(TList) && val.Data != nil && !IsTypedList(val) && !IsTableType(val) {
 			result, err := e.autoEvalList(val)
 			if err != nil {
 				return err
 			}
 			e.stack[i] = result
-		} else if val.VType.Equal(TMap) && val.Data != nil && !val.IsTypedMap() && !val.IsRecordType() && !val.IsOptionsType() {
+		} else if val.VType.Equal(TMap) && val.Data != nil && !IsTypedMap(val) && !IsRecordType(val) && !IsOptionsType(val) {
 			result, err := e.autoEvalMap(val)
 			if err != nil {
 				return err
@@ -1304,7 +1304,7 @@ func (e *Engine) autoEvalStack() error {
 // autoEvalList evaluates the contents of a plain list in a sub-engine,
 // returning a new list containing the results. For example, [1 add 2] → [3].
 func (e *Engine) autoEvalList(val Value) (Value, error) {
-	elems := val.AsList()
+	elems, _ := AsList(val)
 	if elems.Len() == 0 {
 		return val, nil
 	}
@@ -1322,8 +1322,8 @@ func (e *Engine) autoEvalList(val Value) (Value, error) {
 // expression part in a sub-engine, converting results to strings, and
 // concatenating everything into a single string value.
 func (e *Engine) evalInterpString(val Value) (Value, error) {
-	parts := val.AsInterpString()
-	if parts == nil {
+	parts, err := AsInterpString(val)
+	if err != nil || parts == nil {
 		return NewString(""), nil
 	}
 	var buf strings.Builder
@@ -1360,7 +1360,7 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 //	{a:[1,2]}     → {a:[1,2]}   (literal list unchanged)
 //	{x:"hello"}   → {x:"hello"} (strings pass through unchanged)
 func (e *Engine) autoEvalMap(val Value) (Value, error) {
-	m := val.AsMutableMap()
+	m, _ := AsMutableMap(val)
 	out := NewOrderedMap()
 	if m.Implicit {
 		out.Implicit = true
@@ -1386,9 +1386,9 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 			}
 			if len(keyResult) == 1 {
 				if keyResult[0].VType.Matches(TString) {
-					resolvedKey, _ = keyResult[0].AsString()
-				} else if keyResult[0].IsAtom() {
-					resolvedKey, _ = keyResult[0].AsAtom()
+					resolvedKey, _ = AsString(keyResult[0])
+				} else if IsAtom(keyResult[0]) {
+					resolvedKey, _ = AsAtom(keyResult[0])
 				} else {
 					resolvedKey = ValToString(keyResult[0])
 				}
@@ -1396,7 +1396,7 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 		}
 
 		// Interpolated string: evaluate inline.
-		if v.IsInterpString() {
+		if IsInterpString(v) {
 			result, err := e.evalInterpString(v)
 			if err != nil {
 				return Value{}, err
@@ -1407,8 +1407,8 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 
 		// Paren expression: evaluate items with paren markers so the
 		// engine's stepCloseParen collapses to a single result.
-		if v.IsParenExpr() {
-			items := v.AsParenExpr()
+		if IsParenExpr(v) {
+			items, _ := AsParenExpr(v)
 			sub := New(e.registry)
 			input := make([]Value, 0, len(items)+2)
 			input = append(input, NewOpenParen())
@@ -1533,7 +1533,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 					pat := *p.Pattern
 					if pat.VType.Equal(TMap) && resolved[ri].VType.Equal(TMap) &&
 						pat.Data != nil && resolved[ri].Data != nil &&
-						!pat.IsOptionsType() {
+						!IsOptionsType(pat) {
 						if !OpenUnifyMap(pat, resolved[ri]) {
 							match = false
 							break
@@ -1566,7 +1566,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 					pat := *p.Pattern
 					if pat.VType.Equal(TMap) && candidate[j].VType.Equal(TMap) &&
 						pat.Data != nil && candidate[j].Data != nil &&
-						!pat.IsOptionsType() {
+						!IsOptionsType(pat) {
 						if !OpenUnifyMap(pat, candidate[j]) {
 							match = false
 							break
@@ -1629,13 +1629,13 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	for i := range args {
 		if args[i].Eval && !args[i].Quoted {
 			if args[i].VType.Equal(TMap) &&
-				args[i].Data != nil && !args[i].IsTypedMap() && !args[i].IsRecordType() && !args[i].IsOptionsType() {
+				args[i].Data != nil && !IsTypedMap(args[i]) && !IsRecordType(args[i]) && !IsOptionsType(args[i]) {
 				evaluated, err := e.autoEvalMap(args[i])
 				if err == nil {
 					args[i] = evaluated
 				}
 			} else if args[i].VType.Equal(TList) &&
-				args[i].Data != nil && !args[i].IsTypedList() && !args[i].IsTableType() {
+				args[i].Data != nil && !IsTypedList(args[i]) && !IsTableType(args[i]) {
 				evaluated, err := e.autoEvalList(args[i])
 				if err == nil {
 					args[i] = evaluated
@@ -1753,7 +1753,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 
 // implicitEnd resolves a forward early when a type mismatch occurs.
 func (e *Engine) implicitEnd(fwdIdx int) error {
-	fwd, _ := e.stack[fwdIdx].AsForward()
+	fwd, _ := AsForward(e.stack[fwdIdx])
 	funcIdx := fwd.FuncIndex
 	collectedCount := fwd.CollectedArgs
 	stackArgCount := fwd.StackArgs
@@ -1774,10 +1774,10 @@ func (e *Engine) stepEnd() error {
 	// Find nearest pending forward, stopping at open-paren barriers.
 	fwdIdx := -1
 	for i := endIdx - 1; i >= 0; i-- {
-		if e.stack[i].IsOpenParen() {
+		if IsOpenParen(e.stack[i]) {
 			break
 		}
-		if e.stack[i].IsForward() {
+		if IsForward(e.stack[i]) {
 			fwdIdx = i
 			break
 		}
@@ -1788,7 +1788,7 @@ func (e *Engine) stepEnd() error {
 		return nil
 	}
 
-	fwd, _ := e.stack[fwdIdx].AsForward()
+	fwd, _ := AsForward(e.stack[fwdIdx])
 	funcIdx := fwd.FuncIndex
 
 	// Remove forward and end from the stack.
@@ -1824,7 +1824,7 @@ func (e *Engine) stepEnd() error {
 // The DefCleanupInfo carries a snapshot of DefStacks lengths taken before
 // the body ran. Any defs added since are popped via UninstallDef.
 func (e *Engine) stepDefCleanup(val Value) {
-	info, _ := val.AsDefCleanup()
+	info, _ := AsDefCleanup(val)
 	reg := info.Registry
 	for _, name := range reg.Defs.Names() {
 		prevLen := info.Snapshot[name] // 0 for names not in snapshot
@@ -1835,7 +1835,7 @@ func (e *Engine) stepDefCleanup(val Value) {
 }
 
 func (e *Engine) stepMark(val Value) {
-	info, _ := val.AsMark()
+	info, _ := AsMark(val)
 	if e.marks == nil {
 		e.marks = make(map[string]bool)
 	}
@@ -1852,7 +1852,7 @@ func (e *Engine) stepMark(val Value) {
 // When the move carries a ForCont (for-loop continuation), stepMoveCont is
 // called instead of the basic one-shot replay.
 func (e *Engine) stepMove(val Value) error {
-	info, _ := val.AsMove()
+	info, _ := AsMove(val)
 	moveIdx := e.pointer
 
 	if e.marks == nil || !e.marks[info.To] {
@@ -1862,8 +1862,8 @@ func (e *Engine) stepMove(val Value) error {
 	// Scan the stack to find the mark's current position.
 	markIdx := -1
 	for i := 0; i < len(e.stack); i++ {
-		_as2, _ := e.stack[i].AsMark()
-		if e.stack[i].IsMark() && _as2.ID == info.To {
+		_as2, _ := AsMark(e.stack[i])
+		if IsMark(e.stack[i]) && _as2.ID == info.To {
 			markIdx = i
 			break
 		}
@@ -1888,7 +1888,7 @@ func (e *Engine) stepMove(val Value) error {
 	}
 
 	// Get the saved body from the mark.
-	markInfo, _ := e.stack[markIdx].AsMark()
+	markInfo, _ := AsMark(e.stack[markIdx])
 
 	// Remove from hash table.
 	delete(e.marks, info.To)
@@ -2045,14 +2045,14 @@ func (e *Engine) exitWithFlowCtrl() ([]Value, error) {
 func (e *Engine) handleLoopBreak() bool {
 	// Scan forward from current pointer for a move with continuation.
 	for i := e.pointer; i < len(e.stack); i++ {
-		if e.stack[i].IsMove() {
-			info, _ := e.stack[i].AsMove()
+		if IsMove(e.stack[i]) {
+			info, _ := AsMove(e.stack[i])
 			if info.Cont != nil {
 				// Found the for-loop's move. Find its mark.
 				markIdx := -1
 				for j := 0; j < i; j++ {
-					_as3, _ := e.stack[j].AsMark()
-					if e.stack[j].IsMark() && _as3.ID == info.To {
+					_as3, _ := AsMark(e.stack[j])
+					if IsMark(e.stack[j]) && _as3.ID == info.To {
 						markIdx = j
 						break
 					}
@@ -2081,14 +2081,14 @@ func (e *Engine) handleLoopBreak() bool {
 func (e *Engine) handleLoopContinue() bool {
 	// Scan forward from current pointer for a move with continuation.
 	for i := e.pointer; i < len(e.stack); i++ {
-		if e.stack[i].IsMove() {
-			info, _ := e.stack[i].AsMove()
+		if IsMove(e.stack[i]) {
+			info, _ := AsMove(e.stack[i])
 			if info.Cont != nil {
 				// Found the for-loop's move. Find its mark.
 				markIdx := -1
 				for j := 0; j < i; j++ {
-					_as4, _ := e.stack[j].AsMark()
-					if e.stack[j].IsMark() && _as4.ID == info.To {
+					_as4, _ := AsMark(e.stack[j])
+					if IsMark(e.stack[j]) && _as4.ID == info.To {
 						markIdx = j
 						break
 					}
@@ -2117,7 +2117,7 @@ func (e *Engine) handleLoopContinue() bool {
 func (e *Engine) cleanMarks() {
 	i := 0
 	for i < len(e.stack) {
-		if e.stack[i].IsMark() || e.stack[i].IsMove() {
+		if IsMark(e.stack[i]) || IsMove(e.stack[i]) {
 			stackRemove(&e.stack, i)
 		} else {
 			i++
@@ -2140,7 +2140,7 @@ func (e *Engine) stepCloseParen() error {
 
 	openIdx := -1
 	for i := closeIdx - 1; i >= 0; i-- {
-		if e.stack[i].IsOpenParen() {
+		if IsOpenParen(e.stack[i]) {
 			openIdx = i
 			break
 		}
@@ -2155,9 +2155,9 @@ func (e *Engine) stepCloseParen() error {
 	for attempt := 0; attempt < 222; attempt++ {
 		hasFwd := false
 		for i := openIdx + 1; i < closeIdx; i++ {
-			if e.stack[i].IsForward() {
+			if IsForward(e.stack[i]) {
 				hasFwd = true
-				fwd, _ := e.stack[i].AsForward()
+				fwd, _ := AsForward(e.stack[i])
 				funcIdx := fwd.FuncIndex
 				collectedCount := fwd.CollectedArgs
 				stackArgCount := fwd.StackArgs
@@ -2181,7 +2181,7 @@ func (e *Engine) stepCloseParen() error {
 				for e.pointer < closeIdx {
 					val := e.stack[e.pointer]
 					switch {
-					case val.IsWord():
+					case IsWord(val):
 						if err := e.stepWord(val); err != nil {
 							return err
 						}
@@ -2190,7 +2190,7 @@ func (e *Engine) stepCloseParen() error {
 						if closeIdx < 0 {
 							return e.syntaxError("unmatched closing parenthesis", ")")
 						}
-					case val.IsCloseParen():
+					case IsCloseParen(val):
 						if err := e.stepCloseParen(); err != nil {
 							return err
 						}
@@ -2198,7 +2198,7 @@ func (e *Engine) stepCloseParen() error {
 						if closeIdx < 0 {
 							return e.syntaxError("unmatched closing parenthesis", ")")
 						}
-					case val.IsEnd():
+					case IsEnd(val):
 						if err := e.stepEnd(); err != nil {
 							return err
 						}
@@ -2206,13 +2206,13 @@ func (e *Engine) stepCloseParen() error {
 						if closeIdx < 0 {
 							return e.syntaxError("unmatched closing parenthesis", ")")
 						}
-					case val.IsForward():
+					case IsForward(val):
 						e.pointer++
-					case val.IsOpenParen():
+					case IsOpenParen(val):
 						e.pointer++
-					case val.IsReturnCheck():
+					case IsReturnCheck(val):
 						e.pointer++
-					case val.IsDefCleanup():
+					case IsDefCleanup(val):
 						e.stepDefCleanup(val)
 						e.pointer++
 					default:
@@ -2240,15 +2240,15 @@ func (e *Engine) stepCloseParen() error {
 
 	// Check for any remaining orphaned forwards.
 	for i := openIdx + 1; i < closeIdx; i++ {
-		if e.stack[i].IsForward() {
-			fwd, _ := e.stack[i].AsForward()
+		if IsForward(e.stack[i]) {
+			fwd, _ := AsForward(e.stack[i])
 			return e.insufficientArgsError(fwd.FuncName, fwd.ExpectedArgs)
 		}
 	}
 
 	// Remove any surviving def-cleanup markers.
 	for i := openIdx + 1; i < closeIdx; i++ {
-		if e.stack[i].IsDefCleanup() {
+		if IsDefCleanup(e.stack[i]) {
 			e.stepDefCleanup(e.stack[i])
 			stackRemove(&e.stack, i)
 			closeIdx--
@@ -2258,8 +2258,8 @@ func (e *Engine) stepCloseParen() error {
 
 	// Check for return type validation.
 	for i := openIdx + 1; i < closeIdx; i++ {
-		if e.stack[i].IsReturnCheck() {
-			rc, _ := e.stack[i].AsReturnCheck()
+		if IsReturnCheck(e.stack[i]) {
+			rc, _ := AsReturnCheck(e.stack[i])
 			stackRemove(&e.stack, i)
 			closeIdx--
 
@@ -2290,7 +2290,7 @@ func (e *Engine) stepCloseParen() error {
 
 			// Discard unconsumed unnamed args from the bottom of the scope.
 			for j := 0; j < extra; j++ {
-				stackRemove(&e.stack, openIdx + 1)
+				stackRemove(&e.stack, openIdx+1)
 				closeIdx--
 			}
 			break
@@ -2311,9 +2311,9 @@ func (e *Engine) stepCloseParen() error {
 func (e *Engine) findCloseParenAfter(openIdx int) int {
 	depth := 0
 	for i := openIdx + 1; i < len(e.stack); i++ {
-		if e.stack[i].IsOpenParen() {
+		if IsOpenParen(e.stack[i]) {
 			depth++
-		} else if e.stack[i].IsCloseParen() {
+		} else if IsCloseParen(e.stack[i]) {
 			if depth == 0 {
 				return i
 			}
@@ -2331,12 +2331,12 @@ func (e *Engine) effectiveResolved() []Value {
 	start := 0
 	excludeIndices := make(map[int]bool)
 	for i := e.pointer - 1; i >= 0; i-- {
-		if e.stack[i].IsOpenParen() {
+		if IsOpenParen(e.stack[i]) {
 			start = i + 1
 			break
 		}
-		if e.stack[i].IsForward() {
-			fwd, _ := e.stack[i].AsForward()
+		if IsForward(e.stack[i]) {
+			fwd, _ := AsForward(e.stack[i])
 			// Exclude the function word itself.
 			excludeIndices[fwd.FuncIndex] = true
 			// Exclude collected forward args (positioned before function word).
@@ -2358,7 +2358,7 @@ func (e *Engine) effectiveResolved() []Value {
 	var resolved []Value
 	for i := start; i < e.pointer; i++ {
 		v := e.stack[i]
-		if v.IsForward() || v.IsOpenParen() || v.IsMark() || v.IsMove() || excludeIndices[i] {
+		if IsForward(v) || IsOpenParen(v) || IsMark(v) || IsMove(v) || excludeIndices[i] {
 			continue
 		}
 		resolved = append(resolved, v)
@@ -2371,10 +2371,10 @@ func (e *Engine) effectiveResolved() []Value {
 // to collect this function's result as a forward arg).
 func (e *Engine) isInsidePendingForward() bool {
 	for i := e.pointer - 1; i >= 0; i-- {
-		if e.stack[i].IsOpenParen() {
+		if IsOpenParen(e.stack[i]) {
 			return false
 		}
-		if e.stack[i].IsForward() {
+		if IsForward(e.stack[i]) {
 			return true
 		}
 	}
@@ -2393,12 +2393,12 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 		sac = stackArgCount[0]
 	}
 
-	if funcIdx >= len(e.stack) || !e.stack[funcIdx].IsWord() {
+	if funcIdx >= len(e.stack) || !IsWord(e.stack[funcIdx]) {
 		e.pointer = funcIdx
 		return
 	}
 
-	w, _ := e.stack[funcIdx].AsWord()
+	w, _ := AsWord(e.stack[funcIdx])
 	fn := e.registry.Lookup(w.Name)
 
 	// Check if stack match exists with current resolved values.
@@ -2410,12 +2410,12 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 		start := 0
 		excludeIndices := make(map[int]bool)
 		for i := funcIdx - 1; i >= 0; i-- {
-			if e.stack[i].IsOpenParen() {
+			if IsOpenParen(e.stack[i]) {
 				start = i + 1
 				break
 			}
-			if e.stack[i].IsForward() {
-				fwd, _ := e.stack[i].AsForward()
+			if IsForward(e.stack[i]) {
+				fwd, _ := AsForward(e.stack[i])
 				// Exclude the function word itself.
 				excludeIndices[fwd.FuncIndex] = true
 				// Exclude collected forward args (before function word).
@@ -2437,7 +2437,7 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 		var resolved []Value
 		for i := start; i < funcIdx; i++ {
 			v := e.stack[i]
-			if v.IsForward() || v.IsOpenParen() || excludeIndices[i] {
+			if IsForward(v) || IsOpenParen(v) || excludeIndices[i] {
 				continue
 			}
 			resolved = append(resolved, v)
@@ -2470,10 +2470,10 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 		checkStart = 0
 	}
 	for i := checkStart - 1; i >= 0; i-- {
-		if e.stack[i].IsOpenParen() {
+		if IsOpenParen(e.stack[i]) {
 			break
 		}
-		if e.stack[i].IsForward() {
+		if IsForward(e.stack[i]) {
 			hasOuterForward = true
 			break
 		}
@@ -2511,11 +2511,11 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 // quote, inspect, etc.; see signature.go §1.5 on /q.
 func (e *Engine) hasPendingForwardQuoteArg() bool {
 	for i := e.pointer - 1; i >= 0; i-- {
-		if e.stack[i].IsOpenParen() {
+		if IsOpenParen(e.stack[i]) {
 			break
 		}
-		if e.stack[i].IsForward() {
-			fwd, _ := e.stack[i].AsForward()
+		if IsForward(e.stack[i]) {
+			fwd, _ := AsForward(e.stack[i])
 			// Forward args fill from sigArgs[0]; the next forward slot
 			// is at index CollectedArgs.
 			nextIdx := fwd.CollectedArgs
@@ -2532,11 +2532,11 @@ func (e *Engine) hasPendingForwardQuoteArg() bool {
 // whose next expected argument is TFunction.
 func (e *Engine) hasPendingForwardExpectingFunction() bool {
 	for i := e.pointer - 1; i >= 0; i-- {
-		if e.stack[i].IsOpenParen() {
+		if IsOpenParen(e.stack[i]) {
 			break
 		}
-		if e.stack[i].IsForward() {
-			fwd, _ := e.stack[i].AsForward()
+		if IsForward(e.stack[i]) {
+			fwd, _ := AsForward(e.stack[i])
 			// Forward args fill from sigArgs[0].
 			nextIdx := fwd.CollectedArgs
 			if nextIdx < len(fwd.Sig.Args) {
@@ -2595,7 +2595,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 	preferWordSig := false
 	if e.pointer+1 < len(e.stack) {
 		next := e.stack[e.pointer+1]
-		if next.IsWord() {
+		if IsWord(next) {
 			preferWordSig = true
 		}
 	}
@@ -2662,24 +2662,24 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				expectedType := sig.Args[fwd]
 
 				// 1.4: structural boundaries — stop forward scan.
-				if tok.IsForward() || tok.VType.Matches(TMark) || tok.VType.Matches(TMove) ||
+				if IsForward(tok) || tok.VType.Matches(TMark) || tok.VType.Matches(TMove) ||
 					tok.VType.Matches(TInternal) || tok.VType.Matches(TReturnCheck) {
 					break
 				}
 
 				// 1.4: end, ) — boundary, stop.
-				if tok.IsEnd() || tok.IsCloseParen() {
+				if IsEnd(tok) || IsCloseParen(tok) {
 					break
 				}
 
 				// 1.5: open parens are pre-evaluated by preEvalParens
 				// before matching begins. If one remains, treat as boundary.
-				if tok.IsOpenParen() {
+				if IsOpenParen(tok) {
 					break
 				}
 
-				if tok.IsWord() {
-					ww, _ := tok.AsWord()
+				if IsWord(tok) {
+					ww, _ := AsWord(tok)
 					// /q modifier: capture the upcoming Word as an Atom
 					// (the conversion happens at insertForward / stepLiteral
 					// time; here we just count it as a match).
@@ -2767,7 +2767,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				}
 
 				// Open paren marker: boundary, stop forward scan.
-				if tok.IsOpenParen() {
+				if IsOpenParen(tok) {
 					break
 				}
 
@@ -2940,8 +2940,8 @@ func (e *Engine) checkModeFallbackPositions(n int) []int {
 	remaining := n - len(positions)
 	for i := e.pointer + 1; remaining > 0 && i < len(e.stack); i++ {
 		v := e.stack[i]
-		if v.IsForward() || v.IsMark() || v.IsMove() ||
-			v.IsOpenParen() || v.IsReturnCheck() || v.IsDefCleanup() {
+		if IsForward(v) || IsMark(v) || IsMove(v) ||
+			IsOpenParen(v) || IsReturnCheck(v) || IsDefCleanup(v) {
 			continue
 		}
 		positions = append(positions, i)

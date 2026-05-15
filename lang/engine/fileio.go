@@ -80,7 +80,7 @@ func parseFileOpts(opts Value) (enc, format, mode, nl string, fmtExplicit bool) 
 	if !opts.VType.Equal(TMap) || opts.Data == nil {
 		return
 	}
-	m := opts.AsMap()
+	m, _ := AsMap(opts)
 
 	if s, ok := MapFieldString(m, "enc"); ok {
 		enc = s
@@ -163,16 +163,16 @@ func sortedMapKeys(m map[string]any) []string {
 func valueToJsonic(v Value) string {
 	switch {
 	case v.VType.Matches(TString):
-		_as0, _ := v.AsString()
+		_as0, _ := AsString(v)
 		return fmt.Sprintf("%q", _as0)
 	case v.VType.Matches(TDecimal):
-		_as1, _ := v.AsDecimal()
+		_as1, _ := AsDecimal(v)
 		return strconv.FormatFloat(_as1, 'f', -1, 64)
 	case v.VType.Matches(TInteger):
-		_as2, _ := v.AsInteger()
+		_as2, _ := AsInteger(v)
 		return fmt.Sprintf("%d", _as2)
 	case v.VType.Matches(TBoolean):
-		_as3, _ := v.AsBoolean()
+		_as3, _ := AsBoolean(v)
 		if _as3 {
 			return "true"
 		}
@@ -180,20 +180,19 @@ func valueToJsonic(v Value) string {
 	case v.VType.Equal(TNone):
 		return "null"
 	case v.VType.Equal(TAtom):
-		_as4, _ := v.AsAtom()
+		_as4, _ := AsAtom(v)
 		return fmt.Sprintf("%q", _as4)
 	case v.VType.Equal(TList):
-		if _, ok := v.Data.([]Value); ok {
-			elems := v.AsList()
-			parts := make([]string, elems.Len())
-			for i, e := range elems.Slice() {
+		if elems, err := AsMutableList(v); err == nil {
+			parts := make([]string, len(elems))
+			for i, e := range elems {
 				parts[i] = valueToJsonic(e)
 			}
 			return "[" + strings.Join(parts, ",") + "]"
 		}
 		return "[]"
 	case v.VType.Equal(TMap):
-		if om, ok := v.Data.(*OrderedMap); ok {
+		if om, err := AsMutableMap(v); err == nil {
 			parts := make([]string, 0, om.Len())
 			for _, k := range om.Keys() {
 				val, _ := om.Get(k)

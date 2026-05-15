@@ -18,9 +18,10 @@ type parallelResult struct {
 // If the element is a list, it runs as a sub-program.
 // Otherwise, it is returned as a single value.
 func runParallelBranch(r *Registry, elem Value) parallelResult {
-	if elem.VType.Matches(TList) && elem.Data != nil && !elem.IsTypedList() && !elem.IsTableType() {
+	if elem.VType.Matches(TList) && elem.Data != nil && !IsTypedList(elem) && !IsTableType(elem) {
 		sub := New(r)
-		body := elem.AsList().Slice()
+		_lst, _ := AsList(elem)
+		body := _lst.Slice()
 		input := make([]Value, len(body))
 		copy(input, body)
 		result, runErr := sub.Run(input)
@@ -28,7 +29,7 @@ func runParallelBranch(r *Registry, elem Value) parallelResult {
 			return parallelResult{values: []Value{NewError(runErr)}, err: true}
 		}
 		// Check if the result is a single error value.
-		if len(result) == 1 && result[0].IsError() {
+		if len(result) == 1 && IsError(result[0]) {
 			return parallelResult{values: result, err: true}
 		}
 		return parallelResult{values: result}

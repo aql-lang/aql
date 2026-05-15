@@ -398,7 +398,7 @@ func TestTopOfDefStack_SingleEntry(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected ok=true")
 	}
-	n, _ := v.AsInteger()
+	n, _ := AsInteger(v)
 	if n != 42 {
 		t.Errorf("got %d, want 42", n)
 	}
@@ -413,7 +413,7 @@ func TestTopOfDefStack_StackedReturnsTop(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected ok=true")
 	}
-	n, _ := v.AsInteger()
+	n, _ := AsInteger(v)
 	if n != 3 {
 		t.Errorf("got %d, want 3 (top of stack)", n)
 	}
@@ -438,7 +438,7 @@ func TestResolveTypedName_TypesPriority(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected ok=true")
 	}
-	s, _ := v.AsString()
+	s, _ := AsString(v)
 	if s != "from-types" {
 		t.Errorf("got %q, want \"from-types\" (Types takes priority)", s)
 	}
@@ -451,7 +451,7 @@ func TestResolveTypedName_FallbackToDefStacks(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected ok=true")
 	}
-	s, _ := v.AsString()
+	s, _ := AsString(v)
 	if s != "from-defstacks" {
 		t.Errorf("got %q, want \"from-defstacks\"", s)
 	}
@@ -562,7 +562,7 @@ func TestResolveTypedNameValue_NotAWord(t *testing.T) {
 	if name != "" {
 		t.Errorf("non-word value: name=%q, want empty", name)
 	}
-	n, _ := out.AsInteger()
+	n, _ := AsInteger(out)
 	if n != 42 {
 		t.Errorf("non-word value: out modified (got %d)", n)
 	}
@@ -575,7 +575,7 @@ func TestResolveTypedNameValue_WordResolved(t *testing.T) {
 	if !ok || name != "Bbd" {
 		t.Errorf("got (name=%q, ok=%v), want (\"Bbd\", true)", name, ok)
 	}
-	s, _ := out.AsString()
+	s, _ := AsString(out)
 	if s != "from-types" {
 		t.Errorf("resolved value = %q, want \"from-types\"", s)
 	}
@@ -593,7 +593,7 @@ func TestResolveTypedNameValue_WordUnresolved(t *testing.T) {
 	}
 	// out should be the original Word (unchanged) so callers can
 	// continue with it.
-	if !out.IsWord() {
+	if !IsWord(out) {
 		t.Errorf("unresolved word: out.IsWord=false")
 	}
 }
@@ -610,7 +610,12 @@ func TestRunPredicate_NotAFn(t *testing.T) {
 
 func TestRunPredicate_BadPayload(t *testing.T) {
 	r, _ := NewRegistry()
-	v := Value{VType: TFnDef, Data: "not a FnDefInfo"}
+	// Post Step 5g: payload is a sealed interface. A wrong-shape
+	// payload (a StrPayload for a TFnDef-typed Value) is the
+	// closest we can express to "not a FnDefInfo" — the value
+	// satisfies Payload but is the wrong variant. RunPredicate must
+	// detect the mismatch at runtime.
+	v := Value{VType: TFnDef, Data: StrPayload{S: "not a FnDefInfo"}}
 	_, _, err := r.RunPredicate(v, NewInteger(42))
 	if err == nil {
 		t.Fatalf("expected error for invalid FnDef payload")
@@ -652,7 +657,7 @@ func TestFlattenDisjunctAlts_NotADisjunct(t *testing.T) {
 	if len(alts) != 1 {
 		t.Fatalf("got %d alts, want 1", len(alts))
 	}
-	n, _ := alts[0].AsInteger()
+	n, _ := AsInteger(alts[0])
 	if n != 42 {
 		t.Errorf("got %d, want 42 (the original value)", n)
 	}
@@ -687,7 +692,7 @@ func TestFlattenDisjunctAlts_DisjunctWithBadPayload(t *testing.T) {
 	// payload that AsDisjunct can't unwrap. The helper should
 	// fall back gracefully to a single-element slice rather than
 	// returning nil or panicking.
-	v := Value{VType: TDisjunct, Data: "not a DisjunctInfo"}
+	v := Value{VType: TDisjunct, Data: StrPayload{S: "not a DisjunctInfo"}}
 	alts := FlattenDisjunctAlts(v)
 	if len(alts) != 1 {
 		t.Fatalf("got %d alts, want 1 (graceful fallback)", len(alts))

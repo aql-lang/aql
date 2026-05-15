@@ -38,8 +38,8 @@ func registerAdd(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []*Type{TInteger, TInteger},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				a, _ := args[0].AsInteger()
-				b, _ := args[1].AsInteger()
+				a, _ := AsInteger(args[0])
+				b, _ := AsInteger(args[1])
 				return []Value{NewInteger(a + b)}, nil
 			},
 			Returns: []*Type{TInteger},
@@ -56,8 +56,8 @@ func registerMul(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []*Type{TInteger, TInteger},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				a, _ := args[0].AsInteger()
-				b, _ := args[1].AsInteger()
+				a, _ := AsInteger(args[0])
+				b, _ := AsInteger(args[1])
 				return []Value{NewInteger(a * b)}, nil
 			},
 			Returns: []*Type{TInteger},
@@ -73,7 +73,7 @@ func registerNeg(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []*Type{TInteger},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				n, _ := args[0].AsInteger()
+				n, _ := AsInteger(args[0])
 				return []Value{NewInteger(-n)}, nil
 			},
 			Returns: []*Type{TInteger},
@@ -103,7 +103,7 @@ func TestSmokeRunWithNoWords(t *testing.T) {
 	if len(out) != 1 {
 		t.Fatalf("got %d results, want 1", len(out))
 	}
-	got, _ := out[0].AsInteger()
+	got, _ := AsInteger(out[0])
 	if got != 7 {
 		t.Errorf("got %d, want 7", got)
 	}
@@ -115,7 +115,7 @@ func TestSmokeAddForwardArgs(t *testing.T) {
 	if len(out) != 1 {
 		t.Fatalf("got %d results, want 1", len(out))
 	}
-	got, _ := out[0].AsInteger()
+	got, _ := AsInteger(out[0])
 	if got != 5 {
 		t.Errorf("got %d, want 5", got)
 	}
@@ -127,7 +127,7 @@ func TestSmokeAddPrefixForm(t *testing.T) {
 	if len(out) != 1 {
 		t.Fatalf("got %d results, want 1", len(out))
 	}
-	got, _ := out[0].AsInteger()
+	got, _ := AsInteger(out[0])
 	if got != 5 {
 		t.Errorf("got %d, want 5", got)
 	}
@@ -148,7 +148,7 @@ func TestSmokeMultipleWords(t *testing.T) {
 	if len(out) != 1 {
 		t.Fatalf("got %d results, want 1", len(out))
 	}
-	got, _ := out[0].AsInteger()
+	got, _ := AsInteger(out[0])
 	if got != 20 {
 		t.Errorf("got %d, want 20", got)
 	}
@@ -161,7 +161,7 @@ func TestSmokeStackOnlyDispatch(t *testing.T) {
 	if len(out) != 1 {
 		t.Fatalf("got %d results, want 1", len(out))
 	}
-	got, _ := out[0].AsInteger()
+	got, _ := AsInteger(out[0])
 	if got != -5 {
 		t.Errorf("got %d, want -5", got)
 	}

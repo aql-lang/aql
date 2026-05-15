@@ -29,7 +29,7 @@ func Canon(stack []Value) string {
 // CanonValue renders one value as canonical AQL source. See Canon.
 func CanonValue(v Value) string {
 	switch {
-	case v.IsNone():
+	case IsNone(v):
 		return "none"
 	case v.Data == nil:
 		if v.VType != nil {
@@ -42,25 +42,25 @@ func CanonValue(v Value) string {
 	case v.IsDepScalar():
 		return v.String()
 	case v.VType.Matches(TInteger):
-		n, _ := v.AsInteger()
+		n, _ := AsInteger(v)
 		return strconv.FormatInt(n, 10)
 	case v.VType.Matches(TDecimal):
-		f, _ := v.AsDecimal()
+		f, _ := AsDecimal(v)
 		return FormatDecimal(f)
 	case v.VType.Matches(TString):
-		s, _ := v.AsString()
+		s, _ := AsString(v)
 		return "'" + s + "'"
 	case v.VType.Matches(TBoolean):
-		b, _ := v.AsBoolean()
+		b, _ := AsBoolean(v)
 		if b {
 			return "true"
 		}
 		return "false"
 	case v.VType.Equal(TAtom):
-		s, _ := v.AsAtom()
+		s, _ := AsAtom(v)
 		return "(quote " + s + ")"
 	case v.VType.Matches(TList) && v.Data != nil:
-		lst := v.AsList()
+		lst, _ := AsList(v)
 		parts := make([]string, lst.Len())
 		for i := 0; i < lst.Len(); i++ {
 			parts[i] = CanonValue(lst.Get(i))
@@ -71,8 +71,8 @@ func CanonValue(v Value) string {
 		}
 		return body
 	case v.VType.Equal(TMap) && v.Data != nil:
-		m := v.AsMap()
-		if m == nil {
+		m, err := AsMap(v)
+		if err != nil || m == nil {
 			return v.String()
 		}
 		parts := make([]string, m.Len())

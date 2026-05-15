@@ -202,11 +202,11 @@ func describeStackTypes(stack []Value, pointer int) string {
 	for i := start; i < end; i++ {
 		v := stack[i]
 		label := v.VType.String()
-		if v.IsWord() {
-			w, _ := v.AsWord()
+		if IsWord(v) {
+			w, _ := AsWord(v)
 			label = "word(" + w.Name + ")"
-		} else if v.IsAtom() {
-			a, _ := v.AsAtom()
+		} else if IsAtom(v) {
+			a, _ := AsAtom(v)
 			label = "atom(" + a + ")"
 		} else if s := renderDepScalar(v); s != "" {
 			// Render the constraint payload rather than falling
@@ -214,16 +214,16 @@ func describeStackTypes(stack []Value, pointer int) string {
 			// silently produce an empty label.
 			label = s
 		} else if v.VType.Matches(TString) {
-			s, _ := v.AsString()
+			s, _ := AsString(v)
 			if len(s) > 20 {
 				s = s[:20] + "..."
 			}
 			label = "'" + s + "'"
 		} else if v.VType.Matches(TInteger) {
-			n, _ := v.AsInteger()
+			n, _ := AsInteger(v)
 			label = strconv.FormatInt(n, 10)
 		} else if v.VType.Matches(TDecimal) {
-			f, _ := v.AsDecimal()
+			f, _ := AsDecimal(v)
 			label = formatDecimal(f)
 		}
 		if i == pointer {

@@ -93,8 +93,8 @@ func DataListElemTypeFromValue(data Value) *Type {
 	if ct, ok := data.Data.(ChildTypeInfo); ok {
 		return ct.Child.VType
 	}
-	list := data.AsList()
-	if list.IsNil() || list.Len() == 0 {
+	list, err := AsList(data)
+	if err != nil || list.IsNil() || list.Len() == 0 {
 		return TAny
 	}
 	t := list.Get(0).VType
@@ -115,9 +115,9 @@ func DataListElemTypeFromValue(data Value) *Type {
 // signature matching keeps working; carrier-aware list/map handling
 // is future work.
 func toCarrier(v Value) Value {
-	if v.IsWord() || v.IsForward() || v.IsMark() || v.IsMove() ||
-		v.IsOpenParen() || v.IsParenExpr() || v.IsInterpString() ||
-		v.IsReturnCheck() || v.IsDefCleanup() {
+	if IsWord(v) || IsForward(v) || IsMark(v) || IsMove(v) ||
+		IsOpenParen(v) || IsParenExpr(v) || IsInterpString(v) ||
+		IsReturnCheck(v) || IsDefCleanup(v) {
 		return v
 	}
 	// Keep lists and maps concrete for now — matchSignature relies
@@ -277,8 +277,8 @@ const CarrierDisjunctCap = 8
 // alternatives recursively; for any other carrier, returns a single
 // type literal of its VType.
 func flattenAlternatives(v Value) []Value {
-	if v.IsDisjunct() {
-		di, _ := v.AsDisjunct()
+	if IsDisjunct(v) {
+		di, _ := AsDisjunct(v)
 		var out []Value
 		for _, alt := range di.Alternatives {
 			out = append(out, flattenAlternatives(alt)...)
@@ -304,13 +304,13 @@ func flattenAlternatives(v Value) []Value {
 // This is the primary join used when the checker needs to combine
 // two branch outcomes (e.g. `if` then/else).
 func JoinCarriers(a, b Value) Value {
-	if a.VType.Equal(b.VType) && !a.IsDisjunct() && !b.IsDisjunct() {
+	if a.VType.Equal(b.VType) && !IsDisjunct(a) && !IsDisjunct(b) {
 		out := a
 		out.Carrier = true
 		out.Data = nil
 		return out
 	}
-	if !a.IsDisjunct() && !b.IsDisjunct() {
+	if !IsDisjunct(a) && !IsDisjunct(b) {
 		if a.VType.Matches(b.VType) {
 			// a is subtype of b → widen to b
 			return NewCarrier(b.VType)
@@ -348,7 +348,6 @@ func JoinCarriers(a, b Value) Value {
 	return v
 }
 
-
 // RunCarrierBody runs a list body (a Value with VType=TList) through a
 // fresh sub-engine in check mode and returns the residual carrier
 // stack. Returns nil if the body is not a concrete list. Requires
@@ -375,8 +374,8 @@ func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 	if body.Data == nil {
 		return nil, nil
 	}
-	elems := body.AsList()
-	if elems.IsNil() {
+	elems, err := AsList(body)
+	if err != nil || elems.IsNil() {
 		return nil, nil
 	}
 
@@ -485,8 +484,8 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 	if r == nil || condList.Data == nil {
 		return nil
 	}
-	list := condList.AsList()
-	if list.IsNil() || list.Len() < 3 {
+	list, err := AsList(condList)
+	if err != nil || list.IsNil() || list.Len() < 3 {
 		return nil
 	}
 	elems := list.Slice()
@@ -495,22 +494,22 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 		if !elems[i].VType.Equal(TWord) || !elems[i+1].VType.Equal(TWord) {
 			continue
 		}
-		wx, err := elems[i].AsWord()
+		wx, err := AsWord(elems[i])
 		if err != nil {
 			continue
 		}
-		wis, err := elems[i+1].AsWord()
+		wis, err := AsWord(elems[i+1])
 		if err != nil || wis.Name != "is" {
 			continue
 		}
 		tv := elems[i+2]
 		if tv.Data != nil && tv.VType.Equal(TWord) {
-			inner, _ := tv.AsWord()
+			inner, _ := AsWord(tv)
 			if v, ok := r.Defs.Top(inner.Name); ok {
 				tv = v
 			}
 		}
-		if tv.Data != nil && !tv.IsObjectType() {
+		if tv.Data != nil && !IsObjectType(tv) {
 			continue
 		}
 		out = append(out, GuardClause{Name: wx.Name, Type: tv.VType})
@@ -536,8 +535,8 @@ func LiteralCondValue(condList Value) (bool, bool) {
 	if condList.Data == nil {
 		return false, false
 	}
-	list := condList.AsList()
-	if list.IsNil() || list.Len() != 1 {
+	list, err := AsList(condList)
+	if err != nil || list.IsNil() || list.Len() != 1 {
 		return false, false
 	}
 	only := list.Get(0)
@@ -545,7 +544,7 @@ func LiteralCondValue(condList Value) (bool, bool) {
 	// resolve to booleans in engine.stepWord; in check mode the
 	// words stay as Words until the branch runs).
 	if only.VType.Equal(TWord) {
-		w, err := only.AsWord()
+		w, err := AsWord(only)
 		if err == nil {
 			if w.Name == "true" {
 				return true, true
@@ -557,7 +556,7 @@ func LiteralCondValue(condList Value) (bool, bool) {
 	}
 	// Concrete Boolean value with Data set (post-runtime path).
 	if only.VType.Matches(TBoolean) && only.Data != nil {
-		b, err := only.AsBoolean()
+		b, err := AsBoolean(only)
 		if err == nil {
 			return b, true
 		}
@@ -609,10 +608,10 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 		if !ok {
 			continue
 		}
-		if !cur.IsDisjunct() {
+		if !IsDisjunct(cur) {
 			continue
 		}
-		di, err := cur.AsDisjunct()
+		di, err := AsDisjunct(cur)
 		if err != nil {
 			continue
 		}

@@ -15,7 +15,8 @@ import (
 //	[1,2,3] 99 push → [1,2,3,99]
 func pushHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	newElem := args[0]
-	list := args[1].AsList().Slice()
+	_lst, _ := engine.AsList(args[1])
+	list := _lst.Slice()
 	if list == nil {
 		return nil, fmt.Errorf("push: expected concrete list")
 	}
@@ -33,7 +34,8 @@ func pushHandler(args []engine.Value, ctx map[string]engine.Value, stack []engin
 //	pop [a,b,c] → [a,b] c
 //	[a,b,c] pop → [a,b] c
 func popHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	list := args[0].AsList().Slice()
+	_lst, _ := engine.AsList(args[0])
+	list := _lst.Slice()
 	if len(list) == 0 {
 		return nil, fmt.Errorf("pop: cannot pop from empty list")
 	}
@@ -51,7 +53,8 @@ func popHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine
 //	[1,2,3] 99 unshift → [99,1,2,3]
 func unshiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
 	newElem := args[0]
-	list := args[1].AsList().Slice()
+	_lst, _ := engine.AsList(args[1])
+	list := _lst.Slice()
 	if list == nil {
 		return nil, fmt.Errorf("unshift: expected concrete list")
 	}
@@ -69,7 +72,8 @@ func unshiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 //	shift [a,b,c] → [b,c] a
 //	[a,b,c] shift → [b,c] a
 func shiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	list := args[0].AsList().Slice()
+	_lst, _ := engine.AsList(args[0])
+	list := _lst.Slice()
 	if len(list) == 0 {
 		return nil, fmt.Errorf("shift: cannot shift from empty list")
 	}

@@ -12,11 +12,11 @@ import (
 // to its String() form. Used by stringSliceNative in natives.go.
 func valueToSliceArg(v engine.Value) interface{} {
 	if v.VType.Matches(engine.TString) {
-		_as3, _ := v.AsString()
+		_as3, _ := engine.AsString(v)
 		return _as3
 	}
 	if v.VType.Matches(engine.TList) {
-		list := v.AsList()
+		list, _ := engine.AsList(v)
 		result := make([]interface{}, list.Len())
 		for i, elem := range list.Slice() {
 			result[i] = valueToSliceArg(elem)

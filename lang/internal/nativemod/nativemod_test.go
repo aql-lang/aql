@@ -122,7 +122,7 @@ func TestMathDotAbs(t *testing.T) {
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("abs"),
 		engine.NewCloseParen(),
 	})
-	v, _ := result[0].AsInteger()
+	v, _ := engine.AsInteger(result[0])
 	if v != 5 {
 		t.Errorf("math.abs(-5) = %v, want 5", result[0])
 	}
@@ -136,7 +136,7 @@ func TestMathDotSin(t *testing.T) {
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("sin"),
 		engine.NewCloseParen(),
 	})
-	v, _ := result[0].AsNumber()
+	v, _ := engine.AsNumber(result[0])
 	if v != 0.0 {
 		t.Errorf("math.sin(0) = %v, want 0.0", result[0])
 	}
@@ -150,7 +150,7 @@ func TestMathDotCos(t *testing.T) {
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("cos"),
 		engine.NewCloseParen(),
 	})
-	v, _ := result[0].AsNumber()
+	v, _ := engine.AsNumber(result[0])
 	if v != 1.0 {
 		t.Errorf("math.cos(0) = %v, want 1.0", result[0])
 	}
@@ -164,7 +164,7 @@ func TestMathDotSqrt(t *testing.T) {
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("sqrt"),
 		engine.NewCloseParen(),
 	})
-	v, _ := result[0].AsNumber()
+	v, _ := engine.AsNumber(result[0])
 	if v != 2.0 {
 		t.Errorf("math.sqrt(4) = %v, want 2.0", result[0])
 	}
@@ -180,7 +180,7 @@ func TestMathDotMin(t *testing.T) {
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("min"),
 		engine.NewCloseParen(),
 	})
-	v, _ := result[0].AsInteger()
+	v, _ := engine.AsInteger(result[0])
 	if v != 3 {
 		t.Errorf("math.min(3,7) = %v, want 3", result[0])
 	}
@@ -194,7 +194,7 @@ func TestMathDotMax(t *testing.T) {
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("max"),
 		engine.NewCloseParen(),
 	})
-	v, _ := result[0].AsInteger()
+	v, _ := engine.AsInteger(result[0])
 	if v != 7 {
 		t.Errorf("math.max(3,7) = %v, want 7", result[0])
 	}
@@ -207,7 +207,7 @@ func TestMathDotPi(t *testing.T) {
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("pi"),
 		engine.NewCloseParen(),
 	})
-	v, _ := result[0].AsNumber()
+	v, _ := engine.AsNumber(result[0])
 	if math.Abs(v-math.Pi) > 0.0001 {
 		t.Errorf("math.pi = %v, want %v", result[0], math.Pi)
 	}
@@ -220,7 +220,7 @@ func TestMathDotE(t *testing.T) {
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("e"),
 		engine.NewCloseParen(),
 	})
-	v, _ := result[0].AsNumber()
+	v, _ := engine.AsNumber(result[0])
 	if math.Abs(v-math.E) > 0.0001 {
 		t.Errorf("math.e = %v, want %v", result[0], math.E)
 	}
@@ -234,7 +234,7 @@ func TestMathDotNegate(t *testing.T) {
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("negate"),
 		engine.NewCloseParen(),
 	})
-	v, _ := result[0].AsInteger()
+	v, _ := engine.AsInteger(result[0])
 	if v != -5 {
 		t.Errorf("math.negate(5) = %v, want -5", result[0])
 	}
@@ -248,7 +248,7 @@ func TestMathDotCeil(t *testing.T) {
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("ceil"),
 		engine.NewCloseParen(),
 	})
-	v, _ := result[0].AsNumber()
+	v, _ := engine.AsNumber(result[0])
 	if v != 2.0 {
 		t.Errorf("math.ceil(1.2) = %v, want 2.0", result[0])
 	}
@@ -262,7 +262,7 @@ func TestMathDotFloor(t *testing.T) {
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("floor"),
 		engine.NewCloseParen(),
 	})
-	v, _ := result[0].AsNumber()
+	v, _ := engine.AsNumber(result[0])
 	if v != 1.0 {
 		t.Errorf("math.floor(1.8) = %v, want 1.0", result[0])
 	}
@@ -276,7 +276,7 @@ func TestMathDotRound(t *testing.T) {
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("round"),
 		engine.NewCloseParen(),
 	})
-	v, _ := result[0].AsNumber()
+	v, _ := engine.AsNumber(result[0])
 	if v != 2.0 {
 		t.Errorf("math.round(1.5) = %v, want 2.0", result[0])
 	}
@@ -290,7 +290,7 @@ func TestMathDotSign(t *testing.T) {
 		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("sign"),
 		engine.NewCloseParen(),
 	})
-	v, _ := result[0].AsInteger()
+	v, _ := engine.AsInteger(result[0])
 	if v != -1 {
 		t.Errorf("math.sign(-7) = %v, want -1", result[0])
 	}

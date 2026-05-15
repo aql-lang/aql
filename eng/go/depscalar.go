@@ -173,20 +173,21 @@ func dependentLeafFromBoundType(t *Type) string {
 
 // DependentLeafBaseType returns the scalar base type for a given
 // dependent leaf name, or (TNone, false) if the leaf is unknown.
+//
+// Post Step 9 of TYPE-DECOUPLING.0.md the lookup is no longer a
+// hardcoded leaf-name switch — every dependent type's *Type carries
+// its BaseType pointer directly, set at registration via
+// builtinDecl.BasePath. This function walks the Builtin table to
+// find the named DepXxx type and returns its BaseType. Callers
+// holding a *Type should prefer `t.BaseType` for the same answer in
+// one field access.
 func DependentLeafBaseType(leaf string) (*Type, bool) {
-	switch leaf {
-	case "Integer":
-		return TInteger, true
-	case "Decimal":
-		return TDecimal, true
-	case "Number":
-		return TNumber, true
-	case "String":
-		return TString, true
-	case "Boolean":
-		return TBoolean, true
-	case "Atom":
-		return TAtom, true
+	if leaf == "" {
+		return TNone, false
+	}
+	depPath := "Type/Dependent/Dep" + leaf
+	if dep := Builtin.bypath[depPath]; dep != nil && dep.BaseType != nil {
+		return dep.BaseType, true
 	}
 	return TNone, false
 }

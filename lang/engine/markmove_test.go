@@ -49,15 +49,15 @@ func TestMarkMoveBasic(t *testing.T) {
 	if len(result) != 3 {
 		t.Fatalf("expected 3 values on stack, got %d: %v", len(result), result)
 	}
-	_as0, _ := result[0].AsInteger()
+	_as0, _ := engine.AsInteger(result[0])
 	if !result[0].VType.Matches(engine.TInteger) || _as0 != 11 {
 		t.Errorf("result[0] = %v, want 11", result[0])
 	}
-	_as1, _ := result[1].AsInteger()
+	_as1, _ := engine.AsInteger(result[1])
 	if !result[1].VType.Matches(engine.TInteger) || _as1 != 22 {
 		t.Errorf("result[1] = %v, want 22", result[1])
 	}
-	_as2, _ := result[2].AsInteger()
+	_as2, _ := engine.AsInteger(result[2])
 	if !result[2].VType.Matches(engine.TInteger) || _as2 != 33 {
 		t.Errorf("result[2] = %v, want 33", result[2])
 	}
@@ -204,11 +204,11 @@ func TestMarkMoveWithLiterals(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("expected 2 values, got %d: %v", len(result), result)
 	}
-	_as3, _ := result[0].AsInteger()
+	_as3, _ := engine.AsInteger(result[0])
 	if _as3 != 1 {
 		t.Errorf("result[0] = %v, want 1", result[0])
 	}
-	_as4, _ := result[1].AsInteger()
+	_as4, _ := engine.AsInteger(result[1])
 	if _as4 != 5 {
 		t.Errorf("result[1] = %v, want 5", result[1])
 	}
@@ -230,18 +230,18 @@ func TestMarkMoveString(t *testing.T) {
 // TestMarkMoveIsMethods tests IsMark/IsMove type checks.
 func TestMarkMoveIsMethods(t *testing.T) {
 	m := engine.NewMark("x", engine.NewInteger(1))
-	if !m.IsMark() {
+	if !engine.IsMark(m) {
 		t.Error("NewMark should be IsMark()")
 	}
-	if m.IsMove() {
+	if engine.IsMove(m) {
 		t.Error("NewMark should not be IsMove()")
 	}
 
 	mv := engine.NewMove("x", "reason")
-	if !mv.IsMove() {
+	if !engine.IsMove(mv) {
 		t.Error("NewMove should be IsMove()")
 	}
-	if mv.IsMark() {
+	if engine.IsMark(mv) {
 		t.Error("NewMove should not be IsMark()")
 	}
 

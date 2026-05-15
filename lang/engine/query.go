@@ -385,24 +385,26 @@ type columnSpec struct {
 //   - [[cast age integer]]       — CAST("age" AS INTEGER)
 //   - [[cast age integer a]]     — CAST("age" AS INTEGER) AS "a"
 func parseColumnSpec(colList Value) ([]columnSpec, error) {
-	elems := colList.AsList().Slice()
+	_lst, _ := AsList(colList)
+	elems := _lst.Slice()
 	cols := make([]columnSpec, 0, len(elems))
 	for _, e := range elems {
 		switch {
 		case e.VType.Equal(TAtom):
-			_as6, _ := e.AsAtom()
+			_as6, _ := AsAtom(e)
 			cols = append(cols, columnSpec{Name: _as6})
 		case e.VType.Matches(TString):
-			_as7, _ := e.AsString()
+			_as7, _ := AsString(e)
 			cols = append(cols, columnSpec{Name: _as7})
-		case e.IsWord():
+		case IsWord(e):
 			// A word that appears in the column list without evaluation
 			// is treated as a column name OR as an aggregate function name.
-			_as8, _ := e.AsWord()
+			_as8, _ := AsWord(e)
 			wname := _as8.Name
 			cols = append(cols, columnSpec{Name: wname})
 		case e.VType.Equal(TList):
-			pair := e.AsList().Slice()
+			_lst, _ := AsList(e)
+			pair := _lst.Slice()
 			if len(pair) < 2 {
 				return nil, fmt.Errorf("select: column spec list must have at least 2 elements")
 			}
@@ -468,15 +470,15 @@ func parseColumnSpec(colList Value) ([]columnSpec, error) {
 // Unlike valueToColName, this also recognizes unevaluated word values.
 func nameFromValue(v Value) string {
 	if v.VType.Equal(TAtom) {
-		_as9, _ := v.AsAtom()
+		_as9, _ := AsAtom(v)
 		return _as9
 	}
 	if v.VType.Matches(TString) {
-		_as10, _ := v.AsString()
+		_as10, _ := AsString(v)
 		return _as10
 	}
-	if v.IsWord() {
-		_as11, _ := v.AsWord()
+	if IsWord(v) {
+		_as11, _ := AsWord(v)
 		return _as11.Name
 	}
 	return ""
@@ -574,23 +576,36 @@ func sqlTypeToAQLType(sqlType string) *Type {
 // valueToColName extracts the string content from an atom, string, or word value.
 func valueToColName(v Value) string {
 	if v.VType.Equal(TAtom) {
-		_as12, _ := v.AsAtom()
+		_as12, _ := AsAtom(v)
 		return _as12
 	}
 	if v.VType.Matches(TString) {
-		_as13, _ := v.AsString()
+		_as13, _ := AsString(v)
 		return _as13
 	}
-	if v.IsWord() {
-		_as14, _ := v.AsWord()
+	if IsWord(v) {
+		_as14, _ := AsWord(v)
 		return _as14.Name
 	}
 	return ""
 }
 
+// unwrapQB extracts a QueryBuilder from a Value, accepting both the
+// wrapped form (ExtensionPayload{Body: qb} — the post-Step-5 storage
+// shape so QueryBuilder satisfies Payload) and the legacy bare form.
+// Returns (QueryBuilder{}, false) when v is not a query builder.
+func unwrapQB(v Value) (QueryBuilder, bool) {
+	if ep, ok := v.Data.(ExtensionPayload); ok {
+		if qb, ok := ep.Body.(QueryBuilder); ok {
+			return qb, true
+		}
+	}
+	return QueryBuilder{}, false
+}
+
 // toQueryBuilder converts a Value (QueryBuilder or TableData) into a QueryBuilder.
 func toQueryBuilder(r *Registry, v Value) (QueryBuilder, error) {
-	if qb, ok := v.Data.(QueryBuilder); ok {
+	if qb, ok := unwrapQB(v); ok {
 		return qb.clone(), nil
 	}
 	if td, ok := v.Data.(TableData); ok {
@@ -656,7 +671,8 @@ var logicalOps = map[string]string{
 // The inner list elements are scanned for paren tokens. When found, the
 // sub-expression is evaluated and the result replaces the paren tokens.
 func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
-	elems := colList.AsList().Slice()
+	_lst, _ := AsList(colList)
+	elems := _lst.Slice()
 	if len(elems) == 0 {
 		return colList, nil
 	}
@@ -665,7 +681,7 @@ func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
 	for i, e := range elems {
 		if e.VType.Equal(TList) {
 			if _, isTD := e.Data.(TableData); !isTD {
-				if _, isQB := e.Data.(QueryBuilder); !isQB {
+				if _, isQB := unwrapQB(e); !isQB {
 					resolved, err := resolveSelectSubExprs(r, e)
 					if err != nil {
 						return Value{}, err
@@ -681,7 +697,7 @@ func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
 	// Check for paren tokens at this level.
 	hasParen := false
 	for _, e := range result {
-		if e.IsOpenParen() {
+		if IsOpenParen(e) {
 			hasParen = true
 			break
 		}
@@ -694,13 +710,13 @@ func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
 	var out []Value
 	idx := 0
 	for idx < len(result) {
-		if result[idx].IsOpenParen() {
+		if IsOpenParen(result[idx]) {
 			depth := 1
 			j := idx + 1
 			for j < len(result) && depth > 0 {
-				if result[j].IsOpenParen() {
+				if IsOpenParen(result[j]) {
 					depth++
-				} else if result[j].IsCloseParen() {
+				} else if IsCloseParen(result[j]) {
 					depth--
 				}
 				j++
@@ -735,7 +751,8 @@ func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
 // The "(select [city] from cities)" tokens are evaluated, producing a
 // TableData value that buildInList can extract values from.
 func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
-	elems := condList.AsList().Slice()
+	_lst, _ := AsList(condList)
+	elems := _lst.Slice()
 	if len(elems) == 0 {
 		return condList, nil
 	}
@@ -743,7 +760,7 @@ func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
 	// Quick scan: any open-paren markers?
 	hasParen := false
 	for _, e := range elems {
-		if e.IsOpenParen() {
+		if IsOpenParen(e) {
 			hasParen = true
 			break
 		}
@@ -754,7 +771,7 @@ func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
 		for i, e := range elems {
 			if e.VType.Equal(TList) {
 				if _, isTD := e.Data.(TableData); !isTD {
-					if _, isQB := e.Data.(QueryBuilder); !isQB {
+					if _, isQB := unwrapQB(e); !isQB {
 						resolved, err := resolveWhereSubExprs(r, e)
 						if err != nil {
 							return Value{}, err
@@ -773,14 +790,14 @@ func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
 	var result []Value
 	i := 0
 	for i < len(elems) {
-		if elems[i].IsOpenParen() {
+		if IsOpenParen(elems[i]) {
 			// Find the matching close paren.
 			depth := 1
 			j := i + 1
 			for j < len(elems) && depth > 0 {
-				if elems[j].IsOpenParen() {
+				if IsOpenParen(elems[j]) {
 					depth++
-				} else if elems[j].IsCloseParen() {
+				} else if IsCloseParen(elems[j]) {
 					depth--
 				}
 				j++
@@ -812,7 +829,8 @@ func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
 // [column not in [v1 v2 v3]]                — NOT IN (v1, v2, v3)
 // [... and/or ...]                           — logical connectives
 func buildWhereClause(condList Value) (string, error) {
-	elems := condList.AsList().Slice()
+	_lst, _ := AsList(condList)
+	elems := _lst.Slice()
 	if len(elems) == 0 {
 		return "1=1", nil
 	}
@@ -1083,7 +1101,7 @@ func buildInList(v Value) (string, error) {
 	if td, ok := v.Data.(TableData); ok {
 		return buildInListFromTable(td)
 	}
-	if qb, ok := v.Data.(QueryBuilder); ok {
+	if qb, ok := unwrapQB(v); ok {
 		td, err := qb.Materialize()
 		if err != nil {
 			return "", fmt.Errorf("in subquery: %w", err)
@@ -1091,7 +1109,8 @@ func buildInList(v Value) (string, error) {
 		return buildInListFromTable(td)
 	}
 
-	elems := v.AsList().Slice()
+	_lst, _ := AsList(v)
+	elems := _lst.Slice()
 	if len(elems) == 0 {
 		return "", fmt.Errorf("empty IN list")
 	}
@@ -1122,7 +1141,7 @@ func buildInListFromTable(td TableData) (string, error) {
 
 	parts := make([]string, 0, len(td.Rows))
 	for _, row := range td.Rows {
-		m := row.AsMap()
+		m, _ := AsMap(row)
 		val, ok := m.Get(firstCol)
 		if !ok {
 			continue
@@ -1144,7 +1163,7 @@ func isTableOrQuery(v Value) bool {
 	if _, ok := v.Data.(TableData); ok {
 		return true
 	}
-	if _, ok := v.Data.(QueryBuilder); ok {
+	if _, ok := unwrapQB(v); ok {
 		return true
 	}
 	return false
@@ -1163,7 +1182,8 @@ func scalarFromTable(td TableData) (Value, error) {
 	if len(td.Rows) > 1 {
 		return Value{}, fmt.Errorf("scalar subquery returned %d rows, expected 1", len(td.Rows))
 	}
-	val, ok := td.Rows[0].AsMap().Get(cols[0])
+	_m, _ := AsMap(td.Rows[0])
+	val, ok := _m.Get(cols[0])
 	if !ok {
 		return NewTypeLiteral(TNone), nil
 	}
@@ -1176,7 +1196,7 @@ func resolveScalarValue(v Value) (Value, error) {
 	if td, ok := v.Data.(TableData); ok {
 		return scalarFromTable(td)
 	}
-	if qb, ok := v.Data.(QueryBuilder); ok {
+	if qb, ok := unwrapQB(v); ok {
 		td, err := qb.Materialize()
 		if err != nil {
 			return Value{}, fmt.Errorf("scalar subquery: %w", err)
@@ -1190,24 +1210,24 @@ func resolveScalarValue(v Value) (Value, error) {
 func valueToSQL(v Value) (string, error) {
 	switch {
 	case v.VType.Matches(TString):
-		_as23, _ := v.AsString()
+		_as23, _ := AsString(v)
 		return "'" + strings.ReplaceAll(_as23, "'", "''") + "'", nil
 	case v.VType.Matches(TInteger):
-		_as24, _ := v.AsInteger()
+		_as24, _ := AsInteger(v)
 		return fmt.Sprintf("%d", _as24), nil
 	case v.VType.Matches(TBoolean):
-		_as25, _ := v.AsBoolean()
+		_as25, _ := AsBoolean(v)
 		if _as25 {
 			return "'true'", nil
 		}
 		return "'false'", nil
 	case v.VType.Equal(TAtom):
-		_as26, _ := v.AsAtom()
+		_as26, _ := AsAtom(v)
 		return "'" + strings.ReplaceAll(_as26, "'", "''") + "'", nil
 	case v.VType.Equal(TNone):
 		return "NULL", nil
 	case v.VType.Equal(TWord):
-		_as27, _ := v.AsWord()
+		_as27, _ := AsWord(v)
 		return "'" + strings.ReplaceAll(_as27.Name, "'", "''") + "'", nil
 	default:
 		return "", fmt.Errorf("unsupported value type in condition: %s", v.VType)
@@ -1216,7 +1236,8 @@ func valueToSQL(v Value) (string, error) {
 
 // buildGroupByClause translates a column list into a SQL GROUP BY clause.
 func buildGroupByClause(colList Value) (string, error) {
-	elems := colList.AsList().Slice()
+	_lst, _ := AsList(colList)
+	elems := _lst.Slice()
 	if len(elems) == 0 {
 		return "", fmt.Errorf("empty group by column list")
 	}
@@ -1234,7 +1255,8 @@ func buildGroupByClause(colList Value) (string, error) {
 // buildJoinCondition translates a condition list into a SQL ON clause.
 // Supports dot-separated qualified names: [a.id eq b.id]
 func buildJoinCondition(condList Value) (string, error) {
-	elems := condList.AsList().Slice()
+	_lst, _ := AsList(condList)
+	elems := _lst.Slice()
 	if len(elems) == 0 {
 		return "1=1", nil
 	}
@@ -1300,7 +1322,8 @@ func quoteJoinCol(name string) string {
 //   - [col1 asc nulls first]         — with nulls placement
 //   - [1, 2 desc]                    — positional (1-based)
 func buildOrderClause(colList Value) (string, error) {
-	elems := colList.AsList().Slice()
+	_lst, _ := AsList(colList)
+	elems := _lst.Slice()
 	if len(elems) == 0 {
 		return "", fmt.Errorf("empty order column list")
 	}
@@ -1336,7 +1359,7 @@ func buildOrderClause(colList Value) (string, error) {
 		e := elems[i]
 
 		if e.VType.Matches(TInteger) {
-			_as28, _ := e.AsInteger()
+			_as28, _ := AsInteger(e)
 			parts = append(parts, fmt.Sprintf("%d", _as28))
 			i++
 			continue

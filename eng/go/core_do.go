@@ -47,7 +47,8 @@ func doListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 			Detail: "do: argument must be a concrete list, got type literal",
 		}
 	}
-	return doEvalList(r, args[0].AsList().Slice())
+	lst, _ := AsList(args[0])
+	return doEvalList(r, lst.Slice())
 }
 
 func doMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -92,7 +93,7 @@ func doEvalDataList(r *Registry, elems []Value) ([]Value, error) {
 // returned unchanged.
 func doPromoteToWord(r *Registry, v Value) Value {
 	if v.VType.Matches(TString) || v.VType.Matches(TAtom) {
-		name, _ := v.AsString()
+		name, _ := AsString(v)
 		if r.Lookup(name) != nil {
 			return NewWord(name)
 		}
@@ -104,8 +105,9 @@ func doPromoteToWord(r *Registry, v Value) Value {
 // Records, options, table types, typed lists / maps are left
 // untouched — only plain concrete lists and maps are walked.
 func doEvalMapValue(r *Registry, v Value) (Value, error) {
-	if v.VType.Equal(TList) && v.Data != nil && !v.IsTypedList() && !v.IsTableType() {
-		results, err := doEvalDataList(r, v.AsList().Slice())
+	if v.VType.Equal(TList) && v.Data != nil && !IsTypedList(v) && !IsTableType(v) {
+		lst, _ := AsList(v)
+		results, err := doEvalDataList(r, lst.Slice())
 		if err != nil {
 			return Value{}, err
 		}
@@ -114,9 +116,9 @@ func doEvalMapValue(r *Registry, v Value) (Value, error) {
 		}
 		return NewList(results), nil
 	}
-	if v.VType.Equal(TMap) && v.Data != nil && !v.IsTypedMap() && !v.IsRecordType() && !v.IsOptionsType() {
-		m := v.AsMap()
-		if m == nil {
+	if v.VType.Equal(TMap) && v.Data != nil && !IsTypedMap(v) && !IsRecordType(v) && !IsOptionsType(v) {
+		m, err := AsMap(v)
+		if err != nil || m == nil {
 			return v, nil
 		}
 		out := NewOrderedMap()

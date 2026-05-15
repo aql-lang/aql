@@ -98,11 +98,10 @@ Never	Never	uninhabited bottom type
 Type	Type	metatype root
 Type	Type	metatype subkinds
 Type	Type	
-Type	Type	
-Timeout	Timeout	temporal types
-Interval	Interval	
-		
-# Multiple type literals on the stack — each renders independently.		
+Type	Type
+
+# Multiple type literals on the stack — each renders independently.
+
 Integer Integer	Integer Integer	
 Number Scalar Integer	Number Scalar Integer	
 		
@@ -499,11 +498,10 @@ Entity is Type	true
 Table is Type	true	
 Record is Type	true	
 Options is Type	true	
-Array is Type	true	
-Timeout is Type	true	
-Interval is Type	true	
-		
-# --- builtin type literals: type family ---		
+Array is Type	true
+
+# --- builtin type literals: type family ---
+
 Function is Type	true	
 FunctionSignature is Type	true	
 Disjunct is Type	true	

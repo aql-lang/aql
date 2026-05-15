@@ -94,7 +94,7 @@ func TestObjectTypeParentFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := result[0].AsObjectType()
+	ot, _ := engine.AsObjectType(result[0])
 	all := ot.AllFields()
 	if all.Len() != 3 {
 		t.Fatalf("expected 3 total fields (a,b,d), got %d", all.Len())
@@ -116,7 +116,7 @@ func TestObjectTypeOwnFieldsOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := result[0].AsObjectType()
+	ot, _ := engine.AsObjectType(result[0])
 	if ot.Fields.Len() != 1 {
 		t.Fatalf("expected 1 own field (d), got %d", ot.Fields.Len())
 	}
@@ -144,7 +144,7 @@ func TestObjectTypeDeepInheritance(t *testing.T) {
 	if !strings.Contains(s, "Object/Foo/Bar/Baz") {
 		t.Errorf("expected type name 'Object/Foo/Bar/Baz', got %s", s)
 	}
-	ot, _ := result[0].AsObjectType()
+	ot, _ := engine.AsObjectType(result[0])
 	all := ot.AllFields()
 	if all.Len() != 3 {
 		t.Fatalf("expected 3 fields (a,b,c), got %d", all.Len())
@@ -165,7 +165,7 @@ func TestObjectTypeUniqueID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp1, _ := result[0].AsObjectType()
+	_tmp1, _ := engine.AsObjectType(result[0])
 	fooID := _tmp1.ID
 
 	result2, err := runNativeSteps(t, nil, []string{
@@ -176,7 +176,7 @@ func TestObjectTypeUniqueID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp2, _ := result2[0].AsObjectType()
+	_tmp2, _ := engine.AsObjectType(result2[0])
 	barID := _tmp2.ID
 
 	if fooID == barID {
@@ -199,7 +199,7 @@ func TestObjectTypeParentIsNilForRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := result[0].AsObjectType()
+	ot, _ := engine.AsObjectType(result[0])
 	if ot.Parent != nil {
 		t.Errorf("expected nil parent for root object type, got %+v", ot.Parent)
 	}
@@ -218,7 +218,7 @@ func TestObjectTypeParentReference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := result[0].AsObjectType()
+	ot, _ := engine.AsObjectType(result[0])
 	if ot.Parent == nil {
 		t.Fatal("expected non-nil parent for child object type")
 	}
@@ -237,7 +237,7 @@ func TestObjectTypeFieldOverride(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := result[0].AsObjectType()
+	ot, _ := engine.AsObjectType(result[0])
 	all := ot.AllFields()
 	// a should be narrowed to Integer, b inherited as Boolean
 	if all.Len() != 2 {
@@ -441,10 +441,10 @@ func objFields(t *testing.T, result []engine.Value) *engine.OrderedMap {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
 	v := result[0]
-	if !v.IsObjectInstance() {
+	if !engine.IsObjectInstance(v) {
 		t.Fatalf("expected object instance, got %s", v.String())
 	}
-	oi, _ := v.AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(v)
 	return oi.AllFields()
 }
 
@@ -458,10 +458,10 @@ func TestMakeObjectBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	inst := result[0]
-	if !inst.IsObjectInstance() {
+	if !engine.IsObjectInstance(inst) {
 		t.Fatalf("expected object instance, got %s", inst.String())
 	}
-	oi, _ := inst.AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(inst)
 	if oi.TypeRef.Name != "Object/Foo" {
 		t.Errorf("expected type ref Object/Foo, got %s", oi.TypeRef.Name)
 	}
@@ -469,9 +469,9 @@ func TestMakeObjectBasic(t *testing.T) {
 	if !ok {
 		t.Fatal("missing field x")
 	}
-	_v3, _ := v.AsString()
+	_v3, _ := engine.AsString(v)
 	if _v3 != "hello" {
-		_v4, _ := v.AsString()
+		_v4, _ := engine.AsString(v)
 		t.Errorf("expected x='hello', got %s", _v4)
 	}
 }
@@ -487,9 +487,9 @@ func TestMakeObjectTypeConversion(t *testing.T) {
 	}
 	om := objFields(t, result)
 	v, _ := om.Get("x")
-	_v5, _ := v.AsString()
+	_v5, _ := engine.AsString(v)
 	if _v5 != "42" {
-		_v6, _ := v.AsString()
+		_v6, _ := engine.AsString(v)
 		t.Errorf("expected x='42' (converted), got %s", _v6)
 	}
 }
@@ -508,9 +508,9 @@ func TestMakeObjectDefaultValues(t *testing.T) {
 	if !ok {
 		t.Fatal("missing field x")
 	}
-	_v7, _ := v.AsInteger()
+	_v7, _ := engine.AsInteger(v)
 	if _v7 != 1 {
-		_v8, _ := v.AsInteger()
+		_v8, _ := engine.AsInteger(v)
 		t.Errorf("expected x=1 (default), got %d", _v8)
 	}
 }
@@ -526,9 +526,9 @@ func TestMakeObjectOverrideDefault(t *testing.T) {
 	}
 	om := objFields(t, result)
 	v, _ := om.Get("x")
-	_v9, _ := v.AsInteger()
+	_v9, _ := engine.AsInteger(v)
 	if _v9 != 2 {
-		_v10, _ := v.AsInteger()
+		_v10, _ := engine.AsInteger(v)
 		t.Errorf("expected x=2, got %d", _v10)
 	}
 }
@@ -545,14 +545,14 @@ func TestMakeObjectMultipleFields(t *testing.T) {
 	om := objFields(t, result)
 	x, _ := om.Get("x")
 	y, _ := om.Get("y")
-	_v11, _ := x.AsString()
+	_v11, _ := engine.AsString(x)
 	if _v11 != "hi" {
-		_v12, _ := x.AsString()
+		_v12, _ := engine.AsString(x)
 		t.Errorf("expected x='hi', got %s", _v12)
 	}
-	_v13, _ := y.AsInteger()
+	_v13, _ := engine.AsInteger(y)
 	if _v13 != 7 {
-		_v14, _ := y.AsInteger()
+		_v14, _ := engine.AsInteger(y)
 		t.Errorf("expected y=7, got %d", _v14)
 	}
 }
@@ -569,14 +569,14 @@ func TestMakeObjectMixedDefaultsAndTypes(t *testing.T) {
 	om := objFields(t, result)
 	x, _ := om.Get("x")
 	y, _ := om.Get("y")
-	_v15, _ := x.AsString()
+	_v15, _ := engine.AsString(x)
 	if _v15 != "hi" {
-		_v16, _ := x.AsString()
+		_v16, _ := engine.AsString(x)
 		t.Errorf("expected x='hi', got %s", _v16)
 	}
-	_v17, _ := y.AsInteger()
+	_v17, _ := engine.AsInteger(y)
 	if _v17 != 10 {
-		_v18, _ := y.AsInteger()
+		_v18, _ := engine.AsInteger(y)
 		t.Errorf("expected y=10 (default), got %d", _v18)
 	}
 }
@@ -635,14 +635,14 @@ func TestMakeObjectEmptyMapAllDefaults(t *testing.T) {
 	om := objFields(t, result)
 	x, _ := om.Get("x")
 	y, _ := om.Get("y")
-	_v19, _ := x.AsInteger()
+	_v19, _ := engine.AsInteger(x)
 	if _v19 != 1 {
-		_v20, _ := x.AsInteger()
+		_v20, _ := engine.AsInteger(x)
 		t.Errorf("expected x=1, got %d", _v20)
 	}
-	_v21, _ := y.AsString()
+	_v21, _ := engine.AsString(y)
 	if _v21 != "default" {
-		_v22, _ := y.AsString()
+		_v22, _ := engine.AsString(y)
 		t.Errorf("expected y='default', got %s", _v22)
 	}
 }
@@ -661,17 +661,17 @@ func TestMakeObjectInheritedFields(t *testing.T) {
 	a, _ := om.Get("a")
 	b, _ := om.Get("b")
 	c, _ := om.Get("c")
-	_v23, _ := a.AsString()
+	_v23, _ := engine.AsString(a)
 	if _v23 != "hi" {
-		_v24, _ := a.AsString()
+		_v24, _ := engine.AsString(a)
 		t.Errorf("expected a='hi', got %s", _v24)
 	}
-	_v25, _ := b.AsInteger()
+	_v25, _ := engine.AsInteger(b)
 	if _v25 != 3 {
-		_v26, _ := b.AsInteger()
+		_v26, _ := engine.AsInteger(b)
 		t.Errorf("expected b=3, got %d", _v26)
 	}
-	if !c.Data.(bool) {
+	if cb, _ := engine.AsBoolean(c); !cb {
 		t.Error("expected c=true")
 	}
 }
@@ -690,19 +690,19 @@ func TestMakeObjectInheritedDefaults(t *testing.T) {
 	a, _ := om.Get("a")
 	b, _ := om.Get("b")
 	c, _ := om.Get("c")
-	_v27, _ := a.AsInteger()
+	_v27, _ := engine.AsInteger(a)
 	if _v27 != 1 {
-		_v28, _ := a.AsInteger()
+		_v28, _ := engine.AsInteger(a)
 		t.Errorf("expected a=1, got %d", _v28)
 	}
-	_v29, _ := b.AsInteger()
+	_v29, _ := engine.AsInteger(b)
 	if _v29 != 2 {
-		_v30, _ := b.AsInteger()
+		_v30, _ := engine.AsInteger(b)
 		t.Errorf("expected b=2, got %d", _v30)
 	}
-	_v31, _ := c.AsInteger()
+	_v31, _ := engine.AsInteger(c)
 	if _v31 != 3 {
-		_v32, _ := c.AsInteger()
+		_v32, _ := engine.AsInteger(c)
 		t.Errorf("expected c=3, got %d", _v32)
 	}
 }
@@ -734,9 +734,9 @@ func TestMakeObjectOverrideInheritedDefault(t *testing.T) {
 	}
 	om := objFields(t, result)
 	a, _ := om.Get("a")
-	_v33, _ := a.AsInteger()
+	_v33, _ := engine.AsInteger(a)
 	if _v33 != 99 {
-		_v34, _ := a.AsInteger()
+		_v34, _ := engine.AsInteger(a)
 		t.Errorf("expected a=99, got %d", _v34)
 	}
 }
@@ -752,9 +752,9 @@ func TestMakeObjectStringDefault(t *testing.T) {
 	}
 	om := objFields(t, result)
 	v, _ := om.Get("x")
-	_v35, _ := v.AsString()
+	_v35, _ := engine.AsString(v)
 	if _v35 != "hello" {
-		_v36, _ := v.AsString()
+		_v36, _ := engine.AsString(v)
 		t.Errorf("expected x='hello', got %s", _v36)
 	}
 }
@@ -770,9 +770,9 @@ func TestMakeObjectStringDefaultOverride(t *testing.T) {
 	}
 	om := objFields(t, result)
 	v, _ := om.Get("x")
-	_v37, _ := v.AsString()
+	_v37, _ := engine.AsString(v)
 	if _v37 != "world" {
-		_v38, _ := v.AsString()
+		_v38, _ := engine.AsString(v)
 		t.Errorf("expected x='world', got %s", _v38)
 	}
 }
@@ -788,7 +788,7 @@ func TestMakeObjectBooleanDefault(t *testing.T) {
 	}
 	om := objFields(t, result)
 	v, _ := om.Get("x")
-	if !v.Data.(bool) {
+	if vb, _ := engine.AsBoolean(v); !vb {
 		t.Error("expected x=true (default)")
 	}
 }
@@ -804,7 +804,7 @@ func TestMakeObjectBooleanDefaultOverride(t *testing.T) {
 	}
 	om := objFields(t, result)
 	v, _ := om.Get("x")
-	if v.Data.(bool) {
+	if vb, _ := engine.AsBoolean(v); vb {
 		t.Error("expected x=false (overridden)")
 	}
 }
@@ -831,8 +831,8 @@ func TestMakeObjectMultipleInstances(t *testing.T) {
 
 	v1, _ := om1.Get("x")
 	v2, _ := om2.Get("x")
-	_v39, _ := v1.AsInteger()
-	_v40, _ := v2.AsInteger()
+	_v39, _ := engine.AsInteger(v1)
+	_v40, _ := engine.AsInteger(v2)
 	if _v39 == _v40 {
 		t.Error("expected independent instances with different values")
 	}
@@ -884,13 +884,13 @@ func TestMakeObjectDeepInheritance(t *testing.T) {
 	x, _ := om.Get("x")
 	y, _ := om.Get("y")
 	z, _ := om.Get("z")
-	_v41, _ := x.AsInteger()
-	_v42, _ := y.AsInteger()
-	_v43, _ := z.AsInteger()
+	_v41, _ := engine.AsInteger(x)
+	_v42, _ := engine.AsInteger(y)
+	_v43, _ := engine.AsInteger(z)
 	if _v41 != 1 || _v42 != 2 || _v43 != 3 {
-		_v44, _ := x.AsInteger()
-		_v45, _ := y.AsInteger()
-		_v46, _ := z.AsInteger()
+		_v44, _ := engine.AsInteger(x)
+		_v45, _ := engine.AsInteger(y)
+		_v46, _ := engine.AsInteger(z)
 		t.Errorf("expected x=1,y=2,z=3, got x=%d,y=%d,z=%d", _v44, _v45, _v46)
 	}
 }
@@ -923,7 +923,7 @@ func TestMakeObjectInstanceTypeMatchesObjectType(t *testing.T) {
 	if !inst.VType.Matches(engine.TObject) {
 		t.Errorf("expected instance type to match TObject, got %s", inst.VType)
 	}
-	oi, _ := inst.AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(inst)
 	if oi.TypeRef.Name != "Object/Foo" {
 		t.Errorf("expected TypeRef.Name='Object/Foo', got %s", oi.TypeRef.Name)
 	}
@@ -939,7 +939,7 @@ func TestMakeObjectInstanceChildTypeRef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := result[0].AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(result[0])
 	if oi.TypeRef.Name != "Object/Foo/Bar" {
 		t.Errorf("expected TypeRef.Name='Object/Foo/Bar', got %s", oi.TypeRef.Name)
 	}
@@ -982,18 +982,18 @@ func TestMakeObjectPrototypeBasic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := result[0].AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(result[0])
 	allF := oi.AllFields()
 	y, _ := allF.Get("y")
 	x, _ := allF.Get("x")
-	_v47, _ := y.AsString()
+	_v47, _ := engine.AsString(y)
 	if _v47 != "A" {
-		_v48, _ := y.AsString()
+		_v48, _ := engine.AsString(y)
 		t.Errorf("expected y='A', got %s", _v48)
 	}
-	_v49, _ := x.AsInteger()
+	_v49, _ := engine.AsInteger(x)
 	if _v49 != 1 {
-		_v50, _ := x.AsInteger()
+		_v50, _ := engine.AsInteger(x)
 		t.Errorf("expected x=1 (from prototype), got %d", _v50)
 	}
 }
@@ -1009,7 +1009,7 @@ func TestMakeObjectPrototypeChainRef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := result[0].AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(result[0])
 	if oi.Prototype == nil {
 		t.Fatal("expected prototype to be set")
 	}
@@ -1017,9 +1017,9 @@ func TestMakeObjectPrototypeChainRef(t *testing.T) {
 		t.Errorf("expected prototype type Object/Foo, got %s", oi.Prototype.TypeRef.Name)
 	}
 	px, _ := oi.Prototype.Fields.Get("x")
-	_v51, _ := px.AsInteger()
+	_v51, _ := engine.AsInteger(px)
 	if _v51 != 42 {
-		_v52, _ := px.AsInteger()
+		_v52, _ := engine.AsInteger(px)
 		t.Errorf("expected prototype x=42, got %d", _v52)
 	}
 }
@@ -1035,15 +1035,15 @@ func TestMakeObjectAutoPrototypeBaseValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := result[0].AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(result[0])
 	if oi.Prototype == nil {
 		t.Fatal("expected auto-created prototype")
 	}
 	allF := oi.AllFields()
 	x, _ := allF.Get("x")
-	_v53, _ := x.AsInteger()
+	_v53, _ := engine.AsInteger(x)
 	if _v53 != 0 {
-		_v54, _ := x.AsInteger()
+		_v54, _ := engine.AsInteger(x)
 		t.Errorf("expected auto-prototype x=0 (base), got %d", _v54)
 	}
 }
@@ -1059,12 +1059,12 @@ func TestMakeObjectAutoPrototypeWithDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp55, _ := result[0].AsObjectInstance()
+	_tmp55, _ := engine.AsObjectInstance(result[0])
 	allF := _tmp55.AllFields()
 	x, _ := allF.Get("x")
-	_v56, _ := x.AsInteger()
+	_v56, _ := engine.AsInteger(x)
 	if _v56 != 10 {
-		_v57, _ := x.AsInteger()
+		_v57, _ := engine.AsInteger(x)
 		t.Errorf("expected auto-prototype x=10 (default), got %d", _v57)
 	}
 }
@@ -1080,12 +1080,12 @@ func TestMakeObjectPrototypeOverrideInherited(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp58, _ := result[0].AsObjectInstance()
+	_tmp58, _ := engine.AsObjectInstance(result[0])
 	allF := _tmp58.AllFields()
 	x, _ := allF.Get("x")
-	_v59, _ := x.AsInteger()
+	_v59, _ := engine.AsInteger(x)
 	if _v59 != 99 {
-		_v60, _ := x.AsInteger()
+		_v60, _ := engine.AsInteger(x)
 		t.Errorf("expected x=99 (overridden), got %d", _v60)
 	}
 }
@@ -1101,23 +1101,23 @@ func TestMakeObjectPrototypeGetField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := result[0].AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(result[0])
 	x, ok := oi.GetField("x")
 	if !ok {
 		t.Fatal("expected GetField to find x via prototype")
 	}
-	_v61, _ := x.AsInteger()
+	_v61, _ := engine.AsInteger(x)
 	if _v61 != 7 {
-		_v62, _ := x.AsInteger()
+		_v62, _ := engine.AsInteger(x)
 		t.Errorf("expected x=7, got %d", _v62)
 	}
 	y, ok := oi.GetField("y")
 	if !ok {
 		t.Fatal("expected GetField to find y directly")
 	}
-	_v63, _ := y.AsString()
+	_v63, _ := engine.AsString(y)
 	if _v63 != "hi" {
-		_v64, _ := y.AsString()
+		_v64, _ := engine.AsString(y)
 		t.Errorf("expected y='hi', got %s", _v64)
 	}
 }
@@ -1211,7 +1211,7 @@ func TestMakeObjectDeep7LevelsAllDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp65, _ := result[0].AsObjectInstance()
+	_tmp65, _ := engine.AsObjectInstance(result[0])
 	allF := _tmp65.AllFields()
 	checks := map[string]interface{}{
 		"a": int64(1), "b": "two", "c": true, "d": int64(4),
@@ -1225,19 +1225,19 @@ func TestMakeObjectDeep7LevelsAllDefaults(t *testing.T) {
 		}
 		switch exp := expected.(type) {
 		case int64:
-			_v66, _ := v.AsInteger()
+			_v66, _ := engine.AsInteger(v)
 			if _v66 != exp {
-				_v67, _ := v.AsInteger()
+				_v67, _ := engine.AsInteger(v)
 				t.Errorf("field %s: expected %d, got %d", k, exp, _v67)
 			}
 		case string:
-			_v68, _ := v.AsString()
+			_v68, _ := engine.AsString(v)
 			if _v68 != exp {
-				_v69, _ := v.AsString()
+				_v69, _ := engine.AsString(v)
 				t.Errorf("field %s: expected %q, got %q", k, exp, _v69)
 			}
 		case bool:
-			if v.Data.(bool) != exp {
+			if vb, _ := engine.AsBoolean(v); vb != exp {
 				t.Errorf("field %s: expected %v, got %v", k, exp, v.Data)
 			}
 		}
@@ -1265,7 +1265,7 @@ func TestMakeObjectDeep7LevelsPrototypeChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := result[0].AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(result[0])
 	allF := oi.AllFields()
 	checks := map[string]interface{}{
 		"a": int64(10), "b": "twenty", "c": true, "d": int64(40),
@@ -1279,19 +1279,19 @@ func TestMakeObjectDeep7LevelsPrototypeChain(t *testing.T) {
 		}
 		switch exp := expected.(type) {
 		case int64:
-			_v70, _ := v.AsInteger()
+			_v70, _ := engine.AsInteger(v)
 			if _v70 != exp {
-				_v71, _ := v.AsInteger()
+				_v71, _ := engine.AsInteger(v)
 				t.Errorf("field %s: expected %d, got %d", k, exp, _v71)
 			}
 		case string:
-			_v72, _ := v.AsString()
+			_v72, _ := engine.AsString(v)
 			if _v72 != exp {
-				_v73, _ := v.AsString()
+				_v73, _ := engine.AsString(v)
 				t.Errorf("field %s: expected %q, got %q", k, exp, _v73)
 			}
 		case bool:
-			if v.Data.(bool) != exp {
+			if vb, _ := engine.AsBoolean(v); vb != exp {
 				t.Errorf("field %s: expected %v, got %v", k, exp, v.Data)
 			}
 		}
@@ -1319,7 +1319,7 @@ func TestMakeObjectDeep7LevelsPrototypeDepth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := result[0].AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(result[0])
 	depth := 0
 	for p := oi.Prototype; p != nil; p = p.Prototype {
 		depth++
@@ -1344,16 +1344,16 @@ func TestMakeObjectDeep7GrandparentFieldAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := result[0].AsObjectInstance()
+	oi, _ := engine.AsObjectInstance(result[0])
 
 	// GetField should find a from great-grandparent (L1).
 	a, ok := oi.GetField("a")
 	if !ok {
 		t.Fatal("expected GetField to find 'a' from L1 via prototype chain")
 	}
-	_v74, _ := a.AsInteger()
+	_v74, _ := engine.AsInteger(a)
 	if _v74 != 100 {
-		_v75, _ := a.AsInteger()
+		_v75, _ := engine.AsInteger(a)
 		t.Errorf("expected a=100, got %d", _v75)
 	}
 
@@ -1362,9 +1362,9 @@ func TestMakeObjectDeep7GrandparentFieldAccess(t *testing.T) {
 	if !ok {
 		t.Fatal("expected GetField to find 'b' from L2 via prototype chain")
 	}
-	_v76, _ := b.AsString()
+	_v76, _ := engine.AsString(b)
 	if _v76 != "hi" {
-		_v77, _ := b.AsString()
+		_v77, _ := engine.AsString(b)
 		t.Errorf("expected b='hi', got %s", _v77)
 	}
 }
@@ -1383,12 +1383,12 @@ func TestMakeObjectDeep7OverrideGrandparentField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp78, _ := result[0].AsObjectInstance()
+	_tmp78, _ := engine.AsObjectInstance(result[0])
 	allF := _tmp78.AllFields()
 	a, _ := allF.Get("a")
-	_v79, _ := a.AsInteger()
+	_v79, _ := engine.AsInteger(a)
 	if _v79 != 999 {
-		_v80, _ := a.AsInteger()
+		_v80, _ := engine.AsInteger(a)
 		t.Errorf("expected a=999 (overridden grandparent), got %d", _v80)
 	}
 }
@@ -1405,12 +1405,12 @@ func TestMakeObjectDeep7NarrowingChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp81, _ := result[0].AsObjectInstance()
+	_tmp81, _ := engine.AsObjectInstance(result[0])
 	allF := _tmp81.AllFields()
 	x, _ := allF.Get("x")
-	_v82, _ := x.AsInteger()
+	_v82, _ := engine.AsInteger(x)
 	if _v82 != 42 {
-		_v83, _ := x.AsInteger()
+		_v83, _ := engine.AsInteger(x)
 		t.Errorf("expected x=42 (narrowed default), got %d", _v83)
 	}
 }
@@ -1451,9 +1451,9 @@ func TestMakeObjectPrototypeDotAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_v84, _ := result[0].AsInteger()
+	_v84, _ := engine.AsInteger(result[0])
 	if _v84 != 1 {
-		_v85, _ := result[0].AsInteger()
+		_v85, _ := engine.AsInteger(result[0])
 		t.Errorf("expected foo1.x=1, got %d", _v85)
 	}
 
@@ -1468,9 +1468,9 @@ func TestMakeObjectPrototypeDotAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_v86, _ := result[0].AsString()
+	_v86, _ := engine.AsString(result[0])
 	if _v86 != "A" {
-		_v87, _ := result[0].AsString()
+		_v87, _ := engine.AsString(result[0])
 		t.Errorf("expected bar-a.y='A', got %s", _v87)
 	}
 
@@ -1485,9 +1485,9 @@ func TestMakeObjectPrototypeDotAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_v88, _ := result[0].AsInteger()
+	_v88, _ := engine.AsInteger(result[0])
 	if _v88 != 1 {
-		_v89, _ := result[0].AsInteger()
+		_v89, _ := engine.AsInteger(result[0])
 		t.Errorf("expected bar-a.x=1 (from prototype foo1), got %d", _v89)
 	}
 }
@@ -1510,9 +1510,9 @@ func TestMakeObjectPrototypeDotAccessEndToEnd(t *testing.T) {
 	}
 
 	// bar-a.x is the last step, so result comes from that.
-	_v90, _ := result[0].AsInteger()
+	_v90, _ := engine.AsInteger(result[0])
 	if _v90 != 1 {
-		_v91, _ := result[0].AsInteger()
+		_v91, _ := engine.AsInteger(result[0])
 		t.Errorf("expected bar-a.x=1 (inherited from prototype foo1), got %d", _v91)
 	}
 
@@ -1585,7 +1585,7 @@ func TestObjectTypeNonObjectParentIgnored(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("expected 2 results (object type + 42), got %d", len(result))
 	}
-	if !result[0].IsObjectType() {
+	if !engine.IsObjectType(result[0]) {
 		t.Errorf("expected first result to be object type, got %s", result[0].String())
 	}
 }

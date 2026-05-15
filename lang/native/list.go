@@ -20,7 +20,8 @@ func listEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack [
 // listEntityOptsHandler handles list with an Entity object instance and an options map.
 // Sig is opts-first per the data-last principle: args[0]=opts, args[1]=entity.
 func listEntityOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := entityToAPIMapWithOpts(args[1], args[0].AsMap(), "query")
+	_m, _ := engine.AsMap(args[0])
+	merged := entityToAPIMapWithOpts(args[1], _m, "query")
 	return listAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
@@ -28,7 +29,9 @@ func listEntityOptsHandler(args []engine.Value, ctx map[string]engine.Value, sta
 // The options map is merged into the query field of the API map.
 // Sig is opts-first: args[0]=opts, args[1]=apiMap (pattern-matched).
 func listAPIOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := mergeAPIOptions(args[1].AsMap(), args[0].AsMap(), "query")
+	_m1, _ := engine.AsMap(args[1])
+	_m0, _ := engine.AsMap(args[0])
+	merged := mergeAPIOptions(_m1, _m0, "query")
 	return listAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
@@ -36,7 +39,7 @@ func listAPIOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack 
 // It uses the UniversalManager to create/cache an SDK, then calls entity.List().
 // An optional query field ({query:{...}}) is passed as the reqmatch filter.
 func listAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	apiMap := args[0].AsMap()
+	apiMap, _ := engine.AsMap(args[0])
 
 	sdkInst, entityName, err := getSDK(apiMap, "list", r)
 	if err != nil {
@@ -60,7 +63,8 @@ func listAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 
 // listAllHandler returns all records from a table as a list.
 func listAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[0].AsList().Slice()
+	_lst, _ := engine.AsList(args[0])
+	rows := _lst.Slice()
 	result := make([]engine.Value, len(rows))
 	copy(result, rows)
 	return []engine.Value{engine.NewList(result)}, nil
@@ -71,15 +75,16 @@ func listAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 // value in the corresponding record field. Sig is opts-first: args[0]=filter,
 // args[1]=list.
 func listFilterHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := args[1].AsList().Slice()
-	filter := args[0].AsMap()
+	_lst, _ := engine.AsList(args[1])
+	rows := _lst.Slice()
+	filter, _ := engine.AsMap(args[0])
 
 	var matched []engine.Value
 	for _, row := range rows {
 		if !row.VType.Matches(engine.TMap) {
 			continue
 		}
-		rec := row.AsMap()
+		rec, _ := engine.AsMap(row)
 		if recordMatches(rec, filter) {
 			matched = append(matched, row)
 		}
@@ -124,29 +129,29 @@ func recordMatches(rec engine.ReadMap, filter engine.ReadMap) bool {
 func valuesEqual(a, b engine.Value) bool {
 	switch {
 	case a.VType.Matches(engine.TInteger) && b.VType.Matches(engine.TInteger):
-		ai, _ := a.AsInteger()
-		bi, _ := b.AsInteger()
+		ai, _ := engine.AsInteger(a)
+		bi, _ := engine.AsInteger(b)
 		return ai == bi
 	case a.VType.Matches(engine.TString) && b.VType.Matches(engine.TString):
-		as, _ := a.AsString()
-		bs, _ := b.AsString()
+		as, _ := engine.AsString(a)
+		bs, _ := engine.AsString(b)
 		return as == bs
 	case a.VType.Matches(engine.TBoolean) && b.VType.Matches(engine.TBoolean):
-		ab, _ := a.AsBoolean()
-		bb, _ := b.AsBoolean()
+		ab, _ := engine.AsBoolean(a)
+		bb, _ := engine.AsBoolean(b)
 		return ab == bb
 	case a.VType.Equal(engine.TAtom) && b.VType.Equal(engine.TAtom):
-		aa, _ := a.AsAtom()
-		ba, _ := b.AsAtom()
+		aa, _ := engine.AsAtom(a)
+		ba, _ := engine.AsAtom(b)
 		return aa == ba
 	// Cross-type: atom and string are interchangeable for equality.
 	case a.VType.Equal(engine.TAtom) && b.VType.Matches(engine.TString):
-		aa, _ := a.AsAtom()
-		bs, _ := b.AsString()
+		aa, _ := engine.AsAtom(a)
+		bs, _ := engine.AsString(b)
 		return aa == bs
 	case a.VType.Matches(engine.TString) && b.VType.Equal(engine.TAtom):
-		as, _ := a.AsString()
-		ba, _ := b.AsAtom()
+		as, _ := engine.AsString(a)
+		ba, _ := engine.AsAtom(b)
 		return as == ba
 	default:
 		return a.String() == b.String()

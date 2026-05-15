@@ -320,16 +320,22 @@ consolidation and will be flagged in code review.
 
 Handlers that take `TList`/`TMap`/`TAny` args should guard with
 `!IsConcrete(args[i])` (or use the `RequireConcreteX` helpers) before
-calling `AsList()`/`AsMap()` — otherwise carriers and type literals
-panic on `.Len()`.
+calling `AsList(v)`/`AsMap(v)` — otherwise carriers and type literals
+panic on `.Len()`. (`AsList` / `AsMap` are free functions in eng, not
+methods on `Value`; only `Is(t)` and `String()` remain as methods.)
 
 **DepScalar-rejecting accessors**:
 - `v.AsConcreteString()`, `v.AsConcreteInteger()`, `v.AsConcreteDecimal()`,
   `v.AsConcreteBoolean()`, `v.AsConcreteAtom()` — reject DepScalar
   payloads with a clear error rather than silently returning the zero
-  value. Always prefer these over the bare `AsX()` accessors when the
-  arg comes from a sig-matched value (a `TString` slot can secretly
-  hold a `DepString` constraint).
+  value. Always prefer these over the bare free-function accessors
+  (`AsString(v)`, `AsInteger(v)`, …) when the arg comes from a
+  sig-matched value (a `TString` slot can secretly hold a `DepString`
+  constraint). These DepScalar-rejecting variants remain methods on
+  `Value` since they're the canonical handler-side error path; the
+  low-level accessors were drained to free functions in `eng/` as part
+  of the type-decoupling work — see
+  `lang/doc/design/TYPE-DECOUPLING.0.md`.
 
 **Check mode**:
 - `r.IsCheckMode()` — read-side helper. Replaces `r.Check.Mode` and
@@ -401,11 +407,11 @@ on hardcoded type paths).
 
 Key patterns to follow:
 
-- **Always nil-check before dereferencing.** `Value.AsMap()` and
-  `Value.AsList()` return `nil` when `Data` is nil (type literals like
-  bare `Map` or `List`) **or when `Data` is a non-concrete subtype**
-  (e.g. `RecordTypeInfo`, `OptionsTypeInfo`, `ChildTypeInfo`). Never
-  call `.Len()`, `.Keys()`, `.Get()` etc. on a potentially nil result
+- **Always nil-check before dereferencing.** `AsMap(v)` and `AsList(v)`
+  return `nil` when `Data` is nil (type literals like bare `Map` or
+  `List`) **or when `Data` is a non-concrete subtype** (e.g.
+  `RecordTypeInfo`, `OptionsTypeInfo`, `ChildTypeInfo`). Never call
+  `.Len()`, `.Keys()`, `.Get()` etc. on a potentially nil result
   without checking first.
 - **Type literals have nil Data.** `NewTypeLiteral(TMap)` creates a Value
   with `VType=TMap, Data=nil`. Any code that receives a Value matching
@@ -413,15 +419,16 @@ Key patterns to follow:
   signature-matched arguments — `TAny` matches type literals.
 - **Map subtypes share VType=TMap.** RecordTypeInfo, OptionsTypeInfo,
   ChildTypeInfo, and *OrderedMap all have `VType=TMap`. Code that checks
-  `VType.Equal(TMap)` matches all of them. Use `IsRecordType()`,
-  `IsOptionsType()`, `IsTypedMap()` to discriminate, and guard
-  `AsMap()` calls — it returns nil for non-OrderedMap data.
+  `VType.Equal(TMap)` matches all of them. Use `IsRecordType(v)`,
+  `IsOptionsType(v)`, `IsTypedMap(v)` to discriminate, and guard
+  `AsMap(v)` calls — it returns nil for non-OrderedMap data.
 - **Guard conversion functions.** `valueToAny()` and `valueToMap()` in
   `native/transform.go` have nil-Data guards. If you add new
   conversion helpers, include the same guard.
 - **Engine builtin handlers.** Check `args[N].Data == nil` before calling
-  `AsMap()`/`AsList()` on arguments matched via `TMap`/`TList`/`TAny`
-  signatures. See `native_accessor_dotr.go` for the canonical pattern.
+  `AsMap(args[N])`/`AsList(args[N])` on arguments matched via
+  `TMap`/`TList`/`TAny` signatures. See `native_accessor_dotr.go`
+  for the canonical pattern.
 - **Prefer `val, ok := v.Data.(Type)` over `v.Data.(Type)`.** The
   two-value form never panics; the single-value form panics on mismatch.
 - **Write tests that use `recover()`.** For any new word or native

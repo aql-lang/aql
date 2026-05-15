@@ -17,7 +17,7 @@ func TestContextSetGetString(t *testing.T) {
 		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("x"), engine.NewInteger(42),
 		engine.NewWord("context"), engine.NewWord("get"), engine.NewString("x"),
 	})
-	_as0, _ := result[0].AsInteger()
+	_as0, _ := engine.AsInteger(result[0])
 	if len(result) != 1 || _as0 != 42 {
 		t.Errorf("context get x = %v, want 42", result)
 	}
@@ -32,7 +32,7 @@ func TestContextSetGetWordKey(t *testing.T) {
 		engine.NewWord("context"), engine.NewWord("set"), engine.NewWord("foo"), engine.NewInteger(99),
 		engine.NewWord("context"), engine.NewWord("get"), engine.NewWord("foo"),
 	})
-	_as1, _ := result[0].AsInteger()
+	_as1, _ := engine.AsInteger(result[0])
 	if len(result) != 1 || _as1 != 99 {
 		t.Errorf("context get foo = %v, want 99", result)
 	}
@@ -48,7 +48,7 @@ func TestContextSetOverwrite(t *testing.T) {
 		engine.NewWord("context"), engine.NewWord("set"), engine.NewString("k"), engine.NewInteger(2),
 		engine.NewWord("context"), engine.NewWord("get"), engine.NewString("k"),
 	})
-	_as2, _ := result[0].AsInteger()
+	_as2, _ := engine.AsInteger(result[0])
 	if len(result) != 1 || _as2 != 2 {
 		t.Errorf("overwritten context get k = %v, want 2", result)
 	}
@@ -84,7 +84,7 @@ func TestContextSubEngineInherits(t *testing.T) {
 			engine.NewWord("context"), engine.NewWord("get"), engine.NewString("x"),
 		}),
 	})
-	_as3, _ := result[0].AsInteger()
+	_as3, _ := engine.AsInteger(result[0])
 	if len(result) != 1 || _as3 != 10 {
 		t.Errorf("sub-engine should inherit parent context, got %v", result)
 	}
@@ -105,7 +105,7 @@ func TestContextSubEngineIsolation(t *testing.T) {
 		}),
 		engine.NewWord("context"), engine.NewWord("get"), engine.NewString("x"),
 	})
-	_as4, _ := result[0].AsInteger()
+	_as4, _ := engine.AsInteger(result[0])
 	if len(result) != 1 || _as4 != 1 {
 		t.Errorf("parent context should be unchanged after sub-engine write, got %v", result)
 	}
@@ -159,11 +159,11 @@ func TestContextNestedThreeLevels(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("expected 2 results, got %d: %v", len(result), result)
 	}
-	_as5, _ := result[0].AsInteger()
+	_as5, _ := engine.AsInteger(result[0])
 	if _as5 != 1 {
 		t.Errorf("inner do should see level=1, got %v", result[0])
 	}
-	_as6, _ := result[1].AsInteger()
+	_as6, _ := engine.AsInteger(result[1])
 	if _as6 != 0 {
 		t.Errorf("parent should still see level=0, got %v", result[1])
 	}
@@ -186,7 +186,7 @@ func TestContextMultipleKeys(t *testing.T) {
 		engine.NewWord("context"), engine.NewWord("get"), engine.NewString("c"),
 		engine.NewWord("add"),
 	})
-	_as7, _ := result[0].AsInteger()
+	_as7, _ := engine.AsInteger(result[0])
 	if len(result) != 1 || _as7 != 6 {
 		t.Errorf("sum of context values = %v, want 6", result)
 	}
@@ -217,15 +217,15 @@ func TestContextDifferentValueTypes(t *testing.T) {
 	if len(result) != 3 {
 		t.Fatalf("expected 3 results, got %d", len(result))
 	}
-	_as8, _ := result[0].AsString()
+	_as8, _ := engine.AsString(result[0])
 	if !result[0].VType.Matches(engine.TString) || _as8 != "hello" {
 		t.Errorf("string value = %v, want hello", result[0])
 	}
-	_as9, _ := result[1].AsInteger()
+	_as9, _ := engine.AsInteger(result[1])
 	if !result[1].VType.Matches(engine.TInteger) || _as9 != 42 {
 		t.Errorf("integer value = %v, want 42", result[1])
 	}
-	_as10, _ := result[2].AsBoolean()
+	_as10, _ := engine.AsBoolean(result[2])
 	if !result[2].VType.Matches(engine.TBoolean) || _as10 != true {
 		t.Errorf("boolean value = %v, want true", result[2])
 	}
@@ -250,9 +250,9 @@ func TestContextValuesByReference(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	rm := result[0].AsMap()
+	rm, _ := engine.AsMap(result[0])
 	v, ok := rm.Get("key")
-	_as11, _ := v.AsInteger()
+	_as11, _ := engine.AsInteger(v)
 	if !ok || _as11 != 100 {
 		t.Errorf("expected map with key=100, got %v", result[0])
 	}
@@ -307,7 +307,7 @@ func TestContextModuleIsolation(t *testing.T) {
 		engine.NewWord("drop"), // drop module desc
 		engine.NewWord("context"), engine.NewWord("get"), engine.NewString("x"),
 	})
-	_as12, _ := result[0].AsInteger()
+	_as12, _ := engine.AsInteger(result[0])
 	if len(result) != 1 || _as12 != 1 {
 		t.Errorf("parent context should be unchanged after module write, got %v", result)
 	}
@@ -343,7 +343,7 @@ func TestRegistryContextStackMethods(t *testing.T) {
 	r.Contexts.Push(store)
 	childStore := r.Contexts.Top()
 	v, ok := childStore.Get("key1")
-	_as13, _ := v.AsInteger()
+	_as13, _ := engine.AsInteger(v)
 	if !ok || _as13 != 1 {
 		t.Error("child should inherit key1=1 from parent via prototype")
 	}
@@ -356,7 +356,7 @@ func TestRegistryContextStackMethods(t *testing.T) {
 	r.Contexts.Pop()
 	restored := r.Contexts.Top()
 	v, ok = restored.Get("key1")
-	_as14, _ := v.AsInteger()
+	_as14, _ := engine.AsInteger(v)
 	if !ok || _as14 != 1 {
 		t.Errorf("parent key1 should still be 1 after pop, got %v", v)
 	}
@@ -384,7 +384,7 @@ func TestContextIfSubEngineInherits(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewWord("context"), engine.NewWord("get"), engine.NewString("val")}),
 		engine.NewList([]engine.Value{engine.NewInteger(0)}),
 	})
-	_as15, _ := result[0].AsInteger()
+	_as15, _ := engine.AsInteger(result[0])
 	if len(result) != 1 || _as15 != 5 {
 		t.Errorf("if-branch should inherit context, got %v", result)
 	}

@@ -14,10 +14,10 @@ func TestMakePathFromList(t *testing.T) {
 		engine.NewWord("make"), engine.NewWord("Path"),
 		engine.NewList([]engine.Value{engine.NewString("usr"), engine.NewString("local"), engine.NewString("bin")}),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
-	p, _ := result[0].AsPath()
+	p, _ := engine.AsPath(result[0])
 	if p.Abs {
 		t.Error("expected relative path")
 	}
@@ -32,12 +32,12 @@ func TestMakePathFromListAtoms(t *testing.T) {
 		engine.NewWord("make"), engine.NewWord("Path"),
 		engine.NewList([]engine.Value{engine.NewAtom("a"), engine.NewAtom("b"), engine.NewAtom("c")}),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
-	_as0, _ := result[0].AsPath()
+	_as0, _ := engine.AsPath(result[0])
 	if _as0.String() != "a/b/c" {
-		_as1, _ := result[0].AsPath()
+		_as1, _ := engine.AsPath(result[0])
 		t.Errorf("got %q, want %q", _as1.String(), "a/b/c")
 	}
 }
@@ -49,10 +49,10 @@ func TestMakePathFromString(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("make"), engine.NewWord("Path"), engine.NewString("usr/local/bin"),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
-	p, _ := result[0].AsPath()
+	p, _ := engine.AsPath(result[0])
 	if p.Abs {
 		t.Error("expected relative path")
 	}
@@ -66,10 +66,10 @@ func TestMakePathFromAbsString(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("make"), engine.NewWord("Path"), engine.NewString("/usr/local/bin"),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
-	p, _ := result[0].AsPath()
+	p, _ := engine.AsPath(result[0])
 	if !p.Abs {
 		t.Error("expected absolute path")
 	}
@@ -88,10 +88,10 @@ func TestMakePathAbsOption(t *testing.T) {
 		engine.NewWord("make"), engine.NewWord("Path"), engine.NewMap(opts),
 		engine.NewList([]engine.Value{engine.NewString("x"), engine.NewString("y")}),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
-	p, _ := result[0].AsPath()
+	p, _ := engine.AsPath(result[0])
 	if !p.Abs {
 		t.Error("expected absolute path from abs option")
 	}
@@ -107,12 +107,12 @@ func TestMakePathAbsOptionString(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("make"), engine.NewWord("Path"), engine.NewMap(opts), engine.NewString("x/y"),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
-	_as2, _ := result[0].AsPath()
+	_as2, _ := engine.AsPath(result[0])
 	if _as2.String() != "/x/y" {
-		_as3, _ := result[0].AsPath()
+		_as3, _ := engine.AsPath(result[0])
 		t.Errorf("got %q, want %q", _as3.String(), "/x/y")
 	}
 }

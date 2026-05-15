@@ -7,7 +7,7 @@ import (
 // Tests for unnamed type-literal parameters in fn signatures.
 // Regression: bare Map in an input signature triggered a panic because
 // parseFnParams conflated a Map type literal (Data==nil) with an actual
-// map value, calling AsMap() on nil.
+// map value, calling engine.AsMap() on nil.
 
 // --- Single unnamed Map parameter ---
 

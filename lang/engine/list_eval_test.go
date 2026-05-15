@@ -36,15 +36,15 @@ func TestListEvalAsArg(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	lst := result[0].AsList()
+	lst, _ := engine.AsList(result[0])
 	if lst.Len() != 2 {
 		t.Fatalf("expected list of 2, got %d", lst.Len())
 	}
-	_as0, _ := lst.Get(0).AsNumber()
+	_as0, _ := engine.AsNumber(lst.Get(0))
 	if _as0 != 10 {
 		t.Errorf("element 0 = %v, want 10", lst.Get(0))
 	}
-	_as1, _ := lst.Get(1).AsNumber()
+	_as1, _ := engine.AsNumber(lst.Get(1))
 	if _as1 != 20 {
 		t.Errorf("element 1 = %v, want 20", lst.Get(1))
 	}
@@ -73,8 +73,8 @@ func TestListEvalArithmetic(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	lst := result[0].AsList()
-	_as2, _ := lst.Get(0).AsNumber()
+	lst, _ := engine.AsList(result[0])
+	_as2, _ := engine.AsNumber(lst.Get(0))
 	if lst.Len() != 1 || _as2 != 3 {
 		t.Errorf("list = %v, want [3]", result[0])
 	}
@@ -104,7 +104,7 @@ func TestListEvalQuotedSkipped(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	lst := result[0].AsList()
+	lst, _ := engine.AsList(result[0])
 	if lst.Len() != 3 {
 		t.Errorf("expected 3 elements (unevaluated), got %d: %v", lst.Len(), result[0])
 	}
@@ -126,7 +126,7 @@ func TestListEvalNoEvalArgsPreservesCodeBody(t *testing.T) {
 		engine.NewEnd(),
 		engine.NewInteger(5), engine.NewWord("double"),
 	})
-	_as3, _ := result[0].AsNumber()
+	_as3, _ := engine.AsNumber(result[0])
 	if len(result) != 1 || _as3 != 10 {
 		t.Errorf("5 double = %v, want 10", result)
 	}
@@ -146,7 +146,7 @@ func TestListEvalFnDefAutoInvoke(t *testing.T) {
 	r.Register("listlen", engine.Signature{
 		Args: []*engine.Type{engine.TList},
 		Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-			lst := args[0].AsList()
+			lst, _ := engine.AsList(args[0])
 			return []engine.Value{engine.NewInteger(int64(lst.Len()))}, nil
 		},
 	})
@@ -163,7 +163,7 @@ func TestListEvalFnDefAutoInvoke(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	_as4, _ := result[0].AsNumber()
+	_as4, _ := engine.AsNumber(result[0])
 	if _as4 != 2 {
 		t.Errorf("listlen = %v, want 2", result[0])
 	}
@@ -198,7 +198,7 @@ func TestListEvalRuntimeListNotEvaluated(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	lst := result[0].AsList()
+	lst, _ := engine.AsList(result[0])
 	if lst.Len() != 2 {
 		t.Errorf("expected 2 elements (unevaluated runtime list), got %d", lst.Len())
 	}

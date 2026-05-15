@@ -45,13 +45,37 @@ func (o OriginKind) String() string {
 // from builtinDecls; the `type` word mints fresh Type values at
 // runtime (each declaration mints a new identity — even when its name
 // shadows an outer one).
+//
+// Behavior is the pluggable per-type operation set consulted by the
+// kernel's dispatch points (`v.Is(t)`, Value.String, ValuesEqual,
+// etc.). Every Type has a non-nil Behavior — the registration paths
+// install DefaultBehavior when the caller doesn't supply a custom
+// one. See typebehavior.go for the interface and the optional
+// capability sub-interfaces (Comparer, Hasher, Walker).
+//
+// BaseType is the "underlying scalar" pointer for dependent scalar
+// types (Type/Dependent/Dep<X> — DepInteger, DepDecimal, DepString,
+// …) so a DepInteger satisfies any slot typed as Integer. nil for
+// every other type. Set at registration; the lattice override in
+// Type.Matches consults it directly rather than running the historical
+// leaf-name → base-type switch (Step 9 of TYPE-DECOUPLING.0.md).
+//
+// Metatype is the type-of-the-type: TScalar's Metatype is
+// TScalarType, TNode's is TNodeType, TObject's is TObjectType, and
+// every descendant of those roots inherits the same Metatype. Other
+// roots (Any, None, Never, Word, Type) have a nil Metatype, which
+// MetatypeFor maps to TType. Replaces the historical hardcoded root-
+// name switch in MetatypeFor (Step 9).
 type Type struct {
-	ID         string     // canonical identity (e.g. "S_000000000004")
-	Name       string     // last segment of path (e.g. "ProperString")
-	Parent     *Type      // nil for roots
-	FixedID    int        // >0 for builtins; 0 for dynamic
-	IsInternal bool       // Word/__XX runtime markers — not user-facing
-	Origin     OriginKind // builtin / userdef
+	ID         string       // canonical identity (e.g. "S_000000000004")
+	Name       string       // last segment of path (e.g. "ProperString")
+	Parent     *Type        // nil for roots
+	FixedID    int          // >0 for builtins; 0 for dynamic
+	IsInternal bool         // Word/__XX runtime markers — not user-facing
+	Origin     OriginKind   // builtin / userdef
+	Behavior   TypeBehavior // pluggable dispatch — never nil after registration
+	BaseType   *Type        // dependent-scalar underlying base; nil otherwise
+	Metatype   *Type        // metatype anchor for this branch; nil → TType
 }
 
 // IsNative reports whether t is a built-in type seeded at init from
@@ -201,14 +225,131 @@ func (tt *TypeTable) mintID(parent *Type) string {
 // construct a body Value using the returned *Type as its VType, then
 // Bind. Anonymous types (e.g. `object {…}` not installed by name)
 // skip the Bind step and just keep the *Type as the Value's identity.
+//
+// Behavior defaults to DefaultBehavior. Callers needing custom
+// dispatch construct the *Type via this path then set def.Behavior
+// before exposing it, or use MintTypeWithBehavior.
 func (tt *TypeTable) MintType(name string, parent *Type) *Type {
 	def := &Type{
-		Name:   name,
-		Parent: parent,
-		Origin: OriginUserDef,
+		Name:     name,
+		Parent:   parent,
+		Origin:   OriginUserDef,
+		Behavior: DefaultBehavior,
 	}
 	def.ID = tt.mintID(parent)
 	tt.byID[def.ID] = def
+	return def
+}
+
+// RegisterExternalBuiltin installs a non-kernel-declared "builtin-
+// class" type from outside the eng package — host modules
+// (lang/internal/nativemod/time, lang/native/fetch, plugin packages,
+// etc.) that own a type the kernel doesn't need to know about by
+// name. Conceptually equivalent to a builtinDecls row, but supplied
+// at runtime by the owning module.
+//
+// FixedID allocation policy: each module reserves a stable per-module
+// range so cross-version ID stability survives reorderings and
+// plugin loadings. Reserved ranges:
+//
+//	  100-999    eng-internal future-builtins
+//	 1000-1999   lang/internal/nativemod/time   (Date, DateTime, Instant, …)
+//	 2000-2999   lang/internal/nativemod/matrix (Matrix)
+//	 3000-3999   lang/native/fetch              (Fetch, Request, Response)
+//	 4000-4999   lang/engine (Timeout, Interval)
+//	 5000-9999   reserved for future kernel use
+//	10000+       host / third-party plugin types
+//
+// Callers register at module init (e.g. nativemod.RegisterTypes(r))
+// and capture the returned *Type into a package-level variable. The
+// kernel's dispatch path consults the type's Behavior — no special
+// case for "external vs builtin" exists at runtime.
+//
+// Validates the path is well-formed (every part starts with [A-Z]),
+// the parent path is registered, and the FixedID is unused. Returns
+// the minted *Type on success.
+func (tt *TypeTable) RegisterExternalBuiltin(path string, fixedID int, behavior TypeBehavior) (*Type, error) {
+	parts := strings.Split(path, "/")
+	if len(parts) == 0 || path == "" {
+		return nil, fmt.Errorf("RegisterExternalBuiltin: empty path")
+	}
+	for _, p := range parts {
+		if p == "" {
+			return nil, fmt.Errorf("RegisterExternalBuiltin: invalid path %q (empty part)", path)
+		}
+		c := p[0]
+		if c < 'A' || c > 'Z' {
+			if !strings.HasPrefix(p, "__") {
+				return nil, fmt.Errorf("RegisterExternalBuiltin: invalid path %q (part %q must start with [A-Z])", path, p)
+			}
+		}
+	}
+
+	var parent *Type
+	if len(parts) > 1 {
+		parentPath := strings.Join(parts[:len(parts)-1], "/")
+		parent = tt.bypath[parentPath]
+		if parent == nil {
+			return nil, fmt.Errorf("RegisterExternalBuiltin: parent %q not registered for %q", parentPath, path)
+		}
+	}
+
+	if existing := tt.bypath[path]; existing != nil {
+		return nil, fmt.Errorf("RegisterExternalBuiltin: path %q already registered", path)
+	}
+
+	id := formatFixedID(path, fixedID)
+	if existing, dup := tt.byID[id]; dup {
+		return nil, fmt.Errorf("RegisterExternalBuiltin: FixedID %d for %q collides with %q", fixedID, path, existing.Path())
+	}
+
+	if behavior == nil {
+		behavior = DefaultBehavior
+	}
+
+	def := &Type{
+		ID:       id,
+		Name:     parts[len(parts)-1],
+		Parent:   parent,
+		FixedID:  fixedID,
+		Origin:   OriginBuiltin,
+		Behavior: behavior,
+	}
+	tt.byID[id] = def
+	tt.bypath[path] = def
+	if parent == nil {
+		tt.rootSet[path] = true
+	}
+	tt.byName[def.Name] = []TypeBinding{{Def: def}}
+	for _, p := range parts {
+		tt.parts[p] = true
+	}
+	if existing, dup := tt.leafIndex[def.Name]; dup {
+		if existing != "" {
+			tt.leafIndex[def.Name] = ""
+		}
+	} else {
+		tt.leafIndex[def.Name] = path
+	}
+	// Refresh the parser's bare-name lookup snapshot so the newly-
+	// registered type is resolvable by source-text references like
+	// `Foo`. Only the package-level Builtin table feeds typeNames;
+	// per-Registry dynamic tables do not.
+	if tt == Builtin {
+		refreshTypeNames()
+	}
+	return def, nil
+}
+
+// MintTypeWithBehavior is MintType plus a custom TypeBehavior. Used
+// by registration paths that want to install a domain-specific
+// Behavior at mint time (predicate types, dependent scalars, plugin
+// types). A nil behavior falls back to DefaultBehavior.
+func (tt *TypeTable) MintTypeWithBehavior(name string, parent *Type, behavior TypeBehavior) *Type {
+	def := tt.MintType(name, parent)
+	if behavior != nil {
+		def.Behavior = behavior
+	}
 	return def
 }
 
@@ -310,10 +451,12 @@ func (tt *TypeTable) Clone() *TypeTable {
 // is the SINGLE SOURCE OF TRUTH for all builtin types — IDs, parents,
 // user-facing visibility, everything.
 type builtinDecl struct {
-	Path       string
-	FixedID    int
-	IsInternal bool   // true for Word/__XX runtime markers
-	Alias      string // optional friendly short name for ExpandShortName (e.g. "Paren" → Word/__OP)
+	Path         string
+	FixedID      int
+	IsInternal   bool   // true for Word/__XX runtime markers
+	Alias        string // optional friendly short name for ExpandShortName (e.g. "Paren" → Word/__OP)
+	BasePath     string // for Type/Dependent/Dep<X> types: the path of the underlying scalar (Step 9)
+	MetatypePath string // for root types whose descendants share a metatype anchor (Scalar→Type/ScalarType, …)
 }
 
 // builtinDecls lists every builtin type. Parent-first ordering is
@@ -327,9 +470,9 @@ var builtinDecls = []builtinDecl{
 	{Path: "Any", FixedID: 1},
 	{Path: "None", FixedID: 2},
 	{Path: "Never", FixedID: 61},
-	{Path: "Scalar", FixedID: 3},
-	{Path: "Node", FixedID: 11},
-	{Path: "Object", FixedID: 30},
+	{Path: "Scalar", FixedID: 3, MetatypePath: "Type/ScalarType"},
+	{Path: "Node", FixedID: 11, MetatypePath: "Type/NodeType"},
+	{Path: "Object", FixedID: 30, MetatypePath: "Type/ObjectType"},
 	{Path: "Word", FixedID: 17},
 	{Path: "Type", FixedID: 39},
 
@@ -340,19 +483,11 @@ var builtinDecls = []builtinDecl{
 	{Path: "Scalar/Number", FixedID: 7},
 	{Path: "Scalar/Number/Integer", FixedID: 8},
 	{Path: "Scalar/Number/Decimal", FixedID: 9},
-	{Path: "Scalar/Number/Matrix", FixedID: 50},
+	// Scalar/Number/Matrix moved to lang/internal/nativemod/matrix.go (Step 8).
 	{Path: "Scalar/Boolean", FixedID: 10},
 	{Path: "Scalar/Path", FixedID: 47},
 	{Path: "Scalar/Atom", FixedID: 18},
-	{Path: "Scalar/Time", FixedID: 48},
-	{Path: "Scalar/Time/Date", FixedID: 49},
-	{Path: "Scalar/Time/DateTime", FixedID: 52},
-	{Path: "Scalar/Time/Instant", FixedID: 53},
-	{Path: "Scalar/Time/TimeOfDay", FixedID: 54},
-	{Path: "Scalar/Time/Duration", FixedID: 55},
-	{Path: "Scalar/Time/Duration/CalDuration", FixedID: 56},
-	{Path: "Scalar/Time/Duration/ClkDuration", FixedID: 57},
-	{Path: "Scalar/Time/Timezone", FixedID: 58},
+	// Scalar/Time and descendants moved to lang/engine/native_temporal.go (Step 8).
 
 	// Node branch
 	{Path: "Node/List", FixedID: 12},
@@ -370,11 +505,9 @@ var builtinDecls = []builtinDecl{
 	{Path: "Object/Error", FixedID: 45},
 	{Path: "Object/Resource", FixedID: 36},
 	{Path: "Object/Resource/Entity", FixedID: 37},
-	{Path: "Object/Fetch", FixedID: 33},
-	{Path: "Object/Fetch/Request", FixedID: 34},
-	{Path: "Object/Fetch/Response", FixedID: 35},
-	{Path: "Object/Timeout", FixedID: 59},
-	{Path: "Object/Interval", FixedID: 60},
+	// Object/Fetch / Object/Fetch/Request / Object/Fetch/Response
+	// moved to lang/native/fetch.go (Step 8 migration).
+	// Object/Timeout and Object/Interval moved to lang/engine/native_misc.go (Step 8).
 
 	// Word branch — Word/__XX entries are internal runtime markers.
 	// They expose friendly short-name aliases (e.g. "Paren" → Word/__OP)
@@ -403,12 +536,12 @@ var builtinDecls = []builtinDecl{
 	{Path: "Type/NodeType", FixedID: 41},
 	{Path: "Type/ObjectType", FixedID: 46},
 	{Path: "Type/Dependent", FixedID: 65},
-	{Path: "Type/Dependent/DepInteger", FixedID: 66},
-	{Path: "Type/Dependent/DepDecimal", FixedID: 67},
-	{Path: "Type/Dependent/DepNumber", FixedID: 68},
-	{Path: "Type/Dependent/DepString", FixedID: 69},
-	{Path: "Type/Dependent/DepBoolean", FixedID: 70},
-	{Path: "Type/Dependent/DepAtom", FixedID: 71},
+	{Path: "Type/Dependent/DepInteger", FixedID: 66, BasePath: "Scalar/Number/Integer"},
+	{Path: "Type/Dependent/DepDecimal", FixedID: 67, BasePath: "Scalar/Number/Decimal"},
+	{Path: "Type/Dependent/DepNumber", FixedID: 68, BasePath: "Scalar/Number"},
+	{Path: "Type/Dependent/DepString", FixedID: 69, BasePath: "Scalar/String"},
+	{Path: "Type/Dependent/DepBoolean", FixedID: 70, BasePath: "Scalar/Boolean"},
+	{Path: "Type/Dependent/DepAtom", FixedID: 71, BasePath: "Scalar/Atom"},
 }
 
 // Builtin is the package-level TypeTable holding every builtin type.
@@ -427,6 +560,25 @@ func newBuiltinTypeTable() *TypeTable {
 	}
 	for _, d := range builtinDecls {
 		tt.registerBuiltin(d)
+	}
+	// Post-pass: wire Metatype fields. Roots that anchor a metatype
+	// (Scalar→ScalarType, Node→NodeType, Object→ObjectType) resolve
+	// their MetatypePath here, after all decls have been registered.
+	// Every descendant of a metatype-bearing root inherits its
+	// ancestor's Metatype by walking up — done lazily by MetatypeFor.
+	for _, d := range builtinDecls {
+		if d.MetatypePath == "" {
+			continue
+		}
+		def := tt.bypath[d.Path]
+		if def == nil {
+			panic(fmt.Sprintf("typetable: post-pass cannot find %q", d.Path))
+		}
+		mt := tt.bypath[d.MetatypePath]
+		if mt == nil {
+			panic(fmt.Sprintf("typetable: metatype %q not registered for %q", d.MetatypePath, d.Path))
+		}
+		def.Metatype = mt
 	}
 	return tt
 }
@@ -452,6 +604,14 @@ func (tt *TypeTable) registerBuiltin(d builtinDecl) {
 		FixedID:    d.FixedID,
 		IsInternal: d.IsInternal,
 		Origin:     OriginBuiltin,
+		Behavior:   DefaultBehavior,
+	}
+	if d.BasePath != "" {
+		base := tt.bypath[d.BasePath]
+		if base == nil {
+			panic(fmt.Sprintf("typetable: base %q not registered before %q (declare base types first in builtinDecls)", d.BasePath, d.Path))
+		}
+		def.BaseType = base
 	}
 	tt.byID[id] = def
 	tt.bypath[d.Path] = def
@@ -571,10 +731,11 @@ func MintTestType(path string) *Type {
 		}
 	}
 	def := &Type{
-		ID:     fmt.Sprintf("%st%011x", prefix, testTypeSeq),
-		Name:   parts[len(parts)-1],
-		Parent: parent,
-		Origin: OriginUserDef,
+		ID:       fmt.Sprintf("%st%011x", prefix, testTypeSeq),
+		Name:     parts[len(parts)-1],
+		Parent:   parent,
+		Origin:   OriginUserDef,
+		Behavior: DefaultBehavior,
 	}
 	testTypePool[path] = def
 	return def

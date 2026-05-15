@@ -42,8 +42,8 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	}
 	// Integer key on list.
 	if key.VType.Matches(TInteger) {
-		if list := container.AsList(); !list.IsNil() && container.VType.Matches(TList) {
-			_as3, _ := key.AsInteger()
+		if list, _ := AsList(container); !list.IsNil() && container.VType.Matches(TList) {
+			_as3, _ := AsInteger(key)
 			idx := int(_as3)
 			if idx < 0 || idx >= list.Len() {
 				return nil, fmt.Errorf("getr: index %d out of bounds (length %d)", idx, list.Len())
@@ -52,7 +52,7 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 		}
 	}
 	k := getKey(key)
-	m := container.AsMap()
+	m, _ := AsMap(container)
 	if m == nil {
 		return nil, fmt.Errorf("getr: expected a map, got %s", container.VType.String())
 	}
@@ -70,14 +70,14 @@ func getrObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 		return nil, fmt.Errorf("getr: cannot access property on type literal")
 	}
 	k := getKey(key)
-	if m, ok := container.Data.(*OrderedMap); ok {
+	if m, err := AsMutableMap(container); err == nil {
 		val, found := m.Get(k)
 		if !found {
 			return nil, fmt.Errorf("getr: key %q not found in object", k)
 		}
 		return []Value{val}, nil
 	}
-	oi, _ := container.AsObjectInstance()
+	oi, _ := AsObjectInstance(container)
 	val, ok := oi.GetField(k)
 	if !ok {
 		return nil, fmt.Errorf("getr: field %q not found in object", k)

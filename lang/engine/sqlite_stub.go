@@ -110,8 +110,8 @@ func (s *SQLiteStore) StoreTable(name string, td TableData) error {
 			strings.Join(placeholders, ", "))
 
 		for _, row := range td.Rows {
-			m, ok := row.Data.(*OrderedMap)
-			if !ok {
+			m, err := AsMutableMap(row)
+			if err != nil {
 				continue
 			}
 			params := js.Global().Get("Array").New(len(columns))
@@ -222,17 +222,17 @@ func aqlValueToJSParam(v Value, colType *Type) any {
 	switch {
 	case colType.Matches(TInteger):
 		if v.VType.Matches(TInteger) {
-			_as0, _ := v.AsInteger()
+			_as0, _ := AsInteger(v)
 			return _as0
 		}
 		if v.VType.Matches(TString) {
-			_as1, _ := v.AsString()
+			_as1, _ := AsString(v)
 			if n, err := strconv.ParseInt(_as1, 10, 64); err == nil {
 				return n
 			}
 		}
 		if v.VType.Matches(TBoolean) {
-			_as2, _ := v.AsBoolean()
+			_as2, _ := AsBoolean(v)
 			if _as2 {
 				return 1
 			}
@@ -241,15 +241,15 @@ func aqlValueToJSParam(v Value, colType *Type) any {
 		return ValToString(v)
 	case colType.Matches(TNumber):
 		if v.VType.Matches(TDecimal) {
-			_as3, _ := v.AsDecimal()
+			_as3, _ := AsDecimal(v)
 			return _as3
 		}
 		if v.VType.Matches(TInteger) {
-			_as4, _ := v.AsInteger()
+			_as4, _ := AsInteger(v)
 			return float64(_as4)
 		}
 		if v.VType.Matches(TString) {
-			_as5, _ := v.AsString()
+			_as5, _ := AsString(v)
 			if f, err := strconv.ParseFloat(_as5, 64); err == nil {
 				return f
 			}
@@ -257,14 +257,14 @@ func aqlValueToJSParam(v Value, colType *Type) any {
 		return ValToString(v)
 	case colType.Matches(TBoolean):
 		if v.VType.Matches(TBoolean) {
-			_as6, _ := v.AsBoolean()
+			_as6, _ := AsBoolean(v)
 			if _as6 {
 				return 1
 			}
 			return 0
 		}
 		if v.VType.Matches(TString) {
-			_as7, _ := v.AsString()
+			_as7, _ := AsString(v)
 			if _as7 == "true" {
 				return 1
 			}
@@ -273,7 +273,7 @@ func aqlValueToJSParam(v Value, colType *Type) any {
 		return ValToString(v)
 	default:
 		if v.VType.Matches(TString) {
-			_as8, _ := v.AsString()
+			_as8, _ := AsString(v)
 			return _as8
 		}
 		return ValToString(v)

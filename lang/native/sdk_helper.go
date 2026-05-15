@@ -17,14 +17,14 @@ func getSDK(apiMap engine.ReadMap, opName string, r *engine.Registry) (*udk.Univ
 		return nil, "", fmt.Errorf("%s: missing required \"spec\" field", opName)
 	}
 
-	spec, err := specVal.AsString()
+	spec, err := engine.AsString(specVal)
 	if err != nil {
 		return nil, "", fmt.Errorf("%s: spec: %w", opName, err)
 	}
 
 	var entityName string
 	if entityVal, ok := apiMap.Get("entity"); ok {
-		entityName, err = entityVal.AsString()
+		entityName, err = engine.AsString(entityVal)
 		if err != nil {
 			return nil, "", fmt.Errorf("%s: entity: %w", opName, err)
 		}
@@ -57,7 +57,7 @@ func entityToAPIMap(v engine.Value) *engine.OrderedMap {
 	if v.Data == nil {
 		return m
 	}
-	inst, _ := v.AsObjectInstance()
+	inst, _ := engine.AsObjectInstance(v)
 	if kind, ok := inst.GetField("kind"); ok {
 		m.Set("kind", kind)
 	}
@@ -135,7 +135,7 @@ func mergeAPIOptions(base engine.ReadMap, opts engine.ReadMap, field string) *en
 	// Get existing field map or create a new one.
 	existing := engine.NewOrderedMap()
 	if v, ok := merged.Get(field); ok && v.VType.Matches(engine.TMap) {
-		if src := v.AsMap(); src != nil {
+		if src, _ := engine.AsMap(v); src != nil {
 			for _, k := range src.Keys() {
 				val, _ := src.Get(k)
 				existing.Set(k, val)

@@ -137,7 +137,7 @@ func TestCapabilityAvailableToHandler(t *testing.T) {
 				if !ok {
 					t.Fatal("scaler capability missing inside handler")
 				}
-				n, _ := args[0].AsInteger()
+				n, _ := AsInteger(args[0])
 				return []Value{NewInteger(n * c.factor)}, nil
 			},
 			Returns: []*Type{TInteger},
@@ -149,7 +149,7 @@ func TestCapabilityAvailableToHandler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, _ := out[0].AsInteger()
+	got, _ := AsInteger(out[0])
 	if got != 70 {
 		t.Errorf("got %d, want 70", got)
 	}
@@ -179,7 +179,7 @@ func TestCapabilityMissingIsNotFatal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, _ := out[0].AsString()
+	got, _ := AsString(out[0])
 	if got != "absent" {
 		t.Errorf("got %q, want \"absent\"", got)
 	}

@@ -1,332 +1,1121 @@
-# Type-Behaviour Dispatch: Decoupling the Kernel from Domain Types
+# Type and Value Decoupling: Sealed Payloads, Pluggable Behaviour, External Types
 
-This proposal replaces the kernel's closed type-dispatch surface
-(`Value.IsX` predicates, `Value.AsX` accessors, hardcoded switches in
-`Value.String` and the lattice path) with a single behaviour-bearing
-type model. The goal is that user modules can register types — and
-ordinary user code can introduce types via `type Foo Integer` — that
-are dispatched on by the kernel through the same uniform mechanism the
-kernel uses for `Integer` itself. No closed enumeration; no kernel
-patch needed when a new type is added.
+A unified refactor that closes two coupled holes in the kernel's
+value/type model:
 
-This is a design proposal, not a landed change. Status: **DRAFT (0)**.
+1. **The payload hole.** `Value.Data interface{}` admits any
+   combination of `(VType, Data)`, including nonsensical ones like
+   `Value{VType: TInteger, Data: "hello"}`. The 40 `AsX` methods and
+   the 65 internal `Data.(T)` assertions are runtime guards papering
+   over what the Go type system was never asked to enforce.
+
+2. **The dispatch hole.** `Value.IsX`, `Value.AsX`, hardcoded
+   `Value.String` switches, and per-domain `T*` constants in
+   `eng/types.go` form a closed set of types the kernel happens to
+   know about. A plugin module cannot teach the kernel about a new
+   type without patching the kernel.
+
+The two holes reinforce each other. Closing only the dispatch hole
+(the original TYPE-DECOUPLING.0 draft) leaves the kernel still
+holding an `interface{}` payload it must defensively destructure on
+every access. Closing only the payload hole leaves the dispatch
+surface (`AsDate`, `IsTimeout`, the 200-line `String` switch) intact.
+This plan closes both, together, in a sequence that keeps
+`make test` green at every step.
+
+Status: **IMPLEMENTATION COMPLETE — Steps 0-11 landed**.
+
+| Step | Status | Notes |
+|---|---|---|
+| 0  Inventory | ✅ landed | `lang/doc/design/TYPE-DECOUPLING-INVENTORY.md` |
+| 1  TypeBehavior + defaults | ✅ landed | `eng/go/typebehavior.go` |
+| 2  v.Is(t) + canonical dispatch routing | ✅ landed | |
+| 3  Pluggable Format (10 domain render arms) | ✅ landed | `eng/go/coretype_format_behaviors.go` (placeholder file; Behaviors moved to owning modules at Step 8) |
+| 4  Pluggable Equal | ✅ landed | `ValuesEqual` delegates to `Behavior.Equal` |
+| 5  Sealed Payload | ✅ landed | `type Payload interface { payloadMarker() }`; `Value.Data` is sealed. `Value{VType: TInteger, Data: "hello"}` is a compile error. |
+| 6  Drain primitive AsX | ✅ landed | 9 primitive accessors (AsString, AsInteger, AsDecimal, AsNumber, AsBoolean, AsAtom, AsPath, AsWord, AsForward) converted from methods to free functions. ~1500 caller sites updated via gofmt -r AST rewrites. |
+| 7  Drain structural AsX + all IsX | ✅ landed | All remaining 49 IsX/AsX methods (AsList, AsMap, AsRecordType, IsWord, IsArray, …) converted to free functions. Only `Is(t *Type)` and `String()` remain as methods on Value. |
+| 8a RegisterExternalBuiltin API | ✅ landed | API + acceptance test in `eng/go/external_register_test.go` |
+| 8b Migrate TFetch* | ✅ landed | First kernel-type migration via the new API. Owned by `lang/native/fetch.go`. |
+| 8c Migrate TMatrix | ✅ landed | Owned by `lang/internal/nativemod/matrix.go`. Format Behavior + `NewMatrix` constructor moved with it. |
+| 8d Migrate TTimeout / TInterval | ✅ landed | Owned by `lang/engine/native_misc.go`. `IsTimeout`/`IsInterval`/`AsTimeout`/`AsInterval` methods on Value removed (callers use direct payload assertion or `engine.NewTimeout` / `engine.NewInterval`). |
+| 8e Migrate Time family (TDate, TDateTime, TInstant, TTimeOfDay, TDuration, TCalDuration, TClkDuration, TTimezone, TTime) | ✅ landed | Owned by `lang/engine/native_temporal.go`. Resolved the `lang/engine/native_math.go` cycle by colocating in `lang/engine` (same package as the date-arithmetic handlers) rather than `lang/internal/nativemod/time`. Format Behaviors and `New*` constructors moved with the types. The `As*` methods on Value stay in eng since they assert against payload-only kernel structs. |
+| 9a Lattice cleanup — BaseType field | ✅ landed | `DependentLeafBaseType` switch replaced by per-Type field populated via `builtinDecl.BasePath`. |
+| 9b Lattice cleanup — Metatype field | ✅ landed | `MetatypeFor` switch replaced by per-Type field populated via `builtinDecl.MetatypePath`. |
+| 10c List/Map ChildType formatting → Behavior | ✅ landed | `eng/go/coretype_list_map_behaviors.go` houses `listFormatBehavior` / `mapFormatBehavior`; `Value.String` dispatch walks the `Parent` chain so subtypes (e.g. `TInspect ⟶ TMap`) inherit the parent's Behavior without per-subtype registration. `ValuesEqual` factored into `valuesEqualDefault` to break the Behavior-delegation recursion cycle. |
+| 10d FixedID stability snapshot | ✅ landed | `lang/test/fixedid_stability_test.go` pins ~60 path→FixedID pairs across kernel + externalised types; failure on this test means a Value.ID serialised by an older binary will deserialise to the wrong Type. |
+| 10e Kernel-level conventions | ✅ landed | `eng/go/CLAUDE.md` documents sealed Payload variant rules, the canonical TypeBehavior dispatch contract, kernel/domain boundary policy, FixedID allocation ranges, and the "Value has two methods" invariant. |
+| 10f Consolidate `InstallType` | ✅ landed | The old `validateAndInstallType` duplicate in `lang/engine/native_type.go` is gone; the production `type` word delegates to the kernel's `eng.InstallType`. Type-installation policy now has a single source of truth. |
+| 11 Parser hand-off / ISO removal | ✅ landed | ISO-string parsing for temporal values removed entirely from the time module — no `time-date` / `time-datetime` / `time-instant` / `time-time-of-day` / `time-duration` (ISO-duration) / `parse-date` / `parse-datetime` / `auto-date` words, no `parseISO8601Duration` / `autoDateLayouts` helpers. Numeric (`unix` / `unix-ms` / `unix-ns`), wall-clock (`now-local` / `today` / `today-utc`), and formatting (`format` / `to-iso` / `to-string`) constructors remain. Eliminates the parser-coupling that motivated keeping these types kernel-resident historically. |
+
+The core invariant — **illegal `(VType, Data)` combinations are
+compile errors** — is enforced. The Behavior seam, the sealed
+Payload interface, the external-registration hook, the lattice
+field migration, and ALL five domain-type families
+(Fetch, Matrix, Timeout, Interval, Time) are externalised. The
+kernel (`eng/`) no longer mentions any user-facing domain type
+identity — only parser-emitted / interpreter-loop kinds and the
+structural type system remain. All AsX/IsX methods have been
+drained from `Value` — only `Is(t)` (canonical dispatch) and
+`String()` (Stringer interface) remain as methods.
+
+The remaining lattice cleanup (Step 10c–10f) and parser hand-off
+(Step 11) have all landed:
+
+- `Value.String` Format dispatch walks the Type's `Parent` chain
+  so any descendant Type inherits its ancestor's Behavior. The
+  ~50-line List/Map switch arms in `Value.String` are gone.
+- Equal dispatch is split into `ValuesEqual` (dispatches via the
+  Behavior) and `valuesEqualDefault` (the structural fallback the
+  default Behavior delegates to) — eliminating the
+  `Behavior.Equal → DefaultBehavior.Equal → ValuesEqual` recursion.
+- A FixedID snapshot test pins the externalised type IDs so older
+  serialised `Value.ID`s deserialise into the correct types.
+- `eng/go/CLAUDE.md` documents the kernel-level conventions
+  (Payload sealing, Behavior dispatch contract, FixedID ranges,
+  kernel/domain boundary policy).
+- `lang/engine/native_type.go::validateAndInstallType` has been
+  collapsed into `eng.InstallType` — type installation has one
+  policy point shared by both the eng-core and lang-production
+  `type` words.
+- ISO-string parsing for temporal values has been removed
+  entirely from the time module. The remaining constructors are
+  numeric (`unix` / `unix-ms` / `unix-ns`), wall-clock
+  (`now-local` / `today` / `today-utc`), and formatting
+  (`format` / `to-iso` / `to-string`) — i.e. nothing in the
+  temporal types now depends on free-form text parsing.
 
 ---
 
-## 1. The problem
+## 1. Goal & guiding principle
 
-The kernel currently has three parallel mechanisms for type dispatch,
-and every one of them is a closed enumeration baked into `eng`:
+**"Make illegal values unrepresentable."** The Go type system should
+reject `Value{VType: TInteger, Data: "hello"}` at compile time, and
+the kernel's dispatch path should never need to ask "what kind of
+value is this?" by hand-coded switch on a `T*` constant.
 
-1. **30 `Value.IsX()` predicates** — `IsWord`, `IsInteger`,
-   `IsObjectInstance`, `IsTimeout`, …. Each is a method on `Value` that
-   names a specific type. Adding a new type means adding a method or
-   accepting that the type is invisible to predicate-style code.
+Concretely the refactor delivers:
 
-2. **40 `Value.AsX()` payload accessors** — `AsInteger`,
-   `AsCalDuration`, `AsMatrix`, …. The kernel both *defines* and
-   *exports* payload-extraction methods for types it has no semantic
-   reason to know about. `CalDurationData`, `MatrixData`, `TimeoutInfo`
-   and `IntervalInfo` are all struct types declared in `eng/go/value.go`
-   even though `eng` itself does nothing with them.
+- **Payload type space is closed.** `Value.Data` is no longer
+  `interface{}`. It is a sealed interface (`Payload`) whose variants
+  are declared in `eng/`. Plugin types flow through one explicit
+  variant (`ExtensionPayload`) whose body is opaque to the kernel —
+  only the type's owning module touches the inner payload.
 
-3. **Type-symbol dispatch in switches** — `v.VType.Matches(TInteger)`,
-   `v.VType.Equal(TList)`, and the ~200-line `case`-tree in
-   `Value.String` that hardcodes a render branch for every domain
-   type the kernel happens to know about (Date, DateTime, Instant,
-   TimeOfDay, CalDuration, ClkDuration, Timezone, Matrix, …).
+- **Dispatch is pluggable.** Each `*Type` carries a `Behavior`
+  (Match / Format / Equal, plus optional capability interfaces
+  Comparer / Hasher / Walker). Plugin types ship their own Behavior;
+  the kernel never special-cases them.
 
-The core issue: each of these is a *closed set*. `type Foo Integer`
-works only because Foo inherits TInteger as its parent in the type
-lattice, so `v.VType.Matches(TInteger)` still returns true for a Foo
-value. But the kernel can never *natively* see Foo as Foo — and a
-plugin module that registers a brand-new type with no kernel parent
-(an SDK-provided opaque handle, a domain-specific scalar) can't be
-plumbed through the existing dispatch surface at all.
+- **Domain types live where they belong.** `TDate`, `TMatrix`,
+  `TCalDuration`, `TFetch*`, `TTimeout`, `TInterval` move out of
+  `eng/types.go` and `eng/typetable.go` into `lang/internal/nativemod/*`
+  and `lang/native/*`. The kernel keeps only what the parser emits
+  directly or what the interpreter loop branches on structurally.
 
-This affects every plugin scenario: user records, user objects, user
-predicate types, host-provided foreign types, and even the existing
-"domain" types in `eng/types.go` (Date, CalDuration, Matrix, Timeout,
-Interval) that morally belong to lang's nativemod packages but live
-in the kernel because the kernel needs to dispatch on them.
+- **40 `AsX` methods, 31 `IsX` methods disappear** from
+  `eng/go/value.go`. Typed field access on payload variants replaces
+  them. The 132 `AsConcreteX` callers retain their DepScalar shield —
+  but as small inline checks, not as a parallel accessor family.
 
-### Survey of the dispatch surface
 
+## 2. Current state — two coupled violations
+
+### 2.1 The payload hole
+
+`eng/go/value.go:520`:
+```go
+type Value struct {
+    ID    string
+    VType *Type
+    Data  interface{}   // ← the hole
+    Quoted, Eval, Carrier, Undefined bool
+    Pos   SrcPos
+}
 ```
-Value.IsX methods    : 30
-Value.AsX methods    : 40
-VType.Matches/Equal  : ~hundreds of call sites across eng + lang
-Value.String switch  : 20 arms for non-primitive types
-```
 
-Of the As* methods for domain types (Date, DateTime, Instant,
-TimeOfDay, CalDuration, ClkDuration, Timezone, Matrix, Timeout,
-Interval), **zero are called from inside `eng/`** except for two
-sites in `Value.String` (Timeout, Interval). All real callers are in
-`lang/internal/nativemod/*`. The kernel only *exports* these methods;
-it doesn't *use* them.
+`interface{}` admits anything. The valid `(VType, Data)` pairs form
+a tiny subset of the cartesian product:
 
+| VType | Valid Data | Invalid examples that compile |
+|---|---|---|
+| `TInteger` | `int64` | `string`, `nil`, `[]Value`, … |
+| `TList` | `[]Value`, `TableData`, `Materializer`, `ChildTypeInfo` | `int64`, `string`, … |
+| `TMap` | `*OrderedMap`, `ChildTypeInfo`, `RecordTypeInfo`, `OptionsTypeInfo` | `int64`, `string`, … |
+| `TDate` | `time.Time` | `int64`, `string`, … |
 
-## 2. The model
+The 40 `AsX` methods at `eng/go/value.go:1002-1647` exist solely to
+defensively destructure `Data` at runtime: every one is a guarded
+type assertion plus a nil check plus an error.
 
-A `Type` becomes the dispatch unit. Each Type carries the operations
-the kernel needs to perform on values of that type. The kernel never
-asks "is this a CalDuration?" — it asks "what does `v.VType.Behavior`
-say about `v`?".
+`AsList` (`eng/go/value.go:1583-1607`) is the clearest example of
+defensive normalisation:
 
 ```go
-// eng/types.go
-type Type struct {
-    // existing identity fields (ID, Path, Parent, …) unchanged
+func (v Value) AsList() ReadList {
+    if v.Data == nil                                  { return ReadList{} }
+    if td, ok := v.Data.(TableData);     ok           { return ReadList{elems: td.Rows} }
+    if mz, ok := v.Data.(Materializer);  ok           { td, _ := mz.Materialize(); return ReadList{elems: td.Rows} }
+    if elems, ok := v.Data.([]Value);    ok           { return ReadList{elems: elems} }
+    if ci, ok := v.Data.(ChildTypeInfo); ok && len(ci.Elements) > 0 {
+        return ReadList{elems: ci.Elements}
+    }
+    return ReadList{}
+}
+```
 
-    // Behavior is the pluggable per-type operation set. nil means
-    // "use the default lattice-based behavior" (which the kernel
-    // installs at MintType time for every type that doesn't
-    // override). Custom Behaviors cover predicate types, refinement
-    // types, dependent scalars, foreign opaque values, and any
-    // host-provided type the kernel can't have prior knowledge of.
-    Behavior TypeBehavior
+Four payload shapes, normalised to one read view, with no static
+guarantee that any future shape is handled.
+
+### 2.2 The dispatch hole
+
+`eng/go/types.go:14-81` declares 67 hardcoded `T*` constants;
+`eng/go/typetable.go:325-412` lists 80+ builtin paths. Many describe
+types the kernel does not consume:
+
+- `TDate`, `TDateTime`, `TInstant`, `TTimeOfDay`, `TCalDuration`,
+  `TClkDuration`, `TTimezone` — read only by
+  `lang/internal/nativemod/time.go` (32 sites).
+- `TMatrix` — read only by `lang/internal/nativemod/matrix.go` (20 sites).
+- `TTimeout`, `TInterval` — read only by `lang/engine/native_misc.go`
+  + two render arms in `eng/go/value.go`'s String switch.
+- `TFetchFunction`, `TFetchRequest`, `TFetchResponse` — read only by
+  `lang/native/fetch.go`.
+
+A plugin wanting a new type today must patch:
+
+- `eng/go/typetable.go` (add a `builtinDecl` row, allocate a `FixedID`)
+- `eng/go/types.go` (add a `T*` constant)
+- `eng/go/value.go` (add `NewX`, `AsX`, `IsX`, a `Value.String` arm)
+- `lang/engine/aliases.go` (re-export the constant)
+
+None of these are in the plugin's package. The kernel becomes the
+disposal site for every domain.
+
+The `Type.Matches` lattice walk
+(`eng/go/types.go:194-218`) carries one branch for DepScalar override.
+`sigTypeMatches` (`eng/go/signature.go:259-279`) carries metatype
+promotion. `MetatypeFor` (`eng/go/types.go:274-287`) hardcodes the
+`Scalar/Node/Object` → `ScalarType/NodeType/ObjectType` mapping.
+`DependentLeafBaseType` (`eng/go/depscalar.go:176-192`) hardcodes the
+DepInteger/DepDecimal/DepString/… → base map. All four are closed
+switches on identities the kernel knows about.
+
+
+## 3. Target architecture
+
+### 3.1 Sealed `Payload` interface
+
+`eng/go/payload.go` introduces a sealed interface and one variant
+per kernel-known payload shape:
+
+```go
+// Payload is a sealed interface — only types in package eng satisfy
+// it (the marker method is unexported). Plugin payloads go through
+// ExtensionPayload below.
+type Payload interface {
+    payloadMarker()
 }
 
+// Primitive variants ------------------------------------------------
+type IntPayload      struct { N int64 }
+type DecPayload      struct { F float64 }
+type StrPayload      struct { S string }
+type BoolPayload     struct { B bool }
+type AtomPayload     struct { Name string }
+type PathPayload     struct { Path PathInfo }
+type NonePayload     struct{}    // the unique inhabitant of None
+type WordPayload     struct { W WordInfo }
+type ForwardPayload  struct { F ForwardInfo }
+
+// Structural variants ----------------------------------------------
+type ListPayload     struct { Elems []Value }
+type MapPayload      struct { M *OrderedMap }
+type ChildTypePayload struct { ChildTypeInfo }   // typed list/map
+type RecordTypePayload struct { RecordTypeInfo }
+type OptionsTypePayload struct { OptionsTypeInfo }
+type TableTypePayload  struct { TableTypeInfo }
+type TableDataPayload  struct { TableData }
+type MaterializerPayload struct { Materializer }
+type DisjunctPayload   struct { DisjunctInfo }
+
+// Loop / control variants ------------------------------------------
+type ParenExprPayload  struct { Toks []Value }
+type InterpStringPayload struct { Parts []InterpPart }
+type MarkPayload       struct { MarkInfo }
+type MovePayload       struct { MoveInfo }
+type ReturnCheckPayload struct { ReturnCheckInfo }
+type DefCleanupPayload struct { DefCleanupInfo }
+type ModulePayload     struct { ModuleDesc }
+
+// Object variants --------------------------------------------------
+type StorePayload    struct { *StoreInstanceInfo }
+type ArrayPayload    struct { *ArrayInstanceInfo }
+type ObjectTypePayload struct { ObjectTypeInfo }
+type ObjectInstancePayload struct { ObjectInstanceInfo }
+type ErrorPayload    struct { ErrorInfo }
+
+// DepScalar variant ------------------------------------------------
+type DepScalarPayload struct { DepScalarInfo }
+
+// Type-literal sentinel -- a Value{VType: T, Data: TypeLiteralPayload{}}
+// is "the type T as a value" (the bare word `Integer` in source code).
+type TypeLiteralPayload struct{}
+
+// Carrier sentinel -- check-mode carrier value (today: Value{Carrier: true}).
+type CarrierPayload struct{}
+
+// Extension variant ------------------------------------------------
+// Plugin types flow through here. The Body is opaque to eng/; only
+// HostType.Behavior dereferences it.
+type ExtensionPayload struct {
+    Body any
+}
+
+func (IntPayload)      payloadMarker() {}
+func (DecPayload)      payloadMarker() {}
+// ... one per variant
+```
+
+Every constructor in `eng/` returns `Value{Data: <one of these>}`.
+The `Value` struct stays as today (pass by value, fixed layout) — only
+the `Data` field's static type tightens from `interface{}` to `Payload`.
+
+Constructor protocol:
+
+```go
+func NewInteger(n int64) Value {
+    return Value{ID: GenerateID("S_"), VType: TInteger, Data: IntPayload{N: n}}
+}
+func NewList(elems []Value) Value {
+    return Value{ID: GenerateID("N_"), VType: TList, Data: ListPayload{Elems: elems}}
+}
+```
+
+`Value{VType: TInteger, Data: "hello"}` no longer compiles —
+`string` does not satisfy `Payload`. The cross-field invariant
+(`TInteger` ↔ `IntPayload`) is enforced by a single
+`TestValueInvariants` walk and by every constructor being a one-liner.
+
+### 3.2 `TypeBehavior` on `*Type`
+
+`eng/go/typebehavior.go` (new):
+
+```go
+// TypeBehavior is the pluggable per-type operation set. nil ↦ use
+// defaultBehavior (lattice-based Match, fmt-based Format, deep-equal).
 type TypeBehavior interface {
-    // Match reports whether v conforms to this type. Default impl
-    // is the existing lattice walk (v.VType == t or descendant).
-    // Predicate types override to invoke the predicate body;
-    // refinement types override to check the refinement clause.
     Match(v Value, t *Type) bool
-
-    // Format renders v as a string. Used by Value.String, error
-    // messages, the canon writer, and the spec runner.
     Format(v Value) string
-
-    // Equal reports semantic equality. Default is reflect.DeepEqual
-    // on payloads; structural types override (Map: per-key compare;
-    // CalDuration: normalise then compare; etc.).
     Equal(a, b Value) bool
 }
+
+// Optional capability interfaces - types opt in by implementing.
+type Comparer interface { Compare(a, b Value) int }
+type Hasher   interface { Hash(v Value) uint64 }
+type Walker   interface { Walk(v Value, visit func(Value)) }
 ```
 
-Most types don't ship a custom Behavior. The `TypeTable` installs a
-sensible default at `MintType` time: lattice-based Match, fmt-style
-Format, deep-equal. A type provides its own implementation only when
-its semantics demand it.
-
-Optional capability sub-interfaces let a type opt into extra
-operations without bloating the required interface:
+`Type` (eng/go/typetable.go:48) gains one field:
 
 ```go
-type Hasher interface { Hash(v Value) uint64 }
-type Comparer interface { Compare(a, b Value) int }
-type Walker interface { Walk(v Value, visit func(Value)) }
-// ...
+type Type struct {
+    ID, Name string
+    Parent   *Type
+    FixedID  int
+    IsInternal bool
+    Origin   OriginKind
+    Behavior TypeBehavior   // ← new
+}
 ```
 
-Kernel words that need these (`hash`, `sort`, `walk`, …) consult the
-Type's Behavior via type assertion: if the Behavior implements
-`Comparer`, use it; otherwise the word errors with a clear "type T
-does not support compare" message.
+`TypeTable.MintType` and `registerBuiltin` install a default Behavior
+when the caller doesn't supply one. Kernel-known types (Integer,
+List, Map, …) get Behaviors whose `Format` switches on the typed
+`Payload` variant and reads its fields directly — no `interface{}`
+assertions, no nil-checks, no error returns.
+
+### 3.3 `ExtensionPayload` — the one opaque seam
+
+`ExtensionPayload.Body any` is the only place `interface{}` survives
+in the value model. The kernel never inspects `Body`. The plugin
+type's Behavior is the only code that dereferences it:
+
+```go
+// time module — internal payload
+type datePayload struct { T time.Time }
+
+// Behavior bound to TDate (which lives in the time module, not eng)
+type dateBehavior struct{}
+
+func (dateBehavior) Match(v eng.Value, t *eng.Type) bool {
+    if v.VType != t                                    { return false }
+    ext, ok := v.Data.(eng.ExtensionPayload); if !ok   { return false }
+    _, ok = ext.Body.(datePayload)
+    return ok
+}
+
+func (dateBehavior) Format(v eng.Value) string {
+    ext, _ := v.Data.(eng.ExtensionPayload)
+    dp,  _ := ext.Body.(datePayload)
+    return dp.T.Format("2006-01-02")
+}
+
+func (dateBehavior) Equal(a, b eng.Value) bool {
+    aE, _ := a.Data.(eng.ExtensionPayload); ap, _ := aE.Body.(datePayload)
+    bE, _ := b.Data.(eng.ExtensionPayload); bp, _ := bE.Body.(datePayload)
+    return ap.T.Equal(bp.T)
+}
+```
+
+The inner `Body.(datePayload)` assertion remains unsafe in principle,
+but it lives entirely inside the time module — the module is the
+sole writer of date values *and* the sole reader, so a mismatch is a
+module-internal bug, not a system-wide hazard. Inside the time
+module, the team can use a sealed payload sub-interface to close the
+last hole if they want; the kernel doesn't care.
+
+### 3.4 What stays kernel-hardcoded
+
+A type stays in `eng/` iff one of these holds:
+
+- The parser emits it directly: Integer, Decimal, String, Boolean,
+  Atom, Path, None, List, Map.
+- The interpreter loop branches on it structurally: Word, Forward,
+  Mark, Move, OpenParen, CloseParen, End, ReturnCheck, DefCleanup,
+  ParenExpr, InterpString, Module.
+- It is a meta-type used by `is`/`typeof`/`inspect`: Type, Function,
+  FnDef, FnUndef, Disjunct, Enum.
+- It is a structural type used by `make`/`record`/`object`:
+  Record, Options, Table, ChildType, ObjectType, ObjectInstance,
+  Store, Array, Error.
+
+Everything else — Date, DateTime, Instant, TimeOfDay, CalDuration,
+ClkDuration, Timezone, Matrix, Timeout, Interval, Fetch
+{Function,Request,Response}, all user types, all plugin types — flows
+through `ExtensionPayload` plus its Behavior.
+
+The boundary is principled: documented in a new section of
+`eng/CLAUDE.md` ("Why is TInteger in the kernel but TDate is not?").
 
 
-## 3. What replaces the three mechanisms
+## 4. Migration plan — test-green at every step
 
-| Today | Tomorrow |
-|---|---|
-| `v.IsInteger()` | `v.Is(TInteger)` → routes through `TInteger.Behavior.Match` |
-| `v.IsCalDuration()` (would need to be added) | `v.Is(time.TCalDuration)` — same path, no kernel change |
-| `v.AsInteger()` | `n, _ := v.Data.(int64)` (caller knows the convention) |
-| `v.AsCalDuration()` | `time.AsCalDuration(v)` (in the module that owns the payload) |
-| `Value.String`'s 200-line switch | one dispatch: `if v.VType.Behavior != nil { return v.VType.Behavior.Format(v) }` |
-| `v.VType.Matches(TList)` | `v.Is(TList)` |
+**Cardinal rule**: `cd lang && make test` (rollup of lang + eng +
+cmd/go) passes at the end of every numbered step. No temporarily-
+skipped tests, no `t.Skip`, no commented-out assertions. New
+behaviour is added without removing the old until the last caller
+is migrated.
 
-**`v.Is(t *Type)` is the single dispatch method.** It's what the
-kernel uses, what handlers use, what `is`/`guard` evaluate, what
-signature matching consults. Behind it sits `t.Behavior.Match(v, t)`
-— pluggable.
+The plan groups into four PR-sized chunks:
 
-**Payload extraction stops being a kernel API for non-primitives.**
-The kernel stores `Data any`; callers who know the type also know the
-Go form to assert. `AsInteger`-style wrappers become package-local
-conveniences in whichever module owns the type. `eng` exports zero
-As* methods for non-kernel types.
+- **PR-1 (Steps 1-4)**: Behavior seam. Pluggable dispatch / format /
+  equal layered on today's `Value` struct, unchanged.
+- **PR-2 (Steps 5-7)**: Sealed `Payload`. Switch `Data` field type;
+  drain primitive and structural `AsX` methods.
+- **PR-3 (Steps 8-9)**: External domain types. Move `TDate`/`TMatrix`/etc.
+  out of `eng/`; introduce `ExtensionPayload` migration.
+- **PR-4 (Step 10)**: Lattice cleanup (consolidate DepScalar /
+  Metatype switches into Behaviors).
+- **PR-5 (Step 11, optional)**: Parser hand-off — push parser-coupled
+  types (e.g. ISO date literals) out of eng entirely.
+
+### Step 0 — Inventory & freeze
+
+**Goal**: catalogue every closed-enumeration call site before any
+code moves.
+
+**Work**: grep for the four enumerations and write
+`lang/doc/design/TYPE-DECOUPLING-INVENTORY.md`:
+
+1. `Value.IsX` callers outside `eng/go/value.go` (~120 sites).
+2. `Value.AsX` callers outside `eng/go/value.go` (~600 sites).
+3. `Value.String` non-primitive arms (`eng/go/value.go:1719-1820`).
+4. Domain `T*` constants outside `eng/go/types.go` &
+   `eng/go/typetable.go` (TDate, TDateTime, TInstant, TTimeOfDay,
+   TCalDuration, TClkDuration, TTimezone, TMatrix, TTimeout,
+   TInterval, TFetch* — 200+ sites across `lang/`).
+
+**Done when**: `lang/doc/design/TYPE-DECOUPLING-INVENTORY.md` exists.
+`make test` unchanged.
+
+### Step 1 — Add `TypeBehavior` with default implementation
+
+**Goal**: introduce the dispatch seam, observably no-op.
+
+**Work**:
+
+1. Create `eng/go/typebehavior.go` defining `TypeBehavior` and the
+   `Comparer`/`Hasher`/`Walker` capability interfaces.
+2. Add `Behavior TypeBehavior` field to `Type`
+   (`eng/go/typetable.go:48`).
+3. Provide `defaultBehavior` whose `Match` delegates to existing
+   `Type.Matches`, `Format` delegates to existing `Value.String`,
+   `Equal` delegates to `ValuesEqual`.
+4. `TypeTable.MintType` and `registerBuiltin` install
+   `defaultBehavior{}` when the caller supplies none.
+
+**Done when**: `make test` green. New test
+`eng/go/typebehavior_test.go::TestDefaultBehaviorInstalled` asserts
+every builtin `*Type` has non-nil Behavior post-init.
+
+### Step 2 — `v.Is(t)` and canonical dispatch routing
+
+**Goal**: every NEW dispatch call uses `v.Is(t)`; existing
+`VType.Matches`/`VType.Equal` continues to work via delegation.
+
+**Work**:
+
+1. Add `func (v Value) Is(t *Type) bool { return t.Behavior.Match(v, t) }`
+   to `value.go`.
+2. Route the four canonical match sites through `v.Is(t)`:
+   - `IsValueOfType` (`eng/go/core_type.go:371`)
+   - `sigTypeMatches` (`eng/go/signature.go:259`)
+   - `Unify`'s lattice branch (`eng/go/unify.go`)
+   - `rejectsTypeLiteral` (`eng/go/signature.go:307`)
+3. Do NOT rewrite the 525+ `VType.Matches` / `VType.Equal` call sites
+   yet. They keep working via `defaultBehavior.Match`.
+
+**Done when**: `make test` green. Spec runner output (`eng/spec/*.tsv`,
+`lang/spec/*.tsv`, `lang/test/check_fixtures/*`) byte-identical.
+
+### Step 3 — Pluggable Format
+
+**Goal**: pull the 10 domain render arms out of `Value.String` into
+per-type `Behavior.Format`.
+
+**Work**:
+
+1. For each of `TDate`, `TDateTime`, `TInstant`, `TTimeOfDay`,
+   `TCalDuration`, `TClkDuration`, `TTimezone`, `TMatrix`, `TTimeout`,
+   `TInterval`: register a Behavior whose `Format` returns the exact
+   string today's switch produces (`eng/go/value.go:1719-1820`).
+2. The registration site is *next to the existing T-constant*. Time
+   types in a new `eng/go/coretype_time_behavior.go`; matrix in
+   `eng/go/coretype_matrix_behavior.go`; timeout/interval same. They
+   move out of `eng/` later — Step 8 — when the constants do.
+3. `Value.String` gains one early branch: `if b :=
+   v.VType.Behavior; b != nil { if s := b.Format(v); s != "" { return s } }`.
+   (The empty-string sentinel keeps `defaultBehavior.Format` opted out
+   — defaults still flow into the kernel switch for primitives, so the
+   fast path is preserved.)
+
+**Done when**: spec output byte-identical. `value.go`'s switch shrinks
+by ~100 lines. `lang/test/error_format_test.go`,
+`lang/test/check_fixtures_test.go` green.
+
+### Step 4 — Pluggable Equal / Compare / Hash
+
+**Goal**: same delegation story for value comparison.
+
+**Work**:
+
+1. `ValuesEqual` (`eng/go/compare.go`) routes through
+   `Behavior.Equal`. Default = today's deep-equal.
+2. Domain types with normalisation semantics (CalDuration —
+   normalise years/months/days before compare; DepScalar — compare
+   bounds) supply their own `Equal`. The bodies of `boundsEqual` /
+   `depScalarsEqual` (`eng/go/depscalar.go:265-300`) move into the
+   DepScalar Behavior.
+3. Compare/Hash: optional capability interfaces. `sort`, `dedup`,
+   `set` look for the capability; types lacking it produce a clear
+   error rather than a silent miscompile.
+
+**Done when**: `lang/engine/compare_test.go`,
+`lang/test/type_algebra_test.go`, `lang/test/type_depscalar_safety_test.go`
+green.
+
+### Step 5 — Introduce sealed `Payload`; switch `Value.Data` field
+
+**Goal**: close the payload type space.
+
+**Work**:
+
+1. Create `eng/go/payload.go` declaring `Payload` (sealed marker
+   interface) and all variants enumerated in §3.1.
+2. Update every constructor in `eng/go/value.go` to wrap concrete
+   payloads in the right variant:
+   ```go
+   func NewInteger(n int64) Value {
+       return Value{ID: GenerateID("S_"), VType: TInteger, Data: IntPayload{N: n}}
+   }
+   ```
+3. Update every `AsX` method in `eng/go/value.go` to assert against
+   the new variant instead of the bare type:
+   ```go
+   func (v Value) AsInteger() (int64, error) {
+       if v.Data == nil                  { return 0, fmt.Errorf("...") }
+       if ip, ok := v.Data.(IntPayload); ok { return ip.N, nil }
+       return 0, fmt.Errorf("...")
+   }
+   ```
+4. Update every direct `v.Data.(T)` site (65 in `value.go`, plus
+   handlers in `core_*.go`, `engine.go`, `signature.go`, …) to
+   assert against the new variant.
+5. Flip the field type: `Data Payload` instead of `Data interface{}`.
+   The compiler now flags any missed site. Fix each one until
+   `go build ./...` succeeds.
+
+The new variants and the old `interface{}` cannot coexist easily —
+flipping the field type is one mechanical-but-large commit. Plan
+for a single self-contained PR that does ONLY this and lands behind
+a feature freeze (no other concurrent refactor on `Value`).
+
+**Done when**: `go build ./...` succeeds with `Data Payload`;
+`make test` byte-identical to pre-step 5; the
+`TestValueInvariants` test (new) walks every (VType, Payload) pair
+in the registry and asserts they pair up correctly.
+
+### Step 6 — Drain primitive `AsX` methods
+
+**Goal**: remove `AsInteger`, `AsDecimal`, `AsString`, `AsBoolean`,
+`AsAtom`, `AsNumber`, `AsPath`, `AsWord`, `AsForward`,
+`AsConcreteX` (the DepScalar-rejecting variants).
+
+The DepScalar shield stays — as an inline guard at the (now small)
+number of sites that need it, not as a parallel accessor family.
+
+**Work** (mechanical, file-by-file):
+
+1. Each caller that today writes `n, _ := v.AsInteger()` becomes:
+   ```go
+   ip, ok := v.Data.(eng.IntPayload)
+   if !ok { return r.AqlError("type_error", ...) }
+   n := ip.N
+   ```
+   Or in idiomatic switch form when several types are handled:
+   ```go
+   switch p := v.Data.(type) {
+   case eng.IntPayload: handleInt(p.N)
+   case eng.DecPayload: handleDec(p.F)
+   default:             return signatureError(...)
+   }
+   ```
+2. DepScalar-rejecting paths (132 callers of `AsConcreteX`) become:
+   ```go
+   if _, ok := v.Data.(eng.DepScalarPayload); ok { return ..., depScalarError(...) }
+   ip := v.Data.(eng.IntPayload); n := ip.N
+   ```
+   A small helper, e.g. `eng.RequireConcreteInteger(v) (int64, error)`,
+   absorbs the DepScalar check. The 132 sites become one-line calls
+   to that helper, not parallel accessors.
+3. Once the last caller is gone, delete the method from `value.go`.
+
+Migrate one method per commit to keep the PR reviewable; each commit
+leaves `make test` green because the OLD method coexists with the
+new pattern until its callers all move.
+
+**Done when**: `grep -nE "^func \(v Value\) As(Integer|Decimal|String|Boolean|Atom|Number|Path|Word|Forward|ConcreteX)"
+eng/go/value.go eng/go/util.go` returns nothing. The DepScalar
+shield is a 3-line helper in `eng/go/util.go`, not 5 methods.
+
+### Step 7 — Drain structural `AsX` methods
+
+**Goal**: remove `AsList`, `AsMap`, `AsMutableList`, `AsMutableMap`,
+`AsChildType`, `AsRecordType`, `AsOptionsType`, `AsTableType`,
+`AsObjectType`, `AsDisjunct`, …
+
+**Work**:
+
+1. **`AsList` is the hardest case** — it normalises 4 payload shapes.
+   Resolve by establishing one canonical list payload:
+   - `ListPayload` carries `Elems []Value` — the common case.
+   - `TableDataPayload`, `MaterializerPayload`, `ChildTypePayload`
+     are *separate* variants. Callers wanting "iterate the list
+     contents regardless of internal form" use a free function
+     `eng.ListElements(v) []Value` that does the type-switch (the
+     same switch today's `AsList` hides). Callers wanting "is this
+     a Materializer?" type-assert directly:
+     ```go
+     if mp, ok := v.Data.(eng.MaterializerPayload); ok {
+         td, _ := mp.Materializer.Materialize()
+         ...
+     }
+     ```
+2. `AsMap` similarly — `MapPayload`, `RecordTypePayload`,
+   `OptionsTypePayload`, `ChildTypePayload` (entries form) are
+   separate; a `eng.MapEntries(v)` free function handles the union.
+3. `AsChildType`, `AsRecordType`, etc. all become direct payload
+   assertions at the (few) sites that need them. The compiler now
+   tells you when a new payload variant is added that the caller
+   doesn't handle — that's the exhaustiveness benefit.
+
+**Done when**: `grep -nE "^func \(v Value\) As(List|Map|MutableList|MutableMap|ChildType|RecordType|OptionsType|TableType|ObjectType|Disjunct)"
+eng/go/value.go` returns nothing. `eng.ListElements` /
+`eng.MapEntries` are the new shared helpers.
+
+### Step 8 — Introduce `ExtensionPayload`; migrate domain payloads
+
+**Goal**: domain types stop having dedicated payload variants;
+they all flow through `ExtensionPayload`.
+
+**Work**:
+
+1. Add `ExtensionPayload struct { Body any }` to `eng/go/payload.go`
+   plus `func NewExtension(t *Type, body any) Value`.
+2. For each domain type — TDate, TDateTime, TInstant, TTimeOfDay,
+   TCalDuration, TClkDuration, TTimezone, TMatrix, TTimeout,
+   TInterval — rewrite its constructor and accessors:
+   ```go
+   // Was: func NewDate(t time.Time) Value { return NewValueRaw(TDate, t) }
+   // Was: func (v Value) AsDate() time.Time { ... }
+   // Both removed from eng. Now in lang/internal/nativemod/time/:
+   func NewDate(t time.Time) eng.Value { return eng.NewExtension(TDate, datePayload{T: t}) }
+   func AsDate(v eng.Value) (time.Time, bool) {
+       ext, ok := v.Data.(eng.ExtensionPayload); if !ok { return time.Time{}, false }
+       dp, ok := ext.Body.(datePayload); if !ok       { return time.Time{}, false }
+       return dp.T, true
+   }
+   ```
+3. Each domain type's Behavior moves with it. The kernel keeps no
+   knowledge of the inner payload struct (`datePayload` is
+   unexported in the time module).
+4. Today's `NewDate` etc. stay in `eng/` as transition shims that
+   delegate to the new module versions, marked `// Deprecated: use
+   time.NewDate`. Removed in Step 9.
+
+**Done when**: `make test` green. Inside `eng/go/value.go`, no
+`time.Time` / `CalDurationData` / `MatrixData` references remain.
+The 2 render sites in `Value.String` (Timeout, Interval) are gone —
+Step 3 already routed them through Behavior.
+
+### Step 9 — Externalise domain `T*` constants
+
+**Goal**: `eng/go/types.go` and `eng/go/typetable.go` no longer
+declare TDate / TMatrix / TFetch* / TTimeout / TInterval.
+
+**Work**:
+
+1. Add a registration hook:
+   ```go
+   // eng/go/typetable.go
+   func (tt *TypeTable) RegisterExternalBuiltin(path string, fixedID int, behavior TypeBehavior) *Type
+   ```
+   Allocates a stable FixedID in a documented per-module range:
+   - 1000-1999 reserved for `lang/internal/nativemod/time`
+   - 2000-2999 reserved for `lang/internal/nativemod/matrix`
+   - 3000-3999 reserved for `lang/native/fetch`
+   - 4000-4999 reserved for `lang/engine` builtin-but-external
+     (Timeout, Interval — pending future home)
+2. For each domain group, create
+   `lang/internal/nativemod/<group>/types.go`:
+   ```go
+   package time
+
+   var (
+       TDate         *eng.Type
+       TDateTime     *eng.Type
+       TInstant      *eng.Type
+       // ...
+   )
+
+   func RegisterTypes(r *eng.Registry) {
+       TDate     = r.Types.RegisterExternalBuiltin("Scalar/Time/Date",     49, dateBehavior{})
+       TDateTime = r.Types.RegisterExternalBuiltin("Scalar/Time/DateTime", 52, dateTimeBehavior{})
+       // ...
+   }
+   ```
+   FixedID values match today's `builtinDecls` for cross-version ID
+   stability. **A test snapshots `Builtin.byID` plus the externally
+   registered IDs and asserts they match the prior baseline.**
+3. Update 200+ lang call sites: `engine.TDate` → `time.TDate`.
+   `lang/engine/aliases.go` keeps re-exports for the transition.
+4. Delete the domain entries from `builtinDecls`
+   (`eng/go/typetable.go:325-412`) and the `T*` constants from
+   `eng/go/types.go` (lines 60-80). Delete the
+   `eng/coretype_*_behavior.go` files added in Step 3 — they live
+   in the owning module now.
+
+**Done when**:
+- `grep -nE "TDate|TDateTime|TInstant|TTimeOfDay|TCalDuration|TClkDuration|TTimezone|TMatrix|TTimeout|TInterval|TFetch" eng/go/` returns zero hits.
+- The FixedID snapshot test passes (no ID drift).
+- `lang/internal/nativemod/time_test.go`, `matrix_test.go`,
+  `lang/native/fetch.go`, `lang/test/factorial_type_scaling_test.go` all green.
+
+### Step 10 — Lattice cleanup
+
+**Goal**: consolidate `Type.Matches`, `MetatypeFor`,
+`DependentLeafBaseType`, `ChildType` handling into Behavior.
+
+**Work**:
+
+1. `DependentLeafBaseType`'s switch (`eng/go/depscalar.go:176-192`)
+   becomes a per-Type field set at registration: `TDepInteger`'s
+   Behavior knows its base is `TInteger`. The leaf→base hardcoded
+   switch goes away.
+2. `MetatypeFor`'s root-name switch (`eng/go/types.go:274-287`)
+   becomes per-root: `TScalar`'s Behavior knows it's the
+   metatype anchor for `ScalarType`. Adding a new root no longer
+   requires editing `MetatypeFor`.
+3. `ChildTypePayload` handling in `Value.String`'s List and Map
+   arms (`eng/go/value.go:1798`, `:1855`) moves into the List and
+   Map Behaviors' `Format`.
+
+After Step 10, `Type.Matches` becomes a thin wrapper:
+`Behavior.Match(NewTypeLiteral(t), pattern)`. The 525+ existing
+`VType.Matches` call sites in lang/ keep working via this wrapper;
+no mechanical sweep needed.
+
+**Done when**: `lang/test/type_depscalar_safety_test.go`,
+`lang/test/type_predicate_arity_test.go`,
+`lang/test/type_predicate_sandbox_test.go`,
+`lang/test/type_fnvariance_test.go`,
+`lang/engine/path_subtype_test.go` all green. Full spec rollup
+byte-identical.
+
+### Step 11 — Parser hand-off
+
+**Goal**: push parser-coupled types (ISO date literals, duration
+literals) out of `eng/`.
+
+**Resolution**: ISO date parsing was removed entirely as a feature
+rather than relocated. The temporal module no longer accepts
+free-form text input. The path now is:
+
+- Numeric construction: `unix-ms 1700000000000 to-datetime`
+- Wall-clock construction: `now-local`, `today`, `today-utc`
+- Formatted output only (no symmetric parser):
+  `dt to-iso`, `dt format "2006-01-02"`, `dt to-string`
+
+Eliminates the parser/temporal coupling without a spec rebaseline:
+any AQL source that needed ISO input was using the explicit `time-date
+"2024-01-15"` form, which becomes a deprecation/removal in the
+domain-module surface (eng kernel unaffected).
+
+**Removed words** (lang/internal/nativemod/time.go): `time-date`,
+`time-datetime`, `time-instant`, `time-time-of-day`, `time-duration`
+(ISO-duration form), `parse-date`, `parse-datetime`, `auto-date`.
+**Removed helpers**: `parseISO8601Duration`, `autoDateLayouts`.
+
+### Effort summary
+
+| Step | Work | Risk | PR group |
+|---|---|---|---|
+| 0 | Inventory | None | — |
+| 1 | Behavior + defaults | Very low | PR-1 |
+| 2 | `v.Is(t)` canonical routing | Low | PR-1 |
+| 3 | Pluggable Format | Low (spec byte-equal gate) | PR-1 |
+| 4 | Pluggable Equal/Compare | Low | PR-1 |
+| 5 | Sealed Payload (flip field type) | **High** — one big mechanical commit | PR-2 |
+| 6 | Drain primitive AsX | Medium (mechanical, many sites) | PR-2 |
+| 7 | Drain structural AsX | Medium (List/Map normalisation rewrite) | PR-2 |
+| 8 | ExtensionPayload + migrate domain payloads | Medium | PR-3 |
+| 9 | Externalise domain T* | Medium — FixedID stability | PR-3 |
+| 10 | Lattice cleanup | Medium — corner cases | PR-4 |
+| 11 | Parser hand-off (resolved by removing ISO parsing) | Low — no spec rebaseline | PR-5 |
+
+**Estimated effort**: 4-6 weeks for PR-1 through PR-4, plus
+unbounded review time. PR-2 is the load-bearing one: if it lands
+clean, PR-3 and PR-4 are routine. PR-5 in practice was a single
+commit since the temporal module's text-parsing surface was
+removed rather than relocated.
 
 
-## 4. How user types fit
+## 5. Worked examples
 
-### 4.1 `type Foo Integer`
+### 5.1 Adding a new type from a native module — `Color`
+
+Before — today, every native module wanting a `Color` type patches
+the kernel: a `builtinDecl` row, a `TColor = mustType(...)` line,
+`NewColor` / `AsColor` / `IsColor` methods on `Value`, a render arm
+in `Value.String`, and `engine.TColor` exposed via `aliases.go`.
+
+After — entirely module-local:
+
+```go
+// lang/native/color/types.go
+package color
+
+import "github.com/aql-lang/aql/eng"
+
+var TColor *eng.Type
+
+type colorPayload struct { R, G, B byte }
+
+type colorBehavior struct{}
+
+func (colorBehavior) Match(v eng.Value, t *eng.Type) bool {
+    if v.VType != t                                  { return false }
+    ext, ok := v.Data.(eng.ExtensionPayload); if !ok { return false }
+    _, ok = ext.Body.(colorPayload)
+    return ok
+}
+
+func (colorBehavior) Format(v eng.Value) string {
+    ext := v.Data.(eng.ExtensionPayload)
+    cp  := ext.Body.(colorPayload)
+    return fmt.Sprintf("#%02x%02x%02x", cp.R, cp.G, cp.B)
+}
+
+func (colorBehavior) Equal(a, b eng.Value) bool {
+    ap := a.Data.(eng.ExtensionPayload).Body.(colorPayload)
+    bp := b.Data.(eng.ExtensionPayload).Body.(colorPayload)
+    return ap == bp
+}
+
+// Optional capability — Comparer. Equipping the type with this
+// makes `sort` work on Color values without any kernel change.
+func (colorBehavior) Compare(a, b eng.Value) int {
+    ap := a.Data.(eng.ExtensionPayload).Body.(colorPayload)
+    bp := b.Data.(eng.ExtensionPayload).Body.(colorPayload)
+    return cmp.Compare(rgbToHue(ap), rgbToHue(bp))
+}
+
+func NewColor(r, g, b byte) eng.Value {
+    return eng.NewExtension(TColor, colorPayload{R: r, G: g, B: b})
+}
+
+func AsColor(v eng.Value) (byte, byte, byte, bool) {
+    ext, ok := v.Data.(eng.ExtensionPayload); if !ok { return 0, 0, 0, false }
+    cp, ok  := ext.Body.(colorPayload);       if !ok { return 0, 0, 0, false }
+    return cp.R, cp.G, cp.B, true
+}
+
+func RegisterTypes(r *eng.Registry) {
+    TColor = r.Types.RegisterExternalBuiltin(
+        "Object/Color",
+        5000,               // module FixedID range
+        colorBehavior{},
+    )
+}
+
+func Register(r *eng.Registry) {
+    RegisterTypes(r)
+    r.RegisterNativeFunc(eng.NativeFunc{
+        Name: "rgb",
+        Signatures: []eng.NativeSig{{
+            Args:    []*eng.Type{eng.TInteger, eng.TInteger, eng.TInteger},
+            Returns: []*eng.Type{TColor},
+            Handler: rgbHandler,
+        }},
+    })
+}
+
+func rgbHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+    r, _ := eng.RequireConcreteInteger(args[0])
+    g, _ := eng.RequireConcreteInteger(args[1])
+    b, _ := eng.RequireConcreteInteger(args[2])
+    return []eng.Value{NewColor(byte(r), byte(g), byte(b))}, nil
+}
+```
+
+Host wires it from `DefaultRegistry()` or an import-resolver:
+
+```go
+// lang/aql.go
+color.Register(r)
+```
+
+`v is Color`, `print someColor`, `someColor eq someColor`, and
+`sort listOfColors` all work — the dispatch path consults
+`TColor.Behavior` (and the optional `Comparer`). The kernel never
+mentions `colorPayload`, `Color`, or `RGB`.
+
+### 5.2 Adding a new type from an AQL source module
+
+All three flavours that work today continue to work — but now they
+flow through the same Behavior pipeline as plugin types.
+
+**Refinement** — `type Foo Integer`:
 
 ```aql
 type Foo Integer
 def x:Foo 5
+def y:Foo 'hello'    # error: 'hello' is not a Foo
 ```
 
-What happens:
-
-1. `TypeTable.MintType("Foo", parent=TInteger)` creates a fresh
-   `*Type` for Foo.
-2. Foo inherits TInteger's Behavior. `Match` passes if `v` is an
-   Integer (or Foo). `Format` does `fmt.Sprintf("%d", v.Data)`.
-   `Equal` compares int64 payloads.
+What `installType` (`eng/go/core_type.go:476-530`) does, post-refactor:
+1. `r.Types.MintType("Foo", parent=TInteger)` mints `*Type` Foo
+   with Parent = TInteger.
+2. Foo's Behavior inherits `TInteger.Behavior` (the default lattice
+   match, fmt format, deep equal — the kernel's `IntPayload` Behavior).
 3. `def x:Foo 5` calls `TFoo.Behavior.Match(NewInteger(5), TFoo)` →
-   true → installs.
+   true (5's Payload is `IntPayload`, which is the Integer Behavior's
+   match shape); installs.
 
-No kernel code changes when the user types `type Foo Integer`. The
-dispatch path is the same as for any other type, because there *is*
-only one dispatch path.
+**Predicate type** — `type Even fn [n:Integer Boolean [n 2 mod 0 eq]]`:
 
-### 4.2 Predicate types
+`fn` builds an `FnDefInfo`. `type Even <fnDef>` mints a Type whose
+Behavior is `predicateBehavior{fn: fnDef}`. `Behavior.Match` invokes
+the predicate body via `RunPredicate` (`eng/go/registry.go:822`) —
+already factored out today; no new dispatch logic.
+
+**Record type** — `type Point record { x:Decimal y:Decimal }`:
+
+`record` builds a `RecordTypePayload`. `type Point <record>` mints
+a Type whose Behavior is `recordBehavior{shape: recordTypeInfo}`.
+`Match` does field-by-field conformance (today's `IsValueOfType`
+logic). `Format` prints `Point{x:1.0 y:2.0}`. `Equal` does per-key
+compare. Nominal vs structural is preserved: `{x:1.0 y:2.0}` has
+VType=TMap, so `m is Point` is true only via structural conformance,
+but `typeof m` remains `Map`.
+
+In all three cases, **nothing changes in the kernel** — `installType`
+mints a Type and installs a Behavior. `Foo` / `Even` / `Point` are
+invisible to `eng/`.
+
+### 5.3 Cross-module type export
 
 ```aql
-type Even fn [n:Integer Boolean [n 2 mod 0 eq]]
+# colors.aql
+type Color record { r:Integer g:Integer b:Integer }
+type Palette { primary:Color secondary:Color }
+
+# main.aql
+'colors.aql' module
+def p:Palette { primary:{r:255 g:0 b:0} secondary:{r:0 g:0 b:255} }
 ```
 
-The `fn` constructor (already in the codebase) builds a Behavior
-whose `Match` invokes the predicate body. No kernel change —
-predicate types just have a non-default Behavior on their Type.
+The existing module mechanism
+(`lang/engine/native_module_module.go`) already exports type
+bindings via `r.Types.PopType` / `PushType`. Because Behavior is a
+field on `*Type` (not on the registry), the exported type works
+identically in the importing scope without additional plumbing.
 
-### 4.3 Records
 
-```aql
-type Point record { x:Decimal y:Decimal }
+## 6. Test gating per step
+
+**Cardinal-rule check** at every step: `cd lang && make test && make vet`.
+
+| Step | Specific gating tests |
+|---|---|
+| 1 | `eng/go/typebehavior_test.go::TestDefaultBehaviorInstalled` (new) |
+| 2 | `lang/test/{istype,typed_def,type_algebra,type_depscalar_safety,type_distribute,type_error_messages,type_fnsig,type_fnvariance,type_guard,type_inspect,type_namespace,type_never,type_predicate_arity,type_predicate_sandbox,type_shadow}_test.go`; spec runner: `eng/spec/{dispatch,mirror,pattern,record}.tsv`, `lang/spec/{list,map}.tsv` |
+| 3 | `lang/test/error_format_test.go`, `lang/test/type_error_messages_test.go`, `lang/test/check_fixtures_test.go`; spec rollup byte-equal diff: `eng/spec/*.tsv`, `lang/spec/*.tsv`, `lang/test/check_fixtures/*`; `lang/internal/nativemod/{time,matrix}_test.go` |
+| 4 | `lang/engine/compare_test.go`, `lang/test/type_algebra_test.go`, `lang/test/type_depscalar_safety_test.go` |
+| 5 | `TestValueInvariants` (new — walks every (VType, Payload) pair); full `make test` rollup; verify `go vet` finds no `interface{}` payload assertions remaining |
+| 6 | Full rollup; particularly `lang/test/type_depscalar_safety_test.go` (the DepScalar shield helper) |
+| 7 | Full rollup; `lang/test/{object_type,resource_type}_test.go`; spec rollup byte-equal |
+| 8 | `lang/internal/nativemod/{time,matrix}_test.go`; `lang/test/{factorial_type_scaling}_test.go`; spec rollup byte-equal |
+| 9 | FixedID snapshot test (new) — asserts `Builtin.byID` ∪ externally-registered IDs match prior baseline; full rollup |
+| 10 | `lang/test/{type_depscalar_safety,type_predicate_arity,type_predicate_sandbox,type_fnvariance}_test.go`, `lang/engine/path_subtype_test.go`; full spec rollup |
+| 11 | Spec rebaseline expected; out-of-scope for this proposal |
+
+**Local fast-feedback loop**:
+```bash
+cd lang && go test ./test/ -run TestX -v   # any specific test
+cd lang && make test                       # rollup
 ```
 
-`record` constructs a Behavior whose `Match` checks field-by-field;
-`Format` renders the field-name → field-value pairs. Already
-structurally what `RecordTypeInfo` does today — just routed through
-Behavior instead of hardcoded switches.
-
-### 4.4 Domain types loaded by a module
-
-```go
-// lang/internal/nativemod/time/register.go
-func Register(r *eng.Registry) {
-    TDate = r.Types.MintType("Date", eng.TScalar)
-    TDate.Behavior = dateBehavior{}
-    // …same for DateTime, CalDuration, Timezone, etc.
-}
-
-type dateBehavior struct{}
-
-func (dateBehavior) Match(v eng.Value, t *eng.Type) bool {
-    if v.VType != t && !v.VType.IsDescendantOf(t) { return false }
-    _, ok := v.Data.(time.Time)
-    return ok || v.Data == nil // type-literal Date is also a match
-}
-
-func (dateBehavior) Format(v eng.Value) string {
-    if t, ok := v.Data.(time.Time); ok {
-        return t.Format("2006-01-02")
-    }
-    return "Date(nil)"
-}
-
-func (dateBehavior) Equal(a, b eng.Value) bool {
-    aT, _ := a.Data.(time.Time)
-    bT, _ := b.Data.(time.Time)
-    return aT.Equal(bT)
-}
-```
-
-A foreign module — say one that wraps a database row type — works
-identically. The kernel doesn't need to know what a row is; the
-module supplies the Behavior and everything dispatches.
-
-
-## 5. What stays kernel-hardcoded — and why
-
-Some types are *load-bearing for the interpreter loop itself*. The
-kernel can't be ignorant of them because the step loop branches on
-their shape:
-
-- **List, Map** — auto-eval, splicing, paren handling, interpolation
-  all dispatch on these structurally.
-- **Word, Forward, Mark, Move, OpenParen, CloseParen, End,
-  ReturnCheck, DefCleanup, ParenExpr, InterpString** — control
-  tokens. The step loop matches on these to drive dispatch.
-- **Integer, Decimal, String, Boolean, Atom, Path, None** — literal
-  kinds the parser produces. Removing kernel knowledge here means
-  reworking the parser, which is out of scope.
-- **Type, Function, FnDef, FnUndef** — type-system meta-types used
-  by `is`, `typeof`, `inspect`. Same reasoning.
-
-Everything else — CalDuration, ClkDuration, Date, DateTime, Instant,
-TimeOfDay, Timezone, Matrix, Timeout, Interval, all user types, all
-record/object instances, all foreign-host opaque values — flows
-through the Behavior path.
-
-The boundary is principled: a type stays kernel-hardcoded iff
-**the parser produces it directly** or **the interpreter loop
-branches on it structurally**. Anything else is data and goes
-through Behavior.
-
-
-## 6. Migration shape
-
-A deep change, not a one-week refactor. Sketch:
-
-| Step | Description | Effort |
-|---|---|---|
-| 1 | Add `Behavior` field to `Type`; supply default `TypeBehavior` impl that replicates today's lattice-walk Match, fmt-style Format, deep-equal Equal. Behavior=nil → use default. Backwards-compatible: nothing else changes yet. | 1-2 days |
-| 2 | Introduce `v.Is(t)` and route all `VType.Matches`/`VType.Equal` call sites through it via sed + audit. | 2-3 days |
-| 3 | Move 6 domain-type render arms out of `Value.String` — register `Behavior.Format` on each *Type* at runtime. | 1 day |
-| 4 | Delete the domain As* methods (`AsCalDuration`, `AsMatrix`, `AsTimeout`, …); move them to free functions in their owning modules (`time.AsCalDuration` etc.). | 1 day mechanical |
-| 5 | Delete the domain Is* methods (`IsTimeout`, `IsInterval`); callers use `v.Is(TTimeout)` instead. | 1 day mechanical |
-| 6 | Lattice cleanup: today `Match` is implemented half on `*Type` (the lattice walk) and half ad-hoc on `Value` (sig matching, `ChildTypeInfo` special-cases, dep-scalar override). Pull all of that into a single `defaultBehavior` impl that the kernel installs at MintType time. | 2-3 days |
-| 7 *(optional)* | Parser hand-off: today the parser bakes TDate, TCalDuration into produced values. To push those types out of `eng` entirely, the parser needs to emit neutral literal tokens (`LiteralWithSyntax{kind: "iso-duration", raw: "P1Y2M3D"}`) that the temporal module post-converts. Real semantic change. | ~1 week + spec rebaseline |
-
-**Total: 2-3 weeks for steps 1-6**, more if step 7 is in scope.
-Touches a few hundred files, mostly mechanical, but step 6 has real
-complexity around lattice corner cases (ChildTypeInfo, dep-scalar
-override, table types).
+**CI gate**: `make test` + `make vet` green for every commit on the
+PR; no `t.Skip` introduced; spec output byte-identical at PR
+boundaries.
 
 
 ## 7. Trade-offs
 
-### What you gain
+### What we gain
 
-- **User modules become first-class.** A temporal-module-defined
-  CalDuration is indistinguishable from a kernel-defined Integer at
-  the dispatch site. Same for user records, user objects, predicate
-  types — all behave uniformly under `v.Is(t)`.
-- **One unified mechanism.** `v.Is(t)` replaces 70 ad-hoc methods.
-- **Smaller kernel surface.** `Value.String`'s switch shrinks from
-  ~200 lines to a 4-line delegation. The 50+ domain accessor methods
-  vanish from `eng/`.
+- **Illegal values cannot be represented.** `Value{VType: TInteger,
+  Data: "hello"}` does not compile. The 40 `AsX` defensive accessors
+  and 31 `IsX` predicates collapse into typed payload variants.
+- **Plugin types are first-class.** A module-defined Color is
+  indistinguishable from a kernel-defined Integer at the dispatch
+  site. Adding a type touches one package — the plugin's own.
+- **Smaller kernel surface.** `eng/go/value.go` loses ~700 lines
+  (estimate: 40 `AsX` methods + 31 `IsX` predicates + ~150 lines
+  of `Value.String` switch + ~100 lines of domain constructors).
+- **Exhaustiveness checking is possible.** Once `Payload` is sealed,
+  third-party linters (`exhaustive`, `go-sumtype`) can flag missing
+  variants in type switches. The CI gate can enforce this.
 - **Clearer policy.** "Why is TInteger in the kernel but TDate is
-  not?" has a real answer: the parser produces Integer literals; it
-  doesn't produce Date literals. Defensible boundary.
+  not?" has a real answer (§3.4): the parser emits Integer literals;
+  it doesn't emit Date literals.
 
 ### What it costs
 
-- **Pointer indirection on hot paths.** Today's
-  `v.VType.Matches(TInteger)` inlines easily; the new
-  `v.VType.Behavior.Match(v, TInteger)` is an interface call. Likely
-  measurable on the matching path (called once per arg per dispatch).
-  The kernel-primitive Match path can keep its fast path: default
-  Behavior's `Match` is itself a small function the compiler may
-  inline; for the loop-critical case it might be worth a specialised
-  "ints fast" check before the interface call.
-- **Interface evolution cost.** Adding a new operation to
-  `TypeBehavior` is a breaking change for every implementor. Mitigate
-  with capability sub-interfaces (`Hasher`, `Comparer`, `Walker`,
-  ...) — required `TypeBehavior` stays minimal.
-- **The kernel/domain boundary becomes policy.** Today it's
-  visible: `TInteger` is in `eng/types.go`. After the refactor, it's
-  still in `eng/types.go` but the *reason* is "the parser emits it
-  directly" — a more nuanced justification that someone could erode
-  by adding a "small convenience" kernel type. Worth a documented
-  rule in `eng/CLAUDE.md`.
+- **One big mechanical commit at Step 5.** Flipping
+  `Data interface{}` → `Data Payload` cannot be coexistent — the
+  field type is one or the other. The mitigation is good prep work
+  in Step 5: every constructor and every internal `Data.(T)` site
+  pre-converted to the new variant *as if* the field type were
+  already `Payload`, then the field type flip is the last commit.
+- **Interface boxing on Payload assignments.** Today,
+  `v.Data = int64(5)` stores an `interface{}` holding `int64` — 16
+  bytes including the type pointer. After: `v.Data = IntPayload{N: 5}`
+  stores an interface holding a struct — 16 bytes plus a possible
+  heap allocation for the struct (Go usually inlines small structs).
+  Benchmark before merging.
+- **Helper sprawl** for List/Map normalisation. Today `AsList`
+  hides four shape conversions; tomorrow `eng.ListElements` is a
+  free function with the same switch. The total LOC may be unchanged;
+  the win is at the type level (callers can see which shapes they
+  handle).
+- **Plugin discipline** for ExtensionPayload bodies. The inner
+  `Body any` assertion is still unsafe in principle. The mitigation
+  is module-level: each plugin owns one payload type, asserts on it
+  in exactly one place (its Behavior implementation), and tests it.
+  Within `eng/`, no such hole remains.
+- **FixedID allocation policy** becomes a coordination point. The
+  per-module ID ranges (1000-1999 for time, etc.) must be documented
+  and reserved up front, or future plugins collide.
 
-### What's actually delivered by each step
+### What lands first matters
 
-If steps 1-3 land but 4-7 don't, **90% of the user-facing benefit is
-already there.** Steps 1-3 give the unified dispatch point and the
-pluggable formatter, which together mean a temporal-module-defined
-CalDuration is indistinguishable from a kernel-defined Integer at the
-call site. Steps 4-5 are cosmetic (delete dead method count). Step 6
-is the lattice cleanup that can be deferred until it bites. Step 7 is
-the only piece with real semantic risk and can be left out if the
-parser-coupling is acceptable.
+If PR-1 (Steps 1-4) lands but PR-2 stalls, ~60% of the user-facing
+benefit is already there — Behavior is pluggable, Format/Equal are
+pluggable, and the kernel/domain split is documented. The
+`interface{}` payload remains, but no new code is required to
+write through it.
 
-**Recommended landing plan**: do steps 1-3 as a single PR, ship,
-observe, then decide whether 4-7 are worth it. The first PR is the
-load-bearing one — everything after is mechanical or optional.
+If PR-2 lands but PR-3 stalls, the kernel's payload type space is
+closed; domain types still live in `eng/` but flow through typed
+payloads with no `AsX` surface area.
+
+If PR-3 lands but PR-4 stalls, domain types are out of `eng/`
+entirely. Lattice cleanup is the polish step.
+
+**Recommended landing plan**: ship PR-1; ship PR-2 after a
+benchmark gate; ship PR-3 once the FixedID protocol is reviewed;
+ship PR-4 as cleanup. PR-5 is a separate conversation.
+
+
+## 8. Open questions
+
+1. **FixedID allocation policy.** Step 9 needs an explicit reservation
+   document. Proposal: `eng/go/typetable.go` carries a top-of-file
+   comment listing every reserved range with the owning module name.
+   Adding a new module requires updating this comment and writing the
+   `RegisterExternalBuiltin` call site. A test checks for collisions.
+
+2. **`Value` struct vs `Value` interface.** This plan keeps `Value` as
+   a struct (only the `Data` field type changes). An alternative —
+   make `Value` itself a sealed interface — would push exhaustiveness
+   even further, but at the cost of pass-by-value semantics. The plan
+   above is the smaller-blast-radius choice. Worth re-examining if
+   PR-2 benchmark results are good and a future round of cleanup is
+   desired.
+
+3. **DepScalar shield API.** Step 6 mentions
+   `eng.RequireConcreteInteger(v) (int64, error)` as the consolidated
+   replacement for `AsConcreteInteger`. Open: is the helper better
+   named differently? `MustInteger`? `Concrete[int64]`? Naming TBD;
+   semantics are clear.
+
+4. **`Type.Matches` compatibility surface.** The 525+ existing
+   `VType.Matches(TInteger)` sites in non-eng code work fine via
+   delegation. Proposal: keep `Type.Matches` as a method delegating
+   to `Behavior.Match`. Cost: one extra interface call per match,
+   already accounted in §7.
+
+5. **Carrier values.** Carriers (today: `Value.Carrier = true`,
+   `Data == nil`, abstract value) need a clear place in the new
+   model. Proposal: a `CarrierPayload struct { /* declared type */ }`
+   variant. The Carrier flag stays on `Value` for cheap
+   short-circuiting; the Payload variant tracks the abstract type
+   it represents. Default Behavior treats `CarrierPayload` as
+   matching iff the declared type is a subtype of the target.
+
+6. **Duplicate `validateAndInstallType` vs `installType`.** Two
+   near-identical implementations exist (`lang/engine/native_type.go:221-263`
+   vs `eng/go/core_type.go:476-530`). The lang version accepts
+   `TString` for the name; the eng version accepts only `TAtom`.
+   Consolidate at Step 1 or Step 2 — they're both doing
+   MintType + Bind. The duplication will become an active hazard
+   once Behavior wiring lands.
+
+7. **Documentation: the kernel/domain boundary.** `eng/CLAUDE.md`
+   needs one new section explaining §3.4's rule: when to register
+   a type in `eng/` versus a module, and how to write a Behavior.
+   Suggested location: a new "Type Registration Rules" section
+   under the existing "Registry Stacks" block.

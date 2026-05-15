@@ -185,8 +185,8 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 			for idx, pattern := range sig.Patterns {
 				if pattern.VType.Equal(TMap) && ordered[idx].VType.Equal(TMap) &&
 					pattern.Data != nil && ordered[idx].Data != nil &&
-					!pattern.IsOptionsType() &&
-					!ordered[idx].IsRecordType() && !ordered[idx].IsTypedMap() && !ordered[idx].IsOptionsType() {
+					!IsOptionsType(pattern) &&
+					!IsRecordType(ordered[idx]) && !IsTypedMap(ordered[idx]) && !IsOptionsType(ordered[idx]) {
 					if !OpenUnifyMap(pattern, ordered[idx]) {
 						patternOk = false
 						break
@@ -257,7 +257,12 @@ func FlexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
 // See `LANGREF.md` "Type-Registry Internals" → "Carriers" for the
 // user-facing description of this rule.
 func sigTypeMatches(v Value, t *Type) bool {
-	if v.VType.Matches(t) {
+	// Canonical dispatch site: route the primary subtype check
+	// through Behavior so per-type custom Match implementations
+	// participate in signature matching. The metatype-promotion
+	// branches below remain — they are matching-strategy concerns
+	// (a type-literal at a metatype slot), not per-type behaviour.
+	if v.Is(t) {
 		return true
 	}
 	if v.Data == nil && !v.Carrier && IsMetaType(t) {
@@ -266,13 +271,13 @@ func sigTypeMatches(v Value, t *Type) bool {
 	if _, ok := v.Data.(ObjectTypeInfo); ok && IsMetaType(t) {
 		return MetatypeFor(v.VType).Matches(t)
 	}
-	if v.IsRecordType() || v.IsTableType() || v.IsOptionsType() {
+	if IsRecordType(v) || IsTableType(v) || IsOptionsType(v) {
 		if IsMetaType(t) {
 			return MetatypeFor(v.VType).Matches(t)
 		}
 	}
 	// Options values have VType=TMap but should match TOptions signatures.
-	if v.IsOptionsType() && t.Equal(TOptions) {
+	if IsOptionsType(v) && t.Equal(TOptions) {
 		return true
 	}
 	return false

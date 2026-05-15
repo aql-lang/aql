@@ -34,12 +34,12 @@ func TestFolderCreatesDir(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("folder"), engine.NewPath([]string{"a", "b", "c"}, false),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path result, got %v", result)
 	}
-	_as0, _ := result[0].AsPath()
+	_as0, _ := engine.AsPath(result[0])
 	if _as0.String() != "a/b/c" {
-		_as1, _ := result[0].AsPath()
+		_as1, _ := engine.AsPath(result[0])
 		t.Errorf("got %q, want %q", _as1.String(), "a/b/c")
 	}
 	// Check that the directory was created in mem FS
@@ -56,12 +56,12 @@ func TestFolderAbsolutePath(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("folder"), engine.NewPath([]string{"tmp", "data"}, true),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
-	_as2, _ := result[0].AsPath()
+	_as2, _ := engine.AsPath(result[0])
 	if _as2.String() != "/tmp/data" {
-		_as3, _ := result[0].AsPath()
+		_as3, _ := engine.AsPath(result[0])
 		t.Errorf("got %q, want %q", _as3.String(), "/tmp/data")
 	}
 	if !mem.Dirs["/tmp/data"] {
@@ -77,7 +77,7 @@ func TestFolderIdempotent(t *testing.T) {
 	// Create twice — should not error
 	runAQL(t, r, []engine.Value{engine.NewWord("folder"), path})
 	result := runAQL(t, r, []engine.Value{engine.NewWord("folder"), path})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("idempotent call failed: got %v", result)
 	}
 }
@@ -93,7 +93,7 @@ func TestFolderWithParentsTrue(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("folder"), engine.NewOptionsType(opts), engine.NewPath([]string{"deep", "nested", "dir"}, false),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
 	resolved, _ := mem.ResolvePath("deep/nested/dir")
@@ -112,7 +112,7 @@ func TestFolderWithParentsFalse(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("folder"), engine.NewOptionsType(opts), engine.NewPath([]string{"single"}, false),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
 }
@@ -130,7 +130,7 @@ func TestFolderWithMakePath(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewString("foo"), engine.NewString("bar")}),
 		engine.NewCloseParen(),
 	})
-	if len(result) != 1 || !result[0].IsPath() {
+	if len(result) != 1 || !engine.IsPath(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
 	resolved, _ := mem.ResolvePath("foo/bar")

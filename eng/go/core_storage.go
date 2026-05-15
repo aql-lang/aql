@@ -1,6 +1,9 @@
 package eng
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 // registerCoreStorage installs the `get` and `set` words — the
 // universal container-access pair. Both collect their args forward
@@ -84,8 +87,8 @@ func setObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 }
 
 func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	arr := args[2].AsArray()
-	if arr == nil {
+	arr, err := AsArray(args[2])
+	if err != nil {
 		return nil, fmt.Errorf("set: expected an Array, got %s", args[2].VType.String())
 	}
 	_as0, _ := args[0].AsConcreteInteger()
@@ -104,17 +107,35 @@ func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 // the production Store-side set/get reuse the same key-coercion
 // rules as the kernel's `get`.
 func GetKey(v Value) string {
-	if v.IsWord() {
-		_as0, _ := v.AsWord()
+	if IsWord(v) {
+		_as0, _ := AsWord(v)
 		return _as0.Name
 	}
 	if v.VType.Matches(TString) {
-		_as1, _ := v.AsString()
+		_as1, _ := AsString(v)
 		return _as1
 	}
-	if v.IsAtom() {
-		_as2, _ := v.AsAtom()
+	if IsAtom(v) {
+		_as2, _ := AsAtom(v)
 		return _as2
+	}
+	// Primitive scalar fallbacks: render the payload via the
+	// dedicated accessors rather than `%v` on the boxed payload
+	// (post Step 5b: Data is e.g. IntPayload{N:5}, not int64(5)).
+	if v.VType.Matches(TInteger) {
+		n, _ := AsInteger(v)
+		return strconv.FormatInt(n, 10)
+	}
+	if v.VType.Matches(TDecimal) {
+		f, _ := AsDecimal(v)
+		return FormatDecimal(f)
+	}
+	if v.VType.Matches(TBoolean) {
+		b, _ := AsBoolean(v)
+		if b {
+			return "true"
+		}
+		return "false"
 	}
 	return fmt.Sprintf("%v", v.Data)
 }
@@ -127,8 +148,8 @@ func getNodeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	}
 	// Integer key: list index access.
 	if key.VType.Matches(TInteger) {
-		idx, _ := key.AsInteger()
-		if list := container.AsList(); !list.IsNil() && container.VType.Matches(TList) {
+		idx, _ := AsInteger(key)
+		if list, _ := AsList(container); !list.IsNil() && container.VType.Matches(TList) {
 			i := int(idx)
 			if i < 0 || i >= list.Len() {
 				return []Value{NewTypeLiteral(TNone)}, nil
@@ -139,7 +160,7 @@ func getNodeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	}
 	// String/atom/word key: map property access.
 	k := GetKey(key)
-	if m := container.AsMap(); m != nil {
+	if m, _ := AsMap(container); m != nil {
 		val, ok := m.Get(k)
 		if !ok {
 			return []Value{NewTypeLiteral(TNone)}, nil
@@ -156,14 +177,14 @@ func getObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 		return nil, fmt.Errorf("get: cannot access property on type literal")
 	}
 	k := GetKey(key)
-	if m, ok := container.Data.(*OrderedMap); ok {
+	if m, err := AsMutableMap(container); err == nil {
 		val, found := m.Get(k)
 		if !found {
 			return []Value{NewTypeLiteral(TNone)}, nil
 		}
 		return []Value{val}, nil
 	}
-	oi, _ := container.AsObjectInstance()
+	oi, _ := AsObjectInstance(container)
 	val, ok := oi.GetField(k)
 	if !ok {
 		return []Value{NewTypeLiteral(TNone)}, nil
@@ -172,8 +193,8 @@ func getObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 }
 
 func getArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	arr := args[1].AsArray()
-	if arr == nil {
+	arr, err := AsArray(args[1])
+	if err != nil {
 		return nil, fmt.Errorf("get: expected an Array, got %s", args[1].VType.String())
 	}
 	_as3, _ := args[0].AsConcreteInteger()

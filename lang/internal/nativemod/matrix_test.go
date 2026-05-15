@@ -68,7 +68,7 @@ func TestMatrixEye(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	if m.Rows != 3 || m.Cols != 3 {
 		t.Fatalf("expected 3x3, got %dx%d", m.Rows, m.Cols)
 	}
@@ -92,7 +92,7 @@ func TestMatrixZeros(t *testing.T) {
 	r := matrixRegistry(t)
 	input := append([]engine.Value{engine.NewInteger(2), engine.NewInteger(3)}, matGet("zeros")...)
 	result := runAQL(t, r, input)
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	if m.Rows != 2 || m.Cols != 3 {
 		t.Fatalf("expected 2x3, got %dx%d", m.Rows, m.Cols)
 	}
@@ -109,7 +109,7 @@ func TestMatrixOnes(t *testing.T) {
 	r := matrixRegistry(t)
 	input := append([]engine.Value{engine.NewInteger(2), engine.NewInteger(2)}, matGet("ones")...)
 	result := runAQL(t, r, input)
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	for i, v := range m.Data {
 		if v != 1.0 {
 			t.Errorf("ones[%d] = %v, want 1.0", i, v)
@@ -121,10 +121,10 @@ func TestMatrixOnes(t *testing.T) {
 
 func TestMatrixRows(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := engine.NewMatrix(engine.MatrixData{Data: make([]float64, 6), Rows: 2, Cols: 3})
+	mat := NewMatrix(engine.MatrixData{Data: make([]float64, 6), Rows: 2, Cols: 3})
 	input := append([]engine.Value{mat}, matGet("rows")...)
 	result := runAQL(t, r, input)
-	v, _ := result[0].AsInteger()
+	v, _ := engine.AsInteger(result[0])
 	if v != 2 {
 		t.Errorf("rows = %v, want 2", result[0])
 	}
@@ -132,10 +132,10 @@ func TestMatrixRows(t *testing.T) {
 
 func TestMatrixCols(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := engine.NewMatrix(engine.MatrixData{Data: make([]float64, 6), Rows: 2, Cols: 3})
+	mat := NewMatrix(engine.MatrixData{Data: make([]float64, 6), Rows: 2, Cols: 3})
 	input := append([]engine.Value{mat}, matGet("cols")...)
 	result := runAQL(t, r, input)
-	v, _ := result[0].AsInteger()
+	v, _ := engine.AsInteger(result[0])
 	if v != 3 {
 		t.Errorf("cols = %v, want 3", result[0])
 	}
@@ -143,10 +143,10 @@ func TestMatrixCols(t *testing.T) {
 
 func TestMatrixSize(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := engine.NewMatrix(engine.MatrixData{Data: make([]float64, 6), Rows: 2, Cols: 3})
+	mat := NewMatrix(engine.MatrixData{Data: make([]float64, 6), Rows: 2, Cols: 3})
 	input := append([]engine.Value{mat}, matGet("size")...)
 	result := runAQL(t, r, input)
-	v, _ := result[0].AsInteger()
+	v, _ := engine.AsInteger(result[0])
 	if v != 6 {
 		t.Errorf("size = %v, want 6", result[0])
 	}
@@ -157,11 +157,11 @@ func TestMatrixSize(t *testing.T) {
 func TestMatrixAt(t *testing.T) {
 	r := matrixRegistry(t)
 	// 2x2 matrix: [[1,2],[3,4]]
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
 	// mat 1 0 matrix.at → element at row 1, col 0 = 3
 	input := append([]engine.Value{mat, engine.NewInteger(1), engine.NewInteger(0)}, matGet("elem")...)
 	result := runAQL(t, r, input)
-	v, _ := result[0].AsNumber()
+	v, _ := engine.AsNumber(result[0])
 	if v != 3.0 {
 		t.Errorf("at(1,0) = %v, want 3.0", result[0])
 	}
@@ -169,17 +169,17 @@ func TestMatrixAt(t *testing.T) {
 
 func TestMatrixRow(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
 	// mat 1 matrix.row → [4, 5, 6]
 	input := append([]engine.Value{mat, engine.NewInteger(1)}, matGet("row")...)
 	result := runAQL(t, r, input)
-	list := result[0].AsList()
+	list, _ := engine.AsList(result[0])
 	if list.Len() != 3 {
 		t.Fatalf("row length = %d, want 3", list.Len())
 	}
-	v0, _ := list.Get(0).AsNumber()
-	v1, _ := list.Get(1).AsNumber()
-	v2, _ := list.Get(2).AsNumber()
+	v0, _ := engine.AsNumber(list.Get(0))
+	v1, _ := engine.AsNumber(list.Get(1))
+	v2, _ := engine.AsNumber(list.Get(2))
 	if v0 != 4.0 || v1 != 5.0 || v2 != 6.0 {
 		t.Errorf("row(1) = %v, want [4,5,6]", result[0])
 	}
@@ -187,16 +187,16 @@ func TestMatrixRow(t *testing.T) {
 
 func TestMatrixCol(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
 	// mat 1 matrix.col → [2, 5]
 	input := append([]engine.Value{mat, engine.NewInteger(1)}, matGet("col")...)
 	result := runAQL(t, r, input)
-	list := result[0].AsList()
+	list, _ := engine.AsList(result[0])
 	if list.Len() != 2 {
 		t.Fatalf("col length = %d, want 2", list.Len())
 	}
-	v0, _ := list.Get(0).AsNumber()
-	v1, _ := list.Get(1).AsNumber()
+	v0, _ := engine.AsNumber(list.Get(0))
+	v1, _ := engine.AsNumber(list.Get(1))
 	if v0 != 2.0 || v1 != 5.0 {
 		t.Errorf("col(1) = %v, want [2,5]", result[0])
 	}
@@ -206,10 +206,10 @@ func TestMatrixCol(t *testing.T) {
 
 func TestMatrixScale(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{mat, engine.NewInteger(3)}, matGet("scale")...)
 	result := runAQL(t, r, input)
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	expected := []float64{3, 6, 9, 12}
 	for i, v := range m.Data {
 		if v != expected[i] {
@@ -220,11 +220,11 @@ func TestMatrixScale(t *testing.T) {
 
 func TestMatrixAdd(t *testing.T) {
 	r := matrixRegistry(t)
-	a := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
-	b := engine.NewMatrix(engine.MatrixData{Data: []float64{10, 20, 30, 40}, Rows: 2, Cols: 2})
+	a := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	b := NewMatrix(engine.MatrixData{Data: []float64{10, 20, 30, 40}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{a, b}, matGet("mat-add")...)
 	result := runAQL(t, r, input)
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	expected := []float64{11, 22, 33, 44}
 	for i, v := range m.Data {
 		if v != expected[i] {
@@ -236,11 +236,11 @@ func TestMatrixAdd(t *testing.T) {
 func TestMatrixMul(t *testing.T) {
 	r := matrixRegistry(t)
 	// [[1,2],[3,4]] * [[5,6],[7,8]] = [[19,22],[43,50]]
-	a := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
-	b := engine.NewMatrix(engine.MatrixData{Data: []float64{5, 6, 7, 8}, Rows: 2, Cols: 2})
+	a := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	b := NewMatrix(engine.MatrixData{Data: []float64{5, 6, 7, 8}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{a, b}, matGet("mat-mul")...)
 	result := runAQL(t, r, input)
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	expected := []float64{19, 22, 43, 50}
 	for i, v := range m.Data {
 		if v != expected[i] {
@@ -252,11 +252,11 @@ func TestMatrixMul(t *testing.T) {
 func TestMatrixMulRectangular(t *testing.T) {
 	r := matrixRegistry(t)
 	// 2x3 * 3x1 = 2x1
-	a := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
-	b := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 1, 1}, Rows: 3, Cols: 1})
+	a := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
+	b := NewMatrix(engine.MatrixData{Data: []float64{1, 1, 1}, Rows: 3, Cols: 1})
 	input := append([]engine.Value{a, b}, matGet("mat-mul")...)
 	result := runAQL(t, r, input)
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	if m.Rows != 2 || m.Cols != 1 {
 		t.Fatalf("expected 2x1, got %dx%d", m.Rows, m.Cols)
 	}
@@ -270,10 +270,10 @@ func TestMatrixMulRectangular(t *testing.T) {
 func TestMatrixTranspose(t *testing.T) {
 	r := matrixRegistry(t)
 	// [[1,2,3],[4,5,6]] → [[1,4],[2,5],[3,6]]
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
 	input := append([]engine.Value{mat}, matGet("transpose")...)
 	result := runAQL(t, r, input)
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	if m.Rows != 3 || m.Cols != 2 {
 		t.Fatalf("expected 3x2, got %dx%d", m.Rows, m.Cols)
 	}
@@ -287,15 +287,15 @@ func TestMatrixTranspose(t *testing.T) {
 
 func TestMatrixFlatten(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{mat}, matGet("flatten")...)
 	result := runAQL(t, r, input)
-	list := result[0].AsList()
+	list, _ := engine.AsList(result[0])
 	if list.Len() != 4 {
 		t.Fatalf("flatten length = %d, want 4", list.Len())
 	}
 	for i := 0; i < 4; i++ {
-		v, _ := list.Get(i).AsNumber()
+		v, _ := engine.AsNumber(list.Get(i))
 		if v != float64(i+1) {
 			t.Errorf("flatten[%d] = %v, want %v", i, v, float64(i+1))
 		}
@@ -306,10 +306,10 @@ func TestMatrixFlatten(t *testing.T) {
 
 func TestMatrixSum(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{mat}, matGet("sum")...)
 	result := runAQL(t, r, input)
-	v, _ := result[0].AsNumber()
+	v, _ := engine.AsNumber(result[0])
 	if v != 10.0 {
 		t.Errorf("sum = %v, want 10.0", result[0])
 	}
@@ -318,10 +318,10 @@ func TestMatrixSum(t *testing.T) {
 func TestMatrixTrace(t *testing.T) {
 	r := matrixRegistry(t)
 	// trace([[1,2],[3,4]]) = 1+4 = 5
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{mat}, matGet("tr")...)
 	result := runAQL(t, r, input)
-	v, _ := result[0].AsNumber()
+	v, _ := engine.AsNumber(result[0])
 	if v != 5.0 {
 		t.Errorf("trace = %v, want 5.0", result[0])
 	}
@@ -330,10 +330,10 @@ func TestMatrixTrace(t *testing.T) {
 func TestMatrixDet(t *testing.T) {
 	r := matrixRegistry(t)
 	// det([[1,2],[3,4]]) = 1*4 - 2*3 = -2
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{mat}, matGet("det")...)
 	result := runAQL(t, r, input)
-	v, _ := result[0].AsNumber()
+	v, _ := engine.AsNumber(result[0])
 	if math.Abs(v-(-2.0)) > 1e-10 {
 		t.Errorf("det = %v, want -2.0", result[0])
 	}
@@ -343,10 +343,10 @@ func TestMatrixDet3x3(t *testing.T) {
 	r := matrixRegistry(t)
 	// det([[6,1,1],[4,-2,5],[2,8,7]]) = 6(-2*7-5*8) - 1(4*7-5*2) + 1(4*8-(-2)*2)
 	// = 6(-14-40) - 1(28-10) + 1(32+4) = 6(-54) - 18 + 36 = -324-18+36 = -306
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{6, 1, 1, 4, -2, 5, 2, 8, 7}, Rows: 3, Cols: 3})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{6, 1, 1, 4, -2, 5, 2, 8, 7}, Rows: 3, Cols: 3})
 	input := append([]engine.Value{mat}, matGet("det")...)
 	result := runAQL(t, r, input)
-	v, _ := result[0].AsNumber()
+	v, _ := engine.AsNumber(result[0])
 	if math.Abs(v-(-306.0)) > 1e-6 {
 		t.Errorf("det = %v, want -306.0", result[0])
 	}
@@ -359,7 +359,7 @@ func TestMatrixDetIdentity(t *testing.T) {
 	eye := runAQL(t, r, input)
 	input2 := append([]engine.Value{eye[0]}, matGet("det")...)
 	result := runAQL(t, r, input2)
-	v, _ := result[0].AsNumber()
+	v, _ := engine.AsNumber(result[0])
 	if math.Abs(v-1.0) > 1e-10 {
 		t.Errorf("det(I) = %v, want 1.0", result[0])
 	}
@@ -374,7 +374,7 @@ func TestMatrixDot(t *testing.T) {
 	// [1,2,3] . [4,5,6] = 4+10+18 = 32
 	input := append([]engine.Value{a, b}, matGet("dot")...)
 	result := runAQL(t, r, input)
-	v, _ := result[0].AsNumber()
+	v, _ := engine.AsNumber(result[0])
 	if v != 32.0 {
 		t.Errorf("dot = %v, want 32.0", result[0])
 	}
@@ -390,7 +390,7 @@ func TestMatrixMakeFromRows(t *testing.T) {
 	})
 	input := append([]engine.Value{rows}, matGet("create")...)
 	result := runAQL(t, r, input)
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	if m.Rows != 2 || m.Cols != 2 {
 		t.Fatalf("expected 2x2, got %dx%d", m.Rows, m.Cols)
 	}
@@ -406,11 +406,11 @@ func TestMatrixMakeFromRows(t *testing.T) {
 
 func TestMatrixMulIdentity(t *testing.T) {
 	r := matrixRegistry(t)
-	a := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
-	eye := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 0, 0, 1}, Rows: 2, Cols: 2})
+	a := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	eye := NewMatrix(engine.MatrixData{Data: []float64{1, 0, 0, 1}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{a, eye}, matGet("mat-mul")...)
 	result := runAQL(t, r, input)
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	expected := []float64{1, 2, 3, 4}
 	for i, v := range m.Data {
 		if v != expected[i] {

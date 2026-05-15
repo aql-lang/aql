@@ -26,12 +26,12 @@ func TestTransformHandlerPassthrough(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m := result[0].AsMap()
+	m, _ := engine.AsMap(result[0])
 	v, ok := m.Get("x")
 	if !ok {
 		t.Fatal("expected key 'x' in result")
 	}
-	vi, _ := v.AsInteger()
+	vi, _ := engine.AsInteger(v)
 	if vi != 99 {
 		t.Errorf("expected 99, got %d", vi)
 	}
@@ -54,12 +54,12 @@ func TestTransformHandlerInject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := result[0].AsMap()
+	m, _ := engine.AsMap(result[0])
 	v, ok := m.Get("greeting")
 	if !ok {
 		t.Fatal("expected key 'greeting' in result")
 	}
-	vs, _ := v.AsString()
+	vs, _ := engine.AsString(v)
 	if vs != "Alice" {
 		t.Errorf("expected Alice, got %s", vs)
 	}
@@ -84,9 +84,9 @@ func TestTransformHandlerNestedPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := result[0].AsMap()
+	m, _ := engine.AsMap(result[0])
 	v, _ := m.Get("val")
-	vi, _ := v.AsInteger()
+	vi, _ := engine.AsInteger(v)
 	if vi != 42 {
 		t.Errorf("expected 42, got %d", vi)
 	}
@@ -105,19 +105,19 @@ func TestValueToAnyRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := back.AsMap()
+	m, _ := engine.AsMap(back)
 	name, _ := m.Get("name")
-	ns, _ := name.AsString()
+	ns, _ := engine.AsString(name)
 	if ns != "Bob" {
 		t.Errorf("expected Bob, got %s", ns)
 	}
 	age, _ := m.Get("age")
-	ai, _ := age.AsInteger()
+	ai, _ := engine.AsInteger(age)
 	if ai != 25 {
 		t.Errorf("expected 25, got %d", ai)
 	}
 	active, _ := m.Get("active")
-	ab, _ := active.AsBoolean()
+	ab, _ := engine.AsBoolean(active)
 	if !ab {
 		t.Error("expected true")
 	}
@@ -168,7 +168,7 @@ func TestAnyToValueBool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	vb, _ := v.AsBoolean()
+	vb, _ := engine.AsBoolean(v)
 	if !vb {
 		t.Error("expected true")
 	}
@@ -179,7 +179,7 @@ func TestAnyToValueInt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	vi, _ := v.AsInteger()
+	vi, _ := engine.AsInteger(v)
 	if vi != 42 {
 		t.Errorf("expected 42, got %d", vi)
 	}
@@ -190,7 +190,7 @@ func TestAnyToValueInt64(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	vi, _ := v.AsInteger()
+	vi, _ := engine.AsInteger(v)
 	if vi != 99 {
 		t.Errorf("expected 99, got %d", vi)
 	}
@@ -215,19 +215,20 @@ func TestValueToAnyList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := back.AsList().Slice()
+	_lst, _ := engine.AsList(back)
+	list := _lst.Slice()
 	if len(list) != 3 {
 		t.Fatalf("expected 3 elements, got %d", len(list))
 	}
-	li0, _ := list[0].AsInteger()
+	li0, _ := engine.AsInteger(list[0])
 	if li0 != 1 {
 		t.Errorf("expected 1, got %d", li0)
 	}
-	ls1, _ := list[1].AsString()
+	ls1, _ := engine.AsString(list[1])
 	if ls1 != "two" {
 		t.Errorf("expected two, got %s", ls1)
 	}
-	lb2, _ := list[2].AsBoolean()
+	lb2, _ := engine.AsBoolean(list[2])
 	if lb2 {
 		t.Error("expected false")
 	}

@@ -24,8 +24,8 @@ const (
 // TraceColorize returns a colored string representation of a Value for trace output.
 func TraceColorize(v Value) string {
 	switch {
-	case v.IsWord():
-		w, _ := v.AsWord()
+	case IsWord(v):
+		w, _ := AsWord(v)
 		if w.ForceStack {
 			return cYellow + w.Name + "/s" + cReset
 		}
@@ -33,10 +33,10 @@ func TraceColorize(v Value) string {
 			return cYellow + w.Name + "/f" + cReset
 		}
 		return cYellow + w.Name + cReset
-	case v.IsForward():
-		f, _ := v.AsForward()
+	case IsForward(v):
+		f, _ := AsForward(v)
 		return cMagenta + fmt.Sprintf("→%s(%d/%d)", f.FuncName, f.CollectedArgs, f.ExpectedArgs) + cReset
-	case v.IsOpenParen():
+	case IsOpenParen(v):
 		return cDim + "(" + cReset
 	case v.Data == nil:
 		// Type literal
@@ -46,26 +46,27 @@ func TraceColorize(v Value) string {
 	case v.VType.Matches(TInteger):
 		return cBlue + fmt.Sprintf("%d", v.Data) + cReset
 	case v.VType.Matches(TBoolean):
-		_as0, _ := v.AsBoolean()
+		_as0, _ := AsBoolean(v)
 		if _as0 {
 			return cCyan + "true" + cReset
 		}
 		return cCyan + "false" + cReset
 	case v.VType.Equal(TAtom):
-		s, ok := v.Data.(string)
-		if !ok {
+		s, err := AsAtom(v)
+		if err != nil {
 			return cRed + fmt.Sprintf("%v", v.Data) + cReset
 		}
 		return cRed + s + cReset
 	case v.VType.Equal(TList):
-		elems := v.AsList().Slice()
+		_lst, _ := AsList(v)
+		elems := _lst.Slice()
 		parts := make([]string, len(elems))
 		for i, e := range elems {
 			parts[i] = TraceColorize(e)
 		}
 		return cDim + "[" + cReset + strings.Join(parts, " ") + cDim + "]" + cReset
 	case v.VType.Equal(TMap):
-		m := v.AsMap()
+		m, _ := AsMap(v)
 		parts := make([]string, 0, m.Len())
 		for _, k := range m.Keys() {
 			val, _ := m.Get(k)
@@ -119,7 +120,8 @@ func traceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("trace: argument must be a concrete list, got type literal")
 	}
-	elems := args[0].AsList().Slice()
+	_lst, _ := AsList(args[0])
+	elems := _lst.Slice()
 	return RunTrace(r, elems, r.Output)
 }
 

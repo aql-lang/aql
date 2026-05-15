@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/aql-lang/aql/eng"
 )
 
 // typeNatives covers the type-system words: table, type, untype,
@@ -188,7 +190,7 @@ func installResourceTypes(r *Registry) {
 	InstallDef(r, "Resource", NewObjectType(TResource, resourceInfo))
 
 	resourceVal, _ := r.Defs.Top("Resource")
-	installedResource, _ := resourceVal.AsObjectType()
+	installedResource, _ := AsObjectType(resourceVal)
 
 	entityFields := NewOrderedMap()
 	entityFields.Set("spec", NewTypeLiteral(TString))
@@ -207,65 +209,23 @@ func installResourceTypes(r *Registry) {
 
 func tableHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	target := args[0]
-	if !target.IsRecordType() {
+	if !IsRecordType(target) {
 		return nil, fmt.Errorf("table: argument must be a record type, got %s", target.String())
 	}
-	_as0, _ := target.AsRecordType()
+	_as0, _ := AsRecordType(target)
 	return []Value{NewTableType(_as0)}, nil
 }
 
 // ---- type / untype ----
 
-// validateAndInstallType validates a type-name/body pair and pushes
-// the body onto r's type stack. Used by typeHandler.
-func validateAndInstallType(r *Registry, name string, body Value) error {
-	if !IsTypeBody(body) {
-		return fmt.Errorf("type: body must be a type value (record, disjunct, type literal, typed list, or typed map), got %s", body.String())
-	}
-	if !IsCapitalisedName(name) {
-		return fmt.Errorf("type %s: type names must start with a capital letter", name)
-	}
-	if !r.Types.Has(name) {
-		if err := ValidateTypeNameParts(name, r.IsKnownPart); err != nil {
-			return err
-		}
-	}
-	if r.Lookup(name) != nil {
-		return fmt.Errorf("type %s: name clash — already a registered function", name)
-	}
-	if r.Defs.Has(name) {
-		return fmt.Errorf("type %s: name clash — already a def'd value", name)
-	}
-	if body.IsObjectType() {
-		info, _ := body.AsObjectType()
-		if info.Parent != nil {
-			info.Name = info.Parent.Name + "/" + name
-		} else {
-			info.Name = "Object/" + name
-		}
-		for _, p := range strings.Split(info.Name, "/") {
-			r.RegisterPart(p)
-		}
-		parentDef := TObject
-		if info.Parent != nil && info.Parent.Type != nil {
-			parentDef = info.Parent.Type
-		}
-		def := r.Types.MintType(name, parentDef)
-		body = NewObjectType(def, info)
-		r.Types.Bind(name, def, body)
-	} else {
-		r.Types.PushType(name, body)
-	}
-	for _, p := range strings.Split(name, "/") {
-		r.RegisterPart(p)
-	}
-	return nil
-}
-
+// typeHandler delegates to eng.InstallType — the single kernel entry
+// point for type-name installation. At Step 10d the lang-side
+// validateAndInstallType (near-duplicate) was removed; changes to
+// type-installation policy go to eng/go/core_type.go::InstallType.
 func typeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := defName(args[0])
 	body := args[1]
-	if err := validateAndInstallType(r, name, body); err != nil {
+	if err := eng.InstallType(r, name, body); err != nil {
 		return nil, err
 	}
 	return nil, nil
@@ -318,8 +278,8 @@ func fulltypeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 
 func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	a, b := args[1], args[0]
-	if b.VType.Equal(TFnUndef) && a.IsAtom() {
-		name, _ := a.AsAtom()
+	if b.VType.Equal(TFnUndef) && IsAtom(a) {
+		name, _ := AsAtom(a)
 		if top, ok := r.Defs.Top(name); ok {
 			if top.VType.Equal(TFnDef) || top.VType.Equal(TFunction) {
 				a = top
@@ -405,7 +365,7 @@ func anyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	if !IsConcrete(args[0]) {
 		return []Value{NewBoolean(false)}, nil
 	}
-	list := args[0].AsList()
+	list, _ := AsList(args[0])
 	n := list.Len()
 	if n == 0 {
 		return []Value{NewBoolean(false)}, nil
@@ -425,7 +385,7 @@ func allHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	if !IsConcrete(args[0]) {
 		return []Value{NewBoolean(true)}, nil
 	}
-	list := args[0].AsList()
+	list, _ := AsList(args[0])
 	n := list.Len()
 	if n == 0 {
 		return []Value{NewBoolean(true)}, nil
@@ -445,7 +405,7 @@ func tanyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("tany: expected a concrete list")
 	}
-	list := args[0].AsList()
+	list, _ := AsList(args[0])
 	n := list.Len()
 	if n == 0 {
 		return []Value{NewTypeLiteral(TNever)}, nil
@@ -471,7 +431,7 @@ func tallHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("tall: expected a concrete list")
 	}
-	list := args[0].AsList()
+	list, _ := AsList(args[0])
 	n := list.Len()
 	if n == 0 {
 		return []Value{NewTypeLiteral(TAny)}, nil
@@ -503,7 +463,7 @@ func convertTo(src Value, targetType *Type, base string) (Value, error) {
 		if !src.VType.Matches(TInteger) {
 			return Value{}, fmt.Errorf("convert: base %q only supported for integer to string", base)
 		}
-		n, _ := src.AsInteger()
+		n, _ := AsInteger(src)
 		var s string
 		switch base {
 		case "hex":
@@ -587,7 +547,7 @@ func convert3Handler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 
 	base := ""
 	if opts.Data != nil {
-		m := opts.AsMap()
+		m, _ := AsMap(opts)
 		if m != nil {
 			if bv, ok := m.Get("base"); ok {
 				base = ValToString(bv)

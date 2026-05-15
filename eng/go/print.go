@@ -51,7 +51,7 @@ func printstrHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 func FormatForPrint(v Value) string {
 	// The value `none` (the unique inhabitant of None, Data != nil
 	// sentinel) prints as "none".
-	if v.IsNone() {
+	if IsNone(v) {
 		return "none"
 	}
 	// Type literals (Data==nil) — print as the leaf of the type path
@@ -62,8 +62,15 @@ func FormatForPrint(v Value) string {
 	}
 
 	// Table: formatted with headers and aligned columns.
-	if v.IsTableType() {
+	if IsTableType(v) {
 		if td, ok := v.Data.(TableData); ok {
+			return formatTable(td)
+		}
+		if mp, ok := v.Data.(MaterializerPayload); ok {
+			td, err := mp.M.Materialize()
+			if err != nil {
+				return "query(error:" + err.Error() + ")"
+			}
 			return formatTable(td)
 		}
 		if mz, ok := v.Data.(Materializer); ok {
@@ -76,8 +83,8 @@ func FormatForPrint(v Value) string {
 	}
 
 	// Error: print the error message.
-	if v.IsError() {
-		info, _ := v.AsError()
+	if IsError(v) {
+		info, _ := AsError(v)
 		return info.Message
 	}
 
@@ -90,12 +97,12 @@ func FormatForPrint(v Value) string {
 
 	// String: printed as-is (no quotes).
 	if v.VType.Matches(TString) {
-		_as0, _ := v.AsString()
+		_as0, _ := AsString(v)
 		return _as0
 	}
 
 	// Options type: use String() representation.
-	if v.IsOptionsType() {
+	if IsOptionsType(v) {
 		return v.String()
 	}
 
@@ -115,8 +122,8 @@ func FormatForPrint(v Value) string {
 
 // formatMapJSON formats a map value as a JSON-like string.
 func formatMapJSON(v Value) string {
-	om, ok := v.Data.(*OrderedMap)
-	if !ok {
+	om, err := AsMutableMap(v)
+	if err != nil {
 		return "{}"
 	}
 	parts := make([]string, 0, om.Len())
@@ -129,7 +136,7 @@ func formatMapJSON(v Value) string {
 
 // formatListJSON formats a list value as a JSON-like string.
 func formatListJSON(v Value) string {
-	elems := v.AsList()
+	elems, _ := AsList(v)
 	parts := make([]string, elems.Len())
 	for i, e := range elems.Slice() {
 		parts[i] = FormatValueJSON(e)
@@ -141,7 +148,7 @@ func formatListJSON(v Value) string {
 func FormatValueJSON(v Value) string {
 	// The value `none` and the None type literal both render as JSON
 	// null — that's how JSON encodes the unit type / absent value.
-	if v.IsNone() || (v.Data == nil && v.VType.Equal(TNone)) {
+	if IsNone(v) || (v.Data == nil && v.VType.Equal(TNone)) {
 		return "null"
 	}
 	if v.Data == nil {
@@ -157,13 +164,13 @@ func FormatValueJSON(v Value) string {
 	}
 	switch {
 	case v.VType.Matches(TString):
-		_as1, _ := v.AsString()
+		_as1, _ := AsString(v)
 		return fmt.Sprintf("%q", _as1)
 	case v.VType.Matches(TInteger):
-		_as2, _ := v.AsInteger()
+		_as2, _ := AsInteger(v)
 		return fmt.Sprintf("%d", _as2)
 	case v.VType.Matches(TBoolean):
-		_as3, _ := v.AsBoolean()
+		_as3, _ := AsBoolean(v)
 		if _as3 {
 			return "true"
 		}
@@ -190,7 +197,7 @@ func formatTable(td TableData) string {
 	cells := make([][]string, len(td.Rows))
 	for i, row := range td.Rows {
 		cells[i] = make([]string, len(columns))
-		om := row.AsMap()
+		om, _ := AsMap(row)
 		for j, col := range columns {
 			if val, ok := om.Get(col); ok {
 				cells[i][j] = ValToString(val)

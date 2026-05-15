@@ -8,8 +8,32 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aql-lang/aql/eng"
 	"github.com/aql-lang/aql/lang/engine"
 )
+
+// Object/Fetch / Object/Fetch/Request / Object/Fetch/Response are
+// owned by the lang/native package — they're consumed only by the
+// fetch handler and tests in this package. Registration goes
+// through eng.Builtin.RegisterExternalBuiltin in the var
+// initialisers below so that any other package-level var
+// referencing TFetch* (signature slices in natives.go) sees a
+// non-nil pointer at slice-init time. FixedIDs come from the
+// documented lang/native/fetch range (3000-3999) — see
+// eng.TypeTable.RegisterExternalBuiltin for the allocation policy.
+var (
+	TFetchFunction = registerFetchType("Object/Fetch", 3000)
+	TFetchRequest  = registerFetchType("Object/Fetch/Request", 3001)
+	TFetchResponse = registerFetchType("Object/Fetch/Response", 3002)
+)
+
+func registerFetchType(path string, fixedID int) *eng.Type {
+	t, err := eng.Builtin.RegisterExternalBuiltin(path, fixedID, nil)
+	if err != nil {
+		panic(fmt.Sprintf("fetch: register %s: %v", path, err))
+	}
+	return t
+}
 
 const defaultFetchTimeout = 30 * time.Second
 
@@ -27,7 +51,7 @@ func fetchStringHandler(args []engine.Value, ctx map[string]engine.Value, stack 
 // fetchStringMapHandler handles fetch with a URL string and an options map.
 // The URL is merged into the options map as the "url" field.
 func fetchStringMapHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	opts := args[1].AsMap()
+	opts, _ := engine.AsMap(args[1])
 	if opts == nil {
 		return nil, fmt.Errorf("fetch: expected map for options, got nil")
 	}
@@ -47,7 +71,7 @@ func fetchStringMapHandler(args []engine.Value, ctx map[string]engine.Value, sta
 // fetchMapHandler handles fetch with a full request map.
 // The map must contain a "url" field.
 func fetchMapHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	m := args[0].AsMap()
+	m, _ := engine.AsMap(args[0])
 	if m == nil {
 		return nil, fmt.Errorf("fetch: expected map argument, got nil")
 	}
@@ -69,7 +93,7 @@ func doFetch(reqOM engine.ReadMap) ([]engine.Value, error) {
 	if !ok {
 		return nil, fmt.Errorf("fetch: missing required \"url\" field")
 	}
-	urlStr, err := urlVal.AsString()
+	urlStr, err := engine.AsString(urlVal)
 	if err != nil {
 		return nil, fmt.Errorf("fetch: url: %w", err)
 	}
@@ -77,7 +101,7 @@ func doFetch(reqOM engine.ReadMap) ([]engine.Value, error) {
 	// Extract method (default GET).
 	method := "GET"
 	if mv, ok := reqOM.Get("method"); ok {
-		mvStr, err := mv.AsString()
+		mvStr, err := engine.AsString(mv)
 		if err != nil {
 			return nil, fmt.Errorf("fetch: method: %w", err)
 		}
@@ -87,7 +111,7 @@ func doFetch(reqOM engine.ReadMap) ([]engine.Value, error) {
 	// Extract body.
 	var bodyReader io.Reader
 	if bv, ok := reqOM.Get("body"); ok {
-		bvStr, err := bv.AsString()
+		bvStr, err := engine.AsString(bv)
 		if err != nil {
 			return nil, fmt.Errorf("fetch: body: %w", err)
 		}
@@ -102,10 +126,10 @@ func doFetch(reqOM engine.ReadMap) ([]engine.Value, error) {
 
 	// Set headers.
 	if hv, ok := reqOM.Get("headers"); ok && hv.VType.Matches(engine.TMap) {
-		hm := hv.AsMap()
+		hm, _ := engine.AsMap(hv)
 		for _, key := range hm.Keys() {
 			val, _ := hm.Get(key)
-			valStr, err := val.AsString()
+			valStr, err := engine.AsString(val)
 			if err != nil {
 				return nil, fmt.Errorf("fetch: header %q: %w", key, err)
 			}
@@ -116,7 +140,7 @@ func doFetch(reqOM engine.ReadMap) ([]engine.Value, error) {
 	// Timeout.
 	timeout := defaultFetchTimeout
 	if tv, ok := reqOM.Get("timeout"); ok {
-		tvInt, err := tv.AsInteger()
+		tvInt, err := engine.AsInteger(tv)
 		if err != nil {
 			return nil, fmt.Errorf("fetch: timeout: %w", err)
 		}
@@ -156,5 +180,5 @@ func doFetch(reqOM engine.ReadMap) ([]engine.Value, error) {
 	respOM.Set("body", engine.NewString(string(bodyBytes)))
 	respOM.Set("url", engine.NewString(resp.Request.URL.String()))
 
-	return []engine.Value{{VType: engine.TFetchResponse, Data: respOM}}, nil
+	return []engine.Value{{VType: TFetchResponse, Data: engine.MapPayload{M: respOM}}}, nil
 }

@@ -186,7 +186,7 @@ func TandValues(a, b Value) Value {
 		return NewTypeLiteral(TNever)
 	}
 
-	if a.IsDisjunct() || b.IsDisjunct() {
+	if IsDisjunct(a) || IsDisjunct(b) {
 		aAlts := FlattenDisjunctAlts(a)
 		bAlts := FlattenDisjunctAlts(b)
 		var result []Value
@@ -207,7 +207,9 @@ func TandValues(a, b Value) Value {
 	}
 
 	if isPlainConcreteMap(a) && isPlainConcreteMap(b) {
-		merged, ok := mergeMaps(a.AsMap(), b.AsMap())
+		ma, _ := AsMap(a)
+		mb, _ := AsMap(b)
+		merged, ok := mergeMaps(ma, mb)
 		if !ok {
 			return NewTypeLiteral(TNever)
 		}
@@ -227,10 +229,11 @@ func isPlainConcreteMap(v Value) bool {
 	if !v.VType.Equal(TMap) || v.Data == nil {
 		return false
 	}
-	if v.IsRecordType() || v.IsOptionsType() || v.IsTypedMap() {
+	if IsRecordType(v) || IsOptionsType(v) || IsTypedMap(v) {
 		return false
 	}
-	return v.AsMap() != nil
+	m, err := AsMap(v)
+	return err == nil && m != nil
 }
 
 // mergeMaps walks keys of a then b in order, intersecting values for

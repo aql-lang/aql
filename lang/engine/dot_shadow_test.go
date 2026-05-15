@@ -66,7 +66,7 @@ func TestDotNotationModuleExportShadow(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewWord("matrix"), engine.NewWord("get"), engine.NewWord("trace"),
 	})
-	_as0, _ := result[0].AsString()
+	_as0, _ := engine.AsString(result[0])
 	if len(result) != 1 || _as0 != "my-trace-fn" {
 		t.Errorf("matrix get trace = %v, want 'my-trace-fn'", result)
 	}
@@ -87,7 +87,7 @@ func TestDotNotationNormalKeysStillWork(t *testing.T) {
 	result := runAQL(t, r, []engine.Value{
 		engine.NewMap(m), engine.NewWord("get"), engine.NewWord("name"),
 	})
-	_as1, _ := result[0].AsString()
+	_as1, _ := engine.AsString(result[0])
 	if len(result) != 1 || _as1 != "alice" {
 		t.Errorf("get name = %v, want 'alice'", result)
 	}
@@ -95,7 +95,7 @@ func TestDotNotationNormalKeysStillWork(t *testing.T) {
 	result = runAQL(t, r, []engine.Value{
 		engine.NewMap(m), engine.NewWord("get"), engine.NewWord("age"),
 	})
-	_as2, _ := result[0].AsNumber()
+	_as2, _ := engine.AsNumber(result[0])
 	if len(result) != 1 || _as2 != 30 {
 		t.Errorf("get age = %v, want 30", result)
 	}

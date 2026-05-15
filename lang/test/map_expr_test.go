@@ -398,13 +398,13 @@ func TestMapExprListValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := result[0].AsMap()
+	m, _ := engine.AsMap(result[0])
 	av, _ := m.Get("a")
 	bv, _ := m.Get("b")
 	cv, _ := m.Get("c")
-	avi, _ := av.AsInteger()
-	bvi, _ := bv.AsInteger()
-	cvs, _ := cv.AsString()
+	avi, _ := engine.AsInteger(av)
+	bvi, _ := engine.AsInteger(bv)
+	cvs, _ := engine.AsString(cv)
 	if avi != 10 {
 		t.Errorf("a = %d, want 10", avi)
 	}

@@ -94,7 +94,7 @@ func EffectiveFileOps(r *Registry) fileops.FileOps {
 	if !ok {
 		return HostFileOps(r)
 	}
-	asBool, _ := memVal.AsBoolean()
+	asBool, _ := AsBoolean(memVal)
 	if memVal.VType.Matches(TBoolean) && asBool {
 		if mem, _ := eng.Cap[fileops.FileOps](r, CapMemFileOps); mem != nil {
 			return mem

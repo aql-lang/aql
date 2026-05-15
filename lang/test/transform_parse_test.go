@@ -1,6 +1,7 @@
 package test
 
 import (
+	"github.com/aql-lang/aql/lang/engine"
 	"testing"
 )
 
@@ -15,12 +16,12 @@ func TestTransformInject(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m := result[0].AsMap()
+	m, _ := engine.AsMap(result[0])
 	v, ok := m.Get("x")
 	if !ok {
 		t.Fatal("expected key 'x' in result")
 	}
-	vs1, _ := v.AsString()
+	vs1, _ := engine.AsString(v)
 	if vs1 != "hello" {
 		t.Errorf("expected hello, got %s", vs1)
 	}
@@ -34,9 +35,9 @@ func TestTransformPassthrough(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := result[0].AsMap()
+	m, _ := engine.AsMap(result[0])
 	v, _ := m.Get("x")
-	vi1, _ := v.AsInteger()
+	vi1, _ := engine.AsInteger(v)
 	if vi1 != 99 {
 		t.Errorf("expected 99, got %d", vi1)
 	}
@@ -50,9 +51,9 @@ func TestTransformNestedPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := result[0].AsMap()
+	m, _ := engine.AsMap(result[0])
 	v, _ := m.Get("val")
-	vi2, _ := v.AsInteger()
+	vi2, _ := engine.AsInteger(v)
 	if vi2 != 42 {
 		t.Errorf("expected 42, got %d", vi2)
 	}
@@ -69,12 +70,12 @@ func TestDefTransformWithLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := result[0].AsMap()
+	m, _ := engine.AsMap(result[0])
 	v, ok := m.Get("greeting")
 	if !ok {
 		t.Fatal("expected key 'greeting' in result")
 	}
-	vs2, _ := v.AsString()
+	vs2, _ := engine.AsString(v)
 	if vs2 != "Alice" {
 		t.Errorf("expected Alice, got %s", vs2)
 	}

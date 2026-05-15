@@ -490,26 +490,26 @@ func quoteAnyHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.
 func folderOptsHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, reg *engine.Registry) ([]engine.Value, error) {
 	optsVal := args[0]
 	pathVal := args[1]
-	if !pathVal.IsPath() {
+	if !engine.IsPath(pathVal) {
 		return nil, fmt.Errorf("folder: expected Path, got %s", pathVal.VType.String())
 	}
 	parents := true
-	if optsMap := optsVal.AsMap(); optsMap != nil {
+	if optsMap, _ := engine.AsMap(optsVal); optsMap != nil {
 		if v, ok := optsMap.Get("parents"); ok && v.VType.Matches(engine.TBoolean) {
-			parents, _ = v.AsBoolean()
+			parents, _ = engine.AsBoolean(v)
 		}
 	}
-	_as0, _ := pathVal.AsPath()
+	_as0, _ := engine.AsPath(pathVal)
 	return doFolder(_as0, parents, reg)
 }
 
 // folderHandler implements `folder` with a single Path arg (parents=true).
 func folderHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, reg *engine.Registry) ([]engine.Value, error) {
 	pathVal := args[0]
-	if !pathVal.IsPath() {
+	if !engine.IsPath(pathVal) {
 		return nil, fmt.Errorf("folder: expected Path, got %s", pathVal.VType.String())
 	}
-	_as1, _ := pathVal.AsPath()
+	_as1, _ := engine.AsPath(pathVal)
 	return doFolder(_as1, true, reg)
 }
 
@@ -622,9 +622,9 @@ func startInterval(args []engine.Value, r *engine.Registry, isList bool) ([]engi
 
 // cancelTimeoutHandler stops a pending Timeout timer.
 func cancelTimeoutHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-	ti, err := args[0].AsTimeout()
-	if err != nil {
-		return nil, err
+	ti, ok := args[0].Data.(*engine.TimeoutInfo)
+	if !ok {
+		return nil, fmt.Errorf("cancel-timeout: not a Timeout value (got %s)", args[0].VType)
 	}
 	if ti.Timer != nil {
 		ti.Timer.Stop()
@@ -636,9 +636,9 @@ func cancelTimeoutHandler(args []engine.Value, _ map[string]engine.Value, _ []en
 // cancelIntervalHandler stops a running Interval ticker and signals its
 // goroutine to exit.
 func cancelIntervalHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-	ii, err := args[0].AsInterval()
-	if err != nil {
-		return nil, err
+	ii, ok := args[0].Data.(*engine.IntervalInfo)
+	if !ok {
+		return nil, fmt.Errorf("cancel-interval: not an Interval value (got %s)", args[0].VType)
 	}
 	if ii.Ticker != nil {
 		ii.Ticker.Stop()

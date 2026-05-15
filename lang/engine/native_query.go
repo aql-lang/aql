@@ -200,7 +200,7 @@ func fromHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	if !ok {
 		return nil, fmt.Errorf("from: unknown table %q", name)
 	}
-	if !val.IsTableType() {
+	if !IsTableType(val) {
 		return nil, fmt.Errorf("from: %q is not a table", name)
 	}
 
@@ -210,7 +210,7 @@ func fromHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	}
 
 	qb := NewQueryBuilder(r, td)
-	return []Value{NewValueRaw(TList, qb)}, nil
+	return []Value{NewValueRaw(TList, ExtensionPayload{Body: qb})}, nil
 }
 
 // as: [table/query(prefix), atom(forward)] -> [query-builder with alias]
@@ -224,7 +224,7 @@ func asHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		return nil, fmt.Errorf("as: %w", err)
 	}
 	qb.Alias = alias
-	return []Value{NewValueRaw(TList, qb)}, nil
+	return []Value{NewValueRaw(TList, ExtensionPayload{Body: qb})}, nil
 }
 
 // Infix star handler: "from products select star" → args=[table, star]
@@ -232,9 +232,9 @@ func selectStarInfixHandler(args []Value, _ map[string]Value, _ []Value, r *Regi
 	table := args[0]
 	colSpec := args[1]
 
-	_as0, _ := colSpec.AsAtom()
+	_as0, _ := AsAtom(colSpec)
 	if _as0 != "*" {
-		_as1, _ := colSpec.AsAtom()
+		_as1, _ := AsAtom(colSpec)
 		return nil, fmt.Errorf("select: expected * or column list, got atom %q", _as1)
 	}
 
@@ -246,9 +246,9 @@ func selectStarForwardHandler(args []Value, _ map[string]Value, _ []Value, r *Re
 	colSpec := args[0]
 	table := args[1]
 
-	_as2, _ := colSpec.AsAtom()
+	_as2, _ := AsAtom(colSpec)
 	if _as2 != "*" {
-		_as3, _ := colSpec.AsAtom()
+		_as3, _ := AsAtom(colSpec)
 		return nil, fmt.Errorf("select: expected * or column list, got atom %q", _as3)
 	}
 
@@ -294,7 +294,7 @@ func queryWhereHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		return nil, fmt.Errorf("where: %w", err)
 	}
 	qb.Where = clause
-	return []Value{NewValueRaw(TList, qb)}, nil
+	return []Value{NewValueRaw(TList, ExtensionPayload{Body: qb})}, nil
 }
 
 func orderListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -311,7 +311,7 @@ func orderListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 		return nil, fmt.Errorf("order: %w", err)
 	}
 	qb.OrderBy = clause
-	return []Value{NewValueRaw(TList, qb)}, nil
+	return []Value{NewValueRaw(TList, ExtensionPayload{Body: qb})}, nil
 }
 
 func orderAtomHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -322,9 +322,9 @@ func orderAtomHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	if err != nil {
 		return nil, fmt.Errorf("order: %w", err)
 	}
-	_as4, _ := col.AsAtom()
+	_as4, _ := AsAtom(col)
 	qb.OrderBy = quoteIdent(_as4)
-	return []Value{NewValueRaw(TList, qb)}, nil
+	return []Value{NewValueRaw(TList, ExtensionPayload{Body: qb})}, nil
 }
 
 func byAtomHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -345,7 +345,7 @@ func limitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		return nil, fmt.Errorf("limit: %w", err)
 	}
 	qb.Limit = int(n)
-	return []Value{NewValueRaw(TList, qb)}, nil
+	return []Value{NewValueRaw(TList, ExtensionPayload{Body: qb})}, nil
 }
 
 // offset: [table/query(prefix), integer(forward)] -> [query-builder]
@@ -358,7 +358,7 @@ func offsetHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 		return nil, fmt.Errorf("offset: %w", err)
 	}
 	qb.Offset = int(n)
-	return []Value{NewValueRaw(TList, qb)}, nil
+	return []Value{NewValueRaw(TList, ExtensionPayload{Body: qb})}, nil
 }
 
 // distinct: [table/query(prefix)] -> [query-builder]
@@ -370,7 +370,7 @@ func distinctHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		return nil, fmt.Errorf("distinct: %w", err)
 	}
 	qb.Distinct = true
-	return []Value{NewValueRaw(TList, qb)}, nil
+	return []Value{NewValueRaw(TList, ExtensionPayload{Body: qb})}, nil
 }
 
 // group: [columns(forward), table/query(prefix)] -> [query-builder]
@@ -392,7 +392,7 @@ func groupListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 		return nil, fmt.Errorf("group: %w", err)
 	}
 	qb.GroupBy = clause
-	return []Value{NewValueRaw(TList, qb)}, nil
+	return []Value{NewValueRaw(TList, ExtensionPayload{Body: qb})}, nil
 }
 
 func groupAtomHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -403,9 +403,9 @@ func groupAtomHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	if err != nil {
 		return nil, fmt.Errorf("group: %w", err)
 	}
-	_as5, _ := col.AsAtom()
+	_as5, _ := AsAtom(col)
 	qb.GroupBy = quoteIdent(_as5)
-	return []Value{NewValueRaw(TList, qb)}, nil
+	return []Value{NewValueRaw(TList, ExtensionPayload{Body: qb})}, nil
 }
 
 // having: [condition(forward), table/query(prefix)] -> [query-builder]
@@ -429,7 +429,7 @@ func havingHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 		return nil, fmt.Errorf("having: %w", err)
 	}
 	qb.Having = clause
-	return []Value{NewValueRaw(TList, qb)}, nil
+	return []Value{NewValueRaw(TList, ExtensionPayload{Body: qb})}, nil
 }
 
 // on: [condition(forward), table/query(prefix)] -> [query-builder]
@@ -451,7 +451,7 @@ func onHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		return nil, fmt.Errorf("on: no preceding join")
 	}
 	qb.Joins[len(qb.Joins)-1].On = clause
-	return []Value{NewValueRaw(TList, qb)}, nil
+	return []Value{NewValueRaw(TList, ExtensionPayload{Body: qb})}, nil
 }
 
 // using: [columns(forward), table/query(prefix)] -> [query-builder]
@@ -460,7 +460,8 @@ func usingHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	table := args[0]
 	colList := args[1]
 
-	elems := colList.AsList().Slice()
+	_lst, _ := AsList(colList)
+	elems := _lst.Slice()
 	cols := make([]string, 0, len(elems))
 	for _, e := range elems {
 		name := valueToColName(e)
@@ -478,7 +479,7 @@ func usingHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		return nil, fmt.Errorf("using: no preceding join")
 	}
 	qb.Joins[len(qb.Joins)-1].UsingCols = strings.Join(cols, ", ")
-	return []Value{NewValueRaw(TList, qb)}, nil
+	return []Value{NewValueRaw(TList, ExtensionPayload{Body: qb})}, nil
 }
 
 // joinWordNative builds a NativeFunc for join/innerjoin/leftjoin/crossjoin.
@@ -497,7 +498,7 @@ func joinWordNative(name, joinType string) NativeFunc {
 			Type:  joinType,
 			Table: tableName,
 		})
-		return []Value{NewValueRaw(TList, qb)}, nil
+		return []Value{NewValueRaw(TList, ExtensionPayload{Body: qb})}, nil
 	}
 
 	return NativeFunc{
@@ -532,7 +533,7 @@ func setOpWordNative(name, op string) NativeFunc {
 			Op:    op,
 			Right: rightQB,
 		})
-		return []Value{NewValueRaw(TList, leftQB)}, nil
+		return []Value{NewValueRaw(TList, ExtensionPayload{Body: leftQB})}, nil
 	}
 
 	return NativeFunc{

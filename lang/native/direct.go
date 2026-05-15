@@ -12,7 +12,7 @@ import (
 // directAPIHandler handles direct with {kind:"api", spec:String, path:String, method:String, ...}.
 // It calls SDK.Direct() and returns the result as a map with ok, status, headers, data.
 func directAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	apiMap := args[0].AsMap()
+	apiMap, _ := engine.AsMap(args[0])
 
 	sdkInst, _, err := getSDK(apiMap, "direct", r)
 	if err != nil {

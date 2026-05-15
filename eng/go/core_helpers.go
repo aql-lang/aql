@@ -120,8 +120,8 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 	}
 
 	// ObjectTypeInfo body: set the proper name in the type hierarchy.
-	if body.IsObjectType() {
-		info, _ := body.AsObjectType()
+	if IsObjectType(body) {
+		info, _ := AsObjectType(body)
 		if info.Parent != nil {
 			// Child type: full name is Parent/Name (e.g. Object/Foo/Bar)
 			info.Name = info.Parent.Name + "/" + name
@@ -302,8 +302,8 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 					pat.Data == nil || val.Data == nil {
 					continue
 				}
-				pMap := pat.AsMap()
-				vMap := val.AsMap()
+				pMap, _ := AsMap(*pat)
+				vMap, _ := AsMap(val)
 				if pMap == nil || vMap == nil || vMap.Len() == 0 {
 					continue
 				}
@@ -376,7 +376,6 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 	}
 }
 
-
 // UninstallFnSigs removes specific function signatures from a word's DefStack.
 // For each spec in the FnUndefInfo, it finds and removes the most recent
 // DefStack entry containing a matching signature, then rebuilds the
@@ -433,10 +432,10 @@ func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 func CoerceBoolean(v Value) bool {
 	switch {
 	case v.VType.Matches(TBoolean):
-		b, _ := v.AsBoolean()
+		b, _ := AsBoolean(v)
 		return b
 	case v.VType.Matches(TNumber):
-		n, _ := v.AsNumber()
+		n, _ := AsNumber(v)
 		return n != 0
 	case v.VType.Equal(TNone):
 		return false
@@ -444,7 +443,7 @@ func CoerceBoolean(v Value) bool {
 		if v.Data == nil {
 			return false
 		}
-		if elems, ok := v.Data.([]Value); ok {
+		if elems, err := AsMutableList(v); err == nil {
 			return len(elems) > 0
 		}
 		// Non-[]Value list backings (table types, query builders) are truthy.
@@ -453,7 +452,7 @@ func CoerceBoolean(v Value) bool {
 		if v.Data == nil {
 			return false
 		}
-		if om, ok := v.Data.(*OrderedMap); ok {
+		if om, err := AsMutableMap(v); err == nil {
 			return om.Len() > 0
 		}
 		// Non-*OrderedMap map backings (record/options/child types) are truthy.
@@ -545,35 +544,35 @@ func IsTypeBody(v Value) bool {
 	// Implicit-map record shape (`{x:Integer}`): a Map whose backing
 	// OrderedMap is flagged Implicit. Used as a structural Node-type
 	// declaration body.
-	if v.IsImplicitMap() {
+	if IsImplicitMap(v) {
 		return true
 	}
 	// Record type
-	if v.IsRecordType() {
+	if IsRecordType(v) {
 		return true
 	}
 	// Options type
-	if v.IsOptionsType() {
+	if IsOptionsType(v) {
 		return true
 	}
 	// Table type
-	if v.IsTableType() {
+	if IsTableType(v) {
 		return true
 	}
 	// Disjunct
-	if v.IsDisjunct() {
+	if IsDisjunct(v) {
 		return true
 	}
 	// Typed list [:type]
-	if v.IsTypedList() {
+	if IsTypedList(v) {
 		return true
 	}
 	// Typed map {:type}
-	if v.IsTypedMap() {
+	if IsTypedMap(v) {
 		return true
 	}
 	// Object type
-	if v.IsObjectType() {
+	if IsObjectType(v) {
 		return true
 	}
 	// Dependent scalar type (Integer gt 10, String lt "z", …)
@@ -599,7 +598,7 @@ func IsTypeBody(v Value) bool {
 // installType to relax the strict IsTypeBody check in a way that
 // doesn't pollute the inspect / fn-shape paths.
 func IsLiteralTypeBody(v Value) bool {
-	if v.IsNone() {
+	if IsNone(v) {
 		return true
 	}
 	switch {
@@ -625,10 +624,10 @@ func IsLiteralTypeBody(v Value) bool {
 // Words named "true"/"false" become booleans, known type names become type
 // literals, and other words become atoms (bare strings).
 func ResolveWordValue(v Value) Value {
-	if !v.IsWord() {
+	if !IsWord(v) {
 		return v
 	}
-	_as1, _ := v.AsWord()
+	_as1, _ := AsWord(v)
 	name := _as1.Name
 	switch name {
 	case "true":
@@ -754,8 +753,8 @@ func BaseValue(t *Type) (Value, error) {
 // For disjunctions (e.g. string|none), returns the base of the first
 // non-none alternative.
 func BaseValueForConstraint(constraint Value) (Value, error) {
-	if constraint.IsDisjunct() {
-		di, _ := constraint.AsDisjunct()
+	if IsDisjunct(constraint) {
+		di, _ := AsDisjunct(constraint)
 		for _, alt := range di.Alternatives {
 			if alt.Data == nil && !alt.VType.Equal(TNone) {
 				return BaseValue(alt.VType)
@@ -776,8 +775,8 @@ func BaseValueForConstraint(constraint Value) (Value, error) {
 // default and are skipped). Non-Options params fall back to BaseValue
 // of the param's declared Type.
 func omittedDefaultValue(p FnParam) (Value, error) {
-	if p.Pattern != nil && p.Pattern.IsOptionsType() {
-		oi, err := p.Pattern.AsOptionsType()
+	if p.Pattern != nil && IsOptionsType(*p.Pattern) {
+		oi, err := AsOptionsType(*p.Pattern)
 		if err == nil && oi.Fields != nil {
 			m := NewOrderedMap()
 			for _, k := range oi.Fields.Keys() {
