@@ -233,6 +233,99 @@ func (tt *TypeTable) MintType(name string, parent *Type) *Type {
 	return def
 }
 
+// RegisterExternalBuiltin installs a non-kernel-declared "builtin-
+// class" type from outside the eng package — host modules
+// (lang/internal/nativemod/time, lang/native/fetch, plugin packages,
+// etc.) that own a type the kernel doesn't need to know about by
+// name. Conceptually equivalent to a builtinDecls row, but supplied
+// at runtime by the owning module.
+//
+// FixedID allocation policy: each module reserves a stable per-module
+// range so cross-version ID stability survives reorderings and
+// plugin loadings. Reserved ranges:
+//
+//	   100-999    eng-internal future-builtins
+//	  1000-1999   lang/internal/nativemod/time   (Date, DateTime, Instant, …)
+//	  2000-2999   lang/internal/nativemod/matrix (Matrix)
+//	  3000-3999   lang/native/fetch              (Fetch, Request, Response)
+//	  4000-4999   lang/engine (Timeout, Interval)
+//	  5000-9999   reserved for future kernel use
+//	 10000+       host / third-party plugin types
+//
+// Callers register at module init (e.g. nativemod.RegisterTypes(r))
+// and capture the returned *Type into a package-level variable. The
+// kernel's dispatch path consults the type's Behavior — no special
+// case for "external vs builtin" exists at runtime.
+//
+// Validates the path is well-formed (every part starts with [A-Z]),
+// the parent path is registered, and the FixedID is unused. Returns
+// the minted *Type on success.
+func (tt *TypeTable) RegisterExternalBuiltin(path string, fixedID int, behavior TypeBehavior) (*Type, error) {
+	parts := strings.Split(path, "/")
+	if len(parts) == 0 || path == "" {
+		return nil, fmt.Errorf("RegisterExternalBuiltin: empty path")
+	}
+	for _, p := range parts {
+		if p == "" {
+			return nil, fmt.Errorf("RegisterExternalBuiltin: invalid path %q (empty part)", path)
+		}
+		c := p[0]
+		if c < 'A' || c > 'Z' {
+			if !strings.HasPrefix(p, "__") {
+				return nil, fmt.Errorf("RegisterExternalBuiltin: invalid path %q (part %q must start with [A-Z])", path, p)
+			}
+		}
+	}
+
+	var parent *Type
+	if len(parts) > 1 {
+		parentPath := strings.Join(parts[:len(parts)-1], "/")
+		parent = tt.bypath[parentPath]
+		if parent == nil {
+			return nil, fmt.Errorf("RegisterExternalBuiltin: parent %q not registered for %q", parentPath, path)
+		}
+	}
+
+	if existing := tt.bypath[path]; existing != nil {
+		return nil, fmt.Errorf("RegisterExternalBuiltin: path %q already registered", path)
+	}
+
+	id := formatFixedID(path, fixedID)
+	if existing, dup := tt.byID[id]; dup {
+		return nil, fmt.Errorf("RegisterExternalBuiltin: FixedID %d for %q collides with %q", fixedID, path, existing.Path())
+	}
+
+	if behavior == nil {
+		behavior = DefaultBehavior
+	}
+
+	def := &Type{
+		ID:       id,
+		Name:     parts[len(parts)-1],
+		Parent:   parent,
+		FixedID:  fixedID,
+		Origin:   OriginBuiltin,
+		Behavior: behavior,
+	}
+	tt.byID[id] = def
+	tt.bypath[path] = def
+	if parent == nil {
+		tt.rootSet[path] = true
+	}
+	tt.byName[def.Name] = []TypeBinding{{Def: def}}
+	for _, p := range parts {
+		tt.parts[p] = true
+	}
+	if existing, dup := tt.leafIndex[def.Name]; dup {
+		if existing != "" {
+			tt.leafIndex[def.Name] = ""
+		}
+	} else {
+		tt.leafIndex[def.Name] = path
+	}
+	return def, nil
+}
+
 // MintTypeWithBehavior is MintType plus a custom TypeBehavior. Used
 // by registration paths that want to install a domain-specific
 // Behavior at mint time (predicate types, dependent scalars, plugin
