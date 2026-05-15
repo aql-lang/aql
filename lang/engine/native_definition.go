@@ -404,7 +404,10 @@ func dblcallHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 // ---- args / __pa ----
 
 func argsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	top, ok := r.Args.Top()
+	top, ok, err := r.Args.Top()
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, fmt.Errorf("args: not inside a function")
 	}
@@ -412,6 +415,8 @@ func argsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value
 }
 
 func popArgsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	r.Args.Pop()
+	if _, err := r.Args.Pop(); err != nil {
+		return nil, err
+	}
 	return nil, nil
 }

@@ -219,7 +219,9 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			argsCopy := make([]Value, len(args))
 			copy(argsCopy, args)
 			argsList := NewList(argsCopy)
-			r.Args.Push(argsList)
+			if err := r.Args.Push(argsList); err != nil {
+				return nil, err
+			}
 
 			unnamedCount := 0
 			for i, p := range s.Params {

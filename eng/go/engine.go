@@ -1688,7 +1688,9 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
-	e.registry.Args.Push(NewList(argsCopy))
+	if err := e.registry.Args.Push(NewList(argsCopy)); err != nil {
+		return err
+	}
 
 	var names []string
 	unnamedCount := 0

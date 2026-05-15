@@ -389,10 +389,14 @@ func registerCoreArgs(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []*Type{},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-				if top, ok := reg.Args.Top(); ok {
-					return []Value{top}, nil
+				top, ok, err := reg.Args.Top()
+				if err != nil {
+					return nil, err
 				}
-				return []Value{NewList(nil)}, nil
+				if !ok {
+					return []Value{NewList(nil)}, nil
+				}
+				return []Value{top}, nil
 			},
 			Returns: []*Type{TList},
 		}},
@@ -403,7 +407,9 @@ func registerCoreArgs(r *Registry) {
 		Signatures: []NativeSig{{
 			Args: []*Type{},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-				reg.Args.Pop()
+				if _, err := reg.Args.Pop(); err != nil {
+					return nil, err
+				}
 				return nil, nil
 			},
 			Returns: []*Type{},
@@ -633,9 +639,11 @@ func installCoreFnDef(r *Registry, name string, sigs ...FnSig) {
 					reg.Defs.Push(p.Name, args[i])
 				}
 				argsCopy := append([]Value{}, args...)
-				reg.Args.Push(NewList(argsCopy))
+				if err := reg.Args.Push(NewList(argsCopy)); err != nil {
+					return nil, err
+				}
 				defer func() {
-					reg.Args.Pop()
+					_, _ = reg.Args.Pop()
 					for i := len(sig.Params) - 1; i >= 0; i-- {
 						reg.Defs.Pop(sig.Params[i].Name)
 					}
