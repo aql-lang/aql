@@ -1572,16 +1572,22 @@ func AsMutableMap(v Value) *OrderedMap {
 // String returns a human-readable representation.
 func (v Value) String() string {
 	// Behavior-driven format delegation: types that supply a custom
-	// TypeBehavior route through their Format. The DefaultBehavior
-	// sentinel falls through to the kernel switch below, preserving
-	// the fast path for primitive / structural / loop-control values.
+	// TypeBehavior route through their Format. Walks the Parent
+	// chain so descendants of a type with a custom Behavior inherit
+	// it (e.g. TInspect inherits mapFormatBehavior via its TMap
+	// parent). The DefaultBehavior sentinel falls through to the
+	// kernel switch below.
 	//
 	// Type literals (Data==nil) are NOT delegated — they render as
 	// their leaf type name uniformly across all types, including
 	// types with custom Behaviors. See the Data==nil arm in the
 	// switch below.
-	if v.Data != nil && v.VType != nil && v.VType.Behavior != nil && v.VType.Behavior != DefaultBehavior {
-		return v.VType.Behavior.Format(v)
+	if v.Data != nil && v.VType != nil {
+		for t := v.VType; t != nil; t = t.Parent {
+			if t.Behavior != nil && t.Behavior != DefaultBehavior {
+				return t.Behavior.Format(v)
+			}
+		}
 	}
 	switch {
 	case IsWord(v):
@@ -1652,52 +1658,9 @@ func (v Value) String() string {
 	case IsPath(v):
 		_as6, _ := AsPath(v)
 		return _as6.String()
-	case v.VType.Equal(TList):
-		if tt, ok := v.Data.(TableTypeInfo); ok {
-			parts := make([]string, 0, tt.Record.Fields.Len())
-			for _, k := range tt.Record.Fields.Keys() {
-				val, _ := tt.Record.Fields.Get(k)
-				parts = append(parts, k+":"+val.String())
-			}
-			return "table{" + strings.Join(parts, ",") + "}"
-		}
-		if td, ok := v.Data.(TableData); ok {
-			parts := make([]string, 0, td.Record.Fields.Len())
-			for _, k := range td.Record.Fields.Keys() {
-				val, _ := td.Record.Fields.Get(k)
-				parts = append(parts, k+":"+val.String())
-			}
-			rowParts := make([]string, len(td.Rows))
-			for i, row := range td.Rows {
-				rowParts[i] = row.String()
-			}
-			return "table{" + strings.Join(parts, ",") + "}[" + strings.Join(rowParts, ",") + "]"
-		}
-		if mp, ok := v.Data.(MaterializerPayload); ok {
-			td, err := mp.M.Materialize()
-			if err != nil {
-				return "query(error:" + err.Error() + ")"
-			}
-			v2 := NewValueRaw(TList, td)
-			return v2.String()
-		}
-		if mz, ok := v.Data.(Materializer); ok {
-			td, err := mz.Materialize()
-			if err != nil {
-				return "query(error:" + err.Error() + ")"
-			}
-			v2 := NewValueRaw(TList, td)
-			return v2.String()
-		}
-		if ct, ok := v.Data.(ChildTypeInfo); ok {
-			return "[:" + ct.Child.String() + "]"
-		}
-		elems := AsList(v).Slice()
-		parts := make([]string, len(elems))
-		for i, e := range elems {
-			parts[i] = e.String()
-		}
-		return "[" + strings.Join(parts, ",") + "]"
+	// TList rendering moved to listFormatBehavior in
+	// coretype_list_map_behaviors.go (Step 10). The top-of-function
+	// Behavior dispatch routes List values there.
 	case IsArray(v):
 		arr := AsArray(v)
 		parts := make([]string, arr.Len())
@@ -1742,33 +1705,10 @@ func (v Value) String() string {
 			parts[i] = alt.String()
 		}
 		return strings.Join(parts, "|")
-	case v.VType.Matches(TMap):
-		if ct, ok := v.Data.(ChildTypeInfo); ok {
-			return "{:" + ct.Child.String() + "}"
-		}
-		if rt, ok := v.Data.(RecordTypeInfo); ok {
-			parts := make([]string, 0, rt.Fields.Len())
-			for _, k := range rt.Fields.Keys() {
-				val, _ := rt.Fields.Get(k)
-				parts = append(parts, k+":"+val.String())
-			}
-			return "record{" + strings.Join(parts, ",") + "}"
-		}
-		if ot, ok := v.Data.(OptionsTypeInfo); ok {
-			parts := make([]string, 0, ot.Fields.Len())
-			for _, k := range ot.Fields.Keys() {
-				val, _ := ot.Fields.Get(k)
-				parts = append(parts, k+":"+val.String())
-			}
-			return "options{" + strings.Join(parts, ",") + "}"
-		}
-		m := AsMap(v)
-		parts := make([]string, 0, m.Len())
-		for _, k := range m.Keys() {
-			val, _ := m.Get(k)
-			parts = append(parts, k+":"+val.String())
-		}
-		return "{" + strings.Join(parts, ",") + "}"
+	// TMap rendering moved to mapFormatBehavior in
+	// coretype_list_map_behaviors.go (Step 10). The top-of-function
+	// Behavior dispatch routes Map values (and TMap-rooted subtypes
+	// like RecordType/OptionsType) there.
 	default:
 		return fmt.Sprintf("%v(%v)", v.VType, v.Data)
 	}

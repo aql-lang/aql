@@ -679,6 +679,15 @@ func ValuesEqual(a, b Value) bool {
 		a.VType.Behavior != nil && a.VType.Behavior != DefaultBehavior {
 		return a.VType.Behavior.Equal(a, b)
 	}
+	return valuesEqualDefault(a, b)
+}
+
+// valuesEqualDefault is the kernel's default equality path,
+// bypassing the Behavior dispatch in ValuesEqual. Used by
+// DefaultBehavior.Equal and by Behavior implementations that
+// override Format but want fall-through equality without
+// triggering infinite re-entry.
+func valuesEqualDefault(a, b Value) bool {
 	// Type literals (Data == nil) with equal types are always equal.
 	if a.Data == nil && b.Data == nil {
 		return true

@@ -102,5 +102,5 @@ func (defaultBehavior) Format(v Value) string {
 }
 
 func (defaultBehavior) Equal(a, b Value) bool {
-	return ValuesEqual(a, b)
+	return valuesEqualDefault(a, b)
 }
