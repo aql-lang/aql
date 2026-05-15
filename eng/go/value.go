@@ -1491,6 +1491,9 @@ func (v Value) IsTableType() bool {
 		if _, ok := v.Data.(TableData); ok {
 			return true
 		}
+		if _, ok := v.Data.(MaterializerPayload); ok {
+			return true
+		}
 		if _, ok := v.Data.(Materializer); ok {
 			return true
 		}
@@ -1502,6 +1505,9 @@ func (v Value) IsTableType() bool {
 func (v Value) AsTableType() (TableTypeInfo, error) {
 	if td, ok := v.Data.(TableData); ok {
 		return TableTypeInfo{Record: td.Record}, nil
+	}
+	if mp, ok := v.Data.(MaterializerPayload); ok {
+		return TableTypeInfo{Record: mp.M.SourceRecord()}, nil
 	}
 	if mz, ok := v.Data.(Materializer); ok {
 		return TableTypeInfo{Record: mz.SourceRecord()}, nil
@@ -1609,6 +1615,13 @@ func (v Value) AsList() ReadList {
 		return ReadList{elems: lp.Elems}
 	}
 	if td, ok := v.Data.(TableData); ok {
+		return ReadList{elems: td.Rows}
+	}
+	if mp, ok := v.Data.(MaterializerPayload); ok {
+		td, err := mp.M.Materialize()
+		if err != nil {
+			return ReadList{}
+		}
 		return ReadList{elems: td.Rows}
 	}
 	if mz, ok := v.Data.(Materializer); ok {
@@ -1789,6 +1802,14 @@ func (v Value) String() string {
 				rowParts[i] = row.String()
 			}
 			return "table{" + strings.Join(parts, ",") + "}[" + strings.Join(rowParts, ",") + "]"
+		}
+		if mp, ok := v.Data.(MaterializerPayload); ok {
+			td, err := mp.M.Materialize()
+			if err != nil {
+				return "query(error:" + err.Error() + ")"
+			}
+			v2 := NewValueRaw(TList, td)
+			return v2.String()
 		}
 		if mz, ok := v.Data.(Materializer); ok {
 			td, err := mz.Materialize()

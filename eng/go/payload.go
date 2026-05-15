@@ -9,21 +9,28 @@ package eng
 // on each variant), at which point the compiler catches any
 // remaining non-variant assignment to Value.Data.
 //
-// The transition is structured so that at every intermediate commit:
+// Two strategies for satisfying Payload:
 //
-//   - Every NewX constructor that has been migrated produces the
-//     new variant payload (e.g. IntPayload{N: 5}).
-//   - The corresponding AsX accessor asserts the variant payload
-//     first, then falls through to the legacy raw payload if a
-//     caller built a Value through some other path.
-//   - Tests pass.
+//  1. eng-defined struct or pointer types act as payloads directly,
+//     with an unexported payloadMarker() method (added to the type's
+//     definition file). No wrapper needed — the type's name already
+//     conveys its role (WordInfo, ForwardInfo, RecordTypeInfo, …).
 //
-// Once every constructor and every assertion is on variants, the
-// fallback paths in AsX get removed and Payload is sealed.
+//  2. Primitives (int64, string, bool, float64), Go-built-in slice
+//     types ([]Value, []InterpPart), and external types (time.Time,
+//     time.Duration, *time.Location) cannot carry methods; they are
+//     wrapped in named variant structs declared below (IntPayload,
+//     ListPayload, TimePayload, …).
+//
+// The migration plan (subsequent commits 5b-5g) moves each NewX
+// constructor and each Data.(T) assertion onto either form one batch
+// at a time. The final commit seals Payload by renaming the alias to
+// an interface with an unexported marker method, at which point the
+// compiler catches any leftover untagged-payload site.
 type Payload = any
 
 // =================================================================
-// Primitive payloads (Step 5b)
+// Wrapper variants (Step 5b–5c) for types that can't carry methods.
 // =================================================================
 
 // IntPayload carries the int64 payload for a Scalar/Number/Integer
@@ -46,171 +53,64 @@ type BoolPayload struct{ B bool }
 // value. Constructed by NewAtom.
 type AtomPayload struct{ Name string }
 
-// =================================================================
-// Structural payloads (Step 5c)
-// =================================================================
+// PathPayload wraps a PathInfo for a Scalar/Path value.
+type PathPayload struct{ Info PathInfo }
 
 // ListPayload carries the standard []Value payload for a Node/List
-// value. Constructed by NewList.
+// value. Constructed by NewList. Wrapping []Value rather than
+// adding a marker to the slice type itself is necessary because Go
+// does not allow methods on built-in slice types.
 type ListPayload struct{ Elems []Value }
 
 // MapPayload carries the *OrderedMap payload for a Node/Map value.
-// Constructed by NewMap.
+// Constructed by NewMap. Same wrapping motivation as ListPayload.
 type MapPayload struct{ M *OrderedMap }
 
-// =================================================================
-// Path payload (Step 5b)
-// =================================================================
-
-// PathPayload carries the PathInfo payload for a Scalar/Path value.
-// Constructed by NewPath.
-type PathPayload struct{ Info PathInfo }
-
-// =================================================================
-// Word / control-token payloads (Step 5d)
-// =================================================================
-
-// WordPayload carries the WordInfo payload for a Word value (a
-// callable word name in the source program).
-type WordPayload struct{ Info WordInfo }
-
-// ForwardPayload carries the ForwardInfo payload for a Forward
-// marker — the interpreter loop's "pending forward-arg collection"
-// state.
-type ForwardPayload struct{ Info ForwardInfo }
-
-// MarkPayload carries the MarkInfo payload for a Mark control token
-// (loop / iteration anchor).
-type MarkPayload struct{ Info MarkInfo }
-
-// MovePayload carries the MoveInfo payload for a Move control token
-// (jump to a Mark).
-type MovePayload struct{ Info MoveInfo }
-
-// ReturnCheckPayload carries the ReturnCheckInfo payload for a
-// Returncheck token (function-return type guard).
-type ReturnCheckPayload struct{ Info ReturnCheckInfo }
-
-// DefCleanupPayload carries the DefCleanupInfo payload for a
-// DefCleanup control token (scoped def removal).
-type DefCleanupPayload struct{ Info DefCleanupInfo }
-
-// ParenExprPayload carries the token-list payload for a paren
-// expression awaiting inline evaluation.
+// ParenExprPayload carries the unevaluated tokens of a paren-expression
+// awaiting inline evaluation. Wrapping []Value.
 type ParenExprPayload struct{ Toks []Value }
 
 // InterpStringPayload carries the parts of a template-string
-// interpolation.
+// interpolation. Wrapping []InterpPart.
 type InterpStringPayload struct{ Parts []InterpPart }
 
-// ModulePayload carries the ModuleDesc payload for a Module value
-// (the result of `'foo.aql' module`).
-type ModulePayload struct{ Desc ModuleDesc }
-
 // =================================================================
-// Object payloads (Step 5e)
+// External / domain payloads (Step 5f).
 // =================================================================
 
-// StorePayload carries the *StoreInstanceInfo payload for an
-// Object/Store value (mutable key-value store).
-type StorePayload struct{ Info *StoreInstanceInfo }
-
-// ArrayPayload carries the *ArrayInstanceInfo payload for an
-// Object/Array value (mutable typed array).
-type ArrayPayload struct{ Info *ArrayInstanceInfo }
-
-// ObjectInstancePayload carries an ObjectInstanceInfo payload for
-// an Object/* user instance (created via `make Foo {…}`).
-type ObjectInstancePayload struct{ Info ObjectInstanceInfo }
-
-// ObjectTypePayload carries an ObjectTypeInfo payload — a type
-// declaration like `type Foo object {…}`.
-type ObjectTypePayload struct{ Info ObjectTypeInfo }
-
-// ErrorPayload carries an ErrorInfo payload (an Error value
-// produced when a handler returns an AqlError).
-type ErrorPayload struct{ Info ErrorInfo }
-
-// =================================================================
-// Structural type payloads (Step 5c continued — record, options,
-// table, child-type, disjunct shapes)
-// =================================================================
-
-// RecordTypePayload carries a RecordTypeInfo — a `type Foo record
-// {…}` declaration.
-type RecordTypePayload struct{ Info RecordTypeInfo }
-
-// OptionsTypePayload carries an OptionsTypeInfo — an options-map
-// schema.
-type OptionsTypePayload struct{ Info OptionsTypeInfo }
-
-// TableTypePayload carries a TableTypeInfo — a table-shape type.
-type TableTypePayload struct{ Info TableTypeInfo }
-
-// TableDataPayload carries TableData — the concrete rows of a
-// table value.
-type TableDataPayload struct{ Data TableData }
-
-// MaterializerPayload carries a Materializer — a deferred query
-// value that produces rows on demand.
-type MaterializerPayload struct{ M Materializer }
-
-// ChildTypePayload carries a ChildTypeInfo — a typed list / map
-// shape like `[:T]` or `{:T}`, possibly with concrete elements
-// or entries.
-type ChildTypePayload struct{ Info ChildTypeInfo }
-
-// DisjunctPayload carries a DisjunctInfo — a union type like
-// `Integer | String`, including enum subtypes.
-type DisjunctPayload struct{ Info DisjunctInfo }
-
-// =================================================================
-// DepScalar payload (Step 5f)
-// =================================================================
-
-// DepScalarPayload carries a DepScalarInfo — the bounded-scalar
-// constraint payload for a Type/Dependent/Dep<X> value.
-type DepScalarPayload struct{ Info DepScalarInfo }
-
-// =================================================================
-// None payload (the unique inhabitant of None)
-// =================================================================
-
-// NonePayload is the Data-payload sentinel that distinguishes the
-// VALUE `none` (the unique inhabitant of None) from the TYPE LITERAL
-// `None` (which has Data == nil). Renderers and the matcher use
-// the Data!=nil discriminator.
-type NonePayload struct{}
-
-// =================================================================
-// Domain payloads (Step 5f — these move out to nativemod at Step 8)
-// =================================================================
-
-// TimePayload carries a time.Time for Date / DateTime / Instant.
-// The VType discriminates which kind it is.
-type TimePayload struct{ T any /* time.Time, kept as any to avoid pulling time import here */ }
+// TimePayload carries a time.Time for Date / DateTime / Instant —
+// the VType discriminates which kind it is. Body is interface{}-typed
+// here so the eng package doesn't pull the `time` import; the
+// dedicated NewDate / NewDateTime / NewInstant constructors handle
+// the typed wrapping.
+type TimePayload struct{ T any /* time.Time */ }
 
 // DurationPayload carries a time.Duration for TimeOfDay /
-// ClkDuration. The VType discriminates which kind it is.
+// ClkDuration; same VType-discriminator pattern as TimePayload.
 type DurationPayload struct{ D any /* time.Duration */ }
-
-// CalDurationPayload carries a CalDurationData (years/months/days).
-type CalDurationPayload struct{ Data CalDurationData }
 
 // TimezonePayload carries a *time.Location for Scalar/Time/Timezone.
 type TimezonePayload struct{ Loc any /* *time.Location */ }
 
-// MatrixPayload carries a MatrixData for Scalar/Number/Matrix.
-type MatrixPayload struct{ Data MatrixData }
-
-// TimeoutPayload carries a *TimeoutInfo for Object/Timeout.
-type TimeoutPayload struct{ Info *TimeoutInfo }
-
-// IntervalPayload carries an *IntervalInfo for Object/Interval.
-type IntervalPayload struct{ Info *IntervalInfo }
+// MaterializerPayload wraps an external Materializer (e.g. the
+// production engine's QueryBuilder) into a payload-satisfying
+// variant. The Materializer interface itself can't be required to
+// satisfy Payload because its implementors live in other packages
+// (lang/engine), so we wrap instead. AsList unwraps and calls
+// .M.Materialize() to surface rows.
+type MaterializerPayload struct{ M Materializer }
 
 // =================================================================
-// Extension payload (Step 8 — for plugin types)
+// Type-literal / Carrier sentinels.
+// =================================================================
+
+// NonePayload is the sentinel for the VALUE `none` (the unique
+// inhabitant of None). Replaces the old `noneSentinel` struct so
+// it satisfies Payload. The TYPE LITERAL `None` carries Data == nil.
+type NonePayload struct{}
+
+// =================================================================
+// Extension payload (Step 8 — for plugin types).
 // =================================================================
 
 // ExtensionPayload is the one explicit escape hatch from the closed
@@ -235,3 +135,87 @@ func NewExtension(t *Type, body any) Value {
 		Data:  ExtensionPayload{Body: body},
 	}
 }
+
+// =================================================================
+// Marker methods.
+//
+// When Step 5g seals Payload (renames the alias to an interface
+// with an unexported marker), every payload-bearing type needs a
+// `payloadMarker()` method. The wrapper variants above get one
+// each; eng-defined struct payloads (WordInfo, ForwardInfo, …)
+// get theirs in the file where they're defined. The collected list
+// below documents what's intended to satisfy Payload after sealing
+// — it's a checklist, not active code yet.
+//
+// Wrapper variants:
+//   IntPayload, DecPayload, StrPayload, BoolPayload, AtomPayload,
+//   PathPayload, ListPayload, MapPayload, ParenExprPayload,
+//   InterpStringPayload, TimePayload, DurationPayload,
+//   TimezonePayload, NonePayload, ExtensionPayload.
+//
+// Direct (eng-defined struct or pointer types):
+//   WordInfo, ForwardInfo, MarkInfo, MoveInfo, ReturnCheckInfo,
+//   DefCleanupInfo, ModuleDesc, FnDefInfo, FnUndefInfo,
+//   DisjunctInfo, ChildTypeInfo, RecordTypeInfo, OptionsTypeInfo,
+//   TableTypeInfo, TableData, ObjectTypeInfo, ObjectInstanceInfo,
+//   *StoreInstanceInfo, *ArrayInstanceInfo, *TimeoutInfo,
+//   *IntervalInfo, ErrorInfo, MatrixData, CalDurationData,
+//   DepScalarInfo, Materializer (interface), noneSentinel
+//   (legacy — to be removed in Step 5f).
+// =================================================================
+
+// payloadMarker is the unexported marker method that will close the
+// Payload type space once Payload is renamed from an alias to a
+// sealed interface (Step 5g). Defined as a no-op on every type that
+// gets stored in Value.Data. Defining it here in payload.go keeps
+// the catalogue centralised; the methods are dispatch-free.
+
+// Wrapper-variant markers.
+func (IntPayload) payloadMarker()         {}
+func (DecPayload) payloadMarker()         {}
+func (StrPayload) payloadMarker()         {}
+func (BoolPayload) payloadMarker()        {}
+func (AtomPayload) payloadMarker()        {}
+func (PathPayload) payloadMarker()        {}
+func (ListPayload) payloadMarker()        {}
+func (MapPayload) payloadMarker()         {}
+func (ParenExprPayload) payloadMarker()   {}
+func (InterpStringPayload) payloadMarker() {}
+func (TimePayload) payloadMarker()        {}
+func (DurationPayload) payloadMarker()    {}
+func (TimezonePayload) payloadMarker()    {}
+func (MaterializerPayload) payloadMarker() {}
+func (NonePayload) payloadMarker()        {}
+func (ExtensionPayload) payloadMarker()   {}
+
+// Direct eng-defined struct markers.
+func (WordInfo) payloadMarker()           {}
+func (ForwardInfo) payloadMarker()        {}
+func (MarkInfo) payloadMarker()           {}
+func (MoveInfo) payloadMarker()           {}
+func (ReturnCheckInfo) payloadMarker()    {}
+func (DefCleanupInfo) payloadMarker()     {}
+func (ModuleDesc) payloadMarker()         {}
+func (FnDefInfo) payloadMarker()          {}
+func (FnUndefInfo) payloadMarker()        {}
+func (DisjunctInfo) payloadMarker()       {}
+func (ChildTypeInfo) payloadMarker()      {}
+func (RecordTypeInfo) payloadMarker()     {}
+func (OptionsTypeInfo) payloadMarker()    {}
+func (TableTypeInfo) payloadMarker()      {}
+func (TableData) payloadMarker()          {}
+func (ObjectTypeInfo) payloadMarker()     {}
+func (ObjectInstanceInfo) payloadMarker() {}
+func (*StoreInstanceInfo) payloadMarker() {}
+func (*ArrayInstanceInfo) payloadMarker() {}
+func (*TimeoutInfo) payloadMarker()       {}
+func (*IntervalInfo) payloadMarker()      {}
+func (ErrorInfo) payloadMarker()          {}
+func (MatrixData) payloadMarker()         {}
+func (CalDurationData) payloadMarker()    {}
+func (DepScalarInfo) payloadMarker()      {}
+func (PathInfo) payloadMarker()           {} // legacy; replaced by PathPayload at Step 5b but may still flow through some paths
+
+// noneSentinel is kept for backward compat with code that reads it
+// directly. NewNone() now produces NonePayload below.
+func (noneSentinel) payloadMarker() {}

@@ -34,7 +34,8 @@ type (
 	PathPayload        = eng.PathPayload
 	ListPayload        = eng.ListPayload
 	MapPayload         = eng.MapPayload
-	ExtensionPayload   = eng.ExtensionPayload
+	ExtensionPayload    = eng.ExtensionPayload
+	MaterializerPayload = eng.MaterializerPayload
 	DefCleanupInfo     = eng.DefCleanupInfo
 	DepBound           = eng.DepBound
 	DepKind            = eng.DepKind

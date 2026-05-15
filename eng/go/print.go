@@ -66,6 +66,13 @@ func FormatForPrint(v Value) string {
 		if td, ok := v.Data.(TableData); ok {
 			return formatTable(td)
 		}
+		if mp, ok := v.Data.(MaterializerPayload); ok {
+			td, err := mp.M.Materialize()
+			if err != nil {
+				return "query(error:" + err.Error() + ")"
+			}
+			return formatTable(td)
+		}
 		if mz, ok := v.Data.(Materializer); ok {
 			td, err := mz.Materialize()
 			if err != nil {
