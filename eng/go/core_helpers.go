@@ -443,7 +443,7 @@ func CoerceBoolean(v Value) bool {
 		if v.Data == nil {
 			return false
 		}
-		if elems := AsMutableList(v); elems != nil {
+		if elems, err := AsMutableList(v); err == nil {
 			return len(elems) > 0
 		}
 		// Non-[]Value list backings (table types, query builders) are truthy.
@@ -452,7 +452,7 @@ func CoerceBoolean(v Value) bool {
 		if v.Data == nil {
 			return false
 		}
-		if om := AsMutableMap(v); om != nil {
+		if om, err := AsMutableMap(v); err == nil {
 			return om.Len() > 0
 		}
 		// Non-*OrderedMap map backings (record/options/child types) are truthy.

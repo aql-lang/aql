@@ -1322,8 +1322,8 @@ func (e *Engine) autoEvalList(val Value) (Value, error) {
 // expression part in a sub-engine, converting results to strings, and
 // concatenating everything into a single string value.
 func (e *Engine) evalInterpString(val Value) (Value, error) {
-	parts := AsInterpString(val)
-	if parts == nil {
+	parts, err := AsInterpString(val)
+	if err != nil || parts == nil {
 		return NewString(""), nil
 	}
 	var buf strings.Builder
@@ -1360,7 +1360,7 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 //	{a:[1,2]}     → {a:[1,2]}   (literal list unchanged)
 //	{x:"hello"}   → {x:"hello"} (strings pass through unchanged)
 func (e *Engine) autoEvalMap(val Value) (Value, error) {
-	m := AsMutableMap(val)
+	m, _ := AsMutableMap(val)
 	out := NewOrderedMap()
 	if m.Implicit {
 		out.Implicit = true
@@ -1408,7 +1408,7 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 		// Paren expression: evaluate items with paren markers so the
 		// engine's stepCloseParen collapses to a single result.
 		if IsParenExpr(v) {
-			items := AsParenExpr(v)
+			items, _ := AsParenExpr(v)
 			sub := New(e.registry)
 			input := make([]Value, 0, len(items)+2)
 			input = append(input, NewOpenParen())

@@ -244,9 +244,9 @@ func TestAsMapReturnsReadMap(t *testing.T) {
 
 	// AsMutableMap() returns *OrderedMap for raw map data (internal use)
 	rawMap := NewMap(m)
-	om := AsMutableMap(rawMap)
-	if om == nil {
-		t.Fatal("AsMutableMap returned nil for raw map")
+	om, err := AsMutableMap(rawMap)
+	if err != nil {
+		t.Fatalf("AsMutableMap returned err for raw map: %v", err)
 	}
 	// *OrderedMap supports Set (for internal construction paths)
 	om.Set("y", NewInteger(2))

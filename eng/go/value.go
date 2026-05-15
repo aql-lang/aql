@@ -1125,11 +1125,11 @@ func IsParenExpr(v Value) bool {
 }
 
 // AsParenExpr returns the items in a paren expression value.
-func AsParenExpr(v Value) []Value {
+func AsParenExpr(v Value) ([]Value, error) {
 	if pp, ok := v.Data.(ParenExprPayload); ok {
-		return pp.Toks
+		return pp.Toks, nil
 	}
-	return nil
+	return nil, fmt.Errorf("AsParenExpr: not a paren-expr value (got %T)", v.Data)
 }
 
 // IsInterpString reports whether this value is an interpolated string.
@@ -1138,11 +1138,11 @@ func IsInterpString(v Value) bool {
 }
 
 // AsInterpString returns the parts of an interpolated string value.
-func AsInterpString(v Value) []InterpPart {
+func AsInterpString(v Value) ([]InterpPart, error) {
 	if ip, ok := v.Data.(InterpStringPayload); ok {
-		return ip.Parts
+		return ip.Parts, nil
 	}
-	return nil
+	return nil, fmt.Errorf("AsInterpString: not an interp-string value (got %T)", v.Data)
 }
 
 // IsMark reports whether this value is a mark.
@@ -1239,13 +1239,13 @@ func IsStore(v Value) bool {
 	return ok && v.VType.Matches(TStore)
 }
 
-// AsStore returns the StoreInstanceInfo pointer. Returns nil if not a store.
-func AsStore(v Value) *StoreInstanceInfo {
+// AsStore returns the StoreInstanceInfo pointer. Returns an error if not a store.
+func AsStore(v Value) (*StoreInstanceInfo, error) {
 	si, ok := v.Data.(*StoreInstanceInfo)
 	if !ok {
-		return nil
+		return nil, fmt.Errorf("AsStore: not a store value (got %T)", v.Data)
 	}
-	return si
+	return si, nil
 }
 
 // IsArray reports whether this value is an Array instance.
@@ -1254,13 +1254,13 @@ func IsArray(v Value) bool {
 	return ok && v.VType.Matches(TArray)
 }
 
-// AsArray returns the ArrayInstanceInfo pointer. Returns nil if not an array.
-func AsArray(v Value) *ArrayInstanceInfo {
+// AsArray returns the ArrayInstanceInfo pointer. Returns an error if not an array.
+func AsArray(v Value) (*ArrayInstanceInfo, error) {
 	ai, ok := v.Data.(*ArrayInstanceInfo)
 	if !ok {
-		return nil
+		return nil, fmt.Errorf("AsArray: not an array value (got %T)", v.Data)
 	}
-	return ai
+	return ai, nil
 }
 
 // IsObjectInstance reports whether this value is an object instance.
@@ -1524,14 +1524,15 @@ func AsList(v Value) ReadList {
 
 // AsMutableList returns the underlying []Value slice for mutation.
 // Only valid for internal construction paths — never for immutable Node values.
-func AsMutableList(v Value) []Value {
+// Returns an error if the value lacks a mutable list payload.
+func AsMutableList(v Value) ([]Value, error) {
 	if v.Data == nil {
-		return nil
+		return nil, fmt.Errorf("AsMutableList: nil data")
 	}
 	if lp, ok := v.Data.(ListPayload); ok {
-		return lp.Elems
+		return lp.Elems, nil
 	}
-	return nil
+	return nil, fmt.Errorf("AsMutableList: not a list payload (got %T)", v.Data)
 }
 
 // AsMap returns a read-only view of the map payload, or nil if the data is
@@ -1559,14 +1560,15 @@ func AsMap(v Value) ReadMap {
 
 // AsMutableMap returns the underlying *OrderedMap for mutation. Only valid
 // for Object instances and internal construction — never for Node values.
-func AsMutableMap(v Value) *OrderedMap {
+// Returns an error if the value lacks a mutable map payload.
+func AsMutableMap(v Value) (*OrderedMap, error) {
 	if v.Data == nil {
-		return nil
+		return nil, fmt.Errorf("AsMutableMap: nil data")
 	}
 	if mp, ok := v.Data.(MapPayload); ok {
-		return mp.M
+		return mp.M, nil
 	}
-	return nil
+	return nil, fmt.Errorf("AsMutableMap: not a map payload (got %T)", v.Data)
 }
 
 // String returns a human-readable representation.
@@ -1603,7 +1605,8 @@ func (v Value) String() string {
 	case IsEnd(v):
 		return "end"
 	case IsParenExpr(v):
-		return fmt.Sprintf("paren(%v)", AsParenExpr(v))
+		_pe, _ := AsParenExpr(v)
+		return fmt.Sprintf("paren(%v)", _pe)
 	case IsMark(v):
 		_as2, _ := AsMark(v)
 		return fmt.Sprintf("mark(%s)", _as2.ID)
@@ -1662,7 +1665,7 @@ func (v Value) String() string {
 	// coretype_list_map_behaviors.go (Step 10). The top-of-function
 	// Behavior dispatch routes List values there.
 	case IsArray(v):
-		arr := AsArray(v)
+		arr, _ := AsArray(v)
 		parts := make([]string, arr.Len())
 		for i := 0; i < arr.Len(); i++ {
 			e, _ := arr.Get(i)

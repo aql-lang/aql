@@ -84,8 +84,8 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 
 		switch {
 		case elem.VType.Equal(TMap) && elem.Data != nil:
-			m := AsMutableMap(elem)
-			if m != nil && m.Implicit {
+			m, err := AsMutableMap(elem)
+			if err == nil && m != nil && m.Implicit {
 				keys := m.Keys()
 				if len(keys) != 1 {
 					return nil, 0, fmt.Errorf("function spec: parameter map must have exactly one key")
@@ -98,7 +98,7 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 				}
 				typeVal, _ := m.Get(keys[0])
 				if IsParenExpr(typeVal) && r != nil {
-					items := AsParenExpr(typeVal)
+					items, _ := AsParenExpr(typeVal)
 					sub := New(r)
 					input := make([]Value, 0, len(items)+2)
 					input = append(input, NewOpenParen())

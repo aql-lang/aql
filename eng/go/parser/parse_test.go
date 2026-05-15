@@ -1644,7 +1644,7 @@ func TestParseImplicitMapInList(t *testing.T) {
 	if !elems[0].VType.Equal(eng.TMap) {
 		t.Fatalf("expected map element, got %s", elems[0].VType)
 	}
-	m := eng.AsMutableMap(elems[0])
+	m, _ := eng.AsMutableMap(elems[0])
 	if !m.Implicit {
 		t.Error("expected Implicit=true for pair syntax [x:Integer]")
 	}
@@ -1671,7 +1671,7 @@ func TestParseExplicitMapInList(t *testing.T) {
 	if !elems[0].VType.Equal(eng.TMap) {
 		t.Fatalf("expected map element, got %s", elems[0].VType)
 	}
-	m := eng.AsMutableMap(elems[0])
+	m, _ := eng.AsMutableMap(elems[0])
 	if m.Implicit {
 		t.Error("expected Implicit=false for explicit map [{x:Integer}]")
 	}
@@ -1689,7 +1689,7 @@ func TestParseExplicitMapTopLevel(t *testing.T) {
 	if !vals[0].VType.Equal(eng.TMap) {
 		t.Fatalf("expected map, got %s", vals[0].VType)
 	}
-	m := eng.AsMutableMap(vals[0])
+	m, _ := eng.AsMutableMap(vals[0])
 	if m.Implicit {
 		t.Error("expected Implicit=false for explicit map {a:1}")
 	}
@@ -1760,7 +1760,7 @@ func TestParseOptionalFieldInList(t *testing.T) {
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element, got %d: %s", len(elems), list.String())
 	}
-	m := eng.AsMutableMap(elems[0])
+	m, _ := eng.AsMutableMap(elems[0])
 	if m == nil {
 		t.Fatalf("expected map element, got %s (data: %T)", elems[0].String(), elems[0].Data)
 	}
@@ -1828,7 +1828,7 @@ func TestParseBacktickSimpleInterpolation(t *testing.T) {
 	if !eng.IsInterpString(got[0]) {
 		t.Fatalf("expected InterpString, got %s", got[0].VType)
 	}
-	parts := eng.AsInterpString(got[0])
+	parts, _ := eng.AsInterpString(got[0])
 	if len(parts) != 2 {
 		t.Fatalf("expected 2 parts, got %d", len(parts))
 	}
@@ -1851,7 +1851,7 @@ func TestParseBacktickMultipleInterpolations(t *testing.T) {
 	if len(got) != 1 || !eng.IsInterpString(got[0]) {
 		t.Fatalf("expected 1 InterpString value, got %d values", len(got))
 	}
-	parts := eng.AsInterpString(got[0])
+	parts, _ := eng.AsInterpString(got[0])
 	// Parts: expr(a), " and ", expr(b)
 	if len(parts) != 3 {
 		t.Fatalf("expected 3 parts, got %d", len(parts))
@@ -1867,7 +1867,7 @@ func TestParseBacktickExpressionInterpolation(t *testing.T) {
 	if len(got) != 1 || !eng.IsInterpString(got[0]) {
 		t.Fatalf("expected 1 InterpString value")
 	}
-	parts := eng.AsInterpString(got[0])
+	parts, _ := eng.AsInterpString(got[0])
 	// Parts: "result: ", expr(1 add 2), empty trailing
 	if parts[0].Lit != "result: " {
 		t.Errorf("expected literal 'result: ', got %q", parts[0].Lit)

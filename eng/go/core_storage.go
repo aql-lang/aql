@@ -87,8 +87,8 @@ func setObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 }
 
 func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	arr := AsArray(args[2])
-	if arr == nil {
+	arr, err := AsArray(args[2])
+	if err != nil {
 		return nil, fmt.Errorf("set: expected an Array, got %s", args[2].VType.String())
 	}
 	_as0, _ := args[0].AsConcreteInteger()
@@ -177,7 +177,7 @@ func getObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 		return nil, fmt.Errorf("get: cannot access property on type literal")
 	}
 	k := GetKey(key)
-	if m := AsMutableMap(container); m != nil {
+	if m, err := AsMutableMap(container); err == nil {
 		val, found := m.Get(k)
 		if !found {
 			return []Value{NewTypeLiteral(TNone)}, nil
@@ -193,8 +193,8 @@ func getObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 }
 
 func getArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	arr := AsArray(args[1])
-	if arr == nil {
+	arr, err := AsArray(args[1])
+	if err != nil {
 		return nil, fmt.Errorf("get: expected an Array, got %s", args[1].VType.String())
 	}
 	_as3, _ := args[0].AsConcreteInteger()

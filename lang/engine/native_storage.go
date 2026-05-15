@@ -66,8 +66,8 @@ var storageNatives = []NativeFunc{
 // ---- set Store handler ----
 
 func setStoreHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	store := AsStore(args[2])
-	if store == nil {
+	store, err := AsStore(args[2])
+	if err != nil {
 		return nil, fmt.Errorf("set: expected a Store, got %s", args[2].VType.String())
 	}
 	key := StoreKey(args[0])
@@ -83,8 +83,8 @@ func setStoreReturnsFn(args []Value, r *Registry) []Value {
 // ---- get Store handler ----
 
 func getStoreHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	store := AsStore(args[1])
-	if store == nil {
+	store, err := AsStore(args[1])
+	if err != nil {
 		return nil, fmt.Errorf("get: expected a Store, got %s", args[1].VType.String())
 	}
 	key := getKey(args[0])

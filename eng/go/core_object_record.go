@@ -80,8 +80,8 @@ func recordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 		if !elem.VType.Equal(TMap) {
 			return nil, fmt.Errorf("record: each element must be a pair (map), got %s", elem.String())
 		}
-		m := AsMutableMap(elem)
-		if m == nil {
+		m, err := AsMutableMap(elem)
+		if err != nil {
 			return nil, fmt.Errorf("record: each element must be a concrete pair, got %s", elem.String())
 		}
 		for _, key := range m.Keys() {
@@ -113,8 +113,8 @@ func objectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	if !fieldsVal.VType.Equal(TMap) {
 		return nil, fmt.Errorf("object: argument must be a map of field definitions, got %s", fieldsVal.String())
 	}
-	m := AsMutableMap(fieldsVal)
-	if m == nil {
+	m, err := AsMutableMap(fieldsVal)
+	if err != nil {
 		return nil, fmt.Errorf("object: argument must be a concrete map, got %s", fieldsVal.String())
 	}
 	fields := parseObjectFields(m, r)
@@ -136,8 +136,8 @@ func objectWithParentHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 	if !fieldsVal.VType.Equal(TMap) {
 		return nil, fmt.Errorf("object: first argument must be a map of field definitions, got %s", fieldsVal.String())
 	}
-	m := AsMutableMap(fieldsVal)
-	if m == nil {
+	m, err := AsMutableMap(fieldsVal)
+	if err != nil {
 		return nil, fmt.Errorf("object: first argument must be a concrete map, got %s", fieldsVal.String())
 	}
 
