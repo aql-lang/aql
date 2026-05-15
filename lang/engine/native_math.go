@@ -146,43 +146,43 @@ func addConcatHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 }
 
 func addDateCalHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	t := args[0].AsDate()
-	cd, _ := args[1].AsCalDuration()
+	t := AsDate(args[0])
+	cd, _ := AsCalDuration(args[1])
 	return []Value{NewDate(t.AddDate(cd.Years, cd.Months, cd.Days))}, nil
 }
 
 func addDateTimeClkHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	t := args[0].AsDateTime()
-	d, _ := args[1].AsClkDuration()
+	t := AsDateTime(args[0])
+	d, _ := AsClkDuration(args[1])
 	return []Value{NewDateTime(t.Add(d))}, nil
 }
 
 func addInstantClkHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	t := args[0].AsInstant()
-	d, _ := args[1].AsClkDuration()
+	t := AsInstant(args[0])
+	d, _ := AsClkDuration(args[1])
 	return []Value{NewInstant(t.Add(d))}, nil
 }
 
 func addDateClkHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	t := args[0].AsDate()
-	d, _ := args[1].AsClkDuration()
+	t := AsDate(args[0])
+	d, _ := AsClkDuration(args[1])
 	return []Value{NewDateTime(t.Add(d))}, nil
 }
 
 func subDateCalHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	t := args[0].AsDate()
-	cd, _ := args[1].AsCalDuration()
+	t := AsDate(args[0])
+	cd, _ := AsCalDuration(args[1])
 	return []Value{NewDate(t.AddDate(-cd.Years, -cd.Months, -cd.Days))}, nil
 }
 
 func subDateTimeClkHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	t := args[0].AsDateTime()
-	d, _ := args[1].AsClkDuration()
+	t := AsDateTime(args[0])
+	d, _ := AsClkDuration(args[1])
 	return []Value{NewDateTime(t.Add(-d))}, nil
 }
 
 func subInstantClkHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	t := args[0].AsInstant()
-	d, _ := args[1].AsClkDuration()
+	t := AsInstant(args[0])
+	d, _ := AsClkDuration(args[1])
 	return []Value{NewInstant(t.Add(-d))}, nil
 }

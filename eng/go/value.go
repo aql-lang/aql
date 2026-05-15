@@ -1024,52 +1024,12 @@ type MatrixData struct {
 	Cols int
 }
 
-// New* constructors for Scalar/Time/* moved to
-// lang/engine/native_temporal.go (Step 8). The As* methods stay
-// here as kernel-level payload accessors — they assert against the
-// kernel-owned TimePayload / DurationPayload / TimezonePayload
-// variants without referencing the (now-externalised) *Type
-// identities.
-
-// AsDate returns the time.Time for a Date value.
-func (v Value) AsDate() time.Time {
-	if tp, ok := v.Data.(TimePayload); ok {
-		if t, ok := tp.T.(time.Time); ok {
-			return t
-		}
-	}
-	return time.Time{}
-}
-
-// AsDateTime returns the time.Time for a DateTime value.
-func (v Value) AsDateTime() time.Time {
-	if tp, ok := v.Data.(TimePayload); ok {
-		if t, ok := tp.T.(time.Time); ok {
-			return t
-		}
-	}
-	return time.Time{}
-}
-
-// AsInstant returns the time.Time for an Instant value.
-func (v Value) AsInstant() time.Time {
-	if tp, ok := v.Data.(TimePayload); ok {
-		if t, ok := tp.T.(time.Time); ok {
-			return t
-		}
-	}
-	return time.Time{}
-}
-
-// AsTimeOfDay returns the time.Duration for a TimeOfDay value.
-func (v Value) AsTimeOfDay() time.Duration {
-	if dp, ok := v.Data.(DurationPayload); ok {
-		if d, ok := dp.D.(time.Duration); ok {
-			return d
-		}
-	}
-	return 0
-}
+// As* accessors for Scalar/Time/* moved to
+// lang/engine/native_temporal.go (Step 6/7). The kernel no longer
+// carries methods named for types it doesn't own. CalDurationData
+// stays here because the payload struct is kernel-owned (it has the
+// payloadMarker) — only the user-facing constructor / accessor
+// surface moved.
 
 // CalDurationData holds a calendar duration (years, months, days).
 type CalDurationData struct {
@@ -1078,43 +1038,8 @@ type CalDurationData struct {
 	Days   int
 }
 
-// AsCalDuration returns the CalDurationData for a CalDuration value.
-func (v Value) AsCalDuration() (CalDurationData, bool) {
-	if d, ok := v.Data.(CalDurationData); ok {
-		return d, true
-	}
-	return CalDurationData{}, false
-}
-
-// AsClkDuration returns the time.Duration for a ClkDuration value.
-func (v Value) AsClkDuration() (time.Duration, bool) {
-	if dp, ok := v.Data.(DurationPayload); ok {
-		if d, ok := dp.D.(time.Duration); ok {
-			return d, true
-		}
-	}
-	return 0, false
-}
-
-// AsTimezone returns the *time.Location for a Timezone value.
-func (v Value) AsTimezone() *time.Location {
-	if tp, ok := v.Data.(TimezonePayload); ok {
-		if loc, ok := tp.Loc.(*time.Location); ok {
-			return loc
-		}
-	}
-	return nil
-}
-
 // NewMatrix moved to lang/internal/nativemod/matrix.go (Step 8).
-
-// AsMatrix returns the MatrixData for a Matrix value.
-func (v Value) AsMatrix() MatrixData {
-	if m, ok := v.Data.(MatrixData); ok {
-		return m
-	}
-	return MatrixData{}
-}
+// AsMatrix moved to lang/internal/nativemod/matrix.go (Step 6/7).
 
 // ErrorInfo holds the details of an AQL error value.
 type ErrorInfo struct {

@@ -75,7 +75,7 @@ func TestTimeDateParse(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	d := result[0].AsDate()
+	d := engine.AsDate(result[0])
 	if d.Year() != 2024 || d.Month() != time.March || d.Day() != 15 {
 		t.Errorf("expected 2024-03-15, got %v", d)
 	}
@@ -87,7 +87,7 @@ func TestTimeDateTimeParse(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	dt := result[0].AsDateTime()
+	dt := engine.AsDateTime(result[0])
 	if dt.Year() != 2024 || dt.Hour() != 10 || dt.Minute() != 30 {
 		t.Errorf("expected 2024-03-15T10:30:00, got %v", dt)
 	}
@@ -99,7 +99,7 @@ func TestTimeInstantParse(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	ins := result[0].AsInstant()
+	ins := engine.AsInstant(result[0])
 	if ins.Year() != 2024 || ins.Hour() != 10 {
 		t.Errorf("expected 2024-03-15T10:30:00Z, got %v", ins)
 	}
@@ -111,7 +111,7 @@ func TestTimeTimeOfDayParse(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	tod := result[0].AsTimeOfDay()
+	tod := engine.AsTimeOfDay(result[0])
 	if tod != 14*time.Hour+30*time.Minute {
 		t.Errorf("expected 14h30m, got %v", tod)
 	}
@@ -123,7 +123,7 @@ func TestTimeTz(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	loc := result[0].AsTimezone()
+	loc := engine.AsTimezone(result[0])
 	if loc == nil || loc.String() != "UTC" {
 		t.Errorf("expected UTC timezone, got %v", loc)
 	}
@@ -135,7 +135,7 @@ func TestTimeUnix(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	ins := result[0].AsInstant()
+	ins := engine.AsInstant(result[0])
 	if ins.Unix() != 1710500000 {
 		t.Errorf("expected unix 1710500000, got %d", ins.Unix())
 	}
@@ -144,7 +144,7 @@ func TestTimeUnix(t *testing.T) {
 func TestTimeUnixMs(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("unix-ms", engine.NewInteger(1710500000000)))
-	ins := result[0].AsInstant()
+	ins := engine.AsInstant(result[0])
 	if ins.UnixMilli() != 1710500000000 {
 		t.Errorf("expected unix-ms 1710500000000, got %d", ins.UnixMilli())
 	}
@@ -169,7 +169,7 @@ func TestTimeToday(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	d := result[0].AsDate()
+	d := engine.AsDate(result[0])
 	if d.Year() < 2024 {
 		t.Errorf("today year = %d, expected >= 2024", d.Year())
 	}
@@ -181,7 +181,7 @@ func TestTimeTodayUtc(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	d := result[0].AsDate()
+	d := engine.AsDate(result[0])
 	if d.Year() < 2024 {
 		t.Errorf("today-utc year = %d, expected >= 2024", d.Year())
 	}
@@ -418,7 +418,7 @@ func TestTimeAddDays(t *testing.T) {
 	r := timeRegistry(t)
 	d := engine.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
 	result := runAQL(t, r, callTimeDot("add-days", d, engine.NewInteger(10)))
-	got := result[0].AsDate()
+	got := engine.AsDate(result[0])
 	want := time.Date(2024, 3, 25, 0, 0, 0, 0, time.UTC)
 	if !got.Equal(want) {
 		t.Errorf("add-days(2024-03-15, 10) = %v, want %v", got, want)
@@ -429,7 +429,7 @@ func TestTimeAddMonths(t *testing.T) {
 	r := timeRegistry(t)
 	d := engine.NewDate(time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC))
 	result := runAQL(t, r, callTimeDot("add-months", d, engine.NewInteger(1)))
-	got := result[0].AsDate()
+	got := engine.AsDate(result[0])
 	want := time.Date(2024, 3, 2, 0, 0, 0, 0, time.UTC)
 	if !got.Equal(want) {
 		t.Errorf("add-months(2024-01-31, 1) = %v, want %v", got, want)
@@ -440,7 +440,7 @@ func TestTimeAddYears(t *testing.T) {
 	r := timeRegistry(t)
 	d := engine.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
 	result := runAQL(t, r, callTimeDot("add-years", d, engine.NewInteger(2)))
-	got := result[0].AsDate()
+	got := engine.AsDate(result[0])
 	want := time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC)
 	if !got.Equal(want) {
 		t.Errorf("add-years(2024-03-15, 2) = %v, want %v", got, want)
@@ -472,7 +472,7 @@ func TestNowStandardWord(t *testing.T) {
 func TestTimeDurYears(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("years", engine.NewInteger(2)))
-	cd, ok := result[0].AsCalDuration()
+	cd, ok := engine.AsCalDuration(result[0])
 	if !ok || cd.Years != 2 || cd.Months != 0 || cd.Days != 0 {
 		t.Errorf("2 years = %+v, want {2 0 0}", cd)
 	}
@@ -481,7 +481,7 @@ func TestTimeDurYears(t *testing.T) {
 func TestTimeDurMonths(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("months", engine.NewInteger(6)))
-	cd, ok := result[0].AsCalDuration()
+	cd, ok := engine.AsCalDuration(result[0])
 	if !ok || cd.Months != 6 {
 		t.Errorf("6 months = %+v, want {0 6 0}", cd)
 	}
@@ -490,7 +490,7 @@ func TestTimeDurMonths(t *testing.T) {
 func TestTimeDurWeeks(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("weeks", engine.NewInteger(2)))
-	cd, ok := result[0].AsCalDuration()
+	cd, ok := engine.AsCalDuration(result[0])
 	if !ok || cd.Days != 14 {
 		t.Errorf("2 weeks = %+v, want {0 0 14}", cd)
 	}
@@ -499,7 +499,7 @@ func TestTimeDurWeeks(t *testing.T) {
 func TestTimeDurDays(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("days", engine.NewInteger(30)))
-	cd, ok := result[0].AsCalDuration()
+	cd, ok := engine.AsCalDuration(result[0])
 	if !ok || cd.Days != 30 {
 		t.Errorf("30 days = %+v, want {0 0 30}", cd)
 	}
@@ -508,7 +508,7 @@ func TestTimeDurDays(t *testing.T) {
 func TestTimeDurHours(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("hours", engine.NewInteger(3)))
-	d, ok := result[0].AsClkDuration()
+	d, ok := engine.AsClkDuration(result[0])
 	if !ok || d != 3*time.Hour {
 		t.Errorf("3 hours = %v, want %v", d, 3*time.Hour)
 	}
@@ -517,7 +517,7 @@ func TestTimeDurHours(t *testing.T) {
 func TestTimeDurMinutes(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("minutes", engine.NewInteger(90)))
-	d, ok := result[0].AsClkDuration()
+	d, ok := engine.AsClkDuration(result[0])
 	if !ok || d != 90*time.Minute {
 		t.Errorf("90 minutes = %v, want %v", d, 90*time.Minute)
 	}
@@ -526,7 +526,7 @@ func TestTimeDurMinutes(t *testing.T) {
 func TestTimeDurSeconds(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("seconds", engine.NewInteger(30)))
-	d, ok := result[0].AsClkDuration()
+	d, ok := engine.AsClkDuration(result[0])
 	if !ok || d != 30*time.Second {
 		t.Errorf("30 seconds = %v, want %v", d, 30*time.Second)
 	}
@@ -535,7 +535,7 @@ func TestTimeDurSeconds(t *testing.T) {
 func TestTimeDurMs(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("ms", engine.NewInteger(500)))
-	d, ok := result[0].AsClkDuration()
+	d, ok := engine.AsClkDuration(result[0])
 	if !ok || d != 500*time.Millisecond {
 		t.Errorf("500 ms = %v, want %v", d, 500*time.Millisecond)
 	}
@@ -544,7 +544,7 @@ func TestTimeDurMs(t *testing.T) {
 func TestTimeCalDur(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("cal-dur", engine.NewInteger(1), engine.NewInteger(6), engine.NewInteger(15)))
-	cd, ok := result[0].AsCalDuration()
+	cd, ok := engine.AsCalDuration(result[0])
 	if !ok || cd.Years != 1 || cd.Months != 6 || cd.Days != 15 {
 		t.Errorf("cal-dur 1 6 15 = %+v, want {1 6 15}", cd)
 	}
@@ -553,7 +553,7 @@ func TestTimeCalDur(t *testing.T) {
 func TestTimeDurationParseISO(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("duration", engine.NewString("P1Y6M")))
-	cd, ok := result[0].AsCalDuration()
+	cd, ok := engine.AsCalDuration(result[0])
 	if !ok || cd.Years != 1 || cd.Months != 6 {
 		t.Errorf("P1Y6M = %+v, want {1 6 0}", cd)
 	}
@@ -562,7 +562,7 @@ func TestTimeDurationParseISO(t *testing.T) {
 func TestTimeDurationParseISOTime(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("duration", engine.NewString("PT2H30M")))
-	d, ok := result[0].AsClkDuration()
+	d, ok := engine.AsClkDuration(result[0])
 	if !ok || d != 2*time.Hour+30*time.Minute {
 		t.Errorf("PT2H30M = %v, want %v", d, 2*time.Hour+30*time.Minute)
 	}
@@ -659,7 +659,7 @@ func TestTimeUntil(t *testing.T) {
 	d1 := engine.NewDate(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 	d2 := engine.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
 	result := runAQL(t, r, callTimeDot("until", d1, d2))
-	cd, ok := result[0].AsCalDuration()
+	cd, ok := engine.AsCalDuration(result[0])
 	if !ok || cd.Years != 0 || cd.Months != 2 || cd.Days != 14 {
 		t.Errorf("until = %+v, want {0 2 14}", cd)
 	}
@@ -670,7 +670,7 @@ func TestTimeSince(t *testing.T) {
 	d1 := engine.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
 	d2 := engine.NewDate(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 	result := runAQL(t, r, callTimeDot("since", d1, d2))
-	cd, ok := result[0].AsCalDuration()
+	cd, ok := engine.AsCalDuration(result[0])
 	if !ok || cd.Years != 0 || cd.Months != 2 || cd.Days != 14 {
 		t.Errorf("since = %+v, want {0 2 14}", cd)
 	}
@@ -681,7 +681,7 @@ func TestTimeDiffInstants(t *testing.T) {
 	i1 := engine.NewInstant(time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC))
 	i2 := engine.NewInstant(time.Date(2024, 1, 1, 12, 30, 0, 0, time.UTC))
 	result := runAQL(t, r, callTimeDot("diff", i1, i2))
-	d, ok := result[0].AsClkDuration()
+	d, ok := engine.AsClkDuration(result[0])
 	if !ok || d != 2*time.Hour+30*time.Minute {
 		t.Errorf("diff = %v, want 2h30m", d)
 	}
@@ -725,7 +725,7 @@ func TestTimeEarliest(t *testing.T) {
 	d1 := engine.NewDate(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 	d2 := engine.NewDate(time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC))
 	result := runAQL(t, r, callTimeDot("earliest", d1, d2))
-	got := result[0].AsDate()
+	got := engine.AsDate(result[0])
 	if got.Year() != 2024 || got.Month() != 1 || got.Day() != 1 {
 		t.Errorf("earliest = %v, want 2024-01-01", got)
 	}
@@ -736,7 +736,7 @@ func TestTimeLatest(t *testing.T) {
 	d1 := engine.NewDate(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 	d2 := engine.NewDate(time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC))
 	result := runAQL(t, r, callTimeDot("latest", d1, d2))
-	got := result[0].AsDate()
+	got := engine.AsDate(result[0])
 	if got.Year() != 2024 || got.Month() != 12 || got.Day() != 31 {
 		t.Errorf("latest = %v, want 2024-12-31", got)
 	}
@@ -748,7 +748,7 @@ func TestTimeToDate(t *testing.T) {
 	r := timeRegistry(t)
 	dt := engine.NewDateTime(time.Date(2024, 3, 15, 10, 30, 0, 0, time.UTC))
 	result := runAQL(t, r, callTimeDot("to-date", dt))
-	got := result[0].AsDate()
+	got := engine.AsDate(result[0])
 	if got.Hour() != 0 || got.Day() != 15 {
 		t.Errorf("to-date = %v, want midnight 2024-03-15", got)
 	}
@@ -758,7 +758,7 @@ func TestTimeToTimeOfDay(t *testing.T) {
 	r := timeRegistry(t)
 	dt := engine.NewDateTime(time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC))
 	result := runAQL(t, r, callTimeDot("to-time-of-day", dt))
-	tod := result[0].AsTimeOfDay()
+	tod := engine.AsTimeOfDay(result[0])
 	if tod != 14*time.Hour+30*time.Minute {
 		t.Errorf("to-time-of-day = %v, want 14h30m", tod)
 	}
@@ -809,19 +809,19 @@ func TestTimeStartOf(t *testing.T) {
 	d := engine.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
 
 	result := runAQL(t, r, callTimeDot("start-of", d, engine.NewString("month")))
-	got := result[0].AsDate()
+	got := engine.AsDate(result[0])
 	if got.Day() != 1 || got.Month() != 3 {
 		t.Errorf("start-of month = %v, want 2024-03-01", got)
 	}
 
 	result = runAQL(t, r, callTimeDot("start-of", d, engine.NewString("year")))
-	got = result[0].AsDate()
+	got = engine.AsDate(result[0])
 	if got.Month() != 1 || got.Day() != 1 {
 		t.Errorf("start-of year = %v, want 2024-01-01", got)
 	}
 
 	result = runAQL(t, r, callTimeDot("start-of", d, engine.NewString("quarter")))
-	got = result[0].AsDate()
+	got = engine.AsDate(result[0])
 	if got.Month() != 1 || got.Day() != 1 {
 		t.Errorf("start-of quarter = %v, want 2024-01-01", got)
 	}
@@ -832,13 +832,13 @@ func TestTimeEndOf(t *testing.T) {
 	d := engine.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
 
 	result := runAQL(t, r, callTimeDot("end-of", d, engine.NewString("month")))
-	got := result[0].AsDate()
+	got := engine.AsDate(result[0])
 	if got.Day() != 31 || got.Month() != 3 {
 		t.Errorf("end-of month = %v, want 2024-03-31", got)
 	}
 
 	result = runAQL(t, r, callTimeDot("end-of", d, engine.NewString("year")))
-	got = result[0].AsDate()
+	got = engine.AsDate(result[0])
 	if got.Month() != 12 || got.Day() != 31 {
 		t.Errorf("end-of year = %v, want 2024-12-31", got)
 	}
@@ -849,7 +849,7 @@ func TestTimeEndOf(t *testing.T) {
 func TestTimeTzUtc(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("tz-utc"))
-	loc := result[0].AsTimezone()
+	loc := engine.AsTimezone(result[0])
 	if loc == nil || loc.String() != "UTC" {
 		t.Errorf("tz-utc = %v, want UTC", loc)
 	}
@@ -880,7 +880,7 @@ func TestTimeTzOffset(t *testing.T) {
 func TestTimeParseDate(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("parse-date", engine.NewString("15/03/2024"), engine.NewString("02/01/2006")))
-	got := result[0].AsDate()
+	got := engine.AsDate(result[0])
 	if got.Year() != 2024 || got.Month() != 3 || got.Day() != 15 {
 		t.Errorf("parse-date = %v, want 2024-03-15", got)
 	}
@@ -889,7 +889,7 @@ func TestTimeParseDate(t *testing.T) {
 func TestTimeParseDatetime(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("parse-datetime", engine.NewString("Mar 15, 2024 2:30PM"), engine.NewString("Jan 02, 2006 3:04PM")))
-	got := result[0].AsDateTime()
+	got := engine.AsDateTime(result[0])
 	if got.Hour() != 14 || got.Minute() != 30 {
 		t.Errorf("parse-datetime = %v, want 14:30", got)
 	}
@@ -909,7 +909,7 @@ func TestTimeAutoDate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		result := runAQL(t, r, callTimeDot("auto-date", engine.NewString(tt.input)))
-		got := result[0].AsDate()
+		got := engine.AsDate(result[0])
 		if got.Year() != tt.year || got.Month() != tt.month || got.Day() != tt.day {
 			t.Errorf("auto-date(%q) = %v, want %d-%02d-%02d", tt.input, got, tt.year, tt.month, tt.day)
 		}
@@ -931,7 +931,7 @@ func TestAddDateCalDuration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
-	got := result[0].AsDate()
+	got := engine.AsDate(result[0])
 	// Go normalizes: Jan 31 + 1 month = March 2
 	want := time.Date(2024, 3, 2, 0, 0, 0, 0, time.UTC)
 	if !got.Equal(want) {
@@ -951,7 +951,7 @@ func TestSubDateCalDuration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sub: %v", err)
 	}
-	got := result[0].AsDate()
+	got := engine.AsDate(result[0])
 	want := time.Date(2024, 2, 15, 0, 0, 0, 0, time.UTC)
 	if !got.Equal(want) {
 		t.Errorf("date sub CalDur = %v, want %v", got, want)
@@ -970,7 +970,7 @@ func TestAddInstantClkDuration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
-	got := result[0].AsInstant()
+	got := engine.AsInstant(result[0])
 	if got.Minute() != 30 {
 		t.Errorf("instant add 30min = %v, want 10:30", got)
 	}

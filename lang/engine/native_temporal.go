@@ -79,6 +79,81 @@ func NewTimezone(loc *time.Location) Value {
 	return eng.NewValueRaw(TTimezone, eng.TimezonePayload{Loc: loc})
 }
 
+// As* accessors for the time-family types. Moved from
+// eng/value.go at Step 6/7 — the kernel no longer carries methods
+// for types it doesn't own. The implementations are identical to
+// the previous methods: assert the kernel-owned payload variant
+// (TimePayload / DurationPayload / TimezonePayload / CalDurationData)
+// and return the inner Go value, or the zero value on mismatch.
+
+// AsDate extracts the time.Time from a Date value.
+func AsDate(v Value) time.Time {
+	if tp, ok := v.Data.(eng.TimePayload); ok {
+		if t, ok := tp.T.(time.Time); ok {
+			return t
+		}
+	}
+	return time.Time{}
+}
+
+// AsDateTime extracts the time.Time from a DateTime value.
+func AsDateTime(v Value) time.Time {
+	if tp, ok := v.Data.(eng.TimePayload); ok {
+		if t, ok := tp.T.(time.Time); ok {
+			return t
+		}
+	}
+	return time.Time{}
+}
+
+// AsInstant extracts the time.Time from an Instant value.
+func AsInstant(v Value) time.Time {
+	if tp, ok := v.Data.(eng.TimePayload); ok {
+		if t, ok := tp.T.(time.Time); ok {
+			return t
+		}
+	}
+	return time.Time{}
+}
+
+// AsTimeOfDay extracts the time.Duration offset for a TimeOfDay value.
+func AsTimeOfDay(v Value) time.Duration {
+	if dp, ok := v.Data.(eng.DurationPayload); ok {
+		if d, ok := dp.D.(time.Duration); ok {
+			return d
+		}
+	}
+	return 0
+}
+
+// AsCalDuration extracts the CalDurationData payload.
+func AsCalDuration(v Value) (eng.CalDurationData, bool) {
+	if d, ok := v.Data.(eng.CalDurationData); ok {
+		return d, true
+	}
+	return eng.CalDurationData{}, false
+}
+
+// AsClkDuration extracts the time.Duration payload for a ClkDuration value.
+func AsClkDuration(v Value) (time.Duration, bool) {
+	if dp, ok := v.Data.(eng.DurationPayload); ok {
+		if d, ok := dp.D.(time.Duration); ok {
+			return d, true
+		}
+	}
+	return 0, false
+}
+
+// AsTimezone extracts the *time.Location for a Timezone value.
+func AsTimezone(v Value) *time.Location {
+	if tp, ok := v.Data.(eng.TimezonePayload); ok {
+		if loc, ok := tp.Loc.(*time.Location); ok {
+			return loc
+		}
+	}
+	return nil
+}
+
 // Format Behaviors for the time-family types. Moved from
 // eng/coretype_format_behaviors.go at Step 8.
 

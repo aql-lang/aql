@@ -57,6 +57,17 @@ func NewMatrix(m engine.MatrixData) engine.Value {
 	return engine.NewValueRaw(TMatrix, m)
 }
 
+// AsMatrix extracts the MatrixData payload from a Matrix value.
+// Moved out of eng at Step 6/7 — the kernel no longer carries an
+// accessor method for a type it doesn't own. The implementation
+// is identical to the previous method on Value.
+func AsMatrix(v engine.Value) engine.MatrixData {
+	if m, ok := v.Data.(engine.MatrixData); ok {
+		return m
+	}
+	return engine.MatrixData{}
+}
+
 // BuildMatrixModule creates the "aql:matrix" native module. It registers
 // Go-implemented matrix words into an isolated sub-registry and returns a
 // ModuleDesc with a "matrix" export containing FnDef wrappers for each word.
@@ -420,7 +431,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Signatures: []engine.NativeSig{{
 			Args: []*engine.Type{TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				m := args[0].AsMatrix()
+				m := AsMatrix(args[0])
 				return []engine.Value{engine.NewInteger(int64(m.Rows))}, nil
 			},
 			Returns: []*engine.Type{engine.TInteger},
@@ -432,7 +443,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Signatures: []engine.NativeSig{{
 			Args: []*engine.Type{TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				m := args[0].AsMatrix()
+				m := AsMatrix(args[0])
 				return []engine.Value{engine.NewInteger(int64(m.Cols))}, nil
 			},
 			Returns: []*engine.Type{engine.TInteger},
@@ -444,7 +455,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Signatures: []engine.NativeSig{{
 			Args: []*engine.Type{TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				m := args[0].AsMatrix()
+				m := AsMatrix(args[0])
 				return []engine.Value{engine.NewInteger(int64(m.Rows * m.Cols))}, nil
 			},
 			Returns: []*engine.Type{engine.TList},
@@ -468,7 +479,7 @@ var MatrixNatives = []engine.NativeFunc{
 				if err != nil {
 					return nil, err
 				}
-				m := args[2].AsMatrix()
+				m := AsMatrix(args[2])
 				row, col := int(r64), int(c64)
 				if row < 0 || row >= m.Rows || col < 0 || col >= m.Cols {
 					return nil, fmt.Errorf("at: index (%d,%d) out of bounds for %dx%d matrix", row, col, m.Rows, m.Cols)
@@ -488,7 +499,7 @@ var MatrixNatives = []engine.NativeFunc{
 				if err != nil {
 					return nil, err
 				}
-				m := args[1].AsMatrix()
+				m := AsMatrix(args[1])
 				row := int(r64)
 				if row < 0 || row >= m.Rows {
 					return nil, fmt.Errorf("row: index %d out of bounds for %d rows", row, m.Rows)
@@ -512,7 +523,7 @@ var MatrixNatives = []engine.NativeFunc{
 				if err != nil {
 					return nil, err
 				}
-				m := args[1].AsMatrix()
+				m := AsMatrix(args[1])
 				col := int(c64)
 				if col < 0 || col >= m.Cols {
 					return nil, fmt.Errorf("col: index %d out of bounds for %d cols", col, m.Cols)
@@ -533,8 +544,8 @@ var MatrixNatives = []engine.NativeFunc{
 		Signatures: []engine.NativeSig{{
 			Args: []*engine.Type{TMatrix, TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				a := args[0].AsMatrix()
-				b := args[1].AsMatrix()
+				a := AsMatrix(args[0])
+				b := AsMatrix(args[1])
 				if a.Rows != b.Rows || a.Cols != b.Cols {
 					return nil, fmt.Errorf("mat-add: dimension mismatch %dx%d vs %dx%d", a.Rows, a.Cols, b.Rows, b.Cols)
 				}
@@ -554,8 +565,8 @@ var MatrixNatives = []engine.NativeFunc{
 		Signatures: []engine.NativeSig{{
 			Args: []*engine.Type{TMatrix, TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				a := args[1].AsMatrix()
-				b := args[0].AsMatrix()
+				a := AsMatrix(args[1])
+				b := AsMatrix(args[0])
 				if a.Rows != b.Rows || a.Cols != b.Cols {
 					return nil, fmt.Errorf("mat-sub: dimension mismatch %dx%d vs %dx%d", a.Rows, a.Cols, b.Rows, b.Cols)
 				}
@@ -575,8 +586,8 @@ var MatrixNatives = []engine.NativeFunc{
 		Signatures: []engine.NativeSig{{
 			Args: []*engine.Type{TMatrix, TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				a := args[1].AsMatrix()
-				b := args[0].AsMatrix()
+				a := AsMatrix(args[1])
+				b := AsMatrix(args[0])
 				result, err := matMul(a, b)
 				if err != nil {
 					return nil, err
@@ -596,7 +607,7 @@ var MatrixNatives = []engine.NativeFunc{
 				if err != nil {
 					return nil, err
 				}
-				m := args[1].AsMatrix()
+				m := AsMatrix(args[1])
 				data := make([]float64, len(m.Data))
 				for i := range data {
 					data[i] = m.Data[i] * s
@@ -612,8 +623,8 @@ var MatrixNatives = []engine.NativeFunc{
 		Signatures: []engine.NativeSig{{
 			Args: []*engine.Type{TMatrix, TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				a := args[0].AsMatrix()
-				b := args[1].AsMatrix()
+				a := AsMatrix(args[0])
+				b := AsMatrix(args[1])
 				if a.Rows != b.Rows || a.Cols != b.Cols {
 					return nil, fmt.Errorf("mat-emul: dimension mismatch %dx%d vs %dx%d", a.Rows, a.Cols, b.Rows, b.Cols)
 				}
@@ -633,7 +644,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Signatures: []engine.NativeSig{{
 			Args: []*engine.Type{TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				m := args[0].AsMatrix()
+				m := AsMatrix(args[0])
 				data := make([]float64, len(m.Data))
 				for i := 0; i < m.Rows; i++ {
 					for j := 0; j < m.Cols; j++ {
@@ -651,7 +662,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Signatures: []engine.NativeSig{{
 			Args: []*engine.Type{TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				m := args[0].AsMatrix()
+				m := AsMatrix(args[0])
 				elems := make([]engine.Value, len(m.Data))
 				for i, v := range m.Data {
 					elems[i] = engine.NewDecimal(v)
@@ -668,7 +679,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Signatures: []engine.NativeSig{{
 			Args: []*engine.Type{TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				m := args[0].AsMatrix()
+				m := AsMatrix(args[0])
 				s := 0.0
 				for _, v := range m.Data {
 					s += v
@@ -684,7 +695,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Signatures: []engine.NativeSig{{
 			Args: []*engine.Type{TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				m := args[0].AsMatrix()
+				m := AsMatrix(args[0])
 				if m.Rows != m.Cols {
 					return nil, fmt.Errorf("trace: not square (%dx%d)", m.Rows, m.Cols)
 				}
@@ -703,7 +714,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Signatures: []engine.NativeSig{{
 			Args: []*engine.Type{TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				m := args[0].AsMatrix()
+				m := AsMatrix(args[0])
 				d, err := matDet(m)
 				if err != nil {
 					return nil, err

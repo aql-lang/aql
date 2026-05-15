@@ -68,7 +68,7 @@ func TestMatrixEye(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	if m.Rows != 3 || m.Cols != 3 {
 		t.Fatalf("expected 3x3, got %dx%d", m.Rows, m.Cols)
 	}
@@ -92,7 +92,7 @@ func TestMatrixZeros(t *testing.T) {
 	r := matrixRegistry(t)
 	input := append([]engine.Value{engine.NewInteger(2), engine.NewInteger(3)}, matGet("zeros")...)
 	result := runAQL(t, r, input)
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	if m.Rows != 2 || m.Cols != 3 {
 		t.Fatalf("expected 2x3, got %dx%d", m.Rows, m.Cols)
 	}
@@ -109,7 +109,7 @@ func TestMatrixOnes(t *testing.T) {
 	r := matrixRegistry(t)
 	input := append([]engine.Value{engine.NewInteger(2), engine.NewInteger(2)}, matGet("ones")...)
 	result := runAQL(t, r, input)
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	for i, v := range m.Data {
 		if v != 1.0 {
 			t.Errorf("ones[%d] = %v, want 1.0", i, v)
@@ -209,7 +209,7 @@ func TestMatrixScale(t *testing.T) {
 	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{mat, engine.NewInteger(3)}, matGet("scale")...)
 	result := runAQL(t, r, input)
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	expected := []float64{3, 6, 9, 12}
 	for i, v := range m.Data {
 		if v != expected[i] {
@@ -224,7 +224,7 @@ func TestMatrixAdd(t *testing.T) {
 	b := NewMatrix(engine.MatrixData{Data: []float64{10, 20, 30, 40}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{a, b}, matGet("mat-add")...)
 	result := runAQL(t, r, input)
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	expected := []float64{11, 22, 33, 44}
 	for i, v := range m.Data {
 		if v != expected[i] {
@@ -240,7 +240,7 @@ func TestMatrixMul(t *testing.T) {
 	b := NewMatrix(engine.MatrixData{Data: []float64{5, 6, 7, 8}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{a, b}, matGet("mat-mul")...)
 	result := runAQL(t, r, input)
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	expected := []float64{19, 22, 43, 50}
 	for i, v := range m.Data {
 		if v != expected[i] {
@@ -256,7 +256,7 @@ func TestMatrixMulRectangular(t *testing.T) {
 	b := NewMatrix(engine.MatrixData{Data: []float64{1, 1, 1}, Rows: 3, Cols: 1})
 	input := append([]engine.Value{a, b}, matGet("mat-mul")...)
 	result := runAQL(t, r, input)
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	if m.Rows != 2 || m.Cols != 1 {
 		t.Fatalf("expected 2x1, got %dx%d", m.Rows, m.Cols)
 	}
@@ -273,7 +273,7 @@ func TestMatrixTranspose(t *testing.T) {
 	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
 	input := append([]engine.Value{mat}, matGet("transpose")...)
 	result := runAQL(t, r, input)
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	if m.Rows != 3 || m.Cols != 2 {
 		t.Fatalf("expected 3x2, got %dx%d", m.Rows, m.Cols)
 	}
@@ -390,7 +390,7 @@ func TestMatrixMakeFromRows(t *testing.T) {
 	})
 	input := append([]engine.Value{rows}, matGet("create")...)
 	result := runAQL(t, r, input)
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	if m.Rows != 2 || m.Cols != 2 {
 		t.Fatalf("expected 2x2, got %dx%d", m.Rows, m.Cols)
 	}
@@ -410,7 +410,7 @@ func TestMatrixMulIdentity(t *testing.T) {
 	eye := NewMatrix(engine.MatrixData{Data: []float64{1, 0, 0, 1}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{a, eye}, matGet("mat-mul")...)
 	result := runAQL(t, r, input)
-	m := result[0].AsMatrix()
+	m := AsMatrix(result[0])
 	expected := []float64{1, 2, 3, 4}
 	for i, v := range m.Data {
 		if v != expected[i] {

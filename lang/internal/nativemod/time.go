@@ -360,7 +360,7 @@ func clkDurationToDecimalNative(name string, returnType *engine.Type, fn func(ti
 		Signatures: []engine.NativeSig{{
 			Args: []*engine.Type{engine.TClkDuration},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				d, _ := args[0].AsClkDuration()
+				d, _ := engine.AsClkDuration(args[0])
 				return []engine.Value{engine.NewDecimal(fn(d))}, nil
 			},
 			Returns: []*engine.Type{returnType},
@@ -377,7 +377,7 @@ func calDurationToIntNative(name string, fn func(engine.CalDurationData) int64) 
 		Signatures: []engine.NativeSig{{
 			Args: []*engine.Type{engine.TCalDuration},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				cd, _ := args[0].AsCalDuration()
+				cd, _ := engine.AsCalDuration(args[0])
 				return []engine.Value{engine.NewInteger(fn(cd))}, nil
 			},
 			Returns: []*engine.Type{engine.TInteger},
@@ -832,7 +832,7 @@ var TimeNatives = func() []engine.NativeFunc {
 				{
 					Args: []*engine.Type{engine.TCalDuration},
 					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-						cd, _ := args[0].AsCalDuration()
+						cd, _ := engine.AsCalDuration(args[0])
 						total := cd.Years*365 + cd.Months*30 + cd.Days
 						switch {
 						case total < 0:
@@ -848,7 +848,7 @@ var TimeNatives = func() []engine.NativeFunc {
 				{
 					Args: []*engine.Type{engine.TClkDuration},
 					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-						d, _ := args[0].AsClkDuration()
+						d, _ := engine.AsClkDuration(args[0])
 						switch {
 						case d < 0:
 							return []engine.Value{engine.NewInteger(-1)}, nil
@@ -1058,7 +1058,7 @@ var TimeNatives = func() []engine.NativeFunc {
 				Args: []*engine.Type{engine.TTimezone, engine.TDateTime},
 				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 					dt := extractTime(args[1])
-					loc := args[0].AsTimezone()
+					loc := engine.AsTimezone(args[0])
 					if loc == nil {
 						loc = time.UTC
 					}
@@ -1076,7 +1076,7 @@ var TimeNatives = func() []engine.NativeFunc {
 				Args: []*engine.Type{engine.TTimezone, engine.TInstant},
 				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 					t := extractTime(args[1])
-					loc := args[0].AsTimezone()
+					loc := engine.AsTimezone(args[0])
 					if loc == nil {
 						loc = time.UTC
 					}
@@ -1205,7 +1205,7 @@ var TimeNatives = func() []engine.NativeFunc {
 			Signatures: []engine.NativeSig{{
 				Args: []*engine.Type{engine.TTimezone},
 				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-					loc := args[0].AsTimezone()
+					loc := engine.AsTimezone(args[0])
 					if loc == nil {
 						return []engine.Value{engine.NewString("UTC")}, nil
 					}
@@ -1222,7 +1222,7 @@ var TimeNatives = func() []engine.NativeFunc {
 				Args: []*engine.Type{engine.TTimezone, engine.TInstant},
 				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 					t := extractTime(args[1])
-					loc := args[0].AsTimezone()
+					loc := engine.AsTimezone(args[0])
 					if loc == nil {
 						loc = time.UTC
 					}
@@ -1250,7 +1250,7 @@ var TimeNatives = func() []engine.NativeFunc {
 				Args: []*engine.Type{engine.TTimezone, engine.TInstant},
 				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 					t := extractTime(args[1])
-					loc := args[0].AsTimezone()
+					loc := engine.AsTimezone(args[0])
 					if loc == nil {
 						loc = time.UTC
 					}
