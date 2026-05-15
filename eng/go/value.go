@@ -1024,10 +1024,12 @@ type MatrixData struct {
 	Cols int
 }
 
-// NewDate creates a Date value from a time.Time (date only, midnight UTC).
-func NewDate(t time.Time) Value {
-	return NewValueRaw(TDate, TimePayload{T: t})
-}
+// New* constructors for Scalar/Time/* moved to
+// lang/engine/native_temporal.go (Step 8). The As* methods stay
+// here as kernel-level payload accessors — they assert against the
+// kernel-owned TimePayload / DurationPayload / TimezonePayload
+// variants without referencing the (now-externalised) *Type
+// identities.
 
 // AsDate returns the time.Time for a Date value.
 func (v Value) AsDate() time.Time {
@@ -1037,11 +1039,6 @@ func (v Value) AsDate() time.Time {
 		}
 	}
 	return time.Time{}
-}
-
-// NewDateTime creates a DateTime value from a time.Time (date+time, no timezone).
-func NewDateTime(t time.Time) Value {
-	return NewValueRaw(TDateTime, TimePayload{T: t})
 }
 
 // AsDateTime returns the time.Time for a DateTime value.
@@ -1054,11 +1051,6 @@ func (v Value) AsDateTime() time.Time {
 	return time.Time{}
 }
 
-// NewInstant creates an Instant value from a time.Time (absolute UTC timestamp).
-func NewInstant(t time.Time) Value {
-	return NewValueRaw(TInstant, TimePayload{T: t.UTC()})
-}
-
 // AsInstant returns the time.Time for an Instant value.
 func (v Value) AsInstant() time.Time {
 	if tp, ok := v.Data.(TimePayload); ok {
@@ -1067,11 +1059,6 @@ func (v Value) AsInstant() time.Time {
 		}
 	}
 	return time.Time{}
-}
-
-// NewTimeOfDay creates a TimeOfDay value from a time.Duration (offset from midnight).
-func NewTimeOfDay(d time.Duration) Value {
-	return NewValueRaw(TTimeOfDay, DurationPayload{D: d})
 }
 
 // AsTimeOfDay returns the time.Duration for a TimeOfDay value.
@@ -1091,22 +1078,12 @@ type CalDurationData struct {
 	Days   int
 }
 
-// NewCalDuration creates a CalDuration value.
-func NewCalDuration(years, months, days int) Value {
-	return NewValueRaw(TCalDuration, CalDurationData{Years: years, Months: months, Days: days})
-}
-
 // AsCalDuration returns the CalDurationData for a CalDuration value.
 func (v Value) AsCalDuration() (CalDurationData, bool) {
 	if d, ok := v.Data.(CalDurationData); ok {
 		return d, true
 	}
 	return CalDurationData{}, false
-}
-
-// NewClkDuration creates a ClkDuration value from a time.Duration.
-func NewClkDuration(d time.Duration) Value {
-	return NewValueRaw(TClkDuration, DurationPayload{D: d})
 }
 
 // AsClkDuration returns the time.Duration for a ClkDuration value.
@@ -1117,11 +1094,6 @@ func (v Value) AsClkDuration() (time.Duration, bool) {
 		}
 	}
 	return 0, false
-}
-
-// NewTimezone creates a Timezone value from a *time.Location.
-func NewTimezone(loc *time.Location) Value {
-	return NewValueRaw(TTimezone, TimezonePayload{Loc: loc})
 }
 
 // AsTimezone returns the *time.Location for a Timezone value.

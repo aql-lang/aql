@@ -99,16 +99,14 @@ var (
 	TArray          = eng.TArray
 	TAtom           = eng.TAtom
 	TBoolean        = eng.TBoolean
-	TCalDuration    = eng.TCalDuration
-	TClkDuration    = eng.TClkDuration
-	TDate           = eng.TDate
-	TDateTime       = eng.TDateTime
+	// TCalDuration / TClkDuration / TDate / TDateTime / TDuration
+	// moved to lang/engine/native_temporal.go (Step 8) — declared
+	// directly in this package, no eng alias needed.
 	TDecimal        = eng.TDecimal
 	TDefCleanup     = eng.TDefCleanup
 	TDepInteger     = eng.TDepInteger
 	TDependent      = eng.TDependent
 	TDisjunct       = eng.TDisjunct
-	TDuration       = eng.TDuration
 	TError          = eng.TError
 	// TFetchFunction / TFetchRequest / TFetchResponse moved to
 	// lang/native/fetch.go at Step 8. References use native.TFetch*
@@ -118,7 +116,7 @@ var (
 	TForward        = eng.TForward
 	TFunction       = eng.TFunction
 	TInspect        = eng.TInspect
-	TInstant        = eng.TInstant
+	// TInstant moved to lang/engine/native_temporal.go (Step 8).
 	TInteger        = eng.TInteger
 	TInternal       = eng.TInternal
 	TInterpString   = eng.TInterpString
@@ -153,9 +151,9 @@ var (
 	TStringEmpty    = eng.TStringEmpty
 	TStringProper   = eng.TStringProper
 	TTable          = eng.TTable
-	TTimeOfDay      = eng.TTimeOfDay
+	// TTimeOfDay moved to lang/engine/native_temporal.go (Step 8).
 	// TTimeout moved to lang/engine/native_misc.go (Step 8).
-	TTimezone       = eng.TTimezone
+	// TTimezone moved to lang/engine/native_temporal.go (Step 8).
 	TType           = eng.TType
 	TWord           = eng.TWord
 )
@@ -274,13 +272,12 @@ var (
 	FormatValueJSON            = eng.FormatValueJSON
 	NewAtom                    = eng.NewAtom
 	NewBoolean                 = eng.NewBoolean
-	NewCalDuration             = eng.NewCalDuration
+	// NewCalDuration moved to lang/engine/native_temporal.go (Step 8).
 	NewCarrier                 = eng.NewCarrier
 	NewCarrierTypedList        = eng.NewCarrierTypedList
 	NewCarrierTypedListValue   = eng.NewCarrierTypedListValue
-	NewClkDuration             = eng.NewClkDuration
-	NewDate                    = eng.NewDate
-	NewDateTime                = eng.NewDateTime
+	// NewClkDuration moved to lang/engine/native_temporal.go (Step 8).
+	// NewDate / NewDateTime moved to lang/engine/native_temporal.go (Step 8).
 	NewDecimal                 = eng.NewDecimal
 	NewDefCleanup              = eng.NewDefCleanup
 	NewDepScalar               = eng.NewDepScalar
@@ -293,7 +290,7 @@ var (
 	NewForward                 = eng.NewForward
 	NewFunction                = eng.NewFunction
 	NewImplicitMap             = eng.NewImplicitMap
-	NewInstant                 = eng.NewInstant
+	// NewInstant moved to lang/engine/native_temporal.go (Step 8).
 	NewInteger                 = eng.NewInteger
 	NewInterpString            = eng.NewInterpString
 	// NewInterval moved to lang/engine/native_misc.go (Step 8).
@@ -322,9 +319,9 @@ var (
 	NewStoreWithPrototype      = eng.NewStoreWithPrototype
 	NewString                  = eng.NewString
 	NewTableType               = eng.NewTableType
-	NewTimeOfDay               = eng.NewTimeOfDay
+	// NewTimeOfDay moved to lang/engine/native_temporal.go (Step 8).
 	// NewTimeout moved to lang/engine/native_misc.go (Step 8).
-	NewTimezone                = eng.NewTimezone
+	// NewTimezone moved to lang/engine/native_temporal.go (Step 8).
 	NewTop                     = eng.NewTop
 	NewType                    = eng.NewType
 	NewTypeLiteral             = eng.NewTypeLiteral

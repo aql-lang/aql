@@ -487,15 +487,7 @@ var builtinDecls = []builtinDecl{
 	{Path: "Scalar/Boolean", FixedID: 10},
 	{Path: "Scalar/Path", FixedID: 47},
 	{Path: "Scalar/Atom", FixedID: 18},
-	{Path: "Scalar/Time", FixedID: 48},
-	{Path: "Scalar/Time/Date", FixedID: 49},
-	{Path: "Scalar/Time/DateTime", FixedID: 52},
-	{Path: "Scalar/Time/Instant", FixedID: 53},
-	{Path: "Scalar/Time/TimeOfDay", FixedID: 54},
-	{Path: "Scalar/Time/Duration", FixedID: 55},
-	{Path: "Scalar/Time/Duration/CalDuration", FixedID: 56},
-	{Path: "Scalar/Time/Duration/ClkDuration", FixedID: 57},
-	{Path: "Scalar/Time/Timezone", FixedID: 58},
+	// Scalar/Time and descendants moved to lang/engine/native_temporal.go (Step 8).
 
 	// Node branch
 	{Path: "Node/List", FixedID: 12},

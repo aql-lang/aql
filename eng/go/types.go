@@ -65,25 +65,12 @@ var (
 	TScalarType     = mustType("Type/ScalarType")
 	TNodeType       = mustType("Type/NodeType")
 	TObjectType     = mustType("Type/ObjectType")
-	TDate           = mustType("Scalar/Time/Date")
-	TDateTime       = mustType("Scalar/Time/DateTime")
-	TInstant        = mustType("Scalar/Time/Instant")
-	TTimeOfDay      = mustType("Scalar/Time/TimeOfDay")
-	TDuration       = mustType("Scalar/Time/Duration")
-	TCalDuration    = mustType("Scalar/Time/Duration/CalDuration")
-	TClkDuration    = mustType("Scalar/Time/Duration/ClkDuration")
-	TTimezone       = mustType("Scalar/Time/Timezone")
-	// Note: Time-family types stay in eng (Step 8 deferred) because
-	// lang/engine/native_math.go declares date-arithmetic signatures
-	// at package-init time that reference TDate / TCalDuration /
-	// TInstant / etc. Moving those types to lang/internal/nativemod
-	// would require lang/engine to import nativemod for the
-	// signature registration, which conflicts with nativemod's
-	// existing import of lang/engine (import cycle). The fix
-	// requires moving the date-arithmetic handlers + signatures out
-	// of native_math.go into nativemod/time, then routing
-	// registration through a hook — a larger change than fits in
-	// this PR.
+	// Scalar/Time and descendants moved to
+	// lang/engine/native_temporal.go (Step 8). They live in
+	// lang/engine (not lang/internal/nativemod/time) because
+	// date-arithmetic handlers in lang/engine/native_math.go
+	// reference these types at package-init time — colocating
+	// avoids the import-cycle constraint.
 	// TMatrix moved to lang/internal/nativemod/matrix.go (Step 8).
 	// TTimeout moved to lang/engine/native_misc.go (Step 8).
 	TDependent      = mustType("Type/Dependent")
