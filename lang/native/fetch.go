@@ -8,8 +8,39 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aql-lang/aql/eng"
 	"github.com/aql-lang/aql/lang/engine"
 )
+
+// Object/Fetch / Object/Fetch/Request / Object/Fetch/Response are
+// owned by the lang/native package — they're consumed only by the
+// fetch handler and tests in this package. Registration goes
+// through eng.Builtin.RegisterExternalBuiltin at package init time
+// so the kernel doesn't need to declare these types in its
+// builtinDecls. FixedIDs come from the documented
+// lang/native/fetch range (3000-3999) — see
+// eng.TypeTable.RegisterExternalBuiltin for the allocation policy.
+var (
+	TFetchFunction *eng.Type
+	TFetchRequest  *eng.Type
+	TFetchResponse *eng.Type
+)
+
+func init() {
+	var err error
+	TFetchFunction, err = eng.Builtin.RegisterExternalBuiltin("Object/Fetch", 3000, nil)
+	if err != nil {
+		panic(fmt.Sprintf("fetch: register TFetchFunction: %v", err))
+	}
+	TFetchRequest, err = eng.Builtin.RegisterExternalBuiltin("Object/Fetch/Request", 3001, nil)
+	if err != nil {
+		panic(fmt.Sprintf("fetch: register TFetchRequest: %v", err))
+	}
+	TFetchResponse, err = eng.Builtin.RegisterExternalBuiltin("Object/Fetch/Response", 3002, nil)
+	if err != nil {
+		panic(fmt.Sprintf("fetch: register TFetchResponse: %v", err))
+	}
+}
 
 const defaultFetchTimeout = 30 * time.Second
 
@@ -156,5 +187,5 @@ func doFetch(reqOM engine.ReadMap) ([]engine.Value, error) {
 	respOM.Set("body", engine.NewString(string(bodyBytes)))
 	respOM.Set("url", engine.NewString(resp.Request.URL.String()))
 
-	return []engine.Value{{VType: engine.TFetchResponse, Data: engine.MapPayload{M: respOM}}}, nil
+	return []engine.Value{{VType: TFetchResponse, Data: engine.MapPayload{M: respOM}}}, nil
 }

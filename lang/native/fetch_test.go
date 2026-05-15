@@ -46,8 +46,8 @@ func TestFetchStringHandler(t *testing.T) {
 	}
 
 	resp := result[0]
-	if !resp.VType.Equal(engine.TFetchResponse) {
-		t.Errorf("expected type %s, got %s", engine.TFetchResponse, resp.VType)
+	if !resp.VType.Equal(TFetchResponse) {
+		t.Errorf("expected type %s, got %s", TFetchResponse, resp.VType)
 	}
 
 	m := resp.AsMap()
@@ -371,7 +371,7 @@ func TestFetchResponseType(t *testing.T) {
 	if !resp.VType.Matches(engine.TObject) {
 		t.Errorf("expected response to match Object, got %s", resp.VType)
 	}
-	if !resp.VType.Equal(engine.TFetchResponse) {
+	if !resp.VType.Equal(TFetchResponse) {
 		t.Errorf("expected type Object/Fetch/Response, got %s", resp.VType)
 	}
 }

@@ -108,9 +108,9 @@ var (
 	TDisjunct       = eng.TDisjunct
 	TDuration       = eng.TDuration
 	TError          = eng.TError
-	TFetchFunction  = eng.TFetchFunction
-	TFetchRequest   = eng.TFetchRequest
-	TFetchResponse  = eng.TFetchResponse
+	// TFetchFunction / TFetchRequest / TFetchResponse moved to
+	// lang/native/fetch.go at Step 8. References use native.TFetch*
+	// directly; this aliases block no longer re-exports them.
 	TFnDef          = eng.TFnDef
 	TFnUndef        = eng.TFnUndef
 	TForward        = eng.TForward

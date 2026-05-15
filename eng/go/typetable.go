@@ -331,6 +331,13 @@ func (tt *TypeTable) RegisterExternalBuiltin(path string, fixedID int, behavior 
 	} else {
 		tt.leafIndex[def.Name] = path
 	}
+	// Refresh the parser's bare-name lookup snapshot so the newly-
+	// registered type is resolvable by source-text references like
+	// `Foo`. Only the package-level Builtin table feeds typeNames;
+	// per-Registry dynamic tables do not.
+	if tt == Builtin {
+		refreshTypeNames()
+	}
 	return def, nil
 }
 
@@ -506,9 +513,8 @@ var builtinDecls = []builtinDecl{
 	{Path: "Object/Error", FixedID: 45},
 	{Path: "Object/Resource", FixedID: 36},
 	{Path: "Object/Resource/Entity", FixedID: 37},
-	{Path: "Object/Fetch", FixedID: 33},
-	{Path: "Object/Fetch/Request", FixedID: 34},
-	{Path: "Object/Fetch/Response", FixedID: 35},
+	// Object/Fetch / Object/Fetch/Request / Object/Fetch/Response
+	// moved to lang/native/fetch.go (Step 8 migration).
 	{Path: "Object/Timeout", FixedID: 59},
 	{Path: "Object/Interval", FixedID: 60},
 

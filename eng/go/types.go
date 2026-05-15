@@ -57,9 +57,9 @@ var (
 	TArray          = mustType("Object/Array")
 	TResource       = mustType("Object/Resource")
 	TResourceEntity = mustType("Object/Resource/Entity")
-	TFetchFunction  = mustType("Object/Fetch")
-	TFetchRequest   = mustType("Object/Fetch/Request")
-	TFetchResponse  = mustType("Object/Fetch/Response")
+	// TFetchFunction / TFetchRequest / TFetchResponse moved to
+	// lang/native/fetch.go (Step 8 migration); registered via
+	// RegisterExternalBuiltin at lang/native package init.
 	TError          = mustType("Object/Error")
 	TType           = mustType("Type")
 	TScalarType     = mustType("Type/ScalarType")
@@ -81,9 +81,14 @@ var (
 )
 
 // typeNames is the user-facing name → Type map for bare-word type
-// resolution. It is a snapshot of the Builtin TypeTable taken at init
-// (Builtin is read-only post-init). Used by the parser and engine.
-var typeNames = func() map[string]*Type {
+// resolution. Built at init from the Builtin TypeTable; refreshed
+// whenever a new externally-registered builtin is added via
+// RegisterExternalBuiltin. The parser and engine consult this map
+// to resolve bare type-name words (e.g. `Integer`, `Date`, plugin-
+// supplied names) to their *Type.
+var typeNames = buildTypeNames()
+
+func buildTypeNames() map[string]*Type {
 	m := make(map[string]*Type, len(Builtin.byName))
 	for name, stack := range Builtin.byName {
 		if len(stack) == 0 || stack[0].Def == nil {
@@ -92,7 +97,14 @@ var typeNames = func() map[string]*Type {
 		m[name] = stack[0].Def
 	}
 	return m
-}()
+}
+
+// refreshTypeNames rebuilds the typeNames snapshot. Called by
+// RegisterExternalBuiltin so freshly-installed types are immediately
+// resolvable by bare-name lookup in the parser.
+func refreshTypeNames() {
+	typeNames = buildTypeNames()
+}
 
 // TypeNameTable returns the canonical mapping of all well-known type
 // names to their Type. Used by both the parser and engine.
