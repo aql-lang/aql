@@ -10,14 +10,17 @@ import (
 // overrides Format only; Match and Equal delegate to DefaultBehavior
 // so signature matching and value equality are unchanged.
 //
-// The init() function runs after Builtin is constructed (package
-// init order: var initialisers first, then init functions), so
-// TDate/TDateTime/etc. exist by the time we reach init().
+// Status after Step 8:
 //
-// Lifecycle note: these Behaviors are kernel-internal until Step 9
-// of the migration, when TDate/TMatrix/etc. move out of eng/. At
-// that point the Behaviors travel with their types to
-// lang/internal/nativemod/* and this file goes away.
+//   Time-family (Date / DateTime / Instant / TimeOfDay / CalDuration
+//   / ClkDuration / Timezone): kernel-side because the date-arithmetic
+//   handlers in lang/engine/native_math.go reference these types at
+//   package-init time. Moving them to nativemod/time would require
+//   restructuring native_math.go's registration path (import-cycle
+//   constraint). Tracked as a follow-up.
+//
+//   Matrix → lang/internal/nativemod/matrix.go.
+//   Timeout / Interval → lang/engine/native_misc.go.
 
 func init() {
 	TInstant.Behavior = instantFormatBehavior{}
@@ -27,8 +30,6 @@ func init() {
 	TCalDuration.Behavior = calDurationFormatBehavior{}
 	TClkDuration.Behavior = clkDurationFormatBehavior{}
 	TTimezone.Behavior = timezoneFormatBehavior{}
-	// TMatrix Behavior moved to lang/internal/nativemod/matrix.go (Step 8).
-	// TTimeout / TInterval Behaviors moved to lang/engine/native_misc.go (Step 8).
 }
 
 // instantFormatBehavior renders Instant values as RFC3339Nano.
@@ -136,7 +137,3 @@ func (timezoneFormatBehavior) Format(v Value) string {
 	}
 	return "Timezone(nil)"
 }
-
-// matrixFormatBehavior moved to lang/internal/nativemod/matrix.go (Step 8).
-// timeoutFormatBehavior + intervalFormatBehavior moved to
-// lang/engine/native_misc.go (Step 8).

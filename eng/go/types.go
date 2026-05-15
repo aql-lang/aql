@@ -73,6 +73,17 @@ var (
 	TCalDuration    = mustType("Scalar/Time/Duration/CalDuration")
 	TClkDuration    = mustType("Scalar/Time/Duration/ClkDuration")
 	TTimezone       = mustType("Scalar/Time/Timezone")
+	// Note: Time-family types stay in eng (Step 8 deferred) because
+	// lang/engine/native_math.go declares date-arithmetic signatures
+	// at package-init time that reference TDate / TCalDuration /
+	// TInstant / etc. Moving those types to lang/internal/nativemod
+	// would require lang/engine to import nativemod for the
+	// signature registration, which conflicts with nativemod's
+	// existing import of lang/engine (import cycle). The fix
+	// requires moving the date-arithmetic handlers + signatures out
+	// of native_math.go into nativemod/time, then routing
+	// registration through a hook — a larger change than fits in
+	// this PR.
 	// TMatrix moved to lang/internal/nativemod/matrix.go (Step 8).
 	// TTimeout moved to lang/engine/native_misc.go (Step 8).
 	TDependent      = mustType("Type/Dependent")
