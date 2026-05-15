@@ -1134,10 +1134,7 @@ func (v Value) AsTimezone() *time.Location {
 	return nil
 }
 
-// NewMatrix creates a Matrix value from a MatrixData.
-func NewMatrix(m MatrixData) Value {
-	return NewValueRaw(TMatrix, m)
-}
+// NewMatrix moved to lang/internal/nativemod/matrix.go (Step 8).
 
 // AsMatrix returns the MatrixData for a Matrix value.
 func (v Value) AsMatrix() MatrixData {

@@ -73,7 +73,7 @@ var (
 	TCalDuration    = mustType("Scalar/Time/Duration/CalDuration")
 	TClkDuration    = mustType("Scalar/Time/Duration/ClkDuration")
 	TTimezone       = mustType("Scalar/Time/Timezone")
-	TMatrix         = mustType("Scalar/Number/Matrix")
+	// TMatrix moved to lang/internal/nativemod/matrix.go (Step 8).
 	TTimeout        = mustType("Object/Timeout")
 	TDependent      = mustType("Type/Dependent")
 	TDepInteger     = mustType("Type/Dependent/DepInteger")

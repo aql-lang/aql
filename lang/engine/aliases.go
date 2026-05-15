@@ -62,6 +62,7 @@ type (
 	MarkInfo           = eng.MarkInfo
 	MatchResult        = eng.MatchResult
 	Materializer       = eng.Materializer
+	TypeBehavior       = eng.TypeBehavior
 	MatrixData         = eng.MatrixData
 	ModuleDesc         = eng.ModuleDesc
 	MoveInfo           = eng.MoveInfo
@@ -93,6 +94,7 @@ type (
 
 // Well-known *Type values — re-exported for convenience.
 var (
+	DefaultBehavior = eng.DefaultBehavior
 	TAny            = eng.TAny
 	TArray          = eng.TArray
 	TAtom           = eng.TAtom
@@ -125,7 +127,7 @@ var (
 	TListArgs       = eng.TListArgs
 	TMap            = eng.TMap
 	TMark           = eng.TMark
-	TMatrix         = eng.TMatrix
+	// TMatrix moved to lang/internal/nativemod/matrix.go (Step 8).
 	TModule         = eng.TModule
 	TMove           = eng.TMove
 	TNever          = eng.TNever
@@ -298,7 +300,7 @@ var (
 	NewList                    = eng.NewList
 	NewMap                     = eng.NewMap
 	NewMark                    = eng.NewMark
-	NewMatrix                  = eng.NewMatrix
+	// NewMatrix moved to lang/internal/nativemod/matrix.go (Step 8).
 	NewModule                  = eng.NewModule
 	NewMove                    = eng.NewMove
 	NewMoveCont                = eng.NewMoveCont

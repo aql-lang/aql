@@ -27,7 +27,7 @@ func init() {
 	TCalDuration.Behavior = calDurationFormatBehavior{}
 	TClkDuration.Behavior = clkDurationFormatBehavior{}
 	TTimezone.Behavior = timezoneFormatBehavior{}
-	TMatrix.Behavior = matrixFormatBehavior{}
+	// TMatrix Behavior moved to lang/internal/nativemod/matrix.go (Step 8).
 	TTimeout.Behavior = timeoutFormatBehavior{}
 	TInterval.Behavior = intervalFormatBehavior{}
 }
@@ -138,17 +138,7 @@ func (timezoneFormatBehavior) Format(v Value) string {
 	return "Timezone(nil)"
 }
 
-// matrixFormatBehavior renders Matrix as Matrix(rowsxcols).
-type matrixFormatBehavior struct{}
-
-func (matrixFormatBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
-func (matrixFormatBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
-func (matrixFormatBehavior) Format(v Value) string {
-	if m, ok := v.Data.(MatrixData); ok {
-		return fmt.Sprintf("Matrix(%dx%d)", m.Rows, m.Cols)
-	}
-	return "Matrix(nil)"
-}
+// matrixFormatBehavior moved to lang/internal/nativemod/matrix.go (Step 8).
 
 // timeoutFormatBehavior renders Timeout as Timeout(id,Nms).
 type timeoutFormatBehavior struct{}

@@ -4,8 +4,58 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/aql-lang/aql/eng"
 	"github.com/aql-lang/aql/lang/engine"
 )
+
+// TMatrix is the Scalar/Number/Matrix type identity. Owned by the
+// matrix native module — the kernel doesn't carry this type; the
+// module registers it via eng.Builtin.RegisterExternalBuiltin in
+// the var initialiser below so that any other package-level var
+// referencing TMatrix (notably MatrixNatives, whose signatures
+// embed TMatrix) sees a non-nil pointer at slice-init time. Go
+// package-init order resolves dependencies before declaration order;
+// declaring TMatrix's initialiser to call the registration helper
+// gives MatrixNatives a hard dependency on TMatrix.
+//
+// FixedID 2000 comes from the documented
+// lang/internal/nativemod/matrix range (2000-2999).
+var TMatrix = registerMatrixType()
+
+func registerMatrixType() *eng.Type {
+	t, err := eng.Builtin.RegisterExternalBuiltin("Scalar/Number/Matrix", 2000, matrixFormatBehavior{})
+	if err != nil {
+		panic(fmt.Sprintf("matrix: register TMatrix: %v", err))
+	}
+	return t
+}
+
+// matrixFormatBehavior renders a Matrix as "Matrix(rowsxcols)".
+// Lives in matrix.go (this file) post Step 8 — the kernel
+// previously installed an identical Behavior in
+// eng/coretype_format_behaviors.go; it has been removed in favour
+// of the module-owned one declared here and attached at registration.
+type matrixFormatBehavior struct{}
+
+func (matrixFormatBehavior) Match(v engine.Value, t *engine.Type) bool {
+	return engine.DefaultBehavior.Match(v, t)
+}
+func (matrixFormatBehavior) Equal(a, b engine.Value) bool {
+	return engine.DefaultBehavior.Equal(a, b)
+}
+func (matrixFormatBehavior) Format(v engine.Value) string {
+	if mp, ok := v.Data.(engine.MatrixData); ok {
+		return fmt.Sprintf("Matrix(%dx%d)", mp.Rows, mp.Cols)
+	}
+	return "Matrix(nil)"
+}
+
+// NewMatrix constructs a Matrix value carrying the given MatrixData
+// payload. Moved out of eng at Step 8 — the kernel no longer carries
+// a constructor for a type it doesn't own.
+func NewMatrix(m engine.MatrixData) engine.Value {
+	return engine.NewValueRaw(TMatrix, m)
+}
 
 // BuildMatrixModule creates the "aql:matrix" native module. It registers
 // Go-implemented matrix words into an isolated sub-registry and returns a
@@ -72,7 +122,7 @@ func makeListToMatrixFnDef(wordName string, subReg *engine.Registry) engine.Valu
 	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Type: engine.TList}},
-			Returns: []*engine.Type{engine.TMatrix},
+			Returns: []*engine.Type{TMatrix},
 			Body:    []engine.Value{engine.NewWord(wordName)},
 		}},
 		Registry: subReg,
@@ -83,7 +133,7 @@ func makeIntIntToMatrixFnDef(wordName string, subReg *engine.Registry) engine.Va
 	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Type: engine.TInteger}, {Type: engine.TInteger}},
-			Returns: []*engine.Type{engine.TMatrix},
+			Returns: []*engine.Type{TMatrix},
 			Body:    []engine.Value{engine.NewWord(wordName)},
 		}},
 		Registry: subReg,
@@ -94,7 +144,7 @@ func makeIntToMatrixFnDef(wordName string, subReg *engine.Registry) engine.Value
 	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Type: engine.TInteger}},
-			Returns: []*engine.Type{engine.TMatrix},
+			Returns: []*engine.Type{TMatrix},
 			Body:    []engine.Value{engine.NewWord(wordName)},
 		}},
 		Registry: subReg,
@@ -105,7 +155,7 @@ func makeIntIntNumToMatrixFnDef(wordName string, subReg *engine.Registry) engine
 	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
 			Params:  []engine.FnParam{{Type: engine.TInteger}, {Type: engine.TInteger}, {Type: engine.TNumber}},
-			Returns: []*engine.Type{engine.TMatrix},
+			Returns: []*engine.Type{TMatrix},
 			Body:    []engine.Value{engine.NewWord(wordName)},
 		}},
 		Registry: subReg,
@@ -115,7 +165,7 @@ func makeIntIntNumToMatrixFnDef(wordName string, subReg *engine.Registry) engine
 func makeMatrixToIntFnDef(wordName string, subReg *engine.Registry) engine.Value {
 	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
-			Params:  []engine.FnParam{{Type: engine.TMatrix}},
+			Params:  []engine.FnParam{{Type: TMatrix}},
 			Returns: []*engine.Type{engine.TInteger},
 			Body:    []engine.Value{engine.NewWord(wordName)},
 		}},
@@ -131,7 +181,7 @@ func makeMatrixIntIntToDecFnDef(wordName string, subReg *engine.Registry) engine
 	// "data-last" by virtue of mat being deepest.
 	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
-			Params:  []engine.FnParam{{Type: engine.TMatrix}, {Type: engine.TInteger}, {Type: engine.TInteger}},
+			Params:  []engine.FnParam{{Type: TMatrix}, {Type: engine.TInteger}, {Type: engine.TInteger}},
 			Returns: []*engine.Type{engine.TDecimal},
 			Body:    []engine.Value{engine.NewWord(wordName)},
 		}},
@@ -142,7 +192,7 @@ func makeMatrixIntIntToDecFnDef(wordName string, subReg *engine.Registry) engine
 func makeMatrixIntToListFnDef(wordName string, subReg *engine.Registry) engine.Value {
 	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
-			Params:  []engine.FnParam{{Type: engine.TMatrix}, {Type: engine.TInteger}},
+			Params:  []engine.FnParam{{Type: TMatrix}, {Type: engine.TInteger}},
 			Returns: []*engine.Type{engine.TList},
 			Body:    []engine.Value{engine.NewWord(wordName)},
 		}},
@@ -153,8 +203,8 @@ func makeMatrixIntToListFnDef(wordName string, subReg *engine.Registry) engine.V
 func makeMatrixMatrixToMatrixFnDef(wordName string, subReg *engine.Registry) engine.Value {
 	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
-			Params:  []engine.FnParam{{Type: engine.TMatrix}, {Type: engine.TMatrix}},
-			Returns: []*engine.Type{engine.TMatrix},
+			Params:  []engine.FnParam{{Type: TMatrix}, {Type: TMatrix}},
+			Returns: []*engine.Type{TMatrix},
 			Body:    []engine.Value{engine.NewWord(wordName)},
 		}},
 		Registry: subReg,
@@ -164,8 +214,8 @@ func makeMatrixMatrixToMatrixFnDef(wordName string, subReg *engine.Registry) eng
 func makeMatrixNumToMatrixFnDef(wordName string, subReg *engine.Registry) engine.Value {
 	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
-			Params:  []engine.FnParam{{Type: engine.TMatrix}, {Type: engine.TNumber}},
-			Returns: []*engine.Type{engine.TMatrix},
+			Params:  []engine.FnParam{{Type: TMatrix}, {Type: engine.TNumber}},
+			Returns: []*engine.Type{TMatrix},
 			Body:    []engine.Value{engine.NewWord(wordName)},
 		}},
 		Registry: subReg,
@@ -175,8 +225,8 @@ func makeMatrixNumToMatrixFnDef(wordName string, subReg *engine.Registry) engine
 func makeUnaryMatrixFnDef(wordName string, subReg *engine.Registry) engine.Value {
 	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
-			Params:  []engine.FnParam{{Type: engine.TMatrix}},
-			Returns: []*engine.Type{engine.TMatrix},
+			Params:  []engine.FnParam{{Type: TMatrix}},
+			Returns: []*engine.Type{TMatrix},
 			Body:    []engine.Value{engine.NewWord(wordName)},
 		}},
 		Registry: subReg,
@@ -186,7 +236,7 @@ func makeUnaryMatrixFnDef(wordName string, subReg *engine.Registry) engine.Value
 func makeMatrixToListFnDef(wordName string, subReg *engine.Registry) engine.Value {
 	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
-			Params:  []engine.FnParam{{Type: engine.TMatrix}},
+			Params:  []engine.FnParam{{Type: TMatrix}},
 			Returns: []*engine.Type{engine.TList},
 			Body:    []engine.Value{engine.NewWord(wordName)},
 		}},
@@ -197,7 +247,7 @@ func makeMatrixToListFnDef(wordName string, subReg *engine.Registry) engine.Valu
 func makeMatrixToDecFnDef(wordName string, subReg *engine.Registry) engine.Value {
 	return engine.NewFnDef(engine.FnDefInfo{Name: wordName,
 		Sigs: []engine.FnSig{{
-			Params:  []engine.FnParam{{Type: engine.TMatrix}},
+			Params:  []engine.FnParam{{Type: TMatrix}},
 			Returns: []*engine.Type{engine.TDecimal},
 			Body:    []engine.Value{engine.NewWord(wordName)},
 		}},
@@ -263,9 +313,9 @@ var MatrixNatives = []engine.NativeFunc{
 						data = append(data, n)
 					}
 				}
-				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
+				return []engine.Value{NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
 			},
-			Returns: []*engine.Type{engine.TMatrix},
+			Returns: []*engine.Type{TMatrix},
 		}},
 	},
 	{
@@ -285,9 +335,9 @@ var MatrixNatives = []engine.NativeFunc{
 				}
 				rows, cols := int(r64), int(c64)
 				data := make([]float64, rows*cols)
-				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
+				return []engine.Value{NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
 			},
-			Returns: []*engine.Type{engine.TMatrix},
+			Returns: []*engine.Type{TMatrix},
 		}},
 	},
 	{
@@ -310,9 +360,9 @@ var MatrixNatives = []engine.NativeFunc{
 				for i := range data {
 					data[i] = 1.0
 				}
-				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
+				return []engine.Value{NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
 			},
-			Returns: []*engine.Type{engine.TMatrix},
+			Returns: []*engine.Type{TMatrix},
 		}},
 	},
 	{
@@ -330,9 +380,9 @@ var MatrixNatives = []engine.NativeFunc{
 				for i := 0; i < n; i++ {
 					data[i*n+i] = 1.0
 				}
-				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: n, Cols: n})}, nil
+				return []engine.Value{NewMatrix(engine.MatrixData{Data: data, Rows: n, Cols: n})}, nil
 			},
-			Returns: []*engine.Type{engine.TMatrix},
+			Returns: []*engine.Type{TMatrix},
 		}},
 	},
 	{
@@ -358,9 +408,9 @@ var MatrixNatives = []engine.NativeFunc{
 				for i := range data {
 					data[i] = val
 				}
-				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
+				return []engine.Value{NewMatrix(engine.MatrixData{Data: data, Rows: rows, Cols: cols})}, nil
 			},
-			Returns: []*engine.Type{engine.TMatrix},
+			Returns: []*engine.Type{TMatrix},
 		}},
 	},
 	// Shape.
@@ -368,7 +418,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Name:        "matrix-rows",
 		ForwardArgs: true,
 		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TMatrix},
+			Args: []*engine.Type{TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 				m := args[0].AsMatrix()
 				return []engine.Value{engine.NewInteger(int64(m.Rows))}, nil
@@ -380,7 +430,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Name:        "matrix-cols",
 		ForwardArgs: true,
 		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TMatrix},
+			Args: []*engine.Type{TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 				m := args[0].AsMatrix()
 				return []engine.Value{engine.NewInteger(int64(m.Cols))}, nil
@@ -392,7 +442,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Name:        "matrix-size",
 		ForwardArgs: true,
 		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TMatrix},
+			Args: []*engine.Type{TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 				m := args[0].AsMatrix()
 				return []engine.Value{engine.NewInteger(int64(m.Rows * m.Cols))}, nil
@@ -408,7 +458,7 @@ var MatrixNatives = []engine.NativeFunc{
 			// Data-last: [col, row, mat]. Under §1.4 stack-top-first matching,
 			// `mat row col matrix-at` binds sig[0]=col (top), sig[1]=row,
 			// sig[2]=mat (deepest).
-			Args: []*engine.Type{engine.TInteger, engine.TInteger, engine.TMatrix},
+			Args: []*engine.Type{engine.TInteger, engine.TInteger, TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 				c64, err := args[0].AsConcreteInteger()
 				if err != nil {
@@ -432,7 +482,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Name:        "matrix-row",
 		ForwardArgs: true,
 		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TInteger, engine.TMatrix},
+			Args: []*engine.Type{engine.TInteger, TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 				r64, err := args[0].AsConcreteInteger()
 				if err != nil {
@@ -456,7 +506,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Name:        "matrix-col",
 		ForwardArgs: true,
 		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TInteger, engine.TMatrix},
+			Args: []*engine.Type{engine.TInteger, TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 				c64, err := args[0].AsConcreteInteger()
 				if err != nil {
@@ -481,7 +531,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Name:        "matrix-mat-add",
 		ForwardArgs: true,
 		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TMatrix, engine.TMatrix},
+			Args: []*engine.Type{TMatrix, TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 				a := args[0].AsMatrix()
 				b := args[1].AsMatrix()
@@ -492,9 +542,9 @@ var MatrixNatives = []engine.NativeFunc{
 				for i := range data {
 					data[i] = a.Data[i] + b.Data[i]
 				}
-				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: a.Rows, Cols: a.Cols})}, nil
+				return []engine.Value{NewMatrix(engine.MatrixData{Data: data, Rows: a.Rows, Cols: a.Cols})}, nil
 			},
-			Returns: []*engine.Type{engine.TMatrix},
+			Returns: []*engine.Type{TMatrix},
 		}},
 	},
 	{
@@ -502,7 +552,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Name:        "matrix-mat-sub",
 		ForwardArgs: true,
 		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TMatrix, engine.TMatrix},
+			Args: []*engine.Type{TMatrix, TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 				a := args[1].AsMatrix()
 				b := args[0].AsMatrix()
@@ -513,9 +563,9 @@ var MatrixNatives = []engine.NativeFunc{
 				for i := range data {
 					data[i] = a.Data[i] - b.Data[i]
 				}
-				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: a.Rows, Cols: a.Cols})}, nil
+				return []engine.Value{NewMatrix(engine.MatrixData{Data: data, Rows: a.Rows, Cols: a.Cols})}, nil
 			},
-			Returns: []*engine.Type{engine.TMatrix},
+			Returns: []*engine.Type{TMatrix},
 		}},
 	},
 	{
@@ -523,7 +573,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Name:        "matrix-mat-mul",
 		ForwardArgs: true,
 		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TMatrix, engine.TMatrix},
+			Args: []*engine.Type{TMatrix, TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 				a := args[1].AsMatrix()
 				b := args[0].AsMatrix()
@@ -531,16 +581,16 @@ var MatrixNatives = []engine.NativeFunc{
 				if err != nil {
 					return nil, err
 				}
-				return []engine.Value{engine.NewMatrix(result)}, nil
+				return []engine.Value{NewMatrix(result)}, nil
 			},
-			Returns: []*engine.Type{engine.TMatrix},
+			Returns: []*engine.Type{TMatrix},
 		}},
 	},
 	{
 		Name:        "matrix-scale",
 		ForwardArgs: true,
 		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TNumber, engine.TMatrix},
+			Args: []*engine.Type{engine.TNumber, TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 				s, err := args[0].AsNumber()
 				if err != nil {
@@ -551,16 +601,16 @@ var MatrixNatives = []engine.NativeFunc{
 				for i := range data {
 					data[i] = m.Data[i] * s
 				}
-				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: m.Rows, Cols: m.Cols})}, nil
+				return []engine.Value{NewMatrix(engine.MatrixData{Data: data, Rows: m.Rows, Cols: m.Cols})}, nil
 			},
-			Returns: []*engine.Type{engine.TMatrix},
+			Returns: []*engine.Type{TMatrix},
 		}},
 	},
 	{
 		Name:        "matrix-mat-emul",
 		ForwardArgs: true,
 		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TMatrix, engine.TMatrix},
+			Args: []*engine.Type{TMatrix, TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 				a := args[0].AsMatrix()
 				b := args[1].AsMatrix()
@@ -571,9 +621,9 @@ var MatrixNatives = []engine.NativeFunc{
 				for i := range data {
 					data[i] = a.Data[i] * b.Data[i]
 				}
-				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: a.Rows, Cols: a.Cols})}, nil
+				return []engine.Value{NewMatrix(engine.MatrixData{Data: data, Rows: a.Rows, Cols: a.Cols})}, nil
 			},
-			Returns: []*engine.Type{engine.TMatrix},
+			Returns: []*engine.Type{TMatrix},
 		}},
 	},
 	// Transform.
@@ -581,7 +631,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Name:        "matrix-transpose",
 		ForwardArgs: true,
 		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TMatrix},
+			Args: []*engine.Type{TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 				m := args[0].AsMatrix()
 				data := make([]float64, len(m.Data))
@@ -590,16 +640,16 @@ var MatrixNatives = []engine.NativeFunc{
 						data[j*m.Rows+i] = m.Data[i*m.Cols+j]
 					}
 				}
-				return []engine.Value{engine.NewMatrix(engine.MatrixData{Data: data, Rows: m.Cols, Cols: m.Rows})}, nil
+				return []engine.Value{NewMatrix(engine.MatrixData{Data: data, Rows: m.Cols, Cols: m.Rows})}, nil
 			},
-			Returns: []*engine.Type{engine.TMatrix},
+			Returns: []*engine.Type{TMatrix},
 		}},
 	},
 	{
 		Name:        "matrix-flatten",
 		ForwardArgs: true,
 		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TMatrix},
+			Args: []*engine.Type{TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 				m := args[0].AsMatrix()
 				elems := make([]engine.Value, len(m.Data))
@@ -616,7 +666,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Name:        "matrix-sum",
 		ForwardArgs: true,
 		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TMatrix},
+			Args: []*engine.Type{TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 				m := args[0].AsMatrix()
 				s := 0.0
@@ -632,7 +682,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Name:        "matrix-trace",
 		ForwardArgs: true,
 		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TMatrix},
+			Args: []*engine.Type{TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 				m := args[0].AsMatrix()
 				if m.Rows != m.Cols {
@@ -651,7 +701,7 @@ var MatrixNatives = []engine.NativeFunc{
 		Name:        "matrix-det",
 		ForwardArgs: true,
 		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TMatrix},
+			Args: []*engine.Type{TMatrix},
 			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
 				m := args[0].AsMatrix()
 				d, err := matDet(m)

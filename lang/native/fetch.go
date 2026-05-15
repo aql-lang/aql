@@ -15,31 +15,24 @@ import (
 // Object/Fetch / Object/Fetch/Request / Object/Fetch/Response are
 // owned by the lang/native package — they're consumed only by the
 // fetch handler and tests in this package. Registration goes
-// through eng.Builtin.RegisterExternalBuiltin at package init time
-// so the kernel doesn't need to declare these types in its
-// builtinDecls. FixedIDs come from the documented
-// lang/native/fetch range (3000-3999) — see
+// through eng.Builtin.RegisterExternalBuiltin in the var
+// initialisers below so that any other package-level var
+// referencing TFetch* (signature slices in natives.go) sees a
+// non-nil pointer at slice-init time. FixedIDs come from the
+// documented lang/native/fetch range (3000-3999) — see
 // eng.TypeTable.RegisterExternalBuiltin for the allocation policy.
 var (
-	TFetchFunction *eng.Type
-	TFetchRequest  *eng.Type
-	TFetchResponse *eng.Type
+	TFetchFunction = registerFetchType("Object/Fetch", 3000)
+	TFetchRequest  = registerFetchType("Object/Fetch/Request", 3001)
+	TFetchResponse = registerFetchType("Object/Fetch/Response", 3002)
 )
 
-func init() {
-	var err error
-	TFetchFunction, err = eng.Builtin.RegisterExternalBuiltin("Object/Fetch", 3000, nil)
+func registerFetchType(path string, fixedID int) *eng.Type {
+	t, err := eng.Builtin.RegisterExternalBuiltin(path, fixedID, nil)
 	if err != nil {
-		panic(fmt.Sprintf("fetch: register TFetchFunction: %v", err))
+		panic(fmt.Sprintf("fetch: register %s: %v", path, err))
 	}
-	TFetchRequest, err = eng.Builtin.RegisterExternalBuiltin("Object/Fetch/Request", 3001, nil)
-	if err != nil {
-		panic(fmt.Sprintf("fetch: register TFetchRequest: %v", err))
-	}
-	TFetchResponse, err = eng.Builtin.RegisterExternalBuiltin("Object/Fetch/Response", 3002, nil)
-	if err != nil {
-		panic(fmt.Sprintf("fetch: register TFetchResponse: %v", err))
-	}
+	return t
 }
 
 const defaultFetchTimeout = 30 * time.Second

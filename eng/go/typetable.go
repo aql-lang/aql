@@ -483,7 +483,7 @@ var builtinDecls = []builtinDecl{
 	{Path: "Scalar/Number", FixedID: 7},
 	{Path: "Scalar/Number/Integer", FixedID: 8},
 	{Path: "Scalar/Number/Decimal", FixedID: 9},
-	{Path: "Scalar/Number/Matrix", FixedID: 50},
+	// Scalar/Number/Matrix moved to lang/internal/nativemod/matrix.go (Step 8).
 	{Path: "Scalar/Boolean", FixedID: 10},
 	{Path: "Scalar/Path", FixedID: 47},
 	{Path: "Scalar/Atom", FixedID: 18},

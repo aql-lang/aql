@@ -121,7 +121,7 @@ func TestMatrixOnes(t *testing.T) {
 
 func TestMatrixRows(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := engine.NewMatrix(engine.MatrixData{Data: make([]float64, 6), Rows: 2, Cols: 3})
+	mat := NewMatrix(engine.MatrixData{Data: make([]float64, 6), Rows: 2, Cols: 3})
 	input := append([]engine.Value{mat}, matGet("rows")...)
 	result := runAQL(t, r, input)
 	v, _ := result[0].AsInteger()
@@ -132,7 +132,7 @@ func TestMatrixRows(t *testing.T) {
 
 func TestMatrixCols(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := engine.NewMatrix(engine.MatrixData{Data: make([]float64, 6), Rows: 2, Cols: 3})
+	mat := NewMatrix(engine.MatrixData{Data: make([]float64, 6), Rows: 2, Cols: 3})
 	input := append([]engine.Value{mat}, matGet("cols")...)
 	result := runAQL(t, r, input)
 	v, _ := result[0].AsInteger()
@@ -143,7 +143,7 @@ func TestMatrixCols(t *testing.T) {
 
 func TestMatrixSize(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := engine.NewMatrix(engine.MatrixData{Data: make([]float64, 6), Rows: 2, Cols: 3})
+	mat := NewMatrix(engine.MatrixData{Data: make([]float64, 6), Rows: 2, Cols: 3})
 	input := append([]engine.Value{mat}, matGet("size")...)
 	result := runAQL(t, r, input)
 	v, _ := result[0].AsInteger()
@@ -157,7 +157,7 @@ func TestMatrixSize(t *testing.T) {
 func TestMatrixAt(t *testing.T) {
 	r := matrixRegistry(t)
 	// 2x2 matrix: [[1,2],[3,4]]
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
 	// mat 1 0 matrix.at → element at row 1, col 0 = 3
 	input := append([]engine.Value{mat, engine.NewInteger(1), engine.NewInteger(0)}, matGet("elem")...)
 	result := runAQL(t, r, input)
@@ -169,7 +169,7 @@ func TestMatrixAt(t *testing.T) {
 
 func TestMatrixRow(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
 	// mat 1 matrix.row → [4, 5, 6]
 	input := append([]engine.Value{mat, engine.NewInteger(1)}, matGet("row")...)
 	result := runAQL(t, r, input)
@@ -187,7 +187,7 @@ func TestMatrixRow(t *testing.T) {
 
 func TestMatrixCol(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
 	// mat 1 matrix.col → [2, 5]
 	input := append([]engine.Value{mat, engine.NewInteger(1)}, matGet("col")...)
 	result := runAQL(t, r, input)
@@ -206,7 +206,7 @@ func TestMatrixCol(t *testing.T) {
 
 func TestMatrixScale(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{mat, engine.NewInteger(3)}, matGet("scale")...)
 	result := runAQL(t, r, input)
 	m := result[0].AsMatrix()
@@ -220,8 +220,8 @@ func TestMatrixScale(t *testing.T) {
 
 func TestMatrixAdd(t *testing.T) {
 	r := matrixRegistry(t)
-	a := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
-	b := engine.NewMatrix(engine.MatrixData{Data: []float64{10, 20, 30, 40}, Rows: 2, Cols: 2})
+	a := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	b := NewMatrix(engine.MatrixData{Data: []float64{10, 20, 30, 40}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{a, b}, matGet("mat-add")...)
 	result := runAQL(t, r, input)
 	m := result[0].AsMatrix()
@@ -236,8 +236,8 @@ func TestMatrixAdd(t *testing.T) {
 func TestMatrixMul(t *testing.T) {
 	r := matrixRegistry(t)
 	// [[1,2],[3,4]] * [[5,6],[7,8]] = [[19,22],[43,50]]
-	a := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
-	b := engine.NewMatrix(engine.MatrixData{Data: []float64{5, 6, 7, 8}, Rows: 2, Cols: 2})
+	a := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	b := NewMatrix(engine.MatrixData{Data: []float64{5, 6, 7, 8}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{a, b}, matGet("mat-mul")...)
 	result := runAQL(t, r, input)
 	m := result[0].AsMatrix()
@@ -252,8 +252,8 @@ func TestMatrixMul(t *testing.T) {
 func TestMatrixMulRectangular(t *testing.T) {
 	r := matrixRegistry(t)
 	// 2x3 * 3x1 = 2x1
-	a := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
-	b := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 1, 1}, Rows: 3, Cols: 1})
+	a := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
+	b := NewMatrix(engine.MatrixData{Data: []float64{1, 1, 1}, Rows: 3, Cols: 1})
 	input := append([]engine.Value{a, b}, matGet("mat-mul")...)
 	result := runAQL(t, r, input)
 	m := result[0].AsMatrix()
@@ -270,7 +270,7 @@ func TestMatrixMulRectangular(t *testing.T) {
 func TestMatrixTranspose(t *testing.T) {
 	r := matrixRegistry(t)
 	// [[1,2,3],[4,5,6]] → [[1,4],[2,5],[3,6]]
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
 	input := append([]engine.Value{mat}, matGet("transpose")...)
 	result := runAQL(t, r, input)
 	m := result[0].AsMatrix()
@@ -287,7 +287,7 @@ func TestMatrixTranspose(t *testing.T) {
 
 func TestMatrixFlatten(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{mat}, matGet("flatten")...)
 	result := runAQL(t, r, input)
 	list := result[0].AsList()
@@ -306,7 +306,7 @@ func TestMatrixFlatten(t *testing.T) {
 
 func TestMatrixSum(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{mat}, matGet("sum")...)
 	result := runAQL(t, r, input)
 	v, _ := result[0].AsNumber()
@@ -318,7 +318,7 @@ func TestMatrixSum(t *testing.T) {
 func TestMatrixTrace(t *testing.T) {
 	r := matrixRegistry(t)
 	// trace([[1,2],[3,4]]) = 1+4 = 5
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{mat}, matGet("tr")...)
 	result := runAQL(t, r, input)
 	v, _ := result[0].AsNumber()
@@ -330,7 +330,7 @@ func TestMatrixTrace(t *testing.T) {
 func TestMatrixDet(t *testing.T) {
 	r := matrixRegistry(t)
 	// det([[1,2],[3,4]]) = 1*4 - 2*3 = -2
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{mat}, matGet("det")...)
 	result := runAQL(t, r, input)
 	v, _ := result[0].AsNumber()
@@ -343,7 +343,7 @@ func TestMatrixDet3x3(t *testing.T) {
 	r := matrixRegistry(t)
 	// det([[6,1,1],[4,-2,5],[2,8,7]]) = 6(-2*7-5*8) - 1(4*7-5*2) + 1(4*8-(-2)*2)
 	// = 6(-14-40) - 1(28-10) + 1(32+4) = 6(-54) - 18 + 36 = -324-18+36 = -306
-	mat := engine.NewMatrix(engine.MatrixData{Data: []float64{6, 1, 1, 4, -2, 5, 2, 8, 7}, Rows: 3, Cols: 3})
+	mat := NewMatrix(engine.MatrixData{Data: []float64{6, 1, 1, 4, -2, 5, 2, 8, 7}, Rows: 3, Cols: 3})
 	input := append([]engine.Value{mat}, matGet("det")...)
 	result := runAQL(t, r, input)
 	v, _ := result[0].AsNumber()
@@ -406,8 +406,8 @@ func TestMatrixMakeFromRows(t *testing.T) {
 
 func TestMatrixMulIdentity(t *testing.T) {
 	r := matrixRegistry(t)
-	a := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
-	eye := engine.NewMatrix(engine.MatrixData{Data: []float64{1, 0, 0, 1}, Rows: 2, Cols: 2})
+	a := NewMatrix(engine.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	eye := NewMatrix(engine.MatrixData{Data: []float64{1, 0, 0, 1}, Rows: 2, Cols: 2})
 	input := append([]engine.Value{a, eye}, matGet("mat-mul")...)
 	result := runAQL(t, r, input)
 	m := result[0].AsMatrix()
