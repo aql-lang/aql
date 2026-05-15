@@ -123,7 +123,7 @@ func registerCoreTypeWord(r *Registry) {
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				name, _ := args[0].AsConcreteAtom()
 				body := args[1]
-				if err := installType(reg, name, body); err != nil {
+				if err := InstallType(reg, name, body); err != nil {
 					return nil, err
 				}
 				return nil, nil
@@ -464,8 +464,12 @@ func IsValueOfType(v, t Value) bool {
 	return ok
 }
 
-// installType validates a (name, body) pair and pushes the body onto
-// the type stack. Mirrors production aql validateAndInstallType.
+// InstallType is the single kernel entry point for installing a
+// named type body (`type Foo body`). Validates the body shape,
+// rejects name clashes, and pushes onto the registry's type
+// stack. Used by both the eng-internal core `type` word and the
+// production aql `type` word in lang/engine. Changes to
+// type-installation policy go here, not in a per-surface duplicate.
 //
 // Body acceptance is broad: a structural type body (IsTypeBody — type
 // literal, disjunct, implicit map, typed list/map, ObjectType, …) OR a
@@ -477,7 +481,7 @@ func IsValueOfType(v, t Value) bool {
 // When the body is an anonymous ObjectType (from the `object` word),
 // binding it under NAME renames it `Object/NAME` (or `<parent>/NAME`
 // when it inherits) so `typeof` / `is` report the nominal name.
-func installType(r *Registry, name string, body Value) error {
+func InstallType(r *Registry, name string, body Value) error {
 	if !IsTypeBody(body) && !IsLiteralTypeBody(body) {
 		return &AqlError{
 			Code:   "type_error",

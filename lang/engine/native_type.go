@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/aql-lang/aql/eng"
 )
 
 // typeNatives covers the type-system words: table, type, untype,
@@ -216,56 +218,14 @@ func tableHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 
 // ---- type / untype ----
 
-// validateAndInstallType validates a type-name/body pair and pushes
-// the body onto r's type stack. Used by typeHandler.
-func validateAndInstallType(r *Registry, name string, body Value) error {
-	if !IsTypeBody(body) {
-		return fmt.Errorf("type: body must be a type value (record, disjunct, type literal, typed list, or typed map), got %s", body.String())
-	}
-	if !IsCapitalisedName(name) {
-		return fmt.Errorf("type %s: type names must start with a capital letter", name)
-	}
-	if !r.Types.Has(name) {
-		if err := ValidateTypeNameParts(name, r.IsKnownPart); err != nil {
-			return err
-		}
-	}
-	if r.Lookup(name) != nil {
-		return fmt.Errorf("type %s: name clash — already a registered function", name)
-	}
-	if r.Defs.Has(name) {
-		return fmt.Errorf("type %s: name clash — already a def'd value", name)
-	}
-	if IsObjectType(body) {
-		info, _ := AsObjectType(body)
-		if info.Parent != nil {
-			info.Name = info.Parent.Name + "/" + name
-		} else {
-			info.Name = "Object/" + name
-		}
-		for _, p := range strings.Split(info.Name, "/") {
-			r.RegisterPart(p)
-		}
-		parentDef := TObject
-		if info.Parent != nil && info.Parent.Type != nil {
-			parentDef = info.Parent.Type
-		}
-		def := r.Types.MintType(name, parentDef)
-		body = NewObjectType(def, info)
-		r.Types.Bind(name, def, body)
-	} else {
-		r.Types.PushType(name, body)
-	}
-	for _, p := range strings.Split(name, "/") {
-		r.RegisterPart(p)
-	}
-	return nil
-}
-
+// typeHandler delegates to eng.InstallType — the single kernel entry
+// point for type-name installation. At Step 10d the lang-side
+// validateAndInstallType (near-duplicate) was removed; changes to
+// type-installation policy go to eng/go/core_type.go::InstallType.
 func typeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := defName(args[0])
 	body := args[1]
-	if err := validateAndInstallType(r, name, body); err != nil {
+	if err := eng.InstallType(r, name, body); err != nil {
 		return nil, err
 	}
 	return nil, nil
