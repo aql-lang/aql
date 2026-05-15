@@ -6,6 +6,18 @@ AQL currently has no date/time types or words. The type system (`types.go`) is e
 
 **Deliverable:** New design document at `lang/doc/design/TEMPORAL-WORDS.1.md`.
 
+> **Status update (post Step 11 of TYPE-DECOUPLING.0.md):** the
+> free-form text parsing surface originally proposed in this design
+> has been **removed as a feature**. The temporal types remain (Date,
+> DateTime, Instant, TimeOfDay, CalDuration, ClkDuration, Timezone,
+> Timeout, Interval), as does construction from numeric Unix epochs
+> (`unix` / `unix-ms` / `unix-ns`) and wall-clock (`now-local` /
+> `today` / `today-utc`), and output-only formatting (`to-string`
+> / `to-iso` / `format`). There is no symmetric text-input path —
+> AQL programs that need to read date strings should pre-parse them
+> in their source system or use Unix epochs. Affected sections below
+> are marked with **REMOVED**.
+
 ---
 
 ## Analysis: Is the JS Temporal API Sufficient?
@@ -244,16 +256,23 @@ Units: `"year"`, `"quarter"`, `"month"`, `"week"`, `"day"`, `"hour"`, `"minute"`
 
 ---
 
-### 11. Parsing (4 words)
+### 11. Parsing — **REMOVED**
+
+> All four words below were removed as a feature in Step 11 of
+> TYPE-DECOUPLING.0.md. The parser-coupling between the temporal types
+> and free-form text was the last remaining reason for eng/ to know
+> about temporal types; removing the parsing surface eliminates that
+> coupling. The original proposal is retained below struck through
+> for design-history reasons.
 
 | Word | Signature | Example | Notes |
 |------|-----------|---------|-------|
-| `date` | `S -> D` | `"2024-03-15" date` | ISO 8601 (default, listed in Construction) |
-| `parse-date` | `S S -> D` | `"15/03/2024" parse-date "02/01/2006"` | Custom Go layout |
-| `parse-datetime` | `S S -> DT` | `"Mar 15, 2024 2:30PM" parse-datetime "Jan 02, 2006 3:04PM"` | Custom Go layout |
-| `auto-date` | `S -> D` | `"March 15, 2024" auto-date` | Best-effort multi-format parsing |
+| ~~`date`~~ (ISO-string form) | ~~`S -> D`~~ | ~~`"2024-03-15" date`~~ | **REMOVED** |
+| ~~`parse-date`~~ | ~~`S S -> D`~~ | ~~`"15/03/2024" parse-date "02/01/2006"`~~ | **REMOVED** |
+| ~~`parse-datetime`~~ | ~~`S S -> DT`~~ | ~~`"Mar 15, 2024 2:30PM" parse-datetime "Jan 02, 2006 3:04PM"`~~ | **REMOVED** |
+| ~~`auto-date`~~ | ~~`S -> D`~~ | ~~`"March 15, 2024" auto-date`~~ | **REMOVED** |
 
-`auto-date` tries ISO 8601, RFC 2822, US format, European format, etc. in sequence. Neither Temporal nor Go provides this out of the box, but it's essential for messy real-world data.
+~~`auto-date` tries ISO 8601, RFC 2822, US format, European format, etc. in sequence. Neither Temporal nor Go provides this out of the box, but it's essential for messy real-world data.~~
 
 ---
 
@@ -271,7 +290,7 @@ Units: `"year"`, `"quarter"`, `"month"`, `"week"`, `"day"`, `"hour"`, `"minute"`
 | Conversion | 9 | `to-date`, `to-time-of-day`, `to-datetime`, `to-instant`, `to-local`, `to-utc`, `to-string`, `format`, `to-iso` |
 | Rounding | 4 | `round` (extend), `truncate` (extend), `start-of`, `end-of` |
 | Timezone | 6 | `tz`, `tz-utc`, `tz-local`, `tz-name`, `tz-offset`, `dst?` |
-| Parsing | 4 | `date`, `parse-date`, `parse-datetime`, `auto-date` |
+| ~~Parsing~~ | ~~4~~ | ~~`date`, `parse-date`, `parse-datetime`, `auto-date`~~ — **REMOVED**, see Step 11 of TYPE-DECOUPLING.0.md |
 | **Total** | **~92** | (some overlap: `date`, `duration` appear in multiple categories) |
 
 **Unique new words: ~70. Extended existing words: `add`, `sub`, `eq`, `compare`, `round`, `truncate` (6).**
@@ -321,8 +340,9 @@ elapsed total-seconds
 # precise elapsed time, immune to clock adjustment
 ```
 
-### Parsing messy date formats
+### ~~Parsing messy date formats~~ — **REMOVED**
 ```aql
+# REMOVED in Step 11 of TYPE-DECOUPLING.0.md; left for design history only.
 raw-data apply date_str [auto-date]
          dropna date_str
          mutate {yr:(date_str year)}
@@ -335,9 +355,9 @@ raw-data apply date_str [auto-date]
 
 | Phase | Words | Coverage |
 |-------|-------|----------|
-| **Phase 1 (Core)** | `date`, `datetime`, `instant`, `now`, `today`, `year`, `month`, `day`, `weekday`, `add`, `sub`, `until`, `before?`, `after?`, `to-string`, `format`, `parse-date` | 80% of use cases |
+| **Phase 1 (Core)** | `now-local`, `today`, `unix`, `unix-ms`, `year`, `month`, `day`, `weekday`, `add`, `sub`, `until`, `before?`, `after?`, `to-string`, `format` (~~`parse-date`, `date`, `datetime`, `instant`~~ — removed Step 11) | 80% of use cases |
 | **Phase 2 (Duration)** | `years`, `months`, `weeks`, `days`, `hours`, `minutes`, `seconds`, `diff`, `elapsed`, duration extraction words | Duration arithmetic |
-| **Phase 3 (Business)** | `quarter`, `start-of`, `end-of`, `iso-week`, `auto-date`, `between?`, `earliest`, `latest` | Business analytics |
+| **Phase 3 (Business)** | `quarter`, `start-of`, `end-of`, `iso-week`, ~~`auto-date`~~, `between?`, `earliest`, `latest` | Business analytics |
 | **Phase 4 (Timezone)** | `tz`, `to-local`, `to-instant`, `to-utc`, `tz-offset`, `dst?` | Global data |
 
 ---
@@ -355,7 +375,7 @@ Following the existing `native_*.go` pattern:
 - `lang/internal/engine/native_temporal_convert.go` — to-date, to-datetime, to-instant, to-local, format
 - `lang/internal/engine/native_temporal_round.go` — round, truncate, start-of, end-of
 - `lang/internal/engine/native_temporal_tz.go` — tz, tz-utc, tz-local, tz-name, tz-offset, dst?
-- `lang/internal/engine/native_temporal_parse.go` — parse-date, parse-datetime, auto-date
+- ~~`lang/internal/engine/native_temporal_parse.go` — parse-date, parse-datetime, auto-date~~ — **REMOVED** (Step 11)
 
 ## Files to Modify
 

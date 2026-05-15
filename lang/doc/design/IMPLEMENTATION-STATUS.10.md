@@ -109,9 +109,16 @@ Date, TimeOfDay, CalDuration, ClkDuration, Timezone, Timeout, Interval.
 Core timer words implemented: `now`, `sleep`, `timeout`, `interval`,
 `cancel`, `await`. Remaining ~64 temporal module words not yet implemented.
 
+Per the Step 11 resolution of TYPE-DECOUPLING.0.md, free-form
+text/ISO parsing was **removed** as a feature rather than reimplemented.
+Construction is via numeric (`unix` / `unix-ms` / `unix-ns`) or
+wall-clock (`now-local` / `today` / `today-utc`); output-only
+formatting is via `to-string` / `to-iso` / `format`. The removed
+words appear stricken through below.
+
 | Category | Words |
 |----------|-------|
-| Construction | `date`, `datetime`, `instant`, `time-of-day`, `tz`, `unix`, `unix-ms`, `unix-ns`, `cal-dur`, `duration` |
+| Construction | ~~`date`~~, ~~`datetime`~~, ~~`instant`~~, ~~`time-of-day`~~, `tz`, `unix`, `unix-ms`, `unix-ns`, `cal-dur`, ~~`duration`~~ (ISO-form) |
 | Current time | `now`, `now-local`, `today`, `today-utc`, `elapsed` |
 | Extraction | `year`, `month`, `day`, `hour`, `minute`, `second`, `nanosecond`, `weekday`, `weekday-name`, `month-name`, `year-day`, `iso-week`, `quarter`, `days-in-month`, `days-in-year`, `leap-year?`, `to-unix`, `to-unix-ms` |
 | Duration | `years`, `months`, `weeks`, `days`, `hours`, `minutes`, `seconds`, `ms`, `us`, `ns`, `total-hours`, `total-minutes`, `total-seconds`, `total-ms`, `dur-years`, `dur-months`, `dur-days`, `dur-sign` |
@@ -120,7 +127,7 @@ Core timer words implemented: `now`, `sleep`, `timeout`, `interval`,
 | Conversion | `to-date`, `to-time-of-day`, `to-datetime`, `to-instant`, `to-local`, `to-utc`, `to-string`, `format`, `to-iso` |
 | Rounding | `round`/`truncate` (extend), `start-of`, `end-of` |
 | Timezone | `tz`, `tz-utc`, `tz-local`, `tz-name`, `tz-offset`, `dst?` |
-| Parsing | `parse-date`, `parse-datetime`, `auto-date` |
+| Parsing | ~~`parse-date`, `parse-datetime`, `auto-date`~~ (removed — see TYPE-DECOUPLING.0.md Step 11) |
 
 ### MINILANG.0.md — 10+ inline DSLs
 
