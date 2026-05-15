@@ -272,17 +272,22 @@ func (t *Type) Equal(other *Type) bool {
 // MetatypeFor returns the metatype for a given type.
 // Scalar subtypes → TScalarType, Node subtypes → TNodeType,
 // Object subtypes → TObjectType, everything else → TType.
+//
+// The mapping is driven by *Type.Metatype, set at registration via
+// builtinDecl.MetatypePath on the three anchor roots (Scalar, Node,
+// Object). Descendants of those roots inherit the anchor by walking
+// up the Parent chain. Step 9 of TYPE-DECOUPLING.0.md replaced the
+// historical root-name switch with this field-driven lookup so a
+// new root with its own metatype can be added by declaring its
+// MetatypePath, no central function edit required.
 func MetatypeFor(t *Type) *Type {
 	if t == nil || t.Parent == nil {
 		return TType
 	}
-	switch t.Root() {
-	case TScalar:
-		return TScalarType
-	case TNode:
-		return TNodeType
-	case TObject:
-		return TObjectType
+	for d := t; d != nil; d = d.Parent {
+		if d.Metatype != nil {
+			return d.Metatype
+		}
 	}
 	return TType
 }

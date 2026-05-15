@@ -59,6 +59,13 @@ func (o OriginKind) String() string {
 // every other type. Set at registration; the lattice override in
 // Type.Matches consults it directly rather than running the historical
 // leaf-name → base-type switch (Step 9 of TYPE-DECOUPLING.0.md).
+//
+// Metatype is the type-of-the-type: TScalar's Metatype is
+// TScalarType, TNode's is TNodeType, TObject's is TObjectType, and
+// every descendant of those roots inherits the same Metatype. Other
+// roots (Any, None, Never, Word, Type) have a nil Metatype, which
+// MetatypeFor maps to TType. Replaces the historical hardcoded root-
+// name switch in MetatypeFor (Step 9).
 type Type struct {
 	ID         string       // canonical identity (e.g. "S_000000000004")
 	Name       string       // last segment of path (e.g. "ProperString")
@@ -68,6 +75,7 @@ type Type struct {
 	Origin     OriginKind   // builtin / userdef
 	Behavior   TypeBehavior // pluggable dispatch — never nil after registration
 	BaseType   *Type        // dependent-scalar underlying base; nil otherwise
+	Metatype   *Type        // metatype anchor for this branch; nil → TType
 }
 
 // IsNative reports whether t is a built-in type seeded at init from
@@ -436,11 +444,12 @@ func (tt *TypeTable) Clone() *TypeTable {
 // is the SINGLE SOURCE OF TRUTH for all builtin types — IDs, parents,
 // user-facing visibility, everything.
 type builtinDecl struct {
-	Path       string
-	FixedID    int
-	IsInternal bool   // true for Word/__XX runtime markers
-	Alias      string // optional friendly short name for ExpandShortName (e.g. "Paren" → Word/__OP)
-	BasePath   string // for Type/Dependent/Dep<X> types: the path of the underlying scalar (Step 9)
+	Path         string
+	FixedID      int
+	IsInternal   bool   // true for Word/__XX runtime markers
+	Alias        string // optional friendly short name for ExpandShortName (e.g. "Paren" → Word/__OP)
+	BasePath     string // for Type/Dependent/Dep<X> types: the path of the underlying scalar (Step 9)
+	MetatypePath string // for root types whose descendants share a metatype anchor (Scalar→Type/ScalarType, …)
 }
 
 // builtinDecls lists every builtin type. Parent-first ordering is
@@ -454,9 +463,9 @@ var builtinDecls = []builtinDecl{
 	{Path: "Any", FixedID: 1},
 	{Path: "None", FixedID: 2},
 	{Path: "Never", FixedID: 61},
-	{Path: "Scalar", FixedID: 3},
-	{Path: "Node", FixedID: 11},
-	{Path: "Object", FixedID: 30},
+	{Path: "Scalar", FixedID: 3, MetatypePath: "Type/ScalarType"},
+	{Path: "Node", FixedID: 11, MetatypePath: "Type/NodeType"},
+	{Path: "Object", FixedID: 30, MetatypePath: "Type/ObjectType"},
 	{Path: "Word", FixedID: 17},
 	{Path: "Type", FixedID: 39},
 
@@ -554,6 +563,25 @@ func newBuiltinTypeTable() *TypeTable {
 	}
 	for _, d := range builtinDecls {
 		tt.registerBuiltin(d)
+	}
+	// Post-pass: wire Metatype fields. Roots that anchor a metatype
+	// (Scalar→ScalarType, Node→NodeType, Object→ObjectType) resolve
+	// their MetatypePath here, after all decls have been registered.
+	// Every descendant of a metatype-bearing root inherits its
+	// ancestor's Metatype by walking up — done lazily by MetatypeFor.
+	for _, d := range builtinDecls {
+		if d.MetatypePath == "" {
+			continue
+		}
+		def := tt.bypath[d.Path]
+		if def == nil {
+			panic(fmt.Sprintf("typetable: post-pass cannot find %q", d.Path))
+		}
+		mt := tt.bypath[d.MetatypePath]
+		if mt == nil {
+			panic(fmt.Sprintf("typetable: metatype %q not registered for %q", d.MetatypePath, d.Path))
+		}
+		def.Metatype = mt
 	}
 	return tt
 }
