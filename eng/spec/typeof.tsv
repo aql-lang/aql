@@ -95,10 +95,8 @@ typeof Entity	Type
 typeof Table	Type	
 typeof Record	Type	
 typeof Options	Type	
-typeof Array	Type	
-typeof Timeout	Type	
-typeof Interval	Type	
-		
+typeof Array	Type
+
 # --- type family (Function / FunctionSignature / Disjunct / Enum all parent to Type) ---		
 typeof Function	Type	the Function *type* literal
 typeof FunctionSignature	Type	

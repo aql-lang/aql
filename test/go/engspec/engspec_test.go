@@ -42,17 +42,17 @@ func registerSpecWords(r *eng.Registry) {
 
 	toFloat := func(v eng.Value) float64 {
 		if v.VType.Matches(eng.TInteger) {
-			n, _ := v.AsInteger()
+			n, _ := eng.AsInteger(v)
 			return float64(n)
 		}
-		f, _ := v.AsDecimal()
+		f, _ := eng.AsDecimal(v)
 		return f
 	}
 	numericBinary := func(intOp func(a, b int64) int64, floatOp func(a, b float64) float64) eng.Handler {
 		return func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 			if args[0].VType.Matches(eng.TInteger) && args[1].VType.Matches(eng.TInteger) {
-				a, _ := args[0].AsInteger()
-				b, _ := args[1].AsInteger()
+				a, _ := eng.AsInteger(args[0])
+				b, _ := eng.AsInteger(args[1])
 				return []eng.Value{eng.NewInteger(intOp(a, b))}, nil
 			}
 			return []eng.Value{eng.NewDecimal(floatOp(toFloat(args[0]), toFloat(args[1])))}, nil
@@ -90,10 +90,10 @@ func registerSpecWords(r *eng.Registry) {
 			Args: []*eng.Type{eng.TNumber}, BarrierPos: 1,
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				if args[0].VType.Matches(eng.TInteger) {
-					n, _ := args[0].AsInteger()
+					n, _ := eng.AsInteger(args[0])
 					return []eng.Value{eng.NewInteger(-n)}, nil
 				}
-				f, _ := args[0].AsDecimal()
+				f, _ := eng.AsDecimal(args[0])
 				return []eng.Value{eng.NewDecimal(-f)}, nil
 			},
 			Returns: []*eng.Type{eng.TNumber},
@@ -104,8 +104,8 @@ func registerSpecWords(r *eng.Registry) {
 		Signatures: []eng.NativeSig{{
 			Args: []*eng.Type{eng.TString, eng.TString},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-				a, _ := args[0].AsString()
-				b, _ := args[1].AsString()
+				a, _ := eng.AsString(args[0])
+				b, _ := eng.AsString(args[1])
 				return []eng.Value{eng.NewString(b + a)}, nil
 			},
 			Returns: []*eng.Type{eng.TString},
@@ -117,7 +117,7 @@ func registerSpecWords(r *eng.Registry) {
 			{
 				Args: []*eng.Type{eng.TInteger},
 				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-					n, _ := args[0].AsInteger()
+					n, _ := eng.AsInteger(args[0])
 					return []eng.Value{eng.NewString("int:" + strconv.FormatInt(n, 10))}, nil
 				},
 				Returns: []*eng.Type{eng.TString},
@@ -125,7 +125,7 @@ func registerSpecWords(r *eng.Registry) {
 			{
 				Args: []*eng.Type{eng.TString},
 				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-					s, _ := args[0].AsString()
+					s, _ := eng.AsString(args[0])
 					return []eng.Value{eng.NewString("str:" + s)}, nil
 				},
 				Returns: []*eng.Type{eng.TString},
@@ -156,7 +156,7 @@ func registerSpecWords(r *eng.Registry) {
 			{
 				Args: []*eng.Type{eng.TInteger},
 				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-					n, _ := args[0].AsInteger()
+					n, _ := eng.AsInteger(args[0])
 					return []eng.Value{eng.NewInteger(n)}, nil
 				},
 				Returns: []*eng.Type{eng.TInteger},
@@ -206,9 +206,9 @@ func registerSpecWords(r *eng.Registry) {
 		Signatures: []eng.NativeSig{{
 			Args: []*eng.Type{eng.TInteger, eng.TInteger, eng.TInteger},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-				a, _ := args[0].AsInteger()
-				b, _ := args[1].AsInteger()
-				c, _ := args[2].AsInteger()
+				a, _ := eng.AsInteger(args[0])
+				b, _ := eng.AsInteger(args[1])
+				c, _ := eng.AsInteger(args[2])
 				return []eng.Value{eng.NewString(fmt.Sprintf("%d,%d,%d", a, b, c))}, nil
 			},
 			Returns: []*eng.Type{eng.TString},
@@ -220,8 +220,8 @@ func registerSpecWords(r *eng.Registry) {
 			Args:       []*eng.Type{eng.TInteger, eng.TInteger},
 			BarrierPos: 1,
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-				a, _ := args[0].AsInteger()
-				b, _ := args[1].AsInteger()
+				a, _ := eng.AsInteger(args[0])
+				b, _ := eng.AsInteger(args[1])
 				return []eng.Value{eng.NewString(fmt.Sprintf("%d:%d", a, b))}, nil
 			},
 			Returns: []*eng.Type{eng.TString},
@@ -254,7 +254,7 @@ func registerSpecWords(r *eng.Registry) {
 			{
 				Args: []*eng.Type{eng.TInteger},
 				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-					a, _ := args[0].AsInteger()
+					a, _ := eng.AsInteger(args[0])
 					return []eng.Value{eng.NewString(fmt.Sprintf("one:%d", a))}, nil
 				},
 				Returns: []*eng.Type{eng.TString},
@@ -262,8 +262,8 @@ func registerSpecWords(r *eng.Registry) {
 			{
 				Args: []*eng.Type{eng.TInteger, eng.TInteger},
 				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-					a, _ := args[0].AsInteger()
-					b, _ := args[1].AsInteger()
+					a, _ := eng.AsInteger(args[0])
+					b, _ := eng.AsInteger(args[1])
 					return []eng.Value{eng.NewString(fmt.Sprintf("two:%d,%d", a, b))}, nil
 				},
 				Returns: []*eng.Type{eng.TString},
@@ -283,7 +283,7 @@ func registerSpecWords(r *eng.Registry) {
 	intArgsFmt := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 		parts := make([]string, len(args))
 		for i, a := range args {
-			n, _ := a.AsInteger()
+			n, _ := eng.AsInteger(a)
 			parts[i] = strconv.FormatInt(n, 10)
 		}
 		return []eng.Value{eng.NewString(strings.Join(parts, ","))}, nil
@@ -316,7 +316,7 @@ func registerSpecWords(r *eng.Registry) {
 		Signatures: []eng.NativeSig{{
 			Args: []*eng.Type{eng.TList},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-				lst := args[0].AsList()
+				lst, _ := eng.AsList(args[0])
 				return []eng.Value{eng.NewInteger(int64(lst.Len()))}, nil
 			},
 			Returns: []*eng.Type{eng.TInteger},
@@ -327,7 +327,7 @@ func registerSpecWords(r *eng.Registry) {
 		Signatures: []eng.NativeSig{{
 			Args: []*eng.Type{eng.TList},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-				lst := args[0].AsList()
+				lst, _ := eng.AsList(args[0])
 				if lst.Len() == 0 {
 					return []eng.Value{eng.NewNone()}, nil
 				}
@@ -342,7 +342,8 @@ func registerSpecWords(r *eng.Registry) {
 			Args:       []*eng.Type{eng.TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-				body := args[0].AsList().Slice()
+				_lst, _ := eng.AsList(args[0])
+				body := _lst.Slice()
 				specReplayCounter++
 				id := fmt.Sprintf("__replayq_%d", specReplayCounter)
 				out := make([]eng.Value, 0, len(body)+2)

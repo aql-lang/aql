@@ -29,7 +29,6 @@ func TestRegisterExternalBuiltin_PluginColor(t *testing.T) {
 		return NewExtension(nil, rgbPayload{R: r, G: g, B: b})
 	}
 
-	type colorBehavior struct{}
 	matchFn := func(v Value, target *Type) bool {
 		if v.VType != target {
 			return false
