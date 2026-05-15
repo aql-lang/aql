@@ -1,0 +1,119 @@
+# tokens	expected	note
+# =====================================================================
+# Compare-dispatch spec — covers the three layers wired through
+# eng.CompareValues:
+#
+#   1. CORE comparators on the kernel scalar types (Integer, Decimal,
+#      Number cross-promotion, String, Boolean, Atom). Attached to
+#      each *Type's Behavior in eng/go/compare_scalar_behaviors.go.
+#
+#   2. NATIVE comparators on lang-layer domain types (Date, DateTime,
+#      Instant, TimeOfDay). Attached to the existing FormatBehavior
+#      in lang/engine/native_temporal.go.
+#
+#   3. USER-DEFINED comparators installed by the `cmp` word
+#      (lang/engine/native_cmp.go). The signature `cmp [Type/q List]`
+#      lets the caller write a bare type-name Word — the /q at the
+#      sig position captures it as an Atom; the handler resolves to
+#      the registered *Type and wraps its Behavior with a body that
+#      runs as AQL.
+# =====================================================================
+
+# ---------------------------------------------------------------------
+# 1. CORE: kernel scalar Comparers
+# ---------------------------------------------------------------------
+
+# Integer ordering — the numberCompareBehavior on TNumber handles
+# both Integer-Integer pairs (via the lattice walk) and Decimal pairs.
+2 5 lt	true	Integer < Integer
+5 2 lt	false	Integer > Integer
+5 5 lt	false	Integer == Integer (not less)
+5 5 lte	true	Integer == Integer (≤ holds)
+5 5 gte	true	Integer == Integer (≥ holds)
+5 2 gt	true	Integer > Integer
+
+# Decimal ordering — same dispatch path, AsNumber coerces.
+3.14 2.71 gt	true	Decimal > Decimal
+3.14 3.14 lte	true	Decimal == Decimal
+
+# Cross-type Integer + Decimal: LCA = Number; both values flow
+# through AsNumber.  Without the LCA walk the dispatch would need
+# a per-pair Behavior on Integer or Decimal — instead a single
+# Comparer on Number handles the whole numeric branch.
+3 3.5 lt	true	Integer < Decimal (LCA = Number)
+3.0 3 lt	false	Integer == Decimal (LCA = Number)
+3.0 3 lte	true	Integer == Decimal (≤ holds)
+
+# String lexicographic ordering.
+'apple' 'banana' lt	true	String lex <
+'banana' 'apple' lt	false	String lex >
+'same' 'same' lt	false	String ==
+
+# Boolean: false < true.
+false true lt	true	false < true
+true false lt	false	true > false
+true true lt	false	true == true
+
+# Atom: lex order by name.
+red/q green/q lt	false	red > green lex
+green/q red/q lt	true	green < red lex
+red/q red/q lt	false	same atom
+
+# Cross-branch (Integer vs String) — no shared Comparer below the
+# root, so the dispatch surfaces an error rather than silently
+# coercing.
+1 'a' lt	ERROR:	cross-branch (Integer vs String)
+1 true lt	ERROR:	cross-branch (Integer vs Boolean)
+
+# ---------------------------------------------------------------------
+# 2. NATIVE: predefined domain comparators (Date / DateTime / Instant)
+# ---------------------------------------------------------------------
+# These types are constructed via the `aql:time` native module — the
+# test runner pre-installs its exports so spec rows can use
+# `time.unix`, `time.seconds`, … directly. The Compare method on
+# each type's FormatBehavior orders chronologically.
+
+# Two Instants from different unix timestamps order numerically.
+(0 time.unix) (100 time.unix) lt	true	earlier Instant < later
+(100 time.unix) (0 time.unix) lt	false	later Instant > earlier
+(50 time.unix) (50 time.unix) lt	false	same Instant
+(50 time.unix) (50 time.unix) lte	true	same Instant (≤)
+(0 time.unix) (100 time.unix) gt	false	earlier !> later
+
+# ClkDuration ordering: built from numeric helpers.
+(5 time.seconds) (10 time.seconds) lt	true	5s < 10s
+(10 time.seconds) (5 time.seconds) lt	false	10s > 5s
+
+# ---------------------------------------------------------------------
+# 3. USER-DEFINED: cmp [Type/q List]
+# ---------------------------------------------------------------------
+# `cmp Person [body]` — Person is a Word, captured as an Atom by the
+# sig's /q at position 0. The handler resolves "Person" to its *Type
+# and wraps the Behavior with a Comparer running the body. Inside the
+# body, `a` and `b` are pushed as defs; the trailing Integer on the
+# stack is the comparison result.
+
+# Ascending by age: body subtracts (b.age - a.age sub computes b-a).
+# `make` calls are parenthesised so `def NAME (make TYPE BODY)`
+# binds NAME to the resulting instance — without the parens the
+# trailing tokens get pulled into the next forward collection.
+type Person object {age:Integer} cmp Person [(a 'age' get) (b 'age' get) sub] def alice (make Person {age:30}) def bob (make Person {age:25}) alice bob lt	false	30 lt 25 → false (asc by age)
+type Person object {age:Integer} cmp Person [(a 'age' get) (b 'age' get) sub] def alice (make Person {age:30}) def bob (make Person {age:25}) bob alice lt	true	25 lt 30 → true (asc by age)
+type Person object {age:Integer} cmp Person [(a 'age' get) (b 'age' get) sub] def alice (make Person {age:30}) def bob (make Person {age:25}) alice bob gt	true	30 gt 25 → true
+
+# Descending: swap operands in the body — flips the ordering.
+type Item object {n:Integer} cmp Item [(b 'n' get) (a 'n' get) sub] def i1 (make Item {n:1}) def i9 (make Item {n:9}) i1 i9 lt	false	descending: 1 not < 9
+type Item object {n:Integer} cmp Item [(b 'n' get) (a 'n' get) sub] def i1 (make Item {n:1}) def i9 (make Item {n:9}) i9 i1 lt	true	descending: 9 < 1 (inverted)
+
+# Equality through cmp: a == a returns 0, lt/gt false, lte/gte true.
+type Person object {age:Integer} cmp Person [(a 'age' get) (b 'age' get) sub] def alice (make Person {age:30}) alice alice lt	false	alice == alice → not lt
+type Person object {age:Integer} cmp Person [(a 'age' get) (b 'age' get) sub] def alice (make Person {age:30}) alice alice lte	true	alice == alice → lte holds
+
+# Unknown type — surfaces a clear error.
+cmp Nope [a b sub]	ERROR:no such type	unknown type rejected
+
+# Builtin override — refused.
+cmp Integer [a b sub]	ERROR:builtin	builtin override rejected
+
+# Body produced no Integer — error propagates.
+type Faulty object {x:Integer} cmp Faulty [a b quux] def v1 (make Faulty {x:1}) def v2 (make Faulty {x:2}) v1 v2 lt	ERROR:	body-error propagation (quux undefined)

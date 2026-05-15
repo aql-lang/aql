@@ -17,6 +17,12 @@ import (
 // Routes through eng.CompareValues, so `lt`/`gt`/`lte`/`gte` and
 // `sort` automatically pick it up when both operands match NAME.
 //
+// Signature: cmp [Type/q List]. The first arg is a type — either
+// a bare type-name Word (captured as an Atom by /q) OR a Type
+// literal already on the stack (e.g. produced by `typeof v`).
+// The handler extracts a type name from either form and looks up
+// the type in the registry's type table.
+//
 // `cmp` works on any type registered in the registry's type table —
 // `type Foo object {…}` mints a fresh *Type that values produced via
 // `make Foo {…}` carry as their VType, so the lattice walk finds the
@@ -27,6 +33,8 @@ var cmpNative = NativeFunc{
 	Name:        "cmp",
 	ForwardArgs: true,
 	Signatures: []NativeSig{
+		// Type/q: a bare type-name Word captured as Atom, or an
+		// already-quoted Atom. Forward-collected.
 		{
 			Args:       []*Type{TAtom, TList},
 			QuoteArgs:  map[int]bool{0: true},
@@ -34,8 +42,19 @@ var cmpNative = NativeFunc{
 			Handler:    cmpHandler,
 			Returns:    []*Type{},
 		},
+		// Type literal directly (e.g. `cmp (typeof p) body`).
 		{
-			Args:       []*Type{TString, TList},
+			Args:       []*Type{TType, TList},
+			NoEvalArgs: map[int]bool{1: true},
+			Handler:    cmpHandler,
+			Returns:    []*Type{},
+		},
+		// Object-rooted type literals (TObjectType, TRecord, etc.)
+		// don't satisfy TType via the default match — pick them up
+		// explicitly so `cmp (typeof person) body` works regardless
+		// of which branch the type lives on.
+		{
+			Args:       []*Type{TAny, TList},
 			NoEvalArgs: map[int]bool{1: true},
 			Handler:    cmpHandler,
 			Returns:    []*Type{},
@@ -44,12 +63,22 @@ var cmpNative = NativeFunc{
 }
 
 func cmpHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	name := defName(args[0])
+	name, err := cmpTypeName(args[0])
+	if err != nil {
+		return nil, err
+	}
 	if !IsCapitalisedName(name) {
 		return nil, fmt.Errorf("cmp %s: type names must start with a capital letter", name)
 	}
 	def := r.Types.LookupByName(name)
 	if def == nil {
+		// Fall back to the kernel builtin table. Hitting it means
+		// the caller is trying to override a kernel scalar's
+		// canonical Comparer (Integer / String / Boolean / Atom)
+		// — refused so the kernel ordering stays stable.
+		if eng.Builtin.LookupByName(name) != nil {
+			return nil, fmt.Errorf("cmp %s: cannot override comparator on builtin type", name)
+		}
 		return nil, fmt.Errorf("cmp %s: no such type", name)
 	}
 	if def.Origin == eng.OriginBuiltin {
@@ -70,6 +99,43 @@ func cmpHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 		typeName: name,
 	}
 	return nil, nil
+}
+
+// cmpTypeName extracts a type-name string from the first cmp arg,
+// supporting all three sig variants:
+//   - Atom (from a bare-name Word via /q): use the atom's payload.
+//   - Type literal (Data == nil): use the VType's leaf name.
+//   - Structural type body (ObjectType etc.): use its declared name.
+func cmpTypeName(v Value) (string, error) {
+	if v.VType.Equal(eng.TAtom) {
+		s, _ := eng.AsAtom(v)
+		return s, nil
+	}
+	if v.VType.Equal(eng.TString) {
+		s, _ := eng.AsString(v)
+		return s, nil
+	}
+	if v.Data == nil && v.VType != nil {
+		return v.VType.Leaf(), nil
+	}
+	if ot, err := eng.AsObjectType(v); err == nil && ot.Name != "" {
+		// Object/Foo → "Foo"
+		name := ot.Name
+		if idx := lastSlash(name); idx >= 0 {
+			name = name[idx+1:]
+		}
+		return name, nil
+	}
+	return "", fmt.Errorf("cmp: first argument must be a type name or type literal, got %s", v.VType.String())
+}
+
+func lastSlash(s string) int {
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] == '/' {
+			return i
+		}
+	}
+	return -1
 }
 
 // userTypeBehavior wraps a Type's existing TypeBehavior with a

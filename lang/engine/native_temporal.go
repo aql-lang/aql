@@ -317,6 +317,10 @@ func (clkDurationFormatBehavior) Format(v Value) string {
 	return "ClkDuration(nil)"
 }
 
+func (clkDurationFormatBehavior) Compare(a, b Value) (int, error) {
+	return compareDurationPayloads(a, b), nil
+}
+
 type timezoneFormatBehavior struct{}
 
 func (timezoneFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
