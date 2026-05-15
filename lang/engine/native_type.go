@@ -365,7 +365,7 @@ func anyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	if !IsConcrete(args[0]) {
 		return []Value{NewBoolean(false)}, nil
 	}
-	list := AsList(args[0])
+	list, _ := AsList(args[0])
 	n := list.Len()
 	if n == 0 {
 		return []Value{NewBoolean(false)}, nil
@@ -385,7 +385,7 @@ func allHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	if !IsConcrete(args[0]) {
 		return []Value{NewBoolean(true)}, nil
 	}
-	list := AsList(args[0])
+	list, _ := AsList(args[0])
 	n := list.Len()
 	if n == 0 {
 		return []Value{NewBoolean(true)}, nil
@@ -405,7 +405,7 @@ func tanyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("tany: expected a concrete list")
 	}
-	list := AsList(args[0])
+	list, _ := AsList(args[0])
 	n := list.Len()
 	if n == 0 {
 		return []Value{NewTypeLiteral(TNever)}, nil
@@ -431,7 +431,7 @@ func tallHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("tall: expected a concrete list")
 	}
-	list := AsList(args[0])
+	list, _ := AsList(args[0])
 	n := list.Len()
 	if n == 0 {
 		return []Value{NewTypeLiteral(TAny)}, nil
@@ -547,7 +547,7 @@ func convert3Handler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 
 	base := ""
 	if opts.Data != nil {
-		m := AsMap(opts)
+		m, _ := AsMap(opts)
 		if m != nil {
 			if bv, ok := m.Get("base"); ok {
 				base = ValToString(bv)

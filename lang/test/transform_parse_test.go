@@ -16,7 +16,7 @@ func TestTransformInject(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m := engine.AsMap(result[0])
+	m, _ := engine.AsMap(result[0])
 	v, ok := m.Get("x")
 	if !ok {
 		t.Fatal("expected key 'x' in result")
@@ -35,7 +35,7 @@ func TestTransformPassthrough(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := engine.AsMap(result[0])
+	m, _ := engine.AsMap(result[0])
 	v, _ := m.Get("x")
 	vi1, _ := engine.AsInteger(v)
 	if vi1 != 99 {
@@ -51,7 +51,7 @@ func TestTransformNestedPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := engine.AsMap(result[0])
+	m, _ := engine.AsMap(result[0])
 	v, _ := m.Get("val")
 	vi2, _ := engine.AsInteger(v)
 	if vi2 != 42 {
@@ -70,7 +70,7 @@ func TestDefTransformWithLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := engine.AsMap(result[0])
+	m, _ := engine.AsMap(result[0])
 	v, ok := m.Get("greeting")
 	if !ok {
 		t.Fatal("expected key 'greeting' in result")

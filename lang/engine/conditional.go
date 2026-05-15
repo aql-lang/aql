@@ -5,7 +5,7 @@ package engine
 // them as a sub-expression. Scalars are returned as-is.
 func spliceArg(v Value) []Value {
 	if v.VType.Equal(TList) && v.Data != nil && !IsTypedList(v) && !IsTableType(v) {
-		elems := AsList(v)
+		elems, _ := AsList(v)
 		result := make([]Value, 0, elems.Len()+2)
 		result = append(result, NewOpenParen())
 		result = append(result, elems.Slice()...)
@@ -49,7 +49,8 @@ func ifClause(elems []Value) []Value {
 	elseBranch := ifClause(elems[2:])
 
 	if isCodeBody(cond) {
-		condSlice := AsList(cond).Slice()
+		_lst, _ := AsList(cond)
+		condSlice := _lst.Slice()
 		id := NextMarkID()
 		tokens := make([]Value, 0, len(condSlice)+2)
 		tokens = append(tokens, NewMark(id, condSlice...))

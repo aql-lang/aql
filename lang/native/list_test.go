@@ -46,7 +46,8 @@ func TestListAllHandler(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	list := engine.AsList(result[0]).Slice()
+	_lst, _ := engine.AsList(result[0])
+	list := _lst.Slice()
 	if len(list) != 2 {
 		t.Errorf("expected 2 rows, got %d", len(list))
 	}
@@ -76,14 +77,15 @@ func TestListFilterHandler(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	list := engine.AsList(result[0]).Slice()
+	_lst, _ := engine.AsList(result[0])
+	list := _lst.Slice()
 	if len(list) != 2 {
 		t.Errorf("expected 2 matching rows, got %d", len(list))
 	}
 
 	// Check the names
 	for _, row := range list {
-		m := engine.AsMap(row)
+		m, _ := engine.AsMap(row)
 		nameVal, _ := m.Get("name")
 		name, _ := engine.AsString(nameVal)
 		if name != "alice" && name != "carol" {
@@ -114,12 +116,13 @@ func TestListFilterMultipleKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := engine.AsList(result[0]).Slice()
+	_lst, _ := engine.AsList(result[0])
+	list := _lst.Slice()
 	if len(list) != 1 {
 		t.Errorf("expected 1 matching row, got %d", len(list))
 	}
 	if len(list) > 0 {
-		m := engine.AsMap(list[0])
+		m, _ := engine.AsMap(list[0])
 		nameVal, _ := m.Get("name")
 		ns, _ := engine.AsString(nameVal)
 		if ns != "alice" {
@@ -146,7 +149,8 @@ func TestListFilterNoMatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := engine.AsList(result[0]).Slice()
+	_lst, _ := engine.AsList(result[0])
+	list := _lst.Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 matching rows, got %d", len(list))
 	}
@@ -171,7 +175,8 @@ func TestListFilterMissingField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := engine.AsList(result[0]).Slice()
+	_lst, _ := engine.AsList(result[0])
+	list := _lst.Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 matching rows, got %d", len(list))
 	}
@@ -184,7 +189,8 @@ func TestListAllEmptyTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := engine.AsList(result[0]).Slice()
+	_lst, _ := engine.AsList(result[0])
+	list := _lst.Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(list))
 	}

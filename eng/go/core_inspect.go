@@ -157,7 +157,7 @@ func buildTypeInspection(name string, tv Value) Value {
 
 	case IsRecordShape(tv):
 		result.Set("kind", NewAtom("record"))
-		m := AsMap(tv)
+		m, _ := AsMap(tv)
 		fields := NewOrderedMap()
 		for _, k := range m.Keys() {
 			v, _ := m.Get(k)

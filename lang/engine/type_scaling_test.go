@@ -569,7 +569,8 @@ func TestUnifyListsWithDeepTypedValues(t *testing.T) {
 	if !ok {
 		t.Fatal("Unify of identical integer lists should succeed")
 	}
-	elems := AsList(result).Slice()
+	_lst, _ := AsList(result)
+	elems := _lst.Slice()
 	if len(elems) != 2 {
 		t.Fatalf("expected 2 elements, got %d", len(elems))
 	}
@@ -595,7 +596,7 @@ func TestUnifyMapsWithDeepTypedValues(t *testing.T) {
 	if !ok {
 		t.Fatal("Unify of identical integer-valued maps should succeed")
 	}
-	rm := AsMap(result)
+	rm, _ := AsMap(result)
 	xv, _ := rm.Get("X")
 	yv, _ := rm.Get("y")
 	_as9, _ := AsInteger(xv)

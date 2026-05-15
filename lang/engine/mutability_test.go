@@ -224,7 +224,7 @@ func TestAsMapReturnsReadMap(t *testing.T) {
 	m.Set("x", NewInteger(1))
 	mapVal := NewMap(m)
 
-	rm := AsMap(mapVal)
+	rm, _ := AsMap(mapVal)
 	if rm == nil {
 		t.Fatal("AsMap returned nil")
 	}
@@ -268,9 +268,9 @@ func TestAsMapReturnsReadMap(t *testing.T) {
 		TypeRef: &objType,
 		Fields:  objFields,
 	})
-	// AsMap returns nil for Object (Data is ObjectInstanceInfo, not *OrderedMap)
-	if AsMap(inst) != nil {
-		t.Fatal("AsMap should return nil for Object instance")
+	// AsMap returns an error for Object (Data is ObjectInstanceInfo, not *OrderedMap)
+	if _m, err := AsMap(inst); err == nil && _m != nil {
+		t.Fatal("AsMap should return nil/error for Object instance")
 	}
 	// But Fields are mutable via the ObjectInstanceInfo
 	oi := inst.Data.(ObjectInstanceInfo)
@@ -287,7 +287,7 @@ func TestAsMapReturnsReadMap(t *testing.T) {
 func TestAsListReturnsReadList(t *testing.T) {
 	listVal := NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)})
 
-	rl := AsList(listVal)
+	rl, _ := AsList(listVal)
 	if rl.IsNil() {
 		t.Fatal("AsList returned nil ReadList")
 	}

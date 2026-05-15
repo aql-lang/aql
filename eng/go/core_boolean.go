@@ -207,7 +207,9 @@ func TandValues(a, b Value) Value {
 	}
 
 	if isPlainConcreteMap(a) && isPlainConcreteMap(b) {
-		merged, ok := mergeMaps(AsMap(a), AsMap(b))
+		ma, _ := AsMap(a)
+		mb, _ := AsMap(b)
+		merged, ok := mergeMaps(ma, mb)
 		if !ok {
 			return NewTypeLiteral(TNever)
 		}
@@ -230,7 +232,8 @@ func isPlainConcreteMap(v Value) bool {
 	if IsRecordType(v) || IsOptionsType(v) || IsTypedMap(v) {
 		return false
 	}
-	return AsMap(v) != nil
+	m, err := AsMap(v)
+	return err == nil && m != nil
 }
 
 // mergeMaps walks keys of a then b in order, intersecting values for

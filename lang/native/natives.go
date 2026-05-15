@@ -494,7 +494,7 @@ func folderOptsHandler(args []engine.Value, _ map[string]engine.Value, _ []engin
 		return nil, fmt.Errorf("folder: expected Path, got %s", pathVal.VType.String())
 	}
 	parents := true
-	if optsMap := engine.AsMap(optsVal); optsMap != nil {
+	if optsMap, _ := engine.AsMap(optsVal); optsMap != nil {
 		if v, ok := optsMap.Get("parents"); ok && v.VType.Matches(engine.TBoolean) {
 			parents, _ = engine.AsBoolean(v)
 		}

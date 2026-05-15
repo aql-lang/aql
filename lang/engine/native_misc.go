@@ -399,7 +399,8 @@ func moduleHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("module: argument must be a concrete list, got type literal")
 	}
-	desc, err := RunModuleBody(r, AsList(args[0]).Slice())
+	_lst, _ := AsList(args[0])
+	desc, err := RunModuleBody(r, _lst.Slice())
 	if err != nil {
 		return nil, fmt.Errorf("module: %w", err)
 	}
@@ -417,7 +418,8 @@ func importRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("import: rename list must be a concrete list, got type literal")
 	}
-	return nil, installRenamedExports(r, desc, AsList(args[0]).Slice())
+	_lst, _ := AsList(args[0])
+	return nil, installRenamedExports(r, desc, _lst.Slice())
 }
 
 func importSingleRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -465,7 +467,8 @@ func importFileRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 		if err != nil {
 			return nil, err
 		}
-		return nil, installRenamedExports(r, desc, AsList(args[0]).Slice())
+		_lst, _ := AsList(args[0])
+		return nil, installRenamedExports(r, desc, _lst.Slice())
 	}
 	if isDataFile(path) {
 		return nil, fmt.Errorf("import: rename not supported for data files (%s)", path)
@@ -474,7 +477,8 @@ func importFileRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 	if err != nil {
 		return nil, err
 	}
-	return nil, installRenamedExports(r, desc, AsList(args[0]).Slice())
+	_lst, _ := AsList(args[0])
+	return nil, installRenamedExports(r, desc, _lst.Slice())
 }
 
 // import: [atom/q list] -> [] — inline module: import module [body]
@@ -488,7 +492,8 @@ func importInlineHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	if !IsConcrete(args[1]) {
 		return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 	}
-	desc, err := RunModuleBody(r, AsList(args[1]).Slice())
+	_lst, _ := AsList(args[1])
+	desc, err := RunModuleBody(r, _lst.Slice())
 	if err != nil {
 		return nil, fmt.Errorf("import module: %w", err)
 	}
@@ -507,11 +512,13 @@ func importInlineRenameHandler(args []Value, _ map[string]Value, _ []Value, r *R
 	if !IsConcrete(args[2]) {
 		return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 	}
-	desc, err := RunModuleBody(r, AsList(args[2]).Slice())
+	_lst2, _ := AsList(args[2])
+	desc, err := RunModuleBody(r, _lst2.Slice())
 	if err != nil {
 		return nil, fmt.Errorf("import module: %w", err)
 	}
-	return nil, installRenamedExports(r, desc, AsList(args[0]).Slice())
+	_lst, _ := AsList(args[0])
+	return nil, installRenamedExports(r, desc, _lst.Slice())
 }
 
 func importInlineSingleRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -522,7 +529,8 @@ func importInlineSingleRenameHandler(args []Value, _ map[string]Value, _ []Value
 	if !IsConcrete(args[2]) {
 		return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
 	}
-	desc, err := RunModuleBody(r, AsList(args[2]).Slice())
+	_lst, _ := AsList(args[2])
+	desc, err := RunModuleBody(r, _lst.Slice())
 	if err != nil {
 		return nil, fmt.Errorf("import module: %w", err)
 	}
@@ -570,7 +578,7 @@ func awaitWithOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Regist
 				mode = a
 			}
 		}
-	} else if optsMap := AsMap(args[0]); optsMap != nil {
+	} else if optsMap, _ := AsMap(args[0]); optsMap != nil {
 		if v, ok := optsMap.Get("mode"); ok {
 			if s, err := AsString(v); err == nil {
 				mode = s
@@ -590,7 +598,8 @@ func doAwait(r *Registry, mode string, parallels Value) ([]Value, error) {
 	if parallels.Data == nil {
 		return nil, fmt.Errorf("await: parallels must be a concrete list, got type literal")
 	}
-	elems := AsList(parallels).Slice()
+	_lst, _ := AsList(parallels)
+	elems := _lst.Slice()
 	if len(elems) == 0 {
 		return []Value{NewList([]Value{})}, nil
 	}

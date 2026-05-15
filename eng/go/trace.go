@@ -58,14 +58,15 @@ func TraceColorize(v Value) string {
 		}
 		return cRed + s + cReset
 	case v.VType.Equal(TList):
-		elems := AsList(v).Slice()
+		_lst, _ := AsList(v)
+		elems := _lst.Slice()
 		parts := make([]string, len(elems))
 		for i, e := range elems {
 			parts[i] = TraceColorize(e)
 		}
 		return cDim + "[" + cReset + strings.Join(parts, " ") + cDim + "]" + cReset
 	case v.VType.Equal(TMap):
-		m := AsMap(v)
+		m, _ := AsMap(v)
 		parts := make([]string, 0, m.Len())
 		for _, k := range m.Keys() {
 			val, _ := m.Get(k)
@@ -119,7 +120,8 @@ func traceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("trace: argument must be a concrete list, got type literal")
 	}
-	elems := AsList(args[0]).Slice()
+	_lst, _ := AsList(args[0])
+	elems := _lst.Slice()
 	return RunTrace(r, elems, r.Output)
 }
 

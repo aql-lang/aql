@@ -106,7 +106,7 @@ func makeRecord(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, er
 	if srcVal.Data == nil {
 		return nil, fmt.Errorf("make: record values must be a concrete list, got type literal")
 	}
-	elems := AsList(srcVal)
+	elems, _ := AsList(srcVal)
 
 	isNamed := elems.Len() > 0 && elems.Get(0).VType.Equal(TMap)
 	if isNamed {
@@ -302,7 +302,7 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 func makePath(srcVal Value, abs bool) ([]Value, error) {
 	switch {
 	case srcVal.VType.Matches(TList) && srcVal.Data != nil:
-		elems := AsList(srcVal)
+		elems, _ := AsList(srcVal)
 		parts := make([]string, elems.Len())
 		for i := 0; i < elems.Len(); i++ {
 			parts[i] = ValToString(elems.Get(i))
@@ -368,7 +368,7 @@ func makeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		if srcVal.Data == nil {
 			return nil, fmt.Errorf("make: table values must be a concrete list, got type literal")
 		}
-		rows := AsList(srcVal)
+		rows, _ := AsList(srcVal)
 		fieldKeys := recType.Fields.Keys()
 		resultRows := make([]Value, 0, rows.Len())
 
@@ -379,7 +379,7 @@ func makeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 			if rowVal.Data == nil {
 				return nil, fmt.Errorf("make: table row %d must be a concrete list, got type literal", rowIdx)
 			}
-			rowElems := AsList(rowVal)
+			rowElems, _ := AsList(rowVal)
 
 			isNamed := rowElems.Len() > 0 && rowElems.Get(0).VType.Equal(TMap)
 			if isNamed {
@@ -525,7 +525,7 @@ func makeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 
 	if targetVal.Data == nil && targetVal.VType.Equal(TPath) {
 		abs := false
-		if optsMap := AsMap(optsVal); optsMap != nil {
+		if optsMap, _ := AsMap(optsVal); optsMap != nil {
 			if v, ok := optsMap.Get("abs"); ok && v.VType.Matches(TBoolean) {
 				abs, _ = AsBoolean(v)
 			}
@@ -573,7 +573,8 @@ func makeArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 	if !srcVal.VType.Equal(TList) || srcVal.Data == nil {
 		return nil, fmt.Errorf("make: Array source must be a concrete list, got %s", srcVal.String())
 	}
-	return []Value{NewArray(AsList(srcVal).Slice())}, nil
+	srcList, _ := AsList(srcVal)
+	return []Value{NewArray(srcList.Slice())}, nil
 }
 
 // makeScalarOptsHandler is the 3-arg [ScalarType, Map, Any] make handler.
@@ -581,7 +582,7 @@ func makeScalarOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Regis
 	targetVal, optsVal, srcVal := args[0], args[1], args[2]
 	if targetVal.Data == nil && targetVal.VType.Equal(TPath) {
 		abs := false
-		if optsMap := AsMap(optsVal); optsMap != nil {
+		if optsMap, _ := AsMap(optsVal); optsMap != nil {
 			if v, ok := optsMap.Get("abs"); ok && v.VType.Matches(TBoolean) {
 				abs, _ = AsBoolean(v)
 			}
@@ -699,7 +700,7 @@ func ResolveFieldType(r *Registry, v Value) Value {
 	}
 
 	if v.VType.Equal(TList) && !IsTypedList(v) && !IsTableType(v) {
-		elems := AsList(v)
+		elems, _ := AsList(v)
 		input := make([]Value, elems.Len())
 		for i, e := range elems.Slice() {
 			if (e.VType.Matches(TString) || e.VType.Matches(TAtom)) && e.Data != nil {

@@ -1487,39 +1487,42 @@ func AsBoolean(v Value) (bool, error) {
 // Also works for TableData and Materializer, returning the rows.
 // For Materializer, this triggers materialization.
 // AsList returns a read-only view of the list payload.
-// Returns a ReadList with nil backing if the data is not a list.
-func AsList(v Value) ReadList {
+// Returns an error if the value lacks a list-shaped payload.
+// Type literals (Data == nil) and unsupported payload types are
+// reported as errors so callers can't silently treat a non-list
+// value as an empty list.
+func AsList(v Value) (ReadList, error) {
 	if v.Data == nil {
-		return ReadList{}
+		return ReadList{}, fmt.Errorf("AsList: nil data")
 	}
 	// Post Step 5c variant first; legacy []Value second.
 	if lp, ok := v.Data.(ListPayload); ok {
-		return ReadList{elems: lp.Elems}
+		return ReadList{elems: lp.Elems}, nil
 	}
 	if td, ok := v.Data.(TableData); ok {
-		return ReadList{elems: td.Rows}
+		return ReadList{elems: td.Rows}, nil
 	}
 	if mp, ok := v.Data.(MaterializerPayload); ok {
 		td, err := mp.M.Materialize()
 		if err != nil {
-			return ReadList{}
+			return ReadList{}, fmt.Errorf("AsList: materialize: %w", err)
 		}
-		return ReadList{elems: td.Rows}
+		return ReadList{elems: td.Rows}, nil
 	}
 	if mz, ok := v.Data.(Materializer); ok {
 		td, err := mz.Materialize()
 		if err != nil {
-			return ReadList{}
+			return ReadList{}, fmt.Errorf("AsList: materialize: %w", err)
 		}
-		return ReadList{elems: td.Rows}
+		return ReadList{elems: td.Rows}, nil
 	}
 	// Typed list carrying both a child constraint and concrete
 	// elements (`[v0 :T v1]`). Surface the elements so list-aware
 	// operations (lengthq, firstq, is) see them.
 	if ci, ok := v.Data.(ChildTypeInfo); ok && len(ci.Elements) > 0 {
-		return ReadList{elems: ci.Elements}
+		return ReadList{elems: ci.Elements}, nil
 	}
-	return ReadList{}
+	return ReadList{}, fmt.Errorf("AsList: not a list payload (got %T)", v.Data)
 }
 
 // AsMutableList returns the underlying []Value slice for mutation.
@@ -1535,15 +1538,17 @@ func AsMutableList(v Value) ([]Value, error) {
 	return nil, fmt.Errorf("AsMutableList: not a list payload (got %T)", v.Data)
 }
 
-// AsMap returns a read-only view of the map payload, or nil if the data is
-// not an *OrderedMap. Node values (Map, Options) are immutable — use this
-// for all read access.
-func AsMap(v Value) ReadMap {
+// AsMap returns a read-only view of the map payload.
+// Returns an error if the value lacks a map-shaped payload.
+// Type literals (Data == nil) and unsupported payload types are
+// reported as errors so callers can't silently treat a non-map
+// value as an empty map.
+func AsMap(v Value) (ReadMap, error) {
 	if v.Data == nil {
-		return nil
+		return nil, fmt.Errorf("AsMap: nil data")
 	}
 	if mp, ok := v.Data.(MapPayload); ok {
-		return mp.M
+		return mp.M, nil
 	}
 	// Typed map carrying both a child constraint and concrete entries
 	// (`{k:v :T}`). Surface the entries as an OrderedMap so map-aware
@@ -1553,9 +1558,9 @@ func AsMap(v Value) ReadMap {
 		for _, e := range ci.Entries {
 			om.Set(e.Key, e.Value)
 		}
-		return om
+		return om, nil
 	}
-	return nil
+	return nil, fmt.Errorf("AsMap: not a map payload (got %T)", v.Data)
 }
 
 // AsMutableMap returns the underlying *OrderedMap for mutation. Only valid
@@ -1733,7 +1738,7 @@ func IsTypeValue(v Value) bool {
 
 	// Concrete list: check each element recursively.
 	if v.VType.Matches(TList) && v.Data != nil {
-		elems := AsList(v)
+		elems, _ := AsList(v)
 		if !elems.IsNil() {
 			for _, elem := range elems.Slice() {
 				if IsTypeValue(elem) {
@@ -1745,7 +1750,7 @@ func IsTypeValue(v Value) bool {
 
 	// Concrete map: check each value recursively.
 	if v.VType.Matches(TMap) && v.Data != nil {
-		m := AsMap(v)
+		m, _ := AsMap(v)
 		if m != nil {
 			for _, key := range m.Keys() {
 				val, _ := m.Get(key)

@@ -20,7 +20,8 @@ type parallelResult struct {
 func runParallelBranch(r *Registry, elem Value) parallelResult {
 	if elem.VType.Matches(TList) && elem.Data != nil && !IsTypedList(elem) && !IsTableType(elem) {
 		sub := New(r)
-		body := AsList(elem).Slice()
+		_lst, _ := AsList(elem)
+		body := _lst.Slice()
 		input := make([]Value, len(body))
 		copy(input, body)
 		result, runErr := sub.Run(input)

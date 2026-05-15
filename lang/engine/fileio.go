@@ -80,7 +80,7 @@ func parseFileOpts(opts Value) (enc, format, mode, nl string, fmtExplicit bool) 
 	if !opts.VType.Equal(TMap) || opts.Data == nil {
 		return
 	}
-	m := AsMap(opts)
+	m, _ := AsMap(opts)
 
 	if s, ok := MapFieldString(m, "enc"); ok {
 		enc = s

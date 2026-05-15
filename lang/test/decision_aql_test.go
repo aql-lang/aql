@@ -49,7 +49,7 @@ func checkBool(want bool) func(t *testing.T, result []engine.Value) {
 func checkMapField(key, want string) func(t *testing.T, result []engine.Value) {
 	return func(t *testing.T, result []engine.Value) {
 		t.Helper()
-		m := engine.AsMap(result[0])
+		m, _ := engine.AsMap(result[0])
 		if m == nil {
 			t.Fatalf("expected map, got %s", result[0].VType.String())
 		}
@@ -74,7 +74,7 @@ func checkString(want string) func(t *testing.T, result []engine.Value) {
 func checkCollectLen(want int) func(t *testing.T, result []engine.Value) {
 	return func(t *testing.T, result []engine.Value) {
 		t.Helper()
-		list := engine.AsList(result[0])
+		list, _ := engine.AsList(result[0])
 		if list.Len() != want {
 			t.Fatalf("expected %d collected, got %d: %v", want, list.Len(), result[0])
 		}
@@ -90,7 +90,7 @@ var decisionTests = []decisionTestCase{
 		expr: `18 "gte" quote age decision.cond`,
 		check: func(t *testing.T, result []engine.Value) {
 			t.Helper()
-			m := engine.AsMap(result[0])
+			m, _ := engine.AsMap(result[0])
 			if m == nil {
 				t.Fatalf("expected map, got %s", result[0].VType.String())
 			}

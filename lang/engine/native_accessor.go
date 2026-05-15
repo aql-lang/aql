@@ -42,7 +42,7 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	}
 	// Integer key on list.
 	if key.VType.Matches(TInteger) {
-		if list := AsList(container); !list.IsNil() && container.VType.Matches(TList) {
+		if list, _ := AsList(container); !list.IsNil() && container.VType.Matches(TList) {
 			_as3, _ := AsInteger(key)
 			idx := int(_as3)
 			if idx < 0 || idx >= list.Len() {
@@ -52,7 +52,7 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 		}
 	}
 	k := getKey(key)
-	m := AsMap(container)
+	m, _ := AsMap(container)
 	if m == nil {
 		return nil, fmt.Errorf("getr: expected a map, got %s", container.VType.String())
 	}

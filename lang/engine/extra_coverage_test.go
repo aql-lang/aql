@@ -192,7 +192,8 @@ func TestExtraAsListTableData(t *testing.T) {
 	row.Set("col", NewString("val"))
 	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
 	v := Value{VType: TList, Data: td}
-	list := AsList(v).Slice()
+	_lst, _ := AsList(v)
+	list := _lst.Slice()
 	if len(list) != 1 {
 		t.Fatalf("AsList() on TableData got %d rows, want 1", len(list))
 	}
@@ -253,7 +254,8 @@ func TestExtraCSVDecodeEncode(t *testing.T) {
 	if !IsTableType(vals[0]) {
 		t.Fatal("CSV decode: result should be a table type")
 	}
-	rows := AsList(vals[0]).Slice()
+	_lst, _ := AsList(vals[0])
+	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("CSV decode: got %d rows, want 2", len(rows))
 	}
@@ -278,7 +280,8 @@ func TestExtraTSVDecodeEncode(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("TSV decode: got %d values, want 1", len(vals))
 	}
-	rows := AsList(vals[0]).Slice()
+	_lst, _ := AsList(vals[0])
+	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("TSV decode: got %d rows, want 2", len(rows))
 	}
@@ -409,7 +412,8 @@ func TestExtraUnifyListsSameSuccess(t *testing.T) {
 	if !ok {
 		t.Fatal("identical lists should unify")
 	}
-	elems := AsList(result).Slice()
+	_lst, _ := AsList(result)
+	elems := _lst.Slice()
 	if len(elems) != 2 {
 		t.Errorf("unified list has %d elems, want 2", len(elems))
 	}
@@ -424,7 +428,7 @@ func TestExtraUnifyMapsSuccess(t *testing.T) {
 	if !ok {
 		t.Fatal("identical maps should unify")
 	}
-	m := AsMap(result)
+	m, _ := AsMap(result)
 	v, _ := m.Get("x")
 	_as0, _ := AsNumber(v)
 	if _as0 != 1.0 {
@@ -506,7 +510,8 @@ func TestExtraUnifyListTypeLiteral(t *testing.T) {
 	if !ok {
 		t.Fatal("list type literal should unify with concrete list")
 	}
-	if len(AsList(result).Slice()) != 1 {
+	_lst1, _ := AsList(result)
+	if len(_lst1.Slice()) != 1 {
 		t.Errorf("result should be the concrete list")
 	}
 }
@@ -519,7 +524,8 @@ func TestExtraUnifyListTypeLiteralReverse(t *testing.T) {
 	if !ok {
 		t.Fatal("concrete list should unify with list type literal")
 	}
-	if len(AsList(result).Slice()) != 1 {
+	_lst, _ := AsList(result)
+	if len(_lst.Slice()) != 1 {
 		t.Errorf("result should be the concrete list")
 	}
 }
@@ -533,7 +539,8 @@ func TestExtraUnifyMapTypeLiteral(t *testing.T) {
 	if !ok {
 		t.Fatal("map type literal should unify with concrete map")
 	}
-	if AsMap(result).Len() != 1 {
+	_m, _ := AsMap(result)
+	if _m.Len() != 1 {
 		t.Errorf("result should be the concrete map")
 	}
 }
@@ -547,7 +554,8 @@ func TestExtraUnifyMapTypeLiteralReverse(t *testing.T) {
 	if !ok {
 		t.Fatal("concrete map should unify with map type literal")
 	}
-	if AsMap(result).Len() != 1 {
+	_m, _ := AsMap(result)
+	if _m.Len() != 1 {
 		t.Errorf("result should be the concrete map")
 	}
 }

@@ -61,7 +61,7 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 	if inputSig.Data == nil {
 		return nil, 0, fmt.Errorf("function spec: input signature must be a concrete list, got type literal")
 	}
-	elems := AsList(inputSig)
+	elems, _ := AsList(inputSig)
 	var params []FnParam
 	barrierPos := 0
 
@@ -211,7 +211,7 @@ func ParseFnReturns(outputSig Value) ([]*Type, error) {
 		}
 		return []*Type{t}, nil
 	}
-	elems := AsList(outputSig)
+	elems, _ := AsList(outputSig)
 	if elems.Len() == 0 {
 		return nil, nil
 	}

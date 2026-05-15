@@ -153,7 +153,7 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 }
 
 func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	nameMap := AsMap(args[0])
+	nameMap, _ := AsMap(args[0])
 	if nameMap == nil || nameMap.Len() == 0 {
 		return nil, fmt.Errorf("def: typed-name map must have exactly one key, got empty/non-concrete map")
 	}
@@ -263,7 +263,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	if list.Data == nil {
 		return nil, fmt.Errorf("var: argument must be a concrete list, got type literal")
 	}
-	elems := AsList(list)
+	elems, _ := AsList(list)
 	if elems.Len() == 0 {
 		return nil, fmt.Errorf("var: empty list")
 	}
@@ -272,7 +272,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	if !declVal.VType.Equal(TList) || declVal.Data == nil {
 		return nil, fmt.Errorf("var: first element must be a list of variable declarations")
 	}
-	decls := AsList(declVal)
+	decls, _ := AsList(declVal)
 	body := elems.Slice()[1:]
 
 	var result []Value
@@ -287,7 +287,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 			result = append(result, NewWord("def"), NewWord(name), NewEnd())
 
 		case decl.VType.Equal(TList) && decl.Data != nil:
-			declElems := AsList(decl)
+			declElems, _ := AsList(decl)
 			if declElems.Len() < 2 {
 				return nil, fmt.Errorf("var: declaration list must have name and value")
 			}
@@ -339,7 +339,8 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	if list.Data == nil {
 		return nil, fmt.Errorf("fn: argument must be a concrete list, got type literal")
 	}
-	elems := AsList(list).Slice()
+	_lst, _ := AsList(list)
+	elems := _lst.Slice()
 	if len(elems) == 0 || len(elems)%3 != 0 {
 		return nil, fmt.Errorf("fn: list length must be a non-zero multiple of 3 (input output body triples); use `fnsig` for the type-only form")
 	}
@@ -362,7 +363,7 @@ func callHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 		return nil, fmt.Errorf("call: argument must be a plain list")
 	}
 
-	bodyElems := AsList(body)
+	bodyElems, _ := AsList(body)
 	if bodyElems.Len() == 0 {
 		return nil, nil
 	}
@@ -386,7 +387,7 @@ func dblcallHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 
 	doubled := NewInteger(n * 2)
 
-	bodyElems := AsList(body)
+	bodyElems, _ := AsList(body)
 	if bodyElems.Len() == 0 {
 		return []Value{doubled}, nil
 	}

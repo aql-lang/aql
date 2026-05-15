@@ -71,7 +71,7 @@ func parseStrOpts(v Value) strOpts {
 	if !v.VType.Equal(TMap) || v.Data == nil {
 		return o
 	}
-	m := AsMap(v)
+	m, _ := AsMap(v)
 
 	if b, ok := MapFieldBoolean(m, "u"); ok {
 		o.u = b

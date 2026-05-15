@@ -566,7 +566,7 @@ func TestParseTypedListMap(t *testing.T) {
 	if !child.VType.Equal(eng.TMap) {
 		t.Errorf("expected child type map, got %s", child.VType)
 	}
-	m := eng.AsMap(child)
+	m, _ := eng.AsMap(child)
 	xVal, ok := m.Get("x")
 	if !ok {
 		t.Fatalf("expected key 'x' in child map")
@@ -609,7 +609,7 @@ func TestParseTypedListMapChild(t *testing.T) {
 	}
 	ct0b, _ := eng.AsChildType(got[0])
 	child0b := ct0b.Child
-	m := eng.AsMap(child0b)
+	m, _ := eng.AsMap(child0b)
 	if m.Len() != 2 {
 		t.Errorf("expected 2 keys, got %d", m.Len())
 	}
@@ -686,7 +686,7 @@ func TestParseTypedMapConcreteChild(t *testing.T) {
 	if !child0c.VType.Equal(eng.TMap) {
 		t.Errorf("expected child type map, got %s", child0c.VType)
 	}
-	m := eng.AsMap(child0c)
+	m, _ := eng.AsMap(child0c)
 	xVal, ok := m.Get("x")
 	if !ok {
 		t.Fatalf("expected key 'x' in child map")
@@ -710,7 +710,8 @@ func TestParseExplicitList(t *testing.T) {
 	if !got[0].VType.Equal(eng.TList) {
 		t.Fatalf("expected list, got %s", got[0].VType)
 	}
-	elems := eng.AsList(got[0]).Slice()
+	_lst, _ := eng.AsList(got[0])
+	elems := _lst.Slice()
 	if len(elems) != 3 {
 		t.Errorf("expected 3 elements, got %d", len(elems))
 	}
@@ -725,7 +726,8 @@ func TestParseListWithStrings(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	elems := eng.AsList(got[0]).Slice()
+	_lst, _ := eng.AsList(got[0])
+	elems := _lst.Slice()
 	if len(elems) != 2 {
 		t.Errorf("expected 2 elements, got %d", len(elems))
 	}
@@ -745,7 +747,7 @@ func TestParseMapWithList(t *testing.T) {
 	if !got[0].VType.Equal(eng.TMap) {
 		t.Fatalf("expected map, got %s", got[0].VType)
 	}
-	m := eng.AsMap(got[0])
+	m, _ := eng.AsMap(got[0])
 	xVal, ok := m.Get("x")
 	if !ok {
 		t.Fatal("expected key 'x'")
@@ -753,7 +755,8 @@ func TestParseMapWithList(t *testing.T) {
 	if !xVal.VType.Equal(eng.TList) {
 		t.Errorf("expected list, got %s", xVal.VType)
 	}
-	elems := eng.AsList(xVal).Slice()
+	_lst, _ := eng.AsList(xVal)
+	elems := _lst.Slice()
 	if len(elems) != 3 {
 		t.Errorf("expected 3 elements, got %d", len(elems))
 	}
@@ -768,7 +771,7 @@ func TestParseMapWithBooleans(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m := eng.AsMap(got[0])
+	m, _ := eng.AsMap(got[0])
 	aVal, _ := m.Get("a")
 	aw, _ := eng.AsWord(aVal)
 	if !eng.IsWord(aVal) || aw.Name != "true" {
@@ -790,7 +793,7 @@ func TestParseMapWithNull(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m := eng.AsMap(got[0])
+	m, _ := eng.AsMap(got[0])
 	_, ok := m.Get("x")
 	if !ok {
 		t.Fatal("expected key 'x'")
@@ -806,7 +809,7 @@ func TestParseMapWithTypeName(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m := eng.AsMap(got[0])
+	m, _ := eng.AsMap(got[0])
 	xVal, _ := m.Get("x")
 	if !xVal.VType.Equal(eng.TNumber) {
 		t.Errorf("expected number type literal, got %s", xVal.VType)
@@ -822,7 +825,7 @@ func TestParseMapWithNestedMap(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m := eng.AsMap(got[0])
+	m, _ := eng.AsMap(got[0])
 	aVal, _ := m.Get("a")
 	if !aVal.VType.Equal(eng.TMap) {
 		t.Errorf("expected nested map, got %s", aVal.VType)
@@ -915,7 +918,7 @@ func TestParseDataMapWithNil(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m := eng.AsMap(got[0])
+	m, _ := eng.AsMap(got[0])
 	// b should be word "true" (word context)
 	bVal, _ := m.Get("b")
 	bw2, _ := eng.AsWord(bVal)
@@ -941,12 +944,12 @@ func TestParseDataMapWithNestedList(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m := eng.AsMap(got[0])
+	m, _ := eng.AsMap(got[0])
 	xVal, _ := m.Get("x")
 	if !xVal.VType.Equal(eng.TMap) {
 		t.Fatalf("expected nested map, got %s", xVal.VType)
 	}
-	inner := eng.AsMap(xVal)
+	inner, _ := eng.AsMap(xVal)
 	yVal, _ := inner.Get("y")
 	if !yVal.VType.Equal(eng.TList) {
 		t.Errorf("expected list, got %s", yVal.VType)
@@ -977,9 +980,10 @@ func TestParseDataListWithBoolAndNil(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m := eng.AsMap(got[0])
+	m, _ := eng.AsMap(got[0])
 	xVal, _ := m.Get("x")
-	elems := eng.AsList(xVal).Slice()
+	_lst, _ := eng.AsList(xVal)
+	elems := _lst.Slice()
 	if len(elems) != 4 {
 		t.Fatalf("expected 4 elements, got %d", len(elems))
 	}
@@ -1038,7 +1042,7 @@ func TestParseMapWithDecimal(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m := eng.AsMap(got[0])
+	m, _ := eng.AsMap(got[0])
 	xVal, _ := m.Get("x")
 	if !xVal.VType.Matches(eng.TDecimal) {
 		t.Errorf("expected decimal, got %s", xVal.VType)
@@ -1056,7 +1060,8 @@ func TestParseListWithMap(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	elems := eng.AsList(got[0]).Slice()
+	_lst, _ := eng.AsList(got[0])
+	elems := _lst.Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element, got %d", len(elems))
 	}
@@ -1074,9 +1079,10 @@ func TestParseNestedList(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m := eng.AsMap(got[0])
+	m, _ := eng.AsMap(got[0])
 	xVal, _ := m.Get("x")
-	elems := eng.AsList(xVal).Slice()
+	_lst, _ := eng.AsList(xVal)
+	elems := _lst.Slice()
 	if len(elems) != 2 {
 		t.Fatalf("expected 2 elements, got %d", len(elems))
 	}
@@ -1093,7 +1099,8 @@ func TestParseListWithDottedWord(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	elems := eng.AsList(got[0]).Slice()
+	_lst, _ := eng.AsList(got[0])
+	elems := _lst.Slice()
 	if len(elems) != 3 {
 		t.Fatalf("expected 3 elements (foo get bar), got %d", len(elems))
 	}
@@ -1110,7 +1117,7 @@ func TestParseMapSingleKey(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m := eng.AsMap(got[0])
+	m, _ := eng.AsMap(got[0])
 	if m.Len() != 1 {
 		t.Errorf("expected 1 key, got %d", m.Len())
 	}
@@ -1250,7 +1257,7 @@ func TestParseMapWithStringValues(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m := eng.AsMap(got[0])
+	m, _ := eng.AsMap(got[0])
 	xVal, _ := m.Get("x")
 	xValS, _ := eng.AsString(xVal)
 	if !xVal.VType.Matches(eng.TString) || xValS != "hello" {
@@ -1315,7 +1322,7 @@ func TestParseDataMapNilValue(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m := eng.AsMap(got[0])
+	m, _ := eng.AsMap(got[0])
 	// Check type literal resolution in data context
 	eVal, _ := m.Get("e")
 	if !eVal.VType.Equal(eng.TNumber) {
@@ -1362,7 +1369,7 @@ func TestParseMapManyKeys(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m := eng.AsMap(got[0])
+	m, _ := eng.AsMap(got[0])
 	if m.Len() != 3 {
 		t.Errorf("expected 3 keys, got %d", m.Len())
 	}
@@ -1378,9 +1385,10 @@ func TestParseDataListWithDecimal(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	m := eng.AsMap(got[0])
+	m, _ := eng.AsMap(got[0])
 	xVal, _ := m.Get("x")
-	elems := eng.AsList(xVal).Slice()
+	_lst, _ := eng.AsList(xVal)
+	elems := _lst.Slice()
 	if len(elems) != 2 {
 		t.Fatalf("expected 2 elements, got %d", len(elems))
 	}
@@ -1637,7 +1645,8 @@ func TestParseImplicitMapInList(t *testing.T) {
 	if !list.VType.Equal(eng.TList) {
 		t.Fatalf("expected list, got %s", list.VType)
 	}
-	elems := eng.AsList(list).Slice()
+	_lst, _ := eng.AsList(list)
+	elems := _lst.Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element in list, got %d", len(elems))
 	}
@@ -1664,7 +1673,8 @@ func TestParseExplicitMapInList(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
 	list := vals[0]
-	elems := eng.AsList(list).Slice()
+	_lst, _ := eng.AsList(list)
+	elems := _lst.Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element in list, got %d", len(elems))
 	}
@@ -1704,7 +1714,7 @@ func TestParseOptionalFieldDisjunct(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
-	m := eng.AsMap(vals[0])
+	m, _ := eng.AsMap(vals[0])
 	if m == nil {
 		t.Fatalf("eng.AsMap() returned nil, value: %s (data: %T)", vals[0].String(), vals[0].Data)
 	}
@@ -1732,7 +1742,7 @@ func TestParseOptionalFieldMixed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	m := eng.AsMap(vals[0])
+	m, _ := eng.AsMap(vals[0])
 	if m == nil {
 		t.Fatalf("eng.AsMap() returned nil")
 	}
@@ -1756,7 +1766,8 @@ func TestParseOptionalFieldInList(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
 	list := vals[0]
-	elems := eng.AsList(list).Slice()
+	_lst, _ := eng.AsList(list)
+	elems := _lst.Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element, got %d: %s", len(elems), list.String())
 	}
@@ -1783,7 +1794,7 @@ func TestParseComputedKey(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
-	m := eng.AsMap(vals[0])
+	m, _ := eng.AsMap(vals[0])
 	if m == nil {
 		t.Fatalf("eng.AsMap() returned nil, value: %s (data: %T)", vals[0].String(), vals[0].Data)
 	}
@@ -1799,7 +1810,7 @@ func TestParseComputedKeyMultiple(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	m := eng.AsMap(vals[0])
+	m, _ := eng.AsMap(vals[0])
 	if m == nil {
 		t.Fatalf("eng.AsMap() returned nil")
 	}

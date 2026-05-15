@@ -20,7 +20,8 @@ func listEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack [
 // listEntityOptsHandler handles list with an Entity object instance and an options map.
 // Sig is opts-first per the data-last principle: args[0]=opts, args[1]=entity.
 func listEntityOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := entityToAPIMapWithOpts(args[1], engine.AsMap(args[0]), "query")
+	_m, _ := engine.AsMap(args[0])
+	merged := entityToAPIMapWithOpts(args[1], _m, "query")
 	return listAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
@@ -28,7 +29,9 @@ func listEntityOptsHandler(args []engine.Value, ctx map[string]engine.Value, sta
 // The options map is merged into the query field of the API map.
 // Sig is opts-first: args[0]=opts, args[1]=apiMap (pattern-matched).
 func listAPIOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	merged := mergeAPIOptions(engine.AsMap(args[1]), engine.AsMap(args[0]), "query")
+	_m1, _ := engine.AsMap(args[1])
+	_m0, _ := engine.AsMap(args[0])
+	merged := mergeAPIOptions(_m1, _m0, "query")
 	return listAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
 }
 
@@ -36,7 +39,7 @@ func listAPIOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack 
 // It uses the UniversalManager to create/cache an SDK, then calls entity.List().
 // An optional query field ({query:{...}}) is passed as the reqmatch filter.
 func listAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	apiMap := engine.AsMap(args[0])
+	apiMap, _ := engine.AsMap(args[0])
 
 	sdkInst, entityName, err := getSDK(apiMap, "list", r)
 	if err != nil {
@@ -60,7 +63,8 @@ func listAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 
 // listAllHandler returns all records from a table as a list.
 func listAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := engine.AsList(args[0]).Slice()
+	_lst, _ := engine.AsList(args[0])
+	rows := _lst.Slice()
 	result := make([]engine.Value, len(rows))
 	copy(result, rows)
 	return []engine.Value{engine.NewList(result)}, nil
@@ -71,15 +75,16 @@ func listAllHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 // value in the corresponding record field. Sig is opts-first: args[0]=filter,
 // args[1]=list.
 func listFilterHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	rows := engine.AsList(args[1]).Slice()
-	filter := engine.AsMap(args[0])
+	_lst, _ := engine.AsList(args[1])
+	rows := _lst.Slice()
+	filter, _ := engine.AsMap(args[0])
 
 	var matched []engine.Value
 	for _, row := range rows {
 		if !row.VType.Matches(engine.TMap) {
 			continue
 		}
-		rec := engine.AsMap(row)
+		rec, _ := engine.AsMap(row)
 		if recordMatches(rec, filter) {
 			matched = append(matched, row)
 		}

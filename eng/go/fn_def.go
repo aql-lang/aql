@@ -70,7 +70,8 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 
 		var bodyElems []Value
 		if body.VType.Equal(TList) && body.Data != nil {
-			bodyElems = AsList(body).Slice()
+			_lst, _ := AsList(body)
+			bodyElems = _lst.Slice()
 		} else {
 			bodyElems = []Value{body}
 		}
@@ -143,7 +144,7 @@ func ParseFnUndefSpec(r *Registry, list []Value) (FnUndefInfo, error) {
 // type form (`[Integer String]`).
 func OutputSigIsConcreteReturns(outputSig Value) bool {
 	if outputSig.VType.Equal(TList) && outputSig.Data != nil {
-		elems := AsList(outputSig)
+		elems, _ := AsList(outputSig)
 		if elems.Len() == 0 {
 			return false
 		}
@@ -197,7 +198,7 @@ func IsSigTypeValue(v Value) bool {
 // for a single-value form, wraps the value in a one-element slice.
 func OutputSigValues(outputSig Value) []Value {
 	if outputSig.VType.Equal(TList) && outputSig.Data != nil {
-		elems := AsList(outputSig)
+		elems, _ := AsList(outputSig)
 		result := elems.Slice()
 		return result
 	}

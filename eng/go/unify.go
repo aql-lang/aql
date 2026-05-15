@@ -275,18 +275,22 @@ func unifyLists(a Value, aIsList bool, b Value, bIsList bool) (Value, bool) {
 	if aTyped {
 		// a is typed, b is concrete: each element must unify with the child type.
 		_as7, _ := AsChildType(a)
-		return unifyTypedWithConcrete(_as7.Child, AsList(b).Slice())
+		_bl, _ := AsList(b)
+		return unifyTypedWithConcrete(_as7.Child, _bl.Slice())
 	}
 
 	if bTyped {
 		// b is typed, a is concrete: each element must unify with the child type.
 		_as8, _ := AsChildType(b)
-		return unifyTypedWithConcrete(_as8.Child, AsList(a).Slice())
+		_al, _ := AsList(a)
+		return unifyTypedWithConcrete(_as8.Child, _al.Slice())
 	}
 
 	// Both concrete lists: element-by-element unification.
-	aElems := AsList(a).Slice()
-	bElems := AsList(b).Slice()
+	_aLst, _ := AsList(a)
+	aElems := _aLst.Slice()
+	_bLst, _ := AsList(b)
+	bElems := _bLst.Slice()
 
 	// Lengths must match.
 	if len(aElems) != len(bElems) {
@@ -386,18 +390,20 @@ func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
 	if aTyped {
 		// a is typed, b is concrete: each value must unify with the child type.
 		_as13, _ := AsChildType(a)
-		return unifyTypedMapWithConcrete(_as13.Child, AsMap(b))
+		_bMap, _ := AsMap(b)
+		return unifyTypedMapWithConcrete(_as13.Child, _bMap)
 	}
 
 	if bTyped {
 		// b is typed, a is concrete: each value must unify with the child type.
 		_as14, _ := AsChildType(b)
-		return unifyTypedMapWithConcrete(_as14.Child, AsMap(a))
+		_aMap, _ := AsMap(a)
+		return unifyTypedMapWithConcrete(_as14.Child, _aMap)
 	}
 
 	// Both concrete maps: key-by-key unification.
-	aMap := AsMap(a)
-	bMap := AsMap(b)
+	aMap, _ := AsMap(a)
+	bMap, _ := AsMap(b)
 
 	noneVal := NewTypeLiteral(TNone)
 	result := NewOrderedMap()
@@ -515,7 +521,7 @@ func unifyOptions(a Value, aIsOptions bool, b Value, bIsOptions bool) (Value, bo
 		return Value{}, false
 	}
 
-	cMap := AsMap(concrete)
+	cMap, _ := AsMap(concrete)
 
 	// Extra keys in concrete not in Options → fail.
 	for _, key := range cMap.Keys() {
@@ -745,7 +751,9 @@ func valuesEqualDefault(a, b Value) bool {
 		if aOk != bOk {
 			return false
 		}
-		return listsEqual(AsList(a).Slice(), AsList(b).Slice())
+		_aLst, _ := AsList(a)
+		_bLst, _ := AsList(b)
+		return listsEqual(_aLst.Slice(), _bLst.Slice())
 	case a.VType.Equal(TMap):
 		aRT, aRec := a.Data.(RecordTypeInfo)
 		bRT, bRec := b.Data.(RecordTypeInfo)
@@ -771,7 +779,9 @@ func valuesEqualDefault(a, b Value) bool {
 		if aOk != bOk {
 			return false
 		}
-		return mapsEqual(AsMap(a), AsMap(b))
+		_aMap, _ := AsMap(a)
+		_bMap, _ := AsMap(b)
+		return mapsEqual(_aMap, _bMap)
 	default:
 		return fmt.Sprintf("%v", a.Data) == fmt.Sprintf("%v", b.Data)
 	}
@@ -845,8 +855,8 @@ func unifyDisjunct(disj DisjunctInfo, val Value) (Value, bool) {
 // OpenUnifyMap checks whether candidate contains at least the key-value pairs
 // of pattern. Extra keys in candidate are allowed (open/subset matching).
 func OpenUnifyMap(pattern, candidate Value) bool {
-	pMap := AsMap(pattern)
-	cMap := AsMap(candidate)
+	pMap, _ := AsMap(pattern)
+	cMap, _ := AsMap(candidate)
 
 	for _, key := range pMap.Keys() {
 		pVal, _ := pMap.Get(key)
@@ -869,7 +879,8 @@ func ResolveWordsDeep(v Value) Value {
 		return ResolveWordValue(v)
 	}
 	if v.VType.Equal(TList) && v.Data != nil && !IsTypedList(v) && !IsTableType(v) {
-		elems := AsList(v).Slice()
+		_lst, _ := AsList(v)
+		elems := _lst.Slice()
 		resolved := make([]Value, len(elems))
 		for i, e := range elems {
 			resolved[i] = ResolveWordsDeep(e)
@@ -877,7 +888,7 @@ func ResolveWordsDeep(v Value) Value {
 		return NewList(resolved)
 	}
 	if v.VType.Equal(TMap) && v.Data != nil && !IsTypedMap(v) && !IsRecordType(v) && !IsOptionsType(v) {
-		m := AsMap(v)
+		m, _ := AsMap(v)
 		result := NewOrderedMap()
 		for _, key := range m.Keys() {
 			val, _ := m.Get(key)

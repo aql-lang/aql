@@ -31,8 +31,9 @@ func mergeHandler(args []engine.Value, ctx map[string]engine.Value, stack []engi
 //
 //	[a,b,c] merge {1:d} → [a,d,c]
 func mergeListMapHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	list := engine.AsList(args[0]).Slice()
-	m := engine.AsMap(args[1])
+	_lst, _ := engine.AsList(args[0])
+	list := _lst.Slice()
+	m, _ := engine.AsMap(args[1])
 	if list == nil || m == nil {
 		return nil, fmt.Errorf("merge: expected concrete list and map")
 	}
@@ -69,8 +70,9 @@ func mergeListMapHandler(args []engine.Value, ctx map[string]engine.Value, stack
 //
 //	{3:d,x:X} merge [a,b,c] → [a,b,c,d]
 func mergeMapListHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	m := engine.AsMap(args[0])
-	list := engine.AsList(args[1]).Slice()
+	m, _ := engine.AsMap(args[0])
+	_lst, _ := engine.AsList(args[1])
+	list := _lst.Slice()
 	if m == nil || list == nil {
 		return nil, fmt.Errorf("merge: expected concrete map and list")
 	}

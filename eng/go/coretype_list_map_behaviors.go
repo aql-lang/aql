@@ -49,7 +49,8 @@ func (listFormatBehavior) Format(v Value) string {
 	if ct, ok := v.Data.(ChildTypeInfo); ok {
 		return "[:" + ct.Child.String() + "]"
 	}
-	elems := AsList(v).Slice()
+	_lst, _ := AsList(v)
+	elems := _lst.Slice()
 	parts := make([]string, len(elems))
 	for i, e := range elems {
 		parts[i] = e.String()
@@ -93,7 +94,7 @@ func (mapFormatBehavior) Format(v Value) string {
 		}
 		return "options{" + strings.Join(parts, ",") + "}"
 	}
-	m := AsMap(v)
+	m, _ := AsMap(v)
 	if m == nil {
 		return "{}"
 	}

@@ -79,7 +79,8 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 						return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
 					}
 					_as1, _ := eargs[0].AsConcreteAtom()
-					exportHandler(_as1, AsMap(eargs[1]))
+					_m, _ := AsMap(eargs[1])
+					exportHandler(_as1, _m)
 					return nil, nil
 				},
 				Returns: []*Type{},
@@ -91,7 +92,8 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 						return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
 					}
 					_as2, _ := eargs[0].AsConcreteString()
-					exportHandler(_as2, AsMap(eargs[1]))
+					_m, _ := AsMap(eargs[1])
+					exportHandler(_as2, _m)
 					return nil, nil
 				},
 				Returns: []*Type{},
@@ -335,7 +337,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 	if renameList[0].VType.Equal(TList) {
 		// Multiple rename pairs: [[from1 to1] [from2 to2] ...]
 		for _, pair := range renameList {
-			pairElems := AsList(pair)
+			pairElems, _ := AsList(pair)
 			if pairElems.Len() != 2 {
 				return fmt.Errorf("import: rename pair must have exactly 2 elements")
 			}

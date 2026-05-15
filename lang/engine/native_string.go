@@ -163,7 +163,7 @@ func doConcat(listVal Value, o strOpts) ([]Value, error) {
 	if listVal.Data == nil {
 		return nil, fmt.Errorf("concat: argument must be a concrete list, got type literal")
 	}
-	elems := AsList(listVal)
+	elems, _ := AsList(listVal)
 	var parts []string
 	for _, e := range elems.Slice() {
 		if e.VType.Equal(TNone) {
@@ -867,7 +867,7 @@ func padOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 		opts.fill = " "
 	}
 	// Default side for pad is "right", not "both" from parseStrOpts.
-	if m := AsMap(args[1]); m != nil {
+	if m, _ := AsMap(args[1]); m != nil {
 		if _, ok := m.Get("side"); !ok {
 			opts.side = "right"
 		}

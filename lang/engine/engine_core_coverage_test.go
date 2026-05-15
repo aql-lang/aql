@@ -496,7 +496,7 @@ func TestEngineCoreRecordMakePositional(t *testing.T) {
 	if len(result) != 1 || !result[0].VType.Equal(TMap) {
 		t.Fatalf("make record = %v, want map", result)
 	}
-	m := AsMap(result[0])
+	m, _ := AsMap(result[0])
 	xv, _ := m.Get("x")
 	yv, _ := m.Get("y")
 	_as29, _ := AsNumber(xv)
@@ -523,7 +523,7 @@ func TestEngineCoreRecordMakeMap(t *testing.T) {
 	if len(result) != 1 || !result[0].VType.Equal(TMap) {
 		t.Fatalf("make record from map = %v, want map", result)
 	}
-	m := AsMap(result[0])
+	m, _ := AsMap(result[0])
 	xv, _ := m.Get("x")
 	_as30, _ := AsNumber(xv)
 	if _as30 != 1 {
@@ -621,7 +621,7 @@ func TestEngineCoreModuleImportAll(t *testing.T) {
 	if len(result) != 1 || !result[0].VType.Equal(TMap) {
 		t.Fatalf("coreExp should be map, got %v", result)
 	}
-	m := AsMap(result[0])
+	m, _ := AsMap(result[0])
 	v, ok := m.Get("v")
 	_as31, _ := AsInteger(v)
 	if !ok || _as31 != 88 {
@@ -789,7 +789,8 @@ func TestEngineCoreBaseList(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("base List got %d results", len(result))
 	}
-	if len(AsList(result[0]).Slice()) != 0 {
+	_lst, _ := AsList(result[0])
+	if len(_lst.Slice()) != 0 {
 		t.Errorf("base List = %v, want empty list", result)
 	}
 }
@@ -802,7 +803,8 @@ func TestEngineCoreBaseMap(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("base Map got %d results", len(result))
 	}
-	if AsMap(result[0]).Len() != 0 {
+	_m, _ := AsMap(result[0])
+	if _m.Len() != 0 {
 		t.Errorf("base Map = %v, want empty map", result)
 	}
 }
@@ -1333,7 +1335,7 @@ func TestEngineCoreMakeRecordWithBase(t *testing.T) {
 	if len(result) != 1 || !result[0].VType.Equal(TMap) {
 		t.Fatalf("make with base = %v, want map", result)
 	}
-	m := AsMap(result[0])
+	m, _ := AsMap(result[0])
 	yv, ok := m.Get("y")
 	if !ok {
 		t.Fatal("missing field y")
@@ -1541,7 +1543,7 @@ func TestEngineCoreMakeRecordNamed(t *testing.T) {
 	if len(result) != 1 || !result[0].VType.Equal(TMap) {
 		t.Fatalf("make record named = %v, want map", result)
 	}
-	m := AsMap(result[0])
+	m, _ := AsMap(result[0])
 	nv, _ := m.Get("name")
 	av, _ := m.Get("age")
 	_as57, _ := AsString(nv)
@@ -1592,7 +1594,8 @@ func TestEngineCoreMakeTablePositional(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("make table got %d results", len(result))
 	}
-	rowList := AsList(result[0]).Slice()
+	_lst, _ := AsList(result[0])
+	rowList := _lst.Slice()
 	if len(rowList) != 2 {
 		t.Errorf("table has %d rows, want 2", len(rowList))
 	}

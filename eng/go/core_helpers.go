@@ -302,8 +302,8 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 					pat.Data == nil || val.Data == nil {
 					continue
 				}
-				pMap := AsMap(*pat)
-				vMap := AsMap(val)
+				pMap, _ := AsMap(*pat)
+				vMap, _ := AsMap(val)
 				if pMap == nil || vMap == nil || vMap.Len() == 0 {
 					continue
 				}

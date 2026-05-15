@@ -71,7 +71,7 @@ func recordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	if list.Data == nil {
 		return nil, fmt.Errorf("record: argument must be a concrete list, got type literal")
 	}
-	elems := AsList(list)
+	elems, _ := AsList(list)
 	if elems.Len() == 0 {
 		return nil, fmt.Errorf("record: list must have at least one field")
 	}

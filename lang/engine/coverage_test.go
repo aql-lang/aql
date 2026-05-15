@@ -1035,7 +1035,7 @@ func TestMakeRecordPositional(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	m := AsMap(result[0])
+	m, _ := AsMap(result[0])
 	xVal, _ := m.Get("x")
 	yVal, _ := m.Get("y")
 	_as16, _ := AsInteger(xVal)
@@ -1071,7 +1071,7 @@ func TestMakeRecordNamed(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m := AsMap(result[0])
+	m, _ := AsMap(result[0])
 	xVal, _ := m.Get("x")
 	yVal, _ := m.Get("y")
 	_as18, _ := AsInteger(xVal)
@@ -2542,7 +2542,8 @@ func TestAsListQueryBuilder(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
 	// Accessing AsList on a QueryBuilder triggers materialization
-	list := AsList(result[0]).Slice()
+	_lst, _ := AsList(result[0])
+	list := _lst.Slice()
 	if len(list) != 3 {
 		t.Errorf("expected 3 rows via AsList, got %d", len(list))
 	}
@@ -4159,7 +4160,8 @@ func TestArgsDirectAccess(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	argsList := AsList(result[0]).Slice()
+	_lst, _ := AsList(result[0])
+	argsList := _lst.Slice()
 	if len(argsList) != 2 {
 		t.Errorf("expected args list of length 2, got %d", len(argsList))
 	}

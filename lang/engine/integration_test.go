@@ -310,7 +310,8 @@ func TestEngineReadWithOpts(t *testing.T) {
 	if len(result) != 1 || !result[0].VType.Equal(TList) {
 		t.Errorf("read with lines fmt = %v, want list", result)
 	}
-	elems := AsList(result[0]).Slice()
+	_lst, _ := AsList(result[0])
+	elems := _lst.Slice()
 	if len(elems) != 3 {
 		t.Errorf("expected 3 lines, got %d", len(elems))
 	}
@@ -1940,7 +1941,7 @@ func TestEngineMakeRecord(t *testing.T) {
 	if len(result) != 1 || !result[0].VType.Equal(TMap) {
 		t.Errorf("expected map, got %v", result)
 	}
-	m := AsMap(result[0])
+	m, _ := AsMap(result[0])
 	xVal, _ := m.Get("x")
 	_as90, _ := AsInteger(xVal)
 	if _as90 != 1 {
@@ -2106,11 +2107,12 @@ func TestEngineReadCSVByExtension(t *testing.T) {
 	if !IsTableType(v) {
 		t.Fatalf("expected table type, got %s", v.VType)
 	}
-	rows := AsList(v).Slice()
+	_lst, _ := AsList(v)
+	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
-	r0 := AsMap(rows[0])
+	r0, _ := AsMap(rows[0])
 	nameVal, ok := r0.Get("name")
 	if !ok {
 		t.Fatal("expected 'name' key")
@@ -2139,7 +2141,8 @@ func TestEngineReadTSVByExtension(t *testing.T) {
 	if !IsTableType(v) {
 		t.Fatalf("expected table type, got %s", v.VType)
 	}
-	rows := AsList(v).Slice()
+	_lst, _ := AsList(v)
+	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -2226,7 +2229,7 @@ func TestEngineInspectBuiltin(t *testing.T) {
 	if !v.VType.Equal(TInspect) {
 		t.Fatalf("expected type %s, got %s", TInspect, v.VType)
 	}
-	m := AsMap(v)
+	m, _ := AsMap(v)
 
 	// Check name field.
 	name, ok := m.Get("name")
@@ -2247,15 +2250,17 @@ func TestEngineInspectBuiltin(t *testing.T) {
 	if !ok {
 		t.Fatal("missing signatures field")
 	}
-	sigList := AsList(sigs).Slice()
+	_lst, _ := AsList(sigs)
+	sigList := _lst.Slice()
 	if len(sigList) == 0 {
 		t.Error("expected at least one signature for add")
 	}
 
 	// Check first signature has args.
-	sig0 := AsMap(sigList[0])
+	sig0, _ := AsMap(sigList[0])
 	args, _ := sig0.Get("args")
-	argList := AsList(args).Slice()
+	_lst2, _ := AsList(args)
+	argList := _lst2.Slice()
 	if len(argList) != 2 {
 		t.Errorf("expected 2 args for add, got %d", len(argList))
 	}
@@ -2274,7 +2279,7 @@ func TestEngineInspectUserDefined(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
-	m := AsMap(result[0])
+	m, _ := AsMap(result[0])
 
 	kind, _ := m.Get("kind")
 	_as104, _ := AsAtom(kind)
@@ -2298,7 +2303,7 @@ func TestEngineInspectUnknown(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
-	m := AsMap(result[0])
+	m, _ := AsMap(result[0])
 
 	kind, _ := m.Get("kind")
 	_as106, _ := AsAtom(kind)
@@ -2307,7 +2312,8 @@ func TestEngineInspectUnknown(t *testing.T) {
 	}
 
 	sigs, _ := m.Get("signatures")
-	if len(AsList(sigs).Slice()) != 0 {
+	_lst, _ := AsList(sigs)
+	if len(_lst.Slice()) != 0 {
 		t.Errorf("expected empty signatures for unknown word")
 	}
 }
@@ -2348,7 +2354,7 @@ func TestEngineInspectTypeLiteral(t *testing.T) {
 	if !v.VType.Equal(TInspect) {
 		t.Fatalf("expected type %s, got %s", TInspect, v.VType)
 	}
-	m := AsMap(v)
+	m, _ := AsMap(v)
 
 	name, _ := m.Get("name")
 	_as108, _ := AsString(name)
@@ -2390,7 +2396,7 @@ func TestEngineInspectRecordType(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
-	m := AsMap(result[0])
+	m, _ := AsMap(result[0])
 
 	name, _ := m.Get("name")
 	_as111, _ := AsString(name)
@@ -2406,7 +2412,7 @@ func TestEngineInspectRecordType(t *testing.T) {
 	if !ok {
 		t.Fatal("missing fields")
 	}
-	fm := AsMap(flds)
+	fm, _ := AsMap(flds)
 	xType, _ := fm.Get("x")
 	_as113, _ := AsString(xType)
 	if _as113 != "Number" {
@@ -3215,7 +3221,7 @@ func TestInterpStringInMapValue(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m := AsMap(result[0])
+	m, _ := AsMap(result[0])
 	if m == nil {
 		t.Fatal("expected map result")
 	}

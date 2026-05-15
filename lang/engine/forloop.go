@@ -22,7 +22,8 @@ func runForLoop(r *Registry, start, end, step int64, iterName string, body Value
 	if body.Data == nil {
 		return nil, fmt.Errorf("for: body must be a concrete list, got type literal")
 	}
-	bodySlice := AsList(body).Slice()
+	_lst, _ := AsList(body)
+	bodySlice := _lst.Slice()
 
 	// Install the iterator variable for the first iteration.
 	InstallDef(r, iterName, NewInteger(start))

@@ -250,7 +250,7 @@ func TestContextValuesByReference(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	rm := engine.AsMap(result[0])
+	rm, _ := engine.AsMap(result[0])
 	v, ok := rm.Get("key")
 	_as11, _ := engine.AsInteger(v)
 	if !ok || _as11 != 100 {

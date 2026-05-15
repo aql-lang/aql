@@ -50,7 +50,7 @@ func valueToAny(v engine.Value) any {
 	case v.VType.Equal(engine.TNone):
 		return nil
 	case v.VType.Matches(engine.TMap):
-		m := engine.AsMap(v)
+		m, _ := engine.AsMap(v)
 		out := make(map[string]any, m.Len())
 		for _, key := range m.Keys() {
 			val, _ := m.Get(key)
@@ -58,7 +58,8 @@ func valueToAny(v engine.Value) any {
 		}
 		return out
 	case v.VType.Matches(engine.TList):
-		elems := engine.AsList(v).Slice()
+		_lst, _ := engine.AsList(v)
+		elems := _lst.Slice()
 		out := make([]any, len(elems))
 		for i, elem := range elems {
 			out[i] = valueToAny(elem)
@@ -111,7 +112,7 @@ func anyToValue(v any) (engine.Value, error) {
 
 // valueToMap converts a map-typed Value to map[string]any for use with SDK calls.
 func valueToMap(v engine.Value) map[string]any {
-	m := engine.AsMap(v)
+	m, _ := engine.AsMap(v)
 	if m == nil {
 		return nil
 	}

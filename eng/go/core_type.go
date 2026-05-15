@@ -79,7 +79,7 @@ func registerCoreEnum(r *Registry) {
 					childType = ci.Child
 					hasChild = childType.VType != nil
 				}
-				elems := AsList(list)
+				elems, _ := AsList(list)
 				alts := make([]Value, 0, elems.Len())
 				for i := 0; i < elems.Len(); i++ {
 					e := elems.Get(i)
@@ -300,7 +300,7 @@ func IsRecordShape(v Value) bool {
 	if !v.VType.Equal(TMap) || v.Data == nil {
 		return false
 	}
-	m := AsMap(v)
+	m, _ := AsMap(v)
 	if m == nil || m.Len() == 0 {
 		return false
 	}
@@ -374,7 +374,7 @@ func IsValueOfType(v, t Value) bool {
 			return false
 		}
 		ci, _ := AsChildType(t)
-		lst := AsList(v)
+		lst, _ := AsList(v)
 		if lst.IsNil() {
 			return false
 		}
@@ -390,7 +390,7 @@ func IsValueOfType(v, t Value) bool {
 			return false
 		}
 		ci, _ := AsChildType(t)
-		vMap := AsMap(v)
+		vMap, _ := AsMap(v)
 		if vMap == nil {
 			return false
 		}
@@ -408,12 +408,12 @@ func IsValueOfType(v, t Value) bool {
 	// fields via the Unify fallback when t's field is a literal.
 	// Subtypes like RecordTypeInfo / OptionsTypeInfo (whose AsMap
 	// returns nil) fall through to Unify below.
-	if t.VType.Equal(TMap) && t.Data != nil && AsMap(t) != nil {
+	if _tMap, _tErr := AsMap(t); t.VType.Equal(TMap) && t.Data != nil && _tErr == nil && _tMap != nil {
 		if !v.VType.Equal(TMap) || v.Data == nil {
 			return false
 		}
-		vMap := AsMap(v)
-		tMap := AsMap(t)
+		vMap, _ := AsMap(v)
+		tMap, _ := AsMap(t)
 		if vMap == nil || tMap == nil {
 			return false
 		}

@@ -149,7 +149,7 @@ func getNodeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	// Integer key: list index access.
 	if key.VType.Matches(TInteger) {
 		idx, _ := AsInteger(key)
-		if list := AsList(container); !list.IsNil() && container.VType.Matches(TList) {
+		if list, _ := AsList(container); !list.IsNil() && container.VType.Matches(TList) {
 			i := int(idx)
 			if i < 0 || i >= list.Len() {
 				return []Value{NewTypeLiteral(TNone)}, nil
@@ -160,7 +160,7 @@ func getNodeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	}
 	// String/atom/word key: map property access.
 	k := GetKey(key)
-	if m := AsMap(container); m != nil {
+	if m, _ := AsMap(container); m != nil {
 		val, ok := m.Get(k)
 		if !ok {
 			return []Value{NewTypeLiteral(TNone)}, nil

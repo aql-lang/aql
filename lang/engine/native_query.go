@@ -460,7 +460,8 @@ func usingHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	table := args[0]
 	colList := args[1]
 
-	elems := AsList(colList).Slice()
+	_lst, _ := AsList(colList)
+	elems := _lst.Slice()
 	cols := make([]string, 0, len(elems))
 	for _, e := range elems {
 		name := valueToColName(e)

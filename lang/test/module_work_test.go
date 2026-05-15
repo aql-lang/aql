@@ -39,7 +39,7 @@ func TestColorHex2rgbComponents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := engine.AsMap(result[0])
+	m, _ := engine.AsMap(result[0])
 	rv, _ := m.Get("r")
 	gv, _ := m.Get("g")
 	bv, _ := m.Get("b")
@@ -283,7 +283,7 @@ func TestDoMapWordValuesResolve(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := engine.AsMap(result[0])
+	m, _ := engine.AsMap(result[0])
 	rv, _ := m.Get("r")
 	gv, _ := m.Get("g")
 	bv, _ := m.Get("b")
@@ -309,7 +309,7 @@ func TestDoMapLiteralValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := engine.AsMap(result[0])
+	m, _ := engine.AsMap(result[0])
 	xv, _ := m.Get("x")
 	yv, _ := m.Get("y")
 	zv, _ := m.Get("z")
@@ -335,7 +335,7 @@ func TestDoMapListValuesStillWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := engine.AsMap(result[0])
+	m, _ := engine.AsMap(result[0])
 	xv, _ := m.Get("x")
 	yv, _ := m.Get("y")
 	xvi2, _ := engine.AsInteger(xv)
@@ -399,7 +399,7 @@ func TestColorHex2rgbBlack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := engine.AsMap(result[0])
+	m, _ := engine.AsMap(result[0])
 	rv, _ := m.Get("r")
 	gv, _ := m.Get("g")
 	bv, _ := m.Get("b")
@@ -420,7 +420,7 @@ func TestColorHex2rgbWhite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := engine.AsMap(result[0])
+	m, _ := engine.AsMap(result[0])
 	rv, _ := m.Get("r")
 	gv, _ := m.Get("g")
 	bv, _ := m.Get("b")
@@ -524,7 +524,7 @@ func TestDoMapMixedWordAndListValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := engine.AsMap(result[0])
+	m, _ := engine.AsMap(result[0])
 	av, _ := m.Get("a")
 	bv, _ := m.Get("b")
 	cv, _ := m.Get("c")
@@ -554,7 +554,7 @@ func TestColorMakeColorTypeFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := engine.AsMap(result[0])
+	m, _ := engine.AsMap(result[0])
 	for _, key := range []string{"r", "g", "b"} {
 		v, ok := m.Get(key)
 		if !ok {
@@ -591,7 +591,7 @@ func TestColorMakeColorTypeHasHex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := engine.AsMap(result[0])
+	m, _ := engine.AsMap(result[0])
 	for _, key := range []string{"hex", "r", "g", "b"} {
 		if _, ok := m.Get(key); !ok {
 			t.Errorf("missing field %s in ColorHex record", key)
@@ -614,7 +614,7 @@ func TestColorClampRgbEvaluatedMapValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := engine.AsMap(result[0])
+	m, _ := engine.AsMap(result[0])
 	rv, _ := m.Get("r")
 	gv, _ := m.Get("g")
 	bv, _ := m.Get("b")
@@ -731,7 +731,7 @@ func TestColorDefAndMapExpr(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := engine.AsMap(result[0])
+	m, _ := engine.AsMap(result[0])
 	r1, _ := m.Get("r1")
 	b2, _ := m.Get("b2")
 	r1i, _ := engine.AsInteger(r1)

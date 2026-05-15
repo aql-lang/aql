@@ -131,7 +131,7 @@ func (e *Engine) isFnShapeTypedBindingContext() bool {
 		if mapIdx < 0 || mapIdx >= len(e.stack) {
 			return false
 		}
-		m := AsMap(e.stack[mapIdx])
+		m, _ := AsMap(e.stack[mapIdx])
 		if m == nil || m.Len() != 1 {
 			return false
 		}
@@ -669,7 +669,7 @@ func (e *Engine) stepWord(val Value) error {
 			// fall through to stepLiteral so the type itself is pushed
 			// onto the stack rather than splicing nothing.
 			if top.VType.Equal(TList) && top.Data != nil && !IsTypedList(top) && !IsTableType(top) && !top.Quoted {
-				elems := AsList(top)
+				elems, _ := AsList(top)
 				expanded := make([]Value, elems.Len())
 				copy(expanded, elems.Slice())
 				stackSplice(&e.stack, e.pointer, 1, expanded...)
@@ -1304,7 +1304,7 @@ func (e *Engine) autoEvalStack() error {
 // autoEvalList evaluates the contents of a plain list in a sub-engine,
 // returning a new list containing the results. For example, [1 add 2] → [3].
 func (e *Engine) autoEvalList(val Value) (Value, error) {
-	elems := AsList(val)
+	elems, _ := AsList(val)
 	if elems.Len() == 0 {
 		return val, nil
 	}

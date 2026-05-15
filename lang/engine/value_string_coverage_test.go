@@ -114,7 +114,8 @@ func TestValueAsTableTypeCov(t *testing.T) {
 
 func TestValueAsListCov(t *testing.T) {
 	v := engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2)})
-	list := engine.AsList(v).Slice()
+	_lst, _ := engine.AsList(v)
+	list := _lst.Slice()
 	if len(list) != 2 {
 		t.Fatalf("expected 2, got %d", len(list))
 	}
@@ -128,7 +129,8 @@ func TestValueAsListCov(t *testing.T) {
 		Rows:   []engine.Value{engine.NewMap(row)},
 	}
 	v = engine.Value{VType: engine.TList, Data: td}
-	list = engine.AsList(v).Slice()
+	_lst2, _ := engine.AsList(v)
+	list = _lst2.Slice()
 	if len(list) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(list))
 	}

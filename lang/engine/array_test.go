@@ -11,7 +11,7 @@ import (
 func TestIota(t *testing.T) {
 	r, _ := engine.DefaultRegistry(native.Register)
 	result := runAQL(t, r, []engine.Value{engine.NewWord("iota"), engine.NewInteger(5)})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	if list.Len() != 5 {
 		t.Fatalf("iota 5: length = %d, want 5", list.Len())
 	}
@@ -27,7 +27,7 @@ func TestIota(t *testing.T) {
 func TestIotaZero(t *testing.T) {
 	r, _ := engine.DefaultRegistry(native.Register)
 	result := runAQL(t, r, []engine.Value{engine.NewWord("iota"), engine.NewInteger(0)})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	if list.Len() != 0 {
 		t.Errorf("iota 0: length = %d, want 0", list.Len())
 	}
@@ -41,7 +41,7 @@ func TestShapeFlat(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3)}),
 		engine.NewWord("shape"),
 	})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	_as2, _ := engine.AsInteger(list.Get(0))
 	if list.Len() != 1 || _as2 != 3 {
 		t.Errorf("shape [1,2,3] = %v, want [3]", result[0])
@@ -56,7 +56,7 @@ func TestShapeNested(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(5), engine.NewInteger(6)}),
 	})
 	result := runAQL(t, r, []engine.Value{input, engine.NewWord("shape")})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	_as4, _ := engine.AsInteger(list.Get(0))
 	_as3, _ := engine.AsInteger(list.Get(1))
 	if list.Len() != 2 || _as4 != 3 || _as3 != 2 {
@@ -114,11 +114,11 @@ func TestReshape(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(2), engine.NewInteger(3)}),
 		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3), engine.NewInteger(4), engine.NewInteger(5), engine.NewInteger(6)}),
 	})
-	outer := engine.AsList(result[0])
+	outer, _ := engine.AsList(result[0])
 	if outer.Len() != 2 {
 		t.Fatalf("reshape rows = %d, want 2", outer.Len())
 	}
-	row0 := engine.AsList(outer.Get(0))
+	row0, _ := engine.AsList(outer.Get(0))
 	_as12, _ := engine.AsInteger(row0.Get(0))
 	_as11, _ := engine.AsInteger(row0.Get(2))
 	if row0.Len() != 3 || _as12 != 1 || _as11 != 3 {
@@ -135,7 +135,7 @@ func TestArrFlatten(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(3), engine.NewInteger(4)}),
 	})
 	result := runAQL(t, r, []engine.Value{input, engine.NewWord("arr-flatten")})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	if list.Len() != 4 {
 		t.Fatalf("arr-flatten length = %d, want 4", list.Len())
 	}
@@ -157,12 +157,12 @@ func TestArrTranspose(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(4), engine.NewInteger(5), engine.NewInteger(6)}),
 	})
 	result := runAQL(t, r, []engine.Value{input, engine.NewWord("arr-transpose")})
-	outer := engine.AsList(result[0])
+	outer, _ := engine.AsList(result[0])
 	if outer.Len() != 3 {
 		t.Fatalf("transpose rows = %d, want 3", outer.Len())
 	}
 	// First column: [1,4]
-	col0 := engine.AsList(outer.Get(0))
+	col0, _ := engine.AsList(outer.Get(0))
 	_as16, _ := engine.AsInteger(col0.Get(0))
 	_as15, _ := engine.AsInteger(col0.Get(1))
 	if _as16 != 1 || _as15 != 4 {
@@ -178,7 +178,7 @@ func TestReverse(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3)}),
 		engine.NewWord("reverse"),
 	})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	_as19, _ := engine.AsInteger(list.Get(0))
 	_as18, _ := engine.AsInteger(list.Get(1))
 	_as17, _ := engine.AsInteger(list.Get(2))
@@ -195,7 +195,7 @@ func TestTake(t *testing.T) {
 		engine.NewWord("take"), engine.NewInteger(2),
 		engine.NewList([]engine.Value{engine.NewInteger(10), engine.NewInteger(20), engine.NewInteger(30), engine.NewInteger(40)}),
 	})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	_as21, _ := engine.AsInteger(list.Get(0))
 	_as20, _ := engine.AsInteger(list.Get(1))
 	if list.Len() != 2 || _as21 != 10 || _as20 != 20 {
@@ -209,7 +209,7 @@ func TestTakeNegative(t *testing.T) {
 		engine.NewWord("take"), engine.NewInteger(-2),
 		engine.NewList([]engine.Value{engine.NewInteger(10), engine.NewInteger(20), engine.NewInteger(30), engine.NewInteger(40)}),
 	})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	_as23, _ := engine.AsInteger(list.Get(0))
 	_as22, _ := engine.AsInteger(list.Get(1))
 	if list.Len() != 2 || _as23 != 30 || _as22 != 40 {
@@ -225,7 +225,7 @@ func TestShed(t *testing.T) {
 		engine.NewWord("shed"), engine.NewInteger(1),
 		engine.NewList([]engine.Value{engine.NewInteger(10), engine.NewInteger(20), engine.NewInteger(30), engine.NewInteger(40)}),
 	})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	_as24, _ := engine.AsInteger(list.Get(0))
 	if list.Len() != 3 || _as24 != 20 {
 		t.Errorf("shed 1 = %v, want [20,30,40]", result[0])
@@ -240,7 +240,7 @@ func TestWhere(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewBoolean(true), engine.NewBoolean(false), engine.NewBoolean(true), engine.NewBoolean(false), engine.NewBoolean(true)}),
 		engine.NewWord("where"),
 	})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	_as27, _ := engine.AsInteger(list.Get(0))
 	_as26, _ := engine.AsInteger(list.Get(1))
 	_as25, _ := engine.AsInteger(list.Get(2))
@@ -257,7 +257,7 @@ func TestUnique(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(3), engine.NewInteger(1), engine.NewInteger(4), engine.NewInteger(1), engine.NewInteger(5)}),
 		engine.NewWord("unique"),
 	})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	if list.Len() != 4 {
 		t.Fatalf("unique length = %d, want 4", list.Len())
 	}
@@ -279,7 +279,7 @@ func TestGrade(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(30), engine.NewInteger(10), engine.NewInteger(40), engine.NewInteger(20)}),
 		engine.NewWord("grade"),
 	})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	// Sorted order: 10(1), 20(3), 30(0), 40(2)
 	expected := []int64{1, 3, 0, 2}
 	for i, want := range expected {
@@ -300,7 +300,7 @@ func TestAt(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(2), engine.NewInteger(0), engine.NewInteger(1)}),
 		engine.NewList([]engine.Value{engine.NewString("a"), engine.NewString("b"), engine.NewString("c")}),
 	})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	_as34, _ := engine.AsString(list.Get(0))
 	_as33, _ := engine.AsString(list.Get(1))
 	_as32, _ := engine.AsString(list.Get(2))
@@ -318,7 +318,7 @@ func TestSortby(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(3), engine.NewInteger(1), engine.NewInteger(2)}),
 		engine.NewList([]engine.Value{engine.NewString("c"), engine.NewString("a"), engine.NewString("b")}),
 	})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	_as37, _ := engine.AsString(list.Get(0))
 	_as36, _ := engine.AsString(list.Get(1))
 	_as35, _ := engine.AsString(list.Get(2))
@@ -336,7 +336,7 @@ func TestMember(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3)}),
 		engine.NewList([]engine.Value{engine.NewInteger(2), engine.NewInteger(4), engine.NewInteger(6)}),
 	})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	_as38, _ := engine.AsBoolean(list.Get(1))
 	if !_as38 {
 		t.Error("member: 2 should be in [2,4,6]")
@@ -355,11 +355,11 @@ func TestWindow(t *testing.T) {
 		engine.NewWord("window"), engine.NewInteger(2),
 		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3), engine.NewInteger(4)}),
 	})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	if list.Len() != 3 {
 		t.Fatalf("window 2: length = %d, want 3", list.Len())
 	}
-	w0 := engine.AsList(list.Get(0))
+	w0, _ := engine.AsList(list.Get(0))
 	_as41, _ := engine.AsInteger(w0.Get(0))
 	_as40, _ := engine.AsInteger(w0.Get(1))
 	if _as41 != 1 || _as40 != 2 {
@@ -375,7 +375,7 @@ func TestPairs(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3), engine.NewInteger(4)}),
 		engine.NewWord("pairs"),
 	})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	if list.Len() != 3 {
 		t.Fatalf("pairs: length = %d, want 3", list.Len())
 	}
@@ -390,7 +390,7 @@ func TestReplicate(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(2), engine.NewInteger(0), engine.NewInteger(3)}),
 		engine.NewList([]engine.Value{engine.NewInteger(10), engine.NewInteger(20), engine.NewInteger(30)}),
 	})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	// [10,10,30,30,30]
 	if list.Len() != 5 {
 		t.Fatalf("replicate length = %d, want 5", list.Len())
@@ -414,12 +414,12 @@ func TestGroupTwoArgs(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewAtom("a"), engine.NewAtom("b"), engine.NewAtom("a")}),
 		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3)}),
 	})
-	m := engine.AsMap(result[0])
+	m, _ := engine.AsMap(result[0])
 	aVal, ok := m.Get("a")
 	if !ok {
 		t.Fatal("group: key 'a' not found")
 	}
-	aList := engine.AsList(aVal)
+	aList, _ := engine.AsList(aVal)
 	_as45, _ := engine.AsInteger(aList.Get(0))
 	_as44, _ := engine.AsInteger(aList.Get(1))
 	if aList.Len() != 2 || _as45 != 1 || _as44 != 3 {
@@ -436,7 +436,7 @@ func TestEach(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewWord("mul"), engine.NewInteger(2)}),
 		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3)}),
 	})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	expected := []int64{2, 4, 6}
 	for i, want := range expected {
 		_as46, _ := engine.AsInteger(list.Get(i))
@@ -484,7 +484,7 @@ func TestScan(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewWord("add")}),
 		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3), engine.NewInteger(4)}),
 	})
-	list := engine.AsList(result[0])
+	list, _ := engine.AsList(result[0])
 	expected := []int64{1, 3, 6, 10}
 	for i, want := range expected {
 		_as50, _ := engine.AsInteger(list.Get(i))
@@ -506,17 +506,17 @@ func TestOuterMul(t *testing.T) {
 		engine.NewList([]engine.Value{engine.NewInteger(1), engine.NewInteger(2), engine.NewInteger(3), engine.NewInteger(4)}),
 	})
 	// [[1,2,3,4],[2,4,6,8],[3,6,9,12]]
-	outer := engine.AsList(result[0])
+	outer, _ := engine.AsList(result[0])
 	if outer.Len() != 3 {
 		t.Fatalf("outer rows = %d, want 3", outer.Len())
 	}
-	row0 := engine.AsList(outer.Get(0))
+	row0, _ := engine.AsList(outer.Get(0))
 	_as52, _ := engine.AsInteger(row0.Get(3))
 	if _as52 != 4 {
 		_as53, _ := engine.AsInteger(row0.Get(3))
 		t.Errorf("outer[0][3] = %d, want 4", _as53)
 	}
-	row2 := engine.AsList(outer.Get(2))
+	row2, _ := engine.AsList(outer.Get(2))
 	_as54, _ := engine.AsInteger(row2.Get(2))
 	if _as54 != 9 {
 		_as55, _ := engine.AsInteger(row2.Get(2))
@@ -543,9 +543,9 @@ func TestInnerMatMul(t *testing.T) {
 		left, right,
 	})
 	// [[1*5+2*7, 1*6+2*8], [3*5+4*7, 3*6+4*8]] = [[19,22],[43,50]]
-	outer := engine.AsList(result[0])
-	r0 := engine.AsList(outer.Get(0))
-	r1 := engine.AsList(outer.Get(1))
+	outer, _ := engine.AsList(result[0])
+	r0, _ := engine.AsList(outer.Get(0))
+	r1, _ := engine.AsList(outer.Get(1))
 	_as57, _ := engine.AsInteger(r0.Get(0))
 	_as56, _ := engine.AsInteger(r0.Get(1))
 	if _as57 != 19 || _as56 != 22 {

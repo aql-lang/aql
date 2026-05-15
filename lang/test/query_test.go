@@ -59,13 +59,13 @@ func TestFromLooksUpTable(t *testing.T) {
 		t.Fatalf("expected table type, got %s", v.VType)
 	}
 
-	rows := engine.AsList(v)
+	rows, _ := engine.AsList(v)
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
 
 	// Check all columns are present.
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	assertField(t, r0, "name", "Alice")
 	assertField(t, r0, "age", "30")
 	assertField(t, r0, "city", "London")
@@ -92,12 +92,12 @@ func TestSelectStarFromFile(t *testing.T) {
 	}
 
 	v := result[0]
-	rows := engine.AsList(v)
+	rows, _ := engine.AsList(v)
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
 
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	assertField(t, r0, "id", "1")
 	assertField(t, r0, "name", "Widget")
 	assertField(t, r0, "price", "9.99")
@@ -116,13 +116,13 @@ func TestSelectSpecificColumns(t *testing.T) {
 	}
 
 	v := result[0]
-	rows := engine.AsList(v)
+	rows, _ := engine.AsList(v)
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
 
 	// Should only have name and city columns.
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	if r0.Len() != 2 {
 		t.Fatalf("expected 2 columns, got %d", r0.Len())
 	}
@@ -148,13 +148,13 @@ func TestSelectWithAlias(t *testing.T) {
 	}
 
 	v := result[0]
-	rows := engine.AsList(v)
+	rows, _ := engine.AsList(v)
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
 
 	// name should be aliased to person_name.
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	assertField(t, r0, "person_name", "Alice")
 	assertField(t, r0, "city", "London")
 
@@ -212,12 +212,12 @@ func TestSelectAgainstInternalTable(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
 
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	assertField(t, r0, "color", "red")
 	if r0.Len() != 1 {
 		t.Errorf("expected 1 column, got %d", r0.Len())
@@ -236,12 +236,12 @@ func TestStarWord(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
 
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	assertField(t, r0, "name", "Alice")
 	assertField(t, r0, "age", "30")
 	assertField(t, r0, "city", "London")
@@ -276,11 +276,11 @@ func TestCurriedFrom(t *testing.T) {
 		}
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	assertField(t, r0, "name", "Alice")
 }
 
@@ -311,7 +311,7 @@ func TestCurriedSelect(t *testing.T) {
 		}
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -345,11 +345,11 @@ func TestCurriedBoth(t *testing.T) {
 		}
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	assertField(t, r0, "name", "Alice")
 }
 
@@ -380,11 +380,11 @@ func TestCurriedSelectCols(t *testing.T) {
 		}
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	assertField(t, r0, "name", "Alice")
 	if r0.Len() != 1 {
 		t.Errorf("expected 1 column, got %d", r0.Len())
@@ -403,7 +403,7 @@ func TestWhereBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -421,7 +421,7 @@ func TestWhereNumericComparison(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows (age 30 and 35), got %d", len(rows))
 	}
@@ -437,7 +437,7 @@ func TestWhereLt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row (age 25), got %d", len(rows))
 	}
@@ -454,7 +454,7 @@ func TestWhereAnd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -471,7 +471,7 @@ func TestWhereOr(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -488,7 +488,7 @@ func TestWhereWithColumns(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -507,7 +507,7 @@ func TestWhereNoMatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 0 {
 		t.Fatalf("expected 0 rows, got %d", len(rows))
 	}
@@ -523,7 +523,7 @@ func TestWhereLike(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -540,7 +540,7 @@ func TestWhereNeq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -560,7 +560,7 @@ func TestOrderByColumn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -580,7 +580,7 @@ func TestOrderByDesc(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -600,7 +600,7 @@ func TestOrderByAtom(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	assertField(t, engine.AsMap(rows[0]), "name", "Alice")
 	assertField(t, engine.AsMap(rows[2]), "name", "Charlie")
 }
@@ -616,7 +616,7 @@ func TestOrderBySyntax(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	assertField(t, engine.AsMap(rows[0]), "name", "Alice")
 	assertField(t, engine.AsMap(rows[2]), "name", "Charlie")
 }
@@ -632,7 +632,7 @@ func TestOrderByListSyntax(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	assertField(t, engine.AsMap(rows[0]), "name", "Charlie")
 	assertField(t, engine.AsMap(rows[2]), "name", "Alice")
 }
@@ -649,7 +649,7 @@ func TestLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -665,7 +665,7 @@ func TestLimitOne(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -680,7 +680,7 @@ func TestLimitZero(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 0 {
 		t.Fatalf("expected 0 rows, got %d", len(rows))
 	}
@@ -698,7 +698,7 @@ func TestWhereOrderLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -718,7 +718,7 @@ func TestWhereAndOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -737,7 +737,7 @@ func TestOrderAndLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -782,7 +782,7 @@ func TestWhereOnInternalTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -803,7 +803,7 @@ func TestOffset(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -822,7 +822,7 @@ func TestLimitOffset(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -842,7 +842,7 @@ func TestDistinct(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows without distinct, got %d", len(rows))
 	}
@@ -895,7 +895,7 @@ func TestDistinctDuplicates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 distinct colors, got %d", len(rows))
 	}
@@ -944,7 +944,7 @@ func TestOrderNullsFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -964,7 +964,7 @@ func TestOrderByPosition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -983,7 +983,7 @@ func TestOrderByPositionDesc(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	assertField(t, engine.AsMap(rows[0]), "name", "Charlie")
 	assertField(t, engine.AsMap(rows[2]), "name", "Alice")
 }
@@ -1026,7 +1026,7 @@ func TestWhereIsNull(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows (all non-null TEXT), got %d", len(rows))
 	}
@@ -1043,7 +1043,7 @@ func TestWhereBetween(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows (age 25 and 30), got %d", len(rows))
 	}
@@ -1058,7 +1058,7 @@ func TestWhereNotBetween(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row (age 35), got %d", len(rows))
 	}
@@ -1076,7 +1076,7 @@ func TestWhereNotSimple(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows (Bob, Charlie), got %d", len(rows))
 	}
@@ -1093,7 +1093,7 @@ func TestWhereNotWithSubList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row (Paris), got %d", len(rows))
 	}
@@ -1109,7 +1109,7 @@ func TestWhereNotAndOther(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row (Charlie), got %d", len(rows))
 	}
@@ -1128,7 +1128,7 @@ func TestWhereNestedGroup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row (Alice: London, 30), got %d", len(rows))
 	}
@@ -1145,7 +1145,7 @@ func TestWhereNestedGroupRight(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows (Alice, Charlie), got %d", len(rows))
 	}
@@ -1160,7 +1160,7 @@ func TestWhereNotWithNestedGroup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row (Charlie: Tokyo), got %d", len(rows))
 	}
@@ -1176,7 +1176,7 @@ func TestWhereDoubleNested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows (Alice, Charlie), got %d", len(rows))
 	}
@@ -1193,7 +1193,7 @@ func TestWhereBetweenAndOther(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -1211,7 +1211,7 @@ func TestWhereGlob(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -1228,7 +1228,7 @@ func TestWhereGlobCaseSensitive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 0 {
 		t.Fatalf("expected 0 rows (GLOB is case-sensitive), got %d", len(rows))
 	}
@@ -1277,13 +1277,13 @@ func TestTypedIntegerColumn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows (age 30 and 35), got %d", len(rows))
 	}
 
 	// Results should come back as integers, not strings.
-	ageVal, ok := engine.AsMap(rows[0]).Get("age")
+	ageVal, ok, _ := engine.AsMap(rows[0]).Get("age")
 	if !ok {
 		t.Fatal("expected age field")
 	}
@@ -1343,13 +1343,13 @@ func TestTypedBooleanColumn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 active users, got %d", len(rows))
 	}
 
 	// Results should come back as booleans.
-	activeVal, ok := engine.AsMap(rows[0]).Get("active")
+	activeVal, ok, _ := engine.AsMap(rows[0]).Get("active")
 	if !ok {
 		t.Fatal("expected active field")
 	}
@@ -1396,7 +1396,7 @@ func TestTypedIntegerOrdering(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -1426,7 +1426,7 @@ func TestWhereIn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -1440,11 +1440,11 @@ func TestWhereNotIn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	name, _ := r0.Get("name")
 	_v12, _ := engine.AsString(name)
 	if _v12 != "Bob" {
@@ -1463,7 +1463,7 @@ func TestWhereInSubquery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows (Alice, Charlie), got %d", len(rows))
 	}
@@ -1479,7 +1479,7 @@ func TestWhereNotInSubquery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row (Bob), got %d", len(rows))
 	}
@@ -1494,7 +1494,7 @@ func TestWhereInSubqueryWithFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row (Alice: London/UK), got %d", len(rows))
 	}
@@ -1509,7 +1509,7 @@ func TestWhereInSubqueryEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 0 {
 		t.Fatalf("expected 0 rows, got %d", len(rows))
 	}
@@ -1525,7 +1525,7 @@ func TestWhereRegexp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows (Alice, Bob), got %d", len(rows))
 	}
@@ -1541,7 +1541,7 @@ func TestWhereRegexpNoMatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 0 {
 		t.Fatalf("expected 0 rows, got %d", len(rows))
 	}
@@ -1555,7 +1555,7 @@ func TestWhereNotRegexp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row (Charlie), got %d", len(rows))
 	}
@@ -1570,7 +1570,7 @@ func TestWhereRegexpDigits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows (Alice:30, Charlie:35), got %d", len(rows))
 	}
@@ -1617,12 +1617,12 @@ func TestGroupByWithCount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 groups, got %d", len(rows))
 	}
 
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	dept0, _ := r0.Get("dept")
 	cnt0, _ := r0.Get("cnt")
 	_v14, _ := engine.AsString(dept0)
@@ -1636,7 +1636,7 @@ func TestGroupByWithCount(t *testing.T) {
 		t.Errorf("expected count 3, got %d", _v17)
 	}
 
-	r1 := engine.AsMap(rows[1])
+	r1, _ := engine.AsMap(rows[1])
 	cnt1, _ := r1.Get("cnt")
 	_v18, _ := engine.AsInteger(cnt1)
 	if _v18 != 2 {
@@ -1684,11 +1684,11 @@ func TestHaving(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 group (eng has 3), got %d", len(rows))
 	}
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	dept, _ := r0.Get("dept")
 	_v20, _ := engine.AsString(dept)
 	if _v20 != "eng" {
@@ -1707,7 +1707,7 @@ func TestFromAlias(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -1774,13 +1774,13 @@ func TestInnerJoin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 joined rows, got %d", len(rows))
 	}
 
 	// First row should have both order and product fields.
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	oid, _ := r0.Get("order_id")
 	price, _ := r0.Get("price")
 	_v22, _ := engine.AsString(oid)
@@ -1852,13 +1852,13 @@ func TestLeftJoin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows (left join preserves all left rows), got %d", len(rows))
 	}
 
 	// Charlie should have NULL dept_name.
-	r2 := engine.AsMap(rows[2])
+	r2, _ := engine.AsMap(rows[2])
 	name2, _ := r2.Get("name")
 	_v26, _ := engine.AsString(name2)
 	if _v26 != "Charlie" {
@@ -1902,7 +1902,7 @@ func TestUnion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 unique rows, got %d", len(rows))
 	}
@@ -1941,7 +1941,7 @@ func TestUnionAll(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 4 {
 		t.Fatalf("expected 4 rows (with duplicate Bob), got %d", len(rows))
 	}
@@ -1979,7 +1979,7 @@ func TestIntersect(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row (Bob), got %d", len(rows))
 	}
@@ -2023,7 +2023,7 @@ func TestExcept(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row (Alice), got %d", len(rows))
 	}
@@ -2045,7 +2045,7 @@ func TestCast(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -2075,7 +2075,7 @@ func TestCountStar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -2118,7 +2118,7 @@ func TestSumAggregate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -2185,11 +2185,11 @@ func TestJoinWithOnCondition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 joined rows, got %d", len(rows))
 	}
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	empName, _ := r0.Get("emp_name")
 	deptName, _ := r0.Get("dept_name")
 	_v42, _ := engine.AsString(empName)
@@ -2249,7 +2249,7 @@ func TestJoinWithOnMultipleConditions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row (only a=1,b=x matches), got %d", len(rows))
 	}
@@ -2267,7 +2267,7 @@ func TestJoinWithOnDotQualified(t *testing.T) {
 	}
 	// age is text "30", "25", "35" and dept_id is "1","2","3" — no matches expected
 	// but the query should execute without error, exercising the dot-qualified path
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	_ = rows // result doesn't matter, we just need the dot-qualified parsing to work
 }
 
@@ -2305,7 +2305,7 @@ func TestCrossJoin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 6 {
 		t.Fatalf("expected 6 rows (2x3 cross join), got %d", len(rows))
 	}
@@ -2321,7 +2321,7 @@ func TestCastToReal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -2357,7 +2357,7 @@ func TestCastToText(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -2377,12 +2377,12 @@ func TestCastWithoutAlias(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
 	// Without alias, output name defaults to the column name.
-	v, ok := engine.AsMap(rows[0]).Get("age")
+	v, ok, _ := engine.AsMap(rows[0]).Get("age")
 	if !ok {
 		t.Fatal("expected 'age' field in result")
 	}
@@ -2425,7 +2425,7 @@ func TestAvgAggregate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -2468,7 +2468,7 @@ func TestMinMaxAggregate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -2494,12 +2494,12 @@ func TestAggregateWithoutAlias(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
 	// Default alias is "count_name"
-	cnt, ok := engine.AsMap(rows[0]).Get("count_name")
+	cnt, ok, _ := engine.AsMap(rows[0]).Get("count_name")
 	if !ok {
 		t.Fatal("expected 'count_name' field (default alias)")
 	}
@@ -2550,7 +2550,7 @@ func TestWhereIsNullActual(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row with NULL score, got %d", len(rows))
 	}
@@ -2604,7 +2604,7 @@ func TestMultiColumnGroupBy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 groups, got %d", len(rows))
 	}
@@ -2656,12 +2656,12 @@ func TestOrderNullsLast(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
 	// With NULLS LAST, Bob (null score) should be last.
-	lastRow := engine.AsMap(rows[2])
+	lastRow, _ := engine.AsMap(rows[2])
 	name, _ := lastRow.Get("name")
 	_v62, _ := engine.AsString(name)
 	if _v62 != "Bob" {
@@ -2730,7 +2730,7 @@ func TestInnerJoinKeyword(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -2746,7 +2746,7 @@ func TestOrderByMultipleKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -2764,7 +2764,7 @@ func TestOrderByMultipleKeysDesc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -2783,7 +2783,7 @@ func TestOrderByMultipleKeysMixed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -2802,7 +2802,7 @@ func TestOrderCollateNocase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -2820,7 +2820,7 @@ func TestOrderCollateBinary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
@@ -2838,7 +2838,7 @@ func TestWhereEqCollateNocase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -2854,7 +2854,7 @@ func TestWhereEqCollateNocaseNoMatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 0 {
 		t.Fatalf("expected 0 rows (case-sensitive), got %d", len(rows))
 	}
@@ -2868,7 +2868,7 @@ func TestWhereLikeCollateNocase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -2909,7 +2909,7 @@ func TestGroupByAtom(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 groups, got %d", len(rows))
 	}
@@ -2950,7 +2950,7 @@ func TestWhereIntegerComparison(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows (age 30, 35), got %d", len(rows))
 	}
@@ -3038,13 +3038,13 @@ func TestMixedTypeStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
 
 	// Check Alice's values came back correctly
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	name, _ := r0.Get("name")
 	_v64, _ := engine.AsString(name)
 	if _v64 != "Alice" {
@@ -3074,7 +3074,7 @@ func TestCastWithTypeAliases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -3100,7 +3100,7 @@ func TestCastFloat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -3116,11 +3116,11 @@ func TestSelectStringColumns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	if r0.Len() != 2 {
 		t.Errorf("expected 2 columns, got %d", r0.Len())
 	}
@@ -3158,7 +3158,7 @@ func TestWhereBetweenIntegers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows (20, 30), got %d", len(rows))
 	}
@@ -3177,7 +3177,7 @@ func TestWhereInSingleValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -3211,7 +3211,7 @@ func TestCastBool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -3251,7 +3251,7 @@ func TestWhereWithBoolLiteral(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	// "false" becomes 'false' as SQL string, and active is stored as INTEGER 0
 	// This tests the boolean branch of valueToSQL
 	_ = rows
@@ -3269,7 +3269,7 @@ func TestAggregateWithStringColName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -3289,7 +3289,7 @@ func TestWhereWithAtomValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
@@ -3326,7 +3326,7 @@ func TestScalarSubqueryInWhereGt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -3344,7 +3344,7 @@ func TestScalarSubqueryInWhereEq(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
@@ -3361,7 +3361,7 @@ func TestScalarSubqueryInSelect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 4 {
 		t.Fatalf("expected 4 rows, got %d", len(rows))
 	}
@@ -3392,7 +3392,7 @@ func TestScalarSubqueryEmptyReturnsNull(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := engine.AsList(result[0])
+	rows, _ := engine.AsList(result[0])
 	if len(rows) != 0 {
 		t.Fatalf("expected 0 rows (NULL comparison), got %d", len(rows))
 	}

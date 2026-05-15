@@ -60,7 +60,7 @@ func CanonValue(v Value) string {
 		s, _ := AsAtom(v)
 		return "(quote " + s + ")"
 	case v.VType.Matches(TList) && v.Data != nil:
-		lst := AsList(v)
+		lst, _ := AsList(v)
 		parts := make([]string, lst.Len())
 		for i := 0; i < lst.Len(); i++ {
 			parts[i] = CanonValue(lst.Get(i))
@@ -71,8 +71,8 @@ func CanonValue(v Value) string {
 		}
 		return body
 	case v.VType.Equal(TMap) && v.Data != nil:
-		m := AsMap(v)
-		if m == nil {
+		m, err := AsMap(v)
+		if err != nil || m == nil {
 			return v.String()
 		}
 		parts := make([]string, m.Len())

@@ -50,7 +50,7 @@ func TestFetchStringHandler(t *testing.T) {
 		t.Errorf("expected type %s, got %s", TFetchResponse, resp.VType)
 	}
 
-	m := engine.AsMap(resp)
+	m, _ := engine.AsMap(resp)
 
 	okVal, _ := m.Get("ok")
 	okb, _ := engine.AsBoolean(okVal)
@@ -77,7 +77,7 @@ func TestFetchStringHandler(t *testing.T) {
 	}
 
 	headersVal, _ := m.Get("headers")
-	hm := engine.AsMap(headersVal)
+	hm, _ := engine.AsMap(headersVal)
 	xCustom, ok := hm.Get("x-custom")
 	if !ok {
 		t.Error("expected x-custom header in response")
@@ -131,7 +131,7 @@ func TestFetchMapHandler(t *testing.T) {
 		t.Errorf("expected body '{\"name\":\"test\"}', got %q", receivedBody)
 	}
 
-	resp := engine.AsMap(result[0])
+	resp, _ := engine.AsMap(result[0])
 	okVal, _ := resp.Get("ok")
 	okb, _ := engine.AsBoolean(okVal)
 	if !okb {
@@ -174,7 +174,7 @@ func TestFetchStringMapHandler(t *testing.T) {
 		t.Errorf("expected PUT, got %q", receivedMethod)
 	}
 
-	resp := engine.AsMap(result[0])
+	resp, _ := engine.AsMap(result[0])
 	statusVal, _ := resp.Get("status")
 	stati, _ := engine.AsInteger(statusVal)
 	if stati != 200 {
@@ -237,7 +237,7 @@ func TestFetchResponseNotOk(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp := engine.AsMap(result[0])
+	resp, _ := engine.AsMap(result[0])
 	okVal, _ := resp.Get("ok")
 	okb, _ := engine.AsBoolean(okVal)
 	if okb {
@@ -277,7 +277,7 @@ func TestFetchRedirect(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp := engine.AsMap(result[0])
+	resp, _ := engine.AsMap(result[0])
 	urlVal, _ := resp.Get("url")
 	urls, _ := engine.AsString(urlVal)
 	if urls != final.URL {
@@ -327,9 +327,9 @@ func TestFetchResponseHeaders(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp := engine.AsMap(result[0])
+	resp, _ := engine.AsMap(result[0])
 	headersVal, _ := resp.Get("headers")
-	hm := engine.AsMap(headersVal)
+	hm, _ := engine.AsMap(headersVal)
 
 	ct, ok := hm.Get("content-type")
 	if !ok {
@@ -391,7 +391,7 @@ func TestFetchServerError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp := engine.AsMap(result[0])
+	resp, _ := engine.AsMap(result[0])
 	okVal, _ := resp.Get("ok")
 	okb, _ := engine.AsBoolean(okVal)
 	if okb {

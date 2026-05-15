@@ -56,8 +56,8 @@ func RequireConcreteList(v Value, op string) (ReadList, error) {
 	if v.Carrier {
 		return ReadList{}, fmt.Errorf("%s: expected a concrete list, got carrier %s", op, v.VType.String())
 	}
-	list := AsList(v)
-	if list.IsNil() {
+	list, err := AsList(v)
+	if err != nil || list.IsNil() {
 		return ReadList{}, fmt.Errorf("%s: value is not a list (got %s)", op, v.VType.String())
 	}
 	return list, nil
@@ -74,8 +74,8 @@ func RequireConcreteMap(v Value, op string) (ReadMap, error) {
 	if v.Carrier {
 		return nil, fmt.Errorf("%s: expected a concrete map, got carrier %s", op, v.VType.String())
 	}
-	m := AsMap(v)
-	if m == nil {
+	m, err := AsMap(v)
+	if err != nil || m == nil {
 		return nil, fmt.Errorf("%s: value is not a concrete map (got %s)", op, v.VType.String())
 	}
 	return m, nil

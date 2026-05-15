@@ -352,7 +352,7 @@ func TestIntegModuleImportAll(t *testing.T) {
 	if len(result) != 1 || !result[0].VType.Equal(TMap) {
 		t.Fatalf("stuff should be a map, got %v", result)
 	}
-	m := AsMap(result[0])
+	m, _ := AsMap(result[0])
 	v, ok := m.Get("val")
 	_as9, _ := AsInteger(v)
 	if !ok || _as9 != 99 {
@@ -813,7 +813,7 @@ func TestIntegDoMap(t *testing.T) {
 	if len(result) != 1 || !result[0].VType.Equal(TMap) {
 		t.Fatalf("do map should return a map, got %v", result)
 	}
-	rm := AsMap(result[0])
+	rm, _ := AsMap(result[0])
 	xVal, ok := rm.Get("x")
 	_as29, _ := AsNumber(xVal)
 	if !ok || _as29 != 7 {
@@ -833,9 +833,9 @@ func TestIntegDoNestedMap(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	outer := AsMap(result[0])
+	outer, _ := AsMap(result[0])
 	innerVal, _ := outer.Get("outer")
-	innerResult := AsMap(innerVal)
+	innerResult, _ := AsMap(innerVal)
 	v, _ := innerResult.Get("inner")
 	_as30, _ := AsNumber(v)
 	if _as30 != 5 {
@@ -929,7 +929,7 @@ func TestIntegFileIOWriteJSON(t *testing.T) {
 	if len(result) != 1 || !result[0].VType.Equal(TMap) {
 		t.Fatalf("read data.json should return map, got %v", result)
 	}
-	rm := AsMap(result[0])
+	rm, _ := AsMap(result[0])
 	v, ok := rm.Get("x")
 	_as34, _ := AsInteger(v)
 	if !ok || _as34 != 1 {
@@ -1237,7 +1237,7 @@ func TestIntegTandMergeMaps(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	merged := AsMap(result[0])
+	merged, _ := AsMap(result[0])
 	if merged == nil {
 		t.Fatalf("expected merged map, got %v", result[0])
 	}
@@ -1273,7 +1273,7 @@ func TestIntegTandMergeOverlap(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d: %v", len(result), result)
 	}
-	merged := AsMap(result[0])
+	merged, _ := AsMap(result[0])
 	if merged == nil || merged.Len() != 1 {
 		t.Fatalf("expected single-key merged map, got %v", result[0])
 	}
@@ -1399,7 +1399,8 @@ func TestIntegFileIOReadLines(t *testing.T) {
 	if len(result) != 1 || !result[0].VType.Equal(TList) {
 		t.Fatalf("read lines should return list, got %v", result)
 	}
-	elems := AsList(result[0]).Slice()
+	_lst, _ := AsList(result[0])
+	elems := _lst.Slice()
 	if len(elems) != 3 {
 		t.Errorf("read lines should have 3 elements, got %d", len(elems))
 	}
@@ -1415,7 +1416,7 @@ func TestIntegDoMapWithNonListValues(t *testing.T) {
 	if len(result) != 1 || !result[0].VType.Equal(TMap) {
 		t.Fatalf("do map should return map, got %v", result)
 	}
-	rm := AsMap(result[0])
+	rm, _ := AsMap(result[0])
 	xVal, _ := rm.Get("x")
 	_as45, _ := AsInteger(xVal)
 	if _as45 != 42 {

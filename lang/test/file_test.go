@@ -43,19 +43,20 @@ func TestFileReadCSV(t *testing.T) {
 		t.Fatalf("expected table type, got %s", v.VType)
 	}
 
-	rows := engine.AsList(v).Slice()
+	_lst, _ := engine.AsList(v)
+	rows := _lst.Slice()
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
 
 	// Check first row: Alice,30,London
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	assertField(t, r0, "name", "Alice")
 	assertField(t, r0, "age", "30")
 	assertField(t, r0, "city", "London")
 
 	// Check last row: Charlie,35,Tokyo
-	r2 := engine.AsMap(rows[2])
+	r2, _ := engine.AsMap(rows[2])
 	assertField(t, r2, "name", "Charlie")
 	assertField(t, r2, "city", "Tokyo")
 }
@@ -85,12 +86,13 @@ func TestFileReadSimpleCSV(t *testing.T) {
 	}
 
 	v := result[0]
-	rows := engine.AsList(v).Slice()
+	_lst, _ := engine.AsList(v)
+	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
 
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	assertField(t, r0, "x", "1")
 	assertField(t, r0, "y", "a")
 }
@@ -102,12 +104,13 @@ func TestFileReadQuotedCSV(t *testing.T) {
 	}
 
 	v := result[0]
-	rows := engine.AsList(v).Slice()
+	_lst, _ := engine.AsList(v)
+	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
 
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	assertField(t, r0, "name", "Smith, John")
 	assertField(t, r0, "description", "Has a comma, in name")
 }
@@ -125,7 +128,8 @@ func TestFileReadEmptyCSV(t *testing.T) {
 			t.Fatalf("expected list/table type, got %s", v.VType)
 		}
 	}
-	rows := engine.AsList(v).Slice()
+	_lst, _ := engine.AsList(v)
+	rows := _lst.Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(rows))
 	}
@@ -147,19 +151,20 @@ func TestFileReadTSV(t *testing.T) {
 		t.Fatalf("expected table type, got %s", v.VType)
 	}
 
-	rows := engine.AsList(v).Slice()
+	_lst, _ := engine.AsList(v)
+	rows := _lst.Slice()
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
 
 	// Check first row: 1, Widget, 9.99
-	r0 := engine.AsMap(rows[0])
+	r0, _ := engine.AsMap(rows[0])
 	assertField(t, r0, "id", "1")
 	assertField(t, r0, "name", "Widget")
 	assertField(t, r0, "price", "9.99")
 
 	// Check third row: 3, Gizmo, 14.75
-	r2 := engine.AsMap(rows[2])
+	r2, _ := engine.AsMap(rows[2])
 	assertField(t, r2, "id", "3")
 	assertField(t, r2, "name", "Gizmo")
 	assertField(t, r2, "price", "14.75")
@@ -212,7 +217,8 @@ func TestFileReadCSVExplicitFmt(t *testing.T) {
 	if !engine.IsTableType(v) {
 		t.Fatalf("expected table type, got %s", v.VType)
 	}
-	rows := engine.AsList(v).Slice()
+	_lst, _ := engine.AsList(v)
+	rows := _lst.Slice()
 	if len(rows) != 3 {
 		t.Errorf("expected 3 rows, got %d", len(rows))
 	}

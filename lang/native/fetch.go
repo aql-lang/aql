@@ -51,7 +51,7 @@ func fetchStringHandler(args []engine.Value, ctx map[string]engine.Value, stack 
 // fetchStringMapHandler handles fetch with a URL string and an options map.
 // The URL is merged into the options map as the "url" field.
 func fetchStringMapHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	opts := engine.AsMap(args[1])
+	opts, _ := engine.AsMap(args[1])
 	if opts == nil {
 		return nil, fmt.Errorf("fetch: expected map for options, got nil")
 	}
@@ -71,7 +71,7 @@ func fetchStringMapHandler(args []engine.Value, ctx map[string]engine.Value, sta
 // fetchMapHandler handles fetch with a full request map.
 // The map must contain a "url" field.
 func fetchMapHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	m := engine.AsMap(args[0])
+	m, _ := engine.AsMap(args[0])
 	if m == nil {
 		return nil, fmt.Errorf("fetch: expected map argument, got nil")
 	}
@@ -126,7 +126,7 @@ func doFetch(reqOM engine.ReadMap) ([]engine.Value, error) {
 
 	// Set headers.
 	if hv, ok := reqOM.Get("headers"); ok && hv.VType.Matches(engine.TMap) {
-		hm := engine.AsMap(hv)
+		hm, _ := engine.AsMap(hv)
 		for _, key := range hm.Keys() {
 			val, _ := hm.Get(key)
 			valStr, err := engine.AsString(val)

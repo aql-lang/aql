@@ -93,8 +93,8 @@ func DataListElemTypeFromValue(data Value) *Type {
 	if ct, ok := data.Data.(ChildTypeInfo); ok {
 		return ct.Child.VType
 	}
-	list := AsList(data)
-	if list.IsNil() || list.Len() == 0 {
+	list, err := AsList(data)
+	if err != nil || list.IsNil() || list.Len() == 0 {
 		return TAny
 	}
 	t := list.Get(0).VType
@@ -374,8 +374,8 @@ func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 	if body.Data == nil {
 		return nil, nil
 	}
-	elems := AsList(body)
-	if elems.IsNil() {
+	elems, err := AsList(body)
+	if err != nil || elems.IsNil() {
 		return nil, nil
 	}
 
@@ -484,8 +484,8 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 	if r == nil || condList.Data == nil {
 		return nil
 	}
-	list := AsList(condList)
-	if list.IsNil() || list.Len() < 3 {
+	list, err := AsList(condList)
+	if err != nil || list.IsNil() || list.Len() < 3 {
 		return nil
 	}
 	elems := list.Slice()
@@ -535,8 +535,8 @@ func LiteralCondValue(condList Value) (bool, bool) {
 	if condList.Data == nil {
 		return false, false
 	}
-	list := AsList(condList)
-	if list.IsNil() || list.Len() != 1 {
+	list, err := AsList(condList)
+	if err != nil || list.IsNil() || list.Len() != 1 {
 		return false, false
 	}
 	only := list.Get(0)

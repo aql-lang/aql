@@ -385,7 +385,8 @@ type columnSpec struct {
 //   - [[cast age integer]]       — CAST("age" AS INTEGER)
 //   - [[cast age integer a]]     — CAST("age" AS INTEGER) AS "a"
 func parseColumnSpec(colList Value) ([]columnSpec, error) {
-	elems := AsList(colList).Slice()
+	_lst, _ := AsList(colList)
+	elems := _lst.Slice()
 	cols := make([]columnSpec, 0, len(elems))
 	for _, e := range elems {
 		switch {
@@ -402,7 +403,8 @@ func parseColumnSpec(colList Value) ([]columnSpec, error) {
 			wname := _as8.Name
 			cols = append(cols, columnSpec{Name: wname})
 		case e.VType.Equal(TList):
-			pair := AsList(e).Slice()
+			_lst, _ := AsList(e)
+			pair := _lst.Slice()
 			if len(pair) < 2 {
 				return nil, fmt.Errorf("select: column spec list must have at least 2 elements")
 			}
@@ -669,7 +671,8 @@ var logicalOps = map[string]string{
 // The inner list elements are scanned for paren tokens. When found, the
 // sub-expression is evaluated and the result replaces the paren tokens.
 func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
-	elems := AsList(colList).Slice()
+	_lst, _ := AsList(colList)
+	elems := _lst.Slice()
 	if len(elems) == 0 {
 		return colList, nil
 	}
@@ -748,7 +751,8 @@ func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
 // The "(select [city] from cities)" tokens are evaluated, producing a
 // TableData value that buildInList can extract values from.
 func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
-	elems := AsList(condList).Slice()
+	_lst, _ := AsList(condList)
+	elems := _lst.Slice()
 	if len(elems) == 0 {
 		return condList, nil
 	}
@@ -825,7 +829,8 @@ func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
 // [column not in [v1 v2 v3]]                — NOT IN (v1, v2, v3)
 // [... and/or ...]                           — logical connectives
 func buildWhereClause(condList Value) (string, error) {
-	elems := AsList(condList).Slice()
+	_lst, _ := AsList(condList)
+	elems := _lst.Slice()
 	if len(elems) == 0 {
 		return "1=1", nil
 	}
@@ -1104,7 +1109,8 @@ func buildInList(v Value) (string, error) {
 		return buildInListFromTable(td)
 	}
 
-	elems := AsList(v).Slice()
+	_lst, _ := AsList(v)
+	elems := _lst.Slice()
 	if len(elems) == 0 {
 		return "", fmt.Errorf("empty IN list")
 	}
@@ -1135,7 +1141,7 @@ func buildInListFromTable(td TableData) (string, error) {
 
 	parts := make([]string, 0, len(td.Rows))
 	for _, row := range td.Rows {
-		m := AsMap(row)
+		m, _ := AsMap(row)
 		val, ok := m.Get(firstCol)
 		if !ok {
 			continue
@@ -1176,7 +1182,8 @@ func scalarFromTable(td TableData) (Value, error) {
 	if len(td.Rows) > 1 {
 		return Value{}, fmt.Errorf("scalar subquery returned %d rows, expected 1", len(td.Rows))
 	}
-	val, ok := AsMap(td.Rows[0]).Get(cols[0])
+	_m, _ := AsMap(td.Rows[0])
+	val, ok := _m.Get(cols[0])
 	if !ok {
 		return NewTypeLiteral(TNone), nil
 	}
@@ -1229,7 +1236,8 @@ func valueToSQL(v Value) (string, error) {
 
 // buildGroupByClause translates a column list into a SQL GROUP BY clause.
 func buildGroupByClause(colList Value) (string, error) {
-	elems := AsList(colList).Slice()
+	_lst, _ := AsList(colList)
+	elems := _lst.Slice()
 	if len(elems) == 0 {
 		return "", fmt.Errorf("empty group by column list")
 	}
@@ -1247,7 +1255,8 @@ func buildGroupByClause(colList Value) (string, error) {
 // buildJoinCondition translates a condition list into a SQL ON clause.
 // Supports dot-separated qualified names: [a.id eq b.id]
 func buildJoinCondition(condList Value) (string, error) {
-	elems := AsList(condList).Slice()
+	_lst, _ := AsList(condList)
+	elems := _lst.Slice()
 	if len(elems) == 0 {
 		return "1=1", nil
 	}
@@ -1313,7 +1322,8 @@ func quoteJoinCol(name string) string {
 //   - [col1 asc nulls first]         — with nulls placement
 //   - [1, 2 desc]                    — positional (1-based)
 func buildOrderClause(colList Value) (string, error) {
-	elems := AsList(colList).Slice()
+	_lst, _ := AsList(colList)
+	elems := _lst.Slice()
 	if len(elems) == 0 {
 		return "", fmt.Errorf("empty order column list")
 	}

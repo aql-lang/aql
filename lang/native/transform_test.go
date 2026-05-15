@@ -26,7 +26,7 @@ func TestTransformHandlerPassthrough(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m := engine.AsMap(result[0])
+	m, _ := engine.AsMap(result[0])
 	v, ok := m.Get("x")
 	if !ok {
 		t.Fatal("expected key 'x' in result")
@@ -54,7 +54,7 @@ func TestTransformHandlerInject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := engine.AsMap(result[0])
+	m, _ := engine.AsMap(result[0])
 	v, ok := m.Get("greeting")
 	if !ok {
 		t.Fatal("expected key 'greeting' in result")
@@ -84,7 +84,7 @@ func TestTransformHandlerNestedPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := engine.AsMap(result[0])
+	m, _ := engine.AsMap(result[0])
 	v, _ := m.Get("val")
 	vi, _ := engine.AsInteger(v)
 	if vi != 42 {
@@ -105,7 +105,7 @@ func TestValueToAnyRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := engine.AsMap(back)
+	m, _ := engine.AsMap(back)
 	name, _ := m.Get("name")
 	ns, _ := engine.AsString(name)
 	if ns != "Bob" {
@@ -215,7 +215,8 @@ func TestValueToAnyList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := engine.AsList(back).Slice()
+	_lst, _ := engine.AsList(back)
+	list := _lst.Slice()
 	if len(list) != 3 {
 		t.Fatalf("expected 3 elements, got %d", len(list))
 	}
