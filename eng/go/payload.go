@@ -18,16 +18,23 @@ package eng
 //
 //  2. Primitives (int64, string, bool, float64), Go-built-in slice
 //     types ([]Value, []InterpPart), and external types (time.Time,
-//     time.Duration, *time.Location) cannot carry methods; they are
-//     wrapped in named variant structs declared below (IntPayload,
-//     ListPayload, TimePayload, …).
+//     time.Duration, *time.Location), and types defined in other
+//     packages (lang/engine's QueryBuilder) cannot carry the
+//     unexported marker; they are wrapped in named variant structs
+//     declared below (IntPayload, ListPayload, TimePayload, …) or
+//     in the catch-all ExtensionPayload{Body: any}.
 //
-// The migration plan (subsequent commits 5b-5g) moves each NewX
-// constructor and each Data.(T) assertion onto either form one batch
-// at a time. The final commit seals Payload by renaming the alias to
-// an interface with an unexported marker method, at which point the
-// compiler catches any leftover untagged-payload site.
-type Payload = any
+// As of Step 5g, Payload is now a sealed interface. Any code path
+// that tries to assign a non-marker-bearing value to Value.Data will
+// fail to compile — `Value{Data: "hello"}`, `Value{Data: int64(5)}`,
+// `Value{Data: qb}` (where qb is from another package), and similar
+// mismatched-shape constructions are rejected at the type-check
+// level. The seal is the kernel guarantee that fulfils the
+// "make illegal values unrepresentable" goal stated in
+// lang/doc/design/TYPE-DECOUPLING.0.md.
+type Payload interface {
+	payloadMarker()
+}
 
 // =================================================================
 // Wrapper variants (Step 5b–5c) for types that can't carry methods.

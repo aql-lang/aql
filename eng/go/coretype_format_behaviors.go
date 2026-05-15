@@ -43,9 +43,6 @@ func (instantFormatBehavior) Format(v Value) string {
 			return t.Format(time.RFC3339Nano)
 		}
 	}
-	if t, ok := v.Data.(time.Time); ok {
-		return t.Format(time.RFC3339Nano)
-	}
 	return "Instant(nil)"
 }
 
@@ -59,9 +56,6 @@ func (dateTimeFormatBehavior) Format(v Value) string {
 		if t, ok := tp.T.(time.Time); ok {
 			return t.Format("2006-01-02T15:04:05.999999999")
 		}
-	}
-	if t, ok := v.Data.(time.Time); ok {
-		return t.Format("2006-01-02T15:04:05.999999999")
 	}
 	return "DateTime(nil)"
 }
@@ -77,9 +71,6 @@ func (dateFormatBehavior) Format(v Value) string {
 			return t.Format("2006-01-02")
 		}
 	}
-	if t, ok := v.Data.(time.Time); ok {
-		return t.Format("2006-01-02")
-	}
 	return "Date(nil)"
 }
 
@@ -89,13 +80,11 @@ type timeOfDayFormatBehavior struct{}
 func (timeOfDayFormatBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
 func (timeOfDayFormatBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
 func (timeOfDayFormatBehavior) Format(v Value) string {
-	var d time.Duration
-	var ok bool
-	if dp, dok := v.Data.(DurationPayload); dok {
-		d, ok = dp.D.(time.Duration)
-	} else {
-		d, ok = v.Data.(time.Duration)
+	dp, ok := v.Data.(DurationPayload)
+	if !ok {
+		return "TimeOfDay(nil)"
 	}
+	d, ok := dp.D.(time.Duration)
 	if !ok {
 		return "TimeOfDay(nil)"
 	}
@@ -132,9 +121,6 @@ func (clkDurationFormatBehavior) Format(v Value) string {
 			return d.String()
 		}
 	}
-	if d, ok := v.Data.(time.Duration); ok {
-		return d.String()
-	}
 	return "ClkDuration(nil)"
 }
 
@@ -148,9 +134,6 @@ func (timezoneFormatBehavior) Format(v Value) string {
 		if loc, ok := tp.Loc.(*time.Location); ok {
 			return loc.String()
 		}
-	}
-	if loc, ok := v.Data.(*time.Location); ok {
-		return loc.String()
 	}
 	return "Timezone(nil)"
 }

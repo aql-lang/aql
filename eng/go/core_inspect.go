@@ -89,11 +89,11 @@ func buildInspection(r *Registry, name string) Value {
 				result.Set("value", v)
 			}
 			result.Set("signatures", NewList(nil))
-			return NewValueRaw(TInspect, result)
+			return NewValueRaw(TInspect, MapPayload{M: result})
 		}
 		result.Set("kind", NewAtom("unknown"))
 		result.Set("signatures", NewList(nil))
-		return NewValueRaw(TInspect, result)
+		return NewValueRaw(TInspect, MapPayload{M: result})
 	}
 
 	if len(fn.Sigs) > 0 {
@@ -122,7 +122,7 @@ func buildInspection(r *Registry, name string) Value {
 	}
 	result.Set("signatures", NewList(sigMaps))
 
-	return NewValueRaw(TInspect, result)
+	return NewValueRaw(TInspect, MapPayload{M: result})
 }
 
 // buildTypeInspection constructs a type-inspection map for a type value.
@@ -249,5 +249,5 @@ func buildTypeInspection(name string, tv Value) Value {
 		result.Set("kind", NewAtom("literal"))
 	}
 
-	return NewValueRaw(TInspect, result)
+	return NewValueRaw(TInspect, MapPayload{M: result})
 }

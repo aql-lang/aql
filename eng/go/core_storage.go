@@ -177,7 +177,7 @@ func getObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 		return nil, fmt.Errorf("get: cannot access property on type literal")
 	}
 	k := GetKey(key)
-	if m, ok := container.Data.(*OrderedMap); ok {
+	if m := container.AsMutableMap(); m != nil {
 		val, found := m.Get(k)
 		if !found {
 			return []Value{NewTypeLiteral(TNone)}, nil

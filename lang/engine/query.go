@@ -588,9 +588,22 @@ func valueToColName(v Value) string {
 	return ""
 }
 
+// unwrapQB extracts a QueryBuilder from a Value, accepting both the
+// wrapped form (ExtensionPayload{Body: qb} — the post-Step-5 storage
+// shape so QueryBuilder satisfies Payload) and the legacy bare form.
+// Returns (QueryBuilder{}, false) when v is not a query builder.
+func unwrapQB(v Value) (QueryBuilder, bool) {
+	if ep, ok := v.Data.(ExtensionPayload); ok {
+		if qb, ok := ep.Body.(QueryBuilder); ok {
+			return qb, true
+		}
+	}
+	return QueryBuilder{}, false
+}
+
 // toQueryBuilder converts a Value (QueryBuilder or TableData) into a QueryBuilder.
 func toQueryBuilder(r *Registry, v Value) (QueryBuilder, error) {
-	if qb, ok := v.Data.(QueryBuilder); ok {
+	if qb, ok := unwrapQB(v); ok {
 		return qb.clone(), nil
 	}
 	if td, ok := v.Data.(TableData); ok {
@@ -665,7 +678,7 @@ func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
 	for i, e := range elems {
 		if e.VType.Equal(TList) {
 			if _, isTD := e.Data.(TableData); !isTD {
-				if _, isQB := e.Data.(QueryBuilder); !isQB {
+				if _, isQB := unwrapQB(e); !isQB {
 					resolved, err := resolveSelectSubExprs(r, e)
 					if err != nil {
 						return Value{}, err
@@ -754,7 +767,7 @@ func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
 		for i, e := range elems {
 			if e.VType.Equal(TList) {
 				if _, isTD := e.Data.(TableData); !isTD {
-					if _, isQB := e.Data.(QueryBuilder); !isQB {
+					if _, isQB := unwrapQB(e); !isQB {
 						resolved, err := resolveWhereSubExprs(r, e)
 						if err != nil {
 							return Value{}, err
@@ -1083,7 +1096,7 @@ func buildInList(v Value) (string, error) {
 	if td, ok := v.Data.(TableData); ok {
 		return buildInListFromTable(td)
 	}
-	if qb, ok := v.Data.(QueryBuilder); ok {
+	if qb, ok := unwrapQB(v); ok {
 		td, err := qb.Materialize()
 		if err != nil {
 			return "", fmt.Errorf("in subquery: %w", err)
@@ -1144,7 +1157,7 @@ func isTableOrQuery(v Value) bool {
 	if _, ok := v.Data.(TableData); ok {
 		return true
 	}
-	if _, ok := v.Data.(QueryBuilder); ok {
+	if _, ok := unwrapQB(v); ok {
 		return true
 	}
 	return false
@@ -1176,7 +1189,7 @@ func resolveScalarValue(v Value) (Value, error) {
 	if td, ok := v.Data.(TableData); ok {
 		return scalarFromTable(td)
 	}
-	if qb, ok := v.Data.(QueryBuilder); ok {
+	if qb, ok := unwrapQB(v); ok {
 		td, err := qb.Materialize()
 		if err != nil {
 			return Value{}, fmt.Errorf("scalar subquery: %w", err)

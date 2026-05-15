@@ -156,5 +156,5 @@ func doFetch(reqOM engine.ReadMap) ([]engine.Value, error) {
 	respOM.Set("body", engine.NewString(string(bodyBytes)))
 	respOM.Set("url", engine.NewString(resp.Request.URL.String()))
 
-	return []engine.Value{{VType: engine.TFetchResponse, Data: respOM}}, nil
+	return []engine.Value{{VType: engine.TFetchResponse, Data: engine.MapPayload{M: respOM}}}, nil
 }

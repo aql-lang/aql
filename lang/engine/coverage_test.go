@@ -108,7 +108,7 @@ func TestQueryFromWhere(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	td, ok := result[0].Data.(QueryBuilder)
+	td, ok := unwrapQB(result[0])
 	if !ok {
 		td2, ok2 := result[0].Data.(TableData)
 		if !ok2 {
@@ -260,7 +260,7 @@ func TestQueryMaterializeSelectStar(t *testing.T) {
 	}
 	// Materialize the result
 	v := result[0]
-	if qb, ok := v.Data.(QueryBuilder); ok {
+	if qb, ok := unwrapQB(v); ok {
 		td, err := qb.Materialize()
 		if err != nil {
 			t.Fatalf("materialize error: %v", err)
@@ -3280,7 +3280,7 @@ func TestIsTableOrQueryTableData(t *testing.T) {
 
 func TestIsTableOrQueryQueryBuilder(t *testing.T) {
 	qb := QueryBuilder{}
-	v := Value{VType: TList, Data: qb}
+	v := Value{VType: TList, Data: ExtensionPayload{Body: qb}}
 	if !isTableOrQuery(v) {
 		t.Error("expected true for QueryBuilder")
 	}

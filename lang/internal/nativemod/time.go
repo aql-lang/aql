@@ -154,9 +154,6 @@ func extractTime(v engine.Value) time.Time {
 			return t
 		}
 	}
-	if t, ok := v.Data.(time.Time); ok {
-		return t
-	}
 	return time.Time{}
 }
 

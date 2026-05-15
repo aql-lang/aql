@@ -578,8 +578,13 @@ func IDPrefixForType(t *Type) string {
 	return "T_"
 }
 
-// NewValueRaw creates a Value with an auto-generated ID based on the type category.
-func NewValueRaw(t *Type, data interface{}) Value {
+// NewValueRaw creates a Value with an auto-generated ID based on the
+// type category. data must be a Payload — the sealed interface
+// implemented by all kernel-known payload variants and by every
+// eng-defined struct/pointer type used as a payload. After Step 5g,
+// passing a raw int64 / string / time.Time / etc. is a compile error
+// — wrap it in IntPayload / StrPayload / TimePayload / etc. first.
+func NewValueRaw(t *Type, data Payload) Value {
 	return Value{
 		ID:    GenerateID(IDPrefixForType(t)),
 		VType: t,
@@ -710,9 +715,6 @@ func (v Value) IsImplicitMap() bool {
 	}
 	if mp, ok := v.Data.(MapPayload); ok {
 		return mp.M != nil && mp.M.Implicit
-	}
-	if m, ok := v.Data.(*OrderedMap); ok {
-		return m != nil && m.Implicit
 	}
 	return false
 }
@@ -852,7 +854,7 @@ func NewEnd() Value {
 // autoEvalMap evaluates these by running the items in a sub-engine with
 // paren markers, producing a single result value.
 func NewParenExpr(items []Value) Value {
-	return NewValueRaw(TParenExpr, items)
+	return NewValueRaw(TParenExpr, ParenExprPayload{Toks: items})
 }
 
 // InterpPart represents one segment of an interpolated string.
@@ -867,7 +869,7 @@ type InterpPart struct {
 // literal and expression parts. The engine evaluates expression parts in
 // a sub-engine, converts results to strings, and concatenates everything.
 func NewInterpString(parts []InterpPart) Value {
-	return NewValueRaw(TInterpString, parts)
+	return NewValueRaw(TInterpString, InterpStringPayload{Parts: parts})
 }
 
 // NewMark creates a mark value with the given unique ID and the body to
@@ -1034,9 +1036,6 @@ func (v Value) AsDate() time.Time {
 			return t
 		}
 	}
-	if t, ok := v.Data.(time.Time); ok {
-		return t
-	}
 	return time.Time{}
 }
 
@@ -1051,9 +1050,6 @@ func (v Value) AsDateTime() time.Time {
 		if t, ok := tp.T.(time.Time); ok {
 			return t
 		}
-	}
-	if t, ok := v.Data.(time.Time); ok {
-		return t
 	}
 	return time.Time{}
 }
@@ -1070,9 +1066,6 @@ func (v Value) AsInstant() time.Time {
 			return t
 		}
 	}
-	if t, ok := v.Data.(time.Time); ok {
-		return t
-	}
 	return time.Time{}
 }
 
@@ -1087,9 +1080,6 @@ func (v Value) AsTimeOfDay() time.Duration {
 		if d, ok := dp.D.(time.Duration); ok {
 			return d
 		}
-	}
-	if d, ok := v.Data.(time.Duration); ok {
-		return d
 	}
 	return 0
 }
@@ -1126,9 +1116,6 @@ func (v Value) AsClkDuration() (time.Duration, bool) {
 			return d, true
 		}
 	}
-	if d, ok := v.Data.(time.Duration); ok {
-		return d, true
-	}
 	return 0, false
 }
 
@@ -1143,9 +1130,6 @@ func (v Value) AsTimezone() *time.Location {
 		if loc, ok := tp.Loc.(*time.Location); ok {
 			return loc
 		}
-	}
-	if loc, ok := v.Data.(*time.Location); ok {
-		return loc
 	}
 	return nil
 }
@@ -1277,8 +1261,8 @@ func (v Value) IsParenExpr() bool {
 
 // AsParenExpr returns the items in a paren expression value.
 func (v Value) AsParenExpr() []Value {
-	if items, ok := v.Data.([]Value); ok {
-		return items
+	if pp, ok := v.Data.(ParenExprPayload); ok {
+		return pp.Toks
 	}
 	return nil
 }
@@ -1290,8 +1274,8 @@ func (v Value) IsInterpString() bool {
 
 // AsInterpString returns the parts of an interpolated string value.
 func (v Value) AsInterpString() []InterpPart {
-	if parts, ok := v.Data.([]InterpPart); ok {
-		return parts
+	if ip, ok := v.Data.(InterpStringPayload); ok {
+		return ip.Parts
 	}
 	return nil
 }
@@ -1664,9 +1648,6 @@ func (v Value) AsList() ReadList {
 		}
 		return ReadList{elems: td.Rows}
 	}
-	if elems, ok := v.Data.([]Value); ok {
-		return ReadList{elems: elems}
-	}
 	// Typed list carrying both a child constraint and concrete
 	// elements (`[v0 :T v1]`). Surface the elements so list-aware
 	// operations (lengthq, firstq, is) see them.
@@ -1685,9 +1666,6 @@ func (v Value) AsMutableList() []Value {
 	if lp, ok := v.Data.(ListPayload); ok {
 		return lp.Elems
 	}
-	if elems, ok := v.Data.([]Value); ok {
-		return elems
-	}
 	return nil
 }
 
@@ -1700,9 +1678,6 @@ func (v Value) AsMap() ReadMap {
 	}
 	if mp, ok := v.Data.(MapPayload); ok {
 		return mp.M
-	}
-	if om, ok := v.Data.(*OrderedMap); ok {
-		return om
 	}
 	// Typed map carrying both a child constraint and concrete entries
 	// (`{k:v :T}`). Surface the entries as an OrderedMap so map-aware
@@ -1725,9 +1700,6 @@ func (v Value) AsMutableMap() *OrderedMap {
 	}
 	if mp, ok := v.Data.(MapPayload); ok {
 		return mp.M
-	}
-	if om, ok := v.Data.(*OrderedMap); ok {
-		return om
 	}
 	return nil
 }
