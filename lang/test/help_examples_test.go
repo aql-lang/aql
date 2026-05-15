@@ -80,7 +80,9 @@ func TestHelpExamplesCorrect(t *testing.T) {
 
 	// Enable in-memory filesystem for read/write examples.
 	mem := fileops.NewMem()
-	reg.Capabilities.Set(engine.CapMemFileOps, fileops.FileOps(mem))
+	if err := reg.Capabilities.Set(engine.CapMemFileOps, fileops.FileOps(mem)); err != nil {
+		t.Fatalf("set capability: %v", err)
+	}
 
 	// Seed in-memory files that the generated read examples will access.
 	// The help system generates single-letter filenames ('a', 'b', etc.)
