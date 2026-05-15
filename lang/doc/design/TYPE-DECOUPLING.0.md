@@ -33,8 +33,8 @@ Status: **IMPLEMENTATION SUBSTANTIALLY COMPLETE — Steps 0-9 landed**.
 | 3  Pluggable Format (10 domain render arms) | ✅ landed | `eng/go/coretype_format_behaviors.go` (placeholder file; Behaviors moved to owning modules at Step 8) |
 | 4  Pluggable Equal | ✅ landed | `ValuesEqual` delegates to `Behavior.Equal` |
 | 5  Sealed Payload | ✅ landed | `type Payload interface { payloadMarker() }`; `Value.Data` is sealed. `Value{VType: TInteger, Data: "hello"}` is a compile error. |
-| 6  Drain primitive AsX | ⏸ deferred | `AsInteger`/`AsString`/etc. retained as convenience wrappers asserting the sealed variant. Cosmetic. |
-| 7  Drain structural AsX | ⏸ deferred | Same — `AsList`/`AsMap` retained; they normalise across variants. |
+| 6  Drain primitive AsX | ✅ landed | 9 primitive accessors (AsString, AsInteger, AsDecimal, AsNumber, AsBoolean, AsAtom, AsPath, AsWord, AsForward) converted from methods to free functions. ~1500 caller sites updated via gofmt -r AST rewrites. |
+| 7  Drain structural AsX + all IsX | ✅ landed | All remaining 49 IsX/AsX methods (AsList, AsMap, AsRecordType, IsWord, IsArray, …) converted to free functions. Only `Is(t *Type)` and `String()` remain as methods on Value. |
 | 8a RegisterExternalBuiltin API | ✅ landed | API + acceptance test in `eng/go/external_register_test.go` |
 | 8b Migrate TFetch* | ✅ landed | First kernel-type migration via the new API. Owned by `lang/native/fetch.go`. |
 | 8c Migrate TMatrix | ✅ landed | Owned by `lang/internal/nativemod/matrix.go`. Format Behavior + `NewMatrix` constructor moved with it. |
@@ -51,7 +51,9 @@ field migration, and ALL five domain-type families
 (Fetch, Matrix, Timeout, Interval, Time) are externalised. The
 kernel (`eng/`) no longer mentions any user-facing domain type
 identity — only parser-emitted / interpreter-loop kinds and the
-structural type system remain.
+structural type system remain. All AsX/IsX methods have been
+drained from `Value` — only `Is(t)` (canonical dispatch) and
+`String()` (Stringer interface) remain as methods.
 
 ---
 
