@@ -52,6 +52,13 @@ func (o OriginKind) String() string {
 // install DefaultBehavior when the caller doesn't supply a custom
 // one. See typebehavior.go for the interface and the optional
 // capability sub-interfaces (Comparer, Hasher, Walker).
+//
+// BaseType is the "underlying scalar" pointer for dependent scalar
+// types (Type/Dependent/Dep<X> — DepInteger, DepDecimal, DepString,
+// …) so a DepInteger satisfies any slot typed as Integer. nil for
+// every other type. Set at registration; the lattice override in
+// Type.Matches consults it directly rather than running the historical
+// leaf-name → base-type switch (Step 9 of TYPE-DECOUPLING.0.md).
 type Type struct {
 	ID         string       // canonical identity (e.g. "S_000000000004")
 	Name       string       // last segment of path (e.g. "ProperString")
@@ -60,6 +67,7 @@ type Type struct {
 	IsInternal bool         // Word/__XX runtime markers — not user-facing
 	Origin     OriginKind   // builtin / userdef
 	Behavior   TypeBehavior // pluggable dispatch — never nil after registration
+	BaseType   *Type        // dependent-scalar underlying base; nil otherwise
 }
 
 // IsNative reports whether t is a built-in type seeded at init from
@@ -339,6 +347,7 @@ type builtinDecl struct {
 	FixedID    int
 	IsInternal bool   // true for Word/__XX runtime markers
 	Alias      string // optional friendly short name for ExpandShortName (e.g. "Paren" → Word/__OP)
+	BasePath   string // for Type/Dependent/Dep<X> types: the path of the underlying scalar (Step 9)
 }
 
 // builtinDecls lists every builtin type. Parent-first ordering is
@@ -428,12 +437,12 @@ var builtinDecls = []builtinDecl{
 	{Path: "Type/NodeType", FixedID: 41},
 	{Path: "Type/ObjectType", FixedID: 46},
 	{Path: "Type/Dependent", FixedID: 65},
-	{Path: "Type/Dependent/DepInteger", FixedID: 66},
-	{Path: "Type/Dependent/DepDecimal", FixedID: 67},
-	{Path: "Type/Dependent/DepNumber", FixedID: 68},
-	{Path: "Type/Dependent/DepString", FixedID: 69},
-	{Path: "Type/Dependent/DepBoolean", FixedID: 70},
-	{Path: "Type/Dependent/DepAtom", FixedID: 71},
+	{Path: "Type/Dependent/DepInteger", FixedID: 66, BasePath: "Scalar/Number/Integer"},
+	{Path: "Type/Dependent/DepDecimal", FixedID: 67, BasePath: "Scalar/Number/Decimal"},
+	{Path: "Type/Dependent/DepNumber", FixedID: 68, BasePath: "Scalar/Number"},
+	{Path: "Type/Dependent/DepString", FixedID: 69, BasePath: "Scalar/String"},
+	{Path: "Type/Dependent/DepBoolean", FixedID: 70, BasePath: "Scalar/Boolean"},
+	{Path: "Type/Dependent/DepAtom", FixedID: 71, BasePath: "Scalar/Atom"},
 }
 
 // Builtin is the package-level TypeTable holding every builtin type.
@@ -478,6 +487,13 @@ func (tt *TypeTable) registerBuiltin(d builtinDecl) {
 		IsInternal: d.IsInternal,
 		Origin:     OriginBuiltin,
 		Behavior:   DefaultBehavior,
+	}
+	if d.BasePath != "" {
+		base := tt.bypath[d.BasePath]
+		if base == nil {
+			panic(fmt.Sprintf("typetable: base %q not registered before %q (declare base types first in builtinDecls)", d.BasePath, d.Path))
+		}
+		def.BaseType = base
 	}
 	tt.byID[id] = def
 	tt.bypath[d.Path] = def

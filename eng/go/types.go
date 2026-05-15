@@ -207,12 +207,13 @@ func (t *Type) Matches(pattern *Type) bool {
 	if t.IsAncestor(pattern) {
 		return true
 	}
-	if leaf := DependentLeafFromType(t); leaf != "" {
-		if base, ok := DependentLeafBaseType(leaf); ok {
-			if base.Matches(pattern) {
-				return true
-			}
-		}
+	// Dependent-scalar override: a Dep<X> value satisfies any slot
+	// typed as X (its underlying base). The BaseType pointer on the
+	// *Type is populated at registration via builtinDecl.BasePath;
+	// the historical hardcoded leaf-name switch in depscalar.go is
+	// now a per-Type field (Step 9 of TYPE-DECOUPLING.0.md).
+	if t.BaseType != nil && t.BaseType.Matches(pattern) {
+		return true
 	}
 	return false
 }
