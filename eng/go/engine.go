@@ -998,7 +998,7 @@ func (e *Engine) maybeAddFnShapeHint(err error) error {
 	if !e.isFnShapeTypedBindingContext() {
 		return err
 	}
-	hint := "this is a typed-binding context expecting a function value — did you mean `(quote " + aqlErr.Src + ")`?"
+	hint := "this is a typed-binding context expecting a function value — did you mean `" + aqlErr.Src + "/q`?"
 	if aqlErr.Hint != "" {
 		aqlErr.Hint = aqlErr.Hint + "\n  = " + hint
 	} else {
@@ -1688,7 +1688,9 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
-	e.registry.Args.Push(NewList(argsCopy))
+	if err := e.registry.Args.Push(NewList(argsCopy)); err != nil {
+		return err
+	}
 
 	var names []string
 	unnamedCount := 0

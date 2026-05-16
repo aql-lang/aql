@@ -528,6 +528,17 @@ func InstallType(r *Registry, name string, body Value) error {
 		def := r.Types.MintType(name, parentDef)
 		body = NewObjectType(def, info)
 		r.Types.Bind(name, def, body)
+	} else if inputT := PredicateInputType(body); inputT != nil {
+		// Predicate type with a concrete input type: mint the *Type
+		// parented at the input rather than at TFnDef so values
+		// rewrapped by the typed-bind path inherit input-side
+		// capabilities (Integer's Number-branch Comparer, etc.)
+		// through the lattice walk. Predicate types declared with
+		// `Any` input (the historical `fn [x:Any Any […]]` pattern)
+		// fall through to the regular PushType path — they remain
+		// gates, not dispatch categories.
+		def := r.Types.MintType(name, inputT)
+		r.Types.Bind(name, def, body)
 	} else {
 		r.Types.PushType(name, body)
 	}

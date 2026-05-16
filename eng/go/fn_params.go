@@ -161,7 +161,7 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 					paramName = strings.TrimSuffix(paramName, "?")
 					optional = true
 				}
-				paramType, err := ResolveTypeName(typeName)
+				paramType, err := lookupTypeNameInRegistry(r, typeName)
 				if err != nil {
 					return nil, 0, fmt.Errorf("function spec: invalid type %q: %w", typeName, err)
 				}
@@ -172,7 +172,7 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 				continue
 			}
 			// Bare type-name Word: unnamed positional param.
-			paramType, err := ResolveTypeName(name)
+			paramType, err := lookupTypeNameInRegistry(r, name)
 			if err != nil {
 				return nil, 0, fmt.Errorf("function spec: invalid type %q: %w", name, err)
 			}
@@ -331,6 +331,24 @@ func ResolveDefType(v Value) (*Type, *Value, error) {
 // ResolveTypeName maps a type name string to its engine *Type.
 // Special-cases the well-known names; falls back to NewType for any
 // other slash-separated path.
+// lookupTypeNameInRegistry resolves a type-name string against the
+// kernel ResolveTypeName table first, falling back to the registry's
+// dynamic type stack so user-defined types (`type Person object {…}`)
+// are visible to fn-parameter validation. Without this fallback,
+// `fn [[Person Person] [Integer] [body]]` would error at parse time
+// because the kernel name table only knows builtins.
+func lookupTypeNameInRegistry(r *Registry, name string) (*Type, error) {
+	if t, err := ResolveTypeName(name); err == nil {
+		return t, nil
+	}
+	if r != nil {
+		if def := r.Types.LookupByName(name); def != nil {
+			return def, nil
+		}
+	}
+	return nil, fmt.Errorf("aql: unknown type %q", name)
+}
+
 func ResolveTypeName(name string) (*Type, error) {
 	switch name {
 	case "Any":

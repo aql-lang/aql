@@ -381,7 +381,11 @@ func TestRegistryFormatsStartEmpty(t *testing.T) {
 	// service in via Registry.SetCapability before running user
 	// code. Pinned here so future drift surfaces in CI.
 	r, _ := NewRegistry()
-	if names := r.Capabilities.Names(); len(names) != 0 {
+	names, err := r.Capabilities.Names()
+	if err != nil {
+		t.Fatalf("Names: %v", err)
+	}
+	if len(names) != 0 {
 		t.Errorf("expected zero capabilities on a fresh registry, got %v", names)
 	}
 }

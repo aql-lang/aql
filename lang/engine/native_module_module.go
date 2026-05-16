@@ -29,8 +29,14 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	if ops := HostFileOps(parent); ops != nil {
 		SetHostFileOps(modReg, ops)
 	}
-	if mem, ok := parent.Capabilities.Get(CapMemFileOps); ok {
-		modReg.Capabilities.Set(CapMemFileOps, mem)
+	mem, ok, err := parent.Capabilities.Get(CapMemFileOps)
+	if err != nil {
+		return ModuleDesc{}, err
+	}
+	if ok {
+		if err := modReg.Capabilities.Set(CapMemFileOps, mem); err != nil {
+			return ModuleDesc{}, err
+		}
 	}
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir

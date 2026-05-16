@@ -23,13 +23,13 @@ func TestCanonValue(t *testing.T) {
 		{"string", NewString("hello"), "'hello'"},
 		{"true", NewBoolean(true), "true"},
 		{"false", NewBoolean(false), "false"},
-		{"atom", NewAtom("foo"), "(quote foo)"},
+		{"atom", NewAtom("foo"), "foo/q"},
 		{"empty list", NewList(nil), "[]"},
 		{"list of ints", NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}), "[1 2 3]"},
-		{"list with atom", NewList([]Value{NewInteger(1), NewAtom("foo")}), "[1 (quote foo)]"},
+		{"list with atom", NewList([]Value{NewInteger(1), NewAtom("foo")}), "[1 foo/q]"},
 		{"nested list", NewList([]Value{NewList([]Value{NewInteger(1)}), NewList([]Value{NewInteger(2)})}), "[[1] [2]]"},
 		{"quoted list", quotedList, "(quote [1 2])"},
-		{"map", NewMap(m), "{a:1 b:(quote foo)}"},
+		{"map", NewMap(m), "{a:1 b:foo/q}"},
 		{"type literal", NewTypeLiteral(TInteger), "Integer"},
 	}
 
@@ -51,7 +51,7 @@ func TestCanonStack(t *testing.T) {
 		NewBoolean(true),
 	}
 	got := Canon(stack)
-	want := "1 (quote foo) 'bar' true"
+	want := "1 foo/q 'bar' true"
 	if got != want {
 		t.Errorf("Canon = %q, want %q", got, want)
 	}
