@@ -1,6 +1,18 @@
 package eng
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+// ErrNoComparer is returned by Comparer.Compare implementations that
+// hold a placeholder slot (e.g. a wrapped Behavior whose user-defined
+// comparator body is empty). CompareValues recognises it and continues
+// the parent-chain walk, treating the Behavior as if it didn't satisfy
+// the Comparer interface at all. This lets a single Behavior wrapper
+// carry multiple optional capabilities (compare / canon / …) where
+// only some are installed without prematurely terminating dispatch.
+var ErrNoComparer = errors.New("eng: no comparer in this Behavior")
 
 // CompareValues returns -1, 0, or 1 for natural ordering of two values.
 //
@@ -34,7 +46,14 @@ func CompareValues(a, b Value) (int, error) {
 		if !ok {
 			continue
 		}
-		return cmp.Compare(a, b)
+		n, err := cmp.Compare(a, b)
+		if errors.Is(err, ErrNoComparer) {
+			// Wrapper Behavior signalled "I satisfy Comparer
+			// structurally but have no body installed" — keep
+			// walking the parent chain.
+			continue
+		}
+		return n, err
 	}
 	return 0, fmt.Errorf("cannot compare %s and %s", a.VType.String(), b.VType.String())
 }

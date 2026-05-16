@@ -62,7 +62,7 @@ func Register(r *Registry) {
 	for _, n := range typeNatives {
 		r.RegisterNativeFunc(n)
 	}
-	r.RegisterNativeFunc(cmpNative)
+	r.RegisterNativeFunc(regNative)
 	installResourceTypes(r)
 
 	// Control flow

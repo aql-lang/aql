@@ -1,30 +1,33 @@
 # tokens	expected	note
 # =====================================================================
-# Compare-dispatch spec — covers the three layers wired through
-# eng.CompareValues:
+# Behavior dispatch spec — covers `compare` and `canon` capabilities
+# installed via the unified `reg` word.
 #
-#   1. CORE comparators on the kernel scalar types (Integer, Decimal,
-#      Number cross-promotion, String, Boolean, Atom). Attached to
-#      each *Type's Behavior in eng/go/compare_scalar_behaviors.go.
+#   reg compare/q (fn [[T T] [Integer] [body]])
+#   reg canon/q   (fn [[T]   [String]  [body]])
 #
-#   2. NATIVE comparators on lang-layer domain types (Date, DateTime,
-#      Instant, TimeOfDay). Attached to the existing FormatBehavior
-#      in lang/engine/native_temporal.go.
+# Three dispatch layers:
 #
-#   3. USER-DEFINED comparators installed by the `cmp` word
-#      (lang/engine/native_cmp.go). The signature `cmp [Type/q List]`
-#      lets the caller write a bare type-name Word — the /q at the
-#      sig position captures it as an Atom; the handler resolves to
-#      the registered *Type and wraps its Behavior with a body that
-#      runs as AQL.
+#   1. CORE comparators / canonisers — kernel scalar Behaviors
+#      (Integer, Decimal, Number cross-promotion, String, Boolean,
+#      Atom) hold the canonical `Compare` and `Format` impls.
+#
+#   2. NATIVE comparators / canonisers — lang-layer domain types
+#      (Date, Instant, ClkDuration, …) attach Compare / Format to
+#      their existing FormatBehavior in lang/engine/native_temporal.go.
+#
+#   3. USER-DEFINED — `reg compare/q` and `reg canon/q` install AQL
+#      bodies via lang/engine/native_reg.go's userBehavior wrapper.
+#      Both behaviors can coexist on one type — the wrapper carries
+#      multiple capability slots.
 # =====================================================================
 
 # ---------------------------------------------------------------------
-# 1. CORE: kernel scalar Comparers
+# 1a. CORE compare: kernel scalar Comparers
 # ---------------------------------------------------------------------
 
-# Integer ordering — the numberCompareBehavior on TNumber handles
-# both Integer-Integer pairs (via the lattice walk) and Decimal pairs.
+# Integer ordering — numberCompareBehavior on TNumber handles
+# Integer-Integer pairs via the lattice walk plus Decimal pairs.
 2 5 lt	true	Integer < Integer
 5 2 lt	false	Integer > Integer
 5 5 lt	false	Integer == Integer (not less)
@@ -36,10 +39,8 @@
 3.14 2.71 gt	true	Decimal > Decimal
 3.14 3.14 lte	true	Decimal == Decimal
 
-# Cross-type Integer + Decimal: LCA = Number; both values flow
-# through AsNumber.  Without the LCA walk the dispatch would need
-# a per-pair Behavior on Integer or Decimal — instead a single
-# Comparer on Number handles the whole numeric branch.
+# Cross-type Integer + Decimal: LCA = Number; the Comparer on Number
+# handles the entire numeric branch — no per-pair Behavior.
 3 3.5 lt	true	Integer < Decimal (LCA = Number)
 3.0 3 lt	false	Integer == Decimal (LCA = Number)
 3.0 3 lte	true	Integer == Decimal (≤ holds)
@@ -60,60 +61,108 @@ green/q red/q lt	true	green < red lex
 red/q red/q lt	false	same atom
 
 # Cross-branch (Integer vs String) — no shared Comparer below the
-# root, so the dispatch surfaces an error rather than silently
-# coercing.
+# root, so dispatch errors rather than silently coercing.
 1 'a' lt	ERROR:	cross-branch (Integer vs String)
 1 true lt	ERROR:	cross-branch (Integer vs Boolean)
 
 # ---------------------------------------------------------------------
-# 2. NATIVE: predefined domain comparators (Date / DateTime / Instant)
+# 1b. CORE canon: kernel default rendering through CanonValue
 # ---------------------------------------------------------------------
-# These types are constructed via the `aql:time` native module — the
-# test runner pre-installs its exports so spec rows can use
-# `time.unix`, `time.seconds`, … directly. The Compare method on
-# each type's FormatBehavior orders chronologically.
+# Each scalar value renders to its canonical AQL source form (the
+# round-trippable representation produced by eng.CanonValue).
 
-# Two Instants from different unix timestamps order numerically.
+42	42	Integer renders as itself
+-7	-7	negative Integer
+3.14	3.14	Decimal renders with decimal point
+'hello'	'hello'	String renders with single quotes
+true	true	Boolean true
+false	false	Boolean false
+red/q	red/q	Atom renders with /q suffix
+[1 2 3]	[1 2 3]	List renders bracketed
+
+# ---------------------------------------------------------------------
+# 2a. NATIVE compare: predefined domain Comparers
+# ---------------------------------------------------------------------
+# Constructed via the aql:time module — the test runner pre-installs
+# its exports so rows can use `time.unix`, `time.seconds`, … directly.
+
 (0 time.unix) (100 time.unix) lt	true	earlier Instant < later
 (100 time.unix) (0 time.unix) lt	false	later Instant > earlier
 (50 time.unix) (50 time.unix) lt	false	same Instant
 (50 time.unix) (50 time.unix) lte	true	same Instant (≤)
 (0 time.unix) (100 time.unix) gt	false	earlier !> later
-
-# ClkDuration ordering: built from numeric helpers.
-(5 time.seconds) (10 time.seconds) lt	true	5s < 10s
+(5 time.seconds) (10 time.seconds) lt	true	5s < 10s ClkDuration
 (10 time.seconds) (5 time.seconds) lt	false	10s > 5s
 
 # ---------------------------------------------------------------------
-# 3. USER-DEFINED: cmp [Type/q List]
+# 2b. NATIVE canon: domain Format Behaviors
 # ---------------------------------------------------------------------
-# `cmp Person [body]` — Person is a Word, captured as an Atom by the
-# sig's /q at position 0. The handler resolves "Person" to its *Type
-# and wraps the Behavior with a Comparer running the body. Inside the
-# body, `a` and `b` are pushed as defs; the trailing Integer on the
-# stack is the comparison result.
+# Each native type's FormatBehavior produces a domain-specific render
+# (Instant in RFC3339Nano, ClkDuration as a Go duration string, …).
 
-# Ascending by age: body subtracts (b.age - a.age sub computes b-a).
-# `make` calls are parenthesised so `def NAME (make TYPE BODY)`
-# binds NAME to the resulting instance — without the parens the
-# trailing tokens get pulled into the next forward collection.
-type Person object {age:Integer} cmp Person [(a 'age' get) (b 'age' get) sub] def alice (make Person {age:30}) def bob (make Person {age:25}) alice bob lt	false	30 lt 25 → false (asc by age)
-type Person object {age:Integer} cmp Person [(a 'age' get) (b 'age' get) sub] def alice (make Person {age:30}) def bob (make Person {age:25}) bob alice lt	true	25 lt 30 → true (asc by age)
-type Person object {age:Integer} cmp Person [(a 'age' get) (b 'age' get) sub] def alice (make Person {age:30}) def bob (make Person {age:25}) alice bob gt	true	30 gt 25 → true
+0 time.unix	1970-01-01T00:00:00Z	Instant renders chronologically
+100 time.unix	1970-01-01T00:01:40Z	Instant + 100s
+5 time.seconds	5s	ClkDuration
 
-# Descending: swap operands in the body — flips the ordering.
-type Item object {n:Integer} cmp Item [(b 'n' get) (a 'n' get) sub] def i1 (make Item {n:1}) def i9 (make Item {n:9}) i1 i9 lt	false	descending: 1 not < 9
-type Item object {n:Integer} cmp Item [(b 'n' get) (a 'n' get) sub] def i1 (make Item {n:1}) def i9 (make Item {n:9}) i9 i1 lt	true	descending: 9 < 1 (inverted)
+# ---------------------------------------------------------------------
+# 3a. USER-DEFINED compare: reg compare/q (fn [[T T] [Integer] [body]])
+# ---------------------------------------------------------------------
+# `reg compare/q` installs a Comparer on type T. The body receives the
+# operands as the defs `a` and `b`; the trailing Integer determines
+# ordering: negative → a<b, zero → equal, positive → a>b.
 
-# Equality through cmp: a == a returns 0, lt/gt false, lte/gte true.
-type Person object {age:Integer} cmp Person [(a 'age' get) (b 'age' get) sub] def alice (make Person {age:30}) alice alice lt	false	alice == alice → not lt
-type Person object {age:Integer} cmp Person [(a 'age' get) (b 'age' get) sub] def alice (make Person {age:30}) alice alice lte	true	alice == alice → lte holds
+# Ascending by age.
+type Person object {age:Integer} reg compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) def bob (make Person {age:25}) alice bob lt	false	30 lt 25 → false (asc by age)
+type Person object {age:Integer} reg compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) def bob (make Person {age:25}) bob alice lt	true	25 lt 30 → true (asc by age)
+type Person object {age:Integer} reg compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) def bob (make Person {age:25}) alice bob gt	true	30 gt 25 → true
 
-# Unknown type — surfaces a clear error.
-cmp Nope [a b sub]	ERROR:no such type	unknown type rejected
+# Descending: swap operands.
+type Item object {n:Integer} reg compare/q (fn [[Item Item] [Integer] [(b 'n' get) (a 'n' get) sub]]) def i1 (make Item {n:1}) def i9 (make Item {n:9}) i1 i9 lt	false	descending: 1 not < 9
+type Item object {n:Integer} reg compare/q (fn [[Item Item] [Integer] [(b 'n' get) (a 'n' get) sub]]) def i1 (make Item {n:1}) def i9 (make Item {n:9}) i9 i1 lt	true	descending: 9 < 1 (inverted)
 
-# Builtin override — refused.
-cmp Integer [a b sub]	ERROR:builtin	builtin override rejected
+# Self-equality.
+type Person object {age:Integer} reg compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) alice alice lt	false	alice == alice → not lt
+type Person object {age:Integer} reg compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) alice alice lte	true	alice == alice → lte holds
 
-# Body produced no Integer — error propagates.
-type Faulty object {x:Integer} cmp Faulty [a b quux] def v1 (make Faulty {x:1}) def v2 (make Faulty {x:2}) v1 v2 lt	ERROR:	body-error propagation (quux undefined)
+# Sig validation: heterogeneous input params rejected for compare.
+type Person object {age:Integer} reg compare/q (fn [[Person Integer] [Integer] [42]])	ERROR:both params must be the same type	compare needs T,T
+
+# Return type validation.
+type Person object {age:Integer} reg compare/q (fn [[Person Person] [String] ['oops']])	ERROR:return Integer	compare must return Integer
+
+# Builtin type override refused.
+reg compare/q (fn [[Integer Integer] [Integer] [0]])	ERROR:builtin	builtin override rejected
+
+# Unknown behavior name.
+reg bogus/q (fn [[Integer Integer] [Integer] [0]])	ERROR:unknown behavior	bogus behavior name
+
+# Body error propagates through the Comparer chain.
+type Faulty object {x:Integer} reg compare/q (fn [[Faulty Faulty] [Integer] [quux]]) def v1 (make Faulty {x:1}) def v2 (make Faulty {x:2}) v1 v2 lt	ERROR:	body-error propagation
+
+# ---------------------------------------------------------------------
+# 3b. USER-DEFINED canon: reg canon/q (fn [[T] [String] [body]])
+# ---------------------------------------------------------------------
+# `reg canon/q` installs a Format-via-canon Behavior on T. The body
+# receives the value as the def `a` and returns a String — that
+# String becomes the value's canonical render (via Value.String,
+# eng.Canon, every error message).
+
+# Render Person as just its name field. The body returns the raw
+# string contents — that becomes the canonical render for Person
+# values (Canon → CanonValue's default fallthrough → Value.String →
+# userBehavior.Format → body output).
+type Person object {name:String age:Integer} reg canon/q (fn [[Person] [String] [(a 'name' get)]]) make Person {name:'Alice' age:30}	Alice	Person renders as its name
+
+# Multi-field canon body — string concat plus a fixed suffix.
+type Person object {name:String age:Integer} reg canon/q (fn [[Person] [String] [(a 'name' get) ' (person)' add]]) make Person {name:'Alice' age:30}	Alice (person)	concat with a fixed suffix
+
+# Canon coexists with compare on the same type — both wrap one
+# userBehavior; installing the second does not lose the first.
+type Person object {name:String age:Integer} reg compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) reg canon/q (fn [[Person] [String] [(a 'name' get)]]) def alice (make Person {name:'Alice' age:30}) def bob (make Person {name:'Bob' age:25}) alice bob lt	false	compare still works after canon installed
+type Person object {name:String age:Integer} reg compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) reg canon/q (fn [[Person] [String] [(a 'name' get)]]) make Person {name:'Alice' age:30}	Alice	canon still works after compare installed
+
+# Sig validation: canon must take exactly 1 param.
+type Person object {name:String} reg canon/q (fn [[Person Person] [String] ['x']])	ERROR:1 arg	canon needs single param
+
+# Return-type validation.
+type Person object {name:String} reg canon/q (fn [[Person] [Integer] [42]])	ERROR:return String	canon must return String
