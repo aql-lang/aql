@@ -1,16 +1,16 @@
 # tokens	expected	note
 # =====================================================================
 # Behavior dispatch spec — covers `compare` and `canon` capabilities
-# installed via the unified `reg` word.
+# installed via the unified `behave` word.
 #
-#   reg compare/q  (fn [[T T] [Integer] [body]])
-#   reg canon/q    (fn [[T]   [String]  [body]])
-#   reg jsonify/q  (fn [[T]   [Any]     [body]])
+#   behave compare/q  (fn [[T T] [Integer] [body]])
+#   behave canon/q    (fn [[T]   [String]  [body]])
+#   behave nodify/q  (fn [[T]   [Any]     [body]])
 #
-# `jsonify` projects a value into a Node or Scalar (the AQL data
+# `nodify` projects a value into a Node or Scalar (the AQL data
 # subset) rather than into a JSON string — callers compose with a
 # separate encoder when they need wire-format JSON. The default
-# (when no jsonify is registered) returns the value unchanged.
+# (when no nodify is registered) returns the value unchanged.
 #
 # Three dispatch layers:
 #
@@ -22,10 +22,10 @@
 #      (Date, Instant, ClkDuration, …) attach Compare / Format to
 #      their existing FormatBehavior in lang/engine/native_temporal.go.
 #
-#   3. USER-DEFINED — `reg compare/q` and `reg canon/q` install AQL
-#      bodies via lang/engine/native_reg.go's userBehavior wrapper.
-#      Both behaviors can coexist on one type — the wrapper carries
-#      multiple capability slots.
+#   3. USER-DEFINED — `behave compare/q`, `behave canon/q`, and
+#      `behave nodify/q` install AQL bodies via
+#      lang/engine/native_behave.go's userBehavior wrapper. All three
+#      capability slots coexist on one wrapper.
 # =====================================================================
 
 # ---------------------------------------------------------------------
@@ -111,44 +111,44 @@ red/q	red/q	Atom renders with /q suffix
 5 time.seconds	5s	ClkDuration
 
 # ---------------------------------------------------------------------
-# 3a. USER-DEFINED compare: reg compare/q (fn [[T T] [Integer] [body]])
+# 3a. USER-DEFINED compare: behave compare/q (fn [[T T] [Integer] [body]])
 # ---------------------------------------------------------------------
-# `reg compare/q` installs a Comparer on type T. The body receives the
+# `behave compare/q` installs a Comparer on type T. The body receives the
 # operands as the defs `a` and `b`; the trailing Integer determines
 # ordering: negative → a<b, zero → equal, positive → a>b.
 
 # Ascending by age.
-type Person object {age:Integer} reg compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) def bob (make Person {age:25}) alice bob lt	false	30 lt 25 → false (asc by age)
-type Person object {age:Integer} reg compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) def bob (make Person {age:25}) bob alice lt	true	25 lt 30 → true (asc by age)
-type Person object {age:Integer} reg compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) def bob (make Person {age:25}) alice bob gt	true	30 gt 25 → true
+type Person object {age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) def bob (make Person {age:25}) alice bob lt	false	30 lt 25 → false (asc by age)
+type Person object {age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) def bob (make Person {age:25}) bob alice lt	true	25 lt 30 → true (asc by age)
+type Person object {age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) def bob (make Person {age:25}) alice bob gt	true	30 gt 25 → true
 
 # Descending: swap operands.
-type Item object {n:Integer} reg compare/q (fn [[Item Item] [Integer] [(b 'n' get) (a 'n' get) sub]]) def i1 (make Item {n:1}) def i9 (make Item {n:9}) i1 i9 lt	false	descending: 1 not < 9
-type Item object {n:Integer} reg compare/q (fn [[Item Item] [Integer] [(b 'n' get) (a 'n' get) sub]]) def i1 (make Item {n:1}) def i9 (make Item {n:9}) i9 i1 lt	true	descending: 9 < 1 (inverted)
+type Item object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(b 'n' get) (a 'n' get) sub]]) def i1 (make Item {n:1}) def i9 (make Item {n:9}) i1 i9 lt	false	descending: 1 not < 9
+type Item object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(b 'n' get) (a 'n' get) sub]]) def i1 (make Item {n:1}) def i9 (make Item {n:9}) i9 i1 lt	true	descending: 9 < 1 (inverted)
 
 # Self-equality.
-type Person object {age:Integer} reg compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) alice alice lt	false	alice == alice → not lt
-type Person object {age:Integer} reg compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) alice alice lte	true	alice == alice → lte holds
+type Person object {age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) alice alice lt	false	alice == alice → not lt
+type Person object {age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) alice alice lte	true	alice == alice → lte holds
 
 # Sig validation: heterogeneous input params rejected for compare.
-type Person object {age:Integer} reg compare/q (fn [[Person Integer] [Integer] [42]])	ERROR:both params must be the same type	compare needs T,T
+type Person object {age:Integer} behave compare/q (fn [[Person Integer] [Integer] [42]])	ERROR:both params must be the same type	compare needs T,T
 
 # Return type validation.
-type Person object {age:Integer} reg compare/q (fn [[Person Person] [String] ['oops']])	ERROR:return Integer	compare must return Integer
+type Person object {age:Integer} behave compare/q (fn [[Person Person] [String] ['oops']])	ERROR:return Integer	compare must return Integer
 
 # Builtin type override refused.
-reg compare/q (fn [[Integer Integer] [Integer] [0]])	ERROR:builtin	builtin override rejected
+behave compare/q (fn [[Integer Integer] [Integer] [0]])	ERROR:builtin	builtin override rejected
 
 # Unknown behavior name.
-reg bogus/q (fn [[Integer Integer] [Integer] [0]])	ERROR:unknown behavior	bogus behavior name
+behave bogus/q (fn [[Integer Integer] [Integer] [0]])	ERROR:unknown behavior	bogus behavior name
 
 # Body error propagates through the Comparer chain.
-type Faulty object {x:Integer} reg compare/q (fn [[Faulty Faulty] [Integer] [quux]]) def v1 (make Faulty {x:1}) def v2 (make Faulty {x:2}) v1 v2 lt	ERROR:	body-error propagation
+type Faulty object {x:Integer} behave compare/q (fn [[Faulty Faulty] [Integer] [quux]]) def v1 (make Faulty {x:1}) def v2 (make Faulty {x:2}) v1 v2 lt	ERROR:	body-error propagation
 
 # ---------------------------------------------------------------------
-# 3b. USER-DEFINED canon: reg canon/q (fn [[T] [String] [body]])
+# 3b. USER-DEFINED canon: behave canon/q (fn [[T] [String] [body]])
 # ---------------------------------------------------------------------
-# `reg canon/q` installs a Format-via-canon Behavior on T. The body
+# `behave canon/q` installs a Format-via-canon Behavior on T. The body
 # receives the value as the def `a` and returns a String — that
 # String becomes the value's canonical render (via Value.String,
 # eng.Canon, every error message).
@@ -157,26 +157,26 @@ type Faulty object {x:Integer} reg compare/q (fn [[Faulty Faulty] [Integer] [quu
 # string contents — that becomes the canonical render for Person
 # values (Canon → CanonValue's default fallthrough → Value.String →
 # userBehavior.Format → body output).
-type Person object {name:String age:Integer} reg canon/q (fn [[Person] [String] [(a 'name' get)]]) make Person {name:'Alice' age:30}	Alice	Person renders as its name
+type Person object {name:String age:Integer} behave canon/q (fn [[Person] [String] [(a 'name' get)]]) make Person {name:'Alice' age:30}	Alice	Person renders as its name
 
 # Multi-field canon body — string concat plus a fixed suffix.
-type Person object {name:String age:Integer} reg canon/q (fn [[Person] [String] [(a 'name' get) ' (person)' add]]) make Person {name:'Alice' age:30}	Alice (person)	concat with a fixed suffix
+type Person object {name:String age:Integer} behave canon/q (fn [[Person] [String] [(a 'name' get) ' (person)' add]]) make Person {name:'Alice' age:30}	Alice (person)	concat with a fixed suffix
 
 # Canon coexists with compare on the same type — both wrap one
 # userBehavior; installing the second does not lose the first.
-type Person object {name:String age:Integer} reg compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) reg canon/q (fn [[Person] [String] [(a 'name' get)]]) def alice (make Person {name:'Alice' age:30}) def bob (make Person {name:'Bob' age:25}) alice bob lt	false	compare still works after canon installed
-type Person object {name:String age:Integer} reg compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) reg canon/q (fn [[Person] [String] [(a 'name' get)]]) make Person {name:'Alice' age:30}	Alice	canon still works after compare installed
+type Person object {name:String age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) behave canon/q (fn [[Person] [String] [(a 'name' get)]]) def alice (make Person {name:'Alice' age:30}) def bob (make Person {name:'Bob' age:25}) alice bob lt	false	compare still works after canon installed
+type Person object {name:String age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) behave canon/q (fn [[Person] [String] [(a 'name' get)]]) make Person {name:'Alice' age:30}	Alice	canon still works after compare installed
 
 # Sig validation: canon must take exactly 1 param.
-type Person object {name:String} reg canon/q (fn [[Person Person] [String] ['x']])	ERROR:1 arg	canon needs single param
+type Person object {name:String} behave canon/q (fn [[Person Person] [String] ['x']])	ERROR:1 arg	canon needs single param
 
 # Return-type validation.
-type Person object {name:String} reg canon/q (fn [[Person] [Integer] [42]])	ERROR:return String	canon must return String
+type Person object {name:String} behave canon/q (fn [[Person] [Integer] [42]])	ERROR:return String	canon must return String
 
 # ---------------------------------------------------------------------
 # 4. JSONIFY: project a value into a Node or Scalar
 # ---------------------------------------------------------------------
-# `reg jsonify/q (fn [[T] [Any] [body]])` installs a projection on T;
+# `behave nodify/q (fn [[T] [Any] [body]])` installs a projection on T;
 # the body's return value is a Node or Scalar (data-shape, NOT a
 # JSON-encoded string). Two access words:
 #
@@ -204,15 +204,15 @@ true tonode	true	Boolean passes through
 # Map with renamed / filtered fields. The body returns a Map (Node);
 # `tonode` exposes that Map directly so the spec can assert on its
 # structure without going through the JSON-string encoder.
-type Person object {name:String age:Integer secret:String} reg jsonify/q (fn [[Person] [Any] [{n: (a 'name' get), age: (a 'age' get)}]]) make Person {name:'Alice' age:30 secret:'hush'} tonode	{age:30 n:'Alice'}	custom projection: rename + drop `secret`
+type Person object {name:String age:Integer secret:String} behave nodify/q (fn [[Person] [Any] [{n: (a 'name' get), age: (a 'age' get)}]]) make Person {name:'Alice' age:30 secret:'hush'} tonode	{age:30 n:'Alice'}	custom projection: rename + drop `secret`
 
 # Body can return Scalar, not just Node — projection is free to
 # collapse the whole instance to a primitive.
-type Money object {cents:Integer} reg jsonify/q (fn [[Money] [Any] [(a 'cents' get)]]) make Money {cents:1234} tonode	1234	Money → Scalar projection
+type Money object {cents:Integer} behave nodify/q (fn [[Money] [Any] [(a 'cents' get)]]) make Money {cents:1234} tonode	1234	Money → Scalar projection
 
 # Compose with compare + canon on the same type — three capability
 # slots coexist on one userBehavior wrapper.
-type Item object {n:Integer} reg compare/q (fn [[Item Item] [Integer] [(a 'n' get) (b 'n' get) sub]]) reg canon/q (fn [[Item] [String] [(a 'n' get) ' (item)' add]]) reg jsonify/q (fn [[Item] [Any] [{value: (a 'n' get)}]]) def i (make Item {n:42}) i tonode	{value:42}	all three behaviors coexist
+type Item object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(a 'n' get) (b 'n' get) sub]]) behave canon/q (fn [[Item] [String] [(a 'n' get) ' (item)' add]]) behave nodify/q (fn [[Item] [Any] [{value: (a 'n' get)}]]) def i (make Item {n:42}) i tonode	{value:42}	all three behaviors coexist
 
 # Sig validation — jsonify takes exactly 1 param.
-type Foo object {x:Integer} reg jsonify/q (fn [[Foo Foo] [Any] [42]])	ERROR:1 arg	jsonify needs single param
+type Foo object {x:Integer} behave nodify/q (fn [[Foo Foo] [Any] [42]])	ERROR:1 arg	jsonify needs single param
