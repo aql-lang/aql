@@ -29,6 +29,32 @@ func Canon(stack []Value) string {
 
 // CanonValue renders one value as canonical AQL source. See Canon.
 func CanonValue(v Value) string {
+	// Behavior-driven dispatch for user-defined types: if a non-
+	// builtin type in v.VType's parent chain has a non-default
+	// Behavior, route through it. This is how user-installed canon
+	// bodies (`behave canon/q (fn [[T] [String] [body]])`) flow
+	// into eng.Canon.
+	//
+	// Built-in Behaviors (listFormatBehavior, mapFormatBehavior,
+	// dateFormatBehavior, …) are deliberately skipped here — they
+	// produce Value.String's debug form (comma-separated lists,
+	// time-domain renderings) which doesn't match Canon's source-
+	// shape conventions (space-separated lists, quoted strings).
+	// CanonValue's own switch below preserves those.
+	if v.Data != nil && v.VType != nil {
+		for t := v.VType; t != nil; t = t.Parent {
+			if t.Origin == OriginBuiltin {
+				continue
+			}
+			if t.Behavior == nil || t.Behavior == DefaultBehavior {
+				continue
+			}
+			if _, ok := t.Behavior.(formatDelegatesToDefault); ok {
+				continue
+			}
+			return t.Behavior.Format(v)
+		}
+	}
 	switch {
 	case IsNone(v):
 		return "none"

@@ -1,6 +1,10 @@
 package engine
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/aql-lang/aql/eng"
+)
 
 // definitionNatives covers the binding / function-definition words:
 // def, undef, var, fn, call, dblcall, args, __pa.
@@ -199,6 +203,27 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		if !matched {
 			return nil, fmt.Errorf("def %s: value %s does not satisfy predicate type %s",
 				name, body.String(), describeType())
+		}
+		// Rewrap with the predicate's *Type so dispatch keys off
+		// the nominal name. The underlying Data is unchanged —
+		// accessors (AsInteger, AsString, …) read the payload the
+		// same way — but the VType change lets the LCA walk find
+		// behaviors installed via `behave compare/q (fn
+		// [[Positive Positive] …])` etc.
+		//
+		// Only fires when the predicate declares a concrete input
+		// type (e.g. `fn [n:Integer …]`). Predicates with `Any`
+		// input — the historical `fn [x:Any Any […]]` shape — are
+		// pure validation gates: their *Type is parented at
+		// TFnDef and rewrapping would break rendering and
+		// downstream type tests (the value would print as
+		// `Type/Function/Bbd({…})` rather than its underlying
+		// scalar). The PredicateInputType check below mirrors the
+		// InstallType decision so the two paths stay aligned.
+		if typeName != "" && eng.PredicateInputType(constraint) != nil {
+			if def := r.Types.LookupByName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
+				out.VType = def
+			}
 		}
 		InstallDef(r, name, out)
 		r.Check.RecordDef(name, args[0].Pos)

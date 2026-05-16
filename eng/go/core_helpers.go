@@ -593,6 +593,41 @@ func IsTypeBody(v Value) bool {
 	return false
 }
 
+// PredicateInputType returns the concrete input type of a
+// predicate-shaped fn body (a Function or FnDef whose first sig
+// takes exactly one argument with a declared type other than Any).
+// Returns nil if v isn't a predicate type or the input type is Any
+// or unset — those bodies stay parented at TFnDef / TFunction, the
+// pre-existing behavior.
+//
+// Used by InstallType to mint user-defined predicate types with the
+// declared input type as their parent so values rewrapped by the
+// typed-bind path participate in the LCA-walk dispatch alongside
+// kernel scalars. Without this, `behave compare/q (fn [[Positive
+// Positive] …])` would have no dispatch surface — no value's VType
+// is ever Positive.
+func PredicateInputType(v Value) *Type {
+	if v.VType == nil {
+		return nil
+	}
+	if !v.VType.Equal(TFnDef) && !v.VType.Equal(TFunction) {
+		return nil
+	}
+	info, ok := v.Data.(FnDefInfo)
+	if !ok || len(info.Sigs) == 0 {
+		return nil
+	}
+	sig := info.Sigs[0]
+	if len(sig.Params) != 1 {
+		return nil
+	}
+	t := sig.Params[0].Type
+	if t == nil || t.Equal(TAny) {
+		return nil
+	}
+	return t
+}
+
 // IsLiteralTypeBody reports whether v can be installed as a "value-
 // is-a-type" type body — the singleton-type interpretation. Scalar
 // literals (Integer / Decimal / String / Boolean / Atom / Path / the

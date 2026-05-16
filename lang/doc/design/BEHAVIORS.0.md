@@ -176,19 +176,50 @@ the walk-from-LCA-upward order. This is the Liskov-friendly direction
 and the right default; the Eiffel-style covariant override of input
 types isn't expressible.
 
-### Predicate types are dispatch-invisible
+### Predicate-type dispatch (implemented)
 
-A predicate type `type Positive fn [[n:Integer] [Boolean] [n gt 0]]`
-validates membership at typed-binding time but carries no `*Type` of
-its own — it's an FnDef value pushed onto the type stack. So `behave
-compare/q (fn [[Positive Positive] …])` would have no values to
-dispatch on: no value's `VType` is ever `Positive`. The lattice walk
-never reaches it.
+A predicate type `type Positive fn [n:Integer Integer [(n gt 0) guard
+n]]` was historically dispatch-invisible: it had no `*Type` of its
+own (just an FnDef value on the type stack), so `behave compare/q (fn
+[[Positive Positive] …])` had no values to dispatch on — no value's
+`VType` was ever `Positive`. The lattice walk never reached it.
 
-This is a deliberate kernel choice (predicate types are gates, not
-categories), but it does mean the behavior mechanism only applies to
-nominal types today. Four options for closing the gap, in roughly
-ascending order of preference:
+The current kernel resolves this for predicate types whose input is
+concrete (`[n:Integer …]` rather than `[x:Any …]`):
+
+1. **`InstallType` detects predicate shape via `PredicateInputType`**
+   and mints the `*Type` parented at the predicate's input type (not
+   at `TFnDef`). Positive's parent becomes Integer; the lattice walk
+   from Positive reaches Integer → Number → Scalar, picking up
+   numeric Comparers along the way.
+
+2. **The typed-bind path rewraps the validated value with the
+   predicate's `*Type`.** `def x:Positive 5` runs the predicate body
+   (`(n gt 0) guard n`), gets back `5` if it satisfies, then sets
+   `out.VType = Positive` before installing. The underlying `Data`
+   is unchanged — `AsInteger(x)` still works — but the VType change
+   lets `CompareValues` find behaviors registered on Positive.
+
+3. **`CanonValue` walks the parent chain for user-defined types**
+   looking for an installed canon body. Built-in Behaviors (List,
+   Map, Date, …) are deliberately skipped — their Format methods
+   produce `Value.String`'s debug shape rather than Canon's
+   source-shape conventions — but user `behave canon/q` bodies on
+   non-builtin types win.
+
+Predicate types declared with `Any` input — the historical `fn [x:Any
+Any […]]` shape used by `guard`-style validators that check the type
+inside the body — remain pure validation gates. Their `*Type` stays
+parented at `TFnDef` and rewrapping is skipped; rewrapping would
+break rendering and downstream type tests because the value would
+appear as a Function instance with the underlying scalar tucked into
+`Data`. This split is intentional: `Any`-input predicates have no
+meaningful parent on the dispatch path, so giving them one would be
+worse than the current behavior.
+
+### Earlier options considered
+
+For reference, the design space considered during implementation:
 
 1. **Stay as-is, document the distinction.** Predicate types remain
    gates, nominal types remain categories. Users who want
@@ -251,10 +282,21 @@ ascending order of preference:
    (scalar). Worth measuring before landing — typed binds are not
    universal but they're not rare either.
 
-Option (4) is the natural extension: it preserves "dispatch keys off
-`VType`" without special-casing predicates and at the same time
-collapses the validation-vs-dispatch seam. Options (2) and (3) are
-narrower fixes that leave the structural-vs-nominal split intact.
+Option (4) was the one landed (a thinner version than originally
+described — no separate carrier struct; the rewrap just sets `out.VType
+= def` since the payload shape is already compatible with the
+predicate's input type). Options (2) and (3) are narrower fixes that
+would have left the structural-vs-nominal split intact.
+
+The same idea is what would close the structural-vs-nominal gotcha
+for *object-shape* user types — a typed bind would wrap the map with
+a Person-typed carrier. Object types are not addressed yet: a Map
+rewrapped as a Person would have `VType.Parent = TObjectType`, which
+breaks the lattice walk for things like `is Map` (Person doesn't
+descend from Map). A proper fix probably means a Carrier value that
+remembers both the asserted type AND the underlying VType, with
+accessors that consult both. Out of scope for the predicate-type
+work.
 
 ### No method overloading on the same type
 
