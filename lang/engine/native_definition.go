@@ -229,6 +229,42 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		r.Check.RecordDef(name, args[0].Pos)
 		return nil, nil
 	}
+
+	// ObjectType constraint (`def x:Person {map}` where Person is
+	// `type Person object {…}`): build a Person-typed ObjectInstance
+	// from the body map via make-style construction. This closes the
+	// "structural for validation, nominal for dispatch" gap for
+	// object types — without this branch the value would have
+	// VType=TMap and Person's registered behaviors would never
+	// dispatch. The result carries VType=Person, satisfies the
+	// `behave compare/q (fn [[Person Person] …])` dispatch path, and
+	// supports `get`/`set` via the ObjectInstance signatures.
+	//
+	// Accepts both a raw Map (built via make) and an already-typed
+	// ObjectInstance (passed through). Other body shapes fall
+	// through to Unify and either succeed or surface a type error.
+	if IsObjectType(constraint) {
+		info, _ := AsObjectType(constraint)
+		if body.VType.Equal(TMap) {
+			result, err := eng.MakeObject(info, body, nil)
+			if err != nil {
+				return nil, fmt.Errorf("def %s: %w", name, err)
+			}
+			InstallDef(r, name, result[0])
+			r.Check.RecordDef(name, args[0].Pos)
+			return nil, nil
+		}
+		if IsObjectInstance(body) {
+			oi, _ := AsObjectInstance(body)
+			// Accept if the instance's nominal type matches the
+			// declared one (covers `def x:Person make Person {…}`).
+			if oi.TypeRef != nil && oi.TypeRef.ID == info.ID {
+				InstallDef(r, name, body)
+				r.Check.RecordDef(name, args[0].Pos)
+				return nil, nil
+			}
+		}
+	}
 	if r.Check.IsActive() && constraint.IsDepScalar() {
 		leaf := DependentLeafFromType(constraint.VType)
 		if base, ok := DependentLeafBaseType(leaf); ok && body.VType.Matches(base) {
@@ -254,6 +290,19 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		}
 		return nil, fmt.Errorf("def %s: value %s does not unify with declared type %s",
 			name, body.String(), describeType())
+	}
+	// FnUndef constraint (`def f:Mapper fn […]`): after Unify
+	// confirms the function shape matches Mapper, rewrap the
+	// VType so dispatch keys off Mapper rather than the generic
+	// TFunction / TFnDef. Behaviors installed via
+	// `behave compare/q (fn [[Mapper Mapper] …])` then dispatch on
+	// f. Same rewrap pattern as predicate types — the payload
+	// shape (FnDefInfo) is unchanged, accessors keep working, just
+	// the dispatch identity flips.
+	if constraint.VType.Equal(TFnUndef) && typeName != "" {
+		if def := r.Types.LookupByName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
+			unified.VType = def
+		}
 	}
 	InstallDef(r, name, unified)
 	r.Check.RecordDef(name, args[0].Pos)

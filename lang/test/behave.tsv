@@ -259,3 +259,55 @@ type Positive fn [n:Integer Integer [(n gt 0) guard n]] def x:Positive 5 x is In
 # Canon override works on a predicate type — body returns a String
 # rendering.
 type Positive fn [n:Integer Integer [(n gt 0) guard n]] behave canon/q (fn [[Positive] [String] ['+'  a add]]) def x:Positive 7 x	+7	canon body produces a String render
+
+# ---------------------------------------------------------------------
+# 6. OBJECT-TYPE DISPATCH ON TYPED DEFS
+# ---------------------------------------------------------------------
+# `def x:Person {map}` now builds a Person-typed ObjectInstance via
+# make-style construction. The result carries VType=Person so
+# behaviors installed on Person dispatch on x — closes the
+# structural-vs-nominal gap for object types alongside the predicate
+# fix above.
+
+# Without a Person Comparer, two Persons can't be compared (the LCA
+# walk from Person goes to TObjectType which has no Comparer).
+type Person object {name:String age:Integer} def x:Person {name:'A' age:30} typeof x	Person	def x:Person {map} now produces a Person-tagged instance
+
+# Person Comparer dispatches on values bound via typed def.
+type Person object {name:String age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def x:Person {name:'A' age:30} def y:Person {name:'B' age:25} x y lt	false	30 lt 25 → false; Comparer wired through typed-def
+
+# `def x:Person make Person {map}` accepts a pre-made instance.
+type Person object {name:String age:Integer} def x:Person make Person {name:'A' age:30} typeof x	Person	pre-made ObjectInstance accepted by typed def
+
+# ---------------------------------------------------------------------
+# 7. SORT — uses Comparer dispatch
+# ---------------------------------------------------------------------
+# `LIST sort` returns a new List sorted ascending using
+# eng.CompareValues; `MAP sort` returns a new Map ordered by values.
+# Pairs the lattice can't compare fall back to string-form ordering
+# so sort stays total.
+
+# Sort a list of integers.
+[3 1 4 1 5 9 2 6] sort	[1 1 2 3 4 5 6 9]	numeric ascending
+
+# Sort a list of strings (lexical).
+['banana' 'apple' 'cherry'] sort	['apple' 'banana' 'cherry']	String lex order
+
+# Already-sorted is a no-op.
+[1 2 3] sort	[1 2 3]	stable; identity on sorted input
+
+# Sort uses the user-installed Comparer when one is registered.
+# The list of Item instances comes back in `n`-ascending order.
+type Item object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(a 'n' get) (b 'n' get) sub]]) [(make Item {n:5}) (make Item {n:1}) (make Item {n:3})] sort length	3	sort returns a list of three items
+
+# A nodify body can project Items to bare integers — we sort first
+# (using Item's Comparer), then project to make the spec assertion
+# easy. The order in the projected list confirms the Comparer fired.
+type Item object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(a 'n' get) (b 'n' get) sub]]) behave nodify/q (fn [[Item] [Any] [(a 'n' get)]]) [(make Item {n:5}) (make Item {n:1}) (make Item {n:3})] sort each [nodify]	[1 3 5]	sort dispatches via Item's Comparer; nodify projects to ints
+
+# Descending: same Items, inverted body.
+type Item object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(b 'n' get) (a 'n' get) sub]]) behave nodify/q (fn [[Item] [Any] [(a 'n' get)]]) [(make Item {n:5}) (make Item {n:1}) (make Item {n:3})] sort each [nodify]	[5 3 1]	descending Comparer flips the order
+
+# Sort a map by value — entries appear in ascending value order.
+{c:3 a:1 b:2} sort	{a:1 b:2 c:3}	map sorted by values
+{z:10 y:5 x:1} sort	{x:1 y:5 z:10}	another map sort

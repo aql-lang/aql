@@ -288,15 +288,37 @@ described — no separate carrier struct; the rewrap just sets `out.VType
 predicate's input type). Options (2) and (3) are narrower fixes that
 would have left the structural-vs-nominal split intact.
 
-The same idea is what would close the structural-vs-nominal gotcha
-for *object-shape* user types — a typed bind would wrap the map with
-a Person-typed carrier. Object types are not addressed yet: a Map
-rewrapped as a Person would have `VType.Parent = TObjectType`, which
-breaks the lattice walk for things like `is Map` (Person doesn't
-descend from Map). A proper fix probably means a Carrier value that
-remembers both the asserted type AND the underlying VType, with
-accessors that consult both. Out of scope for the predicate-type
-work.
+### Object-type and function-shape dispatch (also implemented)
+
+The same gotcha for object types and function-shape types was closed
+along the same lines, with one tweak per category:
+
+- **Object types** — `def x:Person {map}` calls `eng.MakeObject`
+  internally to build a Person-typed ObjectInstance from the raw
+  map body. The result carries `VType = Person` and a real
+  `ObjectInstanceInfo` payload, so accessors like `get key x` find
+  the `[TAtom TObject]` signature instead of failing on a
+  Person-tagged-but-Map-shaped value. Pre-made instances
+  (`def x:Person make Person {…}`) pass through when the
+  instance's nominal `*Type` matches.
+
+- **Function-shape types** — `def f:Mapper fn […]` where Mapper is
+  `type Mapper fnsig [[Integer] [Integer]]`: after `Unify` confirms
+  the function's signature matches the declared shape, the rewrap
+  flips `f.VType` to Mapper. The payload (`FnDefInfo`) is unchanged
+  and the call-site dispatch still finds the registered signatures,
+  so `5 f` still works; what changes is that `behave compare/q (fn
+  [[Mapper Mapper] …])` now dispatches on `f`.
+
+- **Records** — out of scope for this pass. Records' `make Pair
+  {…}` returns a bare Map (not a Pair-tagged value), so the rewrap
+  pattern alone isn't enough; closing this needs a small extension
+  to `makeRecord` to tag the result. Left for future work.
+
+With objects and predicate types both producing nominally typed
+instances on typed bind, the structural-for-validation /
+nominal-for-dispatch seam is closed for the two cases users hit
+most often. The remaining gap — records — is a known follow-up.
 
 ### No method overloading on the same type
 

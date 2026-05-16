@@ -205,6 +205,15 @@ func buildBasePrototype(objType ObjectTypeInfo) (*ObjectInstanceInfo, error) {
 
 // makeObject creates an object instance from an ObjectTypeInfo, a
 // map source, and an optional prototype instance.
+// MakeObject is the exported wrapper around the internal object
+// construction path. Used by lang-side `def x:T body` to build a
+// Person-typed ObjectInstance from a raw Map body when the typed
+// binding's constraint is an ObjectType — closes the
+// structural-vs-nominal dispatch gap for object types.
+func MakeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceInfo) ([]Value, error) {
+	return makeObject(objType, srcVal, prototype)
+}
+
 func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceInfo) ([]Value, error) {
 	if !srcVal.VType.Equal(TMap) {
 		return nil, fmt.Errorf("make: object values must be a map, got %s", srcVal.String())
