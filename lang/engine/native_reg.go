@@ -10,17 +10,20 @@ import (
 // reg BEHAVIOR FN
 //
 // Installs a user-defined capability on a type. The first arg is the
-// behavior name (Atom — `compare/q`, `canon/q`, …); the second is a
-// Function whose sig declares the target type and shape:
+// behavior name (Atom — `compare/q`, `canon/q`, `jsonify/q`, …);
+// the second is a Function whose sig declares the target type and
+// shape:
 //
-//	reg compare/q fn [[Foo Foo] [Integer] [body]]
-//	reg canon/q   fn [[Foo]     [String]  [body]]
+//	reg compare/q  fn [[Foo Foo] [Integer] [body]]
+//	reg canon/q    fn [[Foo]     [String]  [body]]
+//	reg jsonify/q  fn [[Foo]     [Any]     [body]]
 //
 // The handler validates the fn's first sig against the behavior's
 // declared shape, extracts the target type from the input params,
 // looks the type up in the registry, and wraps its TypeBehavior so
 // the body runs whenever the kernel dispatches the corresponding
-// capability (CompareValues for compare, Value.String for canon).
+// capability (CompareValues for compare, Value.String for canon,
+// JsonifyValue for jsonify).
 //
 // Calling `reg` again on the same type with the same or a different
 // behavior is additive — the existing userBehavior wrapper accepts
@@ -42,6 +45,36 @@ var regNative = NativeFunc{
 			Returns: []*Type{},
 		},
 	},
+}
+
+// tonode VALUE
+//
+// Project VALUE into a Node or Scalar via its type's Jsonifier
+// capability — direct access to the data-shape produced by a
+// `reg jsonify/q` body without the JSON-string serialisation step.
+// Useful when the caller wants the structural result for further
+// AQL processing rather than for wire output. With no jsonify
+// behavior registered for the type, the value passes through
+// unchanged.
+//
+// The existing `jsonify` word composes this projection with
+// voxgig/struct's JSON encoder; `tonode` exposes just the
+// projection so tests and downstream pipelines can observe the
+// Node/Scalar directly.
+var tonodeNative = NativeFunc{
+	Name:        "tonode",
+	ForwardArgs: true,
+	Signatures: []NativeSig{{
+		Args: []*Type{TAny},
+		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			out, err := eng.JsonifyValue(args[0])
+			if err != nil {
+				return nil, err
+			}
+			return []Value{out}, nil
+		},
+		Returns: []*Type{TAny},
+	}},
 }
 
 // regBehavior describes how `reg` should validate the supplied fn
@@ -70,13 +103,17 @@ var regBehaviors = map[string]regBehavior{
 		validate: validateCanonSig,
 		install:  func(u *userBehavior, body []eng.Value) { u.canonBody = body },
 	},
+	"jsonify": {
+		validate: validateJsonifySig,
+		install:  func(u *userBehavior, body []eng.Value) { u.jsonifyBody = body },
+	},
 }
 
 func regHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := defName(args[0])
 	rb, ok := regBehaviors[name]
 	if !ok {
-		return nil, fmt.Errorf("reg %s: unknown behavior name; known: compare, canon", name)
+		return nil, fmt.Errorf("reg %s: unknown behavior name; known: compare, canon, jsonify", name)
 	}
 
 	fnVal := args[1]
@@ -174,6 +211,25 @@ func validateCanonSig(sig eng.FnSig) (*eng.Type, error) {
 	return t, nil
 }
 
+// validateJsonifySig enforces shape `[[T] [Any] [body]]` and returns
+// T. The body produces a Node or Scalar projection of the value —
+// the output stays in the AQL data domain (Integer, String, Map,
+// List, …) rather than a serialised JSON string, so callers can
+// compose with other data transforms before encoding.
+func validateJsonifySig(sig eng.FnSig) (*eng.Type, error) {
+	if len(sig.Params) != 1 {
+		return nil, fmt.Errorf("jsonify: fn must take 1 arg (got %d)", len(sig.Params))
+	}
+	if len(sig.Returns) != 1 {
+		return nil, fmt.Errorf("jsonify: fn must declare a single return type")
+	}
+	t := sig.Params[0].Type
+	if t == nil {
+		return nil, fmt.Errorf("jsonify: param must declare a type")
+	}
+	return t, nil
+}
+
 // userBehavior is the shared wrapper type that carries one or more
 // AQL-bodied capability slots on a target *Type. The TypeBehavior
 // surface (Match / Format / Equal) delegates to the previous
@@ -194,7 +250,9 @@ type userBehavior struct {
 	typeName    string
 	compareBody []Value
 	canonBody   []Value
+	jsonifyBody []Value
 	inRender    bool
+	inJsonify   bool
 }
 
 // Match delegates to prev — `reg` does not currently install custom
@@ -282,6 +340,51 @@ func (u *userBehavior) runCompareBody(a, b Value) (int, error) {
 	default:
 		return 0, nil
 	}
+}
+
+// Jsonify runs the installed projection body if any. Falls back to
+// prev's Jsonifier when present, or signals ErrNoJsonifier so
+// JsonifyValue continues the parent-chain walk. Re-entrancy is
+// guarded the same way as Format — a jsonify body that calls
+// `jsonify` on a nested value of the same type would otherwise loop.
+func (u *userBehavior) Jsonify(v Value) (Value, error) {
+	if len(u.jsonifyBody) == 0 {
+		if j, ok := u.prev.(eng.Jsonifier); ok {
+			return j.Jsonify(v)
+		}
+		return Value{}, eng.ErrNoJsonifier
+	}
+	if u.inJsonify {
+		// Re-entry on the same type — fall through so the body
+		// can use `jsonify` on nested fields of the same type
+		// without looping. Returning ErrNoJsonifier here would
+		// just propagate up; falling back to the value itself is
+		// the natural "no further transformation" signal.
+		return v, nil
+	}
+	u.inJsonify = true
+	defer func() { u.inJsonify = false }()
+	return u.runJsonifyBody(v)
+}
+
+func (u *userBehavior) runJsonifyBody(v Value) (Value, error) {
+	r := u.registry
+	if r == nil {
+		return Value{}, fmt.Errorf("reg jsonify %s: no registry attached", u.typeName)
+	}
+	r.Defs.Push("a", v)
+	defer r.Defs.Pop("a")
+
+	tokens := append([]Value{}, u.jsonifyBody...)
+	sub := eng.NewTop(r)
+	result, err := sub.Run(tokens)
+	if err != nil {
+		return Value{}, fmt.Errorf("reg jsonify %s: %w", u.typeName, err)
+	}
+	if len(result) == 0 {
+		return Value{}, fmt.Errorf("reg jsonify %s: body produced no result", u.typeName)
+	}
+	return result[len(result)-1], nil
 }
 
 func (u *userBehavior) runCanonBody(v Value) (string, error) {

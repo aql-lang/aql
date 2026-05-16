@@ -14,19 +14,19 @@ import (
 	"github.com/aql-lang/aql/lang/native"
 )
 
-// TestCompare runs the compare-dispatch spec at compare.tsv. Each row
-// exercises one of three layers wired through eng.CompareValues:
-// kernel scalar Comparers, lang-layer native Comparers (Date /
-// DateTime / Instant / TimeOfDay), and user-defined Comparers
-// installed via the `cmp [Type/q List]` word.
+// TestBehave runs the behavior-dispatch spec at behave.tsv. Each row
+// exercises one of the kernel capabilities wired through `reg`:
+// kernel scalar Comparers / Formatters / Jsonifiers, lang-layer
+// native variants (Date, Instant, ClkDuration), and user-defined
+// behaviors installed via `reg compare/q | canon/q | jsonify/q`.
 //
-// The native rows use `"aql:time" import` to construct domain values,
-// so the runner wires `nativemod.Resolve` as the module resolver
-// (langspec doesn't, since it can't import the lang-internal nativemod
-// package across module boundaries — this runner lives inside the
-// lang module so the wiring is local).
-func TestCompare(t *testing.T) {
-	f, err := os.Open("compare.tsv")
+// The native rows use the `aql:time` module, so the runner wires
+// `nativemod.Resolve` and pre-installs the time exports
+// (langspec doesn't, since it can't import lang-internal nativemod
+// across module boundaries — this runner lives inside the lang
+// module so the wiring is local).
+func TestBehave(t *testing.T) {
+	f, err := os.Open("behave.tsv")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,9 +98,9 @@ func TestCompare(t *testing.T) {
 		t.Fatal(err)
 	}
 	if ran == 0 {
-		t.Fatal("no test cases found in compare.tsv")
+		t.Fatal("no test cases found in behave.tsv")
 	}
-	t.Logf("ran %d compare rows", ran)
+	t.Logf("ran %d behave rows", ran)
 }
 
 func sanitiseName(s string) string {

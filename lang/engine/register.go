@@ -63,6 +63,7 @@ func Register(r *Registry) {
 		r.RegisterNativeFunc(n)
 	}
 	r.RegisterNativeFunc(regNative)
+	r.RegisterNativeFunc(tonodeNative)
 	installResourceTypes(r)
 
 	// Control flow
