@@ -47,7 +47,7 @@ var behaveNative = NativeFunc{
 	},
 }
 
-// tonode / nodify VALUE
+// nodify VALUE
 //
 // Project VALUE into a Node or Scalar via its type's Nodifier
 // capability — direct access to the data-shape produced by a
@@ -56,27 +56,14 @@ var behaveNative = NativeFunc{
 // processing rather than for wire output. With no nodify behavior
 // registered for the type, the value passes through unchanged.
 //
-// `tonode` and `nodify` are two surface names for the same
-// operation: `nodify` matches the behavior name registered via
-// `behave nodify/q`, and `tonode` reads naturally for "to a Node".
 // The existing `jsonify` word composes this projection with
-// voxgig/struct's JSON encoder; `tonode` / `nodify` expose just the
-// projection so tests and downstream pipelines can observe the
-// Node/Scalar directly.
-var tonodeNative = NativeFunc{
-	Name:        "tonode",
-	ForwardArgs: true,
-	Signatures:  nodifySigs(),
-}
-
+// voxgig/struct's JSON encoder; `nodify` exposes just the projection
+// so tests and downstream pipelines can observe the Node/Scalar
+// directly.
 var nodifyNative = NativeFunc{
 	Name:        "nodify",
 	ForwardArgs: true,
-	Signatures:  nodifySigs(),
-}
-
-func nodifySigs() []NativeSig {
-	return []NativeSig{{
+	Signatures: []NativeSig{{
 		Args: []*Type{TAny},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			out, err := eng.NodifyValue(args[0])
@@ -86,7 +73,7 @@ func nodifySigs() []NativeSig {
 			return []Value{out}, nil
 		},
 		Returns: []*Type{TAny},
-	}}
+	}},
 }
 
 // behaviorEntry describes how `behave` should validate the supplied

@@ -180,39 +180,39 @@ type Person object {name:String} behave canon/q (fn [[Person] [Integer] [42]])	E
 # the body's return value is a Node or Scalar (data-shape, NOT a
 # JSON-encoded string). Two access words:
 #
-#   - `tonode VALUE` — runs the projection, returns the Node/Scalar
+#   - `nodify VALUE` — runs the projection, returns the Node/Scalar
 #     directly. Used here for spec assertions on the body output.
 #   - `jsonify VALUE` — runs the projection THEN serialises via the
 #     JSON encoder. Existing word — the customisation hook now flows
 #     through it transparently.
 #
-# With no jsonify behavior registered for the type, `tonode` returns
+# With no jsonify behavior registered for the type, `nodify` returns
 # the value unchanged (Map / List / scalar are already data-shaped).
 
 # 4a. Default pass-through for native data shapes.
-5 tonode	5	scalar passes through
-'hello' tonode	'hello'	String passes through
-true tonode	true	Boolean passes through
-[1 2 3] tonode	[1 2 3]	List passes through
-{a:1 b:2} tonode	{a:1 b:2}	Map passes through
+5 nodify	5	scalar passes through
+'hello' nodify	'hello'	String passes through
+true nodify	true	Boolean passes through
+[1 2 3] nodify	[1 2 3]	List passes through
+{a:1 b:2} nodify	{a:1 b:2}	Map passes through
 
 # 4b. NATIVE pass-through — domain types with no jsonify behavior
 # attached also pass through unchanged.
-0 time.unix tonode	1970-01-01T00:00:00Z	Instant unchanged
+0 time.unix nodify	1970-01-01T00:00:00Z	Instant unchanged
 
 # 4c. USER-DEFINED — a Person with a custom jsonify projects to a
 # Map with renamed / filtered fields. The body returns a Map (Node);
-# `tonode` exposes that Map directly so the spec can assert on its
+# `nodify` exposes that Map directly so the spec can assert on its
 # structure without going through the JSON-string encoder.
-type Person object {name:String age:Integer secret:String} behave nodify/q (fn [[Person] [Any] [{n: (a 'name' get), age: (a 'age' get)}]]) make Person {name:'Alice' age:30 secret:'hush'} tonode	{age:30 n:'Alice'}	custom projection: rename + drop `secret`
+type Person object {name:String age:Integer secret:String} behave nodify/q (fn [[Person] [Any] [{n: (a 'name' get), age: (a 'age' get)}]]) make Person {name:'Alice' age:30 secret:'hush'} nodify	{age:30 n:'Alice'}	custom projection: rename + drop `secret`
 
 # Body can return Scalar, not just Node — projection is free to
 # collapse the whole instance to a primitive.
-type Money object {cents:Integer} behave nodify/q (fn [[Money] [Any] [(a 'cents' get)]]) make Money {cents:1234} tonode	1234	Money → Scalar projection
+type Money object {cents:Integer} behave nodify/q (fn [[Money] [Any] [(a 'cents' get)]]) make Money {cents:1234} nodify	1234	Money → Scalar projection
 
 # Compose with compare + canon on the same type — three capability
 # slots coexist on one userBehavior wrapper.
-type Item object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(a 'n' get) (b 'n' get) sub]]) behave canon/q (fn [[Item] [String] [(a 'n' get) ' (item)' add]]) behave nodify/q (fn [[Item] [Any] [{value: (a 'n' get)}]]) def i (make Item {n:42}) i tonode	{value:42}	all three behaviors coexist
+type Item object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(a 'n' get) (b 'n' get) sub]]) behave canon/q (fn [[Item] [String] [(a 'n' get) ' (item)' add]]) behave nodify/q (fn [[Item] [Any] [{value: (a 'n' get)}]]) def i (make Item {n:42}) i nodify	{value:42}	all three behaviors coexist
 
 # Sig validation — jsonify takes exactly 1 param.
 type Foo object {x:Integer} behave nodify/q (fn [[Foo Foo] [Any] [42]])	ERROR:1 arg	jsonify needs single param

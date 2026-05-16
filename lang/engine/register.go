@@ -63,7 +63,6 @@ func Register(r *Registry) {
 		r.RegisterNativeFunc(n)
 	}
 	r.RegisterNativeFunc(behaveNative)
-	r.RegisterNativeFunc(tonodeNative)
 	r.RegisterNativeFunc(nodifyNative)
 	r.RegisterNativeFunc(sortNative)
 	installResourceTypes(r)
