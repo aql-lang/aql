@@ -2038,3 +2038,49 @@ func TestParseBacktickOnlyLiteral(t *testing.T) {
 	// Backtick string with $ but no ${ is just a plain string.
 	assertParse(t, "`price: $100`", []eng.Value{eng.NewString("price: $100")})
 }
+
+
+// --- Words starting with '-' (CLI flag style) ---
+//
+// `-h`, `--help`, `--limit` need to parse as Words so a CLI built
+// on the engine (e.g. sdkgen go-cli) can register them as native AQL
+// words and dispatch the same way as any other word. The grammar
+// preserves the existing number-literal precedence — `-3.14`,
+// `-42`, `+5` still tokenise as numbers because matchNumber only
+// returns nil when the sign isn't followed by digits/`.`.
+
+func TestParseSingleDashWord(t *testing.T) {
+	assertParse(t, "-h", []eng.Value{eng.NewWord("-h")})
+}
+
+func TestParseDoubleDashWord(t *testing.T) {
+	assertParse(t, "--help", []eng.Value{eng.NewWord("--help")})
+}
+
+func TestParseDashWordWithBareword(t *testing.T) {
+	assertParse(t, "-h book", []eng.Value{
+		eng.NewWord("-h"),
+		eng.NewWord("book"),
+	})
+}
+
+func TestParseDashWordWithIntegerArg(t *testing.T) {
+	assertParse(t, "--limit 10", []eng.Value{
+		eng.NewWord("--limit"),
+		eng.NewInteger(10),
+	})
+}
+
+func TestParseDashWordPreservesNegativeDecimal(t *testing.T) {
+	// `-3.14` must still tokenise as Decimal, not Word("-3.14").
+	assertParse(t, "-3.14", []eng.Value{eng.NewDecimal(-3.14)})
+}
+
+func TestParseDashWordPreservesNegativeInteger(t *testing.T) {
+	assertParse(t, "-42", []eng.Value{eng.NewInteger(-42)})
+}
+
+func TestParseDashLetterDigitMix(t *testing.T) {
+	// `-x5` is a Word (the leading `-` is followed by a non-digit).
+	assertParse(t, "-x5", []eng.Value{eng.NewWord("-x5")})
+}

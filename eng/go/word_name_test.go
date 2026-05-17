@@ -30,6 +30,8 @@ func TestValidateWordNameAccepts(t *testing.T) {
 		// Underscore-prefix (discard placeholder, engine internals).
 		"_", "__pa", "__mark", "_internal", "_-leading",
 		"_unused-arg",
+		// CLI-style flag names (leading hyphen).
+		"-h", "-v", "-x5", "--help", "--limit", "--no-push",
 	}
 	for _, name := range good {
 		if err := ValidateWordName(name); err != nil {
@@ -45,14 +47,17 @@ func TestValidateWordNameRejects(t *testing.T) {
 		wantInMsg string // substring expected in the error detail
 	}{
 		{"", "empty"},
-		{"Integer", "[a-z_]"},   // uppercase first
-		{"String", "[a-z_]"},    // uppercase first
-		{"X", "[a-z_]"},         // uppercase first
-		{"123", "[a-z_]"},       // digit first
-		{"2dup", "[a-z_]"},      // digit first
-		{"-rot", "[a-z_]"},      // hyphen first
-		{"?question", "[a-z_]"}, // ? first
-		{"!bang", "[a-z_]"},     // ! first
+		{"Integer", "[a-z_-]"},   // uppercase first
+		{"String", "[a-z_-]"},    // uppercase first
+		{"X", "[a-z_-]"},         // uppercase first
+		{"123", "[a-z_-]"},       // digit first
+		{"2dup", "[a-z_-]"},      // digit first
+		{"?question", "[a-z_-]"}, // ? first
+		{"!bang", "[a-z_-]"},     // ! first
+		// All-hyphen names rejected (carry no identifier).
+		{"-", "only hyphens"},
+		{"--", "only hyphens"},
+		{"---", "only hyphens"},
 		{"foo bar", "illegal"},  // space mid-name
 		{"foo!bar", "illegal"},  // ! mid-name
 		{"foo*bar", "illegal"},  // * mid-name
