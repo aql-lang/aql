@@ -78,9 +78,30 @@ var controlNatives = []NativeFunc{
 			},
 		},
 	},
-	// break and continue are installed by eng.RegisterCoreFlowCtrl
-	// (see eng/go/flowctrl.go); their handlers signal via
-	// Registry.FlowCtrl rather than returning an error.
+	// break and continue signal via Registry.FlowCtrl rather than
+	// returning an error. The Run loop in eng/engine.go reads the
+	// signal after every step and dispatches it through the nearest
+	// loop's flow-control resolver.
+	{
+		Name: "break",
+		Signatures: []NativeSig{{
+			Handler: func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+				r.FlowCtrl = FlowBreak
+				return nil, nil
+			},
+			Returns: []*Type{},
+		}},
+	},
+	{
+		Name: "continue",
+		Signatures: []NativeSig{{
+			Handler: func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+				r.FlowCtrl = FlowContinue
+				return nil, nil
+			},
+			Returns: []*Type{},
+		}},
+	},
 	{
 		Name:        "error",
 		ForwardArgs: true,

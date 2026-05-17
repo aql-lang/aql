@@ -21,7 +21,8 @@ func Register(r *Registry) {
 	eng.RegisterCoreObjectRecord(r)
 	eng.RegisterCoreInspect(r)
 	eng.RegisterCoreStorage(r)
-	eng.RegisterCoreFlowCtrl(r)
+	// break / continue are owned by lang (see native_control.go); the
+	// kernel only provides the FlowCtrl type and the Run-loop dispatch.
 
 	// String
 	for _, n := range stringNatives {

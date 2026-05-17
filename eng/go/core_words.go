@@ -77,7 +77,6 @@ func RegisterCoreWords(r *Registry) {
 	registerCoreDo(r)
 	registerCoreMake(r)
 	registerCoreStorage(r)
-	RegisterCoreFlowCtrl(r)
 }
 
 // RegisterCoreBoolean installs the boolean / logical-connective core

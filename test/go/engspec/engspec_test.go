@@ -358,6 +358,33 @@ func registerSpecWords(r *eng.Registry) {
 	r.Defs.Push("pi", eng.NewInteger(3))
 	r.Defs.Push("tau", eng.NewInteger(6))
 	r.Defs.Push("greeting", eng.NewString("hello"))
+
+	// break / continue — the production words live in lang
+	// (lang/engine/native_control.go); for engspec we register
+	// kernel-side stubs that signal Registry.FlowCtrl so the
+	// interp.tsv "break outside loop" rows exercise the Run-loop
+	// dispatch (which IS kernel territory) without dragging the
+	// whole lang word set into the engspec setup.
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name: "break",
+		Signatures: []eng.NativeSig{{
+			Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
+				r.FlowCtrl = eng.FlowBreak
+				return nil, nil
+			},
+			Returns: []*eng.Type{},
+		}},
+	})
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name: "continue",
+		Signatures: []eng.NativeSig{{
+			Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
+				r.FlowCtrl = eng.FlowContinue
+				return nil, nil
+			},
+			Returns: []*eng.Type{},
+		}},
+	})
 }
 
 // TestSpec runs aql/eng/spec/*.tsv against the engine kernel — a fresh
