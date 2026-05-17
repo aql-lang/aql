@@ -395,6 +395,132 @@ func registerSpecWords(r *eng.Registry) {
 	registerEngSpecTypeOps(r)
 	registerEngSpecDo(r)
 	registerEngSpecFnSig(r)
+	registerEngSpecObjectRecord(r)
+}
+
+// registerEngSpecObjectRecord installs `record` and `object` as
+// spec-runner fixtures so the eng/spec/record.tsv and
+// eng/spec/object.tsv rows can run against the kernel alone. The
+// production registrations live in
+// lang/engine/native_object_record.go.
+func registerEngSpecObjectRecord(r *eng.Registry) {
+	recordH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
+		list := args[0]
+		if !list.VType.Equal(eng.TList) {
+			return nil, fmt.Errorf("record: argument must be a list")
+		}
+		if list.Data == nil {
+			return nil, fmt.Errorf("record: argument must be a concrete list, got type literal")
+		}
+		elems, _ := eng.AsList(list)
+		if elems.Len() == 0 {
+			return nil, fmt.Errorf("record: list must have at least one field")
+		}
+		fields := eng.NewOrderedMap()
+		for _, elem := range elems.Slice() {
+			if !elem.VType.Equal(eng.TMap) {
+				return nil, fmt.Errorf("record: each element must be a pair (map), got %s", elem.String())
+			}
+			m, err := eng.AsMutableMap(elem)
+			if err != nil {
+				return nil, fmt.Errorf("record: each element must be a concrete pair, got %s", elem.String())
+			}
+			for _, key := range m.Keys() {
+				val, _ := m.Get(key)
+				val = eng.ResolveFieldType(r, val)
+				fields.Set(key, val)
+			}
+		}
+		return []eng.Value{eng.NewRecordType(fields)}, nil
+	}
+	parseObjectFields := func(fieldsMap *eng.OrderedMap, r *eng.Registry) *eng.OrderedMap {
+		fields := eng.NewOrderedMap()
+		for _, key := range fieldsMap.Keys() {
+			val, _ := fieldsMap.Get(key)
+			val = eng.ResolveFieldType(r, val)
+			fields.Set(key, val)
+		}
+		return fields
+	}
+	objectH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
+		fieldsVal := args[0]
+		if !fieldsVal.VType.Equal(eng.TMap) {
+			return nil, fmt.Errorf("object: argument must be a map of field definitions, got %s", fieldsVal.String())
+		}
+		m, err := eng.AsMutableMap(fieldsVal)
+		if err != nil {
+			return nil, fmt.Errorf("object: argument must be a concrete map, got %s", fieldsVal.String())
+		}
+		fields := parseObjectFields(m, r)
+		id := eng.GenerateObjectTypeID()
+		info := eng.ObjectTypeInfo{Fields: fields, Parent: nil, ID: id, Name: ""}
+		def := r.Types.MintType(id, eng.TObject)
+		return []eng.Value{eng.NewObjectType(def, info)}, nil
+	}
+	objectWithParentH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
+		fieldsVal := args[0]
+		parentVal := args[1]
+		if !fieldsVal.VType.Equal(eng.TMap) {
+			return nil, fmt.Errorf("object: first argument must be a map of field definitions, got %s", fieldsVal.String())
+		}
+		m, err := eng.AsMutableMap(fieldsVal)
+		if err != nil {
+			return nil, fmt.Errorf("object: first argument must be a concrete map, got %s", fieldsVal.String())
+		}
+		if !eng.IsObjectType(parentVal) {
+			return nil, fmt.Errorf("object: parent must be an object type, got %s", parentVal.String())
+		}
+		parentInfo, _ := eng.AsObjectType(parentVal)
+		fields := parseObjectFields(m, r)
+		parentAllFields := parentInfo.AllFields()
+		for _, key := range fields.Keys() {
+			childConstraint, _ := fields.Get(key)
+			parentConstraint, exists := parentAllFields.Get(key)
+			if !exists {
+				continue
+			}
+			if _, ok := eng.Unify(parentConstraint, childConstraint); !ok {
+				return nil, fmt.Errorf("object: field %q in child type cannot expand parent type %s (child: %s, parent: %s)",
+					key, parentInfo.Name, childConstraint.String(), parentConstraint.String())
+			}
+		}
+		id := eng.GenerateObjectTypeID()
+		info := eng.ObjectTypeInfo{Fields: fields, Parent: &parentInfo, ID: id, Name: ""}
+		parentDef := parentInfo.Type
+		if parentDef == nil {
+			parentDef = eng.TObject
+		}
+		def := r.Types.MintType(id, parentDef)
+		return []eng.Value{eng.NewObjectType(def, info)}, nil
+	}
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "record",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{{
+			Args:           []*eng.Type{eng.TList},
+			Handler:        recordH,
+			Returns:        []*eng.Type{eng.TRecord},
+			RunInCheckMode: true,
+		}},
+	})
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "object",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{
+			{
+				Args:           []*eng.Type{eng.TMap, eng.TObject},
+				Handler:        objectWithParentH,
+				Returns:        []*eng.Type{eng.TObjectType},
+				RunInCheckMode: true,
+			},
+			{
+				Args:           []*eng.Type{eng.TMap},
+				Handler:        objectH,
+				Returns:        []*eng.Type{eng.TObjectType},
+				RunInCheckMode: true,
+			},
+		},
+	})
 }
 
 // registerEngSpecFnSig installs `fnsig` as a spec-runner fixture so
