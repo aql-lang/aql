@@ -12,7 +12,6 @@ import "github.com/aql-lang/aql/eng"
 // registrations below wire into the dispatch; eng does not register
 // any word of its own.
 func Register(r *Registry) {
-	eng.RegisterCoreFnSig(r)
 	eng.RegisterCoreMake(r)
 	eng.RegisterCoreObjectRecord(r)
 	eng.RegisterCoreInspect(r)

@@ -65,7 +65,6 @@ package eng
 func RegisterCoreWords(r *Registry) {
 	registerCoreDef(r)
 	registerCoreFn(r)
-	registerCoreFnSig(r)
 	registerCoreQuote(r)
 	registerCoreArgs(r)
 	registerCoreStack(r)
@@ -74,14 +73,6 @@ func RegisterCoreWords(r *Registry) {
 	registerCoreInspect(r)
 	registerCoreMake(r)
 	registerCoreStorage(r)
-}
-
-// RegisterCoreFnSig installs the `fnsig` core word — the type-only
-// counterpart to `fn`. Exported as a separate entry point so the
-// production aql package (which has its own `fn` registration) can
-// install just this addition.
-func RegisterCoreFnSig(r *Registry) {
-	registerCoreFnSig(r)
 }
 
 // RegisterCoreMake installs the `make` core word — the universal
@@ -259,52 +250,6 @@ func registerCoreFn(r *Registry) {
 				return []Value{NewFunction(info)}, nil
 			},
 			Returns: []*Type{TFunction},
-		}},
-	})
-}
-
-// registerCoreFnSig installs `fnsig [input output …]` — produces a
-// function-SHAPE type literal (FnSig) from input/output sig pairs.
-//
-// `fnsig` is the type-only counterpart to `fn`: same shape grammar,
-// no body. The list length must be a non-zero multiple of 2 (each
-// pair is one signature). The result is an FnSig value usable as a
-// type constraint, e.g. `def f:fnsig [[Integer] [String]] impl`
-// asserts that `impl` is a function whose signatures cover the
-// shape `Integer → String`.
-//
-// FnSig is structural: any function value whose registered
-// signatures satisfy every pair in the FnSig matches. See
-// eng/go/fnsig.go::FnUndefMatchesFnDef.
-func registerCoreFnSig(r *Registry) {
-	r.RegisterNativeFunc(NativeFunc{
-		Name:        "fnsig",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:       []*Type{TList},
-			NoEvalArgs: map[int]bool{0: true},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-				if args[0].Data == nil {
-					return nil, &AqlError{
-						Code:   "fnsig_invalid_spec",
-						Detail: "fnsig: argument must be a concrete list",
-					}
-				}
-				_lst, _ := AsList(args[0])
-				spec := _lst.Slice()
-				if len(spec) == 0 || len(spec)%2 != 0 {
-					return nil, &AqlError{
-						Code:   "fnsig_invalid_spec",
-						Detail: "fnsig: list length must be a non-zero multiple of 2 (input output pairs); use `fn` for the with-body form",
-					}
-				}
-				info, err := ParseFnUndefSpec(reg, spec)
-				if err != nil {
-					return nil, err
-				}
-				return []Value{NewFnUndef(info)}, nil
-			},
-			Returns: []*Type{TFnUndef},
 		}},
 	})
 }

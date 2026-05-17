@@ -394,6 +394,44 @@ func registerSpecWords(r *eng.Registry) {
 	registerEngSpecBoolean(r)
 	registerEngSpecTypeOps(r)
 	registerEngSpecDo(r)
+	registerEngSpecFnSig(r)
+}
+
+// registerEngSpecFnSig installs `fnsig` as a spec-runner fixture so
+// the eng/spec/types.tsv rows around FnSig type-shape matching can
+// run against the kernel alone. The production fnsig registration
+// lives in lang/engine/native_definition.go.
+func registerEngSpecFnSig(r *eng.Registry) {
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "fnsig",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{{
+			Args:       []*eng.Type{eng.TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
+				if args[0].Data == nil {
+					return nil, &eng.AqlError{
+						Code:   "fnsig_invalid_spec",
+						Detail: "fnsig: argument must be a concrete list",
+					}
+				}
+				lst, _ := eng.AsList(args[0])
+				spec := lst.Slice()
+				if len(spec) == 0 || len(spec)%2 != 0 {
+					return nil, &eng.AqlError{
+						Code:   "fnsig_invalid_spec",
+						Detail: "fnsig: list length must be a non-zero multiple of 2 (input output pairs); use `fn` for the with-body form",
+					}
+				}
+				info, err := eng.ParseFnUndefSpec(reg, spec)
+				if err != nil {
+					return nil, err
+				}
+				return []eng.Value{eng.NewFnUndef(info)}, nil
+			},
+			Returns: []*eng.Type{eng.TFnUndef},
+		}},
+	})
 }
 
 // registerEngSpecBoolean installs not/and/or as spec-runner fixtures
