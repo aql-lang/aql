@@ -385,6 +385,85 @@ func registerSpecWords(r *eng.Registry) {
 			Returns: []*eng.Type{},
 		}},
 	})
+
+	// not / and / or — production registrations live in
+	// lang/engine/native_boolean.go. The eng kernel exposes only the
+	// CoerceBoolean primitive; engspec wires it into bare not/and/or
+	// names so the existing eng/spec tsvs (forth.tsv, inspect.tsv,
+	// types.tsv, …) keep exercising the dispatch path.
+	registerEngSpecBoolean(r)
+	registerEngSpecTypeOps(r)
+}
+
+// registerEngSpecBoolean installs not/and/or as spec-runner fixtures
+// using eng.CoerceBoolean. The production words with the same names
+// live in lang/engine/native_boolean.go.
+func registerEngSpecBoolean(r *eng.Registry) {
+	notH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+		return []eng.Value{eng.NewBoolean(!eng.CoerceBoolean(args[0]))}, nil
+	}
+	andH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+		if !eng.CoerceBoolean(args[1]) {
+			return []eng.Value{args[1]}, nil
+		}
+		return []eng.Value{args[0]}, nil
+	}
+	orH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+		if eng.CoerceBoolean(args[1]) {
+			return []eng.Value{args[1]}, nil
+		}
+		return []eng.Value{args[0]}, nil
+	}
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "not",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{
+			{Args: []*eng.Type{eng.TBoolean}, Handler: notH, Returns: []*eng.Type{eng.TBoolean}},
+			{Args: []*eng.Type{eng.TAny}, Handler: notH, Returns: []*eng.Type{eng.TBoolean}},
+		},
+	})
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "and",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{
+			{Args: []*eng.Type{eng.TBoolean, eng.TBoolean}, Handler: andH, Returns: []*eng.Type{eng.TBoolean}},
+			{Args: []*eng.Type{eng.TAny, eng.TAny}, Handler: andH, Returns: []*eng.Type{eng.TAny}},
+		},
+	})
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "or",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{
+			{Args: []*eng.Type{eng.TBoolean, eng.TBoolean}, BarrierPos: 1, Handler: orH, Returns: []*eng.Type{eng.TBoolean}},
+			{Args: []*eng.Type{eng.TAny, eng.TAny}, BarrierPos: 1, Handler: orH, Returns: []*eng.Type{eng.TAny}},
+		},
+	})
+}
+
+// registerEngSpecTypeOps installs tor/tand as spec-runner fixtures
+// using the eng-exported algorithm handlers. Production registrations
+// live in lang/engine/native_type.go.
+func registerEngSpecTypeOps(r *eng.Registry) {
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "tor",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{{
+			Args:       []*eng.Type{eng.TAny, eng.TAny},
+			BarrierPos: 1,
+			Handler:    eng.TorHandler,
+			ReturnsFn:  eng.TorReturnsFn,
+		}},
+	})
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "tand",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{{
+			Args:       []*eng.Type{eng.TAny, eng.TAny},
+			BarrierPos: 1,
+			Handler:    eng.TandHandler,
+			Returns:    []*eng.Type{eng.TAny},
+		}},
+	})
 }
 
 // TestSpec runs aql/eng/spec/*.tsv against the engine kernel — a fresh

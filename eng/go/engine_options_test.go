@@ -159,8 +159,10 @@ func TestCoreWordNames(t *testing.T) {
 			t.Errorf("CoreWordNames not sorted: %q before %q", names[i-1], names[i])
 		}
 	}
-	// Spot-check a few words we know should be present.
-	want := []string{"def", "fn", "quote", "args", "dup", "swap", "drop", "not", "and", "or", "tor", "tand"}
+	// Spot-check a few words we know should be present. not/and/or
+	// and tor/tand moved to lang/engine; break/continue moved to lang
+	// too. Only kernel-resident registrations are checked here.
+	want := []string{"def", "fn", "quote", "args", "dup", "swap", "drop", "over", "rot"}
 	for _, w := range want {
 		found := false
 		for _, n := range names {

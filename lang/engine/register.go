@@ -7,15 +7,11 @@ import "github.com/aql-lang/aql/eng"
 // themselves live in the various native_*.go and feature files
 // alongside their handlers.
 //
-// The boolean trio (not/and/or) and the type-level connectives
-// (tor/tand) are owned by aqleng — see eng/go/core_boolean.go.
-// They're installed here via eng.RegisterCoreBoolean and
-// eng.RegisterCoreTypeOps so the production registry ends up
-// with the canonical implementations rather than maintaining a
-// duplicate set.
+// Lang owns every word name. The eng kernel exposes algorithm
+// primitives (CoerceBoolean, TandValues, TorHandler, ...) that the
+// registrations below wire into the dispatch; eng does not register
+// any word of its own.
 func Register(r *Registry) {
-	eng.RegisterCoreBoolean(r)
-	eng.RegisterCoreTypeOps(r)
 	eng.RegisterCoreFnSig(r)
 	eng.RegisterCoreMake(r)
 	eng.RegisterCoreObjectRecord(r)

@@ -69,35 +69,12 @@ func RegisterCoreWords(r *Registry) {
 	registerCoreQuote(r)
 	registerCoreArgs(r)
 	registerCoreStack(r)
-	registerCoreBoolean(r)
-	registerCoreTypeOps(r)
 	registerCoreType(r)
 	registerCoreObjectRecord(r)
 	registerCoreInspect(r)
 	registerCoreDo(r)
 	registerCoreMake(r)
 	registerCoreStorage(r)
-}
-
-// RegisterCoreBoolean installs the boolean / logical-connective core
-// words: not, and, or. They are exported as a separate entry point
-// so consumers (e.g. the production aql package) can install just
-// these without taking the rest of RegisterCoreWords.
-//
-// The handlers route through CoerceBoolean (in core_helpers.go) for
-// non-boolean inputs; `and`/`or` short-circuit and return the
-// operand that decided the result rather than a pure boolean. So
-// `0 or 5` returns `5`, and `1 and 2` returns `2` — matching Lisp /
-// Python truthy-coalescing semantics.
-func RegisterCoreBoolean(r *Registry) {
-	registerCoreBoolean(r)
-}
-
-// RegisterCoreTypeOps installs the type-level connective core words:
-// tor (disjunct union) and tand (intersection). Exported as a
-// separate entry point so consumers can install just these.
-func RegisterCoreTypeOps(r *Registry) {
-	registerCoreTypeOps(r)
 }
 
 // RegisterCoreFnSig installs the `fnsig` core word — the type-only

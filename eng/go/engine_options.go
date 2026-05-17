@@ -167,6 +167,11 @@ func installCoreWordsByWhitelist(r *Registry, words []string) error {
 var coreWordRegister map[string]func(*Registry)
 
 func init() {
+	// Word registrations that remain in eng after the lang
+	// migration. break/continue (FlowCtrl), not/and/or (Boolean
+	// trio) and tor/tand (type-level connectives) live in
+	// lang/engine; the whitelist below tracks only what eng
+	// still installs.
 	coreWordRegister = map[string]func(*Registry){
 		"def":   registerCoreDef,
 		"fn":    registerCoreFn,
@@ -183,10 +188,5 @@ func init() {
 		"swap2": registerCoreSwap2,
 		"drop2": registerCoreDrop2,
 		"over2": registerCoreOver2,
-		"not":   registerCoreNot,
-		"and":   registerCoreAnd,
-		"or":    registerCoreOr,
-		"tor":   registerCoreTor,
-		"tand":  registerCoreTand,
 	}
 }

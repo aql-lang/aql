@@ -118,8 +118,30 @@ var typeNatives = []NativeFunc{
 			ReturnsFn: ReturnsIdentity(0),
 		}},
 	},
-	// `tor` and `tand` moved to eng/go/core_boolean.go; installed
-	// via eng.RegisterCoreTypeOps from register.go.
+	// `tor` (disjunct union) and `tand` (intersection) — type-level
+	// connective words. Algorithm primitives live in eng
+	// (eng.TorHandler / eng.TandHandler / eng.TandValues); the
+	// registrations here own the names and dispatch wiring.
+	{
+		Name:        "tor",
+		ForwardArgs: true,
+		Signatures: []NativeSig{{
+			Args:       []*Type{TAny, TAny},
+			BarrierPos: 1,
+			Handler:    eng.TorHandler,
+			ReturnsFn:  eng.TorReturnsFn,
+		}},
+	},
+	{
+		Name:        "tand",
+		ForwardArgs: true,
+		Signatures: []NativeSig{{
+			Args:       []*Type{TAny, TAny},
+			BarrierPos: 1,
+			Handler:    eng.TandHandler,
+			Returns:    []*Type{TAny},
+		}},
+	},
 	{
 		Name:        "any",
 		ForwardArgs: true,
