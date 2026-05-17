@@ -107,14 +107,30 @@ func TestRegisterNativeFuncRejectsBadName(t *testing.T) {
 	}
 }
 
-// TestDefRejectsBadName — `def` validates the user-supplied name
-// before pushing. The production `def` lives in lang; here we use the
-// in-package helper registerCoreDef as a minimal test fixture so the
-// name-validation rule is exercised against eng's algorithm
-// primitives in isolation.
+// TestDefRejectsBadName — the engine's word-name validation rule
+// (ValidateWordName) rejects uppercase names; here we exercise the
+// rule through a minimal in-test `def` fixture so the assertion
+// reaches the same code path users hit with the production lang word.
 func TestDefRejectsBadName(t *testing.T) {
 	r, _ := NewRegistry()
-	registerCoreDef(r)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:        "def",
+		ForwardArgs: true,
+		Signatures: []NativeSig{{
+			Args:       []*Type{TAtom, TAny},
+			QuoteArgs:  map[int]bool{0: true},
+			NoEvalArgs: map[int]bool{1: true},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+				name, _ := args[0].AsConcreteAtom()
+				if err := ValidateWordName(name); err != nil {
+					return nil, err
+				}
+				reg.Defs.Push(name, args[1])
+				return nil, nil
+			},
+			Returns: []*Type{},
+		}},
+	})
 	r.InitRootContext()
 
 	_, err := NewTop(r).Run([]Value{

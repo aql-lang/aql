@@ -2,10 +2,11 @@
 // aql/eng/spec/*.tsv (sibling of eng/go/ and eng/ts/, so Go and TypeScript
 // ports run the same .tsv files). Each row is parsed with the AQL parser
 // (eng/parser) and run against a fresh eng.Registry pre-populated with
-// eng.RegisterCoreWords plus a fixed set of spec-runner test fixtures
-// (q-suffixed). No production native words (add, upper, …) are installed
-// — the q-fixtures cover dispatch / value / type-lattice ground in
-// spec-stable minimal forms.
+// kernel-only spec-runner fixtures (q-suffixed plus minimal copies of
+// the words eng/spec rows exercise — def, fn, dup, …). After the
+// eng→lang migration eng itself ships no word registrations; engspec
+// keeps its own fixtures so the kernel can still be tested in
+// isolation against the same .tsv corpus.
 //
 // The "q" suffix on most fixtures marks them as SPEC-RUNNER FIXTURES,
 // distinct from production AQL words of the same root name. Language-
@@ -38,8 +39,6 @@ var specReplayCounter int
 // variants tailored for spec coverage of the dispatch / value /
 // type-lattice core.
 func registerSpecWords(r *eng.Registry) {
-	eng.RegisterCoreWords(r)
-
 	toFloat := func(v eng.Value) float64 {
 		if v.VType.Matches(eng.TInteger) {
 			n, _ := eng.AsInteger(v)
@@ -1408,10 +1407,11 @@ func registerEngSpecTypeOps(r *eng.Registry) {
 }
 
 // TestSpec runs aql/eng/spec/*.tsv against the engine kernel — a fresh
-// eng.Registry populated with eng.RegisterCoreWords plus the spec-runner
-// fixtures registered by registerSpecWords above. The shared TSV
-// scaffolding (file walk, row parsing, ERROR handling, value rendering)
-// lives in test/go/specrunner.
+// eng.Registry populated by registerSpecWords, which installs only
+// the spec-runner fixtures eng/spec needs (q-suffixed probes plus
+// minimal in-test copies of the dispatching words). The shared TSV
+// scaffolding (file walk, row parsing, ERROR handling, value
+// rendering) lives in test/go/specrunner.
 func TestSpec(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "eng", "spec")
 	specrunner.RunDir(t, specDir, func(input string) ([]eng.Value, error) {
