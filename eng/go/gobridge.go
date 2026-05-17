@@ -9,36 +9,36 @@ package eng
 // helpers centralise that conversion so callers don't reinvent the
 // payload-unwrapping logic per project.
 //
-// ToGo maps a Value down to a plain Go value:
+// ToNative maps a Value down to a plain Go value:
 //   String   → string
 //   Integer  → int64
 //   Decimal  → float64
 //   Boolean  → bool
 //   Atom     → string (the atom name)
-//   List     → []any  (each element recursively ToGo'd)
+//   List     → []any  (each element recursively ToNative'd)
 //   Map      → map[string]any (likewise)
 //   None     → nil
 //   anything else → v.String() (best-effort textual fallback)
 //
-// FromGo lifts a plain Go value up to an AQL Value:
+// FromNative lifts a plain Go value up to an AQL Value:
 //   nil           → None
 //   string        → String
 //   bool          → Boolean
 //   int / int64   → Integer
 //   float64       → Integer if integral-valued, else Decimal
-//   []any         → List (each element recursively FromGo'd)
+//   []any         → List (each element recursively FromNative'd)
 //   map[string]any→ Map (likewise)
 //   fmt.Stringer / anything else → String of fmt.Sprintf("%v", x)
 //
-// FromGo is intentionally lenient — it never errors. Callers passing
+// FromNative is intentionally lenient — it never errors. Callers passing
 // data of an unknown shape get a stringified fallback so the value at
 // least surfaces in the AQL stream.
 
 import "fmt"
 
-// ToGo converts an AQL Value into a plain Go value. See the package
+// ToNative converts an AQL Value into a plain Go value. See the package
 // header comment for the mapping.
-func ToGo(v Value) any {
+func ToNative(v Value) any {
 	switch {
 	case v.VType == nil:
 		return nil
@@ -67,7 +67,7 @@ func ToGo(v Value) any {
 		out := make(map[string]any, rm.Len())
 		for _, k := range rm.Keys() {
 			vv, _ := rm.Get(k)
-			out[k] = ToGo(vv)
+			out[k] = ToNative(vv)
 		}
 		return out
 	case v.VType.Matches(TList):
@@ -77,17 +77,17 @@ func ToGo(v Value) any {
 		}
 		out := make([]any, rl.Len())
 		for i := 0; i < rl.Len(); i++ {
-			out[i] = ToGo(rl.Get(i))
+			out[i] = ToNative(rl.Get(i))
 		}
 		return out
 	}
 	return v.String()
 }
 
-// FromGo lifts a plain Go value to an AQL Value. See the package
+// FromNative lifts a plain Go value to an AQL Value. See the package
 // header comment for the mapping. Never returns an error — unknown
 // shapes fall back to a stringified Value.
-func FromGo(x any) Value {
+func FromNative(x any) Value {
 	switch v := x.(type) {
 	case nil:
 		return NewNone()
@@ -116,13 +116,13 @@ func FromGo(x any) Value {
 	case []any:
 		out := make([]Value, len(v))
 		for i, e := range v {
-			out[i] = FromGo(e)
+			out[i] = FromNative(e)
 		}
 		return NewList(out)
 	case map[string]any:
 		m := NewOrderedMap()
 		for k, vv := range v {
-			m.Set(k, FromGo(vv))
+			m.Set(k, FromNative(vv))
 		}
 		return NewMap(m)
 	}
