@@ -69,7 +69,6 @@ func RegisterCoreWords(r *Registry) {
 	registerCoreArgs(r)
 	registerCoreStack(r)
 	registerCoreType(r)
-	registerCoreInspect(r)
 	registerCoreMake(r)
 	registerCoreStorage(r)
 }

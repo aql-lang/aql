@@ -13,9 +13,11 @@ import "github.com/aql-lang/aql/eng"
 // any word of its own.
 func Register(r *Registry) {
 	eng.RegisterCoreMake(r)
-	eng.RegisterCoreInspect(r)
 	eng.RegisterCoreStorage(r)
 	for _, n := range objectRecordNatives {
+		r.RegisterNativeFunc(n)
+	}
+	for _, n := range inspectNatives {
 		r.RegisterNativeFunc(n)
 	}
 	// break / continue are owned by lang (see native_control.go); the
