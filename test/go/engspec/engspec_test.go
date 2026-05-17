@@ -395,6 +395,452 @@ func registerSpecWords(r *eng.Registry) {
 	registerEngSpecTypeOps(r)
 	registerEngSpecDo(r)
 	registerEngSpecFnSig(r)
+	registerEngSpecObjectRecord(r)
+	registerEngSpecStorage(r)
+	registerEngSpecInspect(r)
+}
+
+// registerEngSpecStorage installs the kernel-container `get` and
+// `set` signatures (Node / Object / Array / None) as spec-runner
+// fixtures. The production registration in
+// lang/engine/native_storage.go adds Store-side sigs on top of
+// these; engspec mirrors only the kernel slice so eng/spec rows
+// that inspect `get` / `set` see the expected shape.
+func registerEngSpecStorage(r *eng.Registry) {
+	setObjectH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+		container := args[2]
+		if container.Data == nil {
+			return nil, fmt.Errorf("set: cannot set field on type literal")
+		}
+		key := eng.StoreKey(args[0])
+		oi, ok := container.Data.(eng.ObjectInstanceInfo)
+		if !ok {
+			return nil, fmt.Errorf("set: expected an Object instance, got %s", container.VType.String())
+		}
+		oi.Fields.Set(key, args[1])
+		return nil, nil
+	}
+	setArrayH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+		arr, err := eng.AsArray(args[2])
+		if err != nil {
+			return nil, fmt.Errorf("set: expected an Array, got %s", args[2].VType.String())
+		}
+		idx, _ := args[0].AsConcreteInteger()
+		if !arr.Set(int(idx), args[1]) {
+			return nil, fmt.Errorf("set: index %d out of bounds (length %d)", idx, arr.Len())
+		}
+		return nil, nil
+	}
+	getNodeH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+		key := args[0]
+		container := args[1]
+		if container.Data == nil {
+			return nil, fmt.Errorf("get: cannot access property on type literal")
+		}
+		if key.VType.Matches(eng.TInteger) {
+			idx, _ := eng.AsInteger(key)
+			if list, _ := eng.AsList(container); !list.IsNil() && container.VType.Matches(eng.TList) {
+				i := int(idx)
+				if i < 0 || i >= list.Len() {
+					return []eng.Value{eng.NewTypeLiteral(eng.TNone)}, nil
+				}
+				return []eng.Value{list.Get(i)}, nil
+			}
+		}
+		k := eng.GetKey(key)
+		if m, _ := eng.AsMap(container); m != nil {
+			val, ok := m.Get(k)
+			if !ok {
+				return []eng.Value{eng.NewTypeLiteral(eng.TNone)}, nil
+			}
+			return []eng.Value{val}, nil
+		}
+		return []eng.Value{eng.NewTypeLiteral(eng.TNone)}, nil
+	}
+	getObjectH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+		key := args[0]
+		container := args[1]
+		if container.Data == nil {
+			return nil, fmt.Errorf("get: cannot access property on type literal")
+		}
+		k := eng.GetKey(key)
+		if m, err := eng.AsMutableMap(container); err == nil {
+			val, found := m.Get(k)
+			if !found {
+				return []eng.Value{eng.NewTypeLiteral(eng.TNone)}, nil
+			}
+			return []eng.Value{val}, nil
+		}
+		oi, _ := eng.AsObjectInstance(container)
+		val, ok := oi.GetField(k)
+		if !ok {
+			return []eng.Value{eng.NewTypeLiteral(eng.TNone)}, nil
+		}
+		return []eng.Value{val}, nil
+	}
+	getArrayH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+		arr, err := eng.AsArray(args[1])
+		if err != nil {
+			return nil, fmt.Errorf("get: expected an Array, got %s", args[1].VType.String())
+		}
+		idx, _ := args[0].AsConcreteInteger()
+		val, ok := arr.Get(int(idx))
+		if !ok {
+			return []eng.Value{eng.NewTypeLiteral(eng.TNone)}, nil
+		}
+		return []eng.Value{val}, nil
+	}
+	getNoneH := func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+		return []eng.Value{eng.NewTypeLiteral(eng.TNone)}, nil
+	}
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "set",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{
+			{Args: []*eng.Type{eng.TInteger, eng.TAny, eng.TArray}, Handler: setArrayH, Returns: []*eng.Type{}},
+			{Args: []*eng.Type{eng.TString, eng.TAny, eng.TObject}, Handler: setObjectH, Returns: []*eng.Type{}},
+			{Args: []*eng.Type{eng.TAtom, eng.TAny, eng.TObject}, QuoteArgs: map[int]bool{0: true}, Handler: setObjectH, Returns: []*eng.Type{}},
+		},
+	})
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "get",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{
+			{Args: []*eng.Type{eng.TAtom, eng.TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeH, Returns: []*eng.Type{eng.TAny}},
+			{Args: []*eng.Type{eng.TString, eng.TNode}, BarrierPos: 1, Handler: getNodeH, Returns: []*eng.Type{eng.TAny}},
+			{Args: []*eng.Type{eng.TInteger, eng.TNode}, BarrierPos: 1, Handler: getNodeH, Returns: []*eng.Type{eng.TAny}},
+			{Args: []*eng.Type{eng.TInteger, eng.TArray}, BarrierPos: 1, Handler: getArrayH, Returns: []*eng.Type{eng.TAny}},
+			{Args: []*eng.Type{eng.TAtom, eng.TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectH, Returns: []*eng.Type{eng.TAny}},
+			{Args: []*eng.Type{eng.TString, eng.TObject}, BarrierPos: 1, Handler: getObjectH, Returns: []*eng.Type{eng.TAny}},
+			{Args: []*eng.Type{eng.TInteger, eng.TObject}, BarrierPos: 1, Handler: getObjectH, Returns: []*eng.Type{eng.TAny}},
+			{Args: []*eng.Type{eng.TAny, eng.TNone}, BarrierPos: 1, Handler: getNoneH, Returns: []*eng.Type{eng.TNone}},
+		},
+	})
+}
+
+// registerEngSpecObjectRecord installs `record` and `object` as
+// spec-runner fixtures so the eng/spec/inspect.tsv rows around
+// record / object inspection can run against the kernel. Production
+// registrations live in lang/engine/native_object_record.go.
+func registerEngSpecObjectRecord(r *eng.Registry) {
+	recordH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
+		list := args[0]
+		if !list.VType.Equal(eng.TList) {
+			return nil, fmt.Errorf("record: argument must be a list")
+		}
+		if list.Data == nil {
+			return nil, fmt.Errorf("record: argument must be a concrete list, got type literal")
+		}
+		elems, _ := eng.AsList(list)
+		if elems.Len() == 0 {
+			return nil, fmt.Errorf("record: list must have at least one field")
+		}
+		fields := eng.NewOrderedMap()
+		for _, elem := range elems.Slice() {
+			if !elem.VType.Equal(eng.TMap) {
+				return nil, fmt.Errorf("record: each element must be a pair (map), got %s", elem.String())
+			}
+			m, err := eng.AsMutableMap(elem)
+			if err != nil {
+				return nil, fmt.Errorf("record: each element must be a concrete pair, got %s", elem.String())
+			}
+			for _, key := range m.Keys() {
+				val, _ := m.Get(key)
+				val = eng.ResolveFieldType(r, val)
+				fields.Set(key, val)
+			}
+		}
+		return []eng.Value{eng.NewRecordType(fields)}, nil
+	}
+	parseObjectFields := func(fieldsMap *eng.OrderedMap, r *eng.Registry) *eng.OrderedMap {
+		fields := eng.NewOrderedMap()
+		for _, key := range fieldsMap.Keys() {
+			val, _ := fieldsMap.Get(key)
+			val = eng.ResolveFieldType(r, val)
+			fields.Set(key, val)
+		}
+		return fields
+	}
+	objectH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
+		fieldsVal := args[0]
+		if !fieldsVal.VType.Equal(eng.TMap) {
+			return nil, fmt.Errorf("object: argument must be a map of field definitions, got %s", fieldsVal.String())
+		}
+		m, err := eng.AsMutableMap(fieldsVal)
+		if err != nil {
+			return nil, fmt.Errorf("object: argument must be a concrete map, got %s", fieldsVal.String())
+		}
+		fields := parseObjectFields(m, r)
+		id := eng.GenerateObjectTypeID()
+		info := eng.ObjectTypeInfo{Fields: fields, Parent: nil, ID: id, Name: ""}
+		def := r.Types.MintType(id, eng.TObject)
+		return []eng.Value{eng.NewObjectType(def, info)}, nil
+	}
+	objectWithParentH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
+		fieldsVal := args[0]
+		parentVal := args[1]
+		if !fieldsVal.VType.Equal(eng.TMap) {
+			return nil, fmt.Errorf("object: first argument must be a map of field definitions, got %s", fieldsVal.String())
+		}
+		m, err := eng.AsMutableMap(fieldsVal)
+		if err != nil {
+			return nil, fmt.Errorf("object: first argument must be a concrete map, got %s", fieldsVal.String())
+		}
+		if !eng.IsObjectType(parentVal) {
+			return nil, fmt.Errorf("object: parent must be an object type, got %s", parentVal.String())
+		}
+		parentInfo, _ := eng.AsObjectType(parentVal)
+		fields := parseObjectFields(m, r)
+		parentAllFields := parentInfo.AllFields()
+		for _, key := range fields.Keys() {
+			childConstraint, _ := fields.Get(key)
+			parentConstraint, exists := parentAllFields.Get(key)
+			if !exists {
+				continue
+			}
+			if _, ok := eng.Unify(parentConstraint, childConstraint); !ok {
+				return nil, fmt.Errorf("object: field %q in child type cannot expand parent type %s (child: %s, parent: %s)",
+					key, parentInfo.Name, childConstraint.String(), parentConstraint.String())
+			}
+		}
+		id := eng.GenerateObjectTypeID()
+		info := eng.ObjectTypeInfo{Fields: fields, Parent: &parentInfo, ID: id, Name: ""}
+		parentDef := parentInfo.Type
+		if parentDef == nil {
+			parentDef = eng.TObject
+		}
+		def := r.Types.MintType(id, parentDef)
+		return []eng.Value{eng.NewObjectType(def, info)}, nil
+	}
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "record",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{{
+			Args:           []*eng.Type{eng.TList},
+			Handler:        recordH,
+			Returns:        []*eng.Type{eng.TRecord},
+			RunInCheckMode: true,
+		}},
+	})
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "object",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{
+			{
+				Args:           []*eng.Type{eng.TMap, eng.TObject},
+				Handler:        objectWithParentH,
+				Returns:        []*eng.Type{eng.TObjectType},
+				RunInCheckMode: true,
+			},
+			{
+				Args:           []*eng.Type{eng.TMap},
+				Handler:        objectH,
+				Returns:        []*eng.Type{eng.TObjectType},
+				RunInCheckMode: true,
+			},
+		},
+	})
+}
+
+// registerEngSpecInspect installs `inspect` as a spec-runner fixture
+// that mirrors lang/engine/native_inspect.go. The production
+// registration lives in lang; engspec keeps a copy so the
+// eng/spec/inspect.tsv rows continue to exercise the kernel-only
+// dispatch and value-introspection paths.
+func registerEngSpecInspect(r *eng.Registry) {
+	atomH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
+		name, _ := args[0].AsConcreteAtom()
+		if tv, ok := r.Types.TopBody(name); ok {
+			return []eng.Value{buildTypeInspection(name, tv)}, nil
+		}
+		if top, ok := r.Defs.Top(name); ok {
+			if eng.IsTypeBody(top) && !top.VType.Equal(eng.TFnDef) && !top.VType.Equal(eng.TFunction) {
+				return []eng.Value{buildTypeInspection(name, top)}, nil
+			}
+		}
+		return []eng.Value{buildInspection(r, name)}, nil
+	}
+	typeH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+		return []eng.Value{buildTypeInspection("", args[0])}, nil
+	}
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "inspect",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{
+			{Args: []*eng.Type{eng.TAtom}, QuoteArgs: map[int]bool{0: true}, Handler: atomH, Returns: []*eng.Type{eng.TInspect}},
+			{Args: []*eng.Type{eng.TAny}, Handler: typeH, Returns: []*eng.Type{eng.TInspect}},
+		},
+	})
+}
+
+// buildInspection constructs a word-inspection map for the named word.
+func buildInspection(r *eng.Registry, name string) eng.Value {
+	result := eng.NewOrderedMap()
+	result.Set("name", eng.NewString(name))
+
+	fn := r.Lookup(name)
+	if fn == nil {
+		if r.Defs.Has(name) {
+			result.Set("kind", eng.NewAtom("defined"))
+			if v, ok := r.Defs.Top(name); ok {
+				result.Set("value", v)
+			}
+			result.Set("signatures", eng.NewList(nil))
+			return eng.NewValueRaw(eng.TInspect, eng.MapPayload{M: result})
+		}
+		result.Set("kind", eng.NewAtom("unknown"))
+		result.Set("signatures", eng.NewList(nil))
+		return eng.NewValueRaw(eng.TInspect, eng.MapPayload{M: result})
+	}
+
+	if len(fn.Sigs) > 0 {
+		result.Set("kind", eng.NewAtom("defined"))
+	} else {
+		result.Set("kind", eng.NewAtom("native"))
+	}
+
+	var sigMaps []eng.Value
+	for _, sig := range fn.Signatures {
+		sm := eng.NewOrderedMap()
+		var argVals []eng.Value
+		for _, argType := range sig.Args {
+			argVals = append(argVals, eng.NewString(argType.Leaf()))
+		}
+		if argVals == nil {
+			argVals = []eng.Value{}
+		}
+		sm.Set("args", eng.NewList(argVals))
+		sigMaps = append(sigMaps, eng.NewMap(sm))
+	}
+	if sigMaps == nil {
+		sigMaps = []eng.Value{}
+	}
+	result.Set("signatures", eng.NewList(sigMaps))
+
+	return eng.NewValueRaw(eng.TInspect, eng.MapPayload{M: result})
+}
+
+// buildTypeInspection constructs a type-inspection map for a type value.
+func buildTypeInspection(name string, tv eng.Value) eng.Value {
+	result := eng.NewOrderedMap()
+
+	if name != "" {
+		result.Set("name", eng.NewString(name))
+	}
+
+	if tv.Data == nil || eng.IsTypeBody(tv) || eng.IsRecordShape(tv) {
+		result.Set("type", eng.NewString("Type"))
+		result.Set("struct", eng.NewString(tv.VType.Leaf()))
+	} else {
+		result.Set("type", eng.NewString(tv.VType.Leaf()))
+	}
+
+	switch {
+	case eng.IsRecordType(tv):
+		result.Set("kind", eng.NewAtom("record"))
+		rt, _ := eng.AsRecordType(tv)
+		fields := eng.NewOrderedMap()
+		for _, k := range rt.Fields.Keys() {
+			v, _ := rt.Fields.Get(k)
+			fields.Set(k, eng.NewString(v.VType.Leaf()))
+		}
+		result.Set("fields", eng.NewMap(fields))
+
+	case eng.IsRecordShape(tv):
+		result.Set("kind", eng.NewAtom("record"))
+		m, _ := eng.AsMap(tv)
+		fields := eng.NewOrderedMap()
+		for _, k := range m.Keys() {
+			v, _ := m.Get(k)
+			fields.Set(k, eng.NewString(v.VType.Leaf()))
+		}
+		result.Set("fields", eng.NewMap(fields))
+
+	case eng.IsObjectType(tv):
+		result.Set("kind", eng.NewAtom("object"))
+		oi, _ := eng.AsObjectType(tv)
+		if oi.Parent != nil {
+			result.Set("parent", eng.NewString(oi.Parent.Name))
+		}
+		af := oi.AllFields()
+		fields := eng.NewOrderedMap()
+		for _, k := range af.Keys() {
+			v, _ := af.Get(k)
+			fields.Set(k, eng.NewString(v.VType.Leaf()))
+		}
+		result.Set("fields", eng.NewMap(fields))
+
+	case eng.IsTableType(tv):
+		result.Set("kind", eng.NewAtom("table"))
+		tt, _ := eng.AsTableType(tv)
+		fields := eng.NewOrderedMap()
+		for _, k := range tt.Record.Fields.Keys() {
+			v, _ := tt.Record.Fields.Get(k)
+			fields.Set(k, eng.NewString(v.VType.Leaf()))
+		}
+		result.Set("fields", eng.NewMap(fields))
+
+	case eng.IsDisjunct(tv):
+		result.Set("kind", eng.NewAtom("disjunct"))
+		di, _ := eng.AsDisjunct(tv)
+		alts := make([]eng.Value, len(di.Alternatives))
+		for i, alt := range di.Alternatives {
+			alts[i] = eng.NewString(alt.VType.String())
+		}
+		result.Set("alternatives", eng.NewList(alts))
+
+	case eng.IsTypedList(tv):
+		result.Set("kind", eng.NewAtom("typed_list"))
+		ci, _ := eng.AsChildType(tv)
+		result.Set("child", eng.NewString(ci.Child.VType.String()))
+
+	case eng.IsTypedMap(tv):
+		result.Set("kind", eng.NewAtom("typed_map"))
+		ci, _ := eng.AsChildType(tv)
+		result.Set("child", eng.NewString(ci.Child.VType.String()))
+
+	case tv.VType.Equal(eng.TFnUndef):
+		result.Set("kind", eng.NewAtom("function_shape"))
+		uInfo, _ := tv.Data.(eng.FnUndefInfo)
+		sigs := make([]eng.Value, 0, len(uInfo.Sigs))
+		for _, spec := range uInfo.Sigs {
+			sig := eng.NewOrderedMap()
+			params := make([]eng.Value, len(spec.Params))
+			for i, p := range spec.Params {
+				params[i] = eng.NewString(p.Type.Leaf())
+			}
+			sig.Set("params", eng.NewList(params))
+			rets := make([]eng.Value, len(spec.Returns))
+			for i, ret := range spec.Returns {
+				rets[i] = eng.NewString(ret.Leaf())
+			}
+			sig.Set("returns", eng.NewList(rets))
+			sigs = append(sigs, eng.NewMap(sig))
+		}
+		result.Set("signatures", eng.NewList(sigs))
+
+	case tv.IsDepScalar():
+		result.Set("kind", eng.NewAtom("dependent_scalar"))
+		info, _ := tv.AsDepScalar()
+		result.Set("leaf", eng.NewString(eng.DependentLeafFromType(tv.VType)))
+		if info.Lo != nil {
+			lo := eng.NewOrderedMap()
+			lo.Set("kind", eng.NewString(eng.BoundToKind(info.Lo, true).String()))
+			lo.Set("value", info.Lo.Value)
+			result.Set("lo", eng.NewMap(lo))
+		}
+		if info.Hi != nil {
+			hi := eng.NewOrderedMap()
+			hi.Set("kind", eng.NewString(eng.BoundToKind(info.Hi, false).String()))
+			hi.Set("value", info.Hi.Value)
+			result.Set("hi", eng.NewMap(hi))
+		}
+
+	default:
+		result.Set("kind", eng.NewAtom("literal"))
+	}
+
+	return eng.NewValueRaw(eng.TInspect, eng.MapPayload{M: result})
 }
 
 // registerEngSpecFnSig installs `fnsig` as a spec-runner fixture so

@@ -70,7 +70,6 @@ func RegisterCoreWords(r *Registry) {
 	registerCoreStack(r)
 	registerCoreType(r)
 	registerCoreMake(r)
-	registerCoreStorage(r)
 }
 
 // RegisterCoreMake installs the `make` core word — the universal
@@ -80,14 +79,6 @@ func RegisterCoreWords(r *Registry) {
 // RegisterCoreWords.
 func RegisterCoreMake(r *Registry) {
 	registerCoreMake(r)
-}
-
-// RegisterCoreStorage installs the `get` and `set` core words — the
-// universal container-access pair. Exported as a separate entry
-// point so the production lang package can install just these
-// without taking the rest of RegisterCoreWords.
-func RegisterCoreStorage(r *Registry) {
-	registerCoreStorage(r)
 }
 
 // registerCoreDef installs `def NAME body`. NAME may arrive as either

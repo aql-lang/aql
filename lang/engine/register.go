@@ -13,7 +13,6 @@ import "github.com/aql-lang/aql/eng"
 // any word of its own.
 func Register(r *Registry) {
 	eng.RegisterCoreMake(r)
-	eng.RegisterCoreStorage(r)
 	for _, n := range objectRecordNatives {
 		r.RegisterNativeFunc(n)
 	}
