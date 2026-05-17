@@ -68,7 +68,6 @@ func RegisterCoreWords(r *Registry) {
 	registerCoreQuote(r)
 	registerCoreArgs(r)
 	registerCoreStack(r)
-	registerCoreType(r)
 }
 
 // registerCoreDef installs `def NAME body`. NAME may arrive as either

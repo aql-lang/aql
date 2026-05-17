@@ -72,6 +72,27 @@ var typeNatives = []NativeFunc{
 		},
 	},
 	{
+		Name:        "pathof",
+		ForwardArgs: true,
+		Signatures: []NativeSig{{
+			Args: []*Type{TType},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return []Value{eng.PathOf(args[0])}, nil
+			},
+			Returns: []*Type{TList},
+		}},
+	},
+	{
+		Name:        "enum",
+		ForwardArgs: true,
+		Signatures: []NativeSig{{
+			Args:       []*Type{TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler:    enumHandler,
+			Returns:    []*Type{TEnum},
+		}},
+	},
+	{
 		Name:        "typeof",
 		ForwardArgs: true,
 		Signatures: []NativeSig{{
@@ -262,6 +283,45 @@ func untypeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 		return nil, fmt.Errorf("untype %s: no such type binding", name)
 	}
 	return nil, nil
+}
+
+// ---- enum ----
+
+// enumHandler — `enum [a b c]` builds a fixed-enumeration type
+// (Enum, a subtype of Disjunct) whose alternatives are the list's
+// elements. Words become Atoms automatically so `enum [red green
+// blue]` doesn't require quoting. When the list carries a child-type
+// constraint (`[ :T a b c]`), each element is validated against T
+// before being added.
+func enumHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	list := args[0]
+	if list.Data == nil {
+		return nil, &AqlError{Code: "type_error", Detail: "enum: argument must be a concrete list"}
+	}
+	var childType Value
+	hasChild := false
+	if IsTypedList(list) {
+		ci, _ := AsChildType(list)
+		childType = ci.Child
+		hasChild = childType.VType != nil
+	}
+	elems, _ := AsList(list)
+	alts := make([]Value, 0, elems.Len())
+	for i := 0; i < elems.Len(); i++ {
+		e := elems.Get(i)
+		if IsWord(e) {
+			w, _ := AsWord(e)
+			e = NewAtom(w.Name)
+		}
+		if hasChild && !IsValueOfType(e, childType) {
+			return nil, &AqlError{
+				Code:   "type_error",
+				Detail: "enum: element " + e.String() + " does not satisfy child type " + childType.String(),
+			}
+		}
+		alts = append(alts, e)
+	}
+	return []Value{NewEnum(alts)}, nil
 }
 
 // ---- typeof / fulltypeof ----

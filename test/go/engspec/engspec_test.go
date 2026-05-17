@@ -399,6 +399,125 @@ func registerSpecWords(r *eng.Registry) {
 	registerEngSpecStorage(r)
 	registerEngSpecInspect(r)
 	registerEngSpecMake(r)
+	registerEngSpecTypeWords(r)
+}
+
+// registerEngSpecTypeWords installs `type` / `untype` / `typeof` /
+// `pathof` / `is` / `enum` as spec-runner fixtures using the eng-
+// exported algorithm primitives (InstallType, TypeOf, PathOf,
+// IsValueOfType, NewEnum). Production registrations live in
+// lang/engine/native_type.go.
+func registerEngSpecTypeWords(r *eng.Registry) {
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "type",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{{
+			Args:       []*eng.Type{eng.TAtom, eng.TAny},
+			QuoteArgs:  map[int]bool{0: true},
+			NoEvalArgs: map[int]bool{1: true},
+			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
+				name, _ := args[0].AsConcreteAtom()
+				if err := eng.InstallType(reg, name, args[1]); err != nil {
+					return nil, err
+				}
+				return nil, nil
+			},
+			Returns:        []*eng.Type{},
+			RunInCheckMode: true,
+		}},
+	})
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "untype",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{{
+			Args:      []*eng.Type{eng.TAtom},
+			QuoteArgs: map[int]bool{0: true},
+			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
+				name, _ := args[0].AsConcreteAtom()
+				if !eng.IsCapitalisedName(name) {
+					return nil, &eng.AqlError{Code: "type_error", Detail: "untype " + name + ": type names must start with a capital letter"}
+				}
+				if _, ok := reg.Types.PopType(name); !ok {
+					return nil, &eng.AqlError{Code: "type_error", Detail: "untype " + name + ": no such type binding"}
+				}
+				return nil, nil
+			},
+			Returns: []*eng.Type{},
+		}},
+	})
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "typeof",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{{
+			Args: []*eng.Type{eng.TAny},
+			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+				return []eng.Value{eng.TypeOf(args[0])}, nil
+			},
+			Returns: []*eng.Type{eng.TType},
+		}},
+	})
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "pathof",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{{
+			Args: []*eng.Type{eng.TType},
+			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+				return []eng.Value{eng.PathOf(args[0])}, nil
+			},
+			Returns: []*eng.Type{eng.TList},
+		}},
+	})
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "is",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{{
+			Args:       []*eng.Type{eng.TAny, eng.TAny},
+			BarrierPos: 1,
+			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+				return []eng.Value{eng.NewBoolean(eng.IsValueOfType(args[1], args[0]))}, nil
+			},
+			Returns: []*eng.Type{eng.TBoolean},
+		}},
+	})
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "enum",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{{
+			Args:       []*eng.Type{eng.TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+				list := args[0]
+				if list.Data == nil {
+					return nil, &eng.AqlError{Code: "type_error", Detail: "enum: argument must be a concrete list"}
+				}
+				var childType eng.Value
+				hasChild := false
+				if eng.IsTypedList(list) {
+					ci, _ := eng.AsChildType(list)
+					childType = ci.Child
+					hasChild = childType.VType != nil
+				}
+				elems, _ := eng.AsList(list)
+				alts := make([]eng.Value, 0, elems.Len())
+				for i := 0; i < elems.Len(); i++ {
+					e := elems.Get(i)
+					if eng.IsWord(e) {
+						w, _ := eng.AsWord(e)
+						e = eng.NewAtom(w.Name)
+					}
+					if hasChild && !eng.IsValueOfType(e, childType) {
+						return nil, &eng.AqlError{
+							Code:   "type_error",
+							Detail: "enum: element " + e.String() + " does not satisfy child type " + childType.String(),
+						}
+					}
+					alts = append(alts, e)
+				}
+				return []eng.Value{eng.NewEnum(alts)}, nil
+			},
+			Returns: []*eng.Type{eng.TEnum},
+		}},
+	})
 }
 
 // registerEngSpecMake installs `make` as a spec-runner fixture

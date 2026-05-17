@@ -4,163 +4,11 @@ import (
 	"strings"
 )
 
-// registerCoreType installs the language-fundamental type words:
-//
-//	type NAME body    — bind a type name (NAME must start [A-Z]) to a
-//	                    type body (a type literal, disjunct, implicit
-//	                    map shape, or any value satisfying IsTypeBody).
-//	                    Pushes onto the type stack — `type Foo Integer;
-//	                    type Foo String` shadows; `untype Foo` pops.
-//
-//	untype NAME       — pop the most-recent binding for NAME from the
-//	                    type stack. Errors if no binding exists.
-//
-//	typeof v          — return the type of v as a type-literal Value
-//	                    (e.g. typeof 5 → Integer, typeof Integer →
-//	                    Type, typeof none → None). The type-of any
-//	                    type literal is uniformly `Type` — there is no
-//	                    ScalarType / NodeType / ObjectType layer.
-//
-//	v is T            — Boolean: does v satisfy type T? Forward sig is
-//	                    [Any | Any], so `5 is Integer` reads naturally
-//	                    (T from forward, v from stack).
-//
-// Mirrors the production aql `type` / `untype` / `typeof` / `is`
-// (see lang/engine/native_type.go); these are the foundational
-// type-system surface that the richer words (record, table, object,
-// make, guard, inspect, …) build on. The richer words are NOT in
-// aqleng's core — they layer on top in the production engine.
-func registerCoreType(r *Registry) {
-	registerCoreTypeWord(r)
-	registerCoreUntypeWord(r)
-	registerCoreTypeof(r)
-	registerCorePathOf(r)
-	registerCoreIs(r)
-	registerCoreEnum(r)
-}
-
-// registerCoreEnum installs `enum [a b c]` — fixed-enumeration type
-// builder. Returns an Enum value (type Type/Disjunct/Enum — a
-// subtype of Disjunct) whose alternatives are the list's elements
-// (Words become Atoms so `enum [red green blue]` defines an enum of
-// three named values without requiring `quote`). `typeof` reports
-// `Enum`; structurally it behaves as a disjunct for `is` / unify.
-//
-// When the list carries a child-type constraint (`[ :T a b c]`), each
-// element is validated against T before being added to the enum.
-//
-// Used in the same shape as `fn`:
-//
-//	def Color enum [red green blue]
-//	red is Color    → true
-//	pink is Color   → false
-//
-// And with child types:
-//
-//	def Codes enum [: Integer 200 404 500]
-//	200 is Codes  → true
-//	201 is Codes  → false
-func registerCoreEnum(r *Registry) {
-	r.RegisterNativeFunc(NativeFunc{
-		Name:        "enum",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:       []*Type{TList},
-			NoEvalArgs: map[int]bool{0: true},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				list := args[0]
-				if list.Data == nil {
-					return nil, &AqlError{Code: "type_error", Detail: "enum: argument must be a concrete list"}
-				}
-				var childType Value
-				hasChild := false
-				if IsTypedList(list) {
-					ci, _ := AsChildType(list)
-					childType = ci.Child
-					hasChild = childType.VType != nil
-				}
-				elems, _ := AsList(list)
-				alts := make([]Value, 0, elems.Len())
-				for i := 0; i < elems.Len(); i++ {
-					e := elems.Get(i)
-					// Word → Atom conversion: enum members are
-					// typically named, and in word context the parser
-					// produces Words. Convert here so users don't need
-					// to wrap each element in `quote`.
-					if IsWord(e) {
-						w, _ := AsWord(e)
-						e = NewAtom(w.Name)
-					}
-					if hasChild && !IsValueOfType(e, childType) {
-						return nil, &AqlError{
-							Code:   "type_error",
-							Detail: "enum: element " + e.String() + " does not satisfy child type " + childType.String(),
-						}
-					}
-					alts = append(alts, e)
-				}
-				return []Value{NewEnum(alts)}, nil
-			},
-			Returns: []*Type{TEnum},
-		}},
-	})
-}
-
-// registerCoreTypeWord installs `type NAME body`. NAME arrives as a
-// Word (the bare aqleng tokenizer never quotes; the production parser's
-// /q machinery captures the name as an Atom — both forms route here).
-//
-// The body is unquoted (NoEvalArgs[1] = true) because type bodies are
-// literal type expressions, not code to evaluate.
-func registerCoreTypeWord(r *Registry) {
-	r.RegisterNativeFunc(NativeFunc{
-		Name:        "type",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:       []*Type{TAtom, TAny},
-			QuoteArgs:  map[int]bool{0: true},
-			NoEvalArgs: map[int]bool{1: true},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-				name, _ := args[0].AsConcreteAtom()
-				body := args[1]
-				if err := InstallType(reg, name, body); err != nil {
-					return nil, err
-				}
-				return nil, nil
-			},
-			Returns: []*Type{},
-		}},
-	})
-}
-
-// registerCoreUntypeWord installs `untype NAME`. Name arrives as a Word.
-func registerCoreUntypeWord(r *Registry) {
-	r.RegisterNativeFunc(NativeFunc{
-		Name:        "untype",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:      []*Type{TAtom},
-			QuoteArgs: map[int]bool{0: true},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-				name, _ := args[0].AsConcreteAtom()
-				if !IsCapitalisedName(name) {
-					return nil, &AqlError{
-						Code:   "type_error",
-						Detail: "untype " + name + ": type names must start with a capital letter",
-					}
-				}
-				if _, ok := reg.Types.PopType(name); !ok {
-					return nil, &AqlError{
-						Code:   "type_error",
-						Detail: "untype " + name + ": no such type binding",
-					}
-				}
-				return nil, nil
-			},
-			Returns: []*Type{},
-		}},
-	})
-}
+// This file owns the algorithms behind the type-system words —
+// PathOf, TypeOf, IsRecordShape, IsValueOfType, InstallType — plus
+// the helper rules that `is` / `typeof` / `pathof` / `enum` build on.
+// The matching word registrations live in lang/engine/native_type.go;
+// the engspec spec-runner installs minimal kernel-side fixtures.
 
 // registerCoreTypeof installs `typeof v`. Returns a Type literal —
 // the type of v, expressed as a value:
@@ -186,24 +34,9 @@ func registerCoreUntypeWord(r *Registry) {
 // typeof's result is itself a type literal so it round-trips: passing
 // the result to `is` or chaining `typeof typeof v` (always `Type`)
 // produces the expected answers.
-func registerCoreTypeof(r *Registry) {
-	r.RegisterNativeFunc(NativeFunc{
-		Name:        "typeof",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args: []*Type{TAny},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{TypeOf(args[0])}, nil
-			},
-			Returns: []*Type{TType},
-		}},
-	})
-}
-
-// registerCorePathOf installs `pathof T` — the ancestry path of a
-// TYPE. It takes a Type literal (not an arbitrary value) and returns
-// the chain of progressively-deeper Type literals from the top-level
-// root down to T itself, as a List of Type (`[Type [:Type]]`):
+// PathOf returns the ancestry path of the type T (a Type literal, or
+// any value whose VType is a Type subtype — e.g. a Function/Disjunct
+// value) as a List of Type literals, root first, leaf last:
 //
 //	pathof Integer          → [Scalar Number Integer]
 //	pathof ProperString     → [Scalar String ProperString]
@@ -213,32 +46,8 @@ func registerCoreTypeof(r *Registry) {
 //	pathof Type             → [Type]              (Type has no ancestors)
 //	pathof None             → [None]
 //
-// The last element always equals T. To get the path of a *value*'s
-// type, compose with `typeof`:
-//
-//	pathof ( typeof 5 )     → [Scalar Number Integer]   (= pathof Integer)
-//	pathof ( typeof none )  → [None]
-//	pathof ( typeof Integer ) → [Type]                  (= pathof Type)
-//
-// `pathof 5` is a signature_error — the argument must be a Type.
-func registerCorePathOf(r *Registry) {
-	r.RegisterNativeFunc(NativeFunc{
-		Name:        "pathof",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args: []*Type{TType},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{PathOf(args[0])}, nil
-			},
-			Returns: []*Type{TList},
-		}},
-	})
-}
-
-// PathOf returns the ancestry path of the type T (a Type literal, or
-// any value whose VType is a Type subtype — e.g. a Function/Disjunct
-// value) as a List of Type literals, root first, leaf last. See
-// registerCorePathOf.
+// Exported so lang's `pathof` registration (lang/engine/native_type.go)
+// can wire dispatch into it without forking the algorithm.
 func PathOf(t Value) Value {
 	// Walk the def's ancestry from root down to t, producing one type
 	// literal per ancestor.
@@ -315,37 +124,6 @@ func IsRecordShape(v Value) bool {
 		return false
 	}
 	return true
-}
-
-// registerCoreIs installs `v is T` — Boolean: does v satisfy T?
-//
-// Sig is [TAny, TAny] with BarrierPos=1: T forward-eligible (sig[0]),
-// v from the stack (sig[1]). Reading order in source is `v is T` —
-// the natural infix reading binds v from the prefix and T from the
-// upcoming forward token.
-//
-// Type-check rules (kept minimal — this is the aqleng core; the
-// richer fn-predicate / disjunct narrowing lives in production aql):
-//
-//   - T is a type literal (Data == nil): true iff v's VType matches T
-//     and v is not a type literal of a strict supertype. Concrete
-//     values pass; type literals at metatype slots compare metatypes.
-//   - T is an implicit-map record shape: every key in T must be
-//     present in v with a matching type.
-//   - T is anything else: structurally unify v with T.
-func registerCoreIs(r *Registry) {
-	r.RegisterNativeFunc(NativeFunc{
-		Name:        "is",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:       []*Type{TAny, TAny},
-			BarrierPos: 1,
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{NewBoolean(IsValueOfType(args[1], args[0]))}, nil
-			},
-			Returns: []*Type{TBoolean},
-		}},
-	})
 }
 
 // IsValueOfType reports whether v satisfies type T. Used by the `is`
