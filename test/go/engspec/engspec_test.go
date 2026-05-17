@@ -398,6 +398,26 @@ func registerSpecWords(r *eng.Registry) {
 	registerEngSpecObjectRecord(r)
 	registerEngSpecStorage(r)
 	registerEngSpecInspect(r)
+	registerEngSpecMake(r)
+}
+
+// registerEngSpecMake installs `make` as a spec-runner fixture
+// using the eng-exported algorithm handlers. Production
+// registration lives in lang/engine/native_make.go.
+func registerEngSpecMake(r *eng.Registry) {
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "make",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{
+			{Args: []*eng.Type{eng.TScalarType, eng.TMap, eng.TAny}, Handler: eng.MakeScalarOptsHandler, ReturnsFn: eng.ReturnsIdentity(0)},
+			{Args: []*eng.Type{eng.TObjectType, eng.TMap}, Handler: eng.MakeObjHandler, ReturnsFn: eng.ReturnsIdentity(0)},
+			{Args: []*eng.Type{eng.TArray, eng.TList}, Handler: eng.MakeArrayHandler, Returns: []*eng.Type{eng.TArray}},
+			{Args: []*eng.Type{eng.TScalarType, eng.TAny}, Handler: eng.MakeScalarHandler, ReturnsFn: eng.ReturnsIdentity(0)},
+			{Args: []*eng.Type{eng.TObject, eng.TAny, eng.TObject}, Handler: eng.MakeWithPrototype, Returns: []*eng.Type{eng.TObject}},
+			{Args: []*eng.Type{eng.TAny, eng.TAny, eng.TMap}, Handler: eng.MakeWithOpts, Returns: []*eng.Type{eng.TAny}},
+			{Args: []*eng.Type{eng.TAny, eng.TAny}, Handler: eng.MakeHandler, Returns: []*eng.Type{eng.TAny}},
+		},
+	})
 }
 
 // registerEngSpecStorage installs the kernel-container `get` and

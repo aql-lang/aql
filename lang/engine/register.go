@@ -1,7 +1,5 @@
 package engine
 
-import "github.com/aql-lang/aql/eng"
-
 // Register installs the engine's built-in word set on the given
 // registry. This is invoked from DefaultRegistry. Word definitions
 // themselves live in the various native_*.go and feature files
@@ -12,7 +10,9 @@ import "github.com/aql-lang/aql/eng"
 // registrations below wire into the dispatch; eng does not register
 // any word of its own.
 func Register(r *Registry) {
-	eng.RegisterCoreMake(r)
+	for _, n := range makeNatives {
+		r.RegisterNativeFunc(n)
+	}
 	for _, n := range objectRecordNatives {
 		r.RegisterNativeFunc(n)
 	}

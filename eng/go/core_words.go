@@ -69,16 +69,6 @@ func RegisterCoreWords(r *Registry) {
 	registerCoreArgs(r)
 	registerCoreStack(r)
 	registerCoreType(r)
-	registerCoreMake(r)
-}
-
-// RegisterCoreMake installs the `make` core word — the universal
-// constructor for typed values (scalars, objects, records, paths,
-// arrays). Exported as a separate entry point so the production lang
-// package can install just this without taking the rest of
-// RegisterCoreWords.
-func RegisterCoreMake(r *Registry) {
-	registerCoreMake(r)
 }
 
 // registerCoreDef installs `def NAME body`. NAME may arrive as either

@@ -22,21 +22,10 @@ import (
 // lang/engine/native_type_make_helpers.go); the handlers are
 // ported verbatim. Lang re-exports the helpers via aliases so any
 // callers that reach into the package-private surface keep working.
-func registerCoreMake(r *Registry) {
-	r.RegisterNativeFunc(NativeFunc{
-		Name:        "make",
-		ForwardArgs: true,
-		Signatures: []NativeSig{
-			{Args: []*Type{TScalarType, TMap, TAny}, Handler: makeScalarOptsHandler, ReturnsFn: ReturnsIdentity(0)},
-			{Args: []*Type{TObjectType, TMap}, Handler: makeObjHandler, ReturnsFn: ReturnsIdentity(0)},
-			{Args: []*Type{TArray, TList}, Handler: makeArrayHandler, Returns: []*Type{TArray}},
-			{Args: []*Type{TScalarType, TAny}, Handler: makeScalarHandler, ReturnsFn: ReturnsIdentity(0)},
-			{Args: []*Type{TObject, TAny, TObject}, Handler: makeWithPrototype, Returns: []*Type{TObject}},
-			{Args: []*Type{TAny, TAny, TMap}, Handler: makeWithOpts, Returns: []*Type{TAny}},
-			{Args: []*Type{TAny, TAny}, Handler: makeHandler, Returns: []*Type{TAny}},
-		},
-	})
-}
+// The `make` word registration has moved to
+// lang/engine/native_make.go. The Make* handlers below are exported
+// algorithm primitives — lang's registration wires the dispatch
+// table without forking the algorithm.
 
 // isTypeLike returns true if v looks like a type target for make
 // (type literal with nil Data, record type, options type, table
@@ -333,8 +322,8 @@ func makePath(srcVal Value, abs bool) ([]Value, error) {
 	}
 }
 
-// makeHandler is the position-agnostic 2-arg make dispatcher.
-func makeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+// MakeHandler is the position-agnostic 2-arg make dispatcher.
+func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	targetVal, srcVal := args[0], args[1]
 	if !isTypeLike(targetVal) && isTypeLike(srcVal) {
 		targetVal, srcVal = srcVal, targetVal
@@ -467,8 +456,8 @@ func makeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 	return []Value{result}, nil
 }
 
-// makeWithPrototype is the 3-arg make-with-prototype dispatcher.
-func makeWithPrototype(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+// MakeWithPrototype is the 3-arg make-with-prototype dispatcher.
+func MakeWithPrototype(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	resolved := make([]Value, len(args))
 	for i, a := range args {
 		resolved[i] = ResolveTypeLiteralDef(a, reg)
@@ -497,8 +486,8 @@ func makeWithPrototype(args []Value, _ map[string]Value, _ []Value, reg *Registr
 	return makeObject(objType, srcVal, &protoInfo)
 }
 
-// makeWithOpts is the 3-arg make-with-options dispatcher.
-func makeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+// MakeWithOpts is the 3-arg make-with-options dispatcher.
+func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	var targetVal, srcVal, optsVal Value
 	for _, a := range args {
 		resolved := ResolveTypeLiteralDef(a, reg)
@@ -542,11 +531,11 @@ func makeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 		return makePath(srcVal, abs)
 	}
 
-	return makeHandler([]Value{srcVal, targetVal}, nil, nil, nil)
+	return MakeHandler([]Value{srcVal, targetVal}, nil, nil, nil)
 }
 
-// makeScalarHandler converts a scalar value to a target scalar type.
-func makeScalarHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+// MakeScalarHandler converts a scalar value to a target scalar type.
+func MakeScalarHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	targetVal, srcVal := args[0], args[1]
 	if targetVal.Data != nil {
 		return nil, fmt.Errorf("make: expected a type literal, got %s", targetVal.String())
@@ -565,8 +554,8 @@ func makeScalarHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 	return []Value{result}, nil
 }
 
-// makeObjHandler is the 2-arg [ObjectType, Map] make handler.
-func makeObjHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+// MakeObjHandler is the 2-arg [ObjectType, Map] make handler.
+func MakeObjHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	targetVal, srcVal := args[0], args[1]
 	targetVal = ResolveTypeLiteralDef(targetVal, reg)
 	if IsObjectType(targetVal) {
@@ -576,8 +565,8 @@ func makeObjHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) 
 	return nil, fmt.Errorf("make: expected object type, got %s", targetVal.String())
 }
 
-// makeArrayHandler is the 2-arg [Array, List] make handler.
-func makeArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+// MakeArrayHandler is the 2-arg [Array, List] make handler.
+func MakeArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	srcVal := args[1]
 	if !srcVal.VType.Equal(TList) || srcVal.Data == nil {
 		return nil, fmt.Errorf("make: Array source must be a concrete list, got %s", srcVal.String())
@@ -586,8 +575,8 @@ func makeArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 	return []Value{NewArray(srcList.Slice())}, nil
 }
 
-// makeScalarOptsHandler is the 3-arg [ScalarType, Map, Any] make handler.
-func makeScalarOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+// MakeScalarOptsHandler is the 3-arg [ScalarType, Map, Any] make handler.
+func MakeScalarOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	targetVal, optsVal, srcVal := args[0], args[1], args[2]
 	if targetVal.Data == nil && targetVal.VType.Equal(TPath) {
 		abs := false
@@ -598,7 +587,7 @@ func makeScalarOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Regis
 		}
 		return makePath(srcVal, abs)
 	}
-	return makeScalarHandler([]Value{targetVal, srcVal}, nil, nil, nil)
+	return MakeScalarHandler([]Value{targetVal, srcVal}, nil, nil, nil)
 }
 
 // MakeConvert converts a source value to a target scalar type.
