@@ -222,109 +222,11 @@ func DeepEqual(a, b Value) bool {
 	return false
 }
 
-// ComparisonNatives is the consolidated set of comparison words (lt,
-// gt, lte, gte, eq, neq, deq) plus the closed-interval DepScalar
-// constructor `between`. Installed by the engine's top-level Register
-// via a slice walk.
-var ComparisonNatives = []NativeFunc{
-	// lt: [any, any] -> [boolean] — less than
-	// Swap: `a b lt` means a < b, so compare args[1] < args[0].
-	// Also accepts `Integer lt N` to construct a DepInteger constraint.
-	{
-		Name:        "lt",
-		ForwardArgs: true,
-		Signatures: []NativeSig{
-			makeDepScalarSig("lt", DepLT),
-			{
-				Args:    []*Type{TAny, TAny},
-				Handler: ltHandler,
-				Returns: []*Type{TBoolean},
-			},
-		},
-	},
+// The comparison-word registrations (lt / gt / lte / gte / eq /
+// neq / deq / between) live in lang/engine/native_compare.go. The
+// handlers and MakeDepScalarSig helper are exported eng primitives.
 
-	// gt: [any, any] -> [boolean] — greater than
-	{
-		Name:        "gt",
-		ForwardArgs: true,
-		Signatures: []NativeSig{
-			makeDepScalarSig("gt", DepGT),
-			{
-				Args:    []*Type{TAny, TAny},
-				Handler: gtHandler,
-				Returns: []*Type{TBoolean},
-			},
-		},
-	},
-
-	// lte: [any, any] -> [boolean] — less than or equal
-	{
-		Name:        "lte",
-		ForwardArgs: true,
-		Signatures: []NativeSig{
-			makeDepScalarSig("lte", DepLTE),
-			{
-				Args:    []*Type{TAny, TAny},
-				Handler: lteHandler,
-				Returns: []*Type{TBoolean},
-			},
-		},
-	},
-
-	// gte: [any, any] -> [boolean] — greater than or equal
-	{
-		Name:        "gte",
-		ForwardArgs: true,
-		Signatures: []NativeSig{
-			makeDepScalarSig("gte", DepGTE),
-			{
-				Args:    []*Type{TAny, TAny},
-				Handler: gteHandler,
-				Returns: []*Type{TBoolean},
-			},
-		},
-	},
-
-	// between: closed-interval DepScalar constructor — defined in
-	// depscalar.go alongside the dependent-type machinery so adding
-	// new bound shapes only touches one file.
-	betweenNative,
-
-	// eq: [any, any] -> [boolean] — exact equality (identity for non-scalars)
-	{
-		Name:        "eq",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:    []*Type{TAny, TAny},
-			Handler: eqHandler,
-			Returns: []*Type{TBoolean},
-		}},
-	},
-
-	// neq: [any, any] -> [boolean] — not equal (negation of eq)
-	{
-		Name:        "neq",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:    []*Type{TAny, TAny},
-			Handler: neqHandler,
-			Returns: []*Type{TBoolean},
-		}},
-	},
-
-	// deq: [any, any] -> [boolean] — deep equality (traverse non-scalars)
-	{
-		Name:        "deq",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:    []*Type{TAny, TAny},
-			Handler: deqHandler,
-			Returns: []*Type{TBoolean},
-		}},
-	},
-}
-
-func ltHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func LtHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	cmp, err := CompareValues(args[1], args[0])
 	if err != nil {
 		return nil, fmt.Errorf("lt: %w", err)
@@ -332,7 +234,7 @@ func ltHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Valu
 	return []Value{NewBoolean(cmp < 0)}, nil
 }
 
-func gtHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func GtHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	cmp, err := CompareValues(args[1], args[0])
 	if err != nil {
 		return nil, fmt.Errorf("gt: %w", err)
@@ -340,7 +242,7 @@ func gtHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Valu
 	return []Value{NewBoolean(cmp > 0)}, nil
 }
 
-func lteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func LteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	cmp, err := CompareValues(args[1], args[0])
 	if err != nil {
 		return nil, fmt.Errorf("lte: %w", err)
@@ -348,7 +250,7 @@ func lteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	return []Value{NewBoolean(cmp <= 0)}, nil
 }
 
-func gteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func GteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	cmp, err := CompareValues(args[1], args[0])
 	if err != nil {
 		return nil, fmt.Errorf("gte: %w", err)
@@ -356,14 +258,14 @@ func gteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	return []Value{NewBoolean(cmp >= 0)}, nil
 }
 
-func eqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func EqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	return []Value{NewBoolean(ExactEqual(args[0], args[1]))}, nil
 }
 
-func neqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func NeqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	return []Value{NewBoolean(!ExactEqual(args[0], args[1]))}, nil
 }
 
-func deqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func DeqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	return []Value{NewBoolean(DeepEqual(args[0], args[1]))}, nil
 }

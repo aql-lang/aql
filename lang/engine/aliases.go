@@ -396,10 +396,6 @@ var (
 	UnaryNumOpNative      = eng.UnaryNumOpNative
 	BinaryNumOpNative     = eng.BinaryNumOpNative
 	BinaryIntOpNative     = eng.BinaryIntOpNative
-	ComparisonNatives     = eng.ComparisonNatives
-	PrintNatives          = eng.PrintNatives
-	TraceNatives          = eng.TraceNatives
-	UnifyNatives          = eng.UnifyNatives
 	RequireConcreteList   = eng.RequireConcreteList
 	RequireConcreteMap    = eng.RequireConcreteMap
 	ResolveTypeLiteralDef = eng.ResolveTypeLiteralDef

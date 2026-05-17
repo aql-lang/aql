@@ -899,20 +899,11 @@ func ResolveWordsDeep(v Value) Value {
 	return v
 }
 
-// UnifyNatives defines the "unify" word: [any, any] -> [any, boolean].
-var UnifyNatives = []NativeFunc{
-	{
-		Name:        "unify",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:    []*Type{TAny, TAny},
-			Handler: unifyHandler,
-			Returns: []*Type{TAny, TBoolean},
-		}},
-	},
-}
+// The `unify` word registration lives in
+// lang/engine/native_unify.go. UnifyHandler below is the exported
+// algorithm primitive lang's registration wires dispatch into.
 
-func unifyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func UnifyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	unified, ok := Unify(args[0], args[1])
 	if ok {
 		return []Value{unified, NewBoolean(true)}, nil

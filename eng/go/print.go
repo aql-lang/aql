@@ -5,42 +5,18 @@ import (
 	"strings"
 )
 
-// PrintNatives consolidates the "print" and "printstr" words. print
-// consumes one value from the stack and writes its formatted
-// representation to the registry's Output writer followed by a
-// newline. printstr does the same but without a trailing newline.
-//   - strings: printed as-is
-//   - maps/lists: printed as JSON-like text
-//   - tables: printed as a formatted table with column headers
-var PrintNatives = []NativeFunc{
-	{
-		Name:        "print",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:    []*Type{TAny},
-			Handler: printHandler,
-			Returns: []*Type{},
-		}},
-	},
-	{
-		Name:        "printstr",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:    []*Type{TAny},
-			Handler: printstrHandler,
-			Returns: []*Type{},
-		}},
-	},
-}
+// The `print` / `printstr` word registrations live in
+// lang/engine/native_print.go. The handlers and FormatForPrint
+// rendering algorithm stay here as exported eng primitives.
 
-func printHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func PrintHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	v := args[0]
 	out := FormatForPrint(v)
 	fmt.Fprintln(r.Output, out)
 	return nil, nil
 }
 
-func printstrHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func PrintstrHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	v := args[0]
 	out := FormatForPrint(v)
 	fmt.Fprint(r.Output, out)

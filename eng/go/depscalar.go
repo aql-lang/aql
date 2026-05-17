@@ -403,7 +403,7 @@ func combineDepScalars(a, b DepScalarInfo) (DepScalarInfo, bool) {
 	return out, true
 }
 
-// makeDepScalarSig builds the [TScalar, TScalarType] -> [TDependent]
+// MakeDepScalarSig builds the [TScalar, TScalarType] -> [TDependent]
 // signature variant for a comparison op. `Integer gte 10`, `String lt
 // "z"`, `Decimal gte 1.5` all hit this sig: arg0 is the bound, arg1 is
 // the base-type literal. The result type path is Type/Dependent/Dep<X>
@@ -421,7 +421,7 @@ func combineDepScalars(a, b DepScalarInfo) (DepScalarInfo, bool) {
 // `def x:G10 …` would have no per-leaf shape to reason about. The
 // handler is a pure constructor with no registry side effects, so
 // running it during check is safe.
-func makeDepScalarSig(opName string, kind DepKind) NativeSig {
+func MakeDepScalarSig(opName string, kind DepKind) NativeSig {
 	return NativeSig{
 		Args: []*Type{TScalar, TScalarType},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -450,31 +450,12 @@ func makeDepScalarSig(opName string, kind DepKind) NativeSig {
 	}
 }
 
-// betweenNative defines `between`: a closed-interval DepScalar
-// constructor. `Integer between 10 20` ≡ `(Integer gte 10) tand
-// (Integer lte 20)` but in one word. Sig follows the concatenative
-// mirror pattern: sig[0]=lo (innermost forward), sig[1]=hi, sig[2]=
-// type (deepest, taken from the stack when the type is prefixed).
-//
-// Inverted bounds (lo > hi) collapse to Never; equal bounds form a
-// singleton interval.
-//
-// Lives in depscalar.go alongside the rest of the dependent-type
-// machinery; surfaced into the engine through ComparisonNatives.
-var betweenNative = NativeFunc{
-	Name:        "between",
-	ForwardArgs: true,
-	Signatures: []NativeSig{
-		{
-			Args:           []*Type{TScalar, TScalar, TScalarType},
-			Handler:        betweenHandler,
-			Returns:        []*Type{TDependent},
-			RunInCheckMode: true,
-		},
-	},
-}
+// The `between` word registration is defined in
+// lang/engine/native_compare.go alongside the other DepScalar
+// constructors (lt / gt / lte / gte). BetweenHandler below is the
+// exported algorithm primitive.
 
-func betweenHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func BetweenHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	if IsConcrete(args[2]) {
 		return nil, fmt.Errorf("between: type arg must be a scalar type literal, got concrete %s",
 			args[2].VType.String())

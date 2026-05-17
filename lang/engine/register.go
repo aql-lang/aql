@@ -43,7 +43,7 @@ func Register(r *Registry) {
 	}
 
 	// Comparison
-	for _, n := range ComparisonNatives {
+	for _, n := range comparisonNatives {
 		r.RegisterNativeFunc(n)
 	}
 
@@ -80,15 +80,15 @@ func Register(r *Registry) {
 	for _, n := range miscNatives {
 		r.RegisterNativeFunc(n)
 	}
-	for _, n := range PrintNatives {
+	for _, n := range printNatives {
 		r.RegisterNativeFunc(n)
 	}
-	for _, n := range TraceNatives {
+	for _, n := range traceNatives {
 		r.RegisterNativeFunc(n)
 	}
 
 	// Unify
-	for _, n := range UnifyNatives {
+	for _, n := range unifyNatives {
 		r.RegisterNativeFunc(n)
 	}
 
