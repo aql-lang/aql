@@ -72,7 +72,6 @@ func RegisterCoreWords(r *Registry) {
 	registerCoreType(r)
 	registerCoreObjectRecord(r)
 	registerCoreInspect(r)
-	registerCoreDo(r)
 	registerCoreMake(r)
 	registerCoreStorage(r)
 }

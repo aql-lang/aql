@@ -393,6 +393,7 @@ func registerSpecWords(r *eng.Registry) {
 	// types.tsv, …) keep exercising the dispatch path.
 	registerEngSpecBoolean(r)
 	registerEngSpecTypeOps(r)
+	registerEngSpecDo(r)
 }
 
 // registerEngSpecBoolean installs not/and/or as spec-runner fixtures
@@ -438,6 +439,98 @@ func registerEngSpecBoolean(r *eng.Registry) {
 			{Args: []*eng.Type{eng.TAny, eng.TAny}, BarrierPos: 1, Handler: orH, Returns: []*eng.Type{eng.TAny}},
 		},
 	})
+}
+
+// registerEngSpecDo installs the `do` word as a spec-runner fixture.
+// The production registration lives in
+// lang/engine/native_control.go; engspec ships a minimal version
+// that runs a list body or evaluates embedded lists in a map literal
+// against a sub-engine — enough surface for the eng/spec/do.tsv rows
+// to exercise the kernel's sub-engine semantics.
+func registerEngSpecDo(r *eng.Registry) {
+	listH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
+		if !eng.IsConcrete(args[0]) {
+			return nil, &eng.AqlError{
+				Code:   "type_error",
+				Detail: "do: argument must be a concrete list, got type literal",
+			}
+		}
+		lst, _ := eng.AsList(args[0])
+		sub := eng.New(r)
+		input := append([]eng.Value{}, lst.Slice()...)
+		result, err := sub.Run(input)
+		if err != nil {
+			return []eng.Value{eng.NewError(err)}, nil
+		}
+		return result, nil
+	}
+	mapH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
+		result, err := doEvalMapValue(r, args[0])
+		if err != nil {
+			return nil, err
+		}
+		return []eng.Value{result}, nil
+	}
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "do",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{
+			{Args: []*eng.Type{eng.TList}, NoEvalArgs: map[int]bool{0: true}, Handler: listH, Returns: []*eng.Type{eng.TAny}},
+			{Args: []*eng.Type{eng.TMap}, Handler: mapH, Returns: []*eng.Type{eng.TAny}},
+		},
+	})
+}
+
+// doEvalMapValue recursively evaluates list values within a map.
+// Records, options, table types, typed lists / maps are left
+// untouched — only plain concrete lists and maps are walked.
+func doEvalMapValue(r *eng.Registry, v eng.Value) (eng.Value, error) {
+	if v.VType.Equal(eng.TList) && v.Data != nil && !eng.IsTypedList(v) && !eng.IsTableType(v) {
+		lst, _ := eng.AsList(v)
+		sub := eng.New(r)
+		input := make([]eng.Value, lst.Len())
+		for i, e := range lst.Slice() {
+			input[i] = doPromoteToWord(r, e)
+		}
+		results, err := sub.Run(input)
+		if err != nil {
+			return eng.Value{}, err
+		}
+		if len(results) == 1 {
+			return results[0], nil
+		}
+		return eng.NewList(results), nil
+	}
+	if v.VType.Equal(eng.TMap) && v.Data != nil && !eng.IsTypedMap(v) && !eng.IsRecordType(v) && !eng.IsOptionsType(v) {
+		m, err := eng.AsMap(v)
+		if err != nil || m == nil {
+			return v, nil
+		}
+		out := eng.NewOrderedMap()
+		for _, key := range m.Keys() {
+			val, _ := m.Get(key)
+			evaluated, err := doEvalMapValue(r, val)
+			if err != nil {
+				return eng.Value{}, err
+			}
+			out.Set(key, evaluated)
+		}
+		return eng.NewMap(out), nil
+	}
+	return v, nil
+}
+
+// doPromoteToWord converts a string or atom to a Word when the
+// payload names a registered function — so `{op:[1 "add" 2]}` lets
+// `do` dispatch "add" as a callable inside the embedded list.
+func doPromoteToWord(r *eng.Registry, v eng.Value) eng.Value {
+	if v.VType.Matches(eng.TString) || v.VType.Matches(eng.TAtom) {
+		name, _ := eng.AsString(v)
+		if r.Lookup(name) != nil {
+			return eng.NewWord(name)
+		}
+	}
+	return v
 }
 
 // registerEngSpecTypeOps installs tor/tand as spec-runner fixtures
