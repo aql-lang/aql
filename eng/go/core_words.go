@@ -63,11 +63,13 @@ package eng
 // etc.) on top of these primitives — but the primitives themselves
 // live here so any aqleng test suite can exercise them directly.
 func RegisterCoreWords(r *Registry) {
-	registerCoreDef(r)
-	registerCoreFn(r)
-	registerCoreQuote(r)
-	registerCoreArgs(r)
-	registerCoreStack(r)
+	// All word registrations have moved to lang/engine/. eng now only
+	// exposes algorithm primitives; RegisterCoreWords is kept as an
+	// empty no-op so legacy test setups that call it still compile.
+	// Spec / source-test runners that previously relied on the bundled
+	// vocabulary register their own minimal test fixtures inline (see
+	// test/go/engspec).
+	_ = r
 }
 
 // registerCoreDef installs `def NAME body`. NAME may arrive as either

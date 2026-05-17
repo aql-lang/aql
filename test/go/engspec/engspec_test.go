@@ -400,6 +400,231 @@ func registerSpecWords(r *eng.Registry) {
 	registerEngSpecInspect(r)
 	registerEngSpecMake(r)
 	registerEngSpecTypeWords(r)
+	registerEngSpecDefinition(r)
+	registerEngSpecStack(r)
+}
+
+// registerEngSpecDefinition installs def / fn / quote / args as
+// spec-runner fixtures. Production registrations live in
+// lang/engine/native_definition.go; engspec delegates to the same
+// algorithm helpers in eng (registerCoreDef etc. retained in
+// eng/go/core_words.go as in-package test infrastructure are not
+// reachable from this package — so engspec wires its own NativeFunc
+// dispatch through the public eng API).
+func registerEngSpecDefinition(r *eng.Registry) {
+	// def name body — plain and typed forms. The production version in
+	// lang handles richer FnDef installation; engspec ships the bare
+	// "push body onto def stack after name validation" semantics, which
+	// is enough for the eng/spec tsv rows that exercise simple bindings.
+	plainDef := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
+		name, _ := args[0].AsConcreteAtom()
+		if err := eng.ValidateWordName(name); err != nil {
+			return nil, err
+		}
+		if info, ok := args[1].Data.(eng.FnDefInfo); ok {
+			eng.InstallFnDef(reg, name, info)
+			return nil, nil
+		}
+		reg.Defs.Push(name, args[1])
+		return nil, nil
+	}
+	typedDef := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
+		nameMap, _ := eng.AsMap(args[0])
+		if nameMap == nil || nameMap.Len() != 1 {
+			return nil, &eng.AqlError{Code: "type_error", Detail: "def: typed-name map must have exactly one key"}
+		}
+		name := nameMap.Keys()[0]
+		if err := eng.ValidateWordName(name); err != nil {
+			return nil, err
+		}
+		if reg.Types.Has(name) {
+			return nil, &eng.AqlError{Code: "type_error", Detail: "def " + name + ": name clash — already a type"}
+		}
+		constraint, _ := nameMap.Get(name)
+		if resolved, _, _ := reg.ResolveTypedNameValue(constraint); resolved.Data != nil || resolved.VType != nil {
+			constraint = resolved
+		}
+		body := args[1]
+		if !eng.IsValueOfType(body, constraint) {
+			return nil, &eng.AqlError{
+				Code:   "type_error",
+				Detail: "def " + name + ": value " + body.String() + " does not satisfy declared type " + constraint.String(),
+			}
+		}
+		if info, ok := body.Data.(eng.FnDefInfo); ok {
+			eng.InstallFnDef(reg, name, info)
+			return nil, nil
+		}
+		reg.Defs.Push(name, body)
+		return nil, nil
+	}
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "def",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{
+			{
+				Args:          []*eng.Type{eng.TMap, eng.TAny},
+				NoEvalArgs:    map[int]bool{1: true},
+				NoEvalMapArgs: map[int]bool{0: true},
+				Handler:       typedDef,
+				Returns:       []*eng.Type{},
+			},
+			{
+				Args:       []*eng.Type{eng.TAtom, eng.TAny},
+				QuoteArgs:  map[int]bool{0: true},
+				NoEvalArgs: map[int]bool{1: true},
+				Handler:    plainDef,
+				Returns:    []*eng.Type{},
+			},
+		},
+	})
+
+	// fn [triples] — uses ParseFnDef from eng to build the FnDef.
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "fn",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{{
+			Args:       []*eng.Type{eng.TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
+				if args[0].Data == nil {
+					return nil, &eng.AqlError{Code: "type_error", Detail: "fn: argument must be a concrete list"}
+				}
+				lst, _ := eng.AsList(args[0])
+				elems := lst.Slice()
+				if len(elems) == 0 || len(elems)%3 != 0 {
+					return nil, &eng.AqlError{Code: "fn_invalid_spec", Detail: "fn: list length must be a non-zero multiple of 3"}
+				}
+				fnDef, err := eng.ParseFnDef(reg, elems)
+				if err != nil {
+					return nil, err
+				}
+				return []eng.Value{eng.NewFunction(fnDef)}, nil
+			},
+			Returns:        []*eng.Type{eng.TFunction},
+			RunInCheckMode: true,
+		}},
+	})
+
+	// quote VALUE — atom-quoted and any-value forms.
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "quote",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{
+			{
+				Args:      []*eng.Type{eng.TAtom},
+				QuoteArgs: map[int]bool{0: true},
+				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+					return []eng.Value{args[0]}, nil
+				},
+				Returns: []*eng.Type{eng.TAtom},
+			},
+			{
+				Args:       []*eng.Type{eng.TAny},
+				NoEvalArgs: map[int]bool{0: true},
+				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+					v := args[0]
+					if v.VType.Equal(eng.TList) && v.Data != nil {
+						v.Quoted = true
+					}
+					return []eng.Value{v}, nil
+				},
+				Returns: []*eng.Type{eng.TAny},
+			},
+		},
+	})
+
+	// args — return the current fn-call's args frame as a List.
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name: "args",
+		Signatures: []eng.NativeSig{{
+			Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
+				v, ok, err := reg.Args.Top()
+				if err != nil {
+					return nil, err
+				}
+				if !ok {
+					return []eng.Value{eng.NewList(nil)}, nil
+				}
+				return []eng.Value{v}, nil
+			},
+			Returns: []*eng.Type{eng.TList},
+		}},
+	})
+
+	// __pa — engine-internal args-frame cleanup marker emitted by
+	// eng.InstallFnDef's expansion. Pops the top args frame from the
+	// per-fn-call argsStack. The production version lives at
+	// lang/engine/native_definition.go::popArgsHandler.
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "__pa",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{{
+			Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
+				if _, err := reg.Args.Pop(); err != nil {
+					return nil, err
+				}
+				return nil, nil
+			},
+			Returns: []*eng.Type{},
+		}},
+	})
+
+	// undef NAME — pop the named binding from the def stack. Also
+	// emitted by eng.InstallFnDef's body expansion to clean up
+	// per-call parameter bindings.
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "undef",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{{
+			Args:      []*eng.Type{eng.TAtom},
+			QuoteArgs: map[int]bool{0: true},
+			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
+				name, _ := args[0].AsConcreteAtom()
+				eng.UninstallDef(reg, name)
+				return nil, nil
+			},
+			Returns: []*eng.Type{},
+		}},
+	})
+}
+
+// registerEngSpecStack installs the Forth-style stack manipulators —
+// dup / swap / drop / over / rot / nip / tuck / dup2 / swap2 / drop2
+// / over2 — as spec-runner fixtures. Production registrations live
+// in lang/engine/native_stack.go.
+//
+// All ops are stack-only (ForwardArgs=false) — args[0] is the top
+// of stack, args[1] the next-deeper, etc. The handler returns the
+// splice-form replacement for the consumed args, in source order.
+func registerEngSpecStack(r *eng.Registry) {
+	op := func(name string, argCount int, fn func(args []eng.Value) []eng.Value) {
+		args := make([]*eng.Type, argCount)
+		for i := range args {
+			args[i] = eng.TAny
+		}
+		r.RegisterNativeFunc(eng.NativeFunc{
+			Name: name,
+			Signatures: []eng.NativeSig{{
+				Args: args,
+				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+					return fn(args), nil
+				},
+				Returns: []*eng.Type{},
+			}},
+		})
+	}
+	op("dup", 1, func(a []eng.Value) []eng.Value { return []eng.Value{a[0], a[0]} })
+	op("drop", 1, func(_ []eng.Value) []eng.Value { return nil })
+	op("swap", 2, func(a []eng.Value) []eng.Value { return []eng.Value{a[0], a[1]} })
+	op("over", 2, func(a []eng.Value) []eng.Value { return []eng.Value{a[1], a[0], a[1]} })
+	op("rot", 3, func(a []eng.Value) []eng.Value { return []eng.Value{a[1], a[0], a[2]} })
+	op("nip", 2, func(a []eng.Value) []eng.Value { return []eng.Value{a[0]} })
+	op("tuck", 2, func(a []eng.Value) []eng.Value { return []eng.Value{a[0], a[1], a[0]} })
+	op("dup2", 2, func(a []eng.Value) []eng.Value { return []eng.Value{a[1], a[0], a[1], a[0]} })
+	op("swap2", 4, func(a []eng.Value) []eng.Value { return []eng.Value{a[1], a[0], a[3], a[2]} })
+	op("drop2", 2, func(_ []eng.Value) []eng.Value { return nil })
+	op("over2", 4, func(a []eng.Value) []eng.Value { return []eng.Value{a[3], a[2], a[1], a[0], a[3], a[2]} })
 }
 
 // registerEngSpecTypeWords installs `type` / `untype` / `typeof` /
