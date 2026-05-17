@@ -12,9 +12,11 @@ import "fmt"
 // sub-engines share a Registry, the signal naturally propagates across
 // nested Run frames without abusing the error return.
 //
-// Extension: add a new constant here and a matching case in the Run
-// loop's post-step handler (and, if needed, a corresponding stack-tape
-// resolver alongside handleLoopBreak / handleLoopContinue).
+// The `break` and `continue` words themselves live in the lang layer
+// (lang/engine/native_control.go) — eng only owns the FlowCtrl type
+// plus the Run-loop dispatch. To extend the channel with a new
+// signal, add a constant here and a matching case in the Run loop's
+// post-step handler.
 type FlowCtrl uint8
 
 const (
@@ -34,34 +36,4 @@ func (f FlowCtrl) String() string {
 	default:
 		return fmt.Sprintf("FlowCtrl(%d)", uint8(f))
 	}
-}
-
-// RegisterCoreFlowCtrl installs the break and continue words. Their
-// handlers raise a flow-control signal on the registry instead of
-// returning an error.
-func RegisterCoreFlowCtrl(r *Registry) {
-	r.RegisterNativeFunc(NativeFunc{
-		Name: "break",
-		Signatures: []NativeSig{{
-			Handler: breakHandler,
-			Returns: []*Type{},
-		}},
-	})
-	r.RegisterNativeFunc(NativeFunc{
-		Name: "continue",
-		Signatures: []NativeSig{{
-			Handler: continueHandler,
-			Returns: []*Type{},
-		}},
-	})
-}
-
-func breakHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	r.FlowCtrl = FlowBreak
-	return nil, nil
-}
-
-func continueHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	r.FlowCtrl = FlowContinue
-	return nil, nil
 }

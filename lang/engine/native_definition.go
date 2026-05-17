@@ -99,6 +99,16 @@ var definitionNatives = []NativeFunc{
 		}},
 	},
 	{
+		Name:        "fnsig",
+		ForwardArgs: true,
+		Signatures: []NativeSig{{
+			Args:       []*Type{TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler:    fnsigHandler,
+			Returns:    []*Type{TFnUndef},
+		}},
+	},
+	{
 		Name:        "call",
 		ForwardArgs: true,
 		Signatures: []NativeSig{{
@@ -423,6 +433,39 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		return nil, err
 	}
 	return []Value{NewFunction(fnDef)}, nil
+}
+
+// fnsigHandler — `fnsig [input output …]` produces a function-SHAPE
+// type literal (FnUndef) from input/output sig pairs. The type-only
+// counterpart to `fn` — same grammar, no body. The list length must
+// be a non-zero multiple of 2 (each pair is one signature). The
+// result is an FnUndef value usable as a type constraint, e.g.
+// `def f:fnsig [[Integer] [String]] impl` asserts that `impl` is a
+// function whose signatures cover the shape `Integer → String`.
+//
+// FnUndef is structural: any function value whose registered
+// signatures satisfy every pair in the FnUndef matches. See
+// eng/go/fnsig.go::FnUndefMatchesFnDef.
+func fnsigHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if args[0].Data == nil {
+		return nil, &AqlError{
+			Code:   "fnsig_invalid_spec",
+			Detail: "fnsig: argument must be a concrete list",
+		}
+	}
+	_lst, _ := AsList(args[0])
+	spec := _lst.Slice()
+	if len(spec) == 0 || len(spec)%2 != 0 {
+		return nil, &AqlError{
+			Code:   "fnsig_invalid_spec",
+			Detail: "fnsig: list length must be a non-zero multiple of 2 (input output pairs); use `fn` for the with-body form",
+		}
+	}
+	info, err := parseFnUndefSpec(r, spec)
+	if err != nil {
+		return nil, err
+	}
+	return []Value{NewFnUndef(info)}, nil
 }
 
 // ---- call ----

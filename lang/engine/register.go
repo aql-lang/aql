@@ -1,27 +1,26 @@
 package engine
 
-import "github.com/aql-lang/aql/eng"
-
 // Register installs the engine's built-in word set on the given
 // registry. This is invoked from DefaultRegistry. Word definitions
 // themselves live in the various native_*.go and feature files
 // alongside their handlers.
 //
-// The boolean trio (not/and/or) and the type-level connectives
-// (tor/tand) are owned by aqleng — see eng/go/core_boolean.go.
-// They're installed here via eng.RegisterCoreBoolean and
-// eng.RegisterCoreTypeOps so the production registry ends up
-// with the canonical implementations rather than maintaining a
-// duplicate set.
+// Lang owns every word name. The eng kernel exposes algorithm
+// primitives (CoerceBoolean, TandValues, TorHandler, ...) that the
+// registrations below wire into the dispatch; eng does not register
+// any word of its own.
 func Register(r *Registry) {
-	eng.RegisterCoreBoolean(r)
-	eng.RegisterCoreTypeOps(r)
-	eng.RegisterCoreFnSig(r)
-	eng.RegisterCoreMake(r)
-	eng.RegisterCoreObjectRecord(r)
-	eng.RegisterCoreInspect(r)
-	eng.RegisterCoreStorage(r)
-	eng.RegisterCoreFlowCtrl(r)
+	for _, n := range makeNatives {
+		r.RegisterNativeFunc(n)
+	}
+	for _, n := range objectRecordNatives {
+		r.RegisterNativeFunc(n)
+	}
+	for _, n := range inspectNatives {
+		r.RegisterNativeFunc(n)
+	}
+	// break / continue are owned by lang (see native_control.go); the
+	// kernel only provides the FlowCtrl type and the Run-loop dispatch.
 
 	// String
 	for _, n := range stringNatives {
@@ -44,7 +43,7 @@ func Register(r *Registry) {
 	}
 
 	// Comparison
-	for _, n := range ComparisonNatives {
+	for _, n := range comparisonNatives {
 		r.RegisterNativeFunc(n)
 	}
 
@@ -81,15 +80,15 @@ func Register(r *Registry) {
 	for _, n := range miscNatives {
 		r.RegisterNativeFunc(n)
 	}
-	for _, n := range PrintNatives {
+	for _, n := range printNatives {
 		r.RegisterNativeFunc(n)
 	}
-	for _, n := range TraceNatives {
+	for _, n := range traceNatives {
 		r.RegisterNativeFunc(n)
 	}
 
 	// Unify
-	for _, n := range UnifyNatives {
+	for _, n := range unifyNatives {
 		r.RegisterNativeFunc(n)
 	}
 

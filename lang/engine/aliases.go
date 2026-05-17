@@ -107,6 +107,7 @@ var (
 	TDepInteger = eng.TDepInteger
 	TDependent  = eng.TDependent
 	TDisjunct   = eng.TDisjunct
+	TEnum       = eng.TEnum
 	TError      = eng.TError
 	// TFetchFunction / TFetchRequest / TFetchResponse moved to
 	// lang/native/fetch.go at Step 8. References use native.TFetch*
@@ -238,6 +239,7 @@ var (
 	IsTypeValue                = eng.IsTypeValue
 	IsTypedList                = eng.IsTypedList
 	IsTypedMap                 = eng.IsTypedMap
+	IsValueOfType              = eng.IsValueOfType
 	IsWord                     = eng.IsWord
 	AsBoolean                  = eng.AsBoolean
 	AsDecimal                  = eng.AsDecimal
@@ -340,6 +342,7 @@ var (
 	NewDefCleanup  = eng.NewDefCleanup
 	NewDepScalar   = eng.NewDepScalar
 	NewDisjunct    = eng.NewDisjunct
+	NewEnum        = eng.NewEnum
 	NewError       = eng.NewError
 	NewEvalList    = eng.NewEvalList
 	NewEvalMap     = eng.NewEvalMap
@@ -393,10 +396,6 @@ var (
 	UnaryNumOpNative      = eng.UnaryNumOpNative
 	BinaryNumOpNative     = eng.BinaryNumOpNative
 	BinaryIntOpNative     = eng.BinaryIntOpNative
-	ComparisonNatives     = eng.ComparisonNatives
-	PrintNatives          = eng.PrintNatives
-	TraceNatives          = eng.TraceNatives
-	UnifyNatives          = eng.UnifyNatives
 	RequireConcreteList   = eng.RequireConcreteList
 	RequireConcreteMap    = eng.RequireConcreteMap
 	ResolveTypeLiteralDef = eng.ResolveTypeLiteralDef
