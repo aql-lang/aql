@@ -21,7 +21,9 @@ jobs:
         # Replaces a previous `curl … install.sh | sh` to avoid piping
         # a remote script into the CI shell. The official action installs
         # via GitHub Actions' cached infrastructure.
-        uses: golangci/golangci-lint-action@v6
+        # v7 of the action is required for golangci-lint v2; v6 only
+        # supports v1.x.
+        uses: golangci/golangci-lint-action@v7
         with:
           version: v2.5.0
           install-mode: binary
