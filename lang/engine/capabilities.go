@@ -19,15 +19,20 @@ const (
 // HostFileOps returns the FileOps installed on r, or nil if none.
 // Word handlers that need filesystem access call EffectiveFileOps
 // instead — it honours the __sys.fs.mem switch.
+//
+// The eng.Cap error (nil registry) is discarded: the wrappers are
+// only ever called on initialised registries in practice, and the
+// callers expect a single-value signature. A misconfigured registry
+// surfaces at lower-level capability checks before reaching here.
 func HostFileOps(r *Registry) fileops.FileOps {
-	ops, _ := eng.Cap[fileops.FileOps](r, CapFileOps)
+	ops, _, _ := eng.Cap[fileops.FileOps](r, CapFileOps)
 	return ops
 }
 
 // SetHostFileOps installs the active fileops capability and re-wires
 // any registered jsonic-format multisource resolver to use it.
 func SetHostFileOps(r *Registry, ops fileops.FileOps) {
-	r.Capabilities.Set(CapFileOps, ops)
+	_ = r.Capabilities.Set(CapFileOps, ops)
 	if formats := HostFormats(r); formats != nil {
 		if jf, ok := formats["jsonic"].(*JsonicFormat); ok {
 			jf.Resolver = MakeFileOpsResolver(ops)
@@ -39,24 +44,24 @@ func SetHostFileOps(r *Registry, ops fileops.FileOps) {
 // none. The map is owned by the host and may be mutated in place to
 // register or replace individual formats.
 func HostFormats(r *Registry) map[string]Format {
-	formats, _ := eng.Cap[map[string]Format](r, CapFormats)
+	formats, _, _ := eng.Cap[map[string]Format](r, CapFormats)
 	return formats
 }
 
 // SetHostFormats installs the format registry as a single capability.
 func SetHostFormats(r *Registry, formats map[string]Format) {
-	r.Capabilities.Set(CapFormats, formats)
+	_ = r.Capabilities.Set(CapFormats, formats)
 }
 
 // HostSQLite returns the SQLite store installed on r, or nil if none.
 func HostSQLite(r *Registry) *SQLiteStore {
-	store, _ := eng.Cap[*SQLiteStore](r, CapSQLite)
+	store, _, _ := eng.Cap[*SQLiteStore](r, CapSQLite)
 	return store
 }
 
 // SetHostSQLite installs the SQLite store as a capability.
 func SetHostSQLite(r *Registry, store *SQLiteStore) {
-	r.Capabilities.Set(CapSQLite, store)
+	_ = r.Capabilities.Set(CapSQLite, store)
 }
 
 // EffectiveFileOps returns the fileops to use for the current
@@ -96,11 +101,11 @@ func EffectiveFileOps(r *Registry) fileops.FileOps {
 	}
 	asBool, _ := AsBoolean(memVal)
 	if memVal.VType.Matches(TBoolean) && asBool {
-		if mem, _ := eng.Cap[fileops.FileOps](r, CapMemFileOps); mem != nil {
+		if mem, _, _ := eng.Cap[fileops.FileOps](r, CapMemFileOps); mem != nil {
 			return mem
 		}
 		mem := fileops.NewMem()
-		r.Capabilities.Set(CapMemFileOps, mem)
+		_ = r.Capabilities.Set(CapMemFileOps, mem)
 		return mem
 	}
 	return HostFileOps(r)

@@ -1582,20 +1582,43 @@ func (v Value) String() string {
 	// TypeBehavior route through their Format. Walks the Parent
 	// chain so descendants of a type with a custom Behavior inherit
 	// it (e.g. TInspect inherits mapFormatBehavior via its TMap
-	// parent). The DefaultBehavior sentinel falls through to the
-	// kernel switch below.
+	// parent). The DefaultBehavior sentinel — and any Behavior that
+	// embeds defaultBehavior without overriding Format (e.g. the
+	// scalar Comparer behaviors) — falls through to the kernel
+	// renderer below.
 	//
 	// Type literals (Data==nil) are NOT delegated — they render as
 	// their leaf type name uniformly across all types, including
-	// types with custom Behaviors. See the Data==nil arm in the
-	// switch below.
+	// types with custom Behaviors. See the Data==nil arm in
+	// kernelFormatDefault.
 	if v.Data != nil && v.VType != nil {
 		for t := v.VType; t != nil; t = t.Parent {
-			if t.Behavior != nil && t.Behavior != DefaultBehavior {
-				return t.Behavior.Format(v)
+			if t.Behavior == nil || t.Behavior == DefaultBehavior {
+				continue
 			}
+			if _, ok := t.Behavior.(formatDelegatesToDefault); ok {
+				continue
+			}
+			return t.Behavior.Format(v)
 		}
 	}
+	return kernelFormatDefault(v)
+}
+
+// formatDelegatesToDefault is an opt-in marker for TypeBehavior impls
+// that embed defaultBehavior without overriding Format. Without it,
+// Value.String would dispatch into the embedded defaultBehavior.Format,
+// which calls v.String() — a stack-overflow. Marker-tagged Behaviors
+// are skipped so the walk falls through to kernelFormatDefault.
+type formatDelegatesToDefault interface {
+	formatDelegate()
+}
+
+// kernelFormatDefault renders v using the kernel's canonical switch.
+// Used both as the terminal of Value.String's Behavior walk and from
+// defaultBehavior.Format so the two paths produce identical output
+// without recursing through Value.String.
+func kernelFormatDefault(v Value) string {
 	switch {
 	case IsWord(v):
 		w, _ := AsWord(v)

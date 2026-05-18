@@ -1,8 +1,7 @@
-package eng
+package engine
 
-// RegisterCoreInspect installs the `inspect` introspection word and is
-// wired into RegisterCoreWords. Exported so callers can install just
-// this without taking the rest of RegisterCoreWords.
+// inspectNatives installs `inspect` — the machine-readable
+// counterpart of `help` for words, values, and types.
 //
 //	inspect NAME   — NAME is a bare word or a quoted atom. Resolves it
 //	                 (type stack, then def stack, then registered word)
@@ -13,19 +12,14 @@ package eng
 //	                 typed map / fn-shape / dependent scalar). Returns
 //	                 the type inspection of V.
 //
-// The result is the machine-readable counterpart of `help`:
+// The result shape:
 //
 //	word inspection:  { name, kind:native|defined|unknown,
 //	                    value?, signatures:[{args:[…]}…] }
 //	                    (`value` only for a plain `def`-bound value)
 //	type inspection:  { name?, type:"<leaf>", kind, …kind-specific }
-//	  • for a TYPE value (a type literal, record / object / disjunct /
-//	    enum / typed list / typed map / fn-shape / dependent scalar):
-//	    type = "Type" (its type-of is the metatype), struct = the
-//	    underlying-structure leaf (Map for a record shape, List for a
-//	    typed list, the named type for an object, …);
-//	  • for a CONCRETE value: type = the value's exact VType leaf, and
-//	    no `struct`.
+//	  • for a TYPE value: type = "Type", struct = underlying leaf;
+//	  • for a CONCRETE value: type = VType leaf, no `struct`.
 //	  record / table → fields:{k:"<leaf>" …}
 //	  object         → parent:"…"?, fields:{k:"<leaf>" …} (incl. inherited)
 //	  disjunct       → alternatives:["…" …]
@@ -35,13 +29,11 @@ package eng
 //	  literal        → (just kind)
 //
 // The returned value carries VType `Inspect` but its payload is an
-// OrderedMap, so it renders and round-trips like a map.
-func RegisterCoreInspect(r *Registry) {
-	registerCoreInspect(r)
-}
-
-func registerCoreInspect(r *Registry) {
-	r.RegisterNativeFunc(NativeFunc{
+// OrderedMap so it renders and round-trips like a map. Algorithms
+// (IsRecordType / AsObjectType / DependentLeafFromType / …) live in
+// eng; this file owns the word name and dispatch wiring.
+var inspectNatives = []NativeFunc{
+	{
 		Name:        "inspect",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
@@ -51,7 +43,7 @@ func registerCoreInspect(r *Registry) {
 			{Args: []*Type{TAtom}, QuoteArgs: map[int]bool{0: true}, Handler: inspectAtomHandler, Returns: []*Type{TInspect}},
 			{Args: []*Type{TAny}, Handler: inspectTypeHandler, Returns: []*Type{TInspect}},
 		},
-	})
+	},
 }
 
 func inspectAtomHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

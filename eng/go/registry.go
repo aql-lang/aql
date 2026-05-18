@@ -679,7 +679,9 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
 	argsList := NewList(argsCopy)
-	r.Args.Push(argsList)
+	if err := r.Args.Push(argsList); err != nil {
+		return nil, err
+	}
 
 	for i, p := range sig.Params {
 		if p.Name != "" {
@@ -707,8 +709,13 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 	result, err := sub.Run(tokens)
 
 	// Cleanup: pop args stack, undef named params, then clean up
-	// any defs that were created during body execution.
-	r.Args.Pop()
+	// any defs that were created during body execution. A Pop error
+	// here means the args stack is nil — a misconfigured registry;
+	// surface it only if sub.Run didn't already fail (the run error
+	// is more informative).
+	if _, popErr := r.Args.Pop(); popErr != nil && err == nil {
+		err = popErr
+	}
 	for i := len(names) - 1; i >= 0; i-- {
 		UninstallDef(r, names[i])
 	}

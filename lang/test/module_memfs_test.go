@@ -26,7 +26,9 @@ func runMemFSModuleSteps(t *testing.T, files map[string]string, steps []string) 
 	for path, content := range files {
 		mem.Files[path] = []byte(content)
 	}
-	reg.Capabilities.Set(engine.CapMemFileOps, fileops.FileOps(mem))
+	if err := reg.Capabilities.Set(engine.CapMemFileOps, fileops.FileOps(mem)); err != nil {
+		t.Fatalf("set capability: %v", err)
+	}
 
 	// Enable in-memory FS via __sys.fs.mem = true.
 	eng := engine.New(reg)

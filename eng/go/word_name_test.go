@@ -30,6 +30,8 @@ func TestValidateWordNameAccepts(t *testing.T) {
 		// Underscore-prefix (discard placeholder, engine internals).
 		"_", "__pa", "__mark", "_internal", "_-leading",
 		"_unused-arg",
+		// CLI-style flag names (leading hyphen).
+		"-h", "-v", "-x5", "--help", "--limit", "--no-push",
 	}
 	for _, name := range good {
 		if err := ValidateWordName(name); err != nil {
@@ -45,14 +47,17 @@ func TestValidateWordNameRejects(t *testing.T) {
 		wantInMsg string // substring expected in the error detail
 	}{
 		{"", "empty"},
-		{"Integer", "[a-z_]"},   // uppercase first
-		{"String", "[a-z_]"},    // uppercase first
-		{"X", "[a-z_]"},         // uppercase first
-		{"123", "[a-z_]"},       // digit first
-		{"2dup", "[a-z_]"},      // digit first
-		{"-rot", "[a-z_]"},      // hyphen first
-		{"?question", "[a-z_]"}, // ? first
-		{"!bang", "[a-z_]"},     // ! first
+		{"Integer", "[a-z_-]"},   // uppercase first
+		{"String", "[a-z_-]"},    // uppercase first
+		{"X", "[a-z_-]"},         // uppercase first
+		{"123", "[a-z_-]"},       // digit first
+		{"2dup", "[a-z_-]"},      // digit first
+		{"?question", "[a-z_-]"}, // ? first
+		{"!bang", "[a-z_-]"},     // ! first
+		// All-hyphen names rejected (carry no identifier).
+		{"-", "only hyphens"},
+		{"--", "only hyphens"},
+		{"---", "only hyphens"},
 		{"foo bar", "illegal"},  // space mid-name
 		{"foo!bar", "illegal"},  // ! mid-name
 		{"foo*bar", "illegal"},  // * mid-name
@@ -107,11 +112,30 @@ func TestRegisterNativeFuncRejectsBadName(t *testing.T) {
 	}
 }
 
-// TestDefRejectsBadName — `def` validates the user-supplied name
-// before pushing.
+// TestDefRejectsBadName — the engine's word-name validation rule
+// (ValidateWordName) rejects uppercase names; here we exercise the
+// rule through a minimal in-test `def` fixture so the assertion
+// reaches the same code path users hit with the production lang word.
 func TestDefRejectsBadName(t *testing.T) {
 	r, _ := NewRegistry()
-	RegisterCoreWords(r)
+	r.RegisterNativeFunc(NativeFunc{
+		Name:        "def",
+		ForwardArgs: true,
+		Signatures: []NativeSig{{
+			Args:       []*Type{TAtom, TAny},
+			QuoteArgs:  map[int]bool{0: true},
+			NoEvalArgs: map[int]bool{1: true},
+			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+				name, _ := args[0].AsConcreteAtom()
+				if err := ValidateWordName(name); err != nil {
+					return nil, err
+				}
+				reg.Defs.Push(name, args[1])
+				return nil, nil
+			},
+			Returns: []*Type{},
+		}},
+	})
 	r.InitRootContext()
 
 	_, err := NewTop(r).Run([]Value{

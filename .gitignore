@@ -140,3 +140,11 @@ vite.config.ts.timestamp-*
 
 # Code-structure visualization artifacts (Makefile `viz*` targets)
 viz/
+
+# Per-module coverage artifacts (Makefile `cover` / `cover-html` targets)
+coverage/
+**/coverage.out
+**/coverage.html
+
+# calc module build output
+calc/bin/

@@ -43,6 +43,10 @@ func TestSpecProd(t *testing.T) {
 		if err != nil {
 			return nil, err
 		}
+		// Install the shared q-suffixed spec fixtures so tsv files
+		// originally written for engspec (object, record, inspect, …)
+		// can run under the production setup too.
+		specrunner.RegisterQFixtures(reg)
 		return engine.NewTop(reg).Run(values)
 	})
 }

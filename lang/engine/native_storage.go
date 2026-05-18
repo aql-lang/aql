@@ -2,24 +2,43 @@ package engine
 
 import "fmt"
 
-// storageNatives covers the production-only Store-side container
-// access — `context` plus the Store-targeted sigs of `set` and
-// `get`. The non-context kernel sigs (Map / List / Object / Array)
-// live in eng and are installed via eng.RegisterCoreStorage from
-// register.go; these entries register ADDITIONAL signatures on top
-// of those, keeping the dispatch table for `set` / `get` unified
-// from the caller's perspective.
+// storageNatives covers `set` / `get` / `context`. The unified
+// dispatch table mixes Node / Object / Array (kernel-territory
+// containers) and Store (context-aware, copy-on-write) sigs in one
+// place, keeping `set` and `get` polymorphic from the caller's
+// perspective.
 //
-// `set` and `get` carry ReturnsFn closures that thread the static
-// type tracker (r.RecordContextSet / r.LookupContextType) so
-// check-mode can recover a typed carrier from a previous set on the
-// same key. Both are context-aware machinery and therefore live
-// here, not in the kernel.
+// `set` and `get` carry ReturnsFn closures on the Store sigs that
+// thread the static type tracker (r.RecordContextSet /
+// r.LookupContextType) so check-mode can recover a typed carrier
+// from a previous set on the same key.
+//
+// Algorithms (GetKey, AsStore, AsArray, CowSet, AsObjectInstance,
+// AsMutableMap, …) live in eng; this file owns the word names and
+// dispatch wiring.
 var storageNatives = []NativeFunc{
 	{
 		Name:        "set",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
+			// Array (indexed by integer)
+			{
+				Args:    []*Type{TInteger, TAny, TArray},
+				Handler: setArrayHandler,
+				Returns: []*Type{},
+			},
+			// Object
+			{
+				Args:    []*Type{TString, TAny, TObject},
+				Handler: setObjectHandler,
+				Returns: []*Type{},
+			},
+			{
+				Args:      []*Type{TAtom, TAny, TObject},
+				QuoteArgs: map[int]bool{0: true},
+				Handler:   setObjectHandler,
+				Returns:   []*Type{},
+			},
 			// Store (copy-on-write)
 			{
 				Args:      []*Type{TString, TAny, TStore},
@@ -40,6 +59,18 @@ var storageNatives = []NativeFunc{
 		Name:        "get",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
+			// [Key | Node] — covers Map, List, Options, record-shape
+			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: getNodeHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getNodeHandler, Returns: []*Type{TAny}},
+			// [Key | Array]
+			{Args: []*Type{TInteger, TArray}, BarrierPos: 1, Handler: getArrayHandler, Returns: []*Type{TAny}},
+			// [Key | Object]
+			{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TInteger, TObject}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
+			// [Key | None] — chained-read propagation
+			{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: getNoneHandler, Returns: []*Type{TNone}},
 			// [Key | Store] — check-mode-aware ReturnsFn picks up a
 			// typed carrier from a previously-set key.
 			{
@@ -61,6 +92,104 @@ var storageNatives = []NativeFunc{
 			Returns: []*Type{TStore},
 		}},
 	},
+}
+
+// ---- kernel-container handlers (Node / Object / Array / None) ----
+
+func setObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	container := args[2]
+	if container.Data == nil {
+		return nil, fmt.Errorf("set: cannot set field on type literal")
+	}
+	key := StoreKey(args[0])
+	oi, ok := container.Data.(ObjectInstanceInfo)
+	if !ok {
+		return nil, fmt.Errorf("set: expected an Object instance, got %s", container.VType.String())
+	}
+	oi.Fields.Set(key, args[1])
+	return nil, nil
+}
+
+func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	arr, err := AsArray(args[2])
+	if err != nil {
+		return nil, fmt.Errorf("set: expected an Array, got %s", args[2].VType.String())
+	}
+	asInt, _ := args[0].AsConcreteInteger()
+	idx := int(asInt)
+	if !arr.Set(idx, args[1]) {
+		return nil, fmt.Errorf("set: index %d out of bounds (length %d)", idx, arr.Len())
+	}
+	return nil, nil
+}
+
+func getNodeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	key := args[0]
+	container := args[1]
+	if container.Data == nil {
+		return nil, fmt.Errorf("get: cannot access property on type literal")
+	}
+	// Integer key: list index access.
+	if key.VType.Matches(TInteger) {
+		idx, _ := AsInteger(key)
+		if list, _ := AsList(container); !list.IsNil() && container.VType.Matches(TList) {
+			i := int(idx)
+			if i < 0 || i >= list.Len() {
+				return []Value{NewTypeLiteral(TNone)}, nil
+			}
+			return []Value{list.Get(i)}, nil
+		}
+		// Fall through to map lookup with stringified key.
+	}
+	// String/atom/word key: map property access.
+	k := getKey(key)
+	if m, _ := AsMap(container); m != nil {
+		val, ok := m.Get(k)
+		if !ok {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
+	}
+	return []Value{NewTypeLiteral(TNone)}, nil
+}
+
+func getObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	key := args[0]
+	container := args[1]
+	if container.Data == nil {
+		return nil, fmt.Errorf("get: cannot access property on type literal")
+	}
+	k := getKey(key)
+	if m, err := AsMutableMap(container); err == nil {
+		val, found := m.Get(k)
+		if !found {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
+	}
+	oi, _ := AsObjectInstance(container)
+	val, ok := oi.GetField(k)
+	if !ok {
+		return []Value{NewTypeLiteral(TNone)}, nil
+	}
+	return []Value{val}, nil
+}
+
+func getArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	arr, err := AsArray(args[1])
+	if err != nil {
+		return nil, fmt.Errorf("get: expected an Array, got %s", args[1].VType.String())
+	}
+	idx, _ := args[0].AsConcreteInteger()
+	val, ok := arr.Get(int(idx))
+	if !ok {
+		return []Value{NewTypeLiteral(TNone)}, nil
+	}
+	return []Value{val}, nil
+}
+
+func getNoneHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	return []Value{NewTypeLiteral(TNone)}, nil
 }
 
 // ---- set Store handler ----

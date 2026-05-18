@@ -9,10 +9,11 @@ import (
 // that, when parsed and evaluated, reproduces the input stack. Where it
 // diverges from Value.String:
 //
-//   - atoms render as `(quote name)` (bare `name` would parse as a word
-//     lookup, not as an atom value)
+//   - atoms render as `name/q` (bare `name` would parse as a word
+//     lookup, not as an atom value; the /q suffix is the preferred
+//     short form over `(quote name)`)
 //   - quoted lists render as `(quote [...])` so the Quoted flag survives
-//     a round-trip
+//     a round-trip (the /q suffix is only defined for words)
 //   - lists and maps are space-separated, matching AQL source syntax
 //     instead of Value.String's comma-separated debug form
 //
@@ -28,6 +29,32 @@ func Canon(stack []Value) string {
 
 // CanonValue renders one value as canonical AQL source. See Canon.
 func CanonValue(v Value) string {
+	// Behavior-driven dispatch for user-defined types: if a non-
+	// builtin type in v.VType's parent chain has a non-default
+	// Behavior, route through it. This is how user-installed canon
+	// bodies (`behave canon/q (fn [[T] [String] [body]])`) flow
+	// into eng.Canon.
+	//
+	// Built-in Behaviors (listFormatBehavior, mapFormatBehavior,
+	// dateFormatBehavior, …) are deliberately skipped here — they
+	// produce Value.String's debug form (comma-separated lists,
+	// time-domain renderings) which doesn't match Canon's source-
+	// shape conventions (space-separated lists, quoted strings).
+	// CanonValue's own switch below preserves those.
+	if v.Data != nil && v.VType != nil {
+		for t := v.VType; t != nil; t = t.Parent {
+			if t.Origin == OriginBuiltin {
+				continue
+			}
+			if t.Behavior == nil || t.Behavior == DefaultBehavior {
+				continue
+			}
+			if _, ok := t.Behavior.(formatDelegatesToDefault); ok {
+				continue
+			}
+			return t.Behavior.Format(v)
+		}
+	}
 	switch {
 	case IsNone(v):
 		return "none"
@@ -58,7 +85,7 @@ func CanonValue(v Value) string {
 		return "false"
 	case v.VType.Equal(TAtom):
 		s, _ := AsAtom(v)
-		return "(quote " + s + ")"
+		return s + "/q"
 	case v.VType.Matches(TList) && v.Data != nil:
 		lst, _ := AsList(v)
 		parts := make([]string, lst.Len())

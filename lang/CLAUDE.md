@@ -379,9 +379,17 @@ literal (`true`/`false`/a type name) raises `[aql/undefined_word]` at
 
 Names that are meant as data must be quoted:
 
-- `quote foo` — captures the upcoming Word as `Atom(foo)`.
-- `(quote foo)` — same, inside a paren so forward collection can pick
-  up the resulting Atom.
+- `foo/q` — word-suffix form: parses `foo` directly as `Atom(foo)`.
+  This is the preferred short form and the canonical render output
+  (canon.go emits `name/q` rather than `(quote name)`). Like the
+  other suffix modifiers, `/q` stacks with `/s`, `/f`, and the
+  argCount digit in any order (`foo/sq` ≡ `foo/qs`); when `q` is
+  present the result is an Atom and the other modifiers are
+  accepted syntactically but ignored.
+- `quote foo` — function form: captures the upcoming Word as
+  `Atom(foo)`.
+- `(quote foo)` — same as `quote foo`, inside a paren so forward
+  collection can pick up the resulting Atom.
 - A `/q`-marked sig position — captures the upcoming Word as an Atom
   during forward collection (`def name body`, `get key map`,
   `set key val store`, etc.).

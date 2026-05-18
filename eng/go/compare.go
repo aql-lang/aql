@@ -1,77 +1,78 @@
 package eng
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+// ErrNoComparer is returned by Comparer.Compare implementations that
+// hold a placeholder slot (e.g. a wrapped Behavior whose user-defined
+// comparator body is empty). CompareValues recognises it and continues
+// the parent-chain walk, treating the Behavior as if it didn't satisfy
+// the Comparer interface at all. This lets a single Behavior wrapper
+// carry multiple optional capabilities (compare / canon / …) where
+// only some are installed without prematurely terminating dispatch.
+var ErrNoComparer = errors.New("eng: no comparer in this Behavior")
 
 // CompareValues returns -1, 0, or 1 for natural ordering of two values.
-// Comparison rules:
-//   - Integers: numeric order
-//   - Strings: lexicographic order
-//   - Booleans: false < true
-//   - Atoms: lexicographic order on atom name
-//   - Cross-type: ordered by type name (atom < boolean < number < string)
-//   - Lists, maps, and other types: not orderable, returns error
+//
+// Dispatch is type-driven: the compare logic for a pair of values lives
+// on the type's Behavior (Comparer capability), not in a switch ladder
+// here. The dispatch routes through the lowest common ancestor of the
+// two operand VTypes — e.g. Integer-vs-Decimal walks up to Number, which
+// owns the numeric ordering; Date-vs-Date stays on Date.
+//
+// Types without a Comparer in their lattice surface a clear
+// "type X does not support compare" error. Two values rooted in
+// disjoint branches (Integer-vs-String) also error: the lattice walk
+// finds no shared ancestor below Any/Scalar that owns a Comparer.
+//
+// DepScalar values represent type-level constraints, not concrete
+// scalars — they are rejected up front to avoid silently coercing
+// zero values through AsNumber/AsString.
 func CompareValues(a, b Value) (int, error) {
-	// DepScalar values represent type-level constraints, not concrete
-	// scalars. Ordering them as if they were scalar values is a
-	// category error — refuse rather than silently coerce zero
-	// values through the Matches(TNumber)/AsNumber() path.
 	if a.IsDepScalar() || b.IsDepScalar() {
 		return 0, fmt.Errorf("cannot compare dependent-type constraint with %s", b.VType.String())
 	}
-	// Numeric comparisons: both operands are some form of Number.
-	if a.VType.Matches(TNumber) && b.VType.Matches(TNumber) {
-		_as1, _ := AsNumber(a)
-		_as0, _ := AsNumber(b)
-		af, bf := _as1, _as0
-		if af < bf {
-			return -1, nil
-		}
-		if af > bf {
-			return 1, nil
-		}
-		return 0, nil
+	if a.VType == nil || b.VType == nil {
+		return 0, fmt.Errorf("cannot compare values with nil type")
 	}
-
-	if a.VType.Matches(TString) && b.VType.Matches(TString) {
-		_as3, _ := AsString(a)
-		_as2, _ := AsString(b)
-		as, bs := _as3, _as2
-		if as < bs {
-			return -1, nil
-		}
-		if as > bs {
-			return 1, nil
-		}
-		return 0, nil
+	lca := lowestCommonAncestor(a.VType, b.VType)
+	if lca == nil {
+		return 0, fmt.Errorf("cannot compare %s and %s", a.VType.String(), b.VType.String())
 	}
-
-	if a.VType.Matches(TBoolean) && b.VType.Matches(TBoolean) {
-		_as5, _ := AsBoolean(a)
-		_as4, _ := AsBoolean(b)
-		ab, bb := _as5, _as4
-		if ab == bb {
-			return 0, nil
+	for t := lca; t != nil; t = t.Parent {
+		cmp, ok := t.Behavior.(Comparer)
+		if !ok {
+			continue
 		}
-		if !ab {
-			return -1, nil // false < true
+		n, err := cmp.Compare(a, b)
+		if errors.Is(err, ErrNoComparer) {
+			// Wrapper Behavior signalled "I satisfy Comparer
+			// structurally but have no body installed" — keep
+			// walking the parent chain.
+			continue
 		}
-		return 1, nil
+		return n, err
 	}
-
-	if a.VType.Equal(TAtom) && b.VType.Equal(TAtom) {
-		_as7, _ := AsAtom(a)
-		_as6, _ := AsAtom(b)
-		as, bs := _as7, _as6
-		if as < bs {
-			return -1, nil
-		}
-		if as > bs {
-			return 1, nil
-		}
-		return 0, nil
-	}
-
 	return 0, fmt.Errorf("cannot compare %s and %s", a.VType.String(), b.VType.String())
+}
+
+// lowestCommonAncestor returns the closest type that is an ancestor
+// of both a and b on the parent chain. Returns nil only if a and b
+// share no common ancestor (the type tables guarantee a single root,
+// so in practice this returns at worst the root type).
+func lowestCommonAncestor(a, b *Type) *Type {
+	seen := make(map[*Type]bool)
+	for t := a; t != nil; t = t.Parent {
+		seen[t] = true
+	}
+	for t := b; t != nil; t = t.Parent {
+		if seen[t] {
+			return t
+		}
+	}
+	return nil
 }
 
 // ExactEqual returns true if two values are exactly equal.
@@ -221,109 +222,11 @@ func DeepEqual(a, b Value) bool {
 	return false
 }
 
-// ComparisonNatives is the consolidated set of comparison words (lt,
-// gt, lte, gte, eq, neq, deq) plus the closed-interval DepScalar
-// constructor `between`. Installed by the engine's top-level Register
-// via a slice walk.
-var ComparisonNatives = []NativeFunc{
-	// lt: [any, any] -> [boolean] — less than
-	// Swap: `a b lt` means a < b, so compare args[1] < args[0].
-	// Also accepts `Integer lt N` to construct a DepInteger constraint.
-	{
-		Name:        "lt",
-		ForwardArgs: true,
-		Signatures: []NativeSig{
-			makeDepScalarSig("lt", DepLT),
-			{
-				Args:    []*Type{TAny, TAny},
-				Handler: ltHandler,
-				Returns: []*Type{TBoolean},
-			},
-		},
-	},
+// The comparison-word registrations (lt / gt / lte / gte / eq /
+// neq / deq / between) live in lang/engine/native_compare.go. The
+// handlers and MakeDepScalarSig helper are exported eng primitives.
 
-	// gt: [any, any] -> [boolean] — greater than
-	{
-		Name:        "gt",
-		ForwardArgs: true,
-		Signatures: []NativeSig{
-			makeDepScalarSig("gt", DepGT),
-			{
-				Args:    []*Type{TAny, TAny},
-				Handler: gtHandler,
-				Returns: []*Type{TBoolean},
-			},
-		},
-	},
-
-	// lte: [any, any] -> [boolean] — less than or equal
-	{
-		Name:        "lte",
-		ForwardArgs: true,
-		Signatures: []NativeSig{
-			makeDepScalarSig("lte", DepLTE),
-			{
-				Args:    []*Type{TAny, TAny},
-				Handler: lteHandler,
-				Returns: []*Type{TBoolean},
-			},
-		},
-	},
-
-	// gte: [any, any] -> [boolean] — greater than or equal
-	{
-		Name:        "gte",
-		ForwardArgs: true,
-		Signatures: []NativeSig{
-			makeDepScalarSig("gte", DepGTE),
-			{
-				Args:    []*Type{TAny, TAny},
-				Handler: gteHandler,
-				Returns: []*Type{TBoolean},
-			},
-		},
-	},
-
-	// between: closed-interval DepScalar constructor — defined in
-	// depscalar.go alongside the dependent-type machinery so adding
-	// new bound shapes only touches one file.
-	betweenNative,
-
-	// eq: [any, any] -> [boolean] — exact equality (identity for non-scalars)
-	{
-		Name:        "eq",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:    []*Type{TAny, TAny},
-			Handler: eqHandler,
-			Returns: []*Type{TBoolean},
-		}},
-	},
-
-	// neq: [any, any] -> [boolean] — not equal (negation of eq)
-	{
-		Name:        "neq",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:    []*Type{TAny, TAny},
-			Handler: neqHandler,
-			Returns: []*Type{TBoolean},
-		}},
-	},
-
-	// deq: [any, any] -> [boolean] — deep equality (traverse non-scalars)
-	{
-		Name:        "deq",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:    []*Type{TAny, TAny},
-			Handler: deqHandler,
-			Returns: []*Type{TBoolean},
-		}},
-	},
-}
-
-func ltHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func LtHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	cmp, err := CompareValues(args[1], args[0])
 	if err != nil {
 		return nil, fmt.Errorf("lt: %w", err)
@@ -331,7 +234,7 @@ func ltHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Valu
 	return []Value{NewBoolean(cmp < 0)}, nil
 }
 
-func gtHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func GtHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	cmp, err := CompareValues(args[1], args[0])
 	if err != nil {
 		return nil, fmt.Errorf("gt: %w", err)
@@ -339,7 +242,7 @@ func gtHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Valu
 	return []Value{NewBoolean(cmp > 0)}, nil
 }
 
-func lteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func LteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	cmp, err := CompareValues(args[1], args[0])
 	if err != nil {
 		return nil, fmt.Errorf("lte: %w", err)
@@ -347,7 +250,7 @@ func lteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	return []Value{NewBoolean(cmp <= 0)}, nil
 }
 
-func gteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func GteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	cmp, err := CompareValues(args[1], args[0])
 	if err != nil {
 		return nil, fmt.Errorf("gte: %w", err)
@@ -355,14 +258,14 @@ func gteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	return []Value{NewBoolean(cmp >= 0)}, nil
 }
 
-func eqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func EqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	return []Value{NewBoolean(ExactEqual(args[0], args[1]))}, nil
 }
 
-func neqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func NeqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	return []Value{NewBoolean(!ExactEqual(args[0], args[1]))}, nil
 }
 
-func deqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func DeqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	return []Value{NewBoolean(DeepEqual(args[0], args[1]))}, nil
 }

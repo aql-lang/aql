@@ -98,25 +98,11 @@ func TraceVisibleLen(s string) int {
 	return n
 }
 
-// TraceNatives defines the "trace" word for debugging.
-//
-// trace operates like do: it takes a list, evaluates it in a
-// sub-engine, and prints a step-by-step trace of the stack evolution.
-//
-//	trace [1 add 2 mul 3]
-var TraceNatives = []NativeFunc{
-	{
-		Name:        "trace",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:    []*Type{TList},
-			Handler: traceHandler,
-			Returns: []*Type{TAny},
-		}},
-	},
-}
+// The `trace` word registration lives in
+// lang/engine/native_trace.go. TraceHandler and RunTrace are
+// exported algorithm primitives that lang's registration calls into.
 
-func traceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func TraceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
 		return nil, fmt.Errorf("trace: argument must be a concrete list, got type literal")
 	}

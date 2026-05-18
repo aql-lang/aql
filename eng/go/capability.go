@@ -1,5 +1,7 @@
 package eng
 
+import "errors"
+
 // Capabilities are an opaque plugin slot on the Registry. The engine
 // itself doesn't know what capabilities mean — it just stores values
 // keyed by name so word handlers can retrieve them at dispatch time.
@@ -13,7 +15,8 @@ package eng
 //
 // and a word handler retrieves it:
 //
-//	ops, ok := eng.Cap[fileops.FileOps](r, "engine.fileops")
+//	ops, ok, err := eng.Cap[fileops.FileOps](r, "engine.fileops")
+//	if err != nil { return nil, err }
 //	if !ok { return nil, fmt.Errorf("read: no fileops capability") }
 //
 // Names are convention-only — pick stable strings the host package
@@ -33,79 +36,95 @@ type CapabilityRegistry struct {
 	store map[string]any
 }
 
+// errCapabilityNil is returned by every method when the receiver is
+// nil. The production path constructs the registry through
+// NewRegistry, so a nil receiver indicates a misconfigured
+// (zero-initialised or partially built) Registry — a programming
+// error that should surface rather than be silently ignored.
+var errCapabilityNil = errors.New("capability: nil registry (registry was not initialised via NewRegistry)")
+
 // NewCapabilityRegistry returns an empty capability registry.
 func NewCapabilityRegistry() *CapabilityRegistry {
 	return &CapabilityRegistry{store: make(map[string]any)}
 }
 
-// Get returns the value stored under name and true, or (nil, false)
-// if no capability is registered under that name.
-func (c *CapabilityRegistry) Get(name string) (any, bool) {
+// Get returns (value, true, nil) when name is bound,
+// (nil, false, nil) when no capability is registered under that
+// name, or (nil, false, error) when the receiver is nil.
+func (c *CapabilityRegistry) Get(name string) (any, bool, error) {
 	if c == nil {
-		return nil, false
+		return nil, false, errCapabilityNil
 	}
 	v, ok := c.store[name]
-	return v, ok
+	return v, ok, nil
 }
 
 // Set installs (or replaces) the value under name. To remove a
 // capability, call Delete — passing a nil value here STORES nil, it
-// does not delete.
-func (c *CapabilityRegistry) Set(name string, value any) {
+// does not delete. Returns an error only when the receiver is nil.
+func (c *CapabilityRegistry) Set(name string, value any) error {
 	if c == nil {
-		return
+		return errCapabilityNil
 	}
 	if c.store == nil {
 		c.store = make(map[string]any)
 	}
 	c.store[name] = value
+	return nil
 }
 
-// Delete removes the entry for name. Returns true if a capability was
-// present and removed, false if no capability existed.
-func (c *CapabilityRegistry) Delete(name string) bool {
+// Delete removes the entry for name. Returns (true, nil) if a
+// capability was present and removed, (false, nil) if no capability
+// existed, or (false, error) if the receiver is nil.
+func (c *CapabilityRegistry) Delete(name string) (bool, error) {
 	if c == nil {
-		return false
+		return false, errCapabilityNil
 	}
 	if _, ok := c.store[name]; !ok {
-		return false
+		return false, nil
 	}
 	delete(c.store, name)
-	return true
+	return true, nil
 }
 
 // Names returns the set of registered capability names in arbitrary
-// order. Useful for debugging and snapshot/restore.
-func (c *CapabilityRegistry) Names() []string {
+// order. Useful for debugging and snapshot/restore. Returns an error
+// only when the receiver is nil; an empty registry returns
+// (nil-or-empty, nil).
+func (c *CapabilityRegistry) Names() ([]string, error) {
 	if c == nil {
-		return nil
+		return nil, errCapabilityNil
 	}
 	names := make([]string, 0, len(c.store))
 	for k := range c.store {
 		names = append(names, k)
 	}
-	return names
+	return names, nil
 }
 
 // Cap is a typed convenience wrapper around r.Capabilities.Get. It
-// returns the capability cast to T plus true on success, or T's zero
-// value plus false when the capability is missing or stored under a
-// different concrete type.
+// returns (value, true, nil) on success, (zero, false, nil) when the
+// capability is missing or stored under a different concrete type,
+// or (zero, false, error) when r or r.Capabilities is nil (a
+// misconfigured registry).
 //
 // This is a free function (not a method) because Go does not allow
 // generic methods on an existing type.
-func Cap[T any](r *Registry, name string) (T, bool) {
+func Cap[T any](r *Registry, name string) (T, bool, error) {
 	var zero T
 	if r == nil {
-		return zero, false
+		return zero, false, errCapabilityNil
 	}
-	v, ok := r.Capabilities.Get(name)
+	v, ok, err := r.Capabilities.Get(name)
+	if err != nil {
+		return zero, false, err
+	}
 	if !ok {
-		return zero, false
+		return zero, false, nil
 	}
 	t, ok := v.(T)
 	if !ok {
-		return zero, false
+		return zero, false, nil
 	}
-	return t, true
+	return t, true, nil
 }

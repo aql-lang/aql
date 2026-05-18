@@ -1,37 +1,30 @@
-package eng
+package engine
 
 import "fmt"
 
-// RegisterCoreObjectRecord installs the two structural type-constructor
-// words — `record` and `object` — and is wired into RegisterCoreWords.
-// Exported so callers can install just these without taking the rest of
-// RegisterCoreWords.
+// objectRecordNatives covers the two structural type-constructor
+// words — `record` and `object`. They produce type bodies (RecordType
+// / ObjectType) which are then named with `type Foo …` and
+// instantiated with `make Foo data`.
 //
 //	record [ {a:Integer} {b:String} … ]   build a RecordType from a
-//	                                       list of single-pair maps;
-//	                                       the explicit, named-shape
-//	                                       counterpart of the implicit
-//	                                       `{a:Integer}` literal.
+//	                                       list of single-pair maps.
 //	object {a:String b:Integer …}          build an anonymous ObjectType
-//	                                       (nominal, inheritance-aware);
+//	                                       (nominal, inheritance-aware).
 //	object {b:Integer …} ParentType        build an ObjectType that
 //	                                       extends ParentType — child
 //	                                       fields must unify with the
 //	                                       parent's same-named fields.
 //
-// The RecordType / ObjectType *values* these produce are type bodies:
-// name one with `type Foo record […]` / `type Foo object {…}`, then
-// instantiate with `make Foo data` (the kernel `make` validates that
-// `data` carries every declared field with a conforming value).
+// Both run under CheckMode (RunInCheckMode) because downstream
+// `make NAME` needs the constructed type even during static
+// analysis.
 //
-// Both run under CheckMode (RunInCheckMode) — downstream `make NAME`
-// needs the constructed type even during static analysis.
-func RegisterCoreObjectRecord(r *Registry) {
-	registerCoreObjectRecord(r)
-}
-
-func registerCoreObjectRecord(r *Registry) {
-	r.RegisterNativeFunc(NativeFunc{
+// Algorithms (ResolveFieldType, Unify, MintType, NewRecordType,
+// NewObjectType, …) live in eng; this file owns the word names and
+// dispatch wiring.
+var objectRecordNatives = []NativeFunc{
+	{
 		Name:        "record",
 		ForwardArgs: true,
 		Signatures: []NativeSig{{
@@ -40,8 +33,8 @@ func registerCoreObjectRecord(r *Registry) {
 			Returns:        []*Type{TRecord},
 			RunInCheckMode: true,
 		}},
-	})
-	r.RegisterNativeFunc(NativeFunc{
+	},
+	{
 		Name:        "object",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
@@ -58,10 +51,8 @@ func registerCoreObjectRecord(r *Registry) {
 				RunInCheckMode: true,
 			},
 		},
-	})
+	},
 }
-
-// ---- record ----
 
 func recordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	list := args[0]
@@ -92,8 +83,6 @@ func recordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	}
 	return []Value{NewRecordType(fields)}, nil
 }
-
-// ---- object ----
 
 // parseObjectFields converts a map of field definitions into an
 // OrderedMap of field name → type-constraint Value, resolving type

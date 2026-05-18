@@ -1,6 +1,10 @@
 package engine
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/aql-lang/aql/eng"
+)
 
 // definitionNatives covers the binding / function-definition words:
 // def, undef, var, fn, call, dblcall, args, __pa.
@@ -92,6 +96,16 @@ var definitionNatives = []NativeFunc{
 			Handler:        fnHandler,
 			Returns:        []*Type{TFunction},
 			RunInCheckMode: true,
+		}},
+	},
+	{
+		Name:        "fnsig",
+		ForwardArgs: true,
+		Signatures: []NativeSig{{
+			Args:       []*Type{TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler:    fnsigHandler,
+			Returns:    []*Type{TFnUndef},
 		}},
 	},
 	{
@@ -200,9 +214,66 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			return nil, fmt.Errorf("def %s: value %s does not satisfy predicate type %s",
 				name, body.String(), describeType())
 		}
+		// Rewrap with the predicate's *Type so dispatch keys off
+		// the nominal name. The underlying Data is unchanged —
+		// accessors (AsInteger, AsString, …) read the payload the
+		// same way — but the VType change lets the LCA walk find
+		// behaviors installed via `behave compare/q (fn
+		// [[Positive Positive] …])` etc.
+		//
+		// Only fires when the predicate declares a concrete input
+		// type (e.g. `fn [n:Integer …]`). Predicates with `Any`
+		// input — the historical `fn [x:Any Any […]]` shape — are
+		// pure validation gates: their *Type is parented at
+		// TFnDef and rewrapping would break rendering and
+		// downstream type tests (the value would print as
+		// `Type/Function/Bbd({…})` rather than its underlying
+		// scalar). The PredicateInputType check below mirrors the
+		// InstallType decision so the two paths stay aligned.
+		if typeName != "" && eng.PredicateInputType(constraint) != nil {
+			if def := r.Types.LookupByName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
+				out.VType = def
+			}
+		}
 		InstallDef(r, name, out)
 		r.Check.RecordDef(name, args[0].Pos)
 		return nil, nil
+	}
+
+	// ObjectType constraint (`def x:Person {map}` where Person is
+	// `type Person object {…}`): build a Person-typed ObjectInstance
+	// from the body map via make-style construction. This closes the
+	// "structural for validation, nominal for dispatch" gap for
+	// object types — without this branch the value would have
+	// VType=TMap and Person's registered behaviors would never
+	// dispatch. The result carries VType=Person, satisfies the
+	// `behave compare/q (fn [[Person Person] …])` dispatch path, and
+	// supports `get`/`set` via the ObjectInstance signatures.
+	//
+	// Accepts both a raw Map (built via make) and an already-typed
+	// ObjectInstance (passed through). Other body shapes fall
+	// through to Unify and either succeed or surface a type error.
+	if IsObjectType(constraint) {
+		info, _ := AsObjectType(constraint)
+		if body.VType.Equal(TMap) {
+			result, err := eng.MakeObject(info, body, nil)
+			if err != nil {
+				return nil, fmt.Errorf("def %s: %w", name, err)
+			}
+			InstallDef(r, name, result[0])
+			r.Check.RecordDef(name, args[0].Pos)
+			return nil, nil
+		}
+		if IsObjectInstance(body) {
+			oi, _ := AsObjectInstance(body)
+			// Accept if the instance's nominal type matches the
+			// declared one (covers `def x:Person make Person {…}`).
+			if oi.TypeRef != nil && oi.TypeRef.ID == info.ID {
+				InstallDef(r, name, body)
+				r.Check.RecordDef(name, args[0].Pos)
+				return nil, nil
+			}
+		}
 	}
 	if r.Check.IsActive() && constraint.IsDepScalar() {
 		leaf := DependentLeafFromType(constraint.VType)
@@ -229,6 +300,19 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		}
 		return nil, fmt.Errorf("def %s: value %s does not unify with declared type %s",
 			name, body.String(), describeType())
+	}
+	// FnUndef constraint (`def f:Mapper fn […]`): after Unify
+	// confirms the function shape matches Mapper, rewrap the
+	// VType so dispatch keys off Mapper rather than the generic
+	// TFunction / TFnDef. Behaviors installed via
+	// `behave compare/q (fn [[Mapper Mapper] …])` then dispatch on
+	// f. Same rewrap pattern as predicate types — the payload
+	// shape (FnDefInfo) is unchanged, accessors keep working, just
+	// the dispatch identity flips.
+	if constraint.VType.Equal(TFnUndef) && typeName != "" {
+		if def := r.Types.LookupByName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
+			unified.VType = def
+		}
 	}
 	InstallDef(r, name, unified)
 	r.Check.RecordDef(name, args[0].Pos)
@@ -351,6 +435,39 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	return []Value{NewFunction(fnDef)}, nil
 }
 
+// fnsigHandler — `fnsig [input output …]` produces a function-SHAPE
+// type literal (FnUndef) from input/output sig pairs. The type-only
+// counterpart to `fn` — same grammar, no body. The list length must
+// be a non-zero multiple of 2 (each pair is one signature). The
+// result is an FnUndef value usable as a type constraint, e.g.
+// `def f:fnsig [[Integer] [String]] impl` asserts that `impl` is a
+// function whose signatures cover the shape `Integer → String`.
+//
+// FnUndef is structural: any function value whose registered
+// signatures satisfy every pair in the FnUndef matches. See
+// eng/go/fnsig.go::FnUndefMatchesFnDef.
+func fnsigHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if args[0].Data == nil {
+		return nil, &AqlError{
+			Code:   "fnsig_invalid_spec",
+			Detail: "fnsig: argument must be a concrete list",
+		}
+	}
+	_lst, _ := AsList(args[0])
+	spec := _lst.Slice()
+	if len(spec) == 0 || len(spec)%2 != 0 {
+		return nil, &AqlError{
+			Code:   "fnsig_invalid_spec",
+			Detail: "fnsig: list length must be a non-zero multiple of 2 (input output pairs); use `fn` for the with-body form",
+		}
+	}
+	info, err := parseFnUndefSpec(r, spec)
+	if err != nil {
+		return nil, err
+	}
+	return []Value{NewFnUndef(info)}, nil
+}
+
 // ---- call ----
 
 func callHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -404,7 +521,10 @@ func dblcallHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 // ---- args / __pa ----
 
 func argsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	top, ok := r.Args.Top()
+	top, ok, err := r.Args.Top()
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, fmt.Errorf("args: not inside a function")
 	}
@@ -412,6 +532,8 @@ func argsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value
 }
 
 func popArgsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	r.Args.Pop()
+	if _, err := r.Args.Pop(); err != nil {
+		return nil, err
+	}
 	return nil, nil
 }
