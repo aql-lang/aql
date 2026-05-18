@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
 )
 
 func TestBasic(t *testing.T) {
@@ -48,11 +47,11 @@ func TestBasic(t *testing.T) {
 			}
 
 			// Run through the engine with a fresh registry.
-			reg, err := engine.DefaultRegistry(native.Register)
+			reg, err := native.DefaultRegistry()
 			if err != nil {
 				t.Fatal(err)
 			}
-			eng := engine.NewTop(reg)
+			eng := native.NewTop(reg)
 			result, err := eng.Run(values)
 
 			// Expected error: "ERROR:substring"
@@ -94,7 +93,7 @@ func TestBasic(t *testing.T) {
 
 // formatStack converts a result stack to a string for comparison.
 // Each value uses Value.String(), joined by spaces.
-func formatStack(values []engine.Value) string {
+func formatStack(values []native.Value) string {
 	parts := make([]string, len(values))
 	for i, v := range values {
 		parts[i] = v.String()

@@ -125,7 +125,7 @@ math/boolean/stack/comparison sigs, and FullStack sigs are excluded.
 | pop / shift | [List] | OK |
 | istype | [Any] | OK |
 
-### `lang/go/internal/nativemod/matrix` (matrix module — Go-implemented words)
+### `lang/go/modules/matrix` (matrix module — Go-implemented words)
 
 | Word | Sig(s) | Verdict |
 |---|---|---|
@@ -150,7 +150,7 @@ FnDef-args [mat,1,0] → CallAQL pushes them as tokens [mat,1,0] →
 NativeFunc sig [Int,Int,Matrix] matches stack [mat,1,0]
 (top=0→sig[0], mid=1→sig[1], deep=mat→sig[2]).
 
-### `lang/go/internal/nativemod/time` (time module)
+### `lang/go/modules/time` (time module)
 
 | Word | Sig(s) | Verdict |
 |---|---|---|

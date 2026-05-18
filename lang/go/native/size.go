@@ -1,7 +1,6 @@
 package native
 
 import (
-	"github.com/aql-lang/aql/lang/go/engine"
 	voxgigstruct "github.com/voxgig/struct"
 )
 
@@ -9,8 +8,8 @@ import (
 // natives.go.
 //
 // sizeHandler calls voxgigstruct.Size to get the size of a value.
-func sizeHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+func sizeHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	data := valueToAny(args[0])
 	result := voxgigstruct.Size(data)
-	return []engine.Value{engine.NewInteger(int64(result))}, nil
+	return []Value{NewInteger(int64(result))}, nil
 }

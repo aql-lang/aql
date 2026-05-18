@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
 )
 
 func TestOptionsParams(t *testing.T) {
@@ -45,11 +44,11 @@ func TestOptionsParams(t *testing.T) {
 				t.Fatalf("parse error: %v", err)
 			}
 
-			reg, err := engine.DefaultRegistry(native.Register)
+			reg, err := native.DefaultRegistry()
 			if err != nil {
 				t.Fatal(err)
 			}
-			eng := engine.NewTop(reg)
+			eng := native.NewTop(reg)
 			result, err := eng.Run(values)
 
 			if strings.HasPrefix(expected, "ERROR:") {

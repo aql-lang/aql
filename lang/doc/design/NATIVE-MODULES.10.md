@@ -126,7 +126,7 @@ All trigonometric functions use radians.
 
 ## Implementation
 
-Native modules live in `internal/nativemod/`. Each module:
+Native modules live in `modules/`. Each module:
 
 1. Registers Go-implemented words into an isolated sub-registry
 2. Creates FnDef wrappers for each word (with the sub-registry for
@@ -134,15 +134,15 @@ Native modules live in `internal/nativemod/`. Each module:
 3. Packages them into a `ModuleDesc` with named exports
 4. The import handler installs exports as defs via `installExports`
 
-The resolver (`nativemod.Resolve`) maps module names to their builder
+The resolver (`modules.Resolve`) maps module names to their builder
 functions and is wired into the registry via `Registry.NativeModResolver`
 in `aql.go`.
 
 ## Adding a New Native Module
 
-1. Create a new Go file in `internal/nativemod/` (e.g. `strings.go`)
+1. Create a new Go file in `modules/` (e.g. `strings.go`)
 2. Implement a `BuildStringsModule(parent *engine.Registry) (engine.ModuleDesc, error)`
-3. Add the module to the `modules` map in `nativemod.go`
+3. Add the module to the `modules` map in `modules.go`
 4. Add help entries in `internal/engine/help/`
-5. Add tests in `internal/nativemod/`
+5. Add tests in `modules/`
 6. Document in this file

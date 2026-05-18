@@ -5,21 +5,20 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
 )
 
-func runAQLText(t *testing.T, r *engine.Registry, src string) ([]engine.Value, error) {
+func runAQLText(t *testing.T, r *native.Registry, src string) ([]native.Value, error) {
 	t.Helper()
 	values, err := parser.Parse(src)
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	eng := engine.NewTop(r)
+	eng := native.NewTop(r)
 	return eng.Run(values)
 }
 
 func TestDotVerify(t *testing.T) {
-	r, err := engine.DefaultRegistry(native.Register)
+	r, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +30,7 @@ def m 'y'`
 	if err != nil {
 		t.Fatalf("parse setup: %v", err)
 	}
-	eng := engine.NewTop(r)
+	eng := native.NewTop(r)
 	if _, err := eng.Run(values); err != nil {
 		t.Fatalf("run setup: %v", err)
 	}

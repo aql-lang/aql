@@ -5,29 +5,28 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
-	"github.com/aql-lang/aql/lang/go/internal/nativemod"
+	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/aql-lang/aql/lang/go/modules"
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
-func runNativeSteps(t *testing.T, files map[string]string, steps []string) ([]engine.Value, error) {
+func runNativeSteps(t *testing.T, files map[string]string, steps []string) ([]native.Value, error) {
 	t.Helper()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	for path, content := range files {
 		mem.Files[path] = []byte(content)
 	}
 
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	engine.SetHostFileOps(reg, mem)
+	native.SetHostFileOps(reg, mem)
 	native.Register(reg)
-	nativemod.InstallMathExports(reg)
+	modules.InstallMathExports(reg)
 
-	eng := engine.NewTop(reg)
-	var result []engine.Value
+	eng := native.NewTop(reg)
+	var result []native.Value
 	for _, step := range steps {
 		vals, err := parser.Parse(step)
 		if err != nil {
@@ -51,7 +50,7 @@ func TestDefListAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	rows := _lst.Slice()
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
@@ -68,16 +67,16 @@ func TestDefListFilterPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 filtered rows, got %d", len(rows))
 	}
 	names := make([]string, len(rows))
 	for i, row := range rows {
-		m, _ := engine.AsMap(row)
+		m, _ := native.AsMap(row)
 		v, _ := m.Get("name")
-		ns, _ := engine.AsString(v)
+		ns, _ := native.AsString(v)
 		names[i] = ns
 	}
 	got := strings.Join(names, ",")
@@ -95,16 +94,16 @@ func TestDefListFilterParens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 filtered rows, got %d", len(rows))
 	}
 	names := make([]string, len(rows))
 	for i, row := range rows {
-		m, _ := engine.AsMap(row)
+		m, _ := native.AsMap(row)
 		v, _ := m.Get("name")
-		ns, _ := engine.AsString(v)
+		ns, _ := native.AsString(v)
 		names[i] = ns
 	}
 	got := strings.Join(names, ",")
@@ -123,7 +122,7 @@ func TestDefListFilterParensDef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 filtered rows, got %d", len(rows))
@@ -140,16 +139,16 @@ func TestDefParensListFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 filtered rows, got %d", len(rows))
 	}
 	names := make([]string, len(rows))
 	for i, row := range rows {
-		m, _ := engine.AsMap(row)
+		m, _ := native.AsMap(row)
 		v, _ := m.Get("name")
-		ns, _ := engine.AsString(v)
+		ns, _ := native.AsString(v)
 		names[i] = ns
 	}
 	got := strings.Join(names, ",")
@@ -168,7 +167,7 @@ func TestDefParensListAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	rows := _lst.Slice()
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
@@ -185,14 +184,14 @@ func TestDefParensCreate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	rows := _lst.Slice()
 	if len(rows) != 4 {
 		t.Fatalf("expected 4 rows, got %d", len(rows))
 	}
-	m, _ := engine.AsMap(rows[3])
+	m, _ := native.AsMap(rows[3])
 	v, _ := m.Get("name")
-	vs1, _ := engine.AsString(v)
+	vs1, _ := native.AsString(v)
 	if vs1 != "Dave" {
 		t.Errorf("expected Dave, got %s", vs1)
 	}
@@ -211,9 +210,9 @@ func TestDefParensLoad(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	v, _ := m.Get("name")
-	vs2, _ := engine.AsString(v)
+	vs2, _ := native.AsString(v)
 	if vs2 != "Bob" {
 		t.Errorf("expected Bob, got %s", vs2)
 	}
@@ -229,19 +228,19 @@ func TestDefParensUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
-	m, _ := engine.AsMap(rows[0])
+	m, _ := native.AsMap(rows[0])
 	city, _ := m.Get("city")
-	cityS, _ := engine.AsString(city)
+	cityS, _ := native.AsString(city)
 	if cityS != "Berlin" {
 		t.Errorf("expected Berlin, got %s", cityS)
 	}
 	name, _ := m.Get("name")
-	nameS, _ := engine.AsString(name)
+	nameS, _ := native.AsString(name)
 	if nameS != "Alice" {
 		t.Errorf("expected Alice preserved, got %s", nameS)
 	}
@@ -257,15 +256,15 @@ func TestDefParensRemove(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
 	for _, row := range rows {
-		m, _ := engine.AsMap(row)
+		m, _ := native.AsMap(row)
 		v, _ := m.Get("name")
-		vs3, _ := engine.AsString(v)
+		vs3, _ := native.AsString(v)
 		if vs3 == "Bob" {
 			t.Error("Bob should have been removed")
 		}

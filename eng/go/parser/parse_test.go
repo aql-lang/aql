@@ -2039,7 +2039,6 @@ func TestParseBacktickOnlyLiteral(t *testing.T) {
 	assertParse(t, "`price: $100`", []eng.Value{eng.NewString("price: $100")})
 }
 
-
 // --- Words starting with '-' (CLI flag style) ---
 //
 // `-h`, `--help`, `--limit` need to parse as Words so a CLI built

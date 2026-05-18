@@ -5,24 +5,23 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
 // runNativeWithFiles creates a registry with native functions and in-memory files.
-func runNativeWithFiles(t *testing.T, files map[string]string, expr string) ([]engine.Value, error) {
+func runNativeWithFiles(t *testing.T, files map[string]string, expr string) ([]native.Value, error) {
 	t.Helper()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	for path, content := range files {
 		mem.Files[path] = []byte(content)
 	}
 
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	engine.SetHostFileOps(reg, mem)
+	native.SetHostFileOps(reg, mem)
 	native.Register(reg)
 
 	values, err := parser.Parse(expr)
@@ -30,7 +29,7 @@ func runNativeWithFiles(t *testing.T, files map[string]string, expr string) ([]e
 		return nil, err
 	}
 
-	eng := engine.NewTop(reg)
+	eng := native.NewTop(reg)
 	return eng.Run(values)
 }
 
@@ -49,7 +48,7 @@ func TestListAllFromCSV(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
 
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	rows := _lst.Slice()
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
@@ -57,9 +56,9 @@ func TestListAllFromCSV(t *testing.T) {
 
 	names := make(map[string]bool)
 	for _, row := range rows {
-		m, _ := engine.AsMap(row)
+		m, _ := native.AsMap(row)
 		v, _ := m.Get("name")
-		vs, _ := engine.AsString(v)
+		vs, _ := native.AsString(v)
 		names[vs] = true
 	}
 	for _, want := range []string{"Alice", "Bob", "Charlie"} {
@@ -84,16 +83,16 @@ func TestListFilterFromCSV(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
 
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 matching rows, got %d", len(rows))
 	}
 
 	for _, row := range rows {
-		m, _ := engine.AsMap(row)
+		m, _ := native.AsMap(row)
 		cityVal, _ := m.Get("city")
-		cityStr, _ := engine.AsString(cityVal)
+		cityStr, _ := native.AsString(cityVal)
 		if cityStr != "London" {
 			t.Errorf("expected city London, got %s", cityStr)
 		}
@@ -112,7 +111,7 @@ func TestListFilterNoMatches(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	rows := _lst.Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(rows))
@@ -131,7 +130,7 @@ func TestListFilterMultipleFields(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
@@ -139,9 +138,9 @@ func TestListFilterMultipleFields(t *testing.T) {
 
 	names := make([]string, len(rows))
 	for i, row := range rows {
-		m, _ := engine.AsMap(row)
+		m, _ := native.AsMap(row)
 		v, _ := m.Get("name")
-		vs, _ := engine.AsString(v)
+		vs, _ := native.AsString(v)
 		names[i] = vs
 	}
 	got := strings.Join(names, ",")

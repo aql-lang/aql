@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
@@ -23,22 +22,22 @@ func TestNativeFnInFnBody(t *testing.T) {
 		name  string
 		def   string // fn definition step
 		call  string // invocation step
-		check func(t *testing.T, result []engine.Value)
+		check func(t *testing.T, result []native.Value)
 	}{
 		{
 			name: "merge",
 			def:  `def f fn [[m:Map] [Map] [m merge {x:1}]]`,
 			call: `{a:1} f`,
-			check: func(t *testing.T, result []engine.Value) {
+			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				m, _ := engine.AsMap(result[0])
+				m, _ := native.AsMap(result[0])
 				a, _ := m.Get("a")
 				x, _ := m.Get("x")
-				ai1, _ := engine.AsInteger(a)
-				xi1, _ := engine.AsInteger(x)
+				ai1, _ := native.AsInteger(a)
+				xi1, _ := native.AsInteger(x)
 				if ai1 != 1 {
 					t.Errorf("expected a=1, got %v", a)
 				}
@@ -51,7 +50,7 @@ func TestNativeFnInFnBody(t *testing.T) {
 			name: "clone",
 			def:  `def f fn [[m:Map] [Map] [m clone]]`,
 			call: `{a:1} f`,
-			check: func(t *testing.T, result []engine.Value) {
+			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
 				assertResult(t, result, "{a:1}")
 			},
@@ -60,7 +59,7 @@ func TestNativeFnInFnBody(t *testing.T) {
 			name: "size",
 			def:  `def f fn [[m:Map] [Integer] [m size]]`,
 			call: `{a:1 b:2} f`,
-			check: func(t *testing.T, result []engine.Value) {
+			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
 				assertResult(t, result, "2")
 			},
@@ -69,12 +68,12 @@ func TestNativeFnInFnBody(t *testing.T) {
 			name: "jsonify",
 			def:  `def f fn [[m:Map] [String] [m jsonify]]`,
 			call: `{a:1} f`,
-			check: func(t *testing.T, result []engine.Value) {
+			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				s, _ := engine.AsString(result[0])
+				s, _ := native.AsString(result[0])
 				if !strings.Contains(s, "a") {
 					t.Errorf("expected JSON containing 'a', got %q", s)
 				}
@@ -84,12 +83,12 @@ func TestNativeFnInFnBody(t *testing.T) {
 			name: "items",
 			def:  `def f fn [[m:Map] [List] [m items]]`,
 			call: `{a:1} f`,
-			check: func(t *testing.T, result []engine.Value) {
+			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				_lst, _ := engine.AsList(result[0])
+				_lst, _ := native.AsList(result[0])
 				items := _lst.Slice()
 				if len(items) != 1 {
 					t.Errorf("expected 1 item pair, got %d", len(items))
@@ -100,7 +99,7 @@ func TestNativeFnInFnBody(t *testing.T) {
 			name: "getpath",
 			def:  `def f fn [[m:Map] [Any] [getpath "a" m]]`,
 			call: `{a:42} f`,
-			check: func(t *testing.T, result []engine.Value) {
+			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
 				assertResult(t, result, "42")
 			},
@@ -128,21 +127,21 @@ func TestNativeInExplicitParens(t *testing.T) {
 	cases := []struct {
 		name  string
 		expr  string
-		check func(t *testing.T, result []engine.Value)
+		check func(t *testing.T, result []native.Value)
 	}{
 		{
 			name: "merge",
 			expr: `({a:1} merge {b:2})`,
-			check: func(t *testing.T, result []engine.Value) {
+			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				m, _ := engine.AsMap(result[0])
+				m, _ := native.AsMap(result[0])
 				a, _ := m.Get("a")
 				b, _ := m.Get("b")
-				ai2, _ := engine.AsInteger(a)
-				bi2, _ := engine.AsInteger(b)
+				ai2, _ := native.AsInteger(a)
+				bi2, _ := native.AsInteger(b)
 				if ai2 != 1 {
 					t.Errorf("expected a=1, got %v", a)
 				}
@@ -154,7 +153,7 @@ func TestNativeInExplicitParens(t *testing.T) {
 		{
 			name: "clone",
 			expr: `({a:1} clone)`,
-			check: func(t *testing.T, result []engine.Value) {
+			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
 				assertResult(t, result, "{a:1}")
 			},
@@ -162,7 +161,7 @@ func TestNativeInExplicitParens(t *testing.T) {
 		{
 			name: "size",
 			expr: `({a:1 b:2} size)`,
-			check: func(t *testing.T, result []engine.Value) {
+			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
 				assertResult(t, result, "2")
 			},
@@ -170,12 +169,12 @@ func TestNativeInExplicitParens(t *testing.T) {
 		{
 			name: "jsonify",
 			expr: `({a:1} jsonify)`,
-			check: func(t *testing.T, result []engine.Value) {
+			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				s, _ := engine.AsString(result[0])
+				s, _ := native.AsString(result[0])
 				if !strings.Contains(s, "a") {
 					t.Errorf("expected JSON containing 'a', got %q", s)
 				}
@@ -184,12 +183,12 @@ func TestNativeInExplicitParens(t *testing.T) {
 		{
 			name: "flatten",
 			expr: `([[1],[2,3]] flatten)`,
-			check: func(t *testing.T, result []engine.Value) {
+			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				_lst, _ := engine.AsList(result[0])
+				_lst, _ := native.AsList(result[0])
 				items := _lst.Slice()
 				if len(items) != 3 {
 					t.Errorf("expected 3 elements, got %d", len(items))
@@ -199,7 +198,7 @@ func TestNativeInExplicitParens(t *testing.T) {
 		{
 			name: "join",
 			expr: `(join "-" ["a","b"])`,
-			check: func(t *testing.T, result []engine.Value) {
+			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
 				assertResult(t, result, "'a-b'")
 			},
@@ -351,11 +350,11 @@ func TestTypeLiteralNoPanic(t *testing.T) {
 				return
 			}
 
-			reg, err := engine.DefaultRegistry(native.Register)
+			reg, err := native.DefaultRegistry()
 			if err != nil {
 				t.Fatal(err)
 			}
-			eng := engine.NewTop(reg)
+			eng := native.NewTop(reg)
 			_, _ = eng.Run(values)
 			// Any outcome (success or error) is fine — only panics fail the test.
 		})
@@ -405,13 +404,13 @@ func TestTypeLiteralNoPanicNative(t *testing.T) {
 				return
 			}
 
-			reg, err := engine.DefaultRegistry(native.Register)
+			reg, err := native.DefaultRegistry()
 			if err != nil {
 				t.Fatal(err)
 			}
 			native.Register(reg)
 
-			eng := engine.NewTop(reg)
+			eng := native.NewTop(reg)
 			_, _ = eng.Run(values)
 			// Any outcome (success or error) is fine — only panics fail the test.
 		})
@@ -472,22 +471,22 @@ func TestNativeFnInFnBodyChained(t *testing.T) {
 		name  string
 		def   string
 		call  string
-		check func(t *testing.T, result []engine.Value)
+		check func(t *testing.T, result []native.Value)
 	}{
 		{
 			name: "clone-then-merge",
 			def:  `def f fn [[m:Map] [Map] [m clone merge {extra:1}]]`,
 			call: `{a:1} f`,
-			check: func(t *testing.T, result []engine.Value) {
+			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				m, _ := engine.AsMap(result[0])
+				m, _ := native.AsMap(result[0])
 				a, _ := m.Get("a")
 				e, _ := m.Get("extra")
-				ai3, _ := engine.AsInteger(a)
-				ei3, _ := engine.AsInteger(e)
+				ai3, _ := native.AsInteger(a)
+				ei3, _ := native.AsInteger(e)
 				if ai3 != 1 {
 					t.Errorf("expected a=1, got %v", a)
 				}
@@ -500,7 +499,7 @@ func TestNativeFnInFnBodyChained(t *testing.T) {
 			name: "merge-then-size",
 			def:  `def f fn [[m:Map] [Integer] [(m merge {x:1}) size]]`,
 			call: `{a:1} f`,
-			check: func(t *testing.T, result []engine.Value) {
+			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
 				assertResult(t, result, "2")
 			},
@@ -509,12 +508,12 @@ func TestNativeFnInFnBodyChained(t *testing.T) {
 			name: "merge-then-jsonify",
 			def:  `def f fn [[m:Map] [String] [(m merge {b:2}) jsonify]]`,
 			call: `{a:1} f`,
-			check: func(t *testing.T, result []engine.Value) {
+			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
 				if len(result) != 1 {
 					t.Fatalf("expected 1 result, got %d", len(result))
 				}
-				s, _ := engine.AsString(result[0])
+				s, _ := native.AsString(result[0])
 				if !strings.Contains(s, "a") || !strings.Contains(s, "b") {
 					t.Errorf("expected JSON with 'a' and 'b', got %q", s)
 				}
@@ -578,7 +577,7 @@ func TestNativeFnInFnBodyRepeatedCalls(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	v, ok := m.Get("added")
 	if !ok {
 		t.Fatal("expected 'added' key in result")

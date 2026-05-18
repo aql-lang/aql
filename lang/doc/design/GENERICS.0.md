@@ -359,7 +359,7 @@ is in scope while the constraint is evaluated.
 
 ## 8. Case study: the `aql:decision` module
 
-`internal/nativemod/decision.go` is a DMN-style decision module
+`modules/decision.go` is a DMN-style decision module
 (decision tables and decision trees) implemented in pure AQL. It is
 a good case study because it has three independent shapes of
 `Any`-punt that generics resolve in distinct ways.

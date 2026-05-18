@@ -2,40 +2,38 @@ package native
 
 import (
 	"fmt"
-
-	"github.com/aql-lang/aql/lang/go/engine"
 )
 
 // The "update" word is registered via the consolidated Natives slice in
 // natives.go.
 //
 // updateEntityHandler handles update with an Entity object instance.
-func updateEntityHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+func updateEntityHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	apiMap := entityToAPIMap(args[0])
-	return updateAPIHandler([]engine.Value{engine.NewMap(apiMap)}, ctx, stack, r)
+	return updateAPIHandler([]Value{NewMap(apiMap)}, ctx, stack, r)
 }
 
 // updateEntityOptsHandler handles update with an Entity object instance and a data map.
 // Sig is opts-first: args[0]=data, args[1]=entity.
-func updateEntityOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	_m, _ := engine.AsMap(args[0])
+func updateEntityOptsHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	_m, _ := AsMap(args[0])
 	merged := entityToAPIMapWithOpts(args[1], _m, "data")
-	return updateAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
+	return updateAPIHandler([]Value{NewMap(merged)}, ctx, stack, r)
 }
 
 // updateAPIOptsHandler handles update with {kind:"api",...} and an extra data map.
 // The options map is merged into the data field of the API map.
 // Sig is opts-first: args[0]=data, args[1]=apiMap (pattern-matched).
-func updateAPIOptsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	_m1, _ := engine.AsMap(args[1])
-	_m0, _ := engine.AsMap(args[0])
+func updateAPIOptsHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	_m1, _ := AsMap(args[1])
+	_m0, _ := AsMap(args[0])
 	merged := mergeAPIOptions(_m1, _m0, "data")
-	return updateAPIHandler([]engine.Value{engine.NewMap(merged)}, ctx, stack, r)
+	return updateAPIHandler([]Value{NewMap(merged)}, ctx, stack, r)
 }
 
 // updateAPIHandler handles update with {kind:"api", spec:String, entity:String, data:{...}}.
-func updateAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	apiMap, _ := engine.AsMap(args[0])
+func updateAPIHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	apiMap, _ := AsMap(args[0])
 
 	sdkInst, entityName, err := getSDK(apiMap, "update", r)
 	if err != nil {
@@ -53,52 +51,52 @@ func updateAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []
 		return nil, err
 	}
 
-	return []engine.Value{v}, nil
+	return []Value{v}, nil
 }
 
 // updateRecordHandler handles update on a record type (not a table).
 // Returns an empty table.
-func updateRecordHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	return []engine.Value{engine.NewList([]engine.Value{})}, nil
+func updateRecordHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	return []Value{NewList([]Value{})}, nil
 }
 
 // updateHandler finds a record by its "id" field and merges the provided
 // fields into it. Returns the updated table. The map must contain an "id" field.
-func updateHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	patch, _ := engine.AsMap(args[0])
-	_lst, _ := engine.AsList(args[1])
+func updateHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	patch, _ := AsMap(args[0])
+	_lst, _ := AsList(args[1])
 	rows := _lst.Slice()
 
 	idVal, ok := patch.Get("id")
 	if !ok {
 		return nil, fmt.Errorf("update: record must contain an \"id\" field")
 	}
-	id, err := engine.AsString(idVal)
+	id, err := AsString(idVal)
 	if err != nil {
 		return nil, fmt.Errorf("update: id: %w", err)
 	}
 
 	found := false
-	result := make([]engine.Value, len(rows))
+	result := make([]Value, len(rows))
 	for i, row := range rows {
-		if !row.VType.Matches(engine.TMap) {
+		if !row.VType.Matches(TMap) {
 			result[i] = row
 			continue
 		}
-		rec, _ := engine.AsMap(row)
+		rec, _ := AsMap(row)
 		existing, ok := rec.Get("id")
 		if !ok {
 			result[i] = row
 			continue
 		}
-		existingStr, _ := engine.AsString(existing)
+		existingStr, _ := AsString(existing)
 		if existingStr != id {
 			result[i] = row
 			continue
 		}
 
 		// Merge: copy existing fields, then overlay patch fields.
-		merged := engine.NewOrderedMap()
+		merged := NewOrderedMap()
 		for _, key := range rec.Keys() {
 			v, _ := rec.Get(key)
 			merged.Set(key, v)
@@ -107,13 +105,13 @@ func updateHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 			v, _ := patch.Get(key)
 			merged.Set(key, v)
 		}
-		result[i] = engine.NewMap(merged)
+		result[i] = NewMap(merged)
 		found = true
 	}
 
 	if !found {
-		return nil, fmt.Errorf("update: no record found with id %q", id)
+		return nil, r.AqlError("update_error", fmt.Sprintf("update: no record found with id %q", id), "update")
 	}
 
-	return []engine.Value{engine.NewList(result)}, nil
+	return []Value{NewList(result)}, nil
 }

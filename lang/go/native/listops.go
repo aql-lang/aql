@@ -1,11 +1,5 @@
 package native
 
-import (
-	"fmt"
-
-	"github.com/aql-lang/aql/lang/go/engine"
-)
-
 // The list-mutation words (push/pop/unshift/shift) are registered via the
 // consolidated Natives slice in natives.go.
 //
@@ -13,19 +7,19 @@ import (
 //
 //	push 99 [1,2,3] → [1,2,3,99]
 //	[1,2,3] 99 push → [1,2,3,99]
-func pushHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+func pushHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	newElem := args[0]
-	_lst, _ := engine.AsList(args[1])
+	_lst, _ := AsList(args[1])
 	list := _lst.Slice()
 	if list == nil {
-		return nil, fmt.Errorf("push: expected concrete list")
+		return nil, r.AqlError("push_error", "push: expected concrete list", "push")
 	}
 
-	result := make([]engine.Value, len(list)+1)
+	result := make([]Value, len(list)+1)
 	copy(result, list)
 	result[len(list)] = newElem
 
-	return []engine.Value{engine.NewList(result)}, nil
+	return []Value{NewList(result)}, nil
 }
 
 // pop removes the last element from a list, returning the new list
@@ -33,37 +27,37 @@ func pushHandler(args []engine.Value, ctx map[string]engine.Value, stack []engin
 //
 //	pop [a,b,c] → [a,b] c
 //	[a,b,c] pop → [a,b] c
-func popHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	_lst, _ := engine.AsList(args[0])
+func popHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	_lst, _ := AsList(args[0])
 	list := _lst.Slice()
 	if len(list) == 0 {
-		return nil, fmt.Errorf("pop: cannot pop from empty list")
+		return nil, r.AqlError("pop_error", "pop: cannot pop from empty list", "pop")
 	}
 
-	newList := make([]engine.Value, len(list)-1)
+	newList := make([]Value, len(list)-1)
 	copy(newList, list[:len(list)-1])
 	popped := list[len(list)-1]
 
-	return []engine.Value{engine.NewList(newList), popped}, nil
+	return []Value{NewList(newList), popped}, nil
 }
 
 // unshift prepends a single element to the beginning of a list, returning a new list.
 //
 //	unshift 99 [1,2,3] → [99,1,2,3]
 //	[1,2,3] 99 unshift → [99,1,2,3]
-func unshiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+func unshiftHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	newElem := args[0]
-	_lst, _ := engine.AsList(args[1])
+	_lst, _ := AsList(args[1])
 	list := _lst.Slice()
 	if list == nil {
-		return nil, fmt.Errorf("unshift: expected concrete list")
+		return nil, r.AqlError("unshift_error", "unshift: expected concrete list", "unshift")
 	}
 
-	result := make([]engine.Value, len(list)+1)
+	result := make([]Value, len(list)+1)
 	result[0] = newElem
 	copy(result[1:], list)
 
-	return []engine.Value{engine.NewList(result)}, nil
+	return []Value{NewList(result)}, nil
 }
 
 // shift removes the first element from a list, returning the new list
@@ -71,16 +65,16 @@ func unshiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 //
 //	shift [a,b,c] → [b,c] a
 //	[a,b,c] shift → [b,c] a
-func shiftHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	_lst, _ := engine.AsList(args[0])
+func shiftHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	_lst, _ := AsList(args[0])
 	list := _lst.Slice()
 	if len(list) == 0 {
-		return nil, fmt.Errorf("shift: cannot shift from empty list")
+		return nil, r.AqlError("shift_error", "shift: cannot shift from empty list", "shift")
 	}
 
 	shifted := list[0]
-	newList := make([]engine.Value, len(list)-1)
+	newList := make([]Value, len(list)-1)
 	copy(newList, list[1:])
 
-	return []engine.Value{engine.NewList(newList), shifted}, nil
+	return []Value{NewList(newList), shifted}, nil
 }

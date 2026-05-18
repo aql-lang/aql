@@ -10,8 +10,8 @@ import (
 	"strings"
 	"syscall/js"
 
-	"github.com/aql-lang/aql/lang/go/formatter"
 	"github.com/aql-lang/aql/lang/go"
+	"github.com/aql-lang/aql/lang/go/formatter"
 )
 
 func main() {

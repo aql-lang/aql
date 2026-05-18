@@ -59,7 +59,7 @@ Because the **handler is the algorithm** and the **registration
 is the language design**. Lang and calc both want a `lt` word
 that compares two values, but they might want different
 signatures or different dispatch boundaries. Lang's `lt` in
-`lang/go/engine/native_compare.go` registers two overloads — one
+`lang/go/native/native_compare.go` registers two overloads — one
 that builds a DepScalar refinement (`Integer lt 10`), another
 that does ordinary comparison. A host that didn't want the
 DepScalar overload would register only the second.
@@ -94,7 +94,7 @@ like: `add` forward-collects 2 then 3, the handler receives
 When you register with `ForwardArgs: false`, `BarrierPos` stays
 at 0 — every position comes from the stack, top down. Forth-style
 stack ops like calc's `dup` (in the engspec test fixtures and
-lang/go/engine/native_stack.go) work this way: the dispatcher
+lang/go/native/native_stack.go) work this way: the dispatcher
 doesn't even look at what's after the word.
 
 The unified rule means **any non-trivial layout works**. For a

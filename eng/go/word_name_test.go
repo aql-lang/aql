@@ -58,14 +58,14 @@ func TestValidateWordNameRejects(t *testing.T) {
 		{"-", "only hyphens"},
 		{"--", "only hyphens"},
 		{"---", "only hyphens"},
-		{"foo bar", "illegal"},  // space mid-name
-		{"foo!bar", "illegal"},  // ! mid-name
-		{"foo*bar", "illegal"},  // * mid-name
-		{"foo+bar", "illegal"},  // + mid-name
-		{"foo.bar", "illegal"},  // . mid-name
-		{"fooBar", "illegal"},   // uppercase mid-name
-		{"foo$", "illegal"},     // $ mid-name
-		{"foo/", "illegal"},     // / mid-name
+		{"foo bar", "illegal"}, // space mid-name
+		{"foo!bar", "illegal"}, // ! mid-name
+		{"foo*bar", "illegal"}, // * mid-name
+		{"foo+bar", "illegal"}, // + mid-name
+		{"foo.bar", "illegal"}, // . mid-name
+		{"fooBar", "illegal"},  // uppercase mid-name
+		{"foo$", "illegal"},    // $ mid-name
+		{"foo/", "illegal"},    // / mid-name
 	}
 	for _, c := range cases {
 		err := ValidateWordName(c.name)

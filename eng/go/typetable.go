@@ -243,7 +243,7 @@ func (tt *TypeTable) MintType(name string, parent *Type) *Type {
 
 // RegisterExternalBuiltin installs a non-kernel-declared "builtin-
 // class" type from outside the eng package — host modules
-// (lang/go/internal/nativemod/time, lang/go/native/fetch, plugin packages,
+// (lang/go/modules/time, lang/go/native/fetch, plugin packages,
 // etc.) that own a type the kernel doesn't need to know about by
 // name. Conceptually equivalent to a builtinDecls row, but supplied
 // at runtime by the owning module.
@@ -253,14 +253,14 @@ func (tt *TypeTable) MintType(name string, parent *Type) *Type {
 // plugin loadings. Reserved ranges:
 //
 //	  100-999    eng-internal future-builtins
-//	 1000-1999   lang/go/internal/nativemod/time   (Date, DateTime, Instant, …)
-//	 2000-2999   lang/go/internal/nativemod/matrix (Matrix)
+//	 1000-1999   lang/go/modules/time   (Date, DateTime, Instant, …)
+//	 2000-2999   lang/go/modules/matrix (Matrix)
 //	 3000-3999   lang/go/native/fetch              (Fetch, Request, Response)
 //	 4000-4999   lang/go/engine (Timeout, Interval)
 //	 5000-9999   reserved for future kernel use
 //	10000+       host / third-party plugin types
 //
-// Callers register at module init (e.g. nativemod.RegisterTypes(r))
+// Callers register at module init (e.g. modules.RegisterTypes(r))
 // and capture the returned *Type into a package-level variable. The
 // kernel's dispatch path consults the type's Behavior — no special
 // case for "external vs builtin" exists at runtime.
@@ -483,7 +483,7 @@ var builtinDecls = []builtinDecl{
 	{Path: "Scalar/Number", FixedID: 7},
 	{Path: "Scalar/Number/Integer", FixedID: 8},
 	{Path: "Scalar/Number/Decimal", FixedID: 9},
-	// Scalar/Number/Matrix moved to lang/go/internal/nativemod/matrix.go (Step 8).
+	// Scalar/Number/Matrix moved to lang/go/modules/matrix.go (Step 8).
 	{Path: "Scalar/Boolean", FixedID: 10},
 	{Path: "Scalar/Path", FixedID: 47},
 	{Path: "Scalar/Atom", FixedID: 18},

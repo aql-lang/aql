@@ -6,22 +6,21 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
-	"github.com/aql-lang/aql/lang/go/internal/nativemod"
+	"github.com/aql-lang/aql/lang/go/modules"
 )
 
 // runSteps executes a sequence of AQL expressions on a shared engine,
 // returning the result of the last step.
-func runSteps(t *testing.T, steps []string) ([]engine.Value, error) {
+func runSteps(t *testing.T, steps []string) ([]native.Value, error) {
 	t.Helper()
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	nativemod.InstallMathExports(reg)
-	eng := engine.NewTop(reg)
+	modules.InstallMathExports(reg)
+	eng := native.NewTop(reg)
 
-	var result []engine.Value
+	var result []native.Value
 	for _, step := range steps {
 		vals, err := parser.Parse(step)
 		if err != nil {
@@ -36,7 +35,7 @@ func runSteps(t *testing.T, steps []string) ([]engine.Value, error) {
 }
 
 // assertResult checks that the result stack formatted as a string matches want.
-func assertResult(t *testing.T, result []engine.Value, want string) {
+func assertResult(t *testing.T, result []native.Value, want string) {
 	t.Helper()
 	got := formatStack(result)
 	if got != want {
@@ -283,11 +282,11 @@ func TestCurryConvert(t *testing.T) {
 
 func TestCurryNoOuterForwardErrors(t *testing.T) {
 	// Without an outer forward context, insufficient args should error.
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	eng := engine.NewTop(reg)
+	eng := native.NewTop(reg)
 	vals, err := parser.Parse(`add 5`)
 	if err != nil {
 		t.Fatal(err)

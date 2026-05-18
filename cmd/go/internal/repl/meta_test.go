@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/engine"
+	"github.com/aql-lang/aql/lang/go/native"
 )
 
 // --- MetaRegistry unit tests ---
@@ -258,10 +258,10 @@ func TestMetaStackEmpty(t *testing.T) {
 func TestMetaStackWithValues(t *testing.T) {
 	mr := NewMetaRegistry()
 	out := &bytes.Buffer{}
-	stack := []engine.Value{
-		engine.NewInteger(1),
-		engine.NewString("hello"),
-		engine.NewBoolean(true),
+	stack := []native.Value{
+		native.NewInteger(1),
+		native.NewString("hello"),
+		native.NewBoolean(true),
 	}
 	ctx := &MetaContext{Out: out, Stack: stack}
 	_, err := mr.ParseAndRun("/stack", ctx)
@@ -283,11 +283,11 @@ func TestMetaStackWithValues(t *testing.T) {
 func TestMetaStackTopN(t *testing.T) {
 	mr := NewMetaRegistry()
 	out := &bytes.Buffer{}
-	stack := []engine.Value{
-		engine.NewInteger(10),
-		engine.NewInteger(20),
-		engine.NewInteger(30),
-		engine.NewInteger(40),
+	stack := []native.Value{
+		native.NewInteger(10),
+		native.NewInteger(20),
+		native.NewInteger(30),
+		native.NewInteger(40),
 	}
 	ctx := &MetaContext{Out: out, Stack: stack}
 	_, err := mr.ParseAndRun("/stack 2", ctx)
@@ -310,7 +310,7 @@ func TestMetaStackTopN(t *testing.T) {
 func TestMetaStackTopNExceedsDepth(t *testing.T) {
 	mr := NewMetaRegistry()
 	out := &bytes.Buffer{}
-	stack := []engine.Value{engine.NewInteger(1), engine.NewInteger(2)}
+	stack := []native.Value{native.NewInteger(1), native.NewInteger(2)}
 	ctx := &MetaContext{Out: out, Stack: stack}
 	// n > stack depth → show all
 	_, err := mr.ParseAndRun("/stack 99", ctx)
@@ -326,7 +326,7 @@ func TestMetaStackTopNExceedsDepth(t *testing.T) {
 func TestMetaStackTopZero(t *testing.T) {
 	mr := NewMetaRegistry()
 	out := &bytes.Buffer{}
-	stack := []engine.Value{engine.NewInteger(1)}
+	stack := []native.Value{native.NewInteger(1)}
 	ctx := &MetaContext{Out: out, Stack: stack}
 	_, err := mr.ParseAndRun("/stack 0", ctx)
 	if err != nil {
@@ -341,7 +341,7 @@ func TestMetaStackTopZero(t *testing.T) {
 func TestMetaStackNegative(t *testing.T) {
 	mr := NewMetaRegistry()
 	out := &bytes.Buffer{}
-	stack := []engine.Value{engine.NewInteger(1)}
+	stack := []native.Value{native.NewInteger(1)}
 	ctx := &MetaContext{Out: out, Stack: stack}
 	_, err := mr.ParseAndRun("/stack -1", ctx)
 	if err == nil || !strings.Contains(err.Error(), "non-negative") {
@@ -352,7 +352,7 @@ func TestMetaStackNegative(t *testing.T) {
 func TestMetaStackBadArg(t *testing.T) {
 	mr := NewMetaRegistry()
 	out := &bytes.Buffer{}
-	ctx := &MetaContext{Out: out, Stack: []engine.Value{engine.NewInteger(1)}}
+	ctx := &MetaContext{Out: out, Stack: []native.Value{native.NewInteger(1)}}
 	_, err := mr.ParseAndRun("/stack foo", ctx)
 	if err == nil || !strings.Contains(err.Error(), "expected integer") {
 		t.Errorf("expected integer arg error, got: %v", err)

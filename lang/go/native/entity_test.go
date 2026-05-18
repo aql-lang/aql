@@ -2,12 +2,10 @@ package native
 
 import (
 	"testing"
-
-	"github.com/aql-lang/aql/lang/go/engine"
 )
 
 // makeEntityTable creates a table with id, name, city columns for entity tests.
-func makeEntityTable(rows [][]engine.Value) engine.Value {
+func makeEntityTable(rows [][]Value) Value {
 	return makeTable(
 		[]string{"id", "name", "city"},
 		rows,
@@ -15,42 +13,42 @@ func makeEntityTable(rows [][]engine.Value) engine.Value {
 }
 
 func TestCreateHandler(t *testing.T) {
-	table := makeEntityTable([][]engine.Value{
-		{engine.NewString("1"), engine.NewString("Alice"), engine.NewString("London")},
+	table := makeEntityTable([][]Value{
+		{NewString("1"), NewString("Alice"), NewString("London")},
 	})
 
-	rec := engine.NewOrderedMap()
-	rec.Set("id", engine.NewString("2"))
-	rec.Set("name", engine.NewString("Bob"))
-	rec.Set("city", engine.NewString("Paris"))
+	rec := NewOrderedMap()
+	rec.Set("id", NewString("2"))
+	rec.Set("name", NewString("Bob"))
+	rec.Set("city", NewString("Paris"))
 
-	result, err := createHandler([]engine.Value{engine.NewMap(rec), table}, nil, nil, nil)
+	result, err := createHandler([]Value{NewMap(rec), table}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := AsList(result[0])
 	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
-	m, _ := engine.AsMap(rows[1])
+	m, _ := AsMap(rows[1])
 	v, _ := m.Get("name")
-	vs, _ := engine.AsString(v)
+	vs, _ := AsString(v)
 	if vs != "Bob" {
 		t.Errorf("expected Bob, got %s", vs)
 	}
 }
 
 func TestCreateHandlerDuplicateId(t *testing.T) {
-	table := makeEntityTable([][]engine.Value{
-		{engine.NewString("1"), engine.NewString("Alice"), engine.NewString("London")},
+	table := makeEntityTable([][]Value{
+		{NewString("1"), NewString("Alice"), NewString("London")},
 	})
 
-	rec := engine.NewOrderedMap()
-	rec.Set("id", engine.NewString("1"))
-	rec.Set("name", engine.NewString("Bob"))
+	rec := NewOrderedMap()
+	rec.Set("id", NewString("1"))
+	rec.Set("name", NewString("Bob"))
 
-	_, err := createHandler([]engine.Value{engine.NewMap(rec), table}, nil, nil, nil)
+	_, err := createHandler([]Value{NewMap(rec), table}, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for duplicate id")
 	}
@@ -59,104 +57,104 @@ func TestCreateHandlerDuplicateId(t *testing.T) {
 func TestCreateHandlerNoId(t *testing.T) {
 	table := makeEntityTable(nil)
 
-	rec := engine.NewOrderedMap()
-	rec.Set("name", engine.NewString("Bob"))
+	rec := NewOrderedMap()
+	rec.Set("name", NewString("Bob"))
 
-	_, err := createHandler([]engine.Value{engine.NewMap(rec), table}, nil, nil, nil)
+	_, err := createHandler([]Value{NewMap(rec), table}, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for missing id")
 	}
 }
 
 func TestLoadHandler(t *testing.T) {
-	table := makeEntityTable([][]engine.Value{
-		{engine.NewString("1"), engine.NewString("Alice"), engine.NewString("London")},
-		{engine.NewString("2"), engine.NewString("Bob"), engine.NewString("Paris")},
+	table := makeEntityTable([][]Value{
+		{NewString("1"), NewString("Alice"), NewString("London")},
+		{NewString("2"), NewString("Bob"), NewString("Paris")},
 	})
 
-	filter := engine.NewOrderedMap()
-	filter.Set("id", engine.NewString("2"))
+	filter := NewOrderedMap()
+	filter.Set("id", NewString("2"))
 
-	result, err := loadHandler([]engine.Value{engine.NewMap(filter), table}, nil, nil, nil)
+	result, err := loadHandler([]Value{NewMap(filter), table}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m, _ := engine.AsMap(result[0])
+	m, _ := AsMap(result[0])
 	v, _ := m.Get("name")
-	vs, _ := engine.AsString(v)
+	vs, _ := AsString(v)
 	if vs != "Bob" {
 		t.Errorf("expected Bob, got %s", vs)
 	}
 }
 
 func TestLoadHandlerNotFound(t *testing.T) {
-	table := makeEntityTable([][]engine.Value{
-		{engine.NewString("1"), engine.NewString("Alice"), engine.NewString("London")},
+	table := makeEntityTable([][]Value{
+		{NewString("1"), NewString("Alice"), NewString("London")},
 	})
 
-	filter := engine.NewOrderedMap()
-	filter.Set("id", engine.NewString("99"))
+	filter := NewOrderedMap()
+	filter.Set("id", NewString("99"))
 
-	_, err := loadHandler([]engine.Value{engine.NewMap(filter), table}, nil, nil, nil)
+	_, err := loadHandler([]Value{NewMap(filter), table}, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for not found")
 	}
 }
 
 func TestUpdateHandler(t *testing.T) {
-	table := makeEntityTable([][]engine.Value{
-		{engine.NewString("1"), engine.NewString("Alice"), engine.NewString("London")},
-		{engine.NewString("2"), engine.NewString("Bob"), engine.NewString("Paris")},
+	table := makeEntityTable([][]Value{
+		{NewString("1"), NewString("Alice"), NewString("London")},
+		{NewString("2"), NewString("Bob"), NewString("Paris")},
 	})
 
-	patch := engine.NewOrderedMap()
-	patch.Set("id", engine.NewString("1"))
-	patch.Set("city", engine.NewString("Berlin"))
+	patch := NewOrderedMap()
+	patch.Set("id", NewString("1"))
+	patch.Set("city", NewString("Berlin"))
 
-	result, err := updateHandler([]engine.Value{engine.NewMap(patch), table}, nil, nil, nil)
+	result, err := updateHandler([]Value{NewMap(patch), table}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := AsList(result[0])
 	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
 	// Check first row was updated.
-	m, _ := engine.AsMap(rows[0])
+	m, _ := AsMap(rows[0])
 	city, _ := m.Get("city")
-	cs, _ := engine.AsString(city)
+	cs, _ := AsString(city)
 	if cs != "Berlin" {
 		t.Errorf("expected Berlin, got %s", cs)
 	}
 	// Name should be preserved.
 	name, _ := m.Get("name")
-	ns, _ := engine.AsString(name)
+	ns, _ := AsString(name)
 	if ns != "Alice" {
 		t.Errorf("expected Alice, got %s", ns)
 	}
 	// Second row should be unchanged.
-	m2, _ := engine.AsMap(rows[1])
+	m2, _ := AsMap(rows[1])
 	city2, _ := m2.Get("city")
-	cs2, _ := engine.AsString(city2)
+	cs2, _ := AsString(city2)
 	if cs2 != "Paris" {
 		t.Errorf("expected Paris, got %s", cs2)
 	}
 }
 
 func TestUpdateHandlerNotFound(t *testing.T) {
-	table := makeEntityTable([][]engine.Value{
-		{engine.NewString("1"), engine.NewString("Alice"), engine.NewString("London")},
+	table := makeEntityTable([][]Value{
+		{NewString("1"), NewString("Alice"), NewString("London")},
 	})
 
-	patch := engine.NewOrderedMap()
-	patch.Set("id", engine.NewString("99"))
-	patch.Set("city", engine.NewString("Berlin"))
+	patch := NewOrderedMap()
+	patch.Set("id", NewString("99"))
+	patch.Set("city", NewString("Berlin"))
 
-	_, err := updateHandler([]engine.Value{engine.NewMap(patch), table}, nil, nil, nil)
+	_, err := updateHandler([]Value{NewMap(patch), table}, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for not found")
 	}
@@ -165,39 +163,39 @@ func TestUpdateHandlerNotFound(t *testing.T) {
 func TestUpdateHandlerNoId(t *testing.T) {
 	table := makeEntityTable(nil)
 
-	patch := engine.NewOrderedMap()
-	patch.Set("city", engine.NewString("Berlin"))
+	patch := NewOrderedMap()
+	patch.Set("city", NewString("Berlin"))
 
-	_, err := updateHandler([]engine.Value{engine.NewMap(patch), table}, nil, nil, nil)
+	_, err := updateHandler([]Value{NewMap(patch), table}, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for missing id")
 	}
 }
 
 func TestRemoveHandler(t *testing.T) {
-	table := makeEntityTable([][]engine.Value{
-		{engine.NewString("1"), engine.NewString("Alice"), engine.NewString("London")},
-		{engine.NewString("2"), engine.NewString("Bob"), engine.NewString("Paris")},
-		{engine.NewString("3"), engine.NewString("Carol"), engine.NewString("Berlin")},
+	table := makeEntityTable([][]Value{
+		{NewString("1"), NewString("Alice"), NewString("London")},
+		{NewString("2"), NewString("Bob"), NewString("Paris")},
+		{NewString("3"), NewString("Carol"), NewString("Berlin")},
 	})
 
-	filter := engine.NewOrderedMap()
-	filter.Set("id", engine.NewString("2"))
+	filter := NewOrderedMap()
+	filter.Set("id", NewString("2"))
 
-	result, err := removeHandler([]engine.Value{engine.NewMap(filter), table}, nil, nil, nil)
+	result, err := removeHandler([]Value{NewMap(filter), table}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := AsList(result[0])
 	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
 	// Verify Bob is gone.
 	for _, row := range rows {
-		m, _ := engine.AsMap(row)
+		m, _ := AsMap(row)
 		v, _ := m.Get("name")
-		vs, _ := engine.AsString(v)
+		vs, _ := AsString(v)
 		if vs == "Bob" {
 			t.Error("Bob should have been removed")
 		}
@@ -205,14 +203,14 @@ func TestRemoveHandler(t *testing.T) {
 }
 
 func TestRemoveHandlerNotFound(t *testing.T) {
-	table := makeEntityTable([][]engine.Value{
-		{engine.NewString("1"), engine.NewString("Alice"), engine.NewString("London")},
+	table := makeEntityTable([][]Value{
+		{NewString("1"), NewString("Alice"), NewString("London")},
 	})
 
-	filter := engine.NewOrderedMap()
-	filter.Set("id", engine.NewString("99"))
+	filter := NewOrderedMap()
+	filter.Set("id", NewString("99"))
 
-	_, err := removeHandler([]engine.Value{engine.NewMap(filter), table}, nil, nil, nil)
+	_, err := removeHandler([]Value{NewMap(filter), table}, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for not found")
 	}
@@ -221,10 +219,10 @@ func TestRemoveHandlerNotFound(t *testing.T) {
 func TestRemoveHandlerNoId(t *testing.T) {
 	table := makeEntityTable(nil)
 
-	filter := engine.NewOrderedMap()
-	filter.Set("name", engine.NewString("Alice"))
+	filter := NewOrderedMap()
+	filter.Set("name", NewString("Alice"))
 
-	_, err := removeHandler([]engine.Value{engine.NewMap(filter), table}, nil, nil, nil)
+	_, err := removeHandler([]Value{NewMap(filter), table}, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for missing id")
 	}

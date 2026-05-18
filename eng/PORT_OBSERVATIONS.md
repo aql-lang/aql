@@ -376,7 +376,7 @@ Migration scope:
 
 Open follow-ups (not yet migrated):
 
-- lang/go/internal/nativemod multi-arg sigs (matrix-at, time-add-*) were
+- lang/go/modules multi-arg sigs (matrix-at, time-add-*) were
   declared with their args in domain order (e.g. `(Matrix, Integer,
   Integer)`) and called as `mat row col matrix-at`. Under the new
   rule the `matrix-at` sig declaration has to be reversed to

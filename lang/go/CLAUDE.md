@@ -9,9 +9,13 @@ alongside as `<component>/ts/`. The Go modules are:
 
 - `eng/go/` — the engine kernel + jsonic parser + kernel spec runner
   (`github.com/aql-lang/aql/eng/go`).
-- `lang/go/` — the language layer: `lang.New()` API, native words/modules,
-  the `engine` shim, the production spec suite (this module,
-  `github.com/aql-lang/aql/lang/go`).
+- `lang/go/` — the language layer: `lang.New()` API and the consolidated
+  `native` package (the eng-shim + every built-in word) plus the
+  production spec suite (this module,
+  `github.com/aql-lang/aql/lang/go`). The pre-May-2026 split between
+  `lang/go/engine/` (language-layer primitives + alias shim) and
+  `lang/go/native/` (data-manipulation words) was merged into a single
+  `lang/go/native/` package — see `Package layout` below.
 - `cmd/go/` — the `aql` CLI / REPL
   (`github.com/aql-lang/aql/cmd/go`).
 - `calc/go/` — a small calculator built directly on `eng` (learning example,
@@ -26,6 +30,38 @@ alongside as `<component>/ts/`. The Go modules are:
 
 Language-agnostic content stays at the top of each component:
 `eng/spec/`, `lang/spec/`, `lang/doc/`, `calc/doc/`.
+
+## Package layout
+
+`lang/go/` contains:
+
+- `aql.go`, `parse.go` — the public `lang` package (entry points
+  `lang.New()`, `(*AQL).Run`, `(*AQL).Check`, `(*AQL).Register`,
+  re-exports of `Type`/`Value`/`Signature` for handler authors).
+- `native/` — every built-in word and the kernel-shim aliases.
+  Sub-files:
+  - `aliases.go` — re-exports the eng kernel's exported types/funcs
+    as `native.Foo` so the rest of the lang code can stay
+    eng-agnostic.
+  - `register.go`, `setup.go` — `Register`/`DefaultRegistry` entry
+    points.
+  - `native_*.go` — language-layer primitives (math, boolean,
+    string, stack, control, def, type, accessor, …). Each file
+    exposes a `xxxNatives []NativeFunc` slice that `Register`
+    iterates.
+  - `natives.go` and the per-feature files (`clone.go`, `fetch.go`,
+    `filter.go`, …) — data-manipulation words historically owned
+    by the `native` sub-package and merged into this consolidated
+    package in May 2026.
+  - `format.go`, `query.go`, `sqlite.go`, `fileio.go`,
+    `conditional.go`, `forloop.go` — feature-specific helpers.
+  - `help/` — dynamic help-system implementation (sub-package).
+- `formatter/` — code pretty-printer (no engine deps).
+- `capabilities/` — file I/O abstraction (`FileOps` interface
+  + OS-backed and in-memory implementations).
+- `modules/` — loadable modules (`aql:math`, `aql:time`,
+  `aql:matrix`, `aql:decision`, `aql:solardemo`).
+- `test/` — integration tests and TSV spec runners.
 
 ## Build & Test
 
@@ -283,7 +319,7 @@ The `Registry` holds two per-name stacks for user bindings:
 Both fields are **unexported and accessed exclusively through the
 helper API in `util.go`**. Do not add `r.defStacks` or `r.types`
 indexing to new code — direct access is a compile error in external
-packages and will be rejected in code review for `package engine`
+packages and will be rejected in code review for `package native`
 code as well.
 
 **Read helpers**:
@@ -322,7 +358,8 @@ overlays) only need to update the helpers.
 ## Helper API discipline
 
 The engine consolidates several distributed implicit contracts behind
-helper APIs in `engine/util.go`. Use the helpers rather than
+helper APIs in `eng/util.go` (re-exported through `native/aliases.go`).
+Use the helpers rather than
 the underlying state. Adding direct field access regresses the
 consolidation and will be flagged in code review.
 
@@ -424,9 +461,21 @@ to the corresponding Atom position. Without `/q`, callers will see an
 **Panics must never occur in this codebase.** All code must be defensive
 against unexpected input. Return errors instead of panicking — user
 errors must be reported as error return values that are printed to the
-user, never as panics. This is a hard rule — no exceptions (the only
-permitted panic is `mustType()` in `types.go` which runs at init time
-on hardcoded type paths).
+user, never as panics. This is a hard rule.
+
+The only permitted panics are at **init time**, on hardcoded type-registration
+paths — they signal a build-time programmer error (FixedID collision or
+malformed type path), not a runtime condition. Each such call site carries
+a `// lint:allow-panic` comment. The current set:
+
+- `eng/types.go::mustType` — eng's hardcoded built-in types.
+- `native/native_misc.go::registerTimerType` — TTimeout, TInterval.
+- `native/native_temporal.go::registerTemporalType` — TDate, TDateTime, …
+- `native/fetch.go::registerFetchType` — TFetchFunction, TFetchRequest, …
+- `modules/matrix.go::registerMatrixType` — TMatrix.
+
+Do not add new init-time panics without also annotating them
+`// lint:allow-panic` and listing them here.
 
 Key patterns to follow:
 

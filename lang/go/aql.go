@@ -4,26 +4,25 @@ import (
 	"io"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
-	"github.com/aql-lang/aql/lang/go/internal/nativemod"
+	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/aql-lang/aql/lang/go/modules"
 	"github.com/aql-lang/aql/lang/go/native"
 
 	udk "voxgiguniversalsdk"
 )
 
 // FileOps is the interface for file system operations used by read/write words.
-type FileOps = fileops.FileOps
+type FileOps = capabilities.FileOps
 
 // Format handles encoding and decoding file content for a specific format.
-type Format = engine.Format
+type Format = native.Format
 
 // Type represents an AQL type such as "string", "number/integer", or "any".
 // Use NewType to create types from slash-separated paths.
-type Type = engine.Type
+type Type = native.Type
 
 // Value is a typed entry on the AQL stack.
-type Value = engine.Value
+type Value = native.Value
 
 // Signature describes one way a function can be called.
 // Args lists the types the word needs, ordered deepest-first (Args[0] = deepest
@@ -32,52 +31,52 @@ type Value = engine.Value
 // Handler receives the matched args, the current context map, the resolved
 // stack (only for FullStack signatures), and the registry. Most handlers
 // only use the first parameter and ignore the rest with _.
-type Signature = engine.Signature
+type Signature = native.Signature
 
 // Well-known AQL types for use in Signature definitions.
 var (
-	TAny            = engine.TAny
-	TScalar         = engine.TScalar
-	TString         = engine.TString
-	TNumber         = engine.TNumber
-	TInteger        = engine.TInteger
-	TDecimal        = engine.TDecimal
-	TBoolean        = engine.TBoolean
-	TNode           = engine.TNode
-	TAtom           = engine.TAtom
-	TList           = engine.TList
-	TMap            = engine.TMap
-	TTable          = engine.TTable
-	TRecord         = engine.TRecord
-	TResource       = engine.TResource
-	TResourceEntity = engine.TResourceEntity
+	TAny            = native.TAny
+	TScalar         = native.TScalar
+	TString         = native.TString
+	TNumber         = native.TNumber
+	TInteger        = native.TInteger
+	TDecimal        = native.TDecimal
+	TBoolean        = native.TBoolean
+	TNode           = native.TNode
+	TAtom           = native.TAtom
+	TList           = native.TList
+	TMap            = native.TMap
+	TTable          = native.TTable
+	TRecord         = native.TRecord
+	TResource       = native.TResource
+	TResourceEntity = native.TResourceEntity
 )
 
 // NewType creates a *Type from a slash-separated path (e.g. "string/proper",
 // "number/integer"). Use this for custom or hierarchical types.
-var NewType = engine.NewType
+var NewType = native.NewType
 
 // NewString creates a string Value.
-var NewString = engine.NewString
+var NewString = native.NewString
 
 // NewInteger creates a number/integer Value.
-var NewInteger = engine.NewInteger
+var NewInteger = native.NewInteger
 
 // NewBoolean creates a boolean Value.
-var NewBoolean = engine.NewBoolean
+var NewBoolean = native.NewBoolean
 
 // NewList creates a list Value from a slice of Values.
-var NewList = engine.NewList
+var NewList = native.NewList
 
 // NewMap creates a map Value from an OrderedMap.
-var NewMap = engine.NewMap
+var NewMap = native.NewMap
 
 // NewAtom creates an atom Value from a bare name.
-var NewAtom = engine.NewAtom
+var NewAtom = native.NewAtom
 
 // NewMemFileOps creates an in-memory file system for testing.
-func NewMemFileOps() *fileops.MemFileOps {
-	return fileops.NewMem()
+func NewMemFileOps() *capabilities.MemFileOps {
+	return capabilities.NewMem()
 }
 
 // Options configures an AQL instance.
@@ -92,8 +91,13 @@ type Options struct {
 // AQL is an independent AQL execution instance.
 // Each instance has its own state (set/get storage is isolated).
 // Create multiple instances with New() for independent execution contexts.
+//
+// AQL is not safe for concurrent use. (*AQL).Run and (*AQL).Check both
+// mutate the underlying Registry (source pointer, def/type stacks, check
+// state) and must not be called from multiple goroutines simultaneously
+// on the same instance. Use one instance per goroutine for parallel work.
 type AQL struct {
-	registry *engine.Registry
+	registry *native.Registry
 	options  Options
 	manager  *udk.UniversalManager
 }
@@ -107,15 +111,15 @@ func New(opts ...Options) (*AQL, error) {
 	}
 
 	if o.Seed != 0 {
-		engine.SetIDSeed(o.Seed)
+		native.SetIDSeed(o.Seed)
 	}
 
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		return nil, err
 	}
 	reg.SetParseFunc(parser.Parse)
-	reg.Modules.Resolver = nativemod.Resolve
+	reg.Modules.Resolver = modules.Resolve
 
 	um := udk.NewUniversalManager(map[string]any{
 		"registry": o.Registry,
@@ -124,7 +128,7 @@ func New(opts ...Options) (*AQL, error) {
 	reg.Manager = um
 
 	// Enable dynamic help generation for functions registered after this point.
-	engine.EnableDynamicHelp(reg)
+	native.EnableDynamicHelp(reg)
 	reg.MarkReady()
 
 	return &AQL{registry: reg, options: o, manager: um}, nil
@@ -153,7 +157,7 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 	a.registry.Source = src
 	defer a.registry.Check.Begin()()
 
-	eng := engine.NewTop(a.registry)
+	eng := native.NewTop(a.registry)
 	eng.SetSource(src)
 	result, err := eng.Run(values)
 	// Emit unused-def warnings after all execution has completed
@@ -176,7 +180,7 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 	var summary CheckSummary
 	for i := range diags {
 		if diags[i].Row == 0 && diags[i].Word != "" {
-			diags[i].Row, diags[i].Col = engine.FindWordInSource(src, diags[i].Word)
+			diags[i].Row, diags[i].Col = native.FindWordInSource(src, diags[i].Word)
 		}
 		switch diags[i].Severity {
 		case SeverityError:
@@ -192,7 +196,7 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 
 // SetFileOps replaces the file operations implementation used by read/write.
 func (a *AQL) SetFileOps(ops FileOps) {
-	engine.SetHostFileOps(a.registry, ops)
+	native.SetHostFileOps(a.registry, ops)
 }
 
 // SetOutput replaces the writer used by print, help, and other output words.
@@ -203,10 +207,10 @@ func (a *AQL) SetOutput(w io.Writer) {
 // RegisterFormat adds or replaces a format in the format registry.
 // Formats are used by read/write words via the {fmt:"name"} option.
 func (a *AQL) RegisterFormat(name string, f Format) {
-	formats := engine.HostFormats(a.registry)
+	formats := native.HostFormats(a.registry)
 	if formats == nil {
-		formats = make(map[string]engine.Format)
-		engine.SetHostFormats(a.registry, formats)
+		formats = make(map[string]native.Format)
+		native.SetHostFormats(a.registry, formats)
 	}
 	formats[name] = f
 }
@@ -221,7 +225,7 @@ func (a *AQL) RegisterFormat(name string, f Format) {
 //
 //	a.Register("double", lang.Signature{
 //	    Args: []lang.Type{lang.TInteger},
-//	    Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
+//	    Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
 //	        n := args[0].AsConcreteInteger()
 //	        return []lang.Value{lang.NewInteger(n * 2)}, nil
 //	    },
@@ -238,7 +242,7 @@ func (a *AQL) Register(name string, sigs ...Signature) {
 //
 //	a.RegisterStackOnly("neg", lang.Signature{
 //	    Args: []lang.Type{lang.TInteger},
-//	    Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
+//	    Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
 //	        n := args[0].AsConcreteInteger()
 //	        return []lang.Value{lang.NewInteger(-n)}, nil
 //	    },
@@ -269,7 +273,7 @@ func (a *AQL) Run(src string) ([]any, error) {
 	}
 
 	a.registry.Source = src
-	eng := engine.NewTop(a.registry)
+	eng := native.NewTop(a.registry)
 	eng.SetSource(src)
 	result, err := eng.Run(values)
 	if err != nil {
@@ -279,11 +283,11 @@ func (a *AQL) Run(src string) ([]any, error) {
 	out := make([]any, len(result))
 	for i, v := range result {
 		switch {
-		case v.VType.Matches(engine.TInteger):
-			n, _ := engine.AsInteger(v)
+		case v.VType.Matches(native.TInteger):
+			n, _ := native.AsInteger(v)
 			out[i] = n
-		case v.VType.Matches(engine.TString):
-			s, _ := engine.AsString(v)
+		case v.VType.Matches(native.TString):
+			s, _ := native.AsString(v)
 			out[i] = s
 		default:
 			out[i] = v.String()
@@ -316,14 +320,14 @@ type CheckSummary struct {
 }
 
 // CheckSeverity classifies a diagnostic.
-type CheckSeverity = engine.CheckSeverity
+type CheckSeverity = native.CheckSeverity
 
 // Re-exported severity constants.
 const (
-	SeverityError   = engine.SeverityError
-	SeverityWarning = engine.SeverityWarning
-	SeverityInfo    = engine.SeverityInfo
+	SeverityError   = native.SeverityError
+	SeverityWarning = native.SeverityWarning
+	SeverityInfo    = native.SeverityInfo
 )
 
 // CheckDiagnostic is a single finding from the static checker.
-type CheckDiagnostic = engine.CheckDiagnostic
+type CheckDiagnostic = native.CheckDiagnostic

@@ -3,7 +3,7 @@ package lang
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/engine"
+	"github.com/aql-lang/aql/lang/go/native"
 )
 
 func TestRegisterFormat(t *testing.T) {
@@ -16,7 +16,7 @@ func TestRegisterFormat(t *testing.T) {
 	a.RegisterFormat("bracket", &bracketFormat{})
 
 	// Verify the format was registered by checking the registry directly.
-	if engine.HostFormats(a.registry)["bracket"] == nil {
+	if native.HostFormats(a.registry)["bracket"] == nil {
 		t.Fatal("expected bracket format to be registered")
 	}
 }
@@ -24,10 +24,10 @@ func TestRegisterFormat(t *testing.T) {
 // bracketFormat is a test format.
 type bracketFormat struct{}
 
-func (f *bracketFormat) Decode(content string) ([]engine.Value, error) {
-	return []engine.Value{engine.NewString(content)}, nil
+func (f *bracketFormat) Decode(content string) ([]native.Value, error) {
+	return []native.Value{native.NewString(content)}, nil
 }
 
-func (f *bracketFormat) Encode(v engine.Value) (string, error) {
+func (f *bracketFormat) Encode(v native.Value) (string, error) {
 	return "[" + v.String() + "]", nil
 }
