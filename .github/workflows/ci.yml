@@ -37,25 +37,25 @@ jobs:
       - name: Build CLI
         run: make -C cmd/go build
 
-      - name: Vet
-        run: make -C lang vet
+      - name: Vet (all modules)
+        run: make vet
 
       - name: Lint assertions
         run: make -C lang lint-assertions
 
-      - name: Lint (golangci-lint)
-        run: make -C lang lint
+      - name: Lint (golangci-lint, all modules)
+        run: make lint
 
-      - name: Test
-        run: make -C lang test
+      - name: Test (all modules)
+        run: make test
 
       - name: Build WASM
-        run: make -C cmd/go wasm
+        run: make -C wpg wasm
 
       # Advisory: govulncheck currently flags Go standard-library vulns
       # that are fixed in newer 1.24.x patch releases — see
       # STATIC_ANALYSIS_REPORT.md. Drop continue-on-error once the `go`
       # directive is bumped (or CI installs the latest 1.24.x toolchain).
-      - name: Vulncheck (advisory)
-        run: make -C lang vuln
+      - name: Vulncheck (advisory, all modules)
+        run: make vuln
         continue-on-error: true

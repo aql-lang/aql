@@ -63,18 +63,6 @@ linters:
         linters:
           - errcheck
           - ineffassign
-      # Parked / work-in-progress code carrying dead symbols (the query
-      # builder rework, unit-aware string helpers, the await ordering
-      # field). Tracked in STATIC_ANALYSIS_REPORT.md; re-enable `unused`
-      # for these once the features land or the code is removed.
-      - path: lang/engine/(native_query|query|native_string_helpers|native_temporal_await)\.go
-        linters:
-          - unused
-      # aliases.go is a re-export shim that intentionally mirrors the
-      # whole eng API; some aliases stay until a caller needs them.
-      - path: lang/engine/aliases\.go
-        linters:
-          - unused
 
 formatters:
   enable:

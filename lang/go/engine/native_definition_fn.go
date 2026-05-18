@@ -3,16 +3,15 @@ package engine
 // This file contains the helpers and parsers used by the `fn` word.
 // The fn handler itself lives in native_definition.go.
 
-// parseFnDef, outputSigIsConcreteReturns, isSigTypeValue,
-// outputSigValues, parseFnUndefSpec: re-exported from aqleng via
+// parseFnDef, parseFnUndefSpec: re-exported from aqleng via
 // aliases.go (canonical implementations live in eng/go/fn_def.go).
 
 // parseFnReturns: re-exported from aqleng via aliases.go
 // (canonical implementation lives in eng/go/fn_params.go).
 
-// parseFnParams, resolveSigType, lookupDefType, resolveDefType,
-// resolveTypeName: re-exported from aqleng via aliases.go (canonical
-// implementations live in eng/go/fn_params.go).
+// parseFnParams, resolveSigType, resolveTypeName: re-exported from
+// aqleng via aliases.go (canonical implementations live in
+// eng/go/fn_params.go).
 
 // MatchFnSig finds the first FnSig in a FnDef value whose params match
 // the given args. Returns nil if no signature matches.

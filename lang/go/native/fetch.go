@@ -30,6 +30,8 @@ var (
 func registerFetchType(path string, fixedID int) *eng.Type {
 	t, err := eng.Builtin.RegisterExternalBuiltin(path, fixedID, nil)
 	if err != nil {
+		// lint:allow-panic — init-time builtin registration; see
+		// registerTimerType in engine/native_misc.go for rationale.
 		panic(fmt.Sprintf("fetch: register %s: %v", path, err))
 	}
 	return t

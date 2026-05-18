@@ -25,6 +25,8 @@ var TMatrix = registerMatrixType()
 func registerMatrixType() *eng.Type {
 	t, err := eng.Builtin.RegisterExternalBuiltin("Scalar/Number/Matrix", 2000, matrixFormatBehavior{})
 	if err != nil {
+		// lint:allow-panic — init-time builtin registration; see
+		// registerTimerType in engine/native_misc.go for rationale.
 		panic(fmt.Sprintf("matrix: register TMatrix: %v", err))
 	}
 	return t

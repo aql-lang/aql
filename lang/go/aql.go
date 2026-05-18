@@ -92,6 +92,11 @@ type Options struct {
 // AQL is an independent AQL execution instance.
 // Each instance has its own state (set/get storage is isolated).
 // Create multiple instances with New() for independent execution contexts.
+//
+// AQL is not safe for concurrent use. (*AQL).Run and (*AQL).Check both
+// mutate the underlying Registry (source pointer, def/type stacks, check
+// state) and must not be called from multiple goroutines simultaneously
+// on the same instance. Use one instance per goroutine for parallel work.
 type AQL struct {
 	registry *engine.Registry
 	options  Options

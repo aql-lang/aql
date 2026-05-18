@@ -77,24 +77,16 @@ in all three modules.
 
 ### Grandfathered via config (debt to triage)
 
-- **`unused` (~31 symbols)** in `lang/go/engine/native_query.go` and
-  `lang/go/engine/query.go` — a query-builder feature that's only partly
-  wired up (`offsetHandler`, `distinctHandler`, `groupListHandler`,
-  `groupAtomHandler`, `havingHandler`, `onHandler`, `usingHandler`,
-  `joinWordNative`, `setOpWordNative`, `QueryBuilder.clone`,
-  `toQueryBuilder`, `doSelect`, `resolveSelectSubExprs`,
-  `resolveWhereSubExprs`, …). Either finish the feature or delete the
-  dead handlers, then drop the exclusion.
-- **`unused`** in `lang/go/engine/native_string_helpers.go` (`toGraphemes`,
-  `strLen`, `strSlice`) and `lang/go/engine/native_temporal_await.go`
-  (`order` field) — small orphans, same treatment.
-- **`unused`** in `lang/go/engine/aliases.go` (6 re-export aliases:
-  `lookupDefType`, `resolveDefType`, `parseFnUndefSpec`,
-  `outputSigIsConcreteReturns`, `isSigTypeValue`, `outputSigValues`) —
-  expected for a "mirror the whole API" shim; leave as-is or prune.
 - **`QF1001`/`QF1003`** (~8 spots in `word_name.go`, `native_boolean.go`,
   `native/setpath.go`, `engine/query.go`) — De-Morgan / tagged-switch
   refactor suggestions; suppressed globally, not bugs.
+
+The previously-grandfathered ~31 `unused` symbols in the query-builder
+rework (`native_query.go` + `query.go`), the unit-aware string helpers
+(`toGraphemes`, `strLen`, `strSlice`), the `order` field in
+`native_temporal_await.go`, and 5 re-export aliases in `aliases.go`
+have all been deleted; the matching `.golangci.yml` exclusions are
+removed and `unused` is enforced on those files again.
 
 ### Looked at but left alone
 

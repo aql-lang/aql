@@ -127,8 +127,7 @@ func awaitFirst(r *Registry, elems []Value) ([]Value, error) {
 // the last error.
 func awaitAny(r *Registry, elems []Value) ([]Value, error) {
 	type indexedResult struct {
-		pr    parallelResult
-		order int // completion order
+		pr parallelResult
 	}
 
 	ch := make(chan indexedResult, len(elems))

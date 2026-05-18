@@ -49,21 +49,6 @@ func NewQueryBuilder(r *Registry, td TableData) QueryBuilder {
 	}
 }
 
-// clone returns a shallow copy of the QueryBuilder for safe mutation.
-func (qb QueryBuilder) clone() QueryBuilder {
-	if qb.Joins != nil {
-		cp := make([]JoinClause, len(qb.Joins))
-		copy(cp, qb.Joins)
-		qb.Joins = cp
-	}
-	if qb.SetOps != nil {
-		cp := make([]SetOp, len(qb.SetOps))
-		copy(cp, qb.SetOps)
-		qb.SetOps = cp
-	}
-	return qb
-}
-
 // buildSQL constructs the full SQL query string.
 func (qb *QueryBuilder) buildSQL(tableName string, colSQL string) string {
 	var buf strings.Builder
@@ -603,38 +588,6 @@ func unwrapQB(v Value) (QueryBuilder, bool) {
 	return QueryBuilder{}, false
 }
 
-// toQueryBuilder converts a Value (QueryBuilder or TableData) into a QueryBuilder.
-func toQueryBuilder(r *Registry, v Value) (QueryBuilder, error) {
-	if qb, ok := unwrapQB(v); ok {
-		return qb.clone(), nil
-	}
-	if td, ok := v.Data.(TableData); ok {
-		return NewQueryBuilder(r, td), nil
-	}
-	return QueryBuilder{}, fmt.Errorf("argument is not a table or query")
-}
-
-// doSelect performs a SELECT query, materializing a QueryBuilder or TableData.
-// If cols is nil, selects all columns (*).
-func doSelect(r *Registry, cols []columnSpec, table Value) ([]Value, error) {
-	qb, err := toQueryBuilder(r, table)
-	if err != nil {
-		return nil, fmt.Errorf("select: %w", err)
-	}
-
-	var result TableData
-	if cols == nil {
-		result, err = qb.Materialize()
-	} else {
-		result, err = qb.MaterializeWithColumns(cols)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("select: %w", err)
-	}
-
-	return []Value{NewValueRaw(TList, result)}, nil
-}
-
 // comparisonOps maps AQL comparison word names to SQL operators.
 var comparisonOps = map[string]string{
 	"eq":     "=",
@@ -661,173 +614,11 @@ var logicalOps = map[string]string{
 //	[column is null]                           — IS NULL
 //	[column is not null]                       — IS NOT NULL
 //	[column between value1 value2]             — BETWEEN ... AND ...
-//
-// resolveSelectSubExprs evaluates parenthesized sub-expressions in a
-// SELECT column list, replacing them with their results. This enables
-// scalar subqueries in the column list:
-//
-//	select [name [[(select [[max salary]] from emp) top_sal]]] from emp
-//
-// The inner list elements are scanned for paren tokens. When found, the
-// sub-expression is evaluated and the result replaces the paren tokens.
-func resolveSelectSubExprs(r *Registry, colList Value) (Value, error) {
-	_lst, _ := AsList(colList)
-	elems := _lst.Slice()
-	if len(elems) == 0 {
-		return colList, nil
-	}
-
-	result := make([]Value, len(elems))
-	for i, e := range elems {
-		if e.VType.Equal(TList) {
-			if _, isTD := e.Data.(TableData); !isTD {
-				if _, isQB := unwrapQB(e); !isQB {
-					resolved, err := resolveSelectSubExprs(r, e)
-					if err != nil {
-						return Value{}, err
-					}
-					result[i] = resolved
-					continue
-				}
-			}
-		}
-		result[i] = e
-	}
-
-	// Check for paren tokens at this level.
-	hasParen := false
-	for _, e := range result {
-		if IsOpenParen(e) {
-			hasParen = true
-			break
-		}
-	}
-	if !hasParen {
-		return NewList(result), nil
-	}
-
-	// Find matching paren pairs and evaluate them.
-	var out []Value
-	idx := 0
-	for idx < len(result) {
-		if IsOpenParen(result[idx]) {
-			depth := 1
-			j := idx + 1
-			for j < len(result) && depth > 0 {
-				if IsOpenParen(result[j]) {
-					depth++
-				} else if IsCloseParen(result[j]) {
-					depth--
-				}
-				j++
-			}
-			if depth != 0 {
-				return Value{}, fmt.Errorf("unmatched parenthesis in select column list")
-			}
-			subExpr := result[idx+1 : j-1]
-			eng := New(r)
-			evalResult, err := eng.Run(subExpr)
-			if err != nil {
-				return Value{}, fmt.Errorf("select subquery evaluation: %w", err)
-			}
-			out = append(out, evalResult...)
-			idx = j
-		} else {
-			out = append(out, result[idx])
-			idx++
-		}
-	}
-
-	return NewList(out), nil
-}
-
-// resolveWhereSubExprs scans a WHERE condition list for parenthesized
-// sub-expressions (sequences of tokens between "(" and ")") and evaluates
-// them via the engine. The results replace the paren tokens in the list.
-// This enables subquery support in IN clauses:
-//
-//	[city in (select [city] from cities)]
-//
-// The "(select [city] from cities)" tokens are evaluated, producing a
-// TableData value that buildInList can extract values from.
-func resolveWhereSubExprs(r *Registry, condList Value) (Value, error) {
-	_lst, _ := AsList(condList)
-	elems := _lst.Slice()
-	if len(elems) == 0 {
-		return condList, nil
-	}
-
-	// Quick scan: any open-paren markers?
-	hasParen := false
-	for _, e := range elems {
-		if IsOpenParen(e) {
-			hasParen = true
-			break
-		}
-	}
-	if !hasParen {
-		// Recurse into nested lists.
-		result := make([]Value, len(elems))
-		for i, e := range elems {
-			if e.VType.Equal(TList) {
-				if _, isTD := e.Data.(TableData); !isTD {
-					if _, isQB := unwrapQB(e); !isQB {
-						resolved, err := resolveWhereSubExprs(r, e)
-						if err != nil {
-							return Value{}, err
-						}
-						result[i] = resolved
-						continue
-					}
-				}
-			}
-			result[i] = e
-		}
-		return NewList(result), nil
-	}
-
-	// Find matching paren pairs and evaluate them.
-	var result []Value
-	i := 0
-	for i < len(elems) {
-		if IsOpenParen(elems[i]) {
-			// Find the matching close paren.
-			depth := 1
-			j := i + 1
-			for j < len(elems) && depth > 0 {
-				if IsOpenParen(elems[j]) {
-					depth++
-				} else if IsCloseParen(elems[j]) {
-					depth--
-				}
-				j++
-			}
-			if depth != 0 {
-				return Value{}, fmt.Errorf("unmatched parenthesis in condition")
-			}
-			// Evaluate the sub-expression (tokens between parens).
-			subExpr := elems[i+1 : j-1]
-			eng := New(r)
-			evalResult, err := eng.Run(subExpr)
-			if err != nil {
-				return Value{}, fmt.Errorf("subquery evaluation: %w", err)
-			}
-			result = append(result, evalResult...)
-			i = j
-		} else {
-			result = append(result, elems[i])
-			i++
-		}
-	}
-
-	return NewList(result), nil
-}
-
-// [column not between value1 value2]         — NOT BETWEEN ... AND ...
-// [column in [v1 v2 v3]]                     — IN (v1, v2, v3)
-// [column in (select [col] from table)]      — IN (subquery result)
-// [column not in [v1 v2 v3]]                — NOT IN (v1, v2, v3)
-// [... and/or ...]                           — logical connectives
+//	[column not between value1 value2]         — NOT BETWEEN ... AND ...
+//	[column in [v1 v2 v3]]                     — IN (v1, v2, v3)
+//	[column in (select [col] from table)]      — IN (subquery result)
+//	[column not in [v1 v2 v3]]                 — NOT IN (v1, v2, v3)
+//	[... and/or ...]                           — logical connectives
 func buildWhereClause(condList Value) (string, error) {
 	_lst, _ := AsList(condList)
 	elems := _lst.Slice()

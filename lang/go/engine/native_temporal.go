@@ -42,6 +42,8 @@ var (
 func registerTemporalType(path string, fixedID int, behavior eng.TypeBehavior) *eng.Type {
 	t, err := eng.Builtin.RegisterExternalBuiltin(path, fixedID, behavior)
 	if err != nil {
+		// lint:allow-panic — init-time builtin registration; see
+		// registerTimerType in native_misc.go for rationale.
 		panic(fmt.Sprintf("native_temporal: register %s: %v", path, err))
 	}
 	return t

@@ -11,11 +11,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/aql-lang/aql/lang/go/formatter"
 	"github.com/aql-lang/aql/cmd/go/internal/repl"
 	"github.com/aql-lang/aql/lang/go"
 	"github.com/aql-lang/aql/lang/go/engine"
 	"github.com/aql-lang/aql/lang/go/engine/help"
+	"github.com/aql-lang/aql/lang/go/formatter"
 	"github.com/aql-lang/aql/lang/go/native"
 	jsonic "github.com/jsonicjs/jsonic/go"
 )

@@ -424,9 +424,21 @@ to the corresponding Atom position. Without `/q`, callers will see an
 **Panics must never occur in this codebase.** All code must be defensive
 against unexpected input. Return errors instead of panicking — user
 errors must be reported as error return values that are printed to the
-user, never as panics. This is a hard rule — no exceptions (the only
-permitted panic is `mustType()` in `types.go` which runs at init time
-on hardcoded type paths).
+user, never as panics. This is a hard rule.
+
+The only permitted panics are at **init time**, on hardcoded type-registration
+paths — they signal a build-time programmer error (FixedID collision or
+malformed type path), not a runtime condition. Each such call site carries
+a `// lint:allow-panic` comment. The current set:
+
+- `eng/types.go::mustType` — eng's hardcoded built-in types.
+- `engine/native_misc.go::registerTimerType` — TTimeout, TInterval.
+- `engine/native_temporal.go::registerTemporalType` — TDate, TDateTime, …
+- `native/fetch.go::registerFetchType` — TFetchFunction, TFetchRequest, …
+- `internal/nativemod/matrix.go::registerMatrixType` — TMatrix.
+
+Do not add new init-time panics without also annotating them
+`// lint:allow-panic` and listing them here.
 
 Key patterns to follow:
 
