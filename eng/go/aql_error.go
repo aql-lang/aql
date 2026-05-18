@@ -26,6 +26,8 @@ type AqlError struct {
 	fullSource string
 }
 
+// TODO: this should use jsonic error formatting
+
 // Error implements the error interface with jsonic-style formatting.
 func (e *AqlError) Error() string {
 	var b strings.Builder
