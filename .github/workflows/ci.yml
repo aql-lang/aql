@@ -17,10 +17,20 @@ jobs:
         with:
           go-version-file: lang/go.mod
 
-      - name: Install lint tools
+      - name: Install golangci-lint
+        # Replaces a previous `curl … install.sh | sh` to avoid piping
+        # a remote script into the CI shell. The official action installs
+        # via GitHub Actions' cached infrastructure.
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.5.0
+          install-mode: binary
+          # We invoke golangci-lint via `make lint` below; this step
+          # only needs to put the binary on $PATH.
+          args: --version
+
+      - name: Install govulncheck
         run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
-            | sh -s -- -b "$(go env GOPATH)/bin" v2.5.0
           go install golang.org/x/vuln/cmd/govulncheck@latest
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
