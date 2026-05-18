@@ -1,12 +1,12 @@
 package nativemod
 
 import (
-	"github.com/aql-lang/aql/lang/go/engine"
+	"github.com/aql-lang/aql/lang/go/native"
 )
 
 // BuildSolarDemoModule creates the "aql:solardemo" native module.
 // It provides planet and moon data as lists of maps for querying.
-func BuildSolarDemoModule(parent *engine.Registry) (engine.ModuleDesc, error) {
+func BuildSolarDemoModule(parent *native.Registry) (native.ModuleDesc, error) {
 	planets := []struct {
 		id, name, kind string
 		diameter       int64
@@ -41,35 +41,35 @@ func BuildSolarDemoModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 		{"moon13", "Triton", "planet08", 2707},
 	}
 
-	planetList := make([]engine.Value, len(planets))
+	planetList := make([]native.Value, len(planets))
 	for i, p := range planets {
-		m := engine.NewOrderedMap()
-		m.Set("id", engine.NewString(p.id))
-		m.Set("name", engine.NewString(p.name))
-		m.Set("kind", engine.NewString(p.kind))
-		m.Set("diameter", engine.NewInteger(p.diameter))
-		m.Set("order", engine.NewInteger(p.order))
-		planetList[i] = engine.NewMap(m)
+		m := native.NewOrderedMap()
+		m.Set("id", native.NewString(p.id))
+		m.Set("name", native.NewString(p.name))
+		m.Set("kind", native.NewString(p.kind))
+		m.Set("diameter", native.NewInteger(p.diameter))
+		m.Set("order", native.NewInteger(p.order))
+		planetList[i] = native.NewMap(m)
 	}
 
-	moonList := make([]engine.Value, len(moons))
+	moonList := make([]native.Value, len(moons))
 	for i, mn := range moons {
-		m := engine.NewOrderedMap()
-		m.Set("id", engine.NewString(mn.id))
-		m.Set("name", engine.NewString(mn.name))
-		m.Set("planet_id", engine.NewString(mn.planetID))
-		m.Set("diameter", engine.NewInteger(mn.diameter))
-		moonList[i] = engine.NewMap(m)
+		m := native.NewOrderedMap()
+		m.Set("id", native.NewString(mn.id))
+		m.Set("name", native.NewString(mn.name))
+		m.Set("planet_id", native.NewString(mn.planetID))
+		m.Set("diameter", native.NewInteger(mn.diameter))
+		moonList[i] = native.NewMap(m)
 	}
 
-	exports := engine.NewOrderedMap()
-	exports.Set("planets", engine.NewList(planetList))
-	exports.Set("moons", engine.NewList(moonList))
+	exports := native.NewOrderedMap()
+	exports.Set("planets", native.NewList(planetList))
+	exports.Set("moons", native.NewList(moonList))
 
 	modID := parent.Modules.NextID()
-	desc := engine.ModuleDesc{
+	desc := native.ModuleDesc{
 		ID:      modID,
-		Exports: map[string]*engine.OrderedMap{"solardemo": exports},
+		Exports: map[string]*native.OrderedMap{"solardemo": exports},
 	}
 	return desc, nil
 }

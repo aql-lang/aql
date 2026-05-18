@@ -3,7 +3,6 @@ package native
 import (
 	"fmt"
 
-	"github.com/aql-lang/aql/lang/go/engine"
 	voxgigstruct "github.com/voxgig/struct"
 )
 
@@ -11,7 +10,7 @@ import (
 // natives.go.
 //
 // getpathHandler calls voxgigstruct.GetPath to retrieve a nested value.
-func getpathHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+func getpathHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	path, err := args[0].AsConcreteString()
 	if err != nil {
 		return nil, err
@@ -24,5 +23,5 @@ func getpathHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 	if err != nil {
 		return nil, fmt.Errorf("getpath: %w", err)
 	}
-	return []engine.Value{val}, nil
+	return []Value{val}, nil
 }

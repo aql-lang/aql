@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
 	"github.com/aql-lang/aql/lang/go/internal/nativemod"
 	"github.com/aql-lang/aql/lang/go/native"
 )
@@ -33,48 +32,48 @@ type decisionTestCase struct {
 	// expr is the AQL expression to evaluate.
 	expr string
 	// check validates the result.
-	check func(t *testing.T, result []engine.Value)
+	check func(t *testing.T, result []native.Value)
 }
 
-func checkBool(want bool) func(t *testing.T, result []engine.Value) {
-	return func(t *testing.T, result []engine.Value) {
+func checkBool(want bool) func(t *testing.T, result []native.Value) {
+	return func(t *testing.T, result []native.Value) {
 		t.Helper()
-		b, _ := engine.AsBoolean(result[0])
+		b, _ := native.AsBoolean(result[0])
 		if b != want {
 			t.Errorf("got %v, want %v", b, want)
 		}
 	}
 }
 
-func checkMapField(key, want string) func(t *testing.T, result []engine.Value) {
-	return func(t *testing.T, result []engine.Value) {
+func checkMapField(key, want string) func(t *testing.T, result []native.Value) {
+	return func(t *testing.T, result []native.Value) {
 		t.Helper()
-		m, _ := engine.AsMap(result[0])
+		m, _ := native.AsMap(result[0])
 		if m == nil {
 			t.Fatalf("expected map, got %s", result[0].VType.String())
 		}
 		v, _ := m.Get(key)
-		s, _ := engine.AsString(v)
+		s, _ := native.AsString(v)
 		if s != want {
 			t.Errorf("%s = %q, want %q", key, s, want)
 		}
 	}
 }
 
-func checkString(want string) func(t *testing.T, result []engine.Value) {
-	return func(t *testing.T, result []engine.Value) {
+func checkString(want string) func(t *testing.T, result []native.Value) {
+	return func(t *testing.T, result []native.Value) {
 		t.Helper()
-		s, _ := engine.AsString(result[0])
+		s, _ := native.AsString(result[0])
 		if s != want {
 			t.Errorf("got %q, want %q", s, want)
 		}
 	}
 }
 
-func checkCollectLen(want int) func(t *testing.T, result []engine.Value) {
-	return func(t *testing.T, result []engine.Value) {
+func checkCollectLen(want int) func(t *testing.T, result []native.Value) {
+	return func(t *testing.T, result []native.Value) {
 		t.Helper()
-		list, _ := engine.AsList(result[0])
+		list, _ := native.AsList(result[0])
 		if list.Len() != want {
 			t.Fatalf("expected %d collected, got %d: %v", want, list.Len(), result[0])
 		}
@@ -88,9 +87,9 @@ var decisionTests = []decisionTestCase{
 	{
 		name: "Cond",
 		expr: `18 "gte" quote age decision.cond`,
-		check: func(t *testing.T, result []engine.Value) {
+		check: func(t *testing.T, result []native.Value) {
 			t.Helper()
-			m, _ := engine.AsMap(result[0])
+			m, _ := native.AsMap(result[0])
 			if m == nil {
 				t.Fatalf("expected map, got %s", result[0].VType.String())
 			}
@@ -520,9 +519,9 @@ var decisionTests = []decisionTestCase{
 
 // runDecisionTest runs a single test case against an initialized registry
 // where the decision module is already imported as "decision".
-func runDecisionTest(t *testing.T, tc decisionTestCase, reg *engine.Registry) {
+func runDecisionTest(t *testing.T, tc decisionTestCase, reg *native.Registry) {
 	t.Helper()
-	eng := engine.NewTop(reg)
+	eng := native.NewTop(reg)
 
 	if tc.setup != "" {
 		vals, err := parser.Parse(tc.setup)
@@ -548,9 +547,9 @@ func runDecisionTest(t *testing.T, tc decisionTestCase, reg *engine.Registry) {
 
 // --- Native module tests ---
 
-func nativeDecisionRegistry(t *testing.T) *engine.Registry {
+func nativeDecisionRegistry(t *testing.T) *native.Registry {
 	t.Helper()
-	r, err := engine.DefaultRegistry(native.Register)
+	r, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -572,9 +571,9 @@ func TestNativeDecision(t *testing.T) {
 
 // --- module [...] inline AQL tests ---
 
-func inlineDecisionRegistry(t *testing.T) *engine.Registry {
+func inlineDecisionRegistry(t *testing.T) *native.Registry {
 	t.Helper()
-	r, err := engine.DefaultRegistry(native.Register)
+	r, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -586,7 +585,7 @@ func inlineDecisionRegistry(t *testing.T) *engine.Registry {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	eng := engine.NewTop(r)
+	eng := native.NewTop(r)
 	if _, err := eng.Run(vals); err != nil {
 		t.Fatalf("run: %v", err)
 	}

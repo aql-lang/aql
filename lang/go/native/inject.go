@@ -3,7 +3,6 @@ package native
 import (
 	"fmt"
 
-	"github.com/aql-lang/aql/lang/go/engine"
 	voxgigstruct "github.com/voxgig/struct"
 )
 
@@ -11,7 +10,7 @@ import (
 // natives.go.
 //
 // injectHandler calls voxgigstruct.Inject to resolve path references.
-func injectHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+func injectHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	val := valueToAny(args[0])
 	store := valueToAny(args[1])
 
@@ -21,5 +20,5 @@ func injectHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 	if err != nil {
 		return nil, fmt.Errorf("inject: %w", err)
 	}
-	return []engine.Value{out}, nil
+	return []Value{out}, nil
 }

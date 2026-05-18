@@ -4,13 +4,13 @@ import (
 	"math"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/engine"
+	"github.com/aql-lang/aql/lang/go/native"
 )
 
 // runAQL is a test helper that creates an engine and runs the given values.
-func runAQL(t *testing.T, r *engine.Registry, input []engine.Value) []engine.Value {
+func runAQL(t *testing.T, r *native.Registry, input []native.Value) []native.Value {
 	t.Helper()
-	e := engine.New(r)
+	e := native.New(r)
 	result, err := e.Run(input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -21,9 +21,9 @@ func runAQL(t *testing.T, r *engine.Registry, input []engine.Value) []engine.Val
 // mathRegistry returns a registry with the aql:math module loaded via
 // the standard ModuleDesc/installExports path (simulated by building
 // the module and installing the "math" export as a def).
-func mathRegistry(t *testing.T) *engine.Registry {
+func mathRegistry(t *testing.T) *native.Registry {
 	t.Helper()
-	r, err := engine.DefaultRegistry()
+	r, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func mathRegistry(t *testing.T) *engine.Registry {
 	}
 	// Install exports as defs — same as the import handler does.
 	for name, exportMap := range desc.Exports {
-		r.Defs.Push(name, engine.NewMap(exportMap))
+		r.Defs.Push(name, native.NewMap(exportMap))
 	}
 	return r
 }
@@ -42,7 +42,7 @@ func mathRegistry(t *testing.T) *engine.Registry {
 // --- Resolve tests ---
 
 func TestResolveKnownModule(t *testing.T) {
-	r, err := engine.DefaultRegistry()
+	r, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestResolveKnownModule(t *testing.T) {
 }
 
 func TestResolveUnknownModule(t *testing.T) {
-	r, err := engine.DefaultRegistry()
+	r, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestNames(t *testing.T) {
 // --- Math export map structure ---
 
 func TestMathExportContainsAllWords(t *testing.T) {
-	r, err := engine.DefaultRegistry()
+	r, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,13 +116,13 @@ func TestMathExportContainsAllWords(t *testing.T) {
 
 func TestMathDotAbs(t *testing.T) {
 	r := mathRegistry(t)
-	result := runAQL(t, r, []engine.Value{
-		engine.NewInteger(-5),
-		engine.NewOpenParen(),
-		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("abs"),
-		engine.NewCloseParen(),
+	result := runAQL(t, r, []native.Value{
+		native.NewInteger(-5),
+		native.NewOpenParen(),
+		native.NewWord("math"), native.NewWord("get"), native.NewWord("abs"),
+		native.NewCloseParen(),
 	})
-	v, _ := engine.AsInteger(result[0])
+	v, _ := native.AsInteger(result[0])
 	if v != 5 {
 		t.Errorf("math.abs(-5) = %v, want 5", result[0])
 	}
@@ -130,13 +130,13 @@ func TestMathDotAbs(t *testing.T) {
 
 func TestMathDotSin(t *testing.T) {
 	r := mathRegistry(t)
-	result := runAQL(t, r, []engine.Value{
-		engine.NewDecimal(0),
-		engine.NewOpenParen(),
-		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("sin"),
-		engine.NewCloseParen(),
+	result := runAQL(t, r, []native.Value{
+		native.NewDecimal(0),
+		native.NewOpenParen(),
+		native.NewWord("math"), native.NewWord("get"), native.NewWord("sin"),
+		native.NewCloseParen(),
 	})
-	v, _ := engine.AsNumber(result[0])
+	v, _ := native.AsNumber(result[0])
 	if v != 0.0 {
 		t.Errorf("math.sin(0) = %v, want 0.0", result[0])
 	}
@@ -144,13 +144,13 @@ func TestMathDotSin(t *testing.T) {
 
 func TestMathDotCos(t *testing.T) {
 	r := mathRegistry(t)
-	result := runAQL(t, r, []engine.Value{
-		engine.NewDecimal(0),
-		engine.NewOpenParen(),
-		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("cos"),
-		engine.NewCloseParen(),
+	result := runAQL(t, r, []native.Value{
+		native.NewDecimal(0),
+		native.NewOpenParen(),
+		native.NewWord("math"), native.NewWord("get"), native.NewWord("cos"),
+		native.NewCloseParen(),
 	})
-	v, _ := engine.AsNumber(result[0])
+	v, _ := native.AsNumber(result[0])
 	if v != 1.0 {
 		t.Errorf("math.cos(0) = %v, want 1.0", result[0])
 	}
@@ -158,13 +158,13 @@ func TestMathDotCos(t *testing.T) {
 
 func TestMathDotSqrt(t *testing.T) {
 	r := mathRegistry(t)
-	result := runAQL(t, r, []engine.Value{
-		engine.NewDecimal(4),
-		engine.NewOpenParen(),
-		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("sqrt"),
-		engine.NewCloseParen(),
+	result := runAQL(t, r, []native.Value{
+		native.NewDecimal(4),
+		native.NewOpenParen(),
+		native.NewWord("math"), native.NewWord("get"), native.NewWord("sqrt"),
+		native.NewCloseParen(),
 	})
-	v, _ := engine.AsNumber(result[0])
+	v, _ := native.AsNumber(result[0])
 	if v != 2.0 {
 		t.Errorf("math.sqrt(4) = %v, want 2.0", result[0])
 	}
@@ -174,13 +174,13 @@ func TestMathDotMin(t *testing.T) {
 	r := mathRegistry(t)
 	// 3 math.min 7 — but since FnDef takes both args from stack:
 	// We need: 3 7 (math get min)
-	result := runAQL(t, r, []engine.Value{
-		engine.NewInteger(3), engine.NewInteger(7),
-		engine.NewOpenParen(),
-		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("min"),
-		engine.NewCloseParen(),
+	result := runAQL(t, r, []native.Value{
+		native.NewInteger(3), native.NewInteger(7),
+		native.NewOpenParen(),
+		native.NewWord("math"), native.NewWord("get"), native.NewWord("min"),
+		native.NewCloseParen(),
 	})
-	v, _ := engine.AsInteger(result[0])
+	v, _ := native.AsInteger(result[0])
 	if v != 3 {
 		t.Errorf("math.min(3,7) = %v, want 3", result[0])
 	}
@@ -188,13 +188,13 @@ func TestMathDotMin(t *testing.T) {
 
 func TestMathDotMax(t *testing.T) {
 	r := mathRegistry(t)
-	result := runAQL(t, r, []engine.Value{
-		engine.NewInteger(3), engine.NewInteger(7),
-		engine.NewOpenParen(),
-		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("max"),
-		engine.NewCloseParen(),
+	result := runAQL(t, r, []native.Value{
+		native.NewInteger(3), native.NewInteger(7),
+		native.NewOpenParen(),
+		native.NewWord("math"), native.NewWord("get"), native.NewWord("max"),
+		native.NewCloseParen(),
 	})
-	v, _ := engine.AsInteger(result[0])
+	v, _ := native.AsInteger(result[0])
 	if v != 7 {
 		t.Errorf("math.max(3,7) = %v, want 7", result[0])
 	}
@@ -202,12 +202,12 @@ func TestMathDotMax(t *testing.T) {
 
 func TestMathDotPi(t *testing.T) {
 	r := mathRegistry(t)
-	result := runAQL(t, r, []engine.Value{
-		engine.NewOpenParen(),
-		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("pi"),
-		engine.NewCloseParen(),
+	result := runAQL(t, r, []native.Value{
+		native.NewOpenParen(),
+		native.NewWord("math"), native.NewWord("get"), native.NewWord("pi"),
+		native.NewCloseParen(),
 	})
-	v, _ := engine.AsNumber(result[0])
+	v, _ := native.AsNumber(result[0])
 	if math.Abs(v-math.Pi) > 0.0001 {
 		t.Errorf("math.pi = %v, want %v", result[0], math.Pi)
 	}
@@ -215,12 +215,12 @@ func TestMathDotPi(t *testing.T) {
 
 func TestMathDotE(t *testing.T) {
 	r := mathRegistry(t)
-	result := runAQL(t, r, []engine.Value{
-		engine.NewOpenParen(),
-		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("e"),
-		engine.NewCloseParen(),
+	result := runAQL(t, r, []native.Value{
+		native.NewOpenParen(),
+		native.NewWord("math"), native.NewWord("get"), native.NewWord("e"),
+		native.NewCloseParen(),
 	})
-	v, _ := engine.AsNumber(result[0])
+	v, _ := native.AsNumber(result[0])
 	if math.Abs(v-math.E) > 0.0001 {
 		t.Errorf("math.e = %v, want %v", result[0], math.E)
 	}
@@ -228,13 +228,13 @@ func TestMathDotE(t *testing.T) {
 
 func TestMathDotNegate(t *testing.T) {
 	r := mathRegistry(t)
-	result := runAQL(t, r, []engine.Value{
-		engine.NewInteger(5),
-		engine.NewOpenParen(),
-		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("negate"),
-		engine.NewCloseParen(),
+	result := runAQL(t, r, []native.Value{
+		native.NewInteger(5),
+		native.NewOpenParen(),
+		native.NewWord("math"), native.NewWord("get"), native.NewWord("negate"),
+		native.NewCloseParen(),
 	})
-	v, _ := engine.AsInteger(result[0])
+	v, _ := native.AsInteger(result[0])
 	if v != -5 {
 		t.Errorf("math.negate(5) = %v, want -5", result[0])
 	}
@@ -242,13 +242,13 @@ func TestMathDotNegate(t *testing.T) {
 
 func TestMathDotCeil(t *testing.T) {
 	r := mathRegistry(t)
-	result := runAQL(t, r, []engine.Value{
-		engine.NewDecimal(1.2),
-		engine.NewOpenParen(),
-		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("ceil"),
-		engine.NewCloseParen(),
+	result := runAQL(t, r, []native.Value{
+		native.NewDecimal(1.2),
+		native.NewOpenParen(),
+		native.NewWord("math"), native.NewWord("get"), native.NewWord("ceil"),
+		native.NewCloseParen(),
 	})
-	v, _ := engine.AsNumber(result[0])
+	v, _ := native.AsNumber(result[0])
 	if v != 2.0 {
 		t.Errorf("math.ceil(1.2) = %v, want 2.0", result[0])
 	}
@@ -256,13 +256,13 @@ func TestMathDotCeil(t *testing.T) {
 
 func TestMathDotFloor(t *testing.T) {
 	r := mathRegistry(t)
-	result := runAQL(t, r, []engine.Value{
-		engine.NewDecimal(1.8),
-		engine.NewOpenParen(),
-		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("floor"),
-		engine.NewCloseParen(),
+	result := runAQL(t, r, []native.Value{
+		native.NewDecimal(1.8),
+		native.NewOpenParen(),
+		native.NewWord("math"), native.NewWord("get"), native.NewWord("floor"),
+		native.NewCloseParen(),
 	})
-	v, _ := engine.AsNumber(result[0])
+	v, _ := native.AsNumber(result[0])
 	if v != 1.0 {
 		t.Errorf("math.floor(1.8) = %v, want 1.0", result[0])
 	}
@@ -270,13 +270,13 @@ func TestMathDotFloor(t *testing.T) {
 
 func TestMathDotRound(t *testing.T) {
 	r := mathRegistry(t)
-	result := runAQL(t, r, []engine.Value{
-		engine.NewDecimal(1.5),
-		engine.NewOpenParen(),
-		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("round"),
-		engine.NewCloseParen(),
+	result := runAQL(t, r, []native.Value{
+		native.NewDecimal(1.5),
+		native.NewOpenParen(),
+		native.NewWord("math"), native.NewWord("get"), native.NewWord("round"),
+		native.NewCloseParen(),
 	})
-	v, _ := engine.AsNumber(result[0])
+	v, _ := native.AsNumber(result[0])
 	if v != 2.0 {
 		t.Errorf("math.round(1.5) = %v, want 2.0", result[0])
 	}
@@ -284,13 +284,13 @@ func TestMathDotRound(t *testing.T) {
 
 func TestMathDotSign(t *testing.T) {
 	r := mathRegistry(t)
-	result := runAQL(t, r, []engine.Value{
-		engine.NewInteger(-7),
-		engine.NewOpenParen(),
-		engine.NewWord("math"), engine.NewWord("get"), engine.NewWord("sign"),
-		engine.NewCloseParen(),
+	result := runAQL(t, r, []native.Value{
+		native.NewInteger(-7),
+		native.NewOpenParen(),
+		native.NewWord("math"), native.NewWord("get"), native.NewWord("sign"),
+		native.NewCloseParen(),
 	})
-	v, _ := engine.AsInteger(result[0])
+	v, _ := native.AsInteger(result[0])
 	if v != -1 {
 		t.Errorf("math.sign(-7) = %v, want -1", result[0])
 	}

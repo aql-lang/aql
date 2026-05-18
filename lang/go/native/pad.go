@@ -1,7 +1,6 @@
 package native
 
 import (
-	"github.com/aql-lang/aql/lang/go/engine"
 	voxgigstruct "github.com/voxgig/struct"
 )
 
@@ -9,19 +8,19 @@ import (
 // natives.go.
 //
 // padDefaultHandler calls voxgigstruct.Pad with default width.
-func padDefaultHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+func padDefaultHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	data := valueToAny(args[0])
 	result := voxgigstruct.Pad(data)
-	return []engine.Value{engine.NewString(result)}, nil
+	return []Value{NewString(result)}, nil
 }
 
 // padWidthHandler calls voxgigstruct.Pad with a specified width.
-func padWidthHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+func padWidthHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	width, err := args[0].AsConcreteInteger()
 	if err != nil {
 		return nil, err
 	}
 	data := valueToAny(args[1])
 	result := voxgigstruct.Pad(data, int(width))
-	return []engine.Value{engine.NewString(result)}, nil
+	return []Value{NewString(result)}, nil
 }

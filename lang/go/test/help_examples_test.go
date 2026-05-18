@@ -6,20 +6,18 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
-	"github.com/aql-lang/aql/lang/go/engine/help"
 	"github.com/aql-lang/aql/lang/go/internal/fileops"
 	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/aql-lang/aql/lang/go/native/help"
 )
 
 // TestHelpAllWords checks that every registered word produces valid
 // dynamic help output with the expected sections.
 func TestHelpAllWords(t *testing.T) {
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	native.Register(reg)
 
 	words := allRegisteredWords(reg)
 	if len(words) == 0 {
@@ -28,7 +26,7 @@ func TestHelpAllWords(t *testing.T) {
 
 	for _, word := range words {
 		t.Run(word, func(t *testing.T) {
-			info := engine.BuildFuncInfo(reg, word)
+			info := native.BuildFuncInfo(reg, word)
 			if info == nil {
 				t.Skipf("no func info for %q (simple def)", word)
 				return
@@ -71,16 +69,15 @@ func TestHelpAllWords(t *testing.T) {
 // the result matches the documented output. Uses in-memory filesystem
 // for read/write validation.
 func TestHelpExamplesCorrect(t *testing.T) {
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	native.Register(reg)
 	reg.SetParseFunc(parser.Parse)
 
 	// Enable in-memory filesystem for read/write examples.
 	mem := fileops.NewMem()
-	if err := reg.Capabilities.Set(engine.CapMemFileOps, fileops.FileOps(mem)); err != nil {
+	if err := reg.Capabilities.Set(native.CapMemFileOps, fileops.FileOps(mem)); err != nil {
 		t.Fatalf("set capability: %v", err)
 	}
 
@@ -107,7 +104,7 @@ func TestHelpExamplesCorrect(t *testing.T) {
 		if skipWords[word] {
 			continue
 		}
-		info := engine.BuildFuncInfo(reg, word)
+		info := native.BuildFuncInfo(reg, word)
 		if info == nil {
 			continue
 		}
@@ -133,7 +130,7 @@ func TestHelpExamplesCorrect(t *testing.T) {
 						t.Fatalf("parse %q: %v", ex.expr, err)
 					}
 					// Use a fresh engine per example to avoid state leaks
-					eng := engine.NewTop(reg)
+					eng := native.NewTop(reg)
 					result, err := eng.Run(vals)
 					if err != nil {
 						t.Fatalf("run %q: %v", ex.expr, err)
@@ -152,13 +149,13 @@ func TestHelpExamplesCorrect(t *testing.T) {
 }
 
 // enableMemFS sets __sys.fs.mem = true in the registry's root context.
-func enableMemFS(t *testing.T, reg *engine.Registry) {
+func enableMemFS(t *testing.T, reg *native.Registry) {
 	t.Helper()
-	eng := engine.New(reg)
-	_, err := eng.Run([]engine.Value{
-		engine.NewWord("context"), engine.NewWord("get"), engine.NewWord("__sys"),
-		engine.NewWord("get"), engine.NewWord("fs"),
-		engine.NewWord("set"), engine.NewWord("mem"), engine.NewBoolean(true),
+	eng := native.New(reg)
+	_, err := eng.Run([]native.Value{
+		native.NewWord("context"), native.NewWord("get"), native.NewWord("__sys"),
+		native.NewWord("get"), native.NewWord("fs"),
+		native.NewWord("set"), native.NewWord("mem"), native.NewBoolean(true),
 	})
 	if err != nil {
 		t.Fatalf("failed to enable mem fs: %v", err)
@@ -167,7 +164,7 @@ func enableMemFS(t *testing.T, reg *engine.Registry) {
 
 // allRegisteredWords returns a sorted list of all words in the registry
 // that have function definitions (not just simple defs).
-func allRegisteredWords(reg *engine.Registry) []string {
+func allRegisteredWords(reg *native.Registry) []string {
 	// Collect words that have help entries
 	helpWords := help.Words()
 

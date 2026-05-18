@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
 	"github.com/aql-lang/aql/lang/go/internal/nativemod"
 )
 
@@ -46,13 +45,13 @@ func TestSigMatch(t *testing.T) {
 				t.Fatalf("parse error: %v", err)
 			}
 
-			reg, err := engine.DefaultRegistry(native.Register)
+			reg, err := native.DefaultRegistry()
 			if err != nil {
 				t.Fatal(err)
 			}
 			reg.SetParseFunc(parser.Parse)
 			nativemod.InstallMathExports(reg)
-			eng := engine.NewTop(reg)
+			eng := native.NewTop(reg)
 			result, err := eng.Run(values)
 
 			if strings.HasPrefix(expected, "ERROR:") {

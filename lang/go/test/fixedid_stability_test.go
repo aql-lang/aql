@@ -7,7 +7,6 @@ import (
 	// Side-effect imports: trigger the init() / var initialisers that
 	// register externally-owned types into eng.Builtin so the snapshot
 	// below sees the full set.
-	_ "github.com/aql-lang/aql/lang/go/engine"
 	_ "github.com/aql-lang/aql/lang/go/internal/nativemod"
 	_ "github.com/aql-lang/aql/lang/go/native"
 )

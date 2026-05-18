@@ -10,7 +10,6 @@ import (
 	"github.com/chzyer/readline"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
 	"github.com/aql-lang/aql/lang/go/native"
 
 	udk "voxgiguniversalsdk"
@@ -24,8 +23,8 @@ var newReadline = func(cfg *readline.Config) (readliner, error) {
 	return readline.NewEx(cfg)
 }
 
-var newRegistry = func() (*engine.Registry, error) {
-	return engine.DefaultRegistry(native.Register)
+var newRegistry = func() (*native.Registry, error) {
+	return native.DefaultRegistry()
 }
 
 // readliner abstracts the readline interface for testing.
@@ -67,7 +66,7 @@ func Start(in io.Reader, out io.Writer, registryPath string) {
 	registry.Output = out
 
 	meta := NewMetaRegistry()
-	var lastStack []engine.Value
+	var lastStack []native.Value
 
 	for {
 		line, err := rl.Readline()
@@ -98,7 +97,7 @@ func Start(in io.Reader, out io.Writer, registryPath string) {
 			continue
 		}
 
-		eng := engine.NewTop(registry)
+		eng := native.NewTop(registry)
 		result, err := eng.Run(values)
 		if err != nil {
 			fmt.Fprintf(out, "  error: %s\n", err)

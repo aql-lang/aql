@@ -5,17 +5,16 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
 	"github.com/aql-lang/aql/lang/go/internal/fileops"
 )
 
 // runMemFSModuleSteps sets up an in-memory filesystem with pre-populated files,
 // enables __sys.fs.mem=true, and runs AQL steps against it.
 // This validates the full pipeline: folder + write + import on in-memory FS.
-func runMemFSModuleSteps(t *testing.T, files map[string]string, steps []string) ([]engine.Value, error) {
+func runMemFSModuleSteps(t *testing.T, files map[string]string, steps []string) ([]native.Value, error) {
 	t.Helper()
 
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,22 +25,22 @@ func runMemFSModuleSteps(t *testing.T, files map[string]string, steps []string) 
 	for path, content := range files {
 		mem.Files[path] = []byte(content)
 	}
-	if err := reg.Capabilities.Set(engine.CapMemFileOps, fileops.FileOps(mem)); err != nil {
+	if err := reg.Capabilities.Set(native.CapMemFileOps, fileops.FileOps(mem)); err != nil {
 		t.Fatalf("set capability: %v", err)
 	}
 
 	// Enable in-memory FS via __sys.fs.mem = true.
-	eng := engine.New(reg)
-	_, err = eng.Run([]engine.Value{
-		engine.NewWord("context"), engine.NewWord("get"), engine.NewWord("__sys"),
-		engine.NewWord("get"), engine.NewWord("fs"),
-		engine.NewWord("set"), engine.NewWord("mem"), engine.NewBoolean(true),
+	eng := native.New(reg)
+	_, err = eng.Run([]native.Value{
+		native.NewWord("context"), native.NewWord("get"), native.NewWord("__sys"),
+		native.NewWord("get"), native.NewWord("fs"),
+		native.NewWord("set"), native.NewWord("mem"), native.NewBoolean(true),
 	})
 	if err != nil {
 		t.Fatalf("enable mem fs: %v", err)
 	}
 
-	var result []engine.Value
+	var result []native.Value
 	for _, step := range steps {
 		vals, err := parser.Parse(step)
 		if err != nil {

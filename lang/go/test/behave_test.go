@@ -9,7 +9,6 @@ import (
 
 	"github.com/aql-lang/aql/eng/go"
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
 	"github.com/aql-lang/aql/lang/go/internal/nativemod"
 	"github.com/aql-lang/aql/lang/go/native"
 )
@@ -52,7 +51,7 @@ func TestBehave(t *testing.T) {
 
 		ran++
 		t.Run(fmt.Sprintf("L%d_%s", lineNum, sanitiseName(expr)), func(t *testing.T) {
-			reg, err := engine.DefaultRegistry(native.Register)
+			reg, err := native.DefaultRegistry()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -69,7 +68,7 @@ func TestBehave(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse error: %v", err)
 			}
-			result, err := engine.NewTop(reg).Run(values)
+			result, err := native.NewTop(reg).Run(values)
 
 			if strings.HasPrefix(expected, "ERROR:") {
 				want := strings.TrimPrefix(expected, "ERROR:")

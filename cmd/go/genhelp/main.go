@@ -1,5 +1,5 @@
 // Command genhelp pre-computes help example results by running each
-// expression through the AQL engine. Output is written to
+// expression through the AQL native. Output is written to
 // lang/go/engine/help/examples_gen.go as a static map.
 //
 //go:generate go run .
@@ -15,9 +15,8 @@ import (
 	"strings"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
-	"github.com/aql-lang/aql/lang/go/engine/help"
 	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/aql-lang/aql/lang/go/native/help"
 )
 
 // outputPath returns the absolute path of the generated file, derived from
@@ -30,7 +29,7 @@ func outputPath() string {
 }
 
 func main() {
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "genhelp: %v\n", err)
 		os.Exit(1)
@@ -44,14 +43,14 @@ func main() {
 	sort.Strings(words)
 
 	for _, word := range words {
-		info := engine.BuildFuncInfo(reg, word)
+		info := native.BuildFuncInfo(reg, word)
 		if info == nil {
 			continue
 		}
 		exprs := help.ExampleExprs(*info)
 
 		// Fresh registry per word.
-		wordReg, err := engine.DefaultRegistry(native.Register)
+		wordReg, err := native.DefaultRegistry()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "genhelp: %v\n", err)
 			os.Exit(1)
@@ -98,7 +97,7 @@ func main() {
 	fmt.Fprintf(os.Stderr, "genhelp: wrote %d examples to %s\n", len(results), outPath)
 }
 
-func evalExpr(reg *engine.Registry, expr string) (string, error) {
+func evalExpr(reg *native.Registry, expr string) (string, error) {
 	vals, err := parser.Parse(expr)
 	if err != nil {
 		return "", err
@@ -109,7 +108,7 @@ func evalExpr(reg *engine.Registry, expr string) (string, error) {
 	reg.Output = io.Discard
 	defer func() { reg.Output = savedOut }()
 
-	eng := engine.NewTop(reg)
+	eng := native.NewTop(reg)
 	result, err := eng.Run(vals)
 	if err != nil {
 		return "", err

@@ -2,21 +2,19 @@ package native
 
 import (
 	"fmt"
-
-	"github.com/aql-lang/aql/lang/go/engine"
 )
 
 // valueToSliceArg converts a Value into the interface{} expected by
 // voxgigstruct.Slice: strings flow through unchanged, lists become
 // []interface{} with element-wise conversion, anything else falls back
 // to its String() form. Used by stringSliceNative in natives.go.
-func valueToSliceArg(v engine.Value) interface{} {
-	if v.VType.Matches(engine.TString) {
-		_as3, _ := engine.AsString(v)
+func valueToSliceArg(v Value) interface{} {
+	if v.VType.Matches(TString) {
+		_as3, _ := AsString(v)
 		return _as3
 	}
-	if v.VType.Matches(engine.TList) {
-		list, _ := engine.AsList(v)
+	if v.VType.Matches(TList) {
+		list, _ := AsList(v)
 		result := make([]interface{}, list.Len())
 		for i, elem := range list.Slice() {
 			result[i] = valueToSliceArg(elem)
@@ -29,12 +27,12 @@ func valueToSliceArg(v engine.Value) interface{} {
 // sliceResult converts a voxgigstruct.Slice result back into engine
 // values. Strings stay strings; []interface{} becomes a List of converted
 // items via sliceResultItem; nil becomes a None type literal.
-func sliceResult(result interface{}) ([]engine.Value, error) {
+func sliceResult(result interface{}) ([]Value, error) {
 	switch r := result.(type) {
 	case string:
-		return []engine.Value{engine.NewString(r)}, nil
+		return []Value{NewString(r)}, nil
 	case []interface{}:
-		vals := make([]engine.Value, len(r))
+		vals := make([]Value, len(r))
 		for i, item := range r {
 			v, err := sliceResultItem(item)
 			if err != nil {
@@ -42,41 +40,41 @@ func sliceResult(result interface{}) ([]engine.Value, error) {
 			}
 			vals[i] = v
 		}
-		return []engine.Value{engine.NewList(vals)}, nil
+		return []Value{NewList(vals)}, nil
 	case nil:
-		return []engine.Value{engine.NewTypeLiteral(engine.TNone)}, nil
+		return []Value{NewTypeLiteral(TNone)}, nil
 	default:
 		return nil, fmt.Errorf("slice: unexpected result type %T", result)
 	}
 }
 
 // sliceResultItem converts a single item produced by voxgigstruct.Slice
-// into an engine.Value, recursing into nested []interface{} slices.
-func sliceResultItem(item interface{}) (engine.Value, error) {
+// into an Value, recursing into nested []interface{} slices.
+func sliceResultItem(item interface{}) (Value, error) {
 	switch v := item.(type) {
 	case string:
-		return engine.NewString(v), nil
+		return NewString(v), nil
 	case int:
-		return engine.NewInteger(int64(v)), nil
+		return NewInteger(int64(v)), nil
 	case int64:
-		return engine.NewInteger(v), nil
+		return NewInteger(v), nil
 	case float64:
-		return engine.NewDecimal(v), nil
+		return NewDecimal(v), nil
 	case bool:
-		return engine.NewBoolean(v), nil
+		return NewBoolean(v), nil
 	case nil:
-		return engine.NewTypeLiteral(engine.TNone), nil
+		return NewTypeLiteral(TNone), nil
 	case []interface{}:
-		vals := make([]engine.Value, len(v))
+		vals := make([]Value, len(v))
 		for i, elem := range v {
 			val, err := sliceResultItem(elem)
 			if err != nil {
-				return engine.Value{}, err
+				return Value{}, err
 			}
 			vals[i] = val
 		}
-		return engine.NewList(vals), nil
+		return NewList(vals), nil
 	default:
-		return engine.Value{}, fmt.Errorf("slice: unsupported element type %T", item)
+		return Value{}, fmt.Errorf("slice: unsupported element type %T", item)
 	}
 }

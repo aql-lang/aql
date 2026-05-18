@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
 	"github.com/aql-lang/aql/lang/go/internal/fileops"
 	"github.com/aql-lang/aql/lang/go/native"
 )
@@ -23,7 +22,7 @@ func testdataDir(t *testing.T) string {
 
 // runRealFileSteps creates a registry backed by real OS file operations,
 // with the working directory set to dir, then executes AQL steps.
-func runRealFileSteps(t *testing.T, dir string, steps []string) ([]engine.Value, error) {
+func runRealFileSteps(t *testing.T, dir string, steps []string) ([]native.Value, error) {
 	t.Helper()
 
 	origDir, err := os.Getwd()
@@ -40,17 +39,17 @@ func runRealFileSteps(t *testing.T, dir string, steps []string) ([]engine.Value,
 		t.Fatal(err)
 	}
 
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	native.Register(reg)
-	engine.SetHostFileOps(reg, fileops.NewDefault())
+	native.SetHostFileOps(reg, fileops.NewDefault())
 	reg.SetParseFunc(parser.Parse)
 	reg.BaseDir = absDir
 
-	eng := engine.New(reg)
-	var result []engine.Value
+	eng := native.New(reg)
+	var result []native.Value
 	for _, step := range steps {
 		vals, err := parser.Parse(step)
 		if err != nil {

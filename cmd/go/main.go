@@ -13,10 +13,9 @@ import (
 
 	"github.com/aql-lang/aql/cmd/go/internal/repl"
 	"github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/engine"
-	"github.com/aql-lang/aql/lang/go/engine/help"
 	"github.com/aql-lang/aql/lang/go/formatter"
 	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/aql-lang/aql/lang/go/native/help"
 	jsonic "github.com/jsonicjs/jsonic/go"
 )
 
@@ -185,9 +184,9 @@ func runHelp(args []string, w io.Writer) int {
 	name := args[0]
 
 	// Build a registry to get dynamic signature data.
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err == nil {
-		if info := engine.BuildFuncInfo(reg, name); info != nil {
+		if info := native.BuildFuncInfo(reg, name); info != nil {
 			fmt.Fprint(w, help.FormatDynamic(*info))
 			return 0
 		}

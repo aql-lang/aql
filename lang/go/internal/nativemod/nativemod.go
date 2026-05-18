@@ -13,13 +13,13 @@ package nativemod
 import (
 	"fmt"
 
-	"github.com/aql-lang/aql/lang/go/engine"
+	"github.com/aql-lang/aql/lang/go/native"
 )
 
 // modules maps native module names to their builder functions.
 // Each builder creates a sub-registry with the module's words and returns
 // a ModuleDesc whose exports contain FnDef wrappers for those words.
-var modules = map[string]func(parent *engine.Registry) (engine.ModuleDesc, error){
+var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error){
 	"math":      BuildMathModule,
 	"time":      BuildTimeModule,
 	"matrix":    BuildMatrixModule,
@@ -30,10 +30,10 @@ var modules = map[string]func(parent *engine.Registry) (engine.ModuleDesc, error
 // Resolve resolves a native module name and returns a ModuleDesc.
 // The parent registry is used to generate module IDs and inherit context.
 // This function is intended to be called from the import handler.
-func Resolve(name string, parent *engine.Registry) (engine.ModuleDesc, error) {
+func Resolve(name string, parent *native.Registry) (native.ModuleDesc, error) {
 	fn, ok := modules[name]
 	if !ok {
-		return engine.ModuleDesc{}, fmt.Errorf("unknown native module: aql:%s", name)
+		return native.ModuleDesc{}, fmt.Errorf("unknown native module: aql:%s", name)
 	}
 	return fn(parent)
 }
@@ -41,49 +41,49 @@ func Resolve(name string, parent *engine.Registry) (engine.ModuleDesc, error) {
 // InstallMathExports builds the math module and installs its exports as defs
 // in the given registry. This is a convenience for test setup — equivalent to
 // what happens when AQL code runs "aql:math" import.
-func InstallMathExports(r *engine.Registry) error {
+func InstallMathExports(r *native.Registry) error {
 	desc, err := BuildMathModule(r)
 	if err != nil {
 		return err
 	}
 	for name, exportMap := range desc.Exports {
-		r.Defs.Push(name, engine.NewMap(exportMap))
+		r.Defs.Push(name, native.NewMap(exportMap))
 	}
 	return nil
 }
 
 // InstallTimeExports builds the time module and installs its exports as defs.
-func InstallTimeExports(r *engine.Registry) error {
+func InstallTimeExports(r *native.Registry) error {
 	desc, err := BuildTimeModule(r)
 	if err != nil {
 		return err
 	}
 	for name, exportMap := range desc.Exports {
-		r.Defs.Push(name, engine.NewMap(exportMap))
+		r.Defs.Push(name, native.NewMap(exportMap))
 	}
 	return nil
 }
 
 // InstallMatrixExports builds the matrix module and installs its exports as defs.
-func InstallMatrixExports(r *engine.Registry) error {
+func InstallMatrixExports(r *native.Registry) error {
 	desc, err := BuildMatrixModule(r)
 	if err != nil {
 		return err
 	}
 	for name, exportMap := range desc.Exports {
-		r.Defs.Push(name, engine.NewMap(exportMap))
+		r.Defs.Push(name, native.NewMap(exportMap))
 	}
 	return nil
 }
 
 // InstallDecisionExports builds the decision module and installs its exports as defs.
-func InstallDecisionExports(r *engine.Registry) error {
+func InstallDecisionExports(r *native.Registry) error {
 	desc, err := BuildDecisionModule(r)
 	if err != nil {
 		return err
 	}
 	for name, exportMap := range desc.Exports {
-		r.Defs.Push(name, engine.NewMap(exportMap))
+		r.Defs.Push(name, native.NewMap(exportMap))
 	}
 	return nil
 }

@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
 	"github.com/aql-lang/aql/lang/go/internal/fileops"
 )
 
@@ -421,15 +420,15 @@ func TestImportFileNoParseFunc(t *testing.T) {
 	mem := fileops.NewMem()
 	mem.Files["./mod.aql"] = []byte(`export "M" {x:1}`)
 
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	engine.SetHostFileOps(reg, mem)
+	native.SetHostFileOps(reg, mem)
 	// No ParseFunc.
 
 	vals, _ := parser.Parse(`import "./mod.aql"`)
-	eng := engine.New(reg)
+	eng := native.New(reg)
 	_, runErr := eng.Run(vals)
 	if runErr == nil {
 		t.Fatal("expected error when ParseFunc is nil")
@@ -443,14 +442,14 @@ func TestImportFileRenameNoParseFunc(t *testing.T) {
 	mem := fileops.NewMem()
 	mem.Files["./mod.aql"] = []byte(`export "M" {x:1}`)
 
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	engine.SetHostFileOps(reg, mem)
+	native.SetHostFileOps(reg, mem)
 
 	vals, _ := parser.Parse(`import [M R] "./mod.aql"`)
-	eng := engine.New(reg)
+	eng := native.New(reg)
 	_, runErr := eng.Run(vals)
 	if runErr == nil {
 		t.Fatal("expected error when ParseFunc is nil")
@@ -634,7 +633,7 @@ func TestExportWithListValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result) != 1 || !result[0].VType.Equal(engine.TList) {
+	if len(result) != 1 || !result[0].VType.Equal(native.TList) {
 		t.Errorf("expected list, got %v", result)
 	}
 }
@@ -778,10 +777,10 @@ func TestModuleValueType(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
 	v := result[0]
-	if !engine.IsModule(v) {
+	if !native.IsModule(v) {
 		t.Fatal("expected module type")
 	}
-	desc, _ := engine.AsModule(v)
+	desc, _ := native.AsModule(v)
 	if desc.ID == "" {
 		t.Error("expected non-empty module ID")
 	}
@@ -827,7 +826,7 @@ func TestMultiRenameWithStringNames(t *testing.T) {
 // =====================================================================
 
 func TestSetParseFuncNil(t *testing.T) {
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -838,7 +837,7 @@ func TestSetParseFuncNil(t *testing.T) {
 }
 
 func TestSetParseFuncRoundTrip(t *testing.T) {
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -940,7 +939,7 @@ func TestExportListDefResolution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result) != 1 || !result[0].VType.Equal(engine.TList) {
+	if len(result) != 1 || !result[0].VType.Equal(native.TList) {
 		t.Errorf("expected list, got %v", result)
 	}
 }

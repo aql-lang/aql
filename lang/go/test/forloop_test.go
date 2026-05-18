@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
 	"github.com/aql-lang/aql/lang/go/internal/nativemod"
 )
 
@@ -49,12 +48,12 @@ func TestForLoop(t *testing.T) {
 			}
 
 			// Run through the engine with a fresh registry.
-			reg, err := engine.DefaultRegistry(native.Register)
+			reg, err := native.DefaultRegistry()
 			if err != nil {
 				t.Fatal(err)
 			}
 			nativemod.InstallMathExports(reg)
-			eng := engine.NewTop(reg)
+			eng := native.NewTop(reg)
 			result, err := eng.Run(values)
 
 			// Expected error: "ERROR:substring"

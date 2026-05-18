@@ -103,7 +103,7 @@ Worth listing because the absence is the whole point.
 
 - **`github.com/aql-lang/aql/lang/go`** — the language layer with
   the production word set. Calc deliberately avoids it.
-- **`github.com/aql-lang/aql/lang/go/engine`** — the engine shim
+- **`github.com/aql-lang/aql/lang/go/native`** — the engine shim
   that lang re-exports through. Calc reaches the bare eng API.
 - **`github.com/aql-lang/aql/lang/go/native`** — array / fetch /
   query natives. None of them belong in a calculator.

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/aql-lang/aql/lang/go/engine"
 	voxgigstruct "github.com/voxgig/struct"
 )
 
@@ -12,7 +11,7 @@ import (
 // natives.go.
 //
 // mergeHandler calls voxgigstruct.Merge on two values, returning the merged result.
-func mergeHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+func mergeHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	a := valueToAny(args[0])
 	b := valueToAny(args[1])
 
@@ -22,7 +21,7 @@ func mergeHandler(args []engine.Value, ctx map[string]engine.Value, stack []engi
 	if err != nil {
 		return nil, fmt.Errorf("merge: %w", err)
 	}
-	return []engine.Value{val}, nil
+	return []Value{val}, nil
 }
 
 // mergeListMapHandler creates a new list with map's integer keys replacing
@@ -30,16 +29,16 @@ func mergeHandler(args []engine.Value, ctx map[string]engine.Value, stack []engi
 // are ignored. The original list is unchanged.
 //
 //	[a,b,c] merge {1:d} → [a,d,c]
-func mergeListMapHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	_lst, _ := engine.AsList(args[0])
+func mergeListMapHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	_lst, _ := AsList(args[0])
 	list := _lst.Slice()
-	m, _ := engine.AsMap(args[1])
+	m, _ := AsMap(args[1])
 	if list == nil || m == nil {
 		return nil, fmt.Errorf("merge: expected concrete list and map")
 	}
 
 	// Copy the list.
-	result := make([]engine.Value, len(list))
+	result := make([]Value, len(list))
 	copy(result, list)
 
 	// Apply map's integer-keyed values.
@@ -60,7 +59,7 @@ func mergeListMapHandler(args []engine.Value, ctx map[string]engine.Value, stack
 		// idx > len(result): gap, ignore
 	}
 
-	return []engine.Value{engine.NewList(result)}, nil
+	return []Value{NewList(result)}, nil
 }
 
 // mergeMapListHandler creates a new list from the list argument, with
@@ -69,16 +68,16 @@ func mergeListMapHandler(args []engine.Value, ctx map[string]engine.Value, stack
 // Keys within range replace existing elements.
 //
 //	{3:d,x:X} merge [a,b,c] → [a,b,c,d]
-func mergeMapListHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	m, _ := engine.AsMap(args[0])
-	_lst, _ := engine.AsList(args[1])
+func mergeMapListHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	m, _ := AsMap(args[0])
+	_lst, _ := AsList(args[1])
 	list := _lst.Slice()
 	if m == nil || list == nil {
 		return nil, fmt.Errorf("merge: expected concrete map and list")
 	}
 
 	// Start with a copy of the list.
-	result := make([]engine.Value, len(list))
+	result := make([]Value, len(list))
 	copy(result, list)
 
 	// Apply map's integer-keyed values.
@@ -100,5 +99,5 @@ func mergeMapListHandler(args []engine.Value, ctx map[string]engine.Value, stack
 		// idx > len(result): gap, ignore
 	}
 
-	return []engine.Value{engine.NewList(result)}, nil
+	return []Value{NewList(result)}, nil
 }

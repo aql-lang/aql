@@ -6,21 +6,20 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
 )
 
 // runExpr parses and runs a multi-line AQL expression with a fresh registry.
-func runExpr(t *testing.T, expr string) ([]engine.Value, error) {
+func runExpr(t *testing.T, expr string) ([]native.Value, error) {
 	t.Helper()
 	values, err := parser.Parse(expr)
 	if err != nil {
 		return nil, err
 	}
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	eng := engine.NewTop(reg)
+	eng := native.NewTop(reg)
 	return eng.Run(values)
 }
 
@@ -398,13 +397,13 @@ func TestMapExprListValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	av, _ := m.Get("a")
 	bv, _ := m.Get("b")
 	cv, _ := m.Get("c")
-	avi, _ := engine.AsInteger(av)
-	bvi, _ := engine.AsInteger(bv)
-	cvs, _ := engine.AsString(cv)
+	avi, _ := native.AsInteger(av)
+	bvi, _ := native.AsInteger(bv)
+	cvs, _ := native.AsString(cv)
 	if avi != 10 {
 		t.Errorf("a = %d, want 10", avi)
 	}

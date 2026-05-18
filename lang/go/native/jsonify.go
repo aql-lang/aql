@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/engine"
 	voxgigstruct "github.com/voxgig/struct"
 )
 
@@ -20,18 +19,18 @@ import (
 // pre-existing semantics for plain Maps / Lists / scalars.
 //
 // jsonifyDefaultHandler calls voxgigstruct.Jsonify with default settings.
-func jsonifyDefaultHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+func jsonifyDefaultHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	projected, err := eng.NodifyValue(args[0])
 	if err != nil {
 		return nil, err
 	}
 	data := valueToAny(projected)
 	result := voxgigstruct.Jsonify(data)
-	return []engine.Value{engine.NewString(result)}, nil
+	return []Value{NewString(result)}, nil
 }
 
 // jsonifyFlagsHandler calls voxgigstruct.Jsonify with a flags map.
-func jsonifyFlagsHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+func jsonifyFlagsHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	flags, ok := valueToAny(args[0]).(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("jsonify: expected map for flags, got %T", valueToAny(args[0]))
@@ -42,5 +41,5 @@ func jsonifyFlagsHandler(args []engine.Value, ctx map[string]engine.Value, stack
 	}
 	data := valueToAny(projected)
 	result := voxgigstruct.Jsonify(data, flags)
-	return []engine.Value{engine.NewString(result)}, nil
+	return []Value{NewString(result)}, nil
 }

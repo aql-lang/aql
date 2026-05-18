@@ -4,12 +4,12 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
+	"github.com/aql-lang/aql/lang/go/native"
 )
 
-func decisionRegistry(t *testing.T) *engine.Registry {
+func decisionRegistry(t *testing.T) *native.Registry {
 	t.Helper()
-	r, err := engine.DefaultRegistry()
+	r, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,13 +20,13 @@ func decisionRegistry(t *testing.T) *engine.Registry {
 	return r
 }
 
-func runDecisionAQL(t *testing.T, r *engine.Registry, src string) []engine.Value {
+func runDecisionAQL(t *testing.T, r *native.Registry, src string) []native.Value {
 	t.Helper()
 	values, err := parser.Parse(src)
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	eng := engine.NewTop(r)
+	eng := native.NewTop(r)
 	result, err := eng.Run(values)
 	if err != nil {
 		t.Fatalf("run error: %v", err)
@@ -37,7 +37,7 @@ func runDecisionAQL(t *testing.T, r *engine.Registry, src string) []engine.Value
 // --- Module structure ---
 
 func TestDecisionModuleExports(t *testing.T) {
-	r, err := engine.DefaultRegistry()
+	r, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestDecisionModuleExports(t *testing.T) {
 func TestDecisionCond(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `18 "gte" quote age decision.cond`)
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	if m == nil {
 		t.Fatalf("expected map, got %s", result[0].VType.String())
 	}
@@ -80,7 +80,7 @@ func TestDecisionCond(t *testing.T) {
 func TestDecisionEvalCondTrue(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `{age:25} {field:"age",op:"gte",value:18} decision.eval-cond`)
-	b, _ := engine.AsBoolean(result[0])
+	b, _ := native.AsBoolean(result[0])
 	if !b {
 		t.Error("expected true for age=25 gte 18")
 	}
@@ -89,7 +89,7 @@ func TestDecisionEvalCondTrue(t *testing.T) {
 func TestDecisionEvalCondFalse(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `{age:15} {field:"age",op:"gte",value:18} decision.eval-cond`)
-	b, _ := engine.AsBoolean(result[0])
+	b, _ := native.AsBoolean(result[0])
 	if b {
 		t.Error("expected false for age=15 gte 18")
 	}
@@ -98,7 +98,7 @@ func TestDecisionEvalCondFalse(t *testing.T) {
 func TestDecisionEvalCondEq(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `{status:"active"} {field:"status",op:"eq",value:"active"} decision.eval-cond`)
-	b, _ := engine.AsBoolean(result[0])
+	b, _ := native.AsBoolean(result[0])
 	if !b {
 		t.Error("expected true for status eq active")
 	}
@@ -112,7 +112,7 @@ func TestDecisionEvalPredAllOf(t *testing.T) {
 		def pred ([{field:"age",op:"gte",value:18} {field:"score",op:"gt",value:50}] decision.all-of)
 		{age:25,score:80} pred decision.eval-pred
 	`)
-	b, _ := engine.AsBoolean(result[0])
+	b, _ := native.AsBoolean(result[0])
 	if !b {
 		t.Error("expected all-of true for age=25,score=80")
 	}
@@ -124,7 +124,7 @@ func TestDecisionEvalPredAllOfFalse(t *testing.T) {
 		def pred ([{field:"age",op:"gte",value:18} {field:"score",op:"gt",value:50}] decision.all-of)
 		{age:25,score:30} pred decision.eval-pred
 	`)
-	b, _ := engine.AsBoolean(result[0])
+	b, _ := native.AsBoolean(result[0])
 	if b {
 		t.Error("expected all-of false for age=25,score=30")
 	}
@@ -136,7 +136,7 @@ func TestDecisionEvalPredAnyOf(t *testing.T) {
 		def pred ([{field:"age",op:"gte",value:18} {field:"score",op:"gt",value:50}] decision.any-of)
 		{age:10,score:80} pred decision.eval-pred
 	`)
-	b, _ := engine.AsBoolean(result[0])
+	b, _ := native.AsBoolean(result[0])
 	if !b {
 		t.Error("expected any-of true for age=10,score=80")
 	}
@@ -148,7 +148,7 @@ func TestDecisionEvalPredNotOf(t *testing.T) {
 		def pred ({field:"age",op:"lt",value:18} decision.not-of)
 		{age:25} pred decision.eval-pred
 	`)
-	b, _ := engine.AsBoolean(result[0])
+	b, _ := native.AsBoolean(result[0])
 	if !b {
 		t.Error("expected not-of(age lt 18) true for age=25")
 	}
@@ -165,9 +165,9 @@ func TestDecisionTableFirst(t *testing.T) {
 		] decision.make-table)
 		{age:25} tbl decision.eval-table
 	`)
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	cat, _ := m.Get("category")
-	s, _ := engine.AsString(cat)
+	s, _ := native.AsString(cat)
 	if s != "adult" {
 		t.Errorf("expected adult, got %v", cat)
 	}
@@ -182,9 +182,9 @@ func TestDecisionTableFirstMinor(t *testing.T) {
 		] decision.make-table)
 		{age:12} tbl decision.eval-table
 	`)
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	cat, _ := m.Get("category")
-	s, _ := engine.AsString(cat)
+	s, _ := native.AsString(cat)
 	if s != "minor" {
 		t.Errorf("expected minor, got %v", cat)
 	}
@@ -200,9 +200,9 @@ func TestDecisionTableUnique(t *testing.T) {
 		def tbl (rawtbl "unique" decision.with-policy)
 		{score:75} tbl decision.eval-table
 	`)
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	grade, _ := m.Get("grade")
-	s, _ := engine.AsString(grade)
+	s, _ := native.AsString(grade)
 	if s != "pass" {
 		t.Errorf("expected pass, got %v", grade)
 	}
@@ -218,7 +218,7 @@ func TestDecisionTableCollect(t *testing.T) {
 		def tbl (rawtbl "collect" decision.with-policy)
 		{age:25} tbl decision.eval-table
 	`)
-	list, _ := engine.AsList(result[0])
+	list, _ := native.AsList(result[0])
 	if list.Len() != 2 {
 		t.Fatalf("expected 2 collected, got %d: %v", list.Len(), result[0])
 	}
@@ -230,9 +230,9 @@ func TestDecisionTableNoMatch(t *testing.T) {
 		def tbl ([{when:{field:"age",op:"gt",value:100}, then:{x:1}}] decision.make-table)
 		{age:25} tbl decision.eval-table
 	`)
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	errVal, _ := m.Get("error")
-	s, _ := engine.AsString(errVal)
+	s, _ := native.AsString(errVal)
 	if s != "no-match" {
 		t.Errorf("expected no-match error, got %v", result[0])
 	}
@@ -247,9 +247,9 @@ func TestDecisionTableCompound(t *testing.T) {
 		]})
 		{age:25,score:95} tbl decision.eval-table
 	`)
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	tier, _ := m.Get("tier")
-	s, _ := engine.AsString(tier)
+	s, _ := native.AsString(tier)
 	if s != "premium" {
 		t.Errorf("expected premium, got %v", tier)
 	}
@@ -270,9 +270,9 @@ func TestDecisionTree(t *testing.T) {
 		]})
 		{age:25} tree decision.eval-tree
 	`)
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	cat, _ := m.Get("category")
-	s, _ := engine.AsString(cat)
+	s, _ := native.AsString(cat)
 	if s != "adult" {
 		t.Errorf("expected adult, got %v", cat)
 	}
@@ -291,7 +291,7 @@ func TestDecisionTreeMinor(t *testing.T) {
 		]})
 		{age:12} tree decision.eval-tree
 	`)
-	s, _ := engine.AsString(result[0])
+	s, _ := native.AsString(result[0])
 	if s != "too-young" {
 		t.Errorf("expected too-young, got %v", result[0])
 	}
@@ -315,7 +315,7 @@ func TestDecisionTreeMultiLevel(t *testing.T) {
 		]})
 		{age:25,score:90} tree decision.eval-tree
 	`)
-	s, _ := engine.AsString(result[0])
+	s, _ := native.AsString(result[0])
 	if s != "approved" {
 		t.Errorf("expected approved, got %v", result[0])
 	}
@@ -332,9 +332,9 @@ func TestDecideTable(t *testing.T) {
 		]})
 		{x:5} model decision.decide
 	`)
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	sign, _ := m.Get("sign")
-	s, _ := engine.AsString(sign)
+	s, _ := native.AsString(sign)
 	if s != "positive" {
 		t.Errorf("expected positive, got %v", sign)
 	}
@@ -353,7 +353,7 @@ func TestDecideTree(t *testing.T) {
 		]})
 		{temp:35} model decision.decide
 	`)
-	s, _ := engine.AsString(result[0])
+	s, _ := native.AsString(result[0])
 	if s != "hot" {
 		t.Errorf("expected hot, got %v", result[0])
 	}
@@ -410,7 +410,7 @@ func TestDecisionDeepNestedPredicates(t *testing.T) {
 			result := runDecisionAQL(t, r, src+`
 				`+tc.input+` root decision.eval-pred
 			`)
-			b, _ := engine.AsBoolean(result[0])
+			b, _ := native.AsBoolean(result[0])
 			if b != tc.want {
 				t.Errorf("got %v, want %v for input %s", b, tc.want, tc.input)
 			}
@@ -461,7 +461,7 @@ func TestDecisionDeepCompoundTable(t *testing.T) {
 			result := runDecisionAQL(t, r, src+`
 				`+tc.input+` tbl decision.eval-table
 			`)
-			m, _ := engine.AsMap(result[0])
+			m, _ := native.AsMap(result[0])
 			if m == nil {
 				t.Fatalf("expected map result, got %s", result[0].VType.String())
 			}
@@ -470,7 +470,7 @@ func TestDecisionDeepCompoundTable(t *testing.T) {
 				if !ok {
 					t.Fatalf("expected no-match error, got %s", result[0])
 				}
-				es, _ := engine.AsString(errVal)
+				es, _ := native.AsString(errVal)
 				if es != "no-match" {
 					t.Errorf("got error=%q, want no-match", es)
 				}
@@ -480,7 +480,7 @@ func TestDecisionDeepCompoundTable(t *testing.T) {
 			if !ok {
 				t.Fatalf("missing 'access' key in result %s", result[0])
 			}
-			s, _ := engine.AsString(access)
+			s, _ := native.AsString(access)
 			if s != tc.want {
 				t.Errorf("got access=%q, want %q for input %s", s, tc.want, tc.input)
 			}
@@ -532,7 +532,7 @@ func TestDecisionDeepBranchingTree(t *testing.T) {
 			result := runDecisionAQL(t, r, src+`
 				`+tc.input+` model decision.decide
 			`)
-			s, _ := engine.AsString(result[0])
+			s, _ := native.AsString(result[0])
 			if s != tc.want {
 				t.Errorf("got %q, want %q for input %s", s, tc.want, tc.input)
 			}
@@ -565,31 +565,31 @@ func TestDecisionTreeDeepLeafResult(t *testing.T) {
 		]})
 		{x:5} model decision.decide
 	`)
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	if m == nil {
 		t.Fatalf("expected map result, got %s", result[0].VType.String())
 	}
 	sign, _ := m.Get("sign")
-	s, _ := engine.AsString(sign)
+	s, _ := native.AsString(sign)
 	if s != "positive" {
 		t.Errorf("sign = %q, want positive", s)
 	}
 	detail, _ := m.Get("detail")
-	dm, _ := engine.AsMap(detail)
+	dm, _ := native.AsMap(detail)
 	if dm == nil {
 		t.Fatalf("expected detail map, got %s", detail.VType.String())
 	}
 	bucket, _ := dm.Get("bucket")
-	if bs, _ := engine.AsString(bucket); bs != "high" {
+	if bs, _ := native.AsString(bucket); bs != "high" {
 		t.Errorf("detail.bucket = %q, want high", bs)
 	}
 	nested, _ := dm.Get("nested")
-	nm, _ := engine.AsMap(nested)
+	nm, _ := native.AsMap(nested)
 	if nm == nil {
 		t.Fatalf("expected nested map, got %s", nested.VType.String())
 	}
 	label, _ := nm.Get("label")
-	if ls, _ := engine.AsString(label); ls != "deep" {
+	if ls, _ := native.AsString(label); ls != "deep" {
 		t.Errorf("detail.nested.label = %q, want deep", ls)
 	}
 }
@@ -615,7 +615,7 @@ func TestDecisionDeepStructureRejectsUndefinedWords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	eng := engine.NewTop(r)
+	eng := native.NewTop(r)
 	_, err = eng.Run(values)
 	if err == nil {
 		t.Fatal("expected undefined_word error for bare-word field value, got nil")
@@ -644,7 +644,7 @@ func TestDecisionDeepTreeRejectsUndefinedWords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	eng := engine.NewTop(r)
+	eng := native.NewTop(r)
 	_, err = eng.Run(values)
 	if err == nil {
 		t.Fatal("expected undefined_word error for bare-word value, got nil")

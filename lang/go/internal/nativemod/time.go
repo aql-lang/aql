@@ -4,21 +4,21 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aql-lang/aql/lang/go/engine"
+	"github.com/aql-lang/aql/lang/go/native"
 )
 
 // BuildTimeModule creates the "aql:time" native module.
-func BuildTimeModule(parent *engine.Registry) (engine.ModuleDesc, error) {
-	subReg, err := engine.DefaultRegistry()
+func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
+	subReg, err := native.DefaultRegistry()
 	if err != nil {
-		return engine.ModuleDesc{}, err
+		return native.ModuleDesc{}, err
 	}
 
 	for _, n := range TimeNatives {
 		subReg.RegisterNativeFunc(n)
 	}
 
-	exports := engine.NewOrderedMap()
+	exports := native.NewOrderedMap()
 
 	// Construction — numeric and IANA-zone only. ISO 8601 date /
 	// datetime / instant / time-of-day / duration string parsing
@@ -26,90 +26,90 @@ func BuildTimeModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 	// `today`, `today-utc`, `unix`, `unix-ms`, `unix-ns`, the
 	// numeric duration constructors (`years`, `months`, `days`,
 	// `hours`, `minutes`, `seconds`, …), or `cal-dur` directly.
-	exports.Set("tz", makeTimeFnDef("time-tz", []engine.FnParam{{Type: engine.TString}}, []*engine.Type{engine.TTimezone}, subReg))
-	exports.Set("unix", makeTimeFnDef("time-unix", []engine.FnParam{{Type: engine.TInteger}}, []*engine.Type{engine.TInstant}, subReg))
-	exports.Set("unix-ms", makeTimeFnDef("time-unix-ms", []engine.FnParam{{Type: engine.TInteger}}, []*engine.Type{engine.TInstant}, subReg))
-	exports.Set("unix-ns", makeTimeFnDef("time-unix-ns", []engine.FnParam{{Type: engine.TInteger}}, []*engine.Type{engine.TInstant}, subReg))
+	exports.Set("tz", makeTimeFnDef("time-tz", []native.FnParam{{Type: native.TString}}, []*native.Type{native.TTimezone}, subReg))
+	exports.Set("unix", makeTimeFnDef("time-unix", []native.FnParam{{Type: native.TInteger}}, []*native.Type{native.TInstant}, subReg))
+	exports.Set("unix-ms", makeTimeFnDef("time-unix-ms", []native.FnParam{{Type: native.TInteger}}, []*native.Type{native.TInstant}, subReg))
+	exports.Set("unix-ns", makeTimeFnDef("time-unix-ns", []native.FnParam{{Type: native.TInteger}}, []*native.Type{native.TInstant}, subReg))
 
 	// Current time
-	exports.Set("now-local", makeTimeFnDef("time-now-local", []engine.FnParam{}, []*engine.Type{engine.TDateTime}, subReg))
-	exports.Set("today", makeTimeFnDef("time-today", []engine.FnParam{}, []*engine.Type{engine.TDate}, subReg))
-	exports.Set("today-utc", makeTimeFnDef("time-today-utc", []engine.FnParam{}, []*engine.Type{engine.TDate}, subReg))
+	exports.Set("now-local", makeTimeFnDef("time-now-local", []native.FnParam{}, []*native.Type{native.TDateTime}, subReg))
+	exports.Set("today", makeTimeFnDef("time-today", []native.FnParam{}, []*native.Type{native.TDate}, subReg))
+	exports.Set("today-utc", makeTimeFnDef("time-today-utc", []native.FnParam{}, []*native.Type{native.TDate}, subReg))
 
 	// Extraction (Date -> Integer)
 	for _, name := range []string{"year", "month", "day", "weekday", "year-day", "iso-week", "quarter", "days-in-month", "days-in-year"} {
-		exports.Set(name, makeTimeFnDef(name, []engine.FnParam{{Type: engine.TDate}}, []*engine.Type{engine.TInteger}, subReg))
+		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TDate}}, []*native.Type{native.TInteger}, subReg))
 	}
 	for _, name := range []string{"weekday-name", "month-name"} {
-		exports.Set(name, makeTimeFnDef(name, []engine.FnParam{{Type: engine.TDate}}, []*engine.Type{engine.TString}, subReg))
+		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TDate}}, []*native.Type{native.TString}, subReg))
 	}
-	exports.Set("leap-year?", makeTimeFnDef("leap-year?", []engine.FnParam{{Type: engine.TDate}}, []*engine.Type{engine.TBoolean}, subReg))
+	exports.Set("leap-year?", makeTimeFnDef("leap-year?", []native.FnParam{{Type: native.TDate}}, []*native.Type{native.TBoolean}, subReg))
 
 	// Extraction from Instant
-	exports.Set("to-unix", makeTimeFnDef("to-unix", []engine.FnParam{{Type: engine.TInstant}}, []*engine.Type{engine.TInteger}, subReg))
-	exports.Set("to-unix-ms", makeTimeFnDef("to-unix-ms", []engine.FnParam{{Type: engine.TInstant}}, []*engine.Type{engine.TInteger}, subReg))
+	exports.Set("to-unix", makeTimeFnDef("to-unix", []native.FnParam{{Type: native.TInstant}}, []*native.Type{native.TInteger}, subReg))
+	exports.Set("to-unix-ms", makeTimeFnDef("to-unix-ms", []native.FnParam{{Type: native.TInstant}}, []*native.Type{native.TInteger}, subReg))
 
 	// Comparison (Date Date -> Boolean)
 	for _, name := range []string{"before?", "after?", "equal?"} {
-		exports.Set(name, makeTimeFnDef(name, []engine.FnParam{{Type: engine.TDate}, {Type: engine.TDate}}, []*engine.Type{engine.TBoolean}, subReg))
+		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{native.TBoolean}, subReg))
 	}
 
 	// Formatting
-	exports.Set("to-string", makeTimeFnDef("to-string", []engine.FnParam{{Type: engine.TDate}}, []*engine.Type{engine.TString}, subReg))
-	exports.Set("format", makeTimeFnDef("format", []engine.FnParam{{Type: engine.TDate}, {Type: engine.TString}}, []*engine.Type{engine.TString}, subReg))
-	exports.Set("to-iso", makeTimeFnDef("to-iso", []engine.FnParam{{Type: engine.TDate}}, []*engine.Type{engine.TString}, subReg))
+	exports.Set("to-string", makeTimeFnDef("to-string", []native.FnParam{{Type: native.TDate}}, []*native.Type{native.TString}, subReg))
+	exports.Set("format", makeTimeFnDef("format", []native.FnParam{{Type: native.TDate}, {Type: native.TString}}, []*native.Type{native.TString}, subReg))
+	exports.Set("to-iso", makeTimeFnDef("to-iso", []native.FnParam{{Type: native.TDate}}, []*native.Type{native.TString}, subReg))
 
 	// Duration construction
 	for _, name := range []string{"years", "months", "weeks", "days"} {
-		exports.Set(name, makeTimeFnDef(name, []engine.FnParam{{Type: engine.TInteger}}, []*engine.Type{engine.TCalDuration}, subReg))
+		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TInteger}}, []*native.Type{native.TCalDuration}, subReg))
 	}
 	for _, name := range []string{"hours", "minutes", "seconds", "ms", "us", "ns"} {
-		exports.Set(name, makeTimeFnDef(name, []engine.FnParam{{Type: engine.TNumber}}, []*engine.Type{engine.TClkDuration}, subReg))
+		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TNumber}}, []*native.Type{native.TClkDuration}, subReg))
 	}
-	exports.Set("cal-dur", makeTimeFnDef("cal-dur", []engine.FnParam{{Type: engine.TInteger}, {Type: engine.TInteger}, {Type: engine.TInteger}}, []*engine.Type{engine.TCalDuration}, subReg))
+	exports.Set("cal-dur", makeTimeFnDef("cal-dur", []native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}, {Type: native.TInteger}}, []*native.Type{native.TCalDuration}, subReg))
 	// ISO 8601 duration string parsing (`"P1Y2M3D" duration`)
 	// removed as a feature. Use cal-dur or the years/months/days
 	// constructors directly.
 
 	// Duration extraction
 	for _, name := range []string{"total-hours", "total-minutes", "total-seconds", "total-ms"} {
-		exports.Set(name, makeTimeFnDef(name, []engine.FnParam{{Type: engine.TClkDuration}}, []*engine.Type{engine.TDecimal}, subReg))
+		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TClkDuration}}, []*native.Type{native.TDecimal}, subReg))
 	}
 	for _, name := range []string{"dur-years", "dur-months", "dur-days"} {
-		exports.Set(name, makeTimeFnDef(name, []engine.FnParam{{Type: engine.TCalDuration}}, []*engine.Type{engine.TInteger}, subReg))
+		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TCalDuration}}, []*native.Type{native.TInteger}, subReg))
 	}
-	exports.Set("dur-sign", makeTimeFnDef("dur-sign", []engine.FnParam{{Type: engine.TCalDuration}}, []*engine.Type{engine.TInteger}, subReg))
+	exports.Set("dur-sign", makeTimeFnDef("dur-sign", []native.FnParam{{Type: native.TCalDuration}}, []*native.Type{native.TInteger}, subReg))
 
 	// Arithmetic
-	exports.Set("until", makeTimeFnDef("until", []engine.FnParam{{Type: engine.TDate}, {Type: engine.TDate}}, []*engine.Type{engine.TCalDuration}, subReg))
-	exports.Set("since", makeTimeFnDef("since", []engine.FnParam{{Type: engine.TDate}, {Type: engine.TDate}}, []*engine.Type{engine.TCalDuration}, subReg))
-	exports.Set("diff", makeTimeFnDef("diff", []engine.FnParam{{Type: engine.TInstant}, {Type: engine.TInstant}}, []*engine.Type{engine.TClkDuration}, subReg))
-	exports.Set("elapsed", makeTimeFnDef("elapsed", []engine.FnParam{{Type: engine.TInstant}}, []*engine.Type{engine.TClkDuration}, subReg))
+	exports.Set("until", makeTimeFnDef("until", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{native.TCalDuration}, subReg))
+	exports.Set("since", makeTimeFnDef("since", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{native.TCalDuration}, subReg))
+	exports.Set("diff", makeTimeFnDef("diff", []native.FnParam{{Type: native.TInstant}, {Type: native.TInstant}}, []*native.Type{native.TClkDuration}, subReg))
+	exports.Set("elapsed", makeTimeFnDef("elapsed", []native.FnParam{{Type: native.TInstant}}, []*native.Type{native.TClkDuration}, subReg))
 
 	// Comparison extended
-	exports.Set("compare", makeTimeFnDef("time-compare", []engine.FnParam{{Type: engine.TDate}, {Type: engine.TDate}}, []*engine.Type{engine.TInteger}, subReg))
-	exports.Set("between?", makeTimeFnDef("between?", []engine.FnParam{{Type: engine.TDate}, {Type: engine.TDate}, {Type: engine.TDate}}, []*engine.Type{engine.TBoolean}, subReg))
-	exports.Set("earliest", makeTimeFnDef("earliest", []engine.FnParam{{Type: engine.TDate}, {Type: engine.TDate}}, []*engine.Type{engine.TDate}, subReg))
-	exports.Set("latest", makeTimeFnDef("latest", []engine.FnParam{{Type: engine.TDate}, {Type: engine.TDate}}, []*engine.Type{engine.TDate}, subReg))
+	exports.Set("compare", makeTimeFnDef("time-compare", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{native.TInteger}, subReg))
+	exports.Set("between?", makeTimeFnDef("between?", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}, {Type: native.TDate}}, []*native.Type{native.TBoolean}, subReg))
+	exports.Set("earliest", makeTimeFnDef("earliest", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{native.TDate}, subReg))
+	exports.Set("latest", makeTimeFnDef("latest", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{native.TDate}, subReg))
 
 	// Conversion
-	exports.Set("to-date", makeTimeFnDef("to-date", []engine.FnParam{{Type: engine.TDateTime}}, []*engine.Type{engine.TDate}, subReg))
-	exports.Set("to-time-of-day", makeTimeFnDef("to-time-of-day", []engine.FnParam{{Type: engine.TDateTime}}, []*engine.Type{engine.TTimeOfDay}, subReg))
-	exports.Set("to-datetime", makeTimeFnDef("to-datetime", []engine.FnParam{{Type: engine.TDate}}, []*engine.Type{engine.TDateTime}, subReg))
-	exports.Set("to-instant", makeTimeFnDef("to-instant", []engine.FnParam{{Type: engine.TDateTime}, {Type: engine.TTimezone}}, []*engine.Type{engine.TInstant}, subReg))
-	exports.Set("to-local", makeTimeFnDef("to-local", []engine.FnParam{{Type: engine.TInstant}, {Type: engine.TTimezone}}, []*engine.Type{engine.TDateTime}, subReg))
-	exports.Set("to-utc", makeTimeFnDef("to-utc", []engine.FnParam{{Type: engine.TInstant}}, []*engine.Type{engine.TDateTime}, subReg))
+	exports.Set("to-date", makeTimeFnDef("to-date", []native.FnParam{{Type: native.TDateTime}}, []*native.Type{native.TDate}, subReg))
+	exports.Set("to-time-of-day", makeTimeFnDef("to-time-of-day", []native.FnParam{{Type: native.TDateTime}}, []*native.Type{native.TTimeOfDay}, subReg))
+	exports.Set("to-datetime", makeTimeFnDef("to-datetime", []native.FnParam{{Type: native.TDate}}, []*native.Type{native.TDateTime}, subReg))
+	exports.Set("to-instant", makeTimeFnDef("to-instant", []native.FnParam{{Type: native.TDateTime}, {Type: native.TTimezone}}, []*native.Type{native.TInstant}, subReg))
+	exports.Set("to-local", makeTimeFnDef("to-local", []native.FnParam{{Type: native.TInstant}, {Type: native.TTimezone}}, []*native.Type{native.TDateTime}, subReg))
+	exports.Set("to-utc", makeTimeFnDef("to-utc", []native.FnParam{{Type: native.TInstant}}, []*native.Type{native.TDateTime}, subReg))
 
 	// Rounding
-	exports.Set("start-of", makeTimeFnDef("start-of", []engine.FnParam{{Type: engine.TDate}, {Type: engine.TString}}, []*engine.Type{engine.TDate}, subReg))
-	exports.Set("end-of", makeTimeFnDef("end-of", []engine.FnParam{{Type: engine.TDate}, {Type: engine.TString}}, []*engine.Type{engine.TDate}, subReg))
+	exports.Set("start-of", makeTimeFnDef("start-of", []native.FnParam{{Type: native.TDate}, {Type: native.TString}}, []*native.Type{native.TDate}, subReg))
+	exports.Set("end-of", makeTimeFnDef("end-of", []native.FnParam{{Type: native.TDate}, {Type: native.TString}}, []*native.Type{native.TDate}, subReg))
 
 	// Timezone
-	exports.Set("tz-utc", makeTimeFnDef("tz-utc", []engine.FnParam{}, []*engine.Type{engine.TTimezone}, subReg))
-	exports.Set("tz-local", makeTimeFnDef("tz-local", []engine.FnParam{}, []*engine.Type{engine.TTimezone}, subReg))
-	exports.Set("tz-name", makeTimeFnDef("tz-name", []engine.FnParam{{Type: engine.TTimezone}}, []*engine.Type{engine.TString}, subReg))
-	exports.Set("tz-offset", makeTimeFnDef("tz-offset", []engine.FnParam{{Type: engine.TInstant}, {Type: engine.TTimezone}}, []*engine.Type{engine.TString}, subReg))
-	exports.Set("dst?", makeTimeFnDef("dst?", []engine.FnParam{{Type: engine.TInstant}, {Type: engine.TTimezone}}, []*engine.Type{engine.TBoolean}, subReg))
+	exports.Set("tz-utc", makeTimeFnDef("tz-utc", []native.FnParam{}, []*native.Type{native.TTimezone}, subReg))
+	exports.Set("tz-local", makeTimeFnDef("tz-local", []native.FnParam{}, []*native.Type{native.TTimezone}, subReg))
+	exports.Set("tz-name", makeTimeFnDef("tz-name", []native.FnParam{{Type: native.TTimezone}}, []*native.Type{native.TString}, subReg))
+	exports.Set("tz-offset", makeTimeFnDef("tz-offset", []native.FnParam{{Type: native.TInstant}, {Type: native.TTimezone}}, []*native.Type{native.TString}, subReg))
+	exports.Set("dst?", makeTimeFnDef("dst?", []native.FnParam{{Type: native.TInstant}, {Type: native.TTimezone}}, []*native.Type{native.TBoolean}, subReg))
 
 	// Parsing — removed as a feature. parse-date / parse-datetime
 	// (layout-based) and auto-date (auto-format-detecting) are gone.
@@ -118,38 +118,38 @@ func BuildTimeModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 	// (deepest-first match): `date n add-days`. The underlying NativeFunc
 	// sig is "data-last" (top-of-stack-first match): [TInteger, TDate].
 	for _, name := range []string{"add-days", "add-months", "add-years"} {
-		exports.Set(name, makeTimeFnDef(name, []engine.FnParam{{Type: engine.TDate}, {Type: engine.TInteger}}, []*engine.Type{engine.TDate}, subReg))
+		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TDate}, {Type: native.TInteger}}, []*native.Type{native.TDate}, subReg))
 	}
 
 	modID := parent.Modules.NextID()
-	desc := engine.ModuleDesc{
+	desc := native.ModuleDesc{
 		ID:      modID,
-		Exports: map[string]*engine.OrderedMap{"time": exports},
+		Exports: map[string]*native.OrderedMap{"time": exports},
 	}
 	return desc, nil
 }
 
 // makeTimeFnDef creates a FnDef value with the given params, returns, and word name.
-func makeTimeFnDef(wordName string, params []engine.FnParam, returns []*engine.Type, subReg *engine.Registry) engine.Value {
-	fnDef := engine.FnDefInfo{
+func makeTimeFnDef(wordName string, params []native.FnParam, returns []*native.Type, subReg *native.Registry) native.Value {
+	fnDef := native.FnDefInfo{
 		Name: wordName,
-		Sigs: []engine.FnSig{
+		Sigs: []native.FnSig{
 			{
 				Params:  params,
 				Returns: returns,
-				Body:    []engine.Value{engine.NewWord(wordName)},
+				Body:    []native.Value{native.NewWord(wordName)},
 			},
 		},
 		Registry: subReg,
 	}
-	return engine.NewFnDef(fnDef)
+	return native.NewFnDef(fnDef)
 }
 
 // --- helpers ---
 
 // extractTime returns the time.Time from a Date, DateTime, or Instant value.
-func extractTime(v engine.Value) time.Time {
-	if tp, ok := v.Data.(engine.TimePayload); ok {
+func extractTime(v native.Value) time.Time {
+	if tp, ok := v.Data.(native.TimePayload); ok {
 		if t, ok := tp.T.(time.Time); ok {
 			return t
 		}
@@ -158,7 +158,7 @@ func extractTime(v engine.Value) time.Time {
 }
 
 // dateDiffCalDuration computes the CalDuration between two dates (from → to).
-func dateDiffCalDuration(from, to time.Time) engine.CalDurationData {
+func dateDiffCalDuration(from, to time.Time) native.CalDurationData {
 	years := to.Year() - from.Year()
 	months := int(to.Month()) - int(from.Month())
 	days := to.Day() - from.Day()
@@ -172,7 +172,7 @@ func dateDiffCalDuration(from, to time.Time) engine.CalDurationData {
 		years--
 		months += 12
 	}
-	return engine.CalDurationData{Years: years, Months: months, Days: days}
+	return native.CalDurationData{Years: years, Months: months, Days: days}
 }
 
 // ISO 8601 duration parsing (parseISO8601Duration) and auto-date
@@ -186,73 +186,73 @@ func dateDiffCalDuration(from, to time.Time) engine.CalDurationData {
 
 // dateToIntNative builds a NativeFunc with a single [TDate] -> [TInteger]
 // signature whose handler applies fn to the extracted time.Time.
-func dateToIntNative(name string, fn func(time.Time) int64) engine.NativeFunc {
-	return engine.NativeFunc{
+func dateToIntNative(name string, fn func(time.Time) int64) native.NativeFunc {
+	return native.NativeFunc{
 		Name:        name,
 		ForwardArgs: true,
-		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TDate},
-			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				return []engine.Value{engine.NewInteger(fn(extractTime(args[0])))}, nil
+		Signatures: []native.NativeSig{{
+			Args: []*native.Type{native.TDate},
+			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				return []native.Value{native.NewInteger(fn(extractTime(args[0])))}, nil
 			},
-			Returns: []*engine.Type{engine.TInteger},
+			Returns: []*native.Type{native.TInteger},
 		}},
 	}
 }
 
 // dateToStringNative builds a NativeFunc with a single [TDate] -> [TString]
 // signature whose handler applies fn to the extracted time.Time.
-func dateToStringNative(name string, fn func(time.Time) string) engine.NativeFunc {
-	return engine.NativeFunc{
+func dateToStringNative(name string, fn func(time.Time) string) native.NativeFunc {
+	return native.NativeFunc{
 		Name:        name,
 		ForwardArgs: true,
-		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TDate},
-			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				return []engine.Value{engine.NewString(fn(extractTime(args[0])))}, nil
+		Signatures: []native.NativeSig{{
+			Args: []*native.Type{native.TDate},
+			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				return []native.Value{native.NewString(fn(extractTime(args[0])))}, nil
 			},
-			Returns: []*engine.Type{engine.TString},
+			Returns: []*native.Type{native.TString},
 		}},
 	}
 }
 
 // intToCalDurationNative builds a NativeFunc with [TInteger] -> [TCalDuration]
 // where the handler turns the integer into a CalDurationData via fn.
-func intToCalDurationNative(name string, returnType *engine.Type, fn func(int) (int, int, int)) engine.NativeFunc {
-	return engine.NativeFunc{
+func intToCalDurationNative(name string, returnType *native.Type, fn func(int) (int, int, int)) native.NativeFunc {
+	return native.NativeFunc{
 		Name:        name,
 		ForwardArgs: true,
-		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TInteger},
-			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+		Signatures: []native.NativeSig{{
+			Args: []*native.Type{native.TInteger},
+			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				n, err := args[0].AsConcreteInteger()
 				if err != nil {
 					return nil, err
 				}
 				y, m, d := fn(int(n))
-				return []engine.Value{engine.NewCalDuration(y, m, d)}, nil
+				return []native.Value{native.NewCalDuration(y, m, d)}, nil
 			},
-			Returns: []*engine.Type{returnType},
+			Returns: []*native.Type{returnType},
 		}},
 	}
 }
 
 // numToClkDurationNative builds a NativeFunc with [TNumber] -> [TClkDuration]
 // where the handler scales the numeric input by `unit`.
-func numToClkDurationNative(name string, unit time.Duration) engine.NativeFunc {
-	return engine.NativeFunc{
+func numToClkDurationNative(name string, unit time.Duration) native.NativeFunc {
+	return native.NativeFunc{
 		Name:        name,
 		ForwardArgs: true,
-		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TNumber},
-			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				n, err := engine.AsNumber(args[0])
+		Signatures: []native.NativeSig{{
+			Args: []*native.Type{native.TNumber},
+			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				n, err := native.AsNumber(args[0])
 				if err != nil {
 					return nil, err
 				}
-				return []engine.Value{engine.NewClkDuration(time.Duration(n * float64(unit)))}, nil
+				return []native.Value{native.NewClkDuration(time.Duration(n * float64(unit)))}, nil
 			},
-			Returns: []*engine.Type{engine.TClkDuration},
+			Returns: []*native.Type{native.TClkDuration},
 		}},
 	}
 }
@@ -261,34 +261,34 @@ func numToClkDurationNative(name string, unit time.Duration) engine.NativeFunc {
 // [TClkDuration] -> [TDecimal] for a total-* extraction. `returnType`
 // is exposed because total-ms historically declared TInteger even
 // though the value pushed is Decimal.
-func clkDurationToDecimalNative(name string, returnType *engine.Type, fn func(time.Duration) float64) engine.NativeFunc {
-	return engine.NativeFunc{
+func clkDurationToDecimalNative(name string, returnType *native.Type, fn func(time.Duration) float64) native.NativeFunc {
+	return native.NativeFunc{
 		Name:        name,
 		ForwardArgs: true,
-		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TClkDuration},
-			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				d, _ := engine.AsClkDuration(args[0])
-				return []engine.Value{engine.NewDecimal(fn(d))}, nil
+		Signatures: []native.NativeSig{{
+			Args: []*native.Type{native.TClkDuration},
+			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				d, _ := native.AsClkDuration(args[0])
+				return []native.Value{native.NewDecimal(fn(d))}, nil
 			},
-			Returns: []*engine.Type{returnType},
+			Returns: []*native.Type{returnType},
 		}},
 	}
 }
 
 // calDurationToIntNative builds a NativeFunc with
 // [TCalDuration] -> [TInteger] for dur-years/dur-months/dur-days.
-func calDurationToIntNative(name string, fn func(engine.CalDurationData) int64) engine.NativeFunc {
-	return engine.NativeFunc{
+func calDurationToIntNative(name string, fn func(native.CalDurationData) int64) native.NativeFunc {
+	return native.NativeFunc{
 		Name:        name,
 		ForwardArgs: true,
-		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TCalDuration},
-			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-				cd, _ := engine.AsCalDuration(args[0])
-				return []engine.Value{engine.NewInteger(fn(cd))}, nil
+		Signatures: []native.NativeSig{{
+			Args: []*native.Type{native.TCalDuration},
+			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				cd, _ := native.AsCalDuration(args[0])
+				return []native.Value{native.NewInteger(fn(cd))}, nil
 			},
-			Returns: []*engine.Type{engine.TInteger},
+			Returns: []*native.Type{native.TInteger},
 		}},
 	}
 }
@@ -296,22 +296,22 @@ func calDurationToIntNative(name string, fn func(engine.CalDurationData) int64) 
 // addDateNative builds the add-days/add-months/add-years words. The
 // fn signature mirrors time.Time.AddDate's parameters so each word
 // just supplies (years, months, days) shifts driven by the integer arg.
-func addDateNative(name string, build func(n int) (years, months, days int)) engine.NativeFunc {
-	return engine.NativeFunc{
+func addDateNative(name string, build func(n int) (years, months, days int)) native.NativeFunc {
+	return native.NativeFunc{
 		Name:        name,
 		ForwardArgs: true,
-		Signatures: []engine.NativeSig{{
-			Args: []*engine.Type{engine.TInteger, engine.TDate},
-			Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+		Signatures: []native.NativeSig{{
+			Args: []*native.Type{native.TInteger, native.TDate},
+			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				n, err := args[0].AsConcreteInteger()
 				if err != nil {
 					return nil, err
 				}
 				t := extractTime(args[1])
 				y, m, d := build(int(n))
-				return []engine.Value{engine.NewDate(t.AddDate(y, m, d))}, nil
+				return []native.Value{native.NewDate(t.AddDate(y, m, d))}, nil
 			},
-			Returns: []*engine.Type{engine.TAny},
+			Returns: []*native.Type{native.TAny},
 		}},
 	}
 }
@@ -321,8 +321,8 @@ func addDateNative(name string, build func(n int) (years, months, days int)) eng
 // TimeNatives is the consolidated NativeFunc slice for the time
 // module's Go-implemented words. Replaces the per-word
 // register* functions and the master registerAllTimeWords aggregator.
-var TimeNatives = func() []engine.NativeFunc {
-	out := []engine.NativeFunc{
+var TimeNatives = func() []native.NativeFunc {
+	out := []native.NativeFunc{
 		// --- Construction ---
 		// ISO 8601 string parsers (time-date, time-datetime,
 		// time-instant, time-time-of-day) were removed as a feature.
@@ -331,9 +331,9 @@ var TimeNatives = func() []engine.NativeFunc {
 		{
 			Name:        "time-tz",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TString},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TString},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					s, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -342,92 +342,92 @@ var TimeNatives = func() []engine.NativeFunc {
 					if err != nil {
 						return nil, fmt.Errorf("tz: unknown timezone: %q", s)
 					}
-					return []engine.Value{engine.NewTimezone(loc)}, nil
+					return []native.Value{native.NewTimezone(loc)}, nil
 				},
-				Returns: []*engine.Type{engine.TTimezone},
+				Returns: []*native.Type{native.TTimezone},
 			}},
 		},
 		{
 			Name:        "time-unix",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TInteger},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TInteger},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					n, err := args[0].AsConcreteInteger()
 					if err != nil {
 						return nil, err
 					}
-					return []engine.Value{engine.NewInstant(time.Unix(n, 0))}, nil
+					return []native.Value{native.NewInstant(time.Unix(n, 0))}, nil
 				},
-				Returns: []*engine.Type{engine.TInstant},
+				Returns: []*native.Type{native.TInstant},
 			}},
 		},
 		{
 			Name:        "time-unix-ms",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TInteger},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TInteger},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					n, err := args[0].AsConcreteInteger()
 					if err != nil {
 						return nil, err
 					}
-					return []engine.Value{engine.NewInstant(time.UnixMilli(n))}, nil
+					return []native.Value{native.NewInstant(time.UnixMilli(n))}, nil
 				},
-				Returns: []*engine.Type{engine.TInstant},
+				Returns: []*native.Type{native.TInstant},
 			}},
 		},
 		{
 			Name:        "time-unix-ns",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TInteger},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TInteger},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					n, err := args[0].AsConcreteInteger()
 					if err != nil {
 						return nil, err
 					}
-					return []engine.Value{engine.NewInstant(time.Unix(0, n))}, nil
+					return []native.Value{native.NewInstant(time.Unix(0, n))}, nil
 				},
-				Returns: []*engine.Type{engine.TInstant},
+				Returns: []*native.Type{native.TInstant},
 			}},
 		},
 		// --- Current time (stack-only zero-arg words) ---
 		{
 			Name:        "time-now-local",
 			ForwardArgs: false,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{},
-				Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-					return []engine.Value{engine.NewDateTime(time.Now())}, nil
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{},
+				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					return []native.Value{native.NewDateTime(time.Now())}, nil
 				},
-				Returns: []*engine.Type{engine.TDateTime},
+				Returns: []*native.Type{native.TDateTime},
 			}},
 		},
 		{
 			Name:        "time-today",
 			ForwardArgs: false,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{},
-				Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{},
+				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					now := time.Now()
 					d := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-					return []engine.Value{engine.NewDate(d)}, nil
+					return []native.Value{native.NewDate(d)}, nil
 				},
-				Returns: []*engine.Type{engine.TDate},
+				Returns: []*native.Type{native.TDate},
 			}},
 		},
 		{
 			Name:        "time-today-utc",
 			ForwardArgs: false,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{},
-				Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{},
+				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					now := time.Now().UTC()
 					d := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-					return []engine.Value{engine.NewDate(d)}, nil
+					return []native.Value{native.NewDate(d)}, nil
 				},
-				Returns: []*engine.Type{engine.TDate},
+				Returns: []*native.Type{native.TDate},
 			}},
 		},
 		// --- Extraction (Date -> Integer) ---
@@ -466,109 +466,109 @@ var TimeNatives = func() []engine.NativeFunc {
 		{
 			Name:        "leap-year?",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TDate},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TDate},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					y := extractTime(args[0]).Year()
 					leap := y%4 == 0 && (y%100 != 0 || y%400 == 0)
-					return []engine.Value{engine.NewBoolean(leap)}, nil
+					return []native.Value{native.NewBoolean(leap)}, nil
 				},
-				Returns: []*engine.Type{engine.TBoolean},
+				Returns: []*native.Type{native.TBoolean},
 			}},
 		},
 		// to-unix / to-unix-ms (Instant -> Integer)
 		{
 			Name:        "to-unix",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TInstant},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-					return []engine.Value{engine.NewInteger(extractTime(args[0]).Unix())}, nil
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TInstant},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					return []native.Value{native.NewInteger(extractTime(args[0]).Unix())}, nil
 				},
-				Returns: []*engine.Type{engine.TInteger},
+				Returns: []*native.Type{native.TInteger},
 			}},
 		},
 		{
 			Name:        "to-unix-ms",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TInstant},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-					return []engine.Value{engine.NewInteger(extractTime(args[0]).UnixMilli())}, nil
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TInstant},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					return []native.Value{native.NewInteger(extractTime(args[0]).UnixMilli())}, nil
 				},
-				Returns: []*engine.Type{engine.TInteger},
+				Returns: []*native.Type{native.TInteger},
 			}},
 		},
 		// --- Comparison (Date Date -> Boolean) ---
 		{
 			Name:        "before?",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TDate, engine.TDate},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-					return []engine.Value{engine.NewBoolean(extractTime(args[1]).Before(extractTime(args[0])))}, nil
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TDate, native.TDate},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					return []native.Value{native.NewBoolean(extractTime(args[1]).Before(extractTime(args[0])))}, nil
 				},
-				Returns: []*engine.Type{engine.TBoolean},
+				Returns: []*native.Type{native.TBoolean},
 			}},
 		},
 		{
 			Name:        "after?",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TDate, engine.TDate},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-					return []engine.Value{engine.NewBoolean(extractTime(args[1]).After(extractTime(args[0])))}, nil
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TDate, native.TDate},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					return []native.Value{native.NewBoolean(extractTime(args[1]).After(extractTime(args[0])))}, nil
 				},
-				Returns: []*engine.Type{engine.TBoolean},
+				Returns: []*native.Type{native.TBoolean},
 			}},
 		},
 		{
 			Name:        "equal?",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TDate, engine.TDate},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-					return []engine.Value{engine.NewBoolean(extractTime(args[0]).Equal(extractTime(args[1])))}, nil
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TDate, native.TDate},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					return []native.Value{native.NewBoolean(extractTime(args[0]).Equal(extractTime(args[1])))}, nil
 				},
-				Returns: []*engine.Type{engine.TBoolean},
+				Returns: []*native.Type{native.TBoolean},
 			}},
 		},
 		// --- Formatting ---
 		{
 			Name:        "to-string",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TDate},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-					return []engine.Value{engine.NewString(extractTime(args[0]).Format("2006-01-02"))}, nil
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TDate},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					return []native.Value{native.NewString(extractTime(args[0]).Format("2006-01-02"))}, nil
 				},
-				Returns: []*engine.Type{engine.TString},
+				Returns: []*native.Type{native.TString},
 			}},
 		},
 		{
 			Name:        "format",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TString, engine.TDate},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TString, native.TDate},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					layout, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
 					}
-					return []engine.Value{engine.NewString(extractTime(args[1]).Format(layout))}, nil
+					return []native.Value{native.NewString(extractTime(args[1]).Format(layout))}, nil
 				},
-				Returns: []*engine.Type{engine.TString},
+				Returns: []*native.Type{native.TString},
 			}},
 		},
 		{
 			Name:        "to-iso",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TDate},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-					return []engine.Value{engine.NewString(extractTime(args[0]).Format("2006-01-02"))}, nil
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TDate},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					return []native.Value{native.NewString(extractTime(args[0]).Format("2006-01-02"))}, nil
 				},
-				Returns: []*engine.Type{engine.TString},
+				Returns: []*native.Type{native.TString},
 			}},
 		},
 		// --- Legacy arithmetic ---
@@ -576,10 +576,10 @@ var TimeNatives = func() []engine.NativeFunc {
 		addDateNative("add-months", func(n int) (int, int, int) { return 0, n, 0 }),
 		addDateNative("add-years", func(n int) (int, int, int) { return n, 0, 0 }),
 		// --- Duration construction (Integer -> CalDuration) ---
-		intToCalDurationNative("years", engine.TCalDuration, func(n int) (int, int, int) { return n, 0, 0 }),
-		intToCalDurationNative("months", engine.TCalDuration, func(n int) (int, int, int) { return 0, n, 0 }),
-		intToCalDurationNative("weeks", engine.TClkDuration, func(n int) (int, int, int) { return 0, 0, n * 7 }),
-		intToCalDurationNative("days", engine.TClkDuration, func(n int) (int, int, int) { return 0, 0, n }),
+		intToCalDurationNative("years", native.TCalDuration, func(n int) (int, int, int) { return n, 0, 0 }),
+		intToCalDurationNative("months", native.TCalDuration, func(n int) (int, int, int) { return 0, n, 0 }),
+		intToCalDurationNative("weeks", native.TClkDuration, func(n int) (int, int, int) { return 0, 0, n * 7 }),
+		intToCalDurationNative("days", native.TClkDuration, func(n int) (int, int, int) { return 0, 0, n }),
 		// --- Duration construction (Number -> ClkDuration) ---
 		numToClkDurationNative("hours", time.Hour),
 		numToClkDurationNative("minutes", time.Minute),
@@ -591,9 +591,9 @@ var TimeNatives = func() []engine.NativeFunc {
 			// cal-dur 1 6 15 → args[0]=15 (nearest), args[1]=6, args[2]=1 (deepest)
 			Name:        "cal-dur",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TInteger, engine.TInteger, engine.TInteger},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TInteger, native.TInteger, native.TInteger},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					y, err := args[2].AsConcreteInteger()
 					if err != nil {
 						return nil, err
@@ -606,58 +606,58 @@ var TimeNatives = func() []engine.NativeFunc {
 					if err != nil {
 						return nil, err
 					}
-					return []engine.Value{engine.NewCalDuration(int(y), int(m), int(d))}, nil
+					return []native.Value{native.NewCalDuration(int(y), int(m), int(d))}, nil
 				},
-				Returns: []*engine.Type{engine.TCalDuration},
+				Returns: []*native.Type{native.TCalDuration},
 			}},
 		},
 		// time-duration (ISO 8601 P1Y2M3D parser) removed as a feature.
 		// --- Duration extraction ---
-		clkDurationToDecimalNative("total-hours", engine.TDecimal, func(d time.Duration) float64 { return d.Hours() }),
-		clkDurationToDecimalNative("total-minutes", engine.TDecimal, func(d time.Duration) float64 { return d.Minutes() }),
-		clkDurationToDecimalNative("total-seconds", engine.TDecimal, func(d time.Duration) float64 { return d.Seconds() }),
+		clkDurationToDecimalNative("total-hours", native.TDecimal, func(d time.Duration) float64 { return d.Hours() }),
+		clkDurationToDecimalNative("total-minutes", native.TDecimal, func(d time.Duration) float64 { return d.Minutes() }),
+		clkDurationToDecimalNative("total-seconds", native.TDecimal, func(d time.Duration) float64 { return d.Seconds() }),
 		// total-ms: handler pushes Decimal but historical Returns is TInteger.
-		clkDurationToDecimalNative("total-ms", engine.TInteger, func(d time.Duration) float64 { return float64(d.Milliseconds()) }),
-		calDurationToIntNative("dur-years", func(cd engine.CalDurationData) int64 { return int64(cd.Years) }),
-		calDurationToIntNative("dur-months", func(cd engine.CalDurationData) int64 { return int64(cd.Months) }),
-		calDurationToIntNative("dur-days", func(cd engine.CalDurationData) int64 { return int64(cd.Days) }),
+		clkDurationToDecimalNative("total-ms", native.TInteger, func(d time.Duration) float64 { return float64(d.Milliseconds()) }),
+		calDurationToIntNative("dur-years", func(cd native.CalDurationData) int64 { return int64(cd.Years) }),
+		calDurationToIntNative("dur-months", func(cd native.CalDurationData) int64 { return int64(cd.Months) }),
+		calDurationToIntNative("dur-days", func(cd native.CalDurationData) int64 { return int64(cd.Days) }),
 		// dur-sign — two overloads (CalDuration and ClkDuration), both
 		// return -1/0/1 integers. Historically two separate r.Register
 		// calls; here unified into one NativeFunc with two signatures.
 		{
 			Name:        "dur-sign",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{
+			Signatures: []native.NativeSig{
 				{
-					Args: []*engine.Type{engine.TCalDuration},
-					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-						cd, _ := engine.AsCalDuration(args[0])
+					Args: []*native.Type{native.TCalDuration},
+					Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+						cd, _ := native.AsCalDuration(args[0])
 						total := cd.Years*365 + cd.Months*30 + cd.Days
 						switch {
 						case total < 0:
-							return []engine.Value{engine.NewInteger(-1)}, nil
+							return []native.Value{native.NewInteger(-1)}, nil
 						case total > 0:
-							return []engine.Value{engine.NewInteger(1)}, nil
+							return []native.Value{native.NewInteger(1)}, nil
 						default:
-							return []engine.Value{engine.NewInteger(0)}, nil
+							return []native.Value{native.NewInteger(0)}, nil
 						}
 					},
-					Returns: []*engine.Type{engine.TInteger},
+					Returns: []*native.Type{native.TInteger},
 				},
 				{
-					Args: []*engine.Type{engine.TClkDuration},
-					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-						d, _ := engine.AsClkDuration(args[0])
+					Args: []*native.Type{native.TClkDuration},
+					Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+						d, _ := native.AsClkDuration(args[0])
 						switch {
 						case d < 0:
-							return []engine.Value{engine.NewInteger(-1)}, nil
+							return []native.Value{native.NewInteger(-1)}, nil
 						case d > 0:
-							return []engine.Value{engine.NewInteger(1)}, nil
+							return []native.Value{native.NewInteger(1)}, nil
 						default:
-							return []engine.Value{engine.NewInteger(0)}, nil
+							return []native.Value{native.NewInteger(0)}, nil
 						}
 					},
-					Returns: []*engine.Type{engine.TInteger},
+					Returns: []*native.Type{native.TInteger},
 				},
 			},
 		},
@@ -666,124 +666,124 @@ var TimeNatives = func() []engine.NativeFunc {
 			// d1 d2 until → args[0]=d2 (nearest), args[1]=d1
 			Name:        "until",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TDate, engine.TDate},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TDate, native.TDate},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					from := extractTime(args[1])
 					to := extractTime(args[0])
 					cd := dateDiffCalDuration(from, to)
-					return []engine.Value{engine.NewCalDuration(cd.Years, cd.Months, cd.Days)}, nil
+					return []native.Value{native.NewCalDuration(cd.Years, cd.Months, cd.Days)}, nil
 				},
-				Returns: []*engine.Type{engine.TClkDuration},
+				Returns: []*native.Type{native.TClkDuration},
 			}},
 		},
 		{
 			// d1 d2 since → args[0]=d2 (nearest), args[1]=d1
 			Name:        "since",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TDate, engine.TDate},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TDate, native.TDate},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					from := extractTime(args[0])
 					to := extractTime(args[1])
 					cd := dateDiffCalDuration(from, to)
-					return []engine.Value{engine.NewCalDuration(cd.Years, cd.Months, cd.Days)}, nil
+					return []native.Value{native.NewCalDuration(cd.Years, cd.Months, cd.Days)}, nil
 				},
-				Returns: []*engine.Type{engine.TClkDuration},
+				Returns: []*native.Type{native.TClkDuration},
 			}},
 		},
 		{
 			// ins1 ins2 diff → args[0]=ins2 (nearest), args[1]=ins1
 			Name:        "diff",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TInstant, engine.TInstant},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TInstant, native.TInstant},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					t1 := extractTime(args[1])
 					t2 := extractTime(args[0])
-					return []engine.Value{engine.NewClkDuration(t2.Sub(t1))}, nil
+					return []native.Value{native.NewClkDuration(t2.Sub(t1))}, nil
 				},
-				Returns: []*engine.Type{engine.TClkDuration},
+				Returns: []*native.Type{native.TClkDuration},
 			}},
 		},
 		{
 			Name:        "elapsed",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TInstant},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TInstant},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					start := extractTime(args[0])
-					return []engine.Value{engine.NewClkDuration(time.Since(start))}, nil
+					return []native.Value{native.NewClkDuration(time.Since(start))}, nil
 				},
-				Returns: []*engine.Type{engine.TClkDuration},
+				Returns: []*native.Type{native.TClkDuration},
 			}},
 		},
 		// --- Comparison extended ---
 		{
 			Name:        "time-compare",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TDate, engine.TDate},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TDate, native.TDate},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					t1 := extractTime(args[1])
 					t2 := extractTime(args[0])
 					switch {
 					case t1.Before(t2):
-						return []engine.Value{engine.NewInteger(-1)}, nil
+						return []native.Value{native.NewInteger(-1)}, nil
 					case t1.After(t2):
-						return []engine.Value{engine.NewInteger(1)}, nil
+						return []native.Value{native.NewInteger(1)}, nil
 					default:
-						return []engine.Value{engine.NewInteger(0)}, nil
+						return []native.Value{native.NewInteger(0)}, nil
 					}
 				},
-				Returns: []*engine.Type{engine.TInteger},
+				Returns: []*native.Type{native.TInteger},
 			}},
 		},
 		{
 			// d start end between? → args[0]=end (nearest), args[1]=start, args[2]=d (deepest)
 			Name:        "between?",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TDate, engine.TDate, engine.TDate},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TDate, native.TDate, native.TDate},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					d := extractTime(args[2])
 					start := extractTime(args[1])
 					end := extractTime(args[0])
-					return []engine.Value{engine.NewBoolean(!d.Before(start) && !d.After(end))}, nil
+					return []native.Value{native.NewBoolean(!d.Before(start) && !d.After(end))}, nil
 				},
-				Returns: []*engine.Type{engine.TBoolean},
+				Returns: []*native.Type{native.TBoolean},
 			}},
 		},
 		{
 			Name:        "earliest",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TDate, engine.TDate},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TDate, native.TDate},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					t1 := extractTime(args[1])
 					t2 := extractTime(args[0])
 					if t1.Before(t2) {
-						return []engine.Value{engine.NewDate(t1)}, nil
+						return []native.Value{native.NewDate(t1)}, nil
 					}
-					return []engine.Value{engine.NewDate(t2)}, nil
+					return []native.Value{native.NewDate(t2)}, nil
 				},
-				Returns: []*engine.Type{engine.TAny},
+				Returns: []*native.Type{native.TAny},
 			}},
 		},
 		{
 			Name:        "latest",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TDate, engine.TDate},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TDate, native.TDate},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					t1 := extractTime(args[1])
 					t2 := extractTime(args[0])
 					if t1.After(t2) {
-						return []engine.Value{engine.NewDate(t1)}, nil
+						return []native.Value{native.NewDate(t1)}, nil
 					}
-					return []engine.Value{engine.NewDate(t2)}, nil
+					return []native.Value{native.NewDate(t2)}, nil
 				},
-				Returns: []*engine.Type{engine.TAny},
+				Returns: []*native.Type{native.TAny},
 			}},
 		},
 		// --- Conversion ---
@@ -791,22 +791,22 @@ var TimeNatives = func() []engine.NativeFunc {
 		{
 			Name:        "to-date",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{
+			Signatures: []native.NativeSig{
 				{
-					Args: []*engine.Type{engine.TDateTime},
-					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+					Args: []*native.Type{native.TDateTime},
+					Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 						t := extractTime(args[0])
-						return []engine.Value{engine.NewDate(time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location()))}, nil
+						return []native.Value{native.NewDate(time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location()))}, nil
 					},
-					Returns: []*engine.Type{engine.TDate},
+					Returns: []*native.Type{native.TDate},
 				},
 				{
-					Args: []*engine.Type{engine.TInstant},
-					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+					Args: []*native.Type{native.TInstant},
+					Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 						t := extractTime(args[0])
-						return []engine.Value{engine.NewDate(time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC))}, nil
+						return []native.Value{native.NewDate(time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC))}, nil
 					},
-					Returns: []*engine.Type{engine.TDate},
+					Returns: []*native.Type{native.TDate},
 				},
 			},
 		},
@@ -814,95 +814,95 @@ var TimeNatives = func() []engine.NativeFunc {
 		{
 			Name:        "to-time-of-day",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{
+			Signatures: []native.NativeSig{
 				{
-					Args: []*engine.Type{engine.TDateTime},
-					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+					Args: []*native.Type{native.TDateTime},
+					Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 						t := extractTime(args[0])
 						d := time.Duration(t.Hour())*time.Hour + time.Duration(t.Minute())*time.Minute +
 							time.Duration(t.Second())*time.Second + time.Duration(t.Nanosecond())
-						return []engine.Value{engine.NewTimeOfDay(d)}, nil
+						return []native.Value{native.NewTimeOfDay(d)}, nil
 					},
-					Returns: []*engine.Type{engine.TTimeOfDay},
+					Returns: []*native.Type{native.TTimeOfDay},
 				},
 				{
-					Args: []*engine.Type{engine.TInstant},
-					Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+					Args: []*native.Type{native.TInstant},
+					Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 						t := extractTime(args[0])
 						d := time.Duration(t.Hour())*time.Hour + time.Duration(t.Minute())*time.Minute +
 							time.Duration(t.Second())*time.Second + time.Duration(t.Nanosecond())
-						return []engine.Value{engine.NewTimeOfDay(d)}, nil
+						return []native.Value{native.NewTimeOfDay(d)}, nil
 					},
-					Returns: []*engine.Type{engine.TTimeOfDay},
+					Returns: []*native.Type{native.TTimeOfDay},
 				},
 			},
 		},
 		{
 			Name:        "to-datetime",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TDate},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TDate},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					t := extractTime(args[0])
-					return []engine.Value{engine.NewDateTime(t)}, nil
+					return []native.Value{native.NewDateTime(t)}, nil
 				},
-				Returns: []*engine.Type{engine.TDateTime},
+				Returns: []*native.Type{native.TDateTime},
 			}},
 		},
 		{
 			// dt tz to-instant → args[0]=tz (nearest), args[1]=dt
 			Name:        "to-instant",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TTimezone, engine.TDateTime},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TTimezone, native.TDateTime},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					dt := extractTime(args[1])
-					loc := engine.AsTimezone(args[0])
+					loc := native.AsTimezone(args[0])
 					if loc == nil {
 						loc = time.UTC
 					}
 					t := time.Date(dt.Year(), dt.Month(), dt.Day(), dt.Hour(), dt.Minute(), dt.Second(), dt.Nanosecond(), loc)
-					return []engine.Value{engine.NewInstant(t)}, nil
+					return []native.Value{native.NewInstant(t)}, nil
 				},
-				Returns: []*engine.Type{engine.TInstant},
+				Returns: []*native.Type{native.TInstant},
 			}},
 		},
 		{
 			// ins tz to-local → args[0]=tz (nearest), args[1]=ins
 			Name:        "to-local",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TTimezone, engine.TInstant},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TTimezone, native.TInstant},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					t := extractTime(args[1])
-					loc := engine.AsTimezone(args[0])
+					loc := native.AsTimezone(args[0])
 					if loc == nil {
 						loc = time.UTC
 					}
-					return []engine.Value{engine.NewDateTime(t.In(loc))}, nil
+					return []native.Value{native.NewDateTime(t.In(loc))}, nil
 				},
-				Returns: []*engine.Type{engine.TDateTime},
+				Returns: []*native.Type{native.TDateTime},
 			}},
 		},
 		{
 			Name:        "to-utc",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TInstant},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TInstant},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					t := extractTime(args[0])
-					return []engine.Value{engine.NewDateTime(t.UTC())}, nil
+					return []native.Value{native.NewDateTime(t.UTC())}, nil
 				},
-				Returns: []*engine.Type{engine.TDateTime},
+				Returns: []*native.Type{native.TDateTime},
 			}},
 		},
 		// --- Rounding ---
 		{
 			Name:        "start-of",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TString, engine.TDate},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TString, native.TDate},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					unit, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -930,17 +930,17 @@ var TimeNatives = func() []engine.NativeFunc {
 					default:
 						return nil, fmt.Errorf("start-of: unknown unit %q", unit)
 					}
-					return []engine.Value{engine.NewDate(result)}, nil
+					return []native.Value{native.NewDate(result)}, nil
 				},
-				Returns: []*engine.Type{engine.TAny},
+				Returns: []*native.Type{native.TAny},
 			}},
 		},
 		{
 			Name:        "end-of",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TString, engine.TDate},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TString, native.TDate},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					unit, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -970,58 +970,58 @@ var TimeNatives = func() []engine.NativeFunc {
 					default:
 						return nil, fmt.Errorf("end-of: unknown unit %q", unit)
 					}
-					return []engine.Value{engine.NewDate(result)}, nil
+					return []native.Value{native.NewDate(result)}, nil
 				},
-				Returns: []*engine.Type{engine.TAny},
+				Returns: []*native.Type{native.TAny},
 			}},
 		},
 		// --- Timezone ---
 		{
 			Name:        "tz-utc",
 			ForwardArgs: false,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{},
-				Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-					return []engine.Value{engine.NewTimezone(time.UTC)}, nil
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{},
+				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					return []native.Value{native.NewTimezone(time.UTC)}, nil
 				},
-				Returns: []*engine.Type{engine.TTimezone},
+				Returns: []*native.Type{native.TTimezone},
 			}},
 		},
 		{
 			Name:        "tz-local",
 			ForwardArgs: false,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{},
-				Handler: func(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-					return []engine.Value{engine.NewTimezone(time.Local)}, nil
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{},
+				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					return []native.Value{native.NewTimezone(time.Local)}, nil
 				},
-				Returns: []*engine.Type{engine.TTimezone},
+				Returns: []*native.Type{native.TTimezone},
 			}},
 		},
 		{
 			Name:        "tz-name",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TTimezone},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-					loc := engine.AsTimezone(args[0])
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TTimezone},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					loc := native.AsTimezone(args[0])
 					if loc == nil {
-						return []engine.Value{engine.NewString("UTC")}, nil
+						return []native.Value{native.NewString("UTC")}, nil
 					}
-					return []engine.Value{engine.NewString(loc.String())}, nil
+					return []native.Value{native.NewString(loc.String())}, nil
 				},
-				Returns: []*engine.Type{engine.TString},
+				Returns: []*native.Type{native.TString},
 			}},
 		},
 		{
 			// ins tz tz-offset → args[0]=tz (nearest), args[1]=ins
 			Name:        "tz-offset",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TTimezone, engine.TInstant},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TTimezone, native.TInstant},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					t := extractTime(args[1])
-					loc := engine.AsTimezone(args[0])
+					loc := native.AsTimezone(args[0])
 					if loc == nil {
 						loc = time.UTC
 					}
@@ -1036,20 +1036,20 @@ var TimeNatives = func() []engine.NativeFunc {
 						sign = "-"
 						h = -h
 					}
-					return []engine.Value{engine.NewString(fmt.Sprintf("%s%02d:%02d", sign, h, m))}, nil
+					return []native.Value{native.NewString(fmt.Sprintf("%s%02d:%02d", sign, h, m))}, nil
 				},
-				Returns: []*engine.Type{engine.TClkDuration},
+				Returns: []*native.Type{native.TClkDuration},
 			}},
 		},
 		{
 			// ins tz dst? → args[0]=tz (nearest), args[1]=ins
 			Name:        "dst?",
 			ForwardArgs: true,
-			Signatures: []engine.NativeSig{{
-				Args: []*engine.Type{engine.TTimezone, engine.TInstant},
-				Handler: func(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TTimezone, native.TInstant},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					t := extractTime(args[1])
-					loc := engine.AsTimezone(args[0])
+					loc := native.AsTimezone(args[0])
 					if loc == nil {
 						loc = time.UTC
 					}
@@ -1065,15 +1065,15 @@ var TimeNatives = func() []engine.NativeFunc {
 					_ = name
 					// If offsets differ between Jan and Jul, the larger offset is DST.
 					if janOff == julOff {
-						return []engine.Value{engine.NewBoolean(false)}, nil
+						return []native.Value{native.NewBoolean(false)}, nil
 					}
 					stdOff := janOff
 					if julOff < janOff {
 						stdOff = julOff // Southern hemisphere
 					}
-					return []engine.Value{engine.NewBoolean(curOff != stdOff)}, nil
+					return []native.Value{native.NewBoolean(curOff != stdOff)}, nil
 				},
-				Returns: []*engine.Type{engine.TBoolean},
+				Returns: []*native.Type{native.TBoolean},
 			}},
 		},
 		// --- Parsing ---

@@ -39,10 +39,10 @@ Deliberately conservative — meant to gate CI without churn:
     setup routinely discards errors; spec-runner fixtures intentionally
     discard the always-nil error from already-type-matched `AsX()`).
   - `unused` is suppressed for a handful of files that carry parked /
-    work-in-progress dead symbols — `lang/go/engine/{native_query,query,
+    work-in-progress dead symbols — `lang/go/native/{native_query,query,
     native_string_helpers,native_temporal_await}.go` (query-builder
     rework, unit-aware string helpers, the await ordering field) — and for
-    the `lang/go/engine/aliases.go` re-export shim, which intentionally
+    the `lang/go/native/aliases.go` re-export shim, which intentionally
     mirrors the whole `eng` API. **These exclusions are debt; remove them
     once the parked code lands or is deleted.**
 - **Not enabled (opt-in / ad-hoc):** `gosec`, `revive`/`stylecheck`,
@@ -67,10 +67,10 @@ in all three modules.
 | `eng/go/engine.go` (stepCloseParen) | `ineffassign` | removed dead `closeIdx--` (overwritten by `findCloseParenAfter` two lines down) |
 | `eng/go/engine.go:612` | `errcheck` | `_ = e.stepOpenParen()` — it never returns a non-nil error |
 | `eng/go/nativefunc.go:72` | `staticcheck` S1016 | `//nolint:staticcheck` — the explicit `NativeSig`→`Signature` field copy is intentional |
-| `lang/go/engine/native_array.go:1164`, `lang/go/native/natives.go:554`, `lang/go/engine/mutability_test.go:227` | `staticcheck` ST1023 | dropped the redundant explicit type in `var x T = …` |
+| `lang/go/native/native_array.go:1164`, `lang/go/native/natives.go:554`, `lang/go/native/mutability_test.go:227` | `staticcheck` ST1023 | dropped the redundant explicit type in `var x T = …` |
 | `lang/go/native/listops.go:37,73` | `staticcheck` S1009 | dropped the `nil` check before `len()` |
 | `lang/go/internal/nativemod/time.go:233` | `errcheck` | `_, _ = fmt.Sscanf(…)` — best-effort parse of an already-validated digit run |
-| `lang/go/engine/mutability_test.go:42`, `lang/go/test/object_type_test.go:1522` | `staticcheck` SA4006 | dropped / `_`-ed the dead intermediate `result` assignment |
+| `lang/go/native/mutability_test.go:42`, `lang/go/test/object_type_test.go:1522` | `staticcheck` SA4006 | dropped / `_`-ed the dead intermediate `result` assignment |
 | `cmd/go/install.go:91` | `errcheck` | check `os.MkdirAll` for the directory-entry case and bail on error |
 | `cmd/go/auth.go:588` | `errcheck` | `_ = json.Unmarshal(…)` with a comment — best-effort parse of a 201 body |
 | `test/solardemo/main.go` (×4) | `staticcheck` ST1013 | `405` → `http.StatusMethodNotAllowed` |
@@ -93,10 +93,10 @@ removed and `unused` is enforced on those files again.
 `nilerr` (not enabled) flags three deliberate error-swallows — worth a
 second look but defensible as designed:
 
-- `lang/go/engine/native_module_module.go` (`loadModuleResources`) — a
+- `lang/go/native/native_module_module.go` (`loadModuleResources`) — a
   malformed `.aql/aql.json` is treated as "no resources" rather than an
   error. A typo would silently disable a module's resources.
-- `lang/go/engine/native_type.go:321` — a predicate-evaluation error inside
+- `lang/go/native/native_type.go:321` — a predicate-evaluation error inside
   `x is SomePredicate` yields `false` rather than propagating.
 
 ## govulncheck
@@ -165,7 +165,7 @@ worthwhile. Findings by module:
 
 ### `lang`
 
-- **G201 (SQL string formatting ×1)** — `lang/go/engine/sqlite.go:122`:
+- **G201 (SQL string formatting ×1)** — `lang/go/native/sqlite.go:122`:
   `fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", quoteIdent(name),
   joinQuoted(columns), …)`. Identifiers are quoted via `quoteIdent` /
   `joinQuoted` and the values use `?` placeholders, so this is not an
@@ -204,10 +204,10 @@ rather than a strict metric.)
 | ---: | --- | --- |
 | 87 | `(*Engine).matchSignature` | `eng/go/match.go:27` |
 | 66 | `Value.String` | `eng/go/value.go:1605` |
-| 64 | `inferExact` | `lang/go/engine/native_help.go:121` |
+| 64 | `inferExact` | `lang/go/native/native_help.go:121` |
 | 63 | `Unify` | `eng/go/unify.go:20` |
 | 49 | `(*Engine).stepWord` | `eng/go/engine.go:693` |
-| 42 | `parseStrOpts` | `lang/go/engine/native_string_helpers.go:59` |
+| 42 | `parseStrOpts` | `lang/go/native/native_string_helpers.go:59` |
 | 41 | `(*Engine).execFnDefLiteral` | `eng/go/engine.go:1527` |
 | 40 | `(*Engine).execMatch` | `eng/go/engine.go:937` |
 | 38 | `ParseFnParams` | `eng/go/fn_params.go:57` |
@@ -299,13 +299,13 @@ scc      --no-cocomo                   eng/go lang cmd/go util/go
 1. **Bump the `go` directive** (and keep current) to clear the
    1.24.x-fixed stdlib advisories; flip the CI `vuln` step to blocking
    once it's clean.
-2. **Triage the parked dead code** in `lang/go/engine/native_query.go` /
+2. **Triage the parked dead code** in `lang/go/native/native_query.go` /
    `query.go` (finish or delete) and drop the matching `unused`
    exclusions from `.golangci.yml`.
 3. **Review the `cmd/go` path-construction sites** (zip extraction,
    registry file serving, module install) — the gosec G305/G703 cluster.
 4. **Consider rewriting `lint-assertions`** (the grep for unsafe
-   `.Data.(Type)` assertions in `lang/go/engine/native_*.go`) as a small
+   `.Data.(Type)` assertions in `lang/go/native/native_*.go`) as a small
    `go/analysis` analyzer so it runs under `golangci-lint` and matches the
    AST instead of source text.
 5. Optionally tighten `.golangci.yml` over time — `errorlint`,

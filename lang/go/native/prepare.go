@@ -2,8 +2,6 @@ package native
 
 import (
 	"fmt"
-
-	"github.com/aql-lang/aql/lang/go/engine"
 )
 
 // The "prepare" word is registered via the consolidated Natives slice in
@@ -12,8 +10,8 @@ import (
 //
 // prepareAPIHandler handles prepare with {kind:"api", spec:String, path:String, method:String, ...}.
 // It calls SDK.Prepare() and returns the fetch definition as a map.
-func prepareAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	apiMap, _ := engine.AsMap(args[0])
+func prepareAPIHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	apiMap, _ := AsMap(args[0])
 
 	sdkInst, _, err := getSDK(apiMap, "prepare", r)
 	if err != nil {
@@ -32,12 +30,12 @@ func prepareAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack [
 		return nil, fmt.Errorf("prepare: converting result: %w", err)
 	}
 
-	return []engine.Value{v}, nil
+	return []Value{v}, nil
 }
 
 // buildFetchArgs extracts fetch arguments (path, method, headers, body, params, query)
 // from an API options map, excluding the kind/spec/entity control fields.
-func buildFetchArgs(apiMap engine.ReadMap) map[string]any {
+func buildFetchArgs(apiMap ReadMap) map[string]any {
 	out := make(map[string]any)
 	for _, key := range apiMap.Keys() {
 		switch key {

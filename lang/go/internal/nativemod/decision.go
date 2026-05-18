@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/aql-lang/aql/lang/go/engine"
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
@@ -12,7 +11,7 @@ import (
 // source. The parse is done once on first import and reused thereafter.
 var (
 	decisionParseOnce sync.Once
-	decisionParsed    []engine.Value
+	decisionParsed    []native.Value
 	decisionParseErr  error
 )
 
@@ -20,9 +19,9 @@ var (
 // All functionality is implemented in pure AQL — record types, builders,
 // evaluators, and exports. The AQL source is parsed once and cached;
 // execution and export collection are handled by RunModuleBody.
-func BuildDecisionModule(parent *engine.Registry) (engine.ModuleDesc, error) {
+func BuildDecisionModule(parent *native.Registry) (native.ModuleDesc, error) {
 	if parent.ParseFunc == nil {
-		return engine.ModuleDesc{}, fmt.Errorf("decision: parser not configured")
+		return native.ModuleDesc{}, fmt.Errorf("decision: parser not configured")
 	}
 
 	// Parse AQL source once, cache for reuse.
@@ -30,7 +29,7 @@ func BuildDecisionModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 		decisionParsed, decisionParseErr = parent.ParseFunc(decisionAQL)
 	})
 	if decisionParseErr != nil {
-		return engine.ModuleDesc{}, fmt.Errorf("decision: parse error: %w", decisionParseErr)
+		return native.ModuleDesc{}, fmt.Errorf("decision: parse error: %w", decisionParseErr)
 	}
 
 	// Ensure native words (push, etc.) are available inside the module.
@@ -40,8 +39,8 @@ func BuildDecisionModule(parent *engine.Registry) (engine.ModuleDesc, error) {
 
 	// Copy tokens to avoid mutation, then let RunModuleBody handle
 	// registry setup, execution, export collection, and FnDef tagging.
-	tokens := append([]engine.Value(nil), decisionParsed...)
-	return engine.RunModuleBody(parent, tokens)
+	tokens := append([]native.Value(nil), decisionParsed...)
+	return native.RunModuleBody(parent, tokens)
 }
 
 // decisionAQL contains the complete AQL source for the decision module.
