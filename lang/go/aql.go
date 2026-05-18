@@ -4,15 +4,15 @@ import (
 	"io"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
-	"github.com/aql-lang/aql/lang/go/internal/nativemod"
+	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/aql-lang/aql/lang/go/modules"
 	"github.com/aql-lang/aql/lang/go/native"
 
 	udk "voxgiguniversalsdk"
 )
 
 // FileOps is the interface for file system operations used by read/write words.
-type FileOps = fileops.FileOps
+type FileOps = capabilities.FileOps
 
 // Format handles encoding and decoding file content for a specific format.
 type Format = native.Format
@@ -75,8 +75,8 @@ var NewMap = native.NewMap
 var NewAtom = native.NewAtom
 
 // NewMemFileOps creates an in-memory file system for testing.
-func NewMemFileOps() *fileops.MemFileOps {
-	return fileops.NewMem()
+func NewMemFileOps() *capabilities.MemFileOps {
+	return capabilities.NewMem()
 }
 
 // Options configures an AQL instance.
@@ -119,7 +119,7 @@ func New(opts ...Options) (*AQL, error) {
 		return nil, err
 	}
 	reg.SetParseFunc(parser.Parse)
-	reg.Modules.Resolver = nativemod.Resolve
+	reg.Modules.Resolver = modules.Resolve
 
 	um := udk.NewUniversalManager(map[string]any{
 		"registry": o.Registry,

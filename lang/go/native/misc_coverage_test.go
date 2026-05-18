@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
 // ── Format coverage ──────────────────────────────────────────────────
@@ -286,7 +286,7 @@ func TestReadWriteJsonic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["data.jsonic"] = []byte(`{a: 1, b: "hello"}`)
 	SetHostFileOps(r, mem)
 
@@ -313,7 +313,7 @@ func TestReadWriteJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["data.json"] = []byte(`{"x": 42}`)
 	SetHostFileOps(r, mem)
 
@@ -330,7 +330,7 @@ func TestReadWriteLines(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
 	// Write lines format
@@ -350,7 +350,7 @@ func TestReadWriteText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["hello.txt"] = []byte("hello world")
 	SetHostFileOps(r, mem)
 
@@ -392,7 +392,7 @@ func TestWriteAppendMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["out.txt"] = []byte("first\n")
 	SetHostFileOps(r, mem)
 
@@ -542,7 +542,7 @@ func TestModuleImportFromFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	// Module file that exports "greet" with value "hello"
 	mem.Files["mod.aql"] = []byte(`export greet {val: 'world'}`)
 	SetHostFileOps(r, mem)
@@ -571,7 +571,7 @@ func TestModuleImportFileWithRename(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["mod2.aql"] = []byte(`export foo {val: 42}`)
 	SetHostFileOps(r, mem)
 	r.ParseFunc = func(src string) ([]Value, error) {

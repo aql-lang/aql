@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
 // --- __sys structure: all containers are Stores ---
@@ -70,7 +70,7 @@ func TestSysStoreStructure(t *testing.T) {
 func TestEffectiveFileOpsDefaultIsOS(t *testing.T) {
 	r, _ := DefaultRegistry()
 	ops := EffectiveFileOps(r)
-	if _, ok := ops.(*fileops.OSFileOps); !ok {
+	if _, ok := ops.(*capabilities.OSFileOps); !ok {
 		t.Fatalf("default EffectiveFileOps is %T, want *OSFileOps", ops)
 	}
 }
@@ -92,7 +92,7 @@ func TestEffectiveFileOpsMemTrue(t *testing.T) {
 	}
 
 	ops := EffectiveFileOps(r)
-	if _, ok := ops.(*fileops.MemFileOps); !ok {
+	if _, ok := ops.(*capabilities.MemFileOps); !ok {
 		t.Fatalf("EffectiveFileOps with mem=true is %T, want *MemFileOps", ops)
 	}
 }
@@ -113,7 +113,7 @@ func TestMemFileOpsReadWrite(t *testing.T) {
 
 	// Write a file via the in-memory ops
 	memOps := EffectiveFileOps(r)
-	mem, ok := memOps.(*fileops.MemFileOps)
+	mem, ok := memOps.(*capabilities.MemFileOps)
 	if !ok {
 		t.Fatal("expected MemFileOps")
 	}

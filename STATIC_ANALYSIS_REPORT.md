@@ -69,7 +69,7 @@ in all three modules.
 | `eng/go/nativefunc.go:72` | `staticcheck` S1016 | `//nolint:staticcheck` — the explicit `NativeSig`→`Signature` field copy is intentional |
 | `lang/go/native/native_array.go:1164`, `lang/go/native/natives.go:554`, `lang/go/native/mutability_test.go:227` | `staticcheck` ST1023 | dropped the redundant explicit type in `var x T = …` |
 | `lang/go/native/listops.go:37,73` | `staticcheck` S1009 | dropped the `nil` check before `len()` |
-| `lang/go/internal/nativemod/time.go:233` | `errcheck` | `_, _ = fmt.Sscanf(…)` — best-effort parse of an already-validated digit run |
+| `lang/go/modules/time.go:233` | `errcheck` | `_, _ = fmt.Sscanf(…)` — best-effort parse of an already-validated digit run |
 | `lang/go/native/mutability_test.go:42`, `lang/go/test/object_type_test.go:1522` | `staticcheck` SA4006 | dropped / `_`-ed the dead intermediate `result` assignment |
 | `cmd/go/install.go:91` | `errcheck` | check `os.MkdirAll` for the directory-entry case and bail on error |
 | `cmd/go/auth.go:588` | `errcheck` | `_ = json.Unmarshal(…)` with a comment — best-effort parse of a 201 body |
@@ -207,7 +207,7 @@ worthwhile. Findings by module:
   joinQuoted(columns), …)`. Identifiers are quoted via `quoteIdent` /
   `joinQuoted` and the values use `?` placeholders, so this is not an
   injection vector — but it's the kind of pattern worth a comment.
-- **G304 (×1)** — `lang/go/internal/fileops/fileops.go:33`: `os.ReadFile`
+- **G304 (×1)** — `lang/go/capabilities/fileops.go:33`: `os.ReadFile`
   on a resolved module path. There is resolution logic upstream; gosec
   flags any variable path. Consider `os.Root`-scoped access (Go 1.24).
 - **G104 (×2)** — the `tx.Rollback()` calls in `sqlite.go` (now excluded

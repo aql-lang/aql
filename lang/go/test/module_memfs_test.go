@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
 // runMemFSModuleSteps sets up an in-memory filesystem with pre-populated files,
@@ -21,11 +21,11 @@ func runMemFSModuleSteps(t *testing.T, files map[string]string, steps []string) 
 	reg.SetParseFunc(parser.Parse)
 
 	// Create an in-memory FS and pre-populate it with module files.
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	for path, content := range files {
 		mem.Files[path] = []byte(content)
 	}
-	if err := reg.Capabilities.Set(native.CapMemFileOps, fileops.FileOps(mem)); err != nil {
+	if err := reg.Capabilities.Set(native.CapMemFileOps, capabilities.FileOps(mem)); err != nil {
 		t.Fatalf("set capability: %v", err)
 	}
 

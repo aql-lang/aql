@@ -6,7 +6,7 @@ import (
 
 	multisource "github.com/jsonicjs/multisource/go"
 
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
 func TestTextFormatDecode(t *testing.T) {
@@ -407,7 +407,7 @@ func TestTSVFormatEncode(t *testing.T) {
 
 func TestJsonicFormatMultisourceResolves(t *testing.T) {
 	// Set up in-memory files for the resolver.
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["part.jsonic"] = []byte(`{x:1}`)
 
 	f := &JsonicFormat{
@@ -443,7 +443,7 @@ func TestJsonicFormatMultisourceResolves(t *testing.T) {
 
 func TestJsonicFormatMultisourceNested(t *testing.T) {
 	// Test nested multisource: a.jsonic references b.jsonic.
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["b.jsonic"] = []byte(`{nested: true}`)
 	mem.Files["a.jsonic"] = []byte(`{@"b.jsonic", top: 1}`)
 
@@ -534,7 +534,7 @@ func TestJsonicFormatMultisourceNotUsedForText(t *testing.T) {
 }
 
 func TestMakeFileOpsResolverFindsFile(t *testing.T) {
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["data.jsonic"] = []byte(`{found:true}`)
 
 	resolver := MakeFileOpsResolver(mem)
@@ -552,7 +552,7 @@ func TestMakeFileOpsResolverFindsFile(t *testing.T) {
 }
 
 func TestMakeFileOpsResolverNotFound(t *testing.T) {
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	resolver := MakeFileOpsResolver(mem)
 	spec := multisource.PathSpec{
 		Full: "missing.jsonic",
@@ -565,7 +565,7 @@ func TestMakeFileOpsResolverNotFound(t *testing.T) {
 }
 
 func TestMakeFileOpsResolverImplicitExt(t *testing.T) {
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["config.jsonic"] = []byte(`{ok:true}`)
 
 	resolver := MakeFileOpsResolver(mem)
@@ -617,7 +617,7 @@ func TestSetFileOpsUpdatesJsonicResolver(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["test.jsonic"] = []byte(`{val:42}`)
 	SetHostFileOps(r, mem)
 

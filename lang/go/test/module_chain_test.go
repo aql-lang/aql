@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
 // =====================================================================
@@ -417,7 +417,7 @@ func TestInlineModuleExportAtomName(t *testing.T) {
 // =====================================================================
 
 func TestImportFileNoParseFunc(t *testing.T) {
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["./mod.aql"] = []byte(`export "M" {x:1}`)
 
 	reg, err := native.DefaultRegistry()
@@ -439,7 +439,7 @@ func TestImportFileNoParseFunc(t *testing.T) {
 }
 
 func TestImportFileRenameNoParseFunc(t *testing.T) {
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["./mod.aql"] = []byte(`export "M" {x:1}`)
 
 	reg, err := native.DefaultRegistry()

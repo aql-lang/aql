@@ -1,7 +1,11 @@
-// Package fileops provides an internal abstraction over file system operations.
-// All dangerous file I/O goes through this interface so it can be replaced
-// for testing or sandboxing without touching the Go os package directly.
-package fileops
+// Package capabilities provides the abstraction for host-side capabilities
+// the AQL engine needs to talk to the outside world. At present it covers
+// file-system access (the FileOps interface and its OS-backed and
+// in-memory implementations); future host capabilities (network,
+// process spawn, …) go here too. All dangerous I/O routes through these
+// interfaces so it can be replaced for testing or sandboxing without
+// touching the Go os/net/etc. packages directly.
+package capabilities
 
 import (
 	"os"

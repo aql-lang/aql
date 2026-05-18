@@ -7,19 +7,19 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/internal/nativemod"
+	"github.com/aql-lang/aql/lang/go/modules"
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
 // buildDecisionFileAQL generates the full decision.aql file content.
 // The AQL source already includes the export block.
 func buildDecisionFileAQL() string {
-	return nativemod.DecisionAQL()
+	return modules.DecisionAQL()
 }
 
 // buildDecisionModuleAQL generates the module [...] inline version.
 func buildDecisionModuleAQL() string {
-	return "module [\n" + nativemod.DecisionAQL() + "\n]\n"
+	return "module [\n" + modules.DecisionAQL() + "\n]\n"
 }
 
 // --- Test infrastructure ---
@@ -554,7 +554,7 @@ func nativeDecisionRegistry(t *testing.T) *native.Registry {
 		t.Fatal(err)
 	}
 	r.SetParseFunc(parser.Parse)
-	if err := nativemod.InstallDecisionExports(r); err != nil {
+	if err := modules.InstallDecisionExports(r); err != nil {
 		t.Fatal(err)
 	}
 	return r
@@ -659,7 +659,7 @@ func TestFileDecision(t *testing.T) {
 func TestDecisionAQLDeterministic(t *testing.T) {
 	// Verify that the generated file exactly matches the expected content.
 	content := buildDecisionFileAQL()
-	aql := nativemod.DecisionAQL()
+	aql := modules.DecisionAQL()
 
 	if !strings.Contains(content, strings.TrimSpace(aql)) {
 		t.Error("generated decision.aql does not contain the native module's AQL")

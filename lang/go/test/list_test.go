@@ -5,14 +5,14 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
 // runNativeWithFiles creates a registry with native functions and in-memory files.
 func runNativeWithFiles(t *testing.T, files map[string]string, expr string) ([]native.Value, error) {
 	t.Helper()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	for path, content := range files {
 		mem.Files[path] = []byte(content)
 	}

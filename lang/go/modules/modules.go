@@ -1,4 +1,4 @@
-// Package nativemod provides built-in native AQL modules that are imported
+// Package modules provides built-in native AQL modules that are imported
 // using names of the form "aql:<name>". Each native module contains both
 // Go-implemented words and AQL code definitions.
 //
@@ -8,7 +8,7 @@
 //	"aql:math" import
 //	0.5 math.sin          # access sin via the math export
 //	3 math.min 7          # min of 3 and 7
-package nativemod
+package modules
 
 import (
 	"fmt"

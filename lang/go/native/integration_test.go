@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
 // helper to run AQL expressions through the engine and return results
@@ -283,7 +283,7 @@ func TestEngineReadBasic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["test.txt"] = []byte("hello world")
 	SetHostFileOps(r, mem)
 
@@ -299,7 +299,7 @@ func TestEngineReadWithOpts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["data.txt"] = []byte("a\nb\nc")
 	SetHostFileOps(r, mem)
 
@@ -321,7 +321,7 @@ func TestEngineReadJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["data.json"] = []byte(`{"x":1}`)
 	SetHostFileOps(r, mem)
 
@@ -338,7 +338,7 @@ func TestEngineReadNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
 	err = runAQLError(t, r, []Value{NewWord("read"), NewString("nope.txt")})
@@ -352,7 +352,7 @@ func TestEngineReadUnknownFormat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["test.txt"] = []byte("data")
 	SetHostFileOps(r, mem)
 
@@ -369,7 +369,7 @@ func TestEngineWriteBasic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
 	result := runAQL(t, r, []Value{NewWord("write"), NewString("out.txt"), NewString("hello")})
@@ -387,7 +387,7 @@ func TestEngineWriteWithOpts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
 	opts := NewOrderedMap()
@@ -406,7 +406,7 @@ func TestEngineWriteAppend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["log.txt"] = []byte("first\n")
 	SetHostFileOps(r, mem)
 
@@ -423,7 +423,7 @@ func TestEngineWriteAppendNewFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
 	opts := NewOrderedMap()
@@ -439,7 +439,7 @@ func TestEngineWriteAnyOpts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
 	// write non-string (map) value with options → auto-serializes with jsonic
@@ -461,7 +461,7 @@ func TestEngineReadLineEndings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["crlf.txt"] = []byte("a\r\nb\r\nc")
 	SetHostFileOps(r, mem)
 
@@ -491,7 +491,7 @@ func TestRegistrySetFileOps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 	if HostFileOps(r) != mem {
 		t.Error("SetHostFileOps did not install the FileOps capability")

@@ -1,4 +1,4 @@
-package nativemod
+package modules
 
 import (
 	"fmt"

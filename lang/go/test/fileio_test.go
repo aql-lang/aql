@@ -7,13 +7,13 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
 // runWithFiles creates a registry with in-memory files and runs AQL.
 func runWithFiles(t *testing.T, files map[string]string, expr string) (string, error) {
 	t.Helper()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	for path, content := range files {
 		mem.Files[path] = []byte(content)
 	}
@@ -40,9 +40,9 @@ func runWithFiles(t *testing.T, files map[string]string, expr string) (string, e
 
 // runWithMem creates a registry with an in-memory FS, runs AQL, and returns
 // the MemFileOps so tests can inspect written files.
-func runWithMem(t *testing.T, files map[string]string, expr string) (*fileops.MemFileOps, string, error) {
+func runWithMem(t *testing.T, files map[string]string, expr string) (*capabilities.MemFileOps, string, error) {
 	t.Helper()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	for path, content := range files {
 		mem.Files[path] = []byte(content)
 	}
@@ -268,7 +268,7 @@ func TestWriteReturnsPath(t *testing.T) {
 // --- read/write roundtrip ---
 
 func TestReadWriteRoundtrip(t *testing.T) {
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["src.txt"] = []byte("the content")
 
 	reg, err := native.DefaultRegistry()
@@ -322,7 +322,7 @@ func runWithStdio(t *testing.T, stdin string, expr string) (stdout, stderr, stac
 	if err != nil {
 		t.Fatal(err)
 	}
-	native.SetHostFileOps(reg, fileops.NewMem())
+	native.SetHostFileOps(reg, capabilities.NewMem())
 
 	var outBuf, errBuf bytes.Buffer
 	reg.Output = &outBuf
@@ -349,7 +349,7 @@ func TestStdinWord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	native.SetHostFileOps(reg, fileops.NewMem())
+	native.SetHostFileOps(reg, capabilities.NewMem())
 	var buf bytes.Buffer
 	reg.Output = &buf
 

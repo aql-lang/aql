@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/internal/nativemod"
+	"github.com/aql-lang/aql/lang/go/modules"
 )
 
 func TestForLoop(t *testing.T) {
@@ -52,7 +52,7 @@ func TestForLoop(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			nativemod.InstallMathExports(reg)
+			modules.InstallMathExports(reg)
 			eng := native.NewTop(reg)
 			result, err := eng.Run(values)
 

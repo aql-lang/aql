@@ -5,14 +5,14 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
-	"github.com/aql-lang/aql/lang/go/internal/nativemod"
+	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/aql-lang/aql/lang/go/modules"
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
 func runNativeSteps(t *testing.T, files map[string]string, steps []string) ([]native.Value, error) {
 	t.Helper()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	for path, content := range files {
 		mem.Files[path] = []byte(content)
 	}
@@ -23,7 +23,7 @@ func runNativeSteps(t *testing.T, files map[string]string, steps []string) ([]na
 	}
 	native.SetHostFileOps(reg, mem)
 	native.Register(reg)
-	nativemod.InstallMathExports(reg)
+	modules.InstallMathExports(reg)
 
 	eng := native.NewTop(reg)
 	var result []native.Value

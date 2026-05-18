@@ -9,7 +9,7 @@ import (
 	jsonic "github.com/jsonicjs/jsonic/go"
 	multisource "github.com/jsonicjs/multisource/go"
 
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
 // Format encodes and decodes file content for a named representation
@@ -88,7 +88,7 @@ func (f *JsonicFormat) Decode(content string) ([]Value, error) {
 // MakeFileOpsResolver creates a multisource.Resolver backed by a FileOps
 // implementation. This bridges the AQL file abstraction to multisource's
 // path resolution so that @"path" references in .jsonic files work.
-func MakeFileOpsResolver(ops fileops.FileOps) multisource.Resolver {
+func MakeFileOpsResolver(ops capabilities.FileOps) multisource.Resolver {
 	return func(spec multisource.PathSpec, opts *multisource.MultiSourceOptions) multisource.Resolution {
 		res := multisource.Resolution{
 			PathSpec: spec,

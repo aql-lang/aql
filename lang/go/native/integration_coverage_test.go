@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
 // === 1. var word ===
@@ -859,7 +859,7 @@ func TestIntegDoListMultipleResults(t *testing.T) {
 
 func TestIntegFileIOWriteAndRead(t *testing.T) {
 	r, _ := DefaultRegistry()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
 	// write "test.txt" "hello world"
@@ -883,7 +883,7 @@ func TestIntegFileIOWriteAndRead(t *testing.T) {
 
 func TestIntegFileIOWriteAppend(t *testing.T) {
 	r, _ := DefaultRegistry()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
 	// write "test.txt" "hello"
@@ -910,7 +910,7 @@ func TestIntegFileIOWriteAppend(t *testing.T) {
 
 func TestIntegFileIOWriteJSON(t *testing.T) {
 	r, _ := DefaultRegistry()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
 	// Write a map as JSON
@@ -974,7 +974,7 @@ func TestIntegFileIOWriteStderr(t *testing.T) {
 
 func TestIntegFileIOReadWithFmtOption(t *testing.T) {
 	r, _ := DefaultRegistry()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
 	// Write JSON content to a txt file, read with explicit fmt
@@ -991,7 +991,7 @@ func TestIntegFileIOReadWithFmtOption(t *testing.T) {
 
 func TestIntegFileIOReadJsonExtension(t *testing.T) {
 	r, _ := DefaultRegistry()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
 	_ = mem.WriteFile("data.json", []byte(`{"b":2}`), 0644)
@@ -1005,7 +1005,7 @@ func TestIntegFileIOReadJsonExtension(t *testing.T) {
 
 func TestIntegFileIOWriteStringWithOpts(t *testing.T) {
 	r, _ := DefaultRegistry()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
 	opts := NewOrderedMap()
@@ -1025,7 +1025,7 @@ func TestIntegFileIOWriteStringWithOpts(t *testing.T) {
 
 func TestIntegCSVReadWrite(t *testing.T) {
 	r, _ := DefaultRegistry()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
 	csvContent := "name,age\nAlice,30\nBob,25\n"
@@ -1045,7 +1045,7 @@ func TestIntegCSVReadWrite(t *testing.T) {
 
 func TestIntegTSVRead(t *testing.T) {
 	r, _ := DefaultRegistry()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
 	tsvContent := "col1\tcol2\nval1\tval2\n"
@@ -1061,7 +1061,7 @@ func TestIntegTSVRead(t *testing.T) {
 
 func TestIntegCSVReadWithFmtOption(t *testing.T) {
 	r, _ := DefaultRegistry()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
 	csvContent := "x,y\n1,2\n"
@@ -1365,7 +1365,7 @@ func TestIntegContextPushesStore(t *testing.T) {
 
 func TestIntegFileIOWriteListAsJSON(t *testing.T) {
 	r, _ := DefaultRegistry()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
 	// Write a list value with fmt:json
@@ -1387,7 +1387,7 @@ func TestIntegFileIOWriteListAsJSON(t *testing.T) {
 
 func TestIntegFileIOReadLines(t *testing.T) {
 	r, _ := DefaultRegistry()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
 	_ = mem.WriteFile("lines.txt", []byte("a\nb\nc"), 0644)
@@ -1443,7 +1443,7 @@ func TestIntegVarWithDoBlock(t *testing.T) {
 
 func TestIntegFileIOReadJsonicFormat(t *testing.T) {
 	r, _ := DefaultRegistry()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
 	_ = mem.WriteFile("data.jsonic", []byte(`{x: 1, y: 2}`), 0644)
@@ -1457,7 +1457,7 @@ func TestIntegFileIOReadJsonicFormat(t *testing.T) {
 
 func TestIntegFileIOWriteAppendNewFile(t *testing.T) {
 	r, _ := DefaultRegistry()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
 	// append to non-existent file should just write

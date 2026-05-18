@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/internal/nativemod"
+	"github.com/aql-lang/aql/lang/go/modules"
 )
 
 func TestSigMatch(t *testing.T) {
@@ -50,7 +50,7 @@ func TestSigMatch(t *testing.T) {
 				t.Fatal(err)
 			}
 			reg.SetParseFunc(parser.Parse)
-			nativemod.InstallMathExports(reg)
+			modules.InstallMathExports(reg)
 			eng := native.NewTop(reg)
 			result, err := eng.Run(values)
 

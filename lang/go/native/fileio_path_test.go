@@ -3,13 +3,13 @@ package native
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
-func setupMemFSForIO(t *testing.T, r *Registry) *fileops.MemFileOps {
+func setupMemFSForIO(t *testing.T, r *Registry) *capabilities.MemFileOps {
 	t.Helper()
-	mem := fileops.NewMem()
-	if err := r.Capabilities.Set(CapMemFileOps, fileops.FileOps(mem)); err != nil {
+	mem := capabilities.NewMem()
+	if err := r.Capabilities.Set(CapMemFileOps, capabilities.FileOps(mem)); err != nil {
 		t.Fatalf("set capability: %v", err)
 	}
 	e := New(r)

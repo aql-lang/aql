@@ -3,7 +3,7 @@ package native
 import (
 	"fmt"
 
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
 // DefaultRegistry returns a registry populated with every built-in
@@ -27,7 +27,7 @@ func DefaultRegistry(providers ...func(*Registry)) (*Registry, error) {
 	}
 
 	// Default file operations: OS-backed.
-	ops := fileops.NewDefault()
+	ops := capabilities.NewDefault()
 	SetHostFileOps(r, ops)
 
 	// Default format registry, with the jsonic resolver pointed at

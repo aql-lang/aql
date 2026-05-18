@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/native"
 	"github.com/aql-lang/aql/lang/go/native/help"
 )
@@ -76,8 +76,8 @@ func TestHelpExamplesCorrect(t *testing.T) {
 	reg.SetParseFunc(parser.Parse)
 
 	// Enable in-memory filesystem for read/write examples.
-	mem := fileops.NewMem()
-	if err := reg.Capabilities.Set(native.CapMemFileOps, fileops.FileOps(mem)); err != nil {
+	mem := capabilities.NewMem()
+	if err := reg.Capabilities.Set(native.CapMemFileOps, capabilities.FileOps(mem)); err != nil {
 		t.Fatalf("set capability: %v", err)
 	}
 

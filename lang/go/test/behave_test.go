@@ -9,7 +9,7 @@ import (
 
 	"github.com/aql-lang/aql/eng/go"
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/internal/nativemod"
+	"github.com/aql-lang/aql/lang/go/modules"
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
@@ -20,7 +20,7 @@ import (
 // behaviors installed via `reg compare/q | canon/q | jsonify/q`.
 //
 // The native rows use the `aql:time` module, so the runner wires
-// `nativemod.Resolve` and pre-installs the time exports
+// `modules.Resolve` and pre-installs the time exports
 // (langspec doesn't, since it can't import lang-internal nativemod
 // across module boundaries — this runner lives inside the lang
 // module so the wiring is local).
@@ -56,11 +56,11 @@ func TestBehave(t *testing.T) {
 				t.Fatal(err)
 			}
 			reg.SetParseFunc(parser.Parse)
-			reg.Modules.Resolver = nativemod.Resolve
+			reg.Modules.Resolver = modules.Resolve
 			// Pre-install the aql:time module so spec rows can use
 			// `time.unix`, `time.seconds`, … without the
 			// `"aql:time" import` boilerplate on every native row.
-			if err := nativemod.InstallTimeExports(reg); err != nil {
+			if err := modules.InstallTimeExports(reg); err != nil {
 				t.Fatalf("install time exports: %v", err)
 			}
 

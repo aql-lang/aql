@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/internal/nativemod"
+	"github.com/aql-lang/aql/lang/go/modules"
 )
 
 // runSteps executes a sequence of AQL expressions on a shared engine,
@@ -17,7 +17,7 @@ func runSteps(t *testing.T, steps []string) ([]native.Value, error) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nativemod.InstallMathExports(reg)
+	modules.InstallMathExports(reg)
 	eng := native.NewTop(reg)
 
 	var result []native.Value

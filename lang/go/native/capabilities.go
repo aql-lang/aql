@@ -3,15 +3,15 @@ package native
 import (
 	"github.com/aql-lang/aql/eng/go"
 
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
 // Host-side capability keys. The host installs implementations under
 // these names on eng.Registry; word handlers retrieve them through
 // the typed accessors in this file. aqleng itself never sees them.
 const (
-	CapFileOps    = "engine.fileops"     // active fileops.FileOps
-	CapMemFileOps = "engine.fileops.mem" // lazily created in-memory fileops
+	CapFileOps    = "engine.fileops"     // active capabilities.FileOps
+	CapMemFileOps = "engine.fileops.mem" // lazily created in-memory FileOps
 	CapFormats    = "engine.formats"     // map[string]Format read/write registry
 	CapSQLite     = "engine.sqlite"      // *SQLiteStore
 )
@@ -24,14 +24,14 @@ const (
 // only ever called on initialised registries in practice, and the
 // callers expect a single-value signature. A misconfigured registry
 // surfaces at lower-level capability checks before reaching here.
-func HostFileOps(r *Registry) fileops.FileOps {
-	ops, _, _ := eng.Cap[fileops.FileOps](r, CapFileOps)
+func HostFileOps(r *Registry) capabilities.FileOps {
+	ops, _, _ := eng.Cap[capabilities.FileOps](r, CapFileOps)
 	return ops
 }
 
 // SetHostFileOps installs the active fileops capability and re-wires
 // any registered jsonic-format multisource resolver to use it.
-func SetHostFileOps(r *Registry, ops fileops.FileOps) {
+func SetHostFileOps(r *Registry, ops capabilities.FileOps) {
 	_ = r.Capabilities.Set(CapFileOps, ops)
 	if formats := HostFormats(r); formats != nil {
 		if jf, ok := formats["jsonic"].(*JsonicFormat); ok {
@@ -71,7 +71,7 @@ func SetHostSQLite(r *Registry, store *SQLiteStore) {
 //
 // This logic used to live on eng.Registry; it now lives here
 // because aqleng has no fileops concept.
-func EffectiveFileOps(r *Registry) fileops.FileOps {
+func EffectiveFileOps(r *Registry) capabilities.FileOps {
 	if r == nil {
 		return nil
 	}
@@ -101,10 +101,10 @@ func EffectiveFileOps(r *Registry) fileops.FileOps {
 	}
 	asBool, _ := AsBoolean(memVal)
 	if memVal.VType.Matches(TBoolean) && asBool {
-		if mem, _, _ := eng.Cap[fileops.FileOps](r, CapMemFileOps); mem != nil {
+		if mem, _, _ := eng.Cap[capabilities.FileOps](r, CapMemFileOps); mem != nil {
 			return mem
 		}
-		mem := fileops.NewMem()
+		mem := capabilities.NewMem()
 		_ = r.Capabilities.Set(CapMemFileOps, mem)
 		return mem
 	}

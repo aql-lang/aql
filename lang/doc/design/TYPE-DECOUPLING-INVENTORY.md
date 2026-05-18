@@ -85,10 +85,10 @@ payload access first.
 ```
  59 lang/go/native/native_array.go
  48 eng/go/unify.go
- 41 lang/go/internal/nativemod/matrix.go
+ 41 lang/go/modules/matrix.go
  40 lang/go/native/native_string.go
  37 eng/go/engine.go
- 32 lang/go/internal/nativemod/time.go
+ 32 lang/go/modules/time.go
  26 lang/go/native/query.go
  26 lang/go/native/native_misc.go
  24 eng/go/compare.go
@@ -98,7 +98,7 @@ payload access first.
  17 eng/go/registry.go
  14 lang/go/native/native_math.go
  14 eng/go/core_type.go
- 13 lang/go/internal/nativemod/math.go
+ 13 lang/go/modules/math.go
  13 lang/go/native/native_definition.go
  13 eng/go/util.go
  13 eng/go/fn_params.go
@@ -123,16 +123,16 @@ payload access first.
 
 | Method | Callers | Owning module |
 |---|---|---|
-| `AsMatrix`      | 20 | `lang/go/internal/nativemod/matrix.go` (only consumer) |
-| `AsClkDuration` |  7 | `lang/go/internal/nativemod/time.go` |
-| `AsTimezone`    |  5 | `lang/go/internal/nativemod/time.go` |
-| `AsCalDuration` |  5 | `lang/go/internal/nativemod/time.go` |
-| `AsDate`        |  3 | `lang/go/internal/nativemod/time.go` |
-| `AsDateTime`    |  2 | `lang/go/internal/nativemod/time.go` |
-| `AsInstant`     |  2 | `lang/go/internal/nativemod/time.go` |
+| `AsMatrix`      | 20 | `lang/go/modules/matrix.go` (only consumer) |
+| `AsClkDuration` |  7 | `lang/go/modules/time.go` |
+| `AsTimezone`    |  5 | `lang/go/modules/time.go` |
+| `AsCalDuration` |  5 | `lang/go/modules/time.go` |
+| `AsDate`        |  3 | `lang/go/modules/time.go` |
+| `AsDateTime`    |  2 | `lang/go/modules/time.go` |
+| `AsInstant`     |  2 | `lang/go/modules/time.go` |
 | `AsTimeout`     |  2 | `lang/go/native/native_misc.go` + `eng/go/value.go:String` |
 | `AsInterval`    |  2 | `lang/go/native/native_misc.go` + `eng/go/value.go:String` |
-| `AsTimeOfDay`   |  0 | `lang/go/internal/nativemod/time.go` (already unused) |
+| `AsTimeOfDay`   |  0 | `lang/go/modules/time.go` (already unused) |
 
 ### DepScalar shield (`AsConcreteX`) in `eng/go/util.go:210-247`
 
@@ -206,8 +206,8 @@ through). All move to the per-module
 ### Non-eng caller counts
 
 ```
-125 lang/go/internal/nativemod/time.go   (time, datetime, duration, timezone)
- 42 lang/go/internal/nativemod/matrix.go (matrix)
+125 lang/go/modules/time.go   (time, datetime, duration, timezone)
+ 42 lang/go/modules/matrix.go (matrix)
   5 lang/go/native/natives.go            (fetch + entity/resource sigs)
   1 lang/go/native/fetch.go              (TFetchResponse construction)
 ```
@@ -303,10 +303,10 @@ lang/go/test/check_fixtures/*
 Domain-type tests:
 
 ```
-lang/go/internal/nativemod/time_test.go
-lang/go/internal/nativemod/matrix_test.go
-lang/go/internal/nativemod/decision_test.go
-lang/go/internal/nativemod/nativemod_test.go
+lang/go/modules/time_test.go
+lang/go/modules/matrix_test.go
+lang/go/modules/decision_test.go
+lang/go/modules/modules_test.go
 ```
 
 
@@ -316,8 +316,8 @@ lang/go/internal/nativemod/nativemod_test.go
 
 - `github.com/aql-lang/aql/lang/go` ok
 - `github.com/aql-lang/aql/lang/go/native` ok
-- `github.com/aql-lang/aql/lang/go/internal/fileops` ok
-- `github.com/aql-lang/aql/lang/go/internal/nativemod` ok
+- `github.com/aql-lang/aql/lang/go/capabilities` ok
+- `github.com/aql-lang/aql/lang/go/modules` ok
 - `github.com/aql-lang/aql/lang/go/internal/object` ok
 - `github.com/aql-lang/aql/lang/go/native` ok
 - `github.com/aql-lang/aql/lang/go/test` ok

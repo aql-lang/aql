@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
@@ -13,7 +13,7 @@ import (
 // then executes a sequence of AQL steps on a shared native.
 func runModuleSteps(t *testing.T, files map[string]string, steps []string) ([]native.Value, error) {
 	t.Helper()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	for path, content := range files {
 		mem.Files[path] = []byte(content)
 	}
@@ -573,7 +573,7 @@ export "B" {y:2}`,
 // in-memory files, and ParseFunc set, then executes AQL steps.
 func runModuleStepsWithCwd(t *testing.T, cwd string, files map[string]string, steps []string) ([]native.Value, error) {
 	t.Helper()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Cwd = cwd
 	for path, content := range files {
 		mem.Files[path] = []byte(content)

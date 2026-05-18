@@ -75,7 +75,7 @@ matching, plugin types) supply a custom Behavior:
 
 - `lang/go/native/native_temporal.go` — Time family Behaviors.
 - `lang/go/native/native_misc.go` — Timeout/Interval Behaviors.
-- `lang/go/internal/nativemod/matrix.go` — Matrix Behavior.
+- `lang/go/modules/matrix.go` — Matrix Behavior.
 - `lang/go/native/fetch.go` — Fetch family (no custom Behavior; uses Default).
 
 The dispatch in `Value.String` walks the Parent chain so
@@ -152,7 +152,7 @@ Documented per-module ranges (see
    1-99       eng kernel builtins
    100-999    reserved for future eng-internal builtins
    1000-1999  lang/go/native — Scalar/Time family
-   2000-2999  lang/go/internal/nativemod/matrix
+   2000-2999  lang/go/modules/matrix
    3000-3999  lang/go/native/fetch
    4000-4999  lang/go/native — Timeout, Interval
    5000-9999  reserved for future kernel/language allocations

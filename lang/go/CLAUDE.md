@@ -57,9 +57,9 @@ Language-agnostic content stays at the top of each component:
     `conditional.go`, `forloop.go` — feature-specific helpers.
   - `help/` — dynamic help-system implementation (sub-package).
 - `formatter/` — code pretty-printer (no engine deps).
-- `internal/fileops/` — file I/O abstraction (`FileOps` interface
+- `capabilities/` — file I/O abstraction (`FileOps` interface
   + OS-backed and in-memory implementations).
-- `internal/nativemod/` — loadable modules (`aql:math`, `aql:time`,
+- `modules/` — loadable modules (`aql:math`, `aql:time`,
   `aql:matrix`, `aql:decision`, `aql:solardemo`).
 - `test/` — integration tests and TSV spec runners.
 
@@ -472,7 +472,7 @@ a `// lint:allow-panic` comment. The current set:
 - `native/native_misc.go::registerTimerType` — TTimeout, TInterval.
 - `native/native_temporal.go::registerTemporalType` — TDate, TDateTime, …
 - `native/fetch.go::registerFetchType` — TFetchFunction, TFetchRequest, …
-- `internal/nativemod/matrix.go::registerMatrixType` — TMatrix.
+- `modules/matrix.go::registerMatrixType` — TMatrix.
 
 Do not add new init-time panics without also annotating them
 `// lint:allow-panic` and listing them here.

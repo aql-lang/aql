@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
@@ -44,7 +44,7 @@ func runRealFileSteps(t *testing.T, dir string, steps []string) ([]native.Value,
 		t.Fatal(err)
 	}
 	native.Register(reg)
-	native.SetHostFileOps(reg, fileops.NewDefault())
+	native.SetHostFileOps(reg, capabilities.NewDefault())
 	reg.SetParseFunc(parser.Parse)
 	reg.BaseDir = absDir
 

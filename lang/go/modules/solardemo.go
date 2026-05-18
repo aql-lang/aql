@@ -1,4 +1,4 @@
-package nativemod
+package modules
 
 import (
 	"github.com/aql-lang/aql/lang/go/native"

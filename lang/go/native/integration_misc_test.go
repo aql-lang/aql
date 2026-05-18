@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
 // --- ValToString coverage ---
@@ -35,7 +35,7 @@ func TestEngineReadCSVByExtension(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["data.csv"] = []byte("name,age\nAlice,30\nBob,25")
 	SetHostFileOps(r, mem)
 
@@ -69,7 +69,7 @@ func TestEngineReadTSVByExtension(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["data.tsv"] = []byte("name\tage\nAlice\t30\nBob\t25")
 	SetHostFileOps(r, mem)
 
@@ -93,7 +93,7 @@ func TestEngineReadCSVExplicitFormat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["data.txt"] = []byte("a,b\n1,2")
 	SetHostFileOps(r, mem)
 
@@ -114,7 +114,7 @@ func TestEngineReadOverrideExtension(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["data.csv"] = []byte("hello,world")
 	SetHostFileOps(r, mem)
 
@@ -140,7 +140,7 @@ func TestEngineReadJSONByExtension(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["data.json"] = []byte(`{"key":"value"}`)
 	SetHostFileOps(r, mem)
 
