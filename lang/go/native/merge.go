@@ -34,7 +34,7 @@ func mergeListMapHandler(args []Value, ctx map[string]Value, stack []Value, r *R
 	list := _lst.Slice()
 	m, _ := AsMap(args[1])
 	if list == nil || m == nil {
-		return nil, fmt.Errorf("merge: expected concrete list and map")
+		return nil, r.AqlError("merge_error", "merge: expected concrete list and map", "merge")
 	}
 
 	// Copy the list.
@@ -73,7 +73,7 @@ func mergeMapListHandler(args []Value, ctx map[string]Value, stack []Value, r *R
 	_lst, _ := AsList(args[1])
 	list := _lst.Slice()
 	if m == nil || list == nil {
-		return nil, fmt.Errorf("merge: expected concrete map and list")
+		return nil, r.AqlError("merge_error", "merge: expected concrete map and list", "merge")
 	}
 
 	// Start with a copy of the list.

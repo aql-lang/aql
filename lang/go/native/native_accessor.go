@@ -34,11 +34,11 @@ var accessorNatives = []NativeFunc{
 	},
 }
 
-func getrMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	key := args[0]
 	container := args[1]
 	if container.Data == nil {
-		return nil, fmt.Errorf("getr: cannot access property on type literal")
+		return nil, r.AqlError("getr_error", "getr: cannot access property on type literal", "getr")
 	}
 	// Integer key on list.
 	if key.VType.Matches(TInteger) {
@@ -58,33 +58,33 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	}
 	val, ok := m.Get(k)
 	if !ok {
-		return nil, fmt.Errorf("getr: key %q not found in map", k)
+		return nil, r.AqlError("getr_error", fmt.Sprintf("getr: key %q not found in map", k), "getr")
 	}
 	return []Value{val}, nil
 }
 
-func getrObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func getrObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	key := args[0]
 	container := args[1]
 	if container.Data == nil {
-		return nil, fmt.Errorf("getr: cannot access property on type literal")
+		return nil, r.AqlError("getr_error", "getr: cannot access property on type literal", "getr")
 	}
 	k := getKey(key)
 	if m, err := AsMutableMap(container); err == nil {
 		val, found := m.Get(k)
 		if !found {
-			return nil, fmt.Errorf("getr: key %q not found in object", k)
+			return nil, r.AqlError("getr_error", fmt.Sprintf("getr: key %q not found in object", k), "getr")
 		}
 		return []Value{val}, nil
 	}
 	oi, _ := AsObjectInstance(container)
 	val, ok := oi.GetField(k)
 	if !ok {
-		return nil, fmt.Errorf("getr: field %q not found in object", k)
+		return nil, r.AqlError("getr_error", fmt.Sprintf("getr: field %q not found in object", k), "getr")
 	}
 	return []Value{val}, nil
 }
 
-func getrNoneHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return nil, fmt.Errorf("getr: parent is None")
+func getrNoneHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return nil, r.AqlError("getr_error", "getr: parent is None", "getr")
 }

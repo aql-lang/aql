@@ -401,7 +401,7 @@ func helpWordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 
 func moduleHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, fmt.Errorf("module: argument must be a concrete list, got type literal")
+		return nil, r.AqlError("module_error", "module: argument must be a concrete list, got type literal", "module")
 	}
 	_lst, _ := AsList(args[0])
 	desc, err := RunModuleBody(r, _lst.Slice())
@@ -420,7 +420,7 @@ func importAllHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 func importRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	desc, _ := AsModule(args[1])
 	if !IsConcrete(args[0]) {
-		return nil, fmt.Errorf("import: rename list must be a concrete list, got type literal")
+		return nil, r.AqlError("import_error", "import: rename list must be a concrete list, got type literal", "import")
 	}
 	_lst, _ := AsList(args[0])
 	return nil, installRenamedExports(r, desc, _lst.Slice())
@@ -475,7 +475,7 @@ func importFileRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 		return nil, installRenamedExports(r, desc, _lst.Slice())
 	}
 	if isDataFile(path) {
-		return nil, fmt.Errorf("import: rename not supported for data files (%s)", path)
+		return nil, r.AqlError("import_error", fmt.Sprintf("import: rename not supported for data files (%s)", path), "import")
 	}
 	desc, err := loadFileModule(r, path)
 	if err != nil {
@@ -491,10 +491,10 @@ func importFileRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 func importInlineHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := defName(args[0])
 	if name != "module" {
-		return nil, fmt.Errorf("import: unknown inline form %q (expected 'module')", name)
+		return nil, r.AqlError("import_error", fmt.Sprintf("import: unknown inline form %q (expected 'module')", name), "import")
 	}
 	if !IsConcrete(args[1]) {
-		return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
+		return nil, r.AqlError("import_error", "import: module body must be a concrete list, got type literal", "import")
 	}
 	_lst, _ := AsList(args[1])
 	desc, err := RunModuleBody(r, _lst.Slice())
@@ -508,13 +508,13 @@ func importInlineHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 func importInlineRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := defName(args[1])
 	if name != "module" {
-		return nil, fmt.Errorf("import: unknown inline form %q (expected 'module')", name)
+		return nil, r.AqlError("import_error", fmt.Sprintf("import: unknown inline form %q (expected 'module')", name), "import")
 	}
 	if !IsConcrete(args[0]) {
-		return nil, fmt.Errorf("import: rename list must be a concrete list, got type literal")
+		return nil, r.AqlError("import_error", "import: rename list must be a concrete list, got type literal", "import")
 	}
 	if !IsConcrete(args[2]) {
-		return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
+		return nil, r.AqlError("import_error", "import: module body must be a concrete list, got type literal", "import")
 	}
 	_lst2, _ := AsList(args[2])
 	desc, err := RunModuleBody(r, _lst2.Slice())
@@ -528,10 +528,10 @@ func importInlineRenameHandler(args []Value, _ map[string]Value, _ []Value, r *R
 func importInlineSingleRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	modName := defName(args[1])
 	if modName != "module" {
-		return nil, fmt.Errorf("import: unknown inline form %q (expected 'module')", modName)
+		return nil, r.AqlError("import_error", fmt.Sprintf("import: unknown inline form %q (expected 'module')", modName), "import")
 	}
 	if !IsConcrete(args[2]) {
-		return nil, fmt.Errorf("import: module body must be a concrete list, got type literal")
+		return nil, r.AqlError("import_error", "import: module body must be a concrete list, got type literal", "import")
 	}
 	_lst, _ := AsList(args[2])
 	desc, err := RunModuleBody(r, _lst.Slice())
@@ -554,7 +554,7 @@ func timeoutWordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 func doTimeout(r *Registry, args []Value, isList bool) ([]Value, error) {
 	ms, _ := args[0].AsConcreteInteger()
 	if ms < 0 {
-		return nil, fmt.Errorf("timeout: milliseconds must be non-negative, got %d", ms)
+		return nil, r.AqlError("timeout_error", fmt.Sprintf("timeout: milliseconds must be non-negative, got %d", ms), "timeout")
 	}
 	callback := args[1]
 
@@ -600,7 +600,7 @@ func awaitDefaultHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 
 func doAwait(r *Registry, mode string, parallels Value) ([]Value, error) {
 	if parallels.Data == nil {
-		return nil, fmt.Errorf("await: parallels must be a concrete list, got type literal")
+		return nil, r.AqlError("await_error", "await: parallels must be a concrete list, got type literal", "await")
 	}
 	_lst, _ := AsList(parallels)
 	elems := _lst.Slice()
@@ -618,6 +618,6 @@ func doAwait(r *Registry, mode string, parallels Value) ([]Value, error) {
 	case "any":
 		return awaitAny(r, elems)
 	default:
-		return nil, fmt.Errorf("await: unknown mode %q, expected all, full, first, or any", mode)
+		return nil, r.AqlError("await_error", fmt.Sprintf("await: unknown mode %q, expected all, full, first, or any", mode), "await")
 	}
 }

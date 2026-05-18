@@ -82,7 +82,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 				Args: []*Type{TAtom, TMap},
 				Handler: func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					if !IsConcrete(eargs[1]) {
-						return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
+						return nil, parent.AqlError("export_error", "export: value must be a concrete map, got type literal", "export")
 					}
 					_as1, _ := eargs[0].AsConcreteAtom()
 					_m, _ := AsMap(eargs[1])
@@ -95,7 +95,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 				Args: []*Type{TString, TMap},
 				Handler: func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					if !IsConcrete(eargs[1]) {
-						return nil, fmt.Errorf("export: value must be a concrete map, got type literal")
+						return nil, parent.AqlError("export_error", "export: value must be a concrete map, got type literal", "export")
 					}
 					_as2, _ := eargs[0].AsConcreteString()
 					_m, _ := AsMap(eargs[1])
@@ -227,7 +227,7 @@ func resolveBareModule(r *Registry, name string) (string, error) {
 func loadDataFile(parent *Registry, path string) ([]Value, error) {
 	format := formatFromExt(path)
 	if format == "" {
-		return nil, fmt.Errorf("import: unknown format for %s", path)
+		return nil, parent.AqlError("import_error", fmt.Sprintf("import: unknown format for %s", path), "import")
 	}
 	resolved := resolveImportPath(parent, path)
 	result, err := doRead(parent, resolved, "utf8", format, "lf")

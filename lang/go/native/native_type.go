@@ -277,10 +277,10 @@ func typeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 func untypeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := defName(args[0])
 	if !IsCapitalisedName(name) {
-		return nil, fmt.Errorf("untype %s: type names must start with a capital letter", name)
+		return nil, r.AqlError("untype %s_error", fmt.Sprintf("untype %s: type names must start with a capital letter", name), "untype %s")
 	}
 	if _, ok := r.Types.PopType(name); !ok {
-		return nil, fmt.Errorf("untype %s: no such type binding", name)
+		return nil, r.AqlError("untype %s_error", fmt.Sprintf("untype %s: no such type binding", name), "untype %s")
 	}
 	return nil, nil
 }
@@ -483,9 +483,9 @@ func allHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	return []Value{last}, nil
 }
 
-func tanyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func tanyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, fmt.Errorf("tany: expected a concrete list")
+		return nil, r.AqlError("tany_error", "tany: expected a concrete list", "tany")
 	}
 	list, _ := AsList(args[0])
 	n := list.Len()
@@ -509,9 +509,9 @@ func tanyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 	return []Value{NewDisjunct(simplified)}, nil
 }
 
-func tallHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func tallHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, fmt.Errorf("tall: expected a concrete list")
+		return nil, r.AqlError("tall_error", "tall: expected a concrete list", "tall")
 	}
 	list, _ := AsList(args[0])
 	n := list.Len()
@@ -606,11 +606,11 @@ func convertTo(src Value, targetType *Type, base string) (Value, error) {
 	}
 }
 
-func convert2Handler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func convert2Handler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	targetType := args[0]
 	src := args[1]
 	if targetType.Data != nil {
-		return nil, fmt.Errorf("convert: first argument must be a type literal, got %s", targetType.VType)
+		return nil, r.AqlError("convert_error", fmt.Sprintf("convert: first argument must be a type literal, got %s", targetType.VType), "convert")
 	}
 	result, err := convertTo(src, targetType.VType, "")
 	if err != nil {
@@ -619,12 +619,12 @@ func convert2Handler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 	return []Value{result}, nil
 }
 
-func convert3Handler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func convert3Handler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	targetType := args[0]
 	opts := args[1]
 	src := args[2]
 	if targetType.Data != nil {
-		return nil, fmt.Errorf("convert: first argument must be a type literal, got %s", targetType.VType)
+		return nil, r.AqlError("convert_error", fmt.Sprintf("convert: first argument must be a type literal, got %s", targetType.VType), "convert")
 	}
 
 	base := ""

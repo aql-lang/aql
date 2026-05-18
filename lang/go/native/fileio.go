@@ -226,7 +226,7 @@ func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
 
 	f, ok := HostFormats(r)[format]
 	if !ok {
-		return nil, fmt.Errorf("read: unknown format: %s", format)
+		return nil, r.AqlError("read_error", fmt.Sprintf("read: unknown format: %s", format), "read")
 	}
 
 	result, err := f.Decode(content)

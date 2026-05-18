@@ -22,7 +22,7 @@ func setpathHandler(args []Value, ctx map[string]Value, stack []Value, r *Regist
 		}
 	}
 	if pathIdx < 0 {
-		return nil, fmt.Errorf("setpath: path argument must be a string")
+		return nil, r.AqlError("setpath_error", "setpath: path argument must be a string", "setpath")
 	}
 	path, err := AsString(args[pathIdx])
 	if err != nil {

@@ -569,10 +569,10 @@ func nowHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value,
 }
 
 // sleepHandler pauses the current goroutine for the given milliseconds.
-func sleepHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func sleepHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	ms, _ := args[0].AsConcreteInteger()
 	if ms < 0 {
-		return nil, fmt.Errorf("sleep: milliseconds must be non-negative, got %d", ms)
+		return nil, r.AqlError("sleep_error", fmt.Sprintf("sleep: milliseconds must be non-negative, got %d", ms), "sleep")
 	}
 	time.Sleep(time.Duration(ms) * time.Millisecond)
 	return nil, nil
@@ -591,7 +591,7 @@ func intervalAtomHandler(args []Value, ctx map[string]Value, stack []Value, r *R
 func startInterval(args []Value, r *Registry, isList bool) ([]Value, error) {
 	ms, _ := args[0].AsConcreteInteger()
 	if ms <= 0 {
-		return nil, fmt.Errorf("interval: milliseconds must be positive, got %d", ms)
+		return nil, r.AqlError("interval_error", fmt.Sprintf("interval: milliseconds must be positive, got %d", ms), "interval")
 	}
 	callback := args[1]
 
@@ -620,10 +620,10 @@ func startInterval(args []Value, r *Registry, isList bool) ([]Value, error) {
 }
 
 // cancelTimeoutHandler stops a pending Timeout timer.
-func cancelTimeoutHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func cancelTimeoutHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	ti, ok := args[0].Data.(*TimeoutInfo)
 	if !ok {
-		return nil, fmt.Errorf("cancel-timeout: not a Timeout value (got %s)", args[0].VType)
+		return nil, r.AqlError("cancel-timeout_error", fmt.Sprintf("cancel-timeout: not a Timeout value (got %s)", args[0].VType), "cancel-timeout")
 	}
 	if ti.Timer != nil {
 		ti.Timer.Stop()
@@ -634,10 +634,10 @@ func cancelTimeoutHandler(args []Value, _ map[string]Value, _ []Value, _ *Regist
 
 // cancelIntervalHandler stops a running Interval ticker and signals its
 // goroutine to exit.
-func cancelIntervalHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func cancelIntervalHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	ii, ok := args[0].Data.(*IntervalInfo)
 	if !ok {
-		return nil, fmt.Errorf("cancel-interval: not an Interval value (got %s)", args[0].VType)
+		return nil, r.AqlError("cancel-interval_error", fmt.Sprintf("cancel-interval: not an Interval value (got %s)", args[0].VType), "cancel-interval")
 	}
 	if ii.Ticker != nil {
 		ii.Ticker.Stop()

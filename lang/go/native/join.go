@@ -14,7 +14,7 @@ func joinDefaultHandler(args []Value, ctx map[string]Value, stack []Value, r *Re
 	data := valueToAny(args[0])
 	arr, ok := data.([]any)
 	if !ok {
-		return nil, fmt.Errorf("join: expected list, got %T", data)
+		return nil, r.AqlError("join_error", fmt.Sprintf("join: expected list, got %T", data), "join")
 	}
 	result := voxgigstruct.Join(arr)
 	return []Value{NewString(result)}, nil
@@ -29,7 +29,7 @@ func joinSepHandler(args []Value, ctx map[string]Value, stack []Value, r *Regist
 	data := valueToAny(args[1])
 	arr, ok := data.([]any)
 	if !ok {
-		return nil, fmt.Errorf("join: expected list, got %T", data)
+		return nil, r.AqlError("join_error", fmt.Sprintf("join: expected list, got %T", data), "join")
 	}
 	result := voxgigstruct.Join(arr, sep)
 	return []Value{NewString(result)}, nil

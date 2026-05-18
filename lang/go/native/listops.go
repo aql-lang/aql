@@ -1,9 +1,5 @@
 package native
 
-import (
-	"fmt"
-)
-
 // The list-mutation words (push/pop/unshift/shift) are registered via the
 // consolidated Natives slice in natives.go.
 //
@@ -16,7 +12,7 @@ func pushHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry)
 	_lst, _ := AsList(args[1])
 	list := _lst.Slice()
 	if list == nil {
-		return nil, fmt.Errorf("push: expected concrete list")
+		return nil, r.AqlError("push_error", "push: expected concrete list", "push")
 	}
 
 	result := make([]Value, len(list)+1)
@@ -35,7 +31,7 @@ func popHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) 
 	_lst, _ := AsList(args[0])
 	list := _lst.Slice()
 	if len(list) == 0 {
-		return nil, fmt.Errorf("pop: cannot pop from empty list")
+		return nil, r.AqlError("pop_error", "pop: cannot pop from empty list", "pop")
 	}
 
 	newList := make([]Value, len(list)-1)
@@ -54,7 +50,7 @@ func unshiftHandler(args []Value, ctx map[string]Value, stack []Value, r *Regist
 	_lst, _ := AsList(args[1])
 	list := _lst.Slice()
 	if list == nil {
-		return nil, fmt.Errorf("unshift: expected concrete list")
+		return nil, r.AqlError("unshift_error", "unshift: expected concrete list", "unshift")
 	}
 
 	result := make([]Value, len(list)+1)
@@ -73,7 +69,7 @@ func shiftHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry
 	_lst, _ := AsList(args[0])
 	list := _lst.Slice()
 	if len(list) == 0 {
-		return nil, fmt.Errorf("shift: cannot shift from empty list")
+		return nil, r.AqlError("shift_error", "shift: cannot shift from empty list", "shift")
 	}
 
 	shifted := list[0]

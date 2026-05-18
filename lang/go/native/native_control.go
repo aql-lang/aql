@@ -120,7 +120,7 @@ var controlNatives = []NativeFunc{
 
 func doListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, fmt.Errorf("do: argument must be a concrete list, got type literal")
+		return nil, r.AqlError("do_error", "do: argument must be a concrete list, got type literal", "do")
 	}
 	_lst, _ := AsList(args[0])
 	return doEvalList(r, _lst.Slice())
@@ -331,9 +331,9 @@ func if2ReturnsFn(args []Value, r *Registry) []Value {
 // ifListHandler implements the clause-list form `if [c1 b1 c2 b2 … else]`.
 // It hands the (raw, NoEval'd) list's elements to ifClause, which produces
 // the token stream the engine then runs.
-func ifListHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func ifListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, fmt.Errorf("if: clause-list argument must be a concrete list, got a type literal")
+		return nil, r.AqlError("if_error", "if: clause-list argument must be a concrete list, got a type literal", "if")
 	}
 	_lst, _ := AsList(args[0])
 	return ifClause(_lst.Slice()), nil
@@ -390,7 +390,7 @@ func forCountHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 
 func forRangeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, fmt.Errorf("for: range must be a concrete list, got type literal")
+		return nil, r.AqlError("for_error", "for: range must be a concrete list, got type literal", "for")
 	}
 	_lst, _ := AsList(args[0])
 	rangeSpec := _lst.Slice()
@@ -428,7 +428,7 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 
 func errorHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, fmt.Errorf("error: handler must be a concrete list, got type literal")
+		return nil, r.AqlError("error_error", "error: handler must be a concrete list, got type literal", "error")
 	}
 	sub := New(r)
 	_lst, _ := AsList(args[0])

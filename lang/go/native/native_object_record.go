@@ -57,14 +57,14 @@ var objectRecordNatives = []NativeFunc{
 func recordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	list := args[0]
 	if !list.VType.Equal(TList) {
-		return nil, fmt.Errorf("record: argument must be a list")
+		return nil, r.AqlError("record_error", "record: argument must be a list", "record")
 	}
 	if list.Data == nil {
-		return nil, fmt.Errorf("record: argument must be a concrete list, got type literal")
+		return nil, r.AqlError("record_error", "record: argument must be a concrete list, got type literal", "record")
 	}
 	elems, _ := AsList(list)
 	if elems.Len() == 0 {
-		return nil, fmt.Errorf("record: list must have at least one field")
+		return nil, r.AqlError("record_error", "record: list must have at least one field", "record")
 	}
 	fields := NewOrderedMap()
 	for _, elem := range elems.Slice() {

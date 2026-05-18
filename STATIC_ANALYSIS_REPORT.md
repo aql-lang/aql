@@ -88,6 +88,43 @@ rework (`native_query.go` + `query.go`), the unit-aware string helpers
 have all been deleted; the matching `.golangci.yml` exclusions are
 removed and `unused` is enforced on those files again.
 
+### Error-handling refactor (post architecture review, May 2026)
+
+CLAUDE.md names `r.AqlError(code, detail, word)` as the canonical
+handler-side error path (it threads the source position the engine
+needs for `--> row:col` site extracts and the structured `[aql/<code>]`
+prefix). Pre-refactor, native handlers almost universally returned
+bare `fmt.Errorf` errors instead, which dropped both pieces of context.
+
+Roughly **140 sites** across 23 files in `lang/go/native/*.go` were
+converted in a mechanical pass:
+
+```
+return nil, fmt.Errorf("op: detail %d", n)
+→
+return nil, r.AqlError("op_error", fmt.Sprintf("op: detail %d", n), "op")
+```
+
+The opname prefix is kept in the detail so existing substring-match
+error tests (`strings.Contains(err.Error(), "op: …")`) keep working.
+Handler signatures with `_ *Registry` were upgraded to `r *Registry`
+to access the helper.
+
+Remaining `fmt.Errorf` calls (~210) fall into three categories that
+are deliberately not converted:
+
+1. `fmt.Errorf("%w", …)` wrappers — preserve the underlying chain
+   for `errors.Is`/`errors.As`.
+2. Calls inside helper functions that don't have a `*Registry` in
+   scope (e.g. parser utilities in `query.go`'s SQL builders).
+3. Calls that construct an `&AqlError{…}` literal directly — already
+   structured, just bypass the helper.
+
+The remaining sites can be ratcheted down in follow-up PRs by
+plumbing the registry through helpers, or by adding a
+`MakeAqlError(code, detail, word, src, hint)` variant for the
+no-registry path.
+
 ### Looked at but left alone
 
 `nilerr` (not enabled) flags three deliberate error-swallows — worth a

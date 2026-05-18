@@ -86,7 +86,7 @@ func createHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 		if existing, ok := m.Get("id"); ok {
 			existingStr, _ := AsString(existing)
 			if existingStr == id {
-				return nil, fmt.Errorf("create: record with id %q already exists", id)
+				return nil, r.AqlError("create_error", fmt.Sprintf("create: record with id %q already exists", id), "create")
 			}
 		}
 	}

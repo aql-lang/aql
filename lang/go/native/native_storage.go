@@ -96,10 +96,10 @@ var storageNatives = []NativeFunc{
 
 // ---- kernel-container handlers (Node / Object / Array / None) ----
 
-func setObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func setObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	container := args[2]
 	if container.Data == nil {
-		return nil, fmt.Errorf("set: cannot set field on type literal")
+		return nil, r.AqlError("set_error", "set: cannot set field on type literal", "set")
 	}
 	key := StoreKey(args[0])
 	oi, ok := container.Data.(ObjectInstanceInfo)
@@ -123,11 +123,11 @@ func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 	return nil, nil
 }
 
-func getNodeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func getNodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	key := args[0]
 	container := args[1]
 	if container.Data == nil {
-		return nil, fmt.Errorf("get: cannot access property on type literal")
+		return nil, r.AqlError("get_error", "get: cannot access property on type literal", "get")
 	}
 	// Integer key: list index access.
 	if key.VType.Matches(TInteger) {
@@ -153,11 +153,11 @@ func getNodeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	return []Value{NewTypeLiteral(TNone)}, nil
 }
 
-func getObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func getObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	key := args[0]
 	container := args[1]
 	if container.Data == nil {
-		return nil, fmt.Errorf("get: cannot access property on type literal")
+		return nil, r.AqlError("get_error", "get: cannot access property on type literal", "get")
 	}
 	k := getKey(key)
 	if m, err := AsMutableMap(container); err == nil {
@@ -211,7 +211,7 @@ func setStoreReturnsFn(args []Value, r *Registry) []Value {
 
 // ---- get Store handler ----
 
-func getStoreHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func getStoreHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	store, err := AsStore(args[1])
 	if err != nil {
 		return nil, fmt.Errorf("get: expected a Store, got %s", args[1].VType.String())
@@ -219,7 +219,7 @@ func getStoreHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 	key := getKey(args[0])
 	val, ok := store.Get(key)
 	if !ok {
-		return nil, fmt.Errorf("unknown key: %s", key)
+		return nil, r.AqlError("unknown key_error", fmt.Sprintf("unknown key: %s", key), "unknown key")
 	}
 	return []Value{val}, nil
 }
@@ -239,7 +239,7 @@ func getStoreReturnsFn(args []Value, r *Registry) []Value {
 func contextHandler(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	store := reg.Contexts.Top()
 	if store == nil {
-		return nil, fmt.Errorf("context: no active context")
+		return nil, reg.AqlError("context_error", "context: no active context", "context")
 	}
 	return []Value{NewStoreValue(TStore, store)}, nil
 }

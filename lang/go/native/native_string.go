@@ -858,9 +858,9 @@ func padHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 
 // pad: forward-first: args[0]=width (forward), args[1]=opts (forward), args[2]=string (stack).
 // Usage: "ab" pad 5 {side:"left" fill:"0"} → "000ab"
-func padOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func padOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[1]) {
-		return nil, fmt.Errorf("pad: options must be a concrete map, got type literal")
+		return nil, r.AqlError("pad_error", "pad: options must be a concrete map, got type literal", "pad")
 	}
 	opts := parseStrOpts(args[1])
 	if opts.fill == "" {

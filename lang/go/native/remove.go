@@ -96,7 +96,7 @@ func removeHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 	}
 
 	if !found {
-		return nil, fmt.Errorf("remove: no record found with id %q", id)
+		return nil, r.AqlError("remove_error", fmt.Sprintf("remove: no record found with id %q", id), "remove")
 	}
 
 	if result == nil {

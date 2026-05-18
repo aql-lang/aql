@@ -153,13 +153,13 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	stackOnly := defStackOnly(args[0])
 	body := args[1]
 	if IsCapitalisedName(name) {
-		return nil, fmt.Errorf("def %s: def names must not start with a capital letter (capitalised names are reserved for types)", name)
+		return nil, r.AqlError("def %s_error", fmt.Sprintf("def %s: def names must not start with a capital letter (capitalised names are reserved for types)", name), "def %s")
 	}
 	if err := ValidateWordName(name); err != nil {
 		return nil, fmt.Errorf("def %s: %w", name, err)
 	}
 	if r.Types.Has(name) {
-		return nil, fmt.Errorf("def %s: name clash — already a type", name)
+		return nil, r.AqlError("def %s_error", fmt.Sprintf("def %s: name clash — already a type", name), "def %s")
 	}
 	InstallDef(r, name, body, stackOnly)
 	r.Check.RecordDef(name, args[0].Pos)
@@ -169,20 +169,20 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	nameMap, _ := AsMap(args[0])
 	if nameMap == nil || nameMap.Len() == 0 {
-		return nil, fmt.Errorf("def: typed-name map must have exactly one key, got empty/non-concrete map")
+		return nil, r.AqlError("def_error", "def: typed-name map must have exactly one key, got empty/non-concrete map", "def")
 	}
 	if nameMap.Len() != 1 {
 		return nil, fmt.Errorf("def: typed-name map must have exactly one key, got %d", nameMap.Len())
 	}
 	name := nameMap.Keys()[0]
 	if IsCapitalisedName(name) {
-		return nil, fmt.Errorf("def %s: def names must not start with a capital letter (capitalised names are reserved for types)", name)
+		return nil, r.AqlError("def %s_error", fmt.Sprintf("def %s: def names must not start with a capital letter (capitalised names are reserved for types)", name), "def %s")
 	}
 	if err := ValidateWordName(name); err != nil {
 		return nil, fmt.Errorf("def %s: %w", name, err)
 	}
 	if r.Types.Has(name) {
-		return nil, fmt.Errorf("def %s: name clash — already a type", name)
+		return nil, r.AqlError("def %s_error", fmt.Sprintf("def %s: name clash — already a type", name), "def %s")
 	}
 	constraint, _ := nameMap.Get(name)
 	var typeName string
@@ -339,22 +339,22 @@ func undefFnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 
 // ---- var ----
 
-func varHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	list := args[0]
 	if !list.VType.Equal(TList) {
-		return nil, fmt.Errorf("var: argument must be a list")
+		return nil, r.AqlError("var_error", "var: argument must be a list", "var")
 	}
 	if list.Data == nil {
-		return nil, fmt.Errorf("var: argument must be a concrete list, got type literal")
+		return nil, r.AqlError("var_error", "var: argument must be a concrete list, got type literal", "var")
 	}
 	elems, _ := AsList(list)
 	if elems.Len() == 0 {
-		return nil, fmt.Errorf("var: empty list")
+		return nil, r.AqlError("var_error", "var: empty list", "var")
 	}
 
 	declVal := elems.Get(0)
 	if !declVal.VType.Equal(TList) || declVal.Data == nil {
-		return nil, fmt.Errorf("var: first element must be a list of variable declarations")
+		return nil, r.AqlError("var_error", "var: first element must be a list of variable declarations", "var")
 	}
 	decls, _ := AsList(declVal)
 	body := elems.Slice()[1:]
@@ -373,7 +373,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 		case decl.VType.Equal(TList) && decl.Data != nil:
 			declElems, _ := AsList(decl)
 			if declElems.Len() < 2 {
-				return nil, fmt.Errorf("var: declaration list must have name and value")
+				return nil, r.AqlError("var_error", "var: declaration list must have name and value", "var")
 			}
 			var name string
 			if IsWord(declElems.Get(0)) {
@@ -382,7 +382,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 			} else if declElems.Get(0).VType.Matches(TString) {
 				name, _ = AsString(declElems.Get(0))
 			} else {
-				return nil, fmt.Errorf("var: declaration name must be a word or string")
+				return nil, r.AqlError("var_error", "var: declaration name must be a word or string", "var")
 			}
 			varNames = append(varNames, name)
 			result = append(result, NewWord("def"), NewWord(name))
@@ -418,15 +418,15 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	list := args[0]
 	if !list.VType.Equal(TList) {
-		return nil, fmt.Errorf("fn: argument must be a list")
+		return nil, r.AqlError("fn_error", "fn: argument must be a list", "fn")
 	}
 	if list.Data == nil {
-		return nil, fmt.Errorf("fn: argument must be a concrete list, got type literal")
+		return nil, r.AqlError("fn_error", "fn: argument must be a concrete list, got type literal", "fn")
 	}
 	_lst, _ := AsList(list)
 	elems := _lst.Slice()
 	if len(elems) == 0 || len(elems)%3 != 0 {
-		return nil, fmt.Errorf("fn: list length must be a non-zero multiple of 3 (input output body triples); use `fnsig` for the type-only form")
+		return nil, r.AqlError("fn_error", "fn: list length must be a non-zero multiple of 3 (input output body triples); use `fnsig` for the type-only form", "fn")
 	}
 	fnDef, err := parseFnDef(r, elems)
 	if err != nil {
@@ -470,14 +470,14 @@ func fnsigHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 
 // ---- call ----
 
-func callHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func callHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	body := args[0]
 
 	if body.Data == nil {
-		return nil, fmt.Errorf("call: argument must be a concrete list, got type literal")
+		return nil, r.AqlError("call_error", "call: argument must be a concrete list, got type literal", "call")
 	}
 	if IsTypedList(body) || IsTableType(body) {
-		return nil, fmt.Errorf("call: argument must be a plain list")
+		return nil, r.AqlError("call_error", "call: argument must be a plain list", "call")
 	}
 
 	bodyElems, _ := AsList(body)
@@ -491,15 +491,15 @@ func callHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 
 // ---- dblcall ----
 
-func dblcallHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func dblcallHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	n, _ := args[0].AsConcreteInteger()
 	body := args[1]
 
 	if body.Data == nil {
-		return nil, fmt.Errorf("dblcall: callback must be a concrete list, got type literal")
+		return nil, r.AqlError("dblcall_error", "dblcall: callback must be a concrete list, got type literal", "dblcall")
 	}
 	if IsTypedList(body) || IsTableType(body) {
-		return nil, fmt.Errorf("dblcall: callback must be a plain list")
+		return nil, r.AqlError("dblcall_error", "dblcall: callback must be a plain list", "dblcall")
 	}
 
 	doubled := NewInteger(n * 2)
@@ -526,7 +526,7 @@ func argsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value
 		return nil, err
 	}
 	if !ok {
-		return nil, fmt.Errorf("args: not inside a function")
+		return nil, r.AqlError("args_error", "args: not inside a function", "args")
 	}
 	return []Value{top}, nil
 }

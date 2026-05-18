@@ -54,7 +54,7 @@ func fetchStringHandler(args []Value, ctx map[string]Value, stack []Value, r *Re
 func fetchStringMapHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	opts, _ := AsMap(args[1])
 	if opts == nil {
-		return nil, fmt.Errorf("fetch: expected map for options, got nil")
+		return nil, r.AqlError("fetch_error", "fetch: expected map for options, got nil", "fetch")
 	}
 	reqOM := NewOrderedMap()
 	reqOM.Set("url", args[0])
@@ -74,7 +74,7 @@ func fetchStringMapHandler(args []Value, ctx map[string]Value, stack []Value, r 
 func fetchMapHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	m, _ := AsMap(args[0])
 	if m == nil {
-		return nil, fmt.Errorf("fetch: expected map argument, got nil")
+		return nil, r.AqlError("fetch_error", "fetch: expected map argument, got nil", "fetch")
 	}
 	return doFetch(m)
 }

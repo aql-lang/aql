@@ -10,7 +10,7 @@ import "fmt"
 // which delegates to handleLoopBreak/handleLoopContinue.
 func runForLoop(r *Registry, start, end, step int64, iterName string, body Value) ([]Value, error) {
 	if step == 0 {
-		return nil, fmt.Errorf("for: step cannot be zero")
+		return nil, r.AqlError("for_error", "for: step cannot be zero", "for")
 	}
 	if step > 0 && start >= end {
 		return nil, nil
@@ -20,7 +20,7 @@ func runForLoop(r *Registry, start, end, step int64, iterName string, body Value
 	}
 
 	if body.Data == nil {
-		return nil, fmt.Errorf("for: body must be a concrete list, got type literal")
+		return nil, r.AqlError("for_error", "for: body must be a concrete list, got type literal", "for")
 	}
 	_lst, _ := AsList(body)
 	bodySlice := _lst.Slice()
