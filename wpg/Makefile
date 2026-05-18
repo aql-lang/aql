@@ -11,10 +11,14 @@ WASM_DIR := ../docs
 SQLJS_VENDOR := wasm/vendor
 
 # Build-info stamps for the playground header (commit / tag / date).
-# Fall back gracefully when not in a git checkout.
-GIT_COMMIT := $(shell git -C .. rev-parse --short HEAD 2>/dev/null || echo unknown)
-GIT_TAG    := $(shell git -C .. describe --tags --abbrev=0 2>/dev/null || echo untagged)
-GIT_DATE   := $(shell git -C .. log -1 --format=%cs 2>/dev/null || echo unknown)
+# Fall back gracefully when not in a git checkout. GIT_TAG is allowed
+# to be empty — the recipe omits the tag chip entirely in that case
+# rather than printing a placeholder.
+GIT_COMMIT       := $(shell git -C .. rev-parse --short HEAD 2>/dev/null || echo unknown)
+GIT_COMMIT_FULL  := $(shell git -C .. rev-parse HEAD 2>/dev/null)
+GIT_TAG          := $(shell git -C .. describe --tags --abbrev=0 2>/dev/null)
+GIT_DATE         := $(shell git -C .. log -1 --format=%cd --date=iso-local 2>/dev/null || echo unknown)
+GIT_REPO_URL     := https://github.com/aql-lang/aql
 
 serve:
 	go run ./serve
@@ -32,10 +36,21 @@ wasm:
 	fi
 	cp $(SQLJS_VENDOR)/sql-wasm.js $(WASM_DIR)/sql-wasm.js
 	cp $(SQLJS_VENDOR)/sql-wasm.wasm $(WASM_DIR)/sql-wasm.wasm
-	@echo "Bundling into single HTML file (commit $(GIT_COMMIT), tag $(GIT_TAG), date $(GIT_DATE))..."
+	@echo "Bundling into single HTML file (commit $(GIT_COMMIT), tag $(if $(GIT_TAG),$(GIT_TAG),<none>), date $(GIT_DATE))..."
 	@SQL_WASM_B64=$$(base64 -w0 $(WASM_DIR)/sql-wasm.wasm); \
 	AQL_WASM_B64=$$(base64 -w0 $(WASM_DIR)/aql.wasm); \
-	BUILD_INFO='$(GIT_TAG)<span class="sep">·</span>$(GIT_COMMIT)<span class="sep">·</span>$(GIT_DATE)'; \
+	SEP='<span class="sep">·</span>'; \
+	if [ -n "$(GIT_COMMIT_FULL)" ]; then \
+		COMMIT_HTML='<a href="$(GIT_REPO_URL)/commit/$(GIT_COMMIT_FULL)" target="_blank" rel="noopener">$(GIT_COMMIT)</a>'; \
+	else \
+		COMMIT_HTML='$(GIT_COMMIT)'; \
+	fi; \
+	if [ -n "$(GIT_TAG)" ]; then \
+		TAG_HTML='<a href="$(GIT_REPO_URL)/releases/tag/$(GIT_TAG)" target="_blank" rel="noopener">$(GIT_TAG)</a>'; \
+		BUILD_INFO="$${TAG_HTML}$${SEP}$${COMMIT_HTML}$${SEP}$(GIT_DATE)"; \
+	else \
+		BUILD_INFO="$${COMMIT_HTML}$${SEP}$(GIT_DATE)"; \
+	fi; \
 	( \
 		sed -n '1,/<script src="sql-wasm.js"><\/script>/{ /<script src="sql-wasm.js"><\/script>/!p }' wasm/index.html; \
 		echo '<script>'; \
