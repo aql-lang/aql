@@ -15,7 +15,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: lang/go.mod
+          go-version-file: lang/go/go.mod
 
       - name: Install golangci-lint
         # Replaces a previous `curl … install.sh | sh` to avoid piping
@@ -41,7 +41,7 @@ jobs:
         run: make vet
 
       - name: Lint assertions
-        run: make -C lang lint-assertions
+        run: make -C lang/go lint-assertions
 
       - name: Lint (golangci-lint, all modules)
         run: make lint
