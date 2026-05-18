@@ -1,15 +1,16 @@
-.PHONY: build run install vet fmt test lint vuln clean wasm
+.PHONY: build run install vet fmt test lint vuln clean publish tags
 
-# This module (github.com/aql-lang/aql/cmd/go) holds the AQL
-# command-line tools. The language library lives in ../../lang and the
-# kernel in ../../eng/go (both wired in via replace directives in go.mod).
+# This module (github.com/aql-lang/aql/cmd/go) is the AQL command-line
+# tool. The CLI implementation lives in this directory as a library
+# (package `aql`); the thin `main` package that produces the `aql`
+# binary lives at ./aql so `go install` picks the right binary name.
+# The language library lives in ../../lang/go and the kernel in
+# ../../eng/go (both wired in via replace directives in go.mod).
 
 BINARY := bin/aql
-CMD := ./aql
 VERSION := 0.1.0-dev
-LDFLAGS := -ldflags "-X main.Version=$(VERSION)"
-WASM_DIR := ../../docs
-SQLJS_VENDOR := aqlwasm/vendor
+LDFLAGS := -ldflags "-X github.com/aql-lang/aql/cmd/go.Version=$(VERSION)"
+CMD := ./aql
 
 build:
 	go build $(LDFLAGS) -o $(BINARY) $(CMD)
@@ -40,35 +41,35 @@ clean:
 	rm -rf bin/
 	go clean -testcache
 
-wasm:
-	@mkdir -p $(WASM_DIR)
-	GOOS=js GOARCH=wasm go build -o $(WASM_DIR)/aql.wasm ./aqlwasm
-	@GOROOT=$$(go env GOROOT); \
-	if [ -f "$$GOROOT/misc/wasm/wasm_exec.js" ]; then \
-		cp "$$GOROOT/misc/wasm/wasm_exec.js" $(WASM_DIR)/wasm_exec.js; \
-	elif [ -f "$$GOROOT/lib/wasm/wasm_exec.js" ]; then \
-		cp "$$GOROOT/lib/wasm/wasm_exec.js" $(WASM_DIR)/wasm_exec.js; \
-	else \
-		echo "error: wasm_exec.js not found in GOROOT"; exit 1; \
+# Publish a new tagged release of the aql CLI.
+#   make publish V=0.1.0                       # eng+lang pinned to v0.1.0
+#   make publish V=0.1.0 ENG=0.1.0 LANG=0.1.0  # explicit versions
+#
+# Updates require lines for eng/go and lang/go to the pinned versions
+# (so consumers resolve real tags), embeds Version into main.go,
+# commits, tags `cmd/go/v$(V)`, pushes. Wildcard `replace` directives
+# keep local development resolving to the workspace siblings.
+#
+# After publish, users install with:
+#   go install github.com/aql-lang/aql/cmd/go/aql@v$(V)
+# (the binary is named `aql`; the thin main package at ./aql is what
+# makes that work — installing the bare module produces a binary
+# named `go`, which is not what we want).
+publish: test
+	@test -n "$(V)" || (echo "Usage: make publish V=x.y.z [ENG=x.y.z LANG=x.y.z]" && exit 1)
+	@ENG_VER=$${ENG:-$(V)}; \
+	 LANG_VER=$${LANG:-$(V)}; \
+	  perl -i -pe 's{(github\.com/aql-lang/aql/eng/go) v\S+}{$$1 v'$$ENG_VER'}'  go.mod; \
+	  perl -i -pe 's{(github\.com/aql-lang/aql/lang/go) v\S+}{$$1 v'$$LANG_VER'}' go.mod; \
+	  perl -i -pe 's{(^var Version = )"[^"]*"}{$$1"$(V)"}' main.go; \
+	  cd ../.. && git add cmd/go/go.mod cmd/go/main.go && \
+	  (git diff --cached --quiet || git commit -m "cmd/go: v$(V) (eng/go v'$$ENG_VER', lang/go v'$$LANG_VER')") && \
+	  git tag cmd/go/v$(V) && \
+	  git push origin main cmd/go/v$(V)
+	@if command -v gh >/dev/null 2>&1; then \
+		cd ../.. && gh release create cmd/go/v$(V) --title "cmd/go (aql CLI) v$(V)" --notes "AQL CLI v$(V)"; \
 	fi
-	cp $(SQLJS_VENDOR)/sql-wasm.js $(WASM_DIR)/sql-wasm.js
-	cp $(SQLJS_VENDOR)/sql-wasm.wasm $(WASM_DIR)/sql-wasm.wasm
-	@echo "Bundling into single HTML file..."
-	@SQL_WASM_B64=$$(base64 -w0 $(WASM_DIR)/sql-wasm.wasm); \
-	AQL_WASM_B64=$$(base64 -w0 $(WASM_DIR)/aql.wasm); \
-	( \
-		sed -n '1,/<script src="sql-wasm.js"><\/script>/{ /<script src="sql-wasm.js"><\/script>/!p }' aqlwasm/index.html; \
-		echo '<script>'; \
-		cat $(WASM_DIR)/sql-wasm.js; \
-		echo '</script>'; \
-		echo '<script>'; \
-		cat $(WASM_DIR)/wasm_exec.js; \
-		echo '</script>'; \
-		echo '<script>'; \
-		echo "window.__sqlWasmB64 = '$$SQL_WASM_B64';"; \
-		echo "window.__aqlWasmB64 = '$$AQL_WASM_B64';"; \
-		echo '</script>'; \
-		sed -n '/<script src="wasm_exec.js"><\/script>/,$${ /<script src="wasm_exec.js"><\/script>/!p }' aqlwasm/index.html; \
-	) > $(WASM_DIR)/index.html
-	@rm -f $(WASM_DIR)/aql.wasm $(WASM_DIR)/wasm_exec.js $(WASM_DIR)/sql-wasm.js $(WASM_DIR)/sql-wasm.wasm
-	@echo "Built: $(WASM_DIR)/index.html ($$(du -h $(WASM_DIR)/index.html | cut -f1))"
+
+# List recent cmd/go tags (newest first).
+tags:
+	@git -C ../.. tag -l 'cmd/go/v*' --sort=-version:refname

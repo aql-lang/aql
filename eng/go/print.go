@@ -6,7 +6,7 @@ import (
 )
 
 // The `print` / `printstr` word registrations live in
-// lang/engine/native_print.go. The handlers and FormatForPrint
+// lang/go/engine/native_print.go. The handlers and FormatForPrint
 // rendering algorithm stay here as exported eng primitives.
 
 func PrintHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

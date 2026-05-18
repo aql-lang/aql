@@ -1,4 +1,4 @@
-module github.com/aql-lang/aql/eng
+module github.com/aql-lang/aql/eng/go
 
 go 1.24.7
 

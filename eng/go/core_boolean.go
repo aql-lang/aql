@@ -3,8 +3,8 @@ package eng
 // This file owns the algorithms behind the type-level connective
 // words (tor / tand) and the helper TandValues which is reused by
 // lang's typed-all reduction. The matching word registrations now
-// live in lang/engine/native_boolean.go (not/and/or) and
-// lang/engine/native_type.go (tor/tand) — eng exposes only the
+// live in lang/go/engine/native_boolean.go (not/and/or) and
+// lang/go/engine/native_type.go (tor/tand) — eng exposes only the
 // algorithm primitives.
 //
 // tor / tand operate on *Type-shaped values:
@@ -25,7 +25,7 @@ package eng
 //   - the lone alternative if only one remains
 //   - a fresh disjunct otherwise
 //
-// Exported so lang's tor registration (lang/engine/native_type.go)
+// Exported so lang's tor registration (lang/go/engine/native_type.go)
 // can wire dispatch into it without forking the algorithm.
 func TorHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	alts := append(FlattenDisjunctAlts(args[1]), FlattenDisjunctAlts(args[0])...)

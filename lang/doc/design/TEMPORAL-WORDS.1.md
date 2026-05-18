@@ -366,27 +366,27 @@ raw-data apply date_str [auto-date]
 
 Following the existing `native_*.go` pattern:
 
-- `lang/internal/engine/native_temporal_construct.go` — date, datetime, instant, time-of-day, unix
-- `lang/internal/engine/native_temporal_now.go` — now, now-local, today, today-utc, elapsed
-- `lang/internal/engine/native_temporal_extract.go` — year, month, day, hour, minute, second, weekday, etc.
-- `lang/internal/engine/native_temporal_duration.go` — years, months, days, hours, etc., duration extraction
-- `lang/internal/engine/native_temporal_arithmetic.go` — add/sub signatures, until, since, diff
-- `lang/internal/engine/native_temporal_compare.go` — before?, after?, between?, earliest, latest
-- `lang/internal/engine/native_temporal_convert.go` — to-date, to-datetime, to-instant, to-local, format
-- `lang/internal/engine/native_temporal_round.go` — round, truncate, start-of, end-of
-- `lang/internal/engine/native_temporal_tz.go` — tz, tz-utc, tz-local, tz-name, tz-offset, dst?
-- ~~`lang/internal/engine/native_temporal_parse.go` — parse-date, parse-datetime, auto-date~~ — **REMOVED** (Step 11)
+- `lang/go/internal/engine/native_temporal_construct.go` — date, datetime, instant, time-of-day, unix
+- `lang/go/internal/engine/native_temporal_now.go` — now, now-local, today, today-utc, elapsed
+- `lang/go/internal/engine/native_temporal_extract.go` — year, month, day, hour, minute, second, weekday, etc.
+- `lang/go/internal/engine/native_temporal_duration.go` — years, months, days, hours, etc., duration extraction
+- `lang/go/internal/engine/native_temporal_arithmetic.go` — add/sub signatures, until, since, diff
+- `lang/go/internal/engine/native_temporal_compare.go` — before?, after?, between?, earliest, latest
+- `lang/go/internal/engine/native_temporal_convert.go` — to-date, to-datetime, to-instant, to-local, format
+- `lang/go/internal/engine/native_temporal_round.go` — round, truncate, start-of, end-of
+- `lang/go/internal/engine/native_temporal_tz.go` — tz, tz-utc, tz-local, tz-name, tz-offset, dst?
+- ~~`lang/go/internal/engine/native_temporal_parse.go` — parse-date, parse-datetime, auto-date~~ — **REMOVED** (Step 11)
 
 ## Files to Modify
 
-- `lang/internal/engine/types.go` — add `Scalar/Time/*` type paths and IDs (lines 36-59, 112-150)
-- `lang/internal/engine/value.go` — add `NewDate()`, `NewDateTime()`, `NewInstant()`, etc. constructors
-- `lang/internal/engine/registry.go` — register all new words in `registerBuiltins()`
-- `lang/internal/engine/native_math_add.go` — extend `add` with temporal signatures
-- `lang/internal/engine/native_math_sub.go` — extend `sub` with temporal signatures
+- `lang/go/internal/engine/types.go` — add `Scalar/Time/*` type paths and IDs (lines 36-59, 112-150)
+- `lang/go/internal/engine/value.go` — add `NewDate()`, `NewDateTime()`, `NewInstant()`, etc. constructors
+- `lang/go/internal/engine/registry.go` — register all new words in `registerBuiltins()`
+- `lang/go/internal/engine/native_math_add.go` — extend `add` with temporal signatures
+- `lang/go/internal/engine/native_math_sub.go` — extend `sub` with temporal signatures
 
 ## Verification
 
-- `lang/test/temporal_test.go` — test each word category
+- `lang/go/test/temporal_test.go` — test each word category
 - Run: `cd aql && go test ./... -run TestTemporal -v`
 - Test composition with dataframe words: `apply`, `sift`, `mutate`, `groupby`

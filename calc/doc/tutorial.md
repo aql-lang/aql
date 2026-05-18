@@ -38,11 +38,11 @@ module example.com/mycalc
 
 go 1.24
 
-require github.com/aql-lang/aql/eng v0.0.0
+require github.com/aql-lang/aql/eng/go v0.0.0
 
 require github.com/jsonicjs/jsonic/go v0.1.6 // indirect
 
-replace github.com/aql-lang/aql/eng v0.0.0 => ../eng/go
+replace github.com/aql-lang/aql/eng/go v0.0.0 => ../eng/go
 ```
 
 The `replace` line points at the local copy of `eng/go`. In a
@@ -61,7 +61,7 @@ no lang, no native_*, no transitive sqlite or csv. Read this as
 ```go
 package mycalc
 
-import "github.com/aql-lang/aql/eng"
+import "github.com/aql-lang/aql/eng/go"
 
 func New() (*eng.Engine, error) {
     r, err := eng.NewRegistry()
@@ -163,10 +163,10 @@ native word. Calc adds a parser, more words, a stack, and a REPL.
 ## Step 4 — Take source instead of token slices
 
 Hand-constructing token slices gets old. The parser lives next to
-the kernel at `github.com/aql-lang/aql/eng/parser`:
+the kernel at `github.com/aql-lang/aql/eng/go/parser`:
 
 ```go
-import "github.com/aql-lang/aql/eng/parser"
+import "github.com/aql-lang/aql/eng/go/parser"
 
 values, err := parser.Parse("add 2 3")     // returns []eng.Value
 e, _ := New()

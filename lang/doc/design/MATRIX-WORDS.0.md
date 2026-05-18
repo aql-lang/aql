@@ -1078,25 +1078,25 @@ set means (data mat-col-mean)
 
 Following the existing `native_*.go` one-file-per-category pattern:
 
-- `lang/internal/engine/native_matrix_construct.go` — matrix, mat-zeros, mat-ones, mat-eye, mat-diag, mat-fill, mat-rand, mat-randn, mat-linspace, mat-range, mat-from-cols, mat-from-table
-- `lang/internal/engine/native_matrix_info.go` — mat-rows, mat-cols, mat-shape, mat-size, mat-square?, mat-symmetric?
-- `lang/internal/engine/native_matrix_access.go` — mat-at, mat-set, mat-row, mat-col, mat-diag-of, mat-slice, mat-set-row, mat-set-col
-- `lang/internal/engine/native_matrix_arithmetic.go` — mat-emul, mat-ediv, plus add/sub/mul/div signature extensions
-- `lang/internal/engine/native_matrix_transform.go` — mat-t, mat-reshape, mat-flatten, mat-hstack, mat-vstack, mat-squeeze
-- `lang/internal/engine/native_matrix_linalg.go` — mat-det, mat-inv, mat-trace, mat-rank, mat-norm, mat-cond
-- `lang/internal/engine/native_matrix_decomp.go` — mat-lu, mat-qr, mat-svd, mat-svd-vals, mat-chol, mat-eigen
-- `lang/internal/engine/native_matrix_solve.go` — mat-solve, mat-lstsq, mat-pinv
-- `lang/internal/engine/native_matrix_aggregate.go` — mat-sum, mat-mean, mat-min, mat-max, mat-row-sum, mat-col-sum, mat-row-mean, mat-col-mean, mat-row-min, mat-col-max
-- `lang/internal/engine/native_matrix_compare.go` — mat-eq?, mat-close?, mat-gt, mat-lt, mat-any?, mat-all?
-- `lang/internal/engine/native_matrix_advanced.go` — mat-dot, mat-cross, mat-outer, mat-kron, mat-conv, mat-apply, mat-map-row, mat-map-col
+- `lang/go/internal/engine/native_matrix_construct.go` — matrix, mat-zeros, mat-ones, mat-eye, mat-diag, mat-fill, mat-rand, mat-randn, mat-linspace, mat-range, mat-from-cols, mat-from-table
+- `lang/go/internal/engine/native_matrix_info.go` — mat-rows, mat-cols, mat-shape, mat-size, mat-square?, mat-symmetric?
+- `lang/go/internal/engine/native_matrix_access.go` — mat-at, mat-set, mat-row, mat-col, mat-diag-of, mat-slice, mat-set-row, mat-set-col
+- `lang/go/internal/engine/native_matrix_arithmetic.go` — mat-emul, mat-ediv, plus add/sub/mul/div signature extensions
+- `lang/go/internal/engine/native_matrix_transform.go` — mat-t, mat-reshape, mat-flatten, mat-hstack, mat-vstack, mat-squeeze
+- `lang/go/internal/engine/native_matrix_linalg.go` — mat-det, mat-inv, mat-trace, mat-rank, mat-norm, mat-cond
+- `lang/go/internal/engine/native_matrix_decomp.go` — mat-lu, mat-qr, mat-svd, mat-svd-vals, mat-chol, mat-eigen
+- `lang/go/internal/engine/native_matrix_solve.go` — mat-solve, mat-lstsq, mat-pinv
+- `lang/go/internal/engine/native_matrix_aggregate.go` — mat-sum, mat-mean, mat-min, mat-max, mat-row-sum, mat-col-sum, mat-row-mean, mat-col-mean, mat-row-min, mat-col-max
+- `lang/go/internal/engine/native_matrix_compare.go` — mat-eq?, mat-close?, mat-gt, mat-lt, mat-any?, mat-all?
+- `lang/go/internal/engine/native_matrix_advanced.go` — mat-dot, mat-cross, mat-outer, mat-kron, mat-conv, mat-apply, mat-map-row, mat-map-col
 
 ## Files to Modify
 
-- `lang/internal/engine/types.go` — add `"Scalar/Number/Matrix": 38` to `builtinTypeIDs`, add `TMatrix` well-known constant, add `"Matrix": "Scalar/Number/Matrix"` to `typeAncestry`
-- `lang/internal/engine/value.go` — add `MatrixData` struct, `NewMatrix()` constructor, `AsMatrix()` accessor, matrix display in `String()` method
-- `lang/internal/engine/registry.go` — add `registerMatrix*` calls in `registerBuiltins()`; extend `registerUnaryNumOp` to add `[TMatrix] -> [TMatrix]` overload; extend `registerBinaryNumOp` to add `[TMatrix, TMatrix] -> [TMatrix]` and `[TMatrix, TNumber] -> [TMatrix]` overloads
-- `lang/internal/engine/native_math_add.go` — extend with `[TMatrix, TMatrix]` and `[TMatrix, TNumber]` signatures
-- `lang/internal/engine/native_math_sub.go` — same pattern
-- `lang/internal/engine/native_math_mul.go` — extend with matrix multiply `[TMatrix, TMatrix]` and scalar `[TMatrix, TNumber]`
-- `lang/internal/engine/native_math_div.go` — extend with element-wise `[TMatrix, TMatrix]` and scalar `[TMatrix, TNumber]`
+- `lang/go/internal/engine/types.go` — add `"Scalar/Number/Matrix": 38` to `builtinTypeIDs`, add `TMatrix` well-known constant, add `"Matrix": "Scalar/Number/Matrix"` to `typeAncestry`
+- `lang/go/internal/engine/value.go` — add `MatrixData` struct, `NewMatrix()` constructor, `AsMatrix()` accessor, matrix display in `String()` method
+- `lang/go/internal/engine/registry.go` — add `registerMatrix*` calls in `registerBuiltins()`; extend `registerUnaryNumOp` to add `[TMatrix] -> [TMatrix]` overload; extend `registerBinaryNumOp` to add `[TMatrix, TMatrix] -> [TMatrix]` and `[TMatrix, TNumber] -> [TMatrix]` overloads
+- `lang/go/internal/engine/native_math_add.go` — extend with `[TMatrix, TMatrix]` and `[TMatrix, TNumber]` signatures
+- `lang/go/internal/engine/native_math_sub.go` — same pattern
+- `lang/go/internal/engine/native_math_mul.go` — extend with matrix multiply `[TMatrix, TMatrix]` and scalar `[TMatrix, TNumber]`
+- `lang/go/internal/engine/native_math_div.go` — extend with element-wise `[TMatrix, TMatrix]` and scalar `[TMatrix, TNumber]`
 - `lang/go.mod` — add `gonum.org/v1/gonum` dependency

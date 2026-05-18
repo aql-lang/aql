@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aql-lang/aql/eng"
+	"github.com/aql-lang/aql/eng/go"
 	jsonic "github.com/jsonicjs/jsonic/go"
 )
 

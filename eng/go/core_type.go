@@ -7,7 +7,7 @@ import (
 // This file owns the algorithms behind the type-system words —
 // PathOf, TypeOf, IsRecordShape, IsValueOfType, InstallType — plus
 // the helper rules that `is` / `typeof` / `pathof` / `enum` build on.
-// The matching word registrations live in lang/engine/native_type.go;
+// The matching word registrations live in lang/go/engine/native_type.go;
 // the engspec spec-runner installs minimal kernel-side fixtures.
 
 // registerCoreTypeof installs `typeof v`. Returns a Type literal —
@@ -46,7 +46,7 @@ import (
 //	pathof Type             → [Type]              (Type has no ancestors)
 //	pathof None             → [None]
 //
-// Exported so lang's `pathof` registration (lang/engine/native_type.go)
+// Exported so lang's `pathof` registration (lang/go/engine/native_type.go)
 // can wire dispatch into it without forking the algorithm.
 func PathOf(t Value) Value {
 	// Walk the def's ancestry from root down to t, producing one type
@@ -246,7 +246,7 @@ func IsValueOfType(v, t Value) bool {
 // named type body (`type Foo body`). Validates the body shape,
 // rejects name clashes, and pushes onto the registry's type
 // stack. Used by both the eng-internal core `type` word and the
-// production aql `type` word in lang/engine. Changes to
+// production aql `type` word in lang/go/engine. Changes to
 // type-installation policy go here, not in a per-surface duplicate.
 //
 // Body acceptance is broad: a structural type body (IsTypeBody — type

@@ -99,7 +99,7 @@ func TraceVisibleLen(s string) int {
 }
 
 // The `trace` word registration lives in
-// lang/engine/native_trace.go. TraceHandler and RunTrace are
+// lang/go/engine/native_trace.go. TraceHandler and RunTrace are
 // exported algorithm primitives that lang's registration calls into.
 
 func TraceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

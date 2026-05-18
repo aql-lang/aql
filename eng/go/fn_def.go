@@ -2,7 +2,7 @@ package eng
 
 // This file owns the canonical multi-sig fn parser. Both the bare
 // aqleng `fn` (in core_words.go::registerCoreFn) and the production
-// aql `def`/`fn` in lang/engine/native_definition_fn.go call
+// aql `def`/`fn` in lang/go/engine/native_definition_fn.go call
 // into ParseFnDef. Single source of truth — do NOT duplicate the
 // triple-walking logic anywhere else.
 //
@@ -109,7 +109,7 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 // function satisfies the shape.
 //
 // Mirrors the production aql parseFnUndefSpec in
-// lang/engine/native_definition_fn.go.
+// lang/go/engine/native_definition_fn.go.
 func ParseFnUndefSpec(r *Registry, list []Value) (FnUndefInfo, error) {
 	var sigs []FnSigSpec
 	for i := 0; i+1 < len(list); i += 2 {

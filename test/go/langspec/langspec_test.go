@@ -1,6 +1,6 @@
 // Spec-runner test for the production-language spec suite at
 // aql/lang/spec/. Each TSV row is parsed with the AQL parser
-// (eng/parser) and run against a fresh production registry
+// (eng/go/parser) and run against a fresh production registry
 // (engine.DefaultRegistry + native.Register) — the full language
 // layer, so these specs can exercise any registered word (record /
 // object / make / get / length / …) and the builtin Resource / Entity
@@ -19,10 +19,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aql-lang/aql/eng"
-	"github.com/aql-lang/aql/eng/parser"
-	"github.com/aql-lang/aql/lang/engine"
-	"github.com/aql-lang/aql/lang/native"
+	"github.com/aql-lang/aql/eng/go"
+	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/aql-lang/aql/lang/go/engine"
+	"github.com/aql-lang/aql/lang/go/native"
 	"github.com/aql-lang/aql/test/go/specrunner"
 )
 

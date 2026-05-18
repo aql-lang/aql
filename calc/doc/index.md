@@ -1,7 +1,7 @@
 # calc as a learning example for `eng`
 
 Calc is a 350-line Go module that hosts the AQL engine kernel
-(`github.com/aql-lang/aql/eng`) and defines its own word vocabulary —
+(`github.com/aql-lang/aql/eng/go`) and defines its own word vocabulary —
 no dependency on `lang/`. It exists so the eng↔lang boundary is
 demonstrably an architectural fact: if calc compiles, runs, and
 its tests pass, the kernel is a usable algorithm library.

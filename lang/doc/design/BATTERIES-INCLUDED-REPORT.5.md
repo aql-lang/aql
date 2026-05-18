@@ -134,7 +134,7 @@ Counting how many of the 20 languages include each feature in their standard lib
 
 ## Current AQL feature inventory
 
-Based on codebase analysis of `lang/internal/engine/native_*.go` (83 files, 126 `NativeSig` definitions):
+Based on codebase analysis of `lang/go/internal/engine/native_*.go` (83 files, 126 `NativeSig` definitions):
 
 ### What AQL has
 

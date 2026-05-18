@@ -661,7 +661,7 @@ widening.
 | Three diagnostic codes | 20 | `internal/engine/check.go` |
 | `apply` `ReturnsFn` | 50 | `internal/engine/native_type_apply.go` |
 | Generic fn dispatch hook | 60 | `internal/engine/engine.go` |
-| Tests | 200 | `internal/engine/generics_check_test.go`, `lang/test/generics_*.go` |
+| Tests | 200 | `internal/engine/generics_check_test.go`, `lang/go/test/generics_*.go` |
 
 Roughly 400-500 lines, concentrated in three new files plus targeted
 edits to `carrier.go`, `engine.go`, and `check.go`.

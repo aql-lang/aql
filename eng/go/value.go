@@ -1025,7 +1025,7 @@ type MatrixData struct {
 }
 
 // As* accessors for Scalar/Time/* moved to
-// lang/engine/native_temporal.go (Step 6/7). The kernel no longer
+// lang/go/engine/native_temporal.go (Step 6/7). The kernel no longer
 // carries methods named for types it doesn't own. CalDurationData
 // stays here because the payload struct is kernel-owned (it has the
 // payloadMarker) — only the user-facing constructor / accessor
@@ -1038,8 +1038,8 @@ type CalDurationData struct {
 	Days   int
 }
 
-// NewMatrix moved to lang/internal/nativemod/matrix.go (Step 8).
-// AsMatrix moved to lang/internal/nativemod/matrix.go (Step 6/7).
+// NewMatrix moved to lang/go/internal/nativemod/matrix.go (Step 8).
+// AsMatrix moved to lang/go/internal/nativemod/matrix.go (Step 6/7).
 
 // ErrorInfo holds the details of an AQL error value.
 type ErrorInfo struct {
@@ -1072,7 +1072,7 @@ type TimeoutInfo struct {
 	Timer *time.Timer // underlying Go timer (nil after cancel)
 }
 
-// NewTimeout, IsTimeout, AsTimeout moved to lang/engine/native_misc.go
+// NewTimeout, IsTimeout, AsTimeout moved to lang/go/engine/native_misc.go
 // (Step 8). Callers that need them use engine.NewTimeout /
 // engine.AsTimeout, etc. The IsTimeout method is replaced by
 // `v.VType.Equal(engine.TTimeout)` at call sites.
@@ -1085,9 +1085,9 @@ type IntervalInfo struct {
 	Done   chan struct{} // closed to signal cancellation
 }
 
-// NewInterval moved to lang/engine/native_misc.go (Step 8).
+// NewInterval moved to lang/go/engine/native_misc.go (Step 8).
 
-// IsInterval and AsInterval moved to lang/engine/native_misc.go (Step 8).
+// IsInterval and AsInterval moved to lang/go/engine/native_misc.go (Step 8).
 
 // IsWord reports whether this value is a word (function reference).
 func IsWord(v Value) bool {

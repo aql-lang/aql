@@ -19,7 +19,7 @@ package eng
 //  2. Primitives (int64, string, bool, float64), Go-built-in slice
 //     types ([]Value, []InterpPart), and external types (time.Time,
 //     time.Duration, *time.Location), and types defined in other
-//     packages (lang/engine's QueryBuilder) cannot carry the
+//     packages (lang/go/engine's QueryBuilder) cannot carry the
 //     unexported marker; they are wrapped in named variant structs
 //     declared below (IntPayload, ListPayload, TimePayload, …) or
 //     in the catch-all ExtensionPayload{Body: any}.
@@ -109,7 +109,7 @@ type TimezonePayload struct {
 // production engine's QueryBuilder) into a payload-satisfying
 // variant. The Materializer interface itself can't be required to
 // satisfy Payload because its implementors live in other packages
-// (lang/engine), so we wrap instead. AsList unwraps and calls
+// (lang/go/engine), so we wrap instead. AsList unwraps and calls
 // .M.Materialize() to surface rows.
 type MaterializerPayload struct{ M Materializer }
 

@@ -3,7 +3,7 @@ package parser
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng"
+	"github.com/aql-lang/aql/eng/go"
 )
 
 // valuesEqual compares two eng.Value instances for equality.

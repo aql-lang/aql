@@ -1,4 +1,5 @@
 .PHONY: all test vet fmt lint vuln clean cover cover-html cover-html-open \
+        publish publish-eng publish-lang publish-cmd tags \
         viz viz-tools viz-clean viz-index \
         viz-callvis viz-callgraph viz-goda viz-godepgraph \
         viz-gomod viz-golds viz-plantuml viz-list viz-modgraph
@@ -7,18 +8,20 @@
 #
 # The repo is a collection of Go modules:
 #
-#   eng/go    — the kernel (parser, dispatch, types, signatures)
-#   lang      — the language layer (native_* words, engine shim)
-#   cmd/go    — CLI tools (aql, aqlweb, aqlwasm, genhelp)
-#   calc      — small calculator built directly on eng
-#   test/go   — shared TSV spec-runner scaffolding
+#   eng/go         — the kernel (parser, dispatch, types, signatures)
+#   lang/go        — the language layer (native_* words, engine shim)
+#   cmd/go         — the aql CLI command
+#   calc/go        — small calculator built directly on eng (learning example)
+#   wpg            — wasm playground (wasm build + serve)
+#   test/go        — shared TSV spec-runner scaffolding
+#   test/solardemo — standalone HTTP fixture used by API tests
 #
 # Each module has its own go.mod and a focused Makefile. The targets
 # here fan out across the set so the whole codebase can be built,
 # tested, visualised, and coverage-tracked from one place.
 
 # Order matters for `make test`: eng must build before lang, etc.
-MODULES := eng/go lang cmd/go calc test/go
+MODULES := eng/go lang/go cmd/go calc/go wpg test/go test/solardemo
 
 all: test
 
@@ -60,6 +63,48 @@ clean:
 	  ( cd $$m && go clean -testcache ); \
 	done
 	rm -rf $(VIZ_DIR) $(COVER_DIR)
+
+# ---- publishing --------------------------------------------------------
+#
+# Each Go library/CLI module publishes via its own subdir Makefile (the
+# tag prefix has to match the repo subpath per Go's submodule rules).
+# Targets here orchestrate them in dependency order so a coordinated
+# release uses one matched version:
+#
+#   make publish V=0.2.0
+#     -> tags eng/go/v0.2.0, lang/go/v0.2.0, cmd/go/v0.2.0
+#     -> bumps lang/go's eng require, cmd/go's eng+lang requires
+#
+# Per-module publish (independent versions):
+#   make publish-eng  V=0.2.0
+#   make publish-lang V=0.2.0 ENG=0.1.0
+#   make publish-cmd  V=0.2.0 ENG=0.1.0 LANG=0.2.0
+#
+# After publishing, consumers install with:
+#   go install github.com/aql-lang/aql/cmd/go/aql@v0.2.0   # aql CLI
+#   go get     github.com/aql-lang/aql/lang/go@v0.2.0  # lang library
+#   go get     github.com/aql-lang/aql/eng/go@v0.2.0   # eng kernel
+
+publish:
+	@test -n "$(V)" || (echo "Usage: make publish V=x.y.z" && exit 1)
+	$(MAKE) -C eng/go  publish V=$(V)
+	$(MAKE) -C lang/go publish V=$(V) ENG=$(V)
+	$(MAKE) -C cmd/go  publish V=$(V) ENG=$(V) LANG=$(V)
+
+publish-eng:
+	$(MAKE) -C eng/go publish V=$(V)
+
+publish-lang:
+	$(MAKE) -C lang/go publish V=$(V) ENG=$(ENG)
+
+publish-cmd:
+	$(MAKE) -C cmd/go publish V=$(V) ENG=$(ENG) LANG=$(LANG)
+
+# Show recent tags for every published module (newest first).
+tags:
+	@echo "==> eng/go";  git tag -l 'eng/go/v*'  --sort=-version:refname | head
+	@echo "==> lang/go"; git tag -l 'lang/go/v*' --sort=-version:refname | head
+	@echo "==> cmd/go";  git tag -l 'cmd/go/v*'  --sort=-version:refname | head
 
 # ---- coverage ----------------------------------------------------------
 #
@@ -431,8 +476,8 @@ viz-clean:
 	rm -rf $(VIZ_DIR)
 
 # Single-package interactive call viewer; needs CALLVIS_PKG pointing at
-# a directory with a main package. Default: cmd/go/aql.
-CALLVIS_PKG ?= ./cmd/go/aql
+# a directory with a main package. Default: cmd/go.
+CALLVIS_PKG ?= ./cmd/go
 viz-callvis: $(CALLVIS)
 	@mkdir -p $(VIZ_DIR)
 	$(CALLVIS) -file $(VIZ_DIR)/callvis -format svg $(CALLVIS_PKG)

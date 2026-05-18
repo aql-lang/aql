@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/engine"
+	"github.com/aql-lang/aql/lang/go/engine"
 )
 
 // --- MetaRegistry unit tests ---

@@ -7,7 +7,7 @@ language-wide rather than lang-specific lives here.
 
 For language-layer conventions (jsonic integration, registry
 stacks, helper API discipline, panic prevention) see
-`lang/CLAUDE.md`.
+`lang/go/CLAUDE.md`.
 
 ## Sealed Payload (CRITICAL)
 
@@ -73,10 +73,10 @@ Types with semantics the kernel can't infer (time formatting,
 matrix rendering, predicate-type matching, refinement-type
 matching, plugin types) supply a custom Behavior:
 
-- `lang/engine/native_temporal.go` — Time family Behaviors.
-- `lang/engine/native_misc.go` — Timeout/Interval Behaviors.
-- `lang/internal/nativemod/matrix.go` — Matrix Behavior.
-- `lang/native/fetch.go` — Fetch family (no custom Behavior; uses Default).
+- `lang/go/engine/native_temporal.go` — Time family Behaviors.
+- `lang/go/engine/native_misc.go` — Timeout/Interval Behaviors.
+- `lang/go/internal/nativemod/matrix.go` — Matrix Behavior.
+- `lang/go/native/fetch.go` — Fetch family (no custom Behavior; uses Default).
 
 The dispatch in `Value.String` walks the Parent chain so
 descendants of a type with a custom Behavior inherit it — e.g.
@@ -151,16 +151,16 @@ Documented per-module ranges (see
 ```
    1-99       eng kernel builtins
    100-999    reserved for future eng-internal builtins
-   1000-1999  lang/engine — Scalar/Time family
-   2000-2999  lang/internal/nativemod/matrix
-   3000-3999  lang/native/fetch
-   4000-4999  lang/engine — Timeout, Interval
+   1000-1999  lang/go/engine — Scalar/Time family
+   2000-2999  lang/go/internal/nativemod/matrix
+   3000-3999  lang/go/native/fetch
+   4000-4999  lang/go/engine — Timeout, Interval
    5000-9999  reserved for future kernel/language allocations
    10000+     host / third-party plugin types
 ```
 
 The regression gate is
-`lang/test/fixedid_stability_test.go::TestFixedIDStability` — it
+`lang/go/test/fixedid_stability_test.go::TestFixedIDStability` — it
 snapshots every known FixedID and fails on drift. Adding a new
 externally-registered type means:
 
@@ -216,7 +216,7 @@ or lang) registered the word.
 
 The single source of truth is
 `eng/go/core_type.go::installType`. Lang's `validateAndInstallType`
-in `lang/engine/native_type.go` is a thin wrapper that delegates
+in `lang/go/engine/native_type.go` is a thin wrapper that delegates
 to `installType` — do not fork the logic. If you need to extend
 the installation policy (e.g. accept a new name shape, add a
 validation rule), modify the eng function so both surfaces pick

@@ -8,9 +8,9 @@ findings from the first run. Three Go modules are covered: `eng/go`
 
 | Tool | How it runs | Where |
 | --- | --- | --- |
-| **golangci-lint** (v2.5.0) | `make lint` — runs `golangci-lint run ./...` in all three modules | new `lint` target in `lang/Makefile`, `cmd/go/Makefile`, and the new `eng/go/Makefile`; new step in `.github/workflows/ci.yml` |
+| **golangci-lint** (v2.5.0) | `make lint` — runs `golangci-lint run ./...` in all three modules | new `lint` target in `lang/go/Makefile`, `cmd/go/Makefile`, and the new `eng/go/Makefile`; new step in `.github/workflows/ci.yml` |
 | **govulncheck** | `make vuln` — runs `govulncheck ./...` in all three modules | new `vuln` target in the same Makefiles; new (advisory) step in CI |
-| `lint-assertions` (pre-existing grep check) | `make lint-assertions` | unchanged, still in `lang/Makefile` and CI |
+| `lint-assertions` (pre-existing grep check) | `make lint-assertions` | unchanged, still in `lang/go/Makefile` and CI |
 
 `golangci-lint`'s config lives at the repo root (`.golangci.yml`) and is
 found by walking up from each module directory. Local install:
@@ -39,10 +39,10 @@ Deliberately conservative — meant to gate CI without churn:
     setup routinely discards errors; spec-runner fixtures intentionally
     discard the always-nil error from already-type-matched `AsX()`).
   - `unused` is suppressed for a handful of files that carry parked /
-    work-in-progress dead symbols — `lang/engine/{native_query,query,
+    work-in-progress dead symbols — `lang/go/engine/{native_query,query,
     native_string_helpers,native_temporal_await}.go` (query-builder
     rework, unit-aware string helpers, the await ordering field) — and for
-    the `lang/engine/aliases.go` re-export shim, which intentionally
+    the `lang/go/engine/aliases.go` re-export shim, which intentionally
     mirrors the whole `eng` API. **These exclusions are debt; remove them
     once the parked code lands or is deleted.**
 - **Not enabled (opt-in / ad-hoc):** `gosec`, `revive`/`stylecheck`,
@@ -67,28 +67,28 @@ in all three modules.
 | `eng/go/engine.go` (stepCloseParen) | `ineffassign` | removed dead `closeIdx--` (overwritten by `findCloseParenAfter` two lines down) |
 | `eng/go/engine.go:612` | `errcheck` | `_ = e.stepOpenParen()` — it never returns a non-nil error |
 | `eng/go/nativefunc.go:72` | `staticcheck` S1016 | `//nolint:staticcheck` — the explicit `NativeSig`→`Signature` field copy is intentional |
-| `lang/engine/native_array.go:1164`, `lang/native/natives.go:554`, `lang/engine/mutability_test.go:227` | `staticcheck` ST1023 | dropped the redundant explicit type in `var x T = …` |
-| `lang/native/listops.go:37,73` | `staticcheck` S1009 | dropped the `nil` check before `len()` |
-| `lang/internal/nativemod/time.go:233` | `errcheck` | `_, _ = fmt.Sscanf(…)` — best-effort parse of an already-validated digit run |
-| `lang/engine/mutability_test.go:42`, `lang/test/object_type_test.go:1522` | `staticcheck` SA4006 | dropped / `_`-ed the dead intermediate `result` assignment |
-| `cmd/go/aql/install.go:91` | `errcheck` | check `os.MkdirAll` for the directory-entry case and bail on error |
-| `cmd/go/aql/auth.go:588` | `errcheck` | `_ = json.Unmarshal(…)` with a comment — best-effort parse of a 201 body |
-| `cmd/go/solardemo/main.go` (×4) | `staticcheck` ST1013 | `405` → `http.StatusMethodNotAllowed` |
+| `lang/go/engine/native_array.go:1164`, `lang/go/native/natives.go:554`, `lang/go/engine/mutability_test.go:227` | `staticcheck` ST1023 | dropped the redundant explicit type in `var x T = …` |
+| `lang/go/native/listops.go:37,73` | `staticcheck` S1009 | dropped the `nil` check before `len()` |
+| `lang/go/internal/nativemod/time.go:233` | `errcheck` | `_, _ = fmt.Sscanf(…)` — best-effort parse of an already-validated digit run |
+| `lang/go/engine/mutability_test.go:42`, `lang/go/test/object_type_test.go:1522` | `staticcheck` SA4006 | dropped / `_`-ed the dead intermediate `result` assignment |
+| `cmd/go/install.go:91` | `errcheck` | check `os.MkdirAll` for the directory-entry case and bail on error |
+| `cmd/go/auth.go:588` | `errcheck` | `_ = json.Unmarshal(…)` with a comment — best-effort parse of a 201 body |
+| `test/solardemo/main.go` (×4) | `staticcheck` ST1013 | `405` → `http.StatusMethodNotAllowed` |
 
 ### Grandfathered via config (debt to triage)
 
-- **`unused` (~31 symbols)** in `lang/engine/native_query.go` and
-  `lang/engine/query.go` — a query-builder feature that's only partly
+- **`unused` (~31 symbols)** in `lang/go/engine/native_query.go` and
+  `lang/go/engine/query.go` — a query-builder feature that's only partly
   wired up (`offsetHandler`, `distinctHandler`, `groupListHandler`,
   `groupAtomHandler`, `havingHandler`, `onHandler`, `usingHandler`,
   `joinWordNative`, `setOpWordNative`, `QueryBuilder.clone`,
   `toQueryBuilder`, `doSelect`, `resolveSelectSubExprs`,
   `resolveWhereSubExprs`, …). Either finish the feature or delete the
   dead handlers, then drop the exclusion.
-- **`unused`** in `lang/engine/native_string_helpers.go` (`toGraphemes`,
-  `strLen`, `strSlice`) and `lang/engine/native_temporal_await.go`
+- **`unused`** in `lang/go/engine/native_string_helpers.go` (`toGraphemes`,
+  `strLen`, `strSlice`) and `lang/go/engine/native_temporal_await.go`
   (`order` field) — small orphans, same treatment.
-- **`unused`** in `lang/engine/aliases.go` (6 re-export aliases:
+- **`unused`** in `lang/go/engine/aliases.go` (6 re-export aliases:
   `lookupDefType`, `resolveDefType`, `parseFnUndefSpec`,
   `outputSigIsConcreteReturns`, `isSigTypeValue`, `outputSigValues`) —
   expected for a "mirror the whole API" shim; leave as-is or prune.
@@ -101,10 +101,10 @@ in all three modules.
 `nilerr` (not enabled) flags three deliberate error-swallows — worth a
 second look but defensible as designed:
 
-- `lang/engine/native_module_module.go` (`loadModuleResources`) — a
+- `lang/go/engine/native_module_module.go` (`loadModuleResources`) — a
   malformed `.aql/aql.json` is treated as "no resources" rather than an
   error. A typo would silently disable a module's resources.
-- `lang/engine/native_type.go:321` — a predicate-evaluation error inside
+- `lang/go/engine/native_type.go:321` — a predicate-evaluation error inside
   `x is SomePredicate` yields `false` rather than propagating.
 
 ## govulncheck
@@ -137,7 +137,7 @@ worthwhile. Findings by module:
 
 ### `cmd/go` — the most security-relevant module
 
-- **G305 (zip-slip)** — `cmd/go/aql/install.go:89`, the module-zip
+- **G305 (zip-slip)** — `cmd/go/install.go:89`, the module-zip
   extractor. There *is* a guard (`if strings.Contains(f.Name, "..")`),
   and `filepath.Join` cleans the path, so the practical risk is low — but
   the canonical pattern (`filepath.Clean`, then require the result to be
@@ -146,8 +146,8 @@ worthwhile. Findings by module:
   `registry.go`, and `auth.go`/`main.go`: module names / file names from
   HTTP requests and CLI args flow into filesystem paths. Same root cause
   as the zip-slip item; review the path-construction sites together.
-- **G114 (no server timeouts)** — `cmd/go/aqlweb/main.go:75`,
-  `cmd/go/solardemo/main.go:204`, `cmd/go/aql/registry.go:273` use
+- **G114 (no server timeouts)** — `wpg/serve/main.go:75`,
+  `test/solardemo/main.go:204`, `cmd/go/registry.go:273` use
   `http.ListenAndServe` with no `ReadTimeout`/`WriteTimeout`. Fine for a
   dev/test server; harden (use a configured `http.Server`) if any of
   these is ever exposed.
@@ -173,12 +173,12 @@ worthwhile. Findings by module:
 
 ### `lang`
 
-- **G201 (SQL string formatting ×1)** — `lang/engine/sqlite.go:122`:
+- **G201 (SQL string formatting ×1)** — `lang/go/engine/sqlite.go:122`:
   `fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", quoteIdent(name),
   joinQuoted(columns), …)`. Identifiers are quoted via `quoteIdent` /
   `joinQuoted` and the values use `?` placeholders, so this is not an
   injection vector — but it's the kind of pattern worth a comment.
-- **G304 (×1)** — `lang/internal/fileops/fileops.go:33`: `os.ReadFile`
+- **G304 (×1)** — `lang/go/internal/fileops/fileops.go:33`: `os.ReadFile`
   on a resolved module path. There is resolution logic upstream; gosec
   flags any variable path. Consider `os.Root`-scoped access (Go 1.24).
 - **G104 (×2)** — the `tx.Rollback()` calls in `sqlite.go` (now excluded
@@ -212,17 +212,17 @@ rather than a strict metric.)
 | ---: | --- | --- |
 | 87 | `(*Engine).matchSignature` | `eng/go/match.go:27` |
 | 66 | `Value.String` | `eng/go/value.go:1605` |
-| 64 | `inferExact` | `lang/engine/native_help.go:121` |
+| 64 | `inferExact` | `lang/go/engine/native_help.go:121` |
 | 63 | `Unify` | `eng/go/unify.go:20` |
 | 49 | `(*Engine).stepWord` | `eng/go/engine.go:693` |
-| 42 | `parseStrOpts` | `lang/engine/native_string_helpers.go:59` |
+| 42 | `parseStrOpts` | `lang/go/engine/native_string_helpers.go:59` |
 | 41 | `(*Engine).execFnDefLiteral` | `eng/go/engine.go:1527` |
 | 40 | `(*Engine).execMatch` | `eng/go/engine.go:937` |
 | 38 | `ParseFnParams` | `eng/go/fn_params.go:57` |
 | 37 | `makeHandler` | `eng/go/core_make.go:325` |
-| 36 | `execute` | `cmd/go/aql/main.go:31` |
+| 36 | `execute` | `cmd/go/main.go:31` |
 | 36 | `(*Engine).Run` | `eng/go/engine.go:332` |
-| 35 | `tokenize` | `cmd/go/internal/formatter/format.go:90` |
+| 35 | `tokenize` | `lang/go/formatter/format.go:90` |
 | 35 | `(*Engine).execFnDefSig` | `eng/go/engine.go:1702` |
 | 35 | `(*Engine).preEvalParens` | `eng/go/engine.go:558` |
 
@@ -266,17 +266,17 @@ Everything else clears the current gate (cyclo 70 / cognit 200).
 
 | Where |
 | --- |
-| `lang/test/boolean_test.go:19-97` ↔ `lang/test/syntax_test.go:26-107` |
-| `lang/test/basic_test.go:15-93` ↔ `lang/test/options_params_test.go:15-89` |
-| `lang/test/arg_order_test.go:1-89` ↔ `lang/test/options_params_test.go:1-89` |
+| `lang/go/test/boolean_test.go:19-97` ↔ `lang/go/test/syntax_test.go:26-107` |
+| `lang/go/test/basic_test.go:15-93` ↔ `lang/go/test/options_params_test.go:15-89` |
+| `lang/go/test/arg_order_test.go:1-89` ↔ `lang/go/test/options_params_test.go:1-89` |
 
-All three are test-table boilerplate inside `lang/test/`. The gate
+All three are test-table boilerplate inside `lang/go/test/`. The gate
 (`dupl.threshold: 400` tokens) sits above the worst current group, so
 they don't trip it; raising the threshold higher catches nothing. New
 copy-paste larger than the current worst would fail.
 
 The previously-noted cross-module clone — the spec-runner harness,
-which had `eng/go/spec_test.go` and `lang/test/spec_runner_test.go`
+which had `eng/go/spec_test.go` and `lang/go/test/spec_runner_test.go`
 implementing the same "read `.tsv`, parse tokens, run an engine,
 compare output" loop — has been extracted into the new
 `github.com/aql-lang/aql/util/go/specrunner` module. Both test files
@@ -307,13 +307,13 @@ scc      --no-cocomo                   eng/go lang cmd/go util/go
 1. **Bump the `go` directive** (and keep current) to clear the
    1.24.x-fixed stdlib advisories; flip the CI `vuln` step to blocking
    once it's clean.
-2. **Triage the parked dead code** in `lang/engine/native_query.go` /
+2. **Triage the parked dead code** in `lang/go/engine/native_query.go` /
    `query.go` (finish or delete) and drop the matching `unused`
    exclusions from `.golangci.yml`.
-3. **Review the `cmd/go/aql` path-construction sites** (zip extraction,
+3. **Review the `cmd/go` path-construction sites** (zip extraction,
    registry file serving, module install) — the gosec G305/G703 cluster.
 4. **Consider rewriting `lint-assertions`** (the grep for unsafe
-   `.Data.(Type)` assertions in `lang/engine/native_*.go`) as a small
+   `.Data.(Type)` assertions in `lang/go/engine/native_*.go`) as a small
    `go/analysis` analyzer so it runs under `golangci-lint` and matches the
    AST instead of source text.
 5. Optionally tighten `.golangci.yml` over time — `errorlint`,

@@ -451,7 +451,7 @@ func MakeDepScalarSig(opName string, kind DepKind) NativeSig {
 }
 
 // The `between` word registration is defined in
-// lang/engine/native_compare.go alongside the other DepScalar
+// lang/go/engine/native_compare.go alongside the other DepScalar
 // constructors (lt / gt / lte / gte). BetweenHandler below is the
 // exported algorithm primitive.
 

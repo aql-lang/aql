@@ -251,7 +251,7 @@ Mirror the existing pattern (`native_temporal_*_test.go`, `math_bool_coverage_te
 1. `units_test.go` — pure unit-algebra coverage (`UnitMul`/`UnitDiv`/`UnitPow`/canonicalisation).
 2. `native_math_qty_test.go` — dispatch cases: `add` same-unit, `add` mismatch, `mul` tag propagation, `div` collapse to dimensionless, `pow` integer check, raw-number interop rules.
 3. Panic-prevention: extend `TestTypeLiteralNoPanic` in `internal/engine/type_scaling_test.go` so the new `qty`, `unit`, `value`, `convert`, and per-base unit words receive a `Quantity` type literal (`Data==nil`) and return an error cleanly.
-4. End-to-end: add an AQL-level script under `lang/test/` mirroring `lang/test/*.aql` layout — a small physics example and a finance (currency tags) example.
+4. End-to-end: add an AQL-level script under `lang/go/test/` mirroring `lang/go/test/*.aql` layout — a small physics example and a finance (currency tags) example.
 
 ### Effort estimate
 - Engine type + accessors: ~0.5 day.

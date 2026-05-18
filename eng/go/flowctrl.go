@@ -13,7 +13,7 @@ import "fmt"
 // nested Run frames without abusing the error return.
 //
 // The `break` and `continue` words themselves live in the lang layer
-// (lang/engine/native_control.go) — eng only owns the FlowCtrl type
+// (lang/go/engine/native_control.go) — eng only owns the FlowCtrl type
 // plus the Run-loop dispatch. To extend the channel with a new
 // signal, add a constant here and a matching case in the Run loop's
 // post-step handler.

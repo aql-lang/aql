@@ -1,6 +1,6 @@
 // Command genhelp pre-computes help example results by running each
 // expression through the AQL engine. Output is written to
-// lang/engine/help/examples_gen.go as a static map.
+// lang/go/engine/help/examples_gen.go as a static map.
 //
 //go:generate go run .
 package main
@@ -14,19 +14,19 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/aql-lang/aql/eng/parser"
-	"github.com/aql-lang/aql/lang/engine"
-	"github.com/aql-lang/aql/lang/engine/help"
-	"github.com/aql-lang/aql/lang/native"
+	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/aql-lang/aql/lang/go/engine"
+	"github.com/aql-lang/aql/lang/go/engine/help"
+	"github.com/aql-lang/aql/lang/go/native"
 )
 
 // outputPath returns the absolute path of the generated file, derived from
 // this source file's location so it works regardless of the working
-// directory: <repo>/cmd/go/genhelp/main.go -> <repo>/lang/engine/help/examples_gen.go
+// directory: <repo>/cmd/go/genhelp/main.go -> <repo>/lang/go/engine/help/examples_gen.go
 func outputPath() string {
 	_, thisFile, _, _ := runtime.Caller(0)
 	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
-	return filepath.Join(repoRoot, "lang", "engine", "help", "examples_gen.go")
+	return filepath.Join(repoRoot, "lang", "go", "engine", "help", "examples_gen.go")
 }
 
 func main() {

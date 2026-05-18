@@ -9,7 +9,7 @@ import (
 
 	"github.com/chzyer/readline"
 
-	"github.com/aql-lang/aql/lang/engine"
+	"github.com/aql-lang/aql/lang/go/engine"
 )
 
 func TestHistoryFile(t *testing.T) {

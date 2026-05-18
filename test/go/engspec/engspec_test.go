@@ -1,7 +1,7 @@
 // Spec-runner test for the engine kernel — runs the shared corpus at
 // aql/eng/spec/*.tsv (sibling of eng/go/ and eng/ts/, so Go and TypeScript
 // ports run the same .tsv files). Each row is parsed with the AQL parser
-// (eng/parser) and run against a fresh eng.Registry pre-populated with
+// (eng/go/parser) and run against a fresh eng.Registry pre-populated with
 // kernel-only spec-runner fixtures (q-suffixed plus minimal copies of
 // the words eng/spec rows exercise — def, fn, dup, …). After the
 // eng→lang migration eng itself ships no word registrations; engspec
@@ -25,8 +25,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng"
-	"github.com/aql-lang/aql/eng/parser"
+	"github.com/aql-lang/aql/eng/go"
+	"github.com/aql-lang/aql/eng/go/parser"
 	"github.com/aql-lang/aql/test/go/specrunner"
 )
 
@@ -359,7 +359,7 @@ func registerSpecWords(r *eng.Registry) {
 	r.Defs.Push("greeting", eng.NewString("hello"))
 
 	// break / continue — the production words live in lang
-	// (lang/engine/native_control.go); for engspec we register
+	// (lang/go/engine/native_control.go); for engspec we register
 	// kernel-side stubs that signal Registry.FlowCtrl so the
 	// interp.tsv "break outside loop" rows exercise the Run-loop
 	// dispatch (which IS kernel territory) without dragging the
@@ -386,7 +386,7 @@ func registerSpecWords(r *eng.Registry) {
 	})
 
 	// not / and / or — production registrations live in
-	// lang/engine/native_boolean.go. The eng kernel exposes only the
+	// lang/go/engine/native_boolean.go. The eng kernel exposes only the
 	// CoerceBoolean primitive; engspec wires it into bare not/and/or
 	// names so the existing eng/spec tsvs (forth.tsv, inspect.tsv,
 	// types.tsv, …) keep exercising the dispatch path.
@@ -405,7 +405,7 @@ func registerSpecWords(r *eng.Registry) {
 
 // registerEngSpecDefinition installs def / fn / quote / args as
 // spec-runner fixtures. Production registrations live in
-// lang/engine/native_definition.go; engspec delegates to the same
+// lang/go/engine/native_definition.go; engspec delegates to the same
 // algorithm helpers in eng (registerCoreDef etc. retained in
 // eng/go/core_words.go as in-package test infrastructure are not
 // reachable from this package — so engspec wires its own NativeFunc
@@ -554,7 +554,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 	// __pa — engine-internal args-frame cleanup marker emitted by
 	// eng.InstallFnDef's expansion. Pops the top args frame from the
 	// per-fn-call argsStack. The production version lives at
-	// lang/engine/native_definition.go::popArgsHandler.
+	// lang/go/engine/native_definition.go::popArgsHandler.
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name:        "__pa",
 		ForwardArgs: true,
@@ -591,7 +591,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 // registerEngSpecStack installs the Forth-style stack manipulators —
 // dup / swap / drop / over / rot / nip / tuck / dup2 / swap2 / drop2
 // / over2 — as spec-runner fixtures. Production registrations live
-// in lang/engine/native_stack.go.
+// in lang/go/engine/native_stack.go.
 //
 // All ops are stack-only (ForwardArgs=false) — args[0] is the top
 // of stack, args[1] the next-deeper, etc. The handler returns the
@@ -630,7 +630,7 @@ func registerEngSpecStack(r *eng.Registry) {
 // `pathof` / `is` / `enum` as spec-runner fixtures using the eng-
 // exported algorithm primitives (InstallType, TypeOf, PathOf,
 // IsValueOfType, NewEnum). Production registrations live in
-// lang/engine/native_type.go.
+// lang/go/engine/native_type.go.
 func registerEngSpecTypeWords(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name:        "type",
@@ -746,7 +746,7 @@ func registerEngSpecTypeWords(r *eng.Registry) {
 
 // registerEngSpecMake installs `make` as a spec-runner fixture
 // using the eng-exported algorithm handlers. Production
-// registration lives in lang/engine/native_make.go.
+// registration lives in lang/go/engine/native_make.go.
 func registerEngSpecMake(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name:        "make",
@@ -766,7 +766,7 @@ func registerEngSpecMake(r *eng.Registry) {
 // registerEngSpecStorage installs the kernel-container `get` and
 // `set` signatures (Node / Object / Array / None) as spec-runner
 // fixtures. The production registration in
-// lang/engine/native_storage.go adds Store-side sigs on top of
+// lang/go/engine/native_storage.go adds Store-side sigs on top of
 // these; engspec mirrors only the kernel slice so eng/spec rows
 // that inspect `get` / `set` see the expected shape.
 func registerEngSpecStorage(r *eng.Registry) {
@@ -884,7 +884,7 @@ func registerEngSpecStorage(r *eng.Registry) {
 // registerEngSpecObjectRecord installs `record` and `object` as
 // spec-runner fixtures so the eng/spec/inspect.tsv rows around
 // record / object inspection can run against the kernel. Production
-// registrations live in lang/engine/native_object_record.go.
+// registrations live in lang/go/engine/native_object_record.go.
 func registerEngSpecObjectRecord(r *eng.Registry) {
 	recordH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
 		list := args[0]
@@ -1006,7 +1006,7 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 }
 
 // registerEngSpecInspect installs `inspect` as a spec-runner fixture
-// that mirrors lang/engine/native_inspect.go. The production
+// that mirrors lang/go/engine/native_inspect.go. The production
 // registration lives in lang; engspec keeps a copy so the
 // eng/spec/inspect.tsv rows continue to exercise the kernel-only
 // dispatch and value-introspection paths.
@@ -1209,7 +1209,7 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 // registerEngSpecFnSig installs `fnsig` as a spec-runner fixture so
 // the eng/spec/types.tsv rows around FnSig type-shape matching can
 // run against the kernel alone. The production fnsig registration
-// lives in lang/engine/native_definition.go.
+// lives in lang/go/engine/native_definition.go.
 func registerEngSpecFnSig(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name:        "fnsig",
@@ -1245,7 +1245,7 @@ func registerEngSpecFnSig(r *eng.Registry) {
 
 // registerEngSpecBoolean installs not/and/or as spec-runner fixtures
 // using eng.CoerceBoolean. The production words with the same names
-// live in lang/engine/native_boolean.go.
+// live in lang/go/engine/native_boolean.go.
 func registerEngSpecBoolean(r *eng.Registry) {
 	notH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 		return []eng.Value{eng.NewBoolean(!eng.CoerceBoolean(args[0]))}, nil
@@ -1290,7 +1290,7 @@ func registerEngSpecBoolean(r *eng.Registry) {
 
 // registerEngSpecDo installs the `do` word as a spec-runner fixture.
 // The production registration lives in
-// lang/engine/native_control.go; engspec ships a minimal version
+// lang/go/engine/native_control.go; engspec ships a minimal version
 // that runs a list body or evaluates embedded lists in a map literal
 // against a sub-engine — enough surface for the eng/spec/do.tsv rows
 // to exercise the kernel's sub-engine semantics.
@@ -1382,7 +1382,7 @@ func doPromoteToWord(r *eng.Registry, v eng.Value) eng.Value {
 
 // registerEngSpecTypeOps installs tor/tand as spec-runner fixtures
 // using the eng-exported algorithm handlers. Production registrations
-// live in lang/engine/native_type.go.
+// live in lang/go/engine/native_type.go.
 func registerEngSpecTypeOps(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name:        "tor",

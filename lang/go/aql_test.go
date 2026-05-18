@@ -1,0 +1,809 @@
+package lang_test
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/aql-lang/aql/lang/go"
+	"github.com/aql-lang/aql/lang/go/engine"
+)
+
+func TestNew(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == nil {
+		t.Fatal("New() returned nil")
+	}
+}
+
+func TestNewWithOptions(t *testing.T) {
+	a, err := lang.New(lang.Options{Registry: "custom"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == nil {
+		t.Fatal("New() returned nil")
+	}
+	if a.Options().Registry != "custom" {
+		t.Errorf("got registry %q, want %q", a.Options().Registry, "custom")
+	}
+}
+
+func TestNewWithEmptyOptions(t *testing.T) {
+	a, err := lang.New(lang.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Options().Registry != "" {
+		t.Errorf("got registry %q, want empty", a.Options().Registry)
+	}
+}
+
+func TestNewWithoutOptionsDefaultsRegistry(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Options().Registry != "" {
+		t.Errorf("got registry %q, want empty", a.Options().Registry)
+	}
+}
+
+// --- Basic execution ---
+
+func TestRunInteger(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := a.Run("42")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 || result[0] != int64(42) {
+		t.Errorf("got %v, want [42]", result)
+	}
+}
+
+func TestRunString(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := a.Run(`"hello"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 || result[0] != "hello" {
+		t.Errorf("got %v, want [hello]", result)
+	}
+}
+
+func TestRunArithmetic(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := a.Run("1 add 2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 || result[0] != int64(3) {
+		t.Errorf("got %v, want [3]", result)
+	}
+}
+
+func TestRunEmptyResult(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := a.Run("1 drop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 0 {
+		t.Errorf("got %v, want []", result)
+	}
+}
+
+func TestRunMultipleValues(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := a.Run("1 2 3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 3 {
+		t.Fatalf("got %d values, want 3", len(result))
+	}
+	for i, want := range []int64{1, 2, 3} {
+		if result[i] != want {
+			t.Errorf("result[%d] = %v, want %d", i, result[i], want)
+		}
+	}
+}
+
+// --- Independent instances ---
+
+func TestIndependentInstances(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Store and retrieve in a within a single Run.
+	result, err := a.Run("context set x 42 end context get x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 || result[0] != int64(42) {
+		t.Errorf("got %v, want [42]", result)
+	}
+
+	// A separate instance should not see x.
+	b, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = b.Run("context get x")
+	if err == nil {
+		t.Fatal("expected error: b should not have key x")
+	}
+}
+
+func TestStatePersistsWithinRun(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := a.Run("context set counter 10 end context get counter")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result[0] != int64(10) {
+		t.Errorf("got %v, want 10", result[0])
+	}
+}
+
+func TestManyIndependentInstances(t *testing.T) {
+	// Each instance stores and retrieves its own index within a single Run.
+	for i := 0; i < 5; i++ {
+		a, err := lang.New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err := a.Run("context set idx " + itoa(i) + " end context get idx")
+		if err != nil {
+			t.Fatalf("instance %d: %v", i, err)
+		}
+		if result[0] != int64(i) {
+			t.Errorf("instance %d: got %v, want %d", i, result[0], i)
+		}
+	}
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	s := ""
+	for n > 0 {
+		s = string(rune('0'+n%10)) + s
+		n /= 10
+	}
+	return s
+}
+
+// --- Multiline scripts ---
+
+func TestMultilineNewlines(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := a.Run("1\nadd\n2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result[0] != int64(3) {
+		t.Errorf("got %v, want 3", result[0])
+	}
+}
+
+func TestMultilineTabs(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := a.Run("1\tadd\t2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result[0] != int64(3) {
+		t.Errorf("got %v, want 3", result[0])
+	}
+}
+
+func TestMultilineMixed(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := "context set x 10 end\ncontext set y 20 end\n(context get x)\n(context get y)\nadd"
+	result, err := a.Run(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 || result[0] != int64(30) {
+		t.Errorf("got %v, want [30]", result)
+	}
+}
+
+func TestMultilineCRLF(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := a.Run("1\r\nadd\r\n2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result[0] != int64(3) {
+		t.Errorf("got %v, want 3", result[0])
+	}
+}
+
+func TestMultilineBlankLines(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := a.Run("1\n\n\nadd\n\n2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result[0] != int64(3) {
+		t.Errorf("got %v, want 3", result[0])
+	}
+}
+
+func TestMultilineScript(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := `
+		context set width 10 end
+		context set height 5 end
+		(context get width)
+		(context get height)
+		mul
+	`
+	result, err := a.Run(script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 || result[0] != int64(50) {
+		t.Errorf("got %v, want [50]", result)
+	}
+}
+
+func TestMultilineWithComments(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := `
+		# set up values
+		context set x 7 end
+		context set y 3 end
+		# compute
+		(context get x)
+		(context get y)
+		add
+		# result should be 10
+	`
+	result, err := a.Run(script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result[0] != int64(10) {
+		t.Errorf("got %v, want 10", result[0])
+	}
+}
+
+// --- Error handling ---
+
+func TestRunParseError(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = a.Run(`"unterminated`)
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+}
+
+func TestRunEngineError(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = a.Run("10 div 0")
+	if err == nil {
+		t.Fatal("expected engine error")
+	}
+}
+
+func TestRunEmpty(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := a.Run("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 0 {
+		t.Errorf("got %v, want []", result)
+	}
+}
+
+// --- NewMemFileOps, SetFileOps, RegisterFormat ---
+
+func TestNewMemFileOps(t *testing.T) {
+	ops := lang.NewMemFileOps()
+	if ops == nil {
+		t.Fatal("NewMemFileOps() returned nil")
+	}
+}
+
+func TestSetFileOps(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ops := lang.NewMemFileOps()
+	a.SetFileOps(ops)
+
+	// Write and read back via the mem file ops.
+	_, err = a.Run(`write "test.txt" "hello"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := a.Run(`read "test.txt"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 || result[0] != "hello" {
+		t.Errorf("got %v, want [hello]", result)
+	}
+}
+
+func TestRunDefaultBranch(t *testing.T) {
+	// Exercise the default branch in the result conversion switch by
+	// producing a value that is neither integer nor string (e.g. a map).
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ops := lang.NewMemFileOps()
+	a.SetFileOps(ops)
+
+	// Write a JSON file with a map value, then read it back.
+	// The result is a map which hits the default v.String() branch.
+	ops.Files["data.json"] = []byte(`{"a":1}`)
+	result, err := a.Run(`read "data.json"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d results, want 1", len(result))
+	}
+	// The result should be the string representation of the map.
+	s, ok := result[0].(string)
+	if !ok {
+		t.Fatalf("expected string, got %T", result[0])
+	}
+	if s == "" {
+		t.Error("expected non-empty string representation")
+	}
+}
+
+// --- Register / RegisterStackOnly ---
+
+func TestRegisterForwardWord(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Register "double" as a forward-collecting word: 5 double => 10
+	a.Register("double", lang.Signature{
+		Args: []*lang.Type{lang.TInteger},
+		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
+			n, _ := engine.AsInteger(args[0])
+			return []lang.Value{lang.NewInteger(n * 2)}, nil
+		},
+	})
+
+	result, err := a.Run("5 double")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 || result[0] != int64(10) {
+		t.Errorf("got %v, want [10]", result)
+	}
+}
+
+func TestRegisterForwardWordCollectsAfter(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Register "double" as a forward-collecting word — can collect arg after the word.
+	a.Register("double", lang.Signature{
+		Args: []*lang.Type{lang.TInteger},
+		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
+			n, _ := engine.AsInteger(args[0])
+			return []lang.Value{lang.NewInteger(n * 2)}, nil
+		},
+	})
+
+	result, err := a.Run("double 7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 || result[0] != int64(14) {
+		t.Errorf("got %v, want [14]", result)
+	}
+}
+
+func TestRegisterStackOnlyWord(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Register "neg" as stack-only: 5 neg => -5
+	a.RegisterStackOnly("neg", lang.Signature{
+		Args: []*lang.Type{lang.TInteger},
+		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
+			n, _ := engine.AsInteger(args[0])
+			return []lang.Value{lang.NewInteger(-n)}, nil
+		},
+	})
+
+	result, err := a.Run("5 neg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 || result[0] != int64(-5) {
+		t.Errorf("got %v, want [-5]", result)
+	}
+}
+
+func TestRegisterStackOnlyDoesNotCollectForward(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.RegisterStackOnly("neg", lang.Signature{
+		Args: []*lang.Type{lang.TInteger},
+		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
+			n, _ := engine.AsInteger(args[0])
+			return []lang.Value{lang.NewInteger(-n)}, nil
+		},
+	})
+
+	// "neg 5" — neg is stack-only so it should not consume 5 from forward.
+	// Without a value on the stack, it should error.
+	_, err = a.Run("neg 5")
+	if err == nil {
+		t.Fatal("expected error: neg is stack-only and has no prefix args")
+	}
+}
+
+func TestRegisterMultipleSignatures(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Register "square" with two signatures: integer and string.
+	a.Register("square",
+		lang.Signature{
+			Args: []*lang.Type{lang.TInteger},
+			Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
+				n, _ := engine.AsInteger(args[0])
+				return []lang.Value{lang.NewInteger(n * n)}, nil
+			},
+		},
+		lang.Signature{
+			Args: []*lang.Type{lang.TString},
+			Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
+				s, _ := engine.AsString(args[0])
+				return []lang.Value{lang.NewString(s + s)}, nil
+			},
+		},
+	)
+
+	// Integer signature.
+	result, err := a.Run("4 square")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result[0] != int64(16) {
+		t.Errorf("got %v, want 16", result[0])
+	}
+
+	// String signature.
+	result, err = a.Run(`"ab" square`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result[0] != "abab" {
+		t.Errorf("got %v, want abab", result[0])
+	}
+}
+
+func TestRegisterLeftToRight(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	a.Register("myadd", lang.Signature{
+		Args: []*lang.Type{lang.TInteger, lang.TInteger},
+		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
+			a0, _ := engine.AsInteger(args[0])
+			a1, _ := engine.AsInteger(args[1])
+			return []lang.Value{lang.NewInteger(a0 + a1)}, nil
+		},
+	})
+	a.Register("mymul", lang.Signature{
+		Args: []*lang.Type{lang.TInteger, lang.TInteger},
+		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
+			m0, _ := engine.AsInteger(args[0])
+			m1, _ := engine.AsInteger(args[1])
+			return []lang.Value{lang.NewInteger(m0 * m1)}, nil
+		},
+	})
+
+	// 2 myadd 3 mymul 4 => left-to-right: (2+3)*4 = 20
+	result, err := a.Run("2 myadd 3 mymul 4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 || result[0] != int64(20) {
+		t.Errorf("got %v, want [20]", result)
+	}
+}
+
+func TestRegisterReturnsMultipleValues(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Register "divmod" that returns quotient and remainder.
+	// Forward-first swap convention: args[1]=left(stack), args[0]=right(forward).
+	a.Register("divmod", lang.Signature{
+		Args: []*lang.Type{lang.TInteger, lang.TInteger},
+		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
+			a, _ := engine.AsInteger(args[1])
+			b, _ := engine.AsInteger(args[0])
+			if b == 0 {
+				return nil, fmt.Errorf("division by zero")
+			}
+			return []lang.Value{lang.NewInteger(a / b), lang.NewInteger(a % b)}, nil
+		},
+	})
+
+	result, err := a.Run("17 divmod 5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 2 || result[0] != int64(3) || result[1] != int64(2) {
+		t.Errorf("got %v, want [3 2]", result)
+	}
+}
+
+func TestRegisterErrorPropagation(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.Register("fail", lang.Signature{
+		Args: []*lang.Type{lang.TAny},
+		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
+			return nil, fmt.Errorf("intentional error")
+		},
+	})
+
+	_, err = a.Run("42 fail")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "intentional error") {
+		t.Errorf("got %q, want error containing 'intentional error'", err.Error())
+	}
+}
+
+func TestRegisterWorksWithBuiltins(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.Register("triple", lang.Signature{
+		Args: []*lang.Type{lang.TInteger},
+		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
+			t0, _ := engine.AsInteger(args[0])
+			return []lang.Value{lang.NewInteger(t0 * 3)}, nil
+		},
+	})
+
+	// Mix native Go word with built-in "add".
+	result, err := a.Run("2 triple add 1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 || result[0] != int64(7) {
+		t.Errorf("got %v, want [7]", result)
+	}
+}
+
+func TestRegisterIsolatedBetweenInstances(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	a.Register("custom", lang.Signature{
+		Args: []*lang.Type{lang.TInteger},
+		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
+			c0, _ := engine.AsInteger(args[0])
+			return []lang.Value{lang.NewInteger(c0 + 100)}, nil
+		},
+	})
+
+	// a should have "custom".
+	result, err := a.Run("5 custom")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result[0] != int64(105) {
+		t.Errorf("got %v, want 105", result[0])
+	}
+
+	// b should not have "custom" — it errors.
+	_, err = b.Run("5 custom")
+	if err == nil {
+		t.Fatal("expected error for undefined word 'custom' in b, got nil")
+	}
+}
+
+func TestRegisterStringHandler(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.Register("shout", lang.Signature{
+		Args: []*lang.Type{lang.TString},
+		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
+			s, _ := engine.AsString(args[0])
+			return []lang.Value{lang.NewString(strings.ToUpper(s) + "!")}, nil
+		},
+	})
+
+	result, err := a.Run(`"hello" shout`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result[0] != "HELLO!" {
+		t.Errorf("got %v, want HELLO!", result[0])
+	}
+}
+
+func TestRegisterZeroArgWord(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	counter := 0
+	a.Register("tick", lang.Signature{
+		Args: []*lang.Type{},
+		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
+			counter++
+			return []lang.Value{lang.NewInteger(int64(counter))}, nil
+		},
+	})
+
+	result, err := a.Run("tick tick tick")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 3 || result[0] != int64(1) || result[1] != int64(2) || result[2] != int64(3) {
+		t.Errorf("got %v, want [1 2 3]", result)
+	}
+}
+
+func TestRegisterAddsAlongsideBuiltin(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Add a new integer signature to the built-in "upper" word.
+	// The existing string signature still works; the new one handles integers.
+	a.Register("upper", lang.Signature{
+		Args: []*lang.Type{lang.TInteger},
+		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
+			u0, _ := engine.AsInteger(args[0])
+			return []lang.Value{lang.NewInteger(u0 + 1000)}, nil
+		},
+	})
+
+	// Built-in string signature still works.
+	result, err := a.Run(`"hello" upper`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result[0] != "HELLO" {
+		t.Errorf("got %v, want HELLO", result[0])
+	}
+
+	// New integer signature works.
+	result, err = a.Run("7 upper")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result[0] != int64(1007) {
+		t.Errorf("got %v, want 1007", result[0])
+	}
+}
+
+func TestNewTypeCustom(t *testing.T) {
+	// NewType is strict: unregistered paths error out.
+	if _, err := lang.NewType("Custom/Special"); err == nil {
+		t.Error("NewType('Custom/Special') should error — unknown type")
+	}
+}
+
+func TestRegisterWithTypeAny(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.Register("identity", lang.Signature{
+		Args: []*lang.Type{lang.TAny},
+		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *engine.Registry) ([]lang.Value, error) {
+			return args, nil
+		},
+	})
+
+	// Works with integer.
+	result, err := a.Run("42 identity")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result[0] != int64(42) {
+		t.Errorf("got %v, want 42", result[0])
+	}
+
+	// Works with string.
+	result, err = a.Run(`"hi" identity`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result[0] != "hi" {
+		t.Errorf("got %v, want hi", result[0])
+	}
+}

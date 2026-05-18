@@ -223,7 +223,7 @@ func DeepEqual(a, b Value) bool {
 }
 
 // The comparison-word registrations (lt / gt / lte / gte / eq /
-// neq / deq / between) live in lang/engine/native_compare.go. The
+// neq / deq / between) live in lang/go/engine/native_compare.go. The
 // handlers and MakeDepScalarSig helper are exported eng primitives.
 
 func LtHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

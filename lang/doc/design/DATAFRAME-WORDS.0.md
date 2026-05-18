@@ -615,33 +615,33 @@ people merge regions city pick [name city region]
 
 ### Files to create
 Each word (or word family) follows the existing pattern of one file per word:
-- `lang/internal/engine/native_table_head.go`
-- `lang/internal/engine/native_table_tail.go`
-- `lang/internal/engine/native_table_shape.go`
-- `lang/internal/engine/native_table_cols.go`
-- `lang/internal/engine/native_table_nrow.go`
-- `lang/internal/engine/native_table_describe.go`
-- `lang/internal/engine/native_table_col.go`
-- `lang/internal/engine/native_table_pick.go`
-- `lang/internal/engine/native_table_omit.go`
-- `lang/internal/engine/native_table_sift.go`
-- `lang/internal/engine/native_table_mutate.go`
-- `lang/internal/engine/native_table_rename.go`
-- `lang/internal/engine/native_table_sortby.go`
-- `lang/internal/engine/native_table_aggregate.go` (sum, mean, count, min, max)
-- `lang/internal/engine/native_table_groupby.go`
-- `lang/internal/engine/native_table_merge.go`
-- `lang/internal/engine/native_table_stack.go`
-- `lang/internal/engine/native_table_missing.go` (dropna, fillna)
-- `lang/internal/engine/native_table_dedup.go` (dedup, dupes)
-- `lang/internal/engine/native_table_reshape.go` (melt, pivot)
-- `lang/internal/engine/native_table_apply.go`
-- `lang/internal/engine/native_table_row.go`
+- `lang/go/internal/engine/native_table_head.go`
+- `lang/go/internal/engine/native_table_tail.go`
+- `lang/go/internal/engine/native_table_shape.go`
+- `lang/go/internal/engine/native_table_cols.go`
+- `lang/go/internal/engine/native_table_nrow.go`
+- `lang/go/internal/engine/native_table_describe.go`
+- `lang/go/internal/engine/native_table_col.go`
+- `lang/go/internal/engine/native_table_pick.go`
+- `lang/go/internal/engine/native_table_omit.go`
+- `lang/go/internal/engine/native_table_sift.go`
+- `lang/go/internal/engine/native_table_mutate.go`
+- `lang/go/internal/engine/native_table_rename.go`
+- `lang/go/internal/engine/native_table_sortby.go`
+- `lang/go/internal/engine/native_table_aggregate.go` (sum, mean, count, min, max)
+- `lang/go/internal/engine/native_table_groupby.go`
+- `lang/go/internal/engine/native_table_merge.go`
+- `lang/go/internal/engine/native_table_stack.go`
+- `lang/go/internal/engine/native_table_missing.go` (dropna, fillna)
+- `lang/go/internal/engine/native_table_dedup.go` (dedup, dupes)
+- `lang/go/internal/engine/native_table_reshape.go` (melt, pivot)
+- `lang/go/internal/engine/native_table_apply.go`
+- `lang/go/internal/engine/native_table_row.go`
 
 ### Files to modify
-- `lang/internal/engine/registry.go` - register all new words in `NewRegistry()`
-- `lang/internal/engine/native_string_slice.go` - extend slice with table signature
-- `lang/internal/engine/native_math_*.go` - extend min/max with table-column signatures
+- `lang/go/internal/engine/registry.go` - register all new words in `NewRegistry()`
+- `lang/go/internal/engine/native_string_slice.go` - extend slice with table signature
+- `lang/go/internal/engine/native_math_*.go` - extend min/max with table-column signatures
 
 ### Key existing code to reuse
 - `TableData` struct (`format.go:260`) - for table manipulation
@@ -652,7 +652,7 @@ Each word (or word family) follows the existing pattern of one file per word:
 - Table → SQLite loading via `Registry.SQLite.StoreTempTable()` for complex operations
 
 ### Verification
-- Add test file: `lang/test/dataframe_test.go` with test cases for each word
+- Add test file: `lang/go/test/dataframe_test.go` with test cases for each word
 - Use existing CSV test data or create `test/testdata/people.csv`
 - Run: `cd aql && go test ./... -run TestDataframe -v`
 - Verify composition: test multi-word pipelines

@@ -7,7 +7,7 @@ import (
 
 // This file owns the canonical fn-signature parser. Both the bare
 // aqleng `fn` (in core_words.go) and the production aql `def`/`fn`
-// in lang/engine/native_definition_fn.go call into these
+// in lang/go/engine/native_definition_fn.go call into these
 // functions. Do NOT duplicate the parser logic anywhere else; the
 // optional-arg `?` rule, the barrier `|` rule, and the type-name
 // resolution rule must have a single source of truth.
@@ -35,7 +35,7 @@ import (
 //        literal) into a sig type + pattern.
 //
 // All five functions are byte-identical ports of the production
-// helpers that previously lived in lang/engine/native_definition_fn.go.
+// helpers that previously lived in lang/go/engine/native_definition_fn.go.
 
 // ParseFnParams extracts parameters from an input signature list.
 //

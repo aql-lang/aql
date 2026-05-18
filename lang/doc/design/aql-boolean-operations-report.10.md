@@ -10,18 +10,18 @@ provides. Recommendations follow.
 
 Sources reviewed:
 
-- `lang/internal/engine/native_boolean_and.go`
-- `lang/internal/engine/native_boolean_or.go`
-- `lang/internal/engine/native_boolean_not.go`
-- `lang/internal/engine/native_boolean_xor.go`
-- `lang/internal/engine/native_boolean_nand.go`
-- `lang/internal/engine/native_boolean_implies.go`
-- `lang/internal/engine/native_helpers.go` (`registerBinaryBoolWord`)
-- `lang/internal/engine/conditional.go` (`isTruthy`, `if`)
-- `lang/internal/engine/signature.go` (`BarrierPos`, scoring)
-- `lang/internal/engine/match.go` (barrier/forward-collection logic)
+- `lang/go/internal/engine/native_boolean_and.go`
+- `lang/go/internal/engine/native_boolean_or.go`
+- `lang/go/internal/engine/native_boolean_not.go`
+- `lang/go/internal/engine/native_boolean_xor.go`
+- `lang/go/internal/engine/native_boolean_nand.go`
+- `lang/go/internal/engine/native_boolean_implies.go`
+- `lang/go/internal/engine/native_helpers.go` (`registerBinaryBoolWord`)
+- `lang/go/internal/engine/conditional.go` (`isTruthy`, `if`)
+- `lang/go/internal/engine/signature.go` (`BarrierPos`, scoring)
+- `lang/go/internal/engine/match.go` (barrier/forward-collection logic)
 - `lang/doc/design/LANGREF.10.md` §"Boolean Words" and §"if"
-- `lang/test/basic.tsv`, `lang/test/sigmatch.tsv`, `lang/test/curry_test.go`
+- `lang/go/test/basic.tsv`, `lang/go/test/sigmatch.tsv`, `lang/go/test/curry_test.go`
 
 ---
 

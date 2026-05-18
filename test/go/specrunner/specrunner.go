@@ -1,6 +1,6 @@
 // Package specrunner is the shared scaffolding for the .tsv spec-suite
 // test runners — `eng/go/spec_test.go` (kernel) and
-// `lang/test/spec_runner_test.go` (production language). Both walk a
+// `lang/go/test/spec_runner_test.go` (production language). Both walk a
 // directory of `.tsv` files and, for each non-blank/non-comment row,
 // parse the `<input><TAB><expected>[<TAB><note>]` columns, evaluate the
 // input through a caller-supplied engine, and compare the result stack
@@ -20,7 +20,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng"
+	"github.com/aql-lang/aql/eng/go"
 )
 
 // Run executes one spec row's input and returns the resulting stack.

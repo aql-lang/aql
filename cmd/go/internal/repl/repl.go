@@ -9,9 +9,9 @@ import (
 
 	"github.com/chzyer/readline"
 
-	"github.com/aql-lang/aql/eng/parser"
-	"github.com/aql-lang/aql/lang/engine"
-	"github.com/aql-lang/aql/lang/native"
+	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/aql-lang/aql/lang/go/engine"
+	"github.com/aql-lang/aql/lang/go/native"
 
 	udk "voxgiguniversalsdk"
 )

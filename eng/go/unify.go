@@ -900,7 +900,7 @@ func ResolveWordsDeep(v Value) Value {
 }
 
 // The `unify` word registration lives in
-// lang/engine/native_unify.go. UnifyHandler below is the exported
+// lang/go/engine/native_unify.go. UnifyHandler below is the exported
 // algorithm primitive lang's registration wires dispatch into.
 
 func UnifyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

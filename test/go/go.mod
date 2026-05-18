@@ -3,8 +3,8 @@ module github.com/aql-lang/aql/test/go
 go 1.24.7
 
 require (
-	github.com/aql-lang/aql/eng v0.0.0
-	github.com/aql-lang/aql/lang v0.0.0
+	github.com/aql-lang/aql/eng/go v0.0.0
+	github.com/aql-lang/aql/lang/go v0.0.0
 )
 
 require (
@@ -28,9 +28,9 @@ require (
 	voxgiguniversalsdk v0.1.1 // indirect
 )
 
-replace github.com/aql-lang/aql/eng v0.0.0 => ../../eng/go
+replace github.com/aql-lang/aql/eng/go => ../../eng/go
 
-replace github.com/aql-lang/aql/lang v0.0.0 => ../../lang
+replace github.com/aql-lang/aql/lang/go => ../../lang/go
 
 replace github.com/voxgig/struct v0.1.0 => github.com/voxgig/struct/go v0.1.0
 

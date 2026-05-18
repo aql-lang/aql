@@ -56,15 +56,15 @@ Counts exclude `_test.go` files unless explicitly noted.
  14 eng/go/core_make.go       make/build dispatch
  14 eng/go/core_helpers.go    helpers
  14 eng/go/carrier.go         check-mode carrier handling
- 11 lang/engine/query.go      query DSL
+ 11 lang/go/engine/query.go      query DSL
  10 eng/go/registry.go        deftable / typed-def routing
   9 eng/go/util.go            shared helpers
   8 eng/go/fn_params.go       fn signature params
   8 eng/go/core_type.go       type-system core
-  7 lang/engine/native_definition.go  def/undef
+  7 lang/go/engine/native_definition.go  def/undef
   7 eng/go/core_inspect.go    inspect word
   6 eng/go/print.go           print formatting
-  5 lang/engine/native_control.go    control flow
+  5 lang/go/engine/native_control.go    control flow
   5 eng/go/compare.go         ValuesEqual
 ```
 
@@ -83,26 +83,26 @@ payload access first.
 ### Top callers (non-test)
 
 ```
- 59 lang/engine/native_array.go
+ 59 lang/go/engine/native_array.go
  48 eng/go/unify.go
- 41 lang/internal/nativemod/matrix.go
- 40 lang/engine/native_string.go
+ 41 lang/go/internal/nativemod/matrix.go
+ 40 lang/go/engine/native_string.go
  37 eng/go/engine.go
- 32 lang/internal/nativemod/time.go
- 26 lang/engine/query.go
- 26 lang/engine/native_misc.go
+ 32 lang/go/internal/nativemod/time.go
+ 26 lang/go/engine/query.go
+ 26 lang/go/engine/native_misc.go
  24 eng/go/compare.go
  23 eng/go/value.go            internal cross-method use
  23 eng/go/core_make.go
- 19 lang/native/list.go
+ 19 lang/go/native/list.go
  17 eng/go/registry.go
- 14 lang/engine/native_math.go
+ 14 lang/go/engine/native_math.go
  14 eng/go/core_type.go
- 13 lang/internal/nativemod/math.go
- 13 lang/engine/native_definition.go
+ 13 lang/go/internal/nativemod/math.go
+ 13 lang/go/engine/native_definition.go
  13 eng/go/util.go
  13 eng/go/fn_params.go
- 12 lang/native/natives.go
+ 12 lang/go/native/natives.go
 ```
 
 ### Classification (per the plan §6.1)
@@ -123,16 +123,16 @@ payload access first.
 
 | Method | Callers | Owning module |
 |---|---|---|
-| `AsMatrix`      | 20 | `lang/internal/nativemod/matrix.go` (only consumer) |
-| `AsClkDuration` |  7 | `lang/internal/nativemod/time.go` |
-| `AsTimezone`    |  5 | `lang/internal/nativemod/time.go` |
-| `AsCalDuration` |  5 | `lang/internal/nativemod/time.go` |
-| `AsDate`        |  3 | `lang/internal/nativemod/time.go` |
-| `AsDateTime`    |  2 | `lang/internal/nativemod/time.go` |
-| `AsInstant`     |  2 | `lang/internal/nativemod/time.go` |
-| `AsTimeout`     |  2 | `lang/engine/native_misc.go` + `eng/go/value.go:String` |
-| `AsInterval`    |  2 | `lang/engine/native_misc.go` + `eng/go/value.go:String` |
-| `AsTimeOfDay`   |  0 | `lang/internal/nativemod/time.go` (already unused) |
+| `AsMatrix`      | 20 | `lang/go/internal/nativemod/matrix.go` (only consumer) |
+| `AsClkDuration` |  7 | `lang/go/internal/nativemod/time.go` |
+| `AsTimezone`    |  5 | `lang/go/internal/nativemod/time.go` |
+| `AsCalDuration` |  5 | `lang/go/internal/nativemod/time.go` |
+| `AsDate`        |  3 | `lang/go/internal/nativemod/time.go` |
+| `AsDateTime`    |  2 | `lang/go/internal/nativemod/time.go` |
+| `AsInstant`     |  2 | `lang/go/internal/nativemod/time.go` |
+| `AsTimeout`     |  2 | `lang/go/engine/native_misc.go` + `eng/go/value.go:String` |
+| `AsInterval`    |  2 | `lang/go/engine/native_misc.go` + `eng/go/value.go:String` |
+| `AsTimeOfDay`   |  0 | `lang/go/internal/nativemod/time.go` (already unused) |
 
 ### DepScalar shield (`AsConcreteX`) in `eng/go/util.go:210-247`
 
@@ -206,13 +206,13 @@ through). All move to the per-module
 ### Non-eng caller counts
 
 ```
-125 lang/internal/nativemod/time.go   (time, datetime, duration, timezone)
- 42 lang/internal/nativemod/matrix.go (matrix)
-  5 lang/native/natives.go            (fetch + entity/resource sigs)
-  1 lang/native/fetch.go              (TFetchResponse construction)
+125 lang/go/internal/nativemod/time.go   (time, datetime, duration, timezone)
+ 42 lang/go/internal/nativemod/matrix.go (matrix)
+  5 lang/go/native/natives.go            (fetch + entity/resource sigs)
+  1 lang/go/native/fetch.go              (TFetchResponse construction)
 ```
 
-The `lang/engine/aliases.go` re-exports them as `engine.TDate` etc.
+The `lang/go/engine/aliases.go` re-exports them as `engine.TDate` etc.
 — that's where 167 of those 168 caller references resolve.
 
 
@@ -228,7 +228,7 @@ sealed `Payload` variant.
 | Location | Count |
 |---|---|
 | `eng/go/*.go` (non-test) | 291 |
-| `lang/engine/*.go` (non-test) | 234 |
+| `lang/go/engine/*.go` (non-test) | 234 |
 | Total | 525 |
 
 These continue working via `Type.Matches` delegating to
@@ -250,7 +250,7 @@ Step 10.
 
 ## 8. Existing tests that gate the migration
 
-Type-system tests in `lang/test/`:
+Type-system tests in `lang/go/test/`:
 
 ```
 istype_test.go
@@ -297,16 +297,16 @@ eng/spec/inspect.tsv
 lang/spec/list.tsv
 lang/spec/map.tsv
 lang/spec/resource.tsv
-lang/test/check_fixtures/*
+lang/go/test/check_fixtures/*
 ```
 
 Domain-type tests:
 
 ```
-lang/internal/nativemod/time_test.go
-lang/internal/nativemod/matrix_test.go
-lang/internal/nativemod/decision_test.go
-lang/internal/nativemod/nativemod_test.go
+lang/go/internal/nativemod/time_test.go
+lang/go/internal/nativemod/matrix_test.go
+lang/go/internal/nativemod/decision_test.go
+lang/go/internal/nativemod/nativemod_test.go
 ```
 
 
@@ -314,21 +314,21 @@ lang/internal/nativemod/nativemod_test.go
 
 `make test` rollup result at Step 0:
 
-- `github.com/aql-lang/aql/lang` ok
-- `github.com/aql-lang/aql/lang/engine` ok
-- `github.com/aql-lang/aql/lang/internal/fileops` ok
-- `github.com/aql-lang/aql/lang/internal/nativemod` ok
-- `github.com/aql-lang/aql/lang/internal/object` ok
-- `github.com/aql-lang/aql/lang/native` ok
-- `github.com/aql-lang/aql/lang/test` ok
-- `github.com/aql-lang/aql/eng` ok
-- `github.com/aql-lang/aql/eng/parser` ok
-- `github.com/aql-lang/aql/cmd/go/aql` ok
-- `github.com/aql-lang/aql/cmd/go/internal/formatter` ok
+- `github.com/aql-lang/aql/lang/go` ok
+- `github.com/aql-lang/aql/lang/go/engine` ok
+- `github.com/aql-lang/aql/lang/go/internal/fileops` ok
+- `github.com/aql-lang/aql/lang/go/internal/nativemod` ok
+- `github.com/aql-lang/aql/lang/go/internal/object` ok
+- `github.com/aql-lang/aql/lang/go/native` ok
+- `github.com/aql-lang/aql/lang/go/test` ok
+- `github.com/aql-lang/aql/eng/go` ok
+- `github.com/aql-lang/aql/eng/go/parser` ok
+- `github.com/aql-lang/aql/cmd/go` ok
+- `github.com/aql-lang/aql/lang/go/formatter` ok
 - `github.com/aql-lang/aql/cmd/go/internal/repl` ok
 
 Note: `make test` in `lang/Makefile` references a `util/go` module
 that doesn't exist in this checkout. The four real modules
-(`lang`, `eng/go`, `cmd/go`, plus `lang/native`) all pass. CI gate
+(`lang`, `eng/go`, `cmd/go`, plus `lang/go/native`) all pass. CI gate
 for this migration: `go test ./...` in each of `lang/`, `eng/go/`,
 `cmd/go/`.

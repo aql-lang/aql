@@ -348,7 +348,7 @@ re-investigating.
 - **No tests for typed lists `[:Integer]` or typed maps
   `{:String}`**: the spec runner's tokenizer has no syntax for
   these, and the spec set focuses on the unified-dispatch core.
-  Typed-collection sigs are covered in `lang/test/*.tsv` against
+  Typed-collection sigs are covered in `lang/go/test/*.tsv` against
   the full parser.
 
 - **No tests for `if` / `for` / `do` / `var`**: those words are
@@ -357,7 +357,7 @@ re-investigating.
 
 - **No tests for the carrier / static-type-check mode**: the spec
   runner uses runtime mode only. CheckMode is exercised via Go-
-  level tests in `eng/go/carrier*.go` and `lang/test/`.
+  level tests in `eng/go/carrier*.go` and `lang/go/test/`.
 
 - **No tests for module / import / export**: spec runner has no
   module subsystem.
@@ -369,7 +369,7 @@ re-investigating.
   §2.8.
 
 These all live in the larger AQL test corpus
-(`lang/test/*.go` and `lang/test/*.tsv`); the aqleng spec subset is
+(`lang/go/test/*.go` and `lang/go/test/*.tsv`); the aqleng spec subset is
 deliberately focused on the dispatch / value / type-lattice core.
 
 ---

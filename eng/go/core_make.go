@@ -19,11 +19,11 @@ import (
 //	make *Type Any                   two-arg fallback
 //
 // Mirrors the production lang `make` (formerly in
-// lang/engine/native_type_make_helpers.go); the handlers are
+// lang/go/engine/native_type_make_helpers.go); the handlers are
 // ported verbatim. Lang re-exports the helpers via aliases so any
 // callers that reach into the package-private surface keep working.
 // The `make` word registration has moved to
-// lang/engine/native_make.go. The Make* handlers below are exported
+// lang/go/engine/native_make.go. The Make* handlers below are exported
 // algorithm primitives — lang's registration wires the dispatch
 // table without forking the algorithm.
 

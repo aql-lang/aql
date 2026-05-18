@@ -1,7 +1,7 @@
 # Reference — the eng API that calc consumes
 
 This is an exhaustive list of every symbol calc imports from
-`github.com/aql-lang/aql/eng` and `github.com/aql-lang/aql/eng/parser`,
+`github.com/aql-lang/aql/eng/go` and `github.com/aql-lang/aql/eng/go/parser`,
 with a one-line definition each. It exists to be looked up, not
 read in order.
 
@@ -9,7 +9,7 @@ The grouping mirrors how the symbols are used in calc's source.
 Where two symbols only differ in detail (e.g. `eng.New` vs
 `eng.NewTop`), they are listed together.
 
-## Module: `github.com/aql-lang/aql/eng`
+## Module: `github.com/aql-lang/aql/eng/go`
 
 ### Registry construction
 
@@ -85,7 +85,7 @@ vocabulary doesn't need them.
 | `eng.Engine` | The interpreter loop. Methods used: `Run`. |
 | `r.Defs.Names() []string` | All currently-defined word names. The REPL's `:words` meta-command calls this. |
 
-## Module: `github.com/aql-lang/aql/eng/parser`
+## Module: `github.com/aql-lang/aql/eng/go/parser`
 
 | Symbol | What it does |
 | --- | --- |
@@ -101,11 +101,11 @@ that take source strings at runtime.
 
 Worth listing because the absence is the whole point.
 
-- **`github.com/aql-lang/aql/lang`** — the language layer with
+- **`github.com/aql-lang/aql/lang/go`** — the language layer with
   the production word set. Calc deliberately avoids it.
-- **`github.com/aql-lang/aql/lang/engine`** — the engine shim
+- **`github.com/aql-lang/aql/lang/go/engine`** — the engine shim
   that lang re-exports through. Calc reaches the bare eng API.
-- **`github.com/aql-lang/aql/lang/native`** — array / fetch /
+- **`github.com/aql-lang/aql/lang/go/native`** — array / fetch /
   query natives. None of them belong in a calculator.
 - **`modernc.org/sqlite`, `voxgig/struct`, `csv`, `directive`** —
   lang's transitive deps. Calc avoids them by not depending on

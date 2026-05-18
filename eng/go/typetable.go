@@ -243,7 +243,7 @@ func (tt *TypeTable) MintType(name string, parent *Type) *Type {
 
 // RegisterExternalBuiltin installs a non-kernel-declared "builtin-
 // class" type from outside the eng package — host modules
-// (lang/internal/nativemod/time, lang/native/fetch, plugin packages,
+// (lang/go/internal/nativemod/time, lang/go/native/fetch, plugin packages,
 // etc.) that own a type the kernel doesn't need to know about by
 // name. Conceptually equivalent to a builtinDecls row, but supplied
 // at runtime by the owning module.
@@ -253,10 +253,10 @@ func (tt *TypeTable) MintType(name string, parent *Type) *Type {
 // plugin loadings. Reserved ranges:
 //
 //	  100-999    eng-internal future-builtins
-//	 1000-1999   lang/internal/nativemod/time   (Date, DateTime, Instant, …)
-//	 2000-2999   lang/internal/nativemod/matrix (Matrix)
-//	 3000-3999   lang/native/fetch              (Fetch, Request, Response)
-//	 4000-4999   lang/engine (Timeout, Interval)
+//	 1000-1999   lang/go/internal/nativemod/time   (Date, DateTime, Instant, …)
+//	 2000-2999   lang/go/internal/nativemod/matrix (Matrix)
+//	 3000-3999   lang/go/native/fetch              (Fetch, Request, Response)
+//	 4000-4999   lang/go/engine (Timeout, Interval)
 //	 5000-9999   reserved for future kernel use
 //	10000+       host / third-party plugin types
 //
@@ -483,11 +483,11 @@ var builtinDecls = []builtinDecl{
 	{Path: "Scalar/Number", FixedID: 7},
 	{Path: "Scalar/Number/Integer", FixedID: 8},
 	{Path: "Scalar/Number/Decimal", FixedID: 9},
-	// Scalar/Number/Matrix moved to lang/internal/nativemod/matrix.go (Step 8).
+	// Scalar/Number/Matrix moved to lang/go/internal/nativemod/matrix.go (Step 8).
 	{Path: "Scalar/Boolean", FixedID: 10},
 	{Path: "Scalar/Path", FixedID: 47},
 	{Path: "Scalar/Atom", FixedID: 18},
-	// Scalar/Time and descendants moved to lang/engine/native_temporal.go (Step 8).
+	// Scalar/Time and descendants moved to lang/go/engine/native_temporal.go (Step 8).
 
 	// Node branch
 	{Path: "Node/List", FixedID: 12},
@@ -506,8 +506,8 @@ var builtinDecls = []builtinDecl{
 	{Path: "Object/Resource", FixedID: 36},
 	{Path: "Object/Resource/Entity", FixedID: 37},
 	// Object/Fetch / Object/Fetch/Request / Object/Fetch/Response
-	// moved to lang/native/fetch.go (Step 8 migration).
-	// Object/Timeout and Object/Interval moved to lang/engine/native_misc.go (Step 8).
+	// moved to lang/go/native/fetch.go (Step 8 migration).
+	// Object/Timeout and Object/Interval moved to lang/go/engine/native_misc.go (Step 8).
 
 	// Word branch — Word/__XX entries are internal runtime markers.
 	// They expose friendly short-name aliases (e.g. "Paren" → Word/__OP)

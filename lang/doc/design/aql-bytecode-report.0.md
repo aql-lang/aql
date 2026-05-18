@@ -1174,7 +1174,7 @@ chains, typed-list folds) gets the big wins. Orchestration-heavy
 code (I/O, dynamic dispatch, context manipulation) gets
 modest-to-negligible wins.
 
-Factorial — a canonical AQL benchmark in `lang/test/factorial_type_scaling_test.go`
+Factorial — a canonical AQL benchmark in `lang/go/test/factorial_type_scaling_test.go`
 — is the ideal candidate: recursion plus a tight arithmetic body.
 Estimate: 10–15× faster compiled. Record-transform pipelines
 (e.g. map over a list of maps, fold into a summary record) would
@@ -1243,7 +1243,7 @@ from dispatch alone.
 To validate the estimates above, a benchmarking plan:
 
 **Corpus.** The existing AQL tests and the step-by-step programs
-in `lang/test/` (factorial scaling, arg order, array ops, fold
+in `lang/go/test/` (factorial scaling, arg order, array ops, fold
 patterns) are the natural starting corpus. Supplement with:
 
 - **Microbenchmarks.** One per dispatch shape: arithmetic chain,

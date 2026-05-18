@@ -14,7 +14,7 @@ math/boolean/stack/comparison sigs, and FullStack sigs are excluded.
 
 ## Inventory
 
-### `lang/internal/engine` (engine builtins)
+### `lang/go/internal/engine` (engine builtins)
 
 | File | Word | Sig(s) | Verdict |
 |---|---|---|---|
@@ -90,7 +90,7 @@ math/boolean/stack/comparison sigs, and FullStack sigs are excluded.
 | native_type.go | convert | [ScalarType, Map, Scalar] / [ScalarType, Scalar] | OK |
 | native_query.go | star/from/as/select/where/order/by/limit/offset/distinct/group/having/on/using/joins/setops | DSL chain shape: [Table, Spec] | AMBIG (SQL-style left-to-right DSL; intentionally table-first for chainable infix syntax — currently disabled) |
 
-### `lang/internal/native` (data ops)
+### `lang/go/internal/native` (data ops)
 
 | Word | Sig(s) | Verdict |
 |---|---|---|
@@ -125,7 +125,7 @@ math/boolean/stack/comparison sigs, and FullStack sigs are excluded.
 | pop / shift | [List] | OK |
 | istype | [Any] | OK |
 
-### `lang/internal/nativemod/matrix` (matrix module — Go-implemented words)
+### `lang/go/internal/nativemod/matrix` (matrix module — Go-implemented words)
 
 | Word | Sig(s) | Verdict |
 |---|---|---|
@@ -150,7 +150,7 @@ FnDef-args [mat,1,0] → CallAQL pushes them as tokens [mat,1,0] →
 NativeFunc sig [Int,Int,Matrix] matches stack [mat,1,0]
 (top=0→sig[0], mid=1→sig[1], deep=mat→sig[2]).
 
-### `lang/internal/nativemod/time` (time module)
+### `lang/go/internal/nativemod/time` (time module)
 
 | Word | Sig(s) | Verdict |
 |---|---|---|

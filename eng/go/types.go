@@ -58,24 +58,24 @@ var (
 	TResource       = mustType("Object/Resource")
 	TResourceEntity = mustType("Object/Resource/Entity")
 	// TFetchFunction / TFetchRequest / TFetchResponse moved to
-	// lang/native/fetch.go (Step 8 migration); registered via
-	// RegisterExternalBuiltin at lang/native package init.
+	// lang/go/native/fetch.go (Step 8 migration); registered via
+	// RegisterExternalBuiltin at lang/go/native package init.
 	TError      = mustType("Object/Error")
 	TType       = mustType("Type")
 	TScalarType = mustType("Type/ScalarType")
 	TNodeType   = mustType("Type/NodeType")
 	TObjectType = mustType("Type/ObjectType")
 	// Scalar/Time and descendants moved to
-	// lang/engine/native_temporal.go (Step 8). They live in
-	// lang/engine (not lang/internal/nativemod/time) because
-	// date-arithmetic handlers in lang/engine/native_math.go
+	// lang/go/engine/native_temporal.go (Step 8). They live in
+	// lang/go/engine (not lang/go/internal/nativemod/time) because
+	// date-arithmetic handlers in lang/go/engine/native_math.go
 	// reference these types at package-init time — colocating
 	// avoids the import-cycle constraint.
-	// TMatrix moved to lang/internal/nativemod/matrix.go (Step 8).
-	// TTimeout moved to lang/engine/native_misc.go (Step 8).
+	// TMatrix moved to lang/go/internal/nativemod/matrix.go (Step 8).
+	// TTimeout moved to lang/go/engine/native_misc.go (Step 8).
 	TDependent  = mustType("Type/Dependent")
 	TDepInteger = mustType("Type/Dependent/DepInteger")
-	// TInterval moved to lang/engine/native_misc.go (Step 8).
+	// TInterval moved to lang/go/engine/native_misc.go (Step 8).
 )
 
 // typeNames is the user-facing name → Type map for bare-word type

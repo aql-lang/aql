@@ -35,7 +35,7 @@ identity `Any`).
 `Never` itself is a registered top-level type (`engine.TNever`,
 `types.go:86`); it's uninhabited (only unifies with itself per
 `unify.go`'s Never branch), so `v is Never` is `false` for every
-concrete value `v`. Tests in `lang/test/type_never_test.go`.
+concrete value `v`. Tests in `lang/go/test/type_never_test.go`.
 
 ### 1.2 No distribution / De Morgan — RESOLVED
 
@@ -52,7 +52,7 @@ through every fold step. The dedup uses `valuesEqual` guarded by
 to true on Data==nil regardless of VType, so callers that compare
 type literals must pre-check VType).
 
-Tests in `lang/test/type_distribute_test.go` cover left- and
+Tests in `lang/go/test/type_distribute_test.go` cover left- and
 right-side disjuncts, both-side cross product, full DNF collapse to
 `Never`, dedup, `Never` filtering pre-distribution, value-level
 disjuncts, and `tall` folds.
@@ -78,7 +78,7 @@ a closed interval `(gte 10) tand (lte 20)`. Combination rules:
 The "future extensibility" promise on the `DepKind` bit field is
 now redeemed via the dual-storage form.
 
-Tests: `lang/test/type_algebra_test.go` (interval, same-side
+Tests: `lang/go/test/type_algebra_test.go` (interval, same-side
 tightening, empty interval, strict-touching, singleton, cross-base,
 `between` membership-equivalence with the long form).
 
@@ -112,15 +112,15 @@ Status: not addressed. Low impact (static-analysis-only path).
 
 `tand`'s distribution dedup uses the same helper, so DNF cross
 products canonicalise consistently. Tests in
-`lang/test/type_algebra_test.go` (idempotence, subsumption) and
-`lang/test/boolean.tsv` (the previously-asserted non-deduping
+`lang/go/test/type_algebra_test.go` (idempotence, subsumption) and
+`lang/go/test/boolean.tsv` (the previously-asserted non-deduping
 outputs).
 
 ### 1.6 Empty-fold identity — RESOLVED
 
 `[] tall` returns `Any` (identity for `tand`); `[] tany` returns
 `Never` (identity for `tor`). Both are now full monoids over lists.
-Previously each errored. Tests in `lang/test/type_algebra_test.go`.
+Previously each errored. Tests in `lang/go/test/type_algebra_test.go`.
 
 
 ## 2. Dependent side (`DepScalar` family)
@@ -189,7 +189,7 @@ exits:
   `v.IsDepScalar()` branch.
 - `Value.String` and `valToString` — already guarded.
 
-Tests in `lang/test/type_depscalar_safety_test.go` exercise the eq /
+Tests in `lang/go/test/type_depscalar_safety_test.go` exercise the eq /
 lt / print / no-panic paths.
 
 Lower-traffic call sites under `internal/engine/format.go`,
@@ -225,7 +225,7 @@ also preserves type literals (Data already nil) so the
 DepScalar-constructor sigs in `gt`/`gte`/`lt`/`lte`/`between`
 continue to fire under check mode.
 
-Tests in `lang/test/type_predicate_sandbox_test.go` cover the typed-
+Tests in `lang/go/test/type_predicate_sandbox_test.go` cover the typed-
 predicate accept and the runtime-still-rejects paths.
 
 ### 3.3 Predicate has full registry access (sandboxing gap) — RESOLVED
@@ -277,7 +277,7 @@ discard, and exact matching is the right rule.
 Pattern (FnParam.Pattern), Optional, and BarrierPos differences are
 still not checked — see 4.2 and 4.3.
 
-Tests in `lang/test/type_fnvariance_test.go` cover both the
+Tests in `lang/go/test/type_fnvariance_test.go` cover both the
 contravariant and covariant directions, exact match (regression),
 and Any/concrete edge cases.
 
@@ -298,7 +298,7 @@ required where the spec is optional fails — the candidate can't
 accept the omission the spec is allowed to make.
 
 The four alignment cases (req/req, req/opt, opt/req, opt/opt) are now
-covered by `TestVariance_*` in `lang/test/type_fnvariance_test.go`.
+covered by `TestVariance_*` in `lang/go/test/type_fnvariance_test.go`.
 
 `BarrierPos` is intentionally excluded from the structural shape:
 `FnSigSpec` doesn't carry one because barriers are a forward-
@@ -328,7 +328,7 @@ non-fn types. Helpers (`PushType`, `PopType`, `HasType`,
 `TopOfTypeStack`) live in `util.go`; ResolveTypedName /
 ResolveTypedNameValue use them.
 
-Tests in `lang/test/type_shadow_test.go` cover shadow / pop / pop-to-
+Tests in `lang/go/test/type_shadow_test.go` cover shadow / pop / pop-to-
 empty / untype-unbound / case-rule / predicate-over-literal /
 DepScalar / deep-stack scenarios.
 
@@ -382,7 +382,7 @@ the same way as `type`). With §5.2 resolved, types live only in
 `r.Types`; `untype` is just a `PopType` call — no DefStacks mirror
 to keep in lock-step.
 
-Tests in `lang/test/type_shadow_test.go`.
+Tests in `lang/go/test/type_shadow_test.go`.
 
 
 ## 6. Dispatch / planning gaps
@@ -518,7 +518,7 @@ A transforming predicate stays just as terse:
 `(x is String) guard (x upper)` returns the upper-cased string when
 the input is a String, None otherwise.
 
-Tests in `lang/test/type_guard_test.go` cover the bare cases, the
+Tests in `lang/go/test/type_guard_test.go` cover the bare cases, the
 predicate-type idiom, the BarrierPos behaviour, and the typed-def
 transforming-predicate path.
 
@@ -538,7 +538,7 @@ alias), the message falls back to the rendered type form
 (`Scalar/Number/Integer`). `is` returns a boolean, so it has no
 error path of its own.
 
-Tests in `lang/test/type_error_messages_test.go`.
+Tests in `lang/go/test/type_error_messages_test.go`.
 
 ### 7.5 `inspect` for fn-shape types is sparse — RESOLVED
 
@@ -552,7 +552,7 @@ has cases for both fn-shape types (FnUndef) and dependent scalars
   `{kind: dependent_scalar, leaf: 'Integer', lo: {kind: 'gt', value: 10}}`,
   with `hi` populated for the upper-bound or interval cases.
 
-Tests in `lang/test/type_inspect_test.go`.
+Tests in `lang/go/test/type_inspect_test.go`.
 
 ### 7.6 Two ways to express the same thing, with no nudge
 

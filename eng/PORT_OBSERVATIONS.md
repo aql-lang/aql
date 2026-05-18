@@ -364,7 +364,7 @@ Migration scope:
 
 - aqleng spec runners (Go + TS): only `swap` is multi-arg
   stack-only; handler updated.
-- lang/internal/engine native stack ops: swap, over, rot, nip, tuck,
+- lang/go/internal/engine native stack ops: swap, over, rot, nip, tuck,
   2dup, 2swap, 2over rewritten to top-down indexing.
 - aql/test rows: a small number of test rows assumed the legacy
   swap-form binding (`a f b → F(b, a)`) was the only mirror-violator;
@@ -376,13 +376,13 @@ Migration scope:
 
 Open follow-ups (not yet migrated):
 
-- lang/internal/nativemod multi-arg sigs (matrix-at, time-add-*) were
+- lang/go/internal/nativemod multi-arg sigs (matrix-at, time-add-*) were
   declared with their args in domain order (e.g. `(Matrix, Integer,
   Integer)`) and called as `mat row col matrix-at`. Under the new
   rule the `matrix-at` sig declaration has to be reversed to
   `(Integer, Integer, Matrix)`, with handler index access shifted
   to match. Same for the other multi-arg sigs.
-- A handful of `lang/test/*.tsv` rows that document the OLD
+- A handful of `lang/go/test/*.tsv` rows that document the OLD
   swap-form footgun need updating.
 
 ### 1.5 `SetCapability(name, nil)` overloaded as delete — fixed

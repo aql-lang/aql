@@ -150,5 +150,5 @@ The closure workaround described above is no longer needed.
 | `jsonic/go@v0.1.6` `lexer.go` | Go `LexMatcher` type and `nextRaw()` |
 | `jsonic/go@v0.1.6` `plugin.go` | `AddMatcher`, `LexSub` APIs |
 | `jsonic/go@v0.1.6` `rule.go` | `ParseAlts` where `lex.Next()` called |
-| `lang/internal/parser/parse.go` | Jsonic-native interpolation rules |
-| `lang/internal/engine/engine.go` | InterpString evaluation |
+| `lang/go/internal/parser/parse.go` | Jsonic-native interpolation rules |
+| `lang/go/internal/engine/engine.go` | InterpString evaluation |

@@ -1,6 +1,6 @@
-.PHONY: test vet fmt lint vuln clean cover
+.PHONY: test vet fmt lint vuln clean cover publish tags
 
-# This module (github.com/aql-lang/aql/eng) is the AQL engine
+# This module (github.com/aql-lang/aql/eng/go) is the AQL engine
 # kernel + jsonic parser + kernel spec runner. It is standalone — it has
 # no dependency on the lang or cmd/go modules.
 #
@@ -35,3 +35,20 @@ cover:
 clean:
 	go clean -testcache
 	rm -f coverage.out
+
+# Publish a new tagged release of this module.
+#   make publish V=0.1.0
+# Runs tests, then tags `eng/go/v$(V)` and pushes. Tag prefix must match
+# the module's repo subpath (Go's submodule convention).
+publish: test
+	@test -n "$(V)" || (echo "Usage: make publish V=x.y.z" && exit 1)
+	@cd ../.. && git diff --quiet HEAD -- eng/go || (echo "ERROR: uncommitted changes in eng/go" && exit 1)
+	cd ../.. && git tag eng/go/v$(V)
+	cd ../.. && git push origin eng/go/v$(V)
+	@if command -v gh >/dev/null 2>&1; then \
+		cd ../.. && gh release create eng/go/v$(V) --title "eng/go v$(V)" --notes "AQL engine kernel v$(V)"; \
+	fi
+
+# List recent eng/go tags (newest first).
+tags:
+	@git -C ../.. tag -l 'eng/go/v*' --sort=-version:refname
