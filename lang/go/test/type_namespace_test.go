@@ -47,7 +47,7 @@ func TestNameConfusion_TypeThenDef_CaseRule(t *testing.T) {
 	// is a TYPE binding (def is the universal binder), equivalent to
 	// `type Foo …`. So `def Foo` after `type Foo` shadows the type,
 	// exactly as a second `type Foo …` would — no clash, no error.
-	got := runOne(t, `type Foo Integer
+	got := runOne(t, `def Foo Integer
 def Foo String
 "hello" is Foo`)
 	if len(got) != 1 || got[0] != "true" {
@@ -69,8 +69,8 @@ func TestNameConfusion_TypeOverNativeFn_CaseRule(t *testing.T) {
 // shadow-and-revert tests live in lang/go/test/type_shadow_test.go;
 // here we only pin that the second `type Foo …` does NOT error.
 func TestNameConfusion_TypeRedefinitionShadows(t *testing.T) {
-	got := runOne(t, `type Foo Integer
-type Foo String
+	got := runOne(t, `def Foo Integer
+def Foo String
 "hello" is Foo`)
 	if len(got) != 1 || got[0] != "true" {
 		t.Errorf("after shadow, \"hello\" is Foo = %v, want [\"true\"] (Foo now String)", got)
@@ -83,7 +83,7 @@ type Foo String
 // None on fail / unified value on success; `is` collapses that to
 // Boolean: true iff non-None. Symmetric with the typed-def handler.
 
-const isBbdSource = `type Bbd fn [x:Any Any [if ((x is String) and (x gte "b") and (x lte "d")) [x] [None]]]
+const isBbdSource = `def Bbd fn [x:Any Any [if ((x is String) and (x gte "b") and (x lte "d")) [x] [None]]]
 `
 
 // `is` carries BarrierPos=1 (mirroring `or`): only its first arg can
@@ -114,7 +114,7 @@ func TestIsPredicate_FalseWrongType(t *testing.T) {
 func TestIsPredicate_TransformingPredicate(t *testing.T) {
 	// `is` only checks the success/failure flag; the transformed value
 	// is discarded by `is` (the Boolean answer is what matters).
-	got := runOne(t, `type Up fn [x:Any Any [if (x is String) [x upper] [None]]]
+	got := runOne(t, `def Up fn [x:Any Any [if (x is String) [x upper] [None]]]
 "hello" is Up`)
 	if len(got) != 1 || got[0] != "true" {
 		t.Errorf("\"hello\" is Up = %v, want [\"true\"]", got)
@@ -124,7 +124,7 @@ func TestIsPredicate_TransformingPredicate(t *testing.T) {
 // `is` over a non-predicate type still routes through Unify (existing
 // behaviour) — guard that the predicate path doesn't break it.
 func TestIsPredicate_DepScalarStillWorks(t *testing.T) {
-	got := runOne(t, `type G10 (Integer gt 10)
+	got := runOne(t, `def G10 (Integer gt 10)
 15 is G10
 5 is G10`)
 	if len(got) != 2 {
@@ -144,7 +144,7 @@ func TestIsPredicate_DepScalarStillWorks(t *testing.T) {
 // FnUndef↔FnDef structural matcher under the hood.
 
 func TestIsFnShape_True(t *testing.T) {
-	got := runOne(t, `type Mapper fnsig [[Integer] [Integer]]
+	got := runOne(t, `def Mapper fnsig [[Integer] [Integer]]
 def double fn [[Integer] [Integer] [1 add]]
 (quote double) is Mapper`)
 	if len(got) != 1 || got[0] != "true" {
@@ -153,7 +153,7 @@ def double fn [[Integer] [Integer] [1 add]]
 }
 
 func TestIsFnShape_FalseWrongInputType(t *testing.T) {
-	got := runOne(t, `type Mapper fnsig [[Integer] [Integer]]
+	got := runOne(t, `def Mapper fnsig [[Integer] [Integer]]
 def stringy fn [[String] [Integer] [length]]
 (quote stringy) is Mapper`)
 	if len(got) != 1 || got[0] != "false" {
@@ -162,7 +162,7 @@ def stringy fn [[String] [Integer] [length]]
 }
 
 func TestIsFnShape_FalseWrongReturnType(t *testing.T) {
-	got := runOne(t, `type Mapper fnsig [[Integer] [Integer]]
+	got := runOne(t, `def Mapper fnsig [[Integer] [Integer]]
 def stringer fn [[Integer] [String] [convert String]]
 (quote stringer) is Mapper`)
 	if len(got) != 1 || got[0] != "false" {
@@ -171,7 +171,7 @@ def stringer fn [[Integer] [String] [convert String]]
 }
 
 func TestIsFnShape_FalseNonFunction(t *testing.T) {
-	got := runOne(t, `type Mapper fnsig [[Integer] [Integer]]
+	got := runOne(t, `def Mapper fnsig [[Integer] [Integer]]
 42 is Mapper`)
 	if len(got) != 1 || got[0] != "false" {
 		t.Errorf("42 is Mapper = %v, want [\"false\"]", got)
@@ -181,7 +181,7 @@ func TestIsFnShape_FalseNonFunction(t *testing.T) {
 // Regression for the BarrierPos: the next-line token must NOT be
 // pulled into `is` as its second forward arg.
 func TestIsBarrierPos_DoesNotEatNextToken(t *testing.T) {
-	got := runOne(t, `type G10 (Integer gt 10)
+	got := runOne(t, `def G10 (Integer gt 10)
 15 is G10
 42`)
 	if len(got) != 2 {

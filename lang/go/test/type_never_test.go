@@ -203,7 +203,7 @@ func TestNever_DefRejectsAllValues(t *testing.T) {
 // Aliasing Never via `type` is allowed — it just creates a name for the
 // uninhabited type. `is` against the alias behaves like `is Never`.
 func TestNever_TypeAlias(t *testing.T) {
-	got := runOne(t, `type Bottom Never
+	got := runOne(t, `def Bottom Never
 42 is Bottom`)
 	if len(got) != 1 || got[0] != "false" {
 		t.Errorf("42 is Bottom = %v, want [\"false\"]", got)

@@ -29,7 +29,7 @@ func runErr(t *testing.T, src string) error {
 }
 
 func TestErrorMessage_PredicateNamesType(t *testing.T) {
-	err := runErr(t, `type Bbd fn [x:Any Any [if ((x is String) and (x gte "b") and (x lte "d")) [x] [None]]]
+	err := runErr(t, `def Bbd fn [x:Any Any [if ((x is String) and (x gte "b") and (x lte "d")) [x] [None]]]
 def n:Bbd "e"`)
 	msg := err.Error()
 	if !strings.Contains(msg, "Bbd") {
@@ -44,7 +44,7 @@ def n:Bbd "e"`)
 }
 
 func TestErrorMessage_DepScalarNamesType(t *testing.T) {
-	err := runErr(t, `type G10 (Integer gt 10)
+	err := runErr(t, `def G10 (Integer gt 10)
 def n:G10 5`)
 	msg := err.Error()
 	if !strings.Contains(msg, "G10") {

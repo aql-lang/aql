@@ -184,7 +184,7 @@ func TestIstype_DeeplyNestedNoType(t *testing.T) {
 
 func TestIstype_RecordType(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`record [{a:String} {b:Integer}]; istype`,
+		`maketype Record [{a:String} {b:Integer}]; istype`,
 	})
 	if err != nil {
 		t.Fatal(err)

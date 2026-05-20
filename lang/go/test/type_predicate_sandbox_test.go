@@ -33,8 +33,8 @@ func TestPredicateSandbox_TypeMutationIsContained(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	src := `type Sneaky fn [x:Any Any [
-  type Leaked Integer
+	src := `def Sneaky fn [x:Any Any [
+  def Leaked Integer
   x
 ]]
 "hello" is Sneaky
@@ -59,8 +59,8 @@ func TestPredicateSandbox_IsAlsoSandboxed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	_, err = a.Run(`type Sneaky fn [x:Any Any [
-  type LeakedB Integer
+	_, err = a.Run(`def Sneaky fn [x:Any Any [
+  def LeakedB Integer
   x
 ]]
 42 is Sneaky
@@ -83,7 +83,7 @@ func TestPredicateCheckMode_TypedBindingAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	res, err := a.Check(`type Bbd fn [x:Any Any [if (x is String) [x] [None]]]
+	res, err := a.Check(`def Bbd fn [x:Any Any [if (x is String) [x] [None]]]
 def s:Bbd "hello"
 s`)
 	if err != nil {
@@ -108,7 +108,7 @@ func TestDepScalarCheckMode_CarrierAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	res, err := a.Check(`type G10 (Integer gt 10)
+	res, err := a.Check(`def G10 (Integer gt 10)
 def x:G10 15`)
 	if err != nil {
 		t.Fatalf("Check should not error on DepScalar typed binding, got: %v", err)
@@ -127,7 +127,7 @@ func TestDepScalarCheckMode_CrossBaseStillRejects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	_, err = a.Check(`type G10 (Integer gt 10)
+	_, err = a.Check(`def G10 (Integer gt 10)
 def s:G10 "hi"`)
 	// Check mode collects diagnostics but may not return a hard
 	// error. Check both: either an error OR a diagnostic mentioning
@@ -147,7 +147,7 @@ func TestPredicateRuntime_StillErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	_, err = a.Run(`type Bbd fn [x:Any Any [if (x is String) [x] [None]]]
+	_, err = a.Run(`def Bbd fn [x:Any Any [if (x is String) [x] [None]]]
 def n:Bbd 99`)
 	if err == nil {
 		t.Fatalf("runtime should error: 99 is not a String")

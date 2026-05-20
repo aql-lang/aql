@@ -17,7 +17,7 @@ import (
 // type accepts capitalised names.
 
 func TestNameCase_TypeUpperOK(t *testing.T) {
-	got := runOne(t, `type Mid Integer
+	got := runOne(t, `def Mid Integer
 def n:Mid 5
 n`)
 	if len(got) != 1 || got[0] != int64(5) {
