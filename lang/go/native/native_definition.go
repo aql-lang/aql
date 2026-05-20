@@ -328,6 +328,17 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 
 func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := defName(args[0])
+	if IsCapitalisedName(name) {
+		// `undef` is the universal unbinder (the symmetric completion
+		// of Phase 2's universal `def` — lang/doc/design/TYPE-UNIFORM.0.md):
+		// a capitalised name is a TYPE binding, so pop the type stack,
+		// exactly as `untype` does.
+		if _, ok := r.Types.PopType(name); !ok {
+			return nil, r.AqlError("undef_error",
+				fmt.Sprintf("undef %s: no such type binding", name), "undef")
+		}
+		return nil, nil
+	}
 	UninstallDef(r, name)
 	return nil, nil
 }

@@ -2,6 +2,8 @@ package test
 
 import (
 	"testing"
+
+	"github.com/aql-lang/aql/lang/go"
 )
 
 // --- Naming rule: capitalisation selects type vs value binding ---
@@ -75,6 +77,31 @@ func TestNameCase_DefUpperObjectMints(t *testing.T) {
 make Acct {bal:1} typeof`)
 	if len(got) != 1 || got[0] != "Acct" {
 		t.Errorf("got %v, want [Acct]", got)
+	}
+}
+
+// undef is the universal unbinder — the symmetric completion of the
+// universal `def`. `undef Foo` (capitalised) pops the type binding,
+// exactly as the legacy `untype` does; a lowercase `undef` pops a
+// value binding.
+
+func TestNameCase_UndefUpperPopsTypeShadow(t *testing.T) {
+	got := runOne(t, `def Foo Integer
+def Foo String
+undef Foo
+5 is Foo`)
+	if len(got) != 1 || got[0] != "true" {
+		t.Errorf("undef should pop String, revealing Integer; got %v, want [true]", got)
+	}
+}
+
+func TestNameCase_UndefUpperEmptiesType(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	if _, err := a.Run("def Foo Integer\nundef Foo\nFoo"); err == nil {
+		t.Fatal("expected error — Foo undefined after undef, got nil")
 	}
 }
 
