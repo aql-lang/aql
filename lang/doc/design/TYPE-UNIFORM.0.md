@@ -436,7 +436,11 @@ The change is additive-first so the test suite stays green throughout.
   executed as a reviewed series of per-suite commits driven by a
   scanner-based migration tool, not a single pass.
 
-- **Phase 4 (optional).** Collapse the two binding stacks into one.
+- **Phase 4 — collapse the two binding stacks into one. DONE.**
+  Type bindings move into the single `DefTable` alongside value
+  bindings (each entry carries the minted lattice `*Type`); the
+  `TypeTable` is reduced to the pure type lattice. `ResolveTypedName`
+  becomes one lookup and `undef` covers both kinds of binding.
 
 Phases 1–3, sequenced 3a→3b→3c, keep `make test` green at every
 step. The first draft's "single atomic breaking pass" framing for
@@ -489,4 +493,5 @@ Phase 3 was wrong.
   3b migrate the call sites to `maketype`/`def`/`undef` — done; 3c
   rename `maketype` → `type` and delete the old words — done. The
   surface is now `def` (bind) / `make` (instantiate) / `type`
-  (construct). Phase 4 (optional) — collapse the two binding stacks.
+  (construct). Phase 4 — collapse the two binding stacks into the
+  single DefTable — done.
