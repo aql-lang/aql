@@ -417,6 +417,12 @@ func registerEngSpecDefinition(r *eng.Registry) {
 	// is enough for the eng/spec tsv rows that exercise simple bindings.
 	plainDef := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 		name, _ := args[0].AsConcreteAtom()
+		// `def` is the universal binder (TYPE-UNIFORM Phase 2): a
+		// capitalised name is a TYPE binding — delegate to InstallType,
+		// the same path the `type` word uses.
+		if eng.IsCapitalisedName(name) {
+			return nil, eng.InstallType(reg, name, args[1])
+		}
 		if err := eng.ValidateWordName(name); err != nil {
 			return nil, err
 		}
@@ -580,6 +586,14 @@ func registerEngSpecDefinition(r *eng.Registry) {
 			QuoteArgs: map[int]bool{0: true},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 				name, _ := args[0].AsConcreteAtom()
+				// Universal unbinder: a capitalised name pops the type
+				// stack, mirroring the universal `def`.
+				if eng.IsCapitalisedName(name) {
+					if _, ok := reg.Types.PopType(name); !ok {
+						return nil, &eng.AqlError{Code: "type_error", Detail: "undef " + name + ": no such type binding"}
+					}
+					return nil, nil
+				}
 				eng.UninstallDef(reg, name)
 				return nil, nil
 			},
@@ -1002,6 +1016,38 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 				RunInCheckMode: true,
 			},
 		},
+	})
+
+	// maketype — the uniform type constructor (TYPE-UNIFORM Phase 3b).
+	// Mirrors lang/go/native/native_type.go::maketypeHandler; dispatches
+	// to the record/object fixtures above. eng/spec exercises only the
+	// Object and Record bases.
+	maketypeH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
+		base := args[0]
+		arg := args[1]
+		if base.Data == nil && base.VType.Equal(eng.TObject) {
+			return objectH([]eng.Value{arg}, nil, nil, reg)
+		}
+		if eng.IsObjectType(base) {
+			return objectWithParentH([]eng.Value{arg, base}, nil, nil, reg)
+		}
+		if base.Data == nil && base.VType.Equal(eng.TRecord) {
+			if !arg.VType.Equal(eng.TList) {
+				return nil, fmt.Errorf("maketype Record: a record takes a list of field pairs")
+			}
+			return recordH([]eng.Value{arg}, nil, nil, reg)
+		}
+		return nil, fmt.Errorf("maketype: base must be Object, Record, or an object type, got %s", base.String())
+	}
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:        "maketype",
+		ForwardArgs: true,
+		Signatures: []eng.NativeSig{{
+			Args:           []*eng.Type{eng.TAny, eng.TAny},
+			Handler:        maketypeH,
+			Returns:        []*eng.Type{eng.TType},
+			RunInCheckMode: true,
+		}},
 	})
 }
 

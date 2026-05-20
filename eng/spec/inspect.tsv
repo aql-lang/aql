@@ -169,32 +169,32 @@ inspect { :String }	{type:'Type',struct:'Map',kind:typed_map,child:'Scalar/Strin
 # ====================================================================		
 # All report type:'Type'. `struct` is the value's VType leaf — 'Map'		
 # for a record, 'Enum' / 'Disjunct' for an enum / union, the named		
-# type for an object. Naming via `type NAME …` adds a `name:` field.		
+# type for an object. Naming via `def NAME …` adds a `name:` field.		
 		
 # --- record ---		
-inspect ( record [ { a:Integer } { b:String } ] )	{type:'Type',struct:'Map',kind:record,fields:{a:'Integer',b:'String'}}	
-type Pt record [ { x:Integer } { y:Integer } ] inspect Pt	{name:'Pt',type:'Type',struct:'Map',kind:record,fields:{x:'Integer',y:'Integer'}}	
+inspect ( maketype Record [ { a:Integer } { b:String } ] )	{type:'Type',struct:'Map',kind:record,fields:{a:'Integer',b:'String'}}	
+def Pt (maketype Record [ { x:Integer } { y:Integer } ]) inspect Pt	{name:'Pt',type:'Type',struct:'Map',kind:record,fields:{x:'Integer',y:'Integer'}}	
 		
 # --- object (struct is the named type; fields includes inherited, parent first) ---		
-type Vec object { x:Integer y:Integer } inspect Vec	{name:'Vec',type:'Type',struct:'Vec',kind:object,fields:{x:'Integer',y:'Integer'}}	
-type Bar object { b:Integer } type Baz object { c:String } Bar inspect Baz	{name:'Baz',type:'Type',struct:'Baz',kind:object,parent:'Object/Bar',fields:{b:'Integer',c:'String'}}	Baz extends Bar — `b` (inherited) then `c`
+def Vec (maketype Object { x:Integer y:Integer }) inspect Vec	{name:'Vec',type:'Type',struct:'Vec',kind:object,fields:{x:'Integer',y:'Integer'}}	
+def Bar (maketype Object { b:Integer }) def Baz (maketype Bar { c:String }) inspect Baz	{name:'Baz',type:'Type',struct:'Baz',kind:object,parent:'Object/Bar',fields:{b:'Integer',c:'String'}}	Baz extends Bar — `b` (inherited) then `c`
 		
 # --- disjunct / enum (alternatives are the members' VType paths) ---		
 inspect ( Integer tor Boolean )	{type:'Type',struct:'Disjunct',kind:disjunct,alternatives:['Scalar/Number/Integer','Scalar/Boolean']}	
 inspect ( enum [ red green blue ] )	{type:'Type',struct:'Enum',kind:disjunct,alternatives:['Scalar/Atom','Scalar/Atom','Scalar/Atom']}	enum members are atoms
-type D ( Integer tor Boolean ) inspect D	{name:'D',type:'Type',struct:'Disjunct',kind:disjunct,alternatives:['Scalar/Number/Integer','Scalar/Boolean']}	
-type Color enum [ red green blue ] inspect Color	{name:'Color',type:'Type',struct:'Enum',kind:disjunct,alternatives:['Scalar/Atom','Scalar/Atom','Scalar/Atom']}	
+def D ( Integer tor Boolean ) inspect D	{name:'D',type:'Type',struct:'Disjunct',kind:disjunct,alternatives:['Scalar/Number/Integer','Scalar/Boolean']}	
+def Color enum [ red green blue ] inspect Color	{name:'Color',type:'Type',struct:'Enum',kind:disjunct,alternatives:['Scalar/Atom','Scalar/Atom','Scalar/Atom']}	
 		
 # --- function-shape (fnsig) ---		
 inspect ( fnsig [ [ Integer ] [ Integer ] ] )	{type:'Type',struct:'FunctionSignature',kind:function_shape,signatures:[{params:['Integer'],returns:['Integer']}]}	
 inspect ( fnsig [ [ Integer ] [ Integer ] [ String ] [ String ] ] )	{type:'Type',struct:'FunctionSignature',kind:function_shape,signatures:[{params:['Integer'],returns:['Integer']},{params:['String'],returns:['String']}]}	two pairs → two sigs
-type Sig fnsig [ [ Integer ] [ Integer ] ] inspect Sig	{name:'Sig',type:'Type',struct:'FunctionSignature',kind:function_shape,signatures:[{params:['Integer'],returns:['Integer']}]}	
+def Sig fnsig [ [ Integer ] [ Integer ] ] inspect Sig	{name:'Sig',type:'Type',struct:'FunctionSignature',kind:function_shape,signatures:[{params:['Integer'],returns:['Integer']}]}	
 		
 # --- a function VALUE / typed-list / typed-map / alias named type ---		
 inspect ( fn [ [ a:Integer ] [ Integer ] [ a ] ] )	{type:'Type',struct:'Function',kind:literal}	a function value is a (predicate) type — type:'Type', struct:'Function'
-type Ints [ :Integer ] inspect Ints	{name:'Ints',type:'Type',struct:'List',kind:typed_list,child:'Scalar/Number/Integer'}	
-type Strs { :String } inspect Strs	{name:'Strs',type:'Type',struct:'Map',kind:typed_map,child:'Scalar/String'}	
-type IdType Integer inspect IdType	{name:'IdType',type:'Type',struct:'Integer',kind:literal}	an alias of a builtin — type:'Type', struct:'Integer'
+def Ints [ :Integer ] inspect Ints	{name:'Ints',type:'Type',struct:'List',kind:typed_list,child:'Scalar/Number/Integer'}	
+def Strs { :String } inspect Strs	{name:'Strs',type:'Type',struct:'Map',kind:typed_map,child:'Scalar/String'}	
+def IdType Integer inspect IdType	{name:'IdType',type:'Type',struct:'Integer',kind:literal}	an alias of a builtin — type:'Type', struct:'Integer'
 		
 # ====================================================================		
 # 5. inspect — def'd values, unknown names, and inspect-of-inspect		
