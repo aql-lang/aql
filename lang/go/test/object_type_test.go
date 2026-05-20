@@ -8,7 +8,7 @@ import (
 )
 
 // TestObjectTypeDefine defines a named object type and verifies its structure.
-// type Foo object {a:String,b:Boolean} → Object/Foo with fields a and b
+// def Foo maketype Object {a:String,b:Boolean} → Object/Foo with fields a and b
 func TestObjectTypeDefine(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
 		`def Foo maketype Object {a:String,b:Boolean}`,
@@ -33,7 +33,7 @@ func TestObjectTypeDefine(t *testing.T) {
 }
 
 // TestObjectTypeAnonymous creates an anonymous object type.
-// object {c:99} → anonymous object with type Object/<internal-id>
+// maketype Object {c:99} → anonymous object with type Object/<internal-id>
 func TestObjectTypeAnonymous(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
 		`maketype Object {c:99}`,
@@ -54,7 +54,7 @@ func TestObjectTypeAnonymous(t *testing.T) {
 }
 
 // TestObjectTypeInheritance defines a child object type that inherits fields.
-// type Bar object {d:Integer} Foo → Object/Foo/Bar with fields a,b,d
+// def Bar maketype Foo {d:Integer} → Object/Foo/Bar with fields a,b,d
 func TestObjectTypeInheritance(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
 		`def Foo maketype Object {a:String,b:Boolean}`,

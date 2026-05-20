@@ -45,8 +45,8 @@ type foo Integer`, "must start with a capital letter")
 func TestNameConfusion_TypeThenDef_CaseRule(t *testing.T) {
 	// Post TYPE-UNIFORM Phase 2: `def Foo …` with a capitalised name
 	// is a TYPE binding (def is the universal binder), equivalent to
-	// `type Foo …`. So `def Foo` after `type Foo` shadows the type,
-	// exactly as a second `type Foo …` would — no clash, no error.
+	// `def Foo …`. So `def Foo` after `def Foo` shadows the type,
+	// exactly as a second `def Foo …` would — no clash, no error.
 	got := runOne(t, `def Foo Integer
 def Foo String
 "hello" is Foo`)
@@ -65,9 +65,9 @@ func TestNameConfusion_TypeOverNativeFn_CaseRule(t *testing.T) {
 
 // Re-defining the same TYPE is also rejected (no shadow stack — type
 // Re-defining the same TYPE is allowed — type bindings stack like
-// def, and `untype Foo` reverts to the previous binding. The
+// def, and `undef Foo` reverts to the previous binding. The
 // shadow-and-revert tests live in lang/go/test/type_shadow_test.go;
-// here we only pin that the second `type Foo …` does NOT error.
+// here we only pin that the second `def Foo …` does NOT error.
 func TestNameConfusion_TypeRedefinitionShadows(t *testing.T) {
 	got := runOne(t, `def Foo Integer
 def Foo String
@@ -138,7 +138,7 @@ func TestIsPredicate_DepScalarStillWorks(t *testing.T) {
 	}
 }
 
-// `is` with structural fn-shape types (FnUndef from `type Foo fn
+// `is` with structural fn-shape types (FnUndef from `def Foo fn
 // [[input] [output]]`). The value side is a `(quote name)` whose
 // name resolves through DefStacks to a FnDef; `is` then runs the
 // FnUndef↔FnDef structural matcher under the hood.

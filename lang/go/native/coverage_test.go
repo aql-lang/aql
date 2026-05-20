@@ -1021,7 +1021,7 @@ func TestMakeRecordPositional(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// type Point record [x:number y:number]
+	// def Point maketype Record [x:number y:number]
 	// make Point [1 2]
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Point"),

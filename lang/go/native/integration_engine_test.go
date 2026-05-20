@@ -1401,7 +1401,7 @@ func TestEngineTypeRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// type Point record [x:number y:number] end Point
+	// def Point maketype Record [x:number y:number] end Point
 	xf := NewOrderedMap()
 	xf.Set("x", NewTypeLiteral(TNumber))
 	yf := NewOrderedMap()
@@ -1421,7 +1421,7 @@ func TestEngineMakeRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// type P record [x:number y:string] end make P [1 "hi"]
+	// def P maketype Record [x:number y:string] end make P [1 "hi"]
 	xf := NewOrderedMap()
 	xf.Set("x", NewTypeLiteral(TNumber))
 	yf := NewOrderedMap()

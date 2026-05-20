@@ -1320,7 +1320,7 @@ func TestResolveFieldTypeString(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Define a custom type: type MyNum Number
+	// Define a custom type: def MyNum Number
 	_ = runAQL(t, r, []Value{
 		NewWord("def"), NewWord("MyNum"), NewWord("Number"),
 	})

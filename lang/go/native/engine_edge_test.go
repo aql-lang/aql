@@ -2831,7 +2831,7 @@ func TestRecordTypeCreation(t *testing.T) {
 	}
 	e := New(reg)
 
-	// record [x:number y:number] => record{x:Number,y:Number}
+	// maketype Record [x:number y:number] => record{x:Number,y:Number}
 	// In the list, each pair x:Number becomes a single-key map {x:Number}.
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
@@ -2860,7 +2860,7 @@ func TestRecordTypeWithDef(t *testing.T) {
 	}
 	e := New(reg)
 
-	// type Point record [x:number y:number]
+	// def Point maketype Record [x:number y:number]
 	// Point => record{x:Number,y:Number}
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
@@ -2930,7 +2930,7 @@ func TestRecordTypeUnify(t *testing.T) {
 	})
 
 	t.Run("field order must match", func(t *testing.T) {
-		// record [x:number y:string] vs record [y:string x:number] — different order, fail.
+		// maketype Record [x:number y:string] vs maketype Record [y:string x:number] — different order, fail.
 		f1 := NewOrderedMap()
 		f1.Set("x", NewTypeLiteral(TNumber))
 		f1.Set("y", NewTypeLiteral(TString))
@@ -3008,7 +3008,7 @@ func TestRecordTypeListWithMapElement(t *testing.T) {
 	}
 	e := New(reg)
 
-	// record [{x:{z:boolean}} "y":1]
+	// maketype Record [{x:{z:boolean}} "y":1]
 	// List element 0: map {x:{z:boolean}} — a map with nested map value
 	// List element 1: pair "y":1 — a single-key map {y:1}
 	innerMap := NewOrderedMap()

@@ -7,7 +7,7 @@ import (
 
 // --- inspect for fn-shape and DepScalar types ---
 //
-// `inspect Mapper` (Mapper = `type Mapper fnsig [[Integer] [Integer]]`)
+// `inspect Mapper` (Mapper = `def Mapper fnsig [[Integer] [Integer]]`)
 // previously returned an empty `signatures` slot — buildTypeInspection
 // had no case for the FnUndef shape. Same gap for DepScalar
 // constraints: users had no introspection of bounds.

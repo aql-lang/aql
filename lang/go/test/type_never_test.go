@@ -198,7 +198,7 @@ func TestNever_DefRejectsAllValues(t *testing.T) {
 	}
 }
 
-// --- type Foo Never ---
+// --- def Foo Never ---
 
 // Aliasing Never via `type` is allowed — it just creates a name for the
 // uninhabited type. `is` against the alias behaves like `is Never`.

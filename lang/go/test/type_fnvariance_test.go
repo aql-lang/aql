@@ -6,7 +6,7 @@ import (
 
 // --- Structural fn-shape variance ---
 //
-// `type Foo fnsig [[input] [output]]` is a structural function-shape
+// `def Foo fnsig [[input] [output]]` is a structural function-shape
 // constraint. A candidate function value satisfies the constraint
 // under the standard rules:
 //

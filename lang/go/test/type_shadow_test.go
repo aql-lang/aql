@@ -7,10 +7,10 @@ import (
 	"github.com/aql-lang/aql/lang/go"
 )
 
-// --- type shadowing + untype ---
+// --- type shadowing + undef ---
 //
-// *Type bindings now stack like `def` bindings. `type Foo X; type Foo
-// Y` pushes Y on top so subsequent uses see Y; `untype Foo` pops Y
+// *Type bindings now stack like `def` bindings. `def Foo X; def Foo
+// Y` pushes Y on top so subsequent uses see Y; `undef Foo` pops Y
 // and X becomes active again. Once the stack empties, the name is
 // unbound. Mirrors `def` / `undef` semantics so users have a single
 // scoping mental model across the value and type namespaces.
@@ -33,7 +33,7 @@ def Foo String
 	}
 }
 
-// `untype Foo` pops the most recent binding. The previous binding
+// `undef Foo` pops the most recent binding. The previous binding
 // becomes active again.
 func TestTypeShadow_Pop(t *testing.T) {
 	got := runOne(t, `def Foo Integer

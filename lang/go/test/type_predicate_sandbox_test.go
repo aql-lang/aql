@@ -20,11 +20,11 @@ import (
 //     accepts the binding without running the body; the predicate's
 //     real behaviour is checked at runtime.
 //   - **Sandbox.** A predicate body that mutates global state via
-//     `type Foo …` or `context set k v` must NOT have those
+//     `def Foo …` or `context set k v` must NOT have those
 //     mutations leak into the surrounding program. RunPredicate
 //     snapshots r.Types and r.ctxStack and restores them on return.
 
-// Predicate body that defines a new type via `type Inner …`.
+// Predicate body that defines a new type via `def Inner …`.
 // Without a sandbox, the leaked `Inner` would be visible in the
 // surrounding program. With the sandbox, the lookup after the
 // predicate fires fails as expected.

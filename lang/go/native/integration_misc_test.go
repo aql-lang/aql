@@ -282,7 +282,7 @@ func TestEngineInspectTypeLiteral(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// type Qty number ; inspect Qty
+	// def Qty number ; inspect Qty
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Qty"), NewTypeLiteral(TNumber),
 		NewWord("inspect"), NewWord("Qty"),
@@ -325,7 +325,7 @@ func TestEngineInspectRecordType(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// type Pos record{x:number,y:number} ; inspect Pos
+	// def Pos record{x:number,y:number} ; inspect Pos
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TNumber))
 	fields.Set("y", NewTypeLiteral(TNumber))
@@ -370,7 +370,7 @@ func TestEngineInspectTypeDotAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// type Qty number ; inspect Qty .kind
+	// def Qty number ; inspect Qty .kind
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Qty"), NewTypeLiteral(TNumber),
 		NewWord("inspect"), NewWord("Qty"),

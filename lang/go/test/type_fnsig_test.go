@@ -8,7 +8,7 @@ import (
 
 // --- Function signatures as types ---
 //
-// `type Mapper fnsig [[Integer] [Integer]]` installs `Mapper` as a
+// `def Mapper fnsig [[Integer] [Integer]]` installs `Mapper` as a
 // function-shape type — a FnUndef value carrying input + output sig
 // lists but no body. Mapper can then be used in the typed-def form
 // `def n:Mapper somefn` to constrain n to a function value whose
@@ -102,7 +102,7 @@ def p:Predicate (quote positive)
 
 // --- Predicate-as-type: fn that returns None on fail / the unified value on ok ---
 //
-// `type Bbd fn [x:Any Any [if ((x is String) and (x gte "b") and (x lte "d")) [x] [None]]]`
+// `def Bbd fn [x:Any Any [if ((x is String) and (x gte "b") and (x lte "d")) [x] [None]]]`
 // installs Bbd as a *predicate* type. `def p:Bbd v` calls the predicate
 // with `v`; on a non-None return the def installs with the *returned*
 // value (which may be a transformed version of v); on a None return

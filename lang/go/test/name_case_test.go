@@ -59,7 +59,7 @@ my-thing`)
 
 // def with a capitalised name is a TYPE binding — equivalent to
 // `type`. `def Mid Integer` installs Mid as a type, usable in a
-// type position exactly like `type Mid Integer` would.
+// type position exactly like `def Mid Integer` would.
 
 func TestNameCase_DefUpperIsTypeBinding(t *testing.T) {
 	got := runOne(t, `def Mid Integer
