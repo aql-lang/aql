@@ -163,7 +163,7 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	if err := ValidateWordName(name); err != nil {
 		return nil, fmt.Errorf("def %s: %w", name, err)
 	}
-	if r.Types.Has(name) {
+	if r.Defs.IsType(name) {
 		return nil, r.AqlError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
 	}
 	InstallDef(r, name, body, stackOnly)
@@ -186,7 +186,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if err := ValidateWordName(name); err != nil {
 		return nil, fmt.Errorf("def %s: %w", name, err)
 	}
-	if r.Types.Has(name) {
+	if r.Defs.IsType(name) {
 		return nil, r.AqlError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
 	}
 	constraint, _ := nameMap.Get(name)
@@ -236,7 +236,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		// scalar). The PredicateInputType check below mirrors the
 		// InstallType decision so the two paths stay aligned.
 		if typeName != "" && eng.PredicateInputType(constraint) != nil {
-			if def := r.Types.LookupByName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
+			if def := r.LookupTypeName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
 				out.VType = def
 			}
 		}
@@ -315,7 +315,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// shape (FnDefInfo) is unchanged, accessors keep working, just
 	// the dispatch identity flips.
 	if constraint.VType.Equal(TFnUndef) && typeName != "" {
-		if def := r.Types.LookupByName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
+		if def := r.LookupTypeName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
 			unified.VType = def
 		}
 	}
@@ -331,11 +331,15 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	if IsCapitalisedName(name) {
 		// `undef` is the universal unbinder (the symmetric completion
 		// of Phase 2's universal `def` — lang/doc/design/TYPE-UNIFORM.0.md):
-		// a capitalised name is a TYPE binding, so pop the type stack,
-		// exactly as `untype` does.
-		if _, ok := r.Types.PopType(name); !ok {
+		// a capitalised name is a TYPE binding, so pop it from the single
+		// binding store and retire the minted lattice type.
+		entry, ok := r.Defs.PopEntry(name)
+		if !ok {
 			return nil, r.AqlError("undef_error",
 				fmt.Sprintf("undef %s: no such type binding", name), "undef")
+		}
+		if entry.TypeDef != nil {
+			r.Types.Retire(entry.TypeDef)
 		}
 		return nil, nil
 	}

@@ -88,11 +88,11 @@ var typeNames = buildTypeNames()
 
 func buildTypeNames() map[string]*Type {
 	m := make(map[string]*Type, len(Builtin.byName))
-	for name, stack := range Builtin.byName {
-		if len(stack) == 0 || stack[0].Def == nil {
+	for name, def := range Builtin.byName {
+		if def == nil {
 			continue
 		}
-		m[name] = stack[0].Def
+		m[name] = def
 	}
 	return m
 }

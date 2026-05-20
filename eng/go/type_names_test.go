@@ -27,12 +27,12 @@ func TestTypeNameTableConsistency(t *testing.T) {
 	}
 }
 
-// TestTypeNameTableNoDuplicates ensures every entry in the Builtin byName
-// table is non-ambiguous (single stack entry at init, no duplicates).
-func TestTypeNameTableNoDuplicates(t *testing.T) {
-	for name, stack := range Builtin.byName {
-		if len(stack) != 1 {
-			t.Errorf("Builtin.byName[%q] has %d entries at init; expected 1", name, len(stack))
+// TestTypeNameTableEntries ensures every entry in the Builtin byName
+// index points at a registered type.
+func TestTypeNameTableEntries(t *testing.T) {
+	for name, def := range Builtin.byName {
+		if def == nil {
+			t.Errorf("Builtin.byName[%q] is nil", name)
 		}
 	}
 }

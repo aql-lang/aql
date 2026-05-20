@@ -272,7 +272,7 @@ func InstallType(r *Registry, name string, body Value) error {
 			Detail: "type " + name + ": type names must start with a capital letter",
 		}
 	}
-	if !r.Types.Has(name) {
+	if !r.Defs.IsType(name) {
 		if err := ValidateTypeNameParts(name, r.IsKnownPart); err != nil {
 			return err
 		}
@@ -283,7 +283,7 @@ func InstallType(r *Registry, name string, body Value) error {
 			Detail: "type " + name + ": name clash — already a registered function",
 		}
 	}
-	if r.Defs.Has(name) {
+	if r.Defs.Has(name) && !r.Defs.IsType(name) {
 		return &AqlError{
 			Code:   "type_error",
 			Detail: "type " + name + ": name clash — already a def'd value",
@@ -305,7 +305,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		}
 		def := r.Types.MintType(name, parentDef)
 		body = NewObjectType(def, info)
-		r.Types.Bind(name, def, body)
+		r.Defs.PushType(name, def, body)
 	} else if inputT := PredicateInputType(body); inputT != nil {
 		// Predicate type with a concrete input type: mint the *Type
 		// parented at the input rather than at TFnDef so values
@@ -316,9 +316,10 @@ func InstallType(r *Registry, name string, body Value) error {
 		// fall through to the regular PushType path — they remain
 		// gates, not dispatch categories.
 		def := r.Types.MintType(name, inputT)
-		r.Types.Bind(name, def, body)
+		r.Defs.PushType(name, def, body)
 	} else {
-		r.Types.PushType(name, body)
+		def := r.Types.MintType(name, body.VType)
+		r.Defs.PushType(name, def, body)
 	}
 	for _, p := range strings.Split(name, "/") {
 		r.RegisterPart(p)

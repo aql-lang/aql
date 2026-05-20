@@ -442,7 +442,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 		if err := eng.ValidateWordName(name); err != nil {
 			return nil, err
 		}
-		if reg.Types.Has(name) {
+		if reg.Defs.IsType(name) {
 			return nil, &eng.AqlError{Code: "type_error", Detail: "def " + name + ": name clash — already a type"}
 		}
 		constraint, _ := nameMap.Get(name)
@@ -587,10 +587,14 @@ func registerEngSpecDefinition(r *eng.Registry) {
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 				name, _ := args[0].AsConcreteAtom()
 				// Universal unbinder: a capitalised name pops the type
-				// stack, mirroring the universal `def`.
+				// binding from the single store, mirroring `def`.
 				if eng.IsCapitalisedName(name) {
-					if _, ok := reg.Types.PopType(name); !ok {
+					entry, ok := reg.Defs.PopEntry(name)
+					if !ok {
 						return nil, &eng.AqlError{Code: "type_error", Detail: "undef " + name + ": no such type binding"}
+					}
+					if entry.TypeDef != nil {
+						reg.Types.Retire(entry.TypeDef)
 					}
 					return nil, nil
 				}
@@ -993,7 +997,7 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 func registerEngSpecInspect(r *eng.Registry) {
 	atomH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
 		name, _ := args[0].AsConcreteAtom()
-		if tv, ok := r.Types.TopBody(name); ok {
+		if tv, ok := r.TopTypeBody(name); ok {
 			return []eng.Value{buildTypeInspection(name, tv)}, nil
 		}
 		if top, ok := r.Defs.Top(name); ok {

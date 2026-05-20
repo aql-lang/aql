@@ -429,21 +429,6 @@ func TestTopOfDefStack_NilDefTable(t *testing.T) {
 
 // --- ResolveTypedName ---
 
-func TestResolveTypedName_TypesPriority(t *testing.T) {
-	// r.Types should win over DefStacks for the same name.
-	r, _ := NewRegistry()
-	r.Types.PushType("X", NewString("from-types"))
-	r.Defs.Push("X", NewString("from-defstacks"))
-	v, ok := r.ResolveTypedName("X")
-	if !ok {
-		t.Fatalf("expected ok=true")
-	}
-	s, _ := AsString(v)
-	if s != "from-types" {
-		t.Errorf("got %q, want \"from-types\" (Types takes priority)", s)
-	}
-}
-
 func TestResolveTypedName_FallbackToDefStacks(t *testing.T) {
 	r, _ := NewRegistry()
 	r.Defs.Push("X", NewString("from-defstacks"))
@@ -570,7 +555,7 @@ func TestResolveTypedNameValue_NotAWord(t *testing.T) {
 
 func TestResolveTypedNameValue_WordResolved(t *testing.T) {
 	r, _ := NewRegistry()
-	r.Types.PushType("Bbd", NewString("from-types"))
+	r.Defs.Push("Bbd", NewString("from-types"))
 	out, name, ok := r.ResolveTypedNameValue(NewWord("Bbd"))
 	if !ok || name != "Bbd" {
 		t.Errorf("got (name=%q, ok=%v), want (\"Bbd\", true)", name, ok)
