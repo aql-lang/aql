@@ -401,31 +401,38 @@ The change is additive-first so the test suite stays green throughout.
 
   Sub-phases (each green, independently shippable):
 
-  - **3a — lift the constructor to eng.** Move the `maketype`
-    construction logic next to `record`/`object`/`make` in the eng
-    kernel so both registries expose it. Additive.
-  - **3b — migrate call sites** to `maketype` / `def` / `undef`:
-    `type Foo record […]` → `def Foo (maketype Record […])`,
-    `object {…}` → `(maketype Object {…})`, `record […]` →
-    `(maketype Record […])`, `table X` → `(maketype Table X)`,
-    `untype X` → `undef X`, `type Foo PlainType` → `def Foo
-    PlainType`. **~700 sites** across `lang/spec`, `eng/spec`, and
-    the Go test suites, in *two* representations (AQL source strings
-    and `NewWord(...)` token slices). Not a pure text substitution —
-    e.g. `record`'s list body becomes a map, and `record`'s
-    error-case spec rows (list-required, "map rejected") change
-    meaning entirely under `maketype Record […]`. The bulk of the
-    work; file-by-file, suite green throughout (both syntaxes
-    coexist).
+  - **3a — expose the constructor to the eng spec runner. DONE.**
+    The eng kernel ships no words of its own, so "lift to eng"
+    reduced to adding a `maketype` fixture (alongside the existing
+    `object`/`record` fixtures) to the `eng/spec` test registry in
+    `test/go/engspec/engspec_test.go`.
+  - **3b — migrate call sites** to `maketype` / `def` / `undef`.
+    **DONE.** `type Foo record […]` → `def Foo maketype Record […]`,
+    `object {…}` → `maketype Object {…}`, `object {…} Parent` →
+    `maketype Parent {…}` (the inheritance operands reorder),
+    `record […]` → `maketype Record […]`, `table X` →
+    `maketype Table X`, `untype X` → `undef X`, `type Foo PlainType`
+    → `def Foo PlainType`. Migrated across `lang/spec`, `eng/spec`,
+    the `lang/go/test` TSV suites, and the Go test suites — in both
+    representations (AQL source strings and `NewWord(...)` token
+    slices). The migration is semantics-preserving: the legacy words
+    still exist (the Phase-1 additive guarantee), `maketype Record`
+    takes the same list body the old `record` did, and `def`/`undef`
+    delegate to the same kernel installers — so the suite stays green
+    at every commit. No parenthesisation is needed: `def Foo maketype
+    Record […]` works as a bare nested-forward expression. A handful
+    of error-case spec rows that pinned legacy-word behaviour (`type`
+    rejecting a lowercase name, `untype` rejecting one) were
+    rewritten, since the universal `def`/`undef` accept both cases.
   - **3c — rename and remove.** Once nothing uses the old words:
     delete `type`-the-binder, `object`, `record`, `table`, `untype`;
-    rename `maketype` → `type` everywhere (a pure global rename).
-    Suite green.
+    rename `maketype` → `type` everywhere — the word registration and
+    every migrated call site (a pure global rename). Suite green.
 
-  **Scale note.** 3b is a large undertaking — closer to *rewriting
-  the spec suite for the new semantics* than to a mechanical
-  translation. It is best executed as its own reviewed series of
-  per-file commits, not a single pass.
+  **Scale note.** 3b touched several hundred call sites; it was a
+  semantics-preserving mechanical migration (both syntaxes coexist),
+  executed as a reviewed series of per-suite commits driven by a
+  scanner-based migration tool, not a single pass.
 
 - **Phase 4 (optional).** Collapse the two binding stacks into one.
 
@@ -476,7 +483,7 @@ Phase 3 was wrong.
   always `def`, no combined `type Name Base arg` form (§7.3).
 - **Rollout:** Phase 1 (additive `maketype`) — done. Phase 2 (`def`
   the universal binder) — done. Phase 3 — *green-incremental*, not
-  atomic: 3a lift the constructor to the eng kernel, 3b migrate
-  ~700 call sites to `maketype`/`def`/`undef` file-by-file, 3c
-  rename `maketype` → `type` and delete the old words. Phase 4
-  (optional) — collapse the two binding stacks.
+  atomic: 3a expose the constructor to the eng spec runner — done;
+  3b migrate the call sites to `maketype`/`def`/`undef` — done; 3c
+  rename `maketype` → `type` and delete the old words — remaining.
+  Phase 4 (optional) — collapse the two binding stacks.
