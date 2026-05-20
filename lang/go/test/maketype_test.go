@@ -19,17 +19,29 @@ import (
 // These tests assert the new constructor works and that the existing
 // `type`/`record`/`object`/`table` syntax is unaffected.
 
-// maketype Record {fields} builds a record type; make instantiates it.
+// maketype Record [a:T …] builds a record type from a list of field
+// pairs; make instantiates it.
 func TestMaketypeRecord(t *testing.T) {
-	got := runOne(t, "def Pt (maketype Record {x:Integer y:Integer})\nmake Pt {x:3 y:4} .x")
+	got := runOne(t, "def Pt (maketype Record [x:Integer y:Integer])\nmake Pt {x:3 y:4} .x")
 	if len(got) != 1 || got[0] != int64(3) {
 		t.Errorf("got %v, want [3]", got)
 	}
 }
 
+// A record takes a list, not a map — `maketype Record {…}` is rejected.
+func TestMaketypeRecordRejectsMap(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	if _, err := a.Run("maketype Record {x:Integer}"); err == nil {
+		t.Fatal("expected error for `maketype Record {x:Integer}` (map), got nil")
+	}
+}
+
 // A maketype-built record renders as a record type.
 func TestMaketypeRecordRenders(t *testing.T) {
-	got := runOne(t, "def Pt (maketype Record {x:Integer y:String})\nPt")
+	got := runOne(t, "def Pt (maketype Record [x:Integer y:String])\nPt")
 	if len(got) != 1 || got[0] != "record{x:Integer,y:String}" {
 		t.Errorf("got %v, want [record{x:Integer,y:String}]", got)
 	}
@@ -37,7 +49,7 @@ func TestMaketypeRecordRenders(t *testing.T) {
 
 // maketype Table <recordtype> builds a table type; make builds rows.
 func TestMaketypeTable(t *testing.T) {
-	got := runOne(t, "def Row (maketype Record {n:String})\n"+
+	got := runOne(t, "def Row (maketype Record [n:String])\n"+
 		"def Tbl (maketype Table Row)\n"+
 		"make Tbl [[\"a\"] [\"b\"] [\"c\"]] length")
 	if len(got) != 1 || got[0] != int64(3) {

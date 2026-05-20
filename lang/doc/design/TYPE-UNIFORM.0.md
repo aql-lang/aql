@@ -81,7 +81,7 @@ level. A type may have either facet, both, or neither.
 ```
 def Account  (type Object {balance:Number})
 def Savings  (type Account {rate:Decimal})     # inheritance = apply the parent
-def People   (type Table (type Record {name:String age:Number}))
+def People   (type Table (type Record [name:String age:Number]))
 def acct     (make Account {balance:0})
 ```
 
@@ -95,7 +95,7 @@ headed by the word `type` or `make`* (see §3).
 | --- | --- |
 | `type Foo object {x:String}` | `def Foo (type Object {x:String})` |
 | `type Bar object {y:Integer} Foo` | `def Bar (type Foo {y:Integer})` |
-| `type R record [a:Integer b:String]` | `def R (type Record {a:Integer b:String})` |
+| `type R record [a:Integer b:String]` | `def R (type Record [a:Integer b:String])` |
 | `type People table R` | `def People (type Table R)` |
 | `make Foo {x:1}` | `make Foo {x:1}` *(unchanged)* |
 | `untype Foo` | `undef Foo` |
@@ -105,10 +105,17 @@ Two incidental wins fall out:
 - **Inheritance becomes "apply the parent."** There is no privileged
   root constructor and no trailing parent argument: `type Foo {…}`
   refines `Foo`, for any object type `Foo`. `Object` is just the root.
-- **Record bodies become maps, not lists.** `type Record {a:Integer
-  b:String}` replaces `record [a:Integer b:String]`. AQL maps are
-  ordered (`OrderedMap`), so field order — the reason the list form
-  existed — is preserved.
+- **Record bodies stay lists.** `type Record [a:Integer b:String]`
+  — a record takes a *list* of field pairs, exactly as the legacy
+  `record` word did. Field order is part of a record type's identity
+  (record unification is order-strict — `unifyRecordTypes` requires
+  the same keys in the same order), so the list keeps the ordering
+  explicit and intentional. A map body (`{a:T b:U}`) would render
+  fine — AQL maps are ordered internally — but it visually implies
+  order-independence, which records do not have. Objects take a map
+  body (`type Object {a:T b:U}`); the kinds differ deliberately —
+  objects match nominally, records match structurally on an ordered
+  field list.
 
 ## 3. Why `type` is irreducible — the ambiguity argument
 
@@ -178,7 +185,7 @@ per-kind ("modulo builtin behaviours").
 | Type | former `type T arg` | constructor `make T arg` |
 | --- | --- | --- |
 | `Object` | `type Object {x:Integer}` — apply parent to inherit | `make Foo {x:1}` |
-| `Record` | `type Record {x:Integer}` | `make R {x:1}` |
+| `Record` | `type Record [x:Integer]` (list of field pairs) | `make R {x:1}` |
 | `Table` | `type Table R` (arg is a record *type*) | `make T [[…] […]]` |
 | `Resource`/`Entity` | `type Entity {…}` | `make Entity {…}` |
 | `Array` | `type Array Integer` | `make Array [1 2 3]` |
@@ -250,7 +257,7 @@ Rationale: `RecordTypeInfo` carries only `Fields` — no `Parent`, no
 identity — and record unification is exact (same keys, same order). A
 "refined" record could only be an *unrelated* record that happens to
 share fields; `instance is SomeRecord` would be false. Allowing
-`type SomeRecord {…}` would give the *same surface syntax* the
+`type SomeRecord […]` would give the *same surface syntax* the
 opposite meaning it has for objects (where it is true refinement with
 an is-a relation). That trap is worse than the small non-uniformity
 of "only objects refine." Objects are the nominal, inheriting kind;
@@ -330,7 +337,7 @@ The change is additive-first so the test suite stays green throughout.
     to be renamed to `type` at the Phase-3 cutover.
   - `maketype BaseType arg` constructs: `maketype Object {fields}`,
     `maketype <objtype> {fields}` (inheritance — apply the parent),
-    `maketype Record {fields}` (field map, not the list form),
+    `maketype Record [a:T b:U]` (list of field pairs),
     `maketype Table <recordtype>`. It reuses the existing
     object/record/table construction logic and does not bind — pair
     it with `def`.
@@ -398,16 +405,16 @@ The change is additive-first so the test suite stays green throughout.
     construction logic next to `record`/`object`/`make` in the eng
     kernel so both registries expose it. Additive.
   - **3b — migrate call sites** to `maketype` / `def` / `undef`:
-    `type Foo record […]` → `def Foo (maketype Record {…})`,
+    `type Foo record […]` → `def Foo (maketype Record […])`,
     `object {…}` → `(maketype Object {…})`, `record […]` →
-    `(maketype Record {…})`, `table X` → `(maketype Table X)`,
+    `(maketype Record […])`, `table X` → `(maketype Table X)`,
     `untype X` → `undef X`, `type Foo PlainType` → `def Foo
     PlainType`. **~700 sites** across `lang/spec`, `eng/spec`, and
     the Go test suites, in *two* representations (AQL source strings
     and `NewWord(...)` token slices). Not a pure text substitution —
     e.g. `record`'s list body becomes a map, and `record`'s
     error-case spec rows (list-required, "map rejected") change
-    meaning entirely under `maketype Record {…}`. The bulk of the
+    meaning entirely under `maketype Record […]`. The bulk of the
     work; file-by-file, suite green throughout (both syntaxes
     coexist).
   - **3c — rename and remove.** Once nothing uses the old words:

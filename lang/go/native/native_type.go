@@ -61,7 +61,7 @@ var typeNatives = []NativeFunc{
 		// a (sub)type:
 		//   maketype Object {fields}     → object type
 		//   maketype <objtype> {fields}  → object subtype (inheritance)
-		//   maketype Record {fields}     → record type
+		//   maketype Record [a:T b:U]    → record type (list of pairs)
 		//   maketype Table  <recordtype> → table type
 		Name:        "maketype",
 		ForwardArgs: true,
@@ -287,7 +287,7 @@ func tableHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 //
 //   - root Object literal      → an object type with the given fields
 //   - any object type          → an object subtype (inheritance)
-//   - root Record literal      → a record type from a field map
+//   - root Record literal      → a record type from a list of pairs
 //   - root Table literal       → a table type from a record type
 //
 // It reuses the existing object/record/table construction logic;
@@ -304,9 +304,18 @@ func maketypeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if IsObjectType(base) {
 		return objectWithParentHandler([]Value{arg, base}, nil, nil, r)
 	}
-	// Record branch.
+	// Record branch — a record takes a LIST of field pairs. Field
+	// order is part of a record type's identity (record unification
+	// is order-strict), so the list keeps the ordering explicit and
+	// intentional; a map would visually imply order-independence.
+	// Same list argument the legacy `record` word takes.
 	if base.Data == nil && base.VType.Equal(TRecord) {
-		return recordFromMap(r, arg)
+		if !arg.VType.Equal(TList) {
+			return nil, r.AqlError("maketype_error",
+				"maketype Record: a record takes a list of field pairs, e.g. [a:Integer b:String]",
+				"maketype")
+		}
+		return recordHandler([]Value{arg}, nil, nil, r)
 	}
 	// Table branch.
 	if base.Data == nil && base.VType.Equal(TTable) {
@@ -315,32 +324,6 @@ func maketypeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	return nil, r.AqlError("maketype_error",
 		fmt.Sprintf("maketype: base must be Object, Record, Table, or an object type, got %s", base.String()),
 		"maketype")
-}
-
-// recordFromMap builds a record type from a concrete field map —
-// the `maketype Record {a:T b:U}` form. AQL maps are ordered, so the
-// field order is preserved without the list-of-pairs form `record`
-// requires.
-func recordFromMap(r *Registry, m Value) ([]Value, error) {
-	if !m.VType.Equal(TMap) || m.Data == nil {
-		return nil, r.AqlError("maketype_error",
-			"maketype Record: argument must be a concrete map of fields", "maketype")
-	}
-	src, err := AsMutableMap(m)
-	if err != nil {
-		return nil, r.AqlError("maketype_error",
-			"maketype Record: argument must be a concrete map of fields", "maketype")
-	}
-	if src.Len() == 0 {
-		return nil, r.AqlError("maketype_error",
-			"maketype Record: field map must have at least one field", "maketype")
-	}
-	fields := NewOrderedMap()
-	for _, key := range src.Keys() {
-		val, _ := src.Get(key)
-		fields.Set(key, ResolveFieldType(r, val))
-	}
-	return []Value{NewRecordType(fields)}, nil
 }
 
 // ---- type / untype ----
