@@ -376,17 +376,55 @@ The change is additive-first so the test suite stays green throughout.
   This corrects the first draft's Phase-2-before-Phase-3 ordering
   bug — the spec migration could not target the final syntax until
   `def` could bind capitalised type names; now it can.
-- **Phase 3 — cutover (one atomic breaking pass).** Remove
-  `object`/`record`/`table`/`untype` and `type`-as-binder; rename
-  `maketype` → `type`; migrate `lang/spec/*.tsv`, `eng/spec/*.tsv`,
-  and the Go test suites to the new syntax — all in the same change.
-  These cannot be separated: removing `type`-the-binder breaks every
-  spec that still uses it. The suite is red only *within* this single
-  reviewed change. §7.1–7.3 (now resolved) fix the target syntax.
+- **Phase 3 — cutover. NOT atomic; done green-incrementally.**
+  Investigation during Phase 2 corrected two first-draft assumptions:
+
+  1. *It need not be a single red-suite pass.* Migrating call sites
+     to the transitional `maketype` first — file by file, with the
+     old `type`/`object`/`record`/`table`/`untype` words still
+     present (the Phase-1 additive guarantee) — keeps the suite green
+     at every step. Only the final word-rename touches the engine.
+  2. *The constructor must be lifted to the eng kernel.* `record`,
+     `object`, and `make` are eng-kernel words; `maketype` is
+     currently lang-only (`lang/go/native`). `lang/spec/*.tsv` runs
+     against the full lang registry (`test/go/langspec`) and can use
+     `maketype` today — but `eng/spec/*.tsv` runs against the bare
+     eng registry, which has no `maketype`. The constructor must move
+     to / be re-exposed at the eng level before `eng/spec` migrates.
+
+  Sub-phases (each green, independently shippable):
+
+  - **3a — lift the constructor to eng.** Move the `maketype`
+    construction logic next to `record`/`object`/`make` in the eng
+    kernel so both registries expose it. Additive.
+  - **3b — migrate call sites** to `maketype` / `def` / `undef`:
+    `type Foo record […]` → `def Foo (maketype Record {…})`,
+    `object {…}` → `(maketype Object {…})`, `record […]` →
+    `(maketype Record {…})`, `table X` → `(maketype Table X)`,
+    `untype X` → `undef X`, `type Foo PlainType` → `def Foo
+    PlainType`. **~700 sites** across `lang/spec`, `eng/spec`, and
+    the Go test suites, in *two* representations (AQL source strings
+    and `NewWord(...)` token slices). Not a pure text substitution —
+    e.g. `record`'s list body becomes a map, and `record`'s
+    error-case spec rows (list-required, "map rejected") change
+    meaning entirely under `maketype Record {…}`. The bulk of the
+    work; file-by-file, suite green throughout (both syntaxes
+    coexist).
+  - **3c — rename and remove.** Once nothing uses the old words:
+    delete `type`-the-binder, `object`, `record`, `table`, `untype`;
+    rename `maketype` → `type` everywhere (a pure global rename).
+    Suite green.
+
+  **Scale note.** 3b is a large undertaking — closer to *rewriting
+  the spec suite for the new semantics* than to a mechanical
+  translation. It is best executed as its own reviewed series of
+  per-file commits, not a single pass.
+
 - **Phase 4 (optional).** Collapse the two binding stacks into one.
 
-Phases 1–2 are additive and leave `make test` green. Phase 3 is the
-single breaking change; it is green at its start and end.
+Phases 1–3, sequenced 3a→3b→3c, keep `make test` green at every
+step. The first draft's "single atomic breaking pass" framing for
+Phase 3 was wrong.
 
 ## 9. Non-goals and honest limits
 
@@ -429,8 +467,9 @@ single breaking change; it is green at its start and end.
   `make <optionsType> {partial}` produces a defaulted, validated map
   (§7.2); **`type` is single-role** — pure constructor, binding is
   always `def`, no combined `type Name Base arg` form (§7.3).
-- **Rollout:** Phase 1 (additive `maketype`) — done. Phase 2 — `def`
-  becomes the universal binder (must precede migration). Phase 3 —
-  one atomic breaking pass: remove the old words, rename
-  `maketype` → `type`, migrate every spec and test. Phase 4
+- **Rollout:** Phase 1 (additive `maketype`) — done. Phase 2 (`def`
+  the universal binder) — done. Phase 3 — *green-incremental*, not
+  atomic: 3a lift the constructor to the eng kernel, 3b migrate
+  ~700 call sites to `maketype`/`def`/`undef` file-by-file, 3c
+  rename `maketype` → `type` and delete the old words. Phase 4
   (optional) — collapse the two binding stacks.
