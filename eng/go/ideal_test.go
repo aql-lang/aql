@@ -1,0 +1,87 @@
+package eng
+
+import "testing"
+
+func TestIdealRegistry_RegisterGet(t *testing.T) {
+	ir := NewIdealRegistry()
+	a := &Ideal{Name: "A", Enabled: true}
+	ir.Register(a)
+	if got := ir.Get("A"); got != a {
+		t.Errorf("Get(A) = %v, want the registered Ideal", got)
+	}
+	if got := ir.Get("missing"); got != nil {
+		t.Errorf("Get(missing) = %v, want nil", got)
+	}
+}
+
+func TestIdealRegistry_ForResolvesByAccepts(t *testing.T) {
+	ir := NewIdealRegistry()
+	ir.Register(&Ideal{
+		Name: "Stringy", Enabled: true,
+		Accepts: func(v Value) bool { return v.VType.Matches(TString) },
+	})
+	ir.Register(&Ideal{
+		Name: "Inty", Enabled: true,
+		Accepts: func(v Value) bool { return v.VType.Matches(TInteger) },
+	})
+	if id := ir.For(NewString("x")); id == nil || id.Name != "Stringy" {
+		t.Errorf("For(string) = %v, want Stringy", id)
+	}
+	if id := ir.For(NewInteger(1)); id == nil || id.Name != "Inty" {
+		t.Errorf("For(integer) = %v, want Inty", id)
+	}
+	if id := ir.For(NewBoolean(true)); id != nil {
+		t.Errorf("For(boolean) = %v, want nil (no kind claims it)", id)
+	}
+}
+
+func TestIdealRegistry_ForSkipsDisabled(t *testing.T) {
+	ir := NewIdealRegistry()
+	ir.Register(&Ideal{
+		Name: "Off", Enabled: false,
+		Accepts: func(Value) bool { return true },
+	})
+	if id := ir.For(NewString("x")); id != nil {
+		t.Errorf("For with only a disabled Ideal = %v, want nil", id)
+	}
+}
+
+func TestIdealRegistry_ForFirstMatchWins(t *testing.T) {
+	ir := NewIdealRegistry()
+	ir.Register(&Ideal{Name: "First", Enabled: true, Accepts: func(Value) bool { return true }})
+	ir.Register(&Ideal{Name: "Second", Enabled: true, Accepts: func(Value) bool { return true }})
+	if id := ir.For(NewString("x")); id == nil || id.Name != "First" {
+		t.Errorf("For = %v, want First (registration order wins ties)", id)
+	}
+}
+
+func TestIdealRegistry_ReregisterReplaces(t *testing.T) {
+	ir := NewIdealRegistry()
+	ir.Register(&Ideal{Name: "K", Enabled: true, Accepts: func(Value) bool { return false }})
+	ir.Register(&Ideal{Name: "K", Enabled: true, Accepts: func(Value) bool { return true }})
+	got := ir.Get("K")
+	if got == nil || !got.Accepts(NewString("x")) {
+		t.Error("re-register did not replace the descriptor")
+	}
+	if n := len(ir.Names()); n != 1 {
+		t.Errorf("re-register changed the count to %d, want 1", n)
+	}
+}
+
+func TestIdealRegistry_Names(t *testing.T) {
+	ir := NewIdealRegistry()
+	ir.Register(&Ideal{Name: "One", Enabled: true})
+	ir.Register(&Ideal{Name: "Two", Enabled: true})
+	names := ir.Names()
+	if len(names) != 2 || names[0] != "One" || names[1] != "Two" {
+		t.Errorf("Names() = %v, want [One Two] in registration order", names)
+	}
+}
+
+func TestIdealRegistry_NilSafe(t *testing.T) {
+	var ir *IdealRegistry
+	ir.Register(&Ideal{Name: "X"})
+	if ir.Get("X") != nil || ir.For(NewString("x")) != nil || ir.Names() != nil {
+		t.Error("nil IdealRegistry methods must be safe no-ops")
+	}
+}

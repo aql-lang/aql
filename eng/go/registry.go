@@ -41,9 +41,13 @@ type Registry struct {
 	Types *TypeTable // dynamic types installed by the `type` word; each push mints a fresh Type
 	// Capabilities holds host-installed plugin slots. See capability.go.
 	Capabilities *CapabilityRegistry
-	Output       io.Writer // output writer for print/printstr and stdout
-	ErrOutput    io.Writer // error output writer for stderr
-	Input        io.Reader // input reader for stdin
+	// Ideals holds the type-kind descriptors — the registered,
+	// dynamically controllable constructors `type` dispatches through.
+	// See ideal.go and lang/doc/design/IDEAL.0.md.
+	Ideals    *IdealRegistry
+	Output    io.Writer // output writer for print/printstr and stdout
+	ErrOutput io.Writer // error output writer for stderr
+	Input     io.Reader // input reader for stdin
 	// Modules owns module-loading state: the load set, the
 	// module-ID counter, the host's init callback, and the native-
 	// module resolver. See modules.go.
@@ -210,6 +214,7 @@ func NewRegistry() (*Registry, error) {
 		Args:         NewArgsStack(),
 		Types:        NewDynamicTypeTable(),
 		Capabilities: NewCapabilityRegistry(),
+		Ideals:       NewIdealRegistry(),
 		Modules:      NewModuleRegistry(),
 		Output:       os.Stdout,
 		ErrOutput:    os.Stderr,

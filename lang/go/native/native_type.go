@@ -221,51 +221,74 @@ func tableHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 	return []Value{NewTableType(_as0)}, nil
 }
 
-// ---- type (Phase-1 transitional type constructor) ----
+// ---- type (the type constructor) ----
 
-// typeHandler implements `type BaseType arg`, the uniform
-// type constructor from lang/doc/design/TYPE-UNIFORM.0.md. It
-// dispatches on the base type:
-//
-//   - root Object literal      → an object type with the given fields
-//   - any object type          → an object subtype (inheritance)
-//   - root Record literal      → a record type from a list of pairs
-//   - root Table literal       → a table type from a record type
-//
-// It reuses the existing object/record/table construction logic;
-// it does not bind — pair it with `def` (`def Foo (type …)`).
+// typeHandler implements `type BaseType arg`, the uniform type
+// constructor. It does not branch on the base type itself — dispatch
+// is data-driven through the Ideal registry (r.Ideals): whichever
+// type-kind claims the base value supplies the construction logic.
+// See lang/doc/design/IDEAL.0.md. `type` does not bind — pair it with
+// `def` (`def Foo (type …)`).
 func typeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	base := args[0]
 	arg := args[1]
+	ideal := r.Ideals.For(base)
+	if ideal == nil {
+		return nil, r.AqlError("type_error",
+			fmt.Sprintf("type: base must be Object, Record, Table, or an object type, got %s", base.String()),
+			"type")
+	}
+	return ideal.Construct(base, arg, r)
+}
 
-	// Object branch — root `Object` literal builds a fresh object
-	// type; any existing object type builds a subtype of it.
-	if base.Data == nil && base.VType.Equal(TObject) {
-		return objectHandler([]Value{arg}, nil, nil, r)
-	}
-	if IsObjectType(base) {
-		return objectWithParentHandler([]Value{arg, base}, nil, nil, r)
-	}
-	// Record branch — a record takes a LIST of field pairs. Field
-	// order is part of a record type's identity (record unification
-	// is order-strict), so the list keeps the ordering explicit and
-	// intentional; a map would visually imply order-independence.
-	// Same list argument the legacy `record` word takes.
-	if base.Data == nil && base.VType.Equal(TRecord) {
-		if !arg.VType.Equal(TList) {
-			return nil, r.AqlError("type_error",
-				"type Record: a record takes a list of field pairs, e.g. [a:Integer b:String]",
-				"type")
-		}
-		return recordHandler([]Value{arg}, nil, nil, r)
-	}
-	// Table branch.
-	if base.Data == nil && base.VType.Equal(TTable) {
-		return tableHandler([]Value{arg}, nil, nil, r)
-	}
-	return nil, r.AqlError("type_error",
-		fmt.Sprintf("type: base must be Object, Record, Table, or an object type, got %s", base.String()),
-		"type")
+// installIdeals registers the kernel type-kind descriptors — the
+// Ideals `type` dispatches through. Each kernel Ideal's Accepts
+// predicate and Construct body carry exactly the per-kind dispatch
+// logic typeHandler used to hold inline. See
+// lang/doc/design/IDEAL.0.md.
+func installIdeals(r *Registry) {
+	r.Ideals.Register(&eng.Ideal{
+		Name:    "Object",
+		Enabled: true,
+		Accepts: func(base Value) bool {
+			return (base.Data == nil && base.VType.Equal(TObject)) || IsObjectType(base)
+		},
+		Construct: func(base, arg Value, r *Registry) ([]Value, error) {
+			// A root `Object` literal builds a fresh object type; any
+			// existing object type builds a subtype of it.
+			if IsObjectType(base) {
+				return objectWithParentHandler([]Value{arg, base}, nil, nil, r)
+			}
+			return objectHandler([]Value{arg}, nil, nil, r)
+		},
+	})
+	r.Ideals.Register(&eng.Ideal{
+		Name:    "Record",
+		Enabled: true,
+		Accepts: func(base Value) bool {
+			return base.Data == nil && base.VType.Equal(TRecord)
+		},
+		Construct: func(base, arg Value, r *Registry) ([]Value, error) {
+			// A record takes a LIST of field pairs — field order is
+			// part of a record type's identity.
+			if !arg.VType.Equal(TList) {
+				return nil, r.AqlError("type_error",
+					"type Record: a record takes a list of field pairs, e.g. [a:Integer b:String]",
+					"type")
+			}
+			return recordHandler([]Value{arg}, nil, nil, r)
+		},
+	})
+	r.Ideals.Register(&eng.Ideal{
+		Name:    "Table",
+		Enabled: true,
+		Accepts: func(base Value) bool {
+			return base.Data == nil && base.VType.Equal(TTable)
+		},
+		Construct: func(base, arg Value, r *Registry) ([]Value, error) {
+			return tableHandler([]Value{arg}, nil, nil, r)
+		},
+	})
 }
 
 // ---- enum ----

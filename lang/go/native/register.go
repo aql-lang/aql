@@ -67,6 +67,7 @@ func Register(r *Registry) {
 	r.RegisterNativeFunc(nodifyNative)
 	r.RegisterNativeFunc(sortNative)
 	installResourceTypes(r)
+	installIdeals(r)
 
 	// Control flow
 	for _, n := range controlNatives {
