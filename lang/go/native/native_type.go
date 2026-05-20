@@ -8,50 +8,14 @@ import (
 	"github.com/aql-lang/aql/eng/go"
 )
 
-// typeNatives covers the type-system words: table, type, untype,
+// typeNatives covers the type-system words: maketype, pathof, enum,
 // typeof, fulltypeof, is, guard, base, tor, tand, any, all, tany,
 // tall, convert.
 //
-// `record`, `object`, `inspect` and `make` are now installed by
-// aqleng (eng.RegisterCoreObjectRecord / eng.RegisterCoreInspect /
-// eng.RegisterCoreMake, wired from register.go) — the kernel owns the
-// structural type constructors, the introspection word, and the
-// universal `make`. Their entries are intentionally omitted here to
-// avoid double-registration.
-//
 // `Resource` and `Entity` (the builtin object types) are NOT installed
 // via NativeFunc — they are user-typed values pushed onto the type
-// stack. `installResourceTypes` handles those during engine.Register.
+// stack. `installResourceTypes` handles those during Register.
 var typeNatives = []NativeFunc{
-	{
-		Name:        "table",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:           []*Type{TAny},
-			Handler:        tableHandler,
-			Returns:        []*Type{TTable},
-			RunInCheckMode: true,
-		}},
-	},
-	{
-		Name:        "type",
-		ForwardArgs: true,
-		Signatures: []NativeSig{
-			{
-				Args:           []*Type{TString, TAny},
-				Handler:        typeHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true,
-			},
-			{
-				Args:           []*Type{TAtom, TAny},
-				QuoteArgs:      map[int]bool{0: true},
-				Handler:        typeHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true,
-			},
-		},
-	},
 	{
 		// maketype is the Phase-1 transitional type constructor — see
 		// lang/doc/design/TYPE-UNIFORM.0.md. It evaluates both args
@@ -71,25 +35,6 @@ var typeNatives = []NativeFunc{
 			Returns:        []*Type{TType},
 			RunInCheckMode: true,
 		}},
-	},
-	{
-		Name:        "untype",
-		ForwardArgs: true,
-		Signatures: []NativeSig{
-			{
-				Args:           []*Type{TString},
-				Handler:        untypeHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true,
-			},
-			{
-				Args:           []*Type{TAtom},
-				QuoteArgs:      map[int]bool{0: true},
-				Handler:        untypeHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true,
-			},
-		},
 	},
 	{
 		Name:        "pathof",
@@ -324,32 +269,6 @@ func maketypeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	return nil, r.AqlError("maketype_error",
 		fmt.Sprintf("maketype: base must be Object, Record, Table, or an object type, got %s", base.String()),
 		"maketype")
-}
-
-// ---- type / untype ----
-
-// typeHandler delegates to eng.InstallType — the single kernel entry
-// point for type-name installation. At Step 10d the lang-side
-// validateAndInstallType (near-duplicate) was removed; changes to
-// type-installation policy go to eng/go/core_type.go::InstallType.
-func typeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	name := defName(args[0])
-	body := args[1]
-	if err := eng.InstallType(r, name, body); err != nil {
-		return nil, err
-	}
-	return nil, nil
-}
-
-func untypeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	name := defName(args[0])
-	if !IsCapitalisedName(name) {
-		return nil, r.AqlError("untype_error", fmt.Sprintf("untype %s: type names must start with a capital letter", name), "untype")
-	}
-	if _, ok := r.Types.PopType(name); !ok {
-		return nil, r.AqlError("untype_error", fmt.Sprintf("untype %s: no such type binding", name), "untype")
-	}
-	return nil, nil
 }
 
 // ---- enum ----

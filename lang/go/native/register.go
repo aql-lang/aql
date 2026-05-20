@@ -18,9 +18,6 @@ func Register(r *Registry) {
 	for _, n := range makeNatives {
 		r.RegisterNativeFunc(n)
 	}
-	for _, n := range objectRecordNatives {
-		r.RegisterNativeFunc(n)
-	}
 	for _, n := range inspectNatives {
 		r.RegisterNativeFunc(n)
 	}

@@ -16,8 +16,7 @@ import (
 // Phase 2 made `def` the universal binder, so type names here use the
 // canonical capitalised form — a capitalised `def` is a type binding.
 //
-// These tests assert the new constructor works and that the existing
-// `type`/`record`/`object`/`table` syntax is unaffected.
+// These tests assert the constructor works.
 
 // maketype Record [a:T …] builds a record type from a list of field
 // pairs; make instantiates it.
@@ -85,14 +84,6 @@ func TestMaketypeObjectInheritanceIsCheck(t *testing.T) {
 		"make Dog {legs:4 breed:\"lab\"} is Animal")
 	if len(got) != 1 || got[0] != "true" {
 		t.Errorf("got %v, want [true]", got)
-	}
-}
-
-// The legacy `type`/`record` syntax is unaffected by the new word.
-func TestMaketypeLegacySyntaxUnaffected(t *testing.T) {
-	got := runOne(t, "type Foo record [a:Integer]\nmake Foo {a:9} .a")
-	if len(got) != 1 || got[0] != int64(9) {
-		t.Errorf("got %v, want [9]", got)
 	}
 }
 

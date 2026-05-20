@@ -8,13 +8,11 @@ import (
 
 // --- Naming rule: capitalisation selects type vs value binding ---
 //
-// `def` is the universal binder (lang/doc/design/TYPE-UNIFORM.0.md
-// Phase 2). The *name's capitalisation* selects what is bound:
-// a capitalised name is a TYPE binding (`def` delegates to the same
-// kernel installer the `type` word uses); a lowercase name is a
-// VALUE binding. `type` itself still rejects lowercase names.
+// `def` is the universal binder (lang/doc/design/TYPE-UNIFORM.0.md).
+// The *name's capitalisation* selects what is bound: a capitalised
+// name is a TYPE binding, a lowercase name is a VALUE binding.
 
-// type accepts capitalised names.
+// def accepts a capitalised name as a type binding.
 
 func TestNameCase_TypeUpperOK(t *testing.T) {
 	got := runOne(t, `def Mid Integer
@@ -23,20 +21,6 @@ n`)
 	if len(got) != 1 || got[0] != int64(5) {
 		t.Errorf("got %v, want [5]", got)
 	}
-}
-
-// type rejects names that don't start with a capital.
-
-func TestNameCase_TypeLowerRejected(t *testing.T) {
-	expectError(t, `type foo Integer`, "must start with a capital letter")
-}
-
-func TestNameCase_TypeUnderscoreRejected(t *testing.T) {
-	expectError(t, `type _foo Integer`, "must start with a capital letter")
-}
-
-func TestNameCase_TypeDigitRejected(t *testing.T) {
-	expectError(t, `type 1foo Integer`, "must start with a capital letter")
 }
 
 // def accepts non-capitalised names.

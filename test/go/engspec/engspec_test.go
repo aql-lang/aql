@@ -647,43 +647,6 @@ func registerEngSpecStack(r *eng.Registry) {
 // lang/go/engine/native_type.go.
 func registerEngSpecTypeWords(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "type",
-		ForwardArgs: true,
-		Signatures: []eng.NativeSig{{
-			Args:       []*eng.Type{eng.TAtom, eng.TAny},
-			QuoteArgs:  map[int]bool{0: true},
-			NoEvalArgs: map[int]bool{1: true},
-			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
-				name, _ := args[0].AsConcreteAtom()
-				if err := eng.InstallType(reg, name, args[1]); err != nil {
-					return nil, err
-				}
-				return nil, nil
-			},
-			Returns:        []*eng.Type{},
-			RunInCheckMode: true,
-		}},
-	})
-	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "untype",
-		ForwardArgs: true,
-		Signatures: []eng.NativeSig{{
-			Args:      []*eng.Type{eng.TAtom},
-			QuoteArgs: map[int]bool{0: true},
-			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
-				name, _ := args[0].AsConcreteAtom()
-				if !eng.IsCapitalisedName(name) {
-					return nil, &eng.AqlError{Code: "type_error", Detail: "untype " + name + ": type names must start with a capital letter"}
-				}
-				if _, ok := reg.Types.PopType(name); !ok {
-					return nil, &eng.AqlError{Code: "type_error", Detail: "untype " + name + ": no such type binding"}
-				}
-				return nil, nil
-			},
-			Returns: []*eng.Type{},
-		}},
-	})
-	r.RegisterNativeFunc(eng.NativeFunc{
 		Name:        "typeof",
 		ForwardArgs: true,
 		Signatures: []eng.NativeSig{{
@@ -989,35 +952,6 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 		def := r.Types.MintType(id, parentDef)
 		return []eng.Value{eng.NewObjectType(def, info)}, nil
 	}
-	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "record",
-		ForwardArgs: true,
-		Signatures: []eng.NativeSig{{
-			Args:           []*eng.Type{eng.TList},
-			Handler:        recordH,
-			Returns:        []*eng.Type{eng.TRecord},
-			RunInCheckMode: true,
-		}},
-	})
-	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "object",
-		ForwardArgs: true,
-		Signatures: []eng.NativeSig{
-			{
-				Args:           []*eng.Type{eng.TMap, eng.TObject},
-				Handler:        objectWithParentH,
-				Returns:        []*eng.Type{eng.TObjectType},
-				RunInCheckMode: true,
-			},
-			{
-				Args:           []*eng.Type{eng.TMap},
-				Handler:        objectH,
-				Returns:        []*eng.Type{eng.TObjectType},
-				RunInCheckMode: true,
-			},
-		},
-	})
-
 	// maketype — the uniform type constructor (TYPE-UNIFORM Phase 3b).
 	// Mirrors lang/go/native/native_type.go::maketypeHandler; dispatches
 	// to the record/object fixtures above. eng/spec exercises only the

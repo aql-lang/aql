@@ -156,12 +156,6 @@ func inferExact(name string, sig Signature) []string {
 		return []string{"Scalar"}
 	case "base":
 		return []string{"Any"}
-	case "record":
-		return []string{"Object/Record"}
-	case "table":
-		return []string{"Object/Table"}
-	case "object":
-		return []string{"Object"}
 	case "make":
 		return []string{"Any"}
 
@@ -172,7 +166,7 @@ func inferExact(name string, sig Signature) []string {
 		return []string{"Any"}
 
 	// Definition
-	case "def", "undef", "type":
+	case "def", "undef":
 		return nil
 	case "fn":
 		return []string{"Word/Function"}

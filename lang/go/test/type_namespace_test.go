@@ -30,18 +30,6 @@ func expectError(t *testing.T, src string, wantSubstr string) {
 	}
 }
 
-// Under the case rule (type names capital, def names not), the
-// case-mismatch check fires first and the same name can't legally
-// reach both sides. These tests pin the case-rule message; the
-// underlying name-clash guard remains in place for the rare future
-// case where a capitalised native is added (no such native exists
-// today).
-func TestNameConfusion_DefThenType_CaseRule(t *testing.T) {
-	// `type foo` is rejected outright — type names must capitalise.
-	expectError(t, `def foo 1
-type foo Integer`, "must start with a capital letter")
-}
-
 func TestNameConfusion_TypeThenDef_CaseRule(t *testing.T) {
 	// Post TYPE-UNIFORM Phase 2: `def Foo …` with a capitalised name
 	// is a TYPE binding (def is the universal binder), equivalent to
@@ -53,14 +41,6 @@ def Foo String
 	if len(got) != 1 || got[0] != "true" {
 		t.Errorf("def Foo (capitalised) should shadow the type; got %v, want [true]", got)
 	}
-}
-
-// Native fn clash: `type` over a registered native — natives are
-// lowercase, so the capital-rule message hits first. The
-// name-clash guard is still wired up in case capitalised natives
-// are ever registered.
-func TestNameConfusion_TypeOverNativeFn_CaseRule(t *testing.T) {
-	expectError(t, `type add Integer`, "must start with a capital letter")
 }
 
 // Re-defining the same TYPE is also rejected (no shadow stack — type
