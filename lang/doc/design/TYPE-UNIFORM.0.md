@@ -264,10 +264,38 @@ visible type→value seam. `make` stays mandatory for instances.
 The change is additive-first so the test suite stays green throughout.
 
 - **Phase 0** — this document.
-- **Phase 1 (additive).** Introduce `type` as a constructor word that
-  works *alongside* `object`/`record`/`table` and the current
-  `type`-as-binder. Both syntaxes valid. New `.tsv` spec rows and Go
-  tests exercise the new form. Nothing breaks.
+- **Phase 1 (additive). — IMPLEMENTED.** Introduce the type
+  constructor as a word that works *alongside* `object`/`record`/
+  `table` and the current `type`. Both syntaxes valid; nothing breaks.
+
+  Implementation notes (as landed):
+
+  - The word `type` already exists as the binder and **quotes its
+    first argument as a name**; the new constructor must *evaluate*
+    its first argument (the base type). The two cannot share the word
+    during an additive phase. The constructor therefore landed under
+    the transitional name **`maketype`** (`lang/go/native/native_type.go`),
+    to be renamed to `type` at the Phase-3 cutover.
+  - `maketype BaseType arg` constructs: `maketype Object {fields}`,
+    `maketype <objtype> {fields}` (inheritance — apply the parent),
+    `maketype Record {fields}` (field map, not the list form),
+    `maketype Table <recordtype>`. It reuses the existing
+    object/record/table construction logic and does not bind — pair
+    it with `def`.
+  - `def` still rejects capitalised names, so the prototype binds
+    type names with lowercase identifiers (`def pt (maketype Record
+    {…})`). Folding the capitalised-name binder role into `def` —
+    so the canonical `def Account (type Object {…})` works — is
+    Phase 3.
+  - `Options` is not yet a `maketype` base (deferred — §7.2);
+    applying a *user* record type is not yet supported (deferred —
+    §7.1).
+  - Tests: `lang/go/test/maketype_test.go`.
+  - Incidental fix found via the prototype: nine `r.AqlError` call
+    sites in `native_definition.go` / `native_type.go` /
+    `native_behave.go` had a literal `%s` in the error *code* and
+    *word* (e.g. `"def %s_error"`) — a defect from the May-2026
+    error-helper refactor. Corrected to `"def_error"` etc.
 - **Phase 2 (migrate).** Rewrite `lang/spec/*.tsv`, `eng/spec/*.tsv`,
   and the Go test suites to the new syntax. The spec files *are* the
   language specification — this phase is the bulk of the work and

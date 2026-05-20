@@ -112,7 +112,7 @@ func behaveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	name := defName(args[0])
 	be, ok := behaviors[name]
 	if !ok {
-		return nil, r.AqlError("behave %s_error", fmt.Sprintf("behave %s: unknown behavior name; known: compare, canon, nodify", name), "behave %s")
+		return nil, r.AqlError("behave_error", fmt.Sprintf("behave %s: unknown behavior name; known: compare, canon, nodify", name), "behave")
 	}
 
 	fnVal := args[1]
@@ -121,7 +121,7 @@ func behaveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 		return nil, fmt.Errorf("behave %s: %w", name, err)
 	}
 	if len(info.Sigs) == 0 {
-		return nil, r.AqlError("behave %s_error", fmt.Sprintf("behave %s: fn has no signatures", name), "behave %s")
+		return nil, r.AqlError("behave_error", fmt.Sprintf("behave %s: fn has no signatures", name), "behave")
 	}
 	sig := info.Sigs[0]
 
@@ -130,7 +130,7 @@ func behaveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 		return nil, fmt.Errorf("behave %s: %w", name, err)
 	}
 	if target == nil {
-		return nil, r.AqlError("behave %s_error", fmt.Sprintf("behave %s: could not infer target type from fn sig", name), "behave %s")
+		return nil, r.AqlError("behave_error", fmt.Sprintf("behave %s: could not infer target type from fn sig", name), "behave")
 	}
 	if target.Origin == eng.OriginBuiltin {
 		return nil, fmt.Errorf("behave %s: cannot install on builtin type %s", name, target.Leaf())

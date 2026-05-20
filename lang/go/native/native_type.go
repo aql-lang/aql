@@ -53,6 +53,26 @@ var typeNatives = []NativeFunc{
 		},
 	},
 	{
+		// maketype is the Phase-1 transitional type constructor — see
+		// lang/doc/design/TYPE-UNIFORM.0.md. It evaluates both args
+		// (unlike `type`, which quotes arg0 as a name), so it cannot
+		// share the word `type` during the additive phase; it becomes
+		// `type` at the final cutover. `maketype BaseType arg` builds
+		// a (sub)type:
+		//   maketype Object {fields}     → object type
+		//   maketype <objtype> {fields}  → object subtype (inheritance)
+		//   maketype Record {fields}     → record type
+		//   maketype Table  <recordtype> → table type
+		Name:        "maketype",
+		ForwardArgs: true,
+		Signatures: []NativeSig{{
+			Args:           []*Type{TAny, TAny},
+			Handler:        maketypeHandler,
+			Returns:        []*Type{TType},
+			RunInCheckMode: true,
+		}},
+	},
+	{
 		Name:        "untype",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
@@ -259,6 +279,70 @@ func tableHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 	return []Value{NewTableType(_as0)}, nil
 }
 
+// ---- maketype (Phase-1 transitional type constructor) ----
+
+// maketypeHandler implements `maketype BaseType arg`, the uniform
+// type constructor from lang/doc/design/TYPE-UNIFORM.0.md. It
+// dispatches on the base type:
+//
+//   - root Object literal      → an object type with the given fields
+//   - any object type          → an object subtype (inheritance)
+//   - root Record literal      → a record type from a field map
+//   - root Table literal       → a table type from a record type
+//
+// It reuses the existing object/record/table construction logic;
+// it does not bind — pair it with `def` (`def Foo (maketype …)`).
+func maketypeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	base := args[0]
+	arg := args[1]
+
+	// Object branch — root `Object` literal builds a fresh object
+	// type; any existing object type builds a subtype of it.
+	if base.Data == nil && base.VType.Equal(TObject) {
+		return objectHandler([]Value{arg}, nil, nil, r)
+	}
+	if IsObjectType(base) {
+		return objectWithParentHandler([]Value{arg, base}, nil, nil, r)
+	}
+	// Record branch.
+	if base.Data == nil && base.VType.Equal(TRecord) {
+		return recordFromMap(r, arg)
+	}
+	// Table branch.
+	if base.Data == nil && base.VType.Equal(TTable) {
+		return tableHandler([]Value{arg}, nil, nil, r)
+	}
+	return nil, r.AqlError("maketype_error",
+		fmt.Sprintf("maketype: base must be Object, Record, Table, or an object type, got %s", base.String()),
+		"maketype")
+}
+
+// recordFromMap builds a record type from a concrete field map —
+// the `maketype Record {a:T b:U}` form. AQL maps are ordered, so the
+// field order is preserved without the list-of-pairs form `record`
+// requires.
+func recordFromMap(r *Registry, m Value) ([]Value, error) {
+	if !m.VType.Equal(TMap) || m.Data == nil {
+		return nil, r.AqlError("maketype_error",
+			"maketype Record: argument must be a concrete map of fields", "maketype")
+	}
+	src, err := AsMutableMap(m)
+	if err != nil {
+		return nil, r.AqlError("maketype_error",
+			"maketype Record: argument must be a concrete map of fields", "maketype")
+	}
+	if src.Len() == 0 {
+		return nil, r.AqlError("maketype_error",
+			"maketype Record: field map must have at least one field", "maketype")
+	}
+	fields := NewOrderedMap()
+	for _, key := range src.Keys() {
+		val, _ := src.Get(key)
+		fields.Set(key, ResolveFieldType(r, val))
+	}
+	return []Value{NewRecordType(fields)}, nil
+}
+
 // ---- type / untype ----
 
 // typeHandler delegates to eng.InstallType — the single kernel entry
@@ -277,10 +361,10 @@ func typeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 func untypeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := defName(args[0])
 	if !IsCapitalisedName(name) {
-		return nil, r.AqlError("untype %s_error", fmt.Sprintf("untype %s: type names must start with a capital letter", name), "untype %s")
+		return nil, r.AqlError("untype_error", fmt.Sprintf("untype %s: type names must start with a capital letter", name), "untype")
 	}
 	if _, ok := r.Types.PopType(name); !ok {
-		return nil, r.AqlError("untype %s_error", fmt.Sprintf("untype %s: no such type binding", name), "untype %s")
+		return nil, r.AqlError("untype_error", fmt.Sprintf("untype %s: no such type binding", name), "untype")
 	}
 	return nil, nil
 }

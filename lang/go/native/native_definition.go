@@ -153,13 +153,13 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	stackOnly := defStackOnly(args[0])
 	body := args[1]
 	if IsCapitalisedName(name) {
-		return nil, r.AqlError("def %s_error", fmt.Sprintf("def %s: def names must not start with a capital letter (capitalised names are reserved for types)", name), "def %s")
+		return nil, r.AqlError("def_error", fmt.Sprintf("def %s: def names must not start with a capital letter (capitalised names are reserved for types)", name), "def")
 	}
 	if err := ValidateWordName(name); err != nil {
 		return nil, fmt.Errorf("def %s: %w", name, err)
 	}
 	if r.Types.Has(name) {
-		return nil, r.AqlError("def %s_error", fmt.Sprintf("def %s: name clash — already a type", name), "def %s")
+		return nil, r.AqlError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
 	}
 	InstallDef(r, name, body, stackOnly)
 	r.Check.RecordDef(name, args[0].Pos)
@@ -176,13 +176,13 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	}
 	name := nameMap.Keys()[0]
 	if IsCapitalisedName(name) {
-		return nil, r.AqlError("def %s_error", fmt.Sprintf("def %s: def names must not start with a capital letter (capitalised names are reserved for types)", name), "def %s")
+		return nil, r.AqlError("def_error", fmt.Sprintf("def %s: def names must not start with a capital letter (capitalised names are reserved for types)", name), "def")
 	}
 	if err := ValidateWordName(name); err != nil {
 		return nil, fmt.Errorf("def %s: %w", name, err)
 	}
 	if r.Types.Has(name) {
-		return nil, r.AqlError("def %s_error", fmt.Sprintf("def %s: name clash — already a type", name), "def %s")
+		return nil, r.AqlError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
 	}
 	constraint, _ := nameMap.Get(name)
 	var typeName string
