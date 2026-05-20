@@ -153,7 +153,12 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	stackOnly := defStackOnly(args[0])
 	body := args[1]
 	if IsCapitalisedName(name) {
-		return nil, r.AqlError("def_error", fmt.Sprintf("def %s: def names must not start with a capital letter (capitalised names are reserved for types)", name), "def")
+		// `def` is the universal binder (lang/doc/design/TYPE-UNIFORM.0.md
+		// Phase 2): a capitalised name is a TYPE binding. Delegate to
+		// the kernel type installer — the same path the `type` word
+		// uses — so object/predicate lattice-minting and all
+		// type-installation validation happen in exactly one place.
+		return nil, eng.InstallType(r, name, body)
 	}
 	if err := ValidateWordName(name); err != nil {
 		return nil, fmt.Errorf("def %s: %w", name, err)

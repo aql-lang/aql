@@ -4,13 +4,13 @@ import (
 	"testing"
 )
 
-// --- Naming rule: type names start with a capital, def names don't ---
+// --- Naming rule: capitalisation selects type vs value binding ---
 //
-// Enforced as a syntax rule at the boundary between user-supplied
-// names and the registry. A misnamed binding errors before it
-// installs, so the namespace stays predictable: Words starting with
-// a capital are types, Words starting with anything else are values
-// (or function defs).
+// `def` is the universal binder (lang/doc/design/TYPE-UNIFORM.0.md
+// Phase 2). The *name's capitalisation* selects what is bound:
+// a capitalised name is a TYPE binding (`def` delegates to the same
+// kernel installer the `type` word uses); a lowercase name is a
+// VALUE binding. `type` itself still rejects lowercase names.
 
 // type accepts capitalised names.
 
@@ -55,14 +55,27 @@ my-thing`)
 	}
 }
 
-// def rejects names starting with a capital.
+// def with a capitalised name is a TYPE binding — equivalent to
+// `type`. `def Mid Integer` installs Mid as a type, usable in a
+// type position exactly like `type Mid Integer` would.
 
-func TestNameCase_DefUpperRejected(t *testing.T) {
-	expectError(t, `def Foo 1`, "must not start with a capital letter")
+func TestNameCase_DefUpperIsTypeBinding(t *testing.T) {
+	got := runOne(t, `def Mid Integer
+def n:Mid 5
+n`)
+	if len(got) != 1 || got[0] != int64(5) {
+		t.Errorf("got %v, want [5]", got)
+	}
 }
 
-func TestNameCase_DefFnUpperRejected(t *testing.T) {
-	expectError(t, `def Doubler fn [[Integer] [Integer] [1 add]]`, "must not start with a capital letter")
+// A capitalised def binding an object type absorbs the lattice-minting
+// that `type` does: typeof reports the bound name.
+func TestNameCase_DefUpperObjectMints(t *testing.T) {
+	got := runOne(t, `def Acct (maketype Object {bal:Number})
+make Acct {bal:1} typeof`)
+	if len(got) != 1 || got[0] != "Acct" {
+		t.Errorf("got %v, want [Acct]", got)
+	}
 }
 
 // Typed-def shares the same rule.

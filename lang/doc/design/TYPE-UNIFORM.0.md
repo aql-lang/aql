@@ -348,16 +348,34 @@ The change is additive-first so the test suite stays green throughout.
     `native_behave.go` had a literal `%s` in the error *code* and
     *word* (e.g. `"def %s_error"`) — a defect from the May-2026
     error-helper refactor. Corrected to `"def_error"` etc.
-- **Phase 2 — `def` becomes the universal binder.** Make `def`
-  accept capitalised names and absorb the object/predicate
-  lattice-minting that `installType` does today, so the canonical
-  `def Account (maketype Object {…})` works with a capitalised name
-  and `typeof` reports it. Mostly a relaxation — every valid program
-  keeps working; only negative tests that asserted `def Foo …` fails
-  need updating. **This must precede the spec migration** — the
-  canonical syntax depends on it. (This corrects the first draft's
-  Phase-2-before-Phase-3 ordering bug: the migration cannot target
-  the final syntax until `def` can bind capitalised type names.)
+- **Phase 2 — `def` becomes the universal binder. — IMPLEMENTED.**
+  `def` with a capitalised name is now a TYPE binding; a lowercase
+  name remains a VALUE binding.
+
+  Implementation notes (as landed):
+
+  - `defHandler` (`lang/go/native/native_definition.go`): when the
+    name is capitalised, `def` delegates to **`eng.InstallType`** —
+    the exact path the `type` word uses. So `def Foo body` ≡
+    `type Foo body`: object/predicate lattice-minting, literal /
+    singleton type bodies (`def Foo 1`), and all type-installation
+    validation are reused verbatim — no logic duplication, no
+    divergence risk. The canonical `def Account (maketype Object
+    {…})` now works and `typeof` reports `Account`.
+  - `defTypedHandler` (`def name:T value`) still rejects capitalised
+    names: a typed-def is a *value* binding with a type constraint;
+    type-annotating a type binding is contradictory.
+  - Tests updated for the relaxed rule: `name_case_test.go` (the two
+    `def`-capital-rejected negatives became positives — a capitalised
+    `def` is a type binding, and `def`-bound object types mint a
+    name); `type_namespace_test.go` (`TypeThenDef` now asserts
+    `def Foo` shadows an existing `type Foo`); `maketype_test.go`
+    moved to the canonical capitalised-name form.
+  - `make test` / `make lint` clean repo-wide.
+
+  This corrects the first draft's Phase-2-before-Phase-3 ordering
+  bug — the spec migration could not target the final syntax until
+  `def` could bind capitalised type names; now it can.
 - **Phase 3 — cutover (one atomic breaking pass).** Remove
   `object`/`record`/`table`/`untype` and `type`-as-binder; rename
   `maketype` → `type`; migrate `lang/spec/*.tsv`, `eng/spec/*.tsv`,

@@ -43,9 +43,16 @@ type foo Integer`, "must start with a capital letter")
 }
 
 func TestNameConfusion_TypeThenDef_CaseRule(t *testing.T) {
-	// `def Foo` is rejected outright — def names must not capitalise.
-	expectError(t, `type Foo Integer
-def Foo 1`, "must not start with a capital letter")
+	// Post TYPE-UNIFORM Phase 2: `def Foo …` with a capitalised name
+	// is a TYPE binding (def is the universal binder), equivalent to
+	// `type Foo …`. So `def Foo` after `type Foo` shadows the type,
+	// exactly as a second `type Foo …` would — no clash, no error.
+	got := runOne(t, `type Foo Integer
+def Foo String
+"hello" is Foo`)
+	if len(got) != 1 || got[0] != "true" {
+		t.Errorf("def Foo (capitalised) should shadow the type; got %v, want [true]", got)
+	}
 }
 
 // Native fn clash: `type` over a registered native — natives are
