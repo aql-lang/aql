@@ -460,35 +460,44 @@ func unifyTypedMapWithConcrete(childType Value, m ReadMap) (Value, bool) {
 	return NewMap(result), true
 }
 
-// unifyRecordTypes unifies two record types by unifying their field schemas.
-// Both must have exactly the same keys in exactly the same order; each field
-// type pair is unified. Field order is significant.
-func unifyRecordTypes(a, b RecordTypeInfo) (Value, bool) {
-	aFields := a.Fields
-	bFields := b.Fields
-
-	if aFields.Len() != bFields.Len() {
-		return Value{}, false
+// unifyFieldBags unifies two field-schema maps key-by-key. Both must
+// hold the same number of fields and each field-type pair must unify.
+// When orderStrict is true the keys must also appear in the same order
+// (record-type semantics); when false key order is irrelevant
+// (options-type semantics). Returns the merged schema and ok.
+func unifyFieldBags(a, b *OrderedMap, orderStrict bool) (*OrderedMap, bool) {
+	if a.Len() != b.Len() {
+		return nil, false
 	}
-
-	aKeys := aFields.Keys()
-	bKeys := bFields.Keys()
-
+	aKeys := a.Keys()
+	bKeys := b.Keys()
 	result := NewOrderedMap()
 	for i, key := range aKeys {
-		// Field order must match.
-		if bKeys[i] != key {
-			return Value{}, false
+		if orderStrict && bKeys[i] != key {
+			return nil, false
 		}
-		aVal, _ := aFields.Get(key)
-		bVal, _ := bFields.Get(key)
+		bVal, ok := b.Get(key)
+		if !ok {
+			return nil, false
+		}
+		aVal, _ := a.Get(key)
 		unified, uOk := Unify(aVal, bVal)
 		if !uOk {
-			return Value{}, false
+			return nil, false
 		}
 		result.Set(key, unified)
 	}
+	return result, true
+}
 
+// unifyRecordTypes unifies two record types by unifying their field
+// schemas. Keys must match in the same order — field order is part of
+// a record type's identity.
+func unifyRecordTypes(a, b RecordTypeInfo) (Value, bool) {
+	result, ok := unifyFieldBags(a.Fields, b.Fields, true)
+	if !ok {
+		return Value{}, false
+	}
 	return NewRecordType(result), true
 }
 
@@ -646,23 +655,12 @@ func optionsBaseType(v Value) *Type {
 	}
 }
 
-// unifyOptionsPair unifies two options types by unifying their field schemas.
+// unifyOptionsPair unifies two options types by unifying their field
+// schemas. Key order is not significant.
 func unifyOptionsPair(a, b OptionsTypeInfo) (Value, bool) {
-	if a.Fields.Len() != b.Fields.Len() {
+	result, ok := unifyFieldBags(a.Fields, b.Fields, false)
+	if !ok {
 		return Value{}, false
-	}
-	result := NewOrderedMap()
-	for _, key := range a.Fields.Keys() {
-		aVal, _ := a.Fields.Get(key)
-		bVal, ok := b.Fields.Get(key)
-		if !ok {
-			return Value{}, false
-		}
-		unified, uOk := Unify(aVal, bVal)
-		if !uOk {
-			return Value{}, false
-		}
-		result.Set(key, unified)
 	}
 	return NewOptionsType(result), true
 }
