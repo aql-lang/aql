@@ -182,7 +182,7 @@ per-kind ("modulo builtin behaviours").
 | `Table` | `type Table R` (arg is a record *type*) | `make T [[…] […]]` |
 | `Resource`/`Entity` | `type Entity {…}` | `make Entity {…}` |
 | `Array` | `type Array Integer` | `make Array [1 2 3]` |
-| `Options` | `type Options {x:Integer}` | — *(none today — see §7.2)* |
+| `Options` | `type Options {x:Integer}` | `make O {partial}` — defaults filled, fields validated (§7.2) |
 | `List` | `type List Integer` (≡ `[:Integer]`) | literal `[1 2 3]` |
 | `Map` | `type Map String` (≡ `{:String}`) | literal `{a:1}` |
 | `Integer`/`String`/… | `type Integer <bound>` (refinement) | literal `42`; `make` = conversion |
@@ -192,6 +192,13 @@ The convention holds cleanly for the whole **Object branch** —
 `Object`, `Record`, `Table`, `Resource`/`Entity`, `Array`, and every
 user type. `Resource`/`Entity` is already convention-shaped today: it
 has no constructor word and is used purely via `make`.
+
+**Applicable bases (§7.1).** Only object types *refine*: `type`
+accepts the root `Object`, a user object type, or `Resource`/`Entity`
+as a base and produces a subtype. For every other kind only the
+*root* type (`Record`, `Table`, `Options`, `List`, `Map`) is a valid
+`type` base — a user record / table / typed-list is **not**
+applicable.
 
 ## 6. The parser-primitive exception
 
@@ -217,47 +224,92 @@ The `type` *former* still applies to the primitives — `type List
 Integer`, `type Integer <bound>` — it is only the *constructor* facet
 that the primitives satisfy via literals instead of `make`.
 
-## 7. Open questions
+## 7. Resolved decisions
 
-### 7.1 Applying a record
+The questions left open by the first draft are decided here.
 
-`RecordTypeInfo` carries only `Fields` — no `Name`, no `Parent`, no
-identity (unlike `ObjectTypeInfo`). Record unification is closed and
-order-strict. So `type SomeRecord {extra:T}` — refining a record — has
-no inheritance semantics to fall back on. **Decision needed:** either
-(a) disallow applying a record type, or (b) define it as "a fresh
-structural record with the merged field set" (not a nominal subtype).
-Option (b) is more uniform; option (a) is more honest about records
-being structural.
+### 7.1 Applying a type — only objects refine
 
-### 7.2 Regularising `Options`
+**Decision: only object types are applicable-to-refine. A non-object
+user type (a user record, a user table, a typed list) is not a valid
+`type` base.**
 
-`Options` is the lone misfit among the structural types: today
-`make Options {x:Integer}` produces the options *type*, and conforming
-plain maps are the only "instances." Under the uniform convention
-`make` of an options *type* should produce a real instance — a map
-with the options' defaults applied and validated. Adopting the
-convention is the opportunity to fix this asymmetry (the same
-asymmetry noted for records in `TYPE-SYSTEM-REVIEW`).
+The valid first arguments to `type` are:
 
-### 7.3 Combined `type Name Base arg` sugar
+1. **Any object type** — the root `Object`, a user object type, or
+   `Resource`/`Entity`. Applying it yields a *subtype*: `type Foo
+   {extra}` produces an object type whose `Parent` is `Foo`, so
+   `instance is Foo` holds. This is genuine refinement.
+2. **A root structural-kind type** — `Record`, `Table`, `Options`,
+   `List`, `Map`. Applying it yields a fresh type of that kind.
 
-The canonical form is `def Foo (type Object {…})` — `type` is a pure
-constructor, `def` binds. A combined `type Foo Object {…}` form
-(construct + bind in one word, ≈ what AQL has today) is terser.
-**Decision needed:** keep `type` single-role (pure constructor) and
-require `def (…)`, or admit the combined form as arity-overloaded
-sugar that desugars to `def Foo (type …)`. This document leans toward
-single-role for conceptual cleanliness; the combined form can be added
-later as pure sugar if the verbosity proves annoying.
+A *non-root* type of a non-object kind is rejected: `type SomeRecord
+{extra:T}` is an error.
 
-### 7.4 How far does `make` go
+Rationale: `RecordTypeInfo` carries only `Fields` — no `Parent`, no
+identity — and record unification is exact (same keys, same order). A
+"refined" record could only be an *unrelated* record that happens to
+share fields; `instance is SomeRecord` would be false. Allowing
+`type SomeRecord {…}` would give the *same surface syntax* the
+opposite meaning it has for objects (where it is true refinement with
+an is-a relation). That trap is worse than the small non-uniformity
+of "only objects refine." Objects are the nominal, inheriting kind;
+records are the structural, closed kind — the asymmetry is the
+design, not an accident. To get a record with more fields, restate
+the field set; if you want extend-with-is-a you wanted an object.
 
-`make` could be pushed further — `Foo {x:1}` (value-shaped arg) could
-construct an instance while `type Foo {x:Integer}` constructs a type.
-This is **deliberately rejected**: a mixed map `{x:Integer y:1}` is
-ambiguous, and the explicit `make` head is worth keeping as the one
-visible type→value seam. `make` stays mandatory for instances.
+### 7.2 `Options` gains a real constructor
+
+**Decision: regularise `Options`. An options type gets a constructor
+facet — `make <optionsType> {partial}` produces a concrete map with
+the type's defaults filled for absent fields and every present field
+validated against its declared field type.**
+
+Today defaulting happens implicitly, only at a `fn`-parameter
+boundary; there is no value-producing "apply these option defaults"
+operation. The constructor facet makes it explicit and gives
+`Options` the same type→instance shape every other structural type
+has. The result is a plain map (Options instances, like Record
+instances, are plain maps — no distinct payload).
+
+This is a **behaviour addition**, not just a rename: it adds an
+operation `Options` did not have. It is additive — the implicit
+`fn`-parameter defaulting is unchanged — but it must be a deliberate,
+tested change in the implementation phase. The legacy
+`make Options {shape}` (which today *builds the options type*) is
+replaced by `type Options {shape}`; `make` of the bare `Options` base
+is no longer meaningful — you `make` a *specific* options type.
+
+### 7.3 `type` is single-role — no combined binder form
+
+**Decision: `type` is purely a constructor. There is no combined
+`type Name Base arg` form. Binding is always `def`; the canonical and
+only form is `def Name (type Base arg)`.**
+
+A combined `type Foo Object {…}` would be terser and closer to
+today's `type Foo object {…}`, but it is rejected:
+
+- It re-conflates *binding* and *construction* — the exact conflation
+  this design exists to separate (§3, §10).
+- It would make `type` arity-polymorphic (`type Base arg` vs
+  `type Name Base arg`), reviving the ambiguity class that made a
+  dedicated constructor word necessary in the first place.
+- `make` has no combined "make-and-bind" form — you write
+  `def x (make …)`. `type` follows the same symmetry; `def Name (type
+  …)` is exactly as verbose as the already-accepted `def x (make …)`.
+
+If, *after* migration, the verbosity proves painful with evidence, a
+combined form may be reconsidered strictly as a **lexer-level
+rewrite** (`type Foo Base arg` → `def Foo (type Base arg)`,
+desugared before the engine sees it, never a distinct semantics).
+Default: not done.
+
+### 7.4 How far does `make` go — settled
+
+`make` is **not** pushed further: `Foo {x:1}` does not construct an
+instance. A mixed map `{x:Integer y:1}` would be ambiguous, and the
+explicit `make` head is the one visible type→value seam. `make`
+stays mandatory for instances.
 
 ## 8. Migration plan
 
@@ -286,7 +338,7 @@ The change is additive-first so the test suite stays green throughout.
     type names with lowercase identifiers (`def pt (maketype Record
     {…})`). Folding the capitalised-name binder role into `def` —
     so the canonical `def Account (type Object {…})` works — is
-    Phase 3.
+    Phase 2 (see the corrected migration plan in §8).
   - `Options` is not yet a `maketype` base (deferred — §7.2);
     applying a *user* record type is not yet supported (deferred —
     §7.1).
@@ -296,16 +348,27 @@ The change is additive-first so the test suite stays green throughout.
     `native_behave.go` had a literal `%s` in the error *code* and
     *word* (e.g. `"def %s_error"`) — a defect from the May-2026
     error-helper refactor. Corrected to `"def_error"` etc.
-- **Phase 2 (migrate).** Rewrite `lang/spec/*.tsv`, `eng/spec/*.tsv`,
-  and the Go test suites to the new syntax. The spec files *are* the
-  language specification — this phase is the bulk of the work and
-  must be a single reviewed pass.
-- **Phase 3 (remove).** Delete `object`/`record`/`table`/`untype`;
-  fold `type`-as-binder into `def`; move the object/predicate
-  lattice-minting into `def`.
+- **Phase 2 — `def` becomes the universal binder.** Make `def`
+  accept capitalised names and absorb the object/predicate
+  lattice-minting that `installType` does today, so the canonical
+  `def Account (maketype Object {…})` works with a capitalised name
+  and `typeof` reports it. Mostly a relaxation — every valid program
+  keeps working; only negative tests that asserted `def Foo …` fails
+  need updating. **This must precede the spec migration** — the
+  canonical syntax depends on it. (This corrects the first draft's
+  Phase-2-before-Phase-3 ordering bug: the migration cannot target
+  the final syntax until `def` can bind capitalised type names.)
+- **Phase 3 — cutover (one atomic breaking pass).** Remove
+  `object`/`record`/`table`/`untype` and `type`-as-binder; rename
+  `maketype` → `type`; migrate `lang/spec/*.tsv`, `eng/spec/*.tsv`,
+  and the Go test suites to the new syntax — all in the same change.
+  These cannot be separated: removing `type`-the-binder breaks every
+  spec that still uses it. The suite is red only *within* this single
+  reviewed change. §7.1–7.3 (now resolved) fix the target syntax.
 - **Phase 4 (optional).** Collapse the two binding stacks into one.
 
-Each phase is independently shippable and leaves `make test` green.
+Phases 1–2 are additive and leave `make test` green. Phase 3 is the
+single breaking change; it is green at its start and end.
 
 ## 9. Non-goals and honest limits
 
@@ -342,8 +405,14 @@ Each phase is independently shippable and leaves `make test` green.
 - **Parser-primitive exception.** `List`/`Map`/scalars take literal
   instances, not `make` — coinciding with the existing kernel
   category-1/category-4 boundary.
-- **Open items before implementation:** applying-a-record semantics
-  (§7.1), regularising `Options` (§7.2), the combined-sugar question
-  (§7.3).
-- **Rollout:** additive first (Phase 1), then migrate the spec/test
-  suites (Phase 2), then remove the old words (Phase 3).
+- **Resolved decisions (§7):** only **object** types are
+  applicable-to-refine — a user record/table/typed-list is not a
+  valid `type` base (§7.1); **`Options` gains a real constructor** —
+  `make <optionsType> {partial}` produces a defaulted, validated map
+  (§7.2); **`type` is single-role** — pure constructor, binding is
+  always `def`, no combined `type Name Base arg` form (§7.3).
+- **Rollout:** Phase 1 (additive `maketype`) — done. Phase 2 — `def`
+  becomes the universal binder (must precede migration). Phase 3 —
+  one atomic breaking pass: remove the old words, rename
+  `maketype` → `type`, migrate every spec and test. Phase 4
+  (optional) — collapse the two binding stacks.
