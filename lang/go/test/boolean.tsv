@@ -292,7 +292,7 @@ Number tand Integer	Integer
 ({x:Integer} tor {x:String}) unify {x:true}	'~unify-fail' false
 
 # tor inside an optional record field.
-record [name:String age:[Integer tor None]]	record{name:String,age:Integer|None}
+maketype Record [name:String age:[Integer tor None]]	record{name:String,age:Integer|None}
 
 # tand at type-level then unify.
 ({x:Integer} tand {y:String}) unify {x:1 y:"a"}	{x:1,y:'a'} true
@@ -402,9 +402,9 @@ None otherwise "bar"	'bar'
 # =====================================================================
 
 # A field that resolves to None gets a fallback via `otherwise`.
-type Item record [name:String desc:[String tor None]] (make Item ["a" None]) get desc	None
-((make (record [name:String desc:[String tor None]]) ["a" None]) get desc) otherwise "no description"	'no description'
-((make (record [name:String desc:[String tor None]]) ["a" "set"]) get desc) otherwise "no description"	'set'
+def Item maketype Record [name:String desc:[String tor None]] (make Item ["a" None]) get desc	None
+((make (maketype Record [name:String desc:[String tor None]]) ["a" None]) get desc) otherwise "no description"	'no description'
+((make (maketype Record [name:String desc:[String tor None]]) ["a" "set"]) get desc) otherwise "no description"	'set'
 
 # =====================================================================
 # 18. Edge cases
@@ -793,7 +793,7 @@ quote [true false true] all	false
 # =====================================================================
 
 # tany result as a record field type.
-record [name:String age:([Integer None] tany)]	record{name:String,age:Integer|None}
+maketype Record [name:String age:([Integer None] tany)]	record{name:String,age:Integer|None}
 
 # tany result used in `is`.
 42 is ([Integer String None] tany)	true
@@ -889,12 +889,12 @@ make Options {x:([Integer None] tany)}	options{x:Integer|None}
 # =====================================================================
 
 # Define a named disjunct via tany.
-type Maybe tany [String None] Maybe	String|None
-type ScalarOrList tany [Scalar List] ScalarOrList	Scalar|List
+def Maybe tany [String None] Maybe	String|None
+def ScalarOrList tany [Scalar List] ScalarOrList	Scalar|List
 
 # Use the named disjunct as a record field constraint.
-type Maybe tany [String None] type Person record [name:String nick:Maybe] make Person {name:"Alice" nick:None}	{name:'Alice',nick:None}
-type Maybe tany [String None] type Person record [name:String nick:Maybe] make Person {name:"Bob" nick:"Bobby"}	{name:'Bob',nick:'Bobby'}
+def Maybe tany [String None] def Person maketype Record [name:String nick:Maybe] make Person {name:"Alice" nick:None}	{name:'Alice',nick:None}
+def Maybe tany [String None] def Person maketype Record [name:String nick:Maybe] make Person {name:"Bob" nick:"Bobby"}	{name:'Bob',nick:'Bobby'}
 
 # =====================================================================
 # 42. all-quantifier / type-quantifier crosswise interactions
