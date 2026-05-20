@@ -221,6 +221,7 @@ func NewRegistry() (*Registry, error) {
 		Input:        os.Stdin,
 		SDKCache:     make(map[string]any),
 	}
+	registerKernelIdeals(r)
 	return r, nil
 }
 

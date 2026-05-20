@@ -21,6 +21,10 @@ type Ideal struct {
 	// Construct builds a type of this kind from a base type value and
 	// a construction argument. It is the body of `type ‹base› arg`.
 	Construct func(base, arg Value, r *Registry) ([]Value, error)
+	// Instantiate builds a concrete value of a type of this kind from
+	// the type value and source data. It is the body of `make ‹typ›
+	// data`.
+	Instantiate func(typ, data Value, r *Registry) ([]Value, error)
 }
 
 // IdealRegistry holds the type-kind descriptors for one Registry.

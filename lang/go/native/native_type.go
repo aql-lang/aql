@@ -241,34 +241,32 @@ func typeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	return ideal.Construct(base, arg, r)
 }
 
-// installIdeals registers the kernel type-kind descriptors — the
-// Ideals `type` dispatches through. Each kernel Ideal's Accepts
-// predicate and Construct body carry exactly the per-kind dispatch
-// logic typeHandler used to hold inline. See
+// installIdeals fills in the type-level constructor (Ideal.Construct)
+// on the kernel Ideals. The descriptors — Name, the Accepts dispatch
+// predicate, and the value-level Instantiate — are registered by the
+// eng kernel (registerKernelIdeals); type construction additionally
+// reuses the surface object/record/table handlers, wired here. See
 // lang/doc/design/IDEAL.0.md.
 func installIdeals(r *Registry) {
-	r.Ideals.Register(&eng.Ideal{
-		Name:    "Object",
-		Enabled: true,
-		Accepts: func(base Value) bool {
-			return (base.Data == nil && base.VType.Equal(TObject)) || IsObjectType(base)
-		},
-		Construct: func(base, arg Value, r *Registry) ([]Value, error) {
-			// A root `Object` literal builds a fresh object type; any
+	if obj := r.Ideals.Get("Object"); obj != nil {
+		obj.Construct = func(base, arg Value, r *Registry) ([]Value, error) {
+			// A bare Object literal builds a fresh object type; an
 			// existing object type builds a subtype of it.
 			if IsObjectType(base) {
 				return objectWithParentHandler([]Value{arg, base}, nil, nil, r)
 			}
 			return objectHandler([]Value{arg}, nil, nil, r)
-		},
-	})
-	r.Ideals.Register(&eng.Ideal{
-		Name:    "Record",
-		Enabled: true,
-		Accepts: func(base Value) bool {
-			return base.Data == nil && base.VType.Equal(TRecord)
-		},
-		Construct: func(base, arg Value, r *Registry) ([]Value, error) {
+		}
+	}
+	if rec := r.Ideals.Get("Record"); rec != nil {
+		rec.Construct = func(base, arg Value, r *Registry) ([]Value, error) {
+			// Records have no subtyping — only the bare Record literal
+			// is a valid construction base.
+			if base.Data != nil {
+				return nil, r.AqlError("type_error",
+					"type: a record type has no subtyping — construct a Record from the bare Record literal",
+					"type")
+			}
 			// A record takes a LIST of field pairs — field order is
 			// part of a record type's identity.
 			if !arg.VType.Equal(TList) {
@@ -277,18 +275,18 @@ func installIdeals(r *Registry) {
 					"type")
 			}
 			return recordHandler([]Value{arg}, nil, nil, r)
-		},
-	})
-	r.Ideals.Register(&eng.Ideal{
-		Name:    "Table",
-		Enabled: true,
-		Accepts: func(base Value) bool {
-			return base.Data == nil && base.VType.Equal(TTable)
-		},
-		Construct: func(base, arg Value, r *Registry) ([]Value, error) {
+		}
+	}
+	if tbl := r.Ideals.Get("Table"); tbl != nil {
+		tbl.Construct = func(base, arg Value, r *Registry) ([]Value, error) {
+			if base.Data != nil {
+				return nil, r.AqlError("type_error",
+					"type: a table type has no subtyping — construct a Table from the bare Table literal",
+					"type")
+			}
 			return tableHandler([]Value{arg}, nil, nil, r)
-		},
-	})
+		}
+	}
 }
 
 // ---- enum ----

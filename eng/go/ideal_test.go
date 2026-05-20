@@ -85,3 +85,22 @@ func TestIdealRegistry_NilSafe(t *testing.T) {
 		t.Error("nil IdealRegistry methods must be safe no-ops")
 	}
 }
+
+func TestRegisterKernelIdeals(t *testing.T) {
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"Object", "Record", "Table"} {
+		id := r.Ideals.Get(name)
+		if id == nil {
+			t.Fatalf("kernel Ideal %q not registered by NewRegistry", name)
+		}
+		if id.Accepts == nil {
+			t.Errorf("kernel Ideal %q has no Accepts predicate", name)
+		}
+		if id.Instantiate == nil {
+			t.Errorf("kernel Ideal %q has no Instantiate", name)
+		}
+	}
+}

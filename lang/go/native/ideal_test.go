@@ -54,3 +54,32 @@ func TestIdeals_CustomKindDispatchesThroughType(t *testing.T) {
 		t.Error("custom Ideal's Construct was not invoked by `type`")
 	}
 }
+
+// A host-registered Ideal's Instantiate is dispatched by the real
+// `make` word.
+func TestIdeals_CustomKindInstantiatesThroughMake(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	r.Ideals.Register(&eng.Ideal{
+		Name:    "Listy",
+		Enabled: true,
+		Accepts: func(v Value) bool {
+			return v.Data == nil && v.VType.Equal(TList)
+		},
+		Instantiate: func(typ, data Value, r *Registry) ([]Value, error) {
+			called = true
+			return []Value{NewInteger(0)}, nil
+		},
+	})
+	// `make List 7` — no kernel kind claims a bare List type literal,
+	// so the custom Ideal's Instantiate handles it.
+	runAQL(t, r, []Value{
+		NewWord("make"), NewTypeLiteral(TList), NewInteger(7),
+	})
+	if !called {
+		t.Error("custom Ideal's Instantiate was not invoked by `make`")
+	}
+}
