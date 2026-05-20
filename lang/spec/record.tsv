@@ -2,7 +2,7 @@
 # =====================================================================		
 # record — explicit record-shape constructor		
 # =====================================================================		
-# `record [{a:Integer} {b:String} …]` builds a RecordType from a list		
+# `maketype Record [{a:Integer} {b:String} …]` builds a record type		
 # of single-pair maps. Each pair becomes one named field with a type		
 # constraint. Records are the explicit, named-shape counterpart to		
 # the implicit `{a:Integer}` literal — but the two have different		
@@ -12,7 +12,7 @@
 #                                    structural `is` checks. The		
 #                                    parser flags the value as a		
 #                                    Node-family TYPE.		
-#   record [ {a:Integer} ]         — explicit RecordType value;		
+#   maketype Record [ {a:Integer} ] — explicit record type value;		
 #                                    a stronger nominal-leaning form.		
 #		
 # In particular, `is` against an explicit `record [...]` is currently		
@@ -24,12 +24,12 @@
 #		
 #   1. Construction.		
 #   2. Rendering and typeof.		
-#   3. Naming via `type NAME record …`.		
+#   3. Naming via `def NAME (maketype Record …)`.		
 #   4. Instantiation via `make NAME …`.		
 #   5. Structural conformance: which forms work, which return false.		
 #   6. Errors / malformed records.		
 #		
-# Runs against the eng kernel registry (eng/go/spec_test.go).		
+# Runs against the production lang registry (test/go/langspec).		
 		
 		
 # ====================================================================		
@@ -43,16 +43,16 @@
 # RecordTypeInfo, not a plain OrderedMap, so the spec runner's		
 # map-aware renderer falls through to v.String() — which emits		
 # fields comma-separated rather than space-separated.		
-record [ { a:Integer } ]	record{a:Integer}	one-field record
-record [ { a:Integer } { b:String } ]	record{a:Integer,b:String}	two-field record (comma-separated)
-record [ { a:Integer } { b:String } { c:Boolean } ]	record{a:Integer,b:String,c:Boolean}	three-field record
+maketype Record [ { a:Integer } ]	record{a:Integer}	one-field record
+maketype Record [ { a:Integer } { b:String } ]	record{a:Integer,b:String}	two-field record (comma-separated)
+maketype Record [ { a:Integer } { b:String } { c:Boolean } ]	record{a:Integer,b:String,c:Boolean}	three-field record
 		
 # Same-typed fields are fine — fields are by name not by type.		
-record [ { x:Integer } { y:Integer } ]	record{x:Integer,y:Integer}	
+maketype Record [ { x:Integer } { y:Integer } ]	record{x:Integer,y:Integer}	
 		
 # Field types may be any type literal, including subtypes.		
-record [ { age:Number } ]	record{age:Number}	
-record [ { tag:Atom } ]	record{tag:Atom}	
+maketype Record [ { age:Number } ]	record{age:Number}	
+maketype Record [ { tag:Atom } ]	record{tag:Atom}	
 		
 # ====================================================================		
 # 2. typeof and is		
@@ -61,21 +61,21 @@ record [ { tag:Atom } ]	record{tag:Atom}
 # so `typeof` reports `Map`. The richer 'this is a record'		
 # information lives in the value's Data subtype.		
 		
-typeof record [ { a:Integer } ]	Map	records are Map-typed under the hood
-record [ { a:Integer } ] is List	false	a record is not a list
+typeof (maketype Record [ { a:Integer } ])	Map	records are Map-typed under the hood
+(maketype Record [ { a:Integer } ]) is List	false	a record is not a list
 		
 # ====================================================================		
-# 3. Naming via `type NAME record …`		
+# 3. Naming via `def NAME (maketype Record …)`		
 # ====================================================================		
-# `type NAME body` pushes the body onto the type stack under NAME,		
+# `def NAME (maketype Record …)` binds NAME to the record type,		
 # making NAME usable as a type literal. The bound type is the same		
 # RecordType the body produced.		
 		
-type R record [ { a:Integer } ] R	record{a:Integer}	bare R resolves to the RecordType
-type R record [ { a:Integer } ] typeof R	Map	the RecordType's metatype is Map
+def R (maketype Record [ { a:Integer } ]) R	record{a:Integer}	bare R resolves to the RecordType
+def R (maketype Record [ { a:Integer } ]) typeof R	Map	the RecordType's metatype is Map
 		
 # Defining and re-querying.		
-type R record [ { a:Integer } { b:String } ] R	record{a:Integer,b:String}	
+def R (maketype Record [ { a:Integer } { b:String } ]) R	record{a:Integer,b:String}	
 		
 # ====================================================================		
 # 4. Instantiation via `make NAME …`		
@@ -85,9 +85,9 @@ type R record [ { a:Integer } { b:String } ] R	record{a:Integer,b:String}
 # typeof as `Map`), but its underlying data carries the record's		
 # typed schema for downstream tools.		
 		
-type R record [ { a:Integer } ] make R { a:5 }	{a:5}	
-type R record [ { a:Integer } { b:String } ] make R { a:1 b:'x' }	{a:1 b:'x'}	
-type R record [ { a:Integer } ] make R { a:5 } typeof	Map	made record is a Map
+def R (maketype Record [ { a:Integer } ]) make R { a:5 }	{a:5}	
+def R (maketype Record [ { a:Integer } { b:String } ]) make R { a:1 b:'x' }	{a:1 b:'x'}	
+def R (maketype Record [ { a:Integer } ]) make R { a:5 } typeof	Map	made record is a Map
 		
 # ====================================================================		
 # 5. Structural conformance — implicit shape vs explicit record		
@@ -104,22 +104,22 @@ type R record [ { a:Integer } ] make R { a:5 } typeof	Map	made record is a Map
 { a:5 b:'x' } is { a:Integer b:String }	true	multi-field implicit shape
 		
 # Explicit record — narrower; plain maps do NOT satisfy it.		
-{ a:5 } is record [ { a:Integer } ]	false	a plain map is not a record
-type R record [ { a:Integer } ] { a:5 } is R	false	even named, plain maps still fail
+{ a:5 } is (maketype Record [ { a:Integer } ])	false	a plain map is not a record
+def R (maketype Record [ { a:Integer } ]) { a:5 } is R	false	even named, plain maps still fail
 		
 # ====================================================================		
 # 6. Composition with def		
 # ====================================================================		
-# `def name body` captures the record TYPE as a value. Note that def		
-# names must start lowercase (capitalised names are reserved for		
-# types — use `type` for those).		
+# `def name body` captures the record TYPE as a value. A lowercase		
+# name is a value binding; a capitalised name would be a type		
+# binding (def is the universal binder — see TYPE-UNIFORM.0.md).		
 		
-def sch record [ { x:Integer } { y:Integer } ] sch	record{x:Integer,y:Integer}	
+def sch (maketype Record [ { x:Integer } { y:Integer } ]) sch	record{x:Integer,y:Integer}	
 		
 # ====================================================================		
 # 7. Errors / malformed records		
 # ====================================================================		
 		
-record [ ]	ERROR:	empty record list — must have at least one field
-record { a:Integer }	ERROR:	argument must be a list, not a map
-record [ 'not a map' ]	ERROR:	each element must be a pair (single-key map)
+maketype Record [ ]	ERROR:	empty record list — must have at least one field
+maketype Record { a:Integer }	ERROR:	argument must be a list, not a map
+maketype Record [ 'not a map' ]	ERROR:	each element must be a pair (single-key map)
