@@ -91,7 +91,7 @@ func TestEngineRecord(t *testing.T) {
 	m2 := NewOrderedMap()
 	m2.Set("y", NewTypeLiteral(TString))
 	list := NewList([]Value{NewMap(m1), NewMap(m2)})
-	result, err := e.Run([]Value{NewWord("record"), list})
+	result, err := e.Run([]Value{NewWord("maketype"), NewWord("Record"), list})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestEngineTable(t *testing.T) {
 	m1 := NewOrderedMap()
 	m1.Set("x", NewTypeLiteral(TNumber))
 	list := NewList([]Value{NewMap(m1)})
-	result, err := e.Run([]Value{NewWord("table"), NewWord("record"), list})
+	result, err := e.Run([]Value{NewWord("maketype"), NewWord("Table"), NewWord("maketype"), NewWord("Record"), list})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1408,7 +1408,7 @@ func TestEngineTypeRecord(t *testing.T) {
 	yf.Set("y", NewTypeLiteral(TNumber))
 	fields := NewList([]Value{NewMap(xf), NewMap(yf)})
 	result := runAQL(t, r, []Value{
-		NewWord("type"), NewWord("Point"), NewWord("record"), fields, NewEnd(),
+		NewWord("def"), NewWord("Point"), NewWord("maketype"), NewWord("Record"), fields, NewEnd(),
 		NewWord("Point"),
 	})
 	if len(result) != 1 || !IsRecordType(result[0]) {
@@ -1429,7 +1429,7 @@ func TestEngineMakeRecord(t *testing.T) {
 	fields := NewList([]Value{NewMap(xf), NewMap(yf)})
 	vals := NewList([]Value{NewInteger(1), NewString("hi")})
 	result := runAQL(t, r, []Value{
-		NewWord("type"), NewWord("P"), NewWord("record"), fields, NewEnd(),
+		NewWord("def"), NewWord("P"), NewWord("maketype"), NewWord("Record"), fields, NewEnd(),
 		NewWord("make"), NewWord("P"), vals,
 	})
 	if len(result) != 1 || !result[0].VType.Equal(TMap) {
