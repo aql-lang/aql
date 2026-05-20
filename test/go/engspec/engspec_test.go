@@ -952,11 +952,11 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 		def := r.Types.MintType(id, parentDef)
 		return []eng.Value{eng.NewObjectType(def, info)}, nil
 	}
-	// maketype — the uniform type constructor (TYPE-UNIFORM Phase 3b).
-	// Mirrors lang/go/native/native_type.go::maketypeHandler; dispatches
-	// to the record/object fixtures above. eng/spec exercises only the
-	// Object and Record bases.
-	maketypeH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
+	// type — the uniform type constructor.
+	// Mirrors lang/go/native/native_type.go::typeHandler; dispatches
+	// to the record/object handler functions above. eng/spec exercises
+	// only the Object and Record bases.
+	typeCtorH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 		base := args[0]
 		arg := args[1]
 		if base.Data == nil && base.VType.Equal(eng.TObject) {
@@ -967,18 +967,18 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 		}
 		if base.Data == nil && base.VType.Equal(eng.TRecord) {
 			if !arg.VType.Equal(eng.TList) {
-				return nil, fmt.Errorf("maketype Record: a record takes a list of field pairs")
+				return nil, fmt.Errorf("type Record: a record takes a list of field pairs")
 			}
 			return recordH([]eng.Value{arg}, nil, nil, reg)
 		}
-		return nil, fmt.Errorf("maketype: base must be Object, Record, or an object type, got %s", base.String())
+		return nil, fmt.Errorf("type: base must be Object, Record, or an object type, got %s", base.String())
 	}
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "maketype",
+		Name:        "type",
 		ForwardArgs: true,
 		Signatures: []eng.NativeSig{{
 			Args:           []*eng.Type{eng.TAny, eng.TAny},
-			Handler:        maketypeH,
+			Handler:        typeCtorH,
 			Returns:        []*eng.Type{eng.TType},
 			RunInCheckMode: true,
 		}},

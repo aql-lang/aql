@@ -32,9 +32,12 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:        "type",
-		Summary:     "Define a named type.",
-		Description: "Registers a named type definition for later use.",
+		Word:    "type",
+		Summary: "Construct a type from a base type and an argument.",
+		Description: "Builds a (sub)type: `type Object {fields}` an object type, " +
+			"`type ParentType {fields}` an object subtype, `type Record [pairs]` " +
+			"a record type, `type Table recordtype` a table type. Pair with " +
+			"`def Name (type …)` to bind it.",
 	})
 
 	register(&Entry{

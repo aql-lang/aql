@@ -8,7 +8,7 @@ import (
 	"github.com/aql-lang/aql/eng/go"
 )
 
-// typeNatives covers the type-system words: maketype, pathof, enum,
+// typeNatives covers the type-system words: type, pathof, enum,
 // typeof, fulltypeof, is, guard, base, tor, tand, any, all, tany,
 // tall, convert.
 //
@@ -17,21 +17,18 @@ import (
 // stack. `installResourceTypes` handles those during Register.
 var typeNatives = []NativeFunc{
 	{
-		// maketype is the Phase-1 transitional type constructor — see
-		// lang/doc/design/TYPE-UNIFORM.0.md. It evaluates both args
-		// (unlike `type`, which quotes arg0 as a name), so it cannot
-		// share the word `type` during the additive phase; it becomes
-		// `type` at the final cutover. `maketype BaseType arg` builds
-		// a (sub)type:
-		//   maketype Object {fields}     → object type
-		//   maketype <objtype> {fields}  → object subtype (inheritance)
-		//   maketype Record [a:T b:U]    → record type (list of pairs)
-		//   maketype Table  <recordtype> → table type
-		Name:        "maketype",
+		// type is the uniform type constructor — see
+		// lang/doc/design/TYPE-UNIFORM.0.md. `type BaseType arg`
+		// builds a (sub)type:
+		//   type Object {fields}     → object type
+		//   type <objtype> {fields}  → object subtype (inheritance)
+		//   type Record [a:T b:U]    → record type (list of pairs)
+		//   type Table  <recordtype> → table type
+		Name:        "type",
 		ForwardArgs: true,
 		Signatures: []NativeSig{{
 			Args:           []*Type{TAny, TAny},
-			Handler:        maketypeHandler,
+			Handler:        typeHandler,
 			Returns:        []*Type{TType},
 			RunInCheckMode: true,
 		}},
@@ -224,9 +221,9 @@ func tableHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 	return []Value{NewTableType(_as0)}, nil
 }
 
-// ---- maketype (Phase-1 transitional type constructor) ----
+// ---- type (Phase-1 transitional type constructor) ----
 
-// maketypeHandler implements `maketype BaseType arg`, the uniform
+// typeHandler implements `type BaseType arg`, the uniform
 // type constructor from lang/doc/design/TYPE-UNIFORM.0.md. It
 // dispatches on the base type:
 //
@@ -236,8 +233,8 @@ func tableHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 //   - root Table literal       → a table type from a record type
 //
 // It reuses the existing object/record/table construction logic;
-// it does not bind — pair it with `def` (`def Foo (maketype …)`).
-func maketypeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+// it does not bind — pair it with `def` (`def Foo (type …)`).
+func typeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	base := args[0]
 	arg := args[1]
 
@@ -256,9 +253,9 @@ func maketypeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// Same list argument the legacy `record` word takes.
 	if base.Data == nil && base.VType.Equal(TRecord) {
 		if !arg.VType.Equal(TList) {
-			return nil, r.AqlError("maketype_error",
-				"maketype Record: a record takes a list of field pairs, e.g. [a:Integer b:String]",
-				"maketype")
+			return nil, r.AqlError("type_error",
+				"type Record: a record takes a list of field pairs, e.g. [a:Integer b:String]",
+				"type")
 		}
 		return recordHandler([]Value{arg}, nil, nil, r)
 	}
@@ -266,9 +263,9 @@ func maketypeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if base.Data == nil && base.VType.Equal(TTable) {
 		return tableHandler([]Value{arg}, nil, nil, r)
 	}
-	return nil, r.AqlError("maketype_error",
-		fmt.Sprintf("maketype: base must be Object, Record, Table, or an object type, got %s", base.String()),
-		"maketype")
+	return nil, r.AqlError("type_error",
+		fmt.Sprintf("type: base must be Object, Record, Table, or an object type, got %s", base.String()),
+		"type")
 }
 
 // ---- enum ----

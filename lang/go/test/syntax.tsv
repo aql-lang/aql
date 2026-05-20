@@ -794,30 +794,30 @@ make String true	'true'
 make String false	'false'
 
 # make record: positional fields
-def Point maketype Record [x:Number y:Number] make Point [1 2]	{x:1,y:2}
+def Point type Record [x:Number y:Number] make Point [1 2]	{x:1,y:2}
 
 # make record: named fields in declaration order
-def Point maketype Record [x:Number y:Number] make Point [x:1 y:2]	{x:1,y:2}
+def Point type Record [x:Number y:Number] make Point [x:1 y:2]	{x:1,y:2}
 
 # make record: named fields in different order
-def Point maketype Record [x:Number y:Number] make Point [y:3 x:4]	{x:4,y:3}
+def Point type Record [x:Number y:Number] make Point [y:3 x:4]	{x:4,y:3}
 
 # make record: type Conversion applied to fields
-def Bar maketype Record [x:Number y:Boolean z:String] make Bar [1 false "s"]	{x:1,y:false,z:'s'}
+def Bar type Record [x:Number y:Boolean z:String] make Bar [1 false "s"]	{x:1,y:false,z:'s'}
 
 # make record: named fields reordered with type Conversion
-def Bar maketype Record [x:Number y:Boolean z:String] make Bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
+def Bar type Record [x:Number y:Boolean z:String] make Bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
 
 # make record: field value conversion (string to number)
-def Pair maketype Record [a:Number b:Number] make Pair ["3" "7"]	{a:3,b:7}
+def Pair type Record [a:Number b:Number] make Pair ["3" "7"]	{a:3,b:7}
 
 # make with infix form
-def P maketype Record [x:Number y:Number] P make [1 2]	{x:1,y:2}
+def P type Record [x:Number y:Number] P make [1 2]	{x:1,y:2}
 
 # === type - custom type Definitions ===
 
 # type With record
-def Vec maketype Record [x:Number y:Number] make Vec [3 4]	{x:3,y:4}
+def Vec type Record [x:Number y:Number] make Vec [3 4]	{x:3,y:4}
 
 # type With disjunct
 def OptNum (Number tor None) OptNum unify 5	5 true

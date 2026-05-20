@@ -52,13 +52,13 @@ const decisionAQL = `
 # aql:decision — Record types and builder functions
 # ============================================================
 
-def Cond maketype Record [field:Atom op:String value:Any]
-def Pred maketype Record [kind:String op:String children:Any]
-def Rule maketype Record [when:Map then:Map]
-def DTable maketype Record [kind:String rules:List hit-policy:String]
-def BranchNode maketype Record [id:Atom kind:String branches:List]
-def LeafNode maketype Record [id:Atom kind:String result:Any]
-def DTree maketype Record [kind:String root:Atom nodes:List]
+def Cond type Record [field:Atom op:String value:Any]
+def Pred type Record [kind:String op:String children:Any]
+def Rule type Record [when:Map then:Map]
+def DTable type Record [kind:String rules:List hit-policy:String]
+def BranchNode type Record [id:Atom kind:String branches:List]
+def LeafNode type Record [id:Atom kind:String result:Any]
+def DTree type Record [kind:String root:Atom nodes:List]
 
 def cond fn [[field:Atom op:String value:Any] [Map] [
   make Cond {field:field op:op value:value}

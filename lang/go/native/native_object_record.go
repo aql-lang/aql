@@ -3,14 +3,14 @@ package native
 import "fmt"
 
 // This file holds the record / object type-construction handlers.
-// They are not registered as words of their own — the `maketype`
+// They are not registered as words of their own — the `type`
 // constructor (native_type.go) dispatches to them:
 //
-//	maketype Record [a:Integer b:String …]   RecordType from a list
+//	type Record [a:Integer b:String …]   RecordType from a list
 //	                                          of single-pair maps.
-//	maketype Object {a:String b:Integer …}    anonymous ObjectType
+//	type Object {a:String b:Integer …}    anonymous ObjectType
 //	                                          (nominal, inheritance-aware).
-//	maketype <objtype> {b:Integer …}          ObjectType extending the
+//	type <objtype> {b:Integer …}          ObjectType extending the
 //	                                          parent — child fields must
 //	                                          unify with the parent's
 //	                                          same-named fields.

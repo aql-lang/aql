@@ -57,7 +57,7 @@ n`)
 // A capitalised def binding an object type absorbs the lattice-minting
 // that `type` does: typeof reports the bound name.
 func TestNameCase_DefUpperObjectMints(t *testing.T) {
-	got := runOne(t, `def Acct (maketype Object {bal:Number})
+	got := runOne(t, `def Acct (type Object {bal:Number})
 make Acct {bal:1} typeof`)
 	if len(got) != 1 || got[0] != "Acct" {
 		t.Errorf("got %v, want [Acct]", got)

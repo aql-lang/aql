@@ -76,7 +76,7 @@ inspect fn	{name:'fn',kind:native,signatures:[{args:['List']}]}
 inspect fnsig	{name:'fnsig',kind:native,signatures:[{args:['List']}]}
 
 # --- type system ---
-inspect maketype	{name:'maketype',kind:native,signatures:[{args:['Any','Any']}]}	the uniform type constructor
+inspect type	{name:'type',kind:native,signatures:[{args:['Any','Any']}]}	the uniform type constructor
 inspect typeof	{name:'typeof',kind:native,signatures:[{args:['Any']}]}	
 inspect pathof	{name:'pathof',kind:native,signatures:[{args:['Type']}]}	
 inspect is	{name:'is',kind:native,signatures:[{args:['Any','Any']}]}	
@@ -169,12 +169,12 @@ inspect { :String }	{type:'Type',struct:'Map',kind:typed_map,child:'Scalar/Strin
 # type for an object. Naming via `def NAME …` adds a `name:` field.		
 		
 # --- record ---		
-inspect ( maketype Record [ { a:Integer } { b:String } ] )	{type:'Type',struct:'Map',kind:record,fields:{a:'Integer',b:'String'}}	
-def Pt (maketype Record [ { x:Integer } { y:Integer } ]) inspect Pt	{name:'Pt',type:'Type',struct:'Map',kind:record,fields:{x:'Integer',y:'Integer'}}	
+inspect ( type Record [ { a:Integer } { b:String } ] )	{type:'Type',struct:'Map',kind:record,fields:{a:'Integer',b:'String'}}	
+def Pt (type Record [ { x:Integer } { y:Integer } ]) inspect Pt	{name:'Pt',type:'Type',struct:'Map',kind:record,fields:{x:'Integer',y:'Integer'}}	
 		
 # --- object (struct is the named type; fields includes inherited, parent first) ---		
-def Vec (maketype Object { x:Integer y:Integer }) inspect Vec	{name:'Vec',type:'Type',struct:'Vec',kind:object,fields:{x:'Integer',y:'Integer'}}	
-def Bar (maketype Object { b:Integer }) def Baz (maketype Bar { c:String }) inspect Baz	{name:'Baz',type:'Type',struct:'Baz',kind:object,parent:'Object/Bar',fields:{b:'Integer',c:'String'}}	Baz extends Bar — `b` (inherited) then `c`
+def Vec (type Object { x:Integer y:Integer }) inspect Vec	{name:'Vec',type:'Type',struct:'Vec',kind:object,fields:{x:'Integer',y:'Integer'}}	
+def Bar (type Object { b:Integer }) def Baz (type Bar { c:String }) inspect Baz	{name:'Baz',type:'Type',struct:'Baz',kind:object,parent:'Object/Bar',fields:{b:'Integer',c:'String'}}	Baz extends Bar — `b` (inherited) then `c`
 		
 # --- disjunct / enum (alternatives are the members' VType paths) ---		
 inspect ( Integer tor Boolean )	{type:'Type',struct:'Disjunct',kind:disjunct,alternatives:['Scalar/Number/Integer','Scalar/Boolean']}	

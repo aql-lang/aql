@@ -424,10 +424,12 @@ The change is additive-first so the test suite stays green throughout.
     of error-case spec rows that pinned legacy-word behaviour (`type`
     rejecting a lowercase name, `untype` rejecting one) were
     rewritten, since the universal `def`/`undef` accept both cases.
-  - **3c — rename and remove.** Once nothing uses the old words:
-    delete `type`-the-binder, `object`, `record`, `table`, `untype`;
-    rename `maketype` → `type` everywhere — the word registration and
-    every migrated call site (a pure global rename). Suite green.
+  - **3c — rename and remove. DONE.** The legacy words —
+    `type`-the-binder, `object`, `record`, `table`, `untype` — are
+    deleted (their construction handlers stay; `type` dispatches to
+    them). `maketype` is renamed to `type`: the word registration,
+    the engspec fixture, and every call site. `type` is now the
+    uniform type constructor, `def` the universal binder.
 
   **Scale note.** 3b touched several hundred call sites; it was a
   semantics-preserving mechanical migration (both syntaxes coexist),
@@ -485,5 +487,6 @@ Phase 3 was wrong.
   the universal binder) — done. Phase 3 — *green-incremental*, not
   atomic: 3a expose the constructor to the eng spec runner — done;
   3b migrate the call sites to `maketype`/`def`/`undef` — done; 3c
-  rename `maketype` → `type` and delete the old words — remaining.
-  Phase 4 (optional) — collapse the two binding stacks.
+  rename `maketype` → `type` and delete the old words — done. The
+  surface is now `def` (bind) / `make` (instantiate) / `type`
+  (construct). Phase 4 (optional) — collapse the two binding stacks.
