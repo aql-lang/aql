@@ -29,9 +29,9 @@ var ErrNoComparer = errors.New("eng: no comparer in this Behavior")
 //
 //	Ideal < Node < Scalar < Type < Word < None < Any < Never
 //
-// and same-branch pairs fall back to size — the value with the greater
-// SizeOf sorts first, so a longer List leads a shorter one and, more
-// generally, the more "complex" value leads. Equal sizes compare equal.
+// and same-branch pairs fall back to size — the value with the smaller
+// SizeOf sorts first, so a shorter List leads a longer one and, more
+// generally, the less "complex" value leads. Equal sizes compare equal.
 //
 // DepScalar values (type-level constraints) flow through this same
 // path: they sit in the Type branch and order by size like any other
@@ -62,12 +62,12 @@ func CompareValues(a, b Value) (int, error) {
 		}
 		return 1, nil
 	}
-	// Same branch, no Comparer — order by size, larger first, so a
-	// longer List leads a shorter one. Equal sizes compare equal.
+	// Same branch, no Comparer — order by size, smaller first, so a
+	// shorter List leads a longer one. Equal sizes compare equal.
 	switch sa, sb := SizeOf(a), SizeOf(b); {
-	case sa > sb:
-		return -1, nil
 	case sa < sb:
+		return -1, nil
+	case sa > sb:
 		return 1, nil
 	default:
 		return 0, nil

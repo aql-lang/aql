@@ -196,15 +196,15 @@ func TestCompareValuesCrossBranch(t *testing.T) {
 }
 
 // TestCompareValuesSameBranchBySize — same-branch pairs with no
-// Comparer order by size, larger first (more complex values lead).
+// Comparer order by size, smaller first (less complex values lead).
 func TestCompareValuesSameBranchBySize(t *testing.T) {
 	long := NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)})
 	short := NewList([]Value{NewInteger(1)})
-	if got, err := CompareValues(long, short); err != nil || got != -1 {
-		t.Errorf("CompareValues(len 3, len 1) = %d, %v; want -1, nil (larger first)", got, err)
+	if got, err := CompareValues(short, long); err != nil || got != -1 {
+		t.Errorf("CompareValues(len 1, len 3) = %d, %v; want -1, nil (smaller first)", got, err)
 	}
-	if got, err := CompareValues(short, long); err != nil || got != 1 {
-		t.Errorf("CompareValues(len 1, len 3) = %d, %v; want 1, nil", got, err)
+	if got, err := CompareValues(long, short); err != nil || got != 1 {
+		t.Errorf("CompareValues(len 3, len 1) = %d, %v; want 1, nil", got, err)
 	}
 	// Equal size — compare equal (first-pass approximation).
 	if got, err := CompareValues(NewList([]Value{NewInteger(1)}), NewList([]Value{NewInteger(9)})); err != nil || got != 0 {
