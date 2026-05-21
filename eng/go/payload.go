@@ -184,7 +184,7 @@ func (HostTypeBody) hostTypeBody() {}
 //   DisjunctInfo, ChildTypeInfo, RecordTypeInfo, OptionsTypeInfo,
 //   TableTypeInfo, TableData, ObjectTypeInfo, ObjectInstanceInfo,
 //   *StoreInstanceInfo, *ArrayInstanceInfo, *TimeoutInfo,
-//   *IntervalInfo, ErrorInfo, MatrixData, CalDurationData,
+//   *IntervalInfo, ErrorInfo, CalDurationData,
 //   DepScalarInfo, Materializer (interface), noneSentinel
 //   (legacy — to be removed in Step 5f).
 // =================================================================
@@ -236,7 +236,6 @@ func (*ArrayInstanceInfo) payloadMarker() {}
 func (*TimeoutInfo) payloadMarker()       {}
 func (*IntervalInfo) payloadMarker()      {}
 func (ErrorInfo) payloadMarker()          {}
-func (MatrixData) payloadMarker()         {}
 func (CalDurationData) payloadMarker()    {}
 func (DepScalarInfo) payloadMarker()      {}
 func (PathInfo) payloadMarker()           {} // legacy; replaced by PathPayload at Step 5b but may still flow through some paths
