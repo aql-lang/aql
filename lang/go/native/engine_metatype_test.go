@@ -27,6 +27,7 @@ func TestMetatypeFor(t *testing.T) {
 		{"Table → IdealType", TTable, TIdealType},
 		{"Record → IdealType", TRecord, TIdealType},
 		{"Resource → IdealType", TResource, TIdealType},
+		{"Options → IdealType", TOptions, TIdealType},
 		{"Atom → ScalarType", TAtom, TScalarType},
 		{"Type → Type", TType, TType},
 		{"ScalarType → Type", TScalarType, TType},

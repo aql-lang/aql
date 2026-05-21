@@ -411,7 +411,7 @@ var builtinDecls = []builtinDecl{
 	{Path: "Never", FixedID: 61},
 	{Path: "Scalar", FixedID: 3, MetatypePath: "Type/ScalarType"},
 	{Path: "Node", FixedID: 11, MetatypePath: "Type/NodeType"},
-	{Path: "Ideal", FixedID: 48},
+	{Path: "Ideal", FixedID: 48, MetatypePath: "Type/IdealType"},
 	{Path: "Word", FixedID: 17},
 	{Path: "Type", FixedID: 39},
 
@@ -437,7 +437,7 @@ var builtinDecls = []builtinDecl{
 	// Ideal branch — the type-kind types: Object and its structural
 	// family, plus Options. Tensor/Matrix/Vector graft on here from
 	// lang/go/modules/matrix.go.
-	{Path: "Ideal/Object", FixedID: 30, MetatypePath: "Type/IdealType"},
+	{Path: "Ideal/Object", FixedID: 30},
 	{Path: "Ideal/Object/Table", FixedID: 15},
 	{Path: "Ideal/Object/Record", FixedID: 16},
 	{Path: "Ideal/Object/Store", FixedID: 42},

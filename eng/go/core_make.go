@@ -609,7 +609,10 @@ func MakeScalarHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 	return []Value{result}, nil
 }
 
-// MakeObjHandler is the 2-arg [ObjectType, Map] make handler.
+// MakeObjHandler is the 2-arg [IdealType, Map] make handler. It
+// instantiates object types and Ideal-kind types; a non-object
+// IdealType target (e.g. Options) defers to the generic make
+// dispatcher.
 func MakeObjHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	targetVal, srcVal := args[0], args[1]
 	targetVal = ResolveTypeLiteralDef(targetVal, reg)
@@ -625,7 +628,9 @@ func MakeObjHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) 
 		objType, _ := AsObjectType(targetVal)
 		return makeObject(objType, srcVal, nil)
 	}
-	return nil, fmt.Errorf("make: expected object type, got %s", targetVal.String())
+	// Not an object type and unclaimed by an Ideal kind (e.g.
+	// Options) — defer to the generic make dispatcher.
+	return MakeHandler([]Value{targetVal, srcVal}, nil, nil, reg)
 }
 
 // MakeArrayHandler is the 2-arg [Array, List] make handler.
