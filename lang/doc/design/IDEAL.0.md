@@ -1,8 +1,11 @@
 # Ideals — Type-Kinds as First-Class Registered Descriptors
 
-Status: design proposal, no implementation.
-Branch: `claude/review-architecture-go-practices-SoLNa` (parked here;
-move to a dedicated branch when implementation starts).
+Status: implemented — Phases 1-3 (the `type` / `make` pipeline,
+`Enabled` enforcement, the conformance contract) plus a host kind
+family, `Tensor` / `Matrix` / `Vector`, in `lang/go/modules/matrix`.
+Sections §1-§12 are the original design; **§13 records what building
+it changed.**
+Branch: `claude/review-architecture-go-practices-SoLNa`.
 
 This document proposes the **Ideal**: a struct that describes a
 type-*kind* (Object, Record, Table, Array, …) and lives in a
@@ -77,6 +80,10 @@ behave". An Ideal is a *per-kind* vtable — it additionally answers
 §6 describes how the two relate.
 
 ## 3. The `Ideal` struct
+
+> **Implemented differently — see §13.** The struct shipped smaller
+> than this, and `Refines` became a kind-lattice edge, not the
+> func-inheritance pointer described below.
 
 ```go
 // An Ideal is the archetype of a type-kind — the first-class,
@@ -162,6 +169,10 @@ Dynamic control mirrors capabilities exactly:
 
 ## 5. Data-driven dispatch — the `*Type.Ideal` back-pointer
 
+> **Implemented differently — see §13.** The `*Type.Ideal`
+> back-pointer was not adopted: structural kinds are
+> payload-discriminated, so dispatch is by `Accepts` predicate.
+
 The one structural move that removes the hard-coded chain: add a
 back-pointer from a type identity to its Ideal.
 
@@ -204,6 +215,11 @@ move** into the Ideal at first — the Ideal's funcs initially just
 "make dispatch data-driven", not "rewrite the kinds".
 
 ## 6. Relationship to existing machinery
+
+> **Extended in practice — see §13.** A host Ideal whose constructed
+> types round-trip through `def` also needs the `eng.HostTypeBody`
+> marker; `ExtensionPayload` alone is opaque to the kernel's type
+> machinery.
 
 **`TypeBehavior`.** An Ideal *produces* the `Behavior` for the types
 it mints: `Construct` calls `r.Types.MintType` and sets
@@ -279,6 +295,9 @@ gets its own punctuation. An Ideal is a *kind*, not a *grammar
 extension*.
 
 ## 8. Ideal vs. plain Type — the boundary principle
+
+> **See §13** for how `Refines` actually behaves once built — a
+> kind-lattice edge with an availability rule, not func-inheritance.
 
 `Refines` makes it tempting to model every domain archetype as an
 Ideal (`Resource`, `Entity`, `Vector`, `Matrix`, `Tensor`). Resist
@@ -452,5 +471,103 @@ Phased, green at every step — the same discipline as TYPE-UNIFORM.
   the HKT horizon (§10), noted here so the struct shape does not
   preclude it.
 
-This document is a proposal. It changes no behaviour. Phase 1 is the
-recommended starting point if the design is accepted.
+## 13. Implementation findings
+
+Phases 1-3 (the `type` / `make` pipeline, `Enabled` enforcement, the
+conformance contract) are implemented, as is a host kind family —
+`Tensor`, `Matrix` and `Vector` in `lang/go/modules/matrix`. Sections
+§1-§12 are the original design; this section records where building it
+changed that design.
+
+**The `Ideal` struct, as built.** Smaller than §3's proposal:
+
+```go
+type Ideal struct {
+    Name        string
+    Enabled     bool
+    Refines     *Ideal
+    Accepts     func(base Value) bool
+    Construct   func(base, arg Value, r *Registry) ([]Value, error)
+    Instantiate func(typ, data Value, r *Registry) ([]Value, error)
+}
+```
+
+The value-level vtable (`Unify`, `Match`, `Format`, `Field`, `Equal`)
+and the declarative metadata (`Root`, `Inherits`, `OrderStrict`) are
+not built yet — they join when `unify` and rendering become
+data-driven. `Construct` and `Instantiate` return `[]Value` to match
+the kernel handler convention.
+
+**Dispatch is by `Accepts` predicate, not the §5 back-pointer.**
+Records, tables, options and the shaped tensor types are
+*payload-discriminated*: they share a base `*Type` (`Map`, `List`,
+`Matrix`) and are told apart by their payload. A `*Type.Ideal`
+back-pointer cannot distinguish a record from a plain map, so it was
+not adopted. Dispatch is a scan of `Accepts` predicates
+(`IdealRegistry.Match` / `For`). With a handful of kinds the scan is
+free; the predicate, not the pointer, is the contract. A shaped type
+(`type Matrix {rows:3 cols:3}`) is likewise payload-discriminated — it
+is not minted, so it carries no per-type FixedID.
+
+**`Refines` is a kind-lattice edge, not vtable inheritance.** §3 said
+a nil func "falls through to `Refines`'s func"; that never happened.
+`Matrix` and `Vector` each carry their own `Construct` / `Instantiate`
+because their data forms genuinely differ (a flat list, nested lists,
+a `{shape data}` map). What a kind family shares is *helper functions*
+and a *factory* — `tensorConstruct(kind, vtype)` builds three Ideals
+whose funcs are closures over the kind. `Refines` instead carries:
+
+- the **availability chain** — `Ideal.available()` walks `Refines`,
+  reporting a kind usable only when it and every kind it refines are
+  enabled, so disabling `Tensor` disables `Matrix` and `Vector`;
+- an explicit, queryable **kind hierarchy** — the §10 HKT substrate,
+  now real.
+
+§3 and §8 should describe `Refines` this way and drop the
+func-inheritance framing.
+
+**A refinement ripples into every dispatch site.** The Phase-3
+disabled-kind error tested `!Ideal.Enabled`. With `Refines` that is
+wrong: a kind can be unavailable because its *base* is disabled while
+its own `Enabled` is true. `typeHandler`, `MakeHandler` and
+`MakeObjHandler` now gate on `available()`.
+
+**Host Ideals need `HostTypeBody`, not just `ExtensionPayload`.** §6
+said a host carries its payload in `ExtensionPayload` and "the kernel
+never inspects an Ideal-governed payload directly." The second half is
+false for *constructed types*: `def Foo (type Matrix {rows:3 cols:3})`
+routes a host type through `InstallType`, and `typeof` plus `make`'s
+target resolution must recognise it *as a type* — but a bare
+`ExtensionPayload` is opaque, so `IsTypeBody` returns false. The fix
+is a kernel-provided embeddable marker, `eng.HostTypeBody`: a host
+embeds it in the struct it uses for a constructed type, and
+`IsTypeBody` / `TypeOf` / `isTypeLike` detect it generically — still
+without inspecting the concrete shape. The seal holds; it needed one
+bit of structure exposed: "this payload is a type, not an instance".
+
+**A kind's lattice placement interacts with `make`'s overloads.**
+`make` is a set of typed overloads, two of them keyed on metatypes
+(`TScalarType`, `TObjectType`). The tensor family first sat under
+`Scalar/Number` — inherited from the legacy `Matrix` type — which made
+a bare `Matrix` literal match the scalar-cast overload `[TScalarType
+Any]` and never reach the Ideal dispatch. Moving the family to
+`Node/Tensor` fixed it and is correct anyway: a tensor is a structured
+container, not a scalar. For any future kind: place its root `*Type`
+so its metatype does not collide with `make`'s typed overloads —
+containers belong under `Node`.
+
+**A host kind is import-gated.** A type *identity* is global —
+`Matrix` registers into `eng.Builtin` at package init, so the literal
+always parses. A *kind* is per-`Registry`: `r.Ideals` is populated
+when the module is imported (`BuildMatrixModule` calls
+`registerTensorIdeals`). There is no global Ideal table. Before
+`import "aql:matrix"`, `Matrix` names a type but `type Matrix` /
+`make Matrix` raise "the Matrix type-kind is not available" — the
+disabled-kind path. This is §4's per-`Registry` isolation made
+concrete: identity is global, *capability* is registry-scoped.
+
+**`def` / `make` resolution is generic.** A host kind installed
+through `InstallType` reuses the resolution records already use —
+`stepWord` resolves a type-bound name to its stored body,
+`MakeHandler` dispatches on it. Beyond the `HostTypeBody` marker, no
+per-kind kernel plumbing was needed.

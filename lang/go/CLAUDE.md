@@ -466,7 +466,7 @@ a `// lint:allow-panic` comment. The current set:
 - `native/native_misc.go::registerTimerType` — TTimeout, TInterval.
 - `native/native_temporal.go::registerTemporalType` — TDate, TDateTime, …
 - `native/fetch.go::registerFetchType` — TFetchFunction, TFetchRequest, …
-- `modules/matrix.go::registerMatrixType` — TMatrix.
+- `modules/matrix.go::registerTensorTypes` — TTensor, TMatrix, TVector.
 
 Do not add new init-time panics without also annotating them
 `// lint:allow-panic` and listing them here.

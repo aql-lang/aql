@@ -38,7 +38,7 @@ Payload variants live in `eng/go/payload.go`. Two flavours:
    `OptionsTypeInfo`, `TableTypeInfo`, `TableData`,
    `ObjectTypeInfo`, `ObjectInstanceInfo`, `*StoreInstanceInfo`,
    `*ArrayInstanceInfo`, `*TimeoutInfo`, `*IntervalInfo`,
-   `ErrorInfo`, `MatrixData`, `CalDurationData`, `DepScalarInfo`,
+   `ErrorInfo`, `CalDurationData`, `DepScalarInfo`,
    `PathInfo`, `noneSentinel`.
 
 When adding a new kernel-known payload shape, register the
@@ -75,7 +75,7 @@ matching, plugin types) supply a custom Behavior:
 
 - `lang/go/native/native_temporal.go` — Time family Behaviors.
 - `lang/go/native/native_misc.go` — Timeout/Interval Behaviors.
-- `lang/go/modules/matrix.go` — Matrix Behavior.
+- `lang/go/modules/matrix.go` — Tensor/Matrix/Vector Behavior.
 - `lang/go/native/fetch.go` — Fetch family (no custom Behavior; uses Default).
 
 The dispatch in `Value.String` walks the Parent chain so
