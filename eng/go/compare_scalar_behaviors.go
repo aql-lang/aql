@@ -2,7 +2,7 @@ package eng
 
 import "strings"
 
-// Comparer implementations for the kernel scalar types. Each embeds
+// Comparer implementations for the kernel scalar types and Word. Each embeds
 // defaultBehavior so Match/Format/Equal stay at the kernel default;
 // the only addition is the Compare method, which makes the type
 // orderable for `lt`/`gt`/`lte`/`gte`/`sort`. Descendants of a
@@ -30,6 +30,7 @@ func (stringCompareBehavior) formatDelegate()  {}
 func (booleanCompareBehavior) formatDelegate() {}
 func (atomCompareBehavior) formatDelegate()    {}
 func (scalarCompareBehavior) formatDelegate()  {}
+func (wordCompareBehavior) formatDelegate()    {}
 
 func (numberCompareBehavior) Compare(a, b Value) (int, error) {
 	af, _ := AsNumber(a)
@@ -77,6 +78,16 @@ func (atomCompareBehavior) Compare(a, b Value) (int, error) {
 	as, _ := AsAtom(a)
 	bs, _ := AsAtom(b)
 	return strings.Compare(as, bs), nil
+}
+
+// wordCompareBehavior orders Word values lexicographically by their
+// rendered form. Word — like String and Atom — is a name-like type
+// whose deliberate comparison basis is the text itself; this is one
+// of the few places Value.String is used as an ordering key.
+type wordCompareBehavior struct{ defaultBehavior }
+
+func (wordCompareBehavior) Compare(a, b Value) (int, error) {
+	return strings.Compare(a.String(), b.String()), nil
 }
 
 // scalarCompareBehavior is the Comparer on the abstract Scalar root.
@@ -189,4 +200,5 @@ func init() {
 	TBoolean.Behavior = booleanCompareBehavior{}
 	TAtom.Behavior = atomCompareBehavior{}
 	TScalar.Behavior = scalarCompareBehavior{}
+	TWord.Behavior = wordCompareBehavior{}
 }

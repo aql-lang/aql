@@ -165,11 +165,9 @@ func TestCompareValuesPaths(t *testing.T) {
 	}
 }
 
-func TestCompareValuesTotalOrder(t *testing.T) {
-	// CompareValues is total: every pair yields an order. Pairs with
-	// no Comparer fall back to the top-level branch precedence
-	// Ideal < Node < Scalar < Type < Word < None, with same-branch
-	// pairs broken on rendered form.
+func TestCompareValuesCrossBranch(t *testing.T) {
+	// Cross-branch pairs order by the top-level precedence
+	// Ideal < Node < Scalar < Type < Word < None.
 	arr := NewArray([]Value{NewInteger(1)}) // Ideal branch
 	lst := NewList([]Value{NewInteger(1)})  // Node branch
 	num := NewInteger(5)                    // Scalar branch
@@ -183,8 +181,6 @@ func TestCompareValuesTotalOrder(t *testing.T) {
 		{"node_before_scalar", lst, num, -1},
 		{"scalar_after_node", num, lst, 1},
 		{"scalar_before_none", num, none, -1},
-		{"same_branch_tiebreak", NewList([]Value{NewInteger(1)}), NewList([]Value{NewInteger(2)}), -1},
-		{"identical_lists", lst, lst, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -196,6 +192,22 @@ func TestCompareValuesTotalOrder(t *testing.T) {
 				t.Errorf("CompareValues(%s, %s) = %d, want %d", tt.a, tt.b, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestCompareValuesSameBranchUndefined — same-branch pairs with no
+// Comparer are not yet comparable; they surface an error.
+func TestCompareValuesSameBranchUndefined(t *testing.T) {
+	if _, err := CompareValues(NewList([]Value{NewInteger(1)}), NewMap(NewOrderedMap())); err == nil {
+		t.Error("expected error comparing List with Map — no Comparer in the Node branch")
+	}
+}
+
+func TestCompareValuesWords(t *testing.T) {
+	// Word, like String and Atom, compares lexicographically.
+	got, err := CompareValues(NewWord("apple"), NewWord("banana"))
+	if err != nil || got != -1 {
+		t.Errorf("CompareValues(apple, banana) = %d, %v; want -1, nil", got, err)
 	}
 }
 

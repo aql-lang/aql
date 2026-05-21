@@ -492,9 +492,10 @@ None deq None	true
 "a" lt 1	true
 3 gt "z"	true
 
-# Comparison - total order: non-scalar pairs use the branch precedence
-# Ideal < Node < Scalar < Type < Word < None < Any < Never
-[1] lt [2]	true
+# Comparison - cross-branch pairs order by the branch precedence
+# Ideal < Node < Scalar < Type < Word < None < Any < Never; a
+# same-branch non-scalar pair has no comparator yet
+[1] lt [2]	ERROR:lt: cannot compare
 [1] lt 5	true
 5 lt [1]	false
 
