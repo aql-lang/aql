@@ -84,6 +84,8 @@ func CompareValues(a, b Value) (int, error) {
 // rootBranchRank returns v's top-level branch precedence:
 //
 //	Never < Any < None < Word < Type < Scalar < Node < Ideal
+//
+// The values are spaced by 1_000_000, matching Type.Rank.
 func rootBranchRank(v Value) int {
 	root := v.VType
 	for root.Parent != nil {
@@ -93,21 +95,21 @@ func rootBranchRank(v Value) int {
 	case TNever:
 		return 0
 	case TAny:
-		return 1
+		return 1_000_000
 	case TNone:
-		return 2
+		return 2_000_000
 	case TWord:
-		return 3
+		return 3_000_000
 	case TType:
-		return 4
+		return 4_000_000
 	case TScalar:
-		return 5
+		return 5_000_000
 	case TNode:
-		return 6
+		return 6_000_000
 	case TIdeal:
-		return 7
+		return 7_000_000
 	default:
-		return 8
+		return 8_000_000
 	}
 }
 

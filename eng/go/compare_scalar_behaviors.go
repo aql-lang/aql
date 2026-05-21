@@ -127,20 +127,21 @@ func (scalarCompareBehavior) Compare(a, b Value) (int, error) {
 }
 
 // scalarBranchRank maps a scalar value to its cross-branch precedence
-// (Atom < Boolean < Number < String < Path). ok is false for a value
-// typed as the abstract Scalar root, which belongs to no branch.
+// (Atom < Boolean < Number < String < Path), in steps of 1_000_000.
+// ok is false for a value typed as the abstract Scalar root, which
+// belongs to no branch.
 func scalarBranchRank(v Value) (rank int, ok bool) {
 	switch {
 	case v.VType.Matches(TAtom):
 		return 0, true
 	case v.VType.Matches(TBoolean):
-		return 1, true
+		return 1_000_000, true
 	case v.VType.Matches(TNumber):
-		return 2, true
+		return 2_000_000, true
 	case v.VType.Matches(TString):
-		return 3, true
+		return 3_000_000, true
 	case v.VType.Matches(TPath):
-		return 4, true
+		return 4_000_000, true
 	default:
 		return 0, false
 	}
