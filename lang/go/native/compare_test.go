@@ -95,10 +95,60 @@ func TestCompareValuesAtoms(t *testing.T) {
 	}
 }
 
-func TestCompareValuesCrossTypeError(t *testing.T) {
-	_, err := CompareValues(NewInteger(1), NewString("a"))
-	if err == nil {
-		t.Fatal("expected error for cross-type comparison")
+func TestCompareValuesCrossScalar(t *testing.T) {
+	// Cross-branch scalar pairs are ordered by the Scalar root's
+	// Comparer: Path < String < Number < Boolean < Atom.
+	path := NewPath([]string{"a"}, false)
+	tests := []struct {
+		name string
+		a, b Value
+		want int
+	}{
+		{"path_lt_string", path, NewString("a"), -1},
+		{"string_gt_path", NewString("a"), path, 1},
+		{"string_lt_number", NewString("a"), NewInteger(1), -1},
+		{"number_gt_string", NewInteger(1), NewString("a"), 1},
+		{"number_lt_boolean", NewInteger(1), NewBoolean(false), -1},
+		{"boolean_gt_number", NewBoolean(false), NewInteger(1), 1},
+		{"boolean_lt_atom", NewBoolean(true), NewAtom("z"), -1},
+		{"atom_gt_boolean", NewAtom("z"), NewBoolean(true), 1},
+		{"path_lt_atom", path, NewAtom("z"), -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := CompareValues(tt.a, tt.b)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("CompareValues(%s, %s) = %d, want %d", tt.a, tt.b, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCompareValuesPaths(t *testing.T) {
+	// Two paths share the Path branch, which has no Comparer of its
+	// own, so they fall through to the Scalar comparator and order by
+	// rendered form.
+	ab := NewPath([]string{"a", "b"}, false)
+	ac := NewPath([]string{"a", "c"}, false)
+	if got, err := CompareValues(ab, ac); err != nil || got != -1 {
+		t.Errorf("CompareValues(a/b, a/c) = %d, %v; want -1, nil", got, err)
+	}
+	if got, err := CompareValues(ac, ab); err != nil || got != 1 {
+		t.Errorf("CompareValues(a/c, a/b) = %d, %v; want 1, nil", got, err)
+	}
+	if got, err := CompareValues(ab, ab); err != nil || got != 0 {
+		t.Errorf("CompareValues(a/b, a/b) = %d, %v; want 0, nil", got, err)
+	}
+}
+
+func TestCompareValuesIncomparableTypes(t *testing.T) {
+	// A scalar and a non-scalar share no comparable ancestor (their
+	// LCA is the bare Any root) and still error.
+	if _, err := CompareValues(NewInteger(1), NewList([]Value{NewInteger(2)})); err == nil {
+		t.Fatal("expected error comparing Integer with List")
 	}
 }
 

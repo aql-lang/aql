@@ -19,13 +19,17 @@ var ErrNoComparer = errors.New("eng: no comparer in this Behavior")
 // Dispatch is type-driven: the compare logic for a pair of values lives
 // on the type's Behavior (Comparer capability), not in a switch ladder
 // here. The dispatch routes through the lowest common ancestor of the
-// two operand VTypes — e.g. Integer-vs-Decimal walks up to Number, which
-// owns the numeric ordering; Date-vs-Date stays on Date.
+// two operand VTypes — e.g. Integer-vs-Decimal walks up to Number,
+// which owns the numeric ordering; Integer-vs-String walks up to
+// Scalar, which owns the cross-branch ordering; Date-vs-Date stays
+// on Date.
 //
 // Types without a Comparer in their lattice surface a clear
-// "type X does not support compare" error. Two values rooted in
-// disjoint branches (Integer-vs-String) also error: the lattice walk
-// finds no shared ancestor below Any/Scalar that owns a Comparer.
+// "cannot compare" error. Cross-branch scalar pairs are ordered by
+// the Comparer on the Scalar root, which ranks the branches
+// Path < String < Number < Boolean < Atom. Pairs with no comparable
+// common ancestor — e.g. Integer-vs-List, whose LCA is the bare Any
+// root — still error.
 //
 // DepScalar values represent type-level constraints, not concrete
 // scalars — they are rejected up front to avoid silently coercing

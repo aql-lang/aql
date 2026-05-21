@@ -9,6 +9,11 @@ import "strings"
 // scalar (e.g. Integer < Number, EmptyString < String) inherit the
 // Comparer via the lattice walk in CompareValues — no per-subtype
 // registration needed.
+//
+// The Scalar root itself carries scalarCompareBehavior — the
+// cross-branch comparator. It orders values from different branches
+// (e.g. Integer-vs-String) by a fixed branch precedence and is
+// reached only when the LCA walk finds no branch-level Comparer.
 
 // numberCompareBehavior compares any pair of values rooted under
 // Scalar/Number (Integer, Decimal, or their dep variants) via the
@@ -24,6 +29,7 @@ func (numberCompareBehavior) formatDelegate()  {}
 func (stringCompareBehavior) formatDelegate()  {}
 func (booleanCompareBehavior) formatDelegate() {}
 func (atomCompareBehavior) formatDelegate()    {}
+func (scalarCompareBehavior) formatDelegate()  {}
 
 func (numberCompareBehavior) Compare(a, b Value) (int, error) {
 	af, _ := AsNumber(a)
@@ -73,6 +79,61 @@ func (atomCompareBehavior) Compare(a, b Value) (int, error) {
 	return strings.Compare(as, bs), nil
 }
 
+// scalarCompareBehavior is the Comparer on the abstract Scalar root.
+// It gives cross-branch scalar pairs (e.g. Integer-vs-String) a
+// defined order instead of a "cannot compare" error, ranking the
+// branches:
+//
+//	Path < String < Number < Boolean < Atom
+//
+// CompareValues reaches it only for cross-branch pairs: the LCA walk
+// stops at a branch root's own Comparer (Number/String/Boolean/Atom)
+// for any same-branch pair. The one same-branch pair that does reach
+// here is Path-vs-Path — Path has no Comparer of its own — so two
+// paths fall through to Scalar and order lexicographically by their
+// rendered form.
+type scalarCompareBehavior struct{ defaultBehavior }
+
+func (scalarCompareBehavior) Compare(a, b Value) (int, error) {
+	ra, aok := scalarBranchRank(a)
+	rb, bok := scalarBranchRank(b)
+	if !aok || !bok {
+		// A value typed as the bare Scalar root belongs to no
+		// branch. Returning ErrNoComparer lets CompareValues keep
+		// walking the parent chain, surfacing a clear error.
+		return 0, ErrNoComparer
+	}
+	switch {
+	case ra < rb:
+		return -1, nil
+	case ra > rb:
+		return 1, nil
+	default:
+		// Same branch — only Path-vs-Path reaches here (see above).
+		return strings.Compare(a.String(), b.String()), nil
+	}
+}
+
+// scalarBranchRank maps a scalar value to its cross-branch precedence
+// (Path < String < Number < Boolean < Atom). ok is false for a value
+// typed as the abstract Scalar root, which belongs to no branch.
+func scalarBranchRank(v Value) (rank int, ok bool) {
+	switch {
+	case v.VType.Matches(TPath):
+		return 0, true
+	case v.VType.Matches(TString):
+		return 1, true
+	case v.VType.Matches(TNumber):
+		return 2, true
+	case v.VType.Matches(TBoolean):
+		return 3, true
+	case v.VType.Matches(TAtom):
+		return 4, true
+	default:
+		return 0, false
+	}
+}
+
 // init attaches the scalar Comparers to their owning kernel types.
 // The Builtin TypeTable has been populated by the typetable.go init
 // at this point (same package, lexicographic file order isn't
@@ -89,4 +150,5 @@ func init() {
 	TString.Behavior = stringCompareBehavior{}
 	TBoolean.Behavior = booleanCompareBehavior{}
 	TAtom.Behavior = atomCompareBehavior{}
+	TScalar.Behavior = scalarCompareBehavior{}
 }

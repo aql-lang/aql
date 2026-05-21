@@ -66,10 +66,10 @@ red/q green/q lt	false	red > green lex
 green/q red/q lt	true	green < red lex
 red/q red/q lt	false	same atom
 
-# Cross-branch (Integer vs String) — no shared Comparer below the
-# root, so dispatch errors rather than silently coercing.
-1 'a' lt	ERROR:	cross-branch (Integer vs String)
-1 true lt	ERROR:	cross-branch (Integer vs Boolean)
+# Cross-branch scalars order by branch precedence
+# (Path < String < Number < Boolean < Atom) via the Scalar Comparer.
+1 'a' lt	false	cross-branch: Integer outranks String
+1 true lt	true	cross-branch: Integer ranks below Boolean
 
 # ---------------------------------------------------------------------
 # 1b. CORE canon: kernel default rendering through CanonValue

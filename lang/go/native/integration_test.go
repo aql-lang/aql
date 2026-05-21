@@ -120,9 +120,10 @@ func TestEngineLtError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = runAQLError(t, r, []Value{NewInteger(1), NewWord("lt"), NewString("a")})
+	// A scalar and a list share no comparable common ancestor — lt errors.
+	err = runAQLError(t, r, []Value{NewInteger(1), NewWord("lt"), NewList([]Value{NewInteger(2)})})
 	if err == nil {
-		t.Error("expected error for cross-type lt")
+		t.Error("expected error for lt on incomparable types")
 	}
 }
 
