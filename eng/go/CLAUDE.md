@@ -190,10 +190,12 @@ replace historical hardcoded switches:
   (`compare_types.go`) when ordering Comparer-less values and type
   literals: List < Map, and the Ideal family Object < Array <
   Record < Options < Error < Store < Table < Tensor < Resource.
-  `typeFamilyRank` walks the parent chain so a subtype inherits its
-  family head's rank. Populated via `builtinDecl.Rank` for kernel
-  types; external types set `def.Rank = ...` after
-  `RegisterExternalBuiltin` (the matrix module's Tensor).
+  Kernel ranks are spaced by `1_000_000` so a user-registered type
+  can claim an intermediate rank. `typeFamilyRank` walks the parent
+  chain so a subtype inherits its family head's rank. Populated via
+  `builtinDecl.Rank` for kernel types; external types set
+  `def.Rank = ...` after `RegisterExternalBuiltin` (the matrix
+  module's Tensor).
 
 When introducing a new root with its own metatype anchor, add
 `MetatypePath` to its `builtinDecl` row.
