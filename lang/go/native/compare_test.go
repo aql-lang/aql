@@ -129,13 +129,14 @@ func TestCompareValuesCrossScalar(t *testing.T) {
 
 func TestCompareValuesPaths(t *testing.T) {
 	// Path-vs-Path falls through to the Scalar comparator, which
-	// orders paths by segment count (longer first), then compares
-	// equal-length paths segment by segment.
+	// orders paths by segment count (longest first), then segment by
+	// segment, then an absolute path before a relative one.
 	abc := NewPath([]string{"a", "b", "c"}, false) // 3 segments
 	ab := NewPath([]string{"a", "b"}, false)       // 2 segments
 	ac := NewPath([]string{"a", "c"}, false)       // 2 segments
 	zzz := NewPath([]string{"z", "z", "z"}, false) // 3 segments
 	aDashA := NewPath([]string{"a-", "a"}, false)  // 2 segments
+	absAB := NewPath([]string{"a", "b"}, true)     // /a/b — absolute
 	tests := []struct {
 		name string
 		a, b Value
@@ -147,6 +148,8 @@ func TestCompareValuesPaths(t *testing.T) {
 		{"equal_len_segment", ab, ac, -1},
 		{"equal_len_segment_rev", ac, ab, 1},
 		{"per_element_beats_render", ab, aDashA, -1}, // "a" < "a-" at segment 0
+		{"abs_before_rel", absAB, ab, -1},
+		{"rel_after_abs", ab, absAB, 1},
 		{"identical", ab, ab, 0},
 	}
 	for _, tt := range tests {

@@ -91,7 +91,8 @@ func (atomCompareBehavior) Compare(a, b Value) (int, error) {
 // for any same-branch pair. The one same-branch pair that does reach
 // here is Path-vs-Path — Path has no Comparer of its own — so two
 // paths fall through to Scalar, where comparePaths orders them by
-// segment count (longer paths first), then segment by segment.
+// segment count (longest first), then segment by segment, then
+// absolute paths before relative ones.
 type scalarCompareBehavior struct{ defaultBehavior }
 
 func (scalarCompareBehavior) Compare(a, b Value) (int, error) {
@@ -134,10 +135,10 @@ func scalarBranchRank(v Value) (rank int, ok bool) {
 	}
 }
 
-// comparePaths orders two Path values: longer paths (more segments)
-// sort before shorter ones; equal-length paths are then compared
-// segment by segment, lexically. scalarCompareBehavior routes the
-// Path-vs-Path case here.
+// comparePaths orders two Path values by three keys in turn: longer
+// paths (more segments) sort first, then segment by segment
+// lexically, then an absolute path before a relative one.
+// scalarCompareBehavior routes the Path-vs-Path case here.
 func comparePaths(a, b Value) int {
 	ap, aerr := AsPath(a)
 	bp, berr := AsPath(b)
@@ -159,7 +160,16 @@ func comparePaths(a, b Value) int {
 			return c
 		}
 	}
-	return 0
+	// Same size and segments — an absolute path sorts before a
+	// relative one.
+	switch {
+	case ap.Abs && !bp.Abs:
+		return -1
+	case !ap.Abs && bp.Abs:
+		return 1
+	default:
+		return 0
+	}
 }
 
 // init attaches the scalar Comparers to their owning kernel types.
