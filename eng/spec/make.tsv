@@ -91,17 +91,26 @@ make String '' typeof	EmptyString	empty String → EmptyString subtype
 # ====================================================================		
 # 4. Path construction		
 # ====================================================================		
-# Paths take a string ('a/b') or a list of parts (['a' 'b']). A		
-# leading '/' in the string sets the abs flag; an explicit		
-# `{ abs:true }` opts map promotes the result to absolute.		
+# Paths take a string ('a/b') or a list of parts (['a' 'b']).
+# Slashes are normalised — '//' runs and leading/trailing '/'
+# collapse to dropped empty segments. A leading '/' (on the
+# string or the first list element) sets the abs flag;
+# `{ abs:true }` forces absolute.
 		
 make Path 'a/b/c'	a/b/c	relative path from a string
 make Path '/a/b'	/a/b	absolute path; leading '/' detected
 make Path [ 'x' 'y' 'z' ]	x/y/z	list-of-parts form
 make Path [ ]		empty list yields an empty path (renders as the empty string)
-make Path [ 'single' ]	single	
-		
-# Path with `{abs:true}` options — `make` 3-arg sig handles the opts.		
+make Path [ 'single' ]	single
+
+# Slash normalisation — // runs and leading/trailing / drop.
+make Path 'a//b'	a/b	double slash collapses
+make Path 'a/b/'	a/b	trailing slash dropped
+make Path '//a//b//'	/a/b	leading slash absolute; slash runs collapse
+make Path [ 'x/' 'y' ]	x/y	list element slashes normalise too
+make Path [ '/x' 'y' ]	/x/y	leading slash on first element is absolute
+
+# Path with `{abs:true}` options — `make` 3-arg sig handles the opts.
 make Path { abs:true } 'a/b'	/a/b	
 make Path { abs:true } [ 'x' 'y' ]	/x/y	
 make Path { abs:false } 'a/b'	a/b	explicit abs:false leaves the path relative

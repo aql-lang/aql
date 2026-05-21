@@ -284,30 +284,41 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 	})}, nil
 }
 
-// makePath creates a Path value from a source (list or string).
+// makePath creates a Path value from a source: a string ("a/b") or a
+// list of segments (["a" "b"]). Slashes are normalised — every "/"
+// separates segments and empty segments (from a "//" run, or a
+// leading/trailing "/") are dropped, so "a//b" and ["a/" "b"] both
+// yield ["a" "b"]. A leading "/" on the source — the string, or the
+// first list element — marks the path absolute; the abs argument
+// (from a `{ abs:… }` option map) forces it absolute regardless.
 func makePath(srcVal Value, abs bool) ([]Value, error) {
+	var raw []string
 	switch {
 	case srcVal.VType.Matches(TList) && srcVal.Data != nil:
 		elems, _ := AsList(srcVal)
-		parts := make([]string, elems.Len())
+		raw = make([]string, elems.Len())
 		for i := 0; i < elems.Len(); i++ {
-			parts[i] = ValToString(elems.Get(i))
+			raw[i] = ValToString(elems.Get(i))
 		}
-		return []Value{NewPath(parts, abs)}, nil
 	case srcVal.VType.Matches(TString) && srcVal.Data != nil:
 		s, _ := AsString(srcVal)
-		if len(s) > 0 && s[0] == '/' {
-			abs = true
-			s = s[1:]
-		}
-		var parts []string
-		if s != "" {
-			parts = strings.Split(s, "/")
-		}
-		return []Value{NewPath(parts, abs)}, nil
+		raw = []string{s}
 	default:
 		return nil, fmt.Errorf("make: Path source must be a list or string, got %s", srcVal.String())
 	}
+
+	if len(raw) > 0 && strings.HasPrefix(raw[0], "/") {
+		abs = true
+	}
+	var parts []string
+	for _, r := range raw {
+		for _, seg := range strings.Split(r, "/") {
+			if seg != "" {
+				parts = append(parts, seg)
+			}
+		}
+	}
+	return []Value{NewPath(parts, abs)}, nil
 }
 
 // MakeHandler is the position-agnostic 2-arg make dispatcher.
