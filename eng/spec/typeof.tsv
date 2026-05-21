@@ -171,12 +171,12 @@ pathof List	[Node List]
 pathof Map	[Node Map]	
 		
 # --- object family ---		
-pathof Object	[Object]	
-pathof Resource	[Object Resource]	
-pathof Entity	[Object Resource Entity]	
-pathof Table	[Object Table]	
-pathof Record	[Object Record]	
-pathof Array	[Object Array]	
+pathof Object	[Ideal Object]
+pathof Resource	[Ideal Object Resource]
+pathof Entity	[Ideal Object Resource Entity]
+pathof Table	[Ideal Object Table]
+pathof Record	[Ideal Object Record]
+pathof Array	[Ideal Object Array]
 		
 # --- type family ---		
 pathof Type	[Type]	Type has no ancestors
@@ -227,13 +227,13 @@ pathof Integer is List	true	the result is itself a List
 lengthq ( pathof Integer )	3	Scalar / Number / Integer
 lengthq ( pathof Number )	2	Scalar / Number
 lengthq ( pathof Boolean )	2	Scalar / Boolean
-lengthq ( pathof Entity )	3	Object / Resource / Entity
+lengthq ( pathof Entity )	4	Ideal / Object / Resource / Entity
 lengthq ( pathof Type )	1	Type has no ancestors
 lengthq ( pathof None )	1	
 lengthq ( pathof Enum )	3	Type / Disjunct / Enum
 firstq ( pathof Integer )	Scalar	every scalar path is rooted at Scalar
 firstq ( pathof List )	Node	node paths are rooted at Node
-firstq ( pathof Resource )	Object	object paths are rooted at Object
+firstq ( pathof Resource )	Ideal	Ideal-kind paths are rooted at Ideal
 firstq ( pathof Function )	Type	function / disjunct / enum paths are rooted at Type
 firstq ( pathof Integer ) is Scalar	true	the root element is the Scalar type literal
 firstq ( pathof Integer ) is Number	false	Scalar is not a subtype of Number — subtyping runs the other way

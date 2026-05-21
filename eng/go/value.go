@@ -1703,7 +1703,7 @@ func kernelFormatDefault(v Value) string {
 		}
 		name := oi.TypeRef.Name
 		if name == "" {
-			name = "Object/" + oi.TypeRef.ID
+			name = "Ideal/Object/" + oi.TypeRef.ID
 		}
 		return name + "{" + strings.Join(parts, ",") + "}"
 	case IsObjectType(v):
@@ -1716,7 +1716,7 @@ func kernelFormatDefault(v Value) string {
 		}
 		name := ot.Name
 		if name == "" {
-			name = "Object/" + ot.ID
+			name = "Ideal/Object/" + ot.ID
 		}
 		return "object<" + name + ">{" + strings.Join(parts, ",") + "}"
 	case IsDisjunct(v):

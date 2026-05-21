@@ -411,7 +411,7 @@ var builtinDecls = []builtinDecl{
 	{Path: "Never", FixedID: 61},
 	{Path: "Scalar", FixedID: 3, MetatypePath: "Type/ScalarType"},
 	{Path: "Node", FixedID: 11, MetatypePath: "Type/NodeType"},
-	{Path: "Object", FixedID: 30, MetatypePath: "Type/ObjectType"},
+	{Path: "Ideal", FixedID: 48},
 	{Path: "Word", FixedID: 17},
 	{Path: "Type", FixedID: 39},
 
@@ -432,21 +432,23 @@ var builtinDecls = []builtinDecl{
 	{Path: "Node/List", FixedID: 12},
 	{Path: "Node/List/Args", FixedID: 13},
 	{Path: "Node/Map", FixedID: 14},
-	{Path: "Node/Map/Options", FixedID: 38},
 	{Path: "Node/Map/Inspect", FixedID: 31},
 
-	// Object branch
-	{Path: "Object/Table", FixedID: 15},
-	{Path: "Object/Record", FixedID: 16},
-	{Path: "Object/Store", FixedID: 42},
-	{Path: "Object/Store/System", FixedID: 43},
-	{Path: "Object/Array", FixedID: 44},
-	{Path: "Object/Error", FixedID: 45},
-	{Path: "Object/Resource", FixedID: 36},
-	{Path: "Object/Resource/Entity", FixedID: 37},
-	// Object/Fetch / Object/Fetch/Request / Object/Fetch/Response
-	// moved to lang/go/native/fetch.go (Step 8 migration).
-	// Object/Timeout and Object/Interval moved to lang/go/engine/native_misc.go (Step 8).
+	// Ideal branch — the type-kind types: Object and its structural
+	// family, plus Options. Tensor/Matrix/Vector graft on here from
+	// lang/go/modules/matrix.go.
+	{Path: "Ideal/Object", FixedID: 30, MetatypePath: "Type/ObjectType"},
+	{Path: "Ideal/Object/Table", FixedID: 15},
+	{Path: "Ideal/Object/Record", FixedID: 16},
+	{Path: "Ideal/Object/Store", FixedID: 42},
+	{Path: "Ideal/Object/Store/System", FixedID: 43},
+	{Path: "Ideal/Object/Array", FixedID: 44},
+	{Path: "Ideal/Object/Error", FixedID: 45},
+	{Path: "Ideal/Object/Resource", FixedID: 36},
+	{Path: "Ideal/Object/Resource/Entity", FixedID: 37},
+	{Path: "Ideal/Options", FixedID: 38},
+	// Ideal/Object/Fetch{,/Request,/Response} → lang/go/native/fetch.go.
+	// Ideal/Object/Timeout, Ideal/Object/Interval → lang/go/native/native_misc.go.
 
 	// Word branch — Word/__XX entries are internal runtime markers.
 	// They expose friendly short-name aliases (e.g. "Paren" → Word/__OP)

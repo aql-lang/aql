@@ -379,19 +379,19 @@ func (r *Registry) clearSigsKeepFallback(name string) {
 // All containers at every depth are Stores.
 func (r *Registry) InitRootContext() {
 	root := &StoreInstanceInfo{
-		TypeName: "Object/Store",
+		TypeName: "Ideal/Object/Store",
 		Data:     make(map[string]Value),
 	}
 
 	// Create the System store.
 	sysStore := &StoreInstanceInfo{
-		TypeName: "Object/Store/System",
+		TypeName: "Ideal/Object/Store/System",
 		Data:     make(map[string]Value),
 	}
 
 	// fs: a Store with {mem: false, impl: None}
 	fsStore := &StoreInstanceInfo{
-		TypeName: "Object/Store",
+		TypeName: "Ideal/Object/Store",
 		Data:     make(map[string]Value),
 	}
 	fsStore.Set("mem", NewBoolean(false))
@@ -400,7 +400,7 @@ func (r *Registry) InitRootContext() {
 
 	// __val: a Store for user-defined values
 	valStore := &StoreInstanceInfo{
-		TypeName: "Object/Store",
+		TypeName: "Ideal/Object/Store",
 		Data:     make(map[string]Value),
 	}
 	sysStore.Set("__val", NewStoreValue(TStore, valStore))

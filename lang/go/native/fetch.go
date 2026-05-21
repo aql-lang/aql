@@ -21,9 +21,9 @@ import (
 // documented lang/go/native/fetch range (3000-3999) — see
 // eng.TypeTable.RegisterExternalBuiltin for the allocation policy.
 var (
-	TFetchFunction = registerFetchType("Object/Fetch", 3000)
-	TFetchRequest  = registerFetchType("Object/Fetch/Request", 3001)
-	TFetchResponse = registerFetchType("Object/Fetch/Response", 3002)
+	TFetchFunction = registerFetchType("Ideal/Object/Fetch", 3000)
+	TFetchRequest  = registerFetchType("Ideal/Object/Fetch/Request", 3001)
+	TFetchResponse = registerFetchType("Ideal/Object/Fetch/Response", 3002)
 )
 
 func registerFetchType(path string, fixedID int) *eng.Type {

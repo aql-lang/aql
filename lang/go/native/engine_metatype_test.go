@@ -23,7 +23,7 @@ func TestMetatypeFor(t *testing.T) {
 		{"Node → Type", TNode, TType},
 		{"Any → Type", TAny, TType},
 		{"None → Type", TNone, TType},
-		{"Object → Type", TObject, TType},
+		{"Object → ObjectType", TObject, TObjectType},
 		{"Table → ObjectType", TTable, TObjectType},
 		{"Record → ObjectType", TRecord, TObjectType},
 		{"Resource → ObjectType", TResource, TObjectType},

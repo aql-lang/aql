@@ -189,7 +189,7 @@ func installResourceTypes(r *Registry) {
 	resourceInfo := ObjectTypeInfo{
 		Fields: resourceFields,
 		Parent: nil,
-		ID:     BuiltinIDForPath("Object/Resource"),
+		ID:     BuiltinIDForPath("Ideal/Object/Resource"),
 	}
 
 	InstallDef(r, "Resource", NewObjectType(TResource, resourceInfo))
@@ -204,7 +204,7 @@ func installResourceTypes(r *Registry) {
 	entityInfo := ObjectTypeInfo{
 		Fields: entityFields,
 		Parent: &installedResource,
-		ID:     BuiltinIDForPath("Object/Resource/Entity"),
+		ID:     BuiltinIDForPath("Ideal/Object/Resource/Entity"),
 	}
 
 	InstallDef(r, "Entity", NewObjectType(TResourceEntity, entityInfo))

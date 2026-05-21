@@ -370,7 +370,7 @@ var typeInherentScores = map[string]int{
 	"None":   100,
 	"Any":    200,
 	"Type":   300,
-	"Object": 400,
+	"Ideal":  400,
 	"Word":   500,
 	"Scalar": 600,
 	"Node":   700,
@@ -390,24 +390,24 @@ var typeInherentScores = map[string]int{
 	"Word/__UF":      1100,
 
 	// Depth 2 — regular types, ordered by cardinality
-	"Scalar/Boolean":  1200,
-	"Scalar/Path":     1250,
-	"Scalar/Atom":     1300,
-	"Object/Error":    1400,
-	"Object/Fetch":    1500,
-	"Object/Store":    1600,
-	"Object/Array":    1650,
-	"Object/Resource": 1700,
-	"Scalar/Number":   1800,
-	"Word/Function":   1900,
-	"Object/Table":    2000,
-	"Object/Record":   2100,
-	"Scalar/String":   2200,
-	"Node/List":       2300,
-	"Node/Map":        2400,
-	"Type/ScalarType": 2500,
-	"Type/NodeType":   2600,
-	"Type/ObjectType": 2700,
+	"Scalar/Boolean":        1200,
+	"Scalar/Path":           1250,
+	"Scalar/Atom":           1300,
+	"Ideal/Object/Error":    1400,
+	"Ideal/Object/Fetch":    1500,
+	"Ideal/Object/Store":    1600,
+	"Ideal/Object/Array":    1650,
+	"Ideal/Object/Resource": 1700,
+	"Scalar/Number":         1800,
+	"Word/Function":         1900,
+	"Ideal/Object/Table":    2000,
+	"Ideal/Object/Record":   2100,
+	"Scalar/String":         2200,
+	"Node/List":             2300,
+	"Node/Map":              2400,
+	"Type/ScalarType":       2500,
+	"Type/NodeType":         2600,
+	"Type/ObjectType":       2700,
 
 	// Depth 3 — Scalar subtypes
 	"Scalar/String/EmptyString":  900,
@@ -417,14 +417,15 @@ var typeInherentScores = map[string]int{
 
 	// Depth 3 — Node subtypes
 	"Node/List/Args":   1300,
-	"Node/Map/Options": 1400,
+	"Ideal/Options":    1400,
+	"Ideal/Object":     400,
 	"Node/Map/Inspect": 1500,
 
 	// Depth 3 — Object subtypes
-	"Object/Fetch/Request":   1600,
-	"Object/Fetch/Response":  1700,
-	"Object/Resource/Entity": 1800,
-	"Object/Store/System":    1900,
+	"Ideal/Object/Fetch/Request":   1600,
+	"Ideal/Object/Fetch/Response":  1700,
+	"Ideal/Object/Resource/Entity": 1800,
+	"Ideal/Object/Store/System":    1900,
 }
 
 // typeInherentScore returns the inherent score for a type.
