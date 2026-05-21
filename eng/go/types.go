@@ -65,7 +65,7 @@ var (
 	TType       = mustType("Type")
 	TScalarType = mustType("Type/ScalarType")
 	TNodeType   = mustType("Type/NodeType")
-	TObjectType = mustType("Type/ObjectType")
+	TIdealType  = mustType("Type/IdealType")
 	// Scalar/Time and descendants moved to
 	// lang/go/engine/native_temporal.go (Step 8). They live in
 	// lang/go/engine (not lang/go/internal/nativemod/time) because

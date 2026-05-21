@@ -25,7 +25,7 @@ var makeNatives = []NativeFunc{
 		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{Args: []*Type{TScalarType, TMap, TAny}, Handler: eng.MakeScalarOptsHandler, ReturnsFn: ReturnsIdentity(0)},
-			{Args: []*Type{TObjectType, TMap}, Handler: eng.MakeObjHandler, ReturnsFn: ReturnsIdentity(0)},
+			{Args: []*Type{TIdealType, TMap}, Handler: eng.MakeObjHandler, ReturnsFn: ReturnsIdentity(0)},
 			{Args: []*Type{TArray, TList}, Handler: eng.MakeArrayHandler, Returns: []*Type{TArray}},
 			{Args: []*Type{TScalarType, TAny}, Handler: eng.MakeScalarHandler, ReturnsFn: ReturnsIdentity(0)},
 			{Args: []*Type{TObject, TAny, TObject}, Handler: eng.MakeWithPrototype, Returns: []*Type{TObject}},

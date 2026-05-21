@@ -61,7 +61,7 @@ func (o OriginKind) String() string {
 // leaf-name → base-type switch (Step 9 of TYPE-DECOUPLING.0.md).
 //
 // Metatype is the type-of-the-type: TScalar's Metatype is
-// TScalarType, TNode's is TNodeType, TObject's is TObjectType, and
+// TScalarType, TNode's is TNodeType, TObject's is TIdealType, and
 // every descendant of those roots inherits the same Metatype. Other
 // roots (Any, None, Never, Word, Type) have a nil Metatype, which
 // MetatypeFor maps to TType. Replaces the historical hardcoded root-
@@ -437,7 +437,7 @@ var builtinDecls = []builtinDecl{
 	// Ideal branch — the type-kind types: Object and its structural
 	// family, plus Options. Tensor/Matrix/Vector graft on here from
 	// lang/go/modules/matrix.go.
-	{Path: "Ideal/Object", FixedID: 30, MetatypePath: "Type/ObjectType"},
+	{Path: "Ideal/Object", FixedID: 30, MetatypePath: "Type/IdealType"},
 	{Path: "Ideal/Object/Table", FixedID: 15},
 	{Path: "Ideal/Object/Record", FixedID: 16},
 	{Path: "Ideal/Object/Store", FixedID: 42},
@@ -475,7 +475,7 @@ var builtinDecls = []builtinDecl{
 	{Path: "Type/Disjunct/Enum", FixedID: 62},
 	{Path: "Type/ScalarType", FixedID: 40},
 	{Path: "Type/NodeType", FixedID: 41},
-	{Path: "Type/ObjectType", FixedID: 46},
+	{Path: "Type/IdealType", FixedID: 46},
 	{Path: "Type/Dependent", FixedID: 65},
 	{Path: "Type/Dependent/DepInteger", FixedID: 66, BasePath: "Scalar/Number/Integer"},
 	{Path: "Type/Dependent/DepDecimal", FixedID: 67, BasePath: "Scalar/Number/Decimal"},
@@ -503,7 +503,7 @@ func newBuiltinTypeTable() *TypeTable {
 		tt.registerBuiltin(d)
 	}
 	// Post-pass: wire Metatype fields. Roots that anchor a metatype
-	// (Scalar→ScalarType, Node→NodeType, Object→ObjectType) resolve
+	// (Scalar→ScalarType, Node→NodeType, Object→IdealType) resolve
 	// their MetatypePath here, after all decls have been registered.
 	// Every descendant of a metatype-bearing root inherits its
 	// ancestor's Metatype by walking up — done lazily by MetatypeFor.

@@ -77,7 +77,7 @@ func TestFixedIDStability(t *testing.T) {
 		"Ideal/Object/Store/System":    43,
 		"Ideal/Object/Array":           44,
 		"Ideal/Object/Error":           45,
-		"Type/ObjectType":              46,
+		"Type/IdealType":               46,
 		"Scalar/Path":                  47,
 		"Ideal/Tensor":                 2001, // matrix module range (2000-2999)
 		"Ideal/Tensor/Matrix":          2000, // historical Matrix FixedID, kept

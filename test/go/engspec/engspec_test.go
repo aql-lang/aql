@@ -734,7 +734,7 @@ func registerEngSpecMake(r *eng.Registry) {
 		ForwardArgs: true,
 		Signatures: []eng.NativeSig{
 			{Args: []*eng.Type{eng.TScalarType, eng.TMap, eng.TAny}, Handler: eng.MakeScalarOptsHandler, ReturnsFn: eng.ReturnsIdentity(0)},
-			{Args: []*eng.Type{eng.TObjectType, eng.TMap}, Handler: eng.MakeObjHandler, ReturnsFn: eng.ReturnsIdentity(0)},
+			{Args: []*eng.Type{eng.TIdealType, eng.TMap}, Handler: eng.MakeObjHandler, ReturnsFn: eng.ReturnsIdentity(0)},
 			{Args: []*eng.Type{eng.TArray, eng.TList}, Handler: eng.MakeArrayHandler, Returns: []*eng.Type{eng.TArray}},
 			{Args: []*eng.Type{eng.TScalarType, eng.TAny}, Handler: eng.MakeScalarHandler, ReturnsFn: eng.ReturnsIdentity(0)},
 			{Args: []*eng.Type{eng.TObject, eng.TAny, eng.TObject}, Handler: eng.MakeWithPrototype, Returns: []*eng.Type{eng.TObject}},

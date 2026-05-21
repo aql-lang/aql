@@ -134,7 +134,7 @@ var (
 	TNone           = eng.TNone
 	TNumber         = eng.TNumber
 	TObject         = eng.TObject
-	TObjectType     = eng.TObjectType
+	TIdealType      = eng.TIdealType
 	TOpenParen      = eng.TOpenParen
 	TOptions        = eng.TOptions
 	TParenExpr      = eng.TParenExpr
