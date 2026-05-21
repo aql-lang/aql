@@ -24,18 +24,20 @@ var ErrNoComparer = errors.New("eng: no comparer in this Behavior")
 // Scalar, which owns the cross-branch ordering; Date-vs-Date stays
 // on Date.
 //
-// When the lattice walk finds no Comparer, the order is still total:
-// cross-branch pairs order by the top-level branch precedence
+// When the lattice walk finds no Comparer, the order is still a strict
+// total order. Cross-branch pairs order by the top-level branch
+// precedence
 //
 //	Never < Any < None < Word < Type < Scalar < Node < Ideal
 //
-// and same-branch pairs fall back to size — the value with the smaller
-// SizeOf sorts first, so a shorter List leads a longer one and, more
-// generally, the less "complex" value leads. Equal sizes compare equal.
+// A same-branch pair falls back to size (smaller SizeOf first, so a
+// shorter List leads a longer one); equal sizes then break to the
+// type order (compareTypes — family rank, depth, name, id), and two
+// values of the identical type break to an element-wise structural
+// comparison. Distinct values never collapse to 0.
 //
 // DepScalar values (type-level constraints) flow through this same
-// path: they sit in the Type branch and order by size like any other
-// Comparer-less type.
+// path.
 func CompareValues(a, b Value) (int, error) {
 	if a.VType == nil || b.VType == nil {
 		return 0, fmt.Errorf("cannot compare values with nil type")
@@ -62,16 +64,21 @@ func CompareValues(a, b Value) (int, error) {
 		}
 		return 1, nil
 	}
-	// Same branch, no Comparer — order by size, smaller first, so a
-	// shorter List leads a longer one. Equal sizes compare equal.
-	switch sa, sb := SizeOf(a), SizeOf(b); {
-	case sa < sb:
-		return -1, nil
-	case sa > sb:
+	// Same branch, no Comparer — order by size (smaller SizeOf first,
+	// so a shorter List leads a longer one). Equal sizes break to the
+	// type order, then — for two values of the very same type — to an
+	// element-wise structural comparison, so distinct values never
+	// collapse to 0.
+	if sa, sb := SizeOf(a), SizeOf(b); sa != sb {
+		if sa < sb {
+			return -1, nil
+		}
 		return 1, nil
-	default:
-		return 0, nil
 	}
+	if c := compareTypes(a.VType, b.VType); c != 0 {
+		return c, nil
+	}
+	return compareStructural(a, b)
 }
 
 // rootBranchRank returns v's top-level branch precedence:

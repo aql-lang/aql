@@ -206,9 +206,83 @@ func TestCompareValuesSameBranchBySize(t *testing.T) {
 	if got, err := CompareValues(long, short); err != nil || got != 1 {
 		t.Errorf("CompareValues(len 3, len 1) = %d, %v; want 1, nil", got, err)
 	}
-	// Equal size — compare equal (first-pass approximation).
-	if got, err := CompareValues(NewList([]Value{NewInteger(1)}), NewList([]Value{NewInteger(9)})); err != nil || got != 0 {
-		t.Errorf("CompareValues(len 1, len 1) = %d, %v; want 0, nil", got, err)
+	// Equal size — fall through to the type and structural tiebreaks
+	// (see TestCompareValuesStructural); element-wise here, 1 < 9.
+	if got, err := CompareValues(NewList([]Value{NewInteger(1)}), NewList([]Value{NewInteger(9)})); err != nil || got != -1 {
+		t.Errorf("CompareValues([1], [9]) = %d, %v; want -1, nil (element-wise)", got, err)
+	}
+}
+
+// TestCompareTypes — the type order used as the post-size tiebreaker
+// and for sorting type literals: family rank (List < Map), then depth
+// (a type before its subtype), then name (siblings Foo and Bar).
+func TestCompareTypes(t *testing.T) {
+	foo := &Type{Name: "Foo", Parent: TList}
+	bar := &Type{Name: "Bar", Parent: TList}
+	tests := []struct {
+		name string
+		a, b Value
+		want int
+	}{
+		{"list_before_map", NewTypeLiteral(TList), NewTypeLiteral(TMap), -1},
+		{"map_after_list", NewTypeLiteral(TMap), NewTypeLiteral(TList), 1},
+		{"type_before_subtype", NewTypeLiteral(TList), NewTypeLiteral(foo), -1},
+		{"bar_before_foo_by_name", NewTypeLiteral(bar), NewTypeLiteral(foo), -1},
+		{"foo_after_bar_by_name", NewTypeLiteral(foo), NewTypeLiteral(bar), 1},
+		{"same_type_equal", NewTypeLiteral(foo), NewTypeLiteral(foo), 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := CompareValues(tt.a, tt.b)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("CompareValues(%s, %s) = %d, want %d", tt.a, tt.b, got, tt.want)
+			}
+		})
+	}
+
+	// Value level: a Foo value and a Bar value of equal size resolve
+	// by the type order — Bar before Foo, by name.
+	fooVal := NewList([]Value{NewInteger(1)})
+	fooVal.VType = foo
+	barVal := NewList([]Value{NewInteger(1)})
+	barVal.VType = bar
+	if got, err := CompareValues(barVal, fooVal); err != nil || got != -1 {
+		t.Errorf("Bar-value vs Foo-value = %d, %v; want -1, nil", got, err)
+	}
+}
+
+// TestCompareValuesStructural — two values of the same type and size
+// break the tie structurally: lists element-wise, maps by sorted keys
+// then by the value at each key.
+func TestCompareValuesStructural(t *testing.T) {
+	// Lists of equal length compare element by element.
+	if got, err := CompareValues(
+		NewList([]Value{NewInteger(1), NewInteger(2)}),
+		NewList([]Value{NewInteger(1), NewInteger(3)})); err != nil || got != -1 {
+		t.Errorf("[1 2] vs [1 3] = %d, %v; want -1, nil", got, err)
+	}
+	// Identical lists compare equal.
+	if got, err := CompareValues(
+		NewList([]Value{NewInteger(5)}),
+		NewList([]Value{NewInteger(5)})); err != nil || got != 0 {
+		t.Errorf("[5] vs [5] = %d, %v; want 0, nil", got, err)
+	}
+	// Maps of equal key count compare by the value at each key.
+	m1 := NewOrderedMap()
+	m1.Set("a", NewInteger(1))
+	m2 := NewOrderedMap()
+	m2.Set("a", NewInteger(2))
+	if got, err := CompareValues(NewMap(m1), NewMap(m2)); err != nil || got != -1 {
+		t.Errorf("{a:1} vs {a:2} = %d, %v; want -1, nil", got, err)
+	}
+	// Differing key sets compare by sorted keys.
+	m3 := NewOrderedMap()
+	m3.Set("b", NewInteger(1))
+	if got, err := CompareValues(NewMap(m1), NewMap(m3)); err != nil || got != -1 {
+		t.Errorf("{a:1} vs {b:1} = %d, %v; want -1, nil", got, err)
 	}
 }
 

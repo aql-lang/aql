@@ -92,10 +92,10 @@ func TestDepScalar_LtTotalOrder(t *testing.T) {
 		t.Fatalf("comparing DepScalars with lt errored: %v", err)
 	}
 	// The order is total, so DepScalars compare without error. They
-	// carry no Comparer, so they fall back to size — both have size 0,
-	// so neither is strictly less than the other.
-	if len(got) != 1 || got[0] != "false" {
-		t.Errorf("(Int gt 10) lt (Int gt 20) = %v, want [false]", got)
+	// carry no Comparer and no structure to recurse into, so the tie
+	// breaks on the canonical form: "(Integer gt 10)" < "(Integer gt 20)".
+	if len(got) != 1 || got[0] != "true" {
+		t.Errorf("(Int gt 10) lt (Int gt 20) = %v, want [true]", got)
 	}
 }
 

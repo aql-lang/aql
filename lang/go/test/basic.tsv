@@ -493,10 +493,12 @@ None deq None	true
 3 gt "z"	false
 
 # Comparison - total order: cross-branch by precedence
-# (Never < Any < None < Word < Type < Scalar < Node < Ideal),
-# same-branch by size — smaller sorts first
-[1] lt [2]	false
+# (Never < Any < None < Word < Type < Scalar < Node < Ideal); same
+# branch by size, then type (List < Map), then element-wise
+[1] lt [2]	true
+[1 2] lt [1 3]	true
 [9] lt [1 2 3]	true
+List lt Map	true
 [1] lt 5	false
 5 lt [1]	true
 
