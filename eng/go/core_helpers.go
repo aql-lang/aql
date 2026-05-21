@@ -525,6 +525,20 @@ func CowSet(store *StoreInstanceInfo, key string, val Value, r *Registry) {
 	r.Contexts.UpdateChain(origRoot, current)
 }
 
+// IsHostTypeBody reports whether v is a constructed type produced by a
+// host Ideal: an ExtensionPayload whose Body embeds eng.HostTypeBody.
+// The kernel recognises such a value as a type without inspecting its
+// concrete shape (the payload Body being opaque). See
+// lang/doc/design/IDEAL.0.md §6.
+func IsHostTypeBody(v Value) bool {
+	ep, ok := v.Data.(ExtensionPayload)
+	if !ok {
+		return false
+	}
+	_, ok = ep.Body.(interface{ hostTypeBody() })
+	return ok
+}
+
 // IsTypeBody reports whether a value is a valid type definition body
 // in the strict, structural sense: it carries explicit type-shape
 // information (a type literal, disjunct, record / table / object /
@@ -588,6 +602,10 @@ func IsTypeBody(v Value) bool {
 	}
 	// Predicate type: a FnDef / Function whose body returns a Boolean.
 	if v.VType.Equal(TFnDef) || v.VType.Equal(TFunction) {
+		return true
+	}
+	// Host-Ideal constructed type (ExtensionPayload + HostTypeBody).
+	if IsHostTypeBody(v) {
 		return true
 	}
 	return false

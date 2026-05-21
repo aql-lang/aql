@@ -1021,11 +1021,11 @@ func TestMakeRecordPositional(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// type Point record [x:number y:number]
+	// def Point type Record [x:number y:number]
 	// make Point [1 2]
 	result := runAQL(t, r, []Value{
-		NewWord("type"), NewWord("Point"),
-		NewWord("record"), NewList([]Value{
+		NewWord("def"), NewWord("Point"),
+		NewWord("type"), NewWord("Record"), NewList([]Value{
 			NewMap(singleMap("x", NewTypeLiteral(TNumber))),
 			NewMap(singleMap("y", NewTypeLiteral(TNumber))),
 		}),
@@ -1057,8 +1057,8 @@ func TestMakeRecordNamed(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{
-		NewWord("type"), NewWord("Pt"),
-		NewWord("record"), NewList([]Value{
+		NewWord("def"), NewWord("Pt"),
+		NewWord("type"), NewWord("Record"), NewList([]Value{
 			NewMap(singleMap("x", NewTypeLiteral(TNumber))),
 			NewMap(singleMap("y", NewTypeLiteral(TNumber))),
 		}),
@@ -1090,8 +1090,8 @@ func TestMakeRecordMap(t *testing.T) {
 	src.Set("x", NewInteger(5))
 	src.Set("y", NewInteger(6))
 	result := runAQL(t, r, []Value{
-		NewWord("type"), NewWord("Pt2"),
-		NewWord("record"), NewList([]Value{
+		NewWord("def"), NewWord("Pt2"),
+		NewWord("type"), NewWord("Record"), NewList([]Value{
 			NewMap(singleMap("x", NewTypeLiteral(TNumber))),
 			NewMap(singleMap("y", NewTypeLiteral(TNumber))),
 		}),

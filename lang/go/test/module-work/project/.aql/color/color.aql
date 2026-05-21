@@ -1,5 +1,5 @@
-type Color record [r:Integer g:Integer b:Integer]
-type ColorHex record [hex:String r:Integer g:Integer b:Integer]
+def Color type Record [r:Integer g:Integer b:Integer]
+def ColorHex type Record [hex:String r:Integer g:Integer b:Integer]
 
 def hex2int fn [[String] [Integer] [convert Integer {base:"hex"}]]
 

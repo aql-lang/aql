@@ -2,57 +2,21 @@ package native
 
 import "fmt"
 
-// objectRecordNatives covers the two structural type-constructor
-// words — `record` and `object`. They produce type bodies (RecordType
-// / ObjectType) which are then named with `type Foo …` and
-// instantiated with `make Foo data`.
+// This file holds the record / object type-construction handlers.
+// They are not registered as words of their own — the `type`
+// constructor (native_type.go) dispatches to them:
 //
-//	record [ {a:Integer} {b:String} … ]   build a RecordType from a
-//	                                       list of single-pair maps.
-//	object {a:String b:Integer …}          build an anonymous ObjectType
-//	                                       (nominal, inheritance-aware).
-//	object {b:Integer …} ParentType        build an ObjectType that
-//	                                       extends ParentType — child
-//	                                       fields must unify with the
-//	                                       parent's same-named fields.
-//
-// Both run under CheckMode (RunInCheckMode) because downstream
-// `make NAME` needs the constructed type even during static
-// analysis.
+//	type Record [a:Integer b:String …]   RecordType from a list
+//	                                          of single-pair maps.
+//	type Object {a:String b:Integer …}    anonymous ObjectType
+//	                                          (nominal, inheritance-aware).
+//	type <objtype> {b:Integer …}          ObjectType extending the
+//	                                          parent — child fields must
+//	                                          unify with the parent's
+//	                                          same-named fields.
 //
 // Algorithms (ResolveFieldType, Unify, MintType, NewRecordType,
-// NewObjectType, …) live in eng; this file owns the word names and
-// dispatch wiring.
-var objectRecordNatives = []NativeFunc{
-	{
-		Name:        "record",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:           []*Type{TList},
-			Handler:        recordHandler,
-			Returns:        []*Type{TRecord},
-			RunInCheckMode: true,
-		}},
-	},
-	{
-		Name:        "object",
-		ForwardArgs: true,
-		Signatures: []NativeSig{
-			{
-				Args:           []*Type{TMap, TObject},
-				Handler:        objectWithParentHandler,
-				Returns:        []*Type{TObjectType},
-				RunInCheckMode: true,
-			},
-			{
-				Args:           []*Type{TMap},
-				Handler:        objectHandler,
-				Returns:        []*Type{TObjectType},
-				RunInCheckMode: true,
-			},
-		},
-	},
-}
+// NewObjectType, …) live in eng.
 
 func recordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	list := args[0]

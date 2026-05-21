@@ -68,9 +68,9 @@ func TestMatrixEye(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m := AsMatrix(result[0])
-	if m.Rows != 3 || m.Cols != 3 {
-		t.Fatalf("expected 3x3, got %dx%d", m.Rows, m.Cols)
+	m := AsTensor(result[0])
+	if m.Rows() != 3 || m.Cols() != 3 {
+		t.Fatalf("expected 3x3, got %dx%d", m.Rows(), m.Cols())
 	}
 	// Check diagonal is 1, off-diagonal is 0
 	for i := 0; i < 3; i++ {
@@ -92,9 +92,9 @@ func TestMatrixZeros(t *testing.T) {
 	r := matrixRegistry(t)
 	input := append([]native.Value{native.NewInteger(2), native.NewInteger(3)}, matGet("zeros")...)
 	result := runAQL(t, r, input)
-	m := AsMatrix(result[0])
-	if m.Rows != 2 || m.Cols != 3 {
-		t.Fatalf("expected 2x3, got %dx%d", m.Rows, m.Cols)
+	m := AsTensor(result[0])
+	if m.Rows() != 2 || m.Cols() != 3 {
+		t.Fatalf("expected 2x3, got %dx%d", m.Rows(), m.Cols())
 	}
 	for i, v := range m.Data {
 		if v != 0.0 {
@@ -109,7 +109,7 @@ func TestMatrixOnes(t *testing.T) {
 	r := matrixRegistry(t)
 	input := append([]native.Value{native.NewInteger(2), native.NewInteger(2)}, matGet("ones")...)
 	result := runAQL(t, r, input)
-	m := AsMatrix(result[0])
+	m := AsTensor(result[0])
 	for i, v := range m.Data {
 		if v != 1.0 {
 			t.Errorf("ones[%d] = %v, want 1.0", i, v)
@@ -121,7 +121,7 @@ func TestMatrixOnes(t *testing.T) {
 
 func TestMatrixRows(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := NewMatrix(native.MatrixData{Data: make([]float64, 6), Rows: 2, Cols: 3})
+	mat := newMatrix(2, 3, make([]float64, 6))
 	input := append([]native.Value{mat}, matGet("rows")...)
 	result := runAQL(t, r, input)
 	v, _ := native.AsInteger(result[0])
@@ -132,7 +132,7 @@ func TestMatrixRows(t *testing.T) {
 
 func TestMatrixCols(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := NewMatrix(native.MatrixData{Data: make([]float64, 6), Rows: 2, Cols: 3})
+	mat := newMatrix(2, 3, make([]float64, 6))
 	input := append([]native.Value{mat}, matGet("cols")...)
 	result := runAQL(t, r, input)
 	v, _ := native.AsInteger(result[0])
@@ -143,7 +143,7 @@ func TestMatrixCols(t *testing.T) {
 
 func TestMatrixSize(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := NewMatrix(native.MatrixData{Data: make([]float64, 6), Rows: 2, Cols: 3})
+	mat := newMatrix(2, 3, make([]float64, 6))
 	input := append([]native.Value{mat}, matGet("size")...)
 	result := runAQL(t, r, input)
 	v, _ := native.AsInteger(result[0])
@@ -157,7 +157,7 @@ func TestMatrixSize(t *testing.T) {
 func TestMatrixAt(t *testing.T) {
 	r := matrixRegistry(t)
 	// 2x2 matrix: [[1,2],[3,4]]
-	mat := NewMatrix(native.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	mat := newMatrix(2, 2, []float64{1, 2, 3, 4})
 	// mat 1 0 matrix.at → element at row 1, col 0 = 3
 	input := append([]native.Value{mat, native.NewInteger(1), native.NewInteger(0)}, matGet("elem")...)
 	result := runAQL(t, r, input)
@@ -169,7 +169,7 @@ func TestMatrixAt(t *testing.T) {
 
 func TestMatrixRow(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := NewMatrix(native.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
+	mat := newMatrix(2, 3, []float64{1, 2, 3, 4, 5, 6})
 	// mat 1 matrix.row → [4, 5, 6]
 	input := append([]native.Value{mat, native.NewInteger(1)}, matGet("row")...)
 	result := runAQL(t, r, input)
@@ -187,7 +187,7 @@ func TestMatrixRow(t *testing.T) {
 
 func TestMatrixCol(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := NewMatrix(native.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
+	mat := newMatrix(2, 3, []float64{1, 2, 3, 4, 5, 6})
 	// mat 1 matrix.col → [2, 5]
 	input := append([]native.Value{mat, native.NewInteger(1)}, matGet("col")...)
 	result := runAQL(t, r, input)
@@ -206,10 +206,10 @@ func TestMatrixCol(t *testing.T) {
 
 func TestMatrixScale(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := NewMatrix(native.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	mat := newMatrix(2, 2, []float64{1, 2, 3, 4})
 	input := append([]native.Value{mat, native.NewInteger(3)}, matGet("scale")...)
 	result := runAQL(t, r, input)
-	m := AsMatrix(result[0])
+	m := AsTensor(result[0])
 	expected := []float64{3, 6, 9, 12}
 	for i, v := range m.Data {
 		if v != expected[i] {
@@ -220,11 +220,11 @@ func TestMatrixScale(t *testing.T) {
 
 func TestMatrixAdd(t *testing.T) {
 	r := matrixRegistry(t)
-	a := NewMatrix(native.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
-	b := NewMatrix(native.MatrixData{Data: []float64{10, 20, 30, 40}, Rows: 2, Cols: 2})
+	a := newMatrix(2, 2, []float64{1, 2, 3, 4})
+	b := newMatrix(2, 2, []float64{10, 20, 30, 40})
 	input := append([]native.Value{a, b}, matGet("mat-add")...)
 	result := runAQL(t, r, input)
-	m := AsMatrix(result[0])
+	m := AsTensor(result[0])
 	expected := []float64{11, 22, 33, 44}
 	for i, v := range m.Data {
 		if v != expected[i] {
@@ -236,11 +236,11 @@ func TestMatrixAdd(t *testing.T) {
 func TestMatrixMul(t *testing.T) {
 	r := matrixRegistry(t)
 	// [[1,2],[3,4]] * [[5,6],[7,8]] = [[19,22],[43,50]]
-	a := NewMatrix(native.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
-	b := NewMatrix(native.MatrixData{Data: []float64{5, 6, 7, 8}, Rows: 2, Cols: 2})
+	a := newMatrix(2, 2, []float64{1, 2, 3, 4})
+	b := newMatrix(2, 2, []float64{5, 6, 7, 8})
 	input := append([]native.Value{a, b}, matGet("mat-mul")...)
 	result := runAQL(t, r, input)
-	m := AsMatrix(result[0])
+	m := AsTensor(result[0])
 	expected := []float64{19, 22, 43, 50}
 	for i, v := range m.Data {
 		if v != expected[i] {
@@ -252,13 +252,13 @@ func TestMatrixMul(t *testing.T) {
 func TestMatrixMulRectangular(t *testing.T) {
 	r := matrixRegistry(t)
 	// 2x3 * 3x1 = 2x1
-	a := NewMatrix(native.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
-	b := NewMatrix(native.MatrixData{Data: []float64{1, 1, 1}, Rows: 3, Cols: 1})
+	a := newMatrix(2, 3, []float64{1, 2, 3, 4, 5, 6})
+	b := newMatrix(3, 1, []float64{1, 1, 1})
 	input := append([]native.Value{a, b}, matGet("mat-mul")...)
 	result := runAQL(t, r, input)
-	m := AsMatrix(result[0])
-	if m.Rows != 2 || m.Cols != 1 {
-		t.Fatalf("expected 2x1, got %dx%d", m.Rows, m.Cols)
+	m := AsTensor(result[0])
+	if m.Rows() != 2 || m.Cols() != 1 {
+		t.Fatalf("expected 2x1, got %dx%d", m.Rows(), m.Cols())
 	}
 	if m.Data[0] != 6.0 || m.Data[1] != 15.0 {
 		t.Errorf("mat-mul result = %v, want [6, 15]", m.Data)
@@ -270,12 +270,12 @@ func TestMatrixMulRectangular(t *testing.T) {
 func TestMatrixTranspose(t *testing.T) {
 	r := matrixRegistry(t)
 	// [[1,2,3],[4,5,6]] → [[1,4],[2,5],[3,6]]
-	mat := NewMatrix(native.MatrixData{Data: []float64{1, 2, 3, 4, 5, 6}, Rows: 2, Cols: 3})
+	mat := newMatrix(2, 3, []float64{1, 2, 3, 4, 5, 6})
 	input := append([]native.Value{mat}, matGet("transpose")...)
 	result := runAQL(t, r, input)
-	m := AsMatrix(result[0])
-	if m.Rows != 3 || m.Cols != 2 {
-		t.Fatalf("expected 3x2, got %dx%d", m.Rows, m.Cols)
+	m := AsTensor(result[0])
+	if m.Rows() != 3 || m.Cols() != 2 {
+		t.Fatalf("expected 3x2, got %dx%d", m.Rows(), m.Cols())
 	}
 	expected := []float64{1, 4, 2, 5, 3, 6}
 	for i, v := range m.Data {
@@ -287,7 +287,7 @@ func TestMatrixTranspose(t *testing.T) {
 
 func TestMatrixFlatten(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := NewMatrix(native.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	mat := newMatrix(2, 2, []float64{1, 2, 3, 4})
 	input := append([]native.Value{mat}, matGet("flatten")...)
 	result := runAQL(t, r, input)
 	list, _ := native.AsList(result[0])
@@ -306,7 +306,7 @@ func TestMatrixFlatten(t *testing.T) {
 
 func TestMatrixSum(t *testing.T) {
 	r := matrixRegistry(t)
-	mat := NewMatrix(native.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	mat := newMatrix(2, 2, []float64{1, 2, 3, 4})
 	input := append([]native.Value{mat}, matGet("sum")...)
 	result := runAQL(t, r, input)
 	v, _ := native.AsNumber(result[0])
@@ -318,7 +318,7 @@ func TestMatrixSum(t *testing.T) {
 func TestMatrixTrace(t *testing.T) {
 	r := matrixRegistry(t)
 	// trace([[1,2],[3,4]]) = 1+4 = 5
-	mat := NewMatrix(native.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	mat := newMatrix(2, 2, []float64{1, 2, 3, 4})
 	input := append([]native.Value{mat}, matGet("tr")...)
 	result := runAQL(t, r, input)
 	v, _ := native.AsNumber(result[0])
@@ -330,7 +330,7 @@ func TestMatrixTrace(t *testing.T) {
 func TestMatrixDet(t *testing.T) {
 	r := matrixRegistry(t)
 	// det([[1,2],[3,4]]) = 1*4 - 2*3 = -2
-	mat := NewMatrix(native.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
+	mat := newMatrix(2, 2, []float64{1, 2, 3, 4})
 	input := append([]native.Value{mat}, matGet("det")...)
 	result := runAQL(t, r, input)
 	v, _ := native.AsNumber(result[0])
@@ -343,7 +343,7 @@ func TestMatrixDet3x3(t *testing.T) {
 	r := matrixRegistry(t)
 	// det([[6,1,1],[4,-2,5],[2,8,7]]) = 6(-2*7-5*8) - 1(4*7-5*2) + 1(4*8-(-2)*2)
 	// = 6(-14-40) - 1(28-10) + 1(32+4) = 6(-54) - 18 + 36 = -324-18+36 = -306
-	mat := NewMatrix(native.MatrixData{Data: []float64{6, 1, 1, 4, -2, 5, 2, 8, 7}, Rows: 3, Cols: 3})
+	mat := newMatrix(3, 3, []float64{6, 1, 1, 4, -2, 5, 2, 8, 7})
 	input := append([]native.Value{mat}, matGet("det")...)
 	result := runAQL(t, r, input)
 	v, _ := native.AsNumber(result[0])
@@ -390,9 +390,9 @@ func TestMatrixMakeFromRows(t *testing.T) {
 	})
 	input := append([]native.Value{rows}, matGet("create")...)
 	result := runAQL(t, r, input)
-	m := AsMatrix(result[0])
-	if m.Rows != 2 || m.Cols != 2 {
-		t.Fatalf("expected 2x2, got %dx%d", m.Rows, m.Cols)
+	m := AsTensor(result[0])
+	if m.Rows() != 2 || m.Cols() != 2 {
+		t.Fatalf("expected 2x2, got %dx%d", m.Rows(), m.Cols())
 	}
 	expected := []float64{1, 2, 3, 4}
 	for i, v := range m.Data {
@@ -406,11 +406,11 @@ func TestMatrixMakeFromRows(t *testing.T) {
 
 func TestMatrixMulIdentity(t *testing.T) {
 	r := matrixRegistry(t)
-	a := NewMatrix(native.MatrixData{Data: []float64{1, 2, 3, 4}, Rows: 2, Cols: 2})
-	eye := NewMatrix(native.MatrixData{Data: []float64{1, 0, 0, 1}, Rows: 2, Cols: 2})
+	a := newMatrix(2, 2, []float64{1, 2, 3, 4})
+	eye := newMatrix(2, 2, []float64{1, 0, 0, 1})
 	input := append([]native.Value{a, eye}, matGet("mat-mul")...)
 	result := runAQL(t, r, input)
-	m := AsMatrix(result[0])
+	m := AsTensor(result[0])
 	expected := []float64{1, 2, 3, 4}
 	for i, v := range m.Data {
 		if v != expected[i] {

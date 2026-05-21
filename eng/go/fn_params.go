@@ -294,7 +294,7 @@ func LookupDefType(r *Registry, name string) *Value {
 	if r == nil {
 		return nil
 	}
-	if tv, ok := r.Types.TopBody(name); ok {
+	if tv, ok := r.TopTypeBody(name); ok {
 		if IsTypeBody(tv) {
 			return &tv
 		}
@@ -342,7 +342,7 @@ func lookupTypeNameInRegistry(r *Registry, name string) (*Type, error) {
 		return t, nil
 	}
 	if r != nil {
-		if def := r.Types.LookupByName(name); def != nil {
+		if def := r.LookupTypeName(name); def != nil {
 			return def, nil
 		}
 	}

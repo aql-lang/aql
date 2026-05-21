@@ -48,7 +48,7 @@ var inspectNatives = []NativeFunc{
 
 func inspectAtomHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name, _ := args[0].AsConcreteAtom()
-	if tv, ok := r.Types.TopBody(name); ok {
+	if tv, ok := r.TopTypeBody(name); ok {
 		return []Value{buildTypeInspection(name, tv)}, nil
 	}
 	if top, ok := r.Defs.Top(name); ok {

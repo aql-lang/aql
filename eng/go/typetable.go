@@ -118,24 +118,24 @@ func (t *Type) IsAncestor(ancestor *Type) bool {
 	return false
 }
 
-// TypeBinding pairs a Type with a per-scope body. The body holds the
-// user-installed payload (record schema, options schema, ObjectTypeInfo, …)
-// while the Def carries the identity that survives shadow pops.
-type TypeBinding struct {
-	Def  *Type
-	Body Value
-}
-
-// TypeTable is the canonical catalogue of types. Builtin is the package-
-// level table; per-Registry dynamic tables extend it via PushType.
+// TypeTable is the canonical catalogue of types. Builtin is the
+// package-level table; per-Registry dynamic tables extend it via
+// MintType.
+//
+// Post the TYPE-UNIFORM Phase 4 collapse the TypeTable is purely the
+// type *lattice* — it no longer owns a dynamic binding stack. Type
+// bindings installed by a capitalised `def` live in the Registry's
+// single DefTable; this table only mints lattice identities
+// (MintType), indexes them by ID (byID), and keeps the static builtin
+// name index (byName).
 type TypeTable struct {
 	byID      map[string]*Type
-	byName    map[string][]TypeBinding // shadowing stack — top is the active binding
-	parts     map[string]bool          // every Part name used by a registered type
-	bypath    map[string]*Type         // builtin-only path index (dynamic types can collide on path)
-	rootSet   map[string]bool          // roots, for fast IsRoot checks
-	leafIndex map[string]string        // builtin leaf-name → full path; "" if ambiguous
-	seq       int                      // counter for minting dynamic IDs
+	byName    map[string]*Type  // builtin name → Type (static; dynamic bindings live in DefTable)
+	parts     map[string]bool   // every Part name used by a registered type
+	bypath    map[string]*Type  // builtin-only path index (dynamic types can collide on path)
+	rootSet   map[string]bool   // roots, for fast IsRoot checks
+	leafIndex map[string]string // builtin leaf-name → full path; "" if ambiguous
+	seq       int               // counter for minting dynamic IDs
 }
 
 // dynamicIDBase is the starting point for minted IDs, chosen well above
@@ -143,8 +143,8 @@ type TypeTable struct {
 const dynamicIDBase = 0x10000000
 
 // Lookup returns the Type for a builtin path, or nil if none.
-// Dynamic types are NOT in this index — use LookupByName for shadow-
-// aware resolution and LookupByID for direct identity lookup.
+// Dynamic types are NOT in this index — use Registry.LookupTypeName
+// for shadow-aware resolution and LookupByID for direct identity lookup.
 func (tt *TypeTable) Lookup(path string) *Type {
 	if tt == nil {
 		return nil
@@ -160,17 +160,15 @@ func (tt *TypeTable) LookupByID(id string) *Type {
 	return tt.byID[id]
 }
 
-// LookupByName returns the active Type for a user-facing short name,
-// honoring shadowing (top of stack wins). Returns nil if unbound.
-func (tt *TypeTable) LookupByName(name string) *Type {
+// LookupBuiltinByName returns the builtin Type registered under a
+// user-facing short name, or nil. Dynamic type bindings are NOT here —
+// they live in the Registry's DefTable; use Registry.LookupTypeName
+// for shadow-aware resolution across both.
+func (tt *TypeTable) LookupBuiltinByName(name string) *Type {
 	if tt == nil {
 		return nil
 	}
-	s := tt.byName[name]
-	if len(s) == 0 {
-		return nil
-	}
-	return s[len(s)-1].Def
+	return tt.byName[name]
 }
 
 // IsRoot reports whether part is a top-level root name (Scalar, Node, …).
@@ -195,7 +193,7 @@ func (tt *TypeTable) KnownPart(part string) bool {
 func NewDynamicTypeTable() *TypeTable {
 	return &TypeTable{
 		byID:   make(map[string]*Type),
-		byName: make(map[string][]TypeBinding),
+		byName: make(map[string]*Type),
 		parts:  make(map[string]bool),
 	}
 }
@@ -320,7 +318,7 @@ func (tt *TypeTable) RegisterExternalBuiltin(path string, fixedID int, behavior 
 	if parent == nil {
 		tt.rootSet[path] = true
 	}
-	tt.byName[def.Name] = []TypeBinding{{Def: def}}
+	tt.byName[def.Name] = def
 	for _, p := range parts {
 		tt.parts[p] = true
 	}
@@ -353,73 +351,14 @@ func (tt *TypeTable) MintTypeWithBehavior(name string, parent *Type, behavior Ty
 	return def
 }
 
-// Bind associates name with the pre-minted def and body. Each Bind
-// pushes a new shadow layer onto byName[name]; Pop removes the top.
-// The def must have been minted via MintType (or be a builtin).
-func (tt *TypeTable) Bind(name string, def *Type, body Value) {
-	tt.byName[name] = append(tt.byName[name], TypeBinding{Def: def, Body: body})
-	for _, p := range strings.Split(name, "/") {
-		tt.parts[p] = true
+// Retire removes a dynamically-minted type from the ID index. Called
+// by `undef` when a type binding is popped from the Registry's single
+// DefTable, so the retired identity no longer resolves via LookupByID.
+func (tt *TypeTable) Retire(def *Type) {
+	if tt == nil || def == nil {
+		return
 	}
-}
-
-// PushType is a convenience wrapper around MintType + Bind for the
-// common installation path: mint a fresh *Type using body.VType as
-// parent, then bind. The body keeps its original VType (typically a
-// metatype like TRecord / TFnUndef) so `typeof Foo` returns the body
-// metatype; the minted def carries the distinct user-facing identity
-// of this declaration. Returns the minted *Type.
-func (tt *TypeTable) PushType(name string, body Value) *Type {
-	def := tt.MintType(name, body.VType)
-	tt.Bind(name, def, body)
-	return def
-}
-
-// PopType removes the top binding for name. Returns the popped Body and ok.
-func (tt *TypeTable) PopType(name string) (Value, bool) {
-	s := tt.byName[name]
-	if len(s) == 0 {
-		return Value{}, false
-	}
-	top := s[len(s)-1]
-	if len(s) == 1 {
-		delete(tt.byName, name)
-	} else {
-		tt.byName[name] = s[:len(s)-1]
-	}
-	if top.Def != nil {
-		delete(tt.byID, top.Def.ID)
-	}
-	return top.Body, true
-}
-
-// TopBody returns the active Body for name, or zero Value and false if
-// unbound. Mirrors today's TopOfTypeStack.
-func (tt *TypeTable) TopBody(name string) (Value, bool) {
-	s := tt.byName[name]
-	if len(s) == 0 {
-		return Value{}, false
-	}
-	return s[len(s)-1].Body, true
-}
-
-// Has reports whether name has any active binding.
-func (tt *TypeTable) Has(name string) bool {
-	return len(tt.byName[name]) > 0
-}
-
-// Depth returns the number of bindings stacked for name.
-func (tt *TypeTable) Depth(name string) int {
-	return len(tt.byName[name])
-}
-
-// Names returns all currently-bound names in arbitrary order.
-func (tt *TypeTable) Names() []string {
-	names := make([]string, 0, len(tt.byName))
-	for k := range tt.byName {
-		names = append(names, k)
-	}
-	return names
+	delete(tt.byID, def.ID)
 }
 
 // Clone returns a deep copy of tt — used for snapshot/restore around
@@ -431,7 +370,7 @@ func (tt *TypeTable) Clone() *TypeTable {
 	}
 	nt := &TypeTable{
 		byID:   make(map[string]*Type, len(tt.byID)),
-		byName: make(map[string][]TypeBinding, len(tt.byName)),
+		byName: make(map[string]*Type, len(tt.byName)),
 		parts:  make(map[string]bool, len(tt.parts)),
 		seq:    tt.seq,
 	}
@@ -439,7 +378,7 @@ func (tt *TypeTable) Clone() *TypeTable {
 		nt.byID[k] = v
 	}
 	for k, v := range tt.byName {
-		nt.byName[k] = append([]TypeBinding(nil), v...)
+		nt.byName[k] = v
 	}
 	for k, v := range tt.parts {
 		nt.parts[k] = v
@@ -552,7 +491,7 @@ var Builtin = newBuiltinTypeTable()
 func newBuiltinTypeTable() *TypeTable {
 	tt := &TypeTable{
 		byID:      make(map[string]*Type, len(builtinDecls)),
-		byName:    make(map[string][]TypeBinding),
+		byName:    make(map[string]*Type),
 		parts:     make(map[string]bool),
 		bypath:    make(map[string]*Type, len(builtinDecls)),
 		rootSet:   make(map[string]bool),
@@ -619,7 +558,7 @@ func (tt *TypeTable) registerBuiltin(d builtinDecl) {
 		tt.rootSet[d.Path] = true
 	}
 	if !d.IsInternal {
-		tt.byName[def.Name] = []TypeBinding{{Def: def}}
+		tt.byName[def.Name] = def
 	}
 	for _, p := range parts {
 		tt.parts[p] = true

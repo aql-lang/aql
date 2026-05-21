@@ -2,14 +2,14 @@
 # =====================================================================		
 # object — nominal type with fields, inheritance, and instantiation		
 # =====================================================================		
-# `object {field:Type …}` builds an Type: AQL's nominal,		
+# `type Object {field:Type …}` builds an object type — AQL's		
 # inheritance-aware type form. Object types can be:		
 #		
-#   - anonymous       — `object {a:String}` produces an unnamed		
+#   - anonymous       — `type Object {a:String}` produces an unnamed		
 #                       Type with an internal ID (Object/T_…).		
-#   - named           — `type Foo object {a:String}` installs Foo		
+#   - named           — `def Foo (type Object {a:String})` installs Foo		
 #                       on the type stack.		
-#   - inheriting      — `type Bar object {b:Integer} Foo` extends		
+#   - inheriting      — `def Bar (type Foo {b:Integer})` extends		
 #                       Foo with new fields. The result type ID is		
 #                       `Object/Foo/Bar` and the instance carries		
 #                       both Foo's and Bar's field constraints.		
@@ -25,9 +25,9 @@
 # field with values that satisfy each declared type. Missing fields		
 # raise an error.		
 #		
-# Runs against the eng kernel registry (eng/go/spec_test.go).		
+# Runs against the production lang registry (test/go/langspec).		
 #		
-# === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===		
+# === Test fixtures (q-suffixed spec-runner words) ===		
 #   addq    — [Number Number] forward-prec — args[1] + args[0]		
 #   lengthq — [List] forward-prec — list length		
 # === end fixtures ===		
@@ -45,18 +45,18 @@
 # (Object/T_xxx) — the internal ID used to disambiguate anonymous		
 # instances. Tests can't pin the exact ID, so this section uses		
 # named types in subsequent rows. Bare construction succeeds:		
-lengthq [ object { a:Integer } ]	1	the constructor produces exactly one stack value
-lengthq [ object { a:String b:Boolean } ]	1	multi-field anonymous still produces one value
-lengthq [ object { } ]	1	empty-field is allowed
+lengthq [ type Object { a:Integer } ]	1	the constructor produces exactly one stack value
+lengthq [ type Object { a:String b:Boolean } ]	1	multi-field anonymous still produces one value
+lengthq [ type Object { } ]	1	empty-field is allowed
 		
 # ====================================================================		
-# 2. Named object types via `type NAME object {…}`		
+# 2. Named object types via `def NAME (type Object {…})`		
 # ====================================================================		
-# `type` pushes the named type onto the type stack. Once installed,		
+# `def NAME (type Object …)` binds the named object type; once bound		
 # the bare name resolves to the Type value at that name.		
 		
-type Foo object { a:String } typeof Foo	Foo	named Type reports its own name
-type Foo object { a:String b:Boolean } typeof Foo	Foo	multi-field named type
+def Foo (type Object { a:String }) typeof Foo	Foo	named Type reports its own name
+def Foo (type Object { a:String b:Boolean }) typeof Foo	Foo	multi-field named type
 		
 # ====================================================================		
 # 3. Instantiation via `make`		
@@ -64,44 +64,44 @@ type Foo object { a:String b:Boolean } typeof Foo	Foo	multi-field named type
 # `make NAME data` validates each declared field against `data` and		
 # returns a typed object value.		
 		
-type Foo object { a:String } make Foo { a:'hi' } typeof	Foo	the made value's typeof is the type name
-type Foo object { a:String b:Integer } make Foo { a:'hi' b:9 } typeof	Foo	
+def Foo (type Object { a:String }) make Foo { a:'hi' } typeof	Foo	the made value's typeof is the type name
+def Foo (type Object { a:String b:Integer }) make Foo { a:'hi' b:9 } typeof	Foo	
 		
 # Missing required field → error.		
-type Foo object { a:String } make Foo { }	ERROR:missing field	make rejects missing fields
+def Foo (type Object { a:String }) make Foo { }	ERROR:missing field	make rejects missing fields
 		
 # ====================================================================		
 # 4. Field access via dotted accessor		
 # ====================================================================		
 # Object instances support the same `.field` syntax that maps do.		
 		
-type Foo object { a:String } make Foo { a:'hi' } .a	'hi'	
-type Foo object { a:String b:Integer } make Foo { a:'x' b:7 } .a	'x'	
-type Foo object { a:String b:Integer } make Foo { a:'x' b:7 } .b	7	
+def Foo (type Object { a:String }) make Foo { a:'hi' } .a	'hi'	
+def Foo (type Object { a:String b:Integer }) make Foo { a:'x' b:7 } .a	'x'	
+def Foo (type Object { a:String b:Integer }) make Foo { a:'x' b:7 } .b	7	
 		
 # Chained field access — object whose field is another object.		
-type Inner object { v:Integer } type Outer object { i:Inner } make Outer { i:( make Inner { v:99 } ) } .i .v	99	
+def Inner (type Object { v:Integer }) def Outer (type Object { i:Inner }) make Outer { i:( make Inner { v:99 } ) } .i .v	99	
 		
 # ====================================================================		
 # 5. Inheritance		
 # ====================================================================		
-# `type Child object {fields} Parent` makes Child inherit from		
+# `def Child (type Parent {fields})` makes Child inherit from		
 # Parent. The full type path is `Object/Parent/Child` and Child		
 # instances carry both sets of fields.		
 		
 # Path / structure inspection — typeof reports the most-specific name.		
-type Foo object { a:String } type Bar object { b:Integer } Foo typeof Bar	Bar	
+def Foo (type Object { a:String }) def Bar (type Foo { b:Integer }) typeof Bar	Bar	
 		
 # A Bar instance satisfies Foo (parent) via `is`.		
-type Foo object { a:String } type Bar object { b:Integer } Foo make Bar { a:'x' b:9 } is Foo	true	Bar inherits Foo's contract
+def Foo (type Object { a:String }) def Bar (type Foo { b:Integer }) make Bar { a:'x' b:9 } is Foo	true	Bar inherits Foo's contract
 		
 # Multi-level inheritance.		
-type A object { a:Integer } type B object { b:Integer } A type C object { c:Integer } B make C { a:1 b:2 c:3 } is A	true	C extends B extends A
-type A object { a:Integer } type B object { b:Integer } A type C object { c:Integer } B make C { a:1 b:2 c:3 } typeof	C	
+def A (type Object { a:Integer }) def B (type A { b:Integer }) def C (type B { c:Integer }) make C { a:1 b:2 c:3 } is A	true	C extends B extends A
+def A (type Object { a:Integer }) def B (type A { b:Integer }) def C (type B { c:Integer }) make C { a:1 b:2 c:3 } typeof	C	
 		
 # Inherited field access — Foo's `a` is reachable on a Bar instance.		
-type Foo object { a:String } type Bar object { b:Integer } Foo make Bar { a:'x' b:9 } .a	'x'	
-type Foo object { a:String } type Bar object { b:Integer } Foo make Bar { a:'x' b:9 } .b	9	
+def Foo (type Object { a:String }) def Bar (type Foo { b:Integer }) make Bar { a:'x' b:9 } .a	'x'	
+def Foo (type Object { a:String }) def Bar (type Foo { b:Integer }) make Bar { a:'x' b:9 } .b	9	
 		
 # ====================================================================		
 # 6. Composition with def		
@@ -109,12 +109,12 @@ type Foo object { a:String } type Bar object { b:Integer } Foo make Bar { a:'x' 
 # A made instance can be captured by `def`. The bound name then		
 # substitutes the instance value at every use site.		
 		
-type Foo object { a:String } def f make Foo { a:'hi' } f .a	'hi'	def-captured object instance preserves type & fields
-type Foo object { a:Integer } def f make Foo { a:42 } f .a addq 8	50	field access composes with arithmetic
+def Foo (type Object { a:String }) def f make Foo { a:'hi' } f .a	'hi'	def-captured object instance preserves type & fields
+def Foo (type Object { a:Integer }) def f make Foo { a:42 } f .a addq 8	50	field access composes with arithmetic
 		
 # ====================================================================		
 # 7. Multiple instances		
 # ====================================================================		
 # Each `make` call yields a fresh object value; they're independent.		
 		
-type Foo object { a:Integer } def x make Foo { a:1 } def y make Foo { a:2 } ( x .a ) addq ( y .a )	3	
+def Foo (type Object { a:Integer }) def x make Foo { a:1 } def y make Foo { a:2 } ( x .a ) addq ( y .a )	3	

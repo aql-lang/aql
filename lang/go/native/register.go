@@ -18,9 +18,6 @@ func Register(r *Registry) {
 	for _, n := range makeNatives {
 		r.RegisterNativeFunc(n)
 	}
-	for _, n := range objectRecordNatives {
-		r.RegisterNativeFunc(n)
-	}
 	for _, n := range inspectNatives {
 		r.RegisterNativeFunc(n)
 	}
@@ -70,6 +67,7 @@ func Register(r *Registry) {
 	r.RegisterNativeFunc(nodifyNative)
 	r.RegisterNativeFunc(sortNative)
 	installResourceTypes(r)
+	installIdeals(r)
 
 	// Control flow
 	for _, n := range controlNatives {

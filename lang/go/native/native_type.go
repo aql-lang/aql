@@ -8,68 +8,30 @@ import (
 	"github.com/aql-lang/aql/eng/go"
 )
 
-// typeNatives covers the type-system words: table, type, untype,
+// typeNatives covers the type-system words: type, pathof, enum,
 // typeof, fulltypeof, is, guard, base, tor, tand, any, all, tany,
 // tall, convert.
 //
-// `record`, `object`, `inspect` and `make` are now installed by
-// aqleng (eng.RegisterCoreObjectRecord / eng.RegisterCoreInspect /
-// eng.RegisterCoreMake, wired from register.go) — the kernel owns the
-// structural type constructors, the introspection word, and the
-// universal `make`. Their entries are intentionally omitted here to
-// avoid double-registration.
-//
 // `Resource` and `Entity` (the builtin object types) are NOT installed
 // via NativeFunc — they are user-typed values pushed onto the type
-// stack. `installResourceTypes` handles those during engine.Register.
+// stack. `installResourceTypes` handles those during Register.
 var typeNatives = []NativeFunc{
 	{
-		Name:        "table",
-		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:           []*Type{TAny},
-			Handler:        tableHandler,
-			Returns:        []*Type{TTable},
-			RunInCheckMode: true,
-		}},
-	},
-	{
+		// type is the uniform type constructor — see
+		// lang/doc/design/TYPE-UNIFORM.0.md. `type BaseType arg`
+		// builds a (sub)type:
+		//   type Object {fields}     → object type
+		//   type <objtype> {fields}  → object subtype (inheritance)
+		//   type Record [a:T b:U]    → record type (list of pairs)
+		//   type Table  <recordtype> → table type
 		Name:        "type",
 		ForwardArgs: true,
-		Signatures: []NativeSig{
-			{
-				Args:           []*Type{TString, TAny},
-				Handler:        typeHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true,
-			},
-			{
-				Args:           []*Type{TAtom, TAny},
-				QuoteArgs:      map[int]bool{0: true},
-				Handler:        typeHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true,
-			},
-		},
-	},
-	{
-		Name:        "untype",
-		ForwardArgs: true,
-		Signatures: []NativeSig{
-			{
-				Args:           []*Type{TString},
-				Handler:        untypeHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true,
-			},
-			{
-				Args:           []*Type{TAtom},
-				QuoteArgs:      map[int]bool{0: true},
-				Handler:        untypeHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true,
-			},
-		},
+		Signatures: []NativeSig{{
+			Args:           []*Type{TAny, TAny},
+			Handler:        typeHandler,
+			Returns:        []*Type{TType},
+			RunInCheckMode: true,
+		}},
 	},
 	{
 		Name:        "pathof",
@@ -259,30 +221,83 @@ func tableHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 	return []Value{NewTableType(_as0)}, nil
 }
 
-// ---- type / untype ----
+// ---- type (the type constructor) ----
 
-// typeHandler delegates to eng.InstallType — the single kernel entry
-// point for type-name installation. At Step 10d the lang-side
-// validateAndInstallType (near-duplicate) was removed; changes to
-// type-installation policy go to eng/go/core_type.go::InstallType.
+// typeHandler implements `type BaseType arg`, the uniform type
+// constructor. It does not branch on the base type itself — dispatch
+// is data-driven through the Ideal registry (r.Ideals): whichever
+// type-kind claims the base value supplies the construction logic.
+// See lang/doc/design/IDEAL.0.md. `type` does not bind — pair it with
+// `def` (`def Foo (type …)`).
 func typeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	name := defName(args[0])
-	body := args[1]
-	if err := eng.InstallType(r, name, body); err != nil {
-		return nil, err
+	base := args[0]
+	arg := args[1]
+	ideal := r.Ideals.For(base)
+	if ideal == nil {
+		// Distinguish a disabled kind from an unknown base.
+		if m := r.Ideals.Match(base); m != nil {
+			return nil, r.AqlError("type_error",
+				fmt.Sprintf("type: the %s type-kind is not available in this registry", m.Name),
+				"type")
+		}
+		return nil, r.AqlError("type_error",
+			fmt.Sprintf("type: base must be Object, Record, Table, or an object type, got %s", base.String()),
+			"type")
 	}
-	return nil, nil
+	if ideal.Construct == nil {
+		return nil, r.AqlError("type_error",
+			fmt.Sprintf("type: the %s type-kind cannot be constructed with `type`", ideal.Name),
+			"type")
+	}
+	return ideal.Construct(base, arg, r)
 }
 
-func untypeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	name := defName(args[0])
-	if !IsCapitalisedName(name) {
-		return nil, r.AqlError("untype %s_error", fmt.Sprintf("untype %s: type names must start with a capital letter", name), "untype %s")
+// installIdeals fills in the type-level constructor (Ideal.Construct)
+// on the kernel Ideals. The descriptors — Name, the Accepts dispatch
+// predicate, and the value-level Instantiate — are registered by the
+// eng kernel (registerKernelIdeals); type construction additionally
+// reuses the surface object/record/table handlers, wired here. See
+// lang/doc/design/IDEAL.0.md.
+func installIdeals(r *Registry) {
+	if obj := r.Ideals.Get("Object"); obj != nil {
+		obj.Construct = func(base, arg Value, r *Registry) ([]Value, error) {
+			// A bare Object literal builds a fresh object type; an
+			// existing object type builds a subtype of it.
+			if IsObjectType(base) {
+				return objectWithParentHandler([]Value{arg, base}, nil, nil, r)
+			}
+			return objectHandler([]Value{arg}, nil, nil, r)
+		}
 	}
-	if _, ok := r.Types.PopType(name); !ok {
-		return nil, r.AqlError("untype %s_error", fmt.Sprintf("untype %s: no such type binding", name), "untype %s")
+	if rec := r.Ideals.Get("Record"); rec != nil {
+		rec.Construct = func(base, arg Value, r *Registry) ([]Value, error) {
+			// Records have no subtyping — only the bare Record literal
+			// is a valid construction base.
+			if base.Data != nil {
+				return nil, r.AqlError("type_error",
+					"type: a record type has no subtyping — construct a Record from the bare Record literal",
+					"type")
+			}
+			// A record takes a LIST of field pairs — field order is
+			// part of a record type's identity.
+			if !arg.VType.Equal(TList) {
+				return nil, r.AqlError("type_error",
+					"type Record: a record takes a list of field pairs, e.g. [a:Integer b:String]",
+					"type")
+			}
+			return recordHandler([]Value{arg}, nil, nil, r)
+		}
 	}
-	return nil, nil
+	if tbl := r.Ideals.Get("Table"); tbl != nil {
+		tbl.Construct = func(base, arg Value, r *Registry) ([]Value, error) {
+			if base.Data != nil {
+				return nil, r.AqlError("type_error",
+					"type: a table type has no subtyping — construct a Table from the bare Table literal",
+					"type")
+			}
+			return tableHandler([]Value{arg}, nil, nil, r)
+		}
+	}
 }
 
 // ---- enum ----

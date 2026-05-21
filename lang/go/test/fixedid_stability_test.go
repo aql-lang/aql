@@ -19,9 +19,10 @@ import (
 //
 // Every known *Type with a non-zero FixedID — both kernel
 // builtins (declared in eng/go/typetable.go::builtinDecls) and
-// externally-registered types (Fetch in lang/go/native, Matrix in
-// lang/go/internal/nativemod, Timeout/Interval and the Time family
-// in lang/go/engine) — is checked against the snapshot below. A
+// externally-registered types (Fetch in lang/go/native, the
+// Tensor/Matrix/Vector kinds in lang/go/modules, Timeout/Interval
+// and the Time family in lang/go/native) — is checked against the
+// snapshot below. A
 // failure here means EITHER a stable ID has drifted OR a new
 // type was added without registering it in the snapshot.
 //
@@ -77,7 +78,9 @@ func TestFixedIDStability(t *testing.T) {
 		"Object/Error":               45,
 		"Type/ObjectType":            46,
 		"Scalar/Path":                47,
-		"Scalar/Number/Matrix":       2000, // externalised — matrix module range
+		"Node/Tensor":                2001, // matrix module range (2000-2999)
+		"Node/Tensor/Matrix":         2000, // historical Matrix FixedID, kept
+		"Node/Tensor/Vector":         2002,
 		"Word/__IS":                  51,
 		"Type/Disjunct/Enum":         62,
 		"Word/__PE":                  63,

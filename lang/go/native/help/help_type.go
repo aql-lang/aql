@@ -25,20 +25,6 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:    "record",
-		Summary: "Create a record type from a list of field definitions.",
-		Description: "Creates a record type schema from a list of {name: type} maps. " +
-			"Record types are used to define table schemas.",
-	})
-
-	register(&Entry{
-		Word:    "table",
-		Summary: "Create a table type from a record type.",
-		Description: "Creates a table type from a record type definition. Tables hold rows " +
-			"matching the record schema.",
-	})
-
-	register(&Entry{
 		Word:    "make",
 		Summary: "Create a value conforming to a type.",
 		Description: "Constructs a value of the given type from the provided data. " +
@@ -46,9 +32,12 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:        "type",
-		Summary:     "Define a named type.",
-		Description: "Registers a named type definition for later use.",
+		Word:    "type",
+		Summary: "Construct a type from a base type and an argument.",
+		Description: "Builds a (sub)type: `type Object {fields}` an object type, " +
+			"`type ParentType {fields}` an object subtype, `type Record [pairs]` " +
+			"a record type, `type Table recordtype` a table type. Pair with " +
+			"`def Name (type …)` to bind it.",
 	})
 
 	register(&Entry{

@@ -86,13 +86,10 @@ func TestSmokeRegistryStartsBare(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
-	// A fresh registry has no defs, no types stack entries — proves the
-	// engine ships zero words by itself.
+	// A fresh registry has no bindings — proves the engine ships zero
+	// words by itself.
 	if names := r.Defs.Names(); len(names) != 0 {
-		t.Errorf("expected empty def stack, got %v", names)
-	}
-	if names := r.Types.Names(); len(names) != 0 {
-		t.Errorf("expected empty type stack, got %v", names)
+		t.Errorf("expected empty binding store, got %v", names)
 	}
 }
 

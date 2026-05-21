@@ -641,7 +641,7 @@ func (e *Engine) stepWord(val Value) error {
 	// forward can still consume it (e.g. `Color` as the value side
 	// of an export map entry).
 	if e.registry != nil {
-		if tv, ok := e.registry.Types.TopBody(w.Name); ok {
+		if tv, ok := e.registry.TopTypeBody(w.Name); ok {
 			push := tv
 			if push.VType.Equal(TFnDef) || push.VType.Equal(TFunction) {
 				push.Quoted = true
@@ -2714,7 +2714,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					// will actually push at runtime). Predicate types
 					// arrive as TFnDef/TFunction values; plan against
 					// that VType for sig matching.
-					if tv, ok := e.registry.Types.TopBody(ww.Name); ok {
+					if tv, ok := e.registry.TopTypeBody(ww.Name); ok {
 						if sigTypeMatches(tv, expectedType) || expectedType.Equal(TAny) {
 							positions[fwd] = scanIdx
 							fwd++

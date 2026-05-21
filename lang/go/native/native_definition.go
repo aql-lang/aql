@@ -153,13 +153,18 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	stackOnly := defStackOnly(args[0])
 	body := args[1]
 	if IsCapitalisedName(name) {
-		return nil, r.AqlError("def %s_error", fmt.Sprintf("def %s: def names must not start with a capital letter (capitalised names are reserved for types)", name), "def %s")
+		// `def` is the universal binder (lang/doc/design/TYPE-UNIFORM.0.md
+		// Phase 2): a capitalised name is a TYPE binding. Delegate to
+		// the kernel type installer — the same path the `type` word
+		// uses — so object/predicate lattice-minting and all
+		// type-installation validation happen in exactly one place.
+		return nil, eng.InstallType(r, name, body)
 	}
 	if err := ValidateWordName(name); err != nil {
 		return nil, fmt.Errorf("def %s: %w", name, err)
 	}
-	if r.Types.Has(name) {
-		return nil, r.AqlError("def %s_error", fmt.Sprintf("def %s: name clash — already a type", name), "def %s")
+	if r.Defs.IsType(name) {
+		return nil, r.AqlError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
 	}
 	InstallDef(r, name, body, stackOnly)
 	r.Check.RecordDef(name, args[0].Pos)
@@ -176,13 +181,13 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	}
 	name := nameMap.Keys()[0]
 	if IsCapitalisedName(name) {
-		return nil, r.AqlError("def %s_error", fmt.Sprintf("def %s: def names must not start with a capital letter (capitalised names are reserved for types)", name), "def %s")
+		return nil, r.AqlError("def_error", fmt.Sprintf("def %s: def names must not start with a capital letter (capitalised names are reserved for types)", name), "def")
 	}
 	if err := ValidateWordName(name); err != nil {
 		return nil, fmt.Errorf("def %s: %w", name, err)
 	}
-	if r.Types.Has(name) {
-		return nil, r.AqlError("def %s_error", fmt.Sprintf("def %s: name clash — already a type", name), "def %s")
+	if r.Defs.IsType(name) {
+		return nil, r.AqlError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
 	}
 	constraint, _ := nameMap.Get(name)
 	var typeName string
@@ -231,7 +236,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		// scalar). The PredicateInputType check below mirrors the
 		// InstallType decision so the two paths stay aligned.
 		if typeName != "" && eng.PredicateInputType(constraint) != nil {
-			if def := r.Types.LookupByName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
+			if def := r.LookupTypeName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
 				out.VType = def
 			}
 		}
@@ -310,7 +315,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// shape (FnDefInfo) is unchanged, accessors keep working, just
 	// the dispatch identity flips.
 	if constraint.VType.Equal(TFnUndef) && typeName != "" {
-		if def := r.Types.LookupByName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
+		if def := r.LookupTypeName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
 			unified.VType = def
 		}
 	}
@@ -323,6 +328,21 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 
 func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := defName(args[0])
+	if IsCapitalisedName(name) {
+		// `undef` is the universal unbinder (the symmetric completion
+		// of Phase 2's universal `def` — lang/doc/design/TYPE-UNIFORM.0.md):
+		// a capitalised name is a TYPE binding, so pop it from the single
+		// binding store and retire the minted lattice type.
+		entry, ok := r.Defs.PopEntry(name)
+		if !ok {
+			return nil, r.AqlError("undef_error",
+				fmt.Sprintf("undef %s: no such type binding", name), "undef")
+		}
+		if entry.TypeDef != nil {
+			r.Types.Retire(entry.TypeDef)
+		}
+		return nil, nil
+	}
 	UninstallDef(r, name)
 	return nil, nil
 }

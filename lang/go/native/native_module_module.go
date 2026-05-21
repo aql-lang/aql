@@ -406,7 +406,7 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 	// fn-def stash). Without the r.Types check, exports of named
 	// types (`export "color" {Color:Color}`) would leave the value
 	// side as an unresolved Word.
-	if tv, ok := modReg.Types.TopBody(name); ok {
+	if tv, ok := modReg.TopTypeBody(name); ok {
 		if fnDef, ok := tv.Data.(FnDefInfo); ok {
 			if fnDef.Registry == nil {
 				fnDef.Registry = modReg

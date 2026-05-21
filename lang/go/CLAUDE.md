@@ -302,58 +302,52 @@ with the v0.1.6 rule-aware `LexMatcher` signature
 `func(lex *Lex, rule *Rule) *Token` to read `rule.K`/`rule.N` maps.
 See the template string interpolation rules for a complete example.
 
-## Registry Stacks (CRITICAL)
+## Registry Bindings (CRITICAL)
 
-The `Registry` holds two per-name stacks for user bindings:
+Post the TYPE-UNIFORM Phase 4 collapse the `Registry` holds **one**
+per-name binding store, `r.Defs` (a `*DefTable`). It carries both
+kinds of binding:
 
-- **Def stack** (`r.defStacks`, unexported) — `def`-defined values,
-  fn bodies, fn-body parameters, carrier-merge join points, module
-  imports. Stack-per-name with shadowing semantics; `def x 1; def x 2`
-  → `x` is 2; `undef x` → `x` is 1.
-- **Type stack** (`r.types`, unexported) — `type`-defined values
-  (records, options, table, disjuncts, typed list/map, ObjectType,
-  DepScalar, predicate types, fn-shape types, plain literals).
-  Stack-per-name with the same shadow/pop semantics; `untype Foo`
-  pops; once a stack is empty the entry is removed from the map.
+- **value bindings** — `def x 1`, fn bodies, fn-body parameters,
+  carrier-merge join points, module imports.
+- **type bindings** — `def Foo Integer` (a capitalised name). The
+  `DefEntry` additionally carries the minted lattice `*Type` in
+  `DefEntry.TypeDef`.
 
-Both fields are **unexported and accessed exclusively through the
-helper API in `util.go`**. Do not add `r.defStacks` or `r.types`
-indexing to new code — direct access is a compile error in external
-packages and will be rejected in code review for `package native`
-code as well.
+The capitalisation convention keeps the two kinds of name disjoint
+(`Foo` is a type, `foo` a value), so one map suffices. Each name maps
+to a shadowing stack; `def x 1; def x 2` → `x` is 2; `undef x` → `x`
+is 1.
 
-**Read helpers**:
-- `r.TopOfDefStack(name) (Value, bool)` / `r.TopOfTypeStack(name)`
-- `r.HasDef(name) bool` / `r.HasType(name)`
-- `r.DefStackDepth(name) int` / `r.TypeStackDepth(name)`
-- `r.DefStack(name) []Value` (read-only view; do not mutate)
-- `r.DefNames() []string` / `r.TypeNames()`
-- `r.ResolveTypedName(name) (Value, bool)` — Type-first then Def
-  fallback; the canonical way to resolve a type-context name.
+`r.Types` (a `*TypeTable`) is **not** a binding store — it is the type
+*lattice*: it mints type identities (`MintType`), indexes them by ID
+(`LookupByID`), retires them (`Retire`), and holds the static builtin
+name index (`LookupBuiltinByName`).
 
-**Write helpers**:
-- `r.PushDef(name, v)` / `r.PushType(name, v)`
-- `r.PopDef(name) bool` / `r.PopType(name) bool` (auto-deletes the
-  map entry when the stack empties)
-- `r.ReplaceDefTop(name, v) bool` — overwrite the top binding
-- `r.TruncateDefStack(name, depth)` — pop down to a specified depth
-- `r.SetDefStack(name, stack)` — replace the whole stack (rare;
-  used by uninstall paths that filter middle entries)
-- `r.DeleteDef(name)` — remove the entry entirely
+**DefTable methods** (`r.Defs.*`):
+- reads — `Top(name) (Value, bool)`, `TopEntry(name) (DefEntry, bool)`,
+  `Has(name)`, `IsType(name)`, `Depth(name)`, `Stack(name) []Value`,
+  `Names()`.
+- writes — `Push(name, v)` (value binding),
+  `PushType(name, def, body)` (type binding), `Pop(name) bool`,
+  `PopEntry(name) (DefEntry, bool)`, `Replace`, `Truncate`, `Delete`,
+  `Set`.
+- snapshot/restore — `Snapshot() map[string]int` / `Restore(snap)`,
+  depth-based; pair around fn-body sandboxes and carrier-merge joins.
+  (The predicate sandbox additionally clones `r.Types` to roll back
+  lattice mints — see `snapshotPredicateState`.)
 
-**Snapshot/restore**:
-- `r.SnapshotDefDepths() map[string]int` /
-  `r.RestoreToDefDepths(snap)` — depth-only; pair around a region
-  of code that may push but never pop. Used by fn-body sandboxing,
-  carrier merge join points.
-- `r.SnapshotTypeStacks() map[string][]Value` /
-  `r.RestoreTypeStacks(snap)` — full deep copy; pair around code
-  that may both pop and push (e.g. predicate sandbox).
+**Registry resolution helpers**:
+- `r.ResolveTypedName(name) (Value, bool)` — single-store lookup; the
+  canonical way to resolve a type-context name.
+- `r.TopTypeBody(name) (Value, bool)` — the body when name's active
+  binding is a *type* binding (false otherwise).
+- `r.LookupTypeName(name) *Type` — the active lattice type for name:
+  a dynamic binding's minted def, or an external builtin.
 
-When adding a new feature that needs to read or write the stacks,
-extend the helper surface rather than reaching into the field.
-Future namespace changes (single store, scoped types, persistent
-overlays) only need to update the helpers.
+`undef` is the universal unbinder: a capitalised name pops the type
+binding and retires its minted type from the lattice; a lowercase
+name pops a value binding.
 
 ## Helper API discipline
 
@@ -472,7 +466,7 @@ a `// lint:allow-panic` comment. The current set:
 - `native/native_misc.go::registerTimerType` — TTimeout, TInterval.
 - `native/native_temporal.go::registerTemporalType` — TDate, TDateTime, …
 - `native/fetch.go::registerFetchType` — TFetchFunction, TFetchRequest, …
-- `modules/matrix.go::registerMatrixType` — TMatrix.
+- `modules/matrix.go::registerTensorTypes` — TTensor, TMatrix, TVector.
 
 Do not add new init-time panics without also annotating them
 `// lint:allow-panic` and listing them here.

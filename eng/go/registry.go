@@ -41,9 +41,13 @@ type Registry struct {
 	Types *TypeTable // dynamic types installed by the `type` word; each push mints a fresh Type
 	// Capabilities holds host-installed plugin slots. See capability.go.
 	Capabilities *CapabilityRegistry
-	Output       io.Writer // output writer for print/printstr and stdout
-	ErrOutput    io.Writer // error output writer for stderr
-	Input        io.Reader // input reader for stdin
+	// Ideals holds the type-kind descriptors — the registered,
+	// dynamically controllable constructors `type` dispatches through.
+	// See ideal.go and lang/doc/design/IDEAL.0.md.
+	Ideals    *IdealRegistry
+	Output    io.Writer // output writer for print/printstr and stdout
+	ErrOutput io.Writer // error output writer for stderr
+	Input     io.Reader // input reader for stdin
 	// Modules owns module-loading state: the load set, the
 	// module-ID counter, the host's init callback, and the native-
 	// module resolver. See modules.go.
@@ -210,12 +214,14 @@ func NewRegistry() (*Registry, error) {
 		Args:         NewArgsStack(),
 		Types:        NewDynamicTypeTable(),
 		Capabilities: NewCapabilityRegistry(),
+		Ideals:       NewIdealRegistry(),
 		Modules:      NewModuleRegistry(),
 		Output:       os.Stdout,
 		ErrOutput:    os.Stderr,
 		Input:        os.Stdin,
 		SDKCache:     make(map[string]any),
 	}
+	registerKernelIdeals(r)
 	return r, nil
 }
 
@@ -580,13 +586,8 @@ func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
 	if name == "" {
 		return v
 	}
-	if tv, ok := reg.Types.TopBody(name); ok && IsObjectType(tv) {
-		return tv
-	}
-	if top, ok := reg.Defs.Top(name); ok {
-		if IsObjectType(top) {
-			return top
-		}
+	if top, ok := reg.Defs.Top(name); ok && IsObjectType(top) {
+		return top
 	}
 	return v
 }
@@ -773,22 +774,43 @@ func (r *Registry) AqlErrorHint(code, detail, word, hint string) error {
 	return makeAqlError(code, detail, word, src, hint)
 }
 
-// ResolveTypedName resolves a name to its type value through the
-// type-resolution chain used by the typed-def handler and `is`:
-// r.types first (the dedicated type registry), then DefStacks (legacy
-// path for record/object/DepScalar definitions). Returns the resolved
-// value and true if found; zero Value and false otherwise.
-//
-// Centralises the lookup so future namespace changes (a single
-// type/def store, scoped types) only need to update one site.
+// ResolveTypedName resolves a name to its bound value. Post the
+// TYPE-UNIFORM Phase 4 collapse there is a single binding store
+// (DefTable) holding both type and value bindings, so this is one
+// lookup: the capitalisation convention keeps type names and value
+// names disjoint, so a name is bound at most one way.
 func (r *Registry) ResolveTypedName(name string) (Value, bool) {
 	if r == nil {
 		return Value{}, false
 	}
-	if tv, ok := r.Types.TopBody(name); ok {
-		return tv, true
-	}
 	return r.Defs.Top(name)
+}
+
+// TopTypeBody returns the body of name's active binding when that
+// binding is a *type* binding (installed by a capitalised `def`), and
+// (zero Value, false) otherwise — including when name is unbound or
+// bound only as a value.
+func (r *Registry) TopTypeBody(name string) (Value, bool) {
+	if r == nil {
+		return Value{}, false
+	}
+	if e, ok := r.Defs.TopEntry(name); ok && e.TypeDef != nil {
+		return e.Body, true
+	}
+	return Value{}, false
+}
+
+// LookupTypeName returns the active lattice *Type for name: the minted
+// def of a dynamic type binding (in the DefTable), or an external
+// builtin registered by name. Returns nil if name names no type.
+func (r *Registry) LookupTypeName(name string) *Type {
+	if r == nil {
+		return nil
+	}
+	if e, ok := r.Defs.TopEntry(name); ok && e.TypeDef != nil {
+		return e.TypeDef
+	}
+	return r.Types.LookupBuiltinByName(name)
 }
 
 // ResolveTypedNameValue resolves a Value-shaped type reference to its

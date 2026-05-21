@@ -56,9 +56,9 @@ x`)
 	}
 }
 
-// `type G10 (Integer gt 10); def n:G10 11; n` → 11
+// `def G10 (Integer gt 10); def n:G10 11; n` → 11
 func TestTypedDefNamedDepTypeSurface(t *testing.T) {
-	got := runOne(t, `type G10 (Integer gt 10)
+	got := runOne(t, `def G10 (Integer gt 10)
 def n:G10 11
 n`)
 	if len(got) != 1 || got[0] != int64(11) {
@@ -66,13 +66,13 @@ n`)
 	}
 }
 
-// `type G10 (Integer gt 10); def n:G10 5` → unify error.
+// `def G10 (Integer gt 10); def n:G10 5` → unify error.
 func TestTypedDefNamedDepTypeSurfaceFailure(t *testing.T) {
 	a, err := lang.New()
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	_, err = a.Run(`type G10 (Integer gt 10)
+	_, err = a.Run(`def G10 (Integer gt 10)
 def n:G10 5`)
 	if err == nil {
 		t.Fatal("expected unify error for `def n:G10 5` (5 not gt 10), got nil")

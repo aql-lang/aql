@@ -63,8 +63,8 @@ func TestFormatBasic(t *testing.T) {
 		},
 		{
 			name: "record keyword not capitalized",
-			in:   "type Cond record [field:Atom op:String]\n",
-			want: "type Cond record [field:Atom op:String]\n",
+			in:   "def Cond type Record [field:Atom op:String]\n",
+			want: "def Cond type Record [field:Atom op:String]\n",
 		},
 		{
 			name: "comma space",

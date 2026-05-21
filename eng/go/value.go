@@ -1017,13 +1017,6 @@ func NewModule(desc ModuleDesc) Value {
 	return NewValueRaw(TModule, desc)
 }
 
-// MatrixData holds a dense matrix as a flat float64 slice in row-major order.
-type MatrixData struct {
-	Data []float64
-	Rows int
-	Cols int
-}
-
 // As* accessors for Scalar/Time/* moved to
 // lang/go/engine/native_temporal.go (Step 6/7). The kernel no longer
 // carries methods named for types it doesn't own. CalDurationData
@@ -1037,9 +1030,6 @@ type CalDurationData struct {
 	Months int
 	Days   int
 }
-
-// NewMatrix moved to lang/go/internal/nativemod/matrix.go (Step 8).
-// AsMatrix moved to lang/go/internal/nativemod/matrix.go (Step 6/7).
 
 // ErrorInfo holds the details of an AQL error value.
 type ErrorInfo struct {

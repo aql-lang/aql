@@ -7,7 +7,7 @@ import (
 
 // --- inspect for fn-shape and DepScalar types ---
 //
-// `inspect Mapper` (Mapper = `type Mapper fnsig [[Integer] [Integer]]`)
+// `inspect Mapper` (Mapper = `def Mapper fnsig [[Integer] [Integer]]`)
 // previously returned an empty `signatures` slot — buildTypeInspection
 // had no case for the FnUndef shape. Same gap for DepScalar
 // constraints: users had no introspection of bounds.
@@ -18,7 +18,7 @@ import (
 // inspect on a fn-shape type renders one entry per spec, with
 // params/returns lists of the type paths.
 func TestInspect_FnUndefSingleSig(t *testing.T) {
-	got := runOne(t, `type Mapper fnsig [[Integer] [Integer]]
+	got := runOne(t, `def Mapper fnsig [[Integer] [Integer]]
 inspect Mapper`)
 	if len(got) != 1 {
 		t.Fatalf("got %d results, want 1", len(got))
@@ -40,7 +40,7 @@ inspect Mapper`)
 // inspect on a DepScalar (single bound) shows the leaf and the
 // active side (lo for gt/gte, hi for lt/lte) plus the kind/value.
 func TestInspect_DepScalarSingleBound(t *testing.T) {
-	got := runOne(t, `type G10 (Integer gt 10)
+	got := runOne(t, `def G10 (Integer gt 10)
 inspect G10`)
 	if len(got) != 1 {
 		t.Fatalf("got %d results, want 1", len(got))
@@ -65,7 +65,7 @@ inspect G10`)
 // `between` produces a closed interval — inspect should show both
 // lo and hi with their respective kinds.
 func TestInspect_DepScalarInterval(t *testing.T) {
-	got := runOne(t, `type Range (Integer between 5 20)
+	got := runOne(t, `def Range (Integer between 5 20)
 inspect Range`)
 	if len(got) != 1 {
 		t.Fatalf("got %d results, want 1", len(got))

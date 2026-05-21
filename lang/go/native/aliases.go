@@ -63,7 +63,6 @@ type (
 	MatchResult         = eng.MatchResult
 	Materializer        = eng.Materializer
 	TypeBehavior        = eng.TypeBehavior
-	MatrixData          = eng.MatrixData
 	ModuleDesc          = eng.ModuleDesc
 	MoveInfo            = eng.MoveInfo
 	NativeFunc          = eng.NativeFunc
@@ -350,10 +349,9 @@ var (
 	NewInteger      = eng.NewInteger
 	NewInterpString = eng.NewInterpString
 	// NewInterval moved to lang/go/engine/native_misc.go (Step 8).
-	NewList = eng.NewList
-	NewMap  = eng.NewMap
-	NewMark = eng.NewMark
-	// NewMatrix moved to lang/go/internal/nativemod/matrix.go (Step 8).
+	NewList               = eng.NewList
+	NewMap                = eng.NewMap
+	NewMark               = eng.NewMark
 	NewModule             = eng.NewModule
 	NewMove               = eng.NewMove
 	NewMoveCont           = eng.NewMoveCont

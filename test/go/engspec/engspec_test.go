@@ -417,6 +417,12 @@ func registerEngSpecDefinition(r *eng.Registry) {
 	// is enough for the eng/spec tsv rows that exercise simple bindings.
 	plainDef := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 		name, _ := args[0].AsConcreteAtom()
+		// `def` is the universal binder (TYPE-UNIFORM Phase 2): a
+		// capitalised name is a TYPE binding — delegate to InstallType,
+		// the same path the `type` word uses.
+		if eng.IsCapitalisedName(name) {
+			return nil, eng.InstallType(reg, name, args[1])
+		}
 		if err := eng.ValidateWordName(name); err != nil {
 			return nil, err
 		}
@@ -436,7 +442,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 		if err := eng.ValidateWordName(name); err != nil {
 			return nil, err
 		}
-		if reg.Types.Has(name) {
+		if reg.Defs.IsType(name) {
 			return nil, &eng.AqlError{Code: "type_error", Detail: "def " + name + ": name clash — already a type"}
 		}
 		constraint, _ := nameMap.Get(name)
@@ -580,6 +586,18 @@ func registerEngSpecDefinition(r *eng.Registry) {
 			QuoteArgs: map[int]bool{0: true},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 				name, _ := args[0].AsConcreteAtom()
+				// Universal unbinder: a capitalised name pops the type
+				// binding from the single store, mirroring `def`.
+				if eng.IsCapitalisedName(name) {
+					entry, ok := reg.Defs.PopEntry(name)
+					if !ok {
+						return nil, &eng.AqlError{Code: "type_error", Detail: "undef " + name + ": no such type binding"}
+					}
+					if entry.TypeDef != nil {
+						reg.Types.Retire(entry.TypeDef)
+					}
+					return nil, nil
+				}
 				eng.UninstallDef(reg, name)
 				return nil, nil
 			},
@@ -632,43 +650,6 @@ func registerEngSpecStack(r *eng.Registry) {
 // IsValueOfType, NewEnum). Production registrations live in
 // lang/go/engine/native_type.go.
 func registerEngSpecTypeWords(r *eng.Registry) {
-	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "type",
-		ForwardArgs: true,
-		Signatures: []eng.NativeSig{{
-			Args:       []*eng.Type{eng.TAtom, eng.TAny},
-			QuoteArgs:  map[int]bool{0: true},
-			NoEvalArgs: map[int]bool{1: true},
-			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
-				name, _ := args[0].AsConcreteAtom()
-				if err := eng.InstallType(reg, name, args[1]); err != nil {
-					return nil, err
-				}
-				return nil, nil
-			},
-			Returns:        []*eng.Type{},
-			RunInCheckMode: true,
-		}},
-	})
-	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "untype",
-		ForwardArgs: true,
-		Signatures: []eng.NativeSig{{
-			Args:      []*eng.Type{eng.TAtom},
-			QuoteArgs: map[int]bool{0: true},
-			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
-				name, _ := args[0].AsConcreteAtom()
-				if !eng.IsCapitalisedName(name) {
-					return nil, &eng.AqlError{Code: "type_error", Detail: "untype " + name + ": type names must start with a capital letter"}
-				}
-				if _, ok := reg.Types.PopType(name); !ok {
-					return nil, &eng.AqlError{Code: "type_error", Detail: "untype " + name + ": no such type binding"}
-				}
-				return nil, nil
-			},
-			Returns: []*eng.Type{},
-		}},
-	})
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name:        "typeof",
 		ForwardArgs: true,
@@ -975,33 +956,36 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 		def := r.Types.MintType(id, parentDef)
 		return []eng.Value{eng.NewObjectType(def, info)}, nil
 	}
+	// type — the uniform type constructor.
+	// Mirrors lang/go/native/native_type.go::typeHandler; dispatches
+	// to the record/object handler functions above. eng/spec exercises
+	// only the Object and Record bases.
+	typeCtorH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
+		base := args[0]
+		arg := args[1]
+		if base.Data == nil && base.VType.Equal(eng.TObject) {
+			return objectH([]eng.Value{arg}, nil, nil, reg)
+		}
+		if eng.IsObjectType(base) {
+			return objectWithParentH([]eng.Value{arg, base}, nil, nil, reg)
+		}
+		if base.Data == nil && base.VType.Equal(eng.TRecord) {
+			if !arg.VType.Equal(eng.TList) {
+				return nil, fmt.Errorf("type Record: a record takes a list of field pairs")
+			}
+			return recordH([]eng.Value{arg}, nil, nil, reg)
+		}
+		return nil, fmt.Errorf("type: base must be Object, Record, or an object type, got %s", base.String())
+	}
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "record",
+		Name:        "type",
 		ForwardArgs: true,
 		Signatures: []eng.NativeSig{{
-			Args:           []*eng.Type{eng.TList},
-			Handler:        recordH,
-			Returns:        []*eng.Type{eng.TRecord},
+			Args:           []*eng.Type{eng.TAny, eng.TAny},
+			Handler:        typeCtorH,
+			Returns:        []*eng.Type{eng.TType},
 			RunInCheckMode: true,
 		}},
-	})
-	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "object",
-		ForwardArgs: true,
-		Signatures: []eng.NativeSig{
-			{
-				Args:           []*eng.Type{eng.TMap, eng.TObject},
-				Handler:        objectWithParentH,
-				Returns:        []*eng.Type{eng.TObjectType},
-				RunInCheckMode: true,
-			},
-			{
-				Args:           []*eng.Type{eng.TMap},
-				Handler:        objectH,
-				Returns:        []*eng.Type{eng.TObjectType},
-				RunInCheckMode: true,
-			},
-		},
 	})
 }
 
@@ -1013,7 +997,7 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 func registerEngSpecInspect(r *eng.Registry) {
 	atomH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
 		name, _ := args[0].AsConcreteAtom()
-		if tv, ok := r.Types.TopBody(name); ok {
+		if tv, ok := r.TopTypeBody(name); ok {
 			return []eng.Value{buildTypeInspection(name, tv)}, nil
 		}
 		if top, ok := r.Defs.Top(name); ok {

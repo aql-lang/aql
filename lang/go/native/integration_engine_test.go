@@ -91,7 +91,7 @@ func TestEngineRecord(t *testing.T) {
 	m2 := NewOrderedMap()
 	m2.Set("y", NewTypeLiteral(TString))
 	list := NewList([]Value{NewMap(m1), NewMap(m2)})
-	result, err := e.Run([]Value{NewWord("record"), list})
+	result, err := e.Run([]Value{NewWord("type"), NewWord("Record"), list})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestEngineTable(t *testing.T) {
 	m1 := NewOrderedMap()
 	m1.Set("x", NewTypeLiteral(TNumber))
 	list := NewList([]Value{NewMap(m1)})
-	result, err := e.Run([]Value{NewWord("table"), NewWord("record"), list})
+	result, err := e.Run([]Value{NewWord("type"), NewWord("Table"), NewWord("type"), NewWord("Record"), list})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1401,14 +1401,14 @@ func TestEngineTypeRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// type Point record [x:number y:number] end Point
+	// def Point type Record [x:number y:number] end Point
 	xf := NewOrderedMap()
 	xf.Set("x", NewTypeLiteral(TNumber))
 	yf := NewOrderedMap()
 	yf.Set("y", NewTypeLiteral(TNumber))
 	fields := NewList([]Value{NewMap(xf), NewMap(yf)})
 	result := runAQL(t, r, []Value{
-		NewWord("type"), NewWord("Point"), NewWord("record"), fields, NewEnd(),
+		NewWord("def"), NewWord("Point"), NewWord("type"), NewWord("Record"), fields, NewEnd(),
 		NewWord("Point"),
 	})
 	if len(result) != 1 || !IsRecordType(result[0]) {
@@ -1421,7 +1421,7 @@ func TestEngineMakeRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// type P record [x:number y:string] end make P [1 "hi"]
+	// def P type Record [x:number y:string] end make P [1 "hi"]
 	xf := NewOrderedMap()
 	xf.Set("x", NewTypeLiteral(TNumber))
 	yf := NewOrderedMap()
@@ -1429,7 +1429,7 @@ func TestEngineMakeRecord(t *testing.T) {
 	fields := NewList([]Value{NewMap(xf), NewMap(yf)})
 	vals := NewList([]Value{NewInteger(1), NewString("hi")})
 	result := runAQL(t, r, []Value{
-		NewWord("type"), NewWord("P"), NewWord("record"), fields, NewEnd(),
+		NewWord("def"), NewWord("P"), NewWord("type"), NewWord("Record"), fields, NewEnd(),
 		NewWord("make"), NewWord("P"), vals,
 	})
 	if len(result) != 1 || !result[0].VType.Equal(TMap) {

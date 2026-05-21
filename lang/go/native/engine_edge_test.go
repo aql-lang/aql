@@ -2831,13 +2831,13 @@ func TestRecordTypeCreation(t *testing.T) {
 	}
 	e := New(reg)
 
-	// record [x:number y:number] => record{x:Number,y:Number}
+	// type Record [x:number y:number] => record{x:Number,y:Number}
 	// In the list, each pair x:Number becomes a single-key map {x:Number}.
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
 	pairY := NewOrderedMap()
 	pairY.Set("y", NewTypeLiteral(TNumber))
-	input := []Value{NewWord("record"), NewList([]Value{NewMap(pairX), NewMap(pairY)})}
+	input := []Value{NewWord("type"), NewWord("Record"), NewList([]Value{NewMap(pairX), NewMap(pairY)})}
 	result, err := e.Run(input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2860,15 +2860,15 @@ func TestRecordTypeWithDef(t *testing.T) {
 	}
 	e := New(reg)
 
-	// type Point record [x:number y:number]
+	// def Point type Record [x:number y:number]
 	// Point => record{x:Number,y:Number}
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
 	pairY := NewOrderedMap()
 	pairY.Set("y", NewTypeLiteral(TNumber))
 	input := []Value{
-		NewWord("type"), NewWord("Point"),
-		NewWord("record"), NewList([]Value{NewMap(pairX), NewMap(pairY)}),
+		NewWord("def"), NewWord("Point"),
+		NewWord("type"), NewWord("Record"), NewList([]Value{NewMap(pairX), NewMap(pairY)}),
 		NewEnd(),
 		NewWord("Point"),
 	}
@@ -2930,7 +2930,7 @@ func TestRecordTypeUnify(t *testing.T) {
 	})
 
 	t.Run("field order must match", func(t *testing.T) {
-		// record [x:number y:string] vs record [y:string x:number] — different order, fail.
+		// type Record [x:number y:string] vs type Record [y:string x:number] — different order, fail.
 		f1 := NewOrderedMap()
 		f1.Set("x", NewTypeLiteral(TNumber))
 		f1.Set("y", NewTypeLiteral(TString))
@@ -3008,7 +3008,7 @@ func TestRecordTypeListWithMapElement(t *testing.T) {
 	}
 	e := New(reg)
 
-	// record [{x:{z:boolean}} "y":1]
+	// type Record [{x:{z:boolean}} "y":1]
 	// List element 0: map {x:{z:boolean}} — a map with nested map value
 	// List element 1: pair "y":1 — a single-key map {y:1}
 	innerMap := NewOrderedMap()
@@ -3017,7 +3017,7 @@ func TestRecordTypeListWithMapElement(t *testing.T) {
 	elem0.Set("x", NewMap(innerMap))
 	elem1 := NewOrderedMap()
 	elem1.Set("y", NewInteger(1))
-	input := []Value{NewWord("record"), NewList([]Value{NewMap(elem0), NewMap(elem1)})}
+	input := []Value{NewWord("type"), NewWord("Record"), NewList([]Value{NewMap(elem0), NewMap(elem1)})}
 	result, err := e.Run(input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

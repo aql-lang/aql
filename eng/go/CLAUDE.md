@@ -38,7 +38,7 @@ Payload variants live in `eng/go/payload.go`. Two flavours:
    `OptionsTypeInfo`, `TableTypeInfo`, `TableData`,
    `ObjectTypeInfo`, `ObjectInstanceInfo`, `*StoreInstanceInfo`,
    `*ArrayInstanceInfo`, `*TimeoutInfo`, `*IntervalInfo`,
-   `ErrorInfo`, `MatrixData`, `CalDurationData`, `DepScalarInfo`,
+   `ErrorInfo`, `CalDurationData`, `DepScalarInfo`,
    `PathInfo`, `noneSentinel`.
 
 When adding a new kernel-known payload shape, register the
@@ -75,7 +75,7 @@ matching, plugin types) supply a custom Behavior:
 
 - `lang/go/native/native_temporal.go` — Time family Behaviors.
 - `lang/go/native/native_misc.go` — Timeout/Interval Behaviors.
-- `lang/go/modules/matrix.go` — Matrix Behavior.
+- `lang/go/modules/matrix.go` — Tensor/Matrix/Vector Behavior.
 - `lang/go/native/fetch.go` — Fetch family (no custom Behavior; uses Default).
 
 The dispatch in `Value.String` walks the Parent chain so
@@ -207,17 +207,22 @@ Methods on `Value` accumulate API surface and become coupling
 points; free functions are equally callable and can be moved
 between packages without affecting the kernel.
 
-## type / untype installation
+## Type installation
 
-`type Foo body` and `untype Foo` are kernel-level concerns —
-they manipulate the registry's type stack and validate that
-`body` is a valid type body, regardless of which surface (eng
-or lang) registered the word.
+A capitalised `def Foo body` installs a type binding (the
+TYPE-UNIFORM surface: `def` binds, `make` instantiates, `type`
+constructs — the legacy `type`-binder / `object` / `record` /
+`table` / `untype` words were removed in Phase 3).
 
-The single source of truth is
-`eng/go/core_type.go::installType`. Lang's `validateAndInstallType`
-in `lang/go/native/native_type.go` is a thin wrapper that delegates
-to `installType` — do not fork the logic. If you need to extend
-the installation policy (e.g. accept a new name shape, add a
-validation rule), modify the eng function so both surfaces pick
+The single source of truth is `eng/go/core_type.go::InstallType`. It
+validates `body` is a valid type body, mints the lattice identity
+via `TypeTable.MintType`, and binds it in the single `DefTable`
+(`PushType`, carrying the minted `*Type`). `def`'s handler delegates
+here for capitalised names regardless of which surface (eng or lang)
+registered `def` — do not fork the logic. `undef` of a capitalised
+name pops the binding and retires the minted type
+(`TypeTable.Retire`).
+
+If you need to extend the installation policy (a new name shape, an
+extra validation rule), modify `InstallType` so every surface picks
 it up.
