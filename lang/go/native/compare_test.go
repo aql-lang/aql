@@ -310,3 +310,61 @@ func TestDeepEqualMapsMissingKey(t *testing.T) {
 		t.Error("maps with different keys should not be deeply equal")
 	}
 }
+
+// revPathBehavior is a test fixture for TestRevPathComparator: a
+// Comparer whose order is the reverse of the normal Path comparator.
+// Match/Format/Equal delegate to the kernel default; Compare re-types
+// both operands to Path, runs the normal comparison, and negates it.
+type revPathBehavior struct{}
+
+func (revPathBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
+func (revPathBehavior) Format(v Value) string       { return DefaultBehavior.Format(v) }
+func (revPathBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
+
+func (revPathBehavior) Compare(a, b Value) (int, error) {
+	pa, pb := a, b
+	pa.VType = TPath
+	pb.VType = TPath
+	n, err := CompareValues(pa, pb)
+	return -n, err
+}
+
+// TestRevPathComparator exercises the behavior system: it defines
+// RevPath, a subtype of Path, and installs a Comparer that is the
+// reverse of the normal Path comparator. RevPath values must compare
+// in reversed order, while plain Path values keep the normal order —
+// proving a subtype can override an inherited capability and that
+// CompareValues' lattice walk picks the most-specific Comparer.
+func TestRevPathComparator(t *testing.T) {
+	revPath := &Type{Name: "RevPath", Parent: TPath, Behavior: revPathBehavior{}}
+	rev := func(parts ...string) Value {
+		p := NewPath(parts, false)
+		p.VType = revPath
+		return p
+	}
+
+	tests := []struct {
+		name       string
+		a, b       []string
+		normalWant int // CompareValues for the same pair as plain Paths
+	}{
+		{"longer_first", []string{"a", "b", "c"}, []string{"a", "b"}, -1},
+		{"segment_order", []string{"a", "b"}, []string{"a", "c"}, -1},
+		{"identical", []string{"a", "b"}, []string{"a", "b"}, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Plain Path keeps the normal order.
+			got, err := CompareValues(NewPath(tt.a, false), NewPath(tt.b, false))
+			if err != nil || got != tt.normalWant {
+				t.Fatalf("plain Path: got %d, %v; want %d", got, err, tt.normalWant)
+			}
+			// RevPath reverses it.
+			got, err = CompareValues(rev(tt.a...), rev(tt.b...))
+			if err != nil || got != -tt.normalWant {
+				t.Errorf("RevPath: got %d, %v; want %d (reverse of plain %d)",
+					got, err, -tt.normalWant, tt.normalWant)
+			}
+		})
+	}
+}
