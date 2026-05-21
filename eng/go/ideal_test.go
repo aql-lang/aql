@@ -81,8 +81,39 @@ func TestIdealRegistry_Names(t *testing.T) {
 func TestIdealRegistry_NilSafe(t *testing.T) {
 	var ir *IdealRegistry
 	ir.Register(&Ideal{Name: "X"})
-	if ir.Get("X") != nil || ir.For(NewString("x")) != nil || ir.Names() != nil {
+	if ir.Get("X") != nil || ir.For(NewString("x")) != nil ||
+		ir.Match(NewString("x")) != nil || ir.Names() != nil {
 		t.Error("nil IdealRegistry methods must be safe no-ops")
+	}
+}
+
+// Match reports the first claiming Ideal regardless of Enabled; For
+// additionally requires it to be enabled. The pair lets a caller tell
+// a disabled kind apart from an unknown base.
+func TestIdealRegistry_Match(t *testing.T) {
+	ir := NewIdealRegistry()
+	ir.Register(&Ideal{
+		Name: "Off", Enabled: false,
+		Accepts: func(v Value) bool { return v.VType.Matches(TString) },
+	})
+	ir.Register(&Ideal{
+		Name: "On", Enabled: true,
+		Accepts: func(v Value) bool { return v.VType.Matches(TInteger) },
+	})
+	if id := ir.Match(NewString("x")); id == nil || id.Name != "Off" {
+		t.Errorf("Match(string) = %v, want Off (Match reports disabled kinds)", id)
+	}
+	if id := ir.For(NewString("x")); id != nil {
+		t.Errorf("For(string) = %v, want nil (For skips disabled kinds)", id)
+	}
+	if id := ir.Match(NewInteger(1)); id == nil || id.Name != "On" {
+		t.Errorf("Match(integer) = %v, want On", id)
+	}
+	if id := ir.For(NewInteger(1)); id == nil || id.Name != "On" {
+		t.Errorf("For(integer) = %v, want On", id)
+	}
+	if id := ir.Match(NewBoolean(true)); id != nil {
+		t.Errorf("Match(boolean) = %v, want nil (no kind claims it)", id)
 	}
 }
 

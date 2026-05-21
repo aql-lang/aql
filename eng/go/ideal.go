@@ -70,17 +70,29 @@ func (ir *IdealRegistry) Get(name string) *Ideal {
 	return ir.byName[name]
 }
 
-// For resolves the Ideal that governs base — the first enabled Ideal,
-// in registration order, whose Accepts predicate matches. Returns nil
-// when no enabled kind claims base.
-func (ir *IdealRegistry) For(base Value) *Ideal {
+// Match returns the first Ideal, in registration order, whose Accepts
+// predicate claims base — regardless of whether it is enabled. Returns
+// nil when no kind claims base. Use For for dispatch (it additionally
+// requires the kind to be enabled); use Match to tell a disabled kind
+// apart from an unknown one when raising an error.
+func (ir *IdealRegistry) Match(base Value) *Ideal {
 	if ir == nil {
 		return nil
 	}
 	for _, id := range ir.ordered {
-		if id.Enabled && id.Accepts != nil && id.Accepts(base) {
+		if id.Accepts != nil && id.Accepts(base) {
 			return id
 		}
+	}
+	return nil
+}
+
+// For resolves the Ideal that governs base for dispatch — the first
+// matching Ideal (see Match) that is also enabled. Returns nil when no
+// enabled kind claims base.
+func (ir *IdealRegistry) For(base Value) *Ideal {
+	if m := ir.Match(base); m != nil && m.Enabled {
+		return m
 	}
 	return nil
 }

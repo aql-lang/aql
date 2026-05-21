@@ -234,8 +234,19 @@ func typeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	arg := args[1]
 	ideal := r.Ideals.For(base)
 	if ideal == nil {
+		// Distinguish a disabled kind from an unknown base.
+		if m := r.Ideals.Match(base); m != nil {
+			return nil, r.AqlError("type_error",
+				fmt.Sprintf("type: the %s type-kind is not available in this registry", m.Name),
+				"type")
+		}
 		return nil, r.AqlError("type_error",
 			fmt.Sprintf("type: base must be Object, Record, Table, or an object type, got %s", base.String()),
+			"type")
+	}
+	if ideal.Construct == nil {
+		return nil, r.AqlError("type_error",
+			fmt.Sprintf("type: the %s type-kind cannot be constructed with `type`", ideal.Name),
 			"type")
 	}
 	return ideal.Construct(base, arg, r)
