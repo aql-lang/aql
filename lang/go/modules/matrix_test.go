@@ -58,6 +58,19 @@ func TestMatrixModuleExports(t *testing.T) {
 	}
 }
 
+// TestTensorSize covers the Sizer behaviour: the kernel `size` word
+// (eng.SizeOf) reports a tensor's entry count.
+func TestTensorSize(t *testing.T) {
+	m := tensorValue(TMatrix, TensorData{Shape: []int{2, 3}, Data: []float64{1, 2, 3, 4, 5, 6}})
+	if got := native.SizeOf(m); got != 6 {
+		t.Errorf("SizeOf(2x3 matrix) = %d, want 6", got)
+	}
+	v := tensorValue(TVector, TensorData{Shape: []int{4}, Data: []float64{1, 2, 3, 4}})
+	if got := native.SizeOf(v); got != 4 {
+		t.Errorf("SizeOf(vector of 4) = %d, want 4", got)
+	}
+}
+
 // --- Construction: matrix.eye ---
 
 func TestMatrixEye(t *testing.T) {

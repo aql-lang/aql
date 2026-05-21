@@ -99,6 +99,14 @@ func (tensorFormatBehavior) Format(v native.Value) string {
 	return kind
 }
 
+// Size of a tensor is its entry count — the number of scalars in the
+// dense array, so a 3x3 Matrix sizes to 9 and a length-5 Vector to 5.
+// This satisfies the kernel's eng.Sizer capability, which SizeOf (the
+// `size` word) consults.
+func (tensorFormatBehavior) Size(v native.Value) int {
+	return len(AsTensor(v).Data)
+}
+
 // tensorKindName names the tensor kind a type belongs to.
 func tensorKindName(vt *eng.Type) string {
 	switch {

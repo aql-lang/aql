@@ -10,26 +10,24 @@ import "math"
 // chain so a descendant inherits its branch's Sizer. The kernel
 // Sizers follow one rule — a value sizes to the length of the
 // collection it stands for: a List's elements, a Map's keys, a
-// Path's segments. A number sizes to its floored magnitude, a string
-// or atom to its character length. None is the empty value and sizes
-// 0; a type with no Sizer in its lattice sizes 1 (a single,
-// indivisible value).
+// Path's segments, an Object's fields, a Table's rows. A number
+// sizes to its floored magnitude, a string or atom to its character
+// length. A type with no Sizer in its lattice — None, a Date, a
+// bare scalar — sizes 0.
 func SizeOf(v Value) int {
-	if v.VType == nil || v.VType.Equal(TNone) {
-		return 0
-	}
 	for t := v.VType; t != nil; t = t.Parent {
 		if sz, ok := t.Behavior.(Sizer); ok {
 			return sz.Size(v)
 		}
 	}
-	return 1
+	return 0
 }
 
 // The Size methods below attach the Sizer capability to the kernel
 // Behaviors declared in compare_scalar_behaviors.go (the scalar
-// branch) and coretype_list_map_behaviors.go (List / Map). Gathering
-// them here keeps the one size rule auditable in one place.
+// branch) and coretype_list_map_behaviors.go (List / Map), plus
+// objectSizeBehavior (declared here) for the Object family.
+// Gathering them keeps the one size rule auditable in one place.
 
 // Size of a Number is its floored magnitude: an Integer floors to
 // itself, a Decimal drops its fraction (7.9 → 7).
@@ -60,13 +58,13 @@ func (atomCompareBehavior) Size(v Value) int {
 
 // Size on the Scalar root is reached only by Path — its branch has
 // no Sizer of its own — so a Path sizes to its segment count, the
-// length of its dominant list. Any other bare-Scalar value is a
-// single thing.
+// length of its dominant list. Any other value that walks here has
+// no size rule and sizes 0.
 func (scalarCompareBehavior) Size(v Value) int {
 	if p, err := AsPath(v); err == nil {
 		return len(p.Parts)
 	}
-	return 1
+	return 0
 }
 
 // Size of a List is its element count.
@@ -85,4 +83,38 @@ func (mapFormatBehavior) Size(v Value) int {
 		return 0
 	}
 	return m.Len()
+}
+
+// objectSizeBehavior carries the Sizer capability for the Object
+// family. Installed on the Object root, the SizeOf walk reaches it
+// for any Object-family instance whose own type has no Sizer. Each
+// kind sizes to its member count: an Object's fields, an Array's
+// elements, a Store's entries, a Table's rows. Record instances are
+// field-maps and size via the Map Sizer instead.
+type objectSizeBehavior struct{ defaultBehavior }
+
+func (objectSizeBehavior) formatDelegate() {}
+
+func (objectSizeBehavior) Size(v Value) int {
+	switch d := v.Data.(type) {
+	case ObjectInstanceInfo:
+		if d.Fields != nil {
+			return d.Fields.Len()
+		}
+	case *ArrayInstanceInfo:
+		if d != nil {
+			return len(d.Elems)
+		}
+	case *StoreInstanceInfo:
+		if d != nil {
+			return len(d.Data)
+		}
+	case TableData:
+		return len(d.Rows)
+	}
+	return 0
+}
+
+func init() {
+	TObject.Behavior = objectSizeBehavior{}
 }

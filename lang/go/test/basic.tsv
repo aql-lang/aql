@@ -721,3 +721,5 @@ size 42	42
 size true	1
 size false	0
 size (make Path "a/b/c")	3
+size None	0
+def Pt (type Object {x:Integer y:Integer}); size (make Pt {x:1 y:2})	2

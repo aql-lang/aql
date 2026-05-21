@@ -381,6 +381,7 @@ func TestSizeHandlerBehaviour(t *testing.T) {
 		{"boolean_false", NewBoolean(false), 0},
 		{"atom_name_length", NewAtom("hello"), 5},
 		{"path_segment_count", NewPath([]string{"a", "b", "c"}, false), 3},
+		{"array_elements", NewArray([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}), 3},
 		{"none_is_zero", NewTypeLiteral(TNone), 0},
 	}
 	for _, tt := range tests {
