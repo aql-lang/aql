@@ -27,7 +27,7 @@ var ErrNoComparer = errors.New("eng: no comparer in this Behavior")
 // When the lattice walk finds no Comparer, the order is still total:
 // cross-branch pairs order by the top-level branch precedence
 //
-//	Ideal < Node < Scalar < Type < Word < None < Any < Never
+//	Never < Any < None < Word < Type < Scalar < Node < Ideal
 //
 // and same-branch pairs fall back to size — the value with the smaller
 // SizeOf sorts first, so a shorter List leads a longer one and, more
@@ -76,28 +76,28 @@ func CompareValues(a, b Value) (int, error) {
 
 // rootBranchRank returns v's top-level branch precedence:
 //
-//	Ideal < Node < Scalar < Type < Word < None < Any < Never
+//	Never < Any < None < Word < Type < Scalar < Node < Ideal
 func rootBranchRank(v Value) int {
 	root := v.VType
 	for root.Parent != nil {
 		root = root.Parent
 	}
 	switch root {
-	case TIdeal:
-		return 0
-	case TNode:
-		return 1
-	case TScalar:
-		return 2
-	case TType:
-		return 3
-	case TWord:
-		return 4
-	case TNone:
-		return 5
-	case TAny:
-		return 6
 	case TNever:
+		return 0
+	case TAny:
+		return 1
+	case TNone:
+		return 2
+	case TWord:
+		return 3
+	case TType:
+		return 4
+	case TScalar:
+		return 5
+	case TNode:
+		return 6
+	case TIdeal:
 		return 7
 	default:
 		return 8

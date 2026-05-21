@@ -97,22 +97,22 @@ func TestCompareValuesAtoms(t *testing.T) {
 
 func TestCompareValuesCrossScalar(t *testing.T) {
 	// Cross-branch scalar pairs are ordered by the Scalar root's
-	// Comparer: Path < String < Number < Boolean < Atom.
+	// Comparer: Atom < Boolean < Number < String < Path.
 	path := NewPath([]string{"a"}, false)
 	tests := []struct {
 		name string
 		a, b Value
 		want int
 	}{
-		{"path_lt_string", path, NewString("a"), -1},
-		{"string_gt_path", NewString("a"), path, 1},
-		{"string_lt_number", NewString("a"), NewInteger(1), -1},
-		{"number_gt_string", NewInteger(1), NewString("a"), 1},
-		{"number_lt_boolean", NewInteger(1), NewBoolean(false), -1},
-		{"boolean_gt_number", NewBoolean(false), NewInteger(1), 1},
-		{"boolean_lt_atom", NewBoolean(true), NewAtom("z"), -1},
-		{"atom_gt_boolean", NewAtom("z"), NewBoolean(true), 1},
-		{"path_lt_atom", path, NewAtom("z"), -1},
+		{"atom_lt_boolean", NewAtom("z"), NewBoolean(true), -1},
+		{"boolean_gt_atom", NewBoolean(true), NewAtom("z"), 1},
+		{"boolean_lt_number", NewBoolean(false), NewInteger(1), -1},
+		{"number_gt_boolean", NewInteger(1), NewBoolean(false), 1},
+		{"number_lt_string", NewInteger(1), NewString("a"), -1},
+		{"string_gt_number", NewString("a"), NewInteger(1), 1},
+		{"string_lt_path", NewString("a"), path, -1},
+		{"path_gt_string", path, NewString("a"), 1},
+		{"atom_lt_path", NewAtom("z"), path, -1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -167,7 +167,7 @@ func TestCompareValuesPaths(t *testing.T) {
 
 func TestCompareValuesCrossBranch(t *testing.T) {
 	// Cross-branch pairs order by the top-level precedence
-	// Ideal < Node < Scalar < Type < Word < None.
+	// Never < Any < None < Word < Type < Scalar < Node < Ideal.
 	arr := NewArray([]Value{NewInteger(1)}) // Ideal branch
 	lst := NewList([]Value{NewInteger(1)})  // Node branch
 	num := NewInteger(5)                    // Scalar branch
@@ -177,10 +177,10 @@ func TestCompareValuesCrossBranch(t *testing.T) {
 		a, b Value
 		want int
 	}{
-		{"ideal_before_node", arr, lst, -1},
-		{"node_before_scalar", lst, num, -1},
-		{"scalar_after_node", num, lst, 1},
-		{"scalar_before_none", num, none, -1},
+		{"none_before_scalar", none, num, -1},
+		{"scalar_before_node", num, lst, -1},
+		{"node_before_ideal", lst, arr, -1},
+		{"ideal_after_node", arr, lst, 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

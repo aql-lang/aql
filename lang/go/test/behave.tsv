@@ -67,9 +67,9 @@ green/q red/q lt	true	green < red lex
 red/q red/q lt	false	same atom
 
 # Cross-branch scalars order by branch precedence
-# (Path < String < Number < Boolean < Atom) via the Scalar Comparer.
-1 'a' lt	false	cross-branch: Integer outranks String
-1 true lt	true	cross-branch: Integer ranks below Boolean
+# (Atom < Boolean < Number < String < Path) via the Scalar Comparer.
+1 'a' lt	true	cross-branch: Integer ranks below String
+1 true lt	false	cross-branch: Integer outranks Boolean
 
 # ---------------------------------------------------------------------
 # 1b. CORE canon: kernel default rendering through CanonValue

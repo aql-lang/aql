@@ -487,18 +487,18 @@ Number neq Number	false
 {x:1} deq {x:1,y:2}	false
 None deq None	true
 
-# Comparison - cross-branch scalars order Path < String < Number < Boolean < Atom
-1 lt "a"	false
-"a" lt 1	true
-3 gt "z"	true
+# Comparison - cross-branch scalars order Atom < Boolean < Number < String < Path
+1 lt "a"	true
+"a" lt 1	false
+3 gt "z"	false
 
 # Comparison - total order: cross-branch by precedence
-# (Ideal < Node < Scalar < Type < Word < None < Any < Never),
+# (Never < Any < None < Word < Type < Scalar < Node < Ideal),
 # same-branch by size — smaller sorts first
 [1] lt [2]	false
 [9] lt [1 2 3]	true
-[1] lt 5	true
-5 lt [1]	false
+[1] lt 5	false
+5 lt [1]	true
 
 # Comparison - forward style (swap convention: args[0]=1, args[1]=2, compare(args[1],args[0]))
 lt 1 2	false

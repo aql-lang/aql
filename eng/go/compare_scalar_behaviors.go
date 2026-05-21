@@ -95,7 +95,7 @@ func (wordCompareBehavior) Compare(a, b Value) (int, error) {
 // defined order instead of a "cannot compare" error, ranking the
 // branches:
 //
-//	Path < String < Number < Boolean < Atom
+//	Atom < Boolean < Number < String < Path
 //
 // CompareValues reaches it only for cross-branch pairs: the LCA walk
 // stops at a branch root's own Comparer (Number/String/Boolean/Atom)
@@ -127,19 +127,19 @@ func (scalarCompareBehavior) Compare(a, b Value) (int, error) {
 }
 
 // scalarBranchRank maps a scalar value to its cross-branch precedence
-// (Path < String < Number < Boolean < Atom). ok is false for a value
+// (Atom < Boolean < Number < String < Path). ok is false for a value
 // typed as the abstract Scalar root, which belongs to no branch.
 func scalarBranchRank(v Value) (rank int, ok bool) {
 	switch {
-	case v.VType.Matches(TPath):
+	case v.VType.Matches(TAtom):
 		return 0, true
-	case v.VType.Matches(TString):
+	case v.VType.Matches(TBoolean):
 		return 1, true
 	case v.VType.Matches(TNumber):
 		return 2, true
-	case v.VType.Matches(TBoolean):
+	case v.VType.Matches(TString):
 		return 3, true
-	case v.VType.Matches(TAtom):
+	case v.VType.Matches(TPath):
 		return 4, true
 	default:
 		return 0, false
