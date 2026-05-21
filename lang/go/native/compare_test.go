@@ -129,12 +129,13 @@ func TestCompareValuesCrossScalar(t *testing.T) {
 
 func TestCompareValuesPaths(t *testing.T) {
 	// Path-vs-Path falls through to the Scalar comparator, which
-	// orders paths by segment count (longer first), then breaks ties
-	// lexicographically by rendered form.
+	// orders paths by segment count (longer first), then compares
+	// equal-length paths segment by segment.
 	abc := NewPath([]string{"a", "b", "c"}, false) // 3 segments
 	ab := NewPath([]string{"a", "b"}, false)       // 2 segments
 	ac := NewPath([]string{"a", "c"}, false)       // 2 segments
 	zzz := NewPath([]string{"z", "z", "z"}, false) // 3 segments
+	aDashA := NewPath([]string{"a-", "a"}, false)  // 2 segments
 	tests := []struct {
 		name string
 		a, b Value
@@ -142,9 +143,10 @@ func TestCompareValuesPaths(t *testing.T) {
 	}{
 		{"longer_sorts_first", abc, ab, -1},
 		{"shorter_sorts_after", ab, abc, 1},
-		{"length_beats_lexical", zzz, ab, -1}, // 3 segments win though 'z' > 'a'
-		{"equal_len_lexical", ab, ac, -1},
-		{"equal_len_lexical_rev", ac, ab, 1},
+		{"length_beats_lexical", zzz, ab, -1},
+		{"equal_len_segment", ab, ac, -1},
+		{"equal_len_segment_rev", ac, ab, 1},
+		{"per_element_beats_render", ab, aDashA, -1}, // "a" < "a-" at segment 0
 		{"identical", ab, ab, 0},
 	}
 	for _, tt := range tests {

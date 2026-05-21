@@ -91,7 +91,7 @@ func (atomCompareBehavior) Compare(a, b Value) (int, error) {
 // for any same-branch pair. The one same-branch pair that does reach
 // here is Path-vs-Path — Path has no Comparer of its own — so two
 // paths fall through to Scalar, where comparePaths orders them by
-// segment count (longer paths first), then lexicographically.
+// segment count (longer paths first), then segment by segment.
 type scalarCompareBehavior struct{ defaultBehavior }
 
 func (scalarCompareBehavior) Compare(a, b Value) (int, error) {
@@ -135,9 +135,9 @@ func scalarBranchRank(v Value) (rank int, ok bool) {
 }
 
 // comparePaths orders two Path values: longer paths (more segments)
-// sort before shorter ones; equal-length paths break the tie
-// lexicographically by rendered form. scalarCompareBehavior routes
-// the Path-vs-Path case here.
+// sort before shorter ones; equal-length paths are then compared
+// segment by segment, lexically. scalarCompareBehavior routes the
+// Path-vs-Path case here.
 func comparePaths(a, b Value) int {
 	ap, aerr := AsPath(a)
 	bp, berr := AsPath(b)
@@ -150,9 +150,16 @@ func comparePaths(a, b Value) int {
 		return -1
 	case len(ap.Parts) < len(bp.Parts):
 		return 1
-	default:
-		return strings.Compare(ap.String(), bp.String())
 	}
+	// Equal segment count — compare segment by segment. Comparing
+	// the parts directly, rather than the "/"-joined render, keeps
+	// the separator byte from skewing the order.
+	for i := range ap.Parts {
+		if c := strings.Compare(ap.Parts[i], bp.Parts[i]); c != 0 {
+			return c
+		}
+	}
+	return 0
 }
 
 // init attaches the scalar Comparers to their owning kernel types.
