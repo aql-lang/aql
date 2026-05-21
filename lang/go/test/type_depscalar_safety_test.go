@@ -1,7 +1,6 @@
 package test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/aql-lang/aql/lang/go"
@@ -81,19 +80,22 @@ a eq c`)
 	}
 }
 
-// --- compareValues: refuses to order DepScalars ---
+// --- compareValues: DepScalars take part in the total order ---
 
-func TestDepScalar_LtRefused(t *testing.T) {
+func TestDepScalar_LtTotalOrder(t *testing.T) {
 	a, err := lang.New()
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	_, err = a.Run(`(Integer gt 10) lt (Integer gt 20)`)
-	if err == nil {
-		t.Fatalf("expected error comparing DepScalars with lt")
+	got, err := a.Run(`(Integer gt 10) lt (Integer gt 20)`)
+	if err != nil {
+		t.Fatalf("comparing DepScalars with lt errored: %v", err)
 	}
-	if !strings.Contains(err.Error(), "dependent") {
-		t.Errorf("error %q does not mention dependent type", err)
+	// The order is total, so DepScalars compare without error. They
+	// carry no Comparer, so they fall back to size — both have size 0,
+	// so neither is strictly less than the other.
+	if len(got) != 1 || got[0] != "false" {
+		t.Errorf("(Int gt 10) lt (Int gt 20) = %v, want [false]", got)
 	}
 }
 

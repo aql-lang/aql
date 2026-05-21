@@ -24,21 +24,19 @@ var ErrNoComparer = errors.New("eng: no comparer in this Behavior")
 // Scalar, which owns the cross-branch ordering; Date-vs-Date stays
 // on Date.
 //
-// When the lattice walk finds no Comparer, cross-branch pairs are
-// still ordered by the top-level branch precedence
+// When the lattice walk finds no Comparer, the order is still total:
+// cross-branch pairs order by the top-level branch precedence
 //
 //	Ideal < Node < Scalar < Type < Word < None < Any < Never
 //
-// but same-branch pairs without a Comparer are not yet comparable and
-// surface a "cannot compare" error — the order is not total within
-// Node, Ideal, Type, the Time family, or None.
+// and same-branch pairs fall back to size — the value with the greater
+// SizeOf sorts first, so a longer List leads a shorter one and, more
+// generally, the more "complex" value leads. Equal sizes compare equal.
 //
-// DepScalar values represent type-level constraints, not concrete
-// scalars — they are rejected up front.
+// DepScalar values (type-level constraints) flow through this same
+// path: they sit in the Type branch and order by size like any other
+// Comparer-less type.
 func CompareValues(a, b Value) (int, error) {
-	if a.IsDepScalar() || b.IsDepScalar() {
-		return 0, fmt.Errorf("cannot compare dependent-type constraint with %s", b.VType.String())
-	}
 	if a.VType == nil || b.VType == nil {
 		return 0, fmt.Errorf("cannot compare values with nil type")
 	}
@@ -57,16 +55,22 @@ func CompareValues(a, b Value) (int, error) {
 		return n, err
 	}
 	// No Comparer in the shared lattice. Cross-branch pairs order by
-	// the top-level branch precedence; same-branch pairs without a
-	// Comparer are not yet comparable.
-	ra, rb := rootBranchRank(a), rootBranchRank(b)
-	switch {
-	case ra < rb:
+	// the top-level branch precedence.
+	if ra, rb := rootBranchRank(a), rootBranchRank(b); ra != rb {
+		if ra < rb {
+			return -1, nil
+		}
+		return 1, nil
+	}
+	// Same branch, no Comparer — order by size, larger first, so a
+	// longer List leads a shorter one. Equal sizes compare equal.
+	switch sa, sb := SizeOf(a), SizeOf(b); {
+	case sa > sb:
 		return -1, nil
-	case ra > rb:
+	case sa < sb:
 		return 1, nil
 	default:
-		return 0, fmt.Errorf("cannot compare %s and %s", a.VType.String(), b.VType.String())
+		return 0, nil
 	}
 }
 

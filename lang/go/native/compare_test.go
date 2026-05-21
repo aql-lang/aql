@@ -195,11 +195,20 @@ func TestCompareValuesCrossBranch(t *testing.T) {
 	}
 }
 
-// TestCompareValuesSameBranchUndefined — same-branch pairs with no
-// Comparer are not yet comparable; they surface an error.
-func TestCompareValuesSameBranchUndefined(t *testing.T) {
-	if _, err := CompareValues(NewList([]Value{NewInteger(1)}), NewMap(NewOrderedMap())); err == nil {
-		t.Error("expected error comparing List with Map — no Comparer in the Node branch")
+// TestCompareValuesSameBranchBySize — same-branch pairs with no
+// Comparer order by size, larger first (more complex values lead).
+func TestCompareValuesSameBranchBySize(t *testing.T) {
+	long := NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)})
+	short := NewList([]Value{NewInteger(1)})
+	if got, err := CompareValues(long, short); err != nil || got != -1 {
+		t.Errorf("CompareValues(len 3, len 1) = %d, %v; want -1, nil (larger first)", got, err)
+	}
+	if got, err := CompareValues(short, long); err != nil || got != 1 {
+		t.Errorf("CompareValues(len 1, len 3) = %d, %v; want 1, nil", got, err)
+	}
+	// Equal size — compare equal (first-pass approximation).
+	if got, err := CompareValues(NewList([]Value{NewInteger(1)}), NewList([]Value{NewInteger(9)})); err != nil || got != 0 {
+		t.Errorf("CompareValues(len 1, len 1) = %d, %v; want 0, nil", got, err)
 	}
 }
 
