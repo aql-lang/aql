@@ -325,7 +325,7 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		if ideal := reg.Ideals.For(targetVal); ideal != nil && ideal.Instantiate != nil {
 			return ideal.Instantiate(targetVal, srcVal, reg)
 		}
-		if m := reg.Ideals.Match(targetVal); m != nil && !m.Enabled {
+		if m := reg.Ideals.Match(targetVal); m != nil && !m.available() {
 			return nil, fmt.Errorf("make: the %s type-kind is not available in this registry", m.Name)
 		}
 	}
@@ -606,7 +606,7 @@ func MakeObjHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) 
 		if ideal := reg.Ideals.For(targetVal); ideal != nil && ideal.Instantiate != nil {
 			return ideal.Instantiate(targetVal, srcVal, reg)
 		}
-		if m := reg.Ideals.Match(targetVal); m != nil && !m.Enabled {
+		if m := reg.Ideals.Match(targetVal); m != nil && !m.available() {
 			return nil, fmt.Errorf("make: the %s type-kind is not available in this registry", m.Name)
 		}
 	}

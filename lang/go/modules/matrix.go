@@ -8,10 +8,13 @@ import (
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
-// TTensor, TMatrix and TVector are the Scalar/Number/Tensor[/Matrix |
-// /Vector] type identities. Matrix and Vector are lattice children of
-// Tensor — a Matrix is a rank-2 tensor, a Vector a rank-1 tensor — so
-// `is Tensor` holds for both. The matrix native module owns them; the
+// TTensor, TMatrix and TVector are the Node/Tensor[/Matrix | /Vector]
+// type identities. They live under Node, the container family — a
+// tensor is a structured collection, not a scalar — which also keeps a
+// bare Matrix / Vector type literal from matching `make`'s scalar-cast
+// overload. Matrix and Vector are lattice children of Tensor — a
+// Matrix is a rank-2 tensor, a Vector a rank-1 tensor — so `is Tensor`
+// holds for both. The matrix native module owns them; the
 // var initialiser below registers them into the global eng.Builtin
 // table so any package-level var referencing them (MatrixNatives,
 // whose signatures embed TMatrix) sees non-nil pointers at slice-init
@@ -25,18 +28,18 @@ var TTensor, TMatrix, TVector = registerTensorTypes()
 func registerTensorTypes() (*eng.Type, *eng.Type, *eng.Type) {
 	// Tensor first — Matrix and Vector register as its lattice
 	// children and so need it present in eng.Builtin.
-	tensor, err := eng.Builtin.RegisterExternalBuiltin("Scalar/Number/Tensor", 2001, tensorFormatBehavior{})
+	tensor, err := eng.Builtin.RegisterExternalBuiltin("Node/Tensor", 2001, tensorFormatBehavior{})
 	if err != nil {
 		// lint:allow-panic — init-time builtin registration; see
 		// registerTimerType in native/native_misc.go for rationale.
 		panic(fmt.Sprintf("matrix: register TTensor: %v", err))
 	}
-	matrix, err := eng.Builtin.RegisterExternalBuiltin("Scalar/Number/Tensor/Matrix", 2000, tensorFormatBehavior{})
+	matrix, err := eng.Builtin.RegisterExternalBuiltin("Node/Tensor/Matrix", 2000, tensorFormatBehavior{})
 	if err != nil {
 		// lint:allow-panic — see above.
 		panic(fmt.Sprintf("matrix: register TMatrix: %v", err))
 	}
-	vector, err := eng.Builtin.RegisterExternalBuiltin("Scalar/Number/Tensor/Vector", 2002, tensorFormatBehavior{})
+	vector, err := eng.Builtin.RegisterExternalBuiltin("Node/Tensor/Vector", 2002, tensorFormatBehavior{})
 	if err != nil {
 		// lint:allow-panic — see above.
 		panic(fmt.Sprintf("matrix: register TVector: %v", err))
@@ -163,6 +166,10 @@ func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
 	for _, n := range MatrixNatives {
 		subReg.RegisterNativeFunc(n)
 	}
+
+	// Install the Tensor/Matrix/Vector type-kinds into the importing
+	// registry so `type` constructs and `make` instantiates them.
+	registerTensorIdeals(parent)
 
 	exports := native.NewOrderedMap()
 
