@@ -15,6 +15,13 @@ type Ideal struct {
 	// Enabled gates the kind. A disabled Ideal is skipped by the
 	// registry resolver, exactly like an unavailable capability slot.
 	Enabled bool
+	// Refines names the kind this Ideal specialises — Matrix refines
+	// Tensor, Vector refines Tensor. It is a kind-lattice edge, not a
+	// vtable-inheritance pointer: a refinement is available for
+	// dispatch only when its whole Refines chain is enabled (disabling
+	// Tensor disables Matrix and Vector). nil for a base kind. See
+	// lang/doc/design/IDEAL.0.md §8.
+	Refines *Ideal
 	// Accepts reports whether base is a type value of this kind — the
 	// dispatch predicate the registry consults to route `type`.
 	Accepts func(base Value) bool
@@ -87,11 +94,25 @@ func (ir *IdealRegistry) Match(base Value) *Ideal {
 	return nil
 }
 
+// available reports whether the kind is usable for dispatch: it is
+// enabled and every kind in its Refines chain is enabled. A refinement
+// of a disabled base kind is itself unavailable. The walk is
+// depth-capped so a misconfigured Refines cycle cannot hang.
+func (id *Ideal) available() bool {
+	for cur, depth := id, 0; cur != nil && depth < 64; cur, depth = cur.Refines, depth+1 {
+		if !cur.Enabled {
+			return false
+		}
+	}
+	return true
+}
+
 // For resolves the Ideal that governs base for dispatch — the first
-// matching Ideal (see Match) that is also enabled. Returns nil when no
-// enabled kind claims base.
+// matching Ideal (see Match) that is also available (enabled, with an
+// all-enabled Refines chain). Returns nil when no available kind
+// claims base.
 func (ir *IdealRegistry) For(base Value) *Ideal {
-	if m := ir.Match(base); m != nil && m.Enabled {
+	if m := ir.Match(base); m != nil && m.available() {
 		return m
 	}
 	return nil

@@ -149,6 +149,18 @@ func NewExtension(t *Type, body any) Value {
 	}
 }
 
+// HostTypeBody is an embeddable marker. A host module that introduces
+// a type-kind through an Ideal (see eng/go/ideal.go) embeds this in
+// the struct it stores, via ExtensionPayload, for a *constructed type*
+// — as opposed to an instance. The kernel's type machinery
+// (IsTypeBody, TypeOf, isTypeLike, InstallType) then recognises the
+// value as a type without inspecting its concrete shape, which it
+// cannot — the payload Body is opaque to the kernel. See
+// lang/doc/design/IDEAL.0.md §6.
+type HostTypeBody struct{}
+
+func (HostTypeBody) hostTypeBody() {}
+
 // =================================================================
 // Marker methods.
 //

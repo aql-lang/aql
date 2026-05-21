@@ -34,7 +34,8 @@ func isTypeLike(v Value) bool {
 	if v.Data == nil {
 		return true
 	}
-	return IsRecordType(v) || IsOptionsType(v) || IsTableType(v) || IsObjectType(v)
+	return IsRecordType(v) || IsOptionsType(v) || IsTableType(v) ||
+		IsObjectType(v) || IsHostTypeBody(v)
 }
 
 // MakeRecord creates a record instance from a source value and

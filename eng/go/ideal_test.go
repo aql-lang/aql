@@ -135,3 +135,67 @@ func TestRegisterKernelIdeals(t *testing.T) {
 		}
 	}
 }
+
+// A refinement is available for dispatch only while its whole Refines
+// chain is enabled; Match reports it regardless of the chain state.
+func TestIdeal_Refines(t *testing.T) {
+	ir := NewIdealRegistry()
+	base := &Ideal{
+		Name: "Tensor", Enabled: true,
+		Accepts: func(v Value) bool { return v.VType.Matches(TInteger) },
+	}
+	ref := &Ideal{
+		Name: "Matrix", Enabled: true, Refines: base,
+		Accepts: func(v Value) bool { return v.VType.Matches(TString) },
+	}
+	ir.Register(base)
+	ir.Register(ref)
+	if id := ir.For(NewString("x")); id == nil || id.Name != "Matrix" {
+		t.Fatalf("For(string) = %v, want Matrix", id)
+	}
+	// Disabling the base kind makes the refinement unavailable too.
+	base.Enabled = false
+	if id := ir.For(NewString("x")); id != nil {
+		t.Errorf("For with base disabled = %v, want nil (refinement follows its base)", id)
+	}
+	if id := ir.Match(NewString("x")); id == nil || id.Name != "Matrix" {
+		t.Errorf("Match with base disabled = %v, want Matrix (Match ignores the chain)", id)
+	}
+	// Re-enabling the base restores the refinement.
+	base.Enabled = true
+	if id := ir.For(NewString("x")); id == nil || id.Name != "Matrix" {
+		t.Errorf("For after re-enabling base = %v, want Matrix", id)
+	}
+	// Disabling the refinement itself also removes it.
+	ref.Enabled = false
+	if id := ir.For(NewString("x")); id != nil {
+		t.Errorf("For with refinement disabled = %v, want nil", id)
+	}
+}
+
+type fakeHostType struct{ HostTypeBody }
+
+// A host module's constructed type — an ExtensionPayload whose Body
+// embeds HostTypeBody — is recognised by the kernel's type machinery
+// without the kernel inspecting the opaque payload.
+func TestIsHostTypeBody(t *testing.T) {
+	typeVal := NewExtension(TAny, fakeHostType{})
+	if !IsHostTypeBody(typeVal) {
+		t.Error("IsHostTypeBody(marked extension) = false, want true")
+	}
+	if !IsTypeBody(typeVal) {
+		t.Error("IsTypeBody(host type body) = false, want true")
+	}
+	// An ExtensionPayload whose Body does not embed HostTypeBody is an
+	// instance, not a type.
+	instVal := NewExtension(TAny, struct{ n int }{1})
+	if IsHostTypeBody(instVal) {
+		t.Error("IsHostTypeBody(plain extension) = true, want false")
+	}
+	if IsTypeBody(instVal) {
+		t.Error("IsTypeBody(plain extension instance) = true, want false")
+	}
+	if IsHostTypeBody(NewInteger(1)) {
+		t.Error("IsHostTypeBody(integer) = true, want false")
+	}
+}

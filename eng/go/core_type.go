@@ -88,6 +88,10 @@ func TypeOf(v Value) Value {
 	if IsRecordShape(v) {
 		return NewTypeLiteral(TType)
 	}
+	// A host-Ideal constructed type is a TYPE, not a concrete value.
+	if IsHostTypeBody(v) {
+		return NewTypeLiteral(TType)
+	}
 	// Concrete value — its exact VType.
 	return NewTypeLiteral(v.VType)
 }
