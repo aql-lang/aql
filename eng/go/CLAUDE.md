@@ -170,7 +170,7 @@ externally-registered type means:
 
 ## Type Lattice Fields
 
-`Type` carries two fields populated at registration time that
+`Type` carries three fields populated at registration time that
 replace historical hardcoded switches:
 
 - `BaseType *Type` — for `Type/Dependent/Dep<X>` types, points
@@ -185,6 +185,15 @@ replace historical hardcoded switches:
   `TObjectType`). Descendants inherit by Parent-chain walk in
   `MetatypeFor`. Populated via `builtinDecl.MetatypePath` for
   kernel-declared roots.
+
+- `Rank int` — the family complexity rank read by `compareTypes`
+  (`compare_types.go`) when ordering Comparer-less values and type
+  literals: List < Map, and the Ideal family Object < Array <
+  Record < Options < Error < Store < Table < Tensor < Resource.
+  `typeFamilyRank` walks the parent chain so a subtype inherits its
+  family head's rank. Populated via `builtinDecl.Rank` for kernel
+  types; external types set `def.Rank = ...` after
+  `RegisterExternalBuiltin` (the matrix module's Tensor).
 
 When introducing a new root with its own metatype anchor, add
 `MetatypePath` to its `builtinDecl` row.

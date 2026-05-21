@@ -71,6 +71,7 @@ type Type struct {
 	Name       string       // last segment of path (e.g. "ProperString")
 	Parent     *Type        // nil for roots
 	FixedID    int          // >0 for builtins; 0 for dynamic
+	Rank       int          // family complexity rank for compareTypes; 0 = unranked
 	IsInternal bool         // Word/__XX runtime markers — not user-facing
 	Origin     OriginKind   // builtin / userdef
 	Behavior   TypeBehavior // pluggable dispatch — never nil after registration
@@ -396,6 +397,7 @@ type builtinDecl struct {
 	Alias        string // optional friendly short name for ExpandShortName (e.g. "Paren" → Word/__OP)
 	BasePath     string // for Type/Dependent/Dep<X> types: the path of the underlying scalar (Step 9)
 	MetatypePath string // for root types whose descendants share a metatype anchor (Scalar→Type/ScalarType, …)
+	Rank         int    // family complexity rank for compareTypes; 0 = unranked
 }
 
 // builtinDecls lists every builtin type. Parent-first ordering is
@@ -429,24 +431,24 @@ var builtinDecls = []builtinDecl{
 	// Scalar/Time and descendants moved to lang/go/engine/native_temporal.go (Step 8).
 
 	// Node branch
-	{Path: "Node/List", FixedID: 12},
+	{Path: "Node/List", FixedID: 12, Rank: 1},
 	{Path: "Node/List/Args", FixedID: 13},
-	{Path: "Node/Map", FixedID: 14},
+	{Path: "Node/Map", FixedID: 14, Rank: 2},
 	{Path: "Node/Map/Inspect", FixedID: 31},
 
 	// Ideal branch — the type-kind types: Object and its structural
 	// family, plus Options. Tensor/Matrix/Vector graft on here from
 	// lang/go/modules/matrix.go.
-	{Path: "Ideal/Object", FixedID: 30},
-	{Path: "Ideal/Object/Table", FixedID: 15},
-	{Path: "Ideal/Object/Record", FixedID: 16},
-	{Path: "Ideal/Object/Store", FixedID: 42},
+	{Path: "Ideal/Object", FixedID: 30, Rank: 3},
+	{Path: "Ideal/Object/Table", FixedID: 15, Rank: 9},
+	{Path: "Ideal/Object/Record", FixedID: 16, Rank: 5},
+	{Path: "Ideal/Object/Store", FixedID: 42, Rank: 8},
 	{Path: "Ideal/Object/Store/System", FixedID: 43},
-	{Path: "Ideal/Object/Array", FixedID: 44},
-	{Path: "Ideal/Object/Error", FixedID: 45},
-	{Path: "Ideal/Object/Resource", FixedID: 36},
+	{Path: "Ideal/Object/Array", FixedID: 44, Rank: 4},
+	{Path: "Ideal/Object/Error", FixedID: 45, Rank: 7},
+	{Path: "Ideal/Object/Resource", FixedID: 36, Rank: 11},
 	{Path: "Ideal/Object/Resource/Entity", FixedID: 37},
-	{Path: "Ideal/Options", FixedID: 38},
+	{Path: "Ideal/Options", FixedID: 38, Rank: 6},
 	// Ideal/Object/Fetch{,/Request,/Response} → lang/go/native/fetch.go.
 	// Ideal/Object/Timeout, Ideal/Object/Interval → lang/go/native/native_misc.go.
 
@@ -543,6 +545,7 @@ func (tt *TypeTable) registerBuiltin(d builtinDecl) {
 		Name:       parts[len(parts)-1],
 		Parent:     parent,
 		FixedID:    d.FixedID,
+		Rank:       d.Rank,
 		IsInternal: d.IsInternal,
 		Origin:     OriginBuiltin,
 		Behavior:   DefaultBehavior,

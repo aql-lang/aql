@@ -39,18 +39,20 @@ func compareTypes(a, b *Type) int {
 	return strings.Compare(a.ID, b.ID)
 }
 
-// typeFamilyRank ranks a type by the declared complexity of its
-// family, least complex first — a List leads a Map. The ordering is
-// editorial: extend the switch to rank further families. A type with
-// no ranked ancestor ranks 0 and so falls through to compareTypes's
-// depth and name keys.
+// typeFamilyRank reports the declared complexity rank of a type's
+// family, least complex first — a List leads a Map, a Record leads a
+// Table. It walks the parent chain and returns the first non-zero
+// Type.Rank, so a subtype inherits its family head's rank (a
+// `def Foo List` ranks as List). A type with no ranked ancestor ranks
+// 0 and falls through to compareTypes's depth and name keys.
+//
+// Ranks are declared on the type: builtinDecls in typetable.go for
+// kernel types, and Type.Rank set after RegisterExternalBuiltin for
+// external types (e.g. the matrix module's Tensor).
 func typeFamilyRank(t *Type) int {
 	for ; t != nil; t = t.Parent {
-		switch t {
-		case TList:
-			return 1
-		case TMap:
-			return 2
+		if t.Rank != 0 {
+			return t.Rank
 		}
 	}
 	return 0

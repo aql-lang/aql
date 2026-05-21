@@ -214,8 +214,9 @@ func TestCompareValuesSameBranchBySize(t *testing.T) {
 }
 
 // TestCompareTypes — the type order used as the post-size tiebreaker
-// and for sorting type literals: family rank (List < Map), then depth
-// (a type before its subtype), then name (siblings Foo and Bar).
+// and for sorting type literals: family rank (List < Map, Object <
+// Array < Record < Table), then depth (a type before its subtype),
+// then name (siblings Foo and Bar).
 func TestCompareTypes(t *testing.T) {
 	foo := &Type{Name: "Foo", Parent: TList}
 	bar := &Type{Name: "Bar", Parent: TList}
@@ -226,6 +227,9 @@ func TestCompareTypes(t *testing.T) {
 	}{
 		{"list_before_map", NewTypeLiteral(TList), NewTypeLiteral(TMap), -1},
 		{"map_after_list", NewTypeLiteral(TMap), NewTypeLiteral(TList), 1},
+		{"object_before_array", NewTypeLiteral(TObject), NewTypeLiteral(TArray), -1},
+		{"array_before_record", NewTypeLiteral(TArray), NewTypeLiteral(TRecord), -1},
+		{"record_before_table", NewTypeLiteral(TRecord), NewTypeLiteral(TTable), -1},
 		{"type_before_subtype", NewTypeLiteral(TList), NewTypeLiteral(foo), -1},
 		{"bar_before_foo_by_name", NewTypeLiteral(bar), NewTypeLiteral(foo), -1},
 		{"foo_after_bar_by_name", NewTypeLiteral(foo), NewTypeLiteral(bar), 1},

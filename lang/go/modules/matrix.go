@@ -34,6 +34,10 @@ func registerTensorTypes() (*eng.Type, *eng.Type, *eng.Type) {
 		// registerTimerType in native/native_misc.go for rationale.
 		panic(fmt.Sprintf("matrix: register TTensor: %v", err))
 	}
+	// Rank 10 places Tensor between Table (9) and Resource (11) in the
+	// Ideal complexity order — see builtinDecls in eng/go/typetable.go.
+	// Matrix and Vector inherit it as Tensor's lattice children.
+	tensor.Rank = 10
 	matrix, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Tensor/Matrix", 2000, tensorFormatBehavior{})
 	if err != nil {
 		// lint:allow-panic — see above.
