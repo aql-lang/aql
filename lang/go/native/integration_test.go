@@ -115,15 +115,15 @@ func TestEngineDeq(t *testing.T) {
 	}
 }
 
-func TestEngineLtError(t *testing.T) {
+func TestEngineLtTotalOrder(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A scalar and a list share no comparable common ancestor — lt errors.
-	err = runAQLError(t, r, []Value{NewInteger(1), NewWord("lt"), NewList([]Value{NewInteger(2)})})
-	if err == nil {
-		t.Error("expected error for lt on incomparable types")
+	// lt is total — comparing across type branches no longer errors.
+	result := runAQL(t, r, []Value{NewInteger(1), NewWord("lt"), NewList([]Value{NewInteger(2)})})
+	if len(result) != 1 || !result[0].VType.Equal(TBoolean) {
+		t.Errorf("1 lt [2] = %v, want a Boolean", result)
 	}
 }
 

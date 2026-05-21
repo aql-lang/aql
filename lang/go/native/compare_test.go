@@ -165,18 +165,37 @@ func TestCompareValuesPaths(t *testing.T) {
 	}
 }
 
-func TestCompareValuesIncomparableTypes(t *testing.T) {
-	// A scalar and a non-scalar share no comparable ancestor (their
-	// LCA is the bare Any root) and still error.
-	if _, err := CompareValues(NewInteger(1), NewList([]Value{NewInteger(2)})); err == nil {
-		t.Fatal("expected error comparing Integer with List")
+func TestCompareValuesTotalOrder(t *testing.T) {
+	// CompareValues is total: every pair yields an order. Pairs with
+	// no Comparer fall back to the top-level branch precedence
+	// Ideal < Node < Scalar < Type < Word < None, with same-branch
+	// pairs broken on rendered form.
+	arr := NewArray([]Value{NewInteger(1)}) // Ideal branch
+	lst := NewList([]Value{NewInteger(1)})  // Node branch
+	num := NewInteger(5)                    // Scalar branch
+	none := NewTypeLiteral(TNone)           // None branch
+	tests := []struct {
+		name string
+		a, b Value
+		want int
+	}{
+		{"ideal_before_node", arr, lst, -1},
+		{"node_before_scalar", lst, num, -1},
+		{"scalar_after_node", num, lst, 1},
+		{"scalar_before_none", num, none, -1},
+		{"same_branch_tiebreak", NewList([]Value{NewInteger(1)}), NewList([]Value{NewInteger(2)}), -1},
+		{"identical_lists", lst, lst, 0},
 	}
-}
-
-func TestCompareValuesListError(t *testing.T) {
-	_, err := CompareValues(NewList([]Value{NewInteger(1)}), NewList([]Value{NewInteger(2)}))
-	if err == nil {
-		t.Fatal("expected error for list comparison")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := CompareValues(tt.a, tt.b)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("CompareValues(%s, %s) = %d, want %d", tt.a, tt.b, got, tt.want)
+			}
+		})
 	}
 }
 

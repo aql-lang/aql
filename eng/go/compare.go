@@ -3,6 +3,7 @@ package eng
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // ErrNoComparer is returned by Comparer.Compare implementations that
@@ -24,16 +25,15 @@ var ErrNoComparer = errors.New("eng: no comparer in this Behavior")
 // Scalar, which owns the cross-branch ordering; Date-vs-Date stays
 // on Date.
 //
-// Types without a Comparer in their lattice surface a clear
-// "cannot compare" error. Cross-branch scalar pairs are ordered by
-// the Comparer on the Scalar root, which ranks the branches
-// Path < String < Number < Boolean < Atom. Pairs with no comparable
-// common ancestor — e.g. Integer-vs-List, whose LCA is the bare Any
-// root — still error.
+// Comparison is total: every pair of values yields an order. When the
+// lattice walk finds no Comparer, CompareValues falls back to the
+// top-level branch precedence — Ideal < Node < Scalar < Type < Word
+// < None < Any < Never — with same-branch pairs broken on rendered
+// form. (Cross-branch scalar pairs are still ordered first by the
+// Scalar Comparer: Path < String < Number < Boolean < Atom.)
 //
 // DepScalar values represent type-level constraints, not concrete
-// scalars — they are rejected up front to avoid silently coercing
-// zero values through AsNumber/AsString.
+// scalars — they are still rejected up front.
 func CompareValues(a, b Value) (int, error) {
 	if a.IsDepScalar() || b.IsDepScalar() {
 		return 0, fmt.Errorf("cannot compare dependent-type constraint with %s", b.VType.String())
@@ -41,11 +41,7 @@ func CompareValues(a, b Value) (int, error) {
 	if a.VType == nil || b.VType == nil {
 		return 0, fmt.Errorf("cannot compare values with nil type")
 	}
-	lca := lowestCommonAncestor(a.VType, b.VType)
-	if lca == nil {
-		return 0, fmt.Errorf("cannot compare %s and %s", a.VType.String(), b.VType.String())
-	}
-	for t := lca; t != nil; t = t.Parent {
+	for t := lowestCommonAncestor(a.VType, b.VType); t != nil; t = t.Parent {
 		cmp, ok := t.Behavior.(Comparer)
 		if !ok {
 			continue
@@ -59,7 +55,56 @@ func CompareValues(a, b Value) (int, error) {
 		}
 		return n, err
 	}
-	return 0, fmt.Errorf("cannot compare %s and %s", a.VType.String(), b.VType.String())
+	// No Comparer in the shared lattice — fall back to the total
+	// order: top-level branch precedence, then rendered form.
+	return compareByRootBranch(a, b), nil
+}
+
+// rootBranchRank returns v's top-level branch precedence for the
+// total-order fallback:
+//
+//	Ideal < Node < Scalar < Type < Word < None < Any < Never
+func rootBranchRank(v Value) int {
+	root := v.VType
+	for root.Parent != nil {
+		root = root.Parent
+	}
+	switch root {
+	case TIdeal:
+		return 0
+	case TNode:
+		return 1
+	case TScalar:
+		return 2
+	case TType:
+		return 3
+	case TWord:
+		return 4
+	case TNone:
+		return 5
+	case TAny:
+		return 6
+	case TNever:
+		return 7
+	default:
+		return 8
+	}
+}
+
+// compareByRootBranch is the total-order fallback for value pairs
+// with no Comparer in their shared lattice. Different branches are
+// ordered by rootBranchRank; same-branch pairs break the tie on
+// rendered form, so CompareValues stays a total function.
+func compareByRootBranch(a, b Value) int {
+	ra, rb := rootBranchRank(a), rootBranchRank(b)
+	switch {
+	case ra < rb:
+		return -1
+	case ra > rb:
+		return 1
+	default:
+		return strings.Compare(a.String(), b.String())
+	}
 }
 
 // lowestCommonAncestor returns the closest type that is an ancestor

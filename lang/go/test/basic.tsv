@@ -492,8 +492,11 @@ None deq None	true
 "a" lt 1	true
 3 gt "z"	true
 
-# Comparison - lt/gt still error on incomparable (non-scalar) types
-[1] lt [2]	ERROR:lt: cannot compare
+# Comparison - total order: non-scalar pairs use the branch precedence
+# Ideal < Node < Scalar < Type < Word < None < Any < Never
+[1] lt [2]	true
+[1] lt 5	true
+5 lt [1]	false
 
 # Comparison - forward style (swap convention: args[0]=1, args[1]=2, compare(args[1],args[0]))
 lt 1 2	false
