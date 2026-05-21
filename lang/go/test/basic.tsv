@@ -711,3 +711,13 @@ def x 42; `value is ${x}`	'value is 42'
 def a 1; def b 2; `${a} and ${b}`	'1 and 2'
 `${"hi"}`	'hi'
 `price: $100`	'price: $100'
+
+# size - natural size via the Sizer behaviour
+size [1 2 3]	3
+size {a:1 b:2}	2
+size "hello"	5
+size 7.9	7
+size 42	42
+size true	1
+size false	0
+size (make Path "a/b/c")	3

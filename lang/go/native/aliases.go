@@ -405,6 +405,7 @@ var (
 	SeverityFor           = eng.SeverityFor
 	SignatureScore        = eng.SignatureScore
 	SimplifyDisjunctAlts  = eng.SimplifyDisjunctAlts
+	SizeOf                = eng.SizeOf
 	SortSignatures        = eng.SortSignatures
 	StoreKey              = eng.StoreKey
 	StripToCarriers       = eng.StripToCarriers

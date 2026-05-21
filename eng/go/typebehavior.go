@@ -25,8 +25,8 @@ package eng
 //
 // Adding a new operation to TypeBehavior is a breaking change for
 // every implementor. Optional capability sub-interfaces (Comparer,
-// Hasher, Walker — see below) let a type opt into extra operations
-// without expanding the required surface.
+// Hasher, Walker, Sizer — see below) let a type opt into extra
+// operations without expanding the required surface.
 type TypeBehavior interface {
 	// Match reports whether v conforms to the type t. The
 	// canonical default is a lattice walk (v.VType is t or a
@@ -75,6 +75,15 @@ type Hasher interface {
 // maps walk entries, structural types walk fields).
 type Walker interface {
 	Walk(v Value, visit func(Value))
+}
+
+// Sizer is an optional capability interface. Types implementing it
+// report a natural size — the length of a dominant collection (a
+// List's elements, a Map's keys, a Path's segments), a number's
+// floored magnitude, a string's length. SizeOf consults it; a type
+// with no Sizer in its lattice sizes to 1 (None sizes to 0).
+type Sizer interface {
+	Size(v Value) int
 }
 
 // defaultBehavior provides the canonical Match / Format / Equal
