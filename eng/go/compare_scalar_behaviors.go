@@ -90,8 +90,8 @@ func (atomCompareBehavior) Compare(a, b Value) (int, error) {
 // stops at a branch root's own Comparer (Number/String/Boolean/Atom)
 // for any same-branch pair. The one same-branch pair that does reach
 // here is Path-vs-Path — Path has no Comparer of its own — so two
-// paths fall through to Scalar and order lexicographically by their
-// rendered form.
+// paths fall through to Scalar, where comparePaths orders them by
+// segment count (longer paths first), then lexicographically.
 type scalarCompareBehavior struct{ defaultBehavior }
 
 func (scalarCompareBehavior) Compare(a, b Value) (int, error) {
@@ -110,7 +110,7 @@ func (scalarCompareBehavior) Compare(a, b Value) (int, error) {
 		return 1, nil
 	default:
 		// Same branch — only Path-vs-Path reaches here (see above).
-		return strings.Compare(a.String(), b.String()), nil
+		return comparePaths(a, b), nil
 	}
 }
 
@@ -131,6 +131,27 @@ func scalarBranchRank(v Value) (rank int, ok bool) {
 		return 4, true
 	default:
 		return 0, false
+	}
+}
+
+// comparePaths orders two Path values: longer paths (more segments)
+// sort before shorter ones; equal-length paths break the tie
+// lexicographically by rendered form. scalarCompareBehavior routes
+// the Path-vs-Path case here.
+func comparePaths(a, b Value) int {
+	ap, aerr := AsPath(a)
+	bp, berr := AsPath(b)
+	if aerr != nil || berr != nil {
+		// Not a Path pair after all — fall back to rendered order.
+		return strings.Compare(a.String(), b.String())
+	}
+	switch {
+	case len(ap.Parts) > len(bp.Parts):
+		return -1
+	case len(ap.Parts) < len(bp.Parts):
+		return 1
+	default:
+		return strings.Compare(ap.String(), bp.String())
 	}
 }
 

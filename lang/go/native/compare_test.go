@@ -128,19 +128,35 @@ func TestCompareValuesCrossScalar(t *testing.T) {
 }
 
 func TestCompareValuesPaths(t *testing.T) {
-	// Two paths share the Path branch, which has no Comparer of its
-	// own, so they fall through to the Scalar comparator and order by
-	// rendered form.
-	ab := NewPath([]string{"a", "b"}, false)
-	ac := NewPath([]string{"a", "c"}, false)
-	if got, err := CompareValues(ab, ac); err != nil || got != -1 {
-		t.Errorf("CompareValues(a/b, a/c) = %d, %v; want -1, nil", got, err)
+	// Path-vs-Path falls through to the Scalar comparator, which
+	// orders paths by segment count (longer first), then breaks ties
+	// lexicographically by rendered form.
+	abc := NewPath([]string{"a", "b", "c"}, false) // 3 segments
+	ab := NewPath([]string{"a", "b"}, false)       // 2 segments
+	ac := NewPath([]string{"a", "c"}, false)       // 2 segments
+	zzz := NewPath([]string{"z", "z", "z"}, false) // 3 segments
+	tests := []struct {
+		name string
+		a, b Value
+		want int
+	}{
+		{"longer_sorts_first", abc, ab, -1},
+		{"shorter_sorts_after", ab, abc, 1},
+		{"length_beats_lexical", zzz, ab, -1}, // 3 segments win though 'z' > 'a'
+		{"equal_len_lexical", ab, ac, -1},
+		{"equal_len_lexical_rev", ac, ab, 1},
+		{"identical", ab, ab, 0},
 	}
-	if got, err := CompareValues(ac, ab); err != nil || got != 1 {
-		t.Errorf("CompareValues(a/c, a/b) = %d, %v; want 1, nil", got, err)
-	}
-	if got, err := CompareValues(ab, ab); err != nil || got != 0 {
-		t.Errorf("CompareValues(a/b, a/b) = %d, %v; want 0, nil", got, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := CompareValues(tt.a, tt.b)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("CompareValues(%s, %s) = %d, want %d", tt.a, tt.b, got, tt.want)
+			}
+		})
 	}
 }
 
