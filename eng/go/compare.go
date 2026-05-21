@@ -93,23 +93,23 @@ func rootBranchRank(v Value) int {
 	}
 	switch root {
 	case TNever:
-		return 0
-	case TAny:
 		return 1_000_000
-	case TNone:
+	case TAny:
 		return 2_000_000
-	case TWord:
+	case TNone:
 		return 3_000_000
-	case TType:
+	case TWord:
 		return 4_000_000
-	case TScalar:
+	case TType:
 		return 5_000_000
-	case TNode:
+	case TScalar:
 		return 6_000_000
-	case TIdeal:
+	case TNode:
 		return 7_000_000
-	default:
+	case TIdeal:
 		return 8_000_000
+	default:
+		return 9_000_000
 	}
 }
 

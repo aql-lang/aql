@@ -133,15 +133,15 @@ func (scalarCompareBehavior) Compare(a, b Value) (int, error) {
 func scalarBranchRank(v Value) (rank int, ok bool) {
 	switch {
 	case v.VType.Matches(TAtom):
-		return 0, true
-	case v.VType.Matches(TBoolean):
 		return 1_000_000, true
-	case v.VType.Matches(TNumber):
+	case v.VType.Matches(TBoolean):
 		return 2_000_000, true
-	case v.VType.Matches(TString):
+	case v.VType.Matches(TNumber):
 		return 3_000_000, true
-	case v.VType.Matches(TPath):
+	case v.VType.Matches(TString):
 		return 4_000_000, true
+	case v.VType.Matches(TPath):
+		return 5_000_000, true
 	default:
 		return 0, false
 	}
