@@ -87,7 +87,7 @@ func TestResolveWordValueFalse(t *testing.T) {
 
 func TestResolveWordValueNone(t *testing.T) {
 	v := ResolveWordValue(NewWord("None"))
-	if !v.Parent.Equal(TNone) {
+	if !v.Equal(TNone) {
 		t.Errorf("expected none, got %s", v)
 	}
 }

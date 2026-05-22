@@ -297,7 +297,7 @@ func (t *Type) Equal(other *Type) bool {
 // new root with its own metatype can be added by declaring its
 // MetatypePath, no central function edit required.
 func MetatypeFor(t *Type) *Type {
-	if t == nil || t.Parent == nil {
+	if t == nil {
 		return TType
 	}
 	for d := t; d != nil; d = d.Parent {

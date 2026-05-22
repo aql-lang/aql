@@ -486,8 +486,8 @@ func BinaryIntOpNative(name string, op func(a, b int64) (int64, error)) NativeFu
 
 // ValToString converts any scalar Value to its string representation.
 func ValToString(v Value) string {
-	if v.Data == nil && !v.Parent.Equal(TNone) {
-		return v.Parent.String()
+	if v.Data == nil {
+		return v.String()
 	}
 	switch {
 	case v.IsDepScalar():

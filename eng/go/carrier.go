@@ -628,7 +628,7 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 		}
 		var remaining []Value
 		for _, alt := range di.Alternatives {
-			if alt.Parent.Equal(c.Type) {
+			if ValueType(alt).Equal(c.Type) {
 				continue
 			}
 			remaining = append(remaining, alt)

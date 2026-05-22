@@ -266,7 +266,7 @@ func sigTypeMatches(v Value, t *Type) bool {
 		return true
 	}
 	if v.Data == nil && !v.Carrier && IsMetaType(t) {
-		return MetatypeFor(v.Parent).Matches(t)
+		return MetatypeFor(ValueType(v)).Matches(t)
 	}
 	if _, ok := v.Data.(ObjectTypeInfo); ok && IsMetaType(t) {
 		return MetatypeFor(v.Parent).Matches(t)

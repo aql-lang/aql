@@ -203,7 +203,10 @@ func describeStackTypes(stack []Value, pointer int) string {
 	}
 	for i := start; i < end; i++ {
 		v := stack[i]
-		label := v.Parent.String()
+		label := "?"
+		if t := ValueType(v); t != nil {
+			label = t.String()
+		}
 		if IsWord(v) {
 			w, _ := AsWord(v)
 			label = "word(" + w.Name + ")"

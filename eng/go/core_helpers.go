@@ -433,15 +433,15 @@ func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 // literally, all other values are non-empty.
 func CoerceBoolean(v Value) bool {
 	switch {
-	case v.Parent.Matches(TBoolean):
+	case ValueType(v).Matches(TBoolean):
 		b, _ := AsBoolean(v)
 		return b
-	case v.Parent.Matches(TNumber):
+	case ValueType(v).Matches(TNumber):
 		n, _ := AsNumber(v)
 		return n != 0
-	case v.Parent.Equal(TNone):
+	case ValueType(v).Equal(TNone):
 		return false
-	case v.Parent.Equal(TList):
+	case ValueType(v).Equal(TList):
 		if v.Data == nil {
 			return false
 		}
@@ -450,7 +450,7 @@ func CoerceBoolean(v Value) bool {
 		}
 		// Non-[]Value list backings (table types, query builders) are truthy.
 		return true
-	case v.Parent.Equal(TMap):
+	case ValueType(v).Equal(TMap):
 		if v.Data == nil {
 			return false
 		}

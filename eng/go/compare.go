@@ -76,18 +76,19 @@ func CompareValues(a, b Value) (int, error) {
 // share no common ancestor (the type tables guarantee a single root,
 // so in practice this returns at worst the root type).
 func lowestCommonAncestor(a, b *Type) *Type {
-	// Keyed by ID, not pointer: a type literal is a by-value copy of
-	// its lattice node, so ValueType() may hand us a copy whose
-	// address differs from the canonical node's.
-	seen := make(map[string]bool)
+	// Compared via Type.Equal (pointer OR canonical ID): a type
+	// literal is a by-value copy of its node, so ValueType() may hand
+	// us a copy whose address differs from the canonical node's,
+	// while ID-less ad-hoc types still match by pointer.
+	var aChain []*Type
 	for t := a; t != nil; t = t.Parent {
-		if t.ID != "" {
-			seen[t.ID] = true
-		}
+		aChain = append(aChain, t)
 	}
 	for t := b; t != nil; t = t.Parent {
-		if t.ID != "" && seen[t.ID] {
-			return t
+		for _, at := range aChain {
+			if at.Equal(t) {
+				return t
+			}
 		}
 	}
 	return nil
@@ -99,7 +100,7 @@ func lowestCommonAncestor(a, b *Type) *Type {
 // For non-scalars (list, map): compares by identity (same container).
 func ExactEqual(a, b Value) bool {
 	// none == none
-	if a.Parent.Equal(TNone) && b.Parent.Equal(TNone) {
+	if ValueType(a).Equal(TNone) && ValueType(b).Equal(TNone) {
 		return true
 	}
 
@@ -190,7 +191,7 @@ func sameContainer(a, b Payload) bool {
 // Traverses lists and maps depth-first comparing all leaf values.
 func DeepEqual(a, b Value) bool {
 	// none
-	if a.Parent.Equal(TNone) && b.Parent.Equal(TNone) {
+	if ValueType(a).Equal(TNone) && ValueType(b).Equal(TNone) {
 		return true
 	}
 
