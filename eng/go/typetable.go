@@ -71,7 +71,7 @@ type Type struct {
 	Name       string       // last segment of path (e.g. "ProperString")
 	Parent     *Type        // nil for roots
 	FixedID    int          // >0 for builtins; 0 for dynamic
-	Rank       int          // family complexity rank for compareTypes; 0 = unranked
+	Rank       int          // unified lattice rank — the total order CompareValues/compareTypes use; a child ranks above its parent; user/external types inherit the parent's Rank
 	IsInternal bool         // Word/__XX runtime markers — not user-facing
 	Origin     OriginKind   // builtin / userdef
 	Behavior   TypeBehavior // pluggable dispatch — never nil after registration
@@ -235,6 +235,11 @@ func (tt *TypeTable) MintType(name string, parent *Type) *Type {
 		Origin:   OriginUserDef,
 		Behavior: DefaultBehavior,
 	}
+	// A user type inherits its parent's unified Rank — it gets no
+	// positional slot; compareTypes breaks same-Rank ties by name/id.
+	if parent != nil {
+		def.Rank = parent.Rank
+	}
 	def.ID = tt.mintID(parent)
 	tt.byID[def.ID] = def
 	return def
@@ -313,6 +318,11 @@ func (tt *TypeTable) RegisterExternalBuiltin(path string, fixedID int, behavior 
 		FixedID:  fixedID,
 		Origin:   OriginBuiltin,
 		Behavior: behavior,
+	}
+	// External builtins inherit the parent's unified Rank (no
+	// positional slot — see builtinDecls).
+	if parent != nil {
+		def.Rank = parent.Rank
 	}
 	tt.byID[id] = def
 	tt.bypath[path] = def
@@ -397,7 +407,7 @@ type builtinDecl struct {
 	Alias        string // optional friendly short name for ExpandShortName (e.g. "Paren" → Word/__OP)
 	BasePath     string // for Type/Dependent/Dep<X> types: the path of the underlying scalar (Step 9)
 	MetatypePath string // for root types whose descendants share a metatype anchor (Scalar→Type/ScalarType, …)
-	Rank         int    // compareTypes family rank, spaced by 1_000_000 so user types slot between; 0 = unranked
+	Rank         int    // unified lattice rank — see builtinDecls
 }
 
 // builtinDecls lists every builtin type. Parent-first ordering is
@@ -406,85 +416,102 @@ type builtinDecl struct {
 // FixedID values are stable across runs and must not change once
 // assigned — they appear in serialized IDs. New types must use a fresh
 // number, never recycle an old one.
+//
+// Rank is the unified lattice rank: a single integer giving the total
+// order CompareValues / compareTypes use for cross-type ordering. It is
+// positional — a type's Rank is its parent's Rank plus a depth-scaled
+// offset, so a parent always ranks below its whole subtree and sibling
+// order is least-to-most complex:
+//
+//	depth 0  roots          1e10 bands (Any/None/Never share band 1)
+//	depth 1  branch kinds   +1e8 per sibling
+//	depth 2  refinements    +1e7 per sibling   (Word markers: +1e3)
+//
+// User types (MintType) and external builtins (RegisterExternalBuiltin)
+// do not get a positional slot — they inherit the parent's Rank, and
+// compareTypes breaks the resulting ties by name/id. Max rank ≈ 6e10,
+// far under the int64 ceiling.
 var builtinDecls = []builtinDecl{
-	// Roots
-	{Path: "Any", FixedID: 1},
-	{Path: "None", FixedID: 2},
-	{Path: "Never", FixedID: 61},
-	{Path: "Scalar", FixedID: 3, MetatypePath: "Type/ScalarType"},
-	{Path: "Node", FixedID: 11, MetatypePath: "Type/NodeType"},
-	{Path: "Ideal", FixedID: 48, MetatypePath: "Type/IdealType"},
-	{Path: "Word", FixedID: 17},
-	{Path: "Type", FixedID: 39},
+	// Roots. Any/None/Never are childless degenerate roots packed into
+	// the first 1e10 Rank band; the five structural roots take a 1e10
+	// band each. See the unified-Rank scheme on builtinDecl.Rank.
+	{Path: "Any", FixedID: 1, Rank: 11_000_000_000},
+	{Path: "None", FixedID: 2, Rank: 12_000_000_000},
+	{Path: "Never", FixedID: 61, Rank: 13_000_000_000},
+	{Path: "Scalar", FixedID: 3, Rank: 20_000_000_000, MetatypePath: "Type/ScalarType"},
+	{Path: "Node", FixedID: 11, Rank: 30_000_000_000, MetatypePath: "Type/NodeType"},
+	{Path: "Ideal", FixedID: 48, Rank: 40_000_000_000, MetatypePath: "Type/IdealType"},
+	{Path: "Word", FixedID: 17, Rank: 50_000_000_000},
+	{Path: "Type", FixedID: 39, Rank: 60_000_000_000},
 
-	// Scalar branch
-	{Path: "Scalar/String", FixedID: 4},
-	{Path: "Scalar/String/ProperString", FixedID: 5},
-	{Path: "Scalar/String/EmptyString", FixedID: 6},
-	{Path: "Scalar/Number", FixedID: 7},
-	{Path: "Scalar/Number/Integer", FixedID: 8},
-	{Path: "Scalar/Number/Decimal", FixedID: 9},
-	// Scalar/Number/Matrix moved to lang/go/modules/matrix.go (Step 8).
-	{Path: "Scalar/Boolean", FixedID: 10},
-	{Path: "Scalar/Path", FixedID: 47},
-	{Path: "Scalar/Atom", FixedID: 18},
-	// Scalar/Time and descendants moved to lang/go/engine/native_temporal.go (Step 8).
+	// Scalar branch — children ordered least-to-most complex.
+	{Path: "Scalar/Atom", FixedID: 18, Rank: 20_100_000_000},
+	{Path: "Scalar/Boolean", FixedID: 10, Rank: 20_200_000_000},
+	{Path: "Scalar/Number", FixedID: 7, Rank: 20_300_000_000},
+	{Path: "Scalar/Number/Integer", FixedID: 8, Rank: 20_310_000_000},
+	{Path: "Scalar/Number/Decimal", FixedID: 9, Rank: 20_320_000_000},
+	{Path: "Scalar/String", FixedID: 4, Rank: 20_400_000_000},
+	{Path: "Scalar/String/EmptyString", FixedID: 6, Rank: 20_410_000_000},
+	{Path: "Scalar/String/ProperString", FixedID: 5, Rank: 20_420_000_000},
+	{Path: "Scalar/Path", FixedID: 47, Rank: 20_500_000_000},
+	// Scalar/Time and descendants live in lang/go/native/native_temporal.go.
 
-	// Node branch
-	{Path: "Node/List", FixedID: 12, Rank: 1_000_000},
-	{Path: "Node/List/Args", FixedID: 13},
-	{Path: "Node/Map", FixedID: 14, Rank: 2_000_000},
-	{Path: "Node/Map/Inspect", FixedID: 31},
+	// Node branch.
+	{Path: "Node/List", FixedID: 12, Rank: 30_100_000_000},
+	{Path: "Node/List/Args", FixedID: 13, Rank: 30_110_000_000},
+	{Path: "Node/Map", FixedID: 14, Rank: 30_200_000_000},
+	{Path: "Node/Map/Inspect", FixedID: 31, Rank: 30_210_000_000},
 
-	// Ideal branch — the type-kind types: Object and its structural
-	// family, plus Options. Tensor/Matrix/Vector graft on here from
-	// lang/go/modules/matrix.go.
-	{Path: "Ideal/Object", FixedID: 30, Rank: 3_000_000},
-	{Path: "Ideal/Object/Table", FixedID: 15, Rank: 9_000_000},
-	{Path: "Ideal/Object/Record", FixedID: 16, Rank: 5_000_000},
-	{Path: "Ideal/Object/Store", FixedID: 42, Rank: 8_000_000},
-	{Path: "Ideal/Object/Store/System", FixedID: 43},
-	{Path: "Ideal/Object/Array", FixedID: 44, Rank: 4_000_000},
-	{Path: "Ideal/Object/Error", FixedID: 45, Rank: 7_000_000},
-	{Path: "Ideal/Object/Resource", FixedID: 36, Rank: 11_000_000},
-	{Path: "Ideal/Object/Resource/Entity", FixedID: 37},
-	{Path: "Ideal/Options", FixedID: 38, Rank: 6_000_000},
-	// Ideal/Object/Fetch{,/Request,/Response} → lang/go/native/fetch.go.
-	// Ideal/Object/Timeout, Ideal/Object/Interval → lang/go/native/native_misc.go.
+	// Ideal branch — the structural type-kinds (Object, Array, Record,
+	// Options, Error, Store, Table) are direct children of Ideal: peer
+	// kinds. Resource/Entity are genuine object types (an Object ←
+	// Resource ← Entity inheritance chain), so they stay under Object.
+	// External modules graft Tensor / Timeout / Fetch / … on as further
+	// Ideal/* kinds via RegisterExternalBuiltin.
+	{Path: "Ideal/Object", FixedID: 30, Rank: 40_100_000_000},
+	{Path: "Ideal/Object/Resource", FixedID: 36, Rank: 40_110_000_000},
+	{Path: "Ideal/Object/Resource/Entity", FixedID: 37, Rank: 40_111_000_000},
+	{Path: "Ideal/Array", FixedID: 44, Rank: 40_200_000_000},
+	{Path: "Ideal/Record", FixedID: 16, Rank: 40_300_000_000},
+	{Path: "Ideal/Options", FixedID: 38, Rank: 40_400_000_000},
+	{Path: "Ideal/Error", FixedID: 45, Rank: 40_500_000_000},
+	{Path: "Ideal/Store", FixedID: 42, Rank: 40_600_000_000},
+	{Path: "Ideal/Store/System", FixedID: 43, Rank: 40_610_000_000},
+	{Path: "Ideal/Table", FixedID: 15, Rank: 40_700_000_000},
 
-	// Word branch — Word/__XX entries are internal runtime markers.
-	// They expose friendly short-name aliases (e.g. "Paren" → Word/__OP)
-	// so ResolveTypeName / NewType can resolve them by their lang-level
-	// label rather than the underscore-marker leaf.
-	{Path: "Word/__FW", FixedID: 21, IsInternal: true, Alias: "Forward"},
-	{Path: "Word/__OP", FixedID: 22, IsInternal: true, Alias: "Paren"},
-	{Path: "Word/__CP", FixedID: 72, IsInternal: true, Alias: "CloseParen"},
-	{Path: "Word/__ED", FixedID: 73, IsInternal: true, Alias: "End"},
-	{Path: "Word/__PE", FixedID: 63, IsInternal: true},
-	{Path: "Word/__IS", FixedID: 51, IsInternal: true},
-	{Path: "Word/__FN", FixedID: 23, IsInternal: true, Alias: "Fndef"},
-	{Path: "Word/__RC", FixedID: 25, IsInternal: true, Alias: "Returncheck"},
-	{Path: "Word/__MK", FixedID: 27, IsInternal: true, Alias: "Mark"},
-	{Path: "Word/__MV", FixedID: 28, IsInternal: true, Alias: "Move"},
-	{Path: "Word/__MD", FixedID: 29, IsInternal: true, Alias: "Module"},
-	{Path: "Word/__IN", FixedID: 20, IsInternal: true},
-	{Path: "Word/__IN/__DC", FixedID: 64, IsInternal: true},
+	// Word branch — Word/__XX entries are internal runtime markers,
+	// packed at 1e3 Rank spacing. They expose friendly short-name
+	// aliases (e.g. "Paren" → Word/__OP) so ResolveTypeName / NewType
+	// can resolve them by their lang-level label.
+	{Path: "Word/__FW", FixedID: 21, IsInternal: true, Alias: "Forward", Rank: 50_100_000_000},
+	{Path: "Word/__OP", FixedID: 22, IsInternal: true, Alias: "Paren", Rank: 50_100_001_000},
+	{Path: "Word/__CP", FixedID: 72, IsInternal: true, Alias: "CloseParen", Rank: 50_100_002_000},
+	{Path: "Word/__ED", FixedID: 73, IsInternal: true, Alias: "End", Rank: 50_100_003_000},
+	{Path: "Word/__PE", FixedID: 63, IsInternal: true, Rank: 50_100_004_000},
+	{Path: "Word/__IS", FixedID: 51, IsInternal: true, Rank: 50_100_005_000},
+	{Path: "Word/__FN", FixedID: 23, IsInternal: true, Alias: "Fndef", Rank: 50_100_006_000},
+	{Path: "Word/__RC", FixedID: 25, IsInternal: true, Alias: "Returncheck", Rank: 50_100_007_000},
+	{Path: "Word/__MK", FixedID: 27, IsInternal: true, Alias: "Mark", Rank: 50_100_008_000},
+	{Path: "Word/__MV", FixedID: 28, IsInternal: true, Alias: "Move", Rank: 50_100_009_000},
+	{Path: "Word/__MD", FixedID: 29, IsInternal: true, Alias: "Module", Rank: 50_100_010_000},
+	{Path: "Word/__IN", FixedID: 20, IsInternal: true, Rank: 50_100_011_000},
+	{Path: "Word/__IN/__DC", FixedID: 64, IsInternal: true, Rank: 50_100_011_001},
 
-	// Type (metatype) branch
-	{Path: "Type/Function", FixedID: 19},
-	{Path: "Type/FunctionSignature", FixedID: 24},
-	{Path: "Type/Disjunct", FixedID: 26},
-	{Path: "Type/Disjunct/Enum", FixedID: 62},
-	{Path: "Type/ScalarType", FixedID: 40},
-	{Path: "Type/NodeType", FixedID: 41},
-	{Path: "Type/IdealType", FixedID: 46},
-	{Path: "Type/Dependent", FixedID: 65},
-	{Path: "Type/Dependent/DepInteger", FixedID: 66, BasePath: "Scalar/Number/Integer"},
-	{Path: "Type/Dependent/DepDecimal", FixedID: 67, BasePath: "Scalar/Number/Decimal"},
-	{Path: "Type/Dependent/DepNumber", FixedID: 68, BasePath: "Scalar/Number"},
-	{Path: "Type/Dependent/DepString", FixedID: 69, BasePath: "Scalar/String"},
-	{Path: "Type/Dependent/DepBoolean", FixedID: 70, BasePath: "Scalar/Boolean"},
-	{Path: "Type/Dependent/DepAtom", FixedID: 71, BasePath: "Scalar/Atom"},
+	// Type (metatype) branch.
+	{Path: "Type/Function", FixedID: 19, Rank: 60_100_000_000},
+	{Path: "Type/FunctionSignature", FixedID: 24, Rank: 60_200_000_000},
+	{Path: "Type/Disjunct", FixedID: 26, Rank: 60_300_000_000},
+	{Path: "Type/Disjunct/Enum", FixedID: 62, Rank: 60_310_000_000},
+	{Path: "Type/ScalarType", FixedID: 40, Rank: 60_400_000_000},
+	{Path: "Type/NodeType", FixedID: 41, Rank: 60_500_000_000},
+	{Path: "Type/IdealType", FixedID: 46, Rank: 60_600_000_000},
+	{Path: "Type/Dependent", FixedID: 65, Rank: 60_700_000_000},
+	{Path: "Type/Dependent/DepAtom", FixedID: 71, BasePath: "Scalar/Atom", Rank: 60_710_000_000},
+	{Path: "Type/Dependent/DepBoolean", FixedID: 70, BasePath: "Scalar/Boolean", Rank: 60_720_000_000},
+	{Path: "Type/Dependent/DepNumber", FixedID: 68, BasePath: "Scalar/Number", Rank: 60_730_000_000},
+	{Path: "Type/Dependent/DepInteger", FixedID: 66, BasePath: "Scalar/Number/Integer", Rank: 60_740_000_000},
+	{Path: "Type/Dependent/DepDecimal", FixedID: 67, BasePath: "Scalar/Number/Decimal", Rank: 60_750_000_000},
+	{Path: "Type/Dependent/DepString", FixedID: 69, BasePath: "Scalar/String", Rank: 60_760_000_000},
 }
 
 // Builtin is the package-level TypeTable holding every builtin type.
@@ -680,6 +707,9 @@ func MintTestType(path string) *Type {
 		Parent:   parent,
 		Origin:   OriginUserDef,
 		Behavior: DefaultBehavior,
+	}
+	if parent != nil {
+		def.Rank = parent.Rank
 	}
 	testTypePool[path] = def
 	return def

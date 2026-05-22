@@ -81,7 +81,7 @@ inspect typeof	{name:'typeof',kind:native,signatures:[{args:['Any']}]}
 inspect pathof	{name:'pathof',kind:native,signatures:[{args:['Type']}]}	
 inspect is	{name:'is',kind:native,signatures:[{args:['Any','Any']}]}	
 inspect enum	{name:'enum',kind:native,signatures:[{args:['List']}]}	
-inspect make	{name:'make',kind:native,signatures:[{args:['ScalarType','Map','Any']},{args:['Object','Any','Object']},{args:['Any','Any','Map']},{args:['Array','List']},{args:['IdealType','Map']},{args:['ScalarType','Any']},{args:['Any','Any']}]}	
+inspect make	{name:'make',kind:native,signatures:[{args:['ScalarType','Map','Any']},{args:['Object','Any','Object']},{args:['Any','Any','Map']},{args:['IdealType','Map']},{args:['Array','List']},{args:['ScalarType','Any']},{args:['Any','Any']}]}
 inspect inspect	{name:'inspect',kind:native,signatures:[{args:['Atom']},{args:['Any']}]}	Atom/q sig (was Atom + Word) plus Any fallback
 		
 # --- state ---		

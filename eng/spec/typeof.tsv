@@ -174,9 +174,9 @@ pathof Map	[Node Map]
 pathof Object	[Ideal Object]
 pathof Resource	[Ideal Object Resource]
 pathof Entity	[Ideal Object Resource Entity]
-pathof Table	[Ideal Object Table]
-pathof Record	[Ideal Object Record]
-pathof Array	[Ideal Object Array]
+pathof Table	[Ideal Table]
+pathof Record	[Ideal Record]
+pathof Array	[Ideal Array]
 		
 # --- type family ---		
 pathof Type	[Type]	Type has no ancestors

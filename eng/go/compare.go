@@ -24,17 +24,14 @@ var ErrNoComparer = errors.New("eng: no comparer in this Behavior")
 // Scalar, which owns the cross-branch ordering; Date-vs-Date stays
 // on Date.
 //
-// When the lattice walk finds no Comparer, the order is still a strict
-// total order. Cross-branch pairs order by the top-level branch
-// precedence
-//
-//	Never < Any < None < Word < Type < Scalar < Node < Ideal
-//
-// A same-branch pair falls back to size (smaller SizeOf first, so a
-// shorter List leads a longer one); equal sizes then break to the
-// type order (compareTypes — family rank, depth, name, id), and two
-// values of the identical type break to an element-wise structural
-// comparison. Distinct values never collapse to 0.
+// When the lattice walk finds no Comparer, the order falls to the
+// unified lattice Rank: every type carries one Rank giving a total
+// order over the whole lattice (see typetable.go::builtinDecls), so
+// any two values of different types order by Rank alone. Two values
+// of equal Rank — the identical type, or two user/external types that
+// inherit one builtin's Rank — break to compareTypes (name/id), then
+// to size, then to an element-wise structural comparison. Distinct
+// values never collapse to 0.
 //
 // DepScalar values (type-level constraints) flow through this same
 // path.
@@ -56,61 +53,18 @@ func CompareValues(a, b Value) (int, error) {
 		}
 		return n, err
 	}
-	// No Comparer in the shared lattice. Cross-branch pairs order by
-	// the top-level branch precedence.
-	if ra, rb := rootBranchRank(a), rootBranchRank(b); ra != rb {
-		if ra < rb {
-			return -1, nil
-		}
-		return 1, nil
-	}
-	// Same branch, no Comparer — order by size (smaller SizeOf first,
-	// so a shorter List leads a longer one). Equal sizes break to the
-	// type order, then — for two values of the very same type — to an
-	// element-wise structural comparison, so distinct values never
-	// collapse to 0.
-	if sa, sb := SizeOf(a), SizeOf(b); sa != sb {
-		if sa < sb {
-			return -1, nil
-		}
-		return 1, nil
-	}
+	// No Comparer in the shared lattice — order by the type lattice.
+	// compareTypes is a total order on *Type (Rank, then depth, name,
+	// id), so any two values of distinct types resolve here.
 	if c := compareTypes(a.VType, b.VType); c != 0 {
 		return c, nil
 	}
+	// Identical type — order by value: size, then element-wise
+	// structure, so distinct values never collapse to 0.
+	if sa, sb := SizeOf(a), SizeOf(b); sa != sb {
+		return cmpInt(sa, sb), nil
+	}
 	return compareStructural(a, b)
-}
-
-// rootBranchRank returns v's top-level branch precedence:
-//
-//	Never < Any < None < Word < Type < Scalar < Node < Ideal
-//
-// The values are spaced by 1_000_000, matching Type.Rank.
-func rootBranchRank(v Value) int {
-	root := v.VType
-	for root.Parent != nil {
-		root = root.Parent
-	}
-	switch root {
-	case TNever:
-		return 1_000_000
-	case TAny:
-		return 2_000_000
-	case TNone:
-		return 3_000_000
-	case TWord:
-		return 4_000_000
-	case TType:
-		return 5_000_000
-	case TScalar:
-		return 6_000_000
-	case TNode:
-		return 7_000_000
-	case TIdeal:
-		return 8_000_000
-	default:
-		return 9_000_000
-	}
 }
 
 // lowestCommonAncestor returns the closest type that is an ancestor

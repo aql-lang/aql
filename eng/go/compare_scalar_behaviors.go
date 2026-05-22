@@ -91,60 +91,28 @@ func (wordCompareBehavior) Compare(a, b Value) (int, error) {
 }
 
 // scalarCompareBehavior is the Comparer on the abstract Scalar root.
-// It gives cross-branch scalar pairs (e.g. Integer-vs-String) a
-// defined order instead of a "cannot compare" error, ranking the
-// branches:
+// It gives cross-family scalar pairs (e.g. Integer-vs-String) a defined
+// order by their unified lattice Rank — the same key CompareValues'
+// fallback uses, so the Scalar root needs no private branch ladder and,
+// since the bare Scalar root literal carries a real Rank, it never has
+// to bail.
 //
-//	Atom < Boolean < Number < String < Path
-//
-// CompareValues reaches it only for cross-branch pairs: the LCA walk
+// CompareValues reaches it only for cross-family pairs: the LCA walk
 // stops at a branch root's own Comparer (Number/String/Boolean/Atom)
-// for any same-branch pair. The one same-branch pair that does reach
-// here is Path-vs-Path — Path has no Comparer of its own — so two
-// paths fall through to Scalar, where comparePaths orders them by
-// segment count (longest first), then segment by segment, then
-// absolute paths before relative ones.
+// for any same-family pair. The one same-Rank pair that does reach here
+// is Path-vs-Path — Path has no Comparer of its own — so two paths fall
+// through to Scalar, where comparePaths orders them by segment count
+// (longest first), then segment by segment, then absolute before
+// relative.
 type scalarCompareBehavior struct{ defaultBehavior }
 
 func (scalarCompareBehavior) Compare(a, b Value) (int, error) {
-	ra, aok := scalarBranchRank(a)
-	rb, bok := scalarBranchRank(b)
-	if !aok || !bok {
-		// A value typed as the bare Scalar root belongs to no
-		// branch. Returning ErrNoComparer lets CompareValues keep
-		// walking the parent chain, surfacing a clear error.
-		return 0, ErrNoComparer
+	if c := compareTypes(a.VType, b.VType); c != 0 {
+		return c, nil
 	}
-	switch {
-	case ra < rb:
-		return -1, nil
-	case ra > rb:
-		return 1, nil
-	default:
-		// Same branch — only Path-vs-Path reaches here (see above).
-		return comparePaths(a, b), nil
-	}
-}
-
-// scalarBranchRank maps a scalar value to its cross-branch precedence
-// (Atom < Boolean < Number < String < Path), in steps of 1_000_000.
-// ok is false for a value typed as the abstract Scalar root, which
-// belongs to no branch.
-func scalarBranchRank(v Value) (rank int, ok bool) {
-	switch {
-	case v.VType.Matches(TAtom):
-		return 1_000_000, true
-	case v.VType.Matches(TBoolean):
-		return 2_000_000, true
-	case v.VType.Matches(TNumber):
-		return 3_000_000, true
-	case v.VType.Matches(TString):
-		return 4_000_000, true
-	case v.VType.Matches(TPath):
-		return 5_000_000, true
-	default:
-		return 0, false
-	}
+	// Same scalar type — Path-vs-Path orders by segment count, then
+	// segment by segment, then absolute before relative.
+	return comparePaths(a, b), nil
 }
 
 // comparePaths orders two Path values by three keys in turn: longer

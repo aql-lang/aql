@@ -46,8 +46,8 @@ func TestFixedIDStability(t *testing.T) {
 		"Node/List":                    12,
 		"Node/List/Args":               13,
 		"Node/Map":                     14,
-		"Ideal/Object/Table":           15,
-		"Ideal/Object/Record":          16,
+		"Ideal/Table":                  15,
+		"Ideal/Record":                 16,
 		"Word":                         17,
 		"Scalar/Atom":                  18,
 		"Type/Function":                19,
@@ -64,19 +64,19 @@ func TestFixedIDStability(t *testing.T) {
 		"Ideal":                        48,
 		"Ideal/Object":                 30,
 		"Node/Map/Inspect":             31,
-		"Ideal/Object/Fetch":           3000,
-		"Ideal/Object/Fetch/Request":   3001,
-		"Ideal/Object/Fetch/Response":  3002,
+		"Ideal/Fetch":                  3000,
+		"Ideal/Fetch/Request":          3001,
+		"Ideal/Fetch/Response":         3002,
 		"Ideal/Object/Resource":        36,
 		"Ideal/Object/Resource/Entity": 37,
 		"Ideal/Options":                38,
 		"Type":                         39,
 		"Type/ScalarType":              40,
 		"Type/NodeType":                41,
-		"Ideal/Object/Store":           42,
-		"Ideal/Object/Store/System":    43,
-		"Ideal/Object/Array":           44,
-		"Ideal/Object/Error":           45,
+		"Ideal/Store":                  42,
+		"Ideal/Store/System":           43,
+		"Ideal/Array":                  44,
+		"Ideal/Error":                  45,
 		"Type/IdealType":               46,
 		"Scalar/Path":                  47,
 		"Ideal/Tensor":                 2001, // matrix module range (2000-2999)
@@ -106,8 +106,8 @@ func TestFixedIDStability(t *testing.T) {
 		"Scalar/Time/Duration/CalDuration": 1006,
 		"Scalar/Time/Duration/ClkDuration": 1007,
 		"Scalar/Time/Timezone":             1008,
-		"Ideal/Object/Timeout":             4000, // timer types — lang/go/engine/native_misc.go
-		"Ideal/Object/Interval":            4001,
+		"Ideal/Timeout":                    4000, // timer types — lang/go/engine/native_misc.go
+		"Ideal/Interval":                   4001,
 	}
 
 	for path, want := range expected {

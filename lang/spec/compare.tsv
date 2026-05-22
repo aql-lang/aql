@@ -1,21 +1,18 @@
 # compare.tsv — the `cmp` three-way comparison, exhaustive over scalars.
 #
 # `a cmp b` yields -1 / 0 / 1 — a sorts before / with / after b, the
-# same total order as lt / gt / sort (see eng/go/compare.go).  The rows
+# same total order as lt / gt / sort (see eng/go/compare.go). The rows
 # are the full cross product of a representative value of each scalar
 # kind and every scalar type literal.
 #
-# Two anomalies are visible in the data and recorded here as-is:
+# Cross-type order follows the unified lattice Rank, so it is fully
+# transitive — including the bare `Scalar` root literal, which carries
+# a real Rank and sorts below every scalar branch.
 #
-#  - Number-branch TYPE LITERALS (Number / Integer / Decimal) read as 0
-#    through the numeric comparator, so they compare equal to each other
-#    (the Boolean literal collapses with `false` the same way).
-#
-#  - the bare `Scalar` root literal has no scalar branch rank, so it
-#    falls to the size/type fallback on a different scale from the
-#    branch-rank order — making CompareValues NON-transitive when it is
-#    involved: `Scalar cmp -2` is 1 and `-2 cmp true` is 1, yet
-#    `Scalar cmp true` is -1.  A known bug, not intended behaviour.
+# One anomaly remains: Number-branch TYPE LITERALS (Number / Integer /
+# Decimal) read as 0 through the numeric comparator, so they compare
+# equal to each other (the Boolean literal collapses with `false` the
+# same way).
 
 # a = 5
 5 cmp 5	0
@@ -42,7 +39,7 @@
 -2 cmp true	1
 -2 cmp false	1
 -2 cmp cat/q	1
--2 cmp Scalar	-1
+-2 cmp Scalar	1
 -2 cmp Number	-1
 -2 cmp Integer	-1
 -2 cmp Decimal	-1
@@ -138,7 +135,7 @@ cat/q cmp Path	-1
 
 # a = Scalar
 Scalar cmp 5	-1
-Scalar cmp -2	1
+Scalar cmp -2	-1
 Scalar cmp 3.5	-1
 Scalar cmp 'hi'	-1
 Scalar cmp true	-1

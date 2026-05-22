@@ -26,7 +26,7 @@ func SizeOf(v Value) int {
 // The Size methods below attach the Sizer capability to the kernel
 // Behaviors declared in compare_scalar_behaviors.go (the scalar
 // branch) and coretype_list_map_behaviors.go (List / Map), plus
-// objectSizeBehavior (declared here) for the Object family.
+// idealSizeBehavior (declared here) for the Ideal family.
 // Gathering them keeps the one size rule auditable in one place.
 
 // Size of a Number is its floored magnitude: an Integer floors to
@@ -85,17 +85,17 @@ func (mapFormatBehavior) Size(v Value) int {
 	return m.Len()
 }
 
-// objectSizeBehavior carries the Sizer capability for the Object
-// family. Installed on the Object root, the SizeOf walk reaches it
-// for any Object-family instance whose own type has no Sizer. Each
+// idealSizeBehavior carries the Sizer capability for the Ideal
+// family. Installed on the Ideal root, the SizeOf walk reaches it
+// for any Ideal-family instance whose own type has no Sizer. Each
 // kind sizes to its member count: an Object's fields, an Array's
 // elements, a Store's entries, a Table's rows. Record instances are
 // field-maps and size via the Map Sizer instead.
-type objectSizeBehavior struct{ defaultBehavior }
+type idealSizeBehavior struct{ defaultBehavior }
 
-func (objectSizeBehavior) formatDelegate() {}
+func (idealSizeBehavior) formatDelegate() {}
 
-func (objectSizeBehavior) Size(v Value) int {
+func (idealSizeBehavior) Size(v Value) int {
 	switch d := v.Data.(type) {
 	case ObjectInstanceInfo:
 		if d.Fields != nil {
@@ -116,5 +116,5 @@ func (objectSizeBehavior) Size(v Value) int {
 }
 
 func init() {
-	TObject.Behavior = objectSizeBehavior{}
+	TIdeal.Behavior = idealSizeBehavior{}
 }

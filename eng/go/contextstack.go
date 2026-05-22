@@ -23,7 +23,7 @@ func (cs *ContextStack) Push(parent *StoreInstanceInfo) {
 		return
 	}
 	child := &StoreInstanceInfo{
-		TypeName:  "Ideal/Object/Store",
+		TypeName:  "Ideal/Store",
 		Data:      make(map[string]Value),
 		Prototype: parent,
 	}

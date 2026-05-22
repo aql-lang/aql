@@ -123,11 +123,11 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 	if IsObjectType(body) {
 		info, _ := AsObjectType(body)
 		if info.Parent != nil {
-			// Child type: full name is Parent/Name (e.g. Ideal/Object/Foo/Bar)
+			// Child type: full name is Parent/Name (e.g. Ideal/Foo/Bar)
 			info.Name = info.Parent.Name + "/" + name
 		} else {
-			// Direct child of the Object kind: Ideal/Object/Name
-			info.Name = "Ideal/Object/" + name
+			// Direct child of the Object kind: Ideal/Name
+			info.Name = "Ideal/" + name
 		}
 		// Register the name parts as known type parts.
 		for _, p := range strings.Split(info.Name, "/") {

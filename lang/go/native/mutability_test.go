@@ -393,7 +393,7 @@ func TestArrayMutationSharedReference(t *testing.T) {
 }
 
 func TestArrayIsDistinctFromList(t *testing.T) {
-	// Array is Object/Array; List is List — different types
+	// Array is Ideal/Array; List is Node/List — different branches.
 	arr := NewArray([]Value{NewInteger(1)})
 	list := NewList([]Value{NewInteger(1)})
 
@@ -403,8 +403,8 @@ func TestArrayIsDistinctFromList(t *testing.T) {
 	if list.VType.Matches(TArray) {
 		t.Error("List should not match TArray")
 	}
-	if !arr.VType.Matches(TObject) {
-		t.Error("Array should match TObject")
+	if !arr.VType.Matches(TIdeal) {
+		t.Error("Array should match TIdeal")
 	}
 	if !arr.VType.Matches(TArray) {
 		t.Error("Array should match TArray")

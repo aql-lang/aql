@@ -34,11 +34,9 @@ func registerTensorTypes() (*eng.Type, *eng.Type, *eng.Type) {
 		// registerTimerType in native/native_misc.go for rationale.
 		panic(fmt.Sprintf("matrix: register TTensor: %v", err))
 	}
-	// Rank places Tensor between Table (9_000_000) and Resource
-	// (11_000_000) in the Ideal complexity order — see builtinDecls in
-	// eng/go/typetable.go, where kernel ranks are spaced by 1_000_000.
-	// Matrix and Vector inherit it as Tensor's lattice children.
-	tensor.Rank = 10_000_000
+	// Tensor inherits Ideal's unified Rank from RegisterExternalBuiltin
+	// (external types take no positional slot — see builtinDecls in
+	// eng/go/typetable.go); Matrix and Vector inherit it in turn.
 	matrix, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Tensor/Matrix", 2000, tensorFormatBehavior{})
 	if err != nil {
 		// lint:allow-panic — see above.

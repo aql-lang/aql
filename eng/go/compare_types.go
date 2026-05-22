@@ -5,29 +5,26 @@ import (
 	"strings"
 )
 
-// compareTypes is a total order on *Type. CompareValues uses it as the
-// post-size tiebreaker for a same-branch pair, and it is the order
-// under which type literals sort. Two distinct types never compare
-// equal. The keys, in priority order:
+// compareTypes is a total order on *Type — the tiebreaker CompareValues
+// applies once two values share a unified Rank, and the order under
+// which type literals sort. Two distinct types never compare equal.
+// The keys, in priority order:
 //
-//  1. family rank — the declared complexity of the type's family
-//     (List < Map, …). A subtype inherits its family's rank via the
-//     parent-chain walk, so a `def Foo List` and a `def Bar List`
-//     both rank as List.
-//  2. depth — the shallower type first: the more general type before
-//     a subtype that refines it (List before a `def Foo List`).
-//  3. name — lexical. The nominal key that finally separates sibling
-//     types — Foo and Bar — which share both family rank and depth.
+//  1. Rank — the unified lattice rank (typetable.go::builtinDecls). A
+//     builtin child always ranks above its parent; user and external
+//     types inherit the parent's Rank, so a builtin and all the user
+//     types descending from it share one Rank and fall to key 2.
+//  2. depth — the shallower type first: the more general type before a
+//     subtype that refines it (List before a `def Foo refine List`).
+//  3. name — lexical. Separates sibling types that share Rank and
+//     depth — Foo and Bar, both `def … refine List`.
 //  4. id — the lattice identity string; the last-ditch floor for the
 //     rare pair of distinct types that share a name (a shadowed def).
-//
-// Precondition: CompareValues reaches this only for a same-branch
-// pair — rootBranchRank is checked first.
 func compareTypes(a, b *Type) int {
 	if a == b {
 		return 0
 	}
-	if c := cmpInt(typeFamilyRank(a), typeFamilyRank(b)); c != 0 {
+	if c := cmpInt(rankOf(a), rankOf(b)); c != 0 {
 		return c
 	}
 	if c := cmpInt(typeDepth(a), typeDepth(b)); c != 0 {
@@ -39,17 +36,11 @@ func compareTypes(a, b *Type) int {
 	return strings.Compare(a.ID, b.ID)
 }
 
-// typeFamilyRank reports the declared complexity rank of a type's
-// family, least complex first — a List leads a Map, a Record leads a
-// Table. It walks the parent chain and returns the first non-zero
-// Type.Rank, so a subtype inherits its family head's rank (a
-// `def Foo List` ranks as List). A type with no ranked ancestor ranks
-// 0 and falls through to compareTypes's depth and name keys.
-//
-// Ranks are declared on the type: builtinDecls in typetable.go for
-// kernel types, and Type.Rank set after RegisterExternalBuiltin for
-// external types (e.g. the matrix module's Tensor).
-func typeFamilyRank(t *Type) int {
+// rankOf returns t's unified lattice Rank. Builtins, MintType, and
+// RegisterExternalBuiltin all set Rank at creation, so this normally
+// returns t.Rank directly; the parent-chain walk is a fallback for a
+// *Type assembled without one (chiefly in tests).
+func rankOf(t *Type) int {
 	for ; t != nil; t = t.Parent {
 		if t.Rank != 0 {
 			return t.Rank

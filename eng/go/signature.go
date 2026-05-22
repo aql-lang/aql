@@ -393,15 +393,15 @@ var typeInherentScores = map[string]int{
 	"Scalar/Boolean":        1200,
 	"Scalar/Path":           1250,
 	"Scalar/Atom":           1300,
-	"Ideal/Object/Error":    1400,
-	"Ideal/Object/Fetch":    1500,
-	"Ideal/Object/Store":    1600,
-	"Ideal/Object/Array":    1650,
+	"Ideal/Error":           1400,
+	"Ideal/Fetch":           1500,
+	"Ideal/Store":           1600,
+	"Ideal/Array":           1650,
 	"Ideal/Object/Resource": 1700,
 	"Scalar/Number":         1800,
 	"Word/Function":         1900,
-	"Ideal/Object/Table":    2000,
-	"Ideal/Object/Record":   2100,
+	"Ideal/Table":           2000,
+	"Ideal/Record":          2100,
 	"Scalar/String":         2200,
 	"Node/List":             2300,
 	"Node/Map":              2400,
@@ -422,10 +422,10 @@ var typeInherentScores = map[string]int{
 	"Node/Map/Inspect": 1500,
 
 	// Depth 3 — Object subtypes
-	"Ideal/Object/Fetch/Request":   1600,
-	"Ideal/Object/Fetch/Response":  1700,
+	"Ideal/Fetch/Request":          1600,
+	"Ideal/Fetch/Response":         1700,
 	"Ideal/Object/Resource/Entity": 1800,
-	"Ideal/Object/Store/System":    1900,
+	"Ideal/Store/System":           1900,
 }
 
 // typeInherentScore returns the inherent score for a type.

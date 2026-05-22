@@ -186,16 +186,20 @@ replace historical hardcoded switches:
   `MetatypeFor`. Populated via `builtinDecl.MetatypePath` for
   kernel-declared roots.
 
-- `Rank int` — the family complexity rank read by `compareTypes`
-  (`compare_types.go`) when ordering Comparer-less values and type
-  literals: List < Map, and the Ideal family Object < Array <
-  Record < Options < Error < Store < Table < Tensor < Resource.
-  Kernel ranks are spaced by `1_000_000` so a user-registered type
-  can claim an intermediate rank. `typeFamilyRank` walks the parent
-  chain so a subtype inherits its family head's rank. Populated via
-  `builtinDecl.Rank` for kernel types; external types set
-  `def.Rank = ...` after `RegisterExternalBuiltin` (the matrix
-  module's Tensor).
+- `Rank int` — the **unified lattice rank**: one integer giving the
+  total order `CompareValues` / `compareTypes` use for every cross-type
+  ordering (it replaced the old per-branch `rootBranchRank` /
+  `scalarBranchRank` / family-rank ladders). It is positional — a
+  type's Rank is its parent's Rank plus a depth-scaled offset, so a
+  builtin child always ranks above its parent and siblings run
+  least-to-most complex. The scheme (1e10 root bands, +1e8 / +1e7 per
+  depth, …) is laid out on `typetable.go::builtinDecls`. Kernel types
+  get a positional Rank from `builtinDecl.Rank`; user types
+  (`MintType`) and external builtins (`RegisterExternalBuiltin`)
+  inherit the parent's Rank, and `compareTypes` breaks the resulting
+  ties by depth, then name, then id. `rankOf` (`compare_types.go`)
+  walks the parent chain as a fallback for a `*Type` assembled without
+  one.
 
 When introducing a new root with its own metatype anchor, add
 `MetatypePath` to its `builtinDecl` row.

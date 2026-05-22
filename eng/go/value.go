@@ -1209,9 +1209,13 @@ func AsDisjunct(v Value) (DisjunctInfo, error) {
 }
 
 // IsObjectType reports whether this value is an object type definition.
+// The test is payload-based: any value carrying ObjectTypeInfo is an
+// object type, regardless of where its VType sits in the lattice — a
+// builtin like Resource is an object type whose VType is the peer
+// Ideal kind Ideal/Resource, not a descendant of Ideal/Object.
 func IsObjectType(v Value) bool {
 	_, ok := v.Data.(ObjectTypeInfo)
-	return ok && v.VType.Matches(TObject)
+	return ok
 }
 
 // AsObjectType returns the ObjectTypeInfo, panics if not an object type.
@@ -1254,9 +1258,10 @@ func AsArray(v Value) (*ArrayInstanceInfo, error) {
 }
 
 // IsObjectInstance reports whether this value is an object instance.
+// Payload-based — see IsObjectType.
 func IsObjectInstance(v Value) bool {
 	_, ok := v.Data.(ObjectInstanceInfo)
-	return ok && v.VType.Matches(TObject)
+	return ok
 }
 
 // AsObjectInstance returns the ObjectInstanceInfo, panics if not an object instance.
