@@ -29,7 +29,7 @@ func patternsOk(sig *Signature, positions []int, stack []Value, fwd int) bool {
 		}
 		isForward := idx < fwd
 		val := stack[positions[idx]]
-		if pattern.VType.Equal(TMap) && val.VType.Equal(TMap) &&
+		if pattern.Parent.Equal(TMap) && val.Parent.Equal(TMap) &&
 			pattern.Data != nil && val.Data != nil &&
 			!IsOptionsType(pattern) &&
 			!IsRecordType(val) && !IsTypedMap(val) && !IsOptionsType(val) {

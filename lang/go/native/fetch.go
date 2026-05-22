@@ -126,7 +126,7 @@ func doFetch(reqOM ReadMap) ([]Value, error) {
 	}
 
 	// Set headers.
-	if hv, ok := reqOM.Get("headers"); ok && hv.VType.Matches(TMap) {
+	if hv, ok := reqOM.Get("headers"); ok && hv.Parent.Matches(TMap) {
 		hm, _ := AsMap(hv)
 		for _, key := range hm.Keys() {
 			val, _ := hm.Get(key)
@@ -181,5 +181,5 @@ func doFetch(reqOM ReadMap) ([]Value, error) {
 	respOM.Set("body", NewString(string(bodyBytes)))
 	respOM.Set("url", NewString(resp.Request.URL.String()))
 
-	return []Value{{VType: TFetchResponse, Data: MapPayload{M: respOM}}}, nil
+	return []Value{{Parent: TFetchResponse, Data: MapPayload{M: respOM}}}, nil
 }

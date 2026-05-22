@@ -80,7 +80,7 @@ func registerTensorIdeals(r *native.Registry) {
 func tensorAccepts(vt *eng.Type, kind string) func(native.Value) bool {
 	return func(v native.Value) bool {
 		if v.Data == nil {
-			return v.VType != nil && v.VType.Equal(vt)
+			return v.Parent != nil && v.Parent.Equal(vt)
 		}
 		ti, ok := tensorTypeInfo(v)
 		return ok && ti.Kind == kind

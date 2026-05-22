@@ -24,8 +24,8 @@ func Unify(a, b Value) (Value, bool) {
 	a = ResolveWordsDeep(a)
 	b = ResolveWordsDeep(b)
 
-	aType := a.VType
-	bType := b.VType
+	aType := a.Parent
+	bType := b.Parent
 
 	// Disjunct unification first: try each alternative, succeed on first match.
 	// Must come before none/any checks so that disjuncts containing none work.
@@ -71,7 +71,7 @@ func Unify(a, b Value) (Value, bool) {
 	}
 
 	// Metatype matching: when both are type literals and one has a metatype
-	// VType, check if the other's computed metatype matches.
+	// Parent, check if the other's computed metatype matches.
 	if a.Data == nil && b.Data == nil {
 		aIsMeta := IsMetaType(aType)
 		bIsMeta := IsMetaType(bType)
@@ -577,7 +577,7 @@ func optionsDefault(v Value) (Value, bool) {
 		alts := _as17.Alternatives
 		// Check for None first.
 		for _, alt := range alts {
-			if alt.VType.Equal(TNone) {
+			if alt.Parent.Equal(TNone) {
 				return NewTypeLiteral(TNone), true
 			}
 		}
@@ -590,7 +590,7 @@ func optionsDefault(v Value) (Value, bool) {
 		return Value{}, false
 	}
 
-	if v.VType.Equal(TNone) {
+	if v.Parent.Equal(TNone) {
 		return v, true
 	}
 
@@ -622,7 +622,7 @@ func unifyOptionsField(optVal, cVal Value) (Value, bool) {
 	// Concrete default: accept cVal if compatible type.
 	if optVal.Data != nil {
 		baseType := optionsBaseType(optVal)
-		if cVal.VType.Matches(baseType) {
+		if cVal.Parent.Matches(baseType) {
 			return cVal, true
 		}
 		return Value{}, false
@@ -636,22 +636,22 @@ func unifyOptionsField(optVal, cVal Value) (Value, bool) {
 // For example, integer 42 (Scalar/Number/Integer/42) returns TInteger.
 func optionsBaseType(v Value) *Type {
 	switch {
-	case v.VType.Matches(TInteger):
+	case v.Parent.Matches(TInteger):
 		return TInteger
-	case v.VType.Matches(TDecimal):
+	case v.Parent.Matches(TDecimal):
 		return TDecimal
-	case v.VType.Matches(TString):
+	case v.Parent.Matches(TString):
 		return TString
-	case v.VType.Matches(TBoolean):
+	case v.Parent.Matches(TBoolean):
 		return TBoolean
-	case v.VType.Equal(TMap):
+	case v.Parent.Equal(TMap):
 		return TMap
-	case v.VType.Equal(TList):
+	case v.Parent.Equal(TList):
 		return TList
-	case v.VType.Equal(TNone):
+	case v.Parent.Equal(TNone):
 		return TNone
 	default:
-		return v.VType
+		return v.Parent
 	}
 }
 
@@ -667,21 +667,21 @@ func unifyOptionsPair(a, b OptionsTypeInfo) (Value, bool) {
 
 // ValuesEqual compares the data payloads of two values with the same type.
 //
-// Routes through Behavior.Equal for the same-VType case so types
+// Routes through Behavior.Equal for the same-Parent case so types
 // with normalisation semantics (CalDuration, DepScalar in a future
 // step, and plugin types) can supply their own equality. The
-// cross-VType case falls through to the default switch since
+// cross-Parent case falls through to the default switch since
 // equality across types is a matching-strategy concern, not a
 // per-type concern.
 func ValuesEqual(a, b Value) bool {
-	// Pluggable equality: when both sides share a VType with a
+	// Pluggable equality: when both sides share a Parent with a
 	// non-default Behavior, delegate. Type literals (Data==nil) are
 	// excluded — bare type equality is a lattice-identity check, not
 	// a per-type semantic compare.
 	if a.Data != nil && b.Data != nil &&
-		a.VType != nil && a.VType == b.VType &&
-		a.VType.Behavior != nil && a.VType.Behavior != DefaultBehavior {
-		return a.VType.Behavior.Equal(a, b)
+		a.Parent != nil && a.Parent == b.Parent &&
+		a.Parent.Behavior != nil && a.Parent.Behavior != DefaultBehavior {
+		return a.Parent.Behavior.Equal(a, b)
 	}
 	return valuesEqualDefault(a, b)
 }
@@ -720,19 +720,19 @@ func valuesEqualDefault(a, b Value) bool {
 		return depScalarsEqual(ai, bi)
 	}
 	switch {
-	case a.VType.Matches(TString):
+	case a.Parent.Matches(TString):
 		_as20, _ := AsString(a)
 		_as19, _ := AsString(b)
 		return _as20 == _as19
-	case a.VType.Matches(TInteger):
+	case a.Parent.Matches(TInteger):
 		_as22, _ := AsInteger(a)
 		_as21, _ := AsInteger(b)
 		return _as22 == _as21
-	case a.VType.Matches(TBoolean):
+	case a.Parent.Matches(TBoolean):
 		_as24, _ := AsBoolean(a)
 		_as23, _ := AsBoolean(b)
 		return _as24 == _as23
-	case a.VType.Equal(TList):
+	case a.Parent.Equal(TList):
 		aTT, aTbl := a.Data.(TableTypeInfo)
 		bTT, bTbl := b.Data.(TableTypeInfo)
 		if aTbl && bTbl {
@@ -744,7 +744,7 @@ func valuesEqualDefault(a, b Value) bool {
 		aCT, aOk := a.Data.(ChildTypeInfo)
 		bCT, bOk := b.Data.(ChildTypeInfo)
 		if aOk && bOk {
-			return aCT.Child.VType.Equal(bCT.Child.VType) && ValuesEqual(aCT.Child, bCT.Child)
+			return aCT.Child.Parent.Equal(bCT.Child.Parent) && ValuesEqual(aCT.Child, bCT.Child)
 		}
 		if aOk != bOk {
 			return false
@@ -752,7 +752,7 @@ func valuesEqualDefault(a, b Value) bool {
 		_aLst, _ := AsList(a)
 		_bLst, _ := AsList(b)
 		return listsEqual(_aLst.Slice(), _bLst.Slice())
-	case a.VType.Equal(TMap):
+	case a.Parent.Equal(TMap):
 		aRT, aRec := a.Data.(RecordTypeInfo)
 		bRT, bRec := b.Data.(RecordTypeInfo)
 		if aRec && bRec {
@@ -772,7 +772,7 @@ func valuesEqualDefault(a, b Value) bool {
 		aCT, aOk := a.Data.(ChildTypeInfo)
 		bCT, bOk := b.Data.(ChildTypeInfo)
 		if aOk && bOk {
-			return aCT.Child.VType.Equal(bCT.Child.VType) && ValuesEqual(aCT.Child, bCT.Child)
+			return aCT.Child.Parent.Equal(bCT.Child.Parent) && ValuesEqual(aCT.Child, bCT.Child)
 		}
 		if aOk != bOk {
 			return false
@@ -791,7 +791,7 @@ func listsEqual(a, b []Value) bool {
 		return false
 	}
 	for i := range a {
-		if !a[i].VType.Equal(b[i].VType) || !ValuesEqual(a[i], b[i]) {
+		if !a[i].Parent.Equal(b[i].Parent) || !ValuesEqual(a[i], b[i]) {
 			return false
 		}
 	}
@@ -809,7 +809,7 @@ func mapsEqual(a, b ReadMap) bool {
 		if !ok {
 			return false
 		}
-		if !aVal.VType.Equal(bVal.VType) || !ValuesEqual(aVal, bVal) {
+		if !aVal.Parent.Equal(bVal.Parent) || !ValuesEqual(aVal, bVal) {
 			return false
 		}
 	}
@@ -822,14 +822,14 @@ func mapsEqual(a, b ReadMap) bool {
 // key-value pairs.
 func unifyDisjunct(disj DisjunctInfo, val Value) (Value, bool) {
 	// "any" unifies with the whole disjunct, preserving it.
-	if val.VType.Equal(TAny) {
+	if val.Parent.Equal(TAny) {
 		return NewDisjunct(disj.Alternatives), true
 	}
 
 	for _, alt := range disj.Alternatives {
 		// For concrete map alternatives against concrete map values,
 		// use open (subset) matching.
-		if alt.VType.Equal(TMap) && val.VType.Equal(TMap) &&
+		if alt.Parent.Equal(TMap) && val.Parent.Equal(TMap) &&
 			!IsRecordType(alt) && !IsRecordType(val) &&
 			!IsTypedMap(alt) && !IsTypedMap(val) &&
 			!IsOptionsType(alt) && !IsOptionsType(val) {
@@ -876,7 +876,7 @@ func ResolveWordsDeep(v Value) Value {
 	if IsWord(v) {
 		return ResolveWordValue(v)
 	}
-	if v.VType.Equal(TList) && v.Data != nil && !IsTypedList(v) && !IsTableType(v) {
+	if v.Parent.Equal(TList) && v.Data != nil && !IsTypedList(v) && !IsTableType(v) {
 		_lst, _ := AsList(v)
 		elems := _lst.Slice()
 		resolved := make([]Value, len(elems))
@@ -885,7 +885,7 @@ func ResolveWordsDeep(v Value) Value {
 		}
 		return NewList(resolved)
 	}
-	if v.VType.Equal(TMap) && v.Data != nil && !IsTypedMap(v) && !IsRecordType(v) && !IsOptionsType(v) {
+	if v.Parent.Equal(TMap) && v.Data != nil && !IsTypedMap(v) && !IsRecordType(v) && !IsOptionsType(v) {
 		m, _ := AsMap(v)
 		result := NewOrderedMap()
 		for _, key := range m.Keys() {

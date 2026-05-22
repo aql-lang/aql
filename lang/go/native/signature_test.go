@@ -273,7 +273,7 @@ func TestMatchSignatureParentDoesNotMatchChild(t *testing.T) {
 	}
 	// Create a value with type "number" (not "number/integer")
 	v := NewInteger(42)
-	v.VType = TNumber // override to plain number
+	v.Parent = TNumber // override to plain number
 	stack := []Value{v}
 	m := MatchSignature(sigs, stack, WordInfo{ArgCount: -1})
 	if m != nil {

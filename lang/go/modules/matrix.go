@@ -95,7 +95,7 @@ func (tensorFormatBehavior) Equal(a, b native.Value) bool {
 }
 
 func (tensorFormatBehavior) Format(v native.Value) string {
-	kind := tensorKindName(v.VType)
+	kind := tensorKindName(v.Parent)
 	if td, ok := tensorPayload(v); ok {
 		return kind + "(" + shapeString(td.Shape) + ")"
 	}

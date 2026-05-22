@@ -659,7 +659,7 @@ func TestFilterHandler(t *testing.T) {
 	}
 	// All items should pass the filter (fn always returns true).
 	// voxgigstruct.Filter on a map may return a map or list; just check non-nil.
-	if result[0].VType.Equal(TList) {
+	if result[0].Parent.Equal(TList) {
 		_lst, _ := AsList(result[0])
 		list := _lst.Slice()
 		if len(list) != 2 {

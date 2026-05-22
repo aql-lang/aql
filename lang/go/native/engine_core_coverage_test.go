@@ -493,7 +493,7 @@ func TestEngineCoreRecordMakePositional(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("make"), recType, NewList([]Value{NewInteger(1), NewString("hello")}),
 	})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("make record = %v, want map", result)
 	}
 	m, _ := AsMap(result[0])
@@ -520,7 +520,7 @@ func TestEngineCoreRecordMakeMap(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("make"), recType, NewMap(src),
 	})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("make record from map = %v, want map", result)
 	}
 	m, _ := AsMap(result[0])
@@ -594,7 +594,7 @@ func TestEngineCoreModuleSimple(t *testing.T) {
 		NewMap(singleMap("v", NewString("val"))),
 	})
 	result := runAQL(t, r, []Value{NewWord("module"), moduleBody})
-	if len(result) != 1 || !result[0].VType.Equal(TModule) {
+	if len(result) != 1 || !result[0].Parent.Equal(TModule) {
 		t.Fatalf("module should return TModule, got %v", result)
 	}
 	desc, _ := AsModule(result[0])
@@ -618,7 +618,7 @@ func TestEngineCoreModuleImportAll(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), NewWord("cmod")})
 
 	result := runAQL(t, r, []Value{NewWord("coreExp")})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("coreExp should be map, got %v", result)
 	}
 	m, _ := AsMap(result[0])
@@ -645,7 +645,7 @@ func TestEngineCoreModuleImportRename(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), renameList, NewWord("rmod")})
 
 	result := runAQL(t, r, []Value{NewWord("newName")})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("newName should be map, got %v", result)
 	}
 }
@@ -673,7 +673,7 @@ func TestEngineCoreModuleImportMultiRename(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), renameList, NewWord("mmod")})
 
 	result := runAQL(t, r, []Value{NewWord("ra")})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("ra should be map, got %v", result)
 	}
 }
@@ -851,7 +851,7 @@ func TestEngineCoreBaseValueForConstraintAllNone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BaseValueForConstraint(None): %v", err)
 	}
-	if !v.VType.Equal(TNone) {
+	if !v.Parent.Equal(TNone) {
 		t.Errorf("base all-None disjunct = %v, want None", v)
 	}
 }
@@ -900,7 +900,7 @@ func TestEngineCorePeekForwardAtom(t *testing.T) {
 		NewWord("def"), NewWord("atom-val"), NewAtom("myatom"), NewEnd(),
 		NewWord("atom-val"),
 	})
-	if len(result) != 1 || !result[0].VType.Equal(TAtom) {
+	if len(result) != 1 || !result[0].Parent.Equal(TAtom) {
 		t.Errorf("def atom-val 'myatom = %v, want atom", result)
 	}
 }
@@ -1252,7 +1252,7 @@ func TestEngineCoreFnExplicitMapPatternE2E(t *testing.T) {
 	found := false
 	for _, v := range result {
 		_as47, _ := AsString(v)
-		if v.VType.Matches(TString) && _as47 == "matched" {
+		if v.Parent.Matches(TString) && _as47 == "matched" {
 			found = true
 		}
 	}
@@ -1332,7 +1332,7 @@ func TestEngineCoreMakeRecordWithBase(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("make"), recType, NewMap(src), NewMap(opts),
 	})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("make with base = %v, want map", result)
 	}
 	m, _ := AsMap(result[0])
@@ -1354,7 +1354,7 @@ func TestEngineCoreResolveFieldTypePassthrough(t *testing.T) {
 	r, _ := DefaultRegistry()
 	// Non-string, non-list value should pass through
 	v := ResolveFieldType(r, NewTypeLiteral(TNumber))
-	if !v.VType.Equal(TNumber) {
+	if !v.Parent.Equal(TNumber) {
 		t.Errorf("ResolveFieldType passthrough = %v, want Number", v)
 	}
 }
@@ -1364,7 +1364,7 @@ func TestEngineCoreResolveFieldTypeStringRef(t *testing.T) {
 	// Define a type, then ResolveFieldType should find it
 	InstallDef(r, "MyType", NewTypeLiteral(TString))
 	v := ResolveFieldType(r, NewString("MyType"))
-	if !v.VType.Equal(TString) {
+	if !v.Parent.Equal(TString) {
 		t.Errorf("ResolveFieldType string ref = %v, want String type literal", v)
 	}
 	UninstallDef(r, "MyType")
@@ -1387,7 +1387,7 @@ func TestEngineCoreResolveFieldTypeList(t *testing.T) {
 	// Should produce a disjunction
 	if !IsDisjunct(v) {
 		// If it didn't produce a disjunction, at least it shouldn't crash
-		t.Logf("ResolveFieldType list = %v (type %s)", v, v.VType)
+		t.Logf("ResolveFieldType list = %v (type %s)", v, v.Parent)
 	}
 }
 
@@ -1540,7 +1540,7 @@ func TestEngineCoreMakeRecordNamed(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("make"), recType, src,
 	})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("make record named = %v, want map", result)
 	}
 	m, _ := AsMap(result[0])
@@ -1652,11 +1652,11 @@ func TestEngineCoreResolveWordValue(t *testing.T) {
 		t.Error("ResolveWordValue(false) should be boolean false")
 	}
 	v = ResolveWordValue(NewWord("None"))
-	if !v.VType.Equal(TNone) {
+	if !v.Parent.Equal(TNone) {
 		t.Errorf("ResolveWordValue(None) = %v, want None", v)
 	}
 	v = ResolveWordValue(NewWord("other"))
-	if !v.VType.Equal(TAtom) {
+	if !v.Parent.Equal(TAtom) {
 		t.Errorf("ResolveWordValue(other) = %v, want atom", v)
 	}
 	// Non-word passthrough

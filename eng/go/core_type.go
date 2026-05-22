@@ -29,13 +29,13 @@ import (
 //   - For any other type literal (Data == nil), return `Type`.
 //     Metatypes are collapsed — there is no ScalarType / NodeType /
 //     ObjectType layer; the type-of-a-type-literal is uniformly `Type`.
-//   - For a concrete value (Data != nil), return its full VType.
+//   - For a concrete value (Data != nil), return its full Parent.
 //
 // typeof's result is itself a type literal so it round-trips: passing
 // the result to `is` or chaining `typeof typeof v` (always `Type`)
 // produces the expected answers.
 // PathOf returns the ancestry path of the type T (a Type literal, or
-// any value whose VType is a Type subtype — e.g. a Function/Disjunct
+// any value whose Parent is a Type subtype — e.g. a Function/Disjunct
 // value) as a List of Type literals, root first, leaf last:
 //
 //	pathof Integer          → [Scalar Number Integer]
@@ -52,7 +52,7 @@ func PathOf(t Value) Value {
 	// Walk the def's ancestry from root down to t, producing one type
 	// literal per ancestor.
 	var chain []*Type
-	for d := t.VType; d != nil; d = d.Parent {
+	for d := t.Parent; d != nil; d = d.Parent {
 		chain = append([]*Type{d}, chain...)
 	}
 	elems := make([]Value, 0, len(chain))
@@ -65,7 +65,7 @@ func PathOf(t Value) Value {
 // TypeOf returns the Type of v as a type-literal Value. See
 // registerCoreTypeof for the dispatch rules.
 func TypeOf(v Value) Value {
-	// The VALUE `none` (Data != nil, VType == TNone) → None type literal.
+	// The VALUE `none` (Data != nil, Parent == TNone) → None type literal.
 	if IsNone(v) {
 		return NewTypeLiteral(TNone)
 	}
@@ -92,8 +92,8 @@ func TypeOf(v Value) Value {
 	if IsHostTypeBody(v) {
 		return NewTypeLiteral(TType)
 	}
-	// Concrete value — its exact VType.
-	return NewTypeLiteral(v.VType)
+	// Concrete value — its exact Parent.
+	return NewTypeLiteral(v.Parent)
 }
 
 // IsRecordShape reports whether v is a non-empty map all of whose
@@ -110,7 +110,7 @@ func TypeOf(v Value) Value {
 // returns Map). Singleton-typed shapes still go via `is`'s structural
 // unification path.
 func IsRecordShape(v Value) bool {
-	if !v.VType.Equal(TMap) || v.Data == nil {
+	if !v.Parent.Equal(TMap) || v.Data == nil {
 		return false
 	}
 	m, _ := AsMap(v)
@@ -141,18 +141,18 @@ func IsRecordShape(v Value) bool {
 //   - T is a record-shape implicit map (`{x:Integer y:String}`):
 //     every declared key must be present in v with a matching field
 //     type. v must be a concrete map; extra keys in v are ignored.
-//   - T is the bare metatype `Type` (Data == nil, VType == Type): true
+//   - T is the bare metatype `Type` (Data == nil, Parent == Type): true
 //     iff v is itself a type — any bare type literal, any structural
 //     type body (record shape, typed list/map, disjunct, fn-shape),
 //     or any Function / FunctionSignature / Disjunct / Enum value.
 //     Concrete scalars / lists / maps and the value `none` are not.
 //   - T is any other type literal (Data == nil), including `Function` /
-//     `Disjunct` / `Enum` / `FunctionSignature`: v's VType must be a
+//     `Disjunct` / `Enum` / `FunctionSignature`: v's Parent must be a
 //     subtype of T's via the type lattice.
 //   - T is anything else: structural unification on (v, t).
 func IsValueOfType(v, t Value) bool {
 	if IsTypedList(t) {
-		if !v.VType.Equal(TList) || v.Data == nil {
+		if !v.Parent.Equal(TList) || v.Data == nil {
 			return false
 		}
 		ci, _ := AsChildType(t)
@@ -168,7 +168,7 @@ func IsValueOfType(v, t Value) bool {
 		return true
 	}
 	if IsTypedMap(t) {
-		if !v.VType.Equal(TMap) || v.Data == nil {
+		if !v.Parent.Equal(TMap) || v.Data == nil {
 			return false
 		}
 		ci, _ := AsChildType(t)
@@ -190,8 +190,8 @@ func IsValueOfType(v, t Value) bool {
 	// fields via the Unify fallback when t's field is a literal.
 	// Subtypes like RecordTypeInfo / OptionsTypeInfo (whose AsMap
 	// returns nil) fall through to Unify below.
-	if _tMap, _tErr := AsMap(t); t.VType.Equal(TMap) && t.Data != nil && _tErr == nil && _tMap != nil {
-		if !v.VType.Equal(TMap) || v.Data == nil {
+	if _tMap, _tErr := AsMap(t); t.Parent.Equal(TMap) && t.Data != nil && _tErr == nil && _tMap != nil {
+		if !v.Parent.Equal(TMap) || v.Data == nil {
 			return false
 		}
 		vMap, _ := AsMap(v)
@@ -221,7 +221,7 @@ func IsValueOfType(v, t Value) bool {
 		//   - any structural type body (record shape `{x:Integer}`,
 		//     typed list/map `[:T]` / `{:T}`, disjunct, fn-shape, …) and
 		//     any Function / Disjunct / Enum / FunctionSignature *value*
-		//     (whose VType lives under Type/) — types too;
+		//     (whose Parent lives under Type/) — types too;
 		//   - a concrete scalar / list / map, and the value `none`, are
 		//     NOT types — `5 is Type`, `[1 2 3] is Type`, `none is Type`
 		//     are false. Carriers are abstract VALUES, not types.
@@ -230,17 +230,17 @@ func IsValueOfType(v, t Value) bool {
 		// `FunctionSignature`, the legacy `ScalarType` / `NodeType` /
 		// `ObjectType` metatypes) keep the plain subtype check below, so
 		// `fn […] is Function` / `enum […] is Disjunct` still hold.
-		if t.VType.Equal(TType) {
+		if t.Parent.Equal(TType) {
 			if v.Carrier {
 				return false
 			}
-			return v.Data == nil || IsTypeBody(v) || IsRecordShape(v) || v.VType.Matches(TType)
+			return v.Data == nil || IsTypeBody(v) || IsRecordShape(v) || v.Parent.Matches(TType)
 		}
 		// Canonical dispatch site: route through Behavior so custom
 		// type semantics (predicate types, dependent scalars, future
 		// plugin types) get consulted. Default Behavior delegates to
 		// the historical lattice walk.
-		return v.Is(t.VType)
+		return v.Is(t.Parent)
 	}
 	_, ok := Unify(v, t)
 	return ok
@@ -322,7 +322,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		def := r.Types.MintType(name, inputT)
 		r.Defs.PushType(name, def, body)
 	} else {
-		def := r.Types.MintType(name, body.VType)
+		def := r.Types.MintType(name, body.Parent)
 		r.Defs.PushType(name, def, body)
 	}
 	for _, p := range strings.Split(name, "/") {

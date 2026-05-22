@@ -36,10 +36,10 @@ var ErrNoComparer = errors.New("eng: no comparer in this Behavior")
 // DepScalar values (type-level constraints) flow through this same
 // path.
 func CompareValues(a, b Value) (int, error) {
-	if a.VType == nil || b.VType == nil {
+	if a.Parent == nil || b.Parent == nil {
 		return 0, fmt.Errorf("cannot compare values with nil type")
 	}
-	for t := lowestCommonAncestor(a.VType, b.VType); t != nil; t = t.Parent {
+	for t := lowestCommonAncestor(a.Parent, b.Parent); t != nil; t = t.Parent {
 		cmp, ok := t.Behavior.(Comparer)
 		if !ok {
 			continue
@@ -56,7 +56,7 @@ func CompareValues(a, b Value) (int, error) {
 	// No Comparer in the shared lattice — order by the type lattice.
 	// compareTypes is a total order on *Type (Rank, then depth, name,
 	// id), so any two values of distinct types resolve here.
-	if c := compareTypes(a.VType, b.VType); c != 0 {
+	if c := compareTypes(a.Parent, b.Parent); c != 0 {
 		return c, nil
 	}
 	// Identical type — order by value: size, then element-wise
@@ -90,7 +90,7 @@ func lowestCommonAncestor(a, b *Type) *Type {
 // For non-scalars (list, map): compares by identity (same container).
 func ExactEqual(a, b Value) bool {
 	// none == none
-	if a.VType.Equal(TNone) && b.VType.Equal(TNone) {
+	if a.Parent.Equal(TNone) && b.Parent.Equal(TNone) {
 		return true
 	}
 
@@ -103,31 +103,31 @@ func ExactEqual(a, b Value) bool {
 		if !a.IsDepScalar() || !b.IsDepScalar() {
 			return false
 		}
-		return a.VType.Equal(b.VType) && ValuesEqual(a, b)
+		return a.Parent.Equal(b.Parent) && ValuesEqual(a, b)
 	}
 
 	// Types: structural comparison.
 	if IsTypeBody(a) && IsTypeBody(b) {
-		return a.VType.Equal(b.VType) && ValuesEqual(a, b)
+		return a.Parent.Equal(b.Parent) && ValuesEqual(a, b)
 	}
 
 	// Scalars: compare by value.
-	if a.VType.Matches(TNumber) && b.VType.Matches(TNumber) {
+	if a.Parent.Matches(TNumber) && b.Parent.Matches(TNumber) {
 		_as9, _ := AsNumber(a)
 		_as8, _ := AsNumber(b)
 		return _as9 == _as8
 	}
-	if a.VType.Matches(TString) && b.VType.Matches(TString) {
+	if a.Parent.Matches(TString) && b.Parent.Matches(TString) {
 		_as11, _ := AsString(a)
 		_as10, _ := AsString(b)
 		return _as11 == _as10
 	}
-	if a.VType.Matches(TBoolean) && b.VType.Matches(TBoolean) {
+	if a.Parent.Matches(TBoolean) && b.Parent.Matches(TBoolean) {
 		_as13, _ := AsBoolean(a)
 		_as12, _ := AsBoolean(b)
 		return _as13 == _as12
 	}
-	if a.VType.Equal(TAtom) && b.VType.Equal(TAtom) {
+	if a.Parent.Equal(TAtom) && b.Parent.Equal(TAtom) {
 		_as15, _ := AsAtom(a)
 		_as14, _ := AsAtom(b)
 		return _as15 == _as14
@@ -135,10 +135,10 @@ func ExactEqual(a, b Value) bool {
 
 	// Non-scalars: identity comparison — both values must refer to the
 	// same underlying container.
-	if a.VType.Equal(TList) && b.VType.Equal(TList) {
+	if a.Parent.Equal(TList) && b.Parent.Equal(TList) {
 		return sameContainer(a.Data, b.Data)
 	}
-	if a.VType.Equal(TMap) && b.VType.Equal(TMap) {
+	if a.Parent.Equal(TMap) && b.Parent.Equal(TMap) {
 		return sameContainer(a.Data, b.Data)
 	}
 
@@ -181,7 +181,7 @@ func sameContainer(a, b Payload) bool {
 // Traverses lists and maps depth-first comparing all leaf values.
 func DeepEqual(a, b Value) bool {
 	// none
-	if a.VType.Equal(TNone) && b.VType.Equal(TNone) {
+	if a.Parent.Equal(TNone) && b.Parent.Equal(TNone) {
 		return true
 	}
 
@@ -192,33 +192,33 @@ func DeepEqual(a, b Value) bool {
 		if !a.IsDepScalar() || !b.IsDepScalar() {
 			return false
 		}
-		return a.VType.Equal(b.VType) && ValuesEqual(a, b)
+		return a.Parent.Equal(b.Parent) && ValuesEqual(a, b)
 	}
 
 	// Scalars.
-	if a.VType.Matches(TNumber) && b.VType.Matches(TNumber) {
+	if a.Parent.Matches(TNumber) && b.Parent.Matches(TNumber) {
 		_as17, _ := AsNumber(a)
 		_as16, _ := AsNumber(b)
 		return _as17 == _as16
 	}
-	if a.VType.Matches(TString) && b.VType.Matches(TString) {
+	if a.Parent.Matches(TString) && b.Parent.Matches(TString) {
 		_as19, _ := AsString(a)
 		_as18, _ := AsString(b)
 		return _as19 == _as18
 	}
-	if a.VType.Matches(TBoolean) && b.VType.Matches(TBoolean) {
+	if a.Parent.Matches(TBoolean) && b.Parent.Matches(TBoolean) {
 		_as21, _ := AsBoolean(a)
 		_as20, _ := AsBoolean(b)
 		return _as21 == _as20
 	}
-	if a.VType.Equal(TAtom) && b.VType.Equal(TAtom) {
+	if a.Parent.Equal(TAtom) && b.Parent.Equal(TAtom) {
 		_as23, _ := AsAtom(a)
 		_as22, _ := AsAtom(b)
 		return _as23 == _as22
 	}
 
 	// Lists: same length, each element deeply equal.
-	if a.VType.Equal(TList) && b.VType.Equal(TList) {
+	if a.Parent.Equal(TList) && b.Parent.Equal(TList) {
 		aElems, aErr := AsMutableList(a)
 		bElems, bErr := AsMutableList(b)
 		if aErr != nil || bErr != nil {
@@ -237,7 +237,7 @@ func DeepEqual(a, b Value) bool {
 	}
 
 	// Maps: same keys, each value deeply equal.
-	if a.VType.Equal(TMap) && b.VType.Equal(TMap) {
+	if a.Parent.Equal(TMap) && b.Parent.Equal(TMap) {
 		aMap, aErr := AsMutableMap(a)
 		bMap, bErr := AsMutableMap(b)
 		if aErr != nil || bErr != nil {

@@ -65,7 +65,7 @@ func TestDecisionCond(t *testing.T) {
 	result := runDecisionAQL(t, r, `18 "gte" quote age decision.cond`)
 	m, _ := native.AsMap(result[0])
 	if m == nil {
-		t.Fatalf("expected map, got %s", result[0].VType.String())
+		t.Fatalf("expected map, got %s", result[0].Parent.String())
 	}
 	field, _ := m.Get("field")
 	if field.String() != "age" {
@@ -463,7 +463,7 @@ func TestDecisionDeepCompoundTable(t *testing.T) {
 			`)
 			m, _ := native.AsMap(result[0])
 			if m == nil {
-				t.Fatalf("expected map result, got %s", result[0].VType.String())
+				t.Fatalf("expected map result, got %s", result[0].Parent.String())
 			}
 			if tc.want == "" {
 				errVal, ok := m.Get("error")
@@ -567,7 +567,7 @@ func TestDecisionTreeDeepLeafResult(t *testing.T) {
 	`)
 	m, _ := native.AsMap(result[0])
 	if m == nil {
-		t.Fatalf("expected map result, got %s", result[0].VType.String())
+		t.Fatalf("expected map result, got %s", result[0].Parent.String())
 	}
 	sign, _ := m.Get("sign")
 	s, _ := native.AsString(sign)
@@ -577,7 +577,7 @@ func TestDecisionTreeDeepLeafResult(t *testing.T) {
 	detail, _ := m.Get("detail")
 	dm, _ := native.AsMap(detail)
 	if dm == nil {
-		t.Fatalf("expected detail map, got %s", detail.VType.String())
+		t.Fatalf("expected detail map, got %s", detail.Parent.String())
 	}
 	bucket, _ := dm.Get("bucket")
 	if bs, _ := native.AsString(bucket); bs != "high" {
@@ -586,7 +586,7 @@ func TestDecisionTreeDeepLeafResult(t *testing.T) {
 	nested, _ := dm.Get("nested")
 	nm, _ := native.AsMap(nested)
 	if nm == nil {
-		t.Fatalf("expected nested map, got %s", nested.VType.String())
+		t.Fatalf("expected nested map, got %s", nested.Parent.String())
 	}
 	label, _ := nm.Get("label")
 	if ls, _ := native.AsString(label); ls != "deep" {

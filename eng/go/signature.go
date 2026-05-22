@@ -183,7 +183,7 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 		if sig.Patterns != nil {
 			patternOk := true
 			for idx, pattern := range sig.Patterns {
-				if pattern.VType.Equal(TMap) && ordered[idx].VType.Equal(TMap) &&
+				if pattern.Parent.Equal(TMap) && ordered[idx].Parent.Equal(TMap) &&
 					pattern.Data != nil && ordered[idx].Data != nil &&
 					!IsOptionsType(pattern) &&
 					!IsRecordType(ordered[idx]) && !IsTypedMap(ordered[idx]) && !IsOptionsType(ordered[idx]) {
@@ -233,7 +233,7 @@ func FlexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
 // matches TScalarType).
 //
 // **The carrier rule.** Carriers occupy a deliberately ambiguous role
-// in the type system: they have a concrete VType (e.g. TInteger) and
+// in the type system: they have a concrete Parent (e.g. TInteger) and
 // nil Data, identical to a type literal at the field level. But
 // semantically they are abstract VALUES, not types. To preserve that
 // distinction at sig-match time, sigTypeMatches treats them as
@@ -266,17 +266,17 @@ func sigTypeMatches(v Value, t *Type) bool {
 		return true
 	}
 	if v.Data == nil && !v.Carrier && IsMetaType(t) {
-		return MetatypeFor(v.VType).Matches(t)
+		return MetatypeFor(v.Parent).Matches(t)
 	}
 	if _, ok := v.Data.(ObjectTypeInfo); ok && IsMetaType(t) {
-		return MetatypeFor(v.VType).Matches(t)
+		return MetatypeFor(v.Parent).Matches(t)
 	}
 	if IsRecordType(v) || IsTableType(v) || IsOptionsType(v) {
 		if IsMetaType(t) {
-			return MetatypeFor(v.VType).Matches(t)
+			return MetatypeFor(v.Parent).Matches(t)
 		}
 	}
-	// Options values have VType=TMap but should match TOptions signatures.
+	// Options values have Parent=TMap but should match TOptions signatures.
 	if IsOptionsType(v) && t.Equal(TOptions) {
 		return true
 	}
@@ -285,7 +285,7 @@ func sigTypeMatches(v Value, t *Type) bool {
 
 // rejectsTypeLiteral reports whether a value with Data==nil should be
 // rejected at a concrete-payload sig slot — even if sigTypeMatches
-// said the VType matches.
+// said the Parent matches.
 //
 // A type literal (e.g. `Integer` resolved from a bare type-name word)
 // has Data==nil, so handlers that read its payload via AsX() would
@@ -322,7 +322,7 @@ func rejectsTypeLiteral(v Value, expectedType *Type) bool {
 	if IsMetaType(expectedType) {
 		return false
 	}
-	if v.VType.Equal(TNone) {
+	if v.Parent.Equal(TNone) {
 		return false
 	}
 	return true
@@ -341,7 +341,7 @@ func positionalMatch(values []Value, sig *Signature) bool {
 	for i, t := range sig.Args {
 		v := values[i]
 		// /q modifier (forward-only): treat Word as Atom for matching.
-		if sig.QuoteArgs != nil && sig.QuoteArgs[i] && v.VType.Equal(TWord) {
+		if sig.QuoteArgs != nil && sig.QuoteArgs[i] && v.Parent.Equal(TWord) {
 			if !TAtom.Matches(t) {
 				return false
 			}

@@ -317,7 +317,7 @@ func installIdeals(r *Registry) {
 			}
 			// A record takes a LIST of field pairs — field order is
 			// part of a record type's identity.
-			if !arg.VType.Equal(TList) {
+			if !arg.Parent.Equal(TList) {
 				return nil, r.AqlError("type_error",
 					"refine Record: a record takes a list of field pairs, e.g. [a:Integer b:String]",
 					"refine")
@@ -355,7 +355,7 @@ func enumHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 	if IsTypedList(list) {
 		ci, _ := AsChildType(list)
 		childType = ci.Child
-		hasChild = childType.VType != nil
+		hasChild = childType.Parent != nil
 	}
 	elems, _ := AsList(list)
 	alts := make([]Value, 0, elems.Len())
@@ -380,7 +380,7 @@ func enumHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 
 func typeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	// Delegate to the canonical aqleng implementation, which returns
-	// a Type literal (not an Atom): concrete value → exact VType;
+	// a Type literal (not an Atom): concrete value → exact Parent;
 	// type literal → its metatype (ScalarType / NodeType / Type);
 	// implicit-map record shape → its metatype; the value `none`
 	// (unique inhabitant of None) → None.
@@ -389,9 +389,9 @@ func typeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 
 func fulltypeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	// Delegate to the canonical typeof: a concrete value → its exact
-	// VType path; ANY type literal → "Type" (metatypes are collapsed —
+	// Parent path; ANY type literal → "Type" (metatypes are collapsed —
 	// no ScalarType / NodeType / ObjectType layer); none → "None".
-	def := TypeOf(args[0]).VType
+	def := TypeOf(args[0]).Parent
 	var parts []string
 	for d := def; d != nil; d = d.Parent {
 		parts = append([]string{d.Name}, parts...)
@@ -412,23 +412,23 @@ func fulltypeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 
 func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	a, b := args[1], args[0]
-	if b.VType.Equal(TFnUndef) && IsAtom(a) {
+	if b.Parent.Equal(TFnUndef) && IsAtom(a) {
 		name, _ := AsAtom(a)
 		if top, ok := r.Defs.Top(name); ok {
-			if top.VType.Equal(TFnDef) || top.VType.Equal(TFunction) {
+			if top.Parent.Equal(TFnDef) || top.Parent.Equal(TFunction) {
 				a = top
 			}
 		}
 	}
-	if b.VType.Equal(TFnDef) || b.VType.Equal(TFunction) {
+	if b.Parent.Equal(TFnDef) || b.Parent.Equal(TFunction) {
 		_, matched, err := r.RunPredicate(b, a)
 		if err != nil {
 			return []Value{NewBoolean(false)}, nil
 		}
 		return []Value{NewBoolean(matched)}, nil
 	}
-	if b.Data == nil && IsMetaType(b.VType) {
-		if b.VType.Equal(TType) {
+	if b.Data == nil && IsMetaType(b.Parent) {
+		if b.Parent.Equal(TType) {
 			// `v is Type` — v must be a TYPE: a bare type literal, a
 			// structural type body (record shape, typed list/map,
 			// disjunct, fn-shape), or a Function / Disjunct / Enum /
@@ -438,24 +438,24 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 			if a.Carrier {
 				return []Value{NewBoolean(false)}, nil
 			}
-			return []Value{NewBoolean(a.Data == nil || IsTypeBody(a) || IsRecordShape(a) || a.VType.Matches(TType))}, nil
+			return []Value{NewBoolean(a.Data == nil || IsTypeBody(a) || IsRecordShape(a) || a.Parent.Matches(TType))}, nil
 		}
 		if a.Data == nil {
 			// Legacy metatype RHS (`ScalarType` / `NodeType` /
 			// `ObjectType`): compare the literal's metatype.
-			return []Value{NewBoolean(MetatypeFor(a.VType).Matches(b.VType))}, nil
+			return []Value{NewBoolean(MetatypeFor(a.Parent).Matches(b.Parent))}, nil
 		}
 		// Other Type/-rooted RHS (`Function` / `Disjunct` / `Enum` /
 		// `FunctionSignature`): plain subtype check (also catches a
-		// value whose VType already lives under that type).
-		return []Value{NewBoolean(a.VType.Matches(b.VType))}, nil
+		// value whose Parent already lives under that type).
+		return []Value{NewBoolean(a.Parent.Matches(b.Parent))}, nil
 	}
 	unified, ok := Unify(a, b)
 	if !ok {
 		return []Value{NewBoolean(false)}, nil
 	}
 	resolved := ResolveWordsDeep(a)
-	if !unified.VType.Equal(resolved.VType) {
+	if !unified.Parent.Equal(resolved.Parent) {
 		return []Value{NewBoolean(false)}, nil
 	}
 	if !ValuesEqual(unified, resolved) {
@@ -470,7 +470,7 @@ func guardHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 	val := args[0]
 	cond, err := args[1].AsConcreteBoolean()
 	if err != nil {
-		return nil, fmt.Errorf("guard: condition must be Boolean, got %s", args[1].VType.String())
+		return nil, fmt.Errorf("guard: condition must be Boolean, got %s", args[1].Parent.String())
 	}
 	if cond {
 		return []Value{val}, nil
@@ -482,7 +482,7 @@ func guardHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 
 func baseHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	v := args[0]
-	t := v.VType
+	t := v.Parent
 	result, err := BaseValue(t)
 	if err != nil {
 		return nil, err
@@ -594,7 +594,7 @@ func convertTo(src Value, targetType *Type, base string) (Value, error) {
 		if base == "" {
 			return NewString(ValToString(src)), nil
 		}
-		if !src.VType.Matches(TInteger) {
+		if !src.Parent.Matches(TInteger) {
 			return Value{}, fmt.Errorf("convert: base %q only supported for integer to string", base)
 		}
 		n, _ := AsInteger(src)
@@ -662,9 +662,9 @@ func convert2Handler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	targetType := args[0]
 	src := args[1]
 	if targetType.Data != nil {
-		return nil, r.AqlError("convert_error", fmt.Sprintf("convert: first argument must be a type literal, got %s", targetType.VType), "convert")
+		return nil, r.AqlError("convert_error", fmt.Sprintf("convert: first argument must be a type literal, got %s", targetType.Parent), "convert")
 	}
-	result, err := convertTo(src, targetType.VType, "")
+	result, err := convertTo(src, targetType.Parent, "")
 	if err != nil {
 		return nil, err
 	}
@@ -676,7 +676,7 @@ func convert3Handler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	opts := args[1]
 	src := args[2]
 	if targetType.Data != nil {
-		return nil, r.AqlError("convert_error", fmt.Sprintf("convert: first argument must be a type literal, got %s", targetType.VType), "convert")
+		return nil, r.AqlError("convert_error", fmt.Sprintf("convert: first argument must be a type literal, got %s", targetType.Parent), "convert")
 	}
 
 	base := ""
@@ -689,7 +689,7 @@ func convert3Handler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		}
 	}
 
-	result, err := convertTo(src, targetType.VType, base)
+	result, err := convertTo(src, targetType.Parent, base)
 	if err != nil {
 		return nil, err
 	}

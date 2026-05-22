@@ -18,7 +18,7 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 
 	// FnDefInfo body (from fn word): install typed signatures.
 	// Only fn-based defs register functions; simple value defs just use DefStacks.
-	if body.VType.Equal(TFnDef) || body.VType.Equal(TFunction) {
+	if body.Parent.Equal(TFnDef) || body.Parent.Equal(TFunction) {
 		fnDef, ok := body.Data.(FnDefInfo)
 		if !ok {
 			return
@@ -59,7 +59,7 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 						}
 						return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
 					}
-					if top.VType.Equal(TFunction) {
+					if top.Parent.Equal(TFunction) {
 						return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
 					}
 					return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
@@ -110,7 +110,7 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 	}
 
 	// FnUndefInfo body (from fn word in pair mode): remove targeted signatures.
-	if body.VType.Equal(TFnUndef) {
+	if body.Parent.Equal(TFnUndef) {
 		undefInfo, ok := body.Data.(FnUndefInfo)
 		if !ok {
 			return
@@ -140,7 +140,7 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 		// (Resource, Entity) the caller passes the canonical builtin
 		// *Type; for user-defined object types installed as defs the
 		// caller is responsible for minting first.
-		def := body.VType
+		def := body.Parent
 		if def == nil {
 			def = TObject
 		}
@@ -229,7 +229,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 					arg := args[i]
 					// Quote list params so they're treated as data values
 					// when referenced in the body, not expanded as code bodies.
-					if arg.VType.Equal(TList) && !arg.Quoted {
+					if arg.Parent.Equal(TList) && !arg.Quoted {
 						arg.Quoted = true
 					}
 					InstallDef(r, p.Name, arg)
@@ -300,7 +300,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 					continue
 				}
 				val := args[i]
-				if !pat.VType.Equal(TMap) || !val.VType.Equal(TMap) ||
+				if !pat.Parent.Equal(TMap) || !val.Parent.Equal(TMap) ||
 					pat.Data == nil || val.Data == nil {
 					continue
 				}
@@ -333,10 +333,10 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 						})
 						continue
 					}
-					if pv.Data == nil && !av.VType.Matches(pv.VType) && !av.VType.Equal(TAny) {
+					if pv.Data == nil && !av.Parent.Matches(pv.Parent) && !av.Parent.Equal(TAny) {
 						r.Check.AddDiagnostic(CheckDiagnostic{
 							Code:     "record_shape_mismatch",
-							Detail:   "argument to " + nameCopy + ": field " + key + " expected " + pv.VType.String() + ", got " + av.VType.String(),
+							Detail:   "argument to " + nameCopy + ": field " + key + " expected " + pv.Parent.String() + ", got " + av.Parent.String(),
 							Word:     nameCopy,
 							Severity: SeverityError,
 						})
@@ -433,15 +433,15 @@ func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 // literally, all other values are non-empty.
 func CoerceBoolean(v Value) bool {
 	switch {
-	case v.VType.Matches(TBoolean):
+	case v.Parent.Matches(TBoolean):
 		b, _ := AsBoolean(v)
 		return b
-	case v.VType.Matches(TNumber):
+	case v.Parent.Matches(TNumber):
 		n, _ := AsNumber(v)
 		return n != 0
-	case v.VType.Equal(TNone):
+	case v.Parent.Equal(TNone):
 		return false
-	case v.VType.Equal(TList):
+	case v.Parent.Equal(TList):
 		if v.Data == nil {
 			return false
 		}
@@ -450,7 +450,7 @@ func CoerceBoolean(v Value) bool {
 		}
 		// Non-[]Value list backings (table types, query builders) are truthy.
 		return true
-	case v.VType.Equal(TMap):
+	case v.Parent.Equal(TMap):
 		if v.Data == nil {
 			return false
 		}
@@ -597,11 +597,11 @@ func IsTypeBody(v Value) bool {
 	}
 	// Function-signature type: a FnUndef carrying input + output sig
 	// patterns and no body.
-	if v.VType.Equal(TFnUndef) {
+	if v.Parent.Equal(TFnUndef) {
 		return true
 	}
 	// Predicate type: a FnDef / Function whose body returns a Boolean.
-	if v.VType.Equal(TFnDef) || v.VType.Equal(TFunction) {
+	if v.Parent.Equal(TFnDef) || v.Parent.Equal(TFunction) {
 		return true
 	}
 	// Host-Ideal constructed type (ExtensionPayload + HostTypeBody).
@@ -622,13 +622,13 @@ func IsTypeBody(v Value) bool {
 // declared input type as their parent so values rewrapped by the
 // typed-bind path participate in the LCA-walk dispatch alongside
 // kernel scalars. Without this, `behave compare/q (fn [[Positive
-// Positive] …])` would have no dispatch surface — no value's VType
+// Positive] …])` would have no dispatch surface — no value's Parent
 // is ever Positive.
 func PredicateInputType(v Value) *Type {
-	if v.VType == nil {
+	if v.Parent == nil {
 		return nil
 	}
-	if !v.VType.Equal(TFnDef) && !v.VType.Equal(TFunction) {
+	if !v.Parent.Equal(TFnDef) && !v.Parent.Equal(TFunction) {
 		return nil
 	}
 	info, ok := v.Data.(FnDefInfo)
@@ -657,19 +657,19 @@ func IsLiteralTypeBody(v Value) bool {
 		return true
 	}
 	switch {
-	case v.VType.Matches(TInteger),
-		v.VType.Matches(TDecimal),
-		v.VType.Matches(TNumber),
-		v.VType.Matches(TString),
-		v.VType.Matches(TBoolean),
-		v.VType.Equal(TAtom),
-		v.VType.Equal(TPath):
+	case v.Parent.Matches(TInteger),
+		v.Parent.Matches(TDecimal),
+		v.Parent.Matches(TNumber),
+		v.Parent.Matches(TString),
+		v.Parent.Matches(TBoolean),
+		v.Parent.Equal(TAtom),
+		v.Parent.Equal(TPath):
 		return v.Data != nil
 	}
-	if v.VType.Equal(TList) && v.Data != nil {
+	if v.Parent.Equal(TList) && v.Data != nil {
 		return true
 	}
-	if v.VType.Equal(TMap) && v.Data != nil {
+	if v.Parent.Equal(TMap) && v.Data != nil {
 		return true
 	}
 	return false
@@ -707,7 +707,7 @@ func SimplifyDisjunctAlts(alts []Value) []Value {
 	// First pass: drop Never.
 	live := make([]Value, 0, len(alts))
 	for _, alt := range alts {
-		if alt.VType.Equal(TNever) {
+		if alt.Parent.Equal(TNever) {
 			continue
 		}
 		live = append(live, alt)
@@ -720,12 +720,12 @@ outer:
 	for i, cand := range live {
 		// Drop if structurally equal to an earlier kept alt.
 		for j := 0; j < i; j++ {
-			if live[j].VType.Equal(cand.VType) && ValuesEqual(live[j], cand) {
+			if live[j].Parent.Equal(cand.Parent) && ValuesEqual(live[j], cand) {
 				continue outer
 			}
 		}
 		// Drop if subsumed by some other alt:
-		//   - cand is a type literal whose VType is a strict subtype
+		//   - cand is a type literal whose Parent is a strict subtype
 		//     of another's (Integer subsumed by Number).
 		//   - cand is a concrete value covered by another type literal
 		//     (5 subsumed by Integer).
@@ -734,10 +734,10 @@ outer:
 			if i == j {
 				continue
 			}
-			if cand.VType.Equal(other.VType) {
+			if cand.Parent.Equal(other.Parent) {
 				continue
 			}
-			if !cand.VType.Matches(other.VType) {
+			if !cand.Parent.Matches(other.Parent) {
 				continue
 			}
 			// cand's type is a strict subtype of other's.
@@ -811,14 +811,14 @@ func BaseValueForConstraint(constraint Value) (Value, error) {
 	if IsDisjunct(constraint) {
 		di, _ := AsDisjunct(constraint)
 		for _, alt := range di.Alternatives {
-			if alt.Data == nil && !alt.VType.Equal(TNone) {
-				return BaseValue(alt.VType)
+			if alt.Data == nil && !alt.Parent.Equal(TNone) {
+				return BaseValue(alt.Parent)
 			}
 		}
 		return NewTypeLiteral(TNone), nil
 	}
 	if constraint.Data == nil {
-		return BaseValue(constraint.VType)
+		return BaseValue(constraint.Parent)
 	}
 	return Value{}, fmt.Errorf("base: cannot determine base value for %s", constraint.String())
 }

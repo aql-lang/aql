@@ -27,7 +27,7 @@ func RegisterQFixtures(r *eng.Registry) {
 }
 
 func toFloat(v eng.Value) float64 {
-	if v.VType.Matches(eng.TInteger) {
+	if v.Parent.Matches(eng.TInteger) {
 		n, _ := eng.AsInteger(v)
 		return float64(n)
 	}
@@ -37,7 +37,7 @@ func toFloat(v eng.Value) float64 {
 
 func numericBinary(intOp func(a, b int64) int64, floatOp func(a, b float64) float64) eng.Handler {
 	return func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-		if args[0].VType.Matches(eng.TInteger) && args[1].VType.Matches(eng.TInteger) {
+		if args[0].Parent.Matches(eng.TInteger) && args[1].Parent.Matches(eng.TInteger) {
 			a, _ := eng.AsInteger(args[0])
 			b, _ := eng.AsInteger(args[1])
 			return []eng.Value{eng.NewInteger(intOp(a, b))}, nil
@@ -77,7 +77,7 @@ func registerArith(r *eng.Registry) {
 		Signatures: []eng.NativeSig{{
 			Args: []*eng.Type{eng.TNumber}, BarrierPos: 1,
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-				if args[0].VType.Matches(eng.TInteger) {
+				if args[0].Parent.Matches(eng.TInteger) {
 					n, _ := eng.AsInteger(args[0])
 					return []eng.Value{eng.NewInteger(-n)}, nil
 				}

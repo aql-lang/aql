@@ -232,7 +232,7 @@ func TestValueToSQLBool(t *testing.T) {
 }
 
 func TestValueToSQLNone(t *testing.T) {
-	got, err := valueToSQL(Value{VType: TNone})
+	got, err := valueToSQL(Value{Parent: TNone})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,7 +339,7 @@ func TestBuildInListFromTableInWhere(t *testing.T) {
 	row := NewOrderedMap()
 	row.Set("id", NewInteger(5))
 	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
-	tdVal := Value{VType: TList, Data: td}
+	tdVal := Value{Parent: TList, Data: td}
 
 	got, err := buildInList(tdVal)
 	if err != nil {
@@ -356,7 +356,7 @@ func TestBuildInListFromTableInWhere(t *testing.T) {
 
 func TestIsTableOrQueryTableData(t *testing.T) {
 	td := TableData{}
-	v := Value{VType: TList, Data: td}
+	v := Value{Parent: TList, Data: td}
 	if !isTableOrQuery(v) {
 		t.Error("expected true for TableData")
 	}
@@ -364,7 +364,7 @@ func TestIsTableOrQueryTableData(t *testing.T) {
 
 func TestIsTableOrQueryQueryBuilder(t *testing.T) {
 	qb := QueryBuilder{}
-	v := Value{VType: TList, Data: ExtensionPayload{Body: qb}}
+	v := Value{Parent: TList, Data: ExtensionPayload{Body: qb}}
 	if !isTableOrQuery(v) {
 		t.Error("expected true for QueryBuilder")
 	}
@@ -395,7 +395,7 @@ func TestScalarFromTableOneRow(t *testing.T) {
 		t.Fatal(err)
 	}
 	_as51, _ := AsInteger(val)
-	if !val.VType.Matches(TInteger) || _as51 != 42 {
+	if !val.Parent.Matches(TInteger) || _as51 != 42 {
 		t.Errorf("expected 42, got %v", val)
 	}
 }
@@ -410,8 +410,8 @@ func TestScalarFromTableNoRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !val.VType.Equal(TNone) {
-		t.Errorf("expected TNone, got %v", val.VType)
+	if !val.Parent.Equal(TNone) {
+		t.Errorf("expected TNone, got %v", val.Parent)
 	}
 }
 
@@ -457,7 +457,7 @@ func TestResolveScalarValueTableData(t *testing.T) {
 	row.Set("x", NewInteger(99))
 	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
 
-	v := Value{VType: TList, Data: td}
+	v := Value{Parent: TList, Data: td}
 	got, err := resolveScalarValue(v)
 	if err != nil {
 		t.Fatal(err)
@@ -521,7 +521,7 @@ func makeTestTableWithDepts(r *Registry) {
 			mkRow("dave", 28, "sales"),
 		},
 	}
-	r.ContextSet("employees", Value{VType: TList, Data: td})
+	r.ContextSet("employees", Value{Parent: TList, Data: td})
 }
 
 func makeDeptTable(r *Registry) {
@@ -545,7 +545,7 @@ func makeDeptTable(r *Registry) {
 			mkRow("sales", 50000),
 		},
 	}
-	r.ContextSet("departments", Value{VType: TList, Data: td})
+	r.ContextSet("departments", Value{Parent: TList, Data: td})
 }
 
 func TestQuerySelectWithColumnList(t *testing.T) {
@@ -939,7 +939,7 @@ func TestSQLiteQueryWithNullValues(t *testing.T) {
 	row1.Set("score", NewInteger(100))
 	row2 := NewOrderedMap()
 	row2.Set("name", NewString("bob"))
-	row2.Set("score", Value{VType: TNone})
+	row2.Set("score", Value{Parent: TNone})
 
 	td := TableData{Record: rec, Rows: []Value{NewMap(row1), NewMap(row2)}}
 
@@ -1328,7 +1328,7 @@ func TestResolveFieldTypeString(t *testing.T) {
 	// ResolveFieldType should resolve "MyNum" string to the type value
 	result := ResolveFieldType(r, NewString("MyNum"))
 	if !IsTypeBody(result) {
-		t.Errorf("expected type value, got %s (data=%v)", result.VType, result.Data)
+		t.Errorf("expected type value, got %s (data=%v)", result.Parent, result.Data)
 	}
 }
 
@@ -1358,7 +1358,7 @@ func TestResolveFieldTypeList(t *testing.T) {
 		NewWord("String"), NewWord("tor"), NewWord("None"),
 	}))
 	// Should be a disjunct type, not a raw list
-	if result.VType.Matches(TList) && !IsTypedList(result) {
+	if result.Parent.Matches(TList) && !IsTypedList(result) {
 		t.Error("expected resolved type, not raw list")
 	}
 }
@@ -1372,7 +1372,7 @@ func TestResolveFieldTypePassthrough(t *testing.T) {
 	// A type literal should pass through unchanged
 	v := NewTypeLiteral(TNumber)
 	result := ResolveFieldType(r, v)
-	if !result.VType.Equal(v.VType) {
+	if !result.Parent.Equal(v.Parent) {
 		t.Errorf("expected pass-through, got %v", result)
 	}
 }
@@ -1426,8 +1426,8 @@ func TestResolveSigTypeList(t *testing.T) {
 	if pattern == nil {
 		t.Fatal("expected non-nil pattern for list")
 	}
-	if !pattern.VType.Equal(TList) {
-		t.Errorf("expected pattern to be a list, got %s", pattern.VType)
+	if !pattern.Parent.Equal(TList) {
+		t.Errorf("expected pattern to be a list, got %s", pattern.Parent)
 	}
 }
 

@@ -17,8 +17,8 @@ import (
 
 func TestNewDepScalarDecimal(t *testing.T) {
 	d := NewDepScalar(DepGTE, NewDecimal(1.5))
-	if d.VType.String() != "Type/Dependent/DepDecimal" {
-		t.Errorf("VType = %s, want Type/Dependent/DepDecimal", d.VType.String())
+	if d.Parent.String() != "Type/Dependent/DepDecimal" {
+		t.Errorf("Parent = %s, want Type/Dependent/DepDecimal", d.Parent.String())
 	}
 	info, err := d.AsDepScalar()
 	if err != nil {
@@ -38,8 +38,8 @@ func TestNewDepScalarDecimal(t *testing.T) {
 
 func TestNewDepScalarString(t *testing.T) {
 	d := NewDepScalar(DepLT, NewString("z"))
-	if d.VType.String() != "Type/Dependent/DepString" {
-		t.Errorf("VType = %s, want Type/Dependent/DepString", d.VType.String())
+	if d.Parent.String() != "Type/Dependent/DepString" {
+		t.Errorf("Parent = %s, want Type/Dependent/DepString", d.Parent.String())
 	}
 	info, _ := d.AsDepScalar()
 	if info.Hi == nil || info.Hi.Inclusive {
@@ -56,15 +56,15 @@ func TestNewDepScalarString(t *testing.T) {
 
 func TestNewDepScalarBoolean(t *testing.T) {
 	d := NewDepScalar(DepGTE, NewBoolean(true))
-	if d.VType.String() != "Type/Dependent/DepBoolean" {
-		t.Errorf("VType = %s, want Type/Dependent/DepBoolean", d.VType.String())
+	if d.Parent.String() != "Type/Dependent/DepBoolean" {
+		t.Errorf("Parent = %s, want Type/Dependent/DepBoolean", d.Parent.String())
 	}
 }
 
 func TestNewDepScalarAtom(t *testing.T) {
 	d := NewDepScalar(DepGTE, NewAtom("hello"))
-	if d.VType.String() != "Type/Dependent/DepAtom" {
-		t.Errorf("VType = %s, want Type/Dependent/DepAtom", d.VType.String())
+	if d.Parent.String() != "Type/Dependent/DepAtom" {
+		t.Errorf("Parent = %s, want Type/Dependent/DepAtom", d.Parent.String())
 	}
 }
 
@@ -73,7 +73,7 @@ func TestNewDepScalarAtom(t *testing.T) {
 func TestDepDecimalMatchesDecimalAncestors(t *testing.T) {
 	d := NewDepScalar(DepGTE, NewDecimal(0.0))
 	for _, anc := range []*Type{TDecimal, TNumber, TScalar, TAny} {
-		if !d.VType.Matches(anc) {
+		if !d.Parent.Matches(anc) {
 			t.Errorf("DepDecimal does not match ancestor %s", anc)
 		}
 	}
@@ -82,13 +82,13 @@ func TestDepDecimalMatchesDecimalAncestors(t *testing.T) {
 func TestDepStringMatchesStringAncestors(t *testing.T) {
 	d := NewDepScalar(DepLT, NewString("m"))
 	for _, anc := range []*Type{TString, TScalar, TAny} {
-		if !d.VType.Matches(anc) {
+		if !d.Parent.Matches(anc) {
 			t.Errorf("DepString does not match ancestor %s", anc)
 		}
 	}
 	// DepString must NOT match Number or Boolean.
 	for _, foreign := range []*Type{TNumber, TInteger, TBoolean} {
-		if d.VType.Matches(foreign) {
+		if d.Parent.Matches(foreign) {
 			t.Errorf("DepString unexpectedly matches %s", foreign)
 		}
 	}
@@ -96,10 +96,10 @@ func TestDepStringMatchesStringAncestors(t *testing.T) {
 
 func TestDepAtomMatchesAtom(t *testing.T) {
 	d := NewDepScalar(DepGTE, NewAtom("foo"))
-	if !d.VType.Matches(TAtom) {
+	if !d.Parent.Matches(TAtom) {
 		t.Errorf("DepAtom does not match TAtom")
 	}
-	if !d.VType.Matches(TScalar) {
+	if !d.Parent.Matches(TScalar) {
 		t.Errorf("DepAtom does not match TScalar")
 	}
 }
@@ -108,7 +108,7 @@ func TestDepAtomMatchesAtom(t *testing.T) {
 func TestDepIntegerStillMatchesInteger(t *testing.T) {
 	d := NewDepScalar(DepGTE, NewInteger(10))
 	for _, anc := range []*Type{TInteger, TNumber, TScalar, TAny} {
-		if !d.VType.Matches(anc) {
+		if !d.Parent.Matches(anc) {
 			t.Errorf("DepInteger no longer matches ancestor %s", anc)
 		}
 	}
@@ -205,7 +205,7 @@ func TestRunDecimalGTEReturnsDepDecimal(t *testing.T) {
 		NewWord("gte"),
 		NewDecimal(1.5),
 	})
-	if len(result) != 1 || result[0].VType.String() != "Type/Dependent/DepDecimal" {
+	if len(result) != 1 || result[0].Parent.String() != "Type/Dependent/DepDecimal" {
 		t.Fatalf("Decimal gte 1.5: got %v, want DepDecimal", result)
 	}
 }
@@ -220,7 +220,7 @@ func TestRunStringLTReturnsDepString(t *testing.T) {
 		NewWord("lt"),
 		NewString("z"),
 	})
-	if len(result) != 1 || result[0].VType.String() != "Type/Dependent/DepString" {
+	if len(result) != 1 || result[0].Parent.String() != "Type/Dependent/DepString" {
 		t.Fatalf("String lt \"z\": got %v, want DepString", result)
 	}
 }
@@ -237,7 +237,7 @@ func TestRunAtomGTEReturnsDepAtom(t *testing.T) {
 		NewWord("gte"),
 		NewAtom("m"),
 	})
-	if len(result) != 1 || result[0].VType.String() != "Type/Dependent/DepAtom" {
+	if len(result) != 1 || result[0].Parent.String() != "Type/Dependent/DepAtom" {
 		t.Fatalf("Atom gte 'm': got %v, want DepAtom", result)
 	}
 }

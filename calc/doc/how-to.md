@@ -23,8 +23,8 @@ r.RegisterNativeFunc(eng.NativeFunc{
             res := b + a                   // b op a — see explanation.md
             // collapse back to Integer when both inputs were Integer and the
             // result is whole
-            if args[0].VType.Matches(eng.TInteger) &&
-                args[1].VType.Matches(eng.TInteger) &&
+            if args[0].Parent.Matches(eng.TInteger) &&
+                args[1].Parent.Matches(eng.TInteger) &&
                 res == math.Trunc(res) {
                 return []eng.Value{eng.NewInteger(int64(res))}, nil
             }

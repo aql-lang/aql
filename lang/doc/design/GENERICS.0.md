@@ -528,7 +528,7 @@ helpers plus three diagnostic codes.
 - **The `!Carrier` guard in `sigTypeMatches`** keeps carriers and
   type literals distinguishable. A `TypeParam{T}` placeholder appears
   in two roles — as a type literal during schema construction, as a
-  carrier-VType during fn-body analysis with `T` in scope — and the
+  carrier-Parent during fn-body analysis with `T` in scope — and the
   existing distinction handles both.
 - **Common-ancestor widening** for `if` branches already does the
   right thing for two carriers of the same instantiated type. Two
@@ -543,8 +543,8 @@ dispatch. Roughly:
 
 ```go
 func substituteCarrier(v Value, b map[string]Value) Value {
-    if isTypeParam(v.VType) { return b[paramName(v.VType)] }
-    if isRecord(v.VType)    { return rebuildRecord(v, recurse on fields) }
+    if isTypeParam(v.Parent) { return b[paramName(v.Parent)] }
+    if isRecord(v.Parent)    { return rebuildRecord(v, recurse on fields) }
     // ... lists, maps, fn shapes recurse; scalars pass through
 }
 ```
@@ -617,7 +617,7 @@ mutation patterns make it unsound in practice.
 
 **Operations on unconstrained `TypeParam` carriers.** A fn body
 analysed with `TypeParam{T}` in the parameter slots sees abstract
-values whose VType is a placeholder. Operations on those carriers —
+values whose Parent is a placeholder. Operations on those carriers —
 `T add T`, `T size`, `T.field` — must produce sensible carrier
 results. Recommended rule: **a `TypeParam` carrier matches no
 signature except those whose param slot is also `T` or a
@@ -645,10 +645,10 @@ widening.
 - **`TypeParam{name}`** — appears in two contexts:
   - As a type-literal-level placeholder in schema bodies (during
     schema construction). Substituted at `apply` time.
-  - As a carrier VType inside fn-body analysis when the parameter is
-    in scope (`Carrier{VType: TypeParam{T}}`). Substituted on call.
+  - As a carrier Parent inside fn-body analysis when the parameter is
+    in scope (`Carrier{Parent: TypeParam{T}}`). Substituted on call.
 - **Instantiated records / fn shapes / predicates** — ordinary
-  carriers with the substituted VType. Indistinguishable from
+  carriers with the substituted Parent. Indistinguishable from
   hand-written equivalents downstream.
 
 ### 9.6 Cost summary

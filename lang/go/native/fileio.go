@@ -77,7 +77,7 @@ func parseFileOpts(opts Value) (enc, format, mode, nl string, fmtExplicit bool) 
 	mode = "write"
 	nl = "lf"
 
-	if !opts.VType.Equal(TMap) || opts.Data == nil {
+	if !opts.Parent.Equal(TMap) || opts.Data == nil {
 		return
 	}
 	m, _ := AsMap(opts)
@@ -162,27 +162,27 @@ func sortedMapKeys(m map[string]any) []string {
 // valueToJsonic converts an AQL Value to a jsonic-compatible string.
 func valueToJsonic(v Value) string {
 	switch {
-	case v.VType.Matches(TString):
+	case v.Parent.Matches(TString):
 		_as0, _ := AsString(v)
 		return fmt.Sprintf("%q", _as0)
-	case v.VType.Matches(TDecimal):
+	case v.Parent.Matches(TDecimal):
 		_as1, _ := AsDecimal(v)
 		return strconv.FormatFloat(_as1, 'f', -1, 64)
-	case v.VType.Matches(TInteger):
+	case v.Parent.Matches(TInteger):
 		_as2, _ := AsInteger(v)
 		return fmt.Sprintf("%d", _as2)
-	case v.VType.Matches(TBoolean):
+	case v.Parent.Matches(TBoolean):
 		_as3, _ := AsBoolean(v)
 		if _as3 {
 			return "true"
 		}
 		return "false"
-	case v.VType.Equal(TNone):
+	case v.Parent.Equal(TNone):
 		return "null"
-	case v.VType.Equal(TAtom):
+	case v.Parent.Equal(TAtom):
 		_as4, _ := AsAtom(v)
 		return fmt.Sprintf("%q", _as4)
-	case v.VType.Equal(TList):
+	case v.Parent.Equal(TList):
 		if elems, err := AsMutableList(v); err == nil {
 			parts := make([]string, len(elems))
 			for i, e := range elems {
@@ -191,7 +191,7 @@ func valueToJsonic(v Value) string {
 			return "[" + strings.Join(parts, ",") + "]"
 		}
 		return "[]"
-	case v.VType.Equal(TMap):
+	case v.Parent.Equal(TMap):
 		if om, err := AsMutableMap(v); err == nil {
 			parts := make([]string, 0, om.Len())
 			for _, k := range om.Keys() {

@@ -14,7 +14,7 @@ stacks, helper API discipline, panic prevention) see
 `Value.Data` is a sealed interface: `eng.Payload`. Only types
 with the unexported `payloadMarker()` method satisfy it, and the
 method is only definable in this package. The seal closes the
-historical `Data interface{}` hole — `Value{VType: TInteger,
+historical `Data interface{}` hole — `Value{Parent: TInteger,
 Data: "hello"}` is a **compile error**.
 
 Payload variants live in `eng/go/payload.go`. Two flavours:
@@ -64,7 +64,7 @@ type TypeBehavior interface {
 ```
 
 `DefaultBehavior` is the kernel's no-op: `Match` delegates to
-`v.VType.Matches(t)`, `Format` delegates to `v.String()` (with
+`v.Parent.Matches(t)`, `Format` delegates to `v.String()` (with
 the dispatch carefully avoiding re-entry), `Equal` delegates to
 `valuesEqualDefault`. Every type registered through the kernel
 paths gets `DefaultBehavior` if the caller doesn't supply one.

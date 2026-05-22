@@ -117,8 +117,8 @@ func TestJsonicToValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !v.VType.Equal(TNone) {
-		t.Errorf("expected none, got %s", v.VType)
+	if !v.Parent.Equal(TNone) {
+		t.Errorf("expected none, got %s", v.Parent)
 	}
 
 	// bool
@@ -158,8 +158,8 @@ func TestJsonicToValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.VType.Equal(TList) {
-		t.Errorf("expected list, got %s", v.VType)
+	if !v.Parent.Equal(TList) {
+		t.Errorf("expected list, got %s", v.Parent)
 	}
 
 	// map
@@ -167,8 +167,8 @@ func TestJsonicToValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.VType.Equal(TMap) {
-		t.Errorf("expected map, got %s", v.VType)
+	if !v.Parent.Equal(TMap) {
+		t.Errorf("expected map, got %s", v.Parent)
 	}
 
 	// unsupported type

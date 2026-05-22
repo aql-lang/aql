@@ -169,7 +169,7 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 
 	stack := make([]string, len(result))
 	for i, v := range result {
-		stack[i] = v.VType.Leaf()
+		stack[i] = v.Parent.Leaf()
 	}
 
 	// Fill in missing Row/Col on diagnostics by locating the Word
@@ -283,10 +283,10 @@ func (a *AQL) Run(src string) ([]any, error) {
 	out := make([]any, len(result))
 	for i, v := range result {
 		switch {
-		case v.VType.Matches(native.TInteger):
+		case v.Parent.Matches(native.TInteger):
 			n, _ := native.AsInteger(v)
 			out[i] = n
-		case v.VType.Matches(native.TString):
+		case v.Parent.Matches(native.TString):
 			s, _ := native.AsString(v)
 			out[i] = s
 		default:

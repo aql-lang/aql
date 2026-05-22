@@ -156,8 +156,8 @@ func TestAnyToValueNil(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.VType.Equal(TNone) {
-		t.Errorf("expected none, got %s", v.VType)
+	if !v.Parent.Equal(TNone) {
+		t.Errorf("expected none, got %s", v.Parent)
 	}
 }
 

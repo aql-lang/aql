@@ -71,7 +71,7 @@ func cmpInt(a, b int) int {
 	}
 }
 
-// compareStructural breaks a tie between two values that share a VType
+// compareStructural breaks a tie between two values that share a Parent
 // and a size. A List-like value compares element by element, a
 // Map-like value compares its sorted keys and then the value at each
 // key — both recursing through CompareValues. Any other value is an
@@ -81,10 +81,10 @@ func cmpInt(a, b int) int {
 // Word, and Atom.
 func compareStructural(a, b Value) (int, error) {
 	if IsConcrete(a) && IsConcrete(b) {
-		if a.VType.Matches(TList) {
+		if a.Parent.Matches(TList) {
 			return compareListElems(a, b)
 		}
-		if a.VType.Matches(TMap) {
+		if a.Parent.Matches(TMap) {
 			return compareMapEntries(a, b)
 		}
 	}

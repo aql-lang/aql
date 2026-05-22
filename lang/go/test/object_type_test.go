@@ -249,7 +249,7 @@ func TestObjectTypeFieldOverride(t *testing.T) {
 	}
 }
 
-// TestObjectTypeVTypeMatches verifies VType hierarchy matching.
+// TestObjectTypeVTypeMatches verifies Parent hierarchy matching.
 func TestObjectTypeVTypeMatches(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
 		`def Foo refine Object {a:String}`,
@@ -259,7 +259,7 @@ func TestObjectTypeVTypeMatches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	barType := result[0].VType
+	barType := result[0].Parent
 	// Bar (Object/Foo/Bar) should match Object
 	tObj, _ := native.NewType("Object")
 	if !barType.Matches(tObj) {
@@ -920,8 +920,8 @@ func TestMakeObjectInstanceTypeMatchesObjectType(t *testing.T) {
 		t.Fatal(err)
 	}
 	inst := result[0]
-	if !inst.VType.Matches(native.TObject) {
-		t.Errorf("expected instance type to match TObject, got %s", inst.VType)
+	if !inst.Parent.Matches(native.TObject) {
+		t.Errorf("expected instance type to match TObject, got %s", inst.Parent)
 	}
 	oi, _ := native.AsObjectInstance(inst)
 	if oi.TypeRef.Name != "Object/Foo" {

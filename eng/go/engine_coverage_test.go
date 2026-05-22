@@ -84,8 +84,8 @@ func TestValueConstructors(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if !c.value.VType.Matches(c.want) {
-				t.Errorf("VType = %v does not match expected %v", c.value.VType, c.want)
+			if !c.value.Parent.Matches(c.want) {
+				t.Errorf("Parent = %v does not match expected %v", c.value.Parent, c.want)
 			}
 			if c.value.Data == nil {
 				t.Error("Data should not be nil for a concrete value")

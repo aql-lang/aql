@@ -30,7 +30,7 @@ func numericBinaryHandler(
 	decFn func(a, b float64) (Value, error),
 ) Handler {
 	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		if intFn != nil && args[0].VType.Matches(TInteger) && args[1].VType.Matches(TInteger) {
+		if intFn != nil && args[0].Parent.Matches(TInteger) && args[1].Parent.Matches(TInteger) {
 			a, _ := args[0].AsConcreteInteger()
 			b, _ := args[1].AsConcreteInteger()
 			return singleResult(intFn(a, b))

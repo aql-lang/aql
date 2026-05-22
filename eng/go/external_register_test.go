@@ -30,7 +30,7 @@ func TestRegisterExternalBuiltin_PluginColor(t *testing.T) {
 	}
 
 	matchFn := func(v Value, target *Type) bool {
-		if v.VType != target {
+		if v.Parent != target {
 			return false
 		}
 		ep, ok := v.Data.(ExtensionPayload)
@@ -87,7 +87,7 @@ func TestRegisterExternalBuiltin_PluginColor(t *testing.T) {
 	// Construct a value of the new type and verify dispatch goes
 	// through the Behavior.
 	red := makeColor(255, 0, 0)
-	red.VType = tColor
+	red.Parent = tColor
 
 	got := tColor.Behavior.Format(red)
 	if got != "#ff0000" {
@@ -99,13 +99,13 @@ func TestRegisterExternalBuiltin_PluginColor(t *testing.T) {
 	}
 
 	red2 := makeColor(255, 0, 0)
-	red2.VType = tColor
+	red2.Parent = tColor
 	if !tColor.Behavior.Equal(red, red2) {
 		t.Error("Behavior.Equal of two identical colors returned false")
 	}
 
 	blue := makeColor(0, 0, 255)
-	blue.VType = tColor
+	blue.Parent = tColor
 	if tColor.Behavior.Equal(red, blue) {
 		t.Error("Behavior.Equal of red and blue returned true")
 	}

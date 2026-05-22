@@ -336,7 +336,7 @@ func TestArrayGetOutOfBoundsReturnsNone(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		arr, NewWord("get"), NewInteger(5),
 	})
-	if len(result) != 1 || !result[0].VType.Equal(TNone) {
+	if len(result) != 1 || !result[0].Parent.Equal(TNone) {
 		t.Fatalf("got %v, want None", result)
 	}
 }
@@ -397,16 +397,16 @@ func TestArrayIsDistinctFromList(t *testing.T) {
 	arr := NewArray([]Value{NewInteger(1)})
 	list := NewList([]Value{NewInteger(1)})
 
-	if arr.VType.Matches(TList) {
+	if arr.Parent.Matches(TList) {
 		t.Error("Array should not match TList")
 	}
-	if list.VType.Matches(TArray) {
+	if list.Parent.Matches(TArray) {
 		t.Error("List should not match TArray")
 	}
-	if !arr.VType.Matches(TIdeal) {
+	if !arr.Parent.Matches(TIdeal) {
 		t.Error("Array should match TIdeal")
 	}
-	if !arr.VType.Matches(TArray) {
+	if !arr.Parent.Matches(TArray) {
 		t.Error("Array should match TArray")
 	}
 }

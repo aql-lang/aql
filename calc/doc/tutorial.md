@@ -208,7 +208,7 @@ func numHandler(op func(a, b float64) (float64, error), preferInt bool) eng.Hand
         if err != nil {
             return nil, err
         }
-        if preferInt && args[0].VType.Matches(eng.TInteger) && args[1].VType.Matches(eng.TInteger) && res == math.Trunc(res) {
+        if preferInt && args[0].Parent.Matches(eng.TInteger) && args[1].Parent.Matches(eng.TInteger) && res == math.Trunc(res) {
             return []eng.Value{eng.NewInteger(int64(res))}, nil
         }
         return []eng.Value{eng.NewDecimal(res)}, nil

@@ -151,7 +151,7 @@ Object
 - Payload struct:
   ```go
   type QuantityData struct {
-      Value Value          // VType must match TNumber (Integer or Decimal)
+      Value Value          // Parent must match TNumber (Integer or Decimal)
       Unit  UnitTag        // canonical unit, integer exponents keyed by base atom
   }
   type UnitTag map[string]int

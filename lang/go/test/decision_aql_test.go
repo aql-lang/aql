@@ -50,7 +50,7 @@ func checkMapField(key, want string) func(t *testing.T, result []native.Value) {
 		t.Helper()
 		m, _ := native.AsMap(result[0])
 		if m == nil {
-			t.Fatalf("expected map, got %s", result[0].VType.String())
+			t.Fatalf("expected map, got %s", result[0].Parent.String())
 		}
 		v, _ := m.Get(key)
 		s, _ := native.AsString(v)
@@ -91,7 +91,7 @@ var decisionTests = []decisionTestCase{
 			t.Helper()
 			m, _ := native.AsMap(result[0])
 			if m == nil {
-				t.Fatalf("expected map, got %s", result[0].VType.String())
+				t.Fatalf("expected map, got %s", result[0].Parent.String())
 			}
 			field, _ := m.Get("field")
 			if field.String() != "age" {

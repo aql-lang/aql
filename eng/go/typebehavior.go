@@ -29,7 +29,7 @@ package eng
 // operations without expanding the required surface.
 type TypeBehavior interface {
 	// Match reports whether v conforms to the type t. The
-	// canonical default is a lattice walk (v.VType is t or a
+	// canonical default is a lattice walk (v.Parent is t or a
 	// descendant). Predicate types override to invoke the
 	// predicate body; refinement types override to check the
 	// refinement clause; record types override to do field-by-
@@ -91,7 +91,7 @@ type Sizer interface {
 // existing kernel paths so introducing the Behavior seam is
 // observably a no-op:
 //
-//   - Match → v.VType.Matches(t) (the historical lattice walk plus
+//   - Match → v.Parent.Matches(t) (the historical lattice walk plus
 //     DepScalar override).
 //   - Format → Value.String() (today's full switch).
 //   - Equal → ValuesEqual (today's deep-compare).
@@ -106,7 +106,7 @@ type defaultBehavior struct{}
 var DefaultBehavior TypeBehavior = defaultBehavior{}
 
 func (defaultBehavior) Match(v Value, t *Type) bool {
-	return v.VType.Matches(t)
+	return v.Parent.Matches(t)
 }
 
 func (defaultBehavior) Format(v Value) string {

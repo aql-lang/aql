@@ -109,7 +109,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 
 	// Promote strings to words for code evaluation inside module.
 	promoteToWord := func(v Value) Value {
-		if v.VType.Matches(TString) || v.VType.Matches(TAtom) {
+		if v.Parent.Matches(TString) || v.Parent.Matches(TAtom) {
 			name, _ := AsString(v)
 			if modReg.Lookup(name) != nil {
 				return NewWord(name)
@@ -340,7 +340,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 		return fmt.Errorf("import: empty rename list")
 	}
 
-	if renameList[0].VType.Equal(TList) {
+	if renameList[0].Parent.Equal(TList) {
 		// Multiple rename pairs: [[from1 to1] [from2 to2] ...]
 		for _, pair := range renameList {
 			pairElems, _ := AsList(pair)
@@ -394,7 +394,7 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 	if IsWord(v) {
 		_as3, _ := AsWord(v)
 		name = _as3.Name
-	} else if v.VType.Matches(TString) {
+	} else if v.Parent.Matches(TString) {
 		name, _ = AsString(v)
 	} else if IsAtom(v) {
 		name, _ = AsAtom(v)
@@ -410,7 +410,7 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 		if fnDef, ok := tv.Data.(FnDefInfo); ok {
 			if fnDef.Registry == nil {
 				fnDef.Registry = modReg
-				if tv.VType.Equal(TFnDef) {
+				if tv.Parent.Equal(TFnDef) {
 					return NewFnDef(fnDef)
 				}
 				return NewFunction(fnDef)
@@ -424,7 +424,7 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 		if fnDef, ok := val.Data.(FnDefInfo); ok {
 			if fnDef.Registry == nil {
 				fnDef.Registry = modReg
-				if val.VType.Equal(TFnDef) {
+				if val.Parent.Equal(TFnDef) {
 					return NewFnDef(fnDef)
 				}
 				return NewFunction(fnDef)
@@ -476,7 +476,7 @@ func valToAtomOrString(v Value) string {
 		_as5, _ := AsAtom(v)
 		return _as5
 	}
-	if v.VType.Matches(TString) {
+	if v.Parent.Matches(TString) {
 		_as6, _ := AsString(v)
 		return _as6
 	}

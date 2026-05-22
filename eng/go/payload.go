@@ -86,7 +86,7 @@ type InterpStringPayload struct{ Parts []InterpPart }
 // =================================================================
 
 // TimePayload carries a time.Time for Date / DateTime / Instant —
-// the VType discriminates which kind it is. Body is interface{}-typed
+// the Parent discriminates which kind it is. Body is interface{}-typed
 // here so the eng package doesn't pull the `time` import; the
 // dedicated NewDate / NewDateTime / NewInstant constructors handle
 // the typed wrapping.
@@ -95,7 +95,7 @@ type TimePayload struct {
 }
 
 // DurationPayload carries a time.Duration for TimeOfDay /
-// ClkDuration; same VType-discriminator pattern as TimePayload.
+// ClkDuration; same Parent-discriminator pattern as TimePayload.
 type DurationPayload struct {
 	D any /* time.Duration */
 }
@@ -143,9 +143,9 @@ type ExtensionPayload struct{ Body any }
 // through ExtensionPayload rather than dedicated kernel variants.
 func NewExtension(t *Type, body any) Value {
 	return Value{
-		ID:    GenerateID(IDPrefixForType(t)),
-		VType: t,
-		Data:  ExtensionPayload{Body: body},
+		ID:     GenerateID(IDPrefixForType(t)),
+		Parent: t,
+		Data:   ExtensionPayload{Body: body},
 	}
 }
 

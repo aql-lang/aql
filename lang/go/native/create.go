@@ -79,7 +79,7 @@ func createHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 
 	// Check for duplicate id.
 	for _, row := range rows {
-		if !row.VType.Matches(TMap) {
+		if !row.Parent.Matches(TMap) {
 			continue
 		}
 		m, _ := AsMap(row)

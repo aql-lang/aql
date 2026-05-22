@@ -15,7 +15,7 @@ import "math"
 // length. A type with no Sizer in its lattice — None, a Date, a
 // bare scalar — sizes 0.
 func SizeOf(v Value) int {
-	for t := v.VType; t != nil; t = t.Parent {
+	for t := v.Parent; t != nil; t = t.Parent {
 		if sz, ok := t.Behavior.(Sizer); ok {
 			return sz.Size(v)
 		}

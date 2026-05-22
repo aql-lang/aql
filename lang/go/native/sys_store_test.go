@@ -51,8 +51,8 @@ func TestSysStoreStructure(t *testing.T) {
 	if !ok {
 		t.Fatal("__sys.fs.impl not found")
 	}
-	if !implVal.VType.Equal(TNone) {
-		t.Errorf("__sys.fs.impl type = %s, want None", implVal.VType)
+	if !implVal.Parent.Equal(TNone) {
+		t.Errorf("__sys.fs.impl type = %s, want None", implVal.Parent)
 	}
 
 	// __sys.__val exists and is a Store

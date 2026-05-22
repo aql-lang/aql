@@ -250,9 +250,9 @@ func TestCompareTypes(t *testing.T) {
 	// Value level: a Foo value and a Bar value of equal size resolve
 	// by the type order — Bar before Foo, by name.
 	fooVal := NewList([]Value{NewInteger(1)})
-	fooVal.VType = foo
+	fooVal.Parent = foo
 	barVal := NewList([]Value{NewInteger(1)})
-	barVal.VType = bar
+	barVal.Parent = bar
 	if got, err := CompareValues(barVal, fooVal); err != nil || got != -1 {
 		t.Errorf("Bar-value vs Foo-value = %d, %v; want -1, nil", got, err)
 	}
@@ -441,8 +441,8 @@ func (revPathBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equ
 
 func (revPathBehavior) Compare(a, b Value) (int, error) {
 	pa, pb := a, b
-	pa.VType = TPath
-	pb.VType = TPath
+	pa.Parent = TPath
+	pb.Parent = TPath
 	n, err := CompareValues(pa, pb)
 	return -n, err
 }
@@ -457,7 +457,7 @@ func TestRevPathComparator(t *testing.T) {
 	revPath := &Type{Name: "RevPath", Parent: TPath, Behavior: revPathBehavior{}}
 	rev := func(parts ...string) Value {
 		p := NewPath(parts, false)
-		p.VType = revPath
+		p.Parent = revPath
 		return p
 	}
 

@@ -19,7 +19,7 @@ package native
 //	                    (`value` only for a plain `def`-bound value)
 //	type inspection:  { name?, type:"<leaf>", kind, …kind-specific }
 //	  • for a TYPE value: type = "Type", struct = underlying leaf;
-//	  • for a CONCRETE value: type = VType leaf, no `struct`.
+//	  • for a CONCRETE value: type = Parent leaf, no `struct`.
 //	  record / table → fields:{k:"<leaf>" …}
 //	  object         → parent:"…"?, fields:{k:"<leaf>" …} (incl. inherited)
 //	  disjunct       → alternatives:["…" …]
@@ -28,7 +28,7 @@ package native
 //	  dependent_scalar → leaf, lo:{kind,value}?, hi:{kind,value}?
 //	  literal        → (just kind)
 //
-// The returned value carries VType `Inspect` but its payload is an
+// The returned value carries Parent `Inspect` but its payload is an
 // OrderedMap so it renders and round-trips like a map. Algorithms
 // (IsRecordType / AsObjectType / DependentLeafFromType / …) live in
 // eng; this file owns the word name and dispatch wiring.
@@ -55,7 +55,7 @@ func inspectAtomHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 		// FnDef / Function defs are functions, not types — report
 		// their sig structure via buildInspection instead of treating
 		// the def as a type body.
-		if IsTypeBody(top) && !top.VType.Equal(TFnDef) && !top.VType.Equal(TFunction) {
+		if IsTypeBody(top) && !top.Parent.Equal(TFnDef) && !top.Parent.Equal(TFunction) {
 			return []Value{buildTypeInspection(name, top)}, nil
 		}
 	}
@@ -127,13 +127,13 @@ func buildTypeInspection(name string, tv Value) Value {
 
 	// A TYPE value (a bare type literal, or a structural type body) has
 	// type-of `*Type`; its underlying structure leaf goes to `struct`.
-	// A concrete value reports its own VType leaf as `type` and has no
+	// A concrete value reports its own Parent leaf as `type` and has no
 	// `struct`.
 	if tv.Data == nil || IsTypeBody(tv) || IsRecordShape(tv) {
 		result.Set("type", NewString("Type"))
-		result.Set("struct", NewString(tv.VType.Leaf()))
+		result.Set("struct", NewString(tv.Parent.Leaf()))
 	} else {
-		result.Set("type", NewString(tv.VType.Leaf()))
+		result.Set("type", NewString(tv.Parent.Leaf()))
 	}
 
 	switch {
@@ -143,7 +143,7 @@ func buildTypeInspection(name string, tv Value) Value {
 		fields := NewOrderedMap()
 		for _, k := range rt.Fields.Keys() {
 			v, _ := rt.Fields.Get(k)
-			fields.Set(k, NewString(v.VType.Leaf()))
+			fields.Set(k, NewString(v.Parent.Leaf()))
 		}
 		result.Set("fields", NewMap(fields))
 
@@ -153,7 +153,7 @@ func buildTypeInspection(name string, tv Value) Value {
 		fields := NewOrderedMap()
 		for _, k := range m.Keys() {
 			v, _ := m.Get(k)
-			fields.Set(k, NewString(v.VType.Leaf()))
+			fields.Set(k, NewString(v.Parent.Leaf()))
 		}
 		result.Set("fields", NewMap(fields))
 
@@ -167,7 +167,7 @@ func buildTypeInspection(name string, tv Value) Value {
 		fields := NewOrderedMap()
 		for _, k := range af.Keys() {
 			v, _ := af.Get(k)
-			fields.Set(k, NewString(v.VType.Leaf()))
+			fields.Set(k, NewString(v.Parent.Leaf()))
 		}
 		result.Set("fields", NewMap(fields))
 
@@ -177,7 +177,7 @@ func buildTypeInspection(name string, tv Value) Value {
 		fields := NewOrderedMap()
 		for _, k := range tt.Record.Fields.Keys() {
 			v, _ := tt.Record.Fields.Get(k)
-			fields.Set(k, NewString(v.VType.Leaf()))
+			fields.Set(k, NewString(v.Parent.Leaf()))
 		}
 		result.Set("fields", NewMap(fields))
 
@@ -186,21 +186,21 @@ func buildTypeInspection(name string, tv Value) Value {
 		di, _ := AsDisjunct(tv)
 		alts := make([]Value, len(di.Alternatives))
 		for i, alt := range di.Alternatives {
-			alts[i] = NewString(alt.VType.String())
+			alts[i] = NewString(alt.Parent.String())
 		}
 		result.Set("alternatives", NewList(alts))
 
 	case IsTypedList(tv):
 		result.Set("kind", NewAtom("typed_list"))
 		ci, _ := AsChildType(tv)
-		result.Set("child", NewString(ci.Child.VType.String()))
+		result.Set("child", NewString(ci.Child.Parent.String()))
 
 	case IsTypedMap(tv):
 		result.Set("kind", NewAtom("typed_map"))
 		ci, _ := AsChildType(tv)
-		result.Set("child", NewString(ci.Child.VType.String()))
+		result.Set("child", NewString(ci.Child.Parent.String()))
 
-	case tv.VType.Equal(TFnUndef):
+	case tv.Parent.Equal(TFnUndef):
 		result.Set("kind", NewAtom("function_shape"))
 		uInfo, _ := tv.Data.(FnUndefInfo)
 		sigs := make([]Value, 0, len(uInfo.Sigs))
@@ -223,7 +223,7 @@ func buildTypeInspection(name string, tv Value) Value {
 	case tv.IsDepScalar():
 		result.Set("kind", NewAtom("dependent_scalar"))
 		info, _ := tv.AsDepScalar()
-		result.Set("leaf", NewString(DependentLeafFromType(tv.VType)))
+		result.Set("leaf", NewString(DependentLeafFromType(tv.Parent)))
 		if info.Lo != nil {
 			lo := NewOrderedMap()
 			lo.Set("kind", NewString(BoundToKind(info.Lo, true).String()))

@@ -106,7 +106,7 @@ func TestRequireConcreteList_Carrier(t *testing.T) {
 }
 
 func TestRequireConcreteList_NotAList(t *testing.T) {
-	// A typed-list payload (ChildTypeInfo) has VType=TList but
+	// A typed-list payload (ChildTypeInfo) has Parent=TList but
 	// AsList returns IsNil. RequireConcreteList rejects it with
 	// the "not a list" branch.
 	v := NewTypedList(NewTypeLiteral(TInteger))
@@ -155,7 +155,7 @@ func TestRequireConcreteMap_Carrier(t *testing.T) {
 }
 
 func TestRequireConcreteMap_NotAMap(t *testing.T) {
-	// RecordType has VType=TMap but AsMap returns nil — its payload
+	// RecordType has Parent=TMap but AsMap returns nil — its payload
 	// is RecordTypeInfo, not *OrderedMap.
 	v := NewRecordType(NewOrderedMap())
 	_, err := RequireConcreteMap(v, "myop")
@@ -225,7 +225,7 @@ func TestMapFieldString_NilMap(t *testing.T) {
 }
 
 func TestMapFieldString_TypeLiteralValue(t *testing.T) {
-	// A type literal at the slot — VType matches String but
+	// A type literal at the slot — Parent matches String but
 	// AsString returns ("", error) because Data is nil.
 	m := newOptsMap([2]any{"key", NewTypeLiteral(TString)})
 	s, ok := MapFieldString(m, "key")
@@ -267,7 +267,7 @@ func TestMapFieldInteger_NilMap(t *testing.T) {
 }
 
 func TestMapFieldInteger_DepScalarRejected(t *testing.T) {
-	// DepInteger.VType.Matches(TInteger)=true via lattice override —
+	// DepInteger.Parent.Matches(TInteger)=true via lattice override —
 	// the helper must reject DepScalar payloads explicitly so the
 	// caller doesn't get a zero-value silent miscompile.
 	m := newOptsMap([2]any{"n", NewDepScalar(DepGTE, NewInteger(10))})
@@ -600,7 +600,7 @@ func TestRunPredicate_BadPayload(t *testing.T) {
 	// closest we can express to "not a FnDefInfo" — the value
 	// satisfies Payload but is the wrong variant. RunPredicate must
 	// detect the mismatch at runtime.
-	v := Value{VType: TFnDef, Data: StrPayload{S: "not a FnDefInfo"}}
+	v := Value{Parent: TFnDef, Data: StrPayload{S: "not a FnDefInfo"}}
 	_, _, err := r.RunPredicate(v, NewInteger(42))
 	if err == nil {
 		t.Fatalf("expected error for invalid FnDef payload")
@@ -609,7 +609,7 @@ func TestRunPredicate_BadPayload(t *testing.T) {
 
 func TestRunPredicate_ZeroArgPredicate(t *testing.T) {
 	r, _ := NewRegistry()
-	v := Value{VType: TFnDef, Data: FnDefInfo{}}
+	v := Value{Parent: TFnDef, Data: FnDefInfo{}}
 	_, _, err := r.RunPredicate(v, NewInteger(42))
 	if err == nil {
 		t.Fatalf("expected error for predicate with no sigs")
@@ -618,7 +618,7 @@ func TestRunPredicate_ZeroArgPredicate(t *testing.T) {
 
 func TestRunPredicate_MultiArgPredicate(t *testing.T) {
 	r, _ := NewRegistry()
-	v := Value{VType: TFnDef, Data: FnDefInfo{
+	v := Value{Parent: TFnDef, Data: FnDefInfo{
 		Sigs: []FnSig{{Params: []FnParam{{Type: TAny}, {Type: TAny}}}},
 	}}
 	_, _, err := r.RunPredicate(v, NewInteger(42))
@@ -654,8 +654,8 @@ func TestFlattenDisjunctAlts_Disjunct(t *testing.T) {
 	if len(alts) != 2 {
 		t.Fatalf("got %d alts, want 2", len(alts))
 	}
-	if !alts[0].VType.Equal(TInteger) || !alts[1].VType.Equal(TString) {
-		t.Errorf("got types [%v, %v], want [Integer, String]", alts[0].VType, alts[1].VType)
+	if !alts[0].Parent.Equal(TInteger) || !alts[1].Parent.Equal(TString) {
+		t.Errorf("got types [%v, %v], want [Integer, String]", alts[0].Parent, alts[1].Parent)
 	}
 }
 
@@ -667,8 +667,8 @@ func TestFlattenDisjunctAlts_TypeLiteral(t *testing.T) {
 	if len(alts) != 1 {
 		t.Fatalf("got %d alts, want 1", len(alts))
 	}
-	if !alts[0].VType.Equal(TInteger) {
-		t.Errorf("got %v, want Integer literal", alts[0].VType)
+	if !alts[0].Parent.Equal(TInteger) {
+		t.Errorf("got %v, want Integer literal", alts[0].Parent)
 	}
 }
 
@@ -677,7 +677,7 @@ func TestFlattenDisjunctAlts_DisjunctWithBadPayload(t *testing.T) {
 	// payload that AsDisjunct can't unwrap. The helper should
 	// fall back gracefully to a single-element slice rather than
 	// returning nil or panicking.
-	v := Value{VType: TDisjunct, Data: StrPayload{S: "not a DisjunctInfo"}}
+	v := Value{Parent: TDisjunct, Data: StrPayload{S: "not a DisjunctInfo"}}
 	alts := FlattenDisjunctAlts(v)
 	if len(alts) != 1 {
 		t.Fatalf("got %d alts, want 1 (graceful fallback)", len(alts))

@@ -10,7 +10,7 @@ import (
 //
 // `*Type.Matches` is overridden so that `DepInteger.Matches(TInteger)`
 // is true (used by sig matching). The risk is any code that does
-// `if v.VType.Matches(TString) { _, _ := v.engine.AsString() }` — on a
+// `if v.Parent.Matches(TString) { _, _ := v.engine.AsString() }` — on a
 // DepScalar payload, AsString errors, the underscore swallows the
 // error, and the caller gets a zero value. These tests pin the
 // DepScalar-specific branches in the four most-traveled equality /

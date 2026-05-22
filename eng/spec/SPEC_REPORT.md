@@ -59,7 +59,7 @@ should not be confusable with the concrete scalar payload.
 type literals only for `TMap` and `TList`:
 
 ```go
-if tok.Data == nil && tok.VType.Equal(expectedType) &&
+if tok.Data == nil && tok.Parent.Equal(expectedType) &&
     (expectedType.Equal(TMap) || expectedType.Equal(TList)) {
     break // reject type literals for concrete Map/List
 }
@@ -85,7 +85,7 @@ it should show the type, not a default-zero scalar.
 
 **Observed**: The spec runner's `renderValue` (in
 `eng/go/spec_test.go::renderValue`) goes through the
-`v.VType.Matches(TInteger)` branch first. For a type literal
+`v.Parent.Matches(TInteger)` branch first. For a type literal
 (`Data == nil`), `AsInteger()` returns `0, false` — so the int
 branch happily formats "0":
 
@@ -96,7 +96,7 @@ String   → ""
 Boolean  → "false"
 ```
 
-By contrast, types whose VType doesn't match a scalar leaf fall
+By contrast, types whose Parent doesn't match a scalar leaf fall
 through to the default `v.String()` and print the type path:
 
 ```

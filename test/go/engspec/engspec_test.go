@@ -40,7 +40,7 @@ var specReplayCounter int
 // type-lattice core.
 func registerSpecWords(r *eng.Registry) {
 	toFloat := func(v eng.Value) float64 {
-		if v.VType.Matches(eng.TInteger) {
+		if v.Parent.Matches(eng.TInteger) {
 			n, _ := eng.AsInteger(v)
 			return float64(n)
 		}
@@ -49,7 +49,7 @@ func registerSpecWords(r *eng.Registry) {
 	}
 	numericBinary := func(intOp func(a, b int64) int64, floatOp func(a, b float64) float64) eng.Handler {
 		return func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-			if args[0].VType.Matches(eng.TInteger) && args[1].VType.Matches(eng.TInteger) {
+			if args[0].Parent.Matches(eng.TInteger) && args[1].Parent.Matches(eng.TInteger) {
 				a, _ := eng.AsInteger(args[0])
 				b, _ := eng.AsInteger(args[1])
 				return []eng.Value{eng.NewInteger(intOp(a, b))}, nil
@@ -88,7 +88,7 @@ func registerSpecWords(r *eng.Registry) {
 		Signatures: []eng.NativeSig{{
 			Args: []*eng.Type{eng.TNumber}, BarrierPos: 1,
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-				if args[0].VType.Matches(eng.TInteger) {
+				if args[0].Parent.Matches(eng.TInteger) {
 					n, _ := eng.AsInteger(args[0])
 					return []eng.Value{eng.NewInteger(-n)}, nil
 				}
@@ -446,7 +446,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 			return nil, &eng.AqlError{Code: "type_error", Detail: "def " + name + ": name clash — already a type"}
 		}
 		constraint, _ := nameMap.Get(name)
-		if resolved, _, _ := reg.ResolveTypedNameValue(constraint); resolved.Data != nil || resolved.VType != nil {
+		if resolved, _, _ := reg.ResolveTypedNameValue(constraint); resolved.Data != nil || resolved.Parent != nil {
 			constraint = resolved
 		}
 		body := args[1]
@@ -529,7 +529,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 				NoEvalArgs: map[int]bool{0: true},
 				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					v := args[0]
-					if v.VType.Equal(eng.TList) && v.Data != nil {
+					if v.Parent.Equal(eng.TList) && v.Data != nil {
 						v.Quoted = true
 					}
 					return []eng.Value{v}, nil
@@ -700,7 +700,7 @@ func registerEngSpecTypeWords(r *eng.Registry) {
 				if eng.IsTypedList(list) {
 					ci, _ := eng.AsChildType(list)
 					childType = ci.Child
-					hasChild = childType.VType != nil
+					hasChild = childType.Parent != nil
 				}
 				elems, _ := eng.AsList(list)
 				alts := make([]eng.Value, 0, elems.Len())
@@ -759,7 +759,7 @@ func registerEngSpecStorage(r *eng.Registry) {
 		key := eng.StoreKey(args[0])
 		oi, ok := container.Data.(eng.ObjectInstanceInfo)
 		if !ok {
-			return nil, fmt.Errorf("set: expected an Object instance, got %s", container.VType.String())
+			return nil, fmt.Errorf("set: expected an Object instance, got %s", container.Parent.String())
 		}
 		oi.Fields.Set(key, args[1])
 		return nil, nil
@@ -767,7 +767,7 @@ func registerEngSpecStorage(r *eng.Registry) {
 	setArrayH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 		arr, err := eng.AsArray(args[2])
 		if err != nil {
-			return nil, fmt.Errorf("set: expected an Array, got %s", args[2].VType.String())
+			return nil, fmt.Errorf("set: expected an Array, got %s", args[2].Parent.String())
 		}
 		idx, _ := args[0].AsConcreteInteger()
 		if !arr.Set(int(idx), args[1]) {
@@ -781,9 +781,9 @@ func registerEngSpecStorage(r *eng.Registry) {
 		if container.Data == nil {
 			return nil, fmt.Errorf("get: cannot access property on type literal")
 		}
-		if key.VType.Matches(eng.TInteger) {
+		if key.Parent.Matches(eng.TInteger) {
 			idx, _ := eng.AsInteger(key)
-			if list, _ := eng.AsList(container); !list.IsNil() && container.VType.Matches(eng.TList) {
+			if list, _ := eng.AsList(container); !list.IsNil() && container.Parent.Matches(eng.TList) {
 				i := int(idx)
 				if i < 0 || i >= list.Len() {
 					return []eng.Value{eng.NewTypeLiteral(eng.TNone)}, nil
@@ -825,7 +825,7 @@ func registerEngSpecStorage(r *eng.Registry) {
 	getArrayH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 		arr, err := eng.AsArray(args[1])
 		if err != nil {
-			return nil, fmt.Errorf("get: expected an Array, got %s", args[1].VType.String())
+			return nil, fmt.Errorf("get: expected an Array, got %s", args[1].Parent.String())
 		}
 		idx, _ := args[0].AsConcreteInteger()
 		val, ok := arr.Get(int(idx))
@@ -869,7 +869,7 @@ func registerEngSpecStorage(r *eng.Registry) {
 func registerEngSpecObjectRecord(r *eng.Registry) {
 	recordH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
 		list := args[0]
-		if !list.VType.Equal(eng.TList) {
+		if !list.Parent.Equal(eng.TList) {
 			return nil, fmt.Errorf("record: argument must be a list")
 		}
 		if list.Data == nil {
@@ -881,7 +881,7 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 		}
 		fields := eng.NewOrderedMap()
 		for _, elem := range elems.Slice() {
-			if !elem.VType.Equal(eng.TMap) {
+			if !elem.Parent.Equal(eng.TMap) {
 				return nil, fmt.Errorf("record: each element must be a pair (map), got %s", elem.String())
 			}
 			m, err := eng.AsMutableMap(elem)
@@ -907,7 +907,7 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 	}
 	objectH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
 		fieldsVal := args[0]
-		if !fieldsVal.VType.Equal(eng.TMap) {
+		if !fieldsVal.Parent.Equal(eng.TMap) {
 			return nil, fmt.Errorf("object: argument must be a map of field definitions, got %s", fieldsVal.String())
 		}
 		m, err := eng.AsMutableMap(fieldsVal)
@@ -923,7 +923,7 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 	objectWithParentH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
 		fieldsVal := args[0]
 		parentVal := args[1]
-		if !fieldsVal.VType.Equal(eng.TMap) {
+		if !fieldsVal.Parent.Equal(eng.TMap) {
 			return nil, fmt.Errorf("object: first argument must be a map of field definitions, got %s", fieldsVal.String())
 		}
 		m, err := eng.AsMutableMap(fieldsVal)
@@ -963,14 +963,14 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 	refineCtorH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 		base := args[0]
 		arg := args[1]
-		if base.Data == nil && base.VType.Equal(eng.TObject) {
+		if base.Data == nil && base.Parent.Equal(eng.TObject) {
 			return objectH([]eng.Value{arg}, nil, nil, reg)
 		}
 		if eng.IsObjectType(base) {
 			return objectWithParentH([]eng.Value{arg, base}, nil, nil, reg)
 		}
-		if base.Data == nil && base.VType.Equal(eng.TRecord) {
-			if !arg.VType.Equal(eng.TList) {
+		if base.Data == nil && base.Parent.Equal(eng.TRecord) {
+			if !arg.Parent.Equal(eng.TList) {
 				return nil, fmt.Errorf("refine Record: a record takes a list of field pairs")
 			}
 			return recordH([]eng.Value{arg}, nil, nil, reg)
@@ -1018,7 +1018,7 @@ func registerEngSpecInspect(r *eng.Registry) {
 			return []eng.Value{buildTypeInspection(name, tv)}, nil
 		}
 		if top, ok := r.Defs.Top(name); ok {
-			if eng.IsTypeBody(top) && !top.VType.Equal(eng.TFnDef) && !top.VType.Equal(eng.TFunction) {
+			if eng.IsTypeBody(top) && !top.Parent.Equal(eng.TFnDef) && !top.Parent.Equal(eng.TFunction) {
 				return []eng.Value{buildTypeInspection(name, top)}, nil
 			}
 		}
@@ -1094,9 +1094,9 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 
 	if tv.Data == nil || eng.IsTypeBody(tv) || eng.IsRecordShape(tv) {
 		result.Set("type", eng.NewString("Type"))
-		result.Set("struct", eng.NewString(tv.VType.Leaf()))
+		result.Set("struct", eng.NewString(tv.Parent.Leaf()))
 	} else {
-		result.Set("type", eng.NewString(tv.VType.Leaf()))
+		result.Set("type", eng.NewString(tv.Parent.Leaf()))
 	}
 
 	switch {
@@ -1106,7 +1106,7 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 		fields := eng.NewOrderedMap()
 		for _, k := range rt.Fields.Keys() {
 			v, _ := rt.Fields.Get(k)
-			fields.Set(k, eng.NewString(v.VType.Leaf()))
+			fields.Set(k, eng.NewString(v.Parent.Leaf()))
 		}
 		result.Set("fields", eng.NewMap(fields))
 
@@ -1116,7 +1116,7 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 		fields := eng.NewOrderedMap()
 		for _, k := range m.Keys() {
 			v, _ := m.Get(k)
-			fields.Set(k, eng.NewString(v.VType.Leaf()))
+			fields.Set(k, eng.NewString(v.Parent.Leaf()))
 		}
 		result.Set("fields", eng.NewMap(fields))
 
@@ -1130,7 +1130,7 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 		fields := eng.NewOrderedMap()
 		for _, k := range af.Keys() {
 			v, _ := af.Get(k)
-			fields.Set(k, eng.NewString(v.VType.Leaf()))
+			fields.Set(k, eng.NewString(v.Parent.Leaf()))
 		}
 		result.Set("fields", eng.NewMap(fields))
 
@@ -1140,7 +1140,7 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 		fields := eng.NewOrderedMap()
 		for _, k := range tt.Record.Fields.Keys() {
 			v, _ := tt.Record.Fields.Get(k)
-			fields.Set(k, eng.NewString(v.VType.Leaf()))
+			fields.Set(k, eng.NewString(v.Parent.Leaf()))
 		}
 		result.Set("fields", eng.NewMap(fields))
 
@@ -1149,21 +1149,21 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 		di, _ := eng.AsDisjunct(tv)
 		alts := make([]eng.Value, len(di.Alternatives))
 		for i, alt := range di.Alternatives {
-			alts[i] = eng.NewString(alt.VType.String())
+			alts[i] = eng.NewString(alt.Parent.String())
 		}
 		result.Set("alternatives", eng.NewList(alts))
 
 	case eng.IsTypedList(tv):
 		result.Set("kind", eng.NewAtom("typed_list"))
 		ci, _ := eng.AsChildType(tv)
-		result.Set("child", eng.NewString(ci.Child.VType.String()))
+		result.Set("child", eng.NewString(ci.Child.Parent.String()))
 
 	case eng.IsTypedMap(tv):
 		result.Set("kind", eng.NewAtom("typed_map"))
 		ci, _ := eng.AsChildType(tv)
-		result.Set("child", eng.NewString(ci.Child.VType.String()))
+		result.Set("child", eng.NewString(ci.Child.Parent.String()))
 
-	case tv.VType.Equal(eng.TFnUndef):
+	case tv.Parent.Equal(eng.TFnUndef):
 		result.Set("kind", eng.NewAtom("function_shape"))
 		uInfo, _ := tv.Data.(eng.FnUndefInfo)
 		sigs := make([]eng.Value, 0, len(uInfo.Sigs))
@@ -1186,7 +1186,7 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 	case tv.IsDepScalar():
 		result.Set("kind", eng.NewAtom("dependent_scalar"))
 		info, _ := tv.AsDepScalar()
-		result.Set("leaf", eng.NewString(eng.DependentLeafFromType(tv.VType)))
+		result.Set("leaf", eng.NewString(eng.DependentLeafFromType(tv.Parent)))
 		if info.Lo != nil {
 			lo := eng.NewOrderedMap()
 			lo.Set("kind", eng.NewString(eng.BoundToKind(info.Lo, true).String()))
@@ -1333,7 +1333,7 @@ func registerEngSpecDo(r *eng.Registry) {
 // Records, options, table types, typed lists / maps are left
 // untouched — only plain concrete lists and maps are walked.
 func doEvalMapValue(r *eng.Registry, v eng.Value) (eng.Value, error) {
-	if v.VType.Equal(eng.TList) && v.Data != nil && !eng.IsTypedList(v) && !eng.IsTableType(v) {
+	if v.Parent.Equal(eng.TList) && v.Data != nil && !eng.IsTypedList(v) && !eng.IsTableType(v) {
 		lst, _ := eng.AsList(v)
 		sub := eng.New(r)
 		input := make([]eng.Value, lst.Len())
@@ -1349,7 +1349,7 @@ func doEvalMapValue(r *eng.Registry, v eng.Value) (eng.Value, error) {
 		}
 		return eng.NewList(results), nil
 	}
-	if v.VType.Equal(eng.TMap) && v.Data != nil && !eng.IsTypedMap(v) && !eng.IsRecordType(v) && !eng.IsOptionsType(v) {
+	if v.Parent.Equal(eng.TMap) && v.Data != nil && !eng.IsTypedMap(v) && !eng.IsRecordType(v) && !eng.IsOptionsType(v) {
 		m, err := eng.AsMap(v)
 		if err != nil || m == nil {
 			return v, nil
@@ -1372,7 +1372,7 @@ func doEvalMapValue(r *eng.Registry, v eng.Value) (eng.Value, error) {
 // payload names a registered function — so `{op:[1 "add" 2]}` lets
 // `do` dispatch "add" as a callable inside the embedded list.
 func doPromoteToWord(r *eng.Registry, v eng.Value) eng.Value {
-	if v.VType.Matches(eng.TString) || v.VType.Matches(eng.TAtom) {
+	if v.Parent.Matches(eng.TString) || v.Parent.Matches(eng.TAtom) {
 		name, _ := eng.AsString(v)
 		if r.Lookup(name) != nil {
 			return eng.NewWord(name)

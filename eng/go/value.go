@@ -519,7 +519,7 @@ type ForwardInfo struct {
 // Each ID is the prefix followed by 12 lowercase hex characters (6 random bytes).
 type Value struct {
 	ID        string
-	VType     *Type
+	Parent    *Type
 	Data      Payload // the kernel-known data payload; see payload.go for variants
 	Quoted    bool    // true when value was produced by the quote word; prevents auto-evaluation
 	Eval      bool    // true for parser-created lists that should auto-evaluate at end of Run
@@ -586,9 +586,9 @@ func IDPrefixForType(t *Type) string {
 // — wrap it in IntPayload / StrPayload / TimePayload / etc. first.
 func NewValueRaw(t *Type, data Payload) Value {
 	return Value{
-		ID:    GenerateID(IDPrefixForType(t)),
-		VType: t,
-		Data:  data,
+		ID:     GenerateID(IDPrefixForType(t)),
+		Parent: t,
+		Data:   data,
 	}
 }
 
@@ -612,7 +612,7 @@ func NewString(s string) Value {
 	return NewValueRaw(TStringProper, StrPayload{S: s})
 }
 
-// NewInteger creates a number/integer value with VType = Scalar/Number/Integer.
+// NewInteger creates a number/integer value with Parent = Scalar/Number/Integer.
 // Specific-value dispatch (e.g. `def fact[0] (1)`) routes through
 // Signature.Patterns, not through a per-value type-path leaf. See
 // the NewString comment for the rationale.
@@ -710,7 +710,7 @@ func NewImplicitMap(entries *OrderedMap) Value {
 // `{x:Integer}` or `[x:Integer]` inside an fn sig). Used to
 // discriminate record-shape patterns from concrete maps.
 func IsImplicitMap(v Value) bool {
-	if !v.VType.Equal(TMap) || v.Data == nil {
+	if !v.Parent.Equal(TMap) || v.Data == nil {
 		return false
 	}
 	if mp, ok := v.Data.(MapPayload); ok {
@@ -779,7 +779,7 @@ func NewNone() Value {
 // Is reports whether v satisfies type t, routed through t.Behavior.
 // The canonical dispatch point for "is v a T?" — used by handlers,
 // the matcher, and `is` / `guard`. Default Behavior delegates to the
-// lattice walk (v.VType.Matches(t)); types with custom Behavior
+// lattice walk (v.Parent.Matches(t)); types with custom Behavior
 // override (predicate types invoke their body, record types check
 // field-by-field conformance, etc.).
 //
@@ -792,7 +792,7 @@ func (v Value) Is(t *Type) bool {
 		return false
 	}
 	if t.Behavior == nil {
-		return v.VType.Matches(t)
+		return v.Parent.Matches(t)
 	}
 	return t.Behavior.Match(v, t)
 }
@@ -800,7 +800,7 @@ func (v Value) Is(t *Type) bool {
 // IsNone reports whether v is the value `none` (not the None type
 // literal). The check distinguishes the inhabitant from the type.
 func IsNone(v Value) bool {
-	if !v.VType.Equal(TNone) {
+	if !v.Parent.Equal(TNone) {
 		return false
 	}
 	if _, ok := v.Data.(NonePayload); ok {
@@ -836,14 +836,14 @@ func NewOpenParen() Value {
 }
 
 // NewCloseParen creates a close-paren marker value. Emitted by the
-// parser for `)` so the engine can recognise it by VType identity
+// parser for `)` so the engine can recognise it by Parent identity
 // instead of by string compare.
 func NewCloseParen() Value {
 	return NewValueRaw(TCloseParen, nil)
 }
 
 // NewEnd creates an end-marker value (the `end` / `;` keyword).
-// Emitted by the parser so the engine can recognise it by VType
+// Emitted by the parser so the engine can recognise it by Parent
 // identity instead of by string compare.
 func NewEnd() Value {
 	return NewValueRaw(TEnd, nil)
@@ -1043,7 +1043,7 @@ func NewError(err error) Value {
 
 // IsError reports whether this value is an error.
 func IsError(v Value) bool {
-	return v.VType.Equal(TError)
+	return v.Parent.Equal(TError)
 }
 
 // AsError returns the ErrorInfo for an error value.
@@ -1065,7 +1065,7 @@ type TimeoutInfo struct {
 // NewTimeout, IsTimeout, AsTimeout moved to lang/go/engine/native_misc.go
 // (Step 8). Callers that need them use engine.NewTimeout /
 // engine.AsTimeout, etc. The IsTimeout method is replaced by
-// `v.VType.Equal(engine.TTimeout)` at call sites.
+// `v.Parent.Equal(engine.TTimeout)` at call sites.
 
 // IntervalInfo holds a repeating interval handle.
 type IntervalInfo struct {
@@ -1081,37 +1081,37 @@ type IntervalInfo struct {
 
 // IsWord reports whether this value is a word (function reference).
 func IsWord(v Value) bool {
-	return v.VType.Equal(TWord)
+	return v.Parent.Equal(TWord)
 }
 
 // IsForward reports whether this value is a forward primitive.
 func IsForward(v Value) bool {
-	return v.VType.Equal(TForward)
+	return v.Parent.Equal(TForward)
 }
 
 // IsBoolean reports whether this value is a boolean type.
 func IsBoolean(v Value) bool {
-	return v.VType.Matches(TBoolean)
+	return v.Parent.Matches(TBoolean)
 }
 
 // IsOpenParen reports whether this value is an open-paren marker.
 func IsOpenParen(v Value) bool {
-	return v.VType.Equal(TOpenParen)
+	return v.Parent.Equal(TOpenParen)
 }
 
 // IsCloseParen reports whether this value is a close-paren marker.
 func IsCloseParen(v Value) bool {
-	return v.VType.Equal(TCloseParen)
+	return v.Parent.Equal(TCloseParen)
 }
 
 // IsEnd reports whether this value is an end-marker.
 func IsEnd(v Value) bool {
-	return v.VType.Equal(TEnd)
+	return v.Parent.Equal(TEnd)
 }
 
 // IsParenExpr reports whether this value is a paren expression.
 func IsParenExpr(v Value) bool {
-	return v.VType.Equal(TParenExpr)
+	return v.Parent.Equal(TParenExpr)
 }
 
 // AsParenExpr returns the items in a paren expression value.
@@ -1124,7 +1124,7 @@ func AsParenExpr(v Value) ([]Value, error) {
 
 // IsInterpString reports whether this value is an interpolated string.
 func IsInterpString(v Value) bool {
-	return v.VType.Equal(TInterpString)
+	return v.Parent.Equal(TInterpString)
 }
 
 // AsInterpString returns the parts of an interpolated string value.
@@ -1137,7 +1137,7 @@ func AsInterpString(v Value) ([]InterpPart, error) {
 
 // IsMark reports whether this value is a mark.
 func IsMark(v Value) bool {
-	return v.VType.Equal(TMark)
+	return v.Parent.Equal(TMark)
 }
 
 // AsMark returns the MarkInfo, panics if not a mark.
@@ -1151,7 +1151,7 @@ func AsMark(v Value) (MarkInfo, error) {
 
 // IsMove reports whether this value is a move.
 func IsMove(v Value) bool {
-	return v.VType.Equal(TMove)
+	return v.Parent.Equal(TMove)
 }
 
 // AsMove returns the MoveInfo, panics if not a move.
@@ -1165,7 +1165,7 @@ func AsMove(v Value) (MoveInfo, error) {
 
 // IsReturnCheck reports whether this value is a return-check marker.
 func IsReturnCheck(v Value) bool {
-	return v.VType.Equal(TReturnCheck)
+	return v.Parent.Equal(TReturnCheck)
 }
 
 // AsReturnCheck returns the ReturnCheckInfo, panics if not a return-check.
@@ -1179,7 +1179,7 @@ func AsReturnCheck(v Value) (ReturnCheckInfo, error) {
 
 // IsDefCleanup reports whether this value is a def-cleanup marker.
 func IsDefCleanup(v Value) bool {
-	return v.VType.Equal(TDefCleanup)
+	return v.Parent.Equal(TDefCleanup)
 }
 
 // AsDefCleanup returns the DefCleanupInfo, panics if not a def-cleanup.
@@ -1196,7 +1196,7 @@ func AsDefCleanup(v Value) (DefCleanupInfo, error) {
 // (Type/Disjunct/Enum).
 func IsDisjunct(v Value) bool {
 	_, ok := v.Data.(DisjunctInfo)
-	return ok && v.VType.Matches(TDisjunct)
+	return ok && v.Parent.Matches(TDisjunct)
 }
 
 // AsDisjunct returns the DisjunctInfo, panics if not a disjunct.
@@ -1210,8 +1210,8 @@ func AsDisjunct(v Value) (DisjunctInfo, error) {
 
 // IsObjectType reports whether this value is an object type definition.
 // The test is payload-based: any value carrying ObjectTypeInfo is an
-// object type, regardless of where its VType sits in the lattice — a
-// builtin like Resource is an object type whose VType is the peer
+// object type, regardless of where its Parent sits in the lattice — a
+// builtin like Resource is an object type whose Parent is the peer
 // Ideal kind Ideal/Resource, not a descendant of Ideal/Object.
 func IsObjectType(v Value) bool {
 	_, ok := v.Data.(ObjectTypeInfo)
@@ -1230,7 +1230,7 @@ func AsObjectType(v Value) (ObjectTypeInfo, error) {
 // IsStore reports whether this value is a Store instance.
 func IsStore(v Value) bool {
 	_, ok := v.Data.(*StoreInstanceInfo)
-	return ok && v.VType.Matches(TStore)
+	return ok && v.Parent.Matches(TStore)
 }
 
 // AsStore returns the StoreInstanceInfo pointer. Returns an error if not a store.
@@ -1245,7 +1245,7 @@ func AsStore(v Value) (*StoreInstanceInfo, error) {
 // IsArray reports whether this value is an Array instance.
 func IsArray(v Value) bool {
 	_, ok := v.Data.(*ArrayInstanceInfo)
-	return ok && v.VType.Matches(TArray)
+	return ok && v.Parent.Matches(TArray)
 }
 
 // AsArray returns the ArrayInstanceInfo pointer. Returns an error if not an array.
@@ -1275,7 +1275,7 @@ func AsObjectInstance(v Value) (ObjectInstanceInfo, error) {
 
 // IsModule reports whether this value is a module descriptor.
 func IsModule(v Value) bool {
-	return v.VType.Equal(TModule)
+	return v.Parent.Equal(TModule)
 }
 
 // AsModule returns the ModuleDesc, panics if not a module.
@@ -1291,7 +1291,7 @@ func AsModule(v Value) (ModuleDesc, error) {
 // IsPath reports whether this value is a Path.
 func IsPath(v Value) bool {
 	_, ok := v.Data.(PathPayload)
-	return ok && v.VType.Equal(TPath)
+	return ok && v.Parent.Equal(TPath)
 }
 
 // AsPath returns the PathInfo, or an error if the value is not a path.
@@ -1303,7 +1303,7 @@ func AsPath(v Value) (PathInfo, error) {
 }
 
 func IsAtom(v Value) bool {
-	return v.VType.Equal(TAtom)
+	return v.Parent.Equal(TAtom)
 }
 
 // AsAtom returns the string payload. Returns "" if Data is nil.
@@ -1320,19 +1320,19 @@ func AsAtom(v Value) (string, error) {
 // IsTypedList reports whether this value is a typed list (has child type constraint).
 func IsTypedList(v Value) bool {
 	_, ok := v.Data.(ChildTypeInfo)
-	return ok && v.VType.Equal(TList)
+	return ok && v.Parent.Equal(TList)
 }
 
 // IsTypedMap reports whether this value is a typed map (has child type constraint).
 func IsTypedMap(v Value) bool {
 	_, ok := v.Data.(ChildTypeInfo)
-	return ok && v.VType.Equal(TMap)
+	return ok && v.Parent.Equal(TMap)
 }
 
 // IsRecordType reports whether this value is a record type (map with field schema).
 func IsRecordType(v Value) bool {
 	_, ok := v.Data.(RecordTypeInfo)
-	return ok && v.VType.Equal(TMap)
+	return ok && v.Parent.Equal(TMap)
 }
 
 // AsRecordType returns the RecordTypeInfo, panics if not a record type.
@@ -1347,7 +1347,7 @@ func AsRecordType(v Value) (RecordTypeInfo, error) {
 // IsOptionsType reports whether this value is an options type (map with defaults/constraints).
 func IsOptionsType(v Value) bool {
 	_, ok := v.Data.(OptionsTypeInfo)
-	return ok && v.VType.Equal(TMap)
+	return ok && v.Parent.Equal(TMap)
 }
 
 // AsOptionsType returns the OptionsTypeInfo, panics if not an options type.
@@ -1361,7 +1361,7 @@ func AsOptionsType(v Value) (OptionsTypeInfo, error) {
 
 // IsTableType reports whether this value is a table type (list with record schema).
 func IsTableType(v Value) bool {
-	if v.VType.Equal(TList) {
+	if v.Parent.Equal(TList) {
 		if _, ok := v.Data.(TableTypeInfo); ok {
 			return true
 		}
@@ -1459,7 +1459,7 @@ func AsDecimal(v Value) (float64, error) {
 // AsNumber returns the numeric value as float64 regardless of whether it is
 // an integer or decimal.
 func AsNumber(v Value) (float64, error) {
-	if v.VType.Matches(TDecimal) {
+	if v.Parent.Matches(TDecimal) {
 		f, err := AsDecimal(v)
 		return f, err
 	}
@@ -1586,8 +1586,8 @@ func (v Value) String() string {
 	// their leaf type name uniformly across all types, including
 	// types with custom Behaviors. See the Data==nil arm in
 	// kernelFormatDefault.
-	if v.Data != nil && v.VType != nil {
-		for t := v.VType; t != nil; t = t.Parent {
+	if v.Data != nil && v.Parent != nil {
+		for t := v.Parent; t != nil; t = t.Parent {
 			if t.Behavior == nil || t.Behavior == DefaultBehavior {
 				continue
 			}
@@ -1651,26 +1651,26 @@ func kernelFormatDefault(v Value) string {
 		// Type literal with no specific value (e.g. "Integer", "List").
 		// Render as the LEAF — type names are globally unique so the
 		// leaf alone is unambiguous.
-		return v.VType.Leaf()
+		return v.Parent.Leaf()
 	case v.IsDepScalar():
 		// Must come before TString / TInteger / TDecimal matches: the
 		// lattice override makes DepString.Matches(TString) (and the
 		// numeric counterparts) true, so without this case the value
 		// payload would be cast to the wrong concrete type.
 		return renderDepScalar(v)
-	case v.VType.Matches(TString):
+	case v.Parent.Matches(TString):
 		s, _ := AsString(v)
 		return fmt.Sprintf("'%s'", s)
-	case v.VType.Equal(TAtom):
+	case v.Parent.Equal(TAtom):
 		s, _ := AsAtom(v)
 		return s
-	case v.VType.Matches(TDecimal):
+	case v.Parent.Matches(TDecimal):
 		_as4, _ := AsDecimal(v)
 		return formatDecimal(_as4)
-	case v.VType.Matches(TInteger):
+	case v.Parent.Matches(TInteger):
 		n, _ := AsInteger(v)
 		return fmt.Sprintf("%d", n)
-	case v.VType.Matches(TBoolean):
+	case v.Parent.Matches(TBoolean):
 		_as5, _ := AsBoolean(v)
 		if _as5 {
 			return "true"
@@ -1736,7 +1736,7 @@ func kernelFormatDefault(v Value) string {
 	// Behavior dispatch routes Map values (and TMap-rooted subtypes
 	// like RecordType/OptionsType) there.
 	default:
-		return fmt.Sprintf("%v(%v)", v.VType, v.Data)
+		return fmt.Sprintf("%v(%v)", v.Parent, v.Data)
 	}
 }
 
@@ -1744,7 +1744,7 @@ func kernelFormatDefault(v Value) string {
 // or a Node that contains a leaf that is a type.
 func IsTypeValue(v Value) bool {
 	// Type literal: Data==nil with a real type (not None).
-	if v.Data == nil && !v.VType.Equal(TNone) {
+	if v.Data == nil && !v.Parent.Equal(TNone) {
 		return true
 	}
 
@@ -1755,7 +1755,7 @@ func IsTypeValue(v Value) bool {
 	}
 
 	// Concrete list: check each element recursively.
-	if v.VType.Matches(TList) && v.Data != nil {
+	if v.Parent.Matches(TList) && v.Data != nil {
 		elems, _ := AsList(v)
 		if !elems.IsNil() {
 			for _, elem := range elems.Slice() {
@@ -1767,7 +1767,7 @@ func IsTypeValue(v Value) bool {
 	}
 
 	// Concrete map: check each value recursively.
-	if v.VType.Matches(TMap) && v.Data != nil {
+	if v.Parent.Matches(TMap) && v.Data != nil {
 		m, _ := AsMap(v)
 		if m != nil {
 			for _, key := range m.Keys() {

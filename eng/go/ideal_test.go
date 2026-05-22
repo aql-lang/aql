@@ -18,11 +18,11 @@ func TestIdealRegistry_ForResolvesByAccepts(t *testing.T) {
 	ir := NewIdealRegistry()
 	ir.Register(&Ideal{
 		Name: "Stringy", Enabled: true,
-		Accepts: func(v Value) bool { return v.VType.Matches(TString) },
+		Accepts: func(v Value) bool { return v.Parent.Matches(TString) },
 	})
 	ir.Register(&Ideal{
 		Name: "Inty", Enabled: true,
-		Accepts: func(v Value) bool { return v.VType.Matches(TInteger) },
+		Accepts: func(v Value) bool { return v.Parent.Matches(TInteger) },
 	})
 	if id := ir.For(NewString("x")); id == nil || id.Name != "Stringy" {
 		t.Errorf("For(string) = %v, want Stringy", id)
@@ -94,11 +94,11 @@ func TestIdealRegistry_Match(t *testing.T) {
 	ir := NewIdealRegistry()
 	ir.Register(&Ideal{
 		Name: "Off", Enabled: false,
-		Accepts: func(v Value) bool { return v.VType.Matches(TString) },
+		Accepts: func(v Value) bool { return v.Parent.Matches(TString) },
 	})
 	ir.Register(&Ideal{
 		Name: "On", Enabled: true,
-		Accepts: func(v Value) bool { return v.VType.Matches(TInteger) },
+		Accepts: func(v Value) bool { return v.Parent.Matches(TInteger) },
 	})
 	if id := ir.Match(NewString("x")); id == nil || id.Name != "Off" {
 		t.Errorf("Match(string) = %v, want Off (Match reports disabled kinds)", id)
@@ -142,11 +142,11 @@ func TestIdeal_Refines(t *testing.T) {
 	ir := NewIdealRegistry()
 	base := &Ideal{
 		Name: "Tensor", Enabled: true,
-		Accepts: func(v Value) bool { return v.VType.Matches(TInteger) },
+		Accepts: func(v Value) bool { return v.Parent.Matches(TInteger) },
 	}
 	ref := &Ideal{
 		Name: "Matrix", Enabled: true, Refines: base,
-		Accepts: func(v Value) bool { return v.VType.Matches(TString) },
+		Accepts: func(v Value) bool { return v.Parent.Matches(TString) },
 	}
 	ir.Register(base)
 	ir.Register(ref)

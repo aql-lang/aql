@@ -16,7 +16,7 @@ func setpathHandler(args []Value, ctx map[string]Value, stack []Value, r *Regist
 	// Find the string arg — that's always the path.
 	pathIdx := -1
 	for i := range args {
-		if args[i].VType.Matches(TString) {
+		if args[i].Parent.Matches(TString) {
 			pathIdx = i
 			break
 		}
@@ -51,11 +51,11 @@ func setpathHandler(args []Value, ctx map[string]Value, stack []Value, r *Regist
 		// Normal order: first=data, second=newVal
 		// But if first is after the path and second is even later (all forward),
 		// or if last arg is a map/list (likely data from stack), adjust.
-		if (a.VType.Matches(TMap) || a.VType.Matches(TList)) &&
-			!(b.VType.Matches(TMap) || b.VType.Matches(TList)) {
+		if (a.Parent.Matches(TMap) || a.Parent.Matches(TList)) &&
+			!(b.Parent.Matches(TMap) || b.Parent.Matches(TList)) {
 			data, newVal = a, b
-		} else if (b.VType.Matches(TMap) || b.VType.Matches(TList)) &&
-			!(a.VType.Matches(TMap) || a.VType.Matches(TList)) {
+		} else if (b.Parent.Matches(TMap) || b.Parent.Matches(TList)) &&
+			!(a.Parent.Matches(TMap) || a.Parent.Matches(TList)) {
 			data, newVal = b, a
 		} else {
 			// Both same type — use original convention: args[0]=data, args[2]=newVal

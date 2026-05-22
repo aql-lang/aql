@@ -221,7 +221,7 @@ func (tt *TypeTable) mintID(parent *Type) string {
 // MintType creates a fresh *Type with Origin=OriginUserDef and
 // registers it in byID. The returned *Type is unbound — call Bind to
 // associate it with a user-facing name. Callers typically mint, then
-// construct a body Value using the returned *Type as its VType, then
+// construct a body Value using the returned *Type as its Parent, then
 // Bind. Anonymous types (e.g. `object {…}` not installed by name)
 // skip the Bind step and just keep the *Type as the Value's identity.
 //

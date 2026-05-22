@@ -22,7 +22,7 @@ func makeTable(columns []string, rows [][]Value) Value {
 		rowValues = append(rowValues, NewMap(m))
 	}
 
-	return Value{VType: TList, Data: TableData{
+	return Value{Parent: TList, Data: TableData{
 		Record: rec,
 		Rows:   rowValues,
 	}}

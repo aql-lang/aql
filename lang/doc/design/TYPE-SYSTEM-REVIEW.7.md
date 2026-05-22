@@ -48,9 +48,9 @@ both sides being disjuncts produces the full DNF expansion.
 
 `tall` calls the same helper, so n-ary intersections distribute
 through every fold step. The dedup uses `valuesEqual` guarded by
-`VType.Equal` (the existing convention — `valuesEqual` shortcuts
-to true on Data==nil regardless of VType, so callers that compare
-type literals must pre-check VType).
+`Parent.Equal` (the existing convention — `valuesEqual` shortcuts
+to true on Data==nil regardless of Parent, so callers that compare
+type literals must pre-check Parent).
 
 Tests in `lang/go/test/type_distribute_test.go` cover left- and
 right-side disjuncts, both-side cross product, full DNF collapse to
@@ -161,11 +161,11 @@ storage shape; defer until a concrete need emerges.
 `Bound2` (a closed-interval shape — see 1.3). Set membership, regex,
 length still need richer payloads — same disposition as 2.2.
 
-### 2.4 Display lossiness — `VType.Matches` panic risk — RESOLVED (hot paths)
+### 2.4 Display lossiness — `Parent.Matches` panic risk — RESOLVED (hot paths)
 
 `Type.Matches` is overridden so `DepString.Matches(TString)` returns
 `true` (`internal/engine/types.go:340-396`). Helpful for sig matching;
-hazardous for any code that does `if v.VType.Matches(TString)
+hazardous for any code that does `if v.Parent.Matches(TString)
 { s, _ := v.AsString() … }` — `AsString` errors but the underscore
 swallows it, leaving the caller with a zero-value silent miscompile.
 
@@ -390,7 +390,7 @@ Tests in `lang/go/test/type_shadow_test.go`.
 ### 6.1 No predicate-type CheckMode analysis — PARTIAL (DepScalar resolved)
 
 `defTypedHandler` now has a `r.Check.Mode && constraint.IsDepScalar()`
-short-circuit: when the body's VType matches the dependent's base
+short-circuit: when the body's Parent matches the dependent's base
 type, the binding is accepted symbolically (the per-value check
 stays runtime-only). Cross-base mismatches still reject. This makes
 `def x:G10 15` flow through `aql check` cleanly — runtime catches

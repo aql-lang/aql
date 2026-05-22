@@ -131,7 +131,7 @@ func TestPrintTable(t *testing.T) {
 	row2.Set("x", NewInteger(2))
 	row2.Set("y", NewString("b"))
 
-	table := Value{VType: TList, Data: TableData{
+	table := Value{Parent: TList, Data: TableData{
 		Record: recType,
 		Rows:   []Value{NewMap(row1), NewMap(row2)},
 	}}
@@ -187,7 +187,7 @@ func TestPrintEmptyTable(t *testing.T) {
 
 	fields := NewOrderedMap()
 	recType := RecordTypeInfo{Fields: fields}
-	table := Value{VType: TList, Data: TableData{
+	table := Value{Parent: TList, Data: TableData{
 		Record: recType,
 		Rows:   nil,
 	}}
@@ -272,7 +272,7 @@ func TestFormatValueJSON(t *testing.T) {
 		{"integer", NewInteger(7), "7"},
 		{"bool_true", NewBoolean(true), "true"},
 		{"bool_false", NewBoolean(false), "false"},
-		{"none", Value{VType: TNone}, "null"},
+		{"none", Value{Parent: TNone}, "null"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

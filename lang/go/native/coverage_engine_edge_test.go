@@ -72,7 +72,7 @@ func TestUnmatchedCloseParen(t *testing.T) {
 func TestResolveWordValueTrue(t *testing.T) {
 	v := ResolveWordValue(NewWord("true"))
 	_as35, _ := AsBoolean(v)
-	if !v.VType.Matches(TBoolean) || !_as35 {
+	if !v.Parent.Matches(TBoolean) || !_as35 {
 		t.Errorf("expected boolean true, got %s", v)
 	}
 }
@@ -80,28 +80,28 @@ func TestResolveWordValueTrue(t *testing.T) {
 func TestResolveWordValueFalse(t *testing.T) {
 	v := ResolveWordValue(NewWord("false"))
 	_as36, _ := AsBoolean(v)
-	if !v.VType.Matches(TBoolean) || _as36 {
+	if !v.Parent.Matches(TBoolean) || _as36 {
 		t.Errorf("expected boolean false, got %s", v)
 	}
 }
 
 func TestResolveWordValueNone(t *testing.T) {
 	v := ResolveWordValue(NewWord("None"))
-	if !v.VType.Equal(TNone) {
+	if !v.Parent.Equal(TNone) {
 		t.Errorf("expected none, got %s", v)
 	}
 }
 
 func TestResolveWordValueOther(t *testing.T) {
 	v := ResolveWordValue(NewWord("foo"))
-	if !v.VType.Equal(TAtom) {
+	if !v.Parent.Equal(TAtom) {
 		t.Errorf("expected atom, got %s", v)
 	}
 }
 
 func TestResolveWordValueNonWord(t *testing.T) {
 	v := ResolveWordValue(NewInteger(42))
-	if !v.VType.Matches(TInteger) {
+	if !v.Parent.Matches(TInteger) {
 		t.Errorf("expected integer passthrough, got %s", v)
 	}
 }
@@ -176,8 +176,8 @@ func TestResolveSigTypeMap(t *testing.T) {
 	if pattern == nil {
 		t.Fatal("expected non-nil pattern for map")
 	}
-	if !pattern.VType.Equal(TMap) {
-		t.Errorf("expected pattern to be a map, got %s", pattern.VType)
+	if !pattern.Parent.Equal(TMap) {
+		t.Errorf("expected pattern to be a map, got %s", pattern.Parent)
 	}
 }
 
@@ -355,7 +355,7 @@ func TestEncodeTableData(t *testing.T) {
 	row.Set("name", NewString("alice"))
 	row.Set("age", NewInteger(30))
 	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
-	v := Value{VType: TList, Data: td}
+	v := Value{Parent: TList, Data: td}
 
 	encoded, err := encodeDelimited(v, ",")
 	if err != nil {
@@ -374,7 +374,7 @@ func TestEncodeQuotedStrings(t *testing.T) {
 	row := NewOrderedMap()
 	row.Set("val", NewString("has,comma"))
 	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
-	v := Value{VType: TList, Data: td}
+	v := Value{Parent: TList, Data: td}
 
 	encoded, err := encodeDelimited(v, ",")
 	if err != nil {
@@ -403,7 +403,7 @@ func TestEncodeEmptyColumns(t *testing.T) {
 	fields := NewOrderedMap()
 	rec := RecordTypeInfo{Fields: fields}
 	td := TableData{Record: rec, Rows: nil}
-	v := Value{VType: TList, Data: td}
+	v := Value{Parent: TList, Data: td}
 
 	encoded, err := encodeDelimited(v, ",")
 	if err != nil {
@@ -580,8 +580,8 @@ func TestUnifyTypedListWithConcrete(t *testing.T) {
 	if !ok {
 		t.Fatal("expected typed list to unify with concrete list")
 	}
-	if !result.VType.Equal(TList) {
-		t.Errorf("expected list, got %s", result.VType)
+	if !result.Parent.Equal(TList) {
+		t.Errorf("expected list, got %s", result.Parent)
 	}
 }
 
@@ -925,8 +925,8 @@ func TestMakeConvertToAtom(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
-	if !v.VType.Equal(TAtom) {
-		t.Errorf("expected atom, got %s", v.VType)
+	if !v.Parent.Equal(TAtom) {
+		t.Errorf("expected atom, got %s", v.Parent)
 	}
 }
 

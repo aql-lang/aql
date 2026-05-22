@@ -45,7 +45,7 @@ func (k DepKind) String() string {
 
 // DepBound is one side of a dependent-scalar constraint: a comparison
 // against a concrete bound. Inclusive distinguishes weak (≤, ≥) from
-// strict (<, >). The bound's VType pins the base scalar type for the
+// strict (<, >). The bound's Parent pins the base scalar type for the
 // containing DepScalar.
 type DepBound struct {
 	Inclusive bool  // true → GTE/LTE, false → GT/LT
@@ -117,20 +117,20 @@ func BoundToKind(b *DepBound, lower bool) DepKind {
 }
 
 // NewDepScalar builds a DepScalar Value from a comparison kind and a
-// concrete bound. The bound's VType determines the base type of the
+// concrete bound. The bound's Parent determines the base type of the
 // dependent constraint and selects the leaf name in the resulting
-// Type/Dependent/Dep<Leaf> path. Returns a Value with a None VType
+// Type/Dependent/Dep<Leaf> path. Returns a Value with a None Parent
 // (and no payload) if the bound is not a scalar or kind doesn't
 // decompose into a single bound — callers are expected to validate
 // types before constructing.
 func NewDepScalar(kind DepKind, bound Value) Value {
-	leaf := dependentLeafFromBoundType(bound.VType)
+	leaf := dependentLeafFromBoundType(bound.Parent)
 	if leaf == "" {
-		return Value{VType: TNone}
+		return Value{Parent: TNone}
 	}
 	db, lower, ok := kindToBound(kind, bound)
 	if !ok {
-		return Value{VType: TNone}
+		return Value{Parent: TNone}
 	}
 	t, _ := NewType("Type/Dependent/Dep" + leaf)
 	info := DepScalarInfo{}
@@ -212,7 +212,7 @@ func DependentLeafFromType(t *Type) string {
 
 // IsDepScalar reports whether the value is any dependent scalar type.
 func (v Value) IsDepScalar() bool {
-	return DependentLeafFromType(v.VType) != ""
+	return DependentLeafFromType(v.Parent) != ""
 }
 
 // AsDepScalar extracts the DepScalarInfo payload.
@@ -273,7 +273,7 @@ func boundsEqual(a, b *DepBound) bool {
 	if a.Inclusive != b.Inclusive {
 		return false
 	}
-	if !a.Value.VType.Equal(b.Value.VType) {
+	if !a.Value.Parent.Equal(b.Value.Parent) {
 		return false
 	}
 	return ValuesEqual(a.Value, b.Value)
@@ -326,7 +326,7 @@ func renderDepScalar(v Value) string {
 	if err != nil {
 		return ""
 	}
-	return formatDepScalar(DependentLeafFromType(v.VType), info)
+	return formatDepScalar(DependentLeafFromType(v.Parent), info)
 }
 
 // tightenSameSide combines two same-side bounds (both lower, or both
@@ -430,18 +430,18 @@ func MakeDepScalarSig(opName string, kind DepKind) NativeSig {
 			// to a Dependent leaf name.
 			if IsConcrete(args[1]) {
 				return nil, fmt.Errorf("%s: dependent constructor needs a scalar type literal, got concrete %s",
-					opName, args[1].VType.String())
+					opName, args[1].Parent.String())
 			}
-			leaf := dependentLeafFromBoundType(args[1].VType)
+			leaf := dependentLeafFromBoundType(args[1].Parent)
 			if leaf == "" {
 				return nil, fmt.Errorf("%s: dependent constructor does not support base type %s",
-					opName, args[1].VType.String())
+					opName, args[1].Parent.String())
 			}
 			// Bound must be the same scalar base as the type literal.
 			base, _ := DependentLeafBaseType(leaf)
-			if !args[0].VType.Matches(base) {
+			if !args[0].Parent.Matches(base) {
 				return nil, fmt.Errorf("%s: bound %s does not match dependent base %s",
-					opName, args[0].VType.String(), base.String())
+					opName, args[0].Parent.String(), base.String())
 			}
 			return []Value{NewDepScalar(kind, args[0])}, nil
 		},
@@ -458,21 +458,21 @@ func MakeDepScalarSig(opName string, kind DepKind) NativeSig {
 func BetweenHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	if IsConcrete(args[2]) {
 		return nil, fmt.Errorf("between: type arg must be a scalar type literal, got concrete %s",
-			args[2].VType.String())
+			args[2].Parent.String())
 	}
-	leaf := dependentLeafFromBoundType(args[2].VType)
+	leaf := dependentLeafFromBoundType(args[2].Parent)
 	if leaf == "" {
 		return nil, fmt.Errorf("between: unsupported base type %s",
-			args[2].VType.String())
+			args[2].Parent.String())
 	}
 	base, _ := DependentLeafBaseType(leaf)
-	if !args[0].VType.Matches(base) {
+	if !args[0].Parent.Matches(base) {
 		return nil, fmt.Errorf("between: low bound %s does not match base %s",
-			args[0].VType.String(), base.String())
+			args[0].Parent.String(), base.String())
 	}
-	if !args[1].VType.Matches(base) {
+	if !args[1].Parent.Matches(base) {
 		return nil, fmt.Errorf("between: high bound %s does not match base %s",
-			args[1].VType.String(), base.String())
+			args[1].Parent.String(), base.String())
 	}
 	cmp, err := CompareValues(args[0], args[1])
 	if err != nil {
