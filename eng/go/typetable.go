@@ -82,10 +82,12 @@ func (t *Type) Root() *Type {
 	return t
 }
 
-// IsAncestor reports whether ancestor lies on t's parent chain (or is t).
+// IsAncestor reports whether ancestor lies on t's parent chain (or is
+// t). Comparison is by lattice identity (Equal) so a by-value
+// type-literal copy still recognises its own ancestors.
 func (t *Type) IsAncestor(ancestor *Type) bool {
 	for x := t; x != nil; x = x.Parent {
-		if x == ancestor {
+		if x.Equal(ancestor) {
 			return true
 		}
 	}

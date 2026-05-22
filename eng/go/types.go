@@ -263,16 +263,26 @@ func (t *Type) Leaf() string {
 // For example: Scalar/String/ProperString is a subtype of Scalar/String.
 // A type is NOT a subtype of itself.
 func (t *Type) IsSubtypeOf(parent *Type) bool {
-	if t == nil || parent == nil || t == parent {
+	if t == nil || parent == nil || t.Equal(parent) {
 		return false
 	}
 	return t.IsAncestor(parent)
 }
 
-// Equal reports whether two types are identical. Identity is pointer
-// equality on Type.
+// Equal reports whether t and other are the same lattice identity.
+// Identity is the canonical ID string. A type literal is a by-value
+// copy of its lattice node — same ID, different address — so a raw
+// pointer compare would miss copies. Pointer equality is kept as the
+// fast path and as the fallback for ID-less types (raw &Type{} test
+// fixtures, where the empty ID makes ID comparison meaningless).
 func (t *Type) Equal(other *Type) bool {
-	return t == other
+	if t == other {
+		return true
+	}
+	if t == nil || other == nil {
+		return false
+	}
+	return t.ID != "" && t.ID == other.ID
 }
 
 // MetatypeFor returns the metatype for a given type.
