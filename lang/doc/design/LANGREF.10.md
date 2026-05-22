@@ -3532,7 +3532,7 @@ The `CheckResult` JSON object has:
 ### Carriers vs type literals at sig-match time
 
 Carriers and type literals share an important field-level shape — both
-have nil `Data` and a concrete `VType`. The `Carrier` flag is the only
+have nil `Data` and a concrete `Parent`. The `Carrier` flag is the only
 field that distinguishes them. The runtime relies on this distinction
 at signature-matching time:
 

@@ -34,7 +34,7 @@ func FormatForPrint(v Value) string {
 	// (e.g. Integer → "Integer", List → "List"). Type names are
 	// globally unique. The None type literal prints as "None".
 	if v.Data == nil {
-		return v.VType.Leaf()
+		return typeNodeOf(v).Leaf()
 	}
 
 	// Table: formatted with headers and aligned columns.
@@ -66,13 +66,13 @@ func FormatForPrint(v Value) string {
 
 	// Dependent scalar: render the constraint, not the underlying base.
 	// Must run before TString / TInteger / etc. matches because a
-	// DepScalar's VType also matches its base via the lattice override.
+	// DepScalar's Parent also matches its base via the lattice override.
 	if v.IsDepScalar() {
 		return ValToString(v)
 	}
 
 	// String: printed as-is (no quotes).
-	if v.VType.Matches(TString) {
+	if v.Parent.Matches(TString) {
 		_as0, _ := AsString(v)
 		return _as0
 	}
@@ -83,12 +83,12 @@ func FormatForPrint(v Value) string {
 	}
 
 	// Map: JSON-like output.
-	if v.VType.Equal(TMap) {
+	if v.Parent.Equal(TMap) {
 		return formatMapJSON(v)
 	}
 
 	// List: JSON-like output.
-	if v.VType.Equal(TList) && v.Data != nil {
+	if v.Parent.Equal(TList) && v.Data != nil {
 		return formatListJSON(v)
 	}
 
@@ -124,12 +124,12 @@ func formatListJSON(v Value) string {
 func FormatValueJSON(v Value) string {
 	// The value `none` and the None type literal both render as JSON
 	// null — that's how JSON encodes the unit type / absent value.
-	if IsNone(v) || (v.Data == nil && v.VType.Equal(TNone)) {
+	if IsNone(v) || (v.Data == nil && v.Parent.Equal(TNone)) {
 		return "null"
 	}
 	if v.Data == nil {
 		// Type literal — render the leaf, quoted as a JSON string.
-		return fmt.Sprintf("%q", v.VType.Leaf())
+		return fmt.Sprintf("%q", typeNodeOf(v).Leaf())
 	}
 	// DepScalar pre-empts the Matches(TString)/... dispatch so its
 	// constraint payload renders via the DepScalar formatter rather
@@ -139,23 +139,23 @@ func FormatValueJSON(v Value) string {
 		return fmt.Sprintf("%q", s)
 	}
 	switch {
-	case v.VType.Matches(TString):
+	case v.Parent.Matches(TString):
 		_as1, _ := AsString(v)
 		return fmt.Sprintf("%q", _as1)
-	case v.VType.Matches(TInteger):
+	case v.Parent.Matches(TInteger):
 		_as2, _ := AsInteger(v)
 		return fmt.Sprintf("%d", _as2)
-	case v.VType.Matches(TBoolean):
+	case v.Parent.Matches(TBoolean):
 		_as3, _ := AsBoolean(v)
 		if _as3 {
 			return "true"
 		}
 		return "false"
-	case v.VType.Equal(TNone):
+	case v.Parent.Equal(TNone):
 		return "null"
-	case v.VType.Equal(TMap):
+	case v.Parent.Equal(TMap):
 		return formatMapJSON(v)
-	case v.VType.Equal(TList):
+	case v.Parent.Equal(TList):
 		return formatListJSON(v)
 	default:
 		return v.String()

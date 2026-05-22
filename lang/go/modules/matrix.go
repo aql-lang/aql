@@ -28,18 +28,21 @@ var TTensor, TMatrix, TVector = registerTensorTypes()
 func registerTensorTypes() (*eng.Type, *eng.Type, *eng.Type) {
 	// Tensor first — Matrix and Vector register as its lattice
 	// children and so need it present in eng.Builtin.
-	tensor, err := eng.Builtin.RegisterExternalBuiltin("Node/Tensor", 2001, tensorFormatBehavior{})
+	tensor, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Tensor", 2001, tensorFormatBehavior{})
 	if err != nil {
 		// lint:allow-panic — init-time builtin registration; see
 		// registerTimerType in native/native_misc.go for rationale.
 		panic(fmt.Sprintf("matrix: register TTensor: %v", err))
 	}
-	matrix, err := eng.Builtin.RegisterExternalBuiltin("Node/Tensor/Matrix", 2000, tensorFormatBehavior{})
+	// Tensor inherits Ideal's unified Rank from RegisterExternalBuiltin
+	// (external types take no positional slot — see builtinDecls in
+	// eng/go/typetable.go); Matrix and Vector inherit it in turn.
+	matrix, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Tensor/Matrix", 2000, tensorFormatBehavior{})
 	if err != nil {
 		// lint:allow-panic — see above.
 		panic(fmt.Sprintf("matrix: register TMatrix: %v", err))
 	}
-	vector, err := eng.Builtin.RegisterExternalBuiltin("Node/Tensor/Vector", 2002, tensorFormatBehavior{})
+	vector, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Tensor/Vector", 2002, tensorFormatBehavior{})
 	if err != nil {
 		// lint:allow-panic — see above.
 		panic(fmt.Sprintf("matrix: register TVector: %v", err))
@@ -92,11 +95,19 @@ func (tensorFormatBehavior) Equal(a, b native.Value) bool {
 }
 
 func (tensorFormatBehavior) Format(v native.Value) string {
-	kind := tensorKindName(v.VType)
+	kind := tensorKindName(v.Parent)
 	if td, ok := tensorPayload(v); ok {
 		return kind + "(" + shapeString(td.Shape) + ")"
 	}
 	return kind
+}
+
+// Size of a tensor is its entry count — the number of scalars in the
+// dense array, so a 3x3 Matrix sizes to 9 and a length-5 Vector to 5.
+// This satisfies the kernel's eng.Sizer capability, which SizeOf (the
+// `size` word) consults.
+func (tensorFormatBehavior) Size(v native.Value) int {
+	return len(AsTensor(v).Data)
 }
 
 // tensorKindName names the tensor kind a type belongs to.

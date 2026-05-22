@@ -254,8 +254,8 @@ func TestIntegFnUndefSpecPairs(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("fnsig should return 1 value, got %d", len(result))
 	}
-	if !result[0].VType.Equal(TFnUndef) {
-		t.Errorf("expected TFnUndef, got %s", result[0].VType)
+	if !result[0].Parent.Equal(TFnUndef) {
+		t.Errorf("expected TFnUndef, got %s", result[0].Parent)
 	}
 }
 
@@ -320,8 +320,8 @@ func TestIntegModuleWithExport(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("module should return 1 value, got %d", len(result))
 	}
-	if !result[0].VType.Equal(TModule) {
-		t.Fatalf("expected TModule, got %s", result[0].VType)
+	if !result[0].Parent.Equal(TModule) {
+		t.Fatalf("expected TModule, got %s", result[0].Parent)
 	}
 
 	desc, _ := AsModule(result[0])
@@ -349,7 +349,7 @@ func TestIntegModuleImportAll(t *testing.T) {
 
 	// Now "stuff" should be defined as a map with val: 99
 	result := runAQL(t, r, []Value{NewWord("stuff")})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("stuff should be a map, got %v", result)
 	}
 	m, _ := AsMap(result[0])
@@ -378,7 +378,7 @@ func TestIntegModuleImportRename(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), renameList, NewWord("mymod2")})
 
 	result := runAQL(t, r, []Value{NewWord("renamed")})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("renamed should be a map, got %v", result)
 	}
 }
@@ -407,7 +407,7 @@ func TestIntegModuleImportMultiRename(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), renameList, NewWord("mm")})
 
 	result := runAQL(t, r, []Value{NewWord("newA")})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("newA should be a map, got %v", result)
 	}
 }
@@ -449,7 +449,7 @@ func TestIntegValToAtomOrStringWord(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), renameList, NewWord("wmod")})
 
 	result := runAQL(t, r, []Value{NewWord("wordRenamed")})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("wordRenamed should be a map, got %v", result)
 	}
 }
@@ -472,7 +472,7 @@ func TestIntegImportSingleRenameWord(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), NewAtom("NewName"), NewWord("mymod")})
 
 	result := runAQL(t, r, []Value{NewWord("NewName")})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("NewName should be a map, got %v", result)
 	}
 }
@@ -494,7 +494,7 @@ func TestIntegImportSingleRenameAtom(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), NewAtom("Renamed"), NewWord("mymod")})
 
 	result := runAQL(t, r, []Value{NewWord("Renamed")})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("Renamed should be a map, got %v", result)
 	}
 }
@@ -810,7 +810,7 @@ func TestIntegDoMap(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("x", innerList)
 	result := runAQL(t, r, []Value{NewWord("do"), NewMap(m)})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("do map should return a map, got %v", result)
 	}
 	rm, _ := AsMap(result[0])
@@ -926,7 +926,7 @@ func TestIntegFileIOWriteJSON(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("read"), NewString("data.json"),
 	})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("read data.json should return map, got %v", result)
 	}
 	rm, _ := AsMap(result[0])
@@ -984,7 +984,7 @@ func TestIntegFileIOReadWithFmtOption(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("read"), NewString("data.txt"), NewMap(opts),
 	})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("read data.txt with fmt:json should return map, got %v", result)
 	}
 }
@@ -998,7 +998,7 @@ func TestIntegFileIOReadJsonExtension(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("read"), NewString("data.json"),
 	})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("read data.json should auto-detect json, got %v", result)
 	}
 }
@@ -1038,8 +1038,8 @@ func TestIntegCSVReadWrite(t *testing.T) {
 		t.Fatalf("read csv should return 1 value, got %d", len(result))
 	}
 	// Should be a list (table data)
-	if !result[0].VType.Equal(TList) {
-		t.Fatalf("csv result should be TList, got %s", result[0].VType)
+	if !result[0].Parent.Equal(TList) {
+		t.Fatalf("csv result should be TList, got %s", result[0].Parent)
 	}
 }
 
@@ -1072,7 +1072,7 @@ func TestIntegCSVReadWithFmtOption(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("read"), NewString("data.txt"), NewMap(opts),
 	})
-	if len(result) != 1 || !result[0].VType.Equal(TList) {
+	if len(result) != 1 || !result[0].Parent.Equal(TList) {
 		t.Fatalf("read with csv fmt should return table, got %v", result)
 	}
 }
@@ -1255,7 +1255,7 @@ func TestIntegTandMergeMaps(t *testing.T) {
 	if !okY {
 		t.Fatalf("missing key y")
 	}
-	if !y.VType.Equal(TInteger) || y.Data != nil {
+	if !y.Parent.Equal(TInteger) || y.Data != nil {
 		t.Errorf("y = %v, want Integer type literal", y)
 	}
 }
@@ -1396,7 +1396,7 @@ func TestIntegFileIOReadLines(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("read"), NewString("lines.txt"), NewMap(opts),
 	})
-	if len(result) != 1 || !result[0].VType.Equal(TList) {
+	if len(result) != 1 || !result[0].Parent.Equal(TList) {
 		t.Fatalf("read lines should return list, got %v", result)
 	}
 	_lst, _ := AsList(result[0])
@@ -1413,7 +1413,7 @@ func TestIntegDoMapWithNonListValues(t *testing.T) {
 	m.Set("x", NewInteger(42))
 	m.Set("y", NewString("hello"))
 	result := runAQL(t, r, []Value{NewWord("do"), NewMap(m)})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("do map should return map, got %v", result)
 	}
 	rm, _ := AsMap(result[0])
@@ -1450,7 +1450,7 @@ func TestIntegFileIOReadJsonicFormat(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("read"), NewString("data.jsonic"),
 	})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("read jsonic should return map, got %v", result)
 	}
 }

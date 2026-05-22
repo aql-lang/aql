@@ -25,12 +25,13 @@ var (
 	TBoolean        = mustType("Scalar/Boolean")
 	TPath           = mustType("Scalar/Path")
 	TNode           = mustType("Node")
+	TIdeal          = mustType("Ideal")
 	TList           = mustType("Node/List")
 	TListArgs       = mustType("Node/List/Args")
 	TMap            = mustType("Node/Map")
-	TOptions        = mustType("Node/Map/Options")
-	TTable          = mustType("Object/Table")
-	TRecord         = mustType("Object/Record")
+	TOptions        = mustType("Ideal/Options")
+	TTable          = mustType("Ideal/Table")
+	TRecord         = mustType("Ideal/Record")
 	TAtom           = mustType("Scalar/Atom")
 	TWord           = mustType("Word")
 	TFunction       = mustType("Type/Function")
@@ -51,20 +52,20 @@ var (
 	TModule         = mustType("Word/__MD")
 	TInternal       = mustType("Word/__IN")
 	TInspect        = mustType("Node/Map/Inspect")
-	TObject         = mustType("Object")
-	TStore          = mustType("Object/Store")
-	TStoreSystem    = mustType("Object/Store/System")
-	TArray          = mustType("Object/Array")
-	TResource       = mustType("Object/Resource")
-	TResourceEntity = mustType("Object/Resource/Entity")
+	TObject         = mustType("Ideal/Object")
+	TStore          = mustType("Ideal/Store")
+	TStoreSystem    = mustType("Ideal/Store/System")
+	TArray          = mustType("Ideal/Array")
+	TResource       = mustType("Ideal/Object/Resource")
+	TResourceEntity = mustType("Ideal/Object/Resource/Entity")
 	// TFetchFunction / TFetchRequest / TFetchResponse moved to
 	// lang/go/native/fetch.go (Step 8 migration); registered via
 	// RegisterExternalBuiltin at lang/go/native package init.
-	TError      = mustType("Object/Error")
+	TError      = mustType("Ideal/Error")
 	TType       = mustType("Type")
 	TScalarType = mustType("Type/ScalarType")
 	TNodeType   = mustType("Type/NodeType")
-	TObjectType = mustType("Type/ObjectType")
+	TIdealType  = mustType("Type/IdealType")
 	// Scalar/Time and descendants moved to
 	// lang/go/engine/native_temporal.go (Step 8). They live in
 	// lang/go/engine (not lang/go/internal/nativemod/time) because
@@ -208,7 +209,7 @@ func (t *Type) Matches(pattern *Type) bool {
 	if pattern == nil {
 		return true
 	}
-	if pattern == TAny {
+	if pattern.Equal(TAny) {
 		return true
 	}
 	if t == nil {
@@ -249,11 +250,6 @@ func (t *Type) Specificity() int {
 	return n
 }
 
-// String returns the slash-separated type path.
-func (t *Type) String() string {
-	return t.Path()
-}
-
 // Leaf returns the last part of the type path.
 // For example, "Object/Fetch/Request" returns "Request".
 func (t *Type) Leaf() string {
@@ -267,16 +263,26 @@ func (t *Type) Leaf() string {
 // For example: Scalar/String/ProperString is a subtype of Scalar/String.
 // A type is NOT a subtype of itself.
 func (t *Type) IsSubtypeOf(parent *Type) bool {
-	if t == nil || parent == nil || t == parent {
+	if t == nil || parent == nil || t.Equal(parent) {
 		return false
 	}
 	return t.IsAncestor(parent)
 }
 
-// Equal reports whether two types are identical. Identity is pointer
-// equality on Type.
+// Equal reports whether t and other are the same lattice identity.
+// Identity is the canonical ID string. A type literal is a by-value
+// copy of its lattice node — same ID, different address — so a raw
+// pointer compare would miss copies. Pointer equality is kept as the
+// fast path and as the fallback for ID-less types (raw &Type{} test
+// fixtures, where the empty ID makes ID comparison meaningless).
 func (t *Type) Equal(other *Type) bool {
-	return t == other
+	if t == other {
+		return true
+	}
+	if t == nil || other == nil {
+		return false
+	}
+	return t.ID != "" && t.ID == other.ID
 }
 
 // MetatypeFor returns the metatype for a given type.
@@ -291,7 +297,7 @@ func (t *Type) Equal(other *Type) bool {
 // new root with its own metatype can be added by declaring its
 // MetatypePath, no central function edit required.
 func MetatypeFor(t *Type) *Type {
-	if t == nil || t.Parent == nil {
+	if t == nil {
 		return TType
 	}
 	for d := t; d != nil; d = d.Parent {

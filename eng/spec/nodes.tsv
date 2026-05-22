@@ -63,9 +63,9 @@ typeof [ ]	List	concrete list reports List
 typeof [ 1 2 3 ]	List	
 typeof { }	Map	concrete map reports Map
 typeof { a:1 b:2 }	Map	
-typeof List	Type	bare List type literal → metatype Type
-typeof Map	Type	
-typeof Node	Type	the abstract Node supertype → metatype Type
+typeof List	Node	bare List type literal → metatype Type
+typeof Map	Node	
+typeof Node	Node	the abstract Node supertype → metatype Type
 		
 # `is` against the exact node type.		
 [ 1 2 3 ] is List	true	

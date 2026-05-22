@@ -183,7 +183,7 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 
 		// Paren group: expand to engine paren markers at top level.
 		// Emit typed OpenParen / CloseParen values directly so the
-		// engine can recognise them by VType identity (no stepWord
+		// engine can recognise them by Parent identity (no stepWord
 		// name-dispatch needed).
 		if pg, ok := items[i].(parenGroup); ok {
 			values = append(values, eng.NewOpenParen())
@@ -629,7 +629,7 @@ func parseWord(text string) (eng.Value, error) {
 	}
 
 	// Reserved tape-syntax tokens emit typed marker values so the
-	// engine recognises them by VType identity (parens, end / ';').
+	// engine recognises them by Parent identity (parens, end / ';').
 	// These would otherwise become plain Word values that the engine
 	// would have to name-dispatch in stepWord.
 	switch name {

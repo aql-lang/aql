@@ -3,19 +3,21 @@ package native
 import "github.com/aql-lang/aql/eng/go"
 
 // comparisonNatives is the consolidated set of comparison words —
-// lt / gt / lte / gte / eq / neq / deq — plus the closed-interval
-// DepScalar constructor `between`. Each comparison word also accepts
-// a `Type N` form that builds a DepScalar refinement of the named
-// scalar type (`Integer lt 10`, `Integer between 0 100`, …).
+// lt / gt / lte / gte / cmp / eq / neq / deq — plus the closed-
+// interval DepScalar constructor `between`. The ordering words
+// lt / gt / lte / gte also accept a `Type N` form that builds a
+// DepScalar refinement of the named scalar type (`Integer lt 10`,
+// `Integer between 0 100`, …).
 //
 // Argument convention follows the b-op-a mirror rule:
 //
 //	a b lt     → args[0]=b args[1]=a → compare(a, b) → a < b
 //	10 lt 3    → infix reading: 10 < 3 → false
+//	a b cmp    → -1 / 0 / 1 for a sorting before / with / after b
 //
-// Algorithms (LtHandler / GtHandler / EqHandler / DeqHandler /
-// CompareValues / MakeDepScalarSig / BetweenHandler) live in eng;
-// this file owns the word names and dispatch wiring.
+// Algorithms (LtHandler / GtHandler / CmpHandler / EqHandler /
+// DeqHandler / CompareValues / MakeDepScalarSig / BetweenHandler)
+// live in eng; this file owns the word names and dispatch wiring.
 var comparisonNatives = []NativeFunc{
 	{
 		Name:        "lt",
@@ -64,6 +66,18 @@ var comparisonNatives = []NativeFunc{
 				Returns: []*Type{TBoolean},
 			},
 		},
+	},
+	{
+		// cmp is the three-way comparison: `a b cmp` yields the
+		// Integer -1, 0, or 1 — the raw ordering CompareValues
+		// computes for lt / gt / sort, surfaced as a value.
+		Name:        "cmp",
+		ForwardArgs: true,
+		Signatures: []NativeSig{{
+			Args:    []*Type{TAny, TAny},
+			Handler: eng.CmpHandler,
+			Returns: []*Type{TInteger},
+		}},
 	},
 	{
 		Name:        "between",

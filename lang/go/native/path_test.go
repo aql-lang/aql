@@ -149,13 +149,13 @@ func TestPathStringRoot(t *testing.T) {
 
 func TestPathIsScalar(t *testing.T) {
 	p := NewPath([]string{"a"}, false)
-	if !p.VType.Matches(TScalar) {
+	if !p.Parent.Matches(TScalar) {
 		t.Error("Path should match Scalar")
 	}
-	if !p.VType.Matches(TPath) {
+	if !p.Parent.Matches(TPath) {
 		t.Error("Path should match Path")
 	}
-	if p.VType.Matches(TString) {
+	if p.Parent.Matches(TString) {
 		t.Error("Path should not match String")
 	}
 }

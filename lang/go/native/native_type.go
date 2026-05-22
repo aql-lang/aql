@@ -8,7 +8,7 @@ import (
 	"github.com/aql-lang/aql/eng/go"
 )
 
-// typeNatives covers the type-system words: type, pathof, enum,
+// typeNatives covers the type-system words: refine, pathof, enum,
 // typeof, fulltypeof, is, guard, base, tor, tand, any, all, tany,
 // tall, convert.
 //
@@ -17,21 +17,41 @@ import (
 // stack. `installResourceTypes` handles those during Register.
 var typeNatives = []NativeFunc{
 	{
-		// type is the uniform type constructor — see
-		// lang/doc/design/TYPE-UNIFORM.0.md. `type BaseType arg`
+		// refine is the uniform type constructor — see
+		// lang/doc/design/TYPE-UNIFORM.0.md. `refine BaseType arg`
 		// builds a (sub)type:
-		//   type Object {fields}     → object type
-		//   type <objtype> {fields}  → object subtype (inheritance)
-		//   type Record [a:T b:U]    → record type (list of pairs)
-		//   type Table  <recordtype> → table type
-		Name:        "type",
+		//   refine Object {fields}     → object type
+		//   refine <objtype> {fields}  → object subtype (inheritance)
+		//   refine Record [a:T b:U]    → record type (list of pairs)
+		//   refine Table  (refine Record …) → table type
+		//   refine BaseType            → a bare nominal subtype, no
+		//                                added structure (the 1-arg form)
+		//
+		// Two signatures: a 2-arg structural form and a 1-arg bare form.
+		// Because the 1-arg signature lets `refine` succeed with a
+		// single argument, the word never defers to take a body from the
+		// stack — so a nested constructor must be parenthesised:
+		// `refine Table (refine Record […])`, not `refine Table refine
+		// Record […]`. The 2-arg body is always a Node (a map or list
+		// literal, or a record/object type value), typed TNode so the
+		// matcher falls through to the 1-arg form when a non-Node token
+		// (a following `def` / `behave` / `;`) comes next.
+		Name:        "refine",
 		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:           []*Type{TAny, TAny},
-			Handler:        typeHandler,
-			Returns:        []*Type{TType},
-			RunInCheckMode: true,
-		}},
+		Signatures: []NativeSig{
+			{
+				Args:           []*Type{TAny, TNode},
+				Handler:        refineHandler,
+				Returns:        []*Type{TType},
+				RunInCheckMode: true,
+			},
+			{
+				Args:           []*Type{TAny},
+				Handler:        refineBareHandler,
+				Returns:        []*Type{TType},
+				RunInCheckMode: true,
+			},
+		},
 	},
 	{
 		Name:        "pathof",
@@ -189,7 +209,7 @@ func installResourceTypes(r *Registry) {
 	resourceInfo := ObjectTypeInfo{
 		Fields: resourceFields,
 		Parent: nil,
-		ID:     BuiltinIDForPath("Object/Resource"),
+		ID:     BuiltinIDForPath("Ideal/Object/Resource"),
 	}
 
 	InstallDef(r, "Resource", NewObjectType(TResource, resourceInfo))
@@ -204,7 +224,7 @@ func installResourceTypes(r *Registry) {
 	entityInfo := ObjectTypeInfo{
 		Fields: entityFields,
 		Parent: &installedResource,
-		ID:     BuiltinIDForPath("Object/Resource/Entity"),
+		ID:     BuiltinIDForPath("Ideal/Object/Resource/Entity"),
 	}
 
 	InstallDef(r, "Entity", NewObjectType(TResourceEntity, entityInfo))
@@ -221,15 +241,15 @@ func tableHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 	return []Value{NewTableType(_as0)}, nil
 }
 
-// ---- type (the type constructor) ----
+// ---- refine (the type constructor) ----
 
-// typeHandler implements `type BaseType arg`, the uniform type
+// refineHandler implements `refine BaseType arg`, the uniform type
 // constructor. It does not branch on the base type itself — dispatch
 // is data-driven through the Ideal registry (r.Ideals): whichever
 // type-kind claims the base value supplies the construction logic.
-// See lang/doc/design/IDEAL.0.md. `type` does not bind — pair it with
-// `def` (`def Foo (type …)`).
-func typeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+// See lang/doc/design/IDEAL.0.md. `refine` does not bind — pair it
+// with `def` (`def Foo (refine …)`).
+func refineHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	base := args[0]
 	arg := args[1]
 	ideal := r.Ideals.For(base)
@@ -237,19 +257,36 @@ func typeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 		// Distinguish a disabled kind from an unknown base.
 		if m := r.Ideals.Match(base); m != nil {
 			return nil, r.AqlError("type_error",
-				fmt.Sprintf("type: the %s type-kind is not available in this registry", m.Name),
-				"type")
+				fmt.Sprintf("refine: the %s type-kind is not available in this registry", m.Name),
+				"refine")
 		}
 		return nil, r.AqlError("type_error",
-			fmt.Sprintf("type: base must be Object, Record, Table, or an object type, got %s", base.String()),
-			"type")
+			fmt.Sprintf("refine: base must be Object, Record, Table, or an object type, got %s", base.String()),
+			"refine")
 	}
 	if ideal.Construct == nil {
 		return nil, r.AqlError("type_error",
-			fmt.Sprintf("type: the %s type-kind cannot be constructed with `type`", ideal.Name),
-			"type")
+			fmt.Sprintf("refine: the %s type-kind cannot be constructed with `refine`", ideal.Name),
+			"refine")
 	}
 	return ideal.Construct(base, arg, r)
+}
+
+// refineBareHandler implements the 1-arg `refine BaseType` form — a
+// bare nominal subtype of BaseType with no added structure. It
+// validates that the argument is a type and returns it unchanged; the
+// paired `def Name` then mints a fresh subtype parented at BaseType
+// (InstallType → MintType). `def Foo refine List` thus produces a
+// distinct List subtype that can serve as a dispatch surface for
+// `behave` — see lang/doc/design/TYPE-UNIFORM.0.md.
+func refineBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	base := args[0]
+	if !IsTypeBody(base) {
+		return nil, r.AqlError("type_error",
+			fmt.Sprintf("refine: argument must be a type, got %s", base.String()),
+			"refine")
+	}
+	return []Value{base}, nil
 }
 
 // installIdeals fills in the type-level constructor (Ideal.Construct)
@@ -275,15 +312,15 @@ func installIdeals(r *Registry) {
 			// is a valid construction base.
 			if base.Data != nil {
 				return nil, r.AqlError("type_error",
-					"type: a record type has no subtyping — construct a Record from the bare Record literal",
-					"type")
+					"refine: a record type has no subtyping — construct a Record from the bare Record literal",
+					"refine")
 			}
 			// A record takes a LIST of field pairs — field order is
 			// part of a record type's identity.
-			if !arg.VType.Equal(TList) {
+			if !arg.Parent.Equal(TList) {
 				return nil, r.AqlError("type_error",
-					"type Record: a record takes a list of field pairs, e.g. [a:Integer b:String]",
-					"type")
+					"refine Record: a record takes a list of field pairs, e.g. [a:Integer b:String]",
+					"refine")
 			}
 			return recordHandler([]Value{arg}, nil, nil, r)
 		}
@@ -292,8 +329,8 @@ func installIdeals(r *Registry) {
 		tbl.Construct = func(base, arg Value, r *Registry) ([]Value, error) {
 			if base.Data != nil {
 				return nil, r.AqlError("type_error",
-					"type: a table type has no subtyping — construct a Table from the bare Table literal",
-					"type")
+					"refine: a table type has no subtyping — construct a Table from the bare Table literal",
+					"refine")
 			}
 			return tableHandler([]Value{arg}, nil, nil, r)
 		}
@@ -318,7 +355,7 @@ func enumHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 	if IsTypedList(list) {
 		ci, _ := AsChildType(list)
 		childType = ci.Child
-		hasChild = childType.VType != nil
+		hasChild = childType.Parent != nil
 	}
 	elems, _ := AsList(list)
 	alts := make([]Value, 0, elems.Len())
@@ -343,7 +380,7 @@ func enumHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 
 func typeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	// Delegate to the canonical aqleng implementation, which returns
-	// a Type literal (not an Atom): concrete value → exact VType;
+	// a Type literal (not an Atom): concrete value → exact Parent;
 	// type literal → its metatype (ScalarType / NodeType / Type);
 	// implicit-map record shape → its metatype; the value `none`
 	// (unique inhabitant of None) → None.
@@ -352,9 +389,9 @@ func typeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 
 func fulltypeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	// Delegate to the canonical typeof: a concrete value → its exact
-	// VType path; ANY type literal → "Type" (metatypes are collapsed —
+	// Parent path; ANY type literal → "Type" (metatypes are collapsed —
 	// no ScalarType / NodeType / ObjectType layer); none → "None".
-	def := TypeOf(args[0]).VType
+	def := TypeOf(args[0]).Parent
 	var parts []string
 	for d := def; d != nil; d = d.Parent {
 		parts = append([]string{d.Name}, parts...)
@@ -375,23 +412,23 @@ func fulltypeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 
 func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	a, b := args[1], args[0]
-	if b.VType.Equal(TFnUndef) && IsAtom(a) {
+	if b.Parent.Equal(TFnUndef) && IsAtom(a) {
 		name, _ := AsAtom(a)
 		if top, ok := r.Defs.Top(name); ok {
-			if top.VType.Equal(TFnDef) || top.VType.Equal(TFunction) {
+			if top.Parent.Equal(TFnDef) || top.Parent.Equal(TFunction) {
 				a = top
 			}
 		}
 	}
-	if b.VType.Equal(TFnDef) || b.VType.Equal(TFunction) {
+	if b.Parent.Equal(TFnDef) || b.Parent.Equal(TFunction) {
 		_, matched, err := r.RunPredicate(b, a)
 		if err != nil {
 			return []Value{NewBoolean(false)}, nil
 		}
 		return []Value{NewBoolean(matched)}, nil
 	}
-	if b.Data == nil && IsMetaType(b.VType) {
-		if b.VType.Equal(TType) {
+	if b.Data == nil && IsMetaType(b.Parent) {
+		if b.Parent.Equal(TType) {
 			// `v is Type` — v must be a TYPE: a bare type literal, a
 			// structural type body (record shape, typed list/map,
 			// disjunct, fn-shape), or a Function / Disjunct / Enum /
@@ -401,24 +438,24 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 			if a.Carrier {
 				return []Value{NewBoolean(false)}, nil
 			}
-			return []Value{NewBoolean(a.Data == nil || IsTypeBody(a) || IsRecordShape(a) || a.VType.Matches(TType))}, nil
+			return []Value{NewBoolean(a.Data == nil || IsTypeBody(a) || IsRecordShape(a) || a.Parent.Matches(TType))}, nil
 		}
 		if a.Data == nil {
 			// Legacy metatype RHS (`ScalarType` / `NodeType` /
 			// `ObjectType`): compare the literal's metatype.
-			return []Value{NewBoolean(MetatypeFor(a.VType).Matches(b.VType))}, nil
+			return []Value{NewBoolean(MetatypeFor(a.Parent).Matches(b.Parent))}, nil
 		}
 		// Other Type/-rooted RHS (`Function` / `Disjunct` / `Enum` /
 		// `FunctionSignature`): plain subtype check (also catches a
-		// value whose VType already lives under that type).
-		return []Value{NewBoolean(a.VType.Matches(b.VType))}, nil
+		// value whose Parent already lives under that type).
+		return []Value{NewBoolean(a.Parent.Matches(b.Parent))}, nil
 	}
 	unified, ok := Unify(a, b)
 	if !ok {
 		return []Value{NewBoolean(false)}, nil
 	}
 	resolved := ResolveWordsDeep(a)
-	if !unified.VType.Equal(resolved.VType) {
+	if !unified.Parent.Equal(resolved.Parent) {
 		return []Value{NewBoolean(false)}, nil
 	}
 	if !ValuesEqual(unified, resolved) {
@@ -433,7 +470,7 @@ func guardHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 	val := args[0]
 	cond, err := args[1].AsConcreteBoolean()
 	if err != nil {
-		return nil, fmt.Errorf("guard: condition must be Boolean, got %s", args[1].VType.String())
+		return nil, fmt.Errorf("guard: condition must be Boolean, got %s", args[1].Parent.String())
 	}
 	if cond {
 		return []Value{val}, nil
@@ -445,7 +482,7 @@ func guardHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 
 func baseHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	v := args[0]
-	t := v.VType
+	t := v.Parent
 	result, err := BaseValue(t)
 	if err != nil {
 		return nil, err
@@ -557,7 +594,7 @@ func convertTo(src Value, targetType *Type, base string) (Value, error) {
 		if base == "" {
 			return NewString(ValToString(src)), nil
 		}
-		if !src.VType.Matches(TInteger) {
+		if !src.Parent.Matches(TInteger) {
 			return Value{}, fmt.Errorf("convert: base %q only supported for integer to string", base)
 		}
 		n, _ := AsInteger(src)
@@ -625,9 +662,9 @@ func convert2Handler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	targetType := args[0]
 	src := args[1]
 	if targetType.Data != nil {
-		return nil, r.AqlError("convert_error", fmt.Sprintf("convert: first argument must be a type literal, got %s", targetType.VType), "convert")
+		return nil, r.AqlError("convert_error", fmt.Sprintf("convert: first argument must be a type literal, got %s", targetType.Parent), "convert")
 	}
-	result, err := convertTo(src, targetType.VType, "")
+	result, err := convertTo(src, ValueType(targetType),"")
 	if err != nil {
 		return nil, err
 	}
@@ -639,7 +676,7 @@ func convert3Handler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	opts := args[1]
 	src := args[2]
 	if targetType.Data != nil {
-		return nil, r.AqlError("convert_error", fmt.Sprintf("convert: first argument must be a type literal, got %s", targetType.VType), "convert")
+		return nil, r.AqlError("convert_error", fmt.Sprintf("convert: first argument must be a type literal, got %s", targetType.Parent), "convert")
 	}
 
 	base := ""
@@ -652,7 +689,7 @@ func convert3Handler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		}
 	}
 
-	result, err := convertTo(src, targetType.VType, base)
+	result, err := convertTo(src, ValueType(targetType),base)
 	if err != nil {
 		return nil, err
 	}

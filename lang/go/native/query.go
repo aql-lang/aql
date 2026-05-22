@@ -375,10 +375,10 @@ func parseColumnSpec(colList Value) ([]columnSpec, error) {
 	cols := make([]columnSpec, 0, len(elems))
 	for _, e := range elems {
 		switch {
-		case e.VType.Equal(TAtom):
+		case e.Parent.Equal(TAtom):
 			_as6, _ := AsAtom(e)
 			cols = append(cols, columnSpec{Name: _as6})
-		case e.VType.Matches(TString):
+		case e.Parent.Matches(TString):
 			_as7, _ := AsString(e)
 			cols = append(cols, columnSpec{Name: _as7})
 		case IsWord(e):
@@ -387,7 +387,7 @@ func parseColumnSpec(colList Value) ([]columnSpec, error) {
 			_as8, _ := AsWord(e)
 			wname := _as8.Name
 			cols = append(cols, columnSpec{Name: wname})
-		case e.VType.Equal(TList):
+		case e.Parent.Equal(TList):
 			_lst, _ := AsList(e)
 			pair := _lst.Slice()
 			if len(pair) < 2 {
@@ -445,7 +445,7 @@ func parseColumnSpec(colList Value) ([]columnSpec, error) {
 			}
 			cols = append(cols, columnSpec{Name: name, Alias: alias})
 		default:
-			return nil, fmt.Errorf("select: unsupported column spec type: %s", e.VType)
+			return nil, fmt.Errorf("select: unsupported column spec type: %s", e.Parent)
 		}
 	}
 	return cols, nil
@@ -454,11 +454,11 @@ func parseColumnSpec(colList Value) ([]columnSpec, error) {
 // nameFromValue extracts a name from an atom, string, or word value.
 // Unlike valueToColName, this also recognizes unevaluated word values.
 func nameFromValue(v Value) string {
-	if v.VType.Equal(TAtom) {
+	if v.Parent.Equal(TAtom) {
 		_as9, _ := AsAtom(v)
 		return _as9
 	}
-	if v.VType.Matches(TString) {
+	if v.Parent.Matches(TString) {
 		_as10, _ := AsString(v)
 		return _as10
 	}
@@ -560,11 +560,11 @@ func sqlTypeToAQLType(sqlType string) *Type {
 
 // valueToColName extracts the string content from an atom, string, or word value.
 func valueToColName(v Value) string {
-	if v.VType.Equal(TAtom) {
+	if v.Parent.Equal(TAtom) {
 		_as12, _ := AsAtom(v)
 		return _as12
 	}
-	if v.VType.Matches(TString) {
+	if v.Parent.Matches(TString) {
 		_as13, _ := AsString(v)
 		return _as13
 	}
@@ -639,7 +639,7 @@ func buildWhereClause(condList Value) (string, error) {
 				return "", fmt.Errorf("incomplete condition: expected condition after not")
 			}
 			// If followed by a sub-list, negate the whole group.
-			if elems[i].VType.Equal(TList) {
+			if elems[i].Parent.Equal(TList) {
 				inner, err := buildWhereClause(elems[i])
 				if err != nil {
 					return "", err
@@ -678,7 +678,7 @@ func buildWhereClause(condList Value) (string, error) {
 
 		// --- Sub-list (parenthesized group) ---
 		// [[col op val or col op val] and ...]  → (...) AND ...
-		if elems[i].VType.Equal(TList) {
+		if elems[i].Parent.Equal(TList) {
 			inner, err := buildWhereClause(elems[i])
 			if err != nil {
 				return "", err
@@ -724,7 +724,7 @@ func parseSingleCondition(elems []Value, start int) (string, int, error) {
 	i := start
 	col := valueToColName(elems[i])
 	if col == "" {
-		return "", i, fmt.Errorf("expected column name, got %s", elems[i].VType)
+		return "", i, fmt.Errorf("expected column name, got %s", elems[i].Parent)
 	}
 	i++
 
@@ -879,7 +879,7 @@ func parseSingleCondition(elems []Value, start int) (string, int, error) {
 // buildInList converts a list value to a comma-separated SQL value list.
 // If the value is a table result (from a subquery), extracts the first column values.
 func buildInList(v Value) (string, error) {
-	if !v.VType.Equal(TList) {
+	if !v.Parent.Equal(TList) {
 		// Single value
 		sql, err := valueToSQL(v)
 		if err != nil {
@@ -1000,28 +1000,28 @@ func resolveScalarValue(v Value) (Value, error) {
 // valueToSQL converts a Value to a SQL literal string.
 func valueToSQL(v Value) (string, error) {
 	switch {
-	case v.VType.Matches(TString):
+	case v.Parent.Matches(TString):
 		_as23, _ := AsString(v)
 		return "'" + strings.ReplaceAll(_as23, "'", "''") + "'", nil
-	case v.VType.Matches(TInteger):
+	case v.Parent.Matches(TInteger):
 		_as24, _ := AsInteger(v)
 		return fmt.Sprintf("%d", _as24), nil
-	case v.VType.Matches(TBoolean):
+	case v.Parent.Matches(TBoolean):
 		_as25, _ := AsBoolean(v)
 		if _as25 {
 			return "'true'", nil
 		}
 		return "'false'", nil
-	case v.VType.Equal(TAtom):
+	case v.Parent.Equal(TAtom):
 		_as26, _ := AsAtom(v)
 		return "'" + strings.ReplaceAll(_as26, "'", "''") + "'", nil
-	case v.VType.Equal(TNone):
+	case v.Parent.Equal(TNone):
 		return "NULL", nil
-	case v.VType.Equal(TWord):
+	case v.Parent.Equal(TWord):
 		_as27, _ := AsWord(v)
 		return "'" + strings.ReplaceAll(_as27.Name, "'", "''") + "'", nil
 	default:
-		return "", fmt.Errorf("unsupported value type in condition: %s", v.VType)
+		return "", fmt.Errorf("unsupported value type in condition: %s", v.Parent)
 	}
 }
 
@@ -1036,7 +1036,7 @@ func buildGroupByClause(colList Value) (string, error) {
 	for _, e := range elems {
 		name := valueToColName(e)
 		if name == "" {
-			return "", fmt.Errorf("groupby: expected column name, got %s", e.VType)
+			return "", fmt.Errorf("groupby: expected column name, got %s", e.Parent)
 		}
 		parts = append(parts, quoteIdent(name))
 	}
@@ -1057,7 +1057,7 @@ func buildJoinCondition(condList Value) (string, error) {
 	for i < len(elems) {
 		lhs := valueToColName(elems[i])
 		if lhs == "" {
-			return "", fmt.Errorf("expected column name, got %s", elems[i].VType)
+			return "", fmt.Errorf("expected column name, got %s", elems[i].Parent)
 		}
 		i++
 
@@ -1078,7 +1078,7 @@ func buildJoinCondition(condList Value) (string, error) {
 
 		rhs := valueToColName(elems[i])
 		if rhs == "" {
-			return "", fmt.Errorf("expected column name on right side of join condition, got %s", elems[i].VType)
+			return "", fmt.Errorf("expected column name on right side of join condition, got %s", elems[i].Parent)
 		}
 		i++
 
@@ -1149,7 +1149,7 @@ func buildOrderClause(colList Value) (string, error) {
 	for i < len(elems) {
 		e := elems[i]
 
-		if e.VType.Matches(TInteger) {
+		if e.Parent.Matches(TInteger) {
 			_as28, _ := AsInteger(e)
 			parts = append(parts, fmt.Sprintf("%d", _as28))
 			i++
@@ -1158,7 +1158,7 @@ func buildOrderClause(colList Value) (string, error) {
 
 		name := valueToColName(e)
 		if name == "" {
-			return "", fmt.Errorf("expected column name, position, or modifier, got %s", e.VType)
+			return "", fmt.Errorf("expected column name, position, or modifier, got %s", e.Parent)
 		}
 		lower := strings.ToLower(name)
 

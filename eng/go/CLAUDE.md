@@ -14,7 +14,7 @@ stacks, helper API discipline, panic prevention) see
 `Value.Data` is a sealed interface: `eng.Payload`. Only types
 with the unexported `payloadMarker()` method satisfy it, and the
 method is only definable in this package. The seal closes the
-historical `Data interface{}` hole — `Value{VType: TInteger,
+historical `Data interface{}` hole — `Value{Parent: TInteger,
 Data: "hello"}` is a **compile error**.
 
 Payload variants live in `eng/go/payload.go`. Two flavours:
@@ -64,7 +64,7 @@ type TypeBehavior interface {
 ```
 
 `DefaultBehavior` is the kernel's no-op: `Match` delegates to
-`v.VType.Matches(t)`, `Format` delegates to `v.String()` (with
+`v.Parent.Matches(t)`, `Format` delegates to `v.String()` (with
 the dispatch carefully avoiding re-entry), `Equal` delegates to
 `valuesEqualDefault`. Every type registered through the kernel
 paths gets `DefaultBehavior` if the caller doesn't supply one.
@@ -170,7 +170,7 @@ externally-registered type means:
 
 ## Type Lattice Fields
 
-`Type` carries two fields populated at registration time that
+`Type` carries three fields populated at registration time that
 replace historical hardcoded switches:
 
 - `BaseType *Type` — for `Type/Dependent/Dep<X>` types, points
@@ -185,6 +185,21 @@ replace historical hardcoded switches:
   `TObjectType`). Descendants inherit by Parent-chain walk in
   `MetatypeFor`. Populated via `builtinDecl.MetatypePath` for
   kernel-declared roots.
+
+- `Rank int` — the **unified lattice rank**: one integer giving the
+  total order `CompareValues` / `compareTypes` use for every cross-type
+  ordering (it replaced the old per-branch `rootBranchRank` /
+  `scalarBranchRank` / family-rank ladders). It is positional — a
+  type's Rank is its parent's Rank plus a depth-scaled offset, so a
+  builtin child always ranks above its parent and siblings run
+  least-to-most complex. The scheme (1e10 root bands, +1e8 / +1e7 per
+  depth, …) is laid out on `typetable.go::builtinDecls`. Kernel types
+  get a positional Rank from `builtinDecl.Rank`; user types
+  (`MintType`) and external builtins (`RegisterExternalBuiltin`)
+  inherit the parent's Rank, and `compareTypes` breaks the resulting
+  ties by depth, then name, then id. `rankOf` (`compare_types.go`)
+  walks the parent chain as a fallback for a `*Type` assembled without
+  one.
 
 When introducing a new root with its own metatype anchor, add
 `MetatypePath` to its `builtinDecl` row.
@@ -210,9 +225,10 @@ between packages without affecting the kernel.
 ## Type installation
 
 A capitalised `def Foo body` installs a type binding (the
-TYPE-UNIFORM surface: `def` binds, `make` instantiates, `type`
+TYPE-UNIFORM surface: `def` binds, `make` instantiates, `refine`
 constructs — the legacy `type`-binder / `object` / `record` /
-`table` / `untype` words were removed in Phase 3).
+`table` / `untype` words were removed in Phase 3, and the `type`
+constructor was renamed to `refine`).
 
 The single source of truth is `eng/go/core_type.go::InstallType`. It
 validates `body` is a valid type body, mints the lattice identity

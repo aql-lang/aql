@@ -41,8 +41,8 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		return nil, r.AqlError("getr_error", "getr: cannot access property on type literal", "getr")
 	}
 	// Integer key on list.
-	if key.VType.Matches(TInteger) {
-		if list, _ := AsList(container); !list.IsNil() && container.VType.Matches(TList) {
+	if key.Parent.Matches(TInteger) {
+		if list, _ := AsList(container); !list.IsNil() && container.Parent.Matches(TList) {
 			_as3, _ := AsInteger(key)
 			idx := int(_as3)
 			if idx < 0 || idx >= list.Len() {
@@ -54,7 +54,7 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	k := getKey(key)
 	m, _ := AsMap(container)
 	if m == nil {
-		return nil, fmt.Errorf("getr: expected a map, got %s", container.VType.String())
+		return nil, fmt.Errorf("getr: expected a map, got %s", container.Parent.String())
 	}
 	val, ok := m.Get(k)
 	if !ok {

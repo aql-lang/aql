@@ -106,8 +106,8 @@ func TestValueStringForward(t *testing.T) {
 
 func TestNewFnDef(t *testing.T) {
 	v := NewFnDef(FnDefInfo{})
-	if !v.VType.Equal(TFnDef) {
-		t.Errorf("expected fndef type, got %s", v.VType)
+	if !v.Parent.Equal(TFnDef) {
+		t.Errorf("expected fndef type, got %s", v.Parent)
 	}
 }
 
@@ -147,8 +147,8 @@ func TestAsTableType(t *testing.T) {
 func TestAsChildType(t *testing.T) {
 	v := NewTypedList(NewTypeLiteral(TString))
 	ct, _ := AsChildType(v)
-	if !ct.Child.VType.Equal(TString) {
-		t.Errorf("expected string child, got %s", ct.Child.VType)
+	if !ct.Child.Parent.Equal(TString) {
+		t.Errorf("expected string child, got %s", ct.Child.Parent)
 	}
 }
 

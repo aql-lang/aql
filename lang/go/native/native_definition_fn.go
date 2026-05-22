@@ -27,13 +27,13 @@ func MatchFnSig(fn Value, args []Value) *FnSig {
 		}
 		match := true
 		for j, p := range sig.Params {
-			if !args[j].VType.Matches(p.Type) {
+			if !args[j].Parent.Matches(p.Type) {
 				match = false
 				break
 			}
 			if p.Pattern != nil {
 				pat := *p.Pattern
-				if pat.VType.Equal(TMap) && args[j].VType.Equal(TMap) &&
+				if pat.Parent.Equal(TMap) && args[j].Parent.Equal(TMap) &&
 					pat.Data != nil && args[j].Data != nil {
 					if !OpenUnifyMap(pat, args[j]) {
 						match = false

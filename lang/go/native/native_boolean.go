@@ -91,7 +91,7 @@ func boolBinaryNative(name string, fn func(a, b bool) bool) NativeFunc {
 }
 
 func otherwiseHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	if args[1].VType.Equal(TNone) {
+	if args[1].Parent.Equal(TNone) {
 		return []Value{args[0]}, nil
 	}
 	return []Value{args[1]}, nil

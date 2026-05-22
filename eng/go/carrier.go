@@ -27,14 +27,14 @@ func NewCarrier(t *Type) Value {
 	v := NewValueRaw(t, nil)
 	v.Carrier = true
 	if t.Equal(TList) || t.Equal(TMap) {
-		v.Data = ChildTypeInfo{Child: Value{VType: TAny, Carrier: true}}
+		v.Data = ChildTypeInfo{Child: Value{Parent: TAny, Carrier: true}}
 	}
 	return v
 }
 
 // NewCarrierTypedList constructs a typed-list carrier — a list
 // carrier whose element type is known. Implemented as a regular
-// Value with VType=TList and Data=ChildTypeInfo{Child: NewCarrier(elem)}.
+// Value with Parent=TList and Data=ChildTypeInfo{Child: NewCarrier(elem)}.
 // The Carrier flag is still set so the rest of the engine treats it
 // as abstract. Downstream list-consuming words can recover the
 // element carrier via dataListElemType.
@@ -47,7 +47,7 @@ func NewCarrierTypedList(elem *Type) Value {
 // NewCarrierTypedListValue constructs a typed-list carrier whose
 // element is an arbitrary carrier Value. Use this when the element
 // itself is a typed list (nested lists), a disjunct, or otherwise
-// needs more structure than a bare VType.
+// needs more structure than a bare Parent.
 func NewCarrierTypedListValue(child Value) Value {
 	v := NewTypedList(child)
 	v.Carrier = true
@@ -91,15 +91,19 @@ func DataListElemTypeFromValue(data Value) *Type {
 		return TAny
 	}
 	if ct, ok := data.Data.(ChildTypeInfo); ok {
-		return ct.Child.VType
+		if ct.Child.Data == nil && !ct.Child.Carrier {
+			c := ct.Child // bare type-literal child IS the element type
+			return &c
+		}
+		return ct.Child.Parent
 	}
 	list, err := AsList(data)
 	if err != nil || list.IsNil() || list.Len() == 0 {
 		return TAny
 	}
-	t := list.Get(0).VType
+	t := list.Get(0).Parent
 	for i := 1; i < list.Len(); i++ {
-		t = CommonAncestorType(t, list.Get(i).VType)
+		t = CommonAncestorType(t, list.Get(i).Parent)
 		if t.Equal(TAny) {
 			break
 		}
@@ -122,7 +126,7 @@ func toCarrier(v Value) Value {
 	}
 	// Keep lists and maps concrete for now — matchSignature relies
 	// on Data presence for a few compound cases.
-	if v.VType.Equal(TList) || v.VType.Equal(TMap) {
+	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) {
 		return v
 	}
 	// Type literals (Data already nil) are already in the right
@@ -239,8 +243,8 @@ func ReturnsStatic(types ...*Type) ReturnsFunc {
 func ReturnsNumericBinary() ReturnsFunc {
 	return func(args []Value, _ *Registry) []Value {
 		if len(args) == 2 &&
-			args[0].VType.Matches(TInteger) &&
-			args[1].VType.Matches(TInteger) {
+			args[0].Parent.Matches(TInteger) &&
+			args[1].Parent.Matches(TInteger) {
 			return []Value{NewCarrier(TInteger)}
 		}
 		return []Value{NewCarrier(TDecimal)}
@@ -275,7 +279,7 @@ const CarrierDisjunctCap = 8
 // flattenAlternatives walks a carrier value and returns the unique
 // type literals it represents. For a disjunct carrier, flattens its
 // alternatives recursively; for any other carrier, returns a single
-// type literal of its VType.
+// type literal of its Parent.
 func flattenAlternatives(v Value) []Value {
 	if IsDisjunct(v) {
 		di, _ := AsDisjunct(v)
@@ -285,7 +289,7 @@ func flattenAlternatives(v Value) []Value {
 		}
 		return out
 	}
-	return []Value{NewTypeLiteral(v.VType)}
+	return []Value{NewTypeLiteral(v.Parent)}
 }
 
 // JoinCarriers folds two carriers into a single carrier that
@@ -304,24 +308,24 @@ func flattenAlternatives(v Value) []Value {
 // This is the primary join used when the checker needs to combine
 // two branch outcomes (e.g. `if` then/else).
 func JoinCarriers(a, b Value) Value {
-	if a.VType.Equal(b.VType) && !IsDisjunct(a) && !IsDisjunct(b) {
+	if a.Parent.Equal(b.Parent) && !IsDisjunct(a) && !IsDisjunct(b) {
 		out := a
 		out.Carrier = true
 		out.Data = nil
 		return out
 	}
 	if !IsDisjunct(a) && !IsDisjunct(b) {
-		if a.VType.Matches(b.VType) {
+		if a.Parent.Matches(b.Parent) {
 			// a is subtype of b → widen to b
-			return NewCarrier(b.VType)
+			return NewCarrier(b.Parent)
 		}
-		if b.VType.Matches(a.VType) {
-			return NewCarrier(a.VType)
+		if b.Parent.Matches(a.Parent) {
+			return NewCarrier(a.Parent)
 		}
 		// Check for a non-trivial common ancestor (shared prefix of at
 		// least one part). This collapses value-tagged literals (e.g.
 		// Number/Integer/42 vs Number/Integer/99 → Number/Integer).
-		anc := CommonAncestorType(a.VType, b.VType)
+		anc := CommonAncestorType(a.Parent, b.Parent)
 		if anc != nil && !anc.Equal(TAny) {
 			return NewCarrier(anc)
 		}
@@ -334,12 +338,12 @@ func JoinCarriers(a, b Value) Value {
 	combined = append(combined, flattenAlternatives(b)...)
 	alts := SimplifyDisjunctAlts(combined)
 	if len(alts) == 1 {
-		return NewCarrier(alts[0].VType)
+		return NewCarrier(alts[0].Parent)
 	}
 	if len(alts) > CarrierDisjunctCap {
-		t := alts[0].VType
+		t := alts[0].Parent
 		for i := 1; i < len(alts); i++ {
-			t = CommonAncestorType(t, alts[i].VType)
+			t = CommonAncestorType(t, alts[i].Parent)
 		}
 		return NewCarrier(t)
 	}
@@ -348,7 +352,7 @@ func JoinCarriers(a, b Value) Value {
 	return v
 }
 
-// RunCarrierBody runs a list body (a Value with VType=TList) through a
+// RunCarrierBody runs a list body (a Value with Parent=TList) through a
 // fresh sub-engine in check mode and returns the residual carrier
 // stack. Returns nil if the body is not a concrete list. Requires
 // that the registry is already in CheckMode (callers set it).
@@ -491,7 +495,7 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 	elems := list.Slice()
 	var out []GuardClause
 	for i := 0; i+2 < len(elems); i++ {
-		if !elems[i].VType.Equal(TWord) || !elems[i+1].VType.Equal(TWord) {
+		if !elems[i].Parent.Equal(TWord) || !elems[i+1].Parent.Equal(TWord) {
 			continue
 		}
 		wx, err := AsWord(elems[i])
@@ -503,7 +507,7 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 			continue
 		}
 		tv := elems[i+2]
-		if tv.Data != nil && tv.VType.Equal(TWord) {
+		if tv.Data != nil && tv.Parent.Equal(TWord) {
 			inner, _ := AsWord(tv)
 			if v, ok := r.Defs.Top(inner.Name); ok {
 				tv = v
@@ -512,7 +516,14 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 		if tv.Data != nil && !IsObjectType(tv) {
 			continue
 		}
-		out = append(out, GuardClause{Name: wx.Name, Type: tv.VType})
+		// A bare type-literal clause IS its type; an ObjectType keeps
+		// its type at Parent (the minted object-type node).
+		guardType := tv.Parent
+		if tv.Data == nil {
+			gt := tv
+			guardType = &gt
+		}
+		out = append(out, GuardClause{Name: wx.Name, Type: guardType})
 	}
 	return out
 }
@@ -543,7 +554,7 @@ func LiteralCondValue(condList Value) (bool, bool) {
 	// Bare true/false word (parser emits these as Word values that
 	// resolve to booleans in engine.stepWord; in check mode the
 	// words stay as Words until the branch runs).
-	if only.VType.Equal(TWord) {
+	if only.Parent.Equal(TWord) {
 		w, err := AsWord(only)
 		if err == nil {
 			if w.Name == "true" {
@@ -555,7 +566,7 @@ func LiteralCondValue(condList Value) (bool, bool) {
 		}
 	}
 	// Concrete Boolean value with Data set (post-runtime path).
-	if only.VType.Matches(TBoolean) && only.Data != nil {
+	if only.Parent.Matches(TBoolean) && only.Data != nil {
 		b, err := AsBoolean(only)
 		if err == nil {
 			return b, true
@@ -617,7 +628,7 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 		}
 		var remaining []Value
 		for _, alt := range di.Alternatives {
-			if alt.VType.Equal(c.Type) {
+			if ValueType(alt).Equal(c.Type) {
 				continue
 			}
 			remaining = append(remaining, alt)
@@ -628,7 +639,7 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 		}
 		var narrowed Value
 		if len(remaining) == 1 {
-			narrowed = NewCarrier(remaining[0].VType)
+			narrowed = NewCarrier(remaining[0].Parent)
 		} else {
 			narrowed = NewDisjunct(remaining)
 			narrowed.Carrier = true
@@ -664,7 +675,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	sb.WriteString(name)
 	sb.WriteByte('#')
 	for _, a := range args {
-		sb.WriteString(a.VType.String())
+		sb.WriteString(a.Parent.String())
 		sb.WriteByte(',')
 	}
 	key := sb.String()

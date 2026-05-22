@@ -79,7 +79,7 @@ func updateHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 	found := false
 	result := make([]Value, len(rows))
 	for i, row := range rows {
-		if !row.VType.Matches(TMap) {
+		if !row.Parent.Matches(TMap) {
 			result[i] = row
 			continue
 		}

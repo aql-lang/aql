@@ -480,12 +480,12 @@ Key patterns to follow:
   `.Len()`, `.Keys()`, `.Get()` etc. on a potentially nil result
   without checking first.
 - **Type literals have nil Data.** `NewTypeLiteral(TMap)` creates a Value
-  with `VType=TMap, Data=nil`. Any code that receives a Value matching
+  with `Parent=TMap, Data=nil`. Any code that receives a Value matching
   `TMap`/`TList`/`TAny` must handle the `Data==nil` case. This includes
   signature-matched arguments — `TAny` matches type literals.
-- **Map subtypes share VType=TMap.** RecordTypeInfo, OptionsTypeInfo,
-  ChildTypeInfo, and *OrderedMap all have `VType=TMap`. Code that checks
-  `VType.Equal(TMap)` matches all of them. Use `IsRecordType(v)`,
+- **Map subtypes share Parent=TMap.** RecordTypeInfo, OptionsTypeInfo,
+  ChildTypeInfo, and *OrderedMap all have `Parent=TMap`. Code that checks
+  `Parent.Equal(TMap)` matches all of them. Use `IsRecordType(v)`,
   `IsOptionsType(v)`, `IsTypedMap(v)` to discriminate, and guard
   `AsMap(v)` calls — it returns nil for non-OrderedMap data.
 - **Guard conversion functions.** `valueToAny()` and `valueToMap()` in

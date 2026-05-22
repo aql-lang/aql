@@ -369,6 +369,35 @@ func TestSizeHandlerString(t *testing.T) {
 	}
 }
 
+func TestSizeHandlerBehaviour(t *testing.T) {
+	tests := []struct {
+		name string
+		val  Value
+		want int64
+	}{
+		{"decimal_floors", NewDecimal(7.9), 7},
+		{"integer_magnitude", NewInteger(42), 42},
+		{"boolean_true", NewBoolean(true), 1},
+		{"boolean_false", NewBoolean(false), 0},
+		{"atom_name_length", NewAtom("hello"), 5},
+		{"path_segment_count", NewPath([]string{"a", "b", "c"}, false), 3},
+		{"array_elements", NewArray([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}), 3},
+		{"none_is_zero", NewTypeLiteral(TNone), 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := sizeHandler([]Value{tt.val}, nil, nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, _ := AsInteger(result[0])
+			if got != tt.want {
+				t.Errorf("size(%s) = %d, want %d", tt.val, got, tt.want)
+			}
+		})
+	}
+}
+
 // --- slice ---
 
 func TestSliceAllHandler(t *testing.T) {
@@ -630,7 +659,7 @@ func TestFilterHandler(t *testing.T) {
 	}
 	// All items should pass the filter (fn always returns true).
 	// voxgigstruct.Filter on a map may return a map or list; just check non-nil.
-	if result[0].VType.Equal(TList) {
+	if result[0].Parent.Equal(TList) {
 		_lst, _ := AsList(result[0])
 		list := _lst.Slice()
 		if len(list) != 2 {

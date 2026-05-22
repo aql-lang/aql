@@ -2,13 +2,18 @@ package eng
 
 import "strings"
 
-// Comparer implementations for the kernel scalar types. Each embeds
+// Comparer implementations for the kernel scalar types and Word. Each embeds
 // defaultBehavior so Match/Format/Equal stay at the kernel default;
 // the only addition is the Compare method, which makes the type
 // orderable for `lt`/`gt`/`lte`/`gte`/`sort`. Descendants of a
 // scalar (e.g. Integer < Number, EmptyString < String) inherit the
 // Comparer via the lattice walk in CompareValues — no per-subtype
 // registration needed.
+//
+// The Scalar root itself carries scalarCompareBehavior — the
+// cross-branch comparator. It orders values from different branches
+// (e.g. Integer-vs-String) by a fixed branch precedence and is
+// reached only when the LCA walk finds no branch-level Comparer.
 
 // numberCompareBehavior compares any pair of values rooted under
 // Scalar/Number (Integer, Decimal, or their dep variants) via the
@@ -24,6 +29,8 @@ func (numberCompareBehavior) formatDelegate()  {}
 func (stringCompareBehavior) formatDelegate()  {}
 func (booleanCompareBehavior) formatDelegate() {}
 func (atomCompareBehavior) formatDelegate()    {}
+func (scalarCompareBehavior) formatDelegate()  {}
+func (wordCompareBehavior) formatDelegate()    {}
 
 func (numberCompareBehavior) Compare(a, b Value) (int, error) {
 	af, _ := AsNumber(a)
@@ -73,6 +80,78 @@ func (atomCompareBehavior) Compare(a, b Value) (int, error) {
 	return strings.Compare(as, bs), nil
 }
 
+// wordCompareBehavior orders Word values lexicographically by their
+// rendered form. Word — like String and Atom — is a name-like type
+// whose deliberate comparison basis is the text itself; this is one
+// of the few places Value.String is used as an ordering key.
+type wordCompareBehavior struct{ defaultBehavior }
+
+func (wordCompareBehavior) Compare(a, b Value) (int, error) {
+	return strings.Compare(a.String(), b.String()), nil
+}
+
+// scalarCompareBehavior is the Comparer on the abstract Scalar root.
+// It gives cross-family scalar pairs (e.g. Integer-vs-String) a defined
+// order by their unified lattice Rank — the same key CompareValues'
+// fallback uses, so the Scalar root needs no private branch ladder and,
+// since the bare Scalar root literal carries a real Rank, it never has
+// to bail.
+//
+// CompareValues reaches it only for cross-family pairs: the LCA walk
+// stops at a branch root's own Comparer (Number/String/Boolean/Atom)
+// for any same-family pair. The one same-Rank pair that does reach here
+// is Path-vs-Path — Path has no Comparer of its own — so two paths fall
+// through to Scalar, where comparePaths orders them by segment count
+// (longest first), then segment by segment, then absolute before
+// relative.
+type scalarCompareBehavior struct{ defaultBehavior }
+
+func (scalarCompareBehavior) Compare(a, b Value) (int, error) {
+	if c := compareTypes(ValueType(a), ValueType(b)); c != 0 {
+		return c, nil
+	}
+	// Same scalar type — Path-vs-Path orders by segment count, then
+	// segment by segment, then absolute before relative.
+	return comparePaths(a, b), nil
+}
+
+// comparePaths orders two Path values by three keys in turn: longer
+// paths (more segments) sort first, then segment by segment
+// lexically, then an absolute path before a relative one.
+// scalarCompareBehavior routes the Path-vs-Path case here.
+func comparePaths(a, b Value) int {
+	ap, aerr := AsPath(a)
+	bp, berr := AsPath(b)
+	if aerr != nil || berr != nil {
+		// Not a Path pair after all — fall back to rendered order.
+		return strings.Compare(a.String(), b.String())
+	}
+	switch {
+	case len(ap.Parts) > len(bp.Parts):
+		return -1
+	case len(ap.Parts) < len(bp.Parts):
+		return 1
+	}
+	// Equal segment count — compare segment by segment. Comparing
+	// the parts directly, rather than the "/"-joined render, keeps
+	// the separator byte from skewing the order.
+	for i := range ap.Parts {
+		if c := strings.Compare(ap.Parts[i], bp.Parts[i]); c != 0 {
+			return c
+		}
+	}
+	// Same size and segments — an absolute path sorts before a
+	// relative one.
+	switch {
+	case ap.Abs && !bp.Abs:
+		return -1
+	case !ap.Abs && bp.Abs:
+		return 1
+	default:
+		return 0
+	}
+}
+
 // init attaches the scalar Comparers to their owning kernel types.
 // The Builtin TypeTable has been populated by the typetable.go init
 // at this point (same package, lexicographic file order isn't
@@ -89,4 +168,6 @@ func init() {
 	TString.Behavior = stringCompareBehavior{}
 	TBoolean.Behavior = booleanCompareBehavior{}
 	TAtom.Behavior = atomCompareBehavior{}
+	TScalar.Behavior = scalarCompareBehavior{}
+	TWord.Behavior = wordCompareBehavior{}
 }

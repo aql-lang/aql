@@ -176,7 +176,7 @@ func doEvalDataList(r *Registry, elems []Value) ([]Value, error) {
 // doPromoteToWord converts a string or atom value to a word if it
 // names a registered function.
 func doPromoteToWord(r *Registry, v Value) Value {
-	if v.VType.Matches(TString) || v.VType.Matches(TAtom) {
+	if v.Parent.Matches(TString) || v.Parent.Matches(TAtom) {
 		name, _ := AsString(v)
 		if r.Lookup(name) != nil {
 			return NewWord(name)
@@ -188,7 +188,7 @@ func doPromoteToWord(r *Registry, v Value) Value {
 // doEvalMapValue recursively evaluates list values within a map. Used
 // by `do` to walk a map literal and evaluate any embedded code lists.
 func doEvalMapValue(r *Registry, v Value) (Value, error) {
-	if v.VType.Equal(TList) && v.Data != nil && !IsTypedList(v) && !IsTableType(v) {
+	if v.Parent.Equal(TList) && v.Data != nil && !IsTypedList(v) && !IsTableType(v) {
 		_lst, _ := AsList(v)
 		results, err := doEvalDataList(r, _lst.Slice())
 		if err != nil {
@@ -199,7 +199,7 @@ func doEvalMapValue(r *Registry, v Value) (Value, error) {
 		}
 		return NewList(results), nil
 	}
-	if v.VType.Equal(TMap) && v.Data != nil && !IsTypedMap(v) && !IsRecordType(v) && !IsOptionsType(v) {
+	if v.Parent.Equal(TMap) && v.Data != nil && !IsTypedMap(v) && !IsRecordType(v) && !IsOptionsType(v) {
 		m, _ := AsMap(v)
 		out := NewOrderedMap()
 		for _, key := range m.Keys() {
@@ -222,7 +222,7 @@ func if3Handler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	thenBranch := spliceArg(args[1])
 	elseBranch := spliceArg(args[2])
 
-	if cond.VType.Equal(TList) && cond.Data != nil && !IsTypedList(cond) && !IsTableType(cond) {
+	if cond.Parent.Equal(TList) && cond.Data != nil && !IsTypedList(cond) && !IsTableType(cond) {
 		_lst, _ := AsList(cond)
 		condSlice := _lst.Slice()
 		id := NextMarkID()
@@ -246,7 +246,7 @@ func if2Handler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	cond := args[0]
 	thenBranch := spliceArg(args[1])
 
-	if cond.VType.Equal(TList) && cond.Data != nil && !IsTypedList(cond) && !IsTableType(cond) {
+	if cond.Parent.Equal(TList) && cond.Data != nil && !IsTypedList(cond) && !IsTableType(cond) {
 		_lst, _ := AsList(cond)
 		condSlice := _lst.Slice()
 		id := NextMarkID()
@@ -346,7 +346,7 @@ func ifListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 // contribute to the return type. Unlike if3/if2 this does no per-clause
 // guard narrowing — multi-clause narrowing isn't modelled.
 func ifListReturnsFn(args []Value, r *Registry) []Value {
-	if !IsConcrete(args[0]) || !args[0].VType.Equal(TList) {
+	if !IsConcrete(args[0]) || !args[0].Parent.Equal(TList) {
 		return []Value{NewCarrier(TAny)}
 	}
 	_lst, _ := AsList(args[0])
@@ -421,7 +421,7 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 	if len(stk) == 0 {
 		return []Value{NewCarrier(TList)}
 	}
-	return []Value{NewCarrierTypedList(stk[len(stk)-1].VType)}
+	return []Value{NewCarrierTypedList(stk[len(stk)-1].Parent)}
 }
 
 // ---- error handler ----

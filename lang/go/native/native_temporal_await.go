@@ -18,7 +18,7 @@ type parallelResult struct {
 // If the element is a list, it runs as a sub-program.
 // Otherwise, it is returned as a single value.
 func runParallelBranch(r *Registry, elem Value) parallelResult {
-	if elem.VType.Matches(TList) && elem.Data != nil && !IsTypedList(elem) && !IsTableType(elem) {
+	if elem.Parent.Matches(TList) && elem.Data != nil && !IsTypedList(elem) && !IsTableType(elem) {
 		sub := New(r)
 		_lst, _ := AsList(elem)
 		body := _lst.Slice()

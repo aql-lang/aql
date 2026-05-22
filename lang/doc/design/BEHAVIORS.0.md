@@ -5,7 +5,7 @@
 AQL associates per-type capabilities — `compare`, `canon`, `nodify` —
 with a type's `Behavior` slot on its `*Type`. The kernel-side free
 functions (`eng.CompareValues`, `eng.Value.String`, `eng.NodifyValue`)
-dispatch by walking the value's `VType` parent chain looking for a
+dispatch by walking the value's `Parent` parent chain looking for a
 `Behavior` that implements the corresponding optional capability
 interface (`Comparer`, `Format`-via-`TypeBehavior`, `Nodifier`).
 Three layers ship today:
@@ -115,12 +115,12 @@ dispatch — the subtlest gotcha for users coming from nominal languages.
 
 **Validation is structural.** `def x:Person {name:'A' age:30}` validates
 that the map literal has fields matching Person's shape. The map is
-accepted because its structure fits — but its `VType` stays as `TMap`,
+accepted because its structure fits — but its `Parent` stays as `TMap`,
 not `Person`. The Person name was a *gate* the value had to pass; once
 through, the value forgets it ever heard of Person.
 
-**Dispatch is nominal.** `value lt other` walks `value.VType`'s parent
-chain looking for a `Comparer`. If `value.VType` is `TMap`, it'll find
+**Dispatch is nominal.** `value lt other` walks `value.Parent`'s parent
+chain looking for a `Comparer`. If `value.Parent` is `TMap`, it'll find
 whatever Map has (nothing today) — it'll *never* find Person's
 Comparer, even though that value was just validated as a Person.
 
@@ -130,8 +130,8 @@ The way to *carry* nominal identity is `make`:
 type Person object {name:String age:Integer}
 behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]])
 
-def x:Person {name:'A' age:30}            ; x.VType = TMap     — compare misses
-def y      (make Person {name:'B' age:25}) ; y.VType = Person   — compare hits
+def x:Person {name:'A' age:30}            ; x.Parent = TMap     — compare misses
+def y      (make Person {name:'B' age:25}) ; y.Parent = Person   — compare hits
 ```
 
 Same input, two different runtime identities — one carrying Person, one
@@ -182,7 +182,7 @@ A predicate type `type Positive fn [n:Integer Integer [(n gt 0) guard
 n]]` was historically dispatch-invisible: it had no `*Type` of its
 own (just an FnDef value on the type stack), so `behave compare/q (fn
 [[Positive Positive] …])` had no values to dispatch on — no value's
-`VType` was ever `Positive`. The lattice walk never reached it.
+`Parent` was ever `Positive`. The lattice walk never reached it.
 
 The current kernel resolves this for predicate types whose input is
 concrete (`[n:Integer …]` rather than `[x:Any …]`):
@@ -196,8 +196,8 @@ concrete (`[n:Integer …]` rather than `[x:Any …]`):
 2. **The typed-bind path rewraps the validated value with the
    predicate's `*Type`.** `def x:Positive 5` runs the predicate body
    (`(n gt 0) guard n`), gets back `5` if it satisfies, then sets
-   `out.VType = Positive` before installing. The underlying `Data`
-   is unchanged — `AsInteger(x)` still works — but the VType change
+   `out.Parent = Positive` before installing. The underlying `Data`
+   is unchanged — `AsInteger(x)` still works — but the Parent change
    lets `CompareValues` find behaviors registered on Positive.
 
 3. **`CanonValue` walks the parent chain for user-defined types**
@@ -260,15 +260,15 @@ For reference, the design space considered during implementation:
 
    When the kernel performs a typed bind `def x:Positive 5`, it
    wraps the value `5` in a lightweight `TypedCarrier{Type:
-   Positive, Value: 5}` — a `Value` whose `VType` is `Positive`
+   Positive, Value: 5}` — a `Value` whose `Parent` is `Positive`
    and whose `Data` is the underlying `5`. Accessors
    (`AsInteger`, etc.) unwrap transparently; the only thing that
-   changes is the `VType` reported by `typeof` and consulted by
+   changes is the `Parent` reported by `typeof` and consulted by
    dispatch.
 
    With this in place, `behave compare/q (fn [[Positive Positive]
    …])` Just Works through the existing LCA walk — the carrier's
-   `VType` is `Positive`, the lattice finds the registered
+   `Parent` is `Positive`, the lattice finds the registered
    Comparer, and the body runs. The same mechanism subsumes the
    structural-vs-nominal gotcha above: `def x:Person {…}` would
    wrap the map in a `Person`-typed carrier so Person's behaviors
@@ -277,13 +277,13 @@ For reference, the design space considered during implementation:
    The cost is one `Value` allocation per typed bind, plus a small
    amount of kernel logic to unwrap carriers in accessors. The
    model becomes uniform: a value's runtime identity is what its
-   `VType` says it is, regardless of whether the type is nominal
+   `Parent` says it is, regardless of whether the type is nominal
    (record), structural-with-assertion (predicate), or kernel
    (scalar). Worth measuring before landing — typed binds are not
    universal but they're not rare either.
 
 Option (4) was the one landed (a thinner version than originally
-described — no separate carrier struct; the rewrap just sets `out.VType
+described — no separate carrier struct; the rewrap just sets `out.Parent
 = def` since the payload shape is already compatible with the
 predicate's input type). Options (2) and (3) are narrower fixes that
 would have left the structural-vs-nominal split intact.
@@ -295,7 +295,7 @@ along the same lines, with one tweak per category:
 
 - **Object types** — `def x:Person {map}` calls `eng.MakeObject`
   internally to build a Person-typed ObjectInstance from the raw
-  map body. The result carries `VType = Person` and a real
+  map body. The result carries `Parent = Person` and a real
   `ObjectInstanceInfo` payload, so accessors like `get key x` find
   the `[TAtom TObject]` signature instead of failing on a
   Person-tagged-but-Map-shaped value. Pre-made instances
@@ -305,7 +305,7 @@ along the same lines, with one tweak per category:
 - **Function-shape types** — `def f:Mapper fn […]` where Mapper is
   `type Mapper fnsig [[Integer] [Integer]]`: after `Unify` confirms
   the function's signature matches the declared shape, the rewrap
-  flips `f.VType` to Mapper. The payload (`FnDefInfo`) is unchanged
+  flips `f.Parent` to Mapper. The payload (`FnDefInfo`) is unchanged
   and the call-site dispatch still finds the registered signatures,
   so `5 f` still works; what changes is that `behave compare/q (fn
   [[Mapper Mapper] …])` now dispatches on `f`.

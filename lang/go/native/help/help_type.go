@@ -32,12 +32,12 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:    "type",
-		Summary: "Construct a type from a base type and an argument.",
-		Description: "Builds a (sub)type: `type Object {fields}` an object type, " +
-			"`type ParentType {fields}` an object subtype, `type Record [pairs]` " +
-			"a record type, `type Table recordtype` a table type. Pair with " +
-			"`def Name (type …)` to bind it.",
+		Word:    "refine",
+		Summary: "Construct a (sub)type from a base type.",
+		Description: "Builds a (sub)type: `refine Object {fields}` an object type, " +
+			"`refine ParentType {fields}` an object subtype, `refine Record [pairs]` " +
+			"a record type, `refine Table recordtype` a table type, `refine List` " +
+			"a bare nominal subtype. Pair with `def Name (refine …)` to bind it.",
 	})
 
 	register(&Entry{

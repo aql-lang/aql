@@ -80,7 +80,7 @@ func registerTensorIdeals(r *native.Registry) {
 func tensorAccepts(vt *eng.Type, kind string) func(native.Value) bool {
 	return func(v native.Value) bool {
 		if v.Data == nil {
-			return v.VType != nil && v.VType.Equal(vt)
+			return v.Parent != nil && v.Parent.Equal(vt)
 		}
 		ti, ok := tensorTypeInfo(v)
 		return ok && ti.Kind == kind
@@ -88,17 +88,17 @@ func tensorAccepts(vt *eng.Type, kind string) func(native.Value) bool {
 }
 
 // tensorConstruct is the Ideal.Construct body for a tensor kind — it
-// builds a shaped type from `type <kind> <shape-spec>`.
+// builds a shaped type from `refine <kind> <shape-spec>`.
 func tensorConstruct(kind string, vt *eng.Type) func(base, arg native.Value, r *native.Registry) ([]native.Value, error) {
 	return func(base, arg native.Value, r *native.Registry) ([]native.Value, error) {
 		if base.Data != nil {
 			return nil, r.AqlError("type_error",
-				fmt.Sprintf("type %s: a shaped tensor type has no subtyping — construct from the bare %s literal", kind, kind),
-				"type")
+				fmt.Sprintf("refine %s: a shaped tensor type has no subtyping — construct from the bare %s literal", kind, kind),
+				"refine")
 		}
 		shape, err := parseTensorShapeSpec(kind, arg)
 		if err != nil {
-			return nil, r.AqlError("type_error", err.Error(), "type")
+			return nil, r.AqlError("type_error", err.Error(), "refine")
 		}
 		return []native.Value{eng.NewExtension(vt, TensorTypeInfo{Kind: kind, Shape: shape})}, nil
 	}

@@ -26,6 +26,14 @@ func init() {
 	})
 
 	register(&Entry{
+		Word:    "cmp",
+		Summary: "Three-way comparison of two values.",
+		Description: "Returns -1 when the first value sorts before the second, 0 when " +
+			"they tie, and 1 when it sorts after — the same total order used by " +
+			"lt / gt / sort, surfaced as an Integer.",
+	})
+
+	register(&Entry{
 		Word:        "eq",
 		Summary:     "Test if two values are equal.",
 		Description: "Compares two values for equality. Numbers, strings, booleans, and atoms are compared by value.",

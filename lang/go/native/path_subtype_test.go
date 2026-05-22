@@ -54,11 +54,11 @@ func TestPathSubtype_AnyIsNotMagical(t *testing.T) {
 // with Integer.
 func TestPathSubtype_DepIntegerIsNotInteger(t *testing.T) {
 	dep := NewDepScalar(DepGT, NewInteger(10))
-	if dep.VType.PathSubtype(TInteger) {
+	if dep.Parent.PathSubtype(TInteger) {
 		t.Errorf("DepInteger.PathSubtype(Integer) = true (PathSubtype must NOT follow the Dep bolt-on)")
 	}
 	// Sanity: Matches DOES say yes through the bolt-on.
-	if !dep.VType.Matches(TInteger) {
+	if !dep.Parent.Matches(TInteger) {
 		t.Errorf("DepInteger.Matches(Integer) = false (Matches MUST follow the Dep bolt-on)")
 	}
 }

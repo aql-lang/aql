@@ -115,14 +115,15 @@ func TestEngineDeq(t *testing.T) {
 	}
 }
 
-func TestEngineLtError(t *testing.T) {
+func TestEngineLtTotalOrder(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = runAQLError(t, r, []Value{NewInteger(1), NewWord("lt"), NewString("a")})
-	if err == nil {
-		t.Error("expected error for cross-type lt")
+	// lt is total — comparing across type branches no longer errors.
+	result := runAQL(t, r, []Value{NewInteger(1), NewWord("lt"), NewList([]Value{NewInteger(2)})})
+	if len(result) != 1 || !result[0].Parent.Equal(TBoolean) {
+		t.Errorf("1 lt [2] = %v, want a Boolean", result)
 	}
 }
 
@@ -306,7 +307,7 @@ func TestEngineReadWithOpts(t *testing.T) {
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("lines"))
 	result := runAQL(t, r, []Value{NewWord("read"), NewString("data.txt"), NewMap(opts)})
-	if len(result) != 1 || !result[0].VType.Equal(TList) {
+	if len(result) != 1 || !result[0].Parent.Equal(TList) {
 		t.Errorf("read with lines fmt = %v, want list", result)
 	}
 	_lst, _ := AsList(result[0])
@@ -328,7 +329,7 @@ func TestEngineReadJSON(t *testing.T) {
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("json"))
 	result := runAQL(t, r, []Value{NewWord("read"), NewString("data.json"), NewMap(opts)})
-	if len(result) != 1 || !result[0].VType.Equal(TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Errorf("read json = %v, want map", result)
 	}
 }

@@ -55,7 +55,7 @@ import (
 //
 // Returns the FnParam list, the BarrierPos, or a parse error.
 func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
-	if !inputSig.VType.Equal(TList) {
+	if !inputSig.Parent.Equal(TList) {
 		return nil, 0, fmt.Errorf("function spec: input signature must be a list")
 	}
 	if inputSig.Data == nil {
@@ -83,7 +83,7 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 		}
 
 		switch {
-		case elem.VType.Equal(TMap) && elem.Data != nil:
+		case elem.Parent.Equal(TMap) && elem.Data != nil:
 			m, err := AsMutableMap(elem)
 			if err == nil && m != nil && m.Implicit {
 				keys := m.Keys()
@@ -113,14 +113,14 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 					_as3, _ := AsDisjunct(typeVal)
 					alts := _as3.Alternatives
 					for _, alt := range alts {
-						if alt.VType.Equal(TNone) {
+						if alt.Parent.Equal(TNone) {
 							optional = true
 							break
 						}
 					}
 					if optional {
 						for _, alt := range alts {
-							if !alt.VType.Equal(TNone) {
+							if !alt.Parent.Equal(TNone) {
 								typeVal = alt
 								break
 							}
@@ -179,17 +179,18 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 			params = append(params, FnParam{Type: paramType})
 
 		case elem.Data == nil:
-			params = append(params, FnParam{Type: elem.VType})
+			elemType := elem
+			params = append(params, FnParam{Type: &elemType})
 
-		case elem.VType.Matches(TInteger):
+		case elem.Parent.Matches(TInteger):
 			pat := elem
 			params = append(params, FnParam{Type: TInteger, Pattern: &pat})
 
-		case elem.VType.Matches(TBoolean):
+		case elem.Parent.Matches(TBoolean):
 			pat := elem
 			params = append(params, FnParam{Type: TBoolean, Pattern: &pat})
 
-		case elem.VType.Matches(TString):
+		case elem.Parent.Matches(TString):
 			pat := elem
 			params = append(params, FnParam{Type: TString, Pattern: &pat})
 
@@ -204,7 +205,7 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 // ParseFnReturns extracts return types from an output signature.
 // The output may be a list of types/values or a single type/value.
 func ParseFnReturns(outputSig Value) ([]*Type, error) {
-	if !outputSig.VType.Equal(TList) || outputSig.Data == nil {
+	if !outputSig.Parent.Equal(TList) || outputSig.Data == nil {
 		t, _, err := ResolveSigType(nil, outputSig)
 		if err != nil {
 			return nil, err
@@ -230,7 +231,7 @@ func ParseFnReturns(outputSig Value) ([]*Type, error) {
 // plus an optional pattern Value for structural matching.
 func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 	if v.Data == nil {
-		return v.VType, nil, nil
+		return ValueType(v), nil, nil
 	}
 	if IsWord(v) {
 		_as5, _ := AsWord(v)
@@ -241,7 +242,7 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 		t, err := ResolveTypeName(name)
 		return t, nil, err
 	}
-	if v.VType.Matches(TString) {
+	if v.Parent.Matches(TString) {
 		name, _ := AsString(v)
 		if defVal := LookupDefType(r, name); defVal != nil {
 			return ResolveDefType(*defVal)
@@ -249,7 +250,7 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 		t, err := ResolveTypeName(name)
 		return t, nil, err
 	}
-	if v.VType.Matches(TAtom) {
+	if v.Parent.Matches(TAtom) {
 		name, _ := AsString(v)
 		if defVal := LookupDefType(r, name); defVal != nil {
 			return ResolveDefType(*defVal)
@@ -257,31 +258,31 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 		t, err := ResolveTypeName(name)
 		return t, nil, err
 	}
-	if v.Data != nil && (v.VType.Matches(TInteger) ||
-		v.VType.Matches(TDecimal) ||
-		v.VType.Matches(TBoolean) ||
-		v.VType.Matches(TString) ||
-		v.VType.Matches(TAtom)) {
+	if v.Data != nil && (v.Parent.Matches(TInteger) ||
+		v.Parent.Matches(TDecimal) ||
+		v.Parent.Matches(TBoolean) ||
+		v.Parent.Matches(TString) ||
+		v.Parent.Matches(TAtom)) {
 		pattern := v
 		var kind *Type
 		switch {
-		case v.VType.Matches(TInteger):
+		case v.Parent.Matches(TInteger):
 			kind = TInteger
-		case v.VType.Matches(TDecimal):
+		case v.Parent.Matches(TDecimal):
 			kind = TDecimal
-		case v.VType.Matches(TBoolean):
+		case v.Parent.Matches(TBoolean):
 			kind = TBoolean
-		case v.VType.Matches(TString):
+		case v.Parent.Matches(TString):
 			kind = TString
 		default:
 			kind = TAtom
 		}
 		return kind, &pattern, nil
 	}
-	if v.VType.Equal(TMap) {
+	if v.Parent.Equal(TMap) {
 		return TMap, &v, nil
 	}
-	if v.VType.Equal(TList) {
+	if v.Parent.Equal(TList) {
 		return TList, &v, nil
 	}
 	return TAny, nil, nil
@@ -323,7 +324,7 @@ func ResolveDefType(v Value) (*Type, *Value, error) {
 		return TMap, &pat, nil
 	}
 	if v.Data == nil {
-		return v.VType, nil, nil
+		return v.Parent, nil, nil
 	}
 	return TAny, nil, nil
 }

@@ -55,7 +55,7 @@ func TestFromLooksUpTable(t *testing.T) {
 
 	v := result[0]
 	if !native.IsTableType(v) {
-		t.Fatalf("expected table type, got %s", v.VType)
+		t.Fatalf("expected table type, got %s", v.Parent)
 	}
 
 	rows, _ := native.AsList(v)
@@ -192,7 +192,7 @@ func TestSelectAgainstInternalTable(t *testing.T) {
 		Rows:   []native.Value{native.NewMap(row1), native.NewMap(row2)},
 		SQLite: false, // not backed by SQLite
 	}
-	tableVal := native.Value{VType: native.TList, Data: td}
+	tableVal := native.Value{Parent: native.TList, Data: td}
 
 	// Store in registry.
 	reg.Store["colors"] = tableVal
@@ -770,7 +770,7 @@ func TestWhereOnInternalTable(t *testing.T) {
 		Rows:   []native.Value{native.NewMap(row1), native.NewMap(row2)},
 		SQLite: false,
 	}
-	reg.Store["colors"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["colors"] = native.Value{Parent: native.TList, Data: td}
 
 	queryVals, err := parser.Parse(`select * from colors where [color eq "red"]`)
 	if err != nil {
@@ -883,7 +883,7 @@ func TestDistinctDuplicates(t *testing.T) {
 		Rows:   []native.Value{mkRow("red"), mkRow("blue"), mkRow("red"), mkRow("blue"), mkRow("red")},
 		SQLite: false,
 	}
-	reg.Store["colors"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["colors"] = native.Value{Parent: native.TList, Data: td}
 
 	queryVals, err := parser.Parse(`select [color] (from colors distinct)`)
 	if err != nil {
@@ -931,7 +931,7 @@ func TestOrderNullsFirst(t *testing.T) {
 		Rows:   []native.Value{mkRow("Alice", "90"), mkRow("Bob", ""), mkRow("Charlie", "80")},
 		SQLite: false,
 	}
-	reg.Store["scores"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["scores"] = native.Value{Parent: native.TList, Data: td}
 
 	// Order by score with nulls first — empty strings sort first.
 	queryVals, err := parser.Parse(`select * from scores order [score asc nulls first]`)
@@ -1012,7 +1012,7 @@ func TestWhereIsNull(t *testing.T) {
 		Rows:   []native.Value{mkRow("Alice", "alice@test.com"), mkRow("Bob", ""), mkRow("Charlie", "charlie@test.com")},
 		SQLite: false,
 	}
-	reg.Store["users"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["users"] = native.Value{Parent: native.TList, Data: td}
 
 	// is not null — in SQLite all TEXT columns are non-null (empty string != null)
 	// but the query should still execute without error.
@@ -1263,7 +1263,7 @@ func TestTypedIntegerColumn(t *testing.T) {
 		},
 		SQLite: false,
 	}
-	reg.Store["people"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["people"] = native.Value{Parent: native.TList, Data: td}
 
 	// Numeric comparison should work correctly with INTEGER column.
 	// With TEXT, "9" > "25" is true (string ordering). With INTEGER, 9 < 25.
@@ -1286,8 +1286,8 @@ func TestTypedIntegerColumn(t *testing.T) {
 	if !ok {
 		t.Fatal("expected age field")
 	}
-	if !ageVal.VType.Matches(native.TInteger) {
-		t.Errorf("expected age to be integer type, got %s", ageVal.VType)
+	if !ageVal.Parent.Matches(native.TInteger) {
+		t.Errorf("expected age to be integer type, got %s", ageVal.Parent)
 	}
 	_v1, _ := native.AsInteger(ageVal)
 	if _v1 != 30 {
@@ -1331,7 +1331,7 @@ func TestTypedBooleanColumn(t *testing.T) {
 		},
 		SQLite: false,
 	}
-	reg.Store["users"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["users"] = native.Value{Parent: native.TList, Data: td}
 
 	queryVals, err := parser.Parse(`select * from users where [active eq 1]`)
 	if err != nil {
@@ -1352,8 +1352,8 @@ func TestTypedBooleanColumn(t *testing.T) {
 	if !ok {
 		t.Fatal("expected active field")
 	}
-	if !activeVal.VType.Matches(native.TBoolean) {
-		t.Errorf("expected active to be boolean type, got %s", activeVal.VType)
+	if !activeVal.Parent.Matches(native.TBoolean) {
+		t.Errorf("expected active to be boolean type, got %s", activeVal.Parent)
 	}
 	_v5, _ := native.AsBoolean(activeVal)
 	if !_v5 {
@@ -1384,7 +1384,7 @@ func TestTypedIntegerOrdering(t *testing.T) {
 		Rows:   []native.Value{mkRow(100), mkRow(9), mkRow(25)},
 		SQLite: false,
 	}
-	reg.Store["nums"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["nums"] = native.Value{Parent: native.TList, Data: td}
 
 	queryVals, err := parser.Parse(`select * from nums order [val]`)
 	if err != nil {
@@ -1605,7 +1605,7 @@ func TestGroupByWithCount(t *testing.T) {
 			mkRow("sales", "Eve"),
 		},
 	}
-	reg.Store["staff"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["staff"] = native.Value{Parent: native.TList, Data: td}
 
 	queryVals, err := parser.Parse(`select [dept [count name cnt]] from staff group by [dept] order [dept]`)
 	if err != nil {
@@ -1671,7 +1671,7 @@ func TestHaving(t *testing.T) {
 			mkRow("eng", "Dave"),
 		},
 	}
-	reg.Store["staff"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["staff"] = native.Value{Parent: native.TList, Data: td}
 
 	// Only groups with count > 1
 	queryVals, err := parser.Parse(`select [dept [count name cnt]] from staff group by [dept] having [cnt gt 1]`)
@@ -1742,7 +1742,7 @@ func TestInnerJoin(t *testing.T) {
 			mkOrder("3", "widget", "3"),
 		},
 	}
-	reg.Store["orders"] = native.Value{VType: native.TList, Data: oTD}
+	reg.Store["orders"] = native.Value{Parent: native.TList, Data: oTD}
 
 	// products table
 	pFields := native.NewOrderedMap()
@@ -1762,7 +1762,7 @@ func TestInnerJoin(t *testing.T) {
 			mkProduct("gadget", "19.99"),
 		},
 	}
-	reg.Store["products"] = native.Value{VType: native.TList, Data: pTD}
+	reg.Store["products"] = native.Value{Parent: native.TList, Data: pTD}
 
 	queryVals, err := parser.Parse(`select * from orders join products using [product] order [order_id]`)
 	if err != nil {
@@ -1820,7 +1820,7 @@ func TestLeftJoin(t *testing.T) {
 			mkPerson("Charlie", "99"), // no matching dept
 		},
 	}
-	reg.Store["people"] = native.Value{VType: native.TList, Data: pTD}
+	reg.Store["people"] = native.Value{Parent: native.TList, Data: pTD}
 
 	// depts
 	dFields := native.NewOrderedMap()
@@ -1840,7 +1840,7 @@ func TestLeftJoin(t *testing.T) {
 			mkDept("2", "Sales"),
 		},
 	}
-	reg.Store["depts"] = native.Value{VType: native.TList, Data: dTD}
+	reg.Store["depts"] = native.Value{Parent: native.TList, Data: dTD}
 
 	queryVals, err := parser.Parse(`select * from people leftjoin depts using [dept_id] order [name]`)
 	if err != nil {
@@ -1888,8 +1888,8 @@ func TestUnion(t *testing.T) {
 		return native.TableData{Record: recType, Rows: rows}
 	}
 
-	reg.Store["t1"] = native.Value{VType: native.TList, Data: mkTable("Alice", "Bob")}
-	reg.Store["t2"] = native.Value{VType: native.TList, Data: mkTable("Bob", "Charlie")}
+	reg.Store["t1"] = native.Value{Parent: native.TList, Data: mkTable("Alice", "Bob")}
+	reg.Store["t2"] = native.Value{Parent: native.TList, Data: mkTable("Bob", "Charlie")}
 
 	// UNION removes duplicates.
 	queryVals, err := parser.Parse(`select * (from t1 union from t2) order [name]`)
@@ -1927,8 +1927,8 @@ func TestUnionAll(t *testing.T) {
 		return native.TableData{Record: recType, Rows: rows}
 	}
 
-	reg.Store["t1"] = native.Value{VType: native.TList, Data: mkTable("Alice", "Bob")}
-	reg.Store["t2"] = native.Value{VType: native.TList, Data: mkTable("Bob", "Charlie")}
+	reg.Store["t1"] = native.Value{Parent: native.TList, Data: mkTable("Alice", "Bob")}
+	reg.Store["t2"] = native.Value{Parent: native.TList, Data: mkTable("Bob", "Charlie")}
 
 	// UNION ALL keeps duplicates.
 	queryVals, err := parser.Parse(`select * (from t1 unionall from t2) order [name]`)
@@ -1966,8 +1966,8 @@ func TestIntersect(t *testing.T) {
 		return native.TableData{Record: recType, Rows: rows}
 	}
 
-	reg.Store["t1"] = native.Value{VType: native.TList, Data: mkTable("Alice", "Bob")}
-	reg.Store["t2"] = native.Value{VType: native.TList, Data: mkTable("Bob", "Charlie")}
+	reg.Store["t1"] = native.Value{Parent: native.TList, Data: mkTable("Alice", "Bob")}
+	reg.Store["t2"] = native.Value{Parent: native.TList, Data: mkTable("Bob", "Charlie")}
 
 	queryVals, err := parser.Parse(`select * (from t1 intersect from t2)`)
 	if err != nil {
@@ -2010,8 +2010,8 @@ func TestExcept(t *testing.T) {
 		return native.TableData{Record: recType, Rows: rows}
 	}
 
-	reg.Store["t1"] = native.Value{VType: native.TList, Data: mkTable("Alice", "Bob")}
-	reg.Store["t2"] = native.Value{VType: native.TList, Data: mkTable("Bob", "Charlie")}
+	reg.Store["t1"] = native.Value{Parent: native.TList, Data: mkTable("Alice", "Bob")}
+	reg.Store["t2"] = native.Value{Parent: native.TList, Data: mkTable("Bob", "Charlie")}
 
 	queryVals, err := parser.Parse(`select * (from t1 except from t2)`)
 	if err != nil {
@@ -2106,7 +2106,7 @@ func TestSumAggregate(t *testing.T) {
 		Record: recType,
 		Rows:   []native.Value{mkRow(10), mkRow(20), mkRow(30)},
 	}
-	reg.Store["nums"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["nums"] = native.Value{Parent: native.TList, Data: td}
 
 	queryVals, err := parser.Parse(`select [[sum val total]] from nums`)
 	if err != nil {
@@ -2155,7 +2155,7 @@ func TestJoinWithOnCondition(t *testing.T) {
 		Record: eRec,
 		Rows:   []native.Value{mkEmp("Alice", "1"), mkEmp("Bob", "2")},
 	}
-	reg.Store["employees"] = native.Value{VType: native.TList, Data: eTD}
+	reg.Store["employees"] = native.Value{Parent: native.TList, Data: eTD}
 
 	// departments table
 	dFields := native.NewOrderedMap()
@@ -2172,7 +2172,7 @@ func TestJoinWithOnCondition(t *testing.T) {
 		Record: dRec,
 		Rows:   []native.Value{mkDept("1", "Engineering"), mkDept("2", "Sales")},
 	}
-	reg.Store["departments"] = native.Value{VType: native.TList, Data: dTD}
+	reg.Store["departments"] = native.Value{Parent: native.TList, Data: dTD}
 
 	// JOIN with ON using non-qualified column names (since columns are unique across tables)
 	queryVals, err := parser.Parse(`select * from employees join departments on [dept_id eq id] order [emp_name]`)
@@ -2222,7 +2222,7 @@ func TestJoinWithOnMultipleConditions(t *testing.T) {
 		return native.NewMap(om)
 	}
 	td1 := native.TableData{Record: r1, Rows: []native.Value{mk1("1", "x"), mk1("2", "y")}}
-	reg.Store["t1"] = native.Value{VType: native.TList, Data: td1}
+	reg.Store["t1"] = native.Value{Parent: native.TList, Data: td1}
 
 	// t2 table
 	f2 := native.NewOrderedMap()
@@ -2236,7 +2236,7 @@ func TestJoinWithOnMultipleConditions(t *testing.T) {
 		return native.NewMap(om)
 	}
 	td2 := native.TableData{Record: r2, Rows: []native.Value{mk2("1", "x"), mk2("2", "z")}}
-	reg.Store["t2"] = native.Value{VType: native.TList, Data: td2}
+	reg.Store["t2"] = native.Value{Parent: native.TList, Data: td2}
 
 	// JOIN with AND in ON condition (non-qualified since temp table names differ)
 	queryVals, err := parser.Parse(`select * from t1 join t2 on [a eq c and b eq d]`)
@@ -2292,8 +2292,8 @@ func TestCrossJoin(t *testing.T) {
 		return native.TableData{Record: recType, Rows: rows}
 	}
 
-	reg.Store["colors"] = native.Value{VType: native.TList, Data: mkTable("color", "red", "blue")}
-	reg.Store["sizes"] = native.Value{VType: native.TList, Data: mkTable("size", "S", "M", "L")}
+	reg.Store["colors"] = native.Value{Parent: native.TList, Data: mkTable("color", "red", "blue")}
+	reg.Store["sizes"] = native.Value{Parent: native.TList, Data: mkTable("size", "S", "M", "L")}
 
 	queryVals, err := parser.Parse(`select * from colors crossjoin sizes`)
 	if err != nil {
@@ -2345,7 +2345,7 @@ func TestCastToText(t *testing.T) {
 		Record: recType,
 		Rows:   []native.Value{mkRow(42)},
 	}
-	reg.Store["nums"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["nums"] = native.Value{Parent: native.TList, Data: td}
 
 	queryVals, err := parser.Parse(`select [[cast val text t]] from nums`)
 	if err != nil {
@@ -2413,7 +2413,7 @@ func TestAvgAggregate(t *testing.T) {
 		Record: recType,
 		Rows:   []native.Value{mkRow(10), mkRow(20), mkRow(30)},
 	}
-	reg.Store["nums"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["nums"] = native.Value{Parent: native.TList, Data: td}
 
 	queryVals, err := parser.Parse(`select [[avg val average]] from nums`)
 	if err != nil {
@@ -2456,7 +2456,7 @@ func TestMinMaxAggregate(t *testing.T) {
 		Record: recType,
 		Rows:   []native.Value{mkRow(10), mkRow(20), mkRow(30)},
 	}
-	reg.Store["nums"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["nums"] = native.Value{Parent: native.TList, Data: td}
 
 	queryVals, err := parser.Parse(`select [[min val lo] [max val hi]] from nums`)
 	if err != nil {
@@ -2529,7 +2529,7 @@ func TestWhereIsNullActual(t *testing.T) {
 	row1.Set("score", native.NewInteger(90))
 	row2 := native.NewOrderedMap()
 	row2.Set("name", native.NewString("Bob"))
-	row2.Set("score", native.Value{VType: native.TNone})
+	row2.Set("score", native.Value{Parent: native.TNone})
 	row3 := native.NewOrderedMap()
 	row3.Set("name", native.NewString("Charlie"))
 	row3.Set("score", native.NewInteger(80))
@@ -2538,7 +2538,7 @@ func TestWhereIsNullActual(t *testing.T) {
 		Record: recType,
 		Rows:   []native.Value{native.NewMap(row1), native.NewMap(row2), native.NewMap(row3)},
 	}
-	reg.Store["students"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["students"] = native.Value{Parent: native.TList, Data: td}
 
 	// IS NULL
 	queryVals, err := parser.Parse(`select * from students where [score is null]`)
@@ -2592,7 +2592,7 @@ func TestMultiColumnGroupBy(t *testing.T) {
 			mkRow("sales", "dev", "Dave"),
 		},
 	}
-	reg.Store["staff"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["staff"] = native.Value{Parent: native.TList, Data: td}
 
 	queryVals, err := parser.Parse(`select [dept role [count name cnt]] from staff group by [dept role] order [dept role]`)
 	if err != nil {
@@ -2635,7 +2635,7 @@ func TestOrderNullsLast(t *testing.T) {
 	row1.Set("score", native.NewInteger(90))
 	row2 := native.NewOrderedMap()
 	row2.Set("name", native.NewString("Bob"))
-	row2.Set("score", native.Value{VType: native.TNone})
+	row2.Set("score", native.Value{Parent: native.TNone})
 	row3 := native.NewOrderedMap()
 	row3.Set("name", native.NewString("Charlie"))
 	row3.Set("score", native.NewInteger(80))
@@ -2644,7 +2644,7 @@ func TestOrderNullsLast(t *testing.T) {
 		Record: recType,
 		Rows:   []native.Value{native.NewMap(row1), native.NewMap(row2), native.NewMap(row3)},
 	}
-	reg.Store["students"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["students"] = native.Value{Parent: native.TList, Data: td}
 
 	queryVals, err := parser.Parse(`select * from students order [score asc nulls last]`)
 	if err != nil {
@@ -2705,7 +2705,7 @@ func TestInnerJoinKeyword(t *testing.T) {
 	_ = mkTable // suppress unused
 
 	td1 := native.TableData{Record: r1, Rows: []native.Value{mk1("1", "Alice"), mk1("2", "Bob")}}
-	reg.Store["t1"] = native.Value{VType: native.TList, Data: td1}
+	reg.Store["t1"] = native.Value{Parent: native.TList, Data: td1}
 
 	f2 := native.NewOrderedMap()
 	f2.Set("id", native.NewTypeLiteral(native.TString))
@@ -2718,7 +2718,7 @@ func TestInnerJoinKeyword(t *testing.T) {
 		return native.NewMap(om)
 	}
 	td2 := native.TableData{Record: r2, Rows: []native.Value{mk2("1", "90"), mk2("2", "85")}}
-	reg.Store["t2"] = native.Value{VType: native.TList, Data: td2}
+	reg.Store["t2"] = native.Value{Parent: native.TList, Data: td2}
 
 	queryVals, err := parser.Parse(`select * from t1 innerjoin t2 using [id] order [id]`)
 	if err != nil {
@@ -2897,7 +2897,7 @@ func TestGroupByAtom(t *testing.T) {
 		Record: recType,
 		Rows:   []native.Value{mkRow("London", "A"), mkRow("London", "B"), mkRow("Paris", "C")},
 	}
-	reg.Store["data"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["data"] = native.Value{Parent: native.TList, Data: td}
 
 	queryVals, err := parser.Parse(`select [city [count name cnt]] from data group city order [city]`)
 	if err != nil {
@@ -2937,7 +2937,7 @@ func TestWhereIntegerComparison(t *testing.T) {
 		Record: recType,
 		Rows:   []native.Value{mkRow("Alice", 30), mkRow("Bob", 25), mkRow("Charlie", 35)},
 	}
-	reg.Store["people"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["people"] = native.Value{Parent: native.TList, Data: td}
 
 	// Use integer literal in WHERE (not string)
 	queryVals, err := parser.Parse(`select * from people where [age gt 28]`)
@@ -2978,7 +2978,7 @@ func TestWhereBooleanValue(t *testing.T) {
 		Record: recType,
 		Rows:   []native.Value{mkRow("Alice", true), mkRow("Bob", false)},
 	}
-	reg.Store["users"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["users"] = native.Value{Parent: native.TList, Data: td}
 
 	// Using string "true" comparison with a boolean column (exercises boolean coercion in aqlValueToSQLParam)
 	queryVals, err := parser.Parse(`select * from users where [active eq "true"]`)
@@ -3026,7 +3026,7 @@ func TestMixedTypeStorage(t *testing.T) {
 		Record: recType,
 		Rows:   []native.Value{native.NewMap(row1), native.NewMap(row2)},
 	}
-	reg.Store["data"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["data"] = native.Value{Parent: native.TList, Data: td}
 
 	queryVals, err := parser.Parse(`select * from data order [name]`)
 	if err != nil {
@@ -3146,7 +3146,7 @@ func TestWhereBetweenIntegers(t *testing.T) {
 		Record: recType,
 		Rows:   []native.Value{mkRow(10), mkRow(20), mkRow(30), mkRow(40)},
 	}
-	reg.Store["nums"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["nums"] = native.Value{Parent: native.TList, Data: td}
 
 	queryVals, err := parser.Parse(`select * from nums where [val between 15 35]`)
 	if err != nil {
@@ -3200,7 +3200,7 @@ func TestCastBool(t *testing.T) {
 		Record: recType,
 		Rows:   []native.Value{native.NewMap(row)},
 	}
-	reg.Store["data"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["data"] = native.Value{Parent: native.TList, Data: td}
 
 	queryVals, err := parser.Parse(`select [[cast active bool b]] from data`)
 	if err != nil {
@@ -3239,7 +3239,7 @@ func TestWhereWithBoolLiteral(t *testing.T) {
 		Record: recType,
 		Rows:   []native.Value{mkRow("Alice", true), mkRow("Bob", false)},
 	}
-	reg.Store["users"] = native.Value{VType: native.TList, Data: td}
+	reg.Store["users"] = native.Value{Parent: native.TList, Data: td}
 
 	// Use boolean false literal in WHERE condition
 	queryVals, err := parser.Parse(`select * from users where [active eq false]`)

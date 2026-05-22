@@ -1,4 +1,11 @@
-# Uniform Type Construction — `def` / `make` / `type`
+# Uniform Type Construction — `def` / `make` / `refine`
+
+> **Update — constructor renamed.** The type-constructor word this
+> document calls `type` was later renamed to **`refine`**. Read every
+> `type`-the-constructor reference below as `refine`: `def Foo (refine
+> Object {…})`, `refine Record [...]`, `refine Table (...)`, and the
+> 1-arg `refine List` bare-subtype form. `def` / `make` and all
+> semantics are unchanged; only the constructor word's spelling moved.
 
 Status: design draft, no implementation.
 Branch: `claude/review-architecture-go-practices-SoLNa` (parked here;

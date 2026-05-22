@@ -1,7 +1,6 @@
 package test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/aql-lang/aql/lang/go"
@@ -11,7 +10,7 @@ import (
 //
 // `*Type.Matches` is overridden so that `DepInteger.Matches(TInteger)`
 // is true (used by sig matching). The risk is any code that does
-// `if v.VType.Matches(TString) { _, _ := v.engine.AsString() }` — on a
+// `if v.Parent.Matches(TString) { _, _ := v.engine.AsString() }` — on a
 // DepScalar payload, AsString errors, the underscore swallows the
 // error, and the caller gets a zero value. These tests pin the
 // DepScalar-specific branches in the four most-traveled equality /
@@ -81,19 +80,22 @@ a eq c`)
 	}
 }
 
-// --- compareValues: refuses to order DepScalars ---
+// --- compareValues: DepScalars take part in the total order ---
 
-func TestDepScalar_LtRefused(t *testing.T) {
+func TestDepScalar_LtTotalOrder(t *testing.T) {
 	a, err := lang.New()
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	_, err = a.Run(`(Integer gt 10) lt (Integer gt 20)`)
-	if err == nil {
-		t.Fatalf("expected error comparing DepScalars with lt")
+	got, err := a.Run(`(Integer gt 10) lt (Integer gt 20)`)
+	if err != nil {
+		t.Fatalf("comparing DepScalars with lt errored: %v", err)
 	}
-	if !strings.Contains(err.Error(), "dependent") {
-		t.Errorf("error %q does not mention dependent type", err)
+	// The order is total, so DepScalars compare without error. They
+	// carry no Comparer and no structure to recurse into, so the tie
+	// breaks on the canonical form: "(Integer gt 10)" < "(Integer gt 20)".
+	if len(got) != 1 || got[0] != "true" {
+		t.Errorf("(Int gt 10) lt (Int gt 20) = %v, want [true]", got)
 	}
 }
 

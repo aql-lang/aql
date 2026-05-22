@@ -25,11 +25,11 @@ package eng
 //
 // Adding a new operation to TypeBehavior is a breaking change for
 // every implementor. Optional capability sub-interfaces (Comparer,
-// Hasher, Walker — see below) let a type opt into extra operations
-// without expanding the required surface.
+// Hasher, Walker, Sizer — see below) let a type opt into extra
+// operations without expanding the required surface.
 type TypeBehavior interface {
 	// Match reports whether v conforms to the type t. The
-	// canonical default is a lattice walk (v.VType is t or a
+	// canonical default is a lattice walk (v.Parent is t or a
 	// descendant). Predicate types override to invoke the
 	// predicate body; refinement types override to check the
 	// refinement clause; record types override to do field-by-
@@ -77,12 +77,21 @@ type Walker interface {
 	Walk(v Value, visit func(Value))
 }
 
+// Sizer is an optional capability interface. Types implementing it
+// report a natural size — the length of a dominant collection (a
+// List's elements, a Map's keys, a Path's segments, an Object's
+// fields), a number's floored magnitude, a string's length. SizeOf
+// consults it; a type with no Sizer in its lattice sizes to 0.
+type Sizer interface {
+	Size(v Value) int
+}
+
 // defaultBehavior provides the canonical Match / Format / Equal
 // implementations every *Type starts with. Each delegates to the
 // existing kernel paths so introducing the Behavior seam is
 // observably a no-op:
 //
-//   - Match → v.VType.Matches(t) (the historical lattice walk plus
+//   - Match → v.Parent.Matches(t) (the historical lattice walk plus
 //     DepScalar override).
 //   - Format → Value.String() (today's full switch).
 //   - Equal → ValuesEqual (today's deep-compare).
@@ -97,7 +106,12 @@ type defaultBehavior struct{}
 var DefaultBehavior TypeBehavior = defaultBehavior{}
 
 func (defaultBehavior) Match(v Value, t *Type) bool {
-	return v.VType.Matches(t)
+	// A bare type literal IS a lattice node — test it directly. Any
+	// other value (concrete, or a carrier) is tested by its Parent.
+	if v.Data == nil && !v.Carrier {
+		return v.Matches(t)
+	}
+	return v.Parent.Matches(t)
 }
 
 func (defaultBehavior) Format(v Value) string {

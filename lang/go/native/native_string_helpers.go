@@ -68,7 +68,7 @@ func parseStrOpts(v Value) strOpts {
 	o.form = "NFC"
 	o.quote = "none"
 
-	if !v.VType.Equal(TMap) || v.Data == nil {
+	if !v.Parent.Equal(TMap) || v.Data == nil {
 		return o
 	}
 	m, _ := AsMap(v)
@@ -77,12 +77,12 @@ func parseStrOpts(v Value) strOpts {
 		o.u = b
 	}
 	if val, ok := m.Get("norm"); ok {
-		if val.VType.Matches(TBoolean) {
+		if val.Parent.Matches(TBoolean) {
 			_as1, _ := AsBoolean(val)
 			if _as1 {
 				o.normForm = "NFC"
 			}
-		} else if val.VType.Matches(TString) || IsAtom(val) {
+		} else if val.Parent.Matches(TString) || IsAtom(val) {
 			o.normForm = strings.ToUpper(ValToString(val))
 		}
 	}
@@ -153,7 +153,7 @@ func parseStrOpts(v Value) strOpts {
 		o.wholeWord = b
 	}
 	if val, ok := m.Get("anchored"); ok {
-		if val.VType.Matches(TBoolean) {
+		if val.Parent.Matches(TBoolean) {
 			_as10, _ := AsBoolean(val)
 			if _as10 {
 				o.anchored = "both"
@@ -188,7 +188,7 @@ func parseStrOpts(v Value) strOpts {
 
 	// groups for match
 	if val, ok := m.Get("groups"); ok {
-		if val.VType.Matches(TBoolean) {
+		if val.Parent.Matches(TBoolean) {
 			_as16, _ := AsBoolean(val)
 			o.groupBool = _as16
 		} else {

@@ -293,7 +293,7 @@ fraction on typed code: 80–95%.
   `add`. Works well for small disjuncts produced by `if`.
 - *Dispatch opcode*: `CALL_NATIVE_POLY disp_id`. `disp_id` indexes
   a small table of `(input_tag → sig_id)`. The runtime peeks the
-  top-of-stack `VType`, indexes the table, calls. Still one map-free
+  top-of-stack `Parent`, indexes the table, calls. Still one map-free
   branch plus one indirect call.
 
 The second strategy dominates because splitting interacts badly
@@ -356,7 +356,7 @@ Three costs remain even with fully compiled fixed-arity calls:
    `MAKE_LIST n` with a pre-sized slice, `LIST_APPEND` for
    in-place builders) but most allocations are inherent to the
    semantics.
-3. **Boxing.** AQL `Value` is a tagged union (`VType` + `Data
+3. **Boxing.** AQL `Value` is a tagged union (`Parent` + `Data
    interface{}`). Every int still pays the `interface{}` boxing
    cost inside `Data`. True un-boxing requires typed opcodes
    (`IADD`, `FADD`, `SADD`) with a parallel un-boxed value
@@ -460,7 +460,7 @@ specific ops.
 
 **Type ops**:
 
-- `TYPE_TAG` — push the VType of top-of-stack as a type literal.
+- `TYPE_TAG` — push the Parent of top-of-stack as a type literal.
 - `TYPE_CHECK t_id` — assert top-of-stack matches type; emit only
   at disjunct narrowing points, raise a typed error on mismatch.
 - `TYPE_COERCE t_id` — narrow at a checked boundary (e.g. after
@@ -837,7 +837,7 @@ At a call site, `CALL_USER square_id` resolves to this set. If
 the set has exactly one signature — the common case — the call
 is direct: push frame, jump to the body. If multiple signatures
 exist, the VM needs a `CALL_USER_POLY` variant that inspects the
-argument's VType and indexes into the set.
+argument's Parent and indexes into the set.
 
 ### 5.4 Multi-signature dispatch at compile time
 
@@ -1497,7 +1497,7 @@ subsequent compiled call, the carrier the compiler assumed for
 the consumer may not match the actual runtime value.
 
 **Symptom.** A compiled `CALL_NATIVE2_1 add_i_i` executes
-against a `Value{VType: TString, Data: "foo"}` that came out
+against a `Value{Parent: TString, Data: "foo"}` that came out
 of the fallback. `AsInteger()` returns 0 silently (or panics,
 depending on the unbox helper). The interpreter would have
 errored with a dispatch mismatch.
@@ -1516,7 +1516,7 @@ errored with a dispatch mismatch.
    sites are "safe to compile"; this harness verifies the
    definition in practice.
 
-The boundary check is cheap (one VType compare) and only
+The boundary check is cheap (one Parent compare) and only
 triggers at the (already-slow) fallback frontier.
 
 ### 9.2 Stale bytecode after source edit

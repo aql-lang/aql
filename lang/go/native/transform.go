@@ -34,21 +34,21 @@ func valueToAny(v Value) any {
 		return nil
 	}
 	switch {
-	case v.VType.Matches(TInteger):
+	case v.Parent.Matches(TInteger):
 		i, _ := AsInteger(v)
 		return float64(i)
-	case v.VType.Matches(TString):
+	case v.Parent.Matches(TString):
 		s, _ := AsString(v)
 		return s
-	case v.VType.Matches(TBoolean):
+	case v.Parent.Matches(TBoolean):
 		b, _ := AsBoolean(v)
 		return b
-	case v.VType.Equal(TAtom):
+	case v.Parent.Equal(TAtom):
 		a, _ := AsAtom(v)
 		return a
-	case v.VType.Equal(TNone):
+	case v.Parent.Equal(TNone):
 		return nil
-	case v.VType.Matches(TMap):
+	case v.Parent.Matches(TMap):
 		m, _ := AsMap(v)
 		out := make(map[string]any, m.Len())
 		for _, key := range m.Keys() {
@@ -56,7 +56,7 @@ func valueToAny(v Value) any {
 			out[key] = valueToAny(val)
 		}
 		return out
-	case v.VType.Matches(TList):
+	case v.Parent.Matches(TList):
 		_lst, _ := AsList(v)
 		elems := _lst.Slice()
 		out := make([]any, len(elems))

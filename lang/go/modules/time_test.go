@@ -112,8 +112,8 @@ func TestTimeNowLocal(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	if !result[0].VType.Matches(native.TDateTime) {
-		t.Errorf("expected DateTime type, got %s", result[0].VType)
+	if !result[0].Parent.Matches(native.TDateTime) {
+		t.Errorf("expected DateTime type, got %s", result[0].Parent)
 	}
 }
 
@@ -416,8 +416,8 @@ func TestNowStandardWord(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	if !result[0].VType.Matches(native.TInstant) {
-		t.Errorf("now should return Instant, got %s", result[0].VType)
+	if !result[0].Parent.Matches(native.TInstant) {
+		t.Errorf("now should return Instant, got %s", result[0].Parent)
 	}
 }
 
@@ -707,8 +707,8 @@ func TestTimeToDatetime(t *testing.T) {
 	r := timeRegistry(t)
 	d := native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
 	result := runAQL(t, r, callTimeDot("to-datetime", d))
-	if !result[0].VType.Matches(native.TDateTime) {
-		t.Errorf("to-datetime type = %s, want DateTime", result[0].VType)
+	if !result[0].Parent.Matches(native.TDateTime) {
+		t.Errorf("to-datetime type = %s, want DateTime", result[0].Parent)
 	}
 }
 
@@ -717,8 +717,8 @@ func TestTimeToInstant(t *testing.T) {
 	dt := native.NewDateTime(time.Date(2024, 3, 15, 10, 0, 0, 0, time.UTC))
 	tz := native.NewTimezone(time.UTC)
 	result := runAQL(t, r, callTimeDot("to-instant", dt, tz))
-	if !result[0].VType.Matches(native.TInstant) {
-		t.Errorf("to-instant type = %s, want Instant", result[0].VType)
+	if !result[0].Parent.Matches(native.TInstant) {
+		t.Errorf("to-instant type = %s, want Instant", result[0].Parent)
 	}
 }
 
@@ -727,8 +727,8 @@ func TestTimeToLocal(t *testing.T) {
 	ins := native.NewInstant(time.Date(2024, 3, 15, 10, 0, 0, 0, time.UTC))
 	tz := native.NewTimezone(time.UTC)
 	result := runAQL(t, r, callTimeDot("to-local", ins, tz))
-	if !result[0].VType.Matches(native.TDateTime) {
-		t.Errorf("to-local type = %s, want DateTime", result[0].VType)
+	if !result[0].Parent.Matches(native.TDateTime) {
+		t.Errorf("to-local type = %s, want DateTime", result[0].Parent)
 	}
 }
 
@@ -736,8 +736,8 @@ func TestTimeToUtc(t *testing.T) {
 	r := timeRegistry(t)
 	ins := native.NewInstant(time.Date(2024, 3, 15, 10, 0, 0, 0, time.UTC))
 	result := runAQL(t, r, callTimeDot("to-utc", ins))
-	if !result[0].VType.Matches(native.TDateTime) {
-		t.Errorf("to-utc type = %s, want DateTime", result[0].VType)
+	if !result[0].Parent.Matches(native.TDateTime) {
+		t.Errorf("to-utc type = %s, want DateTime", result[0].Parent)
 	}
 }
 

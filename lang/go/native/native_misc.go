@@ -15,8 +15,8 @@ import (
 // see a non-nil pointer at slice-init time. FixedIDs 4000-4001
 // come from the documented lang/go/engine range (4000-4999).
 var (
-	TTimeout  = registerTimerType("Object/Timeout", 4000, timeoutFormatBehavior{})
-	TInterval = registerTimerType("Object/Interval", 4001, intervalFormatBehavior{})
+	TTimeout  = registerTimerType("Ideal/Timeout", 4000, timeoutFormatBehavior{})
+	TInterval = registerTimerType("Ideal/Interval", 4001, intervalFormatBehavior{})
 )
 
 func registerTimerType(path string, fixedID int, behavior eng.TypeBehavior) *eng.Type {

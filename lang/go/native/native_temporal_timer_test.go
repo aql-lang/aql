@@ -75,8 +75,8 @@ func TestTimeoutReturnType(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d: %v", len(result), result)
 	}
-	if !result[0].VType.Equal(TTimeout) {
-		t.Fatalf("expected Timeout, got %s", result[0].VType)
+	if !result[0].Parent.Equal(TTimeout) {
+		t.Fatalf("expected Timeout, got %s", result[0].Parent)
 	}
 	ti, _ := result[0].Data.(*TimeoutInfo), true
 	if ti.Timer != nil {
@@ -106,7 +106,7 @@ func TestTimeoutCallbackExecutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || !result[0].VType.Equal(TTimeout) {
+	if len(result) != 1 || !result[0].Parent.Equal(TTimeout) {
 		t.Fatalf("expected Timeout result, got %v", result)
 	}
 
@@ -138,7 +138,7 @@ func TestTimeoutWithWordCallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || !result[0].VType.Equal(TTimeout) {
+	if len(result) != 1 || !result[0].Parent.Equal(TTimeout) {
 		t.Fatalf("expected Timeout result, got %v", result)
 	}
 
@@ -179,8 +179,8 @@ func TestIntervalReturnType(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d: %v", len(result), result)
 	}
-	if !result[0].VType.Equal(TInterval) {
-		t.Fatalf("expected Interval, got %s", result[0].VType)
+	if !result[0].Parent.Equal(TInterval) {
+		t.Fatalf("expected Interval, got %s", result[0].Parent)
 	}
 	ii, _ := result[0].Data.(*IntervalInfo), true
 	if ii.Ticker != nil {

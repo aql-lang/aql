@@ -80,7 +80,7 @@ vocabulary doesn't need them.
 
 | Symbol | What it does |
 | --- | --- |
-| `eng.Value` | The kernel's tagged-value type. `VType *Type` + sealed `Data Payload`. Calc treats it as an opaque token in most places. |
+| `eng.Value` | The kernel's tagged-value type. `Parent *Type` + sealed `Data Payload`. Calc treats it as an opaque token in most places. |
 | `eng.Registry` | The dispatch state. Methods used: `RegisterNativeFunc`, `InitRootContext`, `MarkReady`, `SetParseFunc`, `Defs.Names()`. |
 | `eng.Engine` | The interpreter loop. Methods used: `Run`. |
 | `r.Defs.Names() []string` | All currently-defined word names. The REPL's `:words` meta-command calls this. |

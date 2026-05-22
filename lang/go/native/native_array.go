@@ -337,7 +337,7 @@ func computeShape(v Value) []int {
 		return dims
 	}
 	first := list.Get(0)
-	if !first.VType.Matches(TList) || first.Data == nil {
+	if !first.Parent.Matches(TList) || first.Data == nil {
 		return dims
 	}
 	_lst, _ := AsList(first)
@@ -345,7 +345,7 @@ func computeShape(v Value) []int {
 	for i := 1; i < list.Len(); i++ {
 		sub := list.Get(i)
 		_subLst, _ := AsList(sub)
-		if !sub.VType.Matches(TList) || sub.Data == nil || _subLst.Len() != firstLen {
+		if !sub.Parent.Matches(TList) || sub.Data == nil || _subLst.Len() != firstLen {
 			return dims
 		}
 	}
@@ -410,7 +410,7 @@ func flattenList(v Value) []Value {
 	var result []Value
 	for i := 0; i < list.Len(); i++ {
 		elem := list.Get(i)
-		if elem.VType.Matches(TList) && elem.Data != nil {
+		if elem.Parent.Matches(TList) && elem.Data != nil {
 			result = append(result, flattenList(elem)...)
 		} else {
 			result = append(result, elem)
@@ -464,7 +464,7 @@ func arrTransposeHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 		return []Value{NewList(nil)}, nil
 	}
 	first := outer.Get(0)
-	if !first.VType.Matches(TList) || first.Data == nil {
+	if !first.Parent.Matches(TList) || first.Data == nil {
 		return nil, r.AqlError("arr-transpose_error", "arr-transpose: expected rank-2 list", "arr-transpose")
 	}
 	_lst, _ := AsList(first)
@@ -472,7 +472,7 @@ func arrTransposeHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	for i := 1; i < outer.Len(); i++ {
 		sub := outer.Get(i)
 		_subLst, _ := AsList(sub)
-		if !sub.VType.Matches(TList) || sub.Data == nil || _subLst.Len() != cols {
+		if !sub.Parent.Matches(TList) || sub.Data == nil || _subLst.Len() != cols {
 			return nil, r.AqlError("arr-transpose_error", "arr-transpose: expected rectangular rank-2 list", "arr-transpose")
 		}
 	}
@@ -969,7 +969,7 @@ func eachReturnsFn(args []Value, r *Registry) []Value {
 	if len(stk) == 0 {
 		return []Value{NewCarrier(TList)}
 	}
-	return []Value{NewCarrierTypedList(stk[len(stk)-1].VType)}
+	return []Value{NewCarrierTypedList(stk[len(stk)-1].Parent)}
 }
 
 // analyseHigherOrderBody runs a literal code-body list through a
@@ -1024,7 +1024,7 @@ func foldWithInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Regis
 // approximation for bounded-lattice types.
 func foldWithInitReturnsFn(args []Value, r *Registry) []Value {
 	elem := DataListElemTypeFromValue(args[1])
-	stk := analyseHigherOrderBody(r, args[0], args[2].VType, elem)
+	stk := analyseHigherOrderBody(r, args[0], args[2].Parent, elem)
 	if len(stk) == 0 {
 		return []Value{NewCarrier(TAny)}
 	}
@@ -1128,7 +1128,7 @@ func scanReturnsFn(args []Value, r *Registry) []Value {
 	if len(stk) == 0 {
 		return []Value{NewCarrier(TList)}
 	}
-	return []Value{NewCarrierTypedList(stk[len(stk)-1].VType)}
+	return []Value{NewCarrierTypedList(stk[len(stk)-1].Parent)}
 }
 
 // ---- outer ----
@@ -1173,7 +1173,7 @@ func outerReturnsFn(args []Value, r *Registry) []Value {
 	// outer produces a 2D list: TList<TList<body-result>>.
 	innerElem := TAny
 	if len(stk) > 0 {
-		innerElem = stk[len(stk)-1].VType
+		innerElem = stk[len(stk)-1].Parent
 	}
 	inner := NewCarrierTypedList(innerElem)
 	return []Value{NewCarrierTypedListValue(inner)}
@@ -1193,7 +1193,7 @@ func innerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 	right, _ := AsList(args[3])
 
 	// 1D case: zip then fold
-	if left.Len() > 0 && !left.Get(0).VType.Matches(TList) {
+	if left.Len() > 0 && !left.Get(0).Parent.Matches(TList) {
 		if left.Len() != right.Len() {
 			return nil, reg.AqlError("inner_error", "inner: vectors must have same length", "inner")
 		}

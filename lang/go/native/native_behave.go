@@ -159,11 +159,11 @@ func behaveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 // extractFnDefInfo unwraps a TFunction or TFnDef value into its
 // FnDefInfo payload. Returns an error for anything else.
 func extractFnDefInfo(v Value) (eng.FnDefInfo, error) {
-	if v.VType == nil {
+	if v.Parent == nil {
 		return eng.FnDefInfo{}, errors.New("fn arg is nil")
 	}
-	if !v.VType.Equal(eng.TFunction) && !v.VType.Equal(eng.TFnDef) {
-		return eng.FnDefInfo{}, fmt.Errorf("fn arg must be a Function (got %s)", v.VType.String())
+	if !v.Parent.Equal(eng.TFunction) && !v.Parent.Equal(eng.TFnDef) {
+		return eng.FnDefInfo{}, fmt.Errorf("fn arg must be a Function (got %s)", v.Parent.String())
 	}
 	info, ok := v.Data.(eng.FnDefInfo)
 	if !ok {
@@ -237,12 +237,12 @@ func validateNodifySig(sig eng.FnSig) (*eng.Type, error) {
 // to prev.
 //
 // Re-entrancy: a canon body that triggers another render of the same
-// VType (e.g. by calling `inspect` or formatting a nested field of
+// Parent (e.g. by calling `inspect` or formatting a nested field of
 // the same type) loops through Value.String → Behavior.Format → body
-// → Value.String. The per-VType inRender guard breaks the loop by
+// → Value.String. The per-Parent inRender guard breaks the loop by
 // falling back to the previous Behavior's Format on re-entry. A
 // parallel inNodify guard handles `tonode`-bodies that recurse into
-// the same VType. The guards are scoped to the wrapper —
+// the same Parent. The guards are scoped to the wrapper —
 // concurrent rendering across goroutines doesn't share them, matching
 // the kernel's general single-goroutine engine model.
 type userBehavior struct {
@@ -276,7 +276,7 @@ func (u *userBehavior) Equal(a, b Value) bool {
 
 // Format runs the installed canon body if any, otherwise delegates
 // to prev. On re-entry (a canon body triggering another render of
-// the same VType), falls back to prev to break the loop.
+// the same Parent), falls back to prev to break the loop.
 func (u *userBehavior) Format(v Value) string {
 	if len(u.canonBody) == 0 || u.inRender {
 		if u.prev != nil {
@@ -326,8 +326,8 @@ func (u *userBehavior) runCompareBody(a, b Value) (int, error) {
 		return 0, fmt.Errorf("behave compare %s: body produced no result", u.typeName)
 	}
 	top := result[len(result)-1]
-	if !top.VType.Matches(eng.TInteger) {
-		return 0, fmt.Errorf("behave compare %s: body must return Integer, got %s", u.typeName, top.VType.String())
+	if !top.Parent.Matches(eng.TInteger) {
+		return 0, fmt.Errorf("behave compare %s: body must return Integer, got %s", u.typeName, top.Parent.String())
 	}
 	n, err := eng.AsInteger(top)
 	if err != nil {
@@ -406,8 +406,8 @@ func (u *userBehavior) runCanonBody(v Value) (string, error) {
 		return "", fmt.Errorf("body produced no result")
 	}
 	top := result[len(result)-1]
-	if !top.VType.Matches(eng.TString) {
-		return "", fmt.Errorf("body must return String, got %s", top.VType.String())
+	if !top.Parent.Matches(eng.TString) {
+		return "", fmt.Errorf("body must return String, got %s", top.Parent.String())
 	}
 	s, err := eng.AsString(top)
 	if err != nil {

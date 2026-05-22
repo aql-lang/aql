@@ -142,7 +142,7 @@ func (e *Engine) isFnShapeTypedBindingContext() bool {
 				constraint = tv
 			}
 		}
-		return constraint.VType.Equal(TFnUndef)
+		return constraint.Parent.Equal(TFnUndef)
 	}
 	return false
 }
@@ -166,7 +166,7 @@ func (e *Engine) returnCountError(funcName string, expected, got int) *AqlError 
 // returnTypeError builds a detailed AqlError for a return type mismatch.
 func (e *Engine) returnTypeError(funcName string, index int, expected *Type, got Value) *AqlError {
 	detail := fmt.Sprintf("%s: return value %d: expected %s, got %s",
-		funcName, index, expected, got.VType)
+		funcName, index, expected, got.Parent)
 	hint := "value: " + ValToString(got)
 	src := e.effectiveSource()
 	return makeAqlError("type_error", detail, funcName, src, hint)
@@ -321,7 +321,7 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 			e.pointer++
 
 		default:
-			if val.VType.Equal(nil) {
+			if val.Parent == nil && val.Behavior == nil {
 				return nil, e.runtimeError("halt", fmt.Sprintf("undefined stack entry at position %d", e.pointer), "", "")
 			}
 			if err := e.stepLiteral(); err != nil {
@@ -473,8 +473,8 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 		tok := e.stack[scanIdx]
 
 		// Boundary conditions: stop scanning.
-		if IsForward(tok) || tok.VType.Matches(TMark) || tok.VType.Matches(TMove) ||
-			tok.VType.Matches(TInternal) || tok.VType.Matches(TReturnCheck) {
+		if IsForward(tok) || tok.Parent.Matches(TMark) || tok.Parent.Matches(TMove) ||
+			tok.Parent.Matches(TInternal) || tok.Parent.Matches(TReturnCheck) {
 			break
 		}
 
@@ -643,7 +643,7 @@ func (e *Engine) stepWord(val Value) error {
 	if e.registry != nil {
 		if tv, ok := e.registry.TopTypeBody(w.Name); ok {
 			push := tv
-			if push.VType.Equal(TFnDef) || push.VType.Equal(TFunction) {
+			if push.Parent.Equal(TFnDef) || push.Parent.Equal(TFunction) {
 				push.Quoted = true
 			}
 			push.Pos = val.Pos
@@ -668,7 +668,7 @@ func (e *Engine) stepWord(val Value) error {
 			// Type literals (Data == nil) are values, not bodies — they
 			// fall through to stepLiteral so the type itself is pushed
 			// onto the stack rather than splicing nothing.
-			if top.VType.Equal(TList) && top.Data != nil && !IsTypedList(top) && !IsTableType(top) && !top.Quoted {
+			if top.Parent.Equal(TList) && top.Data != nil && !IsTypedList(top) && !IsTableType(top) && !top.Quoted {
 				elems, _ := AsList(top)
 				expanded := make([]Value, elems.Len())
 				copy(expanded, elems.Slice())
@@ -863,7 +863,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	//   def, if, for, do, etc.).
 	for i := range match.Args {
 		if match.Args[i].Eval && !match.Args[i].Quoted {
-			if match.Args[i].VType.Equal(TMap) &&
+			if match.Args[i].Parent.Equal(TMap) &&
 				match.Args[i].Data != nil && !IsTypedMap(match.Args[i]) && !IsRecordType(match.Args[i]) && !IsOptionsType(match.Args[i]) {
 				// NoEvalMapArgs (separate from the list-only
 				// NoEvalArgs) suppresses map auto-evaluation at this
@@ -877,7 +877,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 						match.Args[i] = evaluated
 					}
 				}
-			} else if match.Args[i].VType.Equal(TList) &&
+			} else if match.Args[i].Parent.Equal(TList) &&
 				match.Args[i].Data != nil && !IsTypedList(match.Args[i]) && !IsTableType(match.Args[i]) {
 				// NoEvalArgs suppresses list auto-evaluation for code-body
 				// positions (def body, if branches, for body, etc.).
@@ -1178,7 +1178,7 @@ func (e *Engine) stepLiteral() error {
 		// If the value is a FnDef/TFunction, execute it. Quoted function
 		// values are treated as data (not executed).
 		val := e.stack[valIdx]
-		if (val.VType.Equal(TFnDef) || val.VType.Equal(TFunction)) &&
+		if (val.Parent.Equal(TFnDef) || val.Parent.Equal(TFunction)) &&
 			val.Data != nil && !val.Quoted {
 			if _, ok := val.Data.(FnDefInfo); ok {
 				return e.execFnDefLiteral(valIdx)
@@ -1204,7 +1204,7 @@ func (e *Engine) stepLiteral() error {
 		nextIdx := fwd.CollectedArgs
 		matches := sigTypeMatches(val, fwd.Sig.Args[nextIdx])
 		if !matches && fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx] &&
-			val.VType.Equal(TWord) && TAtom.Matches(fwd.Sig.Args[nextIdx]) {
+			val.Parent.Equal(TWord) && TAtom.Matches(fwd.Sig.Args[nextIdx]) {
 			w, _ := AsWord(val)
 			e.stack[valIdx] = NewAtom(w.Name)
 			matches = true
@@ -1284,13 +1284,13 @@ func (e *Engine) autoEvalStack() error {
 		if !val.Eval || val.Quoted {
 			continue
 		}
-		if val.VType.Equal(TList) && val.Data != nil && !IsTypedList(val) && !IsTableType(val) {
+		if val.Parent.Equal(TList) && val.Data != nil && !IsTypedList(val) && !IsTableType(val) {
 			result, err := e.autoEvalList(val)
 			if err != nil {
 				return err
 			}
 			e.stack[i] = result
-		} else if val.VType.Equal(TMap) && val.Data != nil && !IsTypedMap(val) && !IsRecordType(val) && !IsOptionsType(val) {
+		} else if val.Parent.Equal(TMap) && val.Data != nil && !IsTypedMap(val) && !IsRecordType(val) && !IsOptionsType(val) {
 			result, err := e.autoEvalMap(val)
 			if err != nil {
 				return err
@@ -1385,7 +1385,7 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 				return Value{}, fmt.Errorf("computed key [%s]: %w", key, err)
 			}
 			if len(keyResult) == 1 {
-				if keyResult[0].VType.Matches(TString) {
+				if keyResult[0].Parent.Matches(TString) {
 					resolvedKey, _ = AsString(keyResult[0])
 				} else if IsAtom(keyResult[0]) {
 					resolvedKey, _ = AsAtom(keyResult[0])
@@ -1531,7 +1531,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 				}
 				if p.Pattern != nil {
 					pat := *p.Pattern
-					if pat.VType.Equal(TMap) && resolved[ri].VType.Equal(TMap) &&
+					if pat.Parent.Equal(TMap) && resolved[ri].Parent.Equal(TMap) &&
 						pat.Data != nil && resolved[ri].Data != nil &&
 						!IsOptionsType(pat) {
 						if !OpenUnifyMap(pat, resolved[ri]) {
@@ -1564,7 +1564,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 				}
 				if p.Pattern != nil {
 					pat := *p.Pattern
-					if pat.VType.Equal(TMap) && candidate[j].VType.Equal(TMap) &&
+					if pat.Parent.Equal(TMap) && candidate[j].Parent.Equal(TMap) &&
 						pat.Data != nil && candidate[j].Data != nil &&
 						!IsOptionsType(pat) {
 						if !OpenUnifyMap(pat, candidate[j]) {
@@ -1628,13 +1628,13 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	// Lists: [c1 c2] → [map1, map2].
 	for i := range args {
 		if args[i].Eval && !args[i].Quoted {
-			if args[i].VType.Equal(TMap) &&
+			if args[i].Parent.Equal(TMap) &&
 				args[i].Data != nil && !IsTypedMap(args[i]) && !IsRecordType(args[i]) && !IsOptionsType(args[i]) {
 				evaluated, err := e.autoEvalMap(args[i])
 				if err == nil {
 					args[i] = evaluated
 				}
-			} else if args[i].VType.Equal(TList) &&
+			} else if args[i].Parent.Equal(TList) &&
 				args[i].Data != nil && !IsTypedList(args[i]) && !IsTableType(args[i]) {
 				evaluated, err := e.autoEvalList(args[i])
 				if err == nil {
@@ -1982,7 +1982,7 @@ func (e *Engine) stepMoveIf(markIdx, moveIdx int, info MoveInfo) error {
 	delete(e.marks, info.To)
 
 	// Check if condition produced a value.
-	if condResult.VType == nil {
+	if condResult.Parent == nil {
 		stackSplice(&e.stack, markIdx, moveIdx-markIdx+1)
 		e.pointer = markIdx
 		return e.runtimeError("runtime_error", "if: condition produced no value", "if", "")
@@ -2285,7 +2285,7 @@ func (e *Engine) stepCloseParen() error {
 
 			// Validate the top nret values match declared return types.
 			for k, exp := range rc.Returns {
-				if !results[extra+k].VType.Matches(exp) {
+				if !results[extra+k].Parent.Matches(exp) {
 					return e.returnTypeError(rc.FuncName, k+1, exp, results[extra+k])
 				}
 			}
@@ -2664,8 +2664,8 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				expectedType := sig.Args[fwd]
 
 				// 1.4: structural boundaries — stop forward scan.
-				if IsForward(tok) || tok.VType.Matches(TMark) || tok.VType.Matches(TMove) ||
-					tok.VType.Matches(TInternal) || tok.VType.Matches(TReturnCheck) {
+				if IsForward(tok) || tok.Parent.Matches(TMark) || tok.Parent.Matches(TMove) ||
+					tok.Parent.Matches(TInternal) || tok.Parent.Matches(TReturnCheck) {
 					break
 				}
 
@@ -2713,7 +2713,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					// planner's expected type matches what stepWord
 					// will actually push at runtime). Predicate types
 					// arrive as TFnDef/TFunction values; plan against
-					// that VType for sig matching.
+					// that Parent for sig matching.
 					if tv, ok := e.registry.TopTypeBody(ww.Name); ok {
 						if sigTypeMatches(tv, expectedType) || expectedType.Equal(TAny) {
 							positions[fwd] = scanIdx
@@ -2731,7 +2731,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 
 					// Known literals: true/false → Boolean, type names → type literal.
 					if ww.Name == "true" || ww.Name == "false" {
-						if sigTypeMatches(Value{VType: TBoolean}, expectedType) || expectedType.Equal(TAny) {
+						if sigTypeMatches(Value{Parent: TBoolean}, expectedType) || expectedType.Equal(TAny) {
 							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
@@ -2759,7 +2759,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					}
 
 					// Undefined word: always resolves to Atom.
-					if sigTypeMatches(Value{VType: TAtom}, expectedType) || expectedType.Equal(TAny) {
+					if sigTypeMatches(Value{Parent: TAtom}, expectedType) || expectedType.Equal(TAny) {
 						positions[fwd] = scanIdx
 						fwd++
 						scanIdx++
@@ -2872,7 +2872,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			// The branch below is defensive only — a stack Atom matches
 			// an [Atom/q, ...] sig via the regular sigTypeMatches path
 			// just below, no /q involvement required.
-			if sig.QuoteArgs != nil && sig.QuoteArgs[sigIdx] && stackVal.VType.Equal(TWord) {
+			if sig.QuoteArgs != nil && sig.QuoteArgs[sigIdx] && stackVal.Parent.Equal(TWord) {
 				if !TAtom.Matches(sig.Args[sigIdx]) {
 					allMatch = false
 					break
@@ -2991,7 +2991,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		compatible := true
 		for j, p := range pos {
 			av := e.stack[p]
-			if av.VType.Equal(TAny) {
+			if av.Parent.Equal(TAny) {
 				continue
 			}
 			if sigTypeMatches(av, s.Args[j]) {

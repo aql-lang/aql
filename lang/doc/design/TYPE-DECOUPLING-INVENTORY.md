@@ -152,14 +152,14 @@ DepScalar check around direct typed-field access.
 
 | Line | Arm |
 |---|---|
-| 1719 | `case v.VType.Matches(TInstant)` → `RFC3339Nano` |
-| 1724 | `case v.VType.Matches(TDateTime)` → `2006-01-02T15:04:05.999999999` |
-| 1729 | `case v.VType.Matches(TDate)` → `2006-01-02` |
-| 1734 | `case v.VType.Matches(TTimeOfDay)` → `HH:MM:SS[.ns]` |
-| 1746 | `case v.VType.Matches(TCalDuration)` → `P%dY%dM%dD` |
-| 1751 | `case v.VType.Matches(TClkDuration)` → `d.String()` |
-| 1756 | `case v.VType.Matches(TTimezone)` → `loc.String()` |
-| 1761 | `case v.VType.Matches(TMatrix)` → `Matrix(rows×cols)` |
+| 1719 | `case v.Parent.Matches(TInstant)` → `RFC3339Nano` |
+| 1724 | `case v.Parent.Matches(TDateTime)` → `2006-01-02T15:04:05.999999999` |
+| 1729 | `case v.Parent.Matches(TDate)` → `2006-01-02` |
+| 1734 | `case v.Parent.Matches(TTimeOfDay)` → `HH:MM:SS[.ns]` |
+| 1746 | `case v.Parent.Matches(TCalDuration)` → `P%dY%dM%dD` |
+| 1751 | `case v.Parent.Matches(TClkDuration)` → `d.String()` |
+| 1756 | `case v.Parent.Matches(TTimezone)` → `loc.String()` |
+| 1761 | `case v.Parent.Matches(TMatrix)` → `Matrix(rows×cols)` |
 
 Plus 2 IsX arms (`eng/go/value.go:1815-1820`):
 
@@ -223,7 +223,7 @@ the targets of Step 5: each becomes an assertion against the new
 sealed `Payload` variant.
 
 
-## 6. `Type.Matches` / `VType.Equal` call sites
+## 6. `Type.Matches` / `Parent.Equal` call sites
 
 | Location | Count |
 |---|---|

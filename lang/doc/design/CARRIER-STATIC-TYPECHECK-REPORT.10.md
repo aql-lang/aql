@@ -52,11 +52,11 @@ We evaluate whether the following strategy can provide static typing for AQL:
 
 AQL currently resolves calls by selecting a matching signature from pre-sorted candidates ("first match wins"). `MatchSignature` applies type matching and structural pattern checks (`Unify` for patterns) at call time.
 
-Signature matching is primarily type-driven. The core function `sigTypeMatches(v Value, t Type)` in `signature.go:161-181` uses `VType.Matches(t)` as its first check. However, it also examines `Data` in specific cases: metatype detection (`Data == nil` for type literals, `Data.(ObjectTypeInfo)` for custom types), and `IsRecordType()`/`IsTableType()`/`IsOptionsType()` discrimination. A carrier value would need to represent these compound type distinctions, not just primitive VType.
+Signature matching is primarily type-driven. The core function `sigTypeMatches(v Value, t Type)` in `signature.go:161-181` uses `Parent.Matches(t)` as its first check. However, it also examines `Data` in specific cases: metatype detection (`Data == nil` for type literals, `Data.(ObjectTypeInfo)` for custom types), and `IsRecordType()`/`IsTableType()`/`IsOptionsType()` discrimination. A carrier value would need to represent these compound type distinctions, not just primitive Parent.
 
 The unified `matchSignature` function in `match.go:27` (note: there is no separate `MatchSignatureReversed` — a single function with a `nearestFirst` flag handles both directions), `SortSignatures`, `signatureScore`, `Type.Matches()` hierarchy check, and `Unify` are all largely reusable. The metatype and compound-type cases require the carrier to encode whether a value is a type literal, record schema, or options map.
 
-Implication: a static analyzer can reuse most of the matching logic against abstract carrier stacks, but carriers must encode more than bare VType for compound types.
+Implication: a static analyzer can reuse most of the matching logic against abstract carrier stacks, but carriers must encode more than bare Parent for compound types.
 
 ### 2) Unification and disjunction already exist as language concepts
 
@@ -278,7 +278,7 @@ Without these controls, worst-case behavior can be exponential. With them, it is
 
 10. **Unbounded stack.** Loops can push unbounded values. Mitigation: compute the stack effect (net push/pop per iteration) rather than tracking every iteration's values.
 
-11. **Query system type aliasing.** Query operations like `from` return `newValue(TList, qb)` where `Data` is a `QueryBuilder`, not a real `[]Value` list (`query.go:382`). The VType says `TList` but standard list operations would fail on it. The checker must handle these "disguised" types that share VType with concrete types.
+11. **Query system type aliasing.** Query operations like `from` return `newValue(TList, qb)` where `Data` is a `QueryBuilder`, not a real `[]Value` list (`query.go:382`). The Parent says `TList` but standard list operations would fail on it. The checker must handle these "disguised" types that share Parent with concrete types.
 
 ### Low (manageable)
 
@@ -315,7 +315,7 @@ For this to work, every `NativeSig` must be augmented with return type informati
 
 | Component | Reusable? | Notes |
 |---|---|---|
-| `matchSignature` / `sigTypeMatches` | Yes | Core type matching works on VType |
+| `matchSignature` / `sigTypeMatches` | Yes | Core type matching works on Parent |
 | `SortSignatures` / `signatureScore` | Yes | Scoring is type-only |
 | `Type.Matches()` / `Unify` | Yes | Type hierarchy and unification |
 | `positionalMatch` | Yes | Type checking of arg positions |

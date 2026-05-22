@@ -48,15 +48,15 @@ func TestMarkMoveBasic(t *testing.T) {
 		t.Fatalf("expected 3 values on stack, got %d: %v", len(result), result)
 	}
 	_as0, _ := AsInteger(result[0])
-	if !result[0].VType.Matches(TInteger) || _as0 != 11 {
+	if !result[0].Parent.Matches(TInteger) || _as0 != 11 {
 		t.Errorf("result[0] = %v, want 11", result[0])
 	}
 	_as1, _ := AsInteger(result[1])
-	if !result[1].VType.Matches(TInteger) || _as1 != 22 {
+	if !result[1].Parent.Matches(TInteger) || _as1 != 22 {
 		t.Errorf("result[1] = %v, want 22", result[1])
 	}
 	_as2, _ := AsInteger(result[2])
-	if !result[2].VType.Matches(TInteger) || _as2 != 33 {
+	if !result[2].Parent.Matches(TInteger) || _as2 != 33 {
 		t.Errorf("result[2] = %v, want 33", result[2])
 	}
 }
@@ -244,10 +244,10 @@ func TestMarkMoveIsMethods(t *testing.T) {
 	}
 
 	// Marks and moves should match "any" (Any matches everything now)
-	if !m.VType.Matches(TAny) {
+	if !m.Parent.Matches(TAny) {
 		t.Error("mark should match TAny")
 	}
-	if !mv.VType.Matches(TAny) {
+	if !mv.Parent.Matches(TAny) {
 		t.Error("move should match TAny")
 	}
 }

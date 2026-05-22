@@ -109,12 +109,12 @@ func TestMake_Tensor(t *testing.T) {
 	}
 }
 
-// `type Matrix {rows cols}` constructs a shaped type that `def` binds
+// `refine Matrix {rows cols}` constructs a shaped type that `def` binds
 // and `make` checks data against.
 func TestType_ShapedMatrix(t *testing.T) {
 	r := tensorRegistry(t)
 	res, err := runTensorSrc(t, r,
-		"def Mat3 (type Matrix {rows:3 cols:3}) make Mat3 [[1 2 3][4 5 6][7 8 9]]")
+		"def Mat3 (refine Matrix {rows:3 cols:3}) make Mat3 [[1 2 3][4 5 6][7 8 9]]")
 	if err != nil {
 		t.Fatalf("shaped make should succeed: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestType_ShapedMatrix(t *testing.T) {
 	}
 	// A shape mismatch against the constructed type is rejected.
 	_, err = runTensorSrc(t, r,
-		"def M3 (type Matrix {rows:3 cols:3}) make M3 [[1 2][3 4]]")
+		"def M3 (refine Matrix {rows:3 cols:3}) make M3 [[1 2][3 4]]")
 	if err == nil {
 		t.Fatal("shape-mismatched make should fail")
 	}
@@ -134,14 +134,14 @@ func TestType_ShapedMatrix(t *testing.T) {
 
 func TestType_ShapedVector(t *testing.T) {
 	r := tensorRegistry(t)
-	res, err := runTensorSrc(t, r, "def V5 (type Vector {len:5}) make V5 [1 2 3 4 5]")
+	res, err := runTensorSrc(t, r, "def V5 (refine Vector {len:5}) make V5 [1 2 3 4 5]")
 	if err != nil {
 		t.Fatalf("shaped vector make should succeed: %v", err)
 	}
 	if td := AsTensor(res[0]); !shapeEqual(td.Shape, []int{5}) {
 		t.Fatalf("got shape %v, want [5]", td.Shape)
 	}
-	_, err = runTensorSrc(t, r, "def V3 (type Vector {len:3}) make V3 [1 2 3 4 5]")
+	_, err = runTensorSrc(t, r, "def V3 (refine Vector {len:3}) make V3 [1 2 3 4 5]")
 	if err == nil || !strings.Contains(err.Error(), "does not match") {
 		t.Errorf("length-mismatched vector make should fail with a shape error, got %v", err)
 	}
@@ -151,7 +151,7 @@ func TestType_ShapedVector(t *testing.T) {
 // `typeof` reports Type, not the concrete tensor kind.
 func TestTensorType_TypeofIsType(t *testing.T) {
 	r := tensorRegistry(t)
-	res, err := runTensorSrc(t, r, "(type Matrix {rows:2 cols:2}) typeof")
+	res, err := runTensorSrc(t, r, "(refine Matrix {rows:2 cols:2}) typeof")
 	if err != nil {
 		t.Fatal(err)
 	}

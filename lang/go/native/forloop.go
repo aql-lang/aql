@@ -61,20 +61,20 @@ func runForLoop(r *Registry, start, end, step int64, iterName string, body Value
 func parseRange(elems []Value) (start, end, step int64, err error) {
 	switch len(elems) {
 	case 1:
-		if !elems[0].VType.Matches(TInteger) {
-			return 0, 0, 0, fmt.Errorf("range: expected integer, got %s", elems[0].VType)
+		if !elems[0].Parent.Matches(TInteger) {
+			return 0, 0, 0, fmt.Errorf("range: expected integer, got %s", elems[0].Parent)
 		}
 		_as0, _ := AsInteger(elems[0])
 		return 0, _as0, 1, nil
 	case 2:
-		if !elems[0].VType.Matches(TInteger) || !elems[1].VType.Matches(TInteger) {
+		if !elems[0].Parent.Matches(TInteger) || !elems[1].Parent.Matches(TInteger) {
 			return 0, 0, 0, fmt.Errorf("range: expected integers")
 		}
 		_as2, _ := AsInteger(elems[0])
 		_as1, _ := AsInteger(elems[1])
 		return _as2, _as1, 1, nil
 	case 3:
-		if !elems[0].VType.Matches(TInteger) || !elems[1].VType.Matches(TInteger) || !elems[2].VType.Matches(TInteger) {
+		if !elems[0].Parent.Matches(TInteger) || !elems[1].Parent.Matches(TInteger) || !elems[2].Parent.Matches(TInteger) {
 			return 0, 0, 0, fmt.Errorf("range: expected integers")
 		}
 		_as5, _ := AsInteger(elems[0])

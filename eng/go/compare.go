@@ -19,29 +19,31 @@ var ErrNoComparer = errors.New("eng: no comparer in this Behavior")
 // Dispatch is type-driven: the compare logic for a pair of values lives
 // on the type's Behavior (Comparer capability), not in a switch ladder
 // here. The dispatch routes through the lowest common ancestor of the
-// two operand VTypes — e.g. Integer-vs-Decimal walks up to Number, which
-// owns the numeric ordering; Date-vs-Date stays on Date.
+// two operand VTypes — e.g. Integer-vs-Decimal walks up to Number,
+// which owns the numeric ordering; Integer-vs-String walks up to
+// Scalar, which owns the cross-branch ordering; Date-vs-Date stays
+// on Date.
 //
-// Types without a Comparer in their lattice surface a clear
-// "type X does not support compare" error. Two values rooted in
-// disjoint branches (Integer-vs-String) also error: the lattice walk
-// finds no shared ancestor below Any/Scalar that owns a Comparer.
+// When the lattice walk finds no Comparer, the order falls to the
+// unified lattice Rank: every type carries one Rank giving a total
+// order over the whole lattice (see typetable.go::builtinDecls), so
+// any two values of different types order by Rank alone. Two values
+// of equal Rank — the identical type, or two user/external types that
+// inherit one builtin's Rank — break to compareTypes (name/id), then
+// to size, then to an element-wise structural comparison. Distinct
+// values never collapse to 0.
 //
-// DepScalar values represent type-level constraints, not concrete
-// scalars — they are rejected up front to avoid silently coercing
-// zero values through AsNumber/AsString.
+// DepScalar values (type-level constraints) flow through this same
+// path.
 func CompareValues(a, b Value) (int, error) {
-	if a.IsDepScalar() || b.IsDepScalar() {
-		return 0, fmt.Errorf("cannot compare dependent-type constraint with %s", b.VType.String())
-	}
-	if a.VType == nil || b.VType == nil {
+	// A bare type literal IS its lattice node; its type-for-comparison
+	// is itself, not its Parent (now the supertype).
+	aType := ValueType(a)
+	bType := ValueType(b)
+	if aType == nil || bType == nil {
 		return 0, fmt.Errorf("cannot compare values with nil type")
 	}
-	lca := lowestCommonAncestor(a.VType, b.VType)
-	if lca == nil {
-		return 0, fmt.Errorf("cannot compare %s and %s", a.VType.String(), b.VType.String())
-	}
-	for t := lca; t != nil; t = t.Parent {
+	for t := lowestCommonAncestor(aType, bType); t != nil; t = t.Parent {
 		cmp, ok := t.Behavior.(Comparer)
 		if !ok {
 			continue
@@ -55,7 +57,18 @@ func CompareValues(a, b Value) (int, error) {
 		}
 		return n, err
 	}
-	return 0, fmt.Errorf("cannot compare %s and %s", a.VType.String(), b.VType.String())
+	// No Comparer in the shared lattice — order by the type lattice.
+	// compareTypes is a total order on *Type (Rank, then depth, name,
+	// id), so any two values of distinct types resolve here.
+	if c := compareTypes(aType, bType); c != 0 {
+		return c, nil
+	}
+	// Identical type — order by value: size, then element-wise
+	// structure, so distinct values never collapse to 0.
+	if sa, sb := SizeOf(a), SizeOf(b); sa != sb {
+		return cmpInt(sa, sb), nil
+	}
+	return compareStructural(a, b)
 }
 
 // lowestCommonAncestor returns the closest type that is an ancestor
@@ -63,13 +76,19 @@ func CompareValues(a, b Value) (int, error) {
 // share no common ancestor (the type tables guarantee a single root,
 // so in practice this returns at worst the root type).
 func lowestCommonAncestor(a, b *Type) *Type {
-	seen := make(map[*Type]bool)
+	// Compared via Type.Equal (pointer OR canonical ID): a type
+	// literal is a by-value copy of its node, so ValueType() may hand
+	// us a copy whose address differs from the canonical node's,
+	// while ID-less ad-hoc types still match by pointer.
+	var aChain []*Type
 	for t := a; t != nil; t = t.Parent {
-		seen[t] = true
+		aChain = append(aChain, t)
 	}
 	for t := b; t != nil; t = t.Parent {
-		if seen[t] {
-			return t
+		for _, at := range aChain {
+			if at.Equal(t) {
+				return t
+			}
 		}
 	}
 	return nil
@@ -78,10 +97,10 @@ func lowestCommonAncestor(a, b *Type) *Type {
 // ExactEqual returns true if two values are exactly equal.
 // For scalars (integer, string, boolean, atom, none): compares by value.
 // For types: compares structurally via ValuesEqual.
-// For non-scalars (list, map): compares by identity (same pointer).
+// For non-scalars (list, map): compares by identity (same container).
 func ExactEqual(a, b Value) bool {
 	// none == none
-	if a.VType.Equal(TNone) && b.VType.Equal(TNone) {
+	if ValueType(a).Equal(TNone) && ValueType(b).Equal(TNone) {
 		return true
 	}
 
@@ -94,52 +113,85 @@ func ExactEqual(a, b Value) bool {
 		if !a.IsDepScalar() || !b.IsDepScalar() {
 			return false
 		}
-		return a.VType.Equal(b.VType) && ValuesEqual(a, b)
+		return a.Parent.Equal(b.Parent) && ValuesEqual(a, b)
 	}
 
 	// Types: structural comparison.
 	if IsTypeBody(a) && IsTypeBody(b) {
-		return a.VType.Equal(b.VType) && ValuesEqual(a, b)
+		return a.Parent.Equal(b.Parent) && ValuesEqual(a, b)
 	}
 
 	// Scalars: compare by value.
-	if a.VType.Matches(TNumber) && b.VType.Matches(TNumber) {
+	if a.Parent.Matches(TNumber) && b.Parent.Matches(TNumber) {
 		_as9, _ := AsNumber(a)
 		_as8, _ := AsNumber(b)
 		return _as9 == _as8
 	}
-	if a.VType.Matches(TString) && b.VType.Matches(TString) {
+	if a.Parent.Matches(TString) && b.Parent.Matches(TString) {
 		_as11, _ := AsString(a)
 		_as10, _ := AsString(b)
 		return _as11 == _as10
 	}
-	if a.VType.Matches(TBoolean) && b.VType.Matches(TBoolean) {
+	if a.Parent.Matches(TBoolean) && b.Parent.Matches(TBoolean) {
 		_as13, _ := AsBoolean(a)
 		_as12, _ := AsBoolean(b)
 		return _as13 == _as12
 	}
-	if a.VType.Equal(TAtom) && b.VType.Equal(TAtom) {
+	if a.Parent.Equal(TAtom) && b.Parent.Equal(TAtom) {
 		_as15, _ := AsAtom(a)
 		_as14, _ := AsAtom(b)
 		return _as15 == _as14
 	}
 
-	// Non-scalars: identity comparison (same pointer).
-	if a.VType.Equal(TList) && b.VType.Equal(TList) {
-		return a.Data == b.Data
+	// Non-scalars: identity comparison — both values must refer to the
+	// same underlying container.
+	if a.Parent.Equal(TList) && b.Parent.Equal(TList) {
+		return sameContainer(a.Data, b.Data)
 	}
-	if a.VType.Equal(TMap) && b.VType.Equal(TMap) {
-		return a.Data == b.Data
+	if a.Parent.Equal(TMap) && b.Parent.Equal(TMap) {
+		return sameContainer(a.Data, b.Data)
 	}
 
 	return false
+}
+
+// sameContainer reports whether two non-scalar payloads refer to the
+// same underlying container — the identity test behind ExactEqual for
+// lists and maps. A MapPayload identifies by its *OrderedMap pointer;
+// a ListPayload by the backing array of its element slice, so a value
+// dup'd from a list is identical to its source while two separate
+// literals are not. Payloads with no aliasable identity (table data,
+// materializers, …) are never equal here.
+//
+// It must not apply `==` to a Payload directly: ListPayload holds a
+// slice and is therefore not a comparable type — a bare
+// `a.Data == b.Data` panics at runtime.
+func sameContainer(a, b Payload) bool {
+	switch av := a.(type) {
+	case MapPayload:
+		bv, ok := b.(MapPayload)
+		return ok && av.M == bv.M
+	case ListPayload:
+		bv, ok := b.(ListPayload)
+		if !ok {
+			return false
+		}
+		// An empty list has no backing array to alias by — treat all
+		// empty lists as the single empty list.
+		if len(av.Elems) == 0 || len(bv.Elems) == 0 {
+			return len(av.Elems) == len(bv.Elems)
+		}
+		return &av.Elems[0] == &bv.Elems[0]
+	default:
+		return false
+	}
 }
 
 // DeepEqual returns true if two values are deeply equal.
 // Traverses lists and maps depth-first comparing all leaf values.
 func DeepEqual(a, b Value) bool {
 	// none
-	if a.VType.Equal(TNone) && b.VType.Equal(TNone) {
+	if ValueType(a).Equal(TNone) && ValueType(b).Equal(TNone) {
 		return true
 	}
 
@@ -150,33 +202,33 @@ func DeepEqual(a, b Value) bool {
 		if !a.IsDepScalar() || !b.IsDepScalar() {
 			return false
 		}
-		return a.VType.Equal(b.VType) && ValuesEqual(a, b)
+		return a.Parent.Equal(b.Parent) && ValuesEqual(a, b)
 	}
 
 	// Scalars.
-	if a.VType.Matches(TNumber) && b.VType.Matches(TNumber) {
+	if a.Parent.Matches(TNumber) && b.Parent.Matches(TNumber) {
 		_as17, _ := AsNumber(a)
 		_as16, _ := AsNumber(b)
 		return _as17 == _as16
 	}
-	if a.VType.Matches(TString) && b.VType.Matches(TString) {
+	if a.Parent.Matches(TString) && b.Parent.Matches(TString) {
 		_as19, _ := AsString(a)
 		_as18, _ := AsString(b)
 		return _as19 == _as18
 	}
-	if a.VType.Matches(TBoolean) && b.VType.Matches(TBoolean) {
+	if a.Parent.Matches(TBoolean) && b.Parent.Matches(TBoolean) {
 		_as21, _ := AsBoolean(a)
 		_as20, _ := AsBoolean(b)
 		return _as21 == _as20
 	}
-	if a.VType.Equal(TAtom) && b.VType.Equal(TAtom) {
+	if a.Parent.Equal(TAtom) && b.Parent.Equal(TAtom) {
 		_as23, _ := AsAtom(a)
 		_as22, _ := AsAtom(b)
 		return _as23 == _as22
 	}
 
 	// Lists: same length, each element deeply equal.
-	if a.VType.Equal(TList) && b.VType.Equal(TList) {
+	if a.Parent.Equal(TList) && b.Parent.Equal(TList) {
 		aElems, aErr := AsMutableList(a)
 		bElems, bErr := AsMutableList(b)
 		if aErr != nil || bErr != nil {
@@ -195,7 +247,7 @@ func DeepEqual(a, b Value) bool {
 	}
 
 	// Maps: same keys, each value deeply equal.
-	if a.VType.Equal(TMap) && b.VType.Equal(TMap) {
+	if a.Parent.Equal(TMap) && b.Parent.Equal(TMap) {
 		aMap, aErr := AsMutableMap(a)
 		bMap, bErr := AsMutableMap(b)
 		if aErr != nil || bErr != nil {
@@ -256,6 +308,27 @@ func GteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 		return nil, fmt.Errorf("gte: %w", err)
 	}
 	return []Value{NewBoolean(cmp >= 0)}, nil
+}
+
+// CmpHandler implements `cmp` — a three-way comparison. `a b cmp`
+// returns -1 when a sorts before b, 0 when they tie, and 1 when a
+// sorts after b, using the same total order as lt / gt / sort. The
+// CompareValues result is normalised to its sign, so a custom
+// `behave compare` body that returns a nonzero magnitude other than
+// ±1 still yields exactly -1 / 0 / 1.
+func CmpHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	cmp, err := CompareValues(args[1], args[0])
+	if err != nil {
+		return nil, fmt.Errorf("cmp: %w", err)
+	}
+	switch {
+	case cmp < 0:
+		return []Value{NewInteger(-1)}, nil
+	case cmp > 0:
+		return []Value{NewInteger(1)}, nil
+	default:
+		return []Value{NewInteger(0)}, nil
+	}
 }
 
 func EqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

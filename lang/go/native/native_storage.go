@@ -104,7 +104,7 @@ func setObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	key := StoreKey(args[0])
 	oi, ok := container.Data.(ObjectInstanceInfo)
 	if !ok {
-		return nil, fmt.Errorf("set: expected an Object instance, got %s", container.VType.String())
+		return nil, fmt.Errorf("set: expected an Object instance, got %s", container.Parent.String())
 	}
 	oi.Fields.Set(key, args[1])
 	return nil, nil
@@ -113,7 +113,7 @@ func setObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	arr, err := AsArray(args[2])
 	if err != nil {
-		return nil, fmt.Errorf("set: expected an Array, got %s", args[2].VType.String())
+		return nil, fmt.Errorf("set: expected an Array, got %s", args[2].Parent.String())
 	}
 	asInt, _ := args[0].AsConcreteInteger()
 	idx := int(asInt)
@@ -130,9 +130,9 @@ func getNodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		return nil, r.AqlError("get_error", "get: cannot access property on type literal", "get")
 	}
 	// Integer key: list index access.
-	if key.VType.Matches(TInteger) {
+	if key.Parent.Matches(TInteger) {
 		idx, _ := AsInteger(key)
-		if list, _ := AsList(container); !list.IsNil() && container.VType.Matches(TList) {
+		if list, _ := AsList(container); !list.IsNil() && container.Parent.Matches(TList) {
 			i := int(idx)
 			if i < 0 || i >= list.Len() {
 				return []Value{NewTypeLiteral(TNone)}, nil
@@ -178,7 +178,7 @@ func getObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 func getArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	arr, err := AsArray(args[1])
 	if err != nil {
-		return nil, fmt.Errorf("get: expected an Array, got %s", args[1].VType.String())
+		return nil, fmt.Errorf("get: expected an Array, got %s", args[1].Parent.String())
 	}
 	idx, _ := args[0].AsConcreteInteger()
 	val, ok := arr.Get(int(idx))
@@ -197,7 +197,7 @@ func getNoneHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 func setStoreHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	store, err := AsStore(args[2])
 	if err != nil {
-		return nil, fmt.Errorf("set: expected a Store, got %s", args[2].VType.String())
+		return nil, fmt.Errorf("set: expected a Store, got %s", args[2].Parent.String())
 	}
 	key := StoreKey(args[0])
 	CowSet(store, key, args[1], reg)
@@ -214,7 +214,7 @@ func setStoreReturnsFn(args []Value, r *Registry) []Value {
 func getStoreHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	store, err := AsStore(args[1])
 	if err != nil {
-		return nil, fmt.Errorf("get: expected a Store, got %s", args[1].VType.String())
+		return nil, fmt.Errorf("get: expected a Store, got %s", args[1].Parent.String())
 	}
 	key := getKey(args[0])
 	val, ok := store.Get(key)

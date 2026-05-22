@@ -71,7 +71,7 @@ func TandHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 // list of values via this same intersection. Future higher-order
 // type combinators may want it too.
 func TandValues(a, b Value) Value {
-	if a.VType.Equal(TNever) || b.VType.Equal(TNever) {
+	if a.Parent.Equal(TNever) || b.Parent.Equal(TNever) {
 		return NewTypeLiteral(TNever)
 	}
 
@@ -115,7 +115,7 @@ func TandValues(a, b Value) Value {
 // isPlainConcreteMap reports whether v is a non-typed, non-record,
 // non-options concrete map (Data is *OrderedMap).
 func isPlainConcreteMap(v Value) bool {
-	if !v.VType.Equal(TMap) || v.Data == nil {
+	if !v.Parent.Equal(TMap) || v.Data == nil {
 		return false
 	}
 	if IsRecordType(v) || IsOptionsType(v) || IsTypedMap(v) {
@@ -136,7 +136,7 @@ func mergeMaps(a, b ReadMap) (*OrderedMap, bool) {
 		aVal, _ := a.Get(key)
 		if bVal, present := b.Get(key); present {
 			combined := TandValues(aVal, bVal)
-			if combined.VType.Equal(TNever) {
+			if combined.Parent.Equal(TNever) {
 				return nil, false
 			}
 			result.Set(key, combined)

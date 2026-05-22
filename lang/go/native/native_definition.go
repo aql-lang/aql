@@ -202,15 +202,15 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		return constraint.String()
 	}
 	body := args[1]
-	if constraint.VType.Equal(TFnUndef) && IsAtom(body) {
+	if constraint.Parent.Equal(TFnUndef) && IsAtom(body) {
 		atomName, _ := AsAtom(body)
 		if top, ok := r.Defs.Top(atomName); ok {
-			if top.VType.Equal(TFnDef) || top.VType.Equal(TFunction) {
+			if top.Parent.Equal(TFnDef) || top.Parent.Equal(TFunction) {
 				body = top
 			}
 		}
 	}
-	if constraint.VType.Equal(TFnDef) || constraint.VType.Equal(TFunction) {
+	if constraint.Parent.Equal(TFnDef) || constraint.Parent.Equal(TFunction) {
 		out, matched, err := r.RunPredicate(constraint, body)
 		if err != nil {
 			return nil, fmt.Errorf("def %s: predicate type %s: %w", name, describeType(), err)
@@ -222,7 +222,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		// Rewrap with the predicate's *Type so dispatch keys off
 		// the nominal name. The underlying Data is unchanged —
 		// accessors (AsInteger, AsString, …) read the payload the
-		// same way — but the VType change lets the LCA walk find
+		// same way — but the Parent change lets the LCA walk find
 		// behaviors installed via `behave compare/q (fn
 		// [[Positive Positive] …])` etc.
 		//
@@ -237,7 +237,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		// InstallType decision so the two paths stay aligned.
 		if typeName != "" && eng.PredicateInputType(constraint) != nil {
 			if def := r.LookupTypeName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
-				out.VType = def
+				out.Parent = def
 			}
 		}
 		InstallDef(r, name, out)
@@ -250,8 +250,8 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// from the body map via make-style construction. This closes the
 	// "structural for validation, nominal for dispatch" gap for
 	// object types — without this branch the value would have
-	// VType=TMap and Person's registered behaviors would never
-	// dispatch. The result carries VType=Person, satisfies the
+	// Parent=TMap and Person's registered behaviors would never
+	// dispatch. The result carries Parent=Person, satisfies the
 	// `behave compare/q (fn [[Person Person] …])` dispatch path, and
 	// supports `get`/`set` via the ObjectInstance signatures.
 	//
@@ -260,7 +260,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// through to Unify and either succeed or surface a type error.
 	if IsObjectType(constraint) {
 		info, _ := AsObjectType(constraint)
-		if body.VType.Equal(TMap) {
+		if body.Parent.Equal(TMap) {
 			result, err := eng.MakeObject(info, body, nil)
 			if err != nil {
 				return nil, fmt.Errorf("def %s: %w", name, err)
@@ -281,8 +281,8 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		}
 	}
 	if r.Check.IsActive() && constraint.IsDepScalar() {
-		leaf := DependentLeafFromType(constraint.VType)
-		if base, ok := DependentLeafBaseType(leaf); ok && body.VType.Matches(base) {
+		leaf := DependentLeafFromType(constraint.Parent)
+		if base, ok := DependentLeafBaseType(leaf); ok && body.Parent.Matches(base) {
 			InstallDef(r, name, body)
 			r.Check.RecordDef(name, args[0].Pos)
 			return nil, nil
@@ -299,7 +299,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 				Row:  args[0].Pos.Row,
 				Col:  args[0].Pos.Col,
 			})
-			InstallDef(r, name, NewCarrier(constraint.VType))
+			InstallDef(r, name, NewCarrier(constraint.Parent))
 			r.Check.RecordDef(name, args[0].Pos)
 			return nil, nil
 		}
@@ -308,15 +308,15 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	}
 	// FnUndef constraint (`def f:Mapper fn […]`): after Unify
 	// confirms the function shape matches Mapper, rewrap the
-	// VType so dispatch keys off Mapper rather than the generic
+	// Parent so dispatch keys off Mapper rather than the generic
 	// TFunction / TFnDef. Behaviors installed via
 	// `behave compare/q (fn [[Mapper Mapper] …])` then dispatch on
 	// f. Same rewrap pattern as predicate types — the payload
 	// shape (FnDefInfo) is unchanged, accessors keep working, just
 	// the dispatch identity flips.
-	if constraint.VType.Equal(TFnUndef) && typeName != "" {
+	if constraint.Parent.Equal(TFnUndef) && typeName != "" {
 		if def := r.LookupTypeName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
-			unified.VType = def
+			unified.Parent = def
 		}
 	}
 	InstallDef(r, name, unified)
@@ -361,7 +361,7 @@ func undefFnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 
 func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	list := args[0]
-	if !list.VType.Equal(TList) {
+	if !list.Parent.Equal(TList) {
 		return nil, r.AqlError("var_error", "var: argument must be a list", "var")
 	}
 	if list.Data == nil {
@@ -373,7 +373,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	}
 
 	declVal := elems.Get(0)
-	if !declVal.VType.Equal(TList) || declVal.Data == nil {
+	if !declVal.Parent.Equal(TList) || declVal.Data == nil {
 		return nil, r.AqlError("var_error", "var: first element must be a list of variable declarations", "var")
 	}
 	decls, _ := AsList(declVal)
@@ -390,7 +390,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 			varNames = append(varNames, name)
 			result = append(result, NewWord("def"), NewWord(name), NewEnd())
 
-		case decl.VType.Equal(TList) && decl.Data != nil:
+		case decl.Parent.Equal(TList) && decl.Data != nil:
 			declElems, _ := AsList(decl)
 			if declElems.Len() < 2 {
 				return nil, r.AqlError("var_error", "var: declaration list must have name and value", "var")
@@ -399,7 +399,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 			if IsWord(declElems.Get(0)) {
 				_as1, _ := AsWord(declElems.Get(0))
 				name = _as1.Name
-			} else if declElems.Get(0).VType.Matches(TString) {
+			} else if declElems.Get(0).Parent.Matches(TString) {
 				name, _ = AsString(declElems.Get(0))
 			} else {
 				return nil, r.AqlError("var_error", "var: declaration name must be a word or string", "var")
@@ -409,7 +409,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 			result = append(result, declElems.Slice()[1:]...)
 			result = append(result, NewEnd())
 
-		case decl.VType.Matches(TString):
+		case decl.Parent.Matches(TString):
 			name, _ := AsString(decl)
 			varNames = append(varNames, name)
 			result = append(result, NewWord("def"), NewWord(name), NewEnd())
@@ -437,7 +437,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 // from register.go.
 func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	list := args[0]
-	if !list.VType.Equal(TList) {
+	if !list.Parent.Equal(TList) {
 		return nil, r.AqlError("fn_error", "fn: argument must be a list", "fn")
 	}
 	if list.Data == nil {

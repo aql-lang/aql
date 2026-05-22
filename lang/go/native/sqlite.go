@@ -105,8 +105,8 @@ func (s *SQLiteStore) StoreTable(name string, td TableData) error {
 	colTypes := make([]*Type, len(columns))
 	for i, col := range columns {
 		fieldVal, _ := td.Record.Fields.Get(col)
-		colTypes[i] = fieldVal.VType
-		colDefs[i] = quoteIdent(col) + " " + aqlTypeToSQLType(fieldVal.VType)
+		colTypes[i] = fieldVal.Parent
+		colDefs[i] = quoteIdent(col) + " " + aqlTypeToSQLType(fieldVal.Parent)
 	}
 	createSQL := fmt.Sprintf("CREATE TABLE %s (%s)", quoteIdent(name), strings.Join(colDefs, ", "))
 	if _, err := s.db.Exec(createSQL); err != nil {
@@ -198,7 +198,7 @@ func (s *SQLiteStore) Query(querySQL string, schema *RecordTypeInfo) (TableData,
 		colTypes[i] = TString // default
 		if schema != nil {
 			if fieldVal, ok := schema.Fields.Get(col); ok {
-				colTypes[i] = fieldVal.VType
+				colTypes[i] = fieldVal.Parent
 			}
 		}
 	}
@@ -238,25 +238,25 @@ func (s *SQLiteStore) Query(querySQL string, schema *RecordTypeInfo) (TableData,
 // aqlValueToSQLParam converts an AQL Value to a Go value suitable for
 // a SQL parameter placeholder, respecting the target column type.
 func aqlValueToSQLParam(v Value, colType *Type) interface{} {
-	if v.VType.Equal(TNone) {
+	if v.Parent.Equal(TNone) {
 		return nil
 	}
 
 	switch {
 	case colType.Matches(TInteger):
 		// Column wants INTEGER. Coerce the value.
-		if v.VType.Matches(TInteger) {
+		if v.Parent.Matches(TInteger) {
 			_as0, _ := AsInteger(v)
 			return _as0
 		}
 		// String that looks numeric → parse it.
-		if v.VType.Matches(TString) {
+		if v.Parent.Matches(TString) {
 			_as1, _ := AsString(v)
 			if n, err := strconv.ParseInt(_as1, 10, 64); err == nil {
 				return n
 			}
 		}
-		if v.VType.Matches(TBoolean) {
+		if v.Parent.Matches(TBoolean) {
 			_as2, _ := AsBoolean(v)
 			if _as2 {
 				return int64(1)
@@ -268,15 +268,15 @@ func aqlValueToSQLParam(v Value, colType *Type) interface{} {
 
 	case colType.Matches(TNumber):
 		// Column wants REAL.
-		if v.VType.Matches(TDecimal) {
+		if v.Parent.Matches(TDecimal) {
 			_as3, _ := AsDecimal(v)
 			return _as3
 		}
-		if v.VType.Matches(TInteger) {
+		if v.Parent.Matches(TInteger) {
 			_as4, _ := AsInteger(v)
 			return float64(_as4)
 		}
-		if v.VType.Matches(TString) {
+		if v.Parent.Matches(TString) {
 			_as5, _ := AsString(v)
 			if f, err := strconv.ParseFloat(_as5, 64); err == nil {
 				return f
@@ -286,14 +286,14 @@ func aqlValueToSQLParam(v Value, colType *Type) interface{} {
 
 	case colType.Matches(TBoolean):
 		// Column stored as INTEGER (0/1).
-		if v.VType.Matches(TBoolean) {
+		if v.Parent.Matches(TBoolean) {
 			_as6, _ := AsBoolean(v)
 			if _as6 {
 				return int64(1)
 			}
 			return int64(0)
 		}
-		if v.VType.Matches(TString) {
+		if v.Parent.Matches(TString) {
 			_as7, _ := AsString(v)
 			if _as7 == "true" {
 				return int64(1)
@@ -304,7 +304,7 @@ func aqlValueToSQLParam(v Value, colType *Type) interface{} {
 
 	default:
 		// TEXT column.
-		if v.VType.Matches(TString) {
+		if v.Parent.Matches(TString) {
 			_as8, _ := AsString(v)
 			return _as8
 		}

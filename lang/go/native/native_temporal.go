@@ -242,7 +242,7 @@ func (timeOfDayFormatBehavior) Compare(a, b Value) (int, error) {
 
 // compareTimePayloads returns -1/0/1 for two values whose Data is an
 // eng.TimePayload wrapping a time.Time. Non-Time payloads compare as
-// equal — the matching dispatch already filters by VType, so this
+// equal — the matching dispatch already filters by Parent, so this
 // only fires on well-formed temporal values.
 func compareTimePayloads(a, b Value) int {
 	ta, _ := timeFromValue(a)

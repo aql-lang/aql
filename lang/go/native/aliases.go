@@ -134,7 +134,8 @@ var (
 	TNone           = eng.TNone
 	TNumber         = eng.TNumber
 	TObject         = eng.TObject
-	TObjectType     = eng.TObjectType
+	TIdeal          = eng.TIdeal
+	TIdealType      = eng.TIdealType
 	TOpenParen      = eng.TOpenParen
 	TOptions        = eng.TOptions
 	TParenExpr      = eng.TParenExpr
@@ -268,6 +269,9 @@ var (
 	parseFnUndefSpec          = eng.ParseFnUndefSpec
 	ValidateWordName          = eng.ValidateWordName
 	TypeOf                    = eng.TypeOf
+	TypeNameOf                = eng.TypeNameOf
+	TypePathOf                = eng.TypePathOf
+	ValueType                 = eng.ValueType
 	NewNone                   = eng.NewNone
 	FormatDecimal             = eng.FormatDecimal
 	NewTypedListWithElements  = eng.NewTypedListWithElements
@@ -405,6 +409,7 @@ var (
 	SeverityFor           = eng.SeverityFor
 	SignatureScore        = eng.SignatureScore
 	SimplifyDisjunctAlts  = eng.SimplifyDisjunctAlts
+	SizeOf                = eng.SizeOf
 	SortSignatures        = eng.SortSignatures
 	StoreKey              = eng.StoreKey
 	StripToCarriers       = eng.StripToCarriers

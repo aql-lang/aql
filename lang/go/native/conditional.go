@@ -4,7 +4,7 @@ package native
 // its elements are returned wrapped in parens so the main engine evaluates
 // them as a sub-expression. Scalars are returned as-is.
 func spliceArg(v Value) []Value {
-	if v.VType.Equal(TList) && v.Data != nil && !IsTypedList(v) && !IsTableType(v) {
+	if v.Parent.Equal(TList) && v.Data != nil && !IsTypedList(v) && !IsTableType(v) {
 		elems, _ := AsList(v)
 		result := make([]Value, 0, elems.Len()+2)
 		result = append(result, NewOpenParen())
@@ -19,7 +19,7 @@ func spliceArg(v Value) []Value {
 // list — i.e. something to be evaluated as a code body rather than used
 // as a literal value.
 func isCodeBody(v Value) bool {
-	return v.VType.Equal(TList) && v.Data != nil && !IsTypedList(v) && !IsTableType(v)
+	return v.Parent.Equal(TList) && v.Data != nil && !IsTypedList(v) && !IsTableType(v)
 }
 
 // ifClause turns the element slice of a clause-list `[c1 b1 c2 b2 … else]`

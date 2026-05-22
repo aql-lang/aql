@@ -37,8 +37,8 @@
 		
 Resource	Resource	the bare type literal renders as its name
 Entity	Entity	
-typeof Resource	Type	Resource's metatype is Type
-typeof Entity	Type	
+typeof Resource	Object	Resource's metatype is Type
+typeof Entity	Resource	
 		
 # ====================================================================		
 # 2. Inheritance — Entity is Resource		

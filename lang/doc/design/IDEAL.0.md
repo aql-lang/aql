@@ -22,10 +22,10 @@ constructor. Its handler, `typeHandler` in
 if-else chain:
 
 ```go
-if base.Data == nil && base.VType.Equal(TObject) { … objectHandler }
+if base.Data == nil && base.Parent.Equal(TObject) { … objectHandler }
 if IsObjectType(base)                            { … objectWithParentHandler }
-if base.Data == nil && base.VType.Equal(TRecord) { … recordHandler }
-if base.Data == nil && base.VType.Equal(TTable)  { … tableHandler }
+if base.Data == nil && base.Parent.Equal(TRecord) { … recordHandler }
+if base.Data == nil && base.Parent.Equal(TTable)  { … tableHandler }
 return … "type: base must be Object, Record, Table, or an object type"
 ```
 
@@ -189,11 +189,11 @@ registration. Dispatch then becomes a **pointer-follow**, not a
 search:
 
 ```
-type X arg        →  X.VType.Ideal.Construct(X, arg, r)
-make T data       →  T.VType.Ideal.Instantiate(T, data, r)
-unify(a, b)       →  a.VType.Ideal == b.VType.Ideal → ideal.Unify(a, b)
-v.String()        →  v.VType.Ideal.Format(v)
-v is T            →  T.VType.Ideal.Match(v, T)
+type X arg        →  X.Parent.Ideal.Construct(X, arg, r)
+make T data       →  T.Parent.Ideal.Instantiate(T, data, r)
+unify(a, b)       →  a.Parent.Ideal == b.Parent.Ideal → ideal.Unify(a, b)
+v.String()        →  v.Parent.Ideal.Format(v)
+v is T            →  T.Parent.Ideal.Match(v, T)
 ```
 
 Worked example — object inheritance, today four hard-coded branches,
@@ -201,9 +201,9 @@ becomes one rule:
 
 ```
 def Animal (type Object {legs:Integer})   ; Object literal → objectIdeal.Construct
-def Dog    (type Animal {breed:String})   ; Animal.VType.Ideal == objectIdeal
+def Dog    (type Animal {breed:String})   ; Animal.Parent.Ideal == objectIdeal
                                           ; → objectIdeal.Construct(Animal, …) → subtype
-make Dog {legs:4 breed:"x"}               ; Dog.VType.Ideal.Instantiate
+make Dog {legs:4 breed:"x"}               ; Dog.Parent.Ideal.Instantiate
 ```
 
 `typeHandler` shrinks to: resolve the base, follow `.Ideal`, call
@@ -388,7 +388,7 @@ commits to.
 
 **What Ideals then give a future HKT layer, for free:**
 
-- **A runtime-queryable kind on every value.** `v.VType.Ideal` lets
+- **A runtime-queryable kind on every value.** `v.Parent.Ideal` lets
   AQL code branch on "what kind of structure is this" without
   knowing the concrete type. That is *ad-hoc kind-polymorphism*
   already: a generic `empty`, `size`, or structural `map` word can
@@ -409,7 +409,7 @@ commits to.
 runtime lattice and treats static analysis as a best-effort
 check-mode pass. The Ideal-enabled form of HKT matches that
 philosophy: kind-polymorphism is **runtime dispatch on
-`v.VType.Ideal`**, and kind-checking is a **check-mode consultation
+`v.Parent.Ideal`**, and kind-checking is a **check-mode consultation
 of the Ideal registry** — not a System-F-ω elaboration. Ideals make
 *pragmatic, runtime-flavoured* HKT reachable; they do not drag in
 academic HKT.

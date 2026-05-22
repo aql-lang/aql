@@ -379,19 +379,19 @@ func (r *Registry) clearSigsKeepFallback(name string) {
 // All containers at every depth are Stores.
 func (r *Registry) InitRootContext() {
 	root := &StoreInstanceInfo{
-		TypeName: "Object/Store",
+		TypeName: "Ideal/Store",
 		Data:     make(map[string]Value),
 	}
 
 	// Create the System store.
 	sysStore := &StoreInstanceInfo{
-		TypeName: "Object/Store/System",
+		TypeName: "Ideal/Store/System",
 		Data:     make(map[string]Value),
 	}
 
 	// fs: a Store with {mem: false, impl: None}
 	fsStore := &StoreInstanceInfo{
-		TypeName: "Object/Store",
+		TypeName: "Ideal/Store",
 		Data:     make(map[string]Value),
 	}
 	fsStore.Set("mem", NewBoolean(false))
@@ -400,7 +400,7 @@ func (r *Registry) InitRootContext() {
 
 	// __val: a Store for user-defined values
 	valStore := &StoreInstanceInfo{
-		TypeName: "Object/Store",
+		TypeName: "Ideal/Store",
 		Data:     make(map[string]Value),
 	}
 	sysStore.Set("__val", NewStoreValue(TStore, valStore))
@@ -486,8 +486,8 @@ func BinaryIntOpNative(name string, op func(a, b int64) (int64, error)) NativeFu
 
 // ValToString converts any scalar Value to its string representation.
 func ValToString(v Value) string {
-	if v.Data == nil && !v.VType.Equal(TNone) {
-		return v.VType.String()
+	if v.Data == nil {
+		return v.String()
 	}
 	switch {
 	case v.IsDepScalar():
@@ -496,19 +496,19 @@ func ValToString(v Value) string {
 		// so without this case AsString would crash on the wrong
 		// payload type.
 		return renderDepScalar(v)
-	case v.VType.Matches(TString):
+	case v.Parent.Matches(TString):
 		_as8, _ := AsString(v)
 		return _as8
 	case IsAtom(v):
 		_as9, _ := AsAtom(v)
 		return _as9
-	case v.VType.Matches(TDecimal):
+	case v.Parent.Matches(TDecimal):
 		_as10, _ := AsDecimal(v)
 		return formatDecimal(_as10)
-	case v.VType.Matches(TInteger):
+	case v.Parent.Matches(TInteger):
 		_as11, _ := AsInteger(v)
 		return strconv.FormatInt(_as11, 10)
-	case v.VType.Matches(TBoolean):
+	case v.Parent.Matches(TBoolean):
 		_as12, _ := AsBoolean(v)
 		if _as12 {
 			return "true"
@@ -579,10 +579,10 @@ func (r *Registry) RegisterPart(part string) {
 // fallback is retained only for value-side ObjectType installations
 // from outside the type word (e.g. legacy RegisterResource paths).
 func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
-	if v.Data != nil || reg == nil || v.VType == nil {
+	if v.Data != nil || reg == nil || v.Parent == nil {
 		return v
 	}
-	name := TypeNameByID(v.VType.ID)
+	name := TypeNameByID(v.Parent.ID)
 	if name == "" {
 		return v
 	}
@@ -595,13 +595,13 @@ func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
 // StoreKey converts a Value to a string key for the store.
 func StoreKey(v Value) string {
 	if v.Data == nil {
-		return v.VType.String()
+		return v.Parent.String()
 	}
 	if IsWord(v) {
 		_as15, _ := AsWord(v)
 		return _as15.Name
 	}
-	if v.VType.Matches(TString) {
+	if v.Parent.Matches(TString) {
 		_as16, _ := AsString(v)
 		return _as16
 	}
@@ -609,15 +609,15 @@ func StoreKey(v Value) string {
 		_as17, _ := AsAtom(v)
 		return _as17
 	}
-	if v.VType.Matches(TInteger) {
+	if v.Parent.Matches(TInteger) {
 		n, _ := AsInteger(v)
 		return strconv.FormatInt(n, 10)
 	}
-	if v.VType.Matches(TDecimal) {
+	if v.Parent.Matches(TDecimal) {
 		f, _ := AsDecimal(v)
 		return FormatDecimal(f)
 	}
-	if v.VType.Matches(TBoolean) {
+	if v.Parent.Matches(TBoolean) {
 		b, _ := AsBoolean(v)
 		if b {
 			return "true"
@@ -687,7 +687,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 	for i, p := range sig.Params {
 		if p.Name != "" {
 			arg := args[i]
-			if arg.VType.Equal(TList) && !arg.Quoted {
+			if arg.Parent.Equal(TList) && !arg.Quoted {
 				arg.Quoted = true
 			}
 			InstallDef(r, p.Name, arg)
@@ -865,8 +865,8 @@ func (r *Registry) ResolveTypedNameValue(v Value) (resolved Value, name string, 
 // rolled back. r.defStacks is already protected by CallAQL's own
 // snapshot.
 func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched bool, err error) {
-	if !constraint.VType.Equal(TFnDef) && !constraint.VType.Equal(TFunction) {
-		return Value{}, false, fmt.Errorf("RunPredicate: constraint is not a fn (got %s)", constraint.VType.String())
+	if !constraint.Parent.Equal(TFnDef) && !constraint.Parent.Equal(TFunction) {
+		return Value{}, false, fmt.Errorf("RunPredicate: constraint is not a fn (got %s)", constraint.Parent.String())
 	}
 	fnDef, ok := constraint.Data.(FnDefInfo)
 	if !ok {
@@ -895,6 +895,6 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 		return Value{}, false, fmt.Errorf("RunPredicate: predicate must return exactly one value, got %d", len(result))
 	}
 	out = result[0]
-	matched = !out.VType.Equal(TNone)
+	matched = !out.Parent.Equal(TNone)
 	return out, matched, nil
 }

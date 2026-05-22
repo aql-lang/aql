@@ -205,9 +205,9 @@ func pickCheckFullStack(_ []Value, stack []Value, _ *Registry) []Value {
 	if len(stack) == 0 {
 		return append(append([]Value(nil), stack...), NewCarrier(TAny))
 	}
-	t := stack[0].VType
+	t := stack[0].Parent
 	for i := 1; i < len(stack); i++ {
-		t = CommonAncestorType(t, stack[i].VType)
+		t = CommonAncestorType(t, stack[i].Parent)
 		if t.Equal(TAny) {
 			break
 		}
@@ -234,9 +234,9 @@ func rollCheckFullStack(_ []Value, stack []Value, _ *Registry) []Value {
 		return nil
 	}
 	out := append([]Value(nil), stack...)
-	t := stack[0].VType
+	t := stack[0].Parent
 	for i := 1; i < len(stack); i++ {
-		t = CommonAncestorType(t, stack[i].VType)
+		t = CommonAncestorType(t, stack[i].Parent)
 	}
 	out[len(out)-1] = NewCarrier(t)
 	return out

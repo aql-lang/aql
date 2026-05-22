@@ -30,7 +30,7 @@ func TestRegisterExternalBuiltin_PluginColor(t *testing.T) {
 	}
 
 	matchFn := func(v Value, target *Type) bool {
-		if v.VType != target {
+		if v.Parent != target {
 			return false
 		}
 		ep, ok := v.Data.(ExtensionPayload)
@@ -61,15 +61,15 @@ func TestRegisterExternalBuiltin_PluginColor(t *testing.T) {
 	// Register against a private dynamic table to avoid mutating
 	// the package-level Builtin under test parallelism.
 	tt := newBuiltinTypeTable()
-	tColor, err := tt.RegisterExternalBuiltin("Object/TestPluginColor", 99001, cb)
+	tColor, err := tt.RegisterExternalBuiltin("Ideal/TestPluginColor", 99001, cb)
 	if err != nil {
 		t.Fatalf("RegisterExternalBuiltin: %v", err)
 	}
 	if tColor == nil {
 		t.Fatal("RegisterExternalBuiltin returned nil Type")
 	}
-	if tColor.Path() != "Object/TestPluginColor" {
-		t.Errorf("path = %q, want %q", tColor.Path(), "Object/TestPluginColor")
+	if tColor.Path() != "Ideal/TestPluginColor" {
+		t.Errorf("path = %q, want %q", tColor.Path(), "Ideal/TestPluginColor")
 	}
 	if tColor.FixedID != 99001 {
 		t.Errorf("FixedID = %d, want 99001", tColor.FixedID)
@@ -87,7 +87,7 @@ func TestRegisterExternalBuiltin_PluginColor(t *testing.T) {
 	// Construct a value of the new type and verify dispatch goes
 	// through the Behavior.
 	red := makeColor(255, 0, 0)
-	red.VType = tColor
+	red.Parent = tColor
 
 	got := tColor.Behavior.Format(red)
 	if got != "#ff0000" {
@@ -99,13 +99,13 @@ func TestRegisterExternalBuiltin_PluginColor(t *testing.T) {
 	}
 
 	red2 := makeColor(255, 0, 0)
-	red2.VType = tColor
+	red2.Parent = tColor
 	if !tColor.Behavior.Equal(red, red2) {
 		t.Error("Behavior.Equal of two identical colors returned false")
 	}
 
 	blue := makeColor(0, 0, 255)
-	blue.VType = tColor
+	blue.Parent = tColor
 	if tColor.Behavior.Equal(red, blue) {
 		t.Error("Behavior.Equal of red and blue returned true")
 	}
@@ -114,10 +114,10 @@ func TestRegisterExternalBuiltin_PluginColor(t *testing.T) {
 // TestRegisterExternalBuiltin_DuplicatePath rejects re-registration.
 func TestRegisterExternalBuiltin_DuplicatePath(t *testing.T) {
 	tt := newBuiltinTypeTable()
-	if _, err := tt.RegisterExternalBuiltin("Object/Dup1", 99100, nil); err != nil {
+	if _, err := tt.RegisterExternalBuiltin("Ideal/Dup1", 99100, nil); err != nil {
 		t.Fatalf("first register: %v", err)
 	}
-	if _, err := tt.RegisterExternalBuiltin("Object/Dup1", 99101, nil); err == nil {
+	if _, err := tt.RegisterExternalBuiltin("Ideal/Dup1", 99101, nil); err == nil {
 		t.Fatal("re-registering same path should error")
 	}
 }
@@ -125,10 +125,10 @@ func TestRegisterExternalBuiltin_DuplicatePath(t *testing.T) {
 // TestRegisterExternalBuiltin_DuplicateFixedID rejects collision.
 func TestRegisterExternalBuiltin_DuplicateFixedID(t *testing.T) {
 	tt := newBuiltinTypeTable()
-	if _, err := tt.RegisterExternalBuiltin("Object/DupID1", 99200, nil); err != nil {
+	if _, err := tt.RegisterExternalBuiltin("Ideal/DupID1", 99200, nil); err != nil {
 		t.Fatalf("first register: %v", err)
 	}
-	if _, err := tt.RegisterExternalBuiltin("Object/DupID2", 99200, nil); err == nil {
+	if _, err := tt.RegisterExternalBuiltin("Ideal/DupID2", 99200, nil); err == nil {
 		t.Fatal("FixedID collision should error")
 	}
 }
@@ -144,7 +144,7 @@ func TestRegisterExternalBuiltin_MissingParent(t *testing.T) {
 // TestRegisterExternalBuiltin_LowercasePart rejects bad casing.
 func TestRegisterExternalBuiltin_LowercasePart(t *testing.T) {
 	tt := newBuiltinTypeTable()
-	if _, err := tt.RegisterExternalBuiltin("Object/lowercase", 99400, nil); err == nil {
+	if _, err := tt.RegisterExternalBuiltin("Ideal/lowercase", 99400, nil); err == nil {
 		t.Fatal("lowercase part should error")
 	}
 }
@@ -153,7 +153,7 @@ func TestRegisterExternalBuiltin_LowercasePart(t *testing.T) {
 // falls back to DefaultBehavior.
 func TestRegisterExternalBuiltin_DefaultBehavior(t *testing.T) {
 	tt := newBuiltinTypeTable()
-	def, err := tt.RegisterExternalBuiltin("Object/DefaultBeh", 99500, nil)
+	def, err := tt.RegisterExternalBuiltin("Ideal/DefaultBeh", 99500, nil)
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}

@@ -106,8 +106,8 @@ func TestArithDecimals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !stk[0].VType.Matches(eng.TDecimal) {
-		t.Errorf("1 div 2: want Decimal result, got %s", stk[0].VType.String())
+	if !stk[0].Parent.Matches(eng.TDecimal) {
+		t.Errorf("1 div 2: want Decimal result, got %s", stk[0].Parent.String())
 	}
 	if got := asDec(t, stk, "1 div 2"); got != 0.5 {
 		t.Errorf("1 div 2 = %v, want 0.5", got)

@@ -31,7 +31,7 @@ func makeTestTable(r *Registry) {
 		Record: rec,
 		Rows:   []Value{NewMap(row1), NewMap(row2), NewMap(row3)},
 	}
-	r.ContextSet("people", Value{VType: TList, Data: td})
+	r.ContextSet("people", Value{Parent: TList, Data: td})
 }
 
 func TestQueryFrom(t *testing.T) {
@@ -293,7 +293,7 @@ func TestQueryJoin(t *testing.T) {
 	row2.Set("score", NewInteger(88))
 
 	td := TableData{Record: rec, Rows: []Value{NewMap(row1), NewMap(row2)}}
-	r.ContextSet("scores", Value{VType: TList, Data: td})
+	r.ContextSet("scores", Value{Parent: TList, Data: td})
 
 	result := runAQL(t, r, []Value{
 		NewWord("from"), NewWord("people"),
@@ -323,7 +323,7 @@ func TestQueryUnion(t *testing.T) {
 	row1.Set("name", NewString("dave"))
 	row1.Set("age", NewInteger(40))
 	td := TableData{Record: rec, Rows: []Value{NewMap(row1)}}
-	r.ContextSet("people2", Value{VType: TList, Data: td})
+	r.ContextSet("people2", Value{Parent: TList, Data: td})
 
 	result := runAQL(t, r, []Value{
 		NewWord("from"), NewWord("people"),
@@ -346,8 +346,8 @@ func TestUnifyDisjunctMatch(t *testing.T) {
 	if !ok {
 		t.Fatal("expected unification to succeed")
 	}
-	if !result.VType.Matches(TString) {
-		t.Errorf("expected string type, got %s", result.VType)
+	if !result.Parent.Matches(TString) {
+		t.Errorf("expected string type, got %s", result.Parent)
 	}
 }
 
@@ -359,8 +359,8 @@ func TestUnifyDisjunctNone(t *testing.T) {
 	if !ok {
 		t.Fatal("expected unification to succeed")
 	}
-	if !result.VType.Equal(TNone) {
-		t.Errorf("expected none type, got %s", result.VType)
+	if !result.Parent.Equal(TNone) {
+		t.Errorf("expected none type, got %s", result.Parent)
 	}
 }
 
@@ -403,8 +403,8 @@ func TestUnifyDisjunctMapOpen(t *testing.T) {
 	if !ok {
 		t.Fatal("expected open map unification to succeed")
 	}
-	if !result.VType.Equal(TMap) {
-		t.Errorf("expected map, got %s", result.VType)
+	if !result.Parent.Equal(TMap) {
+		t.Errorf("expected map, got %s", result.Parent)
 	}
 }
 
@@ -450,8 +450,8 @@ func TestValuesEqualTableTypes(t *testing.T) {
 	f2 := NewOrderedMap()
 	f2.Set("x", NewTypeLiteral(TNumber))
 
-	tt1 := Value{VType: TList, Data: TableTypeInfo{Record: RecordTypeInfo{Fields: f1}}}
-	tt2 := Value{VType: TList, Data: TableTypeInfo{Record: RecordTypeInfo{Fields: f2}}}
+	tt1 := Value{Parent: TList, Data: TableTypeInfo{Record: RecordTypeInfo{Fields: f1}}}
+	tt2 := Value{Parent: TList, Data: TableTypeInfo{Record: RecordTypeInfo{Fields: f2}}}
 	if !ValuesEqual(tt1, tt2) {
 		t.Error("expected equal table types")
 	}
@@ -551,8 +551,8 @@ func TestUnifyTypedMapWithConcrete(t *testing.T) {
 	if !ok {
 		t.Fatal("expected unification to succeed")
 	}
-	if !result.VType.Equal(TMap) {
-		t.Errorf("expected map, got %s", result.VType)
+	if !result.Parent.Equal(TMap) {
+		t.Errorf("expected map, got %s", result.Parent)
 	}
 }
 
@@ -595,8 +595,8 @@ func TestUnifyListLiteralWithConcrete(t *testing.T) {
 	if !ok {
 		t.Fatal("expected list type to unify with concrete list")
 	}
-	if !result.VType.Equal(TList) {
-		t.Errorf("expected list, got %s", result.VType)
+	if !result.Parent.Equal(TList) {
+		t.Errorf("expected list, got %s", result.Parent)
 	}
 }
 
@@ -608,8 +608,8 @@ func TestUnifyMapLiteralWithConcrete(t *testing.T) {
 	if !ok {
 		t.Fatal("expected map type to unify with concrete map")
 	}
-	if !result.VType.Equal(TMap) {
-		t.Errorf("expected map, got %s", result.VType)
+	if !result.Parent.Equal(TMap) {
+		t.Errorf("expected map, got %s", result.Parent)
 	}
 }
 
@@ -665,7 +665,7 @@ func TestDotListOutOfBounds(t *testing.T) {
 	}
 	list := NewList([]Value{NewString("a")})
 	result := runAQL(t, r, []Value{list, NewInteger(5), NewWord("get")})
-	if len(result) != 1 || !result[0].VType.Equal(TNone) {
+	if len(result) != 1 || !result[0].Parent.Equal(TNone) {
 		t.Errorf("expected none, got %v", result)
 	}
 }
@@ -678,7 +678,7 @@ func TestDotMapMissing(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
 	result := runAQL(t, r, []Value{NewMap(m), NewAtom("y"), NewWord("get")})
-	if len(result) != 1 || !result[0].VType.Equal(TNone) {
+	if len(result) != 1 || !result[0].Parent.Equal(TNone) {
 		t.Errorf("expected none for missing key, got %v", result)
 	}
 }
@@ -703,7 +703,7 @@ func TestDotNone(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{NewTypeLiteral(TNone), NewAtom("x"), NewWord("get")})
-	if len(result) != 1 || !result[0].VType.Equal(TNone) {
+	if len(result) != 1 || !result[0].Parent.Equal(TNone) {
 		t.Errorf("expected none, got %v", result)
 	}
 }
@@ -730,7 +730,7 @@ func TestDotListAtomKeyReturnsNone(t *testing.T) {
 	}
 	list := NewList([]Value{NewInteger(10), NewInteger(20)})
 	result := runAQL(t, r, []Value{list, NewAtom("x"), NewWord("get")})
-	if len(result) != 1 || !result[0].VType.Equal(TNone) {
+	if len(result) != 1 || !result[0].Parent.Equal(TNone) {
 		t.Errorf("expected none for atom key on list, got %v", result)
 	}
 }
@@ -742,7 +742,7 @@ func TestDotListStringKeyReturnsNone(t *testing.T) {
 	}
 	list := NewList([]Value{NewInteger(10)})
 	result := runAQL(t, r, []Value{list, NewString("x"), NewWord("get")})
-	if len(result) != 1 || !result[0].VType.Equal(TNone) {
+	if len(result) != 1 || !result[0].Parent.Equal(TNone) {
 		t.Errorf("expected none for string key on list, got %v", result)
 	}
 }
@@ -1025,7 +1025,7 @@ func TestMakeRecordPositional(t *testing.T) {
 	// make Point [1 2]
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Point"),
-		NewWord("type"), NewWord("Record"), NewList([]Value{
+		NewWord("refine"), NewWord("Record"), NewList([]Value{
 			NewMap(singleMap("x", NewTypeLiteral(TNumber))),
 			NewMap(singleMap("y", NewTypeLiteral(TNumber))),
 		}),
@@ -1058,7 +1058,7 @@ func TestMakeRecordNamed(t *testing.T) {
 	}
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Pt"),
-		NewWord("type"), NewWord("Record"), NewList([]Value{
+		NewWord("refine"), NewWord("Record"), NewList([]Value{
 			NewMap(singleMap("x", NewTypeLiteral(TNumber))),
 			NewMap(singleMap("y", NewTypeLiteral(TNumber))),
 		}),
@@ -1091,7 +1091,7 @@ func TestMakeRecordMap(t *testing.T) {
 	src.Set("y", NewInteger(6))
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Pt2"),
-		NewWord("type"), NewWord("Record"), NewList([]Value{
+		NewWord("refine"), NewWord("Record"), NewList([]Value{
 			NewMap(singleMap("x", NewTypeLiteral(TNumber))),
 			NewMap(singleMap("y", NewTypeLiteral(TNumber))),
 		}),
@@ -1346,7 +1346,7 @@ func TestFormatForPrintTable(t *testing.T) {
 	row := NewOrderedMap()
 	row.Set("name", NewString("alice"))
 	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
-	out := FormatForPrint(Value{VType: TList, Data: td})
+	out := FormatForPrint(Value{Parent: TList, Data: td})
 	if !strings.Contains(out, "name") || !strings.Contains(out, "alice") {
 		t.Errorf("expected table with 'name' and 'alice', got %q", out)
 	}
@@ -1355,7 +1355,7 @@ func TestFormatForPrintTable(t *testing.T) {
 func TestFormatForPrintEmptyTable(t *testing.T) {
 	rec := RecordTypeInfo{Fields: NewOrderedMap()}
 	td := TableData{Record: rec, Rows: nil}
-	out := FormatForPrint(Value{VType: TList, Data: td})
+	out := FormatForPrint(Value{Parent: TList, Data: td})
 	if out != "(empty table)" {
 		t.Errorf("expected '(empty table)', got %q", out)
 	}

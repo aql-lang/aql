@@ -2837,7 +2837,7 @@ func TestRecordTypeCreation(t *testing.T) {
 	pairX.Set("x", NewTypeLiteral(TNumber))
 	pairY := NewOrderedMap()
 	pairY.Set("y", NewTypeLiteral(TNumber))
-	input := []Value{NewWord("type"), NewWord("Record"), NewList([]Value{NewMap(pairX), NewMap(pairY)})}
+	input := []Value{NewWord("refine"), NewWord("Record"), NewList([]Value{NewMap(pairX), NewMap(pairY)})}
 	result, err := e.Run(input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2868,7 +2868,7 @@ func TestRecordTypeWithDef(t *testing.T) {
 	pairY.Set("y", NewTypeLiteral(TNumber))
 	input := []Value{
 		NewWord("def"), NewWord("Point"),
-		NewWord("type"), NewWord("Record"), NewList([]Value{NewMap(pairX), NewMap(pairY)}),
+		NewWord("refine"), NewWord("Record"), NewList([]Value{NewMap(pairX), NewMap(pairY)}),
 		NewEnd(),
 		NewWord("Point"),
 	}
@@ -3017,7 +3017,7 @@ func TestRecordTypeListWithMapElement(t *testing.T) {
 	elem0.Set("x", NewMap(innerMap))
 	elem1 := NewOrderedMap()
 	elem1.Set("y", NewInteger(1))
-	input := []Value{NewWord("type"), NewWord("Record"), NewList([]Value{NewMap(elem0), NewMap(elem1)})}
+	input := []Value{NewWord("refine"), NewWord("Record"), NewList([]Value{NewMap(elem0), NewMap(elem1)})}
 	result, err := e.Run(input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -3081,7 +3081,7 @@ func TestDoMap(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("do map: got %d results, want 1: %v", len(result), result)
 	}
-	t.Logf("do map result: %s (type=%v)", result[0].String(), result[0].VType)
+	t.Logf("do map result: %s (type=%v)", result[0].String(), result[0].Parent)
 	if result[0].String() != "{x:7}" {
 		t.Errorf("do map: got %s, want {x:7}", result[0].String())
 	}
@@ -3105,7 +3105,7 @@ func TestModuleBasic(t *testing.T) {
 		t.Fatalf("module: got %d results, want 1", len(result))
 	}
 	if !IsModule(result[0]) {
-		t.Fatalf("module: result is not a module, got %s", result[0].VType)
+		t.Fatalf("module: result is not a module, got %s", result[0].Parent)
 	}
 	desc, _ := AsModule(result[0])
 	fooExport, ok := desc.Exports["Foo"]
@@ -3120,8 +3120,8 @@ func TestModuleBasic(t *testing.T) {
 		t.Fatal("module: export Foo.inc not found")
 	}
 	// The exported "inc" should be the list [add 1]
-	if !val.VType.Equal(TList) {
-		t.Errorf("module: export inc type = %s, want list", val.VType)
+	if !val.Parent.Equal(TList) {
+		t.Errorf("module: export inc type = %s, want list", val.Parent)
 	}
 }
 
@@ -3151,8 +3151,8 @@ func TestModuleImportBasic(t *testing.T) {
 	if len(result2) != 1 {
 		t.Fatalf("Foo: got %d results, want 1", len(result2))
 	}
-	if !result2[0].VType.Equal(TMap) {
-		t.Errorf("Foo: type = %s, want map", result2[0].VType)
+	if !result2[0].Parent.Equal(TMap) {
+		t.Errorf("Foo: type = %s, want map", result2[0].Parent)
 	}
 }
 
@@ -3180,8 +3180,8 @@ func TestModuleImportDotAccess(t *testing.T) {
 		t.Fatalf("Foo.inc: got %d results, want 1: %v", len(result), result)
 	}
 	// Should be the list [add 1]
-	if !result[0].VType.Equal(TList) {
-		t.Errorf("Foo.inc: type = %s, want list", result[0].VType)
+	if !result[0].Parent.Equal(TList) {
+		t.Errorf("Foo.inc: type = %s, want list", result[0].Parent)
 	}
 }
 
@@ -3226,7 +3226,7 @@ func TestModuleDefSubject(t *testing.T) {
 	// import my-mod should work.
 	runAQL(t, r, []Value{NewWord("import"), NewWord("my-mod")})
 	result2 := runAQL(t, r, []Value{NewWord("M")})
-	if len(result2) != 1 || !result2[0].VType.Equal(TMap) {
+	if len(result2) != 1 || !result2[0].Parent.Equal(TMap) {
 		t.Errorf("import my-mod: M = %v, want map", result2)
 	}
 }
@@ -3306,7 +3306,7 @@ func TestModuleFreshRegistry(t *testing.T) {
 	}
 	val, _ := mExport.Get("val")
 	// "foo" inside module should be an atom (not resolved), not 99.
-	if val.VType.Matches(TInteger) {
+	if val.Parent.Matches(TInteger) {
 		t.Error("module: parent def 'foo' leaked into module")
 	}
 }

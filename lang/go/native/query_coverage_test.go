@@ -40,7 +40,7 @@ func makeProductsTable(r *Registry) {
 			mkRow(5, "Thingamajig", 5, "misc"),
 		},
 	}
-	r.ContextSet("products", Value{VType: TList, Data: td})
+	r.ContextSet("products", Value{Parent: TList, Data: td})
 }
 
 // makeOrdersTable creates an "orders" table with order_id, product_id, qty.
@@ -68,7 +68,7 @@ func makeOrdersTable(r *Registry) {
 			mkRow(103, 1, 2),
 		},
 	}
-	r.ContextSet("orders", Value{VType: TList, Data: td})
+	r.ContextSet("orders", Value{Parent: TList, Data: td})
 }
 
 // makeCitiesTable creates a "cities" table with city, country.
@@ -93,7 +93,7 @@ func makeCitiesTable(r *Registry) {
 			mkRow("Berlin", "Germany"),
 		},
 	}
-	r.ContextSet("cities", Value{VType: TList, Data: td})
+	r.ContextSet("cities", Value{Parent: TList, Data: td})
 }
 
 // makeSalesTable creates a "sales" table with region, product, amount.
@@ -122,7 +122,7 @@ func makeSalesTable(r *Registry) {
 			mkRow("east", "A", 300),
 		},
 	}
-	r.ContextSet("sales", Value{VType: TList, Data: td})
+	r.ContextSet("sales", Value{Parent: TList, Data: td})
 }
 
 // extractTD extracts TableData from a result Value (either TableData or QueryBuilder).
@@ -526,13 +526,13 @@ func TestQueryCovWhereIsNull(t *testing.T) {
 	row1.Set("note", NewString("has note"))
 	row2 := NewOrderedMap()
 	row2.Set("name", NewString("b"))
-	row2.Set("note", Value{VType: TNone})
+	row2.Set("note", Value{Parent: TNone})
 
 	td := TableData{
 		Record: rec,
 		Rows:   []Value{NewMap(row1), NewMap(row2)},
 	}
-	r.ContextSet("items", Value{VType: TList, Data: td})
+	r.ContextSet("items", Value{Parent: TList, Data: td})
 
 	// where [note is null]
 	result := runAQL(t, r, []Value{
@@ -675,8 +675,8 @@ func TestQueryCovJoinUsing(t *testing.T) {
 
 	td1 := TableData{Record: rec1, Rows: []Value{mk1(1, "order1"), mk1(2, "order2"), mk1(1, "order3")}}
 	td2 := TableData{Record: rec2, Rows: []Value{mk2(1, "Widget"), mk2(2, "Gadget"), mk2(3, "Gizmo")}}
-	r.ContextSet("jorders", Value{VType: TList, Data: td1})
-	r.ContextSet("jproducts", Value{VType: TList, Data: td2})
+	r.ContextSet("jorders", Value{Parent: TList, Data: td1})
+	r.ContextSet("jproducts", Value{Parent: TList, Data: td2})
 
 	result := runAQL(t, r, []Value{
 		NewWord("select"), NewWord("star"),
@@ -725,8 +725,8 @@ func TestQueryCovLeftJoin(t *testing.T) {
 
 	td1 := TableData{Record: rec1, Rows: []Value{mk1(1, "A"), mk1(2, "B"), mk1(3, "C")}}
 	td2 := TableData{Record: rec2, Rows: []Value{mk2(1, 10), mk2(1, 20)}}
-	r.ContextSet("ljProducts", Value{VType: TList, Data: td1})
-	r.ContextSet("ljOrders", Value{VType: TList, Data: td2})
+	r.ContextSet("ljProducts", Value{Parent: TList, Data: td1})
+	r.ContextSet("ljOrders", Value{Parent: TList, Data: td2})
 
 	result := runAQL(t, r, []Value{
 		NewWord("select"), NewWord("star"),
@@ -758,7 +758,7 @@ func TestQueryCovCrossJoin(t *testing.T) {
 	r2 := NewOrderedMap()
 	r2.Set("x", NewInteger(2))
 	td1 := TableData{Record: RecordTypeInfo{Fields: f1}, Rows: []Value{NewMap(r1), NewMap(r2)}}
-	r.ContextSet("tblA", Value{VType: TList, Data: td1})
+	r.ContextSet("tblA", Value{Parent: TList, Data: td1})
 
 	f2 := NewOrderedMap()
 	f2.Set("y", NewTypeLiteral(TString))
@@ -767,7 +767,7 @@ func TestQueryCovCrossJoin(t *testing.T) {
 	rb := NewOrderedMap()
 	rb.Set("y", NewString("b"))
 	td2 := TableData{Record: RecordTypeInfo{Fields: f2}, Rows: []Value{NewMap(ra), NewMap(rb)}}
-	r.ContextSet("tblB", Value{VType: TList, Data: td2})
+	r.ContextSet("tblB", Value{Parent: TList, Data: td2})
 
 	result := runAQL(t, r, []Value{
 		NewWord("select"), NewWord("star"),
@@ -804,8 +804,8 @@ func TestQueryCovUnion(t *testing.T) {
 
 	td1 := TableData{Record: rec, Rows: []Value{mkRow(1), mkRow(2), mkRow(3)}}
 	td2 := TableData{Record: rec, Rows: []Value{mkRow(2), mkRow(3), mkRow(4)}}
-	r.ContextSet("setA", Value{VType: TList, Data: td1})
-	r.ContextSet("setB", Value{VType: TList, Data: td2})
+	r.ContextSet("setA", Value{Parent: TList, Data: td1})
+	r.ContextSet("setB", Value{Parent: TList, Data: td2})
 
 	// from setA union from setB select star — UNION removes duplicates
 	result := runAQL(t, r, []Value{
@@ -837,8 +837,8 @@ func TestQueryCovUnionAll(t *testing.T) {
 
 	td1 := TableData{Record: rec, Rows: []Value{mkRow(1), mkRow(2)}}
 	td2 := TableData{Record: rec, Rows: []Value{mkRow(2), mkRow(3)}}
-	r.ContextSet("uaA", Value{VType: TList, Data: td1})
-	r.ContextSet("uaB", Value{VType: TList, Data: td2})
+	r.ContextSet("uaA", Value{Parent: TList, Data: td1})
+	r.ContextSet("uaB", Value{Parent: TList, Data: td2})
 
 	result := runAQL(t, r, []Value{
 		NewWord("select"), NewWord("star"),
@@ -869,8 +869,8 @@ func TestQueryCovIntersect(t *testing.T) {
 
 	td1 := TableData{Record: rec, Rows: []Value{mkRow(1), mkRow(2), mkRow(3)}}
 	td2 := TableData{Record: rec, Rows: []Value{mkRow(2), mkRow(3), mkRow(4)}}
-	r.ContextSet("isA", Value{VType: TList, Data: td1})
-	r.ContextSet("isB", Value{VType: TList, Data: td2})
+	r.ContextSet("isA", Value{Parent: TList, Data: td1})
+	r.ContextSet("isB", Value{Parent: TList, Data: td2})
 
 	result := runAQL(t, r, []Value{
 		NewWord("select"), NewWord("star"),
@@ -901,8 +901,8 @@ func TestQueryCovExcept(t *testing.T) {
 
 	td1 := TableData{Record: rec, Rows: []Value{mkRow(1), mkRow(2), mkRow(3)}}
 	td2 := TableData{Record: rec, Rows: []Value{mkRow(2), mkRow(3), mkRow(4)}}
-	r.ContextSet("exA", Value{VType: TList, Data: td1})
-	r.ContextSet("exB", Value{VType: TList, Data: td2})
+	r.ContextSet("exA", Value{Parent: TList, Data: td1})
+	r.ContextSet("exB", Value{Parent: TList, Data: td2})
 
 	result := runAQL(t, r, []Value{
 		NewWord("select"), NewWord("star"),
@@ -1214,8 +1214,8 @@ func TestQueryCovCloneWithJoinsAndSetOps(t *testing.T) {
 
 	td1 := TableData{Record: rec1, Rows: []Value{mk1(1, 10), mk1(2, 20)}}
 	td2 := TableData{Record: rec2, Rows: []Value{mk2(1, 5), mk2(2, 3)}}
-	r.ContextSet("cloneP", Value{VType: TList, Data: td1})
-	r.ContextSet("cloneO", Value{VType: TList, Data: td2})
+	r.ContextSet("cloneP", Value{Parent: TList, Data: td1})
+	r.ContextSet("cloneO", Value{Parent: TList, Data: td2})
 
 	// Build a query with join AND then clone it via the where word
 	result := runAQL(t, r, []Value{
@@ -1319,8 +1319,8 @@ func TestQueryCovMergedSchemaOnJoin(t *testing.T) {
 
 	td1 := TableData{Record: rec1, Rows: []Value{mk1(1, "o1")}}
 	td2 := TableData{Record: rec2, Rows: []Value{mk2(1, "p1")}}
-	r.ContextSet("msOrders", Value{VType: TList, Data: td1})
-	r.ContextSet("msProducts", Value{VType: TList, Data: td2})
+	r.ContextSet("msOrders", Value{Parent: TList, Data: td1})
+	r.ContextSet("msProducts", Value{Parent: TList, Data: td2})
 
 	result := runAQL(t, r, []Value{
 		NewWord("select"), NewWord("star"),
@@ -1571,7 +1571,7 @@ func TestQueryCovValueToSQLTypes(t *testing.T) {
 		t.Errorf("atom: %v %v", s, err)
 	}
 
-	s, err = valueToSQL(Value{VType: TNone})
+	s, err = valueToSQL(Value{Parent: TNone})
 	if err != nil || s != "NULL" {
 		t.Errorf("none: %v %v", s, err)
 	}
@@ -1847,7 +1847,7 @@ func TestQueryCovEnsureSourceAlreadySQLite(t *testing.T) {
 	td := extractTD(t, result[0])
 
 	// Store the result back and query it again (already SQLite)
-	r.ContextSet("products_sq", Value{VType: TList, Data: td})
+	r.ContextSet("products_sq", Value{Parent: TList, Data: td})
 
 	result = runAQL(t, r, []Value{
 		NewWord("select"), NewWord("star"),

@@ -183,7 +183,7 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 		if sig.Patterns != nil {
 			patternOk := true
 			for idx, pattern := range sig.Patterns {
-				if pattern.VType.Equal(TMap) && ordered[idx].VType.Equal(TMap) &&
+				if pattern.Parent.Equal(TMap) && ordered[idx].Parent.Equal(TMap) &&
 					pattern.Data != nil && ordered[idx].Data != nil &&
 					!IsOptionsType(pattern) &&
 					!IsRecordType(ordered[idx]) && !IsTypedMap(ordered[idx]) && !IsOptionsType(ordered[idx]) {
@@ -233,7 +233,7 @@ func FlexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
 // matches TScalarType).
 //
 // **The carrier rule.** Carriers occupy a deliberately ambiguous role
-// in the type system: they have a concrete VType (e.g. TInteger) and
+// in the type system: they have a concrete Parent (e.g. TInteger) and
 // nil Data, identical to a type literal at the field level. But
 // semantically they are abstract VALUES, not types. To preserve that
 // distinction at sig-match time, sigTypeMatches treats them as
@@ -266,17 +266,17 @@ func sigTypeMatches(v Value, t *Type) bool {
 		return true
 	}
 	if v.Data == nil && !v.Carrier && IsMetaType(t) {
-		return MetatypeFor(v.VType).Matches(t)
+		return MetatypeFor(ValueType(v)).Matches(t)
 	}
 	if _, ok := v.Data.(ObjectTypeInfo); ok && IsMetaType(t) {
-		return MetatypeFor(v.VType).Matches(t)
+		return MetatypeFor(v.Parent).Matches(t)
 	}
 	if IsRecordType(v) || IsTableType(v) || IsOptionsType(v) {
 		if IsMetaType(t) {
-			return MetatypeFor(v.VType).Matches(t)
+			return MetatypeFor(v.Parent).Matches(t)
 		}
 	}
-	// Options values have VType=TMap but should match TOptions signatures.
+	// Options values have Parent=TMap but should match TOptions signatures.
 	if IsOptionsType(v) && t.Equal(TOptions) {
 		return true
 	}
@@ -285,7 +285,7 @@ func sigTypeMatches(v Value, t *Type) bool {
 
 // rejectsTypeLiteral reports whether a value with Data==nil should be
 // rejected at a concrete-payload sig slot — even if sigTypeMatches
-// said the VType matches.
+// said the Parent matches.
 //
 // A type literal (e.g. `Integer` resolved from a bare type-name word)
 // has Data==nil, so handlers that read its payload via AsX() would
@@ -322,7 +322,7 @@ func rejectsTypeLiteral(v Value, expectedType *Type) bool {
 	if IsMetaType(expectedType) {
 		return false
 	}
-	if v.VType.Equal(TNone) {
+	if v.Parent.Equal(TNone) {
 		return false
 	}
 	return true
@@ -341,7 +341,7 @@ func positionalMatch(values []Value, sig *Signature) bool {
 	for i, t := range sig.Args {
 		v := values[i]
 		// /q modifier (forward-only): treat Word as Atom for matching.
-		if sig.QuoteArgs != nil && sig.QuoteArgs[i] && v.VType.Equal(TWord) {
+		if sig.QuoteArgs != nil && sig.QuoteArgs[i] && v.Parent.Equal(TWord) {
 			if !TAtom.Matches(t) {
 				return false
 			}
@@ -370,7 +370,7 @@ var typeInherentScores = map[string]int{
 	"None":   100,
 	"Any":    200,
 	"Type":   300,
-	"Object": 400,
+	"Ideal":  400,
 	"Word":   500,
 	"Scalar": 600,
 	"Node":   700,
@@ -390,24 +390,24 @@ var typeInherentScores = map[string]int{
 	"Word/__UF":      1100,
 
 	// Depth 2 — regular types, ordered by cardinality
-	"Scalar/Boolean":  1200,
-	"Scalar/Path":     1250,
-	"Scalar/Atom":     1300,
-	"Object/Error":    1400,
-	"Object/Fetch":    1500,
-	"Object/Store":    1600,
-	"Object/Array":    1650,
-	"Object/Resource": 1700,
-	"Scalar/Number":   1800,
-	"Word/Function":   1900,
-	"Object/Table":    2000,
-	"Object/Record":   2100,
-	"Scalar/String":   2200,
-	"Node/List":       2300,
-	"Node/Map":        2400,
-	"Type/ScalarType": 2500,
-	"Type/NodeType":   2600,
-	"Type/ObjectType": 2700,
+	"Scalar/Boolean":        1200,
+	"Scalar/Path":           1250,
+	"Scalar/Atom":           1300,
+	"Ideal/Error":           1400,
+	"Ideal/Fetch":           1500,
+	"Ideal/Store":           1600,
+	"Ideal/Array":           1650,
+	"Ideal/Object/Resource": 1700,
+	"Scalar/Number":         1800,
+	"Word/Function":         1900,
+	"Ideal/Table":           2000,
+	"Ideal/Record":          2100,
+	"Scalar/String":         2200,
+	"Node/List":             2300,
+	"Node/Map":              2400,
+	"Type/ScalarType":       2500,
+	"Type/NodeType":         2600,
+	"Type/IdealType":        2700,
 
 	// Depth 3 — Scalar subtypes
 	"Scalar/String/EmptyString":  900,
@@ -417,14 +417,15 @@ var typeInherentScores = map[string]int{
 
 	// Depth 3 — Node subtypes
 	"Node/List/Args":   1300,
-	"Node/Map/Options": 1400,
+	"Ideal/Options":    1400,
+	"Ideal/Object":     400,
 	"Node/Map/Inspect": 1500,
 
 	// Depth 3 — Object subtypes
-	"Object/Fetch/Request":   1600,
-	"Object/Fetch/Response":  1700,
-	"Object/Resource/Entity": 1800,
-	"Object/Store/System":    1900,
+	"Ideal/Fetch/Request":          1600,
+	"Ideal/Fetch/Response":         1700,
+	"Ideal/Object/Resource/Entity": 1800,
+	"Ideal/Store/System":           1900,
 }
 
 // typeInherentScore returns the inherent score for a type.

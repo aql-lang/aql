@@ -178,7 +178,7 @@ func TestAqlValueToSQLParam(t *testing.T) {
 	}
 
 	// None type
-	got = aqlValueToSQLParam(Value{VType: TNone}, TString)
+	got = aqlValueToSQLParam(Value{Parent: TNone}, TString)
 	if got != nil {
 		t.Errorf("expected nil for None, got %v", got)
 	}
@@ -285,8 +285,8 @@ func TestSQLiteCloseNilDB(t *testing.T) {
 func TestSqlResultToAQLValue(t *testing.T) {
 	// nil
 	v := sqlResultToAQLValue(nil, TString)
-	if !v.VType.Equal(TNone) {
-		t.Errorf("expected none, got %s", v.VType)
+	if !v.Parent.Equal(TNone) {
+		t.Errorf("expected none, got %s", v.Parent)
 	}
 
 	// Integer

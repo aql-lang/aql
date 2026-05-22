@@ -83,7 +83,7 @@ Every entry on the stack is a `Value` with a hierarchical type and a payload.
 
 ```go
 type Value struct {
-    VType Type
+    Parent Type
     Data  interface{}
 }
 ```
@@ -91,11 +91,11 @@ type Value struct {
 **Constructors:**
 
 ```go
-func NewString(s string) Value       // VType: string/proper (or string/empty if "")
-func NewInteger(n int64) Value       // VType: number/integer
-func NewWord(name string) Value      // VType: word — a function reference
+func NewString(s string) Value       // Parent: string/proper (or string/empty if "")
+func NewInteger(n int64) Value       // Parent: number/integer
+func NewWord(name string) Value      // Parent: word — a function reference
 func NewWordModified(name string, argCount int, forceStack, forceForward bool) Value // e.g. lower/1f, lower/s
-func NewForward(info ForwardInfo) Value  // VType: forward
+func NewForward(info ForwardInfo) Value  // Parent: forward
 ```
 
 **Word payload** (for function references with optional modifiers):

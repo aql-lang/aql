@@ -633,7 +633,7 @@ func TestExportWithListValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result) != 1 || !result[0].VType.Equal(native.TList) {
+	if len(result) != 1 || !result[0].Parent.Equal(native.TList) {
 		t.Errorf("expected list, got %v", result)
 	}
 }
@@ -939,7 +939,7 @@ func TestExportListDefResolution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result) != 1 || !result[0].VType.Equal(native.TList) {
+	if len(result) != 1 || !result[0].Parent.Equal(native.TList) {
 		t.Errorf("expected list, got %v", result)
 	}
 }
