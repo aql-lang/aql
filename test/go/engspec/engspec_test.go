@@ -963,13 +963,13 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 	refineCtorH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 		base := args[0]
 		arg := args[1]
-		if base.Data == nil && base.Parent.Equal(eng.TObject) {
+		if base.Data == nil && base.Equal(eng.TObject) {
 			return objectH([]eng.Value{arg}, nil, nil, reg)
 		}
 		if eng.IsObjectType(base) {
 			return objectWithParentH([]eng.Value{arg, base}, nil, nil, reg)
 		}
-		if base.Data == nil && base.Parent.Equal(eng.TRecord) {
+		if base.Data == nil && base.Equal(eng.TRecord) {
 			if !arg.Parent.Equal(eng.TList) {
 				return nil, fmt.Errorf("refine Record: a record takes a list of field pairs")
 			}

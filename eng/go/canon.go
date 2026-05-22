@@ -59,11 +59,11 @@ func CanonValue(v Value) string {
 	case IsNone(v):
 		return "none"
 	case v.Data == nil:
-		if v.Parent != nil {
-			if name := TypeNameByID(v.Parent.ID); name != "" {
+		if t := typeNodeOf(v); t != nil {
+			if name := TypeNameByID(t.ID); name != "" {
 				return name
 			}
-			return v.Parent.Leaf()
+			return t.Leaf()
 		}
 		return "none"
 	case v.IsDepScalar():

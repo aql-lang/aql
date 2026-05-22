@@ -179,7 +179,8 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 			params = append(params, FnParam{Type: paramType})
 
 		case elem.Data == nil:
-			params = append(params, FnParam{Type: elem.Parent})
+			elemType := elem
+			params = append(params, FnParam{Type: &elemType})
 
 		case elem.Parent.Matches(TInteger):
 			pat := elem

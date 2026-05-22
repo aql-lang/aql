@@ -786,10 +786,46 @@ func NewPath(parts []string, abs bool) Value {
 	return NewValueRaw(TPath, PathPayload{Info: PathInfo{Parts: p, Abs: abs}})
 }
 
-// NewTypeLiteral creates a value representing a type itself (e.g. "number", "string").
-// The Data is nil since type literals have no specific literal value.
+// NewTypeLiteral returns the type t expressed as a Value. After the
+// type/value merge a type literal IS its lattice node, so this
+// returns a by-value copy of the node itself: the literal's Parent
+// is the supertype (so typeof is uniformly Parent), its Name is the
+// type's own name, its Data is nil.
 func NewTypeLiteral(t *Type) Value {
-	return NewValueRaw(t, nil)
+	if t == nil {
+		return Value{}
+	}
+	return *t
+}
+
+// typeNodeOf returns the lattice node a Data==nil value stands for.
+// A type literal IS its node. A carrier's node is its Parent — a
+// carrier keeps Parent pointing at the type it carries. Used by the
+// renderers to recover the type name from either shape.
+func typeNodeOf(v Value) *Type {
+	if v.Carrier {
+		return v.Parent
+	}
+	return &v
+}
+
+// TypeNameOf returns the leaf name of the type v represents: a type
+// literal's own name, or any other value's Parent leaf. Used by
+// inspect and rendering paths that display a type's name.
+func TypeNameOf(v Value) string {
+	if v.Data == nil && !v.Carrier {
+		return v.Leaf()
+	}
+	return v.Parent.Leaf()
+}
+
+// TypePathOf returns the slash path of the type v represents: a type
+// literal's own path, or any other value's Parent path.
+func TypePathOf(v Value) string {
+	if v.Data == nil && !v.Carrier {
+		return v.Path()
+	}
+	return v.Parent.Path()
 }
 
 // noneSentinel is the non-nil Data payload that distinguishes the
@@ -1602,12 +1638,6 @@ func AsMutableMap(v Value) (*OrderedMap, error) {
 
 // String returns a human-readable representation.
 func (v Value) String() string {
-	// A type-lattice node renders as its slash path, preserving the
-	// historical (*Type).String(). Type nodes always carry a Behavior;
-	// values minted via NewValueRaw never do.
-	if v.Behavior != nil {
-		return v.Path()
-	}
 	// Behavior-driven format delegation: types that supply a custom
 	// TypeBehavior route through their Format. Walks the Parent
 	// chain so descendants of a type with a custom Behavior inherit
@@ -1683,10 +1713,10 @@ func kernelFormatDefault(v Value) string {
 		_as3, _ := AsError(v)
 		return fmt.Sprintf("error(%s)", _as3.Message)
 	case v.Data == nil:
-		// Type literal with no specific value (e.g. "Integer", "List").
-		// Render as the LEAF — type names are globally unique so the
+		// Type literal (or carrier) with no specific value — render as
+		// the type's leaf name; type names are globally unique so the
 		// leaf alone is unambiguous.
-		return v.Parent.Leaf()
+		return typeNodeOf(v).Leaf()
 	case v.IsDepScalar():
 		// Must come before TString / TInteger / TDecimal matches: the
 		// lattice override makes DepString.Matches(TString) (and the

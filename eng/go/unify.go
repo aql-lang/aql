@@ -24,8 +24,18 @@ func Unify(a, b Value) (Value, bool) {
 	a = ResolveWordsDeep(a)
 	b = ResolveWordsDeep(b)
 
+	// A type literal IS its lattice node after the type/value merge,
+	// so its denoted type is the value itself — not its Parent, which
+	// is now the supertype. Carriers keep Parent pointing at the type
+	// they carry, so they take the plain Parent.
 	aType := a.Parent
+	if a.Data == nil && !a.Carrier {
+		aType = &a
+	}
 	bType := b.Parent
+	if b.Data == nil && !b.Carrier {
+		bType = &b
+	}
 
 	// Disjunct unification first: try each alternative, succeed on first match.
 	// Must come before none/any checks so that disjuncts containing none work.
@@ -692,9 +702,14 @@ func ValuesEqual(a, b Value) bool {
 // override Format but want fall-through equality without
 // triggering infinite re-entry.
 func valuesEqualDefault(a, b Value) bool {
-	// Type literals (Data == nil) with equal types are always equal.
+	// Two Data==nil values: carriers are abstract (conservatively
+	// equal); two type literals are equal iff they are the same
+	// lattice identity.
 	if a.Data == nil && b.Data == nil {
-		return true
+		if a.Carrier || b.Carrier {
+			return true
+		}
+		return a.Equal(&b)
 	}
 	// One is a type literal and the other is a concrete value — not equal.
 	if a.Data == nil || b.Data == nil {

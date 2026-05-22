@@ -321,7 +321,7 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 			e.pointer++
 
 		default:
-			if val.Parent.Equal(nil) {
+			if val.Parent == nil && val.Behavior == nil {
 				return nil, e.runtimeError("halt", fmt.Sprintf("undefined stack entry at position %d", e.pointer), "", "")
 			}
 			if err := e.stepLiteral(); err != nil {

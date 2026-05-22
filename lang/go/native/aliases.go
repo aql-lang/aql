@@ -269,6 +269,8 @@ var (
 	parseFnUndefSpec          = eng.ParseFnUndefSpec
 	ValidateWordName          = eng.ValidateWordName
 	TypeOf                    = eng.TypeOf
+	TypeNameOf                = eng.TypeNameOf
+	TypePathOf                = eng.TypePathOf
 	NewNone                   = eng.NewNone
 	FormatDecimal             = eng.FormatDecimal
 	NewTypedListWithElements  = eng.NewTypedListWithElements

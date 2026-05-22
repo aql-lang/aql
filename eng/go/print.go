@@ -34,7 +34,7 @@ func FormatForPrint(v Value) string {
 	// (e.g. Integer → "Integer", List → "List"). Type names are
 	// globally unique. The None type literal prints as "None".
 	if v.Data == nil {
-		return v.Parent.Leaf()
+		return typeNodeOf(v).Leaf()
 	}
 
 	// Table: formatted with headers and aligned columns.
@@ -129,7 +129,7 @@ func FormatValueJSON(v Value) string {
 	}
 	if v.Data == nil {
 		// Type literal — render the leaf, quoted as a JSON string.
-		return fmt.Sprintf("%q", v.Parent.Leaf())
+		return fmt.Sprintf("%q", typeNodeOf(v).Leaf())
 	}
 	// DepScalar pre-empts the Matches(TString)/... dispatch so its
 	// constraint payload renders via the DepScalar formatter rather

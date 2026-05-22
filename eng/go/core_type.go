@@ -49,10 +49,11 @@ import (
 // Exported so lang's `pathof` registration (lang/go/engine/native_type.go)
 // can wire dispatch into it without forking the algorithm.
 func PathOf(t Value) Value {
-	// Walk the def's ancestry from root down to t, producing one type
-	// literal per ancestor.
+	// Walk the ancestry from root down to t, producing one type
+	// literal per ancestor. t itself is the leaf node — a type
+	// literal IS its lattice node after the type/value merge.
 	var chain []*Type
-	for d := t.Parent; d != nil; d = d.Parent {
+	for d := &t; d != nil; d = d.Parent {
 		chain = append([]*Type{d}, chain...)
 	}
 	elems := make([]Value, 0, len(chain))
@@ -62,37 +63,19 @@ func PathOf(t Value) Value {
 	return NewList(elems)
 }
 
-// TypeOf returns the Type of v as a type-literal Value. See
-// registerCoreTypeof for the dispatch rules.
+// TypeOf returns the type of v — uniformly its Parent, expressed as
+// a type-literal Value. After the type/value merge every value is a
+// lattice node, so typeof is a single Parent hop:
+//
+//	typeof 5        → Integer
+//	typeof Integer  → Number
+//	typeof Number   → Scalar
+//	typeof none     → None
+//	typeof Any      → Any        (a root has no Parent — saturates)
 func TypeOf(v Value) Value {
-	// The VALUE `none` (Data != nil, Parent == TNone) → None type literal.
-	if IsNone(v) {
-		return NewTypeLiteral(TNone)
+	if v.Parent == nil {
+		return v
 	}
-	// A type literal (Data == nil) → `Type`. Metatypes are collapsed:
-	// the type-of-a-type-literal is uniformly `Type` (not ScalarType /
-	// NodeType / ObjectType).
-	if v.Data == nil {
-		return NewTypeLiteral(TType)
-	}
-	// Typed list `[:T]` or typed map `{:T}` — Node-family TYPE
-	// declarations carrying a child-type constraint, not concrete
-	// containers. They are types → `Type`.
-	if IsTypedList(v) || IsTypedMap(v) {
-		return NewTypeLiteral(TType)
-	}
-	// An implicit-map record shape (every entry's value is itself a
-	// type body — type literal or nested shape) is a Node-family TYPE,
-	// not a concrete map → `Type`, so user code can branch on shape
-	// vs concrete map without inspecting the data.
-	if IsRecordShape(v) {
-		return NewTypeLiteral(TType)
-	}
-	// A host-Ideal constructed type is a TYPE, not a concrete value.
-	if IsHostTypeBody(v) {
-		return NewTypeLiteral(TType)
-	}
-	// Concrete value — its exact Parent.
 	return NewTypeLiteral(v.Parent)
 }
 
@@ -230,7 +213,7 @@ func IsValueOfType(v, t Value) bool {
 		// `FunctionSignature`, the legacy `ScalarType` / `NodeType` /
 		// `ObjectType` metatypes) keep the plain subtype check below, so
 		// `fn […] is Function` / `enum […] is Disjunct` still hold.
-		if t.Parent.Equal(TType) {
+		if t.Equal(TType) {
 			if v.Carrier {
 				return false
 			}
@@ -240,7 +223,7 @@ func IsValueOfType(v, t Value) bool {
 		// type semantics (predicate types, dependent scalars, future
 		// plugin types) get consulted. Default Behavior delegates to
 		// the historical lattice walk.
-		return v.Is(t.Parent)
+		return v.Is(&t)
 	}
 	_, ok := Unify(v, t)
 	return ok
@@ -322,7 +305,15 @@ func InstallType(r *Registry, name string, body Value) error {
 		def := r.Types.MintType(name, inputT)
 		r.Defs.PushType(name, def, body)
 	} else {
-		def := r.Types.MintType(name, body.Parent)
+		// A bare type-literal body IS the parent type after the
+		// type/value merge; structural/singleton bodies parent at
+		// their container type (Map / List / Integer / …).
+		parent := body.Parent
+		if body.Data == nil {
+			bodyType := body
+			parent = &bodyType
+		}
+		def := r.Types.MintType(name, parent)
 		r.Defs.PushType(name, def, body)
 	}
 	for _, p := range strings.Split(name, "/") {

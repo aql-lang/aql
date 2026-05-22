@@ -13,23 +13,13 @@ import "fmt"
 // found in future code should land here, not be re-inlined.
 
 // IsTypeLiteral reports whether v is a bare type literal — a Value
-// whose Parent identifies a type but carries no concrete payload and
-// is not a CheckMode carrier. Type literals have Data == nil and
-// Carrier == false; the convention is established in CLAUDE.md and
-// scattered through the codebase as raw `v.Data == nil` checks.
-//
-// The single exception is None: Value{Parent:TNone, Data:nil}
-// represents both the unit type AND the unique None value, so
-// IsTypeLiteral returns false for None — the caller would otherwise
-// treat None as a "type" rather than a value.
+// that is a type-lattice node carrying no concrete payload and is
+// not a CheckMode carrier. After the type/value merge a type literal
+// IS its lattice node; it has Data == nil and Carrier == false. The
+// value `none` carries a NonePayload (Data != nil) and so is
+// correctly excluded.
 func IsTypeLiteral(v Value) bool {
-	if v.Data != nil || v.Carrier {
-		return false
-	}
-	if v.Parent.Equal(TNone) {
-		return false
-	}
-	return true
+	return v.Data == nil && !v.Carrier
 }
 
 // IsConcrete reports whether v carries a real payload (not a type

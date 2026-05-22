@@ -698,8 +698,8 @@ func TestParseTypedListMap(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected key 'x' in child map")
 	}
-	if !xVal.Parent.Equal(eng.TNumber) {
-		t.Errorf("expected x to be number type, got %s (TestParseTypedListMap)", xVal.Parent)
+	if !xVal.Equal(eng.TNumber) {
+		t.Errorf("expected x to be number type, got %s (TestParseTypedListMap)", xVal)
 	}
 }
 
@@ -818,8 +818,8 @@ func TestParseTypedMapConcreteChild(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected key 'x' in child map")
 	}
-	if !xVal.Parent.Equal(eng.TNumber) {
-		t.Errorf("expected x to be number type, got %s (TestParseTypedMapConcreteChild)", xVal.Parent)
+	if !xVal.Equal(eng.TNumber) {
+		t.Errorf("expected x to be number type, got %s (TestParseTypedMapConcreteChild)", xVal)
 	}
 }
 
@@ -938,8 +938,8 @@ func TestParseMapWithTypeName(t *testing.T) {
 	}
 	m, _ := eng.AsMap(got[0])
 	xVal, _ := m.Get("x")
-	if !xVal.Parent.Equal(eng.TNumber) {
-		t.Errorf("expected number type literal, got %s", xVal.Parent)
+	if !xVal.Equal(eng.TNumber) {
+		t.Errorf("expected number type literal, got %s", xVal)
 	}
 }
 
@@ -1452,12 +1452,12 @@ func TestParseDataMapNilValue(t *testing.T) {
 	m, _ := eng.AsMap(got[0])
 	// Check type literal resolution in data context
 	eVal, _ := m.Get("e")
-	if !eVal.Parent.Equal(eng.TNumber) {
-		t.Errorf("expected Number type literal, got %s", eVal.Parent)
+	if !eVal.Equal(eng.TNumber) {
+		t.Errorf("expected Number type literal, got %s", eVal)
 	}
 	fVal, _ := m.Get("f")
-	if !fVal.Parent.Equal(eng.TAny) {
-		t.Errorf("expected Any type literal, got %s", fVal.Parent)
+	if !fVal.Equal(eng.TAny) {
+		t.Errorf("expected Any type literal, got %s", fVal)
 	}
 }
 
@@ -1598,8 +1598,8 @@ func TestResolveTextValueTypes(t *testing.T) {
 	}{
 		{"true", func(v eng.Value) bool { b, _ := eng.AsBoolean(v); return v.Parent.Matches(eng.TBoolean) && b }},
 		{"false", func(v eng.Value) bool { b, _ := eng.AsBoolean(v); return v.Parent.Matches(eng.TBoolean) && !b }},
-		{"Number", func(v eng.Value) bool { return v.Parent.Equal(eng.TNumber) }},
-		{"String", func(v eng.Value) bool { return v.Parent.Equal(eng.TString) }},
+		{"Number", func(v eng.Value) bool { return v.Equal(eng.TNumber) }},
+		{"String", func(v eng.Value) bool { return v.Equal(eng.TString) }},
 		{"hello", func(v eng.Value) bool { s, _ := eng.AsAtom(v); return v.Parent.Matches(eng.TAtom) && s == "hello" }},
 	}
 	for _, tt := range tests {
@@ -1858,8 +1858,8 @@ func TestParseOptionalFieldDisjunct(t *testing.T) {
 	if len(alts) != 2 {
 		t.Fatalf("expected 2 alternatives, got %d", len(alts))
 	}
-	if !alts[1].Parent.Equal(eng.TNone) {
-		t.Errorf("expected second alternative to be None, got %s", alts[1].Parent)
+	if !alts[1].Equal(eng.TNone) {
+		t.Errorf("expected second alternative to be None, got %s", alts[1])
 	}
 }
 

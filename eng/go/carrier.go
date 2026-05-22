@@ -91,6 +91,10 @@ func DataListElemTypeFromValue(data Value) *Type {
 		return TAny
 	}
 	if ct, ok := data.Data.(ChildTypeInfo); ok {
+		if ct.Child.Data == nil && !ct.Child.Carrier {
+			c := ct.Child // bare type-literal child IS the element type
+			return &c
+		}
 		return ct.Child.Parent
 	}
 	list, err := AsList(data)
@@ -512,7 +516,14 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 		if tv.Data != nil && !IsObjectType(tv) {
 			continue
 		}
-		out = append(out, GuardClause{Name: wx.Name, Type: tv.Parent})
+		// A bare type-literal clause IS its type; an ObjectType keeps
+		// its type at Parent (the minted object-type node).
+		guardType := tv.Parent
+		if tv.Data == nil {
+			gt := tv
+			guardType = &gt
+		}
+		out = append(out, GuardClause{Name: wx.Name, Type: guardType})
 	}
 	return out
 }

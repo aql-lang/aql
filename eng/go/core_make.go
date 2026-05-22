@@ -469,7 +469,7 @@ func registerKernelIdeals(r *Registry) {
 		Name:    "Object",
 		Enabled: true,
 		Accepts: func(v Value) bool {
-			return (v.Data == nil && v.Parent.Equal(TObject)) || IsObjectType(v)
+			return (v.Data == nil && v.Equal(TObject)) || IsObjectType(v)
 		},
 		Instantiate: func(typ, data Value, _ *Registry) ([]Value, error) {
 			objType, err := AsObjectType(typ)
@@ -483,7 +483,7 @@ func registerKernelIdeals(r *Registry) {
 		Name:    "Record",
 		Enabled: true,
 		Accepts: func(v Value) bool {
-			return (v.Data == nil && v.Parent.Equal(TRecord)) || IsRecordType(v)
+			return (v.Data == nil && v.Equal(TRecord)) || IsRecordType(v)
 		},
 		Instantiate: func(typ, data Value, _ *Registry) ([]Value, error) {
 			recType, err := AsRecordType(typ)
@@ -497,7 +497,7 @@ func registerKernelIdeals(r *Registry) {
 		Name:    "Table",
 		Enabled: true,
 		Accepts: func(v Value) bool {
-			return (v.Data == nil && v.Parent.Equal(TTable)) || IsTableType(v)
+			return (v.Data == nil && v.Equal(TTable)) || IsTableType(v)
 		},
 		Instantiate: func(typ, data Value, _ *Registry) ([]Value, error) {
 			tt, err := AsTableType(typ)
