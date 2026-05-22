@@ -153,18 +153,18 @@ func dependentLeafFromBoundType(t *Type) string {
 	// subtypes (e.g. Number/Integer/42) strip down to their last named
 	// ancestor.
 	for d := t; d != nil; d = d.Parent {
-		switch d {
-		case TInteger:
+		switch {
+		case d.Equal(TInteger):
 			return "Integer"
-		case TDecimal:
+		case d.Equal(TDecimal):
 			return "Decimal"
-		case TNumber:
+		case d.Equal(TNumber):
 			return "Number"
-		case TString:
+		case d.Equal(TString):
 			return "String"
-		case TBoolean:
+		case d.Equal(TBoolean):
 			return "Boolean"
-		case TAtom:
+		case d.Equal(TAtom):
 			return "Atom"
 		}
 	}
@@ -432,10 +432,10 @@ func MakeDepScalarSig(opName string, kind DepKind) NativeSig {
 				return nil, fmt.Errorf("%s: dependent constructor needs a scalar type literal, got concrete %s",
 					opName, args[1].Parent.String())
 			}
-			leaf := dependentLeafFromBoundType(args[1].Parent)
+			leaf := dependentLeafFromBoundType(ValueType(args[1]))
 			if leaf == "" {
 				return nil, fmt.Errorf("%s: dependent constructor does not support base type %s",
-					opName, args[1].Parent.String())
+					opName, ValueType(args[1]).String())
 			}
 			// Bound must be the same scalar base as the type literal.
 			base, _ := DependentLeafBaseType(leaf)

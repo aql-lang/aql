@@ -813,14 +813,14 @@ func BaseValueForConstraint(constraint Value) (Value, error) {
 	if IsDisjunct(constraint) {
 		di, _ := AsDisjunct(constraint)
 		for _, alt := range di.Alternatives {
-			if alt.Data == nil && !alt.Parent.Equal(TNone) {
-				return BaseValue(alt.Parent)
+			if alt.Data == nil && !ValueType(alt).Equal(TNone) {
+				return BaseValue(ValueType(alt))
 			}
 		}
 		return NewTypeLiteral(TNone), nil
 	}
 	if constraint.Data == nil {
-		return BaseValue(constraint.Parent)
+		return BaseValue(ValueType(constraint))
 	}
 	return Value{}, fmt.Errorf("base: cannot determine base value for %s", constraint.String())
 }

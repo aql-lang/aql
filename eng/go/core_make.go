@@ -721,7 +721,7 @@ func MakeFieldValue(val Value, constraint Value) (Value, error) {
 	val = ResolveWordValue(val)
 
 	if constraint.Data == nil {
-		constraintType := constraint.Parent
+		constraintType := ValueType(constraint)
 		if val.Parent.Matches(constraintType) {
 			return val, nil
 		}
