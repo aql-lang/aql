@@ -39,45 +39,18 @@ func (o OriginKind) String() string {
 	return "unknown"
 }
 
-// Type is the canonical metadata for a single type identity. Identity
-// is pointer equality on Type; the lattice is encoded by Parent
-// pointers, not by path-string prefixes. Builtins are seeded at init
-// from builtinDecls; the `type` word mints fresh Type values at
-// runtime (each declaration mints a new identity — even when its name
-// shadows an outer one).
+// Type is an alias for Value. The type lattice and the value space
+// are one structure: a "type" is a Value used as a lattice node —
+// its Parent is its supertype, its Behavior drives is/format/equal,
+// its Name/FixedID/Rank carry lattice metadata. The full field set
+// and the kernel/value duality are documented on the Value struct
+// in value.go.
 //
-// Behavior is the pluggable per-type operation set consulted by the
-// kernel's dispatch points (`v.Is(t)`, Value.String, ValuesEqual,
-// etc.). Every Type has a non-nil Behavior — the registration paths
-// install DefaultBehavior when the caller doesn't supply a custom
-// one. See typebehavior.go for the interface and the optional
-// capability sub-interfaces (Comparer, Hasher, Walker).
-//
-// BaseType is the "underlying scalar" pointer for dependent scalar
-// types (Type/Dependent/Dep<X> — DepInteger, DepDecimal, DepString,
-// …) so a DepInteger satisfies any slot typed as Integer. nil for
-// every other type. Set at registration; the lattice override in
-// Type.Matches consults it directly rather than running the historical
-// leaf-name → base-type switch (Step 9 of TYPE-DECOUPLING.0.md).
-//
-// Metatype is the type-of-the-type: TScalar's Metatype is
-// TScalarType, TNode's is TNodeType, TObject's is TIdealType, and
-// every descendant of those roots inherits the same Metatype. Other
-// roots (Any, None, Never, Word, Type) have a nil Metatype, which
-// MetatypeFor maps to TType. Replaces the historical hardcoded root-
-// name switch in MetatypeFor (Step 9).
-type Type struct {
-	ID         string       // canonical identity (e.g. "S_000000000004")
-	Name       string       // last segment of path (e.g. "ProperString")
-	Parent     *Type        // nil for roots
-	FixedID    int          // >0 for builtins; 0 for dynamic
-	Rank       int          // unified lattice rank — the total order CompareValues/compareTypes use; a child ranks above its parent; user/external types inherit the parent's Rank
-	IsInternal bool         // Word/__XX runtime markers — not user-facing
-	Origin     OriginKind   // builtin / userdef
-	Behavior   TypeBehavior // pluggable dispatch — never nil after registration
-	BaseType   *Type        // dependent-scalar underlying base; nil otherwise
-	Metatype   *Type        // metatype anchor for this branch; nil → TType
-}
+// The alias keeps the *Type spelling working at the call sites that
+// traffic in lattice nodes; *Type and *Value are the same type.
+// Type identity is pointer equality; builtins are seeded at init
+// from builtinDecls, and MintType mints fresh identities at runtime.
+type Type = Value
 
 // IsNative reports whether t is a built-in type seeded at init from
 // the package-level builtinDecls list. Returns false for user-defined

@@ -509,23 +509,52 @@ type ForwardInfo struct {
 	Sig       *Signature // the matched signature, for direct execution on completion
 }
 
-// Value is a typed entry on the AQL stack.
-// Every value carries a unique ID with a prefix indicating its category:
+// Value is the single node type of the AQL kernel: it is at once a
+// runtime value (an entry on the stack) and a node in the type
+// lattice. Value and Type were historically separate structs; they
+// are now one, with Type an alias for Value (see typetable.go). A
+// leaf (5, 'hello', [1 2 3]) and a type node (Integer, List, Any)
+// are the same kind of thing, differing only in which fields carry
+// data.
+//
+// The lattice is encoded by Parent: a leaf's Parent is its type, a
+// type node's Parent is its supertype.
+//
+// Every value carries a unique ID with a prefix indicating its
+// category:
 //   - "S_" for scalar values (String, Number, Boolean)
 //   - "N_" for node values (List, Map, Table, Record)
 //   - "W_" for word values (Word, Atom, Function, Internal/*)
 //   - "T_" for type/object values (Object/*, type literals, Any, None)
 //
-// Each ID is the prefix followed by 12 lowercase hex characters (6 random bytes).
+// Each ID is the prefix followed by 12 lowercase hex characters.
 type Value struct {
-	ID        string
-	Parent    *Type
+	ID string
+
+	// Parent is the node directly above this one in the unified
+	// lattice: for an ordinary value it is the value's type, for a
+	// type node it is the supertype. nil only for lattice roots.
+	Parent *Type
+
+	// Type-lattice metadata — populated on type nodes, zero on
+	// ordinary values. A non-nil Behavior is the marker of a type
+	// node.
+	Name       string       // type-node leaf name (e.g. "ProperString")
+	FixedID    int          // >0 for builtin type nodes; 0 otherwise
+	Rank       int          // unified lattice rank — total order for CompareValues/compareTypes
+	IsInternal bool         // Word/__XX runtime markers — not user-facing
+	Origin     OriginKind   // builtin / userdef
+	Behavior   TypeBehavior // pluggable dispatch — non-nil exactly on type nodes
+	BaseType   *Type        // dependent-scalar underlying base; nil otherwise
+	Metatype   *Type        // metatype anchor for this branch; nil → TType
+
+	// Payload and evaluation state — populated on ordinary values.
 	Data      Payload // the kernel-known data payload; see payload.go for variants
-	Quoted    bool    // true when value was produced by the quote word; prevents auto-evaluation
-	Eval      bool    // true for parser-created lists that should auto-evaluate at end of Run
+	Quoted    bool    // produced by the quote word; prevents auto-evaluation
+	Eval      bool    // parser-created list that should auto-evaluate at end of Run
 	Pos       SrcPos  // source position for error reporting (zero value = unknown)
-	Undefined bool    // true when atom was created from an undefined word (error if left on result stack)
-	Carrier   bool    // true when this is a static-typecheck carrier (type-only, Data stripped of concrete payload)
+	Undefined bool    // atom created from an undefined word (error if left on result stack)
+	Carrier   bool    // static-typecheck carrier (type-only, Data stripped of concrete payload)
 }
 
 // idRand is the package-level RNG used for ID generation.
@@ -1573,6 +1602,12 @@ func AsMutableMap(v Value) (*OrderedMap, error) {
 
 // String returns a human-readable representation.
 func (v Value) String() string {
+	// A type-lattice node renders as its slash path, preserving the
+	// historical (*Type).String(). Type nodes always carry a Behavior;
+	// values minted via NewValueRaw never do.
+	if v.Behavior != nil {
+		return v.Path()
+	}
 	// Behavior-driven format delegation: types that supply a custom
 	// TypeBehavior route through their Format. Walks the Parent
 	// chain so descendants of a type with a custom Behavior inherit

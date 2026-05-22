@@ -250,11 +250,6 @@ func (t *Type) Specificity() int {
 	return n
 }
 
-// String returns the slash-separated type path.
-func (t *Type) String() string {
-	return t.Path()
-}
-
 // Leaf returns the last part of the type path.
 // For example, "Object/Fetch/Request" returns "Request".
 func (t *Type) Leaf() string {
