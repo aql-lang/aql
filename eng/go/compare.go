@@ -133,7 +133,7 @@ func lowestCommonAncestor(a, b *Type) *Type {
 // ExactEqual returns true if two values are exactly equal.
 // For scalars (integer, string, boolean, atom, none): compares by value.
 // For types: compares structurally via ValuesEqual.
-// For non-scalars (list, map): compares by identity (same pointer).
+// For non-scalars (list, map): compares by identity (same container).
 func ExactEqual(a, b Value) bool {
 	// none == none
 	if a.VType.Equal(TNone) && b.VType.Equal(TNone) {
@@ -179,15 +179,48 @@ func ExactEqual(a, b Value) bool {
 		return _as15 == _as14
 	}
 
-	// Non-scalars: identity comparison (same pointer).
+	// Non-scalars: identity comparison — both values must refer to the
+	// same underlying container.
 	if a.VType.Equal(TList) && b.VType.Equal(TList) {
-		return a.Data == b.Data
+		return sameContainer(a.Data, b.Data)
 	}
 	if a.VType.Equal(TMap) && b.VType.Equal(TMap) {
-		return a.Data == b.Data
+		return sameContainer(a.Data, b.Data)
 	}
 
 	return false
+}
+
+// sameContainer reports whether two non-scalar payloads refer to the
+// same underlying container — the identity test behind ExactEqual for
+// lists and maps. A MapPayload identifies by its *OrderedMap pointer;
+// a ListPayload by the backing array of its element slice, so a value
+// dup'd from a list is identical to its source while two separate
+// literals are not. Payloads with no aliasable identity (table data,
+// materializers, …) are never equal here.
+//
+// It must not apply `==` to a Payload directly: ListPayload holds a
+// slice and is therefore not a comparable type — a bare
+// `a.Data == b.Data` panics at runtime.
+func sameContainer(a, b Payload) bool {
+	switch av := a.(type) {
+	case MapPayload:
+		bv, ok := b.(MapPayload)
+		return ok && av.M == bv.M
+	case ListPayload:
+		bv, ok := b.(ListPayload)
+		if !ok {
+			return false
+		}
+		// An empty list has no backing array to alias by — treat all
+		// empty lists as the single empty list.
+		if len(av.Elems) == 0 || len(bv.Elems) == 0 {
+			return len(av.Elems) == len(bv.Elems)
+		}
+		return &av.Elems[0] == &bv.Elems[0]
+	default:
+		return false
+	}
 }
 
 // DeepEqual returns true if two values are deeply equal.

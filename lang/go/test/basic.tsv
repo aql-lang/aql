@@ -391,6 +391,15 @@ refine Record [x:Number] eq refine Record [x:Number y:String]	false
 # eq/neq - table types
 def R refine Record [x:Number] (refine Table R) eq (refine Table R)	true
 
+# eq/neq - concrete lists & maps compare by identity (same container):
+# two separate literals are distinct, a value dup'd from one is the same.
+[1 2] [1 2] eq	false
+[1 2] [1 2] neq	true
+[1 2] dup eq	true
+[] [] eq	true
+{a:1} {a:1} eq	false
+{a:1} dup eq	true
+
 # eq/neq - disjunct types
 (String tor None) eq (String tor None)	true
 (String tor None) eq (Number tor None)	false
