@@ -128,12 +128,10 @@ var (
 	TMove           = eng.TMove
 	TNever          = eng.TNever
 	TNode           = eng.TNode
-	TNodeType       = eng.TNodeType
 	TNone           = eng.TNone
 	TNumber         = eng.TNumber
 	TObject         = eng.TObject
 	TIdeal          = eng.TIdeal
-	TIdealType      = eng.TIdealType
 	TOpenParen      = eng.TOpenParen
 	TOptions        = eng.TOptions
 	TParenExpr      = eng.TParenExpr
@@ -143,7 +141,6 @@ var (
 	TResourceEntity = eng.TResourceEntity
 	TReturnCheck    = eng.TReturnCheck
 	TScalar         = eng.TScalar
-	TScalarType     = eng.TScalarType
 	TStore          = eng.TStore
 	TStoreSystem    = eng.TStoreSystem
 	TString         = eng.TString
@@ -288,7 +285,6 @@ var (
 	InstallFnDef              = eng.InstallFnDef
 	IsCapitalisedName         = eng.IsCapitalisedName
 	IsConcrete                = eng.IsConcrete
-	IsMetaType                = eng.IsMetaType
 	IsRecordShape             = eng.IsRecordShape
 	IsTypeBody                = eng.IsTypeBody
 	IsTypeLiteral             = eng.IsTypeLiteral
@@ -301,7 +297,6 @@ var (
 	MapFieldInteger           = eng.MapFieldInteger
 	MapFieldString            = eng.MapFieldString
 	MatchSignature            = eng.MatchSignature
-	MetatypeFor               = eng.MetatypeFor
 	NewValueRaw               = eng.NewValueRaw
 	LiteralCondValue          = eng.LiteralCondValue
 	BoolWord                  = eng.BoolWord

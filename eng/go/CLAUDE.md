@@ -170,14 +170,7 @@ externally-registered type means:
 
 ## Type Lattice Fields
 
-`Type` carries two fields populated at registration time that
-replace historical hardcoded switches:
-
-- `Metatype *Type` — for the three anchor roots (`TScalar` →
-  `TScalarType`, `TNode` → `TNodeType`, `TObject` →
-  `TObjectType`). Descendants inherit by Parent-chain walk in
-  `MetatypeFor`. Populated via `builtinDecl.MetatypePath` for
-  kernel-declared roots.
+`Type` carries one field populated at registration time:
 
 - `Rank int` — the **unified lattice rank**: one integer giving the
   total order `CompareValues` / `compareTypes` use for every cross-type
@@ -193,9 +186,6 @@ replace historical hardcoded switches:
   ties by depth, then name, then id. `rankOf` (`compare_types.go`)
   walks the parent chain as a fallback for a `*Type` assembled without
   one.
-
-When introducing a new root with its own metatype anchor, add
-`MetatypePath` to its `builtinDecl` row.
 
 ## Value Has Two Methods
 

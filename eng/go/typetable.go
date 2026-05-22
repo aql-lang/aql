@@ -376,12 +376,11 @@ func (tt *TypeTable) Clone() *TypeTable {
 // is the SINGLE SOURCE OF TRUTH for all builtin types — IDs, parents,
 // user-facing visibility, everything.
 type builtinDecl struct {
-	Path         string
-	FixedID      int
-	IsInternal   bool   // true for Word/__XX runtime markers
-	Alias        string // optional friendly short name for ExpandShortName (e.g. "Paren" → Word/__OP)
-	MetatypePath string // for root types whose descendants share a metatype anchor (Scalar→Type/ScalarType, …)
-	Rank         int    // unified lattice rank — see builtinDecls
+	Path       string
+	FixedID    int
+	IsInternal bool   // true for Word/__XX runtime markers
+	Alias      string // optional friendly short name for ExpandShortName (e.g. "Paren" → Word/__OP)
+	Rank       int    // unified lattice rank — see builtinDecls
 }
 
 // builtinDecls lists every builtin type. Parent-first ordering is
@@ -412,9 +411,9 @@ var builtinDecls = []builtinDecl{
 	{Path: "Any", FixedID: 1, Rank: 11_000_000_000},
 	{Path: "None", FixedID: 2, Rank: 12_000_000_000},
 	{Path: "Never", FixedID: 61, Rank: 13_000_000_000},
-	{Path: "Scalar", FixedID: 3, Rank: 20_000_000_000, MetatypePath: "Type/ScalarType"},
-	{Path: "Node", FixedID: 11, Rank: 30_000_000_000, MetatypePath: "Type/NodeType"},
-	{Path: "Ideal", FixedID: 48, Rank: 40_000_000_000, MetatypePath: "Type/IdealType"},
+	{Path: "Scalar", FixedID: 3, Rank: 20_000_000_000},
+	{Path: "Node", FixedID: 11, Rank: 30_000_000_000},
+	{Path: "Ideal", FixedID: 48, Rank: 40_000_000_000},
 	{Path: "Word", FixedID: 17, Rank: 50_000_000_000},
 	{Path: "Type", FixedID: 39, Rank: 60_000_000_000},
 
@@ -476,9 +475,6 @@ var builtinDecls = []builtinDecl{
 	{Path: "Type/FunctionSignature", FixedID: 24, Rank: 60_200_000_000},
 	{Path: "Type/Disjunct", FixedID: 26, Rank: 60_300_000_000},
 	{Path: "Type/Disjunct/Enum", FixedID: 62, Rank: 60_310_000_000},
-	{Path: "Type/ScalarType", FixedID: 40, Rank: 60_400_000_000},
-	{Path: "Type/NodeType", FixedID: 41, Rank: 60_500_000_000},
-	{Path: "Type/IdealType", FixedID: 46, Rank: 60_600_000_000},
 }
 
 // Builtin is the package-level TypeTable holding every builtin type.
@@ -497,25 +493,6 @@ func newBuiltinTypeTable() *TypeTable {
 	}
 	for _, d := range builtinDecls {
 		tt.registerBuiltin(d)
-	}
-	// Post-pass: wire Metatype fields. Roots that anchor a metatype
-	// (Scalar→ScalarType, Node→NodeType, Object→IdealType) resolve
-	// their MetatypePath here, after all decls have been registered.
-	// Every descendant of a metatype-bearing root inherits its
-	// ancestor's Metatype by walking up — done lazily by MetatypeFor.
-	for _, d := range builtinDecls {
-		if d.MetatypePath == "" {
-			continue
-		}
-		def := tt.bypath[d.Path]
-		if def == nil {
-			panic(fmt.Sprintf("typetable: post-pass cannot find %q", d.Path))
-		}
-		mt := tt.bypath[d.MetatypePath]
-		if mt == nil {
-			panic(fmt.Sprintf("typetable: metatype %q not registered for %q", d.MetatypePath, d.Path))
-		}
-		def.Metatype = mt
 	}
 	return tt
 }

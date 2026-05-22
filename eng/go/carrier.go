@@ -131,12 +131,12 @@ func toCarrier(v Value) Value {
 	}
 	// Type literals (Data already nil) are already in the right
 	// shape for sig matching — preserve their Carrier=false marker
-	// so sigTypeMatches' metatype branch can still recognise them
-	// as type literals rather than as value-carriers. Without this
-	// guard, `Integer gt 10` under check mode loses the Integer
+	// so sigTypeMatchesAsType can still recognise them as type
+	// literals rather than as value-carriers. Without this guard,
+	// `Integer gt 10` under check mode loses the Integer
 	// type-literal distinction and falls through to the boolean
 	// sig instead of the dep-constructor sig. See depscalar.go's
-	// makeDepScalarSig + RunInCheckMode for the matching change.
+	// MakeDepScalarSig + RunInCheckMode for the matching change.
 	if v.Data == nil {
 		return v
 	}

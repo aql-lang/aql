@@ -61,11 +61,8 @@ var (
 	// TFetchFunction / TFetchRequest / TFetchResponse moved to
 	// lang/go/native/fetch.go (Step 8 migration); registered via
 	// RegisterExternalBuiltin at lang/go/native package init.
-	TError      = mustType("Ideal/Error")
-	TType       = mustType("Type")
-	TScalarType = mustType("Type/ScalarType")
-	TNodeType   = mustType("Type/NodeType")
-	TIdealType  = mustType("Type/IdealType")
+	TError = mustType("Ideal/Error")
+	TType  = mustType("Type")
 	// Scalar/Time and descendants moved to
 	// lang/go/engine/native_temporal.go (Step 8). They live in
 	// lang/go/engine (not lang/go/internal/nativemod/time) because
@@ -271,34 +268,6 @@ func (t *Type) Equal(other *Type) bool {
 		return false
 	}
 	return t.ID != "" && t.ID == other.ID
-}
-
-// MetatypeFor returns the metatype for a given type.
-// Scalar subtypes → TScalarType, Node subtypes → TNodeType,
-// Object subtypes → TObjectType, everything else → TType.
-//
-// The mapping is driven by *Type.Metatype, set at registration via
-// builtinDecl.MetatypePath on the three anchor roots (Scalar, Node,
-// Object). Descendants of those roots inherit the anchor by walking
-// up the Parent chain. Step 9 of TYPE-DECOUPLING.0.md replaced the
-// historical root-name switch with this field-driven lookup so a
-// new root with its own metatype can be added by declaring its
-// MetatypePath, no central function edit required.
-func MetatypeFor(t *Type) *Type {
-	if t == nil {
-		return TType
-	}
-	for d := t; d != nil; d = d.Parent {
-		if d.Metatype != nil {
-			return d.Metatype
-		}
-	}
-	return TType
-}
-
-// IsMetaType reports whether t is in the Type/* metatype hierarchy.
-func IsMetaType(t *Type) bool {
-	return t != nil && t.Root() == TType
 }
 
 // ValidateTypeNameParts checks that a type name (slash-separated) does not

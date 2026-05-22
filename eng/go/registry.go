@@ -650,6 +650,7 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 			QuoteArgs:        sig.QuoteArgs,
 			NoEvalArgs:       sig.NoEvalArgs,
 			NoEvalMapArgs:    sig.NoEvalMapArgs,
+			TypeArgs:         sig.TypeArgs,
 			BarrierPos:       sig.BarrierPos,
 			Fallback:         sig.Fallback,
 			Returns:          sig.Returns,

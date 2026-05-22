@@ -57,7 +57,8 @@ var typeNatives = []NativeFunc{
 		Name:        "pathof",
 		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args: []*Type{TType},
+			Args:     []*Type{TAny},
+			TypeArgs: map[int]bool{0: true},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{eng.PathOf(args[0])}, nil
 			},
@@ -178,13 +179,15 @@ var typeNatives = []NativeFunc{
 		ForwardArgs: true,
 		Signatures: []NativeSig{
 			{
-				Args:      []*Type{TScalarType, TMap, TScalar},
+				Args:      []*Type{TScalar, TMap, TScalar},
+				TypeArgs:  map[int]bool{0: true},
 				Patterns:  map[int]Value{1: convertOptsPattern()},
 				Handler:   convert3Handler,
 				ReturnsFn: ReturnsIdentity(0),
 			},
 			{
-				Args:      []*Type{TScalarType, TScalar},
+				Args:      []*Type{TScalar, TScalar},
+				TypeArgs:  map[int]bool{0: true},
 				Handler:   convert2Handler,
 				ReturnsFn: ReturnsIdentity(0),
 			},
@@ -427,7 +430,7 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		}
 		return []Value{NewBoolean(matched)}, nil
 	}
-	if b.Data == nil && IsMetaType(b.Parent) {
+	if b.Data == nil && b.Parent != nil && b.Parent.Root() != nil && b.Parent.Root().Equal(TType) {
 		if b.Parent.Equal(TType) {
 			// `v is Type` — v must be a TYPE: a bare type literal, a
 			// structural type body (record shape, typed list/map,
@@ -440,12 +443,7 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 			}
 			return []Value{NewBoolean(a.Data == nil || IsTypeBody(a) || IsRecordShape(a) || a.Parent.Matches(TType))}, nil
 		}
-		if a.Data == nil {
-			// Legacy metatype RHS (`ScalarType` / `NodeType` /
-			// `ObjectType`): compare the literal's metatype.
-			return []Value{NewBoolean(MetatypeFor(a.Parent).Matches(b.Parent))}, nil
-		}
-		// Other Type/-rooted RHS (`Function` / `Disjunct` / `Enum` /
+		// Type/-rooted RHS (`Function` / `Disjunct` / `Enum` /
 		// `FunctionSignature`): plain subtype check (also catches a
 		// value whose Parent already lives under that type).
 		return []Value{NewBoolean(a.Parent.Matches(b.Parent))}, nil

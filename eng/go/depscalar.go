@@ -371,14 +371,15 @@ func combineDepScalars(a, b DepScalarInfo) (DepScalarInfo, bool) {
 	return out, true
 }
 
-// MakeDepScalarSig builds the [TScalar, TScalarType] -> [TScalar]
+// MakeDepScalarSig builds the [TScalar, TScalar/type] -> [TScalar]
 // signature variant for a comparison op. `Integer gte 10`, `String lt
 // "z"`, `Decimal gte 1.5` all hit this sig: arg0 is the bound, arg1 is
-// the base-type literal. The result Value's Parent IS the base scalar
-// type, with a DepScalarInfo payload carrying the bound. This sig sorts
-// ahead of the [Any, Any] boolean sig (because its types are more
-// specific), so concrete `5 gte 10` still hits the boolean branch via
-// the second match attempt.
+// the base-type literal (TypeArgs[1]=true requires a type literal at
+// that slot — the successor to the historical TScalarType slot). The
+// result Value's Parent IS the base scalar type, with a DepScalarInfo
+// payload carrying the bound. This sig sorts ahead of the [Any, Any]
+// boolean sig (because its types are more specific), so concrete `5
+// gte 10` still hits the boolean branch via the second match attempt.
 //
 // Used by ComparisonNatives to wire the same single-bound DepScalar
 // constructor onto each of `lt`, `gt`, `lte`, `gte`.
@@ -391,7 +392,8 @@ func combineDepScalars(a, b DepScalarInfo) (DepScalarInfo, bool) {
 // during check is safe.
 func MakeDepScalarSig(opName string, kind DepKind) NativeSig {
 	return NativeSig{
-		Args: []*Type{TScalar, TScalarType},
+		Args:     []*Type{TScalar, TScalar},
+		TypeArgs: map[int]bool{1: true},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			// arg1 is the type-literal at the deep position. Reject
 			// non-leaf bases — only the well-known scalar types map

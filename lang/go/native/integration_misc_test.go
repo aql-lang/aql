@@ -1000,7 +1000,10 @@ func TestTypeofMetatypes(t *testing.T) {
 	})
 }
 
-func TestIsMetatypes(t *testing.T) {
+// TestIs_BroadTypeRoot covers `v is Type` — Type/ is still the root
+// for the *Type meta-hierarchy (Function, Disjunct, Enum, etc.) even
+// after the ScalarType / NodeType / IdealType nodes were retired.
+func TestIs_BroadTypeRoot(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -1012,36 +1015,14 @@ func TestIsMetatypes(t *testing.T) {
 		pat  Value
 		want bool
 	}{
-		// ScalarType matches scalar subtypes
-		{"Boolean is ScalarType", NewTypeLiteral(TBoolean), NewTypeLiteral(TScalarType), true},
-		{"String is ScalarType", NewTypeLiteral(TString), NewTypeLiteral(TScalarType), true},
-		{"Integer is ScalarType", NewTypeLiteral(TInteger), NewTypeLiteral(TScalarType), true},
-
-		// NodeType matches node subtypes
-		{"List is NodeType", NewTypeLiteral(TList), NewTypeLiteral(TNodeType), true},
-		{"Map is NodeType", NewTypeLiteral(TMap), NewTypeLiteral(TNodeType), true},
-
-		// Type matches everything
 		{"Boolean is Type", NewTypeLiteral(TBoolean), NewTypeLiteral(TType), true},
 		{"List is Type", NewTypeLiteral(TList), NewTypeLiteral(TType), true},
 		{"Object is Type", NewTypeLiteral(TObject), NewTypeLiteral(TType), true},
 		{"Any is Type", NewTypeLiteral(TAny), NewTypeLiteral(TType), true},
-
-		// Negative cases
-		{"List is ScalarType", NewTypeLiteral(TList), NewTypeLiteral(TScalarType), false},
-		{"Boolean is NodeType", NewTypeLiteral(TBoolean), NewTypeLiteral(TNodeType), false},
-		{"Object is ScalarType", NewTypeLiteral(TObject), NewTypeLiteral(TScalarType), false},
-		{"Object is NodeType", NewTypeLiteral(TObject), NewTypeLiteral(TNodeType), false},
-
-		// Scalar/Node roots have metatype Type, not ScalarNodeType
-		{"Scalar is ScalarType", NewTypeLiteral(TScalar), NewTypeLiteral(TScalarType), false},
-		{"Node is NodeType", NewTypeLiteral(TNode), NewTypeLiteral(TNodeType), false},
 		{"Scalar is Type", NewTypeLiteral(TScalar), NewTypeLiteral(TType), true},
 		{"Node is Type", NewTypeLiteral(TNode), NewTypeLiteral(TType), true},
-
-		// Metatypes themselves
-		{"ScalarType is Type", NewTypeLiteral(TScalarType), NewTypeLiteral(TType), true},
-		{"NodeType is Type", NewTypeLiteral(TNodeType), NewTypeLiteral(TType), true},
+		// A concrete value is NOT a Type.
+		{"5 is Type", NewInteger(5), NewTypeLiteral(TType), false},
 	}
 
 	for _, tt := range tests {
