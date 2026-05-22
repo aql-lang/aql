@@ -102,8 +102,8 @@ func (wordCompareBehavior) Compare(a, b Value) (int, error) {
 // for any same-family pair. The one same-Rank pair that does reach here
 // is Path-vs-Path — Path has no Comparer of its own — so two paths fall
 // through to Scalar, where comparePaths orders them by segment count
-// (longest first), then segment by segment, then absolute before
-// relative.
+// (shortest first), then segment by segment in reverse lexical order,
+// then relative before absolute.
 type scalarCompareBehavior struct{ defaultBehavior }
 
 func (scalarCompareBehavior) Compare(a, b Value) (int, error) {
@@ -115,37 +115,38 @@ func (scalarCompareBehavior) Compare(a, b Value) (int, error) {
 	return comparePaths(a, b), nil
 }
 
-// comparePaths orders two Path values by three keys in turn: longer
-// paths (more segments) sort first, then segment by segment
-// lexically, then an absolute path before a relative one.
+// comparePaths orders two Path values by three keys in turn: shorter
+// paths (fewer segments) sort first, then segment by segment in
+// reverse lexical order, then a relative path before an absolute one.
 // scalarCompareBehavior routes the Path-vs-Path case here.
 func comparePaths(a, b Value) int {
 	ap, aerr := AsPath(a)
 	bp, berr := AsPath(b)
 	if aerr != nil || berr != nil {
 		// Not a Path pair after all — fall back to rendered order.
-		return strings.Compare(a.String(), b.String())
+		return strings.Compare(b.String(), a.String())
 	}
 	switch {
-	case len(ap.Parts) > len(bp.Parts):
-		return -1
 	case len(ap.Parts) < len(bp.Parts):
+		return -1
+	case len(ap.Parts) > len(bp.Parts):
 		return 1
 	}
-	// Equal segment count — compare segment by segment. Comparing
-	// the parts directly, rather than the "/"-joined render, keeps
-	// the separator byte from skewing the order.
+	// Equal segment count — compare segment by segment in reverse
+	// lexical order. Comparing the parts directly, rather than the
+	// "/"-joined render, keeps the separator byte from skewing the
+	// order.
 	for i := range ap.Parts {
-		if c := strings.Compare(ap.Parts[i], bp.Parts[i]); c != 0 {
+		if c := strings.Compare(bp.Parts[i], ap.Parts[i]); c != 0 {
 			return c
 		}
 	}
-	// Same size and segments — an absolute path sorts before a
-	// relative one.
+	// Same size and segments — a relative path sorts before an
+	// absolute one.
 	switch {
-	case ap.Abs && !bp.Abs:
-		return -1
 	case !ap.Abs && bp.Abs:
+		return -1
+	case ap.Abs && !bp.Abs:
 		return 1
 	default:
 		return 0

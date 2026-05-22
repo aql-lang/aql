@@ -202,7 +202,7 @@ cat/q cmp Path	-1
 (make Path ['a' 'b']) cmp String	1
 (make Path ['a' 'b']) cmp EmptyString	1
 (make Path ['a' 'b']) cmp ProperString	1
-(make Path ['a' 'b']) cmp Path	1
+(make Path ['a' 'b']) cmp Path	-1
 
 # a = Scalar
 Scalar cmp 5	-1
@@ -402,7 +402,7 @@ Path cmp 'hi'	1
 Path cmp true	1
 Path cmp false	1
 Path cmp cat/q	1
-Path cmp (make Path ['a' 'b'])	-1
+Path cmp (make Path ['a' 'b'])	1
 Path cmp Scalar	1
 Path cmp Atom	1
 Path cmp Boolean	1
