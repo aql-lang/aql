@@ -1163,7 +1163,7 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 		ci, _ := eng.AsChildType(tv)
 		result.Set("child", eng.NewString(eng.TypePathOf(ci.Child)))
 
-	case tv.Parent.Equal(eng.TFnUndef):
+	case eng.ValueType(tv).Equal(eng.TFnUndef):
 		result.Set("kind", eng.NewAtom("function_shape"))
 		uInfo, _ := tv.Data.(eng.FnUndefInfo)
 		sigs := make([]eng.Value, 0, len(uInfo.Sigs))

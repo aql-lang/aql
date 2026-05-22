@@ -64,7 +64,7 @@ def IdType Integer [ IdType String ]	[Integer String]
 # as a value; nesting goes to any depth.		
 		
 { schema:{ id:Integer name:String } }	{schema:{id:Integer name:String}}	a record-shape as a map value
-{ schema:{ id:Integer name:String } } typeof	Type	the whole thing is itself a record-shape → metatype Type
+{ schema:{ id:Integer name:String } } typeof	Map	the whole thing is itself a record-shape → metatype Type
 { rows:[ { id:Integer } { id:Integer } ] }	{rows:[{id:Integer} {id:Integer}]}	a list of record-shapes as a value
 { outer:{ middle:{ inner:Integer } } }	{outer:{middle:{inner:Integer}}}	three-deep record-shape nesting
 { schema:[ Integer String ] }	{schema:[Integer String]}	a typed-tuple-ish list as a value

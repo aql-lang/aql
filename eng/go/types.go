@@ -209,7 +209,7 @@ func (t *Type) Matches(pattern *Type) bool {
 	if pattern == nil {
 		return true
 	}
-	if pattern == TAny {
+	if pattern.Equal(TAny) {
 		return true
 	}
 	if t == nil {

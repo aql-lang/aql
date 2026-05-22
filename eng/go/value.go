@@ -828,10 +828,10 @@ func TypePathOf(v Value) string {
 	return v.Parent.Path()
 }
 
-// valueType returns the lattice node that is v's type: v itself when
+// ValueType returns the lattice node that is v's type: v itself when
 // v is a bare type literal (a type literal IS a lattice node), and
 // v's Parent for any concrete value or carrier.
-func valueType(v Value) *Type {
+func ValueType(v Value) *Type {
 	if v.Data == nil && !v.Carrier {
 		return &v
 	}

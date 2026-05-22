@@ -707,7 +707,7 @@ func SimplifyDisjunctAlts(alts []Value) []Value {
 	// First pass: drop Never.
 	live := make([]Value, 0, len(alts))
 	for _, alt := range alts {
-		if valueType(alt).Equal(TNever) {
+		if ValueType(alt).Equal(TNever) {
 			continue
 		}
 		live = append(live, alt)
@@ -718,10 +718,10 @@ func SimplifyDisjunctAlts(alts []Value) []Value {
 	out := make([]Value, 0, len(live))
 outer:
 	for i, cand := range live {
-		candType := valueType(cand)
+		candType := ValueType(cand)
 		// Drop if structurally equal to an earlier kept alt.
 		for j := 0; j < i; j++ {
-			if valueType(live[j]).Equal(candType) && ValuesEqual(live[j], cand) {
+			if ValueType(live[j]).Equal(candType) && ValuesEqual(live[j], cand) {
 				continue outer
 			}
 		}
@@ -735,7 +735,7 @@ outer:
 			if i == j {
 				continue
 			}
-			otherType := valueType(other)
+			otherType := ValueType(other)
 			if candType.Equal(otherType) {
 				continue
 			}

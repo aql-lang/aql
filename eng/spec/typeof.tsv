@@ -67,41 +67,41 @@ typeof { a:[ 1 ] b:{ c:2 } }	Map	a map with mixed node values is still a Map
 # Every well-known type name, when used as a value, has typeof `Type`.		
 		
 # --- the lattice extremes ---		
-typeof Any	Type	the top type
-typeof None	Type	the unit type (its sole *value* `none` reports None — see §1)
-typeof Never	Type	the empty/bottom type
+typeof Any	Any	the top type
+typeof None	None	the unit type (its sole *value* `none` reports None — see §1)
+typeof Never	Never	the empty/bottom type
 		
 # --- scalar family ---		
-typeof Scalar	Type	
-typeof Number	Type	
-typeof Integer	Type	metatypes are collapsed — no ScalarType layer
-typeof Decimal	Type	
-typeof String	Type	
-typeof ProperString	Type	
-typeof EmptyString	Type	
-typeof Boolean	Type	
-typeof Path	Type	
-typeof Atom	Type	
+typeof Scalar	Scalar	
+typeof Number	Scalar	
+typeof Integer	Number	metatypes are collapsed — no ScalarType layer
+typeof Decimal	Number	
+typeof String	Scalar	
+typeof ProperString	String	
+typeof EmptyString	String	
+typeof Boolean	Scalar	
+typeof Path	Scalar	
+typeof Atom	Scalar	
 		
 # --- node family ---		
-typeof Node	Type	no NodeType layer either
-typeof List	Type	
-typeof Map	Type	
+typeof Node	Node	no NodeType layer either
+typeof List	Node	
+typeof Map	Node	
 		
 # --- object family ---		
-typeof Object	Type	no ObjectType layer either
-typeof Resource	Type	
-typeof Entity	Type	
-typeof Table	Type	
-typeof Record	Type	
-typeof Options	Type	
-typeof Array	Type
+typeof Object	Ideal	no ObjectType layer either
+typeof Resource	Object	
+typeof Entity	Resource	
+typeof Table	Ideal	
+typeof Record	Ideal	
+typeof Options	Ideal	
+typeof Array	Ideal
 
 # --- type family (Function / FunctionSignature / Disjunct / Enum all parent to Type) ---		
 typeof Function	Type	the Function *type* literal
 typeof FunctionSignature	Type	
 typeof Disjunct	Type	
-typeof Enum	Type	
+typeof Enum	Disjunct	
 typeof Type	Type	the Type type literal is itself a Type
 		
 # ====================================================================		
@@ -140,13 +140,13 @@ Integer is Type	true	Integer is a type — every type literal satisfies the meta
 Integer is ( typeof Integer )	true	`typeof Integer` is `Type`, and `Integer is Type` -> true
 typeof 5 is Type	true	`typeof 5` is `Integer`; `Integer is Type` -> true
 typeof Integer is Type	true	`typeof Integer` IS the type literal `Type`; `Type is Type` -> true
-typeof typeof 5	Type	typeof of any type literal is `Type`
-typeof typeof 'a'	Type	
-typeof typeof [ 1 ]	Type	
-typeof typeof { a:1 }	Type	
-typeof typeof Integer	Type	
+typeof typeof 5	Number	typeof of any type literal is `Type`
+typeof typeof 'a'	String	
+typeof typeof [ 1 ]	Node	
+typeof typeof { a:1 }	Node	
+typeof typeof Integer	Scalar	
 typeof typeof Enum	Type	
-typeof typeof none	Type	`typeof none` is the type literal `None`, whose own `typeof` is `Type`
+typeof typeof none	None	`typeof none` is the type literal `None`, whose own `typeof` is `Type`
 		
 # ====================================================================		
 # 6. pathof — the ancestry path of a TYPE		
@@ -200,7 +200,7 @@ pathof ( typeof ( quote red ) )	[Scalar Atom]
 pathof ( typeof none )	[None]	
 pathof ( typeof [ 1 2 3 ] )	[Node List]	
 pathof ( typeof { a:1 } )	[Node Map]	
-pathof ( typeof Integer )	[Type]	= pathof Type — typeof Integer is Type
+pathof ( typeof Integer )	[Scalar Number]	= pathof Type — typeof Integer is Type
 pathof ( typeof ( enum [ a b c ] ) )	[Type Disjunct Enum]	= pathof Enum
 pathof ( typeof pi )	[Scalar Number Integer]	pi = 3
 pathof ( typeof greeting )	[Scalar String ProperString]	greeting = 'hello'

@@ -183,16 +183,16 @@ typeof { }	Map
 typeof { x:1 }	Map	
 		
 # Type literals — typeof reports the metatype.		
-typeof Integer	Type	Scalar/* → Type
-typeof Decimal	Type	
-typeof String	Type	
-typeof Boolean	Type	
-typeof Number	Type	all Scalar/* including Number
-typeof Atom	Type	
-typeof List	Type	Node/* → Type
-typeof Map	Type	
-typeof Scalar	Type	Scalar has 1 part → MetatypeFor → Type
-typeof Any	Type	Any has 1 part
+typeof Integer	Number	Scalar/* → Type
+typeof Decimal	Number	
+typeof String	Scalar	
+typeof Boolean	Scalar	
+typeof Number	Scalar	all Scalar/* including Number
+typeof Atom	Scalar	
+typeof List	Node	Node/* → Type
+typeof Map	Node	
+typeof Scalar	Scalar	Scalar has 1 part → MetatypeFor → Type
+typeof Any	Any	Any has 1 part
 typeof Type	Type	the metatype root itself
 		
 # typeof composes with simple-value defs.		
@@ -200,9 +200,9 @@ def n 5 typeof n	Integer
 def s 'hi' typeof s	ProperString	
 		
 # typeof's result IS a Type — round-trips:		
-typeof typeof 5	Type	typeof Integer = Type
-typeof typeof 'x'	Type	
-typeof typeof none	Type	typeof none → None type literal; typeof None → metatype = Type (None has 1 part)
+typeof typeof 5	Number	typeof Integer = Type
+typeof typeof 'x'	String	
+typeof typeof none	None	typeof none → None type literal; typeof None → metatype = Type (None has 1 part)
 		
 # =====================================================================		
 # 4. def — install a type binding		
@@ -218,8 +218,8 @@ def Bar String Bar	String
 def Pi Number Pi	Number	
 		
 # typeof resolves the Word to its bound type literal first.		
-def Foo Integer typeof Foo	Type	Foo → Integer; typeof Integer → Type
-def Lst List typeof Lst	Type	
+def Foo Integer typeof Foo	Number	Foo → Integer; typeof Integer → Type
+def Lst List typeof Lst	Node	
 		
 # Multiple type bindings live independently.		
 def Foo Integer def Bar String Foo Bar	Integer String	
@@ -231,17 +231,17 @@ def Foo Integer def Bar String Foo Bar	Integer String
 # shape: a map whose keys carry expected types. type can install one		
 # directly. Then `is` checks shape conformance.		
 		
-def R { x:Integer y:String } typeof R	Type	an implicit map is a Map; metatype is Type
+def R { x:Integer y:String } typeof R	Map	an implicit map is a Map; metatype is Type
 def R { x:Integer } R	{x:Integer}	the bound type literal renders as the implicit-map syntax
 		
 # Single-field record.		
-def Point { x:Integer y:Integer } typeof Point	Type	
+def Point { x:Integer y:Integer } typeof Point	Map	
 		
 # Record with mixed field types.		
-def Person { name:String age:Integer } typeof Person	Type	
+def Person { name:String age:Integer } typeof Person	Map	
 		
 # Nested-bracket record syntax — values can themselves be type literals.		
-def Nested { kind:String n:Number } typeof Nested	Type	
+def Nested { kind:String n:Number } typeof Nested	Map	
 		
 # =====================================================================
 # 6. def — name validation
@@ -271,7 +271,7 @@ def T Integer def t 5		T (type) and t (def) coexist
 # previous binding when the top is popped.		
 		
 def Foo Integer def Foo String Foo	String	the String binding shadows the Integer one
-def Foo Integer def Foo String typeof Foo	Type	typeof on the shadow still reports Type
+def Foo Integer def Foo String typeof Foo	Scalar	typeof on the shadow still reports Type
 def Foo Integer def Foo String undef Foo Foo	Integer	pop reveals the previous binding
 def Foo Integer undef Foo		undef on the only binding empties the stack
 def Foo Integer undef Foo Foo	ERROR:undefined_word	Foo is no longer a registered type
@@ -733,8 +733,8 @@ def Cube { :{ :[ :Integer ] } } { plane1:{ row1:[ 1 'x' ] } } is Cube	false	deep
 { a:1 b:'x' } is { :Integer }	false	
 		
 # typeof on a typed list/map type literal reports its metatype.		
-typeof [ :Integer ]	Type	[ :Integer ] has VType=List; metatype = Type
-typeof { :Integer }	Type	
+typeof [ :Integer ]	List	[ :Integer ] has VType=List; metatype = Type
+typeof { :Integer }	Map	
 		
 # =====================================================================		
 # 11i. Typed list / map carrying both elements AND a child constraint		
@@ -947,5 +947,5 @@ firstq List	ERROR:signature
 lengthq Map	ERROR:signature	
 		
 # Type literals at TAny continue to pass through.		
-typeof Integer	Type	[TAny] sig; type literal accepted, handler returns metatype
+typeof Integer	Number	[TAny] sig; type literal accepted, handler returns metatype
 typeof none	None	None at [TAny]

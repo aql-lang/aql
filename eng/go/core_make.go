@@ -574,7 +574,7 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 		return MakeRecord(recType, srcVal, useBase)
 	}
 
-	if targetVal.Data == nil && targetVal.Parent.Equal(TPath) {
+	if targetVal.Data == nil && targetVal.Equal(TPath) {
 		abs := false
 		if optsMap, _ := AsMap(optsVal); optsMap != nil {
 			if v, ok := optsMap.Get("abs"); ok && v.Parent.Matches(TBoolean) {
@@ -646,7 +646,7 @@ func MakeArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 // MakeScalarOptsHandler is the 3-arg [ScalarType, Map, Any] make handler.
 func MakeScalarOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	targetVal, optsVal, srcVal := args[0], args[1], args[2]
-	if targetVal.Data == nil && targetVal.Parent.Equal(TPath) {
+	if targetVal.Data == nil && targetVal.Equal(TPath) {
 		abs := false
 		if optsMap, _ := AsMap(optsVal); optsMap != nil {
 			if v, ok := optsMap.Get("abs"); ok && v.Parent.Matches(TBoolean) {

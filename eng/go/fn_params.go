@@ -231,7 +231,7 @@ func ParseFnReturns(outputSig Value) ([]*Type, error) {
 // plus an optional pattern Value for structural matching.
 func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 	if v.Data == nil {
-		return v.Parent, nil, nil
+		return ValueType(v), nil, nil
 	}
 	if IsWord(v) {
 		_as5, _ := AsWord(v)
