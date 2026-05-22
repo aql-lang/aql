@@ -664,7 +664,7 @@ func convert2Handler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if targetType.Data != nil {
 		return nil, r.AqlError("convert_error", fmt.Sprintf("convert: first argument must be a type literal, got %s", targetType.Parent), "convert")
 	}
-	result, err := convertTo(src, targetType.Parent, "")
+	result, err := convertTo(src, ValueType(targetType),"")
 	if err != nil {
 		return nil, err
 	}
@@ -689,7 +689,7 @@ func convert3Handler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		}
 	}
 
-	result, err := convertTo(src, targetType.Parent, base)
+	result, err := convertTo(src, ValueType(targetType),base)
 	if err != nil {
 		return nil, err
 	}
