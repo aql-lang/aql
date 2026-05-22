@@ -471,6 +471,16 @@ true lt false	false
 1 gte 1	true
 1 gte 2	false
 
+# Comparison - cmp (three-way: -1 before, 0 equal, 1 after)
+1 cmp 2	-1
+2 cmp 1	1
+1 cmp 1	0
+"abc" cmp "def"	-1
+"abc" cmp "abc"	0
+false cmp true	-1
+[1] cmp [1 2]	-1
+[1 2 3] cmp [1]	1
+
 # Comparison - eq (exact equality)
 1 eq 1	true
 1 eq 2	false

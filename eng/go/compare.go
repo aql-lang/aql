@@ -346,6 +346,27 @@ func GteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	return []Value{NewBoolean(cmp >= 0)}, nil
 }
 
+// CmpHandler implements `cmp` — a three-way comparison. `a b cmp`
+// returns -1 when a sorts before b, 0 when they tie, and 1 when a
+// sorts after b, using the same total order as lt / gt / sort. The
+// CompareValues result is normalised to its sign, so a custom
+// `behave compare` body that returns a nonzero magnitude other than
+// ±1 still yields exactly -1 / 0 / 1.
+func CmpHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	cmp, err := CompareValues(args[1], args[0])
+	if err != nil {
+		return nil, fmt.Errorf("cmp: %w", err)
+	}
+	switch {
+	case cmp < 0:
+		return []Value{NewInteger(-1)}, nil
+	case cmp > 0:
+		return []Value{NewInteger(1)}, nil
+	default:
+		return []Value{NewInteger(0)}, nil
+	}
+}
+
 func EqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	return []Value{NewBoolean(ExactEqual(args[0], args[1]))}, nil
 }
