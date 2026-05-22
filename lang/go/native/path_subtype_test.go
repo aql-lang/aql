@@ -4,7 +4,7 @@ import "testing"
 
 // PathSubtype is the lexical, path-prefix-only sibling of Matches.
 // These tests pin its semantics — no `Any` matches-everything, no
-// Dep<Leaf> → base bolt-on, no metatype rules. The simpler check is
+// metatype rules, no Dep<Leaf> override. The simpler check is
 // what callers want when they're about to do `v.AsX()` and a
 // `DepX` payload would be a silent miscompile.
 
@@ -48,18 +48,21 @@ func TestPathSubtype_AnyIsNotMagical(t *testing.T) {
 	}
 }
 
-// PathSubtype does NOT bolt the Dep<Leaf>→base relation onto the
-// lattice — that's what the override in Matches is for. A DepInteger
-// is at Type/Dependent/DepInteger, which doesn't share any prefix
-// with Integer.
-func TestPathSubtype_DepIntegerIsNotInteger(t *testing.T) {
+// A DepScalar value's Parent IS the base scalar (e.g. TInteger), so
+// PathSubtype is trivially the identity relation here and Matches is
+// true by ancestry walk — no bolt-on override is needed. The
+// constraint payload (DepScalarInfo) carries the refinement, detected
+// via v.IsDepScalar() at unify time.
+func TestPathSubtype_DepScalarParentIsBase(t *testing.T) {
 	dep := NewDepScalar(DepGT, NewInteger(10))
-	if dep.Parent.PathSubtype(TInteger) {
-		t.Errorf("DepInteger.PathSubtype(Integer) = true (PathSubtype must NOT follow the Dep bolt-on)")
+	if !dep.Parent.Equal(TInteger) {
+		t.Errorf("DepScalar(Integer).Parent = %s, want Integer", dep.Parent.String())
 	}
-	// Sanity: Matches DOES say yes through the bolt-on.
 	if !dep.Parent.Matches(TInteger) {
-		t.Errorf("DepInteger.Matches(Integer) = false (Matches MUST follow the Dep bolt-on)")
+		t.Errorf("DepScalar(Integer).Matches(Integer) = false")
+	}
+	if !dep.IsDepScalar() {
+		t.Errorf("DepScalar(Integer).IsDepScalar() = false")
 	}
 }
 

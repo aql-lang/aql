@@ -281,8 +281,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		}
 	}
 	if r.Check.IsActive() && constraint.IsDepScalar() {
-		leaf := DependentLeafFromType(constraint.Parent)
-		if base, ok := DependentLeafBaseType(leaf); ok && body.Parent.Matches(base) {
+		if body.Parent.Matches(constraint.Parent) {
 			InstallDef(r, name, body)
 			r.Check.RecordDef(name, args[0].Pos)
 			return nil, nil

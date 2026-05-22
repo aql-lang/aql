@@ -85,7 +85,7 @@ var comparisonNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:           []*Type{TScalar, TScalar, TScalarType},
 			Handler:        eng.BetweenHandler,
-			Returns:        []*Type{TDependent},
+			Returns:        []*Type{TScalar},
 			RunInCheckMode: true,
 		}},
 	},

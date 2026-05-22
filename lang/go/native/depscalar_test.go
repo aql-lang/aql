@@ -7,18 +7,21 @@ import (
 // --- General dependent types: DepScalar over any scalar base ---
 //
 // `Decimal gte 1.5`, `String lt "z"`, `Boolean eq true`, `Atom eq foo`
-// each construct a DepScalar value living under Type/Dependent/Dep<X>
-// where <X> is the leaf of the base type. The same machinery as
-// DepInteger applies: the DepScalar matches the base type's lattice
-// ancestors, and unifying it with a concrete value of the base type
-// runs the comparison and returns the concrete value on success.
+// each construct a DepScalar value whose Parent IS the base scalar
+// (typeof (Decimal gte 1.5) → Decimal). The DepScalarInfo payload
+// carries the constraint; IsDepScalar detects it via payload type.
+// Unifying a DepScalar with a concrete value of the base type runs
+// the comparison and returns the concrete value on success.
 
 // --- Construction across base types ---
 
 func TestNewDepScalarDecimal(t *testing.T) {
 	d := NewDepScalar(DepGTE, NewDecimal(1.5))
-	if d.Parent.String() != "Type/Dependent/DepDecimal" {
-		t.Errorf("Parent = %s, want Type/Dependent/DepDecimal", d.Parent.String())
+	if !d.Parent.Equal(TDecimal) {
+		t.Errorf("Parent = %s, want Decimal", d.Parent.String())
+	}
+	if !d.IsDepScalar() {
+		t.Errorf("IsDepScalar = false, want true (DepScalarInfo payload missing)")
 	}
 	info, err := d.AsDepScalar()
 	if err != nil {
@@ -38,8 +41,11 @@ func TestNewDepScalarDecimal(t *testing.T) {
 
 func TestNewDepScalarString(t *testing.T) {
 	d := NewDepScalar(DepLT, NewString("z"))
-	if d.Parent.String() != "Type/Dependent/DepString" {
-		t.Errorf("Parent = %s, want Type/Dependent/DepString", d.Parent.String())
+	if !d.Parent.Equal(TString) {
+		t.Errorf("Parent = %s, want String", d.Parent.String())
+	}
+	if !d.IsDepScalar() {
+		t.Errorf("IsDepScalar = false, want true")
 	}
 	info, _ := d.AsDepScalar()
 	if info.Hi == nil || info.Hi.Inclusive {
@@ -56,15 +62,21 @@ func TestNewDepScalarString(t *testing.T) {
 
 func TestNewDepScalarBoolean(t *testing.T) {
 	d := NewDepScalar(DepGTE, NewBoolean(true))
-	if d.Parent.String() != "Type/Dependent/DepBoolean" {
-		t.Errorf("Parent = %s, want Type/Dependent/DepBoolean", d.Parent.String())
+	if !d.Parent.Equal(TBoolean) {
+		t.Errorf("Parent = %s, want Boolean", d.Parent.String())
+	}
+	if !d.IsDepScalar() {
+		t.Errorf("IsDepScalar = false, want true")
 	}
 }
 
 func TestNewDepScalarAtom(t *testing.T) {
 	d := NewDepScalar(DepGTE, NewAtom("hello"))
-	if d.Parent.String() != "Type/Dependent/DepAtom" {
-		t.Errorf("Parent = %s, want Type/Dependent/DepAtom", d.Parent.String())
+	if !d.Parent.Equal(TAtom) {
+		t.Errorf("Parent = %s, want Atom", d.Parent.String())
+	}
+	if !d.IsDepScalar() {
+		t.Errorf("IsDepScalar = false, want true")
 	}
 }
 
@@ -205,8 +217,8 @@ func TestRunDecimalGTEReturnsDepDecimal(t *testing.T) {
 		NewWord("gte"),
 		NewDecimal(1.5),
 	})
-	if len(result) != 1 || result[0].Parent.String() != "Type/Dependent/DepDecimal" {
-		t.Fatalf("Decimal gte 1.5: got %v, want DepDecimal", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TDecimal) || !result[0].IsDepScalar() {
+		t.Fatalf("Decimal gte 1.5: got %v, want DepScalar with Parent=Decimal", result)
 	}
 }
 
@@ -220,13 +232,13 @@ func TestRunStringLTReturnsDepString(t *testing.T) {
 		NewWord("lt"),
 		NewString("z"),
 	})
-	if len(result) != 1 || result[0].Parent.String() != "Type/Dependent/DepString" {
-		t.Fatalf("String lt \"z\": got %v, want DepString", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TString) || !result[0].IsDepScalar() {
+		t.Fatalf("String lt \"z\": got %v, want DepScalar with Parent=String", result)
 	}
 }
 
-// `Atom gte 'm'` constructs a DepAtom. Use NewAtom directly because
-// the parser would treat `m` as a Word.
+// `Atom gte 'm'` constructs an atom-based DepScalar. Use NewAtom
+// directly because the parser would treat `m` as a Word.
 func TestRunAtomGTEReturnsDepAtom(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
@@ -237,8 +249,8 @@ func TestRunAtomGTEReturnsDepAtom(t *testing.T) {
 		NewWord("gte"),
 		NewAtom("m"),
 	})
-	if len(result) != 1 || result[0].Parent.String() != "Type/Dependent/DepAtom" {
-		t.Fatalf("Atom gte 'm': got %v, want DepAtom", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TAtom) || !result[0].IsDepScalar() {
+		t.Fatalf("Atom gte 'm': got %v, want DepScalar with Parent=Atom", result)
 	}
 }
 

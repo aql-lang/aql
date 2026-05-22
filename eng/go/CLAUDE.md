@@ -170,15 +170,8 @@ externally-registered type means:
 
 ## Type Lattice Fields
 
-`Type` carries three fields populated at registration time that
+`Type` carries two fields populated at registration time that
 replace historical hardcoded switches:
-
-- `BaseType *Type` — for `Type/Dependent/Dep<X>` types, points
-  at the underlying scalar (e.g. `TDepInteger.BaseType ==
-  TInteger`). `Type.Matches` consults it for the dependent-base
-  override. Populated via `builtinDecl.BasePath` for kernel-
-  declared deps. External registrations can set
-  `def.BaseType = ...` after `RegisterExternalBuiltin` returns.
 
 - `Metatype *Type` — for the three anchor roots (`TScalar` →
   `TScalarType`, `TNode` → `TNodeType`, `TObject` →

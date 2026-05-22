@@ -86,13 +86,10 @@ func TestFixedIDStability(t *testing.T) {
 		"Type/Disjunct/Enum":           62,
 		"Word/__PE":                    63,
 		"Word/__IN/__DC":               64,
-		"Type/Dependent":               65,
-		"Type/Dependent/DepInteger":    66,
-		"Type/Dependent/DepDecimal":    67,
-		"Type/Dependent/DepNumber":     68,
-		"Type/Dependent/DepString":     69,
-		"Type/Dependent/DepBoolean":    70,
-		"Type/Dependent/DepAtom":       71,
+		// FixedIDs 65-71 retired with the Type/Dependent subtree;
+		// DepScalar values now carry their base scalar type directly
+		// (typeof (Integer gte 0) → Integer) with the constraint in
+		// the DepScalarInfo payload. See depscalar.go.
 		"Word/__CP":                    72,
 		"Word/__ED":                    73,
 		"Never":                        61,

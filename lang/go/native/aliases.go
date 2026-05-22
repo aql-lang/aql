@@ -103,8 +103,6 @@ var (
 	// directly in this package, no eng alias needed.
 	TDecimal    = eng.TDecimal
 	TDefCleanup = eng.TDefCleanup
-	TDepInteger = eng.TDepInteger
-	TDependent  = eng.TDependent
 	TDisjunct   = eng.TDisjunct
 	TEnum       = eng.TEnum
 	TError      = eng.TError
@@ -257,8 +255,6 @@ var (
 	CompareValues             = eng.CompareValues
 	CowSet                    = eng.CowSet
 	DataListElemTypeFromValue = eng.DataListElemTypeFromValue
-	DependentLeafBaseType     = eng.DependentLeafBaseType
-	DependentLeafFromType     = eng.DependentLeafFromType
 	ExpandOptionalSigs        = eng.ExpandOptionalSigs
 	parseFnParams             = eng.ParseFnParams
 	parseFnReturns            = eng.ParseFnReturns

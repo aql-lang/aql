@@ -545,7 +545,6 @@ type Value struct {
 	IsInternal bool         // Word/__XX runtime markers — not user-facing
 	Origin     OriginKind   // builtin / userdef
 	Behavior   TypeBehavior // pluggable dispatch — non-nil exactly on type nodes
-	BaseType   *Type        // dependent-scalar underlying base; nil otherwise
 	Metatype   *Type        // metatype anchor for this branch; nil → TType
 
 	// Payload and evaluation state — populated on ordinary values.

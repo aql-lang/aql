@@ -380,7 +380,6 @@ type builtinDecl struct {
 	FixedID      int
 	IsInternal   bool   // true for Word/__XX runtime markers
 	Alias        string // optional friendly short name for ExpandShortName (e.g. "Paren" → Word/__OP)
-	BasePath     string // for Type/Dependent/Dep<X> types: the path of the underlying scalar (Step 9)
 	MetatypePath string // for root types whose descendants share a metatype anchor (Scalar→Type/ScalarType, …)
 	Rank         int    // unified lattice rank — see builtinDecls
 }
@@ -480,13 +479,6 @@ var builtinDecls = []builtinDecl{
 	{Path: "Type/ScalarType", FixedID: 40, Rank: 60_400_000_000},
 	{Path: "Type/NodeType", FixedID: 41, Rank: 60_500_000_000},
 	{Path: "Type/IdealType", FixedID: 46, Rank: 60_600_000_000},
-	{Path: "Type/Dependent", FixedID: 65, Rank: 60_700_000_000},
-	{Path: "Type/Dependent/DepAtom", FixedID: 71, BasePath: "Scalar/Atom", Rank: 60_710_000_000},
-	{Path: "Type/Dependent/DepBoolean", FixedID: 70, BasePath: "Scalar/Boolean", Rank: 60_720_000_000},
-	{Path: "Type/Dependent/DepNumber", FixedID: 68, BasePath: "Scalar/Number", Rank: 60_730_000_000},
-	{Path: "Type/Dependent/DepInteger", FixedID: 66, BasePath: "Scalar/Number/Integer", Rank: 60_740_000_000},
-	{Path: "Type/Dependent/DepDecimal", FixedID: 67, BasePath: "Scalar/Number/Decimal", Rank: 60_750_000_000},
-	{Path: "Type/Dependent/DepString", FixedID: 69, BasePath: "Scalar/String", Rank: 60_760_000_000},
 }
 
 // Builtin is the package-level TypeTable holding every builtin type.
@@ -551,13 +543,6 @@ func (tt *TypeTable) registerBuiltin(d builtinDecl) {
 		IsInternal: d.IsInternal,
 		Origin:     OriginBuiltin,
 		Behavior:   DefaultBehavior,
-	}
-	if d.BasePath != "" {
-		base := tt.bypath[d.BasePath]
-		if base == nil {
-			panic(fmt.Sprintf("typetable: base %q not registered before %q (declare base types first in builtinDecls)", d.BasePath, d.Path))
-		}
-		def.BaseType = base
 	}
 	tt.byID[id] = def
 	tt.bypath[d.Path] = def

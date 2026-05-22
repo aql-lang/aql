@@ -113,21 +113,21 @@ func Unify(a, b Value) (Value, bool) {
 
 	// Dependent-scalar unification. A DepScalar carries a comparison
 	// constraint over a base scalar type (e.g. Integer ≥10, String
-	// <"z"). Three cases:
+	// <"z"). Its Parent IS the base scalar; the DepScalarInfo payload
+	// is what distinguishes it from an ordinary scalar value. Three
+	// cases:
 	//   1. DepScalar vs concrete scalar: succeeds iff the scalar's
 	//      type matches the base AND the value satisfies the
 	//      comparison. Returns the plain scalar (not the DepScalar)
 	//      so downstream consumers see a normal value.
-	//   2. DepScalar vs DepScalar over the same leaf: combine the
+	//   2. DepScalar vs DepScalar over the same base: combine the
 	//      constraints (intersection) — same-side bounds tighten,
 	//      opposite-side bounds form an interval. Empty result
 	//      (e.g. gt 10 vs lt 5) fails. Returns a fresh DepScalar.
-	//   3. DepScalar vs DepScalar over different leaves: fails
+	//   3. DepScalar vs DepScalar over different bases: fails
 	//      (incompatible bases).
 	if a.IsDepScalar() && b.IsDepScalar() {
-		aLeaf := DependentLeafFromType(aType)
-		bLeaf := DependentLeafFromType(bType)
-		if aLeaf != bLeaf {
+		if !aType.Equal(bType) {
 			return Value{}, false
 		}
 		aInfo, err := a.AsDepScalar()
@@ -146,7 +146,7 @@ func Unify(a, b Value) (Value, bool) {
 		return out, true
 	}
 	if a.IsDepScalar() && !b.IsDepScalar() && b.Data != nil {
-		if base, ok := DependentLeafBaseType(DependentLeafFromType(aType)); ok && bType.Matches(base) {
+		if bType.Matches(aType) {
 			info, err := a.AsDepScalar()
 			if err != nil {
 				return Value{}, false
@@ -158,7 +158,7 @@ func Unify(a, b Value) (Value, bool) {
 		}
 	}
 	if b.IsDepScalar() && !a.IsDepScalar() && a.Data != nil {
-		if base, ok := DependentLeafBaseType(DependentLeafFromType(bType)); ok && aType.Matches(base) {
+		if aType.Matches(bType) {
 			info, err := b.AsDepScalar()
 			if err != nil {
 				return Value{}, false

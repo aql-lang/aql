@@ -74,8 +74,6 @@ var (
 	// avoids the import-cycle constraint.
 	// TMatrix moved to lang/go/internal/nativemod/matrix.go (Step 8).
 	// TTimeout moved to lang/go/engine/native_misc.go (Step 8).
-	TDependent  = mustType("Type/Dependent")
-	TDepInteger = mustType("Type/Dependent/DepInteger")
 	// TInterval moved to lang/go/engine/native_misc.go (Step 8).
 )
 
@@ -196,12 +194,13 @@ func ResolveTypePath(name string) (*Type, bool) {
 //   - "Any" pattern matches everything.
 //   - A child matches a parent: Scalar/String/ProperString matches Scalar/String.
 //   - A parent does NOT match a child: Scalar/String does not match Scalar/String/ProperString.
-//   - A Type/Dependent/Dep<X> path is treated as a subtype of <X> and any
-//     of <X>'s lattice ancestors. The Dependent branch lives under its own
-//     root for clear separation, but dependent values must satisfy any slot
-//     expecting the underlying base. Per-value satisfaction (does 5 lie in
-//     [10, ∞)?) is handled at Unify time; this method answers the type-level
-//     question only.
+//
+// DepScalar values carry their base scalar as Parent (e.g. an
+// `Integer gte 0` value has Parent=Integer), so they satisfy any
+// scalar-typed slot via the normal ancestor walk — no special-case
+// override here. Per-value satisfaction (does 5 lie in [10, ∞)?) is
+// handled at Unify time; this method answers the type-level question
+// only.
 func (t *Type) Matches(pattern *Type) bool {
 	// Empty pattern (nil Type) is a vacuous match — preserves the
 	// old PathSubtype semantics where a zero-iteration prefix loop
@@ -215,23 +214,12 @@ func (t *Type) Matches(pattern *Type) bool {
 	if t == nil {
 		return false
 	}
-	if t.IsAncestor(pattern) {
-		return true
-	}
-	// Dependent-scalar override: a Dep<X> value satisfies any slot
-	// typed as X (its underlying base). The BaseType pointer on the
-	// *Type is populated at registration via builtinDecl.BasePath;
-	// the historical hardcoded leaf-name switch in depscalar.go is
-	// now a per-Type field (Step 9 of TYPE-DECOUPLING.0.md).
-	if t.BaseType != nil && t.BaseType.Matches(pattern) {
-		return true
-	}
-	return false
+	return t.IsAncestor(pattern)
 }
 
 // PathSubtype reports whether t is a strict path-prefix subtype of
 // pattern. With ID-based identity, this is equivalent to the ancestry
-// walk used by Matches — no `Any` bolt-on, no Dep<Leaf> base bolt-on.
+// walk used by Matches — no `Any` bolt-on.
 //
 // `t.PathSubtype(t)` is always true (identity is a subtype of itself).
 func (t *Type) PathSubtype(pattern *Type) bool {
