@@ -271,6 +271,7 @@ var (
 	TypeOf                    = eng.TypeOf
 	TypeNameOf                = eng.TypeNameOf
 	TypePathOf                = eng.TypePathOf
+	ValueType                 = eng.ValueType
 	NewNone                   = eng.NewNone
 	FormatDecimal             = eng.FormatDecimal
 	NewTypedListWithElements  = eng.NewTypedListWithElements
