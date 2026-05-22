@@ -341,11 +341,11 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		}
 	}
 
-	if targetVal.Data == nil && targetVal.Parent.Equal(TPath) {
+	if targetVal.Data == nil && targetVal.Equal(TPath) {
 		return makePath(srcVal, false)
 	}
 
-	if targetVal.Parent.Equal(TOptions) && targetVal.Data == nil {
+	if targetVal.Equal(TOptions) && targetVal.Data == nil {
 		if !srcVal.Parent.Equal(TMap) || srcVal.Data == nil {
 			return nil, fmt.Errorf("make: Options requires a concrete map")
 		}
@@ -360,7 +360,7 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		return nil, fmt.Errorf("make: first argument must be a type literal or record type, got %s", targetVal.String())
 	}
 
-	targetType := targetVal.Parent
+	targetType := &targetVal
 	if srcVal.Parent.Matches(targetType) {
 		return []Value{srcVal}, nil
 	}
@@ -595,7 +595,7 @@ func MakeScalarHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 	if targetVal.Data != nil {
 		return nil, fmt.Errorf("make: expected a type literal, got %s", targetVal.String())
 	}
-	targetType := targetVal.Parent
+	targetType := &targetVal
 	if targetType.Equal(TPath) {
 		return makePath(srcVal, false)
 	}

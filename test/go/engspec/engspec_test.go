@@ -1094,7 +1094,7 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 
 	if tv.Data == nil || eng.IsTypeBody(tv) || eng.IsRecordShape(tv) {
 		result.Set("type", eng.NewString("Type"))
-		result.Set("struct", eng.NewString(tv.Parent.Leaf()))
+		result.Set("struct", eng.NewString(eng.TypeNameOf(tv)))
 	} else {
 		result.Set("type", eng.NewString(tv.Parent.Leaf()))
 	}
@@ -1106,7 +1106,7 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 		fields := eng.NewOrderedMap()
 		for _, k := range rt.Fields.Keys() {
 			v, _ := rt.Fields.Get(k)
-			fields.Set(k, eng.NewString(v.Parent.Leaf()))
+			fields.Set(k, eng.NewString(eng.TypeNameOf(v)))
 		}
 		result.Set("fields", eng.NewMap(fields))
 
@@ -1116,7 +1116,7 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 		fields := eng.NewOrderedMap()
 		for _, k := range m.Keys() {
 			v, _ := m.Get(k)
-			fields.Set(k, eng.NewString(v.Parent.Leaf()))
+			fields.Set(k, eng.NewString(eng.TypeNameOf(v)))
 		}
 		result.Set("fields", eng.NewMap(fields))
 
@@ -1130,7 +1130,7 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 		fields := eng.NewOrderedMap()
 		for _, k := range af.Keys() {
 			v, _ := af.Get(k)
-			fields.Set(k, eng.NewString(v.Parent.Leaf()))
+			fields.Set(k, eng.NewString(eng.TypeNameOf(v)))
 		}
 		result.Set("fields", eng.NewMap(fields))
 
@@ -1140,7 +1140,7 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 		fields := eng.NewOrderedMap()
 		for _, k := range tt.Record.Fields.Keys() {
 			v, _ := tt.Record.Fields.Get(k)
-			fields.Set(k, eng.NewString(v.Parent.Leaf()))
+			fields.Set(k, eng.NewString(eng.TypeNameOf(v)))
 		}
 		result.Set("fields", eng.NewMap(fields))
 
@@ -1149,19 +1149,19 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 		di, _ := eng.AsDisjunct(tv)
 		alts := make([]eng.Value, len(di.Alternatives))
 		for i, alt := range di.Alternatives {
-			alts[i] = eng.NewString(alt.Parent.String())
+			alts[i] = eng.NewString(eng.TypePathOf(alt))
 		}
 		result.Set("alternatives", eng.NewList(alts))
 
 	case eng.IsTypedList(tv):
 		result.Set("kind", eng.NewAtom("typed_list"))
 		ci, _ := eng.AsChildType(tv)
-		result.Set("child", eng.NewString(ci.Child.Parent.String()))
+		result.Set("child", eng.NewString(eng.TypePathOf(ci.Child)))
 
 	case eng.IsTypedMap(tv):
 		result.Set("kind", eng.NewAtom("typed_map"))
 		ci, _ := eng.AsChildType(tv)
-		result.Set("child", eng.NewString(ci.Child.Parent.String()))
+		result.Set("child", eng.NewString(eng.TypePathOf(ci.Child)))
 
 	case tv.Parent.Equal(eng.TFnUndef):
 		result.Set("kind", eng.NewAtom("function_shape"))

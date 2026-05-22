@@ -49,11 +49,15 @@ import (
 // Exported so lang's `pathof` registration (lang/go/engine/native_type.go)
 // can wire dispatch into it without forking the algorithm.
 func PathOf(t Value) Value {
-	// Walk the ancestry from root down to t, producing one type
-	// literal per ancestor. t itself is the leaf node — a type
-	// literal IS its lattice node after the type/value merge.
+	// Walk the ancestry root-first. A bare type literal IS its leaf
+	// node, so start from t itself; any other value (a Function /
+	// Disjunct / Enum value) contributes the ancestry of its type.
+	start := t.Parent
+	if t.Data == nil && !t.Carrier {
+		start = &t
+	}
 	var chain []*Type
-	for d := &t; d != nil; d = d.Parent {
+	for d := start; d != nil; d = d.Parent {
 		chain = append([]*Type{d}, chain...)
 	}
 	elems := make([]Value, 0, len(chain))

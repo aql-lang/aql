@@ -828,6 +828,16 @@ func TypePathOf(v Value) string {
 	return v.Parent.Path()
 }
 
+// valueType returns the lattice node that is v's type: v itself when
+// v is a bare type literal (a type literal IS a lattice node), and
+// v's Parent for any concrete value or carrier.
+func valueType(v Value) *Type {
+	if v.Data == nil && !v.Carrier {
+		return &v
+	}
+	return v.Parent
+}
+
 // noneSentinel is the non-nil Data payload that distinguishes the
 // VALUE `none` (the unique inhabitant of None) from the TYPE LITERAL
 // `None` (which has Data == nil like every other type literal).

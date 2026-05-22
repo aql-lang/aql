@@ -707,7 +707,7 @@ func SimplifyDisjunctAlts(alts []Value) []Value {
 	// First pass: drop Never.
 	live := make([]Value, 0, len(alts))
 	for _, alt := range alts {
-		if alt.Parent.Equal(TNever) {
+		if valueType(alt).Equal(TNever) {
 			continue
 		}
 		live = append(live, alt)
@@ -718,14 +718,15 @@ func SimplifyDisjunctAlts(alts []Value) []Value {
 	out := make([]Value, 0, len(live))
 outer:
 	for i, cand := range live {
+		candType := valueType(cand)
 		// Drop if structurally equal to an earlier kept alt.
 		for j := 0; j < i; j++ {
-			if live[j].Parent.Equal(cand.Parent) && ValuesEqual(live[j], cand) {
+			if valueType(live[j]).Equal(candType) && ValuesEqual(live[j], cand) {
 				continue outer
 			}
 		}
 		// Drop if subsumed by some other alt:
-		//   - cand is a type literal whose Parent is a strict subtype
+		//   - cand is a type literal whose type is a strict subtype
 		//     of another's (Integer subsumed by Number).
 		//   - cand is a concrete value covered by another type literal
 		//     (5 subsumed by Integer).
@@ -734,10 +735,11 @@ outer:
 			if i == j {
 				continue
 			}
-			if cand.Parent.Equal(other.Parent) {
+			otherType := valueType(other)
+			if candType.Equal(otherType) {
 				continue
 			}
-			if !cand.Parent.Matches(other.Parent) {
+			if !candType.Matches(otherType) {
 				continue
 			}
 			// cand's type is a strict subtype of other's.
