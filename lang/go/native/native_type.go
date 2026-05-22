@@ -8,7 +8,7 @@ import (
 	"github.com/aql-lang/aql/eng/go"
 )
 
-// typeNatives covers the type-system words: type, pathof, enum,
+// typeNatives covers the type-system words: refine, pathof, enum,
 // typeof, fulltypeof, is, guard, base, tor, tand, any, all, tany,
 // tall, convert.
 //
@@ -17,21 +17,41 @@ import (
 // stack. `installResourceTypes` handles those during Register.
 var typeNatives = []NativeFunc{
 	{
-		// type is the uniform type constructor — see
-		// lang/doc/design/TYPE-UNIFORM.0.md. `type BaseType arg`
+		// refine is the uniform type constructor — see
+		// lang/doc/design/TYPE-UNIFORM.0.md. `refine BaseType arg`
 		// builds a (sub)type:
-		//   type Object {fields}     → object type
-		//   type <objtype> {fields}  → object subtype (inheritance)
-		//   type Record [a:T b:U]    → record type (list of pairs)
-		//   type Table  <recordtype> → table type
-		Name:        "type",
+		//   refine Object {fields}     → object type
+		//   refine <objtype> {fields}  → object subtype (inheritance)
+		//   refine Record [a:T b:U]    → record type (list of pairs)
+		//   refine Table  (refine Record …) → table type
+		//   refine BaseType            → a bare nominal subtype, no
+		//                                added structure (the 1-arg form)
+		//
+		// Two signatures: a 2-arg structural form and a 1-arg bare form.
+		// Because the 1-arg signature lets `refine` succeed with a
+		// single argument, the word never defers to take a body from the
+		// stack — so a nested constructor must be parenthesised:
+		// `refine Table (refine Record […])`, not `refine Table refine
+		// Record […]`. The 2-arg body is always a Node (a map or list
+		// literal, or a record/object type value), typed TNode so the
+		// matcher falls through to the 1-arg form when a non-Node token
+		// (a following `def` / `behave` / `;`) comes next.
+		Name:        "refine",
 		ForwardArgs: true,
-		Signatures: []NativeSig{{
-			Args:           []*Type{TAny, TAny},
-			Handler:        typeHandler,
-			Returns:        []*Type{TType},
-			RunInCheckMode: true,
-		}},
+		Signatures: []NativeSig{
+			{
+				Args:           []*Type{TAny, TNode},
+				Handler:        refineHandler,
+				Returns:        []*Type{TType},
+				RunInCheckMode: true,
+			},
+			{
+				Args:           []*Type{TAny},
+				Handler:        refineBareHandler,
+				Returns:        []*Type{TType},
+				RunInCheckMode: true,
+			},
+		},
 	},
 	{
 		Name:        "pathof",
@@ -221,15 +241,15 @@ func tableHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 	return []Value{NewTableType(_as0)}, nil
 }
 
-// ---- type (the type constructor) ----
+// ---- refine (the type constructor) ----
 
-// typeHandler implements `type BaseType arg`, the uniform type
+// refineHandler implements `refine BaseType arg`, the uniform type
 // constructor. It does not branch on the base type itself — dispatch
 // is data-driven through the Ideal registry (r.Ideals): whichever
 // type-kind claims the base value supplies the construction logic.
-// See lang/doc/design/IDEAL.0.md. `type` does not bind — pair it with
-// `def` (`def Foo (type …)`).
-func typeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+// See lang/doc/design/IDEAL.0.md. `refine` does not bind — pair it
+// with `def` (`def Foo (refine …)`).
+func refineHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	base := args[0]
 	arg := args[1]
 	ideal := r.Ideals.For(base)
@@ -237,19 +257,36 @@ func typeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 		// Distinguish a disabled kind from an unknown base.
 		if m := r.Ideals.Match(base); m != nil {
 			return nil, r.AqlError("type_error",
-				fmt.Sprintf("type: the %s type-kind is not available in this registry", m.Name),
-				"type")
+				fmt.Sprintf("refine: the %s type-kind is not available in this registry", m.Name),
+				"refine")
 		}
 		return nil, r.AqlError("type_error",
-			fmt.Sprintf("type: base must be Object, Record, Table, or an object type, got %s", base.String()),
-			"type")
+			fmt.Sprintf("refine: base must be Object, Record, Table, or an object type, got %s", base.String()),
+			"refine")
 	}
 	if ideal.Construct == nil {
 		return nil, r.AqlError("type_error",
-			fmt.Sprintf("type: the %s type-kind cannot be constructed with `type`", ideal.Name),
-			"type")
+			fmt.Sprintf("refine: the %s type-kind cannot be constructed with `refine`", ideal.Name),
+			"refine")
 	}
 	return ideal.Construct(base, arg, r)
+}
+
+// refineBareHandler implements the 1-arg `refine BaseType` form — a
+// bare nominal subtype of BaseType with no added structure. It
+// validates that the argument is a type and returns it unchanged; the
+// paired `def Name` then mints a fresh subtype parented at BaseType
+// (InstallType → MintType). `def Foo refine List` thus produces a
+// distinct List subtype that can serve as a dispatch surface for
+// `behave` — see lang/doc/design/TYPE-UNIFORM.0.md.
+func refineBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	base := args[0]
+	if !IsTypeBody(base) {
+		return nil, r.AqlError("type_error",
+			fmt.Sprintf("refine: argument must be a type, got %s", base.String()),
+			"refine")
+	}
+	return []Value{base}, nil
 }
 
 // installIdeals fills in the type-level constructor (Ideal.Construct)
@@ -275,15 +312,15 @@ func installIdeals(r *Registry) {
 			// is a valid construction base.
 			if base.Data != nil {
 				return nil, r.AqlError("type_error",
-					"type: a record type has no subtyping — construct a Record from the bare Record literal",
-					"type")
+					"refine: a record type has no subtyping — construct a Record from the bare Record literal",
+					"refine")
 			}
 			// A record takes a LIST of field pairs — field order is
 			// part of a record type's identity.
 			if !arg.VType.Equal(TList) {
 				return nil, r.AqlError("type_error",
-					"type Record: a record takes a list of field pairs, e.g. [a:Integer b:String]",
-					"type")
+					"refine Record: a record takes a list of field pairs, e.g. [a:Integer b:String]",
+					"refine")
 			}
 			return recordHandler([]Value{arg}, nil, nil, r)
 		}
@@ -292,8 +329,8 @@ func installIdeals(r *Registry) {
 		tbl.Construct = func(base, arg Value, r *Registry) ([]Value, error) {
 			if base.Data != nil {
 				return nil, r.AqlError("type_error",
-					"type: a table type has no subtyping — construct a Table from the bare Table literal",
-					"type")
+					"refine: a table type has no subtyping — construct a Table from the bare Table literal",
+					"refine")
 			}
 			return tableHandler([]Value{arg}, nil, nil, r)
 		}

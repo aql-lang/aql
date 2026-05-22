@@ -1182,7 +1182,7 @@ func TestEngineCoreParseFnParamsImplicitMapIsNamedParam(t *testing.T) {
 		t.Errorf("expected named param 'x', got %q", params[0].Name)
 	}
 	if !params[0].Type.Equal(TNumber) {
-		t.Errorf("expected type Number, got %s", params[0].Type)
+		t.Errorf("expected refine Number, got %s", params[0].Type)
 	}
 }
 
@@ -1202,7 +1202,7 @@ func TestEngineCoreParseFnParamsExplicitMapIsUnnamedParam(t *testing.T) {
 		t.Errorf("expected unnamed param, got name %q", params[0].Name)
 	}
 	if !params[0].Type.Equal(TMap) {
-		t.Errorf("expected type Map, got %s", params[0].Type)
+		t.Errorf("expected refine Map, got %s", params[0].Type)
 	}
 	if params[0].Pattern == nil {
 		t.Error("expected pattern for explicit map param")

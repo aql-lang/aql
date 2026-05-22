@@ -370,7 +370,7 @@ func TestFetchResponseType(t *testing.T) {
 		t.Errorf("expected response to match Object, got %s", resp.VType)
 	}
 	if !resp.VType.Equal(TFetchResponse) {
-		t.Errorf("expected type Object/Fetch/Response, got %s", resp.VType)
+		t.Errorf("expected refine Object/Fetch/Response, got %s", resp.VType)
 	}
 }
 

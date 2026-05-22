@@ -2837,7 +2837,7 @@ func TestRecordTypeCreation(t *testing.T) {
 	pairX.Set("x", NewTypeLiteral(TNumber))
 	pairY := NewOrderedMap()
 	pairY.Set("y", NewTypeLiteral(TNumber))
-	input := []Value{NewWord("type"), NewWord("Record"), NewList([]Value{NewMap(pairX), NewMap(pairY)})}
+	input := []Value{NewWord("refine"), NewWord("Record"), NewList([]Value{NewMap(pairX), NewMap(pairY)})}
 	result, err := e.Run(input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2868,7 +2868,7 @@ func TestRecordTypeWithDef(t *testing.T) {
 	pairY.Set("y", NewTypeLiteral(TNumber))
 	input := []Value{
 		NewWord("def"), NewWord("Point"),
-		NewWord("type"), NewWord("Record"), NewList([]Value{NewMap(pairX), NewMap(pairY)}),
+		NewWord("refine"), NewWord("Record"), NewList([]Value{NewMap(pairX), NewMap(pairY)}),
 		NewEnd(),
 		NewWord("Point"),
 	}
@@ -3017,7 +3017,7 @@ func TestRecordTypeListWithMapElement(t *testing.T) {
 	elem0.Set("x", NewMap(innerMap))
 	elem1 := NewOrderedMap()
 	elem1.Set("y", NewInteger(1))
-	input := []Value{NewWord("type"), NewWord("Record"), NewList([]Value{NewMap(elem0), NewMap(elem1)})}
+	input := []Value{NewWord("refine"), NewWord("Record"), NewList([]Value{NewMap(elem0), NewMap(elem1)})}
 	result, err := e.Run(input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

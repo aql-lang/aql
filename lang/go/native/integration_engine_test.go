@@ -91,7 +91,7 @@ func TestEngineRecord(t *testing.T) {
 	m2 := NewOrderedMap()
 	m2.Set("y", NewTypeLiteral(TString))
 	list := NewList([]Value{NewMap(m1), NewMap(m2)})
-	result, err := e.Run([]Value{NewWord("type"), NewWord("Record"), list})
+	result, err := e.Run([]Value{NewWord("refine"), NewWord("Record"), list})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -106,11 +106,13 @@ func TestEngineTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := NewTop(r)
-	// Create a record type first, then table
+	// Build the record type first; `refine Table` then takes it from
+	// the stack as its body (a nested `refine` must not be inlined
+	// bare — see native_type.go).
 	m1 := NewOrderedMap()
 	m1.Set("x", NewTypeLiteral(TNumber))
 	list := NewList([]Value{NewMap(m1)})
-	result, err := e.Run([]Value{NewWord("type"), NewWord("Table"), NewWord("type"), NewWord("Record"), list})
+	result, err := e.Run([]Value{NewWord("refine"), NewWord("Record"), list, NewWord("refine"), NewWord("Table")})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1408,7 +1410,7 @@ func TestEngineTypeRecord(t *testing.T) {
 	yf.Set("y", NewTypeLiteral(TNumber))
 	fields := NewList([]Value{NewMap(xf), NewMap(yf)})
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("Point"), NewWord("type"), NewWord("Record"), fields, NewEnd(),
+		NewWord("def"), NewWord("Point"), NewWord("refine"), NewWord("Record"), fields, NewEnd(),
 		NewWord("Point"),
 	})
 	if len(result) != 1 || !IsRecordType(result[0]) {
@@ -1429,7 +1431,7 @@ func TestEngineMakeRecord(t *testing.T) {
 	fields := NewList([]Value{NewMap(xf), NewMap(yf)})
 	vals := NewList([]Value{NewInteger(1), NewString("hi")})
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("P"), NewWord("type"), NewWord("Record"), fields, NewEnd(),
+		NewWord("def"), NewWord("P"), NewWord("refine"), NewWord("Record"), fields, NewEnd(),
 		NewWord("make"), NewWord("P"), vals,
 	})
 	if len(result) != 1 || !result[0].VType.Equal(TMap) {

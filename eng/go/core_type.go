@@ -247,20 +247,20 @@ func IsValueOfType(v, t Value) bool {
 }
 
 // InstallType is the single kernel entry point for installing a
-// named type body (`type Foo body`). Validates the body shape,
+// named type body (`def Foo body`). Validates the body shape,
 // rejects name clashes, and pushes onto the registry's type
-// stack. Used by both the eng-internal core `type` word and the
-// production aql `type` word in lang/go/engine. Changes to
+// stack. Used by both the eng-internal core `def` word and the
+// production aql `def` word in lang/go/engine. Changes to
 // type-installation policy go here, not in a per-surface duplicate.
 //
 // Body acceptance is broad: a structural type body (IsTypeBody — type
 // literal, disjunct, implicit map, typed list/map, ObjectType, …) OR a
-// concrete scalar / list / map literal (IsLiteralTypeBody — `type Foo
+// concrete scalar / list / map literal (IsLiteralTypeBody — `def Foo
 // 1`, the singleton type whose only inhabitant is 1). The split keeps
 // the inspect / fn-shape paths aligned with structural typing while
 // letting users name singletons and value-shape types.
 //
-// When the body is an anonymous ObjectType (from the `object` word),
+// When the body is an anonymous ObjectType (from `refine Object {…}`),
 // binding it under NAME renames it `Object/NAME` (or `<parent>/NAME`
 // when it inherits) so `typeof` / `is` report the nominal name.
 func InstallType(r *Registry, name string, body Value) error {

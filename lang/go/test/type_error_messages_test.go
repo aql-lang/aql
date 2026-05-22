@@ -13,7 +13,7 @@ import (
 // predicate type" — the user had to remember which type was at the
 // colon. The handler now captures the source name when the
 // constraint resolves through a word lookup and surfaces it in the
-// error: "def n: value 'e' does not satisfy predicate type Bbd".
+// error: "def n: value 'e' does not satisfy predicate refine Bbd".
 
 func runErr(t *testing.T, src string) error {
 	t.Helper()

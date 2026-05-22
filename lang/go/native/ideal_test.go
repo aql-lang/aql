@@ -46,10 +46,10 @@ func TestIdeals_CustomKindDispatchesThroughType(t *testing.T) {
 			return []Value{NewTypeLiteral(TString)}, nil
 		},
 	})
-	// `type String {}` — no kernel kind claims a String base, so the
+	// `refine String {}` — no kernel kind claims a String base, so the
 	// custom Ideal handles it.
 	runAQL(t, r, []Value{
-		NewWord("type"), NewTypeLiteral(TString), NewMap(NewOrderedMap()),
+		NewWord("refine"), NewTypeLiteral(TString), NewMap(NewOrderedMap()),
 	})
 	if !called {
 		t.Error("custom Ideal's Construct was not invoked by `type`")
@@ -163,10 +163,10 @@ func TestIdeals_DisabledKindErrorsFromType(t *testing.T) {
 	}
 	rec.Enabled = false
 	err = runAQLError(t, r, []Value{
-		NewWord("type"), NewTypeLiteral(TRecord), NewMap(NewOrderedMap()),
+		NewWord("refine"), NewTypeLiteral(TRecord), NewMap(NewOrderedMap()),
 	})
 	if err == nil {
-		t.Fatal("type Record with Record disabled: want an error, got nil")
+		t.Fatal("refine Record with Record disabled: want an error, got nil")
 	}
 	if !strings.Contains(err.Error(), "not available") {
 		t.Errorf("error = %q, want it to mention the kind is not available", err.Error())

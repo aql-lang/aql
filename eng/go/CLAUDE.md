@@ -221,9 +221,10 @@ between packages without affecting the kernel.
 ## Type installation
 
 A capitalised `def Foo body` installs a type binding (the
-TYPE-UNIFORM surface: `def` binds, `make` instantiates, `type`
+TYPE-UNIFORM surface: `def` binds, `make` instantiates, `refine`
 constructs — the legacy `type`-binder / `object` / `record` /
-`table` / `untype` words were removed in Phase 3).
+`table` / `untype` words were removed in Phase 3, and the `type`
+constructor was renamed to `refine`).
 
 The single source of truth is `eng/go/core_type.go::InstallType`. It
 validates `body` is a valid type body, mints the lattice identity

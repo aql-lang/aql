@@ -1025,7 +1025,7 @@ func TestMakeRecordPositional(t *testing.T) {
 	// make Point [1 2]
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Point"),
-		NewWord("type"), NewWord("Record"), NewList([]Value{
+		NewWord("refine"), NewWord("Record"), NewList([]Value{
 			NewMap(singleMap("x", NewTypeLiteral(TNumber))),
 			NewMap(singleMap("y", NewTypeLiteral(TNumber))),
 		}),
@@ -1058,7 +1058,7 @@ func TestMakeRecordNamed(t *testing.T) {
 	}
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Pt"),
-		NewWord("type"), NewWord("Record"), NewList([]Value{
+		NewWord("refine"), NewWord("Record"), NewList([]Value{
 			NewMap(singleMap("x", NewTypeLiteral(TNumber))),
 			NewMap(singleMap("y", NewTypeLiteral(TNumber))),
 		}),
@@ -1091,7 +1091,7 @@ func TestMakeRecordMap(t *testing.T) {
 	src.Set("y", NewInteger(6))
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Pt2"),
-		NewWord("type"), NewWord("Record"), NewList([]Value{
+		NewWord("refine"), NewWord("Record"), NewList([]Value{
 			NewMap(singleMap("x", NewTypeLiteral(TNumber))),
 			NewMap(singleMap("y", NewTypeLiteral(TNumber))),
 		}),

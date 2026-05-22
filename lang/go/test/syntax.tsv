@@ -794,45 +794,45 @@ make String true	'true'
 make String false	'false'
 
 # make record: positional fields
-def Point type Record [x:Number y:Number] make Point [1 2]	{x:1,y:2}
+def Point refine Record [x:Number y:Number] make Point [1 2]	{x:1,y:2}
 
 # make record: named fields in declaration order
-def Point type Record [x:Number y:Number] make Point [x:1 y:2]	{x:1,y:2}
+def Point refine Record [x:Number y:Number] make Point [x:1 y:2]	{x:1,y:2}
 
 # make record: named fields in different order
-def Point type Record [x:Number y:Number] make Point [y:3 x:4]	{x:4,y:3}
+def Point refine Record [x:Number y:Number] make Point [y:3 x:4]	{x:4,y:3}
 
 # make record: type Conversion applied to fields
-def Bar type Record [x:Number y:Boolean z:String] make Bar [1 false "s"]	{x:1,y:false,z:'s'}
+def Bar refine Record [x:Number y:Boolean z:String] make Bar [1 false "s"]	{x:1,y:false,z:'s'}
 
 # make record: named fields reordered with type Conversion
-def Bar type Record [x:Number y:Boolean z:String] make Bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
+def Bar refine Record [x:Number y:Boolean z:String] make Bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
 
 # make record: field value conversion (string to number)
-def Pair type Record [a:Number b:Number] make Pair ["3" "7"]	{a:3,b:7}
+def Pair refine Record [a:Number b:Number] make Pair ["3" "7"]	{a:3,b:7}
 
 # make with infix form
-def P type Record [x:Number y:Number] P make [1 2]	{x:1,y:2}
+def P refine Record [x:Number y:Number] P make [1 2]	{x:1,y:2}
 
-# === type - custom type Definitions ===
+# === refine - custom type Definitions ===
 
-# type With record
-def Vec type Record [x:Number y:Number] make Vec [3 4]	{x:3,y:4}
+# refine With record
+def Vec refine Record [x:Number y:Number] make Vec [3 4]	{x:3,y:4}
 
-# type With disjunct
+# refine With disjunct
 def OptNum (Number tor None) OptNum unify 5	5 true
 def OptNum (Number tor None) OptNum unify None	None true
 def OptNum (Number tor None) OptNum unify "hi"	'~unify-fail' false
 
-# type With type Alias
+# refine With type Alias
 def Num Number Num unify 42	42 true
 def Num Number Num unify "hi"	'~unify-fail' false
 
-# type With typed list
+# refine With typed list
 def Nums [:Number] Nums unify [1,2,3]	[1,2,3] true
 def Nums [:Number] Nums unify ["a"]	'~unify-fail' false
 
-# type With typed map
+# refine With typed map
 def NumMap {:Number} NumMap unify {a:1,b:2}	{a:1,b:2} true
 
 # === do - evaluate list and map contents ===

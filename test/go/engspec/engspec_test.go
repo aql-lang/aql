@@ -10,7 +10,7 @@
 //
 // The "q" suffix on most fixtures marks them as SPEC-RUNNER FIXTURES,
 // distinct from production AQL words of the same root name. Language-
-// fundamental keywords (def, fn, quote, args, type, untype, typeof,
+// fundamental keywords (def, fn, quote, args, refine, typeof,
 // is, none, end, …) keep their bare names because what's being tested
 // IS the keyword itself, not a fixture for it.
 //
@@ -419,7 +419,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 		name, _ := args[0].AsConcreteAtom()
 		// `def` is the universal binder (TYPE-UNIFORM Phase 2): a
 		// capitalised name is a TYPE binding — delegate to InstallType,
-		// the same path the `type` word uses.
+		// the same path the `refine` word uses.
 		if eng.IsCapitalisedName(name) {
 			return nil, eng.InstallType(reg, name, args[1])
 		}
@@ -956,11 +956,11 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 		def := r.Types.MintType(id, parentDef)
 		return []eng.Value{eng.NewObjectType(def, info)}, nil
 	}
-	// type — the uniform type constructor.
-	// Mirrors lang/go/native/native_type.go::typeHandler; dispatches
+	// refine — the uniform type constructor.
+	// Mirrors lang/go/native/native_type.go::refineHandler; dispatches
 	// to the record/object handler functions above. eng/spec exercises
 	// only the Object and Record bases.
-	typeCtorH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
+	refineCtorH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 		base := args[0]
 		arg := args[1]
 		if base.Data == nil && base.VType.Equal(eng.TObject) {
@@ -971,21 +971,38 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 		}
 		if base.Data == nil && base.VType.Equal(eng.TRecord) {
 			if !arg.VType.Equal(eng.TList) {
-				return nil, fmt.Errorf("type Record: a record takes a list of field pairs")
+				return nil, fmt.Errorf("refine Record: a record takes a list of field pairs")
 			}
 			return recordH([]eng.Value{arg}, nil, nil, reg)
 		}
-		return nil, fmt.Errorf("type: base must be Object, Record, or an object type, got %s", base.String())
+		return nil, fmt.Errorf("refine: base must be Object, Record, or an object type, got %s", base.String())
+	}
+	// refine BaseType — the 1-arg bare-subtype form. Returns the base
+	// type unchanged; the paired `def` mints a fresh subtype of it.
+	refineBareCtorH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+		base := args[0]
+		if !eng.IsTypeBody(base) {
+			return nil, fmt.Errorf("refine: argument must be a type, got %s", base.String())
+		}
+		return []eng.Value{base}, nil
 	}
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "type",
+		Name:        "refine",
 		ForwardArgs: true,
-		Signatures: []eng.NativeSig{{
-			Args:           []*eng.Type{eng.TAny, eng.TAny},
-			Handler:        typeCtorH,
-			Returns:        []*eng.Type{eng.TType},
-			RunInCheckMode: true,
-		}},
+		Signatures: []eng.NativeSig{
+			{
+				Args:           []*eng.Type{eng.TAny, eng.TNode},
+				Handler:        refineCtorH,
+				Returns:        []*eng.Type{eng.TType},
+				RunInCheckMode: true,
+			},
+			{
+				Args:           []*eng.Type{eng.TAny},
+				Handler:        refineBareCtorH,
+				Returns:        []*eng.Type{eng.TType},
+				RunInCheckMode: true,
+			},
+		},
 	})
 }
 

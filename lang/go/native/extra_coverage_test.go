@@ -40,10 +40,10 @@ func TestExtraStringTableType(t *testing.T) {
 	v := Value{VType: TList, Data: tt}
 	s := v.String()
 	if !strings.HasPrefix(s, "table{") {
-		t.Errorf("table type String() = %q, want 'table{...'", s)
+		t.Errorf("table refine String() = %q, want 'table{...'", s)
 	}
 	if !strings.Contains(s, "name:") || !strings.Contains(s, "age:") {
-		t.Errorf("table type String() = %q, missing fields", s)
+		t.Errorf("table refine String() = %q, missing fields", s)
 	}
 }
 
@@ -83,7 +83,7 @@ func TestExtraStringRecordType(t *testing.T) {
 	v := NewRecordType(fields)
 	s := v.String()
 	if !strings.HasPrefix(s, "record{") {
-		t.Errorf("record type String() = %q, want 'record{...'", s)
+		t.Errorf("record refine String() = %q, want 'record{...'", s)
 	}
 }
 
