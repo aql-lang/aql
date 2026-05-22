@@ -107,7 +107,7 @@ func (wordCompareBehavior) Compare(a, b Value) (int, error) {
 type scalarCompareBehavior struct{ defaultBehavior }
 
 func (scalarCompareBehavior) Compare(a, b Value) (int, error) {
-	if c := compareTypes(a.Parent, b.Parent); c != 0 {
+	if c := compareTypes(ValueType(a), ValueType(b)); c != 0 {
 		return c, nil
 	}
 	// Same scalar type — Path-vs-Path orders by segment count, then

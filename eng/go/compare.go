@@ -36,10 +36,14 @@ var ErrNoComparer = errors.New("eng: no comparer in this Behavior")
 // DepScalar values (type-level constraints) flow through this same
 // path.
 func CompareValues(a, b Value) (int, error) {
-	if a.Parent == nil || b.Parent == nil {
+	// A bare type literal IS its lattice node; its type-for-comparison
+	// is itself, not its Parent (now the supertype).
+	aType := ValueType(a)
+	bType := ValueType(b)
+	if aType == nil || bType == nil {
 		return 0, fmt.Errorf("cannot compare values with nil type")
 	}
-	for t := lowestCommonAncestor(a.Parent, b.Parent); t != nil; t = t.Parent {
+	for t := lowestCommonAncestor(aType, bType); t != nil; t = t.Parent {
 		cmp, ok := t.Behavior.(Comparer)
 		if !ok {
 			continue
@@ -56,7 +60,7 @@ func CompareValues(a, b Value) (int, error) {
 	// No Comparer in the shared lattice — order by the type lattice.
 	// compareTypes is a total order on *Type (Rank, then depth, name,
 	// id), so any two values of distinct types resolve here.
-	if c := compareTypes(a.Parent, b.Parent); c != 0 {
+	if c := compareTypes(aType, bType); c != 0 {
 		return c, nil
 	}
 	// Identical type — order by value: size, then element-wise
@@ -72,12 +76,17 @@ func CompareValues(a, b Value) (int, error) {
 // share no common ancestor (the type tables guarantee a single root,
 // so in practice this returns at worst the root type).
 func lowestCommonAncestor(a, b *Type) *Type {
-	seen := make(map[*Type]bool)
+	// Keyed by ID, not pointer: a type literal is a by-value copy of
+	// its lattice node, so ValueType() may hand us a copy whose
+	// address differs from the canonical node's.
+	seen := make(map[string]bool)
 	for t := a; t != nil; t = t.Parent {
-		seen[t] = true
+		if t.ID != "" {
+			seen[t.ID] = true
+		}
 	}
 	for t := b; t != nil; t = t.Parent {
-		if seen[t] {
+		if t.ID != "" && seen[t.ID] {
 			return t
 		}
 	}

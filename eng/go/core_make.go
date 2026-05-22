@@ -252,10 +252,10 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 
 		val = ResolveWordValue(val)
 
-		if val.Parent.Matches(constraint.Parent) {
+		if val.Parent.Matches(ValueType(constraint)) {
 			result.Set(key, val)
 		} else {
-			converted, err := MakeConvert(val, constraint.Parent)
+			converted, err := MakeConvert(val, ValueType(constraint))
 			if err != nil {
 				return nil, fmt.Errorf("make: field %q: %w", key, err)
 			}
