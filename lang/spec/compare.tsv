@@ -413,3 +413,256 @@ Path cmp String	1
 Path cmp EmptyString	1
 Path cmp ProperString	1
 Path cmp Path	0
+
+# =============================================================================
+# Cross-numeric magnitude — traditional arithmetic order survives the
+# Integer/Decimal lattice split.
+#
+# The Number Comparer (`numberCompareBehavior` on TNumber) is the
+# lowest common ancestor for any Integer/Decimal pair; it projects
+# both sides into float64 and orders by magnitude. The per-leaf Rank
+# (Integer 2.031·10¹⁰, Decimal 2.032·10¹⁰) is never consulted because
+# the LCA walk finds the Comparer first.
+# =============================================================================
+
+1.1 cmp 2	-1	# 1.1 < 2 — the headline traditional-semantics case
+2 cmp 1.1	1
+1.1 lt 2	true
+2 gt 1.1	true
+2.5 cmp 2	1
+2 cmp 2.5	-1
+1 cmp 1.0001	-1
+1.0001 cmp 1	1
+1.0 cmp 1	0	# magnitude equality across Integer/Decimal collapses to 0
+1 cmp 1.0	0
+-1 cmp -1.0	0
+0 cmp 0.0	0
+0.0 cmp 0	0
+1.5 cmp 2.5	-1
+2.5 cmp 1.5	1
+-3 cmp 2	-1
+-3 cmp -2	-1
+-2 cmp -3	1
+
+# =============================================================================
+# Same-length List comparisons — element-wise via CompareValues.
+#
+# Lists order by length first (different length is decisive); when
+# lengths match, the walk returns the first non-zero per-element
+# comparison.
+# =============================================================================
+
+[] cmp []	0
+[1] cmp [1]	0
+[1 2 3] cmp [1 2 3]	0
+[1] cmp [2]	-1
+[2] cmp [1]	1
+[1 2] cmp [1 3]	-1
+[1 3] cmp [1 2]	1
+[1 2 3] cmp [1 2 4]	-1
+[1 2 4] cmp [1 2 3]	1
+[1 'a'] cmp [1 'b']	-1
+[1 'a'] cmp [1 'a']	0
+[true false] cmp [true true]	-1
+['a' 1] cmp ['a' 2]	-1
+
+# Cross-numeric inside lists (verifies the per-element Comparer
+# walks all the way down).
+[1.1 2] cmp [1 2.1]	1	# (1.1 cmp 1) = 1 — stops the walk
+
+# Length-differs is decisive — element-wise is not reached.
+[] cmp [1]	-1
+[1] cmp []	1
+[1] cmp [1 2]	-1
+[1 2] cmp [1]	1
+[1 2 3] cmp [1 2 3 4]	-1
+[1 2 3 4] cmp [1 2 3]	1
+[1 2 99] cmp [9]	1	# length 3 > length 1 — content irrelevant
+[9] cmp [1 2 99]	-1
+
+# Nested — recursive CompareValues.
+[[1] [2]] cmp [[1] [3]]	-1
+[[1 2] [3]] cmp [[1 2] [3]]	0
+[[1] [2 3]] cmp [[1] [2 4]]	-1
+[[1] []] cmp [[1] [0]]	-1	# inner length differs
+
+# =============================================================================
+# Same-length Map comparisons — sorted-keys then per-key values.
+#
+# Maps order by length first, then by their sorted key lists
+# lexically, then by the values stored at each shared key in sorted-
+# key order.
+# =============================================================================
+
+{} cmp {}	0
+{a:1} cmp {a:1}	0
+{a:1 b:2} cmp {a:1 b:2}	0
+{a:1 b:2} cmp {b:2 a:1}	0	# declaration order doesn't matter
+
+# Same length, same keyset, different values.
+{a:1} cmp {a:2}	-1
+{a:2} cmp {a:1}	1
+{a:1 b:2} cmp {a:1 b:3}	-1
+{a:1 b:3} cmp {a:1 b:2}	1
+{a:2 b:1} cmp {a:1 b:2}	1	# first key-walk diff (a: 2>1) wins
+
+# Same length, different keyset → keys decide.
+{a:1} cmp {b:1}	-1
+{b:1} cmp {a:1}	1
+{a:1 c:2} cmp {a:1 b:2}	1	# c > b lex
+{a:1 b:2} cmp {a:1 c:2}	-1
+
+# Length differs.
+{} cmp {a:1}	-1
+{a:1} cmp {}	1
+{a:1 b:2} cmp {a:1}	1
+{a:1} cmp {a:1 b:2}	-1
+
+# Nested.
+{a:[1 2]} cmp {a:[1 3]}	-1
+{a:{b:1}} cmp {a:{b:2}}	-1
+[{a:1}] cmp [{a:2}]	-1
+
+# =============================================================================
+# None / Never / Any ordering — degenerate roots sort cleanly by Rank.
+# =============================================================================
+
+none cmp none	0
+none cmp Any	1	# None Rank 12·10⁹ > Any Rank 11·10⁹
+Any cmp none	-1
+none cmp 5	-1	# None < Integer band
+5 cmp none	1
+Never cmp Any	1
+Any cmp Never	-1
+Never cmp none	1
+none cmp Never	-1
+Never cmp 5	-1	# Never Rank 13·10⁹ < Integer Rank 20.31·10⁹
+
+# =============================================================================
+# Cross-branch ordering — Rank decides cleanly.
+#
+# Booleans < Numbers < Strings < Paths < Times    (Scalar 2·10¹⁰ band)
+# < Lists < Maps                                   (Node 3·10¹⁰ band)
+# < Objects < Records < Options …                 (Ideal 4·10¹⁰ band)
+# < Words                                          (Word 5·10¹⁰ band)
+# < Functions < Disjuncts < …                     (Type 6·10¹⁰ band)
+# =============================================================================
+
+true cmp 5	-1	# Boolean band < Integer
+5 cmp true	1
+5 cmp 'a'	-1	# Integer < ProperString
+'a' cmp 5	1
+'a' cmp [1]	-1	# String band < List band
+[1] cmp 'a'	1
+[1] cmp {a:1}	-1	# List < Map
+{a:1} cmp [1]	1
+{a:1} cmp foo/q	1	# Atom Rank 20.1·10⁹ < Map Rank 30.2·10⁹
+foo/q cmp {a:1}	-1
+{a:1} cmp 'x'	1	# Map > String (30·10⁹ > 20·10⁹)
+
+# =============================================================================
+# Transitivity battery — for each chain a < b < c we assert a < c
+# AND the conjunction of all three pairs. If any link breaks,
+# transitivity fails and the test reports false.
+# =============================================================================
+
+# Numeric chain (within Integer family).
+(1 lt 2) and (2 lt 3) and (1 lt 3)	true
+(-5 lt 0) and (0 lt 5) and (-5 lt 5)	true
+(0 lt 1) and (1 lt 99) and (0 lt 99)	true
+
+# Cross-numeric chain (Integer/Decimal mixed).
+(1 lt 1.5) and (1.5 lt 2) and (1 lt 2)	true
+(0 lt 1.1) and (1.1 lt 2) and (0 lt 2)	true
+(0.5 lt 1.5) and (1.5 lt 2.5) and (0.5 lt 2.5)	true
+(-3.14 lt 0) and (0 lt 3.14) and (-3.14 lt 3.14)	true
+
+# String chain.
+('' lt 'a') and ('a' lt 'b') and ('' lt 'b')	true
+('apple' lt 'banana') and ('banana' lt 'cherry') and ('apple' lt 'cherry')	true
+
+# Boolean chain.
+(false lt true) and (true lt 0) and (false lt 0)	true	# Bool < Int
+
+# Cross-family chain (Boolean → Integer → String → List).
+(false lt 5) and (5 lt 'a') and (false lt 'a')	true
+(true lt 5) and (5 lt 'hi') and (true lt 'hi')	true
+('a' lt [1]) and ([1] lt {x:1}) and ('a' lt {x:1})	true
+(true lt 'x') and ('x' lt [0]) and (true lt [0])	true
+
+# Long chain (six values, transitive across the whole length).
+(false lt 0) and (0 lt 1) and (1 lt 'a') and ('a' lt [1]) and ([1] lt {x:1})	true
+(false lt 1) and (1 lt 'a') and (false lt 'a')	true
+
+# none / Any / Never chain.
+(Any lt none) and (none lt Never) and (Any lt Never)	true
+(Any lt 5) and (none lt 5) and (Never lt 5)	true
+(Any lt none) and (none lt 5) and (Any lt 5)	true
+
+# Antisymmetry for the strict-order cases (a < b ⇒ ¬(b < a)).
+(1 lt 2) and (not (2 lt 1))	true
+('a' lt 'b') and (not ('b' lt 'a'))	true
+(false lt true) and (not (true lt false))	true
+(1.1 lt 2) and (not (2 lt 1.1))	true
+
+# Reflexivity — a cmp a is 0 for every type literal and concrete value.
+0 cmp 0	0
+1 cmp 1	0
+3.14 cmp 3.14	0
+'' cmp ''	0
+'hello' cmp 'hello'	0
+true cmp true	0
+false cmp false	0
+foo/q cmp foo/q	0
+[] cmp []	0
+{} cmp {}	0
+[1 2 3] cmp [1 2 3]	0
+{a:1} cmp {a:1}	0
+
+# =============================================================================
+# Known anomaly: type literal ≡ family zero value.
+#
+# A scalar type literal compared within its own family reports the
+# family's zero value. The Comparer reads the type literal as
+# Data == nil and pulls a zero-valued payload, so the type literal
+# joins the equivalence class of the family's zero-valued inhabitant.
+# This violates strict total-order antisymmetry — see
+# lang/doc/design/TYPE-ORDERING.0.md "Anomalies".
+# =============================================================================
+
+# Type literals collapse to their family's zero value.
+Integer cmp 0	0
+0 cmp Integer	0
+Decimal cmp 0	0
+Decimal cmp 0.0	0
+Number cmp 0	0
+Boolean cmp false	0
+false cmp Boolean	0
+String cmp ''	0
+'' cmp String	0
+EmptyString cmp ''	0
+
+# Same-family type literals tie among themselves.
+Integer cmp Number	0
+Number cmp Decimal	0
+Integer cmp Decimal	0
+EmptyString cmp ProperString	0
+EmptyString cmp String	0
+ProperString cmp String	0
+
+# But Atom and Path do NOT collapse — Atom Comparer extracts the
+# atom name (empty string for the bare type literal, but distinct
+# from any non-empty atom).
+Atom cmp foo/q	-1	# Atom (name "") < foo (name "foo")
+Atom cmp Atom	0	# self-equal
+
+# =============================================================================
+# DepScalar ordering — canonical-form lex when paired with itself;
+# numeric Comparer signals ErrNoComparer for DepScalar inputs so the
+# fall-through reaches Scalar/comparePaths.
+# =============================================================================
+
+(Integer gt 10) cmp (Integer gt 10)	0
+(Integer gt 10) cmp (Integer gt 20)	-1	# "(Integer gt 10)" < "(Integer gt 20)" lex
+(Integer gt 10) lt (Integer gt 20)	true
+(Integer gt 20) lt (Integer gt 10)	false
