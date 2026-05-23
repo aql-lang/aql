@@ -113,14 +113,14 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 					_as3, _ := AsDisjunct(typeVal)
 					alts := _as3.Alternatives
 					for _, alt := range alts {
-						if alt.Parent.Equal(TNone) {
+						if IsNoneShape(alt) {
 							optional = true
 							break
 						}
 					}
 					if optional {
 						for _, alt := range alts {
-							if !alt.Parent.Equal(TNone) {
+							if !IsNoneShape(alt) {
 								typeVal = alt
 								break
 							}
