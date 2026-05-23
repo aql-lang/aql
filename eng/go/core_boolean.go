@@ -71,7 +71,9 @@ func TandHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 // list of values via this same intersection. Future higher-order
 // type combinators may want it too.
 func TandValues(a, b Value) Value {
-	if a.Parent.Equal(TNever) || b.Parent.Equal(TNever) {
+	// Either operand is Never (sentinel or bare type literal) →
+	// intersection is Never.
+	if isNeverShape(a) || isNeverShape(b) {
 		return NewTypeLiteral(TNever)
 	}
 
@@ -112,6 +114,16 @@ func TandValues(a, b Value) Value {
 	return unified
 }
 
+// isNeverShape reports whether v is any form of Never: the sentinel
+// (Parent=TNever) or the bare type literal (NewTypeLiteral(TNever),
+// Data=nil, lattice node == TNever).
+func isNeverShape(v Value) bool {
+	if v.Parent.Equal(TNever) {
+		return true
+	}
+	return v.Data == nil && !v.Carrier && (&v).Equal(TNever)
+}
+
 // isPlainConcreteMap reports whether v is a non-typed, non-record,
 // non-options concrete map (Data is *OrderedMap).
 func isPlainConcreteMap(v Value) bool {
@@ -136,7 +148,10 @@ func mergeMaps(a, b ReadMap) (*OrderedMap, bool) {
 		aVal, _ := a.Get(key)
 		if bVal, present := b.Get(key); present {
 			combined := TandValues(aVal, bVal)
-			if combined.Parent.Equal(TNever) {
+			// Combined is Never — check both forms: sentinel (Parent=
+			// TNever) and bare type literal (NewTypeLiteral(TNever),
+			// Parent=nil after the degenerate-root setup).
+			if combined.Parent.Equal(TNever) || (combined.Data == nil && (&combined).Equal(TNever)) {
 				return nil, false
 			}
 			result.Set(key, combined)

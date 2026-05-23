@@ -899,6 +899,10 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 		return Value{}, false, fmt.Errorf("RunPredicate: predicate must return exactly one value, got %d", len(result))
 	}
 	out = result[0]
-	matched = !out.Parent.Equal(TNone)
+	// A predicate signals "doesn't match" by returning None — either
+	// the sentinel `none` (Parent=TNone, NonePayload) or the bare
+	// type literal `None` (NewTypeLiteral(TNone), Parent=nil after the
+	// degenerate-root setup). IsNoneShape covers both.
+	matched = !IsNoneShape(out)
 	return out, matched, nil
 }

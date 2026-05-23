@@ -572,9 +572,11 @@ func optionsDefault(v Value) (Value, bool) {
 	if IsDisjunct(v) {
 		_as17, _ := AsDisjunct(v)
 		alts := _as17.Alternatives
-		// Check for None first.
+		// Check for None first — match either form (sentinel value
+		// or NewTypeLiteral(TNone) where Parent is nil post the
+		// degenerate-root setup).
 		for _, alt := range alts {
-			if alt.Parent.Equal(TNone) {
+			if IsNoneShape(alt) {
 				return NewTypeLiteral(TNone), true
 			}
 		}
@@ -587,7 +589,7 @@ func optionsDefault(v Value) (Value, bool) {
 		return Value{}, false
 	}
 
-	if v.Parent.Equal(TNone) {
+	if IsNoneShape(v) {
 		return v, true
 	}
 
