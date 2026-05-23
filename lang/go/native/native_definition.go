@@ -237,7 +237,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		// InstallType decision so the two paths stay aligned.
 		if typeName != "" && eng.PredicateInputType(constraint) != nil {
 			if def := r.LookupTypeName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
-				out.Parent = def
+				out = RetagValue(out, def)
 			}
 		}
 		InstallDef(r, name, out)
@@ -316,9 +316,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			}
 			parentLit := NewTypeLiteral(root)
 			if _, ok := Unify(body, parentLit); ok {
-				retagged := body
-				retagged.Parent = def
-				InstallDef(r, name, retagged)
+				InstallDef(r, name, RetagValue(body, def))
 				r.Check.RecordDef(name, args[0].Pos)
 				return nil, nil
 			}
@@ -367,7 +365,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// the dispatch identity flips.
 	if constraint.Parent.Equal(TFnUndef) && typeName != "" {
 		if def := r.LookupTypeName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
-			unified.Parent = def
+			unified = RetagValue(unified, def)
 		}
 	}
 	InstallDef(r, name, unified)

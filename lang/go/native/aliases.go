@@ -283,6 +283,7 @@ var (
 	GenerateObjectTypeID      = eng.GenerateObjectTypeID
 	IDPrefixForType           = eng.IDPrefixForType
 	CanonicalType             = eng.CanonicalType
+	RetagValue                = eng.RetagValue
 	InstallDef                = eng.InstallDef
 	InstallFnDef              = eng.InstallFnDef
 	IsCapitalisedName         = eng.IsCapitalisedName
