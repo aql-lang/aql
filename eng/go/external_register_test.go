@@ -77,9 +77,6 @@ func TestRegisterExternalBuiltin_PluginColor(t *testing.T) {
 	if tColor.Behavior != cb {
 		t.Errorf("Behavior = %T, want funcBehavior", tColor.Behavior)
 	}
-	if tColor.BaseType != nil {
-		t.Errorf("BaseType = %v, want nil", tColor.BaseType)
-	}
 	if tColor.Origin != OriginBuiltin {
 		t.Errorf("Origin = %v, want OriginBuiltin", tColor.Origin)
 	}

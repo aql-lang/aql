@@ -91,7 +91,10 @@ func boolBinaryNative(name string, fn func(a, b bool) bool) NativeFunc {
 }
 
 func otherwiseHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	if args[1].Parent.Equal(TNone) {
+	// IsNoneShape matches both the sentinel `none` AND the bare type
+	// literal `None` — handlers throughout the codebase return the
+	// latter for "no value", so the LHS check has to cover it too.
+	if IsNoneShape(args[1]) {
 		return []Value{args[0]}, nil
 	}
 	return []Value{args[1]}, nil

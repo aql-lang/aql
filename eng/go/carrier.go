@@ -131,12 +131,12 @@ func toCarrier(v Value) Value {
 	}
 	// Type literals (Data already nil) are already in the right
 	// shape for sig matching — preserve their Carrier=false marker
-	// so sigTypeMatches' metatype branch can still recognise them
-	// as type literals rather than as value-carriers. Without this
-	// guard, `Integer gt 10` under check mode loses the Integer
+	// so sigTypeMatchesAsType can still recognise them as type
+	// literals rather than as value-carriers. Without this guard,
+	// `Integer gt 10` under check mode loses the Integer
 	// type-literal distinction and falls through to the boolean
 	// sig instead of the dep-constructor sig. See depscalar.go's
-	// makeDepScalarSig + RunInCheckMode for the matching change.
+	// MakeDepScalarSig + RunInCheckMode for the matching change.
 	if v.Data == nil {
 		return v
 	}
@@ -639,7 +639,10 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 		}
 		var narrowed Value
 		if len(remaining) == 1 {
-			narrowed = NewCarrier(remaining[0].Parent)
+			// remaining[0] is a type literal (a by-value copy of its
+			// lattice node); the denoted type is ValueType(remaining[0]),
+			// not remaining[0].Parent (which is the supertype).
+			narrowed = NewCarrier(ValueType(remaining[0]))
 		} else {
 			narrowed = NewDisjunct(remaining)
 			narrowed.Carrier = true

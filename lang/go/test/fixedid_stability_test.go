@@ -71,13 +71,13 @@ func TestFixedIDStability(t *testing.T) {
 		"Ideal/Object/Resource/Entity": 37,
 		"Ideal/Options":                38,
 		"Type":                         39,
-		"Type/ScalarType":              40,
-		"Type/NodeType":                41,
+		// FixedIDs 40, 41, 46 retired with Type/ScalarType,
+		// Type/NodeType, Type/IdealType. Sig "type literal here" is
+		// now expressed via Signature.TypeArgs[i]=true.
 		"Ideal/Store":                  42,
 		"Ideal/Store/System":           43,
 		"Ideal/Array":                  44,
 		"Ideal/Error":                  45,
-		"Type/IdealType":               46,
 		"Scalar/Path":                  47,
 		"Ideal/Tensor":                 2001, // matrix module range (2000-2999)
 		"Ideal/Tensor/Matrix":          2000, // historical Matrix FixedID, kept
@@ -86,13 +86,10 @@ func TestFixedIDStability(t *testing.T) {
 		"Type/Disjunct/Enum":           62,
 		"Word/__PE":                    63,
 		"Word/__IN/__DC":               64,
-		"Type/Dependent":               65,
-		"Type/Dependent/DepInteger":    66,
-		"Type/Dependent/DepDecimal":    67,
-		"Type/Dependent/DepNumber":     68,
-		"Type/Dependent/DepString":     69,
-		"Type/Dependent/DepBoolean":    70,
-		"Type/Dependent/DepAtom":       71,
+		// FixedIDs 65-71 retired with the Type/Dependent subtree;
+		// DepScalar values now carry their base scalar type directly
+		// (typeof (Integer gte 0) → Integer) with the constraint in
+		// the DepScalarInfo payload. See depscalar.go.
 		"Word/__CP":                    72,
 		"Word/__ED":                    73,
 		"Never":                        61,

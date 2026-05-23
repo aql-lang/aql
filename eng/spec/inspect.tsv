@@ -78,10 +78,10 @@ inspect fnsig	{name:'fnsig',kind:native,signatures:[{args:['List']}]}
 # --- type system ---
 inspect refine	{name:'refine',kind:native,signatures:[{args:['Any','Node']},{args:['Any']}]}	the uniform type constructor
 inspect typeof	{name:'typeof',kind:native,signatures:[{args:['Any']}]}	
-inspect pathof	{name:'pathof',kind:native,signatures:[{args:['Type']}]}	
-inspect is	{name:'is',kind:native,signatures:[{args:['Any','Any']}]}	
-inspect enum	{name:'enum',kind:native,signatures:[{args:['List']}]}	
-inspect make	{name:'make',kind:native,signatures:[{args:['ScalarType','Map','Any']},{args:['Object','Any','Object']},{args:['Any','Any','Map']},{args:['IdealType','Map']},{args:['Array','List']},{args:['ScalarType','Any']},{args:['Any','Any']}]}
+inspect pathof	{name:'pathof',kind:native,signatures:[{args:['Any']}]}	`pathof` accepts any type literal via Signature.TypeArgs
+inspect is	{name:'is',kind:native,signatures:[{args:['Any','Any']}]}
+inspect enum	{name:'enum',kind:native,signatures:[{args:['List']}]}
+inspect make	{name:'make',kind:native,signatures:[{args:['Object','Any','Object']},{args:['Scalar','Map','Any']},{args:['Any','Any','Map']},{args:['Array','List']},{args:['Ideal','Map']},{args:['Scalar','Any']},{args:['Any','Any']}]}	scalar/ideal slots now use the broader Scalar/Ideal types with TypeArgs requiring a type literal
 inspect inspect	{name:'inspect',kind:native,signatures:[{args:['Atom']},{args:['Any']}]}	Atom/q sig (was Atom + Word) plus Any fallback
 		
 # --- state ---		

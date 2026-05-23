@@ -154,8 +154,8 @@ func TestJsonicToValueNil(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.Parent.Equal(TNone) {
-		t.Errorf("expected TNone, got %s", v.Parent)
+	if !IsNoneShape(v) {
+		t.Errorf("expected None, got %s", v.String())
 	}
 }
 

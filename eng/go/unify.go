@@ -27,13 +27,17 @@ func Unify(a, b Value) (Value, bool) {
 	// A type literal IS its lattice node after the type/value merge,
 	// so its denoted type is the value itself — not its Parent, which
 	// is now the supertype. Carriers keep Parent pointing at the type
-	// they carry, so they take the plain Parent.
+	// they carry, so they take the plain Parent. A Data==nil value
+	// with an empty ID is a manually-constructed `Value{Parent: T,
+	// Data: nil}` (used in tests as a stand-in for a value of type T);
+	// treat its Parent as the denoted type since &a has no lattice
+	// identity to compare against.
 	aType := a.Parent
-	if a.Data == nil && !a.Carrier {
+	if a.Data == nil && !a.Carrier && a.ID != "" {
 		aType = &a
 	}
 	bType := b.Parent
-	if b.Data == nil && !b.Carrier {
+	if b.Data == nil && !b.Carrier && b.ID != "" {
 		bType = &b
 	}
 
@@ -80,23 +84,6 @@ func Unify(a, b Value) (Value, bool) {
 		return a, true
 	}
 
-	// Metatype matching: when both are type literals and one has a metatype
-	// Parent, check if the other's computed metatype matches.
-	if a.Data == nil && b.Data == nil {
-		aIsMeta := IsMetaType(aType)
-		bIsMeta := IsMetaType(bType)
-		if bIsMeta && !aIsMeta {
-			if MetatypeFor(aType).Matches(bType) {
-				return a, true
-			}
-		}
-		if aIsMeta && !bIsMeta {
-			if MetatypeFor(bType).Matches(aType) {
-				return b, true
-			}
-		}
-	}
-
 	// List unification.
 	aList := aType.Equal(TList)
 	bList := bType.Equal(TList)
@@ -113,21 +100,21 @@ func Unify(a, b Value) (Value, bool) {
 
 	// Dependent-scalar unification. A DepScalar carries a comparison
 	// constraint over a base scalar type (e.g. Integer ≥10, String
-	// <"z"). Three cases:
+	// <"z"). Its Parent IS the base scalar; the DepScalarInfo payload
+	// is what distinguishes it from an ordinary scalar value. Three
+	// cases:
 	//   1. DepScalar vs concrete scalar: succeeds iff the scalar's
 	//      type matches the base AND the value satisfies the
 	//      comparison. Returns the plain scalar (not the DepScalar)
 	//      so downstream consumers see a normal value.
-	//   2. DepScalar vs DepScalar over the same leaf: combine the
+	//   2. DepScalar vs DepScalar over the same base: combine the
 	//      constraints (intersection) — same-side bounds tighten,
 	//      opposite-side bounds form an interval. Empty result
 	//      (e.g. gt 10 vs lt 5) fails. Returns a fresh DepScalar.
-	//   3. DepScalar vs DepScalar over different leaves: fails
+	//   3. DepScalar vs DepScalar over different bases: fails
 	//      (incompatible bases).
 	if a.IsDepScalar() && b.IsDepScalar() {
-		aLeaf := DependentLeafFromType(aType)
-		bLeaf := DependentLeafFromType(bType)
-		if aLeaf != bLeaf {
+		if !aType.Equal(bType) {
 			return Value{}, false
 		}
 		aInfo, err := a.AsDepScalar()
@@ -146,7 +133,7 @@ func Unify(a, b Value) (Value, bool) {
 		return out, true
 	}
 	if a.IsDepScalar() && !b.IsDepScalar() && b.Data != nil {
-		if base, ok := DependentLeafBaseType(DependentLeafFromType(aType)); ok && bType.Matches(base) {
+		if bType.Matches(aType) {
 			info, err := a.AsDepScalar()
 			if err != nil {
 				return Value{}, false
@@ -158,7 +145,7 @@ func Unify(a, b Value) (Value, bool) {
 		}
 	}
 	if b.IsDepScalar() && !a.IsDepScalar() && a.Data != nil {
-		if base, ok := DependentLeafBaseType(DependentLeafFromType(bType)); ok && aType.Matches(base) {
+		if aType.Matches(bType) {
 			info, err := b.AsDepScalar()
 			if err != nil {
 				return Value{}, false
@@ -585,9 +572,11 @@ func optionsDefault(v Value) (Value, bool) {
 	if IsDisjunct(v) {
 		_as17, _ := AsDisjunct(v)
 		alts := _as17.Alternatives
-		// Check for None first.
+		// Check for None first — match either form (sentinel value
+		// or NewTypeLiteral(TNone) where Parent is nil post the
+		// degenerate-root setup).
 		for _, alt := range alts {
-			if alt.Parent.Equal(TNone) {
+			if IsNoneShape(alt) {
 				return NewTypeLiteral(TNone), true
 			}
 		}
@@ -600,7 +589,7 @@ func optionsDefault(v Value) (Value, bool) {
 		return Value{}, false
 	}
 
-	if v.Parent.Equal(TNone) {
+	if IsNoneShape(v) {
 		return v, true
 	}
 
@@ -836,8 +825,11 @@ func mapsEqual(a, b ReadMap) bool {
 // (subset) matching where the candidate only needs to contain the alternative's
 // key-value pairs.
 func unifyDisjunct(disj DisjunctInfo, val Value) (Value, bool) {
-	// "any" unifies with the whole disjunct, preserving it.
-	if val.Parent.Equal(TAny) {
+	// "any" unifies with the whole disjunct, preserving it. Covers
+	// two value shapes: the bare type literal NewTypeLiteral(TAny)
+	// (Data=nil; the value IS the TAny lattice node, &val.Equal(TAny))
+	// and the Any-typed carrier (Data=nil, Carrier=true, Parent=TAny).
+	if val.Data == nil && (val.Parent.Equal(TAny) || (&val).Equal(TAny)) {
 		return NewDisjunct(disj.Alternatives), true
 	}
 

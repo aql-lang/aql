@@ -30,8 +30,8 @@ package native
 //
 // The returned value carries Parent `Inspect` but its payload is an
 // OrderedMap so it renders and round-trips like a map. Algorithms
-// (IsRecordType / AsObjectType / DependentLeafFromType / …) live in
-// eng; this file owns the word name and dispatch wiring.
+// (IsRecordType / AsObjectType / IsDepScalar / …) live in eng; this
+// file owns the word name and dispatch wiring.
 var inspectNatives = []NativeFunc{
 	{
 		Name:        "inspect",
@@ -223,7 +223,7 @@ func buildTypeInspection(name string, tv Value) Value {
 	case tv.IsDepScalar():
 		result.Set("kind", NewAtom("dependent_scalar"))
 		info, _ := tv.AsDepScalar()
-		result.Set("leaf", NewString(DependentLeafFromType(tv.Parent)))
+		result.Set("leaf", NewString(tv.Parent.Name))
 		if info.Lo != nil {
 			lo := NewOrderedMap()
 			lo.Set("kind", NewString(BoundToKind(info.Lo, true).String()))

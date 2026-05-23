@@ -66,30 +66,30 @@ typeof { a:[ 1 ] b:{ c:2 } }	Map	a map with mixed node values is still a Map
 # ====================================================================		
 # Every well-known type name, when used as a value, has typeof `Type`.		
 		
-# --- the lattice extremes ---		
-typeof Any	Any	the top type
-typeof None	None	the unit type (its sole *value* `none` reports None — see §1)
-typeof Never	Never	the empty/bottom type
-		
-# --- scalar family ---		
-typeof Scalar	Scalar	
-typeof Number	Scalar	
-typeof Integer	Number	metatypes are collapsed — no ScalarType layer
-typeof Decimal	Number	
-typeof String	Scalar	
-typeof ProperString	String	
+# --- the lattice extremes ---
+typeof Any	Any	the top type — saturates at itself
+typeof None	None	None is a degenerate root (unit) — saturates at itself
+typeof Never	Never	Never is a degenerate root (bottom) — saturates at itself
+
+# --- scalar family ---
+typeof Scalar	Any	Scalar's lattice parent is Any
+typeof Number	Scalar
+typeof Integer	Number	one Parent hop — no metatype layer
+typeof Decimal	Number
+typeof String	Scalar
+typeof ProperString	String
 typeof EmptyString	String	
 typeof Boolean	Scalar	
 typeof Path	Scalar	
 typeof Atom	Scalar	
 		
-# --- node family ---		
-typeof Node	Node	no NodeType layer either
-typeof List	Node	
-typeof Map	Node	
-		
-# --- object family ---		
-typeof Object	Ideal	no ObjectType layer either
+# --- node family ---
+typeof Node	Any	Node's lattice parent is Any
+typeof List	Node
+typeof Map	Node
+
+# --- object family ---
+typeof Object	Ideal	one Parent hop
 typeof Resource	Object	
 typeof Entity	Resource	
 typeof Table	Ideal	
@@ -102,7 +102,7 @@ typeof Function	Type	the Function *type* literal
 typeof FunctionSignature	Type	
 typeof Disjunct	Type	
 typeof Enum	Disjunct	
-typeof Type	Type	the Type type literal is itself a Type
+typeof Type	Any	Type's lattice parent is Any
 		
 # ====================================================================		
 # 4. typeof — function / fnsig / enum / tor values		
@@ -146,7 +146,7 @@ typeof typeof [ 1 ]	Node
 typeof typeof { a:1 }	Node	
 typeof typeof Integer	Scalar	
 typeof typeof Enum	Type	
-typeof typeof none	None	`typeof none` is the type literal `None`, whose own `typeof` is `Type`
+typeof typeof none	None	`typeof none` is the type literal `None`; `typeof None` saturates at None
 		
 # ====================================================================		
 # 6. pathof — the ancestry path of a TYPE		

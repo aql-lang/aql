@@ -1255,7 +1255,7 @@ func TestIntegTandMergeMaps(t *testing.T) {
 	if !okY {
 		t.Fatalf("missing key y")
 	}
-	if !y.Parent.Equal(TInteger) || y.Data != nil {
+	if !(&y).Equal(TInteger) || y.Data != nil {
 		t.Errorf("y = %v, want Integer type literal", y)
 	}
 }

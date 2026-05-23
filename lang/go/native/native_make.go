@@ -24,10 +24,10 @@ var makeNatives = []NativeFunc{
 		Name:        "make",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TScalarType, TMap, TAny}, Handler: eng.MakeScalarOptsHandler, ReturnsFn: ReturnsIdentity(0)},
-			{Args: []*Type{TIdealType, TMap}, Handler: eng.MakeObjHandler, ReturnsFn: ReturnsIdentity(0)},
+			{Args: []*Type{TScalar, TMap, TAny}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeScalarOptsHandler, ReturnsFn: ReturnsIdentity(0)},
+			{Args: []*Type{TIdeal, TMap}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeObjHandler, ReturnsFn: ReturnsIdentity(0)},
 			{Args: []*Type{TArray, TList}, Handler: eng.MakeArrayHandler, Returns: []*Type{TArray}},
-			{Args: []*Type{TScalarType, TAny}, Handler: eng.MakeScalarHandler, ReturnsFn: ReturnsIdentity(0)},
+			{Args: []*Type{TScalar, TAny}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeScalarHandler, ReturnsFn: ReturnsIdentity(0)},
 			{Args: []*Type{TObject, TAny, TObject}, Handler: eng.MakeWithPrototype, Returns: []*Type{TObject}},
 			{Args: []*Type{TAny, TAny, TMap}, Handler: eng.MakeWithOpts, Returns: []*Type{TAny}},
 			{Args: []*Type{TAny, TAny}, Handler: eng.MakeHandler, Returns: []*Type{TAny}},

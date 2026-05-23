@@ -410,8 +410,8 @@ func TestScalarFromTableNoRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !val.Parent.Equal(TNone) {
-		t.Errorf("expected TNone, got %v", val.Parent)
+	if !IsNoneShape(val) {
+		t.Errorf("expected None, got %v", val.Parent)
 	}
 }
 

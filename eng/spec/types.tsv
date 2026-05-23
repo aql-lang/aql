@@ -191,18 +191,18 @@ typeof Number	Scalar	all Scalar/* including Number
 typeof Atom	Scalar	
 typeof List	Node	Node/* → Type
 typeof Map	Node	
-typeof Scalar	Scalar	Scalar has 1 part → MetatypeFor → Type
-typeof Any	Any	Any has 1 part
-typeof Type	Type	the metatype root itself
-		
-# typeof composes with simple-value defs.		
-def n 5 typeof n	Integer	
-def s 'hi' typeof s	ProperString	
-		
-# typeof's result IS a Type — round-trips:		
-typeof typeof 5	Number	typeof Integer = Type
-typeof typeof 'x'	String	
-typeof typeof none	None	typeof none → None type literal; typeof None → metatype = Type (None has 1 part)
+typeof Scalar	Any	Scalar's lattice parent is Any
+typeof Any	Any	Any saturates at itself — the universal root
+typeof Type	Any	Type's lattice parent is Any (Type still anchors the Function/Disjunct/Enum subtree)
+
+# typeof composes with simple-value defs.
+def n 5 typeof n	Integer
+def s 'hi' typeof s	ProperString
+
+# typeof's result IS a Type — round-trips:
+typeof typeof 5	Number	typeof 5 = Integer; typeof Integer = Number
+typeof typeof 'x'	String
+typeof typeof none	None	typeof none = None; typeof None = None (None is a degenerate root)
 		
 # =====================================================================		
 # 4. def — install a type binding		

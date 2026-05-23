@@ -63,9 +63,9 @@ typeof [ ]	List	concrete list reports List
 typeof [ 1 2 3 ]	List	
 typeof { }	Map	concrete map reports Map
 typeof { a:1 b:2 }	Map	
-typeof List	Node	bare List type literal → metatype Type
-typeof Map	Node	
-typeof Node	Node	the abstract Node supertype → metatype Type
+typeof List	Node	one Parent hop
+typeof Map	Node
+typeof Node	Any	Node's lattice parent is Any
 		
 # `is` against the exact node type.		
 [ 1 2 3 ] is List	true	

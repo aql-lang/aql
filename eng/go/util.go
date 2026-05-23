@@ -15,11 +15,19 @@ import "fmt"
 // IsTypeLiteral reports whether v is a bare type literal — a Value
 // that is a type-lattice node carrying no concrete payload and is
 // not a CheckMode carrier. After the type/value merge a type literal
-// IS its lattice node; it has Data == nil and Carrier == false. The
-// value `none` carries a NonePayload (Data != nil) and so is
-// correctly excluded.
+// IS its lattice node; it has Data == nil and Carrier == false.
+//
+// None is excluded: the unit type's only inhabitant doubles as the
+// "absent value" sentinel throughout the codebase (handlers return
+// NewTypeLiteral(TNone) for "no value found"). Treating it as a type
+// literal would make consumers try to use it as a constraint;
+// IsTypeLiteral(NewTypeLiteral(TNone)) returns false so the type-
+// vs-value dispatch treats it as a value.
 func IsTypeLiteral(v Value) bool {
-	return v.Data == nil && !v.Carrier
+	if v.Data != nil || v.Carrier {
+		return false
+	}
+	return !IsNoneShape(v)
 }
 
 // IsConcrete reports whether v carries a real payload (not a type

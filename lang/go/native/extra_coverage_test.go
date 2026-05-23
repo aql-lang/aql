@@ -874,8 +874,8 @@ func TestExtraNewTypeSinglePart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewType('Number') error: %v", err)
 	}
-	if tp.String() != "Scalar/Number" {
-		t.Errorf("unexpected type path: %v", tp.String())
+	if tp.Path() != "Scalar/Number" {
+		t.Errorf("unexpected type path: %v", tp.Path())
 	}
 }
 

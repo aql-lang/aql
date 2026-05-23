@@ -124,7 +124,7 @@ func formatListJSON(v Value) string {
 func FormatValueJSON(v Value) string {
 	// The value `none` and the None type literal both render as JSON
 	// null — that's how JSON encodes the unit type / absent value.
-	if IsNone(v) || (v.Data == nil && v.Parent.Equal(TNone)) {
+	if IsNoneShape(v) {
 		return "null"
 	}
 	if v.Data == nil {

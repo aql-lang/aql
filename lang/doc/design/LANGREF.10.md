@@ -1252,18 +1252,45 @@ element, or the last truthy element if all are truthy). Returns
 ### Comparison Words
 
 Comparison words take two arguments with forward arg collection.
-They use natural type comparisons: integers
-compare numerically, strings compare lexicographically, booleans
-compare as `false < true`, atoms compare lexicographically on
-their name.
+They route through a single unified total order
+(`eng.CompareValues`); see `lang/doc/design/TYPE-ORDERING.0.md` for
+the full design and `lang/spec/compare.tsv` for the test matrix.
 
-Cross-type comparisons are an error for ordering words (`lt`, `gt`,
-`lte`, `gte`). Equality words (`eq`, `deq`) return `false` for
-mismatched types without error.
+**Same-family pairs** settle through per-family `Comparer`s on the
+lattice node:
 
-Non-scalar types (lists, maps) are not orderable — ordering
-comparisons produce an error. Use `eq` or `deq` for equality checks
-on non-scalars.
+* Numbers compare numerically (Integer/Decimal share the `Number`
+  Comparer; `1.1 lt 2 → true`, `1 cmp 1.0 → 0`).
+* Strings compare lexicographically (UTF-8 byte order).
+* Booleans compare `false < true`.
+* Atoms compare lexicographically on their name.
+* Paths compare by segment count, then segment-by-segment in
+  reverse lex, then relative-before-absolute.
+
+**Type-literal-first rule.** Within a family, a bare type literal
+sorts strictly below every concrete inhabitant — including the
+family's zero value:
+
+```
+Integer lt 0            => true     (Integer type literal < the value 0)
+String  lt ''           => true     (String type literal < '')
+Boolean lt false        => true
+Number  lt Integer      => true     (both literals — by Rank: Number < Integer)
+```
+
+**Cross-family pairs** are NOT an error — they settle by the unified
+lattice Rank (Booleans < Numbers < Strings < Paths < … < Lists <
+Maps < … < Objects < …). Example: `true lt 5 → true` (Boolean band <
+Integer band), `5 lt 'a' → true` (Integer < ProperString),
+`'a' lt [1] → true` (String band < List band).
+
+**Non-scalar comparisons** are also defined: lists compare by length
+first then element-wise, maps by length then sorted-keys then per-key
+values. `[1 2 3] cmp [1 2 4] → -1`, `{a:1} cmp {b:1} → -1`.
+
+Equality words (`eq`, `deq`) return `false` for mismatched types
+without error; `deq` is strict structural equality, `eq` allows
+cross-leaf numeric magnitude (`1 eq 1.0 → true`).
 
 #### `lt`
 
@@ -1278,6 +1305,10 @@ Less than.
 1 lt 1                  => false
 "abc" lt "def"          => true
 false lt true           => true
+1.1 lt 2                => true     (cross-leaf numeric magnitude)
+true lt 5               => true     (cross-family: Boolean < Number)
+Integer lt 0            => true     (type literal first)
+[1 2 3] lt [1 2 4]      => true     (same length, element-wise)
 ```
 
 #### `gt`
@@ -1317,6 +1348,49 @@ Greater than or equal.
 2 gte 1                 => true
 1 gte 1                 => true
 1 gte 2                 => false
+```
+
+#### `cmp`
+
+Three-way comparison: `a cmp b` returns `-1` if `a` sorts before
+`b`, `0` if they compare equal, `1` if `a` sorts after. This is the
+underlying total order — `lt` / `gt` / `lte` / `gte` and `sort`
+all build on it. See `lang/doc/design/TYPE-ORDERING.0.md` for the
+full Comparer cascade and the type-literal-first rule, and
+`lang/spec/compare.tsv` for the test matrix.
+
+*Signature:* `[any, any] -> [integer]`
+
+
+```
+5 cmp 5                  => 0
+5 cmp 10                 => -1
+10 cmp 5                 => 1
+1.1 cmp 2                => -1    # cross-leaf numeric magnitude
+1 cmp 1.0                => 0     # 1 ≡ 1.0 by magnitude
+Integer cmp 0            => -1    # type literal sorts FIRST
+Number cmp Integer       => -1    # both literals — by Rank
+true cmp 5               => -1    # cross-family by Rank
+[1 2 3] cmp [1 2 4]      => -1    # same length, element-wise
+{a:1} cmp {a:2}          => -1    # same key, value-wise
+```
+
+#### `between`
+
+Build a closed-interval `DepScalar` refinement of a scalar type.
+`a between b T` produces a constraint that accepts values of type
+`T` in `[a, b]` (inclusive on both ends). Use it as a type body —
+e.g. `def Mid Integer between 10 20` — or as a runtime predicate
+via `unify`.
+
+*Signature:* `[scalar, scalar, scalar/type-literal] -> [scalar]` (`TypeArgs[2]=true`)
+
+
+```
+def Mid Integer between 10 20
+15 is Mid                => true
+5 is Mid                 => false
+25 is Mid                => false
 ```
 
 #### `eq`
@@ -1594,7 +1668,7 @@ Rotate the nth item to the top of the stack (0-indexed).
 #### `context`
 
 Push the current context Store onto the stack. The context is a
-mutable Store (Object/Store) with prototype chain resolution for
+mutable Store (`Ideal/Store`) with prototype chain resolution for
 nested scopes.
 
 *Signature:* `[] -> [Store]`
@@ -3537,22 +3611,29 @@ field that distinguishes them. The runtime relies on this distinction
 at signature-matching time:
 
 - A **carrier** of type `T` is an abstract VALUE of type `T`. It
-  satisfies value-level slots like `[TInteger]` but **not** metatype
-  slots like `[TScalarType]`.
-- A **type literal** for `T` (produced by stepWord on a type-name word
-  like `Integer`) IS a type, not a value. It satisfies metatype slots
-  but not value-level slots of the same name.
+  satisfies value-level slots like `[TInteger]` but NOT
+  `TypeArgs` slots (the sig-level "this position wants a type
+  literal" marker — the successor to the historical metatype
+  slots, which were retired with `TScalarType`/`TNodeType`/
+  `TIdealType`).
+- A **type literal** for `T` (produced by stepWord on a type-name
+  word like `Integer`) IS a type, not a value. It satisfies a
+  `TypeArgs` slot but is rejected at concrete-payload slots.
 
-Concretely, given `[TScalarType]` in a sig:
-- `Integer` (the word, parsed as type literal) — matches.
-- `Carrier{Integer}` (the result of analysing `1`) — does NOT match.
+Concretely, given a sig with `Args: []*Type{TScalar}` and
+`TypeArgs: map[int]bool{0: true}`:
 
-The `sigTypeMatches` function (`internal/engine/signature.go`)
-implements this with an explicit `!v.Carrier` guard on the metatype
-branch. When adding a new metatype branch (a new `IsMetaType` family),
-preserve that guard — otherwise the analyser will silently upgrade
-carriers into metatype matches and break dispatch. See §6.2 in
-`doc/design/TYPE-SYSTEM-REVIEW.md` for the design rationale.
+- `Integer` (the word, parsed as type literal) — matches via
+  `sigTypeMatchesAsType`.
+- `Carrier{Integer}` (the result of analysing `1`) — does NOT match
+  (`v.Carrier == true` is rejected up front).
+- `5` (concrete) — does NOT match a `TypeArgs` slot.
+
+The `sigTypeMatchesAsType` function in `eng/go/signature.go`
+implements the rule. When adding a new sig that needs a type
+literal (rather than a concrete value), set `Sig.TypeArgs[i] = true`
+on the relevant position — that's the successor to the old
+metatype-slot pattern.
 
 ### Adding `Returns` to Custom Native Words
 

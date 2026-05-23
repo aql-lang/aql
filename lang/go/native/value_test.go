@@ -147,8 +147,10 @@ func TestAsTableType(t *testing.T) {
 func TestAsChildType(t *testing.T) {
 	v := NewTypedList(NewTypeLiteral(TString))
 	ct, _ := AsChildType(v)
-	if !ct.Child.Parent.Equal(TString) {
-		t.Errorf("expected string child, got %s", ct.Child.Parent)
+	// ct.Child is a String type literal; its denoted lattice node is
+	// the value itself (a by-value copy of TString).
+	if !(&ct.Child).Equal(TString) {
+		t.Errorf("expected string child, got %s", ct.Child.String())
 	}
 }
 

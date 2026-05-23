@@ -851,7 +851,7 @@ func TestEngineCoreBaseValueForConstraintAllNone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BaseValueForConstraint(None): %v", err)
 	}
-	if !v.Parent.Equal(TNone) {
+	if !IsNoneShape(v) {
 		t.Errorf("base all-None disjunct = %v, want None", v)
 	}
 }
@@ -1352,10 +1352,11 @@ func TestEngineCoreMakeRecordWithBase(t *testing.T) {
 
 func TestEngineCoreResolveFieldTypePassthrough(t *testing.T) {
 	r, _ := DefaultRegistry()
-	// Non-string, non-list value should pass through
+	// Non-string, non-list value should pass through. v is a type
+	// literal; its denoted lattice node is &v.
 	v := ResolveFieldType(r, NewTypeLiteral(TNumber))
-	if !v.Parent.Equal(TNumber) {
-		t.Errorf("ResolveFieldType passthrough = %v, want Number", v)
+	if !(&v).Equal(TNumber) {
+		t.Errorf("ResolveFieldType passthrough = %v, want Number", v.String())
 	}
 }
 
@@ -1364,8 +1365,8 @@ func TestEngineCoreResolveFieldTypeStringRef(t *testing.T) {
 	// Define a type, then ResolveFieldType should find it
 	InstallDef(r, "MyType", NewTypeLiteral(TString))
 	v := ResolveFieldType(r, NewString("MyType"))
-	if !v.Parent.Equal(TString) {
-		t.Errorf("ResolveFieldType string ref = %v, want String type literal", v)
+	if !(&v).Equal(TString) {
+		t.Errorf("ResolveFieldType string ref = %v, want String type literal", v.String())
 	}
 	UninstallDef(r, "MyType")
 }
@@ -1652,7 +1653,7 @@ func TestEngineCoreResolveWordValue(t *testing.T) {
 		t.Error("ResolveWordValue(false) should be boolean false")
 	}
 	v = ResolveWordValue(NewWord("None"))
-	if !v.Parent.Equal(TNone) {
+	if !IsNoneShape(v) && !(&v).Equal(TNone) {
 		t.Errorf("ResolveWordValue(None) = %v, want None", v)
 	}
 	v = ResolveWordValue(NewWord("other"))

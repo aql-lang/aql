@@ -58,6 +58,14 @@ func PathOf(t Value) Value {
 	}
 	var chain []*Type
 	for d := start; d != nil; d = d.Parent {
+		// Any is the universal lattice top; skip it as an ANCESTOR
+		// so paths stay [Scalar Number Integer], not [Any Scalar
+		// Number Integer]. When `pathof Any` is called directly the
+		// chain is still [Any] — the skip only triggers once we've
+		// already accumulated a leaf.
+		if d.Equal(TAny) && len(chain) > 0 {
+			break
+		}
 		chain = append([]*Type{d}, chain...)
 	}
 	elems := make([]Value, 0, len(chain))
@@ -69,13 +77,17 @@ func PathOf(t Value) Value {
 
 // TypeOf returns the type of v — uniformly its Parent, expressed as
 // a type-literal Value. After the type/value merge every value is a
-// lattice node, so typeof is a single Parent hop:
+// lattice node, so typeof is a single Parent hop, climbing the
+// unified lattice that has Any at the top of the main hierarchy:
 //
 //	typeof 5        → Integer
 //	typeof Integer  → Number
 //	typeof Number   → Scalar
-//	typeof none     → None
-//	typeof Any      → Any        (a root has no Parent — saturates)
+//	typeof Scalar   → Any        (Scalar's lattice parent is Any)
+//	typeof Any      → Any        (saturates — top of the main hierarchy)
+//	typeof none     → None       (none is None's sole inhabitant)
+//	typeof None     → None       (None is a degenerate root — saturates)
+//	typeof Never    → Never      (Never is a degenerate root — saturates)
 func TypeOf(v Value) Value {
 	if v.Parent == nil {
 		return v

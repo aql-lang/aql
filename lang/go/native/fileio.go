@@ -177,7 +177,7 @@ func valueToJsonic(v Value) string {
 			return "true"
 		}
 		return "false"
-	case v.Parent.Equal(TNone):
+	case IsNoneShape(v):
 		return "null"
 	case v.Parent.Equal(TAtom):
 		_as4, _ := AsAtom(v)

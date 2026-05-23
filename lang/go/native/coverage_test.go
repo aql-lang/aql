@@ -359,7 +359,7 @@ func TestUnifyDisjunctNone(t *testing.T) {
 	if !ok {
 		t.Fatal("expected unification to succeed")
 	}
-	if !result.Parent.Equal(TNone) {
+	if !IsNoneShape(result) {
 		t.Errorf("expected none type, got %s", result.Parent)
 	}
 }
@@ -665,7 +665,7 @@ func TestDotListOutOfBounds(t *testing.T) {
 	}
 	list := NewList([]Value{NewString("a")})
 	result := runAQL(t, r, []Value{list, NewInteger(5), NewWord("get")})
-	if len(result) != 1 || !result[0].Parent.Equal(TNone) {
+	if len(result) != 1 || !IsNoneShape(result[0]) {
 		t.Errorf("expected none, got %v", result)
 	}
 }
@@ -678,7 +678,7 @@ func TestDotMapMissing(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
 	result := runAQL(t, r, []Value{NewMap(m), NewAtom("y"), NewWord("get")})
-	if len(result) != 1 || !result[0].Parent.Equal(TNone) {
+	if len(result) != 1 || !IsNoneShape(result[0]) {
 		t.Errorf("expected none for missing key, got %v", result)
 	}
 }
@@ -703,7 +703,7 @@ func TestDotNone(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := runAQL(t, r, []Value{NewTypeLiteral(TNone), NewAtom("x"), NewWord("get")})
-	if len(result) != 1 || !result[0].Parent.Equal(TNone) {
+	if len(result) != 1 || !IsNoneShape(result[0]) {
 		t.Errorf("expected none, got %v", result)
 	}
 }
@@ -730,7 +730,7 @@ func TestDotListAtomKeyReturnsNone(t *testing.T) {
 	}
 	list := NewList([]Value{NewInteger(10), NewInteger(20)})
 	result := runAQL(t, r, []Value{list, NewAtom("x"), NewWord("get")})
-	if len(result) != 1 || !result[0].Parent.Equal(TNone) {
+	if len(result) != 1 || !IsNoneShape(result[0]) {
 		t.Errorf("expected none for atom key on list, got %v", result)
 	}
 }
@@ -742,7 +742,7 @@ func TestDotListStringKeyReturnsNone(t *testing.T) {
 	}
 	list := NewList([]Value{NewInteger(10)})
 	result := runAQL(t, r, []Value{list, NewString("x"), NewWord("get")})
-	if len(result) != 1 || !result[0].Parent.Equal(TNone) {
+	if len(result) != 1 || !IsNoneShape(result[0]) {
 		t.Errorf("expected none for string key on list, got %v", result)
 	}
 }

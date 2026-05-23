@@ -83,9 +83,10 @@ var comparisonNatives = []NativeFunc{
 		Name:        "between",
 		ForwardArgs: true,
 		Signatures: []NativeSig{{
-			Args:           []*Type{TScalar, TScalar, TScalarType},
+			Args:           []*Type{TScalar, TScalar, TScalar},
+			TypeArgs:       map[int]bool{2: true},
 			Handler:        eng.BetweenHandler,
-			Returns:        []*Type{TDependent},
+			Returns:        []*Type{TScalar},
 			RunInCheckMode: true,
 		}},
 	},

@@ -91,7 +91,7 @@ func TestJsonicFormatDecodeNull(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || !result[0].Parent.Equal(TNone) {
+	if len(result) != 1 || !IsNoneShape(result[0]) {
 		t.Errorf("expected none, got %v", result)
 	}
 }
@@ -287,8 +287,8 @@ func TestCSVFormatDecodeTableSchema(t *testing.T) {
 	if !ok {
 		t.Fatal("expected field 'x'")
 	}
-	if !xType.Parent.Equal(TString) {
-		t.Errorf("expected string type for x, got %s", xType.Parent)
+	if !(&xType).Equal(TString) {
+		t.Errorf("expected string type for x, got %s", xType.String())
 	}
 }
 

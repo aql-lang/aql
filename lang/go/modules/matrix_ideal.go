@@ -80,7 +80,10 @@ func registerTensorIdeals(r *native.Registry) {
 func tensorAccepts(vt *eng.Type, kind string) func(native.Value) bool {
 	return func(v native.Value) bool {
 		if v.Data == nil {
-			return v.Parent != nil && v.Parent.Equal(vt)
+			// A bare type literal IS its lattice node (by-value copy
+			// post the type/value merge), so test the value's own
+			// identity, not v.Parent (which is the supertype).
+			return (&v).Equal(vt)
 		}
 		ti, ok := tensorTypeInfo(v)
 		return ok && ti.Kind == kind

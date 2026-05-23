@@ -4,7 +4,7 @@ import "testing"
 
 // PathSubtype is the lexical, path-prefix-only sibling of Matches.
 // These tests pin its semantics — no `Any` matches-everything, no
-// Dep<Leaf> → base bolt-on, no metatype rules. The simpler check is
+// metatype rules, no Dep<Leaf> override. The simpler check is
 // what callers want when they're about to do `v.AsX()` and a
 // `DepX` payload would be a silent miscompile.
 
@@ -37,29 +37,36 @@ func TestPathSubtype_DisjointTypes(t *testing.T) {
 	}
 }
 
-// PathSubtype does NOT special-case `Any`. Use `Matches` for the
-// lattice-aware "everything is Any" rule.
-func TestPathSubtype_AnyIsNotMagical(t *testing.T) {
-	if TInteger.PathSubtype(TAny) {
-		t.Errorf("Integer.PathSubtype(Any) = true (PathSubtype must NOT special-case Any)")
+// Under the Any-root lattice, `Any` IS the structural top — every
+// type chains to it via Parent — so PathSubtype now agrees with
+// Matches: Integer.PathSubtype(Any) is true (Any is on Integer's
+// parent chain), and Matches returns true for the same reason
+// (Any is still TAny-special-cased in Matches as a fast path, but
+// the ancestor walk would find it anyway).
+func TestPathSubtype_AnyIsLatticeRoot(t *testing.T) {
+	if !TInteger.PathSubtype(TAny) {
+		t.Errorf("Integer.PathSubtype(Any) = false (Any is the lattice root — every type chains up to it)")
 	}
 	if !TInteger.Matches(TAny) {
-		t.Errorf("Integer.Matches(Any) = false (Matches MUST special-case Any)")
+		t.Errorf("Integer.Matches(Any) = false")
 	}
 }
 
-// PathSubtype does NOT bolt the Dep<Leaf>→base relation onto the
-// lattice — that's what the override in Matches is for. A DepInteger
-// is at Type/Dependent/DepInteger, which doesn't share any prefix
-// with Integer.
-func TestPathSubtype_DepIntegerIsNotInteger(t *testing.T) {
+// A DepScalar value's Parent IS the base scalar (e.g. TInteger), so
+// PathSubtype is trivially the identity relation here and Matches is
+// true by ancestry walk — no bolt-on override is needed. The
+// constraint payload (DepScalarInfo) carries the refinement, detected
+// via v.IsDepScalar() at unify time.
+func TestPathSubtype_DepScalarParentIsBase(t *testing.T) {
 	dep := NewDepScalar(DepGT, NewInteger(10))
-	if dep.Parent.PathSubtype(TInteger) {
-		t.Errorf("DepInteger.PathSubtype(Integer) = true (PathSubtype must NOT follow the Dep bolt-on)")
+	if !dep.Parent.Equal(TInteger) {
+		t.Errorf("DepScalar(Integer).Parent = %s, want Integer", dep.Parent.String())
 	}
-	// Sanity: Matches DOES say yes through the bolt-on.
 	if !dep.Parent.Matches(TInteger) {
-		t.Errorf("DepInteger.Matches(Integer) = false (Matches MUST follow the Dep bolt-on)")
+		t.Errorf("DepScalar(Integer).Matches(Integer) = false")
+	}
+	if !dep.IsDepScalar() {
+		t.Errorf("DepScalar(Integer).IsDepScalar() = false")
 	}
 }
 

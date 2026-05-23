@@ -129,8 +129,9 @@ func TestCompareValuesCrossScalar(t *testing.T) {
 
 func TestCompareValuesPaths(t *testing.T) {
 	// Path-vs-Path falls through to the Scalar comparator, which
-	// orders paths by segment count (longest first), then segment by
-	// segment, then an absolute path before a relative one.
+	// orders paths by segment count (shortest first), then segment
+	// by segment in reverse lexical order, then a relative path
+	// before an absolute one.
 	abc := NewPath([]string{"a", "b", "c"}, false) // 3 segments
 	ab := NewPath([]string{"a", "b"}, false)       // 2 segments
 	ac := NewPath([]string{"a", "c"}, false)       // 2 segments
@@ -142,14 +143,14 @@ func TestCompareValuesPaths(t *testing.T) {
 		a, b Value
 		want int
 	}{
-		{"longer_sorts_first", abc, ab, -1},
-		{"shorter_sorts_after", ab, abc, 1},
-		{"length_beats_lexical", zzz, ab, -1},
-		{"equal_len_segment", ab, ac, -1},
-		{"equal_len_segment_rev", ac, ab, 1},
-		{"per_element_beats_render", ab, aDashA, -1}, // "a" < "a-" at segment 0
-		{"abs_before_rel", absAB, ab, -1},
-		{"rel_after_abs", ab, absAB, 1},
+		{"shorter_sorts_first", ab, abc, -1},
+		{"longer_sorts_after", abc, ab, 1},
+		{"length_beats_lexical", ab, zzz, -1},
+		{"equal_len_segment", ac, ab, -1}, // reverse lexical: "c" > "b" → ac before ab
+		{"equal_len_segment_rev", ab, ac, 1},
+		{"per_element_beats_render", aDashA, ab, -1}, // reverse lexical: "a-" > "a" → aDashA before ab
+		{"rel_before_abs", ab, absAB, -1},
+		{"abs_after_rel", absAB, ab, 1},
 		{"identical", ab, ab, 0},
 	}
 	for _, tt := range tests {
@@ -466,8 +467,8 @@ func TestRevPathComparator(t *testing.T) {
 		a, b       []string
 		normalWant int // CompareValues for the same pair as plain Paths
 	}{
-		{"longer_first", []string{"a", "b", "c"}, []string{"a", "b"}, -1},
-		{"segment_order", []string{"a", "b"}, []string{"a", "c"}, -1},
+		{"longer_after", []string{"a", "b", "c"}, []string{"a", "b"}, 1},
+		{"segment_order", []string{"a", "b"}, []string{"a", "c"}, 1},
 		{"identical", []string{"a", "b"}, []string{"a", "b"}, 0},
 	}
 	for _, tt := range tests {

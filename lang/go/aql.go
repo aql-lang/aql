@@ -283,6 +283,13 @@ func (a *AQL) Run(src string) ([]any, error) {
 	out := make([]any, len(result))
 	for i, v := range result {
 		switch {
+		case v.IsDepScalar():
+			// DepScalar's Parent IS the base scalar (TInteger,
+			// TString, …) post the type-collapse, so it would
+			// otherwise hit the AsInteger/AsString branches below and
+			// pull a zero value from the DepScalarInfo payload. Route
+			// through String() to render as "(Integer gte 5)".
+			out[i] = v.String()
 		case v.Parent.Matches(native.TInteger):
 			n, _ := native.AsInteger(v)
 			out[i] = n

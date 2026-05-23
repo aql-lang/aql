@@ -148,3 +148,6 @@ coverage/
 
 # calc module build output
 calc/bin/
+
+# Local-run binary from `go run .` / `go build .` inside cmd/go/aql/
+cmd/go/aql/aql

@@ -72,6 +72,20 @@ type Signature struct {
 	// the handler could resolve it as a type.
 	NoEvalMapArgs map[int]bool
 
+	// TypeArgs marks arg positions that must receive a *type literal*
+	// (or a structural type body) rather than a concrete value. The
+	// slot's declared type in Args[i] is the upper bound of the
+	// permitted lattice node — Args[i]=TScalar with TypeArgs[i]=true
+	// accepts any scalar type literal (`Integer`, `String`, `Boolean`,
+	// …); Args[i]=TIdeal with TypeArgs[i]=true accepts any ideal type
+	// body (Record, Options, Table, Object, …).
+	//
+	// This replaced the historical metatype nodes (Type/ScalarType,
+	// Type/NodeType, Type/IdealType) — the lattice no longer carries a
+	// "type of types" parallel hierarchy; "this slot wants a type" is
+	// now a sig-level concern.
+	TypeArgs map[int]bool
+
 	// BarrierPos is the arg index where forward collection must stop.
 	// Positions before BarrierPos are collected forward; positions from
 	// BarrierPos onward are matched from the stack in reverse. 0 means
@@ -227,60 +241,84 @@ func FlexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
 	return nil, false
 }
 
-// sigTypeMatches checks whether a value's type matches a signature arg
-// type, including metatype awareness: a type literal (Data==nil) whose
-// metatype matches a metatype signature arg (e.g. String literal
-// matches TScalarType).
+// sigTypeMatches checks whether a value's type matches a signature
+// arg type for an ordinary (non-TypeArgs) slot. Routes the primary
+// subtype check through Behavior so per-type custom Match
+// implementations participate in signature matching.
 //
-// **The carrier rule.** Carriers occupy a deliberately ambiguous role
-// in the type system: they have a concrete Parent (e.g. TInteger) and
-// nil Data, identical to a type literal at the field level. But
-// semantically they are abstract VALUES, not types. To preserve that
-// distinction at sig-match time, sigTypeMatches treats them as
-// values:
+// A type-literal expectation lives on the sig as TypeArgs[i]=true
+// (see sigTypeMatchesAsType); this function is the value-side path.
 //
-//   - Carrier{Integer} satisfies TInteger (the value-level slot).
-//   - Carrier{Integer} does NOT satisfy TScalarType (the metatype slot).
-//
-// Without the carrier exclusion at the metatype branch, every
-// check-mode pass through `is`/`typeof`/`unify` would silently
-// upgrade carriers into metatype matches and produce wrong
-// dispatch. The Carrier=false guard on the metatype path is the
-// only place this distinction is enforced — adding new metatype
-// branches must preserve it.
-//
-// Genuine type literals produced by stepWord on a type-name word
-// (e.g. the Word `Integer` resolves to NewTypeLiteral(TInteger))
-// always have Carrier=false, so they continue to match metatype
-// slots correctly.
-//
-// See `LANGREF.md` "Type-Registry Internals" → "Carriers" for the
-// user-facing description of this rule.
+// **The carrier rule.** Carriers have a concrete Parent (e.g.
+// TInteger) and nil Data, identical to a type literal at the field
+// level — but semantically they are abstract VALUES, not types. They
+// satisfy ordinary value slots (Carrier{Integer} matches TInteger)
+// and are rejected at TypeArgs slots by sigTypeMatchesAsType.
 func sigTypeMatches(v Value, t *Type) bool {
-	// Canonical dispatch site: route the primary subtype check
-	// through Behavior so per-type custom Match implementations
-	// participate in signature matching. The metatype-promotion
-	// branches below remain — they are matching-strategy concerns
-	// (a type-literal at a metatype slot), not per-type behaviour.
 	if v.Is(t) {
 		return true
-	}
-	if v.Data == nil && !v.Carrier && IsMetaType(t) {
-		return MetatypeFor(ValueType(v)).Matches(t)
-	}
-	if _, ok := v.Data.(ObjectTypeInfo); ok && IsMetaType(t) {
-		return MetatypeFor(v.Parent).Matches(t)
-	}
-	if IsRecordType(v) || IsTableType(v) || IsOptionsType(v) {
-		if IsMetaType(t) {
-			return MetatypeFor(v.Parent).Matches(t)
-		}
 	}
 	// Options values have Parent=TMap but should match TOptions signatures.
 	if IsOptionsType(v) && t.Equal(TOptions) {
 		return true
 	}
 	return false
+}
+
+// sigTypeMatchesAsType is the TypeArgs-slot match: v must be a type
+// literal (or a structural type body) whose denoted lattice node
+// matches t. Used for sig positions like the second arg of
+// `Integer gte 10` — the "Integer" type literal — or the first arg
+// of `make Foo {...}` — the Foo type body.
+//
+// A type literal is a by-value copy of its lattice node (Data==nil,
+// Parent set to the supertype); the denoted node is &v. A structural
+// type body (RecordType, OptionsType, TableType, ObjectType,
+// ChildType) carries non-nil Data but its Parent is the family root
+// (TMap, TList, TObject) — we match against the Parent for those.
+// Carriers (Data==nil but Carrier=true) are values, not types, and
+// are rejected here.
+func sigTypeMatchesAsType(v Value, t *Type) bool {
+	if v.Carrier {
+		return false
+	}
+	if v.Data == nil {
+		// Bare None has Parent=TNone; treat it as not-a-type for type
+		// args. Lattice roots have Parent=nil but are still valid type
+		// literals — &v is the lattice node either way.
+		if v.Parent != nil && v.Parent.Equal(TNone) && v.Name == "" {
+			return false
+		}
+		return (&v).Matches(t)
+	}
+	// DepScalar bodies are NOT accepted at TypeArgs slots: they're
+	// constraints over a base scalar (used as runtime values), not
+	// bare scalar type literals — the dep-sig fallthrough would
+	// otherwise loop back on itself for `(Integer gt 10) lt
+	// (Integer gt 20)`.
+	if v.IsDepScalar() {
+		return false
+	}
+	// Other structural type bodies (Record, Options, Table, Object,
+	// ChildType, Disjunct, Enum, Function/FnUndef, ImplicitMap
+	// record shape) are "types" — accept them when their lattice
+	// family matches the slot.
+	if IsTypeBody(v) {
+		return v.Parent.Matches(t)
+	}
+	return false
+}
+
+// sigArgMatches dispatches a positional sig match to either the
+// ordinary value matcher or the TypeArgs (type-literal) matcher
+// based on sig.TypeArgs[idx]. Use this at every call site that has
+// a *Signature in hand; bare sigTypeMatches stays for the
+// no-sig-context paths (carrier promotion, predicate sandbox).
+func sigArgMatches(sig *Signature, idx int, v Value) bool {
+	if sig.TypeArgs != nil && sig.TypeArgs[idx] {
+		return sigTypeMatchesAsType(v, sig.Args[idx])
+	}
+	return sigTypeMatches(v, sig.Args[idx])
 }
 
 // rejectsTypeLiteral reports whether a value with Data==nil should be
@@ -299,16 +337,19 @@ func sigTypeMatches(v Value, t *Type) bool {
 //
 //   - TAny slots — universal catch-all; the handler is expected to
 //     handle both concrete payloads and type literals.
-//   - Metatype slots (Type/*) — `make`, `is`, `typeof`, `convert`,
-//     etc. consume a type literal as the type itself.
+//   - TypeArgs slots — the sig-level "I want a type literal here"
+//     marker (the successor to the historical metatype slots).
+//     rejectsTypeLiteral has no sig in hand; callers wrap the
+//     check with a `!sig.TypeArgs[i]` guard.
 //
 // Carriers (Data==nil but Carrier=true) are abstract VALUES, not
 // types — sigTypeMatches deliberately treats them as values, and
-// this rejection check follows suit. The value `none` (the unique
-// inhabitant of None) is also legitimate at a TNone slot — None
-// has a single inhabitant and that's it. This covers both the spec
-// runner's NewNone() (Data != nil sentinel) and production aql's
-// `NewTypeLiteral(TNone)` (Data == nil, used as the "null" value).
+// this rejection check follows suit. The value `none` is also
+// legitimate at a TNone slot — None has a single inhabitant and
+// that's it. This covers the spec runner's NewNone() (Data != nil
+// sentinel value with Parent=TNone) AND production aql's
+// `NewTypeLiteral(TNone)` (Data == nil, value IS the TNone lattice
+// node — its own Parent is nil since None is a degenerate root).
 func rejectsTypeLiteral(v Value, expectedType *Type) bool {
 	if v.Data != nil {
 		return false
@@ -319,10 +360,10 @@ func rejectsTypeLiteral(v Value, expectedType *Type) bool {
 	if expectedType.Equal(TAny) {
 		return false
 	}
-	if IsMetaType(expectedType) {
-		return false
-	}
-	if v.Parent.Equal(TNone) {
+	if expectedType.Equal(TNone) {
+		// At a TNone slot, the None type literal is the canonical
+		// inhabitant; sigTypeMatches has already verified the value
+		// is None-typed.
 		return false
 	}
 	return true
@@ -347,11 +388,13 @@ func positionalMatch(values []Value, sig *Signature) bool {
 			}
 			continue
 		}
-		if !sigTypeMatches(v, t) {
+		if !sigArgMatches(sig, i, v) {
 			return false
 		}
-		// Reject type literals (Data==nil) for concrete Map/List signatures.
-		if v.Data == nil && (t.Equal(TMap) || t.Equal(TList)) {
+		// Reject type literals (Data==nil) for concrete Map/List signatures
+		// unless this slot explicitly wants a type literal.
+		isTypeArg := sig.TypeArgs != nil && sig.TypeArgs[i]
+		if !isTypeArg && v.Data == nil && (t.Equal(TMap) || t.Equal(TList)) {
 			return false
 		}
 	}
@@ -431,7 +474,7 @@ var typeInherentScores = map[string]int{
 // typeInherentScore returns the inherent score for a type.
 // Defaults to 1000 for types not in the map.
 func typeInherentScore(t *Type) int {
-	path := t.String()
+	path := t.Path()
 	if s, ok := typeInherentScores[path]; ok {
 		return s
 	}

@@ -1202,7 +1202,7 @@ func (e *Engine) stepLiteral() error {
 	if fwd.CollectedArgs < fwd.ExpectedArgs {
 		val := e.stack[valIdx]
 		nextIdx := fwd.CollectedArgs
-		matches := sigTypeMatches(val, fwd.Sig.Args[nextIdx])
+		matches := sigArgMatches(fwd.Sig, nextIdx, val)
 		if !matches && fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx] &&
 			val.Parent.Equal(TWord) && TAtom.Matches(fwd.Sig.Args[nextIdx]) {
 			w, _ := AsWord(val)
@@ -2697,7 +2697,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 
 					// Defined word: resolves to its def type.
 					if top, ok := e.registry.Defs.Top(ww.Name); ok {
-						if sigTypeMatches(top, expectedType) || expectedType.Equal(TAny) {
+						if sigArgMatches(sig, fwd, top) || expectedType.Equal(TAny) {
 							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
@@ -2715,7 +2715,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					// arrive as TFnDef/TFunction values; plan against
 					// that Parent for sig matching.
 					if tv, ok := e.registry.TopTypeBody(ww.Name); ok {
-						if sigTypeMatches(tv, expectedType) || expectedType.Equal(TAny) {
+						if sigArgMatches(sig, fwd, tv) || expectedType.Equal(TAny) {
 							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
@@ -2731,7 +2731,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 
 					// Known literals: true/false → Boolean, type names → type literal.
 					if ww.Name == "true" || ww.Name == "false" {
-						if sigTypeMatches(Value{Parent: TBoolean}, expectedType) || expectedType.Equal(TAny) {
+						if sigArgMatches(sig, fwd, Value{Parent: TBoolean}) || expectedType.Equal(TAny) {
 							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
@@ -2740,7 +2740,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 						break
 					}
 					if tn, isType := typeNames[ww.Name]; isType {
-						if sigTypeMatches(NewTypeLiteral(tn), expectedType) {
+						if sigArgMatches(sig, fwd, NewTypeLiteral(tn)) {
 							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
@@ -2749,7 +2749,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 						break
 					}
 					if tn, isType := ResolveTypePath(ww.Name); isType {
-						if sigTypeMatches(NewTypeLiteral(tn), expectedType) {
+						if sigArgMatches(sig, fwd, NewTypeLiteral(tn)) {
 							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
@@ -2759,7 +2759,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					}
 
 					// Undefined word: always resolves to Atom.
-					if sigTypeMatches(Value{Parent: TAtom}, expectedType) || expectedType.Equal(TAny) {
+					if sigArgMatches(sig, fwd, Value{Parent: TAtom}) || expectedType.Equal(TAny) {
 						positions[fwd] = scanIdx
 						fwd++
 						scanIdx++
@@ -2774,8 +2774,9 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				}
 
 				// Literal value: direct type check.
-				if sigTypeMatches(tok, expectedType) || expectedType.Equal(TAny) {
-					if rejectsTypeLiteral(tok, expectedType) {
+				if sigArgMatches(sig, fwd, tok) || expectedType.Equal(TAny) {
+					isTypeArg := sig.TypeArgs != nil && sig.TypeArgs[fwd]
+					if !isTypeArg && rejectsTypeLiteral(tok, expectedType) {
 						break // reject type literal at concrete-payload sig
 					}
 					positions[fwd] = scanIdx
@@ -2817,7 +2818,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				canStack := true
 				for j := 0; j < remaining; j++ {
 					stackVal := resolved[len(resolved)-1-j]
-					if !sigTypeMatches(stackVal, sig.Args[fwd+j]) {
+					if !sigArgMatches(sig, fwd+j, stackVal) {
 						canStack = false
 						break
 					}
@@ -2880,11 +2881,12 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				positions[sigIdx] = resolvedIdx[ri]
 				continue
 			}
-			if !sigTypeMatches(stackVal, sig.Args[sigIdx]) {
+			if !sigArgMatches(sig, sigIdx, stackVal) {
 				allMatch = false
 				break
 			}
-			if rejectsTypeLiteral(stackVal, sig.Args[sigIdx]) {
+			isTypeArg := sig.TypeArgs != nil && sig.TypeArgs[sigIdx]
+			if !isTypeArg && rejectsTypeLiteral(stackVal, sig.Args[sigIdx]) {
 				allMatch = false
 				break
 			}
@@ -2994,7 +2996,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 			if av.Parent.Equal(TAny) {
 				continue
 			}
-			if sigTypeMatches(av, s.Args[j]) {
+			if sigArgMatches(s, j, av) {
 				score++
 				continue
 			}

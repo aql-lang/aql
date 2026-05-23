@@ -32,8 +32,8 @@ func TestNewTypeMultiLevel(t *testing.T) {
 			if typ.Specificity() != tt.parts {
 				t.Errorf("NewType(%q).Specificity() = %d, want %d", tt.path, typ.Specificity(), tt.parts)
 			}
-			if typ.String() != tt.path {
-				t.Errorf("String() = %q, want %q", typ.String(), tt.path)
+			if typ.Path() != tt.path {
+				t.Errorf("Path() = %q, want %q", typ.Path(), tt.path)
 			}
 		})
 	}
@@ -268,14 +268,15 @@ func TestUnifyIdenticalDeepTypeLiterals(t *testing.T) {
 			path += fmt.Sprintf("/Sub%d", i)
 		}
 		t.Run(fmt.Sprintf("depth_%d", depth), func(t *testing.T) {
-			a := Value{Parent: mustTestType(t, path), Data: nil}
-			b := Value{Parent: mustTestType(t, path), Data: nil}
+			tp := mustTestType(t, path)
+			a := NewTypeLiteral(tp)
+			b := NewTypeLiteral(tp)
 			result, ok := Unify(a, b)
 			if !ok {
 				t.Fatalf("Unify should succeed for identical type %q", path)
 			}
-			if !result.Parent.Equal(mustTestType(t, path)) {
-				t.Errorf("result type = %s, want %s", result.Parent, path)
+			if !(&result).Equal(tp) {
+				t.Errorf("result type = %s, want %s", result.String(), path)
 			}
 		})
 	}
