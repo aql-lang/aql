@@ -297,11 +297,12 @@ func refineBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	// input type literal verbatim) — without this differentiation the
 	// two surfaces would be indistinguishable downstream.
 	if base.Data == nil && !base.Carrier {
-		// Mint the anon subtype against the canonical lattice node
+		// Mint the refine prefab against the canonical lattice node
 		// for base, so any user-installed Behavior on base (via
 		// `behave`) propagates to the LCA walk for sibling subtypes
-		// downstream. See TYPE-CANONICALIZATION.0.
-		anon := r.Types.MintType("", CanonicalType(r, &base))
+		// downstream. The prefab carries no Name; the paired `def`
+		// recognises it (eng.IsRefinePrefab) and renames-and-binds.
+		anon := r.Types.MintRefinePrefab(CanonicalType(r, &base))
 		return []Value{NewTypeLiteral(anon)}, nil
 	}
 	return []Value{base}, nil

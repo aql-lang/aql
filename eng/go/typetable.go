@@ -239,6 +239,26 @@ func (tt *TypeTable) MintType(name string, parent *Type) *Type {
 	return def
 }
 
+// MintRefinePrefab mints an anonymous user subtype as the output of
+// `refine BaseType` (the bare-refine constructor surface). The
+// returned *Type carries no Name; the paired `def Foo` recognises
+// the prefab via IsRefinePrefab and renames-and-binds. This is the
+// protocol channel between `refine` and `def` for distinguishing
+// the subtype path (`def Foo refine Integer`) from the alias path
+// (`def Foo Integer`, where the body remains the input type literal
+// verbatim) — see TYPE-CANONICALIZATION.0.
+func (tt *TypeTable) MintRefinePrefab(parent *Type) *Type {
+	return tt.MintType("", parent)
+}
+
+// IsRefinePrefab reports whether v is an anonymous refine-bare
+// prefab awaiting rename. True iff v is a bare type literal whose
+// lattice node is user-minted with no Name — the unique shape
+// `MintRefinePrefab` produces.
+func IsRefinePrefab(v Value) bool {
+	return v.Data == nil && v.Origin == OriginUserDef && v.Name == "" && !v.Carrier
+}
+
 // externalBandFor returns the Rank band for user/external types
 // rooted at parent's branch. Each band sits one increment above the
 // corresponding kernel band (Scalar 20e9 → external 21e9, Node 30e9

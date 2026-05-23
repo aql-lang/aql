@@ -320,21 +320,18 @@ func InstallType(r *Registry, name string, body Value) error {
 		// gates, not dispatch categories.
 		def := r.Types.MintType(name, inputT)
 		r.Defs.PushType(name, def, body)
-	} else if body.Data == nil && body.Origin == OriginUserDef && body.Name == "" {
-		// `def Foo refine Integer` route: `refineBareHandler` already
-		// minted an anonymous subtype of the input type and returned
+	} else if IsRefinePrefab(body) {
+		// `def Foo refine Integer` route: `refineBareHandler` minted
+		// an anonymous refine prefab (MintRefinePrefab) and returned
 		// its type literal. Rename the lattice node and bind the
 		// renamed Foo literal as the body so resolving `Foo` pushes
-		// the new subtype node (Parent = Integer, Rank in the
-		// external Scalar band) rather than the original input type
-		// literal. Without this anon-refine path the bound body would
-		// stay the bare Integer literal and `typeof Foo` would walk
-		// to Integer's parent (Number).
+		// the new subtype node (Parent = base, Rank in the external
+		// band) rather than the original input type literal.
 		def := r.Types.LookupByID(body.ID)
 		if def == nil {
 			return &AqlError{
 				Code:   "type_error",
-				Detail: "type " + name + ": refine-bare anonymous type missing from lattice",
+				Detail: "type " + name + ": refine prefab missing from lattice",
 			}
 		}
 		def.Name = name
