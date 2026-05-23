@@ -343,11 +343,13 @@ func InstallType(r *Registry, name string, body Value) error {
 	} else {
 		// A bare type-literal body IS the parent type after the
 		// type/value merge; structural/singleton bodies parent at
-		// their container type (Map / List / Integer / …).
+		// their container type (Map / List / Integer / …). For a
+		// bare type-literal body, route through CanonicalType so the
+		// minted subtype's lattice Parent is the canonical *Type and
+		// not a non-canonical copy.
 		parent := body.Parent
 		if body.Data == nil {
-			bodyType := body
-			parent = &bodyType
+			parent = CanonicalType(r, &body)
 		}
 		def := r.Types.MintType(name, parent)
 		r.Defs.PushType(name, def, body)

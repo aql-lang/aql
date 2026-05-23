@@ -297,18 +297,11 @@ func refineBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	// input type literal verbatim) — without this differentiation the
 	// two surfaces would be indistinguishable downstream.
 	if base.Data == nil && !base.Carrier {
-		// Use the canonical lattice node as the parent (the by-value
-		// type literal we received is a copy of that node). The
-		// canonical pointer is what `behave`-installed Behaviors live
-		// on; minting against the copy would leave LCA walks landing
-		// on the copy and missing any user-installed Comparer.
-		parent := &base
-		if base.ID != "" {
-			if canon := r.Types.LookupByID(base.ID); canon != nil {
-				parent = canon
-			}
-		}
-		anon := r.Types.MintType("", parent)
+		// Mint the anon subtype against the canonical lattice node
+		// for base, so any user-installed Behavior on base (via
+		// `behave`) propagates to the LCA walk for sibling subtypes
+		// downstream. See TYPE-CANONICALIZATION.0.
+		anon := r.Types.MintType("", CanonicalType(r, &base))
 		return []Value{NewTypeLiteral(anon)}, nil
 	}
 	return []Value{base}, nil
