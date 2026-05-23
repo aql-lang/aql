@@ -1,0 +1,99 @@
+# tokens	expected	note
+# =====================================================================
+# Signature-matcher ordering spec — covers the lattice-reversed sort
+# eng/go/signature.go::CompareSignatures applies to overloaded words.
+#
+# The order is:
+#   1. Longer arity first (list-size dominant).
+#   2. Per position, the more specific type/pattern first — reversed
+#      CompareValues on the per-slot expectation value (sigSlotValue).
+#   3. BarrierPos as final tiebreaker (piped sigs first).
+#
+# At each position the slot value is either the structural Pattern
+# (when set) or a bare type literal of the declared arg type, so the
+# unified type/value lattice settles the order — same machinery as
+# `cmp` / `sort` / `lt`.
+#
+# Verification is via:
+#   - `inspect k 'signatures' get` — shows the registered overloads in
+#     dispatch order (post-sort).
+#   - dispatching a value of the most-specific type — first-match-wins
+#     reveals which sig actually fires.
+# =====================================================================
+
+# ---------------------------------------------------------------------
+# 1. User-defined scalar subtypes (refine Integer / refine String)
+# ---------------------------------------------------------------------
+# A `def Pos refine Integer` mints Pos in the external scalar band
+# (Rank > all kernel scalars, per typetable.go::externalBandFor), so
+# Pos sorts strictly above its kernel parent in the reversed order.
+
+def Pos refine Integer  def k fn [[Integer] [String] ['i']  [Pos] [String] ['p']]  inspect k 'signatures' get	[{args:['Pos']} {args:['Integer']} {args:[]}]	refine Integer sorts before Integer
+def Pos refine Integer  def k fn [[Pos] [String] ['p']  [Integer] [String] ['i']]  inspect k 'signatures' get	[{args:['Pos']} {args:['Integer']} {args:[]}]	registration order doesn't matter — the sort is stable on lattice keys
+def Phrase refine String  def k fn [[String] [String] ['s']  [Phrase] [String] ['p']]  inspect k 'signatures' get	[{args:['Phrase']} {args:['String']} {args:[]}]	refine String sorts before String
+
+# ---------------------------------------------------------------------
+# 2. User-defined node subtypes (refine List / refine Map)
+# ---------------------------------------------------------------------
+# Same band rule on the Node branch — refined List / Map subtypes
+# sort above their kernel parents.
+
+def Vec refine List  def k fn [[List] [String] ['l']  [Vec] [String] ['v']]  inspect k 'signatures' get	[{args:['Vec']} {args:['List']} {args:[]}]	refine List sorts before List
+def Dict refine Map  def k fn [[Map] [String] ['m']  [Dict] [String] ['d']]  inspect k 'signatures' get	[{args:['Dict']} {args:['Map']} {args:[]}]	refine Map sorts before Map
+
+# ---------------------------------------------------------------------
+# 3. User-defined Object / Record types
+# ---------------------------------------------------------------------
+# `def Foo (refine Object {x:Integer})` mints Foo in the external
+# Ideal band — higher Rank than the kernel Object node. Verified via
+# both inspect (sort key) and dispatch (only Foo-typed instances hit
+# the Foo overload).
+
+def Foo (refine Object {x:Integer})  def k fn [[Object] [String] ['o']  [Foo] [String] ['f']]  inspect k 'signatures' get	[{args:['Foo']} {args:['Object']} {args:[]}]	Foo subtype sorts before Object
+def Foo (refine Object {x:Integer})  def k fn [[Object] [String] ['o']  [Foo] [String] ['f']]  make Foo {x:1} k	'f'	Foo instance dispatches to the Foo sig
+def Foo (refine Object {x:Integer})  def k fn [[Any] [String] ['a']  [Foo] [String] ['f']]  make Foo {x:1} k	'f'	specific Foo wins over the Any catch-all
+
+# Sibling user types: same Rank, same depth — tiebreak by name. Lex
+# puts Bar < Foo in natural order; the reversed sig sort flips that to
+# Foo first.
+def Foo refine List  def Bar refine List  def k fn [[Foo] [String] ['f']  [Bar] [String] ['b']]  inspect k 'signatures' get	[{args:['Foo']} {args:['Bar']} {args:[]}]	siblings tiebreak by name (reversed)
+
+# ---------------------------------------------------------------------
+# 4. Go-defined Ideals (Tensor / Matrix / Vector from aql:matrix)
+# ---------------------------------------------------------------------
+# Matrix and Vector are registered via RegisterExternalBuiltin as
+# lattice children of Tensor (modules/matrix.go::registerTensorTypes).
+# They share the external Ideal band Rank with their parent; same
+# Rank, deeper depth → child sorts before parent in the reversed
+# order. Matrix vs Vector are siblings — name tiebreak (Matrix < Vector
+# lex) flipped means Vector sorts first.
+
+def k fn [[Tensor] [String] ['t']  [Matrix] [String] ['m']]  inspect k 'signatures' get	[{args:['Matrix']} {args:['Tensor']} {args:[]}]	Matrix sorts before Tensor (child before parent)
+def k fn [[Tensor] [String] ['t']  [Matrix] [String] ['m']]  make Matrix [[1 2][3 4]] k	'm'	Matrix instance hits the Matrix sig
+def k fn [[Tensor] [String] ['t']  [Matrix] [String] ['m']]  make Vector [1 2 3] k	't'	Vector isn't Matrix — falls through to Tensor
+def k fn [[Tensor] [String] ['t']  [Matrix] [String] ['m']  [Vector] [String] ['v']]  inspect k 'signatures' get	[{args:['Vector']} {args:['Matrix']} {args:['Tensor']} {args:[]}]	Matrix/Vector both before Tensor; Vector before Matrix on name tiebreak (reversed)
+def k fn [[Tensor] [String] ['t']  [Matrix] [String] ['m']  [Vector] [String] ['v']]  make Vector [1 2 3] k	'v'	Vector instance hits the Vector sig
+
+# User refinement OF a Go-defined Ideal: deeper than Matrix, same
+# external band → sorts ahead of Matrix.
+def UMat refine Matrix  def k fn [[Matrix] [String] ['m']  [UMat] [String] ['u']]  inspect k 'signatures' get	[{args:['UMat']} {args:['Matrix']} {args:[]}]	user-defined subtype of Matrix sorts before Matrix
+
+# ---------------------------------------------------------------------
+# 5. Pattern-driven sort (concrete Pattern beats bare type literal)
+# ---------------------------------------------------------------------
+# A sig with a concrete-value Pattern sorts strictly ahead of a sig
+# with the bare type — via litVsConcreteOrder on the family Comparer
+# (CompareValues path), reversed by the sig sorter so the more
+# specific overload runs first.
+
+def k fn [[0] [String] ['z']  [Integer] [String] ['n']]  k 0	'z'	value 0 matches the 0-pattern
+def k fn [[0] [String] ['z']  [Integer] [String] ['n']]  k 5	'n'	value 5 falls to the bare Integer overload
+def k fn [['x'] [String] ['xx']  [String] [String] ['s']]  k 'x'	'xx'	String pattern beats bare String
+def k fn [['x'] [String] ['xx']  [String] [String] ['s']]  k 'y'	's'	non-matching String falls to bare
+
+# Map patterns: OpenUnifyMap subset-matches, so a larger pattern is
+# strictly more specific than a smaller one. CompareValues orders
+# maps by size first → reversed → larger map pattern sorts first.
+
+def k fn [[{a:1}] [String] ['a']  [{a:1 b:2}] [String] ['ab']]  k {a:1 b:2}	'ab'	the larger-pattern sig wins
+def k fn [[{a:1}] [String] ['a']  [{a:1 b:2}] [String] ['ab']]  k {a:1}	'a'	smaller value matches only the smaller pattern
