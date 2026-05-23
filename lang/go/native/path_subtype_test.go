@@ -37,14 +37,18 @@ func TestPathSubtype_DisjointTypes(t *testing.T) {
 	}
 }
 
-// PathSubtype does NOT special-case `Any`. Use `Matches` for the
-// lattice-aware "everything is Any" rule.
-func TestPathSubtype_AnyIsNotMagical(t *testing.T) {
-	if TInteger.PathSubtype(TAny) {
-		t.Errorf("Integer.PathSubtype(Any) = true (PathSubtype must NOT special-case Any)")
+// Under the Any-root lattice, `Any` IS the structural top — every
+// type chains to it via Parent — so PathSubtype now agrees with
+// Matches: Integer.PathSubtype(Any) is true (Any is on Integer's
+// parent chain), and Matches returns true for the same reason
+// (Any is still TAny-special-cased in Matches as a fast path, but
+// the ancestor walk would find it anyway).
+func TestPathSubtype_AnyIsLatticeRoot(t *testing.T) {
+	if !TInteger.PathSubtype(TAny) {
+		t.Errorf("Integer.PathSubtype(Any) = false (Any is the lattice root — every type chains up to it)")
 	}
 	if !TInteger.Matches(TAny) {
-		t.Errorf("Integer.Matches(Any) = false (Matches MUST special-case Any)")
+		t.Errorf("Integer.Matches(Any) = false")
 	}
 }
 

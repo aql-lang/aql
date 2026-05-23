@@ -226,10 +226,18 @@ func (t *Type) PathSubtype(pattern *Type) bool {
 	return t.IsAncestor(pattern)
 }
 
-// Specificity returns the depth of the type. More ancestry = more specific.
+// Specificity returns the depth of the type. More ancestry = more
+// specific. Any is the universal lattice top — skipped here for the
+// same reason it's skipped in Path() and PathOf: structural roots
+// chain to Any but their declared "depth" (Scalar=1, Integer=3, …)
+// is the historical short measure that sig dispatch was tuned
+// against.
 func (t *Type) Specificity() int {
 	n := 0
 	for d := t; d != nil; d = d.Parent {
+		if d.FixedID == anyFixedID {
+			break
+		}
 		n++
 	}
 	return n

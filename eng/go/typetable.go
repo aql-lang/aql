@@ -60,12 +60,26 @@ func (t *Type) IsNative() bool {
 	return t != nil && t.Origin == OriginBuiltin
 }
 
+// anyFixedID is Any's stable FixedID. Hardcoded here so Path() can
+// short-circuit the "skip Any as parent" check without referencing
+// the TAny var — that would create an initializer cycle (Builtin →
+// registerBuiltin → Path → TAny → Builtin).
+const anyFixedID = 1
+
 // Path returns the slash-separated path by walking up the parent chain.
+//
+// Any acts as the universal lattice root — every other top-level type
+// (Scalar, Node, Ideal, Type, Word, None, Never) chains to it via its
+// Parent pointer — but Path() stops at Any so the textual paths stay
+// the historical short form (Scalar.Path() == "Scalar", not
+// "Any/Scalar"). This keeps FixedIDs / serialised Value IDs / spec
+// tests / external registrations stable while still letting
+// `typeof Scalar` saturate at `Any`.
 func (t *Type) Path() string {
 	if t == nil {
 		return ""
 	}
-	if t.Parent == nil {
+	if t.Parent == nil || t.Parent.FixedID == anyFixedID {
 		return t.Name
 	}
 	return t.Parent.Path() + "/" + t.Name
@@ -377,6 +391,7 @@ func (tt *TypeTable) Clone() *TypeTable {
 // user-facing visibility, everything.
 type builtinDecl struct {
 	Path       string
+	ParentPath string // optional: explicit lattice parent override. Use for nominal roots that should chain to Any without nesting the path (e.g. Scalar/Node/Ideal sit under Any in the lattice but their Path() stays "Scalar"/"Node"/"Ideal").
 	FixedID    int
 	IsInternal bool   // true for Word/__XX runtime markers
 	Alias      string // optional friendly short name for ExpandShortName (e.g. "Paren" → Word/__OP)
@@ -408,14 +423,25 @@ var builtinDecls = []builtinDecl{
 	// Roots. Any/None/Never are childless degenerate roots packed into
 	// the first 1e10 Rank band; the five structural roots take a 1e10
 	// band each. See the unified-Rank scheme on builtinDecl.Rank.
+	// Any is THE structural root for the main type hierarchy. The
+	// structural roots (Scalar, Node, Ideal, Type, Word) chain to it
+	// via ParentPath="Any"; Path() and PathOf skip Any so the declared
+	// short paths stay stable (Scalar.Path() == "Scalar") while typeof
+	// saturates uniformly (`typeof Scalar` → `Any`).
+	//
+	// None (unit) and Never (bottom) are deliberately kept as their
+	// own roots — they're degenerate types with special unification
+	// semantics (None unifies only with None; Never is uninhabited),
+	// and chaining them to Any would make every `Parent.Equal(TAny)`
+	// shortcut in the dispatch path silently match them too.
 	{Path: "Any", FixedID: 1, Rank: 11_000_000_000},
 	{Path: "None", FixedID: 2, Rank: 12_000_000_000},
 	{Path: "Never", FixedID: 61, Rank: 13_000_000_000},
-	{Path: "Scalar", FixedID: 3, Rank: 20_000_000_000},
-	{Path: "Node", FixedID: 11, Rank: 30_000_000_000},
-	{Path: "Ideal", FixedID: 48, Rank: 40_000_000_000},
-	{Path: "Word", FixedID: 17, Rank: 50_000_000_000},
-	{Path: "Type", FixedID: 39, Rank: 60_000_000_000},
+	{Path: "Scalar", FixedID: 3, ParentPath: "Any", Rank: 20_000_000_000},
+	{Path: "Node", FixedID: 11, ParentPath: "Any", Rank: 30_000_000_000},
+	{Path: "Ideal", FixedID: 48, ParentPath: "Any", Rank: 40_000_000_000},
+	{Path: "Word", FixedID: 17, ParentPath: "Any", Rank: 50_000_000_000},
+	{Path: "Type", FixedID: 39, ParentPath: "Any", Rank: 60_000_000_000},
 
 	// Scalar branch — children ordered least-to-most complex.
 	{Path: "Scalar/Atom", FixedID: 18, Rank: 20_100_000_000},
@@ -500,7 +526,13 @@ func newBuiltinTypeTable() *TypeTable {
 func (tt *TypeTable) registerBuiltin(d builtinDecl) {
 	parts := strings.Split(d.Path, "/")
 	var parent *Type
-	if len(parts) > 1 {
+	switch {
+	case d.ParentPath != "":
+		parent = tt.bypath[d.ParentPath]
+		if parent == nil {
+			panic(fmt.Sprintf("typetable: ParentPath %q not registered before %q (declare parents first in builtinDecls)", d.ParentPath, d.Path))
+		}
+	case len(parts) > 1:
 		parentPath := strings.Join(parts[:len(parts)-1], "/")
 		parent = tt.bypath[parentPath]
 		if parent == nil {

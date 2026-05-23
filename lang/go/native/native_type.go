@@ -430,8 +430,14 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		}
 		return []Value{NewBoolean(matched)}, nil
 	}
-	if b.Data == nil && b.Parent != nil && b.Parent.Root() != nil && b.Parent.Root().Equal(TType) {
-		if b.Parent.Equal(TType) {
+	if b.Data == nil && !b.Carrier {
+		// b is a type literal; its denoted lattice node is &b (a
+		// type literal is a by-value copy of its node). Post the
+		// Any-root unification TType.Parent == TAny, so the old
+		// `b.Parent.Root() == TType` check no longer identifies the
+		// Type/-hierarchy — we test the node itself directly.
+		bNode := &b
+		if bNode.Equal(TType) {
 			// `v is Type` — v must be a TYPE: a bare type literal, a
 			// structural type body (record shape, typed list/map,
 			// disjunct, fn-shape), or a Function / Disjunct / Enum /
@@ -443,10 +449,12 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 			}
 			return []Value{NewBoolean(a.Data == nil || IsTypeBody(a) || IsRecordShape(a) || a.Parent.Matches(TType))}, nil
 		}
-		// Type/-rooted RHS (`Function` / `Disjunct` / `Enum` /
-		// `FunctionSignature`): plain subtype check (also catches a
-		// value whose Parent already lives under that type).
-		return []Value{NewBoolean(a.Parent.Matches(b.Parent))}, nil
+		if bNode.Matches(TType) {
+			// Type/-rooted subtype RHS (`Function` / `Disjunct` / `Enum`
+			// / `FunctionSignature`): plain subtype check on the
+			// value's Parent.
+			return []Value{NewBoolean(a.Parent.Matches(bNode))}, nil
+		}
 	}
 	unified, ok := Unify(a, b)
 	if !ok {
