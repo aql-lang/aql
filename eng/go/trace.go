@@ -39,8 +39,9 @@ func TraceColorize(v Value) string {
 	case IsOpenParen(v):
 		return cDim + "(" + cReset
 	case v.Data == nil:
-		// Type literal
-		return cCyan + v.Parent.String() + cReset
+		// Type literal — render the value's OWN type name (it IS its
+		// lattice node), not its parent (which is the supertype).
+		return cCyan + typeNodeOf(v).String() + cReset
 	case v.Parent.Matches(TString):
 		return cGreen + fmt.Sprintf("%q", v.Data) + cReset
 	case v.Parent.Matches(TInteger):

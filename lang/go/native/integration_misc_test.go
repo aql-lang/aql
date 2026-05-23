@@ -929,32 +929,34 @@ func TestTypeofMetatypes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Metatypes are collapsed: typeof / fulltypeof of ANY type literal
-	// is uniformly "Type" — there is no ScalarType / NodeType /
-	// ObjectType layer at the surface.
+	// Post the typeof-collapse + Any-root work, typeof is a single
+	// Parent hop and fulltypeof renders the full path under the Any
+	// root (Any itself is skipped to keep paths the historical short
+	// form). None and Never are degenerate roots that saturate at
+	// themselves.
 	tests := []struct {
 		name     string
 		typeLit  Value
-		wantType string // expected typeof result
-		wantFull string // expected fulltypeof result
+		wantType string // expected typeof result (single Parent hop)
+		wantFull string // expected fulltypeof result (full path)
 	}{
-		{"String", NewTypeLiteral(TString), "Type", "Type"},
-		{"Number", NewTypeLiteral(TNumber), "Type", "Type"},
-		{"Integer", NewTypeLiteral(TInteger), "Type", "Type"},
-		{"Decimal", NewTypeLiteral(TDecimal), "Type", "Type"},
-		{"Boolean", NewTypeLiteral(TBoolean), "Type", "Type"},
-		{"List", NewTypeLiteral(TList), "Type", "Type"},
-		{"Map", NewTypeLiteral(TMap), "Type", "Type"},
-		{"Scalar", NewTypeLiteral(TScalar), "Type", "Type"},
-		{"Node", NewTypeLiteral(TNode), "Type", "Type"},
-		{"Any", NewTypeLiteral(TAny), "Type", "Type"},
-		{"None", NewTypeLiteral(TNone), "Type", "Type"},
-		{"Object", NewTypeLiteral(TObject), "Type", "Type"},
-		{"Table", NewTypeLiteral(TTable), "Type", "Type"},
-		{"Record", NewTypeLiteral(TRecord), "Type", "Type"},
-		{"Resource", NewTypeLiteral(TResource), "Type", "Type"},
-		{"Atom", NewTypeLiteral(TAtom), "Type", "Type"},
-		{"Type", NewTypeLiteral(TType), "Type", "Type"},
+		{"String", NewTypeLiteral(TString), "Scalar", "Scalar"},
+		{"Number", NewTypeLiteral(TNumber), "Scalar", "Scalar"},
+		{"Integer", NewTypeLiteral(TInteger), "Number", "Scalar/Number"},
+		{"Decimal", NewTypeLiteral(TDecimal), "Number", "Scalar/Number"},
+		{"Boolean", NewTypeLiteral(TBoolean), "Scalar", "Scalar"},
+		{"List", NewTypeLiteral(TList), "Node", "Node"},
+		{"Map", NewTypeLiteral(TMap), "Node", "Node"},
+		{"Scalar", NewTypeLiteral(TScalar), "Any", ""},
+		{"Node", NewTypeLiteral(TNode), "Any", ""},
+		{"Any", NewTypeLiteral(TAny), "Any", ""},
+		{"None", NewTypeLiteral(TNone), "None", "None"},
+		{"Object", NewTypeLiteral(TObject), "Ideal", "Ideal"},
+		{"Table", NewTypeLiteral(TTable), "Ideal", "Ideal"},
+		{"Record", NewTypeLiteral(TRecord), "Ideal", "Ideal"},
+		{"Resource", NewTypeLiteral(TResource), "Object", "Ideal/Object"},
+		{"Atom", NewTypeLiteral(TAtom), "Scalar", "Scalar"},
+		{"Type", NewTypeLiteral(TType), "Any", ""},
 		{"Function", NewTypeLiteral(TFunction), "Type", "Type"},
 		{"Disjunct", NewTypeLiteral(TDisjunct), "Type", "Type"},
 	}

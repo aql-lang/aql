@@ -27,13 +27,17 @@ func Unify(a, b Value) (Value, bool) {
 	// A type literal IS its lattice node after the type/value merge,
 	// so its denoted type is the value itself — not its Parent, which
 	// is now the supertype. Carriers keep Parent pointing at the type
-	// they carry, so they take the plain Parent.
+	// they carry, so they take the plain Parent. A Data==nil value
+	// with an empty ID is a manually-constructed `Value{Parent: T,
+	// Data: nil}` (used in tests as a stand-in for a value of type T);
+	// treat its Parent as the denoted type since &a has no lattice
+	// identity to compare against.
 	aType := a.Parent
-	if a.Data == nil && !a.Carrier {
+	if a.Data == nil && !a.Carrier && a.ID != "" {
 		aType = &a
 	}
 	bType := b.Parent
-	if b.Data == nil && !b.Carrier {
+	if b.Data == nil && !b.Carrier && b.ID != "" {
 		bType = &b
 	}
 
@@ -819,8 +823,11 @@ func mapsEqual(a, b ReadMap) bool {
 // (subset) matching where the candidate only needs to contain the alternative's
 // key-value pairs.
 func unifyDisjunct(disj DisjunctInfo, val Value) (Value, bool) {
-	// "any" unifies with the whole disjunct, preserving it.
-	if val.Parent.Equal(TAny) {
+	// "any" unifies with the whole disjunct, preserving it. Covers
+	// two value shapes: the bare type literal NewTypeLiteral(TAny)
+	// (Data=nil; the value IS the TAny lattice node, &val.Equal(TAny))
+	// and the Any-typed carrier (Data=nil, Carrier=true, Parent=TAny).
+	if val.Data == nil && (val.Parent.Equal(TAny) || (&val).Equal(TAny)) {
 		return NewDisjunct(disj.Alternatives), true
 	}
 

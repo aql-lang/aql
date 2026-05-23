@@ -391,12 +391,25 @@ func typeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 }
 
 func fulltypeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	// Delegate to the canonical typeof: a concrete value → its exact
-	// Parent path; ANY type literal → "Type" (metatypes are collapsed —
-	// no ScalarType / NodeType / ObjectType layer); none → "None".
-	def := TypeOf(args[0]).Parent
+	// Render the type's ancestry path. typeof is a single Parent hop;
+	// fulltypeof walks the ancestry of that result to produce the full
+	// slash-separated path. Any is the universal lattice root — skipped
+	// here so the path stays the short form ("Scalar/Number" not
+	// "Any/Scalar/Number").
+	tv := TypeOf(args[0])
+	// For a type literal the denoted lattice node is &tv; for any
+	// other shape it's tv.Parent.
+	var def *Type
+	if tv.Data == nil && !tv.Carrier {
+		def = &tv
+	} else {
+		def = tv.Parent
+	}
 	var parts []string
 	for d := def; d != nil; d = d.Parent {
+		if d.Equal(TAny) { // universal root — skipped in textual paths
+			break
+		}
 		parts = append([]string{d.Name}, parts...)
 	}
 	if len(parts) > 0 {
@@ -488,7 +501,14 @@ func guardHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 
 func baseHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	v := args[0]
-	t := v.Parent
+	// For a type literal the denoted lattice node is &v (the value
+	// IS the type); for a concrete value it's v.Parent.
+	var t *Type
+	if v.Data == nil && !v.Carrier {
+		t = &v
+	} else {
+		t = v.Parent
+	}
 	result, err := BaseValue(t)
 	if err != nil {
 		return nil, err

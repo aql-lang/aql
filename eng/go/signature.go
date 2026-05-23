@@ -291,7 +291,16 @@ func sigTypeMatchesAsType(v Value, t *Type) bool {
 		}
 		return (&v).Matches(t)
 	}
-	if IsTypeBody(v) {
+	// Structural type bodies (Record, Options, Table, Object,
+	// ChildType) are also "types" — accept them when their lattice
+	// family matches the slot. DepScalar bodies are NOT accepted at
+	// TypeArgs slots: they're constraints over a base scalar (used
+	// as runtime values), not bare scalar type literals.
+	if v.IsDepScalar() {
+		return false
+	}
+	if IsRecordType(v) || IsOptionsType(v) || IsTableType(v) ||
+		IsObjectType(v) || IsTypedList(v) || IsTypedMap(v) {
 		return v.Parent.Matches(t)
 	}
 	return false
@@ -332,11 +341,12 @@ func sigArgMatches(sig *Signature, idx int, v Value) bool {
 //
 // Carriers (Data==nil but Carrier=true) are abstract VALUES, not
 // types — sigTypeMatches deliberately treats them as values, and
-// this rejection check follows suit. The value `none` (the unique
-// inhabitant of None) is also legitimate at a TNone slot — None
-// has a single inhabitant and that's it. This covers both the spec
-// runner's NewNone() (Data != nil sentinel) and production aql's
-// `NewTypeLiteral(TNone)` (Data == nil, used as the "null" value).
+// this rejection check follows suit. The value `none` is also
+// legitimate at a TNone slot — None has a single inhabitant and
+// that's it. This covers the spec runner's NewNone() (Data != nil
+// sentinel value with Parent=TNone) AND production aql's
+// `NewTypeLiteral(TNone)` (Data == nil, value IS the TNone lattice
+// node — its own Parent is nil since None is a degenerate root).
 func rejectsTypeLiteral(v Value, expectedType *Type) bool {
 	if v.Data != nil {
 		return false
@@ -347,7 +357,10 @@ func rejectsTypeLiteral(v Value, expectedType *Type) bool {
 	if expectedType.Equal(TAny) {
 		return false
 	}
-	if v.Parent.Equal(TNone) {
+	if expectedType.Equal(TNone) {
+		// At a TNone slot, the None type literal is the canonical
+		// inhabitant; sigTypeMatches has already verified the value
+		// is None-typed.
 		return false
 	}
 	return true
@@ -458,7 +471,7 @@ var typeInherentScores = map[string]int{
 // typeInherentScore returns the inherent score for a type.
 // Defaults to 1000 for types not in the map.
 func typeInherentScore(t *Type) int {
-	path := t.String()
+	path := t.Path()
 	if s, ok := typeInherentScores[path]; ok {
 		return s
 	}

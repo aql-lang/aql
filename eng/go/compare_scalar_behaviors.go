@@ -33,6 +33,14 @@ func (scalarCompareBehavior) formatDelegate()  {}
 func (wordCompareBehavior) formatDelegate()    {}
 
 func (numberCompareBehavior) Compare(a, b Value) (int, error) {
+	// DepScalar values share a numeric Parent (Integer, Decimal,
+	// Number) with concrete scalars but carry a DepScalarInfo payload
+	// rather than a number — they have no numeric ordering. Signal
+	// "I don't apply" so CompareValues falls through to the lattice
+	// + structural compare (which tie-breaks on canonical form).
+	if a.IsDepScalar() || b.IsDepScalar() {
+		return 0, ErrNoComparer
+	}
 	af, _ := AsNumber(a)
 	bf, _ := AsNumber(b)
 	switch {
@@ -50,6 +58,9 @@ func (numberCompareBehavior) Compare(a, b Value) (int, error) {
 type stringCompareBehavior struct{ defaultBehavior }
 
 func (stringCompareBehavior) Compare(a, b Value) (int, error) {
+	if a.IsDepScalar() || b.IsDepScalar() {
+		return 0, ErrNoComparer
+	}
 	as, _ := AsString(a)
 	bs, _ := AsString(b)
 	return strings.Compare(as, bs), nil
@@ -59,6 +70,9 @@ func (stringCompareBehavior) Compare(a, b Value) (int, error) {
 type booleanCompareBehavior struct{ defaultBehavior }
 
 func (booleanCompareBehavior) Compare(a, b Value) (int, error) {
+	if a.IsDepScalar() || b.IsDepScalar() {
+		return 0, ErrNoComparer
+	}
 	ab, _ := AsBoolean(a)
 	bb, _ := AsBoolean(b)
 	switch {
@@ -75,6 +89,9 @@ func (booleanCompareBehavior) Compare(a, b Value) (int, error) {
 type atomCompareBehavior struct{ defaultBehavior }
 
 func (atomCompareBehavior) Compare(a, b Value) (int, error) {
+	if a.IsDepScalar() || b.IsDepScalar() {
+		return 0, ErrNoComparer
+	}
 	as, _ := AsAtom(a)
 	bs, _ := AsAtom(b)
 	return strings.Compare(as, bs), nil
@@ -123,8 +140,10 @@ func comparePaths(a, b Value) int {
 	ap, aerr := AsPath(a)
 	bp, berr := AsPath(b)
 	if aerr != nil || berr != nil {
-		// Not a Path pair after all — fall back to rendered order.
-		return strings.Compare(b.String(), a.String())
+		// Not a Path pair after all — fall back to forward lexical
+		// order on the rendered form (the Path-specific reverse
+		// rule applies only to genuine Paths).
+		return strings.Compare(a.String(), b.String())
 	}
 	switch {
 	case len(ap.Parts) < len(bp.Parts):

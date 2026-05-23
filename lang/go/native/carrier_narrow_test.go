@@ -35,8 +35,10 @@ func TestApplyComplementNarrowing(t *testing.T) {
 		t.Fatalf("expected pushed narrow entry, got stack depth %d", d)
 	}
 	top, _ := r.Defs.Top("x")
+	// Narrowing produces a carrier (Parent=String, Carrier=true) —
+	// check the Parent, not the value's own identity.
 	if !top.Parent.Equal(TString) {
-		t.Errorf("expected top to narrow to String, got %s", top.Parent)
+		t.Errorf("expected top to narrow to String, got %s", top.String())
 	}
 }
 

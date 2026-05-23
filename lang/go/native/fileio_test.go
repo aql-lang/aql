@@ -117,8 +117,8 @@ func TestJsonicToValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !v.Parent.Equal(TNone) {
-		t.Errorf("expected none, got %s", v.Parent)
+	if !IsNoneShape(v) {
+		t.Errorf("expected none, got %s", v.String())
 	}
 
 	// bool

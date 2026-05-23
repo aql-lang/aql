@@ -221,6 +221,7 @@ var (
 	IsModule                  = eng.IsModule
 	IsMove                    = eng.IsMove
 	IsNone                    = eng.IsNone
+	IsNoneShape               = eng.IsNoneShape
 	IsObjectInstance          = eng.IsObjectInstance
 	IsObjectType              = eng.IsObjectType
 	IsOpenParen               = eng.IsOpenParen

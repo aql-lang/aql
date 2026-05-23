@@ -429,10 +429,13 @@ func BetweenHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 		return nil, fmt.Errorf("between: type arg must be a scalar type literal, got concrete %s",
 			args[2].Parent.String())
 	}
-	base := canonicalBaseType(args[2].Parent)
+	// args[2] is a type literal; its denoted lattice node is the value
+	// itself (a by-value copy), not args[2].Parent (which is the
+	// supertype after the type/value merge).
+	base := canonicalBaseType(ValueType(args[2]))
 	if base == nil {
 		return nil, fmt.Errorf("between: unsupported base type %s",
-			args[2].Parent.String())
+			ValueType(args[2]).String())
 	}
 	if !args[0].Parent.Matches(base) {
 		return nil, fmt.Errorf("between: low bound %s does not match base %s",

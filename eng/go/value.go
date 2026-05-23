@@ -586,21 +586,27 @@ func GenerateID(prefix string) string {
 
 // IDPrefixForType returns the ID prefix for a given type:
 // "S_" for Scalar, "N_" for Node, "W_" for Word, "T_" for Object/Any/None.
+//
+// Under the Any-root lattice the universal Root() of every connected
+// type is Any; the historical category prefix lives one step below —
+// the topmost ancestor that's NOT Any. Walk the parent chain until
+// the next step would land on Any (or nil) and read the name there.
 func IDPrefixForType(t *Type) string {
 	if t == nil {
 		return "T_"
 	}
-	root := t.Root()
-	if root == nil {
-		return "T_"
-	}
-	switch root.Name {
-	case "Scalar":
-		return "S_"
-	case "Node":
-		return "N_"
-	case "Word":
-		return "W_"
+	for d := t; d != nil; d = d.Parent {
+		if d.Parent == nil || d.Parent.FixedID == anyFixedID {
+			switch d.Name {
+			case "Scalar":
+				return "S_"
+			case "Node":
+				return "N_"
+			case "Word":
+				return "W_"
+			}
+			return "T_"
+		}
 	}
 	return "T_"
 }
@@ -871,7 +877,10 @@ func (v Value) Is(t *Type) bool {
 }
 
 // IsNone reports whether v is the value `none` (not the None type
-// literal). The check distinguishes the inhabitant from the type.
+// literal). The check distinguishes the inhabitant from the type:
+// `none` carries a NonePayload/noneSentinel marker; the bare type
+// literal `None` is just a by-value copy of TNone with Data=nil.
+// Use IsNoneShape for the broader "is this any form of None" check.
 func IsNone(v Value) bool {
 	if !v.Parent.Equal(TNone) {
 		return false
@@ -881,6 +890,33 @@ func IsNone(v Value) bool {
 	}
 	_, ok := v.Data.(noneSentinel)
 	return ok
+}
+
+// IsNoneShape reports whether v is any form of None — the canonical
+// "did we get back None?" check that covers:
+//
+//   - the sentinel value `none` (IsNone — Data is NonePayload or
+//     noneSentinel, Parent=TNone).
+//   - the bare type literal `None` (NewTypeLiteral(TNone), Data=nil,
+//     value IS the TNone lattice node).
+//   - manually-constructed Value{Parent: TNone} carrier-shaped
+//     values (Data=nil, Parent=TNone — used by some host code and
+//     test fixtures as a "no value" sentinel).
+//
+// Renderers that want to distinguish "none" (lowercase, the value)
+// from "None" (capital, the type) use IsNone for the strict check;
+// dispatch and comparison sites use IsNoneShape.
+func IsNoneShape(v Value) bool {
+	if IsNone(v) {
+		return true
+	}
+	if v.Data != nil {
+		return false
+	}
+	if v.Parent.Equal(TNone) {
+		return true
+	}
+	return !v.Carrier && (&v).Equal(TNone)
 }
 
 // NewWord creates a word value (function reference) with no modifiers.
@@ -1817,7 +1853,7 @@ func kernelFormatDefault(v Value) string {
 // or a Node that contains a leaf that is a type.
 func IsTypeValue(v Value) bool {
 	// Type literal: Data==nil with a real type (not None).
-	if v.Data == nil && !v.Parent.Equal(TNone) {
+	if v.Data == nil && !IsNoneShape(v) {
 		return true
 	}
 

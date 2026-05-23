@@ -639,7 +639,10 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 		}
 		var narrowed Value
 		if len(remaining) == 1 {
-			narrowed = NewCarrier(remaining[0].Parent)
+			// remaining[0] is a type literal (a by-value copy of its
+			// lattice node); the denoted type is ValueType(remaining[0]),
+			// not remaining[0].Parent (which is the supertype).
+			narrowed = NewCarrier(ValueType(remaining[0]))
 		} else {
 			narrowed = NewDisjunct(remaining)
 			narrowed.Carrier = true

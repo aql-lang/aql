@@ -336,7 +336,7 @@ func TestArrayGetOutOfBoundsReturnsNone(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		arr, NewWord("get"), NewInteger(5),
 	})
-	if len(result) != 1 || !result[0].Parent.Equal(TNone) {
+	if len(result) != 1 || !IsNoneShape(result[0]) {
 		t.Fatalf("got %v, want None", result)
 	}
 }

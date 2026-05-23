@@ -231,11 +231,12 @@ func (t *Type) PathSubtype(pattern *Type) bool {
 // same reason it's skipped in Path() and PathOf: structural roots
 // chain to Any but their declared "depth" (Scalar=1, Integer=3, …)
 // is the historical short measure that sig dispatch was tuned
-// against.
+// against. Any itself reports Specificity=1 (it IS the root, not
+// an ancestor) so the score for Any-only signatures is unchanged.
 func (t *Type) Specificity() int {
 	n := 0
 	for d := t; d != nil; d = d.Parent {
-		if d.FixedID == anyFixedID {
+		if d.FixedID == anyFixedID && n > 0 {
 			break
 		}
 		n++

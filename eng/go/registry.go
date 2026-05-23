@@ -579,10 +579,13 @@ func (r *Registry) RegisterPart(part string) {
 // fallback is retained only for value-side ObjectType installations
 // from outside the type word (e.g. legacy RegisterResource paths).
 func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
-	if v.Data != nil || reg == nil || v.Parent == nil {
+	if v.Data != nil || reg == nil || v.Carrier {
 		return v
 	}
-	name := TypeNameByID(v.Parent.ID)
+	// A type literal IS its lattice node (by-value copy), so the
+	// canonical identity is the value's own ID, not v.Parent.ID (the
+	// supertype's ID).
+	name := TypeNameByID(v.ID)
 	if name == "" {
 		return v
 	}

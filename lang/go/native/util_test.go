@@ -654,8 +654,10 @@ func TestFlattenDisjunctAlts_Disjunct(t *testing.T) {
 	if len(alts) != 2 {
 		t.Fatalf("got %d alts, want 2", len(alts))
 	}
-	if !alts[0].Parent.Equal(TInteger) || !alts[1].Parent.Equal(TString) {
-		t.Errorf("got types [%v, %v], want [Integer, String]", alts[0].Parent, alts[1].Parent)
+	// alts[i] is a type literal; its denoted lattice node is &alts[i].
+	a0, a1 := alts[0], alts[1]
+	if !(&a0).Equal(TInteger) || !(&a1).Equal(TString) {
+		t.Errorf("got types [%v, %v], want [Integer, String]", a0.String(), a1.String())
 	}
 }
 
@@ -667,8 +669,9 @@ func TestFlattenDisjunctAlts_TypeLiteral(t *testing.T) {
 	if len(alts) != 1 {
 		t.Fatalf("got %d alts, want 1", len(alts))
 	}
-	if !alts[0].Parent.Equal(TInteger) {
-		t.Errorf("got %v, want Integer literal", alts[0].Parent)
+	a0 := alts[0]
+	if !(&a0).Equal(TInteger) {
+		t.Errorf("got %v, want Integer literal", a0.String())
 	}
 }
 
