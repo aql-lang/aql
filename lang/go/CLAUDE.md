@@ -411,6 +411,22 @@ methods on `Value`; only `Is(t)` and `String()` remain as methods.)
   `r.ContextStore()` (returns the StoreInstanceInfo),
   `r.UpdateCtxStoreChain(orig, new)`.
 
+**Canonical type pointers**:
+- `CanonicalType(r, t) *Type` — resolve `t` to its canonical lattice
+  node via `r.Types.LookupByID`. Use whenever a `*Type` may have come
+  from `&v` of a by-value type-literal Value — `behave` Behavior
+  installs and LCA-walk identity must reach the canonical pointer,
+  not a stack-local copy. See
+  `lang/doc/design/TYPE-CANONICALIZATION.0.md`.
+
+**Typed-def retag**:
+- `RetagValue(v, def) Value` — return a fresh copy of v with
+  `Parent` rebound to def. The single primitive every typed-def
+  retag path uses (predicate / refine-bare / FnUndef branches). The
+  by-value copy is explicit so Unify-swap results (which may return
+  a type literal in the value position) can never be silently
+  mutated and stored as the binding.
+
 **Pos threading**:
 - `WithPos(v, src)` — return v with Pos copied from src. Use when a
   handler constructs a new Value from an input — error reporting
