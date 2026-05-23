@@ -333,3 +333,49 @@ refine 5	ERROR:argument must be a type	refine of a concrete value is rejected
 # behave installs a Comparer on a 1-arg-refined subtype — it is
 # OriginUserDef, so the builtin-target guard does not fire.
 def Shape refine List behave compare/q (fn [[Shape Shape] [Integer] [0]]) ; Shape is List	true	behave accepts a refined subtype as its target
+
+# ---------------------------------------------------------------------
+# 9. REFINE — shared-parent comparator dispatch on scalar bases
+# ---------------------------------------------------------------------
+# A user comparator installed on a common refine-bare parent dispatches
+# for both its concrete inhabitants (subtype VALUES via LCA) and its
+# sibling subtype LITERALS. The pattern: mint Item from a kernel scalar
+# base, mint Foo and Bar from Item, install a Comparer on Item that
+# orders by type-name. y (Bar value) lt x (Foo value) flips from the
+# kernel magnitude/lex/alphabetic rule to type-name order — Bar < Foo
+# by name regardless of payload — confirming the dispatch reaches Item
+# on every hop (fn-sig type → behave install → LCA walk → comparator
+# body). Each base scalar (Integer, Decimal, String, Boolean, Atom)
+# gets one row asserting y lt x = true (the kernel rule would say
+# false for Integer/Decimal/Boolean, false for the String/Atom values
+# chosen so the magnitude/lex order also opposes the type-name order).
+
+# Integer base: y=2 > x=1 numerically; comparator inverts via Bar<Foo.
+def Item refine Integer ; def Foo refine Item ; def Bar refine Item ; def x:Foo 1 ; def y:Bar 2 ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y lt x	true	user Comparer on Integer parent inverts magnitude
+def Item refine Integer ; def Foo refine Item ; def Bar refine Item ; def x:Foo 1 ; def y:Bar 2 ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; Bar lt Foo	true	Integer parent: dispatches on sibling type literals too
+def Item refine Integer ; def Foo refine Item ; def Bar refine Item ; def x:Foo 1 ; def y:Bar 2 ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y cmp x	-1	Integer parent: cmp matches comparator body output
+
+# Decimal base: same pattern, decimal payloads.
+def Item refine Decimal ; def Foo refine Item ; def Bar refine Item ; def x:Foo 1.5 ; def y:Bar 2.5 ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y lt x	true	user Comparer on Decimal parent
+def Item refine Decimal ; def Foo refine Item ; def Bar refine Item ; def x:Foo 1.5 ; def y:Bar 2.5 ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; Bar lt Foo	true	Decimal parent: sibling type literals
+def Item refine Decimal ; def Foo refine Item ; def Bar refine Item ; def x:Foo 1.5 ; def y:Bar 2.5 ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y cmp x	-1	Decimal parent: cmp
+
+# String base: ProperString is a sibling kernel subtype of String, so
+# the typed-def must walk past Item to the kernel String to unify the
+# 'a' / 'b' bodies. Locks in the chain-walk in defTypedHandler.
+def Item refine String ; def Foo refine Item ; def Bar refine Item ; def x:Foo 'a' ; def y:Bar 'b' ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y lt x	true	user Comparer on String parent (sibling-subtype unify)
+def Item refine String ; def Foo refine Item ; def Bar refine Item ; def x:Foo 'a' ; def y:Bar 'b' ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; Bar lt Foo	true	String parent: sibling type literals
+def Item refine String ; def Foo refine Item ; def Bar refine Item ; def x:Foo 'a' ; def y:Bar 'b' ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y cmp x	-1	String parent: cmp
+
+# Boolean base: x=false, y=true. Kernel orders false<true so y lt x is
+# normally false; comparator flips to true via Bar<Foo.
+def Item refine Boolean ; def Foo refine Item ; def Bar refine Item ; def x:Foo false ; def y:Bar true ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y lt x	true	user Comparer on Boolean parent
+def Item refine Boolean ; def Foo refine Item ; def Bar refine Item ; def x:Foo false ; def y:Bar true ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; Bar lt Foo	true	Boolean parent: sibling type literals
+def Item refine Boolean ; def Foo refine Item ; def Bar refine Item ; def x:Foo false ; def y:Bar true ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y cmp x	-1	Boolean parent: cmp
+
+# Atom base: x=alpha, y=bravo. Atom values inspect to a function-shape
+# payload (no 'type' field), so the value branch must route through
+# typeof first to recover the subtype name.
+def Item refine Atom ; def Foo refine Item ; def Bar refine Item ; def x:Foo alpha/q ; def y:Bar bravo/q ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y lt x	true	user Comparer on Atom parent (typeof-then-inspect path)
+def Item refine Atom ; def Foo refine Item ; def Bar refine Item ; def x:Foo alpha/q ; def y:Bar bravo/q ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; Bar lt Foo	true	Atom parent: sibling type literals
+def Item refine Atom ; def Foo refine Item ; def Bar refine Item ; def x:Foo alpha/q ; def y:Bar bravo/q ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y cmp x	-1	Atom parent: cmp

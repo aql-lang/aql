@@ -320,14 +320,33 @@ func InstallType(r *Registry, name string, body Value) error {
 		// gates, not dispatch categories.
 		def := r.Types.MintType(name, inputT)
 		r.Defs.PushType(name, def, body)
+	} else if IsRefinePrefab(body) {
+		// `def Foo refine Integer` route: `refineBareHandler` minted
+		// an anonymous refine prefab (MintRefinePrefab) and returned
+		// its type literal. Rename the lattice node and bind the
+		// renamed Foo literal as the body so resolving `Foo` pushes
+		// the new subtype node (Parent = base, Rank in the external
+		// band) rather than the original input type literal.
+		def := r.Types.LookupByID(body.ID)
+		if def == nil {
+			return &AqlError{
+				Code:   "type_error",
+				Detail: "type " + name + ": refine prefab missing from lattice",
+			}
+		}
+		def.Name = name
+		body.Name = name
+		r.Defs.PushType(name, def, body)
 	} else {
 		// A bare type-literal body IS the parent type after the
 		// type/value merge; structural/singleton bodies parent at
-		// their container type (Map / List / Integer / …).
+		// their container type (Map / List / Integer / …). For a
+		// bare type-literal body, route through CanonicalType so the
+		// minted subtype's lattice Parent is the canonical *Type and
+		// not a non-canonical copy.
 		parent := body.Parent
 		if body.Data == nil {
-			bodyType := body
-			parent = &bodyType
+			parent = CanonicalType(r, &body)
 		}
 		def := r.Types.MintType(name, parent)
 		r.Defs.PushType(name, def, body)

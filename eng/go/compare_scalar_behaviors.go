@@ -39,9 +39,9 @@ func (wordCompareBehavior) formatDelegate()    {}
 //
 // This places every type literal strictly BELOW every concrete value
 // in the same family — including the family's zero-valued inhabitant
-// (`Integer < 0`, `String < ''`, `Boolean < false`). Without this
+// (`Integer < 0`, `String < ""`, `Boolean < false`). Without this
 // rule the family Comparer would read the type literal's nil payload
-// as a zero value and tie with `0` / `''` / `false`, putting two
+// as a zero value and tie with `0` / `""` / `false`, putting two
 // distinct lattice nodes in the same equivalence class and
 // violating the strict-total-order property.
 //

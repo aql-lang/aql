@@ -74,25 +74,25 @@ func TestFixedIDStability(t *testing.T) {
 		// FixedIDs 40, 41, 46 retired with Type/ScalarType,
 		// Type/NodeType, Type/IdealType. Sig "type literal here" is
 		// now expressed via Signature.TypeArgs[i]=true.
-		"Ideal/Store":                  42,
-		"Ideal/Store/System":           43,
-		"Ideal/Array":                  44,
-		"Ideal/Error":                  45,
-		"Scalar/Path":                  47,
-		"Ideal/Tensor":                 2001, // matrix module range (2000-2999)
-		"Ideal/Tensor/Matrix":          2000, // historical Matrix FixedID, kept
-		"Ideal/Tensor/Vector":          2002,
-		"Word/__IS":                    51,
-		"Type/Disjunct/Enum":           62,
-		"Word/__PE":                    63,
-		"Word/__IN/__DC":               64,
+		"Ideal/Store":         42,
+		"Ideal/Store/System":  43,
+		"Ideal/Array":         44,
+		"Ideal/Error":         45,
+		"Scalar/Path":         47,
+		"Ideal/Tensor":        2001, // matrix module range (2000-2999)
+		"Ideal/Tensor/Matrix": 2000, // historical Matrix FixedID, kept
+		"Ideal/Tensor/Vector": 2002,
+		"Word/__IS":           51,
+		"Type/Disjunct/Enum":  62,
+		"Word/__PE":           63,
+		"Word/__IN/__DC":      64,
 		// FixedIDs 65-71 retired with the Type/Dependent subtree;
 		// DepScalar values now carry their base scalar type directly
 		// (typeof (Integer gte 0) → Integer) with the constraint in
 		// the DepScalarInfo payload. See depscalar.go.
-		"Word/__CP":                    72,
-		"Word/__ED":                    73,
-		"Never":                        61,
+		"Word/__CP": 72,
+		"Word/__ED": 73,
+		"Never":     61,
 		// --- Externally-registered types (Step 8 migration) ---
 		"Scalar/Time":                      1000, // time family — lang/go/engine/native_temporal.go
 		"Scalar/Time/Date":                 1001,

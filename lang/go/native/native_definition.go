@@ -237,7 +237,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		// InstallType decision so the two paths stay aligned.
 		if typeName != "" && eng.PredicateInputType(constraint) != nil {
 			if def := r.LookupTypeName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
-				out.Parent = def
+				out = ReparentValue(out, def)
 			}
 		}
 		InstallDef(r, name, out)
@@ -287,6 +287,56 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			return nil, nil
 		}
 	}
+	// User-minted bare-refine subtype (`def Foo refine Integer`): the
+	// constraint is the Foo type literal whose lattice Parent is the
+	// type Foo refines. Check the body satisfies the parent type
+	// (since values of the parent type are the inhabitants Foo can
+	// accept), then reparent a COPY of the body to Foo. Mutating the
+	// Unify result would store its by-value type literal (Unify swaps
+	// when one side is bare and subtype-ordered) instead of the
+	// body's payload — `def x:Foo 1` would silently bind x to the
+	// Foo-tagged type literal, not the integer 1.
+	if constraint.Data == nil && constraint.Origin == eng.OriginUserDef &&
+		typeName != "" && constraint.Parent != nil {
+		if def := r.LookupTypeName(typeName); def != nil && def.Origin == eng.OriginUserDef {
+			// Walk up the lattice past any intervening user refines
+			// (e.g. `Foo refine Item refine String`) to the nearest
+			// builtin ancestor and unify against THAT. A sibling-of-
+			// constraint kernel subtype (ProperString satisfying a
+			// Foo whose parent Item branches off String) wouldn't
+			// match the immediate parent literal but does match the
+			// shared kernel base.
+			root := def.Parent
+			for root != nil && root.Origin == eng.OriginUserDef {
+				root = root.Parent
+			}
+			if root == nil {
+				return nil, fmt.Errorf("def %s: refine subtype %s has no builtin ancestor",
+					name, describeType())
+			}
+			parentLit := NewTypeLiteral(root)
+			if _, ok := Unify(body, parentLit); ok {
+				InstallDef(r, name, ReparentValue(body, def))
+				r.Check.RecordDef(name, args[0].Pos)
+				return nil, nil
+			}
+			if r.Check.IsActive() {
+				r.Check.AddDiagnostic(CheckDiagnostic{
+					Code: "type_error",
+					Detail: fmt.Sprintf("def %s: value %s does not unify with declared type %s",
+						name, body.String(), describeType()),
+					Word: name,
+					Row:  args[0].Pos.Row,
+					Col:  args[0].Pos.Col,
+				})
+				InstallDef(r, name, NewCarrier(def))
+				r.Check.RecordDef(name, args[0].Pos)
+				return nil, nil
+			}
+			return nil, fmt.Errorf("def %s: value %s does not unify with declared type %s",
+				name, body.String(), describeType())
+		}
+	}
 	unified, ok := Unify(body, constraint)
 	if !ok {
 		if r.Check.IsActive() {
@@ -315,7 +365,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// the dispatch identity flips.
 	if constraint.Parent.Equal(TFnUndef) && typeName != "" {
 		if def := r.LookupTypeName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
-			unified.Parent = def
+			unified = ReparentValue(unified, def)
 		}
 	}
 	InstallDef(r, name, unified)

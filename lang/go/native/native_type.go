@@ -289,6 +289,22 @@ func refineBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 			fmt.Sprintf("refine: argument must be a type, got %s", base.String()),
 			"refine")
 	}
+	// Bare type-literal base: mint an anonymous user subtype now and
+	// return its type literal. The paired `def Foo` (via InstallType)
+	// renames the anonymous lattice node to "Foo". This split
+	// distinguishes the subtype path (`def Foo refine Integer`) from
+	// the alias path (`def Foo Integer`, where the body remains the
+	// input type literal verbatim) — without this differentiation the
+	// two surfaces would be indistinguishable downstream.
+	if base.Data == nil && !base.Carrier {
+		// Mint the refine prefab against the canonical lattice node
+		// for base, so any user-installed Behavior on base (via
+		// `behave`) propagates to the LCA walk for sibling subtypes
+		// downstream. The prefab carries no Name; the paired `def`
+		// recognises it (eng.IsRefinePrefab) and renames-and-binds.
+		anon := r.Types.MintRefinePrefab(CanonicalType(r, &base))
+		return []Value{NewTypeLiteral(anon)}, nil
+	}
 	return []Value{base}, nil
 }
 
@@ -467,6 +483,16 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 			// / `FunctionSignature`): plain subtype check on the
 			// value's Parent.
 			return []Value{NewBoolean(a.Parent.Matches(bNode))}, nil
+		}
+		// Both sides are bare type literals: the question is purely
+		// lattice subtyping. Settle directly via IsSubtypeOf rather
+		// than via Unify, whose List/Map/DepScalar/FnDef branches
+		// short-circuit family relationships and would reject a
+		// user-minted subtype (e.g. `def Foo refine List`) against
+		// its base family literal.
+		if a.Data == nil && !a.Carrier {
+			aNode := &a
+			return []Value{NewBoolean(aNode.Equal(bNode) || aNode.IsSubtypeOf(bNode))}, nil
 		}
 	}
 	unified, ok := Unify(a, b)
@@ -690,7 +716,7 @@ func convert2Handler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if targetType.Data != nil {
 		return nil, r.AqlError("convert_error", fmt.Sprintf("convert: first argument must be a type literal, got %s", targetType.Parent), "convert")
 	}
-	result, err := convertTo(src, ValueType(targetType),"")
+	result, err := convertTo(src, ValueType(targetType), "")
 	if err != nil {
 		return nil, err
 	}
@@ -715,7 +741,7 @@ func convert3Handler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		}
 	}
 
-	result, err := convertTo(src, ValueType(targetType),base)
+	result, err := convertTo(src, ValueType(targetType), base)
 	if err != nil {
 		return nil, err
 	}

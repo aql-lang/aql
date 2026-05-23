@@ -269,3 +269,81 @@ name pops the binding and retires the minted type
 If you need to extend the installation policy (a new name shape, an
 extra validation rule), modify `InstallType` so every surface picks
 it up.
+
+## Canonical `*Type` Pointers (CRITICAL)
+
+Because `type Type = Value` a "type literal" is dual: a `Value`
+with `Data == nil` AND the canonical `*Type` registered in
+`TypeTable.byID`. Code that takes `&v` of a stack-local type-
+literal Value (or `NewTypeLiteral(t)`'s by-value return) gets a
+NON-canonical pointer. The orphan compares Equal via ID, but
+mutations to fields like `Behavior` — which `behave` writes
+through the canonical pointer — do not propagate to it. LCA walks
+landing on the orphan miss any user-installed Comparer.
+
+**The discipline:** whenever a `*Type` might have been obtained
+via `&v` from a by-value Value, route it through
+`eng.CanonicalType(r, t)` (re-exported as `native.CanonicalType`)
+before storing it or using it as an identity key. The helper looks
+up the canonical pointer via `r.Types.LookupByID(t.ID)` and falls
+back to `t` for types with no registered canonical (degenerate
+roots, test fixtures with empty IDs).
+
+Current call sites that must canonicalize:
+
+- `core_type.go::InstallType` — bare type-literal body parent.
+- `fn_params.go::LookupDefType` — type-name → body lookup.
+- `fn_params.go::ResolveDefType` — bare-literal Value → `*Type`.
+- `lang/native/native_type.go::refineBareHandler` — `MintRefinePrefab`
+  parent.
+
+See `lang/doc/design/TYPE-CANONICALIZATION.0.md`.
+
+## Typed-Def Reparent
+
+Every typed-def path that rewraps a value's `Parent` to a refine
+subtype's `*Type` routes through `eng.ReparentValue(v, def)` (re-
+exported as `native.ReparentValue`). The helper returns a fresh
+by-value copy with `Parent` rebound — the `Payload`/`Pos`/`Quoted`/
+`Carrier`/`Eval` fields are preserved.
+
+The invariant the helper codifies: NEVER mutate `Parent` on a Value
+that was returned by `Unify` when Unify could have swapped to a
+type-literal side (`Unify(1, Foo-literal)` returns `Foo-literal`,
+not `1`, when Foo is a strict subtype of Integer). The refine-bare
+reparent originally got this wrong and stored the Foo type literal
+as the binding instead of the integer body.
+
+Current reparent callsites:
+
+- `defTypedHandler` predicate-type branch.
+- `defTypedHandler` refine-bare branch.
+- `defTypedHandler` FnUndef branch.
+- (`ObjectType` branch uses `eng.MakeObject` to construct an
+  instance rather than reparenting — different shape, same intent.)
+
+## Refine ↔ Def Constructor Protocol
+
+`refine BaseType` (the bare 1-arg form) and `def Foo BaseType` (the
+alias form, no `refine` word) MUST produce indistinguishable Values
+at the binding site if the protocol is field-coincidental — both
+have `Data == nil` and the same `*Type` ancestry. They are NOT the
+same:
+
+- `def Foo BaseType` — alias. Foo's body IS the input type
+  literal. `typeof x` for `def x:Foo …` resolves to the input.
+- `def Foo refine BaseType` — fresh subtype. Foo gets a minted
+  lattice node with `Parent = BaseType`; the body bound to Foo is
+  the new lattice's type literal.
+
+The protocol channel between the two surfaces:
+
+- `TypeTable.MintRefinePrefab(parent) *Type` — what
+  `refineBareHandler` emits for the bare 1-arg form.
+- `IsRefinePrefab(v) bool` — what `InstallType` matches to take
+  the rename-and-bind path. Anything else falls through to the
+  alias path.
+
+Do NOT detect the prefab via inline field probes (`Origin ==
+OriginUserDef && Name == ""`). Use the named helpers so the
+intent is legible at the call site.

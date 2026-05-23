@@ -236,7 +236,7 @@ func TestMultipleSignaturesDispatch(t *testing.T) {
 	}
 }
 
-func TestSignatureScoreFavoursSpecificity(t *testing.T) {
+func TestSignatureDispatchFavoursSpecificity(t *testing.T) {
 	// Generic (Any) and specific (Integer) overloads of the same word.
 	// A concrete integer arg must dispatch to the specific overload.
 	hits := map[string]int{}

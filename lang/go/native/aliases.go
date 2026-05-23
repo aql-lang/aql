@@ -282,6 +282,8 @@ var (
 	GenerateID                = eng.GenerateID
 	GenerateObjectTypeID      = eng.GenerateObjectTypeID
 	IDPrefixForType           = eng.IDPrefixForType
+	CanonicalType             = eng.CanonicalType
+	ReparentValue             = eng.ReparentValue
 	InstallDef                = eng.InstallDef
 	InstallFnDef              = eng.InstallFnDef
 	IsCapitalisedName         = eng.IsCapitalisedName
@@ -399,7 +401,7 @@ var (
 	RunCarrierBody        = eng.RunCarrierBody
 	SetIDSeed             = eng.SetIDSeed
 	SeverityFor           = eng.SeverityFor
-	SignatureScore        = eng.SignatureScore
+	CompareSignatures     = eng.CompareSignatures
 	SimplifyDisjunctAlts  = eng.SimplifyDisjunctAlts
 	SizeOf                = eng.SizeOf
 	SortSignatures        = eng.SortSignatures

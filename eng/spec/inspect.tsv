@@ -85,8 +85,8 @@ inspect make	{name:'make',kind:native,signatures:[{args:['Object','Any','Object'
 inspect inspect	{name:'inspect',kind:native,signatures:[{args:['Atom']},{args:['Any']}]}	Atom/q sig (was Atom + Word) plus Any fallback
 		
 # --- state ---		
-inspect get	{name:'get',kind:native,signatures:[{args:['Integer','Array']},{args:['Integer','Object']},{args:['String','Object']},{args:['Integer','Node']},{args:['Atom','Object']},{args:['String','Node']},{args:['Atom','Node']},{args:['Any','None']}]}	
-inspect set	{name:'set',kind:native,signatures:[{args:['Integer','Any','Array']},{args:['String','Any','Object']},{args:['Atom','Any','Object']}]}	
+inspect get	{name:'get',kind:native,signatures:[{args:['String','Object']},{args:['String','Node']},{args:['Integer','Array']},{args:['Integer','Object']},{args:['Integer','Node']},{args:['Atom','Object']},{args:['Atom','Node']},{args:['Any','None']}]}
+inspect set	{name:'set',kind:native,signatures:[{args:['String','Any','Object']},{args:['Integer','Any','Array']},{args:['Atom','Any','Object']}]}
 inspect do	{name:'do',kind:native,signatures:[{args:['Map']},{args:['List']}]}	
 		
 # --- a fixture word ---		
