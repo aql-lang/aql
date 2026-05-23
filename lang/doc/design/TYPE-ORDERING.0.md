@@ -229,66 +229,78 @@ Example: `true cmp 5 = -1` (Boolean Rank `20.2·10⁹` < Integer Rank
 `20.31·10⁹`); `5 cmp 'a' = -1` (Integer < String); `'a' cmp [1] =
 -1` (String band < List band).
 
-## Anomalies — type literal ≡ family zero
+## Type-literal-first rule (the family-zero anomaly, now fixed)
 
-The Comparer-first design has a deliberate consequence: when a type
-literal is compared *within its own family*, the family Comparer
-reads the type literal as `Data == nil` and pulls a zero-valued
-payload. This places the type literal in the same equivalence class
-as the family's zero-valued inhabitant:
+Earlier, a scalar type literal compared *within its own family*
+fell through to the family Comparer, which read its `Data == nil`
+payload as a zero value and tied it with the family's zero-valued
+inhabitant (`Integer cmp 0 → 0`, `String cmp '' → 0`, `Boolean cmp
+false → 0`). That violated antisymmetry — distinct lattice nodes
+collapsed into the same equivalence class — and reduced the order
+to a preorder.
+
+The fix is a two-line preamble at the top of every family Comparer:
+
+```go
+// litVsConcreteOrder — type literal sorts FIRST.
+if c, ok := litVsConcreteOrder(a, b); ok { return c, nil }
+// Both literals — order by lattice Rank.
+if a.Data == nil && b.Data == nil {
+    return litVsLitOrder(a, b), nil
+}
+// Both concrete — proceed with the family's value compare.
+```
+
+Result:
 
 ```
-Integer cmp 0      → 0          # type literal Integer ≡ value 0
-Number  cmp 0      → 0
-Decimal cmp 0      → 0
-Decimal cmp 0.0    → 0
-Integer cmp Number → 0          # type literals also tie among themselves
-Number  cmp Decimal → 0
-Boolean cmp false  → 0          # Boolean ≡ false
-String  cmp ''     → 0          # String ≡ ''
-EmptyString cmp ProperString → 0
-EmptyString cmp ''           → 0
-
-1 cmp 1.0         → 0          # cross-leaf numeric magnitude
+Integer cmp 0       → -1     # Integer type literal < the value 0
+Number  cmp Integer → -1     # by Rank (Number 20.3·10⁹ < Integer 20.31·10⁹)
+Integer cmp Decimal → -1     # by Rank
+String  cmp ''      → -1     # String type literal < the empty string
+Boolean cmp false   → -1     # Boolean type literal < the value false
+Atom    cmp foo/q   → -1     # Atom type literal < every concrete atom
+Path    cmp (make Path ['a']) → -1   # Path literal < every concrete path
 ```
 
-These collapse violates **antisymmetry**: `Integer cmp 0 = 0` and
-`0 cmp Number = 0` and `Integer cmp Number = 0`, but the three values
-are not identical lattice nodes. **They are equivalent under `cmp`,
-not equal in identity.**
+The rule applies **only within a family** — `scalarCompareBehavior`
+(the catch-all on `Scalar` that handles cross-family pairs) does
+NOT apply it, so cross-family ordering remains Rank-only:
 
-The order is therefore a **total preorder**, not a strict total
-order. It is:
+```
+true cmp Integer → -1   # Boolean Rank 20.2·10⁹ < Integer Rank 20.31·10⁹
+5    cmp String  → -1   # Integer Rank < String Rank
+```
 
-* Reflexive: `a cmp a = 0` for every value.
-* Transitive: `a ≤ b ∧ b ≤ c ⇒ a ≤ c` (verified by the test suite).
-* **Not antisymmetric**: distinct values can compare equal (the
-  cases above).
+The Path family runs through `comparePaths` (no Comparer on `TPath`
+itself; the LCA walk reaches `Scalar`); `comparePaths` carries its
+own `litVsConcreteOrder` check at the top so the rule applies
+inside the Path family without leaking into other scalar
+cross-family pairs.
 
-### Why we accept the anomaly
+### What's still equivalent
 
-Two alternative designs were considered and rejected:
+After the fix the order is a **strict total order over distinct
+lattice nodes**, with one deliberate value-level equivalence:
 
-1. **Disambiguate type literals from values in the comparer.** The
-   numeric Comparer could check `IsTypeLiteral` and route type
-   literals through Rank. This restores antisymmetry but breaks the
-   single-source-of-truth property: the Comparer would have to know
-   about lattice mechanics, and the consistent "values within a
-   family use the family Comparer" rule would have an exception.
-2. **Cross-leaf numeric distinction (`1 cmp 1.0 = -1`).** This
-   would mean numeric equality across Integer/Decimal is no longer
-   transitive with arithmetic (`1.0 + 0 == 1.0` but `1 cmp 1.0 ≠
-   0`). Worse user-facing surprise than the current collapse.
+```
+1 cmp 1.0       → 0        # cross-leaf numeric magnitude
+1.0 + 0 == 1.0           # consistent with arithmetic
+```
 
-The accepted trade-off: comparator stays simple, type literals
-sort as their family zero, callers that need lattice identity use
-`(&a).Equal(&b)` or `typeof`.
+Cross-leaf magnitude equality (`Integer 1 ≡ Decimal 1.0`) is
+preserved because the alternative — making `1` and `1.0` order
+strictly — breaks numeric semantics that every user expects
+(`1 + 0 == 1`, both render as `1`, both unify against `Integer`).
+This equivalence is confined to the cross-leaf magnitude case and
+does not produce the per-family-zero collapse that the type-literal
+issue did.
 
-### `none` and `Never` are not affected
+### `none` and `Never`
 
-`none` and `Never` are kept as their own degenerate roots (Rank
-`12·10⁹`, `13·10⁹`). They have no Comparer-bearing ancestor, so
-cross-pair comparisons fall through to Rank and order cleanly:
+`none` and `Never` are degenerate roots with no Comparer-bearing
+ancestor; comparisons against them go straight through the Rank
+cascade:
 
 ```
 none cmp 5     → -1     (None Rank 12·10⁹ < Integer band)
@@ -296,8 +308,18 @@ none cmp Any   →  1     (None Rank 12·10⁹ > Any Rank 11·10⁹)
 Never cmp Any  →  1     (Never Rank 13·10⁹ > Any Rank 11·10⁹)
 ```
 
-`none` and `none` compare equal; `none` and any other value compare
-strictly by Rank.
+`none cmp none = 0`; `none` and any other value compare strictly
+by Rank.
+
+### Summary of order properties
+
+| Property | Holds? |
+|---|---|
+| Reflexive — `a cmp a = 0` | ✓ |
+| Transitive — `a < b ∧ b < c ⇒ a < c` | ✓ |
+| Total — every pair compares | ✓ |
+| Antisymmetric over distinct lattice nodes | ✓ |
+| Antisymmetric over distinct values | ✗ for cross-leaf numeric magnitude (`1 ≡ 1.0`) — deliberate |
 
 ## Implementation pointers
 

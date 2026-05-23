@@ -32,6 +32,47 @@ func (atomCompareBehavior) formatDelegate()    {}
 func (scalarCompareBehavior) formatDelegate()  {}
 func (wordCompareBehavior) formatDelegate()    {}
 
+// litVsConcreteOrder applies the type-literal-first rule at the top
+// of every family Comparer: when exactly one side is a bare type
+// literal (Data==nil, !Carrier) and the other carries a concrete
+// payload, the type literal sorts first.
+//
+// This places every type literal strictly BELOW every concrete value
+// in the same family — including the family's zero-valued inhabitant
+// (`Integer < 0`, `String < ''`, `Boolean < false`). Without this
+// rule the family Comparer would read the type literal's nil payload
+// as a zero value and tie with `0` / `''` / `false`, putting two
+// distinct lattice nodes in the same equivalence class and
+// violating the strict-total-order property.
+//
+// Returns (sign, true) when exactly one side is a literal. Returns
+// (0, false) when both are literals or both concrete — the caller
+// then picks the appropriate branch (litVsLitOrder for both-
+// literal, the family's value compare for both-concrete).
+func litVsConcreteOrder(a, b Value) (int, bool) {
+	aLit := a.Data == nil && !a.Carrier
+	bLit := b.Data == nil && !b.Carrier
+	if aLit && !bLit {
+		return -1, true
+	}
+	if !aLit && bLit {
+		return 1, true
+	}
+	return 0, false
+}
+
+// litVsLitOrder orders two bare type literals by lattice node
+// position via compareTypes (Rank → depth → name → ID). Used by the
+// family Comparers when both inputs are type literals — in that
+// case the value-payload compare would tie (both read as zero) so
+// we fall back to lattice identity.
+//
+// The two values are by-value copies of their lattice nodes, so &a
+// and &b ARE the nodes for compareTypes' purposes.
+func litVsLitOrder(a, b Value) int {
+	return compareTypes(&a, &b)
+}
+
 func (numberCompareBehavior) Compare(a, b Value) (int, error) {
 	// DepScalar values share a numeric Parent (Integer, Decimal,
 	// Number) with concrete scalars but carry a DepScalarInfo payload
@@ -40,6 +81,12 @@ func (numberCompareBehavior) Compare(a, b Value) (int, error) {
 	// + structural compare (which tie-breaks on canonical form).
 	if a.IsDepScalar() || b.IsDepScalar() {
 		return 0, ErrNoComparer
+	}
+	if c, ok := litVsConcreteOrder(a, b); ok {
+		return c, nil
+	}
+	if a.Data == nil && b.Data == nil {
+		return litVsLitOrder(a, b), nil
 	}
 	af, _ := AsNumber(a)
 	bf, _ := AsNumber(b)
@@ -61,6 +108,12 @@ func (stringCompareBehavior) Compare(a, b Value) (int, error) {
 	if a.IsDepScalar() || b.IsDepScalar() {
 		return 0, ErrNoComparer
 	}
+	if c, ok := litVsConcreteOrder(a, b); ok {
+		return c, nil
+	}
+	if a.Data == nil && b.Data == nil {
+		return litVsLitOrder(a, b), nil
+	}
 	as, _ := AsString(a)
 	bs, _ := AsString(b)
 	return strings.Compare(as, bs), nil
@@ -72,6 +125,12 @@ type booleanCompareBehavior struct{ defaultBehavior }
 func (booleanCompareBehavior) Compare(a, b Value) (int, error) {
 	if a.IsDepScalar() || b.IsDepScalar() {
 		return 0, ErrNoComparer
+	}
+	if c, ok := litVsConcreteOrder(a, b); ok {
+		return c, nil
+	}
+	if a.Data == nil && b.Data == nil {
+		return litVsLitOrder(a, b), nil
 	}
 	ab, _ := AsBoolean(a)
 	bb, _ := AsBoolean(b)
@@ -92,6 +151,12 @@ func (atomCompareBehavior) Compare(a, b Value) (int, error) {
 	if a.IsDepScalar() || b.IsDepScalar() {
 		return 0, ErrNoComparer
 	}
+	if c, ok := litVsConcreteOrder(a, b); ok {
+		return c, nil
+	}
+	if a.Data == nil && b.Data == nil {
+		return litVsLitOrder(a, b), nil
+	}
 	as, _ := AsAtom(a)
 	bs, _ := AsAtom(b)
 	return strings.Compare(as, bs), nil
@@ -104,6 +169,12 @@ func (atomCompareBehavior) Compare(a, b Value) (int, error) {
 type wordCompareBehavior struct{ defaultBehavior }
 
 func (wordCompareBehavior) Compare(a, b Value) (int, error) {
+	if c, ok := litVsConcreteOrder(a, b); ok {
+		return c, nil
+	}
+	if a.Data == nil && b.Data == nil {
+		return litVsLitOrder(a, b), nil
+	}
 	return strings.Compare(a.String(), b.String()), nil
 }
 
@@ -124,6 +195,13 @@ func (wordCompareBehavior) Compare(a, b Value) (int, error) {
 type scalarCompareBehavior struct{ defaultBehavior }
 
 func (scalarCompareBehavior) Compare(a, b Value) (int, error) {
+	// Cross-family scalar pairs (e.g. Boolean-vs-Integer) and the
+	// Path-vs-Path case both land here. For cross-family pairs the
+	// Rank discriminator must own the result — applying the type-
+	// literal-first rule here would override Rank (e.g. `true cmp
+	// Integer` should stay -1 via Rank, not flip to +1 because
+	// Integer is a literal). The Path-vs-Path-literal case is
+	// settled by comparePaths' own litVsConcrete check.
 	if c := compareTypes(ValueType(a), ValueType(b)); c != 0 {
 		return c, nil
 	}
@@ -145,14 +223,24 @@ func comparePaths(a, b Value) int {
 	if a.IsDepScalar() && b.IsDepScalar() {
 		return strings.Compare(a.String(), b.String())
 	}
+	// Type-literal-first rule for the Path family: the bare `Path`
+	// type literal sorts strictly below every concrete path value.
+	// Done here (not in scalarCompareBehavior) so the rule applies
+	// only inside the Path family — cross-family scalar pairs route
+	// through scalarCompareBehavior's Rank-only path.
+	if c, ok := litVsConcreteOrder(a, b); ok {
+		return c
+	}
 	ap, aerr := AsPath(a)
 	bp, berr := AsPath(b)
 	if aerr != nil || berr != nil {
-		// Not a Path pair after all — fall back to the reverse
-		// lexical order rendered form (genuine Paths sort by
-		// reverse-lex; this matches the spec's expectation for
-		// path-vs-type-literal cases that hit this fallback).
-		return strings.Compare(b.String(), a.String())
+		// Two type literals (both Data==nil) or two non-Path
+		// concretes — fall back to lattice identity then to
+		// rendered form.
+		if a.Data == nil && b.Data == nil {
+			return litVsLitOrder(a, b)
+		}
+		return strings.Compare(a.String(), b.String())
 	}
 	switch {
 	case len(ap.Parts) < len(bp.Parts):
