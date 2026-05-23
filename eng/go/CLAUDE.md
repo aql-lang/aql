@@ -299,11 +299,11 @@ Current call sites that must canonicalize:
 
 See `lang/doc/design/TYPE-CANONICALIZATION.0.md`.
 
-## Typed-Def Retag
+## Typed-Def Reparent
 
 Every typed-def path that rewraps a value's `Parent` to a refine
-subtype's `*Type` routes through `eng.RetagValue(v, def)` (re-
-exported as `native.RetagValue`). The helper returns a fresh
+subtype's `*Type` routes through `eng.ReparentValue(v, def)` (re-
+exported as `native.ReparentValue`). The helper returns a fresh
 by-value copy with `Parent` rebound — the `Payload`/`Pos`/`Quoted`/
 `Carrier`/`Eval` fields are preserved.
 
@@ -311,16 +311,16 @@ The invariant the helper codifies: NEVER mutate `Parent` on a Value
 that was returned by `Unify` when Unify could have swapped to a
 type-literal side (`Unify(1, Foo-literal)` returns `Foo-literal`,
 not `1`, when Foo is a strict subtype of Integer). The refine-bare
-retag originally got this wrong and stored the Foo type literal as
-the binding instead of the integer body.
+reparent originally got this wrong and stored the Foo type literal
+as the binding instead of the integer body.
 
-Current retag callsites:
+Current reparent callsites:
 
 - `defTypedHandler` predicate-type branch.
 - `defTypedHandler` refine-bare branch.
 - `defTypedHandler` FnUndef branch.
 - (`ObjectType` branch uses `eng.MakeObject` to construct an
-  instance rather than retagging — different shape, same intent.)
+  instance rather than reparenting — different shape, same intent.)
 
 ## Refine ↔ Def Constructor Protocol
 

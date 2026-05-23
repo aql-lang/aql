@@ -237,7 +237,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		// InstallType decision so the two paths stay aligned.
 		if typeName != "" && eng.PredicateInputType(constraint) != nil {
 			if def := r.LookupTypeName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
-				out = RetagValue(out, def)
+				out = ReparentValue(out, def)
 			}
 		}
 		InstallDef(r, name, out)
@@ -291,7 +291,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// constraint is the Foo type literal whose lattice Parent is the
 	// type Foo refines. Check the body satisfies the parent type
 	// (since values of the parent type are the inhabitants Foo can
-	// accept), then retag a COPY of the body with Foo. Mutating the
+	// accept), then reparent a COPY of the body to Foo. Mutating the
 	// Unify result would store its by-value type literal (Unify swaps
 	// when one side is bare and subtype-ordered) instead of the
 	// body's payload — `def x:Foo 1` would silently bind x to the
@@ -316,7 +316,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			}
 			parentLit := NewTypeLiteral(root)
 			if _, ok := Unify(body, parentLit); ok {
-				InstallDef(r, name, RetagValue(body, def))
+				InstallDef(r, name, ReparentValue(body, def))
 				r.Check.RecordDef(name, args[0].Pos)
 				return nil, nil
 			}
@@ -365,7 +365,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// the dispatch identity flips.
 	if constraint.Parent.Equal(TFnUndef) && typeName != "" {
 		if def := r.LookupTypeName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
-			unified = RetagValue(unified, def)
+			unified = ReparentValue(unified, def)
 		}
 	}
 	InstallDef(r, name, unified)

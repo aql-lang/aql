@@ -162,21 +162,21 @@ func WithPos(v, src Value) Value {
 	return v
 }
 
-// RetagValue returns a copy of v with its Parent rebound to def.
-// The single primitive every typed-def retag path uses (predicate
+// ReparentValue returns a copy of v with its Parent rebound to def.
+// The single primitive every typed-def reparent path uses (predicate
 // types, ObjectInstance dispatch on Person, FnUndef function-shape
 // binding, refine-bare scalar subtypes). Payload, Pos, Quoted,
 // Carrier, Eval are preserved unchanged.
 //
 // The discipline this codifies: NEVER mutate `Parent` on a Value
 // that was returned by Unify when Unify could have swapped to a
-// type-literal side. The refine-bare retag originally got this
+// type-literal side. The refine-bare reparent originally got this
 // wrong and stored the Foo type literal as the binding instead of
 // the integer body. Using this helper makes the by-value copy
 // explicit and the mistake unreachable.
 //
 // See `lang/doc/design/TYPE-CANONICALIZATION.0.md`.
-func RetagValue(v Value, def *Type) Value {
+func ReparentValue(v Value, def *Type) Value {
 	v.Parent = def
 	return v
 }

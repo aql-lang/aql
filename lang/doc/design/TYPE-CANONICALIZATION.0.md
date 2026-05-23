@@ -1,4 +1,4 @@
-# TYPE-CANONICALIZATION.0 — Canonical Pointers, Unified Resolve, Unified Retag
+# TYPE-CANONICALIZATION.0 — Canonical Pointers, Unified Resolve, Unified Reparent
 
 This document captures a refactor that closes the third generation of
 type-system fractures the prior two refactors didn't reach.
@@ -14,7 +14,7 @@ Comparers via `behave`. The visible API is uniform after TYPE-UNIFORM,
 but the underlying handlers still carry pre-collapse assumptions:
 several sites grab non-canonical `*Type` pointers, three independent
 `resolve-name-to-type` helpers exist, and four bespoke
-typed-def retag branches each invent their own pattern.
+typed-def reparent branches each invent their own pattern.
 
 Status: design + implementation in flight (this branch).
 
@@ -46,7 +46,7 @@ of the seven bugs reduce to this:
   &baseType` (a stack-local copy).
 - `eng.InstallType` else branch used the same `&bodyType` pattern.
 
-### Fracture B — typed-def retag is bespoke per kind
+### Fracture B — typed-def reparent is bespoke per kind
 
 `defTypedHandler` (lang/go/native/native_definition.go) carries four
 independent branches that all do the same conceptual thing — "the
@@ -57,7 +57,7 @@ isolation:
 - ObjectType branch (`def x:Person {…}`) — builds an instance via
   `eng.MakeObject`.
 - FnUndef branch (`def f:Mapper fn […]`) — `unified.Parent = def`.
-- Refine-bare branch (new in this work) — `retagged.Parent = def`
+- Refine-bare branch (new in this work) — `reparented.Parent = def`
   after walking past intervening user refines to the kernel root.
 
 Three of these silently differ on questions like "what if the body
@@ -106,14 +106,14 @@ input when there is no canonical (degenerate roots, test fixtures
 with empty IDs). Every site that historically grabbed `&v` of a
 type-literal Value routes through here.
 
-### 2.3 `eng.RetagValue(body Value, def *Type) Value`
+### 2.3 `eng.ReparentValue(body Value, def *Type) Value`
 
-The single typed-def retag primitive. Copies the body, sets
+The single typed-def reparent primitive. Copies the body, sets
 `Parent = def`, preserves `Data`/`Eval`/`Pos`/`Quoted`/`Carrier`,
 and returns. Used by every `defTypedHandler` branch (predicate,
 object instance, FnUndef, refine-bare). Codifies the invariant that
-"retag preserves payload" so the Unify-swaps-to-literal trap I hit
-on refine-bare can never re-emerge.
+"reparent preserves payload" so the Unify-swaps-to-literal trap I
+hit on refine-bare can never re-emerge.
 
 ### 2.4 The `refine` constructor protocol
 
@@ -139,7 +139,7 @@ tests; the suite stays green at every step.
 | Step | What | Files |
 |---|---|---|
 | 1 | `CanonicalType` helpers + replace canonicalization hot spots | `eng/util.go`, `eng/fn_params.go`, `eng/core_type.go`, `lang/native/native_type.go` |
-| 2 | `RetagValue` helper + retag-callsite consolidation | `eng/util.go`, `lang/native/native_definition.go` |
+| 2 | `ReparentValue` helper + reparent-callsite consolidation | `eng/util.go`, `lang/native/native_definition.go` |
 | 3 | Resolve unification | `eng/registry.go`, `eng/fn_params.go`, `eng/types.go`, every consumer |
 | 4 | `RefinePrefab` payload + protocol cleanup | `eng/payload.go`, `eng/core_type.go`, `lang/native/native_type.go` |
 | 5 | CLAUDE.md updates capturing the new discipline | `eng/go/CLAUDE.md`, `lang/go/CLAUDE.md` |

@@ -112,11 +112,11 @@ typeof Foo is Integer`)
 	}
 }
 
-// A typed-def against a bare-refine subtype retags the value's
-// Parent with the minted lattice node so `typeof x` reports the
-// subtype, not the base. The value still satisfies `is` for the
-// base type via the ancestry walk.
-func TestRefineBareSubtypeRetag(t *testing.T) {
+// A typed-def against a bare-refine subtype reparents the value to
+// the minted lattice node so `typeof x` reports the subtype, not the
+// base. The value still satisfies `is` for the base type via the
+// ancestry walk.
+func TestRefineBareSubtypeReparent(t *testing.T) {
 	got := runOne(t, `def Foo refine Integer
 def x:Foo 1
 typeof x

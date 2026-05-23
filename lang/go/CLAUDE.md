@@ -419,13 +419,13 @@ methods on `Value`; only `Is(t)` and `String()` remain as methods.)
   not a stack-local copy. See
   `lang/doc/design/TYPE-CANONICALIZATION.0.md`.
 
-**Typed-def retag**:
-- `RetagValue(v, def) Value` — return a fresh copy of v with
+**Typed-def reparent**:
+- `ReparentValue(v, def) Value` — return a fresh copy of v with
   `Parent` rebound to def. The single primitive every typed-def
-  retag path uses (predicate / refine-bare / FnUndef branches). The
-  by-value copy is explicit so Unify-swap results (which may return
-  a type literal in the value position) can never be silently
-  mutated and stored as the binding.
+  reparent path uses (predicate / refine-bare / FnUndef branches).
+  The by-value copy is explicit so Unify-swap results (which may
+  return a type literal in the value position) can never be
+  silently mutated and stored as the binding.
 
 **Pos threading**:
 - `WithPos(v, src)` — return v with Pos copied from src. Use when a
