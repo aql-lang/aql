@@ -52,38 +52,53 @@ the [How-To Guides](how-to.md).
 ### Type Hierarchy
 
 ```
-Any
-  Scalar
-    String (Proper | Empty)
-    Number (Integer | Decimal)
-    Boolean
-    Path
-    Atom
-  Node
-    List (Args)
-    Map (Options | Inspect)
-  Word
-    Function
-  Object
-    Store (System)
-    Array
-    Error
-    Table
-    Record
-    Fetch (Request | Response)
-    Resource (Entity)
-    Timeout
-    Interval
-  Type
-    ScalarType
-    NodeType
-    ObjectType
-  None
+Any                            -- top of the main hierarchy
+None                           -- the unit (its sole inhabitant: `none`)
+Never                          -- empty / bottom
+
+Any/Scalar
+  Atom
+  Boolean                      -- false | true
+  Number
+    Integer  Decimal
+  String
+    EmptyString  ProperString
+  Path
+  Time (external)
+    Date  DateTime  Instant  TimeOfDay
+    Duration (CalDuration | ClkDuration)
+    Timezone
+
+Any/Node
+  List (Args)
+  Map (Inspect)
+
+Any/Ideal
+  Object (Resource (Entity))
+  Array  Record  Options  Error  Store (System)  Table
+  Fetch (Request | Response)                   -- external
+  Timeout  Interval                            -- external
+  Tensor (Matrix | Vector)                     -- external
+
+Any/Word
+  __FW __OP __CP __ED __PE __IS __FN __RC __MK __MV __MD __IN  (internal)
+
+Any/Type
+  Function  FunctionSignature
+  Disjunct (Enum)
 ```
 
 Types form a hierarchy with slash-separated paths. A child matches
-its parent: `Scalar/String/Proper` matches `Scalar/String` matches
-`Scalar`. A parent does not match a child.
+its parent: `Scalar/String/ProperString` matches `Scalar/String`
+matches `Scalar`. A parent does not match a child. `Any` is the
+structural root; its name is omitted from rendered paths so
+`Scalar.Path()` is just `"Scalar"`.
+
+**Ordering.** Every type has a unified `Rank` integer; `cmp` / `lt` /
+`gt` / `sort` run a LCA-Comparer-then-Rank cascade. Type literals
+sort before concrete inhabitants of the same family
+(`Integer cmp 0 → -1`). Full design in
+`lang/doc/design/TYPE-ORDERING.0.md`.
 
 ### Short Names
 
@@ -99,11 +114,11 @@ These names expand automatically:
 | `Atom` | `Scalar/Atom` |
 | `List` | `Node/List` |
 | `Map` | `Node/Map` |
-| `Store` | `Object/Store` |
-| `Table` | `Object/Table` |
-| `Record` | `Object/Record` |
-| `Timeout` | `Object/Timeout` |
-| `Interval` | `Object/Interval` |
+| `Store` | `Ideal/Store` |
+| `Table` | `Ideal/Table` |
+| `Record` | `Ideal/Record` |
+| `Timeout` | `Ideal/Timeout` |
+| `Interval` | `Ideal/Interval` |
 | `Function` | `Word/Function` |
 
 ### Type Operations
@@ -113,7 +128,7 @@ These names expand automatically:
 | `typeof` | `[Any] -> [Atom]` | Short type name |
 | `fulltypeof` | `[Any] -> [Atom]` | Full type path |
 | `is` | `[Any, Any] -> [Boolean]` | Type compatibility check |
-| `convert` | `[ScalarType, Scalar] -> [Scalar]` | Type conversion |
+| `convert` | `[Scalar, Scalar] -> [Scalar]` (`TypeArgs[0]=true`) | Type conversion |
 | `base` | `[Any] -> [Any]` | Zero/base value for a type |
 | `type` | `[Atom, Any] -> []` | Register a named type |
 | `record` | `[List] -> [Record]` | Define record type |
@@ -281,15 +296,24 @@ Decimal with automatic promotion.
 
 ### Comparison
 
+All comparison words route through one total order
+(`eng.CompareValues`); cross-family pairs are NOT an error, lists
+and maps are ordered (length-first then element-wise / key-wise),
+and a bare type literal sorts strictly below every concrete
+inhabitant in the same family. See
+`lang/doc/design/TYPE-ORDERING.0.md`.
+
 | Word | Description | Example |
 |------|-------------|---------|
-| `eq` | Equal | `1 eq 1 => true` |
+| `eq` | Equal (cross-leaf magnitude allowed) | `1 eq 1.0 => true` |
 | `neq` | Not equal | `1 neq 2 => true` |
-| `lt` | Less than | `1 lt 2 => true` |
+| `deq` | Deep / strict-identity equality | `[1,2] deq [1,2] => true` |
+| `lt` | Less than | `1 lt 2 => true` · `Integer lt 0 => true` |
 | `gt` | Greater than | `2 gt 1 => true` |
 | `lte` | Less or equal | `1 lte 1 => true` |
 | `gte` | Greater or equal | `2 gte 1 => true` |
-| `deq` | Deep equality | `[1,2] deq [1,2] => true` |
+| `cmp` | Three-way: `-1`/`0`/`1` | `5 cmp 10 => -1` · `[1 2] cmp [1 3] => -1` |
+| `between` | Build closed-interval refinement | `Integer between 10 20` |
 
 ### Definition and Scoping
 

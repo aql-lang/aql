@@ -450,6 +450,65 @@ When adding a sig that should accept a bare-word name as data, add `/q`
 to the corresponding Atom position. Without `/q`, callers will see an
 `undefined_word` error and must wrap the name in `quote` themselves.
 
+## Value Comparison & Ordering
+
+`cmp` / `lt` / `gt` / `lte` / `gte` / `sort` route through one total
+order — see `lang/doc/design/TYPE-ORDERING.0.md` for the canonical
+design. The kernel-side implementation lives in `eng/go/compare.go`
+and `eng/go/compare_scalar_behaviors.go`; this section captures
+what handler authors and word implementers need to know.
+
+**The cascade** (per `CompareValues`):
+
+1. **LCA Comparer walk** — per-family Comparers on `TNumber`,
+   `TString`, `TBoolean`, `TAtom`, `TWord`, `TScalar` own same-
+   family pairs. A Comparer can return `ErrNoComparer` to opt out
+   (DepScalar values do this so numeric Comparers don't read
+   `DepScalarInfo` as a zero float).
+2. **Rank fallback** — `compareTypes` (Rank → depth → name → ID)
+   settles cross-family pairs.
+3. **Structural compare** — when types match, lists go length-then-
+   element-wise, maps go length-then-sorted-keys-then-values,
+   everything else falls to `CanonValue` lex.
+
+**Type-literal-first rule.** Every family Comparer opens with
+`litVsConcreteOrder(a, b)`: a bare type literal sorts strictly
+below every concrete inhabitant in the same family. So `Integer
+cmp 0 → -1`, `String cmp '' → -1`, `Boolean cmp false → -1`,
+`Path cmp <any path> → -1`. Two type literals delegate to
+`litVsLitOrder` → `compareTypes` so they order by lattice Rank
+(`Number cmp Integer → -1`). The rule lives in per-family
+Comparers and `comparePaths`; `scalarCompareBehavior` deliberately
+does NOT apply it (cross-family pairs must be Rank-only — otherwise
+`true cmp Integer` flips wrong).
+
+**Cross-leaf numeric equivalence.** `1 cmp 1.0 → 0` is preserved:
+the Number Comparer projects both Integer and Decimal to `float64`,
+so magnitude equality across leaves stays consistent with
+arithmetic (`1 + 0 == 1`, `1.0 == 1`).
+
+**Order property.** Strict total order over distinct lattice nodes,
+total preorder over values (one deliberate equivalence: cross-leaf
+magnitude). Verified by `lang/spec/compare.tsv` (748 rows incl.
+transitivity battery + user-defined-type coverage).
+
+**Adding a Comparer to a user/external type.** Implement the
+`Comparer` interface on your `TypeBehavior`:
+
+```go
+type fooBehavior struct{ defaultBehavior }
+func (fooBehavior) Compare(a, b Value) (int, error) {
+    // 1. Opt out for shapes you don't own (DepScalar, carriers).
+    // 2. Apply litVsConcreteOrder if your type's literal should
+    //    sort below concrete instances.
+    // 3. Otherwise, project a and b into your domain and return
+    //    -1/0/1 (or ErrNoComparer to bubble up to Rank).
+}
+```
+
+The Comparer participates automatically in `cmp`/`sort`/etc. via
+the LCA walk — no separate registration.
+
 ## Panic Prevention (CRITICAL)
 
 **Panics must never occur in this codebase.** All code must be defensive

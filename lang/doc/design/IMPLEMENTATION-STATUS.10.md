@@ -16,7 +16,7 @@ version.
   interpolation to any depth. See LANGREF.10.md § Literals.
 - **Timer/concurrency words**: `sleep`, `timeout`, `interval`, `cancel`,
   `await` with four parallel execution modes (all, full, first, any).
-  New types: `Object/Timeout`, `Object/Interval`.
+  New types: `Ideal/Timeout`, `Ideal/Interval`.
 
 
 ## Fully Implemented
@@ -27,7 +27,8 @@ version.
 | ENGINE.10.md | Stack machine, forward scanning, argument equivalence | Working. /s /f modifiers, Forth primitives. |
 | ENGINE-UNIFIED-ALGO.8.md | Unified signature matching algorithm | Pending call frames, incremental constraint solving. |
 | SIGNATURE-MATCHING-PSEUDOCODE.10.md | Type matching, scoring, positional/forward/prefix matching | /q modifier, fallback signatures, specificity scoring. |
-| TYPES.10.md | Hierarchical type system (50+ types) | Scalar/Node/Word/Object/Type/Any/None, metatypes, Store. |
+| TYPES.10.md | Hierarchical type system | Any-root lattice; branches Scalar/Node/Ideal/Word/Type; degenerate roots None/Never; Ideal kinds (Object/Resource/Entity/Array/Record/Options/Error/Store/Table) + external (Time/Tensor/Fetch/Timeout/Interval). Metatypes retired; see TYPE-ORDERING.0.md for ordering. |
+| TYPE-ORDERING.0.md | Value lattice, Rank scheme, Comparer cascade, type-literal-first rule | Strict total order over distinct lattice nodes; one deliberate value-level equivalence (1 ≡ 1.0). Verified by lang/spec/compare.tsv (748 rows incl. transitivity + user-defined-type coverage). |
 | SIGNATURES.10.md | All 100+ builtin word signatures | Full match-order signatures with returns and notes. |
 | LANGREF.10.md | Language reference for all builtin words | All documented words registered in native_*.go. |
 | IMPORTS.10.md | Module system: descriptors, file imports, renaming | Bare name resolution, `aql:` prefix, isolation. |
@@ -193,7 +194,8 @@ parity with the codebase, not pending work.
 |----------|-------|
 | LANGREF.10.md | Language reference — all builtins. |
 | SIGNATURES.10.md | Builtin word signatures. |
-| TYPES.10.md | Type system. |
+| TYPES.10.md | Type system — Any-root lattice, branches, kinds. |
+| TYPE-ORDERING.0.md | Comparison total order — `cmp`, `sort`, `lt`/`gt`. |
 | ENGINE.10.md | Stack machine. |
 | IMPORTS.10.md | Module / import system. |
 | NATIVE-MODULES.10.md | Native Go modules. |

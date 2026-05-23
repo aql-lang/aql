@@ -173,19 +173,63 @@ externally-registered type means:
 `Type` carries one field populated at registration time:
 
 - `Rank int` — the **unified lattice rank**: one integer giving the
-  total order `CompareValues` / `compareTypes` use for every cross-type
-  ordering (it replaced the old per-branch `rootBranchRank` /
-  `scalarBranchRank` / family-rank ladders). It is positional — a
-  type's Rank is its parent's Rank plus a depth-scaled offset, so a
-  builtin child always ranks above its parent and siblings run
-  least-to-most complex. The scheme (1e10 root bands, +1e8 / +1e7 per
-  depth, …) is laid out on `typetable.go::builtinDecls`. Kernel types
-  get a positional Rank from `builtinDecl.Rank`; user types
+  total order `CompareValues` / `compareTypes` use for every cross-
+  type ordering. The scheme:
+
+  | Band | Kernel positional | External / user |
+  |---|---|---|
+  | Any / None / Never | `1·10¹⁰` | — (degenerate roots) |
+  | Scalar branch | `2·10¹⁰`-band | `2.1·10¹⁰` (`externalBandFor`) |
+  | Node branch | `3·10¹⁰`-band | `3.1·10¹⁰` |
+  | Ideal branch | `4·10¹⁰`-band | `4.1·10¹⁰` |
+  | Word branch | `5·10¹⁰`-band | `5.1·10¹⁰` |
+  | Type branch | `6·10¹⁰`-band | `6.1·10¹⁰` |
+
+  Kernel types get a positional Rank from `builtinDecl.Rank`
+  (positional: parent + depth-scaled offset, so a child always
+  ranks above its parent and siblings run least-to-most complex
+  — laid out on `typetable.go::builtinDecls`). User types
   (`MintType`) and external builtins (`RegisterExternalBuiltin`)
-  inherit the parent's Rank, and `compareTypes` breaks the resulting
-  ties by depth, then name, then id. `rankOf` (`compare_types.go`)
-  walks the parent chain as a fallback for a `*Type` assembled without
-  one.
+  share a single Rank per branch via `externalBandFor`, so they
+  sort AFTER every kernel positional type in the same branch.
+  Same-Rank ties break in `compareTypes` by depth → name → id;
+  `rankOf` (`compare_types.go`) walks the parent chain as a
+  fallback for a `*Type` assembled without one.
+
+## Comparison & Ordering
+
+`CompareValues` runs a three-stage cascade:
+
+1. **LCA Comparer walk.** Walks the lowest common ancestor up the
+   parent chain looking for a `Comparer` capability
+   (`numberCompareBehavior`, `stringCompareBehavior`,
+   `booleanCompareBehavior`, `atomCompareBehavior`,
+   `wordCompareBehavior`, `scalarCompareBehavior`). The first
+   Comparer found owns the result. Each Comparer can return
+   `ErrNoComparer` to opt out (DepScalar payloads do this so
+   numeric Comparers don't read DepScalarInfo as a zero float).
+2. **Rank fallback** via `compareTypes` (Rank → depth → name →
+   ID). Reached when no Comparer applies — cross-family pairs,
+   Path-vs-Path-of-same-shape edge cases, etc.
+3. **Structural compare** (`compareStructural`) when types are
+   identical: lists by length-then-element-wise, maps by length-
+   then-sorted-keys-then-values, others by `CanonValue` lex.
+
+**Type-literal-first rule.** Every family `Comparer` opens with
+`litVsConcreteOrder(a, b)` — when exactly one side is a bare type
+literal (`Data == nil && !Carrier`), it sorts FIRST. Both-literal
+pairs delegate to `litVsLitOrder` → `compareTypes` so they order by
+lattice Rank. The rule lives in the per-family Comparers (not
+`scalarCompareBehavior`, which handles cross-family pairs where
+Rank must own the result); the Path family applies it inside
+`comparePaths` so the rule stays inside the Path family without
+leaking.
+
+Result is a strict total order over distinct lattice nodes, with
+one deliberate value-level equivalence: cross-leaf numeric
+magnitude (`1 cmp 1.0 → 0`). Full design at
+`lang/doc/design/TYPE-ORDERING.0.md`; verification at
+`lang/spec/compare.tsv`.
 
 ## Value Has Two Methods
 
