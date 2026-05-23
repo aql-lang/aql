@@ -100,3 +100,62 @@ a b c`)
 		t.Errorf("c = %v, want \"3.5\"", got[2])
 	}
 }
+
+// `def Foo refine Integer` mints a fresh user subtype of Integer.
+// `typeof Foo` walks one step up the lattice (Foo's parent), so it
+// reports the base type Foo refines.
+func TestRefineBareSubtypeTypeofParent(t *testing.T) {
+	got := runOne(t, `def Foo refine Integer
+typeof Foo is Integer`)
+	if len(got) != 1 || got[0] != "true" {
+		t.Errorf("got %v, want [true]", got)
+	}
+}
+
+// A typed-def against a bare-refine subtype retags the value's
+// Parent with the minted lattice node so `typeof x` reports the
+// subtype, not the base. The value still satisfies `is` for the
+// base type via the ancestry walk.
+func TestRefineBareSubtypeRetag(t *testing.T) {
+	got := runOne(t, `def Foo refine Integer
+def x:Foo 1
+typeof x
+x is Foo
+x is Integer
+x is Number`)
+	if len(got) != 4 {
+		t.Fatalf("got %v, want 4 results", got)
+	}
+	if got[0] != "Foo" {
+		t.Errorf("typeof x = %v, want \"Foo\"", got[0])
+	}
+	if got[1] != "true" {
+		t.Errorf("x is Foo = %v, want true", got[1])
+	}
+	if got[2] != "true" {
+		t.Errorf("x is Integer = %v, want true", got[2])
+	}
+	if got[3] != "true" {
+		t.Errorf("x is Number = %v, want true", got[3])
+	}
+}
+
+// `def Foo Integer` (no `refine`) is the alias path: Foo's body is
+// the Integer type literal verbatim, so `42 is Foo` resolves Foo
+// to Integer and succeeds. The two surfaces must stay distinct —
+// alias for `def Foo Integer`, subtype for `def Foo refine Integer`.
+func TestRefineBareDistinctFromAlias(t *testing.T) {
+	got := runOne(t, `def Foo Integer
+42 is Foo
+def Bar refine Integer
+42 is Bar`)
+	if len(got) != 2 {
+		t.Fatalf("got %v, want 2 results", got)
+	}
+	if got[0] != "true" {
+		t.Errorf("42 is Foo (alias) = %v, want true", got[0])
+	}
+	if got[1] != "false" {
+		t.Errorf("42 is Bar (subtype, untagged 42) = %v, want false", got[1])
+	}
+}

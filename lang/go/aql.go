@@ -290,6 +290,12 @@ func (a *AQL) Run(src string) ([]any, error) {
 			// pull a zero value from the DepScalarInfo payload. Route
 			// through String() to render as "(Integer gte 5)".
 			out[i] = v.String()
+		case v.Data == nil:
+			// Type literal (e.g. `typeof x` result, a bare `Integer`
+			// or user-minted Foo literal): render its type name
+			// rather than trying to extract an Integer/String payload
+			// that isn't there.
+			out[i] = v.String()
 		case v.Parent.Matches(native.TInteger):
 			n, _ := native.AsInteger(v)
 			out[i] = n

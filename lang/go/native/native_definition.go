@@ -287,6 +287,41 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			return nil, nil
 		}
 	}
+	// User-minted bare-refine subtype (`def Foo refine Integer`): the
+	// constraint is the Foo type literal whose lattice Parent is the
+	// type Foo refines. Unify against the parent (since values of the
+	// parent type are the inhabitants Foo can accept), then retag the
+	// result with Foo so dispatch and `typeof` see Foo. Without this
+	// branch the generic Unify below would swap and return the bare
+	// Foo type literal as `unified`, losing the actual value.
+	if constraint.Data == nil && constraint.Origin == eng.OriginUserDef &&
+		typeName != "" && constraint.Parent != nil {
+		if def := r.LookupTypeName(typeName); def != nil && def.Origin == eng.OriginUserDef {
+			parentLit := NewTypeLiteral(def.Parent)
+			retagged, ok := Unify(body, parentLit)
+			if ok {
+				retagged.Parent = def
+				InstallDef(r, name, retagged)
+				r.Check.RecordDef(name, args[0].Pos)
+				return nil, nil
+			}
+			if r.Check.IsActive() {
+				r.Check.AddDiagnostic(CheckDiagnostic{
+					Code: "type_error",
+					Detail: fmt.Sprintf("def %s: value %s does not unify with declared type %s",
+						name, body.String(), describeType()),
+					Word: name,
+					Row:  args[0].Pos.Row,
+					Col:  args[0].Pos.Col,
+				})
+				InstallDef(r, name, NewCarrier(def))
+				r.Check.RecordDef(name, args[0].Pos)
+				return nil, nil
+			}
+			return nil, fmt.Errorf("def %s: value %s does not unify with declared type %s",
+				name, body.String(), describeType())
+		}
+	}
 	unified, ok := Unify(body, constraint)
 	if !ok {
 		if r.Check.IsActive() {
