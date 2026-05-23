@@ -289,17 +289,19 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	}
 	// User-minted bare-refine subtype (`def Foo refine Integer`): the
 	// constraint is the Foo type literal whose lattice Parent is the
-	// type Foo refines. Unify against the parent (since values of the
-	// parent type are the inhabitants Foo can accept), then retag the
-	// result with Foo so dispatch and `typeof` see Foo. Without this
-	// branch the generic Unify below would swap and return the bare
-	// Foo type literal as `unified`, losing the actual value.
+	// type Foo refines. Check the body satisfies the parent type
+	// (since values of the parent type are the inhabitants Foo can
+	// accept), then retag a COPY of the body with Foo. Mutating the
+	// Unify result would store its by-value type literal (Unify swaps
+	// when one side is bare and subtype-ordered) instead of the
+	// body's payload — `def x:Foo 1` would silently bind x to the
+	// Foo-tagged type literal, not the integer 1.
 	if constraint.Data == nil && constraint.Origin == eng.OriginUserDef &&
 		typeName != "" && constraint.Parent != nil {
 		if def := r.LookupTypeName(typeName); def != nil && def.Origin == eng.OriginUserDef {
 			parentLit := NewTypeLiteral(def.Parent)
-			retagged, ok := Unify(body, parentLit)
-			if ok {
+			if _, ok := Unify(body, parentLit); ok {
+				retagged := body
 				retagged.Parent = def
 				InstallDef(r, name, retagged)
 				r.Check.RecordDef(name, args[0].Pos)

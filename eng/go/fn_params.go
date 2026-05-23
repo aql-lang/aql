@@ -237,6 +237,14 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 		_as5, _ := AsWord(v)
 		name := _as5.Name
 		if defVal := LookupDefType(r, name); defVal != nil {
+			// When defVal is a bare type literal it IS the canonical
+			// lattice node (LookupDefType resolves it via the
+			// TypeTable). Return the pointer unmodified so downstream
+			// identity-sensitive uses (sig dispatch, `behave` Behavior
+			// installs) reach the same *Type the kernel mints.
+			if defVal.Data == nil && defVal.ID != "" {
+				return defVal, nil, nil
+			}
 			return ResolveDefType(*defVal)
 		}
 		t, err := ResolveTypeName(name)
@@ -245,6 +253,14 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 	if v.Parent.Matches(TString) {
 		name, _ := AsString(v)
 		if defVal := LookupDefType(r, name); defVal != nil {
+			// When defVal is a bare type literal it IS the canonical
+			// lattice node (LookupDefType resolves it via the
+			// TypeTable). Return the pointer unmodified so downstream
+			// identity-sensitive uses (sig dispatch, `behave` Behavior
+			// installs) reach the same *Type the kernel mints.
+			if defVal.Data == nil && defVal.ID != "" {
+				return defVal, nil, nil
+			}
 			return ResolveDefType(*defVal)
 		}
 		t, err := ResolveTypeName(name)
@@ -253,6 +269,14 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 	if v.Parent.Matches(TAtom) {
 		name, _ := AsString(v)
 		if defVal := LookupDefType(r, name); defVal != nil {
+			// When defVal is a bare type literal it IS the canonical
+			// lattice node (LookupDefType resolves it via the
+			// TypeTable). Return the pointer unmodified so downstream
+			// identity-sensitive uses (sig dispatch, `behave` Behavior
+			// installs) reach the same *Type the kernel mints.
+			if defVal.Data == nil && defVal.ID != "" {
+				return defVal, nil, nil
+			}
 			return ResolveDefType(*defVal)
 		}
 		t, err := ResolveTypeName(name)
@@ -297,6 +321,17 @@ func LookupDefType(r *Registry, name string) *Value {
 	}
 	if tv, ok := r.TopTypeBody(name); ok {
 		if IsTypeBody(tv) {
+			// For a bare type-literal body whose lattice ID is
+			// known, return the canonical lattice node rather than
+			// a pointer to the by-value local copy. Downstream
+			// `behave` installs (and similar Behavior mutations)
+			// must reach the canonical node — without this they'd
+			// patch a throwaway copy and silently no-op.
+			if tv.Data == nil && tv.ID != "" {
+				if canon := r.Types.LookupByID(tv.ID); canon != nil {
+					return canon
+				}
+			}
 			return &tv
 		}
 	}
@@ -324,7 +359,12 @@ func ResolveDefType(v Value) (*Type, *Value, error) {
 		return TMap, &pat, nil
 	}
 	if v.Data == nil {
-		return v.Parent, nil, nil
+		// A bare type literal IS its lattice node post type/value
+		// merge — the denoted type is the value itself, not its
+		// supertype Parent. Without this, `:Foo` (where Foo is a
+		// user-minted refine subtype) would resolve to Foo's parent
+		// in fn signatures, losing the subtype identity.
+		return ValueType(v), nil, nil
 	}
 	return TAny, nil, nil
 }
