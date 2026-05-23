@@ -299,7 +299,22 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if constraint.Data == nil && constraint.Origin == eng.OriginUserDef &&
 		typeName != "" && constraint.Parent != nil {
 		if def := r.LookupTypeName(typeName); def != nil && def.Origin == eng.OriginUserDef {
-			parentLit := NewTypeLiteral(def.Parent)
+			// Walk up the lattice past any intervening user refines
+			// (e.g. `Foo refine Item refine String`) to the nearest
+			// builtin ancestor and unify against THAT. A sibling-of-
+			// constraint kernel subtype (ProperString satisfying a
+			// Foo whose parent Item branches off String) wouldn't
+			// match the immediate parent literal but does match the
+			// shared kernel base.
+			root := def.Parent
+			for root != nil && root.Origin == eng.OriginUserDef {
+				root = root.Parent
+			}
+			if root == nil {
+				return nil, fmt.Errorf("def %s: refine subtype %s has no builtin ancestor",
+					name, describeType())
+			}
+			parentLit := NewTypeLiteral(root)
 			if _, ok := Unify(body, parentLit); ok {
 				retagged := body
 				retagged.Parent = def
