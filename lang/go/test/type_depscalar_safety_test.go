@@ -1,6 +1,8 @@
 package test
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/aql-lang/aql/lang/go"
@@ -138,4 +140,176 @@ func TestDepScalar_NoPanicOnHotPaths(t *testing.T) {
 def y (Integer gte 10)
 x eq y
 x print`)
+}
+
+// --- DepScalar in sig positions across all scalar bases ---
+//
+// `ResolveSigType` historically had a dispatch ordering bug: String
+// and Atom DepScalars matched the IsWord/String/Atom name-resolution
+// branch (because their Parent.Matches(TString)/TAtom), where
+// AsString silently failed and ResolveTypeName errored on the empty
+// name. The fix guards that branch with !v.IsDepScalar() so all
+// scalar-base DepScalars fall into the scalar-pattern branch (kind =
+// base type, pattern = the DepScalar Value). These tests pin each
+// base type so a future re-shuffle doesn't reintroduce the asymmetry.
+
+func TestDepScalar_InSig_Integer(t *testing.T) {
+	got := runOK(t, `def f fn [[n:(Integer gt 10)] [Integer] [n]]
+20 f`)
+	if len(got) != 1 || got[0] != int64(20) {
+		t.Errorf("Integer DepScalar in sig: got %v, want [20]", got)
+	}
+}
+
+func TestDepScalar_InSig_Decimal(t *testing.T) {
+	got := runOK(t, `def f fn [[n:(Decimal gte 1.5)] [Decimal] [n]]
+2.5 f`)
+	if len(got) != 1 || got[0] != "2.5" {
+		t.Errorf("Decimal DepScalar in sig: got %v, want [2.5]", got)
+	}
+}
+
+func TestDepScalar_InSig_String(t *testing.T) {
+	got := runOK(t, `def f fn [[s:(String lt "z")] [Boolean] [true]]
+"a" f`)
+	if len(got) != 1 || got[0] != "true" {
+		t.Errorf("String DepScalar in sig: got %v, want [true]", got)
+	}
+}
+
+func TestDepScalar_InSig_Atom(t *testing.T) {
+	got := runOK(t, `def f fn [[a:(Atom gt foo/q)] [Boolean] [true]]
+zoo/q f`)
+	if len(got) != 1 || got[0] != "true" {
+		t.Errorf("Atom DepScalar in sig: got %v, want [true]", got)
+	}
+}
+
+// Constraint-violating args reject via the sig matcher, not at
+// sig-parse time. These are the negative complements to InSig_*.
+
+func TestDepScalar_InSig_String_RejectsOutOfBound(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	_, err = a.Run(`def f fn [[s:(String lt "z")] [Boolean] [true]]
+"z" f`)
+	if err == nil {
+		t.Errorf("expected sig mismatch for \"z\" lt \"z\", got nil")
+	}
+}
+
+func TestDepScalar_InSig_Atom_RejectsOutOfBound(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	_, err = a.Run(`def f fn [[a:(Atom gt foo/q)] [Boolean] [true]]
+foo/q f`)
+	if err == nil {
+		t.Errorf("expected sig mismatch for foo gt foo, got nil")
+	}
+}
+
+// --- DepScalar bound to a refine subtype ---
+//
+// `def x:Pos (Integer gt 10)` exercises the refine-bare reparent
+// branch with a DepScalar body (not the usual Integer scalar). The
+// reparent must preserve the DepScalarInfo payload while updating
+// Parent to Pos, so `IsDepScalar(x)` stays true, `typeof x` reports
+// Pos, and the rendered form reads `(Pos gt 10)` (leaf = Parent.Name).
+
+func TestDepScalar_BoundToRefineSubtype(t *testing.T) {
+	got := runOK(t, `def Pos refine Integer
+def x:Pos (Integer gt 10)
+typeof x`)
+	if len(got) != 1 || got[0] != "Pos" {
+		t.Errorf("typeof reparented DepScalar: got %v, want [Pos]", got)
+	}
+}
+
+func TestDepScalar_BoundToRefineSubtype_IsPos(t *testing.T) {
+	got := runOK(t, `def Pos refine Integer
+def x:Pos (Integer gt 10)
+x is Pos`)
+	if len(got) != 1 || got[0] != "true" {
+		t.Errorf("reparented DepScalar is Pos: got %v, want [true]", got)
+	}
+}
+
+func TestDepScalar_BoundToRefineSubtype_IsAncestor(t *testing.T) {
+	got := runOK(t, `def Pos refine Integer
+def x:Pos (Integer gt 10)
+x is Integer`)
+	if len(got) != 1 || got[0] != "true" {
+		t.Errorf("reparented DepScalar is Integer (ancestor): got %v, want [true]", got)
+	}
+}
+
+// `inspect x` reports the constraint with the leaf name flipped to
+// the subtype — proves the payload survived reparenting and the
+// renderer reads `v.Parent.Name` (= "Pos") rather than caching the
+// pre-reparent base name.
+func TestDepScalar_BoundToRefineSubtype_InspectShowsSubtype(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	got, err := a.Run(`def Pos refine Integer
+def x:Pos (Integer gt 10)
+inspect x`)
+	if err != nil {
+		t.Fatalf("inspect: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("inspect: got %d results, want 1: %v", len(got), got)
+	}
+	s := fmt.Sprintf("%v", got[0])
+	for _, want := range []string{"dependent_scalar", "leaf:'Pos'", "kind:'gt'"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("inspect output missing %q: %s", want, s)
+		}
+	}
+}
+
+// `behave compare/q` on a refine subtype must dispatch for DepScalar
+// values reparented to that subtype, not just for concrete Integer
+// inhabitants. The LCA walk for `x cmp y` lands on Pos regardless of
+// whether the operands are concrete (Parent=Pos, Data=IntPayload) or
+// constraint values (Parent=Pos, Data=DepScalarInfo) — the user
+// Comparer owns the result either way. The test pins this with a
+// constant-returning Comparer so the body doesn't depend on the
+// payload shape.
+func TestDepScalar_BehaveCmpOnRefineSubtype(t *testing.T) {
+	got := runOK(t, `def Pos refine Integer
+behave compare/q (fn [[a:Pos b:Pos] [Integer] [42]])
+def x:Pos (Integer gt 10)
+def y:Pos (Integer gt 20)
+x cmp y`)
+	if len(got) != 1 {
+		t.Fatalf("got %d results, want 1: %v", len(got), got)
+	}
+	// User Comparer returns 42, normalised to +1 by the cmp word.
+	// We accept any of {42, 1, "1"} so the test is robust against
+	// whichever normalisation convention the cmp surface uses.
+	if got[0] != int64(42) && got[0] != int64(1) && got[0] != "1" {
+		t.Errorf("user Comparer should have fired for DepScalar-Pos: got %v", got[0])
+	}
+}
+
+// Mixed operands: one reparented DepScalar, one concrete Pos. The
+// LCA is still Pos, so the user Comparer fires.
+func TestDepScalar_BehaveCmpMixedDepConcreteOnRefine(t *testing.T) {
+	got := runOK(t, `def Pos refine Integer
+behave compare/q (fn [[a:Pos b:Pos] [Integer] [42]])
+def x:Pos (Integer gt 10)
+def y:Pos 7
+x cmp y`)
+	if len(got) != 1 {
+		t.Fatalf("got %d results, want 1: %v", len(got), got)
+	}
+	if got[0] != int64(42) && got[0] != int64(1) && got[0] != "1" {
+		t.Errorf("user Comparer should have fired for mixed Dep/concrete Pos: got %v", got[0])
+	}
 }

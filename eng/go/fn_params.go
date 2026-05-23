@@ -238,7 +238,14 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 	// bare type literals, and ResolveDefType canonicalizes its own
 	// Data==nil result via CanonicalType, so the resolved *Type is
 	// identity-stable at every hop.
-	if IsWord(v) || v.Parent.Matches(TString) || v.Parent.Matches(TAtom) {
+	//
+	// DepScalars are excluded: a String/Atom DepScalar has
+	// `Parent.Matches(TString)` true but its payload is
+	// `DepScalarInfo`, not `StrPayload` — `AsString(v)` would fail
+	// silently, name="" would then fail the kernel-name lookup. The
+	// scalar-pattern branch below catches DepScalars correctly
+	// (kind = the base type, pattern = the DepScalar Value).
+	if (IsWord(v) || v.Parent.Matches(TString) || v.Parent.Matches(TAtom)) && !v.IsDepScalar() {
 		var name string
 		if IsWord(v) {
 			w, _ := AsWord(v)
