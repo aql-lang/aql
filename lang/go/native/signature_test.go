@@ -58,49 +58,46 @@ func TestFlexibleMatchPrefersLeastDisplacement(t *testing.T) {
 	}
 }
 
-// --- signatureScore tests ---
+// --- CompareSignatures tests ---
 
-func TestSignatureScoreZeroArgs(t *testing.T) {
-	sig := Signature{Args: nil}
-	if got := SignatureScore(&sig); got != 0 {
-		t.Errorf("zero-arg score = %d, want 0", got)
+func TestCompareSignaturesZeroArgs(t *testing.T) {
+	a := Signature{Args: nil}
+	b := Signature{Args: nil}
+	if got := CompareSignatures(&a, &b); got != 0 {
+		t.Errorf("two zero-arg sigs should tie, got %d", got)
 	}
 }
 
-func TestSignatureScoreArgCountDominates(t *testing.T) {
+func TestCompareSignaturesArgCountDominates(t *testing.T) {
 	sig1 := Signature{Args: []*Type{TAny}}
 	sig2 := Signature{Args: []*Type{TAny, TAny}}
-	s1, s2 := SignatureScore(&sig1), SignatureScore(&sig2)
-	if s2 <= s1 {
-		t.Errorf("2-arg score %d should be > 1-arg score %d", s2, s1)
+	if c := CompareSignatures(&sig2, &sig1); c >= 0 {
+		t.Errorf("2-arg should sort before 1-arg, got %d", c)
 	}
 }
 
-func TestSignatureScoreSpecificityBreaksTie(t *testing.T) {
+func TestCompareSignaturesSpecificityBreaksTie(t *testing.T) {
 	sigNarrow := Signature{Args: []*Type{TInteger, TInteger}}
 	sigWide := Signature{Args: []*Type{TScalar, TScalar}}
-	sn, sw := SignatureScore(&sigNarrow), SignatureScore(&sigWide)
-	if sn <= sw {
-		t.Errorf("narrow score %d should be > wide score %d", sn, sw)
+	if c := CompareSignatures(&sigNarrow, &sigWide); c >= 0 {
+		t.Errorf("narrow (integer) should sort before wide (scalar), got %d", c)
 	}
 }
 
-func TestSignatureScoreMixedSpecificity(t *testing.T) {
+func TestCompareSignaturesMixedSpecificity(t *testing.T) {
 	sig1 := Signature{Args: []*Type{TInteger, TAny}}
 	sig2 := Signature{Args: []*Type{TAny, TAny}}
-	s1, s2 := SignatureScore(&sig1), SignatureScore(&sig2)
-	if s1 <= s2 {
-		t.Errorf("[integer,any] score %d should be > [any,any] score %d", s1, s2)
+	if c := CompareSignatures(&sig1, &sig2); c >= 0 {
+		t.Errorf("[integer,any] should sort before [any,any], got %d", c)
 	}
 }
 
-func TestSignatureScoreDeepType(t *testing.T) {
+func TestCompareSignaturesDeepType(t *testing.T) {
 	deep := MintTestType("Number/Integer/Positive")
 	sigDeep := Signature{Args: []*Type{deep}}
-	sigShallow := Signature{Args: []*Type{TInteger}} // specificity 2
-	sd, ss := SignatureScore(&sigDeep), SignatureScore(&sigShallow)
-	if sd <= ss {
-		t.Errorf("deep type score %d should be > shallow type score %d", sd, ss)
+	sigShallow := Signature{Args: []*Type{TInteger}}
+	if c := CompareSignatures(&sigDeep, &sigShallow); c >= 0 {
+		t.Errorf("deep type should sort before shallow type, got %d", c)
 	}
 }
 
@@ -123,12 +120,11 @@ func TestRankSignaturesSingle(t *testing.T) {
 
 func TestRankSignaturesLongerFirst(t *testing.T) {
 	sigs := []Signature{
-		{Args: []*Type{TAny}},             // score 101
-		{Args: []*Type{TAny, TAny, TAny}}, // score 303
-		{Args: []*Type{TAny, TAny}},       // score 202
+		{Args: []*Type{TAny}},
+		{Args: []*Type{TAny, TAny, TAny}},
+		{Args: []*Type{TAny, TAny}},
 	}
 	ranked := RankSignatures(sigs)
-	// Best first: 3-arg(idx=1), 2-arg(idx=2), 1-arg(idx=0)
 	want := []int{1, 2, 0}
 	for i, idx := range ranked {
 		if idx != want[i] {
@@ -139,23 +135,21 @@ func TestRankSignaturesLongerFirst(t *testing.T) {
 
 func TestRankSignaturesNarrowerFirst(t *testing.T) {
 	sigs := []Signature{
-		{Args: []*Type{TScalar, TScalar}},   // 202
-		{Args: []*Type{TInteger, TInteger}}, // 204
-		{Args: []*Type{TAny, TAny}},         // 202 (tie with scalar)
+		{Args: []*Type{TScalar, TScalar}},
+		{Args: []*Type{TInteger, TInteger}},
+		{Args: []*Type{TAny, TAny}},
 	}
 	ranked := RankSignatures(sigs)
-	// Best first: integer(1), then scalar(0) and any(2) tied — stable order
 	if ranked[0] != 1 {
 		t.Errorf("expected narrowest (integer,integer) first, got index %d", ranked[0])
 	}
 }
 
 func TestRankSignaturesLengthBeatsSpecificity(t *testing.T) {
-	// 3 args of any (score 303) beats 2 args of deep types (score ~206)
 	deep := MintTestType("Number/Integer/Positive")
 	sigs := []Signature{
-		{Args: []*Type{deep, deep}},       // 200 + 3+3 = 206
-		{Args: []*Type{TAny, TAny, TAny}}, // 300 + 1+1+1 = 303
+		{Args: []*Type{deep, deep}},
+		{Args: []*Type{TAny, TAny, TAny}},
 	}
 	ranked := RankSignatures(sigs)
 	if ranked[0] != 1 {
@@ -163,27 +157,23 @@ func TestRankSignaturesLengthBeatsSpecificity(t *testing.T) {
 	}
 }
 
-func TestRankSignaturesStableForEqualScores(t *testing.T) {
-	// Two sigs with identical scores: stable sort preserves order.
-	sigs := []Signature{
-		{Args: []*Type{TString}}, // 101
-		{Args: []*Type{TAtom}},   // 101
-	}
+func TestRankSignaturesStableForEqualOrder(t *testing.T) {
+	// Two sigs that compare equal: stable sort preserves registration order.
+	sig := Signature{Args: []*Type{TString}}
+	sigs := []Signature{sig, sig}
 	ranked := RankSignatures(sigs)
-	// Equal scores, stable sort → original order preserved
 	if ranked[0] != 0 || ranked[1] != 1 {
 		t.Errorf("expected stable order [0,1], got %v", ranked)
 	}
 }
 
 func TestRankSignatures4To7Args(t *testing.T) {
-	// Verify scoring works correctly for larger signatures.
 	sigs := []Signature{
-		{Args: []*Type{TAny, TAny, TAny, TAny}},                           // 4*100+4 = 404
-		{Args: []*Type{TAny, TAny, TAny, TAny, TAny}},                     // 5*100+5 = 505
-		{Args: []*Type{TAny, TAny, TAny, TAny, TAny, TAny}},               // 6*100+6 = 606
-		{Args: []*Type{TAny, TAny, TAny, TAny, TAny, TAny, TAny}},         // 7*100+7 = 707
-		{Args: []*Type{TInteger, TInteger, TInteger, TInteger, TInteger}}, // 5*100+10 = 510
+		{Args: []*Type{TAny, TAny, TAny, TAny}},
+		{Args: []*Type{TAny, TAny, TAny, TAny, TAny}},
+		{Args: []*Type{TAny, TAny, TAny, TAny, TAny, TAny}},
+		{Args: []*Type{TAny, TAny, TAny, TAny, TAny, TAny, TAny}},
+		{Args: []*Type{TInteger, TInteger, TInteger, TInteger, TInteger}},
 	}
 	ranked := RankSignatures(sigs)
 	// 7-arg(3), 6-arg(2), 5-int(4), 5-any(1), 4-any(0)
@@ -323,39 +313,6 @@ func TestMatchSignatureNarrowVsWideHierarchy(t *testing.T) {
 	}
 	if !m.Sig.Args[0].Equal(TBoolean) {
 		t.Errorf("expected boolean/true match, got %v", m.Sig.Args[0])
-	}
-}
-
-// --- Score value tests for specific arg counts ---
-
-func TestSignatureScoreValues(t *testing.T) {
-	tests := []struct {
-		name  string
-		args  []*Type
-		score int
-	}{
-		{"empty", nil, 0},
-		{"1 any", []*Type{TAny}, 1_010_200},
-		{"1 integer", []*Type{TInteger}, 1_031_100},
-		{"2 any", []*Type{TAny, TAny}, 2_020_400},
-		{"2 integer", []*Type{TInteger, TInteger}, 2_062_200},
-		{"2 scalar", []*Type{TScalar, TScalar}, 2_021_200},
-		{"3 any", []*Type{TAny, TAny, TAny}, 3_030_600},
-		{"3 mixed", []*Type{TInteger, TString, TAny}, 3_063_500},
-		{"4 any", []*Type{TAny, TAny, TAny, TAny}, 4_040_800},
-		{"5 any", []*Type{TAny, TAny, TAny, TAny, TAny}, 5_051_000},
-		{"6 any", []*Type{TAny, TAny, TAny, TAny, TAny, TAny}, 6_061_200},
-		{"7 any", []*Type{TAny, TAny, TAny, TAny, TAny, TAny, TAny}, 7_071_400},
-		{"7 integer", []*Type{TInteger, TInteger, TInteger, TInteger, TInteger, TInteger, TInteger}, 7_217_700},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			sig := Signature{Args: tt.args}
-			got := SignatureScore(&sig)
-			if got != tt.score {
-				t.Errorf("score = %d, want %d", got, tt.score)
-			}
-		})
 	}
 }
 

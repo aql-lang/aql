@@ -1,5 +1,7 @@
 package eng
 
+import "sort"
+
 // MaxArgs is the maximum number of arguments a signature may declare.
 const MaxArgs = 32
 
@@ -94,7 +96,8 @@ type Signature struct {
 	BarrierPos int
 
 	// Fallback marks the generic 0-arg handler installed by def as the
-	// fallback entry. SortSignatures always places fallbacks last.
+	// fallback entry. Fallback sigs have zero args so the arity-first
+	// rule in SortSignatures already sinks them to the end.
 	Fallback bool
 
 	// Returns lists the declared return types for this signature. It is
@@ -401,145 +404,72 @@ func positionalMatch(values []Value, sig *Signature) bool {
 	return true
 }
 
-// typeInherentScores maps fully-qualified type paths to an inherent score
-// reflecting roughly how many values the type can represent. Within the same
-// specificity level, types that match more values score higher and sort
-// earlier (tried first). Every type has a unique score. Unknown types
-// default to 1000.
-var typeInherentScores = map[string]int{
-	// Depth 1 — Any/None/Never are special; concrete roots ordered by breadth.
-	// Never (uninhabited) is most specific, then None (unit), then Any (top).
-	"Never":  50,
-	"None":   100,
-	"Any":    200,
-	"Type":   300,
-	"Ideal":  400,
-	"Word":   500,
-	"Scalar": 600,
-	"Node":   700,
-
-	// Depth 2 — Word internals (structural tokens, narrow cardinality)
-	"Word/__DJ":      100,
-	"Word/__FN":      200,
-	"Word/__FW":      300,
-	"Word/__IN":      400,
-	"Word/__IN/__DC": 400,
-	"Word/__MK":      500,
-	"Word/__MD":      600,
-	"Word/__MV":      700,
-	"Word/__OP":      800,
-	"Word/__PE":      900,
-	"Word/__RC":      1000,
-	"Word/__UF":      1100,
-
-	// Depth 2 — regular types, ordered by cardinality
-	"Scalar/Boolean":        1200,
-	"Scalar/Path":           1250,
-	"Scalar/Atom":           1300,
-	"Ideal/Error":           1400,
-	"Ideal/Fetch":           1500,
-	"Ideal/Store":           1600,
-	"Ideal/Array":           1650,
-	"Ideal/Object/Resource": 1700,
-	"Scalar/Number":         1800,
-	"Word/Function":         1900,
-	"Ideal/Table":           2000,
-	"Ideal/Record":          2100,
-	"Scalar/String":         2200,
-	"Node/List":             2300,
-	"Node/Map":              2400,
-	"Type/ScalarType":       2500,
-	"Type/NodeType":         2600,
-	"Type/IdealType":        2700,
-
-	// Depth 3 — Scalar subtypes
-	"Scalar/String/EmptyString":  900,
-	"Scalar/String/ProperString": 1000,
-	"Scalar/Number/Integer":      1100,
-	"Scalar/Number/Decimal":      1200,
-
-	// Depth 3 — Node subtypes
-	"Node/List/Args":   1300,
-	"Ideal/Options":    1400,
-	"Ideal/Object":     400,
-	"Node/Map/Inspect": 1500,
-
-	// Depth 3 — Object subtypes
-	"Ideal/Fetch/Request":          1600,
-	"Ideal/Fetch/Response":         1700,
-	"Ideal/Object/Resource/Entity": 1800,
-	"Ideal/Store/System":           1900,
-}
-
-// typeInherentScore returns the inherent score for a type.
-// Defaults to 1000 for types not in the map.
-func typeInherentScore(t *Type) int {
-	path := t.Path()
-	if s, ok := typeInherentScores[path]; ok {
-		return s
-	}
-	return 1000
-}
-
-// signatureScore computes an intrinsic ranking score for a signature.
-// Higher is better: more args and more specific types win.
-//
-// Formula: arity * 1_000_000 + sum(specificity * 10_000 + inherentScore)
-//
-// Arity dominates (1e6), then specificity (1e4 per arg), then inherent
-// type score (up to ~9000) as a tiebreaker within the same specificity.
-func signatureScore(sig *Signature) int {
-	score := sig.TotalArgs() * 1_000_000
-	if sig.BarrierPos > 0 {
-		// Piped signatures sort before non-piped. Barriers closer to the
-		// start (lower BarrierPos) are more constrained and score higher.
-		score += 500_000 + (MaxArgs-sig.BarrierPos)*10_000
-	}
-	for _, t := range sig.Args {
-		score += t.Specificity() * 10_000
-		score += typeInherentScore(t)
-	}
-	// Post §1.1 fix: scalar-literal dispatch lives in Patterns
-	// rather than in value-tagged subtype paths. A sig with a
-	// concrete-value pattern at position i is MORE SPECIFIC than
-	// one without — give each pattern entry the same boost a
-	// type-path leaf used to provide. Without this, two sigs with
-	// equal arg-types tie on score and registration order picks
-	// the winner, defeating literal-value overloads.
-	for _, pat := range sig.Patterns {
-		if pat.Data != nil {
-			score += 10_000
+// sigSlotValue returns the expectation value the sig declares at
+// position i: the structural Pattern if one is set, otherwise a bare
+// type literal of the declared arg type. The result feeds
+// CompareValues so the unified type/value lattice settles per-position
+// ordering — a concrete Pattern (Data != nil) sorts strictly above the
+// bare type literal of the same family via litVsConcreteOrder, and two
+// bare type literals fall through to compareTypes (Rank → depth →
+// name → ID).
+func sigSlotValue(sig *Signature, i int) Value {
+	if sig.Patterns != nil {
+		if p, ok := sig.Patterns[i]; ok {
+			return p
 		}
 	}
-	return score
+	return NewTypeLiteral(sig.Args[i])
 }
 
-// SignatureScore exports signatureScore for testing.
-func SignatureScore(sig *Signature) int {
-	return signatureScore(sig)
+// CompareSignatures imposes a total order on Signatures using the
+// unified type/value lattice, in REVERSE — the more specific sig
+// sorts first so MatchSignature's first-match-wins loop picks the
+// tightest overload available.
+//
+// Each sig's args are treated as a List of expectation values
+// (per sigSlotValue). Comparison follows the list-comparison contract
+// from CompareValues: list size first (longer lists sort below shorter
+// in natural order; reversed here, so longer arity wins), then
+// element-wise. At each position the reversed CompareValues result
+// places the more specific value (concrete pattern, deeper type, …)
+// first. BarrierPos breaks the final tie: a sig with a stack barrier
+// (non-zero BarrierPos) sorts before an otherwise identical sig
+// without one, since the barrier is an additional dispatch constraint.
+//
+// Fallback sigs need no special-case: a fallback is always 0-arg, so
+// the arity-first rule already sinks it to the end.
+func CompareSignatures(a, b *Signature) int {
+	if c := cmpInt(b.TotalArgs(), a.TotalArgs()); c != 0 {
+		return c
+	}
+	for i := 0; i < a.TotalArgs(); i++ {
+		av := sigSlotValue(a, i)
+		bv := sigSlotValue(b, i)
+		c, err := CompareValues(av, bv)
+		if err != nil || c == 0 {
+			continue
+		}
+		return -c
+	}
+	aBarrier := a.BarrierPos != 0
+	bBarrier := b.BarrierPos != 0
+	if aBarrier && !bBarrier {
+		return -1
+	}
+	if !aBarrier && bBarrier {
+		return 1
+	}
+	return 0
 }
 
-// SortSignatures sorts a slice of signatures in-place by priority:
-// longest first, then most specific types. Fallback signatures always
-// sort last. Stable sort preserves registration order for equal scores.
+// SortSignatures sorts a slice of signatures in-place by reversed
+// lattice order (see CompareSignatures): longer arity first, then per
+// position the more specific type/pattern first. Stable: sigs that
+// compare equal preserve registration order.
 func SortSignatures(sigs []Signature) {
-	for i := 1; i < len(sigs); i++ {
-		for j := i; j > 0; j-- {
-			// Fallbacks always sink to the end.
-			if sigs[j-1].Fallback && !sigs[j].Fallback {
-				sigs[j], sigs[j-1] = sigs[j-1], sigs[j]
-				continue
-			}
-			if sigs[j].Fallback {
-				break
-			}
-			if signatureScore(&sigs[j]) > signatureScore(&sigs[j-1]) {
-				sigs[j], sigs[j-1] = sigs[j-1], sigs[j]
-			} else {
-				break
-			}
-		}
-	}
+	sort.SliceStable(sigs, func(i, j int) bool {
+		return CompareSignatures(&sigs[i], &sigs[j]) < 0
+	})
 }
 
 // KeepFallback returns a slice containing only the fallback signature.
@@ -553,23 +483,15 @@ func KeepFallback(sigs []Signature) []Signature {
 	return nil
 }
 
-// RankSignatures returns the indices of sigs sorted by priority (best first).
-// Longer signatures and narrower (more specific) types rank higher.
+// RankSignatures returns the indices of sigs sorted by priority (best
+// first), using the same reversed-lattice order as SortSignatures.
 func RankSignatures(sigs []Signature) []int {
 	indices := make([]int, len(sigs))
 	for i := range indices {
 		indices[i] = i
 	}
-	// Stable sort: preserve registration order for equal scores.
-	for i := 1; i < len(indices); i++ {
-		for j := i; j > 0; j-- {
-			si, sj := signatureScore(&sigs[indices[j]]), signatureScore(&sigs[indices[j-1]])
-			if si > sj {
-				indices[j], indices[j-1] = indices[j-1], indices[j]
-			} else {
-				break
-			}
-		}
-	}
+	sort.SliceStable(indices, func(i, j int) bool {
+		return CompareSignatures(&sigs[indices[i]], &sigs[indices[j]]) < 0
+	})
 	return indices
 }

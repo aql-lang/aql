@@ -399,7 +399,7 @@ var (
 	RunCarrierBody        = eng.RunCarrierBody
 	SetIDSeed             = eng.SetIDSeed
 	SeverityFor           = eng.SeverityFor
-	SignatureScore        = eng.SignatureScore
+	CompareSignatures     = eng.CompareSignatures
 	SimplifyDisjunctAlts  = eng.SimplifyDisjunctAlts
 	SizeOf                = eng.SizeOf
 	SortSignatures        = eng.SortSignatures
