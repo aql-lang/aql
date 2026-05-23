@@ -224,14 +224,52 @@ func (tt *TypeTable) MintType(name string, parent *Type) *Type {
 		Origin:   OriginUserDef,
 		Behavior: DefaultBehavior,
 	}
-	// A user type inherits its parent's unified Rank — it gets no
-	// positional slot; compareTypes breaks same-Rank ties by name/id.
+	// User and external types share a single Rank band per kernel
+	// branch — they sit one band above the kernel positional ranks
+	// so they sort AFTER every kernel builtin in the same branch
+	// (e.g. `def Foo refine Integer` ranks above Integer, Decimal,
+	// String, etc.). Same-band types tiebreak via compareTypes →
+	// depth → lex name. See externalBandFor for the per-branch
+	// constants.
 	if parent != nil {
-		def.Rank = parent.Rank
+		def.Rank = externalBandFor(parent)
 	}
 	def.ID = tt.mintID(parent)
 	tt.byID[def.ID] = def
 	return def
+}
+
+// externalBandFor returns the Rank band for user/external types
+// rooted at parent's branch. Each band sits one increment above the
+// corresponding kernel band (Scalar 20e9 → external 21e9, Node 30e9
+// → 31e9, Ideal 40e9 → 41e9, Word 50e9 → 51e9, Type 60e9 → 61e9),
+// so external/user types always sort after every positional kernel
+// type in the same branch. Types with no recognised root (or rooted
+// directly at Any/None/Never) fall back to the parent's Rank.
+func externalBandFor(parent *Type) int {
+	if parent == nil {
+		return 0
+	}
+	// Walk to the branch root (the immediate child of Any, or a
+	// degenerate root). Any itself has FixedID=anyFixedID; stop one
+	// step below.
+	branch := parent
+	for branch.Parent != nil && branch.Parent.FixedID != anyFixedID {
+		branch = branch.Parent
+	}
+	switch branch.Name {
+	case "Scalar":
+		return 21_000_000_000
+	case "Node":
+		return 31_000_000_000
+	case "Ideal":
+		return 41_000_000_000
+	case "Word":
+		return 51_000_000_000
+	case "Type":
+		return 61_000_000_000
+	}
+	return parent.Rank
 }
 
 // RegisterExternalBuiltin installs a non-kernel-declared "builtin-
@@ -308,10 +346,12 @@ func (tt *TypeTable) RegisterExternalBuiltin(path string, fixedID int, behavior 
 		Origin:   OriginBuiltin,
 		Behavior: behavior,
 	}
-	// External builtins inherit the parent's unified Rank (no
-	// positional slot — see builtinDecls).
+	// External builtins share the user-/external-type band for
+	// their branch (one increment above the kernel positional band)
+	// so they sort after every kernel builtin in the same branch
+	// and tiebreak among themselves by depth then name.
 	if parent != nil {
-		def.Rank = parent.Rank
+		def.Rank = externalBandFor(parent)
 	}
 	tt.byID[id] = def
 	tt.bypath[path] = def
@@ -678,7 +718,7 @@ func MintTestType(path string) *Type {
 		Behavior: DefaultBehavior,
 	}
 	if parent != nil {
-		def.Rank = parent.Rank
+		def.Rank = externalBandFor(parent)
 	}
 	testTypePool[path] = def
 	return def
