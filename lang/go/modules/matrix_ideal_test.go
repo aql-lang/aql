@@ -147,16 +147,18 @@ func TestType_ShapedVector(t *testing.T) {
 	}
 }
 
-// A constructed tensor type is recognised by the kernel as a type:
-// `typeof` reports Type, not the concrete tensor kind.
-func TestTensorType_TypeofIsType(t *testing.T) {
+// A constructed tensor type sits under the concrete tensor kind in
+// the lattice; `typeof` is a single Parent hop, so it reports the
+// kind name (Matrix here) — not "Type", which was the metatype-
+// collapse era's answer for any type literal.
+func TestTensorType_TypeofIsKind(t *testing.T) {
 	r := tensorRegistry(t)
 	res, err := runTensorSrc(t, r, "(refine Matrix {rows:2 cols:2}) typeof")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := res[0].String(); got != "Type" {
-		t.Errorf("typeof a constructed Matrix type = %q, want Type", got)
+	if got := res[0].String(); got != "Matrix" {
+		t.Errorf("typeof a constructed Matrix type = %q, want Matrix", got)
 	}
 }
 

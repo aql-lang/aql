@@ -291,16 +291,19 @@ func sigTypeMatchesAsType(v Value, t *Type) bool {
 		}
 		return (&v).Matches(t)
 	}
-	// Structural type bodies (Record, Options, Table, Object,
-	// ChildType) are also "types" — accept them when their lattice
-	// family matches the slot. DepScalar bodies are NOT accepted at
-	// TypeArgs slots: they're constraints over a base scalar (used
-	// as runtime values), not bare scalar type literals.
+	// DepScalar bodies are NOT accepted at TypeArgs slots: they're
+	// constraints over a base scalar (used as runtime values), not
+	// bare scalar type literals — the dep-sig fallthrough would
+	// otherwise loop back on itself for `(Integer gt 10) lt
+	// (Integer gt 20)`.
 	if v.IsDepScalar() {
 		return false
 	}
-	if IsRecordType(v) || IsOptionsType(v) || IsTableType(v) ||
-		IsObjectType(v) || IsTypedList(v) || IsTypedMap(v) {
+	// Other structural type bodies (Record, Options, Table, Object,
+	// ChildType, Disjunct, Enum, Function/FnUndef, ImplicitMap
+	// record shape) are "types" — accept them when their lattice
+	// family matches the slot.
+	if IsTypeBody(v) {
 		return v.Parent.Matches(t)
 	}
 	return false

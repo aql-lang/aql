@@ -137,13 +137,22 @@ func (scalarCompareBehavior) Compare(a, b Value) (int, error) {
 // reverse lexical order, then a relative path before an absolute one.
 // scalarCompareBehavior routes the Path-vs-Path case here.
 func comparePaths(a, b Value) int {
+	// DepScalar pair: order by canonical form (forward lex on the
+	// rendered "(base op bound)" string). They have no numeric
+	// ordering of their own — their Comparers signal ErrNoComparer
+	// so we land here — and the spec's "tie-breaks on canonical
+	// form" rule wants forward lex, not the Path-reverse rule.
+	if a.IsDepScalar() && b.IsDepScalar() {
+		return strings.Compare(a.String(), b.String())
+	}
 	ap, aerr := AsPath(a)
 	bp, berr := AsPath(b)
 	if aerr != nil || berr != nil {
-		// Not a Path pair after all — fall back to forward lexical
-		// order on the rendered form (the Path-specific reverse
-		// rule applies only to genuine Paths).
-		return strings.Compare(a.String(), b.String())
+		// Not a Path pair after all — fall back to the reverse
+		// lexical order rendered form (genuine Paths sort by
+		// reverse-lex; this matches the spec's expectation for
+		// path-vs-type-literal cases that hit this fallback).
+		return strings.Compare(b.String(), a.String())
 	}
 	switch {
 	case len(ap.Parts) < len(bp.Parts):
