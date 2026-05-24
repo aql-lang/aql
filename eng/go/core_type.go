@@ -319,6 +319,12 @@ func InstallType(r *Registry, name string, body Value) error {
 		// fall through to the regular PushType path — they remain
 		// gates, not dispatch categories.
 		def := r.Types.MintType(name, inputT)
+		// Attach a Unifier so the predicate runs at every Unify call
+		// site (signature matching, options fields, record fields,
+		// `make` constraints, the `unify` word). Without this, Unify
+		// would take the lattice subtype path and admit any
+		// base-compatible value without checking the predicate.
+		installPredicateUnifier(def, body, r, name)
 		r.Defs.PushType(name, def, body)
 	} else if IsRefinePrefab(body) {
 		// `def Foo refine Integer` route: `refineBareHandler` minted

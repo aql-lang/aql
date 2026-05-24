@@ -106,13 +106,17 @@ var behaviors = map[string]behaviorEntry{
 		validate: validateNodifySig,
 		install:  func(u *userBehavior, body []eng.Value) { u.nodifyBody = body },
 	},
+	"unify": {
+		validate: validateUnifySig,
+		install:  func(u *userBehavior, body []eng.Value) { u.unifyBody = body },
+	},
 }
 
 func behaveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := defName(args[0])
 	be, ok := behaviors[name]
 	if !ok {
-		return nil, r.AqlError("behave_error", fmt.Sprintf("behave %s: unknown behavior name; known: compare, canon, nodify", name), "behave")
+		return nil, r.AqlError("behave_error", fmt.Sprintf("behave %s: unknown behavior name; known: compare, canon, nodify, unify", name), "behave")
 	}
 
 	fnVal := args[1]
@@ -229,6 +233,39 @@ func validateNodifySig(sig eng.FnSig) (*eng.Type, error) {
 	return t, nil
 }
 
+// validateUnifySig enforces shape `[[T T] [T] [body]]` and returns T.
+// Both inputs must be the same type — the body is a closed-over
+// operation on T. The kernel dispatches the Unifier when the LCA walk
+// reaches T; the body receives the two operands as `a` and `b` and is
+// expected to return the unified value (or the type literal `None` to
+// signal failure).
+//
+// The return type slot accepts either T itself or `Any`. ParseFnReturns
+// runs without a registry, so user-defined types in the return position
+// degrade to Any — accepting Any here keeps the surface usable while
+// the kernel still validates at call time that the body returned a
+// value compatible with the target type.
+func validateUnifySig(sig eng.FnSig) (*eng.Type, error) {
+	if len(sig.Params) != 2 {
+		return nil, fmt.Errorf("unify: fn must take 2 args (got %d)", len(sig.Params))
+	}
+	if len(sig.Returns) != 1 {
+		return nil, fmt.Errorf("unify: fn must declare a single return type")
+	}
+	t0 := sig.Params[0].Type
+	t1 := sig.Params[1].Type
+	if t0 == nil || t1 == nil {
+		return nil, fmt.Errorf("unify: both params must declare a type")
+	}
+	if !t0.Equal(t1) {
+		return nil, fmt.Errorf("unify: both params must be the same type (got %s and %s)", t0, t1)
+	}
+	if !sig.Returns[0].Equal(t0) && !sig.Returns[0].Equal(eng.TAny) {
+		return nil, fmt.Errorf("unify: return type must match input type or be Any (got %s, want %s)", sig.Returns[0], t0)
+	}
+	return t0, nil
+}
+
 // userBehavior is the shared wrapper type that carries one or more
 // AQL-bodied capability slots on a target *Type. The TypeBehavior
 // surface (Match / Format / Equal) delegates to the previous
@@ -252,8 +289,10 @@ type userBehavior struct {
 	compareBody []Value
 	canonBody   []Value
 	nodifyBody  []Value
+	unifyBody   []Value
 	inRender    bool
 	inNodify    bool
+	inUnify     bool
 }
 
 // Match delegates to prev — `behave` does not currently install
@@ -366,6 +405,71 @@ func (u *userBehavior) Nodify(v Value) (Value, error) {
 	u.inNodify = true
 	defer func() { u.inNodify = false }()
 	return u.runNodifyBody(v)
+}
+
+// Unify runs the installed unifier body if any. Falls back to prev's
+// Unifier when present, or signals ErrNoUnifier so the kernel's
+// dispatchUnifier walk continues up the parent chain. Re-entrancy is
+// guarded the same way Format/Nodify are — a unifier body that
+// recursively unifies values of the same type would otherwise loop.
+func (u *userBehavior) Unify(a, b Value) (Value, *eng.UnifyError) {
+	if len(u.unifyBody) == 0 {
+		if next, ok := u.prev.(eng.Unifier); ok {
+			return next.Unify(a, b)
+		}
+		return Value{}, eng.ErrNoUnifier
+	}
+	if u.inUnify {
+		// Body recurses into a same-type Unify — fall through so
+		// recursion terminates. Return the structural narrowing
+		// candidate via the prev chain.
+		if next, ok := u.prev.(eng.Unifier); ok {
+			return next.Unify(a, b)
+		}
+		return Value{}, eng.ErrNoUnifier
+	}
+	u.inUnify = true
+	defer func() { u.inUnify = false }()
+	return u.runUnifyBody(a, b)
+}
+
+func (u *userBehavior) runUnifyBody(a, b Value) (Value, *eng.UnifyError) {
+	r := u.registry
+	if r == nil {
+		return Value{}, &eng.UnifyError{
+			Reason: fmt.Sprintf("behave unify %s: no registry attached", u.typeName),
+		}
+	}
+	r.Defs.Push("a", a)
+	r.Defs.Push("b", b)
+	defer r.Defs.Pop("a")
+	defer r.Defs.Pop("b")
+
+	tokens := append([]Value{}, u.unifyBody...)
+	sub := eng.NewTop(r)
+	result, err := sub.Run(tokens)
+	if err != nil {
+		return Value{}, &eng.UnifyError{
+			Reason: fmt.Sprintf("behave unify %s: %v", u.typeName, err),
+		}
+	}
+	if len(result) == 0 {
+		return Value{}, &eng.UnifyError{
+			Reason: fmt.Sprintf("behave unify %s: body produced no result", u.typeName),
+		}
+	}
+	top := result[len(result)-1]
+	// A `None` return signals "no unification" — same convention as
+	// predicate types use for "doesn't match". Anything else is the
+	// unified value.
+	if eng.IsNoneShape(top) {
+		return Value{}, &eng.UnifyError{
+			Reason: fmt.Sprintf("behave unify %s: body returned None", u.typeName),
+			A:      a,
+			B:      b,
+		}
+	}
+	return top, nil
 }
 
 func (u *userBehavior) runNodifyBody(v Value) (Value, error) {

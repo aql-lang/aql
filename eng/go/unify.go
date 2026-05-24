@@ -83,6 +83,17 @@ func unifyInner(a, b Value) (Value, *UnifyError) {
 		return a, nil
 	}
 
+	// Behavior-driven dispatch: walk the LCA of the two operand types
+	// looking for a Unifier capability. The first non-opt-out Unifier
+	// owns the result — same pattern CompareValues uses for Comparer.
+	// Predicate types and refine-with-clause types auto-install
+	// Unifiers (see core_type.go::InstallType) so narrowing into a
+	// constrained type checks the constraint; external plugin types
+	// and `behave unify/q` user installs also flow through here.
+	if v, err, hit := dispatchUnifier(a, b); hit {
+		return v, err
+	}
+
 	// Family handlers — any side in the family routes to that family's
 	// owner, which canonicalizes argument order internally. A bare
 	// type literal whose denoted type is List/Map also routes to the

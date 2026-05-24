@@ -86,6 +86,30 @@ type Sizer interface {
 	Size(v Value) int
 }
 
+// Unifier is an optional capability interface. Types implementing it
+// supply their own structural intersection rule, called by Unify when
+// the lowest common ancestor of the two operands' types reaches a
+// Unifier in the lattice walk.
+//
+// Use cases — kernel auto-installs Unifiers for predicate types and
+// refine-with-clause types so the predicate body runs at every Unify
+// callsite (closing the soundness gap where narrowing into a refined
+// type bypassed the constraint check). External plugin types can
+// install a Unifier directly via RegisterExternalBuiltin; user code
+// can install one via `behave unify/q (fn …)`.
+//
+// Symmetry is required: Unify(a, b) must equal Unify(b, a) up to
+// value identity. The kernel does not enforce this — implementations
+// must preserve it.
+//
+// Implementations return ErrNoUnifier when they hold a placeholder
+// slot (the wrapped-Behavior case where compare/canon are installed
+// but unify is not). The kernel walks past such Behaviors to find the
+// next Unifier up the lattice.
+type Unifier interface {
+	Unify(a, b Value) (Value, *UnifyError)
+}
+
 // defaultBehavior provides the canonical Match / Format / Equal
 // implementations every *Type starts with. Each delegates to the
 // existing kernel paths so introducing the Behavior seam is

@@ -14,27 +14,27 @@ package eng
 type ValueShape int
 
 const (
-	ShapeUnknown     ValueShape = iota
-	ShapeNever                  // bottom type, only unifies with itself
-	ShapeNone                   // none value or none type literal
-	ShapeAny                    // any value or any type literal
-	ShapeCarrier                // Data==nil, Carrier=true — abstract value of a type
-	ShapeTypeLiteral            // bare type literal (Data==nil, not carrier, not none/never/any)
-	ShapeDisjunct               // DisjunctInfo
-	ShapeFnUndef                // FnUndefInfo — structural fn-shape constraint
-	ShapeFnDef                  // FnDefInfo on TFnDef
-	ShapeFunction               // FnDefInfo on TFunction
-	ShapeDepScalar              // DepScalarInfo — refined scalar with bounds
-	ShapeScalar                 // concrete scalar leaf (Integer/Decimal/String/Boolean/Atom/...)
-	ShapeList                   // plain list — Parent=TList, Data=ListPayload
-	ShapeTypedList              // typed list — Parent=TList, Data=ChildTypeInfo
-	ShapeTable                  // table — Parent=TList, Data=TableTypeInfo/TableData/Materializer
-	ShapeMap                    // plain map — Parent=TMap, Data=MapPayload
-	ShapeTypedMap               // typed map — Parent=TMap, Data=ChildTypeInfo
-	ShapeRecord                 // record type — Parent=TMap, Data=RecordTypeInfo
-	ShapeOptions                // options type — Parent=TMap, Data=OptionsTypeInfo
-	ShapeObjectInstance         // object instance — Data=ObjectInstanceInfo
-	ShapeObjectType             // object type — Data=ObjectTypeInfo
+	ShapeUnknown        ValueShape = iota
+	ShapeNever                     // bottom type, only unifies with itself
+	ShapeNone                      // none value or none type literal
+	ShapeAny                       // any value or any type literal
+	ShapeCarrier                   // Data==nil, Carrier=true — abstract value of a type
+	ShapeTypeLiteral               // bare type literal (Data==nil, not carrier, not none/never/any)
+	ShapeDisjunct                  // DisjunctInfo
+	ShapeFnUndef                   // FnUndefInfo — structural fn-shape constraint
+	ShapeFnDef                     // FnDefInfo on TFnDef
+	ShapeFunction                  // FnDefInfo on TFunction
+	ShapeDepScalar                 // DepScalarInfo — refined scalar with bounds
+	ShapeScalar                    // concrete scalar leaf (Integer/Decimal/String/Boolean/Atom/...)
+	ShapeList                      // plain list — Parent=TList, Data=ListPayload
+	ShapeTypedList                 // typed list — Parent=TList, Data=ChildTypeInfo
+	ShapeTable                     // table — Parent=TList, Data=TableTypeInfo/TableData/Materializer
+	ShapeMap                       // plain map — Parent=TMap, Data=MapPayload
+	ShapeTypedMap                  // typed map — Parent=TMap, Data=ChildTypeInfo
+	ShapeRecord                    // record type — Parent=TMap, Data=RecordTypeInfo
+	ShapeOptions                   // options type — Parent=TMap, Data=OptionsTypeInfo
+	ShapeObjectInstance            // object instance — Data=ObjectInstanceInfo
+	ShapeObjectType                // object type — Data=ObjectTypeInfo
 )
 
 // Shape classifies v into exactly one ValueShape. The classification
