@@ -1,0 +1,24 @@
+# AQL Language Server for Helix.
+#
+# Merge the blocks below into ~/.config/helix/languages.toml.
+# Helix talks to language servers over stdio by default; the
+# [language-server.aql] block tells it how to spawn `aql lsp` and
+# the [[language]] block binds the server to *.aql files.
+
+[language-server.aql]
+command = "aql"
+args = ["lsp"]
+
+[[language]]
+name = "aql"
+scope = "source.aql"
+file-types = ["aql"]
+comment-token = "#"
+roots = ["aql.jsonic", ".git"]
+language-servers = ["aql"]
+auto-format = false
+
+# Uncomment to format on save via the LSP formatting capability.
+# [language.formatter]
+# command = "aql"
+# args = ["fmt", "-"]
