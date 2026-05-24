@@ -79,6 +79,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runProxy(rest, homeDir, stdout, stderr)
 	case "providers":
 		return runProviders(stdout)
+	case "scan":
+		return runScan(rest, homeDir, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "error: unknown vault mode %q\n", mode)
 		printUsage(stderr)
@@ -115,6 +117,7 @@ var modeDocs = []modeDoc{
 	{"config", "view or set vault configuration"},
 	{"proxy", "run a local credential broker for agents and tools"},
 	{"providers", "list built-in provider presets"},
+	{"scan", "scan files for leaked secret-like strings"},
 }
 
 // --- shared helpers --------------------------------------------------------
