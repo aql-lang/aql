@@ -113,28 +113,6 @@ func TestExecuteBadFlag(t *testing.T) {
 	}
 }
 
-func TestRunSuccess(t *testing.T) {
-	var buf bytes.Buffer
-	err := run(&buf, "1 add 2", "", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(buf.String(), "3") {
-		t.Errorf("expected '3' in output, got %q", buf.String())
-	}
-}
-
-func TestRunParseError(t *testing.T) {
-	var buf bytes.Buffer
-	err := run(&buf, `"unterminated`, "", 0)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if !strings.Contains(err.Error(), "parse error") {
-		t.Errorf("expected 'parse error', got %q", err.Error())
-	}
-}
-
 // --- do subcommand ---
 
 func TestExecuteDoSimple(t *testing.T) {
@@ -178,14 +156,6 @@ func TestExecuteDoError(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "error") {
 		t.Errorf("expected 'error' in stderr, got %q", stderr.String())
-	}
-}
-
-func TestRunEngineError(t *testing.T) {
-	var buf bytes.Buffer
-	err := run(&buf, "10 div 0", "", 0)
-	if err == nil {
-		t.Fatal("expected error")
 	}
 }
 

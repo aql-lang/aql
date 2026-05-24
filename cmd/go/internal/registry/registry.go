@@ -1,4 +1,12 @@
-package aql
+// Package registry is the aql registry HTTP server subcommand —
+// `aql registry -r <folder> -p <port>`.
+//
+// The server speaks three flavours of request:
+//
+//   - GET /module/<name>-x.y.z — serve a published module zip.
+//   - POST /api/register, POST /api/login — bind to UserStore.
+//   - POST /api/publish — accept a module zip from a logged-in user.
+package registry
 
 import (
 	"archive/zip"
@@ -13,14 +21,76 @@ import (
 	"strings"
 
 	jsonic "github.com/jsonicjs/jsonic/go"
+
+	"github.com/aql-lang/aql/cmd/go/internal/auth"
+	"github.com/aql-lang/aql/cmd/go/internal/command"
 )
 
-// registryHandler serves module zip files from a registry directory.
-// GET /module/<name>-x.y.z returns <registryDir>/<name>-x.y.z.zip
-// POST /api/publish accepts a module zip, validates it, and stores it.
-func registryHandler(registryDir string) http.Handler {
+// cmd is the Command implementation for `aql registry`.
+type cmd struct{}
+
+// New returns the registry subcommand.
+func New() command.Command { return &cmd{} }
+
+// Name returns "registry".
+func (*cmd) Name() string { return "registry" }
+
+// Synopsis returns the one-line help text.
+func (*cmd) Synopsis() string {
+	return "serve modules and auth endpoints over HTTP"
+}
+
+// Mode reports that this is a long-running server.
+func (*cmd) Mode() command.Mode { return command.ModeServer }
+
+// Run handles `aql registry -r <folder> -p <port>`.
+func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
+	return run(args, stdout, stderr)
+}
+
+// run handles `aql registry -r <folder> -p <port>`.
+func run(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("registry", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	registryDir := fs.String("r", "", "registry folder containing zip files")
+	port := fs.Int("p", 8080, "port to listen on")
+
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	if *registryDir == "" {
+		fmt.Fprintf(stderr, "error: -r <folder> is required\n")
+		return 1
+	}
+
+	info, err := os.Stat(*registryDir)
+	if err != nil || !info.IsDir() {
+		fmt.Fprintf(stderr, "error: registry folder %q not found\n", *registryDir)
+		return 1
+	}
+
+	addr := fmt.Sprintf(":%d", *port)
+	handler := Handler(*registryDir)
+
+	fmt.Fprintf(stdout, "aql registry serving %s on %s\n", *registryDir, addr)
+
+	if err := http.ListenAndServe(addr, handler); err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	return 0
+}
+
+// Handler builds the http.Handler for an aql registry serving from
+// registryDir. Exposed for tests that spin up an httptest server.
+//
+// GET /module/<name>-x.y.z returns <registryDir>/<name>-x.y.z.zip.
+// POST /api/{register,login,publish} bind to UserStore.
+func Handler(registryDir string) http.Handler {
 	mux := http.NewServeMux()
-	store := NewUserStore(registryDir)
+	store := auth.NewUserStore(registryDir)
 
 	mux.HandleFunc("/module/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -28,7 +98,6 @@ func registryHandler(registryDir string) http.Handler {
 			return
 		}
 
-		// Extract module identifier from path: /module/<name>-x.y.z
 		id := strings.TrimPrefix(r.URL.Path, "/module/")
 		if id == "" || strings.Contains(id, "/") || strings.Contains(id, "..") {
 			http.NotFound(w, r)
@@ -61,10 +130,9 @@ func registryHandler(registryDir string) http.Handler {
 			return
 		}
 
-		// Validate auth token.
-		auth := r.Header.Get("Authorization")
-		token := strings.TrimPrefix(auth, "Bearer ")
-		if token == "" || token == auth {
+		hdr := r.Header.Get("Authorization")
+		token := strings.TrimPrefix(hdr, "Bearer ")
+		if token == "" || token == hdr {
 			http.Error(w, "authorization required", http.StatusUnauthorized)
 			return
 		}
@@ -77,6 +145,80 @@ func registryHandler(registryDir string) http.Handler {
 	})
 
 	return mux
+}
+
+// handleRegister handles POST /api/register.
+func handleRegister(store *auth.UserStore, w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Email    string `json:"email"`
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Email == "" || req.Username == "" || req.Password == "" {
+		http.Error(w, "email, username, and password are required", http.StatusBadRequest)
+		return
+	}
+
+	if err := store.Register(req.Email, req.Username, req.Password); err != nil {
+		if strings.Contains(err.Error(), "already") {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":   "registered",
+		"username": req.Username,
+	})
+}
+
+// handleLogin handles POST /api/login.
+func handleLogin(store *auth.UserStore, w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Username == "" || req.Password == "" {
+		http.Error(w, "username and password are required", http.StatusBadRequest)
+		return
+	}
+
+	token, user, err := store.Login(req.Username, req.Password)
+	if err != nil {
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"token":    token,
+		"username": user.Username,
+		"email":    user.Email,
+	})
 }
 
 // maxPublishSize limits uploaded zip files to 10 MB.
@@ -101,14 +243,12 @@ func handlePublish(registryDir string, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Open as zip archive.
 	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
 	if err != nil {
 		http.Error(w, "invalid zip archive", http.StatusBadRequest)
 		return
 	}
 
-	// Index zip entries and reject path traversal.
 	zipFiles := make(map[string]*zip.File)
 	for _, f := range zr.File {
 		if strings.Contains(f.Name, "..") || strings.HasPrefix(f.Name, "/") {
@@ -118,7 +258,6 @@ func handlePublish(registryDir string, w http.ResponseWriter, r *http.Request) {
 		zipFiles[f.Name] = f
 	}
 
-	// aql.jsonic must be present.
 	jf, ok := zipFiles["aql.jsonic"]
 	if !ok {
 		http.Error(w, "zip missing aql.jsonic", http.StatusBadRequest)
@@ -137,17 +276,12 @@ func handlePublish(registryDir string, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse aql.jsonic. Since it's jsonic format, we need to use doPrep-style
-	// parsing. But we only need the JSON equivalent, so we call the jsonic
-	// parser. For simplicity we parse it via the same path as prep by writing
-	// to a temp dir, running doPrep, and reading the result.
 	meta, err := parseJsonic(jdata)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("invalid aql.jsonic: %s", err), http.StatusBadRequest)
 		return
 	}
 
-	// Validate required fields.
 	name, _ := meta["name"].(string)
 	if name == "" {
 		http.Error(w, "aql.jsonic missing name", http.StatusBadRequest)
@@ -173,7 +307,6 @@ func handlePublish(registryDir string, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify all declared files are in the zip.
 	for _, f := range rawFiles {
 		fname, ok := f.(string)
 		if !ok {
@@ -186,7 +319,6 @@ func handlePublish(registryDir string, w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Check immutability — reject if version already exists.
 	moduleID := fmt.Sprintf("%s-%s", name, version)
 	zipPath := filepath.Join(registryDir, moduleID+".zip")
 	if _, err := os.Stat(zipPath); err == nil {
@@ -194,7 +326,6 @@ func handlePublish(registryDir string, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Write the zip to the registry.
 	if err := os.MkdirAll(registryDir, 0755); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -228,7 +359,6 @@ func toInt(v any) (int, bool) {
 }
 
 // parseJsonic parses jsonic-formatted bytes into a map.
-// Uses the same jsonic library as doPrep.
 func parseJsonic(data []byte) (map[string]any, error) {
 	j := jsonic.Make()
 	result, err := j.Parse(string(data))
@@ -240,39 +370,4 @@ func parseJsonic(data []byte) (map[string]any, error) {
 		return nil, fmt.Errorf("expected map, got %T", result)
 	}
 	return m, nil
-}
-
-// runRegistry handles `aql registry -r <folder> -p <port>`.
-func runRegistry(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("registry", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-
-	registryDir := fs.String("r", "", "registry folder containing zip files")
-	port := fs.Int("p", 8080, "port to listen on")
-
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-
-	if *registryDir == "" {
-		fmt.Fprintf(stderr, "error: -r <folder> is required\n")
-		return 1
-	}
-
-	info, err := os.Stat(*registryDir)
-	if err != nil || !info.IsDir() {
-		fmt.Fprintf(stderr, "error: registry folder %q not found\n", *registryDir)
-		return 1
-	}
-
-	addr := fmt.Sprintf(":%d", *port)
-	handler := registryHandler(*registryDir)
-
-	fmt.Fprintf(stdout, "aql registry serving %s on %s\n", *registryDir, addr)
-
-	if err := http.ListenAndServe(addr, handler); err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
-		return 1
-	}
-	return 0
 }
