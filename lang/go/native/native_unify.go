@@ -24,8 +24,8 @@ var unifyNatives = []NativeFunc{
 	},
 }
 
-func unifyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	unified, ok := eng.Unify(args[0], args[1])
+func unifyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	unified, ok := eng.UnifyR(args[0], args[1], r)
 	if ok {
 		return []Value{unified, NewBoolean(true)}, nil
 	}

@@ -495,7 +495,7 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 			return []Value{NewBoolean(aNode.Equal(bNode) || aNode.IsSubtypeOf(bNode))}, nil
 		}
 	}
-	unified, ok := Unify(a, b)
+	unified, ok := eng.UnifyR(a, b, r)
 	if !ok {
 		return []Value{NewBoolean(false)}, nil
 	}

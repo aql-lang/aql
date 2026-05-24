@@ -28,15 +28,51 @@ type predicateUnifier struct {
 	typeName   string
 }
 
-// Match / Format / Equal delegate to prev — the predicate Unifier
-// adds only the Unify capability slot. Predicate-type matching
-// already routes through the kernel's existing `is`/`typeof` dispatch
-// and doesn't need an override here.
+// Match runs the predicate against v. The result of `v.Is(Pos)` —
+// reached via sigTypeMatches during signature dispatch, by the `is`
+// word, and by anything else that asks "is v a Pos?" — must reflect
+// the predicate's verdict, not just the lattice walk. Without this
+// override, predicate types would only accept values previously
+// reparented via typed-def; raw `f 5` for `def f fn [[x:Pos] …]`
+// would degrade to a lattice subtype check that always fails because
+// Integer (5's parent) is not a descendant of Pos.
+//
+// Two gates:
+//  1. v's declared type must satisfy the predicate's input type.
+//     `"hello".Is(Pos)` rejects at this gate — String is not Integer.
+//  2. The predicate body returns truthy (RunPredicate's "matched").
+//
+// Bare type literals (no Data) and carriers (CheckMode abstract
+// values) pass through: a type literal is "the type itself", not an
+// inhabitant, and carriers are placeholder values whose concreteness
+// is asserted at runtime by some other path.
 func (p *predicateUnifier) Match(v Value, t *Type) bool {
-	if p.prev != nil {
-		return p.prev.Match(v, t)
+	if v.Data == nil || v.Carrier {
+		if p.prev != nil {
+			return p.prev.Match(v, t)
+		}
+		return DefaultBehavior.Match(v, t)
 	}
-	return DefaultBehavior.Match(v, t)
+	if p.registry == nil {
+		// No registry attached — fall back to lattice walk so behavior
+		// is at least no worse than before predicateUnifier existed.
+		if p.prev != nil {
+			return p.prev.Match(v, t)
+		}
+		return DefaultBehavior.Match(v, t)
+	}
+	// Gate 1: input-type compatibility.
+	if inputT := PredicateInputType(p.constraint); inputT != nil {
+		if !v.Parent.Matches(inputT) {
+			return false
+		}
+	}
+	// Gate 2: run the predicate.
+	_, matched, err := p.registry.RunPredicate(p.constraint, v)
+	if err != nil {
+		return false
+	}
+	return matched
 }
 
 func (p *predicateUnifier) Format(v Value) string {

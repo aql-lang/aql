@@ -22,6 +22,17 @@ func ResolveWordsDeep(v Value) Value {
 		}
 		return NewList(resolved)
 	}
+	// Typed list / typed map: resolve the child constraint so a Word
+	// referring to a predicate type (e.g. `[:Pos]`) reaches its FnDef
+	// body, which unifyInner can then detect as a predicate constraint.
+	if IsTypedList(v) {
+		ct, _ := AsChildType(v)
+		return NewTypedList(ResolveWordsDeep(ct.Child))
+	}
+	if IsTypedMap(v) {
+		ct, _ := AsChildType(v)
+		return NewTypedMap(ResolveWordsDeep(ct.Child))
+	}
 	if v.Parent.Equal(TMap) && v.Data != nil && !IsTypedMap(v) && !IsRecordType(v) && !IsOptionsType(v) {
 		m, _ := AsMap(v)
 		result := NewOrderedMap()

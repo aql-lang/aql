@@ -41,10 +41,225 @@ func UnifyExplain(a, b Value) (Value, *UnifyError) {
 	return unifyInner(a, b)
 }
 
+// UnifyR is Unify with a Registry to enable predicate-FnDef
+// constraint evaluation. When one side is a predicate FnDef (or a
+// Disjunct/ChildType-typed-collection containing one) and a Registry
+// is provided, RunPredicate handles the matching. Without a Registry,
+// behaves identically to Unify.
+//
+// Use this from sites that already have a Registry in hand and may
+// receive predicate-typed constraints — record-field check, options-
+// field check, the lang-level `unify` word.
+func UnifyR(a, b Value, r *Registry) (Value, bool) {
+	v, err := UnifyExplainR(a, b, r)
+	return v, err == nil
+}
+
+// UnifyExplainR — see UnifyR. Returns structured failure.
+//
+// Pushes r onto the unifyRegistryStack so recursive calls inside the
+// per-family handlers (list element, map field, disjunct alternative)
+// can pick it up via currentUnifyRegistry without each handler taking
+// an explicit r parameter. The kernel is single-threaded per Engine,
+// so the package-level stack is safe.
+func UnifyExplainR(a, b Value, r *Registry) (Value, *UnifyError) {
+	a = ResolveWordsDeep(a)
+	b = ResolveWordsDeep(b)
+	if r != nil {
+		pushUnifyRegistry(r)
+		defer popUnifyRegistry()
+	}
+	return unifyInnerR(a, b, r)
+}
+
+// unifyRegistryStack holds the Registry chain for in-flight
+// UnifyExplainR calls. Family handlers (unifyConcreteMaps,
+// unifyTypedListWithConcrete, unifyDisjunct, etc.) consult the top
+// of the stack via currentUnifyRegistry when they encounter a
+// predicate-fn constraint embedded in a structural type.
+var unifyRegistryStack []*Registry
+
+func pushUnifyRegistry(r *Registry) {
+	unifyRegistryStack = append(unifyRegistryStack, r)
+}
+
+func popUnifyRegistry() {
+	if n := len(unifyRegistryStack); n > 0 {
+		unifyRegistryStack = unifyRegistryStack[:n-1]
+	}
+}
+
+// currentUnifyRegistry returns the Registry of the in-flight
+// UnifyExplainR call, or nil if no Registry-aware call is in flight.
+func currentUnifyRegistry() *Registry {
+	if n := len(unifyRegistryStack); n > 0 {
+		return unifyRegistryStack[n-1]
+	}
+	return nil
+}
+
+// unifyInnerR — Registry-threaded dispatch. Pre-pass handles
+// predicate-FnDef constraints (and disjunct alternatives that contain
+// them) by routing through RunPredicate; everything else falls
+// through to the standard kernel dispatch.
+func unifyInnerR(a, b Value, r *Registry) (Value, *UnifyError) {
+	return unifyInner(a, b)
+}
+
+// isPredicateFnValue reports whether v is a function value whose
+// first signature has a single typed parameter — the shape a
+// predicate type has.
+func isPredicateFnValue(v Value) bool {
+	if v.Parent == nil {
+		return false
+	}
+	if !v.Parent.Equal(TFnDef) && !v.Parent.Equal(TFunction) {
+		return false
+	}
+	info, ok := v.Data.(FnDefInfo)
+	if !ok || len(info.Sigs) == 0 {
+		return false
+	}
+	return len(info.Sigs[0].Params) == 1
+}
+
+// resolvePredicateRef returns the predicate fn body when v references
+// a predicate type via name AND the type's Behavior is the
+// predicateUnifier installed by InstallType. The Behavior check is
+// what distinguishes a predicate TYPE from an ordinary 1-arg fn
+// value — without it, every 1-arg fn would look like a predicate and
+// hijack standard unification (e.g. FnUndef variance checks).
+//
+// Accepts three reference shapes:
+//   - Bare type literal of a named predicate type (Pos's *Type).
+//   - Word naming a predicate-typed def (`Pos` in `[:Pos]`).
+//   - Atom naming a predicate-typed def (`Pos` after quote/resolve).
+func resolvePredicateRef(v Value, r *Registry) (Value, bool) {
+	if r == nil {
+		return Value{}, false
+	}
+	var name string
+	switch {
+	case IsWord(v):
+		w, _ := AsWord(v)
+		name = w.Name
+	case v.Parent != nil && v.Parent.Matches(TAtom) && v.Data != nil:
+		w, _ := AsAtom(v)
+		name = w
+	case v.Data == nil && !v.Carrier && v.ID != "" && v.Name != "":
+		name = v.Name
+	case isPredicateFnValue(v):
+		// Direct FnDef body — try the FnDef's Name field. Predicate
+		// types installed via `def Pos fn […]` carry Name="Pos" on
+		// their FnDef payload after InstallType wires the binding.
+		if info, ok := v.Data.(FnDefInfo); ok {
+			name = info.Name
+		}
+		if name == "" {
+			// Anonymous fn — try reverse lookup: walk the def table
+			// for a typed binding whose body equals v. This is what
+			// catches record-field constraints stored as the FnDef
+			// value (not the *Type literal).
+			for _, n := range r.Defs.Names() {
+				body, ok := r.TopTypeBody(n)
+				if !ok {
+					continue
+				}
+				if body.Equal(&v) {
+					name = n
+					break
+				}
+			}
+		}
+	}
+	if name == "" {
+		return Value{}, false
+	}
+	def := r.LookupTypeName(name)
+	if def == nil {
+		return Value{}, false
+	}
+	if _, ok := def.Behavior.(*predicateUnifier); !ok {
+		return Value{}, false
+	}
+	body, ok := r.TopTypeBody(name)
+	if !ok {
+		return Value{}, false
+	}
+	return body, true
+}
+
+// disjunctHasPredicate reports whether any alternative in the
+// disjunct is a predicate fn value.
+func disjunctHasPredicate(disj DisjunctInfo) bool {
+	for _, alt := range disj.Alternatives {
+		if isPredicateFnValue(alt) {
+			return true
+		}
+	}
+	return false
+}
+
+// runPredicateUnify evaluates a predicate fn constraint against a
+// candidate value via RunPredicate and folds the result into the
+// UnifyExplain shape.
+func runPredicateUnify(r *Registry, pred, val Value) (Value, *UnifyError) {
+	out, matched, err := r.RunPredicate(pred, val)
+	if err != nil {
+		return Value{}, &UnifyError{Reason: err.Error(), A: pred, B: val}
+	}
+	if !matched {
+		return Value{}, unifyFail("value does not satisfy predicate", pred, val)
+	}
+	return out, nil
+}
+
+// unifyDisjunctR is the Registry-aware disjunct walk. Tries each
+// alternative via unifyInnerR so predicate-fn alternatives are
+// evaluated correctly.
+func unifyDisjunctR(disj DisjunctInfo, val Value, r *Registry) (Value, *UnifyError) {
+	if val.Data == nil && (val.Parent.Equal(TAny) || (&val).Equal(TAny)) {
+		return NewDisjunct(disj.Alternatives), nil
+	}
+	for _, alt := range disj.Alternatives {
+		if unified, err := unifyInnerR(alt, val, r); err == nil {
+			return unified, nil
+		}
+	}
+	return Value{}, unifyFail("no disjunct alternative matched", NewDisjunct(disj.Alternatives), val)
+}
+
 // unifyInner is the post-resolution dispatcher. All recursive calls
 // inside the family handlers use this entry so ResolveWordsDeep runs
 // exactly once per top-level call.
+//
+// Pre-pass: if a Registry is active on the unifyRegistryStack and
+// either operand is a predicate-fn constraint (or a disjunct
+// containing one), route through RunPredicate so structural contexts
+// — typed-list child, typed-map child, record field, disjunct
+// alternative — honor predicate types without each handler needing
+// to know about Registry.
 func unifyInner(a, b Value) (Value, *UnifyError) {
+	if r := currentUnifyRegistry(); r != nil {
+		if pred, ok := resolvePredicateRef(a, r); ok && b.Data != nil {
+			return runPredicateUnify(r, pred, b)
+		}
+		if pred, ok := resolvePredicateRef(b, r); ok && a.Data != nil {
+			return runPredicateUnify(r, pred, a)
+		}
+		if IsDisjunct(a) {
+			disj, _ := AsDisjunct(a)
+			if disjunctHasPredicate(disj) {
+				return unifyDisjunctR(disj, b, r)
+			}
+		}
+		if IsDisjunct(b) {
+			disj, _ := AsDisjunct(b)
+			if disjunctHasPredicate(disj) {
+				return unifyDisjunctR(disj, a, r)
+			}
+		}
+	}
 	sa := Shape(a)
 	sb := Shape(b)
 

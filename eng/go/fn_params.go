@@ -253,6 +253,23 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 		} else {
 			name, _ = AsString(v)
 		}
+		// Predicate types — when the binding's BODY is an FnDef
+		// (predicate fn) the ResolveDefType fallback degrades to TAny
+		// because it doesn't recognise the function shape as a
+		// structural body. Use the minted *Type directly so x:Pos in
+		// an fn sig becomes the Pos lattice node (with its
+		// predicateUnifier Behavior) instead of TAny. Record/Options/
+		// TypedList/TypedMap bodies keep the old path because
+		// ResolveDefType returns the structural pattern those rely on.
+		if r != nil {
+			if body, ok := r.TopTypeBody(name); ok {
+				if body.Parent != nil && (body.Parent.Equal(TFnDef) || body.Parent.Equal(TFunction)) {
+					if def := r.LookupTypeName(name); def != nil {
+						return def, nil, nil
+					}
+				}
+			}
+		}
 		if defVal := LookupDefType(r, name); defVal != nil {
 			return ResolveDefType(r, *defVal)
 		}

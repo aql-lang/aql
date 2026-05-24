@@ -41,7 +41,17 @@ func isTypeLike(v Value) bool {
 // MakeRecord creates a record instance from a source value and
 // options. Used by `make` (via the Record Ideal's Instantiate) and
 // by the 3-arg make-with-options path.
+//
+// Backward-compat wrapper — delegates to MakeRecordR with nil
+// Registry. Use MakeRecordR when fields may carry predicate-type
+// constraints that need RunPredicate to evaluate.
 func MakeRecord(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, error) {
+	return MakeRecordR(recType, srcVal, useBase, nil)
+}
+
+// MakeRecordR is MakeRecord with Registry threading for
+// predicate-typed field constraints. See MakeFieldValueR.
+func MakeRecordR(recType RecordTypeInfo, srcVal Value, useBase bool, r *Registry) ([]Value, error) {
 	fieldKeys := recType.Fields.Keys()
 	result := NewOrderedMap()
 
@@ -70,7 +80,7 @@ func MakeRecord(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, er
 				}
 				return fmt.Errorf("make: missing field %q", key)
 			}
-			converted, err := MakeFieldValue(val, constraint)
+			converted, err := MakeFieldValueR(val, constraint, r)
 			if err != nil {
 				return fmt.Errorf("make: field %q: %w", key, err)
 			}
@@ -130,7 +140,7 @@ func MakeRecord(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, er
 		}
 		for i, key := range fieldKeys {
 			constraint, _ := recType.Fields.Get(key)
-			converted, err := MakeFieldValue(elems.Get(i), constraint)
+			converted, err := MakeFieldValueR(elems.Get(i), constraint, r)
 			if err != nil {
 				return nil, fmt.Errorf("make: field %q: %w", key, err)
 			}
@@ -376,6 +386,12 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 // rows — from a table type and a list of row data. Each row may be
 // positional or named. Backs the Table Ideal's Instantiate.
 func MakeTable(tt TableTypeInfo, srcVal Value) ([]Value, error) {
+	return MakeTableR(tt, srcVal, nil)
+}
+
+// MakeTableR is MakeTable with Registry threading for predicate-typed
+// field constraints in table rows. See MakeFieldValueR.
+func MakeTableR(tt TableTypeInfo, srcVal Value, r *Registry) ([]Value, error) {
 	recType := tt.Record
 	if !srcVal.Parent.Equal(TList) {
 		return nil, fmt.Errorf("make: table values must be a list of row lists, got %s", srcVal.String())
@@ -425,7 +441,7 @@ func MakeTable(tt TableTypeInfo, srcVal Value) ([]Value, error) {
 					return nil, fmt.Errorf("make: table row %d: missing field %q", rowIdx, key)
 				}
 				constraint, _ := recType.Fields.Get(key)
-				converted, err := MakeFieldValue(val, constraint)
+				converted, err := MakeFieldValueR(val, constraint, r)
 				if err != nil {
 					return nil, fmt.Errorf("make: table row %d: field %q: %w", rowIdx, key, err)
 				}
@@ -443,7 +459,7 @@ func MakeTable(tt TableTypeInfo, srcVal Value) ([]Value, error) {
 			}
 			for i, key := range fieldKeys {
 				constraint, _ := recType.Fields.Get(key)
-				converted, err := MakeFieldValue(rowElems.Get(i), constraint)
+				converted, err := MakeFieldValueR(rowElems.Get(i), constraint, r)
 				if err != nil {
 					return nil, fmt.Errorf("make: table row %d: field %q: %w", rowIdx, key, err)
 				}
@@ -485,12 +501,12 @@ func registerKernelIdeals(r *Registry) {
 		Accepts: func(v Value) bool {
 			return (v.Data == nil && v.Equal(TRecord)) || IsRecordType(v)
 		},
-		Instantiate: func(typ, data Value, _ *Registry) ([]Value, error) {
+		Instantiate: func(typ, data Value, r *Registry) ([]Value, error) {
 			recType, err := AsRecordType(typ)
 			if err != nil {
 				return nil, fmt.Errorf("make: expected a constructed record type, got %s", typ.String())
 			}
-			return MakeRecord(recType, data, false)
+			return MakeRecordR(recType, data, false, r)
 		},
 	})
 	r.Ideals.Register(&Ideal{
@@ -499,12 +515,12 @@ func registerKernelIdeals(r *Registry) {
 		Accepts: func(v Value) bool {
 			return (v.Data == nil && v.Equal(TTable)) || IsTableType(v)
 		},
-		Instantiate: func(typ, data Value, _ *Registry) ([]Value, error) {
+		Instantiate: func(typ, data Value, r *Registry) ([]Value, error) {
 			tt, err := AsTableType(typ)
 			if err != nil {
 				return nil, fmt.Errorf("make: expected a constructed table type, got %s", typ.String())
 			}
-			return MakeTable(tt, data)
+			return MakeTableR(tt, data, r)
 		},
 	})
 }
@@ -571,7 +587,7 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 
 	if IsRecordType(targetVal) {
 		recType, _ := AsRecordType(targetVal)
-		return MakeRecord(recType, srcVal, useBase)
+		return MakeRecordR(recType, srcVal, useBase, reg)
 	}
 
 	if targetVal.Data == nil && targetVal.Equal(TPath) {
@@ -717,7 +733,23 @@ func MakeConvert(src Value, targetType *Type) (Value, error) {
 // constraint. Exported for the same reason as MakeConvert — keeps
 // the production lang's record-make path on the engine's canonical
 // implementation.
+//
+// Backward-compat wrapper that delegates to MakeFieldValueR with a
+// nil Registry — sufficient for non-predicate constraints (type
+// literals, structural records, scalars). For predicate-type field
+// constraints use MakeFieldValueR to thread a Registry so the
+// predicate body can run.
 func MakeFieldValue(val Value, constraint Value) (Value, error) {
+	return MakeFieldValueR(val, constraint, nil)
+}
+
+// MakeFieldValueR is MakeFieldValue with Registry threading so
+// predicate-type field constraints (`def Rec refine Record [x:Pos]`
+// where Pos is a predicate fn type) can run the predicate body via
+// RunPredicate. When the constraint is an FnDef/Function value (a
+// predicate), the candidate is gated by the predicate's input type
+// and admitted only if the predicate accepts.
+func MakeFieldValueR(val Value, constraint Value, r *Registry) (Value, error) {
 	val = ResolveWordValue(val)
 
 	if constraint.Data == nil {
@@ -728,7 +760,11 @@ func MakeFieldValue(val Value, constraint Value) (Value, error) {
 		return MakeConvert(val, constraintType)
 	}
 
-	unified, uerr := UnifyExplain(constraint, val)
+	// Predicate-type constraint (and disjunct-with-predicate) — route
+	// through UnifyExplainR so the predicate body runs via RunPredicate
+	// instead of failing with "incompatible types" when Unify tries to
+	// match an FnDef against a scalar.
+	unified, uerr := UnifyExplainR(constraint, val, r)
 	if uerr != nil {
 		return Value{}, fmt.Errorf("value %s does not match constraint %s: %s",
 			val.String(), constraint.String(), uerr.Error())

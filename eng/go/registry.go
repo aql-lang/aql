@@ -885,6 +885,21 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	if r != nil && r.Check.Mode {
 		return candidate, true, nil
 	}
+	// Input-type gate: a predicate's declared input type acts as a
+	// pre-filter. `"x" is Pos` for `Pos fn [[n:Integer] …]` rejects
+	// at this gate without running the body, because the predicate
+	// body's behavior on a non-Integer input is undefined (and
+	// cross-type comparators like `gt` produce confusing answers).
+	// Skip the gate for the empty case (input declared as Any or
+	// unset) — those predicates explicitly accept any input.
+	if inputT := fnDef.Sigs[0].Params[0].Type; inputT != nil && !inputT.Equal(TAny) {
+		if candidate.Data == nil && !candidate.Carrier {
+			// Bare type literal: skip the gate (the literal IS a type,
+			// not an inhabitant — predicate has no value to test).
+		} else if !candidate.Parent.Matches(inputT) {
+			return candidate, false, nil
+		}
+	}
 	// Sandbox the call so a mischievous predicate body can't mutate
 	// r.types or the context stack out from under the surrounding
 	// program.
@@ -899,10 +914,27 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 		return Value{}, false, fmt.Errorf("RunPredicate: predicate must return exactly one value, got %d", len(result))
 	}
 	out = result[0]
-	// A predicate signals "doesn't match" by returning None — either
-	// the sentinel `none` (Parent=TNone, NonePayload) or the bare
-	// type literal `None` (NewTypeLiteral(TNone), Parent=nil after the
-	// degenerate-root setup). IsNoneShape covers both.
-	matched = !IsNoneShape(out)
-	return out, matched, nil
+	// A predicate signals "doesn't match" by returning:
+	//  - None — sentinel value or bare type literal (IsNoneShape).
+	//  - Boolean false — the natural form when the body is just a
+	//    Boolean expression (`n gt 0`). The Boolean form is friendlier
+	//    than requiring the user to wrap every body in `guard`.
+	//
+	// When the body returns Boolean true, it's a pure verdict ("yes,
+	// matches") — the candidate flows through unchanged. This
+	// preserves the typed-def Reparent invariant (def x:Pos 5 ⇒ x's
+	// payload is 5, not Boolean true). For value-transforming bodies
+	// (`guard val` style) the non-Boolean output IS the new value.
+	if IsNoneShape(out) {
+		return out, false, nil
+	}
+	if out.Parent != nil && out.Parent.Equal(TBoolean) && out.Data != nil {
+		if b, ok := out.Data.(BoolPayload); ok {
+			if !b.B {
+				return out, false, nil
+			}
+			return candidate, true, nil
+		}
+	}
+	return out, true, nil
 }

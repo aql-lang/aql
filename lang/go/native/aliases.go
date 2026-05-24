@@ -410,7 +410,9 @@ var (
 	StripToCarriers       = eng.StripToCarriers
 	TypeNameTable         = eng.TypeNameTable
 	Unify                 = eng.Unify
+	UnifyR                = eng.UnifyR
 	UnifyExplain          = eng.UnifyExplain
+	UnifyExplainR         = eng.UnifyExplainR
 	UninstallDef          = eng.UninstallDef
 	UninstallFnSigs       = eng.UninstallFnSigs
 	ValToString           = eng.ValToString
