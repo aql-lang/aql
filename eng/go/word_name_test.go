@@ -22,9 +22,9 @@ func TestValidateWordNameAccepts(t *testing.T) {
 		"fact_acc", "fact_acc_loop", "args_frame",
 		// Mixed.
 		"dup2-alt_inner",
-		// Predicate (?-suffix).
-		"leap-year?", "before?", "equal?", "is-empty?",
-		"odd?", "prime-factor?",
+		// Predicate names (is- prefix replaces the dropped ?-suffix).
+		"is-leap-year", "is-before", "is-equal", "is-empty",
+		"is-odd", "is-prime-factor",
 		// Single letter.
 		"a", "x", "n",
 		// Underscore-prefix (discard placeholder, engine internals).
@@ -32,6 +32,9 @@ func TestValidateWordNameAccepts(t *testing.T) {
 		"_unused-arg",
 		// CLI-style flag names (leading hyphen).
 		"-h", "-v", "-x5", "--help", "--limit", "--no-push",
+		// Dollar-sign anywhere (shell-style names).
+		"$", "$path", "$home", "foo$", "foo$bar", "$$",
+		"$1", "$a-b", "f$o", "_$inner",
 	}
 	for _, name := range good {
 		if err := ValidateWordName(name); err != nil {
@@ -47,13 +50,13 @@ func TestValidateWordNameRejects(t *testing.T) {
 		wantInMsg string // substring expected in the error detail
 	}{
 		{"", "empty"},
-		{"Integer", "[a-z_-]"},   // uppercase first
-		{"String", "[a-z_-]"},    // uppercase first
-		{"X", "[a-z_-]"},         // uppercase first
-		{"123", "[a-z_-]"},       // digit first
-		{"2dup", "[a-z_-]"},      // digit first
-		{"?question", "[a-z_-]"}, // ? first
-		{"!bang", "[a-z_-]"},     // ! first
+		{"Integer", "[a-z_-$]"},   // uppercase first
+		{"String", "[a-z_-$]"},    // uppercase first
+		{"X", "[a-z_-$]"},         // uppercase first
+		{"123", "[a-z_-$]"},       // digit first
+		{"2dup", "[a-z_-$]"},      // digit first
+		{"?question", "[a-z_-$]"}, // ? first
+		{"!bang", "[a-z_-$]"},     // ! first
 		// All-hyphen names rejected (carry no identifier).
 		{"-", "only hyphens"},
 		{"--", "only hyphens"},
@@ -64,8 +67,10 @@ func TestValidateWordNameRejects(t *testing.T) {
 		{"foo+bar", "illegal"}, // + mid-name
 		{"foo.bar", "illegal"}, // . mid-name
 		{"fooBar", "illegal"},  // uppercase mid-name
-		{"foo$", "illegal"},    // $ mid-name
 		{"foo/", "illegal"},    // / mid-name
+		{"foo?", "illegal"},    // ? suffix (predicate convention dropped)
+		{"leap-year?", "illegal"},
+		{"is-empty?", "illegal"},
 	}
 	for _, c := range cases {
 		err := ValidateWordName(c.name)

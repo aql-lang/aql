@@ -142,7 +142,7 @@ All work on Date, DateTime, and Instant (Instant treated as UTC).
 | `quarter` | `D\|DT\|Ins -> I` | `"2024-03-15" date quarter` | `1` (1-4; neither Temporal nor Go provides this) |
 | `days-in-month` | `D\|DT\|Ins -> I` | `"2024-02-01" date days-in-month` | `29` |
 | `days-in-year` | `D\|DT\|Ins -> I` | `"2024-01-01" date days-in-year` | `366` |
-| `leap-year?` | `D\|DT\|Ins -> B` | `"2024-01-01" date leap-year?` | `true` |
+| `is-leap-year` | `D\|DT\|Ins -> B` | `"2024-01-01" date is-leap-year` | `true` |
 | `to-unix` | `Ins -> I` | `now to-unix` | Unix seconds |
 | `to-unix-ms` | `Ins -> I` | `now to-unix-ms` | Unix milliseconds |
 
@@ -204,11 +204,11 @@ Type safety: adding CalDuration to Instant is a type error (months have no fixed
 
 | Word | Signature | Example | Notes |
 |------|-----------|---------|-------|
-| `before?` | `D D -> B` | `d1 before? d2` | Works for D, DT, Ins (same type) |
-| `after?` | `D D -> B` | `d1 after? d2` | |
+| `is-before` | `D D -> B` | `d1 is-before d2` | Works for D, DT, Ins (same type) |
+| `is-after` | `D D -> B` | `d1 is-after d2` | |
 | `eq` | existing | already works | Extend for date types |
 | `compare` | `D D -> I` | `d1 compare d2` | -1, 0, 1 for sorting |
-| `between?` | `D D D -> B` | `d between? start end` | Is d in [start, end]? |
+| `is-between` | `D D D -> B` | `d is-between start end` | Is d in [start, end]? |
 | `earliest` | `D D -> D` | `d1 earliest d2` | Min of two dates |
 | `latest` | `D D -> D` | `d1 latest d2` | Max of two dates |
 
@@ -252,7 +252,7 @@ Units: `"year"`, `"quarter"`, `"month"`, `"week"`, `"day"`, `"hour"`, `"minute"`
 | `tz-local` | `-> TZ` | `tz-local` | System local |
 | `tz-name` | `TZ -> S` | `"America/New_York" tz tz-name` | Name string |
 | `tz-offset` | `Ins TZ -> S` | `now "America/New_York" tz tz-offset` | `"-04:00"` (DST-aware) |
-| `dst?` | `Ins TZ -> B` | `now "America/New_York" tz dst?` | Is DST active? |
+| `is-dst` | `Ins TZ -> B` | `now "America/New_York" tz is-dst` | Is DST active? |
 
 ---
 
@@ -282,14 +282,14 @@ Units: `"year"`, `"quarter"`, `"month"`, `"week"`, `"day"`, `"hour"`, `"minute"`
 |----------|-------|-------|
 | Construction | 12 | `date`, `datetime`, `instant`, `time-of-day`, `tz`, `unix`, `unix-ms`, `unix-ns`, `cal-dur`, `duration` |
 | Current Time | 5 | `now`, `now-local`, `today`, `today-utc`, `elapsed` |
-| Extraction | 18 | `year`, `month`, `day`, `hour`, `minute`, `second`, `nanosecond`, `weekday`, `weekday-name`, `month-name`, `year-day`, `iso-week`, `quarter`, `days-in-month`, `days-in-year`, `leap-year?`, `to-unix`, `to-unix-ms` |
+| Extraction | 18 | `year`, `month`, `day`, `hour`, `minute`, `second`, `nanosecond`, `weekday`, `weekday-name`, `month-name`, `year-day`, `iso-week`, `quarter`, `days-in-month`, `days-in-year`, `is-leap-year`, `to-unix`, `to-unix-ms` |
 | Duration Construction | 12 | `years`, `months`, `weeks`, `days`, `hours`, `minutes`, `seconds`, `ms`, `us`, `ns`, `cal-dur`, `duration` |
 | Duration Extraction | 8 | `total-hours`, `total-minutes`, `total-seconds`, `total-ms`, `dur-years`, `dur-months`, `dur-days`, `dur-sign` |
 | Arithmetic | 7 | `add` (extend), `sub` (extend), `until`, `since`, `diff` |
-| Comparison | 7 | `before?`, `after?`, `eq` (extend), `compare`, `between?`, `earliest`, `latest` |
+| Comparison | 7 | `is-before`, `is-after`, `eq` (extend), `compare`, `is-between`, `earliest`, `latest` |
 | Conversion | 9 | `to-date`, `to-time-of-day`, `to-datetime`, `to-instant`, `to-local`, `to-utc`, `to-string`, `format`, `to-iso` |
 | Rounding | 4 | `round` (extend), `truncate` (extend), `start-of`, `end-of` |
-| Timezone | 6 | `tz`, `tz-utc`, `tz-local`, `tz-name`, `tz-offset`, `dst?` |
+| Timezone | 6 | `tz`, `tz-utc`, `tz-local`, `tz-name`, `tz-offset`, `is-dst` |
 | ~~Parsing~~ | ~~4~~ | ~~`date`, `parse-date`, `parse-datetime`, `auto-date`~~ — **REMOVED**, see Step 11 of TYPE-DECOUPLING.0.md |
 | **Total** | **~92** | (some overlap: `date`, `duration` appear in multiple categories) |
 
@@ -309,7 +309,7 @@ people apply birthday [date]
 ### Monthly revenue aggregation
 ```aql
 sales apply order_date [date]
-      sift {order_date:(after? "2023-01-01" date)}
+      sift {order_date:(is-after "2023-01-01" date)}
       mutate {month_start:(order_date start-of "month")}
       groupby month_start {revenue:(sum amount)}
       sortby month_start
@@ -328,7 +328,7 @@ meetings apply utc_time [instant]
 ```aql
 invoices apply invoice_date [date]
          mutate {due_date:(invoice_date add 30 days)}
-         sift {due_date:(before? today)}
+         sift {due_date:(is-before today)}
          sortby due_date
 ```
 
@@ -355,10 +355,10 @@ raw-data apply date_str [auto-date]
 
 | Phase | Words | Coverage |
 |-------|-------|----------|
-| **Phase 1 (Core)** | `now-local`, `today`, `unix`, `unix-ms`, `year`, `month`, `day`, `weekday`, `add`, `sub`, `until`, `before?`, `after?`, `to-string`, `format` (~~`parse-date`, `date`, `datetime`, `instant`~~ — removed Step 11) | 80% of use cases |
+| **Phase 1 (Core)** | `now-local`, `today`, `unix`, `unix-ms`, `year`, `month`, `day`, `weekday`, `add`, `sub`, `until`, `is-before`, `is-after`, `to-string`, `format` (~~`parse-date`, `date`, `datetime`, `instant`~~ — removed Step 11) | 80% of use cases |
 | **Phase 2 (Duration)** | `years`, `months`, `weeks`, `days`, `hours`, `minutes`, `seconds`, `diff`, `elapsed`, duration extraction words | Duration arithmetic |
-| **Phase 3 (Business)** | `quarter`, `start-of`, `end-of`, `iso-week`, ~~`auto-date`~~, `between?`, `earliest`, `latest` | Business analytics |
-| **Phase 4 (Timezone)** | `tz`, `to-local`, `to-instant`, `to-utc`, `tz-offset`, `dst?` | Global data |
+| **Phase 3 (Business)** | `quarter`, `start-of`, `end-of`, `iso-week`, ~~`auto-date`~~, `is-between`, `earliest`, `latest` | Business analytics |
+| **Phase 4 (Timezone)** | `tz`, `to-local`, `to-instant`, `to-utc`, `tz-offset`, `is-dst` | Global data |
 
 ---
 
@@ -371,10 +371,10 @@ Following the existing `native_*.go` pattern:
 - `lang/go/internal/engine/native_temporal_extract.go` — year, month, day, hour, minute, second, weekday, etc.
 - `lang/go/internal/engine/native_temporal_duration.go` — years, months, days, hours, etc., duration extraction
 - `lang/go/internal/engine/native_temporal_arithmetic.go` — add/sub signatures, until, since, diff
-- `lang/go/internal/engine/native_temporal_compare.go` — before?, after?, between?, earliest, latest
+- `lang/go/internal/engine/native_temporal_compare.go` — is-before, is-after, is-between, earliest, latest
 - `lang/go/internal/engine/native_temporal_convert.go` — to-date, to-datetime, to-instant, to-local, format
 - `lang/go/internal/engine/native_temporal_round.go` — round, truncate, start-of, end-of
-- `lang/go/internal/engine/native_temporal_tz.go` — tz, tz-utc, tz-local, tz-name, tz-offset, dst?
+- `lang/go/internal/engine/native_temporal_tz.go` — tz, tz-utc, tz-local, tz-name, tz-offset, is-dst
 - ~~`lang/go/internal/engine/native_temporal_parse.go` — parse-date, parse-datetime, auto-date~~ — **REMOVED** (Step 11)
 
 ## Files to Modify

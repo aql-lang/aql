@@ -5,13 +5,16 @@ import "fmt"
 // ValidateWordName enforces the language-fundamental rule for word
 // identifiers:
 //
-//   - The first character must be in [a-z_-] (lowercase letter,
-//     underscore, or hyphen). A leading hyphen lets the engine host
-//     CLI-style flag names like `-h` and `--help` as ordinary words —
-//     the parser already tokenises them as Words, so this validation
-//     just needs to accept the names at registration time.
-//   - Subsequent characters must be in [a-z0-9_-?] (lowercase
-//     letter, digit, hyphen, underscore, or `?`).
+//   - Every character must be in [a-z0-9_-$]: lowercase letter,
+//     digit, hyphen, underscore, or `$`. (Digits are not allowed
+//     in the first position.)
+//   - The first character must be in [a-z_-$] (lowercase letter,
+//     underscore, hyphen, or `$`). A leading hyphen lets the engine
+//     host CLI-style flag names like `-h` and `--help` as ordinary
+//     words — the parser already tokenises them as Words, so this
+//     validation just needs to accept the names at registration
+//     time. A leading `$` lets the engine host shell-style names
+//     like `$path` or `$home`.
 //   - A name consisting only of hyphens (e.g. "-", "--") is rejected
 //     so registrations can't shadow the implicit "no name" case.
 //
@@ -22,7 +25,7 @@ import "fmt"
 // Why these characters and not others
 // -----------------------------------
 //
-//	`[a-z_-]` first — uppercase is reserved for type names
+//	`[a-z_-$]` first — uppercase is reserved for type names
 //	                  (Integer, String, …) so that the engine can
 //	                  disambiguate type-literal words from value-
 //	                  word resolution at lookup time. Lowercase and
@@ -34,15 +37,22 @@ import "fmt"
 //	                  `__mark`, …) under one rule.
 //	                  Hyphen as a leading character covers CLI flag
 //	                  conventions (`-h`, `--help`, `--limit`).
+//	                  `$` as a leading character covers shell-style
+//	                  names (`$path`, `$home`); `${...}` template
+//	                  interpolation is parsed as a separate token
+//	                  pair (`${`, `}`) and is lex-disjoint from
+//	                  `$`-prefixed identifiers outside templates.
 //	`0-9` rest      — common idiom (dup2, swap2, add-two).
 //	`-`             — kebab-case is the language's chosen separator
 //	                  convention (anti-rot, add-two, dup2-alt).
 //	`_`             — also accepted mid-name for snake-case
 //	                  interoperability (fact_acc, double_then_inc).
-//	`?`             — Lisp/Scheme/Ruby predicate convention. Common
-//	                  enough that production words like `leap-year?`,
-//	                  `before?`, `equal?` need it. Allowed anywhere
-//	                  after the first character.
+//	`$`             — accepted anywhere after the first character
+//	                  for symmetry with the leading position. Note:
+//	                  the Lisp/Scheme/Ruby `?` predicate suffix is
+//	                  NOT allowed; predicates use the `is-` prefix
+//	                  convention instead (`is-leap-year`,
+//	                  `is-before`, `is-equal`, …).
 //
 // Returns nil for valid names; an *AqlError with code
 // "invalid_word_name" otherwise. Callers are expected to surface the
@@ -57,11 +67,11 @@ func ValidateWordName(name string) error {
 		}
 	}
 	first := name[0]
-	if !(first >= 'a' && first <= 'z') && first != '_' && first != '-' {
+	if !(first >= 'a' && first <= 'z') && first != '_' && first != '-' && first != '$' {
 		return &AqlError{
 			Code: "invalid_word_name",
 			Detail: fmt.Sprintf(
-				"word %q must begin with [a-z_-]; got %q",
+				"word %q must begin with [a-z_-$]; got %q",
 				name, string(first),
 			),
 		}
@@ -78,7 +88,7 @@ func ValidateWordName(name string) error {
 		return &AqlError{
 			Code: "invalid_word_name",
 			Detail: fmt.Sprintf(
-				"word %q contains only hyphens; need at least one [a-z0-9_?] character",
+				"word %q contains only hyphens; need at least one [a-z0-9_$] character",
 				name,
 			),
 		}
@@ -90,12 +100,12 @@ func ValidateWordName(name string) error {
 		case c >= '0' && c <= '9':
 		case c == '-':
 		case c == '_':
-		case c == '?':
+		case c == '$':
 		default:
 			return &AqlError{
 				Code: "invalid_word_name",
 				Detail: fmt.Sprintf(
-					"word %q contains illegal character %q at position %d (allowed: [a-z0-9_-?] after the first letter)",
+					"word %q contains illegal character %q at position %d (allowed: [a-z0-9_-$] after the first letter)",
 					name, string(c), i,
 				),
 			}

@@ -121,13 +121,13 @@ words appear stricken through below.
 |----------|-------|
 | Construction | ~~`date`~~, ~~`datetime`~~, ~~`instant`~~, ~~`time-of-day`~~, `tz`, `unix`, `unix-ms`, `unix-ns`, `cal-dur`, ~~`duration`~~ (ISO-form) |
 | Current time | `now`, `now-local`, `today`, `today-utc`, `elapsed` |
-| Extraction | `year`, `month`, `day`, `hour`, `minute`, `second`, `nanosecond`, `weekday`, `weekday-name`, `month-name`, `year-day`, `iso-week`, `quarter`, `days-in-month`, `days-in-year`, `leap-year?`, `to-unix`, `to-unix-ms` |
+| Extraction | `year`, `month`, `day`, `hour`, `minute`, `second`, `nanosecond`, `weekday`, `weekday-name`, `month-name`, `year-day`, `iso-week`, `quarter`, `days-in-month`, `days-in-year`, `is-leap-year`, `to-unix`, `to-unix-ms` |
 | Duration | `years`, `months`, `weeks`, `days`, `hours`, `minutes`, `seconds`, `ms`, `us`, `ns`, `total-hours`, `total-minutes`, `total-seconds`, `total-ms`, `dur-years`, `dur-months`, `dur-days`, `dur-sign` |
 | Arithmetic | `add`/`sub` (extend), `until`, `since`, `diff` |
-| Comparison | `before?`, `after?`, `eq` (extend), `compare`, `between?`, `earliest`, `latest` |
+| Comparison | `is-before`, `is-after`, `eq` (extend), `compare`, `is-between`, `earliest`, `latest` |
 | Conversion | `to-date`, `to-time-of-day`, `to-datetime`, `to-instant`, `to-local`, `to-utc`, `to-string`, `format`, `to-iso` |
 | Rounding | `round`/`truncate` (extend), `start-of`, `end-of` |
-| Timezone | `tz`, `tz-utc`, `tz-local`, `tz-name`, `tz-offset`, `dst?` |
+| Timezone | `tz`, `tz-utc`, `tz-local`, `tz-name`, `tz-offset`, `is-dst` |
 | Parsing | ~~`parse-date`, `parse-datetime`, `auto-date`~~ (removed — see TYPE-DECOUPLING.0.md Step 11) |
 
 ### MINILANG.0.md — 10+ inline DSLs

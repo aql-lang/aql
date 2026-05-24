@@ -53,9 +53,9 @@ func TestTimeModuleExports(t *testing.T) {
 		"now-local", "today", "today-utc",
 		"year", "month", "day", "weekday", "year-day",
 		"weekday-name", "month-name", "iso-week", "quarter",
-		"days-in-month", "days-in-year", "leap-year?",
+		"days-in-month", "days-in-year", "is-leap-year",
 		"to-unix", "to-unix-ms",
-		"before?", "after?", "equal?",
+		"is-before", "is-after", "is-equal",
 		"to-string", "format", "to-iso",
 		"add-days", "add-months", "add-years",
 	}
@@ -276,10 +276,10 @@ func TestTimeLeapYear(t *testing.T) {
 	}
 	for _, tt := range tests {
 		d := native.NewDate(parseDate(t, tt.date))
-		result := runAQL(t, r, callTimeDot("leap-year?", d))
+		result := runAQL(t, r, callTimeDot("is-leap-year", d))
 		b, _ := native.AsBoolean(result[0])
 		if b != tt.want {
-			t.Errorf("leap-year?(%s) = %v, want %v", tt.date, b, tt.want)
+			t.Errorf("is-leap-year(%s) = %v, want %v", tt.date, b, tt.want)
 		}
 	}
 }
@@ -311,26 +311,26 @@ func TestTimeBeforeAfter(t *testing.T) {
 	d1 := native.NewDate(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 	d2 := native.NewDate(time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC))
 
-	result := runAQL(t, r, callTimeDot("before?", d1, d2))
+	result := runAQL(t, r, callTimeDot("is-before", d1, d2))
 	b, _ := native.AsBoolean(result[0])
 	if !b {
-		t.Error("expected 2024-01-01 before? 2024-12-31 = true")
+		t.Error("expected 2024-01-01 is-before 2024-12-31 = true")
 	}
 
-	result = runAQL(t, r, callTimeDot("after?", d1, d2))
+	result = runAQL(t, r, callTimeDot("is-after", d1, d2))
 	b, _ = native.AsBoolean(result[0])
 	if b {
-		t.Error("expected 2024-01-01 after? 2024-12-31 = false")
+		t.Error("expected 2024-01-01 is-after 2024-12-31 = false")
 	}
 }
 
 func TestTimeEqual(t *testing.T) {
 	r := timeRegistry(t)
 	d := native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
-	result := runAQL(t, r, callTimeDot("equal?", d, d))
+	result := runAQL(t, r, callTimeDot("is-equal", d, d))
 	b, _ := native.AsBoolean(result[0])
 	if !b {
-		t.Error("expected same date equal? = true")
+		t.Error("expected same date is-equal = true")
 	}
 }
 
@@ -652,10 +652,10 @@ func TestTimeBetween(t *testing.T) {
 	start := native.NewDate(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 	end := native.NewDate(time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC))
 
-	result := runAQL(t, r, callTimeDot("between?", d, start, end))
+	result := runAQL(t, r, callTimeDot("is-between", d, start, end))
 	b, _ := native.AsBoolean(result[0])
 	if !b {
-		t.Error("expected between? = true")
+		t.Error("expected is-between = true")
 	}
 }
 
