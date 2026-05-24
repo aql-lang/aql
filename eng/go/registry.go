@@ -916,19 +916,25 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	out = result[0]
 	// A predicate signals "doesn't match" by returning:
 	//  - None — sentinel value or bare type literal (IsNoneShape).
-	//  - Boolean false — the natural form when the body is just a
-	//    Boolean expression (`n gt 0`). The Boolean form is friendlier
-	//    than requiring the user to wrap every body in `guard`.
+	//  - Boolean false — but ONLY when the predicate's input domain
+	//    doesn't include Boolean. The `n gt 0` style predicate
+	//    (input=Integer, body→Boolean) uses Boolean as a verdict, so
+	//    `false` means "no match". A Boolean-domain predicate like
+	//    `def Flag fn [[b:Boolean] [Boolean] [b]]` legitimately
+	//    accepts `false` as a value, so we must NOT short-circuit on
+	//    Boolean returns when the input type accepts Boolean.
 	//
-	// When the body returns Boolean true, it's a pure verdict ("yes,
-	// matches") — the candidate flows through unchanged. This
-	// preserves the typed-def Reparent invariant (def x:Pos 5 ⇒ x's
-	// payload is 5, not Boolean true). For value-transforming bodies
-	// (`guard val` style) the non-Boolean output IS the new value.
+	// When the body returns Boolean true (verdict form), the
+	// candidate flows through unchanged — this preserves the
+	// typed-def Reparent invariant (def x:Pos 5 ⇒ x's payload is 5,
+	// not Boolean true). For value-transforming bodies (`guard val`)
+	// the non-Boolean output IS the new value.
 	if IsNoneShape(out) {
 		return out, false, nil
 	}
-	if out.Parent != nil && out.Parent.Equal(TBoolean) && out.Data != nil {
+	inputT := fnDef.Sigs[0].Params[0].Type
+	booleanIsValue := inputT != nil && TBoolean.Matches(inputT)
+	if !booleanIsValue && out.Parent != nil && out.Parent.Equal(TBoolean) && out.Data != nil {
 		if b, ok := out.Data.(BoolPayload); ok {
 			if !b.B {
 				return out, false, nil

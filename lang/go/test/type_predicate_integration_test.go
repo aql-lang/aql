@@ -432,3 +432,86 @@ classify "hi"`)
 		}
 	}
 }
+
+// =========================================================
+// Boolean-domain predicates — body return is a VALUE, not a verdict
+// =========================================================
+
+// Regression for review-flagged P1: a predicate whose input type is
+// Boolean must accept `false` as a valid value (the body returns
+// `b`, not a verdict). Without the input-domain check in RunPredicate,
+// any predicate body returning Boolean false would be rejected.
+
+func TestPredicate_BooleanDomainAcceptsFalse(t *testing.T) {
+	got := runPred(t, `def Flag fn [[b:Boolean] [Boolean] [b]]
+false is Flag`)
+	if got[0] != "true" {
+		t.Errorf("false is Flag = %v, want true (Boolean is the value domain)", got)
+	}
+}
+
+func TestPredicate_BooleanDomainAcceptsTrue(t *testing.T) {
+	got := runPred(t, `def Flag fn [[b:Boolean] [Boolean] [b]]
+true is Flag`)
+	if got[0] != "true" {
+		t.Errorf("true is Flag = %v, want true", got)
+	}
+}
+
+// Counterpart: a predicate whose input type is NOT Boolean (Integer
+// here) still uses Boolean returns as verdicts — `n gt 0` returning
+// false means "no match".
+func TestPredicate_NonBooleanDomainTreatsFalseAsVerdict(t *testing.T) {
+	got := runPred(t, `def Pos fn [[n:Integer] [Boolean] [n gt 0]]
+-3 is Pos`)
+	if got[0] != "false" {
+		t.Errorf("-3 is Pos = %v, want false (Boolean is verdict for Integer-domain predicate)", got)
+	}
+}
+
+// Predicate whose input is Any also treats Boolean returns as values
+// (Any accepts Boolean).
+func TestPredicate_AnyDomainAcceptsFalse(t *testing.T) {
+	got := runPred(t, `def Always fn [[x:Any] [Any] [x]]
+false is Always`)
+	if got[0] != "true" {
+		t.Errorf("false is Always = %v, want true (Any domain accepts Boolean values)", got)
+	}
+}
+
+// =========================================================
+// behave unify/q — runtime output-type validation
+// =========================================================
+
+// Regression for review-flagged P2: `validateUnifySig` permits Any in
+// the fn return slot (because ParseFnReturns runs without a Registry
+// and degrades user-type returns to Any). The runtime check on the
+// body's output type is the actual enforcement point — a body that
+// returns a value of an unrelated type must be rejected.
+
+func TestBehaveUnify_RejectsWrongOutputType(t *testing.T) {
+	got := runPred(t, `def Item refine Integer
+behave unify/q (fn [[a:Item b:Item] [Any] ["bogus-string"]])
+def x:Item 3
+def y:Item 4
+x unify y`)
+	if len(got) != 2 || got[1] != "false" {
+		t.Errorf("expected unify failure for bogus String output, got %v", got)
+	}
+}
+
+// Accepting body — produces a valid Item (Integer-derived) value, so
+// the type check passes.
+func TestBehaveUnify_AcceptsCompatibleOutput(t *testing.T) {
+	got := runPred(t, `def Item refine Integer
+behave unify/q (fn [[a:Item b:Item] [Any] [a b add]])
+def x:Item 3
+def y:Item 4
+x unify y`)
+	if len(got) != 2 || got[1] != "true" {
+		t.Fatalf("expected success, got %v", got)
+	}
+	if got[0] != int64(7) {
+		t.Errorf("got %v, want 7", got[0])
+	}
+}

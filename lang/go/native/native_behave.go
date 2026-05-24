@@ -157,6 +157,13 @@ func behaveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 		target.Behavior = ub
 	}
 	be.install(ub, body)
+	// Capture the target *Type for capabilities that need to validate
+	// body output against the declared type (unify currently — its
+	// `[T T] → [T]` body must produce a T-compatible value at run
+	// time, since validateUnifySig allows Any in the return slot).
+	if name == "unify" {
+		ub.unifyTarget = target
+	}
 	return nil, nil
 }
 
@@ -290,6 +297,7 @@ type userBehavior struct {
 	canonBody   []Value
 	nodifyBody  []Value
 	unifyBody   []Value
+	unifyTarget *eng.Type // T from `behave unify/q (fn [[T T] [_] [...]])`
 	inRender    bool
 	inNodify    bool
 	inUnify     bool
@@ -467,6 +475,37 @@ func (u *userBehavior) runUnifyBody(a, b Value) (Value, *eng.UnifyError) {
 			Reason: fmt.Sprintf("behave unify %s: body returned None", u.typeName),
 			A:      a,
 			B:      b,
+		}
+	}
+	// Validate the body's output type. The kernel relies on Unifier
+	// implementations to return a value in the target type's lattice
+	// family — a buggy body that returns an unrelated type (e.g. a
+	// String from a unifier on an Integer refine) would otherwise
+	// propagate as an invalid unification result.
+	// validateUnifySig allows `Any` in the fn return slot because
+	// ParseFnReturns degrades user types without a registry, so this
+	// runtime check is the actual enforcement point.
+	//
+	// "In the family" means: output.Parent and target are on the
+	// same lattice chain — either subtype-or-equal-or-supertype.
+	// Arithmetic naturally produces base-type results (Integer for
+	// an Item-refine), which is a supertype of the target; reparent
+	// to the target so the user sees an Item-typed value back.
+	if u.unifyTarget != nil {
+		tp := top.Parent
+		matches := tp.Equal(u.unifyTarget) ||
+			tp.IsAncestor(u.unifyTarget) ||
+			u.unifyTarget.IsAncestor(tp)
+		if !matches {
+			return Value{}, &eng.UnifyError{
+				Reason: fmt.Sprintf("behave unify %s: body returned %s, expected a value in the %s family",
+					u.typeName, tp.String(), u.unifyTarget.Leaf()),
+				A: a,
+				B: b,
+			}
+		}
+		if u.unifyTarget.IsAncestor(tp) && !tp.Equal(u.unifyTarget) {
+			top = eng.ReparentValue(top, u.unifyTarget)
 		}
 	}
 	return top, nil
