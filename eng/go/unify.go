@@ -1,7 +1,5 @@
 package eng
 
-import "fmt"
-
 // Unify attempts to unify two values. If the values can be unified (their types
 // are compatible and can narrow), it returns the unified value and true.
 // Otherwise it returns an error description and false.
@@ -44,12 +42,12 @@ func Unify(a, b Value) (Value, bool) {
 	// Disjunct unification first: try each alternative, succeed on first match.
 	// Must come before none/any checks so that disjuncts containing none work.
 	if IsDisjunct(a) {
-		_as0, _ := AsDisjunct(a)
-		return unifyDisjunct(_as0, b)
+		disj, _ := AsDisjunct(a)
+		return unifyDisjunct(disj, b)
 	}
 	if IsDisjunct(b) {
-		_as1, _ := AsDisjunct(b)
-		return unifyDisjunct(_as1, a)
+		disj, _ := AsDisjunct(b)
+		return unifyDisjunct(disj, a)
 	}
 
 	// "never" is the bottom type — uninhabited, only unifies with
@@ -129,8 +127,7 @@ func Unify(a, b Value) (Value, bool) {
 		if !ok {
 			return Value{}, false
 		}
-		out := NewValueRaw(aType, combined)
-		return out, true
+		return NewValueRaw(aType, combined), true
 	}
 	if a.IsDepScalar() && !b.IsDepScalar() && b.Data != nil {
 		if bType.Matches(aType) {
@@ -237,14 +234,14 @@ func unifyLists(a Value, aIsList bool, b Value, bIsList bool) (Value, bool) {
 
 	if aTable && bTable {
 		// Both table types: unify their record schemas.
-		_as3, _ := AsTableType(a)
-		_as2, _ := AsTableType(b)
-		unified, ok := unifyRecordTypes(_as3.Record, _as2.Record)
+		aTT, _ := AsTableType(a)
+		bTT, _ := AsTableType(b)
+		unified, ok := unifyRecordTypes(aTT.Record, bTT.Record)
 		if !ok {
 			return Value{}, false
 		}
-		_as4, _ := AsRecordType(unified)
-		return NewTableType(_as4), true
+		uRec, _ := AsRecordType(unified)
+		return NewTableType(uRec), true
 	}
 
 	if aTable || bTable {
@@ -258,11 +255,9 @@ func unifyLists(a Value, aIsList bool, b Value, bIsList bool) (Value, bool) {
 
 	if aTyped && bTyped {
 		// Both typed lists: unify child types.
-		_as5, _ := AsChildType(a)
-		aChild := _as5.Child
-		_as6, _ := AsChildType(b)
-		bChild := _as6.Child
-		unified, ok := Unify(aChild, bChild)
+		aCT, _ := AsChildType(a)
+		bCT, _ := AsChildType(b)
+		unified, ok := Unify(aCT.Child, bCT.Child)
 		if !ok {
 			return Value{}, false
 		}
@@ -271,23 +266,23 @@ func unifyLists(a Value, aIsList bool, b Value, bIsList bool) (Value, bool) {
 
 	if aTyped {
 		// a is typed, b is concrete: each element must unify with the child type.
-		_as7, _ := AsChildType(a)
-		_bl, _ := AsList(b)
-		return unifyTypedWithConcrete(_as7.Child, _bl.Slice())
+		aCT, _ := AsChildType(a)
+		bLst, _ := AsList(b)
+		return unifyTypedWithConcrete(aCT.Child, bLst.Slice())
 	}
 
 	if bTyped {
 		// b is typed, a is concrete: each element must unify with the child type.
-		_as8, _ := AsChildType(b)
-		_al, _ := AsList(a)
-		return unifyTypedWithConcrete(_as8.Child, _al.Slice())
+		bCT, _ := AsChildType(b)
+		aLst, _ := AsList(a)
+		return unifyTypedWithConcrete(bCT.Child, aLst.Slice())
 	}
 
 	// Both concrete lists: element-by-element unification.
-	_aLst, _ := AsList(a)
-	aElems := _aLst.Slice()
-	_bLst, _ := AsList(b)
-	bElems := _bLst.Slice()
+	aLst, _ := AsList(a)
+	aElems := aLst.Slice()
+	bLst, _ := AsList(b)
+	bElems := bLst.Slice()
 
 	// Lengths must match.
 	if len(aElems) != len(bElems) {
@@ -350,9 +345,9 @@ func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
 
 	if aRecord && bRecord {
 		// Both record types: unify field schemas with order enforcement.
-		_as10, _ := AsRecordType(a)
-		_as9, _ := AsRecordType(b)
-		return unifyRecordTypes(_as10, _as9)
+		aRT, _ := AsRecordType(a)
+		bRT, _ := AsRecordType(b)
+		return unifyRecordTypes(aRT, bRT)
 	}
 
 	if aRecord || bRecord {
@@ -373,11 +368,9 @@ func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
 
 	if aTyped && bTyped {
 		// Both typed maps: unify child types.
-		_as11, _ := AsChildType(a)
-		aChild := _as11.Child
-		_as12, _ := AsChildType(b)
-		bChild := _as12.Child
-		unified, ok := Unify(aChild, bChild)
+		aCT, _ := AsChildType(a)
+		bCT, _ := AsChildType(b)
+		unified, ok := Unify(aCT.Child, bCT.Child)
 		if !ok {
 			return Value{}, false
 		}
@@ -386,16 +379,16 @@ func unifyMaps(a Value, aIsMap bool, b Value, bIsMap bool) (Value, bool) {
 
 	if aTyped {
 		// a is typed, b is concrete: each value must unify with the child type.
-		_as13, _ := AsChildType(a)
-		_bMap, _ := AsMap(b)
-		return unifyTypedMapWithConcrete(_as13.Child, _bMap)
+		aCT, _ := AsChildType(a)
+		bMap, _ := AsMap(b)
+		return unifyTypedMapWithConcrete(aCT.Child, bMap)
 	}
 
 	if bTyped {
 		// b is typed, a is concrete: each value must unify with the child type.
-		_as14, _ := AsChildType(b)
-		_aMap, _ := AsMap(a)
-		return unifyTypedMapWithConcrete(_as14.Child, _aMap)
+		bCT, _ := AsChildType(b)
+		aMap, _ := AsMap(a)
+		return unifyTypedMapWithConcrete(bCT.Child, aMap)
 	}
 
 	// Both concrete maps: key-by-key unification.
@@ -501,9 +494,9 @@ func unifyRecordTypes(a, b RecordTypeInfo) (Value, bool) {
 // unifyOptions handles unification when at least one side is an options type.
 func unifyOptions(a Value, aIsOptions bool, b Value, bIsOptions bool) (Value, bool) {
 	if aIsOptions && bIsOptions {
-		_as16, _ := AsOptionsType(a)
-		_as15, _ := AsOptionsType(b)
-		return unifyOptionsPair(_as16, _as15)
+		aOT, _ := AsOptionsType(a)
+		bOT, _ := AsOptionsType(b)
+		return unifyOptionsPair(aOT, bOT)
 	}
 
 	// Normalize: opts is the Options side, concrete is the other.
@@ -570,8 +563,8 @@ func unifyOptions(a Value, aIsOptions bool, b Value, bIsOptions bool) (Value, bo
 // - Disjunct → None if present, else first concrete alternative, else fail
 func optionsDefault(v Value) (Value, bool) {
 	if IsDisjunct(v) {
-		_as17, _ := AsDisjunct(v)
-		alts := _as17.Alternatives
+		disj, _ := AsDisjunct(v)
+		alts := disj.Alternatives
 		// Check for None first — match either form (sentinel value
 		// or NewTypeLiteral(TNone) where Parent is nil post the
 		// degenerate-root setup).
@@ -609,8 +602,8 @@ func optionsDefault(v Value) (Value, bool) {
 // - Disjunct: apply rules to each term
 func unifyOptionsField(optVal, cVal Value) (Value, bool) {
 	if IsDisjunct(optVal) {
-		_as18, _ := AsDisjunct(optVal)
-		for _, alt := range _as18.Alternatives {
+		disj, _ := AsDisjunct(optVal)
+		for _, alt := range disj.Alternatives {
 			if unified, ok := unifyOptionsField(alt, cVal); ok {
 				return unified, true
 			}
@@ -664,162 +657,6 @@ func unifyOptionsPair(a, b OptionsTypeInfo) (Value, bool) {
 	return NewOptionsType(result), true
 }
 
-// ValuesEqual compares the data payloads of two values with the same type.
-//
-// Routes through Behavior.Equal for the same-Parent case so types
-// with normalisation semantics (CalDuration, DepScalar in a future
-// step, and plugin types) can supply their own equality. The
-// cross-Parent case falls through to the default switch since
-// equality across types is a matching-strategy concern, not a
-// per-type concern.
-func ValuesEqual(a, b Value) bool {
-	// Pluggable equality: when both sides share a Parent with a
-	// non-default Behavior, delegate. Type literals (Data==nil) are
-	// excluded — bare type equality is a lattice-identity check, not
-	// a per-type semantic compare.
-	if a.Data != nil && b.Data != nil &&
-		a.Parent != nil && a.Parent == b.Parent &&
-		a.Parent.Behavior != nil && a.Parent.Behavior != DefaultBehavior {
-		return a.Parent.Behavior.Equal(a, b)
-	}
-	return valuesEqualDefault(a, b)
-}
-
-// valuesEqualDefault is the kernel's default equality path,
-// bypassing the Behavior dispatch in ValuesEqual. Used by
-// DefaultBehavior.Equal and by Behavior implementations that
-// override Format but want fall-through equality without
-// triggering infinite re-entry.
-func valuesEqualDefault(a, b Value) bool {
-	// Two Data==nil values: carriers are abstract (conservatively
-	// equal); two type literals are equal iff they are the same
-	// lattice identity.
-	if a.Data == nil && b.Data == nil {
-		if a.Carrier || b.Carrier {
-			return true
-		}
-		return a.Equal(&b)
-	}
-	// One is a type literal and the other is a concrete value — not equal.
-	if a.Data == nil || b.Data == nil {
-		return false
-	}
-	// Dependent scalar: route to payload comparison BEFORE the
-	// Matches(TString)/Matches(TInteger)/... dispatch below. The
-	// lattice override makes DepString.Matches(TString)=true, so
-	// without this branch a DepScalar would fall into AsString and
-	// silently compare zero-value payloads.
-	if a.IsDepScalar() || b.IsDepScalar() {
-		if !a.IsDepScalar() || !b.IsDepScalar() {
-			return false
-		}
-		ai, err := a.AsDepScalar()
-		if err != nil {
-			return false
-		}
-		bi, err := b.AsDepScalar()
-		if err != nil {
-			return false
-		}
-		return depScalarsEqual(ai, bi)
-	}
-	switch {
-	case a.Parent.Matches(TString):
-		_as20, _ := AsString(a)
-		_as19, _ := AsString(b)
-		return _as20 == _as19
-	case a.Parent.Matches(TInteger):
-		_as22, _ := AsInteger(a)
-		_as21, _ := AsInteger(b)
-		return _as22 == _as21
-	case a.Parent.Matches(TBoolean):
-		_as24, _ := AsBoolean(a)
-		_as23, _ := AsBoolean(b)
-		return _as24 == _as23
-	case a.Parent.Equal(TList):
-		aTT, aTbl := a.Data.(TableTypeInfo)
-		bTT, bTbl := b.Data.(TableTypeInfo)
-		if aTbl && bTbl {
-			return mapsEqual(aTT.Record.Fields, bTT.Record.Fields)
-		}
-		if aTbl != bTbl {
-			return false
-		}
-		aCT, aOk := a.Data.(ChildTypeInfo)
-		bCT, bOk := b.Data.(ChildTypeInfo)
-		if aOk && bOk {
-			return aCT.Child.Parent.Equal(bCT.Child.Parent) && ValuesEqual(aCT.Child, bCT.Child)
-		}
-		if aOk != bOk {
-			return false
-		}
-		_aLst, _ := AsList(a)
-		_bLst, _ := AsList(b)
-		return listsEqual(_aLst.Slice(), _bLst.Slice())
-	case a.Parent.Equal(TMap):
-		aRT, aRec := a.Data.(RecordTypeInfo)
-		bRT, bRec := b.Data.(RecordTypeInfo)
-		if aRec && bRec {
-			return mapsEqual(aRT.Fields, bRT.Fields)
-		}
-		if aRec != bRec {
-			return false
-		}
-		aOT, aOpt := a.Data.(OptionsTypeInfo)
-		bOT, bOpt := b.Data.(OptionsTypeInfo)
-		if aOpt && bOpt {
-			return mapsEqual(aOT.Fields, bOT.Fields)
-		}
-		if aOpt != bOpt {
-			return false
-		}
-		aCT, aOk := a.Data.(ChildTypeInfo)
-		bCT, bOk := b.Data.(ChildTypeInfo)
-		if aOk && bOk {
-			return aCT.Child.Parent.Equal(bCT.Child.Parent) && ValuesEqual(aCT.Child, bCT.Child)
-		}
-		if aOk != bOk {
-			return false
-		}
-		_aMap, _ := AsMap(a)
-		_bMap, _ := AsMap(b)
-		return mapsEqual(_aMap, _bMap)
-	default:
-		return fmt.Sprintf("%v", a.Data) == fmt.Sprintf("%v", b.Data)
-	}
-}
-
-// listsEqual compares two list payloads element by element.
-func listsEqual(a, b []Value) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if !a[i].Parent.Equal(b[i].Parent) || !ValuesEqual(a[i], b[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-// mapsEqual compares two map payloads by keys and values.
-func mapsEqual(a, b ReadMap) bool {
-	if a.Len() != b.Len() {
-		return false
-	}
-	for _, k := range a.Keys() {
-		aVal, _ := a.Get(k)
-		bVal, ok := b.Get(k)
-		if !ok {
-			return false
-		}
-		if !aVal.Parent.Equal(bVal.Parent) || !ValuesEqual(aVal, bVal) {
-			return false
-		}
-	}
-	return true
-}
-
 // unifyDisjunct tries to unify a value against each alternative in a disjunct.
 // Returns the first successful unification. For map alternatives, uses open
 // (subset) matching where the candidate only needs to contain the alternative's
@@ -855,63 +692,4 @@ func unifyDisjunct(disj DisjunctInfo, val Value) (Value, bool) {
 		}
 	}
 	return Value{}, false
-}
-
-// OpenUnifyMap checks whether candidate contains at least the key-value pairs
-// of pattern. Extra keys in candidate are allowed (open/subset matching).
-func OpenUnifyMap(pattern, candidate Value) bool {
-	pMap, _ := AsMap(pattern)
-	cMap, _ := AsMap(candidate)
-
-	for _, key := range pMap.Keys() {
-		pVal, _ := pMap.Get(key)
-		cVal, ok := cMap.Get(key)
-		if !ok {
-			return false
-		}
-		if _, uOk := Unify(pVal, cVal); !uOk {
-			return false
-		}
-	}
-	return true
-}
-
-// ResolveWordsDeep recursively resolves word values to their semantic form.
-// For lists, each element is resolved; for maps, each value is resolved.
-// Scalar words are resolved via ResolveWordValue.
-func ResolveWordsDeep(v Value) Value {
-	if IsWord(v) {
-		return ResolveWordValue(v)
-	}
-	if v.Parent.Equal(TList) && v.Data != nil && !IsTypedList(v) && !IsTableType(v) {
-		_lst, _ := AsList(v)
-		elems := _lst.Slice()
-		resolved := make([]Value, len(elems))
-		for i, e := range elems {
-			resolved[i] = ResolveWordsDeep(e)
-		}
-		return NewList(resolved)
-	}
-	if v.Parent.Equal(TMap) && v.Data != nil && !IsTypedMap(v) && !IsRecordType(v) && !IsOptionsType(v) {
-		m, _ := AsMap(v)
-		result := NewOrderedMap()
-		for _, key := range m.Keys() {
-			val, _ := m.Get(key)
-			result.Set(key, ResolveWordsDeep(val))
-		}
-		return NewMap(result)
-	}
-	return v
-}
-
-// The `unify` word registration lives in
-// lang/go/engine/native_unify.go. UnifyHandler below is the exported
-// algorithm primitive lang's registration wires dispatch into.
-
-func UnifyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	unified, ok := Unify(args[0], args[1])
-	if ok {
-		return []Value{unified, NewBoolean(true)}, nil
-	}
-	return []Value{NewString("~unify-fail"), NewBoolean(false)}, nil
 }

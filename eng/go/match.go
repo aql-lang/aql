@@ -55,3 +55,26 @@ func patternsOk(sig *Signature, positions []int, stack []Value, fwd int) bool {
 	}
 	return true
 }
+
+// OpenUnifyMap checks whether candidate contains at least the key-value pairs
+// of pattern. Extra keys in candidate are allowed (open/subset matching).
+//
+// This is an asymmetric subset match, not a unifier — it returns only
+// ok/!ok and never produces a unified value. Lives next to patternsOk
+// because both are matching primitives used by signature dispatch.
+func OpenUnifyMap(pattern, candidate Value) bool {
+	pMap, _ := AsMap(pattern)
+	cMap, _ := AsMap(candidate)
+
+	for _, key := range pMap.Keys() {
+		pVal, _ := pMap.Get(key)
+		cVal, ok := cMap.Get(key)
+		if !ok {
+			return false
+		}
+		if _, uOk := Unify(pVal, cVal); !uOk {
+			return false
+		}
+	}
+	return true
+}
