@@ -728,9 +728,10 @@ func MakeFieldValue(val Value, constraint Value) (Value, error) {
 		return MakeConvert(val, constraintType)
 	}
 
-	unified, ok := Unify(constraint, val)
-	if !ok {
-		return Value{}, fmt.Errorf("value %s does not match constraint %s", val.String(), constraint.String())
+	unified, uerr := UnifyExplain(constraint, val)
+	if uerr != nil {
+		return Value{}, fmt.Errorf("value %s does not match constraint %s: %s",
+			val.String(), constraint.String(), uerr.Error())
 	}
 	return unified, nil
 }

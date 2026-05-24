@@ -4,6 +4,9 @@ package eng
 // values in the lattice. Returns the unified value and true on
 // success, or (Value{}, false) on failure.
 //
+// For callers that need a structured failure (which field, which
+// element, what reason), use UnifyExplain.
+//
 // Dispatch model (this file):
 //
 //  1. ResolveWordsDeep preprocesses both sides so bare words inside
@@ -23,9 +26,25 @@ package eng
 // The narrowing fall-through (same type → ValuesEqual, subtype → take
 // the narrower) lives at the end of this file: unifySameOrSubtype.
 func Unify(a, b Value) (Value, bool) {
+	v, err := UnifyExplain(a, b)
+	return v, err == nil
+}
+
+// UnifyExplain is the structured-error counterpart to Unify. Returns
+// (unified, nil) on success or (Value{}, *UnifyError) describing the
+// failure path on mismatch. Use this when the caller needs to report
+// which field/element failed (record field unification, options
+// matching, `make` constraint checking, the lang-level `unify` word).
+func UnifyExplain(a, b Value) (Value, *UnifyError) {
 	a = ResolveWordsDeep(a)
 	b = ResolveWordsDeep(b)
+	return unifyInner(a, b)
+}
 
+// unifyInner is the post-resolution dispatcher. All recursive calls
+// inside the family handlers use this entry so ResolveWordsDeep runs
+// exactly once per top-level call.
+func unifyInner(a, b Value) (Value, *UnifyError) {
 	sa := Shape(a)
 	sb := Shape(b)
 
@@ -43,25 +62,25 @@ func Unify(a, b Value) (Value, bool) {
 	// Never — bottom type, only unifies with itself.
 	if sa == ShapeNever || sb == ShapeNever {
 		if sa == sb {
-			return a, true
+			return a, nil
 		}
-		return Value{}, false
+		return Value{}, unifyFail("never only unifies with never", a, b)
 	}
 
 	// None — only unifies with itself.
 	if sa == ShapeNone || sb == ShapeNone {
 		if sa == sb {
-			return a, true
+			return a, nil
 		}
-		return Value{}, false
+		return Value{}, unifyFail("none only unifies with none", a, b)
 	}
 
 	// Any — yields the other (more specific) side.
 	if sa == ShapeAny {
-		return b, true
+		return b, nil
 	}
 	if sb == ShapeAny {
-		return a, true
+		return a, nil
 	}
 
 	// Family handlers — any side in the family routes to that family's
@@ -95,35 +114,35 @@ func Unify(a, b Value) (Value, bool) {
 // the time we reach here both sides are non-list, non-map, non-disjunct,
 // non-depscalar, non-fnundef — so it's just type-literal vs concrete
 // or two values along the same scalar lattice chain.
-func unifySameOrSubtype(a, b Value) (Value, bool) {
+func unifySameOrSubtype(a, b Value) (Value, *UnifyError) {
 	aType := denotedType(a)
 	bType := denotedType(b)
 
 	// Type literal unifies with any concrete whose type matches.
 	if a.Data == nil && b.Data != nil && bType.Matches(aType) {
-		return b, true
+		return b, nil
 	}
 	if b.Data == nil && a.Data != nil && aType.Matches(bType) {
-		return a, true
+		return a, nil
 	}
 
 	// Same type → compare literal values.
 	if aType.Equal(bType) {
 		if ValuesEqual(a, b) {
-			return a, true
+			return a, nil
 		}
-		return Value{}, false
+		return Value{}, unifyFail("same type, different literal values", a, b)
 	}
 
 	// Subtype relation → narrower side wins.
 	if aType.IsSubtypeOf(bType) {
-		return a, true
+		return a, nil
 	}
 	if bType.IsSubtypeOf(aType) {
-		return b, true
+		return b, nil
 	}
 
-	return Value{}, false
+	return Value{}, unifyFail("incompatible types", a, b)
 }
 
 // denotedType returns the lattice type the value denotes. For a bare

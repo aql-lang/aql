@@ -13,27 +13,27 @@ package eng
 //     opposite-side bounds form an interval. Empty result fails.
 //  3. DepScalar vs DepScalar over different bases: fails (incompatible
 //     bases).
-func unifyDepScalar(a Value, sa ValueShape, b Value, sb ValueShape) (Value, bool) {
+func unifyDepScalar(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *UnifyError) {
 	// Both DepScalar: intersect constraints.
 	if sa == ShapeDepScalar && sb == ShapeDepScalar {
 		aType := denotedType(a)
 		bType := denotedType(b)
 		if !aType.Equal(bType) {
-			return Value{}, false
+			return Value{}, unifyFail("DepScalar bases do not match", a, b)
 		}
 		aInfo, err := a.AsDepScalar()
 		if err != nil {
-			return Value{}, false
+			return Value{}, unifyFail("could not read DepScalar payload on left", a, b)
 		}
 		bInfo, err := b.AsDepScalar()
 		if err != nil {
-			return Value{}, false
+			return Value{}, unifyFail("could not read DepScalar payload on right", a, b)
 		}
 		combined, ok := combineDepScalars(aInfo, bInfo)
 		if !ok {
-			return Value{}, false
+			return Value{}, unifyFail("DepScalar constraint intersection is empty", a, b)
 		}
-		return NewValueRaw(aType, combined), true
+		return NewValueRaw(aType, combined), nil
 	}
 
 	// Canonicalize: dep on the left, other on the right.
@@ -57,14 +57,14 @@ func unifyDepScalar(a Value, sa ValueShape, b Value, sb ValueShape) (Value, bool
 	depType := denotedType(dep)
 	otherType := denotedType(other)
 	if !otherType.Matches(depType) {
-		return Value{}, false
+		return Value{}, unifyFail("DepScalar base type does not match value's type", a, b)
 	}
 	info, err := dep.AsDepScalar()
 	if err != nil {
-		return Value{}, false
+		return Value{}, unifyFail("could not read DepScalar payload", a, b)
 	}
 	if depScalarCheck(info, other) {
-		return other, true
+		return other, nil
 	}
-	return Value{}, false
+	return Value{}, unifyFail("value does not satisfy DepScalar bounds", a, b)
 }

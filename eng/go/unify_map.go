@@ -8,47 +8,47 @@ package eng
 // canonicalization principle applies: type literals normalize to the
 // `lit` slot, exclusive shapes (Record, Options) only unify with their
 // own kind, and typed-vs-concrete arms are collapsed by ordering.
-func unifyMapFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, bool) {
+func unifyMapFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *UnifyError) {
 	// Bare Map type literal: unifies with any Map-family value except
 	// a record (records are nominal).
 	aLit := sa == ShapeTypeLiteral && denotedType(a).Equal(TMap)
 	bLit := sb == ShapeTypeLiteral && denotedType(b).Equal(TMap)
 	if aLit {
 		if sb == ShapeRecord {
-			return Value{}, false
+			return Value{}, unifyFail("Map type literal does not unify with Record", a, b)
 		}
 		if sb == ShapeOptions {
 			info, _ := AsOptionsType(b)
-			return NewOptionsType(info.Fields), true
+			return NewOptionsType(info.Fields), nil
 		}
 		if IsMapShape(sb) || bLit {
-			return b, true
+			return b, nil
 		}
-		return Value{}, false
+		return Value{}, unifyFail("Map type literal needs a map-family right-hand side", a, b)
 	}
 	if bLit {
 		if sa == ShapeRecord {
-			return Value{}, false
+			return Value{}, unifyFail("Map type literal does not unify with Record", a, b)
 		}
 		if sa == ShapeOptions {
 			info, _ := AsOptionsType(a)
-			return NewOptionsType(info.Fields), true
+			return NewOptionsType(info.Fields), nil
 		}
 		if IsMapShape(sa) {
-			return a, true
+			return a, nil
 		}
-		return Value{}, false
+		return Value{}, unifyFail("Map type literal needs a map-family left-hand side", a, b)
 	}
 
 	if !IsMapShape(sa) || !IsMapShape(sb) {
-		return Value{}, false
+		return Value{}, unifyFail("map family requires map-shaped values on both sides", a, b)
 	}
 
 	// Record is exclusive — only unifies with another record. Field
 	// order is part of a record's identity.
 	if sa == ShapeRecord || sb == ShapeRecord {
 		if sa != sb {
-			return Value{}, false
+			return Value{}, unifyFail("Record only unifies with Record", a, b)
 		}
 		aRT, _ := AsRecordType(a)
 		bRT, _ := AsRecordType(b)
@@ -66,11 +66,11 @@ func unifyMapFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, bool
 	if sa == ShapeTypedMap && sb == ShapeTypedMap {
 		aCT, _ := AsChildType(a)
 		bCT, _ := AsChildType(b)
-		unified, ok := Unify(aCT.Child, bCT.Child)
-		if !ok {
-			return Value{}, false
+		unified, err := unifyInner(aCT.Child, bCT.Child)
+		if err != nil {
+			return Value{}, err.withPath("child")
 		}
-		return NewTypedMap(unified), true
+		return NewTypedMap(unified), nil
 	}
 
 	// One side typed, other concrete: every value must unify with the
@@ -94,7 +94,7 @@ func unifyMapFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, bool
 	return unifyConcreteMaps(aMap, bMap)
 }
 
-func unifyConcreteMaps(aMap, bMap ReadMap) (Value, bool) {
+func unifyConcreteMaps(aMap, bMap ReadMap) (Value, *UnifyError) {
 	noneVal := NewTypeLiteral(TNone)
 	result := NewOrderedMap()
 
@@ -102,16 +102,16 @@ func unifyConcreteMaps(aMap, bMap ReadMap) (Value, bool) {
 		aVal, _ := aMap.Get(key)
 		bVal, ok := bMap.Get(key)
 		if !ok {
-			unified, uOk := Unify(aVal, noneVal)
-			if !uOk {
-				return Value{}, false
+			unified, err := unifyInner(aVal, noneVal)
+			if err != nil {
+				return Value{}, err.withPath("key:" + key)
 			}
 			result.Set(key, unified)
 			continue
 		}
-		unified, uOk := Unify(aVal, bVal)
-		if !uOk {
-			return Value{}, false
+		unified, err := unifyInner(aVal, bVal)
+		if err != nil {
+			return Value{}, err.withPath("key:" + key)
 		}
 		result.Set(key, unified)
 	}
@@ -120,28 +120,28 @@ func unifyConcreteMaps(aMap, bMap ReadMap) (Value, bool) {
 			continue
 		}
 		bVal, _ := bMap.Get(key)
-		unified, uOk := Unify(bVal, noneVal)
-		if !uOk {
-			return Value{}, false
+		unified, err := unifyInner(bVal, noneVal)
+		if err != nil {
+			return Value{}, err.withPath("key:" + key)
 		}
 		result.Set(key, unified)
 	}
-	return NewMap(result), true
+	return NewMap(result), nil
 }
 
 // unifyTypedMapWithConcrete unifies a child type constraint against
 // each value of a concrete map. Every value must unify.
-func unifyTypedMapWithConcrete(childType Value, m ReadMap) (Value, bool) {
+func unifyTypedMapWithConcrete(childType Value, m ReadMap) (Value, *UnifyError) {
 	result := NewOrderedMap()
 	for _, key := range m.Keys() {
 		val, _ := m.Get(key)
-		unified, ok := Unify(childType, val)
-		if !ok {
-			return Value{}, false
+		unified, err := unifyInner(childType, val)
+		if err != nil {
+			return Value{}, err.withPath("key:" + key)
 		}
 		result.Set(key, unified)
 	}
-	return NewMap(result), true
+	return NewMap(result), nil
 }
 
 // unifyFieldBags unifies two field-schema maps key-by-key. Both must
@@ -149,37 +149,37 @@ func unifyTypedMapWithConcrete(childType Value, m ReadMap) (Value, bool) {
 // When orderStrict is true the keys must also appear in the same order
 // (record-type semantics); when false key order is irrelevant
 // (options-type semantics).
-func unifyFieldBags(a, b *OrderedMap, orderStrict bool) (*OrderedMap, bool) {
+func unifyFieldBags(a, b *OrderedMap, orderStrict bool) (*OrderedMap, *UnifyError) {
 	if a.Len() != b.Len() {
-		return nil, false
+		return nil, &UnifyError{Reason: "field-count mismatch"}
 	}
 	aKeys := a.Keys()
 	bKeys := b.Keys()
 	result := NewOrderedMap()
 	for i, key := range aKeys {
 		if orderStrict && bKeys[i] != key {
-			return nil, false
+			return nil, &UnifyError{Reason: "field order mismatch at " + key}
 		}
 		bVal, ok := b.Get(key)
 		if !ok {
-			return nil, false
+			return nil, &UnifyError{Reason: "field " + key + " missing on right side"}
 		}
 		aVal, _ := a.Get(key)
-		unified, uOk := Unify(aVal, bVal)
-		if !uOk {
-			return nil, false
+		unified, err := unifyInner(aVal, bVal)
+		if err != nil {
+			return nil, err.withPath("field:" + key)
 		}
 		result.Set(key, unified)
 	}
-	return result, true
+	return result, nil
 }
 
 // unifyRecordTypes unifies two record types by unifying their field
 // schemas. Keys must match in the same order.
-func unifyRecordTypes(a, b RecordTypeInfo) (Value, bool) {
-	result, ok := unifyFieldBags(a.Fields, b.Fields, true)
-	if !ok {
-		return Value{}, false
+func unifyRecordTypes(a, b RecordTypeInfo) (Value, *UnifyError) {
+	result, err := unifyFieldBags(a.Fields, b.Fields, true)
+	if err != nil {
+		return Value{}, err
 	}
-	return NewRecordType(result), true
+	return NewRecordType(result), nil
 }

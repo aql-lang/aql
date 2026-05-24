@@ -4,7 +4,7 @@ package eng
 // Options type. Options fields can carry concrete defaults, type-
 // literal constraints, or disjuncts — three sub-rules that compose
 // per-field.
-func unifyOptionsFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, bool) {
+func unifyOptionsFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *UnifyError) {
 	// Two Options → unify field schemas (order-independent).
 	if sa == ShapeOptions && sb == ShapeOptions {
 		aOT, _ := AsOptionsType(a)
@@ -25,13 +25,13 @@ func unifyOptionsFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, 
 
 	// Bare Map type literal vs Options → preserve the Options schema.
 	if concrete.Data == nil {
-		return NewOptionsType(opts.Fields), true
+		return NewOptionsType(opts.Fields), nil
 	}
 
 	// Options only accepts plain concrete maps, never structural map
 	// subtypes (Record / TypedMap / nested Options).
 	if IsRecordType(concrete) || IsTypedMap(concrete) || IsOptionsType(concrete) {
-		return Value{}, false
+		return Value{}, unifyFail("Options only unifies with a plain Map", a, b)
 	}
 
 	cMap, _ := AsMap(concrete)
@@ -39,7 +39,7 @@ func unifyOptionsFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, 
 	// Extra keys in concrete not in Options → fail.
 	for _, key := range cMap.Keys() {
 		if _, ok := opts.Fields.Get(key); !ok {
-			return Value{}, false
+			return Value{}, unifyFail("unknown key "+key+" not in Options schema", a, b)
 		}
 	}
 
@@ -50,28 +50,31 @@ func unifyOptionsFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, 
 		if !present {
 			defVal, ok := optionsDefault(optVal)
 			if !ok {
-				return Value{}, false
+				return Value{}, &UnifyError{
+					Reason: "missing required key " + key + " with no default",
+					Path:   []string{"field:" + key},
+				}
 			}
 			result.Set(key, defVal)
 			continue
 		}
-		unified, ok := unifyOptionsField(optVal, cVal)
-		if !ok {
-			return Value{}, false
+		unified, err := unifyOptionsField(optVal, cVal)
+		if err != nil {
+			return Value{}, err.withPath("field:" + key)
 		}
 		result.Set(key, unified)
 	}
-	return NewMap(result), true
+	return NewMap(result), nil
 }
 
 // unifyOptionsPair unifies two options types by unifying their field
 // schemas. Key order is not significant.
-func unifyOptionsPair(a, b OptionsTypeInfo) (Value, bool) {
-	result, ok := unifyFieldBags(a.Fields, b.Fields, false)
-	if !ok {
-		return Value{}, false
+func unifyOptionsPair(a, b OptionsTypeInfo) (Value, *UnifyError) {
+	result, err := unifyFieldBags(a.Fields, b.Fields, false)
+	if err != nil {
+		return Value{}, err
 	}
-	return NewOptionsType(result), true
+	return NewOptionsType(result), nil
 }
 
 // optionsDefault determines the default value for an Options field when
@@ -110,24 +113,24 @@ func optionsDefault(v Value) (Value, bool) {
 //   - Concrete Options value: accept cVal if same parent type (cVal wins)
 //   - Type literal: standard Unify (type narrowing)
 //   - Disjunct: apply rules to each alternative
-func unifyOptionsField(optVal, cVal Value) (Value, bool) {
+func unifyOptionsField(optVal, cVal Value) (Value, *UnifyError) {
 	if IsDisjunct(optVal) {
 		disj, _ := AsDisjunct(optVal)
 		for _, alt := range disj.Alternatives {
-			if unified, ok := unifyOptionsField(alt, cVal); ok {
-				return unified, true
+			if unified, err := unifyOptionsField(alt, cVal); err == nil {
+				return unified, nil
 			}
 		}
-		return Value{}, false
+		return Value{}, unifyFail("no disjunct alternative matched", optVal, cVal)
 	}
 	if optVal.Data != nil {
 		baseType := optionsBaseType(optVal)
 		if cVal.Parent.Matches(baseType) {
-			return cVal, true
+			return cVal, nil
 		}
-		return Value{}, false
+		return Value{}, unifyFail("value does not match field's base type", optVal, cVal)
 	}
-	return Unify(optVal, cVal)
+	return unifyInner(optVal, cVal)
 }
 
 // optionsBaseType returns the base (non-literal) type for a concrete

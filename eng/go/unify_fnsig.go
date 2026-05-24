@@ -8,7 +8,7 @@ package eng
 // The structural-subtyping rule itself (contravariant params,
 // covariant returns, Pattern compatibility) lives in fnsig.go;
 // this file only owns the kernel-side dispatch.
-func unifyFnUndefShape(a Value, sa ValueShape, b Value, sb ValueShape) (Value, bool) {
+func unifyFnUndefShape(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *UnifyError) {
 	// Canonicalize: undef on the left, fn on the right.
 	var undef, fn Value
 	var fnShape ValueShape
@@ -20,10 +20,10 @@ func unifyFnUndefShape(a Value, sa ValueShape, b Value, sb ValueShape) (Value, b
 		fnShape = sa
 	}
 	if fnShape != ShapeFnDef && fnShape != ShapeFunction {
-		return Value{}, false
+		return Value{}, unifyFail("FnUndef requires a function value on the other side", a, b)
 	}
 	if FnUndefMatchesFnDef(undef, fn) {
-		return fn, true
+		return fn, nil
 	}
-	return Value{}, false
+	return Value{}, unifyFail("function signatures do not satisfy FnUndef constraint", a, b)
 }

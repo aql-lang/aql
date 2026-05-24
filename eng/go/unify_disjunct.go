@@ -7,13 +7,13 @@ package eng
 //
 // Asymmetric by design: disj is always the disjunct side, val is the
 // other side. The top dispatcher in unify.go handles the swap.
-func unifyDisjunct(disj DisjunctInfo, val Value) (Value, bool) {
+func unifyDisjunct(disj DisjunctInfo, val Value) (Value, *UnifyError) {
 	// "any" unifies with the whole disjunct, preserving it. Covers
 	// two value shapes: the bare type literal NewTypeLiteral(TAny)
 	// (Data=nil; the value IS the TAny lattice node) and the Any-
 	// typed carrier (Data=nil, Carrier=true, Parent=TAny).
 	if val.Data == nil && (val.Parent.Equal(TAny) || (&val).Equal(TAny)) {
-		return NewDisjunct(disj.Alternatives), true
+		return NewDisjunct(disj.Alternatives), nil
 	}
 
 	for _, alt := range disj.Alternatives {
@@ -26,14 +26,14 @@ func unifyDisjunct(disj DisjunctInfo, val Value) (Value, bool) {
 			!IsOptionsType(alt) && !IsOptionsType(val) {
 			if alt.Data != nil && val.Data != nil {
 				if OpenUnifyMap(alt, val) {
-					return val, true
+					return val, nil
 				}
 				continue
 			}
 		}
-		if unified, ok := Unify(alt, val); ok {
-			return unified, true
+		if unified, err := unifyInner(alt, val); err == nil {
+			return unified, nil
 		}
 	}
-	return Value{}, false
+	return Value{}, unifyFail("no disjunct alternative matched", NewDisjunct(disj.Alternatives), val)
 }

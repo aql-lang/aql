@@ -1,5 +1,7 @@
 package eng
 
+import "fmt"
+
 // unifyListFamily owns unification when either side is in the List
 // family (List, TypedList, Table) or is a bare List type literal.
 //
@@ -8,60 +10,60 @@ package eng
 // sides are in the family, sort by shape rank so the more-general side
 // comes first. This collapses the mirrored "aTyped vs concrete" and
 // "concrete vs bTyped" arms in the prior implementation into one path.
-func unifyListFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, bool) {
+func unifyListFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *UnifyError) {
 	// If one side is the bare List type literal (`List`), it unifies
 	// with any List-family value except a table.
 	aLit := sa == ShapeTypeLiteral && denotedType(a).Equal(TList)
 	bLit := sb == ShapeTypeLiteral && denotedType(b).Equal(TList)
 	if aLit {
 		if sb == ShapeTable {
-			return Value{}, false
+			return Value{}, unifyFail("List type literal does not unify with Table", a, b)
 		}
 		if IsListShape(sb) || bLit {
-			return b, true
+			return b, nil
 		}
-		return Value{}, false
+		return Value{}, unifyFail("List type literal needs a list-family right-hand side", a, b)
 	}
 	if bLit {
 		if sa == ShapeTable {
-			return Value{}, false
+			return Value{}, unifyFail("List type literal does not unify with Table", a, b)
 		}
 		if IsListShape(sa) {
-			return a, true
+			return a, nil
 		}
-		return Value{}, false
+		return Value{}, unifyFail("List type literal needs a list-family left-hand side", a, b)
 	}
 
 	// At this point both sides must be in the List family for
 	// unification to succeed.
 	if !IsListShape(sa) || !IsListShape(sb) {
-		return Value{}, false
+		return Value{}, unifyFail("list family requires list-shaped values on both sides", a, b)
 	}
 
 	// Table is exclusive — only unifies with another table.
 	if sa == ShapeTable || sb == ShapeTable {
 		if sa != sb {
-			return Value{}, false
+			return Value{}, unifyFail("Table only unifies with Table", a, b)
 		}
 		aTT, _ := AsTableType(a)
 		bTT, _ := AsTableType(b)
-		unified, ok := unifyRecordTypes(aTT.Record, bTT.Record)
-		if !ok {
-			return Value{}, false
+		unified, err := unifyRecordTypes(aTT.Record, bTT.Record)
+		if err != nil {
+			return Value{}, err
 		}
 		uRec, _ := AsRecordType(unified)
-		return NewTableType(uRec), true
+		return NewTableType(uRec), nil
 	}
 
 	// Both typed lists → unify child types.
 	if sa == ShapeTypedList && sb == ShapeTypedList {
 		aCT, _ := AsChildType(a)
 		bCT, _ := AsChildType(b)
-		unified, ok := Unify(aCT.Child, bCT.Child)
-		if !ok {
-			return Value{}, false
+		unified, err := unifyInner(aCT.Child, bCT.Child)
+		if err != nil {
+			return Value{}, err.withPath("child")
 		}
-		return NewTypedList(unified), true
+		return NewTypedList(unified), nil
 	}
 
 	// One side typed, the other concrete → each element must unify
@@ -84,29 +86,30 @@ func unifyListFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, boo
 	aElems := aLst.Slice()
 	bElems := bLst.Slice()
 	if len(aElems) != len(bElems) {
-		return Value{}, false
+		return Value{}, unifyFail(
+			fmt.Sprintf("list length mismatch: %d vs %d", len(aElems), len(bElems)), a, b)
 	}
 	result := make([]Value, len(aElems))
 	for i := range aElems {
-		unified, ok := Unify(aElems[i], bElems[i])
-		if !ok {
-			return Value{}, false
+		unified, err := unifyInner(aElems[i], bElems[i])
+		if err != nil {
+			return Value{}, err.withPath(fmt.Sprintf("[%d]", i))
 		}
 		result[i] = unified
 	}
-	return NewList(result), true
+	return NewList(result), nil
 }
 
 // unifyTypedListWithConcrete unifies a child type constraint against
 // each element of a concrete list. Every element must unify.
-func unifyTypedListWithConcrete(childType Value, elems []Value) (Value, bool) {
+func unifyTypedListWithConcrete(childType Value, elems []Value) (Value, *UnifyError) {
 	result := make([]Value, len(elems))
 	for i, elem := range elems {
-		unified, ok := Unify(childType, elem)
-		if !ok {
-			return Value{}, false
+		unified, err := unifyInner(childType, elem)
+		if err != nil {
+			return Value{}, err.withPath(fmt.Sprintf("[%d]", i))
 		}
 		result[i] = unified
 	}
-	return NewList(result), true
+	return NewList(result), nil
 }
