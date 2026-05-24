@@ -75,6 +75,10 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runUnlock(homeDir, stdout, stderr)
 	case "config":
 		return runConfig(rest, homeDir, stdout, stderr)
+	case "proxy":
+		return runProxy(rest, homeDir, stdout, stderr)
+	case "providers":
+		return runProviders(stdout)
 	default:
 		fmt.Fprintf(stderr, "error: unknown vault mode %q\n", mode)
 		printUsage(stderr)
@@ -109,6 +113,8 @@ var modeDocs = []modeDoc{
 	{"lock", "mark the vault locked (block get/grant)"},
 	{"unlock", "mark the vault unlocked"},
 	{"config", "view or set vault configuration"},
+	{"proxy", "run a local credential broker for agents and tools"},
+	{"providers", "list built-in provider presets"},
 }
 
 // --- shared helpers --------------------------------------------------------
@@ -798,6 +804,21 @@ func splitCSV(s string) []string {
 		}
 	}
 	return out
+}
+
+// runProviders prints the built-in provider presets. Aliases tag
+// themselves with one of these via `vault add --provider=...` so
+// the proxy knows how to attach credentials to outbound requests.
+func runProviders(stdout io.Writer) int {
+	fmt.Fprintf(stdout, "%-12s %-32s %s\n", "NAME", "BASE-URL", "AUTH-STYLE")
+	for _, p := range ListProviders() {
+		base := p.BaseURL
+		if base == "" {
+			base = "-"
+		}
+		fmt.Fprintf(stdout, "%-12s %-32s %s\n", p.Name, base, p.AuthStyle)
+	}
+	return 0
 }
 
 // validAlias accepts the conservative ASCII subset
