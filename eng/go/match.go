@@ -62,6 +62,11 @@ func patternsOk(sig *Signature, positions []int, stack []Value, fwd int) bool {
 // This is an asymmetric subset match, not a unifier — it returns only
 // ok/!ok and never produces a unified value. Lives next to patternsOk
 // because both are matching primitives used by signature dispatch.
+//
+// Pattern keys marked optional (`x?:T` syntax) may be absent on the
+// candidate — the "absent" half of the universal "? means None or
+// absent" rule. When present, the value still unifies against the
+// pattern's disjunct(T, None) wrap which handles the "None" half.
 func OpenUnifyMap(pattern, candidate Value) bool {
 	pMap, _ := AsMap(pattern)
 	cMap, _ := AsMap(candidate)
@@ -70,6 +75,9 @@ func OpenUnifyMap(pattern, candidate Value) bool {
 		pVal, _ := pMap.Get(key)
 		cVal, ok := cMap.Get(key)
 		if !ok {
+			if OptionalKeyInMap(pMap, key) {
+				continue
+			}
 			return false
 		}
 		if _, uOk := Unify(pVal, cVal); !uOk {

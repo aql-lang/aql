@@ -124,13 +124,16 @@ List	[]	true	[]
 {x:Number,y:(String tor None)}	{x:1,y:"hello"}	true	{x:1,y:'hello'}
 {x:Number,y:String}	{x:1}	false
 
-# Optional field syntax ? (sugar for type Tor None)
-{x:Number,y?:String}	{x:1}	true	{x:1,y:None}
+# Optional field syntax ? — "None or absent, universally".
+# Absent optional keys are OMITTED from the unified result (not
+# forced to None). Explicit None at an optional key is still
+# admitted via the disjunct(T, None) value wrap.
+{x:Number,y?:String}	{x:1}	true	{x:1}
 {x:Number,y?:String}	{x:1,y:"hello"}	true	{x:1,y:'hello'}
-{x?:Number}	{}	true	{x:None}
+{x?:Number}	{}	true	{}
 {x?:Number}	{x:1}	true	{x:1}
-{x?:Number,y?:String}	{x:1}	true	{x:1,y:None}
-{x?:Number,y?:String}	{}	true	{x:None,y:None}
+{x?:Number,y?:String}	{x:1}	true	{x:1}
+{x?:Number,y?:String}	{}	true	{}
 
 # Map value mismatch (fail)
 {x:1}	{x:2}	false

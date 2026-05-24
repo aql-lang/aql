@@ -98,15 +98,27 @@ func unifyConcreteMaps(aMap, bMap ReadMap) (Value, *UnifyError) {
 	noneVal := NewTypeLiteral(TNone)
 	result := NewOrderedMap()
 
+	// Optional-key rule (universal): when a key is present on one side
+	// and marked optional there but absent on the other side, omit it
+	// from the result entirely. When the key is NOT marked optional,
+	// fall back to the closed-map rule — unify the present value
+	// against None, which succeeds only for None-valued / None-typed
+	// payloads. This implements "? means None or absent" symmetrically.
 	for _, key := range aMap.Keys() {
 		aVal, _ := aMap.Get(key)
 		bVal, ok := bMap.Get(key)
 		if !ok {
+			if OptionalKeyInMap(aMap, key) {
+				continue
+			}
 			unified, err := unifyInner(aVal, noneVal)
 			if err != nil {
 				return Value{}, err.withPath("key:" + key)
 			}
 			result.Set(key, unified)
+			if OptionalKeyInMap(aMap, key) {
+				result.MarkOptionalKey(key)
+			}
 			continue
 		}
 		unified, err := unifyInner(aVal, bVal)
@@ -114,9 +126,17 @@ func unifyConcreteMaps(aMap, bMap ReadMap) (Value, *UnifyError) {
 			return Value{}, err.withPath("key:" + key)
 		}
 		result.Set(key, unified)
+		// Preserve optionality if EITHER side marked the key — chained
+		// unify operations downstream then see the same shape.
+		if OptionalKeyInMap(aMap, key) || OptionalKeyInMap(bMap, key) {
+			result.MarkOptionalKey(key)
+		}
 	}
 	for _, key := range bMap.Keys() {
 		if _, ok := aMap.Get(key); ok {
+			continue
+		}
+		if OptionalKeyInMap(bMap, key) {
 			continue
 		}
 		bVal, _ := bMap.Get(key)

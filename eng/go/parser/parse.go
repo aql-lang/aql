@@ -314,7 +314,12 @@ func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (en
 		if err != nil {
 			return eng.Value{}, err
 		}
-		// Optional field: wrap value as (value or None).
+		// Optional field: mark the key in om.Meta["opt"] so unifiers
+		// and matchers can allow absence universally, AND wrap value
+		// as (value or None) so explicit None at the key is also
+		// accepted. The marker handles the "absent" half of the
+		// "None or absent" rule; the disjunct handles the "None"
+		// half. See OrderedMap.IsOptionalKey.
 		optional := qmSet[key]
 		realKey := key
 		if strings.HasSuffix(key, "?") {
@@ -328,6 +333,9 @@ func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (en
 			})
 		}
 		om.Set(realKey, child)
+		if optional {
+			om.MarkOptionalKey(realKey)
+		}
 	}
 	// Propagate computed keys to OrderedMap.Meta for autoEvalMap.
 	if len(ckSet) > 0 {

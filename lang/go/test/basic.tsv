@@ -196,7 +196,7 @@ def a "x" def b "y" {[a]:1,[b]:2}	{x:1,y:2}
 (make Options {x:1,y?:String}) unify {x:2,y:"Y"}	{x:2,y:'Y'} true
 
 # Optional field in def map
-def a {x:Integer y?:String} a unify {x:1}	{x:1,y:None} true
+def a {x:Integer y?:String} a unify {x:1}	{x:1} true
 def a {x:Integer y?:String} a unify {x:1,y:"Y"}	{x:1,y:'Y'} true
 
 # Optional function arguments — named optional param
