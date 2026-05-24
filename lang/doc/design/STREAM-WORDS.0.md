@@ -30,7 +30,7 @@ The intended outcome: an AQL programmer can write
 
 "./events.log" stream.from-lines
     [ stream.parse-json ] stream.map
-    [ status &= "error" ] stream.filter
+    [ . status "error" eq ] stream.filter
     8 [ enrich-from-api ] stream.pmap
     "./errors.jsonl" stream.to-lines
 ```
@@ -166,7 +166,14 @@ place.
 Side-by-side with the bash equivalent. Bash is shown as the reference
 mental model; the AQL versions are typed end-to-end and back-pressured.
 
-Every AQL snippet assumes `"aql:stream" import` at the top.
+Every AQL snippet assumes `"aql:stream" import` at the top. Words
+that appear inside filter / map blocks come from elsewhere in AQL and
+are shown here for context: `contains` (string search,
+`lang/go/native/native_string.go`), `eq` (equality,
+`lang/go/native/native_compare.go`), and `.` (record / list field
+access, alias for `get`; see `lang/doc/design/SAMPLES.10.md`).
+Duration literals like `30s` do **not** exist — durations are built
+via `aql:time` constructors (`30 seconds`).
 
 ### 1. Count error lines in a log
 
@@ -176,7 +183,7 @@ grep ERROR ./app.log | wc -l
 
 ```aql
 "./app.log" stream.from-lines
-    [ "ERROR" contains? ] stream.filter
+    [ "ERROR" contains ] stream.filter
     stream.count
 ```
 
@@ -225,15 +232,18 @@ timeout 30s tail -f /var/log/events | grep DEPLOY
 ```
 
 ```aql
+"aql:time" import   # for `seconds`
+
 "/var/log/events" stream.from-lines
-    30s stream.with-timeout
-    [ "DEPLOY" contains? ] stream.filter
+    30 seconds stream.with-timeout
+    [ "DEPLOY" contains ] stream.filter
     [ println ] stream.for-each
 ```
 
 `with-timeout` is per-element: if no new line arrives within 30s, the
 stream terminates with a `TimeoutError` and the file handle is
-released.
+released. Duration values are constructed by `aql:time` — there is no
+`30s` shorthand.
 
 ### 5. Batch a JSONL stream into bulk inserts
 
@@ -267,7 +277,7 @@ tail -f a.log b.log | grep ERROR > errors.log
 [ "./a.log" stream.from-lines
   "./b.log" stream.from-lines
 ] stream.merge
-    [ "ERROR" contains? ] stream.filter
+    [ "ERROR" contains ] stream.filter
     "./errors.log" stream.to-lines
 ```
 
@@ -292,7 +302,7 @@ cat events.log \
 ```aql
 "./events.log" stream.from-lines
     [ parse-json ] stream.map
-    [ status &= "error" ] stream.filter
+    [ . status "error" eq ] stream.filter
     8 [ enrich-from-api ] stream.pmap
     "./errors.jsonl" stream.to-lines
 ```
