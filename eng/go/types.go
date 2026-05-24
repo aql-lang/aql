@@ -15,6 +15,7 @@ var (
 	TAny            = mustType("Any")
 	TNone           = mustType("None")
 	TNever          = mustType("Never")
+	TAbsent         = mustType("Absent")
 	TScalar         = mustType("Scalar")
 	TString         = mustType("Scalar/String")
 	TStringProper   = mustType("Scalar/String/ProperString")

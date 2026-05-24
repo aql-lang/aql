@@ -115,12 +115,19 @@ List	[]	true	[]
 {x:1}	{x:1,y:2}	false
 {x:1,y:2}	{x:1}	false
 
-# None unifies with absence (missing key treated as None)
-{x:1,y:None}	{x:1}	true	{x:1,y:None}
-{x:1}	{x:1,y:None}	true	{x:1,y:None}
+# Missing keys synthesise Absent — closed maps without `?` reject
+# absence even when the present-side value is None. To allow absence
+# the present side must be optional (`y?:None`) so the disjunct
+# contains Absent.
+{x:1,y:None}	{x:1}	false
+{x:1}	{x:1,y:None}	false
+{x:1,y?:None}	{x:1}	true	{x:1}
+{x:1}	{x:1,y?:None}	true	{x:1}
 {x:(String tor None)}	{x:1}	false
-{x:Number,y:(String tor None)}	{x:1}	true	{x:1,y:None}
-{x:1}	{x:Number,y:(String tor None)}	true	{x:1,y:None}
+{x:Number,y:(String tor None)}	{x:1}	false
+{x:1}	{x:Number,y:(String tor None)}	false
+{x:Number,y?:(String tor None)}	{x:1}	true	{x:1}
+{x:1}	{x:Number,y?:(String tor None)}	true	{x:1}
 {x:Number,y:(String tor None)}	{x:1,y:"hello"}	true	{x:1,y:'hello'}
 {x:Number,y:String}	{x:1}	false
 
@@ -347,3 +354,326 @@ None	{:Number}	false
 {:[:Number]}	{a:[1,2],b:[3,4]}	true	{a:[1,2],b:[3,4]}
 {:[:String]}	{x:["a","b"],y:["c","d"]}	true	{x:['a','b'],y:['c','d']}
 {:[:Number]}	{a:[1,2],b:["x","y"]}	false
+
+# ============================================================
+# COMPREHENSIVE CROSS-PRODUCT SUITE
+# ============================================================
+# Verifies the algebra of unification across every shape category,
+# pinning: identity (T unify T == T), Any as identity element,
+# Never as absorbing, None / Absent as degenerate, scalar-lattice
+# narrowing, cross-shape incompatibility, list/map family rules,
+# disjunct distribution, commutativity (each pair tested in both
+# directions), and associativity (a u b) u c == a u (b u c).
+
+# --- Identity: every kernel type unifies with itself ---
+Any	Any	true	Any
+None	None	true	None
+Never	Never	true	Never
+Absent	Absent	true	Absent
+Scalar	Scalar	true	Scalar
+Number	Number	true	Number
+Integer	Integer	true	Integer
+Decimal	Decimal	true	Decimal
+String	String	true	String
+Boolean	Boolean	true	Boolean
+List	List	true	List
+Map	Map	true	Map
+
+# --- Identity: concrete values unify with themselves ---
+1	1	true	1
+0	0	true	0
+1.5	1.5	true	1.5
+"a"	"a"	true	'a'
+""	""	true	''
+true	true	true	true
+false	false	true	false
+[]	[]	true	[]
+[1,2]	[1,2]	true	[1,2]
+{}	{}	true	{}
+{a:1}	{a:1}	true	{a:1}
+
+# --- Any as identity element: Any unify x == x (commutative) ---
+Any	None	false
+None	Any	false
+Any	Never	false
+Never	Any	false
+Any	Absent	false
+Absent	Any	false
+Any	Integer	true	Integer
+Integer	Any	true	Integer
+Any	1	true	1
+1	Any	true	1
+Any	String	true	String
+String	Any	true	String
+Any	"hello"	true	'hello'
+"hello"	Any	true	'hello'
+Any	Boolean	true	Boolean
+Boolean	Any	true	Boolean
+Any	true	true	true
+true	Any	true	true
+Any	List	true	List
+List	Any	true	List
+Any	[1,2]	true	[1,2]
+[1,2]	Any	true	[1,2]
+Any	Map	true	Map
+Map	Any	true	Map
+Any	{a:1}	true	{a:1}
+{a:1}	Any	true	{a:1}
+
+# --- Never as absorbing: Never unify x == fail (except Never) ---
+Never	None	false
+None	Never	false
+Never	Absent	false
+Absent	Never	false
+Never	Integer	false
+Integer	Never	false
+Never	1	false
+1	Never	false
+Never	String	false
+String	Never	false
+Never	List	false
+List	Never	false
+Never	[]	false
+[]	Never	false
+Never	Map	false
+Map	Never	false
+Never	{}	false
+{}	Never	false
+
+# --- None is degenerate: only unifies with None ---
+None	Integer	false
+Integer	None	false
+None	1	false
+1	None	false
+None	Number	false
+Number	None	false
+None	Decimal	false
+Decimal	None	false
+None	String	false
+String	None	false
+None	Boolean	false
+Boolean	None	false
+None	true	false
+true	None	false
+None	List	false
+List	None	false
+None	[]	false
+[]	None	false
+None	Map	false
+Map	None	false
+None	Absent	false
+Absent	None	false
+
+# --- Absent is degenerate: only unifies with Absent ---
+Absent	Integer	false
+Integer	Absent	false
+Absent	1	false
+1	Absent	false
+Absent	Number	false
+Number	Absent	false
+Absent	String	false
+String	Absent	false
+Absent	Boolean	false
+Boolean	Absent	false
+Absent	List	false
+List	Absent	false
+Absent	[]	false
+[]	Absent	false
+Absent	Map	false
+Map	Absent	false
+Absent	{}	false
+{}	Absent	false
+
+# --- Scalar lattice narrowing (subtype → narrower wins) ---
+Scalar	Number	true	Number
+Number	Scalar	true	Number
+Scalar	Integer	true	Integer
+Integer	Scalar	true	Integer
+Scalar	String	true	String
+String	Scalar	true	String
+Scalar	Boolean	true	Boolean
+Boolean	Scalar	true	Boolean
+Number	Integer	true	Integer
+Integer	Number	true	Integer
+Number	Decimal	true	Decimal
+Decimal	Number	true	Decimal
+Number	1	true	1
+1	Number	true	1
+Number	1.5	true	1.5
+1.5	Number	true	1.5
+Integer	1	true	1
+1	Integer	true	1
+Decimal	1.5	true	1.5
+1.5	Decimal	true	1.5
+String	"hello"	true	'hello'
+"hello"	String	true	'hello'
+Boolean	true	true	true
+true	Boolean	true	true
+
+# --- Scalar cross-family incompatibility (commutative fail) ---
+Integer	String	false
+String	Integer	false
+Integer	Boolean	false
+Boolean	Integer	false
+Integer	1.5	false
+1.5	Integer	false
+Decimal	1	false
+1	Decimal	false
+Decimal	String	false
+String	Decimal	false
+Number	String	false
+String	Number	false
+Number	Boolean	false
+Boolean	Number	false
+String	Boolean	false
+Boolean	String	false
+String	true	false
+true	String	false
+"a"	1	false
+1	"a"	false
+"a"	true	false
+true	"a"	false
+1	true	false
+true	1	false
+
+# --- Same-type literal-value incompatibility (commutative fail) ---
+1	2	false
+2	1	false
+"a"	"b"	false
+"b"	"a"	false
+true	false	false
+false	true	false
+1.5	2.5	false
+2.5	1.5	false
+
+# --- Container vs scalar incompatibility (commutative fail) ---
+List	Integer	false
+Integer	List	false
+Map	Integer	false
+Integer	Map	false
+List	Map	false
+Map	List	false
+[]	1	false
+1	[]	false
+{}	1	false
+1	{}	false
+[]	{}	false
+{}	[]	false
+[]	"a"	false
+"a"	[]	false
+
+# --- List family ---
+List	[]	true	[]
+[]	List	true	[]
+List	[1,2,3]	true	[1,2,3]
+[1,2,3]	List	true	[1,2,3]
+[1]	[1]	true	[1]
+[1]	[2]	false
+[1,2]	[1]	false
+[1]	[1,2]	false
+[Integer]	[1]	true	[1]
+[1]	[Integer]	true	[1]
+[Number,String]	[1,"a"]	true	[1,'a']
+[1,"a"]	[Number,String]	true	[1,'a']
+[Integer,Integer]	[1,"a"]	false
+[1,"a"]	[Integer,Integer]	false
+
+# --- Map family ---
+Map	{}	true	{}
+{}	Map	true	{}
+Map	{a:1,b:2}	true	{a:1,b:2}
+{a:1,b:2}	Map	true	{a:1,b:2}
+{a:1}	{a:1}	true	{a:1}
+{a:1}	{a:2}	false
+{a:Integer}	{a:1}	true	{a:1}
+{a:1}	{a:Integer}	true	{a:1}
+{a:Integer,b:String}	{a:1,b:"x"}	true	{a:1,b:'x'}
+{a:1,b:"x"}	{a:Integer,b:String}	true	{a:1,b:'x'}
+
+# --- Optional keys (the universal "? = None or absent" rule) ---
+{a?:Integer}	{}	true	{}
+{}	{a?:Integer}	true	{}
+{a?:Integer}	{a:1}	true	{a:1}
+{a:1}	{a?:Integer}	true	{a:1}
+{a?:Integer}	{a:None}	true	{a:None}
+{a:None}	{a?:Integer}	true	{a:None}
+{a?:Integer}	{a:"x"}	false
+{a:"x"}	{a?:Integer}	false
+{a?:Integer,b:String}	{b:"x"}	true	{b:'x'}
+{b:"x"}	{a?:Integer,b:String}	true	{b:'x'}
+
+# --- Disjunct distribution (commutative) ---
+(Integer tor String)	1	true	1
+1	(Integer tor String)	true	1
+(Integer tor String)	"a"	true	'a'
+"a"	(Integer tor String)	true	'a'
+(Integer tor String)	true	false
+true	(Integer tor String)	false
+(Integer tor String)	1.5	false
+1.5	(Integer tor String)	false
+(Integer tor None)	None	true	None
+None	(Integer tor None)	true	None
+(Integer tor None)	1	true	1
+1	(Integer tor None)	true	1
+(Integer tor None)	"a"	false
+"a"	(Integer tor None)	false
+
+# --- Disjunct vs Any ---
+Any	(Integer tor String)	true	Integer|String
+(Integer tor String)	Any	true	Integer|String
+
+# --- Disjunct vs Never ---
+Never	(Integer tor String)	false
+(Integer tor String)	Never	false
+
+# --- Nested structural ---
+[Integer,String]	[1,"a"]	true	[1,'a']
+[1,"a"]	[Integer,String]	true	[1,'a']
+{a:[:Integer],b:String}	{a:[1,2],b:"x"}	true	{a:[1,2],b:'x'}
+{a:[1,2],b:"x"}	{a:[:Integer],b:String}	true	{a:[1,2],b:'x'}
+{a:{b:Integer}}	{a:{b:42}}	true	{a:{b:42}}
+{a:{b:42}}	{a:{b:Integer}}	true	{a:{b:42}}
+
+# --- Associativity: (a u b) u c == a u (b u c) ---
+# Each pair of rows checks the same triple grouped both ways.
+((Number unify Integer) drop)	1	true	1
+Number	((Integer unify 1) drop)	true	1
+((Any unify Integer) drop)	1	true	1
+Any	((Integer unify 1) drop)	true	1
+((Scalar unify Number) drop)	Integer	true	Integer
+Scalar	((Number unify Integer) drop)	true	Integer
+((Integer unify Number) drop)	2	true	2
+Integer	((Number unify 2) drop)	true	2
+((String unify Any) drop)	"x"	true	'x'
+String	((Any unify "x") drop)	true	'x'
+((Boolean unify true) drop)	true	true	true
+Boolean	((true unify true) drop)	true	true
+(([Integer] unify [1]) drop)	[1]	true	[1]
+[Integer]	(([1] unify [1]) drop)	true	[1]
+(({a:Integer} unify {a:1}) drop)	{a:1}	true	{a:1}
+{a:Integer}	(({a:1} unify {a:1}) drop)	true	{a:1}
+((Any unify Any) drop)	Integer	true	Integer
+Any	((Any unify Integer) drop)	true	Integer
+
+# --- Transitivity-of-narrowing chains ---
+# If a narrows to b and b narrows to c, then a u c == c.
+Scalar	1	true	1
+Number	1	true	1
+Integer	1	true	1
+Scalar	Integer	true	Integer
+Number	Integer	true	Integer
+Scalar	Number	true	Number
+
+# --- DepScalar interaction ---
+(Integer gt 0)	5	true	5
+5	(Integer gt 0)	true	5
+(Integer gt 0)	-1	false
+-1	(Integer gt 0)	false
+(Integer gt 0)	"a"	false
+"a"	(Integer gt 0)	false
+(Integer gt 0)	Any	true	(Integer gt 0)
+Any	(Integer gt 0)	true	(Integer gt 0)
+(Integer gt 0)	Never	false
+Never	(Integer gt 0)	false
+(Integer gt 0)	None	false
+None	(Integer gt 0)	false

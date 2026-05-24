@@ -128,54 +128,6 @@ func (m *OrderedMap) Delete(key string) bool {
 	return true
 }
 
-// IsOptionalKey reports whether key is marked optional in this map's
-// metadata. Optional keys participate in the "None or absent" rule
-// uniformly: in unification their absence on the other side is allowed
-// (omitted from the result rather than forced to None), and in
-// signature-pattern matching the candidate may omit them entirely.
-//
-// The parser sets this for any `x?:T` field in `{x?:T, ...}` literal
-// syntax. The value at an optional key is still wrapped as
-// `disjunct(T, None)`, so an explicit `None` is also a valid value at
-// the key — the marker handles the "absent" half of the rule while
-// the disjunct handles the "None" half.
-func (m *OrderedMap) IsOptionalKey(key string) bool {
-	if m == nil || m.Meta == nil {
-		return false
-	}
-	opts, _ := m.Meta["opt"].(map[string]bool)
-	return opts[key]
-}
-
-// MarkOptionalKey records key as optional in this map's metadata.
-// Used by the parser when converting `x?:T` map syntax and by the
-// unifier when propagating optional markers into result maps so
-// chained unification preserves optionality.
-func (m *OrderedMap) MarkOptionalKey(key string) {
-	if m == nil {
-		return
-	}
-	if m.Meta == nil {
-		m.Meta = make(map[string]any)
-	}
-	opts, _ := m.Meta["opt"].(map[string]bool)
-	if opts == nil {
-		opts = make(map[string]bool)
-	}
-	opts[key] = true
-	m.Meta["opt"] = opts
-}
-
-// OptionalKeyInMap reports whether the given ReadMap marks key
-// optional. Convenience for callers holding a ReadMap interface
-// rather than the concrete *OrderedMap.
-func OptionalKeyInMap(m ReadMap, key string) bool {
-	if om, ok := m.(*OrderedMap); ok {
-		return om.IsOptionalKey(key)
-	}
-	return false
-}
-
 // PathInfo holds the data for a Scalar/Path value.
 // A Path represents a filesystem path as a sequence of parts.
 // Absolute paths start from the root (Abs = true).

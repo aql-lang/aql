@@ -95,54 +95,52 @@ func unifyMapFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *Uni
 }
 
 func unifyConcreteMaps(aMap, bMap ReadMap) (Value, *UnifyError) {
-	noneVal := NewTypeLiteral(TNone)
+	absentVal := NewTypeLiteral(TAbsent)
 	result := NewOrderedMap()
 
-	// Optional-key rule (universal): when a key is present on one side
-	// and marked optional there but absent on the other side, omit it
-	// from the result entirely. When the key is NOT marked optional,
-	// fall back to the closed-map rule — unify the present value
-	// against None, which succeeds only for None-valued / None-typed
-	// payloads. This implements "? means None or absent" symmetrically.
+	// Missing-key rule: synthesise an Absent value and unify the
+	// present-side value against it. A disjunct that contains Absent
+	// (the `?:T` desugaring) accepts it via the disjunct fold; any
+	// other shape rejects it — so non-optional missing keys fail
+	// naturally without a marker check.
+	//
+	// Omission rule: a unified value of Absent does not occupy a slot
+	// in the result map. Absent is the type of non-presence, so a key
+	// whose value is Absent is by definition not present in the map.
 	for _, key := range aMap.Keys() {
 		aVal, _ := aMap.Get(key)
 		bVal, ok := bMap.Get(key)
 		if !ok {
-			if OptionalKeyInMap(aMap, key) {
-				continue
-			}
-			unified, err := unifyInner(aVal, noneVal)
+			unified, err := unifyInner(aVal, absentVal)
 			if err != nil {
 				return Value{}, err.withPath("key:" + key)
 			}
-			result.Set(key, unified)
-			if OptionalKeyInMap(aMap, key) {
-				result.MarkOptionalKey(key)
+			if Shape(unified) == ShapeAbsent {
+				continue
 			}
+			result.Set(key, unified)
 			continue
 		}
 		unified, err := unifyInner(aVal, bVal)
 		if err != nil {
 			return Value{}, err.withPath("key:" + key)
 		}
-		result.Set(key, unified)
-		// Preserve optionality if EITHER side marked the key — chained
-		// unify operations downstream then see the same shape.
-		if OptionalKeyInMap(aMap, key) || OptionalKeyInMap(bMap, key) {
-			result.MarkOptionalKey(key)
+		if Shape(unified) == ShapeAbsent {
+			continue
 		}
+		result.Set(key, unified)
 	}
 	for _, key := range bMap.Keys() {
 		if _, ok := aMap.Get(key); ok {
 			continue
 		}
-		if OptionalKeyInMap(bMap, key) {
-			continue
-		}
 		bVal, _ := bMap.Get(key)
-		unified, err := unifyInner(bVal, noneVal)
+		unified, err := unifyInner(bVal, absentVal)
 		if err != nil {
 			return Value{}, err.withPath("key:" + key)
+		}
+		if Shape(unified) == ShapeAbsent {
+			continue
 		}
 		result.Set(key, unified)
 	}

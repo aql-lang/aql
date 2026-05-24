@@ -75,6 +75,18 @@ func unifyInner(a, b Value) (Value, *UnifyError) {
 		return Value{}, unifyFail("none only unifies with none", a, b)
 	}
 
+	// Absent — only unifies with itself. Mirrors None's rule. Absent
+	// is kernel-internal: it appears as a synthesized fill value when
+	// the map unifier encounters a missing key. A disjunct containing
+	// Absent (the `?:T` desugaring) accepts it via the Disjunct fold
+	// above; any other shape rejects it.
+	if sa == ShapeAbsent || sb == ShapeAbsent {
+		if sa == sb {
+			return a, nil
+		}
+		return Value{}, unifyFail("absent only unifies with absent", a, b)
+	}
+
 	// Any — yields the other (more specific) side.
 	if sa == ShapeAny {
 		return b, nil

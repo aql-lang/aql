@@ -63,22 +63,25 @@ func patternsOk(sig *Signature, positions []int, stack []Value, fwd int) bool {
 // ok/!ok and never produces a unified value. Lives next to patternsOk
 // because both are matching primitives used by signature dispatch.
 //
-// Pattern keys marked optional (`x?:T` syntax) may be absent on the
-// candidate — the "absent" half of the universal "? means None or
-// absent" rule. When present, the value still unifies against the
-// pattern's disjunct(T, None) wrap which handles the "None" half.
+// Missing-key rule: when a pattern key is absent on the candidate,
+// synthesise an Absent value and unify the pattern's value against it.
+// A pattern value containing `Absent` as a disjunct alternative (the
+// `?:T` desugaring) accepts it; any other shape rejects it. This
+// implements the "? means None or absent" rule via the type system —
+// no out-of-band optional-key metadata required.
 func OpenUnifyMap(pattern, candidate Value) bool {
 	pMap, _ := AsMap(pattern)
 	cMap, _ := AsMap(candidate)
 
+	absentVal := NewTypeLiteral(TAbsent)
 	for _, key := range pMap.Keys() {
 		pVal, _ := pMap.Get(key)
 		cVal, ok := cMap.Get(key)
 		if !ok {
-			if OptionalKeyInMap(pMap, key) {
-				continue
+			if _, uOk := Unify(pVal, absentVal); !uOk {
+				return false
 			}
-			return false
+			continue
 		}
 		if _, uOk := Unify(pVal, cVal); !uOk {
 			return false

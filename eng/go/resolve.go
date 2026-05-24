@@ -29,13 +29,6 @@ func ResolveWordsDeep(v Value) Value {
 			val, _ := m.Get(key)
 			result.Set(key, ResolveWordsDeep(val))
 		}
-		// Preserve the optional-key marker so unifiers and matchers
-		// downstream see the parser's optionality through resolution.
-		if om, ok := m.(*OrderedMap); ok && om.Meta != nil {
-			if opts, ok := om.Meta["opt"].(map[string]bool); ok && len(opts) > 0 {
-				result.Meta = map[string]any{"opt": opts}
-			}
-		}
 		return NewMap(result)
 	}
 	return v

@@ -1365,15 +1365,6 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 	if m.Implicit {
 		out.Implicit = true
 	}
-	// Propagate the optional-key marker through evaluation so
-	// downstream unify / match call sites see the same optionality
-	// the parser recorded. (Computed keys "ck" are consumed below;
-	// "opt" must survive.)
-	if m.Meta != nil {
-		if opts, ok := m.Meta["opt"].(map[string]bool); ok && len(opts) > 0 {
-			out.Meta = map[string]any{"opt": opts}
-		}
-	}
 
 	// Computed keys: evaluate key expressions at runtime.
 	var ckSet map[string]bool

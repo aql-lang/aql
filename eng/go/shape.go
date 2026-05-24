@@ -17,6 +17,7 @@ const (
 	ShapeUnknown        ValueShape = iota
 	ShapeNever                     // bottom type, only unifies with itself
 	ShapeNone                      // none value or none type literal
+	ShapeAbsent                    // absent type literal — kernel-internal, "key not present"
 	ShapeAny                       // any value or any type literal
 	ShapeCarrier                   // Data==nil, Carrier=true — abstract value of a type
 	ShapeTypeLiteral               // bare type literal (Data==nil, not carrier, not none/never/any)
@@ -53,6 +54,9 @@ func Shape(v Value) ValueShape {
 	}
 	if t.Equal(TNone) {
 		return ShapeNone
+	}
+	if t.Equal(TAbsent) {
+		return ShapeAbsent
 	}
 	if t.Equal(TAny) {
 		return ShapeAny

@@ -1855,11 +1855,18 @@ func TestParseOptionalFieldDisjunct(t *testing.T) {
 	}
 	dj, _ := eng.AsDisjunct(val)
 	alts := dj.Alternatives
-	if len(alts) != 2 {
-		t.Fatalf("expected 2 alternatives, got %d", len(alts))
+	// `?:T` desugars to `disjunct(T, None, Absent)` — Absent is the
+	// kernel type denoting "key not present", and the third
+	// alternative is what makes the missing-key half of the rule
+	// work via the type system rather than out-of-band metadata.
+	if len(alts) != 3 {
+		t.Fatalf("expected 3 alternatives, got %d", len(alts))
 	}
 	if !alts[1].Equal(eng.TNone) {
 		t.Errorf("expected second alternative to be None, got %s", alts[1])
+	}
+	if !alts[2].Equal(eng.TAbsent) {
+		t.Errorf("expected third alternative to be Absent, got %s", alts[2])
 	}
 }
 
