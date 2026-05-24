@@ -1,4 +1,4 @@
-package aql
+package install
 
 import (
 	"bytes"
@@ -8,16 +8,17 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/aql-lang/aql/cmd/go/internal/prep"
+	"github.com/aql-lang/aql/cmd/go/internal/registry"
 )
 
 func setupInstallTest(t *testing.T) (dir string, srvURL string, cleanup func()) {
 	t.Helper()
 
-	// Start a test registry server using the regsrv/registry folder.
-	regDir, _ := filepath.Abs(filepath.Join("../../lang/go/test/regsrv/registry"))
-	srv := httptest.NewServer(registryHandler(regDir))
+	regDir, _ := filepath.Abs(filepath.Join("../../../../lang/go/test/regsrv/registry"))
+	srv := httptest.NewServer(registry.Handler(regDir))
 
-	// Create a temp module folder with aql.jsonic and .aql/aql.json.
 	dir = t.TempDir()
 	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`name: testmod
 major: 0
@@ -28,12 +29,11 @@ files: [index.aql]
 	os.WriteFile(filepath.Join(dir, "index.aql"), []byte(`(import "color") "#FF0000" Color.hex2rgb .r`), 0644)
 	os.MkdirAll(filepath.Join(dir, ".aql"), 0755)
 
-	// Run prep to create .aql/aql.json.
 	orig, _ := os.Getwd()
 	os.Chdir(dir)
 
 	var stdout, stderr bytes.Buffer
-	code := runPrep(nil, &stdout, &stderr)
+	code := prep.Run(nil, &stdout, &stderr)
 	if code != 0 {
 		os.Chdir(orig)
 		srv.Close()
@@ -49,10 +49,10 @@ files: [index.aql]
 func TestInstallDownloadsAndExtracts(t *testing.T) {
 	dir, srvURL, cleanup := setupInstallTest(t)
 	defer cleanup()
-	_ = dir // we're already cd'd into dir
+	_ = dir
 
 	var stdout, stderr bytes.Buffer
-	code := runInstall([]string{"-r", srvURL, "color-0.1.0"}, &stdout, &stderr)
+	code := Run([]string{"-r", srvURL, "color-0.1.0"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
@@ -61,7 +61,6 @@ func TestInstallDownloadsAndExtracts(t *testing.T) {
 		t.Errorf("unexpected output: %q", stdout.String())
 	}
 
-	// Verify files were extracted.
 	if _, err := os.Stat(filepath.Join(".aql", "color", "color.aql")); err != nil {
 		t.Errorf("expected .aql/color/color.aql: %s", err)
 	}
@@ -75,12 +74,11 @@ func TestInstallUpdatesDeps(t *testing.T) {
 	defer cleanup()
 
 	var stdout, stderr bytes.Buffer
-	code := runInstall([]string{"-r", srvURL, "color-0.1.0"}, &stdout, &stderr)
+	code := Run([]string{"-r", srvURL, "color-0.1.0"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code = %d; stderr: %s", code, stderr.String())
 	}
 
-	// Read aql.jsonic and verify deps.
 	data, err := os.ReadFile("aql.jsonic")
 	if err != nil {
 		t.Fatal(err)
@@ -99,12 +97,11 @@ func TestInstallRegeneratesAqlJSON(t *testing.T) {
 	defer cleanup()
 
 	var stdout, stderr bytes.Buffer
-	code := runInstall([]string{"-r", srvURL, "color-0.1.0"}, &stdout, &stderr)
+	code := Run([]string{"-r", srvURL, "color-0.1.0"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code = %d; stderr: %s", code, stderr.String())
 	}
 
-	// .aql/aql.json should now contain deps.
 	data, err := os.ReadFile(filepath.Join(".aql", "aql.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -126,22 +123,19 @@ func TestInstallMultipleDeps(t *testing.T) {
 	_, srvURL, cleanup := setupInstallTest(t)
 	defer cleanup()
 
-	// Install color first.
 	var stdout, stderr bytes.Buffer
-	code := runInstall([]string{"-r", srvURL, "color-0.1.0"}, &stdout, &stderr)
+	code := Run([]string{"-r", srvURL, "color-0.1.0"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("first install failed: %s", stderr.String())
 	}
 
-	// Install color-scheme second.
 	stdout.Reset()
 	stderr.Reset()
-	code = runInstall([]string{"-r", srvURL, "color-scheme-0.1.0"}, &stdout, &stderr)
+	code = Run([]string{"-r", srvURL, "color-scheme-0.1.0"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("second install failed: %s", stderr.String())
 	}
 
-	// Verify both deps in aql.jsonic.
 	data, err := os.ReadFile("aql.jsonic")
 	if err != nil {
 		t.Fatal(err)
@@ -154,7 +148,6 @@ func TestInstallMultipleDeps(t *testing.T) {
 		t.Errorf("missing color-scheme dep in: %s", content)
 	}
 
-	// Verify both extracted.
 	if _, err := os.Stat(filepath.Join(".aql", "color", "color.aql")); err != nil {
 		t.Error("missing .aql/color/color.aql")
 	}
@@ -170,7 +163,7 @@ func TestInstallNoAqlJSON(t *testing.T) {
 	defer os.Chdir(orig)
 
 	var stdout, stderr bytes.Buffer
-	code := runInstall([]string{"color-0.1.0"}, &stdout, &stderr)
+	code := Run([]string{"color-0.1.0"}, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
@@ -181,7 +174,7 @@ func TestInstallNoAqlJSON(t *testing.T) {
 
 func TestInstallInvalidID(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := runInstall([]string{"badname"}, &stdout, &stderr)
+	code := Run([]string{"badname"}, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
@@ -195,7 +188,7 @@ func TestInstallModuleNotFound(t *testing.T) {
 	defer cleanup()
 
 	var stdout, stderr bytes.Buffer
-	code := runInstall([]string{"-r", srvURL, "nonexistent-1.0.0"}, &stdout, &stderr)
+	code := Run([]string{"-r", srvURL, "nonexistent-1.0.0"}, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
@@ -206,7 +199,7 @@ func TestInstallModuleNotFound(t *testing.T) {
 
 func TestInstallNoArgs(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := runInstall(nil, &stdout, &stderr)
+	code := Run(nil, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
@@ -219,28 +212,24 @@ func TestInstallIdempotent(t *testing.T) {
 	_, srvURL, cleanup := setupInstallTest(t)
 	defer cleanup()
 
-	// First install.
 	var stdout, stderr bytes.Buffer
-	code := runInstall([]string{"-r", srvURL, "color-0.1.0"}, &stdout, &stderr)
+	code := Run([]string{"-r", srvURL, "color-0.1.0"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("first install failed: %s", stderr.String())
 	}
 
-	// Snapshot files after first install.
 	firstAqlJsonic, _ := os.ReadFile("aql.jsonic")
 	firstAqlJSON, _ := os.ReadFile(filepath.Join(".aql", "aql.json"))
 	firstColorAql, _ := os.ReadFile(filepath.Join(".aql", "color", "color.aql"))
 	firstColorJsonic, _ := os.ReadFile(filepath.Join(".aql", "color", "aql.jsonic"))
 
-	// Second install of the same module.
 	stdout.Reset()
 	stderr.Reset()
-	code = runInstall([]string{"-r", srvURL, "color-0.1.0"}, &stdout, &stderr)
+	code = Run([]string{"-r", srvURL, "color-0.1.0"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("second install failed: %s", stderr.String())
 	}
 
-	// Verify all files are identical.
 	secondAqlJsonic, _ := os.ReadFile("aql.jsonic")
 	secondAqlJSON, _ := os.ReadFile(filepath.Join(".aql", "aql.json"))
 	secondColorAql, _ := os.ReadFile(filepath.Join(".aql", "color", "color.aql"))
@@ -261,9 +250,8 @@ func TestInstallIdempotent(t *testing.T) {
 }
 
 func TestInstallDeepChain(t *testing.T) {
-	// Install all 10 modules of the deep dependency chain into a fresh project.
-	regDir, _ := filepath.Abs(filepath.Join("../../lang/go/test/regsrv/registry"))
-	srv := httptest.NewServer(registryHandler(regDir))
+	regDir, _ := filepath.Abs(filepath.Join("../../../../lang/go/test/regsrv/registry"))
+	srv := httptest.NewServer(registry.Handler(regDir))
 	defer srv.Close()
 
 	dir := t.TempDir()
@@ -276,12 +264,11 @@ func TestInstallDeepChain(t *testing.T) {
 	defer os.Chdir(orig)
 
 	var stdout, stderr bytes.Buffer
-	code := runPrep(nil, &stdout, &stderr)
+	code := prep.Run(nil, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("prep failed: %s", stderr.String())
 	}
 
-	// Install all modules in dependency order (leaves first).
 	modules := []string{
 		"charops-2.3.1",
 		"joiner-0.4.2",
@@ -298,7 +285,7 @@ func TestInstallDeepChain(t *testing.T) {
 	for _, mod := range modules {
 		stdout.Reset()
 		stderr.Reset()
-		code = runInstall([]string{"-r", srv.URL, mod}, &stdout, &stderr)
+		code = Run([]string{"-r", srv.URL, mod}, &stdout, &stderr)
 		if code != 0 {
 			t.Fatalf("install %s failed: %s", mod, stderr.String())
 		}
@@ -307,7 +294,6 @@ func TestInstallDeepChain(t *testing.T) {
 		}
 	}
 
-	// Verify all 10 modules are installed.
 	for _, mod := range modules {
 		name := mod[:strings.LastIndex(mod, "-")]
 		modDir := filepath.Join(".aql", name)
@@ -316,7 +302,6 @@ func TestInstallDeepChain(t *testing.T) {
 		}
 	}
 
-	// Verify deps in aql.jsonic.
 	data, err := os.ReadFile("aql.jsonic")
 	if err != nil {
 		t.Fatal(err)

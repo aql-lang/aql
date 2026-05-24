@@ -1,4 +1,7 @@
-package aql
+// Package install implements `aql install <name>-x.y.z [-r <url>]`
+// — download a published module zip from the registry, extract it
+// into .aql/<name>/, update aql.jsonic deps, and re-prep.
+package install
 
 import (
 	"archive/zip"
@@ -11,13 +14,28 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/aql-lang/aql/cmd/go/internal/prep"
 )
 
-// moduleIDPattern matches <name>-<major>.<minor>.<patch>
+// moduleIDPattern matches <name>-<major>.<minor>.<patch>.
 var moduleIDPattern = regexp.MustCompile(`^(.+)-(\d+\.\d+\.\d+)$`)
 
-// runInstall handles `aql install <name>-x.y.z -r <registry-url>`.
-func runInstall(args []string, stdout, stderr io.Writer) int {
+type cmd struct{}
+
+// New returns the install subcommand.
+func New() command.Command { return &cmd{} }
+
+func (*cmd) Name() string       { return "install" }
+func (*cmd) Synopsis() string   { return "download and install a module from a registry" }
+func (*cmd) Mode() command.Mode { return command.ModeSinglePass }
+func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
+	return Run(args, stdout, stderr)
+}
+
+// Run handles `aql install <name>-x.y.z [-r <url>]`.
+func Run(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
@@ -41,14 +59,12 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 	name := matches[1]
 	version := matches[2]
 
-	// Verify we are in a valid module folder.
 	aqlJSON := filepath.Join(".aql", "aql.json")
 	if _, err := os.Stat(aqlJSON); err != nil {
 		fmt.Fprintf(stderr, "error: not a valid module folder (missing .aql/aql.json)\n")
 		return 1
 	}
 
-	// Download the zip from the registry.
 	url := strings.TrimRight(*registryURL, "/") + "/module/" + moduleID
 	resp, err := http.Get(url)
 	if err != nil {
@@ -68,7 +84,6 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	// Extract zip into .aql/<name>/
 	destDir := filepath.Join(".aql", name)
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
@@ -82,7 +97,6 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 	}
 
 	for _, f := range zr.File {
-		// Reject path traversal.
 		if strings.Contains(f.Name, "..") {
 			continue
 		}
@@ -115,14 +129,12 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	// Update aql.jsonic: add/extend deps with <name>:<version>.
 	if err := updateDeps(name, version); err != nil {
 		fmt.Fprintf(stderr, "error: updating aql.jsonic: %s\n", err)
 		return 1
 	}
 
-	// Re-run prep to regenerate .aql/aql.json.
-	if _, err := doPrep("."); err != nil {
+	if _, err := prep.Do("."); err != nil {
 		fmt.Fprintf(stderr, "error: prep: %s\n", err)
 		return 1
 	}
@@ -142,9 +154,7 @@ func updateDeps(name, version string) error {
 	content := string(data)
 	depEntry := fmt.Sprintf("%s: %s", name, version)
 
-	// Check if deps already exists in the file.
 	if strings.Contains(content, "deps:") {
-		// Check if this dep already exists - update it.
 		lines := strings.Split(content, "\n")
 		found := false
 		inDeps := false
@@ -152,15 +162,12 @@ func updateDeps(name, version string) error {
 			trimmed := strings.TrimSpace(line)
 			if strings.HasPrefix(trimmed, "deps:") {
 				inDeps = true
-				// Inline deps like "deps: {color: 0.1.0}"
 				if strings.Contains(trimmed, "{") {
-					// Replace or add in the inline map.
 					namePattern := regexp.MustCompile(regexp.QuoteMeta(name) + `:\s*[^\s}]+`)
 					if namePattern.MatchString(trimmed) {
 						lines[i] = namePattern.ReplaceAllString(line, depEntry)
 						found = true
 					} else {
-						// Add before closing brace.
 						lines[i] = strings.Replace(line, "}", " "+depEntry+"}", 1)
 						found = true
 					}
@@ -183,12 +190,9 @@ func updateDeps(name, version string) error {
 		if found {
 			content = strings.Join(lines, "\n")
 		} else {
-			// deps block exists but this dep is not in it - need to add.
-			// For simplicity, replace the closing brace of deps.
 			content = strings.Replace(content, "deps: {", "deps: {"+depEntry+" ", 1)
 		}
 	} else {
-		// No deps yet - append it.
 		content = strings.TrimRight(content, "\n") + "\ndeps: {" + depEntry + "}\n"
 	}
 

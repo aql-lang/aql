@@ -1,0 +1,46 @@
+{
+  "name": "aql",
+  "displayName": "AQL Language",
+  "description": "AQL language support backed by the aql lsp server.",
+  "version": "0.1.0",
+  "publisher": "aql-lang",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aql-lang/aql.git"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:aql"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "aql",
+        "aliases": ["AQL", "aql"],
+        "extensions": [".aql"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "AQL",
+      "properties": {
+        "aql.serverPath": {
+          "type": "string",
+          "default": "aql",
+          "description": "Path to the aql binary. Leave as 'aql' if it is on PATH."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

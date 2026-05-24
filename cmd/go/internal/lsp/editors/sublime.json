@@ -1,0 +1,28 @@
+// AQL Language Server for Sublime Text via the LSP package.
+//
+// Prerequisites: install the "LSP" package via Package Control.
+//
+// Open: Preferences > Package Settings > LSP > Settings
+// Merge the "clients.aql" block below into the user settings on the
+// right-hand pane. Sublime will then spawn `aql lsp` for any file
+// whose syntax / scope matches source.aql or extension matches *.aql.
+//
+// For syntax highlighting you can install an AQL syntax package
+// separately or fall back to "Packages/Text/Plain text.tmLanguage"
+// — diagnostics work either way.
+
+{
+  "clients": {
+    "aql": {
+      "enabled": true,
+      "command": ["aql", "lsp"],
+      "selector": "source.aql",
+      "schemes": ["file"],
+      "languageId": "aql",
+      "settings": {}
+    }
+  },
+  "file_types": {
+    "aql": ["*.aql"]
+  }
+}

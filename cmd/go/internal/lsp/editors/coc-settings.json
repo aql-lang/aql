@@ -1,0 +1,17 @@
+// AQL Language Server for coc.nvim (Vim 8+ / Neovim).
+//
+// Open with :CocConfig and merge the "languageserver.aql" block into
+// your existing coc-settings.json. coc.nvim will spawn `aql lsp`
+// over stdio for any *.aql buffer.
+
+{
+  "languageserver": {
+    "aql": {
+      "command": "aql",
+      "args": ["lsp"],
+      "filetypes": ["aql"],
+      "rootPatterns": ["aql.jsonic", ".git"],
+      "trace.server": "off"
+    }
+  }
+}
