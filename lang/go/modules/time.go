@@ -43,14 +43,14 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	for _, name := range []string{"weekday-name", "month-name"} {
 		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TDate}}, []*native.Type{native.TString}, subReg))
 	}
-	exports.Set("leap-year?", makeTimeFnDef("leap-year?", []native.FnParam{{Type: native.TDate}}, []*native.Type{native.TBoolean}, subReg))
+	exports.Set("is-leap-year", makeTimeFnDef("is-leap-year", []native.FnParam{{Type: native.TDate}}, []*native.Type{native.TBoolean}, subReg))
 
 	// Extraction from Instant
 	exports.Set("to-unix", makeTimeFnDef("to-unix", []native.FnParam{{Type: native.TInstant}}, []*native.Type{native.TInteger}, subReg))
 	exports.Set("to-unix-ms", makeTimeFnDef("to-unix-ms", []native.FnParam{{Type: native.TInstant}}, []*native.Type{native.TInteger}, subReg))
 
 	// Comparison (Date Date -> Boolean)
-	for _, name := range []string{"before?", "after?", "equal?"} {
+	for _, name := range []string{"is-before", "is-after", "is-equal"} {
 		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{native.TBoolean}, subReg))
 	}
 
@@ -88,7 +88,7 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	// Comparison extended
 	exports.Set("compare", makeTimeFnDef("time-compare", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{native.TInteger}, subReg))
-	exports.Set("between?", makeTimeFnDef("between?", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}, {Type: native.TDate}}, []*native.Type{native.TBoolean}, subReg))
+	exports.Set("is-between", makeTimeFnDef("is-between", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}, {Type: native.TDate}}, []*native.Type{native.TBoolean}, subReg))
 	exports.Set("earliest", makeTimeFnDef("earliest", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{native.TDate}, subReg))
 	exports.Set("latest", makeTimeFnDef("latest", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{native.TDate}, subReg))
 
@@ -109,7 +109,7 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("tz-local", makeTimeFnDef("tz-local", []native.FnParam{}, []*native.Type{native.TTimezone}, subReg))
 	exports.Set("tz-name", makeTimeFnDef("tz-name", []native.FnParam{{Type: native.TTimezone}}, []*native.Type{native.TString}, subReg))
 	exports.Set("tz-offset", makeTimeFnDef("tz-offset", []native.FnParam{{Type: native.TInstant}, {Type: native.TTimezone}}, []*native.Type{native.TString}, subReg))
-	exports.Set("dst?", makeTimeFnDef("dst?", []native.FnParam{{Type: native.TInstant}, {Type: native.TTimezone}}, []*native.Type{native.TBoolean}, subReg))
+	exports.Set("is-dst", makeTimeFnDef("is-dst", []native.FnParam{{Type: native.TInstant}, {Type: native.TTimezone}}, []*native.Type{native.TBoolean}, subReg))
 
 	// Parsing — removed as a feature. parse-date / parse-datetime
 	// (layout-based) and auto-date (auto-format-detecting) are gone.
@@ -464,7 +464,7 @@ var TimeNatives = func() []native.NativeFunc {
 			return int64(end.Sub(start).Hours() / 24)
 		}),
 		{
-			Name:        "leap-year?",
+			Name:        "is-leap-year",
 			ForwardArgs: true,
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TDate},
@@ -501,7 +501,7 @@ var TimeNatives = func() []native.NativeFunc {
 		},
 		// --- Comparison (Date Date -> Boolean) ---
 		{
-			Name:        "before?",
+			Name:        "is-before",
 			ForwardArgs: true,
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TDate, native.TDate},
@@ -512,7 +512,7 @@ var TimeNatives = func() []native.NativeFunc {
 			}},
 		},
 		{
-			Name:        "after?",
+			Name:        "is-after",
 			ForwardArgs: true,
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TDate, native.TDate},
@@ -523,7 +523,7 @@ var TimeNatives = func() []native.NativeFunc {
 			}},
 		},
 		{
-			Name:        "equal?",
+			Name:        "is-equal",
 			ForwardArgs: true,
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TDate, native.TDate},
@@ -740,8 +740,8 @@ var TimeNatives = func() []native.NativeFunc {
 			}},
 		},
 		{
-			// d start end between? → args[0]=end (nearest), args[1]=start, args[2]=d (deepest)
-			Name:        "between?",
+			// d start end is-between → args[0]=end (nearest), args[1]=start, args[2]=d (deepest)
+			Name:        "is-between",
 			ForwardArgs: true,
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TDate, native.TDate, native.TDate},
@@ -1042,8 +1042,8 @@ var TimeNatives = func() []native.NativeFunc {
 			}},
 		},
 		{
-			// ins tz dst? → args[0]=tz (nearest), args[1]=ins
-			Name:        "dst?",
+			// ins tz is-dst → args[0]=tz (nearest), args[1]=ins
+			Name:        "is-dst",
 			ForwardArgs: true,
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TTimezone, native.TInstant},
