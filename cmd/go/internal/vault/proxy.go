@@ -343,14 +343,23 @@ func writeDenied(w http.ResponseWriter, code int, reason string) {
 	_, _ = io.WriteString(w, "vault proxy denied: "+reason+"\n")
 }
 
-// log writes a single redacted access line. The Authorization
-// header (capability token) is replaced with a fixed marker so
-// access logs are safe to share and tail.
+// log writes a single redacted access line and appends a
+// structured event to the audit log. The Authorization header
+// (capability token) and the upstream secret are never written;
+// only metadata about the request shape and outcome.
 func (p *Proxy) log(started time.Time, r *http.Request, alias string, status int, tag string) {
-	if p.stdout == nil {
-		return
+	if p.stdout != nil {
+		fmt.Fprintf(p.stdout, "%s %s %s alias=%s status=%d outcome=%s dur=%s\n",
+			time.Now().UTC().Format(time.RFC3339), r.Method, r.URL.Path,
+			alias, status, tag, time.Since(started).Truncate(time.Millisecond))
 	}
-	fmt.Fprintf(p.stdout, "%s %s %s alias=%s status=%d outcome=%s dur=%s\n",
-		time.Now().UTC().Format(time.RFC3339), r.Method, r.URL.Path,
-		alias, status, tag, time.Since(started).Truncate(time.Millisecond))
+	_ = appendAudit(p.homeDir, AuditEvent{
+		Action:  "proxy.request",
+		Actor:   "proxy",
+		Alias:   alias,
+		Method:  r.Method,
+		Path:    r.URL.Path,
+		Status:  status,
+		Outcome: tag,
+	})
 }

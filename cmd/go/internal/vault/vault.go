@@ -81,6 +81,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runProviders(stdout)
 	case "scan":
 		return runScan(rest, homeDir, stdout, stderr)
+	case "audit":
+		return runAudit(rest, homeDir, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "error: unknown vault mode %q\n", mode)
 		printUsage(stderr)
@@ -118,6 +120,7 @@ var modeDocs = []modeDoc{
 	{"proxy", "run a local credential broker for agents and tools"},
 	{"providers", "list built-in provider presets"},
 	{"scan", "scan files for leaked secret-like strings"},
+	{"audit", "show the structured audit log"},
 }
 
 // --- shared helpers --------------------------------------------------------
@@ -247,6 +250,7 @@ func runInit(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	_ = appendAudit(homeDir, AuditEvent{Action: "vault.init", Outcome: "ok", Reason: "backend=" + chosen})
 	fmt.Fprintf(stdout, "vault initialized: backend=%s store=%s\n", chosen, StorePath(homeDir))
 	return 0
 }
@@ -338,6 +342,10 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	_ = appendAudit(homeDir, AuditEvent{
+		Action: "vault.add", Alias: alias, Provider: *provider, Outcome: "ok",
+		Reason: "source=" + source,
+	})
 	fmt.Fprintf(stdout, "stored %s (backend=%s, %d bytes)\n", alias, kr.Name(), len(value))
 	return 0
 }
@@ -498,6 +506,7 @@ func runRemove(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	_ = appendAudit(homeDir, AuditEvent{Action: "vault.rm", Alias: alias, Outcome: "ok"})
 	fmt.Fprintf(stdout, "removed %s\n", alias)
 	return 0
 }
@@ -564,6 +573,10 @@ func runImport(args []string, homeDir string, stdout, stderr io.Writer) int {
 			Provider:  *provider,
 			Namespace: *namespace,
 			Source:    "import:" + path,
+		})
+		_ = appendAudit(homeDir, AuditEvent{
+			Action: "vault.import", Alias: alias, Provider: *provider,
+			Outcome: "ok", Reason: "source=" + path,
 		})
 		fmt.Fprintf(stdout, "imported %s\n", alias)
 	}
@@ -657,6 +670,10 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	_ = appendAudit(homeDir, AuditEvent{
+		Action: "vault.grant", Alias: alias, Capability: tok.ID,
+		Agent: tok.Agent, Outcome: "ok",
+	})
 	fmt.Fprintf(stdout, "capability: %s\n", tok.ID)
 	fmt.Fprintf(stdout, "alias:      %s\n", tok.Alias)
 	if tok.Agent != "" {
@@ -700,6 +717,10 @@ func runRevoke(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	_ = appendAudit(homeDir, AuditEvent{
+		Action: "vault.revoke", Capability: s.Capabilities[idx].ID,
+		Alias: s.Capabilities[idx].Alias, Outcome: "ok",
+	})
 	fmt.Fprintf(stdout, "revoked %s\n", s.Capabilities[idx].ID)
 	return 0
 }
@@ -717,6 +738,7 @@ func runLock(homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	_ = appendAudit(homeDir, AuditEvent{Action: "vault.lock", Outcome: "ok"})
 	fmt.Fprintln(stdout, "vault locked")
 	return 0
 }
@@ -732,6 +754,7 @@ func runUnlock(homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	_ = appendAudit(homeDir, AuditEvent{Action: "vault.unlock", Outcome: "ok"})
 	fmt.Fprintln(stdout, "vault unlocked")
 	return 0
 }
