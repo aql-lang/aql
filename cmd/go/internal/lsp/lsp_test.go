@@ -415,3 +415,76 @@ func TestUnknownMethodReturnsError(t *testing.T) {
 		t.Errorf("error code = %d, want %d", resp.Error.Code, errMethodNotFound)
 	}
 }
+
+// TestParseErrorReportedAsDiagnostic verifies that a buffer the
+// parser rejects (e.g. an unterminated string) still triggers a
+// publishDiagnostics notification with at least one error-severity
+// entry — i.e. the lang.Check error path is surfaced, not silently
+// swallowed.
+func TestParseErrorReportedAsDiagnostic(t *testing.T) {
+	c := newClient(t)
+	defer c.shutdown()
+
+	c.send(rpcRequest{JSONRPC: "2.0", ID: 1, Method: "initialize", Params: map[string]any{}})
+	c.recvResponse(1)
+
+	uri := "file:///tmp/parse.aql"
+	c.send(rpcNotification{
+		JSONRPC: "2.0",
+		Method:  "textDocument/didOpen",
+		Params: DidOpenTextDocumentParams{
+			TextDocument: TextDocumentItem{
+				URI: uri, LanguageID: "aql", Version: 1, Text: `"unterminated`,
+			},
+		},
+	})
+
+	c.send(rpcRequest{
+		JSONRPC: "2.0", ID: 2, Method: "textDocument/formatting",
+		Params: DocumentFormattingParams{TextDocument: TextDocumentIdentifier{URI: uri}},
+	})
+	_, before := c.recvResponse(2)
+
+	note := notificationFor("textDocument/publishDiagnostics", before)
+	if note == nil {
+		t.Fatal("no publishDiagnostics notification for parse error")
+	}
+	pd := decodeResult[PublishDiagnosticsParams](t, note.Params)
+	if len(pd.Diagnostics) == 0 {
+		t.Fatal("expected at least one diagnostic for unterminated string")
+	}
+	hasError := false
+	for _, d := range pd.Diagnostics {
+		if d.Severity == severityError {
+			hasError = true
+		}
+	}
+	if !hasError {
+		t.Errorf("no error-severity diagnostic for parse failure: %+v", pd.Diagnostics)
+	}
+}
+
+// TestWholeDocumentRangeCountsUTF16Units exercises wholeDocumentRange
+// directly so the UTF-16-vs-bytes regression has a focused unit test
+// independent of the JSON-RPC plumbing.
+func TestWholeDocumentRangeCountsUTF16Units(t *testing.T) {
+	// 🌍 (U+1F30D) is outside the BMP → 2 UTF-16 code units.
+	// "hello " is 6 BMP characters → 6 UTF-16 code units.
+	// Total expected end character: 8.
+	r := wholeDocumentRange("hello \U0001F30D")
+	if r.End.Line != 0 {
+		t.Errorf("End.Line = %d, want 0", r.End.Line)
+	}
+	if r.End.Character != 8 {
+		t.Errorf("End.Character = %d, want 8 (6 BMP + 1 surrogate pair)", r.End.Character)
+	}
+
+	// Multi-line ASCII keeps the same shape — last-line length, in code units.
+	r2 := wholeDocumentRange("abc\ndefg")
+	if r2.End.Line != 1 {
+		t.Errorf("End.Line = %d, want 1", r2.End.Line)
+	}
+	if r2.End.Character != 4 {
+		t.Errorf("End.Character = %d, want 4", r2.End.Character)
+	}
+}

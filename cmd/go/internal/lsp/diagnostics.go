@@ -30,7 +30,11 @@ func (s *server) publishDiagnostics(uri string) {
 }
 
 // computeDiagnostics runs lang.Check on src and converts each
-// CheckDiagnostic to an LSP Diagnostic.
+// CheckDiagnostic to an LSP Diagnostic. lang.Check returns a non-nil
+// error when the source fails to parse (or some other top-level
+// failure occurs); we synthesise a single diagnostic for that case
+// when the per-word diagnostic list is empty, so the editor shows
+// a marker for malformed buffers instead of clearing existing ones.
 func (s *server) computeDiagnostics(src string) []Diagnostic {
 	a, err := lang.New(lang.Options{})
 	if err != nil {
@@ -43,10 +47,19 @@ func (s *server) computeDiagnostics(src string) []Diagnostic {
 		}}
 	}
 
-	res, _ := a.Check(src)
-	out := make([]Diagnostic, 0, len(res.Diagnostics))
+	res, checkErr := a.Check(src)
+	out := make([]Diagnostic, 0, len(res.Diagnostics)+1)
 	for _, d := range res.Diagnostics {
 		out = append(out, toLSPDiagnostic(d))
+	}
+	if checkErr != nil && len(res.Diagnostics) == 0 {
+		out = append(out, Diagnostic{
+			Range:    Range{},
+			Severity: severityError,
+			Code:     "aql/check",
+			Source:   "aql",
+			Message:  checkErr.Error(),
+		})
 	}
 	return out
 }
@@ -65,7 +78,7 @@ func toLSPDiagnostic(d lang.CheckDiagnostic) Diagnostic {
 	if col < 0 {
 		col = 0
 	}
-	endCol := col + len(d.Word)
+	endCol := col + utf16Len(d.Word)
 	if d.Word == "" {
 		endCol = col + 1
 	}
