@@ -129,8 +129,10 @@ def OptStr (String tor None) def Foo refine Record [x:Number y:OptStr] make Foo 
 # Make record with optional field - none value
 def OptStr (String tor None) def Foo refine Record [x:Number y:OptStr] make Foo [42 None]	{x:42,y:None}
 
-# Def map with optional field - absence unifies as None
-def a {x:Integer y:(String tor None)} a unify {x:1}	{x:1,y:None} true
+# Def map with disjunct value field — `y:(String tor None)` accepts
+# only `String` or `None`, not absence (Absent is not in the disjunct).
+# Use `y?:String` for "None or absent".
+def a {x:Integer y:(String tor None)} a unify {x:1}	'~unify-fail' false
 def a {x:Integer y:(String tor None)} a unify {x:1,y:"Y"}	{x:1,y:'Y'} true
 def a {x:Integer y:(String tor None)} a unify {x:1,y:None}	{x:1,y:None} true
 
@@ -180,8 +182,10 @@ def d (make Options {y:(Integer tor None)}) d unify {}	{y:None} true
 # Options - all defaults
 (make Options {x:1,y:2}) unify {}	{x:1,y:2} true
 
-# Optional field syntax ? — sugar for (type Tor None)
-{x?:Integer}	{x:Integer|None}
+# Optional field syntax ? — desugars to (type Tor None Tor Absent).
+# Absent is the kernel type meaning "key not present"; its appearance
+# as a disjunct alternative makes "may be missing" first-class.
+{x?:Integer}	{x:Integer|None|Absent}
 
 # Computed key syntax {[key]:value} — uses defined variables
 def a "a" {[a]:1}	{a:1}
@@ -196,7 +200,7 @@ def a "x" def b "y" {[a]:1,[b]:2}	{x:1,y:2}
 (make Options {x:1,y?:String}) unify {x:2,y:"Y"}	{x:2,y:'Y'} true
 
 # Optional field in def map
-def a {x:Integer y?:String} a unify {x:1}	{x:1,y:None} true
+def a {x:Integer y?:String} a unify {x:1}	{x:1} true
 def a {x:Integer y?:String} a unify {x:1,y:"Y"}	{x:1,y:'Y'} true
 
 # Optional function arguments — named optional param

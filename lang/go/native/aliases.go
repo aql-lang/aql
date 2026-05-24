@@ -63,6 +63,7 @@ type (
 	MatchResult         = eng.MatchResult
 	Materializer        = eng.Materializer
 	TypeBehavior        = eng.TypeBehavior
+	UnifyError          = eng.UnifyError
 	ModuleDesc          = eng.ModuleDesc
 	MoveInfo            = eng.MoveInfo
 	NativeFunc          = eng.NativeFunc
@@ -409,6 +410,9 @@ var (
 	StripToCarriers       = eng.StripToCarriers
 	TypeNameTable         = eng.TypeNameTable
 	Unify                 = eng.Unify
+	UnifyR                = eng.UnifyR
+	UnifyExplain          = eng.UnifyExplain
+	UnifyExplainR         = eng.UnifyExplainR
 	UninstallDef          = eng.UninstallDef
 	UninstallFnSigs       = eng.UninstallFnSigs
 	ValToString           = eng.ValToString

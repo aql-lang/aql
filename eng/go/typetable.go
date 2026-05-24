@@ -497,6 +497,14 @@ var builtinDecls = []builtinDecl{
 	{Path: "Any", FixedID: 1, Rank: 11_000_000_000},
 	{Path: "None", FixedID: 2, Rank: 12_000_000_000},
 	{Path: "Never", FixedID: 61, Rank: 13_000_000_000},
+	// Absent is the kernel-internal type denoting "key/value not
+	// present". It is the third degenerate root (alongside None and
+	// Never) and shares their unification rule — only unifies with
+	// itself. Used by map unification to synthesize the fill value for
+	// a missing key, so `?:T` desugars to `disjunct(T, None, Absent)`
+	// and the "may be absent" semantic is carried entirely in the
+	// type rather than via map metadata.
+	{Path: "Absent", FixedID: 74, Rank: 14_000_000_000},
 	{Path: "Scalar", FixedID: 3, ParentPath: "Any", Rank: 20_000_000_000},
 	{Path: "Node", FixedID: 11, ParentPath: "Any", Rank: 30_000_000_000},
 	{Path: "Ideal", FixedID: 48, ParentPath: "Any", Rank: 40_000_000_000},

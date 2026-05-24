@@ -314,7 +314,13 @@ func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (en
 		if err != nil {
 			return eng.Value{}, err
 		}
-		// Optional field: wrap value as (value or None).
+		// Optional field: `?:T` means "None or absent, universally" —
+		// desugared to `disjunct(T, None, Absent)`. The Absent
+		// alternative carries the "may be missing" half of the rule
+		// (the map unifier synthesises Absent when a key is absent);
+		// the None alternative carries the "may be explicitly None"
+		// half. No separate metadata needed — the optionality lives
+		// entirely in the type.
 		optional := qmSet[key]
 		realKey := key
 		if strings.HasSuffix(key, "?") {
@@ -325,6 +331,7 @@ func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (en
 			child = eng.NewDisjunct([]eng.Value{
 				child,
 				eng.NewTypeLiteral(eng.TNone),
+				eng.NewTypeLiteral(eng.TAbsent),
 			})
 		}
 		om.Set(realKey, child)
