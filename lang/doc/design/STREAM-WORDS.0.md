@@ -161,6 +161,142 @@ words stay where they are, and `aql:stream` re-exports them so a user
 who has imported the module finds a complete async toolkit in one
 place.
 
+## Common patterns
+
+Side-by-side with the bash equivalent. Bash is shown as the reference
+mental model; the AQL versions are typed end-to-end and back-pressured.
+
+Every AQL snippet assumes `"aql:stream" import` at the top.
+
+### 1. Count error lines in a log
+
+```bash
+grep ERROR ./app.log | wc -l
+```
+
+```aql
+"./app.log" stream.from-lines
+    [ "ERROR" contains? ] stream.filter
+    stream.count
+```
+
+### 2. Bounded parallel HTTP fetches
+
+```bash
+cat urls.txt | xargs -P 8 -I{} curl -sf {} -o /dev/null
+```
+
+```aql
+"./urls.txt" stream.from-lines
+    8 [ http.get ] stream.pmap
+    stream.to-list
+```
+
+The `8` is the concurrency cap; order is preserved. Use
+`stream.pmap-unordered` to yield results as they finish.
+
+### 3. First responder wins (race across regions)
+
+```bash
+# bash has no clean idiom — you background each, `wait -n` for the
+# first to exit, then have to identify the winner yourself and kill
+# the rest.
+( fetch us-east > /tmp/a ) &
+( fetch eu-west > /tmp/b ) &
+( fetch ap-south > /tmp/c ) &
+wait -n
+kill %1 %2 %3 2>/dev/null
+```
+
+```aql
+[ [ "us-east"  fetch-region ] stream.spawn
+  [ "eu-west"  fetch-region ] stream.spawn
+  [ "ap-south" fetch-region ] stream.spawn
+] stream.race
+```
+
+`stream.race` returns the winner's value and cancels the losers'
+tokens — the in-flight HTTP requests abort instead of leaking.
+
+### 4. Tail a log with a deadline
+
+```bash
+timeout 30s tail -f /var/log/events | grep DEPLOY
+```
+
+```aql
+"/var/log/events" stream.from-lines
+    30s stream.with-timeout
+    [ "DEPLOY" contains? ] stream.filter
+    [ println ] stream.for-each
+```
+
+`with-timeout` is per-element: if no new line arrives within 30s, the
+stream terminates with a `TimeoutError` and the file handle is
+released.
+
+### 5. Batch a JSONL stream into bulk inserts
+
+```bash
+# Awkward in bash: split into files, then loop. No streaming bulk-insert.
+split -l 100 events.jsonl batch_
+for f in batch_*; do bulk-insert < "$f"; done
+rm batch_*
+```
+
+```aql
+"./events.jsonl" stream.from-lines
+    [ parse-json ] stream.map
+    100 stream.chunks-of
+    [ bulk-insert ] stream.for-each
+```
+
+No temp files, constant memory, and `bulk-insert` sees a real
+`List<Record>` rather than re-parsing text.
+
+### 6. Merge multiple log sources, filter, write out
+
+```bash
+# tail -f on multiple files prefixes filenames and interleaves by
+# kernel scheduling; ordering is best-effort, error handling
+# nonexistent.
+tail -f a.log b.log | grep ERROR > errors.log
+```
+
+```aql
+[ "./a.log" stream.from-lines
+  "./b.log" stream.from-lines
+] stream.merge
+    [ "ERROR" contains? ] stream.filter
+    "./errors.log" stream.to-lines
+```
+
+If either source errors, fail-fast cancels both and the partial
+output file is closed cleanly.
+
+### 7. Enrich + filter + persist (the full pipeline)
+
+The motivating example from the top of the doc, shown against its
+bash equivalent for completeness:
+
+```bash
+# Approximation — true line-by-line typed enrichment with 8-way
+# parallelism requires GNU parallel and careful quoting:
+cat events.log \
+  | jq -c '.' \
+  | parallel -j 8 --keep-order 'enrich-from-api {}' \
+  | jq -c 'select(.status == "error")' \
+  > errors.jsonl
+```
+
+```aql
+"./events.log" stream.from-lines
+    [ parse-json ] stream.map
+    [ status &= "error" ] stream.filter
+    8 [ enrich-from-api ] stream.pmap
+    "./errors.jsonl" stream.to-lines
+```
+
 ## Lifecycle & cancellation
 
 - Every `Stream`, `Channel`, and `Job` is born attached to a
