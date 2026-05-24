@@ -41,7 +41,7 @@ func dispatchUnifier(a, b Value) (Value, *UnifyError, bool) {
 		return Value{}, nil, false
 	}
 
-	start := aType
+	var start *Type
 	switch {
 	case bType.IsSubtypeOf(aType):
 		start = bType

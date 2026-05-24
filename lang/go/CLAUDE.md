@@ -69,6 +69,7 @@ Language-agnostic content stays at the top of each component:
 make test         # from repo root: fans out across every module
 make vet          # vet across every module
 make fmt          # gofmt across every module
+make lint         # golangci-lint across every module — RUN BEFORE COMMIT
 
 cd cmd/go
 make build        # builds bin/aql
@@ -82,6 +83,18 @@ Run a specific test:
 ```bash
 cd lang/go && go test ./test/ -run "TestFactorialTypeScaling" -v
 ```
+
+**Pre-commit checklist.** Before every `git commit`, run from the
+repo root:
+
+```bash
+make fmt && make vet && make lint && make test
+```
+
+`make lint` runs `golangci-lint` (configured via `.golangci.yml`)
+and catches ineffassign / unused / shadowed-variable issues that
+`go vet` and the test suite both miss. Skipping it lets a clean-
+locally commit fail CI; the cost of running it is a few seconds.
 
 ## Dependencies
 
