@@ -25,18 +25,28 @@ type Alias struct {
 }
 
 // Capability is a short-lived, scoped permission to use one alias.
-// It maps to the "capability token" pattern from the recommendation:
-// the broker/proxy layer (not yet implemented) will consume these
-// to authorize HTTP requests without exposing the underlying secret.
+// It maps to the "capability token" pattern from the recommendation
+// and is enforced by the broker proxy at request time.
+//
+// Beyond the time- and host/method-scoping primitives, capabilities
+// can carry quantitative constraints (MaxCalls, MaxCostCents) and a
+// human-approval flag for risky operations. Used* fields are
+// incremented on each successful proxy request and persisted so the
+// quotas survive proxy restarts.
 type Capability struct {
-	ID        string   `json:"id"`
-	Alias     string   `json:"alias"`
-	Agent     string   `json:"agent,omitempty"`
-	Hosts     []string `json:"hosts,omitempty"`
-	Methods   []string `json:"methods,omitempty"`
-	CreatedAt string   `json:"created_at"`
-	ExpiresAt string   `json:"expires_at,omitempty"`
-	Revoked   bool     `json:"revoked,omitempty"`
+	ID              string   `json:"id"`
+	Alias           string   `json:"alias"`
+	Agent           string   `json:"agent,omitempty"`
+	Hosts           []string `json:"hosts,omitempty"`
+	Methods         []string `json:"methods,omitempty"`
+	CreatedAt       string   `json:"created_at"`
+	ExpiresAt       string   `json:"expires_at,omitempty"`
+	Revoked         bool     `json:"revoked,omitempty"`
+	MaxCalls        int      `json:"max_calls,omitempty"`
+	UsedCalls       int      `json:"used_calls,omitempty"`
+	MaxCostCents    int      `json:"max_cost_cents,omitempty"`
+	UsedCostCents   int      `json:"used_cost_cents,omitempty"`
+	RequireApproval bool     `json:"require_approval,omitempty"`
 }
 
 // Store is the on-disk vault metadata file. It contains aliases,

@@ -83,6 +83,12 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runScan(rest, homeDir, stdout, stderr)
 	case "audit":
 		return runAudit(rest, homeDir, stdout, stderr)
+	case "rotate":
+		return runRotate(rest, homeDir, stdin, stdout, stderr)
+	case "policy":
+		return runPolicy(rest, homeDir, stdin, stdout, stderr)
+	case "mcp":
+		return runMCP(rest, homeDir, stdin, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "error: unknown vault mode %q\n", mode)
 		printUsage(stderr)
@@ -98,7 +104,7 @@ func printUsage(w io.Writer) {
 		fmt.Fprintf(w, "  %-10s %s\n", m.name, m.summary)
 	}
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Backends: auto (default), keychain, secret-service, wincred, file.")
+	fmt.Fprintln(w, "Backends: auto (default), keychain, secret-service, wincred, file, 1password.")
 	fmt.Fprintln(w, "Use AQL_VAULT_PASSPHRASE for non-interactive file-backend access.")
 }
 
@@ -121,6 +127,9 @@ var modeDocs = []modeDoc{
 	{"providers", "list built-in provider presets"},
 	{"scan", "scan files for leaked secret-like strings"},
 	{"audit", "show the structured audit log"},
+	{"rotate", "replace a stored secret value, optionally revoking caps"},
+	{"policy", "declaratively apply / show vault aliases and capabilities"},
+	{"mcp", "run a stdio MCP server exposing aliases as tools"},
 }
 
 // --- shared helpers --------------------------------------------------------
@@ -184,7 +193,7 @@ func fileDir(homeDir string) string {
 func runInit(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("vault init", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	backend := fs.String("backend", BackendAuto, "storage backend: auto, keychain, secret-service, wincred, file")
+	backend := fs.String("backend", BackendAuto, "storage backend: auto, keychain, secret-service, wincred, file, 1password")
 	force := fs.Bool("force", false, "reinitialize an existing vault")
 	if err := fs.Parse(args); err != nil {
 		return 1
@@ -640,11 +649,14 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 	hosts := fs.String("hosts", "", "comma-separated host allowlist (e.g. api.openai.com)")
 	methods := fs.String("methods", "", "comma-separated HTTP methods (default any)")
 	ttl := fs.Duration("ttl", 2*time.Hour, "lifetime before the capability expires")
+	maxCalls := fs.Int("max-calls", 0, "max total proxy calls (0 = unlimited)")
+	maxCostCents := fs.Int("max-cost-cents", 0, "max total cost in cents from X-AQL-Vault-Cost-Cents (0 = unlimited)")
+	approval := fs.Bool("require-approval", false, "advisory: proxy will deny until a human flips this off")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintf(stderr, "error: usage: aql vault grant [--agent=NAME] [--hosts=H,H] [--methods=GET,POST] [--ttl=2h] <alias>\n")
+		fmt.Fprintf(stderr, "error: usage: aql vault grant [--agent=NAME] [--hosts=H,H] [--methods=GET,POST] [--ttl=2h] [--max-calls=N] [--max-cost-cents=N] [--require-approval] <alias>\n")
 		return 1
 	}
 	alias := fs.Arg(0)
@@ -661,11 +673,15 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: no alias named %q\n", alias)
 		return 1
 	}
-	tok, err := s.NewCapability(alias, *agent, splitCSV(*hosts), splitCSV(*methods), *ttl)
-	if err != nil {
+	if _, err := s.NewCapability(alias, *agent, splitCSV(*hosts), splitCSV(*methods), *ttl); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	idx := len(s.Capabilities) - 1
+	s.Capabilities[idx].MaxCalls = *maxCalls
+	s.Capabilities[idx].MaxCostCents = *maxCostCents
+	s.Capabilities[idx].RequireApproval = *approval
+	tok := &s.Capabilities[idx]
 	if err := SaveStore(homeDir, s); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -687,6 +703,15 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 	}
 	if tok.ExpiresAt != "" {
 		fmt.Fprintf(stdout, "expires:    %s\n", tok.ExpiresAt)
+	}
+	if tok.MaxCalls > 0 {
+		fmt.Fprintf(stdout, "max-calls:  %d\n", tok.MaxCalls)
+	}
+	if tok.MaxCostCents > 0 {
+		fmt.Fprintf(stdout, "max-cost:   %dc\n", tok.MaxCostCents)
+	}
+	if tok.RequireApproval {
+		fmt.Fprintln(stdout, "approval:   required (proxy will deny until cleared)")
 	}
 	return 0
 }
@@ -813,6 +838,90 @@ func runConfig(args []string, homeDir string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
+}
+
+// --- rotate ---------------------------------------------------------------
+
+// runRotate replaces the secret behind an alias with a new value
+// while preserving the alias metadata (provider, namespace, creation
+// time). Existing capabilities continue to work — the rotation is
+// transparent at the broker layer. Pass --revoke-caps to invalidate
+// all live capabilities for the alias at the same time (the safer
+// default for incident response).
+func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("vault rotate", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fromEnv := fs.String("from-env", "", "read the new value from this environment variable")
+	fromStdin := fs.Bool("from-stdin", false, "read the new value from one line on stdin")
+	revokeCaps := fs.Bool("revoke-caps", false, "revoke all capabilities scoped to this alias")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	if fs.NArg() < 1 {
+		fmt.Fprintf(stderr, "error: usage: aql vault rotate [--from-env=VAR | --from-stdin | --revoke-caps] <alias>\n")
+		return 1
+	}
+	alias := fs.Arg(0)
+	s, err := requireStore(homeDir)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	if s.Locked {
+		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
+		return 1
+	}
+	a, _ := s.FindAlias(alias)
+	if a == nil {
+		fmt.Fprintf(stderr, "error: no alias named %q\n", alias)
+		return 1
+	}
+
+	value, source, err := readSecretValue(*fromEnv, *fromStdin, stdin, stdout)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	if value == "" {
+		fmt.Fprintln(stderr, "error: empty value; refusing to rotate")
+		return 1
+	}
+
+	kr, err := openKeyring(s, homeDir, stdin, stdout, "Vault passphrase: ")
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	if err := kr.Set(alias, value); err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	a.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	a.Source = source
+
+	revoked := 0
+	if *revokeCaps {
+		for i := range s.Capabilities {
+			if s.Capabilities[i].Alias == alias && !s.Capabilities[i].Revoked {
+				s.Capabilities[i].Revoked = true
+				revoked++
+			}
+		}
+	}
+	if err := SaveStore(homeDir, s); err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	_ = appendAudit(homeDir, AuditEvent{
+		Action: "vault.rotate", Alias: alias, Outcome: "ok",
+		Reason: fmt.Sprintf("source=%s revoked-caps=%d", source, revoked),
+	})
+	fmt.Fprintf(stdout, "rotated %s (backend=%s, %d bytes)", alias, kr.Name(), len(value))
+	if revoked > 0 {
+		fmt.Fprintf(stdout, "; revoked %d capability(s)", revoked)
+	}
+	fmt.Fprintln(stdout)
+	return 0
 }
 
 // --- input helpers ---------------------------------------------------------

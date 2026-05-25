@@ -47,6 +47,12 @@ const (
 	// ~/.aql/vault.keyring. Used when no host keychain is available
 	// or when explicitly requested for offline portability.
 	BackendFile = "file"
+	// BackendOnePassword stores secrets in 1Password via the `op`
+	// CLI. The user must have `op` installed and signed in to a
+	// 1Password account; entries are written to the configured
+	// vault as items of category "API Credential" with the alias
+	// as the item title.
+	BackendOnePassword = "1password"
 )
 
 // ErrNotFound is returned by keyring.Get when no entry exists for
@@ -104,6 +110,11 @@ func selectKeyring(backend string, fileDir, passphrase string) (keyring, error) 
 		return &winCred{}, nil
 	case BackendFile:
 		return &fileKeyring{dir: fileDir, pass: passphrase}, nil
+	case BackendOnePassword:
+		if _, err := exec.LookPath("op"); err != nil {
+			return nil, fmt.Errorf("vault: 1password CLI `op` not found")
+		}
+		return &onePasswordKeyring{vault: os.Getenv("AQL_VAULT_1PASSWORD_VAULT")}, nil
 	default:
 		return nil, fmt.Errorf("vault: unknown backend %q", backend)
 	}
@@ -423,4 +434,70 @@ func decryptBlob(blob []byte, passphrase string) ([]byte, error) {
 		return nil, errors.New("vault: wrong passphrase or corrupt keyring")
 	}
 	return plain, nil
+}
+
+// --- 1Password via `op` CLI -------------------------------------------------
+
+// onePasswordKeyring stores secrets in the 1Password vault named
+// by AQL_VAULT_1PASSWORD_VAULT (default "Private"). Each alias
+// becomes an "API Credential" item titled "aql:<alias>". The user
+// must have an active `op signin` session for the `op` CLI calls
+// to succeed; this is the responsibility of the host.
+type onePasswordKeyring struct {
+	vault string
+}
+
+func (k *onePasswordKeyring) Name() string { return BackendOnePassword }
+
+func (k *onePasswordKeyring) itemTitle(alias string) string {
+	return "aql:" + alias
+}
+
+func (k *onePasswordKeyring) opVault() string {
+	if k.vault == "" {
+		return "Private"
+	}
+	return k.vault
+}
+
+func (k *onePasswordKeyring) Set(alias, value string) error {
+	// `op item delete` to clear any prior item, then `op item create`.
+	// The delete is best-effort: missing items return non-zero, which
+	// we ignore. Creating is the operation that matters.
+	_ = exec.Command("op", "item", "delete", k.itemTitle(alias),
+		"--vault", k.opVault()).Run()
+	cmd := exec.Command("op", "item", "create",
+		"--category", "API Credential",
+		"--vault", k.opVault(),
+		"--title", k.itemTitle(alias),
+		"credential="+value)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("op item create: %s: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func (k *onePasswordKeyring) Get(alias string) (string, error) {
+	cmd := exec.Command("op", "item", "get", k.itemTitle(alias),
+		"--vault", k.opVault(), "--fields", "label=credential", "--reveal")
+	out, err := cmd.Output()
+	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok && strings.Contains(string(ee.Stderr), "isn't an item") {
+			return "", ErrNotFound
+		}
+		return "", fmt.Errorf("op item get: %w", err)
+	}
+	return strings.TrimRight(string(out), "\n"), nil
+}
+
+func (k *onePasswordKeyring) Delete(alias string) error {
+	cmd := exec.Command("op", "item", "delete", k.itemTitle(alias),
+		"--vault", k.opVault())
+	if out, err := cmd.CombinedOutput(); err != nil {
+		if strings.Contains(string(out), "isn't an item") {
+			return nil
+		}
+		return fmt.Errorf("op item delete: %s: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }

@@ -180,6 +180,27 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p.log(started, r, alias, http.StatusForbidden, "method-deny")
 		return
 	}
+	if tok.MaxCalls > 0 && tok.UsedCalls >= tok.MaxCalls {
+		writeDenied(w, http.StatusTooManyRequests, "capability call quota exhausted")
+		p.log(started, r, alias, http.StatusTooManyRequests, "calls-exhausted")
+		return
+	}
+	if tok.MaxCostCents > 0 && tok.UsedCostCents >= tok.MaxCostCents {
+		writeDenied(w, http.StatusPaymentRequired, "capability cost budget exhausted")
+		p.log(started, r, alias, http.StatusPaymentRequired, "budget-exhausted")
+		return
+	}
+	if tok.RequireApproval {
+		// Approval flow is currently advisory: the proxy refuses
+		// the request and emits an audit event so an operator can
+		// inspect and (out of band) flip RequireApproval off, grant
+		// a new capability, or proceed via a different channel. A
+		// future revision could park requests in a queue with an
+		// interactive `vault approve <id>` command.
+		writeDenied(w, http.StatusForbidden, "capability requires human approval (advisory; see audit log)")
+		p.log(started, r, alias, http.StatusForbidden, "approval-required")
+		return
+	}
 
 	aliasMeta, _ := s.FindAlias(alias)
 	if aliasMeta == nil {
@@ -239,10 +260,52 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
+	// Persist the call against the capability *before* streaming
+	// the body so a crash mid-stream cannot cause the quota to be
+	// silently bypassed.
+	costCents := parseCostHeader(resp.Header.Get("X-AQL-Vault-Cost-Cents"))
+	p.recordUse(tok.ID, costCents)
+
 	copyHeadersExceptHop(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
 	p.log(started, r, alias, resp.StatusCode, "ok")
+}
+
+// recordUse increments the call counter and cost meter on the
+// named capability and persists the store. Errors are swallowed
+// (recorded to stderr) because a bookkeeping failure must not
+// affect the in-flight response, which has already been authorized.
+func (p *Proxy) recordUse(capID string, costCents int) {
+	s, err := LoadStore(p.homeDir)
+	if err != nil || s == nil {
+		return
+	}
+	c, idx := s.FindCapability(capID)
+	if c == nil {
+		return
+	}
+	s.Capabilities[idx].UsedCalls++
+	s.Capabilities[idx].UsedCostCents += costCents
+	if err := SaveStore(p.homeDir, s); err != nil {
+		fmt.Fprintf(p.stderr, "vault proxy: persisting capability counters: %s\n", err)
+	}
+}
+
+// parseCostHeader returns the integer cost in cents reported by
+// the upstream, or 0 when the header is missing or malformed.
+func parseCostHeader(v string) int {
+	if v == "" {
+		return 0
+	}
+	n := 0
+	for _, ch := range v {
+		if ch < '0' || ch > '9' {
+			return 0
+		}
+		n = n*10 + int(ch-'0')
+	}
+	return n
 }
 
 // splitAliasPath parses /<alias>/<rest> into ("alias", "/rest").
