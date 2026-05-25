@@ -26,8 +26,8 @@ type fakeService struct {
 	paused atomic.Bool
 }
 
-func (f *fakeService) Name() string               { return f.name }
-func (f *fakeService) Status() service.State      { return service.State(f.state.Load()) }
+func (f *fakeService) Name() string          { return f.name }
+func (f *fakeService) Status() service.State { return service.State(f.state.Load()) }
 func (f *fakeService) Start(context.Context) error {
 	f.state.Store(int32(service.StateRunning))
 	return nil
@@ -102,7 +102,10 @@ func newTestServer(t *testing.T, token string, svcs ...service.Service) (*httpte
 	return ts, s
 }
 
-func get(t *testing.T, url, token string) (*http.Response, []byte) {
+// get and postJSON return (statusCode, body) so the body can be
+// closed inside the helper (satisfying the bodyclose linter) without
+// the caller having to remember.
+func get(t *testing.T, url, token string) (int, []byte) {
 	t.Helper()
 	req, _ := http.NewRequest(http.MethodGet, url, nil)
 	if token != "" {
@@ -114,10 +117,10 @@ func get(t *testing.T, url, token string) (*http.Response, []byte) {
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
-	return resp, body
+	return resp.StatusCode, body
 }
 
-func postJSON(t *testing.T, url, token string, body any) (*http.Response, []byte) {
+func postJSON(t *testing.T, url, token string, body any) (int, []byte) {
 	t.Helper()
 	b, _ := json.Marshal(body)
 	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader(b))
@@ -131,24 +134,24 @@ func postJSON(t *testing.T, url, token string, body any) (*http.Response, []byte
 	}
 	defer resp.Body.Close()
 	out, _ := io.ReadAll(resp.Body)
-	return resp, out
+	return resp.StatusCode, out
 }
 
 // --- tests ---
 
 func TestHealthz(t *testing.T) {
 	ts, _ := newTestServer(t, "")
-	resp, _ := get(t, ts.URL+"/healthz", "")
-	if resp.StatusCode != 200 {
-		t.Errorf("status = %d, want 200", resp.StatusCode)
+	status, _ := get(t, ts.URL+"/healthz", "")
+	if status != 200 {
+		t.Errorf("status = %d, want 200", status)
 	}
 }
 
 func TestOpenAPISpec(t *testing.T) {
 	ts, _ := newTestServer(t, "")
-	resp, body := get(t, ts.URL+"/openapi.yaml", "")
-	if resp.StatusCode != 200 {
-		t.Fatalf("status = %d", resp.StatusCode)
+	status, body := get(t, ts.URL+"/openapi.yaml", "")
+	if status != 200 {
+		t.Fatalf("status = %d", status)
 	}
 	if !strings.Contains(string(body), "openapi: 3.0.3") {
 		t.Errorf("expected openapi 3.0.3 header, got start: %.100q", body)
@@ -165,9 +168,9 @@ func TestListServices(t *testing.T) {
 	b.state.Store(int32(service.StateRunning))
 
 	ts, _ := newTestServer(t, "", a, b)
-	resp, body := get(t, ts.URL+"/v1/services", "")
-	if resp.StatusCode != 200 {
-		t.Fatalf("status = %d, body=%s", resp.StatusCode, body)
+	status, body := get(t, ts.URL+"/v1/services", "")
+	if status != 200 {
+		t.Fatalf("status = %d, body=%s", status, body)
 	}
 	var got []map[string]any
 	if err := json.Unmarshal(body, &got); err != nil {
@@ -192,9 +195,9 @@ func TestGetService(t *testing.T) {
 	a.state.Store(int32(service.StateRunning))
 	ts, _ := newTestServer(t, "", a)
 
-	resp, body := get(t, ts.URL+"/v1/services/a", "")
-	if resp.StatusCode != 200 {
-		t.Fatalf("status = %d, body=%s", resp.StatusCode, body)
+	status, body := get(t, ts.URL+"/v1/services/a", "")
+	if status != 200 {
+		t.Fatalf("status = %d, body=%s", status, body)
 	}
 	var got map[string]any
 	json.Unmarshal(body, &got)
@@ -202,14 +205,14 @@ func TestGetService(t *testing.T) {
 		t.Errorf("got %v", got)
 	}
 
-	resp, _ = get(t, ts.URL+"/v1/services/nope", "")
-	if resp.StatusCode != 404 {
-		t.Errorf("nonexistent: status = %d, want 404", resp.StatusCode)
+	status, _ = get(t, ts.URL+"/v1/services/nope", "")
+	if status != 404 {
+		t.Errorf("nonexistent: status = %d, want 404", status)
 	}
 
-	resp, _ = get(t, ts.URL+"/v1/services/bad!name", "")
-	if resp.StatusCode != 400 {
-		t.Errorf("bad name: status = %d, want 400", resp.StatusCode)
+	status, _ = get(t, ts.URL+"/v1/services/bad!name", "")
+	if status != 400 {
+		t.Errorf("bad name: status = %d, want 400", status)
 	}
 }
 
@@ -218,17 +221,17 @@ func TestActionPauseAndResume(t *testing.T) {
 	a.state.Store(int32(service.StateRunning))
 	ts, _ := newTestServer(t, "", a)
 
-	resp, body := postJSON(t, ts.URL+"/v1/services/a/actions", "", map[string]string{"action": "pause"})
-	if resp.StatusCode != 200 {
-		t.Fatalf("pause: status = %d, body=%s", resp.StatusCode, body)
+	status, body := postJSON(t, ts.URL+"/v1/services/a/actions", "", map[string]string{"action": "pause"})
+	if status != 200 {
+		t.Fatalf("pause: status = %d, body=%s", status, body)
 	}
 	if !a.paused.Load() {
 		t.Error("expected paused")
 	}
 
-	resp, _ = postJSON(t, ts.URL+"/v1/services/a/actions", "", map[string]string{"action": "resume"})
-	if resp.StatusCode != 200 {
-		t.Fatalf("resume: status = %d", resp.StatusCode)
+	status, _ = postJSON(t, ts.URL+"/v1/services/a/actions", "", map[string]string{"action": "resume"})
+	if status != 200 {
+		t.Fatalf("resume: status = %d", status)
 	}
 	if a.paused.Load() {
 		t.Error("expected resumed")
@@ -240,9 +243,9 @@ func TestActionStop(t *testing.T) {
 	a.state.Store(int32(service.StateRunning))
 	ts, _ := newTestServer(t, "", a)
 
-	resp, body := postJSON(t, ts.URL+"/v1/services/a/actions", "", map[string]string{"action": "stop"})
-	if resp.StatusCode != 200 {
-		t.Fatalf("stop: status = %d, body=%s", resp.StatusCode, body)
+	status, body := postJSON(t, ts.URL+"/v1/services/a/actions", "", map[string]string{"action": "stop"})
+	if status != 200 {
+		t.Fatalf("stop: status = %d, body=%s", status, body)
 	}
 	if a.Status() != service.StateStopped {
 		t.Errorf("state = %s, want stopped", a.Status())
@@ -254,18 +257,18 @@ func TestActionNotPausable(t *testing.T) {
 	a.state.Store(int32(service.StateRunning))
 	ts, _ := newTestServer(t, "", a)
 
-	resp, body := postJSON(t, ts.URL+"/v1/services/a/actions", "", map[string]string{"action": "pause"})
-	if resp.StatusCode != 409 {
-		t.Errorf("status = %d, want 409, body=%s", resp.StatusCode, body)
+	status, body := postJSON(t, ts.URL+"/v1/services/a/actions", "", map[string]string{"action": "pause"})
+	if status != 409 {
+		t.Errorf("status = %d, want 409, body=%s", status, body)
 	}
 }
 
 func TestActionUnknown(t *testing.T) {
 	a := &fakeService{name: "a"}
 	ts, _ := newTestServer(t, "", a)
-	resp, _ := postJSON(t, ts.URL+"/v1/services/a/actions", "", map[string]string{"action": "explode"})
-	if resp.StatusCode != 400 {
-		t.Errorf("status = %d, want 400", resp.StatusCode)
+	status, _ := postJSON(t, ts.URL+"/v1/services/a/actions", "", map[string]string{"action": "explode"})
+	if status != 400 {
+		t.Errorf("status = %d, want 400", status)
 	}
 }
 
@@ -274,27 +277,27 @@ func TestAuthTokenEnforced(t *testing.T) {
 	ts, _ := newTestServer(t, "secret-token", a)
 
 	// No token: 401.
-	resp, _ := get(t, ts.URL+"/v1/services", "")
-	if resp.StatusCode != 401 {
-		t.Errorf("no token: status = %d, want 401", resp.StatusCode)
+	status, _ := get(t, ts.URL+"/v1/services", "")
+	if status != 401 {
+		t.Errorf("no token: status = %d, want 401", status)
 	}
 
 	// Wrong token: 401.
-	resp, _ = get(t, ts.URL+"/v1/services", "wrong")
-	if resp.StatusCode != 401 {
-		t.Errorf("wrong token: status = %d, want 401", resp.StatusCode)
+	status, _ = get(t, ts.URL+"/v1/services", "wrong")
+	if status != 401 {
+		t.Errorf("wrong token: status = %d, want 401", status)
 	}
 
 	// Correct token: 200.
-	resp, _ = get(t, ts.URL+"/v1/services", "secret-token")
-	if resp.StatusCode != 200 {
-		t.Errorf("right token: status = %d, want 200", resp.StatusCode)
+	status, _ = get(t, ts.URL+"/v1/services", "secret-token")
+	if status != 200 {
+		t.Errorf("right token: status = %d, want 200", status)
 	}
 
 	// /healthz is unauthenticated.
-	resp, _ = get(t, ts.URL+"/healthz", "")
-	if resp.StatusCode != 200 {
-		t.Errorf("healthz with no auth: status = %d, want 200", resp.StatusCode)
+	status, _ = get(t, ts.URL+"/healthz", "")
+	if status != 200 {
+		t.Errorf("healthz with no auth: status = %d, want 200", status)
 	}
 }
 
@@ -302,9 +305,9 @@ func TestServerInfo(t *testing.T) {
 	a := &fakeService{name: "a"}
 	ts, srv := newTestServer(t, "", a)
 	// Set startTime so uptime is meaningful.
-	resp, body := get(t, ts.URL+"/v1/server", "")
-	if resp.StatusCode != 200 {
-		t.Fatalf("status = %d", resp.StatusCode)
+	status, body := get(t, ts.URL+"/v1/server", "")
+	if status != 200 {
+		t.Fatalf("status = %d", status)
 	}
 	var info map[string]any
 	json.Unmarshal(body, &info)
@@ -320,9 +323,9 @@ func TestServerInfo(t *testing.T) {
 func TestMethodNotAllowed(t *testing.T) {
 	a := &fakeService{name: "a"}
 	ts, _ := newTestServer(t, "", a)
-	resp, _ := postJSON(t, ts.URL+"/v1/services", "", map[string]any{})
-	if resp.StatusCode != 405 {
-		t.Errorf("POST /v1/services: status = %d, want 405", resp.StatusCode)
+	status, _ := postJSON(t, ts.URL+"/v1/services", "", map[string]any{})
+	if status != 405 {
+		t.Errorf("POST /v1/services: status = %d, want 405", status)
 	}
 }
 

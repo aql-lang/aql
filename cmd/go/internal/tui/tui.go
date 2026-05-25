@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"sync/atomic"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -23,6 +24,29 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/command"
 	"github.com/aql-lang/aql/cmd/go/internal/service"
 )
+
+// discoveryRetryBudget is how long Start/Run waits for the api
+// service to publish its discovery file. Sized to absorb the
+// startup race in `aql serve ... + api + tui` without making a
+// genuinely-absent api take too long to fail.
+const discoveryRetryBudget = 2 * time.Second
+
+// readDiscoveryWithRetry polls the discovery file until it appears
+// or the budget elapses.
+func readDiscoveryWithRetry(_ io.Writer) (url, token string, err error) {
+	deadline := time.Now().Add(discoveryRetryBudget)
+	for {
+		u, t, _, e := api.ReadDiscoveryFile()
+		if e == nil {
+			return u, t, nil
+		}
+		err = e
+		if time.Now().After(deadline) {
+			return "", "", err
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
 
 type cmdImpl struct{}
 
@@ -38,15 +62,13 @@ func (*cmdImpl) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) in
 	if err != nil {
 		return 1
 	}
-	if apiURL == "" || token == "" {
-		url, tok, _, err := api.ReadDiscoveryFile()
+	if apiURL == "" {
+		url, tok, err := readDiscoveryWithRetry(stderr)
 		if err != nil {
 			fmt.Fprintf(stderr, "tui: %s\n", err)
 			return 1
 		}
-		if apiURL == "" {
-			apiURL = url
-		}
+		apiURL = url
 		if token == "" {
 			token = tok
 		}
@@ -120,14 +142,16 @@ func (s *Server) Start(ctx context.Context) error {
 	s.state.Store(int32(service.StateStarting))
 	defer s.state.Store(int32(service.StateStopped))
 
-	if s.apiURL == "" || s.token == "" {
-		url, tok, _, err := api.ReadDiscoveryFile()
+	// When composed as a service under `aql serve ... + api + tui`,
+	// the api service may not have written the discovery file yet.
+	// Retry briefly to absorb that startup race. With an explicit
+	// --api the discovery file isn't consulted at all.
+	if s.apiURL == "" {
+		url, tok, err := readDiscoveryWithRetry(s.stderr)
 		if err != nil {
 			return err
 		}
-		if s.apiURL == "" {
-			s.apiURL = url
-		}
+		s.apiURL = url
 		if s.token == "" {
 			s.token = tok
 		}

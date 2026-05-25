@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/aql-lang/aql/cmd/go/internal/api"
 	"github.com/aql-lang/aql/cmd/go/internal/check"
 	"github.com/aql-lang/aql/cmd/go/internal/clean"
 	"github.com/aql-lang/aql/cmd/go/internal/command"
@@ -25,7 +26,6 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/publish"
 	"github.com/aql-lang/aql/cmd/go/internal/register"
 	"github.com/aql-lang/aql/cmd/go/internal/registry"
-	"github.com/aql-lang/aql/cmd/go/internal/api"
 	"github.com/aql-lang/aql/cmd/go/internal/repl"
 	"github.com/aql-lang/aql/cmd/go/internal/run"
 	"github.com/aql-lang/aql/cmd/go/internal/serve"

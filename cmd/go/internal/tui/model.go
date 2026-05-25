@@ -188,7 +188,7 @@ func (m *model) View() string {
 			if i == m.cursor {
 				cursor = cursorStyle.Render("▸ ")
 			}
-			stateStr := svc.State
+			var stateStr string
 			switch svc.State {
 			case "running":
 				stateStr = runStyle.Render("running ")

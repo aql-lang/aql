@@ -55,15 +55,17 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		name = rest[1]
 	}
 
-	if *apiURL == "" || *token == "" {
+	// Only fall back to the discovery file when --api is missing.
+	// An explicit --api implies the caller knows the URL; an empty
+	// token in that case means "talk to an unauthenticated api",
+	// not "go find a token".
+	if *apiURL == "" {
 		url, tok, _, err := api.ReadDiscoveryFile()
 		if err != nil {
 			fmt.Fprintf(stderr, "ctl: %s\n", err)
 			return 1
 		}
-		if *apiURL == "" {
-			*apiURL = url
-		}
+		*apiURL = url
 		if *token == "" {
 			*token = tok
 		}

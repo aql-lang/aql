@@ -25,13 +25,13 @@ type fakeService struct {
 	pausable bool
 	startErr error
 
-	state    atomic.Int32
-	paused   atomic.Bool
-	started  atomic.Bool
-	stopped  atomic.Bool
-	startCh  chan struct{} // closed on first Start
+	state     atomic.Int32
+	paused    atomic.Bool
+	started   atomic.Bool
+	stopped   atomic.Bool
+	startCh   chan struct{} // closed on first Start
 	releaseCh chan struct{} // tests close to let Start return
-	mu       sync.Mutex
+	mu        sync.Mutex
 }
 
 func newFakeService(name string, stdio, pausable bool) *fakeService {
