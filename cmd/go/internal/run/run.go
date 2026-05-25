@@ -54,7 +54,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	checkFirst := fs.Bool("check", false, "run static type-check before execution; abort on error")
 
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql check [script.aql]\n       aql help [word]\n       aql fmt [file.aql ...]\n       aql prep [dir]\n       aql pack [dir]\n       aql clean [dir]\n       aql lsp [-p <port>]\n       aql registry -r <folder> -p <port>\n       aql serve <svc> [flags] [+ <svc> [flags]]...\n       aql ctl [--socket <path>] <op> [name]\n       aql install <name>-x.y.z [-r <url>]\n       aql register [-r <url>]\n       aql login [-r <url>]\n       aql publish [-r <url>] [dir]\n\nOptions:\n")
+		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql check [script.aql]\n       aql help [word]\n       aql fmt [file.aql ...]\n       aql prep [dir]\n       aql pack [dir]\n       aql clean [dir]\n       aql lsp [-p <port>]\n       aql registry -r <folder> -p <port>\n       aql serve <svc> [flags] [+ <svc> [flags]]...\n       aql ctl [--api url] [--token tok] <op> [name]\n       aql tui [--api url] [--token tok]\n       aql install <name>-x.y.z [-r <url>]\n       aql register [-r <url>]\n       aql login [-r <url>]\n       aql publish [-r <url>] [dir]\n\nOptions:\n")
 		fs.PrintDefaults()
 	}
 

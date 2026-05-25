@@ -184,9 +184,23 @@ func (s *Server) Stop(ctx context.Context) error {
 	return nil
 }
 
+// Metadata returns the LSP server's observable runtime state.
+func (s *Server) Metadata() map[string]string {
+	mode := "tcp"
+	if s.usesStdio {
+		mode = "stdio"
+	}
+	m := map[string]string{"mode": mode}
+	if !s.usesStdio {
+		m["addr"] = s.Addr()
+	}
+	return m
+}
+
 // compile-time interface checks. Note: Pausable is deliberately not
 // implemented (see file header).
 var (
-	_ service.Service   = (*Server)(nil)
-	_ service.StdioUser = (*Server)(nil)
+	_ service.Service      = (*Server)(nil)
+	_ service.StdioUser    = (*Server)(nil)
+	_ service.WithMetadata = (*Server)(nil)
 )

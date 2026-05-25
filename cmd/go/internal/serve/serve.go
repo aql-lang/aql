@@ -21,6 +21,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/aql-lang/aql/cmd/go/internal/command"
 	"github.com/aql-lang/aql/cmd/go/internal/service"
@@ -34,25 +35,18 @@ func New() command.Command { return &cmd{} }
 func (*cmd) Name() string     { return "serve" }
 func (*cmd) Synopsis() string { return "run one or more services in one process" }
 
-// Run handles `aql serve [--ctl[=path]] [-c file] <svc> [flags] + <svc> [flags] ...`.
+// Run handles `aql serve [-c file] <svc> [flags] + <svc> [flags] ...`.
+// Control is exposed via the `api` service (see internal/api); add
+// `+ api` to your invocation if you want `aql ctl` to work.
 func (*cmd) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Pull the serve-level flags off the head of argv before we
 	// hand the rest to splitSegments. We use a manual walk because
 	// the flag package would consume the service segments too.
-	var ctlEnabled bool
-	var ctlPath string
 	var configPath string
 	tail := args
 	for len(tail) > 0 {
 		a := tail[0]
 		switch {
-		case a == "--ctl":
-			ctlEnabled = true
-			tail = tail[1:]
-		case len(a) > len("--ctl=") && a[:len("--ctl=")] == "--ctl=":
-			ctlEnabled = true
-			ctlPath = a[len("--ctl="):]
-			tail = tail[1:]
 		case a == "-c" || a == "--config":
 			if len(tail) < 2 {
 				fmt.Fprintf(stderr, "serve: %s requires a path\n", a)
@@ -112,15 +106,6 @@ parseSegments:
 	}
 
 	sup := newSupervisor(services, stdout, stderr)
-	if ctlEnabled {
-		if ctlPath == "" {
-			ctlPath = defaultCtlPath()
-		}
-		if err := sup.startControlSocket(ctlPath); err != nil {
-			fmt.Fprintf(stderr, "serve: ctl: %s\n", err)
-			return 1
-		}
-	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -181,8 +166,8 @@ func checkDuplicateNames(svcs []service.Service) error {
 
 // printUsage writes the serve subcommand help.
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aql serve [--ctl[=path]] <svc> [flags] [+ <svc> [flags]]...")
-	fmt.Fprintln(w, "       aql serve [--ctl[=path]] -c <file>")
+	fmt.Fprintln(w, "Usage: aql serve <svc> [flags] [+ <svc> [flags]]...")
+	fmt.Fprintln(w, "       aql serve -c <file>")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Compose multiple services in one process under a single supervisor.")
 	fmt.Fprintln(w, "Segments are separated by a bare '+' token; each segment uses the")
@@ -194,27 +179,31 @@ func printUsage(w io.Writer) {
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Flags:")
-	fmt.Fprintln(w, "  --ctl[=path]   open the control socket (default: $TMPDIR/aql-serve.sock)")
 	fmt.Fprintln(w, "  -c <file>      load service list from a jsonic config file")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Examples:")
 	fmt.Fprintln(w, "  aql serve registry -r ./mods -p 8080 + lsp -p 9000")
-	fmt.Fprintln(w, "  aql serve --ctl repl + registry -r ./mods")
+	fmt.Fprintln(w, "  aql serve registry -r ./mods + api")
 	fmt.Fprintln(w, "  aql serve -c services.jsonic")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "For supervisor control (status/pause/resume/stop), include the")
+	fmt.Fprintln(w, "`api` service and use `aql ctl` or `aql tui` as the client.")
 }
 
-// supervisor owns the running services and the optional control
-// socket. One supervisor per `aql serve` invocation.
+// supervisor owns the running services and implements
+// service.Inspector so api/tui can read state and drive transitions.
+// One supervisor per `aql serve` invocation.
 type supervisor struct {
 	services []service.Service
 	byName   map[string]service.Service
 	stdout   io.Writer
 	stderr   io.Writer
 
-	mu        sync.Mutex
-	cancels   map[string]context.CancelFunc
-	ctlServer *controlServer // nil if --ctl not given
-	wg        sync.WaitGroup
+	mu      sync.Mutex
+	cancels map[string]context.CancelFunc
+	wg      sync.WaitGroup
+
+	startTime time.Time
 }
 
 func newSupervisor(svcs []service.Service, stdout, stderr io.Writer) *supervisor {
@@ -231,11 +220,59 @@ func newSupervisor(svcs []service.Service, stdout, stderr io.Writer) *supervisor
 	}
 }
 
+// Services returns all services in registration order. Part of the
+// service.Inspector contract.
+func (sup *supervisor) Services() []service.Service {
+	out := make([]service.Service, len(sup.services))
+	copy(out, sup.services)
+	return out
+}
+
+// ByName looks up a service by name. Part of the service.Inspector
+// contract.
+func (sup *supervisor) ByName(name string) (service.Service, bool) {
+	s, ok := sup.byName[name]
+	return s, ok
+}
+
+// StopService cancels the named service's context and waits for it
+// to unwind (or stopCtx to expire). Part of the service.Inspector
+// contract.
+func (sup *supervisor) StopService(stopCtx context.Context, name string) error {
+	svc, ok := sup.byName[name]
+	if !ok {
+		return fmt.Errorf("unknown service: %s", name)
+	}
+	// Best-effort graceful stop on the service first (HTTP shutdown,
+	// listener close, etc.), then cancel its context so Start unwinds.
+	_ = svc.Stop(stopCtx)
+	sup.mu.Lock()
+	if c, ok := sup.cancels[name]; ok {
+		c()
+	}
+	sup.mu.Unlock()
+	return nil
+}
+
+// StartTime returns when run() started, for /v1/server uptime
+// reporting. Zero if run hasn't been called yet.
+func (sup *supervisor) StartTime() time.Time { return sup.startTime }
+
 // run launches every service in a goroutine, waits for ctx to cancel
 // (signal received) or all services to exit on their own, then drives
 // graceful shutdown. Returns 0 on clean shutdown, 1 if any service
 // returned an error.
 func (sup *supervisor) run(ctx context.Context) int {
+	sup.startTime = time.Now()
+
+	// Late binding: services that need supervisor access (api, tui)
+	// receive the Inspector now, before Start.
+	for _, svc := range sup.services {
+		if b, ok := svc.(service.SupervisorBound); ok {
+			b.Bind(sup)
+		}
+	}
+
 	allDone := make(chan struct{})
 	var hadErr atomic.Bool
 
@@ -266,9 +303,6 @@ func (sup *supervisor) run(ctx context.Context) int {
 		names = append(names, s.Name())
 	}
 	fmt.Fprintf(sup.stdout, "aql serve: running %v\n", names)
-	if sup.ctlServer != nil {
-		fmt.Fprintf(sup.stdout, "aql serve: ctl on %s\n", sup.ctlServer.path)
-	}
 
 	select {
 	case <-ctx.Done():
@@ -284,12 +318,11 @@ func (sup *supervisor) run(ctx context.Context) int {
 		// All services exited on their own.
 	}
 
-	if sup.ctlServer != nil {
-		_ = sup.ctlServer.close()
-	}
-
 	if hadErr.Load() {
 		return 1
 	}
 	return 0
 }
+
+// compile-time interface check.
+var _ service.Inspector = (*supervisor)(nil)

@@ -25,9 +25,11 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/publish"
 	"github.com/aql-lang/aql/cmd/go/internal/register"
 	"github.com/aql-lang/aql/cmd/go/internal/registry"
+	"github.com/aql-lang/aql/cmd/go/internal/api"
 	"github.com/aql-lang/aql/cmd/go/internal/repl"
 	"github.com/aql-lang/aql/cmd/go/internal/run"
 	"github.com/aql-lang/aql/cmd/go/internal/serve"
+	"github.com/aql-lang/aql/cmd/go/internal/tui"
 	"github.com/aql-lang/aql/cmd/go/internal/vault"
 )
 
@@ -40,6 +42,9 @@ var Version = "0.1.0-dev"
 // cmd/go/aql calls this so the installed binary is named `aql`
 // rather than `go`.
 func Run() {
+	// Publish the version constant to the api package so the
+	// /v1/server endpoint can report it without an import cycle.
+	api.SetSupervisorVersion(Version)
 	os.Exit(execute(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
@@ -91,6 +96,7 @@ func buildRegistry() *command.Registry {
 	r.Register(registry.New())
 	r.Register(lsp.New())
 	r.Register(serve.New())
+	r.Register(tui.New())
 	return r
 }
 
@@ -102,6 +108,7 @@ var serviceNames = map[string]bool{
 	"registry": true,
 	"lsp":      true,
 	"serve":    true,
+	"tui":      true,
 }
 
 // Usage prints a short overview of every registered subcommand to w,

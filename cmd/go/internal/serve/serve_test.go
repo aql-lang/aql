@@ -3,7 +3,6 @@ package serve
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -186,118 +185,49 @@ func TestSupervisorRunsAndStopsOnCancel(t *testing.T) {
 	}
 }
 
-// --- control socket round-trip ---
+// --- Inspector surface (used by api/tui) ---
 
-func TestControlSocketStatusAndPause(t *testing.T) {
+func TestSupervisorInspector(t *testing.T) {
 	a := newFakeService("a", false, true)
 	b := newFakeService("b", false, false)
+	sup := newSupervisor([]service.Service{a, b}, &bytes.Buffer{}, &bytes.Buffer{})
 
-	var stdout, stderr bytes.Buffer
-	sup := newSupervisor([]service.Service{a, b}, &stdout, &stderr)
-
-	dir := t.TempDir()
-	sockPath := filepath.Join(dir, "ctl.sock")
-	if err := sup.startControlSocket(sockPath); err != nil {
-		t.Fatalf("startControlSocket: %s", err)
+	// Inspector view: Services, ByName.
+	all := sup.Services()
+	if len(all) != 2 || all[0].Name() != "a" || all[1].Name() != "b" {
+		t.Errorf("Services() = %v, want [a b]", all)
+	}
+	if got, ok := sup.ByName("a"); !ok || got.Name() != "a" {
+		t.Errorf("ByName(a) = (%v, %v)", got, ok)
+	}
+	if _, ok := sup.ByName("nope"); ok {
+		t.Error("ByName(nope) should be !ok")
 	}
 
+	// StopService: cancel context + Stop the service.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
 	supDone := make(chan int, 1)
-	go func() {
-		supDone <- sup.run(ctx)
-	}()
+	go func() { supDone <- sup.run(ctx) }()
 
-	// Wait for both services to be running, then exercise the
-	// control socket.
 	<-a.startCh
 	<-b.startCh
-	waitForState(t, a, service.StateRunning)
 
-	// status
-	resp := sendCtl(t, sockPath, map[string]any{"op": "status"})
-	if !resp.OK {
-		t.Fatalf("status not OK: %s", resp.Error)
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stopCancel()
+	if err := sup.StopService(stopCtx, "a"); err != nil {
+		t.Fatalf("StopService(a): %s", err)
 	}
-	if len(resp.Services) != 2 {
-		t.Fatalf("expected 2 services in status, got %d", len(resp.Services))
+	if err := sup.StopService(stopCtx, "b"); err != nil {
+		t.Fatalf("StopService(b): %s", err)
 	}
-
-	// pause a (pausable)
-	resp = sendCtl(t, sockPath, map[string]any{"op": "pause", "name": "a"})
-	if !resp.OK {
-		t.Fatalf("pause a: %s", resp.Error)
-	}
-	if a.Status() != service.StatePaused {
-		t.Errorf("a state = %s, want paused", a.Status())
-	}
-
-	// resume a
-	resp = sendCtl(t, sockPath, map[string]any{"op": "resume", "name": "a"})
-	if !resp.OK {
-		t.Fatalf("resume a: %s", resp.Error)
-	}
-	if a.Status() != service.StateRunning {
-		t.Errorf("a state = %s, want running", a.Status())
-	}
-
-	// pause b (not pausable) should fail
-	resp = sendCtl(t, sockPath, map[string]any{"op": "pause", "name": "b"})
-	// fakeService implements Pausable but returns an error if !pausable;
-	// the supervisor surfaces that as resp.Error.
-	if resp.OK {
-		t.Errorf("expected pause b to fail (non-pausable in test)")
-	}
-
-	// stop a via ctl
-	resp = sendCtl(t, sockPath, map[string]any{"op": "stop", "name": "a"})
-	if !resp.OK {
-		t.Fatalf("stop a: %s", resp.Error)
-	}
-
-	// unknown service
-	resp = sendCtl(t, sockPath, map[string]any{"op": "status", "name": "nope"})
-	// status ignores name (already validated by client) and returns OK
-	if !resp.OK {
-		t.Errorf("status with name should still succeed: %s", resp.Error)
-	}
-	resp = sendCtl(t, sockPath, map[string]any{"op": "stop", "name": "nope"})
-	if resp.OK {
-		t.Errorf("expected stop unknown to fail")
-	}
-
-	// Clean up.
-	cancel()
 	select {
-	case code := <-supDone:
-		if code != 0 {
-			t.Errorf("supervisor exit = %d, want 0; stderr=%s", code, stderr.String())
-		}
+	case <-supDone:
 	case <-time.After(3 * time.Second):
-		t.Fatal("supervisor did not exit within 3s")
+		t.Fatal("supervisor did not exit after stopping all services")
 	}
-
-	// Socket file should have been removed on shutdown.
-	if _, err := os.Stat(sockPath); err == nil {
-		t.Errorf("socket file %s should have been removed", sockPath)
-	}
-}
-
-func TestControlSocketRejectsNonSocketPath(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "not-a-socket")
-	if err := os.WriteFile(path, []byte("hi"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	a := newFakeService("a", false, false)
-	sup := newSupervisor([]service.Service{a}, &bytes.Buffer{}, &bytes.Buffer{})
-	err := sup.startControlSocket(path)
-	if err == nil {
-		t.Fatal("expected error opening ctl on a regular file")
-	}
-	if !strings.Contains(err.Error(), "not a socket") {
-		t.Errorf("error = %q, want 'not a socket'", err)
+	if err := sup.StopService(stopCtx, "nope"); err == nil {
+		t.Error("StopService(nope) should fail")
 	}
 }
 
@@ -421,39 +351,6 @@ func TestRegistryServiceStartStop(t *testing.T) {
 // --- helpers ---
 
 // ctlReply is the local shape we decode replies into.
-type ctlReply struct {
-	OK       bool             `json:"ok"`
-	Error    string           `json:"error,omitempty"`
-	Services []map[string]any `json:"services,omitempty"`
-}
-
-func sendCtl(t *testing.T, sockPath string, req map[string]any) ctlReply {
-	t.Helper()
-	conn, err := net.DialTimeout("unix", sockPath, 2*time.Second)
-	if err != nil {
-		t.Fatalf("dial: %s", err)
-	}
-	defer conn.Close()
-
-	body, _ := json.Marshal(req)
-	body = append(body, '\n')
-	if _, err := conn.Write(body); err != nil {
-		t.Fatalf("write: %s", err)
-	}
-	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-
-	buf := make([]byte, 4096)
-	n, err := conn.Read(buf)
-	if err != nil {
-		t.Fatalf("read: %s", err)
-	}
-	var resp ctlReply
-	if err := json.Unmarshal(buf[:n], &resp); err != nil {
-		t.Fatalf("decode: %s (raw=%s)", err, buf[:n])
-	}
-	return resp
-}
-
 // waitForState polls until svc reaches state or 2s elapses.
 func waitForState(t *testing.T, svc service.Service, state service.State) {
 	t.Helper()

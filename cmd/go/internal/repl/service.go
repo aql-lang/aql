@@ -108,9 +108,19 @@ func (s *Server) Resume(ctx context.Context) error {
 	return nil
 }
 
+// Metadata returns observable REPL state for the api service.
+func (s *Server) Metadata() map[string]string {
+	m := map[string]string{}
+	if s.registryPath != "" {
+		m["registry"] = s.registryPath
+	}
+	return m
+}
+
 // compile-time interface checks.
 var (
-	_ service.Service   = (*Server)(nil)
-	_ service.Pausable  = (*Server)(nil)
-	_ service.StdioUser = (*Server)(nil)
+	_ service.Service      = (*Server)(nil)
+	_ service.Pausable     = (*Server)(nil)
+	_ service.StdioUser    = (*Server)(nil)
+	_ service.WithMetadata = (*Server)(nil)
 )

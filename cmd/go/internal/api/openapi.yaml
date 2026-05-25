@@ -1,0 +1,206 @@
+openapi: 3.0.3
+info:
+  title: AQL Supervisor API
+  version: 1.0.0
+  description: |
+    REST API for inspecting and controlling AQL services managed by
+    a running `aql serve` supervisor. The api service is itself a
+    service (composed under `aql serve`), so its presence in the
+    process is what makes ctl/tui control possible.
+
+    State transitions use the actions-collection pattern: clients
+    POST to `/services/{name}/actions` with an `action` field. This
+    keeps the path structure strictly entity-oriented (services as
+    nouns) while allowing the action vocabulary to grow without new
+    routes.
+servers:
+  - url: http://127.0.0.1:8090/v1
+    description: Default loopback bind
+paths:
+  /server:
+    get:
+      summary: Get supervisor metadata
+      description: |
+        Returns process-level info about the running supervisor: pid,
+        start time, uptime in seconds, aql version, and the number
+        of registered services.
+      operationId: getServer
+      responses:
+        '200':
+          description: Supervisor info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Server'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /services:
+    get:
+      summary: List services
+      description: All services known to the supervisor, in registration order.
+      operationId: listServices
+      responses:
+        '200':
+          description: Service collection
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Service'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /services/{name}:
+    parameters:
+      - $ref: '#/components/parameters/ServiceName'
+    get:
+      summary: Get one service
+      operationId: getService
+      responses:
+        '200':
+          description: Service entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /services/{name}/actions:
+    parameters:
+      - $ref: '#/components/parameters/ServiceName'
+    post:
+      summary: Apply a state transition to a service
+      description: |
+        Pause, resume, or stop a service. The response is the
+        service entity reflecting the new state. Some actions are
+        not supported by every service: pause/resume only work on
+        services that implement the Pausable capability (see
+        `pausable` flag on the Service entity).
+      operationId: applyServiceAction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActionRequest'
+      responses:
+        '200':
+          description: Action applied; updated service entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+        '400':
+          description: Unknown action or invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Service does not support the requested action
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /healthz:
+    get:
+      summary: Liveness probe
+      description: Always returns 200 OK with no body. Not authenticated.
+      operationId: healthz
+      security: []
+      responses:
+        '200':
+          description: OK
+components:
+  parameters:
+    ServiceName:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[a-zA-Z][a-zA-Z0-9_-]*$'
+      description: The service name (e.g. "repl", "registry", "lsp").
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+  responses:
+    Unauthorized:
+      description: Missing or invalid bearer token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: No service with that name
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Server:
+      type: object
+      required: [pid, version, startTime, uptimeSeconds, serviceCount]
+      properties:
+        pid:
+          type: integer
+          description: OS process ID of the supervisor.
+        version:
+          type: string
+          description: AQL CLI version string.
+        startTime:
+          type: string
+          format: date-time
+          description: RFC 3339 timestamp of when the supervisor started.
+        uptimeSeconds:
+          type: number
+          description: Seconds since startTime.
+        serviceCount:
+          type: integer
+          description: Number of registered services.
+    State:
+      type: string
+      enum: [stopped, starting, running, paused, stopping]
+      description: Lifecycle state reported by the service.
+    Service:
+      type: object
+      required: [name, state, pausable, usesStdio, metadata]
+      properties:
+        name:
+          type: string
+          description: Stable identifier for the service.
+        state:
+          $ref: '#/components/schemas/State'
+        pausable:
+          type: boolean
+          description: True if this service implements pause/resume.
+        usesStdio:
+          type: boolean
+          description: True if the service binds to process stdin/stdout.
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+          description: |
+            Service-specific runtime metadata. Keys depend on the
+            service (e.g. registry has `addr` and `dir`; lsp has
+            `mode` and conditionally `addr`).
+    ActionRequest:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [pause, resume, stop]
+          description: The transition to apply.
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Human-readable error message.
+security:
+  - BearerAuth: []

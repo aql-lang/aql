@@ -155,9 +155,19 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	s.inner.ServeHTTP(w, r)
 }
 
+// Metadata returns the registry's observable runtime state for the
+// api service to surface.
+func (s *Server) Metadata() map[string]string {
+	return map[string]string{
+		"addr": s.addr,
+		"dir":  s.dir,
+	}
+}
+
 // compile-time interface checks.
 var (
-	_ service.Service   = (*Server)(nil)
-	_ service.Pausable  = (*Server)(nil)
-	_ service.StdioUser = (*Server)(nil)
+	_ service.Service      = (*Server)(nil)
+	_ service.Pausable     = (*Server)(nil)
+	_ service.StdioUser    = (*Server)(nil)
+	_ service.WithMetadata = (*Server)(nil)
 )

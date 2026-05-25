@@ -94,3 +94,33 @@ type Pausable interface {
 type StdioUser interface {
 	UsesStdio() bool
 }
+
+// WithMetadata is implemented by services that have observable
+// runtime metadata (listen address, registry directory, etc.). The
+// api service surfaces these key/value pairs in service responses.
+// Implementations must return a stable, JSON-friendly map; values
+// that change at runtime (state) belong elsewhere.
+type WithMetadata interface {
+	Metadata() map[string]string
+}
+
+// Inspector is the read/control surface the supervisor exposes to
+// services that need to introspect or act on their siblings (api,
+// tui). Implementations are safe for concurrent use.
+type Inspector interface {
+	// Services returns all services in supervisor-registration order.
+	Services() []Service
+	// ByName looks up a service by its Name(); ok is false if absent.
+	ByName(name string) (svc Service, ok bool)
+	// StopService cancels the service's run context and waits for it
+	// to unwind (or stopCtx to cancel). Equivalent to the ctl "stop"
+	// op. Returns an error if the name is unknown.
+	StopService(stopCtx context.Context, name string) error
+}
+
+// SupervisorBound is implemented by services that need to read or
+// drive sibling services (api, tui). The supervisor calls Bind on
+// each such service after construction and before Start.
+type SupervisorBound interface {
+	Bind(insp Inspector)
+}

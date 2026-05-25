@@ -11,10 +11,12 @@ import (
 	"io"
 	"strings"
 
+	"github.com/aql-lang/aql/cmd/go/internal/api"
 	"github.com/aql-lang/aql/cmd/go/internal/lsp"
 	"github.com/aql-lang/aql/cmd/go/internal/registry"
 	"github.com/aql-lang/aql/cmd/go/internal/repl"
 	"github.com/aql-lang/aql/cmd/go/internal/service"
+	"github.com/aql-lang/aql/cmd/go/internal/tui"
 )
 
 // Factory builds one Service from its flag tail. stdin/stdout/stderr
@@ -28,10 +30,12 @@ var factories = map[string]Factory{
 	"repl":     replFactory,
 	"registry": registryFactory,
 	"lsp":      lspFactory,
+	"api":      apiFactory,
+	"tui":      tuiFactory,
 }
 
 // factoryOrder is the display order for help/usage output.
-var factoryOrder = []string{"repl", "registry", "lsp"}
+var factoryOrder = []string{"repl", "registry", "lsp", "api", "tui"}
 
 func replFactory(args []string, stdin io.Reader, stdout, _ io.Writer) (service.Service, error) {
 	fs := flag.NewFlagSet("repl", flag.ContinueOnError)
@@ -73,4 +77,26 @@ func lspFactory(args []string, stdin io.Reader, stdout, stderr io.Writer) (servi
 		return lsp.NewStdioServer(stdin, stdout, stderr), nil
 	}
 	return lsp.NewTCPServer(*port, stderr), nil
+}
+
+func apiFactory(args []string, _ io.Reader, _, stderr io.Writer) (service.Service, error) {
+	fs := flag.NewFlagSet("api", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	bind := fs.String("bind", "127.0.0.1:8090", "host:port to bind the api HTTP server")
+	token := fs.String("token", "", "require a Bearer token of this value")
+	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
+	return api.NewServer(*bind, *token, stderr), nil
+}
+
+func tuiFactory(args []string, stdin io.Reader, stdout, stderr io.Writer) (service.Service, error) {
+	fs := flag.NewFlagSet("tui", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	apiURL := fs.String("api", "", "api base URL (default: read from discovery file)")
+	token := fs.String("token", "", "bearer token (default: read from discovery file)")
+	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
+	return tui.NewServer(*apiURL, *token, stdin, stdout, stderr), nil
 }

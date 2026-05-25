@@ -1,27 +1,27 @@
-// Package ctl implements `aql ctl <op> [name]` — the client side of
-// the supervisor's control socket. It connects to a Unix socket
-// opened by `aql serve --ctl`, sends one JSON line, prints the JSON
-// reply, and exits.
+// Package ctl implements `aql ctl <op> [name]` — the HTTP client
+// for the `api` service. It reads the api's discovery file (or
+// --api/--token overrides) and translates ops into REST calls.
 //
-// Default socket path matches serve's default: $TMPDIR/aql-serve-<pid>.sock.
-// Since the PID is per-supervisor, callers will usually pass --socket
-// explicitly; the default is convenient for the common single-process
-// case (you can copy the path serve prints at startup).
+// Ops match the api's allowed action set:
 //
-// Ops: status, pause <svc>, resume <svc>, stop <svc>.
+//	aql ctl status              GET  /v1/services
+//	aql ctl info                GET  /v1/server
+//	aql ctl pause  <svc>        POST /v1/services/<svc>/actions {"action":"pause"}
+//	aql ctl resume <svc>        POST /v1/services/<svc>/actions {"action":"resume"}
+//	aql ctl stop   <svc>        POST /v1/services/<svc>/actions {"action":"stop"}
 package ctl
 
 import (
-	"bufio"
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
-	"net"
-	"os"
-	"path/filepath"
+	"net/http"
+	"strings"
 	"time"
 
+	"github.com/aql-lang/aql/cmd/go/internal/api"
 	"github.com/aql-lang/aql/cmd/go/internal/command"
 )
 
@@ -31,21 +31,21 @@ type cmd struct{}
 func New() command.Command { return &cmd{} }
 
 func (*cmd) Name() string     { return "ctl" }
-func (*cmd) Synopsis() string { return "control a running `aql serve` process" }
+func (*cmd) Synopsis() string { return "control a running `aql serve` process via its api service" }
 
-// Run handles `aql ctl [--socket path] <op> [name]`.
+// Run handles `aql ctl [--api url] [--token tok] <op> [name]`.
 func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("ctl", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	socket := fs.String("socket", "", "path to the supervisor control socket")
+	apiURL := fs.String("api", "", "api base URL (default: read from discovery file)")
+	token := fs.String("token", "", "bearer token (default: read from discovery file)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 
 	rest := fs.Args()
 	if len(rest) == 0 {
-		fmt.Fprintln(stderr, "usage: aql ctl [--socket path] <op> [name]")
-		fmt.Fprintln(stderr, "ops: status, pause <svc>, resume <svc>, stop <svc>")
+		printUsage(stderr)
 		return 1
 	}
 
@@ -55,79 +55,172 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		name = rest[1]
 	}
 
-	switch op {
-	case "status":
-		if name != "" {
-			fmt.Fprintln(stderr, "ctl: status takes no argument")
+	if *apiURL == "" || *token == "" {
+		url, tok, _, err := api.ReadDiscoveryFile()
+		if err != nil {
+			fmt.Fprintf(stderr, "ctl: %s\n", err)
 			return 1
 		}
+		if *apiURL == "" {
+			*apiURL = url
+		}
+		if *token == "" {
+			*token = tok
+		}
+	}
+
+	switch op {
+	case "status":
+		return doStatus(*apiURL, *token, stdout, stderr)
+	case "info":
+		return doInfo(*apiURL, *token, stdout, stderr)
 	case "pause", "resume", "stop":
 		if name == "" {
 			fmt.Fprintf(stderr, "ctl: %s requires a service name\n", op)
 			return 1
 		}
+		return doAction(*apiURL, *token, name, op, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "ctl: unknown op %q\n", op)
+		printUsage(stderr)
 		return 1
 	}
+}
 
-	path := *socket
-	if path == "" {
-		path = defaultSocket()
-	}
+func printUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: aql ctl [--api url] [--token tok] <op> [name]")
+	fmt.Fprintln(w, "Ops:")
+	fmt.Fprintln(w, "  status              list services and their state")
+	fmt.Fprintln(w, "  info                supervisor info (pid, uptime, version)")
+	fmt.Fprintln(w, "  pause <svc>         pause a pausable service")
+	fmt.Fprintln(w, "  resume <svc>        resume a paused service")
+	fmt.Fprintln(w, "  stop <svc>          stop a running service")
+}
 
-	conn, err := net.DialTimeout("unix", path, 3*time.Second)
-	if err != nil {
-		fmt.Fprintf(stderr, "ctl: dial %s: %s\n", path, err)
+// doStatus issues GET /v1/services and prints a compact table.
+func doStatus(apiURL, token string, stdout, stderr io.Writer) int {
+	var svcs []serviceEntity
+	if err := getJSON(apiURL+"/v1/services", token, &svcs); err != nil {
+		fmt.Fprintf(stderr, "ctl: %s\n", err)
 		return 1
 	}
-	defer conn.Close()
-
-	req := map[string]any{"op": op}
-	if name != "" {
-		req["name"] = name
-	}
-	reqBytes, _ := json.Marshal(req)
-	reqBytes = append(reqBytes, '\n')
-	if _, err := conn.Write(reqBytes); err != nil {
-		fmt.Fprintf(stderr, "ctl: write: %s\n", err)
-		return 1
-	}
-
-	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-	reader := bufio.NewReader(conn)
-	line, err := reader.ReadBytes('\n')
-	if err != nil && err != io.EOF {
-		fmt.Fprintf(stderr, "ctl: read: %s\n", err)
-		return 1
-	}
-
-	var resp struct {
-		OK       bool             `json:"ok"`
-		Error    string           `json:"error,omitempty"`
-		Services []map[string]any `json:"services,omitempty"`
-	}
-	if err := json.Unmarshal(line, &resp); err != nil {
-		fmt.Fprintf(stderr, "ctl: invalid reply: %s\n", err)
-		return 1
-	}
-	if !resp.OK {
-		fmt.Fprintf(stderr, "ctl: %s\n", resp.Error)
-		return 1
-	}
-
-	if op == "status" {
-		for _, s := range resp.Services {
-			fmt.Fprintf(stdout, "%-12s %s\n", s["name"], s["state"])
+	for _, s := range svcs {
+		extra := []string{}
+		for k, v := range s.Metadata {
+			extra = append(extra, k+"="+v)
 		}
-		return 0
+		meta := ""
+		if len(extra) > 0 {
+			meta = "  (" + strings.Join(extra, " ") + ")"
+		}
+		fmt.Fprintf(stdout, "%-12s %s%s\n", s.Name, s.State, meta)
 	}
-	fmt.Fprintf(stdout, "ok\n")
 	return 0
 }
 
-// defaultSocket matches serve's default ctl path so the no-arg case
-// (one supervisor, default --ctl) works without explicit --socket.
-func defaultSocket() string {
-	return filepath.Join(os.TempDir(), "aql-serve.sock")
+// doInfo issues GET /v1/server and prints the supervisor info.
+func doInfo(apiURL, token string, stdout, stderr io.Writer) int {
+	var info struct {
+		PID           int     `json:"pid"`
+		Version       string  `json:"version"`
+		StartTime     string  `json:"startTime"`
+		UptimeSeconds float64 `json:"uptimeSeconds"`
+		ServiceCount  int     `json:"serviceCount"`
+	}
+	if err := getJSON(apiURL+"/v1/server", token, &info); err != nil {
+		fmt.Fprintf(stderr, "ctl: %s\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "pid:      %d\n", info.PID)
+	fmt.Fprintf(stdout, "version:  %s\n", info.Version)
+	fmt.Fprintf(stdout, "started:  %s\n", info.StartTime)
+	fmt.Fprintf(stdout, "uptime:   %.0fs\n", info.UptimeSeconds)
+	fmt.Fprintf(stdout, "services: %d\n", info.ServiceCount)
+	return 0
+}
+
+// doAction issues POST /v1/services/<name>/actions.
+//
+// Stopping the api service itself is a corner case: the server tears
+// down before flushing the response, so the client observes a
+// connection-level EOF. We treat that specific case (action=stop and
+// transport-level EOF) as success, since the request reached the
+// handler and the supervisor will exit cleanly.
+func doAction(apiURL, token, name, action string, stdout, stderr io.Writer) int {
+	body, _ := json.Marshal(map[string]string{"action": action})
+	req, err := http.NewRequest(http.MethodPost, apiURL+"/v1/services/"+name+"/actions", bytes.NewReader(body))
+	if err != nil {
+		fmt.Fprintf(stderr, "ctl: %s\n", err)
+		return 1
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := httpClient().Do(req)
+	if err != nil {
+		if action == "stop" && isConnectionTorn(err) {
+			fmt.Fprintln(stdout, "ok")
+			return 0
+		}
+		fmt.Fprintf(stderr, "ctl: %s\n", err)
+		return 1
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		var e struct {
+			Error string `json:"error"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&e)
+		if e.Error == "" {
+			e.Error = resp.Status
+		}
+		fmt.Fprintf(stderr, "ctl: %s\n", e.Error)
+		return 1
+	}
+	fmt.Fprintln(stdout, "ok")
+	return 0
+}
+
+// isConnectionTorn reports whether err looks like the server cut the
+// connection mid-response (EOF, connection reset). Used to handle
+// the "stop the api itself" case gracefully.
+func isConnectionTorn(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "EOF") || strings.Contains(s, "connection reset")
+}
+
+// serviceEntity matches the Service schema from openapi.yaml.
+type serviceEntity struct {
+	Name      string            `json:"name"`
+	State     string            `json:"state"`
+	Pausable  bool              `json:"pausable"`
+	UsesStdio bool              `json:"usesStdio"`
+	Metadata  map[string]string `json:"metadata"`
+}
+
+func getJSON(url, token string, out any) error {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := httpClient().Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("api %s: %s", url, resp.Status)
+	}
+	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+func httpClient() *http.Client {
+	return &http.Client{Timeout: 5 * time.Second}
 }
