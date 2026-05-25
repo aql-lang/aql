@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/aql-lang/aql/cmd/go/internal/api"
@@ -17,6 +18,7 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/repl"
 	"github.com/aql-lang/aql/cmd/go/internal/service"
 	"github.com/aql-lang/aql/cmd/go/internal/tui"
+	"github.com/aql-lang/aql/cmd/go/internal/vault"
 )
 
 // Factory builds one Service from its flag tail. stdin/stdout/stderr
@@ -27,15 +29,16 @@ type Factory func(args []string, stdin io.Reader, stdout, stderr io.Writer) (ser
 // factories is the static name → Factory map. Order matches the
 // listing in the serve usage output.
 var factories = map[string]Factory{
-	"repl":     replFactory,
-	"registry": registryFactory,
-	"lsp":      lspFactory,
-	"api":      apiFactory,
-	"tui":      tuiFactory,
+	"repl":        replFactory,
+	"registry":    registryFactory,
+	"lsp":         lspFactory,
+	"api":         apiFactory,
+	"tui":         tuiFactory,
+	"vault-proxy": vaultProxyFactory,
 }
 
 // factoryOrder is the display order for help/usage output.
-var factoryOrder = []string{"repl", "registry", "lsp", "api", "tui"}
+var factoryOrder = []string{"repl", "registry", "lsp", "api", "tui", "vault-proxy"}
 
 func replFactory(args []string, stdin io.Reader, stdout, _ io.Writer) (service.Service, error) {
 	fs := flag.NewFlagSet("repl", flag.ContinueOnError)
@@ -88,6 +91,24 @@ func apiFactory(args []string, _ io.Reader, _, stderr io.Writer) (service.Servic
 		return nil, err
 	}
 	return api.NewServer(*bind, *token, stderr), nil
+}
+
+func vaultProxyFactory(args []string, _ io.Reader, _, stderr io.Writer) (service.Service, error) {
+	fs := flag.NewFlagSet("vault-proxy", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	listen := fs.String("listen", "127.0.0.1:8787", "address to listen on (loopback recommended)")
+	home := fs.String("home", "", "vault home directory (default: $AQL_HOME or $HOME)")
+	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
+	svc, err := vault.NewProxyService(*listen, *home, os.Getenv(vault.EnvPassphrase))
+	if err != nil {
+		// NewProxyService prefixes errors with "vault-proxy: " for
+		// standalone use; strip it since buildServices re-adds the
+		// segment name.
+		return nil, fmt.Errorf("%s", strings.TrimPrefix(err.Error(), "vault-proxy: "))
+	}
+	return svc, nil
 }
 
 func tuiFactory(args []string, stdin io.Reader, stdout, stderr io.Writer) (service.Service, error) {
