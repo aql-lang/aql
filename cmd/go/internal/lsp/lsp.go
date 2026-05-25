@@ -14,10 +14,13 @@
 package lsp
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
-	"net"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/aql-lang/aql/cmd/go/internal/command"
 )
@@ -27,9 +30,8 @@ type cmd struct{}
 // New returns the lsp subcommand.
 func New() command.Command { return &cmd{} }
 
-func (*cmd) Name() string       { return "lsp" }
-func (*cmd) Synopsis() string   { return "run a Language Server Protocol server on stdio or TCP" }
-func (*cmd) Mode() command.Mode { return command.ModeServer }
+func (*cmd) Name() string     { return "lsp" }
+func (*cmd) Synopsis() string { return "run a Language Server Protocol server on stdio or TCP" }
 
 // Run handles `aql lsp [-p <port>]`. With no flags the server
 // reads/writes stdio. Passing -p binds a TCP listener on the given
@@ -44,25 +46,19 @@ func (*cmd) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	var srv *Server
 	if *port == 0 {
-		return newServer(stdin, stdout, stderr).run()
+		srv = NewStdioServer(stdin, stdout, stderr)
+	} else {
+		srv = NewTCPServer(*port, stderr)
 	}
 
-	addr := fmt.Sprintf(":%d", *port)
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		fmt.Fprintf(stderr, "lsp: listen %s: %s\n", addr, err)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if err := srv.Start(ctx); err != nil {
+		fmt.Fprintf(stderr, "lsp: %s\n", err)
 		return 1
 	}
-	defer ln.Close()
-
-	fmt.Fprintf(stderr, "aql lsp listening on %s\n", addr)
-	conn, err := ln.Accept()
-	if err != nil {
-		fmt.Fprintf(stderr, "lsp: accept: %s\n", err)
-		return 1
-	}
-	defer conn.Close()
-
-	return newServer(conn, conn, stderr).run()
+	return srv.ExitCode()
 }

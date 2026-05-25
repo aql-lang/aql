@@ -23,9 +23,8 @@ type cmd struct{}
 // New returns the check subcommand.
 func New() command.Command { return &cmd{} }
 
-func (*cmd) Name() string       { return "check" }
-func (*cmd) Synopsis() string   { return "static type-check a script or expression" }
-func (*cmd) Mode() command.Mode { return command.ModeSinglePass }
+func (*cmd) Name() string     { return "check" }
+func (*cmd) Synopsis() string { return "static type-check a script or expression" }
 func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	return RunCLI(args, stdout, stderr)
 }

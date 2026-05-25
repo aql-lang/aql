@@ -17,9 +17,8 @@ type cmd struct{}
 // New returns the clean subcommand.
 func New() command.Command { return &cmd{} }
 
-func (*cmd) Name() string       { return "clean" }
-func (*cmd) Synopsis() string   { return "delete .aql/* except dotfiles" }
-func (*cmd) Mode() command.Mode { return command.ModeSinglePass }
+func (*cmd) Name() string     { return "clean" }
+func (*cmd) Synopsis() string { return "delete .aql/* except dotfiles" }
 func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	return Run(args, stdout, stderr)
 }

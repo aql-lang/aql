@@ -16,9 +16,8 @@ type cmd struct{}
 // New returns the repl subcommand.
 func New() command.Command { return &cmd{} }
 
-func (*cmd) Name() string       { return "repl" }
-func (*cmd) Synopsis() string   { return "start the interactive read-eval-print loop" }
-func (*cmd) Mode() command.Mode { return command.ModeServer }
+func (*cmd) Name() string     { return "repl" }
+func (*cmd) Synopsis() string { return "start the interactive read-eval-print loop" }
 
 // Run handles `aql repl [-r <registry>]`. With no flags it starts a
 // REPL on stdio; -r passes a registry path to native.DefaultRegistry.

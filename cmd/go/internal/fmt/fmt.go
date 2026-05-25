@@ -21,9 +21,8 @@ type cmd struct{}
 // New returns the fmt subcommand.
 func New() command.Command { return &cmd{} }
 
-func (*cmd) Name() string       { return "fmt" }
-func (*cmd) Synopsis() string   { return "format .aql source files in place" }
-func (*cmd) Mode() command.Mode { return command.ModeSinglePass }
+func (*cmd) Name() string     { return "fmt" }
+func (*cmd) Synopsis() string { return "format .aql source files in place" }
 func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	return Run(args, stdout, stderr)
 }

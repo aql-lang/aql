@@ -16,9 +16,8 @@ type cmd struct{}
 // New returns the do subcommand.
 func New() command.Command { return &cmd{} }
 
-func (*cmd) Name() string       { return "do" }
-func (*cmd) Synopsis() string   { return "evaluate args as an AQL expression" }
-func (*cmd) Mode() command.Mode { return command.ModeSinglePass }
+func (*cmd) Name() string     { return "do" }
+func (*cmd) Synopsis() string { return "evaluate args as an AQL expression" }
 func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	source := strings.Join(args, " ")
 	if source == "" {

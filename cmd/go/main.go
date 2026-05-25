@@ -13,6 +13,7 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/check"
 	"github.com/aql-lang/aql/cmd/go/internal/clean"
 	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/aql-lang/aql/cmd/go/internal/ctl"
 	"github.com/aql-lang/aql/cmd/go/internal/do"
 	aqlfmt "github.com/aql-lang/aql/cmd/go/internal/fmt"
 	"github.com/aql-lang/aql/cmd/go/internal/help"
@@ -26,6 +27,7 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/registry"
 	"github.com/aql-lang/aql/cmd/go/internal/repl"
 	"github.com/aql-lang/aql/cmd/go/internal/run"
+	"github.com/aql-lang/aql/cmd/go/internal/serve"
 	"github.com/aql-lang/aql/cmd/go/internal/vault"
 )
 
@@ -61,52 +63,65 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 }
 
 // buildRegistry registers every subcommand. The order here drives
-// the Usage listing — single-pass commands first (grouped by
-// purpose), then server commands at the end.
+// the Usage listing — one-shot Commands first (grouped by purpose),
+// then long-running Services at the end.
 func buildRegistry() *command.Registry {
 	r := command.New()
-	// Single-pass: language execution.
+	// Commands: language execution.
 	r.Register(run.New())
 	r.Register(do.New())
 	r.Register(check.New())
 	r.Register(help.New())
 	r.Register(aqlfmt.New())
-	// Single-pass: project lifecycle.
+	// Commands: project lifecycle.
 	r.Register(prep.New())
 	r.Register(pack.New())
 	r.Register(clean.New())
-	// Single-pass: registry client.
+	// Commands: registry client.
 	r.Register(install.New())
 	r.Register(register.New())
 	r.Register(login.New())
 	r.Register(publish.New())
-	// Single-pass: local secret management.
+	// Commands: local secret management.
 	r.Register(vault.New())
-	// Server: long-running input loops.
+	// Commands: supervisor control plane client.
+	r.Register(ctl.New())
+	// Services: long-running input loops.
 	r.Register(repl.New())
 	r.Register(registry.New())
 	r.Register(lsp.New())
+	r.Register(serve.New())
 	return r
 }
 
-// Usage prints a short overview of every registered subcommand to
-// w, grouped by Mode. Exposed for tooling that wants to render
-// help without invoking the CLI.
+// serviceNames is the set of Commands that are also long-running
+// services (composable under `aql serve`). Used by Usage to group
+// them separately from one-shot commands.
+var serviceNames = map[string]bool{
+	"repl":     true,
+	"registry": true,
+	"lsp":      true,
+	"serve":    true,
+}
+
+// Usage prints a short overview of every registered subcommand to w,
+// grouped into one-shot Commands and long-running Services. Exposed
+// for tooling that wants to render help without invoking the CLI.
 func Usage(w io.Writer) {
 	reg := buildRegistry()
 	fmt.Fprintln(w, "Usage: aql [options] [script.aql]")
 	fmt.Fprintln(w, "       aql <subcommand> [args...]")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Single-pass subcommands:")
+	fmt.Fprintln(w, "Commands:")
 	for _, c := range reg.Commands() {
-		if c.Mode() == command.ModeSinglePass {
+		if !serviceNames[c.Name()] {
 			fmt.Fprintf(w, "  %-10s %s\n", c.Name(), c.Synopsis())
 		}
 	}
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Server subcommands:")
+	fmt.Fprintln(w, "Services:")
 	for _, c := range reg.Commands() {
-		if c.Mode() == command.ModeServer {
+		if serviceNames[c.Name()] {
 			fmt.Fprintf(w, "  %-10s %s\n", c.Name(), c.Synopsis())
 		}
 	}

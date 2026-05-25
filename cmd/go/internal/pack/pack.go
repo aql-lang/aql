@@ -19,9 +19,8 @@ type cmd struct{}
 // New returns the pack subcommand.
 func New() command.Command { return &cmd{} }
 
-func (*cmd) Name() string       { return "pack" }
-func (*cmd) Synopsis() string   { return "build a publishable module zip" }
-func (*cmd) Mode() command.Mode { return command.ModeSinglePass }
+func (*cmd) Name() string     { return "pack" }
+func (*cmd) Synopsis() string { return "build a publishable module zip" }
 func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	return Run(args, stdout, stderr)
 }
