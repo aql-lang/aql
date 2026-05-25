@@ -2,39 +2,15 @@
 // subcommand satisfies and the Registry used by the top-level
 // dispatcher to look one up by name.
 //
-// Two operational modes are explicit on every Command:
-//
-//   - ModeSinglePass: parse args, do one thing, exit (run, check,
-//     fmt, prep, pack, clean, help, do, install, register, login,
-//     publish).
-//   - ModeServer: stay alive accepting requests (repl, registry, lsp).
-//
-// The dispatcher uses Mode only for grouping in help/usage output;
-// it has no runtime effect.
+// Long-running subcommands ("services" — repl, registry, lsp, serve)
+// are still Commands at this level: the difference now lives in the
+// internal/service package (a Service interface with Start/Stop
+// /Pause/Resume) and only matters when a command is composed under
+// `aql serve`. Help/usage output groups Commands by checking whether
+// they are listed as services.
 package command
 
 import "io"
-
-// Mode classifies a Command as either single-pass (one-shot CLI
-// invocation) or server (long-running input loop).
-type Mode int
-
-const (
-	// ModeSinglePass indicates the command parses args, runs once,
-	// and exits.
-	ModeSinglePass Mode = iota
-	// ModeServer indicates the command stays alive accepting input
-	// (REPL on stdio, HTTP server, LSP server, etc.).
-	ModeServer
-)
-
-// String returns "single-pass" or "server".
-func (m Mode) String() string {
-	if m == ModeServer {
-		return "server"
-	}
-	return "single-pass"
-}
 
 // Command is the contract every aql subcommand implements. The
 // top-level dispatcher resolves args[0] to a Command and calls Run
@@ -46,7 +22,6 @@ func (m Mode) String() string {
 type Command interface {
 	Name() string
 	Synopsis() string
-	Mode() Mode
 	Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int
 }
 

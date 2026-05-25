@@ -11,14 +11,17 @@ package registry
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	jsonic "github.com/jsonicjs/jsonic/go"
 
@@ -40,15 +43,15 @@ func (*cmd) Synopsis() string {
 	return "serve modules and auth endpoints over HTTP"
 }
 
-// Mode reports that this is a long-running server.
-func (*cmd) Mode() command.Mode { return command.ModeServer }
-
 // Run handles `aql registry -r <folder> -p <port>`.
 func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	return run(args, stdout, stderr)
 }
 
-// run handles `aql registry -r <folder> -p <port>`.
+// run handles `aql registry -r <folder> -p <port>`. It parses flags
+// the same way standalone mode always has, then drives the lifecycle
+// through Server.Start with a SIGINT/SIGTERM-driven cancel so the
+// server shuts down gracefully on Ctrl-C.
 func run(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("registry", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -65,18 +68,18 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	info, err := os.Stat(*registryDir)
-	if err != nil || !info.IsDir() {
-		fmt.Fprintf(stderr, "error: registry folder %q not found\n", *registryDir)
+	srv, err := NewServer(*registryDir, *port)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", strings.TrimPrefix(err.Error(), "registry: "))
 		return 1
 	}
 
-	addr := fmt.Sprintf(":%d", *port)
-	handler := Handler(*registryDir)
+	fmt.Fprintf(stdout, "aql registry serving %s on %s\n", srv.Dir(), srv.Addr())
 
-	fmt.Fprintf(stdout, "aql registry serving %s on %s\n", *registryDir, addr)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	if err := http.ListenAndServe(addr, handler); err != nil {
+	if err := srv.Start(ctx); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}

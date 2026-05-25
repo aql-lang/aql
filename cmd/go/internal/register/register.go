@@ -21,9 +21,8 @@ type cmd struct{}
 // New returns the register subcommand.
 func New() command.Command { return &cmd{} }
 
-func (*cmd) Name() string       { return "register" }
-func (*cmd) Synopsis() string   { return "create an account on an aql registry" }
-func (*cmd) Mode() command.Mode { return command.ModeSinglePass }
+func (*cmd) Name() string     { return "register" }
+func (*cmd) Synopsis() string { return "create an account on an aql registry" }
 func (*cmd) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return Run(args, stdin, stdout, stderr)
 }

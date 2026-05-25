@@ -18,9 +18,8 @@ type cmd struct{}
 // New returns the help subcommand.
 func New() command.Command { return &cmd{} }
 
-func (*cmd) Name() string       { return "help" }
-func (*cmd) Synopsis() string   { return "list available words or describe one" }
-func (*cmd) Mode() command.Mode { return command.ModeSinglePass }
+func (*cmd) Name() string     { return "help" }
+func (*cmd) Synopsis() string { return "list available words or describe one" }
 func (*cmd) Run(args []string, _ io.Reader, stdout, _ io.Writer) int {
 	return Run(args, stdout)
 }

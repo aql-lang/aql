@@ -27,9 +27,8 @@ type cmd struct{}
 // New returns the vault subcommand.
 func New() command.Command { return &cmd{} }
 
-func (*cmd) Name() string       { return "vault" }
-func (*cmd) Synopsis() string   { return "manage a local key vault (init, add, get, list, grant, ...)" }
-func (*cmd) Mode() command.Mode { return command.ModeSinglePass }
+func (*cmd) Name() string     { return "vault" }
+func (*cmd) Synopsis() string { return "manage a local key vault (init, add, get, list, grant, ...)" }
 func (*cmd) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return Run(args, stdin, stdout, stderr)
 }

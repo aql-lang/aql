@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/chzyer/readline"
 
@@ -36,6 +37,15 @@ type readliner interface {
 // Start runs the REPL loop, reading from in and writing to out.
 // If registryPath is non-empty, a UniversalManager is configured for API operations.
 func Start(in io.Reader, out io.Writer, registryPath string) {
+	startWithPauseGate(in, out, registryPath, nil)
+}
+
+// startWithPauseGate is the shared loop body used by both Start (no
+// gate) and Service.Start (with a pause gate). When paused is non-nil
+// and set to true, entered lines are discarded with a "paused" notice
+// instead of being evaluated. The readline loop keeps spinning so the
+// prompt stays responsive.
+func startWithPauseGate(in io.Reader, out io.Writer, registryPath string, paused *atomic.Bool) {
 	rl, err := newReadline(&readline.Config{
 		Prompt:          PROMPT,
 		HistoryFile:     historyFile(),
@@ -75,6 +85,11 @@ func Start(in io.Reader, out io.Writer, registryPath string) {
 		}
 
 		if line == "" {
+			continue
+		}
+
+		if paused != nil && paused.Load() {
+			fmt.Fprintln(out, "  (paused — input ignored)")
 			continue
 		}
 
