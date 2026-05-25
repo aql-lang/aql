@@ -2,8 +2,8 @@
 
 This document explains the ideas behind AQL — the *why* behind the
 syntax, the type system, and the runtime. It complements the
-**[Tutorial](tutorial.md)** (learning), **[How-To Guides](how-to.md)**
-(tasks), and **[Reference](reference.md)** (precise behaviour).
+**[Tutorial](TUTORIAL.md)** (learning), **[How-To Guides](HOWTO.md)**
+(tasks), and **[Reference](REFERENCE.md)** (precise behaviour).
 
 ## Contents
 

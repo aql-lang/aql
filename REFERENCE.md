@@ -2,9 +2,9 @@
 
 Information-oriented reference for AQL syntax, types, and the
 built-in word library. For learning AQL, start with the
-**[Tutorial](tutorial.md)**. For task-oriented recipes, see the
-**[How-To Guides](how-to.md)**. For *why* AQL is shaped the way it
-is, see the **[Explanation](explanation.md)**.
+**[Tutorial](TUTORIAL.md)**. For task-oriented recipes, see the
+**[How-To Guides](HOWTO.md)**. For *why* AQL is shaped the way it
+is, see the **[Explanation](EXPLANATION.md)**.
 
 ## Contents
 
@@ -129,7 +129,7 @@ lower/1 "GHI"                 => 'ghi'
 * **`end`.** Forces the nearest waiting word to stop forward
   collection.
 
-See **[Explanation §The stack model](explanation.md#the-stack-model)**
+See **[Explanation §The stack model](EXPLANATION.md#the-stack-model)**
 for a longer treatment.
 
 
@@ -357,7 +357,7 @@ with named flags (see each word's docs in
 ### Comparison
 
 All comparison words route through one total order — see
-**[Explanation §Type ordering](explanation.md#type-ordering)**.
+**[Explanation §Type ordering](EXPLANATION.md#type-ordering)**.
 
 | Word | Description | Example |
 |------|-------------|---------|
