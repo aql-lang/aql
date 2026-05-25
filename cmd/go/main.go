@@ -26,6 +26,7 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/registry"
 	"github.com/aql-lang/aql/cmd/go/internal/repl"
 	"github.com/aql-lang/aql/cmd/go/internal/run"
+	"github.com/aql-lang/aql/cmd/go/internal/vault"
 )
 
 // Version is the aql CLI version. It is rewritten by the publish
@@ -79,6 +80,8 @@ func buildRegistry() *command.Registry {
 	r.Register(register.New())
 	r.Register(login.New())
 	r.Register(publish.New())
+	// Single-pass: local secret management.
+	r.Register(vault.New())
 	// Server: long-running input loops.
 	r.Register(repl.New())
 	r.Register(registry.New())
