@@ -260,7 +260,7 @@ aql vault mcp                           # stdio MCP server over aliases
 ```
 
 Inside AQL programs the vault is accessed through the `vault`
-capability — see **[Reference §Capabilities](reference.md#capabilities)**.
+capability — see **[Reference §Capabilities](REFERENCE.md#capabilities)**.
 
 
 ## Supervisor control

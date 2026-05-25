@@ -8,8 +8,8 @@ tables, doing concurrent work with `await`, and packaging code as
 modules.
 
 If you only want a recipe for a specific task, see the
-**[How-To Guides](how-to.md)**. If you want the precise behaviour of
-a word, see the **[Reference](reference.md)**.
+**[How-To Guides](HOWTO.md)**. If you want the precise behaviour of
+a word, see the **[Reference](REFERENCE.md)**.
 
 
 ## 1. Install and start the REPL
@@ -95,7 +95,7 @@ aql> 10 sub 3
 ```
 
 You'll mix all three styles as your code grows. See
-**[Explanation §Forward Collection](explanation.md#forward-collection-beyond-reverse-polish)**
+**[Explanation §Forward Collection](EXPLANATION.md#forward-collection-beyond-reverse-polish)**
 for what's happening underneath.
 
 
@@ -553,10 +553,10 @@ aql> aql:time.now
 
 ## 20. Where to next
 
-- **[How-To Guides](how-to.md)** — practical recipes by task.
-- **[Reference](reference.md)** — every word, every type.
-- **[Explanation](explanation.md)** — the design choices behind AQL.
-- **[CLI Reference](cli.md)** — `aql do`, `aql check`, `aql fmt`,
+- **[How-To Guides](HOWTO.md)** — practical recipes by task.
+- **[Reference](REFERENCE.md)** — every word, every type.
+- **[Explanation](EXPLANATION.md)** — the design choices behind AQL.
+- **[CLI Reference](CLI.md)** — `aql do`, `aql check`, `aql fmt`,
   `aql serve`, and the rest of the binary.
 
 Common next steps:

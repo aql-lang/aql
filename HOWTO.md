@@ -1,7 +1,7 @@
 # AQL How-To Guides
 
 Short, task-oriented recipes. Each entry assumes you've worked
-through the **[Tutorial](tutorial.md)** and just need an answer to
+through the **[Tutorial](TUTORIAL.md)** and just need an answer to
 "how do I…?" Use the index below to jump straight in.
 
 ## Index
@@ -532,7 +532,7 @@ aql clean                    # delete .aql/* except dotfiles
 ```
 
 By default operations target the public registry; override with
-`-r <url>`. See [CLI Reference](cli.md) for full flags.
+`-r <url>`. See [CLI Reference](CLI.md) for full flags.
 
 
 ## Use the built-in `aql:time` module
@@ -643,4 +643,4 @@ def y add x end 5                     # bind y to (add x), with 5 left on stack
 ```
 
 Read more in
-**[Explanation §the end keyword](explanation.md#the-end-keyword)**.
+**[Explanation §the end keyword](EXPLANATION.md#the-end-keyword)**.
