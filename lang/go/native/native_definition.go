@@ -99,6 +99,22 @@ var definitionNatives = []NativeFunc{
 		}},
 	},
 	{
+		// `afn` is the canonical anonymous-fn constructor. The parser
+		// lexes `=>` as the word `afn` so `a => b` desugars to `a afn b`.
+		// Sig is [Any Any |] — both args forward-eligible, both typed
+		// Any. NoEvalArgs on both so the input sig isn't auto-evaluated
+		// and the body's words aren't dispatched before construction.
+		Name: "afn",
+
+		Signatures: []NativeSig{{
+			Args:           []*Type{TAny, TAny},
+			NoEvalArgs:     map[int]bool{0: true, 1: true},
+			Handler:        afnHandler,
+			Returns:        []*Type{TFunction},
+			RunInCheckMode: true, BarrierPos: -1,
+		}},
+	},
+	{
 		Name: "fnsig",
 
 		Signatures: []NativeSig{{
@@ -501,6 +517,49 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	if err != nil {
 		return nil, err
 	}
+	return []Value{NewFunction(fnDef)}, nil
+}
+
+// afnHandler — `afn input body` constructs an anonymous Function value
+// with a single signature. Mirrors the per-triple shape of ParseFnDef
+// (eng/go/fn_def.go) for one triple: auto-wraps non-list input and body
+// into single-element lists, parses params via the shared
+// eng.ParseFnParams, and constructs the FnSig with Returns=[TAny] and
+// Anonymous=true. Static Returns is conservative so call sites that
+// inspect the type without invoking see `Any`; check-mode dispatch
+// reads the Anonymous flag and runs AnalyseFnBody for real propagation.
+func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	// `afn` is normally encountered as the swap form `input afn body`
+	// (because `input => body` desugars to this), which makes args[1]
+	// the source-left operand (input sig) and args[0] the source-right
+	// operand (body). Mirrors the AQL `args[1] op args[0]` convention.
+	inputSig := args[1]
+	body := args[0]
+
+	if !inputSig.Parent.Equal(TList) {
+		inputSig = NewList([]Value{inputSig})
+	}
+
+	params, barrierPos, err := parseFnParams(r, inputSig)
+	if err != nil {
+		return nil, r.AqlError("afn_error", err.Error(), "afn")
+	}
+
+	var bodyElems []Value
+	if body.Parent.Equal(TList) && body.Data != nil {
+		lst, _ := AsList(body)
+		bodyElems = lst.Slice()
+	} else {
+		bodyElems = []Value{body}
+	}
+
+	sig := FnSig{
+		Params:     params,
+		Returns:    []*Type{TAny},
+		Body:       bodyElems,
+		BarrierPos: barrierPos,
+	}
+	fnDef := FnDefInfo{Sigs: []FnSig{sig}, Anonymous: true}
 	return []Value{NewFunction(fnDef)}, nil
 }
 

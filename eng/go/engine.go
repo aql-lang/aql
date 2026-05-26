@@ -1570,17 +1570,22 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// Fall through to FnSig-based pure-stack matching when
 	// matchSignature finds nothing — this preserves the legacy
 	// anonymous-fn-on-stack dispatch for AQL fns whose Sigs carry
-	// named params.
-	if sig == nil || sig.Handler == nil {
+	// named params. The same path runs when matched but the sig
+	// has no Go Handler AND this isn't an `afn`-produced lambda:
+	// predicate-type FnDefs landing bare are intentionally inert.
+	if sig == nil || (sig.Handler == nil && !fnDef.Anonymous) {
 		return e.execFnDefSigStackMatch(valIdx, fnDef, resolved)
 	}
 
-	// Forward-collecting match: defer handler invocation until the
-	// remaining tokens have been consumed. When the Forward marker
-	// completes, the engine re-processes the Function value with
-	// all args on the stack — which routes through this same
-	// execFnDefLiteral entry with the module-closure check below
-	// firing on the second pass.
+	// Forward-collecting match: defer dispatch until the remaining
+	// tokens have been consumed. When the Forward marker completes,
+	// the engine re-processes the Function value with all args on
+	// the stack — which routes through this same execFnDefLiteral
+	// entry. This branch runs whether the sig has a Go Handler
+	// (registered native) or only an AQL body (anonymous FnDef from
+	// `afn` / `=>`); in both cases matchSignature found valid
+	// positions and we need the forward args on the stack before
+	// the body / handler runs.
 	fwdCount := 0
 	for _, pos := range positions {
 		if pos > e.pointer {
@@ -1590,6 +1595,13 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	if fwdCount > 0 {
 		stkCount := len(positions) - fwdCount
 		return e.insertForward(w, sig, fwdCount, stkCount)
+	}
+
+	// All args resolved on the stack. Anonymous FnDefs (no Go
+	// Handler) take the legacy stack-match path, which splices the
+	// body via execFnDefSig and binds named params via def-stack.
+	if sig.Handler == nil {
+		return e.execFnDefSigStackMatch(valIdx, fnDef, resolved)
 	}
 
 	// Module closures: with all args now on the stack (either because
@@ -1619,10 +1631,14 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 // match returns nothing.
 func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []Value) error {
 	resolvedIdx := e.resolvedIndicesBefore(len(resolved))
+	checkMode := e.registry != nil && e.registry.Check.Mode && fnDef.Anonymous
 	for i := range fnDef.Sigs {
 		sig := &fnDef.Sigs[i]
 		nArgs := len(sig.Params)
 		if nArgs == 0 {
+			if checkMode {
+				return e.spliceAnonCheckResult(valIdx, 0, sig, nil)
+			}
 			return e.execFnDefSig(valIdx, sig, nil, fnDef.Registry)
 		}
 		if len(resolved) < nArgs {
@@ -1668,6 +1684,9 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 					ri := len(resolvedIdx) - 1 - j
 					args[j] = e.stack[resolvedIdx[ri]]
 				}
+				if checkMode {
+					return e.spliceAnonCheckResult(valIdx, nArgs, sig, args)
+				}
 				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
 			}
 		} else {
@@ -1700,12 +1719,61 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 				for j := 0; j < nArgs; j++ {
 					args[j] = e.stack[resolvedIdx[startIdx+j]]
 				}
+				if checkMode {
+					return e.spliceAnonCheckResult(valIdx, nArgs, sig, args)
+				}
 				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
 			}
 		}
 	}
 
 	e.pointer++
+	return nil
+}
+
+// spliceAnonCheckResult runs AnalyseFnBody on an anonymous FnDef in
+// check mode and splices the residual carrier stack as the dispatch
+// result. This bypasses the body splice + ReturnCheck path that named
+// fns use: an anonymous lambda's static Returns is the conservative
+// [Any], and AnalyseFnBody recovers the real return type for downstream
+// type propagation.
+func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Value) error {
+	paramNames := make([]string, len(sig.Params))
+	for i, p := range sig.Params {
+		paramNames[i] = p.Name
+	}
+	result := AnalyseFnBody(e.registry, "", paramNames, sig.Body, args)
+	if len(result) == 0 {
+		result = []Value{NewCarrier(TAny)}
+	}
+
+	indices := e.resolvedIndicesBefore(nArgs)
+	if len(indices) == nArgs && nArgs > 0 {
+		firstArgIdx := indices[0]
+		skipSet := make(map[int]bool, nArgs+1)
+		for _, idx := range indices {
+			skipSet[idx] = true
+		}
+		skipSet[valIdx] = true
+		dst := firstArgIdx
+		for i := firstArgIdx; i <= valIdx; i++ {
+			if !skipSet[i] {
+				e.stack[dst] = e.stack[i]
+				dst++
+			}
+		}
+		stackSplice(&e.stack, dst, valIdx+1-dst, result...)
+		e.pointer = firstArgIdx
+	} else if nArgs == 0 {
+		stackSplice(&e.stack, valIdx, 1, result...)
+	} else {
+		argStart := valIdx - nArgs
+		if argStart < 0 {
+			argStart = 0
+		}
+		stackSplice(&e.stack, argStart, valIdx+1-argStart, result...)
+		e.pointer = argStart
+	}
 	return nil
 }
 

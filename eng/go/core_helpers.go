@@ -285,6 +285,13 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			paramPatterns[i] = p.Pattern
 		}
 		declaredReturns := append([]*Type(nil), s.Returns...)
+		// Anonymous lambdas (from `afn` / `=>`) declare Returns=[Any]
+		// as a placeholder. In check mode we want the analyser's
+		// residual carrier(s) to win, so drop the declared-returns
+		// fast path for anonymous installations.
+		if fnDef.Anonymous {
+			declaredReturns = nil
+		}
 		bodyCopy := append([]Value(nil), s.Body...)
 		nameCopy := name
 		returnsFn := func(args []Value, _ *Registry) []Value {

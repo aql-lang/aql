@@ -249,6 +249,13 @@ type FnDefInfo struct {
 	Signatures     []Signature // compiled dispatch table
 	MaxForwardArgs int         // longest forward arg count across all sigs (respecting barriers)
 	Registry       *Registry
+	// Anonymous is true iff the FnDef was produced by the `afn` word (i.e.
+	// via the `=>` lambda sugar). The flag is read only in check mode: an
+	// anonymous fn's static Returns is the conservative [Any], and the
+	// check-mode dispatch path runs AnalyseFnBody to recover the real
+	// return type for downstream type propagation. Named fns leave this
+	// false and the check-mode path uses sig.Returns as authored.
+	Anonymous bool
 }
 
 // HasForwardSigs reports whether any compiled signature has a non-zero

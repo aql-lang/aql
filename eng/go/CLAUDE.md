@@ -9,6 +9,20 @@ For language-layer conventions (jsonic integration, registry
 stacks, helper API discipline, panic prevention) see
 `lang/go/CLAUDE.md`.
 
+## Single-Pass Parsing (CRITICAL)
+
+AQL source is converted from jsonic items to engine values in
+one left-to-right walk. Do not introduce post-conversion rewrite
+passes that re-walk the value stream — they accumulate complexity
+(paren-expansion ordering, data-context vs word-context divergence,
+nested-container recursion) and entangle the parser with handler
+semantics. When a surface form needs sugar, prefer a token-level
+substitution (an `AltSpec.A` callback that emits a `jsonic.Text`
+marker — see `;` → `"end"`, `=>` → `"afn"`, `|` → `"|"` in
+`parser/grammar.go::setupValRule`) so the conversion path stays
+linear. Behaviour the marker can't express directly belongs in the
+registered word's handler, not in a separate parser stage.
+
 ## No Zero-Value Overload (CRITICAL)
 
 A struct field MUST NOT use the Go zero value (`0`, `""`, `false`,

@@ -269,6 +269,61 @@ across paren / nested-forward boundaries, `rearrangeForForward` lays
 the collected values out so the post-collection retry sees them
 top-down in sig order.
 
+## Lambda Syntax (`=>` / `afn`)
+
+`=>` is a parser token that lexes directly to the word `afn`. The
+source `a => b` is the same value sequence as `a afn b`. `afn` is a
+regular registered word — there is no lambda type, no separate
+runtime path, and no rewrite pass.
+
+`afn` has signature `[Any Any |]` (both args forward-eligible, both
+typed `Any`, body and sig captured via `NoEvalArgs`). The canonical
+surface form is the swap `input afn body` (i.e. `input => body`),
+mirroring the AQL `args[1] op args[0]` reading convention — afn
+collects the body as the forward arg and the input sig from the
+stack.
+
+The handler:
+- auto-wraps a non-list input into `[input]` (same convention as
+  `fn`);
+- parses params via the shared `eng.ParseFnParams` so every fn
+  abbreviation (`name:Type`, `{name:Type}`, bare type words, value
+  patterns, `?`, `|`, `__SB`) works in afn;
+- auto-wraps a non-list body into `[body]`;
+- builds a single-sig `FnDefInfo` with `Returns=[Any]` and
+  `Anonymous: true`, and returns a `Function` value indistinguishable
+  from `fn`'s output except for the flag.
+
+The `Anonymous` flag on `FnDefInfo` is read **only in check mode**.
+Anonymous lambdas have a deliberately conservative static
+`Returns=[Any]`; in check mode the dispatch path
+(`execFnDefSigStackMatch` for direct invocation,
+`InstallFnDef`'s ReturnsFn for `def name (lambda)` installations)
+runs `eng.AnalyseFnBody` against the bound carrier args and lets the
+analyser's residual stack carry the inferred return type forward.
+Normal execution doesn't read the flag; the body runs the same way
+a named fn's body does.
+
+### Syntactic gotchas
+
+- **Typed-param shorthand must be list-wrapped.** `x:Integer => body`
+  doesn't parse because `x:Integer` at top level starts an implicit
+  map and the rest collapses into the map's value position. Write
+  `[x:Integer] => body` (or `{x: Integer} => body`) instead.
+- **Single-value body rule.** afn captures one forward token as the
+  body. Multi-token bodies must wrap as `[token1 token2 …]` or
+  `(token1 token2 …)`. A bare-word body (e.g. `[x:Any] => x`) fails
+  because the engine dispatches the word as it walks past it during
+  forward collection — wrap as `[x]` to keep the word as data inside
+  the body list.
+- **`def name x => body` (no parens) doesn't work** because `def`
+  forward-collects the body as its second argument and afn forward-
+  collects a body of its own — the precedence overlaps. Always wrap:
+  `def name (x:Integer => [x mul 2])`.
+- **Single sig only.** `=>` produces exactly one `FnSig`. For
+  multi-overload fns, use the verbose `fn [[input1] [output1] [body1]
+  [input2] …]` form.
+
 ## Quotation System
 
 Lists are **evaluated by default**: `[1 add 2]` → `[3]`. Auto-evaluation

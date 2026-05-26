@@ -16,6 +16,7 @@ type parserTokens struct {
 	QM jsonic.Tin // ?
 	BG jsonic.Tin // !
 	PI jsonic.Tin // |
+	AR jsonic.Tin // => (lambda arrow → aliases the word `afn`)
 	BT jsonic.Tin // ` (backtick)
 	IS jsonic.Tin // ${ (interp start)
 	TL jsonic.Tin // template literal segment
@@ -38,6 +39,7 @@ func setupBaseTokens(j *jsonic.Jsonic) parserTokens {
 		QM: j.Token("#QM", "?"),
 		BG: j.Token("#BG", "!"),
 		PI: j.Token("#PI", "|"),
+		AR: j.Token("#AR", "=>"),
 		BT: j.Token("#BT", "`"),
 		IS: j.Token("#IS", "${"),
 		TL: j.Token("#TL"),
@@ -133,6 +135,11 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 			// Pipe: "|" token. Used in fn signatures as forward barrier marker.
 			{S: [][]jsonic.Tin{{t.PI}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 				r.Node = jsonic.Text{Str: "|", Quote: ""}
+			}},
+			// Arrow: "=>" token. Lambda sugar — aliases the word `afn` so
+			// `a => b` lexes as the same value sequence as `a afn b`.
+			{S: [][]jsonic.Tin{{t.AR}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+				r.Node = jsonic.Text{Str: "afn", Quote: ""}
 			}},
 			// Dot: "." token. Becomes get in convertTopLevelItems.
 			{S: [][]jsonic.Tin{{t.DT}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
