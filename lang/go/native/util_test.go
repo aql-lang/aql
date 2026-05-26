@@ -619,7 +619,7 @@ func TestRunPredicate_ZeroArgPredicate(t *testing.T) {
 func TestRunPredicate_MultiArgPredicate(t *testing.T) {
 	r, _ := NewRegistry()
 	v := Value{Parent: TFnDef, Data: FnDefInfo{
-		Sigs: []FnSig{{Params: []FnParam{{Type: TAny}, {Type: TAny}}}},
+		Sigs: []FnSig{{Params: []FnParam{{Type: TAny}, {Type: TAny}}, BarrierPos: -1}},
 	}}
 	_, _, err := r.RunPredicate(v, NewInteger(42))
 	if err == nil {

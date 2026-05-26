@@ -27,7 +27,7 @@ var comparisonNatives = []NativeFunc{
 			{
 				Args:    []*Type{TAny, TAny},
 				Handler: eng.LtHandler,
-				Returns: []*Type{TBoolean},
+				Returns: []*Type{TBoolean}, BarrierPos: -1,
 			},
 		},
 	},
@@ -39,7 +39,7 @@ var comparisonNatives = []NativeFunc{
 			{
 				Args:    []*Type{TAny, TAny},
 				Handler: eng.GtHandler,
-				Returns: []*Type{TBoolean},
+				Returns: []*Type{TBoolean}, BarrierPos: -1,
 			},
 		},
 	},
@@ -51,7 +51,7 @@ var comparisonNatives = []NativeFunc{
 			{
 				Args:    []*Type{TAny, TAny},
 				Handler: eng.LteHandler,
-				Returns: []*Type{TBoolean},
+				Returns: []*Type{TBoolean}, BarrierPos: -1,
 			},
 		},
 	},
@@ -63,7 +63,7 @@ var comparisonNatives = []NativeFunc{
 			{
 				Args:    []*Type{TAny, TAny},
 				Handler: eng.GteHandler,
-				Returns: []*Type{TBoolean},
+				Returns: []*Type{TBoolean}, BarrierPos: -1,
 			},
 		},
 	},
@@ -76,7 +76,7 @@ var comparisonNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny, TAny},
 			Handler: eng.CmpHandler,
-			Returns: []*Type{TInteger},
+			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -87,7 +87,7 @@ var comparisonNatives = []NativeFunc{
 			TypeArgs:       map[int]bool{2: true},
 			Handler:        eng.BetweenHandler,
 			Returns:        []*Type{TScalar},
-			RunInCheckMode: true,
+			RunInCheckMode: true, BarrierPos: -1,
 		}},
 	},
 	{
@@ -96,7 +96,7 @@ var comparisonNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny, TAny},
 			Handler: eng.EqHandler,
-			Returns: []*Type{TBoolean},
+			Returns: []*Type{TBoolean}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -105,7 +105,7 @@ var comparisonNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny, TAny},
 			Handler: eng.NeqHandler,
-			Returns: []*Type{TBoolean},
+			Returns: []*Type{TBoolean}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -114,7 +114,7 @@ var comparisonNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny, TAny},
 			Handler: eng.DeqHandler,
-			Returns: []*Type{TBoolean},
+			Returns: []*Type{TBoolean}, BarrierPos: -1,
 		}},
 	},
 }

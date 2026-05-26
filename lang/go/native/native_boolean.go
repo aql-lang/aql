@@ -15,16 +15,16 @@ var booleanNatives = []NativeFunc{
 		Name:        "not",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TBoolean}, Handler: notHandler, Returns: []*Type{TBoolean}},
-			{Args: []*Type{TAny}, Handler: notHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TBoolean}, Handler: notHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
+			{Args: []*Type{TAny}, Handler: notHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
 		},
 	},
 	{
 		Name:        "and",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TBoolean, TBoolean}, Handler: andHandler, Returns: []*Type{TBoolean}},
-			{Args: []*Type{TAny, TAny}, Handler: andHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TBoolean, TBoolean}, Handler: andHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
+			{Args: []*Type{TAny, TAny}, Handler: andHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
@@ -84,8 +84,8 @@ func boolBinaryNative(name string, fn func(a, b bool) bool) NativeFunc {
 		Name:        name,
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TBoolean, TBoolean}, Handler: handler, Returns: []*Type{TBoolean}},
-			{Args: []*Type{TAny, TAny}, Handler: handler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TBoolean, TBoolean}, Handler: handler, Returns: []*Type{TBoolean}, BarrierPos: -1},
+			{Args: []*Type{TAny, TAny}, Handler: handler, Returns: []*Type{TBoolean}, BarrierPos: -1},
 		},
 	}
 }

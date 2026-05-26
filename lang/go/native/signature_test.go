@@ -8,7 +8,7 @@ import (
 func TestFlexibleMatchPositional(t *testing.T) {
 	// Positional match should always be preferred.
 	vals := []Value{NewAtom("x"), NewList(nil)}
-	ordered, ok := FlexibleMatch(vals, &Signature{Args: []*Type{TAtom, TList}})
+	ordered, ok := FlexibleMatch(vals, &Signature{Args: []*Type{TAtom, TList}, BarrierPos: -1})
 	if !ok {
 		t.Fatal("expected positional match")
 	}
@@ -21,7 +21,7 @@ func TestFlexibleMatchPositional(t *testing.T) {
 func TestFlexibleMatchNoPermutation(t *testing.T) {
 	// Values in wrong positional order should NOT match — no permutation.
 	vals := []Value{NewList(nil), NewAtom("x")}
-	_, ok := FlexibleMatch(vals, &Signature{Args: []*Type{TAtom, TList}})
+	_, ok := FlexibleMatch(vals, &Signature{Args: []*Type{TAtom, TList}, BarrierPos: -1})
 	if ok {
 		t.Fatal("expected no match — arguments must not be permuted")
 	}
@@ -30,7 +30,7 @@ func TestFlexibleMatchNoPermutation(t *testing.T) {
 func TestFlexibleMatchNoMatch(t *testing.T) {
 	// No valid permutation exists.
 	vals := []Value{NewAtom("a"), NewAtom("b")}
-	_, ok := FlexibleMatch(vals, &Signature{Args: []*Type{TAtom, TList}})
+	_, ok := FlexibleMatch(vals, &Signature{Args: []*Type{TAtom, TList}, BarrierPos: -1})
 	if ok {
 		t.Fatal("expected no match for incompatible types")
 	}
@@ -41,7 +41,7 @@ func TestFlexibleMatchPrefersLeastDisplacement(t *testing.T) {
 	// [atom, atom, list] with types [atom, atom, list] — positional wins (0 displacements).
 	vals := []Value{NewAtom("a"), NewAtom("b"), NewList(nil)}
 	types := []*Type{TAtom, TAtom, TList}
-	ordered, ok := FlexibleMatch(vals, &Signature{Args: types})
+	ordered, ok := FlexibleMatch(vals, &Signature{Args: types, BarrierPos: -1})
 	if !ok {
 		t.Fatal("expected match")
 	}
@@ -61,32 +61,32 @@ func TestFlexibleMatchPrefersLeastDisplacement(t *testing.T) {
 // --- CompareSignatures tests ---
 
 func TestCompareSignaturesZeroArgs(t *testing.T) {
-	a := Signature{Args: nil}
-	b := Signature{Args: nil}
+	a := Signature{Args: nil, BarrierPos: -1}
+	b := Signature{Args: nil, BarrierPos: -1}
 	if got := CompareSignatures(&a, &b); got != 0 {
 		t.Errorf("two zero-arg sigs should tie, got %d", got)
 	}
 }
 
 func TestCompareSignaturesArgCountDominates(t *testing.T) {
-	sig1 := Signature{Args: []*Type{TAny}}
-	sig2 := Signature{Args: []*Type{TAny, TAny}}
+	sig1 := Signature{Args: []*Type{TAny}, BarrierPos: -1}
+	sig2 := Signature{Args: []*Type{TAny, TAny}, BarrierPos: -1}
 	if c := CompareSignatures(&sig2, &sig1); c >= 0 {
 		t.Errorf("2-arg should sort before 1-arg, got %d", c)
 	}
 }
 
 func TestCompareSignaturesSpecificityBreaksTie(t *testing.T) {
-	sigNarrow := Signature{Args: []*Type{TInteger, TInteger}}
-	sigWide := Signature{Args: []*Type{TScalar, TScalar}}
+	sigNarrow := Signature{Args: []*Type{TInteger, TInteger}, BarrierPos: -1}
+	sigWide := Signature{Args: []*Type{TScalar, TScalar}, BarrierPos: -1}
 	if c := CompareSignatures(&sigNarrow, &sigWide); c >= 0 {
 		t.Errorf("narrow (integer) should sort before wide (scalar), got %d", c)
 	}
 }
 
 func TestCompareSignaturesMixedSpecificity(t *testing.T) {
-	sig1 := Signature{Args: []*Type{TInteger, TAny}}
-	sig2 := Signature{Args: []*Type{TAny, TAny}}
+	sig1 := Signature{Args: []*Type{TInteger, TAny}, BarrierPos: -1}
+	sig2 := Signature{Args: []*Type{TAny, TAny}, BarrierPos: -1}
 	if c := CompareSignatures(&sig1, &sig2); c >= 0 {
 		t.Errorf("[integer,any] should sort before [any,any], got %d", c)
 	}
@@ -94,8 +94,8 @@ func TestCompareSignaturesMixedSpecificity(t *testing.T) {
 
 func TestCompareSignaturesDeepType(t *testing.T) {
 	deep := MintTestType("Number/Integer/Positive")
-	sigDeep := Signature{Args: []*Type{deep}}
-	sigShallow := Signature{Args: []*Type{TInteger}}
+	sigDeep := Signature{Args: []*Type{deep}, BarrierPos: -1}
+	sigShallow := Signature{Args: []*Type{TInteger}, BarrierPos: -1}
 	if c := CompareSignatures(&sigDeep, &sigShallow); c >= 0 {
 		t.Errorf("deep type should sort before shallow type, got %d", c)
 	}
@@ -111,7 +111,7 @@ func TestRankSignaturesEmpty(t *testing.T) {
 }
 
 func TestRankSignaturesSingle(t *testing.T) {
-	sigs := []Signature{{Args: []*Type{TAny}}}
+	sigs := []Signature{{Args: []*Type{TAny}, BarrierPos: -1}}
 	result := RankSignatures(sigs)
 	if len(result) != 1 || result[0] != 0 {
 		t.Errorf("expected [0], got %v", result)
@@ -120,9 +120,9 @@ func TestRankSignaturesSingle(t *testing.T) {
 
 func TestRankSignaturesLongerFirst(t *testing.T) {
 	sigs := []Signature{
-		{Args: []*Type{TAny}},
-		{Args: []*Type{TAny, TAny, TAny}},
-		{Args: []*Type{TAny, TAny}},
+		{Args: []*Type{TAny}, BarrierPos: -1},
+		{Args: []*Type{TAny, TAny, TAny}, BarrierPos: -1},
+		{Args: []*Type{TAny, TAny}, BarrierPos: -1},
 	}
 	ranked := RankSignatures(sigs)
 	want := []int{1, 2, 0}
@@ -135,9 +135,9 @@ func TestRankSignaturesLongerFirst(t *testing.T) {
 
 func TestRankSignaturesNarrowerFirst(t *testing.T) {
 	sigs := []Signature{
-		{Args: []*Type{TScalar, TScalar}},
-		{Args: []*Type{TInteger, TInteger}},
-		{Args: []*Type{TAny, TAny}},
+		{Args: []*Type{TScalar, TScalar}, BarrierPos: -1},
+		{Args: []*Type{TInteger, TInteger}, BarrierPos: -1},
+		{Args: []*Type{TAny, TAny}, BarrierPos: -1},
 	}
 	ranked := RankSignatures(sigs)
 	if ranked[0] != 1 {
@@ -148,8 +148,8 @@ func TestRankSignaturesNarrowerFirst(t *testing.T) {
 func TestRankSignaturesLengthBeatsSpecificity(t *testing.T) {
 	deep := MintTestType("Number/Integer/Positive")
 	sigs := []Signature{
-		{Args: []*Type{deep, deep}},
-		{Args: []*Type{TAny, TAny, TAny}},
+		{Args: []*Type{deep, deep}, BarrierPos: -1},
+		{Args: []*Type{TAny, TAny, TAny}, BarrierPos: -1},
 	}
 	ranked := RankSignatures(sigs)
 	if ranked[0] != 1 {
@@ -159,7 +159,7 @@ func TestRankSignaturesLengthBeatsSpecificity(t *testing.T) {
 
 func TestRankSignaturesStableForEqualOrder(t *testing.T) {
 	// Two sigs that compare equal: stable sort preserves registration order.
-	sig := Signature{Args: []*Type{TString}}
+	sig := Signature{Args: []*Type{TString}, BarrierPos: -1}
 	sigs := []Signature{sig, sig}
 	ranked := RankSignatures(sigs)
 	if ranked[0] != 0 || ranked[1] != 1 {
@@ -169,11 +169,11 @@ func TestRankSignaturesStableForEqualOrder(t *testing.T) {
 
 func TestRankSignatures4To7Args(t *testing.T) {
 	sigs := []Signature{
-		{Args: []*Type{TAny, TAny, TAny, TAny}},
-		{Args: []*Type{TAny, TAny, TAny, TAny, TAny}},
-		{Args: []*Type{TAny, TAny, TAny, TAny, TAny, TAny}},
-		{Args: []*Type{TAny, TAny, TAny, TAny, TAny, TAny, TAny}},
-		{Args: []*Type{TInteger, TInteger, TInteger, TInteger, TInteger}},
+		{Args: []*Type{TAny, TAny, TAny, TAny}, BarrierPos: -1},
+		{Args: []*Type{TAny, TAny, TAny, TAny, TAny}, BarrierPos: -1},
+		{Args: []*Type{TAny, TAny, TAny, TAny, TAny, TAny}, BarrierPos: -1},
+		{Args: []*Type{TAny, TAny, TAny, TAny, TAny, TAny, TAny}, BarrierPos: -1},
+		{Args: []*Type{TInteger, TInteger, TInteger, TInteger, TInteger}, BarrierPos: -1},
 	}
 	ranked := RankSignatures(sigs)
 	// 7-arg(3), 6-arg(2), 5-int(4), 5-any(1), 4-any(0)
@@ -193,9 +193,9 @@ func dummyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 
 func TestMatchSignaturePrefersMostSpecific(t *testing.T) {
 	sigs := []Signature{
-		{Args: []*Type{TAny, TAny}, Handler: dummyHandler},
-		{Args: []*Type{TInteger, TInteger}, Handler: dummyHandler},
-		{Args: []*Type{TScalar, TScalar}, Handler: dummyHandler},
+		{Args: []*Type{TAny, TAny}, Handler: dummyHandler, BarrierPos: -1},
+		{Args: []*Type{TInteger, TInteger}, Handler: dummyHandler, BarrierPos: -1},
+		{Args: []*Type{TScalar, TScalar}, Handler: dummyHandler, BarrierPos: -1},
 	}
 	SortSignatures(sigs)
 	stack := []Value{NewInteger(1), NewInteger(2)}
@@ -211,9 +211,9 @@ func TestMatchSignaturePrefersMostSpecific(t *testing.T) {
 
 func TestMatchSignaturePrefersLonger(t *testing.T) {
 	sigs := []Signature{
-		{Args: []*Type{TAny}, Handler: dummyHandler},
-		{Args: []*Type{TAny, TAny, TAny}, Handler: dummyHandler},
-		{Args: []*Type{TAny, TAny}, Handler: dummyHandler},
+		{Args: []*Type{TAny}, Handler: dummyHandler, BarrierPos: -1},
+		{Args: []*Type{TAny, TAny, TAny}, Handler: dummyHandler, BarrierPos: -1},
+		{Args: []*Type{TAny, TAny}, Handler: dummyHandler, BarrierPos: -1},
 	}
 	SortSignatures(sigs)
 	stack := []Value{NewInteger(1), NewString("x"), NewBoolean(true)}
@@ -228,9 +228,9 @@ func TestMatchSignaturePrefersLonger(t *testing.T) {
 
 func TestMatchSignatureArgCountFilter(t *testing.T) {
 	sigs := []Signature{
-		{Args: []*Type{TAny}, Handler: dummyHandler},
-		{Args: []*Type{TAny, TAny}, Handler: dummyHandler},
-		{Args: []*Type{TAny, TAny, TAny}, Handler: dummyHandler},
+		{Args: []*Type{TAny}, Handler: dummyHandler, BarrierPos: -1},
+		{Args: []*Type{TAny, TAny}, Handler: dummyHandler, BarrierPos: -1},
+		{Args: []*Type{TAny, TAny, TAny}, Handler: dummyHandler, BarrierPos: -1},
 	}
 	stack := []Value{NewInteger(1), NewInteger(2), NewInteger(3)}
 
@@ -247,7 +247,7 @@ func TestMatchSignatureArgCountFilter(t *testing.T) {
 func TestMatchSignatureSubtypeMatchesParent(t *testing.T) {
 	// integer is a subtype of number; both match number pattern
 	sigs := []Signature{
-		{Args: []*Type{TNumber}, Handler: dummyHandler},
+		{Args: []*Type{TNumber}, Handler: dummyHandler, BarrierPos: -1},
 	}
 	stack := []Value{NewInteger(42)}
 	m := MatchSignature(sigs, stack, WordInfo{ArgCount: -1})
@@ -259,9 +259,12 @@ func TestMatchSignatureSubtypeMatchesParent(t *testing.T) {
 func TestMatchSignatureParentDoesNotMatchChild(t *testing.T) {
 	// A plain number value should NOT match an integer-only signature
 	sigs := []Signature{
-		{Args: []*Type{TInteger}, Handler: dummyHandler},
+		{Args: []*Type{TInteger}, Handler: dummyHandler, BarrierPos:
+
+		// Create a value with type "number" (not "number/integer")
+		-1},
 	}
-	// Create a value with type "number" (not "number/integer")
+
 	v := NewInteger(42)
 	v.Parent = TNumber // override to plain number
 	stack := []Value{v}
@@ -273,7 +276,7 @@ func TestMatchSignatureParentDoesNotMatchChild(t *testing.T) {
 
 func TestMatchSignatureNoMatchInsufficientStack(t *testing.T) {
 	sigs := []Signature{
-		{Args: []*Type{TAny, TAny, TAny}, Handler: dummyHandler},
+		{Args: []*Type{TAny, TAny, TAny}, Handler: dummyHandler, BarrierPos: -1},
 	}
 	stack := []Value{NewInteger(1), NewInteger(2)}
 	m := MatchSignature(sigs, stack, WordInfo{ArgCount: -1})
@@ -284,7 +287,7 @@ func TestMatchSignatureNoMatchInsufficientStack(t *testing.T) {
 
 func TestMatchSignatureExtraStackIgnored(t *testing.T) {
 	sigs := []Signature{
-		{Args: []*Type{TInteger}, Handler: dummyHandler},
+		{Args: []*Type{TInteger}, Handler: dummyHandler, BarrierPos: -1},
 	}
 	stack := []Value{NewString("extra"), NewString("extra2"), NewInteger(42)}
 	m := MatchSignature(sigs, stack, WordInfo{ArgCount: -1})
@@ -301,9 +304,9 @@ func TestMatchSignatureNarrowVsWideHierarchy(t *testing.T) {
 	// Test with multiple specificity levels:
 	// boolean/true (3 parts) vs boolean (1 part) vs any (1 part)
 	sigs := []Signature{
-		{Args: []*Type{TAny}, Handler: dummyHandler},
-		{Args: []*Type{TBoolean}, Handler: dummyHandler},
-		{Args: []*Type{TBoolean}, Handler: dummyHandler},
+		{Args: []*Type{TAny}, Handler: dummyHandler, BarrierPos: -1},
+		{Args: []*Type{TBoolean}, Handler: dummyHandler, BarrierPos: -1},
+		{Args: []*Type{TBoolean}, Handler: dummyHandler, BarrierPos: -1},
 	}
 	SortSignatures(sigs)
 	stack := []Value{NewBoolean(true)}
@@ -329,7 +332,7 @@ func TestMatchSignaturePriorityByArgCount(t *testing.T) {
 				for i := range args {
 					args[i] = TAny
 				}
-				sigs = append(sigs, Signature{Args: args, Handler: dummyHandler})
+				sigs = append(sigs, Signature{Args: args, Handler: dummyHandler, BarrierPos: -1})
 			}
 			SortSignatures(sigs)
 
@@ -356,7 +359,7 @@ func TestMaxArgsLimit(t *testing.T) {
 	for i := range args {
 		args[i] = TAny
 	}
-	sig := Signature{Args: args, Handler: dummyHandler}
+	sig := Signature{Args: args, Handler: dummyHandler, BarrierPos: -1}
 	if sig.TotalArgs() != MaxArgs {
 		t.Fatalf("expected %d args, got %d", MaxArgs, sig.TotalArgs())
 	}
@@ -371,7 +374,7 @@ func TestMaxArgsExceededReturnsError(t *testing.T) {
 	for i := range args {
 		args[i] = TAny
 	}
-	r.Register("toobig", Signature{Args: args, Handler: dummyHandler})
+	r.Register("toobig", Signature{Args: args, Handler: dummyHandler, BarrierPos: -1})
 	if r.Err() == nil {
 		t.Fatal("expected error for signature exceeding MaxArgs")
 	}

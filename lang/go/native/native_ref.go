@@ -35,7 +35,7 @@ var refNatives = []NativeFunc{
 			QuoteArgs:      map[int]bool{0: true},
 			Handler:        refHandler,
 			Returns:        []*Type{TAny},
-			RunInCheckMode: true,
+			RunInCheckMode: true, BarrierPos: -1,
 		}},
 	},
 	{
@@ -48,7 +48,7 @@ var refNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{TFunction},
 			Handler: applyHandler,
-			Returns: []*Type{TAny},
+			Returns: []*Type{TAny}, BarrierPos: -1,
 		}},
 	},
 }

@@ -65,7 +65,7 @@ func registerArith(r *eng.Registry) {
 			Name:        name,
 			ForwardArgs: true,
 			Signatures: []eng.NativeSig{
-				{Args: []*eng.Type{eng.TNumber, eng.TNumber}, Handler: h, Returns: []*eng.Type{eng.TNumber}},
+				{Args: []*eng.Type{eng.TNumber, eng.TNumber}, Handler: h, Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1},
 			},
 		})
 	}
@@ -109,7 +109,7 @@ func registerUnary(r *eng.Registry) {
 			Name:        name,
 			ForwardArgs: true,
 			Signatures: []eng.NativeSig{
-				{Args: []*eng.Type{eng.TNumber}, Handler: h, Returns: []*eng.Type{eng.TNumber}},
+				{Args: []*eng.Type{eng.TNumber}, Handler: h, Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1},
 			},
 		})
 	}
@@ -131,7 +131,7 @@ func registerConstants(r *eng.Registry) {
 				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return []eng.Value{v}, nil
 				},
-				Returns: []*eng.Type{eng.TNumber},
+				Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1,
 			}},
 		})
 	}
@@ -154,7 +154,7 @@ func registerStackOps(r *eng.Registry) {
 					}
 					return fn(stk)
 				},
-				Returns: []*eng.Type{},
+				Returns: []*eng.Type{}, BarrierPos: -1,
 			}},
 		})
 	}
@@ -184,7 +184,7 @@ func registerStackOps(r *eng.Registry) {
 				out := append([]eng.Value{}, stk...)
 				return append(out, eng.NewInteger(int64(len(stk)))), nil
 			},
-			Returns: []*eng.Type{eng.TInteger},
+			Returns: []*eng.Type{eng.TInteger}, BarrierPos: -1,
 		}},
 	})
 }
@@ -203,7 +203,7 @@ func registerDisplay(r *eng.Registry, out io.Writer) {
 				fmt.Fprintln(out, args[0].String())
 				return nil, nil
 			},
-			Returns: []*eng.Type{},
+			Returns: []*eng.Type{}, BarrierPos: -1,
 		}},
 	})
 	// show — write the full stack without consuming it. The output is one
@@ -231,7 +231,7 @@ func registerDisplay(r *eng.Registry, out io.Writer) {
 				}
 				return append([]eng.Value{}, stk...), nil
 			},
-			Returns: []*eng.Type{},
+			Returns: []*eng.Type{}, BarrierPos: -1,
 		}},
 	})
 }

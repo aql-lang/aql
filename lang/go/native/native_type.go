@@ -43,13 +43,13 @@ var typeNatives = []NativeFunc{
 				Args:           []*Type{TAny, TNode},
 				Handler:        refineHandler,
 				Returns:        []*Type{TType},
-				RunInCheckMode: true,
+				RunInCheckMode: true, BarrierPos: -1,
 			},
 			{
 				Args:           []*Type{TAny},
 				Handler:        refineBareHandler,
 				Returns:        []*Type{TType},
-				RunInCheckMode: true,
+				RunInCheckMode: true, BarrierPos: -1,
 			},
 		},
 	},
@@ -62,7 +62,7 @@ var typeNatives = []NativeFunc{
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{eng.PathOf(args[0])}, nil
 			},
-			Returns: []*Type{TList},
+			Returns: []*Type{TList}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -72,7 +72,7 @@ var typeNatives = []NativeFunc{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    enumHandler,
-			Returns:    []*Type{TEnum},
+			Returns:    []*Type{TEnum}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -81,7 +81,7 @@ var typeNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny},
 			Handler: typeofHandler,
-			Returns: []*Type{TAtom},
+			Returns: []*Type{TAtom}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -90,7 +90,7 @@ var typeNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny},
 			Handler: fulltypeofHandler,
-			Returns: []*Type{TAtom},
+			Returns: []*Type{TAtom}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -119,7 +119,7 @@ var typeNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny},
 			Handler:   baseHandler,
-			ReturnsFn: ReturnsIdentity(0),
+			ReturnsFn: ReturnsIdentity(0), BarrierPos: -1,
 		}},
 	},
 	// `tor` (disjunct union) and `tand` (intersection) — type-level
@@ -150,28 +150,28 @@ var typeNatives = []NativeFunc{
 		Name:        "any",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TList}, Handler: anyHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TList}, Handler: anyHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
 		Name:        "all",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TList}, Handler: allHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TList}, Handler: allHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
 		Name:        "tany",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TList}, Handler: tanyHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TList}, Handler: tanyHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
 		Name:        "tall",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TList}, Handler: tallHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TList}, Handler: tallHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
@@ -183,13 +183,13 @@ var typeNatives = []NativeFunc{
 				TypeArgs:  map[int]bool{0: true},
 				Patterns:  map[int]Value{1: convertOptsPattern()},
 				Handler:   convert3Handler,
-				ReturnsFn: ReturnsIdentity(0),
+				ReturnsFn: ReturnsIdentity(0), BarrierPos: -1,
 			},
 			{
 				Args:      []*Type{TScalar, TScalar},
 				TypeArgs:  map[int]bool{0: true},
 				Handler:   convert2Handler,
-				ReturnsFn: ReturnsIdentity(0),
+				ReturnsFn: ReturnsIdentity(0), BarrierPos: -1,
 			},
 		},
 	},

@@ -1465,10 +1465,12 @@ func TestMatchSignaturePatternReject(t *testing.T) {
 	sig := Signature{
 		Args:     []*Type{TMap},
 		Patterns: map[int]Value{0: patternVal},
-		Handler:  func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { return args, nil },
+		Handler:  func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { return args, nil }, BarrierPos:
+
+		// Matching map: {x:99}
+		-1,
 	}
 
-	// Matching map: {x:99}
 	matchMap := NewOrderedMap()
 	matchMap.Set("x", NewInteger(99))
 	stack := []Value{NewMap(matchMap)}
@@ -1500,16 +1502,18 @@ func TestMatchSignaturePatternFallthrough(t *testing.T) {
 		Patterns: map[int]Value{0: patternVal},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{NewString("specific")}, nil
-		},
+		}, BarrierPos: -1,
 	}
 	fallbackSig := Signature{
 		Args: []*Type{TMap},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{NewString("fallback")}, nil
-		},
+		}, BarrierPos:
+
+		// Non-matching map should fall through to fallback.
+		-1,
 	}
 
-	// Non-matching map should fall through to fallback.
 	m := NewOrderedMap()
 	m.Set("a", NewInteger(2))
 	stack := []Value{NewMap(m)}
@@ -1546,7 +1550,7 @@ func TestCallAQLMapPattern(t *testing.T) {
 			{
 				Params:  []FnParam{{Name: "x", Type: TMap, Pattern: &patternVal}},
 				Returns: []*Type{TString},
-				Body:    []Value{NewString("yes")},
+				Body:    []Value{NewString("yes")}, BarrierPos: -1,
 			},
 		},
 	}
@@ -1696,7 +1700,7 @@ func TestFlexibleMatchTooFewValues(t *testing.T) {
 	// Fewer values than types should return nil, false.
 	values := []Value{NewInteger(1)}
 	types := []*Type{TInteger, TString}
-	result, ok := FlexibleMatch(values, &Signature{Args: types})
+	result, ok := FlexibleMatch(values, &Signature{Args: types, BarrierPos: -1})
 	if ok || result != nil {
 		t.Errorf("expected no match with fewer values than types")
 	}

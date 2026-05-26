@@ -629,7 +629,7 @@ func makeTrueFilterFn() Value {
 				Params: []FnParam{
 					{Name: "item", Type: TMap},
 				},
-				Body: []Value{NewBoolean(true)},
+				Body: []Value{NewBoolean(true)}, BarrierPos: -1,
 			},
 		},
 	})
@@ -688,7 +688,7 @@ func makeWalkValueFn() Value {
 					NewWord("getpath"),
 					NewString("value"),
 					NewWord("node"),
-				},
+				}, BarrierPos: -1,
 			},
 		},
 	})

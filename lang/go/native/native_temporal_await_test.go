@@ -197,7 +197,7 @@ func TestAwaitFirst(t *testing.T) {
 		Args: []*Type{},
 		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{NewInteger(int64(order.Add(1)))}, nil
-		},
+		}, BarrierPos: -1,
 	})
 
 	e := NewTop(reg)

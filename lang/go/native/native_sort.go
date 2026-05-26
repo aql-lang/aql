@@ -35,12 +35,12 @@ var sortNative = NativeFunc{
 		{
 			Args:    []*Type{TList},
 			Handler: sortListHandler,
-			Returns: []*Type{TList},
+			Returns: []*Type{TList}, BarrierPos: -1,
 		},
 		{
 			Args:    []*Type{TMap},
 			Handler: sortMapHandler,
-			Returns: []*Type{TMap},
+			Returns: []*Type{TMap}, BarrierPos: -1,
 		},
 	},
 }

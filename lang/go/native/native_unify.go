@@ -19,7 +19,7 @@ var unifyNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny, TAny},
 			Handler: unifyHandler,
-			Returns: []*Type{TAny, TBoolean},
+			Returns: []*Type{TAny, TBoolean}, BarrierPos: -1,
 		}},
 	},
 }

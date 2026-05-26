@@ -18,7 +18,7 @@ var traceNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{TList},
 			Handler: eng.TraceHandler,
-			Returns: []*Type{TAny},
+			Returns: []*Type{TAny}, BarrierPos: -1,
 		}},
 	},
 }

@@ -431,7 +431,7 @@ func TestRegisterForwardWord(t *testing.T) {
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
 			n, _ := native.AsInteger(args[0])
 			return []lang.Value{lang.NewInteger(n * 2)}, nil
-		},
+		}, BarrierPos: -1,
 	})
 
 	result, err := a.Run("5 double")
@@ -454,7 +454,7 @@ func TestRegisterForwardWordCollectsAfter(t *testing.T) {
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
 			n, _ := native.AsInteger(args[0])
 			return []lang.Value{lang.NewInteger(n * 2)}, nil
-		},
+		}, BarrierPos: -1,
 	})
 
 	result, err := a.Run("double 7")
@@ -477,7 +477,7 @@ func TestRegisterStackOnlyWord(t *testing.T) {
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
 			n, _ := native.AsInteger(args[0])
 			return []lang.Value{lang.NewInteger(-n)}, nil
-		},
+		}, BarrierPos: -1,
 	})
 
 	result, err := a.Run("5 neg")
@@ -499,11 +499,13 @@ func TestRegisterStackOnlyDoesNotCollectForward(t *testing.T) {
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
 			n, _ := native.AsInteger(args[0])
 			return []lang.Value{lang.NewInteger(-n)}, nil
-		},
+		}, BarrierPos:
+
+		// "neg 5" — neg is stack-only so it should not consume 5 from forward.
+		// Without a value on the stack, it should error.
+		-1,
 	})
 
-	// "neg 5" — neg is stack-only so it should not consume 5 from forward.
-	// Without a value on the stack, it should error.
 	_, err = a.Run("neg 5")
 	if err == nil {
 		t.Fatal("expected error: neg is stack-only and has no prefix args")
@@ -522,18 +524,20 @@ func TestRegisterMultipleSignatures(t *testing.T) {
 			Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
 				n, _ := native.AsInteger(args[0])
 				return []lang.Value{lang.NewInteger(n * n)}, nil
-			},
+			}, BarrierPos: -1,
 		},
 		lang.Signature{
 			Args: []*lang.Type{lang.TString},
 			Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
 				s, _ := native.AsString(args[0])
 				return []lang.Value{lang.NewString(s + s)}, nil
-			},
+			}, BarrierPos: -
+
+			// Integer signature.
+			1,
 		},
 	)
 
-	// Integer signature.
 	result, err := a.Run("4 square")
 	if err != nil {
 		t.Fatal(err)
@@ -564,7 +568,7 @@ func TestRegisterLeftToRight(t *testing.T) {
 			a0, _ := native.AsInteger(args[0])
 			a1, _ := native.AsInteger(args[1])
 			return []lang.Value{lang.NewInteger(a0 + a1)}, nil
-		},
+		}, BarrierPos: -1,
 	})
 	a.Register("mymul", lang.Signature{
 		Args: []*lang.Type{lang.TInteger, lang.TInteger},
@@ -572,10 +576,12 @@ func TestRegisterLeftToRight(t *testing.T) {
 			m0, _ := native.AsInteger(args[0])
 			m1, _ := native.AsInteger(args[1])
 			return []lang.Value{lang.NewInteger(m0 * m1)}, nil
-		},
+		}, BarrierPos:
+
+		// 2 myadd 3 mymul 4 => left-to-right: (2+3)*4 = 20
+		-1,
 	})
 
-	// 2 myadd 3 mymul 4 => left-to-right: (2+3)*4 = 20
 	result, err := a.Run("2 myadd 3 mymul 4")
 	if err != nil {
 		t.Fatal(err)
@@ -601,7 +607,7 @@ func TestRegisterReturnsMultipleValues(t *testing.T) {
 				return nil, fmt.Errorf("division by zero")
 			}
 			return []lang.Value{lang.NewInteger(a / b), lang.NewInteger(a % b)}, nil
-		},
+		}, BarrierPos: -1,
 	})
 
 	result, err := a.Run("17 divmod 5")
@@ -622,7 +628,7 @@ func TestRegisterErrorPropagation(t *testing.T) {
 		Args: []*lang.Type{lang.TAny},
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
 			return nil, fmt.Errorf("intentional error")
-		},
+		}, BarrierPos: -1,
 	})
 
 	_, err = a.Run("42 fail")
@@ -644,10 +650,12 @@ func TestRegisterWorksWithBuiltins(t *testing.T) {
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
 			t0, _ := native.AsInteger(args[0])
 			return []lang.Value{lang.NewInteger(t0 * 3)}, nil
-		},
+		}, BarrierPos:
+
+		// Mix native Go word with built-in "add".
+		-1,
 	})
 
-	// Mix native Go word with built-in "add".
 	result, err := a.Run("2 triple add 1")
 	if err != nil {
 		t.Fatal(err)
@@ -672,10 +680,12 @@ func TestRegisterIsolatedBetweenInstances(t *testing.T) {
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
 			c0, _ := native.AsInteger(args[0])
 			return []lang.Value{lang.NewInteger(c0 + 100)}, nil
-		},
+		}, BarrierPos:
+
+		// a should have "custom".
+		-1,
 	})
 
-	// a should have "custom".
 	result, err := a.Run("5 custom")
 	if err != nil {
 		t.Fatal(err)
@@ -701,7 +711,7 @@ func TestRegisterStringHandler(t *testing.T) {
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
 			s, _ := native.AsString(args[0])
 			return []lang.Value{lang.NewString(strings.ToUpper(s) + "!")}, nil
-		},
+		}, BarrierPos: -1,
 	})
 
 	result, err := a.Run(`"hello" shout`)
@@ -724,7 +734,7 @@ func TestRegisterZeroArgWord(t *testing.T) {
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
 			counter++
 			return []lang.Value{lang.NewInteger(int64(counter))}, nil
-		},
+		}, BarrierPos: -1,
 	})
 
 	result, err := a.Run("tick tick tick")
@@ -748,10 +758,12 @@ func TestRegisterAddsAlongsideBuiltin(t *testing.T) {
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
 			u0, _ := native.AsInteger(args[0])
 			return []lang.Value{lang.NewInteger(u0 + 1000)}, nil
-		},
+		}, BarrierPos:
+
+		// Built-in string signature still works.
+		-1,
 	})
 
-	// Built-in string signature still works.
 	result, err := a.Run(`"hello" upper`)
 	if err != nil {
 		t.Fatal(err)
@@ -786,10 +798,12 @@ func TestRegisterWithTypeAny(t *testing.T) {
 		Args: []*lang.Type{lang.TAny},
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
 			return args, nil
-		},
+		}, BarrierPos:
+
+		// Works with integer.
+		-1,
 	})
 
-	// Works with integer.
 	result, err := a.Run("42 identity")
 	if err != nil {
 		t.Fatal(err)

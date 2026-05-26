@@ -42,7 +42,7 @@ func registerAdd(r *Registry) {
 				b, _ := AsInteger(args[1])
 				return []Value{NewInteger(a + b)}, nil
 			},
-			Returns: []*Type{TInteger},
+			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	})
 }
@@ -60,7 +60,7 @@ func registerMul(r *Registry) {
 				b, _ := AsInteger(args[1])
 				return []Value{NewInteger(a * b)}, nil
 			},
-			Returns: []*Type{TInteger},
+			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	})
 }
@@ -76,7 +76,7 @@ func registerNeg(r *Registry) {
 				n, _ := AsInteger(args[0])
 				return []Value{NewInteger(-n)}, nil
 			},
-			Returns: []*Type{TInteger},
+			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	})
 }

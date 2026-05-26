@@ -106,7 +106,7 @@ func TestRegisterNativeFuncRejectsBadName(t *testing.T) {
 			Args: []*Type{TInteger},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return nil, nil
-			},
+			}, BarrierPos: -1,
 		}},
 	})
 	if r.Err() == nil {
@@ -138,7 +138,7 @@ func TestDefRejectsBadName(t *testing.T) {
 				reg.Defs.Push(name, args[1])
 				return nil, nil
 			},
-			Returns: []*Type{},
+			Returns: []*Type{}, BarrierPos: -1,
 		}},
 	})
 	r.InitRootContext()

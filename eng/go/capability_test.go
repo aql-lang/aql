@@ -221,7 +221,7 @@ func TestCapabilityAvailableToHandler(t *testing.T) {
 				n, _ := AsInteger(args[0])
 				return []Value{NewInteger(n * c.factor)}, nil
 			},
-			Returns: []*Type{TInteger},
+			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	})
 	r.InitRootContext()
@@ -255,7 +255,7 @@ func TestCapabilityMissingIsNotFatal(t *testing.T) {
 					t.Fatal("missing capability should not be ok")
 				}
 				return []Value{NewString("absent")}, nil
-			},
+			}, BarrierPos: -1,
 		}},
 	})
 	r.InitRootContext()

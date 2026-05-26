@@ -26,14 +26,14 @@ var definitionNatives = []NativeFunc{
 				NoEvalMapArgs:  map[int]bool{0: true},
 				Handler:        defTypedHandler,
 				Returns:        []*Type{},
-				RunInCheckMode: true,
+				RunInCheckMode: true, BarrierPos: -1,
 			},
 			{
 				Args:           []*Type{TString, TAny},
 				NoEvalArgs:     map[int]bool{1: true},
 				Handler:        defHandler,
 				Returns:        []*Type{},
-				RunInCheckMode: true,
+				RunInCheckMode: true, BarrierPos: -1,
 			},
 			{
 				Args:           []*Type{TAtom, TAny},
@@ -41,7 +41,7 @@ var definitionNatives = []NativeFunc{
 				NoEvalArgs:     map[int]bool{1: true},
 				Handler:        defHandler,
 				Returns:        []*Type{},
-				RunInCheckMode: true,
+				RunInCheckMode: true, BarrierPos: -1,
 			},
 		},
 	},
@@ -53,27 +53,27 @@ var definitionNatives = []NativeFunc{
 				Args:           []*Type{TString},
 				Handler:        undefHandler,
 				Returns:        []*Type{},
-				RunInCheckMode: true,
+				RunInCheckMode: true, BarrierPos: -1,
 			},
 			{
 				Args:           []*Type{TAtom},
 				QuoteArgs:      map[int]bool{0: true},
 				Handler:        undefHandler,
 				Returns:        []*Type{},
-				RunInCheckMode: true,
+				RunInCheckMode: true, BarrierPos: -1,
 			},
 			{
 				Args:           []*Type{TString, TFnUndef},
 				Handler:        undefFnHandler,
 				Returns:        []*Type{},
-				RunInCheckMode: true,
+				RunInCheckMode: true, BarrierPos: -1,
 			},
 			{
 				Args:           []*Type{TAtom, TFnUndef},
 				QuoteArgs:      map[int]bool{0: true},
 				Handler:        undefFnHandler,
 				Returns:        []*Type{},
-				RunInCheckMode: true,
+				RunInCheckMode: true, BarrierPos: -1,
 			},
 		},
 	},
@@ -84,7 +84,7 @@ var definitionNatives = []NativeFunc{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    varHandler,
-			Returns:    []*Type{TAny},
+			Returns:    []*Type{TAny}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -95,7 +95,7 @@ var definitionNatives = []NativeFunc{
 			NoEvalArgs:     map[int]bool{0: true},
 			Handler:        fnHandler,
 			Returns:        []*Type{TFunction},
-			RunInCheckMode: true,
+			RunInCheckMode: true, BarrierPos: -1,
 		}},
 	},
 	{
@@ -105,7 +105,7 @@ var definitionNatives = []NativeFunc{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    fnsigHandler,
-			Returns:    []*Type{TFnUndef},
+			Returns:    []*Type{TFnUndef}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -115,7 +115,7 @@ var definitionNatives = []NativeFunc{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    callHandler,
-			Returns:    []*Type{TAny},
+			Returns:    []*Type{TAny}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -125,7 +125,7 @@ var definitionNatives = []NativeFunc{
 			Args:       []*Type{TInteger, TList},
 			NoEvalArgs: map[int]bool{1: true},
 			Handler:    dblcallHandler,
-			Returns:    []*Type{TAny},
+			Returns:    []*Type{TAny}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -133,7 +133,7 @@ var definitionNatives = []NativeFunc{
 		ForwardArgs: true,
 		Signatures: []NativeSig{{
 			Handler: argsHandler,
-			Returns: []*Type{TList},
+			Returns: []*Type{TList}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -141,7 +141,7 @@ var definitionNatives = []NativeFunc{
 		ForwardArgs: true,
 		Signatures: []NativeSig{{
 			Handler: popArgsHandler,
-			Returns: []*Type{},
+			Returns: []*Type{}, BarrierPos: -1,
 		}},
 	},
 }

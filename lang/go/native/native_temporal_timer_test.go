@@ -94,7 +94,7 @@ func TestTimeoutCallbackExecutes(t *testing.T) {
 		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			flag.Store(1)
 			return nil, nil
-		},
+		}, BarrierPos: -1,
 	})
 
 	e := NewTop(reg)
@@ -127,7 +127,7 @@ func TestTimeoutWithWordCallback(t *testing.T) {
 		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			flag.Store(1)
 			return nil, nil
-		},
+		}, BarrierPos: -1,
 	})
 
 	e := NewTop(reg)
@@ -198,7 +198,7 @@ func TestIntervalCallbackRepeats(t *testing.T) {
 		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			counter.Add(1)
 			return nil, nil
-		},
+		}, BarrierPos: -1,
 	})
 
 	e := NewTop(reg)
@@ -251,7 +251,7 @@ func TestCancelTimeout(t *testing.T) {
 		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			flag.Store(1)
 			return nil, nil
-		},
+		}, BarrierPos: -1,
 	})
 
 	e := NewTop(reg)
@@ -287,7 +287,7 @@ func TestCancelInterval(t *testing.T) {
 		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			counter.Add(1)
 			return nil, nil
-		},
+		}, BarrierPos: -1,
 	})
 
 	e := NewTop(reg)

@@ -91,8 +91,12 @@ func TestPipeBarrierPreventsGreedyForward(t *testing.T) {
 // TestPipeBarrierSortOrder verifies that piped signatures sort before
 // non-piped signatures of equal arity.
 func TestPipeBarrierSortOrder(t *testing.T) {
+	// Both fixtures use already-resolved BarrierPos values (this test
+	// compares Signatures directly, not via registration which would
+	// translate the -1 sentinel). `piped` carries a real mid-position
+	// barrier; `plain` is the all-forward default (BarrierPos = len(Args)).
 	piped := Signature{Args: []*Type{TAtom, TNode}, BarrierPos: 1}
-	plain := Signature{Args: []*Type{TAtom, TNode}}
+	plain := Signature{Args: []*Type{TAtom, TNode}, BarrierPos: 2}
 	if c := CompareSignatures(&piped, &plain); c >= 0 {
 		t.Errorf("piped sig should sort before plain sig, got cmp=%d", c)
 	}

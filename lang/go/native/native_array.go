@@ -22,7 +22,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TInteger},
 			Handler:   iotaHandler,
-			ReturnsFn: returnsCarrierTypedListInteger,
+			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
 		}},
 	},
 	{
@@ -31,7 +31,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
 			Handler:   shapeHandler,
-			ReturnsFn: returnsCarrierTypedListInteger,
+			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
 		}},
 	},
 	{
@@ -40,7 +40,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{TList},
 			Handler: rankHandler,
-			Returns: []*Type{TInteger},
+			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -49,7 +49,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{TList},
 			Handler: lengthHandler,
-			Returns: []*Type{TInteger},
+			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -58,7 +58,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
 			Handler:   reshapeHandler,
-			ReturnsFn: ReturnsPreserveListAt(1),
+			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
 		}},
 	},
 	{
@@ -67,7 +67,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
 			Handler:   arrFlattenHandler,
-			ReturnsFn: ReturnsPreserveListAt(0),
+			ReturnsFn: ReturnsPreserveListAt(0), BarrierPos: -1,
 		}},
 	},
 	{
@@ -76,7 +76,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
 			Handler:   arrTransposeHandler,
-			ReturnsFn: ReturnsPreserveListAt(0),
+			ReturnsFn: ReturnsPreserveListAt(0), BarrierPos: -1,
 		}},
 	},
 	{
@@ -85,7 +85,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
 			Handler:   reverseHandler,
-			ReturnsFn: ReturnsPreserveListAt(0),
+			ReturnsFn: ReturnsPreserveListAt(0), BarrierPos: -1,
 		}},
 	},
 	{
@@ -94,7 +94,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TInteger, TList},
 			Handler:   takeHandler,
-			ReturnsFn: ReturnsPreserveListAt(1),
+			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
 		}},
 	},
 	{
@@ -103,7 +103,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TInteger, TList},
 			Handler:   shedHandler,
-			ReturnsFn: ReturnsPreserveListAt(1),
+			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
 		}},
 	},
 	{
@@ -112,7 +112,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
 			Handler:   whereHandler,
-			ReturnsFn: returnsCarrierTypedListInteger,
+			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
 		}},
 	},
 	{
@@ -121,7 +121,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
 			Handler:   uniqueHandler,
-			ReturnsFn: ReturnsPreserveListAt(0),
+			ReturnsFn: ReturnsPreserveListAt(0), BarrierPos: -1,
 		}},
 	},
 	{
@@ -130,7 +130,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
 			Handler:   gradeHandler,
-			ReturnsFn: returnsCarrierTypedListInteger,
+			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
 		}},
 	},
 	{
@@ -139,7 +139,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
 			Handler:   atHandler,
-			ReturnsFn: ReturnsPreserveListAt(1),
+			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
 		}},
 	},
 	{
@@ -148,7 +148,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
 			Handler:   sortbyHandler,
-			ReturnsFn: ReturnsPreserveListAt(1),
+			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
 		}},
 	},
 	{
@@ -157,7 +157,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
 			Handler:   memberHandler,
-			ReturnsFn: returnsCarrierTypedListBoolean,
+			ReturnsFn: returnsCarrierTypedListBoolean, BarrierPos: -1,
 		}},
 	},
 	{
@@ -166,7 +166,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
 			Handler:   arrIndexofHandler,
-			ReturnsFn: returnsCarrierTypedListInteger,
+			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
 		}},
 	},
 	{
@@ -176,12 +176,12 @@ var arrayNatives = []NativeFunc{
 			{
 				Args:    []*Type{TList, TList},
 				Handler: groupTwoHandler,
-				Returns: []*Type{TMap},
+				Returns: []*Type{TMap}, BarrierPos: -1,
 			},
 			{
 				Args:    []*Type{TList},
 				Handler: groupOneHandler,
-				Returns: []*Type{TMap},
+				Returns: []*Type{TMap}, BarrierPos: -1,
 			},
 		},
 	},
@@ -191,7 +191,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
 			Handler:   replicateHandler,
-			ReturnsFn: ReturnsPreserveListAt(1),
+			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
 		}},
 	},
 	{
@@ -200,7 +200,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
 			Handler:   expandHandler,
-			ReturnsFn: ReturnsPreserveListAt(1),
+			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
 		}},
 	},
 	{
@@ -209,7 +209,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TInteger, TList},
 			Handler:   windowHandler,
-			ReturnsFn: windowReturnsFn,
+			ReturnsFn: windowReturnsFn, BarrierPos: -1,
 		}},
 	},
 	{
@@ -218,7 +218,7 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
 			Handler:   pairsHandler,
-			ReturnsFn: pairsReturnsFn,
+			ReturnsFn: pairsReturnsFn, BarrierPos: -1,
 		}},
 	},
 
@@ -230,7 +230,7 @@ var arrayNatives = []NativeFunc{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    eachHandler,
-			ReturnsFn:  eachReturnsFn,
+			ReturnsFn:  eachReturnsFn, BarrierPos: -1,
 		}},
 	},
 	{
@@ -245,14 +245,14 @@ var arrayNatives = []NativeFunc{
 				Args:       []*Type{TList, TList, TAny},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler:    foldWithInitHandler,
-				ReturnsFn:  foldWithInitReturnsFn,
+				ReturnsFn:  foldWithInitReturnsFn, BarrierPos: -1,
 			},
 			{
 				// Without initial: body data → result (uses first element as init)
 				Args:       []*Type{TList, TList},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler:    foldNoInitHandler,
-				ReturnsFn:  foldNoInitReturnsFn,
+				ReturnsFn:  foldNoInitReturnsFn, BarrierPos: -1,
 			},
 		},
 	},
@@ -263,7 +263,7 @@ var arrayNatives = []NativeFunc{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    scanHandler,
-			ReturnsFn:  scanReturnsFn,
+			ReturnsFn:  scanReturnsFn, BarrierPos: -1,
 		}},
 	},
 	{
@@ -273,7 +273,7 @@ var arrayNatives = []NativeFunc{
 			Args:       []*Type{TList, TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    outerHandler,
-			ReturnsFn:  outerReturnsFn,
+			ReturnsFn:  outerReturnsFn, BarrierPos: -1,
 		}},
 	},
 	{
@@ -283,7 +283,7 @@ var arrayNatives = []NativeFunc{
 			Args:       []*Type{TList, TList, TList, TList},
 			NoEvalArgs: map[int]bool{0: true, 1: true},
 			Handler:    innerHandler,
-			ReturnsFn:  innerReturnsFn,
+			ReturnsFn:  innerReturnsFn, BarrierPos: -1,
 		}},
 	},
 }

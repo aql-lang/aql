@@ -1711,17 +1711,14 @@ func fnSigsToSignatures(sigs []FnSig) []Signature {
 				patterns[j] = *p.Pattern
 			}
 		}
-		// Translate the FnSig BarrierPos sentinel for the dispatcher:
-		//   -1 → AQL source had no `|`: default to all-forward.
-		//    0 → either an explicit `[| a b]` from AQL source or a
-		//        Go-side FnSig{} literal that didn't set the field;
-		//        treat as the legacy default and bump to N for
-		//        backwards compatibility. (Anonymous AQL fns with a
-		//        leading `|` reach the dispatcher via InstallFnDef
-		//        and never come through this path.)
-		//   >0 → explicit intermediate barrier.
+		// Resolve the FnSig BarrierPos sentinel: -1 means "use the
+		// all-forward default" (the same defaulting RegisterNative
+		// applies to registered fns). 0 means explicit all-stack
+		// from a leading `|`; >0 is an explicit boundary. All Go-
+		// side FnSig{} construction sites set BarrierPos: -1 so
+		// they reach the dispatcher with the correct default.
 		barrier := sig.BarrierPos
-		if (barrier == -1 || barrier == 0) && len(argTypes) > 0 {
+		if barrier == -1 {
 			barrier = len(argTypes)
 		}
 		out[i] = Signature{Args: argTypes, Patterns: patterns, BarrierPos: barrier}

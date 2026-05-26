@@ -96,14 +96,18 @@ func init() {
 			ForwardArgs: true,
 			Signatures: []NativeSig{
 				// Path signatures
-				{Args: []*Type{TPath, TMap}, Handler: readOptsHandler, Returns: []*Type{TAny}},
-				{Args: []*Type{TPath}, Handler: readHandler, Returns: []*Type{TAny}},
+				{Args: []*Type{TPath, TMap}, Handler: readOptsHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TPath}, Handler: readHandler, Returns: []*Type{TAny}, BarrierPos:
 				// String signatures (backward compatible)
-				{Args: []*Type{TString, TMap}, Handler: readOptsHandler, Returns: []*Type{TAny}},
-				{Args: []*Type{TString}, Handler: readHandler, Returns: []*Type{TAny}},
+				-1},
+
+				{Args: []*Type{TString, TMap}, Handler: readOptsHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TString}, Handler: readHandler, Returns: []*Type{TAny}, BarrierPos:
 				// Reversed signatures for stack-first: "path" {opts} read
-				{Args: []*Type{TMap, TPath}, Handler: readOptsRevHandler, Returns: []*Type{TAny}},
-				{Args: []*Type{TMap, TString}, Handler: readOptsRevHandler, Returns: []*Type{TAny}},
+				-1},
+
+				{Args: []*Type{TMap, TPath}, Handler: readOptsRevHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TMap, TString}, Handler: readOptsRevHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 			},
 		},
 		{
@@ -111,13 +115,15 @@ func init() {
 			ForwardArgs: true,
 			Signatures: []NativeSig{
 				// Path signatures
-				{Args: []*Type{TPath, TString, TMap}, Handler: writeOptsHandler, Returns: []*Type{}},
-				{Args: []*Type{TPath, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []*Type{}},
-				{Args: []*Type{TPath, TString}, Handler: writeHandler, Returns: []*Type{}},
+				{Args: []*Type{TPath, TString, TMap}, Handler: writeOptsHandler, Returns: []*Type{}, BarrierPos: -1},
+				{Args: []*Type{TPath, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []*Type{}, BarrierPos: -1},
+				{Args: []*Type{TPath, TString}, Handler: writeHandler, Returns: []*Type{}, BarrierPos:
 				// String signatures (backward compatible)
-				{Args: []*Type{TString, TString, TMap}, Handler: writeOptsHandler, Returns: []*Type{}},
-				{Args: []*Type{TString, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []*Type{}},
-				{Args: []*Type{TString, TString}, Handler: writeHandler, Returns: []*Type{}},
+				-1},
+
+				{Args: []*Type{TString, TString, TMap}, Handler: writeOptsHandler, Returns: []*Type{}, BarrierPos: -1},
+				{Args: []*Type{TString, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []*Type{}, BarrierPos: -1},
+				{Args: []*Type{TString, TString}, Handler: writeHandler, Returns: []*Type{}, BarrierPos: -1},
 			},
 		},
 		{
@@ -126,7 +132,7 @@ func init() {
 			Signatures: []NativeSig{{
 				Args:    []*Type{},
 				Handler: stdinHandler,
-				Returns: []*Type{TString},
+				Returns: []*Type{TString}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -135,7 +141,7 @@ func init() {
 			Signatures: []NativeSig{{
 				Args:    []*Type{},
 				Handler: stdoutHandler,
-				Returns: []*Type{TString},
+				Returns: []*Type{TString}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -144,7 +150,7 @@ func init() {
 			Signatures: []NativeSig{{
 				Args:    []*Type{},
 				Handler: stderrHandler,
-				Returns: []*Type{TString},
+				Returns: []*Type{TString}, BarrierPos: -1,
 			}},
 		},
 
@@ -153,15 +159,15 @@ func init() {
 			Name:        "help",
 			ForwardArgs: true,
 			Signatures: []NativeSig{
-				{Args: []*Type{TString}, Handler: helpWordHandler},
-				{Args: []*Type{TAtom}, Handler: helpWordHandler},
+				{Args: []*Type{TString}, Handler: helpWordHandler, BarrierPos: -1},
+				{Args: []*Type{TAtom}, Handler: helpWordHandler, BarrierPos: -1},
 				{
 					Args:      []*Type{TAtom},
 					QuoteArgs: map[int]bool{0: true},
 					Handler:   helpWordHandler,
-					Returns:   []*Type{},
+					Returns:   []*Type{}, BarrierPos: -1,
 				},
-				{Args: []*Type{}, Handler: helpSelfHandler},
+				{Args: []*Type{}, Handler: helpSelfHandler, BarrierPos: -1},
 			},
 		},
 
@@ -174,7 +180,7 @@ func init() {
 				NoEvalArgs:     map[int]bool{0: true},
 				Handler:        moduleHandler,
 				Returns:        []*Type{TModule},
-				RunInCheckMode: true,
+				RunInCheckMode: true, BarrierPos: -1,
 			}},
 		},
 		{
@@ -185,31 +191,31 @@ func init() {
 					Args:           []*Type{TModule},
 					Handler:        importAllHandler,
 					Returns:        []*Type{},
-					RunInCheckMode: true,
+					RunInCheckMode: true, BarrierPos: -1,
 				},
 				{
 					Args:           []*Type{TList, TModule},
 					Handler:        importRenameHandler,
 					Returns:        []*Type{},
-					RunInCheckMode: true,
+					RunInCheckMode: true, BarrierPos: -1,
 				},
 				{
 					Args:           []*Type{TAtom, TModule},
 					Handler:        importSingleRenameHandler,
 					Returns:        []*Type{},
-					RunInCheckMode: true,
+					RunInCheckMode: true, BarrierPos: -1,
 				},
 				{
 					Args:           []*Type{TString},
 					Handler:        importFileHandler,
 					Returns:        []*Type{TModule},
-					RunInCheckMode: true,
+					RunInCheckMode: true, BarrierPos: -1,
 				},
 				{
 					Args:           []*Type{TList, TString},
 					Handler:        importFileRenameHandler,
 					Returns:        []*Type{},
-					RunInCheckMode: true,
+					RunInCheckMode: true, BarrierPos: -1,
 				},
 				// Inline module forms: use /q to capture "module" as a quoted word
 				// instead of executing it as a function.
@@ -219,7 +225,7 @@ func init() {
 					NoEvalArgs:     map[int]bool{1: true},
 					Handler:        importInlineHandler,
 					Returns:        []*Type{},
-					RunInCheckMode: true,
+					RunInCheckMode: true, BarrierPos: -1,
 				},
 				{
 					Args:           []*Type{TList, TAtom, TList},
@@ -227,7 +233,7 @@ func init() {
 					NoEvalArgs:     map[int]bool{2: true},
 					Handler:        importInlineRenameHandler,
 					Returns:        []*Type{},
-					RunInCheckMode: true,
+					RunInCheckMode: true, BarrierPos: -1,
 				},
 				{
 					Args:           []*Type{TAtom, TAtom, TList},
@@ -235,7 +241,7 @@ func init() {
 					NoEvalArgs:     map[int]bool{2: true},
 					Handler:        importInlineSingleRenameHandler,
 					Returns:        []*Type{},
-					RunInCheckMode: true,
+					RunInCheckMode: true, BarrierPos: -1,
 				},
 			},
 		},
@@ -249,13 +255,13 @@ func init() {
 					Args:      []*Type{TInteger, TList},
 					QuoteArgs: map[int]bool{1: true},
 					Handler:   timeoutListHandler,
-					Returns:   []*Type{TTimeout},
+					Returns:   []*Type{TTimeout}, BarrierPos: -1,
 				},
 				{
 					Args:      []*Type{TInteger, TAtom},
 					QuoteArgs: map[int]bool{1: true},
 					Handler:   timeoutWordHandler,
-					Returns:   []*Type{TTimeout},
+					Returns:   []*Type{TTimeout}, BarrierPos: -1,
 				},
 			},
 		},
@@ -267,13 +273,13 @@ func init() {
 					Args:       []*Type{TOptions, TList},
 					NoEvalArgs: map[int]bool{1: true},
 					Handler:    awaitWithOptsHandler,
-					Returns:    []*Type{TAny},
+					Returns:    []*Type{TAny}, BarrierPos: -1,
 				},
 				{
 					Args:       []*Type{TList},
 					NoEvalArgs: map[int]bool{0: true},
 					Handler:    awaitDefaultHandler,
-					Returns:    []*Type{TAny},
+					Returns:    []*Type{TAny}, BarrierPos: -1,
 				},
 			},
 		},

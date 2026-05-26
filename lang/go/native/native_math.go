@@ -29,13 +29,13 @@ var mathNatives = []NativeFunc{
 					func(a, b int64) (Value, error) { return NewInteger(b + a), nil },
 					func(a, b float64) (Value, error) { return NewDecimal(b + a), nil },
 				),
-				ReturnsFn: ReturnsNumericBinary(),
+				ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
 			},
-			{Args: []*Type{TScalar, TScalar}, Handler: addConcatHandler, Returns: []*Type{TString}},
-			{Args: []*Type{TDate, TCalDuration}, Handler: addDateCalHandler, Returns: []*Type{TDate}},
-			{Args: []*Type{TDateTime, TClkDuration}, Handler: addDateTimeClkHandler, Returns: []*Type{TDateTime}},
-			{Args: []*Type{TInstant, TClkDuration}, Handler: addInstantClkHandler, Returns: []*Type{TInstant}},
-			{Args: []*Type{TDate, TClkDuration}, Handler: addDateClkHandler, Returns: []*Type{TDateTime}},
+			{Args: []*Type{TScalar, TScalar}, Handler: addConcatHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TDate, TCalDuration}, Handler: addDateCalHandler, Returns: []*Type{TDate}, BarrierPos: -1},
+			{Args: []*Type{TDateTime, TClkDuration}, Handler: addDateTimeClkHandler, Returns: []*Type{TDateTime}, BarrierPos: -1},
+			{Args: []*Type{TInstant, TClkDuration}, Handler: addInstantClkHandler, Returns: []*Type{TInstant}, BarrierPos: -1},
+			{Args: []*Type{TDate, TClkDuration}, Handler: addDateClkHandler, Returns: []*Type{TDateTime}, BarrierPos: -1},
 		},
 	},
 	{
@@ -48,11 +48,11 @@ var mathNatives = []NativeFunc{
 					func(a, b int64) (Value, error) { return NewInteger(b - a), nil },
 					func(a, b float64) (Value, error) { return NewDecimal(b - a), nil },
 				),
-				ReturnsFn: ReturnsNumericBinary(),
+				ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
 			},
-			{Args: []*Type{TDate, TCalDuration}, Handler: subDateCalHandler, Returns: []*Type{TDate}},
-			{Args: []*Type{TDateTime, TClkDuration}, Handler: subDateTimeClkHandler, Returns: []*Type{TDateTime}},
-			{Args: []*Type{TInstant, TClkDuration}, Handler: subInstantClkHandler, Returns: []*Type{TInstant}},
+			{Args: []*Type{TDate, TCalDuration}, Handler: subDateCalHandler, Returns: []*Type{TDate}, BarrierPos: -1},
+			{Args: []*Type{TDateTime, TClkDuration}, Handler: subDateTimeClkHandler, Returns: []*Type{TDateTime}, BarrierPos: -1},
+			{Args: []*Type{TInstant, TClkDuration}, Handler: subInstantClkHandler, Returns: []*Type{TInstant}, BarrierPos: -1},
 		},
 	},
 	{
@@ -64,7 +64,7 @@ var mathNatives = []NativeFunc{
 				func(a, b int64) (Value, error) { return NewInteger(b * a), nil },
 				func(a, b float64) (Value, error) { return NewDecimal(b * a), nil },
 			),
-			ReturnsFn: ReturnsNumericBinary(),
+			ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
 		}},
 	},
 	{
@@ -86,7 +86,7 @@ var mathNatives = []NativeFunc{
 					return NewDecimal(b / a), nil
 				},
 			),
-			ReturnsFn: ReturnsNumericBinary(),
+			ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
 		}},
 	},
 	{
@@ -108,7 +108,7 @@ var mathNatives = []NativeFunc{
 					return NewDecimal(math.Mod(b, a)), nil
 				},
 			),
-			ReturnsFn: ReturnsNumericBinary(),
+			ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
 		}},
 	},
 	{
@@ -136,7 +136,7 @@ var mathNatives = []NativeFunc{
 				},
 				func(a, b float64) (Value, error) { return NewDecimal(math.Pow(b, a)), nil },
 			),
-			ReturnsFn: ReturnsNumericBinary(),
+			ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
 		}},
 	},
 }

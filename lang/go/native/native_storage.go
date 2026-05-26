@@ -25,33 +25,39 @@ var storageNatives = []NativeFunc{
 			{
 				Args:    []*Type{TInteger, TAny, TArray},
 				Handler: setArrayHandler,
-				Returns: []*Type{},
+				Returns: []*Type{}, BarrierPos:
+
+				// Object
+				-1,
 			},
-			// Object
+
 			{
 				Args:    []*Type{TString, TAny, TObject},
 				Handler: setObjectHandler,
-				Returns: []*Type{},
+				Returns: []*Type{}, BarrierPos: -1,
 			},
 			{
 				Args:      []*Type{TAtom, TAny, TObject},
 				QuoteArgs: map[int]bool{0: true},
 				Handler:   setObjectHandler,
-				Returns:   []*Type{},
+				Returns:   []*Type{}, BarrierPos:
+
+				// Store (copy-on-write)
+				-1,
 			},
-			// Store (copy-on-write)
+
 			{
 				Args:      []*Type{TString, TAny, TStore},
 				Handler:   setStoreHandler,
 				Returns:   []*Type{},
-				ReturnsFn: setStoreReturnsFn,
+				ReturnsFn: setStoreReturnsFn, BarrierPos: -1,
 			},
 			{
 				Args:      []*Type{TAtom, TAny, TStore},
 				QuoteArgs: map[int]bool{0: true},
 				Handler:   setStoreHandler,
 				Returns:   []*Type{},
-				ReturnsFn: setStoreReturnsFn,
+				ReturnsFn: setStoreReturnsFn, BarrierPos: -1,
 			},
 		},
 	},
@@ -89,7 +95,7 @@ var storageNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{},
 			Handler: contextHandler,
-			Returns: []*Type{TStore},
+			Returns: []*Type{TStore}, BarrierPos: -1,
 		}},
 	},
 }

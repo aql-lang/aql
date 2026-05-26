@@ -19,12 +19,14 @@ func TestListEvalAsArg(t *testing.T) {
 		Args: []*Type{TList},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{args[0]}, nil
-		},
+		}, BarrierPos:
+
+		// def c1 10
+		// def c2 20
+		// [c1 c2] passlist → [10, 20]
+		-1,
 	})
 
-	// def c1 10
-	// def c2 20
-	// [c1 c2] passlist → [10, 20]
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("c1"), NewInteger(10), NewEnd(),
 		NewWord("def"), NewWord("c2"), NewInteger(20), NewEnd(),
@@ -60,10 +62,12 @@ func TestListEvalArithmetic(t *testing.T) {
 		Args: []*Type{TList},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{args[0]}, nil
-		},
+		}, BarrierPos:
+
+		// [1 add 2] passlist → [3]
+		-1,
 	})
 
-	// [1 add 2] passlist → [3]
 	result := runAQL(t, r, []Value{
 		NewEvalList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)}),
 		NewWord("passlist"),
@@ -90,10 +94,12 @@ func TestListEvalQuotedSkipped(t *testing.T) {
 		Args: []*Type{TList},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{args[0]}, nil
-		},
+		}, BarrierPos:
+
+		// quote [1 add 2] passlist → [1, word(add), 2] (not evaluated)
+		-1,
 	})
 
-	// quote [1 add 2] passlist → [1, word(add), 2] (not evaluated)
 	result := runAQL(t, r, []Value{
 		NewWord("quote"),
 		NewEvalList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)}),
@@ -146,12 +152,14 @@ func TestListEvalFnDefAutoInvoke(t *testing.T) {
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			lst, _ := AsList(args[0])
 			return []Value{NewInteger(int64(lst.Len()))}, nil
-		},
+		}, BarrierPos:
+
+		// def a 10
+		// def b 20
+		// [a b] listlen → 2 (list was auto-evaluated to [10, 20], length is 2)
+		-1,
 	})
 
-	// def a 10
-	// def b 20
-	// [a b] listlen → 2 (list was auto-evaluated to [10, 20], length is 2)
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("a"), NewInteger(10), NewEnd(),
 		NewWord("def"), NewWord("b"), NewInteger(20), NewEnd(),
@@ -179,17 +187,19 @@ func TestListEvalRuntimeListNotEvaluated(t *testing.T) {
 	r.Register("makelist", Signature{
 		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{NewList([]Value{NewWord("add"), NewInteger(1)})}, nil
-		},
+		}, BarrierPos: -1,
 	})
 
 	r.Register("passlist", Signature{
 		Args: []*Type{TList},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{args[0]}, nil
-		},
+		}, BarrierPos:
+
+		// makelist passlist → [word(add), 1] (not evaluated, runtime-created)
+		-1,
 	})
 
-	// makelist passlist → [word(add), 1] (not evaluated, runtime-created)
 	result := runAQL(t, r, []Value{
 		NewWord("makelist"), NewWord("passlist"),
 	})

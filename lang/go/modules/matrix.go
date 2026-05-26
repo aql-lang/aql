@@ -235,7 +235,7 @@ func makeListToMatrixFnDef(wordName string, subReg *native.Registry) native.Valu
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TList}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -246,7 +246,7 @@ func makeIntIntToMatrixFnDef(wordName string, subReg *native.Registry) native.Va
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -257,7 +257,7 @@ func makeIntToMatrixFnDef(wordName string, subReg *native.Registry) native.Value
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TInteger}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -268,7 +268,7 @@ func makeIntIntNumToMatrixFnDef(wordName string, subReg *native.Registry) native
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}, {Type: native.TNumber}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -279,7 +279,7 @@ func makeMatrixToIntFnDef(wordName string, subReg *native.Registry) native.Value
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}},
 			Returns: []*native.Type{native.TInteger},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -295,7 +295,7 @@ func makeMatrixIntIntToDecFnDef(wordName string, subReg *native.Registry) native
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}, {Type: native.TInteger}, {Type: native.TInteger}},
 			Returns: []*native.Type{native.TDecimal},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -306,7 +306,7 @@ func makeMatrixIntToListFnDef(wordName string, subReg *native.Registry) native.V
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}, {Type: native.TInteger}},
 			Returns: []*native.Type{native.TList},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -317,7 +317,7 @@ func makeMatrixMatrixToMatrixFnDef(wordName string, subReg *native.Registry) nat
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}, {Type: TMatrix}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -328,7 +328,7 @@ func makeMatrixNumToMatrixFnDef(wordName string, subReg *native.Registry) native
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}, {Type: native.TNumber}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -339,7 +339,7 @@ func makeUnaryMatrixFnDef(wordName string, subReg *native.Registry) native.Value
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -350,7 +350,7 @@ func makeMatrixToListFnDef(wordName string, subReg *native.Registry) native.Valu
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}},
 			Returns: []*native.Type{native.TList},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -361,7 +361,7 @@ func makeMatrixToDecFnDef(wordName string, subReg *native.Registry) native.Value
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}},
 			Returns: []*native.Type{native.TDecimal},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -372,7 +372,7 @@ func makeListListToDecFnDef(wordName string, subReg *native.Registry) native.Val
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TList}, {Type: native.TList}},
 			Returns: []*native.Type{native.TDecimal},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -398,7 +398,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{tensorValue(TMatrix, td)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -420,7 +420,7 @@ var MatrixNatives = []native.NativeFunc{
 				data := make([]float64, rows*cols)
 				return []native.Value{newMatrix(rows, cols, data)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -445,7 +445,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{newMatrix(rows, cols, data)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -465,7 +465,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{newMatrix(n, n, data)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -493,7 +493,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{newMatrix(rows, cols, data)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	// Shape.
@@ -506,7 +506,7 @@ var MatrixNatives = []native.NativeFunc{
 				m := AsTensor(args[0])
 				return []native.Value{native.NewInteger(int64(m.Rows()))}, nil
 			},
-			Returns: []*native.Type{native.TInteger},
+			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -518,7 +518,7 @@ var MatrixNatives = []native.NativeFunc{
 				m := AsTensor(args[0])
 				return []native.Value{native.NewInteger(int64(m.Cols()))}, nil
 			},
-			Returns: []*native.Type{native.TInteger},
+			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -530,7 +530,7 @@ var MatrixNatives = []native.NativeFunc{
 				m := AsTensor(args[0])
 				return []native.Value{native.NewInteger(int64(m.Rows() * m.Cols()))}, nil
 			},
-			Returns: []*native.Type{native.TList},
+			Returns: []*native.Type{native.TList}, BarrierPos: -1,
 		}},
 	},
 	// Access.
@@ -558,7 +558,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewDecimal(m.Data[row*m.Cols()+col])}, nil
 			},
-			Returns: []*native.Type{native.TDecimal},
+			Returns: []*native.Type{native.TDecimal}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -582,7 +582,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewList(elems)}, nil
 			},
-			Returns: []*native.Type{native.TList},
+			Returns: []*native.Type{native.TList}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -606,7 +606,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewList(elems)}, nil
 			},
-			Returns: []*native.Type{native.TList},
+			Returns: []*native.Type{native.TList}, BarrierPos: -1,
 		}},
 	},
 	// Arithmetic.
@@ -627,7 +627,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{newMatrix(a.Rows(), a.Cols(), data)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -648,7 +648,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{newMatrix(a.Rows(), a.Cols(), data)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -666,7 +666,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{tensorValue(TMatrix, result)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -686,7 +686,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{newMatrix(m.Rows(), m.Cols(), data)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -706,7 +706,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{newMatrix(a.Rows(), a.Cols(), data)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	// Transform.
@@ -725,7 +725,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{newMatrix(m.Cols(), m.Rows(), data)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -741,7 +741,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewList(elems)}, nil
 			},
-			Returns: []*native.Type{native.TList},
+			Returns: []*native.Type{native.TList}, BarrierPos: -1,
 		}},
 	},
 	// Aggregation.
@@ -758,7 +758,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewDecimal(s)}, nil
 			},
-			Returns: []*native.Type{native.TDecimal},
+			Returns: []*native.Type{native.TDecimal}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -777,7 +777,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewDecimal(s)}, nil
 			},
-			Returns: []*native.Type{native.TDecimal},
+			Returns: []*native.Type{native.TDecimal}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -793,7 +793,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewDecimal(d)}, nil
 			},
-			Returns: []*native.Type{native.TDecimal},
+			Returns: []*native.Type{native.TDecimal}, BarrierPos: -1,
 		}},
 	},
 	// Vector.
@@ -825,7 +825,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewDecimal(s)}, nil
 			},
-			Returns: []*native.Type{native.TDecimal},
+			Returns: []*native.Type{native.TDecimal}, BarrierPos: -1,
 		}},
 	},
 }

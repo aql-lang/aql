@@ -201,7 +201,7 @@ func TestMultipleSignaturesDispatch(t *testing.T) {
 					}
 					return []Value{NewString("nonzero-int")}, nil
 				},
-				Returns: []*Type{TString},
+				Returns: []*Type{TString}, BarrierPos: -1,
 			},
 			{
 				Args: []*Type{TString},
@@ -209,7 +209,7 @@ func TestMultipleSignaturesDispatch(t *testing.T) {
 					s, _ := AsString(args[0])
 					return []Value{NewString("string:" + s)}, nil
 				},
-				Returns: []*Type{TString},
+				Returns: []*Type{TString}, BarrierPos: -1,
 			},
 		},
 	})
@@ -251,7 +251,7 @@ func TestSignatureDispatchFavoursSpecificity(t *testing.T) {
 					hits["any"]++
 					return []Value{NewString("any")}, nil
 				},
-				Returns: []*Type{TString},
+				Returns: []*Type{TString}, BarrierPos: -1,
 			},
 			{
 				Args: []*Type{TInteger},
@@ -259,7 +259,7 @@ func TestSignatureDispatchFavoursSpecificity(t *testing.T) {
 					hits["int"]++
 					return []Value{NewString("int")}, nil
 				},
-				Returns: []*Type{TString},
+				Returns: []*Type{TString}, BarrierPos: -1,
 			},
 		},
 	})
@@ -299,7 +299,7 @@ func TestOutputCapture(t *testing.T) {
 				reg.Output.Write([]byte(s))
 				return nil, nil
 			},
-			Returns: []*Type{},
+			Returns: []*Type{}, BarrierPos: -1,
 		}},
 	})
 	r.InitRootContext()
@@ -325,7 +325,7 @@ func TestAqlErrorPropagation(t *testing.T) {
 			Args: []*Type{TInteger},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				return nil, reg.AqlError("test_failure", "always fails", "bork")
-			},
+			}, BarrierPos: -1,
 		}},
 	})
 	r.InitRootContext()

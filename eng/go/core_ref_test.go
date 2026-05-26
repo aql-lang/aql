@@ -30,7 +30,7 @@ func freshRegistry(t *testing.T) *eng.Registry {
 				b, _ := eng.AsInteger(args[0])
 				return []eng.Value{eng.NewInteger(a + b)}, nil
 			},
-			Returns: []*eng.Type{eng.TInteger},
+			Returns: []*eng.Type{eng.TInteger}, BarrierPos: -1,
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
@@ -43,7 +43,7 @@ func freshRegistry(t *testing.T) *eng.Registry {
 				b, _ := eng.AsInteger(args[0])
 				return []eng.Value{eng.NewInteger(a * b)}, nil
 			},
-			Returns: []*eng.Type{eng.TInteger},
+			Returns: []*eng.Type{eng.TInteger}, BarrierPos: -1,
 		}},
 	})
 	r.Defs.Push("answer", eng.NewInteger(42))

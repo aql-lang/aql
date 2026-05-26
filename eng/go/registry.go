@@ -284,14 +284,21 @@ func (r *Registry) RegisterStackOnly(name string, sigs ...Signature) {
 // every arg is forward-eligible. When forwardPrec is false (old
 // stack-only registration), BarrierPos stays at zero — boundary at the
 // start, every arg from the stack.
+//
+// Sentinel resolution: BarrierPos == -1 means "no boundary specified;
+// use the ForwardArgs default" — all-forward when forwardArgs is true,
+// all-stack when false. Every other value (0 through len(Args)) is the
+// author's explicit boundary and passes through unchanged. The
+// historical 0-as-sentinel bump was retired here so that an explicit
+// `[| a b]` from the AQL surface can express true stack-only dispatch.
 func (r *Registry) upsertFnDef(name string, forwardArgs bool, sigs ...Signature) {
-	// If the caller registered with forward-arg defaults, fill in
-	// BarrierPos for any sig that didn't set it explicitly. Sigs with
-	// BarrierPos already non-zero, or sigs registered via the
-	// stack-only path, are left alone.
 	for i := range sigs {
-		if sigs[i].BarrierPos == 0 && forwardArgs && len(sigs[i].Args) > 0 {
-			sigs[i].BarrierPos = len(sigs[i].Args)
+		if sigs[i].BarrierPos == -1 {
+			if forwardArgs {
+				sigs[i].BarrierPos = len(sigs[i].Args)
+			} else {
+				sigs[i].BarrierPos = 0
+			}
 		}
 	}
 	// If the top of the stack is already a FnDefInfo, update it in place.
@@ -432,8 +439,8 @@ func UnaryNumOpNative(name string, op func(float64) float64) NativeFunc {
 		Name:        name,
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TInteger}, Handler: handler, Returns: []*Type{TDecimal}},
-			{Args: []*Type{TDecimal}, Handler: handler, Returns: []*Type{TDecimal}},
+			{Args: []*Type{TInteger}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
+			{Args: []*Type{TDecimal}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
 		},
 	}
 }
@@ -455,9 +462,9 @@ func BinaryNumOpNative(name string, op func(a, b float64) (float64, error)) Nati
 		Name:        name,
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TDecimal, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}},
-			{Args: []*Type{TNumber, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}},
-			{Args: []*Type{TDecimal, TNumber}, Handler: handler, Returns: []*Type{TDecimal}},
+			{Args: []*Type{TDecimal, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
+			{Args: []*Type{TNumber, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
+			{Args: []*Type{TDecimal, TNumber}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
 		},
 	}
 }
@@ -479,7 +486,7 @@ func BinaryIntOpNative(name string, op func(a, b int64) (int64, error)) NativeFu
 		Name:        name,
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TInteger, TInteger}, Handler: handler, Returns: []*Type{TInteger}},
+			{Args: []*Type{TInteger, TInteger}, Handler: handler, Returns: []*Type{TInteger}, BarrierPos: -1},
 		},
 	}
 }
@@ -661,6 +668,9 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 			RunInCheckMode:   sig.RunInCheckMode,
 			CheckFullStackFn: sig.CheckFullStackFn,
 		}
+		// Sentinel resolution happens once, in upsertFnDef. -1 here
+		// means "use the ForwardArgs default" and is honored
+		// uniformly across this path and direct r.Register callers.
 		if fn.ForwardArgs {
 			r.Register(fn.Name, s)
 		} else {

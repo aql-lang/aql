@@ -18,12 +18,12 @@ var controlNatives = []NativeFunc{
 				Args:       []*Type{TList},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler:    doListHandler,
-				ReturnsFn:  doListReturnsFn,
+				ReturnsFn:  doListReturnsFn, BarrierPos: -1,
 			},
 			{
 				Args:    []*Type{TMap},
 				Handler: doMapHandler,
-				Returns: []*Type{TAny},
+				Returns: []*Type{TAny}, BarrierPos: -1,
 			},
 		},
 	},
@@ -35,28 +35,31 @@ var controlNatives = []NativeFunc{
 				Args:       []*Type{TAny, TAny, TAny},
 				NoEvalArgs: map[int]bool{0: true, 1: true, 2: true},
 				Handler:    if3Handler,
-				ReturnsFn:  if3ReturnsFn,
+				ReturnsFn:  if3ReturnsFn, BarrierPos: -1,
 			},
 			{
 				Args:       []*Type{TAny, TAny},
 				NoEvalArgs: map[int]bool{0: true, 1: true},
 				Handler:    if2Handler,
-				ReturnsFn:  if2ReturnsFn,
+				ReturnsFn:  if2ReturnsFn, BarrierPos:
+
+				// Clause-list form: `if [c1 b1 c2 b2 … else]`. Even elements
+				// are conditions, the following odd element is that clause's
+				// body, and a trailing element (odd-length list) is the
+				// else. Conditions are tried left-to-right; the first truthy
+				// one's body runs, the rest are not evaluated. Each element
+				// may be a code-body list (evaluated / spliced) or a plain
+				// value (used as-is). Must be tried after if3/if2 so the
+				// legacy `if <listCond> <then> [<else>]` forms still win when
+				// extra args are present. See ifClause in conditional.go.
+				-1,
 			},
-			// Clause-list form: `if [c1 b1 c2 b2 … else]`. Even elements
-			// are conditions, the following odd element is that clause's
-			// body, and a trailing element (odd-length list) is the
-			// else. Conditions are tried left-to-right; the first truthy
-			// one's body runs, the rest are not evaluated. Each element
-			// may be a code-body list (evaluated / spliced) or a plain
-			// value (used as-is). Must be tried after if3/if2 so the
-			// legacy `if <listCond> <then> [<else>]` forms still win when
-			// extra args are present. See ifClause in conditional.go.
+
 			{
 				Args:       []*Type{TList},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler:    ifListHandler,
-				ReturnsFn:  ifListReturnsFn,
+				ReturnsFn:  ifListReturnsFn, BarrierPos: -1,
 			},
 		},
 	},
@@ -68,13 +71,13 @@ var controlNatives = []NativeFunc{
 				Args:       []*Type{TInteger, TList},
 				NoEvalArgs: map[int]bool{1: true},
 				Handler:    forCountHandler,
-				ReturnsFn:  forIntegerListReturnsFn,
+				ReturnsFn:  forIntegerListReturnsFn, BarrierPos: -1,
 			},
 			{
 				Args:       []*Type{TList, TList},
 				NoEvalArgs: map[int]bool{1: true},
 				Handler:    forRangeHandler,
-				ReturnsFn:  forListListReturnsFn,
+				ReturnsFn:  forListListReturnsFn, BarrierPos: -1,
 			},
 		},
 	},
@@ -89,7 +92,7 @@ var controlNatives = []NativeFunc{
 				r.FlowCtrl = FlowBreak
 				return nil, nil
 			},
-			Returns: []*Type{},
+			Returns: []*Type{}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -99,7 +102,7 @@ var controlNatives = []NativeFunc{
 				r.FlowCtrl = FlowContinue
 				return nil, nil
 			},
-			Returns: []*Type{},
+			Returns: []*Type{}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -110,7 +113,7 @@ var controlNatives = []NativeFunc{
 				Args:       []*Type{TList, TError},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler:    errorHandler,
-				Returns:    []*Type{TError},
+				Returns:    []*Type{TError}, BarrierPos: -1,
 			},
 		},
 	},

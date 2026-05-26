@@ -137,7 +137,7 @@ func makeTimeFnDef(wordName string, params []native.FnParam, returns []*native.T
 			{
 				Params:  params,
 				Returns: returns,
-				Body:    []native.Value{native.NewWord(wordName)},
+				Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 			},
 		},
 		Registry: subReg,
@@ -195,7 +195,7 @@ func dateToIntNative(name string, fn func(time.Time) int64) native.NativeFunc {
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				return []native.Value{native.NewInteger(fn(extractTime(args[0])))}, nil
 			},
-			Returns: []*native.Type{native.TInteger},
+			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	}
 }
@@ -211,7 +211,7 @@ func dateToStringNative(name string, fn func(time.Time) string) native.NativeFun
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				return []native.Value{native.NewString(fn(extractTime(args[0])))}, nil
 			},
-			Returns: []*native.Type{native.TString},
+			Returns: []*native.Type{native.TString}, BarrierPos: -1,
 		}},
 	}
 }
@@ -232,7 +232,7 @@ func intToCalDurationNative(name string, returnType *native.Type, fn func(int) (
 				y, m, d := fn(int(n))
 				return []native.Value{native.NewCalDuration(y, m, d)}, nil
 			},
-			Returns: []*native.Type{returnType},
+			Returns: []*native.Type{returnType}, BarrierPos: -1,
 		}},
 	}
 }
@@ -252,7 +252,7 @@ func numToClkDurationNative(name string, unit time.Duration) native.NativeFunc {
 				}
 				return []native.Value{native.NewClkDuration(time.Duration(n * float64(unit)))}, nil
 			},
-			Returns: []*native.Type{native.TClkDuration},
+			Returns: []*native.Type{native.TClkDuration}, BarrierPos: -1,
 		}},
 	}
 }
@@ -271,7 +271,7 @@ func clkDurationToDecimalNative(name string, returnType *native.Type, fn func(ti
 				d, _ := native.AsClkDuration(args[0])
 				return []native.Value{native.NewDecimal(fn(d))}, nil
 			},
-			Returns: []*native.Type{returnType},
+			Returns: []*native.Type{returnType}, BarrierPos: -1,
 		}},
 	}
 }
@@ -288,7 +288,7 @@ func calDurationToIntNative(name string, fn func(native.CalDurationData) int64) 
 				cd, _ := native.AsCalDuration(args[0])
 				return []native.Value{native.NewInteger(fn(cd))}, nil
 			},
-			Returns: []*native.Type{native.TInteger},
+			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	}
 }
@@ -311,7 +311,7 @@ func addDateNative(name string, build func(n int) (years, months, days int)) nat
 				y, m, d := build(int(n))
 				return []native.Value{native.NewDate(t.AddDate(y, m, d))}, nil
 			},
-			Returns: []*native.Type{native.TAny},
+			Returns: []*native.Type{native.TAny}, BarrierPos: -1,
 		}},
 	}
 }
@@ -344,7 +344,7 @@ var TimeNatives = func() []native.NativeFunc {
 					}
 					return []native.Value{native.NewTimezone(loc)}, nil
 				},
-				Returns: []*native.Type{native.TTimezone},
+				Returns: []*native.Type{native.TTimezone}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -359,7 +359,7 @@ var TimeNatives = func() []native.NativeFunc {
 					}
 					return []native.Value{native.NewInstant(time.Unix(n, 0))}, nil
 				},
-				Returns: []*native.Type{native.TInstant},
+				Returns: []*native.Type{native.TInstant}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -374,7 +374,7 @@ var TimeNatives = func() []native.NativeFunc {
 					}
 					return []native.Value{native.NewInstant(time.UnixMilli(n))}, nil
 				},
-				Returns: []*native.Type{native.TInstant},
+				Returns: []*native.Type{native.TInstant}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -389,7 +389,7 @@ var TimeNatives = func() []native.NativeFunc {
 					}
 					return []native.Value{native.NewInstant(time.Unix(0, n))}, nil
 				},
-				Returns: []*native.Type{native.TInstant},
+				Returns: []*native.Type{native.TInstant}, BarrierPos: -1,
 			}},
 		},
 		// --- Current time (stack-only zero-arg words) ---
@@ -401,7 +401,7 @@ var TimeNatives = func() []native.NativeFunc {
 				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewDateTime(time.Now())}, nil
 				},
-				Returns: []*native.Type{native.TDateTime},
+				Returns: []*native.Type{native.TDateTime}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -414,7 +414,7 @@ var TimeNatives = func() []native.NativeFunc {
 					d := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 					return []native.Value{native.NewDate(d)}, nil
 				},
-				Returns: []*native.Type{native.TDate},
+				Returns: []*native.Type{native.TDate}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -427,7 +427,7 @@ var TimeNatives = func() []native.NativeFunc {
 					d := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 					return []native.Value{native.NewDate(d)}, nil
 				},
-				Returns: []*native.Type{native.TDate},
+				Returns: []*native.Type{native.TDate}, BarrierPos: -1,
 			}},
 		},
 		// --- Extraction (Date -> Integer) ---
@@ -473,7 +473,7 @@ var TimeNatives = func() []native.NativeFunc {
 					leap := y%4 == 0 && (y%100 != 0 || y%400 == 0)
 					return []native.Value{native.NewBoolean(leap)}, nil
 				},
-				Returns: []*native.Type{native.TBoolean},
+				Returns: []*native.Type{native.TBoolean}, BarrierPos: -1,
 			}},
 		},
 		// to-unix / to-unix-ms (Instant -> Integer)
@@ -485,7 +485,7 @@ var TimeNatives = func() []native.NativeFunc {
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewInteger(extractTime(args[0]).Unix())}, nil
 				},
-				Returns: []*native.Type{native.TInteger},
+				Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -496,7 +496,7 @@ var TimeNatives = func() []native.NativeFunc {
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewInteger(extractTime(args[0]).UnixMilli())}, nil
 				},
-				Returns: []*native.Type{native.TInteger},
+				Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 			}},
 		},
 		// --- Comparison (Date Date -> Boolean) ---
@@ -508,7 +508,7 @@ var TimeNatives = func() []native.NativeFunc {
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewBoolean(extractTime(args[1]).Before(extractTime(args[0])))}, nil
 				},
-				Returns: []*native.Type{native.TBoolean},
+				Returns: []*native.Type{native.TBoolean}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -519,7 +519,7 @@ var TimeNatives = func() []native.NativeFunc {
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewBoolean(extractTime(args[1]).After(extractTime(args[0])))}, nil
 				},
-				Returns: []*native.Type{native.TBoolean},
+				Returns: []*native.Type{native.TBoolean}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -530,7 +530,7 @@ var TimeNatives = func() []native.NativeFunc {
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewBoolean(extractTime(args[0]).Equal(extractTime(args[1])))}, nil
 				},
-				Returns: []*native.Type{native.TBoolean},
+				Returns: []*native.Type{native.TBoolean}, BarrierPos: -1,
 			}},
 		},
 		// --- Formatting ---
@@ -542,7 +542,7 @@ var TimeNatives = func() []native.NativeFunc {
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewString(extractTime(args[0]).Format("2006-01-02"))}, nil
 				},
-				Returns: []*native.Type{native.TString},
+				Returns: []*native.Type{native.TString}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -557,7 +557,7 @@ var TimeNatives = func() []native.NativeFunc {
 					}
 					return []native.Value{native.NewString(extractTime(args[1]).Format(layout))}, nil
 				},
-				Returns: []*native.Type{native.TString},
+				Returns: []*native.Type{native.TString}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -568,7 +568,7 @@ var TimeNatives = func() []native.NativeFunc {
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewString(extractTime(args[0]).Format("2006-01-02"))}, nil
 				},
-				Returns: []*native.Type{native.TString},
+				Returns: []*native.Type{native.TString}, BarrierPos: -1,
 			}},
 		},
 		// --- Legacy arithmetic ---
@@ -608,7 +608,7 @@ var TimeNatives = func() []native.NativeFunc {
 					}
 					return []native.Value{native.NewCalDuration(int(y), int(m), int(d))}, nil
 				},
-				Returns: []*native.Type{native.TCalDuration},
+				Returns: []*native.Type{native.TCalDuration}, BarrierPos: -1,
 			}},
 		},
 		// time-duration (ISO 8601 P1Y2M3D parser) removed as a feature.
@@ -642,7 +642,7 @@ var TimeNatives = func() []native.NativeFunc {
 							return []native.Value{native.NewInteger(0)}, nil
 						}
 					},
-					Returns: []*native.Type{native.TInteger},
+					Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 				},
 				{
 					Args: []*native.Type{native.TClkDuration},
@@ -657,7 +657,7 @@ var TimeNatives = func() []native.NativeFunc {
 							return []native.Value{native.NewInteger(0)}, nil
 						}
 					},
-					Returns: []*native.Type{native.TInteger},
+					Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 				},
 			},
 		},
@@ -674,7 +674,7 @@ var TimeNatives = func() []native.NativeFunc {
 					cd := dateDiffCalDuration(from, to)
 					return []native.Value{native.NewCalDuration(cd.Years, cd.Months, cd.Days)}, nil
 				},
-				Returns: []*native.Type{native.TClkDuration},
+				Returns: []*native.Type{native.TClkDuration}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -689,7 +689,7 @@ var TimeNatives = func() []native.NativeFunc {
 					cd := dateDiffCalDuration(from, to)
 					return []native.Value{native.NewCalDuration(cd.Years, cd.Months, cd.Days)}, nil
 				},
-				Returns: []*native.Type{native.TClkDuration},
+				Returns: []*native.Type{native.TClkDuration}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -703,7 +703,7 @@ var TimeNatives = func() []native.NativeFunc {
 					t2 := extractTime(args[0])
 					return []native.Value{native.NewClkDuration(t2.Sub(t1))}, nil
 				},
-				Returns: []*native.Type{native.TClkDuration},
+				Returns: []*native.Type{native.TClkDuration}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -715,7 +715,7 @@ var TimeNatives = func() []native.NativeFunc {
 					start := extractTime(args[0])
 					return []native.Value{native.NewClkDuration(time.Since(start))}, nil
 				},
-				Returns: []*native.Type{native.TClkDuration},
+				Returns: []*native.Type{native.TClkDuration}, BarrierPos: -1,
 			}},
 		},
 		// --- Comparison extended ---
@@ -736,7 +736,7 @@ var TimeNatives = func() []native.NativeFunc {
 						return []native.Value{native.NewInteger(0)}, nil
 					}
 				},
-				Returns: []*native.Type{native.TInteger},
+				Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -751,7 +751,7 @@ var TimeNatives = func() []native.NativeFunc {
 					end := extractTime(args[0])
 					return []native.Value{native.NewBoolean(!d.Before(start) && !d.After(end))}, nil
 				},
-				Returns: []*native.Type{native.TBoolean},
+				Returns: []*native.Type{native.TBoolean}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -767,7 +767,7 @@ var TimeNatives = func() []native.NativeFunc {
 					}
 					return []native.Value{native.NewDate(t2)}, nil
 				},
-				Returns: []*native.Type{native.TAny},
+				Returns: []*native.Type{native.TAny}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -783,7 +783,7 @@ var TimeNatives = func() []native.NativeFunc {
 					}
 					return []native.Value{native.NewDate(t2)}, nil
 				},
-				Returns: []*native.Type{native.TAny},
+				Returns: []*native.Type{native.TAny}, BarrierPos: -1,
 			}},
 		},
 		// --- Conversion ---
@@ -798,7 +798,7 @@ var TimeNatives = func() []native.NativeFunc {
 						t := extractTime(args[0])
 						return []native.Value{native.NewDate(time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location()))}, nil
 					},
-					Returns: []*native.Type{native.TDate},
+					Returns: []*native.Type{native.TDate}, BarrierPos: -1,
 				},
 				{
 					Args: []*native.Type{native.TInstant},
@@ -806,7 +806,7 @@ var TimeNatives = func() []native.NativeFunc {
 						t := extractTime(args[0])
 						return []native.Value{native.NewDate(time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC))}, nil
 					},
-					Returns: []*native.Type{native.TDate},
+					Returns: []*native.Type{native.TDate}, BarrierPos: -1,
 				},
 			},
 		},
@@ -823,7 +823,7 @@ var TimeNatives = func() []native.NativeFunc {
 							time.Duration(t.Second())*time.Second + time.Duration(t.Nanosecond())
 						return []native.Value{native.NewTimeOfDay(d)}, nil
 					},
-					Returns: []*native.Type{native.TTimeOfDay},
+					Returns: []*native.Type{native.TTimeOfDay}, BarrierPos: -1,
 				},
 				{
 					Args: []*native.Type{native.TInstant},
@@ -833,7 +833,7 @@ var TimeNatives = func() []native.NativeFunc {
 							time.Duration(t.Second())*time.Second + time.Duration(t.Nanosecond())
 						return []native.Value{native.NewTimeOfDay(d)}, nil
 					},
-					Returns: []*native.Type{native.TTimeOfDay},
+					Returns: []*native.Type{native.TTimeOfDay}, BarrierPos: -1,
 				},
 			},
 		},
@@ -846,7 +846,7 @@ var TimeNatives = func() []native.NativeFunc {
 					t := extractTime(args[0])
 					return []native.Value{native.NewDateTime(t)}, nil
 				},
-				Returns: []*native.Type{native.TDateTime},
+				Returns: []*native.Type{native.TDateTime}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -864,7 +864,7 @@ var TimeNatives = func() []native.NativeFunc {
 					t := time.Date(dt.Year(), dt.Month(), dt.Day(), dt.Hour(), dt.Minute(), dt.Second(), dt.Nanosecond(), loc)
 					return []native.Value{native.NewInstant(t)}, nil
 				},
-				Returns: []*native.Type{native.TInstant},
+				Returns: []*native.Type{native.TInstant}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -881,7 +881,7 @@ var TimeNatives = func() []native.NativeFunc {
 					}
 					return []native.Value{native.NewDateTime(t.In(loc))}, nil
 				},
-				Returns: []*native.Type{native.TDateTime},
+				Returns: []*native.Type{native.TDateTime}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -893,7 +893,7 @@ var TimeNatives = func() []native.NativeFunc {
 					t := extractTime(args[0])
 					return []native.Value{native.NewDateTime(t.UTC())}, nil
 				},
-				Returns: []*native.Type{native.TDateTime},
+				Returns: []*native.Type{native.TDateTime}, BarrierPos: -1,
 			}},
 		},
 		// --- Rounding ---
@@ -932,7 +932,7 @@ var TimeNatives = func() []native.NativeFunc {
 					}
 					return []native.Value{native.NewDate(result)}, nil
 				},
-				Returns: []*native.Type{native.TAny},
+				Returns: []*native.Type{native.TAny}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -972,7 +972,7 @@ var TimeNatives = func() []native.NativeFunc {
 					}
 					return []native.Value{native.NewDate(result)}, nil
 				},
-				Returns: []*native.Type{native.TAny},
+				Returns: []*native.Type{native.TAny}, BarrierPos: -1,
 			}},
 		},
 		// --- Timezone ---
@@ -984,7 +984,7 @@ var TimeNatives = func() []native.NativeFunc {
 				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewTimezone(time.UTC)}, nil
 				},
-				Returns: []*native.Type{native.TTimezone},
+				Returns: []*native.Type{native.TTimezone}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -995,7 +995,7 @@ var TimeNatives = func() []native.NativeFunc {
 				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewTimezone(time.Local)}, nil
 				},
-				Returns: []*native.Type{native.TTimezone},
+				Returns: []*native.Type{native.TTimezone}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -1010,7 +1010,7 @@ var TimeNatives = func() []native.NativeFunc {
 					}
 					return []native.Value{native.NewString(loc.String())}, nil
 				},
-				Returns: []*native.Type{native.TString},
+				Returns: []*native.Type{native.TString}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -1038,7 +1038,7 @@ var TimeNatives = func() []native.NativeFunc {
 					}
 					return []native.Value{native.NewString(fmt.Sprintf("%s%02d:%02d", sign, h, m))}, nil
 				},
-				Returns: []*native.Type{native.TClkDuration},
+				Returns: []*native.Type{native.TClkDuration}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -1073,7 +1073,7 @@ var TimeNatives = func() []native.NativeFunc {
 					}
 					return []native.Value{native.NewBoolean(curOff != stdOff)}, nil
 				},
-				Returns: []*native.Type{native.TBoolean},
+				Returns: []*native.Type{native.TBoolean}, BarrierPos: -1,
 			}},
 		},
 		// --- Parsing ---

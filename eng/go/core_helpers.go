@@ -63,7 +63,7 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 						return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
 					}
 					return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
-				},
+				}, BarrierPos: -1,
 			})
 		}
 
@@ -364,34 +364,19 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			return stk
 		}
 
-		// Translate the FnSig sentinel into the (BarrierPos,
-		// ForwardArgs) pair that RegisterNativeFunc expects.
-		//   -1 → default all-forward: bump to len(argTypes), keep
-		//        ForwardArgs as-is (which is true for non-stackOnly
-		//        registrations). upsertFnDef's 0→N bump no-ops
-		//        because BarrierPos is now explicitly N.
-		//    0 → explicit all-stack from a leading `|`: force
-		//        ForwardArgs=false so RegisterStackOnly takes the
-		//        sig as-is without bumping. This is the only path
-		//        that lets an AQL-source `[| a b]` reach the
-		//        registry as a true stack-only fn.
-		//   >0 → explicit intermediate barrier: pass through.
-		barrier := s.BarrierPos
-		forwardArgs := !isStackOnly
-		switch {
-		case barrier == -1:
-			barrier = len(argTypes)
-		case barrier == 0:
-			forwardArgs = false
-		}
+		// FnSig.BarrierPos uses the same sentinel as NativeSig
+		// (-1 = unset → default by ForwardArgs, 0 = explicit
+		// all-stack from a leading `|`, >0 = explicit barrier).
+		// RegisterNativeFunc resolves -1 once at the boundary; the
+		// other values pass through verbatim.
 		r.RegisterNativeFunc(NativeFunc{
 			Name:        name,
-			ForwardArgs: forwardArgs,
+			ForwardArgs: !isStackOnly,
 			Signatures: []NativeSig{{
 				Args:       argTypes,
 				Handler:    handler,
 				Patterns:   patterns,
-				BarrierPos: barrier,
+				BarrierPos: s.BarrierPos,
 				ReturnsFn:  returnsFn,
 			}},
 		})

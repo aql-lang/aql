@@ -162,7 +162,7 @@ func FnDefHasSig(fnDef FnDefInfo, want FnSigSpec) bool {
 		for i, t := range sig.Args {
 			params[i] = FnParam{Type: t}
 		}
-		if FnSigSatisfiesSpec(FnSig{Params: params, Returns: sig.Returns}, want) {
+		if FnSigSatisfiesSpec(FnSig{Params: params, Returns: sig.Returns, BarrierPos: -1}, want) {
 			return true
 		}
 	}

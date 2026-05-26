@@ -21,100 +21,100 @@ var stringNatives = []NativeFunc{
 		Name:        "concat",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TMap, TList}, Handler: concatOptsHandler, Returns: []*Type{TString}},
-			{Args: []*Type{TList}, Handler: concatHandler, Returns: []*Type{TString}},
+			{Args: []*Type{TMap, TList}, Handler: concatOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TList}, Handler: concatHandler, Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 	{
 		Name:        "split",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TString, TString, TMap}, Handler: splitOptsHandler, Returns: []*Type{TList}},
-			{Args: []*Type{TString, TString}, Handler: splitHandler, Returns: []*Type{TList}},
+			{Args: []*Type{TString, TString, TMap}, Handler: splitOptsHandler, Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TString, TString}, Handler: splitHandler, Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 	{
 		Name:        "trim",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TString, TMap}, Handler: trimOptsHandler, Returns: []*Type{TString}},
-			{Args: []*Type{TString}, Handler: trimHandler, Returns: []*Type{TString}},
-			{Args: []*Type{TAtom, TMap}, Handler: trimOptsHandler, Returns: []*Type{TString}},
-			{Args: []*Type{TAtom}, Handler: trimHandler, Returns: []*Type{TString}},
+			{Args: []*Type{TString, TMap}, Handler: trimOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TString}, Handler: trimHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TAtom, TMap}, Handler: trimOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TAtom}, Handler: trimHandler, Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 	{
 		Name:        "contains",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TString, TString, TMap}, Handler: containsOptsHandler, Returns: []*Type{TBoolean}},
-			{Args: []*Type{TString, TString}, Handler: containsHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TString, TString, TMap}, Handler: containsOptsHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
+			{Args: []*Type{TString, TString}, Handler: containsHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
 		},
 	},
 	{
 		Name:        "indexof",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TString, TString, TMap}, Handler: indexOfOptsHandler, Returns: []*Type{TInteger}},
-			{Args: []*Type{TString, TString}, Handler: indexOfHandler, Returns: []*Type{TInteger}},
+			{Args: []*Type{TString, TString, TMap}, Handler: indexOfOptsHandler, Returns: []*Type{TInteger}, BarrierPos: -1},
+			{Args: []*Type{TString, TString}, Handler: indexOfHandler, Returns: []*Type{TInteger}, BarrierPos: -1},
 		},
 	},
 	{
 		Name:        "replace",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TString, TString, TString, TMap}, Handler: replaceOptsHandler, Returns: []*Type{TString}},
-			{Args: []*Type{TString, TString, TString}, Handler: replaceHandler, Returns: []*Type{TString}},
+			{Args: []*Type{TString, TString, TString, TMap}, Handler: replaceOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TString, TString, TString}, Handler: replaceHandler, Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 	{
 		Name:        "changecase",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TString, TMap}, Handler: changeCaseOptsHandler, Returns: []*Type{TString}},
-			{Args: []*Type{TString}, Handler: changeCaseHandler, Returns: []*Type{TString}},
-			{Args: []*Type{TAtom, TMap}, Handler: changeCaseOptsHandler, Returns: []*Type{TString}},
-			{Args: []*Type{TAtom}, Handler: changeCaseHandler, Returns: []*Type{TString}},
+			{Args: []*Type{TString, TMap}, Handler: changeCaseOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TString}, Handler: changeCaseHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TAtom, TMap}, Handler: changeCaseOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TAtom}, Handler: changeCaseHandler, Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 	{
 		Name:        "normalize",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TString, TMap}, Handler: normalizeOptsHandler, Returns: []*Type{TString}},
-			{Args: []*Type{TString}, Handler: normalizeHandler, Returns: []*Type{TString}},
+			{Args: []*Type{TString, TMap}, Handler: normalizeOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TString}, Handler: normalizeHandler, Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 	{
 		Name:        "repeat",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TString, TInteger, TMap}, Handler: repeatOptsHandler, Returns: []*Type{TString}},
-			{Args: []*Type{TString, TInteger}, Handler: repeatHandler, Returns: []*Type{TString}},
+			{Args: []*Type{TString, TInteger, TMap}, Handler: repeatOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TString, TInteger}, Handler: repeatHandler, Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 	{
 		Name:        "pad",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TInteger, TMap, TString}, Handler: padOptsHandler, Returns: []*Type{TString}},
-			{Args: []*Type{TInteger, TString}, Handler: padHandler, Returns: []*Type{TString}},
+			{Args: []*Type{TInteger, TMap, TString}, Handler: padOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TString}, Handler: padHandler, Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 	{
 		Name:        "match",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TString, TString, TMap}, Handler: matchOptsHandler, Returns: []*Type{TMap}},
-			{Args: []*Type{TString, TString}, Handler: matchHandler, Returns: []*Type{TMap}},
+			{Args: []*Type{TString, TString, TMap}, Handler: matchOptsHandler, Returns: []*Type{TMap}, BarrierPos: -1},
+			{Args: []*Type{TString, TString}, Handler: matchHandler, Returns: []*Type{TMap}, BarrierPos: -1},
 		},
 	},
 	{
 		Name:        "escape",
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TString, TMap}, Handler: escapeOptsHandler, Returns: []*Type{TString}},
-			{Args: []*Type{TString}, Handler: escapeHandler, Returns: []*Type{TString}},
+			{Args: []*Type{TString, TMap}, Handler: escapeOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TString}, Handler: escapeHandler, Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 }
@@ -142,8 +142,8 @@ func unaryStringNative(name string, fn func(string) string) NativeFunc {
 		Name:        name,
 		ForwardArgs: true,
 		Signatures: []NativeSig{
-			{Args: []*Type{TString}, Handler: handler, Returns: []*Type{TString}},
-			{Args: []*Type{TAtom}, Handler: handler, Returns: []*Type{TString}},
+			{Args: []*Type{TString}, Handler: handler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TAtom}, Handler: handler, Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	}
 }
