@@ -678,9 +678,6 @@ func (e *Engine) stepWord(val Value) error {
 	if e.registry != nil {
 		if tv, ok := e.registry.TopTypeBody(w.Name); ok {
 			push := tv
-			if push.Parent.Equal(TFnDef) || push.Parent.Equal(TFunction) {
-				push.Quoted = true
-			}
 			push.Pos = val.Pos
 			e.stack[e.pointer] = push
 			return e.stepLiteral()
@@ -690,21 +687,9 @@ func (e *Engine) stepWord(val Value) error {
 	// Simple value def: substitute the word with its value directly,
 	// bypassing function dispatch entirely. FnDefInfo and ObjectTypeInfo
 	// entries are not simple values — they go through normal Lookup.
-	//
-	// Exception: a Quoted Function/FnDef binding was explicitly stored
-	// as data (e.g. `def saved (myop/r)`), so the bare name pushes the
-	// value rather than invoking. This is the symmetric companion to
-	// the `/r` suffix on the read side.
 	if top, ok := e.registry.Defs.Top(w.Name); ok {
 		switch top.Data.(type) {
 		case FnDefInfo, *ObjectTypeInfo:
-			if top.Quoted {
-				e.registry.Check.recordUse(w.Name)
-				push := top
-				push.Pos = val.Pos
-				e.stack[e.pointer] = push
-				return e.stepLiteral()
-			}
 			// Not a simple value — fall through to Lookup.
 		default:
 			// Record the substitution as a "use" for unused-def
@@ -1500,31 +1485,32 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		return nil
 	}
 
-	// Look up compiled signatures. Named functions normally use the
-	// registry so live re-definitions take effect (recursive calls,
-	// hot patching). When the registry no longer has a binding under
-	// this name we fall back to the captured FnDef's own Signatures:
-	// that's what makes a Function value produced by `ref` (or a
-	// /q-marked TFunction slot) a stable handle — an undef of the
-	// underlying name doesn't strand the captured value. The
-	// signature slice already lives by-value on the FnDefInfo, so no
-	// extra copying is needed.
+	// Resolve compiled signatures. A captured Function value is a
+	// STABLE handle to the fn it was minted from: we prefer the
+	// captured FnDef's own Signatures over a fresh registry lookup so
+	// that `undef foo; def foo …` doesn't change the meaning of a
+	// previously-captured value. Word-driven dispatch (in stepWord)
+	// still re-resolves through the registry every call, which is
+	// what recursive self-references rely on.
 	var fn *FnDefInfo
-	if fnDef.Name != "" {
+	if len(fnDef.Signatures) > 0 {
+		captured := fnDef
+		fn = &captured
+	}
+	if fn == nil && fnDef.Name != "" {
 		reg := fnDef.Registry
 		if reg == nil {
 			reg = e.registry
 		}
 		fn = reg.Lookup(fnDef.Name)
 	}
-	if fn == nil && len(fnDef.Signatures) > 0 {
-		captured := fnDef
-		fn = &captured
-	}
 	if fn == nil && len(fnDef.Sigs) > 0 {
+		synth := fnSigsToSignatures(fnDef.Sigs)
 		fn = &FnDefInfo{
-			Name:       fnDef.Name,
-			Signatures: fnSigsToSignatures(fnDef.Sigs),
+			Name:           fnDef.Name,
+			Signatures:     synth,
+			MaxForwardArgs: calcMaxForwardArgs(synth),
+			Registry:       fnDef.Registry,
 		}
 	}
 	if fn == nil {
@@ -1532,32 +1518,92 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		return nil
 	}
 
-	resolved := e.effectiveResolved()
 	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
 
-	// Use matchSignature for forward collection only.
-	matchedSig, positions := e.matchSignature(fn, w, resolved)
-
-	if matchedSig != nil {
-		// Count forward vs stack args from positions.
-		fwdCount := 0
-		for _, pos := range positions {
-			if pos > e.pointer {
-				fwdCount++
-			}
-		}
-
-		if fwdCount > 0 {
-			stkCount := len(positions) - fwdCount
-			return e.insertForward(w, matchedSig, fwdCount, stkCount)
+	// Pre-evaluate paren expressions in the forward scan range so that
+	// matchSignature sees fully resolved values. Mirrors stepWord's
+	// pre-eval pass — the unified rule says Function values at the
+	// pointer dispatch with the same forward+stack matching as words.
+	if (fn.HasForwardSigs() && !w.ForceStack) || w.ForceForward {
+		if err := e.preEvalParens(fn.MaxForwardArgs); err != nil {
+			return err
 		}
 	}
 
-	// Pure stack match against FnSig params. Two strategies:
-	// - Unnamed params (matrix-style): deepest-first so CallAQL's token
-	//   push order matches the registered handler's nearest-first matching.
-	// - Named params (decision-style): nearest-first because CallAQL
-	//   installs them as defs and the body's reversal expects this order.
+	resolved := e.effectiveResolved()
+	sig, positions := e.matchSignature(fn, w, resolved)
+
+	// Retry fallback for words with forward-collecting sigs: when
+	// nearest-first matching fails, retry with deepest-first
+	// (ForceStack). Mirrors stepWord's CallAQL-input recovery.
+	if sig == nil && fn.HasForwardSigs() && !w.ForceStack {
+		wDeep := w
+		wDeep.ForceStack = true
+		sig, positions = e.matchSignature(fn, wDeep, resolved)
+	}
+
+	// Function-value dispatch does NOT fire Fallback sigs. Fallback
+	// handlers (installed by InstallFnDef as 0-arg catch-alls) exist
+	// to raise a clean "no matching signature for X" error when a
+	// *bare word* arrives without args. For a Function value sitting
+	// at the pointer, the right behavior is to leave it on the stack
+	// as data — the user explicitly captured it and may consume it
+	// later.
+	if sig != nil && sig.Fallback {
+		sig = nil
+	}
+
+	// Fall through to FnSig-based pure-stack matching when
+	// matchSignature finds nothing — this preserves the legacy
+	// anonymous-fn-on-stack dispatch for AQL fns whose Sigs carry
+	// named params.
+	if sig == nil || sig.Handler == nil {
+		return e.execFnDefSigStackMatch(valIdx, fnDef, resolved)
+	}
+
+	// Forward-collecting match: defer handler invocation until the
+	// remaining tokens have been consumed. When the Forward marker
+	// completes, the engine re-processes the Function value with
+	// all args on the stack — which routes through this same
+	// execFnDefLiteral entry with the module-closure check below
+	// firing on the second pass.
+	fwdCount := 0
+	for _, pos := range positions {
+		if pos > e.pointer {
+			fwdCount++
+		}
+	}
+	if fwdCount > 0 {
+		stkCount := len(positions) - fwdCount
+		return e.insertForward(w, sig, fwdCount, stkCount)
+	}
+
+	// Module closures: with all args now on the stack (either because
+	// no forward collection was needed, or after the forward-completion
+	// re-dispatch), route through execFnDefSig with the captured
+	// registry. CallAQL runs the body in a sub-engine on modReg so
+	// the fn's def-body word lookups resolve in its own scope.
+	if fnDef.Registry != nil && fnDef.Registry != e.registry && len(fnDef.Sigs) > 0 {
+		return e.execFnDefSigStackMatch(valIdx, fnDef, resolved)
+	}
+
+	// Pure-stack match: dispatch via execMatch the same way a bare
+	// word with no forward args would.
+	match := &MatchResult{Sig: sig, Positions: positions}
+	if len(positions) > 0 {
+		match.Args = make([]Value, len(positions))
+		for i, pos := range positions {
+			match.Args[i] = e.stack[pos]
+		}
+	}
+	return e.execMatch(match)
+}
+
+// execFnDefSigStackMatch is the legacy FnSig-based pure-stack
+// dispatch path for AQL-defined functions whose Sigs carry named
+// params. Used as a fallback when matchSignature's Signatures-based
+// match returns nothing.
+func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []Value) error {
 	resolvedIdx := e.resolvedIndicesBefore(len(resolved))
 	for i := range fnDef.Sigs {
 		sig := &fnDef.Sigs[i]
@@ -1569,7 +1615,6 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 			continue
 		}
 
-		// Determine ordering: named params → nearest-first, unnamed → deepest-first.
 		hasNamed := false
 		for _, p := range sig.Params {
 			if p.Name != "" {
@@ -1580,7 +1625,6 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 
 		match := true
 		if hasNamed {
-			// Nearest-first: top-of-stack → sig[0].
 			for j, p := range sig.Params {
 				ri := len(resolved) - 1 - j
 				if !sigTypeMatches(resolved[ri], p.Type) {
@@ -1613,7 +1657,6 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
 			}
 		} else {
-			// Deepest-first: bottom-of-resolved → sig[0].
 			candidate := resolved[len(resolved)-nArgs:]
 			for j, p := range sig.Params {
 				if !sigTypeMatches(candidate[j], p.Type) {
@@ -1668,7 +1711,17 @@ func fnSigsToSignatures(sigs []FnSig) []Signature {
 				patterns[j] = *p.Pattern
 			}
 		}
-		out[i] = Signature{Args: argTypes, Patterns: patterns, BarrierPos: sig.BarrierPos}
+		// BarrierPos == 0 from an AQL fn body means "no explicit `|`
+		// barrier was set." Under the unified dispatch rule, Function
+		// values default to all-forward-eligible — the same defaulting
+		// that upsertFnDef applies to ForwardArgs-registered natives.
+		// Without this bump, `(fn [[a b] [out] [body]]) 2 3` would do a
+		// stack-only match and fail to forward-collect 2 and 3.
+		barrier := sig.BarrierPos
+		if barrier == 0 && len(argTypes) > 0 {
+			barrier = len(argTypes)
+		}
+		out[i] = Signature{Args: argTypes, Patterns: patterns, BarrierPos: barrier}
 	}
 	SortSignatures(out)
 	return out

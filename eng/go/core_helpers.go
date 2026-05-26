@@ -16,16 +16,6 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
 	_ = isStackOnly // used by InstallFnDef below
 
-	// A Quoted Function/FnDef body is an explicit "store this as data"
-	// signal — produced by `ref`/`/r` and preserved through paren
-	// evaluation. Bind it as a plain value (so bare-word reads push it
-	// without invoking) and skip the fn-install path that would
-	// overwrite the captured signatures with a fresh registration.
-	if body.Quoted && (body.Parent.Equal(TFnDef) || body.Parent.Equal(TFunction)) {
-		r.Defs.Push(name, body)
-		return
-	}
-
 	// FnDefInfo body (from fn word): install typed signatures.
 	// Only fn-based defs register functions; simple value defs just use DefStacks.
 	if body.Parent.Equal(TFnDef) || body.Parent.Equal(TFunction) {

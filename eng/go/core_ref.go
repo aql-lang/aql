@@ -7,10 +7,14 @@ package eng
 //  1. A type binding (capitalised def, refine-prefab) returns its
 //     stored body — typically a type literal.
 //  2. A value binding returns the bound value: an FnDef binding is
-//     wrapped as a Function value and marked Quoted so it sits on the
-//     stack as data rather than auto-executing; everything else is
-//     returned as-is (also Quoted when its parent is TFnDef/TFunction,
-//     so type bindings whose body is an fn value behave the same).
+//     wrapped as a Function value; every other binding is returned
+//     as-is.
+//
+// The returned Function value is UNQUOTED. Under the dispatch rules
+// of this engine, an unquoted Function on the stack is a live call
+// site — full signature matching (forward + stack) applies the next
+// time the engine processes it. To capture as inert data, wrap with
+// `quote` at the call site.
 //
 // The second return is false when the name is not bound at all. The
 // caller decides how to report the failure — the `ref` word raises
@@ -24,24 +28,14 @@ func ResolveRef(r *Registry, name string) (Value, bool) {
 		return Value{}, false
 	}
 	if tv, ok := r.TopTypeBody(name); ok {
-		out := tv
-		if out.Parent.Equal(TFnDef) || out.Parent.Equal(TFunction) {
-			out.Quoted = true
-		}
-		return out, true
+		return tv, true
 	}
 	top, ok := r.Defs.Top(name)
 	if !ok {
 		return Value{}, false
 	}
 	if fnDef, ok := top.Data.(FnDefInfo); ok {
-		v := NewFunction(fnDef)
-		v.Quoted = true
-		return v, true
+		return NewFunction(fnDef), true
 	}
-	out := top
-	if out.Parent.Equal(TFnDef) || out.Parent.Equal(TFunction) {
-		out.Quoted = true
-	}
-	return out, true
+	return top, true
 }

@@ -11,19 +11,15 @@ import (
 // freshRegistry builds an eng-only Registry plus a small set of probe
 // natives. The /r suffix is a parser+kernel feature, so these tests
 // stay in eng and only need the kernel surface — no `ref` word, no
-// `apply` word, neither of which lives here any more. They test
-// stepWord's ForceRef branch and eng.ResolveRef directly.
+// `apply` word, neither of which lives here. They test stepWord's
+// ForceRef branch, eng.ResolveRef directly, and the dispatch of
+// unquoted Function values via execFnDefLiteral.
 func freshRegistry(t *testing.T) *eng.Registry {
 	t.Helper()
 	r, err := eng.NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
-	// `add` and `mul`: typical binary integer fns. RegisterNativeFunc
-	// pushes a FnDefInfo entry into DefTable, which is precisely the
-	// shape a user-level `def add fn […]` produces — so ResolveRef
-	// behaves identically whether the binding came from native code or
-	// from user code.
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name:        "add",
 		ForwardArgs: true,
@@ -50,8 +46,6 @@ func freshRegistry(t *testing.T) *eng.Registry {
 			Returns: []*eng.Type{eng.TInteger},
 		}},
 	})
-	// A non-function binding, so we can prove /r on a plain value
-	// just returns the value verbatim.
 	r.Defs.Push("answer", eng.NewInteger(42))
 	if err := r.Err(); err != nil {
 		t.Fatalf("registration: %v", err)
@@ -85,9 +79,8 @@ func runSrcErr(t *testing.T, r *eng.Registry, src string) error {
 
 // --- the asymmetry the /r suffix exists to address --------------------
 
-// TestBareWordInvokesFnBinding pins the existing behavior /r is
-// designed to opt out of: a bare word for an fn binding fires
-// dispatch, not data substitution.
+// TestBareWordInvokesFnBinding pins existing behavior: a bare word
+// for an fn binding fires dispatch.
 func TestBareWordInvokesFnBinding(t *testing.T) {
 	r := freshRegistry(t)
 	out := runSrc(t, r, "2 add 3")
@@ -100,11 +93,14 @@ func TestBareWordInvokesFnBinding(t *testing.T) {
 	}
 }
 
-// TestRefSuffixReturnsFunctionValue is the core claim of /r: it
-// yields a Quoted Function value carrying the FnDefInfo, not the
-// result of invocation.
+// TestRefSuffixReturnsFunctionValue: /r resolves to an UNQUOTED
+// Function value carrying the FnDefInfo. Unquoted is the new
+// default — call site, not data.
 func TestRefSuffixReturnsFunctionValue(t *testing.T) {
 	r := freshRegistry(t)
+	// `add/r` standalone: no following args, no preceding stack args,
+	// so the unquoted Function value's sig doesn't match anything —
+	// it sits as data at the end of Run.
 	out := runSrc(t, r, "add/r")
 	if len(out) != 1 {
 		t.Fatalf("got %d values, want 1", len(out))
@@ -113,6 +109,9 @@ func TestRefSuffixReturnsFunctionValue(t *testing.T) {
 	if !v.Parent.Equal(eng.TFunction) {
 		t.Errorf("top.Parent=%s, want Function", v.Parent.String())
 	}
+	if v.Quoted {
+		t.Errorf("function value is Quoted — /r should produce unquoted in the new dispatch model")
+	}
 	fnDef, ok := v.Data.(eng.FnDefInfo)
 	if !ok {
 		t.Fatalf("payload=%T, want FnDefInfo", v.Data)
@@ -120,13 +119,42 @@ func TestRefSuffixReturnsFunctionValue(t *testing.T) {
 	if fnDef.Name != "add" {
 		t.Errorf("fnDef.Name=%q, want %q", fnDef.Name, "add")
 	}
-	if !v.Quoted {
-		t.Errorf("function value not Quoted — would auto-invoke on stack")
+}
+
+// TestRefSuffixDispatchesWithForwardArgs is the headline new
+// behavior: an unquoted Function value at the pointer collects
+// forward args via full sig matching, just like a word.
+func TestRefSuffixDispatchesWithForwardArgs(t *testing.T) {
+	r := freshRegistry(t)
+	out := runSrc(t, r, "add/r 2 3")
+	if len(out) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(out), out)
+	}
+	got, err := eng.AsInteger(out[0])
+	if err != nil {
+		t.Fatalf("AsInteger: %v", err)
+	}
+	if got != 5 {
+		t.Errorf("add/r 2 3 = %d, want 5", got)
+	}
+}
+
+// TestRefSuffixDispatchesWithStackArgs verifies the stack-side of
+// the dispatch — args already on the stack get consumed.
+func TestRefSuffixDispatchesWithStackArgs(t *testing.T) {
+	r := freshRegistry(t)
+	out := runSrc(t, r, "2 3 add/r")
+	if len(out) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(out), out)
+	}
+	got, _ := eng.AsInteger(out[0])
+	if got != 5 {
+		t.Errorf("2 3 add/r = %d, want 5", got)
 	}
 }
 
 // TestRefSuffixOnSimpleValueBinding: /r is uniform across binding
-// shapes — a simple-value def is returned as itself.
+// shapes — a simple-value def returns the value itself.
 func TestRefSuffixOnSimpleValueBinding(t *testing.T) {
 	r := freshRegistry(t)
 	out := runSrc(t, r, "answer/r")
@@ -142,8 +170,6 @@ func TestRefSuffixOnSimpleValueBinding(t *testing.T) {
 	}
 }
 
-// TestRefSuffixUndefinedNameErrors covers the "name is not bound"
-// path — same error code as the regular undefined-word path.
 func TestRefSuffixUndefinedNameErrors(t *testing.T) {
 	r := freshRegistry(t)
 	err := runSrcErr(t, r, "nope/r")
@@ -157,19 +183,13 @@ func TestRefSuffixUndefinedNameErrors(t *testing.T) {
 
 // --- the stable-map-lookup demonstration ------------------------------
 
-// TestRefStableInMap proves the point that motivated the feature: a
-// map built with /r-resolved entries keeps each function as a stable
-// referent. Mutations to the binding (shadow, pop) don't propagate to
-// the values already captured into the map.
+// TestRefStableInMap proves the captured Function value retains its
+// FnDef payload through map storage. The captured value is now
+// UNQUOTED (live call-site shape); the test asserts identity, not
+// Quoted state.
 func TestRefStableInMap(t *testing.T) {
 	r := freshRegistry(t)
 
-	// Parser context inside `{...}` is *data*, so bare names in the
-	// value positions become atoms, not words. To get the ref-resolved
-	// function values into the map we build the OrderedMap directly,
-	// populate it through the /r path, and stash it. (Map-building via
-	// AQL surface lives in the language layer; the kernel test just
-	// exercises eng primitives.)
 	ops := eng.NewOrderedMap()
 	for _, name := range []string{"add", "mul"} {
 		v, ok := resolveViaSlashR(t, r, name)
@@ -179,7 +199,6 @@ func TestRefStableInMap(t *testing.T) {
 		ops.Set(name, v)
 	}
 
-	// Both stored entries are Function values, not raw words.
 	for _, name := range []string{"add", "mul"} {
 		v, ok := ops.Get(name)
 		if !ok {
@@ -188,8 +207,8 @@ func TestRefStableInMap(t *testing.T) {
 		if !v.Parent.Equal(eng.TFunction) {
 			t.Errorf("ops[%q].Parent=%s, want Function", name, v.Parent.String())
 		}
-		if !v.Quoted {
-			t.Errorf("ops[%q] not Quoted — would auto-invoke", name)
+		if v.Quoted {
+			t.Errorf("ops[%q] is Quoted — captured Function should be unquoted (live call-site)", name)
 		}
 		fnDef, ok := v.Data.(eng.FnDefInfo)
 		if !ok {
@@ -201,9 +220,9 @@ func TestRefStableInMap(t *testing.T) {
 	}
 
 	// Stability under shadowing: push a non-fn binding on top of `add`
-	// (without popping the underlying FnDef). The map entry we already
-	// captured must still hold the original Function value — the map
-	// stores referents, not names that get re-resolved.
+	// (without popping the underlying FnDef). The map entry still
+	// holds the original Function value — the map stores referents,
+	// not names that get re-resolved.
 	r.Defs.Push("add", eng.NewString("shadowed"))
 	v, _ := ops.Get("add")
 	if !v.Parent.Equal(eng.TFunction) {
@@ -219,9 +238,7 @@ func TestRefStableInMap(t *testing.T) {
 
 	// Hard-stability check: even after popping the underlying binding
 	// entirely (so `add/r` would now fail), the previously captured
-	// value still carries the full FnDef payload. The runtime can
-	// surface that payload to a consumer (filter, walk, or apply) and
-	// dispatch independently of the registry.
+	// value still carries the full FnDef payload.
 	if !r.Defs.Pop("add") {
 		t.Fatal("Defs.Pop(shadow) returned false")
 	}
@@ -239,9 +256,9 @@ func TestRefStableInMap(t *testing.T) {
 }
 
 // resolveViaSlashR runs `<name>/r` through the engine and returns the
-// resulting value. Using the production /r path here keeps the
-// map-build test honest about how a real program would populate the
-// dispatch table.
+// resulting value. The /r expression sits at end-of-program; with no
+// following args its sig doesn't match anything and it falls through
+// as data — that's how we get the captured value out.
 func resolveViaSlashR(t *testing.T, r *eng.Registry, name string) (eng.Value, bool) {
 	t.Helper()
 	out := runSrc(t, r, name+"/r")
@@ -252,8 +269,8 @@ func resolveViaSlashR(t *testing.T, r *eng.Registry, name string) (eng.Value, bo
 }
 
 // TestResolveRefDirect exercises the exported helper independently of
-// the parser. Same surface, different entry — proves lang's `ref`
-// handler can rely on identical semantics when it calls in.
+// the parser. The returned Function is unquoted — same contract as
+// the /r suffix path.
 func TestResolveRefDirect(t *testing.T) {
 	r := freshRegistry(t)
 	v, ok := eng.ResolveRef(r, "mul")
@@ -263,15 +280,14 @@ func TestResolveRefDirect(t *testing.T) {
 	if !v.Parent.Equal(eng.TFunction) {
 		t.Errorf("Parent=%s, want Function", v.Parent.String())
 	}
-	if !v.Quoted {
-		t.Error("returned function not Quoted")
+	if v.Quoted {
+		t.Error("returned function is Quoted — should be unquoted")
 	}
 	fnDef, _ := v.Data.(eng.FnDefInfo)
 	if fnDef.Name != "mul" {
 		t.Errorf("fnDef.Name=%q, want %q", fnDef.Name, "mul")
 	}
 
-	// Non-bound name reports false rather than panicking.
 	if _, ok := eng.ResolveRef(r, "nope"); ok {
 		t.Error("ResolveRef(nope): expected not-bound, got ok")
 	}
