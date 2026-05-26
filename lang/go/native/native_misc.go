@@ -92,8 +92,8 @@ func init() {
 	miscNatives = []NativeFunc{
 		// ---- file I/O ----
 		{
-			Name:        "read",
-			ForwardArgs: true,
+			Name: "read",
+
 			Signatures: []NativeSig{
 				// Path signatures
 				{Args: []*Type{TPath, TMap}, Handler: readOptsHandler, Returns: []*Type{TAny}, BarrierPos: -1},
@@ -111,8 +111,8 @@ func init() {
 			},
 		},
 		{
-			Name:        "write",
-			ForwardArgs: true,
+			Name: "write",
+
 			Signatures: []NativeSig{
 				// Path signatures
 				{Args: []*Type{TPath, TString, TMap}, Handler: writeOptsHandler, Returns: []*Type{}, BarrierPos: -1},
@@ -127,8 +127,8 @@ func init() {
 			},
 		},
 		{
-			Name:        "stdin",
-			ForwardArgs: true,
+			Name: "stdin",
+
 			Signatures: []NativeSig{{
 				Args:    []*Type{},
 				Handler: stdinHandler,
@@ -136,8 +136,8 @@ func init() {
 			}},
 		},
 		{
-			Name:        "stdout",
-			ForwardArgs: true,
+			Name: "stdout",
+
 			Signatures: []NativeSig{{
 				Args:    []*Type{},
 				Handler: stdoutHandler,
@@ -145,8 +145,8 @@ func init() {
 			}},
 		},
 		{
-			Name:        "stderr",
-			ForwardArgs: true,
+			Name: "stderr",
+
 			Signatures: []NativeSig{{
 				Args:    []*Type{},
 				Handler: stderrHandler,
@@ -156,8 +156,8 @@ func init() {
 
 		// ---- help ----
 		{
-			Name:        "help",
-			ForwardArgs: true,
+			Name: "help",
+
 			Signatures: []NativeSig{
 				{Args: []*Type{TString}, Handler: helpWordHandler, BarrierPos: -1},
 				{Args: []*Type{TAtom}, Handler: helpWordHandler, BarrierPos: -1},
@@ -173,8 +173,8 @@ func init() {
 
 		// ---- module / import ----
 		{
-			Name:        "module",
-			ForwardArgs: true,
+			Name: "module",
+
 			Signatures: []NativeSig{{
 				Args:           []*Type{TList},
 				NoEvalArgs:     map[int]bool{0: true},
@@ -184,8 +184,8 @@ func init() {
 			}},
 		},
 		{
-			Name:        "import",
-			ForwardArgs: true,
+			Name: "import",
+
 			Signatures: []NativeSig{
 				{
 					Args:           []*Type{TModule},
@@ -248,8 +248,8 @@ func init() {
 
 		// ---- temporal ----
 		{
-			Name:        "timeout",
-			ForwardArgs: true,
+			Name: "timeout",
+
 			Signatures: []NativeSig{
 				{
 					Args:      []*Type{TInteger, TList},
@@ -266,8 +266,8 @@ func init() {
 			},
 		},
 		{
-			Name:        "await",
-			ForwardArgs: true,
+			Name: "await",
+
 			Signatures: []NativeSig{
 				{
 					Args:       []*Type{TOptions, TList},

@@ -234,22 +234,10 @@ func (a *AQL) Register(name string, sigs ...Signature) {
 	a.registry.Register(name, sigs...)
 }
 
-// RegisterStackOnly adds a named word with one or more signatures that
-// only match prefix arguments (values already on the stack before the word).
-// No forward argument collection is attempted.
-//
-// Example — register a stack-only word "neg" that negates an integer:
-//
-//	a.RegisterStackOnly("neg", lang.Signature{
-//	    Args: []lang.Type{lang.TInteger},
-//	    Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
-//	        n := args[0].AsConcreteInteger()
-//	        return []lang.Value{lang.NewInteger(-n)}, nil
-//	    },
-//	})
-func (a *AQL) RegisterStackOnly(name string, sigs ...Signature) {
-	a.registry.RegisterStackOnly(name, sigs...)
-}
+// (RegisterStackOnly was retired. To install a stack-only word, set
+// `BarrierPos: 0` on each Signature and call `Register` — that's the
+// canonical encoding of "this sig consumes its args from the prefix
+// stack only.")
 
 // SetSDK injects an SDK instance for the given spec name.
 // Used in tests to provide a pre-configured SDK (e.g. test mode with mock data).

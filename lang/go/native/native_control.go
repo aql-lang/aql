@@ -11,8 +11,8 @@ import "fmt"
 // independently testable.
 var controlNatives = []NativeFunc{
 	{
-		Name:        "do",
-		ForwardArgs: true,
+		Name: "do",
+
 		Signatures: []NativeSig{
 			{
 				Args:       []*Type{TList},
@@ -28,8 +28,8 @@ var controlNatives = []NativeFunc{
 		},
 	},
 	{
-		Name:        "if",
-		ForwardArgs: true,
+		Name: "if",
+
 		Signatures: []NativeSig{
 			{
 				Args:       []*Type{TAny, TAny, TAny},
@@ -64,8 +64,8 @@ var controlNatives = []NativeFunc{
 		},
 	},
 	{
-		Name:        "for",
-		ForwardArgs: true,
+		Name: "for",
+
 		Signatures: []NativeSig{
 			{
 				Args:       []*Type{TInteger, TList},
@@ -92,7 +92,7 @@ var controlNatives = []NativeFunc{
 				r.FlowCtrl = FlowBreak
 				return nil, nil
 			},
-			Returns: []*Type{}, BarrierPos: -1,
+			Returns: []*Type{}, BarrierPos: 0,
 		}},
 	},
 	{
@@ -102,12 +102,12 @@ var controlNatives = []NativeFunc{
 				r.FlowCtrl = FlowContinue
 				return nil, nil
 			},
-			Returns: []*Type{}, BarrierPos: -1,
+			Returns: []*Type{}, BarrierPos: 0,
 		}},
 	},
 	{
-		Name:        "error",
-		ForwardArgs: true,
+		Name: "error",
+
 		Signatures: []NativeSig{
 			{
 				Args:       []*Type{TList, TError},

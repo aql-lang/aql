@@ -36,7 +36,8 @@ Sources reviewed:
 | `implies` | 2     | `[boolean, boolean] -> [boolean]`                  | yes      | 0          |
 | `or`      | 2     | `[boolean, boolean] -> [boolean]` **and** `[any, any] -> [disjunct]` | yes | 1 on both  |
 
-All six are registered with `ForwardArgs: true`, so the standard
+All six are registered with `BarrierPos: BarrierAllForward` (i.e.
+forward-eligible after sentinel resolution), so the standard
 concatenative mirror applies — they can appear in any of the prefix /
 mixed / forward positions described in `lang/CLAUDE.md` §"Argument
 Ordering". For example, `and` accepts:

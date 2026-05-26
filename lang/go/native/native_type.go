@@ -36,8 +36,8 @@ var typeNatives = []NativeFunc{
 		// literal, or a record/object type value), typed TNode so the
 		// matcher falls through to the 1-arg form when a non-Node token
 		// (a following `def` / `behave` / `;`) comes next.
-		Name:        "refine",
-		ForwardArgs: true,
+		Name: "refine",
+
 		Signatures: []NativeSig{
 			{
 				Args:           []*Type{TAny, TNode},
@@ -54,8 +54,8 @@ var typeNatives = []NativeFunc{
 		},
 	},
 	{
-		Name:        "pathof",
-		ForwardArgs: true,
+		Name: "pathof",
+
 		Signatures: []NativeSig{{
 			Args:     []*Type{TAny},
 			TypeArgs: map[int]bool{0: true},
@@ -66,8 +66,8 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "enum",
-		ForwardArgs: true,
+		Name: "enum",
+
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
@@ -76,8 +76,8 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "typeof",
-		ForwardArgs: true,
+		Name: "typeof",
+
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny},
 			Handler: typeofHandler,
@@ -85,8 +85,8 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "fulltypeof",
-		ForwardArgs: true,
+		Name: "fulltypeof",
+
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny},
 			Handler: fulltypeofHandler,
@@ -94,8 +94,8 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "is",
-		ForwardArgs: true,
+		Name: "is",
+
 		Signatures: []NativeSig{{
 			Args:       []*Type{TAny, TAny},
 			BarrierPos: 1,
@@ -104,8 +104,8 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "guard",
-		ForwardArgs: true,
+		Name: "guard",
+
 		Signatures: []NativeSig{{
 			Args:       []*Type{TAny, TBoolean},
 			BarrierPos: 1,
@@ -114,8 +114,8 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "base",
-		ForwardArgs: true,
+		Name: "base",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny},
 			Handler:   baseHandler,
@@ -127,8 +127,8 @@ var typeNatives = []NativeFunc{
 	// (eng.TorHandler / eng.TandHandler / eng.TandValues); the
 	// registrations here own the names and dispatch wiring.
 	{
-		Name:        "tor",
-		ForwardArgs: true,
+		Name: "tor",
+
 		Signatures: []NativeSig{{
 			Args:       []*Type{TAny, TAny},
 			BarrierPos: 1,
@@ -137,8 +137,8 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "tand",
-		ForwardArgs: true,
+		Name: "tand",
+
 		Signatures: []NativeSig{{
 			Args:       []*Type{TAny, TAny},
 			BarrierPos: 1,
@@ -147,36 +147,36 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "any",
-		ForwardArgs: true,
+		Name: "any",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TList}, Handler: anyHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "all",
-		ForwardArgs: true,
+		Name: "all",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TList}, Handler: allHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "tany",
-		ForwardArgs: true,
+		Name: "tany",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TList}, Handler: tanyHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "tall",
-		ForwardArgs: true,
+		Name: "tall",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TList}, Handler: tallHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "convert",
-		ForwardArgs: true,
+		Name: "convert",
+
 		Signatures: []NativeSig{
 			{
 				Args:      []*Type{TScalar, TMap, TScalar},

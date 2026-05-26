@@ -18,8 +18,8 @@ import "fmt"
 // dispatch wiring.
 var storageNatives = []NativeFunc{
 	{
-		Name:        "set",
-		ForwardArgs: true,
+		Name: "set",
+
 		Signatures: []NativeSig{
 			// Array (indexed by integer)
 			{
@@ -62,8 +62,8 @@ var storageNatives = []NativeFunc{
 		},
 	},
 	{
-		Name:        "get",
-		ForwardArgs: true,
+		Name: "get",
+
 		Signatures: []NativeSig{
 			// [Key | Node] — covers Map, List, Options, record-shape
 			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeHandler, Returns: []*Type{TAny}},
@@ -90,8 +90,8 @@ var storageNatives = []NativeFunc{
 		},
 	},
 	{
-		Name:        "context",
-		ForwardArgs: true,
+		Name: "context",
+
 		Signatures: []NativeSig{{
 			Args:    []*Type{},
 			Handler: contextHandler,

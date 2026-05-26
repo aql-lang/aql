@@ -29,8 +29,8 @@ import (
 // accepts new capability slots without losing previously installed
 // ones.
 var behaveNative = NativeFunc{
-	Name:        "behave",
-	ForwardArgs: true,
+	Name: "behave",
+
 	Signatures: []NativeSig{
 		{
 			Args:      []*Type{TAtom, TFunction},
@@ -64,8 +64,8 @@ var behaveNative = NativeFunc{
 // so tests and downstream pipelines can observe the Node/Scalar
 // directly.
 var nodifyNative = NativeFunc{
-	Name:        "nodify",
-	ForwardArgs: true,
+	Name: "nodify",
+
 	Signatures: []NativeSig{{
 		Args: []*Type{TAny},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

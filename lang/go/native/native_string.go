@@ -18,24 +18,24 @@ var stringNatives = []NativeFunc{
 	unaryStringNative("upper", strings.ToUpper),
 	unaryStringNative("lower", strings.ToLower),
 	{
-		Name:        "concat",
-		ForwardArgs: true,
+		Name: "concat",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TMap, TList}, Handler: concatOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TList}, Handler: concatHandler, Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "split",
-		ForwardArgs: true,
+		Name: "split",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TString, TString, TMap}, Handler: splitOptsHandler, Returns: []*Type{TList}, BarrierPos: -1},
 			{Args: []*Type{TString, TString}, Handler: splitHandler, Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "trim",
-		ForwardArgs: true,
+		Name: "trim",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TString, TMap}, Handler: trimOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TString}, Handler: trimHandler, Returns: []*Type{TString}, BarrierPos: -1},
@@ -44,32 +44,32 @@ var stringNatives = []NativeFunc{
 		},
 	},
 	{
-		Name:        "contains",
-		ForwardArgs: true,
+		Name: "contains",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TString, TString, TMap}, Handler: containsOptsHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
 			{Args: []*Type{TString, TString}, Handler: containsHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "indexof",
-		ForwardArgs: true,
+		Name: "indexof",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TString, TString, TMap}, Handler: indexOfOptsHandler, Returns: []*Type{TInteger}, BarrierPos: -1},
 			{Args: []*Type{TString, TString}, Handler: indexOfHandler, Returns: []*Type{TInteger}, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "replace",
-		ForwardArgs: true,
+		Name: "replace",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TString, TString, TString, TMap}, Handler: replaceOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TString, TString, TString}, Handler: replaceHandler, Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "changecase",
-		ForwardArgs: true,
+		Name: "changecase",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TString, TMap}, Handler: changeCaseOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TString}, Handler: changeCaseHandler, Returns: []*Type{TString}, BarrierPos: -1},
@@ -78,40 +78,40 @@ var stringNatives = []NativeFunc{
 		},
 	},
 	{
-		Name:        "normalize",
-		ForwardArgs: true,
+		Name: "normalize",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TString, TMap}, Handler: normalizeOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TString}, Handler: normalizeHandler, Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "repeat",
-		ForwardArgs: true,
+		Name: "repeat",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TString, TInteger, TMap}, Handler: repeatOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TString, TInteger}, Handler: repeatHandler, Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "pad",
-		ForwardArgs: true,
+		Name: "pad",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TInteger, TMap, TString}, Handler: padOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TInteger, TString}, Handler: padHandler, Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "match",
-		ForwardArgs: true,
+		Name: "match",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TString, TString, TMap}, Handler: matchOptsHandler, Returns: []*Type{TMap}, BarrierPos: -1},
 			{Args: []*Type{TString, TString}, Handler: matchHandler, Returns: []*Type{TMap}, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "escape",
-		ForwardArgs: true,
+		Name: "escape",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TString, TMap}, Handler: escapeOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TString}, Handler: escapeHandler, Returns: []*Type{TString}, BarrierPos: -1},
@@ -139,8 +139,8 @@ func unaryStringNative(name string, fn func(string) string) NativeFunc {
 		return []Value{NewString(fn(s))}, nil
 	}
 	return NativeFunc{
-		Name:        name,
-		ForwardArgs: true,
+		Name: name,
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TString}, Handler: handler, Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TAtom}, Handler: handler, Returns: []*Type{TString}, BarrierPos: -1},

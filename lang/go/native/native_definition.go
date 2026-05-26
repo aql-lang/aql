@@ -14,8 +14,8 @@ import (
 // callers in native_definition_fn.go and native_definition_helpers.go.
 var definitionNatives = []NativeFunc{
 	{
-		Name:        "def",
-		ForwardArgs: true,
+		Name: "def",
+
 		Signatures: []NativeSig{
 			{
 				// Typed-name binding: def name:*Type body. Sorts first
@@ -46,8 +46,8 @@ var definitionNatives = []NativeFunc{
 		},
 	},
 	{
-		Name:        "undef",
-		ForwardArgs: true,
+		Name: "undef",
+
 		Signatures: []NativeSig{
 			{
 				Args:           []*Type{TString},
@@ -78,8 +78,8 @@ var definitionNatives = []NativeFunc{
 		},
 	},
 	{
-		Name:        "var",
-		ForwardArgs: true,
+		Name: "var",
+
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
@@ -88,8 +88,8 @@ var definitionNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "fn",
-		ForwardArgs: true,
+		Name: "fn",
+
 		Signatures: []NativeSig{{
 			Args:           []*Type{TList},
 			NoEvalArgs:     map[int]bool{0: true},
@@ -99,8 +99,8 @@ var definitionNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "fnsig",
-		ForwardArgs: true,
+		Name: "fnsig",
+
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
@@ -109,8 +109,8 @@ var definitionNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "call",
-		ForwardArgs: true,
+		Name: "call",
+
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
@@ -119,8 +119,8 @@ var definitionNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "dblcall",
-		ForwardArgs: true,
+		Name: "dblcall",
+
 		Signatures: []NativeSig{{
 			Args:       []*Type{TInteger, TList},
 			NoEvalArgs: map[int]bool{1: true},
@@ -129,16 +129,16 @@ var definitionNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "args",
-		ForwardArgs: true,
+		Name: "args",
+
 		Signatures: []NativeSig{{
 			Handler: argsHandler,
 			Returns: []*Type{TList}, BarrierPos: -1,
 		}},
 	},
 	{
-		Name:        "__pa",
-		ForwardArgs: true,
+		Name: "__pa",
+
 		Signatures: []NativeSig{{
 			Handler: popArgsHandler,
 			Returns: []*Type{}, BarrierPos: -1,

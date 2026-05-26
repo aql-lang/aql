@@ -14,7 +14,6 @@ import (
 // literal substitution.
 func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
-	_ = isStackOnly // used by InstallFnDef below
 
 	// FnDefInfo body (from fn word): install typed signatures.
 	// Only fn-based defs register functions; simple value defs just use DefStacks.
@@ -365,18 +364,22 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 		}
 
 		// FnSig.BarrierPos uses the same sentinel as NativeSig
-		// (-1 = unset → default by ForwardArgs, 0 = explicit
-		// all-stack from a leading `|`, >0 = explicit barrier).
-		// RegisterNativeFunc resolves -1 once at the boundary; the
-		// other values pass through verbatim.
+		// (BarrierAllForward = -1 → default all-forward; 0 =
+		// explicit all-stack; >0 = explicit barrier). The `/s`
+		// modifier on the def name pins BarrierPos to 0 here so
+		// the fn is registered stack-only regardless of its
+		// FnSig-default.
+		barrier := s.BarrierPos
+		if isStackOnly {
+			barrier = 0
+		}
 		r.RegisterNativeFunc(NativeFunc{
-			Name:        name,
-			ForwardArgs: !isStackOnly,
+			Name: name,
 			Signatures: []NativeSig{{
 				Args:       argTypes,
 				Handler:    handler,
 				Patterns:   patterns,
-				BarrierPos: s.BarrierPos,
+				BarrierPos: barrier,
 				ReturnsFn:  returnsFn,
 			}},
 		})

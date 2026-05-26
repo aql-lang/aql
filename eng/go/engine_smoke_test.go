@@ -33,8 +33,8 @@ func runWith(t *testing.T, setup func(*Registry), input []Value) []Value {
 // Used as the canonical "engine works at all" probe.
 func registerAdd(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:        "add",
-		ForwardArgs: true,
+		Name: "add",
+
 		Signatures: []NativeSig{{
 			Args: []*Type{TInteger, TInteger},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -51,8 +51,8 @@ func registerAdd(r *Registry) {
 // multi-word dispatch test.
 func registerMul(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:        "mul",
-		ForwardArgs: true,
+		Name: "mul",
+
 		Signatures: []NativeSig{{
 			Args: []*Type{TInteger, TInteger},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -76,7 +76,7 @@ func registerNeg(r *Registry) {
 				n, _ := AsInteger(args[0])
 				return []Value{NewInteger(-n)}, nil
 			},
-			Returns: []*Type{TInteger}, BarrierPos: -1,
+			Returns: []*Type{TInteger}, BarrierPos: 0,
 		}},
 	})
 }
@@ -154,8 +154,9 @@ func TestSmokeMultipleWords(t *testing.T) {
 }
 
 func TestSmokeStackOnlyDispatch(t *testing.T) {
-	// `5 neg` — neg is registered without ForwardArgs so the
-	// engine must consume the prefix value.
+	// `5 neg` — neg is registered with BarrierPos:0 so the engine
+	// must consume the value from the prefix stack rather than
+	// forward-collecting.
 	out := runWith(t, registerNeg, []Value{NewInteger(5), NewWord("neg")})
 	if len(out) != 1 {
 		t.Fatalf("got %d results, want 1", len(out))

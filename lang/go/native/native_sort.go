@@ -29,8 +29,8 @@ import (
 // the existing `array.sort` semantics — sort stays total even when
 // the lattice walk doesn't find a Comparer for the pair.
 var sortNative = NativeFunc{
-	Name:        "sort",
-	ForwardArgs: true,
+	Name: "sort",
+
 	Signatures: []NativeSig{
 		{
 			Args:    []*Type{TList},

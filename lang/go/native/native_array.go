@@ -17,8 +17,8 @@ import (
 var arrayNatives = []NativeFunc{
 	// ---- core ----
 	{
-		Name:        "iota",
-		ForwardArgs: true,
+		Name: "iota",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TInteger},
 			Handler:   iotaHandler,
@@ -26,8 +26,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "shape",
-		ForwardArgs: true,
+		Name: "shape",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
 			Handler:   shapeHandler,
@@ -35,8 +35,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "rank",
-		ForwardArgs: true,
+		Name: "rank",
+
 		Signatures: []NativeSig{{
 			Args:    []*Type{TList},
 			Handler: rankHandler,
@@ -44,8 +44,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "length",
-		ForwardArgs: true,
+		Name: "length",
+
 		Signatures: []NativeSig{{
 			Args:    []*Type{TList},
 			Handler: lengthHandler,
@@ -53,8 +53,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "reshape",
-		ForwardArgs: true,
+		Name: "reshape",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
 			Handler:   reshapeHandler,
@@ -62,8 +62,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "arr-flatten",
-		ForwardArgs: true,
+		Name: "arr-flatten",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
 			Handler:   arrFlattenHandler,
@@ -71,8 +71,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "arr-transpose",
-		ForwardArgs: true,
+		Name: "arr-transpose",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
 			Handler:   arrTransposeHandler,
@@ -80,8 +80,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "reverse",
-		ForwardArgs: true,
+		Name: "reverse",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
 			Handler:   reverseHandler,
@@ -89,8 +89,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "take",
-		ForwardArgs: true,
+		Name: "take",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TInteger, TList},
 			Handler:   takeHandler,
@@ -98,8 +98,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "shed",
-		ForwardArgs: true,
+		Name: "shed",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TInteger, TList},
 			Handler:   shedHandler,
@@ -107,8 +107,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "where",
-		ForwardArgs: true,
+		Name: "where",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
 			Handler:   whereHandler,
@@ -116,8 +116,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "unique",
-		ForwardArgs: true,
+		Name: "unique",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
 			Handler:   uniqueHandler,
@@ -125,8 +125,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "grade",
-		ForwardArgs: true,
+		Name: "grade",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
 			Handler:   gradeHandler,
@@ -134,8 +134,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "at",
-		ForwardArgs: true,
+		Name: "at",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
 			Handler:   atHandler,
@@ -143,8 +143,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "sortby",
-		ForwardArgs: true,
+		Name: "sortby",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
 			Handler:   sortbyHandler,
@@ -152,8 +152,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "member",
-		ForwardArgs: true,
+		Name: "member",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
 			Handler:   memberHandler,
@@ -161,8 +161,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "arr-indexof",
-		ForwardArgs: true,
+		Name: "arr-indexof",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
 			Handler:   arrIndexofHandler,
@@ -170,8 +170,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "group",
-		ForwardArgs: true,
+		Name: "group",
+
 		Signatures: []NativeSig{
 			{
 				Args:    []*Type{TList, TList},
@@ -186,8 +186,8 @@ var arrayNatives = []NativeFunc{
 		},
 	},
 	{
-		Name:        "replicate",
-		ForwardArgs: true,
+		Name: "replicate",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
 			Handler:   replicateHandler,
@@ -195,8 +195,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "expand",
-		ForwardArgs: true,
+		Name: "expand",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
 			Handler:   expandHandler,
@@ -204,8 +204,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "window",
-		ForwardArgs: true,
+		Name: "window",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TInteger, TList},
 			Handler:   windowHandler,
@@ -213,8 +213,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "pairs",
-		ForwardArgs: true,
+		Name: "pairs",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
 			Handler:   pairsHandler,
@@ -224,8 +224,8 @@ var arrayNatives = []NativeFunc{
 
 	// ---- higher-order ----
 	{
-		Name:        "each",
-		ForwardArgs: true,
+		Name: "each",
+
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
@@ -234,8 +234,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "fold",
-		ForwardArgs: true,
+		Name: "fold",
+
 		Signatures: []NativeSig{
 			{
 				// With initial value: init fold body data → result.
@@ -257,8 +257,8 @@ var arrayNatives = []NativeFunc{
 		},
 	},
 	{
-		Name:        "scan",
-		ForwardArgs: true,
+		Name: "scan",
+
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
@@ -267,8 +267,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "outer",
-		ForwardArgs: true,
+		Name: "outer",
+
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList, TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
@@ -277,8 +277,8 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "inner",
-		ForwardArgs: true,
+		Name: "inner",
+
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList, TList, TList, TList},
 			NoEvalArgs: map[int]bool{0: true, 1: true},

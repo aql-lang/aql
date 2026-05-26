@@ -188,8 +188,8 @@ func dateDiffCalDuration(from, to time.Time) native.CalDurationData {
 // signature whose handler applies fn to the extracted time.Time.
 func dateToIntNative(name string, fn func(time.Time) int64) native.NativeFunc {
 	return native.NativeFunc{
-		Name:        name,
-		ForwardArgs: true,
+		Name: name,
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TDate},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -204,8 +204,8 @@ func dateToIntNative(name string, fn func(time.Time) int64) native.NativeFunc {
 // signature whose handler applies fn to the extracted time.Time.
 func dateToStringNative(name string, fn func(time.Time) string) native.NativeFunc {
 	return native.NativeFunc{
-		Name:        name,
-		ForwardArgs: true,
+		Name: name,
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TDate},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -220,8 +220,8 @@ func dateToStringNative(name string, fn func(time.Time) string) native.NativeFun
 // where the handler turns the integer into a CalDurationData via fn.
 func intToCalDurationNative(name string, returnType *native.Type, fn func(int) (int, int, int)) native.NativeFunc {
 	return native.NativeFunc{
-		Name:        name,
-		ForwardArgs: true,
+		Name: name,
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -241,8 +241,8 @@ func intToCalDurationNative(name string, returnType *native.Type, fn func(int) (
 // where the handler scales the numeric input by `unit`.
 func numToClkDurationNative(name string, unit time.Duration) native.NativeFunc {
 	return native.NativeFunc{
-		Name:        name,
-		ForwardArgs: true,
+		Name: name,
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TNumber},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -263,8 +263,8 @@ func numToClkDurationNative(name string, unit time.Duration) native.NativeFunc {
 // though the value pushed is Decimal.
 func clkDurationToDecimalNative(name string, returnType *native.Type, fn func(time.Duration) float64) native.NativeFunc {
 	return native.NativeFunc{
-		Name:        name,
-		ForwardArgs: true,
+		Name: name,
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TClkDuration},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -280,8 +280,8 @@ func clkDurationToDecimalNative(name string, returnType *native.Type, fn func(ti
 // [TCalDuration] -> [TInteger] for dur-years/dur-months/dur-days.
 func calDurationToIntNative(name string, fn func(native.CalDurationData) int64) native.NativeFunc {
 	return native.NativeFunc{
-		Name:        name,
-		ForwardArgs: true,
+		Name: name,
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TCalDuration},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -298,8 +298,8 @@ func calDurationToIntNative(name string, fn func(native.CalDurationData) int64) 
 // just supplies (years, months, days) shifts driven by the integer arg.
 func addDateNative(name string, build func(n int) (years, months, days int)) native.NativeFunc {
 	return native.NativeFunc{
-		Name:        name,
-		ForwardArgs: true,
+		Name: name,
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger, native.TDate},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -329,8 +329,8 @@ var TimeNatives = func() []native.NativeFunc {
 		// Construct via numeric helpers below or via the
 		// extraction/conversion words.
 		{
-			Name:        "time-tz",
-			ForwardArgs: true,
+			Name: "time-tz",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TString},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -348,8 +348,8 @@ var TimeNatives = func() []native.NativeFunc {
 			}},
 		},
 		{
-			Name:        "time-unix",
-			ForwardArgs: true,
+			Name: "time-unix",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TInteger},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -363,8 +363,8 @@ var TimeNatives = func() []native.NativeFunc {
 			}},
 		},
 		{
-			Name:        "time-unix-ms",
-			ForwardArgs: true,
+			Name: "time-unix-ms",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TInteger},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -378,8 +378,8 @@ var TimeNatives = func() []native.NativeFunc {
 			}},
 		},
 		{
-			Name:        "time-unix-ns",
-			ForwardArgs: true,
+			Name: "time-unix-ns",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TInteger},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -394,19 +394,19 @@ var TimeNatives = func() []native.NativeFunc {
 		},
 		// --- Current time (stack-only zero-arg words) ---
 		{
-			Name:        "time-now-local",
-			ForwardArgs: false,
+			Name: "time-now-local",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{},
 				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewDateTime(time.Now())}, nil
 				},
-				Returns: []*native.Type{native.TDateTime}, BarrierPos: -1,
+				Returns: []*native.Type{native.TDateTime}, BarrierPos: 0,
 			}},
 		},
 		{
-			Name:        "time-today",
-			ForwardArgs: false,
+			Name: "time-today",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{},
 				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -414,12 +414,12 @@ var TimeNatives = func() []native.NativeFunc {
 					d := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 					return []native.Value{native.NewDate(d)}, nil
 				},
-				Returns: []*native.Type{native.TDate}, BarrierPos: -1,
+				Returns: []*native.Type{native.TDate}, BarrierPos: 0,
 			}},
 		},
 		{
-			Name:        "time-today-utc",
-			ForwardArgs: false,
+			Name: "time-today-utc",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{},
 				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -427,7 +427,7 @@ var TimeNatives = func() []native.NativeFunc {
 					d := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 					return []native.Value{native.NewDate(d)}, nil
 				},
-				Returns: []*native.Type{native.TDate}, BarrierPos: -1,
+				Returns: []*native.Type{native.TDate}, BarrierPos: 0,
 			}},
 		},
 		// --- Extraction (Date -> Integer) ---
@@ -464,8 +464,8 @@ var TimeNatives = func() []native.NativeFunc {
 			return int64(end.Sub(start).Hours() / 24)
 		}),
 		{
-			Name:        "is-leap-year",
-			ForwardArgs: true,
+			Name: "is-leap-year",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TDate},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -478,8 +478,8 @@ var TimeNatives = func() []native.NativeFunc {
 		},
 		// to-unix / to-unix-ms (Instant -> Integer)
 		{
-			Name:        "to-unix",
-			ForwardArgs: true,
+			Name: "to-unix",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TInstant},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -489,8 +489,8 @@ var TimeNatives = func() []native.NativeFunc {
 			}},
 		},
 		{
-			Name:        "to-unix-ms",
-			ForwardArgs: true,
+			Name: "to-unix-ms",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TInstant},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -501,8 +501,8 @@ var TimeNatives = func() []native.NativeFunc {
 		},
 		// --- Comparison (Date Date -> Boolean) ---
 		{
-			Name:        "is-before",
-			ForwardArgs: true,
+			Name: "is-before",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TDate, native.TDate},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -512,8 +512,8 @@ var TimeNatives = func() []native.NativeFunc {
 			}},
 		},
 		{
-			Name:        "is-after",
-			ForwardArgs: true,
+			Name: "is-after",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TDate, native.TDate},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -523,8 +523,8 @@ var TimeNatives = func() []native.NativeFunc {
 			}},
 		},
 		{
-			Name:        "is-equal",
-			ForwardArgs: true,
+			Name: "is-equal",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TDate, native.TDate},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -535,8 +535,8 @@ var TimeNatives = func() []native.NativeFunc {
 		},
 		// --- Formatting ---
 		{
-			Name:        "to-string",
-			ForwardArgs: true,
+			Name: "to-string",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TDate},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -546,8 +546,8 @@ var TimeNatives = func() []native.NativeFunc {
 			}},
 		},
 		{
-			Name:        "format",
-			ForwardArgs: true,
+			Name: "format",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TString, native.TDate},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -561,8 +561,8 @@ var TimeNatives = func() []native.NativeFunc {
 			}},
 		},
 		{
-			Name:        "to-iso",
-			ForwardArgs: true,
+			Name: "to-iso",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TDate},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -589,8 +589,8 @@ var TimeNatives = func() []native.NativeFunc {
 		numToClkDurationNative("ns", time.Nanosecond),
 		{
 			// cal-dur 1 6 15 → args[0]=15 (nearest), args[1]=6, args[2]=1 (deepest)
-			Name:        "cal-dur",
-			ForwardArgs: true,
+			Name: "cal-dur",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TInteger, native.TInteger, native.TInteger},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -625,8 +625,8 @@ var TimeNatives = func() []native.NativeFunc {
 		// return -1/0/1 integers. Historically two separate r.Register
 		// calls; here unified into one NativeFunc with two signatures.
 		{
-			Name:        "dur-sign",
-			ForwardArgs: true,
+			Name: "dur-sign",
+
 			Signatures: []native.NativeSig{
 				{
 					Args: []*native.Type{native.TCalDuration},
@@ -664,8 +664,8 @@ var TimeNatives = func() []native.NativeFunc {
 		// --- Arithmetic ---
 		{
 			// d1 d2 until → args[0]=d2 (nearest), args[1]=d1
-			Name:        "until",
-			ForwardArgs: true,
+			Name: "until",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TDate, native.TDate},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -679,8 +679,8 @@ var TimeNatives = func() []native.NativeFunc {
 		},
 		{
 			// d1 d2 since → args[0]=d2 (nearest), args[1]=d1
-			Name:        "since",
-			ForwardArgs: true,
+			Name: "since",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TDate, native.TDate},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -694,8 +694,8 @@ var TimeNatives = func() []native.NativeFunc {
 		},
 		{
 			// ins1 ins2 diff → args[0]=ins2 (nearest), args[1]=ins1
-			Name:        "diff",
-			ForwardArgs: true,
+			Name: "diff",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TInstant, native.TInstant},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -707,8 +707,8 @@ var TimeNatives = func() []native.NativeFunc {
 			}},
 		},
 		{
-			Name:        "elapsed",
-			ForwardArgs: true,
+			Name: "elapsed",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TInstant},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -720,8 +720,8 @@ var TimeNatives = func() []native.NativeFunc {
 		},
 		// --- Comparison extended ---
 		{
-			Name:        "time-compare",
-			ForwardArgs: true,
+			Name: "time-compare",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TDate, native.TDate},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -741,8 +741,8 @@ var TimeNatives = func() []native.NativeFunc {
 		},
 		{
 			// d start end is-between → args[0]=end (nearest), args[1]=start, args[2]=d (deepest)
-			Name:        "is-between",
-			ForwardArgs: true,
+			Name: "is-between",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TDate, native.TDate, native.TDate},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -755,8 +755,8 @@ var TimeNatives = func() []native.NativeFunc {
 			}},
 		},
 		{
-			Name:        "earliest",
-			ForwardArgs: true,
+			Name: "earliest",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TDate, native.TDate},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -771,8 +771,8 @@ var TimeNatives = func() []native.NativeFunc {
 			}},
 		},
 		{
-			Name:        "latest",
-			ForwardArgs: true,
+			Name: "latest",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TDate, native.TDate},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -789,8 +789,8 @@ var TimeNatives = func() []native.NativeFunc {
 		// --- Conversion ---
 		// to-date — DateTime overload + Instant overload (UTC).
 		{
-			Name:        "to-date",
-			ForwardArgs: true,
+			Name: "to-date",
+
 			Signatures: []native.NativeSig{
 				{
 					Args: []*native.Type{native.TDateTime},
@@ -812,8 +812,8 @@ var TimeNatives = func() []native.NativeFunc {
 		},
 		// to-time-of-day — DateTime + Instant overloads (identical body).
 		{
-			Name:        "to-time-of-day",
-			ForwardArgs: true,
+			Name: "to-time-of-day",
+
 			Signatures: []native.NativeSig{
 				{
 					Args: []*native.Type{native.TDateTime},
@@ -838,8 +838,8 @@ var TimeNatives = func() []native.NativeFunc {
 			},
 		},
 		{
-			Name:        "to-datetime",
-			ForwardArgs: true,
+			Name: "to-datetime",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TDate},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -851,8 +851,8 @@ var TimeNatives = func() []native.NativeFunc {
 		},
 		{
 			// dt tz to-instant → args[0]=tz (nearest), args[1]=dt
-			Name:        "to-instant",
-			ForwardArgs: true,
+			Name: "to-instant",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TTimezone, native.TDateTime},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -869,8 +869,8 @@ var TimeNatives = func() []native.NativeFunc {
 		},
 		{
 			// ins tz to-local → args[0]=tz (nearest), args[1]=ins
-			Name:        "to-local",
-			ForwardArgs: true,
+			Name: "to-local",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TTimezone, native.TInstant},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -885,8 +885,8 @@ var TimeNatives = func() []native.NativeFunc {
 			}},
 		},
 		{
-			Name:        "to-utc",
-			ForwardArgs: true,
+			Name: "to-utc",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TInstant},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -898,8 +898,8 @@ var TimeNatives = func() []native.NativeFunc {
 		},
 		// --- Rounding ---
 		{
-			Name:        "start-of",
-			ForwardArgs: true,
+			Name: "start-of",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TString, native.TDate},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -936,8 +936,8 @@ var TimeNatives = func() []native.NativeFunc {
 			}},
 		},
 		{
-			Name:        "end-of",
-			ForwardArgs: true,
+			Name: "end-of",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TString, native.TDate},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -977,30 +977,30 @@ var TimeNatives = func() []native.NativeFunc {
 		},
 		// --- Timezone ---
 		{
-			Name:        "tz-utc",
-			ForwardArgs: false,
+			Name: "tz-utc",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{},
 				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewTimezone(time.UTC)}, nil
 				},
-				Returns: []*native.Type{native.TTimezone}, BarrierPos: -1,
+				Returns: []*native.Type{native.TTimezone}, BarrierPos: 0,
 			}},
 		},
 		{
-			Name:        "tz-local",
-			ForwardArgs: false,
+			Name: "tz-local",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{},
 				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewTimezone(time.Local)}, nil
 				},
-				Returns: []*native.Type{native.TTimezone}, BarrierPos: -1,
+				Returns: []*native.Type{native.TTimezone}, BarrierPos: 0,
 			}},
 		},
 		{
-			Name:        "tz-name",
-			ForwardArgs: true,
+			Name: "tz-name",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TTimezone},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -1015,8 +1015,8 @@ var TimeNatives = func() []native.NativeFunc {
 		},
 		{
 			// ins tz tz-offset → args[0]=tz (nearest), args[1]=ins
-			Name:        "tz-offset",
-			ForwardArgs: true,
+			Name: "tz-offset",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TTimezone, native.TInstant},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -1043,8 +1043,8 @@ var TimeNatives = func() []native.NativeFunc {
 		},
 		{
 			// ins tz is-dst → args[0]=tz (nearest), args[1]=ins
-			Name:        "is-dst",
-			ForwardArgs: true,
+			Name: "is-dst",
+
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TTimezone, native.TInstant},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {

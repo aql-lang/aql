@@ -418,7 +418,7 @@ func TestRunDefaultBranch(t *testing.T) {
 	}
 }
 
-// --- Register / RegisterStackOnly ---
+// --- Register (forward and stack-only via BarrierPos) ---
 
 func TestRegisterForwardWord(t *testing.T) {
 	a, err := lang.New()
@@ -471,13 +471,13 @@ func TestRegisterStackOnlyWord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Register "neg" as stack-only: 5 neg => -5
-	a.RegisterStackOnly("neg", lang.Signature{
+	// Register "neg" as stack-only via explicit BarrierPos: 0.
+	a.Register("neg", lang.Signature{
 		Args: []*lang.Type{lang.TInteger},
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
 			n, _ := native.AsInteger(args[0])
 			return []lang.Value{lang.NewInteger(-n)}, nil
-		}, BarrierPos: -1,
+		}, BarrierPos: 0,
 	})
 
 	result, err := a.Run("5 neg")
@@ -494,16 +494,15 @@ func TestRegisterStackOnlyDoesNotCollectForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.RegisterStackOnly("neg", lang.Signature{
+	a.Register("neg", lang.Signature{
 		Args: []*lang.Type{lang.TInteger},
 		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
 			n, _ := native.AsInteger(args[0])
 			return []lang.Value{lang.NewInteger(-n)}, nil
-		}, BarrierPos:
-
+		},
 		// "neg 5" — neg is stack-only so it should not consume 5 from forward.
 		// Without a value on the stack, it should error.
-		-1,
+		BarrierPos: 0,
 	})
 
 	_, err = a.Run("neg 5")

@@ -25,8 +25,8 @@ import (
 // definition.
 var refNatives = []NativeFunc{
 	{
-		Name:        "ref",
-		ForwardArgs: true,
+		Name: "ref",
+
 		Signatures: []NativeSig{{
 			// /q on the name slot lets the parser capture the upcoming
 			// Word as an Atom rather than executing it. `ref add` then
@@ -44,11 +44,11 @@ var refNatives = []NativeFunc{
 		// off the stack and apply it to the preceding values." Forward
 		// collection would force callers to put fn-args after the fn,
 		// which fights AQL's left-to-right stack flow.
-		ForwardArgs: false,
+
 		Signatures: []NativeSig{{
 			Args:    []*Type{TFunction},
 			Handler: applyHandler,
-			Returns: []*Type{TAny}, BarrierPos: -1,
+			Returns: []*Type{TAny}, BarrierPos: 0,
 		}},
 	},
 }

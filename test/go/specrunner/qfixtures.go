@@ -49,7 +49,7 @@ func numericBinary(intOp func(a, b int64) int64, floatOp func(a, b float64) floa
 func registerArith(r *eng.Registry) {
 	numberPair := []*eng.Type{eng.TNumber, eng.TNumber}
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "addq", ForwardArgs: true,
+		Name: "addq",
 		Signatures: []eng.NativeSig{{
 			Args:    numberPair,
 			Handler: numericBinary(func(a, b int64) int64 { return b + a }, func(a, b float64) float64 { return b + a }),
@@ -57,7 +57,7 @@ func registerArith(r *eng.Registry) {
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "subq", ForwardArgs: true,
+		Name: "subq",
 		Signatures: []eng.NativeSig{{
 			Args:    numberPair,
 			Handler: numericBinary(func(a, b int64) int64 { return b - a }, func(a, b float64) float64 { return b - a }),
@@ -65,7 +65,7 @@ func registerArith(r *eng.Registry) {
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "mulq", ForwardArgs: true,
+		Name: "mulq",
 		Signatures: []eng.NativeSig{{
 			Args:    numberPair,
 			Handler: numericBinary(func(a, b int64) int64 { return b * a }, func(a, b float64) float64 { return b * a }),
@@ -73,7 +73,7 @@ func registerArith(r *eng.Registry) {
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "negq", ForwardArgs: true,
+		Name: "negq",
 		Signatures: []eng.NativeSig{{
 			Args: []*eng.Type{eng.TNumber}, BarrierPos: 1,
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -91,7 +91,7 @@ func registerArith(r *eng.Registry) {
 
 func registerStringProbe(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "concatq", ForwardArgs: true,
+		Name: "concatq",
 		Signatures: []eng.NativeSig{{
 			Args: []*eng.Type{eng.TString, eng.TString},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -106,7 +106,7 @@ func registerStringProbe(r *eng.Registry) {
 
 func registerDispatch(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "describeq", ForwardArgs: true,
+		Name: "describeq",
 		Signatures: []eng.NativeSig{
 			{
 				Args: []*eng.Type{eng.TInteger},
@@ -127,7 +127,7 @@ func registerDispatch(r *eng.Registry) {
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "tagq", ForwardArgs: true,
+		Name: "tagq",
 		Signatures: []eng.NativeSig{
 			{Args: []*eng.Type{eng.TAny}, Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				return []eng.Value{eng.NewString("any")}, nil
@@ -138,7 +138,7 @@ func registerDispatch(r *eng.Registry) {
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "factq", ForwardArgs: true,
+		Name: "factq",
 		Signatures: []eng.NativeSig{
 			{
 				Args: []*eng.Type{eng.TInteger}, Patterns: map[int]eng.Value{0: eng.NewInteger(0)},
@@ -158,7 +158,7 @@ func registerDispatch(r *eng.Registry) {
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "codeq", ForwardArgs: true,
+		Name: "codeq",
 		Signatures: []eng.NativeSig{
 			{
 				Args: []*eng.Type{eng.TInteger}, Patterns: map[int]eng.Value{0: eng.NewInteger(99)},
@@ -177,7 +177,7 @@ func registerDispatch(r *eng.Registry) {
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "routeq", ForwardArgs: true,
+		Name: "routeq",
 		Signatures: []eng.NativeSig{
 			{
 				Args: []*eng.Type{eng.TString}, Patterns: map[int]eng.Value{0: eng.NewString("admin")},
@@ -199,7 +199,7 @@ func registerDispatch(r *eng.Registry) {
 
 func registerBarrierArity(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "tripq", ForwardArgs: true,
+		Name: "tripq",
 		Signatures: []eng.NativeSig{{
 			Args: []*eng.Type{eng.TInteger, eng.TInteger, eng.TInteger},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -212,7 +212,7 @@ func registerBarrierArity(r *eng.Registry) {
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "pairq", ForwardArgs: true,
+		Name: "pairq",
 		Signatures: []eng.NativeSig{{
 			Args:       []*eng.Type{eng.TInteger, eng.TInteger},
 			BarrierPos: 1,
@@ -231,11 +231,11 @@ func registerBarrierArity(r *eng.Registry) {
 			Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				return []eng.Value{eng.NewString("nil")}, nil
 			},
-			Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
+			Returns: []*eng.Type{eng.TString}, BarrierPos: 0,
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "flexq", ForwardArgs: true,
+		Name: "flexq",
 		Signatures: []eng.NativeSig{
 			{
 				Args: []*eng.Type{eng.TInteger},
@@ -271,7 +271,7 @@ func registerBarrierArity(r *eng.Registry) {
 			args[i] = eng.TInteger
 		}
 		r.RegisterNativeFunc(eng.NativeFunc{
-			Name: name, ForwardArgs: true,
+			Name: name,
 			Signatures: []eng.NativeSig{{
 				Args: args, BarrierPos: barrier,
 				Handler: intArgsFmt,
@@ -291,7 +291,7 @@ func registerBarrierArity(r *eng.Registry) {
 
 func registerListProbes(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "lengthq", ForwardArgs: true,
+		Name: "lengthq",
 		Signatures: []eng.NativeSig{{
 			Args: []*eng.Type{eng.TList},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -302,7 +302,7 @@ func registerListProbes(r *eng.Registry) {
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "firstq", ForwardArgs: true,
+		Name: "firstq",
 		Signatures: []eng.NativeSig{{
 			Args: []*eng.Type{eng.TList},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {

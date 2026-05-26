@@ -245,10 +245,15 @@ func (r *Registry) MarkReady() {
 	r.ready = true
 }
 
-// Register adds one or more signatures to a named function. Sigs are
-// treated as forward-arg defaults: any sig with BarrierPos still 0 has
-// it lifted to len(Args), so all positions are forward-eligible.
-// Signatures are stored in a FnDefInfo entry in DefStacks.
+// Register adds one or more signatures to a named function.
+// Sentinel resolution: any sig with `BarrierPos == BarrierAllForward`
+// (-1) is lifted to `len(Args)` by upsertFnDef. Stack-only sigs must
+// set `BarrierPos: 0` explicitly. Signatures are stored in a
+// FnDefInfo entry in DefStacks.
+//
+// There is only one registration entry point now — the historical
+// `RegisterStackOnly` wrapper was retired in favor of an explicit
+// per-sig `BarrierPos`.
 func (r *Registry) Register(name string, sigs ...Signature) {
 	for _, sig := range sigs {
 		if len(sig.Args) > MaxArgs {
@@ -256,58 +261,27 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 			return
 		}
 	}
-	r.upsertFnDef(name, true, sigs...)
-	if r.ready && r.OnRegisterHook != nil {
-		r.OnRegisterHook(name)
-	}
-}
-
-// RegisterStackOnly adds signatures to a named function. Sigs are
-// taken as-is: BarrierPos stays at 0 (no forward-arg defaulting), so
-// every position is matched from the stack unless the sig itself
-// raises BarrierPos. Signatures are stored in a FnDefInfo entry in
-// DefStacks.
-func (r *Registry) RegisterStackOnly(name string, sigs ...Signature) {
-	for _, sig := range sigs {
-		if len(sig.Args) > MaxArgs {
-			r.errs = append(r.errs, fmt.Errorf("signature for %q has %d args, max is %d", name, len(sig.Args), MaxArgs))
-			return
-		}
-	}
-	r.upsertFnDef(name, false, sigs...)
+	r.upsertFnDef(name, sigs...)
 	if r.ready && r.OnRegisterHook != nil {
 		r.OnRegisterHook(name)
 	}
 }
 
 // upsertFnDef finds or creates a FnDefInfo at the top of DefStacks[name]
-// and appends the given compiled signatures. If the top entry is already a
-// FnDefInfo, its Signatures are updated in place. Otherwise a new FnDefInfo
-// is pushed.
+// and appends the given compiled signatures. If the top entry is already
+// a FnDefInfo, its Signatures are updated in place. Otherwise a new
+// FnDefInfo is pushed.
 //
-// Normalisation: every appended sig has its BarrierPos set on the way in.
-// BarrierPos is the position of the boundary marker (`|`) in the sig:
-// args before it can be forward-collected, args from it onward must come
-// from the stack (top-down). When forwardPrec is true and BarrierPos is
-// still zero, we set it to len(Args) — i.e. the boundary is at the end,
-// every arg is forward-eligible. When forwardPrec is false (old
-// stack-only registration), BarrierPos stays at zero — boundary at the
-// start, every arg from the stack.
-//
-// Sentinel resolution: BarrierPos == -1 means "no boundary specified;
-// use the ForwardArgs default" — all-forward when forwardArgs is true,
-// all-stack when false. Every other value (0 through len(Args)) is the
-// author's explicit boundary and passes through unchanged. The
-// historical 0-as-sentinel bump was retired here so that an explicit
-// `[| a b]` from the AQL surface can express true stack-only dispatch.
-func (r *Registry) upsertFnDef(name string, forwardArgs bool, sigs ...Signature) {
+// Sentinel resolution: `BarrierPos == BarrierAllForward` (-1) means
+// "no `|` boundary specified — default this sig to all-forward
+// dispatch." Resolved here to `len(Args)`. Stack-only sigs MUST set
+// `BarrierPos: 0` explicitly at the call site; there is no per-word
+// "stack default" mode (the ForwardArgs flag and RegisterStackOnly
+// method were retired in the BarrierPos cleanup).
+func (r *Registry) upsertFnDef(name string, sigs ...Signature) {
 	for i := range sigs {
-		if sigs[i].BarrierPos == -1 {
-			if forwardArgs {
-				sigs[i].BarrierPos = len(sigs[i].Args)
-			} else {
-				sigs[i].BarrierPos = 0
-			}
+		if sigs[i].BarrierPos == BarrierAllForward {
+			sigs[i].BarrierPos = len(sigs[i].Args)
 		}
 	}
 	// If the top of the stack is already a FnDefInfo, update it in place.
@@ -331,11 +305,12 @@ func (r *Registry) upsertFnDef(name string, forwardArgs bool, sigs ...Signature)
 	r.Defs.Push(name, NewFnDef(fnDef))
 }
 
-// calcMaxForwardArgs returns the maximum number of forward args needed
-// across all signatures. Under the unified dispatch rule, the forward
-// limit is exactly sig.BarrierPos (which has been normalised at
-// registration to len(Args) for old forward-prec sigs and 0 for
-// old stack-only). This tells the engine how far ahead to scan and
+// calcMaxForwardArgs returns the maximum number of forward args
+// needed across all signatures. Under the unified dispatch rule the
+// forward limit is exactly `sig.BarrierPos`, which upsertFnDef
+// resolves at registration: `BarrierAllForward` (-1) becomes
+// `len(Args)`, `0` stays as explicit all-stack, intermediates pass
+// through. This tells the engine how far ahead to scan and
 // pre-evaluate paren expressions before signature matching.
 func calcMaxForwardArgs(sigs []Signature) int {
 	max := 0
@@ -445,8 +420,8 @@ func UnaryNumOpNative(name string, op func(float64) float64) NativeFunc {
 		return []Value{NewDecimal(op(v))}, nil
 	}
 	return NativeFunc{
-		Name:        name,
-		ForwardArgs: true,
+		Name: name,
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TInteger}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
 			{Args: []*Type{TDecimal}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
@@ -468,8 +443,8 @@ func BinaryNumOpNative(name string, op func(a, b float64) (float64, error)) Nati
 		return []Value{NewDecimal(result)}, nil
 	}
 	return NativeFunc{
-		Name:        name,
-		ForwardArgs: true,
+		Name: name,
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TDecimal, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
 			{Args: []*Type{TNumber, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
@@ -492,8 +467,8 @@ func BinaryIntOpNative(name string, op func(a, b int64) (int64, error)) NativeFu
 		return []Value{NewInteger(result)}, nil
 	}
 	return NativeFunc{
-		Name:        name,
-		ForwardArgs: true,
+		Name: name,
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TInteger, TInteger}, Handler: handler, Returns: []*Type{TInteger}, BarrierPos: -1},
 		},
@@ -677,14 +652,10 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 			RunInCheckMode:   sig.RunInCheckMode,
 			CheckFullStackFn: sig.CheckFullStackFn,
 		}
-		// Sentinel resolution happens once, in upsertFnDef. -1 here
-		// means "use the ForwardArgs default" and is honored
-		// uniformly across this path and direct r.Register callers.
-		if fn.ForwardArgs {
-			r.Register(fn.Name, s)
-		} else {
-			r.RegisterStackOnly(fn.Name, s)
-		}
+		// One path. `BarrierAllForward` (-1) on a NativeSig is the
+		// "default all-forward" sentinel; `0` is explicit all-stack.
+		// upsertFnDef resolves the sentinel once.
+		r.Register(fn.Name, s)
 	}
 }
 

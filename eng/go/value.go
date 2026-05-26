@@ -198,6 +198,13 @@ type FnParam struct {
 	Optional bool   // true if this param was marked optional via ?
 }
 
+// BarrierAllForward is the canonical sentinel for "no `|` boundary
+// specified — default this sig to all-forward dispatch." Resolved
+// at registration time (upsertFnDef) to len(Args). Stack-only sigs
+// must set BarrierPos: 0 explicitly; this constant exists only for
+// the all-forward default.
+const BarrierAllForward = -1
+
 // FnSig describes one overload of a function definition.
 type FnSig struct {
 	Params  []FnParam

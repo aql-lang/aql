@@ -206,8 +206,8 @@ func TestCapabilityAvailableToHandler(t *testing.T) {
 	}
 
 	r.RegisterNativeFunc(NativeFunc{
-		Name:        "scale",
-		ForwardArgs: true,
+		Name: "scale",
+
 		Signatures: []NativeSig{{
 			Args: []*Type{TInteger},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
@@ -242,8 +242,8 @@ func TestCapabilityMissingIsNotFatal(t *testing.T) {
 	// typically return a meaningful error rather than panic.
 	r, _ := NewRegistry()
 	r.RegisterNativeFunc(NativeFunc{
-		Name:        "needs-cap",
-		ForwardArgs: true,
+		Name: "needs-cap",
+
 		Signatures: []NativeSig{{
 			Args: []*Type{},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {

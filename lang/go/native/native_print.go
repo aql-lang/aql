@@ -10,8 +10,8 @@ import "github.com/aql-lang/aql/eng/go"
 // this file owns the word names and dispatch wiring.
 var printNatives = []NativeFunc{
 	{
-		Name:        "print",
-		ForwardArgs: true,
+		Name: "print",
+
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny},
 			Handler: eng.PrintHandler,
@@ -19,8 +19,8 @@ var printNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "printstr",
-		ForwardArgs: true,
+		Name: "printstr",
+
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny},
 			Handler: eng.PrintstrHandler,

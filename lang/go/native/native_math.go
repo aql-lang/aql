@@ -20,8 +20,8 @@ import (
 // produce the reversed result.
 var mathNatives = []NativeFunc{
 	{
-		Name:        "add",
-		ForwardArgs: true,
+		Name: "add",
+
 		Signatures: []NativeSig{
 			{
 				Args: []*Type{TNumber, TNumber},
@@ -39,8 +39,8 @@ var mathNatives = []NativeFunc{
 		},
 	},
 	{
-		Name:        "sub",
-		ForwardArgs: true,
+		Name: "sub",
+
 		Signatures: []NativeSig{
 			{
 				Args: []*Type{TNumber, TNumber},
@@ -56,8 +56,8 @@ var mathNatives = []NativeFunc{
 		},
 	},
 	{
-		Name:        "mul",
-		ForwardArgs: true,
+		Name: "mul",
+
 		Signatures: []NativeSig{{
 			Args: []*Type{TNumber, TNumber},
 			Handler: numericBinaryHandler(
@@ -68,8 +68,8 @@ var mathNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "div",
-		ForwardArgs: true,
+		Name: "div",
+
 		Signatures: []NativeSig{{
 			Args: []*Type{TNumber, TNumber},
 			Handler: numericBinaryHandler(
@@ -90,8 +90,8 @@ var mathNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "mod",
-		ForwardArgs: true,
+		Name: "mod",
+
 		Signatures: []NativeSig{{
 			Args: []*Type{TNumber, TNumber},
 			Handler: numericBinaryHandler(
@@ -112,8 +112,8 @@ var mathNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "pow",
-		ForwardArgs: true,
+		Name: "pow",
+
 		Signatures: []NativeSig{{
 			Args: []*Type{TNumber, TNumber},
 			Handler: numericBinaryHandler(

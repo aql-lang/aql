@@ -34,8 +34,8 @@ package native
 // file owns the word name and dispatch wiring.
 var inspectNatives = []NativeFunc{
 	{
-		Name:        "inspect",
-		ForwardArgs: true,
+		Name: "inspect",
+
 		Signatures: []NativeSig{
 			// /q captures the upcoming Word as an Atom; the same sig
 			// also matches an explicit Atom on the stack (per

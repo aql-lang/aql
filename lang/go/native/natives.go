@@ -14,8 +14,8 @@ import (
 var Natives = []NativeFunc{
 	// ---- boolean ----
 	{
-		Name:        "implies",
-		ForwardArgs: true,
+		Name: "implies",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TBoolean, TBoolean}, Handler: impliesHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
 			{Args: []*Type{TAny, TAny}, Handler: impliesHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
@@ -24,8 +24,8 @@ var Natives = []NativeFunc{
 
 	// ---- control flow ----
 	{
-		Name:        "quote",
-		ForwardArgs: true,
+		Name: "quote",
+
 		Signatures: []NativeSig{
 			{
 				// /q captures the upcoming Word as an Atom for us; the
@@ -47,8 +47,8 @@ var Natives = []NativeFunc{
 
 	// ---- file ops ----
 	{
-		Name:        "folder",
-		ForwardArgs: true,
+		Name: "folder",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TOptions, TPath}, Handler: folderOptsHandler, Returns: []*Type{TList}, BarrierPos: -1},
 			{Args: []*Type{TPath}, Handler: folderHandler, Returns: []*Type{TList}, BarrierPos: -1},
@@ -60,29 +60,29 @@ var Natives = []NativeFunc{
 
 	// ---- stack ----
 	{
-		Name:        "stack",
-		ForwardArgs: false,
+		Name: "stack",
+
 		Signatures: []NativeSig{{
 			Args:             []*Type{TInteger},
 			FullStack:        true,
 			Handler:          stackCollectHandler,
-			CheckFullStackFn: stackCollectCheckFullStackFn, BarrierPos: -1,
+			CheckFullStackFn: stackCollectCheckFullStackFn, BarrierPos: 0,
 		}},
 	},
 
 	// ---- temporal ----
 	{
-		Name:        "now",
-		ForwardArgs: false,
+		Name: "now",
+
 		Signatures: []NativeSig{{
 			Args:    []*Type{},
 			Handler: nowHandler,
-			Returns: []*Type{TInstant}, BarrierPos: -1,
+			Returns: []*Type{TInstant}, BarrierPos: 0,
 		}},
 	},
 	{
-		Name:        "sleep",
-		ForwardArgs: true,
+		Name: "sleep",
+
 		Signatures: []NativeSig{{
 			Args:    []*Type{TInteger},
 			Handler: sleepHandler,
@@ -90,16 +90,16 @@ var Natives = []NativeFunc{
 		}},
 	},
 	{
-		Name:        "interval",
-		ForwardArgs: true,
+		Name: "interval",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TInteger, TList}, QuoteArgs: map[int]bool{1: true}, Handler: intervalListHandler, Returns: []*Type{TInterval}, BarrierPos: -1},
 			{Args: []*Type{TInteger, TAtom}, QuoteArgs: map[int]bool{1: true}, Handler: intervalAtomHandler, Returns: []*Type{TInterval}, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "cancel",
-		ForwardArgs: true,
+		Name: "cancel",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TTimeout}, Handler: cancelTimeoutHandler, Returns: []*Type{}, BarrierPos: -1},
 			{Args: []*Type{TInterval}, Handler: cancelIntervalHandler, Returns: []*Type{}, BarrierPos: -1},
@@ -108,8 +108,8 @@ var Natives = []NativeFunc{
 
 	// ---- list (table query) ----
 	{
-		Name:        "list",
-		ForwardArgs: true,
+		Name: "list",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TMap, TResourceEntity}, Handler: listEntityOptsHandler, BarrierPos: -1},
 			{Args: []*Type{TResourceEntity}, Handler: listEntityHandler, BarrierPos: -1},
@@ -124,8 +124,8 @@ var Natives = []NativeFunc{
 
 	// ---- create ----
 	{
-		Name:        "create",
-		ForwardArgs: true,
+		Name: "create",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TMap, TResourceEntity}, Handler: createEntityOptsHandler, BarrierPos: -1},
 			{Args: []*Type{TResourceEntity}, Handler: createEntityHandler, BarrierPos: -1},
@@ -138,8 +138,8 @@ var Natives = []NativeFunc{
 
 	// ---- load ----
 	{
-		Name:        "load",
-		ForwardArgs: true,
+		Name: "load",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TMap, TResourceEntity}, Handler: loadEntityOptsHandler, BarrierPos: -1},
 			{Args: []*Type{TResourceEntity}, Handler: loadEntityHandler, BarrierPos: -1},
@@ -152,8 +152,8 @@ var Natives = []NativeFunc{
 
 	// ---- update ----
 	{
-		Name:        "update",
-		ForwardArgs: true,
+		Name: "update",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TMap, TResourceEntity}, Handler: updateEntityOptsHandler, BarrierPos: -1},
 			{Args: []*Type{TResourceEntity}, Handler: updateEntityHandler, BarrierPos: -1},
@@ -166,8 +166,8 @@ var Natives = []NativeFunc{
 
 	// ---- remove ----
 	{
-		Name:        "remove",
-		ForwardArgs: true,
+		Name: "remove",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TMap, TResourceEntity}, Handler: removeEntityOptsHandler, BarrierPos: -1},
 			{Args: []*Type{TResourceEntity}, Handler: removeEntityHandler, BarrierPos: -1},
@@ -180,8 +180,8 @@ var Natives = []NativeFunc{
 
 	// ---- transform ----
 	{
-		Name:        "transform",
-		ForwardArgs: true,
+		Name: "transform",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TMap, TAny}, Handler: transformHandler, BarrierPos: -1},
 		},
@@ -189,8 +189,8 @@ var Natives = []NativeFunc{
 
 	// ---- merge ----
 	{
-		Name:        "merge",
-		ForwardArgs: true,
+		Name: "merge",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TList, TMap}, Handler: mergeListMapHandler, BarrierPos: -1},
 			{Args: []*Type{TMap, TList}, Handler: mergeMapListHandler, BarrierPos: -1},
@@ -200,8 +200,8 @@ var Natives = []NativeFunc{
 
 	// ---- validate ----
 	{
-		Name:        "validate",
-		ForwardArgs: true,
+		Name: "validate",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TMap, TAny}, Handler: validateHandler, BarrierPos: -1},
 		},
@@ -209,8 +209,8 @@ var Natives = []NativeFunc{
 
 	// ---- getpath ----
 	{
-		Name:        "getpath",
-		ForwardArgs: true,
+		Name: "getpath",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TString, TAny}, Handler: getpathHandler, BarrierPos: -1},
 		},
@@ -218,8 +218,8 @@ var Natives = []NativeFunc{
 
 	// ---- setpath ----
 	{
-		Name:        "setpath",
-		ForwardArgs: true,
+		Name: "setpath",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TString, TAny, TAny}, Handler: setpathHandler, BarrierPos: -1},
 			{Args: []*Type{TAny, TString, TAny}, Handler: setpathHandler, BarrierPos: -1},
@@ -228,8 +228,8 @@ var Natives = []NativeFunc{
 
 	// ---- inject ----
 	{
-		Name:        "inject",
-		ForwardArgs: true,
+		Name: "inject",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TAny, TAny}, Handler: injectHandler, BarrierPos: -1},
 		},
@@ -237,28 +237,28 @@ var Natives = []NativeFunc{
 
 	// ---- clone ----
 	{
-		Name:        "clone",
-		ForwardArgs: false,
+		Name: "clone",
+
 		Signatures: []NativeSig{
-			{Args: []*Type{TAny}, Handler: cloneHandler, BarrierPos: -1},
+			{Args: []*Type{TAny}, Handler: cloneHandler, BarrierPos: 0},
 		},
 	},
 
 	// ---- walk ----
 	{
-		Name:        "walk",
-		ForwardArgs: false,
+		Name: "walk",
+
 		Signatures: []NativeSig{
-			{Args: []*Type{TFunction, TFunction, TAny}, Handler: walkBeforeAfterHandler, BarrierPos: -1},
-			{Args: []*Type{TFunction, TAny}, Handler: walkBeforeHandler, BarrierPos: -1},
-			{Args: []*Type{TAny}, Handler: walkHandler, BarrierPos: -1},
+			{Args: []*Type{TFunction, TFunction, TAny}, Handler: walkBeforeAfterHandler, BarrierPos: 0},
+			{Args: []*Type{TFunction, TAny}, Handler: walkBeforeHandler, BarrierPos: 0},
+			{Args: []*Type{TAny}, Handler: walkHandler, BarrierPos: 0},
 		},
 	},
 
 	// ---- selector ----
 	{
-		Name:        "selector",
-		ForwardArgs: true,
+		Name: "selector",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TMap, TAny}, Handler: selectorHandler, BarrierPos: -1},
 		},
@@ -266,8 +266,8 @@ var Natives = []NativeFunc{
 
 	// ---- size ----
 	{
-		Name:        "size",
-		ForwardArgs: true,
+		Name: "size",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TAny}, Handler: sizeHandler, BarrierPos: -1},
 		},
@@ -275,8 +275,8 @@ var Natives = []NativeFunc{
 
 	// ---- pad ----
 	{
-		Name:        "pad",
-		ForwardArgs: true,
+		Name: "pad",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TInteger, TAny}, Handler: padWidthHandler, BarrierPos: -1},
 			{Args: []*Type{TAny}, Handler: padDefaultHandler, BarrierPos: -1},
@@ -285,8 +285,8 @@ var Natives = []NativeFunc{
 
 	// ---- items ----
 	{
-		Name:        "items",
-		ForwardArgs: true,
+		Name: "items",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TAny}, Handler: itemsHandler, BarrierPos: -1},
 		},
@@ -294,8 +294,8 @@ var Natives = []NativeFunc{
 
 	// ---- fetch ----
 	{
-		Name:        "fetch",
-		ForwardArgs: true,
+		Name: "fetch",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TString, TMap}, Handler: fetchStringMapHandler, BarrierPos: -1},
 			{Args: []*Type{TMap}, Handler: fetchMapHandler, BarrierPos: -1},
@@ -305,8 +305,8 @@ var Natives = []NativeFunc{
 
 	// ---- prepare ----
 	{
-		Name:        "prepare",
-		ForwardArgs: true,
+		Name: "prepare",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TMap}, Handler: prepareAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
 		},
@@ -314,8 +314,8 @@ var Natives = []NativeFunc{
 
 	// ---- direct ----
 	{
-		Name:        "direct",
-		ForwardArgs: true,
+		Name: "direct",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TMap}, Handler: directAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
 		},
@@ -323,8 +323,8 @@ var Natives = []NativeFunc{
 
 	// ---- flatten ----
 	{
-		Name:        "flatten",
-		ForwardArgs: true,
+		Name: "flatten",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TInteger, TList}, Handler: flattenDepthHandler, BarrierPos: -1},
 			{Args: []*Type{TList}, Handler: flattenDefaultHandler, BarrierPos: -1},
@@ -333,8 +333,8 @@ var Natives = []NativeFunc{
 
 	// ---- filter ----
 	{
-		Name:        "filter",
-		ForwardArgs: true,
+		Name: "filter",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TFunction, TAny}, Handler: filterHandler, BarrierPos: -1},
 		},
@@ -342,8 +342,8 @@ var Natives = []NativeFunc{
 
 	// ---- join ----
 	{
-		Name:        "join",
-		ForwardArgs: true,
+		Name: "join",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TString, TList}, Handler: joinSepHandler, BarrierPos: -1},
 			{Args: []*Type{TList}, Handler: joinDefaultHandler, BarrierPos: -1},
@@ -352,8 +352,8 @@ var Natives = []NativeFunc{
 
 	// ---- jsonify ----
 	{
-		Name:        "jsonify",
-		ForwardArgs: true,
+		Name: "jsonify",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TMap, TAny}, Handler: jsonifyFlagsHandler, BarrierPos: -1},
 			{Args: []*Type{TAny}, Handler: jsonifyDefaultHandler, BarrierPos: -1},
@@ -362,29 +362,29 @@ var Natives = []NativeFunc{
 
 	// ---- listops (push/pop/unshift/shift) ----
 	{
-		Name:        "push",
-		ForwardArgs: true,
+		Name: "push",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TAny, TList}, Handler: pushHandler, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "pop",
-		ForwardArgs: true,
+		Name: "pop",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TList}, Handler: popHandler, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "unshift",
-		ForwardArgs: true,
+		Name: "unshift",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TAny, TList}, Handler: unshiftHandler, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "shift",
-		ForwardArgs: true,
+		Name: "shift",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TList}, Handler: shiftHandler, BarrierPos: -1},
 		},
@@ -392,8 +392,8 @@ var Natives = []NativeFunc{
 
 	// ---- istype ----
 	{
-		Name:        "istype",
-		ForwardArgs: true,
+		Name: "istype",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TAny}, Handler: istypeHandler, BarrierPos: -1},
 		},
@@ -414,8 +414,8 @@ func apiPatternValue() Value {
 // inputs.
 func stringSliceNative() NativeFunc {
 	return NativeFunc{
-		Name:        "slice",
-		ForwardArgs: true,
+		Name: "slice",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TInteger, TInteger, TString}, Handler: sliceStartEndHandler, Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TInteger, TInteger, TList}, Handler: sliceStartEndHandler, Returns: []*Type{TList}, BarrierPos: -1},
