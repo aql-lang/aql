@@ -86,12 +86,12 @@ func TestSmokeRegistryStartsBare(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
-	// A fresh registry ships only the kernel-level words. `ref` is the
-	// one such word — every other built-in flows in from the language
-	// layer via Register / RegisterNativeFunc.
-	names := r.Defs.Names()
-	if len(names) != 1 || names[0] != "ref" {
-		t.Errorf("expected kernel binding {ref}, got %v", names)
+	// A fresh registry has no bindings — proves the engine ships zero
+	// words by itself. The /r suffix is a parser+stepWord feature
+	// that needs no registration; `ref` itself lives in the language
+	// layer.
+	if names := r.Defs.Names(); len(names) != 0 {
+		t.Errorf("expected empty binding store, got %v", names)
 	}
 }
 

@@ -185,3 +185,136 @@ func TestRefOnSimpleValueBindingPassesThrough(t *testing.T) {
 		t.Errorf("answer/r = %d, want 42", got)
 	}
 }
+
+// --- apply: invoke a captured function value -------------------------
+
+// TestApplyInvokesCapturedFn is the smallest end-to-end claim: capture
+// an AQL fn via /r, then apply it to stack args. The apply word
+// unquotes the Function value; the engine's stepLiteral check then
+// fires execFnDefLiteral, which sig-matches against the preceding
+// stack and runs the body.
+func TestApplyInvokesCapturedFn(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def myadd fn [[a:Integer b:Integer] [Integer] [a add b]]`,
+		`2 3 myadd/r apply`,
+	})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d values, want 1: %v", len(result), result)
+	}
+	got, err := eng.AsInteger(result[0])
+	if err != nil {
+		t.Fatalf("AsInteger: %v", err)
+	}
+	if got != 5 {
+		t.Errorf("2 3 myadd/r apply = %d, want 5", got)
+	}
+}
+
+// TestApplyViaMapDispatchTable is the headline integration: build a
+// dispatch table of fns keyed by atom, retrieve by key, apply to
+// stack args. This is the pattern `ref` + `apply` were designed to
+// enable end-to-end.
+func TestApplyViaMapDispatchTable(t *testing.T) {
+	cases := []struct {
+		op   string
+		want int64
+	}{
+		{"plus", 5},
+		{"times", 6},
+	}
+	for _, tc := range cases {
+		t.Run(tc.op, func(t *testing.T) {
+			result, err := runNativeSteps(t, nil, []string{
+				`def myadd fn [[a:Integer b:Integer] [Integer] [a add b]]`,
+				`def mymul fn [[a:Integer b:Integer] [Integer] [a mul b]]`,
+				`def ops {plus: myadd/r times: mymul/r}`,
+				// `(ops.<op>)` retrieves the Function value; apply
+				// unquotes and dispatches against the preceding 2,3.
+				`2 3 (ops.` + tc.op + `) apply`,
+			})
+			if err != nil {
+				t.Fatalf("setup: %v", err)
+			}
+			if len(result) != 1 {
+				t.Fatalf("got %d values, want 1", len(result))
+			}
+			got, err := eng.AsInteger(result[0])
+			if err != nil {
+				t.Fatalf("AsInteger: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("dispatch %q: got %d, want %d", tc.op, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestApplyOnDirectFnLiteral covers the path with no name in the
+// middle: build an anonymous fn with bare `fn`, apply directly. This
+// is the cleanest demonstration that apply works on any TFunction
+// value, not just ref-captured ones.
+func TestApplyOnDirectFnLiteral(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def double fn [[x:Integer] [Integer] [x mul 2]]`,
+		`7 double/r apply`,
+	})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	got, err := eng.AsInteger(result[0])
+	if err != nil {
+		t.Fatalf("AsInteger: %v", err)
+	}
+	if got != 14 {
+		t.Errorf("7 double/r apply = %d, want 14", got)
+	}
+}
+
+// TestApplyAfterRedefinitionUsesCapturedFn closes the stability loop:
+// the captured Function — applied later — runs the ORIGINAL body
+// even though the underlying name has been rebound to a different
+// implementation in the meantime.
+//
+// The capture has to happen at def-time, not at use-time: `def saved
+// myop/r` would store the bare `myop/r` *expression* (a ref-word)
+// which the engine would re-resolve on every use. Wrapping the
+// ref-word in parens evaluates it once, producing the Function value
+// that def then stores by value.
+func TestApplyAfterRedefinitionUsesCapturedFn(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def myop fn [[a:Integer b:Integer] [Integer] [a add b]]`,
+		`def saved (myop/r)`,
+		`undef myop`,
+		`def myop fn [[a:Integer b:Integer] [Integer] [a mul b]]`,
+		// `saved` is a value binding to the captured Function; a bare
+		// name push gives us the value as-is, then apply invokes the
+		// captured body. The current `myop` would multiply — saved
+		// adds.
+		`2 3 saved apply`,
+	})
+	if err != nil {
+		t.Fatalf("apply after redef: %v", err)
+	}
+	got, err := eng.AsInteger(result[0])
+	if err != nil {
+		t.Fatalf("AsInteger: %v", err)
+	}
+	if got != 5 {
+		t.Errorf("captured saved (add) applied to 2,3 = %d, want 5 — late-binding leaked", got)
+	}
+}
+
+// TestApplyErrorsOnNonFunction guards the type check: apply on a
+// non-Function value reports a clear error rather than treating
+// random data as a function.
+func TestApplyErrorsOnNonFunction(t *testing.T) {
+	_, err := runNativeSteps(t, nil, []string{
+		`42 apply`,
+	})
+	if err == nil {
+		t.Fatal("expected error applying to Integer, got nil")
+	}
+}

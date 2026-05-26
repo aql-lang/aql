@@ -607,7 +607,7 @@ func (e *Engine) stepWord(val Value) error {
 	// Quoted Function value so it sits on the stack like any other piece
 	// of data — exactly the case `ref` exists to enable.
 	if w.ForceRef {
-		v, ok := resolveRef(e.registry, w.Name)
+		v, ok := ResolveRef(e.registry, w.Name)
 		if !ok {
 			if e.registry != nil && e.registry.Check.IsActive() {
 				e.registry.Check.AddDiagnostic(CheckDiagnostic{
@@ -690,9 +690,21 @@ func (e *Engine) stepWord(val Value) error {
 	// Simple value def: substitute the word with its value directly,
 	// bypassing function dispatch entirely. FnDefInfo and ObjectTypeInfo
 	// entries are not simple values — they go through normal Lookup.
+	//
+	// Exception: a Quoted Function/FnDef binding was explicitly stored
+	// as data (e.g. `def saved (myop/r)`), so the bare name pushes the
+	// value rather than invoking. This is the symmetric companion to
+	// the `/r` suffix on the read side.
 	if top, ok := e.registry.Defs.Top(w.Name); ok {
 		switch top.Data.(type) {
 		case FnDefInfo, *ObjectTypeInfo:
+			if top.Quoted {
+				e.registry.Check.recordUse(w.Name)
+				push := top
+				push.Pos = val.Pos
+				e.stack[e.pointer] = push
+				return e.stepLiteral()
+			}
 			// Not a simple value — fall through to Lookup.
 		default:
 			// Record the substitution as a "use" for unused-def
