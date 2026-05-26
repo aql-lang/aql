@@ -531,16 +531,18 @@ func sortedKeys(m map[string]any) []string {
 
 // parseWord interprets an unquoted text token as an AQL word, handling
 // modifier syntax: name/f (forceForward), name/s (forceStack), name/N (argCount),
-// name/q (quote → Atom), and combinations like name/1f, name/qs, name/f2.
-// Modifiers stack in any order; f and s are mutually exclusive; the argCount
-// digits form a single number; q produces an Atom and overrides the other
-// modifiers (they are accepted syntactically but ignored).
+// name/q (quote → Atom), name/r (ref → bound value), and combinations like
+// name/1f, name/qs, name/f2, name/r. Modifiers stack in any order;
+// f and s are mutually exclusive; q and r are mutually exclusive; the
+// argCount digits form a single number; q produces an Atom and overrides
+// the other modifiers; r emits a ref-word that short-circuits the rest.
 func parseWord(text string) (eng.Value, error) {
 	name := text
 	argCount := -1
 	forceStack := false
 	forceForward := false
 	quoteFlag := false
+	refFlag := false
 
 	// Check for /... modifier suffix.
 	if idx := strings.LastIndex(name, "/"); idx >= 0 && idx < len(name)-1 {
@@ -587,10 +589,16 @@ func parseWord(text string) (eng.Value, error) {
 					forceStack = true
 				}
 			case c == 'q':
-				if quoteFlag {
+				if quoteFlag || refFlag {
 					valid = false
 				} else {
 					quoteFlag = true
+				}
+			case c == 'r':
+				if refFlag || quoteFlag {
+					valid = false
+				} else {
+					refFlag = true
 				}
 			default:
 				valid = false
@@ -609,6 +617,7 @@ func parseWord(text string) (eng.Value, error) {
 			forceStack = false
 			forceForward = false
 			quoteFlag = false
+			refFlag = false
 		}
 	}
 
@@ -621,6 +630,14 @@ func parseWord(text string) (eng.Value, error) {
 	// not a function call.
 	if quoteFlag {
 		return eng.NewAtom(name), nil
+	}
+
+	// /r emits a ref-word that, when reached at the pointer, resolves to
+	// the bound value (a Function for fn / object bindings) without
+	// invoking. Argument-shape modifiers don't apply because ref bypasses
+	// dispatch entirely; they're accepted syntactically but ignored.
+	if refFlag {
+		return eng.NewWordRef(name), nil
 	}
 
 	if forceStack || forceForward || argCount >= 0 {

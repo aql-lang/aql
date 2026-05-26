@@ -222,6 +222,7 @@ func NewRegistry() (*Registry, error) {
 		SDKCache:     make(map[string]any),
 	}
 	registerKernelIdeals(r)
+	registerCoreRef(r)
 	return r, nil
 }
 

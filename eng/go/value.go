@@ -496,6 +496,7 @@ type WordInfo struct {
 	ArgCount     int  // -1 = unspecified
 	ForceStack   bool // lower/s
 	ForceForward bool // lower/f
+	ForceRef     bool // lower/r — resolve to the bound value without invoking
 }
 
 // ForwardInfo tracks forward argument collection for a deferred function call.
@@ -931,6 +932,19 @@ func NewWordModified(name string, argCount int, forceStack, forceForward bool) V
 		ArgCount:     argCount,
 		ForceStack:   forceStack,
 		ForceForward: forceForward,
+	})
+}
+
+// NewWordRef creates a word value marked with the /r modifier: when
+// reached at the pointer it resolves to the bound value (a Function
+// for fn / object bindings, the value itself for everything else)
+// without entering function dispatch. ArgCount stays unspecified
+// because /r short-circuits argument collection.
+func NewWordRef(name string) Value {
+	return NewValueRaw(TWord, WordInfo{
+		Name:     name,
+		ArgCount: -1,
+		ForceRef: true,
 	})
 }
 

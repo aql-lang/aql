@@ -602,6 +602,41 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 func (e *Engine) stepWord(val Value) error {
 	w, _ := AsWord(val)
 
+	// /r modifier: resolve the name to its bound value as data, with no
+	// argument collection or dispatch. An FnDef binding comes back as a
+	// Quoted Function value so it sits on the stack like any other piece
+	// of data — exactly the case `ref` exists to enable.
+	if w.ForceRef {
+		v, ok := resolveRef(e.registry, w.Name)
+		if !ok {
+			if e.registry != nil && e.registry.Check.IsActive() {
+				e.registry.Check.AddDiagnostic(CheckDiagnostic{
+					Code:   "undefined_word",
+					Detail: "undefined word: " + w.Name,
+					Word:   w.Name,
+					Row:    val.Pos.Row,
+					Col:    val.Pos.Col,
+				})
+				placeholder := NewAtom(w.Name)
+				placeholder.Pos = val.Pos
+				placeholder.Undefined = true
+				e.stack[e.pointer] = placeholder
+				return e.stepLiteral()
+			}
+			return &AqlError{
+				Code:       "undefined_word",
+				Detail:     "undefined word: " + w.Name,
+				Src:        w.Name,
+				Row:        val.Pos.Row,
+				Col:        val.Pos.Col,
+				fullSource: e.effectiveSource(),
+			}
+		}
+		v.Pos = val.Pos
+		e.stack[e.pointer] = v
+		return e.stepLiteral()
+	}
+
 	// If there is a pending forward whose next slot is /q-marked
 	// (QuoteArgs), capture this Word as data (converted to an Atom
 	// further down the pipeline) rather than executing it. This is the
@@ -1453,8 +1488,15 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		return nil
 	}
 
-	// Look up compiled signatures. Named functions use the registry;
-	// anonymous/unregistered functions build signatures from FnSig params.
+	// Look up compiled signatures. Named functions normally use the
+	// registry so live re-definitions take effect (recursive calls,
+	// hot patching). When the registry no longer has a binding under
+	// this name we fall back to the captured FnDef's own Signatures:
+	// that's what makes a Function value produced by `ref` (or a
+	// /q-marked TFunction slot) a stable handle — an undef of the
+	// underlying name doesn't strand the captured value. The
+	// signature slice already lives by-value on the FnDefInfo, so no
+	// extra copying is needed.
 	var fn *FnDefInfo
 	if fnDef.Name != "" {
 		reg := fnDef.Registry
@@ -1462,6 +1504,10 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 			reg = e.registry
 		}
 		fn = reg.Lookup(fnDef.Name)
+	}
+	if fn == nil && len(fnDef.Signatures) > 0 {
+		captured := fnDef
+		fn = &captured
 	}
 	if fn == nil && len(fnDef.Sigs) > 0 {
 		fn = &FnDefInfo{
