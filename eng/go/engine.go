@@ -1711,14 +1711,17 @@ func fnSigsToSignatures(sigs []FnSig) []Signature {
 				patterns[j] = *p.Pattern
 			}
 		}
-		// BarrierPos == 0 from an AQL fn body means "no explicit `|`
-		// barrier was set." Under the unified dispatch rule, Function
-		// values default to all-forward-eligible — the same defaulting
-		// that upsertFnDef applies to ForwardArgs-registered natives.
-		// Without this bump, `(fn [[a b] [out] [body]]) 2 3` would do a
-		// stack-only match and fail to forward-collect 2 and 3.
+		// Translate the FnSig BarrierPos sentinel for the dispatcher:
+		//   -1 → AQL source had no `|`: default to all-forward.
+		//    0 → either an explicit `[| a b]` from AQL source or a
+		//        Go-side FnSig{} literal that didn't set the field;
+		//        treat as the legacy default and bump to N for
+		//        backwards compatibility. (Anonymous AQL fns with a
+		//        leading `|` reach the dispatcher via InstallFnDef
+		//        and never come through this path.)
+		//   >0 → explicit intermediate barrier.
 		barrier := sig.BarrierPos
-		if barrier == 0 && len(argTypes) > 0 {
+		if (barrier == -1 || barrier == 0) && len(argTypes) > 0 {
 			barrier = len(argTypes)
 		}
 		out[i] = Signature{Args: argTypes, Patterns: patterns, BarrierPos: barrier}

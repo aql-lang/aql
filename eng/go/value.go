@@ -200,10 +200,29 @@ type FnParam struct {
 
 // FnSig describes one overload of a function definition.
 type FnSig struct {
-	Params     []FnParam
-	Returns    []*Type // declared return types (nil = unchecked)
-	Body       []Value
-	BarrierPos int // 0 = no barrier; >0 = forward stops at this position
+	Params  []FnParam
+	Returns []*Type // declared return types (nil = unchecked)
+	Body    []Value
+	// BarrierPos is the forward/stack boundary expressed by `|` in
+	// an AQL fn parameter list. Three values carry distinct meaning:
+	//
+	//   -1 — unset (no `|` token in the source). Consumers
+	//        (InstallFnDef, fnSigsToSignatures) default this to
+	//        len(Params) so the fn behaves as all-forward, matching
+	//        the convention `RegisterNativeFunc` already applies to
+	//        natives that omit the field.
+	//    0 — explicit all-stack. The user wrote `[| a b]` so every
+	//        arg comes from the stack. Distinct from -1 because the
+	//        default bump must NOT fire here.
+	//   >0 — explicit barrier at position N. Args[0..N-1] are
+	//        forward-eligible; args[N..] come from the stack.
+	//
+	// Go-side construction sites that don't go through ParseFnParams
+	// (modules/math.go, modules/matrix.go, etc.) leave the field at
+	// the Go zero value (0); the consumer treats that as "default"
+	// for backwards compatibility — only the AQL-source path emits
+	// the -1 sentinel.
+	BarrierPos int
 }
 
 // FnDefInfo holds the parsed function specification for a def-defined function.

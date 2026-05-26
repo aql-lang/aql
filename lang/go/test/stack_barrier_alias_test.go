@@ -39,6 +39,49 @@ func TestStackBarrierAliasMidPosition(t *testing.T) {
 	}
 }
 
+// TestStackBarrierAliasLeadingPosition: barrier at position 0 means
+// all-stack — every arg must come from the stack, none forward. The
+// `[|, a, b]` form was historically broken by upsertFnDef silently
+// promoting BarrierPos==0 to N; the -1 sentinel for "no `|` seen"
+// distinguishes explicit-zero from "use default" so leading-barrier
+// now works as written.
+func TestStackBarrierAliasLeadingPosition(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{
+		`def all-stack-pipe fn [[| a:Integer b:Integer] [Integer] [a add b]]`,
+		`def all-stack-sb   fn [[__SB a:Integer b:Integer] [Integer] [a add b]]`,
+		// All-stack 2-arg fn: needs both args on the stack already.
+		// Top-down: a=6, b=5. Sum = 11. The forward form
+		// `all-stack-pipe 5 6` would NOT match (no stack args).
+		`5 6 all-stack-pipe   5 6 all-stack-sb`,
+	})
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("got %d results, want 2: %v", len(result), result)
+	}
+	for i, want := range []int64{11, 11} {
+		got, _ := eng.AsInteger(result[i])
+		if got != want {
+			t.Errorf("result[%d] = %d, want %d", i, got, want)
+		}
+	}
+}
+
+// TestStackBarrierLeadingRefusesForwardForm: with the leading
+// barrier honored, `all-stack-pipe 5 6` (forward syntax) MUST fail
+// because the fn is now genuinely stack-only.
+func TestStackBarrierLeadingRefusesForwardForm(t *testing.T) {
+	_, err := runNativeSteps(t, nil, []string{
+		`def all-stack fn [[| a:Integer b:Integer] [Integer] [a add b]]`,
+		// No preceding stack args; sig demands them → sig error.
+		`all-stack 5 6`,
+	})
+	if err == nil {
+		t.Fatal("expected stack-only sig to reject forward-collected args, got nil")
+	}
+}
+
 // TestStackBarrierAliasTrailingPosition: barrier after every param,
 // equivalent to all-forward (`| ` at the end means "no slots are
 // stack-only"). Both forms accept the same surface call.
