@@ -119,9 +119,12 @@ type CheckState struct {
 	StepCount int
 
 	// StepBudget is the maximum total steps the check run may
-	// consume. Zero means "use DefaultCheckStepBudget". Once
-	// exceeded, the engine emits a step_budget_exceeded diagnostic
-	// and returns the current residual stack immediately.
+	// consume. The "unset" sentinel is -1 — that's what gets
+	// substituted with DefaultCheckStepBudget at run time. A real
+	// zero is honored as "abort on the first step", which is
+	// rarely useful but unambiguous. Once the running count
+	// exceeds the resolved budget, the engine emits a
+	// step_budget_exceeded diagnostic and returns immediately.
 	StepBudget int
 
 	// BudgetTripped is set to true after the first budget overshoot
@@ -220,6 +223,12 @@ func NewRegistry() (*Registry, error) {
 		ErrOutput:    os.Stderr,
 		Input:        os.Stdin,
 		SDKCache:     make(map[string]any),
+		// StepBudget uses -1 as the "unset, use the project default"
+		// sentinel. The Go zero (0) is honored as "abort on the first
+		// step" so callers who want that have an unambiguous way to
+		// express it; callers who omit the field get the default
+		// without the historical zero-as-magic overload.
+		Check: CheckState{StepBudget: -1},
 	}
 	registerKernelIdeals(r)
 	return r, nil

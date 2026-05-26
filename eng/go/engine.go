@@ -29,24 +29,33 @@ type Engine struct {
 	registry  *Registry
 	trace     TraceCallback
 	traceNote string          // annotation set during execution for the next trace call
-	stepLimit int             // 0 means use default (22222 for top-level, 2222 for sub-engines)
+	stepLimit int             // hard cap on the Run loop; always positive, set by the New/NewTop constructors below
 	marks     map[string]bool // active mark IDs (for mark/move control flow)
 	source    string          // original source text for error reporting
 	isTop     bool            // true for engines created via NewTop; an unhandled FlowCtrl at end-of-Run is an error here, propagates upward otherwise
 }
 
+// Default step limits for the Run loop. Exposed as named constants so
+// every Engine constructor names them explicitly — there is no
+// "zero means default" sentinel on `stepLimit`; the field is always
+// set to a positive value by the constructors below.
+const (
+	DefaultStepLimit    = 22222 // top-level engine cap
+	DefaultSubStepLimit = 2222  // sub-engine cap (autoEvalMap, CallAQL, etc.)
+)
+
 // New creates an Engine with the given function registry.
-// The returned engine uses the sub-engine step limit (2222).
-// Use NewTop for the top-level engine with a higher limit (22222).
+// The returned engine uses the sub-engine step limit.
+// Use NewTop for the top-level engine with a higher limit.
 func New(registry *Registry) *Engine {
-	return &Engine{registry: registry, stepLimit: 2222}
+	return &Engine{registry: registry, stepLimit: DefaultSubStepLimit}
 }
 
-// NewTop creates a top-level Engine with the maximum step limit (22222).
+// NewTop creates a top-level Engine with the maximum step limit.
 // isTop is set so an unhandled FlowCtrl signal at end-of-Run is reported
 // as an error rather than propagating outward.
 func NewTop(registry *Registry) *Engine {
-	return &Engine{registry: registry, stepLimit: 22222, isTop: true}
+	return &Engine{registry: registry, stepLimit: DefaultStepLimit, isTop: true}
 }
 
 // SetSource sets the original source text for error reporting.
@@ -227,10 +236,11 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 	copy(e.stack, input)
 	e.pointer = 0
 
+	// stepLimit is always set by the constructors (New / NewTop); the
+	// defensive check that used to substitute a default if the field
+	// was zero was load-bearing for callers that built Engine{}
+	// directly, but no longer — the constructors are the only entry.
 	limit := e.stepLimit
-	if limit <= 0 {
-		limit = 22222
-	}
 	for step := 0; step < limit; step++ {
 		if e.pointer >= len(e.stack) {
 			break
@@ -240,8 +250,12 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		// gracefully once exceeded. Emits one diagnostic and
 		// then short-circuits every subsequent sub-engine too.
 		if e.registry.Check.IsActive() {
+			// -1 is the "unset" sentinel; resolve to the
+			// project default. A literal 0 is honored as
+			// "abort immediately" rather than treated as a
+			// magic "use default."
 			budget := e.registry.Check.StepBudget
-			if budget == 0 {
+			if budget == -1 {
 				budget = DefaultCheckStepBudget
 			}
 			e.registry.Check.StepCount++

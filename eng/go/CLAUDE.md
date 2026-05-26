@@ -9,6 +9,57 @@ For language-layer conventions (jsonic integration, registry
 stacks, helper API discipline, panic prevention) see
 `lang/go/CLAUDE.md`.
 
+## No Zero-Value Overload (CRITICAL)
+
+A struct field MUST NOT use the Go zero value (`0`, `""`, `false`,
+`nil`) to mean both "the author omitted this" AND a valid
+explicit value. The two meanings are indistinguishable at the
+call site and inevitably drift apart when one path needs the
+"omitted = default" rule and another path needs the "explicit
+zero" interpretation. We hit this exactly with `BarrierPos`,
+where `[| a b]` from AQL source could not be expressed because
+`0` was being silently promoted to `len(Args)` for omitted-field
+callers.
+
+When a field needs an "unset" state distinct from a real value:
+
+- **For ints**: use an out-of-domain sentinel and document it.
+  `-1` is the canonical choice when the field's valid domain is
+  non-negative (`BarrierPos`, `CheckState.StepBudget`,
+  `WordInfo.ArgCount`). Initialize the sentinel in the
+  constructor (e.g. `NewRegistry`) so the Go zero never reaches
+  consumers.
+- **For pointers / interfaces**: `nil` IS unambiguously "unset"
+  when the type has no zero-value inhabitant — fine to use.
+- **For booleans**: don't try to overload. Add a second field
+  (`PathInfo.Abs` plus an `AbsSet bool` if both states matter)
+  or split into an enum.
+- **For strings**: empty string is rarely a valid user value,
+  but if it could be, use a `*string` or a separate `XSet bool`.
+
+Resolve the sentinel **exactly once, at a single boundary** —
+the registration / construction point — so every downstream
+consumer sees a fully-normalised value. Don't sprinkle the
+default substitution across every reader; that's how the
+ambiguity sneaks back in. Current examples:
+
+- `upsertFnDef` (`registry.go`) — sentinel-resolves
+  `Signature.BarrierPos == -1` to `len(Args)` or `0` based on
+  the `forwardArgs` flag, then stores. Every read of
+  `BarrierPos` after this is an explicit value.
+- `NewRegistry` (`registry.go`) — initialises
+  `CheckState.StepBudget = -1` so the Go zero on a freshly-
+  constructed registry doesn't get mistaken for "abort
+  immediately." The engine's check-mode loop substitutes
+  `DefaultCheckStepBudget` only for the sentinel; an explicit
+  user-set `0` is honored as "abort on first step."
+
+When you find a field that violates this rule, treat the audit
+as the BarrierPos cleanup precedent: pick a sentinel, audit all
+construction sites (an AST-based rewrite is fine for bulk),
+move resolution to a single boundary, remove every conditional
+that substituted on the zero value.
+
 ## Sealed Payload (CRITICAL)
 
 `Value.Data` is a sealed interface: `eng.Payload`. Only types
