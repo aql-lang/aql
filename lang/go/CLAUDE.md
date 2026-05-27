@@ -175,7 +175,13 @@ Key conversion functions in `parse.go`:
 - `convertTopLevel()` / `convertTopLevelValue()` — word context
 - `convertDataValue()` / `convertMapData()` — data context (atoms, not strings)
 - `convertWordList()` / `convertDataList()` — lists (word context, Eval=true)
-- `expandDottedWord()` — transforms `foo.a.b` into `( foo get a get b )`
+- Dotted access — there is no parse-time "expansion" pass. `.` is lexed
+  as a separate token (`#DT` in `eng/go/parser/grammar.go`) and converted
+  to `eng.NewWord("get")` during top-level conversion in
+  `convertTopLevelItems` (parse.go around line 173); `!` followed by `.`
+  becomes `getr`. Chained access `m.a.b` becomes the token sequence
+  `m get a get b` and composes at runtime because each `get` produces
+  the receiver for the next.
 
 ## Argument Ordering (CRITICAL)
 

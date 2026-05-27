@@ -170,7 +170,9 @@ stack position.
 **Severity:** Moderate — forces awkward naming choices.
 
 Any registered word name becomes unusable as a module export key
-because the parser's dot expansion emits it as a word:
+because the dot-to-get conversion in
+`eng/go/parser/parse.go::convertTopLevelItems` emits the key as a
+bare Word token following the synthesized `get`:
 
 ```aql
 matrix.trace    # executes 'trace' (debug word) instead of map lookup
@@ -186,10 +188,11 @@ This forced renaming several matrix module exports:
 The problem grows as more built-in words are added — each new word
 potentially shadows module export names.
 
-**Suggested fix:** Change the dot expansion to emit string literal
-keys instead of words: `matrix.trace` → `( matrix get "trace" )`
-instead of `( matrix get trace )`. This makes dot access always
-work as a key lookup regardless of the word namespace.
+**Suggested fix:** at the conversion site in `convertTopLevelItems`,
+emit the post-dot key as a `String` literal rather than passing the
+next token through as a Word: `matrix.trace` → token sequence
+`matrix get "trace"` instead of `matrix get trace`. This makes dot
+access always work as a key lookup regardless of the word namespace.
 
 
 ### Issue 5: No way to build a list of evaluated values (moderate)
@@ -283,7 +286,7 @@ lines of AQL. The Go code is more verbose but works reliably.
 |----------|-------|-----|
 | **P0** | Def leakage from fn bodies | CallAQL should clean up body-local defs on return |
 | **P0** | List auto-eval strips def refs | Resolve word elements when list consumed as fn arg |
-| **P1** | Dot notation shadowed by registered words | Emit string keys in dot expansion: `x.y` → `(x get "y")` |
+| **P1** | Dot notation shadowed by registered words | Emit string keys at the dot-to-get conversion site: `x.y` → `x get "y"` |
 | **P1** | No list-building word | Add `N collect` to gather stack values into a list |
 | **P2** | FnDef no forward collection | Extend `execFnDefLiteral` with forward attempt |
 | **P2** | Arg ordering confusing | Document prefix/forward/FnDef arg ordering for module authors |

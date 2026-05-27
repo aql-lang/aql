@@ -1,0 +1,61 @@
+{
+  version: 1
+  name:    "gen"
+
+  # AQL-G: the generator profile. Used by aql:test property-based
+  # testing to evaluate generator programs and shrink candidates
+  # safely. Permits math, randomness, and decision-table evaluation
+  # only — no clock, no IO, no network, no process, no env. Local
+  # def/mutate inside generator bodies is allowed (so generators can
+  # use temporaries).
+  #
+  # The reducer re-evaluates a generator program ~10²-10³ times
+  # during candidate exploration, so maxStepBudget is tighter than
+  # compute.jsonic — each evaluation must terminate quickly.
+
+  limits: {
+    timeoutMs:      5000
+    maxStepBudget:  200000
+    maxStackDepth:  256
+  }
+
+  scopes: {
+    global: {
+      words: {
+        default: "deny"
+        rules: [
+          { allow: ["mutate"] }
+        ]
+      }
+    }
+
+    engine: {
+      words: { default: "allow" }
+    }
+
+    modules: {
+      words: {
+        default: "deny"
+        rules: [
+          { allow: ["import"], where: {
+              module: ["aql:math", "aql:rand", "aql:decision", "aql:test"]
+          } }
+        ]
+      }
+      scopes: {
+        "aql:math":     { words: { default: "allow" } }
+        "aql:rand":     { words: { default: "allow" } }
+        "aql:decision": { words: { default: "allow" } }
+        "aql:test":     { words: { default: "allow" } }
+      }
+    }
+
+    fileops: { install: false }
+    network: { install: false }
+    sqlite:  { install: false }
+    process: { install: false }
+    env:     { install: false }
+    formats: { words: { default: "allow" } }
+    clock:   { install: false }
+  }
+}

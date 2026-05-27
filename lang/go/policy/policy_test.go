@@ -95,6 +95,27 @@ func TestComputeUninstallsCaps(t *testing.T) {
 	}
 }
 
+func TestGenProfileDeniesIOAllowsRand(t *testing.T) {
+	p := mustLoad(t, "gen")
+	// gen uninstalls IO + clock + network so generator programs
+	// cannot reach the outside world.
+	if p.Installed("fileops") {
+		t.Error("gen should have fileops uninstalled")
+	}
+	if p.Installed("network") {
+		t.Error("gen should have network uninstalled")
+	}
+	if p.Installed("clock") {
+		t.Error("gen should have clock uninstalled")
+	}
+	if p.Installed("sqlite") {
+		t.Error("gen should have sqlite uninstalled")
+	}
+	if !p.Installed("engine") {
+		t.Error("engine cannot be uninstalled")
+	}
+}
+
 func TestReadOnlyInheritsSandbox(t *testing.T) {
 	p := mustLoad(t, "read-only")
 	// Inherits sandbox's deny on disk.write.

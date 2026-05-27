@@ -14,6 +14,9 @@ var builtinSandbox []byte
 //go:embed profiles/compute.jsonic
 var builtinCompute []byte
 
+//go:embed profiles/gen.jsonic
+var builtinGen []byte
+
 //go:embed profiles/read-only.jsonic
 var builtinReadOnly []byte
 
@@ -27,6 +30,7 @@ var builtinProfiles = map[string][]byte{
 	"trusted":   builtinTrusted,
 	"sandbox":   builtinSandbox,
 	"compute":   builtinCompute,
+	"gen":       builtinGen,
 	"read-only": builtinReadOnly,
 	"client":    builtinClient,
 }
@@ -48,6 +52,7 @@ func BuiltinNames() []string {
 		"read-only": 3,
 		"sandbox":   4,
 		"compute":   5,
+		"gen":       6,
 	}
 	for i := 1; i < len(out); i++ {
 		for j := i; j > 0 && order[out[j-1]] > order[out[j]]; j-- {
