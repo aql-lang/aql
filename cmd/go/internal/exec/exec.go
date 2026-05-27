@@ -25,7 +25,9 @@ import (
 	"syscall"
 
 	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/aql-lang/aql/cmd/go/internal/permsflags"
 	lang "github.com/aql-lang/aql/lang/go"
+	"github.com/aql-lang/aql/lang/go/policy"
 )
 
 // cmd is the Command implementation for `aql exec`.
@@ -56,8 +58,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 	bind := fs.String("bind", "127.0.0.1:8091", "host:port to bind the exec HTTP server")
 	port := fs.Int("p", 0, "port to listen on (overrides -bind host:port if >0)")
 	registry := fs.String("r", "", "registry path passed to AQL instances")
+	var pf permsflags.Flags
+	permsflags.Register(fs, &pf)
 
 	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	pol, err := pf.Resolve()
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
 
@@ -66,13 +76,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 		addr = fmt.Sprintf(":%d", *port)
 	}
 
-	srv, err := NewServer(addr, *registry)
+	srv, err := NewServer(addr, *registry, pol)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", strings.TrimPrefix(err.Error(), "exec: "))
 		return 1
 	}
 
 	fmt.Fprintf(stdout, "aql exec serving on %s\n", srv.Addr())
+	if pol != nil {
+		fmt.Fprintf(stdout, "aql exec policy: %s\n", pol.Name())
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -102,8 +115,11 @@ type execResponse struct {
 
 // Handler builds the http.Handler for the exec service. registry is
 // forwarded to each AQL instance so user code can `use` modules from
-// a local directory. Exposed so tests can spin up an httptest server.
-func Handler(registry string) http.Handler {
+// a local directory. pol (may be nil) is the policy applied to every
+// per-request AQL instance — it is bound at server construction and
+// cannot be overridden by request bodies. Exposed so tests can spin
+// up an httptest server.
+func Handler(registry string, pol policy.Policy) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -115,7 +131,7 @@ func Handler(registry string) http.Handler {
 	})
 
 	mux.HandleFunc("/v1/exec", func(w http.ResponseWriter, r *http.Request) {
-		handleExec(registry, w, r)
+		handleExec(registry, pol, w, r)
 	})
 
 	return mux
@@ -125,7 +141,7 @@ func Handler(registry string) http.Handler {
 // writes the JSON response. Errors are reported in the response body
 // with HTTP 200 so clients can distinguish transport errors from AQL
 // errors (parse / type / runtime).
-func handleExec(registry string, w http.ResponseWriter, r *http.Request) {
+func handleExec(registry string, pol policy.Policy, w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -141,7 +157,7 @@ func handleExec(registry string, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a, err := lang.New(lang.Options{Registry: registry})
+	a, err := lang.New(lang.Options{Registry: registry, Policy: pol})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, execResponse{Error: "init error: " + err.Error()})
 		return

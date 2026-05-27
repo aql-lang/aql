@@ -17,14 +17,20 @@ import (
 	"time"
 
 	"github.com/aql-lang/aql/cmd/go/internal/service"
+	"github.com/aql-lang/aql/lang/go/policy"
 )
 
 // Server is the lifecycle-managed exec HTTP server. Construct with
 // NewServer, then call Start/Stop. Pause swaps the live handler to
 // a 503 responder; Resume restores it.
+//
+// The policy field is bound at construction and is immutable for
+// the lifetime of the server. Requests cannot override or supply a
+// policy — that is the security invariant of the exec service.
 type Server struct {
 	addr     string
 	registry string
+	policy   policy.Policy
 	ln       net.Listener
 	srv      *http.Server
 	inner    http.Handler // pre-pause handler, restored on Resume
@@ -35,16 +41,18 @@ type Server struct {
 
 // NewServer builds an exec Server bound to addr ("host:port"). The
 // registry path (may be empty) is forwarded to every AQL instance
-// the server creates per request.
-func NewServer(addr, registry string) (*Server, error) {
+// the server creates per request. The policy (may be nil) is fixed
+// at construction; clients cannot override it via the request body.
+func NewServer(addr, registry string, pol policy.Policy) (*Server, error) {
 	if addr == "" {
 		addr = "127.0.0.1:8091"
 	}
 	s := &Server{
 		addr:     addr,
 		registry: registry,
+		policy:   pol,
 	}
-	inner := Handler(registry)
+	inner := Handler(registry, pol)
 	s.inner = inner
 	s.srv = &http.Server{
 		Addr:              addr,
@@ -154,6 +162,9 @@ func (s *Server) Metadata() map[string]string {
 	m := map[string]string{"addr": s.addr}
 	if s.registry != "" {
 		m["registry"] = s.registry
+	}
+	if s.policy != nil {
+		m["policy"] = s.policy.Name()
 	}
 	return m
 }

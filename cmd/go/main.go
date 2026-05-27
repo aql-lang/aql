@@ -23,6 +23,7 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/login"
 	"github.com/aql-lang/aql/cmd/go/internal/lsp"
 	"github.com/aql-lang/aql/cmd/go/internal/pack"
+	"github.com/aql-lang/aql/cmd/go/internal/policy"
 	"github.com/aql-lang/aql/cmd/go/internal/prep"
 	"github.com/aql-lang/aql/cmd/go/internal/publish"
 	"github.com/aql-lang/aql/cmd/go/internal/register"
@@ -90,6 +91,8 @@ func buildRegistry() *command.Registry {
 	r.Register(publish.New())
 	// Commands: local secret management.
 	r.Register(vault.New())
+	// Commands: permission profiles.
+	r.Register(policy.New())
 	// Commands: supervisor control plane client.
 	r.Register(ctl.New())
 	// Services: long-running input loops.

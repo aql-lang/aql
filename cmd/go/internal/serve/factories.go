@@ -15,6 +15,7 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/api"
 	"github.com/aql-lang/aql/cmd/go/internal/exec"
 	"github.com/aql-lang/aql/cmd/go/internal/lsp"
+	"github.com/aql-lang/aql/cmd/go/internal/permsflags"
 	"github.com/aql-lang/aql/cmd/go/internal/registry"
 	"github.com/aql-lang/aql/cmd/go/internal/repl"
 	"github.com/aql-lang/aql/cmd/go/internal/service"
@@ -90,14 +91,20 @@ func execFactory(args []string, _ io.Reader, _, stderr io.Writer) (service.Servi
 	bind := fs.String("bind", "127.0.0.1:8091", "host:port to bind the exec HTTP server")
 	port := fs.Int("p", 0, "port to listen on (overrides -bind host:port if >0)")
 	registryPath := fs.String("r", "", "registry path passed to AQL instances")
+	var pf permsflags.Flags
+	permsflags.Register(fs, &pf)
 	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
+	pol, err := pf.Resolve()
+	if err != nil {
 		return nil, err
 	}
 	addr := *bind
 	if *port > 0 {
 		addr = fmt.Sprintf(":%d", *port)
 	}
-	srv, err := exec.NewServer(addr, *registryPath)
+	srv, err := exec.NewServer(addr, *registryPath, pol)
 	if err != nil {
 		return nil, fmt.Errorf("%s", strings.TrimPrefix(err.Error(), "exec: "))
 	}

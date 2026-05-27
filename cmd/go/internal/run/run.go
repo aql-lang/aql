@@ -14,6 +14,7 @@ import (
 
 	"github.com/aql-lang/aql/cmd/go/internal/check"
 	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/aql-lang/aql/cmd/go/internal/permsflags"
 	"github.com/aql-lang/aql/cmd/go/internal/repl"
 	lang "github.com/aql-lang/aql/lang/go"
 )
@@ -52,6 +53,8 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	seed := fs.Int64("s", 0, "random seed for ID generation (default: current time)")
 	showVersion := fs.Bool("version", false, "print version and exit")
 	checkFirst := fs.Bool("check", false, "run static type-check before execution; abort on error")
+	var pf permsflags.Flags
+	permsflags.Register(fs, &pf)
 
 	fs.Usage = func() {
 		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql check [script.aql]\n       aql help [word]\n       aql fmt [file.aql ...]\n       aql prep [dir]\n       aql pack [dir]\n       aql clean [dir]\n       aql lsp [-p <port>]\n       aql exec [-bind host:port] [-p <port>] [-r <registry>]\n       aql registry -r <folder> -p <port>\n       aql serve <svc> [flags] [+ <svc> [flags]]...\n       aql ctl [--api url] [--token tok] <op> [name]\n       aql tui [--api url] [--token tok]\n       aql install <name>-x.y.z [-r <url>]\n       aql register [-r <url>]\n       aql login [-r <url>]\n       aql publish [-r <url>] [dir]\n\nOptions:\n")
@@ -91,7 +94,12 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				return 1
 			}
 		}
-		if err := Eval(stdout, source, *registry, *seed); err != nil {
+		pol, err := pf.Resolve()
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+		if err := EvalWithPolicy(stdout, source, *registry, *seed, pol); err != nil {
 			fmt.Fprintf(stderr, "%s\n", err)
 			return 1
 		}
@@ -106,9 +114,16 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 // Eval runs source through lang.New(...).Run and writes the carrier
 // stack to w. Exposed for the do subcommand, which builds source
-// from positional args.
+// from positional args. Equivalent to EvalWithPolicy with a nil
+// policy.
 func Eval(w io.Writer, source string, registry string, seed int64) error {
-	a, err := lang.New(lang.Options{Registry: registry, Seed: seed})
+	return EvalWithPolicy(w, source, registry, seed, nil)
+}
+
+// EvalWithPolicy is Eval with an explicit Policy. Pass nil for pol
+// to preserve the historical default (no checks).
+func EvalWithPolicy(w io.Writer, source string, registry string, seed int64, pol lang.Policy) error {
+	a, err := lang.New(lang.Options{Registry: registry, Seed: seed, Policy: pol})
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
 	}

@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/aql-lang/aql/lang/go/policy"
 )
 
 // post sends a JSON body to path on srv, decodes the response into
@@ -36,7 +38,7 @@ func post(t *testing.T, srv *httptest.Server, path string, body any, out any) in
 }
 
 func TestExecHealthz(t *testing.T) {
-	srv := httptest.NewServer(Handler(""))
+	srv := httptest.NewServer(Handler("", nil))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/healthz")
@@ -50,7 +52,7 @@ func TestExecHealthz(t *testing.T) {
 }
 
 func TestExecAdd(t *testing.T) {
-	srv := httptest.NewServer(Handler(""))
+	srv := httptest.NewServer(Handler("", nil))
 	defer srv.Close()
 
 	var got execResponse
@@ -75,7 +77,7 @@ func TestExecAdd(t *testing.T) {
 }
 
 func TestExecStringResult(t *testing.T) {
-	srv := httptest.NewServer(Handler(""))
+	srv := httptest.NewServer(Handler("", nil))
 	defer srv.Close()
 
 	var got execResponse
@@ -93,7 +95,7 @@ func TestExecStringResult(t *testing.T) {
 }
 
 func TestExecLastValueWins(t *testing.T) {
-	srv := httptest.NewServer(Handler(""))
+	srv := httptest.NewServer(Handler("", nil))
 	defer srv.Close()
 
 	var got execResponse
@@ -116,7 +118,7 @@ func TestExecLastValueWins(t *testing.T) {
 }
 
 func TestExecEmptyStack(t *testing.T) {
-	srv := httptest.NewServer(Handler(""))
+	srv := httptest.NewServer(Handler("", nil))
 	defer srv.Close()
 
 	// `1 drop` consumes the only value, leaving an empty stack.
@@ -134,7 +136,7 @@ func TestExecEmptyStack(t *testing.T) {
 }
 
 func TestExecAQLError(t *testing.T) {
-	srv := httptest.NewServer(Handler(""))
+	srv := httptest.NewServer(Handler("", nil))
 	defer srv.Close()
 
 	// `add` with no args is a runtime error.
@@ -150,7 +152,7 @@ func TestExecAQLError(t *testing.T) {
 }
 
 func TestExecRejectsMissingCode(t *testing.T) {
-	srv := httptest.NewServer(Handler(""))
+	srv := httptest.NewServer(Handler("", nil))
 	defer srv.Close()
 
 	var got execResponse
@@ -164,7 +166,7 @@ func TestExecRejectsMissingCode(t *testing.T) {
 }
 
 func TestExecRejectsWrongMethod(t *testing.T) {
-	srv := httptest.NewServer(Handler(""))
+	srv := httptest.NewServer(Handler("", nil))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/v1/exec")
@@ -178,7 +180,7 @@ func TestExecRejectsWrongMethod(t *testing.T) {
 }
 
 func TestExecRejectsInvalidJSON(t *testing.T) {
-	srv := httptest.NewServer(Handler(""))
+	srv := httptest.NewServer(Handler("", nil))
 	defer srv.Close()
 
 	resp, err := http.Post(srv.URL+"/v1/exec", "application/json", strings.NewReader("not json"))
@@ -192,7 +194,7 @@ func TestExecRejectsInvalidJSON(t *testing.T) {
 }
 
 func TestExecCapturesOutput(t *testing.T) {
-	srv := httptest.NewServer(Handler(""))
+	srv := httptest.NewServer(Handler("", nil))
 	defer srv.Close()
 
 	var got execResponse
@@ -206,7 +208,7 @@ func TestExecCapturesOutput(t *testing.T) {
 }
 
 func TestExecRequestsAreIndependent(t *testing.T) {
-	srv := httptest.NewServer(Handler(""))
+	srv := httptest.NewServer(Handler("", nil))
 	defer srv.Close()
 
 	// A `def` in one request must not leak into the next request,
@@ -222,5 +224,53 @@ func TestExecRequestsAreIndependent(t *testing.T) {
 	// x is undefined in the second request, so we expect an error.
 	if got2.Error == "" {
 		t.Errorf("expected undefined-word error in second request, got %+v", got2)
+	}
+}
+
+// --- Policy enforcement (Phase 5) ---
+
+func TestExecHonoursPolicy(t *testing.T) {
+	pol, err := policy.Load("sandbox")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(Handler("", pol))
+	defer srv.Close()
+
+	// sandbox allows engine.add but not network/process/disk.write.
+	var got execResponse
+	post(t, srv, "/v1/exec", execRequest{Code: "1 add 2"}, &got)
+	if got.Error != "" {
+		t.Errorf("add should be allowed under sandbox: %s", got.Error)
+	}
+}
+
+func TestExecRequestCannotOverridePolicy(t *testing.T) {
+	// Even though the request body carries a "policy" field with a
+	// permissive value, the server's bound policy is the only one
+	// consulted. Adding an unknown field to execRequest is ignored
+	// by the JSON decoder, so we just confirm the bound policy
+	// still applies.
+	pol, err := policy.LoadInline(`{
+		name: "no-add",
+		scopes: { engine: { words: { default: "allow", rules: [{ deny: ["add"] }] } } }
+	}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(Handler("", pol))
+	defer srv.Close()
+
+	// Client tries to override by sending a "policy" field that
+	// (if honoured) would be more permissive. The execRequest
+	// struct has only Code, so the policy field is silently dropped.
+	body := map[string]any{
+		"code":   "1 add 2",
+		"policy": "trusted",
+	}
+	var got execResponse
+	post(t, srv, "/v1/exec", body, &got)
+	if got.Error == "" {
+		t.Error("server-bound policy must reject add regardless of request payload")
 	}
 }
