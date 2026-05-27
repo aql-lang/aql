@@ -27,8 +27,8 @@ func TestCompareSignaturesUserComparerOnPatterns(t *testing.T) {
 	p10 := Value{Parent: inverted, Data: IntPayload{N: 10}}
 
 	sigs := []Signature{
-		{Args: []*Type{inverted}, Patterns: map[int]Value{0: p10}},
-		{Args: []*Type{inverted}, Patterns: map[int]Value{0: p5}},
+		{Args: []*Type{inverted}, Patterns: map[int]Value{0: p10}, BarrierPos: -1},
+		{Args: []*Type{inverted}, Patterns: map[int]Value{0: p5}, BarrierPos: -1},
 	}
 	SortSignatures(sigs)
 
@@ -45,8 +45,8 @@ func TestCompareSignaturesUserComparerOnPatterns(t *testing.T) {
 // reversed sort.
 func TestCompareSignaturesDefaultComparerOnPatterns(t *testing.T) {
 	sigs := []Signature{
-		{Args: []*Type{TInteger}, Patterns: map[int]Value{0: NewInteger(5)}},
-		{Args: []*Type{TInteger}, Patterns: map[int]Value{0: NewInteger(10)}},
+		{Args: []*Type{TInteger}, Patterns: map[int]Value{0: NewInteger(5)}, BarrierPos: -1},
+		{Args: []*Type{TInteger}, Patterns: map[int]Value{0: NewInteger(10)}, BarrierPos: -1},
 	}
 	SortSignatures(sigs)
 

@@ -9,6 +9,91 @@ For language-layer conventions (jsonic integration, registry
 stacks, helper API discipline, panic prevention) see
 `lang/go/CLAUDE.md`.
 
+## Single-Pass Parsing (CRITICAL)
+
+AQL source is converted from jsonic items to engine values in
+one left-to-right walk. Do not introduce post-conversion rewrite
+passes that re-walk the value stream — they accumulate complexity
+(paren-expansion ordering, data-context vs word-context divergence,
+nested-container recursion) and entangle the parser with handler
+semantics. When a surface form needs sugar, prefer a token-level
+substitution (an `AltSpec.A` callback that emits a `jsonic.Text`
+marker — see `;` → `"end"`, `=>` → `"afn"`, `|` → `"|"` in
+`parser/grammar.go::setupValRule`) so the conversion path stays
+linear. Behaviour the marker can't express directly belongs in the
+registered word's handler, not in a separate parser stage.
+
+## Per-Call Stacks (Args / DefSnapshot / FnBaselines)
+
+Every fn-body entry pushes onto three coordinated stacks; every fn
+exit pops the same three. Misalignment (forgetting one) breaks
+nested calls in subtle ways, so add the push and the matching pop
+together when you touch one of these sites.
+
+| Stack | Field | Push site | Pop site | Read site |
+| --- | --- | --- | --- | --- |
+| Args list | `Registry.Args` | `InstallFnDef` handler / `execFnDefSig` body splice / `CallAQL` | `__pa` token in the synthesized body tail / `CallAQL` inline cleanup | `args` native word |
+| Body-local def cleanup | (per-call `defSnapshot` local) | same | `DefCleanupInfo` marker (`stepDefCleanup`) / `CallAQL` inline cleanup | closure capture analysis (via `FnBaselines`) |
+| Enclosing-fn baseline | `Registry.FnBaselines` | same (alongside `defSnapshot`) | piggybacks on `__pa` and on `CallAQL`'s inline cleanup | `ComputeCaptures` (`fn_capture.go`) |
+
+The baseline is what closure-capture detection consults at fn-
+construction time: an inner-fn body Word whose `Defs.Depth(name) >
+TopFnBaseline()[name]` lives inside an enclosing fn (param or
+body-local) and is captured; depth ≤ baseline means module / global
+scope and the reference stays dynamic. See lang/go/CLAUDE.md
+"Closures and Capture" for the surface semantics.
+
+## No Zero-Value Overload (CRITICAL)
+
+A struct field MUST NOT use the Go zero value (`0`, `""`, `false`,
+`nil`) to mean both "the author omitted this" AND a valid
+explicit value. The two meanings are indistinguishable at the
+call site and inevitably drift apart when one path needs the
+"omitted = default" rule and another path needs the "explicit
+zero" interpretation. We hit this exactly with `BarrierPos`,
+where `[| a b]` from AQL source could not be expressed because
+`0` was being silently promoted to `len(Args)` for omitted-field
+callers.
+
+When a field needs an "unset" state distinct from a real value:
+
+- **For ints**: use an out-of-domain sentinel and document it.
+  `-1` is the canonical choice when the field's valid domain is
+  non-negative (`BarrierPos`, `CheckState.StepBudget`,
+  `WordInfo.ArgCount`). Initialize the sentinel in the
+  constructor (e.g. `NewRegistry`) so the Go zero never reaches
+  consumers.
+- **For pointers / interfaces**: `nil` IS unambiguously "unset"
+  when the type has no zero-value inhabitant — fine to use.
+- **For booleans**: don't try to overload. Add a second field
+  (`PathInfo.Abs` plus an `AbsSet bool` if both states matter)
+  or split into an enum.
+- **For strings**: empty string is rarely a valid user value,
+  but if it could be, use a `*string` or a separate `XSet bool`.
+
+Resolve the sentinel **exactly once, at a single boundary** —
+the registration / construction point — so every downstream
+consumer sees a fully-normalised value. Don't sprinkle the
+default substitution across every reader; that's how the
+ambiguity sneaks back in. Current examples:
+
+- `upsertFnDef` (`registry.go`) — sentinel-resolves
+  `Signature.BarrierPos == -1` to `len(Args)` or `0` based on
+  the `forwardArgs` flag, then stores. Every read of
+  `BarrierPos` after this is an explicit value.
+- `NewRegistry` (`registry.go`) — initialises
+  `CheckState.StepBudget = -1` so the Go zero on a freshly-
+  constructed registry doesn't get mistaken for "abort
+  immediately." The engine's check-mode loop substitutes
+  `DefaultCheckStepBudget` only for the sentinel; an explicit
+  user-set `0` is honored as "abort on first step."
+
+When you find a field that violates this rule, treat the audit
+as the BarrierPos cleanup precedent: pick a sentinel, audit all
+construction sites (an AST-based rewrite is fine for bulk),
+move resolution to a single boundary, remove every conditional
+that substituted on the zero value.
+
 ## Sealed Payload (CRITICAL)
 
 `Value.Data` is a sealed interface: `eng.Payload`. Only types

@@ -198,12 +198,38 @@ type FnParam struct {
 	Optional bool   // true if this param was marked optional via ?
 }
 
+// BarrierAllForward is the canonical sentinel for "no `|` boundary
+// specified — default this sig to all-forward dispatch." Resolved
+// at registration time (upsertFnDef) to len(Args). Stack-only sigs
+// must set BarrierPos: 0 explicitly; this constant exists only for
+// the all-forward default.
+const BarrierAllForward = -1
+
 // FnSig describes one overload of a function definition.
 type FnSig struct {
-	Params     []FnParam
-	Returns    []*Type // declared return types (nil = unchecked)
-	Body       []Value
-	BarrierPos int // 0 = no barrier; >0 = forward stops at this position
+	Params  []FnParam
+	Returns []*Type // declared return types (nil = unchecked)
+	Body    []Value
+	// BarrierPos is the forward/stack boundary expressed by `|` in
+	// an AQL fn parameter list. Three values carry distinct meaning:
+	//
+	//   -1 — unset (no `|` token in the source). Consumers
+	//        (InstallFnDef, fnSigsToSignatures) default this to
+	//        len(Params) so the fn behaves as all-forward, matching
+	//        the convention `RegisterNativeFunc` already applies to
+	//        natives that omit the field.
+	//    0 — explicit all-stack. The user wrote `[| a b]` so every
+	//        arg comes from the stack. Distinct from -1 because the
+	//        default bump must NOT fire here.
+	//   >0 — explicit barrier at position N. Args[0..N-1] are
+	//        forward-eligible; args[N..] come from the stack.
+	//
+	// Go-side construction sites that don't go through ParseFnParams
+	// (modules/math.go, modules/matrix.go, etc.) leave the field at
+	// the Go zero value (0); the consumer treats that as "default"
+	// for backwards compatibility — only the AQL-source path emits
+	// the -1 sentinel.
+	BarrierPos int
 }
 
 // FnDefInfo holds the parsed function specification for a def-defined function.
@@ -223,6 +249,35 @@ type FnDefInfo struct {
 	Signatures     []Signature // compiled dispatch table
 	MaxForwardArgs int         // longest forward arg count across all sigs (respecting barriers)
 	Registry       *Registry
+	// Anonymous is true iff the FnDef was produced by the `afn` word (i.e.
+	// via the `=>` lambda sugar). The flag is read only in check mode: an
+	// anonymous fn's static Returns is the conservative [Any], and the
+	// check-mode dispatch path runs AnalyseFnBody to recover the real
+	// return type for downstream type propagation. Named fns leave this
+	// false and the check-mode path uses sig.Returns as authored.
+	Anonymous bool
+	// Captured holds enclosing-fn-local bindings snapshotted at fn-
+	// construction time — the implementation of lexical closures.
+	// Populated by computeCaptures during afn / fn handler execution
+	// (fn_capture.go) when at least one body-Word resolves to a name
+	// bound by an enclosing fn (Depth > TopFnBaseline). Installed as
+	// defs in the per-call scope BEFORE body execution and torn down
+	// by the same DefCleanup mechanism that pops named params; the
+	// install/cleanup wiring lives in InstallFnDef (core_helpers.go),
+	// execFnDefSig + spliceAnonCheckResult (engine.go), and CallAQL
+	// (registry.go). Nil for top-level constructions and any inner
+	// fn whose body references only params, module-global names, or
+	// forward refs. See lang/go/CLAUDE.md "Closures and Capture".
+	Captured []CapturedBinding
+}
+
+// CapturedBinding is one lexically-captured name in a closure. The
+// list is sorted by Name for deterministic install order so that two
+// captures with the same name (impossible today but cheap to keep
+// reproducible) get a stable shadowing order.
+type CapturedBinding struct {
+	Name  string
+	Value Value
 }
 
 // HasForwardSigs reports whether any compiled signature has a non-zero
@@ -496,6 +551,7 @@ type WordInfo struct {
 	ArgCount     int  // -1 = unspecified
 	ForceStack   bool // lower/s
 	ForceForward bool // lower/f
+	ForceRef     bool // lower/r — resolve to the bound value without invoking
 }
 
 // ForwardInfo tracks forward argument collection for a deferred function call.
@@ -931,6 +987,19 @@ func NewWordModified(name string, argCount int, forceStack, forceForward bool) V
 		ArgCount:     argCount,
 		ForceStack:   forceStack,
 		ForceForward: forceForward,
+	})
+}
+
+// NewWordRef creates a word value marked with the /r modifier: when
+// reached at the pointer it resolves to the bound value (a Function
+// for fn / object bindings, the value itself for everything else)
+// without entering function dispatch. ArgCount stays unspecified
+// because /r short-circuits argument collection.
+func NewWordRef(name string) Value {
+	return NewValueRaw(TWord, WordInfo{
+		Name:     name,
+		ArgCount: -1,
+		ForceRef: true,
 	})
 }
 

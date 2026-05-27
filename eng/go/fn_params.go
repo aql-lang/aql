@@ -63,7 +63,11 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 	}
 	elems, _ := AsList(inputSig)
 	var params []FnParam
-	barrierPos := 0
+	// -1 is the "no barrier seen" sentinel — consumers default
+	// it to len(params) so AQL fns without a `|` are all-forward,
+	// matching the convention native registrations follow. A
+	// leading `|` overwrites with 0 (explicit all-stack).
+	barrierPos := -1
 
 	for i := 0; i < elems.Len(); i++ {
 		elem := elems.Get(i)
@@ -77,7 +81,10 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 		}
 
 		_as2, _ := AsWord(elem)
-		if IsWord(elem) && _as2.Name == "|" {
+		if IsWord(elem) && (_as2.Name == "|" || _as2.Name == "__SB") {
+			// `|` is the canonical barrier marker; `__SB` (Stack
+			// Barrier) is its alias for environments where a bare
+			// `|` is awkward to type (shell pipelines, etc.).
 			barrierPos = len(params)
 			continue
 		}

@@ -34,14 +34,14 @@ package native
 // file owns the word name and dispatch wiring.
 var inspectNatives = []NativeFunc{
 	{
-		Name:        "inspect",
-		ForwardArgs: true,
+		Name: "inspect",
+
 		Signatures: []NativeSig{
 			// /q captures the upcoming Word as an Atom; the same sig
 			// also matches an explicit Atom on the stack (per
 			// signature.go §1.5 — Atom/q subsumes Atom).
-			{Args: []*Type{TAtom}, QuoteArgs: map[int]bool{0: true}, Handler: inspectAtomHandler, Returns: []*Type{TInspect}},
-			{Args: []*Type{TAny}, Handler: inspectTypeHandler, Returns: []*Type{TInspect}},
+			{Args: []*Type{TAtom}, QuoteArgs: map[int]bool{0: true}, Handler: inspectAtomHandler, Returns: []*Type{TInspect}, BarrierPos: -1},
+			{Args: []*Type{TAny}, Handler: inspectTypeHandler, Returns: []*Type{TInspect}, BarrierPos: -1},
 		},
 	},
 }

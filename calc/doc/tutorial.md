@@ -106,10 +106,10 @@ Add an `add` word that consumes two integers and pushes their sum.
 ```go
 func RegisterWords(r *eng.Registry) {
     r.RegisterNativeFunc(eng.NativeFunc{
-        Name:        "add",
-        ForwardArgs: true,
+        Name: "add",
         Signatures: []eng.NativeSig{{
-            Args: []*eng.Type{eng.TInteger, eng.TInteger},
+            Args:       []*eng.Type{eng.TInteger, eng.TInteger},
+            BarrierPos: eng.BarrierAllForward, // default all-forward dispatch
             Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
                 a, _ := eng.AsInteger(args[0])
                 b, _ := eng.AsInteger(args[1])
@@ -123,9 +123,11 @@ func RegisterWords(r *eng.Registry) {
 
 Three things to notice:
 
-1. **`ForwardArgs: true`** means `add` is forward-collecting —
-   when the dispatcher sees `add`, it scans the *following*
-   tokens for the two args before falling back to the stack.
+1. **`BarrierPos: eng.BarrierAllForward`** (i.e. -1) means `add`
+   is forward-collecting — when the dispatcher sees `add`, it
+   scans the *following* tokens for the two args before falling
+   back to the stack. The sentinel resolves to `len(Args)` at
+   registration time.
 2. **`Args: []*eng.Type{eng.TInteger, eng.TInteger}`** declares
    the signature. The dispatcher uses this both to pick the
    right overload at runtime and as carrier types in check mode.

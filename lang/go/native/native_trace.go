@@ -13,12 +13,12 @@ import "github.com/aql-lang/aql/eng/go"
 // file owns the word name and dispatch wiring.
 var traceNatives = []NativeFunc{
 	{
-		Name:        "trace",
-		ForwardArgs: true,
+		Name: "trace",
+
 		Signatures: []NativeSig{{
 			Args:    []*Type{TList},
 			Handler: eng.TraceHandler,
-			Returns: []*Type{TAny},
+			Returns: []*Type{TAny}, BarrierPos: -1,
 		}},
 	},
 }

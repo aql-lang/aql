@@ -595,7 +595,14 @@ aql vault add github_token 'ghp_xxx'
 aql vault list
 aql vault get github_token
 aql vault grant github_token <process-id>
+aql vault exec github_token=GITHUB_TOKEN -- gh repo list
 ```
+
+`aql vault exec <alias[=ENV][,...]> -- <cmd> [args...]` runs an
+external command with vault secrets injected as environment
+variables — the secret never appears on the command line. Use
+`--upper` to uppercase derived names, `--prefix=PFX` to prepend a
+fixed prefix, or `--clear-env` for a sanitized environment.
 
 Inside AQL, secrets are surfaced via the `vault` capability:
 

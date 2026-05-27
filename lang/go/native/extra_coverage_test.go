@@ -116,7 +116,7 @@ func TestExtraStringFnDef(t *testing.T) {
 	// Function definition: the default branch should handle it
 	v := NewFnDef(FnDefInfo{Sigs: []FnSig{{
 		Params: []FnParam{{Name: "x", Type: TInteger}},
-		Body:   []Value{NewInteger(1)},
+		Body:   []Value{NewInteger(1)}, BarrierPos: -1,
 	}}})
 	s := v.String()
 	if s == "" {
@@ -1033,7 +1033,7 @@ func TestExtraStringFunction(t *testing.T) {
 	// Function values (TFunction type)
 	v := NewFunction(FnDefInfo{Sigs: []FnSig{{
 		Params: []FnParam{{Name: "x", Type: TAny}},
-		Body:   []Value{NewInteger(1)},
+		Body:   []Value{NewInteger(1)}, BarrierPos: -1,
 	}}})
 	s := v.String()
 	if s == "" {

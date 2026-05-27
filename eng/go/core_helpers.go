@@ -14,7 +14,6 @@ import (
 // literal substitution.
 func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
-	_ = isStackOnly // used by InstallFnDef below
 
 	// FnDefInfo body (from fn word): install typed signatures.
 	// Only fn-based defs register functions; simple value defs just use DefStacks.
@@ -63,7 +62,7 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 						return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
 					}
 					return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
-				},
+				}, BarrierPos: -1,
 			})
 		}
 
@@ -201,7 +200,8 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 				patterns[i] = *p.Pattern
 			}
 		}
-		s := sig // capture for closure
+		s := sig           // capture for closure
+		fnDefCopy := fnDef // capture for closure (we need Captured at call time)
 		handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			var result []Value
 			var names []string
@@ -214,13 +214,34 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			// waiting for the full result).
 			result = append(result, NewOpenParen())
 
+			// Push the fn-entry baseline BEFORE installing anything
+			// for this call. Closure-capture detection on inner fn
+			// constructions (afn/fn) inside this body consults
+			// TopFnBaseline to identify enclosing-fn-local bindings:
+			// names installed AFTER this snapshot (this call's
+			// captures + named params + body-local defs) are
+			// capturable; names already present at module/global
+			// scope are dynamic.
+			r.PushFnBaseline(r.Defs.Snapshot())
+
 			// Push args list onto the args stack for access via the
-			// "args" word (args.0, args.1, etc.).
+			// "args" word (args.0, args.1, etc.). Paired with __pa
+			// at the body tail, which also pops the FnBaseline.
 			argsCopy := make([]Value, len(args))
 			copy(argsCopy, args)
 			argsList := NewList(argsCopy)
 			if err := r.Args.Push(argsList); err != nil {
+				r.PopFnBaseline()
 				return nil, err
+			}
+
+			// Install lexical captures BEFORE named params so params
+			// shadow captures with the same name (innermost binding
+			// wins). Captures are appended to `names` so the
+			// synthesized undef tail tears them down alongside params.
+			for _, cb := range fnDefCopy.Captured {
+				InstallDef(r, cb.Name, cb.Value)
+				names = append(names, cb.Name)
 			}
 
 			unnamedCount := 0
@@ -286,8 +307,16 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			paramPatterns[i] = p.Pattern
 		}
 		declaredReturns := append([]*Type(nil), s.Returns...)
+		// Anonymous lambdas (from `afn` / `=>`) declare Returns=[Any]
+		// as a placeholder. In check mode we want the analyser's
+		// residual carrier(s) to win, so drop the declared-returns
+		// fast path for anonymous installations.
+		if fnDef.Anonymous {
+			declaredReturns = nil
+		}
 		bodyCopy := append([]Value(nil), s.Body...)
 		nameCopy := name
+		capturesCopy := fnDef.Captured
 		returnsFn := func(args []Value, _ *Registry) []Value {
 			// Pattern / record-shape check: for each declared
 			// record-typed param, verify the arg map carries each
@@ -350,7 +379,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			// the analyser's residual stack — the analyser is run purely
 			// for its side-effecting diagnostic collection. Memoisation
 			// inside AnalyseFnBody keeps recursive / repeated calls cheap.
-			stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args)
+			stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args, capturesCopy)
 			if len(declaredReturns) > 0 {
 				out := make([]Value, len(declaredReturns))
 				for i, t := range declaredReturns {
@@ -364,14 +393,23 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			return stk
 		}
 
+		// FnSig.BarrierPos uses the same sentinel as NativeSig
+		// (BarrierAllForward = -1 → default all-forward; 0 =
+		// explicit all-stack; >0 = explicit barrier). The `/s`
+		// modifier on the def name pins BarrierPos to 0 here so
+		// the fn is registered stack-only regardless of its
+		// FnSig-default.
+		barrier := s.BarrierPos
+		if isStackOnly {
+			barrier = 0
+		}
 		r.RegisterNativeFunc(NativeFunc{
-			Name:        name,
-			ForwardArgs: !isStackOnly,
+			Name: name,
 			Signatures: []NativeSig{{
 				Args:       argTypes,
 				Handler:    handler,
 				Patterns:   patterns,
-				BarrierPos: s.BarrierPos,
+				BarrierPos: barrier,
 				ReturnsFn:  returnsFn,
 			}},
 		})
@@ -915,10 +953,20 @@ func ExpandOptionalSigs(name string, sigs []FnSig) []FnSig {
 				}
 			}
 
+			// Propagate the parent sig's BarrierPos so an
+			// optional-param expansion inherits the same forward/
+			// stack convention. -1 (the AQL-source default) stays
+			// -1; an explicit barrier carries over but clamps to
+			// the reduced param count.
+			expandedBarrier := sig.BarrierPos
+			if expandedBarrier > len(reducedParams) {
+				expandedBarrier = len(reducedParams)
+			}
 			expanded = append(expanded, FnSig{
-				Params:  reducedParams,
-				Returns: sig.Returns,
-				Body:    body,
+				Params:     reducedParams,
+				Returns:    sig.Returns,
+				Body:       body,
+				BarrierPos: expandedBarrier,
 			})
 		}
 	}

@@ -11,131 +11,131 @@ import "fmt"
 // (see swap for a worked example).
 var stackNatives = []NativeFunc{
 	{
-		Name:        "dup",
-		ForwardArgs: false,
+		Name: "dup",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny},
 			Handler:   dupHandler,
-			ReturnsFn: ReturnsIdentity(0, 0),
+			ReturnsFn: ReturnsIdentity(0, 0), BarrierPos: 0,
 		}},
 	},
 	{
-		Name:        "swap",
-		ForwardArgs: false,
+		Name: "swap",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny, TAny},
 			Handler:   swapHandler,
-			ReturnsFn: ReturnsIdentity(0, 1),
+			ReturnsFn: ReturnsIdentity(0, 1), BarrierPos: 0,
 		}},
 	},
 	{
-		Name:        "drop",
-		ForwardArgs: false,
+		Name: "drop",
+
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny},
 			Handler: dropHandler,
-			Returns: []*Type{},
+			Returns: []*Type{}, BarrierPos: 0,
 		}},
 	},
 	{
-		Name:        "over",
-		ForwardArgs: false,
+		Name: "over",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny, TAny},
 			Handler:   overHandler,
-			ReturnsFn: ReturnsIdentity(1, 0, 1),
+			ReturnsFn: ReturnsIdentity(1, 0, 1), BarrierPos: 0,
 		}},
 	},
 	{
-		Name:        "rot",
-		ForwardArgs: false,
+		Name: "rot",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny, TAny, TAny},
 			Handler:   rotHandler,
-			ReturnsFn: ReturnsIdentity(1, 0, 2),
+			ReturnsFn: ReturnsIdentity(1, 0, 2), BarrierPos: 0,
 		}},
 	},
 	{
-		Name:        "nip",
-		ForwardArgs: false,
+		Name: "nip",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny, TAny},
 			Handler:   nipHandler,
-			ReturnsFn: ReturnsIdentity(0),
+			ReturnsFn: ReturnsIdentity(0), BarrierPos: 0,
 		}},
 	},
 	{
-		Name:        "tuck",
-		ForwardArgs: false,
+		Name: "tuck",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny, TAny},
 			Handler:   tuckHandler,
-			ReturnsFn: ReturnsIdentity(0, 1, 0),
+			ReturnsFn: ReturnsIdentity(0, 1, 0), BarrierPos: 0,
 		}},
 	},
 	{
-		Name:        "dup2",
-		ForwardArgs: false,
+		Name: "dup2",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny, TAny},
 			Handler:   dup2Handler,
-			ReturnsFn: ReturnsIdentity(1, 0, 1, 0),
+			ReturnsFn: ReturnsIdentity(1, 0, 1, 0), BarrierPos: 0,
 		}},
 	},
 	{
-		Name:        "swap2",
-		ForwardArgs: false,
+		Name: "swap2",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny, TAny, TAny, TAny},
 			Handler:   swap2Handler,
-			ReturnsFn: ReturnsIdentity(1, 0, 3, 2),
+			ReturnsFn: ReturnsIdentity(1, 0, 3, 2), BarrierPos: 0,
 		}},
 	},
 	{
-		Name:        "drop2",
-		ForwardArgs: false,
+		Name: "drop2",
+
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny, TAny},
 			Handler: drop2Handler,
-			Returns: []*Type{},
+			Returns: []*Type{}, BarrierPos: 0,
 		}},
 	},
 	{
-		Name:        "over2",
-		ForwardArgs: false,
+		Name: "over2",
+
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny, TAny, TAny, TAny},
 			Handler:   over2Handler,
-			ReturnsFn: ReturnsIdentity(3, 2, 1, 0, 3, 2),
+			ReturnsFn: ReturnsIdentity(3, 2, 1, 0, 3, 2), BarrierPos: 0,
 		}},
 	},
 	{
-		Name:        "depth",
-		ForwardArgs: false,
+		Name: "depth",
+
 		Signatures: []NativeSig{{
 			FullStack:        true,
 			Handler:          depthHandler,
-			CheckFullStackFn: depthCheckFullStack,
+			CheckFullStackFn: depthCheckFullStack, BarrierPos: 0,
 		}},
 	},
 	{
-		Name:        "pick",
-		ForwardArgs: false,
+		Name: "pick",
+
 		Signatures: []NativeSig{{
 			Args:             []*Type{TInteger},
 			FullStack:        true,
 			Handler:          pickHandler,
-			CheckFullStackFn: pickCheckFullStack,
+			CheckFullStackFn: pickCheckFullStack, BarrierPos: 0,
 		}},
 	},
 	{
-		Name:        "roll",
-		ForwardArgs: false,
+		Name: "roll",
+
 		Signatures: []NativeSig{{
 			Args:             []*Type{TInteger},
 			FullStack:        true,
 			Handler:          rollHandler,
-			CheckFullStackFn: rollCheckFullStack,
+			CheckFullStackFn: rollCheckFullStack, BarrierPos: 0,
 		}},
 	},
 }

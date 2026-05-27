@@ -235,7 +235,7 @@ func makeListToMatrixFnDef(wordName string, subReg *native.Registry) native.Valu
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TList}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -246,7 +246,7 @@ func makeIntIntToMatrixFnDef(wordName string, subReg *native.Registry) native.Va
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -257,7 +257,7 @@ func makeIntToMatrixFnDef(wordName string, subReg *native.Registry) native.Value
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TInteger}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -268,7 +268,7 @@ func makeIntIntNumToMatrixFnDef(wordName string, subReg *native.Registry) native
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}, {Type: native.TNumber}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -279,7 +279,7 @@ func makeMatrixToIntFnDef(wordName string, subReg *native.Registry) native.Value
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}},
 			Returns: []*native.Type{native.TInteger},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -295,7 +295,7 @@ func makeMatrixIntIntToDecFnDef(wordName string, subReg *native.Registry) native
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}, {Type: native.TInteger}, {Type: native.TInteger}},
 			Returns: []*native.Type{native.TDecimal},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -306,7 +306,7 @@ func makeMatrixIntToListFnDef(wordName string, subReg *native.Registry) native.V
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}, {Type: native.TInteger}},
 			Returns: []*native.Type{native.TList},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -317,7 +317,7 @@ func makeMatrixMatrixToMatrixFnDef(wordName string, subReg *native.Registry) nat
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}, {Type: TMatrix}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -328,7 +328,7 @@ func makeMatrixNumToMatrixFnDef(wordName string, subReg *native.Registry) native
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}, {Type: native.TNumber}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -339,7 +339,7 @@ func makeUnaryMatrixFnDef(wordName string, subReg *native.Registry) native.Value
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -350,7 +350,7 @@ func makeMatrixToListFnDef(wordName string, subReg *native.Registry) native.Valu
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}},
 			Returns: []*native.Type{native.TList},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -361,7 +361,7 @@ func makeMatrixToDecFnDef(wordName string, subReg *native.Registry) native.Value
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}},
 			Returns: []*native.Type{native.TDecimal},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -372,7 +372,7 @@ func makeListListToDecFnDef(wordName string, subReg *native.Registry) native.Val
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TList}, {Type: native.TList}},
 			Returns: []*native.Type{native.TDecimal},
-			Body:    []native.Value{native.NewWord(wordName)},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -387,8 +387,8 @@ func makeListListToDecFnDef(wordName string, subReg *native.Registry) native.Val
 var MatrixNatives = []native.NativeFunc{
 	// Construction.
 	{
-		Name:        "matrix-make",
-		ForwardArgs: true,
+		Name: "matrix-make",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TList},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -398,13 +398,13 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{tensorValue(TMatrix, td)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
 		// rows cols zeros → args[0]=cols (top), args[1]=rows (deeper)
-		Name:        "matrix-zeros",
-		ForwardArgs: true,
+		Name: "matrix-zeros",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger, native.TInteger},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -420,13 +420,13 @@ var MatrixNatives = []native.NativeFunc{
 				data := make([]float64, rows*cols)
 				return []native.Value{newMatrix(rows, cols, data)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
 		// rows cols ones → args[0]=cols (top), args[1]=rows (deeper)
-		Name:        "matrix-ones",
-		ForwardArgs: true,
+		Name: "matrix-ones",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger, native.TInteger},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -445,12 +445,12 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{newMatrix(rows, cols, data)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
-		Name:        "matrix-eye",
-		ForwardArgs: true,
+		Name: "matrix-eye",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -465,12 +465,12 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{newMatrix(n, n, data)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
-		Name:        "matrix-fill",
-		ForwardArgs: true,
+		Name: "matrix-fill",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger, native.TInteger, native.TNumber},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -493,50 +493,50 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{newMatrix(rows, cols, data)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	// Shape.
 	{
-		Name:        "matrix-rows",
-		ForwardArgs: true,
+		Name: "matrix-rows",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{TMatrix},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				m := AsTensor(args[0])
 				return []native.Value{native.NewInteger(int64(m.Rows()))}, nil
 			},
-			Returns: []*native.Type{native.TInteger},
+			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
 	{
-		Name:        "matrix-cols",
-		ForwardArgs: true,
+		Name: "matrix-cols",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{TMatrix},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				m := AsTensor(args[0])
 				return []native.Value{native.NewInteger(int64(m.Cols()))}, nil
 			},
-			Returns: []*native.Type{native.TInteger},
+			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
 	{
-		Name:        "matrix-size",
-		ForwardArgs: true,
+		Name: "matrix-size",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{TMatrix},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				m := AsTensor(args[0])
 				return []native.Value{native.NewInteger(int64(m.Rows() * m.Cols()))}, nil
 			},
-			Returns: []*native.Type{native.TList},
+			Returns: []*native.Type{native.TList}, BarrierPos: -1,
 		}},
 	},
 	// Access.
 	{
-		Name:        "matrix-at",
-		ForwardArgs: true,
+		Name: "matrix-at",
+
 		Signatures: []native.NativeSig{{
 			// Data-last: [col, row, mat]. Under §1.4 stack-top-first matching,
 			// `mat row col matrix-at` binds sig[0]=col (top), sig[1]=row,
@@ -558,12 +558,12 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewDecimal(m.Data[row*m.Cols()+col])}, nil
 			},
-			Returns: []*native.Type{native.TDecimal},
+			Returns: []*native.Type{native.TDecimal}, BarrierPos: -1,
 		}},
 	},
 	{
-		Name:        "matrix-row",
-		ForwardArgs: true,
+		Name: "matrix-row",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger, TMatrix},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -582,12 +582,12 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewList(elems)}, nil
 			},
-			Returns: []*native.Type{native.TList},
+			Returns: []*native.Type{native.TList}, BarrierPos: -1,
 		}},
 	},
 	{
-		Name:        "matrix-col",
-		ForwardArgs: true,
+		Name: "matrix-col",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger, TMatrix},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -606,13 +606,13 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewList(elems)}, nil
 			},
-			Returns: []*native.Type{native.TList},
+			Returns: []*native.Type{native.TList}, BarrierPos: -1,
 		}},
 	},
 	// Arithmetic.
 	{
-		Name:        "matrix-mat-add",
-		ForwardArgs: true,
+		Name: "matrix-mat-add",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{TMatrix, TMatrix},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -627,13 +627,13 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{newMatrix(a.Rows(), a.Cols(), data)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
 		// a b mat-sub → args[0]=b (top), args[1]=a
-		Name:        "matrix-mat-sub",
-		ForwardArgs: true,
+		Name: "matrix-mat-sub",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{TMatrix, TMatrix},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -648,13 +648,13 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{newMatrix(a.Rows(), a.Cols(), data)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
 		// a b mat-mul → args[0]=b (top), args[1]=a
-		Name:        "matrix-mat-mul",
-		ForwardArgs: true,
+		Name: "matrix-mat-mul",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{TMatrix, TMatrix},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -666,12 +666,12 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{tensorValue(TMatrix, result)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
-		Name:        "matrix-scale",
-		ForwardArgs: true,
+		Name: "matrix-scale",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TNumber, TMatrix},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -686,12 +686,12 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{newMatrix(m.Rows(), m.Cols(), data)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
-		Name:        "matrix-mat-emul",
-		ForwardArgs: true,
+		Name: "matrix-mat-emul",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{TMatrix, TMatrix},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -706,13 +706,13 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{newMatrix(a.Rows(), a.Cols(), data)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	// Transform.
 	{
-		Name:        "matrix-transpose",
-		ForwardArgs: true,
+		Name: "matrix-transpose",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{TMatrix},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -725,12 +725,12 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{newMatrix(m.Cols(), m.Rows(), data)}, nil
 			},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
-		Name:        "matrix-flatten",
-		ForwardArgs: true,
+		Name: "matrix-flatten",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{TMatrix},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -741,13 +741,13 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewList(elems)}, nil
 			},
-			Returns: []*native.Type{native.TList},
+			Returns: []*native.Type{native.TList}, BarrierPos: -1,
 		}},
 	},
 	// Aggregation.
 	{
-		Name:        "matrix-sum",
-		ForwardArgs: true,
+		Name: "matrix-sum",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{TMatrix},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -758,12 +758,12 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewDecimal(s)}, nil
 			},
-			Returns: []*native.Type{native.TDecimal},
+			Returns: []*native.Type{native.TDecimal}, BarrierPos: -1,
 		}},
 	},
 	{
-		Name:        "matrix-trace",
-		ForwardArgs: true,
+		Name: "matrix-trace",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{TMatrix},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -777,12 +777,12 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewDecimal(s)}, nil
 			},
-			Returns: []*native.Type{native.TDecimal},
+			Returns: []*native.Type{native.TDecimal}, BarrierPos: -1,
 		}},
 	},
 	{
-		Name:        "matrix-det",
-		ForwardArgs: true,
+		Name: "matrix-det",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{TMatrix},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -793,13 +793,13 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewDecimal(d)}, nil
 			},
-			Returns: []*native.Type{native.TDecimal},
+			Returns: []*native.Type{native.TDecimal}, BarrierPos: -1,
 		}},
 	},
 	// Vector.
 	{
-		Name:        "matrix-dot",
-		ForwardArgs: true,
+		Name: "matrix-dot",
+
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TList, native.TList},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -825,7 +825,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewDecimal(s)}, nil
 			},
-			Returns: []*native.Type{native.TDecimal},
+			Returns: []*native.Type{native.TDecimal}, BarrierPos: -1,
 		}},
 	},
 }

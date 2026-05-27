@@ -230,11 +230,13 @@ func TestEngineIfOnlyChosenBranchExecutes(t *testing.T) {
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				callCount++
 				return args, nil
-			},
+			}, BarrierPos: -
+
+			// if true [side-effect 1] [side-effect 2] → only then-branch runs
+			1,
 		},
 	)
 
-	// if true [side-effect 1] [side-effect 2] → only then-branch runs
 	thenList := NewList([]Value{NewWord("side-effect"), NewInteger(1)})
 	elseList := NewList([]Value{NewWord("side-effect"), NewInteger(2)})
 	result := runAQL(t, r, []Value{

@@ -33,7 +33,7 @@ Where two symbols only differ in detail (e.g. `eng.New` vs
 | Symbol | What it does |
 | --- | --- |
 | `r.RegisterNativeFunc(NativeFunc)` | Installs a word — name, sigs, handlers. Validates the word name (must be `[a-z][a-z0-9-]*`). |
-| `eng.NativeFunc` | Word descriptor — `Name`, `ForwardArgs`, `Signatures`. |
+| `eng.NativeFunc` | Word descriptor — `Name`, `Signatures`. Dispatch policy lives on each sig's `BarrierPos`. |
 | `eng.NativeSig` | One overload — `Args`, `Handler`, `Returns`, `BarrierPos`, `QuoteArgs`, `NoEvalArgs`, `FullStack`, `Patterns`, `ReturnsFn`, … |
 | `eng.Handler` | `func(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error)` |
 

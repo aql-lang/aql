@@ -269,6 +269,162 @@ across paren / nested-forward boundaries, `rearrangeForForward` lays
 the collected values out so the post-collection retry sees them
 top-down in sig order.
 
+## Lambda Syntax (`=>` / `afn`)
+
+`=>` is a parser token that lexes directly to the word `afn`. The
+source `a => b` is the same value sequence as `a afn b`. `afn` is a
+regular registered word — there is no lambda type, no separate
+runtime path, and no rewrite pass.
+
+`afn` has signature `[Any Any |]` (both args forward-eligible, both
+typed `Any`, body and sig captured via `NoEvalArgs`). The canonical
+surface form is the swap `input afn body` (i.e. `input => body`),
+mirroring the AQL `args[1] op args[0]` reading convention — afn
+collects the body as the forward arg and the input sig from the
+stack.
+
+The handler:
+- auto-wraps a non-list input into `[input]` (same convention as
+  `fn`);
+- parses params via the shared `eng.ParseFnParams` so every fn
+  abbreviation (`name:Type`, `{name:Type}`, bare type words, value
+  patterns, `?`, `|`, `__SB`) works in afn;
+- auto-wraps a non-list body into `[body]`;
+- builds a single-sig `FnDefInfo` with `Returns=[Any]` and
+  `Anonymous: true`, and returns a `Function` value indistinguishable
+  from `fn`'s output except for the flag.
+
+The `Anonymous` flag on `FnDefInfo` is read **only in check mode**.
+Anonymous lambdas have a deliberately conservative static
+`Returns=[Any]`; in check mode the dispatch path
+(`execFnDefSigStackMatch` for direct invocation,
+`InstallFnDef`'s ReturnsFn for `def name (lambda)` installations)
+runs `eng.AnalyseFnBody` against the bound carrier args and lets the
+analyser's residual stack carry the inferred return type forward.
+Normal execution doesn't read the flag; the body runs the same way
+a named fn's body does.
+
+### Syntactic gotchas
+
+- **Typed-param shorthand must be list-wrapped.** `x:Integer => body`
+  doesn't parse because `x:Integer` at top level starts an implicit
+  map and the rest collapses into the map's value position. Write
+  `[x:Integer] => body` (or `{x: Integer} => body`) instead.
+- **Single-value body rule.** afn captures one forward token as the
+  body. Multi-token bodies must wrap as `[token1 token2 …]` or
+  `(token1 token2 …)`. A bare-word body (e.g. `[x:Any] => x`) fails
+  because the engine dispatches the word as it walks past it during
+  forward collection — wrap as `[x]` to keep the word as data inside
+  the body list.
+- **`def name x => body` (no parens) doesn't work** because `def`
+  forward-collects the body as its second argument and afn forward-
+  collects a body of its own — the precedence overlaps. Always wrap:
+  `def name (x:Integer => [x mul 2])`.
+- **Single sig only.** `=>` produces exactly one `FnSig`. For
+  multi-overload fns, use the verbose `fn [[input1] [output1] [body1]
+  [input2] …]` form.
+
+## Closures and Capture
+
+AQL fns and lambdas use **implicit lexical capture**. At fn-construction
+time the engine walks the body's bare-Word references; any name that
+resolves to a binding made by an **enclosing fn** (a param or local
+def of an outer fn currently executing) is snapshotted into the
+`FnDefInfo.Captured` list. At dispatch the captured names are installed
+as defs in the per-call scope, alongside named params, so the body
+sees its captures regardless of what happened to the outer scope after
+construction. The mechanism is the standard "factories return inner
+fns that retain factory state" pattern:
+
+```
+def make-adder fn [[x:Integer] [Function] [fn [[y:Integer] [Integer] [x add y]]]]
+def add5 (make-adder 5)
+add5 3                              # → 8   (captured x=5 lives in add5)
+add5 10                             # → 15
+```
+
+The same works via `=>`:
+
+```
+def make-adder ([x:Integer] => [([y:Integer] => [x add y])])
+def add5 (make-adder 5)
+add5 3                              # → 8
+```
+
+### What gets captured
+
+| Reference resolves to… | Captured? |
+| --- | --- |
+| Enclosing-fn param | **Yes** |
+| Local def inside enclosing fn body | **Yes** |
+| Capture of a yet-further-outer fn | **Yes** (transitive) |
+| Module-level / global def | **No** (stays dynamic) |
+| Kernel word / native registration | **No** (registry lookup at call) |
+| Name unbound at construction time | **No** (forward ref → call-time lookup) |
+
+Concretely:
+
+- **Module-level dynamic.** `def x 1; def f ([y:Any] => [x add y]); def x 2; f 0` returns 2. `x` lives at module scope, the closure doesn't capture it, and the runtime lookup sees the new binding.
+- **Recursion via forward ref.** `def fact fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fact (n sub 1))]]]` works because `fact` isn't bound when its body is parsed — it's a forward reference resolved via the registry at call time. Standard recursive-fn idiom is unchanged.
+- **Inner shadows outer.** A param or capture with the same name as a module-level def shadows the module reference inside the body — innermost binding wins.
+
+### Capture semantics: shallow snapshot
+
+The captured `Value` is a struct copy. Pointer-backed payloads (`Map`,
+`Store`, `Array`, `Timer`, `Interval`) **share the underlying state**
+with the outer binding, so mutations cross the capture boundary:
+
+```
+def pair (fn [[] [List] [
+  def m {a:1}
+  [([] => [m]) ([k v] => [m set k v])]
+])
+(pair get 1) 'b' 2                  # mutate via second lambda
+(pair get 0)                        # → {a:1, b:2}   (shared OrderedMap pointer)
+```
+
+Reassignments (`def n new-value`) **don't** affect captures, because
+the capture snapshotted the prior Value.
+
+### `args` stays dynamic
+
+`args` is a registered native word bound by the per-call args-stack
+push, not by `def`. Inside a captured fn, `args.N` refers to that fn's
+own call args, not the surrounding scope's — same as `this` in JS
+lambdas. Don't expect to capture caller args; pass them explicitly.
+
+### Implementation notes
+
+- `FnDefInfo.Captured` is `[]CapturedBinding{Name, Value}`, sorted by
+  name for deterministic install order. Nil for top-level
+  constructions and inner fns whose body references only params,
+  module-globals, or forward refs.
+- Captures are computed in `eng.ComputeCaptures` (eng/go/fn_capture.go)
+  via the body walker `WalkBodyWords`, which skips quoted lists,
+  `/q`-atoms, nested `FnDefInfo` payloads (those are inner closures
+  with their own analysis), and engine markers.
+- The "enclosing-fn baseline" — the def-depth snapshot at each
+  currently-active fn entry — lives on `Registry.FnBaselines`. Pushed
+  in lockstep with the per-call args-stack push and the existing
+  body-local-def cleanup snapshot; popped by `__pa`'s handler at body
+  exit and by `CallAQL`'s inline cleanup.
+- Captures are installed via `InstallDef` BEFORE named params so
+  params shadow same-named captures. Cleanup is the existing
+  `DefCleanup` + `undef` tail in the synthesized body; capture names
+  are appended to the cleanup list at install time so they tear down
+  uniformly.
+
+### Sharp edge: 0-arg lambdas as values vs as calls
+
+An anonymous Function value sitting on the stack with **no args
+available** does NOT auto-invoke — it stays as data, which is what
+`def f ([] => [body])` relies on (def receives the Function, binds f
+to it). Once `f` is then referenced as a Word, stepWord finds the
+registered FnDef and dispatches normally (fires the 0-arg sig,
+runs body). The "anonymous value vs named call" distinction is
+gated in `execFnDefLiteral`: anonymous + no positions matched →
+treat as data; otherwise dispatch.
+
 ## Quotation System
 
 Lists are **evaluated by default**: `[1 add 2]` → `[3]`. Auto-evaluation

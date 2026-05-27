@@ -404,6 +404,56 @@ func TestParseStackSuffixBeforeDigits(t *testing.T) {
 	})
 }
 
+// --- /r ref-suffix modifier ---
+
+func TestParseRefSuffix(t *testing.T) {
+	// foo/r → ref-word, short form of (ref foo). The kernel resolves
+	// the binding at execution time without invoking it.
+	assertParse(t, "foo/r", []eng.Value{
+		eng.NewWordRef("foo"),
+	})
+}
+
+func TestParseRefSuffixInExpression(t *testing.T) {
+	// Multiple ref-words on one line round-trip independently.
+	assertParse(t, "add/r mul/r", []eng.Value{
+		eng.NewWordRef("add"),
+		eng.NewWordRef("mul"),
+	})
+}
+
+func TestParseRefAndQuoteMutuallyExclusive(t *testing.T) {
+	// /q and /r express different intents (data vs. resolved value),
+	// so combining them is a parse-level rejection — the whole token
+	// reverts to a plain word.
+	assertParse(t, "foo/qr", []eng.Value{
+		eng.NewWord("foo/qr"),
+	})
+	assertParse(t, "foo/rq", []eng.Value{
+		eng.NewWord("foo/rq"),
+	})
+}
+
+func TestParseRefIgnoresShapeModifiers(t *testing.T) {
+	// /r short-circuits dispatch, so /s, /f, and digit modifiers are
+	// accepted syntactically but have no effect on the emitted value.
+	assertParse(t, "foo/rs", []eng.Value{
+		eng.NewWordRef("foo"),
+	})
+	assertParse(t, "foo/rf", []eng.Value{
+		eng.NewWordRef("foo"),
+	})
+	assertParse(t, "foo/2r", []eng.Value{
+		eng.NewWordRef("foo"),
+	})
+}
+
+func TestParseRefDuplicateRejected(t *testing.T) {
+	assertParse(t, "foo/rr", []eng.Value{
+		eng.NewWord("foo/rr"),
+	})
+}
+
 func TestParseModifiersForwardAndStackMutuallyExclusive(t *testing.T) {
 	// f and s in the same suffix are invalid — the whole token falls
 	// back to a plain word with the slash in its name.

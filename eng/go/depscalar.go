@@ -415,14 +415,15 @@ func MakeDepScalarSig(opName string, kind DepKind) NativeSig {
 			return []Value{NewDepScalar(kind, args[0])}, nil
 		},
 		Returns:        []*Type{TScalar},
-		RunInCheckMode: true,
+		RunInCheckMode: true, BarrierPos:
+
+		// The `between` word registration is defined in
+		// lang/go/engine/native_compare.go alongside the other DepScalar
+		// constructors (lt / gt / lte / gte). BetweenHandler below is the
+		// exported algorithm primitive.
+		-1,
 	}
 }
-
-// The `between` word registration is defined in
-// lang/go/engine/native_compare.go alongside the other DepScalar
-// constructors (lt / gt / lte / gte). BetweenHandler below is the
-// exported algorithm primitive.
 
 func BetweenHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	if IsConcrete(args[2]) {

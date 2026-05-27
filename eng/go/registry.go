@@ -78,6 +78,20 @@ type Registry struct {
 	// returns, without the signal having to ride the error channel.
 	// See flowctrl.go.
 	FlowCtrl FlowCtrl
+
+	// FnBaselines is a stack of def-depth snapshots, one per currently
+	// active fn-body execution. Pushed at every body-entry point that
+	// also takes a defSnapshot for body-local-def cleanup; popped at
+	// the matching cleanup site. The top is the snapshot of the
+	// innermost enclosing fn.
+	//
+	// Closure-capture detection (fn_capture.go::computeCaptures) reads
+	// the top: a referenced name with Defs.Depth(name) > baseline[name]
+	// lives inside an enclosing fn (param or body-local) and is
+	// captured; depth == baseline[name] means it lives at module /
+	// global scope and stays dynamic. Nil baseline (empty stack) means
+	// the construction is at top-level and nothing is captured.
+	FnBaselines []map[string]int
 }
 
 // CheckState aggregates the static type-checking state that used to
@@ -119,9 +133,12 @@ type CheckState struct {
 	StepCount int
 
 	// StepBudget is the maximum total steps the check run may
-	// consume. Zero means "use DefaultCheckStepBudget". Once
-	// exceeded, the engine emits a step_budget_exceeded diagnostic
-	// and returns the current residual stack immediately.
+	// consume. The "unset" sentinel is -1 — that's what gets
+	// substituted with DefaultCheckStepBudget at run time. A real
+	// zero is honored as "abort on the first step", which is
+	// rarely useful but unambiguous. Once the running count
+	// exceeds the resolved budget, the engine emits a
+	// step_budget_exceeded diagnostic and returns immediately.
 	StepBudget int
 
 	// BudgetTripped is set to true after the first budget overshoot
@@ -220,6 +237,12 @@ func NewRegistry() (*Registry, error) {
 		ErrOutput:    os.Stderr,
 		Input:        os.Stdin,
 		SDKCache:     make(map[string]any),
+		// StepBudget uses -1 as the "unset, use the project default"
+		// sentinel. The Go zero (0) is honored as "abort on the first
+		// step" so callers who want that have an unambiguous way to
+		// express it; callers who omit the field get the default
+		// without the historical zero-as-magic overload.
+		Check: CheckState{StepBudget: -1},
 	}
 	registerKernelIdeals(r)
 	return r, nil
@@ -236,10 +259,45 @@ func (r *Registry) MarkReady() {
 	r.ready = true
 }
 
-// Register adds one or more signatures to a named function. Sigs are
-// treated as forward-arg defaults: any sig with BarrierPos still 0 has
-// it lifted to len(Args), so all positions are forward-eligible.
-// Signatures are stored in a FnDefInfo entry in DefStacks.
+// PushFnBaseline records a def-depth snapshot as the entry point of a
+// new fn-body execution. Must be paired with PopFnBaseline at the
+// matching cleanup site (same place the per-call defSnapshot's cleanup
+// runs). Closure-capture detection reads TopFnBaseline to decide which
+// names a body-Word reference belongs to an enclosing fn vs the
+// module / global scope.
+func (r *Registry) PushFnBaseline(snap map[string]int) {
+	r.FnBaselines = append(r.FnBaselines, snap)
+}
+
+// PopFnBaseline removes the innermost fn-body baseline. Safe to call on
+// an empty stack (no-op) so cleanup paths can run unconditionally.
+func (r *Registry) PopFnBaseline() {
+	n := len(r.FnBaselines)
+	if n == 0 {
+		return
+	}
+	r.FnBaselines = r.FnBaselines[:n-1]
+}
+
+// TopFnBaseline returns the innermost enclosing-fn def-depth snapshot,
+// or nil if no fn body is currently executing (top-level construction).
+func (r *Registry) TopFnBaseline() map[string]int {
+	n := len(r.FnBaselines)
+	if n == 0 {
+		return nil
+	}
+	return r.FnBaselines[n-1]
+}
+
+// Register adds one or more signatures to a named function.
+// Sentinel resolution: any sig with `BarrierPos == BarrierAllForward`
+// (-1) is lifted to `len(Args)` by upsertFnDef. Stack-only sigs must
+// set `BarrierPos: 0` explicitly. Signatures are stored in a
+// FnDefInfo entry in DefStacks.
+//
+// There is only one registration entry point now — the historical
+// `RegisterStackOnly` wrapper was retired in favor of an explicit
+// per-sig `BarrierPos`.
 func (r *Registry) Register(name string, sigs ...Signature) {
 	for _, sig := range sigs {
 		if len(sig.Args) > MaxArgs {
@@ -247,50 +305,26 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 			return
 		}
 	}
-	r.upsertFnDef(name, true, sigs...)
-	if r.ready && r.OnRegisterHook != nil {
-		r.OnRegisterHook(name)
-	}
-}
-
-// RegisterStackOnly adds signatures to a named function. Sigs are
-// taken as-is: BarrierPos stays at 0 (no forward-arg defaulting), so
-// every position is matched from the stack unless the sig itself
-// raises BarrierPos. Signatures are stored in a FnDefInfo entry in
-// DefStacks.
-func (r *Registry) RegisterStackOnly(name string, sigs ...Signature) {
-	for _, sig := range sigs {
-		if len(sig.Args) > MaxArgs {
-			r.errs = append(r.errs, fmt.Errorf("signature for %q has %d args, max is %d", name, len(sig.Args), MaxArgs))
-			return
-		}
-	}
-	r.upsertFnDef(name, false, sigs...)
+	r.upsertFnDef(name, sigs...)
 	if r.ready && r.OnRegisterHook != nil {
 		r.OnRegisterHook(name)
 	}
 }
 
 // upsertFnDef finds or creates a FnDefInfo at the top of DefStacks[name]
-// and appends the given compiled signatures. If the top entry is already a
-// FnDefInfo, its Signatures are updated in place. Otherwise a new FnDefInfo
-// is pushed.
+// and appends the given compiled signatures. If the top entry is already
+// a FnDefInfo, its Signatures are updated in place. Otherwise a new
+// FnDefInfo is pushed.
 //
-// Normalisation: every appended sig has its BarrierPos set on the way in.
-// BarrierPos is the position of the boundary marker (`|`) in the sig:
-// args before it can be forward-collected, args from it onward must come
-// from the stack (top-down). When forwardPrec is true and BarrierPos is
-// still zero, we set it to len(Args) — i.e. the boundary is at the end,
-// every arg is forward-eligible. When forwardPrec is false (old
-// stack-only registration), BarrierPos stays at zero — boundary at the
-// start, every arg from the stack.
-func (r *Registry) upsertFnDef(name string, forwardArgs bool, sigs ...Signature) {
-	// If the caller registered with forward-arg defaults, fill in
-	// BarrierPos for any sig that didn't set it explicitly. Sigs with
-	// BarrierPos already non-zero, or sigs registered via the
-	// stack-only path, are left alone.
+// Sentinel resolution: `BarrierPos == BarrierAllForward` (-1) means
+// "no `|` boundary specified — default this sig to all-forward
+// dispatch." Resolved here to `len(Args)`. Stack-only sigs MUST set
+// `BarrierPos: 0` explicitly at the call site; there is no per-word
+// "stack default" mode (the ForwardArgs flag and RegisterStackOnly
+// method were retired in the BarrierPos cleanup).
+func (r *Registry) upsertFnDef(name string, sigs ...Signature) {
 	for i := range sigs {
-		if sigs[i].BarrierPos == 0 && forwardArgs && len(sigs[i].Args) > 0 {
+		if sigs[i].BarrierPos == BarrierAllForward {
 			sigs[i].BarrierPos = len(sigs[i].Args)
 		}
 	}
@@ -315,11 +349,12 @@ func (r *Registry) upsertFnDef(name string, forwardArgs bool, sigs ...Signature)
 	r.Defs.Push(name, NewFnDef(fnDef))
 }
 
-// calcMaxForwardArgs returns the maximum number of forward args needed
-// across all signatures. Under the unified dispatch rule, the forward
-// limit is exactly sig.BarrierPos (which has been normalised at
-// registration to len(Args) for old forward-prec sigs and 0 for
-// old stack-only). This tells the engine how far ahead to scan and
+// calcMaxForwardArgs returns the maximum number of forward args
+// needed across all signatures. Under the unified dispatch rule the
+// forward limit is exactly `sig.BarrierPos`, which upsertFnDef
+// resolves at registration: `BarrierAllForward` (-1) becomes
+// `len(Args)`, `0` stays as explicit all-stack, intermediates pass
+// through. This tells the engine how far ahead to scan and
 // pre-evaluate paren expressions before signature matching.
 func calcMaxForwardArgs(sigs []Signature) int {
 	max := 0
@@ -429,11 +464,11 @@ func UnaryNumOpNative(name string, op func(float64) float64) NativeFunc {
 		return []Value{NewDecimal(op(v))}, nil
 	}
 	return NativeFunc{
-		Name:        name,
-		ForwardArgs: true,
+		Name: name,
+
 		Signatures: []NativeSig{
-			{Args: []*Type{TInteger}, Handler: handler, Returns: []*Type{TDecimal}},
-			{Args: []*Type{TDecimal}, Handler: handler, Returns: []*Type{TDecimal}},
+			{Args: []*Type{TInteger}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
+			{Args: []*Type{TDecimal}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
 		},
 	}
 }
@@ -452,12 +487,12 @@ func BinaryNumOpNative(name string, op func(a, b float64) (float64, error)) Nati
 		return []Value{NewDecimal(result)}, nil
 	}
 	return NativeFunc{
-		Name:        name,
-		ForwardArgs: true,
+		Name: name,
+
 		Signatures: []NativeSig{
-			{Args: []*Type{TDecimal, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}},
-			{Args: []*Type{TNumber, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}},
-			{Args: []*Type{TDecimal, TNumber}, Handler: handler, Returns: []*Type{TDecimal}},
+			{Args: []*Type{TDecimal, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
+			{Args: []*Type{TNumber, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
+			{Args: []*Type{TDecimal, TNumber}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
 		},
 	}
 }
@@ -476,10 +511,10 @@ func BinaryIntOpNative(name string, op func(a, b int64) (int64, error)) NativeFu
 		return []Value{NewInteger(result)}, nil
 	}
 	return NativeFunc{
-		Name:        name,
-		ForwardArgs: true,
+		Name: name,
+
 		Signatures: []NativeSig{
-			{Args: []*Type{TInteger, TInteger}, Handler: handler, Returns: []*Type{TInteger}},
+			{Args: []*Type{TInteger, TInteger}, Handler: handler, Returns: []*Type{TInteger}, BarrierPos: -1},
 		},
 	}
 }
@@ -661,31 +696,46 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 			RunInCheckMode:   sig.RunInCheckMode,
 			CheckFullStackFn: sig.CheckFullStackFn,
 		}
-		if fn.ForwardArgs {
-			r.Register(fn.Name, s)
-		} else {
-			r.RegisterStackOnly(fn.Name, s)
-		}
+		// One path. `BarrierAllForward` (-1) on a NativeSig is the
+		// "default all-forward" sentinel; `0` is explicit all-stack.
+		// upsertFnDef resolves the sentinel once.
+		r.Register(fn.Name, s)
 	}
 }
 
 // CallAQL invokes an AQL function value (FnDefInfo) with a pre-matched
 // signature and arguments in a sub-engine. The caller is responsible for
 // signature matching — use MatchFnSig to find the matching sig.
+// `captures` is the FnDefInfo's lexical-closure binding list (may be
+// nil); they're installed as defs alongside named params and torn down
+// at exit.
 //
 //	sig := MatchFnSig(fn, args)
-//	result, err := r.CallAQL(sig, args)
-func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
+//	result, err := r.CallAQL(sig, args, fnDef.Captured)
+func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding) ([]Value, error) {
 	// Build token sequence (same as InstallFnDef handler).
 	var tokens []Value
 	var names []string
+
+	// Push the fn-entry baseline before installing anything. Inner
+	// fn constructions inside this body consult TopFnBaseline to
+	// identify enclosing-fn-local bindings.
+	r.PushFnBaseline(r.Defs.Snapshot())
 
 	// Push args list onto the args stack.
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
 	argsList := NewList(argsCopy)
 	if err := r.Args.Push(argsList); err != nil {
+		r.PopFnBaseline()
 		return nil, err
+	}
+
+	// Install lexical captures first so params (installed below)
+	// shadow same-named captures — innermost binding wins.
+	for _, cb := range captures {
+		InstallDef(r, cb.Name, cb.Value)
+		names = append(names, cb.Name)
 	}
 
 	for i, p := range sig.Params {
@@ -713,14 +763,15 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 	sub := NewTop(r)
 	result, err := sub.Run(tokens)
 
-	// Cleanup: pop args stack, undef named params, then clean up
-	// any defs that were created during body execution. A Pop error
-	// here means the args stack is nil — a misconfigured registry;
-	// surface it only if sub.Run didn't already fail (the run error
-	// is more informative).
+	// Cleanup: pop args stack, undef named params + captures, then
+	// clean up any defs that were created during body execution. A
+	// Pop error here means the args stack is nil — a misconfigured
+	// registry; surface it only if sub.Run didn't already fail (the
+	// run error is more informative).
 	if _, popErr := r.Args.Pop(); popErr != nil && err == nil {
 		err = popErr
 	}
+	r.PopFnBaseline()
 	for i := len(names) - 1; i >= 0; i-- {
 		UninstallDef(r, names[i])
 	}
@@ -906,7 +957,7 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	saved := snapshotPredicateState(r)
 	defer restorePredicateState(r, saved)
 
-	result, err := r.CallAQL(&fnDef.Sigs[0], []Value{candidate})
+	result, err := r.CallAQL(&fnDef.Sigs[0], []Value{candidate}, fnDef.Captured)
 	if err != nil {
 		return Value{}, false, err
 	}

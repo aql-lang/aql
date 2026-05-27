@@ -17,8 +17,8 @@ import "fmt"
 //	[10,20] 5 getr     → ERROR (index out of bounds)
 var accessorNatives = []NativeFunc{
 	{
-		Name:        "getr",
-		ForwardArgs: true,
+		Name: "getr",
+
 		Signatures: []NativeSig{
 			// [Key | Node] — key forward, container from stack
 			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrMapHandler},

@@ -18,46 +18,52 @@ import "fmt"
 // dispatch wiring.
 var storageNatives = []NativeFunc{
 	{
-		Name:        "set",
-		ForwardArgs: true,
+		Name: "set",
+
 		Signatures: []NativeSig{
 			// Array (indexed by integer)
 			{
 				Args:    []*Type{TInteger, TAny, TArray},
 				Handler: setArrayHandler,
-				Returns: []*Type{},
+				Returns: []*Type{}, BarrierPos:
+
+				// Object
+				-1,
 			},
-			// Object
+
 			{
 				Args:    []*Type{TString, TAny, TObject},
 				Handler: setObjectHandler,
-				Returns: []*Type{},
+				Returns: []*Type{}, BarrierPos: -1,
 			},
 			{
 				Args:      []*Type{TAtom, TAny, TObject},
 				QuoteArgs: map[int]bool{0: true},
 				Handler:   setObjectHandler,
-				Returns:   []*Type{},
+				Returns:   []*Type{}, BarrierPos:
+
+				// Store (copy-on-write)
+				-1,
 			},
-			// Store (copy-on-write)
+
 			{
 				Args:      []*Type{TString, TAny, TStore},
 				Handler:   setStoreHandler,
 				Returns:   []*Type{},
-				ReturnsFn: setStoreReturnsFn,
+				ReturnsFn: setStoreReturnsFn, BarrierPos: -1,
 			},
 			{
 				Args:      []*Type{TAtom, TAny, TStore},
 				QuoteArgs: map[int]bool{0: true},
 				Handler:   setStoreHandler,
 				Returns:   []*Type{},
-				ReturnsFn: setStoreReturnsFn,
+				ReturnsFn: setStoreReturnsFn, BarrierPos: -1,
 			},
 		},
 	},
 	{
-		Name:        "get",
-		ForwardArgs: true,
+		Name: "get",
+
 		Signatures: []NativeSig{
 			// [Key | Node] — covers Map, List, Options, record-shape
 			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeHandler, Returns: []*Type{TAny}},
@@ -84,12 +90,12 @@ var storageNatives = []NativeFunc{
 		},
 	},
 	{
-		Name:        "context",
-		ForwardArgs: true,
+		Name: "context",
+
 		Signatures: []NativeSig{{
 			Args:    []*Type{},
 			Handler: contextHandler,
-			Returns: []*Type{TStore},
+			Returns: []*Type{TStore}, BarrierPos: -1,
 		}},
 	},
 }

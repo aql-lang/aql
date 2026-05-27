@@ -88,6 +88,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runPolicy(rest, homeDir, stdin, stdout, stderr)
 	case "mcp":
 		return runMCP(rest, homeDir, stdin, stdout, stderr)
+	case "exec":
+		return runExec(rest, homeDir, stdin, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "error: unknown vault mode %q\n", mode)
 		printUsage(stderr)
@@ -129,6 +131,7 @@ var modeDocs = []modeDoc{
 	{"rotate", "replace a stored secret value, optionally revoking caps"},
 	{"policy", "declaratively apply / show vault aliases and capabilities"},
 	{"mcp", "run a stdio MCP server exposing aliases as tools"},
+	{"exec", "run a command with secrets injected as env vars"},
 }
 
 // --- shared helpers --------------------------------------------------------

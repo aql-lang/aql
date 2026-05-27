@@ -75,8 +75,8 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	}
 
 	modReg.RegisterNativeFunc(NativeFunc{
-		Name:        "export",
-		ForwardArgs: true,
+		Name: "export",
+
 		Signatures: []NativeSig{
 			{
 				Args: []*Type{TAtom, TMap},
@@ -89,7 +89,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 					exportHandler(_as1, _m)
 					return nil, nil
 				},
-				Returns: []*Type{},
+				Returns: []*Type{}, BarrierPos: -1,
 			},
 			{
 				Args: []*Type{TString, TMap},
@@ -102,7 +102,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 					exportHandler(_as2, _m)
 					return nil, nil
 				},
-				Returns: []*Type{},
+				Returns: []*Type{}, BarrierPos: -1,
 			},
 		},
 	})

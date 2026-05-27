@@ -257,6 +257,29 @@ aql vault audit --json                  # raw JSONL
 aql vault policy apply policy.aql       # declaratively apply policy
 aql vault proxy                         # run local credential broker
 aql vault mcp                           # stdio MCP server over aliases
+aql vault exec gh,openai -- mycmd       # run mycmd with secrets in env
+```
+
+`aql vault exec` resolves the listed aliases against the keyring
+and spawns the given command with each value injected as an
+environment variable. The child inherits the caller's stdio and
+exit code is propagated. The secret value only ever appears in the
+child's environment block — never on the command line, never in
+the audit log.
+
+```bash
+# alias `github_token` becomes $github_token in the child
+aql vault exec github_token -- gh repo list
+
+# Remap or uppercase the env names
+aql vault exec github_token=GITHUB_TOKEN -- gh repo list
+aql vault exec --upper github_token,openai -- ./my-script.sh
+
+# Add a fixed prefix to every derived name
+aql vault exec --prefix=APP_ --upper api_key -- ./run.sh   # → $APP_API_KEY
+
+# Sanitize ambient env (keeps PATH/HOME/USER/SHELL/TERM/LANG/LC_ALL/TMPDIR)
+aql vault exec --clear-env api_key -- ./hermetic-tool
 ```
 
 Inside AQL programs the vault is accessed through the `vault`

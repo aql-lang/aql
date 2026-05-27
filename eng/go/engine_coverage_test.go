@@ -189,8 +189,8 @@ func TestMultipleSignaturesDispatch(t *testing.T) {
 	// types.
 	r, _ := NewRegistry()
 	r.RegisterNativeFunc(NativeFunc{
-		Name:        "describe",
-		ForwardArgs: true,
+		Name: "describe",
+
 		Signatures: []NativeSig{
 			{
 				Args: []*Type{TInteger},
@@ -201,7 +201,7 @@ func TestMultipleSignaturesDispatch(t *testing.T) {
 					}
 					return []Value{NewString("nonzero-int")}, nil
 				},
-				Returns: []*Type{TString},
+				Returns: []*Type{TString}, BarrierPos: -1,
 			},
 			{
 				Args: []*Type{TString},
@@ -209,7 +209,7 @@ func TestMultipleSignaturesDispatch(t *testing.T) {
 					s, _ := AsString(args[0])
 					return []Value{NewString("string:" + s)}, nil
 				},
-				Returns: []*Type{TString},
+				Returns: []*Type{TString}, BarrierPos: -1,
 			},
 		},
 	})
@@ -242,8 +242,8 @@ func TestSignatureDispatchFavoursSpecificity(t *testing.T) {
 	hits := map[string]int{}
 	r, _ := NewRegistry()
 	r.RegisterNativeFunc(NativeFunc{
-		Name:        "tag",
-		ForwardArgs: true,
+		Name: "tag",
+
 		Signatures: []NativeSig{
 			{
 				Args: []*Type{TAny},
@@ -251,7 +251,7 @@ func TestSignatureDispatchFavoursSpecificity(t *testing.T) {
 					hits["any"]++
 					return []Value{NewString("any")}, nil
 				},
-				Returns: []*Type{TString},
+				Returns: []*Type{TString}, BarrierPos: -1,
 			},
 			{
 				Args: []*Type{TInteger},
@@ -259,7 +259,7 @@ func TestSignatureDispatchFavoursSpecificity(t *testing.T) {
 					hits["int"]++
 					return []Value{NewString("int")}, nil
 				},
-				Returns: []*Type{TString},
+				Returns: []*Type{TString}, BarrierPos: -1,
 			},
 		},
 	})
@@ -290,8 +290,8 @@ func TestOutputCapture(t *testing.T) {
 	r, _ := NewRegistry()
 	r.Output = &buf
 	r.RegisterNativeFunc(NativeFunc{
-		Name:        "emit",
-		ForwardArgs: true,
+		Name: "emit",
+
 		Signatures: []NativeSig{{
 			Args: []*Type{TString},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
@@ -299,7 +299,7 @@ func TestOutputCapture(t *testing.T) {
 				reg.Output.Write([]byte(s))
 				return nil, nil
 			},
-			Returns: []*Type{},
+			Returns: []*Type{}, BarrierPos: -1,
 		}},
 	})
 	r.InitRootContext()
@@ -319,13 +319,13 @@ func TestAqlErrorPropagation(t *testing.T) {
 	// error from Run with the same code.
 	r, _ := NewRegistry()
 	r.RegisterNativeFunc(NativeFunc{
-		Name:        "bork",
-		ForwardArgs: true,
+		Name: "bork",
+
 		Signatures: []NativeSig{{
 			Args: []*Type{TInteger},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				return nil, reg.AqlError("test_failure", "always fails", "bork")
-			},
+			}, BarrierPos: -1,
 		}},
 	})
 	r.InitRootContext()

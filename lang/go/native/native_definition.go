@@ -14,8 +14,8 @@ import (
 // callers in native_definition_fn.go and native_definition_helpers.go.
 var definitionNatives = []NativeFunc{
 	{
-		Name:        "def",
-		ForwardArgs: true,
+		Name: "def",
+
 		Signatures: []NativeSig{
 			{
 				// Typed-name binding: def name:*Type body. Sorts first
@@ -26,14 +26,14 @@ var definitionNatives = []NativeFunc{
 				NoEvalMapArgs:  map[int]bool{0: true},
 				Handler:        defTypedHandler,
 				Returns:        []*Type{},
-				RunInCheckMode: true,
+				RunInCheckMode: true, BarrierPos: -1,
 			},
 			{
 				Args:           []*Type{TString, TAny},
 				NoEvalArgs:     map[int]bool{1: true},
 				Handler:        defHandler,
 				Returns:        []*Type{},
-				RunInCheckMode: true,
+				RunInCheckMode: true, BarrierPos: -1,
 			},
 			{
 				Args:           []*Type{TAtom, TAny},
@@ -41,107 +41,123 @@ var definitionNatives = []NativeFunc{
 				NoEvalArgs:     map[int]bool{1: true},
 				Handler:        defHandler,
 				Returns:        []*Type{},
-				RunInCheckMode: true,
+				RunInCheckMode: true, BarrierPos: -1,
 			},
 		},
 	},
 	{
-		Name:        "undef",
-		ForwardArgs: true,
+		Name: "undef",
+
 		Signatures: []NativeSig{
 			{
 				Args:           []*Type{TString},
 				Handler:        undefHandler,
 				Returns:        []*Type{},
-				RunInCheckMode: true,
+				RunInCheckMode: true, BarrierPos: -1,
 			},
 			{
 				Args:           []*Type{TAtom},
 				QuoteArgs:      map[int]bool{0: true},
 				Handler:        undefHandler,
 				Returns:        []*Type{},
-				RunInCheckMode: true,
+				RunInCheckMode: true, BarrierPos: -1,
 			},
 			{
 				Args:           []*Type{TString, TFnUndef},
 				Handler:        undefFnHandler,
 				Returns:        []*Type{},
-				RunInCheckMode: true,
+				RunInCheckMode: true, BarrierPos: -1,
 			},
 			{
 				Args:           []*Type{TAtom, TFnUndef},
 				QuoteArgs:      map[int]bool{0: true},
 				Handler:        undefFnHandler,
 				Returns:        []*Type{},
-				RunInCheckMode: true,
+				RunInCheckMode: true, BarrierPos: -1,
 			},
 		},
 	},
 	{
-		Name:        "var",
-		ForwardArgs: true,
+		Name: "var",
+
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    varHandler,
-			Returns:    []*Type{TAny},
+			Returns:    []*Type{TAny}, BarrierPos: -1,
 		}},
 	},
 	{
-		Name:        "fn",
-		ForwardArgs: true,
+		Name: "fn",
+
 		Signatures: []NativeSig{{
 			Args:           []*Type{TList},
 			NoEvalArgs:     map[int]bool{0: true},
 			Handler:        fnHandler,
 			Returns:        []*Type{TFunction},
-			RunInCheckMode: true,
+			RunInCheckMode: true, BarrierPos: -1,
 		}},
 	},
 	{
-		Name:        "fnsig",
-		ForwardArgs: true,
+		// `afn` is the canonical anonymous-fn constructor. The parser
+		// lexes `=>` as the word `afn` so `a => b` desugars to `a afn b`.
+		// Sig is [Any Any |] — both args forward-eligible, both typed
+		// Any. NoEvalArgs on both so the input sig isn't auto-evaluated
+		// and the body's words aren't dispatched before construction.
+		Name: "afn",
+
+		Signatures: []NativeSig{{
+			Args:           []*Type{TAny, TAny},
+			NoEvalArgs:     map[int]bool{0: true, 1: true},
+			Handler:        afnHandler,
+			Returns:        []*Type{TFunction},
+			RunInCheckMode: true, BarrierPos: -1,
+		}},
+	},
+	{
+		Name: "fnsig",
+
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    fnsigHandler,
-			Returns:    []*Type{TFnUndef},
+			Returns:    []*Type{TFnUndef}, BarrierPos: -1,
 		}},
 	},
 	{
-		Name:        "call",
-		ForwardArgs: true,
+		Name: "call",
+
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    callHandler,
-			Returns:    []*Type{TAny},
+			Returns:    []*Type{TAny}, BarrierPos: -1,
 		}},
 	},
 	{
-		Name:        "dblcall",
-		ForwardArgs: true,
+		Name: "dblcall",
+
 		Signatures: []NativeSig{{
 			Args:       []*Type{TInteger, TList},
 			NoEvalArgs: map[int]bool{1: true},
 			Handler:    dblcallHandler,
-			Returns:    []*Type{TAny},
+			Returns:    []*Type{TAny}, BarrierPos: -1,
 		}},
 	},
 	{
-		Name:        "args",
-		ForwardArgs: true,
+		Name: "args",
+
 		Signatures: []NativeSig{{
 			Handler: argsHandler,
-			Returns: []*Type{TList},
+			Returns: []*Type{TList}, BarrierPos: -1,
 		}},
 	},
 	{
-		Name:        "__pa",
-		ForwardArgs: true,
+		Name: "__pa",
+
 		Signatures: []NativeSig{{
 			Handler: popArgsHandler,
-			Returns: []*Type{},
+			Returns: []*Type{}, BarrierPos: -1,
 		}},
 	},
 }
@@ -501,6 +517,61 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	if err != nil {
 		return nil, err
 	}
+	// Compute lexical captures: per-sig walks merged into one list.
+	// Nil at top-level (no enclosing fn) — natural no-op via
+	// ComputeCaptures' baseline check.
+	perSig := make([][]CapturedBinding, len(fnDef.Sigs))
+	for i := range fnDef.Sigs {
+		perSig[i] = eng.ComputeCaptures(r, &fnDef.Sigs[i])
+	}
+	fnDef.Captured = eng.MergeCaptures(perSig)
+	return []Value{NewFunction(fnDef)}, nil
+}
+
+// afnHandler — `afn input body` constructs an anonymous Function value
+// with a single signature. Mirrors the per-triple shape of ParseFnDef
+// (eng/go/fn_def.go) for one triple: auto-wraps non-list input and body
+// into single-element lists, parses params via the shared
+// eng.ParseFnParams, and constructs the FnSig with Returns=[TAny] and
+// Anonymous=true. Static Returns is conservative so call sites that
+// inspect the type without invoking see `Any`; check-mode dispatch
+// reads the Anonymous flag and runs AnalyseFnBody for real propagation.
+func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	// `afn` is normally encountered as the swap form `input afn body`
+	// (because `input => body` desugars to this), which makes args[1]
+	// the source-left operand (input sig) and args[0] the source-right
+	// operand (body). Mirrors the AQL `args[1] op args[0]` convention.
+	inputSig := args[1]
+	body := args[0]
+
+	if !inputSig.Parent.Equal(TList) {
+		inputSig = NewList([]Value{inputSig})
+	}
+
+	params, barrierPos, err := parseFnParams(r, inputSig)
+	if err != nil {
+		return nil, r.AqlError("afn_error", err.Error(), "afn")
+	}
+
+	var bodyElems []Value
+	if body.Parent.Equal(TList) && body.Data != nil {
+		lst, _ := AsList(body)
+		bodyElems = lst.Slice()
+	} else {
+		bodyElems = []Value{body}
+	}
+
+	sig := FnSig{
+		Params:     params,
+		Returns:    []*Type{TAny},
+		Body:       bodyElems,
+		BarrierPos: barrierPos,
+	}
+	fnDef := FnDefInfo{
+		Sigs:      []FnSig{sig},
+		Anonymous: true,
+		Captured:  eng.ComputeCaptures(r, &sig),
+	}
 	return []Value{NewFunction(fnDef)}, nil
 }
 
@@ -604,5 +675,11 @@ func popArgsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	if _, err := r.Args.Pop(); err != nil {
 		return nil, err
 	}
+	// FnBaseline is pushed in lockstep with the args list at every fn
+	// entry that uses the __pa cleanup convention (InstallFnDef handler
+	// + execFnDefSig body splice). Pop here so closure-capture
+	// detection on subsequent fn constructions sees the correct
+	// enclosing-fn baseline.
+	r.PopFnBaseline()
 	return nil, nil
 }

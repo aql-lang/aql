@@ -13,10 +13,10 @@ constructor at the end.
 
 ```go
 r.RegisterNativeFunc(eng.NativeFunc{
-    Name:        "add",
-    ForwardArgs: true,
+    Name: "add",
     Signatures: []eng.NativeSig{{
-        Args: []*eng.Type{eng.TNumber, eng.TNumber},
+        Args:       []*eng.Type{eng.TNumber, eng.TNumber},
+        BarrierPos: eng.BarrierAllForward, // -1: default all-forward dispatch
         Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
             a, _ := eng.AsNumber(args[0])  // float64 regardless of input subtype
             b, _ := eng.AsNumber(args[1])
@@ -41,8 +41,8 @@ that lets `add`/`sub`/`mul`/`mod`/`pow` all share this skeleton.
 ## How to register a 0-arg constant word
 
 A "constant" is a NativeFunc whose handler ignores `args` and
-returns one value. No `ForwardArgs`, no `Args` — the dispatcher
-just runs the handler when the word appears.
+returns one value. No `Args` — the dispatcher just runs the
+handler when the word appears.
 
 ```go
 r.RegisterNativeFunc(eng.NativeFunc{

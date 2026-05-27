@@ -29,18 +29,18 @@ import (
 // the existing `array.sort` semantics — sort stays total even when
 // the lattice walk doesn't find a Comparer for the pair.
 var sortNative = NativeFunc{
-	Name:        "sort",
-	ForwardArgs: true,
+	Name: "sort",
+
 	Signatures: []NativeSig{
 		{
 			Args:    []*Type{TList},
 			Handler: sortListHandler,
-			Returns: []*Type{TList},
+			Returns: []*Type{TList}, BarrierPos: -1,
 		},
 		{
 			Args:    []*Type{TMap},
 			Handler: sortMapHandler,
-			Returns: []*Type{TMap},
+			Returns: []*Type{TMap}, BarrierPos: -1,
 		},
 	},
 }

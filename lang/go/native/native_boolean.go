@@ -12,32 +12,32 @@ package native
 // names, signatures, and dispatch wiring.
 var booleanNatives = []NativeFunc{
 	{
-		Name:        "not",
-		ForwardArgs: true,
+		Name: "not",
+
 		Signatures: []NativeSig{
-			{Args: []*Type{TBoolean}, Handler: notHandler, Returns: []*Type{TBoolean}},
-			{Args: []*Type{TAny}, Handler: notHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TBoolean}, Handler: notHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
+			{Args: []*Type{TAny}, Handler: notHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "and",
-		ForwardArgs: true,
+		Name: "and",
+
 		Signatures: []NativeSig{
-			{Args: []*Type{TBoolean, TBoolean}, Handler: andHandler, Returns: []*Type{TBoolean}},
-			{Args: []*Type{TAny, TAny}, Handler: andHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TBoolean, TBoolean}, Handler: andHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
+			{Args: []*Type{TAny, TAny}, Handler: andHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "or",
-		ForwardArgs: true,
+		Name: "or",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TBoolean, TBoolean}, BarrierPos: 1, Handler: orHandler, Returns: []*Type{TBoolean}},
 			{Args: []*Type{TAny, TAny}, BarrierPos: 1, Handler: orHandler, Returns: []*Type{TAny}},
 		},
 	},
 	{
-		Name:        "otherwise",
-		ForwardArgs: true,
+		Name: "otherwise",
+
 		Signatures: []NativeSig{
 			{Args: []*Type{TAny, TAny}, BarrierPos: 1, Handler: otherwiseHandler, Returns: []*Type{TAny}},
 		},
@@ -81,11 +81,11 @@ func boolBinaryNative(name string, fn func(a, b bool) bool) NativeFunc {
 		return []Value{NewBoolean(fn(a, b))}, nil
 	}
 	return NativeFunc{
-		Name:        name,
-		ForwardArgs: true,
+		Name: name,
+
 		Signatures: []NativeSig{
-			{Args: []*Type{TBoolean, TBoolean}, Handler: handler, Returns: []*Type{TBoolean}},
-			{Args: []*Type{TAny, TAny}, Handler: handler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TBoolean, TBoolean}, Handler: handler, Returns: []*Type{TBoolean}, BarrierPos: -1},
+			{Args: []*Type{TAny, TAny}, Handler: handler, Returns: []*Type{TBoolean}, BarrierPos: -1},
 		},
 	}
 }

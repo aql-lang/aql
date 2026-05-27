@@ -983,7 +983,7 @@ func TestEngineCoreUnknownWordErrors(t *testing.T) {
 func TestEngineCoreFnSigMatchesSpecBasic(t *testing.T) {
 	sig := FnSig{
 		Params:  []FnParam{{Name: "x", Type: TNumber}},
-		Returns: []*Type{TNumber},
+		Returns: []*Type{TNumber}, BarrierPos: -1,
 	}
 	spec := FnSigSpec{
 		Params:  []FnParam{{Type: TNumber}},
@@ -996,7 +996,7 @@ func TestEngineCoreFnSigMatchesSpecBasic(t *testing.T) {
 
 func TestEngineCoreFnSigMatchesSpecDiffParamCount(t *testing.T) {
 	sig := FnSig{
-		Params: []FnParam{{Type: TNumber}},
+		Params: []FnParam{{Type: TNumber}}, BarrierPos: -1,
 	}
 	spec := FnSigSpec{
 		Params: []FnParam{{Type: TNumber}, {Type: TString}},
@@ -1009,7 +1009,7 @@ func TestEngineCoreFnSigMatchesSpecDiffParamCount(t *testing.T) {
 func TestEngineCoreFnSigMatchesSpecDiffReturnCount(t *testing.T) {
 	sig := FnSig{
 		Params:  []FnParam{{Type: TNumber}},
-		Returns: []*Type{TNumber},
+		Returns: []*Type{TNumber}, BarrierPos: -1,
 	}
 	spec := FnSigSpec{
 		Params:  []FnParam{{Type: TNumber}},
@@ -1023,7 +1023,7 @@ func TestEngineCoreFnSigMatchesSpecDiffReturnCount(t *testing.T) {
 func TestEngineCoreFnSigMatchesSpecDiffReturnType(t *testing.T) {
 	sig := FnSig{
 		Params:  []FnParam{{Type: TNumber}},
-		Returns: []*Type{TNumber},
+		Returns: []*Type{TNumber}, BarrierPos: -1,
 	}
 	spec := FnSigSpec{
 		Params:  []FnParam{{Type: TNumber}},
@@ -1036,7 +1036,7 @@ func TestEngineCoreFnSigMatchesSpecDiffReturnType(t *testing.T) {
 
 func TestEngineCoreFnSigMatchesSpecDiffParamType(t *testing.T) {
 	sig := FnSig{
-		Params: []FnParam{{Type: TNumber}},
+		Params: []FnParam{{Type: TNumber}}, BarrierPos: -1,
 	}
 	spec := FnSigSpec{
 		Params: []FnParam{{Type: TString}},

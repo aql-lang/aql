@@ -451,8 +451,12 @@ func CompareSignatures(a, b *Signature) int {
 		}
 		return -c
 	}
-	aBarrier := a.BarrierPos != 0
-	bBarrier := b.BarrierPos != 0
+	// "Has a piped barrier" means an intermediate position — neither
+	// all-stack (0) nor all-forward (len(Args)). The two extremes are
+	// the default shapes and don't represent an additional dispatch
+	// constraint worth sorting on.
+	aBarrier := a.BarrierPos > 0 && a.BarrierPos < a.TotalArgs()
+	bBarrier := b.BarrierPos > 0 && b.BarrierPos < b.TotalArgs()
 	if aBarrier && !bBarrier {
 		return -1
 	}

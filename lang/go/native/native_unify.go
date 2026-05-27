@@ -14,12 +14,12 @@ import "github.com/aql-lang/aql/eng/go"
 // stack shape.
 var unifyNatives = []NativeFunc{
 	{
-		Name:        "unify",
-		ForwardArgs: true,
+		Name: "unify",
+
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny, TAny},
 			Handler: unifyHandler,
-			Returns: []*Type{TAny, TBoolean},
+			Returns: []*Type{TAny, TBoolean}, BarrierPos: -1,
 		}},
 	},
 }

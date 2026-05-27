@@ -1,12 +1,22 @@
 package eng
 
-// NativeFunc describes a built-in native function with its name, signatures,
-// and configuration. All predefined words (core and extension) use this
-// type for registration.
+// NativeFunc describes a built-in native function with its name and
+// signatures. All predefined words (core and extension) use this type
+// for registration.
+//
+// There is no "ForwardArgs" / "stack-only" flag at this level — that
+// distinction lives entirely in each `NativeSig.BarrierPos`:
+//
+//   - `BarrierPos: BarrierAllForward` (-1)  — default all-forward;
+//     resolved to `len(Args)` at registration. The common case for
+//     normal forward-collecting words.
+//   - `BarrierPos: 0`  — explicit all-stack dispatch. Use for words
+//     that take args strictly off the prefix stack (`drop`, `dup`,
+//     stack manipulators).
+//   - `BarrierPos: N`  — explicit barrier at position N (`|`).
 type NativeFunc struct {
-	Name        string
-	ForwardArgs bool
-	Signatures  []NativeSig
+	Name       string
+	Signatures []NativeSig
 }
 
 // NativeSig describes one overload of a native function.

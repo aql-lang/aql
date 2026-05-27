@@ -37,17 +37,19 @@ func RegisterMirrorTestWord(r *Registry, name string, arity int) {
 	}
 	r.Register(name, Signature{
 		Args:    args,
-		Handler: handler,
+		Handler: handler, BarrierPos:
+
+		// mirrorForms generates all N+1 equivalent mirror forms for an N-arg word.
+		// For N=3 with word "f" and args [a,b,c]:
+		//
+		//	f a b c   (0 prefix, 3 forward)
+		//	c f a b   (1 prefix, 2 forward)
+		//	c b f a   (2 prefix, 1 forward)
+		//	c b a f   (3 prefix, 0 forward)
+		-1,
 	})
 }
 
-// mirrorForms generates all N+1 equivalent mirror forms for an N-arg word.
-// For N=3 with word "f" and args [a,b,c]:
-//
-//	f a b c   (0 prefix, 3 forward)
-//	c f a b   (1 prefix, 2 forward)
-//	c b f a   (2 prefix, 1 forward)
-//	c b a f   (3 prefix, 0 forward)
 func mirrorForms(word string, args []Value) []struct {
 	label string
 	input []Value

@@ -29,20 +29,23 @@ import (
 // accepts new capability slots without losing previously installed
 // ones.
 var behaveNative = NativeFunc{
-	Name:        "behave",
-	ForwardArgs: true,
+	Name: "behave",
+
 	Signatures: []NativeSig{
 		{
 			Args:      []*Type{TAtom, TFunction},
 			QuoteArgs: map[int]bool{0: true},
 			Handler:   behaveHandler,
-			Returns:   []*Type{},
+			Returns:   []*Type{}, BarrierPos:
+
+			// String form for the behavior name (`behave "compare" fn […]`).
+			-1,
 		},
-		// String form for the behavior name (`behave "compare" fn […]`).
+
 		{
 			Args:    []*Type{TString, TFunction},
 			Handler: behaveHandler,
-			Returns: []*Type{},
+			Returns: []*Type{}, BarrierPos: -1,
 		},
 	},
 }
@@ -61,8 +64,8 @@ var behaveNative = NativeFunc{
 // so tests and downstream pipelines can observe the Node/Scalar
 // directly.
 var nodifyNative = NativeFunc{
-	Name:        "nodify",
-	ForwardArgs: true,
+	Name: "nodify",
+
 	Signatures: []NativeSig{{
 		Args: []*Type{TAny},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -72,12 +75,14 @@ var nodifyNative = NativeFunc{
 			}
 			return []Value{out}, nil
 		},
-		Returns: []*Type{TAny},
+		Returns: []*Type{TAny}, BarrierPos:
+
+		// behaviorEntry describes how `behave` should validate the supplied
+		// fn and where the resulting body lives on the target Type's wrapper.
+		-1,
 	}},
 }
 
-// behaviorEntry describes how `behave` should validate the supplied
-// fn and where the resulting body lives on the target Type's wrapper.
 type behaviorEntry struct {
 	// validate inspects the fn's first sig and returns the target
 	// *Type the body should be attached to, or an error if the shape
