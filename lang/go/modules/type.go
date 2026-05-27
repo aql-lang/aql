@@ -153,13 +153,31 @@ func typeBodyArg(v native.Value, opName string, r *native.Registry) (native.Valu
 	return v, nil
 }
 
-func typeBodiesEqual(a, b native.Value) bool {
-	if a.Data == nil && !a.Carrier && b.Data == nil && !b.Carrier {
-		aNode := &a
-		bNode := &b
-		return aNode.Equal(bNode)
+// altSubtypes reports whether alt is target itself or one of its
+// subtypes. Used by type.exclude / type.extract to give the
+// TypeScript-style `Exclude<T,U>` / `Extract<T,U>` semantics where
+// removing/keeping `Number` from a disjunct affects every numeric
+// subtype (Integer, Decimal). Walks the ancestry chain by `*Type.ID`
+// so non-canonical pointers from `latticeNode` still match.
+//
+// Structural type bodies (record/disjunct/object) fall back to
+// strict equality — set-algebra over those is reserved for future
+// work.
+func altSubtypes(alt, target native.Value) bool {
+	if alt.Data == nil && !alt.Carrier && target.Data == nil && !target.Carrier {
+		aNode := &alt
+		tNode := &target
+		for d := aNode; d != nil; d = d.Parent {
+			if d.ID != "" && tNode.ID != "" && d.ID == tNode.ID {
+				return true
+			}
+			if d == tNode {
+				return true
+			}
+		}
+		return false
 	}
-	return native.ValuesEqual(a, b)
+	return native.ValuesEqual(alt, target)
 }
 
 // (typedTypeList helper removed: returning regular Lists from the
@@ -290,7 +308,10 @@ var typeModuleNatives = []native.NativeFunc{
 				for _, alt := range targetAlts {
 					drop := false
 					for _, rm := range removeSet {
-						if typeBodiesEqual(alt, rm) {
+						// Drop alt if it equals or is a subtype of any
+						// remove-set member — matches TypeScript's
+						// `Exclude<T,U>` "remove subtypes of U" semantic.
+						if altSubtypes(alt, rm) {
 							drop = true
 							break
 						}
@@ -331,7 +352,10 @@ var typeModuleNatives = []native.NativeFunc{
 				kept := make([]native.Value, 0, len(targetAlts))
 				for _, alt := range targetAlts {
 					for _, k := range keepSet {
-						if typeBodiesEqual(alt, k) {
+						// Keep alt if it equals or is a subtype of any
+						// keep-set member — matches TypeScript's
+						// `Extract<T,U>` "keep subtypes of U" semantic.
+						if altSubtypes(alt, k) {
 							kept = append(kept, alt)
 							break
 						}

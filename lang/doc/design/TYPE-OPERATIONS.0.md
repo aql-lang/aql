@@ -63,8 +63,8 @@ Loaded via `"aql:type" import`; words accessed as `type.<verb>`.
 
 | Word | Signature | Semantics | Inspiration |
 |---|---|---|---|
-| `type.exclude` | `Any Any -> Any` | set difference: remove alternatives from a disjunct. `(String tor None) type.exclude None -> String`. Result is `Never` if everything is excluded; input unchanged if nothing matches. | TypeScript `Exclude<T,U>` |
-| `type.extract` | `Any Any -> Any` | retain only the intersecting alternatives. `(String tor Number tor Boolean) type.extract Number -> Number` | TypeScript `Extract<T,U>` |
+| `type.exclude` | `Any Any -> Any` | set difference with **subtype semantics**: an alternative is removed when it equals OR subtypes any member of the remove-set. So `(Integer tor String) type.exclude Number -> String` (Integer is a subtype of Number, so it's removed). `(String tor None) type.exclude None -> String`. Result is `Never` if everything is excluded. | TypeScript `Exclude<T,U>` |
+| `type.extract` | `Any Any -> Any` | intersection with **subtype semantics**: an alternative is kept when it equals OR subtypes any member of the keep-set. So `(Integer tor Decimal tor String) type.extract Number -> Integer\|Decimal`. `(String tor Number tor Boolean) type.extract Number -> Number`. | TypeScript `Extract<T,U>` |
 
 ### Record / Object surgery
 

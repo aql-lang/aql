@@ -79,6 +79,11 @@ func TestTypeExclude(t *testing.T) {
 		{`(String tor Number) type.exclude (String tor Number)`, "Never"},
 		{`Integer type.exclude String`, "Integer"},
 		{`Integer type.exclude Integer`, "Never"},
+		// Subtype semantics (TypeScript `Exclude<T,U>`): removing a
+		// supertype drops every subtype that participates.
+		{`(Integer tor String) type.exclude Number`, "String"},
+		{`(Integer tor Decimal tor Boolean) type.exclude Number`, "Boolean"},
+		{`Integer type.exclude Number`, "Never"},
 	}
 	for _, c := range cases {
 		got := runType(t, c.expr)
@@ -97,6 +102,11 @@ func TestTypeExtract(t *testing.T) {
 		{`(String tor None) type.extract None`, "None"},
 		{`(String tor Number) type.extract Boolean`, "Never"},
 		{`Integer type.extract Integer`, "Integer"},
+		// Subtype semantics (TypeScript `Extract<T,U>`): extracting a
+		// supertype keeps every numeric subtype in the disjunct.
+		{`(Integer tor Decimal tor String) type.extract Number`, "Integer|Decimal"},
+		{`(Integer tor String) type.extract Number`, "Integer"},
+		{`Integer type.extract Number`, "Integer"},
 	}
 	for _, c := range cases {
 		got := runType(t, c.expr)
