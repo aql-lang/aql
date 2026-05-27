@@ -153,15 +153,23 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 
 // runInSubEngine builds a fresh registry under pol, parses src via
 // the parent's parse func, runs it, and returns the last residual
-// stack value to the parent. The parent's policy is consulted for
-// attenuation: pol must be a subset.
+// stack value to the parent. The parent's policy is composed with
+// pol so every check in the sub-engine must pass BOTH layers — the
+// sub-engine cannot grant anything the parent denies, regardless
+// of how pol's rules are written.
+//
+// This replaces the earlier rule-comparison RequireSubset check,
+// which only inspected scope defaults and could be bypassed by a
+// parent policy with default-allow plus a specific deny rule (see
+// PR #99 review feedback). Composing structurally is sound because
+// it routes every dispatch through both policies — there is no
+// path for a child rule to lift a parent deny.
 func runInSubEngine(parent *native.Registry, src string, pol policy.Policy) ([]native.Value, error) {
+	effective := pol
 	if parentPol := native.HostPolicy(parent); parentPol != nil {
-		if err := policy.RequireSubset(pol, parentPol); err != nil {
-			return nil, err
-		}
+		effective = policy.Compose(parentPol, pol)
 	}
-	subReg, err := native.DefaultRegistryWithPolicy(pol)
+	subReg, err := native.DefaultRegistryWithPolicy(effective)
 	if err != nil {
 		return nil, fmt.Errorf("vm: init sub-engine: %w", err)
 	}

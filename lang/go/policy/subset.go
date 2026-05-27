@@ -1,25 +1,25 @@
 package policy
 
 // RequireSubset returns nil iff child grants no more than parent.
-// Specifically:
 //
-//   - For every known capability scope: if parent has install=false,
-//     child must also have install=false.
-//   - For every known global op: if parent denies it, child must
-//     also deny it.
-//   - For every scope's words block: every (op, args) that parent
-//     denies, child must also deny. We approximate this with a
-//     conservative rule: child's default must be at least as
-//     restrictive as parent's; child cannot lift a parent rule's
-//     deny by adding a later allow rule.
+// DEPRECATED — UNSOUND. This check only compares scope defaults
+// and install flags; it does NOT account for per-rule denies. A
+// parent with default-allow plus a specific deny rule (e.g.
+// fileops default-allow with `deny: read /secret/*`) is treated
+// as if the child may allow everything in that scope. The child
+// can omit the rule and the sub-engine gains access the parent
+// explicitly blocked. See PR #99 review (chatgpt-codex-connector,
+// 2026-05-27) for the original report.
 //
-// The conservative approximation rejects some technically-safe
-// child policies, but never accepts an unsafe one — false
-// positives only. That's the correct bias for attenuation.
+// The correct replacement is policy.Compose(parent, child), used by
+// the aql:vm module: a composed policy routes every check through
+// BOTH layers, so the parent's denies always apply regardless of
+// the child's rule structure. There is no way for a child rule to
+// lift a parent deny because the parent gets to vote independently.
 //
-// Used by the aql:vm module to validate sub-engine policies before
-// construction. Implemented in the policy package so eng/native
-// don't need to know about it.
+// This function remains exported for backwards compatibility but
+// callers should migrate to Compose. New callers should NOT use
+// RequireSubset for attenuation enforcement.
 func RequireSubset(child, parent Policy) error {
 	if parent == nil {
 		// No parent policy = parent allows everything. Anything goes.

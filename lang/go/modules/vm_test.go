@@ -85,9 +85,10 @@ func TestVMRunWithExplicitPolicy(t *testing.T) {
 	}
 }
 
-func TestVMAttenuationRejectsBroaderChild(t *testing.T) {
+func TestVMAttenuationParentDenyWinsOnGlobal(t *testing.T) {
 	// Parent denies disk.write globally; child policy lifts the cap
-	// (default-allow global). Attenuation must reject the child.
+	// (default-allow global). Composition enforces: parent's deny
+	// always wins, regardless of how the child is structured.
 	parentPol, err := policy.LoadInline(`{
 		name: "parent-deny-write"
 		scopes: {
@@ -109,17 +110,65 @@ func TestVMAttenuationRejectsBroaderChild(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := newAQL(t, parentPol)
+	// Sub-engine: tries to write a file. Child policy is fully
+	// permissive (default-allow everything) but the parent's
+	// global.disk.write deny still applies via the composed wrapper.
 	_, err = a.Run(`
 		("aql:vm" import)
-		{ scopes: { global: { words: { default: "allow" } } } }
-		"1 add 2"
+		{ scopes: { global: { words: { default: "allow" } }, fileops: { words: { default: "allow" } } } }
+		"'data' write '/tmp/aql-attenuation-test'"
 		vm.run-with
 	`)
 	if err == nil {
-		t.Fatal("expected attenuation error")
+		t.Fatal("expected parent's global.disk.write deny to apply in sub-engine")
 	}
-	if !strings.Contains(err.Error(), "attenuation") && !strings.Contains(err.Error(), "exceeds parent") {
-		t.Errorf("expected attenuation/exceeds parent error: %v", err)
+	if !strings.Contains(err.Error(), "disk.write") && !strings.Contains(err.Error(), "denied") {
+		t.Errorf("expected disk.write denial bubbled from parent: %v", err)
+	}
+}
+
+func TestVMAttenuationParentDenyRuleSurvives(t *testing.T) {
+	// Parent has default-allow but a SPECIFIC deny rule for
+	// reading /secret/*. Child has default-allow with no rules.
+	// The composed policy must still deny /secret/* reads — this
+	// is the case the earlier RequireSubset failed to catch
+	// (PR #99 review).
+	parentPol, err := policy.LoadInline(`{
+		name: "parent-secret-deny"
+		scopes: {
+			global: { words: { default: "allow" } }
+			modules: {
+				words: {
+					default: "deny"
+					rules: [{ allow: ["import"], where: { module: ["aql:vm"] } }]
+				}
+			}
+			fileops: {
+				words: {
+					default: "allow"
+					rules: [{ deny: ["read"], where: { path: ["/secret/**"] } }]
+				}
+			}
+		}
+	}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := newAQL(t, parentPol)
+	// Child opens fileops with no rules — under the old subset
+	// check this slipped through. With Compose, parent's deny rule
+	// is consulted on every check and the read is refused.
+	_, err = a.Run(`
+		("aql:vm" import)
+		{ scopes: { fileops: { words: { default: "allow" } } } }
+		"read '/secret/credentials.txt'"
+		vm.run-with
+	`)
+	if err == nil {
+		t.Fatal("expected parent's path-specific deny to survive composition")
+	}
+	if !strings.Contains(err.Error(), "denied") && !strings.Contains(err.Error(), "/secret") {
+		t.Errorf("expected /secret deny bubbled from parent: %v", err)
 	}
 }
 

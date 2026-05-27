@@ -89,8 +89,15 @@ func TestComputeUninstallsCapabilities(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if HostFileOps(r) != nil {
-		t.Error("compute should uninstall fileops")
+	// Uninstalled fileops returns the notInstalled stub (not nil)
+	// so consumer sites that don't nil-check don't crash. Calling
+	// the stub's methods produces a capability_not_installed error.
+	ops := HostFileOps(r)
+	if _, ok := ops.(notInstalledFileOps); !ok {
+		t.Errorf("compute should leave HostFileOps as notInstalledFileOps; got %T", ops)
+	}
+	if err := ops.WriteFile("/tmp/x", []byte("hi"), 0644); err == nil {
+		t.Error("stub WriteFile should return capability_not_installed")
 	}
 	if HostSQLite(r) != nil {
 		t.Error("compute should uninstall sqlite")
