@@ -58,15 +58,19 @@ func BuildTypeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("arityof", makeTypeUnaryFnDef("arityof", subReg, native.TInteger))
 
 	// Binary Any Any -> Type (both args TAny — the wrapper accepts
-	// either dispatch order; the handler validates).
-	for _, name := range []string{"exclude", "extract", "merge", "lca"} {
-		exports.Set(name, makeTypeBinaryAnyFnDef(name, subReg, native.TType))
-	}
+	// either dispatch order; the handler validates). `merge` is also
+	// a built-in word, so the inner native is registered as `_t_merge`
+	// to avoid the dispatch path hitting the built-in via reg.Lookup.
+	exports.Set("exclude", makeTypeBinaryAnyFnDef("exclude", "exclude", subReg, native.TType))
+	exports.Set("extract", makeTypeBinaryAnyFnDef("extract", "extract", subReg, native.TType))
+	exports.Set("merge", makeTypeBinaryAnyFnDef("_t_merge", "_t_merge", subReg, native.TType))
+	exports.Set("lca", makeTypeBinaryAnyFnDef("lca", "lca", subReg, native.TType))
 
 	// Any List -> Type (pick/omit). Surface form: `record op [list]`.
-	for _, name := range []string{"pick", "omit"} {
-		exports.Set(name, makeTypePickOmitFnDef(name, subReg))
-	}
+	// `pick` is a built-in stack op, so the inner is registered as
+	// `_t_pick` to avoid the clash.
+	exports.Set("pick", makeTypePickOmitFnDef("_t_pick", subReg))
+	exports.Set("omit", makeTypePickOmitFnDef("omit", subReg))
 
 	// Any Atom -> Type (brand). Surface form: `BaseType brand tag/q`.
 	exports.Set("brand", makeTypeBrandFnDef("brand", subReg))
@@ -93,46 +97,47 @@ func makeTypeUnaryFnDef(wordName string, subReg *native.Registry, returnType *na
 	})
 }
 
-func makeTypeBinaryAnyFnDef(wordName string, subReg *native.Registry, returnType *native.Type) native.Value {
+// makeTypeBinaryAnyFnDef takes both a Name (used for reg.Lookup) and
+// a bodyWord (used to invoke the inner native). They differ when the
+// export name clashes with a built-in word — see the `merge` case
+// where the inner native is registered as `_t_merge`.
+func makeTypeBinaryAnyFnDef(name, bodyWord string, subReg *native.Registry, returnType *native.Type) native.Value {
+	return native.NewFnDef(native.FnDefInfo{
+		Name: name,
+		Sigs: []native.FnSig{{
+			Params:  []native.FnParam{{Type: native.TAny}, {Type: native.TAny}},
+			Returns: []*native.Type{returnType},
+			Body:    []native.Value{native.NewWord(bodyWord)}, BarrierPos: -1,
+		}},
+		Registry: subReg,
+	})
+}
+
+// makeTypePickOmitFnDef wraps pick/omit. Uses [TAny, TAny] BarrierPos=-1
+// like the other binary wrappers so post-forward-collection dispatch
+// matches uniformly. Handler validates types.
+func makeTypePickOmitFnDef(wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{
 		Name: wordName,
 		Sigs: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TAny}, {Type: native.TAny}},
-			Returns: []*native.Type{returnType},
+			Returns: []*native.Type{native.TType},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
 }
 
-// makeTypePickOmitFnDef constrains sig[0] to TList so the forward
-// arg disambiguates: `record op [list]` dispatches with [list]→sig[0]
-// and record→sig[1]. The wrapper body pushes [list, record] onto
-// the stack; the inner native reads args[0]=record (top), args[1]=list.
-func makeTypePickOmitFnDef(wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{
-		Name: wordName,
-		Sigs: []native.FnSig{{
-			Params:     []native.FnParam{{Type: native.TList}, {Type: native.TAny}},
-			Returns:    []*native.Type{native.TType},
-			BarrierPos: 1,
-			Body:       []native.Value{native.NewWord(wordName)},
-		}},
-		Registry: subReg,
-	})
-}
-
-// makeTypeBrandFnDef constrains sig[0] to TAtom so the forward tag
-// disambiguates: `BaseType brand tag/q` dispatches with tag→sig[0]
-// and BaseType→sig[1]. Inner reads args[0]=BaseType (top), args[1]=tag.
+// makeTypeBrandFnDef wraps brand. Same [TAny, TAny] BarrierPos=-1 shape
+// as the other binary wrappers; handler validates the tag-atom and
+// base-type arguments.
 func makeTypeBrandFnDef(wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{
 		Name: wordName,
 		Sigs: []native.FnSig{{
-			Params:     []native.FnParam{{Type: native.TAtom}, {Type: native.TAny}},
-			Returns:    []*native.Type{native.TType},
-			BarrierPos: 1,
-			Body:       []native.Value{native.NewWord(wordName)},
+			Params:  []native.FnParam{{Type: native.TAny}, {Type: native.TAny}},
+			Returns: []*native.Type{native.TType},
+			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -157,9 +162,9 @@ func typeBodiesEqual(a, b native.Value) bool {
 	return native.ValuesEqual(a, b)
 }
 
-func typedTypeList(elems []native.Value) native.Value {
-	return native.NewTypedListWithElements(native.NewTypeLiteral(native.TType), elems)
-}
+// (typedTypeList helper removed: returning regular Lists from the
+// module words renders cleanly; the [:Type] static-contract claim is
+// documented but not enforced at the runtime value level.)
 
 func fieldsOf(v native.Value) *native.OrderedMap {
 	switch {
@@ -258,13 +263,10 @@ func fieldNames(list native.Value, opName string, r *native.Registry) ([]string,
 
 // ---- Inner native handlers ----
 //
-// All binary handlers below read args following the body-call
-// convention: args[0] = the surface LEFT operand (top of stack at
-// body entry), args[1] = the surface RIGHT operand (deeper on
-// stack). This is the *reverse* of the direct-dispatch swap-form
-// convention (handler reads args[1] OP args[0]) — because the FnDef
-// wrapper pushes its args[0..N-1] in order so the wrapper's last arg
-// ends up on top of the stack.
+// All binary handlers below read args using the standard swap-form
+// convention: args[0] = forward arg (surface-RIGHT), args[1] = stack
+// arg (surface-LEFT). For `target type.exclude what`, args[0]=what,
+// args[1]=target.
 
 var typeModuleNatives = []native.NativeFunc{
 	// --- exclude (set difference) ---
@@ -274,11 +276,11 @@ var typeModuleNatives = []native.NativeFunc{
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny, native.TAny},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-				target, err := typeBodyArg(args[0], "type.exclude", r)
+				what, err := typeBodyArg(args[0], "type.exclude", r)
 				if err != nil {
 					return nil, err
 				}
-				what, err := typeBodyArg(args[1], "type.exclude", r)
+				target, err := typeBodyArg(args[1], "type.exclude", r)
 				if err != nil {
 					return nil, err
 				}
@@ -305,7 +307,7 @@ var typeModuleNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewDisjunct(kept)}, nil
 			},
-			Returns: []*native.Type{native.TType}, BarrierPos: 0,
+			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
 
@@ -316,11 +318,11 @@ var typeModuleNatives = []native.NativeFunc{
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny, native.TAny},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-				target, err := typeBodyArg(args[0], "type.extract", r)
+				what, err := typeBodyArg(args[0], "type.extract", r)
 				if err != nil {
 					return nil, err
 				}
-				what, err := typeBodyArg(args[1], "type.extract", r)
+				target, err := typeBodyArg(args[1], "type.extract", r)
 				if err != nil {
 					return nil, err
 				}
@@ -343,7 +345,7 @@ var typeModuleNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewDisjunct(kept)}, nil
 			},
-			Returns: []*native.Type{native.TType}, BarrierPos: 0,
+			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
 
@@ -367,19 +369,20 @@ var typeModuleNatives = []native.NativeFunc{
 				}
 				return []native.Value{constructRecordOrObjectLike(t, newFields, r)}, nil
 			},
-			Returns: []*native.Type{native.TType}, BarrierPos: 0,
+			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
 
 	// --- pick (retain only named fields) ---
+	// args[0] = list of field names (forward); args[1] = record/object (stack).
 	{
-		Name: "pick",
+		Name: "_t_pick",
 
 		Signatures: []native.NativeSig{{
-			Args: []*native.Type{native.TAny, native.TList},
+			Args: []*native.Type{native.TAny, native.TAny},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-				t := args[0]
-				namesList := args[1]
+				namesList := args[0]
+				t := args[1]
 				fields := fieldsOf(t)
 				if fields == nil {
 					return nil, r.AqlError("type_error",
@@ -402,19 +405,20 @@ var typeModuleNatives = []native.NativeFunc{
 				}
 				return []native.Value{constructRecordOrObjectLike(t, newFields, r)}, nil
 			},
-			Returns: []*native.Type{native.TType}, BarrierPos: 0,
+			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
 
 	// --- omit (drop named fields) ---
+	// args[0] = list of field names (forward); args[1] = record/object (stack).
 	{
 		Name: "omit",
 
 		Signatures: []native.NativeSig{{
-			Args: []*native.Type{native.TAny, native.TList},
+			Args: []*native.Type{native.TAny, native.TAny},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-				t := args[0]
-				namesList := args[1]
+				namesList := args[0]
+				t := args[1]
 				fields := fieldsOf(t)
 				if fields == nil {
 					return nil, r.AqlError("type_error",
@@ -437,19 +441,21 @@ var typeModuleNatives = []native.NativeFunc{
 				}
 				return []native.Value{constructRecordOrObjectLike(t, newFields, r)}, nil
 			},
-			Returns: []*native.Type{native.TType}, BarrierPos: 0,
+			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
 
 	// --- merge (combine two records/objects, unify on overlap) ---
+	// `a merge b`: args[0]=b (forward), args[1]=a (stack). Result is
+	// constructed as a's shape (Record stays Record, Object stays Object).
 	{
-		Name: "merge",
+		Name: "_t_merge",
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny, native.TAny},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-				a := args[0]
-				b := args[1]
+				b := args[0]
+				a := args[1]
 				af := fieldsOf(a)
 				bf := fieldsOf(b)
 				if af == nil || bf == nil {
@@ -476,7 +482,7 @@ var typeModuleNatives = []native.NativeFunc{
 				}
 				return []native.Value{constructRecordOrObjectLike(a, newFields, r)}, nil
 			},
-			Returns: []*native.Type{native.TType}, BarrierPos: 0,
+			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
 
@@ -493,7 +499,7 @@ var typeModuleNatives = []native.NativeFunc{
 					return nil, err
 				}
 				if len(sigs) == 0 {
-					return []native.Value{typedTypeList(nil)}, nil
+					return []native.Value{native.NewList(nil)}, nil
 				}
 				params := sigs[0].Params
 				elems := make([]native.Value, 0, len(params))
@@ -504,9 +510,9 @@ var typeModuleNatives = []native.NativeFunc{
 						elems = append(elems, native.NewTypeLiteral(p.Type))
 					}
 				}
-				return []native.Value{typedTypeList(elems)}, nil
+				return []native.Value{native.NewList(elems)}, nil
 			},
-			Returns: []*native.Type{native.TList}, BarrierPos: 0,
+			Returns: []*native.Type{native.TList}, BarrierPos: -1,
 		}},
 	},
 
@@ -533,9 +539,9 @@ var typeModuleNatives = []native.NativeFunc{
 				for i, rt := range returns {
 					elems[i] = native.NewTypeLiteral(rt)
 				}
-				return []native.Value{typedTypeList(elems)}, nil
+				return []native.Value{native.NewList(elems)}, nil
 			},
-			Returns: []*native.Type{native.TAny}, BarrierPos: 0,
+			Returns: []*native.Type{native.TAny}, BarrierPos: -1,
 		}},
 	},
 
@@ -562,7 +568,7 @@ var typeModuleNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewInteger(n)}, nil
 			},
-			Returns: []*native.Type{native.TInteger}, BarrierPos: 0,
+			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
 
@@ -583,7 +589,7 @@ var typeModuleNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewTypeLiteral(node.Parent)}, nil
 			},
-			Returns: []*native.Type{native.TType}, BarrierPos: 0,
+			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
 
@@ -607,7 +613,7 @@ var typeModuleNatives = []native.NativeFunc{
 				}
 				return []native.Value{native.NewTypeLiteral(node)}, nil
 			},
-			Returns: []*native.Type{native.TType}, BarrierPos: 0,
+			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
 
@@ -626,12 +632,28 @@ var typeModuleNatives = []native.NativeFunc{
 				if err != nil {
 					return nil, err
 				}
+				// eng.CommonAncestorType uses pointer identity, but
+				// latticeNode returns &v of a stack-local Value copy —
+				// pointers don't match canonical kernel nodes. Walk by
+				// ID instead.
 				aNode := latticeNode(a)
 				bNode := latticeNode(b)
-				lca := eng.CommonAncestorType(aNode, bNode)
-				return []native.Value{native.NewTypeLiteral(lca)}, nil
+				seen := map[string]*native.Type{}
+				for d := aNode; d != nil; d = d.Parent {
+					if d.ID != "" {
+						seen[d.ID] = d
+					}
+				}
+				for d := bNode; d != nil; d = d.Parent {
+					if d.ID != "" {
+						if hit, ok := seen[d.ID]; ok {
+							return []native.Value{native.NewTypeLiteral(hit)}, nil
+						}
+					}
+				}
+				return []native.Value{native.NewTypeLiteral(native.TAny)}, nil
 			},
-			Returns: []*native.Type{native.TType}, BarrierPos: 0,
+			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
 
@@ -647,9 +669,9 @@ var typeModuleNatives = []native.NativeFunc{
 					return nil, err
 				}
 				alts := native.FlattenDisjunctAlts(t)
-				return []native.Value{typedTypeList(alts)}, nil
+				return []native.Value{native.NewList(alts)}, nil
 			},
-			Returns: []*native.Type{native.TList}, BarrierPos: 0,
+			Returns: []*native.Type{native.TList}, BarrierPos: -1,
 		}},
 	},
 
@@ -672,22 +694,23 @@ var typeModuleNatives = []native.NativeFunc{
 				anon := r.Types.MintRefinePrefab(native.CanonicalType(r, base))
 				return []native.Value{native.NewTypeLiteral(anon)}, nil
 			},
-			Returns: []*native.Type{native.TType}, BarrierPos: 0,
+			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
 
 	// --- brand (nominal subtype with a tag atom) ---
+	// `BaseType brand tag/q`: args[0]=tag (forward), args[1]=BaseType (stack).
 	{
 		Name: "brand",
 
 		Signatures: []native.NativeSig{{
-			Args: []*native.Type{native.TAny, native.TAtom},
+			Args: []*native.Type{native.TAny, native.TAny},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-				t, err := typeBodyArg(args[0], "type.brand", r)
+				tag, err := args[0].AsConcreteAtom()
 				if err != nil {
 					return nil, err
 				}
-				tag, err := args[1].AsConcreteAtom()
+				t, err := typeBodyArg(args[1], "type.brand", r)
 				if err != nil {
 					return nil, err
 				}
@@ -700,7 +723,7 @@ var typeModuleNatives = []native.NativeFunc{
 				anon.Name = "brand:" + tag
 				return []native.Value{native.NewTypeLiteral(anon)}, nil
 			},
-			Returns: []*native.Type{native.TType}, BarrierPos: 0,
+			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
 }

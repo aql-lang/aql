@@ -26,11 +26,7 @@ var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error
 	"decision":  BuildDecisionModule,
 	"solardemo": BuildSolarDemoModule,
 	"bin":       BuildBinaryModule,
-	// "type": BuildTypeModule — implemented in type.go but not yet
-	// registered: the swap-form dispatch (`Integer type.lca Number`)
-	// fails to auto-invoke the FnDef wrapper. The all-stack form
-	// (`Integer Number type.lca`) works. Wire up once dispatch is
-	// debugged; see TYPE-OPERATIONS.0.md for the design.
+	"type":      BuildTypeModule,
 }
 
 // Resolve resolves a native module name and returns a ModuleDesc.
