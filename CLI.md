@@ -33,6 +33,7 @@ supports.
   * [`aql repl`](#aql-repl)
   * [`aql registry`](#aql-registry)
   * [`aql lsp`](#aql-lsp)
+  * [`aql exec`](#aql-exec)
   * [`aql serve`](#aql-serve)
   * [`aql tui`](#aql-tui)
 * [REPL meta-commands](#repl-meta-commands)
@@ -344,6 +345,40 @@ aql lsp -p 9001             # TCP mode
 ```
 
 * `-p PORT` — TCP port (0 = stdio, the default).
+
+### `aql exec`
+
+Serve AQL code execution over HTTP. POST source to `/v1/exec` and
+get back the residual stack; the last value on the stack is exposed
+as the top-level `result`. Each request runs in a fresh AQL
+instance, so requests are stateless and safe for concurrent use.
+
+```bash
+aql exec                                    # bind 127.0.0.1:8091
+aql exec -p 8091                            # listen on :8091
+aql exec -bind 0.0.0.0:8091 -r ./modules    # custom bind + registry
+```
+
+* `-bind HOST:PORT` — interface and port (default `127.0.0.1:8091`).
+* `-p PORT` — short form; if non-zero, overrides `-bind`.
+* `-r PATH` — registry folder passed to every AQL instance.
+
+Routes:
+
+* `POST /v1/exec` — body `{"code": "..."}`; returns
+  `{"result": ..., "stack": [...], "output": "...", "error": "..."}`.
+  AQL errors (parse / type / runtime) come back at HTTP 200 with
+  `error` set, so clients can distinguish them from transport errors.
+* `GET /healthz` — liveness probe.
+
+Example:
+
+```bash
+curl -s -X POST http://127.0.0.1:8091/v1/exec \
+  -H 'Content-Type: application/json' \
+  -d '{"code": "1 add 2"}'
+# {"result":3,"stack":[3]}
+```
 
 ### `aql serve`
 

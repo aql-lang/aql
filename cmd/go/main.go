@@ -16,6 +16,7 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/command"
 	"github.com/aql-lang/aql/cmd/go/internal/ctl"
 	"github.com/aql-lang/aql/cmd/go/internal/do"
+	"github.com/aql-lang/aql/cmd/go/internal/exec"
 	aqlfmt "github.com/aql-lang/aql/cmd/go/internal/fmt"
 	"github.com/aql-lang/aql/cmd/go/internal/help"
 	"github.com/aql-lang/aql/cmd/go/internal/install"
@@ -95,6 +96,7 @@ func buildRegistry() *command.Registry {
 	r.Register(repl.New())
 	r.Register(registry.New())
 	r.Register(lsp.New())
+	r.Register(exec.New())
 	r.Register(serve.New())
 	r.Register(tui.New())
 	return r
@@ -107,6 +109,7 @@ var serviceNames = map[string]bool{
 	"repl":     true,
 	"registry": true,
 	"lsp":      true,
+	"exec":     true,
 	"serve":    true,
 	"tui":      true,
 }
