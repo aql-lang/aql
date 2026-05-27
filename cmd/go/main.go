@@ -16,12 +16,14 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/command"
 	"github.com/aql-lang/aql/cmd/go/internal/ctl"
 	"github.com/aql-lang/aql/cmd/go/internal/do"
+	"github.com/aql-lang/aql/cmd/go/internal/exec"
 	aqlfmt "github.com/aql-lang/aql/cmd/go/internal/fmt"
 	"github.com/aql-lang/aql/cmd/go/internal/help"
 	"github.com/aql-lang/aql/cmd/go/internal/install"
 	"github.com/aql-lang/aql/cmd/go/internal/login"
 	"github.com/aql-lang/aql/cmd/go/internal/lsp"
 	"github.com/aql-lang/aql/cmd/go/internal/pack"
+	"github.com/aql-lang/aql/cmd/go/internal/policy"
 	"github.com/aql-lang/aql/cmd/go/internal/prep"
 	"github.com/aql-lang/aql/cmd/go/internal/publish"
 	"github.com/aql-lang/aql/cmd/go/internal/register"
@@ -89,12 +91,15 @@ func buildRegistry() *command.Registry {
 	r.Register(publish.New())
 	// Commands: local secret management.
 	r.Register(vault.New())
+	// Commands: permission profiles.
+	r.Register(policy.New())
 	// Commands: supervisor control plane client.
 	r.Register(ctl.New())
 	// Services: long-running input loops.
 	r.Register(repl.New())
 	r.Register(registry.New())
 	r.Register(lsp.New())
+	r.Register(exec.New())
 	r.Register(serve.New())
 	r.Register(tui.New())
 	return r
@@ -107,6 +112,7 @@ var serviceNames = map[string]bool{
 	"repl":     true,
 	"registry": true,
 	"lsp":      true,
+	"exec":     true,
 	"serve":    true,
 	"tui":      true,
 }

@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/aql-lang/aql/lang/go/policy"
 )
 
 // modules maps native module names to their builder functions.
@@ -25,15 +26,34 @@ var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error
 	"matrix":    BuildMatrixModule,
 	"decision":  BuildDecisionModule,
 	"solardemo": BuildSolarDemoModule,
+	"vm":        BuildVMModule,
 }
 
 // Resolve resolves a native module name and returns a ModuleDesc.
 // The parent registry is used to generate module IDs and inherit context.
 // This function is intended to be called from the import handler.
+//
+// Consults the policy installed on parent (if any). The modules
+// scope must allow the "import" op with the resolved module ID; if
+// the policy has modules.install=false, all imports are refused with
+// modules_disabled.
 func Resolve(name string, parent *native.Registry) (native.ModuleDesc, error) {
+	moduleID := "aql:" + name
+	if pol := native.HostPolicy(parent); pol != nil {
+		if !pol.Installed("modules") {
+			return native.ModuleDesc{}, fmt.Errorf("modules disabled by policy %q", pol.Name())
+		}
+		if err := pol.Check("modules", "import", policy.Args{"module": moduleID}); err != nil {
+			return native.ModuleDesc{}, err
+		}
+		// Per-module install:false check via the subscope.
+		if !pol.Scope("modules").Scopes[moduleID].Installed() {
+			return native.ModuleDesc{}, fmt.Errorf("module %s: install=false in policy %q", moduleID, pol.Name())
+		}
+	}
 	fn, ok := modules[name]
 	if !ok {
-		return native.ModuleDesc{}, fmt.Errorf("unknown native module: aql:%s", name)
+		return native.ModuleDesc{}, fmt.Errorf("unknown native module: %s", moduleID)
 	}
 	return fn(parent)
 }

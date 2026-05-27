@@ -4,12 +4,88 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/aql-lang/aql/eng/go"
+	"github.com/aql-lang/aql/lang/go/policy"
 )
+
+// checkFetchPolicy consults the registry's host policy (if any)
+// before fetch issues an outbound request. The check sequence runs
+// global.network → network install → network.connect{host, port};
+// any denial returns the policy error so no HTTP request is built.
+//
+// When r is nil or no policy is installed the function is a no-op
+// (the historical "no permissions configured" default).
+//
+// Errors are returned in *policy.Denied shape when the policy
+// refuses; URL-parse failures are returned as ordinary errors so
+// callers can distinguish "bad URL" from "policy denied".
+func checkFetchPolicy(r *Registry, urlStr string) error {
+	if r == nil {
+		return nil
+	}
+	pol := HostPolicy(r)
+	if pol == nil {
+		return nil
+	}
+	// Resolve host/port from the URL before invoking the rule check
+	// so where-predicates can match on host: and port: fields.
+	host, port := hostPortFromURL(urlStr)
+	args := policy.Args{
+		"url":  urlStr,
+		"host": host,
+		"port": port,
+	}
+	// Per design: the network scope's "connect" op is what fetch
+	// performs. global.network is consulted by the wrapper sequence
+	// via Check; install:false on the network scope produces
+	// capability_not_installed.
+	if !pol.Installed("network") {
+		return &policy.Denied{
+			Code:    policy.CodeCapabilityNotInstalled,
+			Scope:   "network",
+			Op:      "connect",
+			Profile: pol.Name(),
+			Blame:   "network.install=false",
+			Args:    args,
+		}
+	}
+	return pol.Check("network", "connect", args)
+}
+
+// hostPortFromURL extracts (host, port) from a URL. port is
+// inferred from the scheme when absent (80 for http, 443 for https).
+// Parse errors yield ("", 0) — the policy then matches on the
+// surviving args only.
+func hostPortFromURL(rawURL string) (string, int) {
+	u, err := url.Parse(rawURL)
+	if err != nil || u == nil {
+		return "", 0
+	}
+	host := u.Hostname()
+	portStr := u.Port()
+	if portStr != "" {
+		if p, err := strconv.Atoi(portStr); err == nil {
+			return host, p
+		}
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http":
+		return host, 80
+	case "https":
+		return host, 443
+	case "ws":
+		return host, 80
+	case "wss":
+		return host, 443
+	}
+	return host, 0
+}
 
 // Object/Fetch / Object/Fetch/Request / Object/Fetch/Response are
 // owned by the lang/go/native package — they're consumed only by the
@@ -41,12 +117,22 @@ const defaultFetchTimeout = 30 * time.Second
 // The "fetch" word is registered via the consolidated Natives slice in
 // natives.go. Handlers cover [string], [map], and [string, map] forms.
 //
+// All entry points consult the registry's policy before issuing the
+// outbound request (or refuse if the network capability is
+// uninstalled). The check sequence is:
+//  1. global.network hard cap
+//  2. network capability install gate
+//  3. network.connect{host, port} per-host rule
+//
+// If any check denies, the HTTP request is never built and no
+// outbound packet is sent.
+//
 // fetchStringHandler handles fetch with a single URL string argument.
 // Performs a GET request to the given URL.
 func fetchStringHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	reqOM := NewOrderedMap()
 	reqOM.Set("url", args[0])
-	return doFetch(reqOM)
+	return doFetch(reqOM, r)
 }
 
 // fetchStringMapHandler handles fetch with a URL string and an options map.
@@ -66,7 +152,7 @@ func fetchStringMapHandler(args []Value, ctx map[string]Value, stack []Value, r 
 		val, _ := opts.Get(key)
 		reqOM.Set(key, val)
 	}
-	return doFetch(reqOM)
+	return doFetch(reqOM, r)
 }
 
 // fetchMapHandler handles fetch with a full request map.
@@ -76,11 +162,16 @@ func fetchMapHandler(args []Value, ctx map[string]Value, stack []Value, r *Regis
 	if m == nil {
 		return nil, r.AqlError("fetch_error", "fetch: expected map argument, got nil", "fetch")
 	}
-	return doFetch(m)
+	return doFetch(m, r)
 }
 
 // doFetch performs a synchronous HTTP request from the given request map
 // and returns a Map/Fetch/Response value.
+//
+// Consults the registry's policy (if any) before issuing the request:
+// global.network hard cap, network scope install, and
+// network.connect{host, port} per-host rule. Denial returns the
+// policy error without building or sending any HTTP request.
 //
 // Request map fields:
 //   - url     (string, required) — the URL to fetch
@@ -88,7 +179,7 @@ func fetchMapHandler(args []Value, ctx map[string]Value, stack []Value, r *Regis
 //   - headers (map, optional) — request headers
 //   - body    (string, optional) — request body
 //   - timeout (integer, optional, default 30000) — timeout in milliseconds
-func doFetch(reqOM ReadMap) ([]Value, error) {
+func doFetch(reqOM ReadMap, r *Registry) ([]Value, error) {
 	// Extract url (required).
 	urlVal, ok := reqOM.Get("url")
 	if !ok {
@@ -97,6 +188,11 @@ func doFetch(reqOM ReadMap) ([]Value, error) {
 	urlStr, err := AsString(urlVal)
 	if err != nil {
 		return nil, fmt.Errorf("fetch: url: %w", err)
+	}
+
+	// Policy gate: consult host policy before opening any socket.
+	if err := checkFetchPolicy(r, urlStr); err != nil {
+		return nil, err
 	}
 
 	// Extract method (default GET).

@@ -13,7 +13,9 @@ import (
 	"strings"
 
 	"github.com/aql-lang/aql/cmd/go/internal/api"
+	"github.com/aql-lang/aql/cmd/go/internal/exec"
 	"github.com/aql-lang/aql/cmd/go/internal/lsp"
+	"github.com/aql-lang/aql/cmd/go/internal/permsflags"
 	"github.com/aql-lang/aql/cmd/go/internal/registry"
 	"github.com/aql-lang/aql/cmd/go/internal/repl"
 	"github.com/aql-lang/aql/cmd/go/internal/service"
@@ -33,12 +35,13 @@ var factories = map[string]Factory{
 	"registry":    registryFactory,
 	"lsp":         lspFactory,
 	"api":         apiFactory,
+	"exec":        execFactory,
 	"tui":         tuiFactory,
 	"vault-proxy": vaultProxyFactory,
 }
 
 // factoryOrder is the display order for help/usage output.
-var factoryOrder = []string{"repl", "registry", "lsp", "api", "tui", "vault-proxy"}
+var factoryOrder = []string{"repl", "registry", "lsp", "api", "exec", "tui", "vault-proxy"}
 
 func replFactory(args []string, stdin io.Reader, stdout, _ io.Writer) (service.Service, error) {
 	fs := flag.NewFlagSet("repl", flag.ContinueOnError)
@@ -80,6 +83,32 @@ func lspFactory(args []string, stdin io.Reader, stdout, stderr io.Writer) (servi
 		return lsp.NewStdioServer(stdin, stdout, stderr), nil
 	}
 	return lsp.NewTCPServer(*port, stderr), nil
+}
+
+func execFactory(args []string, _ io.Reader, _, stderr io.Writer) (service.Service, error) {
+	fs := flag.NewFlagSet("exec", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	bind := fs.String("bind", "127.0.0.1:8091", "host:port to bind the exec HTTP server")
+	port := fs.Int("p", 0, "port to listen on (overrides -bind host:port if >0)")
+	registryPath := fs.String("r", "", "registry path passed to AQL instances")
+	var pf permsflags.Flags
+	permsflags.Register(fs, &pf)
+	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
+	pol, err := pf.Resolve()
+	if err != nil {
+		return nil, err
+	}
+	addr := *bind
+	if *port > 0 {
+		addr = fmt.Sprintf(":%d", *port)
+	}
+	srv, err := exec.NewServer(addr, *registryPath, pol)
+	if err != nil {
+		return nil, fmt.Errorf("%s", strings.TrimPrefix(err.Error(), "exec: "))
+	}
+	return srv, nil
 }
 
 func apiFactory(args []string, _ io.Reader, _, stderr io.Writer) (service.Service, error) {

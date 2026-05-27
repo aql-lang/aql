@@ -1,0 +1,45 @@
+{
+  version: 1
+  name:    "compute"
+
+  limits: {
+    timeoutMs:      5000
+    maxStepBudget:  1000000
+    maxStackDepth:  256
+  }
+
+  scopes: {
+    global: {
+      words: {
+        default: "deny"
+        rules: [
+          { allow: ["clock", "mutate"] }
+        ]
+      }
+    }
+
+    engine: {
+      words: { default: "allow" }
+    }
+
+    modules: {
+      words: {
+        default: "deny"
+        rules: [
+          { allow: ["import"], where: { module: ["aql:math"] } }
+        ]
+      }
+      scopes: {
+        "aql:math": { words: { default: "allow" } }
+      }
+    }
+
+    fileops: { install: false }
+    network: { install: false }
+    sqlite:  { install: false }
+    process: { install: false }
+    env:     { install: false }
+    formats: { words: { default: "allow" } }
+    clock:   { words: { default: "allow" } }
+  }
+}
