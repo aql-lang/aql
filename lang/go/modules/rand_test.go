@@ -2,6 +2,7 @@ package modules
 
 import (
 	"testing"
+	"time"
 
 	"github.com/aql-lang/aql/eng/go/parser"
 	"github.com/aql-lang/aql/lang/go/native"
@@ -48,7 +49,7 @@ func TestRandModuleExports(t *testing.T) {
 	if !ok {
 		t.Fatal("expected 'rand' export")
 	}
-	for _, name := range []string{"seed", "int", "bool", "float", "string", "one-of"} {
+	for _, name := range []string{"seed", "fresh-seed", "int", "bool", "float", "string", "one-of"} {
 		if _, ok := randExport.Get(name); !ok {
 			t.Errorf("missing export: %q", name)
 		}
@@ -155,6 +156,28 @@ func TestRandStringEmptyCharsetZeroLen(t *testing.T) {
 	s, _ := res[0].AsConcreteString()
 	if s != "" {
 		t.Errorf("got %q, want empty", s)
+	}
+}
+
+func TestRandFreshSeedShiftsStream(t *testing.T) {
+	// rand.fresh-seed reseeds from the host clock. Two registries
+	// that both call fresh-seed should produce different sequences
+	// (with extremely high probability — UnixNano resolution).
+	gather := func() int64 {
+		r := randRegistry(t)
+		res := runRandAQL(t, r, `rand.fresh-seed 0 1000000 rand.int`)
+		n, err := res[0].AsConcreteInteger()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	a := gather()
+	// Sleep a microsecond so UnixNano differs even on coarse clocks.
+	time.Sleep(time.Microsecond)
+	b := gather()
+	if a == b {
+		t.Errorf("two fresh-seed draws produced identical value %d; rng probably not reseeded", a)
 	}
 }
 

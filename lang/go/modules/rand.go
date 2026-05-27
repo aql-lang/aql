@@ -4,6 +4,7 @@ import (
 	"fmt"
 	mathrand "math/rand"
 	"sync"
+	"time"
 
 	"github.com/aql-lang/aql/eng/go"
 	"github.com/aql-lang/aql/lang/go/native"
@@ -59,6 +60,13 @@ func BuildRandModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("seed", wrapRandFnDef("rand-seed",
 		[]native.FnParam{{Type: native.TInteger}},
 		nil, subReg))
+	// fresh-seed reseeds the PRNG from the host clock. Use this when
+	// you actually want non-reproducible randomness — the default
+	// seed of 1 is deterministic on purpose so property tests and
+	// demos replay. Profile note: `rand.fresh-seed` is denied by the
+	// `gen` profile because it reads the clock.
+	exports.Set("fresh-seed", wrapRandFnDef("rand-fresh-seed",
+		nil, nil, subReg))
 	exports.Set("int", wrapRandFnDef("rand-int",
 		// stack `lo hi`: sig[0]=hi, sig[1]=lo
 		[]native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}},
@@ -130,6 +138,21 @@ func randNatives(parent *native.Registry) []native.NativeFunc {
 					s := activeRand(parent)
 					s.mu.Lock()
 					s.rng = mathrand.New(mathrand.NewSource(seed))
+					s.mu.Unlock()
+					return nil, nil
+				},
+			}},
+		},
+		{
+			Name: "rand-fresh-seed",
+			Signatures: []native.NativeSig{{
+				Args:       []*native.Type{},
+				Returns:    []*native.Type{},
+				BarrierPos: -1,
+				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					s := activeRand(parent)
+					s.mu.Lock()
+					s.rng = mathrand.New(mathrand.NewSource(time.Now().UnixNano()))
 					s.mu.Unlock()
 					return nil, nil
 				},
