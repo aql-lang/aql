@@ -424,7 +424,7 @@ None otherwise None	None
 (0 convert Boolean) or (false)	false
 
 # =====================================================================
-# 19. any — list-or, short-circuit, returns winning element
+# 19. any — list-or; returns true iff any element is truthy
 # =====================================================================
 
 # Boolean lists.
@@ -433,31 +433,31 @@ None otherwise None	None
 [true] any	true
 [false] any	false
 
-# Numeric lists — first truthy wins.
-[1 0 2] any	1
-[0 0 2] any	2
-[0 0 0] any	0
-[0 0 -3] any	-3
+# Numeric lists — coerced via convert-boolean rules.
+[1 0 2] any	true
+[0 0 2] any	true
+[0 0 0] any	false
+[0 0 -3] any	true
 
 # String lists.
-["" "" "x"] any	'x'
-["" "x" "y"] any	'x'
-["" "" ""] any	''
+["" "" "x"] any	true
+["" "x" "y"] any	true
+["" "" ""] any	false
 
 # Mixed types.
-[0 "" "found"] any	'found'
+[0 "" "found"] any	true
 [None 0 false] any	false
-[None "x"] any	'x'
+[None "x"] any	true
 
 # Empty list returns identity (false for OR).
 [] any	false
 
 # Coerced via convert-boolean rules: empty list inside list is falsy.
-[[] [1]] any	[1]
-[[] []] any	[]
+[[] [1]] any	true
+[[] []] any	false
 
 # =====================================================================
-# 20. all — list-and, short-circuit, returns winning element
+# 20. all — list-and; returns true iff every element is truthy
 # =====================================================================
 
 # Boolean lists.
@@ -466,44 +466,45 @@ None otherwise None	None
 [true] all	true
 [false] all	false
 
-# Numeric lists — first falsy wins, else last.
-[1 2 3] all	3
-[1 0 3] all	0
-[0 1 2] all	0
-[5] all	5
+# Numeric lists — coerced via convert-boolean rules.
+[1 2 3] all	true
+[1 0 3] all	false
+[0 1 2] all	false
+[5] all	true
 
 # String lists.
-["a" "b" "c"] all	'c'
-["a" "" "c"] all	''
+["a" "b" "c"] all	true
+["a" "" "c"] all	false
 
 # Mixed types.
 [1 "ok" true] all	true
-[1 "" 5] all	''
+[1 "" 5] all	false
 
 # Empty list returns identity (true for AND).
 [] all	true
 
 # Empty inner list is falsy for `all`.
-[[1] []] all	[]
-[[1] [2]] all	[2]
+[[1] []] all	false
+[[1] [2]] all	true
 
 # =====================================================================
 # 21. any/all interactions with other words
 # =====================================================================
 
 # any/all over computed lists.
-[(1 add 1) 0] any	2
-[(1 sub 1) 0] any	0
+[(1 add 1) 0] any	true
+[(1 sub 1) 0] any	false
 
 # Use any/all as a condition (wrap the quantifier in parens so its
 # result feeds into `if`, not the raw list).
 if ([0 0 1] any) [42] [99]	42
 if ([1 0 1] all) [42] [99]	99
 
-# Combine with otherwise — `any` returns 0 (last falsy), then otherwise
-# replaces only on None, not on falsy.
-[0 0 0] any otherwise 99	0
-[None None None] any otherwise 99	99
+# Combine with otherwise — `any` is Boolean now. `otherwise` returns
+# the left operand unless it is None, so `false otherwise 99` is false
+# (false is not None). Only the None case falls through to 99.
+[0 0 0] any otherwise 99	false
+[None None None] any otherwise 99	false
 
 # any over a list built from comparisons.
 [(1 lt 2) (2 lt 1) (3 eq 3)] any	true
@@ -589,81 +590,80 @@ String tor Number tor Boolean tor None	String|Number|Boolean|None
 # 25. any/all — scalar edge cases (numeric)
 # =====================================================================
 
-# Decimals — 0.0 renders with the `.0` suffix to stay visually
-# distinct from Integer 0 (formatDecimal in eng/go/print.go).
-[1.5 0.0 2.5] any	1.5
-[0.0 0.0 0.0] any	0.0
-[0.0 1.5] any	1.5
-[1.5 2.5 3.5] all	3.5
-[1.5 0.0 3.5] all	0.0
+# Decimals — only literal zero is falsy.
+[1.5 0.0 2.5] any	true
+[0.0 0.0 0.0] any	false
+[0.0 1.5] any	true
+[1.5 2.5 3.5] all	true
+[1.5 0.0 3.5] all	false
 
 # Negative numbers are truthy (only literal zero is falsy).
-[-1 0] any	-1
-[-1 -2 -3] all	-3
-[0 -5] any	-5
+[-1 0] any	true
+[-1 -2 -3] all	true
+[0 -5] any	true
 
 # Single-element lists.
-[0] any	0
-[1] any	1
+[0] any	false
+[1] any	true
 [true] any	true
 [false] any	false
-[None] any	None
-[None] all	None
-[""] any	''
-[""] all	''
-["x"] all	'x'
+[None] any	false
+[None] all	false
+[""] any	false
+[""] all	false
+["x"] all	true
 
 # =====================================================================
 # 26. any/all — scalar edge cases (strings, atoms, none)
 # =====================================================================
 
 # String literal "true"/"false" coerce to actual booleans.
-["false" "false"] any	'false'
-["false" "true"] any	'true'
-["true" "false"] all	'false'
-["true" "x"] all	'x'
+["false" "false"] any	false
+["false" "true"] any	true
+["true" "false"] all	false
+["true" "x"] all	true
 
 # Strings that look like numbers don't coerce numerically — non-empty
 # strings are truthy except literal "true"/"false".
-["0" "1"] any	'0'
-["" "0"] any	'0'
-[""] any	''
+["0" "1"] any	true
+["" "0"] any	true
+[""] any	false
 
 # None scattered through.
-[None 0 5 None] any	5
-[None None None] any	None
-[None 1 None] all	None
+[None 0 5 None] any	true
+[None None None] any	false
+[None 1 None] all	false
 
 # =====================================================================
 # 27. any/all — list / map element truthiness
 # =====================================================================
 
 # Empty list inside list is falsy.
-[[] [1 2]] any	[1,2]
-[[] []] any	[]
-[[1] [2]] any	[1]
-[[] [3 4]] all	[]
-[[1] [2 3]] all	[2,3]
+[[] [1 2]] any	true
+[[] []] any	false
+[[1] [2]] any	true
+[[] [3 4]] all	false
+[[1] [2 3]] all	true
 
 # Map truthiness (empty map is falsy).
-[{} {}] any	{}
-[{} {x:1}] any	{x:1}
-[{x:1} {}] all	{}
-[{x:1} {y:2}] all	{y:2}
+[{} {}] any	false
+[{} {x:1}] any	true
+[{x:1} {}] all	false
+[{x:1} {y:2}] all	true
 
 # Mixed list / map elements.
-[{} [] 0 ""] any	''
-[{} [] "found"] any	'found'
-[{x:1} [1] "ok"] all	'ok'
+[{} [] 0 ""] any	false
+[{} [] "found"] any	true
+[{x:1} [1] "ok"] all	true
 
 # =====================================================================
 # 28. any/all — coerce + arithmetic + comparison interactions
 # =====================================================================
 
 # Computed values inside the list.
-[(1 add 1) 0 (5 mul 2)] any	2
-[(1 sub 1) (2 sub 2) (3 sub 3)] any	0
-[(0 add 1) (1 mul 1) (1 add 1)] all	2
+[(1 add 1) 0 (5 mul 2)] any	true
+[(1 sub 1) (2 sub 2) (3 sub 3)] any	false
+[(0 add 1) (1 mul 1) (1 add 1)] all	true
 
 # Comparison results gathered.
 [(1 lt 2) (3 lt 4) (5 lt 6)] all	true
@@ -671,33 +671,27 @@ String tor Number tor Boolean tor None	String|Number|Boolean|None
 [(1 eq 2) (3 eq 4)] any	false
 [(1 lt 2) (3 gt 1) (4 lt 0)] all	false
 
-# Use any/all result in arithmetic.
-([0 0 5] any) add 10	15
-([1 2 3] all) mul 2	6
-([0 0 0] any) add 1	1
-
 # =====================================================================
 # 29. any/all — interactions with not, otherwise, if
 # =====================================================================
 
-# `not [list] any` → "all elements are falsy" — but `not` operates on
-# the `any` result, which is a value (not a boolean). It coerces.
+# DeMorgan: `not any` ↔ "all elements are falsy".
 [0 0 0] any not	true
 [1 0 0] any not	false
 [0 0 5] any not	false
 
-# DeMorgan: `not all` ↔ "any is falsy".
+# DeMorgan: `not all` ↔ "any element is falsy".
 [1 1 1] all not	false
 [1 0 1] all not	true
 
-# any with otherwise — `any` returns the falsy operand (e.g. 0); since
-# 0 is not None, otherwise keeps it.
-[0 0 0] any otherwise 99	0
-[None None None] any otherwise 99	99
+# any with otherwise — `any` is Boolean, so `false otherwise X` is
+# false (false is not None). otherwise only falls through on None.
+[0 0 0] any otherwise 99	false
+[None None None] any otherwise 99	false
 
 # all with otherwise — same idea.
-[1 None 5] all otherwise "fallback"	'fallback'
-[1 0 5] all otherwise "fallback"	0
+[1 None 5] all otherwise "fallback"	false
+[1 0 5] all otherwise "fallback"	false
 
 # Use as `if` condition (parens force the quantifier to evaluate
 # before `if` collects forward args).
@@ -713,49 +707,48 @@ if ([0 0 1] any) ["t"] ["f"]	't'
 # A def-bound list auto-evaluates when referenced, splicing onto the
 # stack — so to use any/all on a stored list, build the list inline
 # or use `quote`.
-quote [1 0 5] any	1
-quote [0 0 0] any	0
+quote [1 0 5] any	true
+quote [0 0 0] any	false
 quote [true false true] all	false
 
 # any/all over a parens-grouped expression that produces a list.
-([1 add 1] any)	2
-([0 sub 0] any)	0
+([1 add 1] any)	true
+([0 sub 0] any)	false
 
 # =====================================================================
 # 31. any/all — composition with each (per-list quantifier)
 # =====================================================================
 
 # Per-row "any non-zero" check.
-[[1 2] [0 0] [3]] each [any]	[1,0,3]
-[[1 2] [0 0] [3]] each [all]	[2,0,3]
+[[1 2] [0 0] [3]] each [any]	[true,false,true]
+[[1 2] [0 0] [3]] each [all]	[true,false,true]
 
 # Are all rows non-empty (truthy)?
-[[1] [0]] each [all]	[1,0]
-([[1] [0]] each [all]) any	1
-([[1] [0]] each [all]) all	0
+[[1] [0]] each [all]	[true,false]
+([[1] [0]] each [all]) any	true
+([[1] [0]] each [all]) all	false
 
 # Are any rows entirely truthy?
-([[1 1] [0 1] [1 1]] each [all]) any	1
+([[1 1] [0 1] [1 1]] each [all]) any	true
 
 # =====================================================================
 # 32. any/all — boundary semantics
 # =====================================================================
 
-# any short-circuits — a "side-effecting" element after the truthy
-# winner is irrelevant since values are already evaluated. Confirm
-# the result is the first truthy element regardless of order.
-[1 2 3] any	1
+# any short-circuits on the first truthy element; the Boolean result
+# is independent of element identity or order.
+[1 2 3] any	true
 [true 2 false] any	true
 [false true 99] any	true
 
-# all short-circuits to the first falsy.
-[1 0 99] all	0
+# all short-circuits on the first falsy element.
+[1 0 99] all	false
 [true false true] all	false
 [1 2 false] all	false
 
-# Repeated falsy values collapse to the last-seen.
-[0 0 0] any	0
-[None None None] any	None
+# All-falsy lists.
+[0 0 0] any	false
+[None None None] any	false
 [false false false] any	false
 
 # =====================================================================

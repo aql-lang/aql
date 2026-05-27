@@ -1,0 +1,73 @@
+# =====================================================================
+# Core binary (bitwise) operators — band, bor, bxor, bnot, bsl, bsr, busr
+# See lang/doc/design/BINARY-OPERATIONS.0.md
+# =====================================================================
+
+# --- band ---
+12 band 10	8
+255 band 15	15
+0 band 12345	0
+-1 band 12345	12345
+band 6 3	2
+3 band 6	2
+
+# --- bor ---
+12 bor 10	14
+0 bor 12345	12345
+-1 bor 0	-1
+bor 1 2	3
+0 bor 0	0
+
+# --- bxor ---
+12 bxor 10	6
+12 bxor 12	0
+-1 bxor 0	-1
+0 bxor 0	0
+255 bxor 170	85
+
+# --- bnot ---
+bnot 0	-1
+bnot -1	0
+bnot 5	-6
+bnot 12345	-12346
+
+# --- bsl (shift left) ---
+8 bsl 2	32
+1 bsl 4	16
+1 bsl 0	1
+1 bsl 63	-9223372036854775808
+0 bsl 5	0
+8 bsl 64	0
+8 bsl 100	0
+
+# --- bsr (arithmetic shift right; sign-fill) ---
+32 bsr 2	8
+8 bsr 0	8
+-8 bsr 2	-2
+-1 bsr 1	-1
+-1 bsr 63	-1
+1024 bsr 100	0
+-1 bsr 100	-1
+
+# --- busr (unsigned shift right; zero-fill) ---
+32 busr 2	8
+-1 busr 1	9223372036854775807
+-1 busr 60	15
+-1 busr 63	1
+-1 busr 64	0
+0 busr 5	0
+8 busr 100	0
+
+# --- composition with other ops ---
+(1 bsl 4) bor (1 bsl 2)	20
+255 band (bnot 15)	240
+((1 bsl 8) sub 1) band 0xff	255
+
+# --- non-commutative: `a bsl b` is `a << b`, not `b << a` ---
+8 bsl 2	32
+2 bsl 8	512
+
+# --- error: negative shift count ---
+8 bsl -1		binary_error
+8 bsr -1		binary_error
+8 busr -2		binary_error

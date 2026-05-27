@@ -70,17 +70,17 @@ func init() {
 
 	register(&Entry{
 		Word:    "any",
-		Summary: "Apply `or` across a list, short-circuiting on the first truthy element.",
-		Description: "Returns the winning element value (the first truthy element, " +
-			"or the last falsy element if all are falsy). Returns `false` for an " +
+		Summary: "Apply `or` across a list; returns true iff any element is truthy.",
+		Description: "Coerces each element via `convert boolean` rules and " +
+			"short-circuits on the first truthy element. Returns `false` for an " +
 			"empty list (the identity for OR).",
 	})
 
 	register(&Entry{
 		Word:    "all",
-		Summary: "Apply `and` across a list, short-circuiting on the first falsy element.",
-		Description: "Returns the winning element value (the first falsy element, " +
-			"or the last truthy element if all are truthy). Returns `true` for an " +
+		Summary: "Apply `and` across a list; returns true iff every element is truthy.",
+		Description: "Coerces each element via `convert boolean` rules and " +
+			"short-circuits on the first falsy element. Returns `true` for an " +
 			"empty list (the identity for AND).",
 	})
 }

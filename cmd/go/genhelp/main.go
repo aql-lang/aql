@@ -21,11 +21,11 @@ import (
 
 // outputPath returns the absolute path of the generated file, derived from
 // this source file's location so it works regardless of the working
-// directory: <repo>/cmd/go/genhelp/main.go -> <repo>/lang/go/engine/help/examples_gen.go
+// directory: <repo>/cmd/go/genhelp/main.go -> <repo>/lang/go/native/help/examples_gen.go
 func outputPath() string {
 	_, thisFile, _, _ := runtime.Caller(0)
 	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
-	return filepath.Join(repoRoot, "lang", "go", "engine", "help", "examples_gen.go")
+	return filepath.Join(repoRoot, "lang", "go", "native", "help", "examples_gen.go")
 }
 
 func main() {

@@ -60,7 +60,8 @@ Language-agnostic content stays at the top of each component:
 - `capabilities/` — file I/O abstraction (`FileOps` interface
   + OS-backed and in-memory implementations).
 - `modules/` — loadable modules (`aql:math`, `aql:time`,
-  `aql:matrix`, `aql:decision`, `aql:solardemo`).
+  `aql:matrix`, `aql:decision`, `aql:solardemo`, `aql:bin`,
+  `aql:type`).
 - `test/` — integration tests and TSV spec runners.
 
 ## Build & Test
@@ -470,6 +471,41 @@ rule with `j.Rule()`, and add conversion logic in the appropriate
 with the v0.1.6 rule-aware `LexMatcher` signature
 `func(lex *Lex, rule *Rule) *Token` to read `rule.K`/`rule.N` maps.
 See the template string interpolation rules for a complete example.
+
+## Module FnDef Wrappers — inner sig BarrierPos (CRITICAL)
+
+Native modules under `lang/go/modules/` follow a sub-registry
+pattern: `BuildXxxModule` creates a fresh `subReg`, registers the
+inner natives there, and exports FnDef wrappers (carrying
+`Registry: subReg`) into the module's export map. When the
+wrapper is invoked via `pkg.word` dot-access, dispatch flows
+through `eng/go/engine.go::execFnDefLiteral`, which calls
+`reg.Lookup(fnDef.Name)` (line ~1519) and uses the **looked-up
+native's `Signatures`** for `matchSignature` — NOT the wrapper's
+own Sigs.
+
+**Consequence:** the inner native's `BarrierPos` controls whether
+the wrapper's swap-form `a pkg.word b` dispatches.
+
+- If the inner sig has `BarrierPos: 0` (stack-only),
+  matchSignature requires every arg on the stack. The swap form
+  has 1 stack + 1 forward, so dispatch fails silently — the
+  FnDef just sits on the stack with the args around it.
+- If the inner sig has `BarrierPos: -1` (all-forward eligible) or
+  any positive boundary, matchSignature accepts the swap-form
+  forward+stack split, runs insertForward, completes collection,
+  and dispatches normally.
+
+**Rule:** inner natives registered into a module sub-registry
+MUST use `BarrierPos: -1` (or a positive value that includes
+position 0 as forward-eligible). At runtime the body context
+has no forward tokens anyway — `BarrierPos: -1` and `0` both
+fall to stack-only — so the change is dispatch-only and safe.
+
+Regression test:
+`lang/go/modules/wrapper_dispatch_test.go::TestModuleWrapperInnerSigBarrierPos`
+asserts both directions (the broken case explicitly demonstrates
+the silent-dispatch-failure mode).
 
 ## Registry Bindings (CRITICAL)
 

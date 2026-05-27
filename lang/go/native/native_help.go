@@ -146,8 +146,8 @@ func inferExact(name string, sig Signature) []string {
 		return []string{"Scalar/String"}
 
 	// *Type ops
-	case "typeof", "fulltypeof":
-		return []string{"Scalar/Atom"}
+	case "typeof":
+		return []string{"Type"}
 	case "is":
 		return []string{"Scalar/Boolean"}
 	case "inspect":
