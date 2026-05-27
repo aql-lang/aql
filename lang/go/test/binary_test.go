@@ -3,28 +3,20 @@ package test
 import (
 	"bufio"
 	"fmt"
-	"github.com/aql-lang/aql/lang/go/native"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/aql-lang/aql/lang/go/native"
 )
 
-// errorPatterns maps error codes used in syntax.tsv to substrings that must
-// appear in the actual error message.
-var errorPatterns = map[string]string{
-	"syntax_error":     "syntax_error",
-	"signature_error":  "signature_error",
-	"division_by_zero": "division by zero",
-	"modulo_by_zero":   "modulo by zero",
-	"undefined_word":   "undefined_word",
-	"unify_error":      "cannot unify",
-	"binary_error":     "binary_error",
-}
-
-func TestSyntax(t *testing.T) {
-	f, err := os.Open("syntax.tsv")
+// TestBinary runs every line of binary.tsv as a parse+run+compare
+// test. Same TSV format as boolean.tsv:
+//
+//	<expr>\t<expected>[\t<error-code>]
+func TestBinary(t *testing.T) {
+	f, err := os.Open("binary.tsv")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +30,6 @@ func TestSyntax(t *testing.T) {
 		lineNum++
 		line := scanner.Text()
 
-		// Skip empty lines and comments.
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
@@ -73,7 +64,6 @@ func TestSyntax(t *testing.T) {
 			result, err := eng.Run(values)
 
 			if errorCode != "" {
-				// We expect an error.
 				if err == nil {
 					t.Errorf("\n  expr: %s\n  expected error %q but got result: %s",
 						expr, errorCode, formatStack(result))
@@ -83,7 +73,6 @@ func TestSyntax(t *testing.T) {
 				return
 			}
 
-			// We expect success.
 			if err != nil {
 				t.Fatalf("engine error: %v", err)
 			}
@@ -100,21 +89,8 @@ func TestSyntax(t *testing.T) {
 	}
 
 	if ran == 0 {
-		t.Fatal("no test cases found in syntax.tsv")
+		t.Fatal("no test cases found in binary.tsv")
 	}
 
-	t.Logf("ran %d syntax test cases", ran)
-}
-
-// checkErrorCode verifies that the error message contains the expected pattern.
-func checkErrorCode(t *testing.T, expr string, err error, code string) {
-	t.Helper()
-	pattern, ok := errorPatterns[code]
-	if !ok {
-		t.Errorf("\n  expr: %s\n  unknown error code %q", expr, code)
-		return
-	}
-	if !strings.Contains(err.Error(), pattern) {
-		t.Errorf("\n  expr: %s\n  error: %v\n  expected error containing %q", expr, err, pattern)
-	}
+	t.Logf("ran %d binary test cases", ran)
 }

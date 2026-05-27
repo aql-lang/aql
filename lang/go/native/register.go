@@ -44,6 +44,11 @@ func Register(r *Registry) {
 		r.RegisterNativeFunc(n)
 	}
 
+	// Binary (bitwise) — see lang/doc/design/BINARY-OPERATIONS.0.md.
+	for _, n := range binaryNatives {
+		r.RegisterNativeFunc(n)
+	}
+
 	// Comparison
 	for _, n := range comparisonNatives {
 		r.RegisterNativeFunc(n)
