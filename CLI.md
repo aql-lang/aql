@@ -27,6 +27,9 @@ supports.
   * [`aql publish`](#aql-publish)
 * [Secrets](#secrets)
   * [`aql vault`](#aql-vault)
+* [Permissions](#permissions)
+  * [`aql policy`](#aql-policy)
+  * [Per-command policy flags](#per-command-policy-flags)
 * [Supervisor control](#supervisor-control)
   * [`aql ctl`](#aql-ctl)
 * [Long-running services](#long-running-services)
@@ -285,6 +288,67 @@ aql vault exec --clear-env api_key -- ./hermetic-tool
 
 Inside AQL programs the vault is accessed through the `vault`
 capability — see **[Reference §Capabilities](REFERENCE.md#capabilities)**.
+
+
+## Permissions
+
+### `aql policy`
+
+Inspect and test permission profiles. Most commands accept either a
+built-in profile name (`full`, `trusted`, `client`, `read-only`,
+`sandbox`, `compute`) or a path to a `.jsonic`/`.json` file.
+
+```bash
+aql policy list                              # built-in profile names
+aql policy show sandbox                      # pretty-printed JSON
+aql policy validate ./my-policy.jsonic       # schema + semantic check
+aql policy test sandbox engine.add           # exit 0 = allowed
+aql policy explain sandbox fileops.write path=/etc/passwd
+# profile:  sandbox
+# scope:    fileops
+# op:       write
+# decision: DENY
+# blame:    global.disk.write (rule #1)
+```
+
+### Per-command policy flags
+
+Every command that builds a `lang.AQL` accepts these flags:
+
+| Flag | Effect |
+|---|---|
+| `--perms NAME\|PATH\|JSONIC` | Auto-detected: name, file, or inline. |
+| `--perms-file PATH` | Explicit file path. |
+| `--perms-inline JSONIC` | Inline jsonic (`@-` = stdin, `@PATH` = file). |
+| `--allow scope.op` | Add an allow rule (repeatable). |
+| `--deny scope.op` | Add a deny rule (repeatable). |
+| `--allow-global OP` | Raise a global hard cap. |
+| `--deny-global OP` | Lower a global hard cap. |
+| `--no-install scope` | Remove a capability slot entirely. |
+| `--install scope` | Force-install (overrides inherited install=false). |
+| `--policy-dry-run` | Observe-only (logs but allows). |
+
+Environment fallbacks (consulted when no `--perms*` flag is set):
+
+```bash
+AQL_POLICY=sandbox aql do '1 add 2'
+AQL_POLICY_FILE=./prod.jsonic aql script.aql
+```
+
+Examples:
+
+```bash
+aql do --perms=sandbox 1 add 2
+aql -e '1 add 2' --perms=read-only
+aql exec -p 8091 --perms=sandbox          # bound at startup; immutable per request
+aql do --perms=sandbox --allow=engine.shell true
+aql exec --perms=trusted --no-install=network --no-install=sqlite
+```
+
+See **[HOWTO §Sandbox untrusted code](HOWTO.md#sandbox-untrusted-code)**
+for a walkthrough, and
+**[lang/doc/design/PERMISSIONS.0.md](lang/doc/design/PERMISSIONS.0.md)**
+for the schema.
 
 
 ## Supervisor control
