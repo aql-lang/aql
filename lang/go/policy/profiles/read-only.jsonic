@@ -1,0 +1,26 @@
+{
+  version: 1
+  name:    "read-only"
+  extends: "sandbox"
+
+  scopes: {
+    global: {
+      words: {
+        default: "deny"
+        rules: [
+          { allow: ["disk.read", "clock", "mutate", "env"] }
+          { deny:  ["disk.write", "network", "process", "system-info"] }
+        ]
+      }
+    }
+
+    env: {
+      words: {
+        default: "deny"
+        rules: [
+          { allow: ["read"], where: { name: ["LANG", "TZ", "AQL_*"] } }
+        ]
+      }
+    }
+  }
+}

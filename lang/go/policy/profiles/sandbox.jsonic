@@ -1,0 +1,61 @@
+{
+  version: 1
+  name:    "sandbox"
+
+  limits: {
+    timeoutMs:      5000
+    maxStepBudget:  1000000
+    maxStackDepth:  256
+    maxOutputBytes: 65536
+  }
+
+  scopes: {
+    global: {
+      words: {
+        default: "deny"
+        rules: [
+          { allow: ["disk.read", "clock", "mutate"] }
+          { deny:  ["disk.write", "network", "process",
+                    "env", "system-info"] }
+        ]
+      }
+    }
+
+    engine: {
+      words: { default: "allow" }
+    }
+
+    modules: {
+      words: {
+        default: "deny"
+        rules: [
+          { allow: ["import"], where: { module: ["aql:math", "aql:time"] } }
+        ]
+      }
+      scopes: {
+        "aql:math": { words: { default: "allow" } }
+        "aql:time": {
+          words: {
+            default: "allow"
+            rules: [{ deny: ["sleep"] }]
+          }
+        }
+      }
+    }
+
+    fileops: {
+      words: {
+        default: "deny"
+        rules: []
+      }
+    }
+
+    network: { install: false }
+    sqlite:  { install: false }
+    process: { install: false }
+
+    formats: { words: { default: "allow" } }
+    env:     { words: { default: "deny" } }
+    clock:   { words: { default: "allow" } }
+  }
+}
