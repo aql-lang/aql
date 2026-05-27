@@ -276,16 +276,6 @@ typeof [1 2 3]	List
 typeof {x:1}	Map
 typeof None	None
 
-# fulltypeof - returns the full type Path as an atom.
-fulltypeof 42	Scalar/Number/Integer
-fulltypeof "hello"	Scalar/String/ProperString
-fulltypeof ""	Scalar/String/EmptyString
-fulltypeof true	Scalar/Boolean
-fulltypeof false	Scalar/Boolean
-fulltypeof [1 2 3]	Node/List
-fulltypeof {x:1}	Node/Map
-fulltypeof None	None
-
 # is - type/value check: true if a unify b -> a
 42 is Number	true
 42 is Integer	true

@@ -930,35 +930,32 @@ func TestTypeofMetatypes(t *testing.T) {
 	}
 
 	// Post the typeof-collapse + Any-root work, typeof is a single
-	// Parent hop and fulltypeof renders the full path under the Any
-	// root (Any itself is skipped to keep paths the historical short
-	// form). None and Never are degenerate roots that saturate at
-	// themselves.
+	// Parent hop. None and Never are degenerate roots that saturate
+	// at themselves.
 	tests := []struct {
 		name     string
 		typeLit  Value
 		wantType string // expected typeof result (single Parent hop)
-		wantFull string // expected fulltypeof result (full path)
 	}{
-		{"String", NewTypeLiteral(TString), "Scalar", "Scalar"},
-		{"Number", NewTypeLiteral(TNumber), "Scalar", "Scalar"},
-		{"Integer", NewTypeLiteral(TInteger), "Number", "Scalar/Number"},
-		{"Decimal", NewTypeLiteral(TDecimal), "Number", "Scalar/Number"},
-		{"Boolean", NewTypeLiteral(TBoolean), "Scalar", "Scalar"},
-		{"List", NewTypeLiteral(TList), "Node", "Node"},
-		{"Map", NewTypeLiteral(TMap), "Node", "Node"},
-		{"Scalar", NewTypeLiteral(TScalar), "Any", ""},
-		{"Node", NewTypeLiteral(TNode), "Any", ""},
-		{"Any", NewTypeLiteral(TAny), "Any", ""},
-		{"None", NewTypeLiteral(TNone), "None", "None"},
-		{"Object", NewTypeLiteral(TObject), "Ideal", "Ideal"},
-		{"Table", NewTypeLiteral(TTable), "Ideal", "Ideal"},
-		{"Record", NewTypeLiteral(TRecord), "Ideal", "Ideal"},
-		{"Resource", NewTypeLiteral(TResource), "Object", "Ideal/Object"},
-		{"Atom", NewTypeLiteral(TAtom), "Scalar", "Scalar"},
-		{"Type", NewTypeLiteral(TType), "Any", ""},
-		{"Function", NewTypeLiteral(TFunction), "Type", "Type"},
-		{"Disjunct", NewTypeLiteral(TDisjunct), "Type", "Type"},
+		{"String", NewTypeLiteral(TString), "Scalar"},
+		{"Number", NewTypeLiteral(TNumber), "Scalar"},
+		{"Integer", NewTypeLiteral(TInteger), "Number"},
+		{"Decimal", NewTypeLiteral(TDecimal), "Number"},
+		{"Boolean", NewTypeLiteral(TBoolean), "Scalar"},
+		{"List", NewTypeLiteral(TList), "Node"},
+		{"Map", NewTypeLiteral(TMap), "Node"},
+		{"Scalar", NewTypeLiteral(TScalar), "Any"},
+		{"Node", NewTypeLiteral(TNode), "Any"},
+		{"Any", NewTypeLiteral(TAny), "Any"},
+		{"None", NewTypeLiteral(TNone), "None"},
+		{"Object", NewTypeLiteral(TObject), "Ideal"},
+		{"Table", NewTypeLiteral(TTable), "Ideal"},
+		{"Record", NewTypeLiteral(TRecord), "Ideal"},
+		{"Resource", NewTypeLiteral(TResource), "Object"},
+		{"Atom", NewTypeLiteral(TAtom), "Scalar"},
+		{"Type", NewTypeLiteral(TType), "Any"},
+		{"Function", NewTypeLiteral(TFunction), "Type"},
+		{"Disjunct", NewTypeLiteral(TDisjunct), "Type"},
 	}
 
 	for _, tt := range tests {
@@ -967,21 +964,11 @@ func TestTypeofMetatypes(t *testing.T) {
 			if len(result) != 1 {
 				t.Fatalf("expected 1 result, got %d", len(result))
 			}
-			// typeof now returns a Type literal, not an Atom — compare
-			// via String() which renders the leaf.
+			// typeof returns a Type literal — compare via String()
+			// which renders the leaf.
 			got := result[0].String()
 			if got != tt.wantType {
 				t.Errorf("typeof %s = %q, want %q", tt.name, got, tt.wantType)
-			}
-		})
-		t.Run("fulltypeof-"+tt.name, func(t *testing.T) {
-			result := runAQL(t, r, []Value{tt.typeLit, NewWord("fulltypeof")})
-			if len(result) != 1 {
-				t.Fatalf("expected 1 result, got %d", len(result))
-			}
-			got, _ := AsAtom(result[0])
-			if got != tt.wantFull {
-				t.Errorf("fulltypeof %s = %q, want %q", tt.name, got, tt.wantFull)
 			}
 		})
 	}

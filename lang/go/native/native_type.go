@@ -9,8 +9,7 @@ import (
 )
 
 // typeNatives covers the type-system words: refine, pathof, enum,
-// typeof, fulltypeof, is, guard, base, tor, tand, any, all, tany,
-// tall, convert.
+// typeof, is, guard, base, tor, tand, tany, tall, convert.
 //
 // `Resource` and `Entity` (the builtin object types) are NOT installed
 // via NativeFunc — they are user-typed values pushed onto the type
@@ -81,16 +80,7 @@ var typeNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny},
 			Handler: typeofHandler,
-			Returns: []*Type{TAtom}, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "fulltypeof",
-
-		Signatures: []NativeSig{{
-			Args:    []*Type{TAny},
-			Handler: fulltypeofHandler,
-			Returns: []*Type{TAtom}, BarrierPos: -1,
+			Returns: []*Type{TType}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -145,20 +135,6 @@ var typeNatives = []NativeFunc{
 			Handler:    eng.TandHandler,
 			Returns:    []*Type{TAny},
 		}},
-	},
-	{
-		Name: "any",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TList}, Handler: anyHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-		},
-	},
-	{
-		Name: "all",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TList}, Handler: allHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-		},
 	},
 	{
 		Name: "tany",
@@ -395,49 +371,14 @@ func enumHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 	return []Value{NewEnum(alts)}, nil
 }
 
-// ---- typeof / fulltypeof ----
+// ---- typeof ----
 
 func typeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	// Delegate to the canonical aqleng implementation, which returns
-	// a Type literal (not an Atom): concrete value → exact Parent;
-	// type literal → its metatype (ScalarType / NodeType / Type);
-	// implicit-map record shape → its metatype; the value `none`
-	// (unique inhabitant of None) → None.
+	// a Type literal: concrete value → exact Parent; type literal →
+	// its metatype (Type); implicit-map record shape → its metatype;
+	// the value `none` (unique inhabitant of None) → None.
 	return []Value{TypeOf(args[0])}, nil
-}
-
-func fulltypeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	// Render the type's ancestry path. typeof is a single Parent hop;
-	// fulltypeof walks the ancestry of that result to produce the full
-	// slash-separated path. Any is the universal lattice root — skipped
-	// here so the path stays the short form ("Scalar/Number" not
-	// "Any/Scalar/Number").
-	tv := TypeOf(args[0])
-	// For a type literal the denoted lattice node is &tv; for any
-	// other shape it's tv.Parent.
-	var def *Type
-	if tv.Data == nil && !tv.Carrier {
-		def = &tv
-	} else {
-		def = tv.Parent
-	}
-	var parts []string
-	for d := def; d != nil; d = d.Parent {
-		if d.Equal(TAny) { // universal root — skipped in textual paths
-			break
-		}
-		parts = append([]string{d.Name}, parts...)
-	}
-	if len(parts) > 0 {
-		last := parts[len(parts)-1]
-		if len(last) > 0 && last[0] >= '0' && last[0] <= '9' {
-			parts = parts[:len(parts)-1]
-		}
-		if len(last) > 1 && last[0] == '-' && last[1] >= '0' && last[1] <= '9' {
-			parts = parts[:len(parts)-1]
-		}
-	}
-	return []Value{NewAtom(strings.Join(parts, "/"))}, nil
 }
 
 // ---- is ----
@@ -545,47 +486,7 @@ func baseHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 // torHandler, torReturnsFn, tandHandler: moved to eng/go/core_boolean.go.
 // tand's `tall` reduction (below) calls eng.TandValues directly.
 
-// ---- any / all / tany / tall ----
-
-func anyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return []Value{NewBoolean(false)}, nil
-	}
-	list, _ := AsList(args[0])
-	n := list.Len()
-	if n == 0 {
-		return []Value{NewBoolean(false)}, nil
-	}
-	var last Value
-	for i := 0; i < n; i++ {
-		v := list.Get(i)
-		if CoerceBoolean(v) {
-			return []Value{v}, nil
-		}
-		last = v
-	}
-	return []Value{last}, nil
-}
-
-func allHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return []Value{NewBoolean(true)}, nil
-	}
-	list, _ := AsList(args[0])
-	n := list.Len()
-	if n == 0 {
-		return []Value{NewBoolean(true)}, nil
-	}
-	var last Value
-	for i := 0; i < n; i++ {
-		v := list.Get(i)
-		if !CoerceBoolean(v) {
-			return []Value{v}, nil
-		}
-		last = v
-	}
-	return []Value{last}, nil
-}
+// ---- tany / tall ----
 
 func tanyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {

@@ -174,8 +174,8 @@ Any
 
 A child matches its parent (`Integer` is a `Number` is a `Scalar`
 is an `Any`); the converse is false. Types are written with
-slash-separated paths in `fulltypeof`; short names like `Number`
-or `Integer` are accepted in signatures.
+slash-separated paths in `pathof`; short names like `Number` or
+`Integer` are accepted in signatures.
 
 ### Short names
 
@@ -462,8 +462,8 @@ for [a, b, step] [body]   # arithmetic progression
 
 | Word | Description | Example |
 |------|-------------|---------|
-| `typeof` | Short type name | `typeof 42 => Integer` |
-| `fulltypeof` | Full slash path | `fulltypeof 42 => Scalar/Number/Integer` |
+| `typeof` | Type of a value (single Parent hop) | `typeof 42 => Integer` |
+| `pathof` | Ancestry path (root first, leaf last) | `pathof Integer => [Scalar Number Integer]` |
 | `is` | Type-compatibility test | `42 is Number => true` |
 | `convert` | Convert scalar between types | `convert Integer "42"` |
 | `base` | Zero / base value for a type | `base Integer => 0` |

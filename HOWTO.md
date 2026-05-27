@@ -448,8 +448,8 @@ for 10 [dup mod 2 eq 0 if [continue] else [print dup]]
 
 ```
 typeof 42                     => Integer
-typeof "hello"                => String
-fulltypeof 42                 => Scalar/Number/Integer
+typeof "hello"                => ProperString
+pathof Integer                => [Scalar Number Integer]
 42 is Number                  => true
 42 is String                  => false
 ```
