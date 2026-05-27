@@ -256,6 +256,28 @@ type FnDefInfo struct {
 	// return type for downstream type propagation. Named fns leave this
 	// false and the check-mode path uses sig.Returns as authored.
 	Anonymous bool
+	// Captured holds enclosing-fn-local bindings snapshotted at fn-
+	// construction time — the implementation of lexical closures.
+	// Populated by computeCaptures during afn / fn handler execution
+	// (fn_capture.go) when at least one body-Word resolves to a name
+	// bound by an enclosing fn (Depth > TopFnBaseline). Installed as
+	// defs in the per-call scope BEFORE body execution and torn down
+	// by the same DefCleanup mechanism that pops named params; the
+	// install/cleanup wiring lives in InstallFnDef (core_helpers.go),
+	// execFnDefSig + spliceAnonCheckResult (engine.go), and CallAQL
+	// (registry.go). Nil for top-level constructions and any inner
+	// fn whose body references only params, module-global names, or
+	// forward refs. See lang/go/CLAUDE.md "Closures and Capture".
+	Captured []CapturedBinding
+}
+
+// CapturedBinding is one lexically-captured name in a closure. The
+// list is sorted by Name for deterministic install order so that two
+// captures with the same name (impossible today but cheap to keep
+// reproducible) get a stable shadowing order.
+type CapturedBinding struct {
+	Name  string
+	Value Value
 }
 
 // HasForwardSigs reports whether any compiled signature has a non-zero

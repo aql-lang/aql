@@ -78,6 +78,20 @@ type Registry struct {
 	// returns, without the signal having to ride the error channel.
 	// See flowctrl.go.
 	FlowCtrl FlowCtrl
+
+	// FnBaselines is a stack of def-depth snapshots, one per currently
+	// active fn-body execution. Pushed at every body-entry point that
+	// also takes a defSnapshot for body-local-def cleanup; popped at
+	// the matching cleanup site. The top is the snapshot of the
+	// innermost enclosing fn.
+	//
+	// Closure-capture detection (fn_capture.go::computeCaptures) reads
+	// the top: a referenced name with Defs.Depth(name) > baseline[name]
+	// lives inside an enclosing fn (param or body-local) and is
+	// captured; depth == baseline[name] means it lives at module /
+	// global scope and stays dynamic. Nil baseline (empty stack) means
+	// the construction is at top-level and nothing is captured.
+	FnBaselines []map[string]int
 }
 
 // CheckState aggregates the static type-checking state that used to
@@ -243,6 +257,36 @@ func (r *Registry) SetParseFunc(fn func(string) ([]Value, error)) {
 // calls will trigger dynamic help example generation via OnRegisterHook.
 func (r *Registry) MarkReady() {
 	r.ready = true
+}
+
+// PushFnBaseline records a def-depth snapshot as the entry point of a
+// new fn-body execution. Must be paired with PopFnBaseline at the
+// matching cleanup site (same place the per-call defSnapshot's cleanup
+// runs). Closure-capture detection reads TopFnBaseline to decide which
+// names a body-Word reference belongs to an enclosing fn vs the
+// module / global scope.
+func (r *Registry) PushFnBaseline(snap map[string]int) {
+	r.FnBaselines = append(r.FnBaselines, snap)
+}
+
+// PopFnBaseline removes the innermost fn-body baseline. Safe to call on
+// an empty stack (no-op) so cleanup paths can run unconditionally.
+func (r *Registry) PopFnBaseline() {
+	n := len(r.FnBaselines)
+	if n == 0 {
+		return
+	}
+	r.FnBaselines = r.FnBaselines[:n-1]
+}
+
+// TopFnBaseline returns the innermost enclosing-fn def-depth snapshot,
+// or nil if no fn body is currently executing (top-level construction).
+func (r *Registry) TopFnBaseline() map[string]int {
+	n := len(r.FnBaselines)
+	if n == 0 {
+		return nil
+	}
+	return r.FnBaselines[n-1]
 }
 
 // Register adds one or more signatures to a named function.
@@ -662,20 +706,36 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 // CallAQL invokes an AQL function value (FnDefInfo) with a pre-matched
 // signature and arguments in a sub-engine. The caller is responsible for
 // signature matching — use MatchFnSig to find the matching sig.
+// `captures` is the FnDefInfo's lexical-closure binding list (may be
+// nil); they're installed as defs alongside named params and torn down
+// at exit.
 //
 //	sig := MatchFnSig(fn, args)
-//	result, err := r.CallAQL(sig, args)
-func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
+//	result, err := r.CallAQL(sig, args, fnDef.Captured)
+func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding) ([]Value, error) {
 	// Build token sequence (same as InstallFnDef handler).
 	var tokens []Value
 	var names []string
+
+	// Push the fn-entry baseline before installing anything. Inner
+	// fn constructions inside this body consult TopFnBaseline to
+	// identify enclosing-fn-local bindings.
+	r.PushFnBaseline(r.Defs.Snapshot())
 
 	// Push args list onto the args stack.
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
 	argsList := NewList(argsCopy)
 	if err := r.Args.Push(argsList); err != nil {
+		r.PopFnBaseline()
 		return nil, err
+	}
+
+	// Install lexical captures first so params (installed below)
+	// shadow same-named captures — innermost binding wins.
+	for _, cb := range captures {
+		InstallDef(r, cb.Name, cb.Value)
+		names = append(names, cb.Name)
 	}
 
 	for i, p := range sig.Params {
@@ -703,14 +763,15 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 	sub := NewTop(r)
 	result, err := sub.Run(tokens)
 
-	// Cleanup: pop args stack, undef named params, then clean up
-	// any defs that were created during body execution. A Pop error
-	// here means the args stack is nil — a misconfigured registry;
-	// surface it only if sub.Run didn't already fail (the run error
-	// is more informative).
+	// Cleanup: pop args stack, undef named params + captures, then
+	// clean up any defs that were created during body execution. A
+	// Pop error here means the args stack is nil — a misconfigured
+	// registry; surface it only if sub.Run didn't already fail (the
+	// run error is more informative).
 	if _, popErr := r.Args.Pop(); popErr != nil && err == nil {
 		err = popErr
 	}
+	r.PopFnBaseline()
 	for i := len(names) - 1; i >= 0; i-- {
 		UninstallDef(r, names[i])
 	}
@@ -896,7 +957,7 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	saved := snapshotPredicateState(r)
 	defer restorePredicateState(r, saved)
 
-	result, err := r.CallAQL(&fnDef.Sigs[0], []Value{candidate})
+	result, err := r.CallAQL(&fnDef.Sigs[0], []Value{candidate}, fnDef.Captured)
 	if err != nil {
 		return Value{}, false, err
 	}

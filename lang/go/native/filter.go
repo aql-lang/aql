@@ -42,7 +42,11 @@ func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 			callErr = fmt.Errorf("filter: no matching callback signature")
 			return false
 		}
-		cbResult, err := r.CallAQL(cbSig, cbArgs)
+		var cbCaps []CapturedBinding
+		if fd, ok := cb.Data.(FnDefInfo); ok {
+			cbCaps = fd.Captured
+		}
+		cbResult, err := r.CallAQL(cbSig, cbArgs, cbCaps)
 		if err != nil {
 			callErr = err
 			return false

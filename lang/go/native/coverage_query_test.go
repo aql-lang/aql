@@ -1062,7 +1062,7 @@ func TestCallAQLBasic(t *testing.T) {
 	if sig == nil {
 		t.Fatal("no matching signature")
 	}
-	result, err := r.CallAQL(sig, args)
+	result, err := r.CallAQL(sig, args, nil)
 	if err != nil {
 		t.Fatalf("CallAQL error: %v", err)
 	}
@@ -1564,7 +1564,7 @@ func TestCallAQLMapPattern(t *testing.T) {
 	if matchSig == nil {
 		t.Fatal("expected matching signature")
 	}
-	result, callErr := r.CallAQL(matchSig, matchArgs)
+	result, callErr := r.CallAQL(matchSig, matchArgs, nil)
 	if callErr != nil {
 		t.Fatalf("expected match, got error: %v", callErr)
 	}

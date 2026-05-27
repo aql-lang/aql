@@ -1577,6 +1577,26 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		return e.execFnDefSigStackMatch(valIdx, fnDef, resolved)
 	}
 
+	// Count forward vs stack positions.
+	fwdCount := 0
+	for _, pos := range positions {
+		if pos > e.pointer {
+			fwdCount++
+		}
+	}
+
+	// Anonymous lambdas (afn / =>) are VALUES that auto-dispatch only
+	// when args are actually available (forward tokens, or stack args
+	// for the swap form). A 0-arg lambda sitting alone on the stack
+	// has positions=[] AND no forward — it's just data, let downstream
+	// consumers (def, a stored map entry, call) take it as-is rather
+	// than auto-invoking. This is what makes `def f ([] => [body])`
+	// bind f to the Function value instead of to the body's result.
+	if fnDef.Anonymous && fwdCount == 0 && len(positions) == 0 {
+		e.pointer++
+		return nil
+	}
+
 	// Forward-collecting match: defer dispatch until the remaining
 	// tokens have been consumed. When the Forward marker completes,
 	// the engine re-processes the Function value with all args on
@@ -1586,12 +1606,6 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// `afn` / `=>`); in both cases matchSignature found valid
 	// positions and we need the forward args on the stack before
 	// the body / handler runs.
-	fwdCount := 0
-	for _, pos := range positions {
-		if pos > e.pointer {
-			fwdCount++
-		}
-	}
 	if fwdCount > 0 {
 		stkCount := len(positions) - fwdCount
 		return e.insertForward(w, sig, fwdCount, stkCount)
@@ -1841,7 +1855,15 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 
 	if capturedReg != nil {
 		// Execute in the captured module's registry via CallAQL.
-		result, err := capturedReg.CallAQL(sig, args)
+		// Pass the FnDef's lexical captures so the body sees them as
+		// defs (alongside the module-registry's own bindings).
+		var captures []CapturedBinding
+		if valIdx < len(e.stack) {
+			if fd, ok := e.stack[valIdx].Data.(FnDefInfo); ok {
+				captures = fd.Captured
+			}
+		}
+		result, err := capturedReg.CallAQL(sig, args, captures)
 		if err != nil {
 			return err
 		}
@@ -1879,13 +1901,35 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	var tokens []Value
 	tokens = append(tokens, NewOpenParen())
 
+	// Push the fn-entry baseline before installing anything. Inner
+	// fn/afn constructions inside this body consult TopFnBaseline
+	// to identify enclosing-fn-local bindings. Paired with __pa
+	// below, which pops the baseline.
+	e.registry.PushFnBaseline(e.registry.Defs.Snapshot())
+
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
 	if err := e.registry.Args.Push(NewList(argsCopy)); err != nil {
+		e.registry.PopFnBaseline()
 		return err
 	}
 
+	// Lexical captures from the FnDefInfo that produced this dispatch.
+	// Pulled from the stack value at valIdx since execFnDefSig's signature
+	// doesn't carry the FnDefInfo directly. Install before params so
+	// params shadow same-named captures (innermost wins).
+	var captures []CapturedBinding
+	if valIdx < len(e.stack) {
+		if fd, ok := e.stack[valIdx].Data.(FnDefInfo); ok {
+			captures = fd.Captured
+		}
+	}
 	var names []string
+	for _, cb := range captures {
+		InstallDef(e.registry, cb.Name, cb.Value)
+		names = append(names, cb.Name)
+	}
+
 	unnamedCount := 0
 	for i, p := range sig.Params {
 		if p.Name != "" {

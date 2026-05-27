@@ -76,7 +76,11 @@ func makeWalkApply(cb Value, r *Registry, callErr *error) func(*string, any, any
 			*callErr = fmt.Errorf("walk: no matching callback signature")
 			return val
 		}
-		cbResult, err := r.CallAQL(cbSig, cbArgs)
+		var cbCaps []CapturedBinding
+		if fd, ok := cb.Data.(FnDefInfo); ok {
+			cbCaps = fd.Captured
+		}
+		cbResult, err := r.CallAQL(cbSig, cbArgs, cbCaps)
 		if err != nil {
 			*callErr = err
 			return val

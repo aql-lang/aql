@@ -23,6 +23,26 @@ marker — see `;` → `"end"`, `=>` → `"afn"`, `|` → `"|"` in
 linear. Behaviour the marker can't express directly belongs in the
 registered word's handler, not in a separate parser stage.
 
+## Per-Call Stacks (Args / DefSnapshot / FnBaselines)
+
+Every fn-body entry pushes onto three coordinated stacks; every fn
+exit pops the same three. Misalignment (forgetting one) breaks
+nested calls in subtle ways, so add the push and the matching pop
+together when you touch one of these sites.
+
+| Stack | Field | Push site | Pop site | Read site |
+| --- | --- | --- | --- | --- |
+| Args list | `Registry.Args` | `InstallFnDef` handler / `execFnDefSig` body splice / `CallAQL` | `__pa` token in the synthesized body tail / `CallAQL` inline cleanup | `args` native word |
+| Body-local def cleanup | (per-call `defSnapshot` local) | same | `DefCleanupInfo` marker (`stepDefCleanup`) / `CallAQL` inline cleanup | closure capture analysis (via `FnBaselines`) |
+| Enclosing-fn baseline | `Registry.FnBaselines` | same (alongside `defSnapshot`) | piggybacks on `__pa` and on `CallAQL`'s inline cleanup | `ComputeCaptures` (`fn_capture.go`) |
+
+The baseline is what closure-capture detection consults at fn-
+construction time: an inner-fn body Word whose `Defs.Depth(name) >
+TopFnBaseline()[name]` lives inside an enclosing fn (param or
+body-local) and is captured; depth ≤ baseline means module / global
+scope and the reference stays dynamic. See lang/go/CLAUDE.md
+"Closures and Capture" for the surface semantics.
+
 ## No Zero-Value Overload (CRITICAL)
 
 A struct field MUST NOT use the Go zero value (`0`, `""`, `false`,

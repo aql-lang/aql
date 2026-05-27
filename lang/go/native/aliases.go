@@ -47,6 +47,7 @@ type (
 	Engine              = eng.Engine
 	ErrorInfo           = eng.ErrorInfo
 	FlowCtrl            = eng.FlowCtrl
+	CapturedBinding     = eng.CapturedBinding
 	FnDefInfo           = eng.FnDefInfo
 	FnParam             = eng.FnParam
 	FnSig               = eng.FnSig

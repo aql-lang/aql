@@ -200,7 +200,8 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 				patterns[i] = *p.Pattern
 			}
 		}
-		s := sig // capture for closure
+		s := sig           // capture for closure
+		fnDefCopy := fnDef // capture for closure (we need Captured at call time)
 		handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			var result []Value
 			var names []string
@@ -213,13 +214,34 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			// waiting for the full result).
 			result = append(result, NewOpenParen())
 
+			// Push the fn-entry baseline BEFORE installing anything
+			// for this call. Closure-capture detection on inner fn
+			// constructions (afn/fn) inside this body consults
+			// TopFnBaseline to identify enclosing-fn-local bindings:
+			// names installed AFTER this snapshot (this call's
+			// captures + named params + body-local defs) are
+			// capturable; names already present at module/global
+			// scope are dynamic.
+			r.PushFnBaseline(r.Defs.Snapshot())
+
 			// Push args list onto the args stack for access via the
-			// "args" word (args.0, args.1, etc.).
+			// "args" word (args.0, args.1, etc.). Paired with __pa
+			// at the body tail, which also pops the FnBaseline.
 			argsCopy := make([]Value, len(args))
 			copy(argsCopy, args)
 			argsList := NewList(argsCopy)
 			if err := r.Args.Push(argsList); err != nil {
+				r.PopFnBaseline()
 				return nil, err
+			}
+
+			// Install lexical captures BEFORE named params so params
+			// shadow captures with the same name (innermost binding
+			// wins). Captures are appended to `names` so the
+			// synthesized undef tail tears them down alongside params.
+			for _, cb := range fnDefCopy.Captured {
+				InstallDef(r, cb.Name, cb.Value)
+				names = append(names, cb.Name)
 			}
 
 			unnamedCount := 0

@@ -517,6 +517,14 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	if err != nil {
 		return nil, err
 	}
+	// Compute lexical captures: per-sig walks merged into one list.
+	// Nil at top-level (no enclosing fn) — natural no-op via
+	// ComputeCaptures' baseline check.
+	perSig := make([][]CapturedBinding, len(fnDef.Sigs))
+	for i := range fnDef.Sigs {
+		perSig[i] = eng.ComputeCaptures(r, &fnDef.Sigs[i])
+	}
+	fnDef.Captured = eng.MergeCaptures(perSig)
 	return []Value{NewFunction(fnDef)}, nil
 }
 
@@ -559,7 +567,11 @@ func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 		Body:       bodyElems,
 		BarrierPos: barrierPos,
 	}
-	fnDef := FnDefInfo{Sigs: []FnSig{sig}, Anonymous: true}
+	fnDef := FnDefInfo{
+		Sigs:      []FnSig{sig},
+		Anonymous: true,
+		Captured:  eng.ComputeCaptures(r, &sig),
+	}
 	return []Value{NewFunction(fnDef)}, nil
 }
 
@@ -663,5 +675,11 @@ func popArgsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	if _, err := r.Args.Pop(); err != nil {
 		return nil, err
 	}
+	// FnBaseline is pushed in lockstep with the args list at every fn
+	// entry that uses the __pa cleanup convention (InstallFnDef handler
+	// + execFnDefSig body splice). Pop here so closure-capture
+	// detection on subsequent fn constructions sees the correct
+	// enclosing-fn baseline.
+	r.PopFnBaseline()
 	return nil, nil
 }
