@@ -1,25 +1,15 @@
 # Property-Based Testing for AQL
 
-> **STATUS: PAUSED (2026-05-27)**
+> **STATUS: READY TO RESUME (2026-05-27)**
 >
 > Stages 0d, 1, and 2 landed in commit 7d46b68 (aql:rand module, gen
-> policy profile, expandDottedWord doc cleanup). The remaining stages
-> (0a-c stack-form recording, 3-6 PBT machinery) are **paused pending
-> the FnSig / NativeSig argument-ordering refactor** described in
-> `design/SIG-ORDER-REFACTOR.0.md`.
+> policy profile, expandDottedWord doc cleanup). The
+> argument-ordering refactor (`design/SIG-ORDER-REFACTOR.0.md`) that
+> was blocking the remaining stages has landed too — every dispatch
+> path now agrees on top-first sig order.
 >
-> The implementation of Stage 1 (`aql:rand`) exposed a critical
-> pre-existing kernel-level inconsistency: module FnDef wrappers use
-> source-order (bottom-first) `Params` while NativeSig and
-> `matchSignature` use sig-order (top-first) `Args`. This bites every
-> heterogeneous-arg module wrapper (time.format, rand.string, etc.)
-> and would compound badly when the stack-form recorder (Stage 0b)
-> reads positions back out. Fixing the inconsistency FIRST means the
-> PBT work that follows can assume one convention.
->
-> Resume here after the sig-ordering refactor is merged. No content
-> in this plan needs to change post-refactor; only the file paths and
-> the "Module FnDef Wrappers" gotcha references will be obsolete.
+> Resume with Stage 0a (stack-form types + `eng/go/stackform/`
+> package). No content below needs updating post-refactor.
 
 ## Context
 

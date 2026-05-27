@@ -1,7 +1,56 @@
 # Signature-Order Refactor: Unify FnSig and NativeSig on Top-First
 
-> **Status: planning, not yet implemented.** Blocks the PBT work in
-> `design/PBT-PLAN.0.md`. Resume PBT after this refactor merges.
+> **Status: implemented** (this branch). The PBT plan in
+> `design/PBT-PLAN.0.md` is unblocked.
+>
+> ## What landed (diff from this design doc)
+>
+> Empirical investigation while executing the plan revealed that AQL
+> source `def fn` was **already** top-first via `matchSignature` — the
+> audit's claim of "bottom-first AQL semantics" was incorrect. The
+> only path actually using bottom-first was `execFnDefSigStackMatch`'s
+> `!hasNamed` branch, which fired from `execFnDefLiteral`'s
+> module-closure branch after `matchSignature` had already succeeded.
+>
+> Implementation:
+>
+> - **engine.go `execFnDefLiteral` module-closure branch** (~line
+>   1638): stopped re-matching via `execFnDefSigStackMatch`. Uses
+>   `matchSignature`'s already-computed positions to construct args
+>   in top-first sig order, then routes through `execFnDefSig` with
+>   the wrapper's FnSig (picked by arity, future-proof against
+>   multi-overload wrappers).
+> - **engine.go `execFnDefSig` non-captured branch** + **registry.go
+>   `CallAQL`**: for **unnamed** params, push args into the body in
+>   REVERSE so the body's stack mirrors the outer stack. The body's
+>   inner native then dispatches against the same shape the user
+>   constructed. Named-param binding (`InstallDef(Params[i].Name,
+>   args[i])`) is unchanged: first declared name binds to top.
+> - **core_helpers.go `InstallFnDef` handler closure** (used by
+>   stepWord-dispatched registered AQL fns like `def f fn […]`):
+>   left UNCHANGED. Its existing semantic — args[i] appears at body
+>   position i from the bottom — is what AQL `def fn` authors rely
+>   on (locked in by `pipe_barrier_test.go::TestPipeBarrierFnDef`).
+> - **`execFnDefSigStackMatch`** itself: left UNCHANGED. Only reached
+>   now as a fallback when matchSignature returns nil; its bottom-
+>   first `!hasNamed` convention there is residual and harmless.
+> - **Module wrapper Params**: flipped to match inner native Args in
+>   the heterogeneous cases (time.format, to-instant, to-local,
+>   start-of, end-of, tz-offset, is-dst, add-days/months/years,
+>   rand.string). Now matches the documented convention "wrapper
+>   Params == inner Args, top-first".
+> - **CLAUDE.md** (eng + lang): new "Signature Ordering" sections
+>   documenting the unified rule.
+> - **Guard test**: `lang/go/test/sig_order_guard_test.go` pins the
+>   four scenarios that the refactor must preserve / fix.
+>
+> The "execFnDefSigStackMatch flip" originally proposed in Step 3
+> below was NOT performed — that path is residual fallback that no
+> production code reaches now that the module-closure branch routes
+> through matchSignature's result directly. Flipping its !hasNamed
+> branch would be cosmetic and risks subtly breaking edge-case
+> anonymous-lambda dispatch that no test pins down. Left for a
+> future cleanup if it ever becomes a load-bearing path again.
 
 ## Context
 

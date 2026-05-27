@@ -43,6 +43,45 @@ body-local) and is captured; depth ≤ baseline means module / global
 scope and the reference stays dynamic. See lang/go/CLAUDE.md
 "Closures and Capture" for the surface semantics.
 
+## Signature Ordering (CRITICAL)
+
+Every argument-positioning convention in this kernel uses
+**top-first, sig order**: position 0 is whatever sits on the top
+of the stack, position 1 is next-deeper, and so on. The single
+source of truth is `matchSignature` (`engine.go::matchSignature`)
+— do not introduce a parallel matcher with a different
+convention.
+
+Concretely:
+
+- `Signature.Args[0]` and `NativeSig.Args[0]` (kernel words):
+  top of stack.
+- `FnSig.Params[0]` (AQL `def fn […]` definitions, module
+  wrappers): also top of stack. AQL source `def f fn
+  [[a:Integer b:String]…] "hello" 42 f` binds `a=42` (top) and
+  `b="hello"` (deeper).
+- `args[i]` in registered native handler closures: i-th sig
+  position from the top.
+- `args[i]` passed to `CallAQL` / `execFnDefSig` / `InstallFnDef`'s
+  handler closure: same.
+- `args.N` AQL accessor: returns `args[N]` directly.
+
+The lone subtlety is `CallAQL` / `execFnDefSig`'s **unnamed-param
+push** path: it pushes args back onto the body's frame in
+*reverse* (`args[N-1]` first, `args[0]` last) so the body's
+stack mirrors the outer stack — sig position 0 ends up on top of
+the body too. This makes module-wrapper bodies like
+`[Word(inner-native-name)]` dispatch correctly. The
+`InstallFnDef` closure path (for stepWord-dispatched registered
+AQL fns) does NOT reverse — body position `i` from the bottom is
+sig position `i`. See `design/SIG-ORDER-REFACTOR.0.md` for the
+historical context.
+
+When adding a new dispatch path (a new way to invoke an
+`FnDefInfo` or `FnSig`), match `matchSignature`'s convention and
+route through the existing helpers rather than reimplementing
+arg-position logic.
+
 ## No Zero-Value Overload (CRITICAL)
 
 A struct field MUST NOT use the Go zero value (`0`, `""`, `false`,

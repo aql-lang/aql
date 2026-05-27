@@ -738,6 +738,23 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 		names = append(names, cb.Name)
 	}
 
+	// args is in top-first sig order (matchSignature convention):
+	// args[0] is the value that filled sig position 0 = outer-stack top.
+	//
+	// Named params: bind args[i] to Params[i].Name — Params[0] (first
+	// declared) gets the outer top, etc.
+	//
+	// Unnamed params: push back onto the body's frame in REVERSE so
+	// the body's stack layout MIRRORS the outer stack (bottom-up).
+	// Without this, a body that delegates to an inner native — e.g. a
+	// module wrapper body of `[Word(inner-name)]` — would dispatch the
+	// inner native against an inverted stack and fail on any
+	// heterogeneous-type sig. See design/SIG-ORDER-REFACTOR.0.md.
+	//
+	// InstallFnDef's handler closure (for stepWord-dispatched registered
+	// AQL fns like `def f fn […]`) is intentionally NOT reversed — that
+	// path's semantic is "args[i] appears at body-position i from the
+	// bottom", which AQL `def fn` authors rely on.
 	for i, p := range sig.Params {
 		if p.Name != "" {
 			arg := args[i]
@@ -746,7 +763,10 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 			}
 			InstallDef(r, p.Name, arg)
 			names = append(names, p.Name)
-		} else {
+		}
+	}
+	for i := len(sig.Params) - 1; i >= 0; i-- {
+		if sig.Params[i].Name == "" {
 			tokens = append(tokens, args[i])
 		}
 	}

@@ -77,13 +77,15 @@ func BuildRandModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("float", wrapRandFnDef("rand-float",
 		nil,
 		[]*native.Type{native.TDecimal}, subReg))
-	// Wrapper FnSig Params are matched in source order (bottom-of-
-	// stack first), the OPPOSITE of inner NativeSig.Args which use
-	// sig order (top-of-stack first). Compare time.format for the
-	// same convention.
+	// Wrapper FnSig Params now match the inner NativeSig.Args order
+	// top-first (sig[0] = stack top), consistent with matchSignature.
+	// The pre-refactor convention (source-order / bottom-first) was
+	// removed when execFnDefLiteral's module-closure branch stopped
+	// re-matching via execFnDefSigStackMatch. See
+	// design/SIG-ORDER-REFACTOR.0.md.
 	exports.Set("string", wrapRandFnDef("rand-string",
-		// source `charset length`: Params[0]=charset, Params[1]=length
-		[]native.FnParam{{Type: native.TString}, {Type: native.TInteger}},
+		// stack `charset length`: Params[0]=length (top), Params[1]=charset (deeper)
+		[]native.FnParam{{Type: native.TInteger}, {Type: native.TString}},
 		[]*native.Type{native.TString}, subReg))
 	exports.Set("one-of", wrapRandFnDef("rand-one-of",
 		[]native.FnParam{{Type: native.TList}},

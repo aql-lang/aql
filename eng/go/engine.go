@@ -1635,8 +1635,32 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// re-dispatch), route through execFnDefSig with the captured
 	// registry. CallAQL runs the body in a sub-engine on modReg so
 	// the fn's def-body word lookups resolve in its own scope.
+	//
+	// matchSignature already matched top-first (sig[0] = stack top).
+	// Pass args in sig order so named-param binding stays correct
+	// (Params[i].Name = args[i] = i-th sig position from the top).
+	// For unnamed params, CallAQL reverses the push order so the
+	// body's frame ends up mirroring the outer stack layout — the
+	// wrapper's body word then dispatches the inner native against
+	// an identical stack shape.
+	//
+	// See design/SIG-ORDER-REFACTOR.0.md for the rationale.
 	if fnDef.Registry != nil && fnDef.Registry != e.registry && len(fnDef.Sigs) > 0 {
-		return e.execFnDefSigStackMatch(valIdx, fnDef, resolved)
+		args := make([]Value, len(positions))
+		for i, pos := range positions {
+			args[i] = e.stack[pos]
+		}
+		// Module wrappers carry a single FnSig (the wrapping shim);
+		// pick by arity to stay future-proof against multi-overload
+		// wrappers.
+		wrapperSig := &fnDef.Sigs[0]
+		for i := range fnDef.Sigs {
+			if len(fnDef.Sigs[i].Params) == len(positions) {
+				wrapperSig = &fnDef.Sigs[i]
+				break
+			}
+		}
+		return e.execFnDefSig(valIdx, wrapperSig, args, fnDef.Registry)
 	}
 
 	// Pure-stack match: dispatch via execMatch the same way a bare
@@ -1942,12 +1966,18 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		names = append(names, cb.Name)
 	}
 
+	// args in top-first sig order. Named params bind by name; unnamed
+	// params push in REVERSE so body stack mirrors outer (see
+	// CallAQL above and design/SIG-ORDER-REFACTOR.0.md).
 	unnamedCount := 0
 	for i, p := range sig.Params {
 		if p.Name != "" {
 			InstallDef(e.registry, p.Name, args[i])
 			names = append(names, p.Name)
-		} else {
+		}
+	}
+	for i := len(sig.Params) - 1; i >= 0; i-- {
+		if sig.Params[i].Name == "" {
 			tokens = append(tokens, args[i])
 			unnamedCount++
 		}

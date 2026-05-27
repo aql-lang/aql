@@ -486,9 +486,8 @@ inner natives there, and exports FnDef wrappers (carrying
 `Registry: subReg`) into the module's export map. When the
 wrapper is invoked via `pkg.word` dot-access, dispatch flows
 through `eng/go/engine.go::execFnDefLiteral`, which calls
-`reg.Lookup(fnDef.Name)` (line ~1519) and uses the **looked-up
-native's `Signatures`** for `matchSignature` — NOT the wrapper's
-own Sigs.
+`reg.Lookup(fnDef.Name)` and uses the **looked-up native's
+`Signatures`** for `matchSignature` — NOT the wrapper's own Sigs.
 
 **Consequence:** the inner native's `BarrierPos` controls whether
 the wrapper's swap-form `a pkg.word b` dispatches.
@@ -512,6 +511,37 @@ Regression test:
 `lang/go/modules/wrapper_dispatch_test.go::TestModuleWrapperInnerSigBarrierPos`
 asserts both directions (the broken case explicitly demonstrates
 the silent-dispatch-failure mode).
+
+### Wrapper FnSig.Params order (CRITICAL)
+
+`FnSig.Params` on a module wrapper MUST be declared in the same
+order as the inner native's `NativeSig.Args` — **top-first, sig
+order**: `Params[0]` describes the type of the value the user
+puts on the top of the stack (= `sig[0]` in matchSignature's
+view).
+
+This convention is post-`SIG-ORDER-REFACTOR.0` (see
+`design/SIG-ORDER-REFACTOR.0.md`). The pre-refactor code re-
+matched module-closure dispatch in `execFnDefSigStackMatch` under
+a bottom-first convention, which forced wrapper authors to
+declare `Params` *reversed* from the inner native's `Args`. The
+engine now uses `matchSignature`'s already-computed positions
+directly, so wrapper `Params` and inner `Args` agree.
+
+For multi-arg wrappers with **unnamed** params (the common case
+— `makeXxxFnDef` helpers all use unnamed positional Params),
+`CallAQL` pushes args into the body's frame in *reverse* so the
+body's stack mirrors the outer stack layout. This means a body
+of `[Word(inner-native-name)]` dispatches the inner native
+against the same stack the user constructed, and inherits the
+inner native's top-first sig matching naturally.
+
+For **named** wrapper params (rare — AQL-defined fns inside a
+module preamble, like `decision.cond`), `Params[i].Name` binds
+to `args[i]` in the body. Since `args[i]` is sig position `i`
+from the top, the first declared name binds to the outer top.
+
+Test: `lang/go/test/sig_order_guard_test.go` pins this convention.
 
 ## Registry Bindings (CRITICAL)
 
