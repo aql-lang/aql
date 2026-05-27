@@ -116,24 +116,16 @@ func TestSigOrder_UnnamedAqlFn_TopFirst(t *testing.T) {
 	}
 }
 
-// TestSigOrder_ModuleWrapper_PreFix demonstrates the broken case
-// targeted by the refactor: a wrapper FnSig whose Params mirror the
-// inner native's Args (top-first natural order). PRE-REFACTOR this
-// fails to dispatch — the module-closure branch in execFnDefLiteral
-// re-matches via execFnDefSigStackMatch under a bottom-first
-// convention, causing the heterogeneous-type sig to mismatch.
-//
-// rand.string's wrapper currently uses [String, Integer] (reversed)
-// as a manual compensation; this test will fail until the engine
-// fix lands AND the wrapper is flipped back to natural order.
-//
-// Once the refactor is in, the rand.string wrapper Params flip to
-// [Integer, String] (matching the inner native) and this test
-// asserts dispatch works.
+// TestSigOrder_ModuleWrapper_NaturalParams pins module-wrapper
+// dispatch on top-first sig order. The wrapper's FnSig.Params match
+// the inner native's NativeSig.Args order (top-first per the
+// canonical forward call form `rand.string CHARSET LENGTH`).
+// execFnDefLiteral's trivial-delegation short-circuit routes the call
+// straight to the inner native via execMatch.
 func TestSigOrder_ModuleWrapper_NaturalParams(t *testing.T) {
 	r := setupRandReg(t)
-	// "abc" 10 rand.string draws a 10-char string from "abc".
-	res, runErr := runSrc(t, r, `1 rand.seed "abc" 10 rand.string`)
+	// Forward form: `rand.string "abc" 10` → charset="abc", length=10.
+	res, runErr := runSrc(t, r, `def s (rand.with-seed 1)  (s.string "abc" 10)`)
 	if runErr != nil {
 		t.Fatalf("dispatch failed: %v", runErr)
 	}

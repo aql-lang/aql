@@ -8,8 +8,32 @@
 > was blocking the remaining stages has landed too — every dispatch
 > path now agrees on top-first sig order.
 >
+> **API update post-refactor**: the rand module has been reshaped so
+> the **top-level** `rand.*` is non-deterministic by default (clock-
+> seeded at module-build time). Deterministic / reproducible
+> sequences come from `rand.with-seed N`, which returns an **isolated
+> OrderedMap instance** carrying the same methods (`int`, `bool`,
+> `float`, `string`, `one-of`). Each instance has its own PRNG. The
+> old `rand.seed N` (top-level mutation) and `rand.fresh-seed` words
+> were removed. Range semantics: **`rand.int LO HI` is half-open**
+> `[LO, HI)` — inclusive lower, exclusive upper.
+>
+> The table in §"Stage 1" below should be read with these changes
+> applied: replace `rand.seed` / `rand.fresh-seed` with
+> `rand.with-seed N → Map`. The `rand.list-of` and `rand.map-from`
+> rows still apply for future work — they remain deferred (FnSig has
+> no NoEvalArgs equivalent yet; see `SIG-ORDER-REFACTOR.0.md`'s
+> "Out-of-scope follow-ups").
+>
+> For PBT determinism, generators MUST use `rand.with-seed N`
+> instances; the clock-seeded top-level would break replay. The gen
+> policy profile currently allows both — Stage 3 should add a runtime
+> check or a stricter sub-profile that denies top-level rand words,
+> forcing PBT runs to pass through seeded instances.
+>
 > Resume with Stage 0a (stack-form types + `eng/go/stackform/`
-> package). No content below needs updating post-refactor.
+> package). The rand-API notes above are the only things in this
+> doc that have changed since it was paused.
 
 ## Context
 

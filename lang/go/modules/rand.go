@@ -6,69 +6,108 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aql-lang/aql/eng/go"
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
-// randState holds the PRNG bound to a registry. Stored under capRandRng
-// on the parent (caller's) registry so successive rand.* calls share
-// the same source, and rand.seed re-seeds them deterministically.
-//
-// Default seed is 1, so a fresh registry that never calls rand.seed
-// still produces a reproducible sequence — useful for property tests
-// where deterministic replay matters more than uniqueness.
+// randState holds a PRNG instance. Each instance is independent —
+// successive calls on the same state share the stream, but two
+// distinct states (e.g. top-level default vs `rand.with-seed N`) are
+// fully isolated.
 type randState struct {
 	mu  sync.Mutex
 	rng *mathrand.Rand
 }
 
-const capRandRng = "rand.rng.active"
-
-// activeRand returns the randState for parent, lazily creating it
-// with the default seed on first access.
-func activeRand(parent *native.Registry) *randState {
-	if s, ok, _ := eng.Cap[*randState](parent, capRandRng); ok && s != nil {
-		return s
-	}
-	s := &randState{rng: mathrand.New(mathrand.NewSource(1))}
-	_ = parent.Capabilities.Set(capRandRng, s)
-	return s
-}
-
-// BuildRandModule creates the "aql:rand" native module. Exposes seeded
-// deterministic randomness as words in the "rand" namespace: seed, int,
-// bool, float, string, one-of, list-of.
+// BuildRandModule creates the "aql:rand" native module.
 //
-// The module is intentionally minimal in v1 — frequency/map-from and
-// other convenience generators can be layered in pure AQL on top of
-// these primitives.
+// The top-level `rand` namespace is **non-deterministic by default**:
+// at module-build time we seed once from the host clock so a fresh
+// `"aql:rand" import` produces genuinely random values.
+//
+// For deterministic / reproducible sequences (property tests, demo
+// fixtures, replayable simulations) use `rand.with-seed N` — it
+// returns a fresh isolated instance (an OrderedMap) carrying the same
+// methods as the top-level (`int`, `bool`, `float`, `string`,
+// `one-of`). The instance has its own PRNG sourced from `N` and does
+// not affect the top-level rand or any other instance.
+//
+//	"aql:rand" import
+//	rand.int 0 100              # random, [0, 100)
+//	def r (rand.with-seed 42)   # isolated, seeded with 42
+//	r.int 0 100                 # deterministic at seed 42
 func BuildRandModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
+	// Seed the top-level instance from the clock so default usage is
+	// non-deterministic — what most developers expect.
+	defaultState := newRandState(time.Now().UnixNano())
+	exports, err := buildRandExportsForState(defaultState)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
 
-	for _, n := range randNatives(parent) {
+	// `rand.with-seed` lives only at the top level. Its handler
+	// constructs a new randState seeded with N, builds a separate
+	// exports map with all the standard methods (int, bool, float,
+	// string, one-of), and returns that map as an OrderedMap. Each
+	// call mints a fresh instance — no global mutation.
+	withSeedSubReg, err := native.DefaultRegistry()
+	if err != nil {
+		return native.ModuleDesc{}, err
+	}
+	withSeedSubReg.RegisterNativeFunc(native.NativeFunc{
+		Name: "rand-with-seed",
+		Signatures: []native.NativeSig{{
+			Args:       []*native.Type{native.TInteger},
+			Returns:    []*native.Type{native.TMap},
+			BarrierPos: -1,
+			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				seed, err := args[0].AsConcreteInteger()
+				if err != nil {
+					return nil, err
+				}
+				state := newRandState(seed)
+				instance, err := buildRandExportsForState(state)
+				if err != nil {
+					return nil, err
+				}
+				return []native.Value{native.NewMap(instance)}, nil
+			},
+		}},
+	})
+	exports.Set("with-seed", wrapRandFnDef("rand-with-seed",
+		[]native.FnParam{{Type: native.TInteger}},
+		[]*native.Type{native.TMap}, withSeedSubReg))
+
+	return native.ModuleDesc{
+		ID:      parent.Modules.NextID(),
+		Exports: map[string]*native.OrderedMap{"rand": exports},
+	}, nil
+}
+
+// newRandState builds a fresh PRNG seeded with the given int64.
+func newRandState(seed int64) *randState {
+	return &randState{rng: mathrand.New(mathrand.NewSource(seed))}
+}
+
+// buildRandExportsForState builds the OrderedMap of dotted methods
+// (`int`, `bool`, `float`, `string`, `one-of`) bound to the given
+// state. Used for both the top-level default and for each
+// `rand.with-seed` instance — each gets its own sub-registry of
+// natives closing over its own randState.
+func buildRandExportsForState(state *randState) (*native.OrderedMap, error) {
+	subReg, err := native.DefaultRegistry()
+	if err != nil {
+		return nil, err
+	}
+	for _, n := range randNativesForState(state) {
 		subReg.RegisterNativeFunc(n)
 	}
 
 	exports := native.NewOrderedMap()
-	// Param ordering follows the unified dispatch rule: sig[0] is the
-	// top of the stack. Stack-only surface form `lo hi rand.int` puts
-	// hi on top, so sig[0]=hi, sig[1]=lo. Likewise for two-arg sigs
-	// below.
-	exports.Set("seed", wrapRandFnDef("rand-seed",
-		[]native.FnParam{{Type: native.TInteger}},
-		nil, subReg))
-	// fresh-seed reseeds the PRNG from the host clock. Use this when
-	// you actually want non-reproducible randomness — the default
-	// seed of 1 is deterministic on purpose so property tests and
-	// demos replay. Profile note: `rand.fresh-seed` is denied by the
-	// `gen` profile because it reads the clock.
-	exports.Set("fresh-seed", wrapRandFnDef("rand-fresh-seed",
-		nil, nil, subReg))
+	// Wrapper FnSig Params match the inner NativeSig.Args order
+	// (top-first per SIG-ORDER-REFACTOR.0.md). Aligned with the
+	// FORWARD canonical surface — sig[0] is the first arg written
+	// after the word: `rand.int LO HI`, `rand.string CHARSET LEN`.
 	exports.Set("int", wrapRandFnDef("rand-int",
-		// stack `lo hi`: sig[0]=hi, sig[1]=lo
 		[]native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}},
 		[]*native.Type{native.TInteger}, subReg))
 	exports.Set("bool", wrapRandFnDef("rand-bool",
@@ -77,37 +116,19 @@ func BuildRandModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("float", wrapRandFnDef("rand-float",
 		nil,
 		[]*native.Type{native.TDecimal}, subReg))
-	// Wrapper FnSig Params now match the inner NativeSig.Args order
-	// top-first (sig[0] = stack top), consistent with matchSignature.
-	// The pre-refactor convention (source-order / bottom-first) was
-	// removed when execFnDefLiteral's module-closure branch stopped
-	// re-matching via execFnDefSigStackMatch. See
-	// design/SIG-ORDER-REFACTOR.0.md.
 	exports.Set("string", wrapRandFnDef("rand-string",
-		// stack `charset length`: Params[0]=length (top), Params[1]=charset (deeper)
-		[]native.FnParam{{Type: native.TInteger}, {Type: native.TString}},
+		[]native.FnParam{{Type: native.TString}, {Type: native.TInteger}},
 		[]*native.Type{native.TString}, subReg))
 	exports.Set("one-of", wrapRandFnDef("rand-one-of",
 		[]native.FnParam{{Type: native.TList}},
 		[]*native.Type{native.TAny}, subReg))
-	// list-of / map-from are deferred. Module FnDef wrappers always
-	// auto-evaluate list args (FnSig has no NoEvalArgs equivalent),
-	// so a quoted generator body cannot be threaded through the
-	// `rand.list-of` surface today without forcing the user to write
-	// `(quote [...]) 5 rand.list-of`. The PBT framework (Stage 3)
-	// iterates generator bodies on the Go side anyway, so this
-	// limitation costs nothing at the property-test layer.
-
-	return native.ModuleDesc{
-		ID:      parent.Modules.NextID(),
-		Exports: map[string]*native.OrderedMap{"rand": exports},
-	}, nil
+	return exports, nil
 }
 
 // wrapRandFnDef builds the FnDef wrapper that dispatches a dotted
-// rand.<word> call into the sub-registry's native handler. BarrierPos
-// is -1 (all forward-eligible) per the module-wrapper rule in
-// lang/go/CLAUDE.md "Module FnDef Wrappers — inner sig BarrierPos".
+// rand.<word> call into the sub-registry's native handler. Body is
+// `[Word(wordName)]` so execFnDefLiteral's trivial-delegation
+// short-circuit fires (direct execMatch on the inner handler).
 func wrapRandFnDef(wordName string, params []native.FnParam, returns []*native.Type, subReg *native.Registry) native.Value {
 	fnDef := native.FnDefInfo{
 		Name: wordName,
@@ -122,68 +143,40 @@ func wrapRandFnDef(wordName string, params []native.FnParam, returns []*native.T
 	return native.NewFnDef(fnDef)
 }
 
-// randNatives builds the Go-implemented rand primitives. Each handler
-// reaches into activeRand(parent) so successive calls share the PRNG.
-func randNatives(parent *native.Registry) []native.NativeFunc {
+// randNativesForState builds the Go-implemented rand primitives.
+// Every handler closes over `state` directly, so each call mints a
+// new set of natives bound to a specific PRNG instance. No global
+// capability lookup — the state pointer is captured at construction.
+func randNativesForState(state *randState) []native.NativeFunc {
 	return []native.NativeFunc{
-		{
-			Name: "rand-seed",
-			Signatures: []native.NativeSig{{
-				Args:       []*native.Type{native.TInteger},
-				Returns:    []*native.Type{},
-				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-					seed, err := args[0].AsConcreteInteger()
-					if err != nil {
-						return nil, err
-					}
-					s := activeRand(parent)
-					s.mu.Lock()
-					s.rng = mathrand.New(mathrand.NewSource(seed))
-					s.mu.Unlock()
-					return nil, nil
-				},
-			}},
-		},
-		{
-			Name: "rand-fresh-seed",
-			Signatures: []native.NativeSig{{
-				Args:       []*native.Type{},
-				Returns:    []*native.Type{},
-				BarrierPos: -1,
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-					s := activeRand(parent)
-					s.mu.Lock()
-					s.rng = mathrand.New(mathrand.NewSource(time.Now().UnixNano()))
-					s.mu.Unlock()
-					return nil, nil
-				},
-			}},
-		},
 		{
 			Name: "rand-int",
 			Signatures: []native.NativeSig{{
-				// stack `lo hi`: sig[0]=hi (top), sig[1]=lo (deeper).
+				// Canonical surface (forward form): `rand.int LO HI`.
+				// sig[0]=lo, sig[1]=hi. Returns a uniform integer in
+				// the HALF-OPEN range [lo, hi) — inclusive lower,
+				// exclusive upper. Matches Python's random.randrange,
+				// Rust's gen_range, Go's rand.Intn.
 				Args:       []*native.Type{native.TInteger, native.TInteger},
 				Returns:    []*native.Type{native.TInteger},
 				BarrierPos: -1,
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-					hi, err := args[0].AsConcreteInteger()
+					lo, err := args[0].AsConcreteInteger()
 					if err != nil {
 						return nil, err
 					}
-					lo, err := args[1].AsConcreteInteger()
+					hi, err := args[1].AsConcreteInteger()
 					if err != nil {
 						return nil, err
 					}
-					if hi < lo {
+					if hi <= lo {
 						return nil, r.AqlError("rand_error",
-							fmt.Sprintf("rand.int: hi (%d) < lo (%d)", hi, lo), "rand.int")
+							fmt.Sprintf("rand.int: hi (%d) <= lo (%d); range must be non-empty", hi, lo),
+							"rand.int")
 					}
-					s := activeRand(parent)
-					s.mu.Lock()
-					n := lo + s.rng.Int63n(hi-lo+1)
-					s.mu.Unlock()
+					state.mu.Lock()
+					n := lo + state.rng.Int63n(hi-lo)
+					state.mu.Unlock()
 					return []native.Value{native.NewInteger(n)}, nil
 				},
 			}},
@@ -195,10 +188,9 @@ func randNatives(parent *native.Registry) []native.NativeFunc {
 				Returns:    []*native.Type{native.TBoolean},
 				BarrierPos: -1,
 				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-					s := activeRand(parent)
-					s.mu.Lock()
-					b := s.rng.Intn(2) == 1
-					s.mu.Unlock()
+					state.mu.Lock()
+					b := state.rng.Intn(2) == 1
+					state.mu.Unlock()
 					return []native.Value{native.NewBoolean(b)}, nil
 				},
 			}},
@@ -206,14 +198,14 @@ func randNatives(parent *native.Registry) []native.NativeFunc {
 		{
 			Name: "rand-float",
 			Signatures: []native.NativeSig{{
+				// Returns a uniform decimal in [0.0, 1.0).
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{native.TDecimal},
 				BarrierPos: -1,
 				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-					s := activeRand(parent)
-					s.mu.Lock()
-					f := s.rng.Float64()
-					s.mu.Unlock()
+					state.mu.Lock()
+					f := state.rng.Float64()
+					state.mu.Unlock()
 					return []native.Value{native.NewDecimal(f)}, nil
 				},
 			}},
@@ -221,16 +213,18 @@ func randNatives(parent *native.Registry) []native.NativeFunc {
 		{
 			Name: "rand-string",
 			Signatures: []native.NativeSig{{
-				// stack `charset length`: sig[0]=length, sig[1]=charset.
-				Args:       []*native.Type{native.TInteger, native.TString},
+				// Canonical surface (forward form):
+				// `rand.string CHARSET LENGTH`. sig[0]=charset (String),
+				// sig[1]=length (Integer).
+				Args:       []*native.Type{native.TString, native.TInteger},
 				Returns:    []*native.Type{native.TString},
 				BarrierPos: -1,
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-					length, err := args[0].AsConcreteInteger()
+					charset, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
 					}
-					charset, err := args[1].AsConcreteString()
+					length, err := args[1].AsConcreteInteger()
 					if err != nil {
 						return nil, err
 					}
@@ -247,12 +241,11 @@ func randNatives(parent *native.Registry) []native.NativeFunc {
 							"rand.string: empty charset", "rand.string")
 					}
 					out := make([]rune, length)
-					s := activeRand(parent)
-					s.mu.Lock()
+					state.mu.Lock()
 					for i := range out {
-						out[i] = runes[s.rng.Intn(len(runes))]
+						out[i] = runes[state.rng.Intn(len(runes))]
 					}
-					s.mu.Unlock()
+					state.mu.Unlock()
 					return []native.Value{native.NewString(string(out))}, nil
 				},
 			}},
@@ -273,10 +266,9 @@ func randNatives(parent *native.Registry) []native.NativeFunc {
 						return nil, r.AqlError("rand_error",
 							"rand.one-of: empty list", "rand.one-of")
 					}
-					s := activeRand(parent)
-					s.mu.Lock()
-					idx := s.rng.Intn(n)
-					s.mu.Unlock()
+					state.mu.Lock()
+					idx := state.rng.Intn(n)
+					state.mu.Unlock()
 					return []native.Value{lst.Get(idx)}, nil
 				},
 			}},
