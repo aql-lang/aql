@@ -23,6 +23,18 @@ func (c *Compiled) Installed(scope string) bool {
 	return s.Installed()
 }
 
+// Scope returns a snapshot of the named scope, or a zero-value
+// Scope if absent. The returned Scope is safe to inspect for
+// install/words/scopes fields but should not be retained or
+// mutated; the underlying maps are shared with the Compiled
+// instance.
+func (c *Compiled) Scope(name string) Scope {
+	if s, ok := c.scopes[name]; ok && s != nil {
+		return *s
+	}
+	return Scope{}
+}
+
 // scope returns the scope by name, or nil if absent.
 func (c *Compiled) scope(name string) *Scope {
 	return c.scopes[name]

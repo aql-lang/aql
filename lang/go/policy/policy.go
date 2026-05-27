@@ -39,6 +39,12 @@ type Policy interface {
 	// the policy structurally disables it.
 	Installed(scope string) bool
 
+	// Scope returns a snapshot view of the named scope (or an empty
+	// Scope if absent). Used by callers that need to inspect
+	// subscopes — e.g. the modules.Resolve hook checks per-module
+	// install flags.
+	Scope(name string) Scope
+
 	// Limits returns the resource limits declared by the policy,
 	// with package defaults filled in for unset fields.
 	Limits() Limits
