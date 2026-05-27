@@ -1630,35 +1630,54 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		return e.execFnDefSigStackMatch(valIdx, fnDef, resolved)
 	}
 
-	// Module closures: with all args now on the stack (either because
-	// no forward collection was needed, or after the forward-completion
-	// re-dispatch), route through execFnDefSig with the captured
-	// registry. CallAQL runs the body in a sub-engine on modReg so
-	// the fn's def-body word lookups resolve in its own scope.
+	// Module closures: the FnDef carries a captured sub-registry
+	// (Registry != e.registry). Two cases:
 	//
-	// matchSignature already matched top-first (sig[0] = stack top).
-	// Pass args in sig order so named-param binding stays correct
-	// (Params[i].Name = args[i] = i-th sig position from the top).
-	// For unnamed params, CallAQL reverses the push order so the
-	// body's frame ends up mirroring the outer stack layout — the
-	// wrapper's body word then dispatches the inner native against
-	// an identical stack shape.
+	//  1. **Trivial-delegation wrapper** — the wrapper FnSig body is
+	//     a single Word referencing the inner native of the same name
+	//     (e.g. rand.string's wrapper body `[Word(rand-string)]`).
+	//     matchSignature already found and matched that inner native;
+	//     its handler is `sig.Handler`. Direct-call it via execMatch
+	//     so args flow straight through in sig order — no body
+	//     execution, no token splicing, no push reordering.
 	//
-	// See design/SIG-ORDER-REFACTOR.0.md for the rationale.
+	//  2. **AQL fn defined inside a module preamble** (e.g.
+	//     decision.cond, defined via `def cond fn […]` in the
+	//     module's AQL source). The body references module-private
+	//     types/words that only resolve in fnDef.Registry, so we must
+	//     run it in that registry via CallAQL. These fns use NAMED
+	//     params, so CallAQL's named-param binding (InstallDef by
+	//     name) sidesteps any unnamed-param push ordering issues.
+	//
+	// See design/SIG-ORDER-REFACTOR.0.md for the architecture history.
 	if fnDef.Registry != nil && fnDef.Registry != e.registry && len(fnDef.Sigs) > 0 {
-		args := make([]Value, len(positions))
-		for i, pos := range positions {
-			args[i] = e.stack[pos]
-		}
-		// Module wrappers carry a single FnSig (the wrapping shim);
-		// pick by arity to stay future-proof against multi-overload
-		// wrappers.
+		// Detect the trivial-delegation shape: a single-word body
+		// that references the same name as the wrapper, with all
+		// unnamed Params. Anything else routes through CallAQL.
 		wrapperSig := &fnDef.Sigs[0]
 		for i := range fnDef.Sigs {
 			if len(fnDef.Sigs[i].Params) == len(positions) {
 				wrapperSig = &fnDef.Sigs[i]
 				break
 			}
+		}
+		trivialDelegation := isTrivialDelegationBody(wrapperSig, fnDef.Name)
+		if trivialDelegation && sig.Handler != nil {
+			match := &MatchResult{Sig: sig, Positions: positions}
+			if len(positions) > 0 {
+				match.Args = make([]Value, len(positions))
+				for i, pos := range positions {
+					match.Args[i] = e.stack[pos]
+				}
+			}
+			return e.execMatch(match)
+		}
+		// Non-trivial body — run via CallAQL in the captured sub-
+		// registry. The wrapper's body has module-private references
+		// that need fnDef.Registry's scope for resolution.
+		args := make([]Value, len(positions))
+		for i, pos := range positions {
+			args[i] = e.stack[pos]
 		}
 		return e.execFnDefSig(valIdx, wrapperSig, args, fnDef.Registry)
 	}
@@ -1673,6 +1692,33 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		}
 	}
 	return e.execMatch(match)
+}
+
+// isTrivialDelegationBody reports whether a wrapper FnSig is a pure
+// pass-through to an inner native of the same name — body of the form
+// `[Word(name)]` with all-unnamed Params. Module wrappers built by
+// the `makeXxxFnDef` / `wrapXxxFnDef` helpers all have this shape;
+// AQL fns defined inside a module preamble (with real bodies + named
+// params) do not. Used by execFnDefLiteral to decide whether to
+// direct-call the inner handler (trivial) or run the body in the
+// captured sub-registry (non-trivial).
+func isTrivialDelegationBody(sig *FnSig, name string) bool {
+	if len(sig.Body) != 1 {
+		return false
+	}
+	for _, p := range sig.Params {
+		if p.Name != "" {
+			return false
+		}
+	}
+	if !IsWord(sig.Body[0]) {
+		return false
+	}
+	w, err := AsWord(sig.Body[0])
+	if err != nil {
+		return false
+	}
+	return w.Name == name
 }
 
 // execFnDefSigStackMatch is the legacy FnSig-based pure-stack
@@ -1966,18 +2012,16 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		names = append(names, cb.Name)
 	}
 
-	// args in top-first sig order. Named params bind by name; unnamed
-	// params push in REVERSE so body stack mirrors outer (see
-	// CallAQL above and design/SIG-ORDER-REFACTOR.0.md).
+	// args in top-first sig order (matchSignature convention).
+	// Named params bind by name; unnamed params push to body tokens in
+	// i-order. No reordering — same convention as InstallFnDef and
+	// CallAQL. See design/SIG-ORDER-REFACTOR.0.md.
 	unnamedCount := 0
 	for i, p := range sig.Params {
 		if p.Name != "" {
 			InstallDef(e.registry, p.Name, args[i])
 			names = append(names, p.Name)
-		}
-	}
-	for i := len(sig.Params) - 1; i >= 0; i-- {
-		if sig.Params[i].Name == "" {
+		} else {
 			tokens = append(tokens, args[i])
 			unnamedCount++
 		}

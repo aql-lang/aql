@@ -12,45 +12,58 @@
 > `!hasNamed` branch, which fired from `execFnDefLiteral`'s
 > module-closure branch after `matchSignature` had already succeeded.
 >
-> Implementation:
+> Implementation — final form (two iterations):
 >
-> - **engine.go `execFnDefLiteral` module-closure branch** (~line
->   1638): stopped re-matching via `execFnDefSigStackMatch`. Uses
->   `matchSignature`'s already-computed positions to construct args
->   in top-first sig order, then routes through `execFnDefSig` with
->   the wrapper's FnSig (picked by arity, future-proof against
->   multi-overload wrappers).
-> - **engine.go `execFnDefSig` non-captured branch** + **registry.go
->   `CallAQL`**: for **unnamed** params, push args into the body in
->   REVERSE so the body's stack mirrors the outer stack. The body's
->   inner native then dispatches against the same shape the user
->   constructed. Named-param binding (`InstallDef(Params[i].Name,
->   args[i])`) is unchanged: first declared name binds to top.
-> - **core_helpers.go `InstallFnDef` handler closure** (used by
->   stepWord-dispatched registered AQL fns like `def f fn […]`):
->   left UNCHANGED. Its existing semantic — args[i] appears at body
->   position i from the bottom — is what AQL `def fn` authors rely
->   on (locked in by `pipe_barrier_test.go::TestPipeBarrierFnDef`).
-> - **`execFnDefSigStackMatch`** itself: left UNCHANGED. Only reached
->   now as a fallback when matchSignature returns nil; its bottom-
->   first `!hasNamed` convention there is residual and harmless.
-> - **Module wrapper Params**: flipped to match inner native Args in
->   the heterogeneous cases (time.format, to-instant, to-local,
->   start-of, end-of, tz-offset, is-dst, add-days/months/years,
->   rand.string). Now matches the documented convention "wrapper
->   Params == inner Args, top-first".
-> - **CLAUDE.md** (eng + lang): new "Signature Ordering" sections
->   documenting the unified rule.
+> **Iteration 1** introduced an unnamed-param push reversal in
+> CallAQL/execFnDefSig to make module-wrapper bodies (`[Word(inner)]`)
+> dispatch correctly. This worked but added a SECOND arg-flow
+> convention to the kernel — args still in sig order at handler
+> handoff, but body-token push order reversed for unnamed params.
+> Internally consistent, but inconsistent across paths.
+>
+> **Iteration 2** (the user push-back: "functions always get args in
+> signature match order, always") removed the push reversal by
+> introducing a trivial-delegation short-circuit in
+> `execFnDefLiteral`. Module wrappers built by `makeXxxFnDef` have
+> bodies of the form `[Word(inner-name)]` with all-unnamed Params —
+> detect that shape via `isTrivialDelegationBody` and dispatch the
+> inner native directly via `execMatch`, bypassing CallAQL and body
+> execution entirely. AQL fns defined in module preambles
+> (decision.cond etc.) take the longer CallAQL path, but they all
+> use named params so push order doesn't matter for them either.
+>
+> Final state — **one convention everywhere, no reversals**:
+>
+> - **engine.go `execFnDefLiteral` module-closure branch**: detects
+>   the trivial-delegation shape and falls through to `execMatch`
+>   for direct inner-handler dispatch. Non-trivial bodies route
+>   through `execFnDefSig` in the captured registry.
+> - **engine.go `isTrivialDelegationBody`**: predicate that
+>   identifies `[Word(name)]` + all-unnamed shape — the exact
+>   pattern `makeXxxFnDef` / `wrapXxxFnDef` produces.
+> - **engine.go `execFnDefSig` + registry.go `CallAQL`**: push
+>   args in sig order (no reversal). Named params bind via
+>   InstallDef; unnamed params (rare here — only AQL fns with
+>   unnamed params inside module preambles, none currently exist)
+>   append to body tokens in i-order.
+> - **core_helpers.go `InstallFnDef` handler closure**: unchanged.
+>   Same convention as everything else.
+> - **`execFnDefSigStackMatch`**: unchanged. Only reached as a
+>   fallback when matchSignature returns nil (anonymous lambda
+>   recovery). Its internal `!hasNamed` branch retains a residual
+>   bottom-first match for that fallback, which is the lone exception
+>   to the unified rule — it lives behind a "matchSignature failed"
+>   gate and no production path exercises it.
+> - **Module wrapper Params**: declared identical to inner native
+>   Args (top-first natural order). Includes time.format, to-instant,
+>   to-local, start-of, end-of, tz-offset, is-dst,
+>   add-days/months/years, rand.string.
+> - **CLAUDE.md** (eng + lang): "Signature Ordering" sections record
+>   the one rule with no exceptions in production paths, plus a
+>   **strong recommendation to always use forward form** (`f a b c`)
+>   as the canonical surface for AQL calls.
 > - **Guard test**: `lang/go/test/sig_order_guard_test.go` pins the
->   four scenarios that the refactor must preserve / fix.
->
-> The "execFnDefSigStackMatch flip" originally proposed in Step 3
-> below was NOT performed — that path is residual fallback that no
-> production code reaches now that the module-closure branch routes
-> through matchSignature's result directly. Flipping its !hasNamed
-> branch would be cosmetic and risks subtly breaking edge-case
-> anonymous-lambda dispatch that no test pins down. Left for a
-> future cleanup if it ever becomes a load-bearing path again.
+>   four scenarios.
 
 ## Context
 
