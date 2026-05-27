@@ -129,6 +129,15 @@ func toCarrier(v Value) Value {
 	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) {
 		return v
 	}
+	// Keep FnDef / Function payloads (FnDefInfo) concrete. Stripping
+	// them loses the body, params, and Captured list — which means a
+	// factory call producing a closure (`def add5 (make-adder 5)`) in
+	// check mode would otherwise bind add5 to an empty carrier rather
+	// than to the inner FnDefInfo, breaking subsequent invocation +
+	// inference of `add5 3`.
+	if _, ok := v.Data.(FnDefInfo); ok {
+		return v
+	}
 	// Type literals (Data already nil) are already in the right
 	// shape for sig matching — preserve their Carrier=false marker
 	// so sigTypeMatchesAsType can still recognise them as type

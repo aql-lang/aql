@@ -244,6 +244,44 @@ def add5 (make-adder 5)`
 	}
 }
 
+// J0 — End-to-end check-mode inference through factory + def + call.
+// make-adder returns an inner closure capturing x:Integer; binding
+// that to add5 and calling `add5 3` should produce an Integer carrier
+// because the inner body `x add y` resolves x (captured) and y (param)
+// to Integer carriers, and `add` propagates Integer.
+func TestClosureCheckModeFactoryDefCall(t *testing.T) {
+	reg, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	native.Register(reg)
+	reg.Check.Mode = true
+	defer func() { reg.Check.Mode = false }()
+
+	e := native.NewTop(reg)
+	src := `def make-adder ([x:Integer] => [([y:Integer] => [x add y])])
+def add5 (make-adder 5)
+add5 3`
+	vals, err := parser.Parse(src)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	out, err := e.Run(vals)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("got %d results, want 1: %v", len(out), out)
+	}
+	v := out[0]
+	if !v.Carrier {
+		t.Errorf("expected carrier in check mode, got %v", v)
+	}
+	if !v.Parent.Equal(eng.TInteger) {
+		t.Errorf("carrier Parent = %s, want Integer (capture flowed through factory→def→call)", v.Parent.String())
+	}
+}
+
 // J — AnalyseFnBody installs captures so a body that references an
 // enclosing-fn-local sees its captured type during check-mode
 // inference. Direct test of the Phase 5 wire-up: call AnalyseFnBody
