@@ -9,7 +9,9 @@ import (
 )
 
 // typeNatives covers the type-system words: refine, pathof, enum,
-// typeof, is, guard, base, tor, tand, tany, tall, convert.
+// typeof, is, teq, tpartial, guard, base, tor, tand, tany, tall,
+// convert. New type ops follow the `t`-prefix convention — see
+// lang/doc/design/TYPE-OPERATIONS.0.md.
 //
 // `Resource` and `Entity` (the builtin object types) are NOT installed
 // via NativeFunc — they are user-typed values pushed onto the type
@@ -94,6 +96,25 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
+		Name: "teq",
+
+		Signatures: []NativeSig{{
+			Args:       []*Type{TAny, TAny},
+			BarrierPos: 1,
+			Handler:    teqHandler,
+			Returns:    []*Type{TBoolean},
+		}},
+	},
+	{
+		Name: "tpartial",
+
+		Signatures: []NativeSig{{
+			Args:    []*Type{TAny},
+			Handler: tpartialHandler,
+			Returns: []*Type{TType}, BarrierPos: -1,
+		}},
+	},
+	{
 		Name: "guard",
 
 		Signatures: []NativeSig{{
@@ -101,8 +122,7 @@ var typeNatives = []NativeFunc{
 			BarrierPos: 1,
 			Handler:    guardHandler,
 			Returns:    []*Type{TAny},
-		}},
-	},
+		}}},
 	{
 		Name: "base",
 
@@ -448,6 +468,90 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		return []Value{NewBoolean(false)}, nil
 	}
 	return []Value{NewBoolean(true)}, nil
+}
+
+// ---- teq ----
+
+// teqHandler implements strict type equality. Both args must be
+// IsTypeBody; otherwise return false. Bare type literals compare by
+// lattice node Equal (ID identity), structural type bodies (record /
+// disjunct / object / etc.) compare via ValuesEqual. Distinct from
+// `is`, which is subtype-membership and is asymmetric on its RHS
+// (`5 is Integer` true, `Integer is 5` false). `teq` is symmetric and
+// rejects non-type values from either side.
+func teqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	a, b := args[1], args[0]
+	if !IsTypeBody(a) || !IsTypeBody(b) {
+		return []Value{NewBoolean(false)}, nil
+	}
+	if a.Data == nil && !a.Carrier && b.Data == nil && !b.Carrier {
+		aNode := &a
+		bNode := &b
+		return []Value{NewBoolean(aNode.Equal(bNode))}, nil
+	}
+	return []Value{NewBoolean(ValuesEqual(a, b))}, nil
+}
+
+// ---- tpartial ----
+
+// tpartialHandler wraps every field of a Record or Object type in
+// `T | None`. Idempotent: a field whose value already includes None
+// is left unchanged. For Object types, inherited fields are flattened
+// into the result's own field map and the result is registered as a
+// fresh anonymous Object type (lattice parent: Object root) — the
+// partial is NOT a subtype of the input because AQL's lattice runs
+// the other way (a child requires more, not less).
+func tpartialHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	t := args[0]
+	switch {
+	case IsRecordType(t):
+		rec, _ := AsRecordType(t)
+		return []Value{NewRecordType(partializeFields(rec.Fields))}, nil
+	case IsObjectType(t):
+		info, _ := AsObjectType(t)
+		newFields := partializeFields(info.AllFields())
+		id := GenerateObjectTypeID()
+		newInfo := ObjectTypeInfo{
+			Fields: newFields,
+			Parent: nil,
+			ID:     id,
+		}
+		def := r.Types.MintType(id, TObject)
+		return []Value{NewObjectType(def, newInfo)}, nil
+	default:
+		return nil, r.AqlError("type_error",
+			fmt.Sprintf("tpartial: argument must be a Record or Object type, got %s", t.String()),
+			"tpartial")
+	}
+}
+
+func partializeFields(fields *OrderedMap) *OrderedMap {
+	result := NewOrderedMap()
+	for _, k := range fields.Keys() {
+		ft, _ := fields.Get(k)
+		result.Set(k, makeOptionalType(ft))
+	}
+	return result
+}
+
+// makeOptionalType returns `t | None` as a Disjunct, or `t` unchanged
+// if t already includes None as an alternative (or IS None).
+func makeOptionalType(t Value) Value {
+	if IsNoneShape(t) {
+		return t
+	}
+	alts := FlattenDisjunctAlts(t)
+	for _, alt := range alts {
+		if IsNoneShape(alt) {
+			return t
+		}
+	}
+	alts = append(alts, NewTypeLiteral(TNone))
+	simplified := SimplifyDisjunctAlts(alts)
+	if len(simplified) == 1 {
+		return simplified[0]
+	}
+	return NewDisjunct(simplified)
 }
 
 // ---- guard ----

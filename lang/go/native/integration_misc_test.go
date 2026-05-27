@@ -1164,3 +1164,32 @@ func TestInterpStringAsWordArg(t *testing.T) {
 		t.Errorf("expected 'HELLO', got %q", got)
 	}
 }
+
+// TestTpartialRejectsNonType verifies tpartial errors on non-Record /
+// non-Object inputs.
+func TestTpartialRejectsNonType(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name string
+		arg  Value
+	}{
+		{"Integer-literal", NewTypeLiteral(TInteger)},
+		{"concrete-int", NewInteger(42)},
+		{"concrete-string", NewString("x")},
+		{"List-literal", NewTypeLiteral(TList)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := runAQLError(t, r, []Value{tc.arg, NewWord("tpartial")})
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), "Record or Object") {
+				t.Errorf("error should mention Record or Object, got: %v", err)
+			}
+		})
+	}
+}

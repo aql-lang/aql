@@ -82,4 +82,22 @@ func init() {
 			"unified pairwise. A single-element list returns that element " +
 			"unchanged. Errors on an empty list or unifiable failure.",
 	})
+
+	register(&Entry{
+		Word:    "teq",
+		Summary: "Strict type equality (lattice node identity, not subtype).",
+		Description: "Returns true iff both args are types AND refer to the same " +
+			"lattice node. Distinct from `is`, which is subtype membership: " +
+			"`Integer is Number` is true, `Integer teq Number` is false. " +
+			"Non-type arguments return false on either side.",
+	})
+
+	register(&Entry{
+		Word:    "tpartial",
+		Summary: "Wrap every field of a Record or Object type in `T | None`.",
+		Description: "Returns a new type where each field's value type is " +
+			"replaced with the disjunct of itself and None. Idempotent — a " +
+			"field already including None is unchanged. For Object types, " +
+			"inherited fields are flattened into the result.",
+	})
 }

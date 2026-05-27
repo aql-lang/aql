@@ -322,6 +322,42 @@ None is None	true
 ["a" 1] is [:String]	false
 ["a" 1] is [:Number]	false
 
+# teq - strict type equality (lattice identity), not subtype
+Integer teq Integer	true
+Integer teq Number	false
+Number teq Integer	false
+Integer teq String	false
+String teq String	true
+None teq None	true
+List teq List	true
+List teq Map	false
+Type teq Type	true
+
+# teq - non-types return false on either side
+42 teq Integer	false
+Integer teq 42	false
+42 teq 42	false
+"a" teq "a"	false
+true teq Boolean	false
+
+# teq - structural type equality (record / disjunct / typed-list)
+(refine Record [x:Integer]) teq (refine Record [x:Integer])	true
+(refine Record [x:Integer]) teq (refine Record [x:String])	false
+(refine Record [x:Integer y:String]) teq (refine Record [x:Integer y:String])	true
+(String tor None) teq (String tor None)	true
+(String tor None) teq (None tor String)	false
+[:Integer] teq [:Integer]	true
+[:Integer] teq [:String]	false
+
+# tpartial - wrap every record field as T|None
+tpartial (refine Record [x:Integer])	record{x:Integer|None}
+tpartial (refine Record [x:Integer y:String])	record{x:Integer|None,y:String|None}
+tpartial (refine Record [x:Number y:Boolean z:String])	record{x:Number|None,y:Boolean|None,z:String|None}
+
+# tpartial - idempotent on fields already including None
+tpartial (refine Record [x:Integer y:[String tor None]])	record{x:Integer|None,y:String|None}
+tpartial (tpartial (refine Record [x:Integer])) teq tpartial (refine Record [x:Integer])	true
+
 # is - per-element type List: type Names in lists match element-wise
 ["a" 1.1] is [String Decimal]	true
 [1 2] is [Integer Integer]	true
