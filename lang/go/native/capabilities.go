@@ -53,7 +53,21 @@ func HostFileOps(r *Registry) capabilities.FileOps {
 
 // SetHostFileOps installs the active fileops capability and re-wires
 // any registered jsonic-format multisource resolver to use it.
+//
+// When a policy is present on r and its fileops scope has
+// install=false, the capability slot is left empty so word handlers
+// that try to reach it produce capability_not_installed errors.
+// When a policy is present without install=false, the FileOps is
+// wrapped with permissionedFileOps so each call is gated.
 func SetHostFileOps(r *Registry, ops capabilities.FileOps) {
+	if pol := HostPolicy(r); pol != nil {
+		if !pol.Installed("fileops") {
+			// Uninstall: remove the slot so HostFileOps returns nil.
+			_, _ = r.Capabilities.Delete(CapFileOps)
+			return
+		}
+		ops = NewPermissionedFileOps(ops, pol)
+	}
 	_ = r.Capabilities.Set(CapFileOps, ops)
 	if formats := HostFormats(r); formats != nil {
 		if jf, ok := formats["jsonic"].(*JsonicFormat); ok {
@@ -71,7 +85,14 @@ func HostFormats(r *Registry) map[string]Format {
 }
 
 // SetHostFormats installs the format registry as a single capability.
+// When a policy has formats.install=false, the slot is removed so
+// HostFormats returns nil and read/write handlers raise
+// capability_not_installed.
 func SetHostFormats(r *Registry, formats map[string]Format) {
+	if pol := HostPolicy(r); pol != nil && !pol.Installed("formats") {
+		_, _ = r.Capabilities.Delete(CapFormats)
+		return
+	}
 	_ = r.Capabilities.Set(CapFormats, formats)
 }
 
@@ -81,8 +102,14 @@ func HostSQLite(r *Registry) *SQLiteStore {
 	return store
 }
 
-// SetHostSQLite installs the SQLite store as a capability.
+// SetHostSQLite installs the SQLite store as a capability. When a
+// policy has sqlite.install=false, the slot is removed so HostSQLite
+// returns nil and sqlite-* word handlers raise capability_not_installed.
 func SetHostSQLite(r *Registry, store *SQLiteStore) {
+	if pol := HostPolicy(r); pol != nil && !pol.Installed("sqlite") {
+		_, _ = r.Capabilities.Delete(CapSQLite)
+		return
+	}
 	_ = r.Capabilities.Set(CapSQLite, store)
 }
 

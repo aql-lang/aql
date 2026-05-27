@@ -1,0 +1,113 @@
+package native
+
+import (
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/aql-lang/aql/lang/go/policy"
+)
+
+func loadPolicy(t *testing.T, name string) policy.Policy {
+	t.Helper()
+	p, err := policy.Load(name)
+	if err != nil {
+		t.Fatalf("policy.Load(%q): %s", name, err)
+	}
+	return p
+}
+
+func TestSetHostFileOpsWrapsWhenPolicySet(t *testing.T) {
+	r, err := DefaultRegistryWithPolicy(loadPolicy(t, "trusted"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ops := HostFileOps(r)
+	if ops == nil {
+		t.Fatal("expected HostFileOps to be installed")
+	}
+	// Wrapped ops should still delegate transparently for trusted.
+	// Touch the underlying type to confirm it's the wrapper.
+	if _, ok := ops.(*permissionedFileOps); !ok {
+		t.Errorf("HostFileOps = %T, want *permissionedFileOps", ops)
+	}
+}
+
+func TestSetHostFileOpsDoesNotWrapWithNoPolicy(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ops := HostFileOps(r)
+	if ops == nil {
+		t.Fatal("expected HostFileOps to be installed")
+	}
+	if _, ok := ops.(*permissionedFileOps); ok {
+		t.Error("no policy → should not be wrapped")
+	}
+}
+
+func TestPermissionedFileOpsDeniesDiskWrite(t *testing.T) {
+	r, err := DefaultRegistryWithPolicy(loadPolicy(t, "sandbox"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ops := HostFileOps(r)
+	if ops == nil {
+		t.Fatal("sandbox should keep FileOps installed")
+	}
+	err = ops.WriteFile("/tmp/foo", []byte("hi"), 0644)
+	var d *policy.Denied
+	if !errors.As(err, &d) {
+		t.Fatalf("expected *policy.Denied, got %T (%v)", err, err)
+	}
+	if !strings.Contains(d.Blame, "disk.write") {
+		t.Errorf("Blame = %q, expected to mention disk.write", d.Blame)
+	}
+}
+
+func TestPermissionedFileOpsDeniesReadByDefault(t *testing.T) {
+	// sandbox has fileops.default=deny, so reads also fail (even
+	// though global.disk.read is allowed).
+	r, err := DefaultRegistryWithPolicy(loadPolicy(t, "sandbox"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ops := HostFileOps(r)
+	_, err = ops.ReadFile("/tmp/foo")
+	var d *policy.Denied
+	if !errors.As(err, &d) {
+		t.Fatalf("expected *policy.Denied, got %T (%v)", err, err)
+	}
+	if !strings.Contains(d.Blame, "fileops.words") {
+		t.Errorf("Blame = %q, expected to mention fileops.words", d.Blame)
+	}
+}
+
+func TestComputeUninstallsCapabilities(t *testing.T) {
+	r, err := DefaultRegistryWithPolicy(loadPolicy(t, "compute"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if HostFileOps(r) != nil {
+		t.Error("compute should uninstall fileops")
+	}
+	if HostSQLite(r) != nil {
+		t.Error("compute should uninstall sqlite")
+	}
+	if HostFormats(r) == nil {
+		t.Error("compute keeps formats installed")
+	}
+}
+
+func TestPermissionedFileOpsResolvePathBypasses(t *testing.T) {
+	// ResolvePath is pure manipulation — no policy gate.
+	r, err := DefaultRegistryWithPolicy(loadPolicy(t, "sandbox"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ops := HostFileOps(r)
+	if _, err := ops.ResolvePath("/tmp/x"); err != nil {
+		t.Errorf("ResolvePath should not be gated: %v", err)
+	}
+}
