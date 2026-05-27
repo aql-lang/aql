@@ -7,6 +7,7 @@ import (
 
 	"github.com/aql-lang/aql/lang/go"
 	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/aql-lang/aql/lang/go/policy"
 )
 
 func TestNew(t *testing.T) {
@@ -818,5 +819,58 @@ func TestRegisterWithTypeAny(t *testing.T) {
 	}
 	if result[0] != "hi" {
 		t.Errorf("got %v, want hi", result[0])
+	}
+}
+
+// --- Policy integration (Phase 2) ---
+
+func TestNewWithNoPolicyPreservesDefault(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Policy() != nil {
+		t.Error("default New() should have nil Policy")
+	}
+	// Run something that exercises every capability surface — no
+	// policy means no checks fire, behaviour is unchanged.
+	if _, err := a.Run("1 add 2"); err != nil {
+		t.Errorf("Run with nil policy failed: %s", err)
+	}
+}
+
+func TestNewWithPolicyInstallsIt(t *testing.T) {
+	pol, err := policy.Load("trusted")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := lang.New(lang.Options{Policy: pol})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := a.Policy(); got == nil {
+		t.Error("expected policy to be installed")
+	} else if got.Name() != "trusted" {
+		t.Errorf("policy name = %q, want trusted", got.Name())
+	}
+}
+
+func TestNewWithSandboxPolicyDoesNotBreakBasicEval(t *testing.T) {
+	// Phase 2 only installs the policy; enforcement comes in Phase 3+.
+	// Until then, sandbox should behave identically to no policy.
+	pol, err := policy.Load("sandbox")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := lang.New(lang.Options{Policy: pol})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := a.Run("1 add 2")
+	if err != nil {
+		t.Fatalf("Phase 2 sandbox policy should not yet block eval: %s", err)
+	}
+	if len(result) == 0 || result[0] != int64(3) {
+		t.Errorf("result = %v, want 3", result)
 	}
 }

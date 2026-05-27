@@ -4,6 +4,7 @@ import (
 	"github.com/aql-lang/aql/eng/go"
 
 	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/aql-lang/aql/lang/go/policy"
 )
 
 // Host-side capability keys. The host installs implementations under
@@ -14,7 +15,28 @@ const (
 	CapMemFileOps = "engine.fileops.mem" // lazily created in-memory FileOps
 	CapFormats    = "engine.formats"     // map[string]Format read/write registry
 	CapSQLite     = "engine.sqlite"      // *SQLiteStore
+	CapPolicy     = "engine.policy"      // policy.Policy enforcing permissions
 )
+
+// HostPolicy returns the policy installed on r, or nil if none. A
+// nil result means "no permissions configured" — the engine and
+// every capability wrapper treat that as allow-everything (the
+// default opt-in posture).
+func HostPolicy(r *Registry) policy.Policy {
+	p, _, _ := eng.Cap[policy.Policy](r, CapPolicy)
+	return p
+}
+
+// SetHostPolicy installs a Policy as a capability. Must be called
+// before SetHostX hooks if those hooks should auto-wrap the
+// capability with the policy. RewrapCapabilities can re-apply
+// wrapping after a late SetHostPolicy.
+func SetHostPolicy(r *Registry, p policy.Policy) {
+	if p == nil {
+		return
+	}
+	_ = r.Capabilities.Set(CapPolicy, p)
+}
 
 // HostFileOps returns the FileOps installed on r, or nil if none.
 // Word handlers that need filesystem access call EffectiveFileOps

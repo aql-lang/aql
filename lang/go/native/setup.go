@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/aql-lang/aql/lang/go/policy"
 )
 
 // DefaultRegistry returns a registry populated with every built-in
@@ -20,10 +21,29 @@ import (
 // eng.Registry returned by eng.NewRegistry. aqleng itself knows
 // nothing about these — it just stores them in opaque capability slots
 // for the host's word handlers to retrieve.
+//
+// To apply a permissions policy, use DefaultRegistryWithPolicy: the
+// policy must be installed before host capabilities so SetHostX
+// hooks can consult it for install:false decisions and (post-Phase 3)
+// auto-wrapping.
 func DefaultRegistry(providers ...func(*Registry)) (*Registry, error) {
+	return DefaultRegistryWithPolicy(nil, providers...)
+}
+
+// DefaultRegistryWithPolicy is like DefaultRegistry but installs a
+// permissions policy before host capabilities. Pass nil for p to
+// mean "no policy" (allow-everything, the historical default).
+func DefaultRegistryWithPolicy(p policy.Policy, providers ...func(*Registry)) (*Registry, error) {
 	r, err := NewRegistry()
 	if err != nil {
 		return nil, err
+	}
+
+	// Install the policy first so subsequent SetHostX hooks can
+	// consult it (e.g. skip-install when install:false, wrap with
+	// the permissioned variant once Phase 3 lands).
+	if p != nil {
+		SetHostPolicy(r, p)
 	}
 
 	// Default file operations: OS-backed.
