@@ -731,6 +731,18 @@ func (e *Engine) stepWord(val Value) error {
 		// User-code dispatch — record the name as "used" for
 		// unused-def analysis in check mode.
 		e.registry.Check.recordUse(w.Name)
+		// Policy gate: consult the engine scope before dispatching.
+		// Skips check mode (static analysis should see every word so
+		// type-checking remains meaningful) and engine markers
+		// (`__`-prefixed, used by internal lowering — never directly
+		// addressable from user code).
+		if !e.registry.Check.IsActive() && !isInternalMarker(w.Name) {
+			if wc := LookupWordChecker(e.registry); wc != nil {
+				if err := wc.CheckWord(w.Name); err != nil {
+					return err
+				}
+			}
+		}
 	}
 
 	if fn == nil {

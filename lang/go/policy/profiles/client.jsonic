@@ -1,0 +1,25 @@
+{
+  version: 1
+  name:    "client"
+  extends: "sandbox"
+
+  scopes: {
+    global: {
+      words: {
+        default: "deny"
+        rules: [
+          { allow: ["disk.read", "clock", "mutate", "network"] }
+          { deny:  ["disk.write", "process", "env", "system-info"] }
+        ]
+      }
+    }
+
+    network: {
+      install: true
+      words: {
+        default: "deny"
+        rules: []
+      }
+    }
+  }
+}

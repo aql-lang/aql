@@ -1,0 +1,16 @@
+{
+  version: 1
+  name:    "trusted"
+  scopes: {
+    global:  { words: { default: "allow" } }
+    engine:  { words: { default: "allow" } }
+    modules: { words: { default: "allow" } }
+    fileops: { words: { default: "allow" } }
+    network: { words: { default: "allow" } }
+    sqlite:  { words: { default: "allow" } }
+    formats: { words: { default: "allow" } }
+    env:     { words: { default: "allow" } }
+    process: { words: { default: "allow" } }
+    clock:   { words: { default: "allow" } }
+  }
+}
