@@ -1,6 +1,10 @@
 # PERMISSIONS-PLAN.0 — Implementation Plan
 
-## Status: Proposed
+## Status: Complete
+
+All 8 phases landed on `claude/sleepy-hamilton-7OYSz`. The wired-up
+exec service (Phase 8) was folded into Phase 5's CLI work since
+both modify the same files.
 
 Companion to [PERMISSIONS.0](PERMISSIONS.0.md). This is the
 sequenced implementation plan: phases, files touched, tests at

@@ -1,6 +1,6 @@
 # PERMISSIONS.0 — Capability-Scoped Permissions for AQL
 
-## Status: Proposed (not yet implemented)
+## Status: Implemented (Phases 1–8 landed; PR-by-PR on `claude/sleepy-hamilton-7OYSz`)
 
 This document records the design of AQL's permissions model: the JSON
 profile shape, the uniform scope structure with hard caps and
