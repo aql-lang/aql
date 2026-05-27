@@ -1,4 +1,4 @@
-.PHONY: all test vet fmt lint vuln clean cover cover-html cover-html-open \
+.PHONY: all build install test vet fmt lint vuln clean cover cover-html cover-html-open \
         publish publish-eng publish-lang publish-cmd tags \
         viz viz-tools viz-clean viz-index \
         viz-callvis viz-callgraph viz-goda viz-godepgraph \
@@ -24,6 +24,21 @@
 MODULES := eng/go lang/go cmd/go calc/go wpg test/go test/solardemo
 
 all: test
+
+# ---- aql CLI binary ----------------------------------------------------
+#
+# The `aql` CLI lives in cmd/go and has its own Makefile that handles
+# the LDFLAGS/version stamping and the bin/aql layout. These targets
+# delegate so the binary can be built from the repo root:
+#
+#   make build    -> cmd/go/bin/aql
+#   make install  -> $GOBIN/aql
+
+build:
+	$(MAKE) -C cmd/go build
+
+install:
+	$(MAKE) -C cmd/go install
 
 # ---- per-module fan-out -------------------------------------------------
 

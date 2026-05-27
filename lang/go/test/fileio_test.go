@@ -7,30 +7,29 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
 // runWithFiles creates a registry with in-memory files and runs AQL.
 func runWithFiles(t *testing.T, files map[string]string, expr string) (string, error) {
 	t.Helper()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	for path, content := range files {
 		mem.Files[path] = []byte(content)
 	}
 
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	engine.SetHostFileOps(reg, mem)
+	native.SetHostFileOps(reg, mem)
 
 	values, err := parser.Parse(expr)
 	if err != nil {
 		return "", err
 	}
 
-	eng := engine.NewTop(reg)
+	eng := native.NewTop(reg)
 	result, err := eng.Run(values)
 	if err != nil {
 		return "", err
@@ -41,25 +40,25 @@ func runWithFiles(t *testing.T, files map[string]string, expr string) (string, e
 
 // runWithMem creates a registry with an in-memory FS, runs AQL, and returns
 // the MemFileOps so tests can inspect written files.
-func runWithMem(t *testing.T, files map[string]string, expr string) (*fileops.MemFileOps, string, error) {
+func runWithMem(t *testing.T, files map[string]string, expr string) (*capabilities.MemFileOps, string, error) {
 	t.Helper()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	for path, content := range files {
 		mem.Files[path] = []byte(content)
 	}
 
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	engine.SetHostFileOps(reg, mem)
+	native.SetHostFileOps(reg, mem)
 
 	values, err := parser.Parse(expr)
 	if err != nil {
 		return mem, "", err
 	}
 
-	eng := engine.NewTop(reg)
+	eng := native.NewTop(reg)
 	result, err := eng.Run(values)
 	if err != nil {
 		return mem, "", err
@@ -269,14 +268,14 @@ func TestWriteReturnsPath(t *testing.T) {
 // --- read/write roundtrip ---
 
 func TestReadWriteRoundtrip(t *testing.T) {
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Files["src.txt"] = []byte("the content")
 
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	engine.SetHostFileOps(reg, mem)
+	native.SetHostFileOps(reg, mem)
 
 	// Write with all forward args to be explicit
 	values, err := parser.Parse(`write "dst.txt" (read "src.txt")`)
@@ -284,7 +283,7 @@ func TestReadWriteRoundtrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	eng := engine.NewTop(reg)
+	eng := native.NewTop(reg)
 	result, err := eng.Run(values)
 	if err != nil {
 		t.Fatal(err)
@@ -319,11 +318,11 @@ func TestWriteCRLF(t *testing.T) {
 // runWithStdio creates a registry with custom stdin/stdout/stderr and runs AQL.
 func runWithStdio(t *testing.T, stdin string, expr string) (stdout, stderr, stack string, err error) {
 	t.Helper()
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	engine.SetHostFileOps(reg, fileops.NewMem())
+	native.SetHostFileOps(reg, capabilities.NewMem())
 
 	var outBuf, errBuf bytes.Buffer
 	reg.Output = &outBuf
@@ -335,7 +334,7 @@ func runWithStdio(t *testing.T, stdin string, expr string) (stdout, stderr, stac
 		return "", "", "", parseErr
 	}
 
-	eng := engine.NewTop(reg)
+	eng := native.NewTop(reg)
 	result, runErr := eng.Run(values)
 	if runErr != nil {
 		return outBuf.String(), errBuf.String(), "", runErr
@@ -346,11 +345,11 @@ func runWithStdio(t *testing.T, stdin string, expr string) (stdout, stderr, stac
 
 func TestStdinWord(t *testing.T) {
 	// stdin should push a special path string.
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	engine.SetHostFileOps(reg, fileops.NewMem())
+	native.SetHostFileOps(reg, capabilities.NewMem())
 	var buf bytes.Buffer
 	reg.Output = &buf
 
@@ -358,7 +357,7 @@ func TestStdinWord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	eng := engine.NewTop(reg)
+	eng := native.NewTop(reg)
 	result, err := eng.Run(values)
 	if err != nil {
 		t.Fatal(err)
@@ -370,7 +369,7 @@ func TestStdinWord(t *testing.T) {
 }
 
 func TestStdoutWord(t *testing.T) {
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,7 +377,7 @@ func TestStdoutWord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	eng := engine.NewTop(reg)
+	eng := native.NewTop(reg)
 	result, err := eng.Run(values)
 	if err != nil {
 		t.Fatal(err)
@@ -390,7 +389,7 @@ func TestStdoutWord(t *testing.T) {
 }
 
 func TestStderrWord(t *testing.T) {
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,7 +397,7 @@ func TestStderrWord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	eng := engine.NewTop(reg)
+	eng := native.NewTop(reg)
 	result, err := eng.Run(values)
 	if err != nil {
 		t.Fatal(err)

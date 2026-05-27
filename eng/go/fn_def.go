@@ -49,7 +49,7 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 		outputSig := list[i+1]
 		body := list[i+2]
 
-		if !inputSig.VType.Equal(TList) {
+		if !inputSig.Parent.Equal(TList) {
 			inputSig = NewList([]Value{inputSig})
 		}
 
@@ -69,7 +69,7 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 		}
 
 		var bodyElems []Value
-		if body.VType.Equal(TList) && body.Data != nil {
+		if body.Parent.Equal(TList) && body.Data != nil {
 			_lst, _ := AsList(body)
 			bodyElems = _lst.Slice()
 		} else {
@@ -116,7 +116,7 @@ func ParseFnUndefSpec(r *Registry, list []Value) (FnUndefInfo, error) {
 		inputSig := list[i]
 		outputSig := list[i+1]
 
-		if !inputSig.VType.Equal(TList) {
+		if !inputSig.Parent.Equal(TList) {
 			inputSig = NewList([]Value{inputSig})
 		}
 
@@ -143,7 +143,7 @@ func ParseFnUndefSpec(r *Registry, list []Value) (FnUndefInfo, error) {
 // is a return-by-value form (`[42 "ok"]`) rather than a return-by-
 // type form (`[Integer String]`).
 func OutputSigIsConcreteReturns(outputSig Value) bool {
-	if outputSig.VType.Equal(TList) && outputSig.Data != nil {
+	if outputSig.Parent.Equal(TList) && outputSig.Data != nil {
 		elems, _ := AsList(outputSig)
 		if elems.Len() == 0 {
 			return false
@@ -162,7 +162,7 @@ func OutputSigIsConcreteReturns(outputSig Value) bool {
 // context — a type literal, a known type-name word, or a structural
 // type (Options/Record/Table/TypedList/TypedMap/ObjectType).
 func IsSigTypeValue(v Value) bool {
-	if v.Data == nil && !v.VType.Equal(TNone) {
+	if v.Data == nil && !v.Parent.Equal(TNone) {
 		return true
 	}
 	if IsOptionsType(v) || IsRecordType(v) || IsTypedList(v) ||
@@ -180,7 +180,7 @@ func IsSigTypeValue(v Value) bool {
 		}
 		return false
 	}
-	if v.VType.Matches(TAtom) || v.VType.Matches(TString) {
+	if v.Parent.Matches(TAtom) || v.Parent.Matches(TString) {
 		name, _ := AsString(v)
 		if _, ok := TypeNameTable()[name]; ok {
 			return true
@@ -197,7 +197,7 @@ func IsSigTypeValue(v Value) bool {
 // output signature. For a list-form output sig, returns the elements;
 // for a single-value form, wraps the value in a one-element slice.
 func OutputSigValues(outputSig Value) []Value {
-	if outputSig.VType.Equal(TList) && outputSig.Data != nil {
+	if outputSig.Parent.Equal(TList) && outputSig.Data != nil {
 		elems, _ := AsList(outputSig)
 		result := elems.Slice()
 		return result

@@ -85,15 +85,15 @@ func (fakeBehavior) Equal(Value, Value) bool { return false }
 
 // TestValueIsRoutesThroughBehavior verifies that v.Is(t) consults
 // t.Behavior — a custom Behavior whose Match returns false even on
-// a value whose VType matches t must produce v.Is(t) == false.
+// a value whose Parent matches t must produce v.Is(t) == false.
 func TestValueIsRoutesThroughBehavior(t *testing.T) {
 	tt := NewDynamicTypeTable()
 	rejecting := &rejectingBehavior{}
 	custom := tt.MintTypeWithBehavior("AlwaysReject", TInteger, rejecting)
 
-	// Construct an Integer value whose VType is the custom type so
+	// Construct an Integer value whose Parent is the custom type so
 	// the lattice walk WOULD say yes; verify Behavior overrides.
-	v := Value{VType: custom, Data: IntPayload{N: 5}}
+	v := Value{Parent: custom, Data: IntPayload{N: 5}}
 	if v.Is(custom) {
 		t.Error("v.Is(custom) returned true; custom Behavior should reject")
 	}
@@ -119,7 +119,7 @@ func (r *rejectingBehavior) Match(Value, *Type) bool { r.matchCalled = true; ret
 func (rejectingBehavior) Format(Value) string        { return "reject" }
 func (rejectingBehavior) Equal(Value, Value) bool    { return false }
 
-// TestValuesEqualRoutesThroughBehavior verifies that a same-VType
+// TestValuesEqualRoutesThroughBehavior verifies that a same-Parent
 // pair with a custom Behavior delegates to Behavior.Equal. The
 // custom Behavior here returns "always equal" regardless of
 // payload — proving the delegation is consulted instead of the
@@ -128,8 +128,8 @@ func TestValuesEqualRoutesThroughBehavior(t *testing.T) {
 	tt := NewDynamicTypeTable()
 	custom := tt.MintTypeWithBehavior("AlwaysEqual", TInteger, alwaysEqualBehavior{})
 
-	a := Value{VType: custom, Data: IntPayload{N: 1}}
-	b := Value{VType: custom, Data: IntPayload{N: 99}}
+	a := Value{Parent: custom, Data: IntPayload{N: 1}}
+	b := Value{Parent: custom, Data: IntPayload{N: 99}}
 
 	if !ValuesEqual(a, b) {
 		t.Error("ValuesEqual returned false; custom Behavior should report equal")
@@ -137,13 +137,13 @@ func TestValuesEqualRoutesThroughBehavior(t *testing.T) {
 }
 
 // TestValuesEqualSkipsBehaviorOnDifferentVTypes verifies the
-// delegation is only triggered when both sides share VType. With
+// delegation is only triggered when both sides share Parent. With
 // different VTypes the historical default-path switch runs.
 func TestValuesEqualSkipsBehaviorOnDifferentVTypes(t *testing.T) {
 	tt := NewDynamicTypeTable()
 	custom := tt.MintTypeWithBehavior("AlwaysEqual", TInteger, alwaysEqualBehavior{})
 
-	a := Value{VType: custom, Data: IntPayload{N: 1}}
+	a := Value{Parent: custom, Data: IntPayload{N: 1}}
 	b := NewInteger(2)
 
 	// Different VTypes (custom vs TInteger): falls into the default

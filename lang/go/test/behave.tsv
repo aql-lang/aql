@@ -66,10 +66,10 @@ red/q green/q lt	false	red > green lex
 green/q red/q lt	true	green < red lex
 red/q red/q lt	false	same atom
 
-# Cross-branch (Integer vs String) — no shared Comparer below the
-# root, so dispatch errors rather than silently coercing.
-1 'a' lt	ERROR:	cross-branch (Integer vs String)
-1 true lt	ERROR:	cross-branch (Integer vs Boolean)
+# Cross-branch scalars order by branch precedence
+# (Atom < Boolean < Number < String < Path) via the Scalar Comparer.
+1 'a' lt	true	cross-branch: Integer ranks below String
+1 true lt	false	cross-branch: Integer outranks Boolean
 
 # ---------------------------------------------------------------------
 # 1b. CORE canon: kernel default rendering through CanonValue
@@ -118,23 +118,23 @@ red/q	red/q	Atom renders with /q suffix
 # ordering: negative → a<b, zero → equal, positive → a>b.
 
 # Ascending by age.
-type Person object {age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) def bob (make Person {age:25}) alice bob lt	false	30 lt 25 → false (asc by age)
-type Person object {age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) def bob (make Person {age:25}) bob alice lt	true	25 lt 30 → true (asc by age)
-type Person object {age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) def bob (make Person {age:25}) alice bob gt	true	30 gt 25 → true
+def Person refine Object {age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) def bob (make Person {age:25}) alice bob lt	false	30 lt 25 → false (asc by age)
+def Person refine Object {age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) def bob (make Person {age:25}) bob alice lt	true	25 lt 30 → true (asc by age)
+def Person refine Object {age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) def bob (make Person {age:25}) alice bob gt	true	30 gt 25 → true
 
 # Descending: swap operands.
-type Item object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(b 'n' get) (a 'n' get) sub]]) def i1 (make Item {n:1}) def i9 (make Item {n:9}) i1 i9 lt	false	descending: 1 not < 9
-type Item object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(b 'n' get) (a 'n' get) sub]]) def i1 (make Item {n:1}) def i9 (make Item {n:9}) i9 i1 lt	true	descending: 9 < 1 (inverted)
+def Item refine Object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(b 'n' get) (a 'n' get) sub]]) def i1 (make Item {n:1}) def i9 (make Item {n:9}) i1 i9 lt	false	descending: 1 not < 9
+def Item refine Object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(b 'n' get) (a 'n' get) sub]]) def i1 (make Item {n:1}) def i9 (make Item {n:9}) i9 i1 lt	true	descending: 9 < 1 (inverted)
 
 # Self-equality.
-type Person object {age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) alice alice lt	false	alice == alice → not lt
-type Person object {age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) alice alice lte	true	alice == alice → lte holds
+def Person refine Object {age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) alice alice lt	false	alice == alice → not lt
+def Person refine Object {age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def alice (make Person {age:30}) alice alice lte	true	alice == alice → lte holds
 
 # Sig validation: heterogeneous input params rejected for compare.
-type Person object {age:Integer} behave compare/q (fn [[Person Integer] [Integer] [42]])	ERROR:both params must be the same type	compare needs T,T
+def Person refine Object {age:Integer} behave compare/q (fn [[Person Integer] [Integer] [42]])	ERROR:both params must be the same type	compare needs T,T
 
 # Return type validation.
-type Person object {age:Integer} behave compare/q (fn [[Person Person] [String] ['oops']])	ERROR:return Integer	compare must return Integer
+def Person refine Object {age:Integer} behave compare/q (fn [[Person Person] [String] ['oops']])	ERROR:return Integer	compare must return Integer
 
 # Builtin type override refused.
 behave compare/q (fn [[Integer Integer] [Integer] [0]])	ERROR:builtin	builtin override rejected
@@ -143,7 +143,7 @@ behave compare/q (fn [[Integer Integer] [Integer] [0]])	ERROR:builtin	builtin ov
 behave bogus/q (fn [[Integer Integer] [Integer] [0]])	ERROR:unknown behavior	bogus behavior name
 
 # Body error propagates through the Comparer chain.
-type Faulty object {x:Integer} behave compare/q (fn [[Faulty Faulty] [Integer] [quux]]) def v1 (make Faulty {x:1}) def v2 (make Faulty {x:2}) v1 v2 lt	ERROR:	body-error propagation
+def Faulty refine Object {x:Integer} behave compare/q (fn [[Faulty Faulty] [Integer] [quux]]) def v1 (make Faulty {x:1}) def v2 (make Faulty {x:2}) v1 v2 lt	ERROR:	body-error propagation
 
 # ---------------------------------------------------------------------
 # 3b. USER-DEFINED canon: behave canon/q (fn [[T] [String] [body]])
@@ -157,21 +157,21 @@ type Faulty object {x:Integer} behave compare/q (fn [[Faulty Faulty] [Integer] [
 # string contents — that becomes the canonical render for Person
 # values (Canon → CanonValue's default fallthrough → Value.String →
 # userBehavior.Format → body output).
-type Person object {name:String age:Integer} behave canon/q (fn [[Person] [String] [(a 'name' get)]]) make Person {name:'Alice' age:30}	Alice	Person renders as its name
+def Person refine Object {name:String age:Integer} behave canon/q (fn [[Person] [String] [(a 'name' get)]]) make Person {name:'Alice' age:30}	Alice	Person renders as its name
 
 # Multi-field canon body — string concat plus a fixed suffix.
-type Person object {name:String age:Integer} behave canon/q (fn [[Person] [String] [(a 'name' get) ' (person)' add]]) make Person {name:'Alice' age:30}	Alice (person)	concat with a fixed suffix
+def Person refine Object {name:String age:Integer} behave canon/q (fn [[Person] [String] [(a 'name' get) ' (person)' add]]) make Person {name:'Alice' age:30}	Alice (person)	concat with a fixed suffix
 
 # Canon coexists with compare on the same type — both wrap one
 # userBehavior; installing the second does not lose the first.
-type Person object {name:String age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) behave canon/q (fn [[Person] [String] [(a 'name' get)]]) def alice (make Person {name:'Alice' age:30}) def bob (make Person {name:'Bob' age:25}) alice bob lt	false	compare still works after canon installed
-type Person object {name:String age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) behave canon/q (fn [[Person] [String] [(a 'name' get)]]) make Person {name:'Alice' age:30}	Alice	canon still works after compare installed
+def Person refine Object {name:String age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) behave canon/q (fn [[Person] [String] [(a 'name' get)]]) def alice (make Person {name:'Alice' age:30}) def bob (make Person {name:'Bob' age:25}) alice bob lt	false	compare still works after canon installed
+def Person refine Object {name:String age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) behave canon/q (fn [[Person] [String] [(a 'name' get)]]) make Person {name:'Alice' age:30}	Alice	canon still works after compare installed
 
 # Sig validation: canon must take exactly 1 param.
-type Person object {name:String} behave canon/q (fn [[Person Person] [String] ['x']])	ERROR:1 arg	canon needs single param
+def Person refine Object {name:String} behave canon/q (fn [[Person Person] [String] ['x']])	ERROR:1 arg	canon needs single param
 
 # Return-type validation.
-type Person object {name:String} behave canon/q (fn [[Person] [Integer] [42]])	ERROR:return String	canon must return String
+def Person refine Object {name:String} behave canon/q (fn [[Person] [Integer] [42]])	ERROR:return String	canon must return String
 
 # ---------------------------------------------------------------------
 # 4. JSONIFY: project a value into a Node or Scalar
@@ -204,23 +204,23 @@ true nodify	true	Boolean passes through
 # Map with renamed / filtered fields. The body returns a Map (Node);
 # `nodify` exposes that Map directly so the spec can assert on its
 # structure without going through the JSON-string encoder.
-type Person object {name:String age:Integer secret:String} behave nodify/q (fn [[Person] [Any] [{n: (a 'name' get), age: (a 'age' get)}]]) make Person {name:'Alice' age:30 secret:'hush'} nodify	{age:30 n:'Alice'}	custom projection: rename + drop `secret`
+def Person refine Object {name:String age:Integer secret:String} behave nodify/q (fn [[Person] [Any] [{n: (a 'name' get), age: (a 'age' get)}]]) make Person {name:'Alice' age:30 secret:'hush'} nodify	{age:30 n:'Alice'}	custom projection: rename + drop `secret`
 
 # Body can return Scalar, not just Node — projection is free to
 # collapse the whole instance to a primitive.
-type Money object {cents:Integer} behave nodify/q (fn [[Money] [Any] [(a 'cents' get)]]) make Money {cents:1234} nodify	1234	Money → Scalar projection
+def Money refine Object {cents:Integer} behave nodify/q (fn [[Money] [Any] [(a 'cents' get)]]) make Money {cents:1234} nodify	1234	Money → Scalar projection
 
 # Compose with compare + canon on the same type — three capability
 # slots coexist on one userBehavior wrapper.
-type Item object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(a 'n' get) (b 'n' get) sub]]) behave canon/q (fn [[Item] [String] [(a 'n' get) ' (item)' add]]) behave nodify/q (fn [[Item] [Any] [{value: (a 'n' get)}]]) def i (make Item {n:42}) i nodify	{value:42}	all three behaviors coexist
+def Item refine Object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(a 'n' get) (b 'n' get) sub]]) behave canon/q (fn [[Item] [String] [(a 'n' get) ' (item)' add]]) behave nodify/q (fn [[Item] [Any] [{value: (a 'n' get)}]]) def i (make Item {n:42}) i nodify	{value:42}	all three behaviors coexist
 
 # Sig validation — jsonify takes exactly 1 param.
-type Foo object {x:Integer} behave nodify/q (fn [[Foo Foo] [Any] [42]])	ERROR:1 arg	jsonify needs single param
+def Foo refine Object {x:Integer} behave nodify/q (fn [[Foo Foo] [Any] [42]])	ERROR:1 arg	jsonify needs single param
 
 # ---------------------------------------------------------------------
 # 5. PREDICATE-TYPE DISPATCH
 # ---------------------------------------------------------------------
-# `type Positive fn [n:Integer Integer [(n gt 0) guard n]]` declares a
+# `def Positive fn [n:Integer Integer [(n gt 0) guard n]]` declares a
 # refinement of Integer. InstallType mints Positive's *Type with
 # parent=Integer (because PredicateInputType returns the concrete
 # input type). `def x:Positive 5` validates via the predicate body
@@ -234,31 +234,31 @@ type Foo object {x:Integer} behave nodify/q (fn [[Foo Foo] [Any] [42]])	ERROR:1 
 # Without a Positive Comparer installed, x y lt falls through to
 # Integer's lattice ancestor (Number's Comparer) — preserves the
 # default ordering.
-type Positive fn [n:Integer Integer [(n gt 0) guard n]] def x:Positive 5 def y:Positive 10 x y lt	true	default numeric ordering inherited via Positive→Integer→Number
+def Positive fn [n:Integer Integer [(n gt 0) guard n]] def x:Positive 5 def y:Positive 10 x y lt	true	default numeric ordering inherited via Positive→Integer→Number
 
 # Installing Positive's Comparer (descending: `b a sub`) flips the
 # result. This row is the canary: if the typed-def rewrap fails,
 # Positive's Comparer is never found and lt stays at `true` (the
 # Integer default). It returns `false` only when dispatch finds
 # Positive's Comparer — proving the gotcha is closed.
-type Positive fn [n:Integer Integer [(n gt 0) guard n]] behave compare/q (fn [[Positive Positive] [Integer] [b a sub]]) def x:Positive 5 def y:Positive 10 x y lt	false	Positive's descending Comparer wins → 5 lt 10 = false
+def Positive fn [n:Integer Integer [(n gt 0) guard n]] behave compare/q (fn [[Positive Positive] [Integer] [b a sub]]) def x:Positive 5 def y:Positive 10 x y lt	false	Positive's descending Comparer wins → 5 lt 10 = false
 
 # typeof on a typed-bound value reports the asserted type — Positive
 # in canonical form is just its leaf name.
-type Positive fn [n:Integer Integer [(n gt 0) guard n]] def x:Positive 5 typeof x	Positive	x dispatches as Positive
+def Positive fn [n:Integer Integer [(n gt 0) guard n]] def x:Positive 5 typeof x	Positive	x dispatches as Positive
 
 # Validation gate still fires — a value failing the predicate body
 # (here, -3 doesn't satisfy `n gt 0`) is rejected at bind time.
-type Positive fn [n:Integer Integer [(n gt 0) guard n]] def x:Positive -3 x	ERROR:does not satisfy	predicate validation still enforced
+def Positive fn [n:Integer Integer [(n gt 0) guard n]] def x:Positive -3 x	ERROR:does not satisfy	predicate validation still enforced
 
 # A Positive value still satisfies `is Integer` — the lattice walk
 # (Positive→Integer) keeps the parent relationship intact, so
 # downstream typed positions accepting Integer accept a Positive too.
-type Positive fn [n:Integer Integer [(n gt 0) guard n]] def x:Positive 5 x is Integer	true	Positive descends from Integer
+def Positive fn [n:Integer Integer [(n gt 0) guard n]] def x:Positive 5 x is Integer	true	Positive descends from Integer
 
 # Canon override works on a predicate type — body returns a String
 # rendering.
-type Positive fn [n:Integer Integer [(n gt 0) guard n]] behave canon/q (fn [[Positive] [String] ['+'  a add]]) def x:Positive 7 x	+7	canon body produces a String render
+def Positive fn [n:Integer Integer [(n gt 0) guard n]] behave canon/q (fn [[Positive] [String] ['+'  a add]]) def x:Positive 7 x	+7	canon body produces a String render
 
 # ---------------------------------------------------------------------
 # 6. OBJECT-TYPE DISPATCH ON TYPED DEFS
@@ -271,13 +271,13 @@ type Positive fn [n:Integer Integer [(n gt 0) guard n]] behave canon/q (fn [[Pos
 
 # Without a Person Comparer, two Persons can't be compared (the LCA
 # walk from Person goes to TObjectType which has no Comparer).
-type Person object {name:String age:Integer} def x:Person {name:'A' age:30} typeof x	Person	def x:Person {map} now produces a Person-tagged instance
+def Person refine Object {name:String age:Integer} def x:Person {name:'A' age:30} typeof x	Person	def x:Person {map} now produces a Person-tagged instance
 
 # Person Comparer dispatches on values bound via typed def.
-type Person object {name:String age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def x:Person {name:'A' age:30} def y:Person {name:'B' age:25} x y lt	false	30 lt 25 → false; Comparer wired through typed-def
+def Person refine Object {name:String age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def x:Person {name:'A' age:30} def y:Person {name:'B' age:25} x y lt	false	30 lt 25 → false; Comparer wired through typed-def
 
 # `def x:Person make Person {map}` accepts a pre-made instance.
-type Person object {name:String age:Integer} def x:Person make Person {name:'A' age:30} typeof x	Person	pre-made ObjectInstance accepted by typed def
+def Person refine Object {name:String age:Integer} def x:Person make Person {name:'A' age:30} typeof x	Person	pre-made ObjectInstance accepted by typed def
 
 # ---------------------------------------------------------------------
 # 7. SORT — uses Comparer dispatch
@@ -298,16 +298,84 @@ type Person object {name:String age:Integer} def x:Person make Person {name:'A' 
 
 # Sort uses the user-installed Comparer when one is registered.
 # The list of Item instances comes back in `n`-ascending order.
-type Item object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(a 'n' get) (b 'n' get) sub]]) [(make Item {n:5}) (make Item {n:1}) (make Item {n:3})] sort length	3	sort returns a list of three items
+def Item refine Object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(a 'n' get) (b 'n' get) sub]]) [(make Item {n:5}) (make Item {n:1}) (make Item {n:3})] sort length	3	sort returns a list of three items
 
 # A nodify body can project Items to bare integers — we sort first
 # (using Item's Comparer), then project to make the spec assertion
 # easy. The order in the projected list confirms the Comparer fired.
-type Item object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(a 'n' get) (b 'n' get) sub]]) behave nodify/q (fn [[Item] [Any] [(a 'n' get)]]) [(make Item {n:5}) (make Item {n:1}) (make Item {n:3})] sort each [nodify]	[1 3 5]	sort dispatches via Item's Comparer; nodify projects to ints
+def Item refine Object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(a 'n' get) (b 'n' get) sub]]) behave nodify/q (fn [[Item] [Any] [(a 'n' get)]]) [(make Item {n:5}) (make Item {n:1}) (make Item {n:3})] sort each [nodify]	[1 3 5]	sort dispatches via Item's Comparer; nodify projects to ints
 
 # Descending: same Items, inverted body.
-type Item object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(b 'n' get) (a 'n' get) sub]]) behave nodify/q (fn [[Item] [Any] [(a 'n' get)]]) [(make Item {n:5}) (make Item {n:1}) (make Item {n:3})] sort each [nodify]	[5 3 1]	descending Comparer flips the order
+def Item refine Object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(b 'n' get) (a 'n' get) sub]]) behave nodify/q (fn [[Item] [Any] [(a 'n' get)]]) [(make Item {n:5}) (make Item {n:1}) (make Item {n:3})] sort each [nodify]	[5 3 1]	descending Comparer flips the order
 
 # Sort a map by value — entries appear in ascending value order.
 {c:3 a:1 b:2} sort	{a:1 b:2 c:3}	map sorted by values
 {z:10 y:5 x:1} sort	{x:1 y:5 z:10}	another map sort
+
+# ---------------------------------------------------------------------
+# 8. REFINE — bare 1-arg subtypes (`refine BaseType`)
+# ---------------------------------------------------------------------
+# `refine BaseType` with no body builds a bare nominal subtype: a fresh
+# type parented directly at BaseType with no added structure. Paired
+# with `def` it mints a named subtype that can carry `behave`
+# capabilities and act as a dispatch surface — the shared-ancestor
+# pattern, where a comparator installed on a common parent orders
+# values of its sibling subtypes.
+
+# A 1-arg refine subtype satisfies its base type via the lattice. The
+# `;` ends the def statement so refine binds exactly one argument.
+def Foo refine List ; Foo is List	true	a 1-arg refine subtype satisfies its base
+def Foo refine Map ; Foo is Map	true	refine accepts any base type
+
+# 1-arg refine rejects a non-type argument.
+refine 5	ERROR:argument must be a type	refine of a concrete value is rejected
+
+# behave installs a Comparer on a 1-arg-refined subtype — it is
+# OriginUserDef, so the builtin-target guard does not fire.
+def Shape refine List behave compare/q (fn [[Shape Shape] [Integer] [0]]) ; Shape is List	true	behave accepts a refined subtype as its target
+
+# ---------------------------------------------------------------------
+# 9. REFINE — shared-parent comparator dispatch on scalar bases
+# ---------------------------------------------------------------------
+# A user comparator installed on a common refine-bare parent dispatches
+# for both its concrete inhabitants (subtype VALUES via LCA) and its
+# sibling subtype LITERALS. The pattern: mint Item from a kernel scalar
+# base, mint Foo and Bar from Item, install a Comparer on Item that
+# orders by type-name. y (Bar value) lt x (Foo value) flips from the
+# kernel magnitude/lex/alphabetic rule to type-name order — Bar < Foo
+# by name regardless of payload — confirming the dispatch reaches Item
+# on every hop (fn-sig type → behave install → LCA walk → comparator
+# body). Each base scalar (Integer, Decimal, String, Boolean, Atom)
+# gets one row asserting y lt x = true (the kernel rule would say
+# false for Integer/Decimal/Boolean, false for the String/Atom values
+# chosen so the magnitude/lex order also opposes the type-name order).
+
+# Integer base: y=2 > x=1 numerically; comparator inverts via Bar<Foo.
+def Item refine Integer ; def Foo refine Item ; def Bar refine Item ; def x:Foo 1 ; def y:Bar 2 ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y lt x	true	user Comparer on Integer parent inverts magnitude
+def Item refine Integer ; def Foo refine Item ; def Bar refine Item ; def x:Foo 1 ; def y:Bar 2 ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; Bar lt Foo	true	Integer parent: dispatches on sibling type literals too
+def Item refine Integer ; def Foo refine Item ; def Bar refine Item ; def x:Foo 1 ; def y:Bar 2 ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y cmp x	-1	Integer parent: cmp matches comparator body output
+
+# Decimal base: same pattern, decimal payloads.
+def Item refine Decimal ; def Foo refine Item ; def Bar refine Item ; def x:Foo 1.5 ; def y:Bar 2.5 ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y lt x	true	user Comparer on Decimal parent
+def Item refine Decimal ; def Foo refine Item ; def Bar refine Item ; def x:Foo 1.5 ; def y:Bar 2.5 ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; Bar lt Foo	true	Decimal parent: sibling type literals
+def Item refine Decimal ; def Foo refine Item ; def Bar refine Item ; def x:Foo 1.5 ; def y:Bar 2.5 ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y cmp x	-1	Decimal parent: cmp
+
+# String base: ProperString is a sibling kernel subtype of String, so
+# the typed-def must walk past Item to the kernel String to unify the
+# 'a' / 'b' bodies. Locks in the chain-walk in defTypedHandler.
+def Item refine String ; def Foo refine Item ; def Bar refine Item ; def x:Foo 'a' ; def y:Bar 'b' ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y lt x	true	user Comparer on String parent (sibling-subtype unify)
+def Item refine String ; def Foo refine Item ; def Bar refine Item ; def x:Foo 'a' ; def y:Bar 'b' ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; Bar lt Foo	true	String parent: sibling type literals
+def Item refine String ; def Foo refine Item ; def Bar refine Item ; def x:Foo 'a' ; def y:Bar 'b' ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y cmp x	-1	String parent: cmp
+
+# Boolean base: x=false, y=true. Kernel orders false<true so y lt x is
+# normally false; comparator flips to true via Bar<Foo.
+def Item refine Boolean ; def Foo refine Item ; def Bar refine Item ; def x:Foo false ; def y:Bar true ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y lt x	true	user Comparer on Boolean parent
+def Item refine Boolean ; def Foo refine Item ; def Bar refine Item ; def x:Foo false ; def y:Bar true ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; Bar lt Foo	true	Boolean parent: sibling type literals
+def Item refine Boolean ; def Foo refine Item ; def Bar refine Item ; def x:Foo false ; def y:Bar true ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y cmp x	-1	Boolean parent: cmp
+
+# Atom base: x=alpha, y=bravo. Atom values inspect to a function-shape
+# payload (no 'type' field), so the value branch must route through
+# typeof first to recover the subtype name.
+def Item refine Atom ; def Foo refine Item ; def Bar refine Item ; def x:Foo alpha/q ; def y:Bar bravo/q ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y lt x	true	user Comparer on Atom parent (typeof-then-inspect path)
+def Item refine Atom ; def Foo refine Item ; def Bar refine Item ; def x:Foo alpha/q ; def y:Bar bravo/q ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; Bar lt Foo	true	Atom parent: sibling type literals
+def Item refine Atom ; def Foo refine Item ; def Bar refine Item ; def x:Foo alpha/q ; def y:Bar bravo/q ; behave compare/q (fn [[a:Item b:Item] [Integer] [if (a is Type) [(a inspect/s 'struct' get) (b inspect/s 'struct' get) cmp] [((typeof a) inspect/s 'struct' get) ((typeof b) inspect/s 'struct' get) cmp]]]) ; y cmp x	-1	Atom parent: cmp

@@ -59,7 +59,7 @@ Because the **handler is the algorithm** and the **registration
 is the language design**. Lang and calc both want a `lt` word
 that compares two values, but they might want different
 signatures or different dispatch boundaries. Lang's `lt` in
-`lang/go/engine/native_compare.go` registers two overloads — one
+`lang/go/native/native_compare.go` registers two overloads — one
 that builds a DepScalar refinement (`Integer lt 10`), another
 that does ordinary comparison. A host that didn't want the
 DepScalar overload would register only the second.
@@ -74,7 +74,7 @@ same as the binary arithmetic words: pick the signature, point
 the handler at the algorithm. See [how-to.md](how-to.md) for the
 binary-op recipe.
 
-## Forward vs stack dispatch — what `ForwardArgs` actually does
+## Forward vs stack dispatch — what `BarrierPos` actually does
 
 Every NativeSig declares an arg-list. The dispatcher fills those
 args by walking the **forward limit** for that sig:
@@ -85,17 +85,22 @@ args by walking the **forward limit** for that sig:
 - positions `[BarrierPos .. N-1]` come from the **stack**, top
   down — sig[BarrierPos] = top, sig[BarrierPos+1] = next-deeper, etc.
 
-When you register with `ForwardArgs: true` and don't set
-`BarrierPos`, the dispatcher fills in `BarrierPos = len(Args)` —
-every position is forward-eligible. That's what `add 2 3` looks
-like: `add` forward-collects 2 then 3, the handler receives
-`args = [2, 3]`.
+`BarrierPos` has three canonical values:
 
-When you register with `ForwardArgs: false`, `BarrierPos` stays
-at 0 — every position comes from the stack, top down. Forth-style
-stack ops like calc's `dup` (in the engspec test fixtures and
-lang/go/engine/native_stack.go) work this way: the dispatcher
-doesn't even look at what's after the word.
+- `BarrierAllForward` (-1) — the sentinel that says "no `|`
+  boundary specified; default to all-forward." Resolved at
+  registration to `len(Args)`. Use this for normal words like
+  `add 2 3`.
+- `0` — explicit all-stack dispatch. Forth-style stack ops like
+  `dup`, `drop`, `swap` set this so the dispatcher doesn't even
+  look at what's after the word.
+- `N` (`1 ≤ N < len(Args)`) — explicit barrier at position N.
+  Used by words like `get key map` where the leading slot
+  forward-collects but the trailing slot must come from the
+  stack.
+
+There is no per-word "ForwardArgs" flag any more — every sig
+carries its dispatch policy in its own `BarrierPos` field.
 
 The unified rule means **any non-trivial layout works**. For a
 2-arg forward-eligible word:

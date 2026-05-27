@@ -45,15 +45,17 @@ func (k DepKind) String() string {
 
 // DepBound is one side of a dependent-scalar constraint: a comparison
 // against a concrete bound. Inclusive distinguishes weak (≤, ≥) from
-// strict (<, >). The bound's VType pins the base scalar type for the
+// strict (<, >). The bound's Parent pins the base scalar type for the
 // containing DepScalar.
 type DepBound struct {
 	Inclusive bool  // true → GTE/LTE, false → GT/LT
 	Value     Value // the concrete bound being compared against
 }
 
-// DepScalarInfo is the payload carried by a Value of a Type/Dependent/
-// Dep<X> type, where <X> is the leaf name of the base scalar type.
+// DepScalarInfo is the payload carried by a Value whose Parent is one
+// of the well-known scalar base types (Integer, Decimal, Number,
+// String, Boolean, Atom) when the value represents a constraint
+// rather than a concrete scalar.
 //
 // A DepScalar carries up to two bounds:
 //
@@ -73,6 +75,11 @@ type DepBound struct {
 // reduce to Never *before* a DepScalarInfo with that shape can be
 // constructed, so a populated info always represents a non-empty
 // constraint.
+//
+// The Value's Parent IS the base scalar type — `typeof (Integer gte
+// 0)` returns `Integer`. The DepScalarInfo payload is what
+// distinguishes a constraint value from an ordinary scalar; IsDepScalar
+// detects it via the payload type.
 type DepScalarInfo struct {
 	Lo *DepBound // nil = no lower bound
 	Hi *DepBound // nil = no upper bound
@@ -117,102 +124,63 @@ func BoundToKind(b *DepBound, lower bool) DepKind {
 }
 
 // NewDepScalar builds a DepScalar Value from a comparison kind and a
-// concrete bound. The bound's VType determines the base type of the
-// dependent constraint and selects the leaf name in the resulting
-// Type/Dependent/Dep<Leaf> path. Returns a Value with a None VType
-// (and no payload) if the bound is not a scalar or kind doesn't
-// decompose into a single bound — callers are expected to validate
-// types before constructing.
+// concrete bound. The bound's lattice ancestry is walked to find a
+// well-known scalar base (Integer, Decimal, Number, String, Boolean,
+// Atom); the resulting Value's Parent IS that base type, and the
+// DepScalarInfo payload carries the bound. Returns a Value with a
+// None Parent (and no payload) if the bound is not rooted at a
+// supported scalar base or the kind doesn't decompose into a single
+// bound — callers are expected to validate types before constructing.
 func NewDepScalar(kind DepKind, bound Value) Value {
-	leaf := dependentLeafFromBoundType(bound.VType)
-	if leaf == "" {
-		return Value{VType: TNone}
+	base := canonicalBaseType(bound.Parent)
+	if base == nil {
+		return Value{Parent: TNone}
 	}
 	db, lower, ok := kindToBound(kind, bound)
 	if !ok {
-		return Value{VType: TNone}
+		return Value{Parent: TNone}
 	}
-	t, _ := NewType("Type/Dependent/Dep" + leaf)
 	info := DepScalarInfo{}
 	if lower {
 		info.Lo = db
 	} else {
 		info.Hi = db
 	}
-	return NewValueRaw(t, info)
+	return NewValueRaw(base, info)
 }
 
-// dependentLeafFromBoundType returns the leaf name to use in a
-// Type/Dependent/Dep<Leaf> path for a given bound type. The leaf is
-// the last *named* part of the bound's lattice path, looked up
-// against the well-known scalar bases. Returns "" for unsupported
-// bound types.
-func dependentLeafFromBoundType(t *Type) string {
-	// Walk the ancestry from the most specific to root, returning the
-	// first match against a well-known scalar base. Value-tagged
-	// subtypes (e.g. Number/Integer/42) strip down to their last named
-	// ancestor.
+// canonicalBaseType walks t's ancestry from most-specific to root,
+// returning the first well-known scalar base (Integer, Decimal,
+// Number, String, Boolean, Atom) encountered. Value-tagged subtypes
+// (e.g. Number/Integer/42) strip down to their last named ancestor.
+// Returns nil for types not rooted at a supported scalar base.
+func canonicalBaseType(t *Type) *Type {
 	for d := t; d != nil; d = d.Parent {
-		switch d {
-		case TInteger:
-			return "Integer"
-		case TDecimal:
-			return "Decimal"
-		case TNumber:
-			return "Number"
-		case TString:
-			return "String"
-		case TBoolean:
-			return "Boolean"
-		case TAtom:
-			return "Atom"
+		switch {
+		case d.Equal(TInteger):
+			return TInteger
+		case d.Equal(TDecimal):
+			return TDecimal
+		case d.Equal(TNumber):
+			return TNumber
+		case d.Equal(TString):
+			return TString
+		case d.Equal(TBoolean):
+			return TBoolean
+		case d.Equal(TAtom):
+			return TAtom
 		}
 	}
-	return ""
+	return nil
 }
 
-// DependentLeafBaseType returns the scalar base type for a given
-// dependent leaf name, or (TNone, false) if the leaf is unknown.
-//
-// Post Step 9 of TYPE-DECOUPLING.0.md the lookup is no longer a
-// hardcoded leaf-name switch — every dependent type's *Type carries
-// its BaseType pointer directly, set at registration via
-// builtinDecl.BasePath. This function walks the Builtin table to
-// find the named DepXxx type and returns its BaseType. Callers
-// holding a *Type should prefer `t.BaseType` for the same answer in
-// one field access.
-func DependentLeafBaseType(leaf string) (*Type, bool) {
-	if leaf == "" {
-		return TNone, false
-	}
-	depPath := "Type/Dependent/Dep" + leaf
-	if dep := Builtin.bypath[depPath]; dep != nil && dep.BaseType != nil {
-		return dep.BaseType, true
-	}
-	return TNone, false
-}
-
-// DependentLeafFromType extracts the leaf name from a Type/Dependent/
-// Dep<Leaf> path, or "" if the type is not a dependent scalar path.
-// Accepts trailing path components (forward-compat) so a future
-// value-tagged DepInteger subtype keeps reporting "Integer".
-func DependentLeafFromType(t *Type) string {
-	// Walk up until the parent is Type/Dependent. Accepts deeper paths
-	// (forward-compat) per the doc comment.
-	for d := t; d != nil && d.Parent != nil; d = d.Parent {
-		if d.Parent == TDependent {
-			if !strings.HasPrefix(d.Name, "Dep") {
-				return ""
-			}
-			return strings.TrimPrefix(d.Name, "Dep")
-		}
-	}
-	return ""
-}
-
-// IsDepScalar reports whether the value is any dependent scalar type.
+// IsDepScalar reports whether the value carries a DepScalar
+// constraint. Detection is by payload type — the Value's Parent is
+// just the base scalar (TInteger, TString, …), indistinguishable
+// from an ordinary scalar at the lattice level.
 func (v Value) IsDepScalar() bool {
-	return DependentLeafFromType(v.VType) != ""
+	_, ok := v.Data.(DepScalarInfo)
+	return ok
 }
 
 // AsDepScalar extracts the DepScalarInfo payload.
@@ -273,7 +241,7 @@ func boundsEqual(a, b *DepBound) bool {
 	if a.Inclusive != b.Inclusive {
 		return false
 	}
-	if !a.Value.VType.Equal(b.Value.VType) {
+	if !a.Value.Parent.Equal(b.Value.Parent) {
 		return false
 	}
 	return ValuesEqual(a.Value, b.Value)
@@ -326,7 +294,7 @@ func renderDepScalar(v Value) string {
 	if err != nil {
 		return ""
 	}
-	return formatDepScalar(DependentLeafFromType(v.VType), info)
+	return formatDepScalar(v.Parent.Name, info)
 }
 
 // tightenSameSide combines two same-side bounds (both lower, or both
@@ -403,76 +371,80 @@ func combineDepScalars(a, b DepScalarInfo) (DepScalarInfo, bool) {
 	return out, true
 }
 
-// MakeDepScalarSig builds the [TScalar, TScalarType] -> [TDependent]
+// MakeDepScalarSig builds the [TScalar, TScalar/type] -> [TScalar]
 // signature variant for a comparison op. `Integer gte 10`, `String lt
 // "z"`, `Decimal gte 1.5` all hit this sig: arg0 is the bound, arg1 is
-// the base-type literal. The result type path is Type/Dependent/Dep<X>
-// where <X> is the leaf of the base type. This sig sorts ahead of the
-// [Any, Any] boolean sig (because its types are more specific), so
-// concrete `5 gte 10` still hits the boolean branch via the second
-// match attempt.
+// the base-type literal (TypeArgs[1]=true requires a type literal at
+// that slot — the successor to the historical TScalarType slot). The
+// result Value's Parent IS the base scalar type, with a DepScalarInfo
+// payload carrying the bound. This sig sorts ahead of the [Any, Any]
+// boolean sig (because its types are more specific), so concrete `5
+// gte 10` still hits the boolean branch via the second match attempt.
 //
 // Used by ComparisonNatives to wire the same single-bound DepScalar
 // constructor onto each of `lt`, `gt`, `lte`, `gte`.
 //
 // RunInCheckMode=true so `type G10 (Integer gt 10)` produces a real
 // DepScalar value under static analysis — without it the check-mode
-// pipeline would push a TDependent carrier (Data=nil) and downstream
-// `def x:G10 …` would have no per-leaf shape to reason about. The
-// handler is a pure constructor with no registry side effects, so
-// running it during check is safe.
+// pipeline would push a carrier (Data=nil) and downstream `def x:G10
+// …` would have no constraint payload to reason about. The handler
+// is a pure constructor with no registry side effects, so running it
+// during check is safe.
 func MakeDepScalarSig(opName string, kind DepKind) NativeSig {
 	return NativeSig{
-		Args: []*Type{TScalar, TScalarType},
+		Args:     []*Type{TScalar, TScalar},
+		TypeArgs: map[int]bool{1: true},
 		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			// arg1 is the type-literal at the deep position. Reject
 			// non-leaf bases — only the well-known scalar types map
-			// to a Dependent leaf name.
+			// to a supported DepScalar base.
 			if IsConcrete(args[1]) {
 				return nil, fmt.Errorf("%s: dependent constructor needs a scalar type literal, got concrete %s",
-					opName, args[1].VType.String())
+					opName, args[1].Parent.String())
 			}
-			leaf := dependentLeafFromBoundType(args[1].VType)
-			if leaf == "" {
+			base := canonicalBaseType(ValueType(args[1]))
+			if base == nil {
 				return nil, fmt.Errorf("%s: dependent constructor does not support base type %s",
-					opName, args[1].VType.String())
+					opName, ValueType(args[1]).String())
 			}
 			// Bound must be the same scalar base as the type literal.
-			base, _ := DependentLeafBaseType(leaf)
-			if !args[0].VType.Matches(base) {
+			if !args[0].Parent.Matches(base) {
 				return nil, fmt.Errorf("%s: bound %s does not match dependent base %s",
-					opName, args[0].VType.String(), base.String())
+					opName, args[0].Parent.String(), base.String())
 			}
 			return []Value{NewDepScalar(kind, args[0])}, nil
 		},
-		Returns:        []*Type{TDependent},
-		RunInCheckMode: true,
+		Returns:        []*Type{TScalar},
+		RunInCheckMode: true, BarrierPos:
+
+		// The `between` word registration is defined in
+		// lang/go/engine/native_compare.go alongside the other DepScalar
+		// constructors (lt / gt / lte / gte). BetweenHandler below is the
+		// exported algorithm primitive.
+		-1,
 	}
 }
-
-// The `between` word registration is defined in
-// lang/go/engine/native_compare.go alongside the other DepScalar
-// constructors (lt / gt / lte / gte). BetweenHandler below is the
-// exported algorithm primitive.
 
 func BetweenHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	if IsConcrete(args[2]) {
 		return nil, fmt.Errorf("between: type arg must be a scalar type literal, got concrete %s",
-			args[2].VType.String())
+			args[2].Parent.String())
 	}
-	leaf := dependentLeafFromBoundType(args[2].VType)
-	if leaf == "" {
+	// args[2] is a type literal; its denoted lattice node is the value
+	// itself (a by-value copy), not args[2].Parent (which is the
+	// supertype after the type/value merge).
+	base := canonicalBaseType(ValueType(args[2]))
+	if base == nil {
 		return nil, fmt.Errorf("between: unsupported base type %s",
-			args[2].VType.String())
+			ValueType(args[2]).String())
 	}
-	base, _ := DependentLeafBaseType(leaf)
-	if !args[0].VType.Matches(base) {
+	if !args[0].Parent.Matches(base) {
 		return nil, fmt.Errorf("between: low bound %s does not match base %s",
-			args[0].VType.String(), base.String())
+			args[0].Parent.String(), base.String())
 	}
-	if !args[1].VType.Matches(base) {
+	if !args[1].Parent.Matches(base) {
 		return nil, fmt.Errorf("between: high bound %s does not match base %s",
-			args[1].VType.String(), base.String())
+			args[1].Parent.String(), base.String())
 	}
 	cmp, err := CompareValues(args[0], args[1])
 	if err != nil {
@@ -485,9 +457,5 @@ func BetweenHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 		Lo: &DepBound{Inclusive: true, Value: args[0]},
 		Hi: &DepBound{Inclusive: true, Value: args[1]},
 	}
-	t, err := NewType("Type/Dependent/Dep" + leaf)
-	if err != nil {
-		return nil, fmt.Errorf("between: %w", err)
-	}
-	return []Value{NewValueRaw(t, info)}, nil
+	return []Value{NewValueRaw(base, info)}, nil
 }

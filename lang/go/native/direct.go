@@ -2,8 +2,6 @@ package native
 
 import (
 	"fmt"
-
-	"github.com/aql-lang/aql/lang/go/engine"
 )
 
 // The "direct" word is registered via the consolidated Natives slice in
@@ -11,8 +9,8 @@ import (
 //
 // directAPIHandler handles direct with {kind:"api", spec:String, path:String, method:String, ...}.
 // It calls SDK.Direct() and returns the result as a map with ok, status, headers, data.
-func directAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	apiMap, _ := engine.AsMap(args[0])
+func directAPIHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	apiMap, _ := AsMap(args[0])
 
 	sdkInst, _, err := getSDK(apiMap, "direct", r)
 	if err != nil {
@@ -31,5 +29,5 @@ func directAPIHandler(args []engine.Value, ctx map[string]engine.Value, stack []
 		return nil, fmt.Errorf("direct: converting result: %w", err)
 	}
 
-	return []engine.Value{v}, nil
+	return []Value{v}, nil
 }

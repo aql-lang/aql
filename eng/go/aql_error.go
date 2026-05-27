@@ -203,7 +203,10 @@ func describeStackTypes(stack []Value, pointer int) string {
 	}
 	for i := start; i < end; i++ {
 		v := stack[i]
-		label := v.VType.String()
+		label := "?"
+		if t := ValueType(v); t != nil {
+			label = t.String()
+		}
 		if IsWord(v) {
 			w, _ := AsWord(v)
 			label = "word(" + w.Name + ")"
@@ -215,16 +218,16 @@ func describeStackTypes(stack []Value, pointer int) string {
 			// into a Matches(TString)/AsString path that would
 			// silently produce an empty label.
 			label = s
-		} else if v.VType.Matches(TString) {
+		} else if v.Parent.Matches(TString) {
 			s, _ := AsString(v)
 			if len(s) > 20 {
 				s = s[:20] + "..."
 			}
 			label = "'" + s + "'"
-		} else if v.VType.Matches(TInteger) {
+		} else if v.Parent.Matches(TInteger) {
 			n, _ := AsInteger(v)
 			label = strconv.FormatInt(n, 10)
-		} else if v.VType.Matches(TDecimal) {
+		} else if v.Parent.Matches(TDecimal) {
 			f, _ := AsDecimal(v)
 			label = formatDecimal(f)
 		}

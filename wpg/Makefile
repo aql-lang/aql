@@ -10,6 +10,16 @@
 WASM_DIR := ../docs
 SQLJS_VENDOR := wasm/vendor
 
+# Build-info stamps for the playground header (commit / tag / date).
+# Fall back gracefully when not in a git checkout. GIT_TAG is allowed
+# to be empty — the recipe omits the tag chip entirely in that case
+# rather than printing a placeholder.
+GIT_COMMIT       := $(shell git -C .. rev-parse --short HEAD 2>/dev/null || echo unknown)
+GIT_COMMIT_FULL  := $(shell git -C .. rev-parse HEAD 2>/dev/null)
+GIT_TAG          := $(shell git -C .. describe --tags --abbrev=0 2>/dev/null)
+GIT_DATE         := $(shell git -C .. log -1 --format=%cd --date=iso-local 2>/dev/null || echo unknown)
+GIT_REPO_URL     := https://github.com/aql-lang/aql
+
 serve:
 	go run ./serve
 
@@ -26,9 +36,21 @@ wasm:
 	fi
 	cp $(SQLJS_VENDOR)/sql-wasm.js $(WASM_DIR)/sql-wasm.js
 	cp $(SQLJS_VENDOR)/sql-wasm.wasm $(WASM_DIR)/sql-wasm.wasm
-	@echo "Bundling into single HTML file..."
+	@echo "Bundling into single HTML file (commit $(GIT_COMMIT), tag $(if $(GIT_TAG),$(GIT_TAG),<none>), date $(GIT_DATE))..."
 	@SQL_WASM_B64=$$(base64 -w0 $(WASM_DIR)/sql-wasm.wasm); \
 	AQL_WASM_B64=$$(base64 -w0 $(WASM_DIR)/aql.wasm); \
+	SEP='<span class="sep">·</span>'; \
+	if [ -n "$(GIT_COMMIT_FULL)" ]; then \
+		COMMIT_HTML='<a href="$(GIT_REPO_URL)/commit/$(GIT_COMMIT_FULL)" target="_blank" rel="noopener">$(GIT_COMMIT)</a>'; \
+	else \
+		COMMIT_HTML='$(GIT_COMMIT)'; \
+	fi; \
+	if [ -n "$(GIT_TAG)" ]; then \
+		TAG_HTML='<a href="$(GIT_REPO_URL)/releases/tag/$(GIT_TAG)" target="_blank" rel="noopener">$(GIT_TAG)</a>'; \
+		BUILD_INFO="$${TAG_HTML}$${SEP}$${COMMIT_HTML}$${SEP}$(GIT_DATE)"; \
+	else \
+		BUILD_INFO="$${COMMIT_HTML}$${SEP}$(GIT_DATE)"; \
+	fi; \
 	( \
 		sed -n '1,/<script src="sql-wasm.js"><\/script>/{ /<script src="sql-wasm.js"><\/script>/!p }' wasm/index.html; \
 		echo '<script>'; \
@@ -42,7 +64,7 @@ wasm:
 		echo "window.__aqlWasmB64 = '$$AQL_WASM_B64';"; \
 		echo '</script>'; \
 		sed -n '/<script src="wasm_exec.js"><\/script>/,$${ /<script src="wasm_exec.js"><\/script>/!p }' wasm/index.html; \
-	) > $(WASM_DIR)/index.html
+	) | sed "s|__BUILD_INFO__|$$BUILD_INFO|" > $(WASM_DIR)/index.html
 	@rm -f $(WASM_DIR)/aql.wasm $(WASM_DIR)/wasm_exec.js $(WASM_DIR)/sql-wasm.js $(WASM_DIR)/sql-wasm.wasm
 	@echo "Built: $(WASM_DIR)/index.html ($$(du -h $(WASM_DIR)/index.html | cut -f1))"
 

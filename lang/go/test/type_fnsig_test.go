@@ -8,7 +8,7 @@ import (
 
 // --- Function signatures as types ---
 //
-// `type Mapper fnsig [[Integer] [Integer]]` installs `Mapper` as a
+// `def Mapper fnsig [[Integer] [Integer]]` installs `Mapper` as a
 // function-shape type — a FnUndef value carrying input + output sig
 // lists but no body. Mapper can then be used in the typed-def form
 // `def n:Mapper somefn` to constrain n to a function value whose
@@ -18,7 +18,7 @@ import (
 // The `(quote double)` form passes the function as a value rather than
 // invoking it — same idiom AQL already uses for higher-order calls.
 func TestTypeFnSig_DefBindMatchingFunction(t *testing.T) {
-	got := runOne(t, `type Mapper fnsig [[Integer] [Integer]]
+	got := runOne(t, `def Mapper fnsig [[Integer] [Integer]]
 def double fn [[Integer] [Integer] [1 add]]
 def m:Mapper (quote double)
 double 5`)
@@ -35,7 +35,7 @@ func TestTypeFnSig_DefBindRejectsNonFunction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	_, err = a.Run(`type Mapper fnsig [[Integer] [Integer]]
+	_, err = a.Run(`def Mapper fnsig [[Integer] [Integer]]
 def m:Mapper 42`)
 	if err == nil {
 		t.Fatal("expected unify error for `def m:Mapper 42` (42 is not a function), got nil")
@@ -48,7 +48,7 @@ func TestTypeFnSig_DefBindRejectsWrongInputType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	_, err = a.Run(`type Mapper fnsig [[Integer] [Integer]]
+	_, err = a.Run(`def Mapper fnsig [[Integer] [Integer]]
 def stringy fn [[String] [Integer] [length]]
 def m:Mapper (quote stringy)`)
 	if err == nil {
@@ -62,7 +62,7 @@ func TestTypeFnSig_DefBindRejectsWrongReturnType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	_, err = a.Run(`type Mapper fnsig [[Integer] [Integer]]
+	_, err = a.Run(`def Mapper fnsig [[Integer] [Integer]]
 def stringer fn [[Integer] [String] [convert String]]
 def m:Mapper (quote stringer)`)
 	if err == nil {
@@ -76,7 +76,7 @@ func TestTypeFnSig_DefBindRejectsWrongArity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	_, err = a.Run(`type Mapper fnsig [[Integer] [Integer]]
+	_, err = a.Run(`def Mapper fnsig [[Integer] [Integer]]
 def two-arg fn [[Integer Integer] [Integer] [add]]
 def m:Mapper (quote two-arg)`)
 	if err == nil {
@@ -87,8 +87,8 @@ def m:Mapper (quote two-arg)`)
 // Different bound names: a second function-shape type and a function
 // that satisfies it; ensures the constraint store is per-name.
 func TestTypeFnSig_DistinctNamedShapes(t *testing.T) {
-	got := runOne(t, `type Mapper fnsig [[Integer] [Integer]]
-type Predicate fnsig [[Integer] [Boolean]]
+	got := runOne(t, `def Mapper fnsig [[Integer] [Integer]]
+def Predicate fnsig [[Integer] [Boolean]]
 def double fn [[Integer] [Integer] [1 add]]
 def positive fn [[Integer] [Boolean] [n:Integer 0 gt]]
 def m:Mapper (quote double)
@@ -102,13 +102,13 @@ def p:Predicate (quote positive)
 
 // --- Predicate-as-type: fn that returns None on fail / the unified value on ok ---
 //
-// `type Bbd fn [x:Any Any [if ((x is String) and (x gte "b") and (x lte "d")) [x] [None]]]`
+// `def Bbd fn [x:Any Any [if ((x is String) and (x gte "b") and (x lte "d")) [x] [None]]]`
 // installs Bbd as a *predicate* type. `def p:Bbd v` calls the predicate
 // with `v`; on a non-None return the def installs with the *returned*
 // value (which may be a transformed version of v); on a None return
 // the def errors and is not installed.
 
-const bbdSource = `type Bbd fn [x:Any Any [if ((x is String) and (x gte "b") and (x lte "d")) [x] [None]]]
+const bbdSource = `def Bbd fn [x:Any Any [if ((x is String) and (x gte "b") and (x lte "d")) [x] [None]]]
 `
 
 func TestTypeFnPredicate_DefBindWithinRange(t *testing.T) {
@@ -185,7 +185,7 @@ func TestTypeFnPredicate_NotIndependentlyCallable(t *testing.T) {
 // different value (here, the upper-cased form). The def installs
 // with the transformed value, not the original input.
 func TestTypeFnPredicate_TransformsOnSuccess(t *testing.T) {
-	got := runOne(t, `type Up fn [x:Any Any [if (x is String) [x upper] [None]]]
+	got := runOne(t, `def Up fn [x:Any Any [if (x is String) [x upper] [None]]]
 def shout:Up "hello"
 shout`)
 	if len(got) != 1 || got[0] != "HELLO" {
@@ -195,7 +195,7 @@ shout`)
 
 // A predicate over Integer values (ranged constraint expressed as a fn).
 func TestTypeFnPredicate_IntegerRange(t *testing.T) {
-	got := runOne(t, `type Mid fn [n:Any Any [if ((n is Integer) and (n gte 10) and (n lte 20)) [n] [None]]]
+	got := runOne(t, `def Mid fn [n:Any Any [if ((n is Integer) and (n gte 10) and (n lte 20)) [n] [None]]]
 def x:Mid 15
 x`)
 	if len(got) != 1 || got[0] != int64(15) {
@@ -208,7 +208,7 @@ func TestTypeFnPredicate_IntegerRangeFail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	_, err = a.Run(`type Mid fn [n:Any Any [if ((n is Integer) and (n gte 10) and (n lte 20)) [n] [None]]]
+	_, err = a.Run(`def Mid fn [n:Any Any [if ((n is Integer) and (n gte 10) and (n lte 20)) [n] [None]]]
 def x:Mid 25`)
 	if err == nil {
 		t.Fatal("Mid with 25: expected unify error, got nil")

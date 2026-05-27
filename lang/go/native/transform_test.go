@@ -2,36 +2,34 @@ package native
 
 import (
 	"testing"
-
-	"github.com/aql-lang/aql/lang/go/engine"
 )
 
 func TestTransformHandlerPassthrough(t *testing.T) {
 	// Transform with literal spec values passes them through.
-	data := engine.NewMap(func() *engine.OrderedMap {
-		m := engine.NewOrderedMap()
-		m.Set("a", engine.NewInteger(1))
+	data := NewMap(func() *OrderedMap {
+		m := NewOrderedMap()
+		m.Set("a", NewInteger(1))
 		return m
 	}())
-	spec := engine.NewMap(func() *engine.OrderedMap {
-		m := engine.NewOrderedMap()
-		m.Set("x", engine.NewInteger(99))
+	spec := NewMap(func() *OrderedMap {
+		m := NewOrderedMap()
+		m.Set("x", NewInteger(99))
 		return m
 	}())
 
-	result, err := transformHandler([]engine.Value{spec, data}, nil, nil, nil)
+	result, err := transformHandler([]Value{spec, data}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m, _ := engine.AsMap(result[0])
+	m, _ := AsMap(result[0])
 	v, ok := m.Get("x")
 	if !ok {
 		t.Fatal("expected key 'x' in result")
 	}
-	vi, _ := engine.AsInteger(v)
+	vi, _ := AsInteger(v)
 	if vi != 99 {
 		t.Errorf("expected 99, got %d", vi)
 	}
@@ -39,27 +37,27 @@ func TestTransformHandlerPassthrough(t *testing.T) {
 
 func TestTransformHandlerInject(t *testing.T) {
 	// Transform with backtick path injects value from data.
-	data := engine.NewMap(func() *engine.OrderedMap {
-		m := engine.NewOrderedMap()
-		m.Set("name", engine.NewString("Alice"))
+	data := NewMap(func() *OrderedMap {
+		m := NewOrderedMap()
+		m.Set("name", NewString("Alice"))
 		return m
 	}())
-	spec := engine.NewMap(func() *engine.OrderedMap {
-		m := engine.NewOrderedMap()
-		m.Set("greeting", engine.NewString("`name`"))
+	spec := NewMap(func() *OrderedMap {
+		m := NewOrderedMap()
+		m.Set("greeting", NewString("`name`"))
 		return m
 	}())
 
-	result, err := transformHandler([]engine.Value{spec, data}, nil, nil, nil)
+	result, err := transformHandler([]Value{spec, data}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, _ := engine.AsMap(result[0])
+	m, _ := AsMap(result[0])
 	v, ok := m.Get("greeting")
 	if !ok {
 		t.Fatal("expected key 'greeting' in result")
 	}
-	vs, _ := engine.AsString(v)
+	vs, _ := AsString(v)
 	if vs != "Alice" {
 		t.Errorf("expected Alice, got %s", vs)
 	}
@@ -67,26 +65,26 @@ func TestTransformHandlerInject(t *testing.T) {
 
 func TestTransformHandlerNestedPath(t *testing.T) {
 	// Transform with nested backtick path.
-	inner := engine.NewOrderedMap()
-	inner.Set("b", engine.NewInteger(42))
-	data := engine.NewMap(func() *engine.OrderedMap {
-		m := engine.NewOrderedMap()
-		m.Set("a", engine.NewMap(inner))
+	inner := NewOrderedMap()
+	inner.Set("b", NewInteger(42))
+	data := NewMap(func() *OrderedMap {
+		m := NewOrderedMap()
+		m.Set("a", NewMap(inner))
 		return m
 	}())
-	spec := engine.NewMap(func() *engine.OrderedMap {
-		m := engine.NewOrderedMap()
-		m.Set("val", engine.NewString("`a.b`"))
+	spec := NewMap(func() *OrderedMap {
+		m := NewOrderedMap()
+		m.Set("val", NewString("`a.b`"))
 		return m
 	}())
 
-	result, err := transformHandler([]engine.Value{spec, data}, nil, nil, nil)
+	result, err := transformHandler([]Value{spec, data}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, _ := engine.AsMap(result[0])
+	m, _ := AsMap(result[0])
 	v, _ := m.Get("val")
-	vi, _ := engine.AsInteger(v)
+	vi, _ := AsInteger(v)
 	if vi != 42 {
 		t.Errorf("expected 42, got %d", vi)
 	}
@@ -94,37 +92,37 @@ func TestTransformHandlerNestedPath(t *testing.T) {
 
 func TestValueToAnyRoundtrip(t *testing.T) {
 	// Test that valueToAny -> anyToValue preserves structure.
-	om := engine.NewOrderedMap()
-	om.Set("name", engine.NewString("Bob"))
-	om.Set("age", engine.NewInteger(25))
-	om.Set("active", engine.NewBoolean(true))
+	om := NewOrderedMap()
+	om.Set("name", NewString("Bob"))
+	om.Set("age", NewInteger(25))
+	om.Set("active", NewBoolean(true))
 
-	orig := engine.NewMap(om)
+	orig := NewMap(om)
 	native := valueToAny(orig)
 	back, err := anyToValue(native)
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, _ := engine.AsMap(back)
+	m, _ := AsMap(back)
 	name, _ := m.Get("name")
-	ns, _ := engine.AsString(name)
+	ns, _ := AsString(name)
 	if ns != "Bob" {
 		t.Errorf("expected Bob, got %s", ns)
 	}
 	age, _ := m.Get("age")
-	ai, _ := engine.AsInteger(age)
+	ai, _ := AsInteger(age)
 	if ai != 25 {
 		t.Errorf("expected 25, got %d", ai)
 	}
 	active, _ := m.Get("active")
-	ab, _ := engine.AsBoolean(active)
+	ab, _ := AsBoolean(active)
 	if !ab {
 		t.Error("expected true")
 	}
 }
 
 func TestValueToAnyAtom(t *testing.T) {
-	v := engine.NewAtom("hello")
+	v := NewAtom("hello")
 	result := valueToAny(v)
 	s, ok := result.(string)
 	if !ok || s != "hello" {
@@ -133,7 +131,7 @@ func TestValueToAnyAtom(t *testing.T) {
 }
 
 func TestValueToAnyNone(t *testing.T) {
-	v := engine.NewTypeLiteral(engine.TNone)
+	v := NewTypeLiteral(TNone)
 	result := valueToAny(v)
 	if result != nil {
 		t.Errorf("expected nil, got %v", result)
@@ -142,7 +140,7 @@ func TestValueToAnyNone(t *testing.T) {
 
 func TestValueToAnyDefault(t *testing.T) {
 	// A decimal value should fall through to default and return String()
-	v := engine.NewDecimal(3.14)
+	v := NewDecimal(3.14)
 	result := valueToAny(v)
 	s, ok := result.(string)
 	if !ok {
@@ -158,8 +156,8 @@ func TestAnyToValueNil(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.VType.Equal(engine.TNone) {
-		t.Errorf("expected none, got %s", v.VType)
+	if !IsNoneShape(v) {
+		t.Errorf("expected none, got %s", v.String())
 	}
 }
 
@@ -168,7 +166,7 @@ func TestAnyToValueBool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	vb, _ := engine.AsBoolean(v)
+	vb, _ := AsBoolean(v)
 	if !vb {
 		t.Error("expected true")
 	}
@@ -179,7 +177,7 @@ func TestAnyToValueInt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	vi, _ := engine.AsInteger(v)
+	vi, _ := AsInteger(v)
 	if vi != 42 {
 		t.Errorf("expected 42, got %d", vi)
 	}
@@ -190,7 +188,7 @@ func TestAnyToValueInt64(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	vi, _ := engine.AsInteger(v)
+	vi, _ := AsInteger(v)
 	if vi != 99 {
 		t.Errorf("expected 99, got %d", vi)
 	}
@@ -204,31 +202,31 @@ func TestAnyToValueUnsupported(t *testing.T) {
 }
 
 func TestValueToAnyList(t *testing.T) {
-	elems := []engine.Value{
-		engine.NewInteger(1),
-		engine.NewString("two"),
-		engine.NewBoolean(false),
+	elems := []Value{
+		NewInteger(1),
+		NewString("two"),
+		NewBoolean(false),
 	}
-	orig := engine.NewList(elems)
+	orig := NewList(elems)
 	native := valueToAny(orig)
 	back, err := anyToValue(native)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(back)
+	_lst, _ := AsList(back)
 	list := _lst.Slice()
 	if len(list) != 3 {
 		t.Fatalf("expected 3 elements, got %d", len(list))
 	}
-	li0, _ := engine.AsInteger(list[0])
+	li0, _ := AsInteger(list[0])
 	if li0 != 1 {
 		t.Errorf("expected 1, got %d", li0)
 	}
-	ls1, _ := engine.AsString(list[1])
+	ls1, _ := AsString(list[1])
 	if ls1 != "two" {
 		t.Errorf("expected two, got %s", ls1)
 	}
-	lb2, _ := engine.AsBoolean(list[2])
+	lb2, _ := AsBoolean(list[2])
 	if lb2 {
 		t.Error("expected false")
 	}

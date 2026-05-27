@@ -4,8 +4,8 @@ A unified refactor that closes two coupled holes in the kernel's
 value/type model:
 
 1. **The payload hole.** `Value.Data interface{}` admits any
-   combination of `(VType, Data)`, including nonsensical ones like
-   `Value{VType: TInteger, Data: "hello"}`. The 40 `AsX` methods and
+   combination of `(Parent, Data)`, including nonsensical ones like
+   `Value{Parent: TInteger, Data: "hello"}`. The 40 `AsX` methods and
    the 65 internal `Data.(T)` assertions are runtime guards papering
    over what the Go type system was never asked to enforce.
 
@@ -32,23 +32,23 @@ Status: **IMPLEMENTATION COMPLETE — Steps 0-11 landed**.
 | 2  v.Is(t) + canonical dispatch routing | ✅ landed | |
 | 3  Pluggable Format (10 domain render arms) | ✅ landed | `eng/go/coretype_format_behaviors.go` (placeholder file; Behaviors moved to owning modules at Step 8) |
 | 4  Pluggable Equal | ✅ landed | `ValuesEqual` delegates to `Behavior.Equal` |
-| 5  Sealed Payload | ✅ landed | `type Payload interface { payloadMarker() }`; `Value.Data` is sealed. `Value{VType: TInteger, Data: "hello"}` is a compile error. |
+| 5  Sealed Payload | ✅ landed | `type Payload interface { payloadMarker() }`; `Value.Data` is sealed. `Value{Parent: TInteger, Data: "hello"}` is a compile error. |
 | 6  Drain primitive AsX | ✅ landed | 9 primitive accessors (AsString, AsInteger, AsDecimal, AsNumber, AsBoolean, AsAtom, AsPath, AsWord, AsForward) converted from methods to free functions. ~1500 caller sites updated via gofmt -r AST rewrites. |
 | 7  Drain structural AsX + all IsX | ✅ landed | All remaining 49 IsX/AsX methods (AsList, AsMap, AsRecordType, IsWord, IsArray, …) converted to free functions. Only `Is(t *Type)` and `String()` remain as methods on Value. |
 | 8a RegisterExternalBuiltin API | ✅ landed | API + acceptance test in `eng/go/external_register_test.go` |
 | 8b Migrate TFetch* | ✅ landed | First kernel-type migration via the new API. Owned by `lang/go/native/fetch.go`. |
-| 8c Migrate TMatrix | ✅ landed | Owned by `lang/go/internal/nativemod/matrix.go`. Format Behavior + `NewMatrix` constructor moved with it. |
-| 8d Migrate TTimeout / TInterval | ✅ landed | Owned by `lang/go/engine/native_misc.go`. `IsTimeout`/`IsInterval`/`AsTimeout`/`AsInterval` methods on Value removed (callers use direct payload assertion or `engine.NewTimeout` / `engine.NewInterval`). |
-| 8e Migrate Time family (TDate, TDateTime, TInstant, TTimeOfDay, TDuration, TCalDuration, TClkDuration, TTimezone, TTime) | ✅ landed | Owned by `lang/go/engine/native_temporal.go`. Resolved the `lang/go/engine/native_math.go` cycle by colocating in `lang/go/engine` (same package as the date-arithmetic handlers) rather than `lang/go/internal/nativemod/time`. Format Behaviors and `New*` constructors moved with the types. The `As*` methods on Value stay in eng since they assert against payload-only kernel structs. |
+| 8c Migrate TMatrix | ✅ landed | Owned by `lang/go/modules/matrix.go`. Format Behavior + `NewMatrix` constructor moved with it. |
+| 8d Migrate TTimeout / TInterval | ✅ landed | Owned by `lang/go/native/native_misc.go`. `IsTimeout`/`IsInterval`/`AsTimeout`/`AsInterval` methods on Value removed (callers use direct payload assertion or `engine.NewTimeout` / `engine.NewInterval`). |
+| 8e Migrate Time family (TDate, TDateTime, TInstant, TTimeOfDay, TDuration, TCalDuration, TClkDuration, TTimezone, TTime) | ✅ landed | Owned by `lang/go/native/native_temporal.go`. Resolved the `lang/go/native/native_math.go` cycle by colocating in `lang/go/native` (same package as the date-arithmetic handlers) rather than `lang/go/modules/time`. Format Behaviors and `New*` constructors moved with the types. The `As*` methods on Value stay in eng since they assert against payload-only kernel structs. |
 | 9a Lattice cleanup — BaseType field | ✅ landed | `DependentLeafBaseType` switch replaced by per-Type field populated via `builtinDecl.BasePath`. |
 | 9b Lattice cleanup — Metatype field | ✅ landed | `MetatypeFor` switch replaced by per-Type field populated via `builtinDecl.MetatypePath`. |
 | 10c List/Map ChildType formatting → Behavior | ✅ landed | `eng/go/coretype_list_map_behaviors.go` houses `listFormatBehavior` / `mapFormatBehavior`; `Value.String` dispatch walks the `Parent` chain so subtypes (e.g. `TInspect ⟶ TMap`) inherit the parent's Behavior without per-subtype registration. `ValuesEqual` factored into `valuesEqualDefault` to break the Behavior-delegation recursion cycle. |
 | 10d FixedID stability snapshot | ✅ landed | `lang/go/test/fixedid_stability_test.go` pins ~60 path→FixedID pairs across kernel + externalised types; failure on this test means a Value.ID serialised by an older binary will deserialise to the wrong Type. |
 | 10e Kernel-level conventions | ✅ landed | `eng/go/CLAUDE.md` documents sealed Payload variant rules, the canonical TypeBehavior dispatch contract, kernel/domain boundary policy, FixedID allocation ranges, and the "Value has two methods" invariant. |
-| 10f Consolidate `InstallType` | ✅ landed | The old `validateAndInstallType` duplicate in `lang/go/engine/native_type.go` is gone; the production `type` word delegates to the kernel's `eng.InstallType`. Type-installation policy now has a single source of truth. |
+| 10f Consolidate `InstallType` | ✅ landed | The old `validateAndInstallType` duplicate in `lang/go/native/native_type.go` is gone; the production `type` word delegates to the kernel's `eng.InstallType`. Type-installation policy now has a single source of truth. |
 | 11 Parser hand-off / ISO removal | ✅ landed | ISO-string parsing for temporal values removed entirely from the time module — no `time-date` / `time-datetime` / `time-instant` / `time-time-of-day` / `time-duration` (ISO-duration) / `parse-date` / `parse-datetime` / `auto-date` words, no `parseISO8601Duration` / `autoDateLayouts` helpers. Numeric (`unix` / `unix-ms` / `unix-ns`), wall-clock (`now-local` / `today` / `today-utc`), and formatting (`format` / `to-iso` / `to-string`) constructors remain. Eliminates the parser-coupling that motivated keeping these types kernel-resident historically. |
 
-The core invariant — **illegal `(VType, Data)` combinations are
+The core invariant — **illegal `(Parent, Data)` combinations are
 compile errors** — is enforced. The Behavior seam, the sealed
 Payload interface, the external-registration hook, the lattice
 field migration, and ALL five domain-type families
@@ -74,7 +74,7 @@ The remaining lattice cleanup (Step 10c–10f) and parser hand-off
 - `eng/go/CLAUDE.md` documents the kernel-level conventions
   (Payload sealing, Behavior dispatch contract, FixedID ranges,
   kernel/domain boundary policy).
-- `lang/go/engine/native_type.go::validateAndInstallType` has been
+- `lang/go/native/native_type.go::validateAndInstallType` has been
   collapsed into `eng.InstallType` — type installation has one
   policy point shared by both the eng-core and lang-production
   `type` words.
@@ -90,7 +90,7 @@ The remaining lattice cleanup (Step 10c–10f) and parser hand-off
 ## 1. Goal & guiding principle
 
 **"Make illegal values unrepresentable."** The Go type system should
-reject `Value{VType: TInteger, Data: "hello"}` at compile time, and
+reject `Value{Parent: TInteger, Data: "hello"}` at compile time, and
 the kernel's dispatch path should never need to ask "what kind of
 value is this?" by hand-coded switch on a `T*` constant.
 
@@ -109,7 +109,7 @@ Concretely the refactor delivers:
 
 - **Domain types live where they belong.** `TDate`, `TMatrix`,
   `TCalDuration`, `TFetch*`, `TTimeout`, `TInterval` move out of
-  `eng/types.go` and `eng/typetable.go` into `lang/go/internal/nativemod/*`
+  `eng/types.go` and `eng/typetable.go` into `lang/go/modules/*`
   and `lang/go/native/*`. The kernel keeps only what the parser emits
   directly or what the interpreter loop branches on structurally.
 
@@ -127,17 +127,17 @@ Concretely the refactor delivers:
 ```go
 type Value struct {
     ID    string
-    VType *Type
+    Parent *Type
     Data  interface{}   // ← the hole
     Quoted, Eval, Carrier, Undefined bool
     Pos   SrcPos
 }
 ```
 
-`interface{}` admits anything. The valid `(VType, Data)` pairs form
+`interface{}` admits anything. The valid `(Parent, Data)` pairs form
 a tiny subset of the cartesian product:
 
-| VType | Valid Data | Invalid examples that compile |
+| Parent | Valid Data | Invalid examples that compile |
 |---|---|---|
 | `TInteger` | `int64` | `string`, `nil`, `[]Value`, … |
 | `TList` | `[]Value`, `TableData`, `Materializer`, `ChildTypeInfo` | `int64`, `string`, … |
@@ -175,9 +175,9 @@ types the kernel does not consume:
 
 - `TDate`, `TDateTime`, `TInstant`, `TTimeOfDay`, `TCalDuration`,
   `TClkDuration`, `TTimezone` — read only by
-  `lang/go/internal/nativemod/time.go` (32 sites).
-- `TMatrix` — read only by `lang/go/internal/nativemod/matrix.go` (20 sites).
-- `TTimeout`, `TInterval` — read only by `lang/go/engine/native_misc.go`
+  `lang/go/modules/time.go` (32 sites).
+- `TMatrix` — read only by `lang/go/modules/matrix.go` (20 sites).
+- `TTimeout`, `TInterval` — read only by `lang/go/native/native_misc.go`
   + two render arms in `eng/go/value.go`'s String switch.
 - `TFetchFunction`, `TFetchRequest`, `TFetchResponse` — read only by
   `lang/go/native/fetch.go`.
@@ -187,7 +187,7 @@ A plugin wanting a new type today must patch:
 - `eng/go/typetable.go` (add a `builtinDecl` row, allocate a `FixedID`)
 - `eng/go/types.go` (add a `T*` constant)
 - `eng/go/value.go` (add `NewX`, `AsX`, `IsX`, a `Value.String` arm)
-- `lang/go/engine/aliases.go` (re-export the constant)
+- `lang/go/native/aliases.go` (re-export the constant)
 
 None of these are in the plugin's package. The kernel becomes the
 disposal site for every domain.
@@ -258,7 +258,7 @@ type ErrorPayload    struct { ErrorInfo }
 // DepScalar variant ------------------------------------------------
 type DepScalarPayload struct { DepScalarInfo }
 
-// Type-literal sentinel -- a Value{VType: T, Data: TypeLiteralPayload{}}
+// Type-literal sentinel -- a Value{Parent: T, Data: TypeLiteralPayload{}}
 // is "the type T as a value" (the bare word `Integer` in source code).
 type TypeLiteralPayload struct{}
 
@@ -285,14 +285,14 @@ Constructor protocol:
 
 ```go
 func NewInteger(n int64) Value {
-    return Value{ID: GenerateID("S_"), VType: TInteger, Data: IntPayload{N: n}}
+    return Value{ID: GenerateID("S_"), Parent: TInteger, Data: IntPayload{N: n}}
 }
 func NewList(elems []Value) Value {
-    return Value{ID: GenerateID("N_"), VType: TList, Data: ListPayload{Elems: elems}}
+    return Value{ID: GenerateID("N_"), Parent: TList, Data: ListPayload{Elems: elems}}
 }
 ```
 
-`Value{VType: TInteger, Data: "hello"}` no longer compiles —
+`Value{Parent: TInteger, Data: "hello"}` no longer compiles —
 `string` does not satisfy `Payload`. The cross-field invariant
 (`TInteger` ↔ `IntPayload`) is enforced by a single
 `TestValueInvariants` walk and by every constructor being a one-liner.
@@ -349,7 +349,7 @@ type datePayload struct { T time.Time }
 type dateBehavior struct{}
 
 func (dateBehavior) Match(v eng.Value, t *eng.Type) bool {
-    if v.VType != t                                    { return false }
+    if v.Parent != t                                    { return false }
     ext, ok := v.Data.(eng.ExtensionPayload); if !ok   { return false }
     _, ok = ext.Body.(datePayload)
     return ok
@@ -462,7 +462,7 @@ every builtin `*Type` has non-nil Behavior post-init.
 ### Step 2 — `v.Is(t)` and canonical dispatch routing
 
 **Goal**: every NEW dispatch call uses `v.Is(t)`; existing
-`VType.Matches`/`VType.Equal` continues to work via delegation.
+`Parent.Matches`/`Parent.Equal` continues to work via delegation.
 
 **Work**:
 
@@ -473,7 +473,7 @@ every builtin `*Type` has non-nil Behavior post-init.
    - `sigTypeMatches` (`eng/go/signature.go:259`)
    - `Unify`'s lattice branch (`eng/go/unify.go`)
    - `rejectsTypeLiteral` (`eng/go/signature.go:307`)
-3. Do NOT rewrite the 525+ `VType.Matches` / `VType.Equal` call sites
+3. Do NOT rewrite the 525+ `Parent.Matches` / `Parent.Equal` call sites
    yet. They keep working via `defaultBehavior.Match`.
 
 **Done when**: `make test` green. Spec runner output (`eng/spec/*.tsv`,
@@ -495,7 +495,7 @@ per-type `Behavior.Format`.
    `eng/go/coretype_matrix_behavior.go`; timeout/interval same. They
    move out of `eng/` later — Step 8 — when the constants do.
 3. `Value.String` gains one early branch: `if b :=
-   v.VType.Behavior; b != nil { if s := b.Format(v); s != "" { return s } }`.
+   v.Parent.Behavior; b != nil { if s := b.Format(v); s != "" { return s } }`.
    (The empty-string sentinel keeps `defaultBehavior.Format` opted out
    — defaults still flow into the kernel switch for primitives, so the
    fast path is preserved.)
@@ -521,7 +521,7 @@ by ~100 lines. `lang/go/test/error_format_test.go`,
    `set` look for the capability; types lacking it produce a clear
    error rather than a silent miscompile.
 
-**Done when**: `lang/go/engine/compare_test.go`,
+**Done when**: `lang/go/native/compare_test.go`,
 `lang/go/test/type_algebra_test.go`, `lang/go/test/type_depscalar_safety_test.go`
 green.
 
@@ -537,7 +537,7 @@ green.
    payloads in the right variant:
    ```go
    func NewInteger(n int64) Value {
-       return Value{ID: GenerateID("S_"), VType: TInteger, Data: IntPayload{N: n}}
+       return Value{ID: GenerateID("S_"), Parent: TInteger, Data: IntPayload{N: n}}
    }
    ```
 3. Update every `AsX` method in `eng/go/value.go` to assert against
@@ -563,7 +563,7 @@ a feature freeze (no other concurrent refactor on `Value`).
 
 **Done when**: `go build ./...` succeeds with `Data Payload`;
 `make test` byte-identical to pre-step 5; the
-`TestValueInvariants` test (new) walks every (VType, Payload) pair
+`TestValueInvariants` test (new) walks every (Parent, Payload) pair
 in the registry and asserts they pair up correctly.
 
 ### Step 6 — Drain primitive `AsX` methods
@@ -659,7 +659,7 @@ they all flow through `ExtensionPayload`.
    ```go
    // Was: func NewDate(t time.Time) Value { return NewValueRaw(TDate, t) }
    // Was: func (v Value) AsDate() time.Time { ... }
-   // Both removed from eng. Now in lang/go/internal/nativemod/time/:
+   // Both removed from eng. Now in lang/go/modules/time/:
    func NewDate(t time.Time) eng.Value { return eng.NewExtension(TDate, datePayload{T: t}) }
    func AsDate(v eng.Value) (time.Time, bool) {
        ext, ok := v.Data.(eng.ExtensionPayload); if !ok { return time.Time{}, false }
@@ -692,13 +692,13 @@ declare TDate / TMatrix / TFetch* / TTimeout / TInterval.
    func (tt *TypeTable) RegisterExternalBuiltin(path string, fixedID int, behavior TypeBehavior) *Type
    ```
    Allocates a stable FixedID in a documented per-module range:
-   - 1000-1999 reserved for `lang/go/internal/nativemod/time`
-   - 2000-2999 reserved for `lang/go/internal/nativemod/matrix`
+   - 1000-1999 reserved for `lang/go/modules/time`
+   - 2000-2999 reserved for `lang/go/modules/matrix`
    - 3000-3999 reserved for `lang/go/native/fetch`
-   - 4000-4999 reserved for `lang/go/engine` builtin-but-external
+   - 4000-4999 reserved for `lang/go/native` builtin-but-external
      (Timeout, Interval — pending future home)
 2. For each domain group, create
-   `lang/go/internal/nativemod/<group>/types.go`:
+   `lang/go/modules/<group>/types.go`:
    ```go
    package time
 
@@ -719,7 +719,7 @@ declare TDate / TMatrix / TFetch* / TTimeout / TInterval.
    stability. **A test snapshots `Builtin.byID` plus the externally
    registered IDs and asserts they match the prior baseline.**
 3. Update 200+ lang call sites: `engine.TDate` → `time.TDate`.
-   `lang/go/engine/aliases.go` keeps re-exports for the transition.
+   `lang/go/native/aliases.go` keeps re-exports for the transition.
 4. Delete the domain entries from `builtinDecls`
    (`eng/go/typetable.go:325-412`) and the `T*` constants from
    `eng/go/types.go` (lines 60-80). Delete the
@@ -729,7 +729,7 @@ declare TDate / TMatrix / TFetch* / TTimeout / TInterval.
 **Done when**:
 - `grep -nE "TDate|TDateTime|TInstant|TTimeOfDay|TCalDuration|TClkDuration|TTimezone|TMatrix|TTimeout|TInterval|TFetch" eng/go/` returns zero hits.
 - The FixedID snapshot test passes (no ID drift).
-- `lang/go/internal/nativemod/time_test.go`, `matrix_test.go`,
+- `lang/go/modules/time_test.go`, `matrix_test.go`,
   `lang/go/native/fetch.go`, `lang/go/test/factorial_type_scaling_test.go` all green.
 
 ### Step 10 — Lattice cleanup
@@ -753,14 +753,14 @@ declare TDate / TMatrix / TFetch* / TTimeout / TInterval.
 
 After Step 10, `Type.Matches` becomes a thin wrapper:
 `Behavior.Match(NewTypeLiteral(t), pattern)`. The 525+ existing
-`VType.Matches` call sites in lang/ keep working via this wrapper;
+`Parent.Matches` call sites in lang/ keep working via this wrapper;
 no mechanical sweep needed.
 
 **Done when**: `lang/go/test/type_depscalar_safety_test.go`,
 `lang/go/test/type_predicate_arity_test.go`,
 `lang/go/test/type_predicate_sandbox_test.go`,
 `lang/go/test/type_fnvariance_test.go`,
-`lang/go/engine/path_subtype_test.go` all green. Full spec rollup
+`lang/go/native/path_subtype_test.go` all green. Full spec rollup
 byte-identical.
 
 ### Step 11 — Parser hand-off
@@ -782,7 +782,7 @@ any AQL source that needed ISO input was using the explicit `time-date
 "2024-01-15"` form, which becomes a deprecation/removal in the
 domain-module surface (eng kernel unaffected).
 
-**Removed words** (lang/go/internal/nativemod/time.go): `time-date`,
+**Removed words** (lang/go/modules/time.go): `time-date`,
 `time-datetime`, `time-instant`, `time-time-of-day`, `time-duration`
 (ISO-duration form), `parse-date`, `parse-datetime`, `auto-date`.
 **Removed helpers**: `parseISO8601Duration`, `autoDateLayouts`.
@@ -835,7 +835,7 @@ type colorPayload struct { R, G, B byte }
 type colorBehavior struct{}
 
 func (colorBehavior) Match(v eng.Value, t *eng.Type) bool {
-    if v.VType != t                                  { return false }
+    if v.Parent != t                                  { return false }
     ext, ok := v.Data.(eng.ExtensionPayload); if !ok { return false }
     _, ok = ext.Body.(colorPayload)
     return ok
@@ -947,7 +947,7 @@ a Type whose Behavior is `recordBehavior{shape: recordTypeInfo}`.
 `Match` does field-by-field conformance (today's `IsValueOfType`
 logic). `Format` prints `Point{x:1.0 y:2.0}`. `Equal` does per-key
 compare. Nominal vs structural is preserved: `{x:1.0 y:2.0}` has
-VType=TMap, so `m is Point` is true only via structural conformance,
+Parent=TMap, so `m is Point` is true only via structural conformance,
 but `typeof m` remains `Map`.
 
 In all three cases, **nothing changes in the kernel** — `installType`
@@ -967,7 +967,7 @@ def p:Palette { primary:{r:255 g:0 b:0} secondary:{r:0 g:0 b:255} }
 ```
 
 The existing module mechanism
-(`lang/go/engine/native_module_module.go`) already exports type
+(`lang/go/native/native_module_module.go`) already exports type
 bindings via `r.Types.PopType` / `PushType`. Because Behavior is a
 field on `*Type` (not on the registry), the exported type works
 identically in the importing scope without additional plumbing.
@@ -981,14 +981,14 @@ identically in the importing scope without additional plumbing.
 |---|---|
 | 1 | `eng/go/typebehavior_test.go::TestDefaultBehaviorInstalled` (new) |
 | 2 | `lang/go/test/{istype,typed_def,type_algebra,type_depscalar_safety,type_distribute,type_error_messages,type_fnsig,type_fnvariance,type_guard,type_inspect,type_namespace,type_never,type_predicate_arity,type_predicate_sandbox,type_shadow}_test.go`; spec runner: `eng/spec/{dispatch,mirror,pattern,record}.tsv`, `lang/spec/{list,map}.tsv` |
-| 3 | `lang/go/test/error_format_test.go`, `lang/go/test/type_error_messages_test.go`, `lang/go/test/check_fixtures_test.go`; spec rollup byte-equal diff: `eng/spec/*.tsv`, `lang/spec/*.tsv`, `lang/go/test/check_fixtures/*`; `lang/go/internal/nativemod/{time,matrix}_test.go` |
-| 4 | `lang/go/engine/compare_test.go`, `lang/go/test/type_algebra_test.go`, `lang/go/test/type_depscalar_safety_test.go` |
-| 5 | `TestValueInvariants` (new — walks every (VType, Payload) pair); full `make test` rollup; verify `go vet` finds no `interface{}` payload assertions remaining |
+| 3 | `lang/go/test/error_format_test.go`, `lang/go/test/type_error_messages_test.go`, `lang/go/test/check_fixtures_test.go`; spec rollup byte-equal diff: `eng/spec/*.tsv`, `lang/spec/*.tsv`, `lang/go/test/check_fixtures/*`; `lang/go/modules/{time,matrix}_test.go` |
+| 4 | `lang/go/native/compare_test.go`, `lang/go/test/type_algebra_test.go`, `lang/go/test/type_depscalar_safety_test.go` |
+| 5 | `TestValueInvariants` (new — walks every (Parent, Payload) pair); full `make test` rollup; verify `go vet` finds no `interface{}` payload assertions remaining |
 | 6 | Full rollup; particularly `lang/go/test/type_depscalar_safety_test.go` (the DepScalar shield helper) |
 | 7 | Full rollup; `lang/go/test/{object_type,resource_type}_test.go`; spec rollup byte-equal |
-| 8 | `lang/go/internal/nativemod/{time,matrix}_test.go`; `lang/go/test/{factorial_type_scaling}_test.go`; spec rollup byte-equal |
+| 8 | `lang/go/modules/{time,matrix}_test.go`; `lang/go/test/{factorial_type_scaling}_test.go`; spec rollup byte-equal |
 | 9 | FixedID snapshot test (new) — asserts `Builtin.byID` ∪ externally-registered IDs match prior baseline; full rollup |
-| 10 | `lang/go/test/{type_depscalar_safety,type_predicate_arity,type_predicate_sandbox,type_fnvariance}_test.go`, `lang/go/engine/path_subtype_test.go`; full spec rollup |
+| 10 | `lang/go/test/{type_depscalar_safety,type_predicate_arity,type_predicate_sandbox,type_fnvariance}_test.go`, `lang/go/native/path_subtype_test.go`; full spec rollup |
 | 11 | Spec rebaseline expected; out-of-scope for this proposal |
 
 **Local fast-feedback loop**:
@@ -1006,7 +1006,7 @@ boundaries.
 
 ### What we gain
 
-- **Illegal values cannot be represented.** `Value{VType: TInteger,
+- **Illegal values cannot be represented.** `Value{Parent: TInteger,
   Data: "hello"}` does not compile. The 40 `AsX` defensive accessors
   and 31 `IsX` predicates collapse into typed payload variants.
 - **Plugin types are first-class.** A module-defined Color is
@@ -1093,7 +1093,7 @@ ship PR-4 as cleanup. PR-5 is a separate conversation.
    semantics are clear.
 
 4. **`Type.Matches` compatibility surface.** The 525+ existing
-   `VType.Matches(TInteger)` sites in non-eng code work fine via
+   `Parent.Matches(TInteger)` sites in non-eng code work fine via
    delegation. Proposal: keep `Type.Matches` as a method delegating
    to `Behavior.Match`. Cost: one extra interface call per match,
    already accounted in §7.
@@ -1107,7 +1107,7 @@ ship PR-4 as cleanup. PR-5 is a separate conversation.
    matching iff the declared type is a subtype of the target.
 
 6. **Duplicate `validateAndInstallType` vs `installType`.** Two
-   near-identical implementations exist (`lang/go/engine/native_type.go:221-263`
+   near-identical implementations exist (`lang/go/native/native_type.go:221-263`
    vs `eng/go/core_type.go:476-530`). The lang version accepts
    `TString` for the name; the eng version accepts only `TAtom`.
    Consolidate at Step 1 or Step 2 — they're both doing

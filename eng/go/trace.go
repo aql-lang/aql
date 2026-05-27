@@ -39,25 +39,26 @@ func TraceColorize(v Value) string {
 	case IsOpenParen(v):
 		return cDim + "(" + cReset
 	case v.Data == nil:
-		// Type literal
-		return cCyan + v.VType.String() + cReset
-	case v.VType.Matches(TString):
+		// Type literal — render the value's OWN type name (it IS its
+		// lattice node), not its parent (which is the supertype).
+		return cCyan + typeNodeOf(v).String() + cReset
+	case v.Parent.Matches(TString):
 		return cGreen + fmt.Sprintf("%q", v.Data) + cReset
-	case v.VType.Matches(TInteger):
+	case v.Parent.Matches(TInteger):
 		return cBlue + fmt.Sprintf("%d", v.Data) + cReset
-	case v.VType.Matches(TBoolean):
+	case v.Parent.Matches(TBoolean):
 		_as0, _ := AsBoolean(v)
 		if _as0 {
 			return cCyan + "true" + cReset
 		}
 		return cCyan + "false" + cReset
-	case v.VType.Equal(TAtom):
+	case v.Parent.Equal(TAtom):
 		s, err := AsAtom(v)
 		if err != nil {
 			return cRed + fmt.Sprintf("%v", v.Data) + cReset
 		}
 		return cRed + s + cReset
-	case v.VType.Equal(TList):
+	case v.Parent.Equal(TList):
 		_lst, _ := AsList(v)
 		elems := _lst.Slice()
 		parts := make([]string, len(elems))
@@ -65,7 +66,7 @@ func TraceColorize(v Value) string {
 			parts[i] = TraceColorize(e)
 		}
 		return cDim + "[" + cReset + strings.Join(parts, " ") + cDim + "]" + cReset
-	case v.VType.Equal(TMap):
+	case v.Parent.Equal(TMap):
 		m, _ := AsMap(v)
 		parts := make([]string, 0, m.Len())
 		for _, k := range m.Keys() {

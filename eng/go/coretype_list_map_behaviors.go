@@ -13,24 +13,14 @@ func (listFormatBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.
 func (listFormatBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
 func (listFormatBehavior) Format(v Value) string {
 	if tt, ok := v.Data.(TableTypeInfo); ok {
-		parts := make([]string, 0, tt.Record.Fields.Len())
-		for _, k := range tt.Record.Fields.Keys() {
-			val, _ := tt.Record.Fields.Get(k)
-			parts = append(parts, k+":"+val.String())
-		}
-		return "table{" + strings.Join(parts, ",") + "}"
+		return formatFieldBag("table", tt.Record.Fields)
 	}
 	if td, ok := v.Data.(TableData); ok {
-		parts := make([]string, 0, td.Record.Fields.Len())
-		for _, k := range td.Record.Fields.Keys() {
-			val, _ := td.Record.Fields.Get(k)
-			parts = append(parts, k+":"+val.String())
-		}
 		rowParts := make([]string, len(td.Rows))
 		for i, row := range td.Rows {
 			rowParts[i] = row.String()
 		}
-		return "table{" + strings.Join(parts, ",") + "}[" + strings.Join(rowParts, ",") + "]"
+		return formatFieldBag("table", td.Record.Fields) + "[" + strings.Join(rowParts, ",") + "]"
 	}
 	if mp, ok := v.Data.(MaterializerPayload); ok {
 		td, err := mp.M.Materialize()
@@ -66,6 +56,18 @@ func formatTableDataAsList(td TableData) string {
 	return v.String()
 }
 
+// formatFieldBag renders an OrderedMap of field name → value as
+// `name{k:v,…}` — the shared render shape of record / options /
+// table-schema type values.
+func formatFieldBag(name string, fields *OrderedMap) string {
+	parts := make([]string, 0, fields.Len())
+	for _, k := range fields.Keys() {
+		val, _ := fields.Get(k)
+		parts = append(parts, k+":"+val.String())
+	}
+	return name + "{" + strings.Join(parts, ",") + "}"
+}
+
 // mapFormatBehavior renders a Map value, dispatching on the
 // internal payload sub-shape (ChildTypeInfo, RecordTypeInfo,
 // OptionsTypeInfo, plain MapPayload). Moved from Value.String at
@@ -79,20 +81,10 @@ func (mapFormatBehavior) Format(v Value) string {
 		return "{:" + ct.Child.String() + "}"
 	}
 	if rt, ok := v.Data.(RecordTypeInfo); ok {
-		parts := make([]string, 0, rt.Fields.Len())
-		for _, k := range rt.Fields.Keys() {
-			val, _ := rt.Fields.Get(k)
-			parts = append(parts, k+":"+val.String())
-		}
-		return "record{" + strings.Join(parts, ",") + "}"
+		return formatFieldBag("record", rt.Fields)
 	}
 	if ot, ok := v.Data.(OptionsTypeInfo); ok {
-		parts := make([]string, 0, ot.Fields.Len())
-		for _, k := range ot.Fields.Keys() {
-			val, _ := ot.Fields.Get(k)
-			parts = append(parts, k+":"+val.String())
-		}
-		return "options{" + strings.Join(parts, ",") + "}"
+		return formatFieldBag("options", ot.Fields)
 	}
 	m, _ := AsMap(v)
 	if m == nil {

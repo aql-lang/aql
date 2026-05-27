@@ -7,10 +7,10 @@ import (
 	"github.com/aql-lang/aql/lang/go"
 )
 
-// --- type shadowing + untype ---
+// --- type shadowing + undef ---
 //
-// *Type bindings now stack like `def` bindings. `type Foo X; type Foo
-// Y` pushes Y on top so subsequent uses see Y; `untype Foo` pops Y
+// *Type bindings now stack like `def` bindings. `def Foo X; def Foo
+// Y` pushes Y on top so subsequent uses see Y; `undef Foo` pops Y
 // and X becomes active again. Once the stack empties, the name is
 // unbound. Mirrors `def` / `undef` semantics so users have a single
 // scoping mental model across the value and type namespaces.
@@ -18,8 +18,8 @@ import (
 // Shadowing a type binding swaps the active definition without
 // error. The most recent binding wins.
 func TestTypeShadow_Push(t *testing.T) {
-	got := runOne(t, `type Foo Integer
-type Foo String
+	got := runOne(t, `def Foo Integer
+def Foo String
 42 is Foo
 "hi" is Foo`)
 	if len(got) != 2 {
@@ -33,12 +33,12 @@ type Foo String
 	}
 }
 
-// `untype Foo` pops the most recent binding. The previous binding
+// `undef Foo` pops the most recent binding. The previous binding
 // becomes active again.
 func TestTypeShadow_Pop(t *testing.T) {
-	got := runOne(t, `type Foo Integer
-type Foo String
-untype Foo
+	got := runOne(t, `def Foo Integer
+def Foo String
+undef Foo
 42 is Foo
 "hi" is Foo`)
 	if len(got) != 2 {
@@ -59,8 +59,8 @@ func TestTypeShadow_PopToEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	_, err = a.Run(`type Foo Integer
-untype Foo
+	_, err = a.Run(`def Foo Integer
+undef Foo
 42 is Foo`)
 	if err == nil {
 		t.Fatalf("expected error after untype-ing the last binding")
@@ -76,7 +76,7 @@ func TestTypeShadow_UntypeUnbound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	_, err = a.Run(`untype Nonexistent`)
+	_, err = a.Run(`undef Nonexistent`)
 	if err == nil {
 		t.Fatalf("expected error untyping a nonexistent name")
 	}
@@ -85,31 +85,33 @@ func TestTypeShadow_UntypeUnbound(t *testing.T) {
 	}
 }
 
-// `untype foo` (lowercase) is rejected — the case rule applies to
-// untype the same way it applies to type.
-func TestTypeShadow_UntypeRejectsLowercase(t *testing.T) {
+// `undef foo` (lowercase) is a value-namespace unbind under the
+// universal `undef`: it does not touch a capitalised type binding and
+// does not error when the lowercase name is unbound.
+func TestTypeShadow_UndefLowercaseIsValueUnbind(t *testing.T) {
 	a, err := lang.New()
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	_, err = a.Run(`type Foo Integer
-untype foo`)
-	if err == nil {
-		t.Fatalf("expected error: lowercase untype name")
+	got, err := a.Run(`def Foo Integer
+undef foo
+5 is Foo`)
+	if err != nil {
+		t.Fatalf("undef foo should be a harmless value-unbind: %v", err)
 	}
-	if !strings.Contains(err.Error(), "capital letter") {
-		t.Errorf("error %q does not mention capital letter", err)
+	if len(got) != 1 || got[0] != "true" {
+		t.Errorf("type binding Foo should survive lowercase undef; got %v, want [true]", got)
 	}
 }
 
 // Shadow with a richer type: predicate type over a concrete type
 // literal. `is` should consult the active binding.
 func TestTypeShadow_PredicateOverLiteral(t *testing.T) {
-	got := runOne(t, `type Foo Integer
-type Foo fn [x:Any Any [if (x is String) [x] [None]]]
+	got := runOne(t, `def Foo Integer
+def Foo fn [x:Any Any [if (x is String) [x] [None]]]
 42 is Foo
 "hi" is Foo
-untype Foo
+undef Foo
 42 is Foo
 "hi" is Foo`)
 	if len(got) != 4 {
@@ -126,11 +128,11 @@ untype Foo
 // Shadow with a DepScalar: the type-stack interacts cleanly with the
 // dependent-scalar machinery.
 func TestTypeShadow_DepScalar(t *testing.T) {
-	got := runOne(t, `type Bound (Integer gt 10)
-type Bound (Integer gt 100)
+	got := runOne(t, `def Bound (Integer gt 10)
+def Bound (Integer gt 100)
 50 is Bound
 200 is Bound
-untype Bound
+undef Bound
 50 is Bound
 200 is Bound`)
 	if len(got) != 4 {
@@ -146,13 +148,13 @@ untype Bound
 
 // Multiple shadows + multiple untypes — verify deep-stack behaviour.
 func TestTypeShadow_DeepStack(t *testing.T) {
-	got := runOne(t, `type T Integer
-type T String
-type T Boolean
+	got := runOne(t, `def T Integer
+def T String
+def T Boolean
 true is T
-untype T
+undef T
 "hi" is T
-untype T
+undef T
 42 is T`)
 	if len(got) != 3 {
 		t.Fatalf("got %v, want 3 results", got)

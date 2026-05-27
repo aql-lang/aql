@@ -276,12 +276,24 @@ Consequences for sig design:
 | Word | Signatures (match order) | Returns | Notes | Data Arg |
 |------|--------------------------|---------|-------|----------|
 | `deq` | `[Any, Any]` | `[B]` | Deep equality (traverses lists/maps) | — |
-| `eq` | `[Any, Any]` | `[B]` | Exact equality (identity for non-scalars) | — |
-| `gt` | `[Any, Any]` | `[B]` | `args[1] > args[0]` (reversed) | — |
-| `gte` | `[Any, Any]` | `[B]` | `args[1] >= args[0]` (reversed) | — |
-| `lt` | `[Any, Any]` | `[B]` | `args[1] < args[0]` (reversed) | — |
-| `lte` | `[Any, Any]` | `[B]` | `args[1] <= args[0]` (reversed) | — |
+| `eq` | `[Any, Any]` | `[B]` | Exact equality (cross-leaf magnitude allowed) | — |
+| `cmp` | `[Any, Any]` | `[I]` | Three-way: `-1`/`0`/`1` | — |
+| `lt` | `[Scalar, Scalar]` (TypeArgs[1]) | `[Scalar]` | DepScalar constructor (`Integer lt 10` → upper-bound refinement) | — |
+| | `[Any, Any]` | `[B]` | `args[1] < args[0]` (reversed) | — |
+| `gt` | `[Scalar, Scalar]` (TypeArgs[1]) | `[Scalar]` | DepScalar constructor | — |
+| | `[Any, Any]` | `[B]` | `args[1] > args[0]` | — |
+| `lte` | `[Scalar, Scalar]` (TypeArgs[1]) | `[Scalar]` | DepScalar constructor | — |
+| | `[Any, Any]` | `[B]` | `args[1] <= args[0]` | — |
+| `gte` | `[Scalar, Scalar]` (TypeArgs[1]) | `[Scalar]` | DepScalar constructor | — |
+| | `[Any, Any]` | `[B]` | `args[1] >= args[0]` | — |
+| `between` | `[Scalar, Scalar, Scalar]` (TypeArgs[2]) | `[Scalar]` | Closed-interval DepScalar constructor | — |
 | `neq` | `[Any, Any]` | `[B]` | Not equal (negation of eq) | — |
+
+All ordering words use one unified total order — see
+`lang/doc/design/TYPE-ORDERING.0.md`. The dep-sig overload of
+`lt`/`gt`/`lte`/`gte` fires when the deeper (stack) arg is a bare
+scalar type literal AND the forward arg is concrete; otherwise the
+`[Any, Any]` boolean handler runs.
 
 
 ## Accessors
@@ -357,17 +369,21 @@ Consequences for sig design:
 | Word | Signatures (match order) | Returns | Notes | Data Arg |
 |------|--------------------------|---------|-------|----------|
 | `base` | `[Any]` | `[Any]` | Returns zero/base value for a type | — |
-| `convert` | `[ScalarType, M, Scalar]` | `[Scalar]` | Opts: {base:S}; convert with options | — |
-| | `[ScalarType, Scalar]` | `[Scalar]` | Convert to target scalar type | — |
+| `convert` | `[Scalar, M, Scalar]` (TypeArgs[0]) | `[Scalar]` | Opts: {base:S}; convert with options | — |
+| | `[Scalar, Scalar]` (TypeArgs[0]) | `[Scalar]` | Convert to target scalar type | — |
 | `fulltypeof` | `[Any]` | `[A]` | Full type path (e.g. `Scalar/String`) | — |
 | `inspect` | `[W]` | `[M]` | Word/type inspection | — |
 | | `[A]` | `[M]` | | — |
 | | `[Node]` | `[M]` | | — |
 | | `[Scalar]` | `[M]` | | — |
 | `is` | `[Any, Any]` | `[B]` | Unification-based type/value check | — |
-| `make` | `[Object, Any, Object]` | `[Object]` | Object from source with prototype | — |
-| | `[Any, Any, M]` | `[Any]` | Type + source + options | — |
-| | `[Any, Any]` | `[Any]` | Type + source | — |
+| `make` | `[Scalar, M, Any]` (TypeArgs[0]) | `[Scalar]` | Scalar type + opts + value | — |
+| | `[Ideal, M]` (TypeArgs[0]) | `[Ideal]` | Ideal kind + source map | — |
+| | `[Array, L]` | `[Array]` | Array from list | — |
+| | `[Scalar, Any]` (TypeArgs[0]) | `[Scalar]` | Scalar type + value | — |
+| | `[Object, Any, Object]` | `[Object]` | Object from source with prototype | — |
+| | `[Any, Any, M]` | `[Any]` | Generic: type + source + options | — |
+| | `[Any, Any]` | `[Any]` | Generic: type + source | — |
 | `object` | `[M]` | `[Object]` | Define object type from field map | — |
 | | `[M, Any]` | `[Object]` | Object type with parent | — |
 | `record` | `[L]` | `[Record]` | Define record type from field list | `arg0: L` |

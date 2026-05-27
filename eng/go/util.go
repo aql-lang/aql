@@ -13,23 +13,21 @@ import "fmt"
 // found in future code should land here, not be re-inlined.
 
 // IsTypeLiteral reports whether v is a bare type literal — a Value
-// whose VType identifies a type but carries no concrete payload and
-// is not a CheckMode carrier. Type literals have Data == nil and
-// Carrier == false; the convention is established in CLAUDE.md and
-// scattered through the codebase as raw `v.Data == nil` checks.
+// that is a type-lattice node carrying no concrete payload and is
+// not a CheckMode carrier. After the type/value merge a type literal
+// IS its lattice node; it has Data == nil and Carrier == false.
 //
-// The single exception is None: Value{VType:TNone, Data:nil}
-// represents both the unit type AND the unique None value, so
-// IsTypeLiteral returns false for None — the caller would otherwise
-// treat None as a "type" rather than a value.
+// None is excluded: the unit type's only inhabitant doubles as the
+// "absent value" sentinel throughout the codebase (handlers return
+// NewTypeLiteral(TNone) for "no value found"). Treating it as a type
+// literal would make consumers try to use it as a constraint;
+// IsTypeLiteral(NewTypeLiteral(TNone)) returns false so the type-
+// vs-value dispatch treats it as a value.
 func IsTypeLiteral(v Value) bool {
 	if v.Data != nil || v.Carrier {
 		return false
 	}
-	if v.VType.Equal(TNone) {
-		return false
-	}
-	return true
+	return !IsNoneShape(v)
 }
 
 // IsConcrete reports whether v carries a real payload (not a type
@@ -51,14 +49,14 @@ func IsConcrete(v Value) bool {
 // their site without wrapping again.
 func RequireConcreteList(v Value, op string) (ReadList, error) {
 	if v.Data == nil {
-		return ReadList{}, fmt.Errorf("%s: expected a concrete list, got type literal %s", op, v.VType.String())
+		return ReadList{}, fmt.Errorf("%s: expected a concrete list, got type literal %s", op, v.Parent.String())
 	}
 	if v.Carrier {
-		return ReadList{}, fmt.Errorf("%s: expected a concrete list, got carrier %s", op, v.VType.String())
+		return ReadList{}, fmt.Errorf("%s: expected a concrete list, got carrier %s", op, v.Parent.String())
 	}
 	list, err := AsList(v)
 	if err != nil || list.IsNil() {
-		return ReadList{}, fmt.Errorf("%s: value is not a list (got %s)", op, v.VType.String())
+		return ReadList{}, fmt.Errorf("%s: value is not a list (got %s)", op, v.Parent.String())
 	}
 	return list, nil
 }
@@ -69,14 +67,14 @@ func RequireConcreteList(v Value, op string) (ReadList, error) {
 // concrete OrderedMap payload return an error.
 func RequireConcreteMap(v Value, op string) (ReadMap, error) {
 	if v.Data == nil {
-		return nil, fmt.Errorf("%s: expected a concrete map, got type literal %s", op, v.VType.String())
+		return nil, fmt.Errorf("%s: expected a concrete map, got type literal %s", op, v.Parent.String())
 	}
 	if v.Carrier {
-		return nil, fmt.Errorf("%s: expected a concrete map, got carrier %s", op, v.VType.String())
+		return nil, fmt.Errorf("%s: expected a concrete map, got carrier %s", op, v.Parent.String())
 	}
 	m, err := AsMap(v)
 	if err != nil || m == nil {
-		return nil, fmt.Errorf("%s: value is not a concrete map (got %s)", op, v.VType.String())
+		return nil, fmt.Errorf("%s: value is not a concrete map (got %s)", op, v.Parent.String())
 	}
 	return m, nil
 }
@@ -84,7 +82,7 @@ func RequireConcreteMap(v Value, op string) (ReadMap, error) {
 // MapFieldString fetches a String-valued field from a ReadMap.
 // Returns the string and true on hit; "" and false when the key is
 // absent OR the value's type is not String. Replaces the
-// `if v, ok := m.Get(k); ok && v.VType.Matches(TString) { s, _ := v.AsString(); … }`
+// `if v, ok := m.Get(k); ok && v.Parent.Matches(TString) { s, _ := v.AsString(); … }`
 // pattern that appeared in fileio.go, native_string_helpers.go, and
 // native_type_make.go.
 //
@@ -94,7 +92,7 @@ func MapFieldString(m ReadMap, key string) (string, bool) {
 		return "", false
 	}
 	v, ok := m.Get(key)
-	if !ok || !v.VType.Matches(TString) {
+	if !ok || !v.Parent.Matches(TString) {
 		return "", false
 	}
 	s, err := AsString(v)
@@ -111,7 +109,7 @@ func MapFieldInteger(m ReadMap, key string) (int64, bool) {
 		return 0, false
 	}
 	v, ok := m.Get(key)
-	if !ok || !v.VType.Matches(TInteger) || v.IsDepScalar() {
+	if !ok || !v.Parent.Matches(TInteger) || v.IsDepScalar() {
 		return 0, false
 	}
 	n, err := AsInteger(v)
@@ -127,7 +125,7 @@ func MapFieldBoolean(m ReadMap, key string) (bool, bool) {
 		return false, false
 	}
 	v, ok := m.Get(key)
-	if !ok || !v.VType.Matches(TBoolean) {
+	if !ok || !v.Parent.Matches(TBoolean) {
 		return false, false
 	}
 	b, err := AsBoolean(v)
@@ -143,7 +141,7 @@ func MapFieldDecimal(m ReadMap, key string) (float64, bool) {
 		return 0, false
 	}
 	v, ok := m.Get(key)
-	if !ok || !v.VType.Matches(TDecimal) || v.IsDepScalar() {
+	if !ok || !v.Parent.Matches(TDecimal) || v.IsDepScalar() {
 		return 0, false
 	}
 	f, err := AsDecimal(v)
@@ -162,6 +160,51 @@ func MapFieldDecimal(m ReadMap, key string) (float64, bool) {
 func WithPos(v, src Value) Value {
 	v.Pos = src.Pos
 	return v
+}
+
+// ReparentValue returns a copy of v with its Parent rebound to def.
+// The single primitive every typed-def reparent path uses (predicate
+// types, ObjectInstance dispatch on Person, FnUndef function-shape
+// binding, refine-bare scalar subtypes). Payload, Pos, Quoted,
+// Carrier, Eval are preserved unchanged.
+//
+// The discipline this codifies: NEVER mutate `Parent` on a Value
+// that was returned by Unify when Unify could have swapped to a
+// type-literal side. The refine-bare reparent originally got this
+// wrong and stored the Foo type literal as the binding instead of
+// the integer body. Using this helper makes the by-value copy
+// explicit and the mistake unreachable.
+//
+// See `lang/doc/design/TYPE-CANONICALIZATION.0.md`.
+func ReparentValue(v Value, def *Type) Value {
+	v.Parent = def
+	return v
+}
+
+// CanonicalType resolves t to its canonical lattice node — the
+// pointer registered in TypeTable.byID for t.ID. If t is already
+// canonical, has no ID, or no registry is in scope, returns t
+// unchanged.
+//
+// Background: `type Type = Value`, so a "type literal" is a Value
+// carrying the lattice node's fields by value. Code that grabs
+// `&v` of such a stack-local Value gets a non-canonical pointer:
+// it compares Equal via ID, but mutations to fields like Behavior
+// (which `behave` writes through the canonical pointer) don't
+// propagate to the orphan copies. Every site that needs *Type
+// identity for a Value-shaped type literal — fn-sig parameter
+// resolution, refine subtype minting, behave validation — routes
+// through this helper so identity stays canonical at every hop.
+//
+// See `lang/doc/design/TYPE-CANONICALIZATION.0.md`.
+func CanonicalType(r *Registry, t *Type) *Type {
+	if t == nil || r == nil || t.ID == "" {
+		return t
+	}
+	if canon := r.Types.LookupByID(t.ID); canon != nil {
+		return canon
+	}
+	return t
 }
 
 // predicateSandbox holds the slice/map state that RunPredicate
@@ -207,7 +250,7 @@ func restorePredicateState(r *Registry, s predicateSandbox) {
 // indexing, …); the error is loud and discoverable.
 func (v Value) AsConcreteString() (string, error) {
 	if v.IsDepScalar() {
-		return "", fmt.Errorf("AsConcreteString: value is a dependent-type constraint (%s), not a concrete String", v.VType.String())
+		return "", fmt.Errorf("AsConcreteString: value is a dependent-type constraint (%s), not a concrete String", v.Parent.String())
 	}
 	// Handlers with dual [TString]+[TAtom] signatures (trim, upper,
 	// lower, concat, …) call into AsConcreteString from either path;
@@ -224,7 +267,7 @@ func (v Value) AsConcreteString() (string, error) {
 // AsConcreteInteger — DepScalar-rejecting accessor. See AsConcreteString.
 func (v Value) AsConcreteInteger() (int64, error) {
 	if v.IsDepScalar() {
-		return 0, fmt.Errorf("AsConcreteInteger: value is a dependent-type constraint (%s), not a concrete Integer", v.VType.String())
+		return 0, fmt.Errorf("AsConcreteInteger: value is a dependent-type constraint (%s), not a concrete Integer", v.Parent.String())
 	}
 	return AsInteger(v)
 }
@@ -232,7 +275,7 @@ func (v Value) AsConcreteInteger() (int64, error) {
 // AsConcreteDecimal — DepScalar-rejecting accessor. See AsConcreteString.
 func (v Value) AsConcreteDecimal() (float64, error) {
 	if v.IsDepScalar() {
-		return 0, fmt.Errorf("AsConcreteDecimal: value is a dependent-type constraint (%s), not a concrete Decimal", v.VType.String())
+		return 0, fmt.Errorf("AsConcreteDecimal: value is a dependent-type constraint (%s), not a concrete Decimal", v.Parent.String())
 	}
 	return AsDecimal(v)
 }
@@ -240,7 +283,7 @@ func (v Value) AsConcreteDecimal() (float64, error) {
 // AsConcreteBoolean — DepScalar-rejecting accessor. See AsConcreteString.
 func (v Value) AsConcreteBoolean() (bool, error) {
 	if v.IsDepScalar() {
-		return false, fmt.Errorf("AsConcreteBoolean: value is a dependent-type constraint (%s), not a concrete Boolean", v.VType.String())
+		return false, fmt.Errorf("AsConcreteBoolean: value is a dependent-type constraint (%s), not a concrete Boolean", v.Parent.String())
 	}
 	return AsBoolean(v)
 }
@@ -248,7 +291,7 @@ func (v Value) AsConcreteBoolean() (bool, error) {
 // AsConcreteAtom — DepScalar-rejecting accessor. See AsConcreteString.
 func (v Value) AsConcreteAtom() (string, error) {
 	if v.IsDepScalar() {
-		return "", fmt.Errorf("AsConcreteAtom: value is a dependent-type constraint (%s), not a concrete Atom", v.VType.String())
+		return "", fmt.Errorf("AsConcreteAtom: value is a dependent-type constraint (%s), not a concrete Atom", v.Parent.String())
 	}
 	return AsAtom(v)
 }
@@ -262,11 +305,11 @@ func (v Value) AsConcreteAtom() (string, error) {
 //
 // Inlines the type-assertion the IsDisjunct/AsDisjunct pair would
 // otherwise duplicate so there's no unreachable error branch.
-// Values whose VType is a Disjunct (Type/Disjunct or a subtype such
+// Values whose Parent is a Disjunct (Type/Disjunct or a subtype such
 // as Type/Disjunct/Enum) but whose payload isn't a real DisjunctInfo
 // fall back to the single-element slice.
 func FlattenDisjunctAlts(v Value) []Value {
-	if d, ok := v.Data.(DisjunctInfo); ok && v.VType.Matches(TDisjunct) {
+	if d, ok := v.Data.(DisjunctInfo); ok && v.Parent.Matches(TDisjunct) {
 		return d.Alternatives
 	}
 	return []Value{v}

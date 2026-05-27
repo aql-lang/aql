@@ -15,7 +15,7 @@ import "errors"
 //
 // and a word handler retrieves it:
 //
-//	ops, ok, err := eng.Cap[fileops.FileOps](r, "engine.fileops")
+//	ops, ok, err := eng.Cap[capabilities.FileOps](r, "engine.fileops")
 //	if err != nil { return nil, err }
 //	if !ok { return nil, fmt.Errorf("read: no fileops capability") }
 //

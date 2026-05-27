@@ -10,7 +10,7 @@
 //
 // The "q" suffix on most fixtures marks them as SPEC-RUNNER FIXTURES,
 // distinct from production AQL words of the same root name. Language-
-// fundamental keywords (def, fn, quote, args, type, untype, typeof,
+// fundamental keywords (def, fn, quote, args, refine, typeof,
 // is, none, end, …) keep their bare names because what's being tested
 // IS the keyword itself, not a fixture for it.
 //
@@ -40,7 +40,7 @@ var specReplayCounter int
 // type-lattice core.
 func registerSpecWords(r *eng.Registry) {
 	toFloat := func(v eng.Value) float64 {
-		if v.VType.Matches(eng.TInteger) {
+		if v.Parent.Matches(eng.TInteger) {
 			n, _ := eng.AsInteger(v)
 			return float64(n)
 		}
@@ -49,7 +49,7 @@ func registerSpecWords(r *eng.Registry) {
 	}
 	numericBinary := func(intOp func(a, b int64) int64, floatOp func(a, b float64) float64) eng.Handler {
 		return func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-			if args[0].VType.Matches(eng.TInteger) && args[1].VType.Matches(eng.TInteger) {
+			if args[0].Parent.Matches(eng.TInteger) && args[1].Parent.Matches(eng.TInteger) {
 				a, _ := eng.AsInteger(args[0])
 				b, _ := eng.AsInteger(args[1])
 				return []eng.Value{eng.NewInteger(intOp(a, b))}, nil
@@ -60,35 +60,35 @@ func registerSpecWords(r *eng.Registry) {
 	numberPair := []*eng.Type{eng.TNumber, eng.TNumber}
 
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "addq", ForwardArgs: true,
+		Name: "addq",
 		Signatures: []eng.NativeSig{{
 			Args:    numberPair,
 			Handler: numericBinary(func(a, b int64) int64 { return b + a }, func(a, b float64) float64 { return b + a }),
-			Returns: []*eng.Type{eng.TNumber},
+			Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1,
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "subq", ForwardArgs: true,
+		Name: "subq",
 		Signatures: []eng.NativeSig{{
 			Args:    numberPair,
 			Handler: numericBinary(func(a, b int64) int64 { return b - a }, func(a, b float64) float64 { return b - a }),
-			Returns: []*eng.Type{eng.TNumber},
+			Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1,
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "mulq", ForwardArgs: true,
+		Name: "mulq",
 		Signatures: []eng.NativeSig{{
 			Args:    numberPair,
 			Handler: numericBinary(func(a, b int64) int64 { return b * a }, func(a, b float64) float64 { return b * a }),
-			Returns: []*eng.Type{eng.TNumber},
+			Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1,
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "negq", ForwardArgs: true,
+		Name: "negq",
 		Signatures: []eng.NativeSig{{
 			Args: []*eng.Type{eng.TNumber}, BarrierPos: 1,
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-				if args[0].VType.Matches(eng.TInteger) {
+				if args[0].Parent.Matches(eng.TInteger) {
 					n, _ := eng.AsInteger(args[0])
 					return []eng.Value{eng.NewInteger(-n)}, nil
 				}
@@ -99,7 +99,7 @@ func registerSpecWords(r *eng.Registry) {
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "concatq", ForwardArgs: true,
+		Name: "concatq",
 		Signatures: []eng.NativeSig{{
 			Args: []*eng.Type{eng.TString, eng.TString},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -107,11 +107,11 @@ func registerSpecWords(r *eng.Registry) {
 				b, _ := eng.AsString(args[1])
 				return []eng.Value{eng.NewString(b + a)}, nil
 			},
-			Returns: []*eng.Type{eng.TString},
+			Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "describeq", ForwardArgs: true,
+		Name: "describeq",
 		Signatures: []eng.NativeSig{
 			{
 				Args: []*eng.Type{eng.TInteger},
@@ -119,7 +119,7 @@ func registerSpecWords(r *eng.Registry) {
 					n, _ := eng.AsInteger(args[0])
 					return []eng.Value{eng.NewString("int:" + strconv.FormatInt(n, 10))}, nil
 				},
-				Returns: []*eng.Type{eng.TString},
+				Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 			},
 			{
 				Args: []*eng.Type{eng.TString},
@@ -127,30 +127,30 @@ func registerSpecWords(r *eng.Registry) {
 					s, _ := eng.AsString(args[0])
 					return []eng.Value{eng.NewString("str:" + s)}, nil
 				},
-				Returns: []*eng.Type{eng.TString},
+				Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 			},
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "tagq", ForwardArgs: true,
+		Name: "tagq",
 		Signatures: []eng.NativeSig{
 			{Args: []*eng.Type{eng.TAny}, Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				return []eng.Value{eng.NewString("any")}, nil
-			}, Returns: []*eng.Type{eng.TString}},
+			}, Returns: []*eng.Type{eng.TString}, BarrierPos: -1},
 			{Args: []*eng.Type{eng.TInteger}, Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				return []eng.Value{eng.NewString("specific")}, nil
-			}, Returns: []*eng.Type{eng.TString}},
+			}, Returns: []*eng.Type{eng.TString}, BarrierPos: -1},
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "factq", ForwardArgs: true,
+		Name: "factq",
 		Signatures: []eng.NativeSig{
 			{
 				Args: []*eng.Type{eng.TInteger}, Patterns: map[int]eng.Value{0: eng.NewInteger(0)},
 				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return []eng.Value{eng.NewInteger(1)}, nil
 				},
-				Returns: []*eng.Type{eng.TInteger},
+				Returns: []*eng.Type{eng.TInteger}, BarrierPos: -1,
 			},
 			{
 				Args: []*eng.Type{eng.TInteger},
@@ -158,50 +158,50 @@ func registerSpecWords(r *eng.Registry) {
 					n, _ := eng.AsInteger(args[0])
 					return []eng.Value{eng.NewInteger(n)}, nil
 				},
-				Returns: []*eng.Type{eng.TInteger},
+				Returns: []*eng.Type{eng.TInteger}, BarrierPos: -1,
 			},
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "codeq", ForwardArgs: true,
+		Name: "codeq",
 		Signatures: []eng.NativeSig{
 			{
 				Args: []*eng.Type{eng.TInteger}, Patterns: map[int]eng.Value{0: eng.NewInteger(99)},
 				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return []eng.Value{eng.NewString("ninety-nine")}, nil
 				},
-				Returns: []*eng.Type{eng.TString},
+				Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 			},
 			{
 				Args: []*eng.Type{eng.TInteger},
 				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return []eng.Value{eng.NewString("general")}, nil
 				},
-				Returns: []*eng.Type{eng.TString},
+				Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 			},
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "routeq", ForwardArgs: true,
+		Name: "routeq",
 		Signatures: []eng.NativeSig{
 			{
 				Args: []*eng.Type{eng.TString}, Patterns: map[int]eng.Value{0: eng.NewString("admin")},
 				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return []eng.Value{eng.NewString("matched-admin")}, nil
 				},
-				Returns: []*eng.Type{eng.TString},
+				Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 			},
 			{
 				Args: []*eng.Type{eng.TString},
 				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return []eng.Value{eng.NewString("other")}, nil
 				},
-				Returns: []*eng.Type{eng.TString},
+				Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 			},
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "tripq", ForwardArgs: true,
+		Name: "tripq",
 		Signatures: []eng.NativeSig{{
 			Args: []*eng.Type{eng.TInteger, eng.TInteger, eng.TInteger},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -210,11 +210,11 @@ func registerSpecWords(r *eng.Registry) {
 				c, _ := eng.AsInteger(args[2])
 				return []eng.Value{eng.NewString(fmt.Sprintf("%d,%d,%d", a, b, c))}, nil
 			},
-			Returns: []*eng.Type{eng.TString},
+			Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "pairq", ForwardArgs: true,
+		Name: "pairq",
 		Signatures: []eng.NativeSig{{
 			Args:       []*eng.Type{eng.TInteger, eng.TInteger},
 			BarrierPos: 1,
@@ -237,7 +237,7 @@ func registerSpecWords(r *eng.Registry) {
 			Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				return []eng.Value{eng.NewString("nil")}, nil
 			},
-			Returns: []*eng.Type{eng.TString},
+			Returns: []*eng.Type{eng.TString}, BarrierPos: 0,
 		}},
 	})
 
@@ -248,7 +248,7 @@ func registerSpecWords(r *eng.Registry) {
 	// explicitly, and `/1f`, `/2s` etc. combine arity selection with a
 	// forced forward/stack boundary.
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "flexq", ForwardArgs: true,
+		Name: "flexq",
 		Signatures: []eng.NativeSig{
 			{
 				Args: []*eng.Type{eng.TInteger},
@@ -256,7 +256,7 @@ func registerSpecWords(r *eng.Registry) {
 					a, _ := eng.AsInteger(args[0])
 					return []eng.Value{eng.NewString(fmt.Sprintf("one:%d", a))}, nil
 				},
-				Returns: []*eng.Type{eng.TString},
+				Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 			},
 			{
 				Args: []*eng.Type{eng.TInteger, eng.TInteger},
@@ -265,7 +265,7 @@ func registerSpecWords(r *eng.Registry) {
 					b, _ := eng.AsInteger(args[1])
 					return []eng.Value{eng.NewString(fmt.Sprintf("two:%d,%d", a, b))}, nil
 				},
-				Returns: []*eng.Type{eng.TString},
+				Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 			},
 		},
 	})
@@ -293,7 +293,7 @@ func registerSpecWords(r *eng.Registry) {
 			args[i] = eng.TInteger
 		}
 		r.RegisterNativeFunc(eng.NativeFunc{
-			Name: name, ForwardArgs: true,
+			Name: name,
 			Signatures: []eng.NativeSig{{
 				Args: args, BarrierPos: barrier,
 				Handler: intArgsFmt,
@@ -311,18 +311,18 @@ func registerSpecWords(r *eng.Registry) {
 	intArity("septq", 7, 4)
 
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "lengthq", ForwardArgs: true,
+		Name: "lengthq",
 		Signatures: []eng.NativeSig{{
 			Args: []*eng.Type{eng.TList},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				lst, _ := eng.AsList(args[0])
 				return []eng.Value{eng.NewInteger(int64(lst.Len()))}, nil
 			},
-			Returns: []*eng.Type{eng.TInteger},
+			Returns: []*eng.Type{eng.TInteger}, BarrierPos: -1,
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "firstq", ForwardArgs: true,
+		Name: "firstq",
 		Signatures: []eng.NativeSig{{
 			Args: []*eng.Type{eng.TList},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -332,11 +332,11 @@ func registerSpecWords(r *eng.Registry) {
 				}
 				return []eng.Value{lst.Get(0)}, nil
 			},
-			Returns: []*eng.Type{eng.TAny},
+			Returns: []*eng.Type{eng.TAny}, BarrierPos: -1,
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name: "replayq", ForwardArgs: true,
+		Name: "replayq",
 		Signatures: []eng.NativeSig{{
 			Args:       []*eng.Type{eng.TList},
 			NoEvalArgs: map[int]bool{0: true},
@@ -350,7 +350,7 @@ func registerSpecWords(r *eng.Registry) {
 				out = append(out, body...)
 				out = append(out, eng.NewMove(id, "replayq"))
 				return out, nil
-			},
+			}, BarrierPos: -1,
 		}},
 	})
 
@@ -371,7 +371,7 @@ func registerSpecWords(r *eng.Registry) {
 				r.FlowCtrl = eng.FlowBreak
 				return nil, nil
 			},
-			Returns: []*eng.Type{},
+			Returns: []*eng.Type{}, BarrierPos: 0,
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
@@ -381,7 +381,7 @@ func registerSpecWords(r *eng.Registry) {
 				r.FlowCtrl = eng.FlowContinue
 				return nil, nil
 			},
-			Returns: []*eng.Type{},
+			Returns: []*eng.Type{}, BarrierPos: 0,
 		}},
 	})
 
@@ -417,6 +417,12 @@ func registerEngSpecDefinition(r *eng.Registry) {
 	// is enough for the eng/spec tsv rows that exercise simple bindings.
 	plainDef := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 		name, _ := args[0].AsConcreteAtom()
+		// `def` is the universal binder (TYPE-UNIFORM Phase 2): a
+		// capitalised name is a TYPE binding — delegate to InstallType,
+		// the same path the `refine` word uses.
+		if eng.IsCapitalisedName(name) {
+			return nil, eng.InstallType(reg, name, args[1])
+		}
 		if err := eng.ValidateWordName(name); err != nil {
 			return nil, err
 		}
@@ -436,11 +442,11 @@ func registerEngSpecDefinition(r *eng.Registry) {
 		if err := eng.ValidateWordName(name); err != nil {
 			return nil, err
 		}
-		if reg.Types.Has(name) {
+		if reg.Defs.IsType(name) {
 			return nil, &eng.AqlError{Code: "type_error", Detail: "def " + name + ": name clash — already a type"}
 		}
 		constraint, _ := nameMap.Get(name)
-		if resolved, _, _ := reg.ResolveTypedNameValue(constraint); resolved.Data != nil || resolved.VType != nil {
+		if resolved, _, _ := reg.ResolveTypedNameValue(constraint); resolved.Data != nil || resolved.Parent != nil {
 			constraint = resolved
 		}
 		body := args[1]
@@ -458,30 +464,30 @@ func registerEngSpecDefinition(r *eng.Registry) {
 		return nil, nil
 	}
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "def",
-		ForwardArgs: true,
+		Name: "def",
+
 		Signatures: []eng.NativeSig{
 			{
 				Args:          []*eng.Type{eng.TMap, eng.TAny},
 				NoEvalArgs:    map[int]bool{1: true},
 				NoEvalMapArgs: map[int]bool{0: true},
 				Handler:       typedDef,
-				Returns:       []*eng.Type{},
+				Returns:       []*eng.Type{}, BarrierPos: -1,
 			},
 			{
 				Args:       []*eng.Type{eng.TAtom, eng.TAny},
 				QuoteArgs:  map[int]bool{0: true},
 				NoEvalArgs: map[int]bool{1: true},
 				Handler:    plainDef,
-				Returns:    []*eng.Type{},
+				Returns:    []*eng.Type{}, BarrierPos: -1,
 			},
 		},
 	})
 
 	// fn [triples] — uses ParseFnDef from eng to build the FnDef.
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "fn",
-		ForwardArgs: true,
+		Name: "fn",
+
 		Signatures: []eng.NativeSig{{
 			Args:       []*eng.Type{eng.TList},
 			NoEvalArgs: map[int]bool{0: true},
@@ -501,14 +507,14 @@ func registerEngSpecDefinition(r *eng.Registry) {
 				return []eng.Value{eng.NewFunction(fnDef)}, nil
 			},
 			Returns:        []*eng.Type{eng.TFunction},
-			RunInCheckMode: true,
+			RunInCheckMode: true, BarrierPos: -1,
 		}},
 	})
 
 	// quote VALUE — atom-quoted and any-value forms.
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "quote",
-		ForwardArgs: true,
+		Name: "quote",
+
 		Signatures: []eng.NativeSig{
 			{
 				Args:      []*eng.Type{eng.TAtom},
@@ -516,19 +522,19 @@ func registerEngSpecDefinition(r *eng.Registry) {
 				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return []eng.Value{args[0]}, nil
 				},
-				Returns: []*eng.Type{eng.TAtom},
+				Returns: []*eng.Type{eng.TAtom}, BarrierPos: -1,
 			},
 			{
 				Args:       []*eng.Type{eng.TAny},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					v := args[0]
-					if v.VType.Equal(eng.TList) && v.Data != nil {
+					if v.Parent.Equal(eng.TList) && v.Data != nil {
 						v.Quoted = true
 					}
 					return []eng.Value{v}, nil
 				},
-				Returns: []*eng.Type{eng.TAny},
+				Returns: []*eng.Type{eng.TAny}, BarrierPos: -1,
 			},
 		},
 	})
@@ -547,7 +553,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 				}
 				return []eng.Value{v}, nil
 			},
-			Returns: []*eng.Type{eng.TList},
+			Returns: []*eng.Type{eng.TList}, BarrierPos: 0,
 		}},
 	})
 
@@ -556,8 +562,8 @@ func registerEngSpecDefinition(r *eng.Registry) {
 	// per-fn-call argsStack. The production version lives at
 	// lang/go/engine/native_definition.go::popArgsHandler.
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "__pa",
-		ForwardArgs: true,
+		Name: "__pa",
+
 		Signatures: []eng.NativeSig{{
 			Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 				if _, err := reg.Args.Pop(); err != nil {
@@ -565,7 +571,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 				}
 				return nil, nil
 			},
-			Returns: []*eng.Type{},
+			Returns: []*eng.Type{}, BarrierPos: -1,
 		}},
 	})
 
@@ -573,17 +579,29 @@ func registerEngSpecDefinition(r *eng.Registry) {
 	// emitted by eng.InstallFnDef's body expansion to clean up
 	// per-call parameter bindings.
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "undef",
-		ForwardArgs: true,
+		Name: "undef",
+
 		Signatures: []eng.NativeSig{{
 			Args:      []*eng.Type{eng.TAtom},
 			QuoteArgs: map[int]bool{0: true},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 				name, _ := args[0].AsConcreteAtom()
+				// Universal unbinder: a capitalised name pops the type
+				// binding from the single store, mirroring `def`.
+				if eng.IsCapitalisedName(name) {
+					entry, ok := reg.Defs.PopEntry(name)
+					if !ok {
+						return nil, &eng.AqlError{Code: "type_error", Detail: "undef " + name + ": no such type binding"}
+					}
+					if entry.TypeDef != nil {
+						reg.Types.Retire(entry.TypeDef)
+					}
+					return nil, nil
+				}
 				eng.UninstallDef(reg, name)
 				return nil, nil
 			},
-			Returns: []*eng.Type{},
+			Returns: []*eng.Type{}, BarrierPos: -1,
 		}},
 	})
 }
@@ -593,9 +611,10 @@ func registerEngSpecDefinition(r *eng.Registry) {
 // / over2 — as spec-runner fixtures. Production registrations live
 // in lang/go/engine/native_stack.go.
 //
-// All ops are stack-only (ForwardArgs=false) — args[0] is the top
-// of stack, args[1] the next-deeper, etc. The handler returns the
-// splice-form replacement for the consumed args, in source order.
+// All ops are stack-only (every sig sets `BarrierPos: 0`) —
+// args[0] is the top of stack, args[1] the next-deeper, etc. The
+// handler returns the splice-form replacement for the consumed
+// args, in source order.
 func registerEngSpecStack(r *eng.Registry) {
 	op := func(name string, argCount int, fn func(args []eng.Value) []eng.Value) {
 		args := make([]*eng.Type, argCount)
@@ -609,7 +628,7 @@ func registerEngSpecStack(r *eng.Registry) {
 				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return fn(args), nil
 				},
-				Returns: []*eng.Type{},
+				Returns: []*eng.Type{}, BarrierPos: 0,
 			}},
 		})
 	}
@@ -633,67 +652,31 @@ func registerEngSpecStack(r *eng.Registry) {
 // lang/go/engine/native_type.go.
 func registerEngSpecTypeWords(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "type",
-		ForwardArgs: true,
-		Signatures: []eng.NativeSig{{
-			Args:       []*eng.Type{eng.TAtom, eng.TAny},
-			QuoteArgs:  map[int]bool{0: true},
-			NoEvalArgs: map[int]bool{1: true},
-			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
-				name, _ := args[0].AsConcreteAtom()
-				if err := eng.InstallType(reg, name, args[1]); err != nil {
-					return nil, err
-				}
-				return nil, nil
-			},
-			Returns:        []*eng.Type{},
-			RunInCheckMode: true,
-		}},
-	})
-	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "untype",
-		ForwardArgs: true,
-		Signatures: []eng.NativeSig{{
-			Args:      []*eng.Type{eng.TAtom},
-			QuoteArgs: map[int]bool{0: true},
-			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
-				name, _ := args[0].AsConcreteAtom()
-				if !eng.IsCapitalisedName(name) {
-					return nil, &eng.AqlError{Code: "type_error", Detail: "untype " + name + ": type names must start with a capital letter"}
-				}
-				if _, ok := reg.Types.PopType(name); !ok {
-					return nil, &eng.AqlError{Code: "type_error", Detail: "untype " + name + ": no such type binding"}
-				}
-				return nil, nil
-			},
-			Returns: []*eng.Type{},
-		}},
-	})
-	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "typeof",
-		ForwardArgs: true,
+		Name: "typeof",
+
 		Signatures: []eng.NativeSig{{
 			Args: []*eng.Type{eng.TAny},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				return []eng.Value{eng.TypeOf(args[0])}, nil
 			},
-			Returns: []*eng.Type{eng.TType},
+			Returns: []*eng.Type{eng.TType}, BarrierPos: -1,
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "pathof",
-		ForwardArgs: true,
+		Name: "pathof",
+
 		Signatures: []eng.NativeSig{{
-			Args: []*eng.Type{eng.TType},
+			Args:     []*eng.Type{eng.TAny},
+			TypeArgs: map[int]bool{0: true},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				return []eng.Value{eng.PathOf(args[0])}, nil
 			},
-			Returns: []*eng.Type{eng.TList},
+			Returns: []*eng.Type{eng.TList}, BarrierPos: -1,
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "is",
-		ForwardArgs: true,
+		Name: "is",
+
 		Signatures: []eng.NativeSig{{
 			Args:       []*eng.Type{eng.TAny, eng.TAny},
 			BarrierPos: 1,
@@ -704,8 +687,8 @@ func registerEngSpecTypeWords(r *eng.Registry) {
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "enum",
-		ForwardArgs: true,
+		Name: "enum",
+
 		Signatures: []eng.NativeSig{{
 			Args:       []*eng.Type{eng.TList},
 			NoEvalArgs: map[int]bool{0: true},
@@ -719,7 +702,7 @@ func registerEngSpecTypeWords(r *eng.Registry) {
 				if eng.IsTypedList(list) {
 					ci, _ := eng.AsChildType(list)
 					childType = ci.Child
-					hasChild = childType.VType != nil
+					hasChild = childType.Parent != nil
 				}
 				elems, _ := eng.AsList(list)
 				alts := make([]eng.Value, 0, elems.Len())
@@ -739,7 +722,7 @@ func registerEngSpecTypeWords(r *eng.Registry) {
 				}
 				return []eng.Value{eng.NewEnum(alts)}, nil
 			},
-			Returns: []*eng.Type{eng.TEnum},
+			Returns: []*eng.Type{eng.TEnum}, BarrierPos: -1,
 		}},
 	})
 }
@@ -749,16 +732,16 @@ func registerEngSpecTypeWords(r *eng.Registry) {
 // registration lives in lang/go/engine/native_make.go.
 func registerEngSpecMake(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "make",
-		ForwardArgs: true,
+		Name: "make",
+
 		Signatures: []eng.NativeSig{
-			{Args: []*eng.Type{eng.TScalarType, eng.TMap, eng.TAny}, Handler: eng.MakeScalarOptsHandler, ReturnsFn: eng.ReturnsIdentity(0)},
-			{Args: []*eng.Type{eng.TObjectType, eng.TMap}, Handler: eng.MakeObjHandler, ReturnsFn: eng.ReturnsIdentity(0)},
-			{Args: []*eng.Type{eng.TArray, eng.TList}, Handler: eng.MakeArrayHandler, Returns: []*eng.Type{eng.TArray}},
-			{Args: []*eng.Type{eng.TScalarType, eng.TAny}, Handler: eng.MakeScalarHandler, ReturnsFn: eng.ReturnsIdentity(0)},
-			{Args: []*eng.Type{eng.TObject, eng.TAny, eng.TObject}, Handler: eng.MakeWithPrototype, Returns: []*eng.Type{eng.TObject}},
-			{Args: []*eng.Type{eng.TAny, eng.TAny, eng.TMap}, Handler: eng.MakeWithOpts, Returns: []*eng.Type{eng.TAny}},
-			{Args: []*eng.Type{eng.TAny, eng.TAny}, Handler: eng.MakeHandler, Returns: []*eng.Type{eng.TAny}},
+			{Args: []*eng.Type{eng.TScalar, eng.TMap, eng.TAny}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeScalarOptsHandler, ReturnsFn: eng.ReturnsIdentity(0), BarrierPos: -1},
+			{Args: []*eng.Type{eng.TIdeal, eng.TMap}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeObjHandler, ReturnsFn: eng.ReturnsIdentity(0), BarrierPos: -1},
+			{Args: []*eng.Type{eng.TArray, eng.TList}, Handler: eng.MakeArrayHandler, Returns: []*eng.Type{eng.TArray}, BarrierPos: -1},
+			{Args: []*eng.Type{eng.TScalar, eng.TAny}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeScalarHandler, ReturnsFn: eng.ReturnsIdentity(0), BarrierPos: -1},
+			{Args: []*eng.Type{eng.TObject, eng.TAny, eng.TObject}, Handler: eng.MakeWithPrototype, Returns: []*eng.Type{eng.TObject}, BarrierPos: -1},
+			{Args: []*eng.Type{eng.TAny, eng.TAny, eng.TMap}, Handler: eng.MakeWithOpts, Returns: []*eng.Type{eng.TAny}, BarrierPos: -1},
+			{Args: []*eng.Type{eng.TAny, eng.TAny}, Handler: eng.MakeHandler, Returns: []*eng.Type{eng.TAny}, BarrierPos: -1},
 		},
 	})
 }
@@ -778,7 +761,7 @@ func registerEngSpecStorage(r *eng.Registry) {
 		key := eng.StoreKey(args[0])
 		oi, ok := container.Data.(eng.ObjectInstanceInfo)
 		if !ok {
-			return nil, fmt.Errorf("set: expected an Object instance, got %s", container.VType.String())
+			return nil, fmt.Errorf("set: expected an Object instance, got %s", container.Parent.String())
 		}
 		oi.Fields.Set(key, args[1])
 		return nil, nil
@@ -786,7 +769,7 @@ func registerEngSpecStorage(r *eng.Registry) {
 	setArrayH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 		arr, err := eng.AsArray(args[2])
 		if err != nil {
-			return nil, fmt.Errorf("set: expected an Array, got %s", args[2].VType.String())
+			return nil, fmt.Errorf("set: expected an Array, got %s", args[2].Parent.String())
 		}
 		idx, _ := args[0].AsConcreteInteger()
 		if !arr.Set(int(idx), args[1]) {
@@ -800,9 +783,9 @@ func registerEngSpecStorage(r *eng.Registry) {
 		if container.Data == nil {
 			return nil, fmt.Errorf("get: cannot access property on type literal")
 		}
-		if key.VType.Matches(eng.TInteger) {
+		if key.Parent.Matches(eng.TInteger) {
 			idx, _ := eng.AsInteger(key)
-			if list, _ := eng.AsList(container); !list.IsNil() && container.VType.Matches(eng.TList) {
+			if list, _ := eng.AsList(container); !list.IsNil() && container.Parent.Matches(eng.TList) {
 				i := int(idx)
 				if i < 0 || i >= list.Len() {
 					return []eng.Value{eng.NewTypeLiteral(eng.TNone)}, nil
@@ -844,7 +827,7 @@ func registerEngSpecStorage(r *eng.Registry) {
 	getArrayH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 		arr, err := eng.AsArray(args[1])
 		if err != nil {
-			return nil, fmt.Errorf("get: expected an Array, got %s", args[1].VType.String())
+			return nil, fmt.Errorf("get: expected an Array, got %s", args[1].Parent.String())
 		}
 		idx, _ := args[0].AsConcreteInteger()
 		val, ok := arr.Get(int(idx))
@@ -857,17 +840,17 @@ func registerEngSpecStorage(r *eng.Registry) {
 		return []eng.Value{eng.NewTypeLiteral(eng.TNone)}, nil
 	}
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "set",
-		ForwardArgs: true,
+		Name: "set",
+
 		Signatures: []eng.NativeSig{
-			{Args: []*eng.Type{eng.TInteger, eng.TAny, eng.TArray}, Handler: setArrayH, Returns: []*eng.Type{}},
-			{Args: []*eng.Type{eng.TString, eng.TAny, eng.TObject}, Handler: setObjectH, Returns: []*eng.Type{}},
-			{Args: []*eng.Type{eng.TAtom, eng.TAny, eng.TObject}, QuoteArgs: map[int]bool{0: true}, Handler: setObjectH, Returns: []*eng.Type{}},
+			{Args: []*eng.Type{eng.TInteger, eng.TAny, eng.TArray}, Handler: setArrayH, Returns: []*eng.Type{}, BarrierPos: -1},
+			{Args: []*eng.Type{eng.TString, eng.TAny, eng.TObject}, Handler: setObjectH, Returns: []*eng.Type{}, BarrierPos: -1},
+			{Args: []*eng.Type{eng.TAtom, eng.TAny, eng.TObject}, QuoteArgs: map[int]bool{0: true}, Handler: setObjectH, Returns: []*eng.Type{}, BarrierPos: -1},
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "get",
-		ForwardArgs: true,
+		Name: "get",
+
 		Signatures: []eng.NativeSig{
 			{Args: []*eng.Type{eng.TAtom, eng.TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeH, Returns: []*eng.Type{eng.TAny}},
 			{Args: []*eng.Type{eng.TString, eng.TNode}, BarrierPos: 1, Handler: getNodeH, Returns: []*eng.Type{eng.TAny}},
@@ -888,7 +871,7 @@ func registerEngSpecStorage(r *eng.Registry) {
 func registerEngSpecObjectRecord(r *eng.Registry) {
 	recordH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
 		list := args[0]
-		if !list.VType.Equal(eng.TList) {
+		if !list.Parent.Equal(eng.TList) {
 			return nil, fmt.Errorf("record: argument must be a list")
 		}
 		if list.Data == nil {
@@ -900,7 +883,7 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 		}
 		fields := eng.NewOrderedMap()
 		for _, elem := range elems.Slice() {
-			if !elem.VType.Equal(eng.TMap) {
+			if !elem.Parent.Equal(eng.TMap) {
 				return nil, fmt.Errorf("record: each element must be a pair (map), got %s", elem.String())
 			}
 			m, err := eng.AsMutableMap(elem)
@@ -926,7 +909,7 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 	}
 	objectH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
 		fieldsVal := args[0]
-		if !fieldsVal.VType.Equal(eng.TMap) {
+		if !fieldsVal.Parent.Equal(eng.TMap) {
 			return nil, fmt.Errorf("object: argument must be a map of field definitions, got %s", fieldsVal.String())
 		}
 		m, err := eng.AsMutableMap(fieldsVal)
@@ -942,7 +925,7 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 	objectWithParentH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
 		fieldsVal := args[0]
 		parentVal := args[1]
-		if !fieldsVal.VType.Equal(eng.TMap) {
+		if !fieldsVal.Parent.Equal(eng.TMap) {
 			return nil, fmt.Errorf("object: first argument must be a map of field definitions, got %s", fieldsVal.String())
 		}
 		m, err := eng.AsMutableMap(fieldsVal)
@@ -975,31 +958,51 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 		def := r.Types.MintType(id, parentDef)
 		return []eng.Value{eng.NewObjectType(def, info)}, nil
 	}
+	// refine — the uniform type constructor.
+	// Mirrors lang/go/native/native_type.go::refineHandler; dispatches
+	// to the record/object handler functions above. eng/spec exercises
+	// only the Object and Record bases.
+	refineCtorH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
+		base := args[0]
+		arg := args[1]
+		if base.Data == nil && base.Equal(eng.TObject) {
+			return objectH([]eng.Value{arg}, nil, nil, reg)
+		}
+		if eng.IsObjectType(base) {
+			return objectWithParentH([]eng.Value{arg, base}, nil, nil, reg)
+		}
+		if base.Data == nil && base.Equal(eng.TRecord) {
+			if !arg.Parent.Equal(eng.TList) {
+				return nil, fmt.Errorf("refine Record: a record takes a list of field pairs")
+			}
+			return recordH([]eng.Value{arg}, nil, nil, reg)
+		}
+		return nil, fmt.Errorf("refine: base must be Object, Record, or an object type, got %s", base.String())
+	}
+	// refine BaseType — the 1-arg bare-subtype form. Returns the base
+	// type unchanged; the paired `def` mints a fresh subtype of it.
+	refineBareCtorH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+		base := args[0]
+		if !eng.IsTypeBody(base) {
+			return nil, fmt.Errorf("refine: argument must be a type, got %s", base.String())
+		}
+		return []eng.Value{base}, nil
+	}
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "record",
-		ForwardArgs: true,
-		Signatures: []eng.NativeSig{{
-			Args:           []*eng.Type{eng.TList},
-			Handler:        recordH,
-			Returns:        []*eng.Type{eng.TRecord},
-			RunInCheckMode: true,
-		}},
-	})
-	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "object",
-		ForwardArgs: true,
+		Name: "refine",
+
 		Signatures: []eng.NativeSig{
 			{
-				Args:           []*eng.Type{eng.TMap, eng.TObject},
-				Handler:        objectWithParentH,
-				Returns:        []*eng.Type{eng.TObjectType},
-				RunInCheckMode: true,
+				Args:           []*eng.Type{eng.TAny, eng.TNode},
+				Handler:        refineCtorH,
+				Returns:        []*eng.Type{eng.TType},
+				RunInCheckMode: true, BarrierPos: -1,
 			},
 			{
-				Args:           []*eng.Type{eng.TMap},
-				Handler:        objectH,
-				Returns:        []*eng.Type{eng.TObjectType},
-				RunInCheckMode: true,
+				Args:           []*eng.Type{eng.TAny},
+				Handler:        refineBareCtorH,
+				Returns:        []*eng.Type{eng.TType},
+				RunInCheckMode: true, BarrierPos: -1,
 			},
 		},
 	})
@@ -1013,11 +1016,11 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 func registerEngSpecInspect(r *eng.Registry) {
 	atomH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
 		name, _ := args[0].AsConcreteAtom()
-		if tv, ok := r.Types.TopBody(name); ok {
+		if tv, ok := r.TopTypeBody(name); ok {
 			return []eng.Value{buildTypeInspection(name, tv)}, nil
 		}
 		if top, ok := r.Defs.Top(name); ok {
-			if eng.IsTypeBody(top) && !top.VType.Equal(eng.TFnDef) && !top.VType.Equal(eng.TFunction) {
+			if eng.IsTypeBody(top) && !top.Parent.Equal(eng.TFnDef) && !top.Parent.Equal(eng.TFunction) {
 				return []eng.Value{buildTypeInspection(name, top)}, nil
 			}
 		}
@@ -1027,11 +1030,11 @@ func registerEngSpecInspect(r *eng.Registry) {
 		return []eng.Value{buildTypeInspection("", args[0])}, nil
 	}
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "inspect",
-		ForwardArgs: true,
+		Name: "inspect",
+
 		Signatures: []eng.NativeSig{
-			{Args: []*eng.Type{eng.TAtom}, QuoteArgs: map[int]bool{0: true}, Handler: atomH, Returns: []*eng.Type{eng.TInspect}},
-			{Args: []*eng.Type{eng.TAny}, Handler: typeH, Returns: []*eng.Type{eng.TInspect}},
+			{Args: []*eng.Type{eng.TAtom}, QuoteArgs: map[int]bool{0: true}, Handler: atomH, Returns: []*eng.Type{eng.TInspect}, BarrierPos: -1},
+			{Args: []*eng.Type{eng.TAny}, Handler: typeH, Returns: []*eng.Type{eng.TInspect}, BarrierPos: -1},
 		},
 	})
 }
@@ -1093,9 +1096,9 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 
 	if tv.Data == nil || eng.IsTypeBody(tv) || eng.IsRecordShape(tv) {
 		result.Set("type", eng.NewString("Type"))
-		result.Set("struct", eng.NewString(tv.VType.Leaf()))
+		result.Set("struct", eng.NewString(eng.TypeNameOf(tv)))
 	} else {
-		result.Set("type", eng.NewString(tv.VType.Leaf()))
+		result.Set("type", eng.NewString(tv.Parent.Leaf()))
 	}
 
 	switch {
@@ -1105,7 +1108,7 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 		fields := eng.NewOrderedMap()
 		for _, k := range rt.Fields.Keys() {
 			v, _ := rt.Fields.Get(k)
-			fields.Set(k, eng.NewString(v.VType.Leaf()))
+			fields.Set(k, eng.NewString(eng.TypeNameOf(v)))
 		}
 		result.Set("fields", eng.NewMap(fields))
 
@@ -1115,7 +1118,7 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 		fields := eng.NewOrderedMap()
 		for _, k := range m.Keys() {
 			v, _ := m.Get(k)
-			fields.Set(k, eng.NewString(v.VType.Leaf()))
+			fields.Set(k, eng.NewString(eng.TypeNameOf(v)))
 		}
 		result.Set("fields", eng.NewMap(fields))
 
@@ -1129,7 +1132,7 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 		fields := eng.NewOrderedMap()
 		for _, k := range af.Keys() {
 			v, _ := af.Get(k)
-			fields.Set(k, eng.NewString(v.VType.Leaf()))
+			fields.Set(k, eng.NewString(eng.TypeNameOf(v)))
 		}
 		result.Set("fields", eng.NewMap(fields))
 
@@ -1139,7 +1142,7 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 		fields := eng.NewOrderedMap()
 		for _, k := range tt.Record.Fields.Keys() {
 			v, _ := tt.Record.Fields.Get(k)
-			fields.Set(k, eng.NewString(v.VType.Leaf()))
+			fields.Set(k, eng.NewString(eng.TypeNameOf(v)))
 		}
 		result.Set("fields", eng.NewMap(fields))
 
@@ -1148,21 +1151,21 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 		di, _ := eng.AsDisjunct(tv)
 		alts := make([]eng.Value, len(di.Alternatives))
 		for i, alt := range di.Alternatives {
-			alts[i] = eng.NewString(alt.VType.String())
+			alts[i] = eng.NewString(eng.TypePathOf(alt))
 		}
 		result.Set("alternatives", eng.NewList(alts))
 
 	case eng.IsTypedList(tv):
 		result.Set("kind", eng.NewAtom("typed_list"))
 		ci, _ := eng.AsChildType(tv)
-		result.Set("child", eng.NewString(ci.Child.VType.String()))
+		result.Set("child", eng.NewString(eng.TypePathOf(ci.Child)))
 
 	case eng.IsTypedMap(tv):
 		result.Set("kind", eng.NewAtom("typed_map"))
 		ci, _ := eng.AsChildType(tv)
-		result.Set("child", eng.NewString(ci.Child.VType.String()))
+		result.Set("child", eng.NewString(eng.TypePathOf(ci.Child)))
 
-	case tv.VType.Equal(eng.TFnUndef):
+	case eng.ValueType(tv).Equal(eng.TFnUndef):
 		result.Set("kind", eng.NewAtom("function_shape"))
 		uInfo, _ := tv.Data.(eng.FnUndefInfo)
 		sigs := make([]eng.Value, 0, len(uInfo.Sigs))
@@ -1185,7 +1188,7 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 	case tv.IsDepScalar():
 		result.Set("kind", eng.NewAtom("dependent_scalar"))
 		info, _ := tv.AsDepScalar()
-		result.Set("leaf", eng.NewString(eng.DependentLeafFromType(tv.VType)))
+		result.Set("leaf", eng.NewString(tv.Parent.Name))
 		if info.Lo != nil {
 			lo := eng.NewOrderedMap()
 			lo.Set("kind", eng.NewString(eng.BoundToKind(info.Lo, true).String()))
@@ -1212,8 +1215,8 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 // lives in lang/go/engine/native_definition.go.
 func registerEngSpecFnSig(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "fnsig",
-		ForwardArgs: true,
+		Name: "fnsig",
+
 		Signatures: []eng.NativeSig{{
 			Args:       []*eng.Type{eng.TList},
 			NoEvalArgs: map[int]bool{0: true},
@@ -1238,7 +1241,7 @@ func registerEngSpecFnSig(r *eng.Registry) {
 				}
 				return []eng.Value{eng.NewFnUndef(info)}, nil
 			},
-			Returns: []*eng.Type{eng.TFnUndef},
+			Returns: []*eng.Type{eng.TFnUndef}, BarrierPos: -1,
 		}},
 	})
 }
@@ -1263,24 +1266,24 @@ func registerEngSpecBoolean(r *eng.Registry) {
 		return []eng.Value{args[0]}, nil
 	}
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "not",
-		ForwardArgs: true,
+		Name: "not",
+
 		Signatures: []eng.NativeSig{
-			{Args: []*eng.Type{eng.TBoolean}, Handler: notH, Returns: []*eng.Type{eng.TBoolean}},
-			{Args: []*eng.Type{eng.TAny}, Handler: notH, Returns: []*eng.Type{eng.TBoolean}},
+			{Args: []*eng.Type{eng.TBoolean}, Handler: notH, Returns: []*eng.Type{eng.TBoolean}, BarrierPos: -1},
+			{Args: []*eng.Type{eng.TAny}, Handler: notH, Returns: []*eng.Type{eng.TBoolean}, BarrierPos: -1},
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "and",
-		ForwardArgs: true,
+		Name: "and",
+
 		Signatures: []eng.NativeSig{
-			{Args: []*eng.Type{eng.TBoolean, eng.TBoolean}, Handler: andH, Returns: []*eng.Type{eng.TBoolean}},
-			{Args: []*eng.Type{eng.TAny, eng.TAny}, Handler: andH, Returns: []*eng.Type{eng.TAny}},
+			{Args: []*eng.Type{eng.TBoolean, eng.TBoolean}, Handler: andH, Returns: []*eng.Type{eng.TBoolean}, BarrierPos: -1},
+			{Args: []*eng.Type{eng.TAny, eng.TAny}, Handler: andH, Returns: []*eng.Type{eng.TAny}, BarrierPos: -1},
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "or",
-		ForwardArgs: true,
+		Name: "or",
+
 		Signatures: []eng.NativeSig{
 			{Args: []*eng.Type{eng.TBoolean, eng.TBoolean}, BarrierPos: 1, Handler: orH, Returns: []*eng.Type{eng.TBoolean}},
 			{Args: []*eng.Type{eng.TAny, eng.TAny}, BarrierPos: 1, Handler: orH, Returns: []*eng.Type{eng.TAny}},
@@ -1319,11 +1322,11 @@ func registerEngSpecDo(r *eng.Registry) {
 		return []eng.Value{result}, nil
 	}
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "do",
-		ForwardArgs: true,
+		Name: "do",
+
 		Signatures: []eng.NativeSig{
-			{Args: []*eng.Type{eng.TList}, NoEvalArgs: map[int]bool{0: true}, Handler: listH, Returns: []*eng.Type{eng.TAny}},
-			{Args: []*eng.Type{eng.TMap}, Handler: mapH, Returns: []*eng.Type{eng.TAny}},
+			{Args: []*eng.Type{eng.TList}, NoEvalArgs: map[int]bool{0: true}, Handler: listH, Returns: []*eng.Type{eng.TAny}, BarrierPos: -1},
+			{Args: []*eng.Type{eng.TMap}, Handler: mapH, Returns: []*eng.Type{eng.TAny}, BarrierPos: -1},
 		},
 	})
 }
@@ -1332,7 +1335,7 @@ func registerEngSpecDo(r *eng.Registry) {
 // Records, options, table types, typed lists / maps are left
 // untouched — only plain concrete lists and maps are walked.
 func doEvalMapValue(r *eng.Registry, v eng.Value) (eng.Value, error) {
-	if v.VType.Equal(eng.TList) && v.Data != nil && !eng.IsTypedList(v) && !eng.IsTableType(v) {
+	if v.Parent.Equal(eng.TList) && v.Data != nil && !eng.IsTypedList(v) && !eng.IsTableType(v) {
 		lst, _ := eng.AsList(v)
 		sub := eng.New(r)
 		input := make([]eng.Value, lst.Len())
@@ -1348,7 +1351,7 @@ func doEvalMapValue(r *eng.Registry, v eng.Value) (eng.Value, error) {
 		}
 		return eng.NewList(results), nil
 	}
-	if v.VType.Equal(eng.TMap) && v.Data != nil && !eng.IsTypedMap(v) && !eng.IsRecordType(v) && !eng.IsOptionsType(v) {
+	if v.Parent.Equal(eng.TMap) && v.Data != nil && !eng.IsTypedMap(v) && !eng.IsRecordType(v) && !eng.IsOptionsType(v) {
 		m, err := eng.AsMap(v)
 		if err != nil || m == nil {
 			return v, nil
@@ -1371,7 +1374,7 @@ func doEvalMapValue(r *eng.Registry, v eng.Value) (eng.Value, error) {
 // payload names a registered function — so `{op:[1 "add" 2]}` lets
 // `do` dispatch "add" as a callable inside the embedded list.
 func doPromoteToWord(r *eng.Registry, v eng.Value) eng.Value {
-	if v.VType.Matches(eng.TString) || v.VType.Matches(eng.TAtom) {
+	if v.Parent.Matches(eng.TString) || v.Parent.Matches(eng.TAtom) {
 		name, _ := eng.AsString(v)
 		if r.Lookup(name) != nil {
 			return eng.NewWord(name)
@@ -1385,8 +1388,8 @@ func doPromoteToWord(r *eng.Registry, v eng.Value) eng.Value {
 // live in lang/go/engine/native_type.go.
 func registerEngSpecTypeOps(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "tor",
-		ForwardArgs: true,
+		Name: "tor",
+
 		Signatures: []eng.NativeSig{{
 			Args:       []*eng.Type{eng.TAny, eng.TAny},
 			BarrierPos: 1,
@@ -1395,8 +1398,8 @@ func registerEngSpecTypeOps(r *eng.Registry) {
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
-		Name:        "tand",
-		ForwardArgs: true,
+		Name: "tand",
+
 		Signatures: []eng.NativeSig{{
 			Args:       []*eng.Type{eng.TAny, eng.TAny},
 			BarrierPos: 1,

@@ -9,7 +9,7 @@ import (
 
 	"github.com/chzyer/readline"
 
-	"github.com/aql-lang/aql/lang/go/engine"
+	"github.com/aql-lang/aql/lang/go/native"
 )
 
 func TestHistoryFile(t *testing.T) {
@@ -125,7 +125,7 @@ func TestStartReadlineError(t *testing.T) {
 func TestStartRegistryError(t *testing.T) {
 	orig := newRegistry
 	defer func() { newRegistry = orig }()
-	newRegistry = func() (*engine.Registry, error) {
+	newRegistry = func() (*native.Registry, error) {
 		return nil, errors.New("registry init failed")
 	}
 

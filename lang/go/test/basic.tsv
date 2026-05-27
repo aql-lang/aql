@@ -79,78 +79,80 @@ make Boolean 1	true
 make Boolean 0	false
 
 # Make - record type (positional)
-type Bar record [x:Number y:Boolean z:String] make Bar [1 false "s"]	{x:1,y:false,z:'s'}
+def Bar refine Record [x:Number y:Boolean z:String] make Bar [1 false "s"]	{x:1,y:false,z:'s'}
 
 # Make - record type (named fields, reordered)
-type Bar record [x:Number y:Boolean z:String] make Bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
+def Bar refine Record [x:Number y:Boolean z:String] make Bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
 
 # Table type - creation
-table record [x:Number y:String]	table{x:Number,y:String}
+refine Table (refine Record [x:Number y:String])	table{x:Number,y:String}
 
 # Table type - with type Def
-type Foo record [x:Integer y:String] type Bar table Foo Bar	table{x:Integer,y:String}
+def Foo refine Record [x:Integer y:String] def Bar refine Table Foo Bar	table{x:Integer,y:String}
 
 # Make - table type (positional)
-type Foo record [x:Integer y:String] type Bar table Foo make Bar [[1 a] [2 b]]	[{x:1,y:'a'},{x:2,y:'b'}]
+def Foo refine Record [x:Integer y:String] def Bar refine Table Foo make Bar [[1 a] [2 b]]	[{x:1,y:'a'},{x:2,y:'b'}]
 
 # Make - table type (named fields)
-type Foo record [x:Integer y:String] type Bar table Foo make Bar [[x:1 y:a] [x:2 y:b]]	[{x:1,y:'a'},{x:2,y:'b'}]
+def Foo refine Record [x:Integer y:String] def Bar refine Table Foo make Bar [[x:1 y:a] [x:2 y:b]]	[{x:1,y:'a'},{x:2,y:'b'}]
 
 # Table unification - compatible schemas
-type Foo record [x:Any] type Bar record [x:Number] (table Foo) unify (table Bar)	table{x:Number} true
+def Foo refine Record [x:Any] def Bar refine Record [x:Number] (refine Table Foo) unify (refine Table Bar)	table{x:Number} true
 
 # Table unification - incompatible schemas
-type Foo record [x:Number] type Bar record [y:Number] (table Foo) unify (table Bar)	'~unify-fail' false
+def Foo refine Record [x:Number] def Bar refine Record [y:Number] (refine Table Foo) unify (refine Table Bar)	'~unify-fail' false
 
 # Table does not unify with list
-List unify table record [x:Number]	'~unify-fail' false
+List unify (refine Table (refine Record [x:Number]))	'~unify-fail' false
 
 # Record with inline disjunct field (list evaluated as code)
-record [x:Number y:[String tor None]]	record{x:Number,y:String|None}
+refine Record [x:Number y:[String tor None]]	record{x:Number,y:String|None}
 
 # Record with inline disjunct - unification narrows
-record [x:Number y:[String tor None]] unify record [x:Number y:String]	record{x:Number,y:String} true
+refine Record [x:Number y:[String tor None]] unify refine Record [x:Number y:String]	record{x:Number,y:String} true
 
 # Make record with inline disjunct - none value
-type Foo record [x:Number y:[String tor None]] make Foo [42 None]	{x:42,y:None}
+def Foo refine Record [x:Number y:[String tor None]] make Foo [42 None]	{x:42,y:None}
 
 # Make record with inline disjunct - string value
-type Foo record [x:Number y:[String tor None]] make Foo [42 "hello"]	{x:42,y:'hello'}
+def Foo refine Record [x:Number y:[String tor None]] make Foo [42 "hello"]	{x:42,y:'hello'}
 
 # Record with user-defined type Field (disjunct for optional)
-type OptStr (String tor None) type Foo record [x:Number y:OptStr] Foo	record{x:Number,y:String|None}
+def OptStr (String tor None) def Foo refine Record [x:Number y:OptStr] Foo	record{x:Number,y:String|None}
 
 # Record with user-defined type - unification narrows disjunct
-type OptStr (String tor None) type Foo record [x:Number y:OptStr] Foo unify record [x:Number y:String]	record{x:Number,y:String} true
+def OptStr (String tor None) def Foo refine Record [x:Number y:OptStr] Foo unify refine Record [x:Number y:String]	record{x:Number,y:String} true
 
 # Make record with optional field - string value
-type OptStr (String tor None) type Foo record [x:Number y:OptStr] make Foo [42 "hello"]	{x:42,y:'hello'}
+def OptStr (String tor None) def Foo refine Record [x:Number y:OptStr] make Foo [42 "hello"]	{x:42,y:'hello'}
 
 # Make record with optional field - none value
-type OptStr (String tor None) type Foo record [x:Number y:OptStr] make Foo [42 None]	{x:42,y:None}
+def OptStr (String tor None) def Foo refine Record [x:Number y:OptStr] make Foo [42 None]	{x:42,y:None}
 
-# Def map with optional field - absence unifies as None
-def a {x:Integer y:(String tor None)} a unify {x:1}	{x:1,y:None} true
+# Def map with disjunct value field — `y:(String tor None)` accepts
+# only `String` or `None`, not absence (Absent is not in the disjunct).
+# Use `y?:String` for "None or absent".
+def a {x:Integer y:(String tor None)} a unify {x:1}	'~unify-fail' false
 def a {x:Integer y:(String tor None)} a unify {x:1,y:"Y"}	{x:1,y:'Y'} true
 def a {x:Integer y:(String tor None)} a unify {x:1,y:None}	{x:1,y:None} true
 
 # Make record from map - all fields provided
-type Foo record [x:Number y:String] make Foo {x:1 y:"hi"}	{x:1,y:'hi'}
+def Foo refine Record [x:Number y:String] make Foo {x:1 y:"hi"}	{x:1,y:'hi'}
 
 # Make record from map - optional field provided
-type Foo record [x:Number y:[String tor None]] make Foo {x:1 y:"hi"}	{x:1,y:'hi'}
+def Foo refine Record [x:Number y:[String tor None]] make Foo {x:1 y:"hi"}	{x:1,y:'hi'}
 
 # Make record from map - optional field omitted (defaults to none)
-type Foo record [x:Number y:[String tor None]] make Foo {x:1}	{x:1,y:None}
+def Foo refine Record [x:Number y:[String tor None]] make Foo {x:1}	{x:1,y:None}
 
 # Make record from named list - optional field omitted (defaults to none)
-type Foo record [x:Number y:[String tor None]] make Foo [x:1]	{x:1,y:None}
+def Foo refine Record [x:Number y:[String tor None]] make Foo [x:1]	{x:1,y:None}
 
 # Make record from map - missing required field is an error
-type Foo record [x:Number y:String] make Foo {x:1}	ERROR:make: missing field "y"
+def Foo refine Record [x:Number y:String] make Foo {x:1}	ERROR:make: missing field "y"
 
 # Make record from map - unknown field is an error
-type Foo record [x:Number y:String] make Foo {x:1 y:"hi" z:3}	ERROR:make: unknown field "z"
+def Foo refine Record [x:Number y:String] make Foo {x:1 y:"hi" z:3}	ERROR:make: unknown field "z"
 
 # Options type Creation
 make Options {x:1,y:2}	options{x:1,y:2}
@@ -180,8 +182,10 @@ def d (make Options {y:(Integer tor None)}) d unify {}	{y:None} true
 # Options - all defaults
 (make Options {x:1,y:2}) unify {}	{x:1,y:2} true
 
-# Optional field syntax ? — sugar for (type Tor None)
-{x?:Integer}	{x:Integer|None}
+# Optional field syntax ? — desugars to (type Tor None Tor Absent).
+# Absent is the kernel type meaning "key not present"; its appearance
+# as a disjunct alternative makes "may be missing" first-class.
+{x?:Integer}	{x:Integer|None|Absent}
 
 # Computed key syntax {[key]:value} — uses defined variables
 def a "a" {[a]:1}	{a:1}
@@ -196,7 +200,7 @@ def a "x" def b "y" {[a]:1,[b]:2}	{x:1,y:2}
 (make Options {x:1,y?:String}) unify {x:2,y:"Y"}	{x:2,y:'Y'} true
 
 # Optional field in def map
-def a {x:Integer y?:String} a unify {x:1}	{x:1,y:None} true
+def a {x:Integer y?:String} a unify {x:1}	{x:1} true
 def a {x:Integer y?:String} a unify {x:1,y:"Y"}	{x:1,y:'Y'} true
 
 # Optional function arguments — named optional param
@@ -237,10 +241,10 @@ def flag fn [[v?:Boolean] [Boolean] [v]] flag	false
 def flag fn [[v?:Boolean] [Boolean] [v]] flag true	true
 
 # Table with optional field - mixed string and none values
-type OptStr (String tor None) type Foo record [x:Number y:OptStr] type Bar table Foo make Bar [[1 "a"] [2 None]]	[{x:1,y:'a'},{x:2,y:None}]
+def OptStr (String tor None) def Foo refine Record [x:Number y:OptStr] def Bar refine Table Foo make Bar [[1 "a"] [2 None]]	[{x:1,y:'a'},{x:2,y:None}]
 
 # Record with nested user-defined record type
-type Inner record [z:String] type Outer record [a:Number b:Inner] Outer	record{a:Number,b:record{z:String}}
+def Inner refine Record [z:String] def Outer refine Record [a:Number b:Inner] Outer	record{a:Number,b:record{z:String}}
 
 # Do - evaluate list contents
 do [1 add 2]	3
@@ -270,7 +274,7 @@ typeof true	Boolean
 typeof false	Boolean
 typeof [1 2 3]	List
 typeof {x:1}	Map
-typeof None	Type
+typeof None	None
 
 # fulltypeof - returns the full type Path as an atom.
 fulltypeof 42	Scalar/Number/Integer
@@ -280,7 +284,7 @@ fulltypeof true	Scalar/Boolean
 fulltypeof false	Scalar/Boolean
 fulltypeof [1 2 3]	Node/List
 fulltypeof {x:1}	Node/Map
-fulltypeof None	Type
+fulltypeof None	None
 
 # is - type/value check: true if a unify b -> a
 42 is Number	true
@@ -356,12 +360,12 @@ None is None	true
 
 # is - record type Equality (records only unify with records)
 # Use parens to scope each record expression so `is` gets both as args.
-(record [x:Number y:String]) is (record [x:Number y:String])	true
-(record [x:Number y:String]) is (record [x:Any y:Any])	true
-(record [x:Number y:String]) is (record [x:String y:String])	false
+(refine Record [x:Number y:String]) is (refine Record [x:Number y:String])	true
+(refine Record [x:Number y:String]) is (refine Record [x:Any y:Any])	true
+(refine Record [x:Number y:String]) is (refine Record [x:String y:String])	false
 
 # is - table type Equality (tables only unify with tables)
-type R record [x:Number] (table R) is (table R)	true
+def R refine Record [x:Number] (refine Table R) is (refine Table R)	true
 
 # is - Node type Hierarchy (values use concrete List/Map types)
 [1 2 3] is List	true
@@ -383,13 +387,22 @@ type R record [x:Number] (table R) is (table R)	true
 {:Number} neq {:String}	true
 
 # eq/neq - record types
-record [x:Number y:String] eq record [x:Number y:String]	true
-record [x:Number y:String] eq record [x:Number y:Number]	false
-record [x:Number y:String] neq record [x:Number y:Number]	true
-record [x:Number] eq record [x:Number y:String]	false
+refine Record [x:Number y:String] eq refine Record [x:Number y:String]	true
+refine Record [x:Number y:String] eq refine Record [x:Number y:Number]	false
+refine Record [x:Number y:String] neq refine Record [x:Number y:Number]	true
+refine Record [x:Number] eq refine Record [x:Number y:String]	false
 
 # eq/neq - table types
-type R record [x:Number] (table R) eq (table R)	true
+def R refine Record [x:Number] (refine Table R) eq (refine Table R)	true
+
+# eq/neq - concrete lists & maps compare by identity (same container):
+# two separate literals are distinct, a value dup'd from one is the same.
+[1 2] [1 2] eq	false
+[1 2] [1 2] neq	true
+[1 2] dup eq	true
+[] [] eq	true
+{a:1} {a:1} eq	false
+{a:1} dup eq	true
 
 # eq/neq - disjunct types
 (String tor None) eq (String tor None)	true
@@ -397,8 +410,8 @@ type R record [x:Number] (table R) eq (table R)	true
 (String tor None) neq (Number tor None)	true
 
 # eq/neq - user-defined types
-type Foo [:Number] type Bar [:Number] Foo eq Bar	true
-type Foo [:Number] type Bar [:String] Foo neq Bar	true
+def Foo [:Number] def Bar [:Number] Foo eq Bar	true
+def Foo [:Number] def Bar [:String] Foo neq Bar	true
 
 # eq/neq - nested complex types
 [:[:Number]] eq [:[:Number]]	true
@@ -416,25 +429,25 @@ base Map	{}
 base None	None
 
 # make record with base:true - missing fields get zero values
-type P record [x:Number y:String] make P {x:1} {base:true}	{x:1,y:''}
+def P refine Record [x:Number y:String] make P {x:1} {base:true}	{x:1,y:''}
 
 # make record with base:true - all fields provided
-type P record [x:Number y:String] make P {x:1 y:"hi"} {base:true}	{x:1,y:'hi'}
+def P refine Record [x:Number y:String] make P {x:1 y:"hi"} {base:true}	{x:1,y:'hi'}
 
 # make record with base:true - optional field gets base not none
-type P record [x:Number y:[String tor None]] make P {x:1} {base:true}	{x:1,y:''}
+def P refine Record [x:Number y:[String tor None]] make P {x:1} {base:true}	{x:1,y:''}
 
 # make record with base:true - boolean field
-type P record [x:Number y:Boolean] make P {x:1} {base:true}	{x:1,y:false}
+def P refine Record [x:Number y:Boolean] make P {x:1} {base:true}	{x:1,y:false}
 
 # make record with base:true - multiple missing fields
-type P record [x:Number y:String z:Boolean] make P {x:1} {base:true}	{x:1,y:'',z:false}
+def P refine Record [x:Number y:String z:Boolean] make P {x:1} {base:true}	{x:1,y:'',z:false}
 
 # make record with base:true - named list form
-type P record [x:Number y:String] make P [x:1] {base:true}	{x:1,y:''}
+def P refine Record [x:Number y:String] make P [x:1] {base:true}	{x:1,y:''}
 
 # type Name uniqueness - conflicting parts are rejected
-type Foo/String Number	ERROR:type: name part "String" in "Foo/String" conflicts with an existing type name
+def Foo/String Number	ERROR:type: name part "String" in "Foo/String" conflicts with an existing type name
 
 # Comparison - lt (less than)
 1 lt 2	true
@@ -462,6 +475,16 @@ true lt false	false
 1 gte 1	true
 1 gte 2	false
 
+# Comparison - cmp (three-way: -1 before, 0 equal, 1 after)
+1 cmp 2	-1
+2 cmp 1	1
+1 cmp 1	0
+"abc" cmp "def"	-1
+"abc" cmp "abc"	0
+false cmp true	-1
+[1] cmp [1 2]	-1
+[1 2 3] cmp [1]	1
+
 # Comparison - eq (exact equality)
 1 eq 1	true
 1 eq 2	false
@@ -487,9 +510,20 @@ Number neq Number	false
 {x:1} deq {x:1,y:2}	false
 None deq None	true
 
-# Comparison - lt/gt error on incomparable types
-1 lt "a"	ERROR:lt: cannot compare
-[1] lt [2]	ERROR:lt: cannot compare
+# Comparison - cross-branch scalars order Atom < Boolean < Number < String < Path
+1 lt "a"	true
+"a" lt 1	false
+3 gt "z"	false
+
+# Comparison - total order: cross-branch by precedence
+# (Never < Any < None < Word < Type < Scalar < Node < Ideal); same
+# branch by size, then type (List < Map), then element-wise
+[1] lt [2]	true
+[1 2] lt [1 3]	true
+[9] lt [1 2 3]	true
+List lt Map	true
+[1] lt 5	false
+5 lt [1]	true
 
 # Comparison - forward style (swap convention: args[0]=1, args[1]=2, compare(args[1],args[0]))
 lt 1 2	false
@@ -707,3 +741,15 @@ def x 42; `value is ${x}`	'value is 42'
 def a 1; def b 2; `${a} and ${b}`	'1 and 2'
 `${"hi"}`	'hi'
 `price: $100`	'price: $100'
+
+# size - natural size via the Sizer behaviour
+size [1 2 3]	3
+size {a:1 b:2}	2
+size "hello"	5
+size 7.9	7
+size 42	42
+size true	1
+size false	0
+size (make Path "a/b/c")	3
+size None	0
+def Pt (refine Object {x:Integer y:Integer}); size (make Pt {x:1 y:2})	2

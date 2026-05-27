@@ -2,29 +2,27 @@ package native
 
 import (
 	"testing"
-
-	"github.com/aql-lang/aql/lang/go/engine"
 )
 
 // makeTable creates a table Value with the given column names and rows.
 // Each row is a map with the column names as keys.
-func makeTable(columns []string, rows [][]engine.Value) engine.Value {
-	fields := engine.NewOrderedMap()
+func makeTable(columns []string, rows [][]Value) Value {
+	fields := NewOrderedMap()
 	for _, col := range columns {
-		fields.Set(col, engine.NewTypeLiteral(engine.TAny))
+		fields.Set(col, NewTypeLiteral(TAny))
 	}
-	rec := engine.RecordTypeInfo{Fields: fields}
+	rec := RecordTypeInfo{Fields: fields}
 
-	var rowValues []engine.Value
+	var rowValues []Value
 	for _, row := range rows {
-		m := engine.NewOrderedMap()
+		m := NewOrderedMap()
 		for i, col := range columns {
 			m.Set(col, row[i])
 		}
-		rowValues = append(rowValues, engine.NewMap(m))
+		rowValues = append(rowValues, NewMap(m))
 	}
 
-	return engine.Value{VType: engine.TList, Data: engine.TableData{
+	return Value{Parent: TList, Data: TableData{
 		Record: rec,
 		Rows:   rowValues,
 	}}
@@ -33,20 +31,20 @@ func makeTable(columns []string, rows [][]engine.Value) engine.Value {
 func TestListAllHandler(t *testing.T) {
 	table := makeTable(
 		[]string{"name", "age"},
-		[][]engine.Value{
-			{engine.NewString("alice"), engine.NewInteger(30)},
-			{engine.NewString("bob"), engine.NewInteger(25)},
+		[][]Value{
+			{NewString("alice"), NewInteger(30)},
+			{NewString("bob"), NewInteger(25)},
 		},
 	)
 
-	result, err := listAllHandler([]engine.Value{table}, nil, nil, nil)
+	result, err := listAllHandler([]Value{table}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := AsList(result[0])
 	list := _lst.Slice()
 	if len(list) != 2 {
 		t.Errorf("expected 2 rows, got %d", len(list))
@@ -56,19 +54,19 @@ func TestListAllHandler(t *testing.T) {
 func TestListFilterHandler(t *testing.T) {
 	table := makeTable(
 		[]string{"name", "age", "city"},
-		[][]engine.Value{
-			{engine.NewString("alice"), engine.NewInteger(30), engine.NewString("london")},
-			{engine.NewString("bob"), engine.NewInteger(25), engine.NewString("paris")},
-			{engine.NewString("carol"), engine.NewInteger(30), engine.NewString("london")},
+		[][]Value{
+			{NewString("alice"), NewInteger(30), NewString("london")},
+			{NewString("bob"), NewInteger(25), NewString("paris")},
+			{NewString("carol"), NewInteger(30), NewString("london")},
 		},
 	)
 
 	// Filter by city == "london"
-	filter := engine.NewOrderedMap()
-	filter.Set("city", engine.NewString("london"))
+	filter := NewOrderedMap()
+	filter.Set("city", NewString("london"))
 
 	result, err := listFilterHandler(
-		[]engine.Value{engine.NewMap(filter), table},
+		[]Value{NewMap(filter), table},
 		nil, nil, nil,
 	)
 	if err != nil {
@@ -77,7 +75,7 @@ func TestListFilterHandler(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := AsList(result[0])
 	list := _lst.Slice()
 	if len(list) != 2 {
 		t.Errorf("expected 2 matching rows, got %d", len(list))
@@ -85,9 +83,9 @@ func TestListFilterHandler(t *testing.T) {
 
 	// Check the names
 	for _, row := range list {
-		m, _ := engine.AsMap(row)
+		m, _ := AsMap(row)
 		nameVal, _ := m.Get("name")
-		name, _ := engine.AsString(nameVal)
+		name, _ := AsString(nameVal)
 		if name != "alice" && name != "carol" {
 			t.Errorf("unexpected name: %s", name)
 		}
@@ -97,34 +95,34 @@ func TestListFilterHandler(t *testing.T) {
 func TestListFilterMultipleKeys(t *testing.T) {
 	table := makeTable(
 		[]string{"name", "age", "city"},
-		[][]engine.Value{
-			{engine.NewString("alice"), engine.NewInteger(30), engine.NewString("london")},
-			{engine.NewString("bob"), engine.NewInteger(25), engine.NewString("paris")},
-			{engine.NewString("carol"), engine.NewInteger(30), engine.NewString("paris")},
+		[][]Value{
+			{NewString("alice"), NewInteger(30), NewString("london")},
+			{NewString("bob"), NewInteger(25), NewString("paris")},
+			{NewString("carol"), NewInteger(30), NewString("paris")},
 		},
 	)
 
 	// Filter by age == 30 AND city == "london"
-	filter := engine.NewOrderedMap()
-	filter.Set("age", engine.NewInteger(30))
-	filter.Set("city", engine.NewString("london"))
+	filter := NewOrderedMap()
+	filter.Set("age", NewInteger(30))
+	filter.Set("city", NewString("london"))
 
 	result, err := listFilterHandler(
-		[]engine.Value{engine.NewMap(filter), table},
+		[]Value{NewMap(filter), table},
 		nil, nil, nil,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := AsList(result[0])
 	list := _lst.Slice()
 	if len(list) != 1 {
 		t.Errorf("expected 1 matching row, got %d", len(list))
 	}
 	if len(list) > 0 {
-		m, _ := engine.AsMap(list[0])
+		m, _ := AsMap(list[0])
 		nameVal, _ := m.Get("name")
-		ns, _ := engine.AsString(nameVal)
+		ns, _ := AsString(nameVal)
 		if ns != "alice" {
 			t.Errorf("expected alice, got %s", ns)
 		}
@@ -134,22 +132,22 @@ func TestListFilterMultipleKeys(t *testing.T) {
 func TestListFilterNoMatch(t *testing.T) {
 	table := makeTable(
 		[]string{"name", "age"},
-		[][]engine.Value{
-			{engine.NewString("alice"), engine.NewInteger(30)},
+		[][]Value{
+			{NewString("alice"), NewInteger(30)},
 		},
 	)
 
-	filter := engine.NewOrderedMap()
-	filter.Set("name", engine.NewString("nobody"))
+	filter := NewOrderedMap()
+	filter.Set("name", NewString("nobody"))
 
 	result, err := listFilterHandler(
-		[]engine.Value{engine.NewMap(filter), table},
+		[]Value{NewMap(filter), table},
 		nil, nil, nil,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := AsList(result[0])
 	list := _lst.Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 matching rows, got %d", len(list))
@@ -159,23 +157,23 @@ func TestListFilterNoMatch(t *testing.T) {
 func TestListFilterMissingField(t *testing.T) {
 	table := makeTable(
 		[]string{"name", "age"},
-		[][]engine.Value{
-			{engine.NewString("alice"), engine.NewInteger(30)},
+		[][]Value{
+			{NewString("alice"), NewInteger(30)},
 		},
 	)
 
 	// Filter on field that doesn't exist in records
-	filter := engine.NewOrderedMap()
-	filter.Set("city", engine.NewString("london"))
+	filter := NewOrderedMap()
+	filter.Set("city", NewString("london"))
 
 	result, err := listFilterHandler(
-		[]engine.Value{engine.NewMap(filter), table},
+		[]Value{NewMap(filter), table},
 		nil, nil, nil,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := AsList(result[0])
 	list := _lst.Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 matching rows, got %d", len(list))
@@ -185,11 +183,11 @@ func TestListFilterMissingField(t *testing.T) {
 func TestListAllEmptyTable(t *testing.T) {
 	table := makeTable([]string{"name"}, nil)
 
-	result, err := listAllHandler([]engine.Value{table}, nil, nil, nil)
+	result, err := listAllHandler([]Value{table}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := AsList(result[0])
 	list := _lst.Slice()
 	if len(list) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(list))
@@ -198,18 +196,18 @@ func TestListAllEmptyTable(t *testing.T) {
 
 func TestValuesEqual(t *testing.T) {
 	tests := []struct {
-		a, b engine.Value
+		a, b Value
 		want bool
 	}{
-		{engine.NewInteger(1), engine.NewInteger(1), true},
-		{engine.NewInteger(1), engine.NewInteger(2), false},
-		{engine.NewString("a"), engine.NewString("a"), true},
-		{engine.NewString("a"), engine.NewString("b"), false},
-		{engine.NewBoolean(true), engine.NewBoolean(true), true},
-		{engine.NewBoolean(true), engine.NewBoolean(false), false},
-		{engine.NewAtom("x"), engine.NewAtom("x"), true},
-		{engine.NewAtom("x"), engine.NewString("x"), true},
-		{engine.NewString("x"), engine.NewAtom("x"), true},
+		{NewInteger(1), NewInteger(1), true},
+		{NewInteger(1), NewInteger(2), false},
+		{NewString("a"), NewString("a"), true},
+		{NewString("a"), NewString("b"), false},
+		{NewBoolean(true), NewBoolean(true), true},
+		{NewBoolean(true), NewBoolean(false), false},
+		{NewAtom("x"), NewAtom("x"), true},
+		{NewAtom("x"), NewString("x"), true},
+		{NewString("x"), NewAtom("x"), true},
 	}
 	for i, tt := range tests {
 		got := valuesEqual(tt.a, tt.b)

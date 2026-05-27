@@ -34,13 +34,24 @@ func isTypeLike(v Value) bool {
 	if v.Data == nil {
 		return true
 	}
-	return IsRecordType(v) || IsOptionsType(v) || IsTableType(v) || IsObjectType(v)
+	return IsRecordType(v) || IsOptionsType(v) || IsTableType(v) ||
+		IsObjectType(v) || IsHostTypeBody(v)
 }
 
-// makeRecord creates a record instance from a source value and
-// options. Used by both 2-arg and 3-arg make sigs targeting
-// RecordTypeInfo.
-func makeRecord(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, error) {
+// MakeRecord creates a record instance from a source value and
+// options. Used by `make` (via the Record Ideal's Instantiate) and
+// by the 3-arg make-with-options path.
+//
+// Backward-compat wrapper — delegates to MakeRecordR with nil
+// Registry. Use MakeRecordR when fields may carry predicate-type
+// constraints that need RunPredicate to evaluate.
+func MakeRecord(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, error) {
+	return MakeRecordR(recType, srcVal, useBase, nil)
+}
+
+// MakeRecordR is MakeRecord with Registry threading for
+// predicate-typed field constraints. See MakeFieldValueR.
+func MakeRecordR(recType RecordTypeInfo, srcVal Value, useBase bool, r *Registry) ([]Value, error) {
 	fieldKeys := recType.Fields.Keys()
 	result := NewOrderedMap()
 
@@ -69,7 +80,7 @@ func makeRecord(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, er
 				}
 				return fmt.Errorf("make: missing field %q", key)
 			}
-			converted, err := MakeFieldValue(val, constraint)
+			converted, err := MakeFieldValueR(val, constraint, r)
 			if err != nil {
 				return fmt.Errorf("make: field %q: %w", key, err)
 			}
@@ -78,7 +89,7 @@ func makeRecord(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, er
 		return nil
 	}
 
-	if srcVal.VType.Equal(TMap) {
+	if srcVal.Parent.Equal(TMap) {
 		provided, err := AsMutableMap(srcVal)
 		if err != nil {
 			return nil, fmt.Errorf("make: expected concrete map, got %s", srcVal.String())
@@ -89,7 +100,7 @@ func makeRecord(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, er
 		return []Value{NewMap(result)}, nil
 	}
 
-	if !srcVal.VType.Equal(TList) {
+	if !srcVal.Parent.Equal(TList) {
 		return nil, fmt.Errorf("make: record values must be a list or map, got %s", srcVal.String())
 	}
 	if srcVal.Data == nil {
@@ -97,7 +108,7 @@ func makeRecord(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, er
 	}
 	elems, _ := AsList(srcVal)
 
-	isNamed := elems.Len() > 0 && elems.Get(0).VType.Equal(TMap)
+	isNamed := elems.Len() > 0 && elems.Get(0).Parent.Equal(TMap)
 	if isNamed {
 		if _, err := AsMutableMap(elems.Get(0)); err != nil {
 			isNamed = false
@@ -107,7 +118,7 @@ func makeRecord(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, er
 	if isNamed {
 		provided := NewOrderedMap()
 		for _, elem := range elems.Slice() {
-			if !elem.VType.Equal(TMap) {
+			if !elem.Parent.Equal(TMap) {
 				return nil, fmt.Errorf("make: mixed named and positional fields")
 			}
 			m, err := AsMutableMap(elem)
@@ -129,7 +140,7 @@ func makeRecord(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, er
 		}
 		for i, key := range fieldKeys {
 			constraint, _ := recType.Fields.Get(key)
-			converted, err := MakeFieldValue(elems.Get(i), constraint)
+			converted, err := MakeFieldValueR(elems.Get(i), constraint, r)
 			if err != nil {
 				return nil, fmt.Errorf("make: field %q: %w", key, err)
 			}
@@ -142,7 +153,7 @@ func makeRecord(recType RecordTypeInfo, srcVal Value, useBase bool) ([]Value, er
 
 // parseMakeOptions extracts make options from an options map.
 func parseMakeOptions(opts Value) (useBase bool, err error) {
-	if !opts.VType.Equal(TMap) {
+	if !opts.Parent.Equal(TMap) {
 		return false, fmt.Errorf("make: options must be a map, got %s", opts.String())
 	}
 	m, err := AsMutableMap(opts)
@@ -204,7 +215,7 @@ func MakeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 }
 
 func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceInfo) ([]Value, error) {
-	if !srcVal.VType.Equal(TMap) {
+	if !srcVal.Parent.Equal(TMap) {
 		return nil, fmt.Errorf("make: object values must be a map, got %s", srcVal.String())
 	}
 	provided, err := AsMutableMap(srcVal)
@@ -251,23 +262,10 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 
 		val = ResolveWordValue(val)
 
-		if constraint.Data == nil {
-			if val.VType.Matches(constraint.VType) {
-				result.Set(key, val)
-			} else {
-				converted, err := MakeConvert(val, constraint.VType)
-				if err != nil {
-					return nil, fmt.Errorf("make: field %q: %w", key, err)
-				}
-				result.Set(key, converted)
-			}
-			continue
-		}
-
-		if val.VType.Matches(constraint.VType) {
+		if val.Parent.Matches(ValueType(constraint)) {
 			result.Set(key, val)
 		} else {
-			converted, err := MakeConvert(val, constraint.VType)
+			converted, err := MakeConvert(val, ValueType(constraint))
 			if err != nil {
 				return nil, fmt.Errorf("make: field %q: %w", key, err)
 			}
@@ -296,30 +294,41 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 	})}, nil
 }
 
-// makePath creates a Path value from a source (list or string).
+// makePath creates a Path value from a source: a string ("a/b") or a
+// list of segments (["a" "b"]). Slashes are normalised — every "/"
+// separates segments and empty segments (from a "//" run, or a
+// leading/trailing "/") are dropped, so "a//b" and ["a/" "b"] both
+// yield ["a" "b"]. A leading "/" on the source — the string, or the
+// first list element — marks the path absolute; the abs argument
+// (from a `{ abs:… }` option map) forces it absolute regardless.
 func makePath(srcVal Value, abs bool) ([]Value, error) {
+	var raw []string
 	switch {
-	case srcVal.VType.Matches(TList) && srcVal.Data != nil:
+	case srcVal.Parent.Matches(TList) && srcVal.Data != nil:
 		elems, _ := AsList(srcVal)
-		parts := make([]string, elems.Len())
+		raw = make([]string, elems.Len())
 		for i := 0; i < elems.Len(); i++ {
-			parts[i] = ValToString(elems.Get(i))
+			raw[i] = ValToString(elems.Get(i))
 		}
-		return []Value{NewPath(parts, abs)}, nil
-	case srcVal.VType.Matches(TString) && srcVal.Data != nil:
+	case srcVal.Parent.Matches(TString) && srcVal.Data != nil:
 		s, _ := AsString(srcVal)
-		if len(s) > 0 && s[0] == '/' {
-			abs = true
-			s = s[1:]
-		}
-		var parts []string
-		if s != "" {
-			parts = strings.Split(s, "/")
-		}
-		return []Value{NewPath(parts, abs)}, nil
+		raw = []string{s}
 	default:
 		return nil, fmt.Errorf("make: Path source must be a list or string, got %s", srcVal.String())
 	}
+
+	if len(raw) > 0 && strings.HasPrefix(raw[0], "/") {
+		abs = true
+	}
+	var parts []string
+	for _, r := range raw {
+		for _, seg := range strings.Split(r, "/") {
+			if seg != "" {
+				parts = append(parts, seg)
+			}
+		}
+	}
+	return []Value{NewPath(parts, abs)}, nil
 }
 
 // MakeHandler is the position-agnostic 2-arg make dispatcher.
@@ -331,17 +340,23 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 
 	targetVal = ResolveTypeLiteralDef(targetVal, reg)
 
-	if IsObjectType(targetVal) {
-		objType, _ := AsObjectType(targetVal)
-		return makeObject(objType, srcVal, nil)
+	// Structural kinds (object / record / table) instantiate through
+	// the Ideal registry — see ideal.go and lang/doc/design/IDEAL.0.md.
+	if reg != nil {
+		if ideal := reg.Ideals.For(targetVal); ideal != nil && ideal.Instantiate != nil {
+			return ideal.Instantiate(targetVal, srcVal, reg)
+		}
+		if m := reg.Ideals.Match(targetVal); m != nil && !m.available() {
+			return nil, fmt.Errorf("make: the %s type-kind is not available in this registry", m.Name)
+		}
 	}
 
-	if targetVal.Data == nil && targetVal.VType.Equal(TPath) {
+	if targetVal.Data == nil && targetVal.Equal(TPath) {
 		return makePath(srcVal, false)
 	}
 
-	if targetVal.VType.Equal(TOptions) && targetVal.Data == nil {
-		if !srcVal.VType.Equal(TMap) || srcVal.Data == nil {
+	if targetVal.Equal(TOptions) && targetVal.Data == nil {
+		if !srcVal.Parent.Equal(TMap) || srcVal.Data == nil {
 			return nil, fmt.Errorf("make: Options requires a concrete map")
 		}
 		src, err := AsMutableMap(srcVal)
@@ -351,101 +366,12 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		return []Value{NewOptionsType(src)}, nil
 	}
 
-	if IsRecordType(targetVal) {
-		recType, _ := AsRecordType(targetVal)
-		return makeRecord(recType, srcVal, false)
-	}
-
-	if IsTableType(targetVal) {
-		tableType, _ := AsTableType(targetVal)
-		recType := tableType.Record
-
-		if !srcVal.VType.Equal(TList) {
-			return nil, fmt.Errorf("make: table values must be a list of row lists, got %s", srcVal.String())
-		}
-		if srcVal.Data == nil {
-			return nil, fmt.Errorf("make: table values must be a concrete list, got type literal")
-		}
-		rows, _ := AsList(srcVal)
-		fieldKeys := recType.Fields.Keys()
-		resultRows := make([]Value, 0, rows.Len())
-
-		for rowIdx, rowVal := range rows.Slice() {
-			if !rowVal.VType.Equal(TList) {
-				return nil, fmt.Errorf("make: table row %d must be a list, got %s", rowIdx, rowVal.String())
-			}
-			if rowVal.Data == nil {
-				return nil, fmt.Errorf("make: table row %d must be a concrete list, got type literal", rowIdx)
-			}
-			rowElems, _ := AsList(rowVal)
-
-			isNamed := rowElems.Len() > 0 && rowElems.Get(0).VType.Equal(TMap)
-			if isNamed {
-				if _, err := AsMutableMap(rowElems.Get(0)); err != nil {
-					isNamed = false
-				}
-			}
-
-			result := NewOrderedMap()
-			if isNamed {
-				provided := NewOrderedMap()
-				for _, elem := range rowElems.Slice() {
-					if !elem.VType.Equal(TMap) {
-						return nil, fmt.Errorf("make: table row %d: mixed named and positional fields", rowIdx)
-					}
-					m, err := AsMutableMap(elem)
-					if err != nil {
-						return nil, fmt.Errorf("make: table row %d: expected concrete map pair, got %s", rowIdx, elem.String())
-					}
-					for _, key := range m.Keys() {
-						val, _ := m.Get(key)
-						provided.Set(key, val)
-					}
-				}
-				for _, key := range fieldKeys {
-					val, ok := provided.Get(key)
-					if !ok {
-						return nil, fmt.Errorf("make: table row %d: missing field %q", rowIdx, key)
-					}
-					constraint, _ := recType.Fields.Get(key)
-					converted, err := MakeFieldValue(val, constraint)
-					if err != nil {
-						return nil, fmt.Errorf("make: table row %d: field %q: %w", rowIdx, key, err)
-					}
-					result.Set(key, converted)
-				}
-				for _, key := range provided.Keys() {
-					if _, ok := recType.Fields.Get(key); !ok {
-						return nil, fmt.Errorf("make: table row %d: unknown field %q", rowIdx, key)
-					}
-				}
-			} else {
-				if rowElems.Len() != len(fieldKeys) {
-					return nil, fmt.Errorf("make: table row %d: expected %d values, got %d",
-						rowIdx, len(fieldKeys), rowElems.Len())
-				}
-				for i, key := range fieldKeys {
-					constraint, _ := recType.Fields.Get(key)
-					converted, err := MakeFieldValue(rowElems.Get(i), constraint)
-					if err != nil {
-						return nil, fmt.Errorf("make: table row %d: field %q: %w", rowIdx, key, err)
-					}
-					result.Set(key, converted)
-				}
-			}
-
-			resultRows = append(resultRows, NewMap(result))
-		}
-
-		return []Value{NewList(resultRows)}, nil
-	}
-
 	if targetVal.Data != nil {
 		return nil, fmt.Errorf("make: first argument must be a type literal or record type, got %s", targetVal.String())
 	}
 
-	targetType := targetVal.VType
-	if srcVal.VType.Matches(targetType) {
+	targetType := &targetVal
+	if srcVal.Parent.Matches(targetType) {
 		return []Value{srcVal}, nil
 	}
 
@@ -454,6 +380,149 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		return nil, err
 	}
 	return []Value{result}, nil
+}
+
+// MakeTable instantiates a table value — a list of record-conforming
+// rows — from a table type and a list of row data. Each row may be
+// positional or named. Backs the Table Ideal's Instantiate.
+func MakeTable(tt TableTypeInfo, srcVal Value) ([]Value, error) {
+	return MakeTableR(tt, srcVal, nil)
+}
+
+// MakeTableR is MakeTable with Registry threading for predicate-typed
+// field constraints in table rows. See MakeFieldValueR.
+func MakeTableR(tt TableTypeInfo, srcVal Value, r *Registry) ([]Value, error) {
+	recType := tt.Record
+	if !srcVal.Parent.Equal(TList) {
+		return nil, fmt.Errorf("make: table values must be a list of row lists, got %s", srcVal.String())
+	}
+	if srcVal.Data == nil {
+		return nil, fmt.Errorf("make: table values must be a concrete list, got type literal")
+	}
+	rows, _ := AsList(srcVal)
+	fieldKeys := recType.Fields.Keys()
+	resultRows := make([]Value, 0, rows.Len())
+
+	for rowIdx, rowVal := range rows.Slice() {
+		if !rowVal.Parent.Equal(TList) {
+			return nil, fmt.Errorf("make: table row %d must be a list, got %s", rowIdx, rowVal.String())
+		}
+		if rowVal.Data == nil {
+			return nil, fmt.Errorf("make: table row %d must be a concrete list, got type literal", rowIdx)
+		}
+		rowElems, _ := AsList(rowVal)
+
+		isNamed := rowElems.Len() > 0 && rowElems.Get(0).Parent.Equal(TMap)
+		if isNamed {
+			if _, err := AsMutableMap(rowElems.Get(0)); err != nil {
+				isNamed = false
+			}
+		}
+
+		result := NewOrderedMap()
+		if isNamed {
+			provided := NewOrderedMap()
+			for _, elem := range rowElems.Slice() {
+				if !elem.Parent.Equal(TMap) {
+					return nil, fmt.Errorf("make: table row %d: mixed named and positional fields", rowIdx)
+				}
+				m, err := AsMutableMap(elem)
+				if err != nil {
+					return nil, fmt.Errorf("make: table row %d: expected concrete map pair, got %s", rowIdx, elem.String())
+				}
+				for _, key := range m.Keys() {
+					val, _ := m.Get(key)
+					provided.Set(key, val)
+				}
+			}
+			for _, key := range fieldKeys {
+				val, ok := provided.Get(key)
+				if !ok {
+					return nil, fmt.Errorf("make: table row %d: missing field %q", rowIdx, key)
+				}
+				constraint, _ := recType.Fields.Get(key)
+				converted, err := MakeFieldValueR(val, constraint, r)
+				if err != nil {
+					return nil, fmt.Errorf("make: table row %d: field %q: %w", rowIdx, key, err)
+				}
+				result.Set(key, converted)
+			}
+			for _, key := range provided.Keys() {
+				if _, ok := recType.Fields.Get(key); !ok {
+					return nil, fmt.Errorf("make: table row %d: unknown field %q", rowIdx, key)
+				}
+			}
+		} else {
+			if rowElems.Len() != len(fieldKeys) {
+				return nil, fmt.Errorf("make: table row %d: expected %d values, got %d",
+					rowIdx, len(fieldKeys), rowElems.Len())
+			}
+			for i, key := range fieldKeys {
+				constraint, _ := recType.Fields.Get(key)
+				converted, err := MakeFieldValueR(rowElems.Get(i), constraint, r)
+				if err != nil {
+					return nil, fmt.Errorf("make: table row %d: field %q: %w", rowIdx, key, err)
+				}
+				result.Set(key, converted)
+			}
+		}
+
+		resultRows = append(resultRows, NewMap(result))
+	}
+
+	return []Value{NewList(resultRows)}, nil
+}
+
+// registerKernelIdeals installs the kernel type-kind descriptors with
+// their dispatch predicate (Accepts) and value constructor
+// (Instantiate). The type-level constructor (Ideal.Construct) is
+// filled in by the language layer's installIdeals — type construction
+// reuses the surface-registered object/record handlers. Called from
+// NewRegistry so every Registry, including the bare eng spec runner,
+// can `make` the structural kinds.
+func registerKernelIdeals(r *Registry) {
+	r.Ideals.Register(&Ideal{
+		Name:    "Object",
+		Enabled: true,
+		Accepts: func(v Value) bool {
+			return (v.Data == nil && v.Equal(TObject)) || IsObjectType(v)
+		},
+		Instantiate: func(typ, data Value, _ *Registry) ([]Value, error) {
+			objType, err := AsObjectType(typ)
+			if err != nil {
+				return nil, fmt.Errorf("make: expected a constructed object type, got %s", typ.String())
+			}
+			return makeObject(objType, data, nil)
+		},
+	})
+	r.Ideals.Register(&Ideal{
+		Name:    "Record",
+		Enabled: true,
+		Accepts: func(v Value) bool {
+			return (v.Data == nil && v.Equal(TRecord)) || IsRecordType(v)
+		},
+		Instantiate: func(typ, data Value, r *Registry) ([]Value, error) {
+			recType, err := AsRecordType(typ)
+			if err != nil {
+				return nil, fmt.Errorf("make: expected a constructed record type, got %s", typ.String())
+			}
+			return MakeRecordR(recType, data, false, r)
+		},
+	})
+	r.Ideals.Register(&Ideal{
+		Name:    "Table",
+		Enabled: true,
+		Accepts: func(v Value) bool {
+			return (v.Data == nil && v.Equal(TTable)) || IsTableType(v)
+		},
+		Instantiate: func(typ, data Value, r *Registry) ([]Value, error) {
+			tt, err := AsTableType(typ)
+			if err != nil {
+				return nil, fmt.Errorf("make: expected a constructed table type, got %s", typ.String())
+			}
+			return MakeTableR(tt, data, r)
+		},
+	})
 }
 
 // MakeWithPrototype is the 3-arg make-with-prototype dispatcher.
@@ -465,7 +534,7 @@ func MakeWithPrototype(args []Value, _ map[string]Value, _ []Value, reg *Registr
 	var targetVal, srcVal, protoVal Value
 	for _, a := range resolved {
 		switch {
-		case IsObjectType(a) && targetVal.VType.Equal(nil):
+		case IsObjectType(a) && targetVal.Parent.Equal(nil):
 			targetVal = a
 		case IsObjectInstance(a):
 			protoVal = a
@@ -492,17 +561,17 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 	for _, a := range args {
 		resolved := ResolveTypeLiteralDef(a, reg)
 		switch {
-		case isTypeLike(resolved) && targetVal.VType.Equal(nil):
+		case isTypeLike(resolved) && targetVal.Parent.Equal(nil):
 			targetVal = resolved
 		default:
-			if srcVal.VType.Equal(nil) {
+			if srcVal.Parent.Equal(nil) {
 				srcVal = a
 			} else {
 				optsVal = a
 			}
 		}
 	}
-	if optsVal.VType.Equal(TList) && srcVal.VType.Equal(TMap) && srcVal.Data != nil {
+	if optsVal.Parent.Equal(TList) && srcVal.Parent.Equal(TMap) && srcVal.Data != nil {
 		srcVal, optsVal = optsVal, srcVal
 	}
 
@@ -518,20 +587,22 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 
 	if IsRecordType(targetVal) {
 		recType, _ := AsRecordType(targetVal)
-		return makeRecord(recType, srcVal, useBase)
+		return MakeRecordR(recType, srcVal, useBase, reg)
 	}
 
-	if targetVal.Data == nil && targetVal.VType.Equal(TPath) {
+	if targetVal.Data == nil && targetVal.Equal(TPath) {
 		abs := false
 		if optsMap, _ := AsMap(optsVal); optsMap != nil {
-			if v, ok := optsMap.Get("abs"); ok && v.VType.Matches(TBoolean) {
+			if v, ok := optsMap.Get("abs"); ok && v.Parent.Matches(TBoolean) {
 				abs, _ = AsBoolean(v)
 			}
 		}
 		return makePath(srcVal, abs)
 	}
 
-	return MakeHandler([]Value{srcVal, targetVal}, nil, nil, nil)
+	// Pass reg through so the Ideal-registry dispatch in MakeHandler
+	// can reach the structural kinds (e.g. a table target with opts).
+	return MakeHandler([]Value{srcVal, targetVal}, nil, nil, reg)
 }
 
 // MakeScalarHandler converts a scalar value to a target scalar type.
@@ -540,11 +611,11 @@ func MakeScalarHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 	if targetVal.Data != nil {
 		return nil, fmt.Errorf("make: expected a type literal, got %s", targetVal.String())
 	}
-	targetType := targetVal.VType
+	targetType := &targetVal
 	if targetType.Equal(TPath) {
 		return makePath(srcVal, false)
 	}
-	if srcVal.VType.Matches(targetType) {
+	if srcVal.Parent.Matches(targetType) {
 		return []Value{srcVal}, nil
 	}
 	result, err := MakeConvert(srcVal, targetType)
@@ -554,21 +625,34 @@ func MakeScalarHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 	return []Value{result}, nil
 }
 
-// MakeObjHandler is the 2-arg [ObjectType, Map] make handler.
+// MakeObjHandler is the 2-arg [IdealType, Map] make handler. It
+// instantiates object types and Ideal-kind types; a non-object
+// IdealType target (e.g. Options) defers to the generic make
+// dispatcher.
 func MakeObjHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	targetVal, srcVal := args[0], args[1]
 	targetVal = ResolveTypeLiteralDef(targetVal, reg)
+	if reg != nil {
+		if ideal := reg.Ideals.For(targetVal); ideal != nil && ideal.Instantiate != nil {
+			return ideal.Instantiate(targetVal, srcVal, reg)
+		}
+		if m := reg.Ideals.Match(targetVal); m != nil && !m.available() {
+			return nil, fmt.Errorf("make: the %s type-kind is not available in this registry", m.Name)
+		}
+	}
 	if IsObjectType(targetVal) {
 		objType, _ := AsObjectType(targetVal)
 		return makeObject(objType, srcVal, nil)
 	}
-	return nil, fmt.Errorf("make: expected object type, got %s", targetVal.String())
+	// Not an object type and unclaimed by an Ideal kind (e.g.
+	// Options) — defer to the generic make dispatcher.
+	return MakeHandler([]Value{targetVal, srcVal}, nil, nil, reg)
 }
 
 // MakeArrayHandler is the 2-arg [Array, List] make handler.
 func MakeArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	srcVal := args[1]
-	if !srcVal.VType.Equal(TList) || srcVal.Data == nil {
+	if !srcVal.Parent.Equal(TList) || srcVal.Data == nil {
 		return nil, fmt.Errorf("make: Array source must be a concrete list, got %s", srcVal.String())
 	}
 	srcList, _ := AsList(srcVal)
@@ -578,10 +662,10 @@ func MakeArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 // MakeScalarOptsHandler is the 3-arg [ScalarType, Map, Any] make handler.
 func MakeScalarOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	targetVal, optsVal, srcVal := args[0], args[1], args[2]
-	if targetVal.Data == nil && targetVal.VType.Equal(TPath) {
+	if targetVal.Data == nil && targetVal.Equal(TPath) {
 		abs := false
 		if optsMap, _ := AsMap(optsVal); optsMap != nil {
-			if v, ok := optsMap.Get("abs"); ok && v.VType.Matches(TBoolean) {
+			if v, ok := optsMap.Get("abs"); ok && v.Parent.Matches(TBoolean) {
 				abs, _ = AsBoolean(v)
 			}
 		}
@@ -620,9 +704,9 @@ func MakeConvert(src Value, targetType *Type) (Value, error) {
 
 	case targetType.Matches(TBoolean):
 		switch {
-		case src.VType.Matches(TBoolean):
+		case src.Parent.Matches(TBoolean):
 			return src, nil
-		case src.VType.Matches(TNumber):
+		case src.Parent.Matches(TNumber):
 			_as0, _ := AsNumber(src)
 			return NewBoolean(_as0 != 0), nil
 		default:
@@ -649,20 +733,41 @@ func MakeConvert(src Value, targetType *Type) (Value, error) {
 // constraint. Exported for the same reason as MakeConvert — keeps
 // the production lang's record-make path on the engine's canonical
 // implementation.
+//
+// Backward-compat wrapper that delegates to MakeFieldValueR with a
+// nil Registry — sufficient for non-predicate constraints (type
+// literals, structural records, scalars). For predicate-type field
+// constraints use MakeFieldValueR to thread a Registry so the
+// predicate body can run.
 func MakeFieldValue(val Value, constraint Value) (Value, error) {
+	return MakeFieldValueR(val, constraint, nil)
+}
+
+// MakeFieldValueR is MakeFieldValue with Registry threading so
+// predicate-type field constraints (`def Rec refine Record [x:Pos]`
+// where Pos is a predicate fn type) can run the predicate body via
+// RunPredicate. When the constraint is an FnDef/Function value (a
+// predicate), the candidate is gated by the predicate's input type
+// and admitted only if the predicate accepts.
+func MakeFieldValueR(val Value, constraint Value, r *Registry) (Value, error) {
 	val = ResolveWordValue(val)
 
 	if constraint.Data == nil {
-		constraintType := constraint.VType
-		if val.VType.Matches(constraintType) {
+		constraintType := ValueType(constraint)
+		if val.Parent.Matches(constraintType) {
 			return val, nil
 		}
 		return MakeConvert(val, constraintType)
 	}
 
-	unified, ok := Unify(constraint, val)
-	if !ok {
-		return Value{}, fmt.Errorf("value %s does not match constraint %s", val.String(), constraint.String())
+	// Predicate-type constraint (and disjunct-with-predicate) — route
+	// through UnifyExplainR so the predicate body runs via RunPredicate
+	// instead of failing with "incompatible types" when Unify tries to
+	// match an FnDef against a scalar.
+	unified, uerr := UnifyExplainR(constraint, val, r)
+	if uerr != nil {
+		return Value{}, fmt.Errorf("value %s does not match constraint %s: %s",
+			val.String(), constraint.String(), uerr.Error())
 	}
 	return unified, nil
 }
@@ -676,7 +781,7 @@ func MakeFieldValue(val Value, constraint Value) (Value, error) {
 //     expressions like [string or none] produce a disjunction.
 //  3. Everything else passes through unchanged.
 func ResolveFieldType(r *Registry, v Value) Value {
-	if v.Data != nil && (v.VType.Matches(TString) || v.VType.Matches(TAtom) || IsWord(v)) {
+	if v.Data != nil && (v.Parent.Matches(TString) || v.Parent.Matches(TAtom) || IsWord(v)) {
 		var name string
 		if IsWord(v) {
 			_as2, _ := AsWord(v)
@@ -684,7 +789,7 @@ func ResolveFieldType(r *Registry, v Value) Value {
 		} else {
 			name, _ = AsString(v)
 		}
-		if tv, ok := r.Types.TopBody(name); ok {
+		if tv, ok := r.TopTypeBody(name); ok {
 			if IsTypeBody(tv) {
 				return tv
 			}
@@ -697,11 +802,11 @@ func ResolveFieldType(r *Registry, v Value) Value {
 		return v
 	}
 
-	if v.VType.Equal(TList) && !IsTypedList(v) && !IsTableType(v) {
+	if v.Parent.Equal(TList) && !IsTypedList(v) && !IsTableType(v) {
 		elems, _ := AsList(v)
 		input := make([]Value, elems.Len())
 		for i, e := range elems.Slice() {
-			if (e.VType.Matches(TString) || e.VType.Matches(TAtom)) && e.Data != nil {
+			if (e.Parent.Matches(TString) || e.Parent.Matches(TAtom)) && e.Data != nil {
 				name, _ := AsString(e)
 				if r.Lookup(name) != nil {
 					input[i] = NewWord(name)

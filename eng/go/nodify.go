@@ -22,7 +22,7 @@ type Nodifier interface {
 // no body installed for this capability — NodifyValue keeps walking.
 var ErrNoNodifier = errors.New("eng: no nodifier in this Behavior")
 
-// NodifyValue projects v into a Node or Scalar by walking v.VType's
+// NodifyValue projects v into a Node or Scalar by walking v.Parent's
 // parent chain looking for a Nodifier. If none is registered, v is
 // returned unchanged — the natural default for values already in
 // data-shape (Integer, String, Map, List, …).
@@ -31,10 +31,10 @@ var ErrNoNodifier = errors.New("eng: no nodifier in this Behavior")
 // produces. Bodies that need to project nested Object fields call
 // `nodify` again inside themselves.
 func NodifyValue(v Value) (Value, error) {
-	if v.VType == nil {
+	if v.Parent == nil {
 		return v, nil
 	}
-	for t := v.VType; t != nil; t = t.Parent {
+	for t := v.Parent; t != nil; t = t.Parent {
 		n, ok := t.Behavior.(Nodifier)
 		if !ok {
 			continue

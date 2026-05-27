@@ -20,7 +20,7 @@ func GetKey(v Value) string {
 		w, _ := AsWord(v)
 		return w.Name
 	}
-	if v.VType.Matches(TString) {
+	if v.Parent.Matches(TString) {
 		s, _ := AsString(v)
 		return s
 	}
@@ -28,15 +28,15 @@ func GetKey(v Value) string {
 		a, _ := AsAtom(v)
 		return a
 	}
-	if v.VType.Matches(TInteger) {
+	if v.Parent.Matches(TInteger) {
 		n, _ := AsInteger(v)
 		return strconv.FormatInt(n, 10)
 	}
-	if v.VType.Matches(TDecimal) {
+	if v.Parent.Matches(TDecimal) {
 		f, _ := AsDecimal(v)
 		return FormatDecimal(f)
 	}
-	if v.VType.Matches(TBoolean) {
+	if v.Parent.Matches(TBoolean) {
 		b, _ := AsBoolean(v)
 		if b {
 			return "true"

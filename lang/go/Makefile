@@ -28,9 +28,11 @@ vuln:
 
 # Fail if any non-test runtime handler uses a single-value .Data.(Type)
 # assertion (panics on mismatch). Two-value (v, ok := ...) is safe.
+# Scans native/native_*.go (the language-layer primitives, post engine→native
+# consolidation in May 2026).
 lint-assertions:
 	@echo "Checking for unsafe .Data.(Type) assertions in runtime handlers..."
-	@HITS=$$(find engine -name 'native_*.go' ! -name '*_test.go' \
+	@HITS=$$(find native -name 'native_*.go' ! -name '*_test.go' \
 		-exec grep -Hn '\.Data\.(' {} \; \
 		| grep -v ',.*:=' | grep -v '\.(type)' \
 		| grep -v '// lint:allow-assert'); \

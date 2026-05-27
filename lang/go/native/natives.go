@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aql-lang/aql/lang/go/engine"
 	voxgigstruct "github.com/voxgig/struct"
 )
 
@@ -12,47 +11,47 @@ import (
 // words owned by the native package. It replaces the per-word RegisterFoo
 // functions and their aggregator (registerAll). The public Register entry
 // point in native.go installs every entry into a registry.
-var Natives = []engine.NativeFunc{
+var Natives = []NativeFunc{
 	// ---- boolean ----
 	{
-		Name:        "implies",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TBoolean, engine.TBoolean}, Handler: impliesHandler, Returns: []*engine.Type{engine.TBoolean}},
-			{Args: []*engine.Type{engine.TAny, engine.TAny}, Handler: impliesHandler, Returns: []*engine.Type{engine.TBoolean}},
+		Name: "implies",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TBoolean, TBoolean}, Handler: impliesHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
+			{Args: []*Type{TAny, TAny}, Handler: impliesHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
 		},
 	},
 
 	// ---- control flow ----
 	{
-		Name:        "quote",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
+		Name: "quote",
+
+		Signatures: []NativeSig{
 			{
 				// /q captures the upcoming Word as an Atom for us; the
 				// handler just marks it Quoted=true.
-				Args:      []*engine.Type{engine.TAtom},
+				Args:      []*Type{TAtom},
 				QuoteArgs: map[int]bool{0: true},
 				Handler:   quoteWordHandler,
-				Returns:   []*engine.Type{engine.TAtom},
+				Returns:   []*Type{TAtom}, BarrierPos: -1,
 			},
 			{
-				Args:           []*engine.Type{engine.TAny},
+				Args:           []*Type{TAny},
 				NoEvalArgs:     map[int]bool{0: true},
 				Handler:        quoteAnyHandler,
 				RunInCheckMode: true,
-				ReturnsFn:      engine.ReturnsIdentity(0),
+				ReturnsFn:      ReturnsIdentity(0), BarrierPos: -1,
 			},
 		},
 	},
 
 	// ---- file ops ----
 	{
-		Name:        "folder",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TOptions, engine.TPath}, Handler: folderOptsHandler, Returns: []*engine.Type{engine.TList}},
-			{Args: []*engine.Type{engine.TPath}, Handler: folderHandler, Returns: []*engine.Type{engine.TList}},
+		Name: "folder",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TOptions, TPath}, Handler: folderOptsHandler, Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TPath}, Handler: folderHandler, Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 
@@ -61,369 +60,369 @@ var Natives = []engine.NativeFunc{
 
 	// ---- stack ----
 	{
-		Name:        "stack",
-		ForwardArgs: false,
-		Signatures: []engine.NativeSig{{
-			Args:             []*engine.Type{engine.TInteger},
+		Name: "stack",
+
+		Signatures: []NativeSig{{
+			Args:             []*Type{TInteger},
 			FullStack:        true,
 			Handler:          stackCollectHandler,
-			CheckFullStackFn: stackCollectCheckFullStackFn,
+			CheckFullStackFn: stackCollectCheckFullStackFn, BarrierPos: 0,
 		}},
 	},
 
 	// ---- temporal ----
 	{
-		Name:        "now",
-		ForwardArgs: false,
-		Signatures: []engine.NativeSig{{
-			Args:    []*engine.Type{},
+		Name: "now",
+
+		Signatures: []NativeSig{{
+			Args:    []*Type{},
 			Handler: nowHandler,
-			Returns: []*engine.Type{engine.TInstant},
+			Returns: []*Type{TInstant}, BarrierPos: 0,
 		}},
 	},
 	{
-		Name:        "sleep",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{{
-			Args:    []*engine.Type{engine.TInteger},
+		Name: "sleep",
+
+		Signatures: []NativeSig{{
+			Args:    []*Type{TInteger},
 			Handler: sleepHandler,
-			Returns: []*engine.Type{},
+			Returns: []*Type{}, BarrierPos: -1,
 		}},
 	},
 	{
-		Name:        "interval",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TInteger, engine.TList}, QuoteArgs: map[int]bool{1: true}, Handler: intervalListHandler, Returns: []*engine.Type{engine.TInterval}},
-			{Args: []*engine.Type{engine.TInteger, engine.TAtom}, QuoteArgs: map[int]bool{1: true}, Handler: intervalAtomHandler, Returns: []*engine.Type{engine.TInterval}},
+		Name: "interval",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TInteger, TList}, QuoteArgs: map[int]bool{1: true}, Handler: intervalListHandler, Returns: []*Type{TInterval}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TAtom}, QuoteArgs: map[int]bool{1: true}, Handler: intervalAtomHandler, Returns: []*Type{TInterval}, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "cancel",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TTimeout}, Handler: cancelTimeoutHandler, Returns: []*engine.Type{}},
-			{Args: []*engine.Type{engine.TInterval}, Handler: cancelIntervalHandler, Returns: []*engine.Type{}},
+		Name: "cancel",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TTimeout}, Handler: cancelTimeoutHandler, Returns: []*Type{}, BarrierPos: -1},
+			{Args: []*Type{TInterval}, Handler: cancelIntervalHandler, Returns: []*Type{}, BarrierPos: -1},
 		},
 	},
 
 	// ---- list (table query) ----
 	{
-		Name:        "list",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TMap, engine.TResourceEntity}, Handler: listEntityOptsHandler},
-			{Args: []*engine.Type{engine.TResourceEntity}, Handler: listEntityHandler},
-			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: listAPIOptsHandler, Patterns: map[int]engine.Value{1: apiPatternValue()}},
-			{Args: []*engine.Type{engine.TMap}, Handler: listAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
-			{Args: []*engine.Type{engine.TMap, engine.TList}, Handler: listFilterHandler},
-			{Args: []*engine.Type{engine.TList}, Handler: listAllHandler},
-			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: listRecordFilterHandler},
-			{Args: []*engine.Type{engine.TMap}, Handler: listRecordAllHandler},
+		Name: "list",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TMap, TResourceEntity}, Handler: listEntityOptsHandler, BarrierPos: -1},
+			{Args: []*Type{TResourceEntity}, Handler: listEntityHandler, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Handler: listAPIOptsHandler, Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap}, Handler: listAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap, TList}, Handler: listFilterHandler, BarrierPos: -1},
+			{Args: []*Type{TList}, Handler: listAllHandler, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Handler: listRecordFilterHandler, BarrierPos: -1},
+			{Args: []*Type{TMap}, Handler: listRecordAllHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- create ----
 	{
-		Name:        "create",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TMap, engine.TResourceEntity}, Handler: createEntityOptsHandler},
-			{Args: []*engine.Type{engine.TResourceEntity}, Handler: createEntityHandler},
-			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: createAPIOptsHandler, Patterns: map[int]engine.Value{1: apiPatternValue()}},
-			{Args: []*engine.Type{engine.TMap}, Handler: createAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
-			{Args: []*engine.Type{engine.TMap, engine.TList}, Handler: createHandler},
-			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: createRecordHandler},
+		Name: "create",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TMap, TResourceEntity}, Handler: createEntityOptsHandler, BarrierPos: -1},
+			{Args: []*Type{TResourceEntity}, Handler: createEntityHandler, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Handler: createAPIOptsHandler, Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap}, Handler: createAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap, TList}, Handler: createHandler, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Handler: createRecordHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- load ----
 	{
-		Name:        "load",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TMap, engine.TResourceEntity}, Handler: loadEntityOptsHandler},
-			{Args: []*engine.Type{engine.TResourceEntity}, Handler: loadEntityHandler},
-			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: loadAPIOptsHandler, Patterns: map[int]engine.Value{1: apiPatternValue()}},
-			{Args: []*engine.Type{engine.TMap}, Handler: loadAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
-			{Args: []*engine.Type{engine.TMap, engine.TList}, Handler: loadHandler},
-			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: loadRecordHandler},
+		Name: "load",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TMap, TResourceEntity}, Handler: loadEntityOptsHandler, BarrierPos: -1},
+			{Args: []*Type{TResourceEntity}, Handler: loadEntityHandler, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Handler: loadAPIOptsHandler, Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap}, Handler: loadAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap, TList}, Handler: loadHandler, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Handler: loadRecordHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- update ----
 	{
-		Name:        "update",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TMap, engine.TResourceEntity}, Handler: updateEntityOptsHandler},
-			{Args: []*engine.Type{engine.TResourceEntity}, Handler: updateEntityHandler},
-			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: updateAPIOptsHandler, Patterns: map[int]engine.Value{1: apiPatternValue()}},
-			{Args: []*engine.Type{engine.TMap}, Handler: updateAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
-			{Args: []*engine.Type{engine.TMap, engine.TList}, Handler: updateHandler},
-			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: updateRecordHandler},
+		Name: "update",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TMap, TResourceEntity}, Handler: updateEntityOptsHandler, BarrierPos: -1},
+			{Args: []*Type{TResourceEntity}, Handler: updateEntityHandler, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Handler: updateAPIOptsHandler, Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap}, Handler: updateAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap, TList}, Handler: updateHandler, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Handler: updateRecordHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- remove ----
 	{
-		Name:        "remove",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TMap, engine.TResourceEntity}, Handler: removeEntityOptsHandler},
-			{Args: []*engine.Type{engine.TResourceEntity}, Handler: removeEntityHandler},
-			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: removeAPIOptsHandler, Patterns: map[int]engine.Value{1: apiPatternValue()}},
-			{Args: []*engine.Type{engine.TMap}, Handler: removeAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
-			{Args: []*engine.Type{engine.TMap, engine.TList}, Handler: removeHandler},
-			{Args: []*engine.Type{engine.TMap, engine.TMap}, Handler: removeRecordHandler},
+		Name: "remove",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TMap, TResourceEntity}, Handler: removeEntityOptsHandler, BarrierPos: -1},
+			{Args: []*Type{TResourceEntity}, Handler: removeEntityHandler, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Handler: removeAPIOptsHandler, Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap}, Handler: removeAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap, TList}, Handler: removeHandler, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Handler: removeRecordHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- transform ----
 	{
-		Name:        "transform",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TMap, engine.TAny}, Handler: transformHandler},
+		Name: "transform",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TMap, TAny}, Handler: transformHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- merge ----
 	{
-		Name:        "merge",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TList, engine.TMap}, Handler: mergeListMapHandler},
-			{Args: []*engine.Type{engine.TMap, engine.TList}, Handler: mergeMapListHandler},
-			{Args: []*engine.Type{engine.TAny, engine.TAny}, Handler: mergeHandler},
+		Name: "merge",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TList, TMap}, Handler: mergeListMapHandler, BarrierPos: -1},
+			{Args: []*Type{TMap, TList}, Handler: mergeMapListHandler, BarrierPos: -1},
+			{Args: []*Type{TAny, TAny}, Handler: mergeHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- validate ----
 	{
-		Name:        "validate",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TMap, engine.TAny}, Handler: validateHandler},
+		Name: "validate",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TMap, TAny}, Handler: validateHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- getpath ----
 	{
-		Name:        "getpath",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TString, engine.TAny}, Handler: getpathHandler},
+		Name: "getpath",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TString, TAny}, Handler: getpathHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- setpath ----
 	{
-		Name:        "setpath",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TString, engine.TAny, engine.TAny}, Handler: setpathHandler},
-			{Args: []*engine.Type{engine.TAny, engine.TString, engine.TAny}, Handler: setpathHandler},
+		Name: "setpath",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TString, TAny, TAny}, Handler: setpathHandler, BarrierPos: -1},
+			{Args: []*Type{TAny, TString, TAny}, Handler: setpathHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- inject ----
 	{
-		Name:        "inject",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TAny, engine.TAny}, Handler: injectHandler},
+		Name: "inject",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TAny, TAny}, Handler: injectHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- clone ----
 	{
-		Name:        "clone",
-		ForwardArgs: false,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TAny}, Handler: cloneHandler},
+		Name: "clone",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TAny}, Handler: cloneHandler, BarrierPos: 0},
 		},
 	},
 
 	// ---- walk ----
 	{
-		Name:        "walk",
-		ForwardArgs: false,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TFunction, engine.TFunction, engine.TAny}, Handler: walkBeforeAfterHandler},
-			{Args: []*engine.Type{engine.TFunction, engine.TAny}, Handler: walkBeforeHandler},
-			{Args: []*engine.Type{engine.TAny}, Handler: walkHandler},
+		Name: "walk",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TFunction, TFunction, TAny}, Handler: walkBeforeAfterHandler, BarrierPos: 0},
+			{Args: []*Type{TFunction, TAny}, Handler: walkBeforeHandler, BarrierPos: 0},
+			{Args: []*Type{TAny}, Handler: walkHandler, BarrierPos: 0},
 		},
 	},
 
 	// ---- selector ----
 	{
-		Name:        "selector",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TMap, engine.TAny}, Handler: selectorHandler},
+		Name: "selector",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TMap, TAny}, Handler: selectorHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- size ----
 	{
-		Name:        "size",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TAny}, Handler: sizeHandler},
+		Name: "size",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TAny}, Handler: sizeHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- pad ----
 	{
-		Name:        "pad",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TInteger, engine.TAny}, Handler: padWidthHandler},
-			{Args: []*engine.Type{engine.TAny}, Handler: padDefaultHandler},
+		Name: "pad",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TInteger, TAny}, Handler: padWidthHandler, BarrierPos: -1},
+			{Args: []*Type{TAny}, Handler: padDefaultHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- items ----
 	{
-		Name:        "items",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TAny}, Handler: itemsHandler},
+		Name: "items",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TAny}, Handler: itemsHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- fetch ----
 	{
-		Name:        "fetch",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TString, engine.TMap}, Handler: fetchStringMapHandler},
-			{Args: []*engine.Type{engine.TMap}, Handler: fetchMapHandler},
-			{Args: []*engine.Type{engine.TString}, Handler: fetchStringHandler},
+		Name: "fetch",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TString, TMap}, Handler: fetchStringMapHandler, BarrierPos: -1},
+			{Args: []*Type{TMap}, Handler: fetchMapHandler, BarrierPos: -1},
+			{Args: []*Type{TString}, Handler: fetchStringHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- prepare ----
 	{
-		Name:        "prepare",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TMap}, Handler: prepareAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
+		Name: "prepare",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TMap}, Handler: prepareAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
 		},
 	},
 
 	// ---- direct ----
 	{
-		Name:        "direct",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TMap}, Handler: directAPIHandler, Patterns: map[int]engine.Value{0: apiPatternValue()}},
+		Name: "direct",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TMap}, Handler: directAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
 		},
 	},
 
 	// ---- flatten ----
 	{
-		Name:        "flatten",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TInteger, engine.TList}, Handler: flattenDepthHandler},
-			{Args: []*engine.Type{engine.TList}, Handler: flattenDefaultHandler},
+		Name: "flatten",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TInteger, TList}, Handler: flattenDepthHandler, BarrierPos: -1},
+			{Args: []*Type{TList}, Handler: flattenDefaultHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- filter ----
 	{
-		Name:        "filter",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TFunction, engine.TAny}, Handler: filterHandler},
+		Name: "filter",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TFunction, TAny}, Handler: filterHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- join ----
 	{
-		Name:        "join",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TString, engine.TList}, Handler: joinSepHandler},
-			{Args: []*engine.Type{engine.TList}, Handler: joinDefaultHandler},
+		Name: "join",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TString, TList}, Handler: joinSepHandler, BarrierPos: -1},
+			{Args: []*Type{TList}, Handler: joinDefaultHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- jsonify ----
 	{
-		Name:        "jsonify",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TMap, engine.TAny}, Handler: jsonifyFlagsHandler},
-			{Args: []*engine.Type{engine.TAny}, Handler: jsonifyDefaultHandler},
+		Name: "jsonify",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TMap, TAny}, Handler: jsonifyFlagsHandler, BarrierPos: -1},
+			{Args: []*Type{TAny}, Handler: jsonifyDefaultHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- listops (push/pop/unshift/shift) ----
 	{
-		Name:        "push",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TAny, engine.TList}, Handler: pushHandler},
+		Name: "push",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TAny, TList}, Handler: pushHandler, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "pop",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TList}, Handler: popHandler},
+		Name: "pop",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TList}, Handler: popHandler, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "unshift",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TAny, engine.TList}, Handler: unshiftHandler},
+		Name: "unshift",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TAny, TList}, Handler: unshiftHandler, BarrierPos: -1},
 		},
 	},
 	{
-		Name:        "shift",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TList}, Handler: shiftHandler},
+		Name: "shift",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TList}, Handler: shiftHandler, BarrierPos: -1},
 		},
 	},
 
 	// ---- istype ----
 	{
-		Name:        "istype",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TAny}, Handler: istypeHandler},
+		Name: "istype",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TAny}, Handler: istypeHandler, BarrierPos: -1},
 		},
 	},
 }
 
 // apiPatternValue returns the pattern map {kind:"api"} used by signature
 // matching to discriminate API maps from plain maps.
-func apiPatternValue() engine.Value {
-	apiPattern := engine.NewOrderedMap()
-	apiPattern.Set("kind", engine.NewString("api"))
-	return engine.NewMap(apiPattern)
+func apiPatternValue() Value {
+	apiPattern := NewOrderedMap()
+	apiPattern.Set("kind", NewString("api"))
+	return NewMap(apiPattern)
 }
 
 // stringSliceNative builds the "slice" NativeFunc covering substring and
 // sublist extraction with three forward-first signatures (3-arg
 // start+end+data, 2-arg start+data, 1-arg data) for both String and List
 // inputs.
-func stringSliceNative() engine.NativeFunc {
-	return engine.NativeFunc{
-		Name:        "slice",
-		ForwardArgs: true,
-		Signatures: []engine.NativeSig{
-			{Args: []*engine.Type{engine.TInteger, engine.TInteger, engine.TString}, Handler: sliceStartEndHandler, Returns: []*engine.Type{engine.TString}},
-			{Args: []*engine.Type{engine.TInteger, engine.TInteger, engine.TList}, Handler: sliceStartEndHandler, Returns: []*engine.Type{engine.TList}},
-			{Args: []*engine.Type{engine.TInteger, engine.TString}, Handler: sliceStartHandler, Returns: []*engine.Type{engine.TString}},
-			{Args: []*engine.Type{engine.TInteger, engine.TList}, Handler: sliceStartHandler, Returns: []*engine.Type{engine.TList}},
-			{Args: []*engine.Type{engine.TString}, Handler: sliceAllHandler, Returns: []*engine.Type{engine.TString}},
-			{Args: []*engine.Type{engine.TList}, Handler: sliceAllHandler, Returns: []*engine.Type{engine.TList}},
+func stringSliceNative() NativeFunc {
+	return NativeFunc{
+		Name: "slice",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TInteger, TInteger, TString}, Handler: sliceStartEndHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TInteger, TList}, Handler: sliceStartEndHandler, Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TString}, Handler: sliceStartHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TList}, Handler: sliceStartHandler, Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TString}, Handler: sliceAllHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TList}, Handler: sliceAllHandler, Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	}
 }
@@ -431,7 +430,7 @@ func stringSliceNative() engine.NativeFunc {
 // sliceStartEndHandler implements `slice start end data` (forward-first:
 // args[0]=start, args[1]=end, args[2]=data). Used by both string and
 // list overloads.
-func sliceStartEndHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+func sliceStartEndHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	_as0, _ := args[0].AsConcreteInteger()
 	start := int(_as0)
 	_as1, _ := args[1].AsConcreteInteger()
@@ -444,7 +443,7 @@ func sliceStartEndHandler(args []engine.Value, _ map[string]engine.Value, _ []en
 // sliceStartHandler implements `slice start data` (forward-first:
 // args[0]=start, args[1]=data). Slices from start to the end of the
 // input.
-func sliceStartHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+func sliceStartHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	_as0, _ := args[0].AsConcreteInteger()
 	s := int(_as0)
 	data := valueToSliceArg(args[1])
@@ -454,7 +453,7 @@ func sliceStartHandler(args []engine.Value, _ map[string]engine.Value, _ []engin
 
 // sliceAllHandler implements `slice data` — the identity/copy form that
 // returns the input unchanged through voxgigstruct.Slice.
-func sliceAllHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+func sliceAllHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	data := valueToSliceArg(args[0])
 	result := voxgigstruct.Slice(data)
 	return sliceResult(result)
@@ -464,116 +463,116 @@ func sliceAllHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.
 
 // impliesHandler implements the "implies" boolean operator. Args[1] is
 // the antecedent (left), args[0] is the consequent (right): !left||right.
-func impliesHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-	left := engine.CoerceBoolean(args[1])
-	right := engine.CoerceBoolean(args[0])
-	return []engine.Value{engine.NewBoolean(!left || right)}, nil
+func impliesHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	left := CoerceBoolean(args[1])
+	right := CoerceBoolean(args[0])
+	return []Value{NewBoolean(!left || right)}, nil
 }
 
 // quoteWordHandler marks the captured atom (already converted from the
 // upcoming Word by /q) as Quoted=true.
-func quoteWordHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+func quoteWordHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	v := args[0]
 	v.Quoted = true
-	return []engine.Value{v}, nil
+	return []Value{v}, nil
 }
 
 // quoteAnyHandler returns the value with Quoted=true, suppressing
 // downstream auto-evaluation. Lists/maps are left structurally intact.
-func quoteAnyHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+func quoteAnyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	v := args[0]
 	v.Quoted = true
-	return []engine.Value{v}, nil
+	return []Value{v}, nil
 }
 
 // folderOptsHandler implements `folder` with a leading {parents:bool} options map.
-func folderOptsHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, reg *engine.Registry) ([]engine.Value, error) {
+func folderOptsHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	optsVal := args[0]
 	pathVal := args[1]
-	if !engine.IsPath(pathVal) {
-		return nil, fmt.Errorf("folder: expected Path, got %s", pathVal.VType.String())
+	if !IsPath(pathVal) {
+		return nil, fmt.Errorf("folder: expected Path, got %s", pathVal.Parent.String())
 	}
 	parents := true
-	if optsMap, _ := engine.AsMap(optsVal); optsMap != nil {
-		if v, ok := optsMap.Get("parents"); ok && v.VType.Matches(engine.TBoolean) {
-			parents, _ = engine.AsBoolean(v)
+	if optsMap, _ := AsMap(optsVal); optsMap != nil {
+		if v, ok := optsMap.Get("parents"); ok && v.Parent.Matches(TBoolean) {
+			parents, _ = AsBoolean(v)
 		}
 	}
-	_as0, _ := engine.AsPath(pathVal)
+	_as0, _ := AsPath(pathVal)
 	return doFolder(_as0, parents, reg)
 }
 
 // folderHandler implements `folder` with a single Path arg (parents=true).
-func folderHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, reg *engine.Registry) ([]engine.Value, error) {
+func folderHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	pathVal := args[0]
-	if !engine.IsPath(pathVal) {
-		return nil, fmt.Errorf("folder: expected Path, got %s", pathVal.VType.String())
+	if !IsPath(pathVal) {
+		return nil, fmt.Errorf("folder: expected Path, got %s", pathVal.Parent.String())
 	}
-	_as1, _ := engine.AsPath(pathVal)
+	_as1, _ := AsPath(pathVal)
 	return doFolder(_as1, true, reg)
 }
 
 // doFolder is the shared body for both folder signatures; resolves and
 // creates a directory via the configured FileOps.
-func doFolder(p engine.PathInfo, parents bool, reg *engine.Registry) ([]engine.Value, error) {
-	ops := engine.EffectiveFileOps(reg)
+func doFolder(p PathInfo, parents bool, reg *Registry) ([]Value, error) {
+	ops := EffectiveFileOps(reg)
 	pathStr := p.String()
 
 	if parents {
 		if err := ops.MkdirAll(pathStr, 0755); err != nil {
-			return []engine.Value{engine.NewError(fmt.Errorf("folder: %w", err))}, nil
+			return []Value{NewError(fmt.Errorf("folder: %w", err))}, nil
 		}
 	} else {
 		resolved, err := ops.ResolvePath(pathStr)
 		if err != nil {
-			return []engine.Value{engine.NewError(fmt.Errorf("folder: %w", err))}, nil
+			return []Value{NewError(fmt.Errorf("folder: %w", err))}, nil
 		}
 		if err := ops.MkdirAll(resolved, 0755); err != nil {
-			return []engine.Value{engine.NewError(fmt.Errorf("folder: %w", err))}, nil
+			return []Value{NewError(fmt.Errorf("folder: %w", err))}, nil
 		}
 	}
 
-	return []engine.Value{engine.NewPath(p.Parts, p.Abs)}, nil
+	return []Value{NewPath(p.Parts, p.Abs)}, nil
 }
 
 // stackCollectHandler runs at execution time: wraps the top N stack
 // entries into a list, preserving the rest of the stack underneath.
-func stackCollectHandler(args []engine.Value, _ map[string]engine.Value, stack []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+func stackCollectHandler(args []Value, _ map[string]Value, stack []Value, _ *Registry) ([]Value, error) {
 	_as0, _ := args[0].AsConcreteInteger()
 	n := int(_as0)
 	if n < 0 || n > len(stack) {
 		return nil, fmt.Errorf("stack: count %d out of range (stack depth %d)", n, len(stack))
 	}
-	items := make([]engine.Value, n)
+	items := make([]Value, n)
 	copy(items, stack[len(stack)-n:])
-	return append(stack, engine.NewList(items)), nil
+	return append(stack, NewList(items)), nil
 }
 
 // stackCollectCheckFullStackFn is the check-mode model for `stack N`:
 // we don't know N statically, so produce a typed-list carrier whose
 // element type joins all preserved stack carriers, leaving the original
 // stack intact below it.
-func stackCollectCheckFullStackFn(_ []engine.Value, stack []engine.Value, _ *engine.Registry) []engine.Value {
-	elem := engine.TAny
+func stackCollectCheckFullStackFn(_ []Value, stack []Value, _ *Registry) []Value {
+	elem := TAny
 	if len(stack) > 0 {
-		elem = stack[0].VType
+		elem = stack[0].Parent
 		for i := 1; i < len(stack); i++ {
-			elem = engine.CommonAncestorType(elem, stack[i].VType)
+			elem = CommonAncestorType(elem, stack[i].Parent)
 		}
 	}
-	return append(append([]engine.Value(nil), stack...), engine.NewCarrierTypedList(elem))
+	return append(append([]Value(nil), stack...), NewCarrierTypedList(elem))
 }
 
 // nowHandler returns the current UTC instant as an Instant value.
-func nowHandler(_ []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-	return []engine.Value{engine.NewInstant(time.Now())}, nil
+func nowHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	return []Value{NewInstant(time.Now())}, nil
 }
 
 // sleepHandler pauses the current goroutine for the given milliseconds.
-func sleepHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
+func sleepHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	ms, _ := args[0].AsConcreteInteger()
 	if ms < 0 {
-		return nil, fmt.Errorf("sleep: milliseconds must be non-negative, got %d", ms)
+		return nil, r.AqlError("sleep_error", fmt.Sprintf("sleep: milliseconds must be non-negative, got %d", ms), "sleep")
 	}
 	time.Sleep(time.Duration(ms) * time.Millisecond)
 	return nil, nil
@@ -581,22 +580,22 @@ func sleepHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Val
 
 // intervalListHandler / intervalAtomHandler schedule a repeated callback
 // (a quoted code list or word) at the given millisecond interval.
-func intervalListHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+func intervalListHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	return startInterval(args, r, true)
 }
 
-func intervalAtomHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+func intervalAtomHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	return startInterval(args, r, false)
 }
 
-func startInterval(args []engine.Value, r *engine.Registry, isList bool) ([]engine.Value, error) {
+func startInterval(args []Value, r *Registry, isList bool) ([]Value, error) {
 	ms, _ := args[0].AsConcreteInteger()
 	if ms <= 0 {
-		return nil, fmt.Errorf("interval: milliseconds must be positive, got %d", ms)
+		return nil, r.AqlError("interval_error", fmt.Sprintf("interval: milliseconds must be positive, got %d", ms), "interval")
 	}
 	callback := args[1]
 
-	id := engine.GenerateID("T_")
+	id := GenerateID("T_")
 	ticker := time.NewTicker(time.Duration(ms) * time.Millisecond)
 	done := make(chan struct{})
 
@@ -606,25 +605,25 @@ func startInterval(args []engine.Value, r *engine.Registry, isList bool) ([]engi
 			case <-done:
 				return
 			case <-ticker.C:
-				engine.RunTimerCallback(r, callback, isList)
+				RunTimerCallback(r, callback, isList)
 			}
 		}
 	}()
 
-	info := &engine.IntervalInfo{
+	info := &IntervalInfo{
 		ID:     id,
 		Ms:     ms,
 		Ticker: ticker,
 		Done:   done,
 	}
-	return []engine.Value{engine.NewInterval(info)}, nil
+	return []Value{NewInterval(info)}, nil
 }
 
 // cancelTimeoutHandler stops a pending Timeout timer.
-func cancelTimeoutHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-	ti, ok := args[0].Data.(*engine.TimeoutInfo)
+func cancelTimeoutHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	ti, ok := args[0].Data.(*TimeoutInfo)
 	if !ok {
-		return nil, fmt.Errorf("cancel-timeout: not a Timeout value (got %s)", args[0].VType)
+		return nil, r.AqlError("cancel-timeout_error", fmt.Sprintf("cancel-timeout: not a Timeout value (got %s)", args[0].Parent), "cancel-timeout")
 	}
 	if ti.Timer != nil {
 		ti.Timer.Stop()
@@ -635,10 +634,10 @@ func cancelTimeoutHandler(args []engine.Value, _ map[string]engine.Value, _ []en
 
 // cancelIntervalHandler stops a running Interval ticker and signals its
 // goroutine to exit.
-func cancelIntervalHandler(args []engine.Value, _ map[string]engine.Value, _ []engine.Value, _ *engine.Registry) ([]engine.Value, error) {
-	ii, ok := args[0].Data.(*engine.IntervalInfo)
+func cancelIntervalHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	ii, ok := args[0].Data.(*IntervalInfo)
 	if !ok {
-		return nil, fmt.Errorf("cancel-interval: not an Interval value (got %s)", args[0].VType)
+		return nil, r.AqlError("cancel-interval_error", fmt.Sprintf("cancel-interval: not an Interval value (got %s)", args[0].Parent), "cancel-interval")
 	}
 	if ii.Ticker != nil {
 		ii.Ticker.Stop()

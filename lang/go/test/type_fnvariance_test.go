@@ -6,7 +6,7 @@ import (
 
 // --- Structural fn-shape variance ---
 //
-// `type Foo fnsig [[input] [output]]` is a structural function-shape
+// `def Foo fnsig [[input] [output]]` is a structural function-shape
 // constraint. A candidate function value satisfies the constraint
 // under the standard rules:
 //
@@ -27,7 +27,7 @@ import (
 // - Input spec=Integer, sig=Number: Integer ⊆ Number → ok.
 // - Return spec=Number, sig=Integer: Integer ⊆ Number → ok.
 func TestVariance_BroaderInputNarrowerReturn(t *testing.T) {
-	got := runOne(t, `type M fnsig [[Integer] [Number]]
+	got := runOne(t, `def M fnsig [[Integer] [Number]]
 def f fn [[Number] [Integer] [convert Integer]]
 (quote f) is M`)
 	if len(got) != 1 || got[0] != "true" {
@@ -38,7 +38,7 @@ def f fn [[Number] [Integer] [convert Integer]]
 // Reversed direction: a candidate that takes only Integer can't stand
 // in where Number is required. Inputs go the wrong way (Number ⊄ Integer).
 func TestVariance_NarrowerInputBroaderReturnFails(t *testing.T) {
-	got := runOne(t, `type M fnsig [[Number] [Integer]]
+	got := runOne(t, `def M fnsig [[Number] [Integer]]
 def f fn [[Integer] [Number] [add 0.5]]
 (quote f) is M`)
 	if len(got) != 1 || got[0] != "false" {
@@ -48,7 +48,7 @@ def f fn [[Integer] [Number] [add 0.5]]
 
 // Exact match still satisfies (regression).
 func TestVariance_ExactStillMatches(t *testing.T) {
-	got := runOne(t, `type M fnsig [[Integer] [Integer]]
+	got := runOne(t, `def M fnsig [[Integer] [Integer]]
 def f fn [[Integer] [Integer] [1 add]]
 (quote f) is M`)
 	if len(got) != 1 || got[0] != "true" {
@@ -59,7 +59,7 @@ def f fn [[Integer] [Integer] [1 add]]
 // Input-only widening: candidate accepts Any, spec demands Integer.
 // Any covers Integer → satisfied.
 func TestVariance_AnyInputAcceptsConcreteSpec(t *testing.T) {
-	got := runOne(t, `type M fnsig [[Integer] [Integer]]
+	got := runOne(t, `def M fnsig [[Integer] [Integer]]
 def f fn [[Any] [Integer] [convert Integer]]
 (quote f) is M`)
 	if len(got) != 1 || got[0] != "true" {
@@ -70,7 +70,7 @@ def f fn [[Any] [Integer] [convert Integer]]
 // Return-only narrowing: candidate returns Integer, spec promises Any.
 // Integer ⊆ Any → satisfied.
 func TestVariance_NarrowReturnSatisfiesAnySpec(t *testing.T) {
-	got := runOne(t, `type M fnsig [[Integer] [Any]]
+	got := runOne(t, `def M fnsig [[Integer] [Any]]
 def f fn [[Integer] [Integer] [1 add]]
 (quote f) is M`)
 	if len(got) != 1 || got[0] != "true" {
@@ -81,7 +81,7 @@ def f fn [[Integer] [Integer] [1 add]]
 // Spec demands Any input ("I'll pass anything"); candidate accepts
 // only Integer → fails. Any ⊄ Integer.
 func TestVariance_AnySpecInputRejectsNarrowSig(t *testing.T) {
-	got := runOne(t, `type M fnsig [[Any] [Integer]]
+	got := runOne(t, `def M fnsig [[Any] [Integer]]
 def f fn [[Integer] [Integer] [1 add]]
 (quote f) is M`)
 	if len(got) != 1 || got[0] != "false" {
@@ -99,7 +99,7 @@ def f fn [[Integer] [Integer] [1 add]]
 // Spec with no pattern, candidate with no pattern: trivially
 // satisfied via type matching alone.
 func TestVariance_PatternlessSpecAndSig(t *testing.T) {
-	got := runOne(t, `type M fnsig [[Integer] [Integer]]
+	got := runOne(t, `def M fnsig [[Integer] [Integer]]
 def f fn [[Integer] [Integer] [1 add]]
 (quote f) is M`)
 	if len(got) != 1 || got[0] != "true" {
@@ -116,7 +116,7 @@ def f fn [[Integer] [Integer] [1 add]]
 
 // Required spec, required sig: trivially equivalent — always works.
 func TestVariance_RequiredSpecRequiredSig(t *testing.T) {
-	got := runOne(t, `type M fnsig [[Integer] [Integer]]
+	got := runOne(t, `def M fnsig [[Integer] [Integer]]
 def f fn [[Integer] [Integer] [1 add]]
 (quote f) is M`)
 	if len(got) != 1 || got[0] != "true" {
@@ -128,7 +128,7 @@ def f fn [[Integer] [Integer] [1 add]]
 // (it can be called with or without the arg). Required spec only
 // calls it with the arg, which sig handles. Should satisfy.
 func TestVariance_RequiredSpecOptionalSig(t *testing.T) {
-	got := runOne(t, `type M fnsig [[Integer] [Integer]]
+	got := runOne(t, `def M fnsig [[Integer] [Integer]]
 def f fn [[x?:Integer] [Integer] [x]]
 (quote f) is M`)
 	if len(got) != 1 || got[0] != "true" {
@@ -140,7 +140,7 @@ def f fn [[x?:Integer] [Integer] [x]]
 // requires presence. Should NOT satisfy — caller's omission would
 // crash sig.
 func TestVariance_OptionalSpecRequiredSig(t *testing.T) {
-	got := runOne(t, `type M fnsig [[x?:Integer] [Integer]]
+	got := runOne(t, `def M fnsig [[x?:Integer] [Integer]]
 def f fn [[x:Integer] [Integer] [x]]
 (quote f) is M`)
 	if len(got) != 1 || got[0] != "false" {
@@ -150,7 +150,7 @@ def f fn [[x:Integer] [Integer] [x]]
 
 // Optional spec, optional sig: trivially aligned.
 func TestVariance_OptionalSpecOptionalSig(t *testing.T) {
-	got := runOne(t, `type M fnsig [[x?:Integer] [Integer]]
+	got := runOne(t, `def M fnsig [[x?:Integer] [Integer]]
 def f fn [[x?:Integer] [Integer] [x]]
 (quote f) is M`)
 	if len(got) != 1 || got[0] != "true" {

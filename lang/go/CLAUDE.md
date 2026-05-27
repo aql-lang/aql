@@ -9,9 +9,13 @@ alongside as `<component>/ts/`. The Go modules are:
 
 - `eng/go/` — the engine kernel + jsonic parser + kernel spec runner
   (`github.com/aql-lang/aql/eng/go`).
-- `lang/go/` — the language layer: `lang.New()` API, native words/modules,
-  the `engine` shim, the production spec suite (this module,
-  `github.com/aql-lang/aql/lang/go`).
+- `lang/go/` — the language layer: `lang.New()` API and the consolidated
+  `native` package (the eng-shim + every built-in word) plus the
+  production spec suite (this module,
+  `github.com/aql-lang/aql/lang/go`). The pre-May-2026 split between
+  `lang/go/engine/` (language-layer primitives + alias shim) and
+  `lang/go/native/` (data-manipulation words) was merged into a single
+  `lang/go/native/` package — see `Package layout` below.
 - `cmd/go/` — the `aql` CLI / REPL
   (`github.com/aql-lang/aql/cmd/go`).
 - `calc/go/` — a small calculator built directly on `eng` (learning example,
@@ -27,12 +31,45 @@ alongside as `<component>/ts/`. The Go modules are:
 Language-agnostic content stays at the top of each component:
 `eng/spec/`, `lang/spec/`, `lang/doc/`, `calc/doc/`.
 
+## Package layout
+
+`lang/go/` contains:
+
+- `aql.go`, `parse.go` — the public `lang` package (entry points
+  `lang.New()`, `(*AQL).Run`, `(*AQL).Check`, `(*AQL).Register`,
+  re-exports of `Type`/`Value`/`Signature` for handler authors).
+- `native/` — every built-in word and the kernel-shim aliases.
+  Sub-files:
+  - `aliases.go` — re-exports the eng kernel's exported types/funcs
+    as `native.Foo` so the rest of the lang code can stay
+    eng-agnostic.
+  - `register.go`, `setup.go` — `Register`/`DefaultRegistry` entry
+    points.
+  - `native_*.go` — language-layer primitives (math, boolean,
+    string, stack, control, def, type, accessor, …). Each file
+    exposes a `xxxNatives []NativeFunc` slice that `Register`
+    iterates.
+  - `natives.go` and the per-feature files (`clone.go`, `fetch.go`,
+    `filter.go`, …) — data-manipulation words historically owned
+    by the `native` sub-package and merged into this consolidated
+    package in May 2026.
+  - `format.go`, `query.go`, `sqlite.go`, `fileio.go`,
+    `conditional.go`, `forloop.go` — feature-specific helpers.
+  - `help/` — dynamic help-system implementation (sub-package).
+- `formatter/` — code pretty-printer (no engine deps).
+- `capabilities/` — file I/O abstraction (`FileOps` interface
+  + OS-backed and in-memory implementations).
+- `modules/` — loadable modules (`aql:math`, `aql:time`,
+  `aql:matrix`, `aql:decision`, `aql:solardemo`).
+- `test/` — integration tests and TSV spec runners.
+
 ## Build & Test
 
 ```bash
 make test         # from repo root: fans out across every module
 make vet          # vet across every module
 make fmt          # gofmt across every module
+make lint         # golangci-lint across every module — RUN BEFORE COMMIT
 
 cd cmd/go
 make build        # builds bin/aql
@@ -46,6 +83,18 @@ Run a specific test:
 ```bash
 cd lang/go && go test ./test/ -run "TestFactorialTypeScaling" -v
 ```
+
+**Pre-commit checklist.** Before every `git commit`, run from the
+repo root:
+
+```bash
+make fmt && make vet && make lint && make test
+```
+
+`make lint` runs `golangci-lint` (configured via `.golangci.yml`)
+and catches ineffassign / unused / shadowed-variable issues that
+`go vet` and the test suite both miss. Skipping it lets a clean-
+locally commit fail CI; the cost of running it is a few seconds.
 
 ## Dependencies
 
@@ -220,6 +269,162 @@ across paren / nested-forward boundaries, `rearrangeForForward` lays
 the collected values out so the post-collection retry sees them
 top-down in sig order.
 
+## Lambda Syntax (`=>` / `afn`)
+
+`=>` is a parser token that lexes directly to the word `afn`. The
+source `a => b` is the same value sequence as `a afn b`. `afn` is a
+regular registered word — there is no lambda type, no separate
+runtime path, and no rewrite pass.
+
+`afn` has signature `[Any Any |]` (both args forward-eligible, both
+typed `Any`, body and sig captured via `NoEvalArgs`). The canonical
+surface form is the swap `input afn body` (i.e. `input => body`),
+mirroring the AQL `args[1] op args[0]` reading convention — afn
+collects the body as the forward arg and the input sig from the
+stack.
+
+The handler:
+- auto-wraps a non-list input into `[input]` (same convention as
+  `fn`);
+- parses params via the shared `eng.ParseFnParams` so every fn
+  abbreviation (`name:Type`, `{name:Type}`, bare type words, value
+  patterns, `?`, `|`, `__SB`) works in afn;
+- auto-wraps a non-list body into `[body]`;
+- builds a single-sig `FnDefInfo` with `Returns=[Any]` and
+  `Anonymous: true`, and returns a `Function` value indistinguishable
+  from `fn`'s output except for the flag.
+
+The `Anonymous` flag on `FnDefInfo` is read **only in check mode**.
+Anonymous lambdas have a deliberately conservative static
+`Returns=[Any]`; in check mode the dispatch path
+(`execFnDefSigStackMatch` for direct invocation,
+`InstallFnDef`'s ReturnsFn for `def name (lambda)` installations)
+runs `eng.AnalyseFnBody` against the bound carrier args and lets the
+analyser's residual stack carry the inferred return type forward.
+Normal execution doesn't read the flag; the body runs the same way
+a named fn's body does.
+
+### Syntactic gotchas
+
+- **Typed-param shorthand must be list-wrapped.** `x:Integer => body`
+  doesn't parse because `x:Integer` at top level starts an implicit
+  map and the rest collapses into the map's value position. Write
+  `[x:Integer] => body` (or `{x: Integer} => body`) instead.
+- **Single-value body rule.** afn captures one forward token as the
+  body. Multi-token bodies must wrap as `[token1 token2 …]` or
+  `(token1 token2 …)`. A bare-word body (e.g. `[x:Any] => x`) fails
+  because the engine dispatches the word as it walks past it during
+  forward collection — wrap as `[x]` to keep the word as data inside
+  the body list.
+- **`def name x => body` (no parens) doesn't work** because `def`
+  forward-collects the body as its second argument and afn forward-
+  collects a body of its own — the precedence overlaps. Always wrap:
+  `def name (x:Integer => [x mul 2])`.
+- **Single sig only.** `=>` produces exactly one `FnSig`. For
+  multi-overload fns, use the verbose `fn [[input1] [output1] [body1]
+  [input2] …]` form.
+
+## Closures and Capture
+
+AQL fns and lambdas use **implicit lexical capture**. At fn-construction
+time the engine walks the body's bare-Word references; any name that
+resolves to a binding made by an **enclosing fn** (a param or local
+def of an outer fn currently executing) is snapshotted into the
+`FnDefInfo.Captured` list. At dispatch the captured names are installed
+as defs in the per-call scope, alongside named params, so the body
+sees its captures regardless of what happened to the outer scope after
+construction. The mechanism is the standard "factories return inner
+fns that retain factory state" pattern:
+
+```
+def make-adder fn [[x:Integer] [Function] [fn [[y:Integer] [Integer] [x add y]]]]
+def add5 (make-adder 5)
+add5 3                              # → 8   (captured x=5 lives in add5)
+add5 10                             # → 15
+```
+
+The same works via `=>`:
+
+```
+def make-adder ([x:Integer] => [([y:Integer] => [x add y])])
+def add5 (make-adder 5)
+add5 3                              # → 8
+```
+
+### What gets captured
+
+| Reference resolves to… | Captured? |
+| --- | --- |
+| Enclosing-fn param | **Yes** |
+| Local def inside enclosing fn body | **Yes** |
+| Capture of a yet-further-outer fn | **Yes** (transitive) |
+| Module-level / global def | **No** (stays dynamic) |
+| Kernel word / native registration | **No** (registry lookup at call) |
+| Name unbound at construction time | **No** (forward ref → call-time lookup) |
+
+Concretely:
+
+- **Module-level dynamic.** `def x 1; def f ([y:Any] => [x add y]); def x 2; f 0` returns 2. `x` lives at module scope, the closure doesn't capture it, and the runtime lookup sees the new binding.
+- **Recursion via forward ref.** `def fact fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fact (n sub 1))]]]` works because `fact` isn't bound when its body is parsed — it's a forward reference resolved via the registry at call time. Standard recursive-fn idiom is unchanged.
+- **Inner shadows outer.** A param or capture with the same name as a module-level def shadows the module reference inside the body — innermost binding wins.
+
+### Capture semantics: shallow snapshot
+
+The captured `Value` is a struct copy. Pointer-backed payloads (`Map`,
+`Store`, `Array`, `Timer`, `Interval`) **share the underlying state**
+with the outer binding, so mutations cross the capture boundary:
+
+```
+def pair (fn [[] [List] [
+  def m {a:1}
+  [([] => [m]) ([k v] => [m set k v])]
+])
+(pair get 1) 'b' 2                  # mutate via second lambda
+(pair get 0)                        # → {a:1, b:2}   (shared OrderedMap pointer)
+```
+
+Reassignments (`def n new-value`) **don't** affect captures, because
+the capture snapshotted the prior Value.
+
+### `args` stays dynamic
+
+`args` is a registered native word bound by the per-call args-stack
+push, not by `def`. Inside a captured fn, `args.N` refers to that fn's
+own call args, not the surrounding scope's — same as `this` in JS
+lambdas. Don't expect to capture caller args; pass them explicitly.
+
+### Implementation notes
+
+- `FnDefInfo.Captured` is `[]CapturedBinding{Name, Value}`, sorted by
+  name for deterministic install order. Nil for top-level
+  constructions and inner fns whose body references only params,
+  module-globals, or forward refs.
+- Captures are computed in `eng.ComputeCaptures` (eng/go/fn_capture.go)
+  via the body walker `WalkBodyWords`, which skips quoted lists,
+  `/q`-atoms, nested `FnDefInfo` payloads (those are inner closures
+  with their own analysis), and engine markers.
+- The "enclosing-fn baseline" — the def-depth snapshot at each
+  currently-active fn entry — lives on `Registry.FnBaselines`. Pushed
+  in lockstep with the per-call args-stack push and the existing
+  body-local-def cleanup snapshot; popped by `__pa`'s handler at body
+  exit and by `CallAQL`'s inline cleanup.
+- Captures are installed via `InstallDef` BEFORE named params so
+  params shadow same-named captures. Cleanup is the existing
+  `DefCleanup` + `undef` tail in the synthesized body; capture names
+  are appended to the cleanup list at install time so they tear down
+  uniformly.
+
+### Sharp edge: 0-arg lambdas as values vs as calls
+
+An anonymous Function value sitting on the stack with **no args
+available** does NOT auto-invoke — it stays as data, which is what
+`def f ([] => [body])` relies on (def receives the Function, binds f
+to it). Once `f` is then referenced as a Word, stepWord finds the
+registered FnDef and dispatches normally (fires the 0-arg sig,
+runs body). The "anonymous value vs named call" distinction is
+gated in `execFnDefLiteral`: anonymous + no positions matched →
+treat as data; otherwise dispatch.
+
 ## Quotation System
 
 Lists are **evaluated by default**: `[1 add 2]` → `[3]`. Auto-evaluation
@@ -266,63 +471,58 @@ with the v0.1.6 rule-aware `LexMatcher` signature
 `func(lex *Lex, rule *Rule) *Token` to read `rule.K`/`rule.N` maps.
 See the template string interpolation rules for a complete example.
 
-## Registry Stacks (CRITICAL)
+## Registry Bindings (CRITICAL)
 
-The `Registry` holds two per-name stacks for user bindings:
+Post the TYPE-UNIFORM Phase 4 collapse the `Registry` holds **one**
+per-name binding store, `r.Defs` (a `*DefTable`). It carries both
+kinds of binding:
 
-- **Def stack** (`r.defStacks`, unexported) — `def`-defined values,
-  fn bodies, fn-body parameters, carrier-merge join points, module
-  imports. Stack-per-name with shadowing semantics; `def x 1; def x 2`
-  → `x` is 2; `undef x` → `x` is 1.
-- **Type stack** (`r.types`, unexported) — `type`-defined values
-  (records, options, table, disjuncts, typed list/map, ObjectType,
-  DepScalar, predicate types, fn-shape types, plain literals).
-  Stack-per-name with the same shadow/pop semantics; `untype Foo`
-  pops; once a stack is empty the entry is removed from the map.
+- **value bindings** — `def x 1`, fn bodies, fn-body parameters,
+  carrier-merge join points, module imports.
+- **type bindings** — `def Foo Integer` (a capitalised name). The
+  `DefEntry` additionally carries the minted lattice `*Type` in
+  `DefEntry.TypeDef`.
 
-Both fields are **unexported and accessed exclusively through the
-helper API in `util.go`**. Do not add `r.defStacks` or `r.types`
-indexing to new code — direct access is a compile error in external
-packages and will be rejected in code review for `package engine`
-code as well.
+The capitalisation convention keeps the two kinds of name disjoint
+(`Foo` is a type, `foo` a value), so one map suffices. Each name maps
+to a shadowing stack; `def x 1; def x 2` → `x` is 2; `undef x` → `x`
+is 1.
 
-**Read helpers**:
-- `r.TopOfDefStack(name) (Value, bool)` / `r.TopOfTypeStack(name)`
-- `r.HasDef(name) bool` / `r.HasType(name)`
-- `r.DefStackDepth(name) int` / `r.TypeStackDepth(name)`
-- `r.DefStack(name) []Value` (read-only view; do not mutate)
-- `r.DefNames() []string` / `r.TypeNames()`
-- `r.ResolveTypedName(name) (Value, bool)` — Type-first then Def
-  fallback; the canonical way to resolve a type-context name.
+`r.Types` (a `*TypeTable`) is **not** a binding store — it is the type
+*lattice*: it mints type identities (`MintType`), indexes them by ID
+(`LookupByID`), retires them (`Retire`), and holds the static builtin
+name index (`LookupBuiltinByName`).
 
-**Write helpers**:
-- `r.PushDef(name, v)` / `r.PushType(name, v)`
-- `r.PopDef(name) bool` / `r.PopType(name) bool` (auto-deletes the
-  map entry when the stack empties)
-- `r.ReplaceDefTop(name, v) bool` — overwrite the top binding
-- `r.TruncateDefStack(name, depth)` — pop down to a specified depth
-- `r.SetDefStack(name, stack)` — replace the whole stack (rare;
-  used by uninstall paths that filter middle entries)
-- `r.DeleteDef(name)` — remove the entry entirely
+**DefTable methods** (`r.Defs.*`):
+- reads — `Top(name) (Value, bool)`, `TopEntry(name) (DefEntry, bool)`,
+  `Has(name)`, `IsType(name)`, `Depth(name)`, `Stack(name) []Value`,
+  `Names()`.
+- writes — `Push(name, v)` (value binding),
+  `PushType(name, def, body)` (type binding), `Pop(name) bool`,
+  `PopEntry(name) (DefEntry, bool)`, `Replace`, `Truncate`, `Delete`,
+  `Set`.
+- snapshot/restore — `Snapshot() map[string]int` / `Restore(snap)`,
+  depth-based; pair around fn-body sandboxes and carrier-merge joins.
+  (The predicate sandbox additionally clones `r.Types` to roll back
+  lattice mints — see `snapshotPredicateState`.)
 
-**Snapshot/restore**:
-- `r.SnapshotDefDepths() map[string]int` /
-  `r.RestoreToDefDepths(snap)` — depth-only; pair around a region
-  of code that may push but never pop. Used by fn-body sandboxing,
-  carrier merge join points.
-- `r.SnapshotTypeStacks() map[string][]Value` /
-  `r.RestoreTypeStacks(snap)` — full deep copy; pair around code
-  that may both pop and push (e.g. predicate sandbox).
+**Registry resolution helpers**:
+- `r.ResolveTypedName(name) (Value, bool)` — single-store lookup; the
+  canonical way to resolve a type-context name.
+- `r.TopTypeBody(name) (Value, bool)` — the body when name's active
+  binding is a *type* binding (false otherwise).
+- `r.LookupTypeName(name) *Type` — the active lattice type for name:
+  a dynamic binding's minted def, or an external builtin.
 
-When adding a new feature that needs to read or write the stacks,
-extend the helper surface rather than reaching into the field.
-Future namespace changes (single store, scoped types, persistent
-overlays) only need to update the helpers.
+`undef` is the universal unbinder: a capitalised name pops the type
+binding and retires its minted type from the lattice; a lowercase
+name pops a value binding.
 
 ## Helper API discipline
 
 The engine consolidates several distributed implicit contracts behind
-helper APIs in `engine/util.go`. Use the helpers rather than
+helper APIs in `eng/util.go` (re-exported through `native/aliases.go`).
+Use the helpers rather than
 the underlying state. Adding direct field access regresses the
 consolidation and will be flagged in code review.
 
@@ -380,6 +580,22 @@ methods on `Value`; only `Is(t)` and `String()` remain as methods.)
   `r.ContextStore()` (returns the StoreInstanceInfo),
   `r.UpdateCtxStoreChain(orig, new)`.
 
+**Canonical type pointers**:
+- `CanonicalType(r, t) *Type` — resolve `t` to its canonical lattice
+  node via `r.Types.LookupByID`. Use whenever a `*Type` may have come
+  from `&v` of a by-value type-literal Value — `behave` Behavior
+  installs and LCA-walk identity must reach the canonical pointer,
+  not a stack-local copy. See
+  `lang/doc/design/TYPE-CANONICALIZATION.0.md`.
+
+**Typed-def reparent**:
+- `ReparentValue(v, def) Value` — return a fresh copy of v with
+  `Parent` rebound to def. The single primitive every typed-def
+  reparent path uses (predicate / refine-bare / FnUndef branches).
+  The by-value copy is explicit so Unify-swap results (which may
+  return a type literal in the value position) can never be
+  silently mutated and stored as the binding.
+
 **Pos threading**:
 - `WithPos(v, src)` — return v with Pos copied from src. Use when a
   handler constructs a new Value from an input — error reporting
@@ -419,14 +635,85 @@ When adding a sig that should accept a bare-word name as data, add `/q`
 to the corresponding Atom position. Without `/q`, callers will see an
 `undefined_word` error and must wrap the name in `quote` themselves.
 
+## Value Comparison & Ordering
+
+`cmp` / `lt` / `gt` / `lte` / `gte` / `sort` route through one total
+order — see `lang/doc/design/TYPE-ORDERING.0.md` for the canonical
+design. The kernel-side implementation lives in `eng/go/compare.go`
+and `eng/go/compare_scalar_behaviors.go`; this section captures
+what handler authors and word implementers need to know.
+
+**The cascade** (per `CompareValues`):
+
+1. **LCA Comparer walk** — per-family Comparers on `TNumber`,
+   `TString`, `TBoolean`, `TAtom`, `TWord`, `TScalar` own same-
+   family pairs. A Comparer can return `ErrNoComparer` to opt out
+   (DepScalar values do this so numeric Comparers don't read
+   `DepScalarInfo` as a zero float).
+2. **Rank fallback** — `compareTypes` (Rank → depth → name → ID)
+   settles cross-family pairs.
+3. **Structural compare** — when types match, lists go length-then-
+   element-wise, maps go length-then-sorted-keys-then-values,
+   everything else falls to `CanonValue` lex.
+
+**Type-literal-first rule.** Every family Comparer opens with
+`litVsConcreteOrder(a, b)`: a bare type literal sorts strictly
+below every concrete inhabitant in the same family. So `Integer
+cmp 0 → -1`, `String cmp '' → -1`, `Boolean cmp false → -1`,
+`Path cmp <any path> → -1`. Two type literals delegate to
+`litVsLitOrder` → `compareTypes` so they order by lattice Rank
+(`Number cmp Integer → -1`). The rule lives in per-family
+Comparers and `comparePaths`; `scalarCompareBehavior` deliberately
+does NOT apply it (cross-family pairs must be Rank-only — otherwise
+`true cmp Integer` flips wrong).
+
+**Cross-leaf numeric equivalence.** `1 cmp 1.0 → 0` is preserved:
+the Number Comparer projects both Integer and Decimal to `float64`,
+so magnitude equality across leaves stays consistent with
+arithmetic (`1 + 0 == 1`, `1.0 == 1`).
+
+**Order property.** Strict total order over distinct lattice nodes,
+total preorder over values (one deliberate equivalence: cross-leaf
+magnitude). Verified by `lang/spec/compare.tsv` (748 rows incl.
+transitivity battery + user-defined-type coverage).
+
+**Adding a Comparer to a user/external type.** Implement the
+`Comparer` interface on your `TypeBehavior`:
+
+```go
+type fooBehavior struct{ defaultBehavior }
+func (fooBehavior) Compare(a, b Value) (int, error) {
+    // 1. Opt out for shapes you don't own (DepScalar, carriers).
+    // 2. Apply litVsConcreteOrder if your type's literal should
+    //    sort below concrete instances.
+    // 3. Otherwise, project a and b into your domain and return
+    //    -1/0/1 (or ErrNoComparer to bubble up to Rank).
+}
+```
+
+The Comparer participates automatically in `cmp`/`sort`/etc. via
+the LCA walk — no separate registration.
+
 ## Panic Prevention (CRITICAL)
 
 **Panics must never occur in this codebase.** All code must be defensive
 against unexpected input. Return errors instead of panicking — user
 errors must be reported as error return values that are printed to the
-user, never as panics. This is a hard rule — no exceptions (the only
-permitted panic is `mustType()` in `types.go` which runs at init time
-on hardcoded type paths).
+user, never as panics. This is a hard rule.
+
+The only permitted panics are at **init time**, on hardcoded type-registration
+paths — they signal a build-time programmer error (FixedID collision or
+malformed type path), not a runtime condition. Each such call site carries
+a `// lint:allow-panic` comment. The current set:
+
+- `eng/types.go::mustType` — eng's hardcoded built-in types.
+- `native/native_misc.go::registerTimerType` — TTimeout, TInterval.
+- `native/native_temporal.go::registerTemporalType` — TDate, TDateTime, …
+- `native/fetch.go::registerFetchType` — TFetchFunction, TFetchRequest, …
+- `modules/matrix.go::registerTensorTypes` — TTensor, TMatrix, TVector.
+
+Do not add new init-time panics without also annotating them
+`// lint:allow-panic` and listing them here.
 
 Key patterns to follow:
 
@@ -437,12 +724,12 @@ Key patterns to follow:
   `.Len()`, `.Keys()`, `.Get()` etc. on a potentially nil result
   without checking first.
 - **Type literals have nil Data.** `NewTypeLiteral(TMap)` creates a Value
-  with `VType=TMap, Data=nil`. Any code that receives a Value matching
+  with `Parent=TMap, Data=nil`. Any code that receives a Value matching
   `TMap`/`TList`/`TAny` must handle the `Data==nil` case. This includes
   signature-matched arguments — `TAny` matches type literals.
-- **Map subtypes share VType=TMap.** RecordTypeInfo, OptionsTypeInfo,
-  ChildTypeInfo, and *OrderedMap all have `VType=TMap`. Code that checks
-  `VType.Equal(TMap)` matches all of them. Use `IsRecordType(v)`,
+- **Map subtypes share Parent=TMap.** RecordTypeInfo, OptionsTypeInfo,
+  ChildTypeInfo, and *OrderedMap all have `Parent=TMap`. Code that checks
+  `Parent.Equal(TMap)` matches all of them. Use `IsRecordType(v)`,
   `IsOptionsType(v)`, `IsTypedMap(v)` to discriminate, and guard
   `AsMap(v)` calls — it returns nil for non-OrderedMap data.
 - **Guard conversion functions.** `valueToAny()` and `valueToMap()` in

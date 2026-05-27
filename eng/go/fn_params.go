@@ -55,7 +55,7 @@ import (
 //
 // Returns the FnParam list, the BarrierPos, or a parse error.
 func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
-	if !inputSig.VType.Equal(TList) {
+	if !inputSig.Parent.Equal(TList) {
 		return nil, 0, fmt.Errorf("function spec: input signature must be a list")
 	}
 	if inputSig.Data == nil {
@@ -63,7 +63,11 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 	}
 	elems, _ := AsList(inputSig)
 	var params []FnParam
-	barrierPos := 0
+	// -1 is the "no barrier seen" sentinel — consumers default
+	// it to len(params) so AQL fns without a `|` are all-forward,
+	// matching the convention native registrations follow. A
+	// leading `|` overwrites with 0 (explicit all-stack).
+	barrierPos := -1
 
 	for i := 0; i < elems.Len(); i++ {
 		elem := elems.Get(i)
@@ -77,13 +81,16 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 		}
 
 		_as2, _ := AsWord(elem)
-		if IsWord(elem) && _as2.Name == "|" {
+		if IsWord(elem) && (_as2.Name == "|" || _as2.Name == "__SB") {
+			// `|` is the canonical barrier marker; `__SB` (Stack
+			// Barrier) is its alias for environments where a bare
+			// `|` is awkward to type (shell pipelines, etc.).
 			barrierPos = len(params)
 			continue
 		}
 
 		switch {
-		case elem.VType.Equal(TMap) && elem.Data != nil:
+		case elem.Parent.Equal(TMap) && elem.Data != nil:
 			m, err := AsMutableMap(elem)
 			if err == nil && m != nil && m.Implicit {
 				keys := m.Keys()
@@ -113,14 +120,14 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 					_as3, _ := AsDisjunct(typeVal)
 					alts := _as3.Alternatives
 					for _, alt := range alts {
-						if alt.VType.Equal(TNone) {
+						if IsNoneShape(alt) {
 							optional = true
 							break
 						}
 					}
 					if optional {
 						for _, alt := range alts {
-							if !alt.VType.Equal(TNone) {
+							if !IsNoneShape(alt) {
 								typeVal = alt
 								break
 							}
@@ -179,17 +186,18 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 			params = append(params, FnParam{Type: paramType})
 
 		case elem.Data == nil:
-			params = append(params, FnParam{Type: elem.VType})
+			elemType := elem
+			params = append(params, FnParam{Type: &elemType})
 
-		case elem.VType.Matches(TInteger):
+		case elem.Parent.Matches(TInteger):
 			pat := elem
 			params = append(params, FnParam{Type: TInteger, Pattern: &pat})
 
-		case elem.VType.Matches(TBoolean):
+		case elem.Parent.Matches(TBoolean):
 			pat := elem
 			params = append(params, FnParam{Type: TBoolean, Pattern: &pat})
 
-		case elem.VType.Matches(TString):
+		case elem.Parent.Matches(TString):
 			pat := elem
 			params = append(params, FnParam{Type: TString, Pattern: &pat})
 
@@ -204,7 +212,7 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 // ParseFnReturns extracts return types from an output signature.
 // The output may be a list of types/values or a single type/value.
 func ParseFnReturns(outputSig Value) ([]*Type, error) {
-	if !outputSig.VType.Equal(TList) || outputSig.Data == nil {
+	if !outputSig.Parent.Equal(TList) || outputSig.Data == nil {
 		t, _, err := ResolveSigType(nil, outputSig)
 		if err != nil {
 			return nil, err
@@ -230,58 +238,76 @@ func ParseFnReturns(outputSig Value) ([]*Type, error) {
 // plus an optional pattern Value for structural matching.
 func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 	if v.Data == nil {
-		return v.VType, nil, nil
+		return ValueType(v), nil, nil
 	}
-	if IsWord(v) {
-		_as5, _ := AsWord(v)
-		name := _as5.Name
+	// Word, String, or Atom: extract the name and resolve.
+	// LookupDefType already returns the canonical lattice node for
+	// bare type literals, and ResolveDefType canonicalizes its own
+	// Data==nil result via CanonicalType, so the resolved *Type is
+	// identity-stable at every hop.
+	//
+	// DepScalars are excluded: a String/Atom DepScalar has
+	// `Parent.Matches(TString)` true but its payload is
+	// `DepScalarInfo`, not `StrPayload` — `AsString(v)` would fail
+	// silently, name="" would then fail the kernel-name lookup. The
+	// scalar-pattern branch below catches DepScalars correctly
+	// (kind = the base type, pattern = the DepScalar Value).
+	if (IsWord(v) || v.Parent.Matches(TString) || v.Parent.Matches(TAtom)) && !v.IsDepScalar() {
+		var name string
+		if IsWord(v) {
+			w, _ := AsWord(v)
+			name = w.Name
+		} else {
+			name, _ = AsString(v)
+		}
+		// Predicate types — when the binding's BODY is an FnDef
+		// (predicate fn) the ResolveDefType fallback degrades to TAny
+		// because it doesn't recognise the function shape as a
+		// structural body. Use the minted *Type directly so x:Pos in
+		// an fn sig becomes the Pos lattice node (with its
+		// predicateUnifier Behavior) instead of TAny. Record/Options/
+		// TypedList/TypedMap bodies keep the old path because
+		// ResolveDefType returns the structural pattern those rely on.
+		if r != nil {
+			if body, ok := r.TopTypeBody(name); ok {
+				if body.Parent != nil && (body.Parent.Equal(TFnDef) || body.Parent.Equal(TFunction)) {
+					if def := r.LookupTypeName(name); def != nil {
+						return def, nil, nil
+					}
+				}
+			}
+		}
 		if defVal := LookupDefType(r, name); defVal != nil {
-			return ResolveDefType(*defVal)
+			return ResolveDefType(r, *defVal)
 		}
 		t, err := ResolveTypeName(name)
 		return t, nil, err
 	}
-	if v.VType.Matches(TString) {
-		name, _ := AsString(v)
-		if defVal := LookupDefType(r, name); defVal != nil {
-			return ResolveDefType(*defVal)
-		}
-		t, err := ResolveTypeName(name)
-		return t, nil, err
-	}
-	if v.VType.Matches(TAtom) {
-		name, _ := AsString(v)
-		if defVal := LookupDefType(r, name); defVal != nil {
-			return ResolveDefType(*defVal)
-		}
-		t, err := ResolveTypeName(name)
-		return t, nil, err
-	}
-	if v.Data != nil && (v.VType.Matches(TInteger) ||
-		v.VType.Matches(TDecimal) ||
-		v.VType.Matches(TBoolean) ||
-		v.VType.Matches(TString) ||
-		v.VType.Matches(TAtom)) {
+	if v.Data != nil && (v.Parent.Matches(TInteger) ||
+		v.Parent.Matches(TDecimal) ||
+		v.Parent.Matches(TBoolean) ||
+		v.Parent.Matches(TString) ||
+		v.Parent.Matches(TAtom)) {
 		pattern := v
 		var kind *Type
 		switch {
-		case v.VType.Matches(TInteger):
+		case v.Parent.Matches(TInteger):
 			kind = TInteger
-		case v.VType.Matches(TDecimal):
+		case v.Parent.Matches(TDecimal):
 			kind = TDecimal
-		case v.VType.Matches(TBoolean):
+		case v.Parent.Matches(TBoolean):
 			kind = TBoolean
-		case v.VType.Matches(TString):
+		case v.Parent.Matches(TString):
 			kind = TString
 		default:
 			kind = TAtom
 		}
 		return kind, &pattern, nil
 	}
-	if v.VType.Equal(TMap) {
+	if v.Parent.Equal(TMap) {
 		return TMap, &v, nil
 	}
-	if v.VType.Equal(TList) {
+	if v.Parent.Equal(TList) {
 		return TList, &v, nil
 	}
 	return TAny, nil, nil
@@ -289,13 +315,19 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 
 // LookupDefType resolves a name to its type value via the type stack
 // first, then the def stack. Returns nil if neither carries a
-// type-body for that name.
+// type-body for that name. For a bare type-literal body, returns
+// the canonical lattice node (via CanonicalType) so downstream
+// identity-sensitive uses (behave installs, sig dispatch) reach the
+// same *Type the kernel mints.
 func LookupDefType(r *Registry, name string) *Value {
 	if r == nil {
 		return nil
 	}
-	if tv, ok := r.Types.TopBody(name); ok {
+	if tv, ok := r.TopTypeBody(name); ok {
 		if IsTypeBody(tv) {
+			if tv.Data == nil {
+				return CanonicalType(r, &tv)
+			}
 			return &tv
 		}
 	}
@@ -306,12 +338,18 @@ func LookupDefType(r *Registry, name string) *Value {
 	if !IsTypeBody(val) {
 		return nil
 	}
+	if val.Data == nil {
+		return CanonicalType(r, &val)
+	}
 	return &val
 }
 
 // ResolveDefType converts a def'd type value (record, options, plain
-// type literal) into a sig type + pattern.
-func ResolveDefType(v Value) (*Type, *Value, error) {
+// type literal) into a sig type + pattern. For a bare type literal,
+// the *Type is canonicalized via CanonicalType so identity-sensitive
+// downstream consumers (sig dispatch, behave installs) land on the
+// lattice's canonical pointer.
+func ResolveDefType(r *Registry, v Value) (*Type, *Value, error) {
 	if IsRecordType(v) {
 		rt, _ := AsRecordType(v)
 		pat := NewMap(rt.Fields)
@@ -323,7 +361,12 @@ func ResolveDefType(v Value) (*Type, *Value, error) {
 		return TMap, &pat, nil
 	}
 	if v.Data == nil {
-		return v.VType, nil, nil
+		// A bare type literal IS its lattice node post type/value
+		// merge — the denoted type is the value itself, not its
+		// supertype Parent. Route through CanonicalType so user-
+		// minted refine subtypes (`:Foo`) keep canonical identity
+		// in fn signatures.
+		return CanonicalType(r, &v), nil, nil
 	}
 	return TAny, nil, nil
 }
@@ -342,7 +385,7 @@ func lookupTypeNameInRegistry(r *Registry, name string) (*Type, error) {
 		return t, nil
 	}
 	if r != nil {
-		if def := r.Types.LookupByName(name); def != nil {
+		if def := r.LookupTypeName(name); def != nil {
 			return def, nil
 		}
 	}

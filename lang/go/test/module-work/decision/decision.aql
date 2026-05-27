@@ -4,13 +4,13 @@
 # aql:decision — Record types and builder functions
 # ============================================================
 
-type Cond record [field:Atom op:String value:Any]
-type Pred record [kind:String op:String children:Any]
-type Rule record [when:Map then:Map]
-type DTable record [kind:String rules:List hit-policy:String]
-type BranchNode record [id:Atom kind:String branches:List]
-type LeafNode record [id:Atom kind:String result:Any]
-type DTree record [kind:String root:Atom nodes:List]
+def Cond refine Record [field:Atom op:String value:Any]
+def Pred refine Record [kind:String op:String children:Any]
+def Rule refine Record [when:Map then:Map]
+def DTable refine Record [kind:String rules:List hit-policy:String]
+def BranchNode refine Record [id:Atom kind:String branches:List]
+def LeafNode refine Record [id:Atom kind:String result:Any]
+def DTree refine Record [kind:String root:Atom nodes:List]
 
 def cond fn [[field:Atom op:String value:Any] [Map] [
   make Cond {field:field op:op value:value}

@@ -5,28 +5,28 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
-	"github.com/aql-lang/aql/lang/go/internal/fileops"
+	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/aql-lang/aql/lang/go/native"
 )
 
 // runModuleSteps creates a registry with in-memory files and ParseFunc set,
-// then executes a sequence of AQL steps on a shared engine.
-func runModuleSteps(t *testing.T, files map[string]string, steps []string) ([]engine.Value, error) {
+// then executes a sequence of AQL steps on a shared native.
+func runModuleSteps(t *testing.T, files map[string]string, steps []string) ([]native.Value, error) {
 	t.Helper()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	for path, content := range files {
 		mem.Files[path] = []byte(content)
 	}
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	engine.SetHostFileOps(reg, mem)
+	native.SetHostFileOps(reg, mem)
 	reg.SetParseFunc(parser.Parse)
 
-	eng := engine.New(reg)
-	var result []engine.Value
+	eng := native.New(reg)
+	var result []native.Value
 	for _, step := range steps {
 		vals, err := parser.Parse(step)
 		if err != nil {
@@ -264,7 +264,7 @@ export "Fns" {inc:inc}`,
 		t.Fatal(err)
 	}
 	// The exported value should be the list [1 add].
-	if len(result) != 1 || !result[0].VType.Equal(engine.TList) {
+	if len(result) != 1 || !result[0].Parent.Equal(native.TList) {
 		t.Errorf("expected list, got %v", result)
 	}
 }
@@ -359,7 +359,7 @@ func TestImportJSONFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result) != 1 || !result[0].VType.Equal(engine.TMap) {
+	if len(result) != 1 || !result[0].Parent.Equal(native.TMap) {
 		t.Fatalf("expected map on stack, got %v", result)
 	}
 	assertResult(t, result, "{diameter:12756,name:'Earth'}")
@@ -390,7 +390,7 @@ func TestImportJSONFileList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result) != 1 || !result[0].VType.Equal(engine.TList) {
+	if len(result) != 1 || !result[0].Parent.Equal(native.TList) {
 		t.Fatalf("expected list on stack, got %v", result)
 	}
 	assertResult(t, result, "[1,2,3]")
@@ -571,23 +571,23 @@ export "B" {y:2}`,
 
 // runModuleStepsWithCwd creates a registry with a simulated working directory,
 // in-memory files, and ParseFunc set, then executes AQL steps.
-func runModuleStepsWithCwd(t *testing.T, cwd string, files map[string]string, steps []string) ([]engine.Value, error) {
+func runModuleStepsWithCwd(t *testing.T, cwd string, files map[string]string, steps []string) ([]native.Value, error) {
 	t.Helper()
-	mem := fileops.NewMem()
+	mem := capabilities.NewMem()
 	mem.Cwd = cwd
 	for path, content := range files {
 		mem.Files[path] = []byte(content)
 	}
 
-	reg, err := engine.DefaultRegistry()
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	engine.SetHostFileOps(reg, mem)
+	native.SetHostFileOps(reg, mem)
 	reg.SetParseFunc(parser.Parse)
 
-	eng := engine.New(reg)
-	var result []engine.Value
+	eng := native.New(reg)
+	var result []native.Value
 	for _, step := range steps {
 		vals, err := parser.Parse(step)
 		if err != nil {

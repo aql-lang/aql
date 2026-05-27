@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
 )
 
 func TestUnify(t *testing.T) {
@@ -60,12 +59,12 @@ func TestUnify(t *testing.T) {
 			}
 
 			// Build and run the unify expression: left unify right
-			reg, err := engine.DefaultRegistry(native.Register)
+			reg, err := native.DefaultRegistry()
 			if err != nil {
 				t.Fatal(err)
 			}
-			eng := engine.NewTop(reg)
-			result, err := eng.Run([]engine.Value{leftVal, engine.NewWord("unify"), rightVal})
+			eng := native.NewTop(reg)
+			result, err := eng.Run([]native.Value{leftVal, native.NewWord("unify"), rightVal})
 			if err != nil {
 				t.Fatalf("engine error: %v", err)
 			}
@@ -103,24 +102,24 @@ func TestUnify(t *testing.T) {
 
 // evalSingle parses and evaluates an AQL expression, returning the single
 // result value. It fails if the expression produces zero or more than one value.
-func evalSingle(expr string) (engine.Value, error) {
+func evalSingle(expr string) (native.Value, error) {
 	values, err := parser.Parse(expr)
 	if err != nil {
-		return engine.Value{}, fmt.Errorf("parse %q: %w", expr, err)
+		return native.Value{}, fmt.Errorf("parse %q: %w", expr, err)
 	}
 
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
-		return engine.Value{}, fmt.Errorf("registry: %w", err)
+		return native.Value{}, fmt.Errorf("registry: %w", err)
 	}
-	eng := engine.NewTop(reg)
+	eng := native.NewTop(reg)
 	result, err := eng.Run(values)
 	if err != nil {
-		return engine.Value{}, fmt.Errorf("run %q: %w", expr, err)
+		return native.Value{}, fmt.Errorf("run %q: %w", expr, err)
 	}
 
 	if len(result) != 1 {
-		return engine.Value{}, fmt.Errorf("expression %q produced %d values, expected 1", expr, len(result))
+		return native.Value{}, fmt.Errorf("expression %q produced %d values, expected 1", expr, len(result))
 	}
 
 	return result[0], nil

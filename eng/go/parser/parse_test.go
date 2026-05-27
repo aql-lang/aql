@@ -8,7 +8,7 @@ import (
 
 // valuesEqual compares two eng.Value instances for equality.
 func valuesEqual(a, b eng.Value) bool {
-	if !a.VType.Equal(b.VType) {
+	if !a.Parent.Equal(b.Parent) {
 		return false
 	}
 	switch {
@@ -21,11 +21,11 @@ func valuesEqual(a, b eng.Value) bool {
 			aw.ForceForward == bw.ForceForward
 	case eng.IsOpenParen(a):
 		return true
-	case a.VType.Matches(eng.TString):
+	case a.Parent.Matches(eng.TString):
 		as, _ := eng.AsString(a)
 		bs, _ := eng.AsString(b)
 		return as == bs
-	case a.VType.Matches(eng.TInteger):
+	case a.Parent.Matches(eng.TInteger):
 		an, _ := eng.AsInteger(a)
 		bn, _ := eng.AsInteger(b)
 		return an == bn
@@ -404,6 +404,56 @@ func TestParseStackSuffixBeforeDigits(t *testing.T) {
 	})
 }
 
+// --- /r ref-suffix modifier ---
+
+func TestParseRefSuffix(t *testing.T) {
+	// foo/r → ref-word, short form of (ref foo). The kernel resolves
+	// the binding at execution time without invoking it.
+	assertParse(t, "foo/r", []eng.Value{
+		eng.NewWordRef("foo"),
+	})
+}
+
+func TestParseRefSuffixInExpression(t *testing.T) {
+	// Multiple ref-words on one line round-trip independently.
+	assertParse(t, "add/r mul/r", []eng.Value{
+		eng.NewWordRef("add"),
+		eng.NewWordRef("mul"),
+	})
+}
+
+func TestParseRefAndQuoteMutuallyExclusive(t *testing.T) {
+	// /q and /r express different intents (data vs. resolved value),
+	// so combining them is a parse-level rejection — the whole token
+	// reverts to a plain word.
+	assertParse(t, "foo/qr", []eng.Value{
+		eng.NewWord("foo/qr"),
+	})
+	assertParse(t, "foo/rq", []eng.Value{
+		eng.NewWord("foo/rq"),
+	})
+}
+
+func TestParseRefIgnoresShapeModifiers(t *testing.T) {
+	// /r short-circuits dispatch, so /s, /f, and digit modifiers are
+	// accepted syntactically but have no effect on the emitted value.
+	assertParse(t, "foo/rs", []eng.Value{
+		eng.NewWordRef("foo"),
+	})
+	assertParse(t, "foo/rf", []eng.Value{
+		eng.NewWordRef("foo"),
+	})
+	assertParse(t, "foo/2r", []eng.Value{
+		eng.NewWordRef("foo"),
+	})
+}
+
+func TestParseRefDuplicateRejected(t *testing.T) {
+	assertParse(t, "foo/rr", []eng.Value{
+		eng.NewWord("foo/rr"),
+	})
+}
+
 func TestParseModifiersForwardAndStackMutuallyExclusive(t *testing.T) {
 	// f and s in the same suffix are invalid — the whole token falls
 	// back to a plain word with the slash in its name.
@@ -690,16 +740,16 @@ func TestParseTypedListMap(t *testing.T) {
 	}
 	ct0a, _ := eng.AsChildType(got[0])
 	child := ct0a.Child
-	if !child.VType.Equal(eng.TMap) {
-		t.Errorf("expected child type map, got %s", child.VType)
+	if !child.Parent.Equal(eng.TMap) {
+		t.Errorf("expected child type map, got %s", child.Parent)
 	}
 	m, _ := eng.AsMap(child)
 	xVal, ok := m.Get("x")
 	if !ok {
 		t.Fatalf("expected key 'x' in child map")
 	}
-	if !xVal.VType.Equal(eng.TNumber) {
-		t.Errorf("expected x to be number type, got %s (TestParseTypedListMap)", xVal.VType)
+	if !xVal.Equal(eng.TNumber) {
+		t.Errorf("expected x to be number type, got %s (TestParseTypedListMap)", xVal)
 	}
 }
 
@@ -810,16 +860,16 @@ func TestParseTypedMapConcreteChild(t *testing.T) {
 	}
 	ct0c, _ := eng.AsChildType(got[0])
 	child0c := ct0c.Child
-	if !child0c.VType.Equal(eng.TMap) {
-		t.Errorf("expected child type map, got %s", child0c.VType)
+	if !child0c.Parent.Equal(eng.TMap) {
+		t.Errorf("expected child type map, got %s", child0c.Parent)
 	}
 	m, _ := eng.AsMap(child0c)
 	xVal, ok := m.Get("x")
 	if !ok {
 		t.Fatalf("expected key 'x' in child map")
 	}
-	if !xVal.VType.Equal(eng.TNumber) {
-		t.Errorf("expected x to be number type, got %s (TestParseTypedMapConcreteChild)", xVal.VType)
+	if !xVal.Equal(eng.TNumber) {
+		t.Errorf("expected x to be number type, got %s (TestParseTypedMapConcreteChild)", xVal)
 	}
 }
 
@@ -834,8 +884,8 @@ func TestParseExplicitList(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	if !got[0].VType.Equal(eng.TList) {
-		t.Fatalf("expected list, got %s", got[0].VType)
+	if !got[0].Parent.Equal(eng.TList) {
+		t.Fatalf("expected list, got %s", got[0].Parent)
 	}
 	_lst, _ := eng.AsList(got[0])
 	elems := _lst.Slice()
@@ -871,16 +921,16 @@ func TestParseMapWithList(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	if !got[0].VType.Equal(eng.TMap) {
-		t.Fatalf("expected map, got %s", got[0].VType)
+	if !got[0].Parent.Equal(eng.TMap) {
+		t.Fatalf("expected map, got %s", got[0].Parent)
 	}
 	m, _ := eng.AsMap(got[0])
 	xVal, ok := m.Get("x")
 	if !ok {
 		t.Fatal("expected key 'x'")
 	}
-	if !xVal.VType.Equal(eng.TList) {
-		t.Errorf("expected list, got %s", xVal.VType)
+	if !xVal.Parent.Equal(eng.TList) {
+		t.Errorf("expected list, got %s", xVal.Parent)
 	}
 	_lst, _ := eng.AsList(xVal)
 	elems := _lst.Slice()
@@ -938,8 +988,8 @@ func TestParseMapWithTypeName(t *testing.T) {
 	}
 	m, _ := eng.AsMap(got[0])
 	xVal, _ := m.Get("x")
-	if !xVal.VType.Equal(eng.TNumber) {
-		t.Errorf("expected number type literal, got %s", xVal.VType)
+	if !xVal.Equal(eng.TNumber) {
+		t.Errorf("expected number type literal, got %s", xVal)
 	}
 }
 
@@ -954,8 +1004,8 @@ func TestParseMapWithNestedMap(t *testing.T) {
 	}
 	m, _ := eng.AsMap(got[0])
 	aVal, _ := m.Get("a")
-	if !aVal.VType.Equal(eng.TMap) {
-		t.Errorf("expected nested map, got %s", aVal.VType)
+	if !aVal.Parent.Equal(eng.TMap) {
+		t.Errorf("expected nested map, got %s", aVal.Parent)
 	}
 }
 
@@ -1073,13 +1123,13 @@ func TestParseDataMapWithNestedList(t *testing.T) {
 	}
 	m, _ := eng.AsMap(got[0])
 	xVal, _ := m.Get("x")
-	if !xVal.VType.Equal(eng.TMap) {
-		t.Fatalf("expected nested map, got %s", xVal.VType)
+	if !xVal.Parent.Equal(eng.TMap) {
+		t.Fatalf("expected nested map, got %s", xVal.Parent)
 	}
 	inner, _ := eng.AsMap(xVal)
 	yVal, _ := inner.Get("y")
-	if !yVal.VType.Equal(eng.TList) {
-		t.Errorf("expected list, got %s", yVal.VType)
+	if !yVal.Parent.Equal(eng.TList) {
+		t.Errorf("expected list, got %s", yVal.Parent)
 	}
 }
 
@@ -1141,8 +1191,8 @@ func TestParseDecimalNumber(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	if !got[0].VType.Matches(eng.TDecimal) {
-		t.Errorf("expected decimal type, got %s", got[0].VType)
+	if !got[0].Parent.Matches(eng.TDecimal) {
+		t.Errorf("expected decimal type, got %s", got[0].Parent)
 	}
 }
 
@@ -1155,8 +1205,8 @@ func TestParseDecimalInExpression(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("expected 3 values, got %d", len(got))
 	}
-	if !got[0].VType.Matches(eng.TDecimal) {
-		t.Errorf("expected decimal, got %s", got[0].VType)
+	if !got[0].Parent.Matches(eng.TDecimal) {
+		t.Errorf("expected decimal, got %s", got[0].Parent)
 	}
 }
 
@@ -1171,8 +1221,8 @@ func TestParseMapWithDecimal(t *testing.T) {
 	}
 	m, _ := eng.AsMap(got[0])
 	xVal, _ := m.Get("x")
-	if !xVal.VType.Matches(eng.TDecimal) {
-		t.Errorf("expected decimal, got %s", xVal.VType)
+	if !xVal.Parent.Matches(eng.TDecimal) {
+		t.Errorf("expected decimal, got %s", xVal.Parent)
 	}
 }
 
@@ -1192,8 +1242,8 @@ func TestParseListWithMap(t *testing.T) {
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element, got %d", len(elems))
 	}
-	if !elems[0].VType.Equal(eng.TMap) {
-		t.Errorf("expected map element, got %s", elems[0].VType)
+	if !elems[0].Parent.Equal(eng.TMap) {
+		t.Errorf("expected map element, got %s", elems[0].Parent)
 	}
 }
 
@@ -1343,8 +1393,8 @@ func TestParseTopLevelMap(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	if !got[0].VType.Equal(eng.TMap) {
-		t.Errorf("expected map, got %s", got[0].VType)
+	if !got[0].Parent.Equal(eng.TMap) {
+		t.Errorf("expected map, got %s", got[0].Parent)
 	}
 }
 
@@ -1387,7 +1437,7 @@ func TestParseMapWithStringValues(t *testing.T) {
 	m, _ := eng.AsMap(got[0])
 	xVal, _ := m.Get("x")
 	xValS, _ := eng.AsString(xVal)
-	if !xVal.VType.Matches(eng.TString) || xValS != "hello" {
+	if !xVal.Parent.Matches(eng.TString) || xValS != "hello" {
 		t.Errorf("expected string hello, got %s", xVal)
 	}
 }
@@ -1452,12 +1502,12 @@ func TestParseDataMapNilValue(t *testing.T) {
 	m, _ := eng.AsMap(got[0])
 	// Check type literal resolution in data context
 	eVal, _ := m.Get("e")
-	if !eVal.VType.Equal(eng.TNumber) {
-		t.Errorf("expected Number type literal, got %s", eVal.VType)
+	if !eVal.Equal(eng.TNumber) {
+		t.Errorf("expected Number type literal, got %s", eVal)
 	}
 	fVal, _ := m.Get("f")
-	if !fVal.VType.Equal(eng.TAny) {
-		t.Errorf("expected Any type literal, got %s", fVal.VType)
+	if !fVal.Equal(eng.TAny) {
+		t.Errorf("expected Any type literal, got %s", fVal)
 	}
 }
 
@@ -1557,16 +1607,16 @@ func TestParseSlashFModifier(t *testing.T) {
 func TestFloatToValueWholeNumber(t *testing.T) {
 	// Whole number float → integer
 	v := floatToValue(42.0)
-	if !v.VType.Matches(eng.TInteger) {
-		t.Errorf("expected integer, got %s", v.VType)
+	if !v.Parent.Matches(eng.TInteger) {
+		t.Errorf("expected integer, got %s", v.Parent)
 	}
 }
 
 func TestFloatToValueFractional(t *testing.T) {
 	// Fractional float → decimal
 	v := floatToValue(3.14)
-	if !v.VType.Matches(eng.TDecimal) {
-		t.Errorf("expected decimal, got %s", v.VType)
+	if !v.Parent.Matches(eng.TDecimal) {
+		t.Errorf("expected decimal, got %s", v.Parent)
 	}
 }
 
@@ -1596,11 +1646,11 @@ func TestResolveTextValueTypes(t *testing.T) {
 		input string
 		check func(eng.Value) bool
 	}{
-		{"true", func(v eng.Value) bool { b, _ := eng.AsBoolean(v); return v.VType.Matches(eng.TBoolean) && b }},
-		{"false", func(v eng.Value) bool { b, _ := eng.AsBoolean(v); return v.VType.Matches(eng.TBoolean) && !b }},
-		{"Number", func(v eng.Value) bool { return v.VType.Equal(eng.TNumber) }},
-		{"String", func(v eng.Value) bool { return v.VType.Equal(eng.TString) }},
-		{"hello", func(v eng.Value) bool { s, _ := eng.AsAtom(v); return v.VType.Matches(eng.TAtom) && s == "hello" }},
+		{"true", func(v eng.Value) bool { b, _ := eng.AsBoolean(v); return v.Parent.Matches(eng.TBoolean) && b }},
+		{"false", func(v eng.Value) bool { b, _ := eng.AsBoolean(v); return v.Parent.Matches(eng.TBoolean) && !b }},
+		{"Number", func(v eng.Value) bool { return v.Equal(eng.TNumber) }},
+		{"String", func(v eng.Value) bool { return v.Equal(eng.TString) }},
+		{"hello", func(v eng.Value) bool { s, _ := eng.AsAtom(v); return v.Parent.Matches(eng.TAtom) && s == "hello" }},
 	}
 	for _, tt := range tests {
 		v := resolveTextValue(tt.input)
@@ -1618,7 +1668,7 @@ func TestConvertTopLevelValueBool(t *testing.T) {
 		t.Fatal(err)
 	}
 	b1, _ := eng.AsBoolean(v)
-	if !v.VType.Matches(eng.TBoolean) || !b1 {
+	if !v.Parent.Matches(eng.TBoolean) || !b1 {
 		t.Errorf("expected true, got %s", v)
 	}
 	v, err = convertTopLevelValue(false)
@@ -1626,7 +1676,7 @@ func TestConvertTopLevelValueBool(t *testing.T) {
 		t.Fatal(err)
 	}
 	b2, _ := eng.AsBoolean(v)
-	if !v.VType.Matches(eng.TBoolean) || b2 {
+	if !v.Parent.Matches(eng.TBoolean) || b2 {
 		t.Errorf("expected false, got %s", v)
 	}
 }
@@ -1637,7 +1687,7 @@ func TestConvertTopLevelValueNil(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !eng.IsAtom(v) {
-		t.Fatalf("expected atom for null, got %s", v.VType)
+		t.Fatalf("expected atom for null, got %s", v.Parent)
 	}
 	name, _ := eng.AsAtom(v)
 	if name != "null" {
@@ -1658,7 +1708,7 @@ func TestConvertDataValueBool(t *testing.T) {
 		t.Fatal(err)
 	}
 	b3, _ := eng.AsBoolean(v)
-	if !v.VType.Matches(eng.TBoolean) || !b3 {
+	if !v.Parent.Matches(eng.TBoolean) || !b3 {
 		t.Errorf("expected true, got %s", v)
 	}
 }
@@ -1669,7 +1719,7 @@ func TestConvertDataValueNil(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !eng.IsAtom(v) {
-		t.Fatalf("expected atom for null, got %s", v.VType)
+		t.Fatalf("expected atom for null, got %s", v.Parent)
 	}
 	name, _ := eng.AsAtom(v)
 	if name != "null" {
@@ -1690,8 +1740,8 @@ func TestConvertDataValueRawMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.VType.Equal(eng.TMap) {
-		t.Errorf("expected map, got %s", v.VType)
+	if !v.Parent.Equal(eng.TMap) {
+		t.Errorf("expected map, got %s", v.Parent)
 	}
 }
 
@@ -1711,8 +1761,8 @@ func TestConvertTopLevelValueRawMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.VType.Equal(eng.TMap) {
-		t.Errorf("expected map, got %s", v.VType)
+	if !v.Parent.Equal(eng.TMap) {
+		t.Errorf("expected map, got %s", v.Parent)
 	}
 }
 
@@ -1769,16 +1819,16 @@ func TestParseImplicitMapInList(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
 	list := vals[0]
-	if !list.VType.Equal(eng.TList) {
-		t.Fatalf("expected list, got %s", list.VType)
+	if !list.Parent.Equal(eng.TList) {
+		t.Fatalf("expected list, got %s", list.Parent)
 	}
 	_lst, _ := eng.AsList(list)
 	elems := _lst.Slice()
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element in list, got %d", len(elems))
 	}
-	if !elems[0].VType.Equal(eng.TMap) {
-		t.Fatalf("expected map element, got %s", elems[0].VType)
+	if !elems[0].Parent.Equal(eng.TMap) {
+		t.Fatalf("expected map element, got %s", elems[0].Parent)
 	}
 	m, _ := eng.AsMutableMap(elems[0])
 	if !m.Implicit {
@@ -1805,8 +1855,8 @@ func TestParseExplicitMapInList(t *testing.T) {
 	if len(elems) != 1 {
 		t.Fatalf("expected 1 element in list, got %d", len(elems))
 	}
-	if !elems[0].VType.Equal(eng.TMap) {
-		t.Fatalf("expected map element, got %s", elems[0].VType)
+	if !elems[0].Parent.Equal(eng.TMap) {
+		t.Fatalf("expected map element, got %s", elems[0].Parent)
 	}
 	m, _ := eng.AsMutableMap(elems[0])
 	if m.Implicit {
@@ -1823,8 +1873,8 @@ func TestParseExplicitMapTopLevel(t *testing.T) {
 	if len(vals) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(vals))
 	}
-	if !vals[0].VType.Equal(eng.TMap) {
-		t.Fatalf("expected map, got %s", vals[0].VType)
+	if !vals[0].Parent.Equal(eng.TMap) {
+		t.Fatalf("expected map, got %s", vals[0].Parent)
 	}
 	m, _ := eng.AsMutableMap(vals[0])
 	if m.Implicit {
@@ -1855,11 +1905,18 @@ func TestParseOptionalFieldDisjunct(t *testing.T) {
 	}
 	dj, _ := eng.AsDisjunct(val)
 	alts := dj.Alternatives
-	if len(alts) != 2 {
-		t.Fatalf("expected 2 alternatives, got %d", len(alts))
+	// `?:T` desugars to `disjunct(T, None, Absent)` — Absent is the
+	// kernel type denoting "key not present", and the third
+	// alternative is what makes the missing-key half of the rule
+	// work via the type system rather than out-of-band metadata.
+	if len(alts) != 3 {
+		t.Fatalf("expected 3 alternatives, got %d", len(alts))
 	}
-	if !alts[1].VType.Equal(eng.TNone) {
-		t.Errorf("expected second alternative to be None, got %s", alts[1].VType)
+	if !alts[1].Equal(eng.TNone) {
+		t.Errorf("expected second alternative to be None, got %s", alts[1])
+	}
+	if !alts[2].Equal(eng.TAbsent) {
+		t.Errorf("expected third alternative to be Absent, got %s", alts[2])
 	}
 }
 
@@ -1964,7 +2021,7 @@ func TestParseBacktickSimpleInterpolation(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
 	if !eng.IsInterpString(got[0]) {
-		t.Fatalf("expected InterpString, got %s", got[0].VType)
+		t.Fatalf("expected InterpString, got %s", got[0].Parent)
 	}
 	parts, _ := eng.AsInterpString(got[0])
 	if len(parts) != 2 {
@@ -2038,7 +2095,6 @@ func TestParseBacktickOnlyLiteral(t *testing.T) {
 	// Backtick string with $ but no ${ is just a plain string.
 	assertParse(t, "`price: $100`", []eng.Value{eng.NewString("price: $100")})
 }
-
 
 // --- Words starting with '-' (CLI flag style) ---
 //

@@ -3,7 +3,6 @@ package native
 import (
 	"fmt"
 
-	"github.com/aql-lang/aql/lang/go/engine"
 	voxgigstruct "github.com/voxgig/struct"
 )
 
@@ -14,7 +13,7 @@ import (
 //
 // transformHandler calls voxgig struct Transform.
 // args[0]=spec (Map, forward-collected), args[1]=data (Any, from stack).
-func transformHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+func transformHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	spec := valueToAny(args[0])
 	data := valueToAny(args[1])
 
@@ -24,41 +23,41 @@ func transformHandler(args []engine.Value, ctx map[string]engine.Value, stack []
 	if err != nil {
 		return nil, fmt.Errorf("transform: %w", err)
 	}
-	return []engine.Value{val}, nil
+	return []Value{val}, nil
 }
 
-// valueToAny converts an engine.Value to a Go any for use with voxgig struct.
-func valueToAny(v engine.Value) any {
+// valueToAny converts an Value to a Go any for use with voxgig struct.
+func valueToAny(v Value) any {
 	// Type literals (e.g. bare Map, List, Integer) have Data==nil.
 	// Return nil rather than panicking on accessor calls.
 	if v.Data == nil {
 		return nil
 	}
 	switch {
-	case v.VType.Matches(engine.TInteger):
-		i, _ := engine.AsInteger(v)
+	case v.Parent.Matches(TInteger):
+		i, _ := AsInteger(v)
 		return float64(i)
-	case v.VType.Matches(engine.TString):
-		s, _ := engine.AsString(v)
+	case v.Parent.Matches(TString):
+		s, _ := AsString(v)
 		return s
-	case v.VType.Matches(engine.TBoolean):
-		b, _ := engine.AsBoolean(v)
+	case v.Parent.Matches(TBoolean):
+		b, _ := AsBoolean(v)
 		return b
-	case v.VType.Equal(engine.TAtom):
-		a, _ := engine.AsAtom(v)
+	case v.Parent.Equal(TAtom):
+		a, _ := AsAtom(v)
 		return a
-	case v.VType.Equal(engine.TNone):
+	case v.Parent.Equal(TNone):
 		return nil
-	case v.VType.Matches(engine.TMap):
-		m, _ := engine.AsMap(v)
+	case v.Parent.Matches(TMap):
+		m, _ := AsMap(v)
 		out := make(map[string]any, m.Len())
 		for _, key := range m.Keys() {
 			val, _ := m.Get(key)
 			out[key] = valueToAny(val)
 		}
 		return out
-	case v.VType.Matches(engine.TList):
-		_lst, _ := engine.AsList(v)
+	case v.Parent.Matches(TList):
+		_lst, _ := AsList(v)
 		elems := _lst.Slice()
 		out := make([]any, len(elems))
 		for i, elem := range elems {
@@ -70,49 +69,49 @@ func valueToAny(v engine.Value) any {
 	}
 }
 
-// anyToValue converts a Go any (as returned by voxgig struct) back to an engine.Value.
-func anyToValue(v any) (engine.Value, error) {
+// anyToValue converts a Go any (as returned by voxgig struct) back to an Value.
+func anyToValue(v any) (Value, error) {
 	switch val := v.(type) {
 	case nil:
-		return engine.NewTypeLiteral(engine.TNone), nil
+		return NewTypeLiteral(TNone), nil
 	case bool:
-		return engine.NewBoolean(val), nil
+		return NewBoolean(val), nil
 	case float64:
-		return engine.NewInteger(int64(val)), nil
+		return NewInteger(int64(val)), nil
 	case int:
-		return engine.NewInteger(int64(val)), nil
+		return NewInteger(int64(val)), nil
 	case int64:
-		return engine.NewInteger(val), nil
+		return NewInteger(val), nil
 	case string:
-		return engine.NewString(val), nil
+		return NewString(val), nil
 	case []any:
-		elems := make([]engine.Value, len(val))
+		elems := make([]Value, len(val))
 		for i, item := range val {
 			e, err := anyToValue(item)
 			if err != nil {
-				return engine.Value{}, err
+				return Value{}, err
 			}
 			elems[i] = e
 		}
-		return engine.NewList(elems), nil
+		return NewList(elems), nil
 	case map[string]any:
-		om := engine.NewOrderedMap()
+		om := NewOrderedMap()
 		for _, key := range sortedAnyMapKeys(val) {
 			child, err := anyToValue(val[key])
 			if err != nil {
-				return engine.Value{}, err
+				return Value{}, err
 			}
 			om.Set(key, child)
 		}
-		return engine.NewMap(om), nil
+		return NewMap(om), nil
 	default:
-		return engine.Value{}, fmt.Errorf("unsupported type from transform: %T", v)
+		return Value{}, fmt.Errorf("unsupported type from transform: %T", v)
 	}
 }
 
 // valueToMap converts a map-typed Value to map[string]any for use with SDK calls.
-func valueToMap(v engine.Value) map[string]any {
-	m, _ := engine.AsMap(v)
+func valueToMap(v Value) map[string]any {
+	m, _ := AsMap(v)
 	if m == nil {
 		return nil
 	}

@@ -372,12 +372,12 @@ func capitalizeTypesInTree(n *Node) {
 		if ch.Kind == NdWord && !strings.Contains(ch.Text, ".") {
 			lower := strings.ToLower(ch.Text)
 			if knownTypes[lower] && !isKeyword(lower) {
-				// Skip if after "def" or "type" (it's a name being defined).
+				// Skip if after "def" or "refine" (it's a name being defined).
 				afterDef := i > 0 && n.Children[i-1].Kind == NdWord &&
-					(n.Children[i-1].Text == "def" || n.Children[i-1].Text == "type")
-				// Skip if after a word that itself follows "type" (e.g. type Cond record).
+					(n.Children[i-1].Text == "def" || n.Children[i-1].Text == "refine")
+				// Skip if after a word that itself follows "refine" (e.g. refine Cond record).
 				afterTypeName := i > 1 && n.Children[i-2].Kind == NdWord &&
-					(n.Children[i-2].Text == "type" || n.Children[i-2].Text == "def")
+					(n.Children[i-2].Text == "refine" || n.Children[i-2].Text == "def")
 				// Skip if before ":" (it's a key/param name).
 				beforeColon := i+1 < len(n.Children) && n.Children[i+1].Kind == NdColon
 				if !afterDef && !afterTypeName && !beforeColon {
@@ -800,7 +800,7 @@ func splitIntoGroups(children []*Node) [][]*Node {
 
 func isStmtStart(word string) bool {
 	switch word {
-	case "def", "type", "if", "for", "export", "end", "make":
+	case "def", "refine", "if", "for", "export", "end", "make":
 		return true
 	}
 	return false

@@ -1,0 +1,31 @@
+// AQL Language Server for Zed.
+//
+// Zed binds language servers per-language. Merge the snippet below
+// into ~/.config/zed/settings.json. Until a dedicated AQL extension
+// ships on the Zed extension marketplace, you also need to register
+// the "aql" file association under languages.
+//
+// Note: cmd.zed.dev/docs/configuring-languages describes the schema
+// — keys here follow it.
+
+{
+  "lsp": {
+    "aql-lsp": {
+      "binary": {
+        "path": "aql",
+        "arguments": ["lsp"]
+      }
+    }
+  },
+  "languages": {
+    "AQL": {
+      "language_servers": ["aql-lsp"],
+      "tab_size": 2,
+      "hard_tabs": false,
+      "format_on_save": "off"
+    }
+  },
+  "file_types": {
+    "AQL": ["aql"]
+  }
+}

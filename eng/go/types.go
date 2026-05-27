@@ -15,6 +15,7 @@ var (
 	TAny            = mustType("Any")
 	TNone           = mustType("None")
 	TNever          = mustType("Never")
+	TAbsent         = mustType("Absent")
 	TScalar         = mustType("Scalar")
 	TString         = mustType("Scalar/String")
 	TStringProper   = mustType("Scalar/String/ProperString")
@@ -25,12 +26,13 @@ var (
 	TBoolean        = mustType("Scalar/Boolean")
 	TPath           = mustType("Scalar/Path")
 	TNode           = mustType("Node")
+	TIdeal          = mustType("Ideal")
 	TList           = mustType("Node/List")
 	TListArgs       = mustType("Node/List/Args")
 	TMap            = mustType("Node/Map")
-	TOptions        = mustType("Node/Map/Options")
-	TTable          = mustType("Object/Table")
-	TRecord         = mustType("Object/Record")
+	TOptions        = mustType("Ideal/Options")
+	TTable          = mustType("Ideal/Table")
+	TRecord         = mustType("Ideal/Record")
 	TAtom           = mustType("Scalar/Atom")
 	TWord           = mustType("Word")
 	TFunction       = mustType("Type/Function")
@@ -51,20 +53,17 @@ var (
 	TModule         = mustType("Word/__MD")
 	TInternal       = mustType("Word/__IN")
 	TInspect        = mustType("Node/Map/Inspect")
-	TObject         = mustType("Object")
-	TStore          = mustType("Object/Store")
-	TStoreSystem    = mustType("Object/Store/System")
-	TArray          = mustType("Object/Array")
-	TResource       = mustType("Object/Resource")
-	TResourceEntity = mustType("Object/Resource/Entity")
+	TObject         = mustType("Ideal/Object")
+	TStore          = mustType("Ideal/Store")
+	TStoreSystem    = mustType("Ideal/Store/System")
+	TArray          = mustType("Ideal/Array")
+	TResource       = mustType("Ideal/Object/Resource")
+	TResourceEntity = mustType("Ideal/Object/Resource/Entity")
 	// TFetchFunction / TFetchRequest / TFetchResponse moved to
 	// lang/go/native/fetch.go (Step 8 migration); registered via
 	// RegisterExternalBuiltin at lang/go/native package init.
-	TError      = mustType("Object/Error")
-	TType       = mustType("Type")
-	TScalarType = mustType("Type/ScalarType")
-	TNodeType   = mustType("Type/NodeType")
-	TObjectType = mustType("Type/ObjectType")
+	TError = mustType("Ideal/Error")
+	TType  = mustType("Type")
 	// Scalar/Time and descendants moved to
 	// lang/go/engine/native_temporal.go (Step 8). They live in
 	// lang/go/engine (not lang/go/internal/nativemod/time) because
@@ -73,8 +72,6 @@ var (
 	// avoids the import-cycle constraint.
 	// TMatrix moved to lang/go/internal/nativemod/matrix.go (Step 8).
 	// TTimeout moved to lang/go/engine/native_misc.go (Step 8).
-	TDependent  = mustType("Type/Dependent")
-	TDepInteger = mustType("Type/Dependent/DepInteger")
 	// TInterval moved to lang/go/engine/native_misc.go (Step 8).
 )
 
@@ -88,11 +85,11 @@ var typeNames = buildTypeNames()
 
 func buildTypeNames() map[string]*Type {
 	m := make(map[string]*Type, len(Builtin.byName))
-	for name, stack := range Builtin.byName {
-		if len(stack) == 0 || stack[0].Def == nil {
+	for name, def := range Builtin.byName {
+		if def == nil {
 			continue
 		}
-		m[name] = stack[0].Def
+		m[name] = def
 	}
 	return m
 }
@@ -195,12 +192,13 @@ func ResolveTypePath(name string) (*Type, bool) {
 //   - "Any" pattern matches everything.
 //   - A child matches a parent: Scalar/String/ProperString matches Scalar/String.
 //   - A parent does NOT match a child: Scalar/String does not match Scalar/String/ProperString.
-//   - A Type/Dependent/Dep<X> path is treated as a subtype of <X> and any
-//     of <X>'s lattice ancestors. The Dependent branch lives under its own
-//     root for clear separation, but dependent values must satisfy any slot
-//     expecting the underlying base. Per-value satisfaction (does 5 lie in
-//     [10, ∞)?) is handled at Unify time; this method answers the type-level
-//     question only.
+//
+// DepScalar values carry their base scalar as Parent (e.g. an
+// `Integer gte 0` value has Parent=Integer), so they satisfy any
+// scalar-typed slot via the normal ancestor walk — no special-case
+// override here. Per-value satisfaction (does 5 lie in [10, ∞)?) is
+// handled at Unify time; this method answers the type-level question
+// only.
 func (t *Type) Matches(pattern *Type) bool {
 	// Empty pattern (nil Type) is a vacuous match — preserves the
 	// old PathSubtype semantics where a zero-iteration prefix loop
@@ -208,29 +206,18 @@ func (t *Type) Matches(pattern *Type) bool {
 	if pattern == nil {
 		return true
 	}
-	if pattern == TAny {
+	if pattern.Equal(TAny) {
 		return true
 	}
 	if t == nil {
 		return false
 	}
-	if t.IsAncestor(pattern) {
-		return true
-	}
-	// Dependent-scalar override: a Dep<X> value satisfies any slot
-	// typed as X (its underlying base). The BaseType pointer on the
-	// *Type is populated at registration via builtinDecl.BasePath;
-	// the historical hardcoded leaf-name switch in depscalar.go is
-	// now a per-Type field (Step 9 of TYPE-DECOUPLING.0.md).
-	if t.BaseType != nil && t.BaseType.Matches(pattern) {
-		return true
-	}
-	return false
+	return t.IsAncestor(pattern)
 }
 
 // PathSubtype reports whether t is a strict path-prefix subtype of
 // pattern. With ID-based identity, this is equivalent to the ancestry
-// walk used by Matches — no `Any` bolt-on, no Dep<Leaf> base bolt-on.
+// walk used by Matches — no `Any` bolt-on.
 //
 // `t.PathSubtype(t)` is always true (identity is a subtype of itself).
 func (t *Type) PathSubtype(pattern *Type) bool {
@@ -240,18 +227,22 @@ func (t *Type) PathSubtype(pattern *Type) bool {
 	return t.IsAncestor(pattern)
 }
 
-// Specificity returns the depth of the type. More ancestry = more specific.
+// Specificity returns the depth of the type. More ancestry = more
+// specific. Any is the universal lattice top — skipped here for the
+// same reason it's skipped in Path() and PathOf: structural roots
+// chain to Any but their declared "depth" (Scalar=1, Integer=3, …)
+// is the historical short measure that sig dispatch was tuned
+// against. Any itself reports Specificity=1 (it IS the root, not
+// an ancestor) so the score for Any-only signatures is unchanged.
 func (t *Type) Specificity() int {
 	n := 0
 	for d := t; d != nil; d = d.Parent {
+		if d.FixedID == anyFixedID && n > 0 {
+			break
+		}
 		n++
 	}
 	return n
-}
-
-// String returns the slash-separated type path.
-func (t *Type) String() string {
-	return t.Path()
 }
 
 // Leaf returns the last part of the type path.
@@ -267,44 +258,26 @@ func (t *Type) Leaf() string {
 // For example: Scalar/String/ProperString is a subtype of Scalar/String.
 // A type is NOT a subtype of itself.
 func (t *Type) IsSubtypeOf(parent *Type) bool {
-	if t == nil || parent == nil || t == parent {
+	if t == nil || parent == nil || t.Equal(parent) {
 		return false
 	}
 	return t.IsAncestor(parent)
 }
 
-// Equal reports whether two types are identical. Identity is pointer
-// equality on Type.
+// Equal reports whether t and other are the same lattice identity.
+// Identity is the canonical ID string. A type literal is a by-value
+// copy of its lattice node — same ID, different address — so a raw
+// pointer compare would miss copies. Pointer equality is kept as the
+// fast path and as the fallback for ID-less types (raw &Type{} test
+// fixtures, where the empty ID makes ID comparison meaningless).
 func (t *Type) Equal(other *Type) bool {
-	return t == other
-}
-
-// MetatypeFor returns the metatype for a given type.
-// Scalar subtypes → TScalarType, Node subtypes → TNodeType,
-// Object subtypes → TObjectType, everything else → TType.
-//
-// The mapping is driven by *Type.Metatype, set at registration via
-// builtinDecl.MetatypePath on the three anchor roots (Scalar, Node,
-// Object). Descendants of those roots inherit the anchor by walking
-// up the Parent chain. Step 9 of TYPE-DECOUPLING.0.md replaced the
-// historical root-name switch with this field-driven lookup so a
-// new root with its own metatype can be added by declaring its
-// MetatypePath, no central function edit required.
-func MetatypeFor(t *Type) *Type {
-	if t == nil || t.Parent == nil {
-		return TType
+	if t == other {
+		return true
 	}
-	for d := t; d != nil; d = d.Parent {
-		if d.Metatype != nil {
-			return d.Metatype
-		}
+	if t == nil || other == nil {
+		return false
 	}
-	return TType
-}
-
-// IsMetaType reports whether t is in the Type/* metatype hierarchy.
-func IsMetaType(t *Type) bool {
-	return t != nil && t.Root() == TType
+	return t.ID != "" && t.ID == other.ID
 }
 
 // ValidateTypeNameParts checks that a type name (slash-separated) does not

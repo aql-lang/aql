@@ -183,7 +183,7 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 
 		// Paren group: expand to engine paren markers at top level.
 		// Emit typed OpenParen / CloseParen values directly so the
-		// engine can recognise them by VType identity (no stepWord
+		// engine can recognise them by Parent identity (no stepWord
 		// name-dispatch needed).
 		if pg, ok := items[i].(parenGroup); ok {
 			values = append(values, eng.NewOpenParen())
@@ -314,7 +314,13 @@ func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (en
 		if err != nil {
 			return eng.Value{}, err
 		}
-		// Optional field: wrap value as (value or None).
+		// Optional field: `?:T` means "None or absent, universally" —
+		// desugared to `disjunct(T, None, Absent)`. The Absent
+		// alternative carries the "may be missing" half of the rule
+		// (the map unifier synthesises Absent when a key is absent);
+		// the None alternative carries the "may be explicitly None"
+		// half. No separate metadata needed — the optionality lives
+		// entirely in the type.
 		optional := qmSet[key]
 		realKey := key
 		if strings.HasSuffix(key, "?") {
@@ -325,6 +331,7 @@ func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (en
 			child = eng.NewDisjunct([]eng.Value{
 				child,
 				eng.NewTypeLiteral(eng.TNone),
+				eng.NewTypeLiteral(eng.TAbsent),
 			})
 		}
 		om.Set(realKey, child)
@@ -524,16 +531,18 @@ func sortedKeys(m map[string]any) []string {
 
 // parseWord interprets an unquoted text token as an AQL word, handling
 // modifier syntax: name/f (forceForward), name/s (forceStack), name/N (argCount),
-// name/q (quote → Atom), and combinations like name/1f, name/qs, name/f2.
-// Modifiers stack in any order; f and s are mutually exclusive; the argCount
-// digits form a single number; q produces an Atom and overrides the other
-// modifiers (they are accepted syntactically but ignored).
+// name/q (quote → Atom), name/r (ref → bound value), and combinations like
+// name/1f, name/qs, name/f2, name/r. Modifiers stack in any order;
+// f and s are mutually exclusive; q and r are mutually exclusive; the
+// argCount digits form a single number; q produces an Atom and overrides
+// the other modifiers; r emits a ref-word that short-circuits the rest.
 func parseWord(text string) (eng.Value, error) {
 	name := text
 	argCount := -1
 	forceStack := false
 	forceForward := false
 	quoteFlag := false
+	refFlag := false
 
 	// Check for /... modifier suffix.
 	if idx := strings.LastIndex(name, "/"); idx >= 0 && idx < len(name)-1 {
@@ -580,10 +589,16 @@ func parseWord(text string) (eng.Value, error) {
 					forceStack = true
 				}
 			case c == 'q':
-				if quoteFlag {
+				if quoteFlag || refFlag {
 					valid = false
 				} else {
 					quoteFlag = true
+				}
+			case c == 'r':
+				if refFlag || quoteFlag {
+					valid = false
+				} else {
+					refFlag = true
 				}
 			default:
 				valid = false
@@ -602,6 +617,7 @@ func parseWord(text string) (eng.Value, error) {
 			forceStack = false
 			forceForward = false
 			quoteFlag = false
+			refFlag = false
 		}
 	}
 
@@ -614,6 +630,14 @@ func parseWord(text string) (eng.Value, error) {
 	// not a function call.
 	if quoteFlag {
 		return eng.NewAtom(name), nil
+	}
+
+	// /r emits a ref-word that, when reached at the pointer, resolves to
+	// the bound value (a Function for fn / object bindings) without
+	// invoking. Argument-shape modifiers don't apply because ref bypasses
+	// dispatch entirely; they're accepted syntactically but ignored.
+	if refFlag {
+		return eng.NewWordRef(name), nil
 	}
 
 	if forceStack || forceForward || argCount >= 0 {
@@ -629,7 +653,7 @@ func parseWord(text string) (eng.Value, error) {
 	}
 
 	// Reserved tape-syntax tokens emit typed marker values so the
-	// engine recognises them by VType identity (parens, end / ';').
+	// engine recognises them by Parent identity (parens, end / ';').
 	// These would otherwise become plain Word values that the engine
 	// would have to name-dispatch in stepWord.
 	switch name {

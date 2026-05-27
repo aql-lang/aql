@@ -15,19 +15,17 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: lang/go.mod
+          go-version-file: lang/go/go.mod
 
       - name: Install golangci-lint
-        # Replaces a previous `curl … install.sh | sh` to avoid piping
-        # a remote script into the CI shell. The official action installs
-        # via GitHub Actions' cached infrastructure.
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v2.5.0
-          install-mode: binary
-          # We invoke golangci-lint via `make lint` below; this step
-          # only needs to put the binary on $PATH.
-          args: --version
+        # Use `go install` (Go is already on PATH from setup-go) rather
+        # than the official action: `make lint` invokes the binary
+        # directly so we just need it on PATH. The action insists on
+        # running `golangci-lint run` itself, which we don't want here
+        # — we run it ourselves later, against every module.
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.5.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Install govulncheck
         run: |
@@ -37,25 +35,25 @@ jobs:
       - name: Build CLI
         run: make -C cmd/go build
 
-      - name: Vet
-        run: make -C lang vet
+      - name: Vet (all modules)
+        run: make vet
 
       - name: Lint assertions
-        run: make -C lang lint-assertions
+        run: make -C lang/go lint-assertions
 
-      - name: Lint (golangci-lint)
-        run: make -C lang lint
+      - name: Lint (golangci-lint, all modules)
+        run: make lint
 
-      - name: Test
-        run: make -C lang test
+      - name: Test (all modules)
+        run: make test
 
       - name: Build WASM
-        run: make -C cmd/go wasm
+        run: make -C wpg wasm
 
       # Advisory: govulncheck currently flags Go standard-library vulns
       # that are fixed in newer 1.24.x patch releases — see
       # STATIC_ANALYSIS_REPORT.md. Drop continue-on-error once the `go`
       # directive is bumped (or CI installs the latest 1.24.x toolchain).
-      - name: Vulncheck (advisory)
-        run: make -C lang vuln
+      - name: Vulncheck (advisory, all modules)
+        run: make vuln
         continue-on-error: true

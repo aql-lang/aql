@@ -1,0 +1,19 @@
+// AQL Language Server for Kate / KWrite via the built-in LSP Client.
+//
+// Settings > Configure Kate > LSP Client > User Server Settings
+// Paste / merge the snippet below into the text area. Kate will
+// spawn `aql lsp` for buffers whose highlighting mode matches the
+// "aql" key. Add an "aql" highlighting definition under
+// Settings > Configure Kate > Open/Save > Modes & Filetypes if
+// none is registered for *.aql.
+
+{
+  "servers": {
+    "aql": {
+      "command": ["aql", "lsp"],
+      "rootIndicationFileNames": ["aql.jsonic", ".git"],
+      "url": "https://github.com/aql-lang/aql",
+      "highlightingModeRegex": "^AQL$"
+    }
+  }
+}

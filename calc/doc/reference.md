@@ -33,7 +33,7 @@ Where two symbols only differ in detail (e.g. `eng.New` vs
 | Symbol | What it does |
 | --- | --- |
 | `r.RegisterNativeFunc(NativeFunc)` | Installs a word — name, sigs, handlers. Validates the word name (must be `[a-z][a-z0-9-]*`). |
-| `eng.NativeFunc` | Word descriptor — `Name`, `ForwardArgs`, `Signatures`. |
+| `eng.NativeFunc` | Word descriptor — `Name`, `Signatures`. Dispatch policy lives on each sig's `BarrierPos`. |
 | `eng.NativeSig` | One overload — `Args`, `Handler`, `Returns`, `BarrierPos`, `QuoteArgs`, `NoEvalArgs`, `FullStack`, `Patterns`, `ReturnsFn`, … |
 | `eng.Handler` | `func(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error)` |
 
@@ -80,7 +80,7 @@ vocabulary doesn't need them.
 
 | Symbol | What it does |
 | --- | --- |
-| `eng.Value` | The kernel's tagged-value type. `VType *Type` + sealed `Data Payload`. Calc treats it as an opaque token in most places. |
+| `eng.Value` | The kernel's tagged-value type. `Parent *Type` + sealed `Data Payload`. Calc treats it as an opaque token in most places. |
 | `eng.Registry` | The dispatch state. Methods used: `RegisterNativeFunc`, `InitRootContext`, `MarkReady`, `SetParseFunc`, `Defs.Names()`. |
 | `eng.Engine` | The interpreter loop. Methods used: `Run`. |
 | `r.Defs.Names() []string` | All currently-defined word names. The REPL's `:words` meta-command calls this. |
@@ -103,7 +103,7 @@ Worth listing because the absence is the whole point.
 
 - **`github.com/aql-lang/aql/lang/go`** — the language layer with
   the production word set. Calc deliberately avoids it.
-- **`github.com/aql-lang/aql/lang/go/engine`** — the engine shim
+- **`github.com/aql-lang/aql/lang/go/native`** — the engine shim
   that lang re-exports through. Calc reaches the bare eng API.
 - **`github.com/aql-lang/aql/lang/go/native`** — array / fetch /
   query natives. None of them belong in a calculator.

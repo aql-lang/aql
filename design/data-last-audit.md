@@ -125,7 +125,7 @@ math/boolean/stack/comparison sigs, and FullStack sigs are excluded.
 | pop / shift | [List] | OK |
 | istype | [Any] | OK |
 
-### `lang/go/internal/nativemod/matrix` (matrix module — Go-implemented words)
+### `lang/go/modules/matrix` (matrix module — Go-implemented words)
 
 | Word | Sig(s) | Verdict |
 |---|---|---|
@@ -150,15 +150,15 @@ FnDef-args [mat,1,0] → CallAQL pushes them as tokens [mat,1,0] →
 NativeFunc sig [Int,Int,Matrix] matches stack [mat,1,0]
 (top=0→sig[0], mid=1→sig[1], deep=mat→sig[2]).
 
-### `lang/go/internal/nativemod/time` (time module)
+### `lang/go/modules/time` (time module)
 
 | Word | Sig(s) | Verdict |
 |---|---|---|
 | date / datetime / instant / time-of-day / tz / unix / unix-ms / unix-ns | [String/Int] | OK |
 | now-local / today / today-utc | [] | OK |
-| year / month / day / weekday / year-day / iso-week / quarter / days-in-month / days-in-year / weekday-name / month-name / leap-year? | [Date] | OK |
+| year / month / day / weekday / year-day / iso-week / quarter / days-in-month / days-in-year / weekday-name / month-name / is-leap-year | [Date] | OK |
 | to-unix / to-unix-ms / to-utc / elapsed | [Instant] | OK |
-| before? / after? / equal? / until / since / diff / earliest / latest / time-compare | [Date, Date] / [Instant, Instant] | VACUOUS (homogeneous) |
+| is-before / is-after / is-equal / until / since / diff / earliest / latest / time-compare | [Date, Date] / [Instant, Instant] | VACUOUS (homogeneous) |
 | to-string / to-iso | [Date] | OK |
 | **format** | was [Date, String] → now [String, Date] | **REORDERED** |
 | **add-days / add-months / add-years** | was [Date, Int] → now [Int, Date] | **REORDERED** |
@@ -166,7 +166,7 @@ NativeFunc sig [Int,Int,Matrix] matches stack [mat,1,0]
 | cal-dur | [Int, Int, Int] | VACUOUS |
 | ~~time-duration~~ (ISO form) | ~~[String]~~ | **REMOVED** (TYPE-DECOUPLING.0.md Step 11) |
 | total-hours / total-minutes / total-seconds / total-ms / dur-years / dur-months / dur-days / dur-sign | [Duration] | OK |
-| between? | [Date, Date, Date] | VACUOUS |
+| is-between | [Date, Date, Date] | VACUOUS |
 | to-date | [DateTime] / [Instant] | OK |
 | to-time-of-day | [DateTime] / [Instant] | OK |
 | to-datetime | [Date] | OK |
@@ -175,7 +175,7 @@ NativeFunc sig [Int,Int,Matrix] matches stack [mat,1,0]
 | **start-of / end-of** | was [Date, String] → now [String, Date] | **REORDERED** |
 | tz-utc / tz-local | [] | OK |
 | tz-name | [Timezone] | OK |
-| tz-offset / dst? | [Timezone, Instant] | OK |
+| tz-offset / is-dst | [Timezone, Instant] | OK |
 | ~~parse-date / parse-datetime~~ | ~~[String, String]~~ | **REMOVED** (TYPE-DECOUPLING.0.md Step 11) |
 | ~~auto-date~~ | ~~[String]~~ | **REMOVED** (TYPE-DECOUPLING.0.md Step 11) |
 
@@ -241,8 +241,8 @@ The user resolved the ambiguous cases as follows:
 - **matrix mat-add / sub / mul / emul, dot** — leave as-is.
   Homogeneous binary ops.
 
-- **time before? / after? / equal? / until / since / diff /
-  earliest / latest / compare / between?** — leave as-is.
+- **time is-before / is-after / is-equal / until / since / diff /
+  earliest / latest / compare / is-between** — leave as-is.
   Homogeneous binary ops.
   *Question:* is URL "data" or "address"?
   *Recommendation:* leave alone (URL-as-address convention is universal).
@@ -250,7 +250,7 @@ The user resolved the ambiguous cases as follows:
 - **matrix mat-add / sub / mul / emul, dot**: binary ops over homogeneous types.
   *Recommendation:* leave alone.
 
-- **time before? / after? / equal? / until / since / diff / earliest / latest / compare / between?**: homogeneous date/instant operands.
+- **time is-before / is-after / is-equal / until / since / diff / earliest / latest / compare / is-between**: homogeneous date/instant operands.
   *Recommendation:* leave alone.
 
 ## Test deltas

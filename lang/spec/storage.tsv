@@ -69,11 +69,11 @@ context get quote nope	ERROR:unknown key
 # observes the change on subsequent reads.		
 		
 # String-key set		
-type Foo object { a:String b:Integer } def f make Foo { a:'hi' b:1 } set 'a' 'bye' f f .a	'bye'	String key updates the field
-type Foo object { a:String b:Integer } def f make Foo { a:'hi' b:1 } set 'a' 'bye' f f .b	1	other fields are untouched
+def Foo (refine Object { a:String b:Integer }) def f make Foo { a:'hi' b:1 } set 'a' 'bye' f f .a	'bye'	String key updates the field
+def Foo (refine Object { a:String b:Integer }) def f make Foo { a:'hi' b:1 } set 'a' 'bye' f f .b	1	other fields are untouched
 		
 # Numeric field via String value — set replaces the value verbatim.		
-type Foo object { a:Integer } def f make Foo { a:5 } set 'a' 99 f f .a	99	
+def Foo (refine Object { a:Integer }) def f make Foo { a:5 } set 'a' 99 f f .a	99	
 		
 # ====================================================================		
 # 3. None propagation		

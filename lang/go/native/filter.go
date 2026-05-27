@@ -3,7 +3,6 @@ package native
 import (
 	"fmt"
 
-	"github.com/aql-lang/aql/lang/go/engine"
 	voxgigstruct "github.com/voxgig/struct"
 )
 
@@ -13,7 +12,7 @@ import (
 // filterHandler calls voxgigstruct.Filter with an AQL callback as predicate.
 // The callback receives a map with "key" and "value" fields and should return
 // a boolean indicating whether to keep the item.
-func filterHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	cb := args[0]
 	data := valueToAny(args[1])
 
@@ -23,33 +22,37 @@ func filterHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 			return false
 		}
 
-		item := engine.NewOrderedMap()
+		item := NewOrderedMap()
 
 		keyVal, err := anyToValue(pair[0])
 		if err != nil {
-			keyVal = engine.NewString(fmt.Sprintf("%v", pair[0]))
+			keyVal = NewString(fmt.Sprintf("%v", pair[0]))
 		}
 		item.Set("key", keyVal)
 
 		valVal, err := anyToValue(pair[1])
 		if err != nil {
-			valVal = engine.NewString(fmt.Sprintf("%v", pair[1]))
+			valVal = NewString(fmt.Sprintf("%v", pair[1]))
 		}
 		item.Set("value", valVal)
 
-		cbArgs := []engine.Value{engine.NewMap(item)}
-		cbSig := engine.MatchFnSig(cb, cbArgs)
+		cbArgs := []Value{NewMap(item)}
+		cbSig := MatchFnSig(cb, cbArgs)
 		if cbSig == nil {
 			callErr = fmt.Errorf("filter: no matching callback signature")
 			return false
 		}
-		cbResult, err := r.CallAQL(cbSig, cbArgs)
+		var cbCaps []CapturedBinding
+		if fd, ok := cb.Data.(FnDefInfo); ok {
+			cbCaps = fd.Captured
+		}
+		cbResult, err := r.CallAQL(cbSig, cbArgs, cbCaps)
 		if err != nil {
 			callErr = err
 			return false
 		}
-		if len(cbResult) > 0 && cbResult[0].VType.Matches(engine.TBoolean) {
-			b, _ := engine.AsBoolean(cbResult[0])
+		if len(cbResult) > 0 && cbResult[0].Parent.Matches(TBoolean) {
+			b, _ := AsBoolean(cbResult[0])
 			return b
 		}
 		return false
@@ -63,5 +66,5 @@ func filterHandler(args []engine.Value, ctx map[string]engine.Value, stack []eng
 	if err != nil {
 		return nil, fmt.Errorf("filter: %w", err)
 	}
-	return []engine.Value{val}, nil
+	return []Value{val}, nil
 }

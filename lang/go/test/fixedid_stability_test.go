@@ -7,8 +7,7 @@ import (
 	// Side-effect imports: trigger the init() / var initialisers that
 	// register externally-owned types into eng.Builtin so the snapshot
 	// below sees the full set.
-	_ "github.com/aql-lang/aql/lang/go/engine"
-	_ "github.com/aql-lang/aql/lang/go/internal/nativemod"
+	_ "github.com/aql-lang/aql/lang/go/modules"
 	_ "github.com/aql-lang/aql/lang/go/native"
 )
 
@@ -20,9 +19,10 @@ import (
 //
 // Every known *Type with a non-zero FixedID — both kernel
 // builtins (declared in eng/go/typetable.go::builtinDecls) and
-// externally-registered types (Fetch in lang/go/native, Matrix in
-// lang/go/internal/nativemod, Timeout/Interval and the Time family
-// in lang/go/engine) — is checked against the snapshot below. A
+// externally-registered types (Fetch in lang/go/native, the
+// Tensor/Matrix/Vector kinds in lang/go/modules, Timeout/Interval
+// and the Time family in lang/go/native) — is checked against the
+// snapshot below. A
 // failure here means EITHER a stable ID has drifted OR a new
 // type was added without registering it in the snapshot.
 //
@@ -32,67 +32,68 @@ import (
 func TestFixedIDStability(t *testing.T) {
 	expected := map[string]int{
 		// --- Kernel builtins (eng/go/typetable.go::builtinDecls) ---
-		"Any":                        1,
-		"None":                       2,
-		"Scalar":                     3,
-		"Scalar/String":              4,
-		"Scalar/String/ProperString": 5,
-		"Scalar/String/EmptyString":  6,
-		"Scalar/Number":              7,
-		"Scalar/Number/Integer":      8,
-		"Scalar/Number/Decimal":      9,
-		"Scalar/Boolean":             10,
-		"Node":                       11,
-		"Node/List":                  12,
-		"Node/List/Args":             13,
-		"Node/Map":                   14,
-		"Object/Table":               15,
-		"Object/Record":              16,
-		"Word":                       17,
-		"Scalar/Atom":                18,
-		"Type/Function":              19,
-		"Word/__IN":                  20,
-		"Word/__FW":                  21,
-		"Word/__OP":                  22,
-		"Word/__FN":                  23,
-		"Type/FunctionSignature":     24,
-		"Word/__RC":                  25,
-		"Type/Disjunct":              26,
-		"Word/__MK":                  27,
-		"Word/__MV":                  28,
-		"Word/__MD":                  29,
-		"Object":                     30,
-		"Node/Map/Inspect":           31,
-		"Object/Fetch":               3000,
-		"Object/Fetch/Request":       3001,
-		"Object/Fetch/Response":      3002,
-		"Object/Resource":            36,
-		"Object/Resource/Entity":     37,
-		"Node/Map/Options":           38,
-		"Type":                       39,
-		"Type/ScalarType":            40,
-		"Type/NodeType":              41,
-		"Object/Store":               42,
-		"Object/Store/System":        43,
-		"Object/Array":               44,
-		"Object/Error":               45,
-		"Type/ObjectType":            46,
-		"Scalar/Path":                47,
-		"Scalar/Number/Matrix":       2000, // externalised — matrix module range
-		"Word/__IS":                  51,
-		"Type/Disjunct/Enum":         62,
-		"Word/__PE":                  63,
-		"Word/__IN/__DC":             64,
-		"Type/Dependent":             65,
-		"Type/Dependent/DepInteger":  66,
-		"Type/Dependent/DepDecimal":  67,
-		"Type/Dependent/DepNumber":   68,
-		"Type/Dependent/DepString":   69,
-		"Type/Dependent/DepBoolean":  70,
-		"Type/Dependent/DepAtom":     71,
-		"Word/__CP":                  72,
-		"Word/__ED":                  73,
-		"Never":                      61,
+		"Any":                          1,
+		"None":                         2,
+		"Scalar":                       3,
+		"Scalar/String":                4,
+		"Scalar/String/ProperString":   5,
+		"Scalar/String/EmptyString":    6,
+		"Scalar/Number":                7,
+		"Scalar/Number/Integer":        8,
+		"Scalar/Number/Decimal":        9,
+		"Scalar/Boolean":               10,
+		"Node":                         11,
+		"Node/List":                    12,
+		"Node/List/Args":               13,
+		"Node/Map":                     14,
+		"Ideal/Table":                  15,
+		"Ideal/Record":                 16,
+		"Word":                         17,
+		"Scalar/Atom":                  18,
+		"Type/Function":                19,
+		"Word/__IN":                    20,
+		"Word/__FW":                    21,
+		"Word/__OP":                    22,
+		"Word/__FN":                    23,
+		"Type/FunctionSignature":       24,
+		"Word/__RC":                    25,
+		"Type/Disjunct":                26,
+		"Word/__MK":                    27,
+		"Word/__MV":                    28,
+		"Word/__MD":                    29,
+		"Ideal":                        48,
+		"Ideal/Object":                 30,
+		"Node/Map/Inspect":             31,
+		"Ideal/Fetch":                  3000,
+		"Ideal/Fetch/Request":          3001,
+		"Ideal/Fetch/Response":         3002,
+		"Ideal/Object/Resource":        36,
+		"Ideal/Object/Resource/Entity": 37,
+		"Ideal/Options":                38,
+		"Type":                         39,
+		// FixedIDs 40, 41, 46 retired with Type/ScalarType,
+		// Type/NodeType, Type/IdealType. Sig "type literal here" is
+		// now expressed via Signature.TypeArgs[i]=true.
+		"Ideal/Store":         42,
+		"Ideal/Store/System":  43,
+		"Ideal/Array":         44,
+		"Ideal/Error":         45,
+		"Scalar/Path":         47,
+		"Ideal/Tensor":        2001, // matrix module range (2000-2999)
+		"Ideal/Tensor/Matrix": 2000, // historical Matrix FixedID, kept
+		"Ideal/Tensor/Vector": 2002,
+		"Word/__IS":           51,
+		"Type/Disjunct/Enum":  62,
+		"Word/__PE":           63,
+		"Word/__IN/__DC":      64,
+		// FixedIDs 65-71 retired with the Type/Dependent subtree;
+		// DepScalar values now carry their base scalar type directly
+		// (typeof (Integer gte 0) → Integer) with the constraint in
+		// the DepScalarInfo payload. See depscalar.go.
+		"Word/__CP": 72,
+		"Word/__ED": 73,
+		"Never":     61,
+		"Absent":    74,
 		// --- Externally-registered types (Step 8 migration) ---
 		"Scalar/Time":                      1000, // time family — lang/go/engine/native_temporal.go
 		"Scalar/Time/Date":                 1001,
@@ -103,8 +104,8 @@ func TestFixedIDStability(t *testing.T) {
 		"Scalar/Time/Duration/CalDuration": 1006,
 		"Scalar/Time/Duration/ClkDuration": 1007,
 		"Scalar/Time/Timezone":             1008,
-		"Object/Timeout":                   4000, // timer types — lang/go/engine/native_misc.go
-		"Object/Interval":                  4001,
+		"Ideal/Timeout":                    4000, // timer types — lang/go/engine/native_misc.go
+		"Ideal/Interval":                   4001,
 	}
 
 	for path, want := range expected {

@@ -9,12 +9,97 @@ For language-layer conventions (jsonic integration, registry
 stacks, helper API discipline, panic prevention) see
 `lang/go/CLAUDE.md`.
 
+## Single-Pass Parsing (CRITICAL)
+
+AQL source is converted from jsonic items to engine values in
+one left-to-right walk. Do not introduce post-conversion rewrite
+passes that re-walk the value stream — they accumulate complexity
+(paren-expansion ordering, data-context vs word-context divergence,
+nested-container recursion) and entangle the parser with handler
+semantics. When a surface form needs sugar, prefer a token-level
+substitution (an `AltSpec.A` callback that emits a `jsonic.Text`
+marker — see `;` → `"end"`, `=>` → `"afn"`, `|` → `"|"` in
+`parser/grammar.go::setupValRule`) so the conversion path stays
+linear. Behaviour the marker can't express directly belongs in the
+registered word's handler, not in a separate parser stage.
+
+## Per-Call Stacks (Args / DefSnapshot / FnBaselines)
+
+Every fn-body entry pushes onto three coordinated stacks; every fn
+exit pops the same three. Misalignment (forgetting one) breaks
+nested calls in subtle ways, so add the push and the matching pop
+together when you touch one of these sites.
+
+| Stack | Field | Push site | Pop site | Read site |
+| --- | --- | --- | --- | --- |
+| Args list | `Registry.Args` | `InstallFnDef` handler / `execFnDefSig` body splice / `CallAQL` | `__pa` token in the synthesized body tail / `CallAQL` inline cleanup | `args` native word |
+| Body-local def cleanup | (per-call `defSnapshot` local) | same | `DefCleanupInfo` marker (`stepDefCleanup`) / `CallAQL` inline cleanup | closure capture analysis (via `FnBaselines`) |
+| Enclosing-fn baseline | `Registry.FnBaselines` | same (alongside `defSnapshot`) | piggybacks on `__pa` and on `CallAQL`'s inline cleanup | `ComputeCaptures` (`fn_capture.go`) |
+
+The baseline is what closure-capture detection consults at fn-
+construction time: an inner-fn body Word whose `Defs.Depth(name) >
+TopFnBaseline()[name]` lives inside an enclosing fn (param or
+body-local) and is captured; depth ≤ baseline means module / global
+scope and the reference stays dynamic. See lang/go/CLAUDE.md
+"Closures and Capture" for the surface semantics.
+
+## No Zero-Value Overload (CRITICAL)
+
+A struct field MUST NOT use the Go zero value (`0`, `""`, `false`,
+`nil`) to mean both "the author omitted this" AND a valid
+explicit value. The two meanings are indistinguishable at the
+call site and inevitably drift apart when one path needs the
+"omitted = default" rule and another path needs the "explicit
+zero" interpretation. We hit this exactly with `BarrierPos`,
+where `[| a b]` from AQL source could not be expressed because
+`0` was being silently promoted to `len(Args)` for omitted-field
+callers.
+
+When a field needs an "unset" state distinct from a real value:
+
+- **For ints**: use an out-of-domain sentinel and document it.
+  `-1` is the canonical choice when the field's valid domain is
+  non-negative (`BarrierPos`, `CheckState.StepBudget`,
+  `WordInfo.ArgCount`). Initialize the sentinel in the
+  constructor (e.g. `NewRegistry`) so the Go zero never reaches
+  consumers.
+- **For pointers / interfaces**: `nil` IS unambiguously "unset"
+  when the type has no zero-value inhabitant — fine to use.
+- **For booleans**: don't try to overload. Add a second field
+  (`PathInfo.Abs` plus an `AbsSet bool` if both states matter)
+  or split into an enum.
+- **For strings**: empty string is rarely a valid user value,
+  but if it could be, use a `*string` or a separate `XSet bool`.
+
+Resolve the sentinel **exactly once, at a single boundary** —
+the registration / construction point — so every downstream
+consumer sees a fully-normalised value. Don't sprinkle the
+default substitution across every reader; that's how the
+ambiguity sneaks back in. Current examples:
+
+- `upsertFnDef` (`registry.go`) — sentinel-resolves
+  `Signature.BarrierPos == -1` to `len(Args)` or `0` based on
+  the `forwardArgs` flag, then stores. Every read of
+  `BarrierPos` after this is an explicit value.
+- `NewRegistry` (`registry.go`) — initialises
+  `CheckState.StepBudget = -1` so the Go zero on a freshly-
+  constructed registry doesn't get mistaken for "abort
+  immediately." The engine's check-mode loop substitutes
+  `DefaultCheckStepBudget` only for the sentinel; an explicit
+  user-set `0` is honored as "abort on first step."
+
+When you find a field that violates this rule, treat the audit
+as the BarrierPos cleanup precedent: pick a sentinel, audit all
+construction sites (an AST-based rewrite is fine for bulk),
+move resolution to a single boundary, remove every conditional
+that substituted on the zero value.
+
 ## Sealed Payload (CRITICAL)
 
 `Value.Data` is a sealed interface: `eng.Payload`. Only types
 with the unexported `payloadMarker()` method satisfy it, and the
 method is only definable in this package. The seal closes the
-historical `Data interface{}` hole — `Value{VType: TInteger,
+historical `Data interface{}` hole — `Value{Parent: TInteger,
 Data: "hello"}` is a **compile error**.
 
 Payload variants live in `eng/go/payload.go`. Two flavours:
@@ -38,7 +123,7 @@ Payload variants live in `eng/go/payload.go`. Two flavours:
    `OptionsTypeInfo`, `TableTypeInfo`, `TableData`,
    `ObjectTypeInfo`, `ObjectInstanceInfo`, `*StoreInstanceInfo`,
    `*ArrayInstanceInfo`, `*TimeoutInfo`, `*IntervalInfo`,
-   `ErrorInfo`, `MatrixData`, `CalDurationData`, `DepScalarInfo`,
+   `ErrorInfo`, `CalDurationData`, `DepScalarInfo`,
    `PathInfo`, `noneSentinel`.
 
 When adding a new kernel-known payload shape, register the
@@ -64,7 +149,7 @@ type TypeBehavior interface {
 ```
 
 `DefaultBehavior` is the kernel's no-op: `Match` delegates to
-`v.VType.Matches(t)`, `Format` delegates to `v.String()` (with
+`v.Parent.Matches(t)`, `Format` delegates to `v.String()` (with
 the dispatch carefully avoiding re-entry), `Equal` delegates to
 `valuesEqualDefault`. Every type registered through the kernel
 paths gets `DefaultBehavior` if the caller doesn't supply one.
@@ -73,9 +158,9 @@ Types with semantics the kernel can't infer (time formatting,
 matrix rendering, predicate-type matching, refinement-type
 matching, plugin types) supply a custom Behavior:
 
-- `lang/go/engine/native_temporal.go` — Time family Behaviors.
-- `lang/go/engine/native_misc.go` — Timeout/Interval Behaviors.
-- `lang/go/internal/nativemod/matrix.go` — Matrix Behavior.
+- `lang/go/native/native_temporal.go` — Time family Behaviors.
+- `lang/go/native/native_misc.go` — Timeout/Interval Behaviors.
+- `lang/go/modules/matrix.go` — Tensor/Matrix/Vector Behavior.
 - `lang/go/native/fetch.go` — Fetch family (no custom Behavior; uses Default).
 
 The dispatch in `Value.String` walks the Parent chain so
@@ -151,10 +236,10 @@ Documented per-module ranges (see
 ```
    1-99       eng kernel builtins
    100-999    reserved for future eng-internal builtins
-   1000-1999  lang/go/engine — Scalar/Time family
-   2000-2999  lang/go/internal/nativemod/matrix
+   1000-1999  lang/go/native — Scalar/Time family
+   2000-2999  lang/go/modules/matrix
    3000-3999  lang/go/native/fetch
-   4000-4999  lang/go/engine — Timeout, Interval
+   4000-4999  lang/go/native — Timeout, Interval
    5000-9999  reserved for future kernel/language allocations
    10000+     host / third-party plugin types
 ```
@@ -170,24 +255,66 @@ externally-registered type means:
 
 ## Type Lattice Fields
 
-`Type` carries two fields populated at registration time that
-replace historical hardcoded switches:
+`Type` carries one field populated at registration time:
 
-- `BaseType *Type` — for `Type/Dependent/Dep<X>` types, points
-  at the underlying scalar (e.g. `TDepInteger.BaseType ==
-  TInteger`). `Type.Matches` consults it for the dependent-base
-  override. Populated via `builtinDecl.BasePath` for kernel-
-  declared deps. External registrations can set
-  `def.BaseType = ...` after `RegisterExternalBuiltin` returns.
+- `Rank int` — the **unified lattice rank**: one integer giving the
+  total order `CompareValues` / `compareTypes` use for every cross-
+  type ordering. The scheme:
 
-- `Metatype *Type` — for the three anchor roots (`TScalar` →
-  `TScalarType`, `TNode` → `TNodeType`, `TObject` →
-  `TObjectType`). Descendants inherit by Parent-chain walk in
-  `MetatypeFor`. Populated via `builtinDecl.MetatypePath` for
-  kernel-declared roots.
+  | Band | Kernel positional | External / user |
+  |---|---|---|
+  | Any / None / Never | `1·10¹⁰` | — (degenerate roots) |
+  | Scalar branch | `2·10¹⁰`-band | `2.1·10¹⁰` (`externalBandFor`) |
+  | Node branch | `3·10¹⁰`-band | `3.1·10¹⁰` |
+  | Ideal branch | `4·10¹⁰`-band | `4.1·10¹⁰` |
+  | Word branch | `5·10¹⁰`-band | `5.1·10¹⁰` |
+  | Type branch | `6·10¹⁰`-band | `6.1·10¹⁰` |
 
-When introducing a new root with its own metatype anchor, add
-`MetatypePath` to its `builtinDecl` row.
+  Kernel types get a positional Rank from `builtinDecl.Rank`
+  (positional: parent + depth-scaled offset, so a child always
+  ranks above its parent and siblings run least-to-most complex
+  — laid out on `typetable.go::builtinDecls`). User types
+  (`MintType`) and external builtins (`RegisterExternalBuiltin`)
+  share a single Rank per branch via `externalBandFor`, so they
+  sort AFTER every kernel positional type in the same branch.
+  Same-Rank ties break in `compareTypes` by depth → name → id;
+  `rankOf` (`compare_types.go`) walks the parent chain as a
+  fallback for a `*Type` assembled without one.
+
+## Comparison & Ordering
+
+`CompareValues` runs a three-stage cascade:
+
+1. **LCA Comparer walk.** Walks the lowest common ancestor up the
+   parent chain looking for a `Comparer` capability
+   (`numberCompareBehavior`, `stringCompareBehavior`,
+   `booleanCompareBehavior`, `atomCompareBehavior`,
+   `wordCompareBehavior`, `scalarCompareBehavior`). The first
+   Comparer found owns the result. Each Comparer can return
+   `ErrNoComparer` to opt out (DepScalar payloads do this so
+   numeric Comparers don't read DepScalarInfo as a zero float).
+2. **Rank fallback** via `compareTypes` (Rank → depth → name →
+   ID). Reached when no Comparer applies — cross-family pairs,
+   Path-vs-Path-of-same-shape edge cases, etc.
+3. **Structural compare** (`compareStructural`) when types are
+   identical: lists by length-then-element-wise, maps by length-
+   then-sorted-keys-then-values, others by `CanonValue` lex.
+
+**Type-literal-first rule.** Every family `Comparer` opens with
+`litVsConcreteOrder(a, b)` — when exactly one side is a bare type
+literal (`Data == nil && !Carrier`), it sorts FIRST. Both-literal
+pairs delegate to `litVsLitOrder` → `compareTypes` so they order by
+lattice Rank. The rule lives in the per-family Comparers (not
+`scalarCompareBehavior`, which handles cross-family pairs where
+Rank must own the result); the Path family applies it inside
+`comparePaths` so the rule stays inside the Path family without
+leaking.
+
+Result is a strict total order over distinct lattice nodes, with
+one deliberate value-level equivalence: cross-leaf numeric
+magnitude (`1 cmp 1.0 → 0`). Full design at
+`lang/doc/design/TYPE-ORDERING.0.md`; verification at
+`lang/spec/compare.tsv`.
 
 ## Value Has Two Methods
 
@@ -207,17 +334,101 @@ Methods on `Value` accumulate API surface and become coupling
 points; free functions are equally callable and can be moved
 between packages without affecting the kernel.
 
-## type / untype installation
+## Type installation
 
-`type Foo body` and `untype Foo` are kernel-level concerns —
-they manipulate the registry's type stack and validate that
-`body` is a valid type body, regardless of which surface (eng
-or lang) registered the word.
+A capitalised `def Foo body` installs a type binding (the
+TYPE-UNIFORM surface: `def` binds, `make` instantiates, `refine`
+constructs — the legacy `type`-binder / `object` / `record` /
+`table` / `untype` words were removed in Phase 3, and the `type`
+constructor was renamed to `refine`).
 
-The single source of truth is
-`eng/go/core_type.go::installType`. Lang's `validateAndInstallType`
-in `lang/go/engine/native_type.go` is a thin wrapper that delegates
-to `installType` — do not fork the logic. If you need to extend
-the installation policy (e.g. accept a new name shape, add a
-validation rule), modify the eng function so both surfaces pick
+The single source of truth is `eng/go/core_type.go::InstallType`. It
+validates `body` is a valid type body, mints the lattice identity
+via `TypeTable.MintType`, and binds it in the single `DefTable`
+(`PushType`, carrying the minted `*Type`). `def`'s handler delegates
+here for capitalised names regardless of which surface (eng or lang)
+registered `def` — do not fork the logic. `undef` of a capitalised
+name pops the binding and retires the minted type
+(`TypeTable.Retire`).
+
+If you need to extend the installation policy (a new name shape, an
+extra validation rule), modify `InstallType` so every surface picks
 it up.
+
+## Canonical `*Type` Pointers (CRITICAL)
+
+Because `type Type = Value` a "type literal" is dual: a `Value`
+with `Data == nil` AND the canonical `*Type` registered in
+`TypeTable.byID`. Code that takes `&v` of a stack-local type-
+literal Value (or `NewTypeLiteral(t)`'s by-value return) gets a
+NON-canonical pointer. The orphan compares Equal via ID, but
+mutations to fields like `Behavior` — which `behave` writes
+through the canonical pointer — do not propagate to it. LCA walks
+landing on the orphan miss any user-installed Comparer.
+
+**The discipline:** whenever a `*Type` might have been obtained
+via `&v` from a by-value Value, route it through
+`eng.CanonicalType(r, t)` (re-exported as `native.CanonicalType`)
+before storing it or using it as an identity key. The helper looks
+up the canonical pointer via `r.Types.LookupByID(t.ID)` and falls
+back to `t` for types with no registered canonical (degenerate
+roots, test fixtures with empty IDs).
+
+Current call sites that must canonicalize:
+
+- `core_type.go::InstallType` — bare type-literal body parent.
+- `fn_params.go::LookupDefType` — type-name → body lookup.
+- `fn_params.go::ResolveDefType` — bare-literal Value → `*Type`.
+- `lang/native/native_type.go::refineBareHandler` — `MintRefinePrefab`
+  parent.
+
+See `lang/doc/design/TYPE-CANONICALIZATION.0.md`.
+
+## Typed-Def Reparent
+
+Every typed-def path that rewraps a value's `Parent` to a refine
+subtype's `*Type` routes through `eng.ReparentValue(v, def)` (re-
+exported as `native.ReparentValue`). The helper returns a fresh
+by-value copy with `Parent` rebound — the `Payload`/`Pos`/`Quoted`/
+`Carrier`/`Eval` fields are preserved.
+
+The invariant the helper codifies: NEVER mutate `Parent` on a Value
+that was returned by `Unify` when Unify could have swapped to a
+type-literal side (`Unify(1, Foo-literal)` returns `Foo-literal`,
+not `1`, when Foo is a strict subtype of Integer). The refine-bare
+reparent originally got this wrong and stored the Foo type literal
+as the binding instead of the integer body.
+
+Current reparent callsites:
+
+- `defTypedHandler` predicate-type branch.
+- `defTypedHandler` refine-bare branch.
+- `defTypedHandler` FnUndef branch.
+- (`ObjectType` branch uses `eng.MakeObject` to construct an
+  instance rather than reparenting — different shape, same intent.)
+
+## Refine ↔ Def Constructor Protocol
+
+`refine BaseType` (the bare 1-arg form) and `def Foo BaseType` (the
+alias form, no `refine` word) MUST produce indistinguishable Values
+at the binding site if the protocol is field-coincidental — both
+have `Data == nil` and the same `*Type` ancestry. They are NOT the
+same:
+
+- `def Foo BaseType` — alias. Foo's body IS the input type
+  literal. `typeof x` for `def x:Foo …` resolves to the input.
+- `def Foo refine BaseType` — fresh subtype. Foo gets a minted
+  lattice node with `Parent = BaseType`; the body bound to Foo is
+  the new lattice's type literal.
+
+The protocol channel between the two surfaces:
+
+- `TypeTable.MintRefinePrefab(parent) *Type` — what
+  `refineBareHandler` emits for the bare 1-arg form.
+- `IsRefinePrefab(v) bool` — what `InstallType` matches to take
+  the rename-and-bind path. Anything else falls through to the
+  alias path.
+
+Do NOT detect the prefab via inline field probes (`Origin ==
+OriginUserDef && Name == ""`). Use the named helpers so the
+intent is legible at the call site.

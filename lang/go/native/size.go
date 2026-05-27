@@ -1,16 +1,8 @@
 package native
 
-import (
-	"github.com/aql-lang/aql/lang/go/engine"
-	voxgigstruct "github.com/voxgig/struct"
-)
-
 // The "size" word is registered via the consolidated Natives slice in
-// natives.go.
-//
-// sizeHandler calls voxgigstruct.Size to get the size of a value.
-func sizeHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
-	data := valueToAny(args[0])
-	result := voxgigstruct.Size(data)
-	return []engine.Value{engine.NewInteger(int64(result))}, nil
+// natives.go. It reports the natural size of any value through the
+// kernel's Sizer behaviour — see eng.SizeOf for the per-type rules.
+func sizeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	return []Value{NewInteger(int64(SizeOf(args[0])))}, nil
 }

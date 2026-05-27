@@ -1059,7 +1059,7 @@ func TestCheckRecordShapeMismatch(t *testing.T) {
 		t.Fatalf("new: %v", err)
 	}
 	src := `
-type Point record [x:Integer y:Integer]
+def Point refine Record [x:Integer y:Integer]
 def dist fn [[p:Point] [Integer] [42]]
 dist {x:10}
 `

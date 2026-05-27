@@ -3,7 +3,6 @@ package native
 import (
 	"fmt"
 
-	"github.com/aql-lang/aql/lang/go/engine"
 	voxgigstruct "github.com/voxgig/struct"
 )
 
@@ -12,7 +11,7 @@ import (
 //
 // validateHandler calls voxgigstruct.Validate on data with the given spec.
 // Returns the validated data, or an error if validation fails.
-func validateHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+func validateHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	spec := valueToAny(args[0])
 	data := valueToAny(args[1])
 
@@ -25,5 +24,5 @@ func validateHandler(args []engine.Value, ctx map[string]engine.Value, stack []e
 	if convErr != nil {
 		return nil, fmt.Errorf("validate: %w", convErr)
 	}
-	return []engine.Value{val}, nil
+	return []Value{val}, nil
 }

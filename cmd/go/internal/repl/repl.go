@@ -6,11 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/chzyer/readline"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
 	"github.com/aql-lang/aql/lang/go/native"
 
 	udk "voxgiguniversalsdk"
@@ -24,8 +24,8 @@ var newReadline = func(cfg *readline.Config) (readliner, error) {
 	return readline.NewEx(cfg)
 }
 
-var newRegistry = func() (*engine.Registry, error) {
-	return engine.DefaultRegistry(native.Register)
+var newRegistry = func() (*native.Registry, error) {
+	return native.DefaultRegistry()
 }
 
 // readliner abstracts the readline interface for testing.
@@ -37,6 +37,15 @@ type readliner interface {
 // Start runs the REPL loop, reading from in and writing to out.
 // If registryPath is non-empty, a UniversalManager is configured for API operations.
 func Start(in io.Reader, out io.Writer, registryPath string) {
+	startWithPauseGate(in, out, registryPath, nil)
+}
+
+// startWithPauseGate is the shared loop body used by both Start (no
+// gate) and Service.Start (with a pause gate). When paused is non-nil
+// and set to true, entered lines are discarded with a "paused" notice
+// instead of being evaluated. The readline loop keeps spinning so the
+// prompt stays responsive.
+func startWithPauseGate(in io.Reader, out io.Writer, registryPath string, paused *atomic.Bool) {
 	rl, err := newReadline(&readline.Config{
 		Prompt:          PROMPT,
 		HistoryFile:     historyFile(),
@@ -67,7 +76,7 @@ func Start(in io.Reader, out io.Writer, registryPath string) {
 	registry.Output = out
 
 	meta := NewMetaRegistry()
-	var lastStack []engine.Value
+	var lastStack []native.Value
 
 	for {
 		line, err := rl.Readline()
@@ -76,6 +85,11 @@ func Start(in io.Reader, out io.Writer, registryPath string) {
 		}
 
 		if line == "" {
+			continue
+		}
+
+		if paused != nil && paused.Load() {
+			fmt.Fprintln(out, "  (paused — input ignored)")
 			continue
 		}
 
@@ -98,7 +112,7 @@ func Start(in io.Reader, out io.Writer, registryPath string) {
 			continue
 		}
 
-		eng := engine.NewTop(registry)
+		eng := native.NewTop(registry)
 		result, err := eng.Run(values)
 		if err != nil {
 			fmt.Fprintf(out, "  error: %s\n", err)

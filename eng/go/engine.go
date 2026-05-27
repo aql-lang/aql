@@ -29,24 +29,33 @@ type Engine struct {
 	registry  *Registry
 	trace     TraceCallback
 	traceNote string          // annotation set during execution for the next trace call
-	stepLimit int             // 0 means use default (22222 for top-level, 2222 for sub-engines)
+	stepLimit int             // hard cap on the Run loop; always positive, set by the New/NewTop constructors below
 	marks     map[string]bool // active mark IDs (for mark/move control flow)
 	source    string          // original source text for error reporting
 	isTop     bool            // true for engines created via NewTop; an unhandled FlowCtrl at end-of-Run is an error here, propagates upward otherwise
 }
 
+// Default step limits for the Run loop. Exposed as named constants so
+// every Engine constructor names them explicitly — there is no
+// "zero means default" sentinel on `stepLimit`; the field is always
+// set to a positive value by the constructors below.
+const (
+	DefaultStepLimit    = 22222 // top-level engine cap
+	DefaultSubStepLimit = 2222  // sub-engine cap (autoEvalMap, CallAQL, etc.)
+)
+
 // New creates an Engine with the given function registry.
-// The returned engine uses the sub-engine step limit (2222).
-// Use NewTop for the top-level engine with a higher limit (22222).
+// The returned engine uses the sub-engine step limit.
+// Use NewTop for the top-level engine with a higher limit.
 func New(registry *Registry) *Engine {
-	return &Engine{registry: registry, stepLimit: 2222}
+	return &Engine{registry: registry, stepLimit: DefaultSubStepLimit}
 }
 
-// NewTop creates a top-level Engine with the maximum step limit (22222).
+// NewTop creates a top-level Engine with the maximum step limit.
 // isTop is set so an unhandled FlowCtrl signal at end-of-Run is reported
 // as an error rather than propagating outward.
 func NewTop(registry *Registry) *Engine {
-	return &Engine{registry: registry, stepLimit: 22222, isTop: true}
+	return &Engine{registry: registry, stepLimit: DefaultStepLimit, isTop: true}
 }
 
 // SetSource sets the original source text for error reporting.
@@ -142,7 +151,7 @@ func (e *Engine) isFnShapeTypedBindingContext() bool {
 				constraint = tv
 			}
 		}
-		return constraint.VType.Equal(TFnUndef)
+		return constraint.Parent.Equal(TFnUndef)
 	}
 	return false
 }
@@ -166,7 +175,7 @@ func (e *Engine) returnCountError(funcName string, expected, got int) *AqlError 
 // returnTypeError builds a detailed AqlError for a return type mismatch.
 func (e *Engine) returnTypeError(funcName string, index int, expected *Type, got Value) *AqlError {
 	detail := fmt.Sprintf("%s: return value %d: expected %s, got %s",
-		funcName, index, expected, got.VType)
+		funcName, index, expected, got.Parent)
 	hint := "value: " + ValToString(got)
 	src := e.effectiveSource()
 	return makeAqlError("type_error", detail, funcName, src, hint)
@@ -227,10 +236,11 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 	copy(e.stack, input)
 	e.pointer = 0
 
+	// stepLimit is always set by the constructors (New / NewTop); the
+	// defensive check that used to substitute a default if the field
+	// was zero was load-bearing for callers that built Engine{}
+	// directly, but no longer — the constructors are the only entry.
 	limit := e.stepLimit
-	if limit <= 0 {
-		limit = 22222
-	}
 	for step := 0; step < limit; step++ {
 		if e.pointer >= len(e.stack) {
 			break
@@ -240,8 +250,12 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 		// gracefully once exceeded. Emits one diagnostic and
 		// then short-circuits every subsequent sub-engine too.
 		if e.registry.Check.IsActive() {
+			// -1 is the "unset" sentinel; resolve to the
+			// project default. A literal 0 is honored as
+			// "abort immediately" rather than treated as a
+			// magic "use default."
 			budget := e.registry.Check.StepBudget
-			if budget == 0 {
+			if budget == -1 {
 				budget = DefaultCheckStepBudget
 			}
 			e.registry.Check.StepCount++
@@ -321,7 +335,7 @@ func (e *Engine) Run(input []Value) ([]Value, error) {
 			e.pointer++
 
 		default:
-			if val.VType.Equal(nil) {
+			if val.Parent == nil && val.Behavior == nil {
 				return nil, e.runtimeError("halt", fmt.Sprintf("undefined stack entry at position %d", e.pointer), "", "")
 			}
 			if err := e.stepLiteral(); err != nil {
@@ -473,8 +487,8 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 		tok := e.stack[scanIdx]
 
 		// Boundary conditions: stop scanning.
-		if IsForward(tok) || tok.VType.Matches(TMark) || tok.VType.Matches(TMove) ||
-			tok.VType.Matches(TInternal) || tok.VType.Matches(TReturnCheck) {
+		if IsForward(tok) || tok.Parent.Matches(TMark) || tok.Parent.Matches(TMove) ||
+			tok.Parent.Matches(TInternal) || tok.Parent.Matches(TReturnCheck) {
 			break
 		}
 
@@ -602,6 +616,41 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 func (e *Engine) stepWord(val Value) error {
 	w, _ := AsWord(val)
 
+	// /r modifier: resolve the name to its bound value as data, with no
+	// argument collection or dispatch. An FnDef binding comes back as a
+	// Quoted Function value so it sits on the stack like any other piece
+	// of data — exactly the case `ref` exists to enable.
+	if w.ForceRef {
+		v, ok := ResolveRef(e.registry, w.Name)
+		if !ok {
+			if e.registry != nil && e.registry.Check.IsActive() {
+				e.registry.Check.AddDiagnostic(CheckDiagnostic{
+					Code:   "undefined_word",
+					Detail: "undefined word: " + w.Name,
+					Word:   w.Name,
+					Row:    val.Pos.Row,
+					Col:    val.Pos.Col,
+				})
+				placeholder := NewAtom(w.Name)
+				placeholder.Pos = val.Pos
+				placeholder.Undefined = true
+				e.stack[e.pointer] = placeholder
+				return e.stepLiteral()
+			}
+			return &AqlError{
+				Code:       "undefined_word",
+				Detail:     "undefined word: " + w.Name,
+				Src:        w.Name,
+				Row:        val.Pos.Row,
+				Col:        val.Pos.Col,
+				fullSource: e.effectiveSource(),
+			}
+		}
+		v.Pos = val.Pos
+		e.stack[e.pointer] = v
+		return e.stepLiteral()
+	}
+
 	// If there is a pending forward whose next slot is /q-marked
 	// (QuoteArgs), capture this Word as data (converted to an Atom
 	// further down the pipeline) rather than executing it. This is the
@@ -641,11 +690,8 @@ func (e *Engine) stepWord(val Value) error {
 	// forward can still consume it (e.g. `Color` as the value side
 	// of an export map entry).
 	if e.registry != nil {
-		if tv, ok := e.registry.Types.TopBody(w.Name); ok {
+		if tv, ok := e.registry.TopTypeBody(w.Name); ok {
 			push := tv
-			if push.VType.Equal(TFnDef) || push.VType.Equal(TFunction) {
-				push.Quoted = true
-			}
 			push.Pos = val.Pos
 			e.stack[e.pointer] = push
 			return e.stepLiteral()
@@ -668,7 +714,7 @@ func (e *Engine) stepWord(val Value) error {
 			// Type literals (Data == nil) are values, not bodies — they
 			// fall through to stepLiteral so the type itself is pushed
 			// onto the stack rather than splicing nothing.
-			if top.VType.Equal(TList) && top.Data != nil && !IsTypedList(top) && !IsTableType(top) && !top.Quoted {
+			if top.Parent.Equal(TList) && top.Data != nil && !IsTypedList(top) && !IsTableType(top) && !top.Quoted {
 				elems, _ := AsList(top)
 				expanded := make([]Value, elems.Len())
 				copy(expanded, elems.Slice())
@@ -863,7 +909,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	//   def, if, for, do, etc.).
 	for i := range match.Args {
 		if match.Args[i].Eval && !match.Args[i].Quoted {
-			if match.Args[i].VType.Equal(TMap) &&
+			if match.Args[i].Parent.Equal(TMap) &&
 				match.Args[i].Data != nil && !IsTypedMap(match.Args[i]) && !IsRecordType(match.Args[i]) && !IsOptionsType(match.Args[i]) {
 				// NoEvalMapArgs (separate from the list-only
 				// NoEvalArgs) suppresses map auto-evaluation at this
@@ -877,7 +923,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 						match.Args[i] = evaluated
 					}
 				}
-			} else if match.Args[i].VType.Equal(TList) &&
+			} else if match.Args[i].Parent.Equal(TList) &&
 				match.Args[i].Data != nil && !IsTypedList(match.Args[i]) && !IsTableType(match.Args[i]) {
 				// NoEvalArgs suppresses list auto-evaluation for code-body
 				// positions (def body, if branches, for body, etc.).
@@ -1178,7 +1224,7 @@ func (e *Engine) stepLiteral() error {
 		// If the value is a FnDef/TFunction, execute it. Quoted function
 		// values are treated as data (not executed).
 		val := e.stack[valIdx]
-		if (val.VType.Equal(TFnDef) || val.VType.Equal(TFunction)) &&
+		if (val.Parent.Equal(TFnDef) || val.Parent.Equal(TFunction)) &&
 			val.Data != nil && !val.Quoted {
 			if _, ok := val.Data.(FnDefInfo); ok {
 				return e.execFnDefLiteral(valIdx)
@@ -1202,9 +1248,9 @@ func (e *Engine) stepLiteral() error {
 	if fwd.CollectedArgs < fwd.ExpectedArgs {
 		val := e.stack[valIdx]
 		nextIdx := fwd.CollectedArgs
-		matches := sigTypeMatches(val, fwd.Sig.Args[nextIdx])
+		matches := sigArgMatches(fwd.Sig, nextIdx, val)
 		if !matches && fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx] &&
-			val.VType.Equal(TWord) && TAtom.Matches(fwd.Sig.Args[nextIdx]) {
+			val.Parent.Equal(TWord) && TAtom.Matches(fwd.Sig.Args[nextIdx]) {
 			w, _ := AsWord(val)
 			e.stack[valIdx] = NewAtom(w.Name)
 			matches = true
@@ -1284,13 +1330,13 @@ func (e *Engine) autoEvalStack() error {
 		if !val.Eval || val.Quoted {
 			continue
 		}
-		if val.VType.Equal(TList) && val.Data != nil && !IsTypedList(val) && !IsTableType(val) {
+		if val.Parent.Equal(TList) && val.Data != nil && !IsTypedList(val) && !IsTableType(val) {
 			result, err := e.autoEvalList(val)
 			if err != nil {
 				return err
 			}
 			e.stack[i] = result
-		} else if val.VType.Equal(TMap) && val.Data != nil && !IsTypedMap(val) && !IsRecordType(val) && !IsOptionsType(val) {
+		} else if val.Parent.Equal(TMap) && val.Data != nil && !IsTypedMap(val) && !IsRecordType(val) && !IsOptionsType(val) {
 			result, err := e.autoEvalMap(val)
 			if err != nil {
 				return err
@@ -1385,7 +1431,7 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 				return Value{}, fmt.Errorf("computed key [%s]: %w", key, err)
 			}
 			if len(keyResult) == 1 {
-				if keyResult[0].VType.Matches(TString) {
+				if keyResult[0].Parent.Matches(TString) {
 					resolvedKey, _ = AsString(keyResult[0])
 				} else if IsAtom(keyResult[0]) {
 					resolvedKey, _ = AsAtom(keyResult[0])
@@ -1453,10 +1499,19 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		return nil
 	}
 
-	// Look up compiled signatures. Named functions use the registry;
-	// anonymous/unregistered functions build signatures from FnSig params.
+	// Resolve compiled signatures. A captured Function value is a
+	// STABLE handle to the fn it was minted from: we prefer the
+	// captured FnDef's own Signatures over a fresh registry lookup so
+	// that `undef foo; def foo …` doesn't change the meaning of a
+	// previously-captured value. Word-driven dispatch (in stepWord)
+	// still re-resolves through the registry every call, which is
+	// what recursive self-references rely on.
 	var fn *FnDefInfo
-	if fnDef.Name != "" {
+	if len(fnDef.Signatures) > 0 {
+		captured := fnDef
+		fn = &captured
+	}
+	if fn == nil && fnDef.Name != "" {
 		reg := fnDef.Registry
 		if reg == nil {
 			reg = e.registry
@@ -1464,9 +1519,12 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		fn = reg.Lookup(fnDef.Name)
 	}
 	if fn == nil && len(fnDef.Sigs) > 0 {
+		synth := fnSigsToSignatures(fnDef.Sigs)
 		fn = &FnDefInfo{
-			Name:       fnDef.Name,
-			Signatures: fnSigsToSignatures(fnDef.Sigs),
+			Name:           fnDef.Name,
+			Signatures:     synth,
+			MaxForwardArgs: calcMaxForwardArgs(synth),
+			Registry:       fnDef.Registry,
 		}
 	}
 	if fn == nil {
@@ -1474,44 +1532,133 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		return nil
 	}
 
-	resolved := e.effectiveResolved()
 	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
 
-	// Use matchSignature for forward collection only.
-	matchedSig, positions := e.matchSignature(fn, w, resolved)
-
-	if matchedSig != nil {
-		// Count forward vs stack args from positions.
-		fwdCount := 0
-		for _, pos := range positions {
-			if pos > e.pointer {
-				fwdCount++
-			}
-		}
-
-		if fwdCount > 0 {
-			stkCount := len(positions) - fwdCount
-			return e.insertForward(w, matchedSig, fwdCount, stkCount)
+	// Pre-evaluate paren expressions in the forward scan range so that
+	// matchSignature sees fully resolved values. Mirrors stepWord's
+	// pre-eval pass — the unified rule says Function values at the
+	// pointer dispatch with the same forward+stack matching as words.
+	if (fn.HasForwardSigs() && !w.ForceStack) || w.ForceForward {
+		if err := e.preEvalParens(fn.MaxForwardArgs); err != nil {
+			return err
 		}
 	}
 
-	// Pure stack match against FnSig params. Two strategies:
-	// - Unnamed params (matrix-style): deepest-first so CallAQL's token
-	//   push order matches the registered handler's nearest-first matching.
-	// - Named params (decision-style): nearest-first because CallAQL
-	//   installs them as defs and the body's reversal expects this order.
+	resolved := e.effectiveResolved()
+	sig, positions := e.matchSignature(fn, w, resolved)
+
+	// Retry fallback for words with forward-collecting sigs: when
+	// nearest-first matching fails, retry with deepest-first
+	// (ForceStack). Mirrors stepWord's CallAQL-input recovery.
+	if sig == nil && fn.HasForwardSigs() && !w.ForceStack {
+		wDeep := w
+		wDeep.ForceStack = true
+		sig, positions = e.matchSignature(fn, wDeep, resolved)
+	}
+
+	// Function-value dispatch does NOT fire Fallback sigs. Fallback
+	// handlers (installed by InstallFnDef as 0-arg catch-alls) exist
+	// to raise a clean "no matching signature for X" error when a
+	// *bare word* arrives without args. For a Function value sitting
+	// at the pointer, the right behavior is to leave it on the stack
+	// as data — the user explicitly captured it and may consume it
+	// later.
+	if sig != nil && sig.Fallback {
+		sig = nil
+	}
+
+	// Fall through to FnSig-based pure-stack matching when
+	// matchSignature finds nothing — this preserves the legacy
+	// anonymous-fn-on-stack dispatch for AQL fns whose Sigs carry
+	// named params. The same path runs when matched but the sig
+	// has no Go Handler AND this isn't an `afn`-produced lambda:
+	// predicate-type FnDefs landing bare are intentionally inert.
+	if sig == nil || (sig.Handler == nil && !fnDef.Anonymous) {
+		return e.execFnDefSigStackMatch(valIdx, fnDef, resolved)
+	}
+
+	// Count forward vs stack positions.
+	fwdCount := 0
+	for _, pos := range positions {
+		if pos > e.pointer {
+			fwdCount++
+		}
+	}
+
+	// Anonymous lambdas (afn / =>) are VALUES that auto-dispatch only
+	// when args are actually available (forward tokens, or stack args
+	// for the swap form). A 0-arg lambda sitting alone on the stack
+	// has positions=[] AND no forward — it's just data, let downstream
+	// consumers (def, a stored map entry, call) take it as-is rather
+	// than auto-invoking. This is what makes `def f ([] => [body])`
+	// bind f to the Function value instead of to the body's result.
+	if fnDef.Anonymous && fwdCount == 0 && len(positions) == 0 {
+		e.pointer++
+		return nil
+	}
+
+	// Forward-collecting match: defer dispatch until the remaining
+	// tokens have been consumed. When the Forward marker completes,
+	// the engine re-processes the Function value with all args on
+	// the stack — which routes through this same execFnDefLiteral
+	// entry. This branch runs whether the sig has a Go Handler
+	// (registered native) or only an AQL body (anonymous FnDef from
+	// `afn` / `=>`); in both cases matchSignature found valid
+	// positions and we need the forward args on the stack before
+	// the body / handler runs.
+	if fwdCount > 0 {
+		stkCount := len(positions) - fwdCount
+		return e.insertForward(w, sig, fwdCount, stkCount)
+	}
+
+	// All args resolved on the stack. Anonymous FnDefs (no Go
+	// Handler) take the legacy stack-match path, which splices the
+	// body via execFnDefSig and binds named params via def-stack.
+	if sig.Handler == nil {
+		return e.execFnDefSigStackMatch(valIdx, fnDef, resolved)
+	}
+
+	// Module closures: with all args now on the stack (either because
+	// no forward collection was needed, or after the forward-completion
+	// re-dispatch), route through execFnDefSig with the captured
+	// registry. CallAQL runs the body in a sub-engine on modReg so
+	// the fn's def-body word lookups resolve in its own scope.
+	if fnDef.Registry != nil && fnDef.Registry != e.registry && len(fnDef.Sigs) > 0 {
+		return e.execFnDefSigStackMatch(valIdx, fnDef, resolved)
+	}
+
+	// Pure-stack match: dispatch via execMatch the same way a bare
+	// word with no forward args would.
+	match := &MatchResult{Sig: sig, Positions: positions}
+	if len(positions) > 0 {
+		match.Args = make([]Value, len(positions))
+		for i, pos := range positions {
+			match.Args[i] = e.stack[pos]
+		}
+	}
+	return e.execMatch(match)
+}
+
+// execFnDefSigStackMatch is the legacy FnSig-based pure-stack
+// dispatch path for AQL-defined functions whose Sigs carry named
+// params. Used as a fallback when matchSignature's Signatures-based
+// match returns nothing.
+func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []Value) error {
 	resolvedIdx := e.resolvedIndicesBefore(len(resolved))
+	checkMode := e.registry != nil && e.registry.Check.Mode && fnDef.Anonymous
 	for i := range fnDef.Sigs {
 		sig := &fnDef.Sigs[i]
 		nArgs := len(sig.Params)
 		if nArgs == 0 {
+			if checkMode {
+				return e.spliceAnonCheckResult(valIdx, 0, sig, nil, fnDef.Captured)
+			}
 			return e.execFnDefSig(valIdx, sig, nil, fnDef.Registry)
 		}
 		if len(resolved) < nArgs {
 			continue
 		}
 
-		// Determine ordering: named params → nearest-first, unnamed → deepest-first.
 		hasNamed := false
 		for _, p := range sig.Params {
 			if p.Name != "" {
@@ -1522,7 +1669,6 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 
 		match := true
 		if hasNamed {
-			// Nearest-first: top-of-stack → sig[0].
 			for j, p := range sig.Params {
 				ri := len(resolved) - 1 - j
 				if !sigTypeMatches(resolved[ri], p.Type) {
@@ -1531,7 +1677,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 				}
 				if p.Pattern != nil {
 					pat := *p.Pattern
-					if pat.VType.Equal(TMap) && resolved[ri].VType.Equal(TMap) &&
+					if pat.Parent.Equal(TMap) && resolved[ri].Parent.Equal(TMap) &&
 						pat.Data != nil && resolved[ri].Data != nil &&
 						!IsOptionsType(pat) {
 						if !OpenUnifyMap(pat, resolved[ri]) {
@@ -1552,10 +1698,12 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 					ri := len(resolvedIdx) - 1 - j
 					args[j] = e.stack[resolvedIdx[ri]]
 				}
+				if checkMode {
+					return e.spliceAnonCheckResult(valIdx, nArgs, sig, args, fnDef.Captured)
+				}
 				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
 			}
 		} else {
-			// Deepest-first: bottom-of-resolved → sig[0].
 			candidate := resolved[len(resolved)-nArgs:]
 			for j, p := range sig.Params {
 				if !sigTypeMatches(candidate[j], p.Type) {
@@ -1564,7 +1712,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 				}
 				if p.Pattern != nil {
 					pat := *p.Pattern
-					if pat.VType.Equal(TMap) && candidate[j].VType.Equal(TMap) &&
+					if pat.Parent.Equal(TMap) && candidate[j].Parent.Equal(TMap) &&
 						pat.Data != nil && candidate[j].Data != nil &&
 						!IsOptionsType(pat) {
 						if !OpenUnifyMap(pat, candidate[j]) {
@@ -1585,12 +1733,61 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 				for j := 0; j < nArgs; j++ {
 					args[j] = e.stack[resolvedIdx[startIdx+j]]
 				}
+				if checkMode {
+					return e.spliceAnonCheckResult(valIdx, nArgs, sig, args, fnDef.Captured)
+				}
 				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
 			}
 		}
 	}
 
 	e.pointer++
+	return nil
+}
+
+// spliceAnonCheckResult runs AnalyseFnBody on an anonymous FnDef in
+// check mode and splices the residual carrier stack as the dispatch
+// result. This bypasses the body splice + ReturnCheck path that named
+// fns use: an anonymous lambda's static Returns is the conservative
+// [Any], and AnalyseFnBody recovers the real return type for downstream
+// type propagation.
+func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Value, captures []CapturedBinding) error {
+	paramNames := make([]string, len(sig.Params))
+	for i, p := range sig.Params {
+		paramNames[i] = p.Name
+	}
+	result := AnalyseFnBody(e.registry, "", paramNames, sig.Body, args, captures)
+	if len(result) == 0 {
+		result = []Value{NewCarrier(TAny)}
+	}
+
+	indices := e.resolvedIndicesBefore(nArgs)
+	if len(indices) == nArgs && nArgs > 0 {
+		firstArgIdx := indices[0]
+		skipSet := make(map[int]bool, nArgs+1)
+		for _, idx := range indices {
+			skipSet[idx] = true
+		}
+		skipSet[valIdx] = true
+		dst := firstArgIdx
+		for i := firstArgIdx; i <= valIdx; i++ {
+			if !skipSet[i] {
+				e.stack[dst] = e.stack[i]
+				dst++
+			}
+		}
+		stackSplice(&e.stack, dst, valIdx+1-dst, result...)
+		e.pointer = firstArgIdx
+	} else if nArgs == 0 {
+		stackSplice(&e.stack, valIdx, 1, result...)
+	} else {
+		argStart := valIdx - nArgs
+		if argStart < 0 {
+			argStart = 0
+		}
+		stackSplice(&e.stack, argStart, valIdx+1-argStart, result...)
+		e.pointer = argStart
+	}
 	return nil
 }
 
@@ -1610,7 +1807,17 @@ func fnSigsToSignatures(sigs []FnSig) []Signature {
 				patterns[j] = *p.Pattern
 			}
 		}
-		out[i] = Signature{Args: argTypes, Patterns: patterns, BarrierPos: sig.BarrierPos}
+		// Resolve the FnSig BarrierPos sentinel: -1 means "use the
+		// all-forward default" (the same defaulting RegisterNative
+		// applies to registered fns). 0 means explicit all-stack
+		// from a leading `|`; >0 is an explicit boundary. All Go-
+		// side FnSig{} construction sites set BarrierPos: -1 so
+		// they reach the dispatcher with the correct default.
+		barrier := sig.BarrierPos
+		if barrier == -1 {
+			barrier = len(argTypes)
+		}
+		out[i] = Signature{Args: argTypes, Patterns: patterns, BarrierPos: barrier}
 	}
 	SortSignatures(out)
 	return out
@@ -1628,13 +1835,13 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	// Lists: [c1 c2] → [map1, map2].
 	for i := range args {
 		if args[i].Eval && !args[i].Quoted {
-			if args[i].VType.Equal(TMap) &&
+			if args[i].Parent.Equal(TMap) &&
 				args[i].Data != nil && !IsTypedMap(args[i]) && !IsRecordType(args[i]) && !IsOptionsType(args[i]) {
 				evaluated, err := e.autoEvalMap(args[i])
 				if err == nil {
 					args[i] = evaluated
 				}
-			} else if args[i].VType.Equal(TList) &&
+			} else if args[i].Parent.Equal(TList) &&
 				args[i].Data != nil && !IsTypedList(args[i]) && !IsTableType(args[i]) {
 				evaluated, err := e.autoEvalList(args[i])
 				if err == nil {
@@ -1648,7 +1855,15 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 
 	if capturedReg != nil {
 		// Execute in the captured module's registry via CallAQL.
-		result, err := capturedReg.CallAQL(sig, args)
+		// Pass the FnDef's lexical captures so the body sees them as
+		// defs (alongside the module-registry's own bindings).
+		var captures []CapturedBinding
+		if valIdx < len(e.stack) {
+			if fd, ok := e.stack[valIdx].Data.(FnDefInfo); ok {
+				captures = fd.Captured
+			}
+		}
+		result, err := capturedReg.CallAQL(sig, args, captures)
 		if err != nil {
 			return err
 		}
@@ -1686,13 +1901,35 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	var tokens []Value
 	tokens = append(tokens, NewOpenParen())
 
+	// Push the fn-entry baseline before installing anything. Inner
+	// fn/afn constructions inside this body consult TopFnBaseline
+	// to identify enclosing-fn-local bindings. Paired with __pa
+	// below, which pops the baseline.
+	e.registry.PushFnBaseline(e.registry.Defs.Snapshot())
+
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
 	if err := e.registry.Args.Push(NewList(argsCopy)); err != nil {
+		e.registry.PopFnBaseline()
 		return err
 	}
 
+	// Lexical captures from the FnDefInfo that produced this dispatch.
+	// Pulled from the stack value at valIdx since execFnDefSig's signature
+	// doesn't carry the FnDefInfo directly. Install before params so
+	// params shadow same-named captures (innermost wins).
+	var captures []CapturedBinding
+	if valIdx < len(e.stack) {
+		if fd, ok := e.stack[valIdx].Data.(FnDefInfo); ok {
+			captures = fd.Captured
+		}
+	}
 	var names []string
+	for _, cb := range captures {
+		InstallDef(e.registry, cb.Name, cb.Value)
+		names = append(names, cb.Name)
+	}
+
 	unnamedCount := 0
 	for i, p := range sig.Params {
 		if p.Name != "" {
@@ -1982,7 +2219,7 @@ func (e *Engine) stepMoveIf(markIdx, moveIdx int, info MoveInfo) error {
 	delete(e.marks, info.To)
 
 	// Check if condition produced a value.
-	if condResult.VType == nil {
+	if condResult.Parent == nil {
 		stackSplice(&e.stack, markIdx, moveIdx-markIdx+1)
 		e.pointer = markIdx
 		return e.runtimeError("runtime_error", "if: condition produced no value", "if", "")
@@ -2285,7 +2522,7 @@ func (e *Engine) stepCloseParen() error {
 
 			// Validate the top nret values match declared return types.
 			for k, exp := range rc.Returns {
-				if !results[extra+k].VType.Matches(exp) {
+				if !results[extra+k].Parent.Matches(exp) {
 					return e.returnTypeError(rc.FuncName, k+1, exp, results[extra+k])
 				}
 			}
@@ -2664,8 +2901,8 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				expectedType := sig.Args[fwd]
 
 				// 1.4: structural boundaries — stop forward scan.
-				if IsForward(tok) || tok.VType.Matches(TMark) || tok.VType.Matches(TMove) ||
-					tok.VType.Matches(TInternal) || tok.VType.Matches(TReturnCheck) {
+				if IsForward(tok) || tok.Parent.Matches(TMark) || tok.Parent.Matches(TMove) ||
+					tok.Parent.Matches(TInternal) || tok.Parent.Matches(TReturnCheck) {
 					break
 				}
 
@@ -2697,7 +2934,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 
 					// Defined word: resolves to its def type.
 					if top, ok := e.registry.Defs.Top(ww.Name); ok {
-						if sigTypeMatches(top, expectedType) || expectedType.Equal(TAny) {
+						if sigArgMatches(sig, fwd, top) || expectedType.Equal(TAny) {
 							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
@@ -2713,9 +2950,9 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					// planner's expected type matches what stepWord
 					// will actually push at runtime). Predicate types
 					// arrive as TFnDef/TFunction values; plan against
-					// that VType for sig matching.
-					if tv, ok := e.registry.Types.TopBody(ww.Name); ok {
-						if sigTypeMatches(tv, expectedType) || expectedType.Equal(TAny) {
+					// that Parent for sig matching.
+					if tv, ok := e.registry.TopTypeBody(ww.Name); ok {
+						if sigArgMatches(sig, fwd, tv) || expectedType.Equal(TAny) {
 							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
@@ -2731,7 +2968,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 
 					// Known literals: true/false → Boolean, type names → type literal.
 					if ww.Name == "true" || ww.Name == "false" {
-						if sigTypeMatches(Value{VType: TBoolean}, expectedType) || expectedType.Equal(TAny) {
+						if sigArgMatches(sig, fwd, Value{Parent: TBoolean}) || expectedType.Equal(TAny) {
 							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
@@ -2740,7 +2977,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 						break
 					}
 					if tn, isType := typeNames[ww.Name]; isType {
-						if sigTypeMatches(NewTypeLiteral(tn), expectedType) {
+						if sigArgMatches(sig, fwd, NewTypeLiteral(tn)) {
 							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
@@ -2749,7 +2986,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 						break
 					}
 					if tn, isType := ResolveTypePath(ww.Name); isType {
-						if sigTypeMatches(NewTypeLiteral(tn), expectedType) {
+						if sigArgMatches(sig, fwd, NewTypeLiteral(tn)) {
 							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
@@ -2759,7 +2996,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					}
 
 					// Undefined word: always resolves to Atom.
-					if sigTypeMatches(Value{VType: TAtom}, expectedType) || expectedType.Equal(TAny) {
+					if sigArgMatches(sig, fwd, Value{Parent: TAtom}) || expectedType.Equal(TAny) {
 						positions[fwd] = scanIdx
 						fwd++
 						scanIdx++
@@ -2774,8 +3011,9 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				}
 
 				// Literal value: direct type check.
-				if sigTypeMatches(tok, expectedType) || expectedType.Equal(TAny) {
-					if rejectsTypeLiteral(tok, expectedType) {
+				if sigArgMatches(sig, fwd, tok) || expectedType.Equal(TAny) {
+					isTypeArg := sig.TypeArgs != nil && sig.TypeArgs[fwd]
+					if !isTypeArg && rejectsTypeLiteral(tok, expectedType) {
 						break // reject type literal at concrete-payload sig
 					}
 					positions[fwd] = scanIdx
@@ -2817,7 +3055,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				canStack := true
 				for j := 0; j < remaining; j++ {
 					stackVal := resolved[len(resolved)-1-j]
-					if !sigTypeMatches(stackVal, sig.Args[fwd+j]) {
+					if !sigArgMatches(sig, fwd+j, stackVal) {
 						canStack = false
 						break
 					}
@@ -2872,7 +3110,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			// The branch below is defensive only — a stack Atom matches
 			// an [Atom/q, ...] sig via the regular sigTypeMatches path
 			// just below, no /q involvement required.
-			if sig.QuoteArgs != nil && sig.QuoteArgs[sigIdx] && stackVal.VType.Equal(TWord) {
+			if sig.QuoteArgs != nil && sig.QuoteArgs[sigIdx] && stackVal.Parent.Equal(TWord) {
 				if !TAtom.Matches(sig.Args[sigIdx]) {
 					allMatch = false
 					break
@@ -2880,11 +3118,12 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				positions[sigIdx] = resolvedIdx[ri]
 				continue
 			}
-			if !sigTypeMatches(stackVal, sig.Args[sigIdx]) {
+			if !sigArgMatches(sig, sigIdx, stackVal) {
 				allMatch = false
 				break
 			}
-			if rejectsTypeLiteral(stackVal, sig.Args[sigIdx]) {
+			isTypeArg := sig.TypeArgs != nil && sig.TypeArgs[sigIdx]
+			if !isTypeArg && rejectsTypeLiteral(stackVal, sig.Args[sigIdx]) {
 				allMatch = false
 				break
 			}
@@ -2991,10 +3230,10 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		compatible := true
 		for j, p := range pos {
 			av := e.stack[p]
-			if av.VType.Equal(TAny) {
+			if av.Parent.Equal(TAny) {
 				continue
 			}
-			if sigTypeMatches(av, s.Args[j]) {
+			if sigArgMatches(s, j, av) {
 				score++
 				continue
 			}

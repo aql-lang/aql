@@ -1,7 +1,7 @@
 // Spec-runner test for the production-language spec suite at
 // aql/lang/spec/. Each TSV row is parsed with the AQL parser
 // (eng/go/parser) and run against a fresh production registry
-// (engine.DefaultRegistry + native.Register) — the full language
+// (native.DefaultRegistry + native.Register) — the full language
 // layer, so these specs can exercise any registered word (record /
 // object / make / get / length / …) and the builtin Resource / Entity
 // types installed by installResourceTypes.
@@ -21,13 +21,12 @@ import (
 
 	"github.com/aql-lang/aql/eng/go"
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
 	"github.com/aql-lang/aql/lang/go/native"
 	"github.com/aql-lang/aql/test/go/specrunner"
 )
 
 // TestSpecProd runs the .tsv spec files under aql/lang/spec/ against a
-// production-aql registry (engine.DefaultRegistry + native.Register).
+// production-aql registry (native.DefaultRegistry + native.Register).
 // These specs cover the production language layer — words and types
 // that aren't part of the eng kernel (record, object, make, get/set on
 // Stores, Resource / Entity, …). They sit at lang/spec/ to mirror the
@@ -39,7 +38,7 @@ func TestSpecProd(t *testing.T) {
 		if err != nil {
 			return nil, err
 		}
-		reg, err := engine.DefaultRegistry(native.Register)
+		reg, err := native.DefaultRegistry()
 		if err != nil {
 			return nil, err
 		}
@@ -47,6 +46,6 @@ func TestSpecProd(t *testing.T) {
 		// originally written for engspec (object, record, inspect, …)
 		// can run under the production setup too.
 		specrunner.RegisterQFixtures(reg)
-		return engine.NewTop(reg).Run(values)
+		return native.NewTop(reg).Run(values)
 	})
 }

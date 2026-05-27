@@ -22,15 +22,15 @@ It is split into three layers:
 
 ### 1.1 Value-tagged subtype lattice — recommended fix
 
-`NewInteger(42)` builds a Value with `VType = Scalar/Number/Integer/42`.
+`NewInteger(42)` builds a Value with `Parent = Scalar/Number/Integer/42`.
 The literal value is encoded as a *type-path leaf*. Same for empty vs
 non-empty strings (`Scalar/String/Empty` vs `Scalar/String/Proper`).
 
 Why this is surprising:
 
-- `v.VType.Equal(TInteger)` returns **false** for a concrete integer.
+- `v.Parent.Equal(TInteger)` returns **false** for a concrete integer.
   Every internal caller knows to use `Matches`, but an external user
-  reading `v.VType` will reach for `Equal` first.
+  reading `v.Parent` will reach for `Equal` first.
 - Two integers with different values have *different* `Type` instances,
   even though semantically they're both `Integer`. This wastes a bit of
   memory and makes any code that builds a `Set<Type>` or
@@ -46,7 +46,7 @@ existing `Signature.Patterns map[int]Value` slot — the same field
 records / typed-lists already use for shape patterns. Concretely:
 
 ```
-v.VType    // = Scalar/Number/Integer (always, for any integer)
+v.Parent    // = Scalar/Number/Integer (always, for any integer)
 v.Data     // = the actual int64
 
 // A handler that fires only on integer 2:
@@ -122,7 +122,7 @@ covers every variant.
 Go sketch:
 
 ```go
-type Value interface { isValue(); VType() Type; Carrier() bool }
+type Value interface { isValue(); Parent() Type; Carrier() bool }
 
 type IntegerValue   struct { N int64 }
 type StringValue    struct { S string }
@@ -132,7 +132,7 @@ type RecordTypeValue struct { Info RecordTypeInfo }
 // …
 
 func (IntegerValue) isValue() {}
-func (IntegerValue) VType() Type { return TInteger }
+func (IntegerValue) Parent() Type { return TInteger }
 // …
 ```
 
@@ -376,7 +376,7 @@ Migration scope:
 
 Open follow-ups (not yet migrated):
 
-- lang/go/internal/nativemod multi-arg sigs (matrix-at, time-add-*) were
+- lang/go/modules multi-arg sigs (matrix-at, time-add-*) were
   declared with their args in domain order (e.g. `(Matrix, Integer,
   Integer)`) and called as `mat row col matrix-at`. Under the new
   rule the `matrix-at` sig declaration has to be reversed to

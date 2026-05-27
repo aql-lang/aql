@@ -7,7 +7,7 @@
 # scalar contents, this file focuses on what happens when the *values*		
 # inside a structure are richer: type literals, record-shape maps,		
 # enums (disjuncts), Function values, FunctionSignature type values, and atoms —		
-# and especially on `def` / `type` references to such values resolving		
+# and especially on `def` references to such values resolving		
 # arbitrarily deep inside nested Lists and Maps.		
 #		
 # Notes on a couple of rough edges:		
@@ -53,8 +53,8 @@ firstq [ Integer String ]	Integer	first element is the Integer type literal
 # auto-evaluates.		
 def t Integer { x:t }	{x:Integer}	`t` (bound to Integer) resolves as a map value
 def t Integer [ t t String ]	[Integer Integer String]	resolves element-wise in a list
-type IdType Integer { id:IdType }	{id:Integer}	a `type`-named binding referenced as a value
-type IdType Integer [ IdType String ]	[Integer String]	
+def IdType Integer { id:IdType }	{id:Integer}	a type-named binding referenced as a value
+def IdType Integer [ IdType String ]	[Integer String]	
 		
 # ====================================================================		
 # 2. Record-shape maps as structure values		
@@ -64,21 +64,21 @@ type IdType Integer [ IdType String ]	[Integer String]
 # as a value; nesting goes to any depth.		
 		
 { schema:{ id:Integer name:String } }	{schema:{id:Integer name:String}}	a record-shape as a map value
-{ schema:{ id:Integer name:String } } typeof	Type	the whole thing is itself a record-shape → metatype Type
+{ schema:{ id:Integer name:String } } typeof	Map	the whole thing is itself a record-shape → metatype Type
 { rows:[ { id:Integer } { id:Integer } ] }	{rows:[{id:Integer} {id:Integer}]}	a list of record-shapes as a value
 { outer:{ middle:{ inner:Integer } } }	{outer:{middle:{inner:Integer}}}	three-deep record-shape nesting
 { schema:[ Integer String ] }	{schema:[Integer String]}	a typed-tuple-ish list as a value
 		
 # def / type references inside record-shapes resolve at depth.		
 def t Integer { schema:{ id:t name:String } }	{schema:{id:Integer name:String}}	
-type IdType Integer { schema:{ id:IdType } }	{schema:{id:Integer}}	
+def IdType Integer { schema:{ id:IdType } }	{schema:{id:Integer}}	
 def t Integer { rows:[ { id:t } { id:t } ] }	{rows:[{id:Integer} {id:Integer}]}	
 		
 # ====================================================================		
 # 3. Enums (disjuncts) as structure values		
 # ====================================================================		
 # `enum [ … ]` builds a Disjunct type. Embed it directly with a paren		
-# (`{ k:( enum … ) }`) or — more usefully — name it with `type` and		
+# (`{ k:( enum … ) }`) or — more usefully — name it with `def` and		
 # reference the name.		
 		
 { e:( enum [ red green blue ] ) }	{e:red|green|blue}	disjunct value as a map value
@@ -86,10 +86,10 @@ def t Integer { rows:[ { id:t } { id:t } ] }	{rows:[{id:Integer} {id:Integer}]}
 firstq [ ( enum [ a b ] ) ( enum [ c d ] ) ]	a|b	
 		
 # type-named enum referenced at depth.		
-type Color enum [ red green blue ] { c:Color }	{c:red|green|blue}	
-type Color enum [ red green blue ] { palette:[ Color Color ] }	{palette:[red|green|blue red|green|blue]}	
-type Color enum [ red green blue ] { deep:{ inner:{ kind:Color } } }	{deep:{inner:{kind:red|green|blue}}}	
-type Color enum [ red green blue ] firstq [ Color ]	red|green|blue	
+def Color enum [ red green blue ] { c:Color }	{c:red|green|blue}	
+def Color enum [ red green blue ] { palette:[ Color Color ] }	{palette:[red|green|blue red|green|blue]}	
+def Color enum [ red green blue ] { deep:{ inner:{ kind:Color } } }	{deep:{inner:{kind:red|green|blue}}}	
+def Color enum [ red green blue ] firstq [ Color ]	red|green|blue	
 		
 # ====================================================================		
 # 4. Functions as structure values		
@@ -117,7 +117,7 @@ def double fn [ [ a:Integer ] [ Integer ] [ a addq a ] ] { fn:double }	ERROR:sig
 		
 { s:( fnsig [ [ Integer ] [ Integer ] ] ) } typeof	Map	
 { s:( fnsig [ [ Integer ] [ Integer ] ] ) } is Map	true	
-type Mapper fnsig [ [ Integer ] [ Integer ] ] { schema:{ sig:Mapper } } typeof	Map	an FunctionSignature nested two levels deep; the outer value is still a Map
+def Mapper fnsig [ [ Integer ] [ Integer ] ] { schema:{ sig:Mapper } } typeof	Map	an FunctionSignature nested two levels deep; the outer value is still a Map
 		
 # ====================================================================		
 # 6. Atoms (quoted words) as structure values		
@@ -138,20 +138,20 @@ def a ( quote red ) firstq [ a ( quote green ) ]	red/q
 # ====================================================================		
 # 7. Def references at depth — the core 'go deeper' cases		
 # ====================================================================		
-# A `def` / `type` name used as a value resolves wherever it appears		
+# A `def` name used as a value resolves wherever it appears		
 # in a nested List/Map, however deep.		
 		
 def t Integer { a:{ b:{ c:t } } }	{a:{b:{c:Integer}}}	three maps deep
 def t Integer { a:[ { b:[ { c:t } ] } ] }	{a:[{b:[{c:Integer}]}]}	map → list → map → list → map
 def t Integer [ [ [ t ] ] ]	[[[Integer]]]	three lists deep
 def t Integer { rows:[ { cols:[ t t ] } { cols:[ t ] } ] }	{rows:[{cols:[Integer Integer]} {cols:[Integer]}]}	
-type Color enum [ a b c ] { ui:{ theme:{ accent:Color base:Color } } }	{ui:{theme:{accent:a|b|c base:a|b|c}}}	type-named disjunct, three deep, twice
+def Color enum [ a b c ] { ui:{ theme:{ accent:Color base:Color } } }	{ui:{theme:{accent:a|b|c base:a|b|c}}}	type-named disjunct, three deep, twice
 def a ( quote red ) { x:{ y:{ z:[ { w:a } ] } } }	{x:{y:{z:[{w:red/q}]}}}	atom, four deep
 		
 # Mixed: a config-shaped structure combining a type, a disjunct, an		
 # atom, and a paren-evaluated number, all at depth, plus a def		
 # reference resolving inside it.		
-def n 2 type Color enum [ red green blue ] { schema:{ id:Integer kind:Color } defaults:{ count:( n addq 1 ) tag:( quote red ) } }	{defaults:{count:3 tag:red/q} schema:{id:Integer kind:red|green|blue}}	`n` resolves; `Color` resolves to its disjunct; Integer stays a type literal; quote stays an atom
+def n 2 def Color enum [ red green blue ] { schema:{ id:Integer kind:Color } defaults:{ count:( n addq 1 ) tag:( quote red ) } }	{defaults:{count:3 tag:red/q} schema:{id:Integer kind:red|green|blue}}	`n` resolves; `Color` resolves to its disjunct; Integer stays a type literal; quote stays an atom
 		
 # Auto-eval still mixes freely with these: a paren-evaluated scalar		
 # value alongside a type-literal value in the same nested map.		

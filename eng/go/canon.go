@@ -30,7 +30,7 @@ func Canon(stack []Value) string {
 // CanonValue renders one value as canonical AQL source. See Canon.
 func CanonValue(v Value) string {
 	// Behavior-driven dispatch for user-defined types: if a non-
-	// builtin type in v.VType's parent chain has a non-default
+	// builtin type in v.Parent's parent chain has a non-default
 	// Behavior, route through it. This is how user-installed canon
 	// bodies (`behave canon/q (fn [[T] [String] [body]])`) flow
 	// into eng.Canon.
@@ -41,8 +41,8 @@ func CanonValue(v Value) string {
 	// time-domain renderings) which doesn't match Canon's source-
 	// shape conventions (space-separated lists, quoted strings).
 	// CanonValue's own switch below preserves those.
-	if v.Data != nil && v.VType != nil {
-		for t := v.VType; t != nil; t = t.Parent {
+	if v.Data != nil && v.Parent != nil {
+		for t := v.Parent; t != nil; t = t.Parent {
 			if t.Origin == OriginBuiltin {
 				continue
 			}
@@ -59,34 +59,34 @@ func CanonValue(v Value) string {
 	case IsNone(v):
 		return "none"
 	case v.Data == nil:
-		if v.VType != nil {
-			if name := TypeNameByID(v.VType.ID); name != "" {
+		if t := typeNodeOf(v); t != nil {
+			if name := TypeNameByID(t.ID); name != "" {
 				return name
 			}
-			return v.VType.Leaf()
+			return t.Leaf()
 		}
 		return "none"
 	case v.IsDepScalar():
 		return v.String()
-	case v.VType.Matches(TInteger):
+	case v.Parent.Matches(TInteger):
 		n, _ := AsInteger(v)
 		return strconv.FormatInt(n, 10)
-	case v.VType.Matches(TDecimal):
+	case v.Parent.Matches(TDecimal):
 		f, _ := AsDecimal(v)
 		return FormatDecimal(f)
-	case v.VType.Matches(TString):
+	case v.Parent.Matches(TString):
 		s, _ := AsString(v)
 		return "'" + s + "'"
-	case v.VType.Matches(TBoolean):
+	case v.Parent.Matches(TBoolean):
 		b, _ := AsBoolean(v)
 		if b {
 			return "true"
 		}
 		return "false"
-	case v.VType.Equal(TAtom):
+	case v.Parent.Equal(TAtom):
 		s, _ := AsAtom(v)
 		return s + "/q"
-	case v.VType.Matches(TList) && v.Data != nil:
+	case v.Parent.Matches(TList) && v.Data != nil:
 		lst, _ := AsList(v)
 		parts := make([]string, lst.Len())
 		for i := 0; i < lst.Len(); i++ {
@@ -97,7 +97,7 @@ func CanonValue(v Value) string {
 			return "(quote " + body + ")"
 		}
 		return body
-	case v.VType.Equal(TMap) && v.Data != nil:
+	case v.Parent.Equal(TMap) && v.Data != nil:
 		m, err := AsMap(v)
 		if err != nil || m == nil {
 			return v.String()

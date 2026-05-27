@@ -41,9 +41,13 @@ type Registry struct {
 	Types *TypeTable // dynamic types installed by the `type` word; each push mints a fresh Type
 	// Capabilities holds host-installed plugin slots. See capability.go.
 	Capabilities *CapabilityRegistry
-	Output       io.Writer // output writer for print/printstr and stdout
-	ErrOutput    io.Writer // error output writer for stderr
-	Input        io.Reader // input reader for stdin
+	// Ideals holds the type-kind descriptors — the registered,
+	// dynamically controllable constructors `type` dispatches through.
+	// See ideal.go and lang/doc/design/IDEAL.0.md.
+	Ideals    *IdealRegistry
+	Output    io.Writer // output writer for print/printstr and stdout
+	ErrOutput io.Writer // error output writer for stderr
+	Input     io.Reader // input reader for stdin
 	// Modules owns module-loading state: the load set, the
 	// module-ID counter, the host's init callback, and the native-
 	// module resolver. See modules.go.
@@ -74,6 +78,20 @@ type Registry struct {
 	// returns, without the signal having to ride the error channel.
 	// See flowctrl.go.
 	FlowCtrl FlowCtrl
+
+	// FnBaselines is a stack of def-depth snapshots, one per currently
+	// active fn-body execution. Pushed at every body-entry point that
+	// also takes a defSnapshot for body-local-def cleanup; popped at
+	// the matching cleanup site. The top is the snapshot of the
+	// innermost enclosing fn.
+	//
+	// Closure-capture detection (fn_capture.go::computeCaptures) reads
+	// the top: a referenced name with Defs.Depth(name) > baseline[name]
+	// lives inside an enclosing fn (param or body-local) and is
+	// captured; depth == baseline[name] means it lives at module /
+	// global scope and stays dynamic. Nil baseline (empty stack) means
+	// the construction is at top-level and nothing is captured.
+	FnBaselines []map[string]int
 }
 
 // CheckState aggregates the static type-checking state that used to
@@ -115,9 +133,12 @@ type CheckState struct {
 	StepCount int
 
 	// StepBudget is the maximum total steps the check run may
-	// consume. Zero means "use DefaultCheckStepBudget". Once
-	// exceeded, the engine emits a step_budget_exceeded diagnostic
-	// and returns the current residual stack immediately.
+	// consume. The "unset" sentinel is -1 — that's what gets
+	// substituted with DefaultCheckStepBudget at run time. A real
+	// zero is honored as "abort on the first step", which is
+	// rarely useful but unambiguous. Once the running count
+	// exceeds the resolved budget, the engine emits a
+	// step_budget_exceeded diagnostic and returns immediately.
 	StepBudget int
 
 	// BudgetTripped is set to true after the first budget overshoot
@@ -210,12 +231,20 @@ func NewRegistry() (*Registry, error) {
 		Args:         NewArgsStack(),
 		Types:        NewDynamicTypeTable(),
 		Capabilities: NewCapabilityRegistry(),
+		Ideals:       NewIdealRegistry(),
 		Modules:      NewModuleRegistry(),
 		Output:       os.Stdout,
 		ErrOutput:    os.Stderr,
 		Input:        os.Stdin,
 		SDKCache:     make(map[string]any),
+		// StepBudget uses -1 as the "unset, use the project default"
+		// sentinel. The Go zero (0) is honored as "abort on the first
+		// step" so callers who want that have an unambiguous way to
+		// express it; callers who omit the field get the default
+		// without the historical zero-as-magic overload.
+		Check: CheckState{StepBudget: -1},
 	}
+	registerKernelIdeals(r)
 	return r, nil
 }
 
@@ -230,10 +259,45 @@ func (r *Registry) MarkReady() {
 	r.ready = true
 }
 
-// Register adds one or more signatures to a named function. Sigs are
-// treated as forward-arg defaults: any sig with BarrierPos still 0 has
-// it lifted to len(Args), so all positions are forward-eligible.
-// Signatures are stored in a FnDefInfo entry in DefStacks.
+// PushFnBaseline records a def-depth snapshot as the entry point of a
+// new fn-body execution. Must be paired with PopFnBaseline at the
+// matching cleanup site (same place the per-call defSnapshot's cleanup
+// runs). Closure-capture detection reads TopFnBaseline to decide which
+// names a body-Word reference belongs to an enclosing fn vs the
+// module / global scope.
+func (r *Registry) PushFnBaseline(snap map[string]int) {
+	r.FnBaselines = append(r.FnBaselines, snap)
+}
+
+// PopFnBaseline removes the innermost fn-body baseline. Safe to call on
+// an empty stack (no-op) so cleanup paths can run unconditionally.
+func (r *Registry) PopFnBaseline() {
+	n := len(r.FnBaselines)
+	if n == 0 {
+		return
+	}
+	r.FnBaselines = r.FnBaselines[:n-1]
+}
+
+// TopFnBaseline returns the innermost enclosing-fn def-depth snapshot,
+// or nil if no fn body is currently executing (top-level construction).
+func (r *Registry) TopFnBaseline() map[string]int {
+	n := len(r.FnBaselines)
+	if n == 0 {
+		return nil
+	}
+	return r.FnBaselines[n-1]
+}
+
+// Register adds one or more signatures to a named function.
+// Sentinel resolution: any sig with `BarrierPos == BarrierAllForward`
+// (-1) is lifted to `len(Args)` by upsertFnDef. Stack-only sigs must
+// set `BarrierPos: 0` explicitly. Signatures are stored in a
+// FnDefInfo entry in DefStacks.
+//
+// There is only one registration entry point now — the historical
+// `RegisterStackOnly` wrapper was retired in favor of an explicit
+// per-sig `BarrierPos`.
 func (r *Registry) Register(name string, sigs ...Signature) {
 	for _, sig := range sigs {
 		if len(sig.Args) > MaxArgs {
@@ -241,50 +305,26 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 			return
 		}
 	}
-	r.upsertFnDef(name, true, sigs...)
-	if r.ready && r.OnRegisterHook != nil {
-		r.OnRegisterHook(name)
-	}
-}
-
-// RegisterStackOnly adds signatures to a named function. Sigs are
-// taken as-is: BarrierPos stays at 0 (no forward-arg defaulting), so
-// every position is matched from the stack unless the sig itself
-// raises BarrierPos. Signatures are stored in a FnDefInfo entry in
-// DefStacks.
-func (r *Registry) RegisterStackOnly(name string, sigs ...Signature) {
-	for _, sig := range sigs {
-		if len(sig.Args) > MaxArgs {
-			r.errs = append(r.errs, fmt.Errorf("signature for %q has %d args, max is %d", name, len(sig.Args), MaxArgs))
-			return
-		}
-	}
-	r.upsertFnDef(name, false, sigs...)
+	r.upsertFnDef(name, sigs...)
 	if r.ready && r.OnRegisterHook != nil {
 		r.OnRegisterHook(name)
 	}
 }
 
 // upsertFnDef finds or creates a FnDefInfo at the top of DefStacks[name]
-// and appends the given compiled signatures. If the top entry is already a
-// FnDefInfo, its Signatures are updated in place. Otherwise a new FnDefInfo
-// is pushed.
+// and appends the given compiled signatures. If the top entry is already
+// a FnDefInfo, its Signatures are updated in place. Otherwise a new
+// FnDefInfo is pushed.
 //
-// Normalisation: every appended sig has its BarrierPos set on the way in.
-// BarrierPos is the position of the boundary marker (`|`) in the sig:
-// args before it can be forward-collected, args from it onward must come
-// from the stack (top-down). When forwardPrec is true and BarrierPos is
-// still zero, we set it to len(Args) — i.e. the boundary is at the end,
-// every arg is forward-eligible. When forwardPrec is false (old
-// stack-only registration), BarrierPos stays at zero — boundary at the
-// start, every arg from the stack.
-func (r *Registry) upsertFnDef(name string, forwardArgs bool, sigs ...Signature) {
-	// If the caller registered with forward-arg defaults, fill in
-	// BarrierPos for any sig that didn't set it explicitly. Sigs with
-	// BarrierPos already non-zero, or sigs registered via the
-	// stack-only path, are left alone.
+// Sentinel resolution: `BarrierPos == BarrierAllForward` (-1) means
+// "no `|` boundary specified — default this sig to all-forward
+// dispatch." Resolved here to `len(Args)`. Stack-only sigs MUST set
+// `BarrierPos: 0` explicitly at the call site; there is no per-word
+// "stack default" mode (the ForwardArgs flag and RegisterStackOnly
+// method were retired in the BarrierPos cleanup).
+func (r *Registry) upsertFnDef(name string, sigs ...Signature) {
 	for i := range sigs {
-		if sigs[i].BarrierPos == 0 && forwardArgs && len(sigs[i].Args) > 0 {
+		if sigs[i].BarrierPos == BarrierAllForward {
 			sigs[i].BarrierPos = len(sigs[i].Args)
 		}
 	}
@@ -309,11 +349,12 @@ func (r *Registry) upsertFnDef(name string, forwardArgs bool, sigs ...Signature)
 	r.Defs.Push(name, NewFnDef(fnDef))
 }
 
-// calcMaxForwardArgs returns the maximum number of forward args needed
-// across all signatures. Under the unified dispatch rule, the forward
-// limit is exactly sig.BarrierPos (which has been normalised at
-// registration to len(Args) for old forward-prec sigs and 0 for
-// old stack-only). This tells the engine how far ahead to scan and
+// calcMaxForwardArgs returns the maximum number of forward args
+// needed across all signatures. Under the unified dispatch rule the
+// forward limit is exactly `sig.BarrierPos`, which upsertFnDef
+// resolves at registration: `BarrierAllForward` (-1) becomes
+// `len(Args)`, `0` stays as explicit all-stack, intermediates pass
+// through. This tells the engine how far ahead to scan and
 // pre-evaluate paren expressions before signature matching.
 func calcMaxForwardArgs(sigs []Signature) int {
 	max := 0
@@ -373,19 +414,19 @@ func (r *Registry) clearSigsKeepFallback(name string) {
 // All containers at every depth are Stores.
 func (r *Registry) InitRootContext() {
 	root := &StoreInstanceInfo{
-		TypeName: "Object/Store",
+		TypeName: "Ideal/Store",
 		Data:     make(map[string]Value),
 	}
 
 	// Create the System store.
 	sysStore := &StoreInstanceInfo{
-		TypeName: "Object/Store/System",
+		TypeName: "Ideal/Store/System",
 		Data:     make(map[string]Value),
 	}
 
 	// fs: a Store with {mem: false, impl: None}
 	fsStore := &StoreInstanceInfo{
-		TypeName: "Object/Store",
+		TypeName: "Ideal/Store",
 		Data:     make(map[string]Value),
 	}
 	fsStore.Set("mem", NewBoolean(false))
@@ -394,7 +435,7 @@ func (r *Registry) InitRootContext() {
 
 	// __val: a Store for user-defined values
 	valStore := &StoreInstanceInfo{
-		TypeName: "Object/Store",
+		TypeName: "Ideal/Store",
 		Data:     make(map[string]Value),
 	}
 	sysStore.Set("__val", NewStoreValue(TStore, valStore))
@@ -423,11 +464,11 @@ func UnaryNumOpNative(name string, op func(float64) float64) NativeFunc {
 		return []Value{NewDecimal(op(v))}, nil
 	}
 	return NativeFunc{
-		Name:        name,
-		ForwardArgs: true,
+		Name: name,
+
 		Signatures: []NativeSig{
-			{Args: []*Type{TInteger}, Handler: handler, Returns: []*Type{TDecimal}},
-			{Args: []*Type{TDecimal}, Handler: handler, Returns: []*Type{TDecimal}},
+			{Args: []*Type{TInteger}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
+			{Args: []*Type{TDecimal}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
 		},
 	}
 }
@@ -446,12 +487,12 @@ func BinaryNumOpNative(name string, op func(a, b float64) (float64, error)) Nati
 		return []Value{NewDecimal(result)}, nil
 	}
 	return NativeFunc{
-		Name:        name,
-		ForwardArgs: true,
+		Name: name,
+
 		Signatures: []NativeSig{
-			{Args: []*Type{TDecimal, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}},
-			{Args: []*Type{TNumber, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}},
-			{Args: []*Type{TDecimal, TNumber}, Handler: handler, Returns: []*Type{TDecimal}},
+			{Args: []*Type{TDecimal, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
+			{Args: []*Type{TNumber, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
+			{Args: []*Type{TDecimal, TNumber}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
 		},
 	}
 }
@@ -470,18 +511,18 @@ func BinaryIntOpNative(name string, op func(a, b int64) (int64, error)) NativeFu
 		return []Value{NewInteger(result)}, nil
 	}
 	return NativeFunc{
-		Name:        name,
-		ForwardArgs: true,
+		Name: name,
+
 		Signatures: []NativeSig{
-			{Args: []*Type{TInteger, TInteger}, Handler: handler, Returns: []*Type{TInteger}},
+			{Args: []*Type{TInteger, TInteger}, Handler: handler, Returns: []*Type{TInteger}, BarrierPos: -1},
 		},
 	}
 }
 
 // ValToString converts any scalar Value to its string representation.
 func ValToString(v Value) string {
-	if v.Data == nil && !v.VType.Equal(TNone) {
-		return v.VType.String()
+	if v.Data == nil {
+		return v.String()
 	}
 	switch {
 	case v.IsDepScalar():
@@ -490,19 +531,19 @@ func ValToString(v Value) string {
 		// so without this case AsString would crash on the wrong
 		// payload type.
 		return renderDepScalar(v)
-	case v.VType.Matches(TString):
+	case v.Parent.Matches(TString):
 		_as8, _ := AsString(v)
 		return _as8
 	case IsAtom(v):
 		_as9, _ := AsAtom(v)
 		return _as9
-	case v.VType.Matches(TDecimal):
+	case v.Parent.Matches(TDecimal):
 		_as10, _ := AsDecimal(v)
 		return formatDecimal(_as10)
-	case v.VType.Matches(TInteger):
+	case v.Parent.Matches(TInteger):
 		_as11, _ := AsInteger(v)
 		return strconv.FormatInt(_as11, 10)
-	case v.VType.Matches(TBoolean):
+	case v.Parent.Matches(TBoolean):
 		_as12, _ := AsBoolean(v)
 		if _as12 {
 			return "true"
@@ -573,20 +614,18 @@ func (r *Registry) RegisterPart(part string) {
 // fallback is retained only for value-side ObjectType installations
 // from outside the type word (e.g. legacy RegisterResource paths).
 func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
-	if v.Data != nil || reg == nil || v.VType == nil {
+	if v.Data != nil || reg == nil || v.Carrier {
 		return v
 	}
-	name := TypeNameByID(v.VType.ID)
+	// A type literal IS its lattice node (by-value copy), so the
+	// canonical identity is the value's own ID, not v.Parent.ID (the
+	// supertype's ID).
+	name := TypeNameByID(v.ID)
 	if name == "" {
 		return v
 	}
-	if tv, ok := reg.Types.TopBody(name); ok && IsObjectType(tv) {
-		return tv
-	}
-	if top, ok := reg.Defs.Top(name); ok {
-		if IsObjectType(top) {
-			return top
-		}
+	if top, ok := reg.Defs.Top(name); ok && IsObjectType(top) {
+		return top
 	}
 	return v
 }
@@ -594,13 +633,13 @@ func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
 // StoreKey converts a Value to a string key for the store.
 func StoreKey(v Value) string {
 	if v.Data == nil {
-		return v.VType.String()
+		return v.Parent.String()
 	}
 	if IsWord(v) {
 		_as15, _ := AsWord(v)
 		return _as15.Name
 	}
-	if v.VType.Matches(TString) {
+	if v.Parent.Matches(TString) {
 		_as16, _ := AsString(v)
 		return _as16
 	}
@@ -608,15 +647,15 @@ func StoreKey(v Value) string {
 		_as17, _ := AsAtom(v)
 		return _as17
 	}
-	if v.VType.Matches(TInteger) {
+	if v.Parent.Matches(TInteger) {
 		n, _ := AsInteger(v)
 		return strconv.FormatInt(n, 10)
 	}
-	if v.VType.Matches(TDecimal) {
+	if v.Parent.Matches(TDecimal) {
 		f, _ := AsDecimal(v)
 		return FormatDecimal(f)
 	}
-	if v.VType.Matches(TBoolean) {
+	if v.Parent.Matches(TBoolean) {
 		b, _ := AsBoolean(v)
 		if b {
 			return "true"
@@ -649,6 +688,7 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 			QuoteArgs:        sig.QuoteArgs,
 			NoEvalArgs:       sig.NoEvalArgs,
 			NoEvalMapArgs:    sig.NoEvalMapArgs,
+			TypeArgs:         sig.TypeArgs,
 			BarrierPos:       sig.BarrierPos,
 			Fallback:         sig.Fallback,
 			Returns:          sig.Returns,
@@ -656,37 +696,52 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 			RunInCheckMode:   sig.RunInCheckMode,
 			CheckFullStackFn: sig.CheckFullStackFn,
 		}
-		if fn.ForwardArgs {
-			r.Register(fn.Name, s)
-		} else {
-			r.RegisterStackOnly(fn.Name, s)
-		}
+		// One path. `BarrierAllForward` (-1) on a NativeSig is the
+		// "default all-forward" sentinel; `0` is explicit all-stack.
+		// upsertFnDef resolves the sentinel once.
+		r.Register(fn.Name, s)
 	}
 }
 
 // CallAQL invokes an AQL function value (FnDefInfo) with a pre-matched
 // signature and arguments in a sub-engine. The caller is responsible for
 // signature matching — use MatchFnSig to find the matching sig.
+// `captures` is the FnDefInfo's lexical-closure binding list (may be
+// nil); they're installed as defs alongside named params and torn down
+// at exit.
 //
 //	sig := MatchFnSig(fn, args)
-//	result, err := r.CallAQL(sig, args)
-func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
+//	result, err := r.CallAQL(sig, args, fnDef.Captured)
+func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding) ([]Value, error) {
 	// Build token sequence (same as InstallFnDef handler).
 	var tokens []Value
 	var names []string
+
+	// Push the fn-entry baseline before installing anything. Inner
+	// fn constructions inside this body consult TopFnBaseline to
+	// identify enclosing-fn-local bindings.
+	r.PushFnBaseline(r.Defs.Snapshot())
 
 	// Push args list onto the args stack.
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
 	argsList := NewList(argsCopy)
 	if err := r.Args.Push(argsList); err != nil {
+		r.PopFnBaseline()
 		return nil, err
+	}
+
+	// Install lexical captures first so params (installed below)
+	// shadow same-named captures — innermost binding wins.
+	for _, cb := range captures {
+		InstallDef(r, cb.Name, cb.Value)
+		names = append(names, cb.Name)
 	}
 
 	for i, p := range sig.Params {
 		if p.Name != "" {
 			arg := args[i]
-			if arg.VType.Equal(TList) && !arg.Quoted {
+			if arg.Parent.Equal(TList) && !arg.Quoted {
 				arg.Quoted = true
 			}
 			InstallDef(r, p.Name, arg)
@@ -708,14 +763,15 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value) ([]Value, error) {
 	sub := NewTop(r)
 	result, err := sub.Run(tokens)
 
-	// Cleanup: pop args stack, undef named params, then clean up
-	// any defs that were created during body execution. A Pop error
-	// here means the args stack is nil — a misconfigured registry;
-	// surface it only if sub.Run didn't already fail (the run error
-	// is more informative).
+	// Cleanup: pop args stack, undef named params + captures, then
+	// clean up any defs that were created during body execution. A
+	// Pop error here means the args stack is nil — a misconfigured
+	// registry; surface it only if sub.Run didn't already fail (the
+	// run error is more informative).
 	if _, popErr := r.Args.Pop(); popErr != nil && err == nil {
 		err = popErr
 	}
+	r.PopFnBaseline()
 	for i := len(names) - 1; i >= 0; i-- {
 		UninstallDef(r, names[i])
 	}
@@ -773,22 +829,43 @@ func (r *Registry) AqlErrorHint(code, detail, word, hint string) error {
 	return makeAqlError(code, detail, word, src, hint)
 }
 
-// ResolveTypedName resolves a name to its type value through the
-// type-resolution chain used by the typed-def handler and `is`:
-// r.types first (the dedicated type registry), then DefStacks (legacy
-// path for record/object/DepScalar definitions). Returns the resolved
-// value and true if found; zero Value and false otherwise.
-//
-// Centralises the lookup so future namespace changes (a single
-// type/def store, scoped types) only need to update one site.
+// ResolveTypedName resolves a name to its bound value. Post the
+// TYPE-UNIFORM Phase 4 collapse there is a single binding store
+// (DefTable) holding both type and value bindings, so this is one
+// lookup: the capitalisation convention keeps type names and value
+// names disjoint, so a name is bound at most one way.
 func (r *Registry) ResolveTypedName(name string) (Value, bool) {
 	if r == nil {
 		return Value{}, false
 	}
-	if tv, ok := r.Types.TopBody(name); ok {
-		return tv, true
-	}
 	return r.Defs.Top(name)
+}
+
+// TopTypeBody returns the body of name's active binding when that
+// binding is a *type* binding (installed by a capitalised `def`), and
+// (zero Value, false) otherwise — including when name is unbound or
+// bound only as a value.
+func (r *Registry) TopTypeBody(name string) (Value, bool) {
+	if r == nil {
+		return Value{}, false
+	}
+	if e, ok := r.Defs.TopEntry(name); ok && e.TypeDef != nil {
+		return e.Body, true
+	}
+	return Value{}, false
+}
+
+// LookupTypeName returns the active lattice *Type for name: the minted
+// def of a dynamic type binding (in the DefTable), or an external
+// builtin registered by name. Returns nil if name names no type.
+func (r *Registry) LookupTypeName(name string) *Type {
+	if r == nil {
+		return nil
+	}
+	if e, ok := r.Defs.TopEntry(name); ok && e.TypeDef != nil {
+		return e.TypeDef
+	}
+	return r.Types.LookupBuiltinByName(name)
 }
 
 // ResolveTypedNameValue resolves a Value-shaped type reference to its
@@ -843,8 +920,8 @@ func (r *Registry) ResolveTypedNameValue(v Value) (resolved Value, name string, 
 // rolled back. r.defStacks is already protected by CallAQL's own
 // snapshot.
 func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched bool, err error) {
-	if !constraint.VType.Equal(TFnDef) && !constraint.VType.Equal(TFunction) {
-		return Value{}, false, fmt.Errorf("RunPredicate: constraint is not a fn (got %s)", constraint.VType.String())
+	if !constraint.Parent.Equal(TFnDef) && !constraint.Parent.Equal(TFunction) {
+		return Value{}, false, fmt.Errorf("RunPredicate: constraint is not a fn (got %s)", constraint.Parent.String())
 	}
 	fnDef, ok := constraint.Data.(FnDefInfo)
 	if !ok {
@@ -859,13 +936,28 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	if r != nil && r.Check.Mode {
 		return candidate, true, nil
 	}
+	// Input-type gate: a predicate's declared input type acts as a
+	// pre-filter. `"x" is Pos` for `Pos fn [[n:Integer] …]` rejects
+	// at this gate without running the body, because the predicate
+	// body's behavior on a non-Integer input is undefined (and
+	// cross-type comparators like `gt` produce confusing answers).
+	// Skip the gate for the empty case (input declared as Any or
+	// unset) — those predicates explicitly accept any input.
+	if inputT := fnDef.Sigs[0].Params[0].Type; inputT != nil && !inputT.Equal(TAny) {
+		if candidate.Data == nil && !candidate.Carrier {
+			// Bare type literal: skip the gate (the literal IS a type,
+			// not an inhabitant — predicate has no value to test).
+		} else if !candidate.Parent.Matches(inputT) {
+			return candidate, false, nil
+		}
+	}
 	// Sandbox the call so a mischievous predicate body can't mutate
 	// r.types or the context stack out from under the surrounding
 	// program.
 	saved := snapshotPredicateState(r)
 	defer restorePredicateState(r, saved)
 
-	result, err := r.CallAQL(&fnDef.Sigs[0], []Value{candidate})
+	result, err := r.CallAQL(&fnDef.Sigs[0], []Value{candidate}, fnDef.Captured)
 	if err != nil {
 		return Value{}, false, err
 	}
@@ -873,6 +965,33 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 		return Value{}, false, fmt.Errorf("RunPredicate: predicate must return exactly one value, got %d", len(result))
 	}
 	out = result[0]
-	matched = !out.VType.Equal(TNone)
-	return out, matched, nil
+	// A predicate signals "doesn't match" by returning:
+	//  - None — sentinel value or bare type literal (IsNoneShape).
+	//  - Boolean false — but ONLY when the predicate's input domain
+	//    doesn't include Boolean. The `n gt 0` style predicate
+	//    (input=Integer, body→Boolean) uses Boolean as a verdict, so
+	//    `false` means "no match". A Boolean-domain predicate like
+	//    `def Flag fn [[b:Boolean] [Boolean] [b]]` legitimately
+	//    accepts `false` as a value, so we must NOT short-circuit on
+	//    Boolean returns when the input type accepts Boolean.
+	//
+	// When the body returns Boolean true (verdict form), the
+	// candidate flows through unchanged — this preserves the
+	// typed-def Reparent invariant (def x:Pos 5 ⇒ x's payload is 5,
+	// not Boolean true). For value-transforming bodies (`guard val`)
+	// the non-Boolean output IS the new value.
+	if IsNoneShape(out) {
+		return out, false, nil
+	}
+	inputT := fnDef.Sigs[0].Params[0].Type
+	booleanIsValue := inputT != nil && TBoolean.Matches(inputT)
+	if !booleanIsValue && out.Parent != nil && out.Parent.Equal(TBoolean) && out.Data != nil {
+		if b, ok := out.Data.(BoolPayload); ok {
+			if !b.B {
+				return out, false, nil
+			}
+			return candidate, true, nil
+		}
+	}
+	return out, true, nil
 }

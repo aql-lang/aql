@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
 )
 
 // runWithSource parses and runs AQL source, returning the error.
@@ -17,12 +16,12 @@ func runWithSource(t *testing.T, src string) error {
 	if err != nil {
 		return err
 	}
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	reg.Source = src
-	eng := engine.NewTop(reg)
+	eng := native.NewTop(reg)
 	eng.SetSource(src)
 	_, err = eng.Run(values)
 	return err
@@ -43,12 +42,12 @@ func assertErrorContains(t *testing.T, err error, substrings ...string) {
 }
 
 // assertAqlError checks that the error is an *AqlError with the given code.
-func assertAqlError(t *testing.T, err error, code string) *engine.AqlError {
+func assertAqlError(t *testing.T, err error, code string) *native.AqlError {
 	t.Helper()
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	ae, ok := err.(*engine.AqlError)
+	ae, ok := err.(*native.AqlError)
 	if !ok {
 		t.Fatalf("expected *AqlError, got %T: %v", err, err)
 	}

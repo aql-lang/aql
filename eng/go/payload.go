@@ -86,7 +86,7 @@ type InterpStringPayload struct{ Parts []InterpPart }
 // =================================================================
 
 // TimePayload carries a time.Time for Date / DateTime / Instant —
-// the VType discriminates which kind it is. Body is interface{}-typed
+// the Parent discriminates which kind it is. Body is interface{}-typed
 // here so the eng package doesn't pull the `time` import; the
 // dedicated NewDate / NewDateTime / NewInstant constructors handle
 // the typed wrapping.
@@ -95,7 +95,7 @@ type TimePayload struct {
 }
 
 // DurationPayload carries a time.Duration for TimeOfDay /
-// ClkDuration; same VType-discriminator pattern as TimePayload.
+// ClkDuration; same Parent-discriminator pattern as TimePayload.
 type DurationPayload struct {
 	D any /* time.Duration */
 }
@@ -143,11 +143,23 @@ type ExtensionPayload struct{ Body any }
 // through ExtensionPayload rather than dedicated kernel variants.
 func NewExtension(t *Type, body any) Value {
 	return Value{
-		ID:    GenerateID(IDPrefixForType(t)),
-		VType: t,
-		Data:  ExtensionPayload{Body: body},
+		ID:     GenerateID(IDPrefixForType(t)),
+		Parent: t,
+		Data:   ExtensionPayload{Body: body},
 	}
 }
+
+// HostTypeBody is an embeddable marker. A host module that introduces
+// a type-kind through an Ideal (see eng/go/ideal.go) embeds this in
+// the struct it stores, via ExtensionPayload, for a *constructed type*
+// — as opposed to an instance. The kernel's type machinery
+// (IsTypeBody, TypeOf, isTypeLike, InstallType) then recognises the
+// value as a type without inspecting its concrete shape, which it
+// cannot — the payload Body is opaque to the kernel. See
+// lang/doc/design/IDEAL.0.md §6.
+type HostTypeBody struct{}
+
+func (HostTypeBody) hostTypeBody() {}
 
 // =================================================================
 // Marker methods.
@@ -172,7 +184,7 @@ func NewExtension(t *Type, body any) Value {
 //   DisjunctInfo, ChildTypeInfo, RecordTypeInfo, OptionsTypeInfo,
 //   TableTypeInfo, TableData, ObjectTypeInfo, ObjectInstanceInfo,
 //   *StoreInstanceInfo, *ArrayInstanceInfo, *TimeoutInfo,
-//   *IntervalInfo, ErrorInfo, MatrixData, CalDurationData,
+//   *IntervalInfo, ErrorInfo, CalDurationData,
 //   DepScalarInfo, Materializer (interface), noneSentinel
 //   (legacy — to be removed in Step 5f).
 // =================================================================
@@ -224,7 +236,6 @@ func (*ArrayInstanceInfo) payloadMarker() {}
 func (*TimeoutInfo) payloadMarker()       {}
 func (*IntervalInfo) payloadMarker()      {}
 func (ErrorInfo) payloadMarker()          {}
-func (MatrixData) payloadMarker()         {}
 func (CalDurationData) payloadMarker()    {}
 func (DepScalarInfo) payloadMarker()      {}
 func (PathInfo) payloadMarker()           {} // legacy; replaced by PathPayload at Step 5b but may still flow through some paths

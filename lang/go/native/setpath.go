@@ -3,7 +3,6 @@ package native
 import (
 	"fmt"
 
-	"github.com/aql-lang/aql/lang/go/engine"
 	voxgigstruct "github.com/voxgig/struct"
 )
 
@@ -13,19 +12,19 @@ import (
 // setpathHandler calls voxgigstruct.SetPath to set a nested value.
 // Position-agnostic: finds the string arg (path), then determines
 // which of the remaining args is data vs new value.
-func setpathHandler(args []engine.Value, ctx map[string]engine.Value, stack []engine.Value, r *engine.Registry) ([]engine.Value, error) {
+func setpathHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	// Find the string arg — that's always the path.
 	pathIdx := -1
 	for i := range args {
-		if args[i].VType.Matches(engine.TString) {
+		if args[i].Parent.Matches(TString) {
 			pathIdx = i
 			break
 		}
 	}
 	if pathIdx < 0 {
-		return nil, fmt.Errorf("setpath: path argument must be a string")
+		return nil, r.AqlError("setpath_error", "setpath: path argument must be a string", "setpath")
 	}
-	path, err := engine.AsString(args[pathIdx])
+	path, err := AsString(args[pathIdx])
 	if err != nil {
 		return nil, fmt.Errorf("setpath: path: %w", err)
 	}
@@ -47,16 +46,16 @@ func setpathHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 	// Use positional heuristic: first non-path arg = data, second = newVal.
 	// But when data comes from stack (last position), swap.
 	a, b := args[others[0]], args[others[1]]
-	var data, newVal engine.Value
+	var data, newVal Value
 	if others[0] < others[1] {
 		// Normal order: first=data, second=newVal
 		// But if first is after the path and second is even later (all forward),
 		// or if last arg is a map/list (likely data from stack), adjust.
-		if (a.VType.Matches(engine.TMap) || a.VType.Matches(engine.TList)) &&
-			!(b.VType.Matches(engine.TMap) || b.VType.Matches(engine.TList)) {
+		if (a.Parent.Matches(TMap) || a.Parent.Matches(TList)) &&
+			!(b.Parent.Matches(TMap) || b.Parent.Matches(TList)) {
 			data, newVal = a, b
-		} else if (b.VType.Matches(engine.TMap) || b.VType.Matches(engine.TList)) &&
-			!(a.VType.Matches(engine.TMap) || a.VType.Matches(engine.TList)) {
+		} else if (b.Parent.Matches(TMap) || b.Parent.Matches(TList)) &&
+			!(a.Parent.Matches(TMap) || a.Parent.Matches(TList)) {
 			data, newVal = b, a
 		} else {
 			// Both same type — use original convention: args[0]=data, args[2]=newVal
@@ -73,5 +72,5 @@ func setpathHandler(args []engine.Value, ctx map[string]engine.Value, stack []en
 	if err != nil {
 		return nil, fmt.Errorf("setpath: %w", err)
 	}
-	return []engine.Value{val}, nil
+	return []Value{val}, nil
 }

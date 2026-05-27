@@ -5,7 +5,7 @@
 
 ## Architecture
 
-File operations use an internal `FileOps` interface (`internal/fileops`)
+File operations use an internal `FileOps` interface (`capabilities`)
 rather than calling the Go `os` package directly. This allows:
 
 - **Testing**: Swap in `MemFileOps` for in-memory tests (no real files)
@@ -141,7 +141,7 @@ File operations follow AQL's existing error conventions:
 Use `MemFileOps` for tests without touching the file system:
 
 ```go
-mem := fileops.NewMem()
+mem := capabilities.NewMem()
 mem.Files["data.txt"] = []byte("hello")
 
 reg := engine.DefaultRegistry()

@@ -6,14 +6,13 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
 )
 
 // runWithOSFiles creates a registry using real OS file ops and runs AQL.
 // Files are resolved relative to the test package directory (lang/go/test/).
-func runWithOSFiles(t *testing.T, expr string) ([]engine.Value, error) {
+func runWithOSFiles(t *testing.T, expr string) ([]native.Value, error) {
 	t.Helper()
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +22,7 @@ func runWithOSFiles(t *testing.T, expr string) ([]engine.Value, error) {
 		return nil, err
 	}
 
-	eng := engine.NewTop(reg)
+	eng := native.NewTop(reg)
 	return eng.Run(values)
 }
 
@@ -39,24 +38,24 @@ func TestFileReadCSV(t *testing.T) {
 	}
 
 	v := result[0]
-	if !engine.IsTableType(v) {
-		t.Fatalf("expected table type, got %s", v.VType)
+	if !native.IsTableType(v) {
+		t.Fatalf("expected table type, got %s", v.Parent)
 	}
 
-	_lst, _ := engine.AsList(v)
+	_lst, _ := native.AsList(v)
 	rows := _lst.Slice()
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
 
 	// Check first row: Alice,30,London
-	r0, _ := engine.AsMap(rows[0])
+	r0, _ := native.AsMap(rows[0])
 	assertField(t, r0, "name", "Alice")
 	assertField(t, r0, "age", "30")
 	assertField(t, r0, "city", "London")
 
 	// Check last row: Charlie,35,Tokyo
-	r2, _ := engine.AsMap(rows[2])
+	r2, _ := native.AsMap(rows[2])
 	assertField(t, r2, "name", "Charlie")
 	assertField(t, r2, "city", "Tokyo")
 }
@@ -68,7 +67,7 @@ func TestFileReadCSVSchema(t *testing.T) {
 	}
 
 	v := result[0]
-	ti, _ := engine.AsTableType(v)
+	ti, _ := native.AsTableType(v)
 	keys := ti.Record.Fields.Keys()
 	if len(keys) != 3 {
 		t.Fatalf("expected 3 columns, got %d: %v", len(keys), keys)
@@ -86,13 +85,13 @@ func TestFileReadSimpleCSV(t *testing.T) {
 	}
 
 	v := result[0]
-	_lst, _ := engine.AsList(v)
+	_lst, _ := native.AsList(v)
 	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
 
-	r0, _ := engine.AsMap(rows[0])
+	r0, _ := native.AsMap(rows[0])
 	assertField(t, r0, "x", "1")
 	assertField(t, r0, "y", "a")
 }
@@ -104,13 +103,13 @@ func TestFileReadQuotedCSV(t *testing.T) {
 	}
 
 	v := result[0]
-	_lst, _ := engine.AsList(v)
+	_lst, _ := native.AsList(v)
 	rows := _lst.Slice()
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
 
-	r0, _ := engine.AsMap(rows[0])
+	r0, _ := native.AsMap(rows[0])
 	assertField(t, r0, "name", "Smith, John")
 	assertField(t, r0, "description", "Has a comma, in name")
 }
@@ -122,13 +121,13 @@ func TestFileReadEmptyCSV(t *testing.T) {
 	}
 
 	v := result[0]
-	if !engine.IsTableType(v) {
+	if !native.IsTableType(v) {
 		// Empty CSV with only headers may return empty list
-		if !v.VType.Equal(engine.TList) {
-			t.Fatalf("expected list/table type, got %s", v.VType)
+		if !v.Parent.Equal(native.TList) {
+			t.Fatalf("expected list/table type, got %s", v.Parent)
 		}
 	}
-	_lst, _ := engine.AsList(v)
+	_lst, _ := native.AsList(v)
 	rows := _lst.Slice()
 	if len(rows) != 0 {
 		t.Errorf("expected 0 rows, got %d", len(rows))
@@ -147,24 +146,24 @@ func TestFileReadTSV(t *testing.T) {
 	}
 
 	v := result[0]
-	if !engine.IsTableType(v) {
-		t.Fatalf("expected table type, got %s", v.VType)
+	if !native.IsTableType(v) {
+		t.Fatalf("expected table type, got %s", v.Parent)
 	}
 
-	_lst, _ := engine.AsList(v)
+	_lst, _ := native.AsList(v)
 	rows := _lst.Slice()
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows, got %d", len(rows))
 	}
 
 	// Check first row: 1, Widget, 9.99
-	r0, _ := engine.AsMap(rows[0])
+	r0, _ := native.AsMap(rows[0])
 	assertField(t, r0, "id", "1")
 	assertField(t, r0, "name", "Widget")
 	assertField(t, r0, "price", "9.99")
 
 	// Check third row: 3, Gizmo, 14.75
-	r2, _ := engine.AsMap(rows[2])
+	r2, _ := native.AsMap(rows[2])
 	assertField(t, r2, "id", "3")
 	assertField(t, r2, "name", "Gizmo")
 	assertField(t, r2, "price", "14.75")
@@ -177,7 +176,7 @@ func TestFileReadTSVSchema(t *testing.T) {
 	}
 
 	v := result[0]
-	ti, _ := engine.AsTableType(v)
+	ti, _ := native.AsTableType(v)
 	keys := ti.Record.Fields.Keys()
 	if len(keys) != 3 {
 		t.Fatalf("expected 3 columns, got %d: %v", len(keys), keys)
@@ -197,10 +196,10 @@ func TestFileReadCSVWithTextOverride(t *testing.T) {
 	}
 
 	v := result[0]
-	if engine.IsTableType(v) {
+	if native.IsTableType(v) {
 		t.Fatal("expected plain string with text override, got table")
 	}
-	s, _ := engine.AsString(v)
+	s, _ := native.AsString(v)
 	if !strings.Contains(s, "x,y") {
 		t.Errorf("expected raw CSV content, got %q", s)
 	}
@@ -214,10 +213,10 @@ func TestFileReadCSVExplicitFmt(t *testing.T) {
 	}
 
 	v := result[0]
-	if !engine.IsTableType(v) {
-		t.Fatalf("expected table type, got %s", v.VType)
+	if !native.IsTableType(v) {
+		t.Fatalf("expected table type, got %s", v.Parent)
 	}
-	_lst, _ := engine.AsList(v)
+	_lst, _ := native.AsList(v)
 	rows := _lst.Slice()
 	if len(rows) != 3 {
 		t.Errorf("expected 3 rows, got %d", len(rows))
@@ -227,7 +226,7 @@ func TestFileReadCSVExplicitFmt(t *testing.T) {
 // --- Print with file-loaded tables ---
 
 func TestFileReadCSVPrint(t *testing.T) {
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +238,7 @@ func TestFileReadCSVPrint(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	eng := engine.NewTop(reg)
+	eng := native.NewTop(reg)
 	result, err := eng.Run(values)
 	if err != nil {
 		t.Fatal(err)
@@ -266,7 +265,7 @@ func TestFileReadCSVPrint(t *testing.T) {
 }
 
 func TestFileReadTSVPrint(t *testing.T) {
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +277,7 @@ func TestFileReadTSVPrint(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	eng := engine.NewTop(reg)
+	eng := native.NewTop(reg)
 	_, err = eng.Run(values)
 	if err != nil {
 		t.Fatal(err)
@@ -291,14 +290,14 @@ func TestFileReadTSVPrint(t *testing.T) {
 }
 
 // assertField checks that an OrderedMap has a field with the expected string value.
-func assertField(t *testing.T, om engine.ReadMap, key, want string) {
+func assertField(t *testing.T, om native.ReadMap, key, want string) {
 	t.Helper()
 	val, ok := om.Get(key)
 	if !ok {
 		t.Errorf("missing field %q", key)
 		return
 	}
-	got, _ := engine.AsString(val)
+	got, _ := native.AsString(val)
 	if got != want {
 		t.Errorf("field %q = %q, want %q", key, got, want)
 	}

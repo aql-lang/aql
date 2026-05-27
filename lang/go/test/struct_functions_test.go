@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/engine"
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
@@ -20,13 +19,13 @@ func TestMergeMaps(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	a, _ := m.Get("a")
 	b, _ := m.Get("b")
 	c, _ := m.Get("c")
-	ai1, _ := engine.AsInteger(a)
-	bi1, _ := engine.AsInteger(b)
-	ci1, _ := engine.AsInteger(c)
+	ai1, _ := native.AsInteger(a)
+	bi1, _ := native.AsInteger(b)
+	ci1, _ := native.AsInteger(c)
 	if ai1 != 1 {
 		t.Errorf("expected a=1, got %d", ai1)
 	}
@@ -45,15 +44,15 @@ func TestMergeNested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	inner, _ := m.Get("a")
-	im, _ := engine.AsMap(inner)
+	im, _ := native.AsMap(inner)
 	x, _ := im.Get("x")
 	y, _ := im.Get("y")
 	z, _ := im.Get("z")
-	xi1, _ := engine.AsInteger(x)
-	yi1, _ := engine.AsInteger(y)
-	zi1, _ := engine.AsInteger(z)
+	xi1, _ := native.AsInteger(x)
+	yi1, _ := native.AsInteger(y)
+	zi1, _ := native.AsInteger(z)
 	if xi1 != 1 {
 		t.Errorf("expected x=1, got %d", xi1)
 	}
@@ -74,14 +73,14 @@ func TestMergeListMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	list := _lst.Slice()
 	if len(list) != 3 {
 		t.Fatalf("expected 3 elements, got %d", len(list))
 	}
-	l0s, _ := engine.AsString(list[0])
-	l1s, _ := engine.AsString(list[1])
-	l2s, _ := engine.AsString(list[2])
+	l0s, _ := native.AsString(list[0])
+	l1s, _ := native.AsString(list[1])
+	l2s, _ := native.AsString(list[2])
 	if l0s != "a" {
 		t.Errorf("expected [0]=a, got %s", l0s)
 	}
@@ -100,12 +99,12 @@ func TestMergeMapList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	list := _lst.Slice()
 	if len(list) != 4 {
 		t.Fatalf("expected 4 elements, got %d", len(list))
 	}
-	l3s, _ := engine.AsString(list[3])
+	l3s, _ := native.AsString(list[3])
 	if l3s != "d" {
 		t.Errorf("expected [3]=d, got %s", l3s)
 	}
@@ -118,7 +117,7 @@ func TestMergeMapListIgnoreNonInt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	list := _lst.Slice()
 	if len(list) != 2 {
 		t.Fatalf("expected 2 elements, got %d", len(list))
@@ -134,9 +133,9 @@ func TestPush(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	list := _lst.Slice()
-	l2push, _ := engine.AsString(list[2])
+	l2push, _ := native.AsString(list[2])
 	if len(list) != 3 || l2push != "c" {
 		t.Errorf("expected [a,b,c], got %v", result[0].String())
 	}
@@ -149,7 +148,7 @@ func TestPushSingleElement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	list := _lst.Slice()
 	if len(list) != 3 {
 		t.Errorf("expected 3 elements (list added as single element), got %d", len(list))
@@ -166,12 +165,12 @@ func TestPop(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("expected 2 results (list + popped), got %d", len(result))
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	list := _lst.Slice()
 	if len(list) != 2 {
 		t.Errorf("expected list of 2, got %d", len(list))
 	}
-	r1pop, _ := engine.AsString(result[1])
+	r1pop, _ := native.AsString(result[1])
 	if r1pop != "c" {
 		t.Errorf("expected popped 'c', got %s", r1pop)
 	}
@@ -184,9 +183,9 @@ func TestUnshift(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	list := _lst.Slice()
-	l0unshift, _ := engine.AsString(list[0])
+	l0unshift, _ := native.AsString(list[0])
 	if len(list) != 3 || l0unshift != "c" {
 		t.Errorf("expected [c,a,b], got %v", result[0].String())
 	}
@@ -199,7 +198,7 @@ func TestUnshiftSingleElement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	list := _lst.Slice()
 	if len(list) != 3 {
 		t.Errorf("expected 3 elements (list added as single element), got %d", len(list))
@@ -216,12 +215,12 @@ func TestShift(t *testing.T) {
 	if len(result) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(result))
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	list := _lst.Slice()
 	if len(list) != 2 {
 		t.Errorf("expected list of 2, got %d", len(list))
 	}
-	r1shift, _ := engine.AsString(result[1])
+	r1shift, _ := native.AsString(result[1])
 	if r1shift != "a" {
 		t.Errorf("expected shifted 'a', got %s", r1shift)
 	}
@@ -239,7 +238,7 @@ func TestGetpathSimple(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	r0i1, _ := engine.AsInteger(result[0])
+	r0i1, _ := native.AsInteger(result[0])
 	if r0i1 != 42 {
 		t.Errorf("expected 42, got %d", r0i1)
 	}
@@ -252,7 +251,7 @@ func TestGetpathTopLevel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r0s1, _ := engine.AsString(result[0])
+	r0s1, _ := native.AsString(result[0])
 	if r0s1 != "Alice" {
 		t.Errorf("expected Alice, got %s", r0s1)
 	}
@@ -270,11 +269,11 @@ func TestSetpathSimple(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	a, _ := m.Get("a")
 	b, _ := m.Get("b")
-	ai2, _ := engine.AsInteger(a)
-	bi2, _ := engine.AsInteger(b)
+	ai2, _ := native.AsInteger(a)
+	bi2, _ := native.AsInteger(b)
 	if ai2 != 1 {
 		t.Errorf("expected a=1, got %d", ai2)
 	}
@@ -290,11 +289,11 @@ func TestSetpathNewKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	a, _ := m.Get("a")
 	b, _ := m.Get("b")
-	ai5, _ := engine.AsInteger(a)
-	bi5, _ := engine.AsInteger(b)
+	ai5, _ := native.AsInteger(a)
+	bi5, _ := native.AsInteger(b)
 	if ai5 != 1 {
 		t.Errorf("expected a=1, got %d", ai5)
 	}
@@ -315,11 +314,11 @@ func TestCloneMap(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	a, _ := m.Get("a")
 	b, _ := m.Get("b")
-	ai3, _ := engine.AsInteger(a)
-	bi3, _ := engine.AsInteger(b)
+	ai3, _ := native.AsInteger(a)
+	bi3, _ := native.AsInteger(b)
 	if ai3 != 1 {
 		t.Errorf("expected a=1, got %d", ai3)
 	}
@@ -340,12 +339,12 @@ func TestInjectPaths(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	v, ok := m.Get("greeting")
 	if !ok {
 		t.Fatal("expected key 'greeting' in result")
 	}
-	vs2, _ := engine.AsString(v)
+	vs2, _ := native.AsString(v)
 	if vs2 != "Alice" {
 		t.Errorf("expected Alice, got %s", vs2)
 	}
@@ -363,12 +362,12 @@ func TestValidateReturnsSpec(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	name, ok := m.Get("name")
 	if !ok {
 		t.Fatal("expected key 'name' in result")
 	}
-	nameS, _ := engine.AsString(name)
+	nameS, _ := native.AsString(name)
 	if nameS != "$STRING" {
 		t.Errorf("expected $STRING, got %s", nameS)
 	}
@@ -376,7 +375,7 @@ func TestValidateReturnsSpec(t *testing.T) {
 	if !ok {
 		t.Fatal("expected key 'age' in result")
 	}
-	ageS, _ := engine.AsString(age)
+	ageS, _ := native.AsString(age)
 	if ageS != "$NUMBER" {
 		t.Errorf("expected $NUMBER, got %s", ageS)
 	}
@@ -394,7 +393,7 @@ func TestWalkFlat(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	leaves := _lst.Slice()
 	if len(leaves) != 2 {
 		t.Fatalf("expected 2 leaves, got %d", len(leaves))
@@ -402,10 +401,10 @@ func TestWalkFlat(t *testing.T) {
 
 	paths := make(map[string]string)
 	for _, leaf := range leaves {
-		m, _ := engine.AsMap(leaf)
+		m, _ := native.AsMap(leaf)
 		p, _ := m.Get("path")
 		v, _ := m.Get("value")
-		ps1, _ := engine.AsString(p)
+		ps1, _ := native.AsString(p)
 		paths[ps1] = v.String()
 	}
 	if _, ok := paths["a"]; !ok {
@@ -423,7 +422,7 @@ func TestWalkNested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_lst, _ := engine.AsList(result[0])
+	_lst, _ := native.AsList(result[0])
 	leaves := _lst.Slice()
 	if len(leaves) != 3 {
 		t.Fatalf("expected 3 leaves, got %d", len(leaves))
@@ -431,9 +430,9 @@ func TestWalkNested(t *testing.T) {
 
 	paths := make(map[string]bool)
 	for _, leaf := range leaves {
-		m, _ := engine.AsMap(leaf)
+		m, _ := native.AsMap(leaf)
 		p, _ := m.Get("path")
-		ps2, _ := engine.AsString(p)
+		ps2, _ := native.AsString(p)
 		paths[ps2] = true
 	}
 	for _, want := range []string{"a.x", "a.y", "b"} {
@@ -450,18 +449,18 @@ func TestWalkBeforeIdentity(t *testing.T) {
 	// walk is stack-only [TAny, TFunction] so it needs both values on the
 	// stack. We pass the fn as a Go-constructed TFunction value directly
 	// in the engine stack to prevent auto-execution.
-	fnDef := engine.FnDefInfo{
-		Sigs: []engine.FnSig{{
-			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []*engine.Type{engine.TAny},
-			Body:    []engine.Value{engine.NewWord("m"), engine.NewWord("get"), engine.NewWord("value")},
+	fnDef := native.FnDefInfo{
+		Sigs: []native.FnSig{{
+			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
+			Returns: []*native.Type{native.TAny},
+			Body:    []native.Value{native.NewWord("m"), native.NewWord("get"), native.NewWord("value")}, BarrierPos: -1,
 		}},
 	}
-	om := engine.NewOrderedMap()
-	om.Set("a", engine.NewInteger(1))
-	om.Set("b", engine.NewInteger(2))
+	om := native.NewOrderedMap()
+	om.Set("a", native.NewInteger(1))
+	om.Set("b", native.NewInteger(2))
 
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -470,12 +469,12 @@ func TestWalkBeforeIdentity(t *testing.T) {
 
 	// Push the fn as a Quoted function value so it doesn't auto-execute
 	// before walk can consume it from the stack.
-	fnVal := engine.NewFunction(fnDef)
+	fnVal := native.NewFunction(fnDef)
 	fnVal.Quoted = true
 
-	eng := engine.NewTop(reg)
-	result, err := eng.Run([]engine.Value{
-		engine.NewMap(om), fnVal, engine.NewWord("walk"),
+	eng := native.NewTop(reg)
+	result, err := eng.Run([]native.Value{
+		native.NewMap(om), fnVal, native.NewWord("walk"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -483,11 +482,11 @@ func TestWalkBeforeIdentity(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	a, _ := m.Get("a")
 	b, _ := m.Get("b")
-	ai6, _ := engine.AsInteger(a)
-	bi6, _ := engine.AsInteger(b)
+	ai6, _ := native.AsInteger(a)
+	bi6, _ := native.AsInteger(b)
 	if ai6 != 1 {
 		t.Errorf("expected a=1, got %v", a)
 	}
@@ -500,46 +499,46 @@ func TestWalkBeforeIdentityNested(t *testing.T) {
 	// Identity before callback on a nested structure — entire tree preserved.
 	// walk is stack-only [TAny, TFunction], so we push the fn as a Quoted
 	// value to prevent auto-execution before walk consumes it.
-	fnDef := engine.FnDefInfo{
-		Sigs: []engine.FnSig{{
-			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []*engine.Type{engine.TAny},
-			Body:    []engine.Value{engine.NewWord("m"), engine.NewWord("get"), engine.NewWord("value")},
+	fnDef := native.FnDefInfo{
+		Sigs: []native.FnSig{{
+			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
+			Returns: []*native.Type{native.TAny},
+			Body:    []native.Value{native.NewWord("m"), native.NewWord("get"), native.NewWord("value")}, BarrierPos: -1,
 		}},
 	}
-	inner := engine.NewOrderedMap()
-	inner.Set("x", engine.NewInteger(1))
-	inner.Set("y", engine.NewInteger(2))
-	om := engine.NewOrderedMap()
-	om.Set("a", engine.NewMap(inner))
-	om.Set("b", engine.NewInteger(3))
+	inner := native.NewOrderedMap()
+	inner.Set("x", native.NewInteger(1))
+	inner.Set("y", native.NewInteger(2))
+	om := native.NewOrderedMap()
+	om.Set("a", native.NewMap(inner))
+	om.Set("b", native.NewInteger(3))
 
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
 
-	fnVal := engine.NewFunction(fnDef)
+	fnVal := native.NewFunction(fnDef)
 	fnVal.Quoted = true
 
-	eng := engine.NewTop(reg)
-	result, err := eng.Run([]engine.Value{
-		engine.NewMap(om), fnVal, engine.NewWord("walk"),
+	eng := native.NewTop(reg)
+	result, err := eng.Run([]native.Value{
+		native.NewMap(om), fnVal, native.NewWord("walk"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	rm, _ := engine.AsMap(result[0])
+	rm, _ := native.AsMap(result[0])
 	aVal, _ := rm.Get("a")
-	aim, _ := engine.AsMap(aVal)
+	aim, _ := native.AsMap(aVal)
 	x, _ := aim.Get("x")
 	y, _ := aim.Get("y")
 	b, _ := rm.Get("b")
-	xi2, _ := engine.AsInteger(x)
-	yi2, _ := engine.AsInteger(y)
-	bi7, _ := engine.AsInteger(b)
+	xi2, _ := native.AsInteger(x)
+	yi2, _ := native.AsInteger(y)
+	bi7, _ := native.AsInteger(b)
 	if xi2 != 1 {
 		t.Errorf("expected x=1, got %v", x)
 	}
@@ -557,30 +556,30 @@ func TestWalkBeforeReplace(t *testing.T) {
 	// Since 99 is not a map/list, walk does NOT descend into children.
 	// This demonstrates that the before callback controls traversal:
 	// replacing a node with a scalar stops descent into that subtree.
-	fnDef := engine.FnDefInfo{
-		Sigs: []engine.FnSig{{
-			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []*engine.Type{engine.TAny},
-			Body:    []engine.Value{engine.NewInteger(99)},
+	fnDef := native.FnDefInfo{
+		Sigs: []native.FnSig{{
+			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
+			Returns: []*native.Type{native.TAny},
+			Body:    []native.Value{native.NewInteger(99)}, BarrierPos: -1,
 		}},
 	}
-	om := engine.NewOrderedMap()
-	om.Set("a", engine.NewInteger(1))
-	om.Set("b", engine.NewInteger(2))
+	om := native.NewOrderedMap()
+	om.Set("a", native.NewInteger(1))
+	om.Set("b", native.NewInteger(2))
 
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
 
-	fnVal := engine.NewFunction(fnDef)
+	fnVal := native.NewFunction(fnDef)
 	fnVal.Quoted = true
 
-	eng := engine.NewTop(reg)
-	result, err := eng.Run([]engine.Value{
-		engine.NewMap(om), fnVal, engine.NewWord("walk"),
+	eng := native.NewTop(reg)
+	result, err := eng.Run([]native.Value{
+		native.NewMap(om), fnVal, native.NewWord("walk"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -588,7 +587,7 @@ func TestWalkBeforeReplace(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	r0i2, _ := engine.AsInteger(result[0])
+	r0i2, _ := native.AsInteger(result[0])
 	if r0i2 != 99 {
 		t.Errorf("expected 99, got %v", result[0])
 	}
@@ -599,30 +598,30 @@ func TestWalkBeforeReturnPath(t *testing.T) {
 	// Before callback returns the path string for every node.
 	// The root path is "" (empty string), which replaces the root map.
 	// Since a string is not a node, descent stops — result is "".
-	fnDef := engine.FnDefInfo{
-		Sigs: []engine.FnSig{{
-			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []*engine.Type{engine.TAny},
-			Body:    []engine.Value{engine.NewWord("m"), engine.NewWord("get"), engine.NewWord("path")},
+	fnDef := native.FnDefInfo{
+		Sigs: []native.FnSig{{
+			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
+			Returns: []*native.Type{native.TAny},
+			Body:    []native.Value{native.NewWord("m"), native.NewWord("get"), native.NewWord("path")}, BarrierPos: -1,
 		}},
 	}
-	om := engine.NewOrderedMap()
-	om.Set("a", engine.NewInteger(1))
-	om.Set("b", engine.NewInteger(2))
+	om := native.NewOrderedMap()
+	om.Set("a", native.NewInteger(1))
+	om.Set("b", native.NewInteger(2))
 
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
 
-	fnVal := engine.NewFunction(fnDef)
+	fnVal := native.NewFunction(fnDef)
 	fnVal.Quoted = true
 
-	eng := engine.NewTop(reg)
-	result, err := eng.Run([]engine.Value{
-		engine.NewMap(om), fnVal, engine.NewWord("walk"),
+	eng := native.NewTop(reg)
+	result, err := eng.Run([]native.Value{
+		native.NewMap(om), fnVal, native.NewWord("walk"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -630,7 +629,7 @@ func TestWalkBeforeReturnPath(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	r0s2, _ := engine.AsString(result[0])
+	r0s2, _ := native.AsString(result[0])
 	if r0s2 != "" {
 		t.Errorf("expected empty string (root path), got %q", r0s2)
 	}
@@ -641,40 +640,40 @@ func TestWalkBeforeReturnPath(t *testing.T) {
 func TestWalkBeforeAfterIdentity(t *testing.T) {
 	// AQL: {a:1 b:2} (fn [[m:Map] [Any] [m.value]]) (fn [[m:Map] [Any] [m.value]]) walk
 	// Both before and after return m.value (identity) — tree is preserved.
-	identityBody := []engine.Value{engine.NewWord("m"), engine.NewWord("get"), engine.NewWord("value")}
-	fnDef1 := engine.FnDefInfo{
-		Sigs: []engine.FnSig{{
-			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []*engine.Type{engine.TAny},
-			Body:    identityBody,
+	identityBody := []native.Value{native.NewWord("m"), native.NewWord("get"), native.NewWord("value")}
+	fnDef1 := native.FnDefInfo{
+		Sigs: []native.FnSig{{
+			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
+			Returns: []*native.Type{native.TAny},
+			Body:    identityBody, BarrierPos: -1,
 		}},
 	}
-	fnDef2 := engine.FnDefInfo{
-		Sigs: []engine.FnSig{{
-			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []*engine.Type{engine.TAny},
-			Body:    identityBody,
+	fnDef2 := native.FnDefInfo{
+		Sigs: []native.FnSig{{
+			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
+			Returns: []*native.Type{native.TAny},
+			Body:    identityBody, BarrierPos: -1,
 		}},
 	}
-	om := engine.NewOrderedMap()
-	om.Set("a", engine.NewInteger(1))
-	om.Set("b", engine.NewInteger(2))
+	om := native.NewOrderedMap()
+	om.Set("a", native.NewInteger(1))
+	om.Set("b", native.NewInteger(2))
 
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
 
-	fnVal1 := engine.NewFunction(fnDef1)
+	fnVal1 := native.NewFunction(fnDef1)
 	fnVal1.Quoted = true
-	fnVal2 := engine.NewFunction(fnDef2)
+	fnVal2 := native.NewFunction(fnDef2)
 	fnVal2.Quoted = true
 
-	eng := engine.NewTop(reg)
-	result, err := eng.Run([]engine.Value{
-		engine.NewMap(om), fnVal1, fnVal2, engine.NewWord("walk"),
+	eng := native.NewTop(reg)
+	result, err := eng.Run([]native.Value{
+		native.NewMap(om), fnVal1, fnVal2, native.NewWord("walk"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -682,11 +681,11 @@ func TestWalkBeforeAfterIdentity(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	a, _ := m.Get("a")
 	b, _ := m.Get("b")
-	ai7, _ := engine.AsInteger(a)
-	bi8, _ := engine.AsInteger(b)
+	ai7, _ := native.AsInteger(a)
+	bi8, _ := native.AsInteger(b)
 	if ai7 != 1 {
 		t.Errorf("expected a=1, got %v", a)
 	}
@@ -706,39 +705,39 @@ func TestWalkBeforeAfterPostOrder(t *testing.T) {
 	//   5. after(b=2) → 99
 	//   6. after(root={a:99 b:99}) → 99
 	// Final result: 99
-	fnDef1 := engine.FnDefInfo{
-		Sigs: []engine.FnSig{{
-			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []*engine.Type{engine.TAny},
-			Body:    []engine.Value{engine.NewWord("m"), engine.NewWord("get"), engine.NewWord("value")},
+	fnDef1 := native.FnDefInfo{
+		Sigs: []native.FnSig{{
+			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
+			Returns: []*native.Type{native.TAny},
+			Body:    []native.Value{native.NewWord("m"), native.NewWord("get"), native.NewWord("value")}, BarrierPos: -1,
 		}},
 	}
-	fnDef2 := engine.FnDefInfo{
-		Sigs: []engine.FnSig{{
-			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []*engine.Type{engine.TAny},
-			Body:    []engine.Value{engine.NewInteger(99)},
+	fnDef2 := native.FnDefInfo{
+		Sigs: []native.FnSig{{
+			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
+			Returns: []*native.Type{native.TAny},
+			Body:    []native.Value{native.NewInteger(99)}, BarrierPos: -1,
 		}},
 	}
-	om := engine.NewOrderedMap()
-	om.Set("a", engine.NewInteger(1))
-	om.Set("b", engine.NewInteger(2))
+	om := native.NewOrderedMap()
+	om.Set("a", native.NewInteger(1))
+	om.Set("b", native.NewInteger(2))
 
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
 
-	fnVal1 := engine.NewFunction(fnDef1)
+	fnVal1 := native.NewFunction(fnDef1)
 	fnVal1.Quoted = true
-	fnVal2 := engine.NewFunction(fnDef2)
+	fnVal2 := native.NewFunction(fnDef2)
 	fnVal2.Quoted = true
 
-	eng := engine.NewTop(reg)
-	result, err := eng.Run([]engine.Value{
-		engine.NewMap(om), fnVal1, fnVal2, engine.NewWord("walk"),
+	eng := native.NewTop(reg)
+	result, err := eng.Run([]native.Value{
+		native.NewMap(om), fnVal1, fnVal2, native.NewWord("walk"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -746,7 +745,7 @@ func TestWalkBeforeAfterPostOrder(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	r0i3, _ := engine.AsInteger(result[0])
+	r0i3, _ := native.AsInteger(result[0])
 	if r0i3 != 99 {
 		t.Errorf("expected 99 (after replaces all), got %v", result[0])
 	}
@@ -757,56 +756,56 @@ func TestWalkBeforeAfterNested(t *testing.T) {
 	//        (fn [[m:Map] [Any] [m.value]])
 	//        (fn [[m:Map] [Any] [m.value]]) walk
 	// Both callbacks are identity — nested tree preserved through full traversal.
-	identityBody := []engine.Value{engine.NewWord("m"), engine.NewWord("get"), engine.NewWord("value")}
-	fnDef1 := engine.FnDefInfo{
-		Sigs: []engine.FnSig{{
-			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []*engine.Type{engine.TAny},
-			Body:    identityBody,
+	identityBody := []native.Value{native.NewWord("m"), native.NewWord("get"), native.NewWord("value")}
+	fnDef1 := native.FnDefInfo{
+		Sigs: []native.FnSig{{
+			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
+			Returns: []*native.Type{native.TAny},
+			Body:    identityBody, BarrierPos: -1,
 		}},
 	}
-	fnDef2 := engine.FnDefInfo{
-		Sigs: []engine.FnSig{{
-			Params:  []engine.FnParam{{Name: "m", Type: engine.TMap}},
-			Returns: []*engine.Type{engine.TAny},
-			Body:    identityBody,
+	fnDef2 := native.FnDefInfo{
+		Sigs: []native.FnSig{{
+			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
+			Returns: []*native.Type{native.TAny},
+			Body:    identityBody, BarrierPos: -1,
 		}},
 	}
-	innerMap := engine.NewOrderedMap()
-	innerMap.Set("x", engine.NewInteger(1))
-	innerMap.Set("y", engine.NewInteger(2))
-	om := engine.NewOrderedMap()
-	om.Set("a", engine.NewMap(innerMap))
-	om.Set("b", engine.NewInteger(3))
+	innerMap := native.NewOrderedMap()
+	innerMap.Set("x", native.NewInteger(1))
+	innerMap.Set("y", native.NewInteger(2))
+	om := native.NewOrderedMap()
+	om.Set("a", native.NewMap(innerMap))
+	om.Set("b", native.NewInteger(3))
 
-	reg, err := engine.DefaultRegistry(native.Register)
+	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
 
-	fnVal1 := engine.NewFunction(fnDef1)
+	fnVal1 := native.NewFunction(fnDef1)
 	fnVal1.Quoted = true
-	fnVal2 := engine.NewFunction(fnDef2)
+	fnVal2 := native.NewFunction(fnDef2)
 	fnVal2.Quoted = true
 
-	eng := engine.NewTop(reg)
-	result, err := eng.Run([]engine.Value{
-		engine.NewMap(om), fnVal1, fnVal2, engine.NewWord("walk"),
+	eng := native.NewTop(reg)
+	result, err := eng.Run([]native.Value{
+		native.NewMap(om), fnVal1, fnVal2, native.NewWord("walk"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, _ := engine.AsMap(result[0])
+	m, _ := native.AsMap(result[0])
 	inner, _ := m.Get("a")
-	im, _ := engine.AsMap(inner)
+	im, _ := native.AsMap(inner)
 	x, _ := im.Get("x")
 	y, _ := im.Get("y")
 	b, _ := m.Get("b")
-	xi3, _ := engine.AsInteger(x)
-	yi3, _ := engine.AsInteger(y)
-	bi9, _ := engine.AsInteger(b)
+	xi3, _ := native.AsInteger(x)
+	yi3, _ := native.AsInteger(y)
+	bi9, _ := native.AsInteger(b)
 	if xi3 != 1 {
 		t.Errorf("expected x=1, got %v", x)
 	}

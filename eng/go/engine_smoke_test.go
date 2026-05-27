@@ -33,8 +33,8 @@ func runWith(t *testing.T, setup func(*Registry), input []Value) []Value {
 // Used as the canonical "engine works at all" probe.
 func registerAdd(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:        "add",
-		ForwardArgs: true,
+		Name: "add",
+
 		Signatures: []NativeSig{{
 			Args: []*Type{TInteger, TInteger},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -42,7 +42,7 @@ func registerAdd(r *Registry) {
 				b, _ := AsInteger(args[1])
 				return []Value{NewInteger(a + b)}, nil
 			},
-			Returns: []*Type{TInteger},
+			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	})
 }
@@ -51,8 +51,8 @@ func registerAdd(r *Registry) {
 // multi-word dispatch test.
 func registerMul(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
-		Name:        "mul",
-		ForwardArgs: true,
+		Name: "mul",
+
 		Signatures: []NativeSig{{
 			Args: []*Type{TInteger, TInteger},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -60,7 +60,7 @@ func registerMul(r *Registry) {
 				b, _ := AsInteger(args[1])
 				return []Value{NewInteger(a * b)}, nil
 			},
-			Returns: []*Type{TInteger},
+			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	})
 }
@@ -76,7 +76,7 @@ func registerNeg(r *Registry) {
 				n, _ := AsInteger(args[0])
 				return []Value{NewInteger(-n)}, nil
 			},
-			Returns: []*Type{TInteger},
+			Returns: []*Type{TInteger}, BarrierPos: 0,
 		}},
 	})
 }
@@ -86,13 +86,12 @@ func TestSmokeRegistryStartsBare(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
-	// A fresh registry has no defs, no types stack entries — proves the
-	// engine ships zero words by itself.
+	// A fresh registry has no bindings — proves the engine ships zero
+	// words by itself. The /r suffix is a parser+stepWord feature
+	// that needs no registration; `ref` itself lives in the language
+	// layer.
 	if names := r.Defs.Names(); len(names) != 0 {
-		t.Errorf("expected empty def stack, got %v", names)
-	}
-	if names := r.Types.Names(); len(names) != 0 {
-		t.Errorf("expected empty type stack, got %v", names)
+		t.Errorf("expected empty binding store, got %v", names)
 	}
 }
 
@@ -155,8 +154,9 @@ func TestSmokeMultipleWords(t *testing.T) {
 }
 
 func TestSmokeStackOnlyDispatch(t *testing.T) {
-	// `5 neg` — neg is registered without ForwardArgs so the
-	// engine must consume the prefix value.
+	// `5 neg` — neg is registered with BarrierPos:0 so the engine
+	// must consume the value from the prefix stack rather than
+	// forward-collecting.
 	out := runWith(t, registerNeg, []Value{NewInteger(5), NewWord("neg")})
 	if len(out) != 1 {
 		t.Fatalf("got %d results, want 1", len(out))

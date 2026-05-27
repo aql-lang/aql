@@ -8,15 +8,15 @@ import (
 
 	jsonic "github.com/jsonicjs/jsonic/go"
 
-	"github.com/aql-lang/aql/lang/go/engine"
-	"github.com/aql-lang/aql/lang/go/engine/help"
+	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/aql-lang/aql/lang/go/native/help"
 )
 
 // MetaContext provides context to meta command handlers.
 type MetaContext struct {
 	Out      io.Writer        // output writer
-	Registry *engine.Registry // the engine registry
-	Stack    []engine.Value   // last evaluation result (the "stack")
+	Registry *native.Registry // the engine registry
+	Stack    []native.Value   // last evaluation result (the "stack")
 }
 
 // MetaHandler is the function signature for a meta command.
