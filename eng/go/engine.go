@@ -1651,7 +1651,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 		nArgs := len(sig.Params)
 		if nArgs == 0 {
 			if checkMode {
-				return e.spliceAnonCheckResult(valIdx, 0, sig, nil)
+				return e.spliceAnonCheckResult(valIdx, 0, sig, nil, fnDef.Captured)
 			}
 			return e.execFnDefSig(valIdx, sig, nil, fnDef.Registry)
 		}
@@ -1699,7 +1699,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 					args[j] = e.stack[resolvedIdx[ri]]
 				}
 				if checkMode {
-					return e.spliceAnonCheckResult(valIdx, nArgs, sig, args)
+					return e.spliceAnonCheckResult(valIdx, nArgs, sig, args, fnDef.Captured)
 				}
 				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
 			}
@@ -1734,7 +1734,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 					args[j] = e.stack[resolvedIdx[startIdx+j]]
 				}
 				if checkMode {
-					return e.spliceAnonCheckResult(valIdx, nArgs, sig, args)
+					return e.spliceAnonCheckResult(valIdx, nArgs, sig, args, fnDef.Captured)
 				}
 				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
 			}
@@ -1751,12 +1751,12 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 // fns use: an anonymous lambda's static Returns is the conservative
 // [Any], and AnalyseFnBody recovers the real return type for downstream
 // type propagation.
-func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Value) error {
+func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Value, captures []CapturedBinding) error {
 	paramNames := make([]string, len(sig.Params))
 	for i, p := range sig.Params {
 		paramNames[i] = p.Name
 	}
-	result := AnalyseFnBody(e.registry, "", paramNames, sig.Body, args)
+	result := AnalyseFnBody(e.registry, "", paramNames, sig.Body, args, captures)
 	if len(result) == 0 {
 		result = []Value{NewCarrier(TAny)}
 	}

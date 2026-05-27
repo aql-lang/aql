@@ -669,17 +669,28 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 // Returns the residual carrier stack. An empty or nil return means
 // the analyser aborted (recursion detected or body not available) —
 // callers should treat that as an Any carrier.
-func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, args []Value) []Value {
+func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, args []Value, captures []CapturedBinding) []Value {
 	if len(body) == 0 {
 		return nil
 	}
-	// Memoisation key: name + arg type paths.
+	// Memoisation key: name + arg type paths + captured-name set.
+	// The captures are included so two anonymous lambdas with
+	// identical bodies but different capture sets don't collide.
 	var sb strings.Builder
 	sb.WriteString(name)
 	sb.WriteByte('#')
 	for _, a := range args {
 		sb.WriteString(a.Parent.String())
 		sb.WriteByte(',')
+	}
+	if len(captures) > 0 {
+		sb.WriteByte('|')
+		for _, cb := range captures {
+			sb.WriteString(cb.Name)
+			sb.WriteByte(':')
+			sb.WriteString(cb.Value.Parent.String())
+			sb.WriteByte(',')
+		}
 	}
 	key := sb.String()
 
@@ -699,9 +710,22 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	r.Check.FnInflight[key] = true
 	defer delete(r.Check.FnInflight, key)
 
-	// Snapshot def-stack depths so we can unwind any defs the body
-	// or parameter binding created.
+	// Snapshot def-stack depths so we can unwind any defs the body,
+	// captures, or parameter bindings created. The same snapshot is
+	// pushed as the fn-entry baseline so any inner fn/afn construction
+	// inside the body sees this scope as its enclosing-fn baseline —
+	// without it, ComputeCaptures would treat outer params as if they
+	// lived at module/global scope and miss the capture.
 	snapshot := r.Defs.Snapshot()
+	r.PushFnBaseline(snapshot)
+	defer r.PopFnBaseline()
+
+	// Install lexical captures first so params (installed below)
+	// shadow same-named captures — innermost binding wins, matching
+	// runtime dispatch.
+	for _, cb := range captures {
+		r.Defs.Push(cb.Name, cb.Value)
+	}
 
 	// Bind named parameters as simple defs (carrier-typed). Unnamed
 	// parameters flow through the stack — push them before the body.

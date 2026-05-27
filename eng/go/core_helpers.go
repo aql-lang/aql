@@ -316,6 +316,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 		}
 		bodyCopy := append([]Value(nil), s.Body...)
 		nameCopy := name
+		capturesCopy := fnDef.Captured
 		returnsFn := func(args []Value, _ *Registry) []Value {
 			// Pattern / record-shape check: for each declared
 			// record-typed param, verify the arg map carries each
@@ -378,7 +379,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			// the analyser's residual stack — the analyser is run purely
 			// for its side-effecting diagnostic collection. Memoisation
 			// inside AnalyseFnBody keeps recursive / repeated calls cheap.
-			stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args)
+			stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args, capturesCopy)
 			if len(declaredReturns) > 0 {
 				out := make([]Value, len(declaredReturns))
 				for i, t := range declaredReturns {

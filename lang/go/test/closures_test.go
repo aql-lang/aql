@@ -244,6 +244,72 @@ def add5 (make-adder 5)`
 	}
 }
 
+// J — AnalyseFnBody installs captures so a body that references an
+// enclosing-fn-local sees its captured type during check-mode
+// inference. Direct test of the Phase 5 wire-up: call AnalyseFnBody
+// with a synthetic body, an Integer-typed captured `x`, and verify
+// the residual carrier infers Integer from `x add 1`.
+func TestClosureCheckModeAnalyseFnBodyUsesCaptures(t *testing.T) {
+	reg, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	native.Register(reg)
+	reg.Check.Mode = true
+	defer func() { reg.Check.Mode = false }()
+
+	// Body: x add 1 — references captured x, no params.
+	body := []eng.Value{
+		eng.NewWord("x"),
+		eng.NewWord("add"),
+		eng.NewInteger(1),
+	}
+	captures := []eng.CapturedBinding{
+		{Name: "x", Value: eng.NewCarrier(eng.TInteger)},
+	}
+
+	result := eng.AnalyseFnBody(reg, "test", nil, body, nil, captures)
+	if len(result) != 1 {
+		t.Fatalf("got %d residual values, want 1: %v", len(result), result)
+	}
+	v := result[0]
+	if !v.Parent.Equal(eng.TInteger) {
+		t.Errorf("residual Parent = %s, want Integer (capture flowed through)", v.Parent.String())
+	}
+
+	// Confirm captures are NOT leaked: x should not exist at module
+	// scope after AnalyseFnBody returns (it restores via Defs.Restore).
+	if _, ok := reg.Defs.Top("x"); ok {
+		t.Errorf("captured x leaked to outer scope after AnalyseFnBody")
+	}
+}
+
+// Same test minus captures: body's reference to x stays undefined,
+// AnalyseFnBody emits a diagnostic, no Integer inference.
+func TestClosureCheckModeAnalyseFnBodyWithoutCaptures(t *testing.T) {
+	reg, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	native.Register(reg)
+	reg.Check.Mode = true
+	defer func() { reg.Check.Mode = false }()
+
+	body := []eng.Value{
+		eng.NewWord("x"),
+		eng.NewWord("add"),
+		eng.NewInteger(1),
+	}
+	// Same body, no captures — x is undefined in body's scope.
+	result := eng.AnalyseFnBody(reg, "test", nil, body, nil, nil)
+	// We expect either an empty/Any residual or a non-Integer carrier
+	// because x doesn't resolve; the analyser falls back to lenient
+	// undefined-word handling.
+	if len(result) == 1 && result[0].Parent.Equal(eng.TInteger) {
+		t.Errorf("residual unexpectedly inferred Integer without captures: %v", result)
+	}
+}
+
 // K — args stays dynamic across the capture boundary. Inside a
 // captured fn, `args.0` refers to that fn's own call args, not the
 // surrounding scope's.
