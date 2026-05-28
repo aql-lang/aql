@@ -151,6 +151,24 @@ def Foo refine Object {} 42 is Foo	false	Integer's tag is not Foo
 42 is Number	true	supertype: Integer ≤ Number
 42 is String	false	wrong family
 
+# --------------------------------------------------------------------
+# 5b. A typed-def binding TAGS the value, resolving the divergence.
+#     `def y:Pos 2` does not merely check 2 against Pos — it binds y to
+#     a value reparented to carry the Pos tag (see eng/go Typed-Def
+#     Reparent). So `y is Pos` is true, unlike the untagged literal
+#     `2 is Pos` (false, §5 above). The tag then widens up the lattice:
+#     Pos ≤ Integer ≤ Number ≤ Scalar. An alias typed def against a
+#     builtin (`x:Integer`) carries the builtin tag the same way.
+# --------------------------------------------------------------------
+def x:Integer 1 x is Integer	true	typed-def: x is Integer
+def x:Integer 1 x is Number	true	x widens to Number
+def x:Integer 1 x is Scalar	true	x widens to Scalar
+def Pos refine Integer def y:Pos 2 y is Pos	true	typed-def :Pos tags y — y is Pos
+def Pos refine Integer def y:Pos 2 y is Integer	true	y widens to Integer
+def Pos refine Integer def y:Pos 2 y is Number	true	y widens to Number
+def Pos refine Integer def y:Pos 2 y is Scalar	true	y widens to Scalar
+def Pos refine Integer def y:Pos 2 2 is Pos	false	untagged literal 2 is not Pos (contrast with y)
+
 
 # ====================================================================
 # 6. :Any is universal — Any means Any, including function values
