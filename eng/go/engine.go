@@ -1998,7 +1998,13 @@ func fnSigsToSignatures(sigs []FnSig) []Signature {
 		if barrier == -1 {
 			barrier = len(argTypes)
 		}
-		out[i] = Signature{Args: argTypes, Patterns: patterns, BarrierPos: barrier}
+		out[i] = Signature{
+			Args:          argTypes,
+			Patterns:      patterns,
+			BarrierPos:    barrier,
+			NoEvalArgs:    sig.NoEvalArgs,
+			NoEvalMapArgs: sig.NoEvalMapArgs,
+		}
 	}
 	SortSignatures(out)
 	return out
@@ -2014,19 +2020,31 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	// Auto-evaluate consumed arguments with Eval=true so FnDef handlers
 	// receive resolved data. Maps: {base:hex} → {base:atom(hex)}.
 	// Lists: [c1 c2] → [map1, map2].
+	//
+	// NoEvalArgs / NoEvalMapArgs on the sig suppresses auto-eval at
+	// specific positions — required for module wrappers that take
+	// quoted code bodies (e.g. rand.list-of [gen] N) so the body
+	// reaches the inner handler intact rather than being sub-Run'd.
+	// Mirrors the NoEvalArgs handling in execMatch (lines 977-1002).
 	for i := range args {
 		if args[i].Eval && !args[i].Quoted {
 			if args[i].Parent.Equal(TMap) &&
 				args[i].Data != nil && !IsTypedMap(args[i]) && !IsRecordType(args[i]) && !IsOptionsType(args[i]) {
-				evaluated, err := e.autoEvalMap(args[i])
-				if err == nil {
-					args[i] = evaluated
+				noEval := sig.NoEvalMapArgs != nil && sig.NoEvalMapArgs[i]
+				if !noEval {
+					evaluated, err := e.autoEvalMap(args[i])
+					if err == nil {
+						args[i] = evaluated
+					}
 				}
 			} else if args[i].Parent.Equal(TList) &&
 				args[i].Data != nil && !IsTypedList(args[i]) && !IsTableType(args[i]) {
-				evaluated, err := e.autoEvalList(args[i])
-				if err == nil {
-					args[i] = evaluated
+				noEval := sig.NoEvalArgs != nil && sig.NoEvalArgs[i]
+				if !noEval {
+					evaluated, err := e.autoEvalList(args[i])
+					if err == nil {
+						args[i] = evaluated
+					}
 				}
 			}
 		}

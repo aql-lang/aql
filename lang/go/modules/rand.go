@@ -136,6 +136,19 @@ func buildRandExportsForState(state *randState) (*native.OrderedMap, error) {
 	exports.Set("one-of", wrapRandFnDef("rand-one-of",
 		[]native.FnParam{{Type: native.TList}},
 		[]*native.Type{native.TAny}, subReg))
+	// list-of takes a quoted generator body — NoEvalArgs[0]=true on
+	// both the wrapper FnSig and the inner native sig so the body
+	// reaches the handler intact rather than being auto-evaluated
+	// at either boundary.
+	exports.Set("list-of", wrapRandFnDefNoEval("rand-list-of",
+		[]native.FnParam{{Type: native.TList}, {Type: native.TInteger}},
+		[]*native.Type{native.TList}, map[int]bool{0: true}, nil, subReg))
+	// map-from takes a schema map whose values are quoted generators.
+	// NoEvalMapArgs[0]=true so the map structure (and inner gen lists)
+	// survive unchanged.
+	exports.Set("map-from", wrapRandFnDefNoEval("rand-map-from",
+		[]native.FnParam{{Type: native.TMap}},
+		[]*native.Type{native.TMap}, nil, map[int]bool{0: true}, subReg))
 	return exports, nil
 }
 
@@ -144,13 +157,31 @@ func buildRandExportsForState(state *randState) (*native.OrderedMap, error) {
 // `[Word(wordName)]` so execFnDefLiteral's trivial-delegation
 // short-circuit fires (direct execMatch on the inner handler).
 func wrapRandFnDef(wordName string, params []native.FnParam, returns []*native.Type, subReg *native.Registry) native.Value {
+	return wrapRandFnDefNoEval(wordName, params, returns, nil, nil, subReg)
+}
+
+// wrapRandFnDefNoEval is wrapRandFnDef plus NoEvalArgs / NoEvalMapArgs
+// passthrough for wrappers whose params are quoted code bodies
+// (rand.list-of, rand.map-from). Without these, execFnDefSig's
+// auto-eval would silently sub-Run the bodies before the inner
+// handler sees them.
+func wrapRandFnDefNoEval(
+	wordName string,
+	params []native.FnParam,
+	returns []*native.Type,
+	noEval map[int]bool,
+	noEvalMap map[int]bool,
+	subReg *native.Registry,
+) native.Value {
 	fnDef := native.FnDefInfo{
 		Name: wordName,
 		Sigs: []native.FnSig{{
-			Params:     params,
-			Returns:    returns,
-			Body:       []native.Value{native.NewWord(wordName)},
-			BarrierPos: -1,
+			Params:        params,
+			Returns:       returns,
+			Body:          []native.Value{native.NewWord(wordName)},
+			BarrierPos:    -1,
+			NoEvalArgs:    noEval,
+			NoEvalMapArgs: noEvalMap,
 		}},
 		Registry: subReg,
 	}
@@ -261,6 +292,88 @@ func randNativesForState(state *randState) []native.NativeFunc {
 					}
 					state.mu.Unlock()
 					return []native.Value{native.NewString(string(out))}, nil
+				},
+			}},
+		},
+		{
+			// Run `body` `n` times, collecting each iteration's
+			// top-of-stack into a List. body is a quoted code block
+			// (NoEvalArgs[0]=true) — typically uses `r` or rand.*
+			// to produce a single value per iteration.
+			Name: "rand-list-of",
+			Signatures: []native.NativeSig{{
+				Args:       []*native.Type{native.TList, native.TInteger},
+				Returns:    []*native.Type{native.TList},
+				NoEvalArgs: map[int]bool{0: true},
+				BarrierPos: -1,
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+					body, err := native.RequireConcreteList(args[0], "rand.list-of body")
+					if err != nil {
+						return nil, err
+					}
+					n, err := args[1].AsConcreteInteger()
+					if err != nil {
+						return nil, err
+					}
+					if n < 0 {
+						return nil, r.AqlError("rand_error",
+							fmt.Sprintf("rand.list-of: length (%d) < 0", n), "rand.list-of")
+					}
+					bodyTokens := body.Slice()
+					out := make([]native.Value, 0, n)
+					for i := int64(0); i < n; i++ {
+						sub := native.New(r)
+						res, err := sub.Run(append([]native.Value(nil), bodyTokens...))
+						if err != nil {
+							return nil, fmt.Errorf("rand.list-of[%d]: %w", i, err)
+						}
+						if len(res) == 0 {
+							return nil, r.AqlError("rand_error",
+								fmt.Sprintf("rand.list-of[%d]: body produced no value", i),
+								"rand.list-of")
+						}
+						out = append(out, res[len(res)-1])
+					}
+					return []native.Value{native.NewList(out)}, nil
+				},
+			}},
+		},
+		{
+			// Build a Map by running each key's quoted body. Schema is
+			// a Map whose values are quoted code blocks; the result
+			// has the same keys with each body's top-of-stack as the
+			// corresponding value.
+			Name: "rand-map-from",
+			Signatures: []native.NativeSig{{
+				Args:          []*native.Type{native.TMap},
+				Returns:       []*native.Type{native.TMap},
+				NoEvalMapArgs: map[int]bool{0: true},
+				BarrierPos:    -1,
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+					schema, err := native.RequireConcreteMap(args[0], "rand.map-from schema")
+					if err != nil {
+						return nil, err
+					}
+					out := native.NewOrderedMap()
+					for _, key := range schema.Keys() {
+						bodyVal, _ := schema.Get(key)
+						body, err := native.RequireConcreteList(bodyVal, "rand.map-from value")
+						if err != nil {
+							return nil, fmt.Errorf("rand.map-from[%s]: %w", key, err)
+						}
+						sub := native.New(r)
+						res, err := sub.Run(append([]native.Value(nil), body.Slice()...))
+						if err != nil {
+							return nil, fmt.Errorf("rand.map-from[%s]: %w", key, err)
+						}
+						if len(res) == 0 {
+							return nil, r.AqlError("rand_error",
+								fmt.Sprintf("rand.map-from[%s]: body produced no value", key),
+								"rand.map-from")
+						}
+						out.Set(key, res[len(res)-1])
+					}
+					return []native.Value{native.NewMap(out)}, nil
 				},
 			}},
 		},

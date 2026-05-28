@@ -230,6 +230,21 @@ type FnSig struct {
 	// for backwards compatibility — only the AQL-source path emits
 	// the -1 sentinel.
 	BarrierPos int
+	// NoEvalArgs lists per-sig-position the list-shaped args that
+	// must NOT be auto-evaluated when consumed by this fn. Mirrors
+	// NativeSig.NoEvalArgs so module FnDef wrappers can preserve
+	// quoted code bodies passed at unnamed-param positions (e.g.
+	// `rand.list-of [body] N` — body is code, not data).
+	//
+	// Honored by fnSigsToSignatures (forwards to Signature.NoEvalArgs)
+	// and by execFnDefSig's auto-eval guard before CallAQL. Without
+	// this, an Eval=true list passed in would be silently sub-Run'd,
+	// breaking the quoted-body contract.
+	NoEvalArgs map[int]bool
+	// NoEvalMapArgs is the map-shaped counterpart to NoEvalArgs.
+	// Used by sigs that take a Map at a code-body slot (e.g. a spec
+	// schema where map values are quoted generators).
+	NoEvalMapArgs map[int]bool
 }
 
 // FnDefInfo holds the parsed function specification for a def-defined function.

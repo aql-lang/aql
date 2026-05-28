@@ -54,7 +54,7 @@ func TestRandModuleExports(t *testing.T) {
 	if !ok {
 		t.Fatal("expected 'rand' export")
 	}
-	for _, name := range []string{"int", "bool", "float", "string", "one-of", "with-seed"} {
+	for _, name := range []string{"int", "bool", "float", "string", "one-of", "list-of", "map-from", "with-seed"} {
 		if _, ok := randExport.Get(name); !ok {
 			t.Errorf("missing export: %q", name)
 		}
@@ -254,6 +254,90 @@ func TestRandOneOfSingleCall(t *testing.T) {
 	}
 	if n != 10 && n != 20 && n != 30 {
 		t.Errorf("draw %d not in the source list", n)
+	}
+}
+
+// TestRandListOf confirms the rand.list-of combinator runs its
+// quoted body N times and collects the results. With NoEvalArgs[0]
+// the body survives the wrapper boundary as code (not as data).
+func TestRandListOf(t *testing.T) {
+	r := randRegistry(t)
+	res := runRandAQL(t, r, `def s (rand.with-seed 42)  rand.list-of [s.int 0 100] 5`)
+	if len(res) != 1 {
+		t.Fatalf("expected one list, got %d", len(res))
+	}
+	lst, err := native.RequireConcreteList(res[0], "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lst.Len() != 5 {
+		t.Errorf("len = %d, want 5", lst.Len())
+	}
+	// Determinism: same seed → identical sequence.
+	r2 := randRegistry(t)
+	res2 := runRandAQL(t, r2, `def s (rand.with-seed 42)  rand.list-of [s.int 0 100] 5`)
+	lst2, _ := native.RequireConcreteList(res2[0], "test")
+	for i := 0; i < lst.Len(); i++ {
+		a, _ := lst.Get(i).AsConcreteInteger()
+		b, _ := lst2.Get(i).AsConcreteInteger()
+		if a != b {
+			t.Errorf("element %d diverges: %d vs %d", i, a, b)
+		}
+		if a < 0 || a >= 100 {
+			t.Errorf("element %d=%d out of [0,100)", i, a)
+		}
+	}
+}
+
+// TestRandMapFrom builds a map by running each key's quoted generator.
+// NoEvalMapArgs[0] keeps the schema map intact across the call boundary.
+func TestRandMapFrom(t *testing.T) {
+	r := randRegistry(t)
+	res := runRandAQL(t, r, `
+		def s (rand.with-seed 42)
+		rand.map-from {age:[s.int 0 100] flag:[s.bool]}
+	`)
+	if len(res) != 1 {
+		t.Fatalf("expected one map, got %d", len(res))
+	}
+	m, _ := native.AsMap(res[0])
+	if m == nil {
+		t.Fatal("not a map")
+	}
+	ageV, ok := m.Get("age")
+	if !ok {
+		t.Fatal("missing age key")
+	}
+	age, _ := ageV.AsConcreteInteger()
+	if age < 0 || age >= 100 {
+		t.Errorf("age=%d out of [0,100)", age)
+	}
+	flagV, ok := m.Get("flag")
+	if !ok {
+		t.Fatal("missing flag key")
+	}
+	if _, err := flagV.AsConcreteBoolean(); err != nil {
+		t.Errorf("flag not Boolean: %v", err)
+	}
+}
+
+// TestRandListOfBodyKeepsQuoted confirms the body really is treated
+// as code, not data. If NoEvalArgs were broken, the body `[s.int 0 100]`
+// would be auto-evaluated ONCE at wrapper-call time and the resulting
+// integer would be repeated N times in the output — every element
+// identical. The fix yields N distinct draws.
+func TestRandListOfBodyKeepsQuoted(t *testing.T) {
+	r := randRegistry(t)
+	res := runRandAQL(t, r, `def s (rand.with-seed 1)  rand.list-of [s.int 0 1000000] 4`)
+	lst, _ := native.RequireConcreteList(res[0], "test")
+	distinct := map[int64]bool{}
+	for i := 0; i < lst.Len(); i++ {
+		n, _ := lst.Get(i).AsConcreteInteger()
+		distinct[n] = true
+	}
+	// Four draws from [0, 1e6) should almost certainly all be distinct.
+	if len(distinct) < 3 {
+		t.Errorf("expected mostly-distinct draws, got %d distinct in %d elements", len(distinct), lst.Len())
 	}
 }
 
