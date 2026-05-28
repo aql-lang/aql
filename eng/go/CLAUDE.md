@@ -43,6 +43,86 @@ body-local) and is captured; depth ≤ baseline means module / global
 scope and the reference stays dynamic. See lang/go/CLAUDE.md
 "Closures and Capture" for the surface semantics.
 
+## Signature Ordering (CRITICAL)
+
+There is exactly **one** argument-positioning convention in this
+kernel: **top-first, sig order**. Position 0 is whatever sits on
+the top of the stack, position 1 is next-deeper, and so on. The
+single source of truth is `matchSignature`
+(`engine.go::matchSignature`). Args flow through every dispatch
+path in this order with **no reordering at any handoff** — never
+swap, reverse, or re-permute args between matchSignature and the
+handler.
+
+Concretely:
+
+- `Signature.Args[0]` and `NativeSig.Args[0]` (kernel words):
+  top of stack.
+- `FnSig.Params[0]` (AQL `def fn […]` definitions, module FnDef
+  wrappers): also top of stack. Empirical: AQL source `def f fn
+  [[a:Integer b:String]…]` called as `f 1 "x"` (forward form)
+  binds `a=1` (sig[0], first forward arg) and `b="x"` (sig[1]).
+  Stack form `"x" 1 f` is mirror-equivalent: top `1` → a, deeper
+  `"x"` → b.
+- `args[i]` in every handler — registered native, InstallFnDef
+  closure, CallAQL, execFnDefSig — is the i-th sig position from
+  the top.
+- `args.N` AQL accessor: returns `args[N]` directly.
+- Body-token push (unnamed params via CallAQL / InstallFnDef /
+  execFnDefSig): appends `args[0]…args[N-1]` in order, no
+  reversal. Body frame contains `args[0]` at the bottom and
+  `args[N-1]` on top.
+
+There is **no exception path**. Anything that looks like a
+"reordering" elsewhere is either:
+
+- `matchSignature`'s top-down stack walk
+  (`stackVal := resolved[len(resolved)-1-j]`), which is how the
+  one convention is implemented (not a reordering of args, but
+  the rule itself).
+- `rearrangeForForward` (engine.go:1124), which fixes the stack
+  layout AFTER forward collection so that matchSignature's
+  top-down walk produces the correct sig assignment. Part of
+  matchSignature's machinery; not a separate path.
+- A handler that, by convention, computes `args[1] OP args[0]`
+  (notably non-commutative math like `sub`). That's how the
+  handler INTERPRETS its received args for natural source
+  reading — args are still delivered in sig order.
+
+### Surface form recommendation
+
+**Always use forward form**: `f a b c`. It reads naturally
+(declared param order matches written argument order: sig[0]=a,
+sig[1]=b, …) and avoids the apparent inversion that stack form
+produces (`c b a f` is mirror-equivalent but reads backwards).
+The Phase-4 unified rule says `f a b ≡ b f a ≡ b a f`, so any of
+those work, but forward form is the recommended canonical surface
+for new code, examples, and documentation.
+
+The swap form `a f b` is the ONE non-equivalent two-arg
+arrangement — there it binds sig[0] from the forward side and
+sig[1] from the prefix stack. Useful for non-commutative ops
+that read better swap-style (`10 sub 3 = 7`), but forward form
+(`sub 10 3` = `3 sub 10` ≡ `3 10 sub`) is always safe and clear.
+
+### Trivial-delegation wrapper short-circuit
+
+Module FnDef wrappers built via `makeXxxFnDef` / `wrapXxxFnDef`
+helpers have a body of `[Word(inner-native-name)]` — pure
+delegation to an inner native of the same name. `execFnDefLiteral`
+detects this shape via `isTrivialDelegationBody` and short-circuits
+to direct `execMatch` dispatch on the inner native's matched sig,
+bypassing CallAQL and body-token execution entirely. Args flow
+straight through; no reordering, no body splicing, no sub-engine.
+AQL fns defined in module preambles (named params, real bodies —
+e.g. `decision.cond`) take the longer CallAQL path, where their
+named params bind to args[i] in i-order without any push reordering.
+
+When adding a new dispatch path (a new way to invoke an
+`FnDefInfo` or `FnSig`), match `matchSignature`'s convention and
+route through the existing helpers rather than reimplementing
+arg-position logic.
+
 ## No Zero-Value Overload (CRITICAL)
 
 A struct field MUST NOT use the Go zero value (`0`, `""`, `false`,

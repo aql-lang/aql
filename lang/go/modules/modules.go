@@ -29,6 +29,9 @@ var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error
 	"bin":       BuildBinaryModule,
 	"type":      BuildTypeModule,
 	"vm":        BuildVMModule,
+	"report":    BuildReportModule,
+	"test":      BuildTestModule,
+	"rand":      BuildRandModule,
 }
 
 // Resolve resolves a native module name and returns a ModuleDesc.
@@ -101,6 +104,30 @@ func InstallMatrixExports(r *native.Registry) error {
 // InstallDecisionExports builds the decision module and installs its exports as defs.
 func InstallDecisionExports(r *native.Registry) error {
 	desc, err := BuildDecisionModule(r)
+	if err != nil {
+		return err
+	}
+	for name, exportMap := range desc.Exports {
+		r.Defs.Push(name, native.NewMap(exportMap))
+	}
+	return nil
+}
+
+// InstallRandExports builds the rand module and installs its exports as defs.
+func InstallRandExports(r *native.Registry) error {
+	desc, err := BuildRandModule(r)
+	if err != nil {
+		return err
+	}
+	for name, exportMap := range desc.Exports {
+		r.Defs.Push(name, native.NewMap(exportMap))
+	}
+	return nil
+}
+
+// InstallTestExports builds the test module and installs its exports as defs.
+func InstallTestExports(r *native.Registry) error {
+	desc, err := BuildTestModule(r)
 	if err != nil {
 		return err
 	}
