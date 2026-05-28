@@ -455,7 +455,197 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				Returns: []*native.Type{}, BarrierPos: -1,
 			}},
 		},
+		// test.prop name gen property → PropertySpec map.
+		//   — constructs a PropertySpec with default runs=100, seed=1,
+		//   max-shrinks=200. Implemented in Go (not as an AQL fn)
+		//   because gen/property are List bodies that would otherwise
+		//   be auto-evaluated during fn-param binding; this native
+		//   uses NoEvalArgs + explicit Quoted=true to preserve the
+		//   bodies intact for the Stage-5 reducer / Stage-3 runner.
+		{
+			Name: "test-prop",
+			Signatures: []native.NativeSig{{
+				Args:       []*native.Type{native.TString, native.TList, native.TList},
+				NoEvalArgs: map[int]bool{1: true, 2: true},
+				Returns:    []*native.Type{native.TMap},
+				BarrierPos: -1,
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					name, _ := args[0].AsConcreteString()
+					gen := args[1]
+					prop := args[2]
+					// Mark bodies Quoted so subsequent consumers
+					// (e.g. run-property's `get` retrieving them
+					// from the map) don't auto-evaluate them.
+					gen.Quoted = true
+					gen.Eval = false
+					prop.Quoted = true
+					prop.Eval = false
+					m := native.NewOrderedMap()
+					m.Set("name", native.NewString(name))
+					m.Set("gen", gen)
+					m.Set("property", prop)
+					m.Set("runs", native.NewInteger(100))
+					m.Set("seed", native.NewInteger(1))
+					m.Set("max-shrinks", native.NewInteger(200))
+					return []native.Value{native.NewMap(m)}, nil
+				},
+			}},
+		},
+		// test.check-prop name gen property runs seed max-shrinks
+		//   — property-based test driver. Runs the generator body
+		//   `runs` times, each iteration with a fresh seeded rand
+		//   instance bound as `r`. The property body is called with
+		//   the generated value on the stack; it must return Boolean.
+		//   On the first false return, records a failure with the
+		//   generated input. Returns a PropertyResult Map and also
+		//   appends it to the active testRun.
+		//
+		// The `max-shrinks` arg is reserved for the Stage-5 reducer
+		// (PBT-PLAN.0.md) — Stage 3 ignores it and reports the raw
+		// failing input verbatim.
+		{
+			Name: "test-check-prop",
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{
+					native.TString,  // name
+					native.TList,    // gen body (quoted)
+					native.TList,    // property body (quoted)
+					native.TInteger, // runs
+					native.TInteger, // seed
+					native.TInteger, // max-shrinks (Stage 5; ignored here)
+				},
+				NoEvalArgs: map[int]bool{1: true, 2: true},
+				Returns:    []*native.Type{native.TMap},
+				BarrierPos: -1,
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					return runCheckProp(parent, args)
+				},
+			}},
+		},
 	}
+}
+
+// runCheckProp is the PBT inner loop. Extracted for readability —
+// the check-prop native's handler delegates here.
+func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value, error) {
+	name, _ := args[0].AsConcreteString()
+	genList, err := native.RequireConcreteList(args[1], "test.check-prop gen")
+	if err != nil {
+		return nil, err
+	}
+	propList, err := native.RequireConcreteList(args[2], "test.check-prop property")
+	if err != nil {
+		return nil, err
+	}
+	runs, _ := args[3].AsConcreteInteger()
+	seed, _ := args[4].AsConcreteInteger()
+	_ = args[5] // max-shrinks: reserved for Stage 5.
+
+	genBody := genList.Slice()
+	propBody := propList.Slice()
+
+	var (
+		failed       bool
+		actualRuns   int64
+		failingInput = native.NewNone()
+		failingError = native.NewNone()
+	)
+
+	for i := int64(0); i < runs; i++ {
+		actualRuns++
+
+		// Build the per-iteration seeded rand instance. Each
+		// iteration uses (seed + i) so failures replay with a
+		// known-good sub-seed.
+		randMap, err := BuildSeededRandInstance(seed + i)
+		if err != nil {
+			failed = true
+			failingError = native.NewError(err)
+			break
+		}
+
+		// Run the generator body in a CallAQL frame where `r` is
+		// bound to the iteration's rand instance. Body must leave
+		// exactly one value on the stack — the generated input.
+		genSig := native.FnSig{
+			Params:     []native.FnParam{{Name: "r", Type: native.TMap}},
+			Returns:    []*native.Type{native.TAny},
+			Body:       append([]native.Value(nil), genBody...),
+			BarrierPos: -1,
+		}
+		genResults, err := parent.CallAQL(&genSig, []native.Value{native.NewMap(randMap)}, nil)
+		if err != nil {
+			failed = true
+			failingError = native.NewError(err)
+			break
+		}
+		if len(genResults) == 0 {
+			failed = true
+			failingError = native.NewError(parent.AqlError("check_prop_error",
+				"generator produced no value", "test.check-prop"))
+			break
+		}
+		input := genResults[len(genResults)-1]
+
+		// Run the property body with `input` on the stack. Body
+		// must leave a Boolean. Anything else is a failure.
+		propTokens := append([]native.Value{input}, propBody...)
+		propResults, err := native.New(parent).Run(propTokens)
+		if err != nil {
+			failed = true
+			failingInput = input
+			failingError = native.NewError(err)
+			break
+		}
+		if len(propResults) == 0 {
+			failed = true
+			failingInput = input
+			failingError = native.NewError(parent.AqlError("check_prop_error",
+				"property produced no value", "test.check-prop"))
+			break
+		}
+		propTop := propResults[len(propResults)-1]
+		propBool, err := propTop.AsConcreteBoolean()
+		if err != nil {
+			failed = true
+			failingInput = input
+			failingError = native.NewError(parent.AqlError("check_prop_error",
+				fmt.Sprintf("property returned non-Boolean (%s)", propTop.Parent.String()),
+				"test.check-prop"))
+			break
+		}
+		if !propBool {
+			failed = true
+			failingInput = input
+			break
+		}
+	}
+
+	// Build the PropertyResult map.
+	result := native.NewOrderedMap()
+	result.Set("name", native.NewString(name))
+	result.Set("ok", native.NewBoolean(!failed))
+	result.Set("runs", native.NewInteger(actualRuns))
+	result.Set("failing-input", failingInput)
+	// Shrunk fields reserved for Stage 5. Today they mirror the
+	// failing input verbatim so consumers see a value.
+	result.Set("shrunk-input", failingInput)
+	result.Set("shrunk-source", native.NewString(""))
+	result.Set("shrunk-cost", native.NewInteger(0))
+	result.Set("error", failingError)
+
+	// Append to the active test run so test.results and
+	// test.summary pick this up alongside table-driven tests.
+	resultVal := native.NewMap(result)
+	run := activeRun(parent)
+	run.mu.Lock()
+	run.results = append(run.results, resultVal)
+	if failed {
+		run.failures++
+	}
+	run.mu.Unlock()
+
+	return []native.Value{resultVal}, nil
 }
 
 // runCase executes one test body, catching errors and recording a
@@ -632,6 +822,49 @@ def TestSet refine Table (refine Record [name:String in:List out:Any])
 # - subs:     list of sub-specs (may be empty)
 def TestSpec refine Record [name:String subject:Any cases:List subs:List]
 
+# ============================================================
+# Property-based testing (PBT) — Stage 3
+# ============================================================
+# A PropertySpec describes a property to be checked against
+# randomly-generated inputs. The framework runs gen runs
+# times, each time with a fresh seeded rand instance bound as
+# r inside the gen body; the resulting value is then fed to
+# property which must return a Boolean. False or an error in
+# any iteration is a failure.
+#
+# - name:         label for the report.
+# - gen:          quoted code body that produces ONE value at
+#                 stack top. Receives the iteration's rand
+#                 instance via the bound name r.
+# - property:     quoted code body that takes the generated
+#                 value on the stack and leaves a Boolean.
+# - runs:         number of random iterations (default 100).
+# - seed:         base PRNG seed; iteration k uses seed+k for
+#                 independent replay (default 1).
+# - max-shrinks:  cap on the Stage-5 reducer's search depth
+#                 (default 200; ignored before Stage 5).
+def PropertySpec refine Record [
+  name:String
+  gen:List
+  property:List
+  runs:Integer
+  seed:Integer
+  max-shrinks:Integer
+]
+
+# Per-property outcome. The shrunk-* fields are populated by the
+# Stage-5 reducer; Stage 3 mirrors the raw failing input there.
+def PropertyResult refine Record [
+  name:String
+  ok:Boolean
+  runs:Integer
+  failing-input:Any
+  shrunk-input:Any
+  shrunk-source:String
+  shrunk-cost:Integer
+  error:Any
+]
+
 # Per-case outcome recorded by the runner.
 def TestResult refine Record [
   name:String
@@ -657,6 +890,30 @@ def spec fn [[cases:List subject:Any name:String] [Map] [
 
 def spec-with-subs fn [[subs:List cases:List subject:Any name:String] [Map] [
   make TestSpec {name:name subject:subject cases:cases subs:subs}
+]]
+
+# prop is a Go native constructor — see test-prop in the natives
+# table. The bodies are NoEvalArgs-protected at the native boundary
+# so list literals like [0 100 r.int] survive intact.
+
+# run-property destructures a PropertySpec map and dispatches the
+# Go-side check-prop driver. Returns the PropertyResult map.
+#
+# The gen/property fields are stored Quoted in the map (set by
+# test.prop), so a plain map.get retrieval preserves them as data
+# rather than triggering auto-eval as they cross fn boundaries.
+#
+# Uses FORWARD form for the test-check-prop call so each arg fills
+# the corresponding sig position directly (sig[0]=String, sig[1..2]
+# =List, sig[3..5]=Integer).
+def run-property fn [[| p:Map] [Map] [
+  test-check-prop
+    (p get "name")
+    (p get "gen")
+    (p get "property")
+    (p get "runs")
+    (p get "seed")
+    (p get "max-shrinks")
 ]]
 
 # ============================================================
@@ -704,20 +961,24 @@ def run-spec fn [[| s:Map] [] [
 
 export "test" {
   # types
-  TestCase:    TestCase
-  TestSet:     TestSet
-  TestSpec:    TestSpec
-  TestResult:  TestResult
+  TestCase:        TestCase
+  TestSet:         TestSet
+  TestSpec:        TestSpec
+  TestResult:      TestResult
+  PropertySpec:    PropertySpec
+  PropertyResult:  PropertyResult
 
   # spec constructors
   case:           case
   spec:           spec
   spec-with-subs: spec-with-subs
+  prop:           test-prop
 
   # imperative API (Go)
-  describe:   test-describe
-  test:       test-test
-  it:         test-test
+  describe:    test-describe
+  test:        test-test
+  it:          test-test
+  check-prop:  test-check-prop
 
   # accumulated results
   results:    test-results
@@ -726,8 +987,9 @@ export "test" {
   fail-count: test-fail-count
 
   # spec runner
-  run-spec:   run-spec
-  invoke:     test-invoke
+  run-spec:     run-spec
+  run-property: run-property
+  invoke:       test-invoke
 }
 
 export "assert" {

@@ -88,6 +88,20 @@ func newRandState(seed int64) *randState {
 	return &randState{rng: mathrand.New(mathrand.NewSource(seed))}
 }
 
+// BuildSeededRandInstance constructs a fresh rand instance with the
+// given seed. Returns an OrderedMap with the same methods as the
+// top-level `rand` namespace (`int`, `bool`, `float`, `string`,
+// `one-of`), each closing over a private PRNG seeded with `seed`.
+//
+// Exposed so other modules (notably aql:test's PBT framework) can
+// build deterministic rand instances without going through AQL-level
+// `rand.with-seed N` invocation. The returned Map is functionally
+// identical to what `rand.with-seed N` produces from AQL.
+func BuildSeededRandInstance(seed int64) (*native.OrderedMap, error) {
+	state := newRandState(seed)
+	return buildRandExportsForState(state)
+}
+
 // buildRandExportsForState builds the OrderedMap of dotted methods
 // (`int`, `bool`, `float`, `string`, `one-of`) bound to the given
 // state. Used for both the top-level default and for each

@@ -1,10 +1,9 @@
 # Property-Based Testing for AQL
 
-> **STATUS: STAGE 0 COMPLETE — READY FOR STAGE 3 (2026-05-28)**
+> **STATUS: STAGES 0-3 COMPLETE — READY FOR STAGE 4 (2026-05-28)**
 >
-> Stages 0a/0b/0c/0d/1/2 are all done. Remaining work: PropertySpec
-> Record + check-prop loop (Stage 3), word-policy/cost annotations
-> (Stage 4), reducer (Stage 5), decision PBT spec (Stage 6).
+> Remaining work: word-policy / cost annotations (Stage 4), reducer
+> (Stage 5), decision PBT spec (Stage 6).
 >
 > What landed:
 > - Stage 0d (7d46b68): expandDottedWord doc cleanup.
@@ -12,7 +11,7 @@
 >   `rand.with-seed N` for deterministic instances; top-level is
 >   non-deterministic by default; half-open `[lo, hi)` range.
 > - Stage 2 (7d46b68): `gen` policy profile.
-> - Stage 0a/0b/0c (this commit): kernel-level `eng/go/stackform/`
+> - Stage 0a/0b/0c (0ffe9ea): kernel-level `eng/go/stackform/`
 >   package — `StackForm`, `Compile`, `Eval`, `Pretty`, `Cost`,
 >   `Equal`, `Walk`. Engine carries an opt-in `Recorder` hook fired
 >   from execMatch + the forward-completion site; stepCloseParen
@@ -21,8 +20,18 @@
 >   `lang/go/test/stackform_equivalence_test.go` confirm
 >   `Eval(Compile(reg, src)) ≡ direct Run(src)` for arithmetic,
 >   comparisons, strings, stack ops, lists, paren grouping, and
->   forward/stack/swap surface forms. Pretty-print round-trips
->   produce equivalent forms.
+>   forward/stack/swap surface forms.
+> - Stage 3 (this commit): `PropertySpec` + `PropertyResult`
+>   Records, `test.check-prop` Go native (6-arg: name, gen,
+>   property, runs, seed, max-shrinks), `test.prop` Go constructor
+>   (preserves gen/property bodies via NoEvalArgs + Quoted=true),
+>   AQL `run-property` fn that destructures a PropertySpec map.
+>   Generator bodies bind `r` to a fresh seeded rand instance per
+>   iteration (seed+i). Property bodies receive the generated value
+>   on the stack and must return Boolean. Failure recorded with
+>   `failing-input`; results flow into the active `testRun`.
+>   shrunk-* fields populated as placeholders (mirror failing-input)
+>   until Stage 5.
 >
 > The argument-ordering refactor (`design/SIG-ORDER-REFACTOR.0.md`)
 > that was blocking Stage 0 has landed too — every dispatch path
@@ -51,10 +60,10 @@
 > check or a stricter sub-profile that denies top-level rand words,
 > forcing PBT runs to pass through seeded instances.
 >
-> Resume with Stage 3 (PropertySpec Record + check-prop loop in
-> aql:test). Stage 4 (word-policy/cost) and Stage 5 (reducer) build
-> on the now-available `stackform.Compile`, `Eval`, `Pretty`, `Cost`,
-> and `Walk` primitives.
+> Resume with Stage 4 (word-policy + cost annotations for the
+> shrinker). Then Stage 5 (reducer using stackform + cost +
+> check-prop's failing input as seed). Stage 6 closes out with the
+> decision PBT spec.
 
 ## Context
 
