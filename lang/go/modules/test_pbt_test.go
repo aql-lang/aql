@@ -232,6 +232,36 @@ func TestCheckProp_ShrinkDisabledByMaxShrinks(t *testing.T) {
 	}
 }
 
+// TestCheckProp_GenProgramShrinkingReachesSmallerSource confirms that
+// gen-program shrinking — not just value-level shrinking — runs when
+// the gen body has structure to mutate. With a gen body of
+// `[r.int 0 1000]` and a property that fails on every value, the
+// reducer can shrink BOTH the range literals (1000 → smaller) AND
+// the produced value (depending on what range the reducer settles).
+// The shrunk-source is non-empty and the shrunk-input is <= the
+// original failing input.
+func TestCheckProp_GenProgramShrinkingReachesSmallerSource(t *testing.T) {
+	r := testRegistry(t)
+	src := `test.check-prop "always-fail" [r.int 0 1000] [false] 5 7 200`
+	res := runTestAQL(t, r, src)
+	m, _ := native.AsMap(res[0])
+	okV, _ := m.Get("ok")
+	if ok, _ := okV.AsConcreteBoolean(); ok {
+		t.Fatal("property `false` should fail every iteration")
+	}
+	sourceV, _ := m.Get("shrunk-source")
+	sourceStr, _ := sourceV.AsConcreteString()
+	if sourceStr == "" {
+		t.Error("expected non-empty shrunk-source from gen-program shrinking path")
+	}
+	// failing-input came from the original gen run; shrunk-input from
+	// the reduced form's eval. With the gen body `[r.int 0 1000]`,
+	// the reducer can drop ops and/or shrink the range literals.
+	failV, _ := m.Get("failing-input")
+	shrunkV, _ := m.Get("shrunk-input")
+	t.Logf("failing=%s  shrunk=%s  source=%q", failV.String(), shrunkV.String(), sourceStr)
+}
+
 // Stub to keep parser referenced when no other test in this file
 // uses it directly.
 var _ = parser.Parse

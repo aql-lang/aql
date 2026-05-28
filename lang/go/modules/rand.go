@@ -102,6 +102,29 @@ func BuildSeededRandInstance(seed int64) (*native.OrderedMap, error) {
 	return buildRandExportsForState(state)
 }
 
+// BuildSeededRandRegistry returns a fresh registry whose top-level
+// word table includes every rand-* native bound to a private PRNG
+// seeded with `seed`. Used by the PBT shrinker to evaluate
+// generator-program StackForms — those forms contain Call ops by
+// the inner native names (`rand-int`, `rand-bool`, etc.), which a
+// caller-side registry without rand installed wouldn't dispatch.
+//
+// The returned registry also carries the default kernel native set
+// (math / comparison / stack ops / etc.) since it's built from
+// native.DefaultRegistry; complex gen bodies that mix rand with
+// arithmetic replay cleanly.
+func BuildSeededRandRegistry(seed int64) (*native.Registry, error) {
+	r, err := native.DefaultRegistry()
+	if err != nil {
+		return nil, err
+	}
+	state := newRandState(seed)
+	for _, n := range randNativesForState(state) {
+		r.RegisterNativeFunc(n)
+	}
+	return r, nil
+}
+
 // buildRandExportsForState builds the OrderedMap of dotted methods
 // (`int`, `bool`, `float`, `string`, `one-of`) bound to the given
 // state. Used for both the top-level default and for each

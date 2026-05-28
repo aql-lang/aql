@@ -549,8 +549,9 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 	var (
 		failed       bool
 		actualRuns   int64
-		failingInput = native.NewNone()
-		failingError = native.NewNone()
+		failingIter  int64 = -1
+		failingInput       = native.NewNone()
+		failingError       = native.NewNone()
 	)
 
 	for i := int64(0); i < runs; i++ {
@@ -562,6 +563,7 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 		randMap, err := BuildSeededRandInstance(seed + i)
 		if err != nil {
 			failed = true
+			failingIter = i
 			failingError = native.NewError(err)
 			break
 		}
@@ -578,11 +580,13 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 		genResults, err := parent.CallAQL(&genSig, []native.Value{native.NewMap(randMap)}, nil)
 		if err != nil {
 			failed = true
+			failingIter = i
 			failingError = native.NewError(err)
 			break
 		}
 		if len(genResults) == 0 {
 			failed = true
+			failingIter = i
 			failingError = native.NewError(parent.AqlError("check_prop_error",
 				"generator produced no value", "test.check-prop"))
 			break
@@ -603,12 +607,14 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 		propResults, err := parent.CallAQL(&propSig, []native.Value{input}, nil)
 		if err != nil {
 			failed = true
+			failingIter = i
 			failingInput = input
 			failingError = native.NewError(err)
 			break
 		}
 		if len(propResults) == 0 {
 			failed = true
+			failingIter = i
 			failingInput = input
 			failingError = native.NewError(parent.AqlError("check_prop_error",
 				"property produced no value", "test.check-prop"))
@@ -618,6 +624,7 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 		propBool, err := propTop.AsConcreteBoolean()
 		if err != nil {
 			failed = true
+			failingIter = i
 			failingInput = input
 			failingError = native.NewError(parent.AqlError("check_prop_error",
 				fmt.Sprintf("property returned non-Boolean (%s)", propTop.Parent.String()),
@@ -626,24 +633,35 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 		}
 		if !propBool {
 			failed = true
+			failingIter = i
 			failingInput = input
 			break
 		}
 	}
 
-	// Stage 5: if we have a failure with a concrete input (not an
-	// error-only failure), run the reducer against it to produce a
-	// minimal counterexample. Value-level shrinking — represent the
-	// failing input as a stackform.PushLit and let the reducer
-	// shrink it via the rewrite families in shrink/candidates.go.
-	// The evalFn re-runs the property body against each candidate's
-	// extracted value; failure-preserving lower-cost candidates win.
+	// Shrinking: on failure, try GEN-PROGRAM shrinking first
+	// (mutates the generator's stack form, re-runs the property
+	// against each candidate's produced value). If the gen-program
+	// reducer can't lower cost (form unrecordable, no improving
+	// candidate found), fall back to VALUE-LEVEL shrinking (mutates
+	// the failing value directly). The complementary path covers
+	// both cases: simple value-shape failures shrink via direct
+	// value mutation; structured gen programs shrink via the
+	// program-level rewrites.
 	shrunkInput := failingInput
 	shrunkSource := ""
 	shrunkCost := int64(0)
-	if failed && !native.IsNone(failingInput) {
-		shrunkInput, shrunkSource, shrunkCost = shrinkFailingInput(
-			parent, failingInput, propBody, maxShrinks)
+	if failed && !native.IsNone(failingInput) && failingIter >= 0 {
+		genSv, genSrc, genCost, genOK := shrinkFailingProgram(
+			parent, genBody, propBody, seed+failingIter, maxShrinks)
+		if genOK {
+			shrunkInput = genSv
+			shrunkSource = genSrc
+			shrunkCost = genCost
+		} else {
+			shrunkInput, shrunkSource, shrunkCost = shrinkFailingInput(
+				parent, failingInput, propBody, maxShrinks)
+		}
 	}
 
 	// Build the PropertyResult map.
@@ -669,6 +687,115 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 	run.mu.Unlock()
 
 	return []native.Value{resultVal}, nil
+}
+
+// shrinkFailingProgram runs gen-program shrinking: compile the gen
+// body's StackForm under the failing iteration's seed, then let the
+// shrink reducer mutate the form (drop ops, shrink literals, prune
+// quote bodies). Each candidate evaluates against a fresh seeded
+// rand-equipped registry; the produced value runs through the
+// property body via CallAQL. Failure-preserving lower-cost
+// candidates win.
+//
+// Returns the reduced form's eval result, the pretty-printed source,
+// and the reduced cost — plus a boolean indicating whether the
+// reducer actually improved on the initial form. Callers fall back
+// to value-level shrinking when this returns ok=false (e.g. the gen
+// body uses non-recordable patterns or no candidate beat the
+// initial cost).
+//
+// failingSeed is the per-iteration sub-seed (typically base-seed +
+// iteration-index) that produced the failing input. Every candidate
+// eval rebuilds rand state from this seed so replay is deterministic.
+func shrinkFailingProgram(
+	parent *native.Registry,
+	genBody []native.Value,
+	propBody []native.Value,
+	failingSeed int64,
+	maxShrinks int64,
+) (shrunkValue native.Value, shrunkSource string, shrunkCost int64, ok bool) {
+	if maxShrinks <= 0 {
+		return native.NewNone(), "", 0, false
+	}
+
+	// Compile the initial gen-body StackForm. Run the gen body in a
+	// sub-engine where `r` is bound to a freshly-seeded rand instance
+	// (matching what the failing iteration would have done) and a
+	// stackform.Recorder is installed to capture the execution.
+	randMap, err := BuildSeededRandInstance(failingSeed)
+	if err != nil {
+		return native.NewNone(), "", 0, false
+	}
+	parent.Defs.Push("r", native.NewMap(randMap))
+	_, initialForm, err := stackform.Compile(parent, append([]native.Value(nil), genBody...))
+	parent.Defs.Pop("r")
+	if err != nil || initialForm == nil || initialForm.Len() == 0 {
+		return native.NewNone(), "", 0, false
+	}
+
+	policy := shrink.DefaultPolicy()
+
+	// evalFn: build a fresh seeded eval registry, run the candidate
+	// form to produce a value, then run the property body against it.
+	// Each candidate eval is deterministic (same seed → same rng
+	// stream) so the reducer's search space is reproducible.
+	evalFn := func(form *stackform.StackForm) shrink.Outcome {
+		if form == nil || form.Len() == 0 {
+			return shrink.Invalid
+		}
+		evalReg, err := BuildSeededRandRegistry(failingSeed)
+		if err != nil {
+			return shrink.Invalid
+		}
+		vals, err := stackform.Eval(evalReg, form)
+		if err != nil || len(vals) == 0 {
+			return shrink.Invalid
+		}
+		candidateValue := vals[len(vals)-1]
+		propSig := native.FnSig{
+			Params:     []native.FnParam{{Type: native.TAny}},
+			Returns:    []*native.Type{native.TAny},
+			Body:       append([]native.Value(nil), propBody...),
+			BarrierPos: -1,
+		}
+		res, err := parent.CallAQL(&propSig, []native.Value{candidateValue}, nil)
+		if err != nil || len(res) == 0 {
+			return shrink.Invalid
+		}
+		b, err := res[len(res)-1].AsConcreteBoolean()
+		if err != nil {
+			return shrink.Invalid
+		}
+		if !b {
+			return shrink.Fail
+		}
+		return shrink.Pass
+	}
+
+	profile := &shrink.Profile{
+		MaxSteps: int(maxShrinks),
+		Policy:   policy,
+	}
+	reduced := shrink.Reduce(initialForm, evalFn, profile)
+
+	initialCost := shrink.ShrinkCost(initialForm, policy)
+	reducedCost := shrink.ShrinkCost(reduced, policy)
+	if reducedCost >= initialCost {
+		// No improvement. Caller should fall back to value-level
+		// shrinking on the original failing input.
+		return native.NewNone(), "", 0, false
+	}
+
+	// Materialise the shrunk value by re-evaluating the reduced form.
+	evalReg, err := BuildSeededRandRegistry(failingSeed)
+	if err != nil {
+		return native.NewNone(), "", 0, false
+	}
+	vals, err := stackform.Eval(evalReg, reduced)
+	if err != nil || len(vals) == 0 {
+		return native.NewNone(), "", 0, false
+	}
+	return vals[len(vals)-1], stackform.Pretty(reduced), int64(reducedCost), true
 }
 
 // shrinkFailingInput reduces a property-failing input to a minimal
