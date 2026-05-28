@@ -36,7 +36,10 @@ import (
 // produces the expected answers.
 // PathOf returns the ancestry path of the type T (a Type literal, or
 // any value whose Parent is a Type subtype — e.g. a Function/Disjunct
-// value) as a List of Type literals, root first, leaf last:
+// value) as a List of Type literals, root first, leaf last (the
+// declared signature contract is [:Type]; the runtime value is a
+// regular List so that `is [literal-list]` comparisons against an
+// untyped list template work):
 //
 //	pathof Integer          → [Scalar Number Integer]
 //	pathof ProperString     → [Scalar String ProperString]

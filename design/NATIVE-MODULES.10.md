@@ -124,6 +124,124 @@ All trigonometric functions use radians.
 | `math.pi` | Pi                       | 3.14159...    |
 | `math.e`  | Euler's number           | 2.71828...    |
 
+### aql:report
+
+Pretty-printers for the kernel value types. Every word returns a
+String — none print directly — so callers compose with `print`,
+embed in error messages, or feed into further formatting. Useful
+beyond testing: any console-bound output of Records and Tables.
+
+**Import:** `"aql:report" import`
+
+| Word            | Description                                                |
+|-----------------|------------------------------------------------------------|
+| `report.value`  | Generic — any Value to a String (delegates to FormatForPrint). |
+| `report.record` | A Map rendered as vertical `key : value` lines, colons aligned. |
+| `report.table`  | A TableData or List-of-Maps rendered with headers and aligned columns. |
+| `report.list`   | A List rendered one numbered element per line.             |
+
+```
+"aql:report" import
+{name:"alice" age:30} report.record print
+# name : alice
+# age  : 30
+
+[{a:1 b:2} {a:3 b:4}] report.table print
+# a | b
+# --+--
+# 1 | 2
+# 3 | 4
+```
+
+### aql:test
+
+Test framework with two complementary surfaces:
+
+1. **Imperative API** — `test.describe`, `test.test` / `test.it`,
+   `assert.equal`, `assert.deep-equal`, `assert.ok`, `assert.throws`,
+   `assert.match`. Eager execution (node:test style). Each case
+   captures errors so the rest of the suite continues.
+2. **Declarative spec runner** — define a `TestSpec` Record carrying
+   a `subject` (the word under test, named as an Atom or dotted
+   String like `"decision.eval-cond"`) and a list of `TestCase`
+   Records (each `{name, in, out}`). Sub-specs nest. `test.run-spec`
+   walks the tree, dispatches the subject against each case's `in`
+   list, deep-compares the top-of-stack result to `out`, and records
+   the outcome.
+
+Results accumulate into a `TestSet` Table that `test.results`
+returns; pipe through `report.table` to print.
+
+**Import:** `"aql:test" import`
+
+**Types** (exported via `test.TestCase`, `test.TestSet`, …):
+
+| Type         | Shape                                                                  |
+|--------------|------------------------------------------------------------------------|
+| `TestCase`   | `refine Record [name:String in:List out:Any]`                          |
+| `TestSet`    | `refine Table TestCase`                                                |
+| `TestSpec`   | `refine Record [name:String subject:Any cases:List subs:List]`         |
+| `TestResult` | `refine Record [name:String path:List ok:Boolean expected:Any actual:Any error:Any duration-ms:Integer]` |
+
+**Imperative words**:
+
+| Word            | Description                                                |
+|-----------------|------------------------------------------------------------|
+| `test.describe` | Group: `[body] "name" test.describe` — body sees nested describes / tests, results inherit the path. |
+| `test.test`     | Run a single case body, catch errors: `[body] "name" test.test`. |
+| `test.it`       | Alias for `test.test`.                                     |
+| `test.results`  | Return the accumulated TestSet Table.                      |
+| `test.summary`  | Return `{total, passed, failed}` Map.                      |
+| `test.fail-count` | Return failure count as Integer.                         |
+| `test.reset`    | Clear the active TestRun.                                  |
+
+**Assertions** (raise `[aql/assertion_failure]` on failure; caught by enclosing `test`):
+
+| Word                | Description                                |
+|---------------------|--------------------------------------------|
+| `assert.equal`      | `a b assert.equal` — exact equality (identity for maps/lists). |
+| `assert.not-equal`  | Inverse of equal.                          |
+| `assert.ok`         | Value is truthy (not None, not false).     |
+| `assert.throws`     | `[body] assert.throws` — body must raise.  |
+| `assert.match`      | `substring fullString assert.match` — substring contains check. |
+
+**Spec runner**:
+
+| Word              | Description                                                |
+|-------------------|------------------------------------------------------------|
+| `test.spec`       | Constructor — `name subject cases` → TestSpec (no subs).   |
+| `test.spec-with-subs` | Constructor with sub-spec list.                        |
+| `test.case`       | Constructor — `name in out` → TestCase.                    |
+| `test.run-spec`   | `spec test.run-spec` — execute every case, recurse into subs. |
+| `test.invoke`     | `inputs subject test.invoke` — Go-side helper that dispatches a subject by name in the caller's registry. |
+
+```
+"aql:test" import
+"aql:report" import
+"aql:decision" import
+
+def my-spec {
+  name: "eval-cond"
+  subject: "decision.eval-cond"
+  cases: [
+    {name: "adult"  in: [{age:25} {field:"age",op:"gte",value:18}] out: true}
+    {name: "minor"  in: [{age:15} {field:"age",op:"gte",value:18}] out: false}
+  ]
+  subs: []
+}
+my-spec test.run-spec
+test.results report.table print
+```
+
+The spec runner uses `deq` (deep equality), so structurally-equal
+maps and lists match without requiring identity. Subject names with
+dots (e.g. `"decision.eval-cond"`) are split into a `get` chain in
+the parent registry — flat imports aren't required.
+
+The decision module is exercised entirely via this mechanism in
+`modules/decision_spec.aql`; see `modules/decision_spec_test.go`
+for the loader.
+
 ## Implementation
 
 Native modules live in `modules/`. Each module:

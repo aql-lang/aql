@@ -5,7 +5,8 @@ package native
 // short-circuit semantics — `0 or 5` returns 5, `1 and 2` returns 2,
 // and `not v` always returns a Boolean. The remaining connectives
 // (`otherwise`, `xor`, `nand`, `nor`, `iff`, `xnor`) coerce
-// non-Boolean inputs via CoerceBoolean.
+// non-Boolean inputs via CoerceBoolean. `any` and `all` are the
+// list-reduction forms of `or` / `and`; they always return Boolean.
 //
 // Algorithms live in the eng layer (CoerceBoolean,
 // FlattenDisjunctAlts, TandValues etc.); this file owns the word
@@ -47,6 +48,52 @@ var booleanNatives = []NativeFunc{
 	boolBinaryNative("nor", func(a, b bool) bool { return !(a || b) }),
 	boolBinaryNative("iff", func(a, b bool) bool { return a == b }),
 	boolBinaryNative("xnor", func(a, b bool) bool { return a == b }),
+	{
+		Name: "any",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TList}, Handler: anyHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
+		},
+	},
+	{
+		Name: "all",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TList}, Handler: allHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
+		},
+	},
+}
+
+// anyHandler returns true iff any element of the list is truthy.
+// Empty list returns false (the identity for OR).
+func anyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	if !IsConcrete(args[0]) {
+		return []Value{NewBoolean(false)}, nil
+	}
+	list, _ := AsList(args[0])
+	n := list.Len()
+	for i := 0; i < n; i++ {
+		if CoerceBoolean(list.Get(i)) {
+			return []Value{NewBoolean(true)}, nil
+		}
+	}
+	return []Value{NewBoolean(false)}, nil
+}
+
+// allHandler returns true iff every element of the list is truthy.
+// Empty list returns true (the identity for AND).
+func allHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	if !IsConcrete(args[0]) {
+		return []Value{NewBoolean(true)}, nil
+	}
+	list, _ := AsList(args[0])
+	n := list.Len()
+	for i := 0; i < n; i++ {
+		if !CoerceBoolean(list.Get(i)) {
+			return []Value{NewBoolean(false)}, nil
+		}
+	}
+	return []Value{NewBoolean(true)}, nil
 }
 
 // notHandler always returns a Boolean.

@@ -1,0 +1,212 @@
+# aql:decision — declarative spec suite, replicated from
+# decision_test.go. Loaded by decision_spec_test.go to exercise the
+# pure-AQL spec runner from aql:test against the production module.
+#
+# Each TestCase pushes its `in` list as args, in order, then dispatches
+# the subject word. The subject's signature dictates stack-top-down
+# order, so for a two-arg signature `[c:Map input:Map]` the args list
+# is `[input, c]` — input pushed first (deepest), c on top (matches
+# sig[0]).
+#
+# This module exports a single `spec` value (a TestSpec). The
+# `subs` field nests sub-specs one per decision operation so reports
+# group failures under their owning op rather than dumping them flat.
+
+"aql:test" import
+
+def cond-spec {
+  name: "eval-cond"
+  subject: "decision.eval-cond"
+  cases: [
+    {name: "age gte true"   in: [{age:25}     {field:"age",   op:"gte",value:18}]      out: true}
+    {name: "age gte false"  in: [{age:15}     {field:"age",   op:"gte",value:18}]      out: false}
+    {name: "status eq true" in: [{status:"active"} {field:"status",op:"eq", value:"active"}] out: true}
+  ]
+  subs: []
+}
+
+def pred-spec {
+  name: "eval-pred"
+  subject: "decision.eval-pred"
+  cases: [
+    {
+      name: "all-of true"
+      in: [
+        {age:25, score:80}
+        {kind:"group", op:"all", children:[
+          {field:"age",   op:"gte", value:18}
+          {field:"score", op:"gt",  value:50}
+        ]}
+      ]
+      out: true
+    }
+    {
+      name: "all-of false"
+      in: [
+        {age:25, score:30}
+        {kind:"group", op:"all", children:[
+          {field:"age",   op:"gte", value:18}
+          {field:"score", op:"gt",  value:50}
+        ]}
+      ]
+      out: false
+    }
+    {
+      name: "any-of true"
+      in: [
+        {age:10, score:80}
+        {kind:"group", op:"any", children:[
+          {field:"age",   op:"gte", value:18}
+          {field:"score", op:"gt",  value:50}
+        ]}
+      ]
+      out: true
+    }
+    {
+      name: "not-of true"
+      in: [
+        {age:25}
+        {kind:"group", op:"not", children:[{field:"age", op:"lt", value:18}]}
+      ]
+      out: true
+    }
+  ]
+  subs: []
+}
+
+def table-spec {
+  name: "eval-table"
+  subject: "decision.eval-table"
+  cases: [
+    {
+      name: "first hit adult"
+      in: [
+        {age:25}
+        {kind:"table", hit-policy:"first", rules:[
+          {when:{field:"age",op:"lt", value:18}, then:{category:"minor"}}
+          {when:{field:"age",op:"gte",value:18}, then:{category:"adult"}}
+        ]}
+      ]
+      out: {category:"adult"}
+    }
+    {
+      name: "first hit minor"
+      in: [
+        {age:12}
+        {kind:"table", hit-policy:"first", rules:[
+          {when:{field:"age",op:"lt", value:18}, then:{category:"minor"}}
+          {when:{field:"age",op:"gte",value:18}, then:{category:"adult"}}
+        ]}
+      ]
+      out: {category:"minor"}
+    }
+    {
+      name: "unique pass"
+      in: [
+        {score:75}
+        {kind:"table", hit-policy:"unique", rules:[
+          {when:{field:"score",op:"lt", value:50}, then:{grade:"fail"}}
+          {when:{field:"score",op:"gte",value:50}, then:{grade:"pass"}}
+        ]}
+      ]
+      out: {grade:"pass"}
+    }
+    {
+      name: "no-match"
+      in: [
+        {age:25}
+        {kind:"table", hit-policy:"first", rules:[
+          {when:{field:"age",op:"gt",value:100}, then:{x:1}}
+        ]}
+      ]
+      out: {ok: false, error: "no-match"}
+    }
+    {
+      name: "compound all-of"
+      in: [
+        {age:25, score:95}
+        {kind:"table", hit-policy:"first", rules:[
+          {
+            when: {kind:"group", op:"all", children:[
+              {field:"age",   op:"lt",  value:30}
+              {field:"score", op:"gte", value:90}
+            ]}
+            then: {tier:"premium"}
+          }
+          {when:{field:"score", op:"gte", value:50}, then:{tier:"standard"}}
+        ]}
+      ]
+      out: {tier:"premium"}
+    }
+  ]
+  subs: []
+}
+
+def tree-spec {
+  name: "eval-tree"
+  subject: "decision.eval-tree"
+  cases: [
+    {
+      name: "tree adult"
+      in: [
+        {age:25}
+        {kind:"tree", root:"root", nodes:[
+          {id:"root", kind:"branch", branches:[
+            {when:{field:"age",op:"lt", value:18}, next:"minor"}
+            {when:{field:"age",op:"gte",value:18}, next:"adult"}
+          ]}
+          {id:"minor", kind:"leaf", result:{category:"minor"}}
+          {id:"adult", kind:"leaf", result:{category:"adult"}}
+        ]}
+      ]
+      out: {category:"adult"}
+    }
+    {
+      name: "tree minor scalar"
+      in: [
+        {age:12}
+        {kind:"tree", root:"root", nodes:[
+          {id:"root", kind:"branch", branches:[
+            {when:{field:"age",op:"lt", value:18}, next:"minor"}
+            {when:{field:"age",op:"gte",value:18}, next:"adult"}
+          ]}
+          {id:"minor", kind:"leaf", result:"too-young"}
+          {id:"adult", kind:"leaf", result:"welcome"}
+        ]}
+      ]
+      out: "too-young"
+    }
+    {
+      name: "tree multi-level approved"
+      in: [
+        {age:25, score:90}
+        {kind:"tree", root:"check-age", nodes:[
+          {id:"check-age", kind:"branch", branches:[
+            {when:{field:"age",op:"lt", value:18}, next:"reject"}
+            {when:{field:"age",op:"gte",value:18}, next:"check-score"}
+          ]}
+          {id:"check-score", kind:"branch", branches:[
+            {when:{field:"score",op:"gte",value:80}, next:"approve"}
+            {when:{field:"score",op:"lt", value:80}, next:"review"}
+          ]}
+          {id:"reject",  kind:"leaf", result:"rejected"}
+          {id:"approve", kind:"leaf", result:"approved"}
+          {id:"review",  kind:"leaf", result:"needs-review"}
+        ]}
+      ]
+      out: "approved"
+    }
+  ]
+  subs: []
+}
+
+def spec {
+  name: "aql:decision"
+  subject: "identity"
+  cases: []
+  subs: [cond-spec pred-spec table-spec tree-spec]
+}
+
+# The top-level `spec` def is the entry point; downstream tooling
+# (the decision_spec_test.go Go runner, or any AQL caller after
+# `import "./decision_spec.aql"`) reads it.

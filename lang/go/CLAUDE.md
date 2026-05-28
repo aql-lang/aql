@@ -60,7 +60,8 @@ Language-agnostic content stays at the top of each component:
 - `capabilities/` — file I/O abstraction (`FileOps` interface
   + OS-backed and in-memory implementations).
 - `modules/` — loadable modules (`aql:math`, `aql:time`,
-  `aql:matrix`, `aql:decision`, `aql:solardemo`).
+  `aql:matrix`, `aql:decision`, `aql:solardemo`, `aql:bin`,
+  `aql:type`).
 - `test/` — integration tests and TSV spec runners.
 
 ## Build & Test
@@ -174,9 +175,17 @@ Key conversion functions in `parse.go`:
 - `convertTopLevel()` / `convertTopLevelValue()` — word context
 - `convertDataValue()` / `convertMapData()` — data context (atoms, not strings)
 - `convertWordList()` / `convertDataList()` — lists (word context, Eval=true)
-- `expandDottedWord()` — transforms `foo.a.b` into `( foo get a get b )`
+- Dotted access — there is no parse-time "expansion" pass. `.` is lexed
+  as a separate token (`#DT` in `eng/go/parser/grammar.go`) and converted
+  to `eng.NewWord("get")` during top-level conversion in
+  `convertTopLevelItems` (parse.go around line 173); `!` followed by `.`
+  becomes `getr`. Chained access `m.a.b` becomes the token sequence
+  `m get a get b` and composes at runtime because each `get` produces
+  the receiver for the next.
 
 ## Argument Ordering (CRITICAL)
+
+### The rule
 
 Post §1.4 unification, dispatch is governed by **one** rule applied
 to every signature, regardless of whether the word was historically
@@ -193,6 +202,60 @@ to every signature, regardless of whether the word was historically
 `BarrierPos == N` means "all forward-eligible" (legacy forward-prec).
 `0 < B < N` mixes the two: forward fills the leading B positions then
 stack fills the rest.
+
+### Strong recommendation: prefer FORWARD form
+
+`f a b c` is the canonical call form. Always reach for it in new
+code, examples, REPL transcripts, and documentation:
+
+- It reads naturally — written argument order matches declared
+  param order. `def f fn [[a:Integer b:String] …] f 1 "x"` binds
+  `a=1, b="x"`.
+- The forward phase fills `sig[0..N-1]` directly with `[a, b, c]`,
+  so the handler's `args[i]` mirrors what the user wrote at
+  position `i+1` after the word.
+- It composes cleanly with paren grouping: `(f a b) other-thing`
+  contains the call.
+
+The Phase-4 unified rule guarantees `f a b ≡ b f a ≡ b a f` (mirror
+equivalence of three forms). Stack form (`c b a f`) and partial
+forms (`c b f a`, `c f a b`) all dispatch to the same `sig=[a,b,c]`
+— but they read backwards because the last-pushed value lands on
+`sig[0]`. Use them only when an enclosing pipeline naturally leaves
+arguments on the stack already; otherwise forward form is clearer.
+
+The **swap form** `a f b` is the only non-equivalent two-arg
+arrangement. It binds `sig[0]` from the forward side and `sig[1]`
+from the prefix stack. Some non-commutative ops (`10 sub 3 = 7`)
+read better in swap form, but forward form (`sub 10 3 = 3 sub 10
+≡ 3 10 sub`) is always safe and equivalent.
+
+### One arg-flow convention everywhere
+
+After matchSignature picks sig and positions, args flow through
+every downstream handoff in **sig order with no reordering**:
+
+- Kernel native handlers (`func(args, …) ([]Value, error)`) —
+  `args[i]` is sig position i.
+- AQL `def fn […]` body via `InstallFnDef`'s registered handler —
+  named params bind by name, `args[i]` matches the i-th declared
+  param; unnamed params push to body tokens in i-order so body
+  position `i` from the bottom holds `args[i]`.
+- `CallAQL` and `execFnDefSig` — same: named params bind by name,
+  unnamed params push in i-order.
+- `args.N` AQL accessor — returns `args[N]` directly.
+
+No reversals, no swaps, no permutations between matchSignature and
+the handler. The only "reordering" anywhere in the kernel is
+`rearrangeForForward`, which is part of how forward-collected args
+get laid out so that matchSignature's top-down walk produces the
+right sig — it's matchSignature internals, not a separate hop.
+
+Module FnDef wrappers (`makeXxxFnDef` helpers) get a special
+short-circuit in `execFnDefLiteral`: trivial single-word delegation
+bodies (`[Word(inner-name)]`) dispatch the inner native directly via
+`execMatch`, skipping CallAQL entirely. See
+`design/SIG-ORDER-REFACTOR.0.md`.
 
 ### The unified algorithm
 
@@ -470,6 +533,63 @@ rule with `j.Rule()`, and add conversion logic in the appropriate
 with the v0.1.6 rule-aware `LexMatcher` signature
 `func(lex *Lex, rule *Rule) *Token` to read `rule.K`/`rule.N` maps.
 See the template string interpolation rules for a complete example.
+
+## Module FnDef Wrappers — inner sig BarrierPos (CRITICAL)
+
+Native modules under `lang/go/modules/` follow a sub-registry
+pattern: `BuildXxxModule` creates a fresh `subReg`, registers the
+inner natives there, and exports FnDef wrappers (carrying
+`Registry: subReg`) into the module's export map. When the
+wrapper is invoked via `pkg.word` dot-access, dispatch flows
+through `eng/go/engine.go::execFnDefLiteral`, which calls
+`reg.Lookup(fnDef.Name)` and uses the **looked-up native's
+`Signatures`** for `matchSignature` — NOT the wrapper's own Sigs.
+
+**Consequence:** the inner native's `BarrierPos` controls whether
+the wrapper's swap-form `a pkg.word b` dispatches.
+
+- If the inner sig has `BarrierPos: 0` (stack-only),
+  matchSignature requires every arg on the stack. The swap form
+  has 1 stack + 1 forward, so dispatch fails silently — the
+  FnDef just sits on the stack with the args around it.
+- If the inner sig has `BarrierPos: -1` (all-forward eligible) or
+  any positive boundary, matchSignature accepts the swap-form
+  forward+stack split, runs insertForward, completes collection,
+  and dispatches normally.
+
+**Rule:** inner natives registered into a module sub-registry
+MUST use `BarrierPos: -1` (or a positive value that includes
+position 0 as forward-eligible). At runtime the body context
+has no forward tokens anyway — `BarrierPos: -1` and `0` both
+fall to stack-only — so the change is dispatch-only and safe.
+
+Regression test:
+`lang/go/modules/wrapper_dispatch_test.go::TestModuleWrapperInnerSigBarrierPos`
+asserts both directions (the broken case explicitly demonstrates
+the silent-dispatch-failure mode).
+
+### Wrapper FnSig.Params order
+
+`FnSig.Params` on a module wrapper MUST be declared in the same
+order as the inner native's `NativeSig.Args` — **top-first, sig
+order**: `Params[0]` describes the type of the value at sig
+position 0 (= top of stack under matchSignature).
+
+This is uniform with everywhere else in the kernel — there is
+ONE convention. The wrapper's `Params` types are only used for
+the static analyser and surface display; at runtime,
+`execFnDefLiteral` detects the trivial-delegation shape
+(`Body=[Word(fnDef.Name)]`, all-unnamed Params) and calls
+`execMatch` on the inner native directly via the matched sig.
+No body execution, no token splicing, no push reordering.
+
+AQL fns defined inside a module preamble (named params + real
+body — e.g. `decision.cond`) take a different path: their body
+runs via `CallAQL` in the captured sub-registry so module-private
+words resolve correctly. Named params bind via `InstallDef`, so
+push ordering doesn't apply.
+
+Test: `lang/go/test/sig_order_guard_test.go` pins this convention.
 
 ## Registry Bindings (CRITICAL)
 

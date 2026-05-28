@@ -348,14 +348,14 @@ aql> [1, 2] inner [3, 4] [mul] [add] => 11      # 1*3 + 2*4
 
 ## 12. Types and `is`
 
-Every value has a type, organised into a hierarchy. Inspect with
-`typeof` or `fulltypeof`:
+Every value has a type, organised into a hierarchy. Inspect a
+value's type with `typeof`, or walk its ancestry with `pathof`:
 
 ```
 aql> typeof 42                       => Integer
-aql> typeof "hello"                  => String
+aql> typeof "hello"                  => ProperString
 aql> typeof [1, 2]                   => List
-aql> fulltypeof 42                   => Scalar/Number/Integer
+aql> pathof Integer                  => [Scalar Number Integer]
 ```
 
 Use `is` to test membership against any ancestor in the hierarchy:

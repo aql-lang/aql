@@ -20,6 +20,7 @@ var errorPatterns = map[string]string{
 	"modulo_by_zero":   "modulo by zero",
 	"undefined_word":   "undefined_word",
 	"unify_error":      "cannot unify",
+	"binary_error":     "binary_error",
 }
 
 func TestSyntax(t *testing.T) {

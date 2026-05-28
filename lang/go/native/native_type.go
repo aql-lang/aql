@@ -9,8 +9,9 @@ import (
 )
 
 // typeNatives covers the type-system words: refine, pathof, enum,
-// typeof, fulltypeof, is, guard, base, tor, tand, any, all, tany,
-// tall, convert.
+// typeof, is, teq, tpartial, guard, base, tor, tand, tany, tall,
+// convert. New type ops follow the `t`-prefix convention — see
+// lang/doc/design/TYPE-OPERATIONS.0.md.
 //
 // `Resource` and `Entity` (the builtin object types) are NOT installed
 // via NativeFunc — they are user-typed values pushed onto the type
@@ -81,16 +82,7 @@ var typeNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny},
 			Handler: typeofHandler,
-			Returns: []*Type{TAtom}, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "fulltypeof",
-
-		Signatures: []NativeSig{{
-			Args:    []*Type{TAny},
-			Handler: fulltypeofHandler,
-			Returns: []*Type{TAtom}, BarrierPos: -1,
+			Returns: []*Type{TType}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -104,6 +96,25 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
+		Name: "teq",
+
+		Signatures: []NativeSig{{
+			Args:       []*Type{TAny, TAny},
+			BarrierPos: 1,
+			Handler:    teqHandler,
+			Returns:    []*Type{TBoolean},
+		}},
+	},
+	{
+		Name: "tpartial",
+
+		Signatures: []NativeSig{{
+			Args:    []*Type{TAny},
+			Handler: tpartialHandler,
+			Returns: []*Type{TType}, BarrierPos: -1,
+		}},
+	},
+	{
 		Name: "guard",
 
 		Signatures: []NativeSig{{
@@ -111,8 +122,7 @@ var typeNatives = []NativeFunc{
 			BarrierPos: 1,
 			Handler:    guardHandler,
 			Returns:    []*Type{TAny},
-		}},
-	},
+		}}},
 	{
 		Name: "base",
 
@@ -145,20 +155,6 @@ var typeNatives = []NativeFunc{
 			Handler:    eng.TandHandler,
 			Returns:    []*Type{TAny},
 		}},
-	},
-	{
-		Name: "any",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TList}, Handler: anyHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-		},
-	},
-	{
-		Name: "all",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TList}, Handler: allHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-		},
 	},
 	{
 		Name: "tany",
@@ -395,49 +391,14 @@ func enumHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 	return []Value{NewEnum(alts)}, nil
 }
 
-// ---- typeof / fulltypeof ----
+// ---- typeof ----
 
 func typeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	// Delegate to the canonical aqleng implementation, which returns
-	// a Type literal (not an Atom): concrete value → exact Parent;
-	// type literal → its metatype (ScalarType / NodeType / Type);
-	// implicit-map record shape → its metatype; the value `none`
-	// (unique inhabitant of None) → None.
+	// a Type literal: concrete value → exact Parent; type literal →
+	// its metatype (Type); implicit-map record shape → its metatype;
+	// the value `none` (unique inhabitant of None) → None.
 	return []Value{TypeOf(args[0])}, nil
-}
-
-func fulltypeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	// Render the type's ancestry path. typeof is a single Parent hop;
-	// fulltypeof walks the ancestry of that result to produce the full
-	// slash-separated path. Any is the universal lattice root — skipped
-	// here so the path stays the short form ("Scalar/Number" not
-	// "Any/Scalar/Number").
-	tv := TypeOf(args[0])
-	// For a type literal the denoted lattice node is &tv; for any
-	// other shape it's tv.Parent.
-	var def *Type
-	if tv.Data == nil && !tv.Carrier {
-		def = &tv
-	} else {
-		def = tv.Parent
-	}
-	var parts []string
-	for d := def; d != nil; d = d.Parent {
-		if d.Equal(TAny) { // universal root — skipped in textual paths
-			break
-		}
-		parts = append([]string{d.Name}, parts...)
-	}
-	if len(parts) > 0 {
-		last := parts[len(parts)-1]
-		if len(last) > 0 && last[0] >= '0' && last[0] <= '9' {
-			parts = parts[:len(parts)-1]
-		}
-		if len(last) > 1 && last[0] == '-' && last[1] >= '0' && last[1] <= '9' {
-			parts = parts[:len(parts)-1]
-		}
-	}
-	return []Value{NewAtom(strings.Join(parts, "/"))}, nil
 }
 
 // ---- is ----
@@ -509,6 +470,90 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	return []Value{NewBoolean(true)}, nil
 }
 
+// ---- teq ----
+
+// teqHandler implements strict type equality. Both args must be
+// IsTypeBody; otherwise return false. Bare type literals compare by
+// lattice node Equal (ID identity), structural type bodies (record /
+// disjunct / object / etc.) compare via ValuesEqual. Distinct from
+// `is`, which is subtype-membership and is asymmetric on its RHS
+// (`5 is Integer` true, `Integer is 5` false). `teq` is symmetric and
+// rejects non-type values from either side.
+func teqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	a, b := args[1], args[0]
+	if !IsTypeBody(a) || !IsTypeBody(b) {
+		return []Value{NewBoolean(false)}, nil
+	}
+	if a.Data == nil && !a.Carrier && b.Data == nil && !b.Carrier {
+		aNode := &a
+		bNode := &b
+		return []Value{NewBoolean(aNode.Equal(bNode))}, nil
+	}
+	return []Value{NewBoolean(ValuesEqual(a, b))}, nil
+}
+
+// ---- tpartial ----
+
+// tpartialHandler wraps every field of a Record or Object type in
+// `T | None`. Idempotent: a field whose value already includes None
+// is left unchanged. For Object types, inherited fields are flattened
+// into the result's own field map and the result is registered as a
+// fresh anonymous Object type (lattice parent: Object root) — the
+// partial is NOT a subtype of the input because AQL's lattice runs
+// the other way (a child requires more, not less).
+func tpartialHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	t := args[0]
+	switch {
+	case IsRecordType(t):
+		rec, _ := AsRecordType(t)
+		return []Value{NewRecordType(partializeFields(rec.Fields))}, nil
+	case IsObjectType(t):
+		info, _ := AsObjectType(t)
+		newFields := partializeFields(info.AllFields())
+		id := GenerateObjectTypeID()
+		newInfo := ObjectTypeInfo{
+			Fields: newFields,
+			Parent: nil,
+			ID:     id,
+		}
+		def := r.Types.MintType(id, TObject)
+		return []Value{NewObjectType(def, newInfo)}, nil
+	default:
+		return nil, r.AqlError("type_error",
+			fmt.Sprintf("tpartial: argument must be a Record or Object type, got %s", t.String()),
+			"tpartial")
+	}
+}
+
+func partializeFields(fields *OrderedMap) *OrderedMap {
+	result := NewOrderedMap()
+	for _, k := range fields.Keys() {
+		ft, _ := fields.Get(k)
+		result.Set(k, makeOptionalType(ft))
+	}
+	return result
+}
+
+// makeOptionalType returns `t | None` as a Disjunct, or `t` unchanged
+// if t already includes None as an alternative (or IS None).
+func makeOptionalType(t Value) Value {
+	if IsNoneShape(t) {
+		return t
+	}
+	alts := FlattenDisjunctAlts(t)
+	for _, alt := range alts {
+		if IsNoneShape(alt) {
+			return t
+		}
+	}
+	alts = append(alts, NewTypeLiteral(TNone))
+	simplified := SimplifyDisjunctAlts(alts)
+	if len(simplified) == 1 {
+		return simplified[0]
+	}
+	return NewDisjunct(simplified)
+}
+
 // ---- guard ----
 
 func guardHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -545,47 +590,7 @@ func baseHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 // torHandler, torReturnsFn, tandHandler: moved to eng/go/core_boolean.go.
 // tand's `tall` reduction (below) calls eng.TandValues directly.
 
-// ---- any / all / tany / tall ----
-
-func anyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return []Value{NewBoolean(false)}, nil
-	}
-	list, _ := AsList(args[0])
-	n := list.Len()
-	if n == 0 {
-		return []Value{NewBoolean(false)}, nil
-	}
-	var last Value
-	for i := 0; i < n; i++ {
-		v := list.Get(i)
-		if CoerceBoolean(v) {
-			return []Value{v}, nil
-		}
-		last = v
-	}
-	return []Value{last}, nil
-}
-
-func allHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return []Value{NewBoolean(true)}, nil
-	}
-	list, _ := AsList(args[0])
-	n := list.Len()
-	if n == 0 {
-		return []Value{NewBoolean(true)}, nil
-	}
-	var last Value
-	for i := 0; i < n; i++ {
-		v := list.Get(i)
-		if !CoerceBoolean(v) {
-			return []Value{v}, nil
-		}
-		last = v
-	}
-	return []Value{last}, nil
-}
+// ---- tany / tall ----
 
 func tanyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {

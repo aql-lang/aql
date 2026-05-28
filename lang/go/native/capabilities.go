@@ -4,6 +4,7 @@ import (
 	"github.com/aql-lang/aql/eng/go"
 
 	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/aql-lang/aql/lang/go/policy"
 )
 
 // Host-side capability keys. The host installs implementations under
@@ -14,24 +15,66 @@ const (
 	CapMemFileOps = "engine.fileops.mem" // lazily created in-memory FileOps
 	CapFormats    = "engine.formats"     // map[string]Format read/write registry
 	CapSQLite     = "engine.sqlite"      // *SQLiteStore
+	CapPolicy     = "engine.policy"      // policy.Policy enforcing permissions
 )
 
-// HostFileOps returns the FileOps installed on r, or nil if none.
-// Word handlers that need filesystem access call EffectiveFileOps
-// instead — it honours the __sys.fs.mem switch.
+// HostPolicy returns the policy installed on r, or nil if none. A
+// nil result means "no permissions configured" — the engine and
+// every capability wrapper treat that as allow-everything (the
+// default opt-in posture).
+func HostPolicy(r *Registry) policy.Policy {
+	p, _, _ := eng.Cap[policy.Policy](r, CapPolicy)
+	return p
+}
+
+// SetHostPolicy installs a Policy as a capability. Must be called
+// before SetHostX hooks if those hooks should auto-wrap the
+// capability with the policy. RewrapCapabilities can re-apply
+// wrapping after a late SetHostPolicy.
+func SetHostPolicy(r *Registry, p policy.Policy) {
+	if p == nil {
+		return
+	}
+	_ = r.Capabilities.Set(CapPolicy, p)
+}
+
+// HostFileOps returns the FileOps installed on r. When a policy has
+// uninstalled the fileops capability (via install:false), the slot
+// is empty — in that case HostFileOps returns notInstalledFileOps,
+// a stub whose ReadFile/WriteFile/MkdirAll return a
+// capability_not_installed error rather than a nil deref. Word
+// handlers that need filesystem access can call without a nil
+// guard and surface the error to the user.
 //
-// The eng.Cap error (nil registry) is discarded: the wrappers are
-// only ever called on initialised registries in practice, and the
-// callers expect a single-value signature. A misconfigured registry
-// surfaces at lower-level capability checks before reaching here.
+// Returns nil only when r itself is nil (a misconfigured registry).
 func HostFileOps(r *Registry) capabilities.FileOps {
-	ops, _, _ := eng.Cap[capabilities.FileOps](r, CapFileOps)
+	if r == nil {
+		return nil
+	}
+	ops, ok, _ := eng.Cap[capabilities.FileOps](r, CapFileOps)
+	if !ok || ops == nil {
+		return notInstalledFileOps{}
+	}
 	return ops
 }
 
 // SetHostFileOps installs the active fileops capability and re-wires
 // any registered jsonic-format multisource resolver to use it.
+//
+// When a policy is present on r and its fileops scope has
+// install=false, the capability slot is left empty so word handlers
+// that try to reach it produce capability_not_installed errors.
+// When a policy is present without install=false, the FileOps is
+// wrapped with permissionedFileOps so each call is gated.
 func SetHostFileOps(r *Registry, ops capabilities.FileOps) {
+	if pol := HostPolicy(r); pol != nil {
+		if !pol.Installed("fileops") {
+			// Uninstall: remove the slot so HostFileOps returns nil.
+			_, _ = r.Capabilities.Delete(CapFileOps)
+			return
+		}
+		ops = NewPermissionedFileOps(ops, pol)
+	}
 	_ = r.Capabilities.Set(CapFileOps, ops)
 	if formats := HostFormats(r); formats != nil {
 		if jf, ok := formats["jsonic"].(*JsonicFormat); ok {
@@ -49,7 +92,14 @@ func HostFormats(r *Registry) map[string]Format {
 }
 
 // SetHostFormats installs the format registry as a single capability.
+// When a policy has formats.install=false, the slot is removed so
+// HostFormats returns nil and read/write handlers raise
+// capability_not_installed.
 func SetHostFormats(r *Registry, formats map[string]Format) {
+	if pol := HostPolicy(r); pol != nil && !pol.Installed("formats") {
+		_, _ = r.Capabilities.Delete(CapFormats)
+		return
+	}
 	_ = r.Capabilities.Set(CapFormats, formats)
 }
 
@@ -59,8 +109,14 @@ func HostSQLite(r *Registry) *SQLiteStore {
 	return store
 }
 
-// SetHostSQLite installs the SQLite store as a capability.
+// SetHostSQLite installs the SQLite store as a capability. When a
+// policy has sqlite.install=false, the slot is removed so HostSQLite
+// returns nil and sqlite-* word handlers raise capability_not_installed.
 func SetHostSQLite(r *Registry, store *SQLiteStore) {
+	if pol := HostPolicy(r); pol != nil && !pol.Installed("sqlite") {
+		_, _ = r.Capabilities.Delete(CapSQLite)
+		return
+	}
 	_ = r.Capabilities.Set(CapSQLite, store)
 }
 
@@ -68,6 +124,11 @@ func SetHostSQLite(r *Registry, store *SQLiteStore) {
 // invocation. When __sys.fs.mem is set on the active context store the
 // in-memory variant is returned (and cached as a capability on first
 // use); otherwise the regular host fileops is returned.
+//
+// Never returns nil: if the policy has uninstalled the fileops
+// capability, HostFileOps returns notInstalledFileOps so consumers
+// can call methods without a nil guard and get a clean error.
+// Returns nil only when r itself is nil (a misconfigured registry).
 //
 // This logic used to live on eng.Registry; it now lives here
 // because aqleng has no fileops concept.

@@ -7,9 +7,15 @@ import (
 	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/modules"
 	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/aql-lang/aql/lang/go/policy"
 
 	udk "voxgiguniversalsdk"
 )
+
+// Policy is the public alias for the permissions policy interface.
+// Callers construct one via policy.Load / LoadFile / LoadInline /
+// LoadAuto / FromMap and pass it through Options.
+type Policy = policy.Policy
 
 // FileOps is the interface for file system operations used by read/write words.
 type FileOps = capabilities.FileOps
@@ -86,6 +92,13 @@ type Options struct {
 	// Seed sets the random seed for ID generation.
 	// If zero, the current time is used.
 	Seed int64
+	// Policy is the optional permissions profile applied to this
+	// instance. Nil means "no permissions configured" — the engine
+	// and every capability wrapper treat that as allow-everything,
+	// preserving the historical default. When set, the policy is
+	// installed before host capabilities so SetHostX hooks can
+	// auto-wrap or skip-install per the profile.
+	Policy policy.Policy
 }
 
 // AQL is an independent AQL execution instance.
@@ -114,7 +127,7 @@ func New(opts ...Options) (*AQL, error) {
 		native.SetIDSeed(o.Seed)
 	}
 
-	reg, err := native.DefaultRegistry()
+	reg, err := native.DefaultRegistryWithPolicy(o.Policy)
 	if err != nil {
 		return nil, err
 	}
@@ -137,6 +150,14 @@ func New(opts ...Options) (*AQL, error) {
 // Options returns the Options the instance was created with.
 func (a *AQL) Options() Options {
 	return a.options
+}
+
+// Policy returns the policy installed on this instance, or nil if
+// none was configured. Equivalent to a.Options().Policy but reads
+// the live capability slot, so it reflects any subsequent
+// SetHostPolicy calls (rare; intended for tooling).
+func (a *AQL) Policy() Policy {
+	return native.HostPolicy(a.registry)
 }
 
 // Check parses the source and runs it through the engine in static

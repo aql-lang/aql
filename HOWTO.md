@@ -448,8 +448,8 @@ for 10 [dup mod 2 eq 0 if [continue] else [print dup]]
 
 ```
 typeof 42                     => Integer
-typeof "hello"                => String
-fulltypeof 42                 => Scalar/Number/Integer
+typeof "hello"                => ProperString
+pathof Integer                => [Scalar Number Integer]
 42 is Number                  => true
 42 is String                  => false
 ```
@@ -651,3 +651,105 @@ def y add x end 5                     # bind y to (add x), with 5 left on stack
 
 Read more in
 **[Explanation §the end keyword](EXPLANATION.md#the-end-keyword)**.
+
+
+## Sandbox untrusted code
+
+AQL has an opt-in permissions model that can restrict what a program
+is allowed to do — useful for running submitted code (`aql exec`),
+embedded scripts, or untrusted plugins. By default there are no
+restrictions; permissions activate only when you pass a `--perms`
+flag or `Options.Policy` to `lang.New`.
+
+### Built-in profiles
+
+```bash
+aql policy list
+```
+
+Common profiles, most-permissive first:
+
+| Profile | What it permits |
+|---|---|
+| `full` | Everything (default; equivalent to no policy). |
+| `trusted` | Everything; same as `full` but explicit. |
+| `client` | Read disk, outbound network (host-configured); no writes. |
+| `read-only` | Read disk + read safe env vars; no writes, no network. |
+| `sandbox` | Engine + math/time modules; no disk write, no network, no process. |
+| `compute` | Pure computation; no I/O capabilities installed at all. |
+
+### Run code under a profile
+
+```bash
+aql do --perms=sandbox 1 add 2                   # 3
+aql -e '1 add 2' --perms=read-only               # 3
+aql script.aql --perms-file=./prod-policy.jsonic
+aql exec -p 8091 --perms=sandbox                 # bound at startup
+```
+
+### Incremental overrides
+
+`--allow` / `--deny` accumulate rules on top of the base profile.
+`--no-install` removes a capability slot entirely (the wrapped
+FileOps / SQLite / etc. is never constructed).
+
+```bash
+aql do --perms=sandbox --allow=engine.shell true
+aql exec --perms=trusted --no-install=network --no-install=sqlite
+aql do --perms-inline='{ scopes: { engine: { words: { default: "deny", rules: [{ allow: ["add"] }] } } } }' 1 add 2
+```
+
+For where-bearing rules (paths, hosts), use `--perms-inline` or a
+`--perms-file`:
+
+```bash
+aql exec --perms-inline='{
+  scopes: {
+    fileops: { words: {
+      default: "deny"
+      rules: [{ allow: ["read"], where: { path: ["/srv/data/**"] } }]
+    } }
+  }
+}'
+```
+
+### Debug a denial
+
+`aql policy explain` prints why a check would be allowed or denied:
+
+```bash
+aql policy explain sandbox fileops.write path=/etc/passwd
+# profile:  sandbox
+# scope:    fileops
+# op:       write
+# decision: DENY
+# blame:    global.disk.write (rule #1)
+```
+
+### Author a custom profile
+
+Profiles are jsonic documents. Drop one in
+`~/.config/aql/policies/<name>.jsonic` to make it loadable by short
+name. See `aql policy show sandbox --json` for a starting point and
+**[lang/doc/design/PERMISSIONS.0.md](lang/doc/design/PERMISSIONS.0.md)**
+for the full schema.
+
+### What the model gates
+
+- **`engine` scope** — kernel words (add, dup, def, …).
+- **`modules` scope** — which `aql:*` modules can be imported and
+  which exports are callable.
+- **Capability scopes** — `fileops`, `network`, `sqlite`, `formats`,
+  `env`, `process`, `clock`. Each can be uninstalled with
+  `install: false` or have its operations gated by rules.
+- **`global` scope** — hard caps like `disk.write`, `network`,
+  `process`. A global denial overrides any allow rule below it.
+
+The HTTP `aql exec` service deliberately does NOT accept policy in
+the request body — the policy is bound at server startup. Run
+multiple `aql exec` instances on different ports for different
+policies.
+
+For running AQL-from-AQL with stricter permissions (test harnesses,
+plugin sandboxes), the `aql:vm` native module exposes
+`vm.run`/`vm.run-with` with capability attenuation.

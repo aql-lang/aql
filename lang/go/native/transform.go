@@ -26,6 +26,12 @@ func transformHandler(args []Value, ctx map[string]Value, stack []Value, r *Regi
 	return []Value{val}, nil
 }
 
+// ValueToAny is the exported entry point to the value→Go-any
+// conversion. The unexported valueToAny is the in-package alias
+// kept for existing handler call sites; new external callers (e.g.
+// lang/go/modules) should use this name.
+func ValueToAny(v Value) any { return valueToAny(v) }
+
 // valueToAny converts an Value to a Go any for use with voxgig struct.
 func valueToAny(v Value) any {
 	// Type literals (e.g. bare Map, List, Integer) have Data==nil.

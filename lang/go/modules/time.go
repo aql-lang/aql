@@ -56,7 +56,9 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	// Formatting
 	exports.Set("to-string", makeTimeFnDef("to-string", []native.FnParam{{Type: native.TDate}}, []*native.Type{native.TString}, subReg))
-	exports.Set("format", makeTimeFnDef("format", []native.FnParam{{Type: native.TDate}, {Type: native.TString}}, []*native.Type{native.TString}, subReg))
+	// Params match the inner native's Args (sig order: top-first).
+	// stack `date layout`: Params[0]=layout (top, String), Params[1]=date (deeper, Date).
+	exports.Set("format", makeTimeFnDef("format", []native.FnParam{{Type: native.TString}, {Type: native.TDate}}, []*native.Type{native.TString}, subReg))
 	exports.Set("to-iso", makeTimeFnDef("to-iso", []native.FnParam{{Type: native.TDate}}, []*native.Type{native.TString}, subReg))
 
 	// Duration construction
@@ -96,29 +98,29 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("to-date", makeTimeFnDef("to-date", []native.FnParam{{Type: native.TDateTime}}, []*native.Type{native.TDate}, subReg))
 	exports.Set("to-time-of-day", makeTimeFnDef("to-time-of-day", []native.FnParam{{Type: native.TDateTime}}, []*native.Type{native.TTimeOfDay}, subReg))
 	exports.Set("to-datetime", makeTimeFnDef("to-datetime", []native.FnParam{{Type: native.TDate}}, []*native.Type{native.TDateTime}, subReg))
-	exports.Set("to-instant", makeTimeFnDef("to-instant", []native.FnParam{{Type: native.TDateTime}, {Type: native.TTimezone}}, []*native.Type{native.TInstant}, subReg))
-	exports.Set("to-local", makeTimeFnDef("to-local", []native.FnParam{{Type: native.TInstant}, {Type: native.TTimezone}}, []*native.Type{native.TDateTime}, subReg))
+	// Wrapper Params match the inner native Args (sig order, top-first).
+	exports.Set("to-instant", makeTimeFnDef("to-instant", []native.FnParam{{Type: native.TTimezone}, {Type: native.TDateTime}}, []*native.Type{native.TInstant}, subReg))
+	exports.Set("to-local", makeTimeFnDef("to-local", []native.FnParam{{Type: native.TTimezone}, {Type: native.TInstant}}, []*native.Type{native.TDateTime}, subReg))
 	exports.Set("to-utc", makeTimeFnDef("to-utc", []native.FnParam{{Type: native.TInstant}}, []*native.Type{native.TDateTime}, subReg))
 
 	// Rounding
-	exports.Set("start-of", makeTimeFnDef("start-of", []native.FnParam{{Type: native.TDate}, {Type: native.TString}}, []*native.Type{native.TDate}, subReg))
-	exports.Set("end-of", makeTimeFnDef("end-of", []native.FnParam{{Type: native.TDate}, {Type: native.TString}}, []*native.Type{native.TDate}, subReg))
+	exports.Set("start-of", makeTimeFnDef("start-of", []native.FnParam{{Type: native.TString}, {Type: native.TDate}}, []*native.Type{native.TDate}, subReg))
+	exports.Set("end-of", makeTimeFnDef("end-of", []native.FnParam{{Type: native.TString}, {Type: native.TDate}}, []*native.Type{native.TDate}, subReg))
 
 	// Timezone
 	exports.Set("tz-utc", makeTimeFnDef("tz-utc", []native.FnParam{}, []*native.Type{native.TTimezone}, subReg))
 	exports.Set("tz-local", makeTimeFnDef("tz-local", []native.FnParam{}, []*native.Type{native.TTimezone}, subReg))
 	exports.Set("tz-name", makeTimeFnDef("tz-name", []native.FnParam{{Type: native.TTimezone}}, []*native.Type{native.TString}, subReg))
-	exports.Set("tz-offset", makeTimeFnDef("tz-offset", []native.FnParam{{Type: native.TInstant}, {Type: native.TTimezone}}, []*native.Type{native.TString}, subReg))
-	exports.Set("is-dst", makeTimeFnDef("is-dst", []native.FnParam{{Type: native.TInstant}, {Type: native.TTimezone}}, []*native.Type{native.TBoolean}, subReg))
+	exports.Set("tz-offset", makeTimeFnDef("tz-offset", []native.FnParam{{Type: native.TTimezone}, {Type: native.TInstant}}, []*native.Type{native.TString}, subReg))
+	exports.Set("is-dst", makeTimeFnDef("is-dst", []native.FnParam{{Type: native.TTimezone}, {Type: native.TInstant}}, []*native.Type{native.TBoolean}, subReg))
 
 	// Parsing — removed as a feature. parse-date / parse-datetime
 	// (layout-based) and auto-date (auto-format-detecting) are gone.
 
-	// Legacy arithmetic — FnDef params are in user-facing positional order
-	// (deepest-first match): `date n add-days`. The underlying NativeFunc
-	// sig is "data-last" (top-of-stack-first match): [TInteger, TDate].
+	// Wrapper Params match inner native Args (sig order, top-first):
+	// stack `date n add-days` → top=n (Integer)=sig[0], deeper=date (Date)=sig[1].
 	for _, name := range []string{"add-days", "add-months", "add-years"} {
-		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TDate}, {Type: native.TInteger}}, []*native.Type{native.TDate}, subReg))
+		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TInteger}, {Type: native.TDate}}, []*native.Type{native.TDate}, subReg))
 	}
 
 	modID := parent.Modules.NextID()

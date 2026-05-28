@@ -738,6 +738,18 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 		names = append(names, cb.Name)
 	}
 
+	// args is in top-first sig order (matchSignature convention):
+	// args[0] is the value that filled sig position 0 = outer-stack top.
+	//
+	// Named params: bind args[i] to Params[i].Name. The first declared
+	// name binds to the outer-stack top.
+	//
+	// Unnamed params: push args[i] into the body's frame in i-order
+	// (args[0] first, args[N-1] last). The body therefore sees args[0]
+	// at the bottom of its frame and args[N-1] on top, the same
+	// convention InstallFnDef's handler closure uses. This is the ONE
+	// arg-flow convention across every fn dispatch path post-
+	// SIG-ORDER-REFACTOR.0: no reordering anywhere.
 	for i, p := range sig.Params {
 		if p.Name != "" {
 			arg := args[i]
