@@ -1,12 +1,32 @@
 # Property-Based Testing for AQL
 
-> **STATUS: READY TO RESUME (2026-05-27)**
+> **STATUS: STAGE 0 COMPLETE — READY FOR STAGE 3 (2026-05-28)**
 >
-> Stages 0d, 1, and 2 landed in commit 7d46b68 (aql:rand module, gen
-> policy profile, expandDottedWord doc cleanup). The
-> argument-ordering refactor (`design/SIG-ORDER-REFACTOR.0.md`) that
-> was blocking the remaining stages has landed too — every dispatch
-> path now agrees on top-first sig order.
+> Stages 0a/0b/0c/0d/1/2 are all done. Remaining work: PropertySpec
+> Record + check-prop loop (Stage 3), word-policy/cost annotations
+> (Stage 4), reducer (Stage 5), decision PBT spec (Stage 6).
+>
+> What landed:
+> - Stage 0d (7d46b68): expandDottedWord doc cleanup.
+> - Stage 1 (7d46b68 + 4ca8ffc): aql:rand module with
+>   `rand.with-seed N` for deterministic instances; top-level is
+>   non-deterministic by default; half-open `[lo, hi)` range.
+> - Stage 2 (7d46b68): `gen` policy profile.
+> - Stage 0a/0b/0c (this commit): kernel-level `eng/go/stackform/`
+>   package — `StackForm`, `Compile`, `Eval`, `Pretty`, `Cost`,
+>   `Equal`, `Walk`. Engine carries an opt-in `Recorder` hook fired
+>   from execMatch + the forward-completion site; stepCloseParen
+>   notifies via `RecorderSkipper.Skip` to dedupe paren-rewind
+>   re-visits. Equivalence tests in
+>   `lang/go/test/stackform_equivalence_test.go` confirm
+>   `Eval(Compile(reg, src)) ≡ direct Run(src)` for arithmetic,
+>   comparisons, strings, stack ops, lists, paren grouping, and
+>   forward/stack/swap surface forms. Pretty-print round-trips
+>   produce equivalent forms.
+>
+> The argument-ordering refactor (`design/SIG-ORDER-REFACTOR.0.md`)
+> that was blocking Stage 0 has landed too — every dispatch path
+> agrees on top-first sig order.
 >
 > **API update post-refactor**: the rand module has been reshaped so
 > the **top-level** `rand.*` is non-deterministic by default (clock-
@@ -31,9 +51,10 @@
 > check or a stricter sub-profile that denies top-level rand words,
 > forcing PBT runs to pass through seeded instances.
 >
-> Resume with Stage 0a (stack-form types + `eng/go/stackform/`
-> package). The rand-API notes above are the only things in this
-> doc that have changed since it was paused.
+> Resume with Stage 3 (PropertySpec Record + check-prop loop in
+> aql:test). Stage 4 (word-policy/cost) and Stage 5 (reducer) build
+> on the now-available `stackform.Compile`, `Eval`, `Pretty`, `Cost`,
+> and `Walk` primitives.
 
 ## Context
 

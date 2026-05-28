@@ -159,6 +159,7 @@ type MatchResult struct {
 	Sig       *Signature
 	Args      []Value // args in signature order
 	Positions []int   // absolute stack indices of each arg (nil for 0-arg)
+	Name      string  // word name being dispatched (for tracing/recording)
 }
 
 // MatchSignature finds the first matching signature for a function given the

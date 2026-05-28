@@ -29,11 +29,57 @@ type Engine struct {
 	registry  *Registry
 	trace     TraceCallback
 	traceNote string          // annotation set during execution for the next trace call
+	recorder  Recorder        // optional StackForm recorder; see stackform package
 	stepLimit int             // hard cap on the Run loop; always positive, set by the New/NewTop constructors below
 	marks     map[string]bool // active mark IDs (for mark/move control flow)
 	source    string          // original source text for error reporting
 	isTop     bool            // true for engines created via NewTop; an unhandled FlowCtrl at end-of-Run is an error here, propagates upward otherwise
 }
+
+// RecorderSkipper is an optional extension to Recorder. When a
+// Recorder also implements RecorderSkipper, the engine can tell it
+// to suppress the next N OnPushLit events — used by stepCloseParen
+// (and other rewind paths) where the engine's main loop re-visits
+// stack values that have already been emitted to the recorder via
+// their original push event.
+type RecorderSkipper interface {
+	Skip(n int)
+}
+
+// Recorder receives events as the Engine executes a program. Used by
+// the eng/go/stackform package to build a canonical strict-stack
+// representation of a program (see design/PBT-PLAN.0.md and
+// design/aql-bytecode-report.0.md). Nil by default; install via
+// Engine.SetRecorder.
+//
+// Recorder is called at the two semantic actions that define a
+// strict-stack form:
+//
+//   - OnPushLit fires when a source literal gets pushed onto the
+//     stack at the current pointer. Handler return values that the
+//     engine re-encounters at the pointer also trigger this — the
+//     recorder is responsible for distinguishing source-literals
+//     from handler-results via the `returns` count delivered by
+//     OnCall (the next `returns` OnPushLit events are handler
+//     outputs, not source data).
+//   - OnCall fires AFTER a successful matchSignature dispatch and
+//     handler invocation. `arity` is len(matched-sig.Args); `returns`
+//     is the number of values the handler actually produced; `name`
+//     is the word the caller invoked. Recorders typically suppress
+//     the next `returns` OnPushLit events.
+//
+// Recorders that need to capture nested sub-programs (e.g. quoted
+// list bodies passed as NoEvalArgs) install themselves on the
+// sub-engine that runs them.
+type Recorder interface {
+	OnPushLit(v Value)
+	OnCall(name string, arity, returns int)
+}
+
+// SetRecorder installs a Recorder on this engine. Pass nil to clear.
+// Recorder events fire during Run(); see the Recorder interface
+// for the semantics of each callback.
+func (e *Engine) SetRecorder(r Recorder) { e.recorder = r }
 
 // Default step limits for the Run loop. Exposed as named constants so
 // every Engine constructor names them explicitly — there is no
@@ -883,7 +929,7 @@ func (e *Engine) stepWord(val Value) error {
 	}
 
 	// Immediate execution: read args from recorded positions.
-	match := &MatchResult{Sig: sig, Positions: positions}
+	match := &MatchResult{Sig: sig, Positions: positions, Name: w.Name}
 	if stkCount > 0 {
 		match.Args = make([]Value, stkCount)
 		for i, pos := range positions {
@@ -1024,6 +1070,9 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		if err != nil {
 			return err
 		}
+		if e.recorder != nil {
+			e.recorder.OnCall(match.Name, n, len(results))
+		}
 		// FullStack handler returns the complete replacement for
 		// everything from base through the pointer (inclusive).
 		stackSplice(&e.stack, base, e.pointer+1-base, results...)
@@ -1034,6 +1083,9 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	results, err := match.Sig.Handler(match.Args, ctx, nil, e.registry)
 	if err != nil {
 		return e.maybeAddFnShapeHint(err)
+	}
+	if e.recorder != nil {
+		e.recorder.OnCall(match.Name, n, len(results))
 	}
 
 	return e.spliceMatchResults(match, sortedIndices, n, results)
@@ -1242,6 +1294,12 @@ func (e *Engine) stepLiteral() error {
 				return e.execFnDefLiteral(valIdx)
 			}
 		}
+		// Record the literal-push event for any installed Recorder.
+		// Skip engine-internal control values (markers, the recorded
+		// FnDef-as-data above is handled by OnCall when it dispatches).
+		if e.recorder != nil && isRecordableLiteral(val) {
+			e.recorder.OnPushLit(val)
+		}
 		e.pointer++
 		return nil
 	}
@@ -1321,6 +1379,28 @@ func (e *Engine) stepLiteral() error {
 		// the deep end (sigArgs[0..F-1]), stack args reversed after them.
 		e.pointer = funcIdx
 		e.rearrangeForForward(fwd.StackArgs, fwd.CollectedArgs)
+
+		// Recorder hook: emit OnPushLit for each forward-collected
+		// arg now that they're laid out on the stack in the order
+		// the upcoming stack-only re-dispatch will see (deepest at
+		// funcIdx-F, top just below WORD at funcIdx-1). Emitting
+		// deepest-first matches the replay push order — a Flatten +
+		// re-run will rebuild the same stack shape.
+		//
+		// Stack args fired OnPushLit earlier when their source
+		// literals reached the pointer (via the bare-stack branch
+		// in stepLiteral). Only the forward args need this hook.
+		if e.recorder != nil && fwd.CollectedArgs > 0 {
+			start := funcIdx - fwd.CollectedArgs
+			for i := start; i < funcIdx; i++ {
+				if i >= 0 && i < len(e.stack) {
+					v := e.stack[i]
+					if isRecordableLiteral(v) {
+						e.recorder.OnPushLit(v)
+					}
+				}
+			}
+		}
 	} else {
 		e.stack[fwdIdx] = NewForward(fwd)
 		e.pointer = fwdIdx + 1
@@ -1663,7 +1743,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		}
 		trivialDelegation := isTrivialDelegationBody(wrapperSig, fnDef.Name)
 		if trivialDelegation && sig.Handler != nil {
-			match := &MatchResult{Sig: sig, Positions: positions}
+			match := &MatchResult{Sig: sig, Positions: positions, Name: fnDef.Name}
 			if len(positions) > 0 {
 				match.Args = make([]Value, len(positions))
 				for i, pos := range positions {
@@ -1684,7 +1764,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 
 	// Pure-stack match: dispatch via execMatch the same way a bare
 	// word with no forward args would.
-	match := &MatchResult{Sig: sig, Positions: positions}
+	match := &MatchResult{Sig: sig, Positions: positions, Name: fnDef.Name}
 	if len(positions) > 0 {
 		match.Args = make([]Value, len(positions))
 		for i, pos := range positions {
@@ -1692,6 +1772,25 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		}
 	}
 	return e.execMatch(match)
+}
+
+// isRecordableLiteral reports whether a stepLiteral value should be
+// surfaced to a Recorder. Control-flow markers and engine-internal
+// shapes (Forward/Mark/Move/ReturnCheck/DefCleanup/OpenParen/CloseParen/End/Internal)
+// are NOT user-visible literals — they're scaffolding around the
+// real data, and a stack-form recording wants only the data.
+func isRecordableLiteral(v Value) bool {
+	if v.Parent == nil {
+		return false
+	}
+	switch {
+	case IsForward(v), IsOpenParen(v), IsCloseParen(v), IsEnd(v):
+		return false
+	case v.Parent.Matches(TMark), v.Parent.Matches(TMove),
+		v.Parent.Matches(TReturnCheck), v.Parent.Matches(TInternal):
+		return false
+	}
+	return true
 }
 
 // isTrivialDelegationBody reports whether a wrapper FnSig is a pure
@@ -2626,6 +2725,35 @@ func (e *Engine) stepCloseParen() error {
 	// The values between them are already in place.
 	stackRemove(&e.stack, closeIdx)
 	stackRemove(&e.stack, openIdx)
+
+	// Recorder hook: the values that survived inside the paren will
+	// be re-encountered by the main loop after we set pointer back
+	// to openIdx (below). They were already emitted to the recorder
+	// during the in-paren execution (via stepLiteral or via execMatch
+	// for handler results), so tell a SkipRecorder to ignore the
+	// next round.
+	if skipper, ok := e.recorder.(RecorderSkipper); ok && e.recorder != nil {
+		survived := 0
+		// Contents now sit at [openIdx .. closeIdx-2] inclusive.
+		// (closeIdx was the position of the CloseParen BEFORE the
+		// pair removals; both removals happened above so the
+		// surviving content occupies indices openIdx through
+		// closeIdx-2 in the new stack — same as [openIdx, closeIdx-1)
+		// in the original stack indices, minus 1 for the removed
+		// OpenParen.)
+		end := closeIdx - 1
+		if end > len(e.stack) {
+			end = len(e.stack)
+		}
+		for i := openIdx; i < end; i++ {
+			if isRecordableLiteral(e.stack[i]) {
+				survived++
+			}
+		}
+		if survived > 0 {
+			skipper.Skip(survived)
+		}
+	}
 
 	e.pointer = openIdx
 	return nil
