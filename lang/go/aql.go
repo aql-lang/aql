@@ -132,7 +132,7 @@ func New(opts ...Options) (*AQL, error) {
 		return nil, err
 	}
 	reg.SetParseFunc(parser.Parse)
-	reg.Modules.Resolver = modules.Resolve
+	modules.InstallResolver(reg)
 
 	um := udk.NewUniversalManager(map[string]any{
 		"registry": o.Registry,

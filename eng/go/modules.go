@@ -35,6 +35,23 @@ func NewModuleRegistry() *ModuleRegistry {
 	return &ModuleRegistry{loaded: make(map[string]bool)}
 }
 
+// InheritConfig copies the module CONFIG — the host-installed callbacks
+// (InitFunc and Resolver) — from parent into m as a single unit, leaving
+// m's own per-registry runtime state (the loaded set and the ID sequence)
+// untouched. Module-body spin-up sites MUST call this instead of copying
+// the callback fields one at a time: the field-by-field copying is exactly
+// how the Resolver came to be silently dropped, which broke
+// `import "aql:math"` from file-imported modules (native-module imports
+// only worked from the top-level script). A new config field added here is
+// then inherited at every spin-up site by default.
+func (m *ModuleRegistry) InheritConfig(parent *ModuleRegistry) {
+	if m == nil || parent == nil {
+		return
+	}
+	m.InitFunc = parent.InitFunc
+	m.Resolver = parent.Resolver
+}
+
 // IsLoaded reports whether the named native module has already been
 // loaded (so a second import is a no-op rather than a re-installation).
 func (m *ModuleRegistry) IsLoaded(name string) bool {
