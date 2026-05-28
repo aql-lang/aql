@@ -14,10 +14,13 @@ a word, see the **[Reference](REFERENCE.md)**.
 
 ## 1. Install and start the REPL
 
-Install the binary, then run it with no arguments:
+Until v0.1.0 is tagged, build from a clone (the cmd/go module
+carries local `replace` directives, so `go install …@latest` is
+not yet supported):
 
 ```bash
-go install github.com/aql-lang/aql/cmd/go/aql@latest
+git clone https://github.com/aql-lang/aql
+cd aql/cmd/go && go install ./aql
 aql
 ```
 
@@ -79,30 +82,64 @@ Unlike Forth, AQL words can collect arguments from after themselves
 as well as from the stack. The same `add` works in three positions:
 
 ```
-aql> 1 2 add        # prefix — both args from stack
+aql> 1 2 add        # all-stack — both args from stack
 3
-aql> add 1 2        # forward — both args after the word
+aql> add 1 2        # all-forward — both args after the word
 3
-aql> 1 add 2        # infix — one from stack, one forward
+aql> 1 add 2        # mixed — one from stack, one forward
 3
 ```
 
-This is why `10 sub 3` reads naturally as "10 minus 3":
+### The argument-order rule
+
+When a word runs, AQL fills its parameter slots `args[0]`, `args[1]`,
+… in this order:
+
+1. **Take tokens after the word, in source order**, into `args[0]`,
+   `args[1]`, …, until either the signature is full or a barrier is
+   hit (`end`, `)`, another function word, type mismatch).
+2. **Fill any slots still empty from the stack, top-first** — the
+   top of stack goes into the next-to-fill slot.
+
+So for an asymmetric operation like `sub` (whose handler computes
+`args[1] - args[0]` — deeper minus top — to read naturally as
+"a minus b"), all three call forms compute the same thing:
 
 ```
-aql> 10 sub 3
+aql> 10 3 sub       # all-stack: args[0]=top=3, args[1]=10  →  10 - 3
+7
+aql> 10 sub 3       # mixed:    args[0]=3 (forward), args[1]=10 (stack)  →  10 - 3
+7
+aql> sub 3 10       # all-forward: args[0]=3 (first), args[1]=10 (second)  →  10 - 3
 7
 ```
 
-You'll mix all three styles as your code grows. See
-**[Explanation §Forward Collection](EXPLANATION.md#forward-collection-beyond-reverse-polish)**
-for what's happening underneath.
+The pattern: `a sub b` always means `a - b`, no matter where `a` and
+`b` are written. The three forms above all encode `a=10, b=3`. Note
+that `sub 10 3` is *not* the same expression — it encodes `a=3,
+b=10`, giving `-7`.
+
+User-defined functions follow the same rule. For
+`def show fn [[a:Number b:Number] [String] [`${a} and ${b}`]]`:
+
+```
+aql> show 1 2       # forward: args[0]=1=a, args[1]=2=b
+'1 and 2'
+aql> 2 show 1       # mixed: args[0]=1 (forward)=a, args[1]=2 (stack)=b
+'1 and 2'
+aql> 2 1 show       # all-stack: args[0]=top=1=a, args[1]=2=b
+'1 and 2'
+```
+
+See **[Explanation §Forward Collection](EXPLANATION.md#forward-collection-beyond-reverse-polish)**
+for the underlying mechanics.
 
 
 ## 4. Numbers, rounding, math
 
 Integers and decimals are different leaves of the same `Number`
-type. Arithmetic auto-promotes:
+type. Arithmetic auto-promotes. The core arithmetic words live at
+the top level:
 
 ```
 aql> 4 mul 5            => 20
@@ -110,34 +147,28 @@ aql> 2 pow 10           => 1024
 aql> 7 div 2            => 3        # integer division
 aql> 7.0 div 2          => 3.5      # decimal: real division
 aql> 10 mod 3           => 1
-aql> abs -5             => 5
-aql> 3 min 5            => 3
-aql> 3 max 5            => 5
+aql> 10 sub 3           => 7        # a sub b ≡ a - b (see §3)
 ```
 
-Rounding:
+For absolute value, rounding, roots, logs, trig, and the standard
+constants, import the `aql:math` module — words register under the
+`math.` prefix:
 
 ```
-aql> floor 3.7          => 3
-aql> ceil 3.2           => 4
-aql> round 3.5          => 4
-aql> trunc 3.9          => 3
-```
-
-Roots, logs, trig:
-
-```
-aql> sqrt 16            => 4
-aql> log 2.718281828    => 1.0
-aql> sin 0              => 0
-aql> hypot 3 4          => 5
-```
-
-Constants:
-
-```
-aql> math-pi            => 3.141592653589793
-aql> math-e             => 2.718281828459045
+aql> "aql:math" import end
+aql> math.abs -5        => 5
+aql> math.min 3 5       => 3
+aql> math.max 3 5       => 5
+aql> math.floor 3.7     => 3
+aql> math.ceil 3.2      => 4
+aql> math.round 3.5     => 4
+aql> math.trunc 3.9     => 3
+aql> math.sqrt 16       => 4.0
+aql> math.log 2.718281828   => 1.0
+aql> math.sin 0         => 0.0
+aql> math.hypot 3 4     => 5.0
+aql> math.pi            => 3.141592653589793
+aql> math.e             => 2.718281828459045
 ```
 
 
@@ -145,17 +176,21 @@ aql> math-e             => 2.718281828459045
 
 Strings use single or double quotes (they're interchangeable):
 
+For string words that take multiple arguments (`split`, `contains`,
+`indexof`, `slice`, `replace`), the clearest call form is
+all-forward: `WORD input arg…`. See
+[§3: the argument-order rule](#the-argument-order-rule).
+
 ```
 aql> "hello" upper                 => 'HELLO'
 aql> "HELLO" lower                 => 'hello'
-aql> "hello,world" split ","       => ['hello','world']
-aql> ["a","b","c"] concat          => 'abc'
-aql> "hello" contains "ell"        => true
-aql> "hello" indexof "ll"          => 2
-aql> "hello" slice 1 3             => 'el'
-aql> "hello" replace "l" "r"       => 'herro'
+aql> split "hello,world" ","       => ['hello','world']
+aql> ["a","b","c"] concat          => 'ab'    # joins list elements
+aql> contains "hello" "ell"        => true
+aql> indexof "hello" "ll"          => 2
+aql> slice "hello" 1 3             => 'el'
+aql> replace "hello" "l" "r"       => 'herlo'
 aql> "  hi  " trim                 => 'hi'
-aql> "ab" repeat 3                 => 'ababab'
 aql> "hi" pad 5                    => 'hi   '
 ```
 
@@ -319,13 +354,15 @@ aql> for 10 [dup gt 5 if [break]]
 
 ## 11. Higher-order list words
 
-These are the bread-and-butter of array programming in AQL:
+These are the bread-and-butter of array programming in AQL. Note
+how the multi-list combinators use the all-forward call shape so
+each list argument lands in a predictable slot — see
+[§3: the argument-order rule](#the-argument-order-rule).
 
 ```
 aql> [1, 2, 3] each [dup mul]        => [1,4,9]
-aql> [1, 2, 3, 4] where [gt 2]       => [3,4]
-aql> [1, 2, 3, 4, 5] fold 0 [add]    => 15
-aql> [1, 2, 3] scan 0 [add]          => [1,3,6]
+aql> fold [add] [1, 2, 3, 4, 5] 0    => 15        # body, data, init
+aql> scan [add] [1, 2, 3]            => [1,3,6]
 ```
 
 Sequence-building:
@@ -341,8 +378,8 @@ aql> [3, 1, 2] grade                  => [1,2,0]
 `outer` and `inner` are APL-style array combinators:
 
 ```
-aql> [1, 2] outer [10, 20] [mul]     => [[10,20],[20,40]]
-aql> [1, 2] inner [3, 4] [mul] [add] => 11      # 1*3 + 2*4
+aql> outer [mul] [10, 20] [1, 2]     => [[10,20],[20,40]]
+aql> inner [add] [mul] [3, 4] [1, 2] # body order: combine, product
 ```
 
 
@@ -367,36 +404,37 @@ aql> 42 is Scalar                    => true
 aql> 42 is String                    => false
 ```
 
-Convert with `make` (for scalars) or `convert`:
+Convert with `convert`:
 
 ```
 aql> convert Integer "42"            => 42
 aql> convert String 42               => '42'
-aql> make string 99                  => '99'
 ```
 
 
 ## 13. Records and tables
 
-`record` defines a struct-like type with named typed fields. `table`
-turns one into a list-of-rows type. `make` instantiates them:
+A record is a struct-like type with named typed fields; a table is a
+list-of-rows-conforming-to-a-record. Define both with
+`def NAME refine Record …` / `def NAME refine Table …`, and use
+`make` to instantiate:
 
 ```
-aql> type Point record [x:Number y:Number]
+aql> def Point refine Record [x:Number y:Number]
 aql> make Point [3 4]                => {x:3,y:4}
 aql> make Point {x:1 y:2}            => {x:1,y:2}
 
-aql> type Row record [name:String qty:Integer]
-aql> type Inventory table Row
+aql> def Row refine Record [name:String qty:Integer]
+aql> def Inventory refine Table Row
 aql> make Inventory [["Widget" 5] ["Bolt" 12]]
 => [{name:'Widget',qty:5},{name:'Bolt',qty:12}]
 ```
 
-Field constraints can be disjunctive — `[String tor none]` means
+Field constraints can be disjunctive — `(String tor none)` means
 "string or absent":
 
 ```
-aql> type Person record [name:String nick:[String tor none]]
+aql> def Person refine Record [name:String nick:(String tor none)]
 aql> make Person {name:"Alice" nick:"ace"}     => {name:'Alice',nick:'ace'}
 aql> make Person {name:"Bob"}                  => {name:'Bob',nick:none}
 ```
@@ -405,15 +443,18 @@ aql> make Person {name:"Bob"}                  => {name:'Bob',nick:none}
 ## 14. Scoped variables with `var`
 
 `var` introduces local names that are automatically un-defined at
-the end of the block:
+the end of the block. Bare-word declarations pop from the stack
+(top into the first listed name, etc. — matching the argument-order
+rule):
 
 ```
-aql> 3 4 var [[a b] (a mul a) add (b mul b) sqrt]      => 5.0
+aql> "aql:math" import end
+aql> 3 4 var [[a b] (a mul a) add (b mul b) math.sqrt]   => 5.0
 ```
 
-The first element of the list is the binding list (each name is
-peeled off the top of the stack). The remaining elements are the
-body. Inline values:
+The first element of the list is the binding list. The remaining
+elements are the body. `a` here binds to `4` (top of stack), `b` to
+`3`. Inline values:
 
 ```
 aql> var [[[x 2] [y 10]] x add y]               => 12
@@ -438,7 +479,8 @@ aql> do {x: [3 add 4], y: 5}        => {x:7,y:5}
 `call` splices a list onto the current stack:
 
 ```
-aql> 1 2 [add 10 mul] call           => 30
+aql> 1 2 [add] call                  => 3
+aql> [3 4 mul] call                  => 12
 ```
 
 `quote` prevents a single token from being interpreted:
@@ -519,36 +561,36 @@ The CLI enables it by default; embeddings may disable it.
 
 ## 19. Modules — namespaces and imports
 
-A *module* is a fresh evaluation context. Define one inline:
+A *module* is a fresh evaluation context. Define one inline with
+the `module` form, calling `export "namespace" {…}` to publish
+bindings:
 
 ```
-aql> import utils [
-  def helper [dup add]
-  def greet fn [[String] [String] [`hello ${args.0}`]]
-]
-aql> utils.helper 5                  => 10
-aql> utils.greet "Ada"               => 'hello Ada'
+aql> import module [
+       def helper [dup add]
+       def greet fn [[name:String] [String] [`hello ${name}`]]
+       export "utils" {helper: helper, greet: greet}
+     ]
+aql> "Ada" utils.greet               => 'hello Ada'
 ```
 
-Import from a file:
+Import from a file (path must start with `./`, `../`, or `/`):
 
 ```
-aql> import "lib/utils.aql"
+aql> "./lib/utils.aql" import
 ```
 
-Rename to avoid collisions:
+Built-in native modules: `aql:math`, `aql:time`, `aql:matrix`,
+`aql:decision`. Import them as quoted strings; the words register
+under a namespace prefix (e.g. `math.`, `time.`):
 
 ```
-aql> import [helper as h] "lib/utils.aql"
+aql> "aql:math" import end
+aql> 5 math.log                      => 1.6094379124341003
 ```
 
-Built-in modules: `aql:math`, `aql:time`, `aql:matrix`,
-`aql:decision`. Import them by name:
-
-```
-aql> import aql:time
-aql> aql:time.now
-```
+The trailing `end` stops `import`'s forward collection from
+grabbing the next token as a second module name.
 
 
 ## 20. Where to next

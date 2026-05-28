@@ -12,36 +12,41 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:        "sub",
-		Summary:     "Subtract the top value from the second value.",
-		Description: "Subtracts: a b sub produces a - b.",
+		Word:    "sub",
+		Summary: "Subtract: a sub b ≡ a - b.",
+		Description: "All three call forms `a b sub`, `a sub b`, and `sub b a` " +
+			"compute a - b. The handler returns args[1] - args[0]; under the " +
+			"argument-order rule args[0] is the rightmost source-position arg.",
 	})
 
 	register(&Entry{
 		Word:        "mul",
 		Summary:     "Multiply two numbers.",
-		Description: "Multiplies two numeric values.",
+		Description: "Multiplies two numeric values (commutative).",
 	})
 
 	register(&Entry{
-		Word:        "div",
-		Summary:     "Divide the second value by the top value.",
-		Description: "Divides: a b div produces a / b. Integer division truncates toward zero.",
+		Word:    "div",
+		Summary: "Divide: a div b ≡ a / b.",
+		Description: "All three call forms `a b div`, `a div b`, and `div b a` " +
+			"compute a / b. Integer division truncates toward zero.",
 		Notes: []string{
 			"Division by zero produces an error.",
 		},
 	})
 
 	register(&Entry{
-		Word:        "mod",
-		Summary:     "Compute the remainder of integer division.",
-		Description: "Computes: a b mod produces a %% b.",
+		Word:    "mod",
+		Summary: "Remainder: a mod b ≡ a %% b.",
+		Description: "All three call forms `a b mod`, `a mod b`, and `mod b a` " +
+			"compute a %% b (the remainder of integer division).",
 	})
 
 	register(&Entry{
-		Word:        "pow",
-		Summary:     "Raise a number to a power.",
-		Description: "Computes: a b pow produces a^b.",
+		Word:    "pow",
+		Summary: "Power: a pow b ≡ a^b.",
+		Description: "All three call forms `a b pow`, `a pow b`, and `pow b a` " +
+			"compute a^b.",
 		Notes: []string{
 			"Negative exponents produce an error for integer pow.",
 		},

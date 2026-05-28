@@ -405,6 +405,37 @@ func typeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 
 func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	a, b := args[1], args[0]
+	// Object/Table refinement RHS: the body is a populated type value
+	// (Data carries ObjectTypeInfo/TableTypeInfo), but its denoted
+	// lattice node is at b.Parent. For tag-identity ("does a carry
+	// T's tag?") we want to compare a.Parent against the lattice
+	// node. Without this, the handler falls through to UnifyR, which
+	// returns the body (not the instance) and the downstream
+	// ValuesEqual check rejects an instance-vs-body comparison even
+	// though the instance plainly carries the type's tag.
+	//
+	// This is the `is` analogue of canonicalizing in dispatch — same
+	// underlying question, different layers. Disjunct / DepScalar /
+	// bare-refine bodies have Data==nil so they already route through
+	// the b.Data==nil branch below; only Object/Table bodies need
+	// this redirect.
+	if (IsObjectType(b) || IsTableType(b)) && b.Parent != nil {
+		latticeNode := b.Parent
+		return []Value{NewBoolean(a.Parent.Equal(latticeNode) || a.Parent.IsSubtypeOf(latticeNode))}, nil
+	}
+	// Structural pattern RHS — typed list `[:T]`, typed map `{:T}`,
+	// record shape `{x:Integer}`. These are NOT lattice nodes; they
+	// denote a structural conformance check, not a tag-identity
+	// check. `IsValueOfType` (eng/go/core_type.go) is the canonical
+	// implementation — kernel-level `is` (engspec test runner) and
+	// the `enum` element validator both delegate to it. Production
+	// `is` historically reached the same answer via UnifyR + Parent
+	// + ValuesEqual, but routing through the shared helper makes the
+	// duplication go away: one structural-conformance function, both
+	// `is` runners consult it.
+	if IsTypedList(b) || IsTypedMap(b) || (b.Parent.Equal(TMap) && b.Data != nil) {
+		return []Value{NewBoolean(IsValueOfType(a, b))}, nil
+	}
 	if b.Parent.Equal(TFnUndef) && IsAtom(a) {
 		name, _ := AsAtom(a)
 		if top, ok := r.Defs.Top(name); ok {

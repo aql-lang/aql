@@ -132,8 +132,19 @@ func IsRecordShape(v Value) bool {
 	return true
 }
 
-// IsValueOfType reports whether v satisfies type T. Used by the `is`
-// word's handler.
+// IsValueOfType reports whether v satisfies type T. The canonical
+// implementation of structural-conformance type-checking. Called by:
+//   - the engspec test runner's kernel-level `is` word
+//     (test/go/engspec/engspec_test.go) — the engine's `is` answers
+//     "is v a T?" via this function directly.
+//   - the production `enum` constructor (lang/go/native/native_type.go)
+//     to validate that each element satisfies a typed-list child
+//     constraint.
+//   - the production `is` handler — for structural-pattern RHS
+//     (typed list / typed map / record shape). Other RHS shapes
+//     (Object/Table refinements, type literals, etc.) go through
+//     paths in the production handler that add tag-identity
+//     semantics on top.
 //
 // Rules:
 //   - T is a typed list `[:T]`: v must be a concrete list and every
@@ -148,9 +159,10 @@ func IsRecordShape(v Value) bool {
 //     type body (record shape, typed list/map, disjunct, fn-shape),
 //     or any Function / FunctionSignature / Disjunct / Enum value.
 //     Concrete scalars / lists / maps and the value `none` are not.
-//   - T is any other type literal (Data == nil), including `Function` /
-//     `Disjunct` / `Enum` / `FunctionSignature`: v's Parent must be a
-//     subtype of T's via the type lattice.
+//   - T is any other type literal (Data == nil): consult Behavior via
+//     v.Is(&t) — DefaultBehavior is lattice subtyping, and per-kind
+//     Unifiers (predicate, disjunct, dep-scalar, bare-refine) take
+//     over for user-defined refinements.
 //   - T is anything else: structural unification on (v, t).
 func IsValueOfType(v, t Value) bool {
 	if IsTypedList(t) {
@@ -345,6 +357,56 @@ func InstallType(r *Registry, name string, body Value) error {
 		}
 		def.Name = name
 		body.Name = name
+		// Attach a bareRefineUnifier so dispatch admits any value
+		// whose declared type satisfies the base. Without this, the
+		// fresh lattice node carries DefaultBehavior and the walk
+		// rejects every value because the prefab sits BELOW its base
+		// in the lattice, not above.
+		//
+		// Crucially we install on `def` (the lattice node consulted
+		// by sig dispatch via `LookupTypeName`) but NOT on `body`
+		// (the value returned by `Defs.Top` and consumed by the `is`
+		// word). The two paths intentionally answer different
+		// questions:
+		//   - dispatch asks "can v be passed where T is expected?"
+		//     → loose binding; admits base-compatible values.
+		//   - `is`     asks "does v carry T's tag?"
+		//     → strict identity; admits only narrowed/tagged values.
+		// See lang/go/test/typed_def_test.go::TestRefineBareDistinctFromAlias
+		// for the asymmetry assertion.
+		if def.Parent != nil {
+			installBareRefineUnifier(def, def.Parent, name)
+		}
+		r.Defs.PushType(name, def, body)
+	} else if IsDisjunct(body) {
+		// `def Maybe (Integer tor none)` route: mint a lattice node
+		// parented at the body's lattice (TDisjunct) and attach a
+		// disjunctUnifier so `42.Is(Maybe)` and sig dispatch consult
+		// the alternatives. Without this Unifier the lattice walk
+		// rejects every value because no value's parent chain reaches
+		// the Maybe node. Same dispatch-vs-`is` asymmetry as bare
+		// refine: install on `def`, not on `body`.
+		di, _ := AsDisjunct(body)
+		def := r.Types.MintType(name, body.Parent)
+		installDisjunctUnifier(def, di.Alternatives, name)
+		r.Defs.PushType(name, def, body)
+	} else if body.IsDepScalar() {
+		// `def Big (Integer gt 10)` route: mint a lattice node
+		// parented at the base scalar (the DepScalar's Parent — e.g.
+		// Integer) and attach a depScalarUnifier so dispatch runs the
+		// constraint. Without this Unifier the lattice walk would
+		// reject every value (Big isn't on any value's parent chain).
+		// Same dispatch-vs-`is` asymmetry: install on `def`, not on
+		// `body`.
+		di, err := body.AsDepScalar()
+		if err != nil {
+			return &AqlError{
+				Code:   "type_error",
+				Detail: "type " + name + ": DepScalar body unreadable: " + err.Error(),
+			}
+		}
+		def := r.Types.MintType(name, body.Parent)
+		installDepScalarUnifier(def, body.Parent, di, name)
 		r.Defs.PushType(name, def, body)
 	} else {
 		// A bare type-literal body IS the parent type after the

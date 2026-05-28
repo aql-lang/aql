@@ -114,9 +114,13 @@ lower/1 "GHI"                 => 'ghi'
 
 * **Stack machine.** Each token either pushes a value or invokes a
   word. The final stack is the result.
-* **Forward collection.** A word can collect arguments from after
-  itself as well as before, with stack-first then forward-fill into
-  signature slots.
+* **Argument-order rule.** When a word runs, its parameter slots
+  are filled **forward-first, then stack**. Tokens after the word
+  are taken in source order into `args[0]`, `args[1]`, … until a
+  barrier (`end`, `)`, another function word, type mismatch). Any
+  remaining slots are filled from the stack, top of stack into the
+  next-to-fill slot first. See
+  **[Tutorial §3](TUTORIAL.md#the-argument-order-rule)**.
 * **Type-directed collection.** A forward token is only consumed if
   it matches the next expected type; mismatches stop collection and
   the word executes with what it has (or fails if it doesn't have
@@ -203,7 +207,7 @@ slash-separated paths in `pathof`; short names like `Number` or
 either side:
 
 ```
-type OptInt (Integer tor none)
+def OptInt (Integer tor none)
 OptInt unify 5                => 5 true
 OptInt unify none             => none true
 OptInt unify "x"              => '~unify-fail' false
@@ -252,60 +256,36 @@ All stack words are stack-only (modifier `/s`).
 
 ### Arithmetic
 
-Forward-collecting, Integer/Decimal with auto-promotion.
+Forward-collecting, Integer/Decimal with auto-promotion. The
+asymmetric ops (`sub`, `div`, `mod`, `pow`) follow the
+**argument-order rule** — see
+[Tutorial §3](TUTORIAL.md#the-argument-order-rule). All three call
+forms `a b sub`, `a sub b`, and `sub b a` compute `a - b`.
 
 | Word | Operation | Example |
 |------|-----------|---------|
-| `add` | `a + b` | `1 add 2 => 3` |
+| `add` | `a + b` (commutative) | `1 add 2 => 3` |
 | `sub` | `a - b` | `10 sub 3 => 7` |
-| `mul` | `a * b` | `4 mul 5 => 20` |
+| `mul` | `a * b` (commutative) | `4 mul 5 => 20` |
 | `div` | `a / b` | `10 div 2 => 5` |
 | `mod` | `a % b` | `10 mod 3 => 1` |
 | `pow` | `a ^ b` | `2 pow 10 => 1024` |
-| `abs` | `|a|` | `abs -5 => 5` |
-| `negate` | `-a` | `negate 5 => -5` |
-| `sign` | `-1/0/1` | `sign -5 => -1` |
-| `min` | minimum | `3 min 5 => 3` |
-| `max` | maximum | `3 max 5 => 5` |
 
 `add` on non-numeric scalars performs string concatenation:
 `"a" add "b" => 'ab'`.
 
-### Rounding
+Additional numeric words (`abs`, `negate`, `sign`, `min`, `max`,
+`floor`, `ceil`, `round`, `trunc`, `sqrt`, `cbrt`, `exp`, `log`,
+`log2`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`,
+`atan2`, `hypot`, constants `math.pi`, `math.e`) live in the
+**`aql:math`** native module. Import to use:
 
-| Word | Description | Example |
-|------|-------------|---------|
-| `floor` | Round down | `floor 3.7 => 3` |
-| `ceil` | Round up | `ceil 3.2 => 4` |
-| `round` | Round nearest | `round 3.5 => 4` |
-| `trunc` | Truncate toward zero | `trunc 3.9 => 3` |
-
-### Roots, exponentials, logarithms
-
-| Word | Description |
-|------|-------------|
-| `sqrt` | Square root |
-| `cbrt` | Cube root |
-| `exp` | e^x |
-| `log` | Natural logarithm |
-| `log2` | Log base 2 |
-| `log10` | Log base 10 |
-
-### Trigonometry
-
-| Word | Description |
-|------|-------------|
-| `sin`, `cos`, `tan` | Standard trig functions |
-| `asin`, `acos`, `atan` | Inverse trig functions |
-| `atan2` | Two-argument arctangent |
-| `hypot` | Hypotenuse, `hypot a b = sqrt(a^2 + b^2)` |
-
-### Constants
-
-| Word | Value |
-|------|-------|
-| `math-pi` | 3.141592653589793 |
-| `math-e` | 2.718281828459045 |
+```
+"aql:math" import end
+math.abs -5                   => 5
+math.floor 3.7                => 3
+math.sqrt 16                  => 4
+```
 
 ### Strings
 
@@ -313,34 +293,36 @@ All forward-collecting. The "options" form takes a trailing map
 with named flags (see each word's docs in
 `lang/doc/design/LANGREF.10.md` for the full set).
 
+**Argument-order note:** for binary/ternary string words like
+`contains`, `indexof`, `slice`, `replace`, `split`, the
+all-forward form `WORD input arg…` is the clearest reading per the
+[argument-order rule](TUTORIAL.md#the-argument-order-rule). Infix
+forms work too but require placing the search/needle on the *left*
+of the word, with the haystack as the forward arg.
+
 | Word | Description | Example |
 |------|-------------|---------|
-| `upper` | Uppercase | `"hello" upper => 'HELLO'` |
-| `lower` | Lowercase | `"ABC" lower => 'abc'` |
-| `concat` | Join list elements into a string | `["a","b"] concat => 'ab'` |
-| `split` | Split string by separator | `"a,b" split "," => ['a','b']` |
-| `contains` | Substring test | `"hello" contains "ell" => true` |
-| `indexof` | Find position (–1 if absent) | `"hello" indexof "ll" => 2` |
-| `slice` | Substring; negative indices ok | `"hello" slice 1 3 => 'el'` |
-| `replace` | Replace pattern | `"hello" replace "l" "r" => 'herro'` |
-| `repeat` | Repeat string | `"ab" repeat 3 => 'ababab'` |
-| `trim` | Trim whitespace or chars | `"  hi  " trim => 'hi'` |
+| `upper` | Uppercase | `upper "hello" => 'HELLO'` |
+| `lower` | Lowercase | `lower "ABC" => 'abc'` |
+| `concat` | Join list elements into a string | `concat ["a","b"] => 'ab'` |
+| `split` | Split string by separator | `split "a,b" "," => ['a','b']` |
+| `contains` | Substring test | `contains "hello" "ell" => true` |
+| `indexof` | Find position (–1 if absent) | `indexof "hello" "ll" => 2` |
+| `slice` | Substring; negative indices ok | `slice "hello" 1 3 => 'el'` |
+| `replace` | Replace pattern | `replace "hello" "l" "r" => 'herlo'` |
+| `repeat` | Repeat string | `repeat "ab" 3 => 'ababab'` |
+| `trim` | Trim whitespace or chars | `trim "  hi  " => 'hi'` |
 | `pad` | Pad to width | `"hi" pad 5 => 'hi   '` |
-| `match` | Regex match | `"abc" match "b(c)" => {0:'bc',1:'c'}` |
-| `escape` | Escape special chars | `"a&b" {mode:'html} escape` |
-| `normalize` | Unicode normalize / cleanup | `"a  b" {collapseWs:true} normalize` |
-| `changecase` | Casing transform | `"fooBar" {style:'snake} changecase` |
-| `format` | printf-style format | `"%.2f" format 3.14159 => '3.14'` |
+| `match` | Regex match (returns a struct) | `match "abc" "b(c)"` |
 
 #### Options examples
 
+Pass an Options map as the *last* forward argument:
+
 ```
-"a,,b" "," {keepEmpty:true} split                       => ['a','','b']
-" a : b " ":" {trimParts:true} split                    => ['a','b']
-"Hello" "hello" {cs:"insensitive"} contains             => true
-"aaa" "a" "b" {scope:"all"} replace                     => 'bbb'
-"hi" 5 {side:"left"} pad                                => '   hi'
-"hello world" {style:"snake"} changecase                => 'hello_world'
+split   "a,,b"      ","    {keepEmpty: true}            => ['a','','b']
+contains "hello"    "Ell"  {cs: "insensitive"}          => true
+replace "aaa"       "a" "b" {scope: "all"}              => 'bbb'
 ```
 
 ### Boolean
@@ -378,7 +360,7 @@ All comparison words route through one total order — see
 | `def` | Define a word | `def x 42` |
 | `undef` | Remove the latest definition | `undef x` |
 | `fn` | Create typed function | `fn [[Integer] [Integer] [dup mul]]` |
-| `var` | Scoped variable block | `var [[x] x mul x]` |
+| `var` | Scoped variable block | `5 var [[x] x mul x] => 25` |
 | `args` | Current `fn` args list (inside body) | `args . 0` |
 | `call` | Splice list onto stack | `call [1 2 3]` |
 | `quote` | Prevent evaluation of next token | `quote [1 add 2]` |
@@ -401,19 +383,33 @@ def hyp fn [
 
 | Word | Description | Example |
 |------|-------------|---------|
-| `if` | Conditional; else branch optional | `5 gt 3 if ["y"] ["n"]` |
-| `for` | Numeric loop (counter or range) | `for 5 [dup mul]` |
+| `if` | Conditional; else branch optional | `if (5 gt 3) ["y"] ["n"]` |
+| `for` | Numeric loop (counter or range) | `for 5 [42]` |
 | `do` | Evaluate list as program | `do [1 add 2] => 3` |
 | `error` | Pattern-match an error value | `do [1 div 0] error [drop 42]` |
-| `break` | Exit `for` loop early | `for 10 [dup gt 5 if [break]]` |
-| `continue` | Skip to next iteration | `for 10 [dup mod 2 if [continue]]` |
+| `break` | Exit `for` loop early | `for 10 [break]` |
+| `continue` | Skip to next iteration | `for 10 [continue]` |
+
+For `if`, the canonical form is all-forward `if cond [then] [else]`
+— this is the form where the argument-order rule places cond into
+`args[0]`, then into `args[1]`, else into `args[2]` as the handler
+expects. See
+**[Tutorial §3](TUTORIAL.md#the-argument-order-rule)**.
 
 #### `for` forms
 
 ```
-for N [body]              # 0 .. N-1
-for [a, b] [body]         # a .. b-1
-for [a, b, step] [body]   # arithmetic progression
+for N [body]              # body runs N times (no iteration index pushed)
+for [a, b] [body]         # body runs b-a times
+for [a, b, step] [body]   # body runs (b-a)/step times
+```
+
+`for` does not push the iteration index onto the body's stack. To
+process a sequence with the index/element, use `iota N each [body]`
+(each pushes the element before running the body):
+
+```
+iota 5 each [dup mul]     => [0, 1, 4, 9, 16]
 ```
 
 ### List and array words
@@ -423,7 +419,6 @@ for [a, b, step] [body]   # arithmetic progression
 | `iota` | Generate `[0..N-1]` | `iota 5 => [0,1,2,3,4]` |
 | `reshape` | Change dimensions | `iota 6 reshape [2,3]` |
 | `flatten` | Remove one level of nesting | `[[1,2],[3]] flatten => [1,2,3]` |
-| `transpose` | Swap rows/columns | `[[1,2],[3,4]] transpose` |
 | `take` | First N elements | `[1,2,3,4] take 2 => [1,2]` |
 | `shed` | Drop first N | `[1,2,3,4] shed 2 => [3,4]` |
 | `reverse` | Reverse order | `[1,2,3] reverse => [3,2,1]` |
@@ -431,23 +426,29 @@ for [a, b, step] [body]   # arithmetic progression
 | `grade` | Indices that would sort | `[3,1,2] grade => [1,2,0]` |
 | `window` | Sliding window of size N | `[1,2,3,4] window 2` |
 | `pairs` | Adjacent pairs | `[1,2,3] pairs => [[1,2],[2,3]]` |
-| `group` | Group by key function | `[1,2,3] group [mod 2]` |
+| `group` | Pair parallel keys/values into a multi-map | `["a","b","a"] [1,2,3] group` |
 | `replicate` | Repeat each element N times | `[1,2,3] replicate [2,1,3]` |
 | `expand` | Expand by Boolean mask | `[1,2,3] expand [true,false,true]` |
 | `at` | Select by index list | `[10,20,30] at [2,0]` |
-| `sortby` | Sort by predicate | `[3,1,2] sortby []` |
-| `member` | Membership test | `[1,2,3] member 2 => true` |
+| `sortby` | Sort by parallel key list | `["b","a","c"] [2,1,3] sortby` |
+| `member` | Per-element membership test | `[1,2,3] [2,3,4] member => [true,true,false]` |
 
 ### Higher-order array words
 
 | Word | Description | Example |
 |------|-------------|---------|
 | `each` | Map a function | `[1,2,3] each [dup mul]` |
-| `fold` | Reduce with accumulator | `[1,2,3] fold 0 [add] => 6` |
-| `scan` | Running fold | `[1,2,3] scan 0 [add] => [1,3,6]` |
-| `where` | Filter by predicate | `[1,2,3,4] where [gt 2]` |
-| `outer` | Outer product | `[1,2] outer [3,4] [mul]` |
-| `inner` | Inner product | `[1,2] inner [3,4] [mul] [add]` |
+| `fold` | Reduce with accumulator | `fold [add] [1,2,3] 0 => 6` |
+| `scan` | Running fold | `scan [add] [1,2,3]` |
+| `outer` | Outer product | `outer [mul] [3,4] [1,2]` |
+| `inner` | Inner product | `inner [add] [mul] [3,4] [1,2]` |
+
+These higher-order words follow the **argument-order rule**
+(see [Tutorial §3](TUTORIAL.md#the-argument-order-rule)). The
+all-forward form shown above maps each list argument left-to-right
+into the signature: `fold` takes `body data init`, `scan` takes
+`body data`, `outer` takes `body listB listA`, `inner` takes
+`combineBody productBody listB listA`.
 
 ### Maps and access
 
@@ -463,16 +464,17 @@ for [a, b, step] [body]   # arithmetic progression
 | Word | Description | Example |
 |------|-------------|---------|
 | `typeof` | Type of a value (single Parent hop) | `typeof 42 => Integer` |
-| `pathof` | Ancestry path (root first, leaf last) | `pathof Integer => [Scalar Number Integer]` |
+| `pathof` | Ancestry path (root first, leaf last) | `pathof Integer` |
 | `is` | Type-compatibility test | `42 is Number => true` |
-| `convert` | Convert scalar between types | `convert Integer "42"` |
+| `convert` | Convert scalar between types | `convert Integer "42" => 42` |
 | `base` | Zero / base value for a type | `base Integer => 0` |
-| `type` | Register a named type | `type Point record [x:Number y:Number]` |
-| `record` | Define a record type | `record [x:Number y:Number]` |
-| `object` | Define an object type | `object {count: 0}` |
-| `table` | Define a table type | `table Row` |
+| `refine` | Build a refinement of a base type | `refine Object {count:0}` |
 | `make` | Construct typed value or instance | `make Point [1 2]` |
-| `untype` | Remove a type binding | `untype Point` |
+
+Named types are introduced by pairing `def` with a `refine`
+expression: `def Point refine Record [x:Number y:Number]`,
+`def Counter refine Object {count: 0}`, `def Inventory refine Table
+Row`. See **[HOWTO: Define a record/table/object type](HOWTO.md#define-a-record-type)**.
 
 ### Inspection
 

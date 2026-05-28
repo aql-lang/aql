@@ -46,7 +46,10 @@ supports.
 ## Quick start
 
 ```bash
-go install github.com/aql-lang/aql/cmd/go/aql@latest
+# Until v0.1.0 is tagged, build from a clone:
+git clone https://github.com/aql-lang/aql
+cd aql/cmd/go && go install ./aql
+
 aql -version
 aql                                 # start the REPL
 aql do '1 add 2'                    # one-shot expression

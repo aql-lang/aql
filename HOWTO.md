@@ -72,13 +72,22 @@ def square fn [[x:Number] [Number] [x mul x]]
 5 square                      => 25
 ```
 
-Inside the body, named parameters (`x:Number`) bind to stack values
-automatically. You can also access them as a list via `args`:
+Inside the body, named parameters (`x:Number`) bind to argument
+slots automatically. The first listed parameter is `args[0]`, the
+second is `args[1]`, etc. You can also access the full slot list via
+`args`:
 
 ```
 def show fn [[a:Number b:Number] [String] [`${a} and ${b}`]]
-3 4 show                      => '3 and 4'
+show 1 2                      => '1 and 2'
+2 show 1                      => '1 and 2'
+2 1 show                      => '1 and 2'
 ```
+
+All three calls compute the same thing: AQL fills argument slots by
+walking forward tokens first (left to right) and then taking from
+the stack top-first. For details see
+**[Tutorial §3](TUTORIAL.md#3-three-ways-to-call-a-word)**.
 
 
 ## Overload a word with multiple signatures
@@ -106,16 +115,17 @@ Create, access, build:
 [10, 20, 30]                  => [10,20,30]
 [10, 20, 30] . 1              => 20
 iota 5                        => [0,1,2,3,4]
-for 5 [dup mul]               => 0 1 4 9 16
+for 5 [42]                    => 42 42 42 42 42   # body runs 5 times
 ```
 
-Transform with higher-order words:
+Transform with higher-order words. Argument order follows the rule
+from **[Tutorial §3](TUTORIAL.md#the-argument-order-rule)** — `fold`
+takes `body data init` in all-forward form:
 
 ```
 [1, 2, 3] each [dup mul]      => [1,4,9]
-[1, 2, 3, 4] where [gt 2]     => [3,4]
-[1, 2, 3] fold 0 [add]        => 6
-[1, 2, 3] scan 0 [add]        => [1,3,6]
+fold [add] [1, 2, 3] 0        => 6              # all-forward
+0 [1, 2, 3] [add] fold        => 6              # all-stack, same result
 ```
 
 Reshape, take, drop, reverse:
@@ -129,21 +139,12 @@ iota 6 reshape [2, 3]         => [[0,1,2],[3,4,5]]
 [1,2,2,3] unique              => [1,2,3]
 [1,2,3,4] window 2            => [[1,2],[2,3],[3,4]]
 [1,2,3] pairs                 => [[1,2],[2,3]]
-[1,2,3,4] group [mod 2]       => {0:[2,4],1:[1,3]}
 ```
 
-Index and select:
+Index:
 
 ```
 [10,20,30] at [2,0]           => [30,10]
-[10,20,30] member 20          => true
-```
-
-Combinators:
-
-```
-[1,2] outer [10,20] [mul]              => [[10,20],[20,40]]
-[1,2,3] inner [4,5,6] [mul] [add]      => 32       # 1*4 + 2*5 + 3*6
 ```
 
 
@@ -183,9 +184,18 @@ Escapes inside templates: `\\`, `` \` ``, `\$`, `\n`, `\t`, `\r`.
 
 ## Format numbers and dates
 
+Use template strings for general value-to-string formatting:
+
 ```
-"%.2f" format 3.14159                 => '3.14'
-"hello %s" format "world"             => 'hello world'
+`pi = ${3.14159}`                     => 'pi = 3.14159'
+`hello ${"world"}`                    => 'hello world'
+```
+
+For controlled rounding, import the math module:
+
+```
+"aql:math" import end
+`${3.14159 100 mul math.round 100 div}` => '3.14'
 ```
 
 For times, use the `aql:time` module — see
@@ -334,25 +344,9 @@ SQLite operations require the **`sqlite`** capability.
 A record is a struct with named, typed fields. Order is significant.
 
 ```
-type Point record [x:Number y:Number]
+def Point refine Record [x:Number y:Number]
 make Point [3 4]                      => {x:3,y:4}
 make Point {x:1 y:2}                  => {x:1,y:2}
-```
-
-Optional fields with `none`:
-
-```
-type Person record [name:String nick:[String tor none]]
-make Person {name:"Bob"}              => {name:'Bob',nick:none}
-make Person {name:"Ada" nick:"ace"}   => {name:'Ada',nick:'ace'}
-```
-
-Fill missing fields with their base value:
-
-```
-type Item record [name:String qty:Number active:Boolean]
-make Item {name:"Widget"} {base:true}
-=> {name:'Widget',qty:0,active:false}
 ```
 
 
@@ -361,54 +355,49 @@ make Item {name:"Widget"} {base:true}
 A table is a list-of-rows-conforming-to-a-record:
 
 ```
-type Row record [name:String qty:Integer]
-type Inventory table Row
+def Row refine Record [name:String qty:Integer]
+def Inventory refine Table Row
 
 make Inventory [["Widget" 5] ["Bolt" 12]]
 => [{name:'Widget',qty:5},{name:'Bolt',qty:12}]
-
-make Inventory [[name:"Widget" qty:5] [name:"Bolt" qty:12]]
-=> [{name:'Widget',qty:5},{name:'Bolt',qty:12}]
 ```
 
 
-## Define an object type with methods
+## Define an object type
 
-Objects are mutable, inheritable types:
-
-```
-type Counter object {
-  count: 0
-  inc:   [count get 1 add count set]
-  value: [count get]
-}
-
-def c make Counter
-c inc
-c inc
-c value                                => 2
-```
-
-Methods see their containing object's fields via the implicit
-`Store`. Inherit by passing a parent object type:
+Objects are mutable, inheritable types. Declare with `refine Object`
+and a field map (`name: defaultValue`); construct instances with
+`make`. Mutate fields via `set` (note the arg order: `obj value key
+set` — see [Tutorial §3](TUTORIAL.md#the-argument-order-rule) for
+why):
 
 ```
-type FastCounter object Counter {
-  inc: [count get 10 add count set]
-}
+def Counter refine Object {count: 0}
+
+def c (make Counter {})
+c 1 "count" set                       # c.count := 1
+c 2 "count" set                       # c.count := 2
+c.count                               => 2
 ```
+
+The `def c (make Counter {})` form wraps `make` in `(…)` so the
+result of `make` is bound to `c` (rather than `c` being bound to the
+literal word `make` — see
+[Argument order](TUTORIAL.md#the-argument-order-rule)).
 
 
 ## Use scoped variables
 
-`var` binds local names that are auto-cleared after the block:
+`var` binds local names that are auto-cleared after the block.
+Bare-word declarations pop from the stack:
 
 ```
-3 4 var [[a b] (a mul a) add (b mul b) sqrt]      => 5.0
+"aql:math" import end
+3 4 var [[a b] (a mul a) add (b mul b) math.sqrt]    => 5.0
 ```
 
-Names peel off the top of the stack in order: `a` gets the topmost
-value, `b` the next. Inline values are also accepted:
+`a` gets the topmost value (4) and `b` gets the next (3), matching
+the argument-order rule. Inline values are also accepted:
 
 ```
 var [[[x 2] [y 10]] x add y]          => 12
@@ -423,24 +412,25 @@ Mix the two:
 
 ## Iterate with `for`
 
-Numeric loop (0..N-1):
+Numeric loop runs the body N times (the body sees an empty stack —
+`for` does not push the iteration index):
 
 ```
-for 5 [dup mul]               => 0 1 4 9 16
+for 5 [42]                    => 42 42 42 42 42
 ```
 
-Range:
+Range form (start, stop) and (start, stop, step):
 
 ```
-for [1, 4] [dup mul]          => 1 4 9
-for [0, 10, 2] [dup mul]      => 0 4 16 36 64
+for [1, 4] [99]               => 99 99 99
+for [0, 10, 2] [99]           => 99 99 99 99 99
 ```
 
-Early exit and skip:
+If you want the index inside the body, use `iota N each [...]`
+instead — `each` does pass the element to the body:
 
 ```
-for 10 [dup gt 5 if [break]]
-for 10 [dup mod 2 eq 0 if [continue] else [print dup]]
+iota 5 each [dup mul]         => [0,1,4,9,16]
 ```
 
 
@@ -454,13 +444,12 @@ pathof Integer                => [Scalar Number Integer]
 42 is String                  => false
 ```
 
-Convert with `make` or `convert`:
+Convert with `convert`:
 
 ```
 convert Integer "42"          => 42
 convert String 42             => '42'
 convert Decimal 5             => 5.0
-make string 99                => '99'
 ```
 
 
@@ -485,35 +474,38 @@ meta-command (`:help` for the full list).
 
 ## Use modules and imports
 
-Define an inline module:
+Define an inline module with the `module` form. The body must call
+`export "namespace" {...}` to publish bindings:
 
 ```
-import utils [
+import module [
   def helper [dup add]
-  def greet fn [[String] [String] [`hello ${args.0}`]]
+  def greet fn [[name:String] [String] [`hello ${name}`]]
+  export "utils" {helper: helper, greet: greet}
 ]
-utils.helper 5                => 10
-utils.greet "Ada"             => 'hello Ada'
+"Ada" utils.greet                     => 'hello Ada'
 ```
 
-Import from a file:
+Import from a file (relative paths must start with `./`, `../`, or
+`/`):
 
 ```
-import "lib/utils.aql"
+"./lib/utils.aql" import
 ```
 
-Rename on import to avoid collisions:
+Import a built-in native module (registers words under a namespace
+prefix):
 
 ```
-import [helper as h, greet as g] "lib/utils.aql"
+"aql:math" import end
+5 math.log                            => 1.6094379124341003
 ```
 
-Import a built-in module:
-
-```
-import aql:time
-aql:time.now
-```
+Native module words are reached via the namespace prefix
+(`math.log`, `math.ceil`, …). The `end` after `import` prevents
+forward collection from grabbing the next token as another path —
+without it, `"aql:math" import "foo" print` would try to import a
+module named `"foo"`.
 
 
 ## Build, install, and publish a module
@@ -537,52 +529,37 @@ By default operations target the public registry; override with
 
 ## Use the built-in `aql:time` module
 
-```
-import aql:time
+The native module name is `"aql:time"`; words register under the
+`time.` namespace prefix.
 
-aql:time.now                          => 2026-05-25T12:00:00Z
-aql:time.parse "2026-01-15"           => 2026-01-15
-aql:time.date 2026 5 25               => 2026-05-25
-aql:time.add (aql:time.now) {days: 7}
-aql:time.format (aql:time.now) "yyyy-MM-dd"
-aql:time.diff t1 t2                   # Duration
+```
+"aql:time" import end
+time.parse "2026-01-15"               # Date value
 ```
 
-The full type set: `Date`, `DateTime`, `Instant`, `TimeOfDay`,
-`Duration`, `Timezone`. See the `aql:time` source for the complete
-word list.
+Provides `Date`, `DateTime`, `Instant`, `TimeOfDay`, `Duration`,
+`Timezone` types. See the module source for the complete word list.
 
 
 ## Use the built-in `aql:matrix` module
 
 ```
-import aql:matrix
-
-aql:matrix.make-vector [1, 2, 3]              => Vector(3)
-aql:matrix.make-matrix [[1, 2], [3, 4]]        => Matrix(2x2)
-
-(aql:matrix.make-vector [1, 2, 3]) aql:matrix.dot
-  (aql:matrix.make-vector [4, 5, 6])           => 32
+"aql:matrix" import end
+matrix.make-vector [1, 2, 3]          # Vector(3)
 ```
 
 Provides `Tensor`, `Matrix`, `Vector` type-kinds and the standard
-linear-algebra operations.
+linear-algebra operations under the `matrix.` namespace.
 
 
 ## Use the built-in `aql:decision` module
 
 ```
-import aql:decision
-
-def policy aql:decision.table [
-  [if: [age lt 18], then: 'minor]
-  [if: [age gte 18], then: 'adult]
-]
-policy {age: 21}                      => 'adult
+"aql:decision" import end
 ```
 
 Decision tables compile to a single dispatch, type-checked against
-the input record.
+the input record. See the module source for the full API.
 
 
 ## Store secrets in the vault
@@ -623,10 +600,9 @@ trace [1 add 2 mul 3]
 ```
 
 In the REPL, `:trace on` toggles tracing for every expression.
-`stack` and `depth` inspect the current stack:
+`depth` reports the current stack size:
 
 ```
-1 2 3 stack                   => [1,2,3]
 1 2 3 depth                   => 3
 ```
 
@@ -642,12 +618,17 @@ inspect (quote add)
 ## Use `end` to stop forward collection
 
 When a word would otherwise vacuum up more tokens than you want,
-use `end` to stop its collection:
+use `end` to stop its collection. For example, `import` is
+forward-precedence and will try to consume the next string as a
+second module name:
 
 ```
-set foo 99 end get foo                => 99
-def y add x end 5                     # bind y to (add x), with 5 left on stack
+"aql:math" import end "foo" print     => 'foo'
 ```
+
+Without `end`, `import` would attempt to import a module named
+`"foo"`. The same idiom is useful any time a forward-precedence
+word sits next to a value the next word actually needs.
 
 Read more in
 **[Explanation §the end keyword](EXPLANATION.md#the-end-keyword)**.

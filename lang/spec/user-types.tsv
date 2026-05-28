@@ -1,0 +1,164 @@
+# tokens	expected	note
+# =====================================================================
+# user-defined type kinds — dispatch matrix
+# =====================================================================
+# Every refinement kind a user can introduce via `def Name (refine …)`
+# or `def Name (… tor …)` etc. must dispatch the same way system types
+# do: a typed fn parameter `[x:Name]` accepts values the type admits
+# and rejects everything else.
+#
+# The earlier bug: `ResolveDefType` in eng/go/fn_params.go fell through
+# to `return TAny` for any populated type body other than Record /
+# Options — so `[f:Foo]` where Foo was a `refine Object` body became a
+# wildcard. Compounded by missing per-kind Behavior.Match wiring for
+# Disjunct / DepScalar / bare nominal subtypes (each minted a lattice
+# node with the default lattice-walk Match, which rejected every value
+# because the new node sat BELOW its parents in the lattice).
+#
+# The fix has two layers:
+#   1. ResolveSigType now consults `DefEntry.TypeDef *Type` (the
+#      explicit "this is a type" flag) via `r.LookupTypeName` as the
+#      primary path; body-payload pattern-matching is the fallback for
+#      Record / Options only.
+#   2. InstallType (eng/go/core_type.go) attaches a per-kind Unifier
+#      Behavior at mint time:
+#        - Object / Table → parent-chain walk (default)
+#        - Disjunct       → disjunctUnifier (unifies against alternatives)
+#        - DepScalar      → depScalarUnifier (runs the bound check)
+#        - bare refine X  → bareRefineUnifier (admits base-type values)
+#        - predicate fn   → predicateUnifier (pre-existing)
+#
+# Rows below pin both directions per kind — accept the right values
+# AND reject the wrong ones. A regression in either layer surfaces
+# immediately.
+#
+# Runs against the production lang registry (test/go/langspec).
+
+
+# ====================================================================
+# 1. Object refinement — `def Foo (refine Object {…})`
+# ====================================================================
+# A typed fn param [f:Foo] should accept Foo instances built with
+# `make Foo {…}` and reject unrelated values.
+
+def Foo (refine Object {}) def g fn [[f:Foo] [Integer] [99]] (make Foo {}) g	99	Foo accepts its own instance
+def Foo (refine Object {x:0}) def g fn [[f:Foo] [Integer] [99]] (make Foo {x:5}) g	99	Foo with field, accepts instance carrying field
+def Foo (refine Object {}) def g fn [[f:Foo] [Integer] [99]] 42 g	ERROR:signature	Foo rejects Integer
+def Foo (refine Object {}) def g fn [[f:Foo] [Integer] [99]] 'hi' g	ERROR:signature	Foo rejects String
+def Foo (refine Object {}) def g fn [[f:Foo] [Integer] [99]] [1,2,3] g	ERROR:signature	Foo rejects List
+
+# Regression for §6.1 — with Foo dispatching correctly, no need for
+# `end` between `g` and the next native fn (`print`-equivalent). Before
+# the fix this leaked the user-fn call into the next word because the
+# wildcard match captured the next word as an argument.
+def Foo (refine Object {}) def g fn [[f:Foo] [Integer] [99]] (make Foo {}) g lengthq [ 1 ]	99 1	dispatch finishes before next word
+
+
+# ====================================================================
+# 2. Bare nominal subtype — `def Pos (refine Integer)`
+# ====================================================================
+# A bare refinement adds no structural constraint, so any value of the
+# base type structurally satisfies the refinement.
+
+def Pos (refine Integer) def g fn [[n:Pos] [Integer] [99]] 42 g	99	bare Integer refinement accepts Integer
+def Pos (refine Integer) def g fn [[n:Pos] [Integer] [99]] -5 g	99	negative Integer also admitted
+def Pos (refine Integer) def g fn [[n:Pos] [Integer] [99]] 'hi' g	ERROR:signature	Pos rejects String
+def Pos (refine Integer) def g fn [[n:Pos] [Integer] [99]] [1,2,3] g	ERROR:signature	Pos rejects List
+def Name (refine String) def g fn [[s:Name] [Integer] [99]] 'Ada' g	99	bare String refinement accepts String
+def Name (refine String) def g fn [[s:Name] [Integer] [99]] 42 g	ERROR:signature	Name rejects Integer
+
+
+# ====================================================================
+# 3. Disjunct refinement — `def Maybe (Integer tor none)`
+# ====================================================================
+# A disjunct admits values matching any alternative.
+
+def Maybe (Integer tor none) def g fn [[m:Maybe] [Integer] [99]] 42 g	99	Maybe accepts Integer alternative
+def Maybe (Integer tor none) def g fn [[m:Maybe] [Integer] [99]] none g	99	Maybe accepts None alternative
+def Maybe (Integer tor none) def g fn [[m:Maybe] [Integer] [99]] 'hi' g	ERROR:signature	Maybe rejects String (not in alternatives)
+def Maybe (Integer tor none) def g fn [[m:Maybe] [Integer] [99]] [1,2] g	ERROR:signature	Maybe rejects List
+
+# Mixed alternatives.
+def Mixed (Integer tor String) def g fn [[m:Mixed] [Integer] [99]] 7 g	99	Mixed accepts Integer
+def Mixed (Integer tor String) def g fn [[m:Mixed] [Integer] [99]] 'x' g	99	Mixed accepts String
+def Mixed (Integer tor String) def g fn [[m:Mixed] [Integer] [99]] true g	ERROR:signature	Mixed rejects Boolean (neither alternative)
+
+
+# ====================================================================
+# 4. DepScalar refinement — `def Big (Integer gt 10)`
+# ====================================================================
+# A DepScalar attaches a constraint to a base scalar type. Dispatch
+# must check (a) base-type compatibility AND (b) the constraint.
+
+def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] 100 g	99	Big accepts 100 (> 10)
+def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] 11 g	99	Big accepts 11 (just over the bound)
+def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] 10 g	ERROR:signature	Big rejects 10 (not strictly greater than 10)
+def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] 5 g	ERROR:signature	Big rejects 5 (below the bound)
+def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] 'hi' g	ERROR:signature	Big rejects String (wrong base type)
+
+# Lower-bounded refinement.
+def Small (Integer lt 0) def g fn [[n:Small] [Integer] [99]] -5 g	99	Small accepts negative
+def Small (Integer lt 0) def g fn [[n:Small] [Integer] [99]] 5 g	ERROR:signature	Small rejects positive
+
+
+# ====================================================================
+# 5. `is` vs dispatch — two DIFFERENT questions about types
+# ====================================================================
+# The `is` word and the fn-sig dispatcher answer DIFFERENT questions
+# about a value/type relationship — by design, not by mistake.
+#
+#   - Dispatch asks: "can v be passed where T is expected?"
+#     → loose binding semantics. A bare-refine subtype `Pos` of
+#       Integer admits any Integer (no narrowing constraint added).
+#     → see §2 above — `[n:Pos] g 42` returns 99.
+#
+#   - `is` asks: "does v carry T's tag?"
+#     → strict identity semantics. `42 is Pos` is false because 42's
+#       runtime type IS Integer, not Pos. To get a Pos-tagged value
+#       use `Pos unify 42` (which produces Pos:42), or build via
+#       a constructor.
+#
+# The asymmetry is intentional and is locked in by the pre-existing
+# test typed_def_test.go::TestRefineBareDistinctFromAlias:
+#   def Foo Integer        ; 42 is Foo  → true   (alias — Foo IS Integer)
+#   def Bar refine Integer ; 42 is Bar  → false  (subtype — distinct)
+#
+# So the two questions agree for cases where there's no narrowing
+# (builtin types, untagged values against alias types) and diverge
+# for refinements that introduce a fresh nominal tag.
+
+# Disjunct: an Integer 42 IS one of Maybe's alternatives. Tag of 42
+# is Integer, which IS in Maybe's structural decomposition. The
+# disjunctUnifier admits it.
+def Maybe (Integer tor none) 42 is Maybe	true	Disjunct: Integer is one of the alternatives
+def Maybe (Integer tor none) 'hi' is Maybe	false	String is not an alternative
+
+# DepScalar: the bound constraint, when run on the value's tag, must
+# admit the value. unifyDepScalar checks the base type AND the bound.
+def Big (Integer gt 10) 100 is Big	true	DepScalar: tag is Integer + 100 > 10
+def Big (Integer gt 10) 5 is Big	false	DepScalar: tag is Integer but 5 not > 10
+
+# Bare refine: tag identity. An untagged 42 is NOT a Pos.
+def Pos refine Integer 42 is Pos	false	bare refine: 42's tag is Integer, not Pos
+
+# Object refine: an instance constructed via `make Foo {}` carries
+# the Foo tag. So `(make Foo {}) is Foo` is true.
+def Foo refine Object {} (make Foo {}) is Foo	true	Object: instance carries Foo tag
+def Foo refine Object {} 42 is Foo	false	Integer's tag is not Foo
+
+# Builtin: lattice subtyping. 42's tag is Integer; Integer ≤ Number ≤ Scalar.
+42 is Integer	true	exact tag match
+42 is Number	true	supertype: Integer ≤ Number
+42 is String	false	wrong family
+
+
+# ====================================================================
+# 6. :Any is universal — Any means Any, including function values
+# ====================================================================
+# The :Any parameter type must NOT be narrowed by the user-subtype
+# fix. Any wildcard semantics are intentional.
+
+def f fn [[x:Any] [Integer] [42]] 5 f	42	Any accepts Integer
+def f fn [[x:Any] [Integer] [42]] 'hi' f	42	Any accepts String
+def f fn [[x:Any] [Integer] [42]] [1,2,3] f	42	Any accepts List
+def f fn [[x:Any] [Integer] [42]] none f	42	Any accepts None

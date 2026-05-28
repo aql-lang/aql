@@ -10,10 +10,10 @@ server, a registry client, a secrets vault, and a multi-service
 supervisor.
 
 ```aql
-# stack-based arithmetic — three equivalent forms
-1 2 add                              # prefix
-add 1 2                              # forward
-1 add 2                              # infix
+# stack-based arithmetic — three equivalent forms (all compute a-b)
+10 3 sub                             # all-stack
+10 sub 3                             # mixed
+sub 3 10                             # all-forward
 
 # typed functions, lists, maps, records, concurrency
 def square fn [[x:Number] [Number] [x mul x]]
@@ -22,7 +22,7 @@ def square fn [[x:Number] [Number] [x mul x]]
 [1, 2, 3] each [dup mul]             => [1,4,9]
 {name: "Ada"} . name                 => 'Ada'
 
-type Point record [x:Number y:Number]
+def Point refine Record [x:Number y:Number]
 make Point [3 4]                     => {x:3,y:4}
 
 await [[sleep 50 1] [sleep 50 2]]    => [1,2]
@@ -31,8 +31,14 @@ await [[sleep 50 1] [sleep 50 2]]    => [1,2]
 
 ## Install
 
+Until v0.1.0 is tagged, build from a clone (the `cmd/go` module
+carries local `replace` directives, so `go install …@latest` is
+not yet supported):
+
 ```bash
-go install github.com/aql-lang/aql/cmd/go/aql@latest
+git clone https://github.com/aql-lang/aql
+cd aql/cmd/go
+go install ./aql
 aql -version
 ```
 

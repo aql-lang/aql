@@ -86,15 +86,31 @@ never have to mentally reverse-engineer `10 3 -`.
 
 ### How collection works
 
-When a word executes:
+When a word executes, AQL fills its argument slots in this order:
 
-1. Check the stack for arguments that match the signature.
-2. If the count is short, enter forward-collection mode. Each
-   subsequent token is evaluated and its type checked against the
-   next expected slot.
-3. If a token's type doesn't match the next slot, collection stops.
-4. Once all slots are filled, the word runs. Stack-derived arguments
-   land in the *remaining* signature positions, top-of-stack first.
+1. **Forward first.** Walk the tokens after the word in source
+   order, left to right. Each token is evaluated and its type
+   checked against the next-to-fill slot. If the type matches, the
+   value goes into `args[0]`, then `args[1]`, …, and the walk
+   continues. If the type doesn't match, or the walk hits a barrier
+   (`end`, `)`, another function word), forward collection stops.
+2. **Stack second.** Any slots still empty are filled from the
+   stack, top of stack into the next-to-fill slot first.
+
+So `args[0]` is whichever argument is closest to the word in source
+position (or the deepest forward arg if all came from the right);
+`args[N-1]` is the furthest. Handlers can rely on a single
+positional contract regardless of how the user wrote the call.
+
+For an asymmetric operation like `sub` (handler returns
+`args[1] - args[0]` — deeper minus top), this single rule produces
+the same answer for every call form:
+
+```
+10 3 sub        # all-stack:   args[0]=top=3, args[1]=10  →  7
+10 sub 3        # mixed:       args[0]=3, args[1]=10       →  7
+sub 3 10        # all-forward: args[0]=3, args[1]=10       →  7
+```
 
 After rearrangement, the word always sees arguments in signature
 order. This is why the body doesn't have to care which side they

@@ -260,21 +260,37 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 		} else {
 			name, _ = AsString(v)
 		}
-		// Predicate types — when the binding's BODY is an FnDef
-		// (predicate fn) the ResolveDefType fallback degrades to TAny
-		// because it doesn't recognise the function shape as a
-		// structural body. Use the minted *Type directly so x:Pos in
-		// an fn sig becomes the Pos lattice node (with its
-		// predicateUnifier Behavior) instead of TAny. Record/Options/
-		// TypedList/TypedMap bodies keep the old path because
-		// ResolveDefType returns the structural pattern those rely on.
+		// Authoritative path: `r.LookupTypeName(name)` consults
+		// `DefEntry.TypeDef` — the dedicated *Type field that's set
+		// non-nil exactly when a name was installed as a type binding
+		// (capitalised `def`). When that field is set, the lattice
+		// node it points at IS the sig type, regardless of what the
+		// body's payload looks like. This works uniformly for every
+		// type kind: Object, Table, predicate fn, Disjunct, DepScalar,
+		// TypedList, TypedMap, bare nominal subtypes, builtins.
+		//
+		// Exceptions: Record and Options bodies need a structural
+		// Pattern (field map / options map) attached to the sig so
+		// the dispatcher checks shape, not just lattice membership.
+		// For those, fall through to ResolveDefType, which returns
+		// the appropriate TMap + pattern pair.
+		//
+		// Before this refactor, the dispatcher inferred "is this a
+		// type?" from body-payload shape — `Data == nil` (lattice-
+		// only body) / `IsRecordType` / `IsOptionsType` / TAny
+		// fallthrough. ObjectType bodies (and several others) hit the
+		// TAny fallthrough silently, turning `[f:Foo]` into a
+		// wildcard. The fix consults the explicit TypeDef flag first
+		// so the meaning is unambiguous; body-payload inspection is
+		// now confined to the two cases that genuinely need it.
 		if r != nil {
-			if body, ok := r.TopTypeBody(name); ok {
-				if body.Parent != nil && (body.Parent.Equal(TFnDef) || body.Parent.Equal(TFunction)) {
-					if def := r.LookupTypeName(name); def != nil {
-						return def, nil, nil
+			if def := r.LookupTypeName(name); def != nil {
+				if body, ok := r.TopTypeBody(name); ok {
+					if IsRecordType(body) || IsOptionsType(body) {
+						return ResolveDefType(r, body)
 					}
 				}
+				return def, nil, nil
 			}
 		}
 		if defVal := LookupDefType(r, name); defVal != nil {
@@ -368,6 +384,16 @@ func ResolveDefType(r *Registry, v Value) (*Type, *Value, error) {
 		// in fn signatures.
 		return CanonicalType(r, &v), nil, nil
 	}
+	// Note: most populated-body cases (Object/Table/Disjunct/
+	// DepScalar/TypedList/TypedMap) are now handled at the
+	// ResolveSigType caller, which consults DefEntry.TypeDef (the
+	// explicit "this is a type" flag) via r.LookupTypeName and uses
+	// the lattice node directly. ResolveDefType is reached only via
+	// the name-based path when the caller actively wants body-payload
+	// inspection — primarily for Record and Options, which need
+	// structural patterns attached. Anything else falling through
+	// here is either a value masquerading as a type body or a shape
+	// that does not contribute a usable dispatch type.
 	return TAny, nil, nil
 }
 

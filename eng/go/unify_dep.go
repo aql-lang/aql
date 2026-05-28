@@ -1,5 +1,71 @@
 package eng
 
+// depScalarUnifier is the kernel-installed Unifier for user-defined
+// refined-scalar types — types whose body is a DepScalar with a
+// comparison constraint, e.g. `def Big (Integer gt 10)`.
+//
+// Before this Unifier existed, InstallType's generic "else" branch
+// minted a lattice node parented at the base scalar (Integer) but
+// left Behavior as DefaultBehavior. That meant `100.Is(Big)` did a
+// plain lattice walk — 100's parent chain is Integer → Number → …,
+// none of which is Big — so dispatch rejected every value, even ones
+// that satisfied the predicate.
+//
+// The Unifier:
+//  - Gate 1: v's type must satisfy the DepScalar's base type
+//    (`Big` constrains Integers — 100 passes, "hi" fails).
+//  - Gate 2: v's payload must satisfy the constraint
+//    (depScalarCheck handles the bounds check).
+//
+// Bare type literals (Data==nil, !Carrier) pass through to the
+// prev/DefaultBehavior walk — the type itself isn't an inhabitant.
+type depScalarUnifier struct {
+	prev      TypeBehavior
+	baseType  *Type
+	depInfo   DepScalarInfo
+	typeName  string
+}
+
+func (d *depScalarUnifier) Match(v Value, t *Type) bool {
+	if v.Data == nil && !v.Carrier {
+		if d.prev != nil {
+			return d.prev.Match(v, t)
+		}
+		return DefaultBehavior.Match(v, t)
+	}
+	if !v.Parent.Matches(d.baseType) {
+		return false
+	}
+	return depScalarCheck(d.depInfo, v)
+}
+
+func (d *depScalarUnifier) Format(v Value) string {
+	if d.prev != nil {
+		return d.prev.Format(v)
+	}
+	return DefaultBehavior.Format(v)
+}
+
+func (d *depScalarUnifier) Equal(a, b Value) bool {
+	if d.prev != nil {
+		return d.prev.Equal(a, b)
+	}
+	return DefaultBehavior.Equal(a, b)
+}
+
+// installDepScalarUnifier attaches a depScalarUnifier to def. Called
+// by InstallType when minting a DepScalar-bodied user type so the
+// constraint runs at every Is/Match call site (sig dispatch, the `is`
+// word, options/record/Make slot checks).
+func installDepScalarUnifier(def *Type, base *Type, info DepScalarInfo, name string) {
+	def.Behavior = &depScalarUnifier{
+		prev:     def.Behavior,
+		baseType: base,
+		depInfo:  info,
+		typeName: name,
+	}
+}
+
 // unifyDepScalar handles unification when at least one side is a
 // DepScalar (refined scalar with bounds, e.g. `Integer ≥10`).
 //
