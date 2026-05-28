@@ -37,7 +37,7 @@ var accessorNatives = []NativeFunc{
 func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	key := args[0]
 	container := args[1]
-	if container.Data == nil {
+	if !IsConcrete(container) {
 		return nil, r.AqlError("getr_error", "getr: cannot access property on type literal", "getr")
 	}
 	// Integer key on list.
@@ -66,7 +66,7 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 func getrObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	key := args[0]
 	container := args[1]
-	if container.Data == nil {
+	if !IsConcrete(container) {
 		return nil, r.AqlError("getr_error", "getr: cannot access property on type literal", "getr")
 	}
 	k := getKey(key)

@@ -312,7 +312,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// when one side is bare and subtype-ordered) instead of the
 	// body's payload — `def x:Foo 1` would silently bind x to the
 	// Foo-tagged type literal, not the integer 1.
-	if constraint.Data == nil && constraint.Origin == eng.OriginUserDef &&
+	if IsBareTypeNode(constraint) && constraint.Origin == eng.OriginUserDef &&
 		typeName != "" && constraint.Parent != nil {
 		if def := r.LookupTypeName(typeName); def != nil && def.Origin == eng.OriginUserDef {
 			// Walk up the lattice past any intervening user refines
@@ -429,7 +429,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	if !list.Parent.Equal(TList) {
 		return nil, r.AqlError("var_error", "var: argument must be a list", "var")
 	}
-	if list.Data == nil {
+	if !IsConcrete(list) {
 		return nil, r.AqlError("var_error", "var: argument must be a concrete list, got type literal", "var")
 	}
 	elems, _ := AsList(list)
@@ -438,7 +438,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	}
 
 	declVal := elems.Get(0)
-	if !declVal.Parent.Equal(TList) || declVal.Data == nil {
+	if !declVal.Parent.Equal(TList) || !IsConcrete(declVal) {
 		return nil, r.AqlError("var_error", "var: first element must be a list of variable declarations", "var")
 	}
 	decls, _ := AsList(declVal)
@@ -505,7 +505,7 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	if !list.Parent.Equal(TList) {
 		return nil, r.AqlError("fn_error", "fn: argument must be a list", "fn")
 	}
-	if list.Data == nil {
+	if !IsConcrete(list) {
 		return nil, r.AqlError("fn_error", "fn: argument must be a concrete list, got type literal", "fn")
 	}
 	_lst, _ := AsList(list)
@@ -587,7 +587,7 @@ func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 // signatures satisfy every pair in the FnUndef matches. See
 // eng/go/fnsig.go::FnUndefMatchesFnDef.
 func fnsigHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if args[0].Data == nil {
+	if !IsConcrete(args[0]) {
 		return nil, &AqlError{
 			Code:   "fnsig_invalid_spec",
 			Detail: "fnsig: argument must be a concrete list",
@@ -613,7 +613,7 @@ func fnsigHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 func callHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	body := args[0]
 
-	if body.Data == nil {
+	if !IsConcrete(body) {
 		return nil, r.AqlError("call_error", "call: argument must be a concrete list, got type literal", "call")
 	}
 	if IsTypedList(body) || IsTableType(body) {
@@ -635,7 +635,7 @@ func dblcallHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	n, _ := args[0].AsConcreteInteger()
 	body := args[1]
 
-	if body.Data == nil {
+	if !IsConcrete(body) {
 		return nil, r.AqlError("dblcall_error", "dblcall: callback must be a concrete list, got type literal", "dblcall")
 	}
 	if IsTypedList(body) || IsTableType(body) {

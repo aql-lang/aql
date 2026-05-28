@@ -7,6 +7,7 @@ import (
 
 	"github.com/aql-lang/aql/eng/go/parser"
 	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/aql-lang/aql/lang/go/modules"
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
@@ -46,6 +47,7 @@ func runRealFileSteps(t *testing.T, dir string, steps []string) ([]native.Value,
 	native.Register(reg)
 	native.SetHostFileOps(reg, capabilities.NewDefault())
 	reg.SetParseFunc(parser.Parse)
+	modules.InstallResolver(reg) // production module wiring (lang.New)
 	reg.BaseDir = absDir
 
 	eng := native.New(reg)

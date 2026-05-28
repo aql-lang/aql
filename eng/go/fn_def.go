@@ -162,7 +162,7 @@ func OutputSigIsConcreteReturns(outputSig Value) bool {
 // context — a type literal, a known type-name word, or a structural
 // type (Options/Record/Table/TypedList/TypedMap/ObjectType).
 func IsSigTypeValue(v Value) bool {
-	if v.Data == nil && !v.Parent.Equal(TNone) {
+	if IsTypeLiteral(v) {
 		return true
 	}
 	if IsOptionsType(v) || IsRecordType(v) || IsTypedList(v) ||

@@ -129,7 +129,7 @@ func buildTypeInspection(name string, tv Value) Value {
 	// type-of `*Type`; its underlying structure leaf goes to `struct`.
 	// A concrete value reports its own Parent leaf as `type` and has no
 	// `struct`.
-	if tv.Data == nil || IsTypeBody(tv) || IsRecordShape(tv) {
+	if IsBareTypeNode(tv) || IsTypeBody(tv) || IsRecordShape(tv) {
 		result.Set("type", NewString("Type"))
 		result.Set("struct", NewString(TypeNameOf(tv)))
 	} else {

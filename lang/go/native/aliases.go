@@ -288,6 +288,7 @@ var (
 	ReparentValue             = eng.ReparentValue
 	InstallDef                = eng.InstallDef
 	InstallFnDef              = eng.InstallFnDef
+	IsBareTypeNode            = eng.IsBareTypeNode
 	IsCapitalisedName         = eng.IsCapitalisedName
 	IsConcrete                = eng.IsConcrete
 	IsRecordShape             = eng.IsRecordShape

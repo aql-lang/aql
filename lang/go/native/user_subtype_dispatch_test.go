@@ -75,7 +75,7 @@ func TestUserTypeBindingShape_ObjectRefinement(t *testing.T) {
 	if !ok {
 		t.Fatal("Foo not installed as a type")
 	}
-	if body.Data == nil {
+	if !IsConcrete(body) {
 		t.Error("ObjectType body should have Data != nil")
 	}
 	if body.Parent == nil || body.Parent.Leaf() != "Foo" {
@@ -181,7 +181,7 @@ func TestProbeIsHandlerPath_DEBUG(t *testing.T) {
 		t.Fatal("Pos not installed")
 	}
 	t.Logf("body for Pos: Data==nil=%v Behavior type=%T leaf=%s",
-		body.Data == nil, body.Behavior, body.Leaf())
+		IsBareTypeNode(body), body.Behavior, body.Leaf())
 
 	// What's the lattice node from LookupTypeName?
 	def := r.LookupTypeName("Pos")
@@ -248,7 +248,7 @@ func TestProbeMaybe_DEBUG(t *testing.T) {
 	})
 	body, _ := r.TopTypeBody("Maybe")
 	t.Logf("body: Data==nil=%v Behavior=%T ID=%q Name=%q Parent.Leaf=%s",
-		body.Data == nil, body.Behavior, body.ID, body.Name, body.Parent.Leaf())
+		IsBareTypeNode(body), body.Behavior, body.ID, body.Name, body.Parent.Leaf())
 	def := r.LookupTypeName("Maybe")
 	t.Logf("def: Behavior=%T", def.Behavior)
 	t.Logf("body.Behavior == def.Behavior: %v", body.Behavior == def.Behavior)

@@ -888,7 +888,7 @@ func typeNodeOf(v Value) *Type {
 // literal's own name, or any other value's Parent leaf. Used by
 // inspect and rendering paths that display a type's name.
 func TypeNameOf(v Value) string {
-	if v.Data == nil && !v.Carrier {
+	if IsBareTypeNode(v) {
 		return v.Leaf()
 	}
 	return v.Parent.Leaf()
@@ -897,7 +897,7 @@ func TypeNameOf(v Value) string {
 // TypePathOf returns the slash path of the type v represents: a type
 // literal's own path, or any other value's Parent path.
 func TypePathOf(v Value) string {
-	if v.Data == nil && !v.Carrier {
+	if IsBareTypeNode(v) {
 		return v.Path()
 	}
 	return v.Parent.Path()
@@ -907,7 +907,7 @@ func TypePathOf(v Value) string {
 // v is a bare type literal (a type literal IS a lattice node), and
 // v's Parent for any concrete value or carrier.
 func ValueType(v Value) *Type {
-	if v.Data == nil && !v.Carrier {
+	if IsBareTypeNode(v) {
 		return &v
 	}
 	return v.Parent

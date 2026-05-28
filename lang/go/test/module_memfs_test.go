@@ -1,6 +1,7 @@
 package test
 
 import (
+	"github.com/aql-lang/aql/lang/go/modules"
 	"github.com/aql-lang/aql/lang/go/native"
 	"testing"
 
@@ -19,6 +20,7 @@ func runMemFSModuleSteps(t *testing.T, files map[string]string, steps []string) 
 		t.Fatal(err)
 	}
 	reg.SetParseFunc(parser.Parse)
+	modules.InstallResolver(reg) // production module wiring (lang.New)
 
 	// Create an in-memory FS and pre-populate it with module files.
 	mem := capabilities.NewMem()

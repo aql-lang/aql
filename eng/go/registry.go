@@ -521,7 +521,7 @@ func BinaryIntOpNative(name string, op func(a, b int64) (int64, error)) NativeFu
 
 // ValToString converts any scalar Value to its string representation.
 func ValToString(v Value) string {
-	if v.Data == nil {
+	if !IsConcrete(v) {
 		return v.String()
 	}
 	switch {
@@ -632,7 +632,7 @@ func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
 
 // StoreKey converts a Value to a string key for the store.
 func StoreKey(v Value) string {
-	if v.Data == nil {
+	if !IsConcrete(v) {
 		return v.Parent.String()
 	}
 	if IsWord(v) {
@@ -956,7 +956,7 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	// Skip the gate for the empty case (input declared as Any or
 	// unset) — those predicates explicitly accept any input.
 	if inputT := fnDef.Sigs[0].Params[0].Type; inputT != nil && !inputT.Equal(TAny) {
-		if candidate.Data == nil && !candidate.Carrier {
+		if IsBareTypeNode(candidate) {
 			// Bare type literal: skip the gate (the literal IS a type,
 			// not an inhabitant — predicate has no value to test).
 		} else if !candidate.Parent.Matches(inputT) {

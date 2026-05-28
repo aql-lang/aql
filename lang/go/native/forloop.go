@@ -19,7 +19,7 @@ func runForLoop(r *Registry, start, end, step int64, iterName string, body Value
 		return nil, nil
 	}
 
-	if body.Data == nil {
+	if !IsConcrete(body) {
 		return nil, r.AqlError("for_error", "for: body must be a concrete list, got type literal", "for")
 	}
 	_lst, _ := AsList(body)

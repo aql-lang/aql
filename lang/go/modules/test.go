@@ -1019,7 +1019,7 @@ func isTruthy(v native.Value) bool {
 		b, _ := native.AsBoolean(v)
 		return b
 	}
-	if v.Data == nil {
+	if native.IsBareTypeNode(v) {
 		return false
 	}
 	return true

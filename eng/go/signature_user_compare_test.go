@@ -69,7 +69,7 @@ func (invertedNumberBehavior) Compare(a, b Value) (int, error) {
 	if c, ok := litVsConcreteOrder(a, b); ok {
 		return c, nil
 	}
-	if a.Data == nil && b.Data == nil {
+	if IsBareTypeNode(a) && IsBareTypeNode(b) {
 		return litVsLitOrder(a, b), nil
 	}
 	an, _ := AsInteger(a)

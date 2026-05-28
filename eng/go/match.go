@@ -46,7 +46,7 @@ func patternsOk(sig *Signature, positions []int, stack []Value, fwd int) bool {
 		// Concrete scalar pattern? Always check.
 		// *Type-literal / non-concrete pattern on a forward position?
 		// Skip — handlers may further constrain inside the body.
-		if isForward && pattern.Data == nil {
+		if isForward && !IsConcrete(pattern) {
 			continue
 		}
 		if _, uOk := Unify(val, pattern); !uOk {

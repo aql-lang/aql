@@ -6,6 +6,7 @@ import (
 
 	"github.com/aql-lang/aql/eng/go/parser"
 	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/aql-lang/aql/lang/go/modules"
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
@@ -24,6 +25,7 @@ func runModuleSteps(t *testing.T, files map[string]string, steps []string) ([]na
 	}
 	native.SetHostFileOps(reg, mem)
 	reg.SetParseFunc(parser.Parse)
+	modules.InstallResolver(reg) // production module wiring (lang.New)
 
 	eng := native.New(reg)
 	var result []native.Value
@@ -585,6 +587,7 @@ func runModuleStepsWithCwd(t *testing.T, cwd string, files map[string]string, st
 	}
 	native.SetHostFileOps(reg, mem)
 	reg.SetParseFunc(parser.Parse)
+	modules.InstallResolver(reg) // production module wiring (lang.New)
 
 	eng := native.New(reg)
 	var result []native.Value

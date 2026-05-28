@@ -25,7 +25,7 @@ type bareRefineUnifier struct {
 }
 
 func (b *bareRefineUnifier) Match(v Value, t *Type) bool {
-	if v.Data == nil && !v.Carrier {
+	if IsBareTypeNode(v) {
 		if b.prev != nil {
 			return b.prev.Match(v, t)
 		}

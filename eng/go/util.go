@@ -34,8 +34,32 @@ func IsTypeLiteral(v Value) bool {
 // literal, not a Carrier). Mirrors the negation of IsTypeLiteral
 // without the None exception — None values are concrete in the
 // sense that they're real values flowing through the program.
+//
+// IsConcrete is NOT the negation of "Data == nil": a list or map
+// carrier (NewCarrier(TList/TMap)) carries a ChildTypeInfo payload
+// — Data != nil — yet is not concrete. Use IsConcrete when the
+// intent is "I need a real value to read"; use IsBareTypeNode when
+// the intent is "v is its own lattice node".
 func IsConcrete(v Value) bool {
 	return v.Data != nil && !v.Carrier
+}
+
+// IsBareTypeNode reports whether v is a bare lattice node: it carries
+// no payload (Data == nil) and is not a CheckMode carrier. It is the
+// precise, intent-named replacement for the recurring
+// `v.Data == nil && !v.Carrier` probe used wherever a value's OWN
+// identity is treated as a type — naming (TypeNameOf / TypePathOf /
+// ValueType), lattice-identity ordering (litVsConcreteOrder), and the
+// "v IS its denoted type" shortcut (denotedType).
+//
+// Unlike IsTypeLiteral, this INCLUDES the None / Any / Never / Absent
+// type literals: every such value's own node is its type, so naming
+// and ordering must treat them as nodes. When the question is instead
+// "may the caller use v as a type CONSTRAINT?" (None excluded, because
+// handlers return NewTypeLiteral(TNone) for "no value found"), use
+// IsTypeLiteral.
+func IsBareTypeNode(v Value) bool {
+	return v.Data == nil && !v.Carrier
 }
 
 // RequireConcreteList unwraps a list-typed Value into its ReadList,

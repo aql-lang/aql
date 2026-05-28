@@ -146,7 +146,7 @@ func resolvePredicateRef(v Value, r *Registry) (Value, bool) {
 	case v.Parent != nil && v.Parent.Matches(TAtom) && v.Data != nil:
 		w, _ := AsAtom(v)
 		name = w
-	case v.Data == nil && !v.Carrier && v.ID != "" && v.Name != "":
+	case IsBareTypeNode(v) && v.ID != "" && v.Name != "":
 		name = v.Name
 	case isPredicateFnValue(v):
 		// Direct FnDef body — try the FnDef's Name field. Predicate
@@ -218,7 +218,7 @@ func runPredicateUnify(r *Registry, pred, val Value) (Value, *UnifyError) {
 // alternative via unifyInnerR so predicate-fn alternatives are
 // evaluated correctly.
 func unifyDisjunctR(disj DisjunctInfo, val Value, r *Registry) (Value, *UnifyError) {
-	if val.Data == nil && (val.Parent.Equal(TAny) || (&val).Equal(TAny)) {
+	if !IsConcrete(val) && (val.Parent.Equal(TAny) || (&val).Equal(TAny)) {
 		return NewDisjunct(disj.Alternatives), nil
 	}
 	for _, alt := range disj.Alternatives {
@@ -357,10 +357,10 @@ func unifySameOrSubtype(a, b Value) (Value, *UnifyError) {
 	bType := denotedType(b)
 
 	// Type literal unifies with any concrete whose type matches.
-	if a.Data == nil && b.Data != nil && bType.Matches(aType) {
+	if IsBareTypeNode(a) && b.Data != nil && bType.Matches(aType) {
 		return b, nil
 	}
-	if b.Data == nil && a.Data != nil && aType.Matches(bType) {
+	if IsBareTypeNode(b) && a.Data != nil && aType.Matches(bType) {
 		return a, nil
 	}
 
@@ -390,7 +390,7 @@ func unifySameOrSubtype(a, b Value) (Value, *UnifyError) {
 // stand-in for a value of type T); treat its Parent as the denoted
 // type since &v has no lattice identity to compare against.
 func denotedType(v Value) *Type {
-	if v.Data == nil && !v.Carrier && v.ID != "" {
+	if IsBareTypeNode(v) && v.ID != "" {
 		return &v
 	}
 	return v.Parent

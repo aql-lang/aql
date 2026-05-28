@@ -23,7 +23,7 @@ func recordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	if !list.Parent.Equal(TList) {
 		return nil, r.AqlError("record_error", "record: argument must be a list", "record")
 	}
-	if list.Data == nil {
+	if !IsConcrete(list) {
 		return nil, r.AqlError("record_error", "record: argument must be a concrete list, got type literal", "record")
 	}
 	elems, _ := AsList(list)

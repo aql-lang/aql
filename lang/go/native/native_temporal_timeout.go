@@ -10,7 +10,7 @@ func RunTimerCallback(r *Registry, callback Value, isList bool) {
 	sub := New(r)
 	var input []Value
 	if isList {
-		if callback.Data == nil {
+		if !IsConcrete(callback) {
 			return
 		}
 		_lst, _ := AsList(callback)

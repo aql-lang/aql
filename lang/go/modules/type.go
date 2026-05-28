@@ -164,7 +164,7 @@ func typeBodyArg(v native.Value, opName string, r *native.Registry) (native.Valu
 // strict equality — set-algebra over those is reserved for future
 // work.
 func altSubtypes(alt, target native.Value) bool {
-	if alt.Data == nil && !alt.Carrier && target.Data == nil && !target.Carrier {
+	if native.IsBareTypeNode(alt) && native.IsBareTypeNode(target) {
 		aNode := &alt
 		tNode := &target
 		for d := aNode; d != nil; d = d.Parent {
@@ -231,7 +231,7 @@ func stripNoneFromField(t native.Value) native.Value {
 }
 
 func latticeNode(v native.Value) *native.Type {
-	if v.Data == nil && !v.Carrier {
+	if native.IsBareTypeNode(v) {
 		node := v
 		return &node
 	}

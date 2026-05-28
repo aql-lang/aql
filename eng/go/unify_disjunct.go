@@ -27,7 +27,7 @@ type disjunctUnifier struct {
 // literals (Data==nil, !Carrier) pass through to the prev/DefaultBehavior
 // walk — a bare Maybe-literal is "the type itself", not an inhabitant.
 func (d *disjunctUnifier) Match(v Value, t *Type) bool {
-	if v.Data == nil && !v.Carrier {
+	if IsBareTypeNode(v) {
 		if d.prev != nil {
 			return d.prev.Match(v, t)
 		}
@@ -74,7 +74,7 @@ func unifyDisjunct(disj DisjunctInfo, val Value) (Value, *UnifyError) {
 	// two value shapes: the bare type literal NewTypeLiteral(TAny)
 	// (Data=nil; the value IS the TAny lattice node) and the Any-
 	// typed carrier (Data=nil, Carrier=true, Parent=TAny).
-	if val.Data == nil && (val.Parent.Equal(TAny) || (&val).Equal(TAny)) {
+	if !IsConcrete(val) && (val.Parent.Equal(TAny) || (&val).Equal(TAny)) {
 		return NewDisjunct(disj.Alternatives), nil
 	}
 
