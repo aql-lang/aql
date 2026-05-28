@@ -201,10 +201,10 @@ parity with the codebase, not pending work.
 | NATIVE-MODULES.10.md | Native Go modules. |
 | FILE-ACCESS.10.md | File I/O API. |
 | SAMPLES.10.md | Code samples. |
-| tutorial.10.md | Diataxis tutorial. |
-| how-to.10.md | Diataxis how-to. |
-| reference.10.md | Diataxis reference. |
-| explanation.10.md | Diataxis explanation. |
+| tutorial.10.md | Step-by-step tutorial. |
+| how-to.10.md | Task-oriented how-to guides. |
+| reference.10.md | Precise reference material. |
+| explanation.10.md | Background and rationale. |
 
 
 ## Open Design Issues

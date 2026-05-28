@@ -12,7 +12,7 @@ calculator is a vehicle; the destination is "I can build a
 concatenative interpreter with my own words on top of the AQL
 engine."
 
-## Diátaxis layout
+## Documentation layout
 
 | Doc | Question it answers | Read first if you… |
 | --- | --- | --- |

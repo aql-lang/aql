@@ -54,9 +54,8 @@ A wasm-powered browser playground is bundled in
 
 ## Documentation
 
-The manual is organised after the [Diátaxis](https://diataxis.fr)
-framework — four documents, one for each kind of learning need,
-plus a CLI reference:
+The manual is organised into four documents, one for each kind of
+learning need, plus a CLI reference:
 
 | Document | When to read it |
 |----------|-----------------|
