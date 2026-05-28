@@ -24,7 +24,7 @@ func runNativeModuleSubImport(t *testing.T, files map[string]string, steps []str
 	reg.SetParseFunc(parser.Parse)
 	// The production wiring (lang/go/aql.go:New). Without this a file
 	// imported via "./lib.aql" cannot itself import a native module.
-	reg.Modules.Resolver = modules.Resolve
+	modules.InstallResolver(reg)
 
 	mem := capabilities.NewMem()
 	for path, content := range files {

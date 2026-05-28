@@ -50,20 +50,17 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	// bodies all stay in CheckMode and collect every typo as usual.
 
 	// Let the native package (or other extension packages) register
-	// their words in the module's sub-registry. Propagate the hook
-	// so nested modules also get these words.
-	if parent.Modules.InitFunc != nil {
-		parent.Modules.InitFunc(modReg)
-		modReg.Modules.InitFunc = parent.Modules.InitFunc
+	// Inherit the module CONFIG (InitFunc + Resolver) as a unit, then
+	// seed the child with native words. Using ModuleStore.InheritConfig
+	// rather than copying fields one at a time is what keeps a future
+	// ModuleStore field from being silently dropped here — the Resolver
+	// omission that broke `import "aql:math"` from file-imported modules
+	// (native imports only worked at the top level) was exactly that
+	// field-by-field bug.
+	modReg.Modules.InheritConfig(parent.Modules)
+	if modReg.Modules.InitFunc != nil {
+		modReg.Modules.InitFunc(modReg)
 	}
-
-	// Propagate the native-module resolver so a file-imported module
-	// can itself `import "aql:math"` (and any other aql:* module). The
-	// child module body runs in a fresh DefaultRegistry whose
-	// Modules.Resolver is nil; without this every native-module import
-	// from an imported file fails with "native module resolver not
-	// configured" — collapsing the module story to single-file scripts.
-	modReg.Modules.Resolver = parent.Modules.Resolver
 
 	// Inherit parent context so module can read parent values.
 	// The module's Run will push its own copy-on-write layer on top.
