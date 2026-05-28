@@ -125,6 +125,18 @@ func InstallRandExports(r *native.Registry) error {
 	return nil
 }
 
+// InstallTestExports builds the test module and installs its exports as defs.
+func InstallTestExports(r *native.Registry) error {
+	desc, err := BuildTestModule(r)
+	if err != nil {
+		return err
+	}
+	for name, exportMap := range desc.Exports {
+		r.Defs.Push(name, native.NewMap(exportMap))
+	}
+	return nil
+}
+
 // Names returns the list of available native module names.
 func Names() []string {
 	names := make([]string, 0, len(modules))

@@ -589,10 +589,18 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 		}
 		input := genResults[len(genResults)-1]
 
-		// Run the property body with `input` on the stack. Body
-		// must leave a Boolean. Anything else is a failure.
-		propTokens := append([]native.Value{input}, propBody...)
-		propResults, err := native.New(parent).Run(propTokens)
+		// Run the property body via CallAQL with one unnamed param
+		// bound to the generated input. The body sees the value on
+		// the stack (so stack-form bodies like `[0 gte]` work) AND
+		// can reference it via `args.0` (so map-destructuring bodies
+		// work). Body must leave a Boolean; anything else is a failure.
+		propSig := native.FnSig{
+			Params:     []native.FnParam{{Type: native.TAny}},
+			Returns:    []*native.Type{native.TAny},
+			Body:       append([]native.Value(nil), propBody...),
+			BarrierPos: -1,
+		}
+		propResults, err := parent.CallAQL(&propSig, []native.Value{input}, nil)
 		if err != nil {
 			failed = true
 			failingInput = input
@@ -711,8 +719,15 @@ func shrinkFailingInput(
 			return shrink.Invalid
 		}
 		candidateValue := vals[len(vals)-1]
-		propTokens := append([]native.Value{candidateValue}, propBody...)
-		res, err := native.New(parent).Run(propTokens)
+		// Same CallAQL plumbing as the main loop: an unnamed Any
+		// param makes `args.0` available inside the property body.
+		propSig := native.FnSig{
+			Params:     []native.FnParam{{Type: native.TAny}},
+			Returns:    []*native.Type{native.TAny},
+			Body:       append([]native.Value(nil), propBody...),
+			BarrierPos: -1,
+		}
+		res, err := parent.CallAQL(&propSig, []native.Value{candidateValue}, nil)
 		if err != nil || len(res) == 0 {
 			return shrink.Invalid
 		}

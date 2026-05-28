@@ -1,8 +1,11 @@
 # Property-Based Testing for AQL
 
-> **STATUS: STAGES 0-5 COMPLETE — READY FOR STAGE 6 (2026-05-28)**
+> **STATUS: ALL STAGES COMPLETE (2026-05-28)**
 >
-> Remaining work: decision PBT spec (Stage 6 — end-to-end demo).
+> PBT shipped end-to-end: kernel stack form + recording, PropertySpec
+> Records, check-prop driver, transparency-aware reducer, decision-
+> module integration demos. The whole pipeline runs via
+> `make test ./lang/go/modules/`.
 >
 > What landed:
 > - Stage 0d (7d46b68): expandDottedWord doc cleanup.
@@ -20,14 +23,22 @@
 >   `Eval(Compile(reg, src)) ≡ direct Run(src)` for arithmetic,
 >   comparisons, strings, stack ops, lists, paren grouping, and
 >   forward/stack/swap surface forms.
-> - Stage 4 (this commit): `lang/go/modules/test/shrink/` package
+> - Stage 4 (aab4fcc): `lang/go/modules/test/shrink/` package
 >   with Transparency annotations (`Transparent`/`Generator`/
 >   `Frozen`/`Opaque`), DefaultPolicy (covers arithmetic/comparison/
 >   stack ops as Transparent, `rand-*` as Generator, `time-*` /
 >   `fetch-*` as Frozen, unknown words as Opaque), and `ShrinkCost`
 >   that adds policy weights + literal-complexity (intMagnitude,
 >   string length, list size) on top of `stackform.Cost`.
-> - Stage 5 (this commit): the greedy `Reduce` loop in
+> - Stage 6 (this commit): `modules/decision_pbt_spec_test.go` —
+>   three end-to-end demos against `aql:decision`:
+>   `EvalCondAlwaysReturnsBoolean` (pipeline sanity), `GreaterThan
+>   SelfIsAlwaysFalse` (real invariant, X > X is false for any X),
+>   and `NegativeControl_ShrinksFailingInput` (deliberately-buggy
+>   property fails on every value in [0,100); reducer collapses
+>   failing input to 0). Plus `InstallTestExports` helper in
+>   modules.go for symmetry with the other Install*Exports.
+> - Stage 5 (aab4fcc): the greedy `Reduce` loop in
 >   `shrink/reduce.go` + rewrite families in `shrink/candidates.go`
 >   (drop-op, integer/decimal/string/boolean/list shrinking,
 >   recursive Quote-body shrinking). Integration with `aql:test`
@@ -77,10 +88,11 @@
 > check or a stricter sub-profile that denies top-level rand words,
 > forcing PBT runs to pass through seeded instances.
 >
-> Resume with Stage 6 — author 3 properties against the decision
-> module (hit-policy stability, collect-order preservation, De
-> Morgan negation), plus a negative-control test that proves the
-> shrinker collapses a failing input to the minimum violator.
+> All planned stages have shipped. Out-of-scope follow-ups (best-
+> first search, exact small-program enumeration, generator-program
+> shrinking rather than value-shrinking, FnSig NoEvalArgs to
+> resurrect rand.list-of / rand.map-from) remain available for a
+> future iteration if PBT usage surfaces concrete need.
 
 ## Context
 
