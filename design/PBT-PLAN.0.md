@@ -1,10 +1,14 @@
 # Property-Based Testing for AQL
 
-> **STATUS: ALL STAGES COMPLETE (2026-05-28)**
+> **STATUS: ALL STAGES + ALL FOLLOW-UPS COMPLETE (2026-05-28)**
 >
 > PBT shipped end-to-end: kernel stack form + recording, PropertySpec
 > Records, check-prop driver, transparency-aware reducer, decision-
-> module integration demos. The whole pipeline runs via
+> module integration demos. All three originally-deferred follow-ups
+> also shipped: FnSig.NoEvalArgs (unlocks rand.list-of /
+> rand.map-from), generator-program shrinking (mutates gen source,
+> not just the value), best-first search (opt-in wider Reduce
+> strategy). The whole pipeline runs via
 > `make test ./lang/go/modules/`.
 >
 > What landed:

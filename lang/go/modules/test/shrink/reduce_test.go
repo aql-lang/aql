@@ -248,6 +248,131 @@ func TestReduce_RejectsCandidatesThatBreakFailure(t *testing.T) {
 	}
 }
 
+// TestReduce_BestFirst_FindsMinimum confirms best-first search
+// reaches the same minimum as greedy on cases where greedy works.
+func TestReduce_BestFirst_FindsMinimum(t *testing.T) {
+	initial := &stackform.StackForm{Ops: []stackform.Op{
+		stackform.PushLit{V: eng.NewInteger(1)},
+		stackform.PushLit{V: eng.NewInteger(7)}, // the witness
+		stackform.PushLit{V: eng.NewInteger(2)},
+		stackform.PushLit{V: eng.NewInteger(3)},
+		stackform.Call{Name: "add", Arity: 2},
+	}}
+	eval := fpEval(func(f *stackform.StackForm) bool {
+		return formHasInt(f, 7)
+	})
+	profile := &Profile{
+		MaxSteps:  500,
+		Policy:    DefaultPolicy(),
+		Strategy:  BestFirst,
+		BeamWidth: 16,
+	}
+	reduced := Reduce(initial, eval, profile)
+	if !formHasInt(reduced, 7) {
+		t.Fatal("best-first dropped the witness")
+	}
+	if len(reduced.Ops) != 1 {
+		t.Errorf("best-first left %d ops, want 1: %s",
+			len(reduced.Ops), stackform.Pretty(reduced))
+	}
+}
+
+// TestReduce_BestFirst_ExploresWiderThanGreedy demonstrates a case
+// where greedy's "commit to the locally lowest-cost candidate"
+// behavior misses a better reduction that best-first finds.
+//
+// Setup: form has two PushLits at cost 4 each. Greedy might commit
+// to shrinking one path; best-first explores both. With this
+// particular eval predicate, both paths converge on the same
+// answer — the test just confirms best-first AT LEAST matches
+// greedy and doesn't regress.
+func TestReduce_BestFirst_AtLeastMatchesGreedy(t *testing.T) {
+	initial := &stackform.StackForm{Ops: []stackform.Op{
+		stackform.PushLit{V: eng.NewInteger(100)},
+		stackform.PushLit{V: eng.NewInteger(200)},
+		stackform.Call{Name: "add", Arity: 2},
+	}}
+	eval := fpEval(func(f *stackform.StackForm) bool {
+		// Failure: there's a Call op AND at least one PushLit.
+		var hasCall, hasLit bool
+		for _, op := range f.Ops {
+			if _, ok := op.(stackform.Call); ok {
+				hasCall = true
+			}
+			if _, ok := op.(stackform.PushLit); ok {
+				hasLit = true
+			}
+		}
+		return hasCall && hasLit
+	})
+
+	greedyProf := DefaultProfile()
+	greedyProf.MaxSteps = 500
+	greedyReduced := Reduce(initial, eval, greedyProf)
+
+	bestProf := &Profile{
+		MaxSteps:  500,
+		Policy:    DefaultPolicy(),
+		Strategy:  BestFirst,
+		BeamWidth: 32,
+	}
+	bestReduced := Reduce(initial, eval, bestProf)
+
+	greedyCost := ShrinkCost(greedyReduced, DefaultPolicy())
+	bestCost := ShrinkCost(bestReduced, DefaultPolicy())
+	if bestCost > greedyCost {
+		t.Errorf("BestFirst regressed: best=%d greedy=%d (forms: best=%q greedy=%q)",
+			bestCost, greedyCost,
+			stackform.Pretty(bestReduced), stackform.Pretty(greedyReduced))
+	}
+}
+
+// TestReduce_BestFirst_NoFailDoesntShrink confirms best-first
+// respects the "only shrink genuine counterexamples" contract.
+func TestReduce_BestFirst_NoFailDoesntShrink(t *testing.T) {
+	initial := &stackform.StackForm{Ops: []stackform.Op{
+		stackform.PushLit{V: eng.NewInteger(5)},
+	}}
+	// Eval always returns Pass.
+	eval := fpEval(func(_ *stackform.StackForm) bool { return false })
+	profile := &Profile{
+		MaxSteps: 500,
+		Policy:   DefaultPolicy(),
+		Strategy: BestFirst,
+	}
+	reduced := Reduce(initial, eval, profile)
+	if !stackform.Equal(reduced, initial) {
+		t.Errorf("non-failing initial got shrunk: %s", stackform.Pretty(reduced))
+	}
+}
+
+// TestReduce_BestFirst_RespectsBeamWidth confirms the queue is
+// bounded — the search doesn't blow up with many candidates.
+func TestReduce_BestFirst_RespectsBeamWidth(t *testing.T) {
+	// Form with many PushLits → many drop candidates per step.
+	ops := []stackform.Op{}
+	for i := 0; i < 20; i++ {
+		ops = append(ops, stackform.PushLit{V: eng.NewInteger(int64(i))})
+	}
+	initial := &stackform.StackForm{Ops: ops}
+	eval := fpEval(func(f *stackform.StackForm) bool {
+		// Failure: contains the value 7 anywhere.
+		return formHasInt(f, 7)
+	})
+	profile := &Profile{
+		MaxSteps:  100,
+		Policy:    DefaultPolicy(),
+		Strategy:  BestFirst,
+		BeamWidth: 4, // very tight beam
+	}
+	// Should not panic / OOM. Returned form should still preserve
+	// the witness.
+	reduced := Reduce(initial, eval, profile)
+	if !formHasInt(reduced, 7) {
+		t.Fatal("tight beam dropped the witness")
+	}
+}
+
 // TestReduce_RespectsMaxSteps confirms MaxSteps caps the outer
 // loop. Uses a predicate (n > 0) where 0 doesn't qualify, so the
 // reducer must halve through intermediate values rather than jump
