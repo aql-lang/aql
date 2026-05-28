@@ -58,7 +58,7 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 	if !inputSig.Parent.Equal(TList) {
 		return nil, 0, fmt.Errorf("function spec: input signature must be a list")
 	}
-	if inputSig.Data == nil {
+	if !IsConcrete(inputSig) {
 		return nil, 0, fmt.Errorf("function spec: input signature must be a concrete list, got type literal")
 	}
 	elems, _ := AsList(inputSig)
@@ -185,7 +185,7 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 			}
 			params = append(params, FnParam{Type: paramType})
 
-		case elem.Data == nil:
+		case IsBareTypeNode(elem):
 			elemType := elem
 			params = append(params, FnParam{Type: &elemType})
 
@@ -212,7 +212,7 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 // ParseFnReturns extracts return types from an output signature.
 // The output may be a list of types/values or a single type/value.
 func ParseFnReturns(outputSig Value) ([]*Type, error) {
-	if !outputSig.Parent.Equal(TList) || outputSig.Data == nil {
+	if !outputSig.Parent.Equal(TList) || !IsConcrete(outputSig) {
 		t, _, err := ResolveSigType(nil, outputSig)
 		if err != nil {
 			return nil, err
@@ -237,7 +237,7 @@ func ParseFnReturns(outputSig Value) ([]*Type, error) {
 // ResolveSigType converts a Value (from a pair's value side) to a *Type
 // plus an optional pattern Value for structural matching.
 func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
-	if v.Data == nil {
+	if IsBareTypeNode(v) {
 		return ValueType(v), nil, nil
 	}
 	// Word, String, or Atom: extract the name and resolve.
@@ -341,7 +341,7 @@ func LookupDefType(r *Registry, name string) *Value {
 	}
 	if tv, ok := r.TopTypeBody(name); ok {
 		if IsTypeBody(tv) {
-			if tv.Data == nil {
+			if IsBareTypeNode(tv) {
 				return CanonicalType(r, &tv)
 			}
 			return &tv
@@ -354,7 +354,7 @@ func LookupDefType(r *Registry, name string) *Value {
 	if !IsTypeBody(val) {
 		return nil
 	}
-	if val.Data == nil {
+	if IsBareTypeNode(val) {
 		return CanonicalType(r, &val)
 	}
 	return &val
@@ -376,7 +376,7 @@ func ResolveDefType(r *Registry, v Value) (*Type, *Value, error) {
 		pat := NewOptionsType(_as6.Fields)
 		return TMap, &pat, nil
 	}
-	if v.Data == nil {
+	if IsBareTypeNode(v) {
 		// A bare type literal IS its lattice node post type/value
 		// merge — the denoted type is the value itself, not its
 		// supertype Parent. Route through CanonicalType so user-

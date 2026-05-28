@@ -121,13 +121,13 @@ func isNeverShape(v Value) bool {
 	if v.Parent.Equal(TNever) {
 		return true
 	}
-	return v.Data == nil && !v.Carrier && (&v).Equal(TNever)
+	return IsBareTypeNode(v) && (&v).Equal(TNever)
 }
 
 // isPlainConcreteMap reports whether v is a non-typed, non-record,
 // non-options concrete map (Data is *OrderedMap).
 func isPlainConcreteMap(v Value) bool {
-	if !v.Parent.Equal(TMap) || v.Data == nil {
+	if !v.Parent.Equal(TMap) || !IsConcrete(v) {
 		return false
 	}
 	if IsRecordType(v) || IsOptionsType(v) || IsTypedMap(v) {
@@ -151,7 +151,7 @@ func mergeMaps(a, b ReadMap) (*OrderedMap, bool) {
 			// Combined is Never — check both forms: sentinel (Parent=
 			// TNever) and bare type literal (NewTypeLiteral(TNever),
 			// Parent=nil after the degenerate-root setup).
-			if combined.Parent.Equal(TNever) || (combined.Data == nil && (&combined).Equal(TNever)) {
+			if combined.Parent.Equal(TNever) || (IsBareTypeNode(combined) && (&combined).Equal(TNever)) {
 				return nil, false
 			}
 			result.Set(key, combined)

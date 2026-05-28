@@ -286,7 +286,7 @@ func sigTypeMatchesAsType(v Value, t *Type) bool {
 	if v.Carrier {
 		return false
 	}
-	if v.Data == nil {
+	if IsBareTypeNode(v) {
 		// Bare None has Parent=TNone; treat it as not-a-type for type
 		// args. Lattice roots have Parent=nil but are still valid type
 		// literals — &v is the lattice node either way.
@@ -398,7 +398,7 @@ func positionalMatch(values []Value, sig *Signature) bool {
 		// Reject type literals (Data==nil) for concrete Map/List signatures
 		// unless this slot explicitly wants a type literal.
 		isTypeArg := sig.TypeArgs != nil && sig.TypeArgs[i]
-		if !isTypeArg && v.Data == nil && (t.Equal(TMap) || t.Equal(TList)) {
+		if !isTypeArg && IsBareTypeNode(v) && (t.Equal(TMap) || t.Equal(TList)) {
 			return false
 		}
 	}

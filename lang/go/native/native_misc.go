@@ -605,7 +605,7 @@ func awaitDefaultHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 }
 
 func doAwait(r *Registry, mode string, parallels Value) ([]Value, error) {
-	if parallels.Data == nil {
+	if !IsConcrete(parallels) {
 		return nil, r.AqlError("await_error", "await: parallels must be a concrete list, got type literal", "await")
 	}
 	_lst, _ := AsList(parallels)

@@ -31,7 +31,7 @@ import (
 // (type literal with nil Data, record type, options type, table
 // type, or object type).
 func isTypeLike(v Value) bool {
-	if v.Data == nil {
+	if IsBareTypeNode(v) {
 		return true
 	}
 	return IsRecordType(v) || IsOptionsType(v) || IsTableType(v) ||
@@ -103,7 +103,7 @@ func MakeRecordR(recType RecordTypeInfo, srcVal Value, useBase bool, r *Registry
 	if !srcVal.Parent.Equal(TList) {
 		return nil, fmt.Errorf("make: record values must be a list or map, got %s", srcVal.String())
 	}
-	if srcVal.Data == nil {
+	if !IsConcrete(srcVal) {
 		return nil, fmt.Errorf("make: record values must be a concrete list, got type literal")
 	}
 	elems, _ := AsList(srcVal)
@@ -351,12 +351,12 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		}
 	}
 
-	if targetVal.Data == nil && targetVal.Equal(TPath) {
+	if IsBareTypeNode(targetVal) && targetVal.Equal(TPath) {
 		return makePath(srcVal, false)
 	}
 
-	if targetVal.Equal(TOptions) && targetVal.Data == nil {
-		if !srcVal.Parent.Equal(TMap) || srcVal.Data == nil {
+	if targetVal.Equal(TOptions) && IsBareTypeNode(targetVal) {
+		if !srcVal.Parent.Equal(TMap) || !IsConcrete(srcVal) {
 			return nil, fmt.Errorf("make: Options requires a concrete map")
 		}
 		src, err := AsMutableMap(srcVal)
@@ -396,7 +396,7 @@ func MakeTableR(tt TableTypeInfo, srcVal Value, r *Registry) ([]Value, error) {
 	if !srcVal.Parent.Equal(TList) {
 		return nil, fmt.Errorf("make: table values must be a list of row lists, got %s", srcVal.String())
 	}
-	if srcVal.Data == nil {
+	if !IsConcrete(srcVal) {
 		return nil, fmt.Errorf("make: table values must be a concrete list, got type literal")
 	}
 	rows, _ := AsList(srcVal)
@@ -407,7 +407,7 @@ func MakeTableR(tt TableTypeInfo, srcVal Value, r *Registry) ([]Value, error) {
 		if !rowVal.Parent.Equal(TList) {
 			return nil, fmt.Errorf("make: table row %d must be a list, got %s", rowIdx, rowVal.String())
 		}
-		if rowVal.Data == nil {
+		if !IsConcrete(rowVal) {
 			return nil, fmt.Errorf("make: table row %d must be a concrete list, got type literal", rowIdx)
 		}
 		rowElems, _ := AsList(rowVal)
@@ -485,7 +485,7 @@ func registerKernelIdeals(r *Registry) {
 		Name:    "Object",
 		Enabled: true,
 		Accepts: func(v Value) bool {
-			return (v.Data == nil && v.Equal(TObject)) || IsObjectType(v)
+			return (IsBareTypeNode(v) && v.Equal(TObject)) || IsObjectType(v)
 		},
 		Instantiate: func(typ, data Value, _ *Registry) ([]Value, error) {
 			objType, err := AsObjectType(typ)
@@ -499,7 +499,7 @@ func registerKernelIdeals(r *Registry) {
 		Name:    "Record",
 		Enabled: true,
 		Accepts: func(v Value) bool {
-			return (v.Data == nil && v.Equal(TRecord)) || IsRecordType(v)
+			return (IsBareTypeNode(v) && v.Equal(TRecord)) || IsRecordType(v)
 		},
 		Instantiate: func(typ, data Value, r *Registry) ([]Value, error) {
 			recType, err := AsRecordType(typ)
@@ -513,7 +513,7 @@ func registerKernelIdeals(r *Registry) {
 		Name:    "Table",
 		Enabled: true,
 		Accepts: func(v Value) bool {
-			return (v.Data == nil && v.Equal(TTable)) || IsTableType(v)
+			return (IsBareTypeNode(v) && v.Equal(TTable)) || IsTableType(v)
 		},
 		Instantiate: func(typ, data Value, r *Registry) ([]Value, error) {
 			tt, err := AsTableType(typ)
@@ -590,7 +590,7 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 		return MakeRecordR(recType, srcVal, useBase, reg)
 	}
 
-	if targetVal.Data == nil && targetVal.Equal(TPath) {
+	if IsBareTypeNode(targetVal) && targetVal.Equal(TPath) {
 		abs := false
 		if optsMap, _ := AsMap(optsVal); optsMap != nil {
 			if v, ok := optsMap.Get("abs"); ok && v.Parent.Matches(TBoolean) {
@@ -652,7 +652,7 @@ func MakeObjHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) 
 // MakeArrayHandler is the 2-arg [Array, List] make handler.
 func MakeArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	srcVal := args[1]
-	if !srcVal.Parent.Equal(TList) || srcVal.Data == nil {
+	if !srcVal.Parent.Equal(TList) || !IsConcrete(srcVal) {
 		return nil, fmt.Errorf("make: Array source must be a concrete list, got %s", srcVal.String())
 	}
 	srcList, _ := AsList(srcVal)
@@ -662,7 +662,7 @@ func MakeArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 // MakeScalarOptsHandler is the 3-arg [ScalarType, Map, Any] make handler.
 func MakeScalarOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	targetVal, optsVal, srcVal := args[0], args[1], args[2]
-	if targetVal.Data == nil && targetVal.Equal(TPath) {
+	if IsBareTypeNode(targetVal) && targetVal.Equal(TPath) {
 		abs := false
 		if optsMap, _ := AsMap(optsVal); optsMap != nil {
 			if v, ok := optsMap.Get("abs"); ok && v.Parent.Matches(TBoolean) {
@@ -752,7 +752,7 @@ func MakeFieldValue(val Value, constraint Value) (Value, error) {
 func MakeFieldValueR(val Value, constraint Value, r *Registry) (Value, error) {
 	val = ResolveWordValue(val)
 
-	if constraint.Data == nil {
+	if IsBareTypeNode(constraint) {
 		constraintType := ValueType(constraint)
 		if val.Parent.Matches(constraintType) {
 			return val, nil

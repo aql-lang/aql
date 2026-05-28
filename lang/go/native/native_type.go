@@ -292,7 +292,7 @@ func refineBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	// the alias path (`def Foo Integer`, where the body remains the
 	// input type literal verbatim) — without this differentiation the
 	// two surfaces would be indistinguishable downstream.
-	if base.Data == nil && !base.Carrier {
+	if IsBareTypeNode(base) {
 		// Mint the refine prefab against the canonical lattice node
 		// for base, so any user-installed Behavior on base (via
 		// `behave`) propagates to the LCA walk for sibling subtypes
@@ -362,7 +362,7 @@ func installIdeals(r *Registry) {
 // before being added.
 func enumHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	list := args[0]
-	if list.Data == nil {
+	if !IsConcrete(list) {
 		return nil, &AqlError{Code: "type_error", Detail: "enum: argument must be a concrete list"}
 	}
 	var childType Value
@@ -446,7 +446,7 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		}
 		return []Value{NewBoolean(matched)}, nil
 	}
-	if b.Data == nil && !b.Carrier {
+	if IsBareTypeNode(b) {
 		// b is a type literal; its denoted lattice node is &b (a
 		// type literal is a by-value copy of its node). Post the
 		// Any-root unification TType.Parent == TAny, so the old
@@ -463,7 +463,7 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 			if a.Carrier {
 				return []Value{NewBoolean(false)}, nil
 			}
-			return []Value{NewBoolean(a.Data == nil || IsTypeBody(a) || IsRecordShape(a) || a.Parent.Matches(TType))}, nil
+			return []Value{NewBoolean(IsBareTypeNode(a) || IsTypeBody(a) || IsRecordShape(a) || a.Parent.Matches(TType))}, nil
 		}
 		if bNode.Matches(TType) {
 			// Type/-rooted subtype RHS (`Function` / `Disjunct` / `Enum`
@@ -477,7 +477,7 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		// short-circuit family relationships and would reject a
 		// user-minted subtype (e.g. `def Foo refine List`) against
 		// its base family literal.
-		if a.Data == nil && !a.Carrier {
+		if IsBareTypeNode(a) {
 			aNode := &a
 			return []Value{NewBoolean(aNode.Equal(bNode) || aNode.IsSubtypeOf(bNode))}, nil
 		}
@@ -510,7 +510,7 @@ func teqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	if !IsTypeBody(a) || !IsTypeBody(b) {
 		return []Value{NewBoolean(false)}, nil
 	}
-	if a.Data == nil && !a.Carrier && b.Data == nil && !b.Carrier {
+	if IsBareTypeNode(a) && IsBareTypeNode(b) {
 		aNode := &a
 		bNode := &b
 		return []Value{NewBoolean(aNode.Equal(bNode))}, nil
@@ -601,7 +601,7 @@ func baseHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 	// For a type literal the denoted lattice node is &v (the value
 	// IS the type); for a concrete value it's v.Parent.
 	var t *Type
-	if v.Data == nil && !v.Carrier {
+	if IsBareTypeNode(v) {
 		t = &v
 	} else {
 		t = v.Parent

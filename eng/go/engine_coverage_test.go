@@ -87,7 +87,7 @@ func TestValueConstructors(t *testing.T) {
 			if !c.value.Parent.Matches(c.want) {
 				t.Errorf("Parent = %v does not match expected %v", c.value.Parent, c.want)
 			}
-			if c.value.Data == nil {
+			if !IsConcrete(c.value) {
 				t.Error("Data should not be nil for a concrete value")
 			}
 		})

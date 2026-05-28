@@ -39,7 +39,7 @@ func TestIdeals_CustomKindDispatchesThroughType(t *testing.T) {
 		Name:    "Stringy",
 		Enabled: true,
 		Accepts: func(base Value) bool {
-			return base.Data == nil && (&base).Equal(TString)
+			return IsBareTypeNode(base) && (&base).Equal(TString)
 		},
 		Construct: func(base, arg Value, r *Registry) ([]Value, error) {
 			called = true
@@ -68,7 +68,7 @@ func TestIdeals_CustomKindInstantiatesThroughMake(t *testing.T) {
 		Name:    "Listy",
 		Enabled: true,
 		Accepts: func(v Value) bool {
-			return v.Data == nil && (&v).Equal(TList)
+			return IsBareTypeNode(v) && (&v).Equal(TList)
 		},
 		Instantiate: func(typ, data Value, r *Registry) ([]Value, error) {
 			called = true

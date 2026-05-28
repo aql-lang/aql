@@ -492,7 +492,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 			Args:       []*eng.Type{eng.TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
-				if args[0].Data == nil {
+				if !eng.IsConcrete(args[0]) {
 					return nil, &eng.AqlError{Code: "type_error", Detail: "fn: argument must be a concrete list"}
 				}
 				lst, _ := eng.AsList(args[0])
@@ -694,7 +694,7 @@ func registerEngSpecTypeWords(r *eng.Registry) {
 			NoEvalArgs: map[int]bool{0: true},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				list := args[0]
-				if list.Data == nil {
+				if !eng.IsConcrete(list) {
 					return nil, &eng.AqlError{Code: "type_error", Detail: "enum: argument must be a concrete list"}
 				}
 				var childType eng.Value
@@ -755,7 +755,7 @@ func registerEngSpecMake(r *eng.Registry) {
 func registerEngSpecStorage(r *eng.Registry) {
 	setObjectH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 		container := args[2]
-		if container.Data == nil {
+		if !eng.IsConcrete(container) {
 			return nil, fmt.Errorf("set: cannot set field on type literal")
 		}
 		key := eng.StoreKey(args[0])
@@ -780,7 +780,7 @@ func registerEngSpecStorage(r *eng.Registry) {
 	getNodeH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 		key := args[0]
 		container := args[1]
-		if container.Data == nil {
+		if !eng.IsConcrete(container) {
 			return nil, fmt.Errorf("get: cannot access property on type literal")
 		}
 		if key.Parent.Matches(eng.TInteger) {
@@ -806,7 +806,7 @@ func registerEngSpecStorage(r *eng.Registry) {
 	getObjectH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 		key := args[0]
 		container := args[1]
-		if container.Data == nil {
+		if !eng.IsConcrete(container) {
 			return nil, fmt.Errorf("get: cannot access property on type literal")
 		}
 		k := eng.GetKey(key)
@@ -874,7 +874,7 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 		if !list.Parent.Equal(eng.TList) {
 			return nil, fmt.Errorf("record: argument must be a list")
 		}
-		if list.Data == nil {
+		if !eng.IsConcrete(list) {
 			return nil, fmt.Errorf("record: argument must be a concrete list, got type literal")
 		}
 		elems, _ := eng.AsList(list)
@@ -965,13 +965,13 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 	refineCtorH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 		base := args[0]
 		arg := args[1]
-		if base.Data == nil && base.Equal(eng.TObject) {
+		if eng.IsBareTypeNode(base) && base.Equal(eng.TObject) {
 			return objectH([]eng.Value{arg}, nil, nil, reg)
 		}
 		if eng.IsObjectType(base) {
 			return objectWithParentH([]eng.Value{arg, base}, nil, nil, reg)
 		}
-		if base.Data == nil && base.Equal(eng.TRecord) {
+		if eng.IsBareTypeNode(base) && base.Equal(eng.TRecord) {
 			if !arg.Parent.Equal(eng.TList) {
 				return nil, fmt.Errorf("refine Record: a record takes a list of field pairs")
 			}
@@ -1094,7 +1094,7 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 		result.Set("name", eng.NewString(name))
 	}
 
-	if tv.Data == nil || eng.IsTypeBody(tv) || eng.IsRecordShape(tv) {
+	if eng.IsBareTypeNode(tv) || eng.IsTypeBody(tv) || eng.IsRecordShape(tv) {
 		result.Set("type", eng.NewString("Type"))
 		result.Set("struct", eng.NewString(eng.TypeNameOf(tv)))
 	} else {
@@ -1221,7 +1221,7 @@ func registerEngSpecFnSig(r *eng.Registry) {
 			Args:       []*eng.Type{eng.TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
-				if args[0].Data == nil {
+				if !eng.IsConcrete(args[0]) {
 					return nil, &eng.AqlError{
 						Code:   "fnsig_invalid_spec",
 						Detail: "fnsig: argument must be a concrete list",

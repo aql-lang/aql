@@ -24,7 +24,7 @@ func unifyOptionsFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, 
 	}
 
 	// Bare Map type literal vs Options → preserve the Options schema.
-	if concrete.Data == nil {
+	if !IsConcrete(concrete) {
 		return NewOptionsType(opts.Fields), nil
 	}
 

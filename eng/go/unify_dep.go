@@ -12,22 +12,22 @@ package eng
 // that satisfied the predicate.
 //
 // The Unifier:
-//  - Gate 1: v's type must satisfy the DepScalar's base type
-//    (`Big` constrains Integers — 100 passes, "hi" fails).
-//  - Gate 2: v's payload must satisfy the constraint
-//    (depScalarCheck handles the bounds check).
+//   - Gate 1: v's type must satisfy the DepScalar's base type
+//     (`Big` constrains Integers — 100 passes, "hi" fails).
+//   - Gate 2: v's payload must satisfy the constraint
+//     (depScalarCheck handles the bounds check).
 //
 // Bare type literals (Data==nil, !Carrier) pass through to the
 // prev/DefaultBehavior walk — the type itself isn't an inhabitant.
 type depScalarUnifier struct {
-	prev      TypeBehavior
-	baseType  *Type
-	depInfo   DepScalarInfo
-	typeName  string
+	prev     TypeBehavior
+	baseType *Type
+	depInfo  DepScalarInfo
+	typeName string
 }
 
 func (d *depScalarUnifier) Match(v Value, t *Type) bool {
-	if v.Data == nil && !v.Carrier {
+	if IsBareTypeNode(v) {
 		if d.prev != nil {
 			return d.prev.Match(v, t)
 		}
@@ -115,7 +115,7 @@ func unifyDepScalar(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *Uni
 	// Parent is its base scalar, so the subtype walk handles e.g.
 	// `Pos refine Integer` (Pos sub Integer) by returning the
 	// narrower side.
-	if other.Data == nil {
+	if !IsConcrete(other) {
 		return unifySameOrSubtype(dep, other)
 	}
 

@@ -174,6 +174,40 @@ construction sites (an AST-based rewrite is fine for bulk),
 move resolution to a single boundary, remove every conditional
 that substituted on the zero value.
 
+## Payload-presence vs value-mode (CRITICAL)
+
+Do NOT write `v.Data == nil` in consumer code. The raw probe is an
+overloaded smell: across the kernel it has meant three different
+things — "v is a bare type literal", "v is not a concrete value", and
+"there is no payload to read" — and those intents genuinely **diverge**:
+
+- A list/map **carrier** (`NewCarrier(TList/TMap)`) carries a
+  `ChildTypeInfo` payload, so `v.Data != nil`, yet it is NOT concrete.
+  That non-nil payload is load-bearing: it's how a carrier satisfies
+  `positionalMatch`'s concrete-list/map rule (`signature.go`).
+- The `None` **type literal** has `Data == nil` like every other
+  literal, but dispatch treats `None` as a *value* (handlers return
+  `NewTypeLiteral(TNone)` for "no value found").
+
+So `Data == nil` is neither the negation of `IsConcrete` nor the same
+as `IsTypeLiteral`. State the intent with a named predicate (all in
+`util.go`, re-exported via `native/aliases.go`):
+
+| Intent | Predicate |
+| --- | --- |
+| v is its own lattice node (naming, ordering, identity dispatch) | `IsBareTypeNode(v)` — exactly `Data == nil && !Carrier`; INCLUDES None/Any/Never |
+| v may be used as a type **constraint** (None excluded) | `IsTypeLiteral(v)` |
+| v carries a real, readable payload | `IsConcrete(v)` |
+| handler needs a concrete list/map | `RequireConcreteList/Map(v, op)` |
+
+The regression gate `data_nil_gate_test.go::TestNoRawDataNilProbes`
+forbids `.Data == nil` outside a small allowlist of files that
+legitimately test payload presence at the lowest level (the
+value/predicate/classifier home, the rendering and comparison
+primitives, and carrier construction). Add a predicate, not an
+allowlist entry. `value_mode_test.go` pins the predicate table across
+every value mode.
+
 ## Sealed Payload (CRITICAL)
 
 `Value.Data` is a sealed interface: `eng.Payload`. Only types

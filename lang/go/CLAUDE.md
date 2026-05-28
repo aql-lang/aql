@@ -647,8 +647,15 @@ the underlying state. Adding direct field access regresses the
 consolidation and will be flagged in code review.
 
 **Concrete-value guards** (panic-prevention, type-literal vs concrete):
-- `IsTypeLiteral(v)` — true if `Data == nil` and not a carrier and not None.
-- `IsConcrete(v)` — true if `Data != nil` and not a carrier.
+- `IsBareTypeNode(v)` — true if `Data == nil` and not a carrier (v IS
+  its own lattice node). INCLUDES None/Any/Never; use for naming,
+  ordering, and lattice-identity dispatch.
+- `IsTypeLiteral(v)` — `IsBareTypeNode` minus None; use when v may be a
+  type **constraint** (None is treated as a value, not a type).
+- `IsConcrete(v)` — true if `Data != nil` and not a carrier. NOT the
+  negation of `Data == nil`: a list/map carrier has `Data != nil` yet
+  is not concrete. Never write the raw `v.Data == nil` probe in
+  consumer code — see eng/go/CLAUDE.md "Payload-presence vs value-mode".
 - `RequireConcreteList(v, op) (ReadList, error)` — unwraps a list-typed
   Value or returns an error when the value is a type literal/carrier.
 - `RequireConcreteMap(v, op) (ReadMap, error)` — same for maps.

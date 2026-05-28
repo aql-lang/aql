@@ -68,7 +68,7 @@ func parseStrOpts(v Value) strOpts {
 	o.form = "NFC"
 	o.quote = "none"
 
-	if !v.Parent.Equal(TMap) || v.Data == nil {
+	if !v.Parent.Equal(TMap) || !IsConcrete(v) {
 		return o
 	}
 	m, _ := AsMap(v)

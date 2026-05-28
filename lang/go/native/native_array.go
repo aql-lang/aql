@@ -337,7 +337,7 @@ func computeShape(v Value) []int {
 		return dims
 	}
 	first := list.Get(0)
-	if !first.Parent.Matches(TList) || first.Data == nil {
+	if !first.Parent.Matches(TList) || !IsConcrete(first) {
 		return dims
 	}
 	_lst, _ := AsList(first)
@@ -345,7 +345,7 @@ func computeShape(v Value) []int {
 	for i := 1; i < list.Len(); i++ {
 		sub := list.Get(i)
 		_subLst, _ := AsList(sub)
-		if !sub.Parent.Matches(TList) || sub.Data == nil || _subLst.Len() != firstLen {
+		if !sub.Parent.Matches(TList) || !IsConcrete(sub) || _subLst.Len() != firstLen {
 			return dims
 		}
 	}
@@ -464,7 +464,7 @@ func arrTransposeHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 		return []Value{NewList(nil)}, nil
 	}
 	first := outer.Get(0)
-	if !first.Parent.Matches(TList) || first.Data == nil {
+	if !first.Parent.Matches(TList) || !IsConcrete(first) {
 		return nil, r.AqlError("arr-transpose_error", "arr-transpose: expected rank-2 list", "arr-transpose")
 	}
 	_lst, _ := AsList(first)
@@ -472,7 +472,7 @@ func arrTransposeHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	for i := 1; i < outer.Len(); i++ {
 		sub := outer.Get(i)
 		_subLst, _ := AsList(sub)
-		if !sub.Parent.Matches(TList) || sub.Data == nil || _subLst.Len() != cols {
+		if !sub.Parent.Matches(TList) || !IsConcrete(sub) || _subLst.Len() != cols {
 			return nil, r.AqlError("arr-transpose_error", "arr-transpose: expected rectangular rank-2 list", "arr-transpose")
 		}
 	}
@@ -979,7 +979,7 @@ func eachReturnsFn(args []Value, r *Registry) []Value {
 // primary purpose is side-effect: any diagnostics the body produces
 // (type mismatches, undefined words) are accumulated on the registry.
 func analyseHigherOrderBody(r *Registry, body Value, elems ...*Type) []Value {
-	if body.Data == nil {
+	if !IsConcrete(body) {
 		return nil
 	}
 	bodyList, _ := AsList(body)

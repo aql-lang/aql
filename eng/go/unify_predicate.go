@@ -47,7 +47,7 @@ type predicateUnifier struct {
 // inhabitant, and carriers are placeholder values whose concreteness
 // is asserted at runtime by some other path.
 func (p *predicateUnifier) Match(v Value, t *Type) bool {
-	if v.Data == nil || v.Carrier {
+	if !IsConcrete(v) {
 		if p.prev != nil {
 			return p.prev.Match(v, t)
 		}
@@ -126,7 +126,7 @@ func (p *predicateUnifier) Unify(a, b Value) (Value, *UnifyError) {
 	// Data, not bare type literals. When the candidate is a type
 	// literal (e.g. Unify(Pos-literal, Pos-literal)) just admit it —
 	// the structural rule already established compatibility.
-	if candidate.Data == nil {
+	if !IsConcrete(candidate) {
 		return candidate, nil
 	}
 

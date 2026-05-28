@@ -52,7 +52,7 @@ func getSDK(apiMap ReadMap, opName string, r *Registry) (*udk.UniversalSDK, stri
 // OrderedMap that getSDK expects ({kind:..., spec:..., entity:...}).
 func entityToAPIMap(v Value) *OrderedMap {
 	m := NewOrderedMap()
-	if v.Data == nil {
+	if !IsConcrete(v) {
 		return m
 	}
 	inst, _ := AsObjectInstance(v)

@@ -330,7 +330,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 				}
 				val := args[i]
 				if !pat.Parent.Equal(TMap) || !val.Parent.Equal(TMap) ||
-					pat.Data == nil || val.Data == nil {
+					!IsConcrete(*pat) || !IsConcrete(val) {
 					continue
 				}
 				pMap, _ := AsMap(*pat)
@@ -362,7 +362,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 						})
 						continue
 					}
-					if pv.Data == nil && !av.Parent.Matches(pv.Parent) && !av.Parent.Equal(TAny) {
+					if IsBareTypeNode(pv) && !av.Parent.Matches(pv.Parent) && !av.Parent.Equal(TAny) {
 						r.Check.AddDiagnostic(CheckDiagnostic{
 							Code:     "record_shape_mismatch",
 							Detail:   "argument to " + nameCopy + ": field " + key + " expected " + pv.Parent.String() + ", got " + av.Parent.String(),
@@ -480,7 +480,7 @@ func CoerceBoolean(v Value) bool {
 	case ValueType(v).Equal(TNone):
 		return false
 	case ValueType(v).Equal(TList):
-		if v.Data == nil {
+		if !IsConcrete(v) {
 			return false
 		}
 		if elems, err := AsMutableList(v); err == nil {
@@ -489,7 +489,7 @@ func CoerceBoolean(v Value) bool {
 		// Non-[]Value list backings (table types, query builders) are truthy.
 		return true
 	case ValueType(v).Equal(TMap):
-		if v.Data == nil {
+		if !IsConcrete(v) {
 			return false
 		}
 		if om, err := AsMutableMap(v); err == nil {
@@ -592,7 +592,7 @@ func IsHostTypeBody(v Value) bool {
 func IsTypeBody(v Value) bool {
 	// Type literal (Data==nil): number, string, boolean, any, etc.
 	// Excludes the value `none` (Data != nil sentinel).
-	if v.Data == nil {
+	if IsBareTypeNode(v) {
 		return true
 	}
 	// Implicit-map record shape (`{x:Integer}`): a Map whose backing
@@ -781,10 +781,10 @@ outer:
 				continue
 			}
 			// cand's type is a strict subtype of other's.
-			if cand.Data == nil && other.Data == nil {
+			if IsBareTypeNode(cand) && IsBareTypeNode(other) {
 				continue outer
 			}
-			if cand.Data != nil && other.Data == nil {
+			if IsConcrete(cand) && IsBareTypeNode(other) {
 				continue outer
 			}
 		}
@@ -851,13 +851,13 @@ func BaseValueForConstraint(constraint Value) (Value, error) {
 	if IsDisjunct(constraint) {
 		di, _ := AsDisjunct(constraint)
 		for _, alt := range di.Alternatives {
-			if alt.Data == nil && !ValueType(alt).Equal(TNone) {
+			if IsTypeLiteral(alt) {
 				return BaseValue(ValueType(alt))
 			}
 		}
 		return NewTypeLiteral(TNone), nil
 	}
-	if constraint.Data == nil {
+	if IsBareTypeNode(constraint) {
 		return BaseValue(ValueType(constraint))
 	}
 	return Value{}, fmt.Errorf("base: cannot determine base value for %s", constraint.String())

@@ -156,7 +156,7 @@ func formatTableValue(v native.Value) string {
 	cols := []string{}
 	seen := map[string]bool{}
 	for _, row := range rows.Slice() {
-		if !row.Parent.Equal(native.TMap) || row.Data == nil {
+		if !row.Parent.Equal(native.TMap) || !native.IsConcrete(row) {
 			return native.FormatForPrint(v)
 		}
 		rm, _ := native.AsMap(row)

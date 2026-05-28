@@ -160,7 +160,7 @@ func concatOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 }
 
 func doConcat(listVal Value, o strOpts) ([]Value, error) {
-	if listVal.Data == nil {
+	if !IsConcrete(listVal) {
 		return nil, fmt.Errorf("concat: argument must be a concrete list, got type literal")
 	}
 	elems, _ := AsList(listVal)

@@ -104,7 +104,7 @@ var storageNatives = []NativeFunc{
 
 func setObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	container := args[2]
-	if container.Data == nil {
+	if !IsConcrete(container) {
 		return nil, r.AqlError("set_error", "set: cannot set field on type literal", "set")
 	}
 	key := StoreKey(args[0])
@@ -132,7 +132,7 @@ func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 func getNodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	key := args[0]
 	container := args[1]
-	if container.Data == nil {
+	if !IsConcrete(container) {
 		return nil, r.AqlError("get_error", "get: cannot access property on type literal", "get")
 	}
 	// Integer key: list index access.
@@ -162,7 +162,7 @@ func getNodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 func getObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	key := args[0]
 	container := args[1]
-	if container.Data == nil {
+	if !IsConcrete(container) {
 		return nil, r.AqlError("get_error", "get: cannot access property on type literal", "get")
 	}
 	k := getKey(key)
