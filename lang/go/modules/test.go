@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/aql-lang/aql/eng/go"
+	"github.com/aql-lang/aql/eng/go/stackform"
+	"github.com/aql-lang/aql/lang/go/modules/test/shrink"
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
@@ -539,7 +541,7 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 	}
 	runs, _ := args[3].AsConcreteInteger()
 	seed, _ := args[4].AsConcreteInteger()
-	_ = args[5] // max-shrinks: reserved for Stage 5.
+	maxShrinks, _ := args[5].AsConcreteInteger()
 
 	genBody := genList.Slice()
 	propBody := propList.Slice()
@@ -621,17 +623,30 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 		}
 	}
 
+	// Stage 5: if we have a failure with a concrete input (not an
+	// error-only failure), run the reducer against it to produce a
+	// minimal counterexample. Value-level shrinking — represent the
+	// failing input as a stackform.PushLit and let the reducer
+	// shrink it via the rewrite families in shrink/candidates.go.
+	// The evalFn re-runs the property body against each candidate's
+	// extracted value; failure-preserving lower-cost candidates win.
+	shrunkInput := failingInput
+	shrunkSource := ""
+	shrunkCost := int64(0)
+	if failed && !native.IsNone(failingInput) {
+		shrunkInput, shrunkSource, shrunkCost = shrinkFailingInput(
+			parent, failingInput, propBody, maxShrinks)
+	}
+
 	// Build the PropertyResult map.
 	result := native.NewOrderedMap()
 	result.Set("name", native.NewString(name))
 	result.Set("ok", native.NewBoolean(!failed))
 	result.Set("runs", native.NewInteger(actualRuns))
 	result.Set("failing-input", failingInput)
-	// Shrunk fields reserved for Stage 5. Today they mirror the
-	// failing input verbatim so consumers see a value.
-	result.Set("shrunk-input", failingInput)
-	result.Set("shrunk-source", native.NewString(""))
-	result.Set("shrunk-cost", native.NewInteger(0))
+	result.Set("shrunk-input", shrunkInput)
+	result.Set("shrunk-source", native.NewString(shrunkSource))
+	result.Set("shrunk-cost", native.NewInteger(shrunkCost))
 	result.Set("error", failingError)
 
 	// Append to the active test run so test.results and
@@ -646,6 +661,87 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 	run.mu.Unlock()
 
 	return []native.Value{resultVal}, nil
+}
+
+// shrinkFailingInput reduces a property-failing input to a minimal
+// counterexample via the shrink package. Used by runCheckProp on
+// failure to populate shrunk-input / shrunk-source / shrunk-cost in
+// the PropertyResult.
+//
+// Strategy is value-level shrinking: represent the failing input as
+// a stackform.PushLit (or recurse for list/map structure), let the
+// shrink package's candidate generators try smaller alternatives,
+// and accept each one whose result still makes the property fail.
+//
+// maxShrinks caps the reducer's outer loop. 0 disables shrinking
+// (returns the failing input verbatim). Defaults to 200 when the
+// PropertySpec uses the test.prop constructor.
+func shrinkFailingInput(
+	parent *native.Registry,
+	failingInput native.Value,
+	propBody []native.Value,
+	maxShrinks int64,
+) (shrunkInput native.Value, shrunkSource string, shrunkCost int64) {
+	shrunkInput = failingInput
+	shrunkSource = ""
+	shrunkCost = 0
+	if maxShrinks <= 0 {
+		return
+	}
+
+	policy := shrink.DefaultPolicy()
+	initialForm := &stackform.StackForm{Ops: []stackform.Op{
+		stackform.PushLit{V: failingInput},
+	}}
+
+	// evalFn extracts the candidate's top value, pushes it onto a
+	// fresh sub-engine on parent, runs the property body, and maps
+	// the Boolean result to Outcome. Errors / non-Boolean / missing
+	// values → Invalid (reducer rejects).
+	evalFn := func(form *stackform.StackForm) shrink.Outcome {
+		if form == nil || len(form.Ops) == 0 {
+			return shrink.Invalid
+		}
+		// Extract top-of-stack value from the candidate. Forms here
+		// are always shape [PushLit(v)] (possibly nested via
+		// shrinkLiteral on a list/map) — Flatten + Run gives the
+		// reconstructed value.
+		vals, err := stackform.Eval(parent, form)
+		if err != nil || len(vals) == 0 {
+			return shrink.Invalid
+		}
+		candidateValue := vals[len(vals)-1]
+		propTokens := append([]native.Value{candidateValue}, propBody...)
+		res, err := native.New(parent).Run(propTokens)
+		if err != nil || len(res) == 0 {
+			return shrink.Invalid
+		}
+		b, err := res[len(res)-1].AsConcreteBoolean()
+		if err != nil {
+			return shrink.Invalid
+		}
+		if !b {
+			return shrink.Fail
+		}
+		return shrink.Pass
+	}
+
+	profile := &shrink.Profile{
+		MaxSteps: int(maxShrinks),
+		Policy:   policy,
+	}
+	reducedForm := shrink.Reduce(initialForm, evalFn, profile)
+
+	// Extract shrunk input from the reduced form. Should be a
+	// single PushLit (or a series that evaluates to one value).
+	if reducedForm != nil && len(reducedForm.Ops) > 0 {
+		if vals, err := stackform.Eval(parent, reducedForm); err == nil && len(vals) > 0 {
+			shrunkInput = vals[len(vals)-1]
+		}
+	}
+	shrunkSource = stackform.Pretty(reducedForm)
+	shrunkCost = int64(shrink.ShrinkCost(reducedForm, policy))
+	return
 }
 
 // runCase executes one test body, catching errors and recording a

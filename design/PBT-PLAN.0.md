@@ -1,9 +1,8 @@
 # Property-Based Testing for AQL
 
-> **STATUS: STAGES 0-3 COMPLETE — READY FOR STAGE 4 (2026-05-28)**
+> **STATUS: STAGES 0-5 COMPLETE — READY FOR STAGE 6 (2026-05-28)**
 >
-> Remaining work: word-policy / cost annotations (Stage 4), reducer
-> (Stage 5), decision PBT spec (Stage 6).
+> Remaining work: decision PBT spec (Stage 6 — end-to-end demo).
 >
 > What landed:
 > - Stage 0d (7d46b68): expandDottedWord doc cleanup.
@@ -21,7 +20,25 @@
 >   `Eval(Compile(reg, src)) ≡ direct Run(src)` for arithmetic,
 >   comparisons, strings, stack ops, lists, paren grouping, and
 >   forward/stack/swap surface forms.
-> - Stage 3 (this commit): `PropertySpec` + `PropertyResult`
+> - Stage 4 (this commit): `lang/go/modules/test/shrink/` package
+>   with Transparency annotations (`Transparent`/`Generator`/
+>   `Frozen`/`Opaque`), DefaultPolicy (covers arithmetic/comparison/
+>   stack ops as Transparent, `rand-*` as Generator, `time-*` /
+>   `fetch-*` as Frozen, unknown words as Opaque), and `ShrinkCost`
+>   that adds policy weights + literal-complexity (intMagnitude,
+>   string length, list size) on top of `stackform.Cost`.
+> - Stage 5 (this commit): the greedy `Reduce` loop in
+>   `shrink/reduce.go` + rewrite families in `shrink/candidates.go`
+>   (drop-op, integer/decimal/string/boolean/list shrinking,
+>   recursive Quote-body shrinking). Integration with `aql:test`
+>   in `runCheckProp`: on failure, calls `shrinkFailingInput` which
+>   wraps the value in a single-PushLit StackForm and lets the
+>   reducer try smaller alternatives, re-running the property body
+>   against each candidate. Populates `shrunk-input`,
+>   `shrunk-source`, `shrunk-cost` in the PropertyResult.
+>   `max-shrinks=0` disables shrinking (returns failing input
+>   verbatim); default is 200.
+> - Stage 3 (f37849a): `PropertySpec` + `PropertyResult`
 >   Records, `test.check-prop` Go native (6-arg: name, gen,
 >   property, runs, seed, max-shrinks), `test.prop` Go constructor
 >   (preserves gen/property bodies via NoEvalArgs + Quoted=true),
@@ -60,10 +77,10 @@
 > check or a stricter sub-profile that denies top-level rand words,
 > forcing PBT runs to pass through seeded instances.
 >
-> Resume with Stage 4 (word-policy + cost annotations for the
-> shrinker). Then Stage 5 (reducer using stackform + cost +
-> check-prop's failing input as seed). Stage 6 closes out with the
-> decision PBT spec.
+> Resume with Stage 6 — author 3 properties against the decision
+> module (hit-policy stability, collect-order preservation, De
+> Morgan negation), plus a negative-control test that proves the
+> shrinker collapses a failing input to the minimum violator.
 
 ## Context
 

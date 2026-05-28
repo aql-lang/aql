@@ -175,6 +175,63 @@ func TestCheckProp_ResultsAccumulated(t *testing.T) {
 	}
 }
 
+// TestCheckProp_ShrinksFailingInput confirms the Stage-5 reducer
+// integration: when a property fails on a "large" input, the
+// reducer minimises that input toward 0 (for the predicate "n < 10")
+// — the failing input ends up as the SMALLEST integer ≥ 10 that
+// still violates `n < 10`, namely 10 itself.
+func TestCheckProp_ShrinksFailingInput(t *testing.T) {
+	r := testRegistry(t)
+	// Generate large ints in [0, 1000). Property: n < 10. Fails on
+	// every value ≥ 10. Reducer should shrink any failing input
+	// down to 10 (smallest violator).
+	src := `test.check-prop "n-lt-10" [r.int 0 1000] [10 lt] 50 1 200`
+	res := runTestAQL(t, r, src)
+	m, _ := native.AsMap(res[0])
+	okV, _ := m.Get("ok")
+	if ok, _ := okV.AsConcreteBoolean(); ok {
+		t.Skip("property unexpectedly passed — no shrink to verify")
+	}
+	failingV, _ := m.Get("failing-input")
+	shrunkV, _ := m.Get("shrunk-input")
+	failing, _ := failingV.AsConcreteInteger()
+	shrunk, _ := shrunkV.AsConcreteInteger()
+	if shrunk > failing {
+		t.Errorf("shrunk-input=%d should be <= failing-input=%d", shrunk, failing)
+	}
+	if shrunk != 10 {
+		t.Errorf("shrunk-input=%d, want 10 (smallest violator of n<10)", shrunk)
+	}
+	// shrunk-source should be non-empty when shrinking actually ran.
+	srcV, _ := m.Get("shrunk-source")
+	srcStr, _ := srcV.AsConcreteString()
+	if srcStr == "" {
+		t.Error("shrunk-source is empty; expected the pretty form of the shrunk literal")
+	}
+	t.Logf("failing=%d → shrunk=%d (source=%q)", failing, shrunk, srcStr)
+}
+
+// TestCheckProp_ShrinkDisabledByMaxShrinks confirms maxShrinks=0
+// bypasses the reducer — shrunk-input equals failing-input verbatim.
+func TestCheckProp_ShrinkDisabledByMaxShrinks(t *testing.T) {
+	r := testRegistry(t)
+	src := `test.check-prop "skip-shrink" [r.int 0 1000] [10 lt] 50 1 0`
+	res := runTestAQL(t, r, src)
+	m, _ := native.AsMap(res[0])
+	okV, _ := m.Get("ok")
+	if ok, _ := okV.AsConcreteBoolean(); ok {
+		t.Skip("property passed — no failure to skip-shrink")
+	}
+	failingV, _ := m.Get("failing-input")
+	shrunkV, _ := m.Get("shrunk-input")
+	failing, _ := failingV.AsConcreteInteger()
+	shrunk, _ := shrunkV.AsConcreteInteger()
+	if shrunk != failing {
+		t.Errorf("max-shrinks=0 should leave shrunk=failing; got shrunk=%d failing=%d",
+			shrunk, failing)
+	}
+}
+
 // Stub to keep parser referenced when no other test in this file
 // uses it directly.
 var _ = parser.Parse
