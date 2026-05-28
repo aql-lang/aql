@@ -57,6 +57,14 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 		modReg.Modules.InitFunc = parent.Modules.InitFunc
 	}
 
+	// Propagate the native-module resolver so a file-imported module
+	// can itself `import "aql:math"` (and any other aql:* module). The
+	// child module body runs in a fresh DefaultRegistry whose
+	// Modules.Resolver is nil; without this every native-module import
+	// from an imported file fails with "native module resolver not
+	// configured" — collapsing the module story to single-file scripts.
+	modReg.Modules.Resolver = parent.Modules.Resolver
+
 	// Inherit parent context so module can read parent values.
 	// The module's Run will push its own copy-on-write layer on top.
 	if parentCtx := parent.Contexts.Top(); parentCtx != nil {
