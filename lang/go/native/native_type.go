@@ -423,19 +423,14 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		latticeNode := b.Parent
 		return []Value{NewBoolean(a.Parent.Equal(latticeNode) || a.Parent.IsSubtypeOf(latticeNode))}, nil
 	}
-	// Structural pattern RHS — typed list `[:T]`, typed map `{:T}`,
-	// record shape `{x:Integer}`. These are NOT lattice nodes; they
-	// denote a structural conformance check, not a tag-identity
-	// check. `IsValueOfType` (eng/go/core_type.go) is the canonical
-	// implementation — kernel-level `is` (engspec test runner) and
-	// the `enum` element validator both delegate to it. Production
-	// `is` historically reached the same answer via UnifyR + Parent
-	// + ValuesEqual, but routing through the shared helper makes the
-	// duplication go away: one structural-conformance function, both
-	// `is` runners consult it.
-	if IsTypedList(b) || IsTypedMap(b) || (b.Parent.Equal(TMap) && b.Data != nil) {
-		return []Value{NewBoolean(IsValueOfType(a, b))}, nil
-	}
+	// Note: a consolidation attempt to delegate structural-pattern
+	// RHS (typed list, typed map, record shape) to IsValueOfType was
+	// tried and reverted. `IsValueOfType` uses subset semantics on
+	// record shapes ("extra keys in v are ignored") while production
+	// `is` uses strict-exact-shape. They look like the same operation
+	// but answer different sub-questions. Real consolidation requires
+	// choosing one shape semantic and migrating the loser; that's a
+	// separate design call documented in PLAN.md.
 	if b.Parent.Equal(TFnUndef) && IsAtom(a) {
 		name, _ := AsAtom(a)
 		if top, ok := r.Defs.Top(name); ok {
