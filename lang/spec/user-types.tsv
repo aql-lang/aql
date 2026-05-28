@@ -168,6 +168,10 @@ def Pos refine Integer def y:Pos 2 y is Integer	true	y widens to Integer
 def Pos refine Integer def y:Pos 2 y is Number	true	y widens to Number
 def Pos refine Integer def y:Pos 2 y is Scalar	true	y widens to Scalar
 def Pos refine Integer def y:Pos 2 2 is Pos	false	untagged literal 2 is not Pos (contrast with y)
+def Pos refine Integer def y:Pos 2 y is String	false	tag widens up, not sideways — Pos is not String
+def Pos refine Integer def y:Pos 2 y is Boolean	false	wrong family — y is not Boolean
+def Pos refine Integer def Neg refine Integer def y:Pos 2 y is Neg	false	sibling subtypes are distinct — y:Pos is not Neg
+def Pos refine Integer def x:Integer 1 x is Pos	false	supertype value is not the subtype — Integer 1 is not Pos
 
 
 # ====================================================================
