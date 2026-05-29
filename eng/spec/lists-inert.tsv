@@ -33,29 +33,30 @@
 #    auto-eval paths. `lengthq quote [1 addq 2]` would expose the raw		
 #    3-element form — but in the spec subset `quote` paren-wrap is		
 #    needed (see autoeval.tsv for the wrapped forms).		
-# 4. SUPPRESSED auto-eval surface: at execMatch, autoEvalList errors		
-#    are SILENTLY DISCARDED. The original (unevaluated) list is then		
-#    handed to the handler. So `lengthq [addq]` returns 1 (the body		
-#    sub-engine errors on bare `addq`, autoEvalList swallows the		
-#    error, lengthq sees the original 1-element list).		
-# 5. END-OF-RUN auto-eval errors PROPAGATE. So `[addq]` alone errors		
-#    with signature_error, even though `lengthq [addq]` does not.		
-# 6. Lists inside lists are auto-evaluated recursively at end-of-Run		
-#    via the autoEvalStack drain (which calls autoEvalList per top-		
-#    level Eval list — but a subq-list inside a list element is		
-#    evaluated by the sub-engine running over the parent list's		
+# 4. Bare words never degrade to data. A list element that fails to
+#    auto-evaluate — an undefined name, or a valid name dispatched
+#    with the wrong arity — is an ERROR, in BOTH the consumed-arg
+#    (execMatch) and end-of-Run (autoEvalStack) paths. So both
+#    `lengthq [addq]` and `[addq]` alone error with signature_error.
+#    To keep a word as literal data, use `foo/q` (atom) or `quote`
+#    (a literal word list). This closed the silent-swallow footgun
+#    that previously let a typo inside a consumed list pass through.
+# 5. Lists inside lists are auto-evaluated recursively at end-of-Run
+#    via the autoEvalStack drain (which calls autoEvalList per top-
+#    level Eval list — but a subq-list inside a list element is
+#    evaluated by the sub-engine running over the parent list's
 #    elements, since the sub-engine is a full Run).		
 #		
-# Why this matters		
-# ----------------		
-# Auto-eval is the bridge from 'lists are data' to 'lists are code'.		
-# It removes the need for an explicit `do` in the common case while		
-# preserving the option to suppress (via `quote`).		
-#		
-# The error-swallowing surface in execMatch (#4) is a real footgun:		
-# a typo inside a list arg silently leaves the typo in the consumed		
-# list. The 'Deviations' section of the report covers the proposed		
-# fix.		
+# Why this matters
+# ----------------
+# Auto-eval is the bridge from 'lists are data' to 'lists are code'.
+# It removes the need for an explicit `do` in the common case while
+# preserving the option to suppress (via `quote`).
+#
+# Auto-eval errors propagate uniformly (consumed and residual): a
+# bare word is always a name to resolve, never a silent fallback to
+# its literal token. The earlier execMatch swallow — a typo footgun
+# that left the typo in the consumed list — was removed.
 		
 # === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===		
 #   addq     — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)		
@@ -76,13 +77,14 @@ lengthq [ 1 addq 2 ]	1	auto-eval [1 addq 2] → [3]; lengthq sees 1-element list
 firstq [ 1 addq 2 ]	3	auto-eval reduces; first returns the single element
 lengthq [ 1 2 3 ]	3	pure literals consume as-is
 		
-# 4. Silent swallow of auto-eval errors at execMatch.		
-lengthq [ addq ]	1	bare addq in body errors; autoEvalList swallows; original 1-element list seen by lengthq
-lengthq [ undef_xyz ]	1	undefined word in body errors; same swallow → original list passed through. Footgun.
-lengthq [ 1 addq ]	2	addq waits for forward args, none follow; sub-engine errors; original 2-element list passed through
+# 4. Consumed-list auto-eval errors PROPAGATE (bare words never
+# degrade to data — use foo/q or quote for literal word data).
+lengthq [ addq ]	ERROR:signature	bare addq in body errors (0-arg, needs 2); propagates through lengthq
+lengthq [ undef_xyz ]	ERROR:undefined	undefined word in body propagates — no silent fallback
+lengthq [ 1 addq ]	ERROR:	addq waits for forward args, none follow; insufficient-args error propagates
 		
-# 5. Bare residual list errors propagate at end-of-Run.		
-[ addq ]	ERROR:signature	bare list residual; autoEvalStack runs sub-engine; bare addq errors; PROPAGATES (unlike consumed-list path)
+# 5. Bare residual list errors propagate at end-of-Run (same as #4).
+[ addq ]	ERROR:signature	bare list residual; autoEvalStack runs sub-engine; bare addq errors; propagates (same as the consumed-list path)
 [ 1 addq ]	ERROR:	bare list with insufficient args for inner addq — propagates
 [ unknown_xyz ]	ERROR:undefined	undefined word in residual list propagates
 		

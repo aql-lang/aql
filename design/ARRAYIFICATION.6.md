@@ -143,13 +143,13 @@ reverse [1,2,3]                   => [3,2,1]
 reverse [[1,2],[3,4]]             => [[3,4],[1,2]]
 ```
 
-### length
+### size
 
 Number of elements along the outermost dimension.
 
 ```
-length [10,20,30]                 => 3
-length [[1,2],[3,4],[5,6]]        => 3
+size [10,20,30]                 => 3
+size [[1,2],[3,4],[5,6]]        => 3
 ```
 
 ### iota
@@ -598,7 +598,7 @@ member:    [list, list] -> [list]
 group:     [list, list] -> [map]
 flatten:   [list] -> [list]
 reverse:   [list] -> [list]
-length:    [list] -> [integer]
+size:      [any] -> [integer]
 replicate: [list, list] -> [list]
 expand:    [list, list] -> [list]
 ```
@@ -613,7 +613,7 @@ All use suffix precedence, consistent with AQL convention.
 Core structural words that everything else builds on:
 
 - `iota` — array construction
-- `shape`, `rank`, `length` — inspection
+- `shape`, `rank`, `size` — inspection
 - `reshape`, `flatten`, `transpose` — structure transforms
 - `take`, `shed`, `reverse` — basic selection
 
@@ -681,7 +681,7 @@ inner [mul] [add] [[1,0],[0,1]] [[5,6],[7,8]]
 group [3,1,4,1,5,9,2,6,5,3,5]
 # => {3:[0,9],1:[1,3],4:[2],5:[4,8,10],9:[5],2:[6],6:[7]}
 
-each [length] group [3,1,4,1,5,9,2,6,5,3,5]
+each [size] group [3,1,4,1,5,9,2,6,5,3,5]
 # counts per value
 ```
 
@@ -701,7 +701,7 @@ scan [max] [3,1,4,1,5,9,2,6]         => [3,3,4,4,5,9,9,9]
 ### Sort by Length
 
 ```
-sortby each [length] ["cat","a","dogs","be"]
+sortby each [size] ["cat","a","dogs","be"]
 => ["a","be","cat","dogs"]
 ```
 

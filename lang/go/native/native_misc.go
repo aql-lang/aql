@@ -194,7 +194,13 @@ func init() {
 					RunInCheckMode: true, BarrierPos: -1,
 				},
 				{
+					// The leading list holds export *names* to rename
+					// (`import [Orig Renamed] mod`) — import name syntax,
+					// not evaluable expressions. NoEvalArgs keeps them raw
+					// (bare words never degrade to data, so without this
+					// the unbound names would raise undefined_word).
 					Args:           []*Type{TList, TModule},
+					NoEvalArgs:     map[int]bool{0: true},
 					Handler:        importRenameHandler,
 					Returns:        []*Type{},
 					RunInCheckMode: true, BarrierPos: -1,
@@ -213,6 +219,7 @@ func init() {
 				},
 				{
 					Args:           []*Type{TList, TString},
+					NoEvalArgs:     map[int]bool{0: true},
 					Handler:        importFileRenameHandler,
 					Returns:        []*Type{},
 					RunInCheckMode: true, BarrierPos: -1,
@@ -230,7 +237,7 @@ func init() {
 				{
 					Args:           []*Type{TList, TAtom, TList},
 					QuoteArgs:      map[int]bool{1: true},
-					NoEvalArgs:     map[int]bool{2: true},
+					NoEvalArgs:     map[int]bool{0: true, 2: true},
 					Handler:        importInlineRenameHandler,
 					Returns:        []*Type{},
 					RunInCheckMode: true, BarrierPos: -1,

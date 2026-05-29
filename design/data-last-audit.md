@@ -21,7 +21,7 @@ math/boolean/stack/comparison sigs, and FullStack sigs are excluded.
 | native_array.go | iota | [Int] | OK (1-arg) |
 | native_array.go | shape | [List] | OK |
 | native_array.go | rank | [List] | OK |
-| native_array.go | length | [List] | OK |
+| native_array.go | size | [Any] | OK |
 | native_array.go | reshape | [List, List] | AMBIG (two list args; shape vs data) |
 | native_array.go | arr-flatten | [List] | OK |
 | native_array.go | arr-transpose | [List] | OK |

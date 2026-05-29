@@ -91,7 +91,7 @@ func TestMemFSModuleStringExport(t *testing.T) {
 func TestMemFSModuleFunctionExport(t *testing.T) {
 	files := map[string]string{
 		"math.aql": `def double fn [[n:Integer] [Integer] [n add n]]
-export "Math" {double:double}`,
+export "Math" {double:double/r}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
 		`import "./math.aql"`,
@@ -101,6 +101,43 @@ export "Math" {double:double}`,
 		t.Fatal(err)
 	}
 	assertResult(t, result, "10")
+}
+
+// A 0-arg function exported via /r is stored as the function (not fired
+// while the export map is built) and dispatches when accessed as
+// `pkg.fn`. The export map auto-evaluates, so a bare `zero` would fire
+// its 0-arg signature there and freeze the export to zero's result; the
+// /r ref is resolved to the fn value directly instead.
+func TestMemFSModuleZeroArgFunctionExport(t *testing.T) {
+	files := map[string]string{
+		"z.aql": `def zero fn [[] [Integer] [42]]
+export "Z" {zero:zero/r}`,
+	}
+	result, err := runMemFSModuleSteps(t, files, []string{
+		`import "./z.aql"`,
+		`Z.zero`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "42")
+}
+
+// Negative: a bare function export (no /r) is auto-evaluated and
+// dispatched while the export map is built — a fn needing args has no
+// matching 0-arg signature, so it errors rather than silently exporting
+// a reference. Functions must be exported with /r.
+func TestMemFSModuleBareFunctionExportErrors(t *testing.T) {
+	files := map[string]string{
+		"math.aql": `def double fn [[n:Integer] [Integer] [n add n]]
+export "Math" {double:double}`,
+	}
+	_, err := runMemFSModuleSteps(t, files, []string{
+		`import "./math.aql"`,
+	})
+	if err == nil {
+		t.Fatal("expected error: a bare fn export dispatches at build time; use /r")
+	}
 }
 
 // --- Module with directory structure (.aql/aql.json) ---
@@ -142,9 +179,9 @@ func TestMemFSModuleCustomMain(t *testing.T) {
 func TestMemFSModuleTwoImports(t *testing.T) {
 	files := map[string]string{
 		"math.aql": `def add1 fn [[n:Integer] [Integer] [n add 1]]
-export "Math" {add1:add1}`,
+export "Math" {add1:add1/r}`,
 		"strings.aql": `def greet fn [[s:String] [String] ["hello " add s]]
-export "Strings" {greet:greet}`,
+export "Strings" {greet:greet/r}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
 		`import "./math.aql"`,

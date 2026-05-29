@@ -90,7 +90,7 @@ path. (The runtime tor/tany path now uses `simplifyDisjunctAlts` —
 see 1.5 — so this only affects check-mode carrier reasoning.) For
 type literals that's fine; for concrete map alternatives, it
 compares the underlying ordered-map by structural equality, so two
-`record [x:Integer]` values with different `RecordTypeInfo.ID` won't
+`refine Record [x:Integer]` values with different `RecordTypeInfo.ID` won't
 dedup, but two *structurally identical* concrete maps will collapse
 — counter-intuitive in either direction. Rare in practice; worth
 tightening with an ID-aware equality predicate.
@@ -242,8 +242,8 @@ expose `Leaked` to a subsequent `def n:Leaked …`.
 
 ### 3.4 No predicate-vs-predicate compatibility op
 
-There's no way to ask `Big ⊆ Mid` (where `type Big (Integer gt 100)`
-and `type Mid (Integer gt 10)`). Only "does this *value* satisfy
+There's no way to ask `Big ⊆ Mid` (where `def Big (Integer gt 100)`
+and `def Mid (Integer gt 10)`). Only "does this *value* satisfy
 this type". For dependent-type design that's a real loss — you can't
 write a fn that takes "any subtype of Mid" without copying the
 constraint into every signature.
@@ -556,7 +556,7 @@ Tests in `lang/go/test/type_inspect_test.go`.
 
 ### 7.6 Two ways to express the same thing, with no nudge
 
-`type T (Integer gt 10)` and `type T fn [n:Any Any [if (n is Integer)
+`def T (Integer gt 10)` and `type T fn [n:Any Any [if (n is Integer)
 and (n gt 10) [n] [None]]]` are runtime-equivalent but use different
 machinery. The `DepScalar` form is checkable in principle (6.1), the
 predicate form isn't. There's no lint that says "this predicate is

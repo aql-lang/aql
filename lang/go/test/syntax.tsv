@@ -505,7 +505,7 @@ def "inc" word [1 add] 10 inc	11
 # def with prefix body — semicolon separates def from call.
 # A prefix list body binds the list VALUE; splicing needs the forward
 # `def name word [body]` form (an __SP on the stack would fire early).
-[1 2 3] def xs; length xs	3
+[1 2 3] def xs; size xs	3
 [10 20] def ys; ys get 0	10
 {a:1} def m; m get 'a'	1
 

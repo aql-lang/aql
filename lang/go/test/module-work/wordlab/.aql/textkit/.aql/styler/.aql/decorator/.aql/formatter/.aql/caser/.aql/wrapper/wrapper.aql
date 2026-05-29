@@ -3,4 +3,4 @@
 def shout fn [[s:String] [String] [(s Charops.to-up) add "!"]]
 def whisper fn [[s:String] [String] [(s Charops.to-down) add "..."]]
 
-export "Wrapper" {shout:shout whisper:whisper}
+export "Wrapper" {shout:shout/r whisper:whisper/r}

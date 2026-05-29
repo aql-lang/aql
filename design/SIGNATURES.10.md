@@ -384,16 +384,13 @@ scalar type literal AND the forward arg is concrete; otherwise the
 | | `[Object, Any, Object]` | `[Object]` | Object from source with prototype | — |
 | | `[Any, Any, M]` | `[Any]` | Generic: type + source + options | — |
 | | `[Any, Any]` | `[Any]` | Generic: type + source | — |
-| `object` | `[M]` | `[Object]` | Define object type from field map | — |
-| | `[M, Any]` | `[Object]` | Object type with parent | — |
-| `record` | `[L]` | `[Record]` | Define record type from field list | `arg0: L` |
-| `table` | `[Any]` | `[Table]` | Define table from record type | — |
+| `refine` | `[Any]` | `[Type]` | Subtype/newtype of a base type | — |
+| | `[Any, Node]` | `[Type]` | Refine with a field shape: `refine Object {…}`, `refine Record […]`, `refine Table Base` | — |
 | `tall` | `[L]` | `[Any]` | List-tand: folds via map-merge / unify; errors on `[]` | — |
 | `tand` | `[Any, Any]` | `[Any]` | Conjunction: merges concrete maps; unifies otherwise | — |
 | `tany` | `[L]` | `[Any]` | List-tor: builds flattened disjunct of all elements; errors on `[]` | — |
 | `tor` | `[Any, Any]` | `[Disjunct]` | Creates/flattens disjunction union | — |
-| `type` | `[S, Any]` | `[]` | Register named type | — |
-| | `[A, Any]` /q | `[]` | | — |
+| `def` | `[A, Any]` /q | `[]` | Bind a name; a capitalised name installs a type (`def Name (refine …)`) | — |
 | `typeof` | `[Any]` | `[A]` | Short type name (e.g. `String`) | — |
 
 

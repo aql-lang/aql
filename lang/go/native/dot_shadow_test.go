@@ -16,7 +16,7 @@ func TestDotNotationRegisteredWordKey(t *testing.T) {
 	// Build a map with keys that shadow registered words.
 	m := NewOrderedMap()
 	m.Set("trace", NewInteger(42))
-	m.Set("length", NewInteger(99))
+	m.Set("size", NewInteger(99))
 	m.Set("add", NewString("plus"))
 
 	tests := []struct {
@@ -24,7 +24,7 @@ func TestDotNotationRegisteredWordKey(t *testing.T) {
 		want string
 	}{
 		{"trace", "42"},
-		{"length", "99"},
+		{"size", "99"},
 		{"add", "'plus'"},
 	}
 

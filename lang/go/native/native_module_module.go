@@ -394,6 +394,23 @@ func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
 // def stacks. If the value is a string, atom, or word that names a def'd word,
 // the def body is returned. Otherwise the value is returned as-is.
 func resolveModuleExport(modReg *Registry, v Value) Value {
+	// A function value — typically produced by `name/r` in the export
+	// map, which auto-evaluates to the bound fn as data — must carry the
+	// module registry so it executes in module scope (resolving module-
+	// private words) when called after import.
+	if fnDef, ok := v.Data.(FnDefInfo); ok {
+		if fnDef.Registry == nil {
+			fnDef.Registry = modReg
+			if v.Parent.Equal(TFnDef) {
+				return NewFnDef(fnDef)
+			}
+			return NewFunction(fnDef)
+		}
+		return v
+	}
+	// A bare name (word/string/atom) resolves by lookup in the module
+	// registry. After auto-eval this path is reached mainly in check
+	// mode and for type/value names that resolved to themselves.
 	var name string
 	if IsWord(v) {
 		_as3, _ := AsWord(v)

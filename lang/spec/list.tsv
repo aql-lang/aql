@@ -12,7 +12,7 @@
 #		
 #   1. Construction and rendering.		
 #   2. Auto-evaluation and quote suppression.		
-#   3. Length / shape inspection.		
+#   3. Size inspection.		
 #   4. Reordering / slicing / set-style operations.		
 #   5. Higher-order traversal (each).		
 #   6. Type-system interactions: typeof, is, type literal.		
@@ -48,16 +48,16 @@ quote [ 1 add 2 ]	(quote [1 word(add) 2])	quote suppresses auto-eval; add become
 quote [ ]	(quote [])	quoted empty list
 		
 # ====================================================================		
-# 3. Length / shape inspection		
+# 3. Size inspection		
 # ====================================================================		
 		
-length [ ]	0	empty list has length 0
-length [ 1 2 3 ]	3	three elements
-length [ 1 ]	1	single element
-length [ 'a' 'b' 'c' 'd' ]	4	
+size [ ]	0	empty list has size 0
+size [ 1 2 3 ]	3	three elements
+size [ 1 ]	1	single element
+size [ 'a' 'b' 'c' 'd' ]	4	
 		
-# Length feeds into normal arithmetic flow.		
-length [ 1 2 3 ] add 10	13	length result chains into add
+# Size feeds into normal arithmetic flow.		
+size [ 1 2 3 ] add 10	13	size result chains into add
 		
 # ====================================================================		
 # 4. Reordering / slicing / set ops		
@@ -76,9 +76,9 @@ unique [ ]	[]
 unique [ 5 5 5 ]	[5]	all-equal collapses to one
 		
 # Composition — chained list transformations. The forward-prec		
-# `length` / `reverse` need a paren-wrapped sub-expression so `take`		
+# `size` / `reverse` need a paren-wrapped sub-expression so `take`		
 # resolves first and the resulting list flows back as a TList arg.		
-length ( take 3 [ 10 20 30 40 50 ] )	3	take then length
+size ( take 3 [ 10 20 30 40 50 ] )	3	take then size
 reverse ( take 2 [ 10 20 30 ] )	[20 10]	take then reverse
 		
 # ====================================================================		
@@ -95,8 +95,8 @@ each [ mul -1 ] [ 1 -2 3 ]	[-1 2 -3]	flip sign by multiplying by -1
 # Empty input → empty result.		
 each [ add 1 ] [ ]	[]	
 		
-# Composition: each + length.		
-each [ dup mul ] [ 1 2 3 4 ] length	4	each preserves arity then length sees 4 entries
+# Composition: each + size.		
+each [ dup mul ] [ 1 2 3 4 ] size	4	each preserves arity then size sees 4 entries
 		
 # ====================================================================		
 # 6. Type-system interactions		
@@ -115,8 +115,7 @@ typeof List	Node	bare List is itself a Node-family TYPE → metatype Type
 [ 1 2 3 ] is Integer	false	
 		
 # A bare type literal is rejected at concrete-payload sigs.		
-length List	ERROR:signature_error	List type literal cannot be measured
-reverse List	ERROR:signature_error	
+reverse List	ERROR:signature_error	bare List type literal rejected before the handler runs
 		
 # ====================================================================		
 # 7. Typed lists — `[ :T …]`		
@@ -142,12 +141,23 @@ typeof [ :Integer ]	List	the type form is a Node-family TYPE
 # A list-bound def binds the evaluated list VALUE (like a map):
 # `def lst [1 2 3]` makes `lst` the list. `quote` still binds data too.
 
-def lst [ 1 2 3 ] length lst	3	a def'd list binds the value; length sees three elements
+def lst [ 1 2 3 ] size lst	3	a def'd list binds the value; size sees three elements
 def lst [ 1 2 3 ] reverse lst	[3 2 1]
 def lst quote [ 1 2 3 ] each [ add 10 ] lst	[11 12 13]	pass quoted list through each
 
 # Splice form: def NAME word [body] inserts the body inline (macro).
 def doub word [ dup add ] 5 doub	10	body splice — dup, add — runs against caller stack
+		
+# ====================================================================		
+# 8b. Dotted access as list elements		
+# ====================================================================		
+# A `.` chain in a list element is grouped by the parser as		
+# `( recv get k … )`, so it binds to its receiver and contributes one		
+# value per element instead of leaving stranded `get` tokens.		
+		
+def a { b:5 } [ a.b ]	[5]	dotted access as a list element
+def a { b:{ c:9 } } [ a.b.c ]	[9]	chained dotted access in a list
+def a { b:5 } def c { d:6 } [ a.b c.d ]	[5 6]	two dotted elements stay separate
 		
 # ====================================================================		
 # 9. List equality via `is`		

@@ -153,7 +153,7 @@ func TestStackFormEquivalence_StackOps(t *testing.T) {
 func TestStackFormEquivalence_Lists(t *testing.T) {
 	for _, src := range []string{
 		`[1 2 3]`,
-		`[1 2 3] length`,
+		`[1 2 3] size`,
 	} {
 		t.Run(src, func(t *testing.T) {
 			equivalentRun(t, src)

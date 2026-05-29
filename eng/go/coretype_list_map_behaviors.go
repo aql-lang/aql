@@ -41,11 +41,60 @@ func (listFormatBehavior) Format(v Value) string {
 	}
 	_lst, _ := AsList(v)
 	elems := _lst.Slice()
-	parts := make([]string, len(elems))
-	for i, e := range elems {
-		parts[i] = e.String()
+	parts := make([]string, 0, len(elems))
+	for i := 0; i < len(elems); i++ {
+		// Display-only: collapse a parser-grouped dot chain
+		// `( recv get k … )` back to `recv.k.…` for readable quoted code.
+		if s, end, ok := resugarDotChain(elems, i); ok {
+			parts = append(parts, s)
+			i = end
+			continue
+		}
+		parts = append(parts, elems[i].String())
 	}
 	return "[" + strings.Join(parts, ",") + "]"
+}
+
+// resugarDotChain recognises a parser-grouped dot-access run inside a
+// quoted list — `( recv get k1 [get|getr k2]* )` where the receiver and
+// every key is a bare Word — and renders it as `recv.k1.k2` (`!.` for
+// getr). It returns the rendered string, the index of the run's closing
+// paren, and whether a chain matched.
+//
+// Display-only: this is reached via Value.String (REPL / inspect output),
+// NOT CanonValue — which has its own list rendering and doubles as the
+// value-comparison key, so it is deliberately left untouched. Only the
+// all-bare-Word shape is re-sugared; nested-group receivers (`(expr).k`)
+// and computed `(expr)` keys (`m.(expr)`) render verbatim.
+func resugarDotChain(elems []Value, i int) (string, int, bool) {
+	if !IsOpenParen(elems[i]) || i+1 >= len(elems) || !IsWord(elems[i+1]) {
+		return "", 0, false
+	}
+	recv, _ := AsWord(elems[i+1])
+	var b strings.Builder
+	b.WriteString(recv.Name)
+	j := i + 2
+	for j+1 < len(elems) && IsWord(elems[j]) {
+		verb, _ := AsWord(elems[j])
+		if verb.Name != "get" && verb.Name != "getr" {
+			break
+		}
+		if !IsWord(elems[j+1]) {
+			return "", 0, false // computed / non-word key — leave verbatim
+		}
+		key, _ := AsWord(elems[j+1])
+		if verb.Name == "getr" {
+			b.WriteString("!.")
+		} else {
+			b.WriteString(".")
+		}
+		b.WriteString(key.Name)
+		j += 2
+	}
+	if j == i+2 || j >= len(elems) || !IsCloseParen(elems[j]) {
+		return "", 0, false // no segment consumed, or no clean close
+	}
+	return b.String(), j, true
 }
 
 // formatTableDataAsList renders TableData by re-wrapping it in a

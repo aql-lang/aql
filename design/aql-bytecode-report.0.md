@@ -935,7 +935,7 @@ What the bytecode VM does *not* need to do for recursion:
 ### 5.7 Polymorphic recursion
 
 `factorial` above is monomorphic (Integer → Integer). A
-polymorphic fn, e.g. a generic `length` over lists of varying
+polymorphic fn, e.g. a generic `size` over lists of varying
 element types, needs either:
 
 - **Per-instantiation specialisation.** Each observed input type
@@ -995,7 +995,7 @@ normally. That is:
 - `def foo 1` installs `foo → Value(1)` in the registry.
 - `def doubled [dup add]` installs the body.
 - `fn [[I] [I] [dup mul]]` builds and returns an `FnDefInfo`.
-- `type Point record [x:Number, y:Number]` adds a record type.
+- `def Point (refine Record [x:Number, y:Number])` adds a record type.
 - `import utils` loads and analyses the module.
 
 The compiler sees the result on the carrier stack (where

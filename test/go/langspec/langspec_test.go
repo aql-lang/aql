@@ -3,7 +3,7 @@
 // (eng/go/parser) and run against a fresh production registry
 // (native.DefaultRegistry + native.Register) — the full language
 // layer, so these specs can exercise any registered word (record /
-// object / make / get / length / …) and the builtin Resource / Entity
+// object / make / get / size / …) and the builtin Resource / Entity
 // types installed by installResourceTypes.
 //
 // The kernel-only spec suite (q-suffixed fixtures, eng.RegisterCoreWords,

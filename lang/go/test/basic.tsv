@@ -91,10 +91,10 @@ refine Table (refine Record [x:Number y:String])	table{x:Number,y:String}
 def Foo refine Record [x:Integer y:String] def Bar refine Table Foo Bar	table{x:Integer,y:String}
 
 # Make - table type (positional)
-def Foo refine Record [x:Integer y:String] def Bar refine Table Foo make Bar [[1 a] [2 b]]	[{x:1,y:'a'},{x:2,y:'b'}]
+def Foo refine Record [x:Integer y:String] def Bar refine Table Foo make Bar [[1 a/q] [2 b/q]]	[{x:1,y:'a'},{x:2,y:'b'}]
 
 # Make - table type (named fields)
-def Foo refine Record [x:Integer y:String] def Bar refine Table Foo make Bar [[x:1 y:a] [x:2 y:b]]	[{x:1,y:'a'},{x:2,y:'b'}]
+def Foo refine Record [x:Integer y:String] def Bar refine Table Foo make Bar [[x:1 y:a/q] [x:2 y:b/q]]	[{x:1,y:'a'},{x:2,y:'b'}]
 
 # Table unification - compatible schemas
 def Foo refine Record [x:Any] def Bar refine Record [x:Number] (refine Table Foo) unify (refine Table Bar)	table{x:Number} true
@@ -378,11 +378,11 @@ tpartial (tpartial (refine Record [x:Integer])) teq tpartial (refine Record [x:I
 [true "a"] is [Boolean String]	true
 [true] is [String]	false
 
-# is - atoms in lists resolve correctly
-[foo] is [Atom]	true
-[foo bar] is [Atom Atom]	true
-[1 foo] is [Integer Atom]	true
-[foo] is [String]	false
+# is - atoms in lists (bare words never degrade — use /q for atom data)
+[foo/q] is [Atom]	true
+[foo/q bar/q] is [Atom Atom]	true
+[1 foo/q] is [Integer Atom]	true
+[foo/q] is [String]	false
 
 # is - record type Equality (records only unify with records)
 # Use parens to scope each record expression so `is` gets both as args.

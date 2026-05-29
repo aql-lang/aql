@@ -15,7 +15,7 @@ one or more type arguments and is instantiated at use sites.
 
 Concrete pain points users hit today:
 
-- `type Box record [value:Any]` loses precision: a `Box` of `Integer`
+- `def Box (refine Record [value:Any])` loses precision: a `Box` of `Integer`
   is the same type as a `Box` of `String`. There is no way to say
   "a `Box` whose `value` field has type `T`, for the same `T`
   throughout."
@@ -370,10 +370,10 @@ Every record that carries a decision result types it as `Any` (or
 `Map`):
 
 ```aql
-type Rule       record [when:Map  then:Map]
-type DTable     record [kind:String  rules:List  hit-policy:String]
-type DTree      record [kind:String  root:Atom  nodes:List]
-type LeafNode   record [id:Atom  kind:String  result:Any]
+def Rule       (refine Record [when:Map  then:Map])
+def DTable     (refine Record [kind:String  rules:List  hit-policy:String])
+def DTree      (refine Record [kind:String  root:Atom  nodes:List])
+def LeafNode   (refine Record [id:Atom  kind:String  result:Any])
 def decide fn [[model:Map  input:Map] [Any] [...]]
 ```
 
@@ -421,7 +421,7 @@ def apply-op fn [[rhs:Any  op:String  lhs:Any] [Boolean] [...]]
 satisfy `Any`. A bounded type parameter rejects it:
 
 ```aql
-type Comparable Integer tor Decimal tor String
+def Comparable (Integer tor Decimal tor String)
 
 def apply-op<T extends Comparable> fn [
   [rhs:T  op:String  lhs:T] [Boolean] [...]
@@ -438,7 +438,7 @@ one new type alias.
 with `children:Any`:
 
 ```aql
-type Pred record [kind:String  op:String  children:Any]
+def Pred (refine Record [kind:String  op:String  children:Any])
 ```
 
 `children` is a list of sub-predicates for `all`/`any` and a single
@@ -447,11 +447,11 @@ right shape is a tagged union — but they unblock the cleaner
 formulation:
 
 ```aql
-type AllPred  record [kind:String  op:String  children:[:Pred]]
-type AnyPred  record [kind:String  op:String  children:[:Pred]]
-type NotPred  record [kind:String  op:String  children:Pred]
-type CondPred record [field:Atom    op:String  value:Any]
-type Pred AllPred tor AnyPred tor NotPred tor CondPred
+def AllPred  (refine Record [kind:String  op:String  children:[:Pred]])
+def AnyPred  (refine Record [kind:String  op:String  children:[:Pred]])
+def NotPred  (refine Record [kind:String  op:String  children:Pred])
+def CondPred (refine Record [field:Atom    op:String  value:Any])
+def Pred (AllPred tor AnyPred tor NotPred tor CondPred)
 ```
 
 Builder functions then return the precise variant:

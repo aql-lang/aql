@@ -51,7 +51,7 @@ typeof { a:Integer }	Map	implicit shape — every value is a type → record-sha
 		
 # A bare Map type literal at concrete-payload sigs raises		
 # signature_error before the handler runs.		
-length Map	ERROR:signature_error	
+reverse Map	ERROR:signature_error	
 		
 # ====================================================================		
 # 3. Implicit-map record shape — `is` against `{k:Type …}`		
@@ -116,6 +116,19 @@ typeof {: Integer }	Map	the bare typed-map form is a Node-family TYPE
 # Missing keys yield the special `none` value.		
 { a:1 }.b	None	dotted access on a missing key returns the None type literal
 		
+# A dotted chain is grouped, so it composes as a single forward		
+# argument to a preceding word — `size m.x` means `size (m.x)`,		
+# not `(size m).x`.		
+def m { x:[ 1 2 3 ] } size m.x	3	dotted chain composes as one forward argument
+def a { n:10 } def b { n:20 } add a.n b.n	30	two dotted forward arguments
+		
+# As a map VALUE a dotted chain must be parenthesised — a bare `.`		
+# is not a valid token in a map-value position. `( a.b )` becomes		
+# `( ( a get b ) )`, evaluated inline by autoEvalMap.		
+def a { b:5 } { x:(a.b) }	{x:5}	parenthesised dotted access as a map value
+def a { b:{ c:9 } } { y:(a.b.c) }	{y:9}	chained dotted access, parenthesised
+def a { b:5 } { x:a.b }	ERROR:unexpected	bare dot in a map value is a parse error — wrap in ( )
+		
 # ====================================================================		
 # 7. Composition with def		
 # ====================================================================		
@@ -135,3 +148,18 @@ def m { a:5 b:7 } m.b add 1	8	field access composes with arithmetic
 { a:1 b:2 } is { a:1 b:2 }	true	identical maps unify
 { a:1 } is { a:1 b:2 }	false	missing key fails
 { a:1 b:9 } is { a:1 b:2 }	false	mismatched literal value
+		
+# ====================================================================		
+# 9. Map value auto-evaluation — bare words must resolve		
+# ====================================================================		
+# A bare word in a map value is auto-evaluated: it must name a binding		
+# that resolves (a value, or a fn dispatchable with the args present).		
+# Bare words never degrade to data — a fn that cannot be called with		
+# the available args is an error. Use `/r` to store a fn as a callable		
+# data value, or `/q` to store a bare word as an atom.		
+def x 5 def m {a:x} m	{a:5}	scalar binding resolves
+def g fn [[] [Integer] [42]] def m {a:g} m	{a:42}	0-arg fn dispatches
+def base 10 def m {x:(base add 5)} m	{x:15}	paren value evaluates inline
+def f fn [[x:Integer] [Integer] [add x 1]] def m {b:f} m	ERROR:signature	bare 1-arg fn cannot dispatch 0-arg — no silent degrade to word(f)
+def f fn [[x:Integer] [Integer] [add x 1]] def m {b:f/r} m.b 2	3	/r stores the fn as data; the arg then calls it
+def m {k:foo/q} m.k is Atom	true	/q stores a bare word as atom data

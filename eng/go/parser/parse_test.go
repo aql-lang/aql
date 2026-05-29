@@ -1268,7 +1268,8 @@ func TestParseNestedList(t *testing.T) {
 // --- List with dotted word ---
 
 func TestParseListWithDottedWord(t *testing.T) {
-	// [foo.bar] → list with foo get bar (3 elements)
+	// [foo.bar] → list with the dot chain grouped: ( foo get bar ) = 5
+	// elements (OpenParen, foo, get, bar, CloseParen).
 	got, err := Parse("[foo.bar]")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
@@ -1278,8 +1279,8 @@ func TestParseListWithDottedWord(t *testing.T) {
 	}
 	_lst, _ := eng.AsList(got[0])
 	elems := _lst.Slice()
-	if len(elems) != 3 {
-		t.Fatalf("expected 3 elements (foo get bar), got %d", len(elems))
+	if len(elems) != 5 {
+		t.Fatalf("expected 5 elements ( foo get bar ), got %d", len(elems))
 	}
 }
 
@@ -1372,13 +1373,14 @@ func TestParseDottedWordTopLevel(t *testing.T) {
 }
 
 func TestParseDottedWordInExpression(t *testing.T) {
-	// 1 foo.bar → 1 foo get bar = 4 values
+	// 1 foo.bar → 1 ( foo get bar ) = 6 values. The dot chain is grouped so
+	// it binds to foo, not to the result of `1 foo`.
 	got, err := Parse("1 foo.bar")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	if len(got) != 4 {
-		t.Fatalf("expected 4 values (1 foo get bar), got %d: %v", len(got), got)
+	if len(got) != 6 {
+		t.Fatalf("expected 6 values (1 ( foo get bar )), got %d: %v", len(got), got)
 	}
 }
 

@@ -694,7 +694,16 @@ func (e *Engine) stepWord(val Value) error {
 		}
 		v.Pos = val.Pos
 		e.stack[e.pointer] = v
-		return e.stepLiteral()
+		// `/r` resolves the name to its bound value and ADVANCES the
+		// pointer, exactly like pushing a literal — it does NOT dispatch a
+		// resolved function (that is what a bare word does). The value
+		// stays a plain Function, so it still dispatches when later stepped
+		// (e.g. `get` for `pkg.fn` / `m.fn arg`, or a bare word).
+		if e.recorder != nil && isRecordableLiteral(v) {
+			e.recorder.OnPushLit(v)
+		}
+		e.pointer++
+		return nil
 	}
 
 	// If there is a pending forward whose next slot is /q-marked
@@ -757,7 +766,7 @@ func (e *Engine) stepWord(val Value) error {
 			e.registry.Check.recordUse(w.Name)
 			// A def'd word binds a VALUE: push it as-is. Lists bind like
 			// maps — `def xs [1,2,3]` makes `xs` the list value, evaluated
-			// at def time (so `length xs` → 3). To splice a list's elements
+			// at def time (so `size xs` → 3). To splice a list's elements
 			// onto the stack (the old implicit behaviour / Forth-style
 			// macros) use the explicit `def name word [list]` form, whose
 			// __SP marker is handled in stepLiteral.
@@ -971,9 +980,10 @@ func (e *Engine) execMatch(match *MatchResult) error {
 				noEval := match.Sig.NoEvalMapArgs != nil && match.Sig.NoEvalMapArgs[i]
 				if !noEval {
 					evaluated, err := e.autoEvalMap(match.Args[i])
-					if err == nil {
-						match.Args[i] = evaluated
+					if err != nil {
+						return err
 					}
+					match.Args[i] = evaluated
 				}
 			} else if match.Args[i].Parent.Equal(TList) &&
 				match.Args[i].Data != nil && !IsTypedList(match.Args[i]) && !IsTableType(match.Args[i]) {
@@ -981,10 +991,17 @@ func (e *Engine) execMatch(match *MatchResult) error {
 				// positions (def body, if branches, for body, etc.).
 				noEval := match.Sig.NoEvalArgs != nil && match.Sig.NoEvalArgs[i]
 				if !noEval {
+					// Bare words never degrade to data: a list element
+					// that fails to evaluate (an undefined name, or a
+					// valid name dispatched with the wrong arity) is an
+					// error, not a silent fallback to its literal word.
+					// Use `foo/q` for an atom, `quote […]` for a literal
+					// word list / quotation.
 					evaluated, err := e.autoEvalList(match.Args[i])
-					if err == nil {
-						match.Args[i] = evaluated
+					if err != nil {
+						return err
 					}
+					match.Args[i] = evaluated
 				}
 			}
 		}
@@ -2054,18 +2071,22 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 				noEval := sig.NoEvalMapArgs != nil && sig.NoEvalMapArgs[i]
 				if !noEval {
 					evaluated, err := e.autoEvalMap(args[i])
-					if err == nil {
-						args[i] = evaluated
+					if err != nil {
+						return err
 					}
+					args[i] = evaluated
 				}
 			} else if args[i].Parent.Equal(TList) &&
 				args[i].Data != nil && !IsTypedList(args[i]) && !IsTableType(args[i]) {
 				noEval := sig.NoEvalArgs != nil && sig.NoEvalArgs[i]
 				if !noEval {
+					// Bare words never degrade to data — propagate the
+					// auto-eval failure (see execMatch).
 					evaluated, err := e.autoEvalList(args[i])
-					if err == nil {
-						args[i] = evaluated
+					if err != nil {
+						return err
 					}
+					args[i] = evaluated
 				}
 			}
 		}

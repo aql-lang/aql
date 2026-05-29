@@ -6,7 +6,7 @@ import (
 )
 
 // arrayNatives covers the array words: core scalar/vector ops
-// (iota, shape, rank, length, reshape, arr-flatten, arr-transpose,
+// (iota, shape, rank, reshape, arr-flatten, arr-transpose,
 // reverse, take, shed, where, unique, grade, at, sortby, member,
 // arr-indexof, group, replicate, expand, window, pairs) and the
 // higher-order ops (each, fold, scan, outer, inner).
@@ -40,15 +40,6 @@ var arrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{TList},
 			Handler: rankHandler,
-			Returns: []*Type{TInteger}, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "length",
-
-		Signatures: []NativeSig{{
-			Args:    []*Type{TList},
-			Handler: lengthHandler,
 			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	},
@@ -360,16 +351,6 @@ func rankHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	}
 	dims := computeShape(args[0])
 	return []Value{NewInteger(int64(len(dims)))}, nil
-}
-
-// ---- length ----
-
-func lengthHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("length_error", "length: expected concrete list", "length")
-	}
-	list, _ := AsList(args[0])
-	return []Value{NewInteger(int64(list.Len()))}, nil
 }
 
 // ---- reshape ----

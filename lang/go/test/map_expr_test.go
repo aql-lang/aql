@@ -279,7 +279,7 @@ func TestMapExprModuleExportFnDef(t *testing.T) {
 	// Module exports a function; caller uses it to build a map with expressions.
 	files := map[string]string{
 		"mod.aql": `def double fn [[n:Integer] Integer [n add n]]
-export "M" {double:double}`,
+export "M" {double:double/r}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import "./mod.aql"`,
@@ -458,7 +458,7 @@ func TestMapExprModuleComprehensive(t *testing.T) {
 	files := map[string]string{
 		"mod.aql": `def bval 100
 def incr fn [[n:Integer] Integer [n add 1]]
-export "M" {bval:bval, incr:incr}`,
+export "M" {bval:bval, incr:incr/r}`,
 	}
 
 	// Test 1: explicit map with module value

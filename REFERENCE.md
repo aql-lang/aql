@@ -55,9 +55,9 @@ is, see the **[Explanation](EXPLANATION.md)**.
 | Bare unquoted word | atom, only inside a `/q`-quoted slot | `foo` |
 | `quote foo` | `Atom` | `foo` |
 
-Type literals: `number`, `integer`, `decimal`, `string`, `boolean`,
-`atom`, `scalar`, `any`, `none`, `list`, `map`, plus every named
-type from `type`.
+Type literals: `Number`, `Integer`, `Decimal`, `String`, `Boolean`,
+`Atom`, `Scalar`, `Any`, `None`, `List`, `Map`, plus every named
+type you define with `def`.
 
 ### Compound data
 
@@ -516,6 +516,7 @@ iota 5 each [dup mul]     => [0, 1, 4, 9, 16]
 | `at` | Select by index list | `[10,20,30] at [2,0]` |
 | `sortby` | Sort by parallel key list | `["b","a","c"] [2,1,3] sortby` |
 | `member` | Per-element membership test | `[1,2,3] [2,3,4] member => [true,true,false]` |
+| `size` | Element / key count of a collection — works on any value (see [Size](#size)) | `[1,2,3] size => 3` |
 
 ### Higher-order array words
 
@@ -534,6 +535,39 @@ into the signature: `fold` takes `body data init`, `scan` takes
 `body data`, `outer` takes `body listB listA`, `inner` takes
 `combineBody productBody listB listA`.
 
+### Size
+
+`size` reports the **natural size** of *any* value as an `Integer`.
+Unlike the collection words above — which accept only a concrete
+list — `size` has signature `[Any]` and is a **total** function:
+every value has a size and `size` never errors. For a list it returns
+the element count, so it is the canonical way to ask "how long is this
+list?"; it also generalises to maps, strings, numbers, and user types.
+
+```
+[10,20,30] size          => 3
+```
+
+The size of a value is the size of the collection it stands for, by
+type:
+
+| Value | Size | Example |
+|-------|------|---------|
+| List | element count | `[10,20,30] size => 3` |
+| Map | key count | `{a:1, b:2} size => 2` |
+| String | length in bytes | `"hello" size => 5` |
+| Atom | length of the name | `foo/q size => 3` |
+| Integer / Decimal | floored magnitude | `42 size => 42`, `7.9 size => 7` |
+| Boolean | `1` for `true`, `0` for `false` | `true size => 1` |
+| Path | segment count | `(make Path "a/b/c") size => 3` |
+| Object / Array / Store / Table | field / element / entry / row count | `(make Pt {x:1 y:2}) size => 2` |
+| `None`, a Date, a bare scalar, or any non-concrete value (e.g. a bare type literal) | `0` (never errors) | `None size => 0`, `List size => 0` |
+
+Dispatch is type-driven: each type contributes its own size rule via
+the kernel's `Sizer` capability (`eng.SizeOf`), and a type with no
+`Sizer` in its lattice sizes to `0`. There is no separate `length`
+word — `size` subsumes it.
+
 ### Maps and access
 
 | Word | Description | Example |
@@ -542,6 +576,36 @@ into the signature: `fold` takes `body data init`, `scan` takes
 | `getr` / `!.` | Strict lookup (errors if missing) | `{x:1} !. y => error` |
 | `set` | Set a key in a Store | `context set foo 99` |
 | `context` | Push the current context Store | `context` |
+
+**Dotted access binds tightly.** A `.`/`!.` chain groups to a single
+`( … )` so it binds to its immediate receiver, not to a surrounding call:
+`size m.x` means `size (m.x)`, and `a.b.c` is `( a get b get c )`. Two
+consequences:
+
+- **Access the result of a call** by parenthesising the call:
+  `(make Point {x:1 y:2}) .x`, `(import "data.json") . name` — bare
+  `make … {} .x` would feed `.x`'s result *into* `make`.
+- **`/r` is a pure reference: it resolves the name to the bound value and
+  *advances the pointer* — it never calls the function in place.** This
+  holds at any arity and in any position (top level, list element, paren,
+  `do`-block, map value): `g/r` yields the function as data, `add/r 2 3`
+  leaves `[Function, 2, 3]` on the stack (the args are *not* consumed),
+  and `[zero/r]` is `[<function>]` even for a 0-arg `zero` (it is **not**
+  fired). To **call** a referenced function, use the bare word
+  (`add 2 3`), `apply` it (`2 3 (quote (f/r)) apply`), or access it as a
+  member (below), where `get` brings the value live.
+
+- **A function stored in a plain map** is callable via dot. Store it with
+  `/r` — `{fn: myfn/r}` — which holds the function as data; then
+  `m.fn arg` retrieves it (via `get`) and the arg calls it. Stored *bare*
+  (`{fn: myfn}`) the map value is auto-evaluated: `myfn` is dispatched
+  0-arg, which fails if it needs arguments — so a bare entry like
+  `{fn: myfn}` is a **build error** (bare words never degrade to data;
+  use `/r` for a callable data value, or `/q` for an atom). **Module
+  functions are exported the same way** — `export "m" {fn: fn/r}` (a
+  bare `{fn: fn}` export errors for the same reason). The distinction is
+  whether the value is *brought live*: `/r` itself holds; member access
+  (`get`) and bare words dispatch.
 
 ### Type words
 
@@ -660,9 +724,9 @@ Await modes (passed as `{mode: 'atom}` in the Options map):
 | `unify` | Unify two values; returns result and Boolean |
 
 ```
-1 unify Number                => 1 true
-1 unify "x"                   => '~unify-fail' false
-record [x:Number] unify {x:1} => '~unify-fail' false   # records ≠ maps
+1 unify Number                       => 1 true
+1 unify "x"                          => '~unify-fail' false
+refine Record [x:Number] unify {x:1} => '~unify-fail' false   # records ≠ maps
 ```
 
 ### Help

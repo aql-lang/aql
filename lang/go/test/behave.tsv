@@ -298,7 +298,7 @@ def Person refine Object {name:String age:Integer} def x:Person make Person {nam
 
 # Sort uses the user-installed Comparer when one is registered.
 # The list of Item instances comes back in `n`-ascending order.
-def Item refine Object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(a 'n' get) (b 'n' get) sub]]) [(make Item {n:5}) (make Item {n:1}) (make Item {n:3})] sort length	3	sort returns a list of three items
+def Item refine Object {n:Integer} behave compare/q (fn [[Item Item] [Integer] [(a 'n' get) (b 'n' get) sub]]) [(make Item {n:5}) (make Item {n:1}) (make Item {n:3})] sort size	3	sort returns a list of three items
 
 # A nodify body can project Items to bare integers — we sort first
 # (using Item's Comparer), then project to make the spec assertion

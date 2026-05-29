@@ -130,10 +130,7 @@ These names expand automatically:
 | `is` | `[Any, Any] -> [Boolean]` | Type compatibility check |
 | `convert` | `[Scalar, Scalar] -> [Scalar]` (`TypeArgs[0]=true`) | Type conversion |
 | `base` | `[Any] -> [Any]` | Zero/base value for a type |
-| `type` | `[Atom, Any] -> []` | Register a named type |
-| `record` | `[List] -> [Record]` | Define record type |
-| `object` | `[Map] -> [Object]` | Define object type |
-| `table` | `[Any] -> [Table]` | Define table from record |
+| `refine` | `[Any] -> [Type]` / `[Any, Node] -> [Type]` | Build a subtype: `refine Object {…}`, `refine Record […]`, `refine Table Base` (bind with `def Name (refine …)`) |
 | `make` | `[Any, Any] -> [Any]` | Construct typed value |
 | `inspect` | `[Any] -> [Map]` | Inspect word or type |
 

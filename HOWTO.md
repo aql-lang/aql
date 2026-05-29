@@ -162,6 +162,20 @@ Index:
 do {x: [1 add 2], y: [3 mul 4]}        => {x:3,y:12}
 ```
 
+A function stored in a map is callable through the dotted accessor when
+you store it with the `/r` ref modifier, which keeps it as a data value:
+
+```
+def inc fn [[n:Integer] [Integer] [n add 1]]
+def m {inc: inc/r}
+m.inc 5                                => 6
+```
+
+Stored bare (`{inc: inc}`), the map value is auto-evaluated and `inc` is
+invoked with no argument — which fails its signature, so `def m {inc: inc}`
+is a build error (bare words never degrade to data). Store it with `/r`,
+or call it by resolving the name at call time with bare `m get inc 5`.
+
 
 ## Format strings with interpolation
 
@@ -363,16 +377,16 @@ make Inventory [["Widget" 5] ["Bolt" 12]]
 ```
 
 
-## Define an object type
+## Define an object type with methods
 
-Objects are mutable, inheritable types. Declare with `refine Object`
-and a field map (`name: defaultValue`); construct instances with
-`make`. Mutate fields via `set` (note the arg order: `obj value key
-set` — see [Tutorial §3](TUTORIAL.md#the-argument-order-rule) for
-why):
+Objects are mutable, inheritable types. Declare one with `refine
+Object` and a field map (`name: defaultValue`); construct instances
+with `make`. Read fields with the dotted accessor (`.field`) and
+mutate them with `set` (note the arg order — `obj value key set` —
+see [Tutorial §3](TUTORIAL.md#the-argument-order-rule) for why):
 
 ```
-def Counter refine Object {count: 0}
+def Counter (refine Object {count: 0})
 
 def c (make Counter {})
 c 1 "count" set                       # c.count := 1
@@ -380,10 +394,60 @@ c 2 "count" set                       # c.count := 2
 c.count                               => 2
 ```
 
-The `def c (make Counter {})` form wraps `make` in `(…)` so the
-result of `make` is bound to `c` (rather than `c` being bound to the
-literal word `make` — see
-[Argument order](TUTORIAL.md#the-argument-order-rule)).
+Wrap `make` in `(…)` so `def` binds the *result* to `c` (rather than
+binding `c` to the literal word `make`); the same grouping around
+`refine` keeps the type expression bound to `Counter`. See
+[Argument order](TUTORIAL.md#the-argument-order-rule).
+
+The same parentheses are needed to read a field **straight off a fresh
+construct** — dotted access binds tightly to its immediate receiver:
+
+```
+def Counter (refine Object {count: 0})
+(make Counter {}).count               => 0       # parenthesise the make
+make Counter {} .count                => error   # parses as make Counter ({}.count)
+```
+
+Binding to `c` first (as above) sidesteps this; otherwise wrap the
+construct. See [Reference: Maps and access](REFERENCE.md#maps-and-access).
+
+### Methods are free functions over the instance
+
+AQL objects hold **fields, not methods**: the field map has no method
+slot and there is no inline dispatch. Putting a body in the map
+(`refine Object {count: 0, inc: [count 1 add]}`) does **not** create a
+callable — that just stores a list under the field `inc`, and `c inc`
+raises `undefined_word`. Model a method as an ordinary typed `fn`
+whose first parameter is the instance, then invoke it in stack form
+(`instance method`) or forward form (`method instance`).
+
+A read-only accessor returns a value derived from the instance:
+
+```
+def Counter (refine Object {count: 0})
+def doubled fn [[c:Counter] [Integer] [c.count 2 mul]]
+
+def c (make Counter {})
+c 5 "count" set
+c doubled                             => 10
+```
+
+A mutator changes the instance in place. `set` returns nothing, so the
+mutator's output signature is empty (`[]`); re-push the instance at the
+end instead if you want to chain calls:
+
+```
+def Counter (refine Object {count: 0})
+def bump fn [[c:Counter] [] [c (c.count 1 add) "count" set]]
+
+def c (make Counter {})
+c bump
+c bump
+c.count                               => 2
+```
+
+Because methods are just typed functions, they overload, type-check,
+and compose like any other word.
 
 
 ## Use scoped variables
@@ -475,16 +539,22 @@ meta-command (`:help` for the full list).
 ## Use modules and imports
 
 Define an inline module with the `module` form. The body must call
-`export "namespace" {...}` to publish bindings:
+`export "namespace" {...}` to publish bindings. Export **functions**
+with the `/r` ref modifier — the export map auto-evaluates, so a bare
+`greet` would be dispatched there (0-arg) rather than exported as the
+function. Values and types export bare:
 
 ```
 import module [
-  def helper [dup add]
+  def base 10
   def greet fn [[name:String] [String] [`hello ${name}`]]
-  export "utils" {helper: helper, greet: greet}
+  export "utils" {base: base, greet: greet/r}
 ]
 "Ada" utils.greet                     => 'hello Ada'
 ```
+
+Here `base` (a value) exports bare, while `greet` (a function) exports
+with `/r`.
 
 Import from a file (relative paths must start with `./`, `../`, or
 `/`):

@@ -150,6 +150,18 @@ func resolveExport(modReg *native.Registry, exports map[string]*native.OrderedMa
 // resolveTestExport mirrors native.resolveModuleExport but is local
 // to this package — the kernel helper is unexported.
 func resolveTestExport(modReg *native.Registry, v native.Value) native.Value {
+	// A function value (from `name/r`) must carry the module registry
+	// so it executes in module scope when called after import.
+	if fnDef, ok := v.Data.(native.FnDefInfo); ok {
+		if fnDef.Registry == nil {
+			fnDef.Registry = modReg
+			if v.Parent.Equal(native.TFnDef) {
+				return native.NewFnDef(fnDef)
+			}
+			return native.NewFunction(fnDef)
+		}
+		return v
+	}
 	var name string
 	switch {
 	case native.IsWord(v):
@@ -1177,7 +1189,7 @@ def run-case fn [[| subject:Scalar c:Map] [] [
 ]]
 
 def run-cases fn [[| subject:Scalar cases:List] [] [
-  for (cases length) [
+  for (cases size) [
     def _i i
     def c (cases _i get)
     c subject run-case
@@ -1190,7 +1202,7 @@ def run-spec fn [[| s:Map] [] [
     def cases quote (s get "cases")
     def subs quote (s get "subs")
     cases subject run-cases
-    for (subs length) [
+    for (subs size) [
       def _i i
       def sub (subs _i get)
       sub run-spec
@@ -1212,35 +1224,35 @@ export "test" {
   PropertyResult:  PropertyResult
 
   # spec constructors
-  case:           case
-  spec:           spec
-  spec-with-subs: spec-with-subs
-  prop:           test-prop
+  case:           case/r
+  spec:           spec/r
+  spec-with-subs: spec-with-subs/r
+  prop:           test-prop/r
 
   # imperative API (Go)
-  describe:    test-describe
-  test:        test-test
-  it:          test-test
-  check-prop:  test-check-prop
+  describe:    test-describe/r
+  test:        test-test/r
+  it:          test-test/r
+  check-prop:  test-check-prop/r
 
   # accumulated results
-  results:    test-results
-  summary:    test-summary
-  reset:      test-reset
-  fail-count: test-fail-count
+  results:    test-results/r
+  summary:    test-summary/r
+  reset:      test-reset/r
+  fail-count: test-fail-count/r
 
   # spec runner
-  run-spec:     run-spec
-  run-property: run-property
-  invoke:       test-invoke
+  run-spec:     run-spec/r
+  run-property: run-property/r
+  invoke:       test-invoke/r
 }
 
 export "assert" {
-  equal:      assert-equal
-  not-equal:  assert-not-equal
-  ok:         assert-ok
-  throws:     assert-throws
-  match:      assert-match
+  equal:      assert-equal/r
+  not-equal:  assert-not-equal/r
+  ok:         assert-ok/r
+  throws:     assert-throws/r
+  match:      assert-match/r
 }
 
 `

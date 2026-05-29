@@ -19,7 +19,7 @@
 def x 42 x	42	scalar binds a value
 def x [1,2,3] x	[1 2 3]	a LIST binds the list value (was: spliced)
 def x {a:1 b:2} x	{a:1 b:2}	a MAP binds the map value (unchanged)
-def x [1,2,3] length x	3	the value is a real List — length works
+def x [1,2,3] size x	3	the value is a real List — size works
 def x [1,2,3] typeof x	List	…and typeof sees a List
 def x [1,2,3] x get 0	1	…and indexing works
 def x [1,2,3] x each [add 10]	[11 12 13]	…and higher-order words work

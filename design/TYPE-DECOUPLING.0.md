@@ -916,10 +916,10 @@ mentions `colorPayload`, `Color`, or `RGB`.
 All three flavours that work today continue to work — but now they
 flow through the same Behavior pipeline as plugin types.
 
-**Refinement** — `type Foo Integer`:
+**Refinement** — `def Foo (refine Integer)`:
 
 ```aql
-type Foo Integer
+def Foo (refine Integer)
 def x:Foo 5
 def y:Foo 'hello'    # error: 'hello' is not a Foo
 ```
@@ -940,7 +940,7 @@ Behavior is `predicateBehavior{fn: fnDef}`. `Behavior.Match` invokes
 the predicate body via `RunPredicate` (`eng/go/registry.go:822`) —
 already factored out today; no new dispatch logic.
 
-**Record type** — `type Point record { x:Decimal y:Decimal }`:
+**Record type** — `def Point (refine Record [x:Decimal y:Decimal])`:
 
 `record` builds a `RecordTypePayload`. `type Point <record>` mints
 a Type whose Behavior is `recordBehavior{shape: recordTypeInfo}`.
@@ -958,8 +958,8 @@ invisible to `eng/`.
 
 ```aql
 # colors.aql
-type Color record { r:Integer g:Integer b:Integer }
-type Palette { primary:Color secondary:Color }
+def Color (refine Record [r:Integer g:Integer b:Integer])
+def Palette (refine Object { primary:Color secondary:Color })
 
 # main.aql
 'colors.aql' module
