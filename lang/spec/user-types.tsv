@@ -204,3 +204,17 @@ def Foo (refine Object {}) def id fn [[f:Foo] [Foo] [f]] typeof (id (make Foo {}
 def Foo (refine Object {}) def mk fn [[] [Foo] [42]] mk	ERROR:return value	Object return rejects Integer (real static safety, not Any)
 def Foo (refine Object {}) def mk fn [[] [Foo] ['hi']] mk	ERROR:return value	Object return rejects String
 def Bar (refine Object {n:0}) def Foo (refine Bar {}) def mk fn [[] [Bar] [make Foo {n:1}]] typeof (mk)	Foo	Object return admits a subtype instance (Foo is-a Bar)
+
+# ====================================================================
+# 8. User types in the RETURN position — negative cases
+# ====================================================================
+# The return slot must reject what it shouldn't admit. Before the fix
+# these all degraded to `Any` and silently passed (or raised a bogus
+# arity error); each is now a precise, intentional type/word error.
+
+def A (refine Object {}) def B (refine Object {}) def mk fn [[] [A] [make B {}]] mk	ERROR:expected A, got B	sibling Object types are distinct in the return slot
+def Bar (refine Object {}) def Foo (refine Bar {}) def mk fn [[] [Foo] [make Bar {}]] mk	ERROR:expected Foo, got Bar	supertype instance is not the declared subtype return
+def Pos (refine Integer) def mk fn [[] [Pos] [7]] mk	ERROR:expected Pos, got Integer	bare scalar refine return rejects a plain base value (nominal, matches param side)
+def Foo (refine Object {}) def mk fn [[] [Foo] [(make Foo {}) (make Foo {})]] mk	ERROR:return value(s)	arity check still fires for a user-typed return
+def Foo (refine Object {}) def mk fn [[] [Integer Foo] [1 2]] mk	ERROR:return value 2	per-slot return typing rejects the wrong type in a later slot
+def mk fn [[] [Nope] [42]] mk	ERROR:undefined word	an unknown type name in the return slot errors, it does not silently become Any

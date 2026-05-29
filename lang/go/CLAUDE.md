@@ -97,6 +97,33 @@ and catches ineffassign / unused / shadowed-variable issues that
 `go vet` and the test suite both miss. Skipping it lets a clean-
 locally commit fail CI; the cost of running it is a few seconds.
 
+## Test discipline — always pair positive with negative
+
+**Whenever you add or change behaviour, add negative tests alongside
+the positive ones, wherever a negative case is expressible.** A test
+that only proves the happy path passes leaves the actual contract —
+*what must be rejected* — unguarded, and that is where regressions hide.
+For every "X is accepted / returns Y" assertion, ask "what must be
+refused here?" and pin it too:
+
+- the wrong type / shape / arity raises the expected error
+  (`ERROR:<substring>` rows in the `.tsv` specs, or an error-asserting
+  Go test),
+- sibling / unrelated / supertype values are rejected where a specific
+  subtype is required,
+- an unknown / undefined name errors rather than silently degrading
+  (e.g. to `Any`),
+- boundary and empty inputs behave as specified.
+
+This is not optional polish: the user-type return-annotation bug
+(`lang/spec/user-types.tsv` §7–8) was invisible for as long as it was
+precisely *because* every existing row asserted only acceptance and
+returned the builtin `[Integer]` — no row ever required a user type to
+be rejected, so the silent `Any` degradation passed every test. The
+negative rows are what make the type contract real. The `recover()`-based
+no-panic tests (see Panic Prevention) are the same discipline applied to
+crashes: assert the bad input is handled, not just the good one.
+
 ## Dependencies
 
 The `github.com/voxgig/struct` module is published as a Go submodule at
