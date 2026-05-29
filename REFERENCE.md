@@ -585,32 +585,27 @@ consequences:
 - **Access the result of a call** by parenthesising the call:
   `(make Point {x:1 y:2}) .x`, `(import "data.json") . name` — bare
   `make … {} .x` would feed `.x`'s result *into* `make`.
-- **A function stored in a plain map** is callable via dot when stored
-  with the `/r` ref modifier — `{fn: myfn/r}`. In a map value `/r`
-  resolves the name to the *function itself*, held as data (not called),
-  so `m.fn arg` retrieves it and the arg calls it. Stored *bare*
+- **`/r` is a pure reference: it resolves the name to the bound value and
+  *advances the pointer* — it never calls the function in place.** This
+  holds at any arity and in any position (top level, list element, paren,
+  `do`-block, map value): `g/r` yields the function as data, `add/r 2 3`
+  leaves `[Function, 2, 3]` on the stack (the args are *not* consumed),
+  and `[zero/r]` is `[<function>]` even for a 0-arg `zero` (it is **not**
+  fired). To **call** a referenced function, use the bare word
+  (`add 2 3`), `apply` it (`2 3 (quote (f/r)) apply`), or access it as a
+  member (below), where `get` brings the value live.
+
+- **A function stored in a plain map** is callable via dot. Store it with
+  `/r` — `{fn: myfn/r}` — which holds the function as data; then
+  `m.fn arg` retrieves it (via `get`) and the arg calls it. Stored *bare*
   (`{fn: myfn}`) the map value is auto-evaluated: `myfn` is dispatched
   0-arg, which fails if it needs arguments — so a bare entry like
   `{fn: myfn}` is a **build error** (bare words never degrade to data;
-  use `/r` for a callable data value, or `/q` for an atom). To resolve
-  the name at call time instead, use bare `m get fn arg`. **Module
+  use `/r` for a callable data value, or `/q` for an atom). **Module
   functions are exported the same way** — `export "m" {fn: fn/r}` (a
-  bare `{fn: fn}` export errors for the same reason).
-
-- **`/r` yields a *dispatchable* function value, not an inert one.** The
-  held-as-data behavior above is specific to a *direct map value*. In a
-  list element, a paren expression, a `do`-block, or at the top level,
-  `/r` produces a function that **dispatches when reached** — so a
-  **0-arg** function fires in place (`[zero/r]` → `[<zero's result>]`,
-  not `[<function>]`). A function taking ≥1 argument is always held
-  until its arguments arrive, so this only bites 0-arg functions:
-  - For a **≥1-arg** function, `quote (f/r)` yields an inert Quoted
-    function value anywhere (the paren resolves it without calling, and
-    `quote` marks it data).
-  - For a **0-arg** function, the only hold-as-data position is a direct
-    map value (`{z: zero/r}`) — a paren `(zero/r)` fires it before
-    `quote` can mark it. Stash a 0-arg function in a map if you need it
-    as a value; access it (`m.z`) when you want it to run.
+  bare `{fn: fn}` export errors for the same reason). The distinction is
+  whether the value is *brought live*: `/r` itself holds; member access
+  (`get`) and bare words dispatch.
 
 ### Type words
 

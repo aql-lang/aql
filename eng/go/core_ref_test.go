@@ -121,35 +121,50 @@ func TestRefSuffixReturnsFunctionValue(t *testing.T) {
 	}
 }
 
-// TestRefSuffixDispatchesWithForwardArgs is the headline new
-// behavior: an unquoted Function value at the pointer collects
-// forward args via full sig matching, just like a word.
-func TestRefSuffixDispatchesWithForwardArgs(t *testing.T) {
+// TestRefSuffixHoldsForwardArgsUndispatched: `/r` is a pure reference —
+// it advances the pointer, leaving the resolved Function on the stack as
+// data, and does NOT dispatch. So tokens that follow are not consumed as
+// args: `add/r 2 3` yields [Function, 2, 3]. (To call, use the bare word
+// `add 2 3`, or `apply` on the ref.)
+func TestRefSuffixHoldsForwardArgsUndispatched(t *testing.T) {
 	r := freshRegistry(t)
 	out := runSrc(t, r, "add/r 2 3")
-	if len(out) != 1 {
-		t.Fatalf("got %d values, want 1: %v", len(out), out)
+	if len(out) != 3 {
+		t.Fatalf("got %d values, want 3 [Function 2 3]: %v", len(out), out)
 	}
-	got, err := eng.AsInteger(out[0])
-	if err != nil {
-		t.Fatalf("AsInteger: %v", err)
+	if !out[0].Parent.Equal(eng.TFunction) {
+		t.Errorf("out[0].Parent=%s, want Function (held, not dispatched)", out[0].Parent.String())
 	}
-	if got != 5 {
-		t.Errorf("add/r 2 3 = %d, want 5", got)
+	if a, _ := eng.AsInteger(out[1]); a != 2 {
+		t.Errorf("out[1]=%v, want 2 (arg not consumed)", out[1])
+	}
+	if b, _ := eng.AsInteger(out[2]); b != 3 {
+		t.Errorf("out[2]=%v, want 3 (arg not consumed)", out[2])
+	}
+	// The call path still works through the bare word.
+	out2 := runSrc(t, freshRegistry(t), "add 2 3")
+	if got, _ := eng.AsInteger(out2[0]); got != 5 {
+		t.Errorf("add 2 3 = %d, want 5", got)
 	}
 }
 
-// TestRefSuffixDispatchesWithStackArgs verifies the stack-side of
-// the dispatch — args already on the stack get consumed.
-func TestRefSuffixDispatchesWithStackArgs(t *testing.T) {
+// TestRefSuffixHoldsStackArgsUndispatched: stack-side — args already on
+// the stack are likewise not consumed; `/r` just pushes the Function and
+// advances. `2 3 add/r` yields [2, 3, Function].
+func TestRefSuffixHoldsStackArgsUndispatched(t *testing.T) {
 	r := freshRegistry(t)
 	out := runSrc(t, r, "2 3 add/r")
-	if len(out) != 1 {
-		t.Fatalf("got %d values, want 1: %v", len(out), out)
+	if len(out) != 3 {
+		t.Fatalf("got %d values, want 3 [2 3 Function]: %v", len(out), out)
 	}
-	got, _ := eng.AsInteger(out[0])
-	if got != 5 {
-		t.Errorf("2 3 add/r = %d, want 5", got)
+	if a, _ := eng.AsInteger(out[0]); a != 2 {
+		t.Errorf("out[0]=%v, want 2", out[0])
+	}
+	if b, _ := eng.AsInteger(out[1]); b != 3 {
+		t.Errorf("out[1]=%v, want 3", out[1])
+	}
+	if !out[2].Parent.Equal(eng.TFunction) {
+		t.Errorf("out[2].Parent=%s, want Function (held, not dispatched)", out[2].Parent.String())
 	}
 }
 

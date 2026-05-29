@@ -168,20 +168,40 @@ func TestRefOnSimpleValueBindingPassesThrough(t *testing.T) {
 
 // --- direct dispatch of unquoted Function values --------------------
 
-// TestRefSuffixDispatchesPrefixArgs: `add/r 2 3` is the unified-rule
-// payoff — the Function value at the pointer collects 2 and 3 as
-// forward args, just as `add 2 3` would.
-func TestRefSuffixDispatchesPrefixArgs(t *testing.T) {
+// TestRefSuffixHoldsArgsUndispatched: `/r` is a pure reference and does
+// NOT dispatch — it advances the pointer, so `myadd/r 2 3` holds the
+// function and leaves the args untouched: [Function, 2, 3]. The call is
+// written `myadd 2 3` (bare word) or via `apply` (TestApplyOnQuotedCapture).
+func TestRefSuffixHoldsArgsUndispatched(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
 		`def myadd fn [[a:Integer b:Integer] [Integer] [a add b]]`,
 		`myadd/r 2 3`,
 	})
 	if err != nil {
-		t.Fatalf("apply: %v", err)
+		t.Fatalf("ref: %v", err)
 	}
-	got, _ := eng.AsInteger(result[0])
-	if got != 5 {
-		t.Errorf("myadd/r 2 3 = %d, want 5", got)
+	if len(result) != 3 {
+		t.Fatalf("got %d results, want 3 [Function 2 3]: %v", len(result), result)
+	}
+	if !result[0].Parent.Equal(eng.TFunction) {
+		t.Errorf("result[0].Parent=%s, want Function (held, not dispatched)", result[0].Parent.String())
+	}
+	if a, _ := eng.AsInteger(result[1]); a != 2 {
+		t.Errorf("result[1]=%v, want 2 (arg not consumed)", result[1])
+	}
+	if b, _ := eng.AsInteger(result[2]); b != 3 {
+		t.Errorf("result[2]=%v, want 3 (arg not consumed)", result[2])
+	}
+	// Call path: the bare word still dispatches.
+	bare, err := runNativeSteps(t, nil, []string{
+		`def myadd fn [[a:Integer b:Integer] [Integer] [a add b]]`,
+		`myadd 2 3`,
+	})
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+	if got, _ := eng.AsInteger(bare[0]); got != 5 {
+		t.Errorf("myadd 2 3 = %d, want 5", got)
 	}
 }
 
@@ -235,40 +255,24 @@ func TestApplyErrorsOnNonFunction(t *testing.T) {
 	}
 }
 
-// TestZeroArgRefFiresInListButHeldInMap pins the documented /r boundary
-// (REFERENCE.md "Dotted access binds tightly"): /r yields a
-// *dispatchable* function value, so a 0-arg fn referenced by /r fires
-// when it is stepped — in a list it runs in place. A >=1-arg fn has no
-// 0-arg signature, so it is held until its args arrive. (A direct map
-// value holds even a 0-arg fn as data — covered by the module-export
-// tests; here we pin the list behavior.)
-func TestZeroArgRefFiresInListButHeldInMap(t *testing.T) {
-	// 0-arg fn: fires in place inside a list.
-	res, err := runNativeSteps(t, nil, []string{
-		`def zero fn [[] [Integer] [42]]`,
-		`[zero/r]`,
-	})
-	if err != nil {
-		t.Fatalf("[zero/r]: %v", err)
+// TestRefInListHoldsFunctionAnyArity pins the pure-reference contract:
+// `/r` advances the pointer and never dispatches, so a function
+// referenced inside a list is held as data regardless of arity — a 0-arg
+// fn is NOT fired in place. (To run it, call the bare word, `apply` it,
+// or access it as a member where `get` brings the value live.)
+func TestRefInListHoldsFunctionAnyArity(t *testing.T) {
+	cases := []struct{ name, def string }{
+		{"0-arg", `def f fn [[] [Integer] [42]]`},
+		{"2-arg", `def f fn [[a:Integer b:Integer] [Integer] [a add b]]`},
 	}
-	l, _ := eng.AsList(res[0])
-	if l.Len() != 1 {
-		t.Fatalf("[zero/r] len=%d, want 1", l.Len())
-	}
-	if got, err := eng.AsInteger(l.Get(0)); err != nil || got != 42 {
-		t.Errorf("[zero/r][0] = %v, want 42 (a 0-arg /r fires in a list)", l.Get(0))
-	}
-
-	// >=1-arg fn: held as a Function value in a list (no 0-arg sig).
-	res, err = runNativeSteps(t, nil, []string{
-		`def myadd fn [[a:Integer b:Integer] [Integer] [a add b]]`,
-		`[myadd/r]`,
-	})
-	if err != nil {
-		t.Fatalf("[myadd/r]: %v", err)
-	}
-	l, _ = eng.AsList(res[0])
-	if l.Len() != 1 || !l.Get(0).Parent.Equal(eng.TFunction) {
-		t.Errorf("[myadd/r][0] = %v, want a held Function", l.Get(0))
+	for _, c := range cases {
+		res, err := runNativeSteps(t, nil, []string{c.def, `[f/r]`})
+		if err != nil {
+			t.Fatalf("%s [f/r]: %v", c.name, err)
+		}
+		l, _ := eng.AsList(res[0])
+		if l.Len() != 1 || !l.Get(0).Parent.Equal(eng.TFunction) {
+			t.Errorf("%s [f/r] = %v, want [Function] (held, not dispatched)", c.name, res[0])
+		}
 	}
 }

@@ -34,6 +34,7 @@ type Engine struct {
 	marks     map[string]bool // active mark IDs (for mark/move control flow)
 	source    string          // original source text for error reporting
 	isTop     bool            // true for engines created via NewTop; an unhandled FlowCtrl at end-of-Run is an error here, propagates upward otherwise
+	refHold   bool            // one-shot: the value now at the pointer came from /r — push it like a literal, don't auto-dispatch a resolved fn (see stepWord ForceRef / stepLiteral)
 }
 
 // RecorderSkipper is an optional extension to Recorder. When a
@@ -694,6 +695,16 @@ func (e *Engine) stepWord(val Value) error {
 		}
 		v.Pos = val.Pos
 		e.stack[e.pointer] = v
+		// `/r` resolves the name to its bound value and ADVANCES the
+		// pointer, exactly like pushing a literal — it does NOT re-fire a
+		// resolved function (that is what a bare word does). stepLiteral
+		// still runs so the value can be collected by a pending forward
+		// (`someword foo/r`), but the one-shot refHold flag suppresses the
+		// 0-arg auto-dispatch that would otherwise fire a referenced fn in
+		// place. The pushed value stays a plain Function, so it still
+		// dispatches when later stepped — e.g. retrieved by `get` for
+		// `pkg.fn` / `m.fn arg`.
+		e.refHold = true
 		return e.stepLiteral()
 	}
 
@@ -1289,6 +1300,12 @@ func spliceExpand(data Value) []Value {
 func (e *Engine) stepLiteral() error {
 	valIdx := e.pointer
 
+	// One-shot: consumed whether or not we dispatch below. Set only by the
+	// stepWord ForceRef (`/r`) path, where the resolved value must be
+	// pushed like a literal rather than auto-dispatched in place.
+	refHold := e.refHold
+	e.refHold = false
+
 	// Look backwards for the nearest forward entry, stopping at open-paren barriers.
 	fwdIdx := -1
 	for i := valIdx - 1; i >= 0; i-- {
@@ -1315,10 +1332,13 @@ func (e *Engine) stepLiteral() error {
 			return nil
 		}
 		// If the value is a FnDef/TFunction, execute it. Quoted function
-		// values are treated as data (not executed).
+		// values are treated as data (not executed). A value just resolved
+		// by `/r` (refHold) is also held as data here — `/r` references the
+		// fn, it does not call it; advancing past it leaves a plain
+		// Function on the stack that still dispatches if stepped later.
 		val := e.stack[valIdx]
 		if (val.Parent.Equal(TFnDef) || val.Parent.Equal(TFunction)) &&
-			val.Data != nil && !val.Quoted {
+			val.Data != nil && !val.Quoted && !refHold {
 			if _, ok := val.Data.(FnDefInfo); ok {
 				return e.execFnDefLiteral(valIdx)
 			}
@@ -1558,36 +1578,6 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 					resolvedKey, _ = AsAtom(keyResult[0])
 				} else {
 					resolvedKey = ValToString(keyResult[0])
-				}
-			}
-		}
-
-		// A /r (ForceRef) word value resolves to its referent as data,
-		// WITHOUT dispatching it — so a fn stored via `{k: name/r}` is
-		// kept as the fn value even at 0 arity (a bare `name` would
-		// dispatch and, for a 0-arg fn, fire here). This is how a fn is
-		// exported: `export "m" {f: f/r}`. Call-site `/r` (`f/r 2 3`)
-		// is unaffected — that path runs through stepWord. If the name
-		// doesn't resolve, fall through to the sub-engine for the
-		// regular undefined-word error.
-		//
-		// This direct-resolution is deliberately scoped to a *map value*.
-		// `/r` otherwise yields a dispatchable Function (per the ref
-		// design): stepWord replaces the word at the pointer with the
-		// resolved fn value and re-steps that slot via stepLiteral, where
-		// an unquoted Function dispatches in place — and a 0-arg fn's
-		// signature matches with no args, so a 0-arg `/r` in a list /
-		// paren / do-block / at top level fires there. A ≥1-arg fn finds
-		// no zero-arg match, so stepLiteral falls through and leaves it as
-		// data; thus only 0-arg fns observe the difference, and a direct
-		// map value is the only position that holds a 0-arg fn as data.
-		// See REFERENCE.md "Dotted access binds tightly".
-		if IsWord(v) {
-			if w, _ := AsWord(v); w.ForceRef {
-				if rv, ok := ResolveRef(e.registry, w.Name); ok {
-					rv.Pos = v.Pos
-					out.Set(resolvedKey, rv)
-					continue
 				}
 			}
 		}
