@@ -100,8 +100,8 @@ This grammar produces the same `{base:exponent}` map everywhere, so `qty 9.81 m/
 For record fields and function signatures, annotate a numeric type with a unit tag using the typed-map convention already in AQL:
 
 ```aql
-type Velocity record [speed:Number#m/s]
-type Force    record [magnitude:Number#kg*m/s^2]
+def Velocity (refine Record [speed:Number#m/s])
+def Force    (refine Record [magnitude:Number#kg*m/s^2])
 
 def accelerate fn [
   [[v:Number#m/s, a:Number#m/s^2, t:Number#s] [Number#m/s]]

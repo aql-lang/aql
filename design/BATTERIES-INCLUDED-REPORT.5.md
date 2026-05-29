@@ -144,7 +144,7 @@ Based on codebase analysis of `lang/go/internal/engine/native_*.go` (83 files, 1
 | **Boolean** | and, or, xor, nand, not, implies | Complete |
 | **Comparison** | lt, gt, lte, gte, eq, neq, deq | Complete |
 | **String ops** | upper, lower, split, contains, indexof, match, replace, repeat, trim, slice, pad, normalize, escape, concat, changecase | Strong (16+ words) |
-| **Array/List** | iota, shape, rank, length, reshape, reverse, take, shed, flatten, transpose, unique, group, replicate, expand, pairs, window, at, where, grade, sortby, member, indexof, each, fold, scan, outer, inner | Very strong (27+ words) |
+| **Array/List** | iota, shape, rank, size, reshape, reverse, take, shed, flatten, transpose, unique, group, replicate, expand, pairs, window, at, where, grade, sortby, member, indexof, each, fold, scan, outer, inner | Very strong (27+ words) |
 | **Stack** | drop, dup, swap, over, rot, nip, tuck, 2drop, 2dup, 2swap, 2over, depth, pick, roll, stack | Complete (Forth-like) |
 | **Type system** | typeof, fulltypeof, inspect, is, convert, record, table, typedef, object, make, base | Strong |
 | **Control flow** | if, for (with break/continue), do, quote, error | Core complete |

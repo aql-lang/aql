@@ -90,7 +90,7 @@ path. (The runtime tor/tany path now uses `simplifyDisjunctAlts` —
 see 1.5 — so this only affects check-mode carrier reasoning.) For
 type literals that's fine; for concrete map alternatives, it
 compares the underlying ordered-map by structural equality, so two
-`record [x:Integer]` values with different `RecordTypeInfo.ID` won't
+`refine Record [x:Integer]` values with different `RecordTypeInfo.ID` won't
 dedup, but two *structurally identical* concrete maps will collapse
 — counter-intuitive in either direction. Rare in practice; worth
 tightening with an ID-aware equality predicate.

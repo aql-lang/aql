@@ -449,12 +449,12 @@ the type-constructor turned into data — `Object`, `Record`, `Table`,
 
 The practical consequence: a host program can register a *new*
 type-kind (e.g. `Graph`, `Tensor`, `Stream`) at runtime, and
-the kernel routes `type`, `make`, `is`, and unification through
+the kernel routes `refine`, `make`, `is`, and unification through
 it the same way it does for the built-ins. The `aql:matrix`
 module does exactly this for `Matrix` and `Vector`.
 
-You usually don't write Ideals — you use them via `record`,
-`table`, `object`, `make`. The framework matters only if you're
+You usually don't write Ideals — you use them via `refine`
+(Record / Table / Object) and `make`. The framework matters only if you're
 extending the language with a new kind of typed container.
 
 

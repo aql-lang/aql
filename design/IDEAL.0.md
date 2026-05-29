@@ -95,7 +95,7 @@ type Ideal struct {
     Refines *Ideal  // optional: a specialisation of another Ideal (§8)
     Enabled bool    // dynamic on/off, exactly like a capability slot
 
-    // --- type-level ops: drive `type ‹base› arg` ---
+    // --- type-level ops: drive `refine ‹base› arg` ---
     Construct func(base, arg Value, r *Registry) (Value, error)
     Unify     func(a, b Value) (Value, bool)
 
@@ -159,7 +159,7 @@ Dynamic control mirrors capabilities exactly:
 - **add** — `r.Ideals.Register(&Ideal{…})`; a host package installs a
   `Graph` kind at module-init time.
 - **disable / enable** — `Ideal.Enabled = false`; a sandboxed
-  sub-engine ships without `Table` (no SQL surface). `type Table …`
+  sub-engine ships without `Table` (no SQL surface). `refine Table …`
   on a disabled Ideal errors cleanly: *"the Table kind is not
   available in this registry"*.
 - **replace** — swap the `Object` Ideal for a stricter variant.
@@ -189,7 +189,7 @@ registration. Dispatch then becomes a **pointer-follow**, not a
 search:
 
 ```
-type X arg        →  X.Parent.Ideal.Construct(X, arg, r)
+refine X arg      →  X.Parent.Ideal.Construct(X, arg, r)
 make T data       →  T.Parent.Ideal.Instantiate(T, data, r)
 unify(a, b)       →  a.Parent.Ideal == b.Parent.Ideal → ideal.Unify(a, b)
 v.String()        →  v.Parent.Ideal.Format(v)
@@ -200,8 +200,8 @@ Worked example — object inheritance, today four hard-coded branches,
 becomes one rule:
 
 ```
-def Animal (type Object {legs:Integer})   ; Object literal → objectIdeal.Construct
-def Dog    (type Animal {breed:String})   ; Animal.Parent.Ideal == objectIdeal
+def Animal (refine Object {legs:Integer}) ; Object literal → objectIdeal.Construct
+def Dog    (refine Animal {breed:String}) ; Animal.Parent.Ideal == objectIdeal
                                           ; → objectIdeal.Construct(Animal, …) → subtype
 make Dog {legs:4 breed:"x"}               ; Dog.Parent.Ideal.Instantiate
 ```
@@ -269,7 +269,7 @@ The parser hard-wires the structural literals: `{…}` → map,
 words:
 
 ```
-type Graph {nodes:List edges:List}     ; construct  — the `type` word
+refine Graph {nodes:List edges:List}   ; construct  — the constructor word
 make GraphType {nodes:[…] edges:[…]}   ; instantiate — the `make` word
 g .nodes                               ; access — the dotted accessor
 ```
@@ -280,9 +280,9 @@ We accept this because:
   grammar (`eng/go/parser`). Per-plugin grammar extension means
   runtime grammar mutation: a large complexity, ambiguity, and
   audit-safety cost for a small ergonomic gain.
-- **The uniform surface is sufficient.** `type Name arg` + `make` +
+- **The uniform surface is sufficient.** `refine Name arg` + `make` +
   `.field` is a complete, readable interface for any structural kind.
-  A `Graph` reached via `type Graph …` is not meaningfully worse than
+  A `Graph` reached via `refine Graph …` is not meaningfully worse than
   one reached via a hypothetical `‹…›` literal.
 - **Closed syntax keeps the language learnable and auditable.** The
   set of literal forms a reader must know stays fixed regardless of
@@ -506,7 +506,7 @@ back-pointer cannot distinguish a record from a plain map, so it was
 not adopted. Dispatch is a scan of `Accepts` predicates
 (`IdealRegistry.Match` / `For`). With a handful of kinds the scan is
 free; the predicate, not the pointer, is the contract. A shaped type
-(`type Matrix {rows:3 cols:3}`) is likewise payload-discriminated — it
+(`refine Matrix {rows:3 cols:3}`) is likewise payload-discriminated — it
 is not minted, so it carries no per-type FixedID.
 
 **`Refines` is a kind-lattice edge, not vtable inheritance.** §3 said
@@ -535,7 +535,7 @@ its own `Enabled` is true. `typeHandler`, `MakeHandler` and
 **Host Ideals need `HostTypeBody`, not just `ExtensionPayload`.** §6
 said a host carries its payload in `ExtensionPayload` and "the kernel
 never inspects an Ideal-governed payload directly." The second half is
-false for *constructed types*: `def Foo (type Matrix {rows:3 cols:3})`
+false for *constructed types*: `def Foo (refine Matrix {rows:3 cols:3})`
 routes a host type through `InstallType`, and `typeof` plus `make`'s
 target resolution must recognise it *as a type* — but a bare
 `ExtensionPayload` is opaque, so `IsTypeBody` returns false. The fix
@@ -561,7 +561,7 @@ containers belong under `Node`.
 always parses. A *kind* is per-`Registry`: `r.Ideals` is populated
 when the module is imported (`BuildMatrixModule` calls
 `registerTensorIdeals`). There is no global Ideal table. Before
-`import "aql:matrix"`, `Matrix` names a type but `type Matrix` /
+`import "aql:matrix"`, `Matrix` names a type but `refine Matrix` /
 `make Matrix` raise "the Matrix type-kind is not available" — the
 disabled-kind path. This is §4's per-`Registry` isolation made
 concrete: identity is global, *capability* is registry-scoped.

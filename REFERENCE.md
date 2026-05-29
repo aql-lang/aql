@@ -55,9 +55,9 @@ is, see the **[Explanation](EXPLANATION.md)**.
 | Bare unquoted word | atom, only inside a `/q`-quoted slot | `foo` |
 | `quote foo` | `Atom` | `foo` |
 
-Type literals: `number`, `integer`, `decimal`, `string`, `boolean`,
-`atom`, `scalar`, `any`, `none`, `list`, `map`, plus every named
-type from `type`.
+Type literals: `Number`, `Integer`, `Decimal`, `String`, `Boolean`,
+`Atom`, `Scalar`, `Any`, `None`, `List`, `Map`, plus every named
+type you define with `def`.
 
 ### Compound data
 
@@ -694,9 +694,9 @@ Await modes (passed as `{mode: 'atom}` in the Options map):
 | `unify` | Unify two values; returns result and Boolean |
 
 ```
-1 unify Number                => 1 true
-1 unify "x"                   => '~unify-fail' false
-record [x:Number] unify {x:1} => '~unify-fail' false   # records ≠ maps
+1 unify Number                       => 1 true
+1 unify "x"                          => '~unify-fail' false
+refine Record [x:Number] unify {x:1} => '~unify-fail' false   # records ≠ maps
 ```
 
 ### Help

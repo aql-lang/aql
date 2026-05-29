@@ -940,7 +940,7 @@ Behavior is `predicateBehavior{fn: fnDef}`. `Behavior.Match` invokes
 the predicate body via `RunPredicate` (`eng/go/registry.go:822`) —
 already factored out today; no new dispatch logic.
 
-**Record type** — `type Point record { x:Decimal y:Decimal }`:
+**Record type** — `def Point (refine Record [x:Decimal y:Decimal])`:
 
 `record` builds a `RecordTypePayload`. `type Point <record>` mints
 a Type whose Behavior is `recordBehavior{shape: recordTypeInfo}`.
@@ -958,7 +958,7 @@ invisible to `eng/`.
 
 ```aql
 # colors.aql
-type Color record { r:Integer g:Integer b:Integer }
+def Color (refine Record [r:Integer g:Integer b:Integer])
 type Palette { primary:Color secondary:Color }
 
 # main.aql

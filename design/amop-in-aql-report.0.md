@@ -56,7 +56,7 @@ Several AmOP concepts can be represented with existing AQL syntax without langua
 Example AQL style for message/event envelopes:
 
 ```aql
-type Msg record [kind:String from:String to:String payload:Any ts:Number]
+def Msg (refine Record [kind:String from:String to:String payload:Any ts:Number])
 
 def mk-msg fn [[kind:String from:String to:String payload:Any] [Map] [
   make Msg {kind:kind from:from to:to payload:payload ts:(now)}

@@ -19,7 +19,7 @@ Three layers ship today:
 3. **User-defined types** — installed via the `behave NAME (fn …)` word:
 
 ```aql
-type Person object {name:String age:Integer}
+def Person (refine Object {name:String age:Integer})
 behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]])
 behave canon/q   (fn [[Person]        [String]  [(a 'name' get)]])
 behave nodify/q  (fn [[Person]        [Any]     [{n:(a 'name' get) age:(a 'age' get)}]])
@@ -127,7 +127,7 @@ Comparer, even though that value was just validated as a Person.
 The way to *carry* nominal identity is `make`:
 
 ```aql
-type Person object {name:String age:Integer}
+def Person (refine Object {name:String age:Integer})
 behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]])
 
 def x:Person {name:'A' age:30}            ; x.Parent = TMap     — compare misses
@@ -224,7 +224,7 @@ For reference, the design space considered during implementation:
 1. **Stay as-is, document the distinction.** Predicate types remain
    gates, nominal types remain categories. Users who want
    predicate-driven behavior wrap their concern in a nominal type
-   (`type PositiveNum object {n:Integer}` plus a predicate guarding
+   (`def PositiveNum (refine Object {n:Integer})` plus a predicate guarding
    construction). Cleanest from a kernel perspective; pushes the work
    onto users. The current state.
 
@@ -324,7 +324,7 @@ most often. The remaining gap — records — is a known follow-up.
 
 One behavior name → one capability slot per type. Can't have
 `compare-by-age` versus `compare-by-name` on the same type — users
-emulate via distinct nominal types (`type PersonByAge object {…}`) or
+emulate via distinct nominal types (`def PersonByAge (refine Object {…})`) or
 by writing an ad-hoc comparator at the call site. CLOS has `:before` /
 `:after` / `:around` and qualifier-keyed methods; Clojure has
 multimethods with arbitrary dispatch fns. AQL stays minimal here,
