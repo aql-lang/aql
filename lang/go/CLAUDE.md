@@ -165,9 +165,13 @@ were removed — jsonic is the sole parsing path.) Key jsonic integration:
   Parens push to a custom "paren"/"pelem" rule pair that collects items into
   a `parenGroup`. At the top level, paren groups expand to engine markers
   `( ... )`. In data context (map values), they become `ParenExpr` values
-  for inline evaluation by `autoEvalMap`. Adjacent dots (`foo.bar`) use
-  source position analysis to distinguish from standalone dots
-  (`foo . bar`).
+  for inline evaluation by `autoEvalMap`. The `.` operator is a plain
+  `#DT` fixed token and jsonic discards inter-token whitespace, so
+  spacing around it is irrelevant: `foo.bar`, `foo . bar`, `foo. bar`,
+  and `foo .bar` all lex to the identical `foo` `.` `bar` token
+  sequence and parse the same. There is **no** adjacency /
+  source-position analysis (that belonged to the removed hand-rolled
+  lexer — jsonic is now the sole parser).
 - **Template string interpolation**: Backtick is removed from jsonic's
   `StringChars` so it is not consumed by the built-in string matcher.
   Instead, `` ` `` (#BT), `${` (#IS), and template literal text (#TL) are
