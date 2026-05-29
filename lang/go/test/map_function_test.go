@@ -15,11 +15,13 @@ import (
 // Function value. `m.greet arg` groups to `(m get greet) arg`, the value
 // stays as data, and the arg calls it.
 //
-// Stored *bare* (`{greet: greet}`) the value is a dispatchable reference
-// to the globally-registered `greet`, so the dotted form self-invokes it
-// 0-arg inside the `( … )` group before the arg arrives — for that form
-// use bare `m get greet arg`. (Module functions `pkg.fn arg` are
-// unaffected; their names are module-scoped, not global.)
+// Stored *bare* (`{greet: greet}`) the map value is auto-evaluated:
+// `greet` is dispatched 0-arg, which fails its 1-arg signature — so
+// `def m {greet: greet}` is now a build error (bare words never
+// degrade to data). Use `/r` to store the fn as a callable data
+// value, or bare `m get greet arg` to resolve the name at call time.
+// (Module functions `pkg.fn arg` are unaffected; their names are
+// module-scoped, resolved by the module export machinery.)
 func TestMapFunctionAccess(t *testing.T) {
 	r, err := native.DefaultRegistry()
 	if err != nil {

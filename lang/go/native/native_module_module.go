@@ -93,7 +93,15 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 					exportHandler(_as1, _m)
 					return nil, nil
 				},
-				Returns: []*Type{}, BarrierPos: -1,
+				// The export map's values are *references* to module
+				// bindings (`{clamp:clamp}`), resolved by name in the
+				// module registry via resolveModuleExport. RefMapArgs
+				// keeps a bare fn-word like `clamp` raw rather than
+				// dispatching it 0-arg (which would raise "no matching
+				// signature for clamp"), while still evaluating computed
+				// values like `{x:(base add 5)}`.
+				RefMapArgs: map[int]bool{1: true},
+				Returns:    []*Type{}, BarrierPos: -1,
 			},
 			{
 				Args: []*Type{TString, TMap},
@@ -106,7 +114,8 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 					exportHandler(_as2, _m)
 					return nil, nil
 				},
-				Returns: []*Type{}, BarrierPos: -1,
+				RefMapArgs: map[int]bool{1: true},
+				Returns:    []*Type{}, BarrierPos: -1,
 			},
 		},
 	})

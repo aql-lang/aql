@@ -43,6 +43,11 @@ type NativeSig struct {
 	// should be suppressed. See Signature.NoEvalMapArgs.
 	NoEvalMapArgs map[int]bool
 
+	// RefMapArgs marks arg positions whose map values are references:
+	// bare-word values are kept as Words rather than dispatched 0-arg,
+	// while computed values still evaluate. See Signature.RefMapArgs.
+	RefMapArgs map[int]bool
+
 	// TypeArgs marks arg positions that must receive a type literal
 	// rather than a concrete value. See Signature.TypeArgs.
 	TypeArgs map[int]bool

@@ -103,7 +103,12 @@ func BuildTestModule(parent *native.Registry) (native.ModuleDesc, error) {
 					name, _ := eargs[0].AsConcreteAtom()
 					return resolveExport(modReg, exports, name, eargs[1])
 				},
-				Returns: []*native.Type{}, BarrierPos: -1,
+				// Export values are name references resolved by
+				// resolveExport; RefMapArgs keeps a bare fn-word raw
+				// rather than dispatching it 0-arg, while still
+				// evaluating computed export values.
+				RefMapArgs: map[int]bool{1: true},
+				Returns:    []*native.Type{}, BarrierPos: -1,
 			},
 			{
 				Args: []*native.Type{native.TString, native.TMap},
@@ -111,7 +116,8 @@ func BuildTestModule(parent *native.Registry) (native.ModuleDesc, error) {
 					name, _ := eargs[0].AsConcreteString()
 					return resolveExport(modReg, exports, name, eargs[1])
 				},
-				Returns: []*native.Type{}, BarrierPos: -1,
+				RefMapArgs: map[int]bool{1: true},
+				Returns:    []*native.Type{}, BarrierPos: -1,
 			},
 		},
 	})

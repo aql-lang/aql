@@ -171,8 +171,10 @@ def m {inc: inc/r}
 m.inc 5                                => 6
 ```
 
-Stored bare (`{inc: inc}`), `m.inc 5` instead tries to invoke `inc` with
-no argument — store it with `/r`, or call it with bare `m get inc 5`.
+Stored bare (`{inc: inc}`), the map value is auto-evaluated and `inc` is
+invoked with no argument — which fails its signature, so `def m {inc: inc}`
+is a build error (bare words never degrade to data). Store it with `/r`,
+or call it by resolving the name at call time with bare `m get inc 5`.
 
 
 ## Format strings with interpolation

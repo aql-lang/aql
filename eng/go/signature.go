@@ -74,6 +74,16 @@ type Signature struct {
 	// the handler could resolve it as a type.
 	NoEvalMapArgs map[int]bool
 
+	// RefMapArgs marks arg positions whose map values are *references*:
+	// a bare Word value is left as a Word (for the handler to resolve by
+	// name) rather than being dispatched 0-arg by autoEvalMap. Computed
+	// values (paren expressions, nested containers) still evaluate
+	// normally. This is the softer counterpart to NoEvalMapArgs (which
+	// suppresses the WHOLE map): it stops only bare-word dispatch, so a
+	// reference map like `export "m" {clamp:clamp x:(base add 5)}` keeps
+	// `clamp` as a name to resolve while still evaluating `(base add 5)`.
+	RefMapArgs map[int]bool
+
 	// TypeArgs marks arg positions that must receive a *type literal*
 	// (or a structural type body) rather than a concrete value. The
 	// slot's declared type in Args[i] is the upper bound of the

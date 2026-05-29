@@ -970,10 +970,12 @@ func (e *Engine) execMatch(match *MatchResult) error {
 				// is a fn that's also a registered callable.
 				noEval := match.Sig.NoEvalMapArgs != nil && match.Sig.NoEvalMapArgs[i]
 				if !noEval {
-					evaluated, err := e.autoEvalMap(match.Args[i])
-					if err == nil {
-						match.Args[i] = evaluated
+					refWords := match.Sig.RefMapArgs != nil && match.Sig.RefMapArgs[i]
+					evaluated, err := e.autoEvalMap(match.Args[i], refWords)
+					if err != nil {
+						return err
 					}
+					match.Args[i] = evaluated
 				}
 			} else if match.Args[i].Parent.Equal(TList) &&
 				match.Args[i].Data != nil && !IsTypedList(match.Args[i]) && !IsTableType(match.Args[i]) {
@@ -981,10 +983,17 @@ func (e *Engine) execMatch(match *MatchResult) error {
 				// positions (def body, if branches, for body, etc.).
 				noEval := match.Sig.NoEvalArgs != nil && match.Sig.NoEvalArgs[i]
 				if !noEval {
+					// Bare words never degrade to data: a list element
+					// that fails to evaluate (an undefined name, or a
+					// valid name dispatched with the wrong arity) is an
+					// error, not a silent fallback to its literal word.
+					// Use `foo/q` for an atom, `quote […]` for a literal
+					// word list / quotation.
 					evaluated, err := e.autoEvalList(match.Args[i])
-					if err == nil {
-						match.Args[i] = evaluated
+					if err != nil {
+						return err
 					}
+					match.Args[i] = evaluated
 				}
 			}
 		}
@@ -1450,7 +1459,7 @@ func (e *Engine) autoEvalStack() error {
 			}
 			e.stack[i] = result
 		} else if val.Parent.Equal(TMap) && val.Data != nil && !IsTypedMap(val) && !IsRecordType(val) && !IsOptionsType(val) {
-			result, err := e.autoEvalMap(val)
+			result, err := e.autoEvalMap(val, false)
 			if err != nil {
 				return err
 			}
@@ -1518,7 +1527,13 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 //	{x:[1 add 2]} → {x:[3]}     (list evaluated, stays as list)
 //	{a:[1,2]}     → {a:[1,2]}   (literal list unchanged)
 //	{x:"hello"}   → {x:"hello"} (strings pass through unchanged)
-func (e *Engine) autoEvalMap(val Value) (Value, error) {
+//
+// refWords, when true, marks this as a reference-map evaluation
+// (see Signature.RefMapArgs): a bare Word value is kept verbatim for
+// the consuming handler to resolve by name, rather than being
+// dispatched 0-arg. Computed values (paren expressions, nested
+// containers) still evaluate normally.
+func (e *Engine) autoEvalMap(val Value, refWords bool) (Value, error) {
 	m, _ := AsMutableMap(val)
 	out := NewOrderedMap()
 	if m.Implicit {
@@ -1552,6 +1567,14 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 					resolvedKey = ValToString(keyResult[0])
 				}
 			}
+		}
+
+		// Reference-map mode: a bare Word value is a name for the
+		// handler to resolve, not a 0-arg call. Keep it verbatim so a
+		// fn export like {clamp:clamp} doesn't dispatch clamp here.
+		if refWords && IsWord(v) {
+			out.Set(resolvedKey, v)
+			continue
 		}
 
 		// Interpolated string: evaluate inline.
@@ -2053,19 +2076,25 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 				args[i].Data != nil && !IsTypedMap(args[i]) && !IsRecordType(args[i]) && !IsOptionsType(args[i]) {
 				noEval := sig.NoEvalMapArgs != nil && sig.NoEvalMapArgs[i]
 				if !noEval {
-					evaluated, err := e.autoEvalMap(args[i])
-					if err == nil {
-						args[i] = evaluated
+					// FnSig has no reference-map concept (export is a
+					// native, dispatched via execMatch); pass refWords=false.
+					evaluated, err := e.autoEvalMap(args[i], false)
+					if err != nil {
+						return err
 					}
+					args[i] = evaluated
 				}
 			} else if args[i].Parent.Equal(TList) &&
 				args[i].Data != nil && !IsTypedList(args[i]) && !IsTableType(args[i]) {
 				noEval := sig.NoEvalArgs != nil && sig.NoEvalArgs[i]
 				if !noEval {
+					// Bare words never degrade to data — propagate the
+					// auto-eval failure (see execMatch).
 					evaluated, err := e.autoEvalList(args[i])
-					if err == nil {
-						args[i] = evaluated
+					if err != nil {
+						return err
 					}
+					args[i] = evaluated
 				}
 			}
 		}

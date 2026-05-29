@@ -148,3 +148,18 @@ def m { a:5 b:7 } m.b add 1	8	field access composes with arithmetic
 { a:1 b:2 } is { a:1 b:2 }	true	identical maps unify
 { a:1 } is { a:1 b:2 }	false	missing key fails
 { a:1 b:9 } is { a:1 b:2 }	false	mismatched literal value
+		
+# ====================================================================		
+# 9. Map value auto-evaluation — bare words must resolve		
+# ====================================================================		
+# A bare word in a map value is auto-evaluated: it must name a binding		
+# that resolves (a value, or a fn dispatchable with the args present).		
+# Bare words never degrade to data — a fn that cannot be called with		
+# the available args is an error. Use `/r` to store a fn as a callable		
+# data value, or `/q` to store a bare word as an atom.		
+def x 5 def m {a:x} m	{a:5}	scalar binding resolves
+def g fn [[] [Integer] [42]] def m {a:g} m	{a:42}	0-arg fn dispatches
+def base 10 def m {x:(base add 5)} m	{x:15}	paren value evaluates inline
+def f fn [[x:Integer] [Integer] [add x 1]] def m {b:f} m	ERROR:signature	bare 1-arg fn cannot dispatch 0-arg — no silent degrade to word(f)
+def f fn [[x:Integer] [Integer] [add x 1]] def m {b:f/r} m.b 2	3	/r stores the fn as data; the arg then calls it
+def m {k:foo/q} m.k is Atom	true	/q stores a bare word as atom data

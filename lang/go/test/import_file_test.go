@@ -254,7 +254,10 @@ func TestImportFileNoModuleWord(t *testing.T) {
 
 func TestImportFileFunctionListExport(t *testing.T) {
 	files := map[string]string{
-		"fns.aql": `def inc [1 add]
+		// `quote` keeps [1 add] as a literal word list (a quotation):
+		// bare words never degrade to data, so an unquoted [1 add]
+		// would try to evaluate `1 add` and fail on arity.
+		"fns.aql": `def inc quote [1 add]
 export "Fns" {inc:inc}`,
 	}
 
