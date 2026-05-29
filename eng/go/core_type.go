@@ -375,7 +375,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		// See lang/go/test/typed_def_test.go::TestRefineBareDistinctFromAlias
 		// for the asymmetry assertion.
 		if def.Parent != nil {
-			installBareRefineUnifier(def, def.Parent, name)
+			installBareRefineUnifier(def, name)
 		}
 		r.Defs.PushType(name, def, body)
 	} else if IsDisjunct(body) {

@@ -1,26 +1,28 @@
 package eng
 
-// bareRefineUnifier is the kernel-installed Unifier for bare nominal
+// bareRefineUnifier is the kernel-installed Behavior for bare nominal
 // subtypes — types whose body has no added structure beyond a base
 // type, e.g. `def Pos refine Integer`. Pos is a fresh lattice node
 // parented at Integer; its only difference from Integer is identity.
 //
-// Without this Unifier, Pos kept DefaultBehavior, whose Match runs a
-// plain lattice walk. For `42.Is(Pos)`, the walk asks
-// `42.Parent.Matches(Pos)` — does Pos sit on Integer's ancestry chain?
-// No, Pos is a *descendant* of Integer (Pos's Parent = Integer), not
-// an ancestor. So `42.Is(Pos)` returned false at every dispatch site
-// even though `Pos unify 42` succeeded and produced a Pos value.
+// Semantics: a bare refine is a NOMINAL NEWTYPE. A value is a member
+// only when its own tag IS the refine type (or a subtype of it) — a
+// plain base-typed value is NOT an inhabitant. So `42.Is(Pos)` is
+// false; a `Pos` is obtained by explicit construction (`def x:Pos 42`,
+// which reparents via Unify — a separate path). This keeps every
+// boundary that asks `v.Is(Pos)` — sig dispatch, the `is` word, and
+// the fn return check — in agreement, and matches the newtype
+// discipline of Haskell/Rust/Go/Scala. See
+// design/REFINE-NEWTYPE-VS-SUBSET.0.md.
 //
-// Semantics: a bare refinement adds no constraint, so any value whose
-// declared type satisfies the base type is structurally a member of
-// the refinement. The Unifier admits exactly those values.
+// (An earlier revision made Match lenient — admitting any base-family
+// value — which split param matching from the nominal `is`/return
+// check; that asymmetry is exactly what this Behavior now removes.)
 //
 // Type literals (Data==nil, !Carrier) pass through to the
 // prev/DefaultBehavior walk — the type itself isn't an inhabitant.
 type bareRefineUnifier struct {
 	prev     TypeBehavior
-	baseType *Type
 	typeName string
 }
 
@@ -31,7 +33,9 @@ func (b *bareRefineUnifier) Match(v Value, t *Type) bool {
 		}
 		return DefaultBehavior.Match(v, t)
 	}
-	return v.Parent.Matches(b.baseType)
+	// Nominal: the value's tag must be the refine type itself (or a
+	// subtype), NOT merely the base type.
+	return v.Parent.Matches(t)
 }
 
 func (b *bareRefineUnifier) Format(v Value) string {
@@ -49,12 +53,11 @@ func (b *bareRefineUnifier) Equal(a, c Value) bool {
 }
 
 // installBareRefineUnifier attaches a bareRefineUnifier to def. Called
-// by InstallType when minting/renaming a bare-refinement prefab so
-// dispatch admits values whose declared type matches the base.
-func installBareRefineUnifier(def *Type, base *Type, name string) {
+// by InstallType when minting/renaming a bare-refinement prefab so the
+// nominal newtype rule governs every v.Is(def) boundary.
+func installBareRefineUnifier(def *Type, name string) {
 	def.Behavior = &bareRefineUnifier{
 		prev:     def.Behavior,
-		baseType: base,
 		typeName: name,
 	}
 }

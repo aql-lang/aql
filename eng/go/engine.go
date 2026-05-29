@@ -2724,8 +2724,15 @@ func (e *Engine) stepCloseParen() error {
 			}
 
 			// Validate the top nret values match declared return types.
+			// Use the membership predicate v.Is(exp) — the SAME question
+			// the parameter boundary asks (sigTypeMatches → v.Is) — so a
+			// type's Behavior governs both ends symmetrically: a predicate
+			// refine runs its predicate on the way out (subset semantics),
+			// a bare refine stays nominal (newtype), and builtins/objects
+			// are unchanged (v.Is ≡ v.Parent.Matches on concrete values).
+			// See design/REFINE-NEWTYPE-VS-SUBSET.0.md.
 			for k, exp := range rc.Returns {
-				if !results[extra+k].Parent.Matches(exp) {
+				if !results[extra+k].Is(exp) {
 					return e.returnTypeError(rc.FuncName, k+1, exp, results[extra+k])
 				}
 			}
