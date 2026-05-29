@@ -153,23 +153,65 @@ func isToken(item any, tok string) bool {
 }
 
 // convertTopLevelItems converts a list of jsonic items in word context,
-// handling parenthesis markers and token sequences. The . and ! tokens
-// are converted to "get" and "getr" words respectively:
-//   - "." → get
-//   - "!" "." → getr (the ! is consumed together with the following .)
+// handling parenthesis markers and token sequences.
 //
-// All other items are converted to engine values directly.
+// Dotted access is sugar for `get`/`getr` and is GROUPED so it binds to
+// its immediate receiver: a chain `recv.k1.k2` (or `recv!.k1`) wraps as a
+// single paren group `( recv get k1 get k2 … )`. Grouping isolates the
+// access from surrounding forward-collection, so `size m.x` means
+// `size (m.x)`, not `(size m).x`. `get`/`getr` left-compose on the stack,
+// so one flat group covers any chain length. The receiver and each key may
+// themselves be paren groups, which covers `(expr).k` and the computed-key
+// form `m.(expr)`.
+//
+//   - "." → get      "!" "." → getr
+//
+// A lone "." / "!." with no receiver still emits the bare word (and errors
+// at runtime, as before). All other items convert to engine values
+// directly.
 func convertTopLevelItems(items []any) ([]eng.Value, error) {
 	values := make([]eng.Value, 0, len(items))
 	for i := 0; i < len(items); i++ {
-		// "!" followed by "." → getr word.
+		// Dotted-access chain: a receiver primary followed by one or more
+		// `.key` / `!.key` segments → one group `( recv get k … )`.
+		if isChainReceiver(items[i]) && i+1 < len(items) && startsDot(items, i+1) {
+			values = append(values, eng.NewOpenParen())
+			if err := emitPrimary(&values, items[i]); err != nil {
+				return nil, err
+			}
+			j := i + 1
+		chain:
+			for j < len(items) {
+				switch {
+				case isToken(items[j], "!") && j+2 < len(items) && isToken(items[j+1], "."):
+					values = append(values, eng.NewWord("getr"))
+					if err := emitPrimary(&values, items[j+2]); err != nil {
+						return nil, err
+					}
+					j += 3
+				case isToken(items[j], ".") && j+1 < len(items):
+					values = append(values, eng.NewWord("get"))
+					if err := emitPrimary(&values, items[j+1]); err != nil {
+						return nil, err
+					}
+					j += 2
+				default:
+					break chain
+				}
+			}
+			values = append(values, eng.NewCloseParen())
+			i = j - 1
+			continue
+		}
+
+		// "!" followed by "." → getr word (lone, no receiver).
 		if isToken(items[i], "!") && i+1 < len(items) && isToken(items[i+1], ".") {
 			values = append(values, eng.NewWord("getr"))
 			i++ // skip the dot
 			continue
 		}
 
-		// "." → get word.
+		// "." → get word (lone, no receiver).
 		if isToken(items[i], ".") {
 			values = append(values, eng.NewWord("get"))
 			continue
@@ -181,28 +223,53 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 			return nil, eng.MakeAqlError("syntax_error", "unmatched opening parenthesis", "(", "", "")
 		}
 
-		// Paren group: expand to engine paren markers at top level.
-		// Emit typed OpenParen / CloseParen values directly so the
-		// engine can recognise them by Parent identity (no stepWord
-		// name-dispatch needed).
-		if pg, ok := items[i].(parenGroup); ok {
-			values = append(values, eng.NewOpenParen())
-			inner, err := convertTopLevelItems([]any(pg))
-			if err != nil {
-				return nil, err
-			}
-			values = append(values, inner...)
-			values = append(values, eng.NewCloseParen())
-			continue
-		}
-
-		v, err := convertTopLevelValue(items[i])
-		if err != nil {
+		// A value, or a paren group expanded to ( … ) markers.
+		if err := emitPrimary(&values, items[i]); err != nil {
 			return nil, err
 		}
-		values = append(values, v)
 	}
 	return values, nil
+}
+
+// startsDot reports whether items[j] begins a dot-access segment: a "."
+// token, or a "!" immediately followed by ".".
+func startsDot(items []any, j int) bool {
+	if isToken(items[j], ".") {
+		return true
+	}
+	return isToken(items[j], "!") && j+1 < len(items) && isToken(items[j+1], ".")
+}
+
+// isChainReceiver reports whether an item can be the receiver of a dot
+// chain — anything except the "." / "!" operator markers and an unclosed
+// paren (i.e. a real value, word, or paren group).
+func isChainReceiver(item any) bool {
+	if _, ok := item.(unclosedParen); ok {
+		return false
+	}
+	return !isToken(item, ".") && !isToken(item, "!")
+}
+
+// emitPrimary appends the converted form of a single primary item — a
+// value, or a parenthesised group expanded to ( … ) markers — to dst. Used
+// for the receiver, the keys of a dot chain, and ordinary top-level items.
+func emitPrimary(dst *[]eng.Value, item any) error {
+	if pg, ok := item.(parenGroup); ok {
+		*dst = append(*dst, eng.NewOpenParen())
+		inner, err := convertTopLevelItems([]any(pg))
+		if err != nil {
+			return err
+		}
+		*dst = append(*dst, inner...)
+		*dst = append(*dst, eng.NewCloseParen())
+		return nil
+	}
+	v, err := convertTopLevelValue(item)
+	if err != nil {
+		return err
+	}
+	*dst = append(*dst, v)
+	return nil
 }
 
 // convertTopLevel converts a top-level implicit list from jsonic into

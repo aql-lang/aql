@@ -85,9 +85,9 @@ make Entity { kind:'api' spec:'x' entity:'y' } is Integer	false
 # Entity instances expose `kind`, `spec`, and `entity` as fields		
 # accessible through the standard `.field` syntax.		
 		
-make Entity { kind:'api' spec:'voxgig-solardemo' entity:'planet' } .kind	'api'	
-make Entity { kind:'api' spec:'voxgig-solardemo' entity:'planet' } .spec	'voxgig-solardemo'	
-make Entity { kind:'api' spec:'voxgig-solardemo' entity:'planet' } .entity	'planet'	
+( make Entity { kind:'api' spec:'voxgig-solardemo' entity:'planet' } ) .kind	'api'	
+( make Entity { kind:'api' spec:'voxgig-solardemo' entity:'planet' } ) .spec	'voxgig-solardemo'	
+( make Entity { kind:'api' spec:'voxgig-solardemo' entity:'planet' } ) .entity	'planet'	
 		
 # ====================================================================		
 # 6. Field validation at make-time		
@@ -106,8 +106,8 @@ make Entity { kind:'api' spec:'x' }	ERROR:missing field	missing entity
 # All field accesses and is-checks survive the round-trip through		
 # the def stack.		
 		
-def planet make Entity { kind:'api' spec:'solardemo' entity:'planet' } planet .kind	'api'	
-def planet make Entity { kind:'api' spec:'solardemo' entity:'planet' } planet .entity	'planet'	
+def planet ( make Entity { kind:'api' spec:'solardemo' entity:'planet' } ) planet .kind	'api'	
+def planet ( make Entity { kind:'api' spec:'solardemo' entity:'planet' } ) planet .entity	'planet'	
 def planet make Entity { kind:'api' spec:'solardemo' entity:'planet' } planet is Entity	true	
 def planet make Entity { kind:'api' spec:'solardemo' entity:'planet' } planet is Resource	true	
 		

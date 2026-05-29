@@ -149,6 +149,17 @@ def lst quote [ 1 2 3 ] each [ add 10 ] lst	[11 12 13]	pass quoted list through 
 def doub word [ dup add ] 5 doub	10	body splice — dup, add — runs against caller stack
 		
 # ====================================================================		
+# 8b. Dotted access as list elements		
+# ====================================================================		
+# A `.` chain in a list element is grouped by the parser as		
+# `( recv get k … )`, so it binds to its receiver and contributes one		
+# value per element instead of leaving stranded `get` tokens.		
+		
+def a { b:5 } [ a.b ]	[5]	dotted access as a list element
+def a { b:{ c:9 } } [ a.b.c ]	[9]	chained dotted access in a list
+def a { b:5 } def c { d:6 } [ a.b c.d ]	[5 6]	two dotted elements stay separate
+		
+# ====================================================================		
 # 9. List equality via `is`		
 # ====================================================================		
 # Two concrete lists with element-wise unifying contents satisfy		
