@@ -517,6 +517,16 @@ type MarkInfo struct {
 	Body []Value // original content to replay (set by the move on first encounter)
 }
 
+// SpliceInfo carries an __SP (splice) marker's payload. When an __SP value
+// reaches the engine pointer it is replaced, unevaluated, by its Data: a
+// plain list contributes its top-level elements, any other value contributes
+// itself. The spliced content is then re-stepped against the live stack, so a
+// word-bearing list behaves as a Forth-style macro. Produced by the `word`
+// native and by `def name word value`. See engine.go::stepLiteral.
+type SpliceInfo struct {
+	Data Value // the wrapped payload to splice in
+}
+
 // MoveInfo identifies a move on the stack. When the stack pointer reaches
 // a move, it jumps back to the corresponding mark. The Reason field
 // describes why the move exists (e.g. "for loop") and is used in error
@@ -1345,6 +1355,26 @@ func AsMark(v Value) (MarkInfo, error) {
 // IsMove reports whether this value is a move.
 func IsMove(v Value) bool {
 	return v.Parent.Equal(TMove)
+}
+
+// NewSplice wraps a value in an __SP (splice) marker. When the marker reaches
+// the engine pointer its payload is spliced, unevaluated, into the stack.
+func NewSplice(v Value) Value {
+	return NewValueRaw(TSplice, SpliceInfo{Data: v})
+}
+
+// IsSplice reports whether this value is an __SP splice marker.
+func IsSplice(v Value) bool {
+	return v.Parent.Equal(TSplice)
+}
+
+// AsSplice returns the SpliceInfo, erroring if not a splice value.
+func AsSplice(v Value) (SpliceInfo, error) {
+	info, ok := v.Data.(SpliceInfo)
+	if !ok {
+		return SpliceInfo{}, fmt.Errorf("AsSplice: not a splice value (got %T)", v.Data)
+	}
+	return info, nil
 }
 
 // AsMove returns the MoveInfo, panics if not a move.

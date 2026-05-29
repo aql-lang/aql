@@ -1269,6 +1269,21 @@ func (e *Engine) insertForward(w WordInfo, sig *Signature, forwardNeeded int, st
 }
 
 // stepLiteral handles a resolved (non-word, non-forward) value at the pointer.
+// spliceExpand returns the stack entries an __SP marker contributes when it
+// reaches the pointer. A plain (non-typed) list splices its top-level
+// elements; every other value — scalars, maps, typed lists, tables — splices
+// as a single entry. The data is returned verbatim (unevaluated); the engine
+// re-steps over it after splicing.
+func spliceExpand(data Value) []Value {
+	if data.Parent.Equal(TList) && data.Data != nil && !IsTypedList(data) && !IsTableType(data) {
+		elems, _ := AsList(data)
+		out := make([]Value, elems.Len())
+		copy(out, elems.Slice())
+		return out
+	}
+	return []Value{data}
+}
+
 func (e *Engine) stepLiteral() error {
 	valIdx := e.pointer
 
@@ -1285,6 +1300,18 @@ func (e *Engine) stepLiteral() error {
 	}
 
 	if fwdIdx < 0 {
+		// __SP (splice) marker: replace it, unevaluated, with its payload
+		// and re-step. A plain list contributes its top-level elements;
+		// any other value contributes itself. The spliced content runs
+		// against the live stack (Forth-style macro). No pending forward
+		// means it is being processed as a standalone stack entry — the
+		// only place a splice should fire (as an arg it is collected by
+		// value via the TAny match in the collection branch below).
+		if IsSplice(e.stack[valIdx]) {
+			info, _ := AsSplice(e.stack[valIdx])
+			stackSplice(&e.stack, valIdx, 1, spliceExpand(info.Data)...)
+			return nil
+		}
 		// If the value is a FnDef/TFunction, execute it. Quoted function
 		// values are treated as data (not executed).
 		val := e.stack[valIdx]
