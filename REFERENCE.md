@@ -586,15 +586,31 @@ consequences:
   `(make Point {x:1 y:2}) .x`, `(import "data.json") . name` — bare
   `make … {} .x` would feed `.x`'s result *into* `make`.
 - **A function stored in a plain map** is callable via dot when stored
-  with the `/r` ref modifier — `{fn: myfn/r}` — which keeps it as a
-  Quoted (data) value, so `m.fn arg` works. Stored *bare* (`{fn: myfn}`)
-  the map value is auto-evaluated: `myfn` is dispatched 0-arg, which
-  fails if it needs arguments — so a bare entry like `{fn: myfn}` is a
-  **build error** (bare words never degrade to data; use `/r` for a
-  callable data value, or `/q` for an atom). To resolve the name at
-  call time instead, use bare `m get fn arg`. (Module functions —
-  `pkg.fn arg` — are unaffected; their names are resolved by the module
-  export machinery.)
+  with the `/r` ref modifier — `{fn: myfn/r}`. In a map value `/r`
+  resolves the name to the *function itself*, held as data (not called),
+  so `m.fn arg` retrieves it and the arg calls it. Stored *bare*
+  (`{fn: myfn}`) the map value is auto-evaluated: `myfn` is dispatched
+  0-arg, which fails if it needs arguments — so a bare entry like
+  `{fn: myfn}` is a **build error** (bare words never degrade to data;
+  use `/r` for a callable data value, or `/q` for an atom). To resolve
+  the name at call time instead, use bare `m get fn arg`. **Module
+  functions are exported the same way** — `export "m" {fn: fn/r}` (a
+  bare `{fn: fn}` export errors for the same reason).
+
+- **`/r` yields a *dispatchable* function value, not an inert one.** The
+  held-as-data behavior above is specific to a *direct map value*. In a
+  list element, a paren expression, a `do`-block, or at the top level,
+  `/r` produces a function that **dispatches when reached** — so a
+  **0-arg** function fires in place (`[zero/r]` → `[<zero's result>]`,
+  not `[<function>]`). A function taking ≥1 argument is always held
+  until its arguments arrive, so this only bites 0-arg functions:
+  - For a **≥1-arg** function, `quote (f/r)` yields an inert Quoted
+    function value anywhere (the paren resolves it without calling, and
+    `quote` marks it data).
+  - For a **0-arg** function, the only hold-as-data position is a direct
+    map value (`{z: zero/r}`) — a paren `(zero/r)` fires it before
+    `quote` can mark it. Stash a 0-arg function in a map if you need it
+    as a value; access it (`m.z`) when you want it to run.
 
 ### Type words
 

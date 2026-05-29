@@ -1570,6 +1570,16 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 		// is unaffected — that path runs through stepWord. If the name
 		// doesn't resolve, fall through to the sub-engine for the
 		// regular undefined-word error.
+		//
+		// This direct-resolution is deliberately scoped to a *map value*.
+		// `/r` otherwise yields a dispatchable Function (per the ref
+		// design): the resolved fn value is pushed and then stepped, and
+		// a 0-arg fn's signature matches with no args, so a 0-arg `/r` in
+		// a list / paren / do-block / at top level fires in place. A
+		// ≥1-arg fn is held regardless (no 0-arg sig to fire), so only
+		// 0-arg fns observe the difference, and a direct map value is the
+		// only position that holds a 0-arg fn as data. See REFERENCE.md
+		// "Dotted access binds tightly".
 		if IsWord(v) {
 			if w, _ := AsWord(v); w.ForceRef {
 				if rv, ok := ResolveRef(e.registry, w.Name); ok {

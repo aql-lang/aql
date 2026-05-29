@@ -234,3 +234,41 @@ func TestApplyErrorsOnNonFunction(t *testing.T) {
 		t.Fatal("expected error applying to Integer, got nil")
 	}
 }
+
+// TestZeroArgRefFiresInListButHeldInMap pins the documented /r boundary
+// (REFERENCE.md "Dotted access binds tightly"): /r yields a
+// *dispatchable* function value, so a 0-arg fn referenced by /r fires
+// when it is stepped — in a list it runs in place. A >=1-arg fn has no
+// 0-arg signature, so it is held until its args arrive. (A direct map
+// value holds even a 0-arg fn as data — covered by the module-export
+// tests; here we pin the list behavior.)
+func TestZeroArgRefFiresInListButHeldInMap(t *testing.T) {
+	// 0-arg fn: fires in place inside a list.
+	res, err := runNativeSteps(t, nil, []string{
+		`def zero fn [[] [Integer] [42]]`,
+		`[zero/r]`,
+	})
+	if err != nil {
+		t.Fatalf("[zero/r]: %v", err)
+	}
+	l, _ := eng.AsList(res[0])
+	if l.Len() != 1 {
+		t.Fatalf("[zero/r] len=%d, want 1", l.Len())
+	}
+	if got, err := eng.AsInteger(l.Get(0)); err != nil || got != 42 {
+		t.Errorf("[zero/r][0] = %v, want 42 (a 0-arg /r fires in a list)", l.Get(0))
+	}
+
+	// >=1-arg fn: held as a Function value in a list (no 0-arg sig).
+	res, err = runNativeSteps(t, nil, []string{
+		`def myadd fn [[a:Integer b:Integer] [Integer] [a add b]]`,
+		`[myadd/r]`,
+	})
+	if err != nil {
+		t.Fatalf("[myadd/r]: %v", err)
+	}
+	l, _ = eng.AsList(res[0])
+	if l.Len() != 1 || !l.Get(0).Parent.Equal(eng.TFunction) {
+		t.Errorf("[myadd/r][0] = %v, want a held Function", l.Get(0))
+	}
+}
