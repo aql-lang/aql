@@ -363,16 +363,16 @@ make Inventory [["Widget" 5] ["Bolt" 12]]
 ```
 
 
-## Define an object type
+## Define an object type with methods
 
-Objects are mutable, inheritable types. Declare with `refine Object`
-and a field map (`name: defaultValue`); construct instances with
-`make`. Mutate fields via `set` (note the arg order: `obj value key
-set` — see [Tutorial §3](TUTORIAL.md#the-argument-order-rule) for
-why):
+Objects are mutable, inheritable types. Declare one with `refine
+Object` and a field map (`name: defaultValue`); construct instances
+with `make`. Read fields with the dotted accessor (`.field`) and
+mutate them with `set` (note the arg order — `obj value key set` —
+see [Tutorial §3](TUTORIAL.md#the-argument-order-rule) for why):
 
 ```
-def Counter refine Object {count: 0}
+def Counter (refine Object {count: 0})
 
 def c (make Counter {})
 c 1 "count" set                       # c.count := 1
@@ -380,10 +380,48 @@ c 2 "count" set                       # c.count := 2
 c.count                               => 2
 ```
 
-The `def c (make Counter {})` form wraps `make` in `(…)` so the
-result of `make` is bound to `c` (rather than `c` being bound to the
-literal word `make` — see
-[Argument order](TUTORIAL.md#the-argument-order-rule)).
+Wrap `make` in `(…)` so `def` binds the *result* to `c` (rather than
+binding `c` to the literal word `make`); the same grouping around
+`refine` keeps the type expression bound to `Counter`. See
+[Argument order](TUTORIAL.md#the-argument-order-rule).
+
+### Methods are free functions over the instance
+
+AQL objects hold **fields, not methods**: the field map has no method
+slot and there is no inline dispatch. Putting a body in the map
+(`refine Object {count: 0, inc: [count 1 add]}`) does **not** create a
+callable — that just stores a list under the field `inc`, and `c inc`
+raises `undefined_word`. Model a method as an ordinary typed `fn`
+whose first parameter is the instance, then invoke it in stack form
+(`instance method`) or forward form (`method instance`).
+
+A read-only accessor returns a value derived from the instance:
+
+```
+def Counter (refine Object {count: 0})
+def doubled fn [[c:Counter] [Integer] [c.count 2 mul]]
+
+def c (make Counter {})
+c 5 "count" set
+c doubled                             => 10
+```
+
+A mutator changes the instance in place. `set` returns nothing, so the
+mutator's output signature is empty (`[]`); re-push the instance at the
+end instead if you want to chain calls:
+
+```
+def Counter (refine Object {count: 0})
+def bump fn [[c:Counter] [] [c (c.count 1 add) "count" set]]
+
+def c (make Counter {})
+c bump
+c bump
+c.count                               => 2
+```
+
+Because methods are just typed functions, they overload, type-check,
+and compose like any other word.
 
 
 ## Use scoped variables
