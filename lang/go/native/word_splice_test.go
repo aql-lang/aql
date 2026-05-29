@@ -61,9 +61,9 @@ func TestWordSplice(t *testing.T) {
 		{"def a word [1,2] def b word [a 3] [b]", "[1 2 3]"}, // nested splice flattens
 		{"def e word [] [e 9]", "[9]"},                       // empty splice contributes nothing
 		// --- def list now binds the evaluated value (implicit splice removed) ---
-		{"def xs [1,2,3] length xs", "3"},                    // a def'd list is a value, not a splice
+		{"def xs [1,2,3] size xs", "3"},                      // a def'd list is a value, not a splice
 		{"def xs [1 add 2] xs", "[3]"},                       // evaluated at def time, like a map
-		{"length [1,2,3]", "3"},                              // list-as-arg auto-eval unaffected
+		{"size [1,2,3]", "3"},                                // list-as-arg auto-eval unaffected
 		{"[1 add 2]", "[3]"},                                 // bare list auto-eval unaffected
 		{"quote [dup add]", "(quote [word(dup) word(add)])"}, // quote unaffected
 	}

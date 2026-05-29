@@ -133,13 +133,13 @@ def eval-pred fn [[pred:Map input:Map] [Boolean] [if ((pred get "kind") "group" 
 
 # --- eval-table helpers ---
 
-def eval-table-first fn [[rules:List input:Map] [Any] [def result (do {ok: false, error: "no-match"}) def found false for (rules length) [def idx i def rule (rules idx get) if (found not) [if (input (rule get "when") eval-pred) [def result (rule get "then") def found true] []] []] end result]]
+def eval-table-first fn [[rules:List input:Map] [Any] [def result (do {ok: false, error: "no-match"}) def found false for (rules size) [def idx i def rule (rules idx get) if (found not) [if (input (rule get "when") eval-pred) [def result (rule get "then") def found true] []] []] end result]]
 
-def eval-table-unique fn [[rules:List input:Map] [Any] [def result (do {ok: false, error: "no-match"}) def match-count 0 for (rules length) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def result (rule get "then") def match-count (match-count 1 add)] []] end if (match-count 1 eq) [result] [if (match-count 0 eq) [do {ok: false, error: "no-match"}] [do {ok: false, error: "multiple-matches"}]]]]
+def eval-table-unique fn [[rules:List input:Map] [Any] [def result (do {ok: false, error: "no-match"}) def match-count 0 for (rules size) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def result (rule get "then") def match-count (match-count 1 add)] []] end if (match-count 1 eq) [result] [if (match-count 0 eq) [do {ok: false, error: "no-match"}] [do {ok: false, error: "multiple-matches"}]]]]
 
-def eval-table-collect fn [[rules:List input:Map] [Any] [def results quote [] for (rules length) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def results (quote (results (rule get "then") push))] []] end results]]
+def eval-table-collect fn [[rules:List input:Map] [Any] [def results quote [] for (rules size) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def results (quote (results (rule get "then") push))] []] end results]]
 
-def eval-table-priority fn [[rules:List input:Map] [Any] [def best (do {ok: false, error: "no-match"}) def best-pri 0 def found false for (rules length) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def pri (if ((rule get "priority") None neq) [(rule get "priority")] [0]) if (found not) [def best (rule get "then") def best-pri pri def found true] [if (pri best-pri gt) [def best (rule get "then") def best-pri pri] []]] []] end best]]
+def eval-table-priority fn [[rules:List input:Map] [Any] [def best (do {ok: false, error: "no-match"}) def best-pri 0 def found false for (rules size) [def idx i def rule (rules idx get) if (input (rule get "when") eval-pred) [def pri (if ((rule get "priority") None neq) [(rule get "priority")] [0]) if (found not) [def best (rule get "then") def best-pri pri def found true] [if (pri best-pri gt) [def best (rule get "then") def best-pri pri] []]] []] end best]]
 
 # --- eval-table ---
 
@@ -147,9 +147,9 @@ def eval-table fn [[table:Map input:Map] [Any] [def rules quote (table get "rule
 
 # --- eval-tree helpers ---
 
-def find-node fn [[id:Any nodes:List] [Any] [def found None for (nodes length) [def idx i def node (nodes idx get) if ((node get "id" convert String) (id convert String) eq) [def found node] []] end found]]
+def find-node fn [[id:Any nodes:List] [Any] [def found None for (nodes size) [def idx i def node (nodes idx get) if ((node get "id" convert String) (id convert String) eq) [def found node] []] end found]]
 
-def find-branch-next fn [[branches:List input:Map] [Any] [def next-id None for (branches length) [def idx i def br (branches idx get) if (input (br get "when") eval-pred) [def next-id (br get "next")] []] end next-id]]
+def find-branch-next fn [[branches:List input:Map] [Any] [def next-id None for (branches size) [def idx i def br (branches idx get) if (input (br get "when") eval-pred) [def next-id (br get "next")] []] end next-id]]
 
 # --- eval-tree ---
 

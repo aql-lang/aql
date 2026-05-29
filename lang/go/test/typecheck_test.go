@@ -844,9 +844,9 @@ func TestCheckNestedTypedList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	// pairs yields TList<TList<Integer>>; each [length] should
-	// type-check cleanly because length accepts TList.
-	res, err := a.Check("each [length] ( pairs ( iota 5 ) )")
+	// pairs yields TList<TList<Integer>>; each [reverse] should
+	// type-check cleanly because reverse accepts TList.
+	res, err := a.Check("each [reverse] ( pairs ( iota 5 ) )")
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -863,7 +863,7 @@ func TestCheckNestedTypedList(t *testing.T) {
 // TestPerfNestedTypedList measures Check vs Run latency for a
 // nested-list program dominated by pairs/each.
 func TestPerfNestedTypedList(t *testing.T) {
-	runPerfComparison(t, "each [length] ( pairs ( iota 10 ) )", 50)
+	runPerfComparison(t, "each [reverse] ( pairs ( iota 10 ) )", 50)
 }
 
 // TestCheckDiagnosticJSON verifies CheckDiagnostic marshals to JSON
@@ -1115,7 +1115,7 @@ func TestPerfUnusedDef(t *testing.T) {
 // a dead branch — with a literal-true condition, only the reachable
 // side is analysed.
 func TestPerfUnreachableBranch(t *testing.T) {
-	src := `if [true] [1 add 2 mul 3] [each [length] pairs iota 100]`
+	src := `if [true] [1 add 2 mul 3] [each [reverse] pairs iota 100]`
 	runPerfComparison(t, src, 30)
 }
 
@@ -1148,7 +1148,7 @@ func TestPerfCorpus(t *testing.T) {
 		{"fold-iota", "0 fold [add] ( iota 20 )"},
 		{"scan-iota", "scan [add] ( iota 20 )"},
 		{"pairs", "pairs ( iota 15 )"},
-		{"nested-higher-order", "each [length] ( pairs ( iota 15 ) )"},
+		{"nested-higher-order", "each [reverse] ( pairs ( iota 15 ) )"},
 		{"userfn-call", `def inc fn [[n:Integer] [Integer] [n add 1]]  inc 21`},
 		{"fullstack", "1 2 3 4 5 depth 1 pick 2 roll 3 stack"},
 		{"ctxtrack", `context set "x" 42 end context get "x"`},

@@ -88,21 +88,6 @@ func TestRank(t *testing.T) {
 	}
 }
 
-// --- length ---
-
-func TestLength(t *testing.T) {
-	r, _ := DefaultRegistry()
-	result := runAQL(t, r, []Value{
-		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)}),
-		NewWord("length"),
-	})
-	_as9, _ := AsInteger(result[0])
-	if _as9 != 3 {
-		_as10, _ := AsInteger(result[0])
-		t.Errorf("length = %d, want 3", _as10)
-	}
-}
-
 // --- reshape ---
 
 func TestReshape(t *testing.T) {

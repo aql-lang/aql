@@ -118,9 +118,9 @@ def planet make Entity { kind:'api' spec:'solardemo' entity:'planet' } planet is
 # (installResourceTypes), so they're always reachable as type		
 # literals. Subsequent `type NAME …` declarations don't shadow them.		
 		
-length [ Resource ]	1	the type literal can be wrapped in a list
-length [ Entity ]	1	
-length [ Resource Entity ]	2	both are first-class type-literal values
+size [ Resource ]	1	the type literal can be wrapped in a list
+size [ Entity ]	1	
+size [ Resource Entity ]	2	both are first-class type-literal values
 		
 # A user-defined type that USES Resource or Entity as a parent must		
 # go through a user-named indirection — `type X object {…} Resource`		

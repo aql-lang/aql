@@ -48,7 +48,7 @@ func TestTypeRecordRenders(t *testing.T) {
 func TestTypeTable(t *testing.T) {
 	got := runOne(t, "def Row (refine Record [n:String])\n"+
 		"def Tbl (refine Table Row)\n"+
-		"make Tbl [[\"a\"] [\"b\"] [\"c\"]] length")
+		"make Tbl [[\"a\"] [\"b\"] [\"c\"]] size")
 	if len(got) != 1 || got[0] != int64(3) {
 		t.Errorf("got %v, want [3]", got)
 	}

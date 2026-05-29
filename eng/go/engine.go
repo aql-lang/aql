@@ -757,7 +757,7 @@ func (e *Engine) stepWord(val Value) error {
 			e.registry.Check.recordUse(w.Name)
 			// A def'd word binds a VALUE: push it as-is. Lists bind like
 			// maps — `def xs [1,2,3]` makes `xs` the list value, evaluated
-			// at def time (so `length xs` → 3). To splice a list's elements
+			// at def time (so `size xs` → 3). To splice a list's elements
 			// onto the stack (the old implicit behaviour / Forth-style
 			// macros) use the explicit `def name word [list]` form, whose
 			// __SP marker is handled in stepLiteral.

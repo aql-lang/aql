@@ -1177,7 +1177,7 @@ def run-case fn [[| subject:Scalar c:Map] [] [
 ]]
 
 def run-cases fn [[| subject:Scalar cases:List] [] [
-  for (cases length) [
+  for (cases size) [
     def _i i
     def c (cases _i get)
     c subject run-case
@@ -1190,7 +1190,7 @@ def run-spec fn [[| s:Map] [] [
     def cases quote (s get "cases")
     def subs quote (s get "subs")
     cases subject run-cases
-    for (subs length) [
+    for (subs size) [
       def _i i
       def sub (subs _i get)
       sub run-spec

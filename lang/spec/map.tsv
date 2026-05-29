@@ -51,7 +51,7 @@ typeof { a:Integer }	Map	implicit shape — every value is a type → record-sha
 		
 # A bare Map type literal at concrete-payload sigs raises		
 # signature_error before the handler runs.		
-length Map	ERROR:signature_error	
+reverse Map	ERROR:signature_error	
 		
 # ====================================================================		
 # 3. Implicit-map record shape — `is` against `{k:Type …}`		

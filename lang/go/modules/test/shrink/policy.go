@@ -157,7 +157,7 @@ func defaultWordTable() map[string]Transparency {
 		"dup", "drop", "swap", "over", "rot", "nip", "tuck",
 		"2dup", "2drop", "2swap", "2over", "depth", "pick", "roll",
 		// List/Map construction & access
-		"length", "append", "prepend", "head", "tail", "first", "last",
+		"size", "append", "prepend", "head", "tail", "first", "last",
 		"reverse", "concat", "flatten", "get", "getr", "set",
 		// String
 		"upper", "lower", "trim", "split", "join", "starts-with", "ends-with",

@@ -516,6 +516,7 @@ iota 5 each [dup mul]     => [0, 1, 4, 9, 16]
 | `at` | Select by index list | `[10,20,30] at [2,0]` |
 | `sortby` | Sort by parallel key list | `["b","a","c"] [2,1,3] sortby` |
 | `member` | Per-element membership test | `[1,2,3] [2,3,4] member => [true,true,false]` |
+| `size` | Element / key count of a collection — works on any value (see [Size](#size)) | `[1,2,3] size => 3` |
 
 ### Higher-order array words
 
@@ -533,6 +534,39 @@ all-forward form shown above maps each list argument left-to-right
 into the signature: `fold` takes `body data init`, `scan` takes
 `body data`, `outer` takes `body listB listA`, `inner` takes
 `combineBody productBody listB listA`.
+
+### Size
+
+`size` reports the **natural size** of *any* value as an `Integer`.
+Unlike the collection words above — which accept only a concrete
+list — `size` has signature `[Any]` and is a **total** function:
+every value has a size and `size` never errors. For a list it returns
+the element count, so it is the canonical way to ask "how long is this
+list?"; it also generalises to maps, strings, numbers, and user types.
+
+```
+[10,20,30] size          => 3
+```
+
+The size of a value is the size of the collection it stands for, by
+type:
+
+| Value | Size | Example |
+|-------|------|---------|
+| List | element count | `[10,20,30] size => 3` |
+| Map | key count | `{a:1, b:2} size => 2` |
+| String | length in bytes | `"hello" size => 5` |
+| Atom | length of the name | `foo/q size => 3` |
+| Integer / Decimal | floored magnitude | `42 size => 42`, `7.9 size => 7` |
+| Boolean | `1` for `true`, `0` for `false` | `true size => 1` |
+| Path | segment count | `(make Path "a/b/c") size => 3` |
+| Object / Array / Store / Table | field / element / entry / row count | `(make Pt {x:1 y:2}) size => 2` |
+| `None`, a Date, a bare scalar, or any non-concrete value (e.g. a bare type literal) | `0` (never errors) | `None size => 0`, `List size => 0` |
+
+Dispatch is type-driven: each type contributes its own size rule via
+the kernel's `Sizer` capability (`eng.SizeOf`), and a type with no
+`Sizer` in its lattice sizes to `0`. There is no separate `length`
+word — `size` subsumes it.
 
 ### Maps and access
 
