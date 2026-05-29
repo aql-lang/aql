@@ -184,3 +184,23 @@ def f fn [[x:Any] [Integer] [42]] 5 f	42	Any accepts Integer
 def f fn [[x:Any] [Integer] [42]] 'hi' f	42	Any accepts String
 def f fn [[x:Any] [Integer] [42]] [1,2,3] f	42	Any accepts List
 def f fn [[x:Any] [Integer] [42]] none f	42	Any accepts None
+
+
+# ====================================================================
+# 7. User types in the RETURN position (regression)
+# ====================================================================
+# Every section above annotates fn PARAMS with user types but always
+# RETURNS [Integer] — a builtin. That gap hid a dispatch bug: a def'd
+# type name in the output sig was classified as a return-by-VALUE (not
+# a type), so its static return type silently became `Any` and the
+# type literal was spliced onto the body stack — surfacing as a bogus
+# "expected N return value(s)" error. These rows pin user types as
+# return annotations: an instance satisfies its own type, and a wrong
+# value is now a real (not silent) type error.
+
+def Foo (refine Object {}) def mk fn [[] [Foo] [make Foo {}]] typeof (mk)	Foo	Object return: instance satisfies its own type
+def Foo (refine Object {x:0}) def mk fn [[] [Foo] [make Foo {x:5}]] (mk) get 'x'	5	Object return: returned instance is usable
+def Foo (refine Object {}) def id fn [[f:Foo] [Foo] [f]] typeof (id (make Foo {}))	Foo	Object param+return: pass-through keeps the type
+def Foo (refine Object {}) def mk fn [[] [Foo] [42]] mk	ERROR:return value	Object return rejects Integer (real static safety, not Any)
+def Foo (refine Object {}) def mk fn [[] [Foo] ['hi']] mk	ERROR:return value	Object return rejects String
+def Bar (refine Object {n:0}) def Foo (refine Bar {}) def mk fn [[] [Bar] [make Foo {n:1}]] typeof (mk)	Foo	Object return admits a subtype instance (Foo is-a Bar)
