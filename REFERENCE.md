@@ -585,15 +585,20 @@ consequences:
 - **Access the result of a call** by parenthesising the call:
   `(make Point {x:1 y:2}) .x`, `(import "data.json") . name` — bare
   `make … {} .x` would feed `.x`'s result *into* `make`.
-- **`/r` is a pure reference: it resolves the name to the bound value and
-  *advances the pointer* — it never calls the function in place.** This
-  holds at any arity and in any position (top level, list element, paren,
-  `do`-block, map value): `g/r` yields the function as data, `add/r 2 3`
-  leaves `[Function, 2, 3]` on the stack (the args are *not* consumed),
-  and `[zero/r]` is `[<function>]` even for a 0-arg `zero` (it is **not**
-  fired). To **call** a referenced function, use the bare word
-  (`add 2 3`), `apply` it (`2 3 (quote (f/r)) apply`), or access it as a
-  member (below), where `get` brings the value live.
+- **`/r` is a pure reference to a *function word*: it resolves the name to
+  the bound function and *advances the pointer* — it never calls the
+  function in place.** `/r` is legal **only** for function words; a name
+  bound to a non-function value (a plain value, a type) raises
+  `[aql/illegal_ref]`, because a bare value name already pushes its value
+  — there is no call/value asymmetry for `/r` to break. The same rule
+  applies to the `ref` word. The reference holds at any arity and in any
+  position (top level, list element, paren, `do`-block, map value): `g/r`
+  yields the function as data, `add/r 2 3` leaves `[Function, 2, 3]` on
+  the stack (the args are *not* consumed), and `[zero/r]` is
+  `[<function>]` even for a 0-arg `zero` (it is **not** fired). To
+  **call** a referenced function, use the bare word (`add 2 3`), `apply`
+  it (`2 3 (quote (f/r)) apply`), or access it as a member (below), where
+  `get` brings the value live.
 
 - **A function stored in a plain map** is callable via dot. Store it with
   `/r` — `{fn: myfn/r}` — which holds the function as data; then

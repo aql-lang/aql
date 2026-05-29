@@ -699,10 +699,13 @@ func parseWord(text string) (eng.Value, error) {
 		return eng.NewAtom(name), nil
 	}
 
-	// /r emits a ref-word that, when reached at the pointer, resolves to
-	// the bound value (a Function for fn / object bindings) without
-	// invoking. Argument-shape modifiers don't apply because ref bypasses
-	// dispatch entirely; they're accepted syntactically but ignored.
+	// /r emits a ref-word that, when reached at the pointer, resolves the
+	// name to its bound Function value without invoking. /r is legal only
+	// for function words; a non-fn binding raises illegal_ref at run time
+	// (the parser accepts the syntax — the binding kind isn't known until
+	// resolution). Argument-shape modifiers don't apply because ref
+	// bypasses dispatch entirely; they're accepted syntactically but
+	// ignored.
 	if refFlag {
 		return eng.NewWordRef(name), nil
 	}

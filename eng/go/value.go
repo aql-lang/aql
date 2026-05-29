@@ -1016,10 +1016,11 @@ func NewWordModified(name string, argCount int, forceStack, forceForward bool) V
 }
 
 // NewWordRef creates a word value marked with the /r modifier: when
-// reached at the pointer it resolves to the bound value (a Function
-// for fn / object bindings, the value itself for everything else)
-// without entering function dispatch. ArgCount stays unspecified
-// because /r short-circuits argument collection.
+// reached at the pointer it resolves the name to its bound Function
+// value without entering function dispatch. /r is legal ONLY for
+// function words — a name bound to a non-fn value (plain value, type
+// body) raises [aql/illegal_ref] (see eng.IsFunctionRef). ArgCount
+// stays unspecified because /r short-circuits argument collection.
 func NewWordRef(name string) Value {
 	return NewValueRaw(TWord, WordInfo{
 		Name:     name,

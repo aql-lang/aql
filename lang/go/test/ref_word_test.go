@@ -1,6 +1,7 @@
 package test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go"
@@ -146,23 +147,23 @@ func TestRefOnUndefinedNameErrors(t *testing.T) {
 	}
 }
 
-// TestRefOnSimpleValueBindingPassesThrough: ref/r on a non-fn binding
-// returns the value verbatim.
-func TestRefOnSimpleValueBindingPassesThrough(t *testing.T) {
-	result, err := runNativeSteps(t, nil, []string{
-		`def answer 42`,
-		`answer/r`,
-	})
-	if err != nil {
-		t.Fatalf("setup: %v", err)
-	}
-	v := result[0]
-	got, err := eng.AsInteger(v)
-	if err != nil {
-		t.Fatalf("AsInteger: %v", err)
-	}
-	if got != 42 {
-		t.Errorf("answer/r = %d, want 42", got)
+// TestRefOnNonFunctionBindingIsIllegal: both surfaces (`ref` and the
+// `/r` suffix) are legal ONLY for function words. Referencing a non-fn
+// binding raises illegal_ref — there is no call/value asymmetry to
+// break for a plain value, so the reference is meaningless.
+func TestRefOnNonFunctionBindingIsIllegal(t *testing.T) {
+	for _, src := range []string{`answer/r`, `ref answer`} {
+		_, err := runNativeSteps(t, nil, []string{
+			`def answer 42`,
+			src,
+		})
+		if err == nil {
+			t.Errorf("%s: expected illegal_ref error, got nil", src)
+			continue
+		}
+		if !strings.Contains(err.Error(), "function word") {
+			t.Errorf("%s: error=%q, want mention of 'function word'", src, err.Error())
+		}
 	}
 }
 

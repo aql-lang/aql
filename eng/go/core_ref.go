@@ -39,3 +39,16 @@ func ResolveRef(r *Registry, name string) (Value, bool) {
 	}
 	return top, true
 }
+
+// IsFunctionRef reports whether a value resolved by ResolveRef is a
+// function word — the only binding kind `/r` and `ref` are permitted to
+// reference. The reference surfaces exist to break the asymmetry between
+// value bindings (a bare name already pushes the value) and fn bindings
+// (a bare name invokes); for a non-fn binding there is no asymmetry to
+// break, so referencing it is meaningless and rejected. ResolveRef wraps
+// every FnDef binding as a Function value (Parent == TFunction), so the
+// predicate is a single Parent check; plain values and type bodies come
+// back with their own Parent and are illegal ref targets.
+func IsFunctionRef(v Value) bool {
+	return v.Parent.Equal(TFunction)
+}

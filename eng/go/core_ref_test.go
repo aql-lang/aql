@@ -168,20 +168,18 @@ func TestRefSuffixHoldsStackArgsUndispatched(t *testing.T) {
 	}
 }
 
-// TestRefSuffixOnSimpleValueBinding: /r is uniform across binding
-// shapes — a simple-value def returns the value itself.
-func TestRefSuffixOnSimpleValueBinding(t *testing.T) {
+// TestRefSuffixOnSimpleValueBindingIsIllegal: /r is legal ONLY for
+// function words. A simple-value binding (`answer` = 42) has no
+// call/value asymmetry for /r to break, so `answer/r` raises
+// illegal_ref rather than passing the value through.
+func TestRefSuffixOnSimpleValueBindingIsIllegal(t *testing.T) {
 	r := freshRegistry(t)
-	out := runSrc(t, r, "answer/r")
-	if len(out) != 1 {
-		t.Fatalf("got %d values, want 1", len(out))
+	err := runSrcErr(t, r, "answer/r")
+	if err == nil {
+		t.Fatal("answer/r: expected illegal_ref error, got nil")
 	}
-	got, err := eng.AsInteger(out[0])
-	if err != nil {
-		t.Fatalf("AsInteger: %v", err)
-	}
-	if got != 42 {
-		t.Errorf("got %d, want 42", got)
+	if !strings.Contains(err.Error(), "function word") {
+		t.Errorf("error=%q, want mention of 'function word'", err.Error())
 	}
 }
 
