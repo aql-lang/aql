@@ -1573,13 +1573,15 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 		//
 		// This direct-resolution is deliberately scoped to a *map value*.
 		// `/r` otherwise yields a dispatchable Function (per the ref
-		// design): the resolved fn value is pushed and then stepped, and
-		// a 0-arg fn's signature matches with no args, so a 0-arg `/r` in
-		// a list / paren / do-block / at top level fires in place. A
-		// ≥1-arg fn is held regardless (no 0-arg sig to fire), so only
-		// 0-arg fns observe the difference, and a direct map value is the
-		// only position that holds a 0-arg fn as data. See REFERENCE.md
-		// "Dotted access binds tightly".
+		// design): stepWord replaces the word at the pointer with the
+		// resolved fn value and re-steps that slot via stepLiteral, where
+		// an unquoted Function dispatches in place — and a 0-arg fn's
+		// signature matches with no args, so a 0-arg `/r` in a list /
+		// paren / do-block / at top level fires there. A ≥1-arg fn finds
+		// no zero-arg match, so stepLiteral falls through and leaves it as
+		// data; thus only 0-arg fns observe the difference, and a direct
+		// map value is the only position that holds a 0-arg fn as data.
+		// See REFERENCE.md "Dotted access binds tightly".
 		if IsWord(v) {
 			if w, _ := AsWord(v); w.ForceRef {
 				if rv, ok := ResolveRef(e.registry, w.Name); ok {
