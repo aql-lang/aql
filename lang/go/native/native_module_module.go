@@ -93,15 +93,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 					exportHandler(_as1, _m)
 					return nil, nil
 				},
-				// The export map's values are *references* to module
-				// bindings (`{clamp:clamp}`), resolved by name in the
-				// module registry via resolveModuleExport. RefMapArgs
-				// keeps a bare fn-word like `clamp` raw rather than
-				// dispatching it 0-arg (which would raise "no matching
-				// signature for clamp"), while still evaluating computed
-				// values like `{x:(base add 5)}`.
-				RefMapArgs: map[int]bool{1: true},
-				Returns:    []*Type{}, BarrierPos: -1,
+				Returns: []*Type{}, BarrierPos: -1,
 			},
 			{
 				Args: []*Type{TString, TMap},
@@ -114,8 +106,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 					exportHandler(_as2, _m)
 					return nil, nil
 				},
-				RefMapArgs: map[int]bool{1: true},
-				Returns:    []*Type{}, BarrierPos: -1,
+				Returns: []*Type{}, BarrierPos: -1,
 			},
 		},
 	})
@@ -403,6 +394,23 @@ func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
 // def stacks. If the value is a string, atom, or word that names a def'd word,
 // the def body is returned. Otherwise the value is returned as-is.
 func resolveModuleExport(modReg *Registry, v Value) Value {
+	// A function value — typically produced by `name/r` in the export
+	// map, which auto-evaluates to the bound fn as data — must carry the
+	// module registry so it executes in module scope (resolving module-
+	// private words) when called after import.
+	if fnDef, ok := v.Data.(FnDefInfo); ok {
+		if fnDef.Registry == nil {
+			fnDef.Registry = modReg
+			if v.Parent.Equal(TFnDef) {
+				return NewFnDef(fnDef)
+			}
+			return NewFunction(fnDef)
+		}
+		return v
+	}
+	// A bare name (word/string/atom) resolves by lookup in the module
+	// registry. After auto-eval this path is reached mainly in check
+	// mode and for type/value names that resolved to themselves.
 	var name string
 	if IsWord(v) {
 		_as3, _ := AsWord(v)

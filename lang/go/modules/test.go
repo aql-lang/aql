@@ -103,12 +103,7 @@ func BuildTestModule(parent *native.Registry) (native.ModuleDesc, error) {
 					name, _ := eargs[0].AsConcreteAtom()
 					return resolveExport(modReg, exports, name, eargs[1])
 				},
-				// Export values are name references resolved by
-				// resolveExport; RefMapArgs keeps a bare fn-word raw
-				// rather than dispatching it 0-arg, while still
-				// evaluating computed export values.
-				RefMapArgs: map[int]bool{1: true},
-				Returns:    []*native.Type{}, BarrierPos: -1,
+				Returns: []*native.Type{}, BarrierPos: -1,
 			},
 			{
 				Args: []*native.Type{native.TString, native.TMap},
@@ -116,8 +111,7 @@ func BuildTestModule(parent *native.Registry) (native.ModuleDesc, error) {
 					name, _ := eargs[0].AsConcreteString()
 					return resolveExport(modReg, exports, name, eargs[1])
 				},
-				RefMapArgs: map[int]bool{1: true},
-				Returns:    []*native.Type{}, BarrierPos: -1,
+				Returns: []*native.Type{}, BarrierPos: -1,
 			},
 		},
 	})
@@ -156,6 +150,18 @@ func resolveExport(modReg *native.Registry, exports map[string]*native.OrderedMa
 // resolveTestExport mirrors native.resolveModuleExport but is local
 // to this package — the kernel helper is unexported.
 func resolveTestExport(modReg *native.Registry, v native.Value) native.Value {
+	// A function value (from `name/r`) must carry the module registry
+	// so it executes in module scope when called after import.
+	if fnDef, ok := v.Data.(native.FnDefInfo); ok {
+		if fnDef.Registry == nil {
+			fnDef.Registry = modReg
+			if v.Parent.Equal(native.TFnDef) {
+				return native.NewFnDef(fnDef)
+			}
+			return native.NewFunction(fnDef)
+		}
+		return v
+	}
 	var name string
 	switch {
 	case native.IsWord(v):
@@ -1218,35 +1224,35 @@ export "test" {
   PropertyResult:  PropertyResult
 
   # spec constructors
-  case:           case
-  spec:           spec
-  spec-with-subs: spec-with-subs
-  prop:           test-prop
+  case:           case/r
+  spec:           spec/r
+  spec-with-subs: spec-with-subs/r
+  prop:           test-prop/r
 
   # imperative API (Go)
-  describe:    test-describe
-  test:        test-test
-  it:          test-test
-  check-prop:  test-check-prop
+  describe:    test-describe/r
+  test:        test-test/r
+  it:          test-test/r
+  check-prop:  test-check-prop/r
 
   # accumulated results
-  results:    test-results
-  summary:    test-summary
-  reset:      test-reset
-  fail-count: test-fail-count
+  results:    test-results/r
+  summary:    test-summary/r
+  reset:      test-reset/r
+  fail-count: test-fail-count/r
 
   # spec runner
-  run-spec:     run-spec
-  run-property: run-property
-  invoke:       test-invoke
+  run-spec:     run-spec/r
+  run-property: run-property/r
+  invoke:       test-invoke/r
 }
 
 export "assert" {
-  equal:      assert-equal
-  not-equal:  assert-not-equal
-  ok:         assert-ok
-  throws:     assert-throws
-  match:      assert-match
+  equal:      assert-equal/r
+  not-equal:  assert-not-equal/r
+  ok:         assert-ok/r
+  throws:     assert-throws/r
+  match:      assert-match/r
 }
 
 `

@@ -539,16 +539,22 @@ meta-command (`:help` for the full list).
 ## Use modules and imports
 
 Define an inline module with the `module` form. The body must call
-`export "namespace" {...}` to publish bindings:
+`export "namespace" {...}` to publish bindings. Export **functions**
+with the `/r` ref modifier — the export map auto-evaluates, so a bare
+`greet` would be dispatched there (0-arg) rather than exported as the
+function. Values and types export bare:
 
 ```
 import module [
-  def helper [dup add]
+  def base 10
   def greet fn [[name:String] [String] [`hello ${name}`]]
-  export "utils" {helper: helper, greet: greet}
+  export "utils" {base: base, greet: greet/r}
 ]
 "Ada" utils.greet                     => 'hello Ada'
 ```
+
+Here `base` (a value) exports bare, while `greet` (a function) exports
+with `/r`.
 
 Import from a file (relative paths must start with `./`, `../`, or
 `/`):

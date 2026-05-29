@@ -4,4 +4,4 @@ def style fn [[s:String] [String] [
   "~ " add (s Decorator.decorate) add " ~"
 ]]
 
-export "Styler" {style:style}
+export "Styler" {style:style/r}

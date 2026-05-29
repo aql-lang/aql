@@ -123,21 +123,21 @@ export "decision" {
   BranchNode:  BranchNode
   LeafNode:    LeafNode
   DTree:       DTree
-  cond:        cond
-  all-of:      all-of
-  any-of:      any-of
-  not-of:      not-of
-  make-rule:   make-rule
-  make-table:  make-table
-  with-policy: with-policy
-  make-branch: make-branch
-  make-leaf:   make-leaf
-  make-tree:   make-tree
-  apply-op:    apply-op
-  eval-cond:   eval-cond
-  eval-pred:   eval-pred
-  eval-table:  eval-table
-  eval-tree:   eval-tree
-  decide:      decide
+  cond:        cond/r
+  all-of:      all-of/r
+  any-of:      any-of/r
+  not-of:      not-of/r
+  make-rule:   make-rule/r
+  make-table:  make-table/r
+  with-policy: with-policy/r
+  make-branch: make-branch/r
+  make-leaf:   make-leaf/r
+  make-tree:   make-tree/r
+  apply-op:    apply-op/r
+  eval-cond:   eval-cond/r
+  eval-pred:   eval-pred/r
+  eval-table:  eval-table/r
+  eval-tree:   eval-tree/r
+  decide:      decide/r
 }
 

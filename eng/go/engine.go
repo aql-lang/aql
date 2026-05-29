@@ -970,8 +970,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 				// is a fn that's also a registered callable.
 				noEval := match.Sig.NoEvalMapArgs != nil && match.Sig.NoEvalMapArgs[i]
 				if !noEval {
-					refWords := match.Sig.RefMapArgs != nil && match.Sig.RefMapArgs[i]
-					evaluated, err := e.autoEvalMap(match.Args[i], refWords)
+					evaluated, err := e.autoEvalMap(match.Args[i])
 					if err != nil {
 						return err
 					}
@@ -1459,7 +1458,7 @@ func (e *Engine) autoEvalStack() error {
 			}
 			e.stack[i] = result
 		} else if val.Parent.Equal(TMap) && val.Data != nil && !IsTypedMap(val) && !IsRecordType(val) && !IsOptionsType(val) {
-			result, err := e.autoEvalMap(val, false)
+			result, err := e.autoEvalMap(val)
 			if err != nil {
 				return err
 			}
@@ -1527,13 +1526,7 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 //	{x:[1 add 2]} → {x:[3]}     (list evaluated, stays as list)
 //	{a:[1,2]}     → {a:[1,2]}   (literal list unchanged)
 //	{x:"hello"}   → {x:"hello"} (strings pass through unchanged)
-//
-// refWords, when true, marks this as a reference-map evaluation
-// (see Signature.RefMapArgs): a bare Word value is kept verbatim for
-// the consuming handler to resolve by name, rather than being
-// dispatched 0-arg. Computed values (paren expressions, nested
-// containers) still evaluate normally.
-func (e *Engine) autoEvalMap(val Value, refWords bool) (Value, error) {
+func (e *Engine) autoEvalMap(val Value) (Value, error) {
 	m, _ := AsMutableMap(val)
 	out := NewOrderedMap()
 	if m.Implicit {
@@ -1569,12 +1562,22 @@ func (e *Engine) autoEvalMap(val Value, refWords bool) (Value, error) {
 			}
 		}
 
-		// Reference-map mode: a bare Word value is a name for the
-		// handler to resolve, not a 0-arg call. Keep it verbatim so a
-		// fn export like {clamp:clamp} doesn't dispatch clamp here.
-		if refWords && IsWord(v) {
-			out.Set(resolvedKey, v)
-			continue
+		// A /r (ForceRef) word value resolves to its referent as data,
+		// WITHOUT dispatching it — so a fn stored via `{k: name/r}` is
+		// kept as the fn value even at 0 arity (a bare `name` would
+		// dispatch and, for a 0-arg fn, fire here). This is how a fn is
+		// exported: `export "m" {f: f/r}`. Call-site `/r` (`f/r 2 3`)
+		// is unaffected — that path runs through stepWord. If the name
+		// doesn't resolve, fall through to the sub-engine for the
+		// regular undefined-word error.
+		if IsWord(v) {
+			if w, _ := AsWord(v); w.ForceRef {
+				if rv, ok := ResolveRef(e.registry, w.Name); ok {
+					rv.Pos = v.Pos
+					out.Set(resolvedKey, rv)
+					continue
+				}
+			}
 		}
 
 		// Interpolated string: evaluate inline.
@@ -2076,9 +2079,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 				args[i].Data != nil && !IsTypedMap(args[i]) && !IsRecordType(args[i]) && !IsOptionsType(args[i]) {
 				noEval := sig.NoEvalMapArgs != nil && sig.NoEvalMapArgs[i]
 				if !noEval {
-					// FnSig has no reference-map concept (export is a
-					// native, dispatched via execMatch); pass refWords=false.
-					evaluated, err := e.autoEvalMap(args[i], false)
+					evaluated, err := e.autoEvalMap(args[i])
 					if err != nil {
 						return err
 					}

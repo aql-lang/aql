@@ -2,4 +2,4 @@
 
 def process fn [[s:String] [String] [(s Styler.style)]]
 
-export "Textkit" {process:process}
+export "Textkit" {process:process/r}
