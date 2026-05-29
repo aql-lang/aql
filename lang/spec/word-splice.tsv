@@ -34,6 +34,15 @@ word [[1,2],[3,4]]	[1 2] [3 4]	only the top level splices; inner lists stay valu
 # =====================================================================
 # 3. def name word value — binds the splice marker
 # =====================================================================
+# FORWARD form only. `word`'s __SP must be collected as def's forward
+# argument (the pointer skips a collected arg, so the marker does not
+# fire). There is NO prefix-form splice — `[body] def name` puts the
+# body on the stack BEFORE def, so the pointer steps (and fires) any
+# marker before def consumes it; a prefix list body therefore binds the
+# list VALUE. `quote` can't ferry the marker either: `quote (word …)`
+# fires the __SP inside the paren before quote marks it, and `quote
+# word …` captures the literal token `word` as an atom. Use the forward
+# form below for splices; use prefix only for value binding.
 def doub word [dup add] 5 doub	10	explicit splice-macro (cf. implicit def doub [dup add])
 def xs word [1,2,3] [xs]	[1 2 3]	re-collecting the reference rebuilds the list
 def n word 42 n add 1	43	scalar splice binds a single value

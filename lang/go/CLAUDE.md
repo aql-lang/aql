@@ -574,6 +574,19 @@ itself — and the result is re-stepped against the live stack:
 - The marker also splices inside containers that get evaluated
   (e.g. a `word` reference inside a list literal).
 
+**Splice is forward-form only — there is no prefix-form splice.** An
+`__SP` fires the instant it is *stepped at the pointer*; the only place
+a stack value is not stepped is when it is collected as a forward
+argument. So `def name word [body]` works (the marker is `def`'s
+forward arg, skipped by the pointer), but `[body] def name` (prefix /
+stack form) puts the body on the stack *before* `def`, where the
+pointer steps and fires it before `def` consumes it — a prefix list
+body therefore binds the list **value**. `quote` cannot ferry the
+marker past this: `quote (word …)` fires the `__SP` inside the paren
+before `quote` marks it, and `quote word …` captures the literal token
+`word` as an atom. Don't re-attempt a prefix-splice path; use the
+forward form.
+
 To add new syntax: register a token with `j.Token()`, extend the `"val"`
 rule with `j.Rule()`, and add conversion logic in the appropriate
 `convert*` function. For context-sensitive lexing, use `j.AddMatcher()`
