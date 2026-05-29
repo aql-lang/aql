@@ -916,10 +916,10 @@ mentions `colorPayload`, `Color`, or `RGB`.
 All three flavours that work today continue to work — but now they
 flow through the same Behavior pipeline as plugin types.
 
-**Refinement** — `type Foo Integer`:
+**Refinement** — `def Foo (refine Integer)`:
 
 ```aql
-type Foo Integer
+def Foo (refine Integer)
 def x:Foo 5
 def y:Foo 'hello'    # error: 'hello' is not a Foo
 ```
@@ -959,7 +959,7 @@ invisible to `eng/`.
 ```aql
 # colors.aql
 def Color (refine Record [r:Integer g:Integer b:Integer])
-type Palette { primary:Color secondary:Color }
+def Palette (refine Object { primary:Color secondary:Color })
 
 # main.aql
 'colors.aql' module

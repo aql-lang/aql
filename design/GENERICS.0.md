@@ -421,7 +421,7 @@ def apply-op fn [[rhs:Any  op:String  lhs:Any] [Boolean] [...]]
 satisfy `Any`. A bounded type parameter rejects it:
 
 ```aql
-type Comparable Integer tor Decimal tor String
+def Comparable (Integer tor Decimal tor String)
 
 def apply-op<T extends Comparable> fn [
   [rhs:T  op:String  lhs:T] [Boolean] [...]
@@ -451,7 +451,7 @@ def AllPred  (refine Record [kind:String  op:String  children:[:Pred]])
 def AnyPred  (refine Record [kind:String  op:String  children:[:Pred]])
 def NotPred  (refine Record [kind:String  op:String  children:Pred])
 def CondPred (refine Record [field:Atom    op:String  value:Any])
-type Pred AllPred tor AnyPred tor NotPred tor CondPred
+def Pred (AllPred tor AnyPred tor NotPred tor CondPred)
 ```
 
 Builder functions then return the precise variant:
