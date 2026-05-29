@@ -128,11 +128,11 @@ lower "ABC"	'abc'
 # --- Curried/defined words with signature matching ---
 
 # def creates a forward-precedence word
-def add5 [add 5] end 10 add5	15
-def mul2 [mul 2] end 3 mul2	6
+def add5 word [add 5] end 10 add5	15
+def mul2 word [mul 2] end 3 mul2	6
 
 # Chaining curried words
-def add5 [add 5] end def mul2 [mul 2] end 3 add5 mul2	16
+def add5 word [add 5] end def mul2 word [mul 2] end 3 add5 mul2	16
 
 # --- Multiple results on stack ---
 

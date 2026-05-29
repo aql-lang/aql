@@ -469,19 +469,34 @@ func registerEngSpecDefinition(r *eng.Registry) {
 		Signatures: []eng.NativeSig{
 			{
 				Args:          []*eng.Type{eng.TMap, eng.TAny},
-				NoEvalArgs:    map[int]bool{1: true},
 				NoEvalMapArgs: map[int]bool{0: true},
 				Handler:       typedDef,
 				Returns:       []*eng.Type{}, BarrierPos: -1,
 			},
 			{
-				Args:       []*eng.Type{eng.TAtom, eng.TAny},
-				QuoteArgs:  map[int]bool{0: true},
-				NoEvalArgs: map[int]bool{1: true},
-				Handler:    plainDef,
-				Returns:    []*eng.Type{}, BarrierPos: -1,
+				Args:      []*eng.Type{eng.TAtom, eng.TAny},
+				QuoteArgs: map[int]bool{0: true},
+				Handler:   plainDef,
+				Returns:   []*eng.Type{}, BarrierPos: -1,
 			},
 		},
+	})
+
+	// word VALUE — wrap the (unevaluated) arg in an __SP splice marker (the
+	// kernel splice mechanism). `def name word value` binds the marker so a
+	// reference splices its payload. Production registration lives in
+	// lang/go/native/natives.go; engspec ships its own fixture so eng/spec
+	// rows (forth.tsv etc.) can express splices after the def-list flip.
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name: "word",
+		Signatures: []eng.NativeSig{{
+			Args:       []*eng.Type{eng.TAny},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+				return []eng.Value{eng.NewSplice(args[0])}, nil
+			},
+			Returns: []*eng.Type{eng.TAny}, BarrierPos: -1,
+		}},
 	})
 
 	// fn [triples] — uses ParseFnDef from eng to build the FnDef.

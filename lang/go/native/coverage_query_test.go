@@ -890,7 +890,7 @@ func TestStepEndWithMoveAndMark(t *testing.T) {
 	}
 	// def creates a mark; calling a def word triggers move
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("dbl"), NewList([]Value{NewWord("dup"), NewWord("add")}),
+		NewWord("def"), NewWord("dbl"), NewWord("word"), NewList([]Value{NewWord("dup"), NewWord("add")}),
 		NewInteger(5), NewWord("dbl"),
 	})
 	_as55, _ := AsInteger(result[0])

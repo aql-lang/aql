@@ -9,7 +9,7 @@ import (
 type aliasCase struct {
 	name      string            // test name
 	files     map[string]string // optional virtual files
-	defStep   string            // e.g. "def plus [add]"
+	defStep   string            // e.g. "def plus word [add]"
 	origSteps []string          // expression with original name
 	aliaSteps []string          // expression with alias name
 }
@@ -51,7 +51,7 @@ func runAliasTest(t *testing.T, tc aliasCase) {
 func TestAliasAdd(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "add",
-		defStep:   "def plus [add]",
+		defStep:   "def plus word [add]",
 		origSteps: []string{"3 add 5"},
 		aliaSteps: []string{"3 plus 5"},
 	})
@@ -60,7 +60,7 @@ func TestAliasAdd(t *testing.T) {
 func TestAliasSub(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "sub",
-		defStep:   "def minus [sub]",
+		defStep:   "def minus word [sub]",
 		origSteps: []string{"10 sub 3"},
 		aliaSteps: []string{"10 minus 3"},
 	})
@@ -69,7 +69,7 @@ func TestAliasSub(t *testing.T) {
 func TestAliasMul(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "mul",
-		defStep:   "def times [mul]",
+		defStep:   "def times word [mul]",
 		origSteps: []string{"4 mul 5"},
 		aliaSteps: []string{"4 times 5"},
 	})
@@ -78,7 +78,7 @@ func TestAliasMul(t *testing.T) {
 func TestAliasDiv(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "div",
-		defStep:   "def divide [div]",
+		defStep:   "def divide word [div]",
 		origSteps: []string{"20 div 4"},
 		aliaSteps: []string{"20 divide 4"},
 	})
@@ -87,7 +87,7 @@ func TestAliasDiv(t *testing.T) {
 func TestAliasMod(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "mod",
-		defStep:   "def modulo [mod]",
+		defStep:   "def modulo word [mod]",
 		origSteps: []string{"10 mod 3"},
 		aliaSteps: []string{"10 modulo 3"},
 	})
@@ -136,7 +136,7 @@ func TestAliasMax(t *testing.T) {
 func TestAliasDup(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "dup",
-		defStep:   "def mydup [dup]",
+		defStep:   "def mydup word [dup]",
 		origSteps: []string{"5 dup"},
 		aliaSteps: []string{"5 mydup"},
 	})
@@ -145,7 +145,7 @@ func TestAliasDup(t *testing.T) {
 func TestAliasSwap(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "swap",
-		defStep:   "def myswap [swap]",
+		defStep:   "def myswap word [swap]",
 		origSteps: []string{"do [1 2 swap]"},
 		aliaSteps: []string{"do [1 2 myswap]"},
 	})
@@ -154,7 +154,7 @@ func TestAliasSwap(t *testing.T) {
 func TestAliasDrop(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "drop",
-		defStep:   "def mydrop [drop]",
+		defStep:   "def mydrop word [drop]",
 		origSteps: []string{"do [1 2 drop]"},
 		aliaSteps: []string{"do [1 2 mydrop]"},
 	})
@@ -163,7 +163,7 @@ func TestAliasDrop(t *testing.T) {
 func TestAliasOver(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "over",
-		defStep:   "def myover [over]",
+		defStep:   "def myover word [over]",
 		origSteps: []string{"do [1 2 over]"},
 		aliaSteps: []string{"do [1 2 myover]"},
 	})
@@ -172,7 +172,7 @@ func TestAliasOver(t *testing.T) {
 func TestAliasRot(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "rot",
-		defStep:   "def myrot [rot]",
+		defStep:   "def myrot word [rot]",
 		origSteps: []string{"do [1 2 3 rot]"},
 		aliaSteps: []string{"do [1 2 3 myrot]"},
 	})
@@ -181,7 +181,7 @@ func TestAliasRot(t *testing.T) {
 func TestAliasNip(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "nip",
-		defStep:   "def mynip [nip]",
+		defStep:   "def mynip word [nip]",
 		origSteps: []string{"do [1 2 nip]"},
 		aliaSteps: []string{"do [1 2 mynip]"},
 	})
@@ -190,7 +190,7 @@ func TestAliasNip(t *testing.T) {
 func TestAliasTuck(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "tuck",
-		defStep:   "def mytuck [tuck]",
+		defStep:   "def mytuck word [tuck]",
 		origSteps: []string{"do [1 2 tuck]"},
 		aliaSteps: []string{"do [1 2 mytuck]"},
 	})
@@ -199,7 +199,7 @@ func TestAliasTuck(t *testing.T) {
 func TestAlias2Dup(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "2dup",
-		defStep:   "def my2dup [2dup]",
+		defStep:   "def my2dup word [2dup]",
 		origSteps: []string{"do [1 2 2dup]"},
 		aliaSteps: []string{"do [1 2 my2dup]"},
 	})
@@ -208,7 +208,7 @@ func TestAlias2Dup(t *testing.T) {
 func TestAlias2Swap(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "2swap",
-		defStep:   "def my2swap [2swap]",
+		defStep:   "def my2swap word [2swap]",
 		origSteps: []string{"do [1 2 3 4 2swap]"},
 		aliaSteps: []string{"do [1 2 3 4 my2swap]"},
 	})
@@ -217,7 +217,7 @@ func TestAlias2Swap(t *testing.T) {
 func TestAlias2Drop(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "2drop",
-		defStep:   "def my2drop [2drop]",
+		defStep:   "def my2drop word [2drop]",
 		origSteps: []string{"do [1 2 3 2drop]"},
 		aliaSteps: []string{"do [1 2 3 my2drop]"},
 	})
@@ -226,7 +226,7 @@ func TestAlias2Drop(t *testing.T) {
 func TestAlias2Over(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "2over",
-		defStep:   "def my2over [2over]",
+		defStep:   "def my2over word [2over]",
 		origSteps: []string{"do [1 2 3 4 2over]"},
 		aliaSteps: []string{"do [1 2 3 4 my2over]"},
 	})
@@ -235,7 +235,7 @@ func TestAlias2Over(t *testing.T) {
 func TestAliasDepth(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "depth",
-		defStep:   "def mydepth [depth]",
+		defStep:   "def mydepth word [depth]",
 		origSteps: []string{"do [1 2 3 depth]"},
 		aliaSteps: []string{"do [1 2 3 mydepth]"},
 	})
@@ -244,7 +244,7 @@ func TestAliasDepth(t *testing.T) {
 func TestAliasPick(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "pick",
-		defStep:   "def mypick [pick]",
+		defStep:   "def mypick word [pick]",
 		origSteps: []string{"do [10 20 30 0 pick]"},
 		aliaSteps: []string{"do [10 20 30 0 mypick]"},
 	})
@@ -253,7 +253,7 @@ func TestAliasPick(t *testing.T) {
 func TestAliasRoll(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "roll",
-		defStep:   "def myroll [roll]",
+		defStep:   "def myroll word [roll]",
 		origSteps: []string{"do [1 2 3 2 roll]"},
 		aliaSteps: []string{"do [1 2 3 2 myroll]"},
 	})
@@ -266,7 +266,7 @@ func TestAliasRoll(t *testing.T) {
 func TestAliasAnd(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "and",
-		defStep:   "def myand [and]",
+		defStep:   "def myand word [and]",
 		origSteps: []string{"true and false"},
 		aliaSteps: []string{"true myand false"},
 	})
@@ -275,7 +275,7 @@ func TestAliasAnd(t *testing.T) {
 func TestAliasOr(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "or",
-		defStep:   "def myor [or]",
+		defStep:   "def myor word [or]",
 		origSteps: []string{"false or true"},
 		aliaSteps: []string{"false myor true"},
 	})
@@ -284,7 +284,7 @@ func TestAliasOr(t *testing.T) {
 func TestAliasXor(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "xor",
-		defStep:   "def myxor [xor]",
+		defStep:   "def myxor word [xor]",
 		origSteps: []string{"true xor false"},
 		aliaSteps: []string{"true myxor false"},
 	})
@@ -293,7 +293,7 @@ func TestAliasXor(t *testing.T) {
 func TestAliasNand(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "nand",
-		defStep:   "def mynand [nand]",
+		defStep:   "def mynand word [nand]",
 		origSteps: []string{"true nand true"},
 		aliaSteps: []string{"true mynand true"},
 	})
@@ -302,7 +302,7 @@ func TestAliasNand(t *testing.T) {
 func TestAliasImplies(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "implies",
-		defStep:   "def myimplies [implies]",
+		defStep:   "def myimplies word [implies]",
 		origSteps: []string{"true implies false"},
 		aliaSteps: []string{"true myimplies false"},
 	})
@@ -311,7 +311,7 @@ func TestAliasImplies(t *testing.T) {
 func TestAliasNot(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "not",
-		defStep:   "def mynot [not]",
+		defStep:   "def mynot word [not]",
 		origSteps: []string{"true not"},
 		aliaSteps: []string{"true mynot"},
 	})
@@ -324,7 +324,7 @@ func TestAliasNot(t *testing.T) {
 func TestAliasEq(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "eq",
-		defStep:   "def same [eq]",
+		defStep:   "def same word [eq]",
 		origSteps: []string{"5 eq 5"},
 		aliaSteps: []string{"5 same 5"},
 	})
@@ -333,7 +333,7 @@ func TestAliasEq(t *testing.T) {
 func TestAliasNeq(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "neq",
-		defStep:   "def diff [neq]",
+		defStep:   "def diff word [neq]",
 		origSteps: []string{"5 neq 3"},
 		aliaSteps: []string{"5 diff 3"},
 	})
@@ -342,7 +342,7 @@ func TestAliasNeq(t *testing.T) {
 func TestAliasLt(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "lt",
-		defStep:   "def less [lt]",
+		defStep:   "def less word [lt]",
 		origSteps: []string{"3 lt 5"},
 		aliaSteps: []string{"3 less 5"},
 	})
@@ -351,7 +351,7 @@ func TestAliasLt(t *testing.T) {
 func TestAliasGt(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "gt",
-		defStep:   "def more [gt]",
+		defStep:   "def more word [gt]",
 		origSteps: []string{"5 gt 3"},
 		aliaSteps: []string{"5 more 3"},
 	})
@@ -360,7 +360,7 @@ func TestAliasGt(t *testing.T) {
 func TestAliasLte(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "lte",
-		defStep:   "def atmost [lte]",
+		defStep:   "def atmost word [lte]",
 		origSteps: []string{"5 lte 5"},
 		aliaSteps: []string{"5 atmost 5"},
 	})
@@ -369,7 +369,7 @@ func TestAliasLte(t *testing.T) {
 func TestAliasGte(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "gte",
-		defStep:   "def atleast [gte]",
+		defStep:   "def atleast word [gte]",
 		origSteps: []string{"5 gte 3"},
 		aliaSteps: []string{"5 atleast 3"},
 	})
@@ -378,7 +378,7 @@ func TestAliasGte(t *testing.T) {
 func TestAliasDeq(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "deq",
-		defStep:   "def deepeq [deq]",
+		defStep:   "def deepeq word [deq]",
 		origSteps: []string{"{a:1} deq {a:1}"},
 		aliaSteps: []string{"{a:1} deepeq {a:1}"},
 	})
@@ -391,7 +391,7 @@ func TestAliasDeq(t *testing.T) {
 func TestAliasUpper(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "upper",
-		defStep:   "def shout [upper]",
+		defStep:   "def shout word [upper]",
 		origSteps: []string{`"hello" upper`},
 		aliaSteps: []string{`"hello" shout`},
 	})
@@ -400,7 +400,7 @@ func TestAliasUpper(t *testing.T) {
 func TestAliasLower(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "lower",
-		defStep:   "def whisper [lower]",
+		defStep:   "def whisper word [lower]",
 		origSteps: []string{`"HELLO" lower`},
 		aliaSteps: []string{`"HELLO" whisper`},
 	})
@@ -413,7 +413,7 @@ func TestAliasLower(t *testing.T) {
 func TestAliasTypeof(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "typeof",
-		defStep:   "def mytype [typeof]",
+		defStep:   "def mytype word [typeof]",
 		origSteps: []string{"42 typeof"},
 		aliaSteps: []string{"42 mytype"},
 	})
@@ -426,7 +426,7 @@ func TestAliasTypeof(t *testing.T) {
 func TestAliasIf(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "if",
-		defStep:   "def myif [if]",
+		defStep:   "def myif word [if]",
 		origSteps: []string{"true if 42 0"},
 		aliaSteps: []string{"true myif 42 0"},
 	})
@@ -435,7 +435,7 @@ func TestAliasIf(t *testing.T) {
 func TestAliasDo(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "do",
-		defStep:   "def mydo [do]",
+		defStep:   "def mydo word [do]",
 		origSteps: []string{"do [3 add 4]"},
 		aliaSteps: []string{"mydo [3 add 4]"},
 	})
@@ -448,7 +448,7 @@ func TestAliasDo(t *testing.T) {
 func TestAliasSetGet(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "set",
-		defStep:   "def myset [set]",
+		defStep:   "def myset word [set]",
 		origSteps: []string{`context set "x" 42 end context get "x"`},
 		aliaSteps: []string{`context myset "x" 42 end context get "x"`},
 	})
@@ -457,7 +457,7 @@ func TestAliasSetGet(t *testing.T) {
 func TestAliasGet(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "get",
-		defStep:   "def myget [get]",
+		defStep:   "def myget word [get]",
 		origSteps: []string{`context set "v" 42 end context get "v"`},
 		aliaSteps: []string{`context set "v" 42 end context myget "v"`},
 	})
@@ -470,7 +470,7 @@ func TestAliasGet(t *testing.T) {
 func TestAliasCall(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "call",
-		defStep:   "def mycall [call]",
+		defStep:   "def mycall word [call]",
 		origSteps: []string{"5 [dup mul] call"},
 		aliaSteps: []string{"5 [dup mul] mycall"},
 	})
@@ -479,7 +479,7 @@ func TestAliasCall(t *testing.T) {
 func TestAliasDblcall(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "dblcall",
-		defStep:   "def mydbl [dblcall]",
+		defStep:   "def mydbl word [dblcall]",
 		origSteps: []string{"[dup mul] 5 dblcall"},
 		aliaSteps: []string{"[dup mul] 5 mydbl"},
 	})
@@ -492,7 +492,7 @@ func TestAliasDblcall(t *testing.T) {
 func TestAliasClone(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "clone",
-		defStep:   "def myclone [clone]",
+		defStep:   "def myclone word [clone]",
 		origSteps: []string{"{a:1 b:2} clone"},
 		aliaSteps: []string{"{a:1 b:2} myclone"},
 	})
@@ -505,7 +505,7 @@ func TestAliasClone(t *testing.T) {
 func TestAliasMerge(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "merge",
-		defStep:   "def mymerge [merge]",
+		defStep:   "def mymerge word [merge]",
 		origSteps: []string{"merge {a:1} {b:2}"},
 		aliaSteps: []string{"mymerge {a:1} {b:2}"},
 	})
@@ -518,7 +518,7 @@ func TestAliasMerge(t *testing.T) {
 func TestAliasWalkNoCallback(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "walk (no callback)",
-		defStep:   "def mywalk [walk]",
+		defStep:   "def mywalk word [walk]",
 		origSteps: []string{"{a:1 b:2} walk"},
 		aliaSteps: []string{"{a:1 b:2} mywalk"},
 	})
@@ -527,7 +527,7 @@ func TestAliasWalkNoCallback(t *testing.T) {
 func TestAliasWalkWithBefore(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "walk (before callback)",
-		defStep:   "def mywalk [walk]",
+		defStep:   "def mywalk word [walk]",
 		origSteps: []string{"{a:1 b:2} (fn [[m:Map] [Any] [m.value]]) walk"},
 		aliaSteps: []string{"{a:1 b:2} (fn [[m:Map] [Any] [m.value]]) mywalk"},
 	})
@@ -540,7 +540,7 @@ func TestAliasWalkWithBefore(t *testing.T) {
 func TestAliasTransform(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "transform",
-		defStep:   "def mytransform [transform]",
+		defStep:   "def mytransform word [transform]",
 		origSteps: []string{`{a:1 b:2} transform {a:"a"}`},
 		aliaSteps: []string{`{a:1 b:2} mytransform {a:"a"}`},
 	})
@@ -553,7 +553,7 @@ func TestAliasTransform(t *testing.T) {
 func TestAliasGetpath(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "getpath",
-		defStep:   "def mygetpath [getpath]",
+		defStep:   "def mygetpath word [getpath]",
 		origSteps: []string{`getpath "a.b" {a:{b:42}}`},
 		aliaSteps: []string{`mygetpath "a.b" {a:{b:42}}`},
 	})
@@ -566,7 +566,7 @@ func TestAliasGetpath(t *testing.T) {
 func TestAliasSetpath(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "setpath",
-		defStep:   "def mysetpath [setpath]",
+		defStep:   "def mysetpath word [setpath]",
 		origSteps: []string{`{a:1} setpath "b" 99`},
 		aliaSteps: []string{`{a:1} mysetpath "b" 99`},
 	})
@@ -579,7 +579,7 @@ func TestAliasSetpath(t *testing.T) {
 func TestAliasValidate(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "validate",
-		defStep:   "def myvalidate [validate]",
+		defStep:   "def myvalidate word [validate]",
 		origSteps: []string{`validate {name:"$STRING" age:"$NUMBER"} {name:"Alice" age:30}`},
 		aliaSteps: []string{`myvalidate {name:"$STRING" age:"$NUMBER"} {name:"Alice" age:30}`},
 	})
@@ -592,7 +592,7 @@ func TestAliasValidate(t *testing.T) {
 func TestAliasInject(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "inject",
-		defStep:   "def myinject [inject]",
+		defStep:   "def myinject word [inject]",
 		origSteps: []string{"{a:`b`} inject {b:42}"},
 		aliaSteps: []string{"{a:`b`} myinject {b:42}"},
 	})
@@ -607,9 +607,9 @@ func TestAliasList(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "list",
 		files:     map[string]string{"data.csv": csv},
-		defStep:   "def mylist [list]",
-		origSteps: []string{`def tbl [read "data.csv"]`, `list tbl`},
-		aliaSteps: []string{`def tbl [read "data.csv"]`, `mylist tbl`},
+		defStep:   "def mylist word [list]",
+		origSteps: []string{`def tbl (read "data.csv")`, `list tbl`},
+		aliaSteps: []string{`def tbl (read "data.csv")`, `mylist tbl`},
 	})
 }
 
@@ -622,9 +622,9 @@ func TestAliasCreate(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "create",
 		files:     map[string]string{"data.csv": csv},
-		defStep:   "def mycreate [create]",
-		origSteps: []string{`def tbl [read "data.csv"]`, `tbl create {id:"2" name:"Bob"}`},
-		aliaSteps: []string{`def tbl [read "data.csv"]`, `tbl mycreate {id:"2" name:"Bob"}`},
+		defStep:   "def mycreate word [create]",
+		origSteps: []string{`def tbl word [read "data.csv"]`, `tbl create {id:"2" name:"Bob"}`},
+		aliaSteps: []string{`def tbl word [read "data.csv"]`, `tbl mycreate {id:"2" name:"Bob"}`},
 	})
 }
 
@@ -637,9 +637,9 @@ func TestAliasLoad(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "load",
 		files:     map[string]string{"data.csv": csv},
-		defStep:   "def myload [load]",
-		origSteps: []string{`def tbl [read "data.csv"]`, `tbl load {id:"1"}`},
-		aliaSteps: []string{`def tbl [read "data.csv"]`, `tbl myload {id:"1"}`},
+		defStep:   "def myload word [load]",
+		origSteps: []string{`def tbl word [read "data.csv"]`, `tbl load {id:"1"}`},
+		aliaSteps: []string{`def tbl word [read "data.csv"]`, `tbl myload {id:"1"}`},
 	})
 }
 
@@ -652,9 +652,9 @@ func TestAliasUpdate(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "update",
 		files:     map[string]string{"data.csv": csv},
-		defStep:   "def myupdate [update]",
-		origSteps: []string{`def tbl [read "data.csv"]`, `tbl update {id:"1" name:"Alicia"}`},
-		aliaSteps: []string{`def tbl [read "data.csv"]`, `tbl myupdate {id:"1" name:"Alicia"}`},
+		defStep:   "def myupdate word [update]",
+		origSteps: []string{`def tbl word [read "data.csv"]`, `tbl update {id:"1" name:"Alicia"}`},
+		aliaSteps: []string{`def tbl word [read "data.csv"]`, `tbl myupdate {id:"1" name:"Alicia"}`},
 	})
 }
 
@@ -667,8 +667,8 @@ func TestAliasRemove(t *testing.T) {
 	runAliasTest(t, aliasCase{
 		name:      "remove",
 		files:     map[string]string{"data.csv": csv},
-		defStep:   "def myremove [remove]",
-		origSteps: []string{`def tbl [read "data.csv"]`, `tbl remove {id:"1"}`},
-		aliaSteps: []string{`def tbl [read "data.csv"]`, `tbl myremove {id:"1"}`},
+		defStep:   "def myremove word [remove]",
+		origSteps: []string{`def tbl word [read "data.csv"]`, `tbl remove {id:"1"}`},
+		aliaSteps: []string{`def tbl word [read "data.csv"]`, `tbl myremove {id:"1"}`},
 	})
 }

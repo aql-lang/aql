@@ -795,7 +795,7 @@ def p:{ x:Integer y:Integer } { x:1 y:'two' }	ERROR:type_error	y is wrong type
 # list is stored as a code-body, so referencing xs splices its		
 # elements (canonical AQL list-def semantics, see code-splice in		
 # function.tsv §2). `quote` would store as data instead.		
-def xs:[ :Integer ] [ 1 2 3 ] xs	1 2 3	splice expands to three Integers
+def xs:[ :Integer ] [ 1 2 3 ] xs	[1 2 3]	typed-name list binds the list value (matches [:Integer]); use `word` to splice
 def xs:[ :Integer ] [ 1 'x' ]	ERROR:type_error	'x' doesn't satisfy Integer at def-time validation
 def xs:[ :Integer ] quote [ 1 2 3 ] xs	(quote [1 2 3])	quote stores the list as data; xs resolves to the quoted list (canonical render preserves the (quote ...) wrapper — /q is for atoms only)
 		

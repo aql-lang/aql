@@ -52,7 +52,7 @@ func TestEngineDef(t *testing.T) {
 	// def inc [1 add] end 5 inc
 	body := NewList([]Value{NewInteger(1), NewWord("add")})
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("inc"), body, NewEnd(),
+		NewWord("def"), NewWord("inc"), NewWord("word"), body, NewEnd(),
 		NewInteger(5), NewWord("inc"),
 	})
 	_as24, _ := AsInteger(result[0])

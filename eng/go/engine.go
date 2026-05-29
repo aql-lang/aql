@@ -755,18 +755,12 @@ func (e *Engine) stepWord(val Value) error {
 			// Record the substitution as a "use" for unused-def
 			// tracking in check mode.
 			e.registry.Check.recordUse(w.Name)
-			// For list bodies, expand onto the stack like the fallback handler does.
-			// Quoted lists are treated as data values (not expanded).
-			// Type literals (Data == nil) are values, not bodies — they
-			// fall through to stepLiteral so the type itself is pushed
-			// onto the stack rather than splicing nothing.
-			if top.Parent.Equal(TList) && top.Data != nil && !IsTypedList(top) && !IsTableType(top) && !top.Quoted {
-				elems, _ := AsList(top)
-				expanded := make([]Value, elems.Len())
-				copy(expanded, elems.Slice())
-				stackSplice(&e.stack, e.pointer, 1, expanded...)
-				return nil
-			}
+			// A def'd word binds a VALUE: push it as-is. Lists bind like
+			// maps — `def xs [1,2,3]` makes `xs` the list value, evaluated
+			// at def time (so `length xs` → 3). To splice a list's elements
+			// onto the stack (the old implicit behaviour / Forth-style
+			// macros) use the explicit `def name word [list]` form, whose
+			// __SP marker is handled in stepLiteral.
 			e.stack[e.pointer] = top
 			return e.stepLiteral()
 		}

@@ -62,50 +62,50 @@
 		
 		
 # ---------- 1. Increment / decrement / scale ----------		
-def incr [ 1 addq/s ] 5 incr	6	classic Forth `: incr 1 + ;` — addq/s body op consumes from stack only
-def incr [ 1 addq/s ] 0 incr	1	incr on zero
-def incr [ 1 addq/s ] -3 incr	-2	incr on a negative
-def incr [ 1 addq/s ] 5 incr incr	7	chained: 5 → 6 → 7
+def incr word [ 1 addq/s ] 5 incr	6	classic Forth `: incr 1 + ;` — addq/s body op consumes from stack only
+def incr word [ 1 addq/s ] 0 incr	1	incr on zero
+def incr word [ 1 addq/s ] -3 incr	-2	incr on a negative
+def incr word [ 1 addq/s ] 5 incr incr	7	chained: 5 → 6 → 7
 		
-def decr [ 1 subq/s ] 5 decr	4	classic `: decr 1 - ;` — subq/s sig=[1,5] → 5-1=4
-def decr [ 1 subq/s ] 1 decr	0	decr on one
-def decr [ 1 subq/s ] 0 decr	-1	decr on zero (rolls negative)
+def decr word [ 1 subq/s ] 5 decr	4	classic `: decr 1 - ;` — subq/s sig=[1,5] → 5-1=4
+def decr word [ 1 subq/s ] 1 decr	0	decr on one
+def decr word [ 1 subq/s ] 0 decr	-1	decr on zero (rolls negative)
 		
-def add-two [ 2 addq/s ] 5 add-two	7	`: add-two 2 + ;` — add 2
-def sub-two [ 2 subq/s ] 5 sub-two	3	`: sub-two 2 - ;` — subtract 2
-def times-two [ 2 mulq/s ] 5 times-two	10	`: 2* 2 * ;` — Forth's classic `2*` (renamed times-two because the spec tokenizer treats `2*` poorly)
-def times-two [ 2 mulq/s ] -3 times-two	-6	times-two on a negative
+def add-two word [ 2 addq/s ] 5 add-two	7	`: add-two 2 + ;` — add 2
+def sub-two word [ 2 subq/s ] 5 sub-two	3	`: sub-two 2 - ;` — subtract 2
+def times-two word [ 2 mulq/s ] 5 times-two	10	`: 2* 2 * ;` — Forth's classic `2*` (renamed times-two because the spec tokenizer treats `2*` poorly)
+def times-two word [ 2 mulq/s ] -3 times-two	-6	times-two on a negative
 		
 # Mid-stream chaining: with /s the body doesn't grab the next literal.		
-def incr [ 1 addq/s ] 1 incr 2 incr	2 3	1 incr → 2 (consumes only the 1); 2 incr → 3; final stack: [2 (residue from second), 3]. Wait actually trace: 1 incr → splice → 1 1 addq/s → addq/s stack=[1,1] sig=[1,1] → 2; stream becomes '2 2 incr'; second incr splices → '2 2 1 addq/s' → addq/s stack=[2,2,1] sig=[1,2] → 3; final: '2 3'
+def incr word [ 1 addq/s ] 1 incr 2 incr	2 3	1 incr → 2 (consumes only the 1); 2 incr → 3; final stack: [2 (residue from second), 3]. Wait actually trace: 1 incr → splice → 1 1 addq/s → addq/s stack=[1,1] sig=[1,1] → 2; stream becomes '2 2 incr'; second incr splices → '2 2 1 addq/s' → addq/s stack=[2,2,1] sig=[1,2] → 3; final: '2 3'
 		
-def double [ dup addq/s ] 5 double	10	`: double dup + ;` — addq/s pulls both from stack
-def double [ dup addq/s ] 7 double	14	
-def double [ dup addq/s ] 0 double	0	
+def double word [ dup addq/s ] 5 double	10	`: double dup + ;` — addq/s pulls both from stack
+def double word [ dup addq/s ] 7 double	14	
+def double word [ dup addq/s ] 0 double	0	
 		
 # ---------- 2. Square / cube ----------		
-def square [ dup mulq/s ] 5 square	25	`: square dup * ;` — mulq/s consumes only the dup'd top
-def square [ dup mulq/s ] -4 square	16	negative input still squares to positive
-def square [ dup mulq/s ] 0 square	0	zero squared is zero
+def square word [ dup mulq/s ] 5 square	25	`: square dup * ;` — mulq/s consumes only the dup'd top
+def square word [ dup mulq/s ] -4 square	16	negative input still squares to positive
+def square word [ dup mulq/s ] 0 square	0	zero squared is zero
 		
 # THIS IS THE KEY ROW — proves `/s` makes square work properly when		
 # followed by another forward-prec call. Without /s, the inner mulq		
 # would grab the `4` and produce 147 (= 3 + 12*12 + residue). With		
 # /s, the body is closed: 3 square = 9, 4 square = 16, addq combines.		
-def square [ dup mulq/s ] 3 square 4 square addq	25	chained squares: with mulq/s neither square grabs the next literal; 9 + 16 = 25
+def square word [ dup mulq/s ] 3 square 4 square addq	25	chained squares: with mulq/s neither square grabs the next literal; 9 + 16 = 25
 		
-def cube [ dup dup mulq/s mulq/s ] 4 cube	64	`: cube dup dup * * ;` — both mulqs are stack-only
-def cube [ dup dup mulq/s mulq/s ] 3 cube	27	3³ = 27
-def cube [ dup dup mulq/s mulq/s ] -2 cube	-8	(-2)³ = -8
+def cube word [ dup dup mulq/s mulq/s ] 4 cube	64	`: cube dup dup * * ;` — both mulqs are stack-only
+def cube word [ dup dup mulq/s mulq/s ] 3 cube	27	3³ = 27
+def cube word [ dup dup mulq/s mulq/s ] -2 cube	-8	(-2)³ = -8
 		
 # ---------- 3. Sum-of-squares (Pythagorean a²+b²) ----------		
 # Classic Forth `: sumsq dup * swap dup * + ;` — given (a b) on stack,		
 # computes a²+b². Useful as the body of `: hyp sumsq sqrt ;` once		
 # sqrt exists. All three forward-prec ops in the body get /s.		
-def sumsq [ dup mulq/s swap dup mulq/s addq/s ] 3 4 sumsq	25	a²+b² for (3, 4) → 9+16 = 25
-def sumsq [ dup mulq/s swap dup mulq/s addq/s ] 1 1 sumsq	2	1²+1² = 2
-def sumsq [ dup mulq/s swap dup mulq/s addq/s ] 5 12 sumsq	169	5²+12² = 169 (Pythagorean triple)
-def sumsq [ dup mulq/s swap dup mulq/s addq/s ] 0 0 sumsq	0	zero case
+def sumsq word [ dup mulq/s swap dup mulq/s addq/s ] 3 4 sumsq	25	a²+b² for (3, 4) → 9+16 = 25
+def sumsq word [ dup mulq/s swap dup mulq/s addq/s ] 1 1 sumsq	2	1²+1² = 2
+def sumsq word [ dup mulq/s swap dup mulq/s addq/s ] 5 12 sumsq	169	5²+12² = 169 (Pythagorean triple)
+def sumsq word [ dup mulq/s swap dup mulq/s addq/s ] 0 0 sumsq	0	zero case
 		
 # ---------- 4. Stack-manipulation words from primitives ----------		
 # Classic Forth defines composite stack ops in terms of lower-level		
@@ -116,35 +116,35 @@ def sumsq [ dup mulq/s swap dup mulq/s addq/s ] 0 0 sumsq	0	zero case
 		
 # `: dup2 over over ;` — duplicate top pair via two `over` calls.		
 # Trace [a, b]: over → [a, b, a]; over → [a, b, a, b].		
-def dup2-alt [ over over ] 1 2 dup2-alt	1 2 1 2	classic `: dup2 over over ;` — pure stack ops, no /s needed
-def dup2-alt [ over over ] 'x' 'y' dup2-alt	'x' 'y' 'x' 'y'	any-typed
-def dup2-alt [ over over ] 1 2 dup2-alt dup2	1 2 1 2 1 2	chained: alt then core dup2
+def dup2-alt word [ over over ] 1 2 dup2-alt	1 2 1 2	classic `: dup2 over over ;` — pure stack ops, no /s needed
+def dup2-alt word [ over over ] 'x' 'y' dup2-alt	'x' 'y' 'x' 'y'	any-typed
+def dup2-alt word [ over over ] 1 2 dup2-alt dup2	1 2 1 2 1 2	chained: alt then core dup2
 		
 # `: nip swap drop ;` — drop second-from-top, keeping the top.		
 # Trace [a, b]: swap → [b, a]; drop → [b]. Matches core `nip`.		
-def nip-alt [ swap drop ] 1 2 nip-alt	2	classic `: nip swap drop ;`
-def nip-alt [ swap drop ] 1 2 3 nip-alt	1 3	deeper untouched
+def nip-alt word [ swap drop ] 1 2 nip-alt	2	classic `: nip swap drop ;`
+def nip-alt word [ swap drop ] 1 2 3 nip-alt	1 3	deeper untouched
 		
 # `: tuck swap over ;` — copy the top under the second.		
 # Trace [a, b]: swap → [b, a]; over → [b, a, b]. Matches core `tuck`.		
-def tuck-alt [ swap over ] 1 2 tuck-alt	2 1 2	classic `: tuck swap over ;`
+def tuck-alt word [ swap over ] 1 2 tuck-alt	2 1 2	classic `: tuck swap over ;`
 		
 # ---------- 5. Anti-rotate (-rot) ----------		
 # Classic Forth: `: anti-rot rot rot ;` — pure stack, no /s.		
 # Trace [a, b, c]: rot → [b, c, a]; rot → [c, a, b].		
-def anti-rot [ rot rot ] 1 2 3 anti-rot	3 1 2	`: anti-rot rot rot ;` — anti-rotate
-def anti-rot [ rot rot ] 'a' 'b' 'c' anti-rot	'c' 'a' 'b'	any-typed
-def anti-rot [ rot rot ] 0 1 2 3 anti-rot	0 3 1 2	deeper element (0) untouched
+def anti-rot word [ rot rot ] 1 2 3 anti-rot	3 1 2	`: anti-rot rot rot ;` — anti-rotate
+def anti-rot word [ rot rot ] 'a' 'b' 'c' anti-rot	'c' 'a' 'b'	any-typed
+def anti-rot word [ rot rot ] 0 1 2 3 anti-rot	0 3 1 2	deeper element (0) untouched
 		
 # ---------- 6. Negation via `0 swap subq` ----------		
 # Classic Forth: `: negate 0 swap - ;`. The body's subq/s consumes		
 # only the swapped (0, n) pair from the stack — n becomes 0-n = -n.		
 # Trace [n]: 0 → [n, 0]; swap → [0, n]; subq/s sig=[n (top), 0] →		
 # handler b-a = 0-n = -n.		
-def fneg [ 0 swap subq/s ] 5 fneg	-5	classic `: negate 0 swap - ;`
-def fneg [ 0 swap subq/s ] -3 fneg	3	-(-3) = 3
-def fneg [ 0 swap subq/s ] 0 fneg	0	-0 = 0 (Integer; no IEEE sign-flip for Integer)
-def fneg [ 0 swap subq/s ] 7 fneg	-7	matches `7 negq` from numbers.tsv
+def fneg word [ 0 swap subq/s ] 5 fneg	-5	classic `: negate 0 swap - ;`
+def fneg word [ 0 swap subq/s ] -3 fneg	3	-(-3) = 3
+def fneg word [ 0 swap subq/s ] 0 fneg	0	-0 = 0 (Integer; no IEEE sign-flip for Integer)
+def fneg word [ 0 swap subq/s ] 7 fneg	-7	matches `7 negq` from numbers.tsv
 5 negq	-5	control: bare negq for the same input
 		
 # ---------- 7. Boolean wrappers ----------		
@@ -152,15 +152,15 @@ def fneg [ 0 swap subq/s ] 7 fneg	-7	matches `7 negq` from numbers.tsv
 # `and`/`or` could grab a forward token in mid-expression. Use /s		
 # in the body for true stack-only Forth semantics. `not` is also		
 # forward-prec; same fix.		
-def both-true [ and/s ] true true both-true	true	classic and via wrapper
-def both-true [ and/s ] true false both-true	false	short-circuits on falsy second arg
-def both-true [ and/s ] false true both-true	false	short-circuits on falsy first arg
+def both-true word [ and/s ] true true both-true	true	classic and via wrapper
+def both-true word [ and/s ] true false both-true	false	short-circuits on falsy second arg
+def both-true word [ and/s ] false true both-true	false	short-circuits on falsy first arg
 		
-def either [ or/s ] true false either	true	classic or via wrapper
-def either [ or/s ] false false either	false	both falsy → falsy
+def either word [ or/s ] true false either	true	classic or via wrapper
+def either word [ or/s ] false false either	false	both falsy → falsy
 		
-def neither [ or/s not/s ] false false neither	true	classic NOR via composition: `or not`, both stack-only
-def neither [ or/s not/s ] true false neither	false	or fires first (true), then not flips it
+def neither word [ or/s not/s ] false false neither	true	classic NOR via composition: `or not`, both stack-only
+def neither word [ or/s not/s ] true false neither	false	or fires first (true), then not flips it
 		
 # ---------- 8. Composition: word built from defined words ----------		
 # Each splice happens at use site; the inner def must be established		
@@ -169,19 +169,19 @@ def neither [ or/s not/s ] true false neither	false	or fires first (true), then 
 # defined-word calls.		
 		
 # square applied twice — quartic.		
-def square [ dup mulq/s ] def quart [ square square ] 3 quart	81	3⁴ = 81 via square applied twice
-def square [ dup mulq/s ] def quart [ square square ] 2 quart	16	2⁴ = 16
-def square [ dup mulq/s ] def quart [ square square ] -2 quart	16	(-2)⁴ = 16
+def square word [ dup mulq/s ] def quart word [ square square ] 3 quart	81	3⁴ = 81 via square applied twice
+def square word [ dup mulq/s ] def quart word [ square square ] 2 quart	16	2⁴ = 16
+def square word [ dup mulq/s ] def quart word [ square square ] -2 quart	16	(-2)⁴ = 16
 		
 # Increment-twice composing a defined `incr`.		
-def incr [ 1 addq/s ] def incr-twice [ incr incr ] 5 incr-twice	7	double-applying incr via composition
-def incr [ 1 addq/s ] def incr-four-times [ incr incr incr incr ] 5 incr-four-times	9	four-fold increment chain
+def incr word [ 1 addq/s ] def incr-twice word [ incr incr ] 5 incr-twice	7	double-applying incr via composition
+def incr word [ 1 addq/s ] def incr-four-times word [ incr incr incr incr ] 5 incr-four-times	9	four-fold increment chain
 		
 # Square-then-double — pipeline through two defined words.		
-def square [ dup mulq/s ] def double [ dup addq/s ] 5 square double	50	5² = 25; double = 50
+def square word [ dup mulq/s ] def double word [ dup addq/s ] 5 square double	50	5² = 25; double = 50
 		
 # Sum-of-squares of two squared values via independent squares + addq.		
-def square [ dup mulq/s ] 3 square 4 square addq	25	square 3 → 9; square 4 → 16; addq → 25 (works WITHOUT paren-wrap because mulq/s closes the body)
+def square word [ dup mulq/s ] 3 square 4 square addq	25	square 3 → 9; square 4 → 16; addq → 25 (works WITHOUT paren-wrap because mulq/s closes the body)
 		
 # ---------- 9. Limits — what NEEDS conditionals ----------		
 # Words requiring `if`/`then`/`else` or `for`/`while` aren't yet		

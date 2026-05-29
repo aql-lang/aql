@@ -21,8 +21,10 @@ var definitionNatives = []NativeFunc{
 				// Typed-name binding: def name:*Type body. Sorts first
 				// because TMap is more specific than TString / TAtom
 				// at the same depth (higher inherent score).
+				// The body is auto-evaluated like any value argument: a
+				// list binds like a map (`def xs [1 add 2]` → `[3]`). For a
+				// raw / spliced body use `def name word value`.
 				Args:           []*Type{TMap, TAny},
-				NoEvalArgs:     map[int]bool{1: true},
 				NoEvalMapArgs:  map[int]bool{0: true},
 				Handler:        defTypedHandler,
 				Returns:        []*Type{},
@@ -30,7 +32,6 @@ var definitionNatives = []NativeFunc{
 			},
 			{
 				Args:           []*Type{TString, TAny},
-				NoEvalArgs:     map[int]bool{1: true},
 				Handler:        defHandler,
 				Returns:        []*Type{},
 				RunInCheckMode: true, BarrierPos: -1,
@@ -38,7 +39,6 @@ var definitionNatives = []NativeFunc{
 			{
 				Args:           []*Type{TAtom, TAny},
 				QuoteArgs:      map[int]bool{0: true},
-				NoEvalArgs:     map[int]bool{1: true},
 				Handler:        defHandler,
 				Returns:        []*Type{},
 				RunInCheckMode: true, BarrierPos: -1,

@@ -116,16 +116,20 @@ func TestListEvalQuotedSkipped(t *testing.T) {
 
 // TestListEvalNoEvalArgsPreservesCodeBody verifies that words with
 // NoEvalArgs (like def, for) receive the list body unevaluated.
-func TestListEvalNoEvalArgsPreservesCodeBody(t *testing.T) {
+// TestWordSplicePreservesCodeBody verifies that `def name word [body]`
+// keeps the body raw (unevaluated) so it splices as a macro. A plain
+// `def double [dup add]` now evaluates the list value instead (the splice
+// moved to the explicit `word` form).
+func TestWordSplicePreservesCodeBody(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// def double [dup add]
+	// def double word [dup add]
 	// 5 double → 10
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("double"),
+		NewWord("def"), NewWord("double"), NewWord("word"),
 		NewEvalList([]Value{NewWord("dup"), NewWord("add")}),
 		NewEnd(),
 		NewInteger(5), NewWord("double"),

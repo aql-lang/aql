@@ -536,7 +536,6 @@ The `quote` word (forward arg collection) prevents evaluation:
 - `quote 99` → `99` (scalars unchanged)
 
 Quotation is **implicit** for code-body positions via `NoEvalArgs`:
-- `def` body: `def double [dup add]` — list is a code body, not data
 - `fn` body: function definition bodies
 - Control words: `if`, `for` branches/bodies
 - Higher-order words: `each`, `fold`, `scan`, `outer`, `inner` code-body args
@@ -553,6 +552,27 @@ Implementation: parser sets `Eval=true` on lists. `execMatch` runs
 `quote` sets `Quoted=true` (also suppresses auto-eval). End-of-`Run()`
 auto-evaluates only lists with `Eval=true && !Quoted` that were never
 consumed.
+
+### `def name <node>` binds a value; `word` splices
+
+`def` does NOT use `NoEvalArgs` on its body: a list body is evaluated
+and bound as a value, exactly like a map body. `def xs [1 add 2]` binds
+`xs = [3]`; `def m {a: (1 add 2)}` binds `m = {a:3}`. Both are early
+snapshots (inner def-words resolve at def time).
+
+The old implicit splice (`def double [dup add]` expanding its body at
+every reference, Forth-style) is now the explicit **`word`** form, which
+wraps a value in an `__SP` splice marker (`eng.NewSplice`, type
+`Word/__SP`). When the marker reaches the engine pointer
+(`stepLiteral`) it is replaced, unevaluated, by its payload — a plain
+list contributes its top-level elements, any other value contributes
+itself — and the result is re-stepped against the live stack:
+
+- `word [1,2,3]` → splices `1 2 3`; `def doub word [dup add]; 5 doub` → 10.
+- `def name word value` binds the marker (a `word`'d body is collected
+  by value via the `TAny` match, so it does not fire during collection).
+- The marker also splices inside containers that get evaluated
+  (e.g. a `word` reference inside a list literal).
 
 To add new syntax: register a token with `j.Token()`, extend the `"val"`
 rule with `j.Rule()`, and add conversion logic in the appropriate

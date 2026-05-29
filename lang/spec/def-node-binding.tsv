@@ -1,72 +1,62 @@
 # tokens	expected	note
 # =====================================================================
 # def-node-binding — what `def x <node>` binds, and how inner words
-# resolve. AQL has DIVERGENT semantics by node kind:
-#   - a List def is a Forth-style SPLICE body whose words are LATE /
-#     dynamically resolved at every reference (no closure);
-#   - a Map def is an EAGER value snapshot whose words are resolved
-#     ONCE, at def time.
-# Neither forms a closure — only `fn` / `=>` capture lexical scope.
+# resolve. After the def-list flip, a List binds exactly like a Map:
+# the node is EVALUATED at def time and bound as a VALUE. The explicit
+# `def name word <node>` form (an __SP splice marker) restores the old
+# Forth-style splice / late-binding behaviour.
 #
 # Runs against the production lang registry (test/go/langspec).
-# Expected values use the canon renderer (containers are space-
-# separated: `[1 2 3]`, `{a:1 b:2}`).
+# Expected values use the canon renderer (containers space-separated).
 # =====================================================================
 
 
 # =====================================================================
-# 1. What does `x` leave on the stack? (shape of the residual)
+# 1. `def x <node>` binds a VALUE — scalar, list and map alike
 # =====================================================================
-# A scalar binds a single value; a List def SPLICES its elements onto
-# the stack (it is a body, not a List value); a Map def pushes one
-# value. Wrapping a reference in `[ … ]` re-collects a spliced list.
+# A List is no longer spliced: it binds like a Map. `word` splices.
 
-def x 42 x	42	scalar def → one value
-def x [1,2,3] x	1 2 3	LIST def splices its elements (three stack items, not a List)
-def x [1,2,3] [x]	[1 2 3]	wrapping the reference re-collects the list
-def x [1,2,3] x x	1 2 3 1 2 3	splices on every reference
-def x [] [x]	[]	empty list splices to nothing
-def x [[1,2],[3,4]] [x]	[[1 2] [3 4]]	only the outer level splices; inner lists stay values
-def x {a:1 b:2} x	{a:1 b:2}	MAP def pushes a single value (no splice)
-def x {a:1 b:2} size x	2	a map reference is a usable Map value
-def x [1,2,3] typeof x	Integer 2 3	typeof hits the first spliced element — proof of the splice
-def x [1,2,3] length x	ERROR:signature	`length` sees a bare Integer, not a List (the reported failure)
+def x 42 x	42	scalar binds a value
+def x [1,2,3] x	[1 2 3]	a LIST binds the list value (was: spliced)
+def x {a:1 b:2} x	{a:1 b:2}	a MAP binds the map value (unchanged)
+def x [1,2,3] length x	3	the value is a real List — length works
+def x [1,2,3] typeof x	List	…and typeof sees a List
+def x [1,2,3] x get 0	1	…and indexing works
+def x [1,2,3] x each [add 10]	[11 12 13]	…and higher-order words work
+def x [1,2,3] [x]	[[1 2 3]]	the list is one element when re-collected
+# Splice on demand with `word`:
+def x word [1,2,3] x	1 2 3	`word` splices the elements (the old default)
 
 
 # =====================================================================
-# 2. Inner words resolve to their def'd VALUES (not kept as words)
+# 2. Inner words are evaluated EAGERLY at def time (list == map)
 # =====================================================================
-
-def c1 10 def x [c1 2 3] [x]	[10 2 3]	list: inner word resolves to its value
-def c1 10 def c2 20 def x [c1 c2] [x]	[10 20]	all inner words resolve
-def c1 10 def x {a:c1 b:2} x	{a:10 b:2}	map: inner word resolves to its value
-def x [foo 2 3] [x]	ERROR:undefined	an unknown inner word is an error, not data
-
-
-# =====================================================================
-# 3. Scope: List = LATE / dynamic, Map = EARLY / snapshot, no closures
-# =====================================================================
-# A list stores the WORD and re-resolves it at every reference, against
-# whatever binding is current — redefining changes the result, undef'ing
-# it errors, and a forward reference resolves at use time.
-
-def c1 10 def x [c1 2] def c1 20 [x]	[20 2]	list re-resolves at use → sees the NEW binding (late/dynamic)
-def c1 10 def l [c1] undef c1 [l]	ERROR:undefined	list word resolved at use; once undef'd it errors
-def x [later 2] def later 7 [x]	[7 2]	list resolves a forward reference at use time
-
-# A map captures its values once, at def time.
-def c1 10 def m {a:c1} def c1 20 m	{a:10}	map snapshots the value at def time (early)
-def c1 10 def m {a:c1} undef c1 m	{a:10}	snapshot survives undef of the source word
-
-# Lists do NOT close over a fn param / local: the word is re-resolved
-# AFTER the scope exits, so it falls back to the module binding (or
-# errors). Contrast `fn` / `=>`, which DO capture lexically.
-def c1 1 def mk fn [[c1:Integer] [List] [[c1]]] mk 9	[1]	returned list ignores param c1=9 — falls back to module c1=1 (no capture)
-def mk fn [[c1:Integer] [Function] [([] => [c1])]] def f (mk 7) f	7	contrast: a `=>` lambda DOES capture the param (c1=7)
+def x [1 add 2] x	[3]	the list body is evaluated at def time
+def c1 10 def x [c1 2 3] x	[10 2 3]	inner word resolves to its value at def time
+def c1 10 def x {a:c1 b:2} x	{a:10 b:2}	a map resolves the same way
+def x word [foo 2 3] x	ERROR:undefined	a `word` splice executes the unknown inner word → errors
 
 
 # =====================================================================
-# 4. Consequence: nested list-defs flatten through splicing
+# 3. Scope: value-bind = EARLY snapshot; `word` splice = LATE/dynamic
 # =====================================================================
-def a [1,2] def b [a 3] b	1 2 3	`a` splices inside `b`, which splices on reference → flat
-def a [1,2] def b [a 3] [b]	[1 2 3]	re-collected: the nested splice flattens into one list
+# A bound list (like a map) snapshots its words at def time.
+def c1 10 def x [c1 2] def c1 20 x	[10 2]	redefining c1 does NOT change the snapshot
+def c1 10 def x [c1] undef c1 x	[10]	the snapshot survives undef of the source word
+def c1 10 def m {a:c1} def c1 20 m	{a:10}	maps behave identically (early snapshot)
+
+# A `word` splice re-resolves at every reference (late / dynamic).
+def c1 10 def x word [c1 2] def c1 20 x	20 2	splice sees the NEW binding
+def c1 10 def x word [c1] undef c1 x	ERROR:undefined	splice word resolved at use; once undef'd it errors
+
+# No closures: a returned list ignores the fn param, falling back to the
+# module binding (a `=>` lambda, by contrast, captures it).
+def c1 1 def mk fn [[c1:Integer] [List] [[c1]]] mk 9	[1]	returned list resolves c1 to the module binding, not the param
+def mk fn [[c1:Integer] [Function] [([] => [c1])]] def f (mk 7) f	7	contrast: a `=>` lambda captures the param
+
+
+# =====================================================================
+# 4. Nesting: value-bind nests as data; `word` splice flattens
+# =====================================================================
+def a [1,2] def b [a 3] b	[[1 2] 3]	`a` is the list value, so `b` nests it
+def a word [1,2] def b word [a 3] b	1 2 3	`word` splices recursively and flattens

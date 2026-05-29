@@ -456,7 +456,7 @@ func TestResourceTypeCreateEmpty(t *testing.T) {
 func TestResourceTypeAlias(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
 		`def Resrc refine Record [name:String kind:String meta:Map]`,
-		`def res [Resrc]`,
+		`def res word [Resrc]`,
 		`res`,
 	})
 	if err != nil {
