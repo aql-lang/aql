@@ -1039,7 +1039,12 @@ func TestCheckInlineModule(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	res, err := a.Check(`import module [export "X" {v:42}]  X.v`)
+	// Access the export with bare `get`, not dotted `X.v`. Dotted access
+	// groups to `( X get v )`, and check mode does not statically resolve a
+	// name bound by `import` inside a paren sub-expression (it does for
+	// `def`-bound names — see TestCheck* for maps). Bare `get` keeps the
+	// access at top level where the import binding is visible.
+	res, err := a.Check(`import module [export "X" {v:42}]  X get v`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}

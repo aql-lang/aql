@@ -22,7 +22,7 @@ func TestColorHex2rgbRed(t *testing.T) {
 	dir := moduleWorkDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`(import "./color")`,
-		`"#FF0000" color.hex2rgb .r`,
+		`( "#FF0000" color.hex2rgb ) .r`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -263,7 +263,7 @@ func TestProjectImportInstalledColor(t *testing.T) {
 	projDir := filepath.Join(dir, "project")
 	result, err := runRealFileSteps(t, projDir, []string{
 		`(import "color")`,
-		`"#00FF00" color.hex2rgb .g`,
+		`( "#00FF00" color.hex2rgb ) .g`,
 	})
 	if err != nil {
 		t.Fatal(err)

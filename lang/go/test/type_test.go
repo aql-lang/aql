@@ -19,7 +19,7 @@ import (
 // type Record [a:T …] builds a record type from a list of field
 // pairs; make instantiates it.
 func TestTypeRecord(t *testing.T) {
-	got := runOne(t, "def Pt (refine Record [x:Integer y:Integer])\nmake Pt {x:3 y:4} .x")
+	got := runOne(t, "def Pt (refine Record [x:Integer y:Integer])\n( make Pt {x:3 y:4} ) .x")
 	if len(got) != 1 || got[0] != int64(3) {
 		t.Errorf("got %v, want [3]", got)
 	}
@@ -56,7 +56,7 @@ func TestTypeTable(t *testing.T) {
 
 // type Object {fields} builds an object type; make + .field works.
 func TestTypeObject(t *testing.T) {
-	got := runOne(t, "def Acct (refine Object {bal:Number})\nmake Acct {bal:50} .bal")
+	got := runOne(t, "def Acct (refine Object {bal:Number})\n( make Acct {bal:50} ) .bal")
 	if len(got) != 1 || got[0] != int64(50) {
 		t.Errorf("got %v, want [50]", got)
 	}
@@ -67,7 +67,7 @@ func TestTypeObject(t *testing.T) {
 func TestTypeObjectInheritance(t *testing.T) {
 	got := runOne(t, "def Animal (refine Object {legs:Integer})\n"+
 		"def Dog (refine Animal {breed:String})\n"+
-		"make Dog {legs:4 breed:\"lab\"} .legs")
+		"( make Dog {legs:4 breed:\"lab\"} ) .legs")
 	if len(got) != 1 || got[0] != int64(4) {
 		t.Errorf("got %v, want [4]", got)
 	}

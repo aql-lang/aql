@@ -373,7 +373,7 @@ func TestImportJSONFileAccess(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "./data.json" . name`,
+		`( import "./data.json" ) . name`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -404,7 +404,7 @@ func TestImportJsonicFile(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "./config.jsonic" . name`,
+		`( import "./config.jsonic" ) . name`,
 	})
 	if err != nil {
 		t.Fatal(err)

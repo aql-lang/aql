@@ -577,6 +577,20 @@ word — `size` subsumes it.
 | `set` | Set a key in a Store | `context set foo 99` |
 | `context` | Push the current context Store | `context` |
 
+**Dotted access binds tightly.** A `.`/`!.` chain groups to a single
+`( … )` so it binds to its immediate receiver, not to a surrounding call:
+`size m.x` means `size (m.x)`, and `a.b.c` is `( a get b get c )`. Two
+consequences:
+
+- **Access the result of a call** by parenthesising the call:
+  `(make Point {x:1 y:2}) .x`, `(import "data.json") . name` — bare
+  `make … {} .x` would feed `.x`'s result *into* `make`.
+- **Calling a function stored in a plain map** uses bare `get`, not dot:
+  `m get fn arg`. The dotted form `m.fn arg` groups as `(m get fn) arg`,
+  and a retrieved *named* function self-invokes before `arg` arrives.
+  (Module functions — `pkg.fn arg` — are unaffected; they dispatch
+  through the module wrapper and compose with the trailing argument.)
+
 ### Type words
 
 | Word | Description | Example |

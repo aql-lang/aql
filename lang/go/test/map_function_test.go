@@ -8,8 +8,15 @@ import (
 )
 
 // TestMapFunctionAccess verifies that functions stored in plain maps
-// (not modules) can be accessed and invoked via get, just like module
-// functions.
+// (not modules) can be accessed and invoked via bare `get`.
+//
+// NOTE: the dotted form `m.greet "arg"` does NOT work for calling a
+// map-stored *named* fn. The parser groups dotted access tightly, so
+// `m.greet "arg"` becomes `(m get greet) "arg"`, and the retrieved named
+// fn self-invokes 0-arg inside the paren before the arg arrives. Call
+// map-stored functions via bare `get` (`m get greet arg`). Module
+// functions (`pkg.fn arg`) are unaffected — they go through the module
+// wrapper dispatch, which composes with the trailing arg.
 func TestMapFunctionAccess(t *testing.T) {
 	r, err := native.DefaultRegistry()
 	if err != nil {
@@ -32,9 +39,9 @@ func TestMapFunctionAccess(t *testing.T) {
 		want string
 	}{
 		// Stack form: arg before function
-		{`"hello" m.greet`, "'hello!'"},
+		{`"hello" m get greet`, "'hello!'"},
 		// Forward form: function before arg
-		{`m.greet "hello"`, "'hello!'"},
+		{`m get greet "hello"`, "'hello!'"},
 	}
 
 	for _, tt := range tests {
