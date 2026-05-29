@@ -385,6 +385,18 @@ binding `c` to the literal word `make`); the same grouping around
 `refine` keeps the type expression bound to `Counter`. See
 [Argument order](TUTORIAL.md#the-argument-order-rule).
 
+The same parentheses are needed to read a field **straight off a fresh
+construct** — dotted access binds tightly to its immediate receiver:
+
+```
+def Counter (refine Object {count: 0})
+(make Counter {}).count               => 0       # parenthesise the make
+make Counter {} .count                => error   # parses as make Counter ({}.count)
+```
+
+Binding to `c` first (as above) sidesteps this; otherwise wrap the
+construct. See [Reference: Maps and access](REFERENCE.md#maps-and-access).
+
 ### Methods are free functions over the instance
 
 AQL objects hold **fields, not methods**: the field map has no method
