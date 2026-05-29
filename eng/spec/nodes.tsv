@@ -204,13 +204,13 @@ quote { a:( 1 addq 2 ) }	{a:3}	the inner paren value still evaluates
 # `def NAME quote [body]` stores it as DATA — no splicing.		
 # `def NAME {map}` binds the map as a value; references substitute it.		
 		
-def doub [ 1 addq ] 5 doub	6	body splices: stack=[5], 1, addq → 6
-def square [ dup mulq ] 7 square	49	dup, mulq: 7*7
+def doub word [ 1 addq ] 5 doub	6	body splices: stack=[5], 1, addq → 6
+def square word [ dup mulq ] 7 square	49	dup, mulq: 7*7
 def lst quote [ 1 2 3 ] lengthq lst	3	quoted list resolves as data — three elements
 def lst quote [ 1 2 3 ] firstq lst	1	
 def m { a:1 b:2 } m	{a:1 b:2}	map binding round-trips
 def m quote { a:1 b:2 } m	{a:1 b:2}	quote on a map binding — still just the map value
-def empty [ ] 5 empty	5	empty-body splice is a no-op; 5 stays
+def empty word [ ] 5 empty	5	empty-body splice is a no-op; 5 stays
 		
 # A def-bound list flows into a list-consuming word.		
 def lst quote [ 1 2 3 4 ] lengthq lst	4	

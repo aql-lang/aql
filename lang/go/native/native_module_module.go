@@ -49,14 +49,13 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	// fix the body before re-running. Top-level / if / do / for / fn
 	// bodies all stay in CheckMode and collect every typo as usual.
 
-	// Let the native package (or other extension packages) register
 	// Inherit the module CONFIG (InitFunc + Resolver) as a unit, then
-	// seed the child with native words. Using ModuleStore.InheritConfig
-	// rather than copying fields one at a time is what keeps a future
-	// ModuleStore field from being silently dropped here — the Resolver
-	// omission that broke `import "aql:math"` from file-imported modules
-	// (native imports only worked at the top level) was exactly that
-	// field-by-field bug.
+	// run InitFunc to seed the child sub-registry with native words.
+	// Using ModuleRegistry.InheritConfig rather than copying fields one
+	// at a time is what keeps a future config field from being silently
+	// dropped here — the Resolver omission that broke `import "aql:math"`
+	// from file-imported modules (native imports only worked at the top
+	// level) was exactly that field-by-field bug.
 	modReg.Modules.InheritConfig(parent.Modules)
 	if modReg.Modules.InitFunc != nil {
 		modReg.Modules.InitFunc(modReg)

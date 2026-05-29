@@ -1,0 +1,74 @@
+# tokens	expected	note
+# =====================================================================
+# word / __SP splice marker
+# =====================================================================
+# `word <value>` wraps its (unevaluated) argument in an internal __SP
+# splice marker. When the marker reaches the stack pointer it is
+# replaced by its payload and re-stepped against the LIVE stack:
+#   - a plain list contributes its top-level elements (so a word-bearing
+#     list runs as a Forth-style macro),
+#   - any other value contributes itself.
+# `def name word value` binds the marker, giving an explicit splice
+# (the type-agnostic counterpart of the implicit `def name [list]`
+# splice, which is unchanged). Expected values use the canon renderer
+# (containers are space-separated).
+# =====================================================================
+
+
+# =====================================================================
+# 1. Standalone `word`: scalar splices itself, list splices its elements
+# =====================================================================
+word 42	42	a scalar splices as a single value
+word [1,2,3]	1 2 3	a plain list splices its top-level elements
+word [] 9	9	an empty list contributes nothing
+word [[1,2],[3,4]]	[1 2] [3 4]	only the top level splices; inner lists stay values
+
+
+# =====================================================================
+# 2. Macro: spliced words execute against the live stack
+# =====================================================================
+5 word [dup add]	10	dup add run against the caller's 5 -> 10
+1 2 word [add] 10	1 12	spliced `add` forward-collects the trailing 10: 2 add 10 = 12
+
+
+# =====================================================================
+# 3. def name word value — binds the splice marker
+# =====================================================================
+# FORWARD form only. `word`'s __SP must be collected as def's forward
+# argument (the pointer skips a collected arg, so the marker does not
+# fire). There is NO prefix-form splice — `[body] def name` puts the
+# body on the stack BEFORE def, so the pointer steps (and fires) any
+# marker before def consumes it; a prefix list body therefore binds the
+# list VALUE. `quote` can't ferry the marker either: `quote (word …)`
+# fires the __SP inside the paren before quote marks it, and `quote
+# word …` captures the literal token `word` as an atom. Use the forward
+# form below for splices; use prefix only for value binding.
+def doub word [dup add] 5 doub	10	explicit splice-macro (cf. implicit def doub [dup add])
+def xs word [1,2,3] [xs]	[1 2 3]	re-collecting the reference rebuilds the list
+def n word 42 n add 1	43	scalar splice binds a single value
+def p word [1 add 2] [p]	[3]	value stored raw; `1 add 2` runs when spliced+evaluated
+
+
+# =====================================================================
+# 4. Splices inside containers when the container is evaluated
+# =====================================================================
+def xs word [1,2,3] [0 xs 4]	[0 1 2 3 4]	a reference splices inside a list literal
+def a word [1,2] def b word [a 3] [b]	[1 2 3]	nested splice flattens through evaluation
+def e word [] [e 9]	[9]	empty splice contributes nothing inside a container
+
+
+# =====================================================================
+# 5. Negative: the splice is unevaluated but the tokens are real code
+# =====================================================================
+word [dup]	ERROR:signature	spliced `dup` runs on an empty stack -> no matching signature
+word	ERROR:signature	`word` needs a value to wrap
+
+
+# =====================================================================
+# 6. `def name [list]` now binds the evaluated list VALUE (like a map)
+# =====================================================================
+# The implicit list-def splice was removed; `word` is the explicit splice.
+def xs [1,2,3] length xs	3	a def'd list is a value, not a splice
+def xs [1 add 2] xs	[3]	the list is evaluated at def time (like a map)
+length [1,2,3]	3	list-as-arg auto-eval unaffected
+[1 add 2]	[3]	bare-list auto-eval unaffected

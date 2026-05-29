@@ -17,7 +17,7 @@ import (
 //   ParseFnParams(r, inputSig)  ([]FnParam, int, error)
 //      — walks an `[ p1 p2 … ]` list and returns the FnParams plus
 //        the BarrierPos (`|` position).
-//   ParseFnReturns(outputSig)   ([]*Type, error)
+//   ParseFnReturns(r, outputSig)   ([]*Type, error)
 //      — walks an `[ T1 T2 … ]` return-type list (or a single type
 //        value) and returns the Types.
 //   ResolveSigType(r, v)        (*Type, *Value, error)
@@ -211,9 +211,9 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 
 // ParseFnReturns extracts return types from an output signature.
 // The output may be a list of types/values or a single type/value.
-func ParseFnReturns(outputSig Value) ([]*Type, error) {
+func ParseFnReturns(r *Registry, outputSig Value) ([]*Type, error) {
 	if !outputSig.Parent.Equal(TList) || !IsConcrete(outputSig) {
-		t, _, err := ResolveSigType(nil, outputSig)
+		t, _, err := ResolveSigType(r, outputSig)
 		if err != nil {
 			return nil, err
 		}
@@ -226,7 +226,7 @@ func ParseFnReturns(outputSig Value) ([]*Type, error) {
 	types := make([]*Type, elems.Len())
 	for i, e := range elems.Slice() {
 		var err error
-		types[i], _, err = ResolveSigType(nil, e)
+		types[i], _, err = ResolveSigType(r, e)
 		if err != nil {
 			return nil, err
 		}

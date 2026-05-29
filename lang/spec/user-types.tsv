@@ -55,17 +55,24 @@ def Foo (refine Object {}) def g fn [[f:Foo] [Integer] [99]] (make Foo {}) g len
 
 
 # ====================================================================
-# 2. Bare nominal subtype — `def Pos (refine Integer)`
+# 2. Bare nominal subtype — `def Pos (refine Integer)` is a NEWTYPE
 # ====================================================================
-# A bare refinement adds no structural constraint, so any value of the
-# base type structurally satisfies the refinement.
+# A bare refine adds no predicate, so it is a nominal newtype: a value
+# is a Pos only if its OWN tag is Pos (or a subtype), exactly like the
+# `is` word (`42 is Pos` is false) and the return boundary. A plain
+# base value is NOT a Pos — construct one explicitly with `def x:Pos …`
+# (which reparents via Unify). Matching is symmetric: the same rule
+# holds at params, returns, and `is`. See
+# design/REFINE-NEWTYPE-VS-SUBSET.0.md.
 
-def Pos (refine Integer) def g fn [[n:Pos] [Integer] [99]] 42 g	99	bare Integer refinement accepts Integer
-def Pos (refine Integer) def g fn [[n:Pos] [Integer] [99]] -5 g	99	negative Integer also admitted
-def Pos (refine Integer) def g fn [[n:Pos] [Integer] [99]] 'hi' g	ERROR:signature	Pos rejects String
-def Pos (refine Integer) def g fn [[n:Pos] [Integer] [99]] [1,2,3] g	ERROR:signature	Pos rejects List
-def Name (refine String) def g fn [[s:Name] [Integer] [99]] 'Ada' g	99	bare String refinement accepts String
-def Name (refine String) def g fn [[s:Name] [Integer] [99]] 42 g	ERROR:signature	Name rejects Integer
+def Pos (refine Integer) def g fn [[n:Pos] [Integer] [99]] 42 g	ERROR:signature	a plain Integer is NOT a Pos (newtype): param rejects it
+def Pos (refine Integer) def g fn [[n:Pos] [Integer] [99]] def x:Pos 42 x g	99	an explicitly-constructed Pos is admitted
+def Pos (refine Integer) def g fn [[n:Pos] [Integer] [99]] def x:Pos -5 x g	99	negative, constructed as Pos, admitted
+def Pos (refine Integer) def g fn [[n:Pos] [Integer] [99]] 'hi' g	ERROR:signature	Pos rejects String (wrong family)
+def Pos (refine Integer) def g fn [[n:Pos] [Integer] [99]] [1,2,3] g	ERROR:signature	Pos rejects List (wrong family)
+def Name (refine String) def g fn [[s:Name] [Integer] [99]] 'Ada' g	ERROR:signature	a plain String is NOT a Name (newtype): param rejects it
+def Name (refine String) def g fn [[s:Name] [Integer] [99]] def x:Name 'Ada' x g	99	an explicitly-constructed Name is admitted
+def Name (refine String) def g fn [[s:Name] [Integer] [99]] 42 g	ERROR:signature	Name rejects Integer (wrong family)
 
 
 # ====================================================================
@@ -100,32 +107,39 @@ def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] 'hi' g	ERROR:signature
 def Small (Integer lt 0) def g fn [[n:Small] [Integer] [99]] -5 g	99	Small accepts negative
 def Small (Integer lt 0) def g fn [[n:Small] [Integer] [99]] 5 g	ERROR:signature	Small rejects positive
 
+# A predicate refine is a SUBSET type: value-sensitive and SYMMETRIC.
+# The return boundary runs the same predicate as the param, so a base
+# value is admitted as the return iff it satisfies the constraint — no
+# explicit construction needed (unlike a bare newtype). The value keeps
+# its base tag. See design/REFINE-NEWTYPE-VS-SUBSET.0.md.
+def Big (Integer gt 10) def mk fn [[] [Big] [50]] mk	50	predicate refine return admits a base value that satisfies the predicate
+def Big (Integer gt 10) def mk fn [[] [Big] [5]] mk	ERROR:return value	predicate refine return rejects a base value that fails the predicate
+def Big (Integer gt 10) def mk fn [[] [Big] [50]] def use fn [[n:Big] [Integer] [n]] use (mk)	50	value-sensitive return feeds a value-sensitive param (symmetric)
+
 
 # ====================================================================
-# 5. `is` vs dispatch — two DIFFERENT questions about types
+# 5. `is`, dispatch, and returns ask ONE membership question
 # ====================================================================
-# The `is` word and the fn-sig dispatcher answer DIFFERENT questions
-# about a value/type relationship — by design, not by mistake.
+# `is`, fn-param dispatch, and the fn return check all answer the same
+# question — "is v a member of T?" — via one rule (v.Is(T), routed
+# through T's Behavior). They agree everywhere. This is the
+# REFINE-NEWTYPE-VS-SUBSET decision; an earlier revision made dispatch
+# LOOSER than `is` for bare refines (a bare `42` was admitted at an
+# `[n:Pos]` param but `42 is Pos` was false), which is exactly the
+# asymmetry that decision removed.
 #
-#   - Dispatch asks: "can v be passed where T is expected?"
-#     → loose binding semantics. A bare-refine subtype `Pos` of
-#       Integer admits any Integer (no narrowing constraint added).
-#     → see §2 above — `[n:Pos] g 42` returns 99.
+#   - bare refine `Pos` (NEWTYPE): nominal — v is a Pos only if its tag
+#     is Pos (or a subtype). `42 is Pos` is false AND `[n:Pos] g 42`
+#     now errors (§2). Construct a Pos with `def x:Pos 42`.
+#   - predicate refine `Big` (SUBSET): value-sensitive — v is a Big iff
+#     its tag is in the base family and it satisfies the predicate.
+#     `50 is Big` is true AND `[n:Big] g 50` dispatches AND `[Big]`
+#     returns admit 50 (§4).
 #
-#   - `is` asks: "does v carry T's tag?"
-#     → strict identity semantics. `42 is Pos` is false because 42's
-#       runtime type IS Integer, not Pos. To get a Pos-tagged value
-#       use `Pos unify 42` (which produces Pos:42), or build via
-#       a constructor.
-#
-# The asymmetry is intentional and is locked in by the pre-existing
-# test typed_def_test.go::TestRefineBareDistinctFromAlias:
+# The alias-vs-refine distinction is unchanged and locked in by
+# typed_def_test.go::TestRefineBareDistinctFromAlias:
 #   def Foo Integer        ; 42 is Foo  → true   (alias — Foo IS Integer)
-#   def Bar refine Integer ; 42 is Bar  → false  (subtype — distinct)
-#
-# So the two questions agree for cases where there's no narrowing
-# (builtin types, untagged values against alias types) and diverge
-# for refinements that introduce a fresh nominal tag.
+#   def Bar refine Integer ; 42 is Bar  → false  (newtype — distinct tag)
 
 # Disjunct: an Integer 42 IS one of Maybe's alternatives. Tag of 42
 # is Integer, which IS in Maybe's structural decomposition. The
@@ -184,3 +198,37 @@ def f fn [[x:Any] [Integer] [42]] 5 f	42	Any accepts Integer
 def f fn [[x:Any] [Integer] [42]] 'hi' f	42	Any accepts String
 def f fn [[x:Any] [Integer] [42]] [1,2,3] f	42	Any accepts List
 def f fn [[x:Any] [Integer] [42]] none f	42	Any accepts None
+
+
+# ====================================================================
+# 7. User types in the RETURN position (regression)
+# ====================================================================
+# Every section above annotates fn PARAMS with user types but always
+# RETURNS [Integer] — a builtin. That gap hid a dispatch bug: a def'd
+# type name in the output sig was classified as a return-by-VALUE (not
+# a type), so its static return type silently became `Any` and the
+# type literal was spliced onto the body stack — surfacing as a bogus
+# "expected N return value(s)" error. These rows pin user types as
+# return annotations: an instance satisfies its own type, and a wrong
+# value is now a real (not silent) type error.
+
+def Foo (refine Object {}) def mk fn [[] [Foo] [make Foo {}]] typeof (mk)	Foo	Object return: instance satisfies its own type
+def Foo (refine Object {x:0}) def mk fn [[] [Foo] [make Foo {x:5}]] (mk) get 'x'	5	Object return: returned instance is usable
+def Foo (refine Object {}) def id fn [[f:Foo] [Foo] [f]] typeof (id (make Foo {}))	Foo	Object param+return: pass-through keeps the type
+def Foo (refine Object {}) def mk fn [[] [Foo] [42]] mk	ERROR:return value	Object return rejects Integer (real static safety, not Any)
+def Foo (refine Object {}) def mk fn [[] [Foo] ['hi']] mk	ERROR:return value	Object return rejects String
+def Bar (refine Object {n:0}) def Foo (refine Bar {}) def mk fn [[] [Bar] [make Foo {n:1}]] typeof (mk)	Foo	Object return admits a subtype instance (Foo is-a Bar)
+
+# ====================================================================
+# 8. User types in the RETURN position — negative cases
+# ====================================================================
+# The return slot must reject what it shouldn't admit. Before the fix
+# these all degraded to `Any` and silently passed (or raised a bogus
+# arity error); each is now a precise, intentional type/word error.
+
+def A (refine Object {}) def B (refine Object {}) def mk fn [[] [A] [make B {}]] mk	ERROR:expected A, got B	sibling Object types are distinct in the return slot
+def Bar (refine Object {}) def Foo (refine Bar {}) def mk fn [[] [Foo] [make Bar {}]] mk	ERROR:expected Foo, got Bar	supertype instance is not the declared subtype return
+def Pos (refine Integer) def mk fn [[] [Pos] [7]] mk	ERROR:expected Pos, got Integer	bare scalar refine return rejects a plain base value (nominal, matches param side)
+def Foo (refine Object {}) def mk fn [[] [Foo] [(make Foo {}) (make Foo {})]] mk	ERROR:return value(s)	arity check still fires for a user-typed return
+def Foo (refine Object {}) def mk fn [[] [Integer Foo] [1 2]] mk	ERROR:return value 2	per-slot return typing rejects the wrong type in a later slot
+def mk fn [[] [Nope] [42]] mk	ERROR:undefined word	an unknown type name in the return slot errors, it does not silently become Any

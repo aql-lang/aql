@@ -13,11 +13,11 @@ package eng
 //        building one FnSig per triple. Returns the assembled
 //        FnDefInfo. An empty list yields an empty FnDefInfo.
 //
-//   OutputSigIsConcreteReturns(outputSig)  bool
+//   OutputSigIsConcreteReturns(r, outputSig)  bool
 //      — true iff every element of an output sig is a concrete value
 //        (i.e. a return-by-value sig), not a type literal.
 //
-//   IsSigTypeValue(v)  bool
+//   IsSigTypeValue(r, v)  bool
 //      — true iff v looks like a type in a signature context
 //        (type literal, type-name word, options/record/table/typed-
 //        list/map etc.).
@@ -58,11 +58,11 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 			return FnDefInfo{}, err
 		}
 
-		concreteReturns := OutputSigIsConcreteReturns(outputSig)
+		concreteReturns := OutputSigIsConcreteReturns(r, outputSig)
 
 		var returns []*Type
 		if !concreteReturns {
-			returns, err = ParseFnReturns(outputSig)
+			returns, err = ParseFnReturns(r, outputSig)
 			if err != nil {
 				return FnDefInfo{}, err
 			}
@@ -125,7 +125,7 @@ func ParseFnUndefSpec(r *Registry, list []Value) (FnUndefInfo, error) {
 			return FnUndefInfo{}, err
 		}
 
-		returns, err := ParseFnReturns(outputSig)
+		returns, err := ParseFnReturns(r, outputSig)
 		if err != nil {
 			return FnUndefInfo{}, err
 		}
@@ -142,26 +142,35 @@ func ParseFnUndefSpec(r *Registry, list []Value) (FnUndefInfo, error) {
 // output signature are concrete (non-type) values — i.e. the sig
 // is a return-by-value form (`[42 "ok"]`) rather than a return-by-
 // type form (`[Integer String]`).
-func OutputSigIsConcreteReturns(outputSig Value) bool {
+func OutputSigIsConcreteReturns(r *Registry, outputSig Value) bool {
 	if outputSig.Parent.Equal(TList) && outputSig.Data != nil {
 		elems, _ := AsList(outputSig)
 		if elems.Len() == 0 {
 			return false
 		}
 		for _, e := range elems.Slice() {
-			if IsSigTypeValue(e) {
+			if IsSigTypeValue(r, e) {
 				return false
 			}
 		}
 		return true
 	}
-	return !IsSigTypeValue(outputSig)
+	return !IsSigTypeValue(r, outputSig)
 }
 
 // IsSigTypeValue reports whether v looks like a type in a signature
-// context — a type literal, a known type-name word, or a structural
-// type (Options/Record/Table/TypedList/TypedMap/ObjectType).
-func IsSigTypeValue(v Value) bool {
+// context — a type literal, a type-name word/atom/string, or a
+// structural type (Options/Record/Table/TypedList/TypedMap/ObjectType).
+//
+// The registry is consulted so a USER-DEFINED type name (a capitalised
+// `def Foo …`) is recognised, not just kernel builtins. Without it, a
+// def'd type name in a fn output sig (`fn [[…] [BloomFilter] […]]`) was
+// misclassified as a concrete return-by-value, which forced the static
+// return type to `Any` and spliced the type literal onto the body
+// stack — surfacing as a spurious "expected N return value(s)" error.
+// A nil registry degrades to builtin-only recognition (the historical
+// behaviour, kept for the registry-less callers).
+func IsSigTypeValue(r *Registry, v Value) bool {
 	if IsTypeLiteral(v) {
 		return true
 	}
@@ -171,26 +180,28 @@ func IsSigTypeValue(v Value) bool {
 	}
 	if IsWord(v) {
 		_as0, _ := AsWord(v)
-		name := _as0.Name
-		if _, ok := TypeNameTable()[name]; ok {
-			return true
-		}
-		if _, ok := ResolveTypePath(name); ok {
-			return true
-		}
-		return false
+		return isSigTypeName(r, _as0.Name)
 	}
 	if v.Parent.Matches(TAtom) || v.Parent.Matches(TString) {
 		name, _ := AsString(v)
-		if _, ok := TypeNameTable()[name]; ok {
-			return true
-		}
-		if _, ok := ResolveTypePath(name); ok {
-			return true
-		}
-		return false
+		return isSigTypeName(r, name)
 	}
 	return false
+}
+
+// isSigTypeName reports whether name denotes a type in signature
+// context: a kernel builtin name, a resolvable kernel type path, or —
+// when a registry is available — an active user-defined type binding
+// (`r.LookupTypeName`, the same authoritative TypeDef-backed lookup the
+// sig-type resolver uses).
+func isSigTypeName(r *Registry, name string) bool {
+	if _, ok := TypeNameTable()[name]; ok {
+		return true
+	}
+	if _, ok := ResolveTypePath(name); ok {
+		return true
+	}
+	return r != nil && r.LookupTypeName(name) != nil
 }
 
 // OutputSigValues extracts the concrete values from a return-by-value

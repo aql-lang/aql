@@ -1,0 +1,62 @@
+# tokens	expected	note
+# =====================================================================
+# def-node-binding — what `def x <node>` binds, and how inner words
+# resolve. After the def-list flip, a List binds exactly like a Map:
+# the node is EVALUATED at def time and bound as a VALUE. The explicit
+# `def name word <node>` form (an __SP splice marker) restores the old
+# Forth-style splice / late-binding behaviour.
+#
+# Runs against the production lang registry (test/go/langspec).
+# Expected values use the canon renderer (containers space-separated).
+# =====================================================================
+
+
+# =====================================================================
+# 1. `def x <node>` binds a VALUE — scalar, list and map alike
+# =====================================================================
+# A List is no longer spliced: it binds like a Map. `word` splices.
+
+def x 42 x	42	scalar binds a value
+def x [1,2,3] x	[1 2 3]	a LIST binds the list value (was: spliced)
+def x {a:1 b:2} x	{a:1 b:2}	a MAP binds the map value (unchanged)
+def x [1,2,3] length x	3	the value is a real List — length works
+def x [1,2,3] typeof x	List	…and typeof sees a List
+def x [1,2,3] x get 0	1	…and indexing works
+def x [1,2,3] x each [add 10]	[11 12 13]	…and higher-order words work
+def x [1,2,3] [x]	[[1 2 3]]	the list is one element when re-collected
+# Splice on demand with `word`:
+def x word [1,2,3] x	1 2 3	`word` splices the elements (the old default)
+
+
+# =====================================================================
+# 2. Inner words are evaluated EAGERLY at def time (list == map)
+# =====================================================================
+def x [1 add 2] x	[3]	the list body is evaluated at def time
+def c1 10 def x [c1 2 3] x	[10 2 3]	inner word resolves to its value at def time
+def c1 10 def x {a:c1 b:2} x	{a:10 b:2}	a map resolves the same way
+def x word [foo 2 3] x	ERROR:undefined	a `word` splice executes the unknown inner word → errors
+
+
+# =====================================================================
+# 3. Scope: value-bind = EARLY snapshot; `word` splice = LATE/dynamic
+# =====================================================================
+# A bound list (like a map) snapshots its words at def time.
+def c1 10 def x [c1 2] def c1 20 x	[10 2]	redefining c1 does NOT change the snapshot
+def c1 10 def x [c1] undef c1 x	[10]	the snapshot survives undef of the source word
+def c1 10 def m {a:c1} def c1 20 m	{a:10}	maps behave identically (early snapshot)
+
+# A `word` splice re-resolves at every reference (late / dynamic).
+def c1 10 def x word [c1 2] def c1 20 x	20 2	splice sees the NEW binding
+def c1 10 def x word [c1] undef c1 x	ERROR:undefined	splice word resolved at use; once undef'd it errors
+
+# No closures: a returned list ignores the fn param, falling back to the
+# module binding (a `=>` lambda, by contrast, captures it).
+def c1 1 def mk fn [[c1:Integer] [List] [[c1]]] mk 9	[1]	returned list resolves c1 to the module binding, not the param
+def mk fn [[c1:Integer] [Function] [([] => [c1])]] def f (mk 7) f	7	contrast: a `=>` lambda captures the param
+
+
+# =====================================================================
+# 4. Nesting: value-bind nests as data; `word` splice flattens
+# =====================================================================
+def a [1,2] def b [a 3] b	[[1 2] 3]	`a` is the list value, so `b` nests it
+def a word [1,2] def b word [a 3] b	1 2 3	`word` splices recursively and flattens

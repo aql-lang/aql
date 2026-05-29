@@ -74,11 +74,11 @@ for 4 [(if [i gt 1] [i])]	2 3
 for 4 [(if [i lt 2] ["lo"] (if [i lt 3] ["mid"] ["hi"]))]	'lo' 'lo' 'mid' 'hi'
 
 # === For + def (define before loop, use inside body) ===
-def double [dup add] for 3 [i double]	0 2 4
-def inc [add 1] for 4 [i inc]	1 2 3 4
+def double word [dup add] for 3 [i double]	0 2 4
+def inc word [add 1] for 4 [i inc]	1 2 3 4
 
 # def inside loop body, use it in same body
-for 3 [(def x [i mul 2] x)]	0 2 4
+for 3 [(def x word [i mul 2] x)]	0 2 4
 
 # === For + var (scoped binding inside body) ===
 for 3 [i var [[x] x add x]]	0 2 4

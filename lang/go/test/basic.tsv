@@ -608,38 +608,38 @@ if false "yes" "no"	'no'
 # Arithmetic currying (brackets needed for sequential planner Case D).
 # Curried form `[op K] end N op` is the swap form `N op K`, which under
 # §1.4 phase 4 yields b op a → N op K.
-def add5 [add 5] end 10 add5	15
-def sub1 [sub 1] end 10 sub1	9
-def mul3 [mul 3] end 4 mul3	12
-def div2 [div 2] end 10 div2	5
-def mod3 [mod 3] end 10 mod3	1
+def add5 word [add 5] end 10 add5	15
+def sub1 word [sub 1] end 10 sub1	9
+def mul3 word [mul 3] end 4 mul3	12
+def div2 word [div 2] end 10 div2	5
+def mod3 word [mod 3] end 10 mod3	1
 
 # List-style def (quotation)
-def double [dup add] 5 double	10
-def square [dup mul] 7 square	49
-def inc [1 add] 1 inc inc inc	4
+def double word [dup add] 5 double	10
+def square word [dup mul] 7 square	49
+def inc word [1 add] 1 inc inc inc	4
 
 # Curried boolean operators (brackets for sequential planner)
-def and_true [and true] end false and_true	false
-def or_true [or true] end false or_true	true
+def and_true word [and true] end false and_true	false
+def or_true word [or true] end false or_true	true
 
 # Curried comparison operators (brackets for sequential planner)
-def lt10 [lt 10] end 5 lt10	true
-def gte0 [gte 0] end 1 gte0	true
+def lt10 word [lt 10] end 5 lt10	true
+def gte0 word [gte 0] end 1 gte0	true
 
 # Curried string concatenation (brackets for sequential planner).
 # Swap form `N op K`: handler computes args[1]+args[0] = "world"+"hello ".
-def greet [add "hello "] end greet "world"	'worldhello '
+def greet word [add "hello "] end greet "world"	'worldhello '
 
 # Chaining curried words (brackets for sequential planner)
-def add5 [add 5] end def mul2 [mul 2] end 3 add5 mul2	16
-def mul2 [mul 2] end def add5 [add 5] end 3 mul2 add5	11
+def add5 word [add 5] end def mul2 word [mul 2] end 3 add5 mul2	16
+def mul2 word [mul 2] end def add5 word [add 5] end 3 mul2 add5	11
 
 # Curried words in parentheses (brackets for sequential planner)
-def add5 [add 5] end (3 add5) mul 2	16
+def add5 word [add 5] end (3 add5) mul 2	16
 
 # Composing curried words
-def add5 [add 5] end def add5_twice [add5 add5] 10 add5_twice	20
+def add5 word [add 5] end def add5_twice word [add5 add5] 10 add5_twice	20
 
 # Dot - key extraction from maps (prefix form)
 {a:1} get a	1
@@ -756,8 +756,8 @@ quote "hello"	'hello'
 []	[]
 
 # def body is implicitly quoted (not auto-evaluated)
-def double [dup add] 5 double	10
-def triple [dup dup add add] 3 triple	9
+def double word [dup add] 5 double	10
+def triple word [dup dup add add] 3 triple	9
 
 # String interpolation with backtick template strings
 `hello`	'hello'

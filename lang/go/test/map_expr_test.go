@@ -130,7 +130,7 @@ func TestMapExprParenMixedValues(t *testing.T) {
 // --- Inside function bodies ---
 
 func TestMapExprInFnBody(t *testing.T) {
-	result, err := runExpr(t, `def x 1 def f [do {a:x}] f`)
+	result, err := runExpr(t, `def x 1 def f word [do {a:x}] f`)
 	if err != nil {
 		t.Fatal(err)
 	}

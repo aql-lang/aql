@@ -139,15 +139,15 @@ typeof [ :Integer ]	List	the type form is a Node-family TYPE
 # ====================================================================		
 # 8. Composition with def		
 # ====================================================================		
-# A list-bound def splices its body at every reference; storing the		
-# list as data requires `quote`.		
-		
-def lst quote [ 1 2 3 ] length lst	3	quoted list resolves as data; length sees three elements
-def lst quote [ 1 2 3 ] reverse lst	[3 2 1]	
+# A list-bound def binds the evaluated list VALUE (like a map):
+# `def lst [1 2 3]` makes `lst` the list. `quote` still binds data too.
+
+def lst [ 1 2 3 ] length lst	3	a def'd list binds the value; length sees three elements
+def lst [ 1 2 3 ] reverse lst	[3 2 1]
 def lst quote [ 1 2 3 ] each [ add 10 ] lst	[11 12 13]	pass quoted list through each
-		
-# Splice form: def NAME [body] inserts the body inline.		
-def doub [ dup add ] 5 doub	10	body splice — dup, add — runs against caller stack
+
+# Splice form: def NAME word [body] inserts the body inline (macro).
+def doub word [ dup add ] 5 doub	10	body splice — dup, add — runs against caller stack
 		
 # ====================================================================		
 # 9. List equality via `is`		

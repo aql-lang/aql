@@ -755,18 +755,12 @@ func (e *Engine) stepWord(val Value) error {
 			// Record the substitution as a "use" for unused-def
 			// tracking in check mode.
 			e.registry.Check.recordUse(w.Name)
-			// For list bodies, expand onto the stack like the fallback handler does.
-			// Quoted lists are treated as data values (not expanded).
-			// Type literals (Data == nil) are values, not bodies — they
-			// fall through to stepLiteral so the type itself is pushed
-			// onto the stack rather than splicing nothing.
-			if top.Parent.Equal(TList) && top.Data != nil && !IsTypedList(top) && !IsTableType(top) && !top.Quoted {
-				elems, _ := AsList(top)
-				expanded := make([]Value, elems.Len())
-				copy(expanded, elems.Slice())
-				stackSplice(&e.stack, e.pointer, 1, expanded...)
-				return nil
-			}
+			// A def'd word binds a VALUE: push it as-is. Lists bind like
+			// maps — `def xs [1,2,3]` makes `xs` the list value, evaluated
+			// at def time (so `length xs` → 3). To splice a list's elements
+			// onto the stack (the old implicit behaviour / Forth-style
+			// macros) use the explicit `def name word [list]` form, whose
+			// __SP marker is handled in stepLiteral.
 			e.stack[e.pointer] = top
 			return e.stepLiteral()
 		}
@@ -1269,6 +1263,21 @@ func (e *Engine) insertForward(w WordInfo, sig *Signature, forwardNeeded int, st
 }
 
 // stepLiteral handles a resolved (non-word, non-forward) value at the pointer.
+// spliceExpand returns the stack entries an __SP marker contributes when it
+// reaches the pointer. A plain (non-typed) list splices its top-level
+// elements; every other value — scalars, maps, typed lists, tables — splices
+// as a single entry. The data is returned verbatim (unevaluated); the engine
+// re-steps over it after splicing.
+func spliceExpand(data Value) []Value {
+	if data.Parent.Equal(TList) && data.Data != nil && !IsTypedList(data) && !IsTableType(data) {
+		elems, _ := AsList(data)
+		out := make([]Value, elems.Len())
+		copy(out, elems.Slice())
+		return out
+	}
+	return []Value{data}
+}
+
 func (e *Engine) stepLiteral() error {
 	valIdx := e.pointer
 
@@ -1285,6 +1294,18 @@ func (e *Engine) stepLiteral() error {
 	}
 
 	if fwdIdx < 0 {
+		// __SP (splice) marker: replace it, unevaluated, with its payload
+		// and re-step. A plain list contributes its top-level elements;
+		// any other value contributes itself. The spliced content runs
+		// against the live stack (Forth-style macro). No pending forward
+		// means it is being processed as a standalone stack entry — the
+		// only place a splice should fire (as an arg it is collected by
+		// value via the TAny match in the collection branch below).
+		if IsSplice(e.stack[valIdx]) {
+			info, _ := AsSplice(e.stack[valIdx])
+			stackSplice(&e.stack, valIdx, 1, spliceExpand(info.Data)...)
+			return nil
+		}
 		// If the value is a FnDef/TFunction, execute it. Quoted function
 		// values are treated as data (not executed).
 		val := e.stack[valIdx]
@@ -2724,8 +2745,15 @@ func (e *Engine) stepCloseParen() error {
 			}
 
 			// Validate the top nret values match declared return types.
+			// Use the membership predicate v.Is(exp) — the SAME question
+			// the parameter boundary asks (sigTypeMatches → v.Is) — so a
+			// type's Behavior governs both ends symmetrically: a predicate
+			// refine runs its predicate on the way out (subset semantics),
+			// a bare refine stays nominal (newtype), and builtins/objects
+			// are unchanged (v.Is ≡ v.Parent.Matches on concrete values).
+			// See design/REFINE-NEWTYPE-VS-SUBSET.0.md.
 			for k, exp := range rc.Returns {
-				if !results[extra+k].Parent.Matches(exp) {
+				if !results[extra+k].Is(exp) {
 					return e.returnTypeError(rc.FuncName, k+1, exp, results[extra+k])
 				}
 			}

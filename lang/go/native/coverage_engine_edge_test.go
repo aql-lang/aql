@@ -1053,7 +1053,7 @@ func TestStepEndTerminatesDef(t *testing.T) {
 	// def a [1 add] end 10 a
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("a"),
-		NewList([]Value{NewInteger(1), NewWord("add")}),
+		NewWord("word"), NewList([]Value{NewInteger(1), NewWord("add")}),
 		NewEnd(),
 		NewInteger(10), NewWord("a"),
 	})

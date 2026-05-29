@@ -86,8 +86,8 @@ addq 2 3 mulq 4	20	addq fires first → stack=[5]; mulq collects forward 4 with 
 2 3 addq mulq 4 5	5 20	addq fires producing 5 on stack; mulq collects 4,5 ALL FORWARD; mulq=20; the 5 from addq stays as residue. Note the surprise: mulq does NOT consume the stack-resident 5 because its forward scan succeeds first.
 		
 # 4. List-body defs splice immediately — no forward-collection.		
-def doub [ dup addq ] doub 5	ERROR:signature_error	doub splices [dup addq] at pointer; dup needs 1 stack value, sees empty stack
-def doub [ dup addq ] 5 doub	10	5 pushed first, then doub splices; dup→[5,5], addq→[10]
+def doub word [ dup addq ] doub 5	ERROR:signature_error	doub splices [dup addq] at pointer; dup needs 1 stack value, sees empty stack
+def doub word [ dup addq ] 5 doub	10	5 pushed first, then doub splices; dup→[5,5], addq→[10]
 		
 # 5. fn-built defs DO forward-collect (synthesised native handler).		
 def double fn [ [ a:Integer ] [ Integer ] [ a a addq ] ] double 5	10	fn-def is a forward-prec native; collects 5 from forward

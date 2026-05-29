@@ -220,6 +220,9 @@ var (
 	IsImplicitMap             = eng.IsImplicitMap
 	IsInterpString            = eng.IsInterpString
 	IsMark                    = eng.IsMark
+	IsSplice                  = eng.IsSplice
+	AsSplice                  = eng.AsSplice
+	Canon                     = eng.Canon
 	IsModule                  = eng.IsModule
 	IsMove                    = eng.IsMove
 	IsNone                    = eng.IsNone
@@ -304,6 +307,7 @@ var (
 	MapFieldString            = eng.MapFieldString
 	MatchSignature            = eng.MatchSignature
 	NewValueRaw               = eng.NewValueRaw
+	NewSplice                 = eng.NewSplice
 	LiteralCondValue          = eng.LiteralCondValue
 	BoolWord                  = eng.BoolWord
 	ApplyGuardNarrowing       = eng.ApplyGuardNarrowing

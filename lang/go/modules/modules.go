@@ -63,6 +63,18 @@ func Resolve(name string, parent *native.Registry) (native.ModuleDesc, error) {
 	return fn(parent)
 }
 
+// InstallResolver wires the native-module resolver onto reg — the single
+// production point where `import "aql:<name>"` is enabled. lang.New calls
+// it, and any test harness that wants to mirror production module
+// resolution must call it too. Centralising the wiring here keeps a test
+// registry from silently diverging from production, the gap that hid the
+// dropped sub-import Resolver: a file imported via "./lib.aql" could not
+// itself import a native module because RunModuleBody never propagated the
+// Resolver, and the test harnesses never installed one to begin with.
+func InstallResolver(reg *native.Registry) {
+	reg.Modules.Resolver = Resolve
+}
+
 // InstallMathExports builds the math module and installs its exports as defs
 // in the given registry. This is a convenience for test setup — equivalent to
 // what happens when AQL code runs "aql:math" import.

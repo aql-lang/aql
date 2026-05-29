@@ -75,10 +75,10 @@ def addq 'hello' 1 addq	1 'hello'	1 pushes; addq resolves via def to 'hello' —
 		
 # Composition with list-body splice. The body captures the current		
 # def state at SPLICE TIME (i.e. at the use site), not at def time.		
-def doub [ dup addq ] 5 def doub [ dup mulq ] 5 doub	5 25	first 5 push; second def shadows doub; 5 doub splices the SECOND body → dup mulq → 25. The first 5 stays on the stack as residue.
+def doub word [ dup addq ] 5 def doub word [ dup mulq ] 5 doub	5 25	first 5 push; second def shadows doub; 5 doub splices the SECOND body → dup mulq → 25. The first 5 stays on the stack as residue.
 		
 # A list-body shadow of a simple-value def — splicing kicks in.		
 # Note: def consumes its two forward args and leaves nothing on the		
 # stack; the original 5 from `def x 5` is NEVER on the stack to begin		
 # with (it's stored in the def, not pushed as residue).		
-def x 5 def x [ 100 ] x	100	first def stores x=5 (consumes 5, no residue); second def shadows x with [100]; `x` splices [100] → push 100
+def x 5 def x word [ 100 ] x	100	first def stores x=5 (consumes 5, no residue); second def shadows x with [100]; `x` splices [100] → push 100

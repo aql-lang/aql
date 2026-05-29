@@ -97,6 +97,33 @@ and catches ineffassign / unused / shadowed-variable issues that
 `go vet` and the test suite both miss. Skipping it lets a clean-
 locally commit fail CI; the cost of running it is a few seconds.
 
+## Test discipline — always pair positive with negative
+
+**Whenever you add or change behaviour, add negative tests alongside
+the positive ones, wherever a negative case is expressible.** A test
+that only proves the happy path passes leaves the actual contract —
+*what must be rejected* — unguarded, and that is where regressions hide.
+For every "X is accepted / returns Y" assertion, ask "what must be
+refused here?" and pin it too:
+
+- the wrong type / shape / arity raises the expected error
+  (`ERROR:<substring>` rows in the `.tsv` specs, or an error-asserting
+  Go test),
+- sibling / unrelated / supertype values are rejected where a specific
+  subtype is required,
+- an unknown / undefined name errors rather than silently degrading
+  (e.g. to `Any`),
+- boundary and empty inputs behave as specified.
+
+This is not optional polish: the user-type return-annotation bug
+(`lang/spec/user-types.tsv` §7–8) was invisible for as long as it was
+precisely *because* every existing row asserted only acceptance and
+returned the builtin `[Integer]` — no row ever required a user type to
+be rejected, so the silent `Any` degradation passed every test. The
+negative rows are what make the type contract real. The `recover()`-based
+no-panic tests (see Panic Prevention) are the same discipline applied to
+crashes: assert the bad input is handled, not just the good one.
+
 ## Dependencies
 
 The `github.com/voxgig/struct` module is published as a Go submodule at
@@ -509,7 +536,6 @@ The `quote` word (forward arg collection) prevents evaluation:
 - `quote 99` → `99` (scalars unchanged)
 
 Quotation is **implicit** for code-body positions via `NoEvalArgs`:
-- `def` body: `def double [dup add]` — list is a code body, not data
 - `fn` body: function definition bodies
 - Control words: `if`, `for` branches/bodies
 - Higher-order words: `each`, `fold`, `scan`, `outer`, `inner` code-body args
@@ -526,6 +552,40 @@ Implementation: parser sets `Eval=true` on lists. `execMatch` runs
 `quote` sets `Quoted=true` (also suppresses auto-eval). End-of-`Run()`
 auto-evaluates only lists with `Eval=true && !Quoted` that were never
 consumed.
+
+### `def name <node>` binds a value; `word` splices
+
+`def` does NOT use `NoEvalArgs` on its body: a list body is evaluated
+and bound as a value, exactly like a map body. `def xs [1 add 2]` binds
+`xs = [3]`; `def m {a: (1 add 2)}` binds `m = {a:3}`. Both are early
+snapshots (inner def-words resolve at def time).
+
+The old implicit splice (`def double [dup add]` expanding its body at
+every reference, Forth-style) is now the explicit **`word`** form, which
+wraps a value in an `__SP` splice marker (`eng.NewSplice`, type
+`Word/__SP`). When the marker reaches the engine pointer
+(`stepLiteral`) it is replaced, unevaluated, by its payload — a plain
+list contributes its top-level elements, any other value contributes
+itself — and the result is re-stepped against the live stack:
+
+- `word [1,2,3]` → splices `1 2 3`; `def doub word [dup add]; 5 doub` → 10.
+- `def name word value` binds the marker (a `word`'d body is collected
+  by value via the `TAny` match, so it does not fire during collection).
+- The marker also splices inside containers that get evaluated
+  (e.g. a `word` reference inside a list literal).
+
+**Splice is forward-form only — there is no prefix-form splice.** An
+`__SP` fires the instant it is *stepped at the pointer*; the only place
+a stack value is not stepped is when it is collected as a forward
+argument. So `def name word [body]` works (the marker is `def`'s
+forward arg, skipped by the pointer), but `[body] def name` (prefix /
+stack form) puts the body on the stack *before* `def`, where the
+pointer steps and fires it before `def` consumes it — a prefix list
+body therefore binds the list **value**. `quote` cannot ferry the
+marker past this: `quote (word …)` fires the `__SP` inside the paren
+before `quote` marks it, and `quote word …` captures the literal token
+`word` as an atom. Don't re-attempt a prefix-splice path; use the
+forward form.
 
 To add new syntax: register a token with `j.Token()`, extend the `"val"`
 rule with `j.Rule()`, and add conversion logic in the appropriate

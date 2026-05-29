@@ -890,7 +890,7 @@ func TestStepEndWithMoveAndMark(t *testing.T) {
 	}
 	// def creates a mark; calling a def word triggers move
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("dbl"), NewList([]Value{NewWord("dup"), NewWord("add")}),
+		NewWord("def"), NewWord("dbl"), NewWord("word"), NewList([]Value{NewWord("dup"), NewWord("add")}),
 		NewInteger(5), NewWord("dbl"),
 	})
 	_as55, _ := AsInteger(result[0])
@@ -1678,7 +1678,7 @@ func TestParseFnUndefSpecReturnError(t *testing.T) {
 
 func TestParseFnReturnsSingleError(t *testing.T) {
 	// A single non-list return type that is an invalid type name.
-	_, err := parseFnReturns(NewString("nonexistent_type"))
+	_, err := parseFnReturns(nil, NewString("nonexistent_type"))
 	if err == nil {
 		t.Error("expected error for invalid return type name")
 	}
@@ -1686,7 +1686,7 @@ func TestParseFnReturnsSingleError(t *testing.T) {
 
 func TestParseFnReturnsListError(t *testing.T) {
 	// A list with an invalid return type element.
-	_, err := parseFnReturns(NewList([]Value{NewString("nonexistent_type")}))
+	_, err := parseFnReturns(nil, NewList([]Value{NewString("nonexistent_type")}))
 	if err == nil {
 		t.Error("expected error for invalid return type in list")
 	}

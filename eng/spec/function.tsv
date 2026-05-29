@@ -82,30 +82,30 @@ def msg 'hi' msg concatq msg	'hihi'	user-defined string def
 # elements in its place. No new args frame, no sandbox — the body		
 # runs against the live caller stack.		
 		
-def doub [ dup addq ] 5 doub	10	body executes against stack=[5]: dup→[5,5], addq→[10]
-def square [ dup mulq ] 7 square	49	dup, mulq: 7*7=49
-def inc [ 1 addq ] 5 inc	6	body adds 1 to top of stack
-def add5 [ addq 5 ] 10 add5	15	curried form — body uses an embedded constant
-def double-then-inc [ dup addq 1 addq ] 5 double-then-inc	11	chained body: 5+5=10, then 10+1=11
+def doub word [ dup addq ] 5 doub	10	body executes against stack=[5]: dup→[5,5], addq→[10]
+def square word [ dup mulq ] 7 square	49	dup, mulq: 7*7=49
+def inc word [ 1 addq ] 5 inc	6	body adds 1 to top of stack
+def add5 word [ addq 5 ] 10 add5	15	curried form — body uses an embedded constant
+def double-then-inc word [ dup addq 1 addq ] 5 double-then-inc	11	chained body: 5+5=10, then 10+1=11
 		
 # Splice fires at the use site, NOT at definition time. Insufficient		
 # stack at the use site is an error — the body sees whatever the		
 # caller stack happens to be.		
-def doub [ dup addq ] doub 5	ERROR:signature_error	splice fires before 5 is pushed; dup needs 1 stack value, sees empty stack
-def doub [ dup addq ] doub	ERROR:	bare invocation; nothing on the stack for dup
+def doub word [ dup addq ] doub 5	ERROR:signature_error	splice fires before 5 is pushed; dup needs 1 stack value, sees empty stack
+def doub word [ dup addq ] doub	ERROR:	bare invocation; nothing on the stack for dup
 		
 # Composition: a body can reference other defs. On splice each name		
 # spawns its own splice (or, for fn-defs, dispatch).		
-def doub [ dup addq ] def quad [ doub doub ] 3 quad	12	3 doubled twice = 12
-def inc [ 1 addq ] def add2 [ inc inc ] 5 add2	7	chained inc calls
+def doub word [ dup addq ] def quad word [ doub doub ] 3 quad	12	3 doubled twice = 12
+def inc word [ 1 addq ] def add2 word [ inc inc ] 5 add2	7	chained inc calls
 		
 # Empty-body splice is a no-op.		
-def noop [ ] 5 noop	5	splice removes the word and inserts nothing; 5 stays
-def noop [ ] noop		bare invocation produces empty stack
+def noop word [ ] 5 noop	5	splice removes the word and inserts nothing; 5 stays
+def noop word [ ] noop		bare invocation produces empty stack
 		
 # Parens isolate each invocation so the body's forward-prec ops don't		
 # greedily grab outside arguments.		
-def doub [ dup addq ] ( 3 doub ) ( 5 doub )	6 10	without the parens addq inside doub would consume the outer 5
+def doub word [ dup addq ] ( 3 doub ) ( 5 doub )	6 10	without the parens addq inside doub would consume the outer 5
 		
 # ====================================================================		
 # 3. Quoted-list def — body stored as DATA, not spliced		

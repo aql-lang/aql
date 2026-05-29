@@ -369,15 +369,99 @@ All comparison words route through one total order — see
 
 A `fn` body is a flat list of `[input-sig] [output-sig] [body]`
 triples. Inputs may be plain types or `name:Type` pairs (the names
-become local bindings during the body):
+become local bindings during the body); the output-sig declares the
+return type(s):
 
 ```
-def hyp fn [
-  [a:Number b:Number] [Number]
-  [(a mul a) add (b mul b) sqrt]
-]
-3 4 hyp                       => 5.0
+def inc fn [[n:Integer] [Integer] [n add 1]]
+inc 5                         => 6
+
+def avg fn [[a:Number b:Number] [Decimal] [(a add b) div 2.0]]
+avg 3 4                       => 3.5
 ```
+
+**Return types are checked.** When the body finishes, each declared
+output type must accept the corresponding result value, by the same
+rule the parameters use (see [fn type semantics](#fn-type-semantics)
+below). A mismatch is an error, not a silent pass:
+
+```
+def bad fn [[] [Integer] ['hi']]
+bad                           => [aql/type_error] return value 1: expected Integer, got ProperString
+```
+
+Multiple triples declare overloads (the engine tries each in order);
+multiple output types declare multiple return values.
+
+#### `fn` type semantics
+
+Parameter and return annotations may name **any** type — builtins,
+and user-defined types introduced with `def NAME refine …`. A value
+is accepted at a slot when it is a *member* of the declared type, and
+the membership rule is **the same at parameters, returns, and the
+`is` word** (one question: `v is T`). How membership is decided
+depends on what kind of type `T` is:
+
+**Builtins and structural types — nominal subtyping.** A value
+matches when its own type is the declared type or a descendant.
+
+```
+def first fn [[xs:List] [Any] [xs get 0]]
+first [10 20 30]              => 10
+```
+
+**Object / Record / Table types — nominal, by construction.** An
+instance built with `make` carries the type's tag, so it satisfies
+both parameter and return slots of that type (and of any supertype):
+
+```
+def Box (refine Object {v:0})
+def wrap fn [[n:Integer] [Box] [make Box {v:n}]]
+typeof (wrap 5)               => Box
+(wrap 5) get 'v'              => 5
+```
+
+**Bare refinement — a *newtype*.** `def Pos (refine Integer)` adds no
+predicate; it is a distinct nominal type. A plain `Integer` is **not**
+a `Pos` — you construct one explicitly with a typed `def`. The same
+strict rule holds at parameters and returns:
+
+```
+def Pos (refine Integer)
+42 is Pos                                          => false
+def g fn [[n:Pos] [Integer] [n]]
+42 g                                               => [aql/signature_error] no matching signature for g
+def x:Pos 42   x g                                 => 42
+
+def mk fn [[] [Pos] [7]]
+mk                                                 => [aql/type_error] return value 1: expected Pos, got Integer
+def mk2 fn [[] [Pos] [def x:Pos 7 x]]
+mk2                                                => 7
+```
+
+**Predicate refinement — a *subset type*.** `def Big (Integer gt 10)`
+carves out a subset by a predicate. Any base-type value that
+satisfies the predicate is a member — no explicit construction
+needed — and the predicate is enforced at parameters **and** returns
+alike:
+
+```
+def Big (Integer gt 10)
+50 is Big                                          => true
+5  is Big                                          => false
+def g fn [[n:Big] [Integer] [n]]
+50 g                                               => 50
+5  g                                               => [aql/signature_error] no matching signature for g
+
+def mk fn [[] [Big] [50]]
+mk                                                 => 50
+def mkBad fn [[] [Big] [5]]
+mkBad                                              => [aql/type_error] return value 1: expected Big, got Integer
+```
+
+The newtype-vs-subset distinction and its cross-language rationale are
+explained in **[Explanation: Function signatures](EXPLANATION.md#function-signatures-and-refinement-types)**
+and pinned in `design/REFINE-NEWTYPE-VS-SUBSET.0.md`.
 
 ### Control flow
 

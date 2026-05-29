@@ -546,3 +546,33 @@ The protocol channel between the two surfaces:
 Do NOT detect the prefab via inline field probes (`Origin ==
 OriginUserDef && Name == ""`). Use the named helpers so the
 intent is legible at the call site.
+
+## Refine matching: newtype (bare) vs subset (predicate)
+
+`refine` builds two different things, and they match by **one**
+predicate — `v.Is(t)` (routed through the type's Behavior) — applied
+**symmetrically** at every boundary: fn-param dispatch
+(`signature.go::sigTypeMatches`), the `is` word, and the fn **return**
+check (`engine.go`, which uses `v.Is(exp)` for exactly this reason).
+Never reintroduce a boundary that asks a different question (e.g. a raw
+`v.Parent.Matches(exp)` on returns) — that is the param/return
+asymmetry that `design/REFINE-NEWTYPE-VS-SUBSET.0.md` removed.
+
+- **Bare refine** (`def Pos (refine Integer)` — no payload,
+  `IsBareTypeNode(body)`): a **nominal newtype**.
+  `bareRefineUnifier.Match` is nominal — a value is a `Pos` only if its
+  tag is `Pos` or a subtype (`v.Parent.Matches(t)`, NOT the base type).
+  A plain `Integer` is not a `Pos`; construct one with `def x:Pos 42`
+  (Unify/reparent — a separate path from Match). Symmetric-strict, like
+  Haskell/Rust/Go newtypes.
+- **Predicate refine** (`def Big (Integer gt 10)` — body carries
+  `DepScalarInfo`, `body.IsDepScalar()`): a **subset type**.
+  `depScalarUnifier.Match` is value-sensitive — base-family membership
+  AND the self-contained predicate (`depScalarCheck`, no registry).
+  Admitted at params and returns iff the predicate holds; the value
+  keeps its base tag (no reparent). Symmetric, like Ada subtypes /
+  refinement types.
+
+Builtins and objects keep `DefaultBehavior` / nominal object matching,
+where `v.Is(t)` coincides with `v.Parent.Matches(t)` on concrete
+values — so routing returns through `v.Is` left them unchanged.

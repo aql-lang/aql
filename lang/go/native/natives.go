@@ -45,6 +45,25 @@ var Natives = []NativeFunc{
 		},
 	},
 
+	// `word <value>` wraps its argument (unevaluated) in an __SP splice
+	// marker. When the marker reaches the stack pointer its payload is
+	// spliced in: a plain list contributes its top-level elements, any
+	// other value contributes itself, and the result is re-stepped against
+	// the live stack. `def name word value` binds the marker so a later
+	// reference splices. The arg is NoEvalArgs so the body is stored raw.
+	{
+		Name: "word",
+
+		Signatures: []NativeSig{
+			{
+				Args:       []*Type{TAny},
+				NoEvalArgs: map[int]bool{0: true},
+				Handler:    wordHandler,
+				Returns:    []*Type{TAny}, BarrierPos: -1,
+			},
+		},
+	},
+
 	// ---- file ops ----
 	{
 		Name: "folder",
@@ -483,6 +502,12 @@ func quoteAnyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 	v := args[0]
 	v.Quoted = true
 	return []Value{v}, nil
+}
+
+// wordHandler wraps its (unevaluated) argument in an __SP splice marker. The
+// splice itself happens later, when the marker reaches the engine pointer.
+func wordHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	return []Value{NewSplice(args[0])}, nil
 }
 
 // folderOptsHandler implements `folder` with a leading {parents:bool} options map.

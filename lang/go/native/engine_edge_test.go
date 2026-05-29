@@ -2030,7 +2030,7 @@ func TestDefBasicListBody(t *testing.T) {
 	// First run: define increment
 	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("increment"),
-		NewList([]Value{NewInteger(1), NewWord("add")}),
+		NewWord("word"), NewList([]Value{NewInteger(1), NewWord("add")}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on def: %v", err)
@@ -2086,7 +2086,7 @@ func TestDefStringName(t *testing.T) {
 
 	_, err = e.Run([]Value{
 		NewWord("def"), NewString("double"),
-		NewList([]Value{NewWord("dup"), NewWord("add")}),
+		NewWord("word"), NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on def: %v", err)
@@ -2113,8 +2113,8 @@ func TestDefPrefixBodyStringName(t *testing.T) {
 	e := New(reg)
 
 	_, err = e.Run([]Value{
+		NewWord("def"), NewString("inc"), NewWord("word"),
 		NewList([]Value{NewInteger(1), NewWord("add")}),
-		NewWord("def"), NewString("inc"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on def: %v", err)
@@ -2141,8 +2141,8 @@ func TestDefPrefixBody(t *testing.T) {
 	e := New(reg)
 
 	_, err = e.Run([]Value{
+		NewWord("def"), NewWord("decrement"), NewWord("word"),
 		NewList([]Value{NewInteger(1), NewWord("sub")}),
-		NewWord("def"), NewWord("decrement"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on def: %v", err)
@@ -2170,7 +2170,7 @@ func TestDefAndUseSameRun(t *testing.T) {
 
 	result, err := e.Run([]Value{
 		NewWord("def"), NewWord("triple"),
-		NewList([]Value{NewWord("dup"), NewWord("dup"), NewWord("add"), NewWord("add")}),
+		NewWord("word"), NewList([]Value{NewWord("dup"), NewWord("dup"), NewWord("add"), NewWord("add")}),
 		NewInteger(4), NewWord("triple"),
 	})
 	if err != nil {
@@ -2255,7 +2255,7 @@ func TestDefUsedMultipleTimes(t *testing.T) {
 
 	result, err := e.Run([]Value{
 		NewWord("def"), NewWord("inc"),
-		NewList([]Value{NewInteger(1), NewWord("add")}),
+		NewWord("word"), NewList([]Value{NewInteger(1), NewWord("add")}),
 		NewInteger(1), NewWord("inc"), NewWord("inc"), NewWord("inc"),
 	})
 	if err != nil {
@@ -2281,7 +2281,7 @@ func TestDefForthSquare(t *testing.T) {
 
 	result, err := e.Run([]Value{
 		NewWord("def"), NewWord("square"),
-		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+		NewWord("word"), NewList([]Value{NewWord("dup"), NewWord("mul")}),
 		NewInteger(5), NewWord("square"),
 	})
 	if err != nil {
@@ -2305,7 +2305,7 @@ func TestDefForthNegate(t *testing.T) {
 
 	result, err := e.Run([]Value{
 		NewWord("def"), NewString("negate"),
-		NewList([]Value{NewInteger(0), NewWord("swap"), NewWord("sub")}),
+		NewWord("word"), NewList([]Value{NewInteger(0), NewWord("swap"), NewWord("sub")}),
 		NewInteger(7), NewWord("negate"),
 	})
 	if err != nil {
@@ -2331,7 +2331,7 @@ func TestDefForthOver(t *testing.T) {
 
 	result, err := e.Run([]Value{
 		NewWord("def"), NewWord("dup2"),
-		NewList([]Value{NewWord("dup"), NewWord("dup")}),
+		NewWord("word"), NewList([]Value{NewWord("dup"), NewWord("dup")}),
 		NewInteger(3), NewWord("dup2"),
 	})
 	if err != nil {
@@ -2363,7 +2363,7 @@ func TestDefForthComposition(t *testing.T) {
 	// Define double
 	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("double"),
-		NewList([]Value{NewWord("dup"), NewWord("add")}),
+		NewWord("word"), NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on def double: %v", err)
@@ -2372,7 +2372,7 @@ func TestDefForthComposition(t *testing.T) {
 	// Define quadruple in terms of double
 	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("quadruple"),
-		NewList([]Value{NewWord("double"), NewWord("double")}),
+		NewWord("word"), NewList([]Value{NewWord("double"), NewWord("double")}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on def quadruple: %v", err)
@@ -2404,7 +2404,7 @@ func TestDefForthThreeDeepComposition(t *testing.T) {
 
 	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("inc"),
-		NewList([]Value{NewInteger(1), NewWord("add")}),
+		NewWord("word"), NewList([]Value{NewInteger(1), NewWord("add")}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on def inc: %v", err)
@@ -2412,7 +2412,7 @@ func TestDefForthThreeDeepComposition(t *testing.T) {
 
 	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("inc2"),
-		NewList([]Value{NewWord("inc"), NewWord("inc")}),
+		NewWord("word"), NewList([]Value{NewWord("inc"), NewWord("inc")}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on def inc2: %v", err)
@@ -2420,7 +2420,7 @@ func TestDefForthThreeDeepComposition(t *testing.T) {
 
 	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("inc6"),
-		NewList([]Value{NewWord("inc2"), NewWord("inc2"), NewWord("inc2")}),
+		NewWord("word"), NewList([]Value{NewWord("inc2"), NewWord("inc2"), NewWord("inc2")}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on def inc6: %v", err)
@@ -2454,7 +2454,7 @@ func TestDefForthSumOfSquares(t *testing.T) {
 
 	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("square"),
-		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+		NewWord("word"), NewList([]Value{NewWord("dup"), NewWord("mul")}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on def: %v", err)
@@ -2487,7 +2487,7 @@ func TestDefForthCube(t *testing.T) {
 
 	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("square"),
-		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+		NewWord("word"), NewList([]Value{NewWord("dup"), NewWord("mul")}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on def square: %v", err)
@@ -2495,7 +2495,7 @@ func TestDefForthCube(t *testing.T) {
 
 	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("cube"),
-		NewList([]Value{NewWord("dup"), NewWord("square"), NewWord("mul")}),
+		NewWord("word"), NewList([]Value{NewWord("dup"), NewWord("square"), NewWord("mul")}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on def cube: %v", err)
@@ -2525,7 +2525,7 @@ func TestDefForthWithInfixOps(t *testing.T) {
 
 	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("double"),
-		NewList([]Value{NewWord("dup"), NewWord("add")}),
+		NewWord("word"), NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on def: %v", err)
@@ -2578,7 +2578,7 @@ func TestDefForthStackEffectMultipleValues(t *testing.T) {
 
 	result, err := e.Run([]Value{
 		NewWord("def"), NewWord("pair1"),
-		NewList([]Value{NewInteger(1), NewInteger(2)}),
+		NewWord("word"), NewList([]Value{NewInteger(1), NewInteger(2)}),
 		NewWord("pair1"), NewWord("add"),
 	})
 	if err != nil {
@@ -2602,7 +2602,7 @@ func TestDefForthSwapSub(t *testing.T) {
 
 	result, err := e.Run([]Value{
 		NewWord("def"), NewString("nip"),
-		NewList([]Value{NewWord("swap"), NewWord("drop")}),
+		NewWord("word"), NewList([]Value{NewWord("swap"), NewWord("drop")}),
 		NewInteger(10), NewInteger(20), NewWord("nip"),
 	})
 	if err != nil {
@@ -2631,7 +2631,7 @@ func TestDefForthAbsDiff(t *testing.T) {
 
 	result, err := e.Run([]Value{
 		NewWord("def"), NewWord("rsub"),
-		NewList([]Value{NewWord("swap"), NewWord("sub")}),
+		NewWord("word"), NewList([]Value{NewWord("swap"), NewWord("sub")}),
 		NewInteger(3), NewInteger(7), NewWord("rsub"),
 	})
 	if err != nil {
@@ -2656,9 +2656,9 @@ func TestDefForthMultipleDefsInSameRun(t *testing.T) {
 
 	result, err := e.Run([]Value{
 		NewWord("def"), NewWord("inc"),
-		NewList([]Value{NewInteger(1), NewWord("add")}),
+		NewWord("word"), NewList([]Value{NewInteger(1), NewWord("add")}),
 		NewWord("def"), NewWord("dec"),
-		NewList([]Value{NewInteger(1), NewWord("sub")}),
+		NewWord("word"), NewList([]Value{NewInteger(1), NewWord("sub")}),
 		NewInteger(10), NewWord("inc"), NewWord("inc"), NewWord("dec"),
 	})
 	if err != nil {
@@ -2682,7 +2682,7 @@ func TestDefForthStringWord(t *testing.T) {
 
 	result, err := e.Run([]Value{
 		NewWord("def"), NewWord("shout"),
-		NewList([]Value{NewWord("upper")}),
+		NewWord("word"), NewList([]Value{NewWord("upper")}),
 		NewString("hello"), NewWord("shout"),
 	})
 	if err != nil {
@@ -2706,7 +2706,7 @@ func TestDefForthPersistsAcrossRuns(t *testing.T) {
 	// Run 1: define square
 	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("square"),
-		NewList([]Value{NewWord("dup"), NewWord("mul")}),
+		NewWord("word"), NewList([]Value{NewWord("dup"), NewWord("mul")}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on def: %v", err)
@@ -2715,7 +2715,7 @@ func TestDefForthPersistsAcrossRuns(t *testing.T) {
 	// Run 2: define cube using square
 	_, err = e.Run([]Value{
 		NewWord("def"), NewWord("cube"),
-		NewList([]Value{NewWord("dup"), NewWord("square"), NewWord("mul")}),
+		NewWord("word"), NewList([]Value{NewWord("dup"), NewWord("square"), NewWord("mul")}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on def cube: %v", err)
@@ -2757,8 +2757,8 @@ func TestDefForthDefWithEnd(t *testing.T) {
 	e := New(reg)
 
 	result, err := e.Run([]Value{
-		NewList([]Value{NewWord("dup"), NewWord("add")}),
-		NewWord("def"), NewWord("double"), NewEnd(),
+		NewWord("def"), NewWord("double"), NewWord("word"),
+		NewList([]Value{NewWord("dup"), NewWord("add")}), NewEnd(),
 		NewInteger(5), NewWord("double"),
 	})
 	if err != nil {
@@ -2784,7 +2784,7 @@ func TestDefForthFactorial5(t *testing.T) {
 
 	result, err := e.Run([]Value{
 		NewWord("def"), NewWord("mul5"),
-		NewList([]Value{NewInteger(5), NewWord("mul")}),
+		NewWord("word"), NewList([]Value{NewInteger(5), NewWord("mul")}),
 		NewInteger(1), NewWord("mul5"),
 		NewInteger(4), NewWord("mul"),
 		NewInteger(3), NewWord("mul"),

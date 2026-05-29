@@ -74,9 +74,14 @@ func BuildTestModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
 
-	if parent.Modules.InitFunc != nil {
-		parent.Modules.InitFunc(modReg)
-		modReg.Modules.InitFunc = parent.Modules.InitFunc
+	// Inherit the module CONFIG (InitFunc + Resolver) as a unit so the
+	// test preamble can itself `import "aql:<name>"` — the same
+	// field-by-field copy that dropped the Resolver in RunModuleBody was
+	// latent here too. Then seed native words via InitFunc, falling back
+	// to a direct Register when the host installed no InitFunc.
+	modReg.Modules.InheritConfig(parent.Modules)
+	if modReg.Modules.InitFunc != nil {
+		modReg.Modules.InitFunc(modReg)
 	} else {
 		native.Register(modReg)
 	}
