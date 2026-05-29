@@ -7,16 +7,19 @@ import (
 	"github.com/aql-lang/aql/eng/go/parser"
 )
 
-// TestMapFunctionAccess verifies that functions stored in plain maps
-// (not modules) can be accessed and invoked via bare `get`.
+// TestMapFunctionAccess verifies that a function stored in a plain map
+// can be invoked, both via the dotted accessor and via bare `get`.
 //
-// NOTE: the dotted form `m.greet "arg"` does NOT work for calling a
-// map-stored *named* fn. The parser groups dotted access tightly, so
-// `m.greet "arg"` becomes `(m get greet) "arg"`, and the retrieved named
-// fn self-invokes 0-arg inside the paren before the arg arrives. Call
-// map-stored functions via bare `get` (`m get greet arg`). Module
-// functions (`pkg.fn arg`) are unaffected — they go through the module
-// wrapper dispatch, which composes with the trailing arg.
+// To call it via dot (`m.greet arg`), store the function with the `/r`
+// ref modifier — `{greet: greet/r}` — so the map holds a Quoted (data)
+// Function value. `m.greet arg` groups to `(m get greet) arg`, the value
+// stays as data, and the arg calls it.
+//
+// Stored *bare* (`{greet: greet}`) the value is a dispatchable reference
+// to the globally-registered `greet`, so the dotted form self-invokes it
+// 0-arg inside the `( … )` group before the arg arrives — for that form
+// use bare `m get greet arg`. (Module functions `pkg.fn arg` are
+// unaffected; their names are module-scoped, not global.)
 func TestMapFunctionAccess(t *testing.T) {
 	r, err := native.DefaultRegistry()
 	if err != nil {
@@ -26,7 +29,7 @@ func TestMapFunctionAccess(t *testing.T) {
 
 	setup := `
 		def greet fn [[s:String] [String] [s add "!"]]
-		def m {greet: greet}
+		def m {greet: greet/r}
 	`
 	vals, _ := parser.Parse(setup)
 	eng := native.NewTop(r)
@@ -38,9 +41,10 @@ func TestMapFunctionAccess(t *testing.T) {
 		expr string
 		want string
 	}{
-		// Stack form: arg before function
-		{`"hello" m get greet`, "'hello!'"},
-		// Forward form: function before arg
+		// Dotted access works because greet is stored with /r (data value).
+		{`"hello" m.greet`, "'hello!'"}, // stack form
+		{`m.greet "hello"`, "'hello!'"}, // forward form
+		// Bare get works regardless of how the function is stored.
 		{`m get greet "hello"`, "'hello!'"},
 	}
 

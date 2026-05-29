@@ -162,6 +162,18 @@ Index:
 do {x: [1 add 2], y: [3 mul 4]}        => {x:3,y:12}
 ```
 
+A function stored in a map is callable through the dotted accessor when
+you store it with the `/r` ref modifier, which keeps it as a data value:
+
+```
+def inc fn [[n:Integer] [Integer] [n add 1]]
+def m {inc: inc/r}
+m.inc 5                                => 6
+```
+
+Stored bare (`{inc: inc}`), `m.inc 5` instead tries to invoke `inc` with
+no argument — store it with `/r`, or call it with bare `m get inc 5`.
+
 
 ## Format strings with interpolation
 

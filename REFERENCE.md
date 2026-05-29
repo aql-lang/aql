@@ -585,11 +585,14 @@ consequences:
 - **Access the result of a call** by parenthesising the call:
   `(make Point {x:1 y:2}) .x`, `(import "data.json") . name` — bare
   `make … {} .x` would feed `.x`'s result *into* `make`.
-- **Calling a function stored in a plain map** uses bare `get`, not dot:
-  `m get fn arg`. The dotted form `m.fn arg` groups as `(m get fn) arg`,
-  and a retrieved *named* function self-invokes before `arg` arrives.
-  (Module functions — `pkg.fn arg` — are unaffected; they dispatch
-  through the module wrapper and compose with the trailing argument.)
+- **A function stored in a plain map** is callable via dot when stored
+  with the `/r` ref modifier — `{fn: myfn/r}` — which keeps it as a
+  Quoted (data) value, so `m.fn arg` works. Stored *bare* (`{fn: myfn}`)
+  the value is a dispatchable reference to the globally-registered name,
+  so `m.fn arg` self-invokes it 0-arg inside the `( … )` group before
+  `arg` arrives — call that form with bare `m get fn arg`. (Module
+  functions — `pkg.fn arg` — are unaffected; their names are
+  module-scoped, not global.)
 
 ### Type words
 
