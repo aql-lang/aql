@@ -1,0 +1,72 @@
+# tokens	expected	note
+# =====================================================================
+# def-node-binding — what `def x <node>` binds, and how inner words
+# resolve. AQL has DIVERGENT semantics by node kind:
+#   - a List def is a Forth-style SPLICE body whose words are LATE /
+#     dynamically resolved at every reference (no closure);
+#   - a Map def is an EAGER value snapshot whose words are resolved
+#     ONCE, at def time.
+# Neither forms a closure — only `fn` / `=>` capture lexical scope.
+#
+# Runs against the production lang registry (test/go/langspec).
+# Expected values use the canon renderer (containers are space-
+# separated: `[1 2 3]`, `{a:1 b:2}`).
+# =====================================================================
+
+
+# =====================================================================
+# 1. What does `x` leave on the stack? (shape of the residual)
+# =====================================================================
+# A scalar binds a single value; a List def SPLICES its elements onto
+# the stack (it is a body, not a List value); a Map def pushes one
+# value. Wrapping a reference in `[ … ]` re-collects a spliced list.
+
+def x 42 x	42	scalar def → one value
+def x [1,2,3] x	1 2 3	LIST def splices its elements (three stack items, not a List)
+def x [1,2,3] [x]	[1 2 3]	wrapping the reference re-collects the list
+def x [1,2,3] x x	1 2 3 1 2 3	splices on every reference
+def x [] [x]	[]	empty list splices to nothing
+def x [[1,2],[3,4]] [x]	[[1 2] [3 4]]	only the outer level splices; inner lists stay values
+def x {a:1 b:2} x	{a:1 b:2}	MAP def pushes a single value (no splice)
+def x {a:1 b:2} size x	2	a map reference is a usable Map value
+def x [1,2,3] typeof x	Integer 2 3	typeof hits the first spliced element — proof of the splice
+def x [1,2,3] length x	ERROR:signature	`length` sees a bare Integer, not a List (the reported failure)
+
+
+# =====================================================================
+# 2. Inner words resolve to their def'd VALUES (not kept as words)
+# =====================================================================
+
+def c1 10 def x [c1 2 3] [x]	[10 2 3]	list: inner word resolves to its value
+def c1 10 def c2 20 def x [c1 c2] [x]	[10 20]	all inner words resolve
+def c1 10 def x {a:c1 b:2} x	{a:10 b:2}	map: inner word resolves to its value
+def x [foo 2 3] [x]	ERROR:undefined	an unknown inner word is an error, not data
+
+
+# =====================================================================
+# 3. Scope: List = LATE / dynamic, Map = EARLY / snapshot, no closures
+# =====================================================================
+# A list stores the WORD and re-resolves it at every reference, against
+# whatever binding is current — redefining changes the result, undef'ing
+# it errors, and a forward reference resolves at use time.
+
+def c1 10 def x [c1 2] def c1 20 [x]	[20 2]	list re-resolves at use → sees the NEW binding (late/dynamic)
+def c1 10 def l [c1] undef c1 [l]	ERROR:undefined	list word resolved at use; once undef'd it errors
+def x [later 2] def later 7 [x]	[7 2]	list resolves a forward reference at use time
+
+# A map captures its values once, at def time.
+def c1 10 def m {a:c1} def c1 20 m	{a:10}	map snapshots the value at def time (early)
+def c1 10 def m {a:c1} undef c1 m	{a:10}	snapshot survives undef of the source word
+
+# Lists do NOT close over a fn param / local: the word is re-resolved
+# AFTER the scope exits, so it falls back to the module binding (or
+# errors). Contrast `fn` / `=>`, which DO capture lexically.
+def c1 1 def mk fn [[c1:Integer] [List] [[c1]]] mk 9	[1]	returned list ignores param c1=9 — falls back to module c1=1 (no capture)
+def mk fn [[c1:Integer] [Function] [([] => [c1])]] def f (mk 7) f	7	contrast: a `=>` lambda DOES capture the param (c1=7)
+
+
+# =====================================================================
+# 4. Consequence: nested list-defs flatten through splicing
+# =====================================================================
+def a [1,2] def b [a 3] b	1 2 3	`a` splices inside `b`, which splices on reference → flat
+def a [1,2] def b [a 3] [b]	[1 2 3]	re-collected: the nested splice flattens into one list
