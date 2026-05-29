@@ -12,6 +12,7 @@ syntax, the type system, and the runtime. It complements the
 * [Forward collection: beyond reverse Polish](#forward-collection-beyond-reverse-polish)
 * [The `end` keyword](#the-end-keyword)
 * [Type-directed dispatch](#type-directed-dispatch)
+* [Function signatures and refinement types](#function-signatures-and-refinement-types)
 * [Type ordering](#type-ordering)
 * [Immutability and mutability](#immutability-and-mutability)
 * [Quotation and evaluation](#quotation-and-evaluation)
@@ -179,6 +180,64 @@ signatures match different argument shapes.
 
 This makes the type system *active*: it isn't just for verification,
 it drives behaviour.
+
+
+## Function signatures and refinement types
+
+A `fn` declares types for both its inputs and its outputs:
+
+```
+def avg fn [[a:Number b:Number] [Decimal] [(a add b) div 2.0]]
+```
+
+Inputs are checked when the function is called; outputs are checked
+when its body finishes. The important principle is that these are not
+two different checks — **a value is accepted at a parameter slot, a
+return slot, or by the `is` word using one and the same membership
+rule**: *is this value a member of that type?* Asking the same
+question at every boundary is what keeps the language honest — a
+function can't accept a value its own signature would reject, and a
+value that flows out of one function flows into the next without
+surprise.
+
+What "member of that type" *means* depends on the kind of type, and
+user types built with `refine` come in two kinds that answer it
+differently. AQL keeps both, because they correspond to two genuinely
+different intentions — and the rest of the world splits the same way.
+
+**A bare refinement is a newtype.** `def UserId (refine Integer)`
+gives you a distinct name with no new constraint. The point is
+*identity*, not validation: a `UserId` and a `ProductId` are both
+integers underneath, but mixing them is a bug. So a bare `Integer` is
+**not** a `UserId` — you have to say so explicitly (`def id:UserId
+42`). This is exactly how `newtype` works in Haskell, tuple structs in
+Rust, defined types in Go, and opaque types in Scala: the wrapper is
+deliberate, required at every boundary, symmetric.
+
+**A predicate refinement is a subset type.** `def Big (Integer gt
+10)` carves a subset out of the integers by a *predicate*. Here the
+point is *validation*, not identity: any integer over ten already
+qualifies, with nothing to construct. Membership is the predicate, and
+it is checked the same way going in (a parameter) and coming out (a
+return). This is how subset types work in F\*, Liquid Haskell, Dafny,
+and Ada's range subtypes: value-sensitive and symmetric.
+
+```
+def UserId (refine Integer)               # newtype — identity
+42 is UserId                  => false    # a raw Integer is not a UserId
+def id:UserId 42   id is UserId => true   # constructed explicitly
+
+def Big (Integer gt 10)                   # subset — validation
+50 is Big                     => true     # 50 qualifies, no construction
+5  is Big                     => false    # 5 does not
+```
+
+The trap AQL avoids is treating these asymmetrically — lenient on the
+way in, strict on the way out (or vice-versa). No mainstream language
+does that on purpose; each picks one discipline per kind and applies
+it at every boundary. AQL does the same: newtypes are nominal and
+symmetric, subset types are value-sensitive and symmetric. The full
+rationale is in `design/REFINE-NEWTYPE-VS-SUBSET.0.md`.
 
 
 ## Type ordering
