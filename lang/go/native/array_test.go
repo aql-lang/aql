@@ -4,10 +4,23 @@ import (
 	"testing"
 )
 
+// arrayTestReg returns a registry with the aql:array module words
+// registered as bare words, so these handler unit tests can exercise
+// them directly even though shape/reshape/where/etc. are no longer part
+// of the global default registry (they now live in the aql:array module).
+// The core array words (iota, range, each, …) are present regardless.
+func arrayTestReg() *Registry {
+	r, _ := DefaultRegistry()
+	for _, n := range ArrayModuleNatives {
+		r.RegisterNativeFunc(n)
+	}
+	return r
+}
+
 // --- iota ---
 
 func TestIota(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{NewWord("iota"), NewInteger(5)})
 	list, _ := AsList(result[0])
 	if list.Len() != 5 {
@@ -23,7 +36,7 @@ func TestIota(t *testing.T) {
 }
 
 func TestIotaZero(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{NewWord("iota"), NewInteger(0)})
 	list, _ := AsList(result[0])
 	if list.Len() != 0 {
@@ -31,10 +44,73 @@ func TestIotaZero(t *testing.T) {
 	}
 }
 
+// --- range ---
+
+// assertIntList checks that result[0] is a list of the wanted integers.
+func assertIntList(t *testing.T, label string, result []Value, want []int64) {
+	t.Helper()
+	list, err := AsList(result[0])
+	if err != nil {
+		t.Fatalf("%s: result is not a list: %v", label, err)
+	}
+	if list.Len() != len(want) {
+		t.Fatalf("%s: length = %d, want %d", label, list.Len(), len(want))
+	}
+	for i, w := range want {
+		got, _ := AsInteger(list.Get(i))
+		if got != w {
+			t.Errorf("%s[%d] = %d, want %d", label, i, got, w)
+		}
+	}
+}
+
+func TestRangeStartStop(t *testing.T) {
+	r := arrayTestReg()
+	result := runAQL(t, r, []Value{NewWord("range"), NewInteger(2), NewInteger(6)})
+	assertIntList(t, "range 2 6", result, []int64{2, 3, 4, 5})
+}
+
+// range 0 n 1 must equal iota n.
+func TestRangeMatchesIota(t *testing.T) {
+	r := arrayTestReg()
+	result := runAQL(t, r, []Value{NewWord("range"), NewInteger(0), NewInteger(5), NewInteger(1)})
+	assertIntList(t, "range 0 5 1", result, []int64{0, 1, 2, 3, 4})
+}
+
+func TestRangeStep(t *testing.T) {
+	r := arrayTestReg()
+	result := runAQL(t, r, []Value{NewWord("range"), NewInteger(0), NewInteger(10), NewInteger(3)})
+	assertIntList(t, "range 0 10 3", result, []int64{0, 3, 6, 9})
+}
+
+func TestRangeNegativeStep(t *testing.T) {
+	r := arrayTestReg()
+	result := runAQL(t, r, []Value{NewWord("range"), NewInteger(5), NewInteger(0), NewInteger(-1)})
+	assertIntList(t, "range 5 0 -1", result, []int64{5, 4, 3, 2, 1})
+}
+
+// An empty range (start already past stop in the step direction) yields [].
+func TestRangeEmpty(t *testing.T) {
+	r := arrayTestReg()
+	result := runAQL(t, r, []Value{NewWord("range"), NewInteger(5), NewInteger(5)})
+	assertIntList(t, "range 5 5", result, []int64{})
+
+	result = runAQL(t, r, []Value{NewWord("range"), NewInteger(0), NewInteger(10), NewInteger(-1)})
+	assertIntList(t, "range 0 10 -1", result, []int64{})
+}
+
+// A zero step is rejected rather than looping forever.
+func TestRangeZeroStepErrors(t *testing.T) {
+	r := arrayTestReg()
+	if err := runAQLError(t, r, []Value{NewWord("range"), NewInteger(0), NewInteger(10), NewInteger(0)}); err == nil {
+		t.Fatalf("range 0 10 0: expected error, got none")
+	}
+}
+
 // --- shape ---
 
 func TestShapeFlat(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
 		NewWord("shape"),
@@ -47,7 +123,7 @@ func TestShapeFlat(t *testing.T) {
 }
 
 func TestShapeNested(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	input := NewList([]Value{
 		NewList([]Value{NewInteger(1), NewInteger(2)}),
 		NewList([]Value{NewInteger(3), NewInteger(4)}),
@@ -65,7 +141,7 @@ func TestShapeNested(t *testing.T) {
 // --- rank ---
 
 func TestRank(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewList([]Value{NewInteger(1), NewInteger(2)}),
 		NewWord("rank"),
@@ -91,7 +167,7 @@ func TestRank(t *testing.T) {
 // --- reshape ---
 
 func TestReshape(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewWord("reshape"),
 		NewList([]Value{NewInteger(2), NewInteger(3)}),
@@ -109,37 +185,56 @@ func TestReshape(t *testing.T) {
 	}
 }
 
-// --- arr-flatten ---
+// --- flatten -1 (deep flatten, a core flatten depth) ---
 
-func TestArrFlatten(t *testing.T) {
+// Deep flatten is `flatten -1` on the core flatten word — not a separate
+// array word (ADR-001). A nested list collapses fully.
+func TestFlattenFull(t *testing.T) {
 	r, _ := DefaultRegistry()
 	input := NewList([]Value{
-		NewList([]Value{NewInteger(1), NewInteger(2)}),
-		NewList([]Value{NewInteger(3), NewInteger(4)}),
+		NewList([]Value{NewInteger(1), NewList([]Value{NewInteger(2), NewList([]Value{NewInteger(3)})})}),
+		NewInteger(4),
 	})
-	result := runAQL(t, r, []Value{input, NewWord("arr-flatten")})
+	result := runAQL(t, r, []Value{NewWord("flatten"), NewInteger(-1), input})
 	list, _ := AsList(result[0])
 	if list.Len() != 4 {
-		t.Fatalf("arr-flatten length = %d, want 4", list.Len())
+		t.Fatalf("flatten -1 length = %d, want 4", list.Len())
 	}
 	for i := 0; i < 4; i++ {
-		_as13, _ := AsInteger(list.Get(i))
-		if _as13 != int64(i+1) {
-			_as14, _ := AsInteger(list.Get(i))
-			t.Errorf("arr-flatten[%d] = %d, want %d", i, _as14, i+1)
+		got, _ := AsInteger(list.Get(i))
+		if got != int64(i+1) {
+			t.Errorf("flatten -1 [%d] = %d, want %d", i, got, i+1)
 		}
 	}
 }
 
-// --- arr-transpose ---
-
-func TestArrTranspose(t *testing.T) {
+// Default flatten still removes only one level (the negative depth is the
+// only "fully flatten" form).
+func TestFlattenDefaultOneLevel(t *testing.T) {
 	r, _ := DefaultRegistry()
+	input := NewList([]Value{
+		NewList([]Value{NewInteger(1), NewList([]Value{NewInteger(2)})}),
+	})
+	result := runAQL(t, r, []Value{NewWord("flatten"), input})
+	list, _ := AsList(result[0])
+	// [[1,[2]]] flatten -> [1,[2]] : one level removed, inner [2] survives.
+	if list.Len() != 2 {
+		t.Fatalf("flatten (default) length = %d, want 2", list.Len())
+	}
+	if inner, err := AsList(list.Get(1)); err != nil || inner.Len() != 1 {
+		t.Errorf("flatten (default) should keep inner list, got %v", result[0])
+	}
+}
+
+// --- transpose ---
+
+func TestTranspose(t *testing.T) {
+	r := arrayTestReg()
 	input := NewList([]Value{
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
 		NewList([]Value{NewInteger(4), NewInteger(5), NewInteger(6)}),
 	})
-	result := runAQL(t, r, []Value{input, NewWord("arr-transpose")})
+	result := runAQL(t, r, []Value{input, NewWord("transpose")})
 	outer, _ := AsList(result[0])
 	if outer.Len() != 3 {
 		t.Fatalf("transpose rows = %d, want 3", outer.Len())
@@ -153,10 +248,138 @@ func TestArrTranspose(t *testing.T) {
 	}
 }
 
+// --- indexof: list overload of the core word (ADR-001) ---
+
+// indexof on two lists is a core overload (native_string.go), not an
+// array word — for each needle, its index in the haystack (length when
+// absent). Uses a plain registry, no aql:array import.
+func TestIndexofListOverload(t *testing.T) {
+	r, _ := DefaultRegistry()
+	// forward form: needles then haystack.
+	result := runAQL(t, r, []Value{
+		NewWord("indexof"),
+		NewList([]Value{NewInteger(20), NewInteger(99), NewInteger(10)}),
+		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)}),
+	})
+	assertIntList(t, "indexof [20,99,10] [10,20,30]", result, []int64{1, 3, 0})
+}
+
+// The same word still serves strings — type dispatch picks the right
+// overload, proving the two operations coexist under one name.
+func TestIndexofStringStillWorks(t *testing.T) {
+	r, _ := DefaultRegistry()
+	result := runAQL(t, r, []Value{
+		NewWord("indexof"), NewString("hello"), NewString("ll"),
+	})
+	got, _ := AsInteger(result[0])
+	if got != 2 {
+		t.Errorf(`indexof "hello" "ll" = %d, want 2`, got)
+	}
+}
+
+// --- compress ---
+
+func TestCompress(t *testing.T) {
+	r := arrayTestReg()
+	result := runAQL(t, r, []Value{
+		NewWord("compress"),
+		NewList([]Value{NewBoolean(true), NewBoolean(false), NewBoolean(true)}),
+		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)}),
+	})
+	assertIntList(t, "compress [t,f,t] [10,20,30]", result, []int64{10, 30})
+}
+
+func TestCompressMismatchErrors(t *testing.T) {
+	r := arrayTestReg()
+	err := runAQLError(t, r, []Value{
+		NewWord("compress"),
+		NewList([]Value{NewBoolean(true), NewBoolean(false)}),
+		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
+	})
+	if err == nil {
+		t.Fatalf("compress length mismatch: expected error, got none")
+	}
+}
+
+// --- eachrank ---
+
+// eachrank 0 targets each scalar leaf; the body doubles it.
+func TestEachrankScalar(t *testing.T) {
+	r := arrayTestReg()
+	result := runAQL(t, r, []Value{
+		NewWord("eachrank"), NewInteger(0),
+		NewList([]Value{NewWord("mul"), NewInteger(2)}),
+		NewList([]Value{
+			NewList([]Value{NewInteger(1), NewInteger(2)}),
+			NewList([]Value{NewInteger(3), NewInteger(4)}),
+		}),
+	})
+	// [[2,4],[6,8]]
+	outer, _ := AsList(result[0])
+	row0, _ := AsList(outer.Get(0))
+	a, _ := AsInteger(row0.Get(0))
+	b, _ := AsInteger(row0.Get(1))
+	if a != 2 || b != 4 {
+		t.Errorf("eachrank 0 [mul 2] row0 = %v, want [2,4]", outer.Get(0))
+	}
+}
+
+func TestEachrankOverRankErrors(t *testing.T) {
+	r := arrayTestReg()
+	err := runAQLError(t, r, []Value{
+		NewWord("eachrank"), NewInteger(5),
+		NewList([]Value{NewWord("reverse")}),
+		NewList([]Value{NewInteger(1), NewInteger(2)}),
+	})
+	if err == nil {
+		t.Fatalf("eachrank rank exceeding data: expected error, got none")
+	}
+}
+
+// --- foldaxis ---
+
+func TestFoldaxisColumns(t *testing.T) {
+	r := arrayTestReg()
+	result := runAQL(t, r, []Value{
+		NewWord("foldaxis"), NewInteger(0),
+		NewList([]Value{NewWord("add")}),
+		NewList([]Value{
+			NewList([]Value{NewInteger(1), NewInteger(2)}),
+			NewList([]Value{NewInteger(3), NewInteger(4)}),
+		}),
+	})
+	assertIntList(t, "foldaxis 0 [add]", result, []int64{4, 6})
+}
+
+func TestFoldaxisRows(t *testing.T) {
+	r := arrayTestReg()
+	result := runAQL(t, r, []Value{
+		NewWord("foldaxis"), NewInteger(1),
+		NewList([]Value{NewWord("add")}),
+		NewList([]Value{
+			NewList([]Value{NewInteger(1), NewInteger(2)}),
+			NewList([]Value{NewInteger(3), NewInteger(4)}),
+		}),
+	})
+	assertIntList(t, "foldaxis 1 [add]", result, []int64{3, 7})
+}
+
+func TestFoldaxisBadAxisErrors(t *testing.T) {
+	r := arrayTestReg()
+	err := runAQLError(t, r, []Value{
+		NewWord("foldaxis"), NewInteger(2),
+		NewList([]Value{NewWord("add")}),
+		NewList([]Value{NewList([]Value{NewInteger(1)})}),
+	})
+	if err == nil {
+		t.Fatalf("foldaxis bad axis: expected error, got none")
+	}
+}
+
 // --- reverse ---
 
 func TestReverse(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
 		NewWord("reverse"),
@@ -173,7 +396,7 @@ func TestReverse(t *testing.T) {
 // --- take ---
 
 func TestTake(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewWord("take"), NewInteger(2),
 		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30), NewInteger(40)}),
@@ -187,7 +410,7 @@ func TestTake(t *testing.T) {
 }
 
 func TestTakeNegative(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewWord("take"), NewInteger(-2),
 		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30), NewInteger(40)}),
@@ -203,7 +426,7 @@ func TestTakeNegative(t *testing.T) {
 // --- shed ---
 
 func TestShed(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewWord("shed"), NewInteger(1),
 		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30), NewInteger(40)}),
@@ -218,7 +441,7 @@ func TestShed(t *testing.T) {
 // --- where ---
 
 func TestWhere(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewList([]Value{NewBoolean(true), NewBoolean(false), NewBoolean(true), NewBoolean(false), NewBoolean(true)}),
 		NewWord("where"),
@@ -235,7 +458,7 @@ func TestWhere(t *testing.T) {
 // --- unique ---
 
 func TestUnique(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewList([]Value{NewInteger(3), NewInteger(1), NewInteger(4), NewInteger(1), NewInteger(5)}),
 		NewWord("unique"),
@@ -257,7 +480,7 @@ func TestUnique(t *testing.T) {
 // --- grade ---
 
 func TestGrade(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewList([]Value{NewInteger(30), NewInteger(10), NewInteger(40), NewInteger(20)}),
 		NewWord("grade"),
@@ -277,7 +500,7 @@ func TestGrade(t *testing.T) {
 // --- at ---
 
 func TestAt(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewWord("at"),
 		NewList([]Value{NewInteger(2), NewInteger(0), NewInteger(1)}),
@@ -295,7 +518,7 @@ func TestAt(t *testing.T) {
 // --- sortby ---
 
 func TestSortby(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewWord("sortby"),
 		NewList([]Value{NewInteger(3), NewInteger(1), NewInteger(2)}),
@@ -313,7 +536,7 @@ func TestSortby(t *testing.T) {
 // --- member ---
 
 func TestMember(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewWord("member"),
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
@@ -333,7 +556,7 @@ func TestMember(t *testing.T) {
 // --- window ---
 
 func TestWindow(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewWord("window"), NewInteger(2),
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4)}),
@@ -353,7 +576,7 @@ func TestWindow(t *testing.T) {
 // --- pairs ---
 
 func TestPairs(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4)}),
 		NewWord("pairs"),
@@ -367,7 +590,7 @@ func TestPairs(t *testing.T) {
 // --- replicate ---
 
 func TestReplicate(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewWord("replicate"),
 		NewList([]Value{NewInteger(2), NewInteger(0), NewInteger(3)}),
@@ -391,7 +614,7 @@ func TestReplicate(t *testing.T) {
 // --- group ---
 
 func TestGroupTwoArgs(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewWord("group"),
 		NewList([]Value{NewAtom("a"), NewAtom("b"), NewAtom("a")}),
@@ -413,7 +636,7 @@ func TestGroupTwoArgs(t *testing.T) {
 // --- each (higher-order) ---
 
 func TestEach(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewWord("each"),
 		NewList([]Value{NewWord("mul"), NewInteger(2)}),
@@ -433,7 +656,7 @@ func TestEach(t *testing.T) {
 // --- fold ---
 
 func TestFoldSum(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewWord("fold"),
 		NewList([]Value{NewWord("add")}),
@@ -446,7 +669,7 @@ func TestFoldSum(t *testing.T) {
 }
 
 func TestFoldProduct(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewWord("fold"),
 		NewList([]Value{NewWord("mul")}),
@@ -461,7 +684,7 @@ func TestFoldProduct(t *testing.T) {
 // --- scan ---
 
 func TestScan(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewWord("scan"),
 		NewList([]Value{NewWord("add")}),
@@ -481,7 +704,7 @@ func TestScan(t *testing.T) {
 // --- outer ---
 
 func TestOuterMul(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewWord("outer"),
 		NewList([]Value{NewWord("mul")}),
@@ -510,7 +733,7 @@ func TestOuterMul(t *testing.T) {
 // --- inner (matrix multiply) ---
 
 func TestInnerMatMul(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	left := NewList([]Value{
 		NewList([]Value{NewInteger(1), NewInteger(2)}),
 		NewList([]Value{NewInteger(3), NewInteger(4)}),
@@ -548,7 +771,7 @@ func TestInnerMatMul(t *testing.T) {
 // --- composition: fold [add] each [dup mul] iota 5 => sum of squares 0+1+4+9+16=30 ---
 
 func TestCompositionSumOfSquares(t *testing.T) {
-	r, _ := DefaultRegistry()
+	r := arrayTestReg()
 	// (each [dup mul] (iota 5)) produces [0,1,4,9,16]
 	// fold [add] over that produces 30
 	result := runAQL(t, r, []Value{

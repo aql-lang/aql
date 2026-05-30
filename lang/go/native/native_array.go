@@ -5,16 +5,31 @@ import (
 	"sort"
 )
 
-// arrayNatives covers the array words: core scalar/vector ops
-// (iota, shape, rank, reshape, arr-flatten, arr-transpose,
-// reverse, take, shed, where, unique, grade, at, sortby, member,
-// arr-indexof, group, replicate, expand, window, pairs) and the
-// higher-order ops (each, fold, scan, outer, inner).
+// arrayNatives (core) and ArrayModuleNatives (the aql:array module)
+// are both derived from allArrayNatives below. The split follows one
+// rule: words that take a quoted code body, the basic constructors,
+// and everyday slicing stay in core; the specialised APL-style data
+// vocabulary (shape/structure, selection/ordering, membership/
+// grouping, neighborhoods) lives in the module and is reached via
+// dot-access (array.shape, array.where, …).
+//
+//	core   — iota, range, each, fold, scan, outer, inner,
+//	         take, shed, reverse
+//	module — shape, rank, reshape, transpose, where, unique, grade,
+//	         at, sortby, member, group, replicate, expand, compress,
+//	         eachrank, foldaxis, window, pairs
+//
+// Per ADR-001 (no module export shadows a core word — see ADR.md in
+// the repo root), the two operations that overlap a core word are NOT
+// array-module words: deep flatten is `flatten -1` (a depth on the
+// core flatten word, flatten.go) and list indexof is a [List, List]
+// overload of the core indexof word (native_string.go). transpose has
+// no core counterpart, so it keeps its plain name.
 //
 // Pure helpers (computeShape, flattenList, buildNested,
 // arrCompareValues, transposeListOfLists, doFold,
 // analyseHigherOrderBody) live alongside their handlers below.
-var arrayNatives = []NativeFunc{
+var allArrayNatives = []NativeFunc{
 	// ---- core ----
 	{
 		Name: "iota",
@@ -24,6 +39,26 @@ var arrayNatives = []NativeFunc{
 			Handler:   iotaHandler,
 			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
 		}},
+	},
+	{
+		// range is iota's start/stop/step cousin: an arithmetic
+		// sequence generator. The 3-arg sig is listed first so
+		// `range start stop step` forward-collects all three; the
+		// 2-arg sig (step defaults to 1) handles `range start stop`.
+		Name: "range",
+
+		Signatures: []NativeSig{
+			{
+				Args:      []*Type{TInteger, TInteger, TInteger},
+				Handler:   rangeThreeHandler,
+				ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TInteger, TInteger},
+				Handler:   rangeTwoHandler,
+				ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
+			},
+		},
 	},
 	{
 		Name: "shape",
@@ -53,16 +88,12 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name: "arr-flatten",
-
-		Signatures: []NativeSig{{
-			Args:      []*Type{TList},
-			Handler:   arrFlattenHandler,
-			ReturnsFn: ReturnsPreserveListAt(0), BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "arr-transpose",
+		// transpose has no core-word counterpart, so it keeps its plain
+		// name (no "arr-" prefix needed). Deep flatten and list indexof,
+		// by contrast, are now overloads of the core flatten/indexof
+		// words rather than separate array words — see flatten.go and
+		// native_string.go.
+		Name: "transpose",
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
@@ -149,15 +180,6 @@ var arrayNatives = []NativeFunc{
 			Args:      []*Type{TList, TList},
 			Handler:   memberHandler,
 			ReturnsFn: returnsCarrierTypedListBoolean, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "arr-indexof",
-
-		Signatures: []NativeSig{{
-			Args:      []*Type{TList, TList},
-			Handler:   arrIndexofHandler,
-			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
 		}},
 	},
 	{
@@ -277,7 +299,68 @@ var arrayNatives = []NativeFunc{
 			ReturnsFn:  innerReturnsFn, BarrierPos: -1,
 		}},
 	},
+	{
+		// compress: mask-based selection. No code body, so it is an
+		// aql:array module word like where/replicate.
+		Name: "compress",
+
+		Signatures: []NativeSig{{
+			Args:      []*Type{TList, TList},
+			Handler:   compressHandler,
+			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
+		}},
+	},
+	{
+		// eachrank: depth-targeted map — specialised APL/J vocabulary, so
+		// it lives in the aql:array module. The quoted body is captured
+		// via NoEvalArgs.
+		Name: "eachrank",
+
+		Signatures: []NativeSig{{
+			Args:       []*Type{TInteger, TList, TList},
+			NoEvalArgs: map[int]bool{1: true},
+			Handler:    eachrankHandler,
+			ReturnsFn:  ReturnsPreserveListAt(2), BarrierPos: -1,
+		}},
+	},
+	{
+		// foldaxis: axis reduction — specialised APL/J vocabulary, so it
+		// lives in the aql:array module. The quoted body is captured via
+		// NoEvalArgs.
+		Name: "foldaxis",
+
+		Signatures: []NativeSig{{
+			Args:       []*Type{TInteger, TList, TList},
+			NoEvalArgs: map[int]bool{1: true},
+			Handler:    foldaxisHandler,
+			ReturnsFn:  ReturnsPreserveListAt(2), BarrierPos: -1,
+		}},
+	},
 }
+
+// arrayCoreNames is the set of array words that remain built-in. The
+// rest of allArrayNatives moves to the aql:array module. See the
+// allArrayNatives comment for the rationale behind the split.
+var arrayCoreNames = map[string]bool{
+	"iota": true, "range": true,
+	"each": true, "fold": true, "scan": true, "outer": true, "inner": true,
+	"take": true, "shed": true, "reverse": true,
+}
+
+// arrayNatives are the core array words registered globally (see
+// register.go). ArrayModuleNatives are the specialised words that the
+// aql:array module registers into its own sub-registry instead — they
+// are NOT globally available, matching how aql:math gates sin/cos/etc.
+var arrayNatives, ArrayModuleNatives = func() (core, module []NativeFunc) {
+	for _, n := range allArrayNatives {
+		if arrayCoreNames[n.Name] {
+			core = append(core, n)
+		} else {
+			module = append(module, n)
+		}
+	}
+	return core, module
+}()
 
 // ---- shared ReturnsFn helpers ----
 
@@ -300,6 +383,43 @@ func iotaHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	elems := make([]Value, n)
 	for i := 0; i < n; i++ {
 		elems[i] = NewInteger(int64(i))
+	}
+	return []Value{NewList(elems)}, nil
+}
+
+// ---- range ----
+
+func rangeThreeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	start, _ := args[0].AsConcreteInteger()
+	stop, _ := args[1].AsConcreteInteger()
+	step, _ := args[2].AsConcreteInteger()
+	return buildRange(start, stop, step, r)
+}
+
+func rangeTwoHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	start, _ := args[0].AsConcreteInteger()
+	stop, _ := args[1].AsConcreteInteger()
+	return buildRange(start, stop, 1, r)
+}
+
+// buildRange produces the arithmetic sequence [start, start+step, ...)
+// stopping before stop. A positive step counts up, a negative step
+// counts down; a zero step is an error. The half-open convention makes
+// `range 0 n 1` equal to `iota n`, and an empty range (start already
+// past stop in the step direction) yields [].
+func buildRange(start, stop, step int64, r *Registry) ([]Value, error) {
+	if step == 0 {
+		return nil, r.AqlError("range_error", "range: step must be non-zero", "range")
+	}
+	elems := []Value{}
+	if step > 0 {
+		for i := start; i < stop; i += step {
+			elems = append(elems, NewInteger(i))
+		}
+	} else {
+		for i := start; i > stop; i += step {
+			elems = append(elems, NewInteger(i))
+		}
 	}
 	return []Value{NewList(elems)}, nil
 }
@@ -424,21 +544,11 @@ func buildNested(flat []Value, dims []int) Value {
 	return NewList(elems)
 }
 
-// ---- arr-flatten ----
-
-func arrFlattenHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("arr-flatten_error", "arr-flatten: expected concrete list", "arr-flatten")
-	}
-	flat := flattenList(args[0])
-	return []Value{NewList(flat)}, nil
-}
-
-// ---- arr-transpose ----
+// ---- transpose ----
 
 func arrTransposeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("arr-transpose_error", "arr-transpose: expected concrete list", "arr-transpose")
+		return nil, r.AqlError("transpose_error", "transpose: expected concrete list", "transpose")
 	}
 	outer, _ := AsList(args[0])
 	if outer.Len() == 0 {
@@ -446,7 +556,7 @@ func arrTransposeHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	}
 	first := outer.Get(0)
 	if !first.Parent.Matches(TList) || !IsConcrete(first) {
-		return nil, r.AqlError("arr-transpose_error", "arr-transpose: expected rank-2 list", "arr-transpose")
+		return nil, r.AqlError("transpose_error", "transpose: expected rank-2 list", "transpose")
 	}
 	_lst, _ := AsList(first)
 	cols := _lst.Len()
@@ -454,7 +564,7 @@ func arrTransposeHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 		sub := outer.Get(i)
 		_subLst, _ := AsList(sub)
 		if !sub.Parent.Matches(TList) || !IsConcrete(sub) || _subLst.Len() != cols {
-			return nil, r.AqlError("arr-transpose_error", "arr-transpose: expected rectangular rank-2 list", "arr-transpose")
+			return nil, r.AqlError("transpose_error", "transpose: expected rectangular rank-2 list", "transpose")
 		}
 	}
 	rows := outer.Len()
@@ -709,14 +819,18 @@ func memberHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	return []Value{NewList(result)}, nil
 }
 
-// ---- arr-indexof ----
+// ---- indexof (list overload) ----
 
-func arrIndexofHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+// listIndexofHandler backs the [List, List] signature of the core
+// indexof word (registered in native_string.go alongside the string
+// overloads): for each needle, its index in the haystack, or the
+// haystack length when absent.
+func listIndexofHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("arr-indexof_error", "arr-indexof: expected concrete needles list", "arr-indexof")
+		return nil, r.AqlError("indexof_error", "indexof: expected concrete needles list", "indexof")
 	}
 	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("arr-indexof_error", "arr-indexof: expected concrete haystack list", "arr-indexof")
+		return nil, r.AqlError("indexof_error", "indexof: expected concrete haystack list", "indexof")
 	}
 	needles, _ := AsList(args[0])
 	haystack, _ := AsList(args[1])
@@ -1278,6 +1392,171 @@ func innerReturnsFn(args []Value, r *Registry) []Value {
 	analyseHigherOrderBody(r, args[0], leftElem, rightElem)
 	analyseHigherOrderBody(r, args[1], TAny, TAny)
 	return []Value{NewCarrier(TList)}
+}
+
+// ---- compress ----
+
+// compressHandler selects elements of data where the parallel mask is
+// truthy. Like `replicate` with a boolean mask, but reads as a filter.
+// Sig is [mask, data] (mask top-of-stack), matching replicate's
+// counts-first order.
+func compressHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if !IsConcrete(args[0]) {
+		return nil, r.AqlError("compress_error", "compress: expected concrete mask list", "compress")
+	}
+	if !IsConcrete(args[1]) {
+		return nil, r.AqlError("compress_error", "compress: expected concrete data list", "compress")
+	}
+	mask, _ := AsList(args[0])
+	data, _ := AsList(args[1])
+	if mask.Len() != data.Len() {
+		return nil, fmt.Errorf("compress: mask length %d does not match data length %d", mask.Len(), data.Len())
+	}
+	result := []Value{}
+	for i := 0; i < mask.Len(); i++ {
+		if CoerceBoolean(mask.Get(i)) {
+			result = append(result, data.Get(i))
+		}
+	}
+	return []Value{NewList(result)}, nil
+}
+
+// ---- eachrank ----
+
+// eachrankHandler applies a code body to every cell at a given rank
+// (nesting depth) of a nested list. Rank 0 targets each scalar leaf,
+// rank 1 each innermost list, rank 2 each list-of-lists, and so on.
+// Sig is [rank, body, data] — body is a quoted code list (NoEvalArgs).
+func eachrankHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	depth, err := args[0].AsConcreteInteger()
+	if err != nil {
+		return nil, reg.AqlError("eachrank_error", "eachrank: rank must be an integer", "eachrank")
+	}
+	if depth < 0 {
+		return nil, reg.AqlError("eachrank_error", fmt.Sprintf("eachrank: negative rank %d", depth), "eachrank")
+	}
+	if !IsConcrete(args[1]) || !IsConcrete(args[2]) {
+		return nil, reg.AqlError("eachrank_error", "eachrank: expected concrete body and data lists", "eachrank")
+	}
+	_lst, _ := AsList(args[1])
+	bodySlice := _lst.Slice()
+	// `rank` is the J-style CELL rank, measured from the leaves: 0 is
+	// each scalar, 1 each innermost list, 2 each list-of-lists. Convert
+	// it to a descent depth from the top by subtracting from the data's
+	// total nesting depth.
+	total := listDepth(args[2])
+	descend := total - int(depth)
+	if descend < 0 {
+		return nil, reg.AqlError("eachrank_error", fmt.Sprintf("eachrank: rank %d exceeds data rank %d", depth, total), "eachrank")
+	}
+	return eachrankWalk(reg, descend, bodySlice, args[2])
+}
+
+// listDepth reports the nesting depth of v along its first-element
+// spine: a scalar is 0, a flat list 1, a list of lists 2, and so on.
+func listDepth(v Value) int {
+	d := 0
+	for v.Parent.Matches(TList) && IsConcrete(v) {
+		list, _ := AsList(v)
+		d++
+		if list.Len() == 0 {
+			break
+		}
+		v = list.Get(0)
+	}
+	return d
+}
+
+// eachrankWalk recurses into the structure until `depth` reaches 0,
+// then runs the body once per cell at that level. The cell value is
+// pushed and the body's top-of-stack result replaces it.
+func eachrankWalk(reg *Registry, depth int, bodySlice []Value, cell Value) ([]Value, error) {
+	if depth == 0 {
+		input := make([]Value, len(bodySlice)+1)
+		input[0] = cell
+		copy(input[1:], bodySlice)
+		sub := New(reg)
+		res, err := sub.Run(input)
+		if err != nil {
+			return nil, fmt.Errorf("eachrank: %w", err)
+		}
+		if len(res) == 0 {
+			return nil, reg.AqlError("eachrank_error", "eachrank: body produced no result", "eachrank")
+		}
+		return []Value{res[len(res)-1]}, nil
+	}
+	if !cell.Parent.Matches(TList) || !IsConcrete(cell) {
+		return nil, reg.AqlError("eachrank_error", fmt.Sprintf("eachrank: rank exceeds nesting depth at %v", cell), "eachrank")
+	}
+	list, _ := AsList(cell)
+	out := make([]Value, list.Len())
+	for i := 0; i < list.Len(); i++ {
+		sub, err := eachrankWalk(reg, depth-1, bodySlice, list.Get(i))
+		if err != nil {
+			return nil, err
+		}
+		out[i] = sub[0]
+	}
+	return []Value{NewList(out)}, nil
+}
+
+// ---- foldaxis ----
+
+// foldaxisHandler reduces a rank-2 list along one axis with a binary
+// body. axis 0 folds down columns (result has one entry per column),
+// axis 1 folds along rows (one entry per row). Sig is [axis, body,
+// data] — body is a quoted code list (NoEvalArgs).
+func foldaxisHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	axis, err := args[0].AsConcreteInteger()
+	if err != nil {
+		return nil, reg.AqlError("foldaxis_error", "foldaxis: axis must be an integer", "foldaxis")
+	}
+	if axis != 0 && axis != 1 {
+		return nil, reg.AqlError("foldaxis_error", fmt.Sprintf("foldaxis: axis must be 0 or 1, got %d", axis), "foldaxis")
+	}
+	if !IsConcrete(args[1]) || !IsConcrete(args[2]) {
+		return nil, reg.AqlError("foldaxis_error", "foldaxis: expected concrete body and data lists", "foldaxis")
+	}
+	_lst, _ := AsList(args[1])
+	bodySlice := _lst.Slice()
+	rows, _ := AsList(args[2])
+	if rows.Len() == 0 {
+		return []Value{NewList([]Value{})}, nil
+	}
+	// Validate a rectangular rank-2 list.
+	if !rows.Get(0).Parent.Matches(TList) || !IsConcrete(rows.Get(0)) {
+		return nil, reg.AqlError("foldaxis_error", "foldaxis: expected a rank-2 list", "foldaxis")
+	}
+	first, _ := AsList(rows.Get(0))
+	cols := first.Len()
+	for i := 1; i < rows.Len(); i++ {
+		ri, _ := AsList(rows.Get(i))
+		if !rows.Get(i).Parent.Matches(TList) || !IsConcrete(rows.Get(i)) || ri.Len() != cols {
+			return nil, reg.AqlError("foldaxis_error", "foldaxis: expected a rectangular rank-2 list", "foldaxis")
+		}
+	}
+	// axis 1 reduces each row directly; axis 0 reduces each column, i.e.
+	// each row of the transpose.
+	var lanes [][]Value
+	if axis == 1 {
+		lanes = make([][]Value, rows.Len())
+		for i := 0; i < rows.Len(); i++ {
+			ri, _ := AsList(rows.Get(i))
+			lanes[i] = ri.Slice()
+		}
+	} else {
+		lanes = transposeListOfLists(rows)
+	}
+	result := make([]Value, len(lanes))
+	for i, lane := range lanes {
+		acc := lane[0]
+		res, err := doFold(reg, acc, bodySlice, NewReadList(lane[1:]))
+		if err != nil {
+			return nil, fmt.Errorf("foldaxis: lane %d: %w", i, err)
+		}
+		result[i] = res[0]
+	}
+	return []Value{NewList(result)}, nil
 }
 
 // transposeListOfLists transposes a list-of-lists, returning columns as [][]Value.

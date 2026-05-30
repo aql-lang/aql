@@ -126,6 +126,37 @@ func TestErrorFormatSignatureFnDef(t *testing.T) {
 	_ = ae
 }
 
+func TestErrorFormatSignaturePointsAtCallSiteNotLastMatch(t *testing.T) {
+	// The failing `upper` is on line 1; a *valid* later `upper` on line 3
+	// is the LAST textual match. The parser now stamps Value.Pos, so the
+	// error must point at the executed (line-1) word — not the last
+	// textual occurrence (line 3), which is what findWordInSource returns.
+	src := "99 upper\ndef ok 1\nupper \"fine\""
+	err := runWithSource(t, src)
+	ae := assertAqlError(t, err, "signature_error")
+	if ae.Row != 1 {
+		t.Errorf("expected Row=1 (the executed `upper`), got %d — "+
+			"a wrong row means the text-search fallback fired instead of the parser position", ae.Row)
+	}
+}
+
+func TestErrorFormatSignatureSameWordTwoBodies(t *testing.T) {
+	// `upper` (String-only) appears in two fn bodies. f's body (line 1)
+	// applies it to an Integer and fails with a signature error; g's body
+	// on line 2 holds the LAST textual `upper`. The error must point at
+	// line 1, where the failing call actually executes — not line 2, which
+	// is what the findWordInSource text-search fallback would return.
+	src := "def f fn [[a:Integer] Integer [a upper]]\n" +
+		"def g fn [[b:Integer] Integer [b upper]]\n" +
+		"f 5"
+	err := runWithSource(t, src)
+	ae := assertAqlError(t, err, "signature_error")
+	assertErrorContains(t, err, "no matching signature for upper")
+	if ae.Row != 1 {
+		t.Errorf("expected Row=1 (the failing `upper` in f's body), got %d", ae.Row)
+	}
+}
+
 func TestErrorFormatSignatureStackContext(t *testing.T) {
 	// The hint should describe what types are actually on the stack
 	err := runWithSource(t, `"hello" 42 upper`)
@@ -167,6 +198,52 @@ func TestErrorFormatReturnCount(t *testing.T) {
 		"got 1",
 	)
 	_ = ae
+}
+
+func TestErrorFormatReturnTypeAnonymousFn(t *testing.T) {
+	// An anonymous fn value (no name) returns the wrong type. Its
+	// FuncName is the "<fn>" placeholder, which findWordInSource can never
+	// match — so without a real position the error had no arrow at all.
+	// The fn value now carries its construction position, so the error
+	// points at line 3 where the `fn [...]` is written.
+	src := "def x 1\n" +
+		"def y 2\n" +
+		"42 (fn [[Integer] String [dup]])"
+	err := runWithSource(t, src)
+	ae := assertAqlError(t, err, "type_error")
+	assertErrorContains(t, err, "return value 1")
+	if ae.Row != 3 {
+		t.Errorf("expected Row=3 (the `fn [...]` construction), got %d", ae.Row)
+	}
+}
+
+func TestErrorFormatReturnTypePointsAtCallSite(t *testing.T) {
+	// f's return mismatch fires at the call on line 2. A trailing `def ff`
+	// on line 3 contains the substring "f", which findWordInSource would
+	// wrongly match as the last occurrence. The call-site Pos now flows
+	// through the ReturnCheck marker, so the error points at line 2.
+	src := "def f fn [[n:Integer] String [n]]\n" +
+		"42 f\n" +
+		"def ff 1"
+	err := runWithSource(t, src)
+	ae := assertAqlError(t, err, "type_error")
+	assertErrorContains(t, err, "return value 1")
+	if ae.Row != 2 {
+		t.Errorf("expected Row=2 (the call `42 f`), got %d — "+
+			"a wrong row means the text-search fallback matched a later substring", ae.Row)
+	}
+}
+
+func TestErrorFormatUnknownPositionSaysSo(t *testing.T) {
+	// An unmatched opening paren is a parser-side syntax error with no
+	// source token to attribute it to. Rather than guess a location by
+	// text-searching, the error explicitly states the position is unknown.
+	err := runWithSource(t, "x add (1 2")
+	ae := assertAqlError(t, err, "syntax_error")
+	if ae.Row != 0 {
+		t.Errorf("expected no position (Row 0), got %d", ae.Row)
+	}
+	assertErrorContains(t, err, "--> source position unknown")
 }
 
 // =====================================================================

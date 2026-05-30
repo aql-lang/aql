@@ -191,10 +191,11 @@ func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("eye", makeIntToMatrixFnDef("matrix-eye", subReg))
 	exports.Set("fill", makeIntIntNumToMatrixFnDef("matrix-fill", subReg))
 
-	// Shape
+	// Shape. No `size` export: the core `size` word already reports a
+	// tensor's entry count via the Sizer behavior (TensorData), so a
+	// matrix.size would only shadow it — see ADR-001.
 	exports.Set("rows", makeMatrixToIntFnDef("matrix-rows", subReg))
 	exports.Set("cols", makeMatrixToIntFnDef("matrix-cols", subReg))
-	exports.Set("size", makeMatrixToIntFnDef("matrix-size", subReg))
 
 	// Access
 	exports.Set("elem", makeMatrixIntIntToDecFnDef("matrix-at", subReg))
@@ -208,9 +209,12 @@ func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("scale", makeMatrixNumToMatrixFnDef("matrix-scale", subReg))
 	exports.Set("mat-emul", makeMatrixMatrixToMatrixFnDef("matrix-mat-emul", subReg))
 
-	// Transform
+	// Transform. The flat row-major list of entries is exported as
+	// `values`, not `flatten`, so it does not shadow the core `flatten`
+	// word (ADR-001). `transpose` is an aql:array module word, not a
+	// core word, so matrix.transpose is fine.
 	exports.Set("transpose", makeUnaryMatrixFnDef("matrix-transpose", subReg))
-	exports.Set("flatten", makeMatrixToListFnDef("matrix-flatten", subReg))
+	exports.Set("values", makeMatrixToListFnDef("matrix-flatten", subReg))
 
 	// Aggregation
 	exports.Set("sum", makeMatrixToDecFnDef("matrix-sum", subReg))

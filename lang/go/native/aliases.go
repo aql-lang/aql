@@ -275,7 +275,6 @@ var (
 	FormatDecimal             = eng.FormatDecimal
 	NewTypedListWithElements  = eng.NewTypedListWithElements
 	NewTypedMapWithEntries    = eng.NewTypedMapWithEntries
-	FindWordInSource          = eng.FindWordInSource
 	FlattenDisjunctAlts       = eng.FlattenDisjunctAlts
 	FnDefHasSig               = eng.FnDefHasSig
 	FnDefsOverlap             = eng.FnDefsOverlap

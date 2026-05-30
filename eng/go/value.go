@@ -330,7 +330,8 @@ type FnUndefInfo struct {
 type ReturnCheckInfo struct {
 	FuncName     string
 	Returns      []*Type
-	UnnamedCount int // number of unnamed params pushed onto the stack before the body
+	UnnamedCount int    // number of unnamed params pushed onto the stack before the body
+	Pos          SrcPos // source position of the fn call site, for return errors
 }
 
 // DisjunctInfo holds the alternatives for a disjunction (union) type.
@@ -588,6 +589,7 @@ type ForwardInfo struct {
 	// FuncIndex records where the deferred function word sits in the stack.
 	FuncIndex int
 	Sig       *Signature // the matched signature, for direct execution on completion
+	Pos       SrcPos     // source position of the forward-collecting word, for errors
 }
 
 // Value is the single node type of the AQL kernel: it is at once a
@@ -1955,12 +1957,60 @@ func kernelFormatDefault(v Value) string {
 			parts[i] = alt.String()
 		}
 		return strings.Join(parts, "|")
+	// A function value (TFnDef / TFunction, payload FnDefInfo) renders
+	// as a compact `fn name(sig…)` summary. Crucially it does NOT fall
+	// through to the `%v` default, which would dump the whole FnDefInfo
+	// — including its captured *Registry and the module's entire exports
+	// map (a 600-line spill into error messages). See formatFnDef.
+	case isFnDefValue(v):
+		fd, _ := v.Data.(FnDefInfo)
+		return formatFnDef(fd)
 	// TMap rendering moved to mapFormatBehavior in
 	// coretype_list_map_behaviors.go (Step 10). The top-of-function
 	// Behavior dispatch routes Map values (and TMap-rooted subtypes
 	// like RecordType/OptionsType) there.
 	default:
 		return fmt.Sprintf("%v(%v)", v.Parent, v.Data)
+	}
+}
+
+// isFnDefValue reports whether v carries an FnDefInfo payload (a fn or
+// lambda value, Parent TFnDef or TFunction).
+func isFnDefValue(v Value) bool {
+	_, ok := v.Data.(FnDefInfo)
+	return ok
+}
+
+// formatFnDef renders a function value as a compact one-line summary:
+// `fn name(argTypes…)` per overload, e.g. `fn inc(Integer)` or
+// `fn (Integer, String) or (Decimal)`. It reads ONLY Name and the
+// argument types of each Signature — never Registry, Captured, or the
+// raw FnSig bodies — so a function value can appear in an error message
+// or a printed list without spilling its closure environment (the
+// module exports map in particular). Anonymous lambdas have no Name and
+// render as `fn(args…)`.
+func formatFnDef(fd FnDefInfo) string {
+	name := fd.Name
+	// Summarise the argument shapes. Prefer non-empty signatures; a
+	// synthesized 0-arg fallback alongside real overloads is noise here
+	// (it is not shown by `help` either), so drop empty sigs when any
+	// non-empty one exists.
+	var sigParts []string
+	for i := range fd.Signatures {
+		if len(fd.Signatures[i].Args) > 0 {
+			sigParts = append(sigParts, describeSigArgs(&fd.Signatures[i]))
+		}
+	}
+	sigPart := strings.Join(sigParts, " or ")
+	switch {
+	case name == "" && sigPart == "":
+		return "fn"
+	case name == "":
+		return "fn " + sigPart
+	case sigPart == "":
+		return "fn " + name
+	default:
+		return "fn " + name + sigPart
 	}
 }
 

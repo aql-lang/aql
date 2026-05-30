@@ -2225,3 +2225,55 @@ func TestParseDashLetterDigitMix(t *testing.T) {
 	// `-x5` is a Word (the leading `-` is followed by a non-digit).
 	assertParse(t, "-x5", []eng.Value{eng.NewWord("-x5")})
 }
+
+// =====================================================================
+// Source position capture (aontu-style Site)
+// =====================================================================
+
+// TestSourcePositionWordRowCol verifies the parser stamps Value.Pos with
+// the 1-based row/col of each top-level word's opening token.
+func TestSourcePositionWordRowCol(t *testing.T) {
+	vals, err := Parse("foo\n  bar baz")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(vals) != 3 {
+		t.Fatalf("expected 3 values, got %d", len(vals))
+	}
+	// foo @ 1:1, bar @ 2:3, baz @ 2:7
+	want := []eng.SrcPos{{Row: 1, Col: 1}, {Row: 2, Col: 3}, {Row: 2, Col: 7}}
+	for i, w := range want {
+		if vals[i].Pos.Row != w.Row || vals[i].Pos.Col != w.Col {
+			t.Errorf("value %d: expected %d:%d, got %d:%d",
+				i, w.Row, w.Col, vals[i].Pos.Row, vals[i].Pos.Col)
+		}
+	}
+}
+
+// TestNoSitedLeak parses a spread of surface forms and asserts none leaks a
+// parser-internal sited wrapper past a converter type-switch. A leak surfaces
+// as an "unsupported value type parser.sited" error from a convert*Inner
+// default arm (the sited wrapper is not a sealed eng.Payload, so it can only
+// manifest as such a parse error, never as a stored Value.Data).
+func TestNoSitedLeak(t *testing.T) {
+	forms := []string{
+		`a b c`,
+		`a.b.c`,
+		`m!.k`,
+		`[1 2 3]`,
+		`{a:1 b:2}`,
+		`f (g x)`,
+		"`hello ${1 add 2} world`",
+		`[x:Integer] => [x]`,
+		`a ; b`,
+		`{foo/r}`,
+		`[:String]`,
+		`{:Integer}`,
+		`def f fn [[n:Integer] Integer [n add 1]]`,
+	}
+	for _, src := range forms {
+		if _, err := Parse(src); err != nil {
+			t.Errorf("Parse(%q) errored (possible sited leak): %v", src, err)
+		}
+	}
+}

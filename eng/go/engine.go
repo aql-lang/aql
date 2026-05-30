@@ -122,7 +122,7 @@ func (e *Engine) effectiveSource() string {
 // sigError builds a detailed AqlError for a signature mismatch.
 // It includes the word name, available signatures, and the actual
 // types found on the stack near the word.
-func (e *Engine) sigError(name string, fn *FnDefInfo) *AqlError {
+func (e *Engine) sigError(name string, fn *FnDefInfo, pos SrcPos) *AqlError {
 	detail := "no matching signature for " + name
 
 	// Build hint with available signatures and actual stack types.
@@ -138,7 +138,7 @@ func (e *Engine) sigError(name string, fn *FnDefInfo) *AqlError {
 	}
 
 	src := e.effectiveSource()
-	return e.maybeAddFnShapeHint(makeAqlError("signature_error", detail, name, src, hint.String())).(*AqlError)
+	return e.maybeAddFnShapeHint(makeAqlErrorAt("signature_error", detail, name, src, hint.String(), pos)).(*AqlError)
 }
 
 // isFnShapeTypedBindingContext reports whether the failing word is
@@ -204,39 +204,97 @@ func (e *Engine) isFnShapeTypedBindingContext() bool {
 
 // insufficientArgsError builds a detailed AqlError for forward argument
 // collection failure (not enough arguments after the word).
-func (e *Engine) insufficientArgsError(name string, expected int) *AqlError {
+func (e *Engine) insufficientArgsError(name string, expected int, pos SrcPos) *AqlError {
 	detail := fmt.Sprintf("insufficient arguments for %s (expected %d forward args)", name, expected)
 	hint := "stack: " + describeStackTypes(e.stack, e.pointer)
 	src := e.effectiveSource()
-	return makeAqlError("signature_error", detail, name, src, hint)
+	return makeAqlErrorAt("signature_error", detail, name, src, hint, pos)
+}
+
+// stampResultPos stamps pos onto handler-produced values that lack a source
+// position: ReturnCheck markers (so a return-type error built later knows the
+// call site) and freshly-constructed Function/FnDef values (so an anonymous
+// `fn`/`afn` value carries its construction site for downstream errors). Only
+// zero-Pos entries are touched, so values that already carry a position — a
+// stored fn passed through, a literal — are left alone.
+func stampResultPos(vals []Value, pos SrcPos) {
+	if pos.Row == 0 {
+		return
+	}
+	for i := range vals {
+		if vals[i].Pos.Row != 0 {
+			continue
+		}
+		switch {
+		case IsReturnCheck(vals[i]):
+			if rc, err := AsReturnCheck(vals[i]); err == nil && rc.Pos.Row == 0 {
+				rc.Pos = pos
+				vals[i] = NewReturnCheck(rc)
+			}
+		case vals[i].Parent.Equal(TFunction) || vals[i].Parent.Equal(TFnDef):
+			vals[i].Pos = pos
+		}
+	}
+}
+
+// stampErrPos attaches the currently-dispatched word's position to a
+// handler-produced AqlError that has none. A handler raises its error while
+// the engine is executing a specific word (at the pointer), so that word's
+// position is the genuine location of the failure — no text-search guess.
+// Errors that already carry a position, and non-AqlError errors, are left
+// untouched.
+func (e *Engine) stampErrPos(err error) error {
+	ae, ok := err.(*AqlError)
+	if !ok || ae.Row != 0 {
+		return err
+	}
+	pos := e.currentPos()
+	if pos.Row != 0 {
+		ae.Row, ae.Col = pos.Row, pos.Col
+		if pos.Src != "" {
+			ae.Src = pos.Src
+		}
+	}
+	return err
 }
 
 // returnCountError builds a detailed AqlError for wrong number of return values.
-func (e *Engine) returnCountError(funcName string, expected, got int) *AqlError {
+func (e *Engine) returnCountError(funcName string, expected, got int, pos SrcPos) *AqlError {
 	detail := fmt.Sprintf("%s: expected %d return value(s), got %d", funcName, expected, got)
 	src := e.effectiveSource()
-	return makeAqlError("type_error", detail, funcName, src, "")
+	return makeAqlErrorAt("type_error", detail, funcName, src, "", pos)
 }
 
 // returnTypeError builds a detailed AqlError for a return type mismatch.
-func (e *Engine) returnTypeError(funcName string, index int, expected *Type, got Value) *AqlError {
+func (e *Engine) returnTypeError(funcName string, index int, expected *Type, got Value, pos SrcPos) *AqlError {
 	detail := fmt.Sprintf("%s: return value %d: expected %s, got %s",
 		funcName, index, expected, got.Parent)
-	hint := "value: " + ValToString(got)
+	hint := "value: " + diagValue(got)
 	src := e.effectiveSource()
-	return makeAqlError("type_error", detail, funcName, src, hint)
+	return makeAqlErrorAt("type_error", detail, funcName, src, hint, pos)
+}
+
+// currentPos returns the source position of the value at the pointer — the
+// token currently being processed — or the unknown SrcPos when the pointer
+// is out of range. Engine-side error builders use it so an error is located
+// at the token that triggered it.
+func (e *Engine) currentPos() SrcPos {
+	if e.pointer >= 0 && e.pointer < len(e.stack) {
+		return e.stack[e.pointer].Pos
+	}
+	return SrcPos{}
 }
 
 // syntaxError builds a detailed AqlError for a syntax error.
 func (e *Engine) syntaxError(msg, token string) *AqlError {
 	src := e.effectiveSource()
-	return makeAqlError("syntax_error", msg, token, src, "")
+	return makeAqlErrorAt("syntax_error", msg, token, src, "", e.currentPos())
 }
 
 // runtimeError builds a detailed AqlError for a runtime error.
 func (e *Engine) runtimeError(code, detail, word, hint string) *AqlError {
 	src := e.effectiveSource()
-	return makeAqlError(code, detail, word, src, hint)
+	return makeAqlErrorAt(code, detail, word, src, hint, e.currentPos())
 }
 
 // traceSigStr formats a signature as "name(type, type) prec=N" for trace annotations.
@@ -941,7 +999,7 @@ func (e *Engine) stepWord(val Value) error {
 		if e.registry.Check.IsActive() && len(fn.Signatures) > 0 {
 			return e.checkModeAssumeSig(w, fn, &fn.Signatures[0], val.Pos)
 		}
-		return e.sigError(w.Name, fn)
+		return e.sigError(w.Name, fn, val.Pos)
 	}
 
 	// Count forward vs stack args from positions.
@@ -1108,7 +1166,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		fullStack = e.resolvedStackBeforeFrom(base, sortedIndices)
 		results, err := match.Sig.Handler(match.Args, ctx, fullStack, e.registry)
 		if err != nil {
-			return err
+			return e.stampErrPos(err)
 		}
 		if e.recorder != nil {
 			e.recorder.OnCall(match.Name, n, len(results))
@@ -1122,10 +1180,18 @@ func (e *Engine) execMatch(match *MatchResult) error {
 
 	results, err := match.Sig.Handler(match.Args, ctx, nil, e.registry)
 	if err != nil {
-		return e.maybeAddFnShapeHint(err)
+		return e.stampErrPos(e.maybeAddFnShapeHint(err))
 	}
 	if e.recorder != nil {
 		e.recorder.OnCall(match.Name, n, len(results))
+	}
+
+	// Stamp handler-produced ReturnCheck markers and fresh Function/FnDef
+	// values that lack a position with the call-site word's position, so a
+	// return-type error (named-fn body or anonymous fn value) points at the
+	// call/construction rather than the last textual occurrence of the name.
+	if e.pointer >= 0 && e.pointer < len(e.stack) {
+		stampResultPos(results, e.stack[e.pointer].Pos)
 	}
 
 	return e.spliceMatchResults(match, sortedIndices, n, results)
@@ -1289,10 +1355,24 @@ func (e *Engine) resolvedStackBeforeFrom(from int, excludeIndices []int) []Value
 // matched signature plus arg-count bookkeeping; subsequent literals
 // are routed into its arg slots until ExpectedArgs is reached, at
 // which point the marker triggers handler execution.
+// forceStackWord rewrites the word at idx into its force-stack form
+// (ForceStack=true) while preserving the source position. Used at the
+// forward-collection completion points where the word must re-dispatch
+// against the stack; callers set e.pointer themselves as needed.
+func (e *Engine) forceStackWord(idx int, w WordInfo) {
+	pos := e.stack[idx].Pos
+	e.stack[idx] = NewWordModified(w.Name, w.ArgCount, true, false)
+	e.stack[idx].Pos = pos // preserve source position across force-stack rewrite
+}
+
 func (e *Engine) insertForward(w WordInfo, sig *Signature, forwardNeeded int, stackArgs ...int) error {
 	pArgs := 0
 	if len(stackArgs) > 0 {
 		pArgs = stackArgs[0]
+	}
+	var pos SrcPos
+	if e.pointer >= 0 && e.pointer < len(e.stack) {
+		pos = e.stack[e.pointer].Pos
 	}
 	fwd := NewForward(ForwardInfo{
 		FuncName:     w.Name,
@@ -1300,6 +1380,7 @@ func (e *Engine) insertForward(w WordInfo, sig *Signature, forwardNeeded int, st
 		StackArgs:    pArgs,
 		FuncIndex:    e.pointer,
 		Sig:          sig,
+		Pos:          pos,
 	})
 
 	stackInsert(&e.stack, e.pointer+1, fwd)
@@ -1389,7 +1470,9 @@ func (e *Engine) stepLiteral() error {
 		if !matches && fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx] &&
 			val.Parent.Equal(TWord) && TAtom.Matches(fwd.Sig.Args[nextIdx]) {
 			w, _ := AsWord(val)
-			e.stack[valIdx] = NewAtom(w.Name)
+			atom := NewAtom(w.Name)
+			atom.Pos = val.Pos // preserve source position across /q Word→Atom conversion
+			e.stack[valIdx] = atom
 			matches = true
 		}
 		if !matches {
@@ -1439,7 +1522,7 @@ func (e *Engine) stepLiteral() error {
 
 		if funcIdx < len(e.stack) && IsWord(e.stack[funcIdx]) {
 			w, _ := AsWord(e.stack[funcIdx])
-			e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
+			e.forceStackWord(funcIdx, w)
 		}
 
 		// Rearrange values for forward-first matching: forward args at
@@ -2084,6 +2167,13 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	nArgs := len(sig.Params)
 	indices := e.resolvedIndicesBefore(nArgs)
 
+	// Capture the call-site position (the fn value being invoked) before the
+	// stack is mutated, so a return-type error can point at the call.
+	var callPos SrcPos
+	if valIdx >= 0 && valIdx < len(e.stack) {
+		callPos = e.stack[valIdx].Pos
+	}
+
 	// Auto-evaluate consumed arguments with Eval=true so FnDef handlers
 	// receive resolved data. Maps: {base:hex} → {base:atom(hex)}.
 	// Lists: [c1 c2] → [map1, map2].
@@ -2230,6 +2320,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 			FuncName:     "<fn>",
 			Returns:      sig.Returns,
 			UnnamedCount: unnamedCount,
+			Pos:          callPos,
 		}))
 	}
 	tokens = append(tokens, NewCloseParen())
@@ -2755,7 +2846,7 @@ func (e *Engine) stepCloseParen() error {
 	for i := openIdx + 1; i < closeIdx; i++ {
 		if IsForward(e.stack[i]) {
 			fwd, _ := AsForward(e.stack[i])
-			return e.insufficientArgsError(fwd.FuncName, fwd.ExpectedArgs)
+			return e.insufficientArgsError(fwd.FuncName, fwd.ExpectedArgs, fwd.Pos)
 		}
 	}
 
@@ -2787,11 +2878,11 @@ func (e *Engine) stepCloseParen() error {
 			// number of unnamed params that were pushed before the body.
 			nret := len(rc.Returns)
 			if len(results) < nret {
-				return e.returnCountError(rc.FuncName, nret, len(results))
+				return e.returnCountError(rc.FuncName, nret, len(results), rc.Pos)
 			}
 			extra := len(results) - nret
 			if extra > rc.UnnamedCount {
-				return e.returnCountError(rc.FuncName, nret, len(results)-rc.UnnamedCount)
+				return e.returnCountError(rc.FuncName, nret, len(results)-rc.UnnamedCount, rc.Pos)
 			}
 
 			// Validate the top nret values match declared return types.
@@ -2804,7 +2895,7 @@ func (e *Engine) stepCloseParen() error {
 			// See design/REFINE-NEWTYPE-VS-SUBSET.0.md.
 			for k, exp := range rc.Returns {
 				if !results[extra+k].Is(exp) {
-					return e.returnTypeError(rc.FuncName, k+1, exp, results[extra+k])
+					return e.returnTypeError(rc.FuncName, k+1, exp, results[extra+k], rc.Pos)
 				}
 			}
 
@@ -3004,7 +3095,7 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 
 		match := MatchSignature(fn.Signatures, resolved, testW)
 		if match != nil {
-			e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
+			e.forceStackWord(funcIdx, w)
 			e.pointer = funcIdx
 			return
 		}
@@ -3049,7 +3140,7 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 	}
 
 	// No outer forward - force stack (may result in error on next step).
-	e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
+	e.forceStackWord(funcIdx, w)
 	e.pointer = funcIdx
 }
 

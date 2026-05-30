@@ -46,19 +46,28 @@ timer/concurrency (6: sleep, timeout, interval, cancel, await, now).
 
 ## Partially Implemented
 
-### ARRAYIFICATION.6.md — ~60%
+### ARRAYIFICATION.6.md — complete (minus the rejected broadcasting)
 
-**Done:** `iota`, `reshape`, `flatten`, `transpose`, `take`, `shed`,
-`reverse`, `each`, `fold`, `scan`, `outer`, `inner`, `where`,
-`unique`, `grade`, `window`, `pairs`, `group`, `replicate`,
-`expand`, `at`, `sortby`, `member` (23 words). Object/Array type
-with SQLiteStore backing.
+**Done:** `iota`, `range`, `reshape`, `flatten`, `transpose`, `take`,
+`shed`, `reverse`, `each`, `fold`, `scan`, `outer`, `inner`, `where`,
+`unique`, `grade`, `window`, `pairs`, `group`, `replicate`, `expand`,
+`compress`, `eachrank`, `foldaxis`, `at`, `sortby`, `member` (27
+words). Object/Array type with SQLiteStore backing.
 
-**Missing:**
-- Broadcasting rules (implicit iteration over mismatched shapes)
-- Rank polymorphism (`eachrank`, `foldaxis`)
-- `compress` (boolean mask selection, separate from `where`)
-- Phases 4-5 from the design doc (broadcasting, advanced composition)
+**Packaging:** the vocabulary is split between core built-ins and the
+`aql:array` module (see ARRAYIFICATION.6.md "Packaging"). Built-in:
+`iota`, `range`, `take`, `shed`, `reverse`, `each`, `fold`, `scan`,
+`outer`, `inner` (plus core `size`/`flatten`/`indexof`). Module
+(`array.` prefix after `"aql:array" import`): `shape`, `rank`,
+`reshape`, `transpose`, `where`, `grade`, `at`, `sortby`, `replicate`,
+`expand`, `compress`, `eachrank`, `foldaxis`, `member`, `unique`,
+`group`, `window`, `pairs`. Per ADR-001 no module export shadows a core
+word: deep flatten is the core `flatten -1` and list lookup is the core
+`indexof` `[List, List]` overload — neither is an `array.*` word.
+
+**Rejected:**
+- Broadcasting (implicit scalar-over-array lifting) — see ADR-002.
+  Scalar-over-array application stays explicit via `each`/`eachrank`.
 
 
 ## Not Implemented

@@ -1,8 +1,21 @@
 package test
 
 import (
+	"strings"
 	"testing"
 )
+
+// stripErrPos removes the source-location tail (`--> row:col` and any
+// following source-extract / caret lines) from an error value's rendered
+// form. An aliased word spliced from a `def` body legitimately reports a
+// different source position than the same word written inline, so alias
+// equivalence is asserted on the error text, not its location.
+func stripErrPos(s string) string {
+	if i := strings.Index(s, "\n  --> "); i >= 0 {
+		return s[:i]
+	}
+	return s
+}
 
 // aliasCase defines a single alias test: an original AQL expression
 // and the same expression using a def alias.
@@ -35,8 +48,8 @@ func runAliasTest(t *testing.T, tc aliasCase) {
 			tc.name, len(origResult), len(aliasResult))
 	}
 	for i := range origResult {
-		o := origResult[i].String()
-		a := aliasResult[i].String()
+		o := stripErrPos(origResult[i].String())
+		a := stripErrPos(aliasResult[i].String())
 		if o != a {
 			t.Errorf("%s: result[%d] mismatch: orig=%s alias=%s",
 				tc.name, i, o, a)

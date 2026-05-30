@@ -59,9 +59,9 @@ Language-agnostic content stays at the top of each component:
 - `formatter/` — code pretty-printer (no engine deps).
 - `capabilities/` — file I/O abstraction (`FileOps` interface
   + OS-backed and in-memory implementations).
-- `modules/` — loadable modules (`aql:math`, `aql:time`,
-  `aql:matrix`, `aql:decision`, `aql:solardemo`, `aql:bin`,
-  `aql:type`).
+- `modules/` — loadable modules (`aql:math`, `aql:array`,
+  `aql:time`, `aql:matrix`, `aql:decision`, `aql:solardemo`,
+  `aql:bin`, `aql:type`).
 - `test/` — integration tests and TSV spec runners.
 
 ## Build & Test

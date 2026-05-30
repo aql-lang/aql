@@ -364,7 +364,7 @@ of the word, with the haystack as the forward arg.
 | `concat` | Join list elements into a string | `concat ["a","b"] => 'ab'` |
 | `split` | Split string by separator | `split "a,b" "," => ['a','b']` |
 | `contains` | Substring test | `contains "hello" "ell" => true` |
-| `indexof` | Find position (–1 if absent) | `indexof "hello" "ll" => 2` |
+| `indexof` | Find substring position (also has a list form — see [List and array words](#list-and-array-words)) | `indexof "hello" "ll" => 2` |
 | `slice` | Substring; negative indices ok | `slice "hello" 1 3 => 'el'` |
 | `replace` | Replace pattern | `replace "hello" "l" "r" => 'herlo'` |
 | `repeat` | Repeat string | `repeat "ab" 3 => 'ababab'` |
@@ -555,25 +555,61 @@ iota 5 each [dup mul]     => [0 1 4 9 16]
 
 ### List and array words
 
+These are built-in (no import needed): the constructors, basic slicing,
+and `flatten`/`size`. The specialised array vocabulary lives in the
+[`aql:array` module](#the-aqlarray-module) below.
+
 | Word | Description | Example |
 |------|-------------|---------|
 | `iota` | Generate `[0..N-1]` | `iota 5 => [0,1,2,3,4]` |
-| `reshape` | Change dimensions | `iota 6 reshape [2,3]` |
-| `flatten` | Remove one level of nesting | `[[1,2],[3]] flatten => [1,2,3]` |
+| `range` | Generate an arithmetic sequence `[start..stop)` | `range 2 6 => [2,3,4,5]`; `range 0 10 3 => [0,3,6,9]` |
 | `take` | First N elements | `[1,2,3,4] take 2 => [1,2]` |
 | `shed` | Drop first N | `[1,2,3,4] shed 2 => [3,4]` |
 | `reverse` | Reverse order | `[1,2,3] reverse => [3,2,1]` |
-| `unique` | Remove duplicates | `[1,2,2,3] unique => [1,2,3]` |
-| `grade` | Indices that would sort | `[3,1,2] grade => [1,2,0]` |
-| `window` | Sliding window of size N | `[1,2,3,4] window 2` |
-| `pairs` | Adjacent pairs | `[1,2,3] pairs => [[1,2],[2,3]]` |
-| `group` | Pair parallel keys/values into a multi-map | `["a","b","a"] [1,2,3] group` |
-| `replicate` | Repeat each element N times | `[1,2,3] replicate [2,1,3]` |
-| `expand` | Expand by Boolean mask | `[1,2,3] expand [true,false,true]` |
-| `at` | Select by index list | `[10,20,30] at [2,0]` |
-| `sortby` | Sort by parallel key list | `["b","a","c"] [2,1,3] sortby` |
-| `member` | Per-element membership test | `[1,2,3] [2,3,4] member => [true,true,false]` |
+| `flatten` | Remove one nesting level; `flatten N` removes N; `flatten -1` fully flattens | `[[1,2],[3]] flatten => [1,2,3]`; `flatten -1 [1,[2,[3]]] => [1,2,3]` |
+| `indexof` | On strings: substring position. On two lists: index of each needle in the haystack | `indexof "hello" "ll" => 2`; `indexof [20,10] [10,20,30] => [1,0]` |
 | `size` | Element / key count of a collection — works on any value (see [Size](#size)) | `[1,2,3] size => 3` |
+
+`flatten` and `indexof` are single words with several type-dispatched
+signatures (see [ADR-001](ADR.md#adr-001)): a deep flatten is `flatten
+-1`, and the list form of `indexof` is just `indexof` on two lists — there
+are deliberately no `array.flatten`/`array.indexof` words.
+
+### The `aql:array` module
+
+The specialised APL-style array vocabulary lives in a built-in module,
+imported with `"aql:array" import` and reached via the `array.` prefix.
+This keeps the global namespace lean (mirroring how `aql:math` gates
+`sin`/`cos`/…). Per [ADR-001](ADR.md#adr-001) no name here shadows a core
+word, so deep flatten and list lookup are core overloads (above), not
+module words. `transpose` has no core counterpart and so appears here
+under its plain name.
+
+```
+"aql:array" import end
+iota 6 array.reshape [2,3]        => [[0 1 2] [3 4 5]]
+```
+
+| Word | Description | Example |
+|------|-------------|---------|
+| `array.shape` | Dimensions of a nested list | `array.shape [[1,2,3],[4,5,6]] => [2,3]` |
+| `array.rank` | Number of dimensions | `array.rank [[1,2],[3,4]] => 2` |
+| `array.reshape` | Change dimensions | `iota 6 array.reshape [2,3]` |
+| `array.transpose` | Transpose a rank-2 list | `array.transpose [[1,2],[3,4]]` |
+| `array.where` | Indices of truthy elements | `array.where [true,false,true] => [0,2]` |
+| `array.grade` | Indices that would sort | `array.grade [3,1,2] => [1,2,0]` |
+| `array.at` | Select by index list | `[10,20,30] array.at [2,0] => [30,10]` |
+| `array.sortby` | Sort by parallel key list | `["b","a","c"] array.sortby [2,1,3]` |
+| `array.replicate` | Repeat each element N times | `[1,2,3] array.replicate [2,1,3]` |
+| `array.expand` | Expand by Boolean mask | `[1,2,3] array.expand [true,false,true]` |
+| `array.compress` | Select elements where a mask is true | `array.compress [true,false,true] [10,20,30] => [10,30]` |
+| `array.eachrank` | Apply a body at a given cell rank (0 = scalars, 1 = innermost lists, …) | `array.eachrank 1 [each [add 10]] [[1,2],[3,4]] => [[11,12],[13,14]]` |
+| `array.foldaxis` | Reduce a rank-2 list along an axis (0 = columns, 1 = rows) | `array.foldaxis 0 [add] [[1,2],[3,4]] => [4,6]` |
+| `array.member` | Per-element membership test | `[1,2,3] array.member [2,3,4] => [true,true,false]` |
+| `array.unique` | Remove duplicates | `array.unique [1,2,2,3] => [1,2,3]` |
+| `array.group` | Group values by parallel keys (or indices by value) | `array.group ["a","b","a"] [1,2,3]` |
+| `array.window` | Sliding window of size N | `[1,2,3,4] array.window 2` |
+| `array.pairs` | Adjacent pairs | `array.pairs [1,2,3] => [[1,2],[2,3]]` |
 
 ### Higher-order array words
 

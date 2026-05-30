@@ -844,9 +844,9 @@ func TestCheckNestedTypedList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	// pairs yields TList<TList<Integer>>; each [reverse] should
+	// outer yields TList<TList<Integer>>; each [reverse] should
 	// type-check cleanly because reverse accepts TList.
-	res, err := a.Check("each [reverse] ( pairs ( iota 5 ) )")
+	res, err := a.Check("each [reverse] ( outer [add] ( iota 3 ) ( iota 3 ) )")
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -861,9 +861,9 @@ func TestCheckNestedTypedList(t *testing.T) {
 }
 
 // TestPerfNestedTypedList measures Check vs Run latency for a
-// nested-list program dominated by pairs/each.
+// nested-list program dominated by outer/each.
 func TestPerfNestedTypedList(t *testing.T) {
-	runPerfComparison(t, "each [reverse] ( pairs ( iota 10 ) )", 50)
+	runPerfComparison(t, "each [reverse] ( outer [add] ( iota 5 ) ( iota 5 ) )", 50)
 }
 
 // TestCheckDiagnosticJSON verifies CheckDiagnostic marshals to JSON
@@ -1152,8 +1152,8 @@ func TestPerfCorpus(t *testing.T) {
 		{"each-iota", "each [dup add] ( iota 20 )"},
 		{"fold-iota", "0 fold [add] ( iota 20 )"},
 		{"scan-iota", "scan [add] ( iota 20 )"},
-		{"pairs", "pairs ( iota 15 )"},
-		{"nested-higher-order", "each [reverse] ( pairs ( iota 15 ) )"},
+		{"outer", "outer [add] ( iota 4 ) ( iota 4 )"},
+		{"nested-higher-order", "each [reverse] ( outer [add] ( iota 4 ) ( iota 4 ) )"},
 		{"userfn-call", `def inc fn [[n:Integer] [Integer] [n add 1]]  inc 21`},
 		{"fullstack", "1 2 3 4 5 depth 1 pick 2 roll 3 stack"},
 		{"ctxtrack", `context set "x" 42 end context get "x"`},

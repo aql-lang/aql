@@ -116,6 +116,8 @@ Create, access, build:
 [10, 20, 30]                  => [10 20 30]
 [10, 20, 30] . 1              => 20
 iota 5                        => [0 1 2 3 4]
+range 2 6                     => [2 3 4 5]        # start/stop
+range 0 10 3                  => [0 3 6 9]        # start/stop/step
 for 5 [42]                    => 42 42 42 42 42   # body runs 5 times
 ```
 
@@ -129,23 +131,28 @@ fold [add] [1, 2, 3] 0        => 6              # all-forward
 0 [1, 2, 3] [add] fold        => 6              # all-stack, same result
 ```
 
-Reshape, take, drop, reverse:
+Take, drop, reverse, flatten, indexof (built-in):
 
 ```
-iota 6 reshape [2, 3]         => [[0 1 2] [3 4 5]]
 [1,2,3,4] take 2              => [1 2]
 [1,2,3,4] shed 2              => [3 4]
 [1,2,3] reverse               => [3 2 1]
-[3,1,2] grade                 => [1 2 0]      # sort indices
-[1,2,2,3] unique              => [1 2 3]
-[1,2,3,4] window 2            => [[1 2] [2 3] [3 4]]
-[1,2,3] pairs                 => [[1 2] [2 3]]
+[[1,2],[3]] flatten           => [1 2 3]        # one level
+flatten -1 [1,[2,[3]]]        => [1 2 3]        # fully flatten
+indexof [20,10] [10,20,30]    => [1 0]          # index of each needle
 ```
 
-Index:
+The richer array vocabulary — reshaping, ordering, grouping,
+neighborhoods, indexing — lives in the `aql:array` module:
 
 ```
-[10,20,30] at [2,0]           => [30 10]
+"aql:array" import end
+iota 6 array.reshape [2, 3]   => [[0 1 2] [3 4 5]]
+[3,1,2] array.grade           => [1 2 0]      # sort indices
+[1,2,2,3] array.unique        => [1 2 3]
+[1,2,3,4] array.window 2      => [[1 2] [2 3] [3 4]]
+[1,2,3] array.pairs           => [[1 2] [2 3]]
+[10,20,30] array.at [2,0]     => [30 10]
 ```
 
 

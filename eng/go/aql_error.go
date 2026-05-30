@@ -38,7 +38,11 @@ func (e *AqlError) Error() string {
 	b.WriteString("]: ")
 	b.WriteString(e.Detail)
 
-	// Line 2: --> <row>:<col>
+	// Line 2: --> <row>:<col>, or an explicit unknown marker. The parser
+	// stamps real positions on values; an error with no position is one the
+	// engine could not attribute to a source token. We say so rather than
+	// guess a location by text-searching the source (which is wrong whenever
+	// a word appears more than once).
 	if e.Row > 0 {
 		b.WriteString("\n  --> ")
 		b.WriteString(strconv.Itoa(e.Row))
@@ -48,6 +52,8 @@ func (e *AqlError) Error() string {
 		} else {
 			b.WriteString("1")
 		}
+	} else {
+		b.WriteString("\n  --> source position unknown")
 	}
 
 	// Source site extract
@@ -138,51 +144,67 @@ type SrcPos struct {
 	Src string // source text of the token
 }
 
-// FindWordInSource locates the last occurrence of a word in the source
-// text and returns 1-based row and col. Searching from the end is more
-// likely to find the call site rather than the definition site (e.g.
-// "def f ..." vs "f"). If the word is not found, returns (0, 0).
-//
-// Exported for use by the static type-checker when filling in Row/Col
-// on diagnostics whose Pos is unknown.
-func FindWordInSource(src, word string) (row int, col int) {
-	return findWordInSource(src, word)
-}
-
-func findWordInSource(src, word string) (row int, col int) {
-	if src == "" || word == "" {
-		return 0, 0
-	}
-	lines := strings.Split(src, "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		idx := strings.Index(lines[i], word)
-		if idx >= 0 {
-			return i + 1, idx + 1
-		}
-	}
-	return 0, 0
-}
-
-// MakeAqlError creates an AqlError with source location from the given
-// source text and word, searching for the word in the source to determine
-// the error position.
+// MakeAqlError creates an AqlError with no source position. The caller
+// has no source token to attribute the error to; the rendered error states
+// the position is unknown. Use MakeAqlErrorAt (or thread a Value's .Pos)
+// whenever the offending token is in hand.
 func MakeAqlError(code, detail, word, fullSource, hint string) *AqlError {
 	return makeAqlError(code, detail, word, fullSource, hint)
 }
 
-// makeAqlError creates an AqlError with source location from the given
-// source text and word.
+// makeAqlError creates an AqlError with no source position (Row 0).
 func makeAqlError(code, detail, word, fullSource, hint string) *AqlError {
-	row, col := findWordInSource(fullSource, word)
+	return makeAqlErrorAt(code, detail, word, fullSource, hint, SrcPos{})
+}
+
+// makeAqlErrorAt creates an AqlError at an explicit source position. When
+// pos is unknown (Row 0) the error carries no location and renders as
+// "source position unknown" — there is no text-search fallback, because a
+// guessed location is wrong whenever the word appears more than once.
+func makeAqlErrorAt(code, detail, word, fullSource, hint string, pos SrcPos) *AqlError {
+	src := word
+	if pos.Src != "" {
+		src = pos.Src
+	}
 	return &AqlError{
 		Code:       code,
 		Detail:     detail,
-		Row:        row,
-		Col:        col,
-		Src:        word,
+		Row:        pos.Row,
+		Col:        pos.Col,
+		Src:        src,
 		Hint:       hint,
 		fullSource: fullSource,
 	}
+}
+
+// diagMaxListHead is the number of leading elements diagValue shows from
+// a list before collapsing the rest into a `… (N more)` marker. Keeps a
+// large quoted fn body (often hundreds of tokens) from burying an error.
+const diagMaxListHead = 8
+
+// diagValue renders v for inclusion in an error message, truncating long
+// lists so a quoted code body or other big literal does not flood the
+// output. Only the diagnostic surface uses this — ValToString and the
+// normal value renderers are untouched, so it never alters real output
+// or round-tripping. A list longer than diagMaxListHead shows its first
+// few elements followed by `… (N more)`; everything else (including
+// function values, which already render compactly via formatFnDef) is
+// shown by its normal String().
+func diagValue(v Value) string {
+	if v.Parent != nil && v.Parent.Matches(TList) && IsConcrete(v) {
+		lst, err := AsList(v)
+		if err == nil && lst.Len() > diagMaxListHead {
+			elems := lst.Slice()
+			parts := make([]string, 0, diagMaxListHead+1)
+			for i := 0; i < diagMaxListHead; i++ {
+				parts = append(parts, elems[i].String())
+			}
+			more := len(elems) - diagMaxListHead
+			parts = append(parts, "… ("+strconv.Itoa(more)+" more)")
+			return "[" + strings.Join(parts, " ") + "]"
+		}
+	}
+	return v.String()
 }
 
 // describeStackTypes returns a human-readable description of the types

@@ -43,23 +43,19 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 					if !ok {
 						return nil, fmt.Errorf("undefined: %s", name)
 					}
+					// A 0-arg fn courtesy-dispatches its 0-arg sig; every other
+					// shape (no 0-arg sig, a plain Function, any other binding)
+					// is an unmatched call returning the same signature error,
+					// so that return is hoisted out of the branches.
 					if _, ok := top.Data.(FnDefInfo); ok {
 						if fn := r.Lookup(name); fn != nil {
 							for i := range fn.Signatures {
 								sig := &fn.Signatures[i]
 								if len(sig.Args) == 0 && sig.Handler != nil && !sig.Fallback {
-									result, err := sig.Handler(nil, nil, nil, r)
-									if err != nil {
-										return nil, err
-									}
-									return result, nil
+									return sig.Handler(nil, nil, nil, r)
 								}
 							}
 						}
-						return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
-					}
-					if top.Parent.Equal(TFunction) {
-						return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
 					}
 					return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
 				}, BarrierPos: -1,
