@@ -545,6 +545,9 @@ iota 6 array.reshape [2,3]        => [[0,1,2],[3,4,5]]
 | `array.sortby` | Sort by parallel key list | `["b","a","c"] array.sortby [2,1,3]` |
 | `array.replicate` | Repeat each element N times | `[1,2,3] array.replicate [2,1,3]` |
 | `array.expand` | Expand by Boolean mask | `[1,2,3] array.expand [true,false,true]` |
+| `array.compress` | Select elements where a mask is true | `array.compress [true,false,true] [10,20,30] => [10,30]` |
+| `array.eachrank` | Apply a body at a given cell rank (0 = scalars, 1 = innermost lists, …) | `array.eachrank 1 [each [add 10]] [[1,2],[3,4]] => [[11,12],[13,14]]` |
+| `array.foldaxis` | Reduce a rank-2 list along an axis (0 = columns, 1 = rows) | `array.foldaxis 0 [add] [[1,2],[3,4]] => [4,6]` |
 | `array.member` | Per-element membership test | `[1,2,3] array.member [2,3,4] => [true,true,false]` |
 | `array.unique` | Remove duplicates | `array.unique [1,2,2,3] => [1,2,3]` |
 | `array.group` | Group values by parallel keys (or indices by value) | `array.group ["a","b","a"] [1,2,3]` |

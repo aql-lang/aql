@@ -59,14 +59,22 @@ For `aql:array` specifically:
 
 After this, the `aql:array` export set shares no name with any core word.
 
-### Known deviations
+### Applied to `aql:matrix`
 
-The `aql:matrix` module predates this record and still exports `flatten`,
-`size`, and `transpose` (as `matrix.flatten` etc.). These operate on a
-distinct `Tensor`/`Matrix` type rather than on plain lists, so the
-overlap is nominal rather than behavioural, but they do not yet satisfy
-the rule as stated. Reconciling them (fold into the core words by type,
-or rename) is tracked as follow-up work, not done here.
+The `aql:matrix` module predated this record and exported `size`,
+`flatten`, and `transpose`. These have been reconciled:
+
+- **`size`** — dropped. The core `size` word already reports a tensor's
+  entry count via the Sizer behavior (`TensorData`), so a `matrix.size`
+  export only shadowed it.
+- **`flatten`** — renamed to **`matrix.values`** (the row-major list of
+  entries). The core `flatten` word remains the only `flatten`.
+- **`transpose`** — kept. `transpose` is *not* a core word; it lives in
+  the `aql:array` module. `matrix.transpose` and `array.transpose` are
+  two namespaced module words, which this rule permits — the rule is
+  about shadowing *core* words, not other module words.
+
+After this, no module export shadows a core word.
 
 ---
 

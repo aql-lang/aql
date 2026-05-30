@@ -62,7 +62,8 @@ func TestArrayModuleExports(t *testing.T) {
 	}
 	expected := []string{
 		"shape", "rank", "reshape", "transpose",
-		"where", "grade", "at", "sortby", "replicate", "expand",
+		"where", "grade", "at", "sortby", "replicate", "expand", "compress",
+		"eachrank", "foldaxis",
 		"member", "unique", "group",
 		"window", "pairs",
 	}
@@ -96,6 +97,12 @@ func TestArrayModuleWords(t *testing.T) {
 		{`array.grade [3,1,2]`, "[1,2,0]"},
 		{`[10,20,30] array.at [2,0]`, "[30,10]"},
 		{`[1,2,3] array.replicate [2,0,1]`, "[1,1,3]"},
+		{`array.compress [true,false,true] [10,20,30]`, "[10,30]"},
+		// rank polymorphism (quoted code body threads through the wrapper)
+		{`array.eachrank 1 [each [add 10]] [[1,2],[3,4]]`, "[[11,12],[13,14]]"},
+		{`array.eachrank 0 [mul 2] [[1,2],[3,4]]`, "[[2,4],[6,8]]"},
+		{`array.foldaxis 0 [add] [[1,2],[3,4]]`, "[4,6]"},
+		{`array.foldaxis 1 [add] [[1,2],[3,4]]`, "[3,7]"},
 		// membership / grouping
 		{`[1,2,3] array.member [2,3,4]`, "[true,true,false]"},
 		{`[1,2,2,3] array.unique`, "[1,2,3]"},
@@ -107,6 +114,41 @@ func TestArrayModuleWords(t *testing.T) {
 		t.Run(tc.src, func(t *testing.T) {
 			assertArrayResult(t, r, tc.src, tc.want)
 		})
+	}
+}
+
+// eachrank rank is the J-style CELL rank, measured from the leaves, so
+// it targets a consistent depth regardless of total nesting.
+func TestArrayEachrankCellRank(t *testing.T) {
+	r := arrayRegistry(t)
+	data := `[[[1,2],[3,4]],[[5,6],[7,8]]]` // rank 3
+	// rank 2: body sees each rank-2 matrix; reverse flips its rows.
+	assertArrayResult(t, r, `array.eachrank 2 [reverse] `+data,
+		`[[[3,4],[1,2]],[[7,8],[5,6]]]`)
+	// rank 1: body sees each innermost row; reverse flips its elements.
+	assertArrayResult(t, r, `array.eachrank 1 [reverse] `+data,
+		`[[[2,1],[4,3]],[[6,5],[8,7]]]`)
+}
+
+// Negative cases: rank beyond the data, bad axis, ragged input.
+func TestArrayRankPolyErrors(t *testing.T) {
+	r := arrayRegistry(t)
+	for _, src := range []string{
+		`array.eachrank 5 [reverse] [[1,2]]`,   // rank exceeds data rank
+		`array.foldaxis 2 [add] [[1,2],[3,4]]`, // axis must be 0 or 1
+		`array.foldaxis 0 [add] [[1,2],[3]]`,   // not rectangular
+	} {
+		if _, err := runArraySrc(t, r, src); err == nil {
+			t.Errorf("%q: expected error, got none", src)
+		}
+	}
+}
+
+// compress length mismatch is an error.
+func TestArrayCompressMismatch(t *testing.T) {
+	r := arrayRegistry(t)
+	if _, err := runArraySrc(t, r, `array.compress [true,false] [1,2,3]`); err == nil {
+		t.Errorf("compress with mismatched lengths should error")
 	}
 }
 

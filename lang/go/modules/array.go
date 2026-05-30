@@ -37,7 +37,7 @@ func BuildArrayModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	exports := native.NewOrderedMap()
 	for _, w := range arrayExports {
-		exports.Set(w.export, makeArrayFnDef(w.internal, w.sigs, subReg))
+		exports.Set(w.export, makeArrayFnDef(w.internal, w.sigs, w.noEval, subReg))
 	}
 
 	modID := parent.Modules.NextID()
@@ -56,11 +56,15 @@ type arrSig struct {
 }
 
 // arrWord maps a module export name to the internal native word it
-// delegates to, with one or more signatures.
+// delegates to, with one or more signatures. noEval lists the sig
+// positions that hold a quoted code body (mirrors the inner native's
+// NoEvalArgs) so the wrapper does not auto-evaluate them during forward
+// collection.
 type arrWord struct {
 	export   string
 	internal string
 	sigs     []arrSig
+	noEval   []int
 }
 
 // arrayExports is the export table for aql:array. export is the clean
@@ -69,38 +73,66 @@ type arrWord struct {
 // collision-avoiding "arr-" words, which reclaim their clean names here.
 var arrayExports = []arrWord{
 	// --- shape / structure ---
-	{"shape", "shape", []arrSig{{[]*native.Type{native.TList}, []*native.Type{native.TList}}}},
-	{"rank", "rank", []arrSig{{[]*native.Type{native.TList}, []*native.Type{native.TInteger}}}},
-	{"reshape", "reshape", []arrSig{{[]*native.Type{native.TList, native.TList}, []*native.Type{native.TList}}}},
-	{"transpose", "transpose", []arrSig{{[]*native.Type{native.TList}, []*native.Type{native.TList}}}},
+	{export: "shape", internal: "shape", sigs: sig1(native.TList, native.TList)},
+	{export: "rank", internal: "rank", sigs: sig1(native.TList, native.TInteger)},
+	{export: "reshape", internal: "reshape", sigs: sig2(native.TList, native.TList, native.TList)},
+	{export: "transpose", internal: "transpose", sigs: sig1(native.TList, native.TList)},
 
 	// --- selection / ordering ---
-	{"where", "where", []arrSig{{[]*native.Type{native.TList}, []*native.Type{native.TList}}}},
-	{"grade", "grade", []arrSig{{[]*native.Type{native.TList}, []*native.Type{native.TList}}}},
-	{"at", "at", []arrSig{{[]*native.Type{native.TList, native.TList}, []*native.Type{native.TList}}}},
-	{"sortby", "sortby", []arrSig{{[]*native.Type{native.TList, native.TList}, []*native.Type{native.TList}}}},
-	{"replicate", "replicate", []arrSig{{[]*native.Type{native.TList, native.TList}, []*native.Type{native.TList}}}},
-	{"expand", "expand", []arrSig{{[]*native.Type{native.TList, native.TList}, []*native.Type{native.TList}}}},
+	{export: "where", internal: "where", sigs: sig1(native.TList, native.TList)},
+	{export: "grade", internal: "grade", sigs: sig1(native.TList, native.TList)},
+	{export: "at", internal: "at", sigs: sig2(native.TList, native.TList, native.TList)},
+	{export: "sortby", internal: "sortby", sigs: sig2(native.TList, native.TList, native.TList)},
+	{export: "replicate", internal: "replicate", sigs: sig2(native.TList, native.TList, native.TList)},
+	{export: "expand", internal: "expand", sigs: sig2(native.TList, native.TList, native.TList)},
+	{export: "compress", internal: "compress", sigs: sig2(native.TList, native.TList, native.TList)},
+
+	// --- rank polymorphism (quoted code body at position 1) ---
+	{export: "eachrank", internal: "eachrank",
+		sigs:   []arrSig{{[]*native.Type{native.TInteger, native.TList, native.TList}, []*native.Type{native.TList}}},
+		noEval: []int{1}},
+	{export: "foldaxis", internal: "foldaxis",
+		sigs:   []arrSig{{[]*native.Type{native.TInteger, native.TList, native.TList}, []*native.Type{native.TList}}},
+		noEval: []int{1}},
 
 	// --- membership / grouping ---
-	{"member", "member", []arrSig{{[]*native.Type{native.TList, native.TList}, []*native.Type{native.TList}}}},
-	{"unique", "unique", []arrSig{{[]*native.Type{native.TList}, []*native.Type{native.TList}}}},
-	{"group", "group", []arrSig{
+	{export: "member", internal: "member", sigs: sig2(native.TList, native.TList, native.TList)},
+	{export: "unique", internal: "unique", sigs: sig1(native.TList, native.TList)},
+	{export: "group", internal: "group", sigs: []arrSig{
 		{[]*native.Type{native.TList, native.TList}, []*native.Type{native.TMap}},
 		{[]*native.Type{native.TList}, []*native.Type{native.TMap}},
 	}},
 
 	// --- neighborhoods ---
-	{"window", "window", []arrSig{{[]*native.Type{native.TInteger, native.TList}, []*native.Type{native.TList}}}},
-	{"pairs", "pairs", []arrSig{{[]*native.Type{native.TList}, []*native.Type{native.TList}}}},
+	{export: "window", internal: "window", sigs: sig2(native.TInteger, native.TList, native.TList)},
+	{export: "pairs", internal: "pairs", sigs: sig1(native.TList, native.TList)},
+}
+
+// sig1 builds a single one-argument signature: [a] -> [ret].
+func sig1(a, ret *native.Type) []arrSig {
+	return []arrSig{{[]*native.Type{a}, []*native.Type{ret}}}
+}
+
+// sig2 builds a single two-argument signature: [a, b] -> [ret].
+func sig2(a, b, ret *native.Type) []arrSig {
+	return []arrSig{{[]*native.Type{a, b}, []*native.Type{ret}}}
 }
 
 // makeArrayFnDef builds a FnDef value that wraps an internal array word.
 // Each signature delegates via a trivial body [Word(internalName)], which
 // execFnDefLiteral short-circuits to a direct dispatch of the inner native
 // in the sub-registry. BarrierPos: -1 keeps the swap form dispatchable
-// (see the "Module FnDef Wrappers" note in lang/go/CLAUDE.md).
-func makeArrayFnDef(internalName string, sigs []arrSig, subReg *native.Registry) native.Value {
+// (see the "Module FnDef Wrappers" note in lang/go/CLAUDE.md). noEval
+// marks the wrapper sig positions holding a quoted code body, so forward
+// collection does not auto-evaluate them before the inner native runs.
+func makeArrayFnDef(internalName string, sigs []arrSig, noEval []int, subReg *native.Registry) native.Value {
+	var noEvalMap map[int]bool
+	if len(noEval) > 0 {
+		noEvalMap = make(map[int]bool, len(noEval))
+		for _, p := range noEval {
+			noEvalMap[p] = true
+		}
+	}
 	fnSigs := make([]native.FnSig, len(sigs))
 	for i, s := range sigs {
 		params := make([]native.FnParam, len(s.params))
@@ -111,6 +143,7 @@ func makeArrayFnDef(internalName string, sigs []arrSig, subReg *native.Registry)
 			Params:     params,
 			Returns:    s.returns,
 			Body:       []native.Value{native.NewWord(internalName)},
+			NoEvalArgs: noEvalMap,
 			BarrierPos: -1,
 		}
 	}

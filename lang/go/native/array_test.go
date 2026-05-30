@@ -277,6 +277,105 @@ func TestIndexofStringStillWorks(t *testing.T) {
 	}
 }
 
+// --- compress ---
+
+func TestCompress(t *testing.T) {
+	r := arrayTestReg()
+	result := runAQL(t, r, []Value{
+		NewWord("compress"),
+		NewList([]Value{NewBoolean(true), NewBoolean(false), NewBoolean(true)}),
+		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)}),
+	})
+	assertIntList(t, "compress [t,f,t] [10,20,30]", result, []int64{10, 30})
+}
+
+func TestCompressMismatchErrors(t *testing.T) {
+	r := arrayTestReg()
+	err := runAQLError(t, r, []Value{
+		NewWord("compress"),
+		NewList([]Value{NewBoolean(true), NewBoolean(false)}),
+		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
+	})
+	if err == nil {
+		t.Fatalf("compress length mismatch: expected error, got none")
+	}
+}
+
+// --- eachrank ---
+
+// eachrank 0 targets each scalar leaf; the body doubles it.
+func TestEachrankScalar(t *testing.T) {
+	r := arrayTestReg()
+	result := runAQL(t, r, []Value{
+		NewWord("eachrank"), NewInteger(0),
+		NewList([]Value{NewWord("mul"), NewInteger(2)}),
+		NewList([]Value{
+			NewList([]Value{NewInteger(1), NewInteger(2)}),
+			NewList([]Value{NewInteger(3), NewInteger(4)}),
+		}),
+	})
+	// [[2,4],[6,8]]
+	outer, _ := AsList(result[0])
+	row0, _ := AsList(outer.Get(0))
+	a, _ := AsInteger(row0.Get(0))
+	b, _ := AsInteger(row0.Get(1))
+	if a != 2 || b != 4 {
+		t.Errorf("eachrank 0 [mul 2] row0 = %v, want [2,4]", outer.Get(0))
+	}
+}
+
+func TestEachrankOverRankErrors(t *testing.T) {
+	r := arrayTestReg()
+	err := runAQLError(t, r, []Value{
+		NewWord("eachrank"), NewInteger(5),
+		NewList([]Value{NewWord("reverse")}),
+		NewList([]Value{NewInteger(1), NewInteger(2)}),
+	})
+	if err == nil {
+		t.Fatalf("eachrank rank exceeding data: expected error, got none")
+	}
+}
+
+// --- foldaxis ---
+
+func TestFoldaxisColumns(t *testing.T) {
+	r := arrayTestReg()
+	result := runAQL(t, r, []Value{
+		NewWord("foldaxis"), NewInteger(0),
+		NewList([]Value{NewWord("add")}),
+		NewList([]Value{
+			NewList([]Value{NewInteger(1), NewInteger(2)}),
+			NewList([]Value{NewInteger(3), NewInteger(4)}),
+		}),
+	})
+	assertIntList(t, "foldaxis 0 [add]", result, []int64{4, 6})
+}
+
+func TestFoldaxisRows(t *testing.T) {
+	r := arrayTestReg()
+	result := runAQL(t, r, []Value{
+		NewWord("foldaxis"), NewInteger(1),
+		NewList([]Value{NewWord("add")}),
+		NewList([]Value{
+			NewList([]Value{NewInteger(1), NewInteger(2)}),
+			NewList([]Value{NewInteger(3), NewInteger(4)}),
+		}),
+	})
+	assertIntList(t, "foldaxis 1 [add]", result, []int64{3, 7})
+}
+
+func TestFoldaxisBadAxisErrors(t *testing.T) {
+	r := arrayTestReg()
+	err := runAQLError(t, r, []Value{
+		NewWord("foldaxis"), NewInteger(2),
+		NewList([]Value{NewWord("add")}),
+		NewList([]Value{NewList([]Value{NewInteger(1)})}),
+	})
+	if err == nil {
+		t.Fatalf("foldaxis bad axis: expected error, got none")
+	}
+}
+
 // --- reverse ---
 
 func TestReverse(t *testing.T) {

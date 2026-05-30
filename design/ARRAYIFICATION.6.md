@@ -50,17 +50,25 @@ Not every array word is globally available. Following the `aql:math`
 precedent (everyday arithmetic is built-in; `sin`/`log`/… are gated
 behind the module), the array vocabulary is split:
 
+The split criterion is the `aql:math` precedent — *everyday* operations
+are built-in; *specialised* domain vocabulary is gated behind the
+module. It is about how commonly a word is reached for, not whether it
+takes a code body.
+
 - **Built-in** — the constructors `iota`/`range`, the basic slicing
-  words `take`/`shed`/`reverse`, `size`/`flatten`, and the higher-order
-  combinators that take a quoted code body (`each`, `fold`, `scan`,
-  `outer`, `inner`). These are reached for constantly and read naturally
-  without a prefix.
+  words `take`/`shed`/`reverse`, `size`/`flatten`, and the everyday
+  higher-order combinators `each`, `fold`, `scan`, `outer`, `inner`.
+  These are reached for constantly and read naturally without a prefix.
 
 - **`aql:array` module** — the specialised, shape-aware data
   vocabulary: `shape`, `rank`, `reshape`, `transpose`, `where`,
-  `grade`, `at`, `sortby`, `replicate`, `expand`, `member`, `unique`,
-  `group`, `window`, `pairs`. Imported with `"aql:array" import` and
-  reached via the `array.` prefix.
+  `grade`, `at`, `sortby`, `replicate`, `expand`, `compress`,
+  `eachrank`, `foldaxis`, `member`, `unique`, `group`, `window`,
+  `pairs`. Imported with `"aql:array" import` and reached via the
+  `array.` prefix. Note `eachrank`/`foldaxis` take a quoted code body
+  yet still live here — being specialised (J-style rank/axis control)
+  outweighs taking a body; the wrapper preserves the body via
+  `NoEvalArgs`.
 
 Per **ADR-001** ([`../ADR.md`](../ADR.md)) a module export must never
 shadow a core word. So the two array operations that overlap a core word
@@ -79,9 +87,9 @@ are
 
 The examples below use bare names for brevity; in running code the
 module words need the `array.` prefix (e.g. `iota 6 array.reshape
-[2,3]`). Words still on the roadmap (`compress`, `eachrank`,
-`foldaxis`) will join the module as they land. (Implicit broadcasting
-was considered and rejected — see [ADR-002](../ADR.md#adr-002).)
+[2,3]`). The full vocabulary above is implemented. (Implicit
+broadcasting was considered and rejected — see
+[ADR-002](../ADR.md#adr-002).)
 
 
 ## New Data Concepts

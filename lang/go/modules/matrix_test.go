@@ -44,10 +44,10 @@ func TestMatrixModuleExports(t *testing.T) {
 	}
 	expected := []string{
 		"create", "zeros", "ones", "eye", "fill",
-		"rows", "cols", "size",
+		"rows", "cols",
 		"elem", "row", "col",
 		"mat-add", "mat-sub", "mat-mul", "scale", "mat-emul",
-		"transpose", "flatten",
+		"transpose", "values",
 		"sum", "tr", "det",
 		"dot",
 	}
@@ -154,10 +154,13 @@ func TestMatrixCols(t *testing.T) {
 	}
 }
 
+// The core `size` word reports a matrix's entry count via the Sizer
+// behavior — there is no matrix.size export (ADR-001: it would only
+// shadow the core word).
 func TestMatrixSize(t *testing.T) {
 	r := matrixRegistry(t)
 	mat := newMatrix(2, 3, make([]float64, 6))
-	input := append([]native.Value{mat}, matGet("size")...)
+	input := append([]native.Value{mat}, native.NewWord("size"))
 	result := runAQL(t, r, input)
 	v, _ := native.AsInteger(result[0])
 	if v != 6 {
@@ -298,19 +301,21 @@ func TestMatrixTranspose(t *testing.T) {
 	}
 }
 
-func TestMatrixFlatten(t *testing.T) {
+// matrix.values returns the row-major list of entries. Named `values`,
+// not `flatten`, so it does not shadow the core flatten word (ADR-001).
+func TestMatrixValues(t *testing.T) {
 	r := matrixRegistry(t)
 	mat := newMatrix(2, 2, []float64{1, 2, 3, 4})
-	input := append([]native.Value{mat}, matGet("flatten")...)
+	input := append([]native.Value{mat}, matGet("values")...)
 	result := runAQL(t, r, input)
 	list, _ := native.AsList(result[0])
 	if list.Len() != 4 {
-		t.Fatalf("flatten length = %d, want 4", list.Len())
+		t.Fatalf("values length = %d, want 4", list.Len())
 	}
 	for i := 0; i < 4; i++ {
 		v, _ := native.AsNumber(list.Get(i))
 		if v != float64(i+1) {
-			t.Errorf("flatten[%d] = %v, want %v", i, v, float64(i+1))
+			t.Errorf("values[%d] = %v, want %v", i, v, float64(i+1))
 		}
 	}
 }
