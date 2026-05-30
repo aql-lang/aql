@@ -372,11 +372,35 @@ func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (en
 	// Extract metadata from MapRef.Meta.
 	var qmSet map[string]bool // optional keys (? syntax)
 	var ckSet map[string]bool // computed keys ([key] syntax)
+	var qkSet map[string]bool // quoted keys ({'k': v} syntax)
 	var shList []string       // shorthand keys ({foo} / {foo/r} syntax)
 	if len(meta) > 0 && meta[0] != nil {
 		qmSet, _ = meta[0]["qm"].(map[string]bool)
 		ckSet, _ = meta[0]["ck"].(map[string]bool)
+		qkSet, _ = meta[0]["qk"].(map[string]bool)
 		shList, _ = meta[0]["sh"].([]string)
+	}
+
+	// Word modifiers (`/r`, `/q`, `/f`, `/s`, `/N`) are legal only on
+	// shorthand entries — `{foo/r}` ≡ `{foo: foo/r}` — where the token is
+	// also the value, so the modifier qualifies that value. On a bare
+	// `key: value` pair the modifier would only ever land on the KEY,
+	// which is meaningless (a map key is a plain name). Reject it rather
+	// than silently keeping `f/r` as a literal key. A quoted key
+	// (`{'f/r': …}`) or computed key (`{[f/r]: …}`) is an explicit string
+	// literal — the slash is data, not a modifier — so those are exempt.
+	// Bare explicit keys (with and without an optional `?`) arrive in m;
+	// shorthand (sh) and value-less optional (qm) tokens are handled below
+	// where the modifier legitimately rides along on the synthesized value.
+	for key := range m {
+		if qkSet[key] || ckSet[key] {
+			continue
+		}
+		if _, _, _, _, _, _, hasMod := scanWordModifier(key); hasMod {
+			return eng.Value{}, fmt.Errorf(
+				"[aql/illegal_key]: word modifier not allowed on map key %q (modifiers qualify values, not keys; quote the key as '%s' for a literal slash)",
+				key, key)
+		}
 	}
 
 	// Shorthand entries: `{foo}` ≡ `{foo: foo}`, `{foo/r}` ≡ `{foo: foo/r}`,

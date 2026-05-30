@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go"
@@ -1961,6 +1962,47 @@ func TestParseMapShorthandRejects(t *testing.T) {
 	assertParseError(t, "{'foo'}")
 	assertParseError(t, `{"foo"}`)
 	assertParseError(t, "{123}")
+}
+
+func TestParseMapKeyModifierRejected(t *testing.T) {
+	// A word modifier (/r /q /f /s /N) on a bare explicit key is illegal:
+	// the modifier could only qualify the key, which is meaningless. (On a
+	// shorthand entry it qualifies the value — see TestParseMapShorthand.)
+	for _, src := range []string{
+		"{f/r: 99}",    // /r on bare key
+		"{f/r?: 99}",   // /r on bare optional key
+		"{f/q: 1}",     // /q
+		"{m/2: 1}",     // arg-count modifier
+		"{a:1 b/r: 2}", // mixed with a clean pair
+	} {
+		_, err := Parse(src)
+		if err == nil {
+			t.Errorf("Parse(%q) expected illegal_key error, got nil", src)
+			continue
+		}
+		if !strings.Contains(err.Error(), "aql/illegal_key") {
+			t.Errorf("Parse(%q) error = %q, want it to contain aql/illegal_key", src, err.Error())
+		}
+	}
+}
+
+func TestParseMapLiteralSlashKeyAllowed(t *testing.T) {
+	// A slash in a key is fine when the key is an explicit literal: quoted
+	// (`{'a/b': v}`) or computed (`{[a/b]: v}`). Only a BARE key with a
+	// real word-modifier suffix is rejected. Each form parses to key a/b.
+	for _, src := range []string{"{'a/b': 1}", "{[a/b]: 1}"} {
+		vals, err := Parse(src)
+		if err != nil {
+			t.Fatalf("Parse(%q) error: %v", src, err)
+		}
+		m, _ := eng.AsMap(vals[0])
+		if m == nil {
+			t.Fatalf("Parse(%q): not a map", src)
+		}
+		if _, ok := m.Get("a/b"); !ok {
+			t.Errorf("Parse(%q): expected key %q, got %s", src, "a/b", vals[0].String())
+		}
+	}
 }
 
 func TestParseOptionalFieldMixed(t *testing.T) {

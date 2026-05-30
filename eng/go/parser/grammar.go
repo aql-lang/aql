@@ -305,6 +305,33 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 		})
 	})
 
+	// Record quoted keys in MapRef.Meta["qk"] via pair.BC callback. A
+	// quoted key (`{'a/b': 1}`) arrives as a string token (TinST) rather
+	// than bare text (TinTX); convertMapData can't tell them apart from the
+	// plain string map afterwards, so it needs this flag to know the key
+	// was an explicit literal — e.g. to allow a `/` in it that would be an
+	// illegal word modifier on a bare key.
+	j.Rule("pair", func(rs *jsonic.RuleSpec) {
+		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			if r.O0.Tin != jsonic.TinST {
+				return
+			}
+			key, ok := r.O0.Val.(string)
+			if !ok || key == "" {
+				return
+			}
+			if mr, ok := r.Node.(jsonic.MapRef); ok {
+				qkSet, _ := mr.Meta["qk"].(map[string]bool)
+				if qkSet == nil {
+					qkSet = make(map[string]bool)
+				}
+				qkSet[key] = true
+				mr.Meta["qk"] = qkSet
+				r.Node = mr // MapRef is a value type, reassign
+			}
+		})
+	})
+
 	// --- Optional field syntax in list context: [x?:Integer] ---
 
 	j.Rule("elem", func(rs *jsonic.RuleSpec) {

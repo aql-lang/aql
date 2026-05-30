@@ -46,7 +46,7 @@ var knownMismatch = map[string]string{
 	// so the doc's `=> true` (illustrating type-literal-sorts-low) never
 	// matches. Needs author decision: change the example to `cmp`, or
 	// reconsider `lt`'s type-literal overload.
-	"REFERENCE.md:274":   "Integer lt 0 builds a DepScalar refinement, not a boolean; doc shows true",
+	"REFERENCE.md:281":   "Integer lt 0 builds a DepScalar refinement, not a boolean; doc shows true",
 	"EXPLANATION.md:270": "Integer lt 0 builds a DepScalar refinement, not a boolean; doc shows true",
 
 	// math.log of e is 0.9999999998311266 (float), not the exact 1.0 the

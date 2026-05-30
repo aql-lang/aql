@@ -159,6 +159,13 @@ write the explicit `key: value` form for those. The pretty-printer
 (`{foo}` → `{foo:foo}`, `{foo/r}` → `{foo:foo/r}`, `{foo?}` →
 `{foo?:foo}`).
 
+**A word modifier belongs on a value, never on a bare key.** It is
+legal on a shorthand entry (`{foo/r}` — the token is the value) but an
+error on an explicit pair: `{foo/r: 1}` raises `[aql/illegal_key]`,
+because the `/r` could only attach to the key `foo`, which is just a
+name. If you genuinely need a `/` in a key, make it a literal with a
+quoted key (`{'a/b': 1}`) or a computed key (`{[a/b]: 1}`).
+
 
 ## Evaluation model
 
