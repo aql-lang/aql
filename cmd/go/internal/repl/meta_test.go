@@ -19,6 +19,9 @@ func TestNewMetaRegistryHasBuiltins(t *testing.T) {
 	if mr.Lookup("help") == nil {
 		t.Error("expected /help to be registered")
 	}
+	if mr.Lookup("describe") == nil {
+		t.Error("expected /describe to be registered")
+	}
 	if mr.Lookup("stack") == nil {
 		t.Error("expected /stack to be registered")
 	}
@@ -190,6 +193,7 @@ func TestParseMetaArgsQuotedString(t *testing.T) {
 
 // --- /help tests ---
 
+// /help prints a language overview plus the meta-command list.
 func TestMetaHelpNoArgs(t *testing.T) {
 	mr := NewMetaRegistry()
 	out := &bytes.Buffer{}
@@ -202,41 +206,73 @@ func TestMetaHelpNoArgs(t *testing.T) {
 	if !strings.Contains(output, "/help") {
 		t.Error("expected /help in output")
 	}
-	if !strings.Contains(output, "/stack") {
-		t.Error("expected /stack in output")
+	if !strings.Contains(output, "/describe") {
+		t.Error("expected /describe in output")
 	}
-	if !strings.Contains(output, "Meta commands") {
-		t.Error("expected 'Meta commands' header")
+	if !strings.Contains(output, "REPL meta-commands") {
+		t.Error("expected 'REPL meta-commands' header")
+	}
+	if !strings.Contains(output, "AQL") {
+		t.Error("expected language overview in output")
 	}
 }
 
-func TestMetaHelpWithWord(t *testing.T) {
+// /help ignores any trailing argument — overview only; word lookup is
+// /describe's job.
+func TestMetaHelpIgnoresArgs(t *testing.T) {
 	mr := NewMetaRegistry()
 	out := &bytes.Buffer{}
 	ctx := &MetaContext{Out: out}
-	_, err := mr.ParseAndRun("/help add", ctx)
+	if _, err := mr.ParseAndRun("/help add", ctx); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.String(), "REPL meta-commands") {
+		t.Error("expected overview even with an argument")
+	}
+}
+
+// --- /describe tests ---
+
+func TestMetaDescribeNoArgs(t *testing.T) {
+	mr := NewMetaRegistry()
+	out := &bytes.Buffer{}
+	ctx := &MetaContext{Out: out}
+	if _, err := mr.ParseAndRun("/describe", ctx); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	output := out.String()
+	if !strings.Contains(output, "add") {
+		t.Error("expected word listing to include 'add'")
+	}
+}
+
+func TestMetaDescribeWithWord(t *testing.T) {
+	mr := NewMetaRegistry()
+	out := &bytes.Buffer{}
+	ctx := &MetaContext{Out: out}
+	_, err := mr.ParseAndRun("/describe add", ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	output := out.String()
 	if !strings.Contains(output, "add") {
-		t.Error("expected 'add' in help output")
+		t.Error("expected 'add' in describe output")
 	}
 	if !strings.Contains(output, "Description") {
 		t.Error("expected 'Description' section")
 	}
 }
 
-func TestMetaHelpUnknownWord(t *testing.T) {
+func TestMetaDescribeUnknownWord(t *testing.T) {
 	mr := NewMetaRegistry()
 	out := &bytes.Buffer{}
 	ctx := &MetaContext{Out: out}
-	_, err := mr.ParseAndRun("/help nonexistent", ctx)
+	_, err := mr.ParseAndRun("/describe nonexistent", ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out.String(), "no help available") {
-		t.Error("expected 'no help available' message")
+	if !strings.Contains(out.String(), "no description available") {
+		t.Error("expected 'no description available' message")
 	}
 }
 
@@ -389,8 +425,8 @@ func TestReplMetaHelpIntegration(t *testing.T) {
 	out := &bytes.Buffer{}
 	Start(in, out, "")
 	output := out.String()
-	if !strings.Contains(output, "Meta commands") {
-		t.Errorf("expected 'Meta commands' in REPL output, got %q", output)
+	if !strings.Contains(output, "REPL meta-commands") {
+		t.Errorf("expected 'REPL meta-commands' in REPL output, got %q", output)
 	}
 }
 

@@ -145,6 +145,9 @@ func Format(e *Entry) string {
 			b.WriteByte('\n')
 		}
 	}
+	b.WriteString("\nDocs: ")
+	b.WriteString(ReferenceURL)
+	b.WriteByte('\n')
 	return b.String()
 }
 
@@ -200,6 +203,11 @@ func FormatDynamic(info FuncInfo) string {
 		}
 	}
 
+	// Docs link back to the reference in the repo.
+	b.WriteString("\nDocs: ")
+	b.WriteString(ReferenceURL)
+	b.WriteByte('\n')
+
 	return b.String()
 }
 
@@ -250,6 +258,15 @@ func writePrecedenceExamples(b *strings.Builder, info FuncInfo) {
 	b.WriteString("  ")
 	b.WriteString(strings.Join(configs, "  <=>  "))
 	b.WriteByte('\n')
+
+	// For non-commutative binary words, argument order changes the
+	// result, so spell out which form reads naturally rather than
+	// leaving a cryptic inline note on the examples.
+	if isNonCommutative2Arg(info) {
+		b.WriteString("  Order matters: the swap form `x ")
+		b.WriteString(name)
+		b.WriteString(" y` reads left-to-right — see Description.\n")
+	}
 }
 
 // writePrecedenceExamplesStack shows the stack-only pattern.
@@ -360,17 +377,60 @@ func exampleVal(typeName string, counter *int) string {
 	return vals[idx]
 }
 
-// sigArgsSameType checks if all args in a sig are the same type.
-func sigArgsSameType(sig SigInfo) bool {
-	if len(sig.Args) < 2 {
-		return false
+// examplePrefixes returns the stack-prefix counts to render as examples
+// for one signature, in display order. The prefix is the number of args
+// that sit on the stack (before the word); the rest are forward tokens.
+//
+//   - Stack-only words (no forward sigs) must put every arg on the
+//     stack, so the only valid form is prefix == nArgs.
+//   - Forward words lead with the canonical forward form (prefix 0):
+//     `word a b`, which reads in declared argument order.
+//   - Non-commutative binary words additionally show the swap form
+//     (prefix 1): `a word b`, the arrangement that reads left-to-right
+//     for operations like subtraction and comparison.
+//
+// Both ExampleExprs (generator) and writeExamples (renderer) call this
+// so the pre-computed result map always lines up with what is shown.
+func examplePrefixes(info FuncInfo, sig SigInfo) []int {
+	nArgs := len(sig.Args)
+	if nArgs == 0 {
+		return nil
 	}
-	for _, a := range sig.Args[1:] {
-		if a != sig.Args[0] {
+	if !info.ForwardArgs {
+		return []int{nArgs}
+	}
+	if nArgs == 2 && isNonCommutative2Arg(info) {
+		return []int{0, 1}
+	}
+	return []int{0}
+}
+
+// sigHasExampleVals reports whether every argument type in sig has a
+// representative literal in exampleValues. Signatures over exotic types
+// (dates, durations, functions, …) would otherwise be illustrated with
+// invented numbers, so they are skipped for example generation.
+func sigHasExampleVals(sig SigInfo) bool {
+	for _, a := range sig.Args {
+		if _, ok := exampleValues[typeAbbrev(a)]; !ok {
 			return false
 		}
 	}
 	return true
+}
+
+// sigExampleVals picks the example values for one signature, advancing
+// the shared per-type counters so successive signatures use distinct
+// values. Both the generator and renderer must walk signatures in the
+// same order with the same counters for the expressions to match.
+func sigExampleVals(sig SigInfo, counters map[string]int) []string {
+	vals := make([]string, len(sig.Args))
+	for i, a := range sig.Args {
+		leaf := typeAbbrev(a)
+		c := counters[leaf]
+		vals[i] = exampleVal(a, &c)
+		counters[leaf] = c
+	}
+	return vals
 }
 
 // ExampleExprs returns all example expressions that would be generated
@@ -378,46 +438,30 @@ func sigArgsSameType(sig SigInfo) bool {
 // which expressions to pre-compute.
 func ExampleExprs(info FuncInfo) []string {
 	var exprs []string
-	configIdx := 0
+	seen := map[string]bool{}
 	counters := map[string]int{}
 	for _, sig := range info.Sigs {
 		nArgs := len(sig.Args)
-		if nArgs == 0 {
+		if nArgs == 0 || !sigHasExampleVals(sig) {
 			continue
 		}
-		vals := make([]string, nArgs)
-		for i, a := range sig.Args {
-			leaf := typeAbbrev(a)
-			c := counters[leaf]
-			vals[i] = exampleVal(a, &c)
-			counters[leaf] = c
-		}
-		minPrefix := nArgs - sig.BarrierPos
-		if minPrefix < 0 {
-			minPrefix = 0
-		}
-		var prefixes []int
-		if !info.ForwardArgs {
-			prefixes = []int{nArgs}
-		} else if sigArgsSameType(sig) {
-			for p := minPrefix; p <= nArgs; p++ {
-				prefixes = append(prefixes, p)
+		vals := sigExampleVals(sig, counters)
+		for _, prefix := range examplePrefixes(info, sig) {
+			expr := buildExampleExpr(info.Name, vals, prefix, nArgs)
+			if seen[expr] {
+				continue
 			}
-		} else {
-			window := nArgs - minPrefix + 1
-			prefixes = []int{minPrefix + (configIdx % window)}
+			seen[expr] = true
+			exprs = append(exprs, expr)
 		}
-		for _, prefix := range prefixes {
-			exprs = append(exprs, buildExampleExpr(info.Name, vals, prefix, nArgs))
-		}
-		configIdx++
 	}
 	return exprs
 }
 
-// writeExamples generates column-aligned examples, one per signature,
-// cycling through arg configurations. For 2-arg words, infix examples
-// come first. Args appear descending left-to-right in source.
+// writeExamples renders column-aligned examples for a word: the
+// canonical forward form per signature (plus the swap form for
+// non-commutative binary words). Identical expressions across
+// signatures are shown once.
 func writeExamples(b *strings.Builder, info FuncInfo) {
 	if len(info.Sigs) == 0 {
 		b.WriteString("  (no examples)\n")
@@ -427,92 +471,36 @@ func writeExamples(b *strings.Builder, info FuncInfo) {
 	type exLine struct {
 		expr   string
 		result string
-		prefix int // for sorting: infix (1) first
 	}
 	var examples []exLine
+	seen := map[string]bool{}
 	maxExprLen := 0
-
-	configIdx := 0
-
-	// Per-type counters for cycling example values (descending)
 	counters := map[string]int{}
 
 	for _, sig := range info.Sigs {
 		nArgs := len(sig.Args)
-		if nArgs == 0 {
+		if nArgs == 0 || !sigHasExampleVals(sig) {
 			continue
 		}
-
-		// Pick example values: vals[0] gets the smaller value (sig[0]),
-		// vals[1] gets the larger (sig[1]). In infix form (vals[1] word vals[0]),
-		// this gives descending left-to-right.
-		vals := make([]string, nArgs)
-		for i, a := range sig.Args {
-			leaf := typeAbbrev(a)
-			c := counters[leaf]
-			vals[i] = exampleVal(a, &c)
-			counters[leaf] = c
-		}
-
-		// Build expressions for each config.
-		// Stack-only words: only all-prefix config.
-		// Same-type args: show all prefix/forward configs.
-		// Otherwise: one config, cycling.
-		// `prefix` is the count of stack-side args (the last `prefix`
-		// sig positions go on the stack). A sig with BarrierPos=B
-		// requires positions [B..N-1] on the stack, so the minimum
-		// valid prefix is N-B.
-		minPrefix := nArgs - sig.BarrierPos
-		if minPrefix < 0 {
-			minPrefix = 0
-		}
-		var prefixes []int
-		if !info.ForwardArgs {
-			prefixes = []int{nArgs} // all on stack
-		} else if sigArgsSameType(sig) {
-			for p := minPrefix; p <= nArgs; p++ {
-				prefixes = append(prefixes, p)
-			}
-		} else {
-			window := nArgs - minPrefix + 1
-			prefixes = []int{minPrefix + (configIdx % window)}
-		}
-
-		for _, prefix := range prefixes {
+		vals := sigExampleVals(sig, counters)
+		for _, prefix := range examplePrefixes(info, sig) {
 			expr := buildExampleExpr(info.Name, vals, prefix, nArgs)
+			if seen[expr] {
+				continue
+			}
+			seen[expr] = true
 			result := evalExample(expr, info.Name, sig, vals)
 			if len(expr) > maxExprLen {
 				maxExprLen = len(expr)
 			}
-			examples = append(examples, exLine{expr: expr, result: result, prefix: prefix})
-		}
-
-		configIdx++
-	}
-
-	// For 2-arg words, sort so infix examples (prefix=1) come first
-	// within each signature group. We do this by partitioning: infix first,
-	// then others in original order.
-	maxArgs := 0
-	for _, sig := range info.Sigs {
-		if len(sig.Args) > maxArgs {
-			maxArgs = len(sig.Args)
+			examples = append(examples, exLine{expr: expr, result: result})
 		}
 	}
-	if maxArgs == 2 {
-		var infix, others []exLine
-		for _, ex := range examples {
-			if ex.prefix == 1 {
-				infix = append(infix, ex)
-			} else {
-				others = append(others, ex)
-			}
-		}
-		examples = append(infix, others...)
-	}
 
-	nonComm := isNonCommutative2Arg(info)
-	noteShown := false
+	if len(examples) == 0 {
+		b.WriteString("  (no examples)\n")
+		return
+	}
 
 	for _, ex := range examples {
 		b.WriteString("  ")
@@ -523,10 +511,6 @@ func writeExamples(b *strings.Builder, info FuncInfo) {
 		}
 		b.WriteString(";# ")
 		b.WriteString(ex.result)
-		if nonComm && ex.prefix == 0 && !noteShown {
-			b.WriteString("  NOTE: most significant argument is last")
-			noteShown = true
-		}
 		b.WriteByte('\n')
 	}
 }

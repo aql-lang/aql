@@ -832,7 +832,12 @@ refine Record [x:Number] unify {x:1} => '~unify-fail' false   # records ≠ maps
 
 | Word | Description |
 |------|-------------|
-| `help` | Print help for a topic or list everything |
+| `help` | Print a language overview and how to use `describe` |
+| `describe` | Document a word: signatures, examples, and notes (e.g. `describe add`) |
+
+At the command line, `aql help` documents the CLI and its subcommands,
+while `aql describe [word\|module]` documents the language. In the REPL,
+`/help` prints the overview and `/describe <word>` looks one up.
 
 
 ## Built-in modules
