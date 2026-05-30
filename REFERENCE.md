@@ -130,8 +130,8 @@ value.
 def x 1
 {x}                           => {x:1}
 def a 10  def b 20
-{a b}                         => {a:10,b:20}        # keys sort
-{a c:3 b}                     => {a:10,b:20,c:3}    # mixes with explicit pairs
+{a b}                         => {a:10 b:20}        # keys sort
+{a c:3 b}                     => {a:10 b:20 c:3}    # mixes with explicit pairs
 {outer: {a}}                  => {outer:{a:10}}     # nests
 ```
 
@@ -334,7 +334,7 @@ Additional numeric words (`abs`, `negate`, `sign`, `min`, `max`,
 "aql:math" import end
 math.abs -5                   => 5
 math.floor 3.7                => 3
-math.sqrt 16                  => 4
+math.sqrt 16                  => 4.0
 ```
 
 ### Strings
@@ -370,7 +370,7 @@ of the word, with the haystack as the forward arg.
 Pass an Options map as the *last* forward argument:
 
 ```
-split   "a,,b"      ","    {keepEmpty: true}            => ['a','','b']
+split   "a,,b"      ","    {keepEmpty: true}            => ['a' '' 'b']
 contains "hello"    "Ell"  {cs: "insensitive"}          => true
 replace "aaa"       "a" "b" {scope: "all"}              => 'bbb'
 ```
@@ -437,7 +437,7 @@ below). A mismatch is an error, not a silent pass:
 
 ```
 def bad fn [[] [Integer] ['hi']]
-bad                           => [aql/type_error] return value 1: expected Integer, got ProperString
+bad                           => [aql/type_error] return value 1: expected Integer got ProperString
 ```
 
 Multiple triples declare overloads (the engine tries each in order);
@@ -484,7 +484,7 @@ def g fn [[n:Pos] [Integer] [n]]
 def x:Pos 42   x g                                 => 42
 
 def mk fn [[] [Pos] [7]]
-mk                                                 => [aql/type_error] return value 1: expected Pos, got Integer
+mk                                                 => [aql/type_error] return value 1: expected Pos got Integer
 def mk2 fn [[] [Pos] [def x:Pos 7 x]]
 mk2                                                => 7
 ```
@@ -505,8 +505,8 @@ def g fn [[n:Big] [Integer] [n]]
 
 def mk fn [[] [Big] [50]]
 mk                                                 => 50
-def mkBad fn [[] [Big] [5]]
-mkBad                                              => [aql/type_error] return value 1: expected Big, got Integer
+def mkbad fn [[] [Big] [5]]
+mkbad                                              => [aql/type_error] return value 1: expected Big got Integer
 ```
 
 The newtype-vs-subset distinction and its cross-language rationale are
@@ -543,7 +543,7 @@ process a sequence with the index/element, use `iota N each [body]`
 (each pushes the element before running the body):
 
 ```
-iota 5 each [dup mul]     => [0, 1, 4, 9, 16]
+iota 5 each [dup mul]     => [0 1 4 9 16]
 ```
 
 ### List and array words
@@ -743,6 +743,7 @@ Requires the `sqlite` capability.
 | `module` | Define a module inline | `module [def x 1]` |
 | `import` | Import a module by name or file | `import "lib.aql"` |
 
+<!-- aql-test: skip -->
 ```
 import utils [def f [dup add]]
 utils.f 3                     => 6

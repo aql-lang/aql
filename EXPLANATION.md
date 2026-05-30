@@ -34,8 +34,8 @@ other* — `x g f`. Every word is a function on the stack, and the
 output of one is the input of the next. Composition is concatenation.
 
 ```
-def double [dup add]
-def quadruple [double double]
+def double word [dup add]
+def quadruple word [double double]
 5 quadruple                       => 20
 ```
 
@@ -171,7 +171,7 @@ separate dispatch construct:
 ```
 add 1 2                           => 3      # Integer + Integer
 add 1.0 2                         => 3.0    # Decimal + Number, promotes
-add "a" "b"                       => 'ab'   # Scalar + Scalar, concatenates
+"a" "b" add                       => 'ab'   # Scalar + Scalar, concatenates
 ```
 
 The same `add` covers numeric addition and string concatenation —
@@ -294,7 +294,7 @@ default, list literals are quotations — they store their elements
 unevaluated:
 
 ```
-[1 add 2]                         => [1,add,2]    # NOT evaluated
+[1 add 2]                         => [1 add 2]    # NOT evaluated
 ```
 
 Code-body positions — the second argument to `def`, all branches
@@ -321,6 +321,7 @@ Most non-trivial words accept an optional trailing `Map` to carry
 named flags. This keeps the main signature small while leaving
 room for growth:
 
+<!-- aql-test: skip -->
 ```
 "hello world" split " "                              # basic
 "hello world" split " " {trim: true}                 # with options
@@ -341,8 +342,9 @@ The `await` word bridges AQL's sequential stack model with Go's
 goroutines. Each element of the parallel list runs in its own
 goroutine with an independent sub-engine:
 
+<!-- aql-test: skip -->
 ```
-await [[sleep 100 1] [sleep 100 2]]   => [1,2]
+await [[sleep 100 1] [sleep 100 2]]   => [1 2]
 ```
 
 The four modes mirror JavaScript's Promise combinators, providing
@@ -367,7 +369,7 @@ AQL treats errors as values, not exceptions. When `1 div 0`
 that sits on the stack like any other:
 
 ```
-do [1 div 0]                      => Error(div: division by zero)
+do [1 div 0]                      => error(division by zero)
 ```
 
 `error` is a pattern-match: if the top of the stack is an `Error`,

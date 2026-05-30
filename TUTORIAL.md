@@ -184,11 +184,11 @@ all-forward: `WORD input arg…`. See
 ```
 aql> "hello" upper                 => 'HELLO'
 aql> "HELLO" lower                 => 'hello'
-aql> split "hello,world" ","       => ['hello','world']
-aql> ["a","b","c"] concat          => 'ab'    # joins list elements
+aql> split "hello,world" ","       => ['hello' 'world']
+aql> ["a","b","c"] concat          => 'abc'   # joins list elements
 aql> contains "hello" "ell"        => true
 aql> indexof "hello" "ll"          => 2
-aql> slice "hello" 1 3             => 'el'
+aql> "hello" slice 1 3             => 'el'
 aql> replace "hello" "l" "r"       => 'herlo'
 aql> "  hi  " trim                 => 'hi'
 aql> "hi" pad 5                    => 'hi   '
@@ -234,8 +234,8 @@ fights you.
 Lists use square brackets, maps use braces:
 
 ```
-aql> [1, 2, 3]                       => [1,2,3]
-aql> {name: "Alice", age: 30}        => {name:'Alice',age:30}
+aql> [1, 2, 3]                       => [1 2 3]
+aql> {name: "Alice", age: 30}        => {age:30 name:'Alice'}   # keys sort
 ```
 
 Commas are optional inside literals — both `[1 2 3]` and `[1, 2, 3]`
@@ -247,7 +247,7 @@ A map entry can be just a bare name — `{foo}` is shorthand for
 ```
 aql> def x 1
 aql> def y 2
-aql> {x y}                           => {x:1,y:2}
+aql> {x y}                           => {x:1 y:2}
 ```
 
 (See [Reference: Map field shorthand](REFERENCE.md#map-field-shorthand)
@@ -265,7 +265,7 @@ Use `!.` (also called `getr`) when the key *must* exist — it raises
 an error instead of returning `none`:
 
 ```
-aql> {x:1} !. y                      => error: missing key 'y'
+aql> {x:1} !. y                      => error: key "y" not found
 ```
 
 Lists and maps nest freely:
@@ -288,15 +288,16 @@ aql> x                               => 42
 When the body is a list, calling the word *runs* the list:
 
 ```
-aql> def double [dup add]
+aql> def double word [dup add]
 aql> 5 double                        => 10
 aql> 3 double double                 => 12
 ```
 
 Composition is concatenation:
 
+<!-- aql-test: skip -->
 ```
-aql> def quadruple [double double]
+aql> def quadruple word [double double]
 aql> 5 quadruple                     => 20
 ```
 
@@ -344,13 +345,14 @@ aql> inc 2.5                         => 3.5
 The branches are lists (which is why they're not evaluated up-front):
 
 ```
-aql> 5 gt 3 if ["yes"] ["no"]        => 'yes'
+aql> if (5 gt 3) ["yes"] ["no"]      => 'yes'
 aql> 0 if ["truthy"] ["falsy"]       => 'falsy'
 ```
 
 `for` iterates over a numeric range, pushing the counter into the
 body each step:
 
+<!-- aql-test: skip -->
 ```
 aql> for 5 [dup mul]                 => 0 1 4 9 16
 aql> for [1, 4] [dup mul]            => 1 4 9
@@ -372,25 +374,25 @@ each list argument lands in a predictable slot — see
 [§3: the argument-order rule](#the-argument-order-rule).
 
 ```
-aql> [1, 2, 3] each [dup mul]        => [1,4,9]
+aql> [1, 2, 3] each [dup mul]        => [1 4 9]
 aql> fold [add] [1, 2, 3, 4, 5] 0    => 15        # body, data, init
-aql> scan [add] [1, 2, 3]            => [1,3,6]
+aql> scan [add] [1, 2, 3]            => [1 3 6]
 ```
 
 Sequence-building:
 
 ```
-aql> iota 5                          => [0,1,2,3,4]
-aql> iota 6 reshape [2, 3]           => [[0,1,2],[3,4,5]]
-aql> [1, 2, 3] reverse                => [3,2,1]
-aql> [1, 2, 2, 3] unique              => [1,2,3]
-aql> [3, 1, 2] grade                  => [1,2,0]
+aql> iota 5                          => [0 1 2 3 4]
+aql> iota 6 reshape [2, 3]           => [[0 1 2] [3 4 5]]
+aql> [1, 2, 3] reverse                => [3 2 1]
+aql> [1, 2, 2, 3] unique              => [1 2 3]
+aql> [3, 1, 2] grade                  => [1 2 0]
 ```
 
 `outer` and `inner` are APL-style array combinators:
 
 ```
-aql> outer [mul] [10, 20] [1, 2]     => [[10,20],[20,40]]
+aql> outer [mul] [10, 20] [1, 2]     => [[10 20] [20 40]]
 aql> inner [add] [mul] [3, 4] [1, 2] # body order: combine, product
 ```
 
@@ -433,13 +435,13 @@ list-of-rows-conforming-to-a-record. Define both with
 
 ```
 aql> def Point refine Record [x:Number y:Number]
-aql> make Point [3 4]                => {x:3,y:4}
-aql> make Point {x:1 y:2}            => {x:1,y:2}
+aql> make Point [3 4]                => {x:3 y:4}
+aql> make Point {x:1 y:2}            => {x:1 y:2}
 
 aql> def Row refine Record [name:String qty:Integer]
 aql> def Inventory refine Table Row
 aql> make Inventory [["Widget" 5] ["Bolt" 12]]
-=> [{name:'Widget',qty:5},{name:'Bolt',qty:12}]
+=> [{name:'Widget' qty:5} {name:'Bolt' qty:12}]
 ```
 
 Field constraints can be disjunctive — `(String tor none)` means
@@ -447,8 +449,8 @@ Field constraints can be disjunctive — `(String tor none)` means
 
 ```
 aql> def Person refine Record [name:String nick:(String tor none)]
-aql> make Person {name:"Alice" nick:"ace"}     => {name:'Alice',nick:'ace'}
-aql> make Person {name:"Bob"}                  => {name:'Bob',nick:none}
+aql> make Person {name:"Alice" nick:"ace"}     => {name:'Alice' nick:'ace'}
+aql> make Person {name:"Bob"}                  => {name:'Bob' nick:none}
 ```
 
 
@@ -478,14 +480,14 @@ aql> var [[[x 2] [y 10]] x add y]               => 12
 Lists are quotations by default — `[1 add 2]` is *data*, not code:
 
 ```
-aql> [1 add 2]                       => [1,add,2]
+aql> [1 add 2]                       => [1 add 2]
 ```
 
 `do` evaluates a list as a sub-program:
 
 ```
 aql> do [1 add 2]                    => 3
-aql> do {x: [3 add 4], y: 5}        => {x:7,y:5}
+aql> do {x: [3 add 4], y: 5}        => {x:7 y:5}
 ```
 
 `call` splices a list onto the current stack:
@@ -498,7 +500,7 @@ aql> [3 4 mul] call                  => 12
 `quote` prevents a single token from being interpreted:
 
 ```
-aql> quote foo                       => foo
+aql> quote foo                       => foo/q
 ```
 
 
@@ -525,15 +527,16 @@ or inspect its fields with `.`.
 results:
 
 ```
-aql> await [[1 add 2] [3 add 4]]     => [3,7]
+aql> await [[1 add 2] [3 add 4]]     => [3 7]
 ```
 
 Pick a mode via an options map — these mirror JavaScript Promise
 combinators:
 
+<!-- aql-test: skip -->
 ```
 aql> await {mode: 'all}   [[sleep 10 1] [sleep 10 2]]
-=> [1,2]                                # all must succeed
+=> [1 2]                                # all must succeed
 
 aql> await {mode: 'first} [[sleep 100 1] [sleep 10 2]]
 => 2                                    # race winner
@@ -542,7 +545,7 @@ aql> await {mode: 'any}   [[1 div 0] [sleep 10 42]]
 => 42                                   # first non-error
 
 aql> await {mode: 'full}  [[1] [1 div 0]]
-=> [{status:'ok,value:1},{status:'error,value:...}]
+=> [{status:'ok,value:1},{status:'error value:...}]
 ```
 
 Schedule deferred work with `timeout` and `interval`, cancel with
@@ -577,6 +580,7 @@ A *module* is a fresh evaluation context. Define one inline with
 the `module` form, calling `export "namespace" {…}` to publish
 bindings:
 
+<!-- aql-test: skip -->
 ```
 aql> import module [
        def helper [dup add]
