@@ -1,0 +1,17 @@
+# tokens	expected	note
+# =====================================================================
+# unpack — JavaScript-style destructuring. `unpack [names] map` extracts
+# the named entries from a map (or record) and binds each to a bare word
+# in the current scope. v1 supports explicit names only; missing keys and
+# capitalised (type) names are errors. See lang/go/native/native_unpack.go.
+# =====================================================================
+
+def m {x:1} unpack [x] m x	1	binds one named entry
+def m {a:1 b:2} unpack [a b] m a add b	3	binds several entries
+def m {x:1 y:2} unpack [y] m y	2	binds only the named entry, not others
+def m {n:10} unpack [n] m n mul 2	20	bound value is usable in expressions
+def m {x:1} unpack [] m x	ERROR:undefined	empty name list binds nothing
+def m {x:1} unpack [y] m	ERROR:not found	missing key is strict
+def m {X:1} unpack [X] m	ERROR:capitalised	refuses to bind a capitalised (type) name
+unpack [x] 42	ERROR:	non-map source is rejected
+unpack [x] Map	ERROR:	bare type-literal source is rejected

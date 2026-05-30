@@ -64,6 +64,11 @@ func Register(r *Registry) {
 		r.RegisterNativeFunc(n)
 	}
 
+	// Unpack — map/record destructuring into local bindings.
+	for _, n := range unpackNatives {
+		r.RegisterNativeFunc(n)
+	}
+
 	// Ref / apply — first-class function value pipeline.
 	for _, n := range refNatives {
 		r.RegisterNativeFunc(n)

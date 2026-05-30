@@ -2,6 +2,21 @@ package help
 
 func init() {
 	register(&Entry{
+		Word:    "unpack",
+		Summary: "Destructure entries of a map into local word bindings.",
+		Description: "Extracts the named entries from a map (or record) and binds each to a " +
+			"bare word in the current scope — AQL's analogue of JavaScript object " +
+			"destructuring. Forward form: `unpack [names] map`.",
+		Notes: []string{
+			"Example: def m {x:1}  unpack [x] m  → x is now bound to 1.",
+			"v1 takes an explicit list of names; rename and bind-all forms are not yet supported.",
+			"A requested name absent from the source is an error (strict, like getr).",
+			"Capitalised (type) names are rejected — unpack binds values only.",
+			"Bindings obey scope: torn down at fn-body exit, persist at top level (like def).",
+		},
+	})
+
+	register(&Entry{
 		Word:    "do",
 		Summary: "Evaluate a list or map as code.",
 		Description: "Evaluates the elements of a list as AQL code. For maps, recursively " +
