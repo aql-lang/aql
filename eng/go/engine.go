@@ -122,7 +122,7 @@ func (e *Engine) effectiveSource() string {
 // sigError builds a detailed AqlError for a signature mismatch.
 // It includes the word name, available signatures, and the actual
 // types found on the stack near the word.
-func (e *Engine) sigError(name string, fn *FnDefInfo) *AqlError {
+func (e *Engine) sigError(name string, fn *FnDefInfo, pos SrcPos) *AqlError {
 	detail := "no matching signature for " + name
 
 	// Build hint with available signatures and actual stack types.
@@ -138,7 +138,7 @@ func (e *Engine) sigError(name string, fn *FnDefInfo) *AqlError {
 	}
 
 	src := e.effectiveSource()
-	return e.maybeAddFnShapeHint(makeAqlError("signature_error", detail, name, src, hint.String())).(*AqlError)
+	return e.maybeAddFnShapeHint(makeAqlErrorAt("signature_error", detail, name, src, hint.String(), pos)).(*AqlError)
 }
 
 // isFnShapeTypedBindingContext reports whether the failing word is
@@ -941,7 +941,7 @@ func (e *Engine) stepWord(val Value) error {
 		if e.registry.Check.IsActive() && len(fn.Signatures) > 0 {
 			return e.checkModeAssumeSig(w, fn, &fn.Signatures[0], val.Pos)
 		}
-		return e.sigError(w.Name, fn)
+		return e.sigError(w.Name, fn, val.Pos)
 	}
 
 	// Count forward vs stack args from positions.

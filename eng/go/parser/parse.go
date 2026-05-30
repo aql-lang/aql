@@ -35,6 +35,42 @@ type interpGroup []any
 // values by the converter.
 type iexprGroup []any
 
+// sited wraps a converted jsonic node with the source position of its
+// opening token, captured by the val-rule before-close callback (see
+// grammar.go setupValRule). deSite unwraps it.
+//
+// Pos here is a pure diagnostic: an unknown (zero) SrcPos degrades to the
+// findWordInSource text search at error time, so the 0=unknown convention
+// is deliberate and is NOT a "No Zero-Value Overload" violation (see
+// eng/go/CLAUDE.md) — there is no decision that a zero Pos corrupts.
+type sited struct {
+	Node any
+	Pos  eng.SrcPos
+}
+
+// deSite unwraps a sited wrapper, returning the inner node and its
+// source position. A non-sited node is returned unchanged with a zero
+// (unknown) Pos. Idempotent and safe on any node — call it wherever a
+// raw jsonic node is type-switched so the wrapper never leaks past the
+// converter's dispatch points.
+func deSite(v any) (any, eng.SrcPos) {
+	if s, ok := v.(sited); ok {
+		return s.Node, s.Pos
+	}
+	return v, eng.SrcPos{}
+}
+
+// withPos stamps a source position onto v, unless pos is unknown (zero
+// Row), in which case v is returned untouched. The guard avoids both
+// storing the unknown and clobbering a position a deeper converter
+// already set on a nested value.
+func withPos(v eng.Value, pos eng.SrcPos) eng.Value {
+	if pos.Row != 0 {
+		v.Pos = pos
+	}
+	return v
+}
+
 // Parse tokenizes the AQL source string into a slice of eng.Value.
 // The input is treated as a top-level implicit list: jsonic.Parse handles
 // the entire source. The TextInfo option distinguishes quoted strings from
@@ -79,6 +115,12 @@ func Parse(src string) ([]eng.Value, error) {
 	if result == nil {
 		return nil, nil
 	}
+
+	// A single top-level scalar/paren/interp value arrives wrapped by the
+	// val-rule BC; unwrap it so the cases below see a bare jsonic node.
+	// (Root containers come from the list/map rule and are not sited; their
+	// elements carry positions individually.)
+	result, _ = deSite(result)
 
 	// With ListRef and MapRef enabled, jsonic returns ListRef/MapRef for
 	// all lists and maps. ListRef.Implicit and MapRef.Implicit distinguish
@@ -148,7 +190,8 @@ func Parse(src string) ([]eng.Value, error) {
 // Quoted text (e.g. "." or "!") has Quote != "" and is handled as a string
 // by convertTopLevelValue, so it never reaches the token checks.
 func isToken(item any, tok string) bool {
-	text, ok := item.(jsonic.Text)
+	node, _ := deSite(item)
+	text, ok := node.(jsonic.Text)
 	return ok && text.Str == tok && text.Quote == ""
 }
 
@@ -170,13 +213,26 @@ func isToken(item any, tok string) bool {
 // at runtime, as before). All other items convert to engine values
 // directly.
 func convertTopLevelItems(items []any) ([]eng.Value, error) {
+	// Strip sited wrappers once into a bare-node slice plus a parallel
+	// position slice. The token helpers (isToken/startsDot/isChainReceiver)
+	// then see bare jsonic nodes, while the emitted operator-marker words
+	// (get/getr) and primaries are still stamped from poss[i].
+	poss := make([]eng.SrcPos, len(items))
+	if anySited(items) {
+		bare := make([]any, len(items))
+		for i, it := range items {
+			bare[i], poss[i] = deSite(it)
+		}
+		items = bare
+	}
+
 	values := make([]eng.Value, 0, len(items))
 	for i := 0; i < len(items); i++ {
 		// Dotted-access chain: a receiver primary followed by one or more
 		// `.key` / `!.key` segments → one group `( recv get k … )`.
 		if isChainReceiver(items[i]) && i+1 < len(items) && startsDot(items, i+1) {
-			values = append(values, eng.NewOpenParen())
-			if err := emitPrimary(&values, items[i]); err != nil {
+			values = append(values, withPos(eng.NewOpenParen(), poss[i]))
+			if err := emitPrimary(&values, items[i], poss[i]); err != nil {
 				return nil, err
 			}
 			j := i + 1
@@ -184,14 +240,14 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 			for j < len(items) {
 				switch {
 				case isToken(items[j], "!") && j+2 < len(items) && isToken(items[j+1], "."):
-					values = append(values, eng.NewWord("getr"))
-					if err := emitPrimary(&values, items[j+2]); err != nil {
+					values = append(values, withPos(eng.NewWord("getr"), poss[j]))
+					if err := emitPrimary(&values, items[j+2], poss[j+2]); err != nil {
 						return nil, err
 					}
 					j += 3
 				case isToken(items[j], ".") && j+1 < len(items):
-					values = append(values, eng.NewWord("get"))
-					if err := emitPrimary(&values, items[j+1]); err != nil {
+					values = append(values, withPos(eng.NewWord("get"), poss[j]))
+					if err := emitPrimary(&values, items[j+1], poss[j+1]); err != nil {
 						return nil, err
 					}
 					j += 2
@@ -199,21 +255,21 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 					break chain
 				}
 			}
-			values = append(values, eng.NewCloseParen())
+			values = append(values, withPos(eng.NewCloseParen(), poss[i]))
 			i = j - 1
 			continue
 		}
 
 		// "!" followed by "." → getr word (lone, no receiver).
 		if isToken(items[i], "!") && i+1 < len(items) && isToken(items[i+1], ".") {
-			values = append(values, eng.NewWord("getr"))
+			values = append(values, withPos(eng.NewWord("getr"), poss[i]))
 			i++ // skip the dot
 			continue
 		}
 
 		// "." → get word (lone, no receiver).
 		if isToken(items[i], ".") {
-			values = append(values, eng.NewWord("get"))
+			values = append(values, withPos(eng.NewWord("get"), poss[i]))
 			continue
 		}
 
@@ -224,11 +280,22 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 		}
 
 		// A value, or a paren group expanded to ( … ) markers.
-		if err := emitPrimary(&values, items[i]); err != nil {
+		if err := emitPrimary(&values, items[i], poss[i]); err != nil {
 			return nil, err
 		}
 	}
 	return values, nil
+}
+
+// anySited reports whether any item is a sited wrapper, so the common
+// data-context path (where items are never sited) skips re-allocation.
+func anySited(items []any) bool {
+	for _, it := range items {
+		if _, ok := it.(sited); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // startsDot reports whether items[j] begins a dot-access segment: a "."
@@ -253,22 +320,25 @@ func isChainReceiver(item any) bool {
 // emitPrimary appends the converted form of a single primary item — a
 // value, or a parenthesised group expanded to ( … ) markers — to dst. Used
 // for the receiver, the keys of a dot chain, and ordinary top-level items.
-func emitPrimary(dst *[]eng.Value, item any) error {
+// pos is the source position of item (caller has already deSited it).
+func emitPrimary(dst *[]eng.Value, item any, pos eng.SrcPos) error {
 	if pg, ok := item.(parenGroup); ok {
-		*dst = append(*dst, eng.NewOpenParen())
+		*dst = append(*dst, withPos(eng.NewOpenParen(), pos))
 		inner, err := convertTopLevelItems([]any(pg))
 		if err != nil {
 			return err
 		}
 		*dst = append(*dst, inner...)
-		*dst = append(*dst, eng.NewCloseParen())
+		*dst = append(*dst, withPos(eng.NewCloseParen(), pos))
 		return nil
 	}
 	v, err := convertTopLevelValue(item)
 	if err != nil {
 		return err
 	}
-	*dst = append(*dst, v)
+	// convertTopLevelValue deSites internally, but item arrived bare from
+	// the caller's normalization, so re-stamp from the caller's pos.
+	*dst = append(*dst, withPos(v, pos))
 	return nil
 }
 
@@ -279,8 +349,18 @@ func convertTopLevel(items []any) ([]eng.Value, error) {
 }
 
 // convertTopLevelValue converts a single value in word context.
-// Unquoted text → word, quoted text → string.
+// Unquoted text → word, quoted text → string. The value is stamped with
+// the source position captured by the val-rule BC (if any).
 func convertTopLevelValue(v any) (eng.Value, error) {
+	node, pos := deSite(v)
+	res, err := convertTopLevelValueInner(node)
+	if err != nil {
+		return res, err
+	}
+	return withPos(res, pos), nil
+}
+
+func convertTopLevelValueInner(v any) (eng.Value, error) {
 	switch val := v.(type) {
 	case jsonic.Text:
 		if val.Quote == "" {
@@ -489,8 +569,18 @@ func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (en
 }
 
 // convertDataValue converts a value in data context (inside maps).
-// Quoted text → strings, unquoted text → words (executable).
+// Quoted text → strings, unquoted text → words (executable). The value is
+// stamped with the source position captured by the val-rule BC (if any).
 func convertDataValue(v any) (eng.Value, error) {
+	node, pos := deSite(v)
+	res, err := convertDataValueInner(node)
+	if err != nil {
+		return res, err
+	}
+	return withPos(res, pos), nil
+}
+
+func convertDataValueInner(v any) (eng.Value, error) {
 	switch val := v.(type) {
 	case jsonic.Text:
 		if val.Quote != "" {
@@ -833,6 +923,7 @@ func convertInterpGroup(grp interpGroup) (eng.Value, error) {
 	var parts []eng.InterpPart
 	hasExpr := false
 	for _, item := range grp {
+		item, _ := deSite(item) // interp parts are not normally sited; guard anyway
 		switch v := item.(type) {
 		case jsonic.Text:
 			// Template literal segment (Quote="tl").

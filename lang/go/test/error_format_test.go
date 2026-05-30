@@ -126,6 +126,37 @@ func TestErrorFormatSignatureFnDef(t *testing.T) {
 	_ = ae
 }
 
+func TestErrorFormatSignaturePointsAtCallSiteNotLastMatch(t *testing.T) {
+	// The failing `upper` is on line 1; a *valid* later `upper` on line 3
+	// is the LAST textual match. The parser now stamps Value.Pos, so the
+	// error must point at the executed (line-1) word — not the last
+	// textual occurrence (line 3), which is what findWordInSource returns.
+	src := "99 upper\ndef ok 1\nupper \"fine\""
+	err := runWithSource(t, src)
+	ae := assertAqlError(t, err, "signature_error")
+	if ae.Row != 1 {
+		t.Errorf("expected Row=1 (the executed `upper`), got %d — "+
+			"a wrong row means the text-search fallback fired instead of the parser position", ae.Row)
+	}
+}
+
+func TestErrorFormatSignatureSameWordTwoBodies(t *testing.T) {
+	// `upper` (String-only) appears in two fn bodies. f's body (line 1)
+	// applies it to an Integer and fails with a signature error; g's body
+	// on line 2 holds the LAST textual `upper`. The error must point at
+	// line 1, where the failing call actually executes — not line 2, which
+	// is what the findWordInSource text-search fallback would return.
+	src := "def f fn [[a:Integer] Integer [a upper]]\n" +
+		"def g fn [[b:Integer] Integer [b upper]]\n" +
+		"f 5"
+	err := runWithSource(t, src)
+	ae := assertAqlError(t, err, "signature_error")
+	assertErrorContains(t, err, "no matching signature for upper")
+	if ae.Row != 1 {
+		t.Errorf("expected Row=1 (the failing `upper` in f's body), got %d", ae.Row)
+	}
+}
+
 func TestErrorFormatSignatureStackContext(t *testing.T) {
 	// The hint should describe what types are actually on the stack
 	err := runWithSource(t, `"hello" 42 upper`)

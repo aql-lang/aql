@@ -171,15 +171,32 @@ func MakeAqlError(code, detail, word, fullSource, hint string) *AqlError {
 }
 
 // makeAqlError creates an AqlError with source location from the given
-// source text and word.
+// source text and word, locating the word by text search.
 func makeAqlError(code, detail, word, fullSource, hint string) *AqlError {
-	row, col := findWordInSource(fullSource, word)
+	return makeAqlErrorAt(code, detail, word, fullSource, hint, SrcPos{})
+}
+
+// makeAqlErrorAt creates an AqlError preferring an explicit source
+// position. When pos is known (Row > 0) it is used directly; otherwise it
+// falls back to findWordInSource — the last textual match of word, which
+// is best-effort and wrong when the word appears in several places. Prefer
+// passing a real pos (a Value's .Pos, populated by the parser) at any call
+// site that has the offending value in hand.
+func makeAqlErrorAt(code, detail, word, fullSource, hint string, pos SrcPos) *AqlError {
+	row, col := pos.Row, pos.Col
+	if row == 0 {
+		row, col = findWordInSource(fullSource, word)
+	}
+	src := word
+	if pos.Src != "" {
+		src = pos.Src
+	}
 	return &AqlError{
 		Code:       code,
 		Detail:     detail,
 		Row:        row,
 		Col:        col,
-		Src:        word,
+		Src:        src,
 		Hint:       hint,
 		fullSource: fullSource,
 	}

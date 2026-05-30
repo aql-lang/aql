@@ -3,6 +3,7 @@ package parser
 import (
 	"strings"
 
+	"github.com/aql-lang/aql/eng/go"
 	jsonic "github.com/jsonicjs/jsonic/go"
 )
 
@@ -146,6 +147,28 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 				r.Node = jsonic.Text{Str: ".", Quote: ""}
 			}},
 		}, rs.Open...)
+	})
+
+	// Capture source position: wrap every value node with the row/col of its
+	// opening token, so the converter can stamp eng.Value.Pos for precise
+	// error reporting (mirrors aontu's addsite). The BC fires on val-rule
+	// close — after the Open alternates above have set r.Node (including the
+	// marker Texts), so markers carry positions too. The wrapper is unwrapped
+	// (deSite) at every node-type switch in parse.go and never leaks.
+	j.Rule("val", func(rs *jsonic.RuleSpec) {
+		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			if r.Node == nil || jsonic.IsUndefined(r.Node) {
+				return
+			}
+			if _, already := r.Node.(sited); already {
+				return
+			}
+			var pos eng.SrcPos
+			if r.O0 != nil && !r.O0.IsNoToken() {
+				pos = eng.SrcPos{Row: r.O0.RI, Col: r.O0.CI, Src: r.O0.Src}
+			}
+			r.Node = sited{Node: r.Node, Pos: pos}
+		})
 	})
 }
 
