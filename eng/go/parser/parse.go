@@ -380,17 +380,25 @@ func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (en
 	}
 
 	// Shorthand entries: `{foo}` ≡ `{foo: foo}`, `{foo/r}` ≡ `{foo: foo/r}`,
-	// `{foo?}` ≡ `{foo?: foo}`. The key is the base name; the value is the
-	// full word token. synth maps each synthesized realKey to that token.
-	// Two sources: explicit shorthand tokens (Meta["sh"]) and optional keys
-	// (Meta["qm"]) that never received an explicit value.
+	// `{foo?}` ≡ `{foo?: foo}`, `{foo/r?}` ≡ `{foo?: foo/r}`. The key is
+	// always the base name (modifiers stay on the value only); the value
+	// is the full word token. synth maps each synthesized base key to that
+	// token. Two sources: explicit shorthand tokens (Meta["sh"]) and
+	// optional keys (Meta["qm"]) that never received an explicit value.
+	//
+	// optBase collects the base name of every optional key so optionality
+	// is looked up by base name below — qmSet is keyed by the raw token
+	// (e.g. `f/r`), which no longer matches the synthesized base key.
 	synth := make(map[string]string)
+	optBase := make(map[string]bool, len(qmSet))
 	for _, raw := range shList {
 		synth[wordBaseName(raw)] = raw
 	}
 	for key := range qmSet {
+		base := wordBaseName(strings.TrimSuffix(key, "?"))
+		optBase[base] = true
 		if _, ok := m[key]; !ok {
-			synth[key] = key
+			synth[base] = key
 		}
 	}
 
@@ -426,7 +434,7 @@ func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (en
 		// the None alternative carries the "may be explicitly None"
 		// half. No separate metadata needed — the optionality lives
 		// entirely in the type.
-		optional := qmSet[key]
+		optional := qmSet[key] || optBase[key]
 		realKey := key
 		if strings.HasSuffix(key, "?") {
 			realKey = strings.TrimSuffix(key, "?")

@@ -1930,6 +1930,8 @@ func TestParseMapShorthand(t *testing.T) {
 		{"{foo/r}", "{foo:foo/r}"},                 // word modifier stays on the value
 		{"{foo/q}", "{foo:foo/q}"},                 // /q → atom value
 		{"{foo?}", "{foo?:foo}"},                   // optional shorthand
+		{"{foo/r?}", "{foo?:foo/r}"},               // optional shorthand + modifier: key is base, modifier stays on value
+		{"{foo/q?}", "{foo?:foo/q}"},               // optional shorthand + /q
 		{"{foo a:1 bar}", "{foo:foo a:1 bar:bar}"}, // mixed, keys sorted
 		{"{a:{foo}}", "{a:{foo:foo}}"},             // nested
 	}
