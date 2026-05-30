@@ -267,6 +267,44 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 		})
 	})
 
+	// --- Shorthand field syntax: {foo} ≡ {foo: foo}, {foo/r} ≡ {foo: foo/r} ---
+
+	j.Rule("pair", func(rs *jsonic.RuleSpec) {
+		rs.Open = append(rs.Open, &jsonic.AltSpec{
+			// A lone unquoted-text key with no following colon. Appended
+			// LAST so it never shadows a real `key:value` pair: the base
+			// KEY CL alt (and the prepended qm/ck alts) are tried first,
+			// and only `{foo}` / `{foo/r}` — where no colon, `?`, or `[`
+			// follows — fall through to here. The optional shorthand
+			// `{foo?}` is handled by the qm path above (it consumes
+			// `foo ?` and records Meta["qm"]); the value is synthesized in
+			// convertMapData. No P/U["pair"]: nothing is pushed, so the
+			// built-in pairval BC stays inert and the pair closes cleanly.
+			S: [][]jsonic.Tin{{jsonic.TinTX}},
+			A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+				if raw, ok := r.O0.Val.(string); ok {
+					r.U["aql_sh"] = raw
+				}
+			},
+		})
+	})
+
+	// Record shorthand keys in MapRef.Meta["sh"] via pair.BC callback.
+	j.Rule("pair", func(rs *jsonic.RuleSpec) {
+		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			raw, ok := r.U["aql_sh"].(string)
+			if !ok || raw == "" {
+				return
+			}
+			if mr, ok := r.Node.(jsonic.MapRef); ok {
+				shList, _ := mr.Meta["sh"].([]string)
+				shList = append(shList, raw)
+				mr.Meta["sh"] = shList
+				r.Node = mr // MapRef is a value type, reassign
+			}
+		})
+	})
+
 	// --- Optional field syntax in list context: [x?:Integer] ---
 
 	j.Rule("elem", func(rs *jsonic.RuleSpec) {

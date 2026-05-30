@@ -506,5 +506,57 @@ export "M" {bval:bval, incr:incr/r}`,
 	assertResult(t, result, "{top:{deep:100}}")
 }
 
+// --- Shorthand map syntax: {foo} ≡ {foo: foo} ---
+
+func TestMapExprShorthandBasic(t *testing.T) {
+	result, err := runExpr(t, `def foo 1 {foo}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "{foo:1}")
+}
+
+func TestMapExprShorthandMatchesExplicit(t *testing.T) {
+	sh, err := runExpr(t, `def foo 10 def bar 20 {foo a:1 bar}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ex, err := runExpr(t, `def foo 10 def bar 20 {foo:foo a:1 bar:bar}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if formatStack(sh) != formatStack(ex) {
+		t.Errorf("shorthand = %q, want same as explicit = %q",
+			formatStack(sh), formatStack(ex))
+	}
+}
+
+func TestMapExprShorthandNested(t *testing.T) {
+	result, err := runExpr(t, `def foo 5 {a:{foo}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "{a:{foo:5}}")
+}
+
+func TestMapExprShorthandRefModifier(t *testing.T) {
+	// {f/r} captures the fn reference under key "f"; calling it dispatches.
+	result, err := runExpr(t,
+		`def f fn [[a:Integer b:Integer] [Integer] [a add b]] ({f/r}).f 2 3`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "5")
+}
+
+func TestMapExprShorthandUnboundErrors(t *testing.T) {
+	// An unbound shorthand name errors exactly like {a:foo} would.
+	_, err := runExpr(t, `{foo}`)
+	if err == nil {
+		t.Fatalf("expected undefined_word error for unbound shorthand")
+	}
+	assertErrorContains(t, err, "undefined", "foo")
+}
+
 // suppress unused import warning
 var _ = strings.Join

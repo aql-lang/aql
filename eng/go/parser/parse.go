@@ -372,12 +372,50 @@ func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (en
 	// Extract metadata from MapRef.Meta.
 	var qmSet map[string]bool // optional keys (? syntax)
 	var ckSet map[string]bool // computed keys ([key] syntax)
+	var shList []string       // shorthand keys ({foo} / {foo/r} syntax)
 	if len(meta) > 0 && meta[0] != nil {
 		qmSet, _ = meta[0]["qm"].(map[string]bool)
 		ckSet, _ = meta[0]["ck"].(map[string]bool)
+		shList, _ = meta[0]["sh"].([]string)
 	}
-	for _, key := range sortedKeys(m) {
-		child, err := convertDataValue(m[key])
+
+	// Shorthand entries: `{foo}` ≡ `{foo: foo}`, `{foo/r}` ≡ `{foo: foo/r}`,
+	// `{foo?}` ≡ `{foo?: foo}`. The key is the base name; the value is the
+	// full word token. synth maps each synthesized realKey to that token.
+	// Two sources: explicit shorthand tokens (Meta["sh"]) and optional keys
+	// (Meta["qm"]) that never received an explicit value.
+	synth := make(map[string]string)
+	for _, raw := range shList {
+		synth[wordBaseName(raw)] = raw
+	}
+	for key := range qmSet {
+		if _, ok := m[key]; !ok {
+			synth[key] = key
+		}
+	}
+
+	// Iterate the sorted union of value-map keys and synthesized keys.
+	keySet := make(map[string]bool, len(m)+len(synth))
+	union := make(map[string]any, len(m)+len(synth))
+	for k, v := range m {
+		union[k] = v
+		keySet[k] = true
+	}
+	for k := range synth {
+		if !keySet[k] {
+			union[k] = nil
+			keySet[k] = true
+		}
+	}
+
+	for _, key := range sortedKeys(union) {
+		var child eng.Value
+		var err error
+		if _, inMap := m[key]; inMap {
+			child, err = convertDataValue(m[key])
+		} else {
+			child, err = parseWord(synth[key])
+		}
 		if err != nil {
 			return eng.Value{}, err
 		}
@@ -596,97 +634,105 @@ func sortedKeys(m map[string]any) []string {
 	return keys
 }
 
-// parseWord interprets an unquoted text token as an AQL word, handling
-// modifier syntax: name/f (forceForward), name/s (forceStack), name/N (argCount),
-// name/q (quote → Atom), name/r (ref → bound value), and combinations like
-// name/1f, name/qs, name/f2, name/r. Modifiers stack in any order;
-// f and s are mutually exclusive; q and r are mutually exclusive; the
-// argCount digits form a single number; q produces an Atom and overrides
-// the other modifiers; r emits a ref-word that short-circuits the rest.
-func parseWord(text string) (eng.Value, error) {
-	name := text
-	argCount := -1
-	forceStack := false
-	forceForward := false
-	quoteFlag := false
-	refFlag := false
+// scanWordModifier parses the optional `/...` modifier suffix of an
+// unquoted word token: name/f (forceForward), name/s (forceStack),
+// name/N (argCount), name/q (quote → Atom), name/r (ref → bound value),
+// and combinations like name/1f, name/qs, name/f2. Modifiers stack in
+// any order; f and s are mutually exclusive; q and r are mutually
+// exclusive; the argCount digits form a single number. When the token
+// has no `/` or a malformed modifier suffix, valid is false, base is the
+// whole text, and every flag is at its zero value (argCount -1).
+func scanWordModifier(text string) (base string, argCount int, forceStack, forceForward, quoteFlag, refFlag, valid bool) {
+	argCount = -1
 
-	// Check for /... modifier suffix.
-	if idx := strings.LastIndex(name, "/"); idx >= 0 && idx < len(name)-1 {
-		mod := name[idx+1:]
-		baseName := name[:idx]
-
-		// Scan modifier chars in any order: digits, 'f', 's', 'q'.
-		// Each letter appears at most once; f/s are mutually exclusive;
-		// digits run contiguously and form a single argCount value.
-		valid := true
-		seenDigits := false
-		i := 0
-		for i < len(mod) {
-			c := mod[i]
-			switch {
-			case c >= '0' && c <= '9':
-				if seenDigits {
-					valid = false
-				} else {
-					j := i
-					for j < len(mod) && mod[j] >= '0' && mod[j] <= '9' {
-						j++
-					}
-					n, err := strconv.Atoi(mod[i:j])
-					if err != nil || n < 0 {
-						valid = false
-					} else {
-						argCount = n
-						seenDigits = true
-					}
-					i = j
-					continue
-				}
-			case c == 'f':
-				if forceForward || forceStack {
-					valid = false
-				} else {
-					forceForward = true
-				}
-			case c == 's':
-				if forceForward || forceStack {
-					valid = false
-				} else {
-					forceStack = true
-				}
-			case c == 'q':
-				if quoteFlag || refFlag {
-					valid = false
-				} else {
-					quoteFlag = true
-				}
-			case c == 'r':
-				if refFlag || quoteFlag {
-					valid = false
-				} else {
-					refFlag = true
-				}
-			default:
-				valid = false
-			}
-			if !valid {
-				break
-			}
-			i++
-		}
-
-		if valid {
-			name = baseName
-		} else {
-			// Unrecognized / malformed modifier — treat entire token as plain word.
-			argCount = -1
-			forceStack = false
-			forceForward = false
-			quoteFlag = false
-			refFlag = false
-		}
+	idx := strings.LastIndex(text, "/")
+	if idx < 0 || idx >= len(text)-1 {
+		return text, argCount, false, false, false, false, false
 	}
+	mod := text[idx+1:]
+	baseName := text[:idx]
+
+	// Scan modifier chars in any order: digits, 'f', 's', 'q', 'r'.
+	// Each letter appears at most once; f/s are mutually exclusive;
+	// digits run contiguously and form a single argCount value.
+	valid = true
+	seenDigits := false
+	i := 0
+	for i < len(mod) {
+		c := mod[i]
+		switch {
+		case c >= '0' && c <= '9':
+			if seenDigits {
+				valid = false
+			} else {
+				j := i
+				for j < len(mod) && mod[j] >= '0' && mod[j] <= '9' {
+					j++
+				}
+				n, err := strconv.Atoi(mod[i:j])
+				if err != nil || n < 0 {
+					valid = false
+				} else {
+					argCount = n
+					seenDigits = true
+				}
+				i = j
+				continue
+			}
+		case c == 'f':
+			if forceForward || forceStack {
+				valid = false
+			} else {
+				forceForward = true
+			}
+		case c == 's':
+			if forceForward || forceStack {
+				valid = false
+			} else {
+				forceStack = true
+			}
+		case c == 'q':
+			if quoteFlag || refFlag {
+				valid = false
+			} else {
+				quoteFlag = true
+			}
+		case c == 'r':
+			if refFlag || quoteFlag {
+				valid = false
+			} else {
+				refFlag = true
+			}
+		default:
+			valid = false
+		}
+		if !valid {
+			break
+		}
+		i++
+	}
+
+	if !valid {
+		// Unrecognized / malformed modifier — treat entire token as plain word.
+		return text, -1, false, false, false, false, false
+	}
+	return baseName, argCount, forceStack, forceForward, quoteFlag, refFlag, true
+}
+
+// wordBaseName returns the base name of an unquoted word token, stripping
+// a valid `/...` modifier suffix (foo/r → foo, foo → foo). Used to derive
+// the key of a shorthand map entry, whose value keeps the full token.
+func wordBaseName(text string) string {
+	base, _, _, _, _, _, _ := scanWordModifier(text)
+	return base
+}
+
+// parseWord interprets an unquoted text token as an AQL word, handling
+// the modifier syntax decoded by scanWordModifier. q produces an Atom and
+// overrides the other modifiers; r emits a ref-word that short-circuits
+// the rest.
+func parseWord(text string) (eng.Value, error) {
+	name, argCount, forceStack, forceForward, quoteFlag, refFlag, _ := scanWordModifier(text)
 
 	if name == "" {
 		return eng.Value{}, fmt.Errorf("empty word")

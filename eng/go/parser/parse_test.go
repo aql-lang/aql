@@ -1922,6 +1922,45 @@ func TestParseOptionalFieldDisjunct(t *testing.T) {
 	}
 }
 
+func TestParseMapShorthand(t *testing.T) {
+	// Each shorthand form must parse to the identical value tree as its
+	// explicit `key:value` equivalent.
+	cases := []struct{ shorthand, explicit string }{
+		{"{foo}", "{foo:foo}"},                     // plain shorthand
+		{"{foo/r}", "{foo:foo/r}"},                 // word modifier stays on the value
+		{"{foo/q}", "{foo:foo/q}"},                 // /q → atom value
+		{"{foo?}", "{foo?:foo}"},                   // optional shorthand
+		{"{foo a:1 bar}", "{foo:foo a:1 bar:bar}"}, // mixed, keys sorted
+		{"{a:{foo}}", "{a:{foo:foo}}"},             // nested
+	}
+	for _, c := range cases {
+		sh, err := Parse(c.shorthand)
+		if err != nil {
+			t.Fatalf("Parse(%q) error: %v", c.shorthand, err)
+		}
+		ex, err := Parse(c.explicit)
+		if err != nil {
+			t.Fatalf("Parse(%q) error: %v", c.explicit, err)
+		}
+		if len(sh) != 1 || len(ex) != 1 {
+			t.Fatalf("expected 1 value each for %q / %q, got %d / %d",
+				c.shorthand, c.explicit, len(sh), len(ex))
+		}
+		if sh[0].String() != ex[0].String() {
+			t.Errorf("shorthand %q = %s, want same as %q = %s",
+				c.shorthand, sh[0].String(), c.explicit, ex[0].String())
+		}
+	}
+}
+
+func TestParseMapShorthandRejects(t *testing.T) {
+	// Only unquoted identifiers trigger the shorthand; quoted keys and
+	// non-identifier tokens remain parse errors.
+	assertParseError(t, "{'foo'}")
+	assertParseError(t, `{"foo"}`)
+	assertParseError(t, "{123}")
+}
+
 func TestParseOptionalFieldMixed(t *testing.T) {
 	// {a:Integer, b?:String} → "a" is plain, "b" is disjunct
 	vals, err := Parse("{a:Integer, b?:String}")

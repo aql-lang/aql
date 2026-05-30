@@ -113,6 +113,33 @@ func TestFormatBasic(t *testing.T) {
 	}
 }
 
+func TestFormatMapShorthand(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain shorthand", "{foo}\n", "{foo:foo}\n"},
+		{"modifier shorthand", "{foo/r}\n", "{foo:foo/r}\n"},
+		{"optional shorthand", "{foo?}\n", "{foo?:foo}\n"},
+		{"two shorthands", "{foo bar}\n", "{foo:foo bar:bar}\n"},
+		{"mixed shorthand and pair", "{foo a:1}\n", "{foo:foo a:1}\n"},
+		// Explicit forms are left untouched (idempotent).
+		{"explicit unchanged", "{foo:foo}\n", "{foo:foo}\n"},
+		{"explicit pair unchanged", "{foo:bar}\n", "{foo:bar}\n"},
+		// Typed-map child syntax must NOT be treated as shorthand.
+		{"typed map child preserved", "{:Integer a:1}\n", "{: Integer a:1}\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := Format(tt.in)
+			if got != tt.want {
+				t.Errorf("Format(%q)\n  got:  %q\n  want: %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestFormatNoTabs(t *testing.T) {
 	src := "def f fn [[x:String] [String] [x upper]]\nexport Foo {a:1 b:2 c:3}\n"
 	result := Format(src)
