@@ -185,37 +185,56 @@ func TestReshape(t *testing.T) {
 	}
 }
 
-// --- arr-flatten ---
+// --- flatten -1 (deep flatten, a core flatten depth) ---
 
-func TestArrFlatten(t *testing.T) {
-	r := arrayTestReg()
+// Deep flatten is `flatten -1` on the core flatten word — not a separate
+// array word (ADR-001). A nested list collapses fully.
+func TestFlattenFull(t *testing.T) {
+	r, _ := DefaultRegistry()
 	input := NewList([]Value{
-		NewList([]Value{NewInteger(1), NewInteger(2)}),
-		NewList([]Value{NewInteger(3), NewInteger(4)}),
+		NewList([]Value{NewInteger(1), NewList([]Value{NewInteger(2), NewList([]Value{NewInteger(3)})})}),
+		NewInteger(4),
 	})
-	result := runAQL(t, r, []Value{input, NewWord("arr-flatten")})
+	result := runAQL(t, r, []Value{NewWord("flatten"), NewInteger(-1), input})
 	list, _ := AsList(result[0])
 	if list.Len() != 4 {
-		t.Fatalf("arr-flatten length = %d, want 4", list.Len())
+		t.Fatalf("flatten -1 length = %d, want 4", list.Len())
 	}
 	for i := 0; i < 4; i++ {
-		_as13, _ := AsInteger(list.Get(i))
-		if _as13 != int64(i+1) {
-			_as14, _ := AsInteger(list.Get(i))
-			t.Errorf("arr-flatten[%d] = %d, want %d", i, _as14, i+1)
+		got, _ := AsInteger(list.Get(i))
+		if got != int64(i+1) {
+			t.Errorf("flatten -1 [%d] = %d, want %d", i, got, i+1)
 		}
 	}
 }
 
-// --- arr-transpose ---
+// Default flatten still removes only one level (the negative depth is the
+// only "fully flatten" form).
+func TestFlattenDefaultOneLevel(t *testing.T) {
+	r, _ := DefaultRegistry()
+	input := NewList([]Value{
+		NewList([]Value{NewInteger(1), NewList([]Value{NewInteger(2)})}),
+	})
+	result := runAQL(t, r, []Value{NewWord("flatten"), input})
+	list, _ := AsList(result[0])
+	// [[1,[2]]] flatten -> [1,[2]] : one level removed, inner [2] survives.
+	if list.Len() != 2 {
+		t.Fatalf("flatten (default) length = %d, want 2", list.Len())
+	}
+	if inner, err := AsList(list.Get(1)); err != nil || inner.Len() != 1 {
+		t.Errorf("flatten (default) should keep inner list, got %v", result[0])
+	}
+}
 
-func TestArrTranspose(t *testing.T) {
+// --- transpose ---
+
+func TestTranspose(t *testing.T) {
 	r := arrayTestReg()
 	input := NewList([]Value{
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
 		NewList([]Value{NewInteger(4), NewInteger(5), NewInteger(6)}),
 	})
-	result := runAQL(t, r, []Value{input, NewWord("arr-transpose")})
+	result := runAQL(t, r, []Value{input, NewWord("transpose")})
 	outer, _ := AsList(result[0])
 	if outer.Len() != 3 {
 		t.Fatalf("transpose rows = %d, want 3", outer.Len())
@@ -226,6 +245,35 @@ func TestArrTranspose(t *testing.T) {
 	_as15, _ := AsInteger(col0.Get(1))
 	if _as16 != 1 || _as15 != 4 {
 		t.Errorf("transpose col 0 = %v, want [1,4]", outer.Get(0))
+	}
+}
+
+// --- indexof: list overload of the core word (ADR-001) ---
+
+// indexof on two lists is a core overload (native_string.go), not an
+// array word — for each needle, its index in the haystack (length when
+// absent). Uses a plain registry, no aql:array import.
+func TestIndexofListOverload(t *testing.T) {
+	r, _ := DefaultRegistry()
+	// forward form: needles then haystack.
+	result := runAQL(t, r, []Value{
+		NewWord("indexof"),
+		NewList([]Value{NewInteger(20), NewInteger(99), NewInteger(10)}),
+		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)}),
+	})
+	assertIntList(t, "indexof [20,99,10] [10,20,30]", result, []int64{1, 3, 0})
+}
+
+// The same word still serves strings — type dispatch picks the right
+// overload, proving the two operations coexist under one name.
+func TestIndexofStringStillWorks(t *testing.T) {
+	r, _ := DefaultRegistry()
+	result := runAQL(t, r, []Value{
+		NewWord("indexof"), NewString("hello"), NewString("ll"),
+	})
+	got, _ := AsInteger(result[0])
+	if got != 2 {
+		t.Errorf(`indexof "hello" "ll" = %d, want 2`, got)
 	}
 }
 

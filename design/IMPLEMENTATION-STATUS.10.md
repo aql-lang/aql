@@ -57,10 +57,13 @@ with SQLiteStore backing.
 **Packaging:** the vocabulary is split between core built-ins and the
 `aql:array` module (see ARRAYIFICATION.6.md "Packaging"). Built-in:
 `iota`, `range`, `take`, `shed`, `reverse`, `each`, `fold`, `scan`,
-`outer`, `inner` (plus core `size`/`flatten`). Module (`array.` prefix
-after `"aql:array" import`): `shape`, `rank`, `reshape`, `flatten`,
-`transpose`, `where`, `grade`, `at`, `sortby`, `replicate`, `expand`,
-`member`, `indexof`, `unique`, `group`, `window`, `pairs`.
+`outer`, `inner` (plus core `size`/`flatten`/`indexof`). Module
+(`array.` prefix after `"aql:array" import`): `shape`, `rank`,
+`reshape`, `transpose`, `where`, `grade`, `at`, `sortby`, `replicate`,
+`expand`, `member`, `unique`, `group`, `window`, `pairs`. Per ADR-001
+no module export shadows a core word: deep flatten is the core
+`flatten -1` and list lookup is the core `indexof` `[List, List]`
+overload — neither is an `array.*` word.
 
 **Missing:**
 - Broadcasting rules (implicit iteration over mismatched shapes)

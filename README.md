@@ -61,7 +61,7 @@ A wasm-powered browser playground is bundled in
 ## Documentation
 
 The manual is organised into four documents, one for each kind of
-learning need, plus a CLI reference:
+learning need, plus a CLI reference and the architecture record:
 
 | Document | When to read it |
 |----------|-----------------|
@@ -70,6 +70,7 @@ learning need, plus a CLI reference:
 | **[Reference](REFERENCE.md)** | You need the precise behaviour of a syntax form, type, or word. |
 | **[Explanation](EXPLANATION.md)** | You want to understand *why* AQL is the way it is. |
 | **[CLI Reference](CLI.md)** | You want to drive the `aql` binary from the shell. |
+| **[Architecture Design Record](ADR.md)** | You want the key architectural decisions and the reasoning behind them. |
 
 Suggested reading orders:
 

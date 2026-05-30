@@ -17,10 +17,11 @@ import (
 // holds the specialised APL-style data vocabulary — shape/structure,
 // selection/ordering, membership/grouping, and neighborhood words.
 //
-// The three words that carry an "arr-" prefix as built-ins (because the
-// bare names collide with the core string/list words flatten and indexof)
-// reclaim their clean names inside the namespace: array.flatten,
-// array.transpose, array.indexof.
+// Per ADR-001 (ADR.md in the repo root) no export here shadows a core word. The two
+// operations that overlap a core word are therefore NOT in this module:
+// deep flatten is the core `flatten -1`, and list lookup is a [List, List]
+// overload of the core `indexof`. Only `transpose` (which has no core
+// counterpart) remains, under its plain name.
 func BuildArrayModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Create an isolated sub-registry for the module's Go words.
 	subReg, err := native.DefaultRegistry()
@@ -71,8 +72,7 @@ var arrayExports = []arrWord{
 	{"shape", "shape", []arrSig{{[]*native.Type{native.TList}, []*native.Type{native.TList}}}},
 	{"rank", "rank", []arrSig{{[]*native.Type{native.TList}, []*native.Type{native.TInteger}}}},
 	{"reshape", "reshape", []arrSig{{[]*native.Type{native.TList, native.TList}, []*native.Type{native.TList}}}},
-	{"flatten", "arr-flatten", []arrSig{{[]*native.Type{native.TList}, []*native.Type{native.TList}}}},
-	{"transpose", "arr-transpose", []arrSig{{[]*native.Type{native.TList}, []*native.Type{native.TList}}}},
+	{"transpose", "transpose", []arrSig{{[]*native.Type{native.TList}, []*native.Type{native.TList}}}},
 
 	// --- selection / ordering ---
 	{"where", "where", []arrSig{{[]*native.Type{native.TList}, []*native.Type{native.TList}}}},
@@ -84,7 +84,6 @@ var arrayExports = []arrWord{
 
 	// --- membership / grouping ---
 	{"member", "member", []arrSig{{[]*native.Type{native.TList, native.TList}, []*native.Type{native.TList}}}},
-	{"indexof", "arr-indexof", []arrSig{{[]*native.Type{native.TList, native.TList}, []*native.Type{native.TList}}}},
 	{"unique", "unique", []arrSig{{[]*native.Type{native.TList}, []*native.Type{native.TList}}}},
 	{"group", "group", []arrSig{
 		{[]*native.Type{native.TList, native.TList}, []*native.Type{native.TMap}},

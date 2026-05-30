@@ -49,20 +49,31 @@ precedent (everyday arithmetic is built-in; `sin`/`log`/… are gated
 behind the module), the array vocabulary is split:
 
 - **Built-in** — the constructors `iota`/`range`, the basic slicing
-  words `take`/`shed`/`reverse`, `size`/`flatten` (the one-level core
-  forms), and the higher-order combinators that take a quoted code body
-  (`each`, `fold`, `scan`, `outer`, `inner`). These are reached for
-  constantly and read naturally without a prefix.
+  words `take`/`shed`/`reverse`, `size`/`flatten`, and the higher-order
+  combinators that take a quoted code body (`each`, `fold`, `scan`,
+  `outer`, `inner`). These are reached for constantly and read naturally
+  without a prefix.
 
 - **`aql:array` module** — the specialised, shape-aware data
-  vocabulary: `shape`, `rank`, `reshape`, `flatten` (deep),
-  `transpose`, `where`, `grade`, `at`, `sortby`, `replicate`,
-  `expand`, `member`, `indexof`, `unique`, `group`, `window`, `pairs`.
-  Imported with `"aql:array" import` and reached via the `array.`
-  prefix. The three words whose bare names collide with core
-  string/list words (`flatten`, `transpose`, `indexof`) reclaim their
-  clean names inside the namespace — internally they remain
-  `arr-flatten`/`arr-transpose`/`arr-indexof`.
+  vocabulary: `shape`, `rank`, `reshape`, `transpose`, `where`,
+  `grade`, `at`, `sortby`, `replicate`, `expand`, `member`, `unique`,
+  `group`, `window`, `pairs`. Imported with `"aql:array" import` and
+  reached via the `array.` prefix.
+
+Per **ADR-001** ([`../ADR.md`](../ADR.md)) a module export must never
+shadow a core word. So the two array operations that overlap a core word
+are
+*not* module words but additional signatures on the core word itself:
+
+- **deep flatten** is `flatten -1` — a negative depth on the core
+  `flatten` (which otherwise removes a single level, or `N` levels with
+  `flatten N`);
+- **list lookup** is `indexof` on two lists — a `[List, List]` overload
+  of the core `indexof` (whose string form returns a scalar position).
+
+`transpose` has no core counterpart, so it keeps its plain name as
+`array.transpose`. The earlier `arr-flatten`/`arr-transpose`/
+`arr-indexof` workaround names are gone.
 
 The examples below use bare names for brevity; in running code the
 module words need the `array.` prefix (e.g. `iota 6 array.reshape

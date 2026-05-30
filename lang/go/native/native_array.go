@@ -15,15 +15,16 @@ import (
 //
 //	core   — iota, range, each, fold, scan, outer, inner,
 //	         take, shed, reverse
-//	module — shape, rank, reshape, arr-flatten, arr-transpose,
-//	         where, unique, grade, at, sortby, member, arr-indexof,
-//	         group, replicate, expand, window, pairs
+//	module — shape, rank, reshape, transpose, where, unique, grade,
+//	         at, sortby, member, group, replicate, expand, window,
+//	         pairs
 //
-// allArrayNatives covers the array words: core scalar/vector ops
-// (iota, range, shape, rank, reshape, arr-flatten, arr-transpose,
-// reverse, take, shed, where, unique, grade, at, sortby, member,
-// arr-indexof, group, replicate, expand, window, pairs) and the
-// higher-order ops (each, fold, scan, outer, inner).
+// Per ADR-001 (no module export shadows a core word — see ADR.md in
+// the repo root), the two operations that overlap a core word are NOT
+// array-module words: deep flatten is `flatten -1` (a depth on the
+// core flatten word, flatten.go) and list indexof is a [List, List]
+// overload of the core indexof word (native_string.go). transpose has
+// no core counterpart, so it keeps its plain name.
 //
 // Pure helpers (computeShape, flattenList, buildNested,
 // arrCompareValues, transposeListOfLists, doFold,
@@ -87,16 +88,12 @@ var allArrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name: "arr-flatten",
-
-		Signatures: []NativeSig{{
-			Args:      []*Type{TList},
-			Handler:   arrFlattenHandler,
-			ReturnsFn: ReturnsPreserveListAt(0), BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "arr-transpose",
+		// transpose has no core-word counterpart, so it keeps its plain
+		// name (no "arr-" prefix needed). Deep flatten and list indexof,
+		// by contrast, are now overloads of the core flatten/indexof
+		// words rather than separate array words — see flatten.go and
+		// native_string.go.
+		Name: "transpose",
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
@@ -183,15 +180,6 @@ var allArrayNatives = []NativeFunc{
 			Args:      []*Type{TList, TList},
 			Handler:   memberHandler,
 			ReturnsFn: returnsCarrierTypedListBoolean, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "arr-indexof",
-
-		Signatures: []NativeSig{{
-			Args:      []*Type{TList, TList},
-			Handler:   arrIndexofHandler,
-			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
 		}},
 	},
 	{
@@ -519,21 +507,11 @@ func buildNested(flat []Value, dims []int) Value {
 	return NewList(elems)
 }
 
-// ---- arr-flatten ----
-
-func arrFlattenHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("arr-flatten_error", "arr-flatten: expected concrete list", "arr-flatten")
-	}
-	flat := flattenList(args[0])
-	return []Value{NewList(flat)}, nil
-}
-
-// ---- arr-transpose ----
+// ---- transpose ----
 
 func arrTransposeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("arr-transpose_error", "arr-transpose: expected concrete list", "arr-transpose")
+		return nil, r.AqlError("transpose_error", "transpose: expected concrete list", "transpose")
 	}
 	outer, _ := AsList(args[0])
 	if outer.Len() == 0 {
@@ -541,7 +519,7 @@ func arrTransposeHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	}
 	first := outer.Get(0)
 	if !first.Parent.Matches(TList) || !IsConcrete(first) {
-		return nil, r.AqlError("arr-transpose_error", "arr-transpose: expected rank-2 list", "arr-transpose")
+		return nil, r.AqlError("transpose_error", "transpose: expected rank-2 list", "transpose")
 	}
 	_lst, _ := AsList(first)
 	cols := _lst.Len()
@@ -549,7 +527,7 @@ func arrTransposeHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 		sub := outer.Get(i)
 		_subLst, _ := AsList(sub)
 		if !sub.Parent.Matches(TList) || !IsConcrete(sub) || _subLst.Len() != cols {
-			return nil, r.AqlError("arr-transpose_error", "arr-transpose: expected rectangular rank-2 list", "arr-transpose")
+			return nil, r.AqlError("transpose_error", "transpose: expected rectangular rank-2 list", "transpose")
 		}
 	}
 	rows := outer.Len()
@@ -804,14 +782,18 @@ func memberHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	return []Value{NewList(result)}, nil
 }
 
-// ---- arr-indexof ----
+// ---- indexof (list overload) ----
 
-func arrIndexofHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+// listIndexofHandler backs the [List, List] signature of the core
+// indexof word (registered in native_string.go alongside the string
+// overloads): for each needle, its index in the haystack, or the
+// haystack length when absent.
+func listIndexofHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("arr-indexof_error", "arr-indexof: expected concrete needles list", "arr-indexof")
+		return nil, r.AqlError("indexof_error", "indexof: expected concrete needles list", "indexof")
 	}
 	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("arr-indexof_error", "arr-indexof: expected concrete haystack list", "arr-indexof")
+		return nil, r.AqlError("indexof_error", "indexof: expected concrete haystack list", "indexof")
 	}
 	needles, _ := AsList(args[0])
 	haystack, _ := AsList(args[1])

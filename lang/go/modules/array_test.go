@@ -61,14 +61,22 @@ func TestArrayModuleExports(t *testing.T) {
 		t.Fatal("expected 'array' export")
 	}
 	expected := []string{
-		"shape", "rank", "reshape", "flatten", "transpose",
+		"shape", "rank", "reshape", "transpose",
 		"where", "grade", "at", "sortby", "replicate", "expand",
-		"member", "indexof", "unique", "group",
+		"member", "unique", "group",
 		"window", "pairs",
 	}
 	for _, name := range expected {
 		if _, ok := arrExport.Get(name); !ok {
 			t.Errorf("missing array export %q", name)
+		}
+	}
+	// ADR-001: no export may shadow a core word. flatten and indexof are
+	// core words, so they must NOT be array exports (deep flatten is
+	// `flatten -1`; list lookup is the core indexof list overload).
+	for _, name := range []string{"flatten", "indexof"} {
+		if _, ok := arrExport.Get(name); ok {
+			t.Errorf("array must not export %q (shadows a core word — ADR-001)", name)
 		}
 	}
 }
@@ -82,7 +90,6 @@ func TestArrayModuleWords(t *testing.T) {
 		{`array.shape [[1,2,3],[4,5,6]]`, "[2,3]"},
 		{`array.rank [[1,2],[3,4]]`, "2"},
 		{`iota 6 array.reshape [2,3]`, "[[0,1,2],[3,4,5]]"},
-		{`array.flatten [[1,2],[3]]`, "[1,2,3]"},
 		{`array.transpose [[1,2,3],[4,5,6]]`, "[[1,4],[2,5],[3,6]]"},
 		// selection / ordering
 		{`array.where [true,false,true,true]`, "[0,2,3]"},
@@ -110,6 +117,22 @@ func TestArrayModuleGroupBothSigs(t *testing.T) {
 	assertArrayResult(t, r, `array.group ["a","b","a"]`, `{'a':[0,2],'b':[1]}`)
 	// 2-arg (forward form, keys then values): group values by parallel keys.
 	assertArrayResult(t, r, `array.group ["a","b","a"] [1,2,3]`, `{'a':[1,3],'b':[2]}`)
+}
+
+// ADR-001 replacements: deep flatten and list indexof are core words,
+// reached without importing aql:array. (That array.flatten / array.indexof
+// are not exports is pinned in TestArrayModuleExports.)
+func TestFlattenAndIndexofAreCore(t *testing.T) {
+	r, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.SetParseFunc(parser.Parse)
+	// No aql:array import — these are core.
+	assertArrayResult(t, r, `flatten -1 [1,[2,[3,[4]]]]`, "[1,2,3,4]")  // deep flatten
+	assertArrayResult(t, r, `flatten [1,[2,[3]]]`, "[1,2,[3]]")         // default = one level
+	assertArrayResult(t, r, `indexof [20,99,10] [10,20,30]`, "[1,3,0]") // list overload
+	assertArrayResult(t, r, `indexof "hello" "ll"`, "2")                // string overload, same word
 }
 
 // --- Negative: the moved words are NOT globally available ---
