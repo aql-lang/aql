@@ -22,6 +22,7 @@ import (
 // a ModuleDesc whose exports contain FnDef wrappers for those words.
 var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error){
 	"math":      BuildMathModule,
+	"array":     BuildArrayModule,
 	"time":      BuildTimeModule,
 	"matrix":    BuildMatrixModule,
 	"decision":  BuildDecisionModule,
@@ -80,6 +81,20 @@ func InstallResolver(reg *native.Registry) {
 // what happens when AQL code runs "aql:math" import.
 func InstallMathExports(r *native.Registry) error {
 	desc, err := BuildMathModule(r)
+	if err != nil {
+		return err
+	}
+	for name, exportMap := range desc.Exports {
+		r.Defs.Push(name, native.NewMap(exportMap))
+	}
+	return nil
+}
+
+// InstallArrayExports builds the array module and installs its exports as defs
+// in the given registry. This is a convenience for test setup — equivalent to
+// what happens when AQL code runs "aql:array" import.
+func InstallArrayExports(r *native.Registry) error {
+	desc, err := BuildArrayModule(r)
 	if err != nil {
 		return err
 	}

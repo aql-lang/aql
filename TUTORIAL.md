@@ -369,13 +369,21 @@ Sequence-building:
 
 ```
 aql> iota 5                          => [0,1,2,3,4]
-aql> iota 6 reshape [2, 3]           => [[0,1,2],[3,4,5]]
+aql> range 2 6                       => [2,3,4,5]
 aql> [1, 2, 3] reverse                => [3,2,1]
-aql> [1, 2, 2, 3] unique              => [1,2,3]
-aql> [3, 1, 2] grade                  => [1,2,0]
 ```
 
-`outer` and `inner` are APL-style array combinators:
+Reshaping, ordering, and grouping live in the `aql:array` module
+(reached via the `array.` prefix after importing):
+
+```
+aql> "aql:array" import
+aql> iota 6 array.reshape [2, 3]     => [[0,1,2],[3,4,5]]
+aql> [1, 2, 2, 3] array.unique       => [1,2,3]
+aql> [3, 1, 2] array.grade           => [1,2,0]
+```
+
+`outer` and `inner` are APL-style array combinators (built-in):
 
 ```
 aql> outer [mul] [10, 20] [1, 2]     => [[10,20],[20,40]]

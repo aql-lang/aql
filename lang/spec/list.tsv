@@ -71,10 +71,6 @@ take 2 [ 10 20 30 40 ]	[10 20]	prefix slice
 take 0 [ 10 20 30 ]	[]	zero-length take
 take 5 [ 1 2 3 ]	[1 2 3]	overshoot just yields the whole list
 		
-unique [ 1 2 1 3 2 3 ]	[1 2 3]	dedupe preserves first-seen order
-unique [ ]	[]	
-unique [ 5 5 5 ]	[5]	all-equal collapses to one
-		
 # Composition — chained list transformations. The forward-prec		
 # `size` / `reverse` need a paren-wrapped sub-expression so `take`		
 # resolves first and the resulting list flows back as a TList arg.		

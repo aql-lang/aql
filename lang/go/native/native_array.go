@@ -5,7 +5,21 @@ import (
 	"sort"
 )
 
-// arrayNatives covers the array words: core scalar/vector ops
+// arrayNatives (core) and ArrayModuleNatives (the aql:array module)
+// are both derived from allArrayNatives below. The split follows one
+// rule: words that take a quoted code body, the basic constructors,
+// and everyday slicing stay in core; the specialised APL-style data
+// vocabulary (shape/structure, selection/ordering, membership/
+// grouping, neighborhoods) lives in the module and is reached via
+// dot-access (array.shape, array.where, …).
+//
+//	core   — iota, range, each, fold, scan, outer, inner,
+//	         take, shed, reverse
+//	module — shape, rank, reshape, arr-flatten, arr-transpose,
+//	         where, unique, grade, at, sortby, member, arr-indexof,
+//	         group, replicate, expand, window, pairs
+//
+// allArrayNatives covers the array words: core scalar/vector ops
 // (iota, range, shape, rank, reshape, arr-flatten, arr-transpose,
 // reverse, take, shed, where, unique, grade, at, sortby, member,
 // arr-indexof, group, replicate, expand, window, pairs) and the
@@ -14,7 +28,7 @@ import (
 // Pure helpers (computeShape, flattenList, buildNested,
 // arrCompareValues, transposeListOfLists, doFold,
 // analyseHigherOrderBody) live alongside their handlers below.
-var arrayNatives = []NativeFunc{
+var allArrayNatives = []NativeFunc{
 	// ---- core ----
 	{
 		Name: "iota",
@@ -298,6 +312,30 @@ var arrayNatives = []NativeFunc{
 		}},
 	},
 }
+
+// arrayCoreNames is the set of array words that remain built-in. The
+// rest of allArrayNatives moves to the aql:array module. See the
+// allArrayNatives comment for the rationale behind the split.
+var arrayCoreNames = map[string]bool{
+	"iota": true, "range": true,
+	"each": true, "fold": true, "scan": true, "outer": true, "inner": true,
+	"take": true, "shed": true, "reverse": true,
+}
+
+// arrayNatives are the core array words registered globally (see
+// register.go). ArrayModuleNatives are the specialised words that the
+// aql:array module registers into its own sub-registry instead — they
+// are NOT globally available, matching how aql:math gates sin/cos/etc.
+var arrayNatives, ArrayModuleNatives = func() (core, module []NativeFunc) {
+	for _, n := range allArrayNatives {
+		if arrayCoreNames[n.Name] {
+			core = append(core, n)
+		} else {
+			module = append(module, n)
+		}
+	}
+	return core, module
+}()
 
 // ---- shared ReturnsFn helpers ----
 

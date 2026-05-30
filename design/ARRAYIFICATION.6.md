@@ -42,6 +42,34 @@ respecting its concatenative nature.
    read left to right on the stack, as with all AQL code.
 
 
+## Packaging — core vs the `aql:array` module
+
+Not every array word is globally available. Following the `aql:math`
+precedent (everyday arithmetic is built-in; `sin`/`log`/… are gated
+behind the module), the array vocabulary is split:
+
+- **Built-in** — the constructors `iota`/`range`, the basic slicing
+  words `take`/`shed`/`reverse`, `size`/`flatten` (the one-level core
+  forms), and the higher-order combinators that take a quoted code body
+  (`each`, `fold`, `scan`, `outer`, `inner`). These are reached for
+  constantly and read naturally without a prefix.
+
+- **`aql:array` module** — the specialised, shape-aware data
+  vocabulary: `shape`, `rank`, `reshape`, `flatten` (deep),
+  `transpose`, `where`, `grade`, `at`, `sortby`, `replicate`,
+  `expand`, `member`, `indexof`, `unique`, `group`, `window`, `pairs`.
+  Imported with `"aql:array" import` and reached via the `array.`
+  prefix. The three words whose bare names collide with core
+  string/list words (`flatten`, `transpose`, `indexof`) reclaim their
+  clean names inside the namespace — internally they remain
+  `arr-flatten`/`arr-transpose`/`arr-indexof`.
+
+The examples below use bare names for brevity; in running code the
+module words need the `array.` prefix (e.g. `iota 6 array.reshape
+[2,3]`). Words still on the roadmap (`compress`, `eachrank`,
+`foldaxis`, broadcasting) will join the module as they land.
+
+
 ## New Data Concepts
 
 ### Shape and Rank

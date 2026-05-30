@@ -18,8 +18,8 @@ func TestRangeSource(t *testing.T) {
 		{`iota 5`, "[0,1,2,3,4]"},
 		// composes with each, same as iota
 		{`range 1 4 each [dup mul]`, "[1,4,9]"},
-		// reshape a range into a grid
-		{`range 0 6 reshape [2,3]`, "[[0,1,2],[3,4,5]]"},
+		// composes with core slicing words
+		{`range 0 6 reverse`, "[5,4,3,2,1,0]"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.expr, func(t *testing.T) {

@@ -48,11 +48,19 @@ timer/concurrency (6: sleep, timeout, interval, cancel, await, now).
 
 ### ARRAYIFICATION.6.md — ~60%
 
-**Done:** `iota`, `reshape`, `flatten`, `transpose`, `take`, `shed`,
-`reverse`, `each`, `fold`, `scan`, `outer`, `inner`, `where`,
+**Done:** `iota`, `range`, `reshape`, `flatten`, `transpose`, `take`,
+`shed`, `reverse`, `each`, `fold`, `scan`, `outer`, `inner`, `where`,
 `unique`, `grade`, `window`, `pairs`, `group`, `replicate`,
-`expand`, `at`, `sortby`, `member` (23 words). Object/Array type
+`expand`, `at`, `sortby`, `member` (24 words). Object/Array type
 with SQLiteStore backing.
+
+**Packaging:** the vocabulary is split between core built-ins and the
+`aql:array` module (see ARRAYIFICATION.6.md "Packaging"). Built-in:
+`iota`, `range`, `take`, `shed`, `reverse`, `each`, `fold`, `scan`,
+`outer`, `inner` (plus core `size`/`flatten`). Module (`array.` prefix
+after `"aql:array" import`): `shape`, `rank`, `reshape`, `flatten`,
+`transpose`, `where`, `grade`, `at`, `sortby`, `replicate`, `expand`,
+`member`, `indexof`, `unique`, `group`, `window`, `pairs`.
 
 **Missing:**
 - Broadcasting rules (implicit iteration over mismatched shapes)
