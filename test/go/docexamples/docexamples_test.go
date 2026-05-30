@@ -32,37 +32,48 @@ var docFiles = []string{
 	"EXPLANATION.md",
 }
 
+// mismatchKey identifies a flagged example by its source file and its
+// expression text. Keying on the expression (not a line number) keeps the
+// registry stable when unrelated doc edits shift lines around — the
+// recurring papercut of a file:line scheme. The file is part of the key
+// because the same expression can appear in more than one doc (e.g.
+// `Integer lt 0` lives in both REFERENCE and EXPLANATION).
+type mismatchKey struct {
+	File string
+	Expr string
+}
+
 // knownMismatch records deterministic doc-vs-engine disagreements that
 // need an author's judgment to resolve (the documented behavior may be a
 // stale concept, or the engine may have a real bug) — so they are flagged
-// here rather than silently rewritten. Key is "File:Line" (matching
-// Example.File/Line); value is the note. An entry downgrades a failure to
-// a logged xfail; an xfail that unexpectedly PASSES fails loudly
-// ("stale xfail") so the list can't rot. See the package's completion
+// here rather than silently rewritten. The value is the note. An entry
+// downgrades a failure to a logged xfail; an xfail that unexpectedly
+// PASSES fails loudly ("stale xfail") and an entry that matches no example
+// fails loudly too, so the list can't rot. See the package's completion
 // report for the triage rationale behind each entry.
-var knownMismatch = map[string]string{
+var knownMismatch = map[mismatchKey]string{
 	// `lt` with a type-literal left operand builds a DepScalar refinement
 	// `(Integer lt 0)`, it does not perform a boolean ordering compare —
 	// so the doc's `=> true` (illustrating type-literal-sorts-low) never
 	// matches. Needs author decision: change the example to `cmp`, or
 	// reconsider `lt`'s type-literal overload.
-	"REFERENCE.md:281":   "Integer lt 0 builds a DepScalar refinement, not a boolean; doc shows true",
-	"EXPLANATION.md:270": "Integer lt 0 builds a DepScalar refinement, not a boolean; doc shows true",
+	{"REFERENCE.md", "Integer lt 0"}:   "Integer lt 0 builds a DepScalar refinement, not a boolean; doc shows true",
+	{"EXPLANATION.md", "Integer lt 0"}: "Integer lt 0 builds a DepScalar refinement, not a boolean; doc shows true",
 
 	// math.log of e is 0.9999999998311266 (float), not the exact 1.0 the
 	// doc shows. Either round in the example or accept the float form.
-	"TUTORIAL.md:167": "math.log float precision: engine 0.9999999998311266 vs doc 1.0",
+	{"TUTORIAL.md", "math.log 2.718281828"}: "math.log float precision: engine 0.9999999998311266 vs doc 1.0",
 
 	// An absent optional record field renders as the None type literal
 	// (Canon: `None`); the doc writes lowercase `none`. Render-convention
 	// call for the author (None type-literal vs none value).
-	"TUTORIAL.md:453": "absent optional renders as None type-literal; doc shows lowercase none",
+	{"TUTORIAL.md", `make Person {name:"Bob"}`}: "absent optional renders as None type-literal; doc shows lowercase none",
 
 	// `set foo 99 end get foo` has no matching `set` signature (bare
 	// set/get need a context store). The example illustrates `end` but
 	// uses a non-working set/get form; author should pick an `end` demo
 	// that runs.
-	"EXPLANATION.md:156": "set/get need a context store; bare form has no signature",
+	{"EXPLANATION.md", "set foo 99 end get foo"}: "set/get need a context store; bare form has no signature",
 }
 
 func docRoot() string { return filepath.Join("..", "..", "..") }
@@ -74,12 +85,15 @@ func TestDocExamples(t *testing.T) {
 		t.Fatalf("render sanity check: got %q, want %q", got, "[1 2 3]")
 	}
 
-	// extractedKeys is every example key the extractor produced this run,
-	// independent of `-run` subtest filtering (extraction always runs).
-	// Used to detect knownMismatch entries that no longer match any
-	// example (doc edited / line moved) without false positives when the
-	// test is filtered to a subset of files.
-	extractedKeys := map[string]bool{}
+	// matchedKeys is every knownMismatch key that matched an extracted
+	// example this run. Populated during extraction (which always runs,
+	// independent of `-run` subtest filtering), so the dead-entry check
+	// below doesn't false-positive when the test is filtered to a subset.
+	matchedKeys := map[mismatchKey]bool{}
+	// keyCounts catches the one ambiguity an expr-based key can introduce:
+	// two examples in the same file with identical expression text. A
+	// flagged entry then can't tell them apart, so we fail loudly.
+	keyCounts := map[mismatchKey]int{}
 
 	for _, name := range docFiles {
 		path := filepath.Join(docRoot(), name)
@@ -93,7 +107,11 @@ func TestDocExamples(t *testing.T) {
 			continue
 		}
 		for _, ex := range examples {
-			extractedKeys[fmt.Sprintf("%s:%d", ex.File, ex.Line)] = true
+			key := mismatchKey{ex.File, ex.Expr}
+			keyCounts[key]++
+			if _, isKnown := knownMismatch[key]; isKnown {
+				matchedKeys[key] = true
+			}
 		}
 
 		t.Run(name, func(t *testing.T) {
@@ -101,11 +119,15 @@ func TestDocExamples(t *testing.T) {
 				ex := ex
 				sub := fmt.Sprintf("L%d_%s", ex.Line, sanitise(ex.Expr))
 				t.Run(sub, func(t *testing.T) {
-					key := fmt.Sprintf("%s:%d", ex.File, ex.Line)
+					key := mismatchKey{ex.File, ex.Expr}
 					ok, detail := checkExample(t, ex)
 					if note, isKnown := knownMismatch[key]; isKnown {
+						if keyCounts[key] > 1 {
+							t.Fatalf("ambiguous knownMismatch key %s:%q matches %d examples — disambiguate (the expr-based key needs unique expressions)",
+								ex.File, ex.Expr, keyCounts[key])
+						}
 						if ok {
-							t.Fatalf("stale xfail %s (%s): now PASSES — remove from knownMismatch", key, note)
+							t.Fatalf("stale xfail %s:%q (%s): now PASSES — remove from knownMismatch", ex.File, ex.Expr, note)
 						}
 						t.Skipf("known mismatch (%s): %s", note, detail)
 						return
@@ -119,11 +141,12 @@ func TestDocExamples(t *testing.T) {
 	}
 
 	// Flag knownMismatch entries that no longer match any extracted
-	// example (doc edited / line moved): they're dead weight and hide
-	// drift. Guarded so `-run`-filtered subset runs don't false-positive.
+	// example (doc rewritten / example removed): they're dead weight and
+	// hide drift. Guarded so `-run`-filtered subset runs don't
+	// false-positive.
 	for key, note := range knownMismatch {
-		if !extractedKeys[key] {
-			t.Errorf("knownMismatch entry %s (%s) matched no example — update or remove it", key, note)
+		if !matchedKeys[key] {
+			t.Errorf("knownMismatch entry %s:%q (%s) matched no example — update or remove it", key.File, key.Expr, note)
 		}
 	}
 }
