@@ -111,7 +111,66 @@ func CanonValue(v Value) string {
 			parts[i] = k + ":" + CanonValue(val)
 		}
 		return "{" + strings.Join(parts, " ") + "}"
+	case isFnDefValue(v):
+		// A function value participates in the total order (cmp/sort),
+		// so its canon form must DISCRIMINATE between distinct fns —
+		// two same-shaped-but-different-body predicates must not collapse
+		// to one string. Render the name plus each sig's params, returns,
+		// and body. Deliberately excludes Registry and Captured: a fn's
+		// closure environment is not part of its identity for ordering,
+		// and dumping it would spill the module exports map (the leak
+		// formatFnDef fixed for String()). See canonFnDef.
+		fd, _ := v.Data.(FnDefInfo)
+		return canonFnDef(fd)
 	default:
 		return v.String()
 	}
+}
+
+// canonFnDef renders a function value's discriminating canonical form:
+// its name plus the params / returns / body of each authored signature.
+// Used only by CanonValue (the ordering / structural-compare surface),
+// so unlike formatFnDef it must distinguish fns that String() renders
+// identically. It never touches FnDefInfo.Registry or .Captured.
+func canonFnDef(fd FnDefInfo) string {
+	var b strings.Builder
+	b.WriteString("fn ")
+	b.WriteString(fd.Name)
+	b.WriteByte('[')
+	for i := range fd.Sigs {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		sig := &fd.Sigs[i]
+		b.WriteByte('[')
+		for j, p := range sig.Params {
+			if j > 0 {
+				b.WriteByte(' ')
+			}
+			b.WriteString(p.Name)
+			if p.Type != nil {
+				b.WriteByte(':')
+				b.WriteString(p.Type.String())
+			}
+		}
+		b.WriteString("][")
+		for j, r := range sig.Returns {
+			if j > 0 {
+				b.WriteByte(' ')
+			}
+			if r != nil {
+				b.WriteString(r.String())
+			}
+		}
+		b.WriteString("][")
+		for j, t := range sig.Body {
+			if j > 0 {
+				b.WriteByte(' ')
+			}
+			b.WriteString(CanonValue(t))
+		}
+		b.WriteString("]")
+	}
+	b.WriteByte(']')
+	return b.String()
 }

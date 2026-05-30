@@ -185,6 +185,36 @@ func makeAqlError(code, detail, word, fullSource, hint string) *AqlError {
 	}
 }
 
+// diagMaxListHead is the number of leading elements diagValue shows from
+// a list before collapsing the rest into a `… (N more)` marker. Keeps a
+// large quoted fn body (often hundreds of tokens) from burying an error.
+const diagMaxListHead = 8
+
+// diagValue renders v for inclusion in an error message, truncating long
+// lists so a quoted code body or other big literal does not flood the
+// output. Only the diagnostic surface uses this — ValToString and the
+// normal value renderers are untouched, so it never alters real output
+// or round-tripping. A list longer than diagMaxListHead shows its first
+// few elements followed by `… (N more)`; everything else (including
+// function values, which already render compactly via formatFnDef) is
+// shown by its normal String().
+func diagValue(v Value) string {
+	if v.Parent != nil && v.Parent.Matches(TList) && IsConcrete(v) {
+		lst, err := AsList(v)
+		if err == nil && lst.Len() > diagMaxListHead {
+			elems := lst.Slice()
+			parts := make([]string, 0, diagMaxListHead+1)
+			for i := 0; i < diagMaxListHead; i++ {
+				parts = append(parts, elems[i].String())
+			}
+			more := len(elems) - diagMaxListHead
+			parts = append(parts, "… ("+strconv.Itoa(more)+" more)")
+			return "[" + strings.Join(parts, " ") + "]"
+		}
+	}
+	return v.String()
+}
+
 // describeStackTypes returns a human-readable description of the types
 // on the stack around a given position, for inclusion in error messages.
 func describeStackTypes(stack []Value, pointer int) string {

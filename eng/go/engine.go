@@ -222,7 +222,7 @@ func (e *Engine) returnCountError(funcName string, expected, got int) *AqlError 
 func (e *Engine) returnTypeError(funcName string, index int, expected *Type, got Value) *AqlError {
 	detail := fmt.Sprintf("%s: return value %d: expected %s, got %s",
 		funcName, index, expected, got.Parent)
-	hint := "value: " + ValToString(got)
+	hint := "value: " + diagValue(got)
 	src := e.effectiveSource()
 	return makeAqlError("type_error", detail, funcName, src, hint)
 }
