@@ -164,6 +164,17 @@ var definitionNatives = []NativeFunc{
 
 // ---- def ----
 
+// installAndRecordDef binds name→value and records the def for check-mode
+// unused-def analysis at pos (the def-name token's position). Every
+// successful def / typed-def branch ends with this exact pair followed by a
+// `return nil, nil`, so it is consolidated here. The optional stackOnly flag
+// is forwarded to InstallDef (only the plain `def` path sets it).
+func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stackOnly ...bool) ([]Value, error) {
+	InstallDef(r, name, value, stackOnly...)
+	r.Check.RecordDef(name, pos)
+	return nil, nil
+}
+
 func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := defName(args[0])
 	stackOnly := defStackOnly(args[0])
@@ -182,9 +193,7 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	if r.Defs.IsType(name) {
 		return nil, r.AqlError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
 	}
-	InstallDef(r, name, body, stackOnly)
-	r.Check.RecordDef(name, args[0].Pos)
-	return nil, nil
+	return installAndRecordDef(r, name, body, args[0].Pos, stackOnly)
 }
 
 func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -256,9 +265,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 				out = ReparentValue(out, def)
 			}
 		}
-		InstallDef(r, name, out)
-		r.Check.RecordDef(name, args[0].Pos)
-		return nil, nil
+		return installAndRecordDef(r, name, out, args[0].Pos)
 	}
 
 	// ObjectType constraint (`def x:Person {map}` where Person is
@@ -281,26 +288,20 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			if err != nil {
 				return nil, fmt.Errorf("def %s: %w", name, err)
 			}
-			InstallDef(r, name, result[0])
-			r.Check.RecordDef(name, args[0].Pos)
-			return nil, nil
+			return installAndRecordDef(r, name, result[0], args[0].Pos)
 		}
 		if IsObjectInstance(body) {
 			oi, _ := AsObjectInstance(body)
 			// Accept if the instance's nominal type matches the
 			// declared one (covers `def x:Person make Person {…}`).
 			if oi.TypeRef != nil && oi.TypeRef.ID == info.ID {
-				InstallDef(r, name, body)
-				r.Check.RecordDef(name, args[0].Pos)
-				return nil, nil
+				return installAndRecordDef(r, name, body, args[0].Pos)
 			}
 		}
 	}
 	if r.Check.IsActive() && constraint.IsDepScalar() {
 		if body.Parent.Matches(constraint.Parent) {
-			InstallDef(r, name, body)
-			r.Check.RecordDef(name, args[0].Pos)
-			return nil, nil
+			return installAndRecordDef(r, name, body, args[0].Pos)
 		}
 	}
 	// User-minted bare-refine subtype (`def Foo refine Integer`): the
@@ -332,9 +333,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			}
 			parentLit := NewTypeLiteral(root)
 			if _, ok := Unify(body, parentLit); ok {
-				InstallDef(r, name, ReparentValue(body, def))
-				r.Check.RecordDef(name, args[0].Pos)
-				return nil, nil
+				return installAndRecordDef(r, name, ReparentValue(body, def), args[0].Pos)
 			}
 			if r.Check.IsActive() {
 				r.Check.AddDiagnostic(CheckDiagnostic{
@@ -345,9 +344,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 					Row:  args[0].Pos.Row,
 					Col:  args[0].Pos.Col,
 				})
-				InstallDef(r, name, NewCarrier(def))
-				r.Check.RecordDef(name, args[0].Pos)
-				return nil, nil
+				return installAndRecordDef(r, name, NewCarrier(def), args[0].Pos)
 			}
 			return nil, fmt.Errorf("def %s: value %s does not unify with declared type %s",
 				name, body.String(), describeType())
@@ -364,9 +361,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 				Row:  args[0].Pos.Row,
 				Col:  args[0].Pos.Col,
 			})
-			InstallDef(r, name, NewCarrier(constraint.Parent))
-			r.Check.RecordDef(name, args[0].Pos)
-			return nil, nil
+			return installAndRecordDef(r, name, NewCarrier(constraint.Parent), args[0].Pos)
 		}
 		return nil, fmt.Errorf("def %s: value %s does not unify with declared type %s",
 			name, body.String(), describeType())
@@ -384,9 +379,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			unified = ReparentValue(unified, def)
 		}
 	}
-	InstallDef(r, name, unified)
-	r.Check.RecordDef(name, args[0].Pos)
-	return nil, nil
+	return installAndRecordDef(r, name, unified, args[0].Pos)
 }
 
 // ---- undef ----

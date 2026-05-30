@@ -220,22 +220,34 @@ func doEvalMapValue(r *Registry, v Value) (Value, error) {
 
 // ---- if handlers ----
 
+// ifMarkMoveTokens builds the mark+move token sequence for a list-form `if`
+// condition: the condition list is run inline (Mark…Move) and its result
+// selects the branch via the IfCont. Returns (nil, false) when cond is not a
+// runnable plain list, so the caller falls back to scalar-condition
+// coercion. Shared by if2Handler (elseBranch=nil) and if3Handler.
+func ifMarkMoveTokens(cond Value, thenBranch, elseBranch []Value) ([]Value, bool) {
+	if !(cond.Parent.Equal(TList) && cond.Data != nil && !IsTypedList(cond) && !IsTableType(cond)) {
+		return nil, false
+	}
+	_lst, _ := AsList(cond)
+	condSlice := _lst.Slice()
+	id := NextMarkID()
+	tokens := make([]Value, 0, len(condSlice)+2)
+	tokens = append(tokens, NewMark(id, condSlice...))
+	tokens = append(tokens, condSlice...)
+	tokens = append(tokens, NewMoveIf(id, "if", &IfCont{
+		Then: thenBranch,
+		Else: elseBranch,
+	}))
+	return tokens, true
+}
+
 func if3Handler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	cond := args[0]
 	thenBranch := spliceArg(args[1])
 	elseBranch := spliceArg(args[2])
 
-	if cond.Parent.Equal(TList) && cond.Data != nil && !IsTypedList(cond) && !IsTableType(cond) {
-		_lst, _ := AsList(cond)
-		condSlice := _lst.Slice()
-		id := NextMarkID()
-		tokens := make([]Value, 0, len(condSlice)+2)
-		tokens = append(tokens, NewMark(id, condSlice...))
-		tokens = append(tokens, condSlice...)
-		tokens = append(tokens, NewMoveIf(id, "if", &IfCont{
-			Then: thenBranch,
-			Else: elseBranch,
-		}))
+	if tokens, ok := ifMarkMoveTokens(cond, thenBranch, elseBranch); ok {
 		return tokens, nil
 	}
 
@@ -249,17 +261,7 @@ func if2Handler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	cond := args[0]
 	thenBranch := spliceArg(args[1])
 
-	if cond.Parent.Equal(TList) && cond.Data != nil && !IsTypedList(cond) && !IsTableType(cond) {
-		_lst, _ := AsList(cond)
-		condSlice := _lst.Slice()
-		id := NextMarkID()
-		tokens := make([]Value, 0, len(condSlice)+2)
-		tokens = append(tokens, NewMark(id, condSlice...))
-		tokens = append(tokens, condSlice...)
-		tokens = append(tokens, NewMoveIf(id, "if", &IfCont{
-			Then: thenBranch,
-			Else: nil,
-		}))
+	if tokens, ok := ifMarkMoveTokens(cond, thenBranch, nil); ok {
 		return tokens, nil
 	}
 

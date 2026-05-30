@@ -1355,6 +1355,16 @@ func (e *Engine) resolvedStackBeforeFrom(from int, excludeIndices []int) []Value
 // matched signature plus arg-count bookkeeping; subsequent literals
 // are routed into its arg slots until ExpectedArgs is reached, at
 // which point the marker triggers handler execution.
+// forceStackWord rewrites the word at idx into its force-stack form
+// (ForceStack=true) while preserving the source position. Used at the
+// forward-collection completion points where the word must re-dispatch
+// against the stack; callers set e.pointer themselves as needed.
+func (e *Engine) forceStackWord(idx int, w WordInfo) {
+	pos := e.stack[idx].Pos
+	e.stack[idx] = NewWordModified(w.Name, w.ArgCount, true, false)
+	e.stack[idx].Pos = pos // preserve source position across force-stack rewrite
+}
+
 func (e *Engine) insertForward(w WordInfo, sig *Signature, forwardNeeded int, stackArgs ...int) error {
 	pArgs := 0
 	if len(stackArgs) > 0 {
@@ -1511,11 +1521,8 @@ func (e *Engine) stepLiteral() error {
 		}
 
 		if funcIdx < len(e.stack) && IsWord(e.stack[funcIdx]) {
-			orig := e.stack[funcIdx]
-			w, _ := AsWord(orig)
-			rewritten := NewWordModified(w.Name, w.ArgCount, true, false)
-			rewritten.Pos = orig.Pos // preserve source position across force-stack rewrite
-			e.stack[funcIdx] = rewritten
+			w, _ := AsWord(e.stack[funcIdx])
+			e.forceStackWord(funcIdx, w)
 		}
 
 		// Rearrange values for forward-first matching: forward args at
@@ -3088,9 +3095,7 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 
 		match := MatchSignature(fn.Signatures, resolved, testW)
 		if match != nil {
-			pos := e.stack[funcIdx].Pos
-			e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
-			e.stack[funcIdx].Pos = pos // preserve source position across force-stack rewrite
+			e.forceStackWord(funcIdx, w)
 			e.pointer = funcIdx
 			return
 		}
@@ -3135,9 +3140,7 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 	}
 
 	// No outer forward - force stack (may result in error on next step).
-	pos := e.stack[funcIdx].Pos
-	e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
-	e.stack[funcIdx].Pos = pos // preserve source position across force-stack rewrite
+	e.forceStackWord(funcIdx, w)
 	e.pointer = funcIdx
 }
 
