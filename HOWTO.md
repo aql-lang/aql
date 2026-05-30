@@ -156,6 +156,21 @@ Index:
 {users: ["Ada"]} . users . 0  => 'Ada'
 ```
 
+A bare name with no `: value` is **field shorthand** — `{foo}` means
+`{foo: foo}`, binding the name to itself just like JavaScript:
+
+```
+def x 1  def y 2
+{x y}                         => {x:1,y:2}
+{x z:3 y}                     => {x:1,y:2,z:3}   # mix with explicit pairs
+```
+
+The key is the base name and the value is the whole token, so word
+modifiers ride along on the value: `{f/r}` ≡ `{f: f/r}` (hold a function
+as data) and `{f?}` ≡ `{f?: f}` (an optional field). Only unquoted
+identifiers qualify; quoted keys like `{'foo'}` stay errors. See
+[Reference: Map field shorthand](REFERENCE.md#map-field-shorthand).
+
 `do` evaluates list-valued entries inside a map:
 
 ```

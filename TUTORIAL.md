@@ -241,6 +241,18 @@ aql> {name: "Alice", age: 30}        => {name:'Alice',age:30}
 Commas are optional inside literals — both `[1 2 3]` and `[1, 2, 3]`
 parse the same.
 
+A map entry can be just a bare name — `{foo}` is shorthand for
+`{foo: foo}`, the same as in JavaScript:
+
+```
+aql> def x 1
+aql> def y 2
+aql> {x y}                           => {x:1,y:2}
+```
+
+(See [Reference: Map field shorthand](REFERENCE.md#map-field-shorthand)
+for the `/r` and `?` variants.)
+
 The dot operator accesses fields by name or by index:
 
 ```

@@ -66,6 +66,7 @@ type you define with `def`.
 | `[a, b, c]` | List literal |
 | `[:Type]` | Typed list (every element must match `Type`) |
 | `{k:v, ...}` | Map literal |
+| `{foo}` | Field shorthand — `{foo}` ≡ `{foo: foo}` (see [Map field shorthand](#map-field-shorthand)) |
 | `{:Type}` | Typed map (every value must match `Type`) |
 
 Commas are optional inside list and map literals — `[1 2 3]` and
@@ -108,6 +109,55 @@ lower/f "ABC"                 => 'abc'
 "DEF" lower/s                 => 'def'
 lower/1 "GHI"                 => 'ghi'
 ```
+
+### Map field shorthand
+
+A map entry written as a bare name — with no `: value` — is shorthand
+for binding that name to itself, mirroring JavaScript's `{ foo }`:
+
+| Shorthand | Expands to | Notes |
+|-----------|------------|-------|
+| `{foo}` | `{foo: foo}` | value is the same auto-evaluated word |
+| `{foo/r}` | `{foo: foo/r}` | a word modifier stays on the **value**; the key is the base name |
+| `{foo?}` | `{foo?: foo}` | a trailing `?` keeps the field **optional**; the value is the bare word |
+
+The rule in one line: **the key is the base name and the value is the
+whole token.** So `{foo}` looks up the binding `foo` and stores it under
+key `foo`; `{foo/r}` stores it under key `foo` but keeps the `/r` on the
+value.
+
+```
+def x 1
+{x}                           => {x:1}
+def a 10  def b 20
+{a b}                         => {a:10,b:20}        # keys sort
+{a c:3 b}                     => {a:10,b:20,c:3}    # mixes with explicit pairs
+{outer: {a}}                  => {outer:{a:10}}     # nests
+```
+
+Because a shorthand value is auto-evaluated exactly like any bare map
+value, the same rules apply (see
+[Maps and access](#maps-and-access)): a plain binding resolves, a 0-arg
+function dispatches, and a function that needs arguments must be held as
+data with `/r` (or stored as an atom with `/q`):
+
+```
+def inc fn [[n:Integer] [Integer] [n add 1]]
+{inc}                         => build error    # inc dispatched 0-arg, fails its signature
+{inc/r} . inc 5               => 6              # /r holds the function as data
+{inc/q} . inc is Atom         => true           # /q stores the bare name as an atom
+```
+
+The optional form composes with the `?:` optional-field rule: `{foo?}`
+desugars to `{foo?: foo}`, i.e. the value becomes
+`disjunct(foo, None, Absent)` — present, explicitly `none`, or absent.
+
+**Only unquoted identifiers trigger the shorthand.** A quoted key
+(`{'foo'}`, `{"foo"}`) or a non-identifier (`{123}`) is a parse error —
+write the explicit `key: value` form for those. The pretty-printer
+(`aql fmt`) normalises every shorthand back to its explicit form
+(`{foo}` → `{foo:foo}`, `{foo/r}` → `{foo:foo/r}`, `{foo?}` →
+`{foo?:foo}`).
 
 
 ## Evaluation model
