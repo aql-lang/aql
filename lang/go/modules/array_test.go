@@ -88,27 +88,27 @@ func TestArrayModuleWords(t *testing.T) {
 	r := arrayRegistry(t)
 	cases := []struct{ src, want string }{
 		// shape / structure
-		{`array.shape [[1,2,3],[4,5,6]]`, "[2,3]"},
+		{`array.shape [[1,2,3],[4,5,6]]`, "[2 3]"},
 		{`array.rank [[1,2],[3,4]]`, "2"},
-		{`iota 6 array.reshape [2,3]`, "[[0,1,2],[3,4,5]]"},
-		{`array.transpose [[1,2,3],[4,5,6]]`, "[[1,4],[2,5],[3,6]]"},
+		{`iota 6 array.reshape [2,3]`, "[[0 1 2] [3 4 5]]"},
+		{`array.transpose [[1,2,3],[4,5,6]]`, "[[1 4] [2 5] [3 6]]"},
 		// selection / ordering
-		{`array.where [true,false,true,true]`, "[0,2,3]"},
-		{`array.grade [3,1,2]`, "[1,2,0]"},
-		{`[10,20,30] array.at [2,0]`, "[30,10]"},
-		{`[1,2,3] array.replicate [2,0,1]`, "[1,1,3]"},
-		{`array.compress [true,false,true] [10,20,30]`, "[10,30]"},
+		{`array.where [true,false,true,true]`, "[0 2 3]"},
+		{`array.grade [3,1,2]`, "[1 2 0]"},
+		{`[10,20,30] array.at [2,0]`, "[30 10]"},
+		{`[1,2,3] array.replicate [2,0,1]`, "[1 1 3]"},
+		{`array.compress [true,false,true] [10,20,30]`, "[10 30]"},
 		// rank polymorphism (quoted code body threads through the wrapper)
-		{`array.eachrank 1 [each [add 10]] [[1,2],[3,4]]`, "[[11,12],[13,14]]"},
-		{`array.eachrank 0 [mul 2] [[1,2],[3,4]]`, "[[2,4],[6,8]]"},
-		{`array.foldaxis 0 [add] [[1,2],[3,4]]`, "[4,6]"},
-		{`array.foldaxis 1 [add] [[1,2],[3,4]]`, "[3,7]"},
+		{`array.eachrank 1 [each [add 10]] [[1,2],[3,4]]`, "[[11 12] [13 14]]"},
+		{`array.eachrank 0 [mul 2] [[1,2],[3,4]]`, "[[2 4] [6 8]]"},
+		{`array.foldaxis 0 [add] [[1,2],[3,4]]`, "[4 6]"},
+		{`array.foldaxis 1 [add] [[1,2],[3,4]]`, "[3 7]"},
 		// membership / grouping
-		{`[1,2,3] array.member [2,3,4]`, "[true,true,false]"},
-		{`[1,2,2,3] array.unique`, "[1,2,3]"},
+		{`[1,2,3] array.member [2,3,4]`, "[true true false]"},
+		{`[1,2,2,3] array.unique`, "[1 2 3]"},
 		// neighborhoods
-		{`[1,2,3,4] array.window 2`, "[[1,2],[2,3],[3,4]]"},
-		{`array.pairs [1,2,3]`, "[[1,2],[2,3]]"},
+		{`[1,2,3,4] array.window 2`, "[[1 2] [2 3] [3 4]]"},
+		{`array.pairs [1,2,3]`, "[[1 2] [2 3]]"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.src, func(t *testing.T) {
@@ -124,10 +124,10 @@ func TestArrayEachrankCellRank(t *testing.T) {
 	data := `[[[1,2],[3,4]],[[5,6],[7,8]]]` // rank 3
 	// rank 2: body sees each rank-2 matrix; reverse flips its rows.
 	assertArrayResult(t, r, `array.eachrank 2 [reverse] `+data,
-		`[[[3,4],[1,2]],[[7,8],[5,6]]]`)
+		`[[[3 4] [1 2]] [[7 8] [5 6]]]`)
 	// rank 1: body sees each innermost row; reverse flips its elements.
 	assertArrayResult(t, r, `array.eachrank 1 [reverse] `+data,
-		`[[[2,1],[4,3]],[[6,5],[8,7]]]`)
+		`[[[2 1] [4 3]] [[6 5] [8 7]]]`)
 }
 
 // Negative cases: rank beyond the data, bad axis, ragged input.
@@ -156,9 +156,9 @@ func TestArrayCompressMismatch(t *testing.T) {
 func TestArrayModuleGroupBothSigs(t *testing.T) {
 	r := arrayRegistry(t)
 	// 1-arg: group equal values by their index.
-	assertArrayResult(t, r, `array.group ["a","b","a"]`, `{'a':[0,2],'b':[1]}`)
+	assertArrayResult(t, r, `array.group ["a","b","a"]`, `{'a':[0 2] 'b':[1]}`)
 	// 2-arg (forward form, keys then values): group values by parallel keys.
-	assertArrayResult(t, r, `array.group ["a","b","a"] [1,2,3]`, `{'a':[1,3],'b':[2]}`)
+	assertArrayResult(t, r, `array.group ["a","b","a"] [1,2,3]`, `{'a':[1 3] 'b':[2]}`)
 }
 
 // ADR-001 replacements: deep flatten and list indexof are core words,
@@ -171,9 +171,9 @@ func TestFlattenAndIndexofAreCore(t *testing.T) {
 	}
 	r.SetParseFunc(parser.Parse)
 	// No aql:array import — these are core.
-	assertArrayResult(t, r, `flatten -1 [1,[2,[3,[4]]]]`, "[1,2,3,4]")  // deep flatten
-	assertArrayResult(t, r, `flatten [1,[2,[3]]]`, "[1,2,[3]]")         // default = one level
-	assertArrayResult(t, r, `indexof [20,99,10] [10,20,30]`, "[1,3,0]") // list overload
+	assertArrayResult(t, r, `flatten -1 [1,[2,[3,[4]]]]`, "[1 2 3 4]")  // deep flatten
+	assertArrayResult(t, r, `flatten [1,[2,[3]]]`, "[1 2 [3]]")         // default = one level
+	assertArrayResult(t, r, `indexof [20,99,10] [10,20,30]`, "[1 3 0]") // list overload
 	assertArrayResult(t, r, `indexof "hello" "ll"`, "2")                // string overload, same word
 }
 

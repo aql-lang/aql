@@ -662,10 +662,11 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 func (e *Engine) stepWord(val Value) error {
 	w, _ := AsWord(val)
 
-	// /r modifier: resolve the name to its bound value as data, with no
-	// argument collection or dispatch. An FnDef binding comes back as a
-	// Quoted Function value so it sits on the stack like any other piece
-	// of data — exactly the case `ref` exists to enable.
+	// /r modifier: resolve the name to its bound Function value as data,
+	// with no argument collection or dispatch. The FnDef binding comes
+	// back as an (unquoted) Function value that sits on the stack like any
+	// other piece of data — exactly the case `ref` exists to enable. /r is
+	// legal only for function words; a non-fn binding raises illegal_ref.
 	if w.ForceRef {
 		v, ok := ResolveRef(e.registry, w.Name)
 		if !ok {
@@ -686,6 +687,34 @@ func (e *Engine) stepWord(val Value) error {
 			return &AqlError{
 				Code:       "undefined_word",
 				Detail:     "undefined word: " + w.Name,
+				Src:        w.Name,
+				Row:        val.Pos.Row,
+				Col:        val.Pos.Col,
+				fullSource: e.effectiveSource(),
+			}
+		}
+		// /r may reference only function words. A non-fn binding (plain
+		// value, type body) has no call/value asymmetry for /r to break,
+		// so referencing it is illegal.
+		if !IsFunctionRef(v) {
+			detail := "/r requires a function word: " + w.Name + " is bound to " + v.Parent.String()
+			if e.registry != nil && e.registry.Check.IsActive() {
+				e.registry.Check.AddDiagnostic(CheckDiagnostic{
+					Code:   "illegal_ref",
+					Detail: detail,
+					Word:   w.Name,
+					Row:    val.Pos.Row,
+					Col:    val.Pos.Col,
+				})
+				placeholder := NewAtom(w.Name)
+				placeholder.Pos = val.Pos
+				placeholder.Undefined = true
+				e.stack[e.pointer] = placeholder
+				return e.stepLiteral()
+			}
+			return &AqlError{
+				Code:       "illegal_ref",
+				Detail:     detail,
 				Src:        w.Name,
 				Row:        val.Pos.Row,
 				Col:        val.Pos.Col,

@@ -230,7 +230,7 @@ func TestImportFileMapExport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{x:10,y:20}")
+	assertResult(t, result, "{x:10 y:20}")
 }
 
 // --- No module word needed (just exports) ---
@@ -367,7 +367,7 @@ func TestImportJSONFile(t *testing.T) {
 	if len(result) != 1 || !result[0].Parent.Equal(native.TMap) {
 		t.Fatalf("expected map on stack, got %v", result)
 	}
-	assertResult(t, result, "{diameter:12756,name:'Earth'}")
+	assertResult(t, result, "{diameter:12756 name:'Earth'}")
 }
 
 func TestImportJSONFileAccess(t *testing.T) {
@@ -398,7 +398,7 @@ func TestImportJSONFileList(t *testing.T) {
 	if len(result) != 1 || !result[0].Parent.Equal(native.TList) {
 		t.Fatalf("expected list on stack, got %v", result)
 	}
-	assertResult(t, result, "[1,2,3]")
+	assertResult(t, result, "[1 2 3]")
 }
 
 func TestImportJsonicFile(t *testing.T) {

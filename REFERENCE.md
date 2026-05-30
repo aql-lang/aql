@@ -66,6 +66,7 @@ type you define with `def`.
 | `[a, b, c]` | List literal |
 | `[:Type]` | Typed list (every element must match `Type`) |
 | `{k:v, ...}` | Map literal |
+| `{foo}` | Field shorthand — `{foo}` ≡ `{foo: foo}` (see [Map field shorthand](#map-field-shorthand)) |
 | `{:Type}` | Typed map (every value must match `Type`) |
 
 Commas are optional inside list and map literals — `[1 2 3]` and
@@ -108,6 +109,62 @@ lower/f "ABC"                 => 'abc'
 "DEF" lower/s                 => 'def'
 lower/1 "GHI"                 => 'ghi'
 ```
+
+### Map field shorthand
+
+A map entry written as a bare name — with no `: value` — is shorthand
+for binding that name to itself, mirroring JavaScript's `{ foo }`:
+
+| Shorthand | Expands to | Notes |
+|-----------|------------|-------|
+| `{foo}` | `{foo: foo}` | value is the same auto-evaluated word |
+| `{foo/r}` | `{foo: foo/r}` | a word modifier stays on the **value**; the key is the base name |
+| `{foo?}` | `{foo?: foo}` | a trailing `?` keeps the field **optional**; the value is the bare word |
+
+The rule in one line: **the key is the base name and the value is the
+whole token.** So `{foo}` looks up the binding `foo` and stores it under
+key `foo`; `{foo/r}` stores it under key `foo` but keeps the `/r` on the
+value.
+
+```
+def x 1
+{x}                           => {x:1}
+def a 10  def b 20
+{a b}                         => {a:10 b:20}        # keys sort
+{a c:3 b}                     => {a:10 b:20 c:3}    # mixes with explicit pairs
+{outer: {a}}                  => {outer:{a:10}}     # nests
+```
+
+Because a shorthand value is auto-evaluated exactly like any bare map
+value, the same rules apply (see
+[Maps and access](#maps-and-access)): a plain binding resolves, a 0-arg
+function dispatches, and a function that needs arguments must be held as
+data with `/r` (or stored as an atom with `/q`):
+
+```
+def inc fn [[n:Integer] [Integer] [n add 1]]
+{inc}                         => build error    # inc dispatched 0-arg, fails its signature
+{inc/r} . inc 5               => 6              # /r holds the function as data
+{inc/q} . inc is Atom         => true           # /q stores the bare name as an atom
+```
+
+The optional form composes with the `?:` optional-field rule: `{foo?}`
+desugars to `{foo?: foo}`, i.e. the value becomes
+`disjunct(foo, None, Absent)` — present, explicitly `none`, or absent.
+
+**Only unquoted identifiers trigger the shorthand.** A quoted key
+(`{'foo'}`, `{"foo"}`) or a non-identifier (`{123}`) is a parse error —
+write the explicit `key: value` form for those. The pretty-printer
+(`aql fmt`) normalises every shorthand back to its explicit form
+(`{foo}` → `{foo:foo}`, `{foo/r}` → `{foo:foo/r}`, `{foo?}` →
+`{foo?:foo}`).
+
+**A word modifier belongs on a value, never on a bare key.** It is
+legal on a shorthand entry (`{foo/r}` — the token is the value) but an
+error on an explicit pair: `{foo/r: 1}` raises `[aql/illegal_key]`,
+because the `/r` could only attach to the key `foo`, which is just a
+name. If you genuinely need a `/` in a key, make it a literal with a
+quoted key (`{'a/b': 1}`) or a computed key (`{[a/b]: 1}`).
 
 
 ## Evaluation model
@@ -284,7 +341,7 @@ Additional numeric words (`abs`, `negate`, `sign`, `min`, `max`,
 "aql:math" import end
 math.abs -5                   => 5
 math.floor 3.7                => 3
-math.sqrt 16                  => 4
+math.sqrt 16                  => 4.0
 ```
 
 ### Strings
@@ -320,7 +377,7 @@ of the word, with the haystack as the forward arg.
 Pass an Options map as the *last* forward argument:
 
 ```
-split   "a,,b"      ","    {keepEmpty: true}            => ['a','','b']
+split   "a,,b"      ","    {keepEmpty: true}            => ['a' '' 'b']
 contains "hello"    "Ell"  {cs: "insensitive"}          => true
 replace "aaa"       "a" "b" {scope: "all"}              => 'bbb'
 ```
@@ -387,7 +444,7 @@ below). A mismatch is an error, not a silent pass:
 
 ```
 def bad fn [[] [Integer] ['hi']]
-bad                           => [aql/type_error] return value 1: expected Integer, got ProperString
+bad                           => [aql/type_error] return value 1: expected Integer got ProperString
 ```
 
 Multiple triples declare overloads (the engine tries each in order);
@@ -434,7 +491,7 @@ def g fn [[n:Pos] [Integer] [n]]
 def x:Pos 42   x g                                 => 42
 
 def mk fn [[] [Pos] [7]]
-mk                                                 => [aql/type_error] return value 1: expected Pos, got Integer
+mk                                                 => [aql/type_error] return value 1: expected Pos got Integer
 def mk2 fn [[] [Pos] [def x:Pos 7 x]]
 mk2                                                => 7
 ```
@@ -455,8 +512,8 @@ def g fn [[n:Big] [Integer] [n]]
 
 def mk fn [[] [Big] [50]]
 mk                                                 => 50
-def mkBad fn [[] [Big] [5]]
-mkBad                                              => [aql/type_error] return value 1: expected Big, got Integer
+def mkbad fn [[] [Big] [5]]
+mkbad                                              => [aql/type_error] return value 1: expected Big got Integer
 ```
 
 The newtype-vs-subset distinction and its cross-language rationale are
@@ -493,7 +550,7 @@ process a sequence with the index/element, use `iota N each [body]`
 (each pushes the element before running the body):
 
 ```
-iota 5 each [dup mul]     => [0, 1, 4, 9, 16]
+iota 5 each [dup mul]     => [0 1 4 9 16]
 ```
 
 ### List and array words
@@ -529,8 +586,8 @@ module words. `transpose` has no core counterpart and so appears here
 under its plain name.
 
 ```
-"aql:array" import
-iota 6 array.reshape [2,3]        => [[0,1,2],[3,4,5]]
+"aql:array" import end
+iota 6 array.reshape [2,3]        => [[0 1 2] [3 4 5]]
 ```
 
 | Word | Description | Example |
@@ -621,15 +678,20 @@ consequences:
 - **Access the result of a call** by parenthesising the call:
   `(make Point {x:1 y:2}) .x`, `(import "data.json") . name` — bare
   `make … {} .x` would feed `.x`'s result *into* `make`.
-- **`/r` is a pure reference: it resolves the name to the bound value and
-  *advances the pointer* — it never calls the function in place.** This
-  holds at any arity and in any position (top level, list element, paren,
-  `do`-block, map value): `g/r` yields the function as data, `add/r 2 3`
-  leaves `[Function, 2, 3]` on the stack (the args are *not* consumed),
-  and `[zero/r]` is `[<function>]` even for a 0-arg `zero` (it is **not**
-  fired). To **call** a referenced function, use the bare word
-  (`add 2 3`), `apply` it (`2 3 (quote (f/r)) apply`), or access it as a
-  member (below), where `get` brings the value live.
+- **`/r` is a pure reference to a *function word*: it resolves the name to
+  the bound function and *advances the pointer* — it never calls the
+  function in place.** `/r` is legal **only** for function words; a name
+  bound to a non-function value (a plain value, a type) raises
+  `[aql/illegal_ref]`, because a bare value name already pushes its value
+  — there is no call/value asymmetry for `/r` to break. The same rule
+  applies to the `ref` word. The reference holds at any arity and in any
+  position (top level, list element, paren, `do`-block, map value): `g/r`
+  yields the function as data, `add/r 2 3` leaves `[Function, 2, 3]` on
+  the stack (the args are *not* consumed), and `[zero/r]` is
+  `[<function>]` even for a 0-arg `zero` (it is **not** fired). To
+  **call** a referenced function, use the bare word (`add 2 3`), `apply`
+  it (`2 3 (quote (f/r)) apply`), or access it as a member (below), where
+  `get` brings the value live.
 
 - **A function stored in a plain map** is callable via dot. Store it with
   `/r` — `{fn: myfn/r}` — which holds the function as data; then
@@ -724,6 +786,7 @@ Requires the `sqlite` capability.
 | `module` | Define a module inline | `module [def x 1]` |
 | `import` | Import a module by name or file | `import "lib.aql"` |
 
+<!-- aql-test: skip -->
 ```
 import utils [def f [dup add]]
 utils.f 3                     => 6

@@ -125,7 +125,7 @@ make Path 'a/b' typeof	Path
 # the Map subtype used to carry option-shaped data.		
 		
 make Options { a:1 }	options{a:1}	one-entry options
-make Options { a:1 b:2 }	options{a:1,b:2}	multi-entry — String() comma-renders Options
+make Options { a:1 b:2 }	options{a:1 b:2}	multi-entry — String() comma-renders Options
 		
 # typeof on an Options instance reports Map (the underlying VType).		
 make Options { a:1 } typeof	Map	

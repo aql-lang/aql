@@ -64,55 +64,55 @@ None	Boolean	false
 Boolean	None	false
 
 # Identical lists
-[1,2,3]	[1,2,3]	true	[1,2,3]
-["a","b"]	["a","b"]	true	['a','b']
+[1,2,3]	[1 2 3]	true	[1 2 3]
+["a","b"]	["a" "b"]	true	['a' 'b']
 []	[]	true	[]
-[true,false]	[true,false]	true	[true,false]
+[true,false]	[true false]	true	[true false]
 
 # List element-wise narrowing (type Names in lists are type Literals)
-[1,String]	[Number,"a"]	true	[1,'a']
-[Number,Number]	[1,2]	true	[1,2]
-[String,String]	["x","y"]	true	['x','y']
-[Decimal,String]	[1.1,"b"]	true	[1.1,'b']
-[String,Integer]	["a",1]	true	['a',1]
-[Number,String]	["a",1]	false
-[Integer,Integer]	[1,"a"]	false
-[Boolean,Integer]	[true,1]	true	[true,1]
-[Integer,Boolean]	[1,false]	true	[1,false]
+[1,String]	[Number "a"]	true	[1 'a']
+[Number,Number]	[1 2]	true	[1 2]
+[String,String]	["x" "y"]	true	['x' 'y']
+[Decimal,String]	[1.1 "b"]	true	[1.1 'b']
+[String,Integer]	["a" 1]	true	['a' 1]
+[Number,String]	["a" 1]	false
+[Integer,Integer]	[1 "a"]	false
+[Boolean,Integer]	[true 1]	true	[true 1]
+[Integer,Boolean]	[1 false]	true	[1 false]
 
 # List length mismatch (fail)
-[1]	[1,2]	false
-[1,2,3]	[1,2]	false
+[1]	[1 2]	false
+[1,2,3]	[1 2]	false
 
 # List element mismatch (fail)
-[1,2]	[1,3]	false
-[1,"a"]	[1,2]	false
+[1,2]	[1 3]	false
+[1,"a"]	[1 2]	false
 
 # List with type Literal
-List	[1,2]	true	[1,2]
-[1,2]	List	true	[1,2]
+List	[1 2]	true	[1 2]
+[1,2]	List	true	[1 2]
 List	List	true	List
 List	[]	true	[]
 
 # Nested lists
-[[1,2],[3,4]]	[[1,2],[3,4]]	true	[[1,2],[3,4]]
-[[String],[Number]]	[["a"],[1]]	true	[['a'],[1]]
+[[1,2],[3,4]]	[[1 2] [3 4]]	true	[[1 2] [3 4]]
+[[String],[Number]]	[["a"] [1]]	true	[['a'] [1]]
 [[1]]	[[2]]	false
 
 # Identical maps
 {x:1}	{x:1}	true	{x:1}
-{x:1,y:2}	{x:1,y:2}	true	{x:1,y:2}
+{x:1,y:2}	{x:1 y:2}	true	{x:1 y:2}
 {}	{}	true	{}
 {a:"hello"}	{a:"hello"}	true	{a:'hello'}
 
 # Map value narrowing
 {x:String}	{x:"hello"}	true	{x:'hello'}
-{x:Number,y:String}	{x:1,y:"a"}	true	{x:1,y:'a'}
+{x:Number,y:String}	{x:1 y:"a"}	true	{x:1 y:'a'}
 {a:Number}	{a:42}	true	{a:42}
 
 # Map key mismatch - closed (fail when missing value cannot unify with None)
 {x:1}	{y:1}	false
-{x:1}	{x:1,y:2}	false
+{x:1}	{x:1 y:2}	false
 {x:1,y:2}	{x:1}	false
 
 # Missing keys synthesise Absent — closed maps without `?` reject
@@ -120,15 +120,15 @@ List	[]	true	[]
 # the present side must be optional (`y?:None`) so the disjunct
 # contains Absent.
 {x:1,y:None}	{x:1}	false
-{x:1}	{x:1,y:None}	false
+{x:1}	{x:1 y:None}	false
 {x:1,y?:None}	{x:1}	true	{x:1}
-{x:1}	{x:1,y?:None}	true	{x:1}
+{x:1}	{x:1 y?:None}	true	{x:1}
 {x:(String tor None)}	{x:1}	false
 {x:Number,y:(String tor None)}	{x:1}	false
-{x:1}	{x:Number,y:(String tor None)}	false
+{x:1}	{x:Number y:(String tor None)}	false
 {x:Number,y?:(String tor None)}	{x:1}	true	{x:1}
-{x:1}	{x:Number,y?:(String tor None)}	true	{x:1}
-{x:Number,y:(String tor None)}	{x:1,y:"hello"}	true	{x:1,y:'hello'}
+{x:1}	{x:Number y?:(String tor None)}	true	{x:1}
+{x:Number,y:(String tor None)}	{x:1 y:"hello"}	true	{x:1 y:'hello'}
 {x:Number,y:String}	{x:1}	false
 
 # Optional field syntax ? — "None or absent, universally".
@@ -136,7 +136,7 @@ List	[]	true	[]
 # forced to None). Explicit None at an optional key is still
 # admitted via the disjunct(T, None) value wrap.
 {x:Number,y?:String}	{x:1}	true	{x:1}
-{x:Number,y?:String}	{x:1,y:"hello"}	true	{x:1,y:'hello'}
+{x:Number,y?:String}	{x:1 y:"hello"}	true	{x:1 y:'hello'}
 {x?:Number}	{}	true	{}
 {x?:Number}	{x:1}	true	{x:1}
 {x?:Number,y?:String}	{x:1}	true	{x:1}
@@ -158,8 +158,8 @@ Map	{}	true	{}
 {a:{b:1}}	{a:{b:2}}	false
 
 # Mixed nesting: maps in lists, lists in maps
-[{a:1},{b:String}]	[{a:Number},{b:"z"}]	true	[{a:1},{b:'z'}]
-{x:[1,String]}	{x:[Number,"a"]}	true	{x:[1,'a']}
+[{a:1},{b:String}]	[{a:Number} {b:"z"}]	true	[{a:1} {b:'z'}]
+{x:[1,String]}	{x:[Number "a"]}	true	{x:[1 'a']}
 {x:[1]}	{x:[2]}	false
 
 # Cross-type Failures: list vs map vs scalar
@@ -183,8 +183,8 @@ None	Map	false
 Map	None	false
 
 # Any unifies with list and map
-Any	[1,2]	true	[1,2]
-[1,2]	Any	true	[1,2]
+Any	[1 2]	true	[1 2]
+[1,2]	Any	true	[1 2]
 Any	{x:1}	true	{x:1}
 {x:1}	Any	true	{x:1}
 
@@ -205,8 +205,8 @@ Any	{x:1}	true	{x:1}
 [:String]	[:Boolean]	false
 
 # Typed list vs concrete list (success)
-[:Number]	[1,2,3]	true	[1,2,3]
-[:String]	["a","b"]	true	['a','b']
+[:Number]	[1 2 3]	true	[1 2 3]
+[:String]	["a" "b"]	true	['a' 'b']
 [:Number]	[42]	true	[42]
 [:String]	["hello"]	true	['hello']
 
@@ -216,20 +216,20 @@ Any	{x:1}	true	{x:1}
 [:{x:Number}]	[]	true	[]
 
 # Typed list vs concrete list (fail - type Mismatch)
-[:String]	[1,2]	false
+[:String]	[1 2]	false
 [:Number]	["hello"]	false
 [:Boolean]	[1]	false
 
 # Typed list vs concrete list (symmetry)
-[1,2,3]	[:Number]	true	[1,2,3]
-["a","b"]	[:String]	true	['a','b']
+[1,2,3]	[:Number]	true	[1 2 3]
+["a","b"]	[:String]	true	['a' 'b']
 [1,2]	[:String]	false
 ["hello"]	[:Number]	false
 
 # Typed list with map child type
-[:{x:Number}]	[{x:1},{x:2}]	true	[{x:1},{x:2}]
-[:{x:String}]	[{x:"a"},{x:"b"}]	true	[{x:'a'},{x:'b'}]
-[:{x:Number}]	[{x:1},{y:1}]	false
+[:{x:Number}]	[{x:1} {x:2}]	true	[{x:1} {x:2}]
+[:{x:String}]	[{x:"a"} {x:"b"}]	true	[{x:'a'} {x:'b'}]
+[:{x:Number}]	[{x:1} {y:1}]	false
 
 # Typed list vs bare list type Literal
 List	[:String]	true	[:String]
@@ -251,10 +251,10 @@ None	[:Number]	false
 [:Number]	None	false
 
 # Deeper typed lists
-[:[:Number]]	[[1,2],[3]]	true	[[1,2],[3]]
-[:[:String]]	[["a"],["b","c"]]	true	[['a'],['b','c']]
+[:[:Number]]	[[1 2] [3]]	true	[[1 2] [3]]
+[:[:String]]	[["a"] ["b" "c"]]	true	[['a'] ['b' 'c']]
 [:[:Number]]	[["a"]]	false
-[:[:Number]]	[[1],[2,3],[]]	true	[[1],[2,3],[]]
+[:[:Number]]	[[1] [2 3] []]	true	[[1] [2 3] []]
 
 # Deeper typed list child type Unification
 [:[:String]]	[:[:String]]	true	[:[:String]]
@@ -283,8 +283,8 @@ None	[:Number]	false
 {:String}	{:Boolean}	false
 
 # Typed map vs concrete map (success)
-{:Number}	{a:1,b:2}	true	{a:1,b:2}
-{:String}	{x:"a",y:"b"}	true	{x:'a',y:'b'}
+{:Number}	{a:1 b:2}	true	{a:1 b:2}
+{:String}	{x:"a" y:"b"}	true	{x:'a' y:'b'}
 {:Number}	{x:42}	true	{x:42}
 {:String}	{a:"hello"}	true	{a:'hello'}
 
@@ -299,15 +299,15 @@ None	[:Number]	false
 {:Boolean}	{x:1}	false
 
 # Typed map vs concrete map (symmetry)
-{a:1,b:2}	{:Number}	true	{a:1,b:2}
-{x:"a",y:"b"}	{:String}	true	{x:'a',y:'b'}
+{a:1,b:2}	{:Number}	true	{a:1 b:2}
+{x:"a",y:"b"}	{:String}	true	{x:'a' y:'b'}
 {a:1}	{:String}	false
 {x:"hello"}	{:Number}	false
 
 # Typed map with map child type
-{:{x:Number}}	{a:{x:1},b:{x:2}}	true	{a:{x:1},b:{x:2}}
-{:{x:String}}	{a:{x:"a"},b:{x:"b"}}	true	{a:{x:'a'},b:{x:'b'}}
-{:{x:Number}}	{a:{x:1},b:{y:1}}	false
+{:{x:Number}}	{a:{x:1} b:{x:2}}	true	{a:{x:1} b:{x:2}}
+{:{x:String}}	{a:{x:"a"} b:{x:"b"}}	true	{a:{x:'a'} b:{x:'b'}}
+{:{x:Number}}	{a:{x:1} b:{y:1}}	false
 
 # Typed map vs bare map type Literal
 Map	{:String}	true	{:String}
@@ -329,10 +329,10 @@ None	{:Number}	false
 {:Number}	None	false
 
 # Deeper typed maps
-{:{:Number}}	{a:{x:1},b:{y:2}}	true	{a:{x:1},b:{y:2}}
-{:{:String}}	{a:{x:"a"},b:{y:"b"}}	true	{a:{x:'a'},b:{y:'b'}}
+{:{:Number}}	{a:{x:1} b:{y:2}}	true	{a:{x:1} b:{y:2}}
+{:{:String}}	{a:{x:"a"} b:{y:"b"}}	true	{a:{x:'a'} b:{y:'b'}}
 {:{:Number}}	{a:{x:"a"}}	false
-{:{:Number}}	{a:{x:1,y:2},b:{z:3}}	true	{a:{x:1,y:2},b:{z:3}}
+{:{:Number}}	{a:{x:1 y:2} b:{z:3}}	true	{a:{x:1 y:2} b:{z:3}}
 
 # Deeper typed map child type Unification
 {:{:String}}	{:{:String}}	true	{:{:String}}
@@ -345,15 +345,15 @@ None	{:Number}	false
 {:String}	1	false
 
 # Mixed: typed list of typed maps
-[:{:Number}]	[{a:1},{b:2}]	true	[{a:1},{b:2}]
-[:{:String}]	[{x:"a"},{y:"b"}]	true	[{x:'a'},{y:'b'}]
+[:{:Number}]	[{a:1} {b:2}]	true	[{a:1} {b:2}]
+[:{:String}]	[{x:"a"} {y:"b"}]	true	[{x:'a'} {y:'b'}]
 [:{:Number}]	[{a:"x"}]	false
 
 # Mixed: typed map of typed lists
 # Single-element lists unwrap during map auto-eval, so use multi-element lists.
-{:[:Number]}	{a:[1,2],b:[3,4]}	true	{a:[1,2],b:[3,4]}
-{:[:String]}	{x:["a","b"],y:["c","d"]}	true	{x:['a','b'],y:['c','d']}
-{:[:Number]}	{a:[1,2],b:["x","y"]}	false
+{:[:Number]}	{a:[1 2] b:[3 4]}	true	{a:[1 2] b:[3 4]}
+{:[:String]}	{x:["a" "b"] y:["c" "d"]}	true	{x:['a' 'b'] y:['c' 'd']}
+{:[:Number]}	{a:[1 2] b:["x" "y"]}	false
 
 # ============================================================
 # COMPREHENSIVE CROSS-PRODUCT SUITE
@@ -388,7 +388,7 @@ Map	Map	true	Map
 true	true	true	true
 false	false	true	false
 []	[]	true	[]
-[1,2]	[1,2]	true	[1,2]
+[1,2]	[1 2]	true	[1 2]
 {}	{}	true	{}
 {a:1}	{a:1}	true	{a:1}
 
@@ -413,8 +413,8 @@ Any	true	true	true
 true	Any	true	true
 Any	List	true	List
 List	Any	true	List
-Any	[1,2]	true	[1,2]
-[1,2]	Any	true	[1,2]
+Any	[1 2]	true	[1 2]
+[1,2]	Any	true	[1 2]
 Any	Map	true	Map
 Map	Any	true	Map
 Any	{a:1}	true	{a:1}
@@ -565,30 +565,30 @@ Map	List	false
 # --- List family ---
 List	[]	true	[]
 []	List	true	[]
-List	[1,2,3]	true	[1,2,3]
-[1,2,3]	List	true	[1,2,3]
+List	[1 2 3]	true	[1 2 3]
+[1,2,3]	List	true	[1 2 3]
 [1]	[1]	true	[1]
 [1]	[2]	false
 [1,2]	[1]	false
-[1]	[1,2]	false
+[1]	[1 2]	false
 [Integer]	[1]	true	[1]
 [1]	[Integer]	true	[1]
-[Number,String]	[1,"a"]	true	[1,'a']
-[1,"a"]	[Number,String]	true	[1,'a']
-[Integer,Integer]	[1,"a"]	false
-[1,"a"]	[Integer,Integer]	false
+[Number,String]	[1 "a"]	true	[1 'a']
+[1,"a"]	[Number String]	true	[1 'a']
+[Integer,Integer]	[1 "a"]	false
+[1,"a"]	[Integer Integer]	false
 
 # --- Map family ---
 Map	{}	true	{}
 {}	Map	true	{}
-Map	{a:1,b:2}	true	{a:1,b:2}
-{a:1,b:2}	Map	true	{a:1,b:2}
+Map	{a:1 b:2}	true	{a:1 b:2}
+{a:1,b:2}	Map	true	{a:1 b:2}
 {a:1}	{a:1}	true	{a:1}
 {a:1}	{a:2}	false
 {a:Integer}	{a:1}	true	{a:1}
 {a:1}	{a:Integer}	true	{a:1}
-{a:Integer,b:String}	{a:1,b:"x"}	true	{a:1,b:'x'}
-{a:1,b:"x"}	{a:Integer,b:String}	true	{a:1,b:'x'}
+{a:Integer,b:String}	{a:1 b:"x"}	true	{a:1 b:'x'}
+{a:1,b:"x"}	{a:Integer b:String}	true	{a:1 b:'x'}
 
 # --- Optional keys (the universal "? = None or absent" rule) ---
 {a?:Integer}	{}	true	{}
@@ -600,7 +600,7 @@ Map	{a:1,b:2}	true	{a:1,b:2}
 {a?:Integer}	{a:"x"}	false
 {a:"x"}	{a?:Integer}	false
 {a?:Integer,b:String}	{b:"x"}	true	{b:'x'}
-{b:"x"}	{a?:Integer,b:String}	true	{b:'x'}
+{b:"x"}	{a?:Integer b:String}	true	{b:'x'}
 
 # --- Disjunct distribution (commutative) ---
 (Integer tor String)	1	true	1
@@ -627,10 +627,10 @@ Never	(Integer tor String)	false
 (Integer tor String)	Never	false
 
 # --- Nested structural ---
-[Integer,String]	[1,"a"]	true	[1,'a']
-[1,"a"]	[Integer,String]	true	[1,'a']
-{a:[:Integer],b:String}	{a:[1,2],b:"x"}	true	{a:[1,2],b:'x'}
-{a:[1,2],b:"x"}	{a:[:Integer],b:String}	true	{a:[1,2],b:'x'}
+[Integer,String]	[1 "a"]	true	[1 'a']
+[1,"a"]	[Integer String]	true	[1 'a']
+{a:[:Integer],b:String}	{a:[1 2] b:"x"}	true	{a:[1 2] b:'x'}
+{a:[1,2],b:"x"}	{a:[:Integer] b:String}	true	{a:[1 2] b:'x'}
 {a:{b:Integer}}	{a:{b:42}}	true	{a:{b:42}}
 {a:{b:42}}	{a:{b:Integer}}	true	{a:{b:42}}
 

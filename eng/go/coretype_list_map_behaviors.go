@@ -20,7 +20,7 @@ func (listFormatBehavior) Format(v Value) string {
 		for i, row := range td.Rows {
 			rowParts[i] = row.String()
 		}
-		return formatFieldBag("table", td.Record.Fields) + "[" + strings.Join(rowParts, ",") + "]"
+		return formatFieldBag("table", td.Record.Fields) + "[" + strings.Join(rowParts, " ") + "]"
 	}
 	if mp, ok := v.Data.(MaterializerPayload); ok {
 		td, err := mp.M.Materialize()
@@ -52,7 +52,7 @@ func (listFormatBehavior) Format(v Value) string {
 		}
 		parts = append(parts, elems[i].String())
 	}
-	return "[" + strings.Join(parts, ",") + "]"
+	return "[" + strings.Join(parts, " ") + "]"
 }
 
 // resugarDotChain recognises a parser-grouped dot-access run inside a
@@ -106,15 +106,16 @@ func formatTableDataAsList(td TableData) string {
 }
 
 // formatFieldBag renders an OrderedMap of field name → value as
-// `name{k:v,…}` — the shared render shape of record / options /
-// table-schema type values.
+// `name{k:v …}` — the shared render shape of record / options /
+// table-schema type values. Fields are space-separated (commas are
+// optional in AQL source, and the default render omits them).
 func formatFieldBag(name string, fields *OrderedMap) string {
 	parts := make([]string, 0, fields.Len())
 	for _, k := range fields.Keys() {
 		val, _ := fields.Get(k)
 		parts = append(parts, k+":"+val.String())
 	}
-	return name + "{" + strings.Join(parts, ",") + "}"
+	return name + "{" + strings.Join(parts, " ") + "}"
 }
 
 // mapFormatBehavior renders a Map value, dispatching on the
@@ -144,7 +145,7 @@ func (mapFormatBehavior) Format(v Value) string {
 		val, _ := m.Get(k)
 		parts = append(parts, k+":"+val.String())
 	}
-	return "{" + strings.Join(parts, ",") + "}"
+	return "{" + strings.Join(parts, " ") + "}"
 }
 
 func init() {

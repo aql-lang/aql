@@ -19,13 +19,13 @@ sub 3 10                             # all-forward
 def square fn [[x:Number] [Number] [x mul x]]
 4 square                             => 16
 
-[1, 2, 3] each [dup mul]             => [1,4,9]
+[1, 2, 3] each [dup mul]             => [1 4 9]
 {name: "Ada"} . name                 => 'Ada'
 
 def Point refine Record [x:Number y:Number]
-make Point [3 4]                     => {x:3,y:4}
+make Point [3 4]                     => {x:3 y:4}
 
-await [[sleep 50 1] [sleep 50 2]]    => [1,2]
+await [[sleep 50 1] [sleep 50 2]]    => [1 2]
 ```
 
 

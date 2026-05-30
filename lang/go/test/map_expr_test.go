@@ -38,7 +38,7 @@ func TestMapExprExplicitMultiKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{a:1,b:2}")
+	assertResult(t, result, "{a:1 b:2}")
 }
 
 // --- Implicit map (pair syntax at top level) ---
@@ -74,7 +74,7 @@ func TestMapExprInListMultipleMaps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "[{a:1},{b:2}]")
+	assertResult(t, result, "[{a:1} {b:2}]")
 }
 
 func TestMapExprInListNestedExpr(t *testing.T) {
@@ -124,7 +124,7 @@ func TestMapExprParenMixedValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{a:10,b:11,c:'lit'}")
+	assertResult(t, result, "{a:10 b:11 c:'lit'}")
 }
 
 // --- Inside function bodies ---
@@ -169,7 +169,7 @@ func TestMapExprNestedMixed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{a:{b:1},c:2}")
+	assertResult(t, result, "{a:{b:1} c:2}")
 }
 
 func TestMapExprNestedWithParen(t *testing.T) {
@@ -379,7 +379,7 @@ func TestMapExprDoNested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{a:{b:1},c:2}")
+	assertResult(t, result, "{a:{b:1} c:2}")
 }
 
 func TestMapExprDoParen(t *testing.T) {
@@ -431,7 +431,7 @@ func TestMapExprBooleanValueUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{a:true,b:false}")
+	assertResult(t, result, "{a:true b:false}")
 }
 
 func TestMapExprNumberValueUnchanged(t *testing.T) {
@@ -439,7 +439,7 @@ func TestMapExprNumberValueUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{a:42,b:99}")
+	assertResult(t, result, "{a:42 b:99}")
 }
 
 func TestMapExprEmptyMap(t *testing.T) {
@@ -504,6 +504,58 @@ export "M" {bval:bval, incr:incr/r}`,
 		t.Fatal(err)
 	}
 	assertResult(t, result, "{top:{deep:100}}")
+}
+
+// --- Shorthand map syntax: {foo} ≡ {foo: foo} ---
+
+func TestMapExprShorthandBasic(t *testing.T) {
+	result, err := runExpr(t, `def foo 1 {foo}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "{foo:1}")
+}
+
+func TestMapExprShorthandMatchesExplicit(t *testing.T) {
+	sh, err := runExpr(t, `def foo 10 def bar 20 {foo a:1 bar}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ex, err := runExpr(t, `def foo 10 def bar 20 {foo:foo a:1 bar:bar}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if formatStack(sh) != formatStack(ex) {
+		t.Errorf("shorthand = %q, want same as explicit = %q",
+			formatStack(sh), formatStack(ex))
+	}
+}
+
+func TestMapExprShorthandNested(t *testing.T) {
+	result, err := runExpr(t, `def foo 5 {a:{foo}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "{a:{foo:5}}")
+}
+
+func TestMapExprShorthandRefModifier(t *testing.T) {
+	// {f/r} captures the fn reference under key "f"; calling it dispatches.
+	result, err := runExpr(t,
+		`def f fn [[a:Integer b:Integer] [Integer] [a add b]] ({f/r}).f 2 3`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "5")
+}
+
+func TestMapExprShorthandUnboundErrors(t *testing.T) {
+	// An unbound shorthand name errors exactly like {a:foo} would.
+	_, err := runExpr(t, `{foo}`)
+	if err == nil {
+		t.Fatalf("expected undefined_word error for unbound shorthand")
+	}
+	assertErrorContains(t, err, "undefined", "foo")
 }
 
 // suppress unused import warning

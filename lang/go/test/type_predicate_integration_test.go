@@ -259,8 +259,8 @@ func TestPredicate_RecordField_AcceptsValid(t *testing.T) {
 	got := runPred(t, `def Pos fn [[n:Integer] [Boolean] [n gt 0]]
 def Point refine Record [x:Pos y:Pos]
 make Point [3 4]`)
-	if got[0] != "{x:3,y:4}" {
-		t.Errorf("got %v, want {x:3,y:4}", got)
+	if got[0] != "{x:3 y:4}" {
+		t.Errorf("got %v, want {x:3 y:4}", got)
 	}
 }
 
@@ -307,8 +307,8 @@ func TestPredicate_OptionalField_AbsentOk(t *testing.T) {
 func TestPredicate_OptionalField_NoneOk(t *testing.T) {
 	got := runPred(t, `def Pos fn [[n:Integer] [Boolean] [n gt 0]]
 ({a:1,b:None} unify {a:Integer,b?:Pos}) drop`)
-	if got[0] != "{a:1,b:None}" {
-		t.Errorf("got %v, want {a:1,b:None}", got)
+	if got[0] != "{a:1 b:None}" {
+		t.Errorf("got %v, want {a:1 b:None}", got)
 	}
 }
 
@@ -374,8 +374,8 @@ func TestPredicate_CombinedRecordOptional(t *testing.T) {
 	got := runPred(t, `def Pos fn [[n:Integer] [Boolean] [n gt 0]]
 def Cfg refine Record [width:Pos height:Pos]
 make Cfg [10 20]`)
-	if got[0] != "{width:10,height:20}" {
-		t.Errorf("got %v, want {width:10,height:20}", got)
+	if got[0] != "{width:10 height:20}" {
+		t.Errorf("got %v, want {width:10 height:20}", got)
 	}
 }
 
@@ -390,8 +390,8 @@ func TestPredicate_HigherOrderEach(t *testing.T) {
 	got := runPred(t, `def Pos fn [[n:Integer] [Boolean] [n gt 0]]
 def f fn [[x:Pos] [Integer] [x add 1]]
 [1,2,3] each [f]`)
-	if got[0] != "[2,3,4]" {
-		t.Errorf("got %v, want [2,3,4]", got)
+	if got[0] != "[2 3 4]" {
+		t.Errorf("got %v, want [2 3 4]", got)
 	}
 }
 

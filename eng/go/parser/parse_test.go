@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go"
@@ -1919,6 +1920,88 @@ func TestParseOptionalFieldDisjunct(t *testing.T) {
 	}
 	if !alts[2].Equal(eng.TAbsent) {
 		t.Errorf("expected third alternative to be Absent, got %s", alts[2])
+	}
+}
+
+func TestParseMapShorthand(t *testing.T) {
+	// Each shorthand form must parse to the identical value tree as its
+	// explicit `key:value` equivalent.
+	cases := []struct{ shorthand, explicit string }{
+		{"{foo}", "{foo:foo}"},                     // plain shorthand
+		{"{foo/r}", "{foo:foo/r}"},                 // word modifier stays on the value
+		{"{foo/q}", "{foo:foo/q}"},                 // /q → atom value
+		{"{foo?}", "{foo?:foo}"},                   // optional shorthand
+		{"{foo/r?}", "{foo?:foo/r}"},               // optional shorthand + modifier: key is base, modifier stays on value
+		{"{foo/q?}", "{foo?:foo/q}"},               // optional shorthand + /q
+		{"{foo a:1 bar}", "{foo:foo a:1 bar:bar}"}, // mixed, keys sorted
+		{"{a:{foo}}", "{a:{foo:foo}}"},             // nested
+	}
+	for _, c := range cases {
+		sh, err := Parse(c.shorthand)
+		if err != nil {
+			t.Fatalf("Parse(%q) error: %v", c.shorthand, err)
+		}
+		ex, err := Parse(c.explicit)
+		if err != nil {
+			t.Fatalf("Parse(%q) error: %v", c.explicit, err)
+		}
+		if len(sh) != 1 || len(ex) != 1 {
+			t.Fatalf("expected 1 value each for %q / %q, got %d / %d",
+				c.shorthand, c.explicit, len(sh), len(ex))
+		}
+		if sh[0].String() != ex[0].String() {
+			t.Errorf("shorthand %q = %s, want same as %q = %s",
+				c.shorthand, sh[0].String(), c.explicit, ex[0].String())
+		}
+	}
+}
+
+func TestParseMapShorthandRejects(t *testing.T) {
+	// Only unquoted identifiers trigger the shorthand; quoted keys and
+	// non-identifier tokens remain parse errors.
+	assertParseError(t, "{'foo'}")
+	assertParseError(t, `{"foo"}`)
+	assertParseError(t, "{123}")
+}
+
+func TestParseMapKeyModifierRejected(t *testing.T) {
+	// A word modifier (/r /q /f /s /N) on a bare explicit key is illegal:
+	// the modifier could only qualify the key, which is meaningless. (On a
+	// shorthand entry it qualifies the value — see TestParseMapShorthand.)
+	for _, src := range []string{
+		"{f/r: 99}",    // /r on bare key
+		"{f/r?: 99}",   // /r on bare optional key
+		"{f/q: 1}",     // /q
+		"{m/2: 1}",     // arg-count modifier
+		"{a:1 b/r: 2}", // mixed with a clean pair
+	} {
+		_, err := Parse(src)
+		if err == nil {
+			t.Errorf("Parse(%q) expected illegal_key error, got nil", src)
+			continue
+		}
+		if !strings.Contains(err.Error(), "aql/illegal_key") {
+			t.Errorf("Parse(%q) error = %q, want it to contain aql/illegal_key", src, err.Error())
+		}
+	}
+}
+
+func TestParseMapLiteralSlashKeyAllowed(t *testing.T) {
+	// A slash in a key is fine when the key is an explicit literal: quoted
+	// (`{'a/b': v}`) or computed (`{[a/b]: v}`). Only a BARE key with a
+	// real word-modifier suffix is rejected. Each form parses to key a/b.
+	for _, src := range []string{"{'a/b': 1}", "{[a/b]: 1}"} {
+		vals, err := Parse(src)
+		if err != nil {
+			t.Fatalf("Parse(%q) error: %v", src, err)
+		}
+		m, _ := eng.AsMap(vals[0])
+		if m == nil {
+			t.Fatalf("Parse(%q): not a map", src)
+		}
+		if _, ok := m.Get("a/b"); !ok {
+			t.Errorf("Parse(%q): expected key %q, got %s", src, "a/b", vals[0].String())
+		}
 	}
 }
 

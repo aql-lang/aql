@@ -163,3 +163,18 @@ def base 10 def m {x:(base add 5)} m	{x:15}	paren value evaluates inline
 def f fn [[x:Integer] [Integer] [add x 1]] def m {b:f} m	ERROR:signature	bare 1-arg fn cannot dispatch 0-arg — no silent degrade to word(f)
 def f fn [[x:Integer] [Integer] [add x 1]] def m {b:f/r} m.b 2	3	/r stores the fn as data; the arg then calls it
 def m {k:foo/q} m.k is Atom	true	/q stores a bare word as atom data
+		
+# ====================================================================		
+# 10. Shorthand field syntax — {foo} desugars to {foo: foo}		
+# ====================================================================		
+# A colon-less unquoted identifier is sugar for a key:value pair whose		
+# value is the same auto-evaluated word. The key is the base name; a		
+# word modifier stays on the value (/r, /q) and a trailing ? makes the		
+# field optional. Only unquoted identifiers trigger it.		
+def foo 1 {foo}	{foo:1}	plain shorthand desugars to {foo: foo}
+def foo 1 def bar 2 {foo bar}	{bar:2 foo:1}	two shorthands, keys sorted
+def foo 1 {foo a:9}	{a:9 foo:1}	shorthand mixed with explicit pair
+def foo 5 {a:{foo}}	{a:{foo:5}}	nested shorthand
+def f fn [[x:Integer] [Integer] [add x 1]] {f}	ERROR:signature	bare 1-arg fn shorthand cannot dispatch 0-arg
+def f fn [[x:Integer] [Integer] [add x 1]] ({f/r}).f 2	3	/r shorthand stores the fn as data; the arg calls it
+def foo 1 ({foo/q}).foo is Atom	true	/q shorthand stores a bare word as atom data

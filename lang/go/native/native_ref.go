@@ -9,9 +9,12 @@ import (
 // refNatives registers the two words that complete AQL's first-class
 // function-value pipeline:
 //
-//   - `ref name`  — resolves a name to its bound value without
-//     invoking; companion to the `/r` word suffix that
-//     lives in the parser+stepWord path.
+//   - `ref name`  — resolves a function word to its bound value
+//     without invoking; companion to the `/r` word suffix
+//     that lives in the parser+stepWord path. Both are legal
+//     only for function words — referencing a non-fn binding
+//     raises [aql/illegal_ref] (a bare value name already
+//     pushes its value, so there is nothing to reference).
 //   - `apply fn`  — invokes a captured function value against the
 //     preceding stack args. The opposite-direction
 //     complement of `ref`: ref converts a call site
@@ -71,6 +74,16 @@ func refHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]V
 			return nil, reg.AqlError("undefined_word", "ref: name "+name+" is not bound", name)
 		}
 		return nil, fmt.Errorf("ref: name %s is not bound", name)
+	}
+	// `ref` is the function-form companion of the `/r` suffix and shares
+	// its rule: only function words may be referenced. A non-fn binding
+	// (plain value, type body) is rejected so both surfaces behave alike.
+	if !eng.IsFunctionRef(v) {
+		detail := "ref requires a function word: " + name + " is bound to " + v.Parent.String()
+		if reg != nil {
+			return nil, reg.AqlError("illegal_ref", detail, name)
+		}
+		return nil, fmt.Errorf("%s", detail)
 	}
 	return []Value{v}, nil
 }

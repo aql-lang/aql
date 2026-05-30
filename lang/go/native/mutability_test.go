@@ -414,8 +414,8 @@ func TestArrayIsDistinctFromList(t *testing.T) {
 func TestArrayStringRepresentation(t *testing.T) {
 	arr := NewArray([]Value{NewInteger(1), NewString("hello")})
 	s := arr.String()
-	if s != "Array[1,'hello']" {
-		t.Errorf("got %q, want Array[1,'hello']", s)
+	if s != "Array[1 'hello']" {
+		t.Errorf("got %q, want Array[1 'hello']", s)
 	}
 }
 

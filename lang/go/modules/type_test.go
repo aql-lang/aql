@@ -120,28 +120,28 @@ func TestTypeExtract(t *testing.T) {
 
 func TestTypePick(t *testing.T) {
 	got := runType(t, `(refine Record [x:Integer y:String z:Boolean]) type.pick [x/q z/q]`)
-	if len(got) != 1 || got[0].String() != "record{x:Integer,z:Boolean}" {
+	if len(got) != 1 || got[0].String() != "record{x:Integer z:Boolean}" {
 		t.Errorf("pick = %v", formatResults(got))
 	}
 }
 
 func TestTypeOmit(t *testing.T) {
 	got := runType(t, `(refine Record [x:Integer y:String z:Boolean]) type.omit [y/q]`)
-	if len(got) != 1 || got[0].String() != "record{x:Integer,z:Boolean}" {
+	if len(got) != 1 || got[0].String() != "record{x:Integer z:Boolean}" {
 		t.Errorf("omit = %v", formatResults(got))
 	}
 }
 
 func TestTypeMerge(t *testing.T) {
 	got := runType(t, `(refine Record [x:Integer]) type.merge (refine Record [y:String])`)
-	if len(got) != 1 || got[0].String() != "record{x:Integer,y:String}" {
+	if len(got) != 1 || got[0].String() != "record{x:Integer y:String}" {
 		t.Errorf("merge = %v", formatResults(got))
 	}
 }
 
 func TestTypeRequired(t *testing.T) {
 	got := runType(t, `(refine Record [x:Integer y:[String tor None]]) type.required`)
-	if len(got) != 1 || got[0].String() != "record{x:Integer,y:String}" {
+	if len(got) != 1 || got[0].String() != "record{x:Integer y:String}" {
 		t.Errorf("required = %v", formatResults(got))
 	}
 }
@@ -156,8 +156,8 @@ func TestTypeParamsOf(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("paramsof: got %d results", len(got))
 	}
-	if s := got[0].String(); s != "[Integer,Integer,Integer]" {
-		t.Errorf("paramsof = %q, want [Integer,Integer,Integer]", s)
+	if s := got[0].String(); s != "[Integer Integer Integer]" {
+		t.Errorf("paramsof = %q, want [Integer Integer Integer]", s)
 	}
 }
 
@@ -242,8 +242,8 @@ func TestTypeAlts(t *testing.T) {
 		expr string
 		want string
 	}{
-		{`type.alts (String tor None)`, "[String,None]"},
-		{`type.alts (Integer tor Decimal tor Boolean)`, "[Integer,Decimal,Boolean]"},
+		{`type.alts (String tor None)`, "[String None]"},
+		{`type.alts (Integer tor Decimal tor Boolean)`, "[Integer Decimal Boolean]"},
 		{`type.alts Integer`, "[Integer]"},
 	}
 	for _, c := range cases {
