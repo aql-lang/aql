@@ -204,27 +204,45 @@ func (e *Engine) isFnShapeTypedBindingContext() bool {
 
 // insufficientArgsError builds a detailed AqlError for forward argument
 // collection failure (not enough arguments after the word).
-func (e *Engine) insufficientArgsError(name string, expected int) *AqlError {
+func (e *Engine) insufficientArgsError(name string, expected int, pos SrcPos) *AqlError {
 	detail := fmt.Sprintf("insufficient arguments for %s (expected %d forward args)", name, expected)
 	hint := "stack: " + describeStackTypes(e.stack, e.pointer)
 	src := e.effectiveSource()
-	return makeAqlError("signature_error", detail, name, src, hint)
+	return makeAqlErrorAt("signature_error", detail, name, src, hint, pos)
+}
+
+// stampReturnCheckPos stamps pos onto any ReturnCheck markers in vals that
+// lack a source position. Used at the fn-body splice point to attach the
+// call-site location to a body's return check.
+func stampReturnCheckPos(vals []Value, pos SrcPos) {
+	if pos.Row == 0 {
+		return
+	}
+	for i, v := range vals {
+		if !IsReturnCheck(v) {
+			continue
+		}
+		if rc, err := AsReturnCheck(v); err == nil && rc.Pos.Row == 0 {
+			rc.Pos = pos
+			vals[i] = NewReturnCheck(rc)
+		}
+	}
 }
 
 // returnCountError builds a detailed AqlError for wrong number of return values.
-func (e *Engine) returnCountError(funcName string, expected, got int) *AqlError {
+func (e *Engine) returnCountError(funcName string, expected, got int, pos SrcPos) *AqlError {
 	detail := fmt.Sprintf("%s: expected %d return value(s), got %d", funcName, expected, got)
 	src := e.effectiveSource()
-	return makeAqlError("type_error", detail, funcName, src, "")
+	return makeAqlErrorAt("type_error", detail, funcName, src, "", pos)
 }
 
 // returnTypeError builds a detailed AqlError for a return type mismatch.
-func (e *Engine) returnTypeError(funcName string, index int, expected *Type, got Value) *AqlError {
+func (e *Engine) returnTypeError(funcName string, index int, expected *Type, got Value, pos SrcPos) *AqlError {
 	detail := fmt.Sprintf("%s: return value %d: expected %s, got %s",
 		funcName, index, expected, got.Parent)
 	hint := "value: " + diagValue(got)
 	src := e.effectiveSource()
-	return makeAqlError("type_error", detail, funcName, src, hint)
+	return makeAqlErrorAt("type_error", detail, funcName, src, hint, pos)
 }
 
 // syntaxError builds a detailed AqlError for a syntax error.
@@ -1128,6 +1146,14 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		e.recorder.OnCall(match.Name, n, len(results))
 	}
 
+	// A named-fn body splice carries a ReturnCheck built without a source
+	// position (the InstallFnDef handler has no call-site context). Stamp it
+	// with the call-site word's position so a return-type error points at the
+	// call, not the last textual occurrence of the fn name.
+	if e.pointer >= 0 && e.pointer < len(e.stack) {
+		stampReturnCheckPos(results, e.stack[e.pointer].Pos)
+	}
+
 	return e.spliceMatchResults(match, sortedIndices, n, results)
 }
 
@@ -1294,12 +1320,17 @@ func (e *Engine) insertForward(w WordInfo, sig *Signature, forwardNeeded int, st
 	if len(stackArgs) > 0 {
 		pArgs = stackArgs[0]
 	}
+	var pos SrcPos
+	if e.pointer >= 0 && e.pointer < len(e.stack) {
+		pos = e.stack[e.pointer].Pos
+	}
 	fwd := NewForward(ForwardInfo{
 		FuncName:     w.Name,
 		ExpectedArgs: forwardNeeded,
 		StackArgs:    pArgs,
 		FuncIndex:    e.pointer,
 		Sig:          sig,
+		Pos:          pos,
 	})
 
 	stackInsert(&e.stack, e.pointer+1, fwd)
@@ -2084,6 +2115,13 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	nArgs := len(sig.Params)
 	indices := e.resolvedIndicesBefore(nArgs)
 
+	// Capture the call-site position (the fn value being invoked) before the
+	// stack is mutated, so a return-type error can point at the call.
+	var callPos SrcPos
+	if valIdx >= 0 && valIdx < len(e.stack) {
+		callPos = e.stack[valIdx].Pos
+	}
+
 	// Auto-evaluate consumed arguments with Eval=true so FnDef handlers
 	// receive resolved data. Maps: {base:hex} → {base:atom(hex)}.
 	// Lists: [c1 c2] → [map1, map2].
@@ -2230,6 +2268,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 			FuncName:     "<fn>",
 			Returns:      sig.Returns,
 			UnnamedCount: unnamedCount,
+			Pos:          callPos,
 		}))
 	}
 	tokens = append(tokens, NewCloseParen())
@@ -2755,7 +2794,7 @@ func (e *Engine) stepCloseParen() error {
 	for i := openIdx + 1; i < closeIdx; i++ {
 		if IsForward(e.stack[i]) {
 			fwd, _ := AsForward(e.stack[i])
-			return e.insufficientArgsError(fwd.FuncName, fwd.ExpectedArgs)
+			return e.insufficientArgsError(fwd.FuncName, fwd.ExpectedArgs, fwd.Pos)
 		}
 	}
 
@@ -2787,11 +2826,11 @@ func (e *Engine) stepCloseParen() error {
 			// number of unnamed params that were pushed before the body.
 			nret := len(rc.Returns)
 			if len(results) < nret {
-				return e.returnCountError(rc.FuncName, nret, len(results))
+				return e.returnCountError(rc.FuncName, nret, len(results), rc.Pos)
 			}
 			extra := len(results) - nret
 			if extra > rc.UnnamedCount {
-				return e.returnCountError(rc.FuncName, nret, len(results)-rc.UnnamedCount)
+				return e.returnCountError(rc.FuncName, nret, len(results)-rc.UnnamedCount, rc.Pos)
 			}
 
 			// Validate the top nret values match declared return types.
@@ -2804,7 +2843,7 @@ func (e *Engine) stepCloseParen() error {
 			// See design/REFINE-NEWTYPE-VS-SUBSET.0.md.
 			for k, exp := range rc.Returns {
 				if !results[extra+k].Is(exp) {
-					return e.returnTypeError(rc.FuncName, k+1, exp, results[extra+k])
+					return e.returnTypeError(rc.FuncName, k+1, exp, results[extra+k], rc.Pos)
 				}
 			}
 

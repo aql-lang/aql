@@ -200,6 +200,23 @@ func TestErrorFormatReturnCount(t *testing.T) {
 	_ = ae
 }
 
+func TestErrorFormatReturnTypePointsAtCallSite(t *testing.T) {
+	// f's return mismatch fires at the call on line 2. A trailing `def ff`
+	// on line 3 contains the substring "f", which findWordInSource would
+	// wrongly match as the last occurrence. The call-site Pos now flows
+	// through the ReturnCheck marker, so the error points at line 2.
+	src := "def f fn [[n:Integer] String [n]]\n" +
+		"42 f\n" +
+		"def ff 1"
+	err := runWithSource(t, src)
+	ae := assertAqlError(t, err, "type_error")
+	assertErrorContains(t, err, "return value 1")
+	if ae.Row != 2 {
+		t.Errorf("expected Row=2 (the call `42 f`), got %d — "+
+			"a wrong row means the text-search fallback matched a later substring", ae.Row)
+	}
+}
+
 // =====================================================================
 // Syntax errors
 // =====================================================================

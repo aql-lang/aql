@@ -330,7 +330,8 @@ type FnUndefInfo struct {
 type ReturnCheckInfo struct {
 	FuncName     string
 	Returns      []*Type
-	UnnamedCount int // number of unnamed params pushed onto the stack before the body
+	UnnamedCount int    // number of unnamed params pushed onto the stack before the body
+	Pos          SrcPos // source position of the fn call site, for return errors
 }
 
 // DisjunctInfo holds the alternatives for a disjunction (union) type.
@@ -588,6 +589,7 @@ type ForwardInfo struct {
 	// FuncIndex records where the deferred function word sits in the stack.
 	FuncIndex int
 	Sig       *Signature // the matched signature, for direct execution on completion
+	Pos       SrcPos     // source position of the forward-collecting word, for errors
 }
 
 // Value is the single node type of the AQL kernel: it is at once a
