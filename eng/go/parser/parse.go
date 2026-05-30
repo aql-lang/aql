@@ -372,12 +372,82 @@ func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (en
 	// Extract metadata from MapRef.Meta.
 	var qmSet map[string]bool // optional keys (? syntax)
 	var ckSet map[string]bool // computed keys ([key] syntax)
+	var qkSet map[string]bool // quoted keys ({'k': v} syntax)
+	var shList []string       // shorthand keys ({foo} / {foo/r} syntax)
 	if len(meta) > 0 && meta[0] != nil {
 		qmSet, _ = meta[0]["qm"].(map[string]bool)
 		ckSet, _ = meta[0]["ck"].(map[string]bool)
+		qkSet, _ = meta[0]["qk"].(map[string]bool)
+		shList, _ = meta[0]["sh"].([]string)
 	}
-	for _, key := range sortedKeys(m) {
-		child, err := convertDataValue(m[key])
+
+	// Word modifiers (`/r`, `/q`, `/f`, `/s`, `/N`) are legal only on
+	// shorthand entries — `{foo/r}` ≡ `{foo: foo/r}` — where the token is
+	// also the value, so the modifier qualifies that value. On a bare
+	// `key: value` pair the modifier would only ever land on the KEY,
+	// which is meaningless (a map key is a plain name). Reject it rather
+	// than silently keeping `f/r` as a literal key. A quoted key
+	// (`{'f/r': …}`) or computed key (`{[f/r]: …}`) is an explicit string
+	// literal — the slash is data, not a modifier — so those are exempt.
+	// Bare explicit keys (with and without an optional `?`) arrive in m;
+	// shorthand (sh) and value-less optional (qm) tokens are handled below
+	// where the modifier legitimately rides along on the synthesized value.
+	for key := range m {
+		if qkSet[key] || ckSet[key] {
+			continue
+		}
+		if _, _, _, _, _, _, hasMod := scanWordModifier(key); hasMod {
+			return eng.Value{}, fmt.Errorf(
+				"[aql/illegal_key]: word modifier not allowed on map key %q (modifiers qualify values, not keys; quote the key as '%s' for a literal slash)",
+				key, key)
+		}
+	}
+
+	// Shorthand entries: `{foo}` ≡ `{foo: foo}`, `{foo/r}` ≡ `{foo: foo/r}`,
+	// `{foo?}` ≡ `{foo?: foo}`, `{foo/r?}` ≡ `{foo?: foo/r}`. The key is
+	// always the base name (modifiers stay on the value only); the value
+	// is the full word token. synth maps each synthesized base key to that
+	// token. Two sources: explicit shorthand tokens (Meta["sh"]) and
+	// optional keys (Meta["qm"]) that never received an explicit value.
+	//
+	// optBase collects the base name of every optional key so optionality
+	// is looked up by base name below — qmSet is keyed by the raw token
+	// (e.g. `f/r`), which no longer matches the synthesized base key.
+	synth := make(map[string]string)
+	optBase := make(map[string]bool, len(qmSet))
+	for _, raw := range shList {
+		synth[wordBaseName(raw)] = raw
+	}
+	for key := range qmSet {
+		base := wordBaseName(strings.TrimSuffix(key, "?"))
+		optBase[base] = true
+		if _, ok := m[key]; !ok {
+			synth[base] = key
+		}
+	}
+
+	// Iterate the sorted union of value-map keys and synthesized keys.
+	keySet := make(map[string]bool, len(m)+len(synth))
+	union := make(map[string]any, len(m)+len(synth))
+	for k, v := range m {
+		union[k] = v
+		keySet[k] = true
+	}
+	for k := range synth {
+		if !keySet[k] {
+			union[k] = nil
+			keySet[k] = true
+		}
+	}
+
+	for _, key := range sortedKeys(union) {
+		var child eng.Value
+		var err error
+		if _, inMap := m[key]; inMap {
+			child, err = convertDataValue(m[key])
+		} else {
+			child, err = parseWord(synth[key])
+		}
 		if err != nil {
 			return eng.Value{}, err
 		}
@@ -388,7 +458,7 @@ func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (en
 		// the None alternative carries the "may be explicitly None"
 		// half. No separate metadata needed — the optionality lives
 		// entirely in the type.
-		optional := qmSet[key]
+		optional := qmSet[key] || optBase[key]
 		realKey := key
 		if strings.HasSuffix(key, "?") {
 			realKey = strings.TrimSuffix(key, "?")
@@ -596,97 +666,105 @@ func sortedKeys(m map[string]any) []string {
 	return keys
 }
 
-// parseWord interprets an unquoted text token as an AQL word, handling
-// modifier syntax: name/f (forceForward), name/s (forceStack), name/N (argCount),
-// name/q (quote → Atom), name/r (ref → bound value), and combinations like
-// name/1f, name/qs, name/f2, name/r. Modifiers stack in any order;
-// f and s are mutually exclusive; q and r are mutually exclusive; the
-// argCount digits form a single number; q produces an Atom and overrides
-// the other modifiers; r emits a ref-word that short-circuits the rest.
-func parseWord(text string) (eng.Value, error) {
-	name := text
-	argCount := -1
-	forceStack := false
-	forceForward := false
-	quoteFlag := false
-	refFlag := false
+// scanWordModifier parses the optional `/...` modifier suffix of an
+// unquoted word token: name/f (forceForward), name/s (forceStack),
+// name/N (argCount), name/q (quote → Atom), name/r (ref → bound value),
+// and combinations like name/1f, name/qs, name/f2. Modifiers stack in
+// any order; f and s are mutually exclusive; q and r are mutually
+// exclusive; the argCount digits form a single number. When the token
+// has no `/` or a malformed modifier suffix, valid is false, base is the
+// whole text, and every flag is at its zero value (argCount -1).
+func scanWordModifier(text string) (base string, argCount int, forceStack, forceForward, quoteFlag, refFlag, valid bool) {
+	argCount = -1
 
-	// Check for /... modifier suffix.
-	if idx := strings.LastIndex(name, "/"); idx >= 0 && idx < len(name)-1 {
-		mod := name[idx+1:]
-		baseName := name[:idx]
-
-		// Scan modifier chars in any order: digits, 'f', 's', 'q'.
-		// Each letter appears at most once; f/s are mutually exclusive;
-		// digits run contiguously and form a single argCount value.
-		valid := true
-		seenDigits := false
-		i := 0
-		for i < len(mod) {
-			c := mod[i]
-			switch {
-			case c >= '0' && c <= '9':
-				if seenDigits {
-					valid = false
-				} else {
-					j := i
-					for j < len(mod) && mod[j] >= '0' && mod[j] <= '9' {
-						j++
-					}
-					n, err := strconv.Atoi(mod[i:j])
-					if err != nil || n < 0 {
-						valid = false
-					} else {
-						argCount = n
-						seenDigits = true
-					}
-					i = j
-					continue
-				}
-			case c == 'f':
-				if forceForward || forceStack {
-					valid = false
-				} else {
-					forceForward = true
-				}
-			case c == 's':
-				if forceForward || forceStack {
-					valid = false
-				} else {
-					forceStack = true
-				}
-			case c == 'q':
-				if quoteFlag || refFlag {
-					valid = false
-				} else {
-					quoteFlag = true
-				}
-			case c == 'r':
-				if refFlag || quoteFlag {
-					valid = false
-				} else {
-					refFlag = true
-				}
-			default:
-				valid = false
-			}
-			if !valid {
-				break
-			}
-			i++
-		}
-
-		if valid {
-			name = baseName
-		} else {
-			// Unrecognized / malformed modifier — treat entire token as plain word.
-			argCount = -1
-			forceStack = false
-			forceForward = false
-			quoteFlag = false
-			refFlag = false
-		}
+	idx := strings.LastIndex(text, "/")
+	if idx < 0 || idx >= len(text)-1 {
+		return text, argCount, false, false, false, false, false
 	}
+	mod := text[idx+1:]
+	baseName := text[:idx]
+
+	// Scan modifier chars in any order: digits, 'f', 's', 'q', 'r'.
+	// Each letter appears at most once; f/s are mutually exclusive;
+	// digits run contiguously and form a single argCount value.
+	valid = true
+	seenDigits := false
+	i := 0
+	for i < len(mod) {
+		c := mod[i]
+		switch {
+		case c >= '0' && c <= '9':
+			if seenDigits {
+				valid = false
+			} else {
+				j := i
+				for j < len(mod) && mod[j] >= '0' && mod[j] <= '9' {
+					j++
+				}
+				n, err := strconv.Atoi(mod[i:j])
+				if err != nil || n < 0 {
+					valid = false
+				} else {
+					argCount = n
+					seenDigits = true
+				}
+				i = j
+				continue
+			}
+		case c == 'f':
+			if forceForward || forceStack {
+				valid = false
+			} else {
+				forceForward = true
+			}
+		case c == 's':
+			if forceForward || forceStack {
+				valid = false
+			} else {
+				forceStack = true
+			}
+		case c == 'q':
+			if quoteFlag || refFlag {
+				valid = false
+			} else {
+				quoteFlag = true
+			}
+		case c == 'r':
+			if refFlag || quoteFlag {
+				valid = false
+			} else {
+				refFlag = true
+			}
+		default:
+			valid = false
+		}
+		if !valid {
+			break
+		}
+		i++
+	}
+
+	if !valid {
+		// Unrecognized / malformed modifier — treat entire token as plain word.
+		return text, -1, false, false, false, false, false
+	}
+	return baseName, argCount, forceStack, forceForward, quoteFlag, refFlag, true
+}
+
+// wordBaseName returns the base name of an unquoted word token, stripping
+// a valid `/...` modifier suffix (foo/r → foo, foo → foo). Used to derive
+// the key of a shorthand map entry, whose value keeps the full token.
+func wordBaseName(text string) string {
+	base, _, _, _, _, _, _ := scanWordModifier(text)
+	return base
+}
+
+// parseWord interprets an unquoted text token as an AQL word, handling
+// the modifier syntax decoded by scanWordModifier. q produces an Atom and
+// overrides the other modifiers; r emits a ref-word that short-circuits
+// the rest.
+func parseWord(text string) (eng.Value, error) {
+	name, argCount, forceStack, forceForward, quoteFlag, refFlag, _ := scanWordModifier(text)
 
 	if name == "" {
 		return eng.Value{}, fmt.Errorf("empty word")
@@ -699,10 +777,13 @@ func parseWord(text string) (eng.Value, error) {
 		return eng.NewAtom(name), nil
 	}
 
-	// /r emits a ref-word that, when reached at the pointer, resolves to
-	// the bound value (a Function for fn / object bindings) without
-	// invoking. Argument-shape modifiers don't apply because ref bypasses
-	// dispatch entirely; they're accepted syntactically but ignored.
+	// /r emits a ref-word that, when reached at the pointer, resolves the
+	// name to its bound Function value without invoking. /r is legal only
+	// for function words; a non-fn binding raises illegal_ref at run time
+	// (the parser accepts the syntax — the binding kind isn't known until
+	// resolution). Argument-shape modifiers don't apply because ref
+	// bypasses dispatch entirely; they're accepted syntactically but
+	// ignored.
 	if refFlag {
 		return eng.NewWordRef(name), nil
 	}

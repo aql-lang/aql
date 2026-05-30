@@ -842,6 +842,47 @@ type mapEntry struct {
 	comment  *Node // standalone comment
 }
 
+// wordBaseName returns the base name of an unquoted word token, stripping
+// a valid `/...` modifier suffix (foo/r → foo, foo → foo). Mirrors the
+// parser's wordBaseName so shorthand keys render the same on both sides.
+func wordBaseName(text string) string {
+	idx := strings.LastIndex(text, "/")
+	if idx < 0 || idx >= len(text)-1 {
+		return text
+	}
+	mod := text[idx+1:]
+	seenDigits, forceSet, qrSet := false, false, false
+	i := 0
+	for i < len(mod) {
+		c := mod[i]
+		switch {
+		case c >= '0' && c <= '9':
+			if seenDigits {
+				return text
+			}
+			for i < len(mod) && mod[i] >= '0' && mod[i] <= '9' {
+				i++
+			}
+			seenDigits = true
+			continue
+		case c == 'f' || c == 's':
+			if forceSet {
+				return text
+			}
+			forceSet = true
+		case c == 'q' || c == 'r':
+			if qrSet {
+				return text
+			}
+			qrSet = true
+		default:
+			return text
+		}
+		i++
+	}
+	return text[:idx]
+}
+
 func parseMapEntries(children []*Node) []mapEntry {
 	var entries []mapEntry
 	i := 0
@@ -875,6 +916,31 @@ func parseMapEntries(children []*Node) []mapEntry {
 				value: children[i+2],
 			})
 			i += 3
+			continue
+		}
+		// Shorthand optional: `{foo?}` ≡ `{foo?: foo}` (a key followed by
+		// `?` with no colon). The `key ? : value` case above already
+		// handled the explicit form.
+		if ch.Kind == NdWord && i+1 < len(children) && children[i+1].Kind == NdQuestion {
+			entries = append(entries, mapEntry{
+				key:      wordBaseName(ch.Text),
+				optional: true,
+				value:    ch,
+			})
+			i += 2
+			continue
+		}
+		// Shorthand: `{foo}` ≡ `{foo: foo}`, `{foo/r}` ≡ `{foo: foo/r}`.
+		// A lone identifier becomes a key:value pair whose key is the base
+		// name and value is the full token. Skip a word that is the type
+		// of a typed-map child (`{:Type}`) — it is preceded by a colon and
+		// must stay key-less.
+		if ch.Kind == NdWord && !(i > 0 && children[i-1].Kind == NdColon) {
+			entries = append(entries, mapEntry{
+				key:   wordBaseName(ch.Text),
+				value: ch,
+			})
+			i++
 			continue
 		}
 		// Bare value (typed map child syntax).

@@ -253,37 +253,37 @@ unify Number String end	'~unify-fail' false
 (1 add 1) unify (3 sub 2)	'~unify-fail' false
 
 # === List literals ===
-[1,2,3]	[1,2,3]
-["a","b"]	['a','b']
+[1,2,3]	[1 2 3]
+["a","b"]	['a' 'b']
 []	[]
-[true,false]	[true,false]
-[1,"a",true]	[1,'a',true]
-[Number,String]	[Number,String]
-[Integer,Decimal,Boolean]	[Integer,Decimal,Boolean]
-[Any,None]	[Any,None]
+[true,false]	[true false]
+[1,"a",true]	[1 'a' true]
+[Number,String]	[Number String]
+[Integer,Decimal,Boolean]	[Integer Decimal Boolean]
+[Any,None]	[Any None]
 [String,foo]		undefined_word
 
 # === Map literals ===
 {x:1}	{x:1}
-{x:1,y:2}	{x:1,y:2}
+{x:1,y:2}	{x:1 y:2}
 {}	{}
 {a:"hello"}	{a:'hello'}
-{x:String,y:Number}	{x:String,y:Number}
+{x:String,y:Number}	{x:String y:Number}
 
 # === Nested structures ===
-[[1,2],[3,4]]	[[1,2],[3,4]]
+[[1,2],[3,4]]	[[1 2] [3 4]]
 {a:{b:1}}	{a:{b:1}}
-[{x:1},{y:2}]	[{x:1},{y:2}]
-{a:[1,2,3]}	{a:[1,2,3]}
+[{x:1},{y:2}]	[{x:1} {y:2}]
+{a:[1,2,3]}	{a:[1 2 3]}
 
 # === Unify - lists ===
-[1,String] unify [Number,"a"]	[1,'a'] true
-[1,"a"] unify [1,"a"]	[1,'a'] true
+[1,String] unify [Number,"a"]	[1 'a'] true
+[1,"a"] unify [1,"a"]	[1 'a'] true
 [] unify []	[] true
 [1,2] unify [1,3]	'~unify-fail' false
 [1] unify [1,2]	'~unify-fail' false
-List unify [1,2]	[1,2] true
-[1,2] unify List	[1,2] true
+List unify [1,2]	[1 2] true
+[1,2] unify List	[1 2] true
 List unify List	List true
 
 # === Unify - maps ===
@@ -298,8 +298,8 @@ Map unify {x:1}	{x:1} true
 Map unify Map	Map true
 
 # === Unify - nested structures ===
-{x:[1,String]} unify {x:[Number,"a"]}	{x:[1,'a']} true
-[{a:1},{b:String}] unify [{a:Number},{b:"z"}]	[{a:1},{b:'z'}] true
+{x:[1,String]} unify {x:[Number,"a"]}	{x:[1 'a']} true
+[{a:1},{b:String}] unify [{a:Number},{b:"z"}]	[{a:1} {b:'z'}] true
 [[String]] unify [["hello"]]	[['hello']] true
 {a:{b:Number}} unify {a:{b:42}}	{a:{b:42}} true
 
@@ -310,8 +310,8 @@ List unify Map	'~unify-fail' false
 {x:1} unify "hello"	'~unify-fail' false
 
 # === Unify - any with list/map ===
-Any unify [1,2]	[1,2] true
-[1,2] unify Any	[1,2] true
+Any unify [1,2]	[1 2] true
+[1,2] unify Any	[1 2] true
 Any unify {x:1}	{x:1} true
 {x:1} unify Any	{x:1} true
 
@@ -329,7 +329,7 @@ None unify Map	'~unify-fail' false
 [:List]	[:List]
 [:Map]	[:Map]
 [:{x:Number}]	[:{x:Number}]
-[:{a:String,b:Number}]	[:{a:String,b:Number}]
+[:{a:String,b:Number}]	[:{a:String b:Number}]
 [:[:String]]	[:[:String]]
 [:[:Number]]	[:[:Number]]
 [:[:{x:Number}]]	[:[:{x:Number}]]
@@ -341,8 +341,8 @@ None unify Map	'~unify-fail' false
 [:Boolean] unify [:Boolean]	[:Boolean] true
 
 # === Unify - typed lists with concrete lists ===
-[:Number] unify [1,2,3]	[1,2,3] true
-[:String] unify ["a","b"]	['a','b'] true
+[:Number] unify [1,2,3]	[1 2 3] true
+[:String] unify ["a","b"]	['a' 'b'] true
 [:Number] unify [42]	[42] true
 [:String] unify []	[] true
 [:Number] unify []	[] true
@@ -374,20 +374,20 @@ None unify [:String]	'~unify-fail' false
 [:Number] unify None	'~unify-fail' false
 
 # === Unify - typed list with map child type ===
-[:{x:Number}] unify [{x:1},{x:2}]	[{x:1},{x:2}] true
-[:{x:String}] unify [{x:"a"},{x:"b"}]	[{x:'a'},{x:'b'}] true
+[:{x:Number}] unify [{x:1},{x:2}]	[{x:1} {x:2}] true
+[:{x:String}] unify [{x:"a"},{x:"b"}]	[{x:'a'} {x:'b'}] true
 [:{x:Number}] unify [{x:1},{y:1}]	'~unify-fail' false
 [:{x:Number}] unify []	[] true
 
 # === Unify - deeper typed lists ===
-[:[:Number]] unify [[1,2],[3]]	[[1,2],[3]] true
-[:[:String]] unify [["a"],["b","c"]]	[['a'],['b','c']] true
+[:[:Number]] unify [[1,2],[3]]	[[1 2] [3]] true
+[:[:String]] unify [["a"],["b","c"]]	[['a'] ['b' 'c']] true
 [:[:Number]] unify [["a"]]	'~unify-fail' false
-[:[:Number]] unify [[1],[2,3],[]]	[[1],[2,3],[]] true
+[:[:Number]] unify [[1],[2,3],[]]	[[1] [2 3] []] true
 
 # === Unify - typed list symmetry ===
-[1,2,3] unify [:Number]	[1,2,3] true
-["a","b"] unify [:String]	['a','b'] true
+[1,2,3] unify [:Number]	[1 2 3] true
+["a","b"] unify [:String]	['a' 'b'] true
 [1,2] unify [:String]	'~unify-fail' false
 
 # === Typed map literals ===
@@ -398,7 +398,7 @@ None unify [:String]	'~unify-fail' false
 {:List}	{:List}
 {:Map}	{:Map}
 {:{x:Number}}	{:{x:Number}}
-{:{a:String,b:Number}}	{:{a:String,b:Number}}
+{:{a:String,b:Number}}	{:{a:String b:Number}}
 {:[:String]}	{:[:String]}
 {:[:Number]}	{:[:Number]}
 {:{:String}}	{:{:String}}
@@ -412,8 +412,8 @@ None unify [:String]	'~unify-fail' false
 {:Boolean} unify {:Boolean}	{:Boolean} true
 
 # === Unify - typed maps with concrete maps ===
-{:Number} unify {a:1,b:2}	{a:1,b:2} true
-{:String} unify {x:"a",y:"b"}	{x:'a',y:'b'} true
+{:Number} unify {a:1,b:2}	{a:1 b:2} true
+{:String} unify {x:"a",y:"b"}	{x:'a' y:'b'} true
 {:Number} unify {x:42}	{x:42} true
 {:String} unify {a:"hello"}	{a:'hello'} true
 
@@ -439,7 +439,7 @@ None unify [:String]	'~unify-fail' false
 {:String} unify {:Boolean}	'~unify-fail' false
 
 # === Unify - typed map symmetry ===
-{a:1,b:2} unify {:Number}	{a:1,b:2} true
+{a:1,b:2} unify {:Number}	{a:1 b:2} true
 {x:"hello"} unify {:String}	{x:'hello'} true
 {a:1} unify {:String}	'~unify-fail' false
 {x:"hello"} unify {:Number}	'~unify-fail' false
@@ -464,16 +464,16 @@ None unify {:Number}	'~unify-fail' false
 {:Number} unify None	'~unify-fail' false
 
 # === Unify - typed map with map child type ===
-{:{x:Number}} unify {a:{x:1},b:{x:2}}	{a:{x:1},b:{x:2}} true
-{:{x:String}} unify {a:{x:"a"},b:{x:"b"}}	{a:{x:'a'},b:{x:'b'}} true
+{:{x:Number}} unify {a:{x:1},b:{x:2}}	{a:{x:1} b:{x:2}} true
+{:{x:String}} unify {a:{x:"a"},b:{x:"b"}}	{a:{x:'a'} b:{x:'b'}} true
 {:{x:Number}} unify {a:{x:1},b:{y:1}}	'~unify-fail' false
 {:{x:Number}} unify {}	{} true
 
 # === Unify - deeper typed maps ===
-{:{:Number}} unify {a:{x:1},b:{y:2}}	{a:{x:1},b:{y:2}} true
-{:{:String}} unify {a:{x:"a"},b:{y:"b"}}	{a:{x:'a'},b:{y:'b'}} true
+{:{:Number}} unify {a:{x:1},b:{y:2}}	{a:{x:1} b:{y:2}} true
+{:{:String}} unify {a:{x:"a"},b:{y:"b"}}	{a:{x:'a'} b:{y:'b'}} true
 {:{:Number}} unify {a:{x:"a"}}	'~unify-fail' false
-{:{:Number}} unify {a:{x:1,y:2},b:{z:3}}	{a:{x:1,y:2},b:{z:3}} true
+{:{:Number}} unify {a:{x:1,y:2},b:{z:3}}	{a:{x:1 y:2} b:{z:3}} true
 
 # === Unify - deeper typed map child type Unification ===
 {:{:String}} unify {:{:String}}	{:{:String}} true
@@ -627,7 +627,7 @@ def inc fn [[x:Number] [Number] [x add 1]] 1 inc inc inc	4
 def mid fn [[Map] [] []] end {a:2} mid	{a:2}
 
 # Unnamed List parameter
-def lid fn [[List] [] []] end quote [10 20] lid	[10,20]
+def lid fn [[List] [] []] end quote [10 20] lid	[10 20]
 
 # Unnamed Boolean parameter
 def notb fn [[Boolean] [] [not]] end true notb	false
@@ -796,30 +796,30 @@ make String true	'true'
 make String false	'false'
 
 # make record: positional fields
-def Point refine Record [x:Number y:Number] make Point [1 2]	{x:1,y:2}
+def Point refine Record [x:Number y:Number] make Point [1 2]	{x:1 y:2}
 
 # make record: named fields in declaration order
-def Point refine Record [x:Number y:Number] make Point [x:1 y:2]	{x:1,y:2}
+def Point refine Record [x:Number y:Number] make Point [x:1 y:2]	{x:1 y:2}
 
 # make record: named fields in different order
-def Point refine Record [x:Number y:Number] make Point [y:3 x:4]	{x:4,y:3}
+def Point refine Record [x:Number y:Number] make Point [y:3 x:4]	{x:4 y:3}
 
 # make record: type Conversion applied to fields
-def Bar refine Record [x:Number y:Boolean z:String] make Bar [1 false "s"]	{x:1,y:false,z:'s'}
+def Bar refine Record [x:Number y:Boolean z:String] make Bar [1 false "s"]	{x:1 y:false z:'s'}
 
 # make record: named fields reordered with type Conversion
-def Bar refine Record [x:Number y:Boolean z:String] make Bar [y:false x:2 z:"Z"]	{x:2,y:false,z:'Z'}
+def Bar refine Record [x:Number y:Boolean z:String] make Bar [y:false x:2 z:"Z"]	{x:2 y:false z:'Z'}
 
 # make record: field value conversion (string to number)
-def Pair refine Record [a:Number b:Number] make Pair ["3" "7"]	{a:3,b:7}
+def Pair refine Record [a:Number b:Number] make Pair ["3" "7"]	{a:3 b:7}
 
 # make with infix form
-def P refine Record [x:Number y:Number] P make [1 2]	{x:1,y:2}
+def P refine Record [x:Number y:Number] P make [1 2]	{x:1 y:2}
 
 # === refine - custom type Definitions ===
 
 # refine With record
-def Vec refine Record [x:Number y:Number] make Vec [3 4]	{x:3,y:4}
+def Vec refine Record [x:Number y:Number] make Vec [3 4]	{x:3 y:4}
 
 # refine With disjunct
 def OptNum (Number tor None) OptNum unify 5	5 true
@@ -831,11 +831,11 @@ def Num Number Num unify 42	42 true
 def Num Number Num unify "hi"	'~unify-fail' false
 
 # refine With typed list
-def Nums [:Number] Nums unify [1,2,3]	[1,2,3] true
+def Nums [:Number] Nums unify [1,2,3]	[1 2 3] true
 def Nums [:Number] Nums unify ["a"]	'~unify-fail' false
 
 # refine With typed map
-def NumMap {:Number} NumMap unify {a:1,b:2}	{a:1,b:2} true
+def NumMap {:Number} NumMap unify {a:1,b:2}	{a:1 b:2} true
 
 # === do - evaluate list and map contents ===
 
@@ -852,13 +852,13 @@ do [1 2 3]	1 2 3
 do [2 mul 3 add 1]	7
 
 # do map: evaluate list values
-do {x:[3 add 4],y:[upper "a"]}	{x:7,y:'A'}
+do {x:[3 add 4],y:[upper "a"]}	{x:7 y:'A'}
 
 # do map: non-list values unchanged
-do {x:1,y:"hello"}	{x:1,y:'hello'}
+do {x:1,y:"hello"}	{x:1 y:'hello'}
 
 # do map: mixed list and non-list values
-do {a:[1 add 2],b:10}	{a:3,b:10}
+do {a:[1 add 2],b:10}	{a:3 b:10}
 
 # do map: nested maps with list values
 do {m:{x:[5 mul 2]}}	{m:{x:10}}
@@ -897,9 +897,9 @@ String tor Number tor Boolean	String|Number|Boolean
 # Disjunct with concrete maps (open matching)
 ({x:1} tor {y:2}) unify {x:1}	{x:1} true
 ({x:1} tor {y:2}) unify {y:2}	{y:2} true
-({x:1} tor {y:2}) unify {x:1,q:9}	{q:9,x:1} true
-({x:1} tor {y:2} tor {z:3}) unify {y:2,q:9,x:8}	{q:9,x:8,y:2} true
-({x:1} tor {y:2} tor {z:3}) unify {q:9,z:3,x:1}	{q:9,x:1,z:3} true
+({x:1} tor {y:2}) unify {x:1,q:9}	{q:9 x:1} true
+({x:1} tor {y:2} tor {z:3}) unify {y:2,q:9,x:8}	{q:9 x:8 y:2} true
+({x:1} tor {y:2} tor {z:3}) unify {q:9,z:3,x:1}	{q:9 x:1 z:3} true
 
 # Disjunct map: no match
 ({x:1} tor {y:2}) unify {z:3}	'~unify-fail' false
@@ -939,13 +939,13 @@ None otherwise None	None
 # === tand - conjunction / map merge ===
 
 # Disjoint keys: combine
-{x:1} tand {y:Integer}	{x:1,y:Integer}
+{x:1} tand {y:Integer}	{x:1 y:Integer}
 
 # Overlapping keys: unify (concrete narrows type)
 {x:1} tand {x:Integer}	{x:1}
 
 # Three-way merge
-{x:1} tand {y:2} tand {z:3}	{x:1,y:2,z:3}
+{x:1} tand {y:2} tand {z:3}	{x:1 y:2 z:3}
 
 # Scalar unification: type Narrows to concrete
 1 tand Integer	1
@@ -1026,7 +1026,7 @@ def x 1 ; a:x	{a:1}
 def x 1 ; a:x b:x	{a:1} {b:1}
 def x 1 def y 2 ; a:x b:y	{a:1} {b:2}
 def x 1 [{a:x}]	[{a:1}]
-def x 1 def y 2 {a:x, b:y}	{a:1,b:2}
+def x 1 def y 2 {a:x, b:y}	{a:1 b:2}
 {a:(1 add 2)}	{a:3}
 def x 1 {a:(x add 1)}	{a:2}
 def x 1 {a:{b:x}}	{a:{b:1}}

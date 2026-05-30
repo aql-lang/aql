@@ -151,8 +151,8 @@ func TestReadLines(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "['aaa','bbb','ccc']" {
-		t.Errorf("got %s, want ['aaa','bbb','ccc']", got)
+	if got != "['aaa' 'bbb' 'ccc']" {
+		t.Errorf("got %s, want ['aaa' 'bbb' 'ccc']", got)
 	}
 }
 
@@ -165,8 +165,8 @@ func TestReadJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "{x:1,y:'hello'}" {
-		t.Errorf("got %s, want {x:1,y:'hello'}", got)
+	if got != "{x:1 y:'hello'}" {
+		t.Errorf("got %s, want {x:1 y:'hello'}", got)
 	}
 }
 
@@ -177,8 +177,8 @@ func TestReadJSONArray(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "[1,2,3]" {
-		t.Errorf("got %s, want [1,2,3]", got)
+	if got != "[1 2 3]" {
+		t.Errorf("got %s, want [1 2 3]", got)
 	}
 }
 
@@ -191,8 +191,8 @@ func TestReadJsonic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "{x:1,y:'hello'}" {
-		t.Errorf("got %s, want {x:1,y:'hello'}", got)
+	if got != "{x:1 y:'hello'}" {
+		t.Errorf("got %s, want {x:1 y:'hello'}", got)
 	}
 }
 
@@ -459,7 +459,7 @@ func TestReadStdinLines(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stack != "['aaa','bbb','ccc']" {
-		t.Errorf("read stdin lines: got %s, want ['aaa','bbb','ccc']", stack)
+	if stack != "['aaa' 'bbb' 'ccc']" {
+		t.Errorf("read stdin lines: got %s, want ['aaa' 'bbb' 'ccc']", stack)
 	}
 }

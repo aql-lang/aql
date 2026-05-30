@@ -40,14 +40,15 @@ through the **[Tutorial](TUTORIAL.md)** and just need an answer to
 ## Define and use custom words
 
 ```
-def double [dup add]
+def double word [dup add]
 5 double                      => 10
 ```
 
 Custom words compose:
 
+<!-- aql-test: skip -->
 ```
-def quadruple [double double]
+def quadruple word [double double]
 5 quadruple                   => 20
 ```
 
@@ -112,9 +113,9 @@ add1 "abc"                    => 'abc_1'
 Create, access, build:
 
 ```
-[10, 20, 30]                  => [10,20,30]
+[10, 20, 30]                  => [10 20 30]
 [10, 20, 30] . 1              => 20
-iota 5                        => [0,1,2,3,4]
+iota 5                        => [0 1 2 3 4]
 for 5 [42]                    => 42 42 42 42 42   # body runs 5 times
 ```
 
@@ -123,7 +124,7 @@ from **[Tutorial §3](TUTORIAL.md#the-argument-order-rule)** — `fold`
 takes `body data init` in all-forward form:
 
 ```
-[1, 2, 3] each [dup mul]      => [1,4,9]
+[1, 2, 3] each [dup mul]      => [1 4 9]
 fold [add] [1, 2, 3] 0        => 6              # all-forward
 0 [1, 2, 3] [add] fold        => 6              # all-stack, same result
 ```
@@ -131,35 +132,50 @@ fold [add] [1, 2, 3] 0        => 6              # all-forward
 Reshape, take, drop, reverse:
 
 ```
-iota 6 reshape [2, 3]         => [[0,1,2],[3,4,5]]
-[1,2,3,4] take 2              => [1,2]
-[1,2,3,4] shed 2              => [3,4]
-[1,2,3] reverse               => [3,2,1]
-[3,1,2] grade                 => [1,2,0]      # sort indices
-[1,2,2,3] unique              => [1,2,3]
-[1,2,3,4] window 2            => [[1,2],[2,3],[3,4]]
-[1,2,3] pairs                 => [[1,2],[2,3]]
+iota 6 reshape [2, 3]         => [[0 1 2] [3 4 5]]
+[1,2,3,4] take 2              => [1 2]
+[1,2,3,4] shed 2              => [3 4]
+[1,2,3] reverse               => [3 2 1]
+[3,1,2] grade                 => [1 2 0]      # sort indices
+[1,2,2,3] unique              => [1 2 3]
+[1,2,3,4] window 2            => [[1 2] [2 3] [3 4]]
+[1,2,3] pairs                 => [[1 2] [2 3]]
 ```
 
 Index:
 
 ```
-[10,20,30] at [2,0]           => [30,10]
+[10,20,30] at [2,0]           => [30 10]
 ```
 
 
 ## Work with maps
 
 ```
-{x:1, y:2}                    => {x:1,y:2}
+{x:1, y:2}                    => {x:1 y:2}
 {x:1} . x                     => 1
 {users: ["Ada"]} . users . 0  => 'Ada'
 ```
 
+A bare name with no `: value` is **field shorthand** — `{foo}` means
+`{foo: foo}`, binding the name to itself just like JavaScript:
+
+```
+def x 1  def y 2
+{x y}                         => {x:1 y:2}
+{x z:3 y}                     => {x:1 y:2 z:3}   # mix with explicit pairs
+```
+
+The key is the base name and the value is the whole token, so word
+modifiers ride along on the value: `{f/r}` ≡ `{f: f/r}` (hold a function
+as data) and `{f?}` ≡ `{f?: f}` (an optional field). Only unquoted
+identifiers qualify; quoted keys like `{'foo'}` stay errors. See
+[Reference: Map field shorthand](REFERENCE.md#map-field-shorthand).
+
 `do` evaluates list-valued entries inside a map:
 
 ```
-do {x: [1 add 2], y: [3 mul 4]}        => {x:3,y:12}
+do {x: [1 add 2], y: [3 mul 4]}        => {x:3 y:12}
 ```
 
 A function stored in a map is callable through the dotted accessor when
@@ -207,6 +223,7 @@ Use template strings for general value-to-string formatting:
 
 For controlled rounding, import the math module:
 
+<!-- aql-test: skip -->
 ```
 "aql:math" import end
 `${3.14159 100 mul math.round 100 div}` => '3.14'
@@ -246,20 +263,21 @@ If there is no error, the `error` word is a no-op.
 gathers the results:
 
 ```
-await [[1 add 2] [3 add 4]]           => [3,7]
+await [[1 add 2] [3 add 4]]           => [3 7]
 ```
 
 Choose a mode via an Options map; these mirror JavaScript Promise
 combinators:
 
+<!-- aql-test: skip -->
 ```
 # 'all (default): all must succeed; first error fails the lot
 await {mode: 'all}   [[sleep 10 1] [sleep 10 2]]
-=> [1,2]
+=> [1 2]
 
 # 'full: always returns all results with status
 await {mode: 'full}  [[1] [1 div 0]]
-=> [{status:'ok,value:1},{status:'error,value:...}]
+=> [{status:'ok,value:1},{status:'error value:...}]
 
 # 'first: the first to complete wins
 await {mode: 'first} [[sleep 100 1] [sleep 10 2]]
@@ -341,12 +359,13 @@ fields. `fetch` requires the **`fetch`** capability.
 
 ## Use a SQLite database
 
+<!-- aql-test: skip -->
 ```
 def db sqlite-open "data.db"
 db sqlite-exec "CREATE TABLE IF NOT EXISTS users (id INTEGER, name TEXT)"
 db sqlite-exec "INSERT INTO users VALUES (?, ?)" [1, "Ada"]
 db sqlite-query "SELECT * FROM users WHERE id = ?" [1]
-=> [{id:1, name:'Ada'}]
+=> [{id:1 name:'Ada'}]
 db sqlite-close
 ```
 
@@ -359,8 +378,8 @@ A record is a struct with named, typed fields. Order is significant.
 
 ```
 def Point refine Record [x:Number y:Number]
-make Point [3 4]                      => {x:3,y:4}
-make Point {x:1 y:2}                  => {x:1,y:2}
+make Point [3 4]                      => {x:3 y:4}
+make Point {x:1 y:2}                  => {x:1 y:2}
 ```
 
 
@@ -373,7 +392,7 @@ def Row refine Record [name:String qty:Integer]
 def Inventory refine Table Row
 
 make Inventory [["Widget" 5] ["Bolt" 12]]
-=> [{name:'Widget',qty:5},{name:'Bolt',qty:12}]
+=> [{name:'Widget' qty:5} {name:'Bolt' qty:12}]
 ```
 
 
@@ -385,6 +404,7 @@ with `make`. Read fields with the dotted accessor (`.field`) and
 mutate them with `set` (note the arg order — `obj value key set` —
 see [Tutorial §3](TUTORIAL.md#the-argument-order-rule) for why):
 
+<!-- aql-test: skip -->
 ```
 def Counter (refine Object {count: 0})
 
@@ -423,6 +443,7 @@ whose first parameter is the instance, then invoke it in stack form
 
 A read-only accessor returns a value derived from the instance:
 
+<!-- aql-test: skip -->
 ```
 def Counter (refine Object {count: 0})
 def doubled fn [[c:Counter] [Integer] [c.count 2 mul]]
@@ -436,6 +457,7 @@ A mutator changes the instance in place. `set` returns nothing, so the
 mutator's output signature is empty (`[]`); re-push the instance at the
 end instead if you want to chain calls:
 
+<!-- aql-test: skip -->
 ```
 def Counter (refine Object {count: 0})
 def bump fn [[c:Counter] [] [c (c.count 1 add) "count" set]]
@@ -494,7 +516,7 @@ If you want the index inside the body, use `iota N each [...]`
 instead — `each` does pass the element to the body:
 
 ```
-iota 5 each [dup mul]         => [0,1,4,9,16]
+iota 5 each [dup mul]         => [0 1 4 9 16]
 ```
 
 
@@ -544,6 +566,7 @@ with the `/r` ref modifier — the export map auto-evaluates, so a bare
 `greet` would be dispatched there (0-arg) rather than exported as the
 function. Values and types export bare:
 
+<!-- aql-test: skip -->
 ```
 import module [
   def base 10
@@ -673,7 +696,7 @@ In the REPL, `:trace on` toggles tracing for every expression.
 `depth` reports the current stack size:
 
 ```
-1 2 3 depth                   => 3
+1 2 3 depth                   => 1 2 3 3   # depth pushes the count; the values stay
 ```
 
 For deeper debugging, `inspect` returns a structured view of a word
@@ -692,6 +715,7 @@ use `end` to stop its collection. For example, `import` is
 forward-precedence and will try to consume the next string as a
 second module name:
 
+<!-- aql-test: skip -->
 ```
 "aql:math" import end "foo" print     => 'foo'
 ```

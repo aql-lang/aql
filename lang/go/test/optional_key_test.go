@@ -37,8 +37,8 @@ func TestOptionalKey_UnifyAcceptsExplicitNone(t *testing.T) {
 	}
 	// Explicit None at an optional key flows through via the
 	// disjunct(1, None) value wrap.
-	if got[0] != "{x:None,y:2}" {
-		t.Errorf("expected {x:None,y:2}, got %v", got[0])
+	if got[0] != "{x:None y:2}" {
+		t.Errorf("expected {x:None y:2}, got %v", got[0])
 	}
 }
 
@@ -47,8 +47,8 @@ func TestOptionalKey_UnifyAcceptsExplicitConcrete(t *testing.T) {
 	if len(got) != 2 || got[1] != "true" {
 		t.Fatalf("expected success, got %v", got)
 	}
-	if got[0] != "{x:1,y:2}" {
-		t.Errorf("expected {x:1,y:2}, got %v", got[0])
+	if got[0] != "{x:1 y:2}" {
+		t.Errorf("expected {x:1 y:2}, got %v", got[0])
 	}
 }
 

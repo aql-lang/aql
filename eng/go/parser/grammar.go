@@ -267,6 +267,71 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 		})
 	})
 
+	// --- Shorthand field syntax: {foo} ≡ {foo: foo}, {foo/r} ≡ {foo: foo/r} ---
+
+	j.Rule("pair", func(rs *jsonic.RuleSpec) {
+		rs.Open = append(rs.Open, &jsonic.AltSpec{
+			// A lone unquoted-text key with no following colon. Appended
+			// LAST so it never shadows a real `key:value` pair: the base
+			// KEY CL alt (and the prepended qm/ck alts) are tried first,
+			// and only `{foo}` / `{foo/r}` — where no colon, `?`, or `[`
+			// follows — fall through to here. The optional shorthand
+			// `{foo?}` is handled by the qm path above (it consumes
+			// `foo ?` and records Meta["qm"]); the value is synthesized in
+			// convertMapData. No P/U["pair"]: nothing is pushed, so the
+			// built-in pairval BC stays inert and the pair closes cleanly.
+			S: [][]jsonic.Tin{{jsonic.TinTX}},
+			A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+				if raw, ok := r.O0.Val.(string); ok {
+					r.U["aql_sh"] = raw
+				}
+			},
+		})
+	})
+
+	// Record shorthand keys in MapRef.Meta["sh"] via pair.BC callback.
+	j.Rule("pair", func(rs *jsonic.RuleSpec) {
+		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			raw, ok := r.U["aql_sh"].(string)
+			if !ok || raw == "" {
+				return
+			}
+			if mr, ok := r.Node.(jsonic.MapRef); ok {
+				shList, _ := mr.Meta["sh"].([]string)
+				shList = append(shList, raw)
+				mr.Meta["sh"] = shList
+				r.Node = mr // MapRef is a value type, reassign
+			}
+		})
+	})
+
+	// Record quoted keys in MapRef.Meta["qk"] via pair.BC callback. A
+	// quoted key (`{'a/b': 1}`) arrives as a string token (TinST) rather
+	// than bare text (TinTX); convertMapData can't tell them apart from the
+	// plain string map afterwards, so it needs this flag to know the key
+	// was an explicit literal — e.g. to allow a `/` in it that would be an
+	// illegal word modifier on a bare key.
+	j.Rule("pair", func(rs *jsonic.RuleSpec) {
+		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			if r.O0.Tin != jsonic.TinST {
+				return
+			}
+			key, ok := r.O0.Val.(string)
+			if !ok || key == "" {
+				return
+			}
+			if mr, ok := r.Node.(jsonic.MapRef); ok {
+				qkSet, _ := mr.Meta["qk"].(map[string]bool)
+				if qkSet == nil {
+					qkSet = make(map[string]bool)
+				}
+				qkSet[key] = true
+				mr.Meta["qk"] = qkSet
+				r.Node = mr // MapRef is a value type, reassign
+			}
+		})
+	})
+
 	// --- Optional field syntax in list context: [x?:Integer] ---
 
 	j.Rule("elem", func(rs *jsonic.RuleSpec) {

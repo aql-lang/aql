@@ -334,7 +334,7 @@ func TestDeepResourceTextkitConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{mode:'standard',version:'3.2.0'}")
+	assertResult(t, result, "{mode:'standard' version:'3.2.0'}")
 }
 
 func TestDeepResourceTextkitConfigKey(t *testing.T) {
@@ -374,7 +374,7 @@ func TestDeepResourceCharopsLettersAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{alpha:'a',beta:'b',gamma:'c'}")
+	assertResult(t, result, "{alpha:'a' beta:'b' gamma:'c'}")
 }
 
 func TestDeepResourceNoConflictWithExports(t *testing.T) {

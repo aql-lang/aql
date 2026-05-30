@@ -105,9 +105,9 @@ shell-friendly than `aql -e` because positional words don't need
 extra quoting.
 
 ```bash
-aql do 1 add 2                  # prints "3"
-aql do '"hello" upper'          # prints 'HELLO'
-aql do 'iota 5 each [dup mul]'  # prints '[0,1,4,9,16]'
+aql do 1 add 2                  # prints 3
+aql do '"hello" upper'          # prints HELLO
+aql do 'iota 5 each [dup mul]'  # prints [0 1 4 9 16]
 ```
 
 ### `aql check`

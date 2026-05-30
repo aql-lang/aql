@@ -44,11 +44,11 @@
 # map-aware renderer falls through to v.String() — which emits		
 # fields comma-separated rather than space-separated.		
 refine Record [ { a:Integer } ]	record{a:Integer}	one-field record
-refine Record [ { a:Integer } { b:String } ]	record{a:Integer,b:String}	two-field record (comma-separated)
-refine Record [ { a:Integer } { b:String } { c:Boolean } ]	record{a:Integer,b:String,c:Boolean}	three-field record
+refine Record [ { a:Integer } { b:String } ]	record{a:Integer b:String}	two-field record (comma-separated)
+refine Record [ { a:Integer } { b:String } { c:Boolean } ]	record{a:Integer b:String c:Boolean}	three-field record
 		
 # Same-typed fields are fine — fields are by name not by type.		
-refine Record [ { x:Integer } { y:Integer } ]	record{x:Integer,y:Integer}	
+refine Record [ { x:Integer } { y:Integer } ]	record{x:Integer y:Integer}	
 		
 # Field types may be any type literal, including subtypes.		
 refine Record [ { age:Number } ]	record{age:Number}	
@@ -75,7 +75,7 @@ def R (refine Record [ { a:Integer } ]) R	record{a:Integer}	bare R resolves to t
 def R (refine Record [ { a:Integer } ]) typeof R	Map	the RecordType's metatype is Map
 		
 # Defining and re-querying.		
-def R (refine Record [ { a:Integer } { b:String } ]) R	record{a:Integer,b:String}	
+def R (refine Record [ { a:Integer } { b:String } ]) R	record{a:Integer b:String}	
 		
 # ====================================================================		
 # 4. Instantiation via `make NAME …`		
@@ -114,7 +114,7 @@ def R (refine Record [ { a:Integer } ]) { a:5 } is R	false	even named, plain map
 # name is a value binding; a capitalised name would be a type		
 # binding (def is the universal binder — see TYPE-UNIFORM.0.md).		
 		
-def sch (refine Record [ { x:Integer } { y:Integer } ]) sch	record{x:Integer,y:Integer}	
+def sch (refine Record [ { x:Integer } { y:Integer } ]) sch	record{x:Integer y:Integer}	
 		
 # ====================================================================		
 # 7. Errors / malformed records		

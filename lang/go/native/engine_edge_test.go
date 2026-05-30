@@ -2848,8 +2848,8 @@ func TestRecordTypeCreation(t *testing.T) {
 	if !IsRecordType(result[0]) {
 		t.Fatalf("result is not a record type: %s", result[0].String())
 	}
-	if result[0].String() != "record{x:Number,y:Number}" {
-		t.Errorf("got %s, want record{x:Number,y:Number}", result[0].String())
+	if result[0].String() != "record{x:Number y:Number}" {
+		t.Errorf("got %s, want record{x:Number y:Number}", result[0].String())
 	}
 }
 
@@ -2882,8 +2882,8 @@ func TestRecordTypeWithDef(t *testing.T) {
 	if !IsRecordType(result[0]) {
 		t.Fatalf("result is not a record type: %s", result[0].String())
 	}
-	if result[0].String() != "record{x:Number,y:Number}" {
-		t.Errorf("got %s, want record{x:Number,y:Number}", result[0].String())
+	if result[0].String() != "record{x:Number y:Number}" {
+		t.Errorf("got %s, want record{x:Number y:Number}", result[0].String())
 	}
 }
 
@@ -2951,8 +2951,8 @@ func TestRecordTypeUnify(t *testing.T) {
 		f2.Set("x", NewTypeLiteral(TNumber))
 		f2.Set("y", NewTypeLiteral(TString))
 		got := runUnify(t, []Value{NewRecordType(f1), NewRecordType(f2), NewWord("unify")})
-		if got != "record{x:Number,y:String} true" {
-			t.Errorf("got %s, want record{x:Number,y:String} true", got)
+		if got != "record{x:Number y:String} true" {
+			t.Errorf("got %s, want record{x:Number y:String} true", got)
 		}
 	})
 
