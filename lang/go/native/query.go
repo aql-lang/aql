@@ -336,13 +336,150 @@ func (qb *QueryBuilder) ensureSetOpSources() ([]string, error) {
 	return tmpNames, nil
 }
 
-// The query DSL words live in queryNatives (native_query.go);
+// The query DSL words live in QueryNatives (native_query.go) and are
+// surfaced through the aql:query module (modules/query.go); the
 // supporting parser/exec helpers stay in this file. Aggregate
 // functions (count, sum, avg, min, max) and CAST are handled
 // directly in parseColumnSpec when they appear as the first element
 // of a sub-list in the column spec, e.g.:
 //   select [[count name cnt]] from people
 //   select [[cast age integer]] from people
+
+// clone returns a deep-enough copy of the QueryBuilder so that
+// mutating one pipeline stage does not alias the slice backing arrays
+// of an upstream builder. Scalar clause fields copy by value; the
+// Joins and SetOps slices are duplicated.
+func (qb QueryBuilder) clone() QueryBuilder {
+	cp := qb
+	if qb.Joins != nil {
+		cp.Joins = append([]JoinClause(nil), qb.Joins...)
+	}
+	if qb.SetOps != nil {
+		cp.SetOps = append([]SetOp(nil), qb.SetOps...)
+	}
+	return cp
+}
+
+// toQueryBuilder coerces a pipeline value into a QueryBuilder. It
+// accepts an already-wrapped builder (cloned so upstream stages are
+// not mutated) or a bare TableData source.
+func toQueryBuilder(r *Registry, v Value) (QueryBuilder, error) {
+	if qb, ok := unwrapQB(v); ok {
+		return qb.clone(), nil
+	}
+	if td, ok := v.Data.(TableData); ok {
+		return NewQueryBuilder(r, td), nil
+	}
+	return QueryBuilder{}, fmt.Errorf("argument is not a table or query")
+}
+
+// wrapQB wraps a QueryBuilder as a deferred-query Value. The builder
+// rides in an ExtensionPayload under the TList tag so unwrapQB can
+// recover it and so table-shaped consumers treat it as list data.
+func wrapQB(qb QueryBuilder) Value {
+	return NewValueRaw(TList, ExtensionPayload{Body: qb})
+}
+
+// doSelect materializes a query, optionally projecting an explicit
+// column list. A nil cols selects every column (SELECT *).
+func doSelect(r *Registry, cols []columnSpec, table Value) ([]Value, error) {
+	qb, err := toQueryBuilder(r, table)
+	if err != nil {
+		return nil, fmt.Errorf("select: %w", err)
+	}
+
+	var result TableData
+	if cols == nil {
+		result, err = qb.Materialize()
+	} else {
+		result, err = qb.MaterializeWithColumns(cols)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("select: %w", err)
+	}
+
+	return []Value{NewValueRaw(TList, result)}, nil
+}
+
+// resolveParenSubExprs walks a clause list and evaluates any
+// parenthesized sub-expressions (scalar subqueries, nested queries) in
+// a sub-engine, splicing their results back into the list. Nested
+// lists are recursed into, except those that are already TableData or
+// QueryBuilder values (subquery results carried as data). Shared by
+// the select column list and the where/having condition list.
+func resolveParenSubExprs(r *Registry, list Value) (Value, error) {
+	if !list.Parent.Equal(TList) {
+		return list, nil
+	}
+	_lst, err := AsList(list)
+	if err != nil {
+		return list, nil
+	}
+	elems := _lst.Slice()
+	if len(elems) == 0 {
+		return list, nil
+	}
+
+	// Recurse into nested lists that are not themselves query results.
+	work := make([]Value, len(elems))
+	for i, e := range elems {
+		if e.Parent.Equal(TList) && !isTableOrQuery(e) {
+			resolved, err := resolveParenSubExprs(r, e)
+			if err != nil {
+				return Value{}, err
+			}
+			work[i] = resolved
+			continue
+		}
+		work[i] = e
+	}
+
+	// Fast path: no paren markers at this level.
+	hasParen := false
+	for _, e := range work {
+		if IsOpenParen(e) {
+			hasParen = true
+			break
+		}
+	}
+	if !hasParen {
+		return NewList(work), nil
+	}
+
+	// Evaluate each parenthesized group in a sub-engine.
+	var out []Value
+	i := 0
+	for i < len(work) {
+		if IsOpenParen(work[i]) {
+			depth := 1
+			j := i + 1
+			for j < len(work) && depth > 0 {
+				if IsOpenParen(work[j]) {
+					depth++
+				} else if IsCloseParen(work[j]) {
+					depth--
+				}
+				j++
+			}
+			if depth != 0 {
+				return Value{}, fmt.Errorf("unmatched parenthesis in query clause")
+			}
+			subExpr := work[i+1 : j-1]
+			sub := New(r)
+			evalResult, err := sub.Run(subExpr)
+			if err != nil {
+				return Value{}, fmt.Errorf("query subexpression: %w", err)
+			}
+			out = append(out, evalResult...)
+			i = j
+		} else {
+			out = append(out, work[i])
+			i++
+		}
+	}
+
+	return NewList(out), nil
+}
 
 // aggregateFuncs is the set of recognized aggregate function names.
 var aggregateFuncs = map[string]bool{

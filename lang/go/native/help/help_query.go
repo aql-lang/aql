@@ -1,72 +1,91 @@
 package help
 
 func init() {
+	// SQL-style query DSL words. These live in the aql:query module and
+	// are accessed via dot notation after `"aql:query" import` — e.g.
+	// query.from, query.where, query.select. They form a left-to-right
+	// pipeline in forward form: `query.from people query.where [age gt
+	// 18] query.select [name age]`.
+
 	register(&Entry{
 		Word:    "select",
-		Summary: "Select columns from a table query.",
-		Description: "Specifies which columns to include in the query result. Supports " +
-			"renaming, casting, and aggregate functions (sum, avg, min, max, count).",
+		Summary: "Project columns and materialize a query (aql:query).",
+		Description: "Terminal pipeline word: runs the accumulated query and returns a table. " +
+			"The column list specifies which columns to include; an empty list [] selects " +
+			"every column. Supports renaming ([col alias]), casting ([cast col type]), and " +
+			"aggregate functions (sum, avg, min, max, count). Imported from aql:query; call " +
+			"as query.select.",
 	})
 
 	register(&Entry{
-		Word:        "from",
-		Summary:     "Start a query from a table.",
-		Description: "Creates a new query builder targeting the named table or table value.",
+		Word:    "from",
+		Summary: "Start a query from a table (aql:query).",
+		Description: "Creates a new query builder targeting a table. Given a bare name it looks " +
+			"the table up in the context store (set via `context set <name> <table>`); given a " +
+			"table value on the stack it wraps that value. Imported from aql:query; call as " +
+			"query.from.",
 	})
 
 	register(&Entry{
 		Word:    "where",
-		Summary: "Add a filter condition to a query.",
+		Summary: "Add a filter condition to a query (aql:query).",
 		Description: "Filters rows matching the condition. Supports operators: eq, neq, lt, gt, " +
-			"lte, gte, like, in, between, is-null, is-not-null, and, or, not.",
+			"lte, gte, like, in, between, is null, is not null, and, or, not. Imported from " +
+			"aql:query; call as query.where.",
 	})
 
 	register(&Entry{
-		Word:        "order",
-		Summary:     "Specify sort order for query results.",
-		Description: "Orders query results by the specified columns. Use [col desc] for descending.",
+		Word:    "order",
+		Summary: "Specify sort order for query results (aql:query).",
+		Description: "Orders query results by the specified columns. Use [col desc] for descending. " +
+			"Imported from aql:query; call as query.order.",
 	})
 
 	register(&Entry{
 		Word:        "limit",
-		Summary:     "Limit the number of query results.",
-		Description: "Restricts the query to return at most n rows.",
+		Summary:     "Limit the number of query results (aql:query).",
+		Description: "Restricts the query to return at most n rows. Imported from aql:query; call as query.limit.",
 	})
 
 	register(&Entry{
 		Word:        "offset",
-		Summary:     "Skip rows in query results.",
-		Description: "Skips the first n rows before returning results.",
+		Summary:     "Skip rows in query results (aql:query).",
+		Description: "Skips the first n rows before returning results. Imported from aql:query; call as query.offset.",
 	})
 
 	register(&Entry{
 		Word:        "distinct",
-		Summary:     "Remove duplicate rows from query results.",
-		Description: "Adds SELECT DISTINCT to the query.",
+		Summary:     "Remove duplicate rows from query results (aql:query).",
+		Description: "Adds SELECT DISTINCT to the query. Imported from aql:query; call as query.distinct.",
 	})
 
 	register(&Entry{
 		Word:        "group",
-		Summary:     "Group query results by columns.",
-		Description: "Groups rows by the specified columns for aggregate queries.",
+		Summary:     "Group query results by columns (aql:query).",
+		Description: "Groups rows by the specified columns for aggregate queries. Imported from aql:query; call as query.group.",
 	})
 
 	register(&Entry{
-		Word:        "having",
-		Summary:     "Filter grouped query results.",
-		Description: "Filters groups after GROUP BY, like WHERE but for aggregated values.",
+		Word:    "having",
+		Summary: "Filter grouped query results (aql:query).",
+		Description: "Filters groups after GROUP BY, like WHERE but for aggregated values. " +
+			"Imported from aql:query; call as query.having.",
 	})
 
 	register(&Entry{
-		Word:        "as",
-		Summary:     "Alias a table in a query.",
-		Description: "Sets an alias for the query's source table.",
+		Word:    "join",
+		Summary: "Join another table into a query (aql:query).",
+		Description: "Adds a JOIN against the named table; pair with query.on (ON condition) or " +
+			"query.using (shared columns). Variants: query.join / query.innerjoin (inner), " +
+			"query.leftjoin (left outer), query.crossjoin (cross). Imported from aql:query.",
 	})
 
 	register(&Entry{
-		Word:        "star",
-		Summary:     "Push a wildcard column selector.",
-		Description: "Pushes the * selector for use in SELECT * queries. Stack-only.",
+		Word:    "union",
+		Summary: "Combine two queries with a set operation (aql:query).",
+		Description: "Appends a set operation against a right-hand query: query.union (distinct), " +
+			"query.unionall (keep duplicates), query.intersect, query.except. The right-hand " +
+			"query is typically a parenthesized sub-pipeline. Imported from aql:query.",
 	})
 
 	register(&Entry{
