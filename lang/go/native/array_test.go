@@ -31,6 +31,69 @@ func TestIotaZero(t *testing.T) {
 	}
 }
 
+// --- range ---
+
+// assertIntList checks that result[0] is a list of the wanted integers.
+func assertIntList(t *testing.T, label string, result []Value, want []int64) {
+	t.Helper()
+	list, err := AsList(result[0])
+	if err != nil {
+		t.Fatalf("%s: result is not a list: %v", label, err)
+	}
+	if list.Len() != len(want) {
+		t.Fatalf("%s: length = %d, want %d", label, list.Len(), len(want))
+	}
+	for i, w := range want {
+		got, _ := AsInteger(list.Get(i))
+		if got != w {
+			t.Errorf("%s[%d] = %d, want %d", label, i, got, w)
+		}
+	}
+}
+
+func TestRangeStartStop(t *testing.T) {
+	r, _ := DefaultRegistry()
+	result := runAQL(t, r, []Value{NewWord("range"), NewInteger(2), NewInteger(6)})
+	assertIntList(t, "range 2 6", result, []int64{2, 3, 4, 5})
+}
+
+// range 0 n 1 must equal iota n.
+func TestRangeMatchesIota(t *testing.T) {
+	r, _ := DefaultRegistry()
+	result := runAQL(t, r, []Value{NewWord("range"), NewInteger(0), NewInteger(5), NewInteger(1)})
+	assertIntList(t, "range 0 5 1", result, []int64{0, 1, 2, 3, 4})
+}
+
+func TestRangeStep(t *testing.T) {
+	r, _ := DefaultRegistry()
+	result := runAQL(t, r, []Value{NewWord("range"), NewInteger(0), NewInteger(10), NewInteger(3)})
+	assertIntList(t, "range 0 10 3", result, []int64{0, 3, 6, 9})
+}
+
+func TestRangeNegativeStep(t *testing.T) {
+	r, _ := DefaultRegistry()
+	result := runAQL(t, r, []Value{NewWord("range"), NewInteger(5), NewInteger(0), NewInteger(-1)})
+	assertIntList(t, "range 5 0 -1", result, []int64{5, 4, 3, 2, 1})
+}
+
+// An empty range (start already past stop in the step direction) yields [].
+func TestRangeEmpty(t *testing.T) {
+	r, _ := DefaultRegistry()
+	result := runAQL(t, r, []Value{NewWord("range"), NewInteger(5), NewInteger(5)})
+	assertIntList(t, "range 5 5", result, []int64{})
+
+	result = runAQL(t, r, []Value{NewWord("range"), NewInteger(0), NewInteger(10), NewInteger(-1)})
+	assertIntList(t, "range 0 10 -1", result, []int64{})
+}
+
+// A zero step is rejected rather than looping forever.
+func TestRangeZeroStepErrors(t *testing.T) {
+	r, _ := DefaultRegistry()
+	if err := runAQLError(t, r, []Value{NewWord("range"), NewInteger(0), NewInteger(10), NewInteger(0)}); err == nil {
+		t.Fatalf("range 0 10 0: expected error, got none")
+	}
+}
+
 // --- shape ---
 
 func TestShapeFlat(t *testing.T) {

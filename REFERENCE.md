@@ -501,6 +501,7 @@ iota 5 each [dup mul]     => [0, 1, 4, 9, 16]
 | Word | Description | Example |
 |------|-------------|---------|
 | `iota` | Generate `[0..N-1]` | `iota 5 => [0,1,2,3,4]` |
+| `range` | Generate an arithmetic sequence `[start..stop)` | `range 2 6 => [2,3,4,5]`; `range 0 10 3 => [0,3,6,9]` |
 | `reshape` | Change dimensions | `iota 6 reshape [2,3]` |
 | `flatten` | Remove one level of nesting | `[[1,2],[3]] flatten => [1,2,3]` |
 | `take` | First N elements | `[1,2,3,4] take 2 => [1,2]` |

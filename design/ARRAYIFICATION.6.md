@@ -169,6 +169,27 @@ build structured arrays:
 reshape [3,3] iota 9              => [[0,1,2],[3,4,5],[6,7,8]]
 ```
 
+### range
+
+`iota`'s start/stop/step cousin: a Python-style arithmetic sequence
+generator over the half-open interval `[start, stop)`. Two forms — a
+2-arg form with an implicit step of 1, and a 3-arg form with an
+explicit (possibly negative) step.
+
+```
+range 2 6                         => [2,3,4,5]
+range 0 10 3                      => [0,3,6,9]
+range 5 0 -1                      => [5,4,3,2,1]
+range 5 5                         => []          # empty: start == stop
+```
+
+`range` is a strict superset of `iota`: `range 0 n 1` ≡ `iota n`.
+`iota` stays the canonical, minimal array constructor (the APL/J/K
+lineage); `range` is the convenience word for sequences that don't
+start at 0 or don't step by 1. The half-open `[start, stop)`
+convention matches `iota` (so the two compose predictably) and a zero
+step is an error rather than an infinite loop.
+
 ### replicate
 
 Repeat elements according to a count vector. Count and data must

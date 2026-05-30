@@ -6,7 +6,7 @@ import (
 )
 
 // arrayNatives covers the array words: core scalar/vector ops
-// (iota, shape, rank, reshape, arr-flatten, arr-transpose,
+// (iota, range, shape, rank, reshape, arr-flatten, arr-transpose,
 // reverse, take, shed, where, unique, grade, at, sortby, member,
 // arr-indexof, group, replicate, expand, window, pairs) and the
 // higher-order ops (each, fold, scan, outer, inner).
@@ -24,6 +24,26 @@ var arrayNatives = []NativeFunc{
 			Handler:   iotaHandler,
 			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
 		}},
+	},
+	{
+		// range is iota's start/stop/step cousin: an arithmetic
+		// sequence generator. The 3-arg sig is listed first so
+		// `range start stop step` forward-collects all three; the
+		// 2-arg sig (step defaults to 1) handles `range start stop`.
+		Name: "range",
+
+		Signatures: []NativeSig{
+			{
+				Args:      []*Type{TInteger, TInteger, TInteger},
+				Handler:   rangeThreeHandler,
+				ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TInteger, TInteger},
+				Handler:   rangeTwoHandler,
+				ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
+			},
+		},
 	},
 	{
 		Name: "shape",
@@ -300,6 +320,43 @@ func iotaHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	elems := make([]Value, n)
 	for i := 0; i < n; i++ {
 		elems[i] = NewInteger(int64(i))
+	}
+	return []Value{NewList(elems)}, nil
+}
+
+// ---- range ----
+
+func rangeThreeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	start, _ := args[0].AsConcreteInteger()
+	stop, _ := args[1].AsConcreteInteger()
+	step, _ := args[2].AsConcreteInteger()
+	return buildRange(start, stop, step, r)
+}
+
+func rangeTwoHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	start, _ := args[0].AsConcreteInteger()
+	stop, _ := args[1].AsConcreteInteger()
+	return buildRange(start, stop, 1, r)
+}
+
+// buildRange produces the arithmetic sequence [start, start+step, ...)
+// stopping before stop. A positive step counts up, a negative step
+// counts down; a zero step is an error. The half-open convention makes
+// `range 0 n 1` equal to `iota n`, and an empty range (start already
+// past stop in the step direction) yields [].
+func buildRange(start, stop, step int64, r *Registry) ([]Value, error) {
+	if step == 0 {
+		return nil, r.AqlError("range_error", "range: step must be non-zero", "range")
+	}
+	elems := []Value{}
+	if step > 0 {
+		for i := start; i < stop; i += step {
+			elems = append(elems, NewInteger(i))
+		}
+	} else {
+		for i := start; i > stop; i += step {
+			elems = append(elems, NewInteger(i))
+		}
 	}
 	return []Value{NewList(elems)}, nil
 }

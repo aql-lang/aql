@@ -115,6 +115,8 @@ Create, access, build:
 [10, 20, 30]                  => [10,20,30]
 [10, 20, 30] . 1              => 20
 iota 5                        => [0,1,2,3,4]
+range 2 6                     => [2,3,4,5]        # start/stop
+range 0 10 3                  => [0,3,6,9]        # start/stop/step
 for 5 [42]                    => 42 42 42 42 42   # body runs 5 times
 ```
 
