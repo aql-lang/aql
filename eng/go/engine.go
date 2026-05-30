@@ -211,20 +211,28 @@ func (e *Engine) insufficientArgsError(name string, expected int, pos SrcPos) *A
 	return makeAqlErrorAt("signature_error", detail, name, src, hint, pos)
 }
 
-// stampReturnCheckPos stamps pos onto any ReturnCheck markers in vals that
-// lack a source position. Used at the fn-body splice point to attach the
-// call-site location to a body's return check.
-func stampReturnCheckPos(vals []Value, pos SrcPos) {
+// stampResultPos stamps pos onto handler-produced values that lack a source
+// position: ReturnCheck markers (so a return-type error built later knows the
+// call site) and freshly-constructed Function/FnDef values (so an anonymous
+// `fn`/`afn` value carries its construction site for downstream errors). Only
+// zero-Pos entries are touched, so values that already carry a position — a
+// stored fn passed through, a literal — are left alone.
+func stampResultPos(vals []Value, pos SrcPos) {
 	if pos.Row == 0 {
 		return
 	}
-	for i, v := range vals {
-		if !IsReturnCheck(v) {
+	for i := range vals {
+		if vals[i].Pos.Row != 0 {
 			continue
 		}
-		if rc, err := AsReturnCheck(v); err == nil && rc.Pos.Row == 0 {
-			rc.Pos = pos
-			vals[i] = NewReturnCheck(rc)
+		switch {
+		case IsReturnCheck(vals[i]):
+			if rc, err := AsReturnCheck(vals[i]); err == nil && rc.Pos.Row == 0 {
+				rc.Pos = pos
+				vals[i] = NewReturnCheck(rc)
+			}
+		case vals[i].Parent.Equal(TFunction) || vals[i].Parent.Equal(TFnDef):
+			vals[i].Pos = pos
 		}
 	}
 }
@@ -1146,12 +1154,12 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		e.recorder.OnCall(match.Name, n, len(results))
 	}
 
-	// A named-fn body splice carries a ReturnCheck built without a source
-	// position (the InstallFnDef handler has no call-site context). Stamp it
-	// with the call-site word's position so a return-type error points at the
-	// call, not the last textual occurrence of the fn name.
+	// Stamp handler-produced ReturnCheck markers and fresh Function/FnDef
+	// values that lack a position with the call-site word's position, so a
+	// return-type error (named-fn body or anonymous fn value) points at the
+	// call/construction rather than the last textual occurrence of the name.
 	if e.pointer >= 0 && e.pointer < len(e.stack) {
-		stampReturnCheckPos(results, e.stack[e.pointer].Pos)
+		stampResultPos(results, e.stack[e.pointer].Pos)
 	}
 
 	return e.spliceMatchResults(match, sortedIndices, n, results)
@@ -1469,8 +1477,11 @@ func (e *Engine) stepLiteral() error {
 		}
 
 		if funcIdx < len(e.stack) && IsWord(e.stack[funcIdx]) {
-			w, _ := AsWord(e.stack[funcIdx])
-			e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
+			orig := e.stack[funcIdx]
+			w, _ := AsWord(orig)
+			rewritten := NewWordModified(w.Name, w.ArgCount, true, false)
+			rewritten.Pos = orig.Pos // preserve source position across force-stack rewrite
+			e.stack[funcIdx] = rewritten
 		}
 
 		// Rearrange values for forward-first matching: forward args at
@@ -3043,7 +3054,9 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 
 		match := MatchSignature(fn.Signatures, resolved, testW)
 		if match != nil {
+			pos := e.stack[funcIdx].Pos
 			e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
+			e.stack[funcIdx].Pos = pos // preserve source position across force-stack rewrite
 			e.pointer = funcIdx
 			return
 		}
@@ -3088,7 +3101,9 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 	}
 
 	// No outer forward - force stack (may result in error on next step).
+	pos := e.stack[funcIdx].Pos
 	e.stack[funcIdx] = NewWordModified(w.Name, w.ArgCount, true, false)
+	e.stack[funcIdx].Pos = pos // preserve source position across force-stack rewrite
 	e.pointer = funcIdx
 }
 

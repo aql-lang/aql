@@ -200,6 +200,23 @@ func TestErrorFormatReturnCount(t *testing.T) {
 	_ = ae
 }
 
+func TestErrorFormatReturnTypeAnonymousFn(t *testing.T) {
+	// An anonymous fn value (no name) returns the wrong type. Its
+	// FuncName is the "<fn>" placeholder, which findWordInSource can never
+	// match — so without a real position the error had no arrow at all.
+	// The fn value now carries its construction position, so the error
+	// points at line 3 where the `fn [...]` is written.
+	src := "def x 1\n" +
+		"def y 2\n" +
+		"42 (fn [[Integer] String [dup]])"
+	err := runWithSource(t, src)
+	ae := assertAqlError(t, err, "type_error")
+	assertErrorContains(t, err, "return value 1")
+	if ae.Row != 3 {
+		t.Errorf("expected Row=3 (the `fn [...]` construction), got %d", ae.Row)
+	}
+}
+
 func TestErrorFormatReturnTypePointsAtCallSite(t *testing.T) {
 	// f's return mismatch fires at the call on line 2. A trailing `def ff`
 	// on line 3 contains the substring "f", which findWordInSource would
