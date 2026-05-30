@@ -82,7 +82,7 @@ func TestFnUnnamedList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "[1,2,3]")
+	assertResult(t, result, "[1 2 3]")
 }
 
 func TestFnUnnamedListDup(t *testing.T) {
@@ -93,7 +93,7 @@ func TestFnUnnamedListDup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "[1,2] [1,2]")
+	assertResult(t, result, "[1 2] [1 2]")
 }
 
 // --- Unnamed Boolean parameter ---

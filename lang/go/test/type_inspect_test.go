@@ -50,7 +50,7 @@ inspect G10`)
 		`name:'G10'`,
 		`kind:dependent_scalar`,
 		`leaf:'Integer'`,
-		`lo:{kind:'gt',value:10}`,
+		`lo:{kind:'gt' value:10}`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("inspect output missing %q\nfull: %s", want, s)
@@ -73,8 +73,8 @@ inspect Range`)
 	s := got[0].(string)
 	for _, want := range []string{
 		`leaf:'Integer'`,
-		`lo:{kind:'gte',value:5}`,
-		`hi:{kind:'lte',value:20}`,
+		`lo:{kind:'gte' value:5}`,
+		`hi:{kind:'lte' value:20}`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("inspect output missing %q\nfull: %s", want, s)

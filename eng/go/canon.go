@@ -14,8 +14,11 @@ import (
 //     short form over `(quote name)`)
 //   - quoted lists render as `(quote [...])` so the Quoted flag survives
 //     a round-trip (the /q suffix is only defined for words)
-//   - lists and maps are space-separated, matching AQL source syntax
-//     instead of Value.String's comma-separated debug form
+//
+// Lists and maps are space-separated in both Canon and Value.String
+// (commas are optional in AQL source and the default render omits
+// them); the atom and quoted-list rules above are what keep Canon
+// distinct from Value.String.
 //
 // Values without a known canonical form (runtime markers, errors,
 // foreign types) fall back to Value.String.
@@ -37,10 +40,10 @@ func CanonValue(v Value) string {
 	//
 	// Built-in Behaviors (listFormatBehavior, mapFormatBehavior,
 	// dateFormatBehavior, …) are deliberately skipped here — they
-	// produce Value.String's debug form (comma-separated lists,
-	// time-domain renderings) which doesn't match Canon's source-
-	// shape conventions (space-separated lists, quoted strings).
-	// CanonValue's own switch below preserves those.
+	// produce Value.String's debug form (e.g. time-domain renderings,
+	// bare atoms) which doesn't match Canon's source-shape conventions
+	// (e.g. `name/q` atoms, quoted strings). CanonValue's own switch
+	// below preserves those.
 	if v.Data != nil && v.Parent != nil {
 		for t := v.Parent; t != nil; t = t.Parent {
 			if t.Origin == OriginBuiltin {

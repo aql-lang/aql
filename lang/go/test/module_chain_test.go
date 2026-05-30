@@ -650,7 +650,7 @@ func TestExportWithNestedMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{a:1,b:2}")
+	assertResult(t, result, "{a:1 b:2}")
 }
 
 // =====================================================================

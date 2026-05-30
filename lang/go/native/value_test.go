@@ -35,8 +35,8 @@ func TestValueStringTypes(t *testing.T) {
 func TestValueStringListOrig(t *testing.T) {
 	v := NewList([]Value{NewInteger(1), NewString("a")})
 	got := v.String()
-	if got != "[1,'a']" {
-		t.Errorf("got %q, want %q", got, "[1,'a']")
+	if got != "[1 'a']" {
+		t.Errorf("got %q, want %q", got, "[1 'a']")
 	}
 }
 
@@ -46,8 +46,8 @@ func TestValueStringMapOrig(t *testing.T) {
 	m.Set("y", NewString("hi"))
 	v := NewMap(m)
 	got := v.String()
-	if got != "{x:1,y:'hi'}" {
-		t.Errorf("got %q, want %q", got, "{x:1,y:'hi'}")
+	if got != "{x:1 y:'hi'}" {
+		t.Errorf("got %q, want %q", got, "{x:1 y:'hi'}")
 	}
 }
 
@@ -73,8 +73,8 @@ func TestValueStringRecordTypeOrig(t *testing.T) {
 	fields.Set("y", NewTypeLiteral(TString))
 	v := NewRecordType(fields)
 	got := v.String()
-	if got != "record{x:Number,y:String}" {
-		t.Errorf("got %q, want %q", got, "record{x:Number,y:String}")
+	if got != "record{x:Number y:String}" {
+		t.Errorf("got %q, want %q", got, "record{x:Number y:String}")
 	}
 }
 

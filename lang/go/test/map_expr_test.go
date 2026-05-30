@@ -38,7 +38,7 @@ func TestMapExprExplicitMultiKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{a:1,b:2}")
+	assertResult(t, result, "{a:1 b:2}")
 }
 
 // --- Implicit map (pair syntax at top level) ---
@@ -74,7 +74,7 @@ func TestMapExprInListMultipleMaps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "[{a:1},{b:2}]")
+	assertResult(t, result, "[{a:1} {b:2}]")
 }
 
 func TestMapExprInListNestedExpr(t *testing.T) {
@@ -124,7 +124,7 @@ func TestMapExprParenMixedValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{a:10,b:11,c:'lit'}")
+	assertResult(t, result, "{a:10 b:11 c:'lit'}")
 }
 
 // --- Inside function bodies ---
@@ -169,7 +169,7 @@ func TestMapExprNestedMixed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{a:{b:1},c:2}")
+	assertResult(t, result, "{a:{b:1} c:2}")
 }
 
 func TestMapExprNestedWithParen(t *testing.T) {
@@ -379,7 +379,7 @@ func TestMapExprDoNested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{a:{b:1},c:2}")
+	assertResult(t, result, "{a:{b:1} c:2}")
 }
 
 func TestMapExprDoParen(t *testing.T) {
@@ -431,7 +431,7 @@ func TestMapExprBooleanValueUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{a:true,b:false}")
+	assertResult(t, result, "{a:true b:false}")
 }
 
 func TestMapExprNumberValueUnchanged(t *testing.T) {
@@ -439,7 +439,7 @@ func TestMapExprNumberValueUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{a:42,b:99}")
+	assertResult(t, result, "{a:42 b:99}")
 }
 
 func TestMapExprEmptyMap(t *testing.T) {

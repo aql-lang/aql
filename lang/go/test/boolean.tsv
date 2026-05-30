@@ -254,18 +254,18 @@ String tor String	String
 # =====================================================================
 
 # Disjoint keys: combine.
-{x:1} tand {y:Integer}	{x:1,y:Integer}
-{a:"A"} tand {b:"B"}	{a:'A',b:'B'}
+{x:1} tand {y:Integer}	{x:1 y:Integer}
+{a:"A"} tand {b:"B"}	{a:'A' b:'B'}
 
 # Overlapping keys: unify.
 {x:1} tand {x:Integer}	{x:1}
 {x:Number} tand {x:1}	{x:1}
 
 # Multi-key with one overlap.
-{x:1 y:2} tand {y:Integer z:3}	{x:1,y:2,z:3}
+{x:1 y:2} tand {y:Integer z:3}	{x:1 y:2 z:3}
 
 # Three-way merge.
-{a:1} tand {b:2} tand {c:3}	{a:1,b:2,c:3}
+{a:1} tand {b:2} tand {c:3}	{a:1 b:2 c:3}
 
 # Non-map: falls back to Unify.
 1 tand Integer	1
@@ -284,7 +284,7 @@ Number tand Integer	Integer
 # =====================================================================
 
 # Disjunct of merged maps.
-({x:1} tand {y:2}) tor {z:3}	{x:1,y:2}|{z:3}
+({x:1} tand {y:2}) tor {z:3}	{x:1 y:2}|{z:3}
 
 # Merge of disjuncts: each merge picks an alternative — tested via unify.
 ({x:Integer} tor {x:String}) unify {x:1}	{x:1} true
@@ -292,10 +292,10 @@ Number tand Integer	Integer
 ({x:Integer} tor {x:String}) unify {x:true}	'~unify-fail' false
 
 # tor inside an optional record field.
-refine Record [name:String age:[Integer tor None]]	record{name:String,age:Integer|None}
+refine Record [name:String age:[Integer tor None]]	record{name:String age:Integer|None}
 
 # tand at type-level then unify.
-({x:Integer} tand {y:String}) unify {x:1 y:"a"}	{x:1,y:'a'} true
+({x:Integer} tand {y:String}) unify {x:1 y:"a"}	{x:1 y:'a'} true
 
 # =====================================================================
 # 12. Coercion combined with logical ops
@@ -381,13 +381,13 @@ None otherwise "bar"	'bar'
 # =====================================================================
 
 # Empty list is falsy.
-[] or [1 2]	[1,2]
+[] or [1 2]	[1 2]
 [] and [1 2]	[]
 [] otherwise [1 2]	[]
 
 # Non-empty list is truthy.
 [1] or [2 3]	[1]
-[1] and [2 3]	[2,3]
+[1] and [2 3]	[2 3]
 
 # Empty map is falsy.
 {} or {x:1}	{x:1}
@@ -546,12 +546,12 @@ String tor Number tor Boolean tor None	String|Number|Boolean|None
 # =====================================================================
 
 # Map merges with disjoint keys.
-[{x:1} {y:2}] tall	{x:1,y:2}
-[{a:1} {b:2} {c:3}] tall	{a:1,b:2,c:3}
+[{x:1} {y:2}] tall	{x:1 y:2}
+[{a:1} {b:2} {c:3}] tall	{a:1 b:2 c:3}
 
 # Map merges with overlapping keys (unify).
 [{x:1} {x:Integer}] tall	{x:1}
-[{x:Number y:2} {x:1 z:3}] tall	{x:1,y:2,z:3}
+[{x:Number y:2} {x:1 z:3}] tall	{x:1 y:2 z:3}
 
 # Single-element list returns the element unchanged.
 [{x:1}] tall	{x:1}
@@ -566,21 +566,21 @@ String tor Number tor Boolean tor None	String|Number|Boolean|None
 [Integer Number] tall	Integer
 
 # Equivalent to chained tand.
-[{x:1} {y:2} {z:3}] tall	{x:1,y:2,z:3}
-{x:1} tand {y:2} tand {z:3}	{x:1,y:2,z:3}
+[{x:1} {y:2} {z:3}] tall	{x:1 y:2 z:3}
+{x:1} tand {y:2} tand {z:3}	{x:1 y:2 z:3}
 
 # tall result used in unify.
-([{x:Integer} {y:String}] tall) unify {x:1 y:"a"}	{x:1,y:'a'} true
+([{x:Integer} {y:String}] tall) unify {x:1 y:"a"}	{x:1 y:'a'} true
 
 # =====================================================================
 # 24. tany/tall interactions
 # =====================================================================
 
 # tany a list with computed disjuncts.
-[({x:1} tand {y:2}) {z:3}] tany	{x:1,y:2}|{z:3}
+[({x:1} tand {y:2}) {z:3}] tany	{x:1 y:2}|{z:3}
 
 # Use tall to fold a list of map schemas, then unify.
-([{x:Integer} {y:String}] tall) unify {x:1 y:"a"}	{x:1,y:'a'} true
+([{x:Integer} {y:String}] tall) unify {x:1 y:"a"}	{x:1 y:'a'} true
 
 # tany an empty disjunct via single-element collapses.
 [String] tany unify "x"	'x' true
@@ -720,11 +720,11 @@ quote [true false true] all	false
 # =====================================================================
 
 # Per-row "any non-zero" check.
-[[1 2] [0 0] [3]] each [any]	[true,false,true]
-[[1 2] [0 0] [3]] each [all]	[true,false,true]
+[[1 2] [0 0] [3]] each [any]	[true false true]
+[[1 2] [0 0] [3]] each [all]	[true false true]
 
 # Are all rows non-empty (truthy)?
-[[1] [0]] each [all]	[true,false]
+[[1] [0]] each [all]	[true false]
 ([[1] [0]] each [all]) any	true
 ([[1] [0]] each [all]) all	false
 
@@ -786,7 +786,7 @@ quote [true false true] all	false
 # =====================================================================
 
 # tany result as a record field type.
-refine Record [name:String age:([Integer None] tany)]	record{name:String,age:Integer|None}
+refine Record [name:String age:([Integer None] tany)]	record{name:String age:Integer|None}
 
 # tany result used in `is`.
 42 is ([Integer String None] tany)	true
@@ -807,14 +807,14 @@ None is ([Integer String None] tany)	true
 [{x:Integer} {x:1}] tall	{x:1}
 
 # Multiple overlapping keys.
-[{x:Number y:String} {x:Integer y:"hi"}] tall	{x:Integer,y:'hi'}
+[{x:Number y:String} {x:Integer y:"hi"}] tall	{x:Integer y:'hi'}
 
 # Three-way merge with one shared key.
-[{x:Number} {x:Integer y:String} {y:"v" z:true}] tall	{x:Integer,y:'v',z:true}
+[{x:Number} {x:Integer y:String} {y:"v" z:true}] tall	{x:Integer y:'v' z:true}
 
 # Order: earlier keys appear first in result order.
-[{a:1} {b:2}] tall	{a:1,b:2}
-[{b:2} {a:1}] tall	{b:2,a:1}
+[{a:1} {b:2}] tall	{a:1 b:2}
+[{b:2} {a:1}] tall	{b:2 a:1}
 
 # =====================================================================
 # 37. tall — disjoint cases reduce to Never
@@ -856,8 +856,8 @@ None is ([Integer String None] tany)	true
 
 # tall produces a plain merged map (not a record type), so unify is
 # the right way to check it satisfies a target shape.
-([{x:Integer} {y:String}] tall) unify {x:1 y:"hi"}	{x:1,y:'hi'} true
-([{x:Integer} {y:String} {z:Boolean}] tall) unify {x:1 y:"a" z:true}	{x:1,y:'a',z:true} true
+([{x:Integer} {y:String}] tall) unify {x:1 y:"hi"}	{x:1 y:'hi'} true
+([{x:Integer} {y:String} {z:Boolean}] tall) unify {x:1 y:"a" z:true}	{x:1 y:'a' z:true} true
 ([{x:Integer} {y:String}] tall) unify {x:1}	'~unify-fail' false
 
 # tany schema as an `Options` field type (note: Options prints lowercase).
@@ -868,11 +868,11 @@ make Options {x:([Integer None] tany)}	options{x:Integer|None}
 # =====================================================================
 
 # Build a disjunct of merged maps.
-[([{x:Integer} {y:String}] tall) ([{a:Boolean} {b:None}] tall)] tany	{x:Integer,y:String}|{a:Boolean,b:None}
+[([{x:Integer} {y:String}] tall) ([{a:Boolean} {b:None}] tall)] tany	{x:Integer y:String}|{a:Boolean b:None}
 
 # Use tany inside tall (combined into a single field).
 [{kind:([String Number] tany)}] tall	{kind:String|Number}
-[{x:([Integer None] tany)} {y:Boolean}] tall	{x:Integer|None,y:Boolean}
+[{x:([Integer None] tany)} {y:Boolean}] tall	{x:Integer|None y:Boolean}
 
 # tall then tany then tall — composable.
 [([{x:Integer}] tall) ([{y:String}] tall)] tany	{x:Integer}|{y:String}
@@ -886,8 +886,8 @@ def Maybe tany [String None] Maybe	String|None
 def ScalarOrList tany [Scalar List] ScalarOrList	Scalar|List
 
 # Use the named disjunct as a record field constraint.
-def Maybe tany [String None] def Person refine Record [name:String nick:Maybe] make Person {name:"Alice" nick:None}	{name:'Alice',nick:None}
-def Maybe tany [String None] def Person refine Record [name:String nick:Maybe] make Person {name:"Bob" nick:"Bobby"}	{name:'Bob',nick:'Bobby'}
+def Maybe tany [String None] def Person refine Record [name:String nick:Maybe] make Person {name:"Alice" nick:None}	{name:'Alice' nick:None}
+def Maybe tany [String None] def Person refine Record [name:String nick:Maybe] make Person {name:"Bob" nick:"Bobby"}	{name:'Bob' nick:'Bobby'}
 
 # =====================================================================
 # 42. all-quantifier / type-quantifier crosswise interactions

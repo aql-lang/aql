@@ -115,14 +115,14 @@ def name 'Ada' `hello ${name}`	'hello Ada'	string-valued def, no quotes appear i
 # Value.String(), which formats lists as `[a,b,c]` and maps as
 # `{k:v,k:v}` — comma-separated, no spaces, map keys in sorted order.
 
-`${[1 2 3]}`	'[1,2,3]'	literal list (auto-eval is a no-op on pure literals)
+`${[1 2 3]}`	'[1 2 3]'	literal list (auto-eval is a no-op on pure literals)
 `${[]}`	'[]'	empty list
 `${[1 addq 2]}`	'[3]'	list auto-evaluates inside the sub-engine before stringification
 `${[1 addq 2 mulq 5]}`	'[15]'	chained ops collapse to a single residual element
-`${[1 [2 3]]}`	'[1,[2,3]]'	nested list — inner list stringified by Value.String() recursion
-`${[[1 2] [3 4]]}`	'[[1,2],[3,4]]'	list of lists
+`${[1 [2 3]]}`	'[1 [2 3]]'	nested list — inner list stringified by Value.String() recursion
+`${[[1 2] [3 4]]}`	'[[1 2] [3 4]]'	list of lists
 `${{a:1}}`	'{a:1}'	single-entry map
-`${{a:1 b:2}}`	'{a:1,b:2}'	multi-entry map; runtime emits keys in sorted order
+`${{a:1 b:2}}`	'{a:1 b:2}'	multi-entry map; runtime emits keys in sorted order
 `${{a:(1 addq 2)}}`	'{a:3}'	paren value auto-evaluates during the sub-engine's autoEvalMap
 `${{outer:{inner:5}}}`	'{outer:{inner:5}}'	nested map
 
@@ -132,17 +132,17 @@ def name 'Ada' `hello ${name}`	'hello Ada'	string-valued def, no quotes appear i
 `${firstq [10 20 30]}`	'10'	firstq returns the first element
 
 # Nodes mixed with surrounding literal text.
-`xs=${[1 2 3]}`	'xs=[1,2,3]'	literal prefix + list interpolation
-`size=${lengthq [1 2 3]} items=${[1 2 3]}`	'size=3 items=[1,2,3]'	two interps; one returns a scalar, the other a node
+`xs=${[1 2 3]}`	'xs=[1 2 3]'	literal prefix + list interpolation
+`size=${lengthq [1 2 3]} items=${[1 2 3]}`	'size=3 items=[1 2 3]'	two interps; one returns a scalar, the other a node
 
 # Def-bound nodes resolve through the shared registry. Use `quote` on
 # the def body so the binding stores the list/map as data (no splice).
-def lst quote [ 10 20 30 ] `items=${lst}`	'items=[10,20,30]'	quoted list def, interpolated by name
-def m quote { a:1 b:2 } `map=${m}`	'map={a:1,b:2}'	quoted map def, interpolated by name
+def lst quote [ 10 20 30 ] `items=${lst}`	'items=[10 20 30]'	quoted list def, interpolated by name
+def m quote { a:1 b:2 } `map=${m}`	'map={a:1 b:2}'	quoted map def, interpolated by name
 
 # Multi-value residual with nodes — each list stringifies separately
 # and the buffer concatenates them with no separator.
-`${[1 2] [3 4]}`	'[1,2][3,4]'	two literal lists end up on the sub-engine's residual stack
+`${[1 2] [3 4]}`	'[1 2][3 4]'	two literal lists end up on the sub-engine's residual stack
 
 # Error: a non-node passed to a node-consuming word inside the interp
 # surfaces as a signature error from the sub-engine.

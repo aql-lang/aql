@@ -1918,7 +1918,7 @@ func kernelFormatDefault(v Value) string {
 			e, _ := arr.Get(i)
 			parts[i] = e.String()
 		}
-		return "Array[" + strings.Join(parts, ",") + "]"
+		return "Array[" + strings.Join(parts, " ") + "]"
 	// Timeout / Interval render via their per-Type Behavior — see
 	// coretype_format_behaviors.go. Their arms have been removed
 	// from this switch.
@@ -1934,7 +1934,7 @@ func kernelFormatDefault(v Value) string {
 		if name == "" {
 			name = "Ideal/Object/" + oi.TypeRef.ID
 		}
-		return name + "{" + strings.Join(parts, ",") + "}"
+		return name + "{" + strings.Join(parts, " ") + "}"
 	case IsObjectType(v):
 		ot, _ := AsObjectType(v)
 		allFields := ot.AllFields()
@@ -1947,7 +1947,7 @@ func kernelFormatDefault(v Value) string {
 		if name == "" {
 			name = "Ideal/Object/" + ot.ID
 		}
-		return "object<" + name + ">{" + strings.Join(parts, ",") + "}"
+		return "object<" + name + ">{" + strings.Join(parts, " ") + "}"
 	case IsDisjunct(v):
 		di, _ := AsDisjunct(v)
 		parts := make([]string, len(di.Alternatives))
