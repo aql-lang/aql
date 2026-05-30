@@ -65,11 +65,13 @@ no module export shadows a core word: deep flatten is the core
 `flatten -1` and list lookup is the core `indexof` `[List, List]`
 overload — neither is an `array.*` word.
 
-**Missing:**
-- Broadcasting rules (implicit iteration over mismatched shapes)
-- Rank polymorphism (`eachrank`, `foldaxis`)
+**Missing / planned:**
+- Rank polymorphism (`eachrank`, `foldaxis`) — explicit depth-targeting
 - `compress` (boolean mask selection, separate from `where`)
-- Phases 4-5 from the design doc (broadcasting, advanced composition)
+
+**Rejected:**
+- Broadcasting (implicit scalar-over-array lifting) — see ADR-002.
+  Scalar-over-array application stays explicit via `each`/`eachrank`.
 
 
 ## Not Implemented

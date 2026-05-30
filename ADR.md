@@ -67,3 +67,59 @@ distinct `Tensor`/`Matrix` type rather than on plain lists, so the
 overlap is nominal rather than behavioural, but they do not yet satisfy
 the rule as stated. Reconciling them (fold into the core words by type,
 or rename) is tracked as follow-up work, not done here.
+
+---
+
+## ADR-002 — No implicit broadcasting {#adr-002}
+
+**Status:** Accepted · **Date:** 2026-05-30
+
+### Decision
+
+AQL will **not** implement broadcasting — the implicit lifting of a
+scalar word over an array. Applying an operation across an array is
+always **explicit**, via a combinator (`each`, `eachrank`, `fold`, …).
+A scalar word applied to a list where it expects a scalar is a **type
+error**, not a silent element-wise map.
+
+```
+add 10 [1,2,3]            # type error — no matching signature
+each [add 10] [1,2,3]     # => [11,12,13]   (the supported form)
+```
+
+### Context
+
+An earlier draft of `design/ARRAYIFICATION.6.md` proposed broadcasting:
+`add 10 [1,2,3] => [11,12,13]`, with rules for scalar+list, equal-length
+list+list zip, and nested alignment. It is attractive (it reads like
+NumPy/APL) but a poor fit for AQL:
+
+1. **It cannot be a word.** It would have to be a fallback wedged into
+   the signature matcher (`eng/go/match.go`) — the most load-bearing
+   code in the kernel — affecting *every* scalar word at once. A subtle
+   bug there regresses the whole language, not one word.
+2. **It defeats the static checker.** Result rank depends on the runtime
+   shape of the operands, so `Check` mode could no longer infer result
+   types without modelling unknown-depth lifting — undermining the
+   typed-list carrier inference the codebase already relies on.
+3. **It is ambiguous.** Words that legitimately take list arguments
+   (`reshape`, `at`, the `group`/`fold` overloads, …) collide with the
+   "scalar op lifted over a list" reading. The matcher would need a
+   fragile precedence rule between "a real `[List, …]` signature exists"
+   and "no scalar match → broadcast".
+4. **It buys ergonomics, not power.** `add 10 [1,2,3]` is already
+   `each [add 10] [1,2,3]`. The implicit form saves keystrokes at the
+   cost of making dispatch — and reading — less predictable.
+
+### Consequences
+
+- Design principle 3 is "explicit iteration", not "implicit iteration".
+- The `## Broadcasting` section of the arrayification design is marked
+  rejected; Phase 5 is "rank polymorphism" (`eachrank`, `foldaxis`),
+  which is explicit depth-targeting, not broadcasting.
+- `eachrank`/`foldaxis` bodies must themselves iterate (e.g.
+  `eachrank 1 [each [add 10]] …`); there is no implicit lift at the cell.
+- This is a decision about the *language*. Type-specific element-wise
+  behaviour can still be offered by a word with an explicit `[List, …]`
+  signature (as `add` does for string concatenation, or `indexof` for
+  lists) — that is normal signature dispatch, not broadcasting.

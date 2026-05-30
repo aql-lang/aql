@@ -31,9 +31,11 @@ respecting its concatenative nature.
    Nested lists `[[1,2],[3,4]]` represent higher-rank arrays. Shape
    is inferred from structure.
 
-3. **Implicit iteration by default.** Scalar words should lift over
-   arrays automatically when a signature does not match but an
-   element-wise application would. This is broadcasting.
+3. **Explicit iteration.** Lifting an operation over an array is done
+   with an explicit combinator (`each`, `eachrank`, `fold`, …), never
+   implicitly. A scalar word applied to a list is a type error, not a
+   silent element-wise map. (Implicit *broadcasting* was considered and
+   rejected — see [ADR-002](../ADR.md#adr-002).)
 
 4. **Shape awareness.** New words should respect and transform shape
    rather than requiring manual indexing.
@@ -78,7 +80,8 @@ are
 The examples below use bare names for brevity; in running code the
 module words need the `array.` prefix (e.g. `iota 6 array.reshape
 [2,3]`). Words still on the roadmap (`compress`, `eachrank`,
-`foldaxis`, broadcasting) will join the module as they land.
+`foldaxis`) will join the module as they land. (Implicit broadcasting
+was considered and rejected — see [ADR-002](../ADR.md#adr-002).)
 
 
 ## New Data Concepts
@@ -280,8 +283,9 @@ means each scalar, rank 1 means each row (innermost list), rank 2
 means each matrix, and so on.
 
 ```
-eachrank 1 [add 10] [[1,2],[3,4]]
-# applies [add 10] to each rank-1 cell: each row broadcasts
+eachrank 1 [each [add 10]] [[1,2],[3,4]]
+# the body runs on each rank-1 cell (a row); the inner `each`
+# maps `add 10` over that row's elements — no implicit broadcasting
 => [[11,12],[13,14]]
 
 eachrank 0 [mul 2] [[1,2],[3,4]]
@@ -535,32 +539,29 @@ pairs [1,2,3,4]                       => [[1,2],[2,3],[3,4]]
 ```
 
 
-## Broadcasting
+## Broadcasting — rejected
 
-### Scalar Extension
+Earlier drafts of this design proposed **broadcasting**: when a scalar
+word like `add` received a list where it expected a scalar, it would
+lift automatically and apply element-wise (`add 10 [1,2,3] =>
+[11,12,13]`), with rules for scalar+list, list+list zip, and nested
+alignment.
 
-When a scalar word like `add` receives a list where it expects a
-scalar, it applies element-wise:
+**This has been rejected and will not be implemented** — see
+[ADR-002](../ADR.md#adr-002). In short: broadcasting cannot be a word;
+it would have to be a fallback wedged into the signature matcher
+(`eng/go/match.go`) affecting every scalar word at once, its result rank
+depends on runtime shape (defeating the static checker), and it
+introduces operand-vs-mapped ambiguity for words that legitimately take
+list arguments. It also buys only ergonomics over the existing explicit
+`each`, not new power.
+
+The supported way to apply a scalar operation across an array is the
+explicit combinator:
 
 ```
-add 10 [1,2,3]                        => [11,12,13]
-mul [1,2,3] [10,20,30]                => [10,40,90]
+each [add 10] [1,2,3]                 => [11,12,13]
 ```
-
-This is broadcasting at rank 0: scalar operations lift automatically
-over list structure.
-
-### Rules
-
-1. **Scalar + list**: apply scalar op to each element.
-2. **List + list (same length)**: apply element-wise (zip-with).
-3. **List + list (different length)**: error. No implicit padding.
-4. **Nested + flat**: align outermost dimension, broadcast inward.
-
-Broadcasting is not magic — it follows the same rules as `each` but
-is applied implicitly when the type signature demands a scalar and
-receives an array. The type system already handles dispatch; this
-extends it with an automatic lifting rule.
 
 
 ## Integration with Existing AQL
@@ -703,12 +704,11 @@ Structural algebra:
 - `unique`, `group` — structural partitioning
 - `replicate`, `expand` — count-based reshaping
 
-### Phase 5 — Broadcasting
+### Phase 5 — Rank polymorphism
 
-Automatic scalar extension:
+Depth-aware application (broadcasting is **not** part of this — see
+[ADR-002](../ADR.md#adr-002)):
 
-- Implicit lifting of scalar words over lists
-- Element-wise zip for matching-length lists
 - Rank-controlled application with `eachrank`
 - `foldaxis` for axis-specific reduction
 
@@ -835,7 +835,10 @@ Arrayification adds:
 - **Membership and grouping**: `member`, `indexof`, `unique`, `group`
 - **Neighborhoods**: `window`, `pairs`
 - **Construction**: `iota`
-- **Broadcasting**: implicit scalar extension over arrays
+
+Implicit broadcasting was considered and **rejected** (see
+[ADR-002](../ADR.md#adr-002)); scalar-over-array application is always
+explicit via `each`/`eachrank`.
 
 Together these give AQL a systematic, compositional approach to array
 programming while staying true to its concatenative stack-machine
