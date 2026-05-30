@@ -52,12 +52,22 @@ its arguments and pushes its results. The stack is the implicit
 data flow.
 
 ```
-3 4 add 2 mul                     => 14
+3 4 add                           => 7
+7 2 mul                           => 14
 ```
 
-Step by step: push 3, push 4, `add` consumes both and pushes 7,
+Step by step: push 3, push 4, `add` consumes both and pushes 7; then
 push 2, `mul` consumes both and pushes 14. There is no `tmp = a + b`
 intermediate — the stack *is* the intermediate.
+
+Written as one line the two steps compose by parenthesising the first
+— `(3 4 add) 2 mul => 14`. The bare `3 4 add 2 mul` does **not** give
+14: because `add` can also *collect forward* (the next section), it
+grabs the following `2` as a second argument — computing `4 add 2 =
+6` — which leaves `3` and `6` on the stack for `mul`, giving `18`.
+Parenthesise, or keep each step on its own line, when a trailing word
+would otherwise reach forward past the value you mean to leave on the
+stack.
 
 This eliminates the need for variable binding in simple cases. When
 naming actually helps readability, `def`, `var`, and named-parameter
@@ -290,26 +300,39 @@ returning a new value to mutating, until a benchmark says otherwise.
 ## Quotation and evaluation
 
 Lists are *dual-purpose*: data structures and code bodies. By
-default, list literals are quotations — they store their elements
-unevaluated:
+default a list literal is **evaluated** — its elements run and the
+list holds the results:
 
 ```
-[1 add 2]                         => [1 add 2]    # NOT evaluated
+[1 add 2]                         => [3]          # evaluated by default
+[1 2 3]                           => [1 2 3]       # plain data, nothing to run
 ```
 
-Code-body positions — the second argument to `def`, all branches
-of `if`, the body of `for`, the function passed to `each`, etc. —
-implicitly take a quotation. This is why `def double [dup add]`
-works: the list is stored, not run.
+`quote` is the opt-out. It keeps the list (or the next token)
+unevaluated, as data — so the elements stay as written (words become
+atoms) and can be run later with `do`:
 
-To evaluate a list at the point of use, three options:
+```
+[1 add 2] size                    => 1             # already evaluated: one element, 3
+quote [1 add 2] do                => 3             # held as data, then run
+```
 
-* `do [1 add 2]` — evaluates as a sub-program, leaves results on
-  the stack.
+Some positions are *implicitly* quoted — they take a list as code to
+run later, not a value to evaluate now: all branches of `if`, the
+body of `for`, the function passed to `each` / `fold`, and the body
+list of a `fn` definition. That is why `fn [[n:Integer] [Integer] [n
+add 1]]` stores `[n add 1]` as the function body instead of trying to
+run it at definition time. (A plain `def name [body]` is *not* one of
+these positions — it evaluates the list and binds the result, so a
+Forth-style splice uses the explicit `word` form: `def double word
+[dup add]`.)
+
+To evaluate a held list at the point of use, two options:
+
+* `do [1 add 2]` — runs it as a sub-program, leaving results on the
+  stack.
 * `[1 add 2] call` — splices the list onto the current stack
   (designed for callback patterns).
-* `quote foo` — opposite direction: stop the *next* token from
-  being interpreted, keep it as data.
 
 The duality — lists as both data and code — is the homoiconic core
 that lets AQL do metaprogramming with no separate AST type.

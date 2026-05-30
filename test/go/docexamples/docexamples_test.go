@@ -47,7 +47,7 @@ var knownMismatch = map[string]string{
 	// matches. Needs author decision: change the example to `cmp`, or
 	// reconsider `lt`'s type-literal overload.
 	"REFERENCE.md:274":   "Integer lt 0 builds a DepScalar refinement, not a boolean; doc shows true",
-	"EXPLANATION.md:260": "Integer lt 0 builds a DepScalar refinement, not a boolean; doc shows true",
+	"EXPLANATION.md:270": "Integer lt 0 builds a DepScalar refinement, not a boolean; doc shows true",
 
 	// math.log of e is 0.9999999998311266 (float), not the exact 1.0 the
 	// doc shows. Either round in the example or accept the float form.
@@ -58,25 +58,11 @@ var knownMismatch = map[string]string{
 	// call for the author (None type-literal vs none value).
 	"TUTORIAL.md:453": "absent optional renders as None type-literal; doc shows lowercase none",
 
-	// Core concept conflict: the docs state list literals are quotations
-	// (NOT evaluated) by default, but the engine auto-evaluates an
-	// unconsumed list — `[1 add 2]` => `[3]`, not `[1 add 2]`. The
-	// surrounding prose (and `def double [dup add]` claims) rest on the
-	// old model; this needs a section rewrite, not a one-line output fix.
-	"TUTORIAL.md:483":    "lists auto-evaluate; doc claims quotation-by-default ([1 add 2] => [3])",
-	"EXPLANATION.md:297": "lists auto-evaluate; doc claims quotation-by-default ([1 add 2] => [3])",
-
-	// `3 4 add 2 mul` yields 18 (forward collection regroups the
-	// operators), not the 14 the stack-machine walkthrough in the prose
-	// describes. The whole explanatory paragraph assumes 14; needs author
-	// rework of the example or the narrative.
-	"EXPLANATION.md:55": "forward collection: 3 4 add 2 mul => 18, doc narrative assumes 14",
-
 	// `set foo 99 end get foo` has no matching `set` signature (bare
 	// set/get need a context store). The example illustrates `end` but
 	// uses a non-working set/get form; author should pick an `end` demo
 	// that runs.
-	"EXPLANATION.md:146": "set/get need a context store; bare form has no signature",
+	"EXPLANATION.md:156": "set/get need a context store; bare form has no signature",
 }
 
 func docRoot() string { return filepath.Join("..", "..", "..") }

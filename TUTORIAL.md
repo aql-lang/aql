@@ -477,13 +477,16 @@ aql> var [[[x 2] [y 10]] x add y]               => 12
 
 ## 15. Evaluation with `do`, `call`, and `quote`
 
-Lists are quotations by default — `[1 add 2]` is *data*, not code:
+A list literal evaluates its contents by default and keeps the
+results *as a list* — `[1 add 2]` becomes `[3]`, not `3`:
 
 ```
-aql> [1 add 2]                       => [1 add 2]
+aql> [1 add 2]                       => [3]
 ```
 
-`do` evaluates a list as a sub-program:
+Use `quote` to hold a list as unevaluated data instead (see below).
+`do` runs a list as a sub-program, leaving its results on the stack
+rather than in a list:
 
 ```
 aql> do [1 add 2]                    => 3
