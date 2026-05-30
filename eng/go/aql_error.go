@@ -38,7 +38,11 @@ func (e *AqlError) Error() string {
 	b.WriteString("]: ")
 	b.WriteString(e.Detail)
 
-	// Line 2: --> <row>:<col>
+	// Line 2: --> <row>:<col>, or an explicit unknown marker. The parser
+	// stamps real positions on values; an error with no position is one the
+	// engine could not attribute to a source token. We say so rather than
+	// guess a location by text-searching the source (which is wrong whenever
+	// a word appears more than once).
 	if e.Row > 0 {
 		b.WriteString("\n  --> ")
 		b.WriteString(strconv.Itoa(e.Row))
@@ -48,6 +52,8 @@ func (e *AqlError) Error() string {
 		} else {
 			b.WriteString("1")
 		}
+	} else {
+		b.WriteString("\n  --> source position unknown")
 	}
 
 	// Source site extract
@@ -138,55 +144,24 @@ type SrcPos struct {
 	Src string // source text of the token
 }
 
-// FindWordInSource locates the last occurrence of a word in the source
-// text and returns 1-based row and col. Searching from the end is more
-// likely to find the call site rather than the definition site (e.g.
-// "def f ..." vs "f"). If the word is not found, returns (0, 0).
-//
-// Exported for use by the static type-checker when filling in Row/Col
-// on diagnostics whose Pos is unknown.
-func FindWordInSource(src, word string) (row int, col int) {
-	return findWordInSource(src, word)
-}
-
-func findWordInSource(src, word string) (row int, col int) {
-	if src == "" || word == "" {
-		return 0, 0
-	}
-	lines := strings.Split(src, "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		idx := strings.Index(lines[i], word)
-		if idx >= 0 {
-			return i + 1, idx + 1
-		}
-	}
-	return 0, 0
-}
-
-// MakeAqlError creates an AqlError with source location from the given
-// source text and word, searching for the word in the source to determine
-// the error position.
+// MakeAqlError creates an AqlError with no source position. The caller
+// has no source token to attribute the error to; the rendered error states
+// the position is unknown. Use MakeAqlErrorAt (or thread a Value's .Pos)
+// whenever the offending token is in hand.
 func MakeAqlError(code, detail, word, fullSource, hint string) *AqlError {
 	return makeAqlError(code, detail, word, fullSource, hint)
 }
 
-// makeAqlError creates an AqlError with source location from the given
-// source text and word, locating the word by text search.
+// makeAqlError creates an AqlError with no source position (Row 0).
 func makeAqlError(code, detail, word, fullSource, hint string) *AqlError {
 	return makeAqlErrorAt(code, detail, word, fullSource, hint, SrcPos{})
 }
 
-// makeAqlErrorAt creates an AqlError preferring an explicit source
-// position. When pos is known (Row > 0) it is used directly; otherwise it
-// falls back to findWordInSource — the last textual match of word, which
-// is best-effort and wrong when the word appears in several places. Prefer
-// passing a real pos (a Value's .Pos, populated by the parser) at any call
-// site that has the offending value in hand.
+// makeAqlErrorAt creates an AqlError at an explicit source position. When
+// pos is unknown (Row 0) the error carries no location and renders as
+// "source position unknown" — there is no text-search fallback, because a
+// guessed location is wrong whenever the word appears more than once.
 func makeAqlErrorAt(code, detail, word, fullSource, hint string, pos SrcPos) *AqlError {
-	row, col := pos.Row, pos.Col
-	if row == 0 {
-		row, col = findWordInSource(fullSource, word)
-	}
 	src := word
 	if pos.Src != "" {
 		src = pos.Src
@@ -194,8 +169,8 @@ func makeAqlErrorAt(code, detail, word, fullSource, hint string, pos SrcPos) *Aq
 	return &AqlError{
 		Code:       code,
 		Detail:     detail,
-		Row:        row,
-		Col:        col,
+		Row:        pos.Row,
+		Col:        pos.Col,
 		Src:        src,
 		Hint:       hint,
 		fullSource: fullSource,

@@ -193,16 +193,14 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 		stack[i] = v.Parent.Leaf()
 	}
 
-	// Fill in missing Row/Col on diagnostics by locating the Word
-	// in the source text. Best-effort — duplicates fall back to
-	// the last occurrence, which is usually the call site rather
-	// than the definition.
+	// Diagnostics carry the source position stamped by the parser onto
+	// the offending value (Row 0 means the engine could not attribute the
+	// diagnostic to a source token). We do not guess a location by
+	// text-searching the source — a guessed position is wrong whenever the
+	// word appears more than once.
 	diags := a.registry.Check.Diagnostics
 	var summary CheckSummary
 	for i := range diags {
-		if diags[i].Row == 0 && diags[i].Word != "" {
-			diags[i].Row, diags[i].Col = native.FindWordInSource(src, diags[i].Word)
-		}
 		switch diags[i].Severity {
 		case SeverityError:
 			summary.Errors++

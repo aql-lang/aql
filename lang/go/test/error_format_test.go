@@ -234,6 +234,18 @@ func TestErrorFormatReturnTypePointsAtCallSite(t *testing.T) {
 	}
 }
 
+func TestErrorFormatUnknownPositionSaysSo(t *testing.T) {
+	// An unmatched opening paren is a parser-side syntax error with no
+	// source token to attribute it to. Rather than guess a location by
+	// text-searching, the error explicitly states the position is unknown.
+	err := runWithSource(t, "x add (1 2")
+	ae := assertAqlError(t, err, "syntax_error")
+	if ae.Row != 0 {
+		t.Errorf("expected no position (Row 0), got %d", ae.Row)
+	}
+	assertErrorContains(t, err, "--> source position unknown")
+}
+
 // =====================================================================
 // Syntax errors
 // =====================================================================

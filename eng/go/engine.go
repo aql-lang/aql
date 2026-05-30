@@ -237,6 +237,27 @@ func stampResultPos(vals []Value, pos SrcPos) {
 	}
 }
 
+// stampErrPos attaches the currently-dispatched word's position to a
+// handler-produced AqlError that has none. A handler raises its error while
+// the engine is executing a specific word (at the pointer), so that word's
+// position is the genuine location of the failure — no text-search guess.
+// Errors that already carry a position, and non-AqlError errors, are left
+// untouched.
+func (e *Engine) stampErrPos(err error) error {
+	ae, ok := err.(*AqlError)
+	if !ok || ae.Row != 0 {
+		return err
+	}
+	pos := e.currentPos()
+	if pos.Row != 0 {
+		ae.Row, ae.Col = pos.Row, pos.Col
+		if pos.Src != "" {
+			ae.Src = pos.Src
+		}
+	}
+	return err
+}
+
 // returnCountError builds a detailed AqlError for wrong number of return values.
 func (e *Engine) returnCountError(funcName string, expected, got int, pos SrcPos) *AqlError {
 	detail := fmt.Sprintf("%s: expected %d return value(s), got %d", funcName, expected, got)
@@ -253,16 +274,27 @@ func (e *Engine) returnTypeError(funcName string, index int, expected *Type, got
 	return makeAqlErrorAt("type_error", detail, funcName, src, hint, pos)
 }
 
+// currentPos returns the source position of the value at the pointer — the
+// token currently being processed — or the unknown SrcPos when the pointer
+// is out of range. Engine-side error builders use it so an error is located
+// at the token that triggered it.
+func (e *Engine) currentPos() SrcPos {
+	if e.pointer >= 0 && e.pointer < len(e.stack) {
+		return e.stack[e.pointer].Pos
+	}
+	return SrcPos{}
+}
+
 // syntaxError builds a detailed AqlError for a syntax error.
 func (e *Engine) syntaxError(msg, token string) *AqlError {
 	src := e.effectiveSource()
-	return makeAqlError("syntax_error", msg, token, src, "")
+	return makeAqlErrorAt("syntax_error", msg, token, src, "", e.currentPos())
 }
 
 // runtimeError builds a detailed AqlError for a runtime error.
 func (e *Engine) runtimeError(code, detail, word, hint string) *AqlError {
 	src := e.effectiveSource()
-	return makeAqlError(code, detail, word, src, hint)
+	return makeAqlErrorAt(code, detail, word, src, hint, e.currentPos())
 }
 
 // traceSigStr formats a signature as "name(type, type) prec=N" for trace annotations.
@@ -1134,7 +1166,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		fullStack = e.resolvedStackBeforeFrom(base, sortedIndices)
 		results, err := match.Sig.Handler(match.Args, ctx, fullStack, e.registry)
 		if err != nil {
-			return err
+			return e.stampErrPos(err)
 		}
 		if e.recorder != nil {
 			e.recorder.OnCall(match.Name, n, len(results))
@@ -1148,7 +1180,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 
 	results, err := match.Sig.Handler(match.Args, ctx, nil, e.registry)
 	if err != nil {
-		return e.maybeAddFnShapeHint(err)
+		return e.stampErrPos(e.maybeAddFnShapeHint(err))
 	}
 	if e.recorder != nil {
 		e.recorder.OnCall(match.Name, n, len(results))
@@ -1428,7 +1460,9 @@ func (e *Engine) stepLiteral() error {
 		if !matches && fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx] &&
 			val.Parent.Equal(TWord) && TAtom.Matches(fwd.Sig.Args[nextIdx]) {
 			w, _ := AsWord(val)
-			e.stack[valIdx] = NewAtom(w.Name)
+			atom := NewAtom(w.Name)
+			atom.Pos = val.Pos // preserve source position across /q Word→Atom conversion
+			e.stack[valIdx] = atom
 			matches = true
 		}
 		if !matches {

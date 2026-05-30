@@ -39,10 +39,10 @@ type iexprGroup []any
 // opening token, captured by the val-rule before-close callback (see
 // grammar.go setupValRule). deSite unwraps it.
 //
-// Pos here is a pure diagnostic: an unknown (zero) SrcPos degrades to the
-// findWordInSource text search at error time, so the 0=unknown convention
-// is deliberate and is NOT a "No Zero-Value Overload" violation (see
-// eng/go/CLAUDE.md) — there is no decision that a zero Pos corrupts.
+// Pos here is a pure diagnostic: an unknown (zero) SrcPos renders as
+// "source position unknown" at error time rather than a guessed location,
+// so the 0=unknown convention is deliberate and is NOT a "No Zero-Value
+// Overload" violation (see eng/go/CLAUDE.md) — no decision reads a zero Pos.
 type sited struct {
 	Node any
 	Pos  eng.SrcPos
@@ -117,10 +117,11 @@ func Parse(src string) ([]eng.Value, error) {
 	}
 
 	// A single top-level scalar/paren/interp value arrives wrapped by the
-	// val-rule BC; unwrap it so the cases below see a bare jsonic node.
-	// (Root containers come from the list/map rule and are not sited; their
-	// elements carry positions individually.)
-	result, _ = deSite(result)
+	// val-rule BC; unwrap it so the cases below see a bare jsonic node, but
+	// keep its position to stamp the single produced value. (Root containers
+	// come from the list/map rule and are not sited; their elements carry
+	// positions individually.)
+	result, rootPos := deSite(result)
 
 	// With ListRef and MapRef enabled, jsonic returns ListRef/MapRef for
 	// all lists and maps. ListRef.Implicit and MapRef.Implicit distinguish
@@ -175,14 +176,16 @@ func Parse(src string) ([]eng.Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		return []eng.Value{iv}, nil
+		return []eng.Value{withPos(iv, rootPos)}, nil
 
 	default:
+		// Single top-level scalar/word: stamp the position the root deSite
+		// recovered (convertTopLevelValue sees a bare node, so it cannot).
 		v, err := convertTopLevelValue(val)
 		if err != nil {
 			return nil, err
 		}
-		return []eng.Value{v}, nil
+		return []eng.Value{withPos(v, rootPos)}, nil
 	}
 }
 
