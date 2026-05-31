@@ -2234,7 +2234,7 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 		sig := fnDef.Sigs[i]
 		barrier := sig.BarrierPos
 		if barrier == BarrierAllForward {
-			barrier = len(argTypes)
+			barrier = len(sig.Params)
 		}
 		compiled := Signature{
 			Params:        append([]FnParam(nil), sig.Params...),
@@ -2246,6 +2246,7 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 			compiled.Handler = buildFnBodyHandler(r, fnDef.Name, sig, fnDef)
 			compiled.ReturnsFn = buildFnBodyReturnsFn(r, fnDef.Name, sig, fnDef)
 		}
+		normalizeSig(&compiled)
 		out[i] = compiled
 	}
 	SortSignatures(out)

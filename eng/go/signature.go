@@ -11,22 +11,31 @@ const MaxArgs = 32
 // registry.
 type Handler func(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error)
 
-// Signature describes one way a function can be called.
-// Args lists the types the word needs, ordered deepest-first (Args[0] = deepest
-// on the stack, Args[last] = top of the stack for stack matching).
+// Signature describes one way a function can be called. Params lists the
+// per-position descriptors (name + type + pattern + optional), ordered
+// top-first (Params[0] = top of stack for stack matching).
 //
-// Args[0..BarrierPos-1] are forward-eligible — the engine collects them
+// Params[0..BarrierPos-1] are forward-eligible — the engine collects them
 // from the tokens following the word, then dispatches once all are
-// present. Args[BarrierPos..N-1] are matched from the stack in reverse.
+// present. Params[BarrierPos..N-1] are matched from the stack in reverse.
 type Signature struct {
 	// Params is the unified per-position descriptor (name + type +
-	// pattern + optional) that the function-model consolidation is
-	// converging Signature and FnSig onto. During the merge it is
-	// populated alongside Args at every construction site; readers are
-	// migrating to Params[i].Type via sigArgType. Once every reader is
-	// off Args, Args (and the Patterns map) is removed and Params is the
-	// single source of per-arg shape.
-	Params  []FnParam
+	// pattern + optional) — the single source of per-arg shape, shared
+	// with FnSig. The kernel reads ONLY Params, positionally via
+	// sigArgType / sigPattern; the arg count is TotalArgs (len(Params));
+	// types as a slice via ArgTypes().
+	Params []FnParam
+
+	// Args and Patterns are an EXPORTED CONSTRUCTOR CONVENIENCE for Go
+	// callers (tests, plugins, the NativeSig shim) that build a Signature
+	// positionally without param names. They are NOT read by the kernel:
+	// normalizeSig (called at the Register / match boundary) folds them
+	// into Params, after which Params is authoritative. Prefer Params in
+	// new code; Args/Patterns remain for ergonomic positional construction
+	// and back-compat with the documented public surface.
+	Args     []*Type
+	Patterns map[int]Value
+
 	Handler Handler
 
 	// FullStack, when true, causes the engine to pass the full resolved
@@ -34,11 +43,6 @@ type Signature struct {
 	// complete replacement for base..pointer. Use this for words like
 	// depth, pick, roll that need to inspect or manipulate the entire stack.
 	FullStack bool
-
-	// Patterns holds optional structural patterns for arguments (e.g. map
-	// literals in fn signatures). Key is arg index, value is the pattern.
-	// When set, the argument must unify with the pattern in addition to
-	// matching the type.
 
 	// QuoteArgs marks arg positions with the /q modifier ("implicit quote").
 	// /q is a FORWARD-ONLY language rule: it intervenes during forward arg
@@ -156,10 +160,13 @@ type CheckFullStackFunc func(args []Value, stack []Value, r *Registry) []Value
 type ReturnsFunc func(args []Value, r *Registry) []Value
 
 // TotalArgs returns the number of arguments. Backed by Params (the
-// unified per-position descriptor); Args is kept in lockstep at every
-// construction site during the merge. Falls back to len(Args) for
-// legacy/external callers that build a Signature with only Args set.
+// unified per-position descriptor. Falls back to len(Args) for a
+// Signature built positionally via the Args constructor-convenience
+// field that hasn't been normalized into Params yet.
 func (s *Signature) TotalArgs() int {
+	if len(s.Params) == 0 {
+		return len(s.Args)
+	}
 	return len(s.Params)
 }
 
@@ -170,11 +177,47 @@ func (s *Signature) TotalArgs() int {
 // be retired without a public-API break. Order is sig order (position 0
 // = top of stack).
 func (s *Signature) ArgTypes() []*Type {
+	if len(s.Params) == 0 && len(s.Args) > 0 {
+		return s.Args
+	}
 	out := make([]*Type, len(s.Params))
 	for i := range s.Params {
 		out[i] = s.Params[i].Type
 	}
 	return out
+}
+
+// normalizeSig makes Params authoritative for a Signature that may have
+// been built via the positional Args/Patterns constructor-convenience
+// fields. If Params is empty but Args is set, it derives Params from
+// Args+Patterns. It then refreshes the Args/Patterns mirrors from Params
+// so introspection that reads either view stays consistent. Idempotent.
+func normalizeSig(s *Signature) {
+	if len(s.Params) == 0 && len(s.Args) > 0 {
+		s.Params = make([]FnParam, len(s.Args))
+		for i, t := range s.Args {
+			s.Params[i] = FnParam{Type: t}
+			if s.Patterns != nil {
+				if pat, ok := s.Patterns[i]; ok {
+					p := pat
+					s.Params[i].Pattern = &p
+				}
+			}
+		}
+	}
+	// Refresh the exported mirrors from Params (the source of truth).
+	s.Args = make([]*Type, len(s.Params))
+	var patterns map[int]Value
+	for i, p := range s.Params {
+		s.Args[i] = p.Type
+		if p.Pattern != nil {
+			if patterns == nil {
+				patterns = make(map[int]Value)
+			}
+			patterns[i] = *p.Pattern
+		}
+	}
+	s.Patterns = patterns
 }
 
 // sigArgType returns the declared type at signature position i. It is the
@@ -184,6 +227,9 @@ func (s *Signature) ArgTypes() []*Type {
 // a fallback for legacy/external callers that built a Signature with only
 // Args set. Callers must ensure 0 <= i < TotalArgs().
 func sigArgType(s *Signature, i int) *Type {
+	if len(s.Params) == 0 && len(s.Args) > 0 {
+		return s.Args[i]
+	}
 	return s.Params[i].Type
 }
 
@@ -195,6 +241,13 @@ func sigArgType(s *Signature, i int) *Type {
 func sigPattern(s *Signature, i int) (Value, bool) {
 	if i < len(s.Params) && s.Params[i].Pattern != nil {
 		return *s.Params[i].Pattern, true
+	}
+	// Constructor-convenience fallback: a Signature built with only the
+	// positional Args/Patterns fields (tests, plugins) hasn't been
+	// normalized into Params yet.
+	if len(s.Params) == 0 && s.Patterns != nil {
+		p, ok := s.Patterns[i]
+		return p, ok
 	}
 	return Value{}, false
 }
@@ -243,27 +296,29 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 		// Check structural patterns (e.g. map literals in fn signatures).
 		// Maps use open (subset) matching: the pattern's key-value pairs
 		// must be present in the argument, but extra keys are allowed.
-		if sig.Patterns != nil {
-			patternOk := true
-			for idx, pattern := range sig.Patterns {
-				if pattern.Parent.Equal(TMap) && ordered[idx].Parent.Equal(TMap) &&
-					pattern.Data != nil && ordered[idx].Data != nil &&
-					!IsOptionsType(pattern) &&
-					!IsRecordType(ordered[idx]) && !IsTypedMap(ordered[idx]) && !IsOptionsType(ordered[idx]) {
-					if !OpenUnifyMap(pattern, ordered[idx]) {
-						patternOk = false
-						break
-					}
-				} else {
-					if _, uOk := Unify(ordered[idx], pattern); !uOk {
-						patternOk = false
-						break
-					}
-				}
-			}
-			if !patternOk {
+		patternOk := true
+		for idx := 0; idx < sig.TotalArgs(); idx++ {
+			pattern, pok := sigPattern(sig, idx)
+			if !pok {
 				continue
 			}
+			if pattern.Parent.Equal(TMap) && ordered[idx].Parent.Equal(TMap) &&
+				pattern.Data != nil && ordered[idx].Data != nil &&
+				!IsOptionsType(pattern) &&
+				!IsRecordType(ordered[idx]) && !IsTypedMap(ordered[idx]) && !IsOptionsType(ordered[idx]) {
+				if !OpenUnifyMap(pattern, ordered[idx]) {
+					patternOk = false
+					break
+				}
+			} else {
+				if _, uOk := Unify(ordered[idx], pattern); !uOk {
+					patternOk = false
+					break
+				}
+			}
+		}
+		if !patternOk {
+			continue
 		}
 
 		args := make([]Value, n)
@@ -275,7 +330,7 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 }
 
 // FlexibleMatch checks whether values match the given signature positionally.
-// Arguments are never permuted — values[i] must match sig.Args[i].
+// Arguments are never permuted — values[i] must match Params[i].
 // Returns the values slice unchanged if matched, or false.
 func FlexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
 	n := sig.TotalArgs()

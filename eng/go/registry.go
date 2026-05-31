@@ -324,8 +324,12 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 // method were retired in the BarrierPos cleanup).
 func (r *Registry) upsertFnDef(name string, sigs ...Signature) {
 	for i := range sigs {
+		// Normalize the positional Args/Patterns constructor-convenience
+		// fields into Params so every stored sig is Params-authoritative
+		// for the kernel's matchers.
+		normalizeSig(&sigs[i])
 		if sigs[i].BarrierPos == BarrierAllForward {
-			sigs[i].BarrierPos = len(sigs[i].Args)
+			sigs[i].BarrierPos = sigs[i].TotalArgs()
 		}
 	}
 	// If the top of the stack is already a FnDefInfo, update it in place.

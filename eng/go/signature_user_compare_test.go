@@ -32,8 +32,8 @@ func TestCompareSignaturesUserComparerOnPatterns(t *testing.T) {
 	}
 	SortSignatures(sigs)
 
-	got0, _ := AsInteger(sigs[0].Patterns[0])
-	got1, _ := AsInteger(sigs[1].Patterns[0])
+	got0, _ := AsInteger(*sigs[0].Params[0].Pattern)
+	got1, _ := AsInteger(*sigs[1].Params[0].Pattern)
 	if got0 != 5 || got1 != 10 {
 		t.Errorf("inverted Comparer not consulted: got [%d, %d], want [5, 10]", got0, got1)
 	}
@@ -44,14 +44,15 @@ func TestCompareSignaturesUserComparerOnPatterns(t *testing.T) {
 // Number Comparer in play, the larger Integer pattern wins the
 // reversed sort.
 func TestCompareSignaturesDefaultComparerOnPatterns(t *testing.T) {
+	pat5, pat10 := NewInteger(5), NewInteger(10)
 	sigs := []Signature{
-		{Params: []FnParam{{Type: TInteger, Pattern: ptrVal(NewInteger(5))}}, BarrierPos: -1},
-		{Params: []FnParam{{Type: TInteger, Pattern: ptrVal(NewInteger(10))}}, BarrierPos: -1},
+		{Params: []FnParam{{Type: TInteger, Pattern: &pat5}}, BarrierPos: -1},
+		{Params: []FnParam{{Type: TInteger, Pattern: &pat10}}, BarrierPos: -1},
 	}
 	SortSignatures(sigs)
 
-	got0, _ := AsInteger(sigs[0].Patterns[0])
-	got1, _ := AsInteger(sigs[1].Patterns[0])
+	got0, _ := AsInteger(*sigs[0].Params[0].Pattern)
+	got1, _ := AsInteger(*sigs[1].Params[0].Pattern)
 	if got0 != 10 || got1 != 5 {
 		t.Errorf("default Number Comparer didn't drive sort: got [%d, %d], want [10, 5]", got0, got1)
 	}
