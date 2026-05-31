@@ -77,6 +77,7 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 					// shape (no 0-arg sig, a plain Function, any other binding)
 					// is an unmatched call returning the same signature error,
 					// so that return is hoisted out of the branches.
+					hasForwardSig := false
 					if _, ok := top.Data.(FnDefInfo); ok {
 						if fn := r.Lookup(name); fn != nil {
 							for i := range fn.Signatures {
@@ -84,8 +85,22 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 								if len(sig.Args) == 0 && sig.Handler != nil && !sig.Fallback {
 									return sig.Handler(nil, nil, nil, r)
 								}
+								if len(sig.Args) > 0 {
+									hasForwardSig = true
+								}
 							}
 						}
+					}
+					// A fn that takes arguments reached its 0-arg fallback,
+					// which means forward collection couldn't gather them —
+					// almost always because the next word (another call, a
+					// builtin) was hit first, e.g. `inc inc 5` or `f a g b`.
+					// Point at the fixes rather than leaving a bare error.
+					if hasForwardSig {
+						return nil, r.AqlErrorHint("signature_error",
+							"no matching signature for "+name, name,
+							"forward args for "+name+" may have run into the next word; "+
+								"group the call with parens — ("+name+" …) — or end it with `end` or `;`")
 					}
 					return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
 				}, BarrierPos: -1,

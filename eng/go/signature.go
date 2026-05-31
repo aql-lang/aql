@@ -262,9 +262,20 @@ func sigTypeMatches(v Value, t *Type) bool {
 	if v.Is(t) {
 		return true
 	}
-	// Options values have Parent=TMap but should match TOptions signatures.
-	if IsOptionsType(v) && t.Equal(TOptions) {
-		return true
+	// Options is structurally a keyword-args map. A parameter typed
+	// `Options` (a bare `opts:Options` annotation → TOptions slot)
+	// accepts both an Options-tagged value AND a plain concrete map —
+	// the latter is how callers actually pass options (`f {a:1}`).
+	// Without this, every make-style fn is forced to declare `Map`
+	// instead of the more descriptive `Options`. A bare `Map` type
+	// literal (Data==nil) is excluded; only a concrete map matches.
+	if t.Equal(TOptions) {
+		if IsOptionsType(v) {
+			return true
+		}
+		if v.Parent.Equal(TMap) && IsConcrete(v) {
+			return true
+		}
 	}
 	return false
 }

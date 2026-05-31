@@ -472,6 +472,16 @@ func importSingleRenameHandler(args []Value, _ map[string]Value, _ []Value, r *R
 
 func importFileHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	path, _ := args[0].AsConcreteString()
+	// In check mode the path string literal has been stripped to a
+	// carrier (StripToCarriers), so `path` is empty. We can't read,
+	// parse, or analyse the target file without it — but the importing
+	// file itself is valid, so a hard error here would block `aql check`
+	// on every file that imports a sibling. Treat the import as opaque:
+	// return a Module carrier and let analysis continue (imported names
+	// resolve to Any, which is the conservative check-mode default).
+	if path == "" && r.Check.IsActive() {
+		return []Value{NewCarrier(TModule)}, nil
+	}
 	if isNativeModImport(path) {
 		return nil, resolveNativeMod(r, path)
 	}
@@ -500,6 +510,12 @@ func importFileHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 
 func importFileRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	path, _ := args[1].AsConcreteString()
+	// Check mode: the path literal was stripped to a carrier. Skip the
+	// import gracefully so `aql check` doesn't hard-fail (see
+	// importFileHandler for the full rationale).
+	if path == "" && r.Check.IsActive() {
+		return nil, nil
+	}
 	if !isFilePath(path) {
 		resolved, err := resolveBareModule(r, path)
 		if err != nil {
