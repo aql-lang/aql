@@ -438,6 +438,30 @@ make Counter {} .count                => error   # parses as make Counter ({}.co
 Binding to `c` first (as above) sidesteps this; otherwise wrap the
 construct. See [Reference: Maps and access](REFERENCE.md#maps-and-access).
 
+### Nested object fields need an explicit constructor default
+
+A field whose type is another object type must default to a **constructed
+instance**, not the bare type literal. Writing `field: NestedType` stores
+the *type* `NestedType` as the field value — `inst.field` is then the type
+literal, not a usable instance. Construct the default with `(make
+NestedType {})`:
+
+<!-- aql-test: skip -->
+```
+def Bits (refine Object {})
+def Foo  (refine Object {bits: (make Bits {})})   # construct the default
+
+def inst (make Foo {})
+inst.bits 1 "0" set                               # mutate the nested object
+inst.bits                             => Object/Bits{0:1}
+```
+
+The `field: NestedType` form looks reasonable (it reads like a type
+declaration) but only names the type; `inst.bits` is then the bare type
+literal (`object<Object/Bits>{}`), not a usable instance. Reach for
+`(make NestedType {})` whenever a field should default to a fresh nested
+object.
+
 ### Methods are free functions over the instance
 
 AQL objects hold **fields, not methods**: the field map has no method
@@ -526,6 +550,18 @@ instead — `each` does pass the element to the body:
 iota 5 each [dup mul]         => [0 1 4 9 16]
 ```
 
+For a **side-effecting loop that collects nothing** — mutating an object,
+accumulating into state — use `do-each`. Unlike `each`, its body may leave
+the stack empty (no throwaway sentinel needed), and it produces no result:
+
+<!-- aql-test: skip -->
+```
+def Box (refine Object {sum: 0})
+def b (make Box {})
+[1 2 3] do-each [var [[x] b (b.sum x add) "sum" set]]
+b.sum                         => 6
+```
+
 
 ## Check types and convert values
 
@@ -607,6 +643,25 @@ forward collection from grabbing the next token as another path —
 without it, `"aql:math" import "foo" print` would try to import a
 module named `"foo"`.
 
+The string-hash and char-code words live in `aql:bin`, handy for
+building bloom filters and other sketches:
+
+```
+"aql:bin" import end
+"A" bin.ord                           => 65
+65 bin.chr                            => 'A'
+"hello" bin.fnv32                     => 1335831723   # 32-bit FNV-1a
+"hello" bin.fnv64                     # 64-bit FNV-1a, non-negative
+```
+
+### One file, two modes: `export` at the top level
+
+`export "Name" {...}` collects a namespace when a file is **imported**.
+At the **top level** — running the file directly (`aql foo.aql`) or in
+the REPL — `export` is a no-op that simply discards its arguments. So a
+single file can both run standalone and export when imported: put the
+`export` last, after whatever standalone code the file runs.
+
 
 ## Build, install, and publish a module
 
@@ -660,6 +715,75 @@ linear-algebra operations under the `matrix.` namespace.
 
 Decision tables compile to a single dispatch, type-checked against
 the input record. See the module source for the full API.
+
+
+## Write property tests
+
+The `aql:test` module includes a property-based tester. A *property* is a
+predicate that should hold for every generated input; the framework draws
+random inputs, runs the property against each, and reports the first
+failing case.
+
+<!-- aql-test: skip -->
+```
+"aql:test" import end
+
+# test.check-prop  name  [gen]  [property]  runs  seed  max-shrinks
+test.check-prop "non-negative"
+  [r.int 0 100]                       # gen: leave ONE value on the stack
+  [0 gte]                             # property: takes it, leaves a Boolean
+  50 1 0
+end
+```
+
+The two bodies follow a fixed convention:
+
+- **gen body** must leave **exactly one** value on the stack — the
+  generated input. It may use the per-iteration random source bound as
+  `r`: `r.int lo hi`, `r.float lo hi`, `r.bool`, `r.string alphabet len`,
+  `r.one-of [a b c]`.
+- **property body** receives that value on the stack (and via `args.0`)
+  and must leave a **Boolean**. `false` — or an error — in any iteration
+  is a failure.
+
+For a **compound input** (e.g. a pair of strings), don't leave two values
+on the stack — the gen body must produce one. Pack them with `r.list-of`
+(a fixed-length list) or `r.map-from` (a map), then destructure in the
+property body:
+
+<!-- aql-test: skip -->
+```
+"aql:test" import end
+test.check-prop "pair-of-strings"
+  [r.list-of [r.string "abc" 6] 2]    # ONE List of two strings
+  [var [[pair]
+    def a (pair.0)                    # destructure the compound input
+    def b (pair.1)
+    (pair size) 2 eq                  # property over the pair
+  ]]
+  20 1 0
+end
+```
+
+Report results with `test.report` (one readable line per property)
+rather than the verbose `test.results` table, and park a
+work-in-progress property with `test.skip` (a drop-in for
+`test.check-prop` that records it as skipped without running it):
+
+<!-- aql-test: skip -->
+```
+"aql:test" import end
+test.check-prop "ready"   [r.int 0 9] [0 gte] 10 1 0 end
+test.skip       "flaky"   [r.int 0 9] [false] 10 1 0 end   # parked
+test.report end print
+#   pass: ready
+#   skip: flaky
+# 1 passed, 0 failed, 1 skipped
+test.fail-count end print             => 0
+```
+
+A property body may `import` a native module (e.g. `"aql:math" import`)
+and use it across every run.
 
 
 ## Store secrets in the vault
