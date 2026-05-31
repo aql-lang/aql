@@ -336,6 +336,112 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo) 
 	}
 }
 
+// buildFnBodyReturnsFn produces the check-mode ReturnsFn for one AQL fn
+// signature. In static-check mode the engine skips the runtime handler
+// and calls this with carrier-typed args; it analyses the body via
+// AnalyseFnBody (so body diagnostics propagate) and returns the carrier
+// result — declared return types when present, else the analyser's
+// residual top-of-stack carrier(s). It also performs record-shape
+// checking for pattern params.
+//
+// Anonymous lambdas (afn / =>) declare Returns=[Any] as a placeholder;
+// for them the declared-returns fast path is dropped so the analyser's
+// inferred residual wins (this is what makes `([n:Integer] => [n add 1])`
+// infer Integer rather than Any in check mode).
+//
+// Extracted verbatim from InstallFnDef so the same return-inference can
+// be shared with the Function-value dispatch path.
+func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) ReturnsFunc {
+	paramNames := make([]string, len(s.Params))
+	paramPatterns := make([]*Value, len(s.Params))
+	for i, p := range s.Params {
+		paramNames[i] = p.Name
+		paramPatterns[i] = p.Pattern
+	}
+	declaredReturns := append([]*Type(nil), s.Returns...)
+	if fnDef.Anonymous {
+		declaredReturns = nil
+	}
+	bodyCopy := append([]Value(nil), s.Body...)
+	nameCopy := name
+	capturesCopy := fnDef.Captured
+	return func(args []Value, _ *Registry) []Value {
+		// Pattern / record-shape check: for each declared
+		// record-typed param, verify the arg map carries each
+		// declared field key. Skip calls whose arg is empty or
+		// whose key set doesn't overlap the pattern at all
+		// (that pattern is typically the one used during fn
+		// body analysis, not a real user call).
+		for i, pat := range paramPatterns {
+			if pat == nil || i >= len(args) {
+				continue
+			}
+			val := args[i]
+			if !pat.Parent.Equal(TMap) || !val.Parent.Equal(TMap) ||
+				!IsConcrete(*pat) || !IsConcrete(val) {
+				continue
+			}
+			pMap, _ := AsMap(*pat)
+			vMap, _ := AsMap(val)
+			if pMap == nil || vMap == nil || vMap.Len() == 0 {
+				continue
+			}
+			// Overlap gate: only emit if val's keys intersect
+			// the pattern at all. This avoids false positives
+			// when analysing with synthetic/default arg maps.
+			overlap := 0
+			for _, k := range pMap.Keys() {
+				if _, ok := vMap.Get(k); ok {
+					overlap++
+				}
+			}
+			if overlap == 0 {
+				continue
+			}
+			for _, key := range pMap.Keys() {
+				pv, _ := pMap.Get(key)
+				av, hasKey := vMap.Get(key)
+				if !hasKey {
+					r.Check.AddDiagnostic(CheckDiagnostic{
+						Code:     "record_shape_mismatch",
+						Detail:   "argument to " + nameCopy + " missing field: " + key,
+						Word:     nameCopy,
+						Severity: SeverityError,
+					})
+					continue
+				}
+				if IsBareTypeNode(pv) && !av.Parent.Matches(pv.Parent) && !av.Parent.Equal(TAny) {
+					r.Check.AddDiagnostic(CheckDiagnostic{
+						Code:     "record_shape_mismatch",
+						Detail:   "argument to " + nameCopy + ": field " + key + " expected " + pv.Parent.String() + ", got " + av.Parent.String(),
+						Word:     nameCopy,
+						Severity: SeverityError,
+					})
+				}
+			}
+		}
+		// Always analyse the body so diagnostics emitted by stepWord
+		// (undefined_word, no_signature, …) inside the body propagate
+		// up to the parent registry. When the fn declares an explicit
+		// return type, we use that for the carrier result and drop
+		// the analyser's residual stack — the analyser is run purely
+		// for its side-effecting diagnostic collection. Memoisation
+		// inside AnalyseFnBody keeps recursive / repeated calls cheap.
+		stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args, capturesCopy)
+		if len(declaredReturns) > 0 {
+			out := make([]Value, len(declaredReturns))
+			for i, t := range declaredReturns {
+				out[i] = NewCarrier(t)
+			}
+			return out
+		}
+		if len(stk) == 0 {
+			return []Value{NewCarrier(TAny)}
+		}
+		return stk
+	}
+}
+
 // InstallFnDef registers typed signatures for a function definition.
 // For each signature, it creates a handler that binds named parameters
 // via InstallDef, returns body tokens, and appends undef cleanup.
@@ -358,102 +464,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 		s := sig           // capture for closure
 		fnDefCopy := fnDef // capture for closure (we need Captured at call time)
 		handler := buildFnBodyHandler(r, name, s, fnDefCopy)
-		// Static type-check: analyse the body once per arg-type
-		// tuple via AnalyseFnBody. If declared return types are
-		// present, use them verbatim (no analysis needed); otherwise
-		// use the residual top-of-stack carrier(s).
-		paramNames := make([]string, len(s.Params))
-		paramPatterns := make([]*Value, len(s.Params))
-		for i, p := range s.Params {
-			paramNames[i] = p.Name
-			paramPatterns[i] = p.Pattern
-		}
-		declaredReturns := append([]*Type(nil), s.Returns...)
-		// Anonymous lambdas (from `afn` / `=>`) declare Returns=[Any]
-		// as a placeholder. In check mode we want the analyser's
-		// residual carrier(s) to win, so drop the declared-returns
-		// fast path for anonymous installations.
-		if fnDef.Anonymous {
-			declaredReturns = nil
-		}
-		bodyCopy := append([]Value(nil), s.Body...)
-		nameCopy := name
-		capturesCopy := fnDef.Captured
-		returnsFn := func(args []Value, _ *Registry) []Value {
-			// Pattern / record-shape check: for each declared
-			// record-typed param, verify the arg map carries each
-			// declared field key. Skip calls whose arg is empty or
-			// whose key set doesn't overlap the pattern at all
-			// (that pattern is typically the one used during fn
-			// body analysis, not a real user call).
-			for i, pat := range paramPatterns {
-				if pat == nil || i >= len(args) {
-					continue
-				}
-				val := args[i]
-				if !pat.Parent.Equal(TMap) || !val.Parent.Equal(TMap) ||
-					!IsConcrete(*pat) || !IsConcrete(val) {
-					continue
-				}
-				pMap, _ := AsMap(*pat)
-				vMap, _ := AsMap(val)
-				if pMap == nil || vMap == nil || vMap.Len() == 0 {
-					continue
-				}
-				// Overlap gate: only emit if val's keys intersect
-				// the pattern at all. This avoids false positives
-				// when analysing with synthetic/default arg maps.
-				overlap := 0
-				for _, k := range pMap.Keys() {
-					if _, ok := vMap.Get(k); ok {
-						overlap++
-					}
-				}
-				if overlap == 0 {
-					continue
-				}
-				for _, key := range pMap.Keys() {
-					pv, _ := pMap.Get(key)
-					av, hasKey := vMap.Get(key)
-					if !hasKey {
-						r.Check.AddDiagnostic(CheckDiagnostic{
-							Code:     "record_shape_mismatch",
-							Detail:   "argument to " + nameCopy + " missing field: " + key,
-							Word:     nameCopy,
-							Severity: SeverityError,
-						})
-						continue
-					}
-					if IsBareTypeNode(pv) && !av.Parent.Matches(pv.Parent) && !av.Parent.Equal(TAny) {
-						r.Check.AddDiagnostic(CheckDiagnostic{
-							Code:     "record_shape_mismatch",
-							Detail:   "argument to " + nameCopy + ": field " + key + " expected " + pv.Parent.String() + ", got " + av.Parent.String(),
-							Word:     nameCopy,
-							Severity: SeverityError,
-						})
-					}
-				}
-			}
-			// Always analyse the body so diagnostics emitted by stepWord
-			// (undefined_word, no_signature, …) inside the body propagate
-			// up to the parent registry. When the fn declares an explicit
-			// return type, we use that for the carrier result and drop
-			// the analyser's residual stack — the analyser is run purely
-			// for its side-effecting diagnostic collection. Memoisation
-			// inside AnalyseFnBody keeps recursive / repeated calls cheap.
-			stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args, capturesCopy)
-			if len(declaredReturns) > 0 {
-				out := make([]Value, len(declaredReturns))
-				for i, t := range declaredReturns {
-					out[i] = NewCarrier(t)
-				}
-				return out
-			}
-			if len(stk) == 0 {
-				return []Value{NewCarrier(TAny)}
-			}
-			return stk
-		}
+		returnsFn := buildFnBodyReturnsFn(r, name, s, fnDefCopy)
 
 		// FnSig.BarrierPos uses the same sentinel as NativeSig
 		// (BarrierAllForward = -1 → default all-forward; 0 =
