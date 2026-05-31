@@ -106,3 +106,74 @@ RULES:
    (zzprobe_test.go) got committed that way and broke the build. Check
    `git status --porcelain` first; remove zz* probes before adding.
 6. cwd persists across Bash calls; `cd /home/user/aql && …` for root ops.
+
+---
+## STAGE 1 — IN PROGRESS
+
+### 1a DONE (committed, pushed, all gates green)
+Extracted `compileFnDef(fnDef) *FnDefInfo` in eng/go/engine.go (after
+fnSigsToSignatures, ~line 2240). Wraps fnSigsToSignatures+calcMaxForwardArgs;
+routed the inline construction at execFnDefLiteral (was engine.go:1827-1835)
+through it. Byte-identical shell (Name/Signatures/MaxForwardArgs/Registry only).
+Verified: eng+lang vet+test=0, both equivalence goldens byte-identical.
+
+### 1b SPIKE — the crux (NOT yet started; highest-risk change in the plan)
+GOAL: attach a Handler to AQL-bodied compiled Signatures so the
+`sig.Handler==nil` fallbacks in execFnDefLiteral (engine.go:1882-1883,
+1923-1924) and execFnDefSigStackMatch (2054) become dead, unifying on
+execMatch.
+
+KEY INSIGHT (makes it tractable): InstallFnDef's handler (core_helpers.go:
+246-339) does NOT return final results — it returns the body as a
+PAREN-WRAPPED TOKEN SEQUENCE (`( argN..arg0 body __pa undef.. returncheck )`)
+which execMatch's spliceMatchResults splices back onto the stack to be
+RE-STEPPED inline. So a result-returning Handler CAN reproduce execFnDefSig's
+inline-splice semantics exactly — no sub-engine, no behavior change — by
+returning the same token sequence. This means anonymous-fn (afn/=>) dispatch
+can move from execFnDefSigStackMatch→execFnDefSig onto the SAME handler shape
+InstallFnDef already uses for named fns.
+
+THE SUBTLETIES (must each be handled / tested):
+1. Registry: InstallFnDef's handler CLOSES OVER `r` (install-time registry)
+   and ignores the passed-in registry arg. A handler attached to a Function
+   VALUE dispatched via execFnDefLiteral must instead use the registry the
+   engine passes at call time (e.registry / the captured fnDef.Registry),
+   because the same Function value can be invoked in different registries.
+   => the extracted builder must take the registry from the handler arg, not
+   a closure, OR compileFnDef must bind the right registry per dispatch.
+2. Check mode: anonymous fns currently route to spliceAnonCheckResult
+   (engine.go:2062,2110) which runs AnalyseFnBody. InstallFnDef instead
+   supplies a ReturnsFn (core_helpers.go:361-435) consumed by carrierResults
+   in execMatch's check-mode intercept. The attached handler path must carry
+   an equivalent ReturnsFn so check-mode return inference is preserved for
+   afn values (the one irreducible asymmetry).
+3. Module closures (capturedReg != nil, execFnDefSig 2293-2334) run via
+   CallAQL in the sub-registry and return FINAL results (not tokens). The
+   trivial-delegation short-circuit (1958-1976) already uses execMatch.
+   Non-trivial module-preamble AQL fns (decision.cond) need the sub-registry
+   CallAQL path — their attached handler must close over fnDef.Registry and
+   return CallAQL's final results, NOT inline tokens.
+4. DefCleanup: InstallFnDef's handler emits a NewDefCleanup marker
+   (core_helpers.go:315-318); execFnDefSig does NOT (it relies on __pa +
+   undef tail only). Reconcile — the cleanup-marker difference is exactly
+   the kind of divergence that causes def-leakage regressions (DX issue 2).
+
+RECOMMENDED 1b SEQUENCING (each its own gated commit):
+  1b-i  Extract InstallFnDef's handler closure into a named builder
+        `buildFnBodyHandler(r, name, s, fnDef) Handler` + the returnsFn into
+        `buildFnBodyReturnsFn(...)`; InstallFnDef calls them. PURE REFACTOR,
+        verify via exit codes + goldens.
+  1b-ii Make compileFnDef attach buildFnBodyHandler + buildFnBodyReturnsFn to
+        each Signature (registry sourced from the handler arg). Anonymous-fn
+        Function values now have non-nil Handler.
+  1b-iii In execFnDefLiteral, let the `sig.Handler != nil` path own anonymous
+        fns (drop the `&& !fnDef.Anonymous` guard at 1882; drop the 1923
+        Handler==nil branch). Keep check-mode routing via the ReturnsFn.
+        execFnDefSigStackMatch becomes reachable only as dead fallback.
+  Gate each against eng+lang test + BOTH equivalence goldens. The goldens are
+  the proof: if afn/closure/if-codebody behavior shifts, they fail.
+
+RISK: this is the engine's core dispatch. If 1b-ii/iii destabilizes, revert
+to the 1a baseline (commit is clean) and reconsider the Handler-sentinel
+fallback (plan's stated alternative: a sentinel the executor recognizes to
+splice inline — one localized branch in execMatch, still one dispatch entry).
