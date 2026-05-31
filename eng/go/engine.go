@@ -1825,7 +1825,11 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		fn = reg.Lookup(fnDef.Name)
 	}
 	if fn == nil && len(fnDef.Sigs) > 0 {
-		fn = compileFnDef(fnDef)
+		reg := fnDef.Registry
+		if reg == nil {
+			reg = e.registry
+		}
+		fn = compileFnDef(reg, fnDef)
 	}
 	if fn == nil {
 		e.pointer++
@@ -2240,17 +2244,65 @@ func fnSigsToSignatures(sigs []FnSig) []Signature {
 //
 // This centralisation is the seam the function-model consolidation builds
 // on: every site that needs a dispatchable FnDefInfo from raw Sigs routes
-// through here rather than constructing the struct inline. Behaviour is
-// byte-identical to the previous inline construction at execFnDefLiteral:
-// the returned shell carries ONLY Name/Signatures/MaxForwardArgs/Registry
-// (Sigs/Anonymous/Captured are intentionally not copied — the dispatch
-// path reads those off the original fnDef, not this compiled shell).
-func compileFnDef(fnDef FnDefInfo) *FnDefInfo {
-	synth := fnSigsToSignatures(fnDef.Sigs)
+// through here rather than constructing the struct inline.
+//
+// Each compiled Signature is given a Go Handler (the shared AQL body-
+// runner, buildFnBodyHandler) and a check-mode ReturnsFn
+// (buildFnBodyReturnsFn), so a Function value dispatches through the
+// uniform execMatch path exactly like a registered native — no
+// handler-less fallback. Handlers are attached per-sig BEFORE
+// SortSignatures so each handler stays paired with its own signature
+// (the sort reorders sigs, so attaching by post-sort index would
+// mis-pair them).
+//
+// r is the registry the body runs in: captures are already snapshotted
+// into fnDef.Captured, and free body words resolve dynamically against r.
+//
+// Handlers are attached ONLY for anonymous fns (afn / `=>` lambdas and
+// the closures they return). A non-anonymous bare FnDef value —
+// notably a predicate-type FnDef sitting on the stack — must stay inert
+// data (no auto-dispatch): leaving its Handler nil routes it through the
+// legacy stack-match fall-through in execFnDefLiteral, which is the
+// behaviour `def Bbd …; Bbd "c"` relies on (the FnDef and "c" remain on
+// the stack rather than the predicate firing). See execFnDefLiteral's
+// "predicate-type FnDefs landing bare are intentionally inert" guard.
+func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
+	out := make([]Signature, len(fnDef.Sigs))
+	for i := range fnDef.Sigs {
+		sig := fnDef.Sigs[i]
+		argTypes := make([]*Type, len(sig.Params))
+		var patterns map[int]Value
+		for j, p := range sig.Params {
+			argTypes[j] = p.Type
+			if p.Pattern != nil {
+				if patterns == nil {
+					patterns = make(map[int]Value)
+				}
+				patterns[j] = *p.Pattern
+			}
+		}
+		barrier := sig.BarrierPos
+		if barrier == BarrierAllForward {
+			barrier = len(argTypes)
+		}
+		compiled := Signature{
+			Args:          argTypes,
+			Patterns:      patterns,
+			BarrierPos:    barrier,
+			NoEvalArgs:    sig.NoEvalArgs,
+			NoEvalMapArgs: sig.NoEvalMapArgs,
+		}
+		if fnDef.Anonymous {
+			compiled.Handler = buildFnBodyHandler(r, fnDef.Name, sig, fnDef)
+			compiled.ReturnsFn = buildFnBodyReturnsFn(r, fnDef.Name, sig, fnDef)
+		}
+		out[i] = compiled
+	}
+	SortSignatures(out)
 	return &FnDefInfo{
 		Name:           fnDef.Name,
-		Signatures:     synth,
-		MaxForwardArgs: calcMaxForwardArgs(synth),
+		Signatures:     out,
+		MaxForwardArgs: calcMaxForwardArgs(out),
 		Registry:       fnDef.Registry,
 	}
 }
