@@ -367,3 +367,29 @@ repoint remaining ~15 internal eng .Args/.Patterns reads to the helpers,
 then drop the fields, then merge Signature<->FnSig + collapse FnDefInfo.
 Do each as: edits -> sentinel-gated build/vet/test/lint/goldens -> commit
 -> push, never batched.
+
+---
+## COMPLETION — all three unifications done, all modules green
+
+Verified clean-cache from repo root: `make vet`=0, `make test`=0,
+`make lint`=0 (all 7 modules); both equivalence goldens byte-identical.
+
+THE GOAL (one uniform function operation) — DELIVERED:
+1. ONE dispatch path — named + anonymous fns (afn/=>/closures) both
+   dispatch via execMatch + handler. (Stage 1b)
+2. ONE per-arg representation — Params []FnParam is the single source of
+   per-position shape; readers go through TotalArgs/sigArgType/sigPattern/
+   ArgTypes(). Signature.Args/Patterns are exported constructor-convenience
+   mirrors normalized into Params at the boundary (normalizeSig). (Stage 3a-3d)
+3. ONE signature struct — `type Signature = FnSig`; the former
+   Signature-only fields folded into FnSig. Body vs Handler is the sole
+   Go-vs-AQL distinction in the one type. (Stage 3e)
+NativeSig stays as the Go authoring shim (lowers into FnSig); 348 literals
+untouched. Design doc: lang/doc/design/FUNCTION-MODEL.0.md.
+
+DEFERRED (documented in the design doc — a redesign, not a finish):
+FnDefInfo.Sigs (authored: Body+names, construction-time) vs .Signatures
+(compiled: sorted, handlers, fallback sig) are now the same element type
+but remain two lifecycle artifacts. Collapsing needs capture-timing
+changes + Body-in-compiled-sigs + sort/fallback reconciliation across ~30
+sites; high risk, ~zero behavioral payoff. Gate with the two goldens.
