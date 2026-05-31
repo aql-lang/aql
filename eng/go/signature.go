@@ -27,7 +27,6 @@ type Signature struct {
 	// off Args, Args (and the Patterns map) is removed and Params is the
 	// single source of per-arg shape.
 	Params  []FnParam
-	Args    []*Type
 	Handler Handler
 
 	// FullStack, when true, causes the engine to pass the full resolved
@@ -40,7 +39,6 @@ type Signature struct {
 	// literals in fn signatures). Key is arg index, value is the pattern.
 	// When set, the argument must unify with the pattern in addition to
 	// matching the type.
-	Patterns map[int]Value
 
 	// QuoteArgs marks arg positions with the /q modifier ("implicit quote").
 	// /q is a FORWARD-ONLY language rule: it intervenes during forward arg
@@ -162,10 +160,7 @@ type ReturnsFunc func(args []Value, r *Registry) []Value
 // construction site during the merge. Falls back to len(Args) for
 // legacy/external callers that build a Signature with only Args set.
 func (s *Signature) TotalArgs() int {
-	if len(s.Params) > 0 {
-		return len(s.Params)
-	}
-	return len(s.Args)
+	return len(s.Params)
 }
 
 // ArgTypes returns the per-position declared types of the signature,
@@ -175,14 +170,11 @@ func (s *Signature) TotalArgs() int {
 // be retired without a public-API break. Order is sig order (position 0
 // = top of stack).
 func (s *Signature) ArgTypes() []*Type {
-	if len(s.Params) > 0 {
-		out := make([]*Type, len(s.Params))
-		for i := range s.Params {
-			out[i] = s.Params[i].Type
-		}
-		return out
+	out := make([]*Type, len(s.Params))
+	for i := range s.Params {
+		out[i] = s.Params[i].Type
 	}
-	return s.Args
+	return out
 }
 
 // sigArgType returns the declared type at signature position i. It is the
@@ -192,10 +184,7 @@ func (s *Signature) ArgTypes() []*Type {
 // a fallback for legacy/external callers that built a Signature with only
 // Args set. Callers must ensure 0 <= i < TotalArgs().
 func sigArgType(s *Signature, i int) *Type {
-	if len(s.Params) > 0 {
-		return s.Params[i].Type
-	}
-	return s.Args[i]
+	return s.Params[i].Type
 }
 
 // sigPattern returns the optional structural pattern at signature
@@ -204,15 +193,8 @@ func sigArgType(s *Signature, i int) *Type {
 // Signature with only Args+Patterns set. ok is false when no pattern is
 // declared at i.
 func sigPattern(s *Signature, i int) (Value, bool) {
-	if len(s.Params) > 0 {
-		if i < len(s.Params) && s.Params[i].Pattern != nil {
-			return *s.Params[i].Pattern, true
-		}
-		return Value{}, false
-	}
-	if s.Patterns != nil {
-		p, ok := s.Patterns[i]
-		return p, ok
+	if i < len(s.Params) && s.Params[i].Pattern != nil {
+		return *s.Params[i].Pattern, true
 	}
 	return Value{}, false
 }

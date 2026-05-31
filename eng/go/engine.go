@@ -2232,25 +2232,12 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 	out := make([]Signature, len(fnDef.Sigs))
 	for i := range fnDef.Sigs {
 		sig := fnDef.Sigs[i]
-		argTypes := make([]*Type, len(sig.Params))
-		var patterns map[int]Value
-		for j, p := range sig.Params {
-			argTypes[j] = p.Type
-			if p.Pattern != nil {
-				if patterns == nil {
-					patterns = make(map[int]Value)
-				}
-				patterns[j] = *p.Pattern
-			}
-		}
 		barrier := sig.BarrierPos
 		if barrier == BarrierAllForward {
 			barrier = len(argTypes)
 		}
 		compiled := Signature{
 			Params:        append([]FnParam(nil), sig.Params...),
-			Args:          argTypes,
-			Patterns:      patterns,
 			BarrierPos:    barrier,
 			NoEvalArgs:    sig.NoEvalArgs,
 			NoEvalMapArgs: sig.NoEvalMapArgs,

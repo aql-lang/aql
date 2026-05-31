@@ -696,10 +696,8 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 		//nolint:staticcheck // S1016: explicit field-by-field copy keeps any NativeSig↔Signature divergence visible
 		s := Signature{
 			Params:           params,
-			Args:             sig.Args,
 			Handler:          sig.Handler,
 			FullStack:        sig.FullStack,
-			Patterns:         sig.Patterns,
 			QuoteArgs:        sig.QuoteArgs,
 			NoEvalArgs:       sig.NoEvalArgs,
 			NoEvalMapArgs:    sig.NoEvalMapArgs,
