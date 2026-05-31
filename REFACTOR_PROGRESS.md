@@ -343,3 +343,27 @@ REMAINING for the full collapse (each its own gated step):
 GATE DISCIPLINE (now being followed): each step = edits → `go build;echo $?>f`
 read back ==0 → `go vet` both modules → `go test` both → goldens → lint →
 THEN commit (separate call) → push (separate call). Never batched.
+
+---
+## STOP POINT (channel unstable) — branch GREEN at the sigPattern fix
+
+The tool output/Read channel began corrupting heavily (injecting narration
+into file Reads, duplicating/suppressing Bash output). Per hard-rule #4 I
+stopped editing kernel code. Verified GREEN via sentinel-gated `&&` chains
+(the only output I trust under corruption): eng build/vet/test/lint OK,
+lang vet/test/lint OK, both equivalence goldens OK. Committed+pushed.
+
+HEAD is the genuine green tip. Stage status:
+- Stages 0,1,2,3a-3d: DONE. One dispatch path (named+anon fns via
+  execMatch+handler); Params is the single per-arg source of truth.
+- Stage 3e: STARTED — exported Signature.ArgTypes() added and the lang
+  help/inspect surface + eng describeSigArgs repointed off raw .Args;
+  sigSlotValue routed through sigPattern. The exported Args/Patterns
+  fields STILL EXIST (intentionally — retiring them is the remaining
+  public-API work).
+
+RESUME (when channel stable; see the step list under "Stage 3e — step 1"):
+repoint remaining ~15 internal eng .Args/.Patterns reads to the helpers,
+then drop the fields, then merge Signature<->FnSig + collapse FnDefInfo.
+Do each as: edits -> sentinel-gated build/vet/test/lint/goldens -> commit
+-> push, never batched.
