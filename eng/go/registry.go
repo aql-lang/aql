@@ -679,8 +679,23 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 		return
 	}
 	for _, sig := range fn.Signatures {
+		// Synthesize the unified Params descriptor from the native sig's
+		// positional Args (+ any structural Patterns). Native sigs have
+		// no param names, so Name stays empty — Params[i].Type carries
+		// the per-position type that readers are migrating to.
+		params := make([]FnParam, len(sig.Args))
+		for i, t := range sig.Args {
+			params[i] = FnParam{Type: t}
+			if sig.Patterns != nil {
+				if pat, ok := sig.Patterns[i]; ok {
+					p := pat
+					params[i].Pattern = &p
+				}
+			}
+		}
 		//nolint:staticcheck // S1016: explicit field-by-field copy keeps any NativeSig↔Signature divergence visible
 		s := Signature{
+			Params:           params,
 			Args:             sig.Args,
 			Handler:          sig.Handler,
 			FullStack:        sig.FullStack,

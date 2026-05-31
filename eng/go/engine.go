@@ -189,7 +189,7 @@ func (e *Engine) isFnShapeTypedBindingContext() bool {
 			return false
 		}
 		// def's typed-name sig is the only one with TMap at position 0.
-		if len(fwd.Sig.Args) < 2 || !fwd.Sig.Args[0].Equal(TMap) {
+		if fwd.Sig.TotalArgs() < 2 || !sigArgType(fwd.Sig, 0).Equal(TMap) {
 			return false
 		}
 		// stepLiteral moves each collected forward arg to the slot
@@ -334,9 +334,9 @@ func (e *Engine) runtimeError(code, detail, word, hint string) *AqlError {
 
 // traceSigStr formats a signature as "name(type, type) prec=N" for trace annotations.
 func traceSigStr(name string, sig *Signature) string {
-	args := make([]string, len(sig.Args))
-	for i, t := range sig.Args {
-		args[i] = t.String()
+	args := make([]string, sig.TotalArgs())
+	for i := range args {
+		args[i] = sigArgType(sig, i).String()
 	}
 	return name + "(" + strings.Join(args, ", ") + ")"
 }
@@ -1532,7 +1532,7 @@ func (e *Engine) stepLiteral() error {
 		nextIdx := fwd.CollectedArgs
 		matches := sigArgMatches(fwd.Sig, nextIdx, val)
 		if !matches && fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx] &&
-			val.Parent.Equal(TWord) && TAtom.Matches(fwd.Sig.Args[nextIdx]) {
+			val.Parent.Equal(TWord) && TAtom.Matches(sigArgType(fwd.Sig, nextIdx)) {
 			w, _ := AsWord(val)
 			atom := NewAtom(w.Name)
 			atom.Pos = val.Pos // preserve source position across /q Word→Atom conversion
@@ -2248,6 +2248,7 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 			barrier = len(argTypes)
 		}
 		compiled := Signature{
+			Params:        append([]FnParam(nil), sig.Params...),
 			Args:          argTypes,
 			Patterns:      patterns,
 			BarrierPos:    barrier,
@@ -3288,8 +3289,8 @@ func (e *Engine) hasPendingForwardExpectingFunction() bool {
 			fwd, _ := AsForward(e.stack[i])
 			// Forward args fill from sigArgs[0].
 			nextIdx := fwd.CollectedArgs
-			if nextIdx < len(fwd.Sig.Args) {
-				return fwd.Sig.Args[nextIdx].Equal(TFunction)
+			if nextIdx < fwd.Sig.TotalArgs() {
+				return sigArgType(fwd.Sig, nextIdx).Equal(TFunction)
 			}
 			break
 		}
@@ -3408,7 +3409,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			for fwd < forwardLimit && scanIdx < len(e.stack) {
 
 				tok := e.stack[scanIdx]
-				expectedType := sig.Args[fwd]
+				expectedType := sigArgType(sig, fwd)
 
 				// 1.4: structural boundaries — stop forward scan.
 				if IsForward(tok) || tok.Parent.Matches(TMark) || tok.Parent.Matches(TMove) ||
@@ -3621,7 +3622,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			// an [Atom/q, ...] sig via the regular sigTypeMatches path
 			// just below, no /q involvement required.
 			if sig.QuoteArgs != nil && sig.QuoteArgs[sigIdx] && stackVal.Parent.Equal(TWord) {
-				if !TAtom.Matches(sig.Args[sigIdx]) {
+				if !TAtom.Matches(sigArgType(sig, sigIdx)) {
 					allMatch = false
 					break
 				}
@@ -3633,7 +3634,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				break
 			}
 			isTypeArg := sig.TypeArgs != nil && sig.TypeArgs[sigIdx]
-			if !isTypeArg && rejectsTypeLiteral(stackVal, sig.Args[sigIdx]) {
+			if !isTypeArg && rejectsTypeLiteral(stackVal, sigArgType(sig, sigIdx)) {
 				allMatch = false
 				break
 			}

@@ -19,6 +19,14 @@ type Handler func(args []Value, ctx map[string]Value, stack []Value, r *Registry
 // from the tokens following the word, then dispatches once all are
 // present. Args[BarrierPos..N-1] are matched from the stack in reverse.
 type Signature struct {
+	// Params is the unified per-position descriptor (name + type +
+	// pattern + optional) that the function-model consolidation is
+	// converging Signature and FnSig onto. During the merge it is
+	// populated alongside Args at every construction site; readers are
+	// migrating to Params[i].Type via sigArgType. Once every reader is
+	// off Args, Args (and the Patterns map) is removed and Params is the
+	// single source of per-arg shape.
+	Params  []FnParam
 	Args    []*Type
 	Handler Handler
 
@@ -149,9 +157,28 @@ type CheckFullStackFunc func(args []Value, stack []Value, r *Registry) []Value
 // the runtime Handler.
 type ReturnsFunc func(args []Value, r *Registry) []Value
 
-// TotalArgs returns the number of arguments.
+// TotalArgs returns the number of arguments. Backed by Params (the
+// unified per-position descriptor); Args is kept in lockstep at every
+// construction site during the merge. Falls back to len(Args) for
+// legacy/external callers that build a Signature with only Args set.
 func (s *Signature) TotalArgs() int {
+	if len(s.Params) > 0 {
+		return len(s.Params)
+	}
 	return len(s.Args)
+}
+
+// sigArgType returns the declared type at signature position i. It is the
+// single accessor every matcher / forward-planner reader uses for a
+// signature's per-position type. Storage lives in Params[i].Type; the
+// legacy Args slice is still populated at construction sites and used as
+// a fallback for legacy/external callers that built a Signature with only
+// Args set. Callers must ensure 0 <= i < TotalArgs().
+func sigArgType(s *Signature, i int) *Type {
+	if len(s.Params) > 0 {
+		return s.Params[i].Type
+	}
+	return s.Args[i]
 }
 
 // MatchResult holds a matched signature and the positionally matched args.
@@ -331,9 +358,9 @@ func sigTypeMatchesAsType(v Value, t *Type) bool {
 // no-sig-context paths (carrier promotion, predicate sandbox).
 func sigArgMatches(sig *Signature, idx int, v Value) bool {
 	if sig.TypeArgs != nil && sig.TypeArgs[idx] {
-		return sigTypeMatchesAsType(v, sig.Args[idx])
+		return sigTypeMatchesAsType(v, sigArgType(sig, idx))
 	}
-	return sigTypeMatches(v, sig.Args[idx])
+	return sigTypeMatches(v, sigArgType(sig, idx))
 }
 
 // rejectsTypeLiteral reports whether a value with Data==nil should be
@@ -394,7 +421,8 @@ func rejectsTypeLiteral(v Value, expectedType *Type) bool {
 // matching the value is never a Word (stepWord has already resolved it),
 // so the branch falls through to the regular sigTypeMatches check.
 func positionalMatch(values []Value, sig *Signature) bool {
-	for i, t := range sig.Args {
+	for i := 0; i < sig.TotalArgs(); i++ {
+		t := sigArgType(sig, i)
 		v := values[i]
 		// /q modifier (forward-only): treat Word as Atom for matching.
 		if sig.QuoteArgs != nil && sig.QuoteArgs[i] && v.Parent.Equal(TWord) {
@@ -430,7 +458,7 @@ func sigSlotValue(sig *Signature, i int) Value {
 			return p
 		}
 	}
-	return NewTypeLiteral(sig.Args[i])
+	return NewTypeLiteral(sigArgType(sig, i))
 }
 
 // CompareSignatures imposes a total order on Signatures using the
