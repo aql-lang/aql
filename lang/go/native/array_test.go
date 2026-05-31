@@ -1,6 +1,7 @@
 package native
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -650,6 +651,65 @@ func TestEach(t *testing.T) {
 			_as47, _ := AsInteger(list.Get(i))
 			t.Errorf("each[%d] = %d, want %d", i, _as47, want)
 		}
+	}
+}
+
+// --- do-each (§7.4): side-effecting iteration that discards results ---
+
+// do-each runs the body once per element for its side effects and
+// produces nothing, leaving the stack clean.
+func TestDoEachProducesNothing(t *testing.T) {
+	r := arrayTestReg()
+	result := runAQL(t, r, []Value{
+		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
+		NewWord("do-each"),
+		NewList([]Value{NewWord("drop")}),
+	})
+	if len(result) != 0 {
+		t.Errorf("do-each should leave the stack empty, got %v", result)
+	}
+}
+
+// do-each tolerates a body that leaves the stack empty (a None-producing
+// / purely-mutating body) — the case where `each` errors. This is the
+// §7.4 sentinel-free mutating loop.
+func TestDoEachAllowsEmptyBody(t *testing.T) {
+	r := arrayTestReg()
+	// Body `drop` consumes the element and pushes nothing.
+	result := runAQL(t, r, []Value{
+		NewList([]Value{NewInteger(10), NewInteger(20)}),
+		NewWord("do-each"),
+		NewList([]Value{NewWord("drop")}),
+	})
+	if len(result) != 0 {
+		t.Fatalf("do-each empty body: expected clean stack, got %v", result)
+	}
+}
+
+// Contrast: `each` with the same empty-producing body must still error,
+// pinning the behavioural difference between each and do-each.
+func TestEachStillRequiresResult(t *testing.T) {
+	r := arrayTestReg()
+	_, err := New(r).Run([]Value{
+		NewList([]Value{NewInteger(1)}),
+		NewWord("each"),
+		NewList([]Value{NewWord("drop")}),
+	})
+	if err == nil || !strings.Contains(err.Error(), "body produced no result") {
+		t.Fatalf("each with empty body should error, got %v", err)
+	}
+}
+
+// do-each surfaces an error raised inside the body.
+func TestDoEachPropagatesBodyError(t *testing.T) {
+	r := arrayTestReg()
+	_, err := New(r).Run([]Value{
+		NewList([]Value{NewInteger(1), NewInteger(2)}),
+		NewWord("do-each"),
+		NewList([]Value{NewWord("definitely-undefined-word")}),
+	})
+	if err == nil {
+		t.Fatal("expected do-each to propagate the body's undefined-word error")
 	}
 }
 

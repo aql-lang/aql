@@ -247,6 +247,22 @@ var allArrayNatives = []NativeFunc{
 		}},
 	},
 	{
+		// `data do-each [body]` — like `each` but discards every body
+		// result and produces nothing. The body may push a value or leave
+		// the stack empty (a None-producing / purely-mutating body is
+		// fine), so index-less mutating loops no longer need to push a
+		// throwaway sentinel just to satisfy each's "body produced a
+		// result" rule. See §7.4 in the DX report.
+		Name: "do-each",
+
+		Signatures: []NativeSig{{
+			Args:       []*Type{TList, TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler:    eachDoHandler,
+			ReturnsFn:  eachDoReturnsFn, BarrierPos: -1,
+		}},
+	},
+	{
 		Name: "fold",
 
 		Signatures: []NativeSig{
@@ -343,7 +359,7 @@ var allArrayNatives = []NativeFunc{
 // allArrayNatives comment for the rationale behind the split.
 var arrayCoreNames = map[string]bool{
 	"iota": true, "range": true,
-	"each": true, "fold": true, "scan": true, "outer": true, "inner": true,
+	"each": true, "do-each": true, "fold": true, "scan": true, "outer": true, "inner": true,
 	"take": true, "shed": true, "reverse": true,
 }
 
@@ -1053,6 +1069,39 @@ func eachHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		results[i] = res[len(res)-1] // take top of stack
 	}
 	return []Value{NewList(results)}, nil
+}
+
+// eachDoHandler runs the body once per data element for its side effects,
+// discarding each body result and producing nothing. Unlike eachHandler
+// it does NOT error when the body leaves the stack empty.
+func eachDoHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
+		return nil, reg.AqlError("do_each_error", "do-each: expected concrete lists", "do-each")
+	}
+	_lst, _ := AsList(args[0])
+	bodySlice := _lst.Slice()
+	dataList, _ := AsList(args[1])
+
+	for i := 0; i < dataList.Len(); i++ {
+		elem := dataList.Get(i)
+		input := make([]Value, len(bodySlice)+1)
+		input[0] = elem
+		copy(input[1:], bodySlice)
+
+		sub := New(reg)
+		if _, err := sub.Run(input); err != nil {
+			return nil, fmt.Errorf("do-each: element %d: %w", i, err)
+		}
+	}
+	return nil, nil
+}
+
+// eachDoReturnsFn runs the body once in check mode (for its diagnostics)
+// and reports that do-each produces nothing.
+func eachDoReturnsFn(args []Value, r *Registry) []Value {
+	elem := DataListElemTypeFromValue(args[1])
+	analyseHigherOrderBody(r, args[0], elem)
+	return nil
 }
 
 // each returns a list whose element type is whatever the body's
