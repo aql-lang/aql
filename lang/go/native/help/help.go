@@ -18,6 +18,15 @@ type Entry struct {
 	Summary     string // one-line description
 	Description string // brief multi-line explanation
 	Notes       []string
+
+	// Examples, when non-empty, are hand-authored illustrative lines that
+	// REPLACE the auto-generated positional permutations in `describe`
+	// output. Each string is a complete line shown verbatim (the author
+	// includes any trailing `;# …` comment). Auto-generated permutations
+	// teach nothing for non-trivial words like set/get/make/fold/each —
+	// this lets a word ship realistic examples against real operands.
+	// See §5.2/§9.5 in the DX report.
+	Examples []string
 }
 
 // SigInfo holds the dynamically extracted signature data for formatting.
@@ -142,6 +151,14 @@ func Format(e *Entry) string {
 		for _, n := range e.Notes {
 			b.WriteString("  - ")
 			b.WriteString(n)
+			b.WriteByte('\n')
+		}
+	}
+	if len(e.Examples) > 0 {
+		b.WriteString("\nExamples:\n")
+		for _, line := range e.Examples {
+			b.WriteString("  ")
+			b.WriteString(line)
 			b.WriteByte('\n')
 		}
 	}
@@ -463,6 +480,15 @@ func ExampleExprs(info FuncInfo) []string {
 // non-commutative binary words). Identical expressions across
 // signatures are shown once.
 func writeExamples(b *strings.Builder, info FuncInfo) {
+	// Hand-authored examples win over the auto-generated permutations.
+	if info.Entry != nil && len(info.Entry.Examples) > 0 {
+		for _, line := range info.Entry.Examples {
+			b.WriteString("  ")
+			b.WriteString(line)
+			b.WriteByte('\n')
+		}
+		return
+	}
 	if len(info.Sigs) == 0 {
 		b.WriteString("  (no examples)\n")
 		return

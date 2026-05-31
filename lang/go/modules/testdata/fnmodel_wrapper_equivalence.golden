@@ -1,0 +1,10 @@
+CASE math.abs
+  => "5"
+CASE math.sign
+  => "-1"
+CASE math.negate
+  => "-4"
+CASE math.ceil
+  => "3"
+CASE math.floor
+  => "2"

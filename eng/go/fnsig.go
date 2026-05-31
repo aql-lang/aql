@@ -158,11 +158,7 @@ func FnDefHasSig(fnDef FnDefInfo, want FnSigSpec) bool {
 		}
 		// Compiled Signatures store Args as []Type; lift to a FnSig
 		// shape so the shared comparison helper applies.
-		params := make([]FnParam, len(sig.Args))
-		for i, t := range sig.Args {
-			params[i] = FnParam{Type: t}
-		}
-		if FnSigSatisfiesSpec(FnSig{Params: params, Returns: sig.Returns, BarrierPos: -1}, want) {
+		if FnSigSatisfiesSpec(FnSig{Params: sig.Params, Returns: sig.Returns, BarrierPos: -1}, want) {
 			return true
 		}
 	}

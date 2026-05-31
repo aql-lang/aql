@@ -1,6 +1,7 @@
 package native
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -134,5 +135,43 @@ func TestDXTopLevelRecover(t *testing.T) {
 	ae, ok := runErr.(*AqlError)
 	if !ok || ae.Code != "internal_error" {
 		t.Fatalf("expected an internal_error AqlError, got %T: %v", runErr, runErr)
+	}
+}
+
+// §8.3 — `export` is a no-op at the top level (running a file directly /
+// in the REPL), so a single file can both run standalone and export a
+// namespace when imported.
+func TestDXExportTopLevelNoOp(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	r.Output = &buf
+	toks, err := parser.Parse(`export "Lib" {greet: 1}  print "ran"`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	out, runErr := NewTop(r).Run(toks)
+	if runErr != nil {
+		t.Fatalf("top-level export should be a no-op, got error: %v", runErr)
+	}
+	if got := strings.TrimSpace(buf.String()); got != "ran" {
+		t.Errorf("top-level export no-op: output = %q, want %q", got, "ran")
+	}
+	// export consumes its (name, map) args and produces nothing.
+	if len(out) != 0 {
+		t.Errorf("top-level export should leave the stack empty, got %v", out)
+	}
+}
+
+// §8.3 — the top-level no-op must NOT leak into an import context: a
+// module body's `export` still collects exports (the per-module handler
+// shadows the top-level no-op). Guards against the no-op's signatures
+// being appended-and-preferred over the real collecting handler.
+func TestDXExportStillCollectsInModule(t *testing.T) {
+	got := dxRun(t, `import module [export "Lib" {answer: 42}] end  Lib.answer`)
+	if got != "42" {
+		t.Errorf("module export collection = %q, want 42 (top-level no-op must not shadow it)", got)
 	}
 }

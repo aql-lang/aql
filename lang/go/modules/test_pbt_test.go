@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
@@ -40,6 +41,71 @@ func TestCheckProp_AlwaysPasses(t *testing.T) {
 	}
 	if !b {
 		t.Errorf("expected ok=true for always-true property")
+	}
+}
+
+// TestCheckProp_PropertyBodyCanImportNativeModule pins §11b.1: a
+// property body may `import "aql:<name>"` and use the namespace across
+// MULTIPLE runs. The module is resolved once and cached; because each
+// property iteration runs via CallAQL — whose def-cleanup strips the
+// namespace binding installed during the body — a naive load-once guard
+// left the module "loaded" but `pkg` unbound from iteration 2 on. The
+// fix re-binds the cached desc's namespace when absent.
+func TestCheckProp_PropertyBodyCanImportNativeModule(t *testing.T) {
+	r := testRegistry(t)
+	InstallResolver(r) // enable `import "aql:math"` resolution
+
+	// Property body imports aql:math every iteration and uses math.sqrt;
+	// runs > 1 is the case that regressed.
+	src := `test.check-prop "sqrt-ok" [r.int 1 10] ` +
+		`[drop "aql:math" import end 4.0 math.sqrt end 2.0 eq] 5 1 0`
+	ok := runTestAndGetField(t, r, src, "ok")
+	b, err := ok.AsConcreteBoolean()
+	if err != nil {
+		t.Fatalf("ok field not Boolean: %v", err)
+	}
+	if !b {
+		// Surface the recorded error to make a regression obvious.
+		errField := runTestAndGetField(t, r, src, "error")
+		t.Errorf("property body importing aql:math should pass across runs; got ok=false, error=%s", errField.String())
+	}
+}
+
+// TestSkip_RecordsSkippedWithoutRunning pins §11b.4: test.skip is a
+// drop-in for test.check-prop that records a skipped result (ok=true)
+// without running the bodies — a [false] property that WOULD fail if run
+// must not contribute a failure.
+func TestSkip_RecordsSkippedWithoutRunning(t *testing.T) {
+	r := testRegistry(t)
+	res := runTestAndGetField(t, r, `test.skip "wip" [r.int 0 9] [false] 10 1 0`, "skipped")
+	if b, err := res.AsConcreteBoolean(); err != nil || !b {
+		t.Fatalf("test.skip should mark the result skipped=true, got %v (err %v)", res, err)
+	}
+	// The skipped [false] property would fail if run; it must not raise
+	// the run's failure count.
+	out := runTestAQL(t, r, `test.fail-count`)
+	if n, _ := native.AsInteger(out[len(out)-1]); n != 0 {
+		t.Errorf("skipped properties must not count as failures; fail-count = %d, want 0", n)
+	}
+}
+
+// TestReport_OneLinePerProperty pins §11b.5: test.report renders one
+// line per recorded property (pass/FAIL/skip) plus a tally.
+func TestReport_OneLinePerProperty(t *testing.T) {
+	r := testRegistry(t)
+	runTestAQL(t, r, `test.check-prop "good" [r.int 0 9] [0 gte] 5 1 0`)
+	runTestAQL(t, r, `test.check-prop "bad" [r.int 0 9] [false] 5 1 0`)
+	runTestAQL(t, r, `test.skip "parked" [r.int 0 9] [false] 5 1 0`)
+
+	out := runTestAQL(t, r, `test.report`)
+	s, err := out[len(out)-1].AsConcreteString()
+	if err != nil {
+		t.Fatalf("test.report should return a String, got %v", out[len(out)-1])
+	}
+	for _, want := range []string{"pass: good", "FAIL: bad", "skip: parked", "1 passed", "1 failed", "1 skipped"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("test.report output missing %q:\n%s", want, s)
+		}
 	}
 }
 

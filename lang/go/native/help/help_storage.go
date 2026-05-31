@@ -6,6 +6,11 @@ func init() {
 		Summary: "Store a value in a Store.",
 		Description: "Stores a value under a key in the given Store. " +
 			"The key is typically a string or atom. The Store is the context or any Store instance.",
+		// Canonical order: `receiver value key set`.
+		Examples: []string{
+			`ctx 42 "x" set         ;# store 42 under key "x" in a Store/context`,
+			`c 1 "count" set        ;# Object: set field count (c.count := 1)`,
+		},
 	})
 
 	register(&Entry{
@@ -16,6 +21,12 @@ func init() {
 			"The . (dot) operator is an alias for get. " +
 			"Dot syntax shorthand: .fieldname is equivalent to get fieldname. " +
 			"Returns None for missing keys in Maps/Objects/Lists.",
+		// Canonical order: `receiver key get` (or the `.key` shorthand).
+		Examples: []string{
+			`{k: 9} "k" get         ;# => 9   — Map value by key`,
+			`[10 20 30] 0 get       ;# => 10  — List element by index`,
+			`c "count" get          ;# Object field (same as c.count)`,
+		},
 	})
 
 	register(&Entry{

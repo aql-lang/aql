@@ -82,10 +82,10 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 						if fn := r.Lookup(name); fn != nil {
 							for i := range fn.Signatures {
 								sig := &fn.Signatures[i]
-								if len(sig.Args) == 0 && sig.Handler != nil && !sig.Fallback {
+								if sig.TotalArgs() == 0 && sig.Handler != nil && !sig.Fallback {
 									return sig.Handler(nil, nil, nil, r)
 								}
-								if len(sig.Args) > 0 {
+								if sig.TotalArgs() > 0 {
 									hasForwardSig = true
 								}
 							}
@@ -222,6 +222,226 @@ func UninstallDef(r *Registry, name string) {
 	}
 }
 
+// buildFnBodyHandler produces the dispatch Handler for one AQL fn
+// signature. Rather than computing a final result, the handler returns
+// a PAREN-WRAPPED TOKEN SEQUENCE — `( unnamed-args… body DefCleanup __pa
+// undef-tail… ReturnCheck )` — that execMatch splices back onto the
+// stack to be RE-STEPPED inline. Named params and lexical captures are
+// installed as defs up front (captures first so params shadow them);
+// the paren keeps the whole expansion atomic so an outer forward can't
+// grab an intermediate body value (e.g. recursive factorial).
+//
+// The handler closes over the install-time registry `r`: an FnDef
+// registered into a name dispatches in the registry it was installed in.
+// (The registry passed to the Handler at call time is intentionally
+// ignored here — this mirrors the historical InstallFnDef closure.)
+//
+// Extracted verbatim from InstallFnDef so the same body-runner can be
+// shared with the Function-value dispatch path (function-model
+// consolidation). `s` is the signature; `fnDefCopy` supplies Captured.
+func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo) Handler {
+	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		var result []Value
+		var names []string
+		// Wrap the entire expansion (unnamed args + body + undef
+		// cleanup) in parens so it evaluates as a single
+		// sub-expression. Without this, an outer forward can grab
+		// intermediate values from the body before the body
+		// finishes executing (e.g. recursive factorial: the outer
+		// mul's forward grabs x=1 from the inner body instead of
+		// waiting for the full result).
+		result = append(result, NewOpenParen())
+
+		// Push the fn-entry baseline BEFORE installing anything
+		// for this call. Closure-capture detection on inner fn
+		// constructions (afn/fn) inside this body consults
+		// TopFnBaseline to identify enclosing-fn-local bindings:
+		// names installed AFTER this snapshot (this call's
+		// captures + named params + body-local defs) are
+		// capturable; names already present at module/global
+		// scope are dynamic.
+		r.PushFnBaseline(r.Defs.Snapshot())
+
+		// Push args list onto the args stack for access via the
+		// "args" word (args.0, args.1, etc.). Paired with __pa
+		// at the body tail, which also pops the FnBaseline.
+		argsCopy := make([]Value, len(args))
+		copy(argsCopy, args)
+		argsList := NewList(argsCopy)
+		if err := r.Args.Push(argsList); err != nil {
+			r.PopFnBaseline()
+			return nil, err
+		}
+
+		// Install lexical captures BEFORE named params so params
+		// shadow captures with the same name (innermost binding
+		// wins). Captures are appended to `names` so the
+		// synthesized undef tail tears them down alongside params.
+		for _, cb := range fnDefCopy.Captured {
+			InstallDef(r, cb.Name, cb.Value)
+			names = append(names, cb.Name)
+		}
+
+		unnamedCount := 0
+		for i, p := range s.Params {
+			if p.Name != "" {
+				arg := args[i]
+				// Quote list params so they're treated as data values
+				// when referenced in the body, not expanded as code bodies.
+				if arg.Parent.Equal(TList) && !arg.Quoted {
+					arg.Quoted = true
+				}
+				InstallDef(r, p.Name, arg)
+				names = append(names, p.Name)
+			} else {
+				// Unnamed parameter: push value back for the body to use
+				result = append(result, args[i])
+				unnamedCount++
+			}
+		}
+		// Snapshot DefStacks lengths after installing named params
+		// so we can clean up any defs created during body execution
+		// (fixes def leakage from fn bodies — DX-REPORT Issue 2).
+		defSnapshot := r.Defs.Snapshot()
+
+		body := make([]Value, len(s.Body))
+		copy(body, s.Body)
+		result = append(result, body...)
+		// Clean up defs created during body execution, then pop
+		// the args stack to restore the previous args (for nesting).
+		result = append(result, NewDefCleanup(DefCleanupInfo{
+			Snapshot: defSnapshot,
+			Registry: r,
+		}))
+		result = append(result, NewWord("__pa"))
+		for i := len(names) - 1; i >= 0; i-- {
+			// Force forward so undef takes the name word that follows,
+			// not a same-typed value from the prefix stack (e.g. a
+			// string return value when the param is also a string).
+			result = append(result,
+				NewWordModified("undef", -1, false, true),
+				NewWord(names[i]),
+			)
+		}
+		// Inject return-check if return types are declared.
+		if len(s.Returns) > 0 {
+			result = append(result, NewReturnCheck(ReturnCheckInfo{
+				FuncName:     name,
+				Returns:      s.Returns,
+				UnnamedCount: unnamedCount,
+			}))
+		}
+		result = append(result, NewCloseParen())
+		return result, nil
+	}
+}
+
+// buildFnBodyReturnsFn produces the check-mode ReturnsFn for one AQL fn
+// signature. In static-check mode the engine skips the runtime handler
+// and calls this with carrier-typed args; it analyses the body via
+// AnalyseFnBody (so body diagnostics propagate) and returns the carrier
+// result — declared return types when present, else the analyser's
+// residual top-of-stack carrier(s). It also performs record-shape
+// checking for pattern params.
+//
+// Anonymous lambdas (afn / =>) declare Returns=[Any] as a placeholder;
+// for them the declared-returns fast path is dropped so the analyser's
+// inferred residual wins (this is what makes `([n:Integer] => [n add 1])`
+// infer Integer rather than Any in check mode).
+//
+// Extracted verbatim from InstallFnDef so the same return-inference can
+// be shared with the Function-value dispatch path.
+func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) ReturnsFunc {
+	paramNames := make([]string, len(s.Params))
+	paramPatterns := make([]*Value, len(s.Params))
+	for i, p := range s.Params {
+		paramNames[i] = p.Name
+		paramPatterns[i] = p.Pattern
+	}
+	declaredReturns := append([]*Type(nil), s.Returns...)
+	if fnDef.Anonymous {
+		declaredReturns = nil
+	}
+	bodyCopy := append([]Value(nil), s.Body...)
+	nameCopy := name
+	capturesCopy := fnDef.Captured
+	return func(args []Value, _ *Registry) []Value {
+		// Pattern / record-shape check: for each declared
+		// record-typed param, verify the arg map carries each
+		// declared field key. Skip calls whose arg is empty or
+		// whose key set doesn't overlap the pattern at all
+		// (that pattern is typically the one used during fn
+		// body analysis, not a real user call).
+		for i, pat := range paramPatterns {
+			if pat == nil || i >= len(args) {
+				continue
+			}
+			val := args[i]
+			if !pat.Parent.Equal(TMap) || !val.Parent.Equal(TMap) ||
+				!IsConcrete(*pat) || !IsConcrete(val) {
+				continue
+			}
+			pMap, _ := AsMap(*pat)
+			vMap, _ := AsMap(val)
+			if pMap == nil || vMap == nil || vMap.Len() == 0 {
+				continue
+			}
+			// Overlap gate: only emit if val's keys intersect
+			// the pattern at all. This avoids false positives
+			// when analysing with synthetic/default arg maps.
+			overlap := 0
+			for _, k := range pMap.Keys() {
+				if _, ok := vMap.Get(k); ok {
+					overlap++
+				}
+			}
+			if overlap == 0 {
+				continue
+			}
+			for _, key := range pMap.Keys() {
+				pv, _ := pMap.Get(key)
+				av, hasKey := vMap.Get(key)
+				if !hasKey {
+					r.Check.AddDiagnostic(CheckDiagnostic{
+						Code:     "record_shape_mismatch",
+						Detail:   "argument to " + nameCopy + " missing field: " + key,
+						Word:     nameCopy,
+						Severity: SeverityError,
+					})
+					continue
+				}
+				if IsBareTypeNode(pv) && !av.Parent.Matches(pv.Parent) && !av.Parent.Equal(TAny) {
+					r.Check.AddDiagnostic(CheckDiagnostic{
+						Code:     "record_shape_mismatch",
+						Detail:   "argument to " + nameCopy + ": field " + key + " expected " + pv.Parent.String() + ", got " + av.Parent.String(),
+						Word:     nameCopy,
+						Severity: SeverityError,
+					})
+				}
+			}
+		}
+		// Always analyse the body so diagnostics emitted by stepWord
+		// (undefined_word, no_signature, …) inside the body propagate
+		// up to the parent registry. When the fn declares an explicit
+		// return type, we use that for the carrier result and drop
+		// the analyser's residual stack — the analyser is run purely
+		// for its side-effecting diagnostic collection. Memoisation
+		// inside AnalyseFnBody keeps recursive / repeated calls cheap.
+		stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args, capturesCopy)
+		if len(declaredReturns) > 0 {
+			out := make([]Value, len(declaredReturns))
+			for i, t := range declaredReturns {
+				out[i] = NewCarrier(t)
+			}
+			return out
+		}
+		if len(stk) == 0 {
+			return []Value{NewCarrier(TAny)}
+		}
+		return stk
+	}
+}
+
 // InstallFnDef registers typed signatures for a function definition.
 // For each signature, it creates a handler that binds named parameters
 // via InstallDef, returns body tokens, and appends undef cleanup.
@@ -243,196 +463,8 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 		}
 		s := sig           // capture for closure
 		fnDefCopy := fnDef // capture for closure (we need Captured at call time)
-		handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			var result []Value
-			var names []string
-			// Wrap the entire expansion (unnamed args + body + undef
-			// cleanup) in parens so it evaluates as a single
-			// sub-expression. Without this, an outer forward can grab
-			// intermediate values from the body before the body
-			// finishes executing (e.g. recursive factorial: the outer
-			// mul's forward grabs x=1 from the inner body instead of
-			// waiting for the full result).
-			result = append(result, NewOpenParen())
-
-			// Push the fn-entry baseline BEFORE installing anything
-			// for this call. Closure-capture detection on inner fn
-			// constructions (afn/fn) inside this body consults
-			// TopFnBaseline to identify enclosing-fn-local bindings:
-			// names installed AFTER this snapshot (this call's
-			// captures + named params + body-local defs) are
-			// capturable; names already present at module/global
-			// scope are dynamic.
-			r.PushFnBaseline(r.Defs.Snapshot())
-
-			// Push args list onto the args stack for access via the
-			// "args" word (args.0, args.1, etc.). Paired with __pa
-			// at the body tail, which also pops the FnBaseline.
-			argsCopy := make([]Value, len(args))
-			copy(argsCopy, args)
-			argsList := NewList(argsCopy)
-			if err := r.Args.Push(argsList); err != nil {
-				r.PopFnBaseline()
-				return nil, err
-			}
-
-			// Install lexical captures BEFORE named params so params
-			// shadow captures with the same name (innermost binding
-			// wins). Captures are appended to `names` so the
-			// synthesized undef tail tears them down alongside params.
-			for _, cb := range fnDefCopy.Captured {
-				InstallDef(r, cb.Name, cb.Value)
-				names = append(names, cb.Name)
-			}
-
-			unnamedCount := 0
-			for i, p := range s.Params {
-				if p.Name != "" {
-					arg := args[i]
-					// Quote list params so they're treated as data values
-					// when referenced in the body, not expanded as code bodies.
-					if arg.Parent.Equal(TList) && !arg.Quoted {
-						arg.Quoted = true
-					}
-					InstallDef(r, p.Name, arg)
-					names = append(names, p.Name)
-				} else {
-					// Unnamed parameter: push value back for the body to use
-					result = append(result, args[i])
-					unnamedCount++
-				}
-			}
-			// Snapshot DefStacks lengths after installing named params
-			// so we can clean up any defs created during body execution
-			// (fixes def leakage from fn bodies — DX-REPORT Issue 2).
-			defSnapshot := r.Defs.Snapshot()
-
-			body := make([]Value, len(s.Body))
-			copy(body, s.Body)
-			result = append(result, body...)
-			// Clean up defs created during body execution, then pop
-			// the args stack to restore the previous args (for nesting).
-			result = append(result, NewDefCleanup(DefCleanupInfo{
-				Snapshot: defSnapshot,
-				Registry: r,
-			}))
-			result = append(result, NewWord("__pa"))
-			for i := len(names) - 1; i >= 0; i-- {
-				// Force forward so undef takes the name word that follows,
-				// not a same-typed value from the prefix stack (e.g. a
-				// string return value when the param is also a string).
-				result = append(result,
-					NewWordModified("undef", -1, false, true),
-					NewWord(names[i]),
-				)
-			}
-			// Inject return-check if return types are declared.
-			if len(s.Returns) > 0 {
-				result = append(result, NewReturnCheck(ReturnCheckInfo{
-					FuncName:     name,
-					Returns:      s.Returns,
-					UnnamedCount: unnamedCount,
-				}))
-			}
-			result = append(result, NewCloseParen())
-			return result, nil
-		}
-		// Static type-check: analyse the body once per arg-type
-		// tuple via AnalyseFnBody. If declared return types are
-		// present, use them verbatim (no analysis needed); otherwise
-		// use the residual top-of-stack carrier(s).
-		paramNames := make([]string, len(s.Params))
-		paramPatterns := make([]*Value, len(s.Params))
-		for i, p := range s.Params {
-			paramNames[i] = p.Name
-			paramPatterns[i] = p.Pattern
-		}
-		declaredReturns := append([]*Type(nil), s.Returns...)
-		// Anonymous lambdas (from `afn` / `=>`) declare Returns=[Any]
-		// as a placeholder. In check mode we want the analyser's
-		// residual carrier(s) to win, so drop the declared-returns
-		// fast path for anonymous installations.
-		if fnDef.Anonymous {
-			declaredReturns = nil
-		}
-		bodyCopy := append([]Value(nil), s.Body...)
-		nameCopy := name
-		capturesCopy := fnDef.Captured
-		returnsFn := func(args []Value, _ *Registry) []Value {
-			// Pattern / record-shape check: for each declared
-			// record-typed param, verify the arg map carries each
-			// declared field key. Skip calls whose arg is empty or
-			// whose key set doesn't overlap the pattern at all
-			// (that pattern is typically the one used during fn
-			// body analysis, not a real user call).
-			for i, pat := range paramPatterns {
-				if pat == nil || i >= len(args) {
-					continue
-				}
-				val := args[i]
-				if !pat.Parent.Equal(TMap) || !val.Parent.Equal(TMap) ||
-					!IsConcrete(*pat) || !IsConcrete(val) {
-					continue
-				}
-				pMap, _ := AsMap(*pat)
-				vMap, _ := AsMap(val)
-				if pMap == nil || vMap == nil || vMap.Len() == 0 {
-					continue
-				}
-				// Overlap gate: only emit if val's keys intersect
-				// the pattern at all. This avoids false positives
-				// when analysing with synthetic/default arg maps.
-				overlap := 0
-				for _, k := range pMap.Keys() {
-					if _, ok := vMap.Get(k); ok {
-						overlap++
-					}
-				}
-				if overlap == 0 {
-					continue
-				}
-				for _, key := range pMap.Keys() {
-					pv, _ := pMap.Get(key)
-					av, hasKey := vMap.Get(key)
-					if !hasKey {
-						r.Check.AddDiagnostic(CheckDiagnostic{
-							Code:     "record_shape_mismatch",
-							Detail:   "argument to " + nameCopy + " missing field: " + key,
-							Word:     nameCopy,
-							Severity: SeverityError,
-						})
-						continue
-					}
-					if IsBareTypeNode(pv) && !av.Parent.Matches(pv.Parent) && !av.Parent.Equal(TAny) {
-						r.Check.AddDiagnostic(CheckDiagnostic{
-							Code:     "record_shape_mismatch",
-							Detail:   "argument to " + nameCopy + ": field " + key + " expected " + pv.Parent.String() + ", got " + av.Parent.String(),
-							Word:     nameCopy,
-							Severity: SeverityError,
-						})
-					}
-				}
-			}
-			// Always analyse the body so diagnostics emitted by stepWord
-			// (undefined_word, no_signature, …) inside the body propagate
-			// up to the parent registry. When the fn declares an explicit
-			// return type, we use that for the carrier result and drop
-			// the analyser's residual stack — the analyser is run purely
-			// for its side-effecting diagnostic collection. Memoisation
-			// inside AnalyseFnBody keeps recursive / repeated calls cheap.
-			stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args, capturesCopy)
-			if len(declaredReturns) > 0 {
-				out := make([]Value, len(declaredReturns))
-				for i, t := range declaredReturns {
-					out[i] = NewCarrier(t)
-				}
-				return out
-			}
-			if len(stk) == 0 {
-				return []Value{NewCarrier(TAny)}
-			}
-			return stk
-		}
+		handler := buildFnBodyHandler(r, name, s, fnDefCopy)
+		returnsFn := buildFnBodyReturnsFn(r, name, s, fnDefCopy)
 
 		// FnSig.BarrierPos uses the same sentinel as NativeSig
 		// (BarrierAllForward = -1 → default all-forward; 0 =

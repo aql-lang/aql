@@ -11,129 +11,14 @@ const MaxArgs = 32
 // registry.
 type Handler func(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error)
 
-// Signature describes one way a function can be called.
-// Args lists the types the word needs, ordered deepest-first (Args[0] = deepest
-// on the stack, Args[last] = top of the stack for stack matching).
+// Signature describes one way a function can be called. Params lists the
+// per-position descriptors (name + type + pattern + optional), ordered
+// top-first (Params[0] = top of stack for stack matching).
 //
-// Args[0..BarrierPos-1] are forward-eligible — the engine collects them
+// Params[0..BarrierPos-1] are forward-eligible — the engine collects them
 // from the tokens following the word, then dispatches once all are
-// present. Args[BarrierPos..N-1] are matched from the stack in reverse.
-type Signature struct {
-	Args    []*Type
-	Handler Handler
-
-	// FullStack, when true, causes the engine to pass the full resolved
-	// stack (excluding matched args) and to splice the results as a
-	// complete replacement for base..pointer. Use this for words like
-	// depth, pick, roll that need to inspect or manipulate the entire stack.
-	FullStack bool
-
-	// Patterns holds optional structural patterns for arguments (e.g. map
-	// literals in fn signatures). Key is arg index, value is the pattern.
-	// When set, the argument must unify with the pattern in addition to
-	// matching the type.
-	Patterns map[int]Value
-
-	// QuoteArgs marks arg positions with the /q modifier ("implicit quote").
-	// /q is a FORWARD-ONLY language rule: it intervenes during forward arg
-	// collection so that an upcoming Word is captured as an Atom rather than
-	// being executed by stepWord. This is what makes `def name body`,
-	// `set foo 42 store`, `get a {a:1}`, etc. work without an explicit `quote`.
-	//
-	// Outside a /q slot, an undefined word at the pointer is an error
-	// (see stepWord). To pass a name as data without /q, the caller must
-	// quote it explicitly: `quote foo`, `(quote foo)`, or a literal atom.
-	//
-	// /q has no effect on stack matching: by the time a value reaches the
-	// resolved stack it is no longer a Word — stepWord has either invoked a
-	// registered word, resolved a defined name, or (under CheckMode only)
-	// converted an undefined Word to an `Undefined=true` Atom. The only
-	// way to put a name on the stack as a value is `quote name`, which
-	// produces an Atom; that Atom matches an [Atom/q, X] sig via the
-	// normal sigTypeMatches fall-through. So a single [Atom/q, X] sig
-	// covers BOTH the forward Word case and the explicit-Atom case —
-	// there is no need to declare a separate non-/q Atom sig.
-	QuoteArgs map[int]bool
-
-	// NoEvalArgs marks arg positions where list auto-evaluation should be
-	// suppressed in execMatch. Unlike QuoteArgs, this does NOT affect
-	// forward collection or word→atom conversion — it only prevents
-	// autoEvalList from running on consumed list arguments at marked
-	// positions. Map auto-evaluation (autoEvalMap) is NOT affected;
-	// for that use NoEvalMapArgs.
-	// Use this for code-body positions (def body, if branches, for body,
-	// etc.) where the list contains code to execute later, not data to
-	// resolve now.
-	NoEvalArgs map[int]bool
-
-	// NoEvalMapArgs marks arg positions where map auto-evaluation
-	// (autoEvalMap) should be suppressed. Used by def's typed-name
-	// signature so a Word at the type position arrives raw — without
-	// this, a fn-as-type name (registered as a callable AND stored as
-	// a type value) would be called by the auto-eval pipeline before
-	// the handler could resolve it as a type.
-	NoEvalMapArgs map[int]bool
-
-	// TypeArgs marks arg positions that must receive a *type literal*
-	// (or a structural type body) rather than a concrete value. The
-	// slot's declared type in Args[i] is the upper bound of the
-	// permitted lattice node — Args[i]=TScalar with TypeArgs[i]=true
-	// accepts any scalar type literal (`Integer`, `String`, `Boolean`,
-	// …); Args[i]=TIdeal with TypeArgs[i]=true accepts any ideal type
-	// body (Record, Options, Table, Object, …).
-	//
-	// This replaced the historical metatype nodes (Type/ScalarType,
-	// Type/NodeType, Type/IdealType) — the lattice no longer carries a
-	// "type of types" parallel hierarchy; "this slot wants a type" is
-	// now a sig-level concern.
-	TypeArgs map[int]bool
-
-	// BarrierPos is the arg index where forward collection must stop.
-	// Positions before BarrierPos are collected forward; positions from
-	// BarrierPos onward are matched from the stack in reverse. 0 means
-	// no barrier (default, greedy forward). Implements the | syntax in
-	// fn signatures: def f fn [[Integer | String] ...] sets BarrierPos=1.
-	BarrierPos int
-
-	// Fallback marks the generic 0-arg handler installed by def as the
-	// fallback entry. Fallback sigs have zero args so the arity-first
-	// rule in SortSignatures already sinks them to the end.
-	Fallback bool
-
-	// Returns lists the declared return types for this signature. It is
-	// used by static type-checking mode: when the engine runs in check
-	// mode, it skips the handler and pushes carrier values typed by
-	// Returns. When nil or empty, the checker falls back to a
-	// conservative approximation (see engine carrier handling).
-	Returns []*Type
-
-	// ReturnsFn, when non-nil, overrides Returns for static
-	// type-checking: the checker calls it with the carrier-typed args
-	// and uses the resulting slice as the return carriers. This is
-	// required for signatures whose return type depends on the input
-	// types (e.g. Integer+Integer → Integer, otherwise Decimal) or on
-	// the input values themselves (e.g. dup, swap propagate their
-	// inputs). When both Returns and ReturnsFn are set, ReturnsFn
-	// wins.
-	ReturnsFn ReturnsFunc
-
-	// RunInCheckMode, when true, causes the engine to execute this
-	// signature's Handler even when Registry.Check.Mode is on. Use it
-	// for words with registry-level side effects that later words
-	// rely on (def, undef, fn, type, import, export, module). The
-	// handler still runs against carrier args, so it must tolerate
-	// Data==nil / Carrier=true values at its input positions.
-	RunInCheckMode bool
-
-	// CheckFullStackFn, when non-nil, replaces both Returns and
-	// ReturnsFn for FullStack signatures in check mode. It is
-	// passed the matched args and the full resolved carrier stack
-	// (from the nearest paren/root barrier through to the pointer
-	// exclusive of args). The returned slice is the complete
-	// replacement for that base..pointer range — mirroring the
-	// runtime FullStack handler's semantics.
-	CheckFullStackFn CheckFullStackFunc
-}
+// present. Params[BarrierPos..N-1] are matched from the stack in reverse.
+type Signature = FnSig
 
 // CheckFullStackFunc produces the full base..pointer replacement
 // for a FullStack signature in check mode. args are the matched
@@ -149,9 +34,97 @@ type CheckFullStackFunc func(args []Value, stack []Value, r *Registry) []Value
 // the runtime Handler.
 type ReturnsFunc func(args []Value, r *Registry) []Value
 
-// TotalArgs returns the number of arguments.
+// TotalArgs returns the number of arguments. Backed by Params (the
+// unified per-position descriptor. Falls back to len(Args) for a
+// Signature built positionally via the Args constructor-convenience
+// field that hasn't been normalized into Params yet.
 func (s *Signature) TotalArgs() int {
-	return len(s.Args)
+	if len(s.Params) == 0 {
+		return len(s.Args)
+	}
+	return len(s.Params)
+}
+
+// ArgTypes returns the per-position declared types of the signature,
+// derived from Params (the unified source of arg shape). This is the
+// EXPORTED accessor external consumers (the lang help/inspect surface)
+// should use instead of the legacy Args field, so that field can later
+// be retired without a public-API break. Order is sig order (position 0
+// = top of stack).
+func (s *Signature) ArgTypes() []*Type {
+	if len(s.Params) == 0 && len(s.Args) > 0 {
+		return s.Args
+	}
+	out := make([]*Type, len(s.Params))
+	for i := range s.Params {
+		out[i] = s.Params[i].Type
+	}
+	return out
+}
+
+// normalizeSig makes Params authoritative for a Signature that may have
+// been built via the positional Args/Patterns constructor-convenience
+// fields. If Params is empty but Args is set, it derives Params from
+// Args+Patterns. It then refreshes the Args/Patterns mirrors from Params
+// so introspection that reads either view stays consistent. Idempotent.
+func normalizeSig(s *Signature) {
+	if len(s.Params) == 0 && len(s.Args) > 0 {
+		s.Params = make([]FnParam, len(s.Args))
+		for i, t := range s.Args {
+			s.Params[i] = FnParam{Type: t}
+			if s.Patterns != nil {
+				if pat, ok := s.Patterns[i]; ok {
+					p := pat
+					s.Params[i].Pattern = &p
+				}
+			}
+		}
+	}
+	// Refresh the exported mirrors from Params (the source of truth).
+	s.Args = make([]*Type, len(s.Params))
+	var patterns map[int]Value
+	for i, p := range s.Params {
+		s.Args[i] = p.Type
+		if p.Pattern != nil {
+			if patterns == nil {
+				patterns = make(map[int]Value)
+			}
+			patterns[i] = *p.Pattern
+		}
+	}
+	s.Patterns = patterns
+}
+
+// sigArgType returns the declared type at signature position i. It is the
+// single accessor every matcher / forward-planner reader uses for a
+// signature's per-position type. Storage lives in Params[i].Type; the
+// legacy Args slice is still populated at construction sites and used as
+// a fallback for legacy/external callers that built a Signature with only
+// Args set. Callers must ensure 0 <= i < TotalArgs().
+func sigArgType(s *Signature, i int) *Type {
+	if len(s.Params) == 0 && len(s.Args) > 0 {
+		return s.Args[i]
+	}
+	return s.Params[i].Type
+}
+
+// sigPattern returns the optional structural pattern at signature
+// position i, mirroring sigArgType: storage lives in Params[i].Pattern,
+// with a fallback to the legacy Patterns map for callers that built a
+// Signature with only Args+Patterns set. ok is false when no pattern is
+// declared at i.
+func sigPattern(s *Signature, i int) (Value, bool) {
+	if i < len(s.Params) && s.Params[i].Pattern != nil {
+		return *s.Params[i].Pattern, true
+	}
+	// Constructor-convenience fallback: a Signature built with only the
+	// positional Args/Patterns fields (tests, plugins) hasn't been
+	// normalized into Params yet.
+	if len(s.Params) == 0 && s.Patterns != nil {
+		p, ok := s.Patterns[i]
+		return p, ok
+	}
+	return Value{}, false
 }
 
 // MatchResult holds a matched signature and the positionally matched args.
@@ -180,7 +153,7 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 			continue
 		}
 
-		n := len(sig.Args)
+		n := sig.TotalArgs()
 		if len(stack) < n {
 			continue
 		}
@@ -198,27 +171,29 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 		// Check structural patterns (e.g. map literals in fn signatures).
 		// Maps use open (subset) matching: the pattern's key-value pairs
 		// must be present in the argument, but extra keys are allowed.
-		if sig.Patterns != nil {
-			patternOk := true
-			for idx, pattern := range sig.Patterns {
-				if pattern.Parent.Equal(TMap) && ordered[idx].Parent.Equal(TMap) &&
-					pattern.Data != nil && ordered[idx].Data != nil &&
-					!IsOptionsType(pattern) &&
-					!IsRecordType(ordered[idx]) && !IsTypedMap(ordered[idx]) && !IsOptionsType(ordered[idx]) {
-					if !OpenUnifyMap(pattern, ordered[idx]) {
-						patternOk = false
-						break
-					}
-				} else {
-					if _, uOk := Unify(ordered[idx], pattern); !uOk {
-						patternOk = false
-						break
-					}
-				}
-			}
-			if !patternOk {
+		patternOk := true
+		for idx := 0; idx < sig.TotalArgs(); idx++ {
+			pattern, pok := sigPattern(sig, idx)
+			if !pok {
 				continue
 			}
+			if pattern.Parent.Equal(TMap) && ordered[idx].Parent.Equal(TMap) &&
+				pattern.Data != nil && ordered[idx].Data != nil &&
+				!IsOptionsType(pattern) &&
+				!IsRecordType(ordered[idx]) && !IsTypedMap(ordered[idx]) && !IsOptionsType(ordered[idx]) {
+				if !OpenUnifyMap(pattern, ordered[idx]) {
+					patternOk = false
+					break
+				}
+			} else {
+				if _, uOk := Unify(ordered[idx], pattern); !uOk {
+					patternOk = false
+					break
+				}
+			}
+		}
+		if !patternOk {
+			continue
 		}
 
 		args := make([]Value, n)
@@ -230,10 +205,10 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 }
 
 // FlexibleMatch checks whether values match the given signature positionally.
-// Arguments are never permuted — values[i] must match sig.Args[i].
+// Arguments are never permuted — values[i] must match Params[i].
 // Returns the values slice unchanged if matched, or false.
 func FlexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
-	n := len(sig.Args)
+	n := sig.TotalArgs()
 	if len(values) < n {
 		return nil, false
 	}
@@ -331,9 +306,9 @@ func sigTypeMatchesAsType(v Value, t *Type) bool {
 // no-sig-context paths (carrier promotion, predicate sandbox).
 func sigArgMatches(sig *Signature, idx int, v Value) bool {
 	if sig.TypeArgs != nil && sig.TypeArgs[idx] {
-		return sigTypeMatchesAsType(v, sig.Args[idx])
+		return sigTypeMatchesAsType(v, sigArgType(sig, idx))
 	}
-	return sigTypeMatches(v, sig.Args[idx])
+	return sigTypeMatches(v, sigArgType(sig, idx))
 }
 
 // rejectsTypeLiteral reports whether a value with Data==nil should be
@@ -394,7 +369,8 @@ func rejectsTypeLiteral(v Value, expectedType *Type) bool {
 // matching the value is never a Word (stepWord has already resolved it),
 // so the branch falls through to the regular sigTypeMatches check.
 func positionalMatch(values []Value, sig *Signature) bool {
-	for i, t := range sig.Args {
+	for i := 0; i < sig.TotalArgs(); i++ {
+		t := sigArgType(sig, i)
 		v := values[i]
 		// /q modifier (forward-only): treat Word as Atom for matching.
 		if sig.QuoteArgs != nil && sig.QuoteArgs[i] && v.Parent.Equal(TWord) {
@@ -425,12 +401,10 @@ func positionalMatch(values []Value, sig *Signature) bool {
 // bare type literals fall through to compareTypes (Rank → depth →
 // name → ID).
 func sigSlotValue(sig *Signature, i int) Value {
-	if sig.Patterns != nil {
-		if p, ok := sig.Patterns[i]; ok {
-			return p
-		}
+	if p, ok := sigPattern(sig, i); ok {
+		return p
 	}
-	return NewTypeLiteral(sig.Args[i])
+	return NewTypeLiteral(sigArgType(sig, i))
 }
 
 // CompareSignatures imposes a total order on Signatures using the

@@ -29,6 +29,11 @@ func init() {
 		Summary: "Create a value conforming to a type.",
 		Description: "Constructs a value of the given type from the provided data. " +
 			"For tables, creates table rows from list data.",
+		Examples: []string{
+			`make Point {}          ;# fresh instance, all fields at their defaults`,
+			`make Point {x: 3 y: 4} ;# instance with field overrides`,
+			`(make Counter {}).count ;# parenthesise to read a field off a fresh make`,
+		},
 	})
 
 	register(&Entry{

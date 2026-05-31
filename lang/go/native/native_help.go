@@ -78,7 +78,7 @@ func BuildFuncInfo(r *Registry, name string) *help.FuncInfo {
 			continue
 		}
 		si := help.SigInfo{BarrierPos: sig.BarrierPos}
-		for _, t := range sig.Args {
+		for _, t := range sig.ArgTypes() {
 			si.Args = append(si.Args, t.String())
 		}
 		// Infer return types from the handler by running with zero values
@@ -94,7 +94,7 @@ func BuildFuncInfo(r *Registry, name string) *help.FuncInfo {
 // inferReturns attempts to determine return types for a signature.
 // Uses known patterns for builtin words.
 func inferReturns(name string, sig Signature) []string {
-	nArgs := len(sig.Args)
+	nArgs := len(sig.ArgTypes())
 
 	// Exact overrides first (word → return types per sig shape).
 	if ret := inferExact(name, sig); ret != nil {
@@ -119,7 +119,7 @@ func inferReturns(name string, sig Signature) []string {
 
 // inferExact handles words with specific, known return types.
 func inferExact(name string, sig Signature) []string {
-	nArgs := len(sig.Args)
+	nArgs := len(sig.ArgTypes())
 	switch name {
 	// String ops
 	case "upper", "lower":
@@ -138,7 +138,7 @@ func inferExact(name string, sig Signature) []string {
 		return []string{"Node/Map"}
 	case "slice":
 		if nArgs > 0 {
-			last := sig.Args[nArgs-1].String()
+			last := sig.ArgTypes()[nArgs-1].String()
 			if last == "Node/List" {
 				return []string{"Node/List"}
 			}
@@ -219,7 +219,7 @@ func inferExact(name string, sig Signature) []string {
 	// [Boolean, Boolean] sig keeps the result narrowed to Boolean;
 	// the [Any, Any] coerce sig returns the operand value as-is.
 	case "or", "and":
-		if nArgs == 2 && sig.Args[0].String() == "Any" {
+		if nArgs == 2 && sig.ArgTypes()[0].String() == "Any" {
 			return []string{"Any"}
 		}
 		return []string{"Scalar/Boolean"}
@@ -316,11 +316,11 @@ func isBoolWord(name string) bool {
 }
 
 func inferArithReturns(name string, sig Signature) []string {
-	if len(sig.Args) != 2 {
+	if len(sig.ArgTypes()) != 2 {
 		return nil
 	}
-	a0 := sig.Args[0].String()
-	a1 := sig.Args[1].String()
+	a0 := sig.ArgTypes()[0].String()
+	a1 := sig.ArgTypes()[1].String()
 
 	if name == "add" && a0 == "Scalar" && a1 == "Scalar" {
 		return []string{"Scalar/String"}
@@ -332,7 +332,7 @@ func inferArithReturns(name string, sig Signature) []string {
 }
 
 func inferUnaryMathReturns(name string, sig Signature) []string {
-	a0 := sig.Args[0].String()
+	a0 := sig.ArgTypes()[0].String()
 	switch name {
 	case "abs", "negate":
 		return []string{a0}

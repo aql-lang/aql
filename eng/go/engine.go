@@ -189,7 +189,7 @@ func (e *Engine) isFnShapeTypedBindingContext() bool {
 			return false
 		}
 		// def's typed-name sig is the only one with TMap at position 0.
-		if len(fwd.Sig.Args) < 2 || !fwd.Sig.Args[0].Equal(TMap) {
+		if fwd.Sig.TotalArgs() < 2 || !sigArgType(fwd.Sig, 0).Equal(TMap) {
 			return false
 		}
 		// stepLiteral moves each collected forward arg to the slot
@@ -334,9 +334,9 @@ func (e *Engine) runtimeError(code, detail, word, hint string) *AqlError {
 
 // traceSigStr formats a signature as "name(type, type) prec=N" for trace annotations.
 func traceSigStr(name string, sig *Signature) string {
-	args := make([]string, len(sig.Args))
-	for i, t := range sig.Args {
-		args[i] = t.String()
+	args := make([]string, sig.TotalArgs())
+	for i := range args {
+		args[i] = sigArgType(sig, i).String()
 	}
 	return name + "(" + strings.Join(args, ", ") + ")"
 }
@@ -1096,7 +1096,7 @@ func (e *Engine) stepWord(val Value) error {
 
 // execMatch executes a matched signature, splicing args and results.
 func (e *Engine) execMatch(match *MatchResult) error {
-	n := len(match.Sig.Args)
+	n := match.Sig.TotalArgs()
 
 	// Use recorded positions if available, otherwise derive from stack.
 	indices := match.Positions
@@ -1532,7 +1532,7 @@ func (e *Engine) stepLiteral() error {
 		nextIdx := fwd.CollectedArgs
 		matches := sigArgMatches(fwd.Sig, nextIdx, val)
 		if !matches && fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx] &&
-			val.Parent.Equal(TWord) && TAtom.Matches(fwd.Sig.Args[nextIdx]) {
+			val.Parent.Equal(TWord) && TAtom.Matches(sigArgType(fwd.Sig, nextIdx)) {
 			w, _ := AsWord(val)
 			atom := NewAtom(w.Name)
 			atom.Pos = val.Pos // preserve source position across /q Word→Atom conversion
@@ -1825,13 +1825,11 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		fn = reg.Lookup(fnDef.Name)
 	}
 	if fn == nil && len(fnDef.Sigs) > 0 {
-		synth := fnSigsToSignatures(fnDef.Sigs)
-		fn = &FnDefInfo{
-			Name:           fnDef.Name,
-			Signatures:     synth,
-			MaxForwardArgs: calcMaxForwardArgs(synth),
-			Registry:       fnDef.Registry,
+		reg := fnDef.Registry
+		if reg == nil {
+			reg = e.registry
 		}
+		fn = compileFnDef(reg, fnDef)
 	}
 	if fn == nil {
 		e.pointer++
@@ -2199,42 +2197,65 @@ func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Val
 	return nil
 }
 
-// fnSigsToSignatures converts FnSig params into Signature objects for the
-// forward planner. Used for anonymous functions that have no registered name.
-func fnSigsToSignatures(sigs []FnSig) []Signature {
-	out := make([]Signature, len(sigs))
-	for i, sig := range sigs {
-		argTypes := make([]*Type, len(sig.Params))
-		var patterns map[int]Value
-		for j, p := range sig.Params {
-			argTypes[j] = p.Type
-			if p.Pattern != nil {
-				if patterns == nil {
-					patterns = make(map[int]Value)
-				}
-				patterns[j] = *p.Pattern
-			}
-		}
-		// Resolve the FnSig BarrierPos sentinel: -1 means "use the
-		// all-forward default" (the same defaulting RegisterNative
-		// applies to registered fns). 0 means explicit all-stack
-		// from a leading `|`; >0 is an explicit boundary. All Go-
-		// side FnSig{} construction sites set BarrierPos: -1 so
-		// they reach the dispatcher with the correct default.
+// compileFnDef produces the compiled-dispatch view of an FnDefInfo whose
+// Sigs are authored (named params + body) but whose Signatures have not
+// yet been built — the afn / captured-FnDef / lazy path. It is the single
+// boundary that turns `Sigs` into the `Signatures` matchSignature needs,
+// resolving the BarrierPos sentinel, attaching handlers, and sorting into
+// dispatch order, then computing MaxForwardArgs.
+//
+// This centralisation is the seam the function-model consolidation builds
+// on: every site that needs a dispatchable FnDefInfo from raw Sigs routes
+// through here rather than constructing the struct inline.
+//
+// Each compiled Signature is given a Go Handler (the shared AQL body-
+// runner, buildFnBodyHandler) and a check-mode ReturnsFn
+// (buildFnBodyReturnsFn), so a Function value dispatches through the
+// uniform execMatch path exactly like a registered native — no
+// handler-less fallback. Handlers are attached per-sig BEFORE
+// SortSignatures so each handler stays paired with its own signature
+// (the sort reorders sigs, so attaching by post-sort index would
+// mis-pair them).
+//
+// r is the registry the body runs in: captures are already snapshotted
+// into fnDef.Captured, and free body words resolve dynamically against r.
+//
+// Handlers are attached ONLY for anonymous fns (afn / `=>` lambdas and
+// the closures they return). A non-anonymous bare FnDef value —
+// notably a predicate-type FnDef sitting on the stack — must stay inert
+// data (no auto-dispatch): leaving its Handler nil routes it through the
+// legacy stack-match fall-through in execFnDefLiteral, which is the
+// behaviour `def Bbd …; Bbd "c"` relies on (the FnDef and "c" remain on
+// the stack rather than the predicate firing). See execFnDefLiteral's
+// "predicate-type FnDefs landing bare are intentionally inert" guard.
+func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
+	out := make([]Signature, len(fnDef.Sigs))
+	for i := range fnDef.Sigs {
+		sig := fnDef.Sigs[i]
 		barrier := sig.BarrierPos
-		if barrier == -1 {
-			barrier = len(argTypes)
+		if barrier == BarrierAllForward {
+			barrier = len(sig.Params)
 		}
-		out[i] = Signature{
-			Args:          argTypes,
-			Patterns:      patterns,
+		compiled := Signature{
+			Params:        append([]FnParam(nil), sig.Params...),
 			BarrierPos:    barrier,
 			NoEvalArgs:    sig.NoEvalArgs,
 			NoEvalMapArgs: sig.NoEvalMapArgs,
 		}
+		if fnDef.Anonymous {
+			compiled.Handler = buildFnBodyHandler(r, fnDef.Name, sig, fnDef)
+			compiled.ReturnsFn = buildFnBodyReturnsFn(r, fnDef.Name, sig, fnDef)
+		}
+		normalizeSig(&compiled)
+		out[i] = compiled
 	}
 	SortSignatures(out)
-	return out
+	return &FnDefInfo{
+		Name:           fnDef.Name,
+		Signatures:     out,
+		MaxForwardArgs: calcMaxForwardArgs(out),
+		Registry:       fnDef.Registry,
+	}
 }
 
 // execFnDefSig executes a matched FnDef signature. If capturedReg is non-nil
@@ -3236,7 +3257,7 @@ func (e *Engine) hasPendingForwardQuoteArg() bool {
 			// Forward args fill from sigArgs[0]; the next forward slot
 			// is at index CollectedArgs.
 			nextIdx := fwd.CollectedArgs
-			if nextIdx < len(fwd.Sig.Args) {
+			if nextIdx < fwd.Sig.TotalArgs() {
 				return fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx]
 			}
 			break
@@ -3256,8 +3277,8 @@ func (e *Engine) hasPendingForwardExpectingFunction() bool {
 			fwd, _ := AsForward(e.stack[i])
 			// Forward args fill from sigArgs[0].
 			nextIdx := fwd.CollectedArgs
-			if nextIdx < len(fwd.Sig.Args) {
-				return fwd.Sig.Args[nextIdx].Equal(TFunction)
+			if nextIdx < fwd.Sig.TotalArgs() {
+				return sigArgType(fwd.Sig, nextIdx).Equal(TFunction)
 			}
 			break
 		}
@@ -3340,7 +3361,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			continue
 		}
 
-		nArgs := len(sig.Args)
+		nArgs := sig.TotalArgs()
 
 		// 0-arg sigs are deferred to the fallback section at the bottom.
 		if nArgs == 0 {
@@ -3376,7 +3397,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			for fwd < forwardLimit && scanIdx < len(e.stack) {
 
 				tok := e.stack[scanIdx]
-				expectedType := sig.Args[fwd]
+				expectedType := sigArgType(sig, fwd)
 
 				// 1.4: structural boundaries — stop forward scan.
 				if IsForward(tok) || tok.Parent.Matches(TMark) || tok.Parent.Matches(TMove) ||
@@ -3589,7 +3610,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			// an [Atom/q, ...] sig via the regular sigTypeMatches path
 			// just below, no /q involvement required.
 			if sig.QuoteArgs != nil && sig.QuoteArgs[sigIdx] && stackVal.Parent.Equal(TWord) {
-				if !TAtom.Matches(sig.Args[sigIdx]) {
+				if !TAtom.Matches(sigArgType(sig, sigIdx)) {
 					allMatch = false
 					break
 				}
@@ -3601,7 +3622,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				break
 			}
 			isTypeArg := sig.TypeArgs != nil && sig.TypeArgs[sigIdx]
-			if !isTypeArg && rejectsTypeLiteral(stackVal, sig.Args[sigIdx]) {
+			if !isTypeArg && rejectsTypeLiteral(stackVal, sigArgType(sig, sigIdx)) {
 				allMatch = false
 				break
 			}
@@ -3640,7 +3661,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		if w.ArgCount >= 0 && sig.TotalArgs() != w.ArgCount {
 			continue
 		}
-		if len(sig.Args) == 0 || sig.Fallback {
+		if sig.TotalArgs() == 0 || sig.Fallback {
 			return sig, nil
 		}
 	}
@@ -3699,7 +3720,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		if s.Fallback {
 			continue
 		}
-		n := len(s.Args)
+		n := s.TotalArgs()
 		pos := e.checkModeFallbackPositions(n)
 		if len(pos) != n {
 			continue
@@ -3750,7 +3771,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		Row:    pos.Row,
 		Col:    pos.Col,
 	})
-	n := len(sig.Args)
+	n := sig.TotalArgs()
 	positions := e.checkModeFallbackPositions(n)
 	args := make([]Value, len(positions))
 	for i, p := range positions {

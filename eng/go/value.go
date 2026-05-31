@@ -245,6 +245,33 @@ type FnSig struct {
 	// Used by sigs that take a Map at a code-body slot (e.g. a spec
 	// schema where map values are quoted generators).
 	NoEvalMapArgs map[int]bool
+
+	// --- Dispatch fields (folded in from the former Signature struct;
+	// the two are now ONE type via `type Signature = FnSig`). Body
+	// (above) vs Handler (below) is the sole Go-vs-AQL distinction: an
+	// AQL sig carries Body tokens, a native sig carries a Go Handler.
+	// Empty/nil on a freshly-parsed AQL FnSig; populated by the install/
+	// compile boundary (compileFnDef / RegisterNativeFunc shim). ---
+
+	// Handler is the Go implementation for a native sig (nil for an
+	// un-compiled AQL sig; the compile boundary attaches one).
+	Handler Handler
+	// Args / Patterns are the exported positional constructor-convenience
+	// mirrors of Params (see signature.go; kernel reads Params).
+	Args     []*Type
+	Patterns map[int]Value
+	// FullStack passes the full resolved stack to the handler.
+	FullStack bool
+	// QuoteArgs / TypeArgs are per-position dispatch modifiers.
+	QuoteArgs map[int]bool
+	TypeArgs  map[int]bool
+	// Fallback marks the synthesized 0-arg catch-all sig.
+	Fallback bool
+	// ReturnsFn / RunInCheckMode / CheckFullStackFn are the check-mode
+	// hooks (see signature.go for full docs).
+	ReturnsFn        ReturnsFunc
+	RunInCheckMode   bool
+	CheckFullStackFn CheckFullStackFunc
 }
 
 // FnDefInfo holds the parsed function specification for a def-defined function.
@@ -1997,7 +2024,7 @@ func formatFnDef(fd FnDefInfo) string {
 	// non-empty one exists.
 	var sigParts []string
 	for i := range fd.Signatures {
-		if len(fd.Signatures[i].Args) > 0 {
+		if fd.Signatures[i].TotalArgs() > 0 {
 			sigParts = append(sigParts, describeSigArgs(&fd.Signatures[i]))
 		}
 	}

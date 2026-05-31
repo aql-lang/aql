@@ -2,10 +2,17 @@ package modules
 
 import (
 	"fmt"
+	"hash/fnv"
 	"math/bits"
 
 	"github.com/aql-lang/aql/lang/go/native"
 )
+
+// sign63Mask clears the sign bit of a 64-bit hash so the result is a
+// non-negative AQL Integer (0 … 2^63-1). Probabilistic structures index
+// with `hash mod m`, and a negative dividend would produce a negative
+// index — so the hash words deliberately return non-negative values.
+const sign63Mask = 0x7FFFFFFFFFFFFFFF
 
 // BuildBinaryModule creates the "aql:bin" native module — rotates,
 // bit-counting, single-bit operators, and slice/construct routines.
@@ -51,6 +58,22 @@ func BuildBinaryModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Quaternary Integer Integer Integer Integer -> Integer.
 	exports.Set("insert", makeBinQuaternaryFnDef("insert", subReg))
 
+	// Character codes: String -> Integer (`ord`) and Integer -> String
+	// (`chr`). These replace the O(95) printable-ASCII alphabet trick that
+	// every char-code-needing AQL library otherwise has to roll by hand.
+	// See §9.8 in the DX report.
+	exports.Set("ord", makeBinFnDef1("ord", subReg, native.TString, native.TInteger))
+	exports.Set("chr", makeBinFnDef1("chr", subReg, native.TInteger, native.TString))
+
+	// Non-cryptographic string hashes: String -> Integer. FNV-1a, the
+	// standard library's hash/fnv. `fnv32` returns the full 32-bit hash
+	// (always a non-negative Integer); `fnv64` returns the 64-bit hash
+	// with its sign bit cleared (non-negative, see sign63Mask) so it is
+	// directly usable as `hash mod m` in bloom/sketch/dedup libraries.
+	// See §9.9 in the DX report.
+	exports.Set("fnv32", makeBinFnDef1("fnv32", subReg, native.TString, native.TInteger))
+	exports.Set("fnv64", makeBinFnDef1("fnv64", subReg, native.TString, native.TInteger))
+
 	modID := parent.Modules.NextID()
 	desc := native.ModuleDesc{
 		ID:      modID,
@@ -65,6 +88,24 @@ func makeBinUnaryFnDef(wordName string, subReg *native.Registry, returnType *nat
 		Sigs: []native.FnSig{
 			{
 				Params:  []native.FnParam{{Type: native.TInteger}},
+				Returns: []*native.Type{returnType},
+				Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+			},
+		},
+		Registry: subReg,
+	}
+	return native.NewFnDef(fnDef)
+}
+
+// makeBinFnDef1 builds a one-parameter module wrapper whose param and
+// return types may differ (e.g. ord: String -> Integer). makeBinUnaryFnDef
+// is the Integer -> returnType special case.
+func makeBinFnDef1(wordName string, subReg *native.Registry, paramType, returnType *native.Type) native.Value {
+	fnDef := native.FnDefInfo{
+		Name: wordName,
+		Sigs: []native.FnSig{
+			{
+				Params:  []native.FnParam{{Type: paramType}},
 				Returns: []*native.Type{returnType},
 				Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 			},
@@ -491,6 +532,85 @@ var binaryModuleNatives = []native.NativeFunc{
 				shifted := (uint64(bits_) & fieldMask) << uint(lo)
 				clear := uint64(x) &^ (fieldMask << uint(lo))
 				return []native.Value{native.NewInteger(int64(clear | shifted))}, nil
+			},
+			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
+		}},
+	},
+	// --- character codes ---
+	// `bin.ord s` → the Unicode codepoint of the first rune of s.
+	{
+		Name: "ord",
+
+		Signatures: []native.NativeSig{{
+			Args: []*native.Type{native.TString},
+			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				s, err := args[0].AsConcreteString()
+				if err != nil {
+					return nil, err
+				}
+				rs := []rune(s)
+				if len(rs) == 0 {
+					return nil, r.AqlError("range_error", "bin.ord: empty string has no codepoint", "ord")
+				}
+				return []native.Value{native.NewInteger(int64(rs[0]))}, nil
+			},
+			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
+		}},
+	},
+	// `bin.chr n` → the single-rune string for codepoint n.
+	{
+		Name: "chr",
+
+		Signatures: []native.NativeSig{{
+			Args: []*native.Type{native.TInteger},
+			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				n, err := intArg(args[0])
+				if err != nil {
+					return nil, err
+				}
+				if n < 0 || n > 0x10FFFF {
+					return nil, r.AqlError("range_error",
+						fmt.Sprintf("bin.chr: codepoint %d out of range [0, 0x10FFFF]", n), "chr")
+				}
+				return []native.Value{native.NewString(string(rune(n)))}, nil
+			},
+			Returns: []*native.Type{native.TString}, BarrierPos: -1,
+		}},
+	},
+	// --- non-cryptographic string hashes (FNV-1a) ---
+	// `bin.fnv32 s` → the 32-bit FNV-1a hash of s (non-negative).
+	{
+		Name: "fnv32",
+
+		Signatures: []native.NativeSig{{
+			Args: []*native.Type{native.TString},
+			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				s, err := args[0].AsConcreteString()
+				if err != nil {
+					return nil, err
+				}
+				h := fnv.New32a()
+				_, _ = h.Write([]byte(s))
+				return []native.Value{native.NewInteger(int64(h.Sum32()))}, nil
+			},
+			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
+		}},
+	},
+	// `bin.fnv64 s` → the 64-bit FNV-1a hash of s, sign bit cleared so the
+	// result is a non-negative Integer usable directly as `hash mod m`.
+	{
+		Name: "fnv64",
+
+		Signatures: []native.NativeSig{{
+			Args: []*native.Type{native.TString},
+			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				s, err := args[0].AsConcreteString()
+				if err != nil {
+					return nil, err
+				}
+				h := fnv.New64a()
+				_, _ = h.Write([]byte(s))
+				return []native.Value{native.NewInteger(int64(h.Sum64() & sign63Mask))}, nil
 			},
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},

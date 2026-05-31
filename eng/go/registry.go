@@ -300,8 +300,8 @@ func (r *Registry) TopFnBaseline() map[string]int {
 // per-sig `BarrierPos`.
 func (r *Registry) Register(name string, sigs ...Signature) {
 	for _, sig := range sigs {
-		if len(sig.Args) > MaxArgs {
-			r.errs = append(r.errs, fmt.Errorf("signature for %q has %d args, max is %d", name, len(sig.Args), MaxArgs))
+		if sig.TotalArgs() > MaxArgs {
+			r.errs = append(r.errs, fmt.Errorf("signature for %q has %d args, max is %d", name, sig.TotalArgs(), MaxArgs))
 			return
 		}
 	}
@@ -324,8 +324,12 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 // method were retired in the BarrierPos cleanup).
 func (r *Registry) upsertFnDef(name string, sigs ...Signature) {
 	for i := range sigs {
+		// Normalize the positional Args/Patterns constructor-convenience
+		// fields into Params so every stored sig is Params-authoritative
+		// for the kernel's matchers.
+		normalizeSig(&sigs[i])
 		if sigs[i].BarrierPos == BarrierAllForward {
-			sigs[i].BarrierPos = len(sigs[i].Args)
+			sigs[i].BarrierPos = sigs[i].TotalArgs()
 		}
 	}
 	// If the top of the stack is already a FnDefInfo, update it in place.
@@ -679,12 +683,25 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 		return
 	}
 	for _, sig := range fn.Signatures {
+		// Synthesize the unified Params descriptor from the native sig's
+		// positional Args (+ any structural Patterns). Native sigs have
+		// no param names, so Name stays empty — Params[i].Type carries
+		// the per-position type that readers are migrating to.
+		params := make([]FnParam, len(sig.Args))
+		for i, t := range sig.Args {
+			params[i] = FnParam{Type: t}
+			if sig.Patterns != nil {
+				if pat, ok := sig.Patterns[i]; ok {
+					p := pat
+					params[i].Pattern = &p
+				}
+			}
+		}
 		//nolint:staticcheck // S1016: explicit field-by-field copy keeps any NativeSig↔Signature divergence visible
 		s := Signature{
-			Args:             sig.Args,
+			Params:           params,
 			Handler:          sig.Handler,
 			FullStack:        sig.FullStack,
-			Patterns:         sig.Patterns,
 			QuoteArgs:        sig.QuoteArgs,
 			NoEvalArgs:       sig.NoEvalArgs,
 			NoEvalMapArgs:    sig.NoEvalMapArgs,

@@ -19,7 +19,7 @@ func fnDefValue(name string, paramTypes []*Type, body []Value) Value {
 	return NewFunction(FnDefInfo{
 		Name:       name,
 		Sigs:       []FnSig{{Params: params, Returns: []*Type{TInteger}, Body: body, BarrierPos: -1}},
-		Signatures: []Signature{{Args: paramTypes, BarrierPos: -1}},
+		Signatures: []Signature{{Params: params, BarrierPos: -1}},
 		Registry:   reg,
 	})
 }
