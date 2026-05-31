@@ -489,10 +489,8 @@ func positionalMatch(values []Value, sig *Signature) bool {
 // bare type literals fall through to compareTypes (Rank → depth →
 // name → ID).
 func sigSlotValue(sig *Signature, i int) Value {
-	if sig.Patterns != nil {
-		if p, ok := sig.Patterns[i]; ok {
-			return p
-		}
+	if p, ok := sigPattern(sig, i); ok {
+		return p
 	}
 	return NewTypeLiteral(sigArgType(sig, i))
 }
