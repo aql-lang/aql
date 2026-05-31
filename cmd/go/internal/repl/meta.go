@@ -128,8 +128,14 @@ func parseMetaArgs(s string) ([]any, error) {
 func (mr *MetaRegistry) registerBuiltins() {
 	mr.Register(&MetaCommand{
 		Name:    "help",
-		Summary: "Show help for a word or list all commands",
+		Summary: "Show a language overview and the meta-command list",
 		Handler: metaHelp(mr),
+	})
+
+	mr.Register(&MetaCommand{
+		Name:    "describe",
+		Summary: "List words, or describe one (e.g. /describe add)",
+		Handler: metaDescribe,
 	})
 
 	mr.Register(&MetaCommand{
@@ -139,38 +145,50 @@ func (mr *MetaRegistry) registerBuiltins() {
 	})
 }
 
-// metaHelp returns the /help handler. It closes over the MetaRegistry
-// so it can list available meta commands.
+// metaHelp returns the /help handler: a language overview plus the list
+// of REPL meta-commands. Per-word docs live under /describe.
 func metaHelp(mr *MetaRegistry) MetaHandler {
-	return func(args []any, ctx *MetaContext) error {
-		if len(args) == 0 {
-			// List meta commands and general help.
-			fmt.Fprintln(ctx.Out, "Meta commands (type /name to run):")
-			for _, name := range mr.Names() {
-				cmd := mr.Lookup(name)
-				fmt.Fprintf(ctx.Out, "  /%-12s %s\n", name, cmd.Summary)
-			}
-			fmt.Fprintln(ctx.Out)
-			fmt.Fprintln(ctx.Out, "Word help (type /help <word>):")
-			words := help.Words()
-			sort.Strings(words)
-			for _, w := range words {
-				e := help.Lookup(w)
-				fmt.Fprintf(ctx.Out, "  %-12s %s\n", w, e.Summary)
-			}
-			return nil
+	return func(_ []any, ctx *MetaContext) error {
+		fmt.Fprint(ctx.Out, help.Overview())
+		fmt.Fprintln(ctx.Out)
+		fmt.Fprintln(ctx.Out, "REPL meta-commands (type /name to run):")
+		for _, name := range mr.Names() {
+			cmd := mr.Lookup(name)
+			fmt.Fprintf(ctx.Out, "  /%-12s %s\n", name, cmd.Summary)
 		}
-
-		// /help <word> — look up a specific word.
-		name := fmt.Sprint(args[0])
-		entry := help.Lookup(name)
-		if entry == nil {
-			fmt.Fprintf(ctx.Out, "help: no help available for %q\n", name)
-			return nil
-		}
-		fmt.Fprint(ctx.Out, help.Format(entry))
 		return nil
 	}
+}
+
+// metaDescribe implements /describe: with no argument it lists every
+// documented word; with a word name it prints that word's docs, using
+// live registry data when available and the static entry otherwise.
+func metaDescribe(args []any, ctx *MetaContext) error {
+	if len(args) == 0 {
+		fmt.Fprintln(ctx.Out, "Words (type /describe <word>):")
+		words := help.Words()
+		sort.Strings(words)
+		for _, w := range words {
+			e := help.Lookup(w)
+			fmt.Fprintf(ctx.Out, "  %-12s %s\n", w, e.Summary)
+		}
+		return nil
+	}
+
+	name := fmt.Sprint(args[0])
+	if ctx.Registry != nil {
+		if info := native.BuildFuncInfo(ctx.Registry, name); info != nil {
+			fmt.Fprint(ctx.Out, help.FormatDynamic(*info))
+			return nil
+		}
+	}
+	entry := help.Lookup(name)
+	if entry == nil {
+		fmt.Fprintf(ctx.Out, "describe: no description available for %q\n", name)
+		return nil
+	}
+	fmt.Fprint(ctx.Out, help.Format(entry))
+	return nil
 }
 
 // metaStack prints the current stack entries without consuming them.

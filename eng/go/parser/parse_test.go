@@ -1385,6 +1385,65 @@ func TestParseDottedWordInExpression(t *testing.T) {
 	}
 }
 
+// --- Dotted access in map values (§3.1) ---
+
+func TestParseDottedMapValue(t *testing.T) {
+	// {x: bf.n} must parse (previously errored with "unexpected
+	// character(s): ."). The dot chain in the value position is folded
+	// into a paren group, the same shape as the explicit {x: (bf.n)}.
+	got, err := Parse("{x: bf.n}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 || !got[0].Parent.Equal(eng.TMap) {
+		t.Fatalf("expected a single map value, got %d: %v", len(got), got)
+	}
+}
+
+func TestParseDottedMapValueMatchesParenWorkaround(t *testing.T) {
+	// The bare-dot form and the explicit-paren workaround must produce
+	// the same parse — that is the whole point of the fix.
+	bare, err := Parse("{x: bf.n}")
+	if err != nil {
+		t.Fatalf("bare parse error: %v", err)
+	}
+	paren, err := Parse("{x: (bf.n)}")
+	if err != nil {
+		t.Fatalf("paren parse error: %v", err)
+	}
+	if bare[0].String() != paren[0].String() {
+		t.Errorf("bare %q != paren %q", bare[0].String(), paren[0].String())
+	}
+}
+
+func TestParseDottedMapValueMultiPair(t *testing.T) {
+	// A dotted value followed by another pair must keep both pairs (an
+	// earlier version of the fix dropped the second pair).
+	got, err := Parse("{a: bf.n b: 9}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	m, mErr := eng.AsMap(got[0])
+	if mErr != nil || m == nil {
+		t.Fatalf("expected a concrete map, got %v (%v)", got[0], mErr)
+	}
+	if m.Len() != 2 {
+		t.Errorf("expected 2 pairs, got %d: %v", m.Len(), got[0])
+	}
+}
+
+func TestParseDottedWordStillWorksInWordContext(t *testing.T) {
+	// The map-value fold must NOT change word context: `1 foo.bar` is
+	// still `1 ( foo get bar )` = 6 values (no double-wrap).
+	got, err := Parse("1 foo.bar")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 6 {
+		t.Fatalf("expected 6 values, got %d: %v", len(got), got)
+	}
+}
+
 // --- Map as top-level value ---
 
 func TestParseTopLevelMap(t *testing.T) {

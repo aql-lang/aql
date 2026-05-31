@@ -6,7 +6,6 @@
 package aql
 
 import (
-	"fmt"
 	"io"
 	"os"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/clean"
 	"github.com/aql-lang/aql/cmd/go/internal/command"
 	"github.com/aql-lang/aql/cmd/go/internal/ctl"
+	"github.com/aql-lang/aql/cmd/go/internal/describe"
 	"github.com/aql-lang/aql/cmd/go/internal/do"
 	"github.com/aql-lang/aql/cmd/go/internal/exec"
 	aqlfmt "github.com/aql-lang/aql/cmd/go/internal/fmt"
@@ -74,11 +74,17 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 // then long-running Services at the end.
 func buildRegistry() *command.Registry {
 	r := command.New()
+	// provide hands the help command the live registry + service
+	// classification at Run time. r is captured by reference and fully
+	// populated before the closure is ever called, so the cycle that
+	// would arise from importing the top-level package is avoided.
+	provide := func() (*command.Registry, map[string]bool) { return r, serviceNames }
 	// Commands: language execution.
 	r.Register(run.New())
 	r.Register(do.New())
 	r.Register(check.New())
-	r.Register(help.New())
+	r.Register(help.New(provide))
+	r.Register(describe.New())
 	r.Register(aqlfmt.New())
 	// Commands: project lifecycle.
 	r.Register(prep.New())
@@ -106,8 +112,8 @@ func buildRegistry() *command.Registry {
 }
 
 // serviceNames is the set of Commands that are also long-running
-// services (composable under `aql serve`). Used by Usage to group
-// them separately from one-shot commands.
+// services (composable under `aql serve`). Used by the help command to
+// group them separately from one-shot commands.
 var serviceNames = map[string]bool{
 	"repl":     true,
 	"registry": true,
@@ -115,27 +121,4 @@ var serviceNames = map[string]bool{
 	"exec":     true,
 	"serve":    true,
 	"tui":      true,
-}
-
-// Usage prints a short overview of every registered subcommand to w,
-// grouped into one-shot Commands and long-running Services. Exposed
-// for tooling that wants to render help without invoking the CLI.
-func Usage(w io.Writer) {
-	reg := buildRegistry()
-	fmt.Fprintln(w, "Usage: aql [options] [script.aql]")
-	fmt.Fprintln(w, "       aql <subcommand> [args...]")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Commands:")
-	for _, c := range reg.Commands() {
-		if !serviceNames[c.Name()] {
-			fmt.Fprintf(w, "  %-10s %s\n", c.Name(), c.Synopsis())
-		}
-	}
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Services:")
-	for _, c := range reg.Commands() {
-		if serviceNames[c.Name()] {
-			fmt.Fprintf(w, "  %-10s %s\n", c.Name(), c.Synopsis())
-		}
-	}
 }

@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/native"
 	"github.com/aql-lang/aql/lang/go/native/help"
 )
@@ -56,6 +57,10 @@ func main() {
 			os.Exit(1)
 		}
 		wordReg.SetParseFunc(parser.Parse)
+		if err := seedMemFS(wordReg); err != nil {
+			fmt.Fprintf(os.Stderr, "genhelp: seed fs: %v\n", err)
+			os.Exit(1)
+		}
 
 		for _, expr := range exprs {
 			if _, done := results[expr]; done {
@@ -95,6 +100,30 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Fprintf(os.Stderr, "genhelp: wrote %d examples to %s\n", len(results), outPath)
+}
+
+// seedMemFS installs an in-memory filesystem on reg seeded with the
+// same files the help-example validation test expects (see
+// lang/go/test/help_examples_test.go), so precomputed read/write
+// example results match what the test reproduces.
+func seedMemFS(reg *native.Registry) error {
+	mem := capabilities.NewMem()
+	for _, name := range []string{"a", "b", "c", "d", "e"} {
+		mem.Files[name] = []byte("file-" + name + "-content")
+	}
+	if err := reg.Capabilities.Set(native.CapMemFileOps, capabilities.FileOps(mem)); err != nil {
+		return err
+	}
+	// Enable the in-memory filesystem: __sys.fs.mem = true in the root
+	// context, matching enableMemFS in the validation test.
+	prog := []native.Value{
+		native.NewWord("context"), native.NewWord("get"), native.NewWord("__sys"),
+		native.NewWord("get"), native.NewWord("fs"),
+		native.NewWord("set"), native.NewWord("mem"), native.NewBoolean(true),
+	}
+	eng := native.New(reg)
+	_, err := eng.Run(prog)
+	return err
 }
 
 func evalExpr(reg *native.Registry, expr string) (string, error) {

@@ -237,8 +237,8 @@ func inferExact(name string, sig Signature) []string {
 	case "any", "all", "tany", "tall":
 		return []string{"Any"}
 
-	// Help
-	case "help":
+	// Help / describe
+	case "help", "describe":
 		return nil
 
 	// Constants

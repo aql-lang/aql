@@ -154,20 +154,29 @@ func init() {
 			}},
 		},
 
-		// ---- help ----
+		// ---- help (language overview) ----
 		{
 			Name: "help",
 
 			Signatures: []NativeSig{
-				{Args: []*Type{TString}, Handler: helpWordHandler, BarrierPos: -1},
-				{Args: []*Type{TAtom}, Handler: helpWordHandler, BarrierPos: -1},
+				{Args: []*Type{}, Handler: helpOverviewHandler, BarrierPos: -1},
+			},
+		},
+
+		// ---- describe (per-word documentation) ----
+		{
+			Name: "describe",
+
+			Signatures: []NativeSig{
+				{Args: []*Type{TString}, Handler: describeWordHandler, BarrierPos: -1},
+				{Args: []*Type{TAtom}, Handler: describeWordHandler, BarrierPos: -1},
 				{
 					Args:      []*Type{TAtom},
 					QuoteArgs: map[int]bool{0: true},
-					Handler:   helpWordHandler,
+					Handler:   describeWordHandler,
 					Returns:   []*Type{}, BarrierPos: -1,
 				},
-				{Args: []*Type{}, Handler: helpSelfHandler, BarrierPos: -1},
+				{Args: []*Type{}, Handler: describeSelfHandler, BarrierPos: -1},
 			},
 		},
 
@@ -387,26 +396,42 @@ func stderrHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	return []Value{NewString(pathStderr)}, nil
 }
 
-// ---- help handlers ----
+// ---- help / describe handlers ----
 
-func helpSelfHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	fmt.Fprintln(r.Output, "help — Show help for an AQL word.")
-	fmt.Fprintln(r.Output, "")
-	fmt.Fprintln(r.Output, "Usage:")
-	fmt.Fprintln(r.Output, "  help              Show this message.")
-	fmt.Fprintln(r.Output, "  <word> help       Show help for a word (e.g. add help).")
-	fmt.Fprintln(r.Output, "  \"<name>\" help     Show help by string name (e.g. \"concat\" help).")
+// helpOverviewHandler implements the 0-arg `help` word: a language
+// overview plus a pointer at `describe` for per-word docs.
+func helpOverviewHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	fmt.Fprint(r.Output, help.Overview())
 	return nil, nil
 }
 
-func helpWordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+// describeSelfHandler implements the 0-arg `describe` word: a reminder
+// of how to call describe on a specific word.
+func describeSelfHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	fmt.Fprintln(r.Output, "describe — Describe an AQL word: signatures, examples, and notes.")
+	fmt.Fprintln(r.Output, "")
+	fmt.Fprintln(r.Output, "Usage:")
+	fmt.Fprintln(r.Output, "  describe <word>     Describe a word (e.g. describe add).")
+	fmt.Fprintln(r.Output, "  \"<name>\" describe   Describe by string name (e.g. \"concat\" describe).")
+	fmt.Fprintln(r.Output, "")
+	fmt.Fprintln(r.Output, "Run `help` for a language overview.")
+	return nil, nil
+}
+
+func describeWordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := ValToString(args[0])
-	info := BuildFuncInfo(r, name)
-	if info == nil {
-		fmt.Fprintf(r.Output, "help: no help available for %q\n", name)
+	// Prefer live registry data (signatures + examples). Fall back to
+	// the static entry for words that are documented but not registered
+	// in this build, then report nothing if neither exists.
+	if info := BuildFuncInfo(r, name); info != nil {
+		fmt.Fprint(r.Output, help.FormatDynamic(*info))
 		return nil, nil
 	}
-	fmt.Fprint(r.Output, help.FormatDynamic(*info))
+	if entry := help.Lookup(name); entry != nil {
+		fmt.Fprint(r.Output, help.Format(entry))
+		return nil, nil
+	}
+	fmt.Fprintf(r.Output, "describe: no description available for %q\n", name)
 	return nil, nil
 }
 
@@ -447,6 +472,16 @@ func importSingleRenameHandler(args []Value, _ map[string]Value, _ []Value, r *R
 
 func importFileHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	path, _ := args[0].AsConcreteString()
+	// In check mode the path string literal has been stripped to a
+	// carrier (StripToCarriers), so `path` is empty. We can't read,
+	// parse, or analyse the target file without it — but the importing
+	// file itself is valid, so a hard error here would block `aql check`
+	// on every file that imports a sibling. Treat the import as opaque:
+	// return a Module carrier and let analysis continue (imported names
+	// resolve to Any, which is the conservative check-mode default).
+	if path == "" && r.Check.IsActive() {
+		return []Value{NewCarrier(TModule)}, nil
+	}
 	if isNativeModImport(path) {
 		return nil, resolveNativeMod(r, path)
 	}
@@ -475,6 +510,12 @@ func importFileHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 
 func importFileRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	path, _ := args[1].AsConcreteString()
+	// Check mode: the path literal was stripped to a carrier. Skip the
+	// import gracefully so `aql check` doesn't hard-fail (see
+	// importFileHandler for the full rationale).
+	if path == "" && r.Check.IsActive() {
+		return nil, nil
+	}
 	if !isFilePath(path) {
 		resolved, err := resolveBareModule(r, path)
 		if err != nil {

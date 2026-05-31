@@ -122,12 +122,14 @@ typeof {: Integer }	Map	the bare typed-map form is a Node-family TYPE
 def m { x:[ 1 2 3 ] } size m.x	3	dotted chain composes as one forward argument
 def a { n:10 } def b { n:20 } add a.n b.n	30	two dotted forward arguments
 		
-# As a map VALUE a dotted chain must be parenthesised — a bare `.`		
-# is not a valid token in a map-value position. `( a.b )` becomes		
-# `( ( a get b ) )`, evaluated inline by autoEvalMap.		
+# As a map VALUE a dotted chain works directly — `{ x:a.b }` is folded		
+# into the same form as the explicit `{ x:(a.b) }`, evaluated inline by		
+# autoEvalMap. Both spellings are accepted.		
 def a { b:5 } { x:(a.b) }	{x:5}	parenthesised dotted access as a map value
 def a { b:{ c:9 } } { y:(a.b.c) }	{y:9}	chained dotted access, parenthesised
-def a { b:5 } { x:a.b }	ERROR:unexpected	bare dot in a map value is a parse error — wrap in ( )
+def a { b:5 } { x:a.b }	{x:5}	bare dotted access as a map value (no parens needed)
+def a { b:{ c:9 } } { y:a.b.c }	{y:9}	bare chained dotted access as a map value
+def a { b:5 } { p:a.b q:9 }	{p:5 q:9}	dotted value followed by another pair
 		
 # ====================================================================		
 # 7. Composition with def		

@@ -159,70 +159,105 @@ func TestExecuteDoError(t *testing.T) {
 	}
 }
 
-// --- help subcommand ---
+// --- help subcommand (CLI overview) ---
 
-func TestExecuteHelpListsWords(t *testing.T) {
+func TestExecuteHelpShowsCommands(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := execute([]string{"help"}, nil, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "Available words:") {
-		t.Errorf("expected 'Available words:' header, got %q", out)
+	if !strings.Contains(out, "Commands:") {
+		t.Errorf("expected 'Commands:' header, got %q", out)
 	}
-	// Spot-check a few well-known words appear in the listing.
-	for _, word := range []string{"add", "concat", "help", "import"} {
-		if !strings.Contains(out, word) {
-			t.Errorf("expected word %q in help listing", word)
+	// Spot-check that subcommands are listed and that it points at describe.
+	for _, want := range []string{"run", "check", "describe", "aql describe <word>"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in help overview", want)
 		}
 	}
 }
 
-func TestExecuteHelpSpecificWord(t *testing.T) {
+func TestExecuteHelpSubcommand(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := execute([]string{"help", "add"}, nil, &stdout, &stderr)
+	code := execute([]string{"help", "check"}, nil, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 	out := stdout.String()
-	// Should contain the word name and signature section — same as in-language help.
-	if !strings.Contains(out, "add") {
-		t.Errorf("expected 'add' in output, got %q", out)
-	}
-	if !strings.Contains(out, "Signatures:") {
-		t.Errorf("expected 'Signatures:' section, got %q", out)
-	}
-	if !strings.Contains(out, "Description:") {
-		t.Errorf("expected 'Description:' section, got %q", out)
+	if !strings.Contains(out, "aql check —") {
+		t.Errorf("expected 'aql check —' summary, got %q", out)
 	}
 }
 
-func TestExecuteHelpUnknownWord(t *testing.T) {
+func TestExecuteHelpUnknownCommand(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := execute([]string{"help", "nonexistent_word"}, nil, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(stdout.String(), "no help available") {
-		t.Errorf("expected 'no help available' message, got %q", stdout.String())
+	if !strings.Contains(stdout.String(), "unknown command") {
+		t.Errorf("expected 'unknown command' message, got %q", stdout.String())
 	}
 }
 
-func TestExecuteHelpMatchesHelpFormat(t *testing.T) {
-	// The CLI "aql help add" should produce dynamic help output with
-	// all expected sections.
-	var cliOut bytes.Buffer
-	code := execute([]string{"help", "add"}, nil, &cliOut, &bytes.Buffer{})
-	if code != 0 {
-		t.Fatalf("CLI help exit code = %d, want 0", code)
-	}
+// --- describe subcommand (language words and modules) ---
 
-	out := cliOut.String()
+func TestExecuteDescribeListsWordsAndModules(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"describe"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "Words:") || !strings.Contains(out, "Modules") {
+		t.Errorf("expected 'Words:' and 'Modules' headers, got %q", out)
+	}
+	for _, want := range []string{"add", "concat", "import", "math"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in describe listing", want)
+		}
+	}
+}
+
+func TestExecuteDescribeWord(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"describe", "add"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	out := stdout.String()
 	for _, section := range []string{"add —", "Precedence:", "Signatures:", "Description:", "Examples:"} {
 		if !strings.Contains(out, section) {
-			t.Errorf("expected %q section in help output, got:\n%s", section, out)
+			t.Errorf("expected %q section in describe output, got:\n%s", section, out)
 		}
+	}
+}
+
+func TestExecuteDescribeModule(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"describe", "math"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "aql:math") {
+		t.Errorf("expected 'aql:math' header, got %q", out)
+	}
+	if !strings.Contains(out, "math.sin") {
+		t.Errorf("expected 'math.sin' export, got %q", out)
+	}
+}
+
+func TestExecuteDescribeUnknownWord(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"describe", "nonexistent_word"}, nil, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stdout.String(), "no description available") {
+		t.Errorf("expected 'no description available' message, got %q", stdout.String())
 	}
 }
 

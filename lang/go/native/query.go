@@ -25,24 +25,39 @@ type SetOp struct {
 // (where, order, limit), the QueryBuilder collects all clauses and
 // executes a single combined query when materialized.
 type QueryBuilder struct {
-	Source   TableData // the source table data
-	Registry *Registry // needed for SQLite access during materialization
-	Where    string    // WHERE condition (without keyword)
-	OrderBy  string    // ORDER BY clause (without keyword)
-	Limit    int       // -1 = no limit
-	Offset   int       // -1 = no offset
-	Distinct bool      // true for SELECT DISTINCT
-	GroupBy  string    // GROUP BY clause (without keyword)
-	Having   string    // HAVING clause (without keyword)
-	Joins    []JoinClause
-	Alias    string // table alias for the FROM source
-	SetOps   []SetOp
+	Source    TableData    // the source table data (valid only when HasSource)
+	HasSource bool         // true once `from` has set the source table
+	Cols      []columnSpec // projected columns (nil = SELECT *)
+	Registry  *Registry    // needed for SQLite access during materialization
+	Where     string       // WHERE condition (without keyword)
+	OrderBy   string       // ORDER BY clause (without keyword)
+	Limit     int          // -1 = no limit
+	Offset    int          // -1 = no offset
+	Distinct  bool         // true for SELECT DISTINCT
+	GroupBy   string       // GROUP BY clause (without keyword)
+	Having    string       // HAVING clause (without keyword)
+	Joins     []JoinClause
+	Alias     string // table alias for the FROM source
+	SetOps    []SetOp
 }
 
 // NewQueryBuilder creates a QueryBuilder from a table data source.
 func NewQueryBuilder(r *Registry, td TableData) QueryBuilder {
 	return QueryBuilder{
-		Source:   td,
+		Source:    td,
+		HasSource: true,
+		Registry:  r,
+		Limit:     -1,
+		Offset:    -1,
+	}
+}
+
+// newSelectBuilder seeds a sourceless QueryBuilder from a `select`
+// projection. `from` fills in the source later; materialization errors
+// if it never does. cols == nil means SELECT *.
+func newSelectBuilder(r *Registry, cols []columnSpec) QueryBuilder {
+	return QueryBuilder{
+		Cols:     cols,
 		Registry: r,
 		Limit:    -1,
 		Offset:   -1,
@@ -201,8 +216,12 @@ func (qb *QueryBuilder) mergedSchema() RecordTypeInfo {
 	return RecordTypeInfo{Fields: fields}
 }
 
-// Materialize executes the accumulated query and returns the result as TableData.
-func (qb *QueryBuilder) Materialize() (TableData, error) {
+// materializeAll executes the accumulated query with `SELECT *` and
+// returns the result as TableData. It is the raw (pointer-receiver)
+// engine path; the public value-receiver Materialize (which satisfies
+// eng.Materializer and handles the FROM-required check + column
+// projection) delegates here for the no-projection case.
+func (qb *QueryBuilder) materializeAll() (TableData, error) {
 	tableName, ownsTmp, err := qb.ensureSource()
 	if err != nil {
 		return TableData{}, err
@@ -336,13 +355,177 @@ func (qb *QueryBuilder) ensureSetOpSources() ([]string, error) {
 	return tmpNames, nil
 }
 
-// The query DSL words live in queryNatives (native_query.go);
+// The query DSL words live in QueryNatives (native_query.go) and are
+// surfaced through the aql:query module (modules/query.go); the
 // supporting parser/exec helpers stay in this file. Aggregate
 // functions (count, sum, avg, min, max) and CAST are handled
 // directly in parseColumnSpec when they appear as the first element
 // of a sub-list in the column spec, e.g.:
 //   select [[count name cnt]] from people
 //   select [[cast age integer]] from people
+
+// clone returns a deep-enough copy of the QueryBuilder so that
+// mutating one pipeline stage does not alias the slice backing arrays
+// of an upstream builder. Scalar clause fields copy by value; the
+// Joins and SetOps slices are duplicated.
+func (qb QueryBuilder) clone() QueryBuilder {
+	cp := qb
+	if qb.Joins != nil {
+		cp.Joins = append([]JoinClause(nil), qb.Joins...)
+	}
+	if qb.SetOps != nil {
+		cp.SetOps = append([]SetOp(nil), qb.SetOps...)
+	}
+	return cp
+}
+
+// toQueryBuilder coerces a pipeline value into a QueryBuilder. It
+// accepts a lazy query (the MaterializerPayload wrapper produced by
+// wrapQB), cloned so upstream stages are not mutated, or a bare
+// TableData source.
+func toQueryBuilder(r *Registry, v Value) (QueryBuilder, error) {
+	if qb, ok := unwrapQB(v); ok {
+		return qb.clone(), nil
+	}
+	if td, ok := v.Data.(TableData); ok {
+		return NewQueryBuilder(r, td), nil
+	}
+	return QueryBuilder{}, fmt.Errorf("argument is not a table or query")
+}
+
+// wrapQB wraps a QueryBuilder as a LAZY table Value. The builder rides
+// in a MaterializerPayload under the TList tag: it satisfies the kernel
+// Materializer interface (Materialize / SourceRecord), so the engine
+// auto-runs the query only when rows or schema are actually needed
+// (printing, iteration, AsList). No terminal word is required.
+func wrapQB(qb QueryBuilder) Value {
+	return NewValueRaw(TList, MaterializerPayload{M: qb})
+}
+
+// Materialize runs the accumulated query and returns concrete rows.
+// Implements eng.Materializer (value receiver so it satisfies the
+// interface when stored by value in MaterializerPayload). A query with
+// no FROM table — a `select` that was never given a `from` — errors
+// here rather than silently producing nothing.
+func (qb QueryBuilder) Materialize() (TableData, error) {
+	if !qb.HasSource {
+		return TableData{}, fmt.Errorf("select: query has no FROM table")
+	}
+	local := qb
+	if local.Cols == nil {
+		return local.materializeAll()
+	}
+	return local.MaterializeWithColumns(local.Cols)
+}
+
+// SourceRecord returns the query's result schema without running it.
+// Implements eng.Materializer. Cheap: derived from the source/join
+// schema (and projected columns when present), no SQLite hit.
+func (qb QueryBuilder) SourceRecord() RecordTypeInfo {
+	if !qb.HasSource {
+		return RecordTypeInfo{Fields: NewOrderedMap()}
+	}
+	local := qb
+	merged := local.mergedSchema()
+	if local.Cols == nil {
+		return merged
+	}
+	fields := NewOrderedMap()
+	for _, c := range local.Cols {
+		name := c.Name
+		if c.Alias != "" {
+			name = c.Alias
+		}
+		if c.ResultType != nil {
+			fields.Set(name, NewTypeLiteral(c.ResultType))
+		} else if v, ok := merged.Fields.Get(c.Name); ok {
+			fields.Set(name, v)
+		} else {
+			fields.Set(name, NewTypeLiteral(TString))
+		}
+	}
+	return RecordTypeInfo{Fields: fields}
+}
+
+// resolveParenSubExprs walks a clause list and evaluates any
+// parenthesized sub-expressions (scalar subqueries, nested queries) in
+// a sub-engine, splicing their results back into the list. Nested
+// lists are recursed into, except those that are already TableData or
+// QueryBuilder values (subquery results carried as data). Shared by
+// the select column list and the where/having condition list.
+func resolveParenSubExprs(r *Registry, list Value) (Value, error) {
+	if !list.Parent.Equal(TList) {
+		return list, nil
+	}
+	_lst, err := AsList(list)
+	if err != nil {
+		return list, nil
+	}
+	elems := _lst.Slice()
+	if len(elems) == 0 {
+		return list, nil
+	}
+
+	// Recurse into nested lists that are not themselves query results.
+	work := make([]Value, len(elems))
+	for i, e := range elems {
+		if e.Parent.Equal(TList) && !isTableOrQuery(e) {
+			resolved, err := resolveParenSubExprs(r, e)
+			if err != nil {
+				return Value{}, err
+			}
+			work[i] = resolved
+			continue
+		}
+		work[i] = e
+	}
+
+	// Fast path: no paren markers at this level.
+	hasParen := false
+	for _, e := range work {
+		if IsOpenParen(e) {
+			hasParen = true
+			break
+		}
+	}
+	if !hasParen {
+		return NewList(work), nil
+	}
+
+	// Evaluate each parenthesized group in a sub-engine.
+	var out []Value
+	i := 0
+	for i < len(work) {
+		if IsOpenParen(work[i]) {
+			depth := 1
+			j := i + 1
+			for j < len(work) && depth > 0 {
+				if IsOpenParen(work[j]) {
+					depth++
+				} else if IsCloseParen(work[j]) {
+					depth--
+				}
+				j++
+			}
+			if depth != 0 {
+				return Value{}, fmt.Errorf("unmatched parenthesis in query clause")
+			}
+			subExpr := work[i+1 : j-1]
+			sub := New(r)
+			evalResult, err := sub.Run(subExpr)
+			if err != nil {
+				return Value{}, fmt.Errorf("query subexpression: %w", err)
+			}
+			out = append(out, evalResult...)
+			i = j
+		} else {
+			out = append(out, work[i])
+			i++
+		}
+	}
+
+	return NewList(out), nil
+}
 
 // aggregateFuncs is the set of recognized aggregate function names.
 var aggregateFuncs = map[string]bool{
@@ -580,6 +763,13 @@ func valueToColName(v Value) string {
 // shape so QueryBuilder satisfies Payload) and the legacy bare form.
 // Returns (QueryBuilder{}, false) when v is not a query builder.
 func unwrapQB(v Value) (QueryBuilder, bool) {
+	// Current wrapper: the lazy MaterializerPayload produced by wrapQB.
+	if mp, ok := v.Data.(MaterializerPayload); ok {
+		if qb, ok := mp.M.(QueryBuilder); ok {
+			return qb, true
+		}
+	}
+	// Back-compat: the older ExtensionPayload-wrapped form.
 	if ep, ok := v.Data.(ExtensionPayload); ok {
 		if qb, ok := ep.Body.(QueryBuilder); ok {
 			return qb, true

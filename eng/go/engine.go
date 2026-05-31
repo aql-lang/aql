@@ -130,6 +130,23 @@ func (e *Engine) sigError(name string, fn *FnDefInfo, pos SrcPos) *AqlError {
 	if fn != nil && len(fn.Signatures) > 0 {
 		hint.WriteString("expected: " + name + " " + describeAllSigs(fn))
 	}
+
+	// Forward-precedence hint: when the word has forward-collecting
+	// signatures, the most common cause of this error is that forward
+	// collection ran into a following word (another call, a builtin)
+	// before it could gather enough arguments — e.g. `inc inc 5` or
+	// `f a g b`. Point the user at the fixes (group with parens, or
+	// terminate collection with `end` / `;`) so they aren't left to
+	// guess from a bare "no matching signature".
+	if fn != nil && fn.HasForwardSigs() {
+		if hint.Len() > 0 {
+			hint.WriteString("\n  = ")
+		}
+		hint.WriteString("forward args for " + name +
+			" may have run into the next word; group the call with parens " +
+			"— (" + name + " …) — or end it with `end` or `;`")
+	}
+
 	if len(e.stack) > 0 {
 		if hint.Len() > 0 {
 			hint.WriteString("\n  = ")
@@ -200,6 +217,24 @@ func (e *Engine) isFnShapeTypedBindingContext() bool {
 		return constraint.Parent.Equal(TFnUndef)
 	}
 	return false
+}
+
+// pendingForwardFunc returns the name of the nearest enclosing
+// forward-collecting word (the function currently gathering arguments at
+// the pointer), or "" if there is none before an open-paren barrier.
+// Used to tailor error hints to the collecting context (e.g. a bare
+// undefined word being collected as `def`'s body).
+func (e *Engine) pendingForwardFunc() string {
+	for i := e.pointer - 1; i >= 0; i-- {
+		if IsOpenParen(e.stack[i]) {
+			return ""
+		}
+		if IsForward(e.stack[i]) {
+			fwd, _ := AsForward(e.stack[i])
+			return fwd.FuncName
+		}
+	}
+	return ""
 }
 
 // insufficientArgsError builds a detailed AqlError for forward argument
@@ -314,7 +349,25 @@ func traceSigStr(name string, sig *Signature) string {
 // returned. Callers decide the shape they want: take [0] for a single
 // value, keep the slice for a list, or splice it back into a parent
 // tape.
-func (e *Engine) Run(input []Value) ([]Value, error) {
+func (e *Engine) Run(input []Value) (result []Value, runErr error) {
+	// Last-resort panic guard at the top-level engine boundary. A bug in
+	// any handler or in the step loop should surface to the user as a
+	// clean AQL error, never as a goroutine stack trace. Only the
+	// outermost (NewTop) engine recovers; sub-engines let the panic
+	// propagate so it unwinds to here with the original stack intact for
+	// the debug detail. Errors returned normally are untouched.
+	if e.isTop {
+		defer func() {
+			if rec := recover(); rec != nil {
+				result = nil
+				runErr = makeAqlErrorAt("internal_error",
+					fmt.Sprintf("internal engine error: %v", rec),
+					"", e.effectiveSource(),
+					"this is a bug in AQL; please report it", e.currentPos())
+			}
+		}()
+	}
+
 	// Push a scoped context Store whose prototype is the parent context.
 	parent := e.registry.Contexts.Top()
 	e.registry.Contexts.Push(parent)
@@ -923,12 +976,23 @@ func (e *Engine) stepWord(val Value) error {
 		// reach the result stack — recording at the source guarantees
 		// every undefined word produces exactly one diagnostic.
 		if !e.registry.Check.IsActive() {
+			hint := ""
+			// `def name foo` where foo is undefined: the user almost
+			// certainly meant to bind foo's VALUE, not the bare word.
+			// `def` does not auto-quote its body, so a bare word is
+			// dispatched (and errors here when undefined). Point at the
+			// fixes: `(foo)` to evaluate, or `foo/q` to bind the name.
+			if e.pendingForwardFunc() == "def" {
+				hint = "did you mean `def … (" + w.Name + ")` to bind its value, " +
+					"or `def … " + w.Name + "/q` to bind the name itself?"
+			}
 			return &AqlError{
 				Code:       "undefined_word",
 				Detail:     "undefined word: " + w.Name,
 				Src:        w.Name,
 				Row:        val.Pos.Row,
 				Col:        val.Pos.Col,
+				Hint:       hint,
 				fullSource: e.effectiveSource(),
 			}
 		}
@@ -1952,22 +2016,35 @@ func isRecordableLiteral(v Value) bool {
 // direct-call the inner handler (trivial) or run the body in the
 // captured sub-registry (non-trivial).
 func isTrivialDelegationBody(sig *FnSig, name string) bool {
+	inner, ok := trivialDelegationTarget(sig)
+	return ok && inner == name
+}
+
+// trivialDelegationTarget reports the inner native name a wrapper FnSig
+// purely delegates to — body of the form `[Word(inner)]` with all-
+// unnamed Params — and whether the sig has that shape at all. Unlike
+// isTrivialDelegationBody it does NOT require the inner name to equal
+// the wrapper's own name, so it also recognises a wrapper rebound under
+// a different name (`def w pkg.word`, `unpack [word] pkg`): the body
+// word still names the original inner native to look up in the
+// sub-registry. See InstallDef's module-wrapper rebinding branch.
+func trivialDelegationTarget(sig *FnSig) (string, bool) {
 	if len(sig.Body) != 1 {
-		return false
+		return "", false
 	}
 	for _, p := range sig.Params {
 		if p.Name != "" {
-			return false
+			return "", false
 		}
 	}
 	if !IsWord(sig.Body[0]) {
-		return false
+		return "", false
 	}
 	w, err := AsWord(sig.Body[0])
 	if err != nil {
-		return false
+		return "", false
 	}
-	return w.Name == name
+	return w.Name, true
 }
 
 // execFnDefSigStackMatch is the legacy FnSig-based pure-stack

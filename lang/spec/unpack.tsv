@@ -1,0 +1,30 @@
+# tokens	expected	note
+# =====================================================================
+# unpack — JavaScript-style destructuring. Binds entries of a map (or
+# record) to bare words in the current scope. Three selector forms:
+#   unpack [names] map     — bind the listed keys
+#   unpack all map         — bind every key
+#   unpack {renames} map   — bind source keys under chosen local names
+# Missing keys and capitalised (type) target names are errors.
+# See lang/go/native/native_unpack.go.
+# =====================================================================
+
+def m {x:1} unpack [x] m x	1	names: binds one named entry
+def m {a:1 b:2} unpack [a b] m a add b	3	names: binds several entries
+def m {x:1 y:2} unpack [y] m y	2	names: binds only the named entry, not others
+def m {n:10} unpack [n] m n mul 2	20	names: bound value is usable in expressions
+def m {a:1 b:2} unpack all m a add b	3	all: binds every key
+def m {x:5} unpack all m x	5	all: single key
+def m {} unpack all m	 	all: empty map binds nothing
+def m {a:1 b:2} unpack {a: x b: y} m x add y	3	rename: source keys bound under new names
+def m {a:1 b:2} unpack {a: x} m x	1	rename: only the renamed key is bound
+def m {greeting: 'hi'} unpack {greeting: g} m g	'hi'	rename: works for any value type
+def m {a:1 b:2} unpack {a b} m a add b	3	rename: map shorthand {a b} ≡ {a: a b: b}
+def m {x:1} unpack [] m x	ERROR:undefined	names: empty list binds nothing
+def m {x:1} unpack [y] m	ERROR:not found	names: missing key is strict
+def m {X:1} unpack [X] m	ERROR:capitalised	names: refuses a capitalised (type) name
+def m {a:1} unpack {z: x} m	ERROR:not found	rename: missing source key is strict
+def m {a:1} unpack {a: X} m	ERROR:capitalised	rename: refuses a capitalised target name
+def m {a:1} unpack everything m	ERROR:expected	only the keyword `all` selects every key
+unpack [x] 42	ERROR:	non-map source is rejected
+unpack [x] Map	ERROR:	bare type-literal source is rejected
