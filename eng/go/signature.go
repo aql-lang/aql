@@ -168,6 +168,23 @@ func (s *Signature) TotalArgs() int {
 	return len(s.Args)
 }
 
+// ArgTypes returns the per-position declared types of the signature,
+// derived from Params (the unified source of arg shape). This is the
+// EXPORTED accessor external consumers (the lang help/inspect surface)
+// should use instead of the legacy Args field, so that field can later
+// be retired without a public-API break. Order is sig order (position 0
+// = top of stack).
+func (s *Signature) ArgTypes() []*Type {
+	if len(s.Params) > 0 {
+		out := make([]*Type, len(s.Params))
+		for i := range s.Params {
+			out[i] = s.Params[i].Type
+		}
+		return out
+	}
+	return s.Args
+}
+
 // sigArgType returns the declared type at signature position i. It is the
 // single accessor every matcher / forward-planner reader uses for a
 // signature's per-position type. Storage lives in Params[i].Type; the

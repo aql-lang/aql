@@ -99,7 +99,7 @@ func buildInspection(r *Registry, name string) Value {
 		sm := NewOrderedMap()
 
 		var argVals []Value
-		for _, argType := range sig.Args {
+		for _, argType := range sig.ArgTypes() {
 			argVals = append(argVals, NewString(argType.Leaf()))
 		}
 		if argVals == nil {
