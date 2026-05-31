@@ -61,6 +61,67 @@ func TestUnpackBindsOnlyNamed(t *testing.T) {
 	}
 }
 
+func TestUnpackAllBindsEveryKey(t *testing.T) {
+	if got := runUnpack(t, `def m {a:1 b:2} unpack all m a add b`); got != "3" {
+		t.Errorf("unpack all m then a add b = %q, want 3", got)
+	}
+}
+
+func TestUnpackAllEmptyMapIsNoop(t *testing.T) {
+	if got := runUnpack(t, `def m {} unpack all m`); got != "" {
+		t.Errorf("unpack all {} = %q, want empty", got)
+	}
+}
+
+func TestUnpackAllWrongKeywordErrors(t *testing.T) {
+	// Only the literal `all` selects every key; any other bare atom errors.
+	err := runUnpackErr(t, `def m {a:1} unpack everything m`)
+	if err == nil || !strings.Contains(err.Error(), "expected") {
+		t.Fatalf("expected keyword error, got %v", err)
+	}
+}
+
+func TestUnpackRenameBindsTargets(t *testing.T) {
+	// {srcKey: localName} binds each source key under the chosen name.
+	if got := runUnpack(t, `def m {a:1 b:2} unpack {a: x b: y} m x add y`); got != "3" {
+		t.Errorf("unpack {a:x b:y} m then x add y = %q, want 3", got)
+	}
+}
+
+func TestUnpackRenamePartial(t *testing.T) {
+	// Only the renamed keys are bound; others are untouched.
+	if got := runUnpack(t, `def m {a:1 b:2} unpack {a: x} m x`); got != "1" {
+		t.Errorf("unpack {a:x} m then x = %q, want 1", got)
+	}
+}
+
+func TestUnpackRenameShorthand(t *testing.T) {
+	// The parser desugars map shorthand `{foo}` to `{foo: foo}`, so a
+	// shorthand rename map binds each key under its own name — making
+	// `unpack {a b} m` behave like `unpack [a b] m`.
+	if got := runUnpack(t, `def m {a:1 b:2} unpack {a b} m a add b`); got != "3" {
+		t.Errorf("unpack {a b} m then a add b = %q, want 3", got)
+	}
+	// Shorthand and explicit rename can be mixed.
+	if got := runUnpack(t, `def m {a:1 b:2} unpack {a b: y} m a add y`); got != "3" {
+		t.Errorf("unpack {a b:y} m then a add y = %q, want 3", got)
+	}
+}
+
+func TestUnpackRenameMissingKeyErrors(t *testing.T) {
+	err := runUnpackErr(t, `def m {a:1} unpack {z: x} m`)
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("expected 'not found' error for missing source key, got %v", err)
+	}
+}
+
+func TestUnpackRenameToCapitalisedRejected(t *testing.T) {
+	err := runUnpackErr(t, `def m {a:1} unpack {a: X} m`)
+	if err == nil || !strings.Contains(err.Error(), "capitalised") {
+		t.Fatalf("expected 'capitalised' error, got %v", err)
+	}
+}
+
 func TestUnpackReturnsNothing(t *testing.T) {
 	// unpack leaves nothing on the stack.
 	if got := runUnpack(t, `def m {x:1} unpack [x] m`); got != "" {
@@ -119,17 +180,24 @@ func TestUnpackHandlerNoPanic(t *testing.T) {
 		{NewList([]Value{NewAtom("x")}), NewTypeLiteral(TMap)}, // type-literal map
 		{NewTypeLiteral(TList), NewMap(NewOrderedMap())},       // type-literal names
 	}
-	for i, c := range cases {
-		func() {
-			defer func() {
-				if rec := recover(); rec != nil {
-					t.Fatalf("case %d: unpackHandler panicked: %v", i, rec)
+	handlers := map[string]func([]Value, map[string]Value, []Value, *Registry) ([]Value, error){
+		"names":  unpackHandler,
+		"all":    unpackAllHandler,
+		"rename": unpackRenameHandler,
+	}
+	for name, h := range handlers {
+		for i, c := range cases {
+			func() {
+				defer func() {
+					if rec := recover(); rec != nil {
+						t.Fatalf("%s case %d: handler panicked: %v", name, i, rec)
+					}
+				}()
+				if _, err := h(c[:], nil, nil, r); err == nil {
+					t.Errorf("%s case %d: expected an error, got nil", name, i)
 				}
 			}()
-			if _, err := unpackHandler(c[:], nil, nil, r); err == nil {
-				t.Errorf("case %d: expected an error, got nil", i)
-			}
-		}()
+		}
 	}
 }
 

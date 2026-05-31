@@ -4,13 +4,16 @@ func init() {
 	register(&Entry{
 		Word:    "unpack",
 		Summary: "Destructure entries of a map into local word bindings.",
-		Description: "Extracts the named entries from a map (or record) and binds each to a " +
-			"bare word in the current scope — AQL's analogue of JavaScript object " +
-			"destructuring. Forward form: `unpack [names] map`.",
+		Description: "Extracts entries from a map (or record) and binds each to a bare word " +
+			"in the current scope — AQL's analogue of JavaScript object destructuring. " +
+			"Three selector forms over the same source: `unpack [names] map`, " +
+			"`unpack all map`, and `unpack {renames} map`.",
 		Notes: []string{
-			"Example: def m {x:1}  unpack [x] m  → x is now bound to 1.",
-			"v1 takes an explicit list of names; rename and bind-all forms are not yet supported.",
-			"A requested name absent from the source is an error (strict, like getr).",
+			"`unpack [a b] m` — bind the listed keys: a → m.a, b → m.b.",
+			"`unpack all m` — bind every key of the source map.",
+			"`unpack {a: x b: y} m` — rename: bind source key a to x, b to y.",
+			"Map shorthand works: `unpack {a b} m` ≡ `{a: a b: b}` ≡ `unpack [a b] m`.",
+			"A requested/renamed key absent from the source is an error (strict, like getr).",
 			"Capitalised (type) names are rejected — unpack binds values only.",
 			"Bindings obey scope: torn down at fn-body exit, persist at top level (like def).",
 		},
