@@ -222,6 +222,120 @@ func UninstallDef(r *Registry, name string) {
 	}
 }
 
+// buildFnBodyHandler produces the dispatch Handler for one AQL fn
+// signature. Rather than computing a final result, the handler returns
+// a PAREN-WRAPPED TOKEN SEQUENCE — `( unnamed-args… body DefCleanup __pa
+// undef-tail… ReturnCheck )` — that execMatch splices back onto the
+// stack to be RE-STEPPED inline. Named params and lexical captures are
+// installed as defs up front (captures first so params shadow them);
+// the paren keeps the whole expansion atomic so an outer forward can't
+// grab an intermediate body value (e.g. recursive factorial).
+//
+// The handler closes over the install-time registry `r`: an FnDef
+// registered into a name dispatches in the registry it was installed in.
+// (The registry passed to the Handler at call time is intentionally
+// ignored here — this mirrors the historical InstallFnDef closure.)
+//
+// Extracted verbatim from InstallFnDef so the same body-runner can be
+// shared with the Function-value dispatch path (function-model
+// consolidation). `s` is the signature; `fnDefCopy` supplies Captured.
+func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo) Handler {
+	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		var result []Value
+		var names []string
+		// Wrap the entire expansion (unnamed args + body + undef
+		// cleanup) in parens so it evaluates as a single
+		// sub-expression. Without this, an outer forward can grab
+		// intermediate values from the body before the body
+		// finishes executing (e.g. recursive factorial: the outer
+		// mul's forward grabs x=1 from the inner body instead of
+		// waiting for the full result).
+		result = append(result, NewOpenParen())
+
+		// Push the fn-entry baseline BEFORE installing anything
+		// for this call. Closure-capture detection on inner fn
+		// constructions (afn/fn) inside this body consults
+		// TopFnBaseline to identify enclosing-fn-local bindings:
+		// names installed AFTER this snapshot (this call's
+		// captures + named params + body-local defs) are
+		// capturable; names already present at module/global
+		// scope are dynamic.
+		r.PushFnBaseline(r.Defs.Snapshot())
+
+		// Push args list onto the args stack for access via the
+		// "args" word (args.0, args.1, etc.). Paired with __pa
+		// at the body tail, which also pops the FnBaseline.
+		argsCopy := make([]Value, len(args))
+		copy(argsCopy, args)
+		argsList := NewList(argsCopy)
+		if err := r.Args.Push(argsList); err != nil {
+			r.PopFnBaseline()
+			return nil, err
+		}
+
+		// Install lexical captures BEFORE named params so params
+		// shadow captures with the same name (innermost binding
+		// wins). Captures are appended to `names` so the
+		// synthesized undef tail tears them down alongside params.
+		for _, cb := range fnDefCopy.Captured {
+			InstallDef(r, cb.Name, cb.Value)
+			names = append(names, cb.Name)
+		}
+
+		unnamedCount := 0
+		for i, p := range s.Params {
+			if p.Name != "" {
+				arg := args[i]
+				// Quote list params so they're treated as data values
+				// when referenced in the body, not expanded as code bodies.
+				if arg.Parent.Equal(TList) && !arg.Quoted {
+					arg.Quoted = true
+				}
+				InstallDef(r, p.Name, arg)
+				names = append(names, p.Name)
+			} else {
+				// Unnamed parameter: push value back for the body to use
+				result = append(result, args[i])
+				unnamedCount++
+			}
+		}
+		// Snapshot DefStacks lengths after installing named params
+		// so we can clean up any defs created during body execution
+		// (fixes def leakage from fn bodies — DX-REPORT Issue 2).
+		defSnapshot := r.Defs.Snapshot()
+
+		body := make([]Value, len(s.Body))
+		copy(body, s.Body)
+		result = append(result, body...)
+		// Clean up defs created during body execution, then pop
+		// the args stack to restore the previous args (for nesting).
+		result = append(result, NewDefCleanup(DefCleanupInfo{
+			Snapshot: defSnapshot,
+			Registry: r,
+		}))
+		result = append(result, NewWord("__pa"))
+		for i := len(names) - 1; i >= 0; i-- {
+			// Force forward so undef takes the name word that follows,
+			// not a same-typed value from the prefix stack (e.g. a
+			// string return value when the param is also a string).
+			result = append(result,
+				NewWordModified("undef", -1, false, true),
+				NewWord(names[i]),
+			)
+		}
+		// Inject return-check if return types are declared.
+		if len(s.Returns) > 0 {
+			result = append(result, NewReturnCheck(ReturnCheckInfo{
+				FuncName:     name,
+				Returns:      s.Returns,
+				UnnamedCount: unnamedCount,
+			}))
+		}
+		result = append(result, NewCloseParen())
+		return result, nil
+	}
+}
+
 // InstallFnDef registers typed signatures for a function definition.
 // For each signature, it creates a handler that binds named parameters
 // via InstallDef, returns body tokens, and appends undef cleanup.
@@ -243,100 +357,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 		}
 		s := sig           // capture for closure
 		fnDefCopy := fnDef // capture for closure (we need Captured at call time)
-		handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			var result []Value
-			var names []string
-			// Wrap the entire expansion (unnamed args + body + undef
-			// cleanup) in parens so it evaluates as a single
-			// sub-expression. Without this, an outer forward can grab
-			// intermediate values from the body before the body
-			// finishes executing (e.g. recursive factorial: the outer
-			// mul's forward grabs x=1 from the inner body instead of
-			// waiting for the full result).
-			result = append(result, NewOpenParen())
-
-			// Push the fn-entry baseline BEFORE installing anything
-			// for this call. Closure-capture detection on inner fn
-			// constructions (afn/fn) inside this body consults
-			// TopFnBaseline to identify enclosing-fn-local bindings:
-			// names installed AFTER this snapshot (this call's
-			// captures + named params + body-local defs) are
-			// capturable; names already present at module/global
-			// scope are dynamic.
-			r.PushFnBaseline(r.Defs.Snapshot())
-
-			// Push args list onto the args stack for access via the
-			// "args" word (args.0, args.1, etc.). Paired with __pa
-			// at the body tail, which also pops the FnBaseline.
-			argsCopy := make([]Value, len(args))
-			copy(argsCopy, args)
-			argsList := NewList(argsCopy)
-			if err := r.Args.Push(argsList); err != nil {
-				r.PopFnBaseline()
-				return nil, err
-			}
-
-			// Install lexical captures BEFORE named params so params
-			// shadow captures with the same name (innermost binding
-			// wins). Captures are appended to `names` so the
-			// synthesized undef tail tears them down alongside params.
-			for _, cb := range fnDefCopy.Captured {
-				InstallDef(r, cb.Name, cb.Value)
-				names = append(names, cb.Name)
-			}
-
-			unnamedCount := 0
-			for i, p := range s.Params {
-				if p.Name != "" {
-					arg := args[i]
-					// Quote list params so they're treated as data values
-					// when referenced in the body, not expanded as code bodies.
-					if arg.Parent.Equal(TList) && !arg.Quoted {
-						arg.Quoted = true
-					}
-					InstallDef(r, p.Name, arg)
-					names = append(names, p.Name)
-				} else {
-					// Unnamed parameter: push value back for the body to use
-					result = append(result, args[i])
-					unnamedCount++
-				}
-			}
-			// Snapshot DefStacks lengths after installing named params
-			// so we can clean up any defs created during body execution
-			// (fixes def leakage from fn bodies — DX-REPORT Issue 2).
-			defSnapshot := r.Defs.Snapshot()
-
-			body := make([]Value, len(s.Body))
-			copy(body, s.Body)
-			result = append(result, body...)
-			// Clean up defs created during body execution, then pop
-			// the args stack to restore the previous args (for nesting).
-			result = append(result, NewDefCleanup(DefCleanupInfo{
-				Snapshot: defSnapshot,
-				Registry: r,
-			}))
-			result = append(result, NewWord("__pa"))
-			for i := len(names) - 1; i >= 0; i-- {
-				// Force forward so undef takes the name word that follows,
-				// not a same-typed value from the prefix stack (e.g. a
-				// string return value when the param is also a string).
-				result = append(result,
-					NewWordModified("undef", -1, false, true),
-					NewWord(names[i]),
-				)
-			}
-			// Inject return-check if return types are declared.
-			if len(s.Returns) > 0 {
-				result = append(result, NewReturnCheck(ReturnCheckInfo{
-					FuncName:     name,
-					Returns:      s.Returns,
-					UnnamedCount: unnamedCount,
-				}))
-			}
-			result = append(result, NewCloseParen())
-			return result, nil
-		}
+		handler := buildFnBodyHandler(r, name, s, fnDefCopy)
 		// Static type-check: analyse the body once per arg-type
 		// tuple via AnalyseFnBody. If declared return types are
 		// present, use them verbatim (no analysis needed); otherwise
