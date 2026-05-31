@@ -519,6 +519,19 @@ func importFileHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	if path == "" && r.Check.IsActive() {
 		return []Value{NewCarrier(TModule)}, nil
 	}
+	// In check mode the path literal is preserved (see StripToCarriers /
+	// §4.3) so the importing file's cross-module references can be
+	// resolved. Loading the target binds its export namespaces, so
+	// `Pkg.word` no longer flags undefined_word. But the target may be
+	// missing, unparseable, or itself fail to load — none of which should
+	// block `aql check` on the importing file. On any such error, fall
+	// back to an opaque Module carrier and let analysis continue.
+	if r.Check.IsActive() {
+		if err := loadImportForCheck(r, path); err != nil {
+			return []Value{NewCarrier(TModule)}, nil
+		}
+		return nil, nil
+	}
 	if isNativeModImport(path) {
 		return nil, resolveNativeMod(r, path)
 	}
@@ -543,6 +556,35 @@ func importFileHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	}
 	installExports(r, desc, nil)
 	return nil, nil
+}
+
+// loadImportForCheck resolves an import in check mode for its export
+// symbols only. It mirrors the runtime import paths (native module,
+// bare module, file module) but is the single guarded entry the
+// check-mode branch of importFileHandler uses so a failure to load the
+// target degrades to an opaque module rather than a hard check error.
+// Data-file imports are skipped (no exports to bind). See §4.3.
+func loadImportForCheck(r *Registry, path string) error {
+	if isNativeModImport(path) {
+		return resolveNativeMod(r, path)
+	}
+	if isDataFile(path) {
+		return nil
+	}
+	resolved := path
+	if !isFilePath(path) {
+		var err error
+		resolved, err = resolveBareModule(r, path)
+		if err != nil {
+			return err
+		}
+	}
+	desc, err := loadFileModule(r, resolved)
+	if err != nil {
+		return err
+	}
+	installExports(r, desc, nil)
+	return nil
 }
 
 func importFileRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

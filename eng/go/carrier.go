@@ -158,15 +158,54 @@ func toCarrier(v Value) Value {
 	return v
 }
 
+// checkModeLiteralWords are words whose adjacent String literal argument
+// must survive check-mode carrier-stripping because the handler needs the
+// concrete value to do anything useful. `import`/`module` resolve a path
+// or module name — without it the checker can't load the target's exports
+// and every cross-module reference flags a spurious undefined_word (§4.3).
+var checkModeLiteralWords = map[string]bool{
+	"import": true,
+	"module": true,
+}
+
 // StripToCarriers returns a copy of in where every non-structural value
 // has been converted to its carrier form. Used at the top-level Run()
 // entry to bootstrap check-mode execution.
+//
+// Exception: a String literal directly adjacent to an `import` / `module`
+// word (either order — forward `import "x"` or stack `"x" import`) is kept
+// concrete so the import handler can resolve and analyse the target. See
+// checkModeLiteralWords and §4.3.
 func StripToCarriers(in []Value) []Value {
 	out := make([]Value, len(in))
 	for i, v := range in {
+		if v.Parent.Matches(TString) && IsConcrete(v) && adjacentToLiteralWord(in, i) {
+			out[i] = v
+			continue
+		}
 		out[i] = toCarrier(v)
 	}
 	return out
+}
+
+// adjacentToLiteralWord reports whether the token at index i has an
+// immediate neighbour that is a checkModeLiteralWords word.
+func adjacentToLiteralWord(in []Value, i int) bool {
+	if i > 0 && isLiteralWord(in[i-1]) {
+		return true
+	}
+	if i+1 < len(in) && isLiteralWord(in[i+1]) {
+		return true
+	}
+	return false
+}
+
+func isLiteralWord(v Value) bool {
+	if !IsWord(v) {
+		return false
+	}
+	w, _ := AsWord(v)
+	return checkModeLiteralWords[w.Name]
 }
 
 // carrierResults returns the carrier Values that a matched signature

@@ -3,6 +3,7 @@ package test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
@@ -63,6 +64,87 @@ func runRealFileSteps(t *testing.T, dir string, steps []string) ([]native.Value,
 		}
 	}
 	return result, nil
+}
+
+// §4.3 — `aql check` on a file that imports a sibling and uses its
+// exports via dot-access must NOT emit spurious undefined_word /
+// no_signature diagnostics for the imported namespace. In check mode the
+// import path literal is preserved (StripToCarriers) and the target's
+// exports are loaded so `Pkg.word` resolves.
+func TestCheckSiblingImportResolvesNamespace(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "bloom.aql", `export "Bloom" {
+  make: ([n:Integer] => [{n: n}])
+  add:  ([b:Map s:String] => [b])
+}`)
+	writeFile(t, dir, "index.aql", `import "./bloom.aql" end
+def bf (100 Bloom.make)
+def bf2 (bf "hello" Bloom.add)
+bf2`)
+
+	diags := checkRealFile(t, dir, "index.aql")
+	for _, d := range diags {
+		if d.Code == "undefined_word" && strings.Contains(d.Detail, "Bloom") {
+			t.Errorf("spurious undefined_word for imported namespace: %+v", d)
+		}
+		if d.Code == "no_signature" {
+			t.Errorf("spurious no_signature from cross-module dot-access: %+v", d)
+		}
+	}
+}
+
+// §4.3 — checking a file that imports a MISSING sibling must degrade to
+// an opaque module rather than hard-failing the whole check.
+func TestCheckMissingSiblingImportDoesNotHardFail(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "index.aql", `import "./does-not-exist.aql" end
+def x 5
+x add 3`)
+	// checkRealFile fails the test on a hard run error; reaching the
+	// assertions means the missing import did not abort the check.
+	diags := checkRealFile(t, dir, "index.aql")
+	for _, d := range diags {
+		if strings.Contains(d.Detail, "not found") {
+			t.Errorf("missing sibling import should not surface a not-found error: %+v", d)
+		}
+	}
+}
+
+// writeFile writes name with the given contents under dir.
+func writeFile(t *testing.T, dir, name, contents string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// checkRealFile runs `name` (relative to dir) under check mode with real
+// file ops + production module wiring, returning the diagnostics.
+func checkRealFile(t *testing.T, dir, name string) []native.CheckDiagnostic {
+	t.Helper()
+	src, err := os.ReadFile(filepath.Join(dir, name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	native.SetHostFileOps(reg, capabilities.NewDefault())
+	reg.SetParseFunc(parser.Parse)
+	modules.InstallResolver(reg)
+	reg.BaseDir = dir
+	reg.Check.Mode = true
+	defer func() { reg.Check.Mode = false }()
+
+	toks, err := parser.Parse(string(src))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if _, err := native.NewTop(reg).Run(toks); err != nil {
+		t.Fatalf("check run hard-failed (should degrade gracefully): %v", err)
+	}
+	return reg.Check.Diagnostics
 }
 
 // --- Bare module with JSON import using relative paths ---
