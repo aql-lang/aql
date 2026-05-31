@@ -264,11 +264,12 @@ func describeStackTypes(stack []Value, pointer int) string {
 // describeSigArgs returns a human-readable description of a signature's
 // expected argument types.
 func describeSigArgs(sig *Signature) string {
-	if sig == nil || len(sig.Args) == 0 {
+	if sig == nil || sig.TotalArgs() == 0 {
 		return "(no args)"
 	}
-	parts := make([]string, len(sig.Args))
-	for i, t := range sig.Args {
+	argTypes := sig.ArgTypes()
+	parts := make([]string, len(argTypes))
+	for i, t := range argTypes {
 		parts[i] = t.String()
 	}
 	return "(" + strings.Join(parts, ", ") + ")"
