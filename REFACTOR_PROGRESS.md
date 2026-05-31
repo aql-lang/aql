@@ -315,3 +315,31 @@ Each step gated in BOTH modules. Do NOT attempt without that plan.
 3. `go test` RC can be 0 from CACHE over a file that no longer compiles —
    use `go vet ./...` (recompiles tests) as the compile gate.
 4. One logical change → build-gate → commit → push, as separate steps.
+
+---
+## Stage 3e — step 1 DONE (green, pushed): ArgTypes() decoupling
+
+Added exported `(s *Signature) ArgTypes() []*Type` (Params-derived).
+Repointed the ONLY external readers of Signature.Args — lang
+native_help.go (9 sites) + native_inspect.go — and eng describeSigArgs
+to it. This is the precondition that makes removing the exported
+Args/Patterns fields safe later (no cross-module break).
+
+State: green at HEAD. Params = source of truth; Signature still carries
+Args/Patterns (now read in eng only by the helper-fallbacks + a handful
+of internal len()/range sites + the registry shim that builds them).
+
+REMAINING for the full collapse (each its own gated step):
+  A. repoint the ~20 internal eng .Args/.Patterns reads to sigArgType/
+     sigPattern/TotalArgs/ArgTypes (engine.go, signature.go, registry.go
+     validation, fnsig.go, value.go, core_helpers.go, match.go).
+  B. drop Args/Patterns from the Signature struct + the two backfill
+     helpers; the registry shim + compileFnDef stop writing them.
+  C. add a no-pattern-args test fixture update (signature_user_compare_test
+     builds {Args,Patterns} — switch to {Params}).
+  D. (separate, largest) merge Signature⇄FnSig + collapse FnDefInfo.
+     {Sigs,Signatures} into one slice.
+
+GATE DISCIPLINE (now being followed): each step = edits → `go build;echo $?>f`
+read back ==0 → `go vet` both modules → `go test` both → goldens → lint →
+THEN commit (separate call) → push (separate call). Never batched.
