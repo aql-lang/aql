@@ -9,20 +9,21 @@ import (
 // sub-registry and returns a ModuleDesc with a "query" export containing
 // FnDef wrappers for each word.
 //
-// After import, words are accessed via dot notation:
+// After import, words are accessed via dot notation, in natural SQL
+// order:
 //
 //	"aql:query" import
-//	people query.from
+//	query.select [name age]
+//	  query.from people
 //	  query.where [age gt 18]
 //	  query.order [age desc]
-//	  query.select [name age]
 //
-// Tables are resolved by name from the context store (set via
-// `context set <name> <table-value>`), so the source word `query.from`
-// takes a bare table name; every later word takes the running query off
-// the stack and its own clause as a forward argument. The terminal
-// `query.select` materializes the accumulated query into a concrete
-// table.
+// `query.select` is the entry word: it seeds a lazy query with the
+// projected columns. `query.from` sets the source table (resolved by
+// name from the context store, set via `context set <name> <table>`).
+// Every later word takes the running query off the stack and its own
+// clause as a forward argument. The query is lazy — it runs only when
+// the result is printed, iterated, or otherwise needs rows.
 func BuildQueryModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Create an isolated sub-registry for the module's Go words.
 	subReg, err := native.DefaultRegistry()
@@ -78,9 +79,9 @@ type qWord struct {
 // position 1, matching each handler's args indexing. The single-source
 // word `from` and the flag word `distinct` take one argument.
 var queryExports = []qWord{
-	{export: "from", internal: "from", params: []qParam{{typ: native.TAtom, quote: true}}},
+	{export: "select", internal: "select", params: []qParam{{typ: native.TList, noEval: true}}},
+	{export: "from", internal: "from", params: []qParam{{typ: native.TAtom, quote: true}, {typ: native.TList}}},
 	{export: "where", internal: "where", params: []qParam{{typ: native.TList, noEval: true}, {typ: native.TList}}},
-	{export: "select", internal: "select", params: []qParam{{typ: native.TList, noEval: true}, {typ: native.TList}}},
 	{export: "order", internal: "order", params: []qParam{{typ: native.TList, noEval: true}, {typ: native.TList}}},
 	{export: "group", internal: "group", params: []qParam{{typ: native.TList, noEval: true}, {typ: native.TList}}},
 	{export: "having", internal: "having", params: []qParam{{typ: native.TList, noEval: true}, {typ: native.TList}}},

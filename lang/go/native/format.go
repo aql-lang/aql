@@ -273,17 +273,17 @@ func encodeDelimited(v Value, sep string) (string, error) {
 	case TableData:
 		columns = data.Record.Fields.Keys()
 		rows = data.Rows
-	case ExtensionPayload:
-		if qb, ok := data.Body.(QueryBuilder); ok {
-			td, err := qb.Materialize()
-			if err != nil {
-				return "", fmt.Errorf("encode: %w", err)
-			}
-			columns = td.Record.Fields.Keys()
-			rows = td.Rows
-		} else {
+	case MaterializerPayload, ExtensionPayload:
+		qb, ok := unwrapQB(v)
+		if !ok {
 			return v.String(), nil
 		}
+		td, err := qb.Materialize()
+		if err != nil {
+			return "", fmt.Errorf("encode: %w", err)
+		}
+		columns = td.Record.Fields.Keys()
+		rows = td.Rows
 	case ListPayload:
 		rows = data.Elems
 		if len(rows) > 0 {

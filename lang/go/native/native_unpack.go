@@ -17,8 +17,8 @@ package native
 // bare names:
 //
 //	"aql:query" import
-//	unpack [from where select] query
-//	from people  where [age gt 18]  select [name age]
+//	unpack [select from where] query
+//	select [name age] from people where [age gt 18]
 //
 // Because module export values are FnDefInfo Values that already carry
 // their sub-registry, re-binding the extracted value under a bare name

@@ -9,21 +9,21 @@ func init() {
 
 	register(&Entry{
 		Word:    "select",
-		Summary: "Project columns and materialize a query (aql:query).",
-		Description: "Terminal pipeline word: runs the accumulated query and returns a table. " +
-			"The column list specifies which columns to include; an empty list [] selects " +
-			"every column. Supports renaming ([col alias]), casting ([cast col type]), and " +
-			"aggregate functions (sum, avg, min, max, count). Imported from aql:query; call " +
-			"as query.select.",
+		Summary: "Start a query, projecting columns (aql:query).",
+		Description: "The SQL-order entry word: `select [name age] from people …`. Seeds a new " +
+			"lazy query with the projection columns; an empty list [] selects every column. " +
+			"Supports renaming ([col alias]), casting ([cast col type]), and aggregate functions " +
+			"(sum, avg, min, max, count). The query runs only when its result is printed, " +
+			"iterated, or otherwise needs rows. Imported from aql:query; call as query.select.",
 	})
 
 	register(&Entry{
 		Word:    "from",
-		Summary: "Start a query from a table (aql:query).",
-		Description: "Creates a new query builder targeting a table. Given a bare name it looks " +
-			"the table up in the context store (set via `context set <name> <table>`); given a " +
-			"table value on the stack it wraps that value. Imported from aql:query; call as " +
-			"query.from.",
+		Summary: "Set the source table of a query (aql:query).",
+		Description: "Sets the table the preceding `select` reads from — required in every query. " +
+			"Given a bare name it looks the table up in the context store (set via " +
+			"`context set <name> <table>`); given a table value it uses that. Imported from " +
+			"aql:query; call as query.from.",
 	})
 
 	register(&Entry{

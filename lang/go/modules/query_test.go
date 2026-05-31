@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
@@ -86,15 +87,22 @@ func runQuerySrc(t *testing.T, r *native.Registry, src string) ([]native.Value, 
 	return native.NewTop(r).Run(values)
 }
 
-// materialize coerces a query result Value to TableData. select
-// returns an eagerly materialized table, so the payload is TableData
-// directly.
+// materialize forces a query result Value to concrete TableData. The
+// query is lazy (a MaterializerPayload), so it runs here; an already
+// concrete TableData is returned directly.
 func materialize(t *testing.T, v native.Value) native.TableData {
 	t.Helper()
+	if mp, ok := v.Data.(native.MaterializerPayload); ok {
+		td, err := mp.M.Materialize()
+		if err != nil {
+			t.Fatalf("materialize: %v", err)
+		}
+		return td
+	}
 	if td, ok := v.Data.(native.TableData); ok {
 		return td
 	}
-	t.Fatalf("expected materialized TableData, got %T", v.Data)
+	t.Fatalf("expected a lazy query or TableData, got %T", v.Data)
 	return native.TableData{}
 }
 
@@ -136,7 +144,7 @@ func TestQueryModuleExports(t *testing.T) {
 // --- select * ---
 
 func TestQuerySelectStar(t *testing.T) {
-	if got := rowCount(t, `query.from people query.select []`); got != 4 {
+	if got := rowCount(t, `query.select [] query.from people`); got != 4 {
 		t.Errorf("select [] (all rows): expected 4, got %d", got)
 	}
 }
@@ -144,7 +152,7 @@ func TestQuerySelectStar(t *testing.T) {
 // --- where ---
 
 func TestQueryWhereFilter(t *testing.T) {
-	if got := rowCount(t, `query.from people query.where [age gt 25] query.select []`); got != 2 {
+	if got := rowCount(t, `query.select [] query.from people query.where [age gt 25]`); got != 2 {
 		t.Errorf("where age>25: expected 2 (Alice,Carol), got %d", got)
 	}
 }
@@ -153,7 +161,7 @@ func TestQueryWhereFilter(t *testing.T) {
 
 func TestQuerySelectColumns(t *testing.T) {
 	r := queryRegistry(t)
-	result, err := runQuerySrc(t, r, `query.from people query.select [name age]`)
+	result, err := runQuerySrc(t, r, `query.select [name age] query.from people`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +176,7 @@ func TestQuerySelectColumns(t *testing.T) {
 
 func TestQueryOrderLimit(t *testing.T) {
 	r := queryRegistry(t)
-	result, err := runQuerySrc(t, r, `query.from people query.order [age desc] query.limit 2 query.select [name age]`)
+	result, err := runQuerySrc(t, r, `query.select [name age] query.from people query.order [age desc] query.limit 2`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +196,7 @@ func TestQueryOrderLimit(t *testing.T) {
 func TestQueryGroupHaving(t *testing.T) {
 	r := queryRegistry(t)
 	// Cities with more than one person: London (Alice, Carol).
-	src := `query.from people query.group [city] query.having [cnt gt 1] query.select [city [count city cnt]]`
+	src := `query.select [city [count city cnt]] query.from people query.group [city] query.having [cnt gt 1]`
 	result, err := runQuerySrc(t, r, src)
 	if err != nil {
 		t.Fatal(err)
@@ -203,7 +211,7 @@ func TestQueryGroupHaving(t *testing.T) {
 
 func TestQueryDistinct(t *testing.T) {
 	r := queryRegistry(t)
-	result, err := runQuerySrc(t, r, `query.from people query.distinct query.select [city]`)
+	result, err := runQuerySrc(t, r, `query.select [city] query.from people query.distinct`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +227,7 @@ func TestQueryJoinOn(t *testing.T) {
 	r := queryRegistry(t)
 	makeVisitsTable(r)
 	// people JOIN visits ON people.name = visits.who
-	src := `query.from people query.join visits query.on [name eq who] query.select [name place]`
+	src := `query.select [name place] query.from people query.join visits query.on [name eq who]`
 	result, err := runQuerySrc(t, r, src)
 	if err != nil {
 		t.Fatal(err)
@@ -235,7 +243,7 @@ func TestQueryJoinOn(t *testing.T) {
 func TestQueryUnion(t *testing.T) {
 	r := queryRegistry(t)
 	// Londoners UNION Berliners.
-	src := `query.from people query.where [city eq 'London'] query.union (query.from people query.where [city eq 'Berlin']) query.select []`
+	src := `query.select [] query.from people query.where [city eq 'London'] query.union (query.select [] query.from people query.where [city eq 'Berlin'])`
 	result, err := runQuerySrc(t, r, src)
 	if err != nil {
 		t.Fatal(err)
@@ -250,7 +258,7 @@ func TestQueryUnion(t *testing.T) {
 
 func TestQueryUnknownTable(t *testing.T) {
 	r := queryRegistry(t)
-	_, err := runQuerySrc(t, r, `query.from nonexistent query.select []`)
+	_, err := runQuerySrc(t, r, `query.select [] query.from nonexistent`)
 	if err == nil {
 		t.Fatal("expected error for unknown table")
 	}
@@ -261,9 +269,46 @@ func TestQueryUnknownTable(t *testing.T) {
 func TestQueryFromNonTable(t *testing.T) {
 	r := queryRegistry(t)
 	r.ContextSet("notable", native.NewInteger(42))
-	_, err := runQuerySrc(t, r, `query.from notable query.select []`)
+	_, err := runQuerySrc(t, r, `query.select [] query.from notable`)
 	if err == nil {
 		t.Fatal("expected error when source is not a table")
+	}
+}
+
+// --- lazy materialization ---
+
+// TestQueryLazyPrintsAsTable confirms a select-first query is lazy: the
+// value carries a query, and it renders as a formatted table when its
+// String() is taken (the print path), with no explicit run word.
+func TestQueryLazyPrintsAsTable(t *testing.T) {
+	r := queryRegistry(t)
+	result, err := runQuerySrc(t, r, `query.select [name] query.from people query.where [age gt 35]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := result[0].Data.(native.MaterializerPayload); !ok {
+		t.Fatalf("expected a lazy MaterializerPayload, got %T", result[0].Data)
+	}
+	rendered := result[0].String()
+	if !strings.Contains(rendered, "Carol") {
+		t.Errorf("lazy query did not render its row: %q", rendered)
+	}
+}
+
+// TestQueryNoFromErrors confirms `from` is required: a select with no
+// from errors when it is materialized.
+func TestQueryNoFromErrors(t *testing.T) {
+	r := queryRegistry(t)
+	result, err := runQuerySrc(t, r, `query.select [name]`)
+	if err != nil {
+		t.Fatalf("seeding select should not error eagerly: %v", err)
+	}
+	mp, ok := result[0].Data.(native.MaterializerPayload)
+	if !ok {
+		t.Fatalf("expected a lazy query, got %T", result[0].Data)
+	}
+	if _, mErr := mp.M.Materialize(); mErr == nil {
+		t.Fatal("expected a 'no FROM' error when materializing a sourceless select")
 	}
 }
 
@@ -277,8 +322,8 @@ func TestQueryFromNonTable(t *testing.T) {
 // native's real signatures — exactly what dot-access dispatches against.
 func TestQueryUnpackBareWords(t *testing.T) {
 	r := queryRegistry(t)
-	src := `unpack [from where select] query
-	        from people where [age gt 25] select [name age]`
+	src := `unpack [select from where] query
+	        select [name age] from people where [age gt 25]`
 	result, err := runQuerySrc(t, r, src)
 	if err != nil {
 		t.Fatalf("bare-word pipeline failed: %v", err)
@@ -305,9 +350,9 @@ func TestQueryUnpackClauseCoverage(t *testing.T) {
 		src  string
 		rows int
 	}{
-		{"order", `unpack [from where order select] query  from people where [city eq 'London'] order [age desc] select []`, 2},
-		{"group-having", `unpack [from group having select] query  from people group [city] having [cnt gt 1] select [city [count city cnt]]`, 1},
-		{"distinct", `unpack [from distinct select] query  from people distinct select [city]`, 3},
+		{"order", `unpack [select from where order] query  select [] from people where [city eq 'London'] order [age desc]`, 2},
+		{"group-having", `unpack [select from group having] query  select [city [count city cnt]] from people group [city] having [cnt gt 1]`, 1},
+		{"distinct", `unpack [select from distinct] query  select [city] from people distinct`, 3},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -329,7 +374,7 @@ func TestQueryUnpackClauseCoverage(t *testing.T) {
 func TestQueryUnpackRename(t *testing.T) {
 	r := queryRegistry(t)
 	// fr is from under a new name; the clause words stay bare via unpack.
-	src := `def fr query.from  unpack [where select] query  fr people where [age gt 25] select []`
+	src := `def fr query.from  unpack [select where] query  select [] fr people where [age gt 25]`
 	result, err := runQuerySrc(t, r, src)
 	if err != nil {
 		t.Fatalf("rename-alias pipeline failed: %v", err)

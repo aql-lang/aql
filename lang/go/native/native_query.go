@@ -7,16 +7,17 @@ import (
 
 // QueryNatives is the set of SQL-style query DSL words surfaced through
 // the aql:query module (see lang/go/modules/query.go). The words form a
-// left-to-right pipeline: a source word (`from`) produces a deferred
-// QueryBuilder, each subsequent word takes that builder off the stack
-// plus its own clause as a forward argument and returns an updated
-// builder, and the terminal `select` materializes the accumulated query
-// into a concrete table.
+// left-to-right pipeline in natural SQL order: the entry word `select`
+// seeds a lazy QueryBuilder with the projection columns, `from` sets the
+// source table, and each subsequent clause word takes the builder off
+// the stack plus its own clause as a forward argument and returns the
+// updated builder. The query is lazy — it materializes (hits SQLite)
+// only when its result is printed, iterated, or otherwise needs rows.
 //
-//	people query.from
+//	query.select [name age]
+//	  query.from people
 //	  query.where [age gt 18]
 //	  query.order [age desc]
-//	  query.select [name age]
 //
 // All supporting parser/exec helpers (toQueryBuilder, buildWhereClause,
 // parseColumnSpec, …) live in query.go.
@@ -24,22 +25,37 @@ import (
 // Argument convention (post §1.4 unified, top-first sig order): each
 // pipeline word reads its clause from the forward token (sig position
 // 0) and the upstream builder from the stack (sig position 1). The
-// single-arg source word `from` reads its one argument forward.
+// entry word `select` reads only its one forward arg (it creates the
+// builder rather than consuming one).
 var QueryNatives = []NativeFunc{
 	{
+		// `select` is the SQL-order entry word: it seeds a new lazy
+		// query with the projection columns. Single forward arg — it
+		// does not consume a builder from the stack, it creates one.
+		Name: "select",
+		Signatures: []NativeSig{{
+			Args:       []*Type{TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Handler:    selectColsHandler,
+			Returns:    []*Type{TList},
+			BarrierPos: -1,
+		}},
+	},
+	{
+		// `from` sets the source table of the select-seeded query.
+		// name form: `from people` — name forward (quoted), builder
+		// from the stack. value form: `from <table-value>`.
 		Name: "from",
 		Signatures: []NativeSig{
-			// from <name> — look the table up in the context store.
 			{
-				Args:       []*Type{TAtom},
+				Args:       []*Type{TAtom, TList},
 				QuoteArgs:  map[int]bool{0: true},
 				Handler:    fromNameHandler,
 				Returns:    []*Type{TList},
 				BarrierPos: -1,
 			},
-			// <table-value> from — wrap an already-resolved table value.
 			{
-				Args:       []*Type{TList},
+				Args:       []*Type{TList, TList},
 				Handler:    fromValueHandler,
 				Returns:    []*Type{TList},
 				BarrierPos: -1,
@@ -52,16 +68,6 @@ var QueryNatives = []NativeFunc{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    queryWhereHandler,
-			Returns:    []*Type{TList},
-			BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "select",
-		Signatures: []NativeSig{{
-			Args:       []*Type{TList, TList},
-			NoEvalArgs: map[int]bool{0: true},
-			Handler:    selectColsHandler,
 			Returns:    []*Type{TList},
 			BarrierPos: -1,
 		}},
@@ -157,8 +163,10 @@ var QueryNatives = []NativeFunc{
 	querySetOpNative("except", "EXCEPT"),
 }
 
-// fromNameHandler resolves a bare table name from the context store and
-// starts a fresh query builder. args[0] is the quoted name atom.
+// fromNameHandler sets the source table of the query the preceding
+// `select` seeded. args[0] is the quoted table-name atom (forward);
+// args[1] is the upstream builder (stack). The table is resolved from
+// the context store.
 func fromNameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name, err := args[0].AsConcreteAtom()
 	if err != nil {
@@ -172,17 +180,32 @@ func fromNameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if !ok {
 		return nil, fmt.Errorf("from: %q is not a table", name)
 	}
-	qb := NewQueryBuilder(r, td)
-	return []Value{wrapQB(qb)}, nil
-}
-
-// fromValueHandler starts a query builder from a table value already on
-// the stack (a TableData result or an upstream query builder).
-func fromValueHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	qb, err := toQueryBuilder(r, args[0])
+	qb, err := toQueryBuilder(r, args[1])
 	if err != nil {
 		return nil, fmt.Errorf("from: %w", err)
 	}
+	qb.Source = td
+	qb.HasSource = true
+	return []Value{wrapQB(qb)}, nil
+}
+
+// fromValueHandler sets the source from a table value already on the
+// stack. args[0] is the source table value (forward); args[1] is the
+// upstream builder (stack).
+func fromValueHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	src, err := toQueryBuilder(r, args[0])
+	if err != nil {
+		return nil, fmt.Errorf("from: %w", err)
+	}
+	if !src.HasSource {
+		return nil, fmt.Errorf("from: value is not a table")
+	}
+	qb, err := toQueryBuilder(r, args[1])
+	if err != nil {
+		return nil, fmt.Errorf("from: %w", err)
+	}
+	qb.Source = src.Source
+	qb.HasSource = true
 	return []Value{wrapQB(qb)}, nil
 }
 
@@ -205,9 +228,11 @@ func queryWhereHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	return []Value{wrapQB(qb)}, nil
 }
 
-// selectColsHandler materializes the query, projecting the column list.
-// An empty column list selects every column. args[0] is the column list
-// (forward), args[1] is the upstream builder (stack).
+// selectColsHandler seeds a new lazy query with the projection columns.
+// It is the SQL-order entry word: `select [name age] from people …`.
+// args[0] is the column list (forward). An empty list means SELECT *.
+// The returned query has no source yet — `from` supplies it; the query
+// runs only when materialized (printed / iterated).
 func selectColsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	colList, err := resolveParenSubExprs(r, args[0])
 	if err != nil {
@@ -221,7 +246,7 @@ func selectColsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		// Empty column list means SELECT * .
 		cols = nil
 	}
-	return doSelect(r, cols, args[1])
+	return []Value{wrapQB(newSelectBuilder(r, cols))}, nil
 }
 
 // queryOrderHandler sets the ORDER BY clause.

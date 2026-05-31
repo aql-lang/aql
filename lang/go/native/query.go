@@ -25,24 +25,39 @@ type SetOp struct {
 // (where, order, limit), the QueryBuilder collects all clauses and
 // executes a single combined query when materialized.
 type QueryBuilder struct {
-	Source   TableData // the source table data
-	Registry *Registry // needed for SQLite access during materialization
-	Where    string    // WHERE condition (without keyword)
-	OrderBy  string    // ORDER BY clause (without keyword)
-	Limit    int       // -1 = no limit
-	Offset   int       // -1 = no offset
-	Distinct bool      // true for SELECT DISTINCT
-	GroupBy  string    // GROUP BY clause (without keyword)
-	Having   string    // HAVING clause (without keyword)
-	Joins    []JoinClause
-	Alias    string // table alias for the FROM source
-	SetOps   []SetOp
+	Source    TableData    // the source table data (valid only when HasSource)
+	HasSource bool         // true once `from` has set the source table
+	Cols      []columnSpec // projected columns (nil = SELECT *)
+	Registry  *Registry    // needed for SQLite access during materialization
+	Where     string       // WHERE condition (without keyword)
+	OrderBy   string       // ORDER BY clause (without keyword)
+	Limit     int          // -1 = no limit
+	Offset    int          // -1 = no offset
+	Distinct  bool         // true for SELECT DISTINCT
+	GroupBy   string       // GROUP BY clause (without keyword)
+	Having    string       // HAVING clause (without keyword)
+	Joins     []JoinClause
+	Alias     string // table alias for the FROM source
+	SetOps    []SetOp
 }
 
 // NewQueryBuilder creates a QueryBuilder from a table data source.
 func NewQueryBuilder(r *Registry, td TableData) QueryBuilder {
 	return QueryBuilder{
-		Source:   td,
+		Source:    td,
+		HasSource: true,
+		Registry:  r,
+		Limit:     -1,
+		Offset:    -1,
+	}
+}
+
+// newSelectBuilder seeds a sourceless QueryBuilder from a `select`
+// projection. `from` fills in the source later; materialization errors
+// if it never does. cols == nil means SELECT *.
+func newSelectBuilder(r *Registry, cols []columnSpec) QueryBuilder {
+	return QueryBuilder{
+		Cols:     cols,
 		Registry: r,
 		Limit:    -1,
 		Offset:   -1,
@@ -201,8 +216,12 @@ func (qb *QueryBuilder) mergedSchema() RecordTypeInfo {
 	return RecordTypeInfo{Fields: fields}
 }
 
-// Materialize executes the accumulated query and returns the result as TableData.
-func (qb *QueryBuilder) Materialize() (TableData, error) {
+// materializeAll executes the accumulated query with `SELECT *` and
+// returns the result as TableData. It is the raw (pointer-receiver)
+// engine path; the public value-receiver Materialize (which satisfies
+// eng.Materializer and handles the FROM-required check + column
+// projection) delegates here for the no-projection case.
+func (qb *QueryBuilder) materializeAll() (TableData, error) {
 	tableName, ownsTmp, err := qb.ensureSource()
 	if err != nil {
 		return TableData{}, err
@@ -361,8 +380,9 @@ func (qb QueryBuilder) clone() QueryBuilder {
 }
 
 // toQueryBuilder coerces a pipeline value into a QueryBuilder. It
-// accepts an already-wrapped builder (cloned so upstream stages are
-// not mutated) or a bare TableData source.
+// accepts a lazy query (the MaterializerPayload wrapper produced by
+// wrapQB), cloned so upstream stages are not mutated, or a bare
+// TableData source.
 func toQueryBuilder(r *Registry, v Value) (QueryBuilder, error) {
 	if qb, ok := unwrapQB(v); ok {
 		return qb.clone(), nil
@@ -373,32 +393,58 @@ func toQueryBuilder(r *Registry, v Value) (QueryBuilder, error) {
 	return QueryBuilder{}, fmt.Errorf("argument is not a table or query")
 }
 
-// wrapQB wraps a QueryBuilder as a deferred-query Value. The builder
-// rides in an ExtensionPayload under the TList tag so unwrapQB can
-// recover it and so table-shaped consumers treat it as list data.
+// wrapQB wraps a QueryBuilder as a LAZY table Value. The builder rides
+// in a MaterializerPayload under the TList tag: it satisfies the kernel
+// Materializer interface (Materialize / SourceRecord), so the engine
+// auto-runs the query only when rows or schema are actually needed
+// (printing, iteration, AsList). No terminal word is required.
 func wrapQB(qb QueryBuilder) Value {
-	return NewValueRaw(TList, ExtensionPayload{Body: qb})
+	return NewValueRaw(TList, MaterializerPayload{M: qb})
 }
 
-// doSelect materializes a query, optionally projecting an explicit
-// column list. A nil cols selects every column (SELECT *).
-func doSelect(r *Registry, cols []columnSpec, table Value) ([]Value, error) {
-	qb, err := toQueryBuilder(r, table)
-	if err != nil {
-		return nil, fmt.Errorf("select: %w", err)
+// Materialize runs the accumulated query and returns concrete rows.
+// Implements eng.Materializer (value receiver so it satisfies the
+// interface when stored by value in MaterializerPayload). A query with
+// no FROM table — a `select` that was never given a `from` — errors
+// here rather than silently producing nothing.
+func (qb QueryBuilder) Materialize() (TableData, error) {
+	if !qb.HasSource {
+		return TableData{}, fmt.Errorf("select: query has no FROM table")
 	}
+	local := qb
+	if local.Cols == nil {
+		return local.materializeAll()
+	}
+	return local.MaterializeWithColumns(local.Cols)
+}
 
-	var result TableData
-	if cols == nil {
-		result, err = qb.Materialize()
-	} else {
-		result, err = qb.MaterializeWithColumns(cols)
+// SourceRecord returns the query's result schema without running it.
+// Implements eng.Materializer. Cheap: derived from the source/join
+// schema (and projected columns when present), no SQLite hit.
+func (qb QueryBuilder) SourceRecord() RecordTypeInfo {
+	if !qb.HasSource {
+		return RecordTypeInfo{Fields: NewOrderedMap()}
 	}
-	if err != nil {
-		return nil, fmt.Errorf("select: %w", err)
+	local := qb
+	merged := local.mergedSchema()
+	if local.Cols == nil {
+		return merged
 	}
-
-	return []Value{NewValueRaw(TList, result)}, nil
+	fields := NewOrderedMap()
+	for _, c := range local.Cols {
+		name := c.Name
+		if c.Alias != "" {
+			name = c.Alias
+		}
+		if c.ResultType != nil {
+			fields.Set(name, NewTypeLiteral(c.ResultType))
+		} else if v, ok := merged.Fields.Get(c.Name); ok {
+			fields.Set(name, v)
+		} else {
+			fields.Set(name, NewTypeLiteral(TString))
+		}
+	}
+	return RecordTypeInfo{Fields: fields}
 }
 
 // resolveParenSubExprs walks a clause list and evaluates any
@@ -717,6 +763,13 @@ func valueToColName(v Value) string {
 // shape so QueryBuilder satisfies Payload) and the legacy bare form.
 // Returns (QueryBuilder{}, false) when v is not a query builder.
 func unwrapQB(v Value) (QueryBuilder, bool) {
+	// Current wrapper: the lazy MaterializerPayload produced by wrapQB.
+	if mp, ok := v.Data.(MaterializerPayload); ok {
+		if qb, ok := mp.M.(QueryBuilder); ok {
+			return qb, true
+		}
+	}
+	// Back-compat: the older ExtensionPayload-wrapped form.
 	if ep, ok := v.Data.(ExtensionPayload); ok {
 		if qb, ok := ep.Body.(QueryBuilder); ok {
 			return qb, true
