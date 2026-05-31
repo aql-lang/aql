@@ -265,3 +265,53 @@ RISK/RECOMMENDATION: 3a-3d are mechanical and individually gateable.
 worktree so a half-done state never touches the main tree. The anonymous-
 fn dispatch unification (Stage 1b) is already the headline win and is
 committed; Stage 3 is the structural cleanup on top.
+
+---
+## RESET TO GREEN (d538240) — field-deletion abandoned
+
+After Stage 3d (Params-routing) I attempted to physically DELETE
+Signature.Args + Signature.Patterns. That was wrong scope AND executed
+badly:
+- WRONG SCOPE: Signature.Args is EXPORTED and read by the lang layer
+  (native_help.go ~9 sites, native_inspect.go) and Signature is re-exported
+  by lang.New for handler authors. Deleting it is a cross-module public-API
+  break, not the eng-internal cleanup I'd scoped (my recon grepped only
+  eng/).
+- BAD EXECUTION: committed RED three times (7ddb8d1, 2ab602b, 1cfa369) by
+  trusting corrupted displayed build output instead of a file-captured
+  `go build; echo $?`, and by batching edits+build+commit so a mid-batch
+  failure left half-applied broken code committed AND pushed.
+
+RECOVERY: `git reset --hard d538240` + `git push --force-with-lease`.
+Verified green by exit code at d538240: eng+lang build/vet/test/lint=0,
+both equivalence goldens byte-identical.
+
+## WHERE WE ARE NOW (green, on remote)
+HEAD = d538240 "route Signature.Patterns reads through sigPattern".
+Stages 0, 1, 2, 3a-3d are DONE and intact:
+- Stage 1b: anonymous fns (afn/=>/closures) dispatch through execMatch +
+  handler — the ONE-DISPATCH-PATH headline goal. (Named fns already did.)
+- Stage 3a-3d: Params []FnParam is the SOURCE OF TRUTH for per-arg shape
+  on Signature; all kernel readers go through sigArgType/sigPattern/
+  TotalArgs. Signature STILL HAS Args/Patterns fields (populated alongside
+  Params at construction); they remain because they're exported API.
+
+## DECISION: physical struct collapse (old 3e + field-delete) is OUT OF
+SCOPE for opportunistic work. Retiring Signature.Args / merging Signature
+into FnSig / collapsing FnDefInfo.{Sigs,Signatures} is a PUBLIC-API change
+(lang help/inspect + lang.New re-export). It needs its own plan:
+  1. add exported accessors on Signature (e.g. ArgType(i), ArgCount) ;
+  2. repoint lang native_help.go / native_inspect.go to them ;
+  3. THEN remove the exported fields ;
+  4. separately, merge Signature⇄FnSig + collapse the two FnDefInfo slices.
+Each step gated in BOTH modules. Do NOT attempt without that plan.
+
+## HARD PROCESS RULES (violated this session — enforce next time)
+1. `git commit` ONLY after a separate, immediately-preceding, file-captured
+   `go build ./... ; echo $? > /tmp/rc` read back == 0. Never batch the
+   build-gate with the commit.
+2. For ANY exported-symbol change: grep eng/ AND lang/ AND cmd/ before
+   starting; the build of ALL modules must be the gate, not just eng.
+3. `go test` RC can be 0 from CACHE over a file that no longer compiles —
+   use `go vet ./...` (recompiles tests) as the compile gate.
+4. One logical change → build-gate → commit → push, as separate steps.
