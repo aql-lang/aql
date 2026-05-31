@@ -94,6 +94,13 @@ func BuildTestModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// minimal local exporter (we cannot use RunModuleBody itself —
 	// it builds a fresh modReg that doesn't see our natives).
 	exports := map[string]*native.OrderedMap{}
+	// Drop the inherited top-level no-op `export` (registered in the
+	// default registry — see §8.3 in native_misc.go) before installing
+	// this module's collecting handler. RegisterNativeFunc APPENDS sigs to
+	// an existing word, so without this the no-op's (Atom|String, Map) sigs
+	// would shadow the collector and the preamble's exports — including the
+	// whole `test` namespace — would be silently discarded.
+	modReg.Defs.Delete("export")
 	modReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "export",
 		Signatures: []native.NativeSig{

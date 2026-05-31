@@ -261,6 +261,35 @@ func init() {
 				},
 			},
 		},
+		// ---- export (top-level no-op) ----
+		//
+		// `export` does its real work only inside an import context, where
+		// RunModuleBody registers a collecting handler on the module
+		// sub-registry that shadows this one. At the top level — running a
+		// file directly (`aql foo.aql`) or in the REPL — there is nowhere
+		// to export to, so `export` is a no-op that simply consumes its
+		// (name, map) arguments. This lets a single file both run
+		// standalone and export a namespace when imported. See §8.3 in the
+		// DX report. The branch arity/types mirror the real handler in
+		// native_module_module.go so dispatch behaves identically.
+		{
+			Name: "export",
+
+			Signatures: []NativeSig{
+				{
+					Args:           []*Type{TAtom, TMap},
+					Handler:        exportNoopHandler,
+					Returns:        []*Type{},
+					RunInCheckMode: true, BarrierPos: -1,
+				},
+				{
+					Args:           []*Type{TString, TMap},
+					Handler:        exportNoopHandler,
+					Returns:        []*Type{},
+					RunInCheckMode: true, BarrierPos: -1,
+				},
+			},
+		},
 
 		// ---- temporal ----
 		{
@@ -436,6 +465,14 @@ func describeWordHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 }
 
 // ---- module / import handlers ----
+
+// exportNoopHandler is the top-level `export` handler: it discards the
+// export name and map, producing no value. The real collecting handler
+// is registered per-module in RunModuleBody and shadows this one. See
+// the "export (top-level no-op)" entry above and §8.3 in the DX report.
+func exportNoopHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	return nil, nil
+}
 
 func moduleHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {

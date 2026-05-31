@@ -78,6 +78,13 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 		exports[name] = resolved
 	}
 
+	// Drop the inherited top-level no-op `export` (registered in the
+	// default registry so files run standalone — see §8.3) before
+	// installing the real collecting handler. RegisterNativeFunc APPENDS
+	// signatures to an existing word, so without this delete the no-op's
+	// (Atom|String, Map) sigs would shadow the collecting sigs and module
+	// exports would be silently discarded.
+	modReg.Defs.Delete("export")
 	modReg.RegisterNativeFunc(NativeFunc{
 		Name: "export",
 
