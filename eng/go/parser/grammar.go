@@ -149,6 +149,96 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 		}, rs.Open...)
 	})
 
+	// Dot-chain continuation. After a value closes, a following `.` (or
+	// `!.`) means member access — `bf.n`, `a.b.c`, `a!.b`. In WORD
+	// context (top level, lists, parens) the dot tokens are already
+	// folded into `get`/`getr` calls by convertTopLevelItems, because
+	// those contexts collect a flat item sequence. But a MAP VALUE is a
+	// single `val`: once `bf` is parsed jsonic has no rule for the
+	// trailing `.`, so `{n: bf.n}` errored with `unexpected character`.
+	//
+	// This Close alternate folds the receiver value plus the trailing
+	// dot-chain into a parenGroup — exactly the shape the explicit
+	// workaround `{n: (bf.n)}` produces — so the existing converter
+	// paths (parenGroup → ParenExpr in data context, ( … ) markers in
+	// word context) handle it uniformly with no converter change.
+	// Prepended so it is tried before jsonic's default "there's more"
+	// backtrack, which is what produced the error.
+	// Gate strictly on map-pair-value position: the val whose Close sees
+	// the dot is the value side of a `key:` pair exactly when its parent
+	// rule is "pair" (in word context — top level, list elements, paren
+	// contents — the parent is "elem"/"pelem" and the dot tokens are
+	// already collected as a flat item sequence and folded into get/getr
+	// by convertTopLevelItems; firing the dotchain there would
+	// double-wrap, e.g. `1 foo.bar` → `1 ((foo get bar))`). Only the
+	// map-value position lacks that flat-item path and needs this fold.
+	inPairValue := func(r *jsonic.Rule, ctx *jsonic.Context) bool {
+		return r.Parent != nil && r.Parent != jsonic.NoRule && r.Parent.Name == "pair"
+	}
+	j.Rule("val", func(rs *jsonic.RuleSpec) {
+		rs.Close = append([]*jsonic.AltSpec{
+			{S: [][]jsonic.Tin{{t.DT}}, C: inPairValue, P: "dotchain", B: 1},
+			{S: [][]jsonic.Tin{{t.BG}, {t.DT}}, C: inPairValue, P: "dotchain", B: 2},
+		}, rs.Close...)
+	})
+
+	// dotchain rule: collects the `.key` / `!.key` segments that follow a
+	// value, folding the receiver (the parent val's already-parsed Node)
+	// and the segments into a parenGroup. Pushed from the val.Close
+	// alternates above with the pointer backtracked onto the first `.` or
+	// `!`. The resulting parenGroup is written back to the parent val so
+	// downstream conversion treats `bf.n` exactly like the explicit
+	// `(bf.n)`.
+	//
+	// jsonic alternates match at most two tokens, so the chain is
+	// consumed one token at a time: a `.` or `!` marker, then the member
+	// key, looping via R (replace-sibling) until a non-chain token ends
+	// it. Each matched token is appended to the parent val's parenGroup.
+	//
+	// Each dotchain rule consumes exactly one `. key` (or `! . key`)
+	// segment, then loops via R only when ANOTHER `.`/`!` immediately
+	// follows. Crucially it must NOT treat a following bare key as a
+	// chain segment — in a map, `{a: bf.n b: 9}` has `b` as the next
+	// pair's key, not part of `bf.n` — so the loop is gated strictly on
+	// a leading `.`/`!`, never on a key alone.
+	j.Rule("dotchain", func(rs *jsonic.RuleSpec) {
+		rs.BO = []jsonic.StateAction{
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				// On the first dotchain rule for this value, seed the
+				// parent val's Node as a parenGroup holding the receiver.
+				// Subsequent looped dotchains see a parenGroup already.
+				if r.Parent == nil || r.Parent == jsonic.NoRule {
+					return
+				}
+				if _, ok := r.Parent.Node.(parenGroup); ok {
+					return
+				}
+				recv := r.Parent.Node
+				if s, ok := recv.(sited); ok {
+					recv = s.Node
+				}
+				r.Parent.Node = parenGroup{recv}
+			},
+		}
+		rs.Open = []*jsonic.AltSpec{
+			// `. key` — plain member access: append "." then the key.
+			{S: [][]jsonic.Tin{{t.DT}, jsonic.TinSetKEY}, A: dotchainSeg(".")},
+			// `!` — strict (getr) marker; the following `. key` is taken
+			// by the next loop iteration. `!` only appears mid-chain
+			// before a dot, so emitting it alone here is safe.
+			{S: [][]jsonic.Tin{{t.BG}}, A: dotchainMarker("!")},
+		}
+		rs.Close = []*jsonic.AltSpec{
+			// Another segment follows (a `.` or `!`) — loop. A bare key
+			// is NOT a continuation (it belongs to the enclosing map/list).
+			{S: [][]jsonic.Tin{{t.DT}}, R: "dotchain", B: 1},
+			{S: [][]jsonic.Tin{{t.BG}}, R: "dotchain", B: 1},
+			// Anything else ends the chain; backtrack so the enclosing
+			// context (map pair, list elem, …) consumes the next token.
+			{B: 1},
+		}
+	})
+
 	// Capture source position: wrap every value node with the row/col of its
 	// opening token, so the converter can stamp eng.Value.Pos for precise
 	// error reporting (mirrors aontu's addsite). The BC fires on val-rule
@@ -170,6 +260,49 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 			r.Node = sited{Node: r.Node, Pos: pos}
 		})
 	})
+}
+
+// dotchainAppendTo appends node(s) to the parent val's parenGroup (the
+// chain accumulator seeded in the dotchain BO). Shared tail of the
+// dotchain Open actions.
+func dotchainAppendTo(r *jsonic.Rule, nodes ...any) {
+	if r.Parent == nil || r.Parent == jsonic.NoRule {
+		return
+	}
+	if grp, ok := r.Parent.Node.(parenGroup); ok {
+		r.Parent.Node = append(grp, nodes...)
+	}
+}
+
+// dotchainMarker returns an AltAction that appends a single marker Text
+// (e.g. the "!" of a strict member access) to the chain.
+func dotchainMarker(marker string) jsonic.AltAction {
+	return func(r *jsonic.Rule, ctx *jsonic.Context) {
+		dotchainAppendTo(r, jsonic.Text{Str: marker, Quote: ""})
+	}
+}
+
+// dotchainSeg returns an AltAction for a `<marker> key` segment: it
+// appends the marker Text (the "." of member access, O0) followed by the
+// member key token (O1), preserving the key's quoted/unquoted
+// distinction so an unquoted key stays a word and a quoted key a string.
+func dotchainSeg(marker string) jsonic.AltAction {
+	return func(r *jsonic.Rule, ctx *jsonic.Context) {
+		tok := r.O1
+		if tok == nil {
+			dotchainAppendTo(r, jsonic.Text{Str: marker, Quote: ""})
+			return
+		}
+		quote := ""
+		if tok.Tin == jsonic.TinST {
+			quote = "'"
+		}
+		str := tok.Src
+		if s, ok := tok.Val.(string); ok {
+			str = s
+		}
+		dotchainAppendTo(r, jsonic.Text{Str: marker, Quote: ""}, jsonic.Text{Str: str, Quote: quote})
+	}
 }
 
 // setupPairGrammar extends "pair" and "elem" rules for optional-field (?:)
