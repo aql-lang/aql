@@ -300,8 +300,8 @@ func (r *Registry) TopFnBaseline() map[string]int {
 // per-sig `BarrierPos`.
 func (r *Registry) Register(name string, sigs ...Signature) {
 	for _, sig := range sigs {
-		if len(sig.Args) > MaxArgs {
-			r.errs = append(r.errs, fmt.Errorf("signature for %q has %d args, max is %d", name, len(sig.Args), MaxArgs))
+		if sig.TotalArgs() > MaxArgs {
+			r.errs = append(r.errs, fmt.Errorf("signature for %q has %d args, max is %d", name, sig.TotalArgs(), MaxArgs))
 			return
 		}
 	}

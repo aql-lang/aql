@@ -82,10 +82,10 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 						if fn := r.Lookup(name); fn != nil {
 							for i := range fn.Signatures {
 								sig := &fn.Signatures[i]
-								if len(sig.Args) == 0 && sig.Handler != nil && !sig.Fallback {
+								if sig.TotalArgs() == 0 && sig.Handler != nil && !sig.Fallback {
 									return sig.Handler(nil, nil, nil, r)
 								}
-								if len(sig.Args) > 0 {
+								if sig.TotalArgs() > 0 {
 									hasForwardSig = true
 								}
 							}

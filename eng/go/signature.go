@@ -243,7 +243,7 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 			continue
 		}
 
-		n := len(sig.Args)
+		n := sig.TotalArgs()
 		if len(stack) < n {
 			continue
 		}
@@ -296,7 +296,7 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 // Arguments are never permuted — values[i] must match sig.Args[i].
 // Returns the values slice unchanged if matched, or false.
 func FlexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
-	n := len(sig.Args)
+	n := sig.TotalArgs()
 	if len(values) < n {
 		return nil, false
 	}

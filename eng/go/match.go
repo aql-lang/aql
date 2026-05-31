@@ -20,10 +20,11 @@ package eng
 //     `(Map) Patterns={kind:"api"}` sig was previously matched on
 //     non-api maps when the handler then routed by stack contents.
 func patternsOk(sig *Signature, positions []int, stack []Value, fwd int) bool {
-	if sig.Patterns == nil {
-		return true
-	}
-	for idx, pattern := range sig.Patterns {
+	for idx := 0; idx < sig.TotalArgs(); idx++ {
+		pattern, ok := sigPattern(sig, idx)
+		if !ok {
+			continue
+		}
 		if idx >= len(positions) {
 			continue
 		}

@@ -1997,7 +1997,7 @@ func formatFnDef(fd FnDefInfo) string {
 	// non-empty one exists.
 	var sigParts []string
 	for i := range fd.Signatures {
-		if len(fd.Signatures[i].Args) > 0 {
+		if fd.Signatures[i].TotalArgs() > 0 {
 			sigParts = append(sigParts, describeSigArgs(&fd.Signatures[i]))
 		}
 	}
