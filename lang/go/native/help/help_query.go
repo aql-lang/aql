@@ -100,6 +100,9 @@ func init() {
 		Summary: "Define a module with exported words.",
 		Description: "Creates a named module. The list is evaluated in an isolated scope and " +
 			"exported words become available under the module name.",
+		Examples: []string{
+			`import module [export "Utils" {greet: greet/r}] end  ;# inline module`,
+		},
 	})
 
 	register(&Entry{
@@ -110,5 +113,58 @@ func init() {
 			"For .json/.jsonic files, pushes parsed data onto the stack. " +
 			"For .csv/.tsv files, loads data as a table. " +
 			"Use a list argument to rename imports (not supported for data files).",
+		Examples: []string{
+			`"aql:math" import end   ;# native module → math.* namespace`,
+			`"./lib.aql" import end  ;# sibling file's exports`,
+			`import [Orig Alias] "./lib.aql" end  ;# rename on import`,
+		},
+	})
+
+	register(&Entry{
+		Word:    "export",
+		Summary: "Publish a namespace from a module.",
+		Description: "Inside a module body, `export \"Name\" {key: value …}` publishes " +
+			"a namespace reachable as Name.key after import. Export functions with the " +
+			"/r ref modifier so the map doesn't dispatch them. At the top level (running " +
+			"a file directly) export is a no-op, so one file can both run standalone and " +
+			"export when imported.",
+		Examples: []string{
+			`export "Utils" {pi: pi, greet: greet/r}  ;# value bare, fn with /r`,
+		},
+	})
+
+	register(&Entry{
+		Word:    "each",
+		Summary: "Map a code body over each element of a list.",
+		Description: "Runs the body once per element with the element on the stack, " +
+			"collecting each body's result into a new list. The body must leave a value; " +
+			"for a side-effecting loop that collects nothing, use do-each.",
+		Examples: []string{
+			`[1 2 3] each [dup mul]  ;# => [1 4 9]`,
+			`iota 4 each [1 add]     ;# => [1 2 3 4]`,
+		},
+	})
+
+	register(&Entry{
+		Word:    "do-each",
+		Summary: "Run a code body over each element for side effects, discarding results.",
+		Description: "Like each, but discards every body result and produces nothing. " +
+			"The body may leave the stack empty (no sentinel needed) — use it for " +
+			"mutating loops that don't collect a value.",
+		Examples: []string{
+			`[1 2 3] do-each [print]   ;# prints 1,2,3; leaves nothing`,
+		},
+	})
+
+	register(&Entry{
+		Word:    "fold",
+		Summary: "Reduce a list to a single value with an accumulator.",
+		Description: "Runs the body with the accumulator and each element, threading the " +
+			"result forward. With an initial value: `init fold [body] data`. Without one, " +
+			"the first element seeds the accumulator: `fold [body] data`.",
+		Examples: []string{
+			`0 fold [add] [1 2 3 4]  ;# => 10  (with initial value)`,
+			`fold [add] [1 2 3]      ;# => 6   (first element seeds it)`,
+		},
 	})
 }

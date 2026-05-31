@@ -11,6 +11,41 @@ import (
 	"github.com/aql-lang/aql/lang/go/native/help"
 )
 
+// TestHandAuthoredExamplesWin verifies §5.2/§9.5: when a word's help
+// Entry carries hand-authored Examples, `describe` renders those instead
+// of the auto-generated positional permutations.
+func TestHandAuthoredExamplesWin(t *testing.T) {
+	reg, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		word     string
+		wantLine string // a hand-authored example substring that must appear
+		notWant  string // an auto-generated permutation that must NOT appear
+	}{
+		{"set", `c 1 "count" set`, `set 'a'`},
+		{"get", `[10 20 30] 0 get`, ``},
+		{"make", `make Point {x: 3 y: 4}`, ``},
+		{"each", `[1 2 3] each [dup mul]`, ``},
+		{"fold", `0 fold [add] [1 2 3 4]`, ``},
+	}
+	for _, c := range cases {
+		info := native.BuildFuncInfo(reg, c.word)
+		if info == nil {
+			t.Errorf("%s: no FuncInfo", c.word)
+			continue
+		}
+		out := help.FormatDynamic(*info)
+		if !strings.Contains(out, c.wantLine) {
+			t.Errorf("describe %s missing hand-authored example %q:\n%s", c.word, c.wantLine, out)
+		}
+		if c.notWant != "" && strings.Contains(out, c.notWant) {
+			t.Errorf("describe %s still shows auto-generated permutation %q (hand-authored should win):\n%s", c.word, c.notWant, out)
+		}
+	}
+}
+
 // TestHelpAllWords checks that every registered word produces valid
 // dynamic help output with the expected sections.
 func TestHelpAllWords(t *testing.T) {
@@ -102,6 +137,15 @@ func TestHelpExamplesCorrect(t *testing.T) {
 
 	for _, word := range words {
 		if skipWords[word] {
+			continue
+		}
+		// Hand-authored examples (Entry.Examples) are curated prose +
+		// results, not the `;# <exact-stack-render>` shape this matcher
+		// validates — and some are side-effecting or multi-statement.
+		// They replace the auto-generated permutations in `describe`, so
+		// there is nothing auto-generated left to check here. See
+		// §5.2/§9.5 and help.Entry.Examples.
+		if e := help.Lookup(word); e != nil && len(e.Examples) > 0 {
 			continue
 		}
 		info := native.BuildFuncInfo(reg, word)
