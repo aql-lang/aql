@@ -2197,50 +2197,12 @@ func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Val
 	return nil
 }
 
-// fnSigsToSignatures converts FnSig params into Signature objects for the
-// forward planner. Used for anonymous functions that have no registered name.
-func fnSigsToSignatures(sigs []FnSig) []Signature {
-	out := make([]Signature, len(sigs))
-	for i, sig := range sigs {
-		argTypes := make([]*Type, len(sig.Params))
-		var patterns map[int]Value
-		for j, p := range sig.Params {
-			argTypes[j] = p.Type
-			if p.Pattern != nil {
-				if patterns == nil {
-					patterns = make(map[int]Value)
-				}
-				patterns[j] = *p.Pattern
-			}
-		}
-		// Resolve the FnSig BarrierPos sentinel: -1 means "use the
-		// all-forward default" (the same defaulting RegisterNative
-		// applies to registered fns). 0 means explicit all-stack
-		// from a leading `|`; >0 is an explicit boundary. All Go-
-		// side FnSig{} construction sites set BarrierPos: -1 so
-		// they reach the dispatcher with the correct default.
-		barrier := sig.BarrierPos
-		if barrier == -1 {
-			barrier = len(argTypes)
-		}
-		out[i] = Signature{
-			Args:          argTypes,
-			Patterns:      patterns,
-			BarrierPos:    barrier,
-			NoEvalArgs:    sig.NoEvalArgs,
-			NoEvalMapArgs: sig.NoEvalMapArgs,
-		}
-	}
-	SortSignatures(out)
-	return out
-}
-
 // compileFnDef produces the compiled-dispatch view of an FnDefInfo whose
 // Sigs are authored (named params + body) but whose Signatures have not
 // yet been built — the afn / captured-FnDef / lazy path. It is the single
 // boundary that turns `Sigs` into the `Signatures` matchSignature needs,
-// resolving the BarrierPos sentinel and sorting into dispatch order
-// (delegated to fnSigsToSignatures), then computing MaxForwardArgs.
+// resolving the BarrierPos sentinel, attaching handlers, and sorting into
+// dispatch order, then computing MaxForwardArgs.
 //
 // This centralisation is the seam the function-model consolidation builds
 // on: every site that needs a dispatchable FnDefInfo from raw Sigs routes
