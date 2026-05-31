@@ -176,12 +176,13 @@ var behaviorCorpus = []struct {
 
 	// --- higher-order words ---
 	{"each-double", `[1 2 3] each [dup add]`},
-	{"fold-sum", `[1 2 3 4] 0 fold [add]`},
+	{"fold-sum", `fold [add] [1 2 3 4]`},
+	{"fold-init", `10 fold [add] [1 2 3 4]`},
 
-	// --- module wrappers (trivial-delegation + sub-registry) ---
-	{"math-max-bound", `def m import "aql:math"  m.max 3 7`},
-	{"math-max-inscope", `import "aql:math"  max 3 7`},
-	{"array-len", `def a import "aql:array"  a.length [10 20 30]`},
+	// Module-wrapper dispatch (the capturedReg / CallAQL branch of
+	// execFnDefSig) is exercised separately in the modules package —
+	// see modules/fnmodel_wrapper_equivalence_test.go — because the
+	// native-module resolver is wired there, not in DefaultRegistry.
 
 	// --- stack words (FullStack path) ---
 	{"dup", `5 dup add`},

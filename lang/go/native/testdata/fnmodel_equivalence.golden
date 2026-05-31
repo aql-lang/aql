@@ -555,17 +555,11 @@ CASE each-double
   [1 2 3] each [dup add]
   => "[2 4 6]"
 CASE fold-sum
-  [1 2 3 4] 0 fold [add]
-  => "RUNERR: [aql/signature_error]: no matching signature for fold\n  --> 1:13\n  = expected: fold (List, List, Any) or (List, List)\n  = forward args for fold may have run into the next word; group the call with parens — (fold …) — or end it with `end` or `;`\n  = stack: List 0 >>>word(fold)<<< List"
-CASE math-max-bound
-  def m import "aql:math"  m.max 3 7
-  => "RUNERR: [aql/undefined_word]: undefined word: m\n  --> 1:26"
-CASE math-max-inscope
-  import "aql:math"  max 3 7
-  => "RUNERR: import: native module resolver not configured (cannot import \"aql:math\")"
-CASE array-len
-  def a import "aql:array"  a.length [10 20 30]
-  => "RUNERR: [aql/undefined_word]: undefined word: a\n  --> 1:27"
+  fold [add] [1 2 3 4]
+  => "10"
+CASE fold-init
+  10 fold [add] [1 2 3 4]
+  => "20"
 CASE dup
   5 dup add
   => "10"
