@@ -181,6 +181,25 @@ func sigArgType(s *Signature, i int) *Type {
 	return s.Args[i]
 }
 
+// sigPattern returns the optional structural pattern at signature
+// position i, mirroring sigArgType: storage lives in Params[i].Pattern,
+// with a fallback to the legacy Patterns map for callers that built a
+// Signature with only Args+Patterns set. ok is false when no pattern is
+// declared at i.
+func sigPattern(s *Signature, i int) (Value, bool) {
+	if len(s.Params) > 0 {
+		if i < len(s.Params) && s.Params[i].Pattern != nil {
+			return *s.Params[i].Pattern, true
+		}
+		return Value{}, false
+	}
+	if s.Patterns != nil {
+		p, ok := s.Patterns[i]
+		return p, ok
+	}
+	return Value{}, false
+}
+
 // MatchResult holds a matched signature and the positionally matched args.
 type MatchResult struct {
 	Sig       *Signature
