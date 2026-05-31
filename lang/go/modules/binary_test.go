@@ -313,3 +313,121 @@ func TestBinSingleBitRangeError(t *testing.T) {
 		t.Fatal("expected range error for set 64, got nil")
 	}
 }
+
+// --- §9.8 ord / chr ---
+
+func TestBinOrd(t *testing.T) {
+	cases := []struct {
+		s    string
+		want int64
+	}{
+		{"A", 65},
+		{"a", 97},
+		{"0", 48},
+		{"~", 126},
+		{"€", 0x20AC}, // multi-byte rune
+		{"abc", 97},   // first rune only
+	}
+	for _, c := range cases {
+		out := runBin(t, append([]native.Value{native.NewString(c.s)}, dotChain("ord")...))
+		if len(out) != 1 {
+			t.Fatalf("ord %q: expected 1 result, got %d", c.s, len(out))
+		}
+		if n, _ := native.AsInteger(out[0]); n != c.want {
+			t.Errorf("ord %q = %d, want %d", c.s, n, c.want)
+		}
+	}
+}
+
+func TestBinOrdEmptyErrors(t *testing.T) {
+	r := binRegistry(t)
+	e := native.New(r)
+	_, err := e.Run(append([]native.Value{native.NewString("")}, dotChain("ord")...))
+	if err == nil {
+		t.Fatal("expected an error for ord of the empty string, got nil")
+	}
+}
+
+func TestBinChr(t *testing.T) {
+	cases := []struct {
+		n    int64
+		want string
+	}{
+		{65, "A"},
+		{97, "a"},
+		{48, "0"},
+		{0x20AC, "€"},
+	}
+	for _, c := range cases {
+		out := runBin(t, append([]native.Value{native.NewInteger(c.n)}, dotChain("chr")...))
+		if len(out) != 1 {
+			t.Fatalf("chr %d: expected 1 result, got %d", c.n, len(out))
+		}
+		if s, _ := native.AsString(out[0]); s != c.want {
+			t.Errorf("chr %d = %q, want %q", c.n, s, c.want)
+		}
+	}
+}
+
+func TestBinChrOutOfRangeErrors(t *testing.T) {
+	r := binRegistry(t)
+	for _, n := range []int64{-1, 0x110000} {
+		e := native.New(r)
+		_, err := e.Run(append([]native.Value{native.NewInteger(n)}, dotChain("chr")...))
+		if err == nil {
+			t.Errorf("expected a range error for chr %d, got nil", n)
+		}
+	}
+}
+
+func TestBinOrdChrRoundTrip(t *testing.T) {
+	for n := int64(32); n < 127; n++ {
+		// chr n then ord → n
+		toks := append([]native.Value{native.NewInteger(n)}, dotChain("chr")...)
+		toks = append(toks, dotChain("ord")...)
+		out := runBin(t, toks)
+		if got, _ := native.AsInteger(out[0]); got != n {
+			t.Errorf("ord(chr(%d)) = %d, want %d", n, got, n)
+		}
+	}
+}
+
+// --- §9.9 FNV-1a hashes ---
+
+func TestBinFnv32(t *testing.T) {
+	// Known FNV-1a/32 values.
+	cases := []struct {
+		s    string
+		want int64
+	}{
+		{"", 2166136261},
+		{"hello", 1335831723},
+		{"a", 0xe40c292c},
+	}
+	for _, c := range cases {
+		out := runBin(t, append([]native.Value{native.NewString(c.s)}, dotChain("fnv32")...))
+		if n, _ := native.AsInteger(out[0]); n != c.want {
+			t.Errorf("fnv32 %q = %d, want %d", c.s, n, c.want)
+		}
+	}
+}
+
+func TestBinFnv64NonNegativeAndStable(t *testing.T) {
+	seen := map[int64]string{}
+	for _, s := range []string{"", "a", "b", "hello", "world", "aql:bin"} {
+		out := runBin(t, append([]native.Value{native.NewString(s)}, dotChain("fnv64")...))
+		n, _ := native.AsInteger(out[0])
+		if n < 0 {
+			t.Errorf("fnv64 %q = %d, want non-negative (usable as hash mod m)", s, n)
+		}
+		// Re-hashing the same input is stable.
+		out2 := runBin(t, append([]native.Value{native.NewString(s)}, dotChain("fnv64")...))
+		if n2, _ := native.AsInteger(out2[0]); n2 != n {
+			t.Errorf("fnv64 %q not stable: %d vs %d", s, n, n2)
+		}
+		if prev, ok := seen[n]; ok && prev != s {
+			t.Errorf("fnv64 collision between %q and %q (both %d)", prev, s, n)
+		}
+		seen[n] = s
+	}
+}
