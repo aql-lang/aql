@@ -569,3 +569,23 @@ CASE swap
 CASE drop
   1 2 3 drop
   => "1 2"
+
+=== CHECK MODE ===
+CHECK check-named-fn-int
+  def dbl fn [[n:Integer] [Integer] [n mul 2]]  dbl 21
+  => "Scalar/Number/Integer"
+CHECK check-named-fn-untyped
+  def idf fn [[n:Integer] [Integer] [n]]  idf 7
+  => "Scalar/Number/Integer"
+CHECK check-afn-direct
+  ([n:Integer] => [n add 1]) 41
+  => "Scalar/Number/Integer"
+CHECK check-closure
+  def mk ([x:Integer] => [([y:Integer] => [x add y])])  def a5 (mk 5)  a5 3
+  => "Scalar/Number/Integer"
+CHECK check-if-branches
+  if (1 gt 0) [10] [20] end
+  => "Scalar/Number/Integer"
+CHECK check-recursive
+  def fact fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fact (n sub 1))]]]  fact 4
+  => "Scalar/Number/Integer"

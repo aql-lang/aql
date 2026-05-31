@@ -221,6 +221,71 @@ func dumpBehavior(t *testing.T) string {
 	return b.String()
 }
 
+// checkCorpus exercises CHECK-MODE return-type inference for fn / afn /
+// closure dispatch — the path that the function-model consolidation puts
+// most at risk (anonymous fns currently infer returns via
+// spliceAnonCheckResult -> AnalyseFnBody; a handler-attached path would
+// instead route through execMatch's carrier intercept). Rendering the
+// resulting carrier stack's type paths pins that inference byte-for-byte.
+var checkCorpus = []struct {
+	name string
+	src  string
+}{
+	{"check-named-fn-int", `def dbl fn [[n:Integer] [Integer] [n mul 2]]  dbl 21`},
+	{"check-named-fn-untyped", `def idf fn [[n:Integer] [Integer] [n]]  idf 7`},
+	{"check-afn-direct", `([n:Integer] => [n add 1]) 41`},
+	{"check-closure", `def mk ([x:Integer] => [([y:Integer] => [x add y])])  def a5 (mk 5)  a5 3`},
+	{"check-if-branches", `if (1 gt 0) [10] [20] end`},
+	{"check-recursive", `def fact fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fact (n sub 1))]]]  fact 4`},
+}
+
+// runCheckEntry runs src in CHECK MODE and renders the carrier stack as
+// type paths (plus any diagnostics), so the golden captures static
+// return-type inference rather than runtime values.
+func runCheckEntry(src string) string {
+	r, err := DefaultRegistry()
+	if err != nil {
+		return "REGERR: " + err.Error()
+	}
+	r.Check.Mode = true
+	toks, perr := parser.Parse(src)
+	if perr != nil {
+		return "PARSEERR: " + perr.Error()
+	}
+	out, runErr := NewTop(r).Run(toks)
+	if runErr != nil {
+		return "RUNERR: " + strings.SplitN(runErr.Error(), "\n", 2)[0]
+	}
+	parts := make([]string, len(out))
+	for i, v := range out {
+		// In check mode the stack holds carriers; render the lattice
+		// type path (the inferred type), which is the invariant we pin.
+		if v.Parent != nil {
+			parts[i] = v.Parent.Path()
+		} else {
+			parts[i] = "<nil>"
+		}
+	}
+	diags := ""
+	if n := len(r.Check.Diagnostics); n > 0 {
+		codes := make([]string, n)
+		for i, d := range r.Check.Diagnostics {
+			codes[i] = d.Code
+		}
+		sort.Strings(codes)
+		diags = " diagnostics=[" + strings.Join(codes, ",") + "]"
+	}
+	return strings.Join(parts, " ") + diags
+}
+
+func dumpCheck() string {
+	var b strings.Builder
+	for _, c := range checkCorpus {
+		fmt.Fprintf(&b, "CHECK %s\n  %s\n  => %q\n", c.name, c.src, runCheckEntry(c.src))
+	}
+	return b.String()
+}
+
 func TestFnModelEquivalence(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
@@ -232,6 +297,8 @@ func TestFnModelEquivalence(t *testing.T) {
 	got.WriteString(dumpSignatureTable(r))
 	got.WriteString("\n=== BEHAVIOR ===\n")
 	got.WriteString(dumpBehavior(t))
+	got.WriteString("\n=== CHECK MODE ===\n")
+	got.WriteString(dumpCheck())
 
 	goldenPath := filepath.Join("testdata", "fnmodel_equivalence.golden")
 	if *updateGolden {
