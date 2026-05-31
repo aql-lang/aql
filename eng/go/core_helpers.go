@@ -24,6 +24,36 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 		}
 		fnDef.Name = name
 
+		// Module-wrapper rebinding: a trivial-delegation wrapper
+		// (`Body=[Word(inner)]`, all-unnamed params, carrying its own
+		// sub-registry) is what `import` produces for each export and
+		// what `unpack` extracts. Dot-access (`pkg.word`) dispatches it
+		// via execFnDefLiteral's short-circuit, which looks up the
+		// INNER native's real Signatures (carrying QuoteArgs /
+		// NoEvalArgs / the Go handler) in the sub-registry. When the
+		// same value is rebound to a bare name (`def w pkg.word` or
+		// `unpack [word] pkg`), the body-splice path below would instead
+		// re-dispatch `Word(inner)` in THIS registry — where the inner
+		// native isn't registered — and drop the wrapper's special
+		// arg-handling (FnSig has no QuoteArgs field). Mirror dot-access
+		// instead: bind the inner native's Signatures verbatim under the
+		// new name so bare-word dispatch behaves exactly like pkg.word.
+		if reg := fnDef.Registry; reg != nil && reg != r && len(fnDef.Sigs) == 1 {
+			if innerName, ok := trivialDelegationTarget(&fnDef.Sigs[0]); ok {
+				if inner := reg.Lookup(innerName); inner != nil && len(inner.Signatures) > 0 {
+					rebound := FnDefInfo{
+						Name:           name,
+						Signatures:     append([]Signature(nil), inner.Signatures...),
+						MaxForwardArgs: inner.MaxForwardArgs,
+						Registry:       reg,
+					}
+					r.Defs.Push(name, NewFnDef(rebound))
+					r.Register(name, inner.Signatures...)
+					return
+				}
+			}
+		}
+
 		// Add a fallback handler (0-arg catch-all) if none exists yet.
 		// This handles 0-arg invocations of fn-defined words.
 		hasFallback := false

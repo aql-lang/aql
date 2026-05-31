@@ -1952,22 +1952,35 @@ func isRecordableLiteral(v Value) bool {
 // direct-call the inner handler (trivial) or run the body in the
 // captured sub-registry (non-trivial).
 func isTrivialDelegationBody(sig *FnSig, name string) bool {
+	inner, ok := trivialDelegationTarget(sig)
+	return ok && inner == name
+}
+
+// trivialDelegationTarget reports the inner native name a wrapper FnSig
+// purely delegates to — body of the form `[Word(inner)]` with all-
+// unnamed Params — and whether the sig has that shape at all. Unlike
+// isTrivialDelegationBody it does NOT require the inner name to equal
+// the wrapper's own name, so it also recognises a wrapper rebound under
+// a different name (`def w pkg.word`, `unpack [word] pkg`): the body
+// word still names the original inner native to look up in the
+// sub-registry. See InstallDef's module-wrapper rebinding branch.
+func trivialDelegationTarget(sig *FnSig) (string, bool) {
 	if len(sig.Body) != 1 {
-		return false
+		return "", false
 	}
 	for _, p := range sig.Params {
 		if p.Name != "" {
-			return false
+			return "", false
 		}
 	}
 	if !IsWord(sig.Body[0]) {
-		return false
+		return "", false
 	}
 	w, err := AsWord(sig.Body[0])
 	if err != nil {
-		return false
+		return "", false
 	}
-	return w.Name == name
+	return w.Name, true
 }
 
 // execFnDefSigStackMatch is the legacy FnSig-based pure-stack

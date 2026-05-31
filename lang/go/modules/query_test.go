@@ -269,26 +269,72 @@ func TestQueryFromNonTable(t *testing.T) {
 
 // --- destructuring DX: unpack lifts query words to bare names ---
 
-// TestQueryUnpackBindsWords confirms unpack successfully destructures the
-// aql:query export map: each named word is extracted and bound in the current
-// scope without error, and the names become defined.
-//
-// NOTE: invoking the unpacked words bare (e.g. `from people …`) does NOT yet
-// work for words whose module wrapper relies on QuoteArgs (from/join — bare
-// table-name quoting) or per-position no-eval during forward collection
-// (where/select). Module-wrapper FnDefs preserve that special arg-handling
-// only on dot-access dispatch (query.from), not when rebound to a bare name —
-// FnSig carries NoEvalArgs but has no QuoteArgs field. This is a pre-existing
-// limitation of module-wrapper rebinding (a plain `def fr query.from; fr x`
-// fails identically), independent of unpack, and is tracked as a separate
-// engine-level follow-up. unpack itself binds the values correctly, as the
-// general-purpose tests in native/native_unpack_test.go show.
-func TestQueryUnpackBindsWords(t *testing.T) {
+// TestQueryUnpackBareWords is the headline DX use case: after importing
+// aql:query, destructure the words so the whole pipeline reads like SQL with
+// no `query.` prefix. The bound module wrappers preserve their inner natives'
+// QuoteArgs (from's bare table name) and NoEvalArgs (the where/select clause
+// lists) because InstallDef rebinds a trivial-delegation wrapper to the inner
+// native's real signatures — exactly what dot-access dispatches against.
+func TestQueryUnpackBareWords(t *testing.T) {
 	r := queryRegistry(t)
-	if _, err := runQuerySrc(t, r, `unpack [from where select] query`); err != nil {
-		t.Fatalf("unpack of query words failed: %v", err)
+	src := `unpack [from where select] query
+	        from people where [age gt 25] select [name age]`
+	result, err := runQuerySrc(t, r, src)
+	if err != nil {
+		t.Fatalf("bare-word pipeline failed: %v", err)
 	}
-	// The names are now bound: referencing one resolves (no undefined_word).
-	// `select` with an empty projection over a from-less builder is exercised
-	// elsewhere; here we only assert the binding step itself succeeded.
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	td := materialize(t, result[0])
+	if len(td.Rows) != 2 {
+		t.Errorf("where age>25: expected 2 rows (Alice, Carol), got %d", len(td.Rows))
+	}
+	cols := td.Record.Fields.Keys()
+	if len(cols) != 2 || cols[0] != "name" || cols[1] != "age" {
+		t.Errorf("expected projection [name age], got %v", cols)
+	}
+}
+
+// TestQueryUnpackClauseCoverage exercises a full bare-word pipeline across the
+// clause families (order, group/having, distinct, aggregates) to confirm the
+// rebinding preserves each inner native's arg-handling, not just where/select.
+func TestQueryUnpackClauseCoverage(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		rows int
+	}{
+		{"order", `unpack [from where order select] query  from people where [city eq 'London'] order [age desc] select []`, 2},
+		{"group-having", `unpack [from group having select] query  from people group [city] having [cnt gt 1] select [city [count city cnt]]`, 1},
+		{"distinct", `unpack [from distinct select] query  from people distinct select [city]`, 3},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := queryRegistry(t)
+			result, err := runQuerySrc(t, r, c.src)
+			if err != nil {
+				t.Fatalf("%s: %v", c.name, err)
+			}
+			if got := len(materialize(t, result[0]).Rows); got != c.rows {
+				t.Errorf("%s: expected %d rows, got %d", c.name, c.rows, got)
+			}
+		})
+	}
+}
+
+// TestQueryUnpackRename confirms a wrapper rebound under a DIFFERENT name
+// (def w query.where) still dispatches via the inner native, including its
+// NoEvalArgs — the body word names the original inner native to look up.
+func TestQueryUnpackRename(t *testing.T) {
+	r := queryRegistry(t)
+	// fr is from under a new name; the clause words stay bare via unpack.
+	src := `def fr query.from  unpack [where select] query  fr people where [age gt 25] select []`
+	result, err := runQuerySrc(t, r, src)
+	if err != nil {
+		t.Fatalf("rename-alias pipeline failed: %v", err)
+	}
+	if got := len(materialize(t, result[0]).Rows); got != 2 {
+		t.Errorf("expected 2 rows, got %d", got)
+	}
 }
