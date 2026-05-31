@@ -309,6 +309,19 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				Returns: []*native.Type{native.TMap}, BarrierPos: -1,
 			}},
 		},
+		// test.report — return a one-line-per-property pass/fail/skip
+		// summary String (plus a tally line). §11b.5: the readable CI
+		// alternative to the verbose test.results table.
+		{
+			Name: "test-report",
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{},
+				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					return []native.Value{activeRun(parent).report()}, nil
+				},
+				Returns: []*native.Type{native.TString}, BarrierPos: -1,
+			}},
+		},
 		// test.fail-count — return the failure count as an integer.
 		{
 			Name: "test-fail-count",
@@ -548,7 +561,51 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				},
 			}},
 		},
+		// test.skip — a drop-in replacement for test.check-prop that does
+		// NOT run the generator/property bodies. It records a skipped
+		// result (ok=true, skipped=true) so the property still appears in
+		// test.report / test.results but contributes no failure and costs
+		// nothing to evaluate. Swap `check-prop` → `skip` on a property to
+		// park it while iterating, instead of commenting it out (§11b.4).
+		{
+			Name: "test-skip",
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{
+					native.TString,  // name
+					native.TList,    // gen body (quoted, ignored)
+					native.TList,    // property body (quoted, ignored)
+					native.TInteger, // runs (ignored)
+					native.TInteger, // seed (ignored)
+					native.TInteger, // max-shrinks (ignored)
+				},
+				NoEvalArgs: map[int]bool{1: true, 2: true},
+				Returns:    []*native.Type{native.TMap},
+				BarrierPos: -1,
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					return runSkipProp(parent, args)
+				},
+			}},
+		},
 	}
+}
+
+// runSkipProp records a skipped property result without running the
+// generator or property bodies. The skipped entry is ok=true and carries
+// a `skipped: true` marker so test.report renders it as `skip:` and it
+// never counts as a failure. See §11b.4.
+func runSkipProp(parent *native.Registry, args []native.Value) ([]native.Value, error) {
+	name, _ := args[0].AsConcreteString()
+	result := native.NewOrderedMap()
+	result.Set("name", native.NewString(name))
+	result.Set("ok", native.NewBoolean(true))
+	result.Set("skipped", native.NewBoolean(true))
+	result.Set("runs", native.NewInteger(0))
+	resultVal := native.NewMap(result)
+	run := activeRun(parent)
+	run.mu.Lock()
+	run.results = append(run.results, resultVal)
+	run.mu.Unlock()
+	return []native.Value{resultVal}, nil
 }
 
 // runCheckProp is the PBT inner loop. Extracted for readability —
@@ -977,6 +1034,75 @@ func (run *testRun) asTable() native.Value {
 	})
 }
 
+// report renders one line per recorded result — `pass:`, `FAIL:`, or
+// `skip:` followed by the name (and the error / failing input for
+// failures) — plus a trailing `N passed, M failed, K skipped` tally.
+// This is the readable CI summary §11b.5 asks for: `test.results`
+// returns the full 7-column table + PropertyResult dumps, which is hard
+// to scan in logs.
+func (run *testRun) report() native.Value {
+	run.mu.Lock()
+	defer run.mu.Unlock()
+	var b strings.Builder
+	passed, failed, skipped := 0, 0, 0
+	for _, res := range run.results {
+		m, _ := native.AsMap(res)
+		if m == nil {
+			continue
+		}
+		name := resultStringField(m, "name")
+		switch {
+		case resultBoolField(m, "skipped"):
+			skipped++
+			fmt.Fprintf(&b, "  skip: %s\n", name)
+		case resultBoolField(m, "ok"):
+			passed++
+			fmt.Fprintf(&b, "  pass: %s\n", name)
+		default:
+			failed++
+			detail := resultStringField(m, "error")
+			if detail == "" || detail == "none" {
+				if fi, ok := m.Get("failing-input"); ok && !native.IsNoneShape(fi) {
+					detail = "failing-input: " + fi.String()
+				}
+			}
+			if detail != "" {
+				fmt.Fprintf(&b, "  FAIL: %s — %s\n", name, detail)
+			} else {
+				fmt.Fprintf(&b, "  FAIL: %s\n", name)
+			}
+		}
+	}
+	fmt.Fprintf(&b, "%d passed, %d failed", passed, failed)
+	if skipped > 0 {
+		fmt.Fprintf(&b, ", %d skipped", skipped)
+	}
+	return native.NewString(b.String())
+}
+
+// resultStringField returns the named field rendered as a string, or ""
+// when absent / None.
+func resultStringField(m native.ReadMap, key string) string {
+	v, ok := m.Get(key)
+	if !ok || native.IsNoneShape(v) {
+		return ""
+	}
+	if s, err := v.AsConcreteString(); err == nil {
+		return s
+	}
+	return v.String()
+}
+
+// resultBoolField returns the named Boolean field, false when absent.
+func resultBoolField(m native.ReadMap, key string) bool {
+	v, ok := m.Get(key)
+	if !ok {
+		return false
+	}
+	b, err := v.AsConcreteBoolean()
+	return err == nil && b
+}
+
 // summary builds a {total, passed, failed} Map for quick reporting.
 func (run *testRun) summary() native.Value {
 	run.mu.Lock()
@@ -1241,10 +1367,12 @@ export "test" {
   test:        test-test/r
   it:          test-test/r
   check-prop:  test-check-prop/r
+  skip:        test-skip/r
 
   # accumulated results
   results:    test-results/r
   summary:    test-summary/r
+  report:     test-report/r
   reset:      test-reset/r
   fail-count: test-fail-count/r
 

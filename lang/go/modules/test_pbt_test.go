@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
@@ -67,6 +68,44 @@ func TestCheckProp_PropertyBodyCanImportNativeModule(t *testing.T) {
 		// Surface the recorded error to make a regression obvious.
 		errField := runTestAndGetField(t, r, src, "error")
 		t.Errorf("property body importing aql:math should pass across runs; got ok=false, error=%s", errField.String())
+	}
+}
+
+// TestSkip_RecordsSkippedWithoutRunning pins §11b.4: test.skip is a
+// drop-in for test.check-prop that records a skipped result (ok=true)
+// without running the bodies — a [false] property that WOULD fail if run
+// must not contribute a failure.
+func TestSkip_RecordsSkippedWithoutRunning(t *testing.T) {
+	r := testRegistry(t)
+	res := runTestAndGetField(t, r, `test.skip "wip" [r.int 0 9] [false] 10 1 0`, "skipped")
+	if b, err := res.AsConcreteBoolean(); err != nil || !b {
+		t.Fatalf("test.skip should mark the result skipped=true, got %v (err %v)", res, err)
+	}
+	// The skipped [false] property would fail if run; it must not raise
+	// the run's failure count.
+	out := runTestAQL(t, r, `test.fail-count`)
+	if n, _ := native.AsInteger(out[len(out)-1]); n != 0 {
+		t.Errorf("skipped properties must not count as failures; fail-count = %d, want 0", n)
+	}
+}
+
+// TestReport_OneLinePerProperty pins §11b.5: test.report renders one
+// line per recorded property (pass/FAIL/skip) plus a tally.
+func TestReport_OneLinePerProperty(t *testing.T) {
+	r := testRegistry(t)
+	runTestAQL(t, r, `test.check-prop "good" [r.int 0 9] [0 gte] 5 1 0`)
+	runTestAQL(t, r, `test.check-prop "bad" [r.int 0 9] [false] 5 1 0`)
+	runTestAQL(t, r, `test.skip "parked" [r.int 0 9] [false] 5 1 0`)
+
+	out := runTestAQL(t, r, `test.report`)
+	s, err := out[len(out)-1].AsConcreteString()
+	if err != nil {
+		t.Fatalf("test.report should return a String, got %v", out[len(out)-1])
+	}
+	for _, want := range []string{"pass: good", "FAIL: bad", "skip: parked", "1 passed", "1 failed", "1 skipped"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("test.report output missing %q:\n%s", want, s)
+		}
 	}
 }
 
