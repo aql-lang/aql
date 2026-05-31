@@ -138,7 +138,7 @@ func init() {
 		Summary: "Map a code body over each element of a list.",
 		Description: "Runs the body once per element with the element on the stack, " +
 			"collecting each body's result into a new list. The body must leave a value; " +
-			"for a side-effecting loop that collects nothing, use do-each.",
+			"for a side-effecting loop that collects nothing, use for-each.",
 		Examples: []string{
 			`[1 2 3] each [dup mul]  ;# => [1 4 9]`,
 			`iota 4 each [1 add]     ;# => [1 2 3 4]`,
@@ -146,13 +146,13 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:    "do-each",
+		Word:    "for-each",
 		Summary: "Run a code body over each element for side effects, discarding results.",
 		Description: "Like each, but discards every body result and produces nothing. " +
 			"The body may leave the stack empty (no sentinel needed) — use it for " +
 			"mutating loops that don't collect a value.",
 		Examples: []string{
-			`[1 2 3] do-each [print]   ;# prints 1,2,3; leaves nothing`,
+			`[1 2 3] for-each [print]   ;# prints 1,2,3; leaves nothing`,
 		},
 	})
 

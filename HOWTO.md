@@ -551,14 +551,14 @@ iota 5 each [dup mul]         => [0 1 4 9 16]
 ```
 
 For a **side-effecting loop that collects nothing** — mutating an object,
-accumulating into state — use `do-each`. Unlike `each`, its body may leave
+accumulating into state — use `for-each`. Unlike `each`, its body may leave
 the stack empty (no throwaway sentinel needed), and it produces no result:
 
 <!-- aql-test: skip -->
 ```
 def Box (refine Object {sum: 0})
 def b (make Box {})
-[1 2 3] do-each [var [[x] b (b.sum x add) "sum" set]]
+[1 2 3] for-each [var [[x] b (b.sum x add) "sum" set]]
 b.sum                         => 6
 ```
 

@@ -654,40 +654,40 @@ func TestEach(t *testing.T) {
 	}
 }
 
-// --- do-each (§7.4): side-effecting iteration that discards results ---
+// --- for-each (§7.4): side-effecting iteration that discards results ---
 
-// do-each runs the body once per element for its side effects and
+// for-each runs the body once per element for its side effects and
 // produces nothing, leaving the stack clean.
-func TestDoEachProducesNothing(t *testing.T) {
+func TestForEachProducesNothing(t *testing.T) {
 	r := arrayTestReg()
 	result := runAQL(t, r, []Value{
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
-		NewWord("do-each"),
+		NewWord("for-each"),
 		NewList([]Value{NewWord("drop")}),
 	})
 	if len(result) != 0 {
-		t.Errorf("do-each should leave the stack empty, got %v", result)
+		t.Errorf("for-each should leave the stack empty, got %v", result)
 	}
 }
 
-// do-each tolerates a body that leaves the stack empty (a None-producing
+// for-each tolerates a body that leaves the stack empty (a None-producing
 // / purely-mutating body) — the case where `each` errors. This is the
 // §7.4 sentinel-free mutating loop.
-func TestDoEachAllowsEmptyBody(t *testing.T) {
+func TestForEachAllowsEmptyBody(t *testing.T) {
 	r := arrayTestReg()
 	// Body `drop` consumes the element and pushes nothing.
 	result := runAQL(t, r, []Value{
 		NewList([]Value{NewInteger(10), NewInteger(20)}),
-		NewWord("do-each"),
+		NewWord("for-each"),
 		NewList([]Value{NewWord("drop")}),
 	})
 	if len(result) != 0 {
-		t.Fatalf("do-each empty body: expected clean stack, got %v", result)
+		t.Fatalf("for-each empty body: expected clean stack, got %v", result)
 	}
 }
 
 // Contrast: `each` with the same empty-producing body must still error,
-// pinning the behavioural difference between each and do-each.
+// pinning the behavioural difference between each and for-each.
 func TestEachStillRequiresResult(t *testing.T) {
 	r := arrayTestReg()
 	_, err := New(r).Run([]Value{
@@ -700,16 +700,16 @@ func TestEachStillRequiresResult(t *testing.T) {
 	}
 }
 
-// do-each surfaces an error raised inside the body.
-func TestDoEachPropagatesBodyError(t *testing.T) {
+// for-each surfaces an error raised inside the body.
+func TestForEachPropagatesBodyError(t *testing.T) {
 	r := arrayTestReg()
 	_, err := New(r).Run([]Value{
 		NewList([]Value{NewInteger(1), NewInteger(2)}),
-		NewWord("do-each"),
+		NewWord("for-each"),
 		NewList([]Value{NewWord("definitely-undefined-word")}),
 	})
 	if err == nil {
-		t.Fatal("expected do-each to propagate the body's undefined-word error")
+		t.Fatal("expected for-each to propagate the body's undefined-word error")
 	}
 }
 
