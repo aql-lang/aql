@@ -1,0 +1,577 @@
+=== SIGNATURE TABLE ===
+WORD __pa
+  [] barrier=0
+WORD add
+  [Scalar/Time/Instant Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/Instant]
+  [Scalar/Time/DateTime Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/DateTime]
+  [Scalar/Time/Date Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/DateTime]
+  [Scalar/Time/Date Scalar/Time/Duration/CalDuration] barrier=2 returns=[Scalar/Time/Date]
+  [Scalar/Number Scalar/Number] barrier=2 +returnsfn
+  [Scalar Scalar] barrier=2 returns=[Scalar/String]
+WORD afn
+  [Any Any] barrier=2 runcheck noeval={0,1} returns=[Type/Function]
+WORD all
+  [Node/List] barrier=1 returns=[Scalar/Boolean]
+WORD and
+  [Scalar/Boolean Scalar/Boolean] barrier=2 returns=[Scalar/Boolean]
+  [Any Any] barrier=2 returns=[Any]
+WORD any
+  [Node/List] barrier=1 returns=[Scalar/Boolean]
+WORD apply
+  [Type/Function] barrier=0 returns=[Any]
+WORD args
+  [] barrier=0 returns=[Node/List]
+WORD await
+  [Ideal/Options Node/List] barrier=2 noeval={1} returns=[Any]
+  [Node/List] barrier=1 noeval={0} returns=[Any]
+WORD band
+  [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
+WORD base
+  [Any] barrier=1 +returnsfn
+WORD behave
+  [Scalar/String Type/Function] barrier=2
+  [Scalar/Atom Type/Function] barrier=2 quote={0}
+WORD between
+  [Scalar Scalar Scalar] barrier=3 runcheck typearg={2} returns=[Scalar]
+WORD bnot
+  [Scalar/Number/Integer] barrier=1 returns=[Scalar/Number/Integer]
+WORD bor
+  [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
+WORD break
+  [] barrier=0
+WORD bsl
+  [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
+WORD bsr
+  [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
+WORD busr
+  [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
+WORD bxor
+  [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
+WORD call
+  [Node/List] barrier=1 noeval={0} returns=[Any]
+WORD cancel
+  [Ideal/Timeout] barrier=1
+  [Ideal/Interval] barrier=1
+WORD changecase
+  [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
+  [Scalar/Atom Node/Map] barrier=2 returns=[Scalar/String]
+  [Scalar/String] barrier=1 returns=[Scalar/String]
+  [Scalar/Atom] barrier=1 returns=[Scalar/String]
+WORD clone
+  [Any] barrier=0
+WORD cmp
+  [Any Any] barrier=2 returns=[Scalar/Number/Integer]
+WORD concat
+  [Node/Map Node/List] barrier=2 returns=[Scalar/String]
+  [Node/List] barrier=1 returns=[Scalar/String]
+WORD contains
+  [Scalar/String Scalar/String Node/Map] barrier=3 returns=[Scalar/Boolean]
+  [Scalar/String Scalar/String] barrier=2 returns=[Scalar/Boolean]
+WORD context
+  [] barrier=0 returns=[Ideal/Store]
+WORD continue
+  [] barrier=0
+WORD convert
+  [Scalar Node/Map Scalar] barrier=3 typearg={0} +returnsfn
+  [Scalar Scalar] barrier=2 typearg={0} +returnsfn
+WORD create
+  [Node/Map Ideal/Object/Resource/Entity] barrier=2
+  [Node/Map Node/Map] barrier=2
+  [Node/Map Node/Map] barrier=2
+  [Node/Map Node/List] barrier=2
+  [Ideal/Object/Resource/Entity] barrier=1
+  [Node/Map] barrier=1
+WORD dblcall
+  [Scalar/Number/Integer Node/List] barrier=2 noeval={1} returns=[Any]
+WORD def
+  [Node/Map Any] barrier=2 runcheck noevalmap={0}
+  [Scalar/String Any] barrier=2 runcheck
+  [Scalar/Atom Any] barrier=2 runcheck quote={0}
+WORD depth
+  [] barrier=0 fullstack
+WORD deq
+  [Any Any] barrier=2 returns=[Scalar/Boolean]
+WORD describe
+  [Scalar/String] barrier=1
+  [Scalar/Atom] barrier=1
+  [Scalar/Atom] barrier=1 quote={0}
+  [] barrier=0
+WORD direct
+  [Node/Map] barrier=1
+WORD div
+  [Scalar/Number Scalar/Number] barrier=2 +returnsfn
+WORD do
+  [Node/Map] barrier=1 returns=[Any]
+  [Node/List] barrier=1 noeval={0} +returnsfn
+WORD drop
+  [Any] barrier=0
+WORD drop2
+  [Any Any] barrier=0
+WORD dup
+  [Any] barrier=0 +returnsfn
+WORD dup2
+  [Any Any] barrier=0 +returnsfn
+WORD each
+  [Node/List Node/List] barrier=2 noeval={0} +returnsfn
+WORD enum
+  [Node/List] barrier=1 noeval={0} returns=[Type/Disjunct/Enum]
+WORD eq
+  [Any Any] barrier=2 returns=[Scalar/Boolean]
+WORD error
+  [Node/List Ideal/Error] barrier=2 noeval={0} returns=[Ideal/Error]
+WORD escape
+  [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
+  [Scalar/String] barrier=1 returns=[Scalar/String]
+WORD export
+  [Scalar/String Node/Map] barrier=2 runcheck
+  [Scalar/Atom Node/Map] barrier=2 runcheck
+WORD fetch
+  [Scalar/String Node/Map] barrier=2
+  [Node/Map] barrier=1
+  [Scalar/String] barrier=1
+WORD filter
+  [Type/Function Any] barrier=2
+WORD flatten
+  [Scalar/Number/Integer Node/List] barrier=2
+  [Node/List] barrier=1
+WORD fn
+  [Node/List] barrier=1 runcheck noeval={0} returns=[Type/Function]
+WORD fnsig
+  [Node/List] barrier=1 noeval={0} returns=[Type/FunctionSignature]
+WORD fold
+  [Node/List Node/List Any] barrier=3 noeval={0} +returnsfn
+  [Node/List Node/List] barrier=2 noeval={0} +returnsfn
+WORD folder
+  [Ideal/Options Scalar/Path] barrier=2 returns=[Node/List]
+  [Scalar/Path] barrier=1 returns=[Node/List]
+WORD for
+  [Node/List Node/List] barrier=2 noeval={1} +returnsfn
+  [Scalar/Number/Integer Node/List] barrier=2 noeval={1} +returnsfn
+WORD for-each
+  [Node/List Node/List] barrier=2 noeval={0} +returnsfn
+WORD get
+  [Scalar/String Ideal/Store] barrier=1 +returnsfn
+  [Scalar/String Ideal/Object] barrier=1 returns=[Any]
+  [Scalar/String Node] barrier=1 returns=[Any]
+  [Scalar/Number/Integer Ideal/Array] barrier=1 returns=[Any]
+  [Scalar/Number/Integer Ideal/Object] barrier=1 returns=[Any]
+  [Scalar/Number/Integer Node] barrier=1 returns=[Any]
+  [Scalar/Atom Ideal/Store] barrier=1 quote={0} +returnsfn
+  [Scalar/Atom Ideal/Object] barrier=1 quote={0} returns=[Any]
+  [Scalar/Atom Node] barrier=1 quote={0} returns=[Any]
+  [Any None] barrier=1 returns=[None]
+WORD getpath
+  [Scalar/String Any] barrier=2
+WORD getr
+  [Scalar/String Ideal/Object] barrier=1
+  [Scalar/String Node] barrier=1
+  [Scalar/Number/Integer Ideal/Object] barrier=1
+  [Scalar/Number/Integer Node] barrier=1
+  [Scalar/Atom Ideal/Object] barrier=1 quote={0}
+  [Scalar/Atom Node] barrier=1 quote={0}
+  [Any None] barrier=1
+WORD gt
+  [Scalar Scalar] barrier=2 runcheck typearg={1} returns=[Scalar]
+  [Any Any] barrier=2 returns=[Scalar/Boolean]
+WORD gte
+  [Scalar Scalar] barrier=2 runcheck typearg={1} returns=[Scalar]
+  [Any Any] barrier=2 returns=[Scalar/Boolean]
+WORD guard
+  [Any Scalar/Boolean] barrier=1 returns=[Any]
+WORD help
+  [] barrier=0
+WORD if
+  [Any Any Any] barrier=3 noeval={0,1,2} +returnsfn
+  [Any Any] barrier=2 noeval={0,1} +returnsfn
+  [Node/List] barrier=1 noeval={0} +returnsfn
+WORD iff
+  [Scalar/Boolean Scalar/Boolean] barrier=2 returns=[Scalar/Boolean]
+  [Any Any] barrier=2 returns=[Scalar/Boolean]
+WORD implies
+  [Scalar/Boolean Scalar/Boolean] barrier=2 returns=[Scalar/Boolean]
+  [Any Any] barrier=2 returns=[Scalar/Boolean]
+WORD import
+  [Node/List Scalar/Atom Node/List] barrier=3 runcheck noeval={0,2} quote={1}
+  [Scalar/Atom Scalar/Atom Node/List] barrier=3 runcheck noeval={2} quote={1}
+  [Node/List Word/__MD] barrier=2 runcheck noeval={0}
+  [Node/List Scalar/String] barrier=2 runcheck noeval={0}
+  [Scalar/Atom Word/__MD] barrier=2 runcheck
+  [Scalar/Atom Node/List] barrier=2 runcheck noeval={1} quote={0}
+  [Word/__MD] barrier=1 runcheck
+  [Scalar/String] barrier=1 runcheck returns=[Word/__MD]
+WORD indexof
+  [Scalar/String Scalar/String Node/Map] barrier=3 returns=[Scalar/Number/Integer]
+  [Node/List Node/List] barrier=2 +returnsfn
+  [Scalar/String Scalar/String] barrier=2 returns=[Scalar/Number/Integer]
+WORD inject
+  [Any Any] barrier=2
+WORD inner
+  [Node/List Node/List Node/List Node/List] barrier=4 noeval={0,1} +returnsfn
+WORD inspect
+  [Scalar/Atom] barrier=1 quote={0} returns=[Node/Map/Inspect]
+  [Any] barrier=1 returns=[Node/Map/Inspect]
+WORD interval
+  [Scalar/Number/Integer Node/List] barrier=2 quote={1} returns=[Ideal/Interval]
+  [Scalar/Number/Integer Scalar/Atom] barrier=2 quote={1} returns=[Ideal/Interval]
+WORD iota
+  [Scalar/Number/Integer] barrier=1 +returnsfn
+WORD is
+  [Any Any] barrier=1 returns=[Scalar/Boolean]
+WORD istype
+  [Any] barrier=1
+WORD items
+  [Any] barrier=1
+WORD join
+  [Scalar/String Node/List] barrier=2
+  [Node/List] barrier=1
+WORD jsonify
+  [Node/Map Any] barrier=2
+  [Any] barrier=1
+WORD list
+  [Node/Map Ideal/Object/Resource/Entity] barrier=2
+  [Node/Map Node/Map] barrier=2
+  [Node/Map Node/Map] barrier=2
+  [Node/Map Node/List] barrier=2
+  [Ideal/Object/Resource/Entity] barrier=1
+  [Node/Map] barrier=1
+  [Node/Map] barrier=1
+  [Node/List] barrier=1
+WORD load
+  [Node/Map Ideal/Object/Resource/Entity] barrier=2
+  [Node/Map Node/Map] barrier=2
+  [Node/Map Node/Map] barrier=2
+  [Node/Map Node/List] barrier=2
+  [Ideal/Object/Resource/Entity] barrier=1
+  [Node/Map] barrier=1
+WORD lower
+  [Scalar/String] barrier=1 returns=[Scalar/String]
+  [Scalar/Atom] barrier=1 returns=[Scalar/String]
+WORD lt
+  [Scalar Scalar] barrier=2 runcheck typearg={1} returns=[Scalar]
+  [Any Any] barrier=2 returns=[Scalar/Boolean]
+WORD lte
+  [Scalar Scalar] barrier=2 runcheck typearg={1} returns=[Scalar]
+  [Any Any] barrier=2 returns=[Scalar/Boolean]
+WORD make
+  [Ideal/Object Any Ideal/Object] barrier=3 returns=[Ideal/Object]
+  [Scalar Node/Map Any] barrier=3 typearg={0} +returnsfn
+  [Any Any Node/Map] barrier=3 returns=[Any]
+  [Ideal/Array Node/List] barrier=2 returns=[Ideal/Array]
+  [Ideal Node/Map] barrier=2 typearg={0} +returnsfn
+  [Scalar Any] barrier=2 typearg={0} +returnsfn
+  [Any Any] barrier=2 returns=[Any]
+WORD match
+  [Scalar/String Scalar/String Node/Map] barrier=3 returns=[Node/Map]
+  [Scalar/String Scalar/String] barrier=2 returns=[Node/Map]
+WORD merge
+  [Node/Map Node/List] barrier=2
+  [Node/List Node/Map] barrier=2
+  [Any Any] barrier=2
+WORD mod
+  [Scalar/Number Scalar/Number] barrier=2 +returnsfn
+WORD module
+  [Node/List] barrier=1 runcheck noeval={0} returns=[Word/__MD]
+WORD mul
+  [Scalar/Number Scalar/Number] barrier=2 +returnsfn
+WORD nand
+  [Scalar/Boolean Scalar/Boolean] barrier=2 returns=[Scalar/Boolean]
+  [Any Any] barrier=2 returns=[Scalar/Boolean]
+WORD neq
+  [Any Any] barrier=2 returns=[Scalar/Boolean]
+WORD nip
+  [Any Any] barrier=0 +returnsfn
+WORD nodify
+  [Any] barrier=1 returns=[Any]
+WORD nor
+  [Scalar/Boolean Scalar/Boolean] barrier=2 returns=[Scalar/Boolean]
+  [Any Any] barrier=2 returns=[Scalar/Boolean]
+WORD normalize
+  [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
+  [Scalar/String] barrier=1 returns=[Scalar/String]
+WORD not
+  [Scalar/Boolean] barrier=1 returns=[Scalar/Boolean]
+  [Any] barrier=1 returns=[Scalar/Boolean]
+WORD now
+  [] barrier=0 returns=[Scalar/Time/Instant]
+WORD or
+  [Scalar/Boolean Scalar/Boolean] barrier=1 returns=[Scalar/Boolean]
+  [Any Any] barrier=1 returns=[Any]
+WORD otherwise
+  [Any Any] barrier=1 returns=[Any]
+WORD outer
+  [Node/List Node/List Node/List] barrier=3 noeval={0} +returnsfn
+WORD over
+  [Any Any] barrier=0 +returnsfn
+WORD over2
+  [Any Any Any Any] barrier=0 +returnsfn
+WORD pad
+  [Scalar/Number/Integer Node/Map Scalar/String] barrier=3 returns=[Scalar/String]
+  [Scalar/Number/Integer Scalar/String] barrier=2 returns=[Scalar/String]
+  [Scalar/Number/Integer Any] barrier=2
+  [Any] barrier=1
+WORD pathof
+  [Any] barrier=1 typearg={0} returns=[Node/List]
+WORD pick
+  [Scalar/Number/Integer] barrier=0 fullstack
+WORD pop
+  [Node/List] barrier=1
+WORD pow
+  [Scalar/Number Scalar/Number] barrier=2 +returnsfn
+WORD prepare
+  [Node/Map] barrier=1
+WORD print
+  [Any] barrier=1
+WORD printstr
+  [Any] barrier=1
+WORD push
+  [Any Node/List] barrier=2
+WORD quote
+  [Scalar/Atom] barrier=1 quote={0} returns=[Scalar/Atom]
+  [Any] barrier=1 runcheck noeval={0} +returnsfn
+WORD range
+  [Scalar/Number/Integer Scalar/Number/Integer Scalar/Number/Integer] barrier=3 +returnsfn
+  [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 +returnsfn
+WORD read
+  [Node/Map Scalar/Path] barrier=2 returns=[Any]
+  [Node/Map Scalar/String] barrier=2 returns=[Any]
+  [Scalar/Path Node/Map] barrier=2 returns=[Any]
+  [Scalar/String Node/Map] barrier=2 returns=[Any]
+  [Scalar/Path] barrier=1 returns=[Any]
+  [Scalar/String] barrier=1 returns=[Any]
+WORD ref
+  [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Any]
+WORD refine
+  [Any Node] barrier=2 runcheck returns=[Type]
+  [Any] barrier=1 runcheck returns=[Type]
+WORD remove
+  [Node/Map Ideal/Object/Resource/Entity] barrier=2
+  [Node/Map Node/Map] barrier=2
+  [Node/Map Node/Map] barrier=2
+  [Node/Map Node/List] barrier=2
+  [Ideal/Object/Resource/Entity] barrier=1
+  [Node/Map] barrier=1
+WORD repeat
+  [Scalar/String Scalar/Number/Integer Node/Map] barrier=3 returns=[Scalar/String]
+  [Scalar/String Scalar/Number/Integer] barrier=2 returns=[Scalar/String]
+WORD replace
+  [Scalar/String Scalar/String Scalar/String Node/Map] barrier=4 returns=[Scalar/String]
+  [Scalar/String Scalar/String Scalar/String] barrier=3 returns=[Scalar/String]
+WORD reverse
+  [Node/List] barrier=1 +returnsfn
+WORD roll
+  [Scalar/Number/Integer] barrier=0 fullstack
+WORD rot
+  [Any Any Any] barrier=0 +returnsfn
+WORD scan
+  [Node/List Node/List] barrier=2 noeval={0} +returnsfn
+WORD selector
+  [Node/Map Any] barrier=2
+WORD set
+  [Scalar/String Any Ideal/Store] barrier=3 +returnsfn
+  [Scalar/String Any Ideal/Object] barrier=3
+  [Scalar/Number/Integer Any Ideal/Array] barrier=3
+  [Scalar/Atom Any Ideal/Store] barrier=3 quote={0} +returnsfn
+  [Scalar/Atom Any Ideal/Object] barrier=3 quote={0}
+WORD setpath
+  [Scalar/String Any Any] barrier=3
+  [Any Scalar/String Any] barrier=3
+WORD shed
+  [Scalar/Number/Integer Node/List] barrier=2 +returnsfn
+WORD shift
+  [Node/List] barrier=1
+WORD size
+  [Any] barrier=1
+WORD sleep
+  [Scalar/Number/Integer] barrier=1
+WORD slice
+  [Scalar/Number/Integer Scalar/Number/Integer Node/List] barrier=3 returns=[Node/List]
+  [Scalar/Number/Integer Scalar/Number/Integer Scalar/String] barrier=3 returns=[Scalar/String]
+  [Scalar/Number/Integer Node/List] barrier=2 returns=[Node/List]
+  [Scalar/Number/Integer Scalar/String] barrier=2 returns=[Scalar/String]
+  [Node/List] barrier=1 returns=[Node/List]
+  [Scalar/String] barrier=1 returns=[Scalar/String]
+WORD sort
+  [Node/Map] barrier=1 returns=[Node/Map]
+  [Node/List] barrier=1 returns=[Node/List]
+WORD split
+  [Scalar/String Scalar/String Node/Map] barrier=3 returns=[Node/List]
+  [Scalar/String Scalar/String] barrier=2 returns=[Node/List]
+WORD stack
+  [Scalar/Number/Integer] barrier=0 fullstack
+WORD stderr
+  [] barrier=0 returns=[Scalar/String]
+WORD stdin
+  [] barrier=0 returns=[Scalar/String]
+WORD stdout
+  [] barrier=0 returns=[Scalar/String]
+WORD sub
+  [Scalar/Time/Instant Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/Instant]
+  [Scalar/Time/DateTime Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/DateTime]
+  [Scalar/Time/Date Scalar/Time/Duration/CalDuration] barrier=2 returns=[Scalar/Time/Date]
+  [Scalar/Number Scalar/Number] barrier=2 +returnsfn
+WORD swap
+  [Any Any] barrier=0 +returnsfn
+WORD swap2
+  [Any Any Any Any] barrier=0 +returnsfn
+WORD take
+  [Scalar/Number/Integer Node/List] barrier=2 +returnsfn
+WORD tall
+  [Node/List] barrier=1 returns=[Any]
+WORD tand
+  [Any Any] barrier=1 returns=[Any]
+WORD tany
+  [Node/List] barrier=1 returns=[Any]
+WORD teq
+  [Any Any] barrier=1 returns=[Scalar/Boolean]
+WORD timeout
+  [Scalar/Number/Integer Node/List] barrier=2 quote={1} returns=[Ideal/Timeout]
+  [Scalar/Number/Integer Scalar/Atom] barrier=2 quote={1} returns=[Ideal/Timeout]
+WORD tor
+  [Any Any] barrier=1 +returnsfn
+WORD tpartial
+  [Any] barrier=1 returns=[Type]
+WORD trace
+  [Node/List] barrier=1 returns=[Any]
+WORD transform
+  [Node/Map Any] barrier=2
+WORD trim
+  [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
+  [Scalar/Atom Node/Map] barrier=2 returns=[Scalar/String]
+  [Scalar/String] barrier=1 returns=[Scalar/String]
+  [Scalar/Atom] barrier=1 returns=[Scalar/String]
+WORD tuck
+  [Any Any] barrier=0 +returnsfn
+WORD typeof
+  [Any] barrier=1 returns=[Type]
+WORD undef
+  [Scalar/String Type/FunctionSignature] barrier=2 runcheck
+  [Scalar/Atom Type/FunctionSignature] barrier=2 runcheck quote={0}
+  [Scalar/String] barrier=1 runcheck
+  [Scalar/Atom] barrier=1 runcheck quote={0}
+WORD unify
+  [Any Any] barrier=2 returns=[Any Scalar/Boolean]
+WORD unpack
+  [Node/Map Node/Map] barrier=2 runcheck noevalmap={0}
+  [Node/List Node/Map] barrier=2 runcheck noeval={0}
+  [Scalar/Atom Node/Map] barrier=2 runcheck quote={0}
+WORD unshift
+  [Any Node/List] barrier=2
+WORD update
+  [Node/Map Ideal/Object/Resource/Entity] barrier=2
+  [Node/Map Node/Map] barrier=2
+  [Node/Map Node/Map] barrier=2
+  [Node/Map Node/List] barrier=2
+  [Ideal/Object/Resource/Entity] barrier=1
+  [Node/Map] barrier=1
+WORD upper
+  [Scalar/String] barrier=1 returns=[Scalar/String]
+  [Scalar/Atom] barrier=1 returns=[Scalar/String]
+WORD validate
+  [Node/Map Any] barrier=2
+WORD var
+  [Node/List] barrier=1 noeval={0} returns=[Any]
+WORD walk
+  [Type/Function Type/Function Any] barrier=0
+  [Type/Function Any] barrier=0
+  [Any] barrier=0
+WORD word
+  [Any] barrier=1 noeval={0} returns=[Any]
+WORD write
+  [Scalar/Path Scalar/String Node/Map] barrier=3
+  [Scalar/Path Any Node/Map] barrier=3
+  [Scalar/String Scalar/String Node/Map] barrier=3
+  [Scalar/String Any Node/Map] barrier=3
+  [Scalar/Path Scalar/String] barrier=2
+  [Scalar/String Scalar/String] barrier=2
+WORD xnor
+  [Scalar/Boolean Scalar/Boolean] barrier=2 returns=[Scalar/Boolean]
+  [Any Any] barrier=2 returns=[Scalar/Boolean]
+WORD xor
+  [Scalar/Boolean Scalar/Boolean] barrier=2 returns=[Scalar/Boolean]
+  [Any Any] barrier=2 returns=[Scalar/Boolean]
+
+=== BEHAVIOR ===
+CASE add-forward
+  add 2 3
+  => "5"
+CASE sub-swap
+  10 sub 3
+  => "7"
+CASE sub-forward
+  sub 10 3
+  => "-7"
+CASE mul-stack
+  4 5 mul
+  => "20"
+CASE nested-arith
+  add (mul 2 3) (sub 10 4)
+  => "0"
+CASE if-then
+  if true 99 88 end
+  => "99"
+CASE if-else
+  if false 99 88 end
+  => "88"
+CASE if-listcond-then
+  if [1 gt 0] 99 88 end
+  => "99"
+CASE if-listcond-else
+  if [1 lt 0] 99 88 end
+  => "88"
+CASE if-no-else-true
+  if true 99 end
+  => "99"
+CASE if-no-else-false
+  if false 99 end
+  => ""
+CASE if-clauselist
+  if [false "a" true "b" "c"]
+  => "'b'"
+CASE if-bodyeval
+  if true [1 add 2] [10 add 20] end
+  => "3"
+CASE named-fn-simple
+  def dbl fn [[n:Integer] [Integer] [n mul 2]]  dbl 21
+  => "42"
+CASE named-fn-forward
+  def f fn [[a:Integer b:Integer] [Integer] [a sub b]]  f 10 3
+  => "7"
+CASE named-fn-recursive
+  def fact fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fact (n sub 1))]]]  fact 5
+  => "120"
+CASE named-fn-multi-overload
+  def g fn [[a:Integer] [Integer] [a add 1] [a:String] [String] [a]]  g 41
+  => "42"
+CASE afn-direct
+  ([n:Integer] => [n add 1]) 41
+  => "42"
+CASE closure-adder
+  def make-adder ([x:Integer] => [([y:Integer] => [x add y])])  def add5 (make-adder 5)  add5 3
+  => "8"
+CASE closure-reuse
+  def make-adder ([x:Integer] => [([y:Integer] => [x add y])])  def add5 (make-adder 5)  add5 3  add5 10
+  => "8 15"
+CASE each-double
+  [1 2 3] each [dup add]
+  => "[2 4 6]"
+CASE fold-sum
+  [1 2 3 4] 0 fold [add]
+  => "RUNERR: [aql/signature_error]: no matching signature for fold\n  --> 1:13\n  = expected: fold (List, List, Any) or (List, List)\n  = forward args for fold may have run into the next word; group the call with parens — (fold …) — or end it with `end` or `;`\n  = stack: List 0 >>>word(fold)<<< List"
+CASE math-max-bound
+  def m import "aql:math"  m.max 3 7
+  => "RUNERR: [aql/undefined_word]: undefined word: m\n  --> 1:26"
+CASE math-max-inscope
+  import "aql:math"  max 3 7
+  => "RUNERR: import: native module resolver not configured (cannot import \"aql:math\")"
+CASE array-len
+  def a import "aql:array"  a.length [10 20 30]
+  => "RUNERR: [aql/undefined_word]: undefined word: a\n  --> 1:27"
+CASE dup
+  5 dup add
+  => "10"
+CASE swap
+  1 2 swap sub
+  => "1"
+CASE drop
+  1 2 3 drop
+  => "1 2"
