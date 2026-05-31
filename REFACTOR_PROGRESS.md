@@ -177,3 +177,48 @@ RISK: this is the engine's core dispatch. If 1b-ii/iii destabilizes, revert
 to the 1a baseline (commit is clean) and reconsider the Handler-sentinel
 fallback (plan's stated alternative: a sentinel the executor recognizes to
 splice inline — one localized branch in execMatch, still one dispatch entry).
+
+---
+## STAGE 1b — SPIKE SUCCEEDED (committed + pushed)
+
+Done, all gates green (eng+lang vet+test, both equivalence goldens
+byte-identical, all lambda/closure/anon/check tests pass):
+- 1b-i: extracted buildFnBodyHandler + buildFnBodyReturnsFn from
+  InstallFnDef (pure refactors). Body-runner now reusable.
+- harness+: added CHECK MODE section to native golden (pins afn/closure
+  return inference — all infer Integer).
+- 1b-ii: compileFnDef attaches the body-runner handler+returnsFn to the
+  compiled Signatures of ANONYMOUS fns. afn/closure Function values now
+  dispatch via execMatch (line 1921 sig.Handler==nil now false for them),
+  NOT execFnDefSigStackMatch. Goldens byte-identical => behavior-equivalent.
+
+CRITICAL SCOPING LESSON: handler attachment MUST be gated on
+fnDef.Anonymous. A first attempt attached handlers to ALL compiled sigs
+and broke TestTypeFnPredicate_NotIndependentlyCallable: a non-anonymous
+predicate-type FnDef sitting bare on the stack (`def Bbd …; Bbd "c"`)
+relies on Handler==nil to stay INERT DATA (fall through to
+execFnDefSigStackMatch which leaves it on the stack). Giving it a handler
+made it auto-dispatch the predicate. So: anonymous => handler (active
+dispatch); non-anonymous bare FnDef => no handler (inert). The
+execFnDefLiteral comment at ~1881 ("predicate-type FnDefs landing bare
+are intentionally inert") is the spec for this.
+
+### REMAINING in Stage 1 / boundary into Stage 2
+The `sig.Handler==nil` fallbacks at engine.go:~1876 and ~1921 are now
+only reached by NON-anonymous bare FnDefs (predicates) + module wrappers
+(which have their own branch at ~1947). execFnDefSigStackMatch is still
+needed for those. So we CANNOT yet delete the fallbacks (that was the
+naive Stage-2 plan). Reassess: the duality that remains is
+  (a) predicate FnDefs — intentionally inert, must stay handler-less;
+  (b) module-preamble AQL fns (decision.cond) — run via CallAQL in a
+      sub-registry (execFnDefSig capturedReg path), returns final results.
+Neither is an afn. The Stage-3 STRUCT MERGE (Sigs+Signatures→one,
+Params[i].Type in matchSignature) is independent of these and is likely
+the higher-value next move. Consider whether fully deleting
+execFnDefSigStackMatch is worth it vs. leaving it for the predicate-inert
++ module-CallAQL cases.
+
+NEXT DECISION POINT (ask user): proceed to Stage 3 struct merge, OR keep
+pushing Stage 2 to also route module-preamble fns through handlers
+(harder — needs the capturedReg CallAQL path as a handler that returns
+final results, not inline tokens).
