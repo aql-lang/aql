@@ -1825,13 +1825,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		fn = reg.Lookup(fnDef.Name)
 	}
 	if fn == nil && len(fnDef.Sigs) > 0 {
-		synth := fnSigsToSignatures(fnDef.Sigs)
-		fn = &FnDefInfo{
-			Name:           fnDef.Name,
-			Signatures:     synth,
-			MaxForwardArgs: calcMaxForwardArgs(synth),
-			Registry:       fnDef.Registry,
-		}
+		fn = compileFnDef(fnDef)
 	}
 	if fn == nil {
 		e.pointer++
@@ -2235,6 +2229,30 @@ func fnSigsToSignatures(sigs []FnSig) []Signature {
 	}
 	SortSignatures(out)
 	return out
+}
+
+// compileFnDef produces the compiled-dispatch view of an FnDefInfo whose
+// Sigs are authored (named params + body) but whose Signatures have not
+// yet been built — the afn / captured-FnDef / lazy path. It is the single
+// boundary that turns `Sigs` into the `Signatures` matchSignature needs,
+// resolving the BarrierPos sentinel and sorting into dispatch order
+// (delegated to fnSigsToSignatures), then computing MaxForwardArgs.
+//
+// This centralisation is the seam the function-model consolidation builds
+// on: every site that needs a dispatchable FnDefInfo from raw Sigs routes
+// through here rather than constructing the struct inline. Behaviour is
+// byte-identical to the previous inline construction at execFnDefLiteral:
+// the returned shell carries ONLY Name/Signatures/MaxForwardArgs/Registry
+// (Sigs/Anonymous/Captured are intentionally not copied — the dispatch
+// path reads those off the original fnDef, not this compiled shell).
+func compileFnDef(fnDef FnDefInfo) *FnDefInfo {
+	synth := fnSigsToSignatures(fnDef.Sigs)
+	return &FnDefInfo{
+		Name:           fnDef.Name,
+		Signatures:     synth,
+		MaxForwardArgs: calcMaxForwardArgs(synth),
+		Registry:       fnDef.Registry,
+	}
 }
 
 // execFnDefSig executes a matched FnDef signature. If capturedReg is non-nil
