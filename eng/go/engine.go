@@ -1096,7 +1096,7 @@ func (e *Engine) stepWord(val Value) error {
 
 // execMatch executes a matched signature, splicing args and results.
 func (e *Engine) execMatch(match *MatchResult) error {
-	n := len(match.Sig.Args)
+	n := match.Sig.TotalArgs()
 
 	// Use recorded positions if available, otherwise derive from stack.
 	indices := match.Positions
@@ -3269,7 +3269,7 @@ func (e *Engine) hasPendingForwardQuoteArg() bool {
 			// Forward args fill from sigArgs[0]; the next forward slot
 			// is at index CollectedArgs.
 			nextIdx := fwd.CollectedArgs
-			if nextIdx < len(fwd.Sig.Args) {
+			if nextIdx < fwd.Sig.TotalArgs() {
 				return fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx]
 			}
 			break
@@ -3373,7 +3373,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			continue
 		}
 
-		nArgs := len(sig.Args)
+		nArgs := sig.TotalArgs()
 
 		// 0-arg sigs are deferred to the fallback section at the bottom.
 		if nArgs == 0 {
@@ -3673,7 +3673,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		if w.ArgCount >= 0 && sig.TotalArgs() != w.ArgCount {
 			continue
 		}
-		if len(sig.Args) == 0 || sig.Fallback {
+		if sig.TotalArgs() == 0 || sig.Fallback {
 			return sig, nil
 		}
 	}
@@ -3732,7 +3732,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		if s.Fallback {
 			continue
 		}
-		n := len(s.Args)
+		n := s.TotalArgs()
 		pos := e.checkModeFallbackPositions(n)
 		if len(pos) != n {
 			continue
@@ -3783,7 +3783,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		Row:    pos.Row,
 		Col:    pos.Col,
 	})
-	n := len(sig.Args)
+	n := sig.TotalArgs()
 	positions := e.checkModeFallbackPositions(n)
 	args := make([]Value, len(positions))
 	for i, p := range positions {
