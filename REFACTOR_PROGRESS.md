@@ -222,3 +222,46 @@ NEXT DECISION POINT (ask user): proceed to Stage 3 struct merge, OR keep
 pushing Stage 2 to also route module-preamble fns through handlers
 (harder — needs the capturedReg CallAQL path as a handler that returns
 final results, not inline tokens).
+
+---
+## STAGE 3 — struct merge (STARTED; lint baseline + dead-code done)
+
+DONE:
+- make lint baseline: eng+lang both golangci-lint clean (0 issues) after
+  removing the now-unused fnSigsToSignatures (compileFnDef inlined it).
+- Confirmed BarrierPos sentinel already consistent (BarrierAllForward
+  named constant used everywhere; registry.go:327 resolves once).
+
+RECON for the merge (validated):
+- Signature{} CONSTRUCTION sites = only 3: registry.go:683 (the native
+  shim — all 348 NativeSig literals funnel here), engine.go:2250
+  (compileFnDef), core_helpers.go:69 (clearSigs/undef rebuild). Tiny.
+- Signature.Args READERS = ~31 (mostly signature.go matchSignature region
+  + engine.go forward-planner: lines signature.go 183/236/334/336/397/433,
+  engine.go 192/337-338/1535/3292/3375/3411/3624/3636/3675/3785). The cost
+  is here, not construction.
+- The shape mismatch is the crux: Signature.Args is []*Type; FnSig.Params
+  is []FnParam (name+type+pattern+optional). Merging means readers go from
+  sig.Args[i] (a *Type) to sig.Params[i].Type.
+
+MERGE PLAN (smallest compiling increments, gate each):
+  3a. Add `Params []FnParam` to Signature (additive, compiles green).
+      Populate it at all 3 construction sites alongside Args (Params[i]
+      = FnParam{Type: Args[i], Pattern: from Patterns map, ...}).
+  3b. Introduce sigArgType(sig,i) *Type helper returning sig.Args[i];
+      repoint the ~31 readers to it. Gate.
+  3c. Flip sigArgType to read sig.Params[i].Type; gate. Now Args is
+      write-only.
+  3d. Delete Signature.Args + the Patterns map (fold into Params);
+      delete the field from the 3 constructors. Gate.
+  3e. Rename the merged struct / alias FnSig=Signature OR fold remaining
+      Signature-only fields (Handler/FullStack/Fallback/RunInCheckMode/
+      ReturnsFn/CheckFullStackFn/QuoteArgs/TypeArgs) onto FnSig; make
+      FnDefInfo carry ONE slice. This is the big one — do last, isolated.
+
+RISK/RECOMMENDATION: 3a-3d are mechanical and individually gateable.
+3e (collapse to one struct + delete FnDefInfo.Signatures, repoint all
+.Sigs/.Signatures readers) is the largest single step — consider a git
+worktree so a half-done state never touches the main tree. The anonymous-
+fn dispatch unification (Stage 1b) is already the headline win and is
+committed; Stage 3 is the structural cleanup on top.
