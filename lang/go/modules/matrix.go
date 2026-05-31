@@ -236,7 +236,7 @@ func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 func makeListToMatrixFnDef(wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TList}},
 			Returns: []*native.Type{TMatrix},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
@@ -247,7 +247,7 @@ func makeListToMatrixFnDef(wordName string, subReg *native.Registry) native.Valu
 
 func makeIntIntToMatrixFnDef(wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}},
 			Returns: []*native.Type{TMatrix},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
@@ -258,7 +258,7 @@ func makeIntIntToMatrixFnDef(wordName string, subReg *native.Registry) native.Va
 
 func makeIntToMatrixFnDef(wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TInteger}},
 			Returns: []*native.Type{TMatrix},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
@@ -269,7 +269,7 @@ func makeIntToMatrixFnDef(wordName string, subReg *native.Registry) native.Value
 
 func makeIntIntNumToMatrixFnDef(wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}, {Type: native.TNumber}},
 			Returns: []*native.Type{TMatrix},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
@@ -280,7 +280,7 @@ func makeIntIntNumToMatrixFnDef(wordName string, subReg *native.Registry) native
 
 func makeMatrixToIntFnDef(wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}},
 			Returns: []*native.Type{native.TInteger},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
@@ -296,7 +296,7 @@ func makeMatrixIntIntToDecFnDef(wordName string, subReg *native.Registry) native
 	// reverse (top-down = stack[N-1], stack[N-2], …, stack[0]) and is
 	// "data-last" by virtue of mat being deepest.
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}, {Type: native.TInteger}, {Type: native.TInteger}},
 			Returns: []*native.Type{native.TDecimal},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
@@ -307,7 +307,7 @@ func makeMatrixIntIntToDecFnDef(wordName string, subReg *native.Registry) native
 
 func makeMatrixIntToListFnDef(wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}, {Type: native.TInteger}},
 			Returns: []*native.Type{native.TList},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
@@ -318,7 +318,7 @@ func makeMatrixIntToListFnDef(wordName string, subReg *native.Registry) native.V
 
 func makeMatrixMatrixToMatrixFnDef(wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}, {Type: TMatrix}},
 			Returns: []*native.Type{TMatrix},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
@@ -329,7 +329,7 @@ func makeMatrixMatrixToMatrixFnDef(wordName string, subReg *native.Registry) nat
 
 func makeMatrixNumToMatrixFnDef(wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}, {Type: native.TNumber}},
 			Returns: []*native.Type{TMatrix},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
@@ -340,7 +340,7 @@ func makeMatrixNumToMatrixFnDef(wordName string, subReg *native.Registry) native
 
 func makeUnaryMatrixFnDef(wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}},
 			Returns: []*native.Type{TMatrix},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
@@ -351,7 +351,7 @@ func makeUnaryMatrixFnDef(wordName string, subReg *native.Registry) native.Value
 
 func makeMatrixToListFnDef(wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}},
 			Returns: []*native.Type{native.TList},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
@@ -362,7 +362,7 @@ func makeMatrixToListFnDef(wordName string, subReg *native.Registry) native.Valu
 
 func makeMatrixToDecFnDef(wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}},
 			Returns: []*native.Type{native.TDecimal},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
@@ -373,7 +373,7 @@ func makeMatrixToDecFnDef(wordName string, subReg *native.Registry) native.Value
 
 func makeListListToDecFnDef(wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TList}, {Type: native.TList}},
 			Returns: []*native.Type{native.TDecimal},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,

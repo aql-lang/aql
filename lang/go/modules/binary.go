@@ -85,7 +85,7 @@ func BuildBinaryModule(parent *native.Registry) (native.ModuleDesc, error) {
 func makeBinUnaryFnDef(wordName string, subReg *native.Registry, returnType *native.Type) native.Value {
 	fnDef := native.FnDefInfo{
 		Name: wordName,
-		Sigs: []native.FnSig{
+		Signatures: []native.FnSig{
 			{
 				Params:  []native.FnParam{{Type: native.TInteger}},
 				Returns: []*native.Type{returnType},
@@ -103,7 +103,7 @@ func makeBinUnaryFnDef(wordName string, subReg *native.Registry, returnType *nat
 func makeBinFnDef1(wordName string, subReg *native.Registry, paramType, returnType *native.Type) native.Value {
 	fnDef := native.FnDefInfo{
 		Name: wordName,
-		Sigs: []native.FnSig{
+		Signatures: []native.FnSig{
 			{
 				Params:  []native.FnParam{{Type: paramType}},
 				Returns: []*native.Type{returnType},
@@ -118,7 +118,7 @@ func makeBinFnDef1(wordName string, subReg *native.Registry, paramType, returnTy
 func makeBinBinaryFnDef(wordName string, subReg *native.Registry, returnType *native.Type) native.Value {
 	fnDef := native.FnDefInfo{
 		Name: wordName,
-		Sigs: []native.FnSig{
+		Signatures: []native.FnSig{
 			{
 				Params: []native.FnParam{
 					{Type: native.TInteger},
@@ -136,7 +136,7 @@ func makeBinBinaryFnDef(wordName string, subReg *native.Registry, returnType *na
 func makeBinTernaryFnDef(wordName string, subReg *native.Registry) native.Value {
 	fnDef := native.FnDefInfo{
 		Name: wordName,
-		Sigs: []native.FnSig{
+		Signatures: []native.FnSig{
 			{
 				Params: []native.FnParam{
 					{Type: native.TInteger},
@@ -155,7 +155,7 @@ func makeBinTernaryFnDef(wordName string, subReg *native.Registry) native.Value 
 func makeBinQuaternaryFnDef(wordName string, subReg *native.Registry) native.Value {
 	fnDef := native.FnDefInfo{
 		Name: wordName,
-		Sigs: []native.FnSig{
+		Signatures: []native.FnSig{
 			{
 				Params: []native.FnParam{
 					{Type: native.TInteger},

@@ -624,7 +624,7 @@ func TestRemoveRecordHandler(t *testing.T) {
 // makeTrueFilterFn creates an AQL function that takes one map arg and returns true.
 func makeTrueFilterFn() Value {
 	return NewFnDef(FnDefInfo{
-		Sigs: []FnSig{
+		Signatures: []FnSig{
 			{
 				Params: []FnParam{
 					{Name: "item", Type: TMap},
@@ -679,7 +679,7 @@ func TestFilterHandler(t *testing.T) {
 // from the walk node map. Body: [getpath node "value"]
 func makeWalkValueFn() Value {
 	return NewFnDef(FnDefInfo{
-		Sigs: []FnSig{
+		Signatures: []FnSig{
 			{
 				Params: []FnParam{
 					{Name: "node", Type: TMap},

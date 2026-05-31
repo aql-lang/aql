@@ -117,10 +117,14 @@ func isPredicateFnValue(v Value) bool {
 		return false
 	}
 	info, ok := v.Data.(FnDefInfo)
-	if !ok || len(info.Sigs) == 0 {
+	if !ok {
 		return false
 	}
-	return len(info.Sigs[0].Params) == 1
+	sig, ok := info.FirstOwnSig()
+	if !ok {
+		return false
+	}
+	return len(sig.Params) == 1
 }
 
 // resolvePredicateRef returns the predicate fn body when v references

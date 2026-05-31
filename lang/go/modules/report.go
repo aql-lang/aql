@@ -43,7 +43,7 @@ func BuildReportModule(parent *native.Registry) (native.ModuleDesc, error) {
 func makeReportFnDef(wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{
 		Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:     []native.FnParam{{Type: native.TAny}},
 			Returns:    []*native.Type{native.TString},
 			Body:       []native.Value{native.NewWord(wordName)},

@@ -198,7 +198,7 @@ func wrapRandFnDefNoEval(
 ) native.Value {
 	fnDef := native.FnDefInfo{
 		Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:        params,
 			Returns:       returns,
 			Body:          []native.Value{native.NewWord(wordName)},

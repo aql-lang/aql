@@ -1074,7 +1074,14 @@ func buildInspection(r *eng.Registry, name string) eng.Value {
 		return eng.NewValueRaw(eng.TInspect, eng.MapPayload{M: result})
 	}
 
-	if len(fn.Sigs) > 0 {
+	isDefined := false
+	for _, s := range fn.OwnSigs() {
+		if len(s.Body) > 0 {
+			isDefined = true
+			break
+		}
+	}
+	if isDefined {
 		result.Set("kind", eng.NewAtom("defined"))
 	} else {
 		result.Set("kind", eng.NewAtom("native"))

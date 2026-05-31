@@ -38,79 +38,32 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 		// arg-handling (FnSig has no QuoteArgs field). Mirror dot-access
 		// instead: bind the inner native's Signatures verbatim under the
 		// new name so bare-word dispatch behaves exactly like pkg.word.
-		if reg := fnDef.Registry; reg != nil && reg != r && len(fnDef.Sigs) == 1 {
-			if innerName, ok := trivialDelegationTarget(&fnDef.Sigs[0]); ok {
-				if inner := reg.Lookup(innerName); inner != nil && len(inner.Signatures) > 0 {
-					rebound := FnDefInfo{
-						Name:           name,
-						Signatures:     append([]Signature(nil), inner.Signatures...),
-						MaxForwardArgs: inner.MaxForwardArgs,
-						Registry:       reg,
-					}
-					r.Defs.Push(name, NewFnDef(rebound))
-					r.Register(name, inner.Signatures...)
-					return
-				}
-			}
-		}
-
-		// Add a fallback handler (0-arg catch-all) if none exists yet.
-		// This handles 0-arg invocations of fn-defined words.
-		hasFallback := false
-		if prev := r.Lookup(name); prev != nil {
-			for _, sig := range prev.Signatures {
-				if sig.Fallback {
-					hasFallback = true
-					break
-				}
-			}
-		}
-		if !hasFallback {
-			fnDef.Signatures = append(fnDef.Signatures, Signature{
-				Fallback: true,
-				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					top, ok := r.Defs.Top(name)
-					if !ok {
-						return nil, fmt.Errorf("undefined: %s", name)
-					}
-					// A 0-arg fn courtesy-dispatches its 0-arg sig; every other
-					// shape (no 0-arg sig, a plain Function, any other binding)
-					// is an unmatched call returning the same signature error,
-					// so that return is hoisted out of the branches.
-					hasForwardSig := false
-					if _, ok := top.Data.(FnDefInfo); ok {
-						if fn := r.Lookup(name); fn != nil {
-							for i := range fn.Signatures {
-								sig := &fn.Signatures[i]
-								if sig.TotalArgs() == 0 && sig.Handler != nil && !sig.Fallback {
-									return sig.Handler(nil, nil, nil, r)
-								}
-								if sig.TotalArgs() > 0 {
-									hasForwardSig = true
-								}
-							}
+		if reg := fnDef.Registry; reg != nil && reg != r {
+			own := fnDef.OwnSigs()
+			if len(own) == 1 {
+				if innerName, ok := trivialDelegationTarget(&own[0]); ok {
+					if inner := reg.Lookup(innerName); inner != nil && len(inner.Signatures) > 0 {
+						rebound := FnDefInfo{
+							Name:           name,
+							Signatures:     append([]Signature(nil), inner.Signatures...),
+							MaxForwardArgs: inner.MaxForwardArgs,
+							Registry:       reg,
 						}
+						r.Defs.Push(name, NewFnDef(rebound))
+						if r.ready && r.OnRegisterHook != nil {
+							r.OnRegisterHook(name)
+						}
+						return
 					}
-					// A fn that takes arguments reached its 0-arg fallback,
-					// which means forward collection couldn't gather them —
-					// almost always because the next word (another call, a
-					// builtin) was hit first, e.g. `inc inc 5` or `f a g b`.
-					// Point at the fixes rather than leaving a bare error.
-					if hasForwardSig {
-						return nil, r.AqlErrorHint("signature_error",
-							"no matching signature for "+name, name,
-							"forward args for "+name+" may have run into the next word; "+
-								"group the call with parens — ("+name+" …) — or end it with `end` or `;`")
-					}
-					return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
-				}, BarrierPos: -1,
-			})
+				}
+			}
 		}
 
 		// Remove any previous DefStack entries whose signatures overlap
-		// with the new definition. Without this, redefining a fn-based
-		// word with the same signature leaves stale handlers that win
-		// matching over the new ones (equal scores, first match wins).
+		// with the new definition. Each entry holds its own overloads and
+		// the dispatch aggregate (Registry.Lookup) unions them, so an
+		// overlapping redefinition must drop the old entry — otherwise the
+		// stale overload races the new one (equal scores, first match wins).
 		if stack := r.Defs.Stack(name); len(stack) > 0 {
 			filtered := stack[:0:0]
 			changed := false
@@ -124,27 +77,12 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 			}
 			if changed {
 				r.Defs.Set(name, filtered)
-				// Rebuild: clear Signatures on the top FnDefInfo (keep fallback),
-				// then re-register from remaining DefStack entries.
-				if top := r.Lookup(name); top != nil {
-					r.clearSigsKeepFallback(name)
-				}
-				for _, entry := range filtered {
-					if fd, ok := entry.Data.(FnDefInfo); ok {
-						InstallFnDef(r, name, fd, isStackOnly)
-					}
-				}
 			}
 		}
 
-		// Carry forward existing compiled Signatures (from previous defs
-		// of the same name) so overloading works across stacked defs.
-		if prev := r.Lookup(name); prev != nil {
-			fnDef.Signatures = append([]Signature(nil), prev.Signatures...)
-		}
-		// Push the FnDefInfo to DefStacks first, then InstallFnDef→Register→
-		// upsertFnDef will update its Signatures in place.
-		r.Defs.Push(name, NewFnDef(fnDef))
+		// Compile this definition's own overloads and push a single
+		// DefStack entry. The 0-arg fallback and cross-stack overloading
+		// are synthesised on demand by Registry.Lookup → aggregateDispatch.
 		InstallFnDef(r, name, fnDef, isStackOnly)
 		return
 	}
@@ -192,34 +130,13 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 	r.Defs.Push(name, body)
 }
 
-// UninstallDef removes the most recent def for a word. If no definitions
-// remain, the function entry is removed so the word falls through to
-// normal resolution (unknown word → string).
+// UninstallDef removes the most recent def for a word, exposing whatever
+// binding it shadowed. For an fn def this drops the top DefStack entry's own
+// overloads; the dispatch table is rebuilt on demand from the remaining
+// entries by Registry.Lookup → aggregateDispatch, so no explicit re-register
+// is needed.
 func UninstallDef(r *Registry, name string) {
-	top, ok := r.Defs.Top(name)
-	if !ok {
-		return
-	}
 	r.Defs.Pop(name)
-
-	if !r.Defs.Has(name) {
-		return
-	}
-
-	// Count typed signatures to remove (function defs register N typed sigs).
-	_, isFnDef := top.Data.(FnDefInfo)
-	if !isFnDef {
-		return
-	}
-
-	// Rebuild: clear Signatures on the (now-top) entry, keep fallback,
-	// then re-register from remaining DefStack entries.
-	r.clearSigsKeepFallback(name)
-	for _, entry := range r.Defs.Stack(name) {
-		if fd, ok := entry.Data.(FnDefInfo); ok {
-			InstallFnDef(r, name, fd)
-		}
-	}
 }
 
 // buildFnBodyHandler produces the dispatch Handler for one AQL fn
@@ -442,57 +359,60 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 	}
 }
 
-// InstallFnDef registers typed signatures for a function definition.
-// For each signature, it creates a handler that binds named parameters
-// via InstallDef, returns body tokens, and appends undef cleanup.
+// InstallFnDef compiles a function definition's own overloads and pushes a
+// single DefStack entry holding them. Each compiled Signature keeps its
+// authored shape (Params with names, Returns, Body) and gains a body-splicing
+// Handler (binds named params via InstallDef, returns body tokens, appends
+// undef cleanup) plus a check-mode ReturnsFn. The cross-stack dispatch table
+// (union of stacked entries + sort + synthetic 0-arg fallback) is assembled on
+// demand by Registry.Lookup → aggregateDispatch, so this entry stays its own
+// authored unit for targeted undef and overlap detection.
 func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) {
 	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
 	// Expand optional parameters into additional signatures.
-	fnDef.Sigs = ExpandOptionalSigs(name, fnDef.Sigs)
-	for _, sig := range fnDef.Sigs {
-		argTypes := make([]*Type, len(sig.Params))
-		var patterns map[int]Value
-		for i, p := range sig.Params {
-			argTypes[i] = p.Type
-			if p.Pattern != nil {
-				if patterns == nil {
-					patterns = make(map[int]Value)
-				}
-				patterns[i] = *p.Pattern
-			}
-		}
+	sigs := ExpandOptionalSigs(name, fnDef.OwnSigs())
+	compiled := make([]Signature, 0, len(sigs))
+	for _, sig := range sigs {
 		s := sig           // capture for closure
 		fnDefCopy := fnDef // capture for closure (we need Captured at call time)
 		handler := buildFnBodyHandler(r, name, s, fnDefCopy)
 		returnsFn := buildFnBodyReturnsFn(r, name, s, fnDefCopy)
 
-		// FnSig.BarrierPos uses the same sentinel as NativeSig
-		// (BarrierAllForward = -1 → default all-forward; 0 =
-		// explicit all-stack; >0 = explicit barrier). The `/s`
-		// modifier on the def name pins BarrierPos to 0 here so
-		// the fn is registered stack-only regardless of its
-		// FnSig-default.
+		// BarrierPos sentinel resolution (No Zero-Value Overload): -1 =
+		// default all-forward → len(Params); 0 = explicit all-stack; >0 =
+		// explicit barrier. The `/s` modifier on the def name pins it to 0
+		// so the fn is stack-only regardless of its FnSig default.
 		barrier := s.BarrierPos
 		if isStackOnly {
 			barrier = 0
+		} else if barrier == BarrierAllForward {
+			barrier = len(s.Params)
 		}
-		r.RegisterNativeFunc(NativeFunc{
-			Name: name,
-			Signatures: []NativeSig{{
-				Args:       argTypes,
-				Handler:    handler,
-				Patterns:   patterns,
-				BarrierPos: barrier,
-				ReturnsFn:  returnsFn,
-			}},
-		})
+
+		cs := s // keep Params (names), Returns, Body, NoEval*
+		cs.Handler = handler
+		cs.ReturnsFn = returnsFn
+		cs.BarrierPos = barrier
+		normalizeSig(&cs)
+		compiled = append(compiled, cs)
+	}
+
+	entry := fnDef
+	entry.Name = name
+	entry.Signatures = compiled
+	SortSignatures(entry.Signatures)
+	entry.MaxForwardArgs = calcMaxForwardArgs(entry.Signatures)
+	r.Defs.Push(name, NewFnDef(entry))
+	if r.ready && r.OnRegisterHook != nil {
+		r.OnRegisterHook(name)
 	}
 }
 
 // UninstallFnSigs removes specific function signatures from a word's DefStack.
 // For each spec in the FnUndefInfo, it finds and removes the most recent
-// DefStack entry containing a matching signature, then rebuilds the
-// Function.Signatures slice from the remaining entries.
+// DefStack entry whose own overloads include a matching signature. Removing
+// the entry is sufficient — the dispatch table is rebuilt on demand by
+// Registry.Lookup → aggregateDispatch from whatever entries remain.
 func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 	stack := r.Defs.Stack(name)
 	if len(stack) == 0 {
@@ -508,7 +428,7 @@ func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 				continue
 			}
 			matched := false
-			for _, sig := range fnDef.Sigs {
+			for _, sig := range fnDef.OwnSigs() {
 				if FnSigMatchesSpec(sig, spec) {
 					matched = true
 					break
@@ -522,20 +442,6 @@ func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 	}
 
 	r.Defs.Set(name, stack)
-
-	// If no DefStack entries remain, clean up entirely.
-	if len(stack) == 0 {
-		return
-	}
-
-	// Rebuild: clear Signatures on the top entry (keep fallback),
-	// then re-register from remaining DefStack entries.
-	r.clearSigsKeepFallback(name)
-	for _, entry := range stack {
-		if fnDef, ok := entry.Data.(FnDefInfo); ok {
-			InstallFnDef(r, name, fnDef)
-		}
-	}
 }
 
 // CoerceBoolean converts any value to a boolean using the same rules
@@ -743,11 +649,11 @@ func PredicateInputType(v Value) *Type {
 		return nil
 	}
 	info, ok := v.Data.(FnDefInfo)
-	if !ok || len(info.Sigs) == 0 {
+	if !ok {
 		return nil
 	}
-	sig := info.Sigs[0]
-	if len(sig.Params) != 1 {
+	sig, ok := info.FirstOwnSig()
+	if !ok || len(sig.Params) != 1 {
 		return nil
 	}
 	t := sig.Params[0].Type
@@ -869,8 +775,8 @@ outer:
 // FnDefsOverlap returns true if any signature in a has the same parameter
 // types as any signature in b (ignoring param names, return types, and body).
 func FnDefsOverlap(a, b FnDefInfo) bool {
-	for _, sa := range a.Sigs {
-		for _, sb := range b.Sigs {
+	for _, sa := range a.OwnSigs() {
+		for _, sb := range b.OwnSigs() {
 			if len(sa.Params) != len(sb.Params) {
 				continue
 			}

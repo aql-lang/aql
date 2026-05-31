@@ -34,8 +34,12 @@ func ResolveRef(r *Registry, name string) (Value, bool) {
 	if !ok {
 		return Value{}, false
 	}
-	if fnDef, ok := top.Data.(FnDefInfo); ok {
-		return NewFunction(fnDef), true
+	if _, ok := top.Data.(FnDefInfo); ok {
+		// Wrap the aggregate dispatch view so the reference carries every
+		// overload of the name, not just the topmost entry's own sigs.
+		if fnDef := r.Lookup(name); fnDef != nil {
+			return NewFunction(*fnDef), true
+		}
 	}
 	return top, true
 }

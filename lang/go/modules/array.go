@@ -148,8 +148,8 @@ func makeArrayFnDef(internalName string, sigs []arrSig, noEval []int, subReg *na
 		}
 	}
 	return native.NewFnDef(native.FnDefInfo{
-		Name:     internalName,
-		Sigs:     fnSigs,
-		Registry: subReg,
+		Name:       internalName,
+		Signatures: fnSigs,
+		Registry:   subReg,
 	})
 }

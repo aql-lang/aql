@@ -56,7 +56,7 @@ func TestRefBuildsDispatchTable(t *testing.T) {
 		if fnDef.Name != wantName {
 			t.Errorf("ops[%q] fnDef.Name = %q, want %q", key, fnDef.Name, wantName)
 		}
-		if len(fnDef.Sigs) == 0 {
+		if len(fnDef.OwnSigs()) == 0 {
 			t.Errorf("ops[%q] captured FnDef has no Sigs — handle is hollow", key)
 		}
 	}

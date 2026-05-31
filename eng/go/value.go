@@ -274,21 +274,31 @@ type FnSig struct {
 	CheckFullStackFn CheckFullStackFunc
 }
 
-// FnDefInfo holds the parsed function specification for a def-defined function.
+// FnDefInfo holds the function specification for a def-defined function.
 // Name is the function's registered name (set by InstallDef). If Registry is
 // non-nil, the function was defined in a module and should execute in that
 // registry's context (closure semantics).
 //
-// Signatures is the compiled dispatch table (typed args + Go handlers).
-// For Go builtins, Sigs is nil and Signatures holds the native handlers.
-// For AQL fn defs, InstallFnDef converts Sigs into Signatures with handler
-// closures that splice body tokens. Whether the engine tries forward
-// collection is determined per-signature via Signature.BarrierPos —
-// derive the word-level summary via fn.HasForwardSigs.
+// Signatures is the SINGLE per-function signature slice — one full-fidelity
+// overload per entry. Each Signature carries the authored shape (Params with
+// names, Returns, and the AQL Body) AND, once compiled, the dispatch fields
+// (a Go Handler, resolved BarrierPos, sorted order). Body vs Handler is the
+// only Go-vs-AQL distinction: a Go builtin has a Handler and no Body, an AQL
+// fn carries Body tokens and (after install/compile) a body-splicing Handler.
+//
+// The slice on a DefStack entry or a constructed Function value holds only
+// THAT definition's own overloads — it is NOT the cross-stack dispatch table.
+// The accumulated, sorted, fallback-bearing dispatch table is built on demand
+// at the registry boundary (Registry.Lookup → aggregateDispatch); every
+// matcher / forward-planner reads the aggregate's Signatures, while the
+// authored-shape readers (canon, inspect, predicate probes, trivial-delegation,
+// targeted undef, overlap) read a single definition's own Signatures, skipping
+// any synthetic Fallback. Whether the engine tries forward collection is
+// determined per-signature via Signature.BarrierPos — derive the word-level
+// summary via fn.HasForwardSigs.
 type FnDefInfo struct {
 	Name           string
-	Sigs           []FnSig     // AQL-defined overloads (nil for Go-implemented words)
-	Signatures     []Signature // compiled dispatch table
+	Signatures     []Signature // own full-fidelity overloads (see doc above)
 	MaxForwardArgs int         // longest forward arg count across all sigs (respecting barriers)
 	Registry       *Registry
 	// Anonymous is true iff the FnDef was produced by the `afn` word (i.e.
@@ -339,6 +349,51 @@ func (fn *FnDefInfo) HasForwardSigs() bool {
 		}
 	}
 	return false
+}
+
+// OwnSigs returns the function's authored overloads — its Signatures with
+// any synthetic 0-arg Fallback sig filtered out. This is the view the
+// authored-shape readers (canon, inspect, predicate probes, trivial-
+// delegation, targeted undef, overlap detection) want: the signatures the
+// user actually declared, never the dispatch-time fallback the aggregate
+// injects.
+func (fn *FnDefInfo) OwnSigs() []Signature {
+	if fn == nil {
+		return nil
+	}
+	hasFallback := false
+	for i := range fn.Signatures {
+		if fn.Signatures[i].Fallback {
+			hasFallback = true
+			break
+		}
+	}
+	if !hasFallback {
+		return fn.Signatures
+	}
+	out := make([]Signature, 0, len(fn.Signatures))
+	for i := range fn.Signatures {
+		if fn.Signatures[i].Fallback {
+			continue
+		}
+		out = append(out, fn.Signatures[i])
+	}
+	return out
+}
+
+// FirstOwnSig returns a pointer to the first non-fallback signature and
+// whether one exists. Used by the single-overload readers (predicate
+// input-type gate, refine single-param probe).
+func (fn *FnDefInfo) FirstOwnSig() (*Signature, bool) {
+	if fn == nil {
+		return nil, false
+	}
+	for i := range fn.Signatures {
+		if !fn.Signatures[i].Fallback {
+			return &fn.Signatures[i], true
+		}
+	}
+	return nil, false
 }
 
 // FnSigSpec describes a signature specification without a body, used for

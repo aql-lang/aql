@@ -135,7 +135,7 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 func makeTimeFnDef(wordName string, params []native.FnParam, returns []*native.Type, subReg *native.Registry) native.Value {
 	fnDef := native.FnDefInfo{
 		Name: wordName,
-		Sigs: []native.FnSig{
+		Signatures: []native.FnSig{
 			{
 				Params:  params,
 				Returns: returns,

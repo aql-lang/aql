@@ -450,7 +450,7 @@ func TestWalkBeforeIdentity(t *testing.T) {
 	// stack. We pass the fn as a Go-constructed TFunction value directly
 	// in the engine stack to prevent auto-execution.
 	fnDef := native.FnDefInfo{
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
 			Body:    []native.Value{native.NewWord("m"), native.NewWord("get"), native.NewWord("value")}, BarrierPos: -1,
@@ -500,7 +500,7 @@ func TestWalkBeforeIdentityNested(t *testing.T) {
 	// walk is stack-only [TAny, TFunction], so we push the fn as a Quoted
 	// value to prevent auto-execution before walk consumes it.
 	fnDef := native.FnDefInfo{
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
 			Body:    []native.Value{native.NewWord("m"), native.NewWord("get"), native.NewWord("value")}, BarrierPos: -1,
@@ -557,7 +557,7 @@ func TestWalkBeforeReplace(t *testing.T) {
 	// This demonstrates that the before callback controls traversal:
 	// replacing a node with a scalar stops descent into that subtree.
 	fnDef := native.FnDefInfo{
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
 			Body:    []native.Value{native.NewInteger(99)}, BarrierPos: -1,
@@ -599,7 +599,7 @@ func TestWalkBeforeReturnPath(t *testing.T) {
 	// The root path is "" (empty string), which replaces the root map.
 	// Since a string is not a node, descent stops — result is "".
 	fnDef := native.FnDefInfo{
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
 			Body:    []native.Value{native.NewWord("m"), native.NewWord("get"), native.NewWord("path")}, BarrierPos: -1,
@@ -642,14 +642,14 @@ func TestWalkBeforeAfterIdentity(t *testing.T) {
 	// Both before and after return m.value (identity) — tree is preserved.
 	identityBody := []native.Value{native.NewWord("m"), native.NewWord("get"), native.NewWord("value")}
 	fnDef1 := native.FnDefInfo{
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
 			Body:    identityBody, BarrierPos: -1,
 		}},
 	}
 	fnDef2 := native.FnDefInfo{
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
 			Body:    identityBody, BarrierPos: -1,
@@ -706,14 +706,14 @@ func TestWalkBeforeAfterPostOrder(t *testing.T) {
 	//   6. after(root={a:99 b:99}) → 99
 	// Final result: 99
 	fnDef1 := native.FnDefInfo{
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
 			Body:    []native.Value{native.NewWord("m"), native.NewWord("get"), native.NewWord("value")}, BarrierPos: -1,
 		}},
 	}
 	fnDef2 := native.FnDefInfo{
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
 			Body:    []native.Value{native.NewInteger(99)}, BarrierPos: -1,
@@ -758,14 +758,14 @@ func TestWalkBeforeAfterNested(t *testing.T) {
 	// Both callbacks are identity — nested tree preserved through full traversal.
 	identityBody := []native.Value{native.NewWord("m"), native.NewWord("get"), native.NewWord("value")}
 	fnDef1 := native.FnDefInfo{
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
 			Body:    identityBody, BarrierPos: -1,
 		}},
 	}
 	fnDef2 := native.FnDefInfo{
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
 			Body:    identityBody, BarrierPos: -1,

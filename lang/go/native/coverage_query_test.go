@@ -1176,7 +1176,7 @@ func TestCallAQLMapPattern(t *testing.T) {
 	patternVal := NewMap(patternMap)
 
 	fnDef := FnDefInfo{
-		Sigs: []FnSig{
+		Signatures: []FnSig{
 			{
 				Params:  []FnParam{{Name: "x", Type: TMap, Pattern: &patternVal}},
 				Returns: []*Type{TString},

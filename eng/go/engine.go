@@ -861,12 +861,12 @@ func (e *Engine) stepWord(val Value) error {
 	// function reference value rather than executing it. The word must
 	// have a FnDef entry in DefStacks.
 	if e.hasPendingForwardExpectingFunction() {
-		stack := e.registry.Defs.Stack(w.Name)
-		for i := len(stack) - 1; i >= 0; i-- {
-			if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
-				e.stack[e.pointer] = NewFunction(fnDef)
-				return e.stepLiteral()
-			}
+		// Wrap the aggregate dispatch view so the reference carries every
+		// overload of the name (across stacked defs), not just the topmost
+		// entry's own sigs.
+		if fnDef := e.registry.Lookup(w.Name); fnDef != nil {
+			e.stack[e.pointer] = NewFunction(*fnDef)
+			return e.stepLiteral()
 		}
 		// Not a def fn — fall through to normal execution.
 	}
@@ -1805,17 +1805,27 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		return nil
 	}
 
-	// Resolve compiled signatures. A captured Function value is a
-	// STABLE handle to the fn it was minted from: we prefer the
-	// captured FnDef's own Signatures over a fresh registry lookup so
-	// that `undef foo; def foo …` doesn't change the meaning of a
-	// previously-captured value. Word-driven dispatch (in stepWord)
-	// still re-resolves through the registry every call, which is
-	// what recursive self-references rely on.
+	// Resolve the dispatchable signatures. A self-contained Function value
+	// (an anonymous closure, or a fn defined in THIS registry) is a STABLE
+	// handle: we compile and use its OWN signatures rather than a fresh
+	// registry lookup, so `undef foo; def foo …` doesn't change the meaning
+	// of a previously-captured value. compileFnDef normalises and barrier-
+	// resolves the authored sigs (it is idempotent on already-compiled
+	// ones) and attaches the body-runner for anonymous fns.
+	//
+	// A value carrying a FOREIGN sub-registry (a module wrapper, or an AQL
+	// fn defined inside a module preamble) is NOT a stable own-sig handle:
+	// it must resolve the real (inner) definition in that sub-registry, so
+	// it falls through to the name-lookup branch below. Anonymous closures
+	// keep their own sigs even when they captured a module registry.
 	var fn *FnDefInfo
-	if len(fnDef.Signatures) > 0 {
-		captured := fnDef
-		fn = &captured
+	foreignReg := fnDef.Registry != nil && fnDef.Registry != e.registry
+	if len(fnDef.Signatures) > 0 && (fnDef.Anonymous || !foreignReg) {
+		reg := fnDef.Registry
+		if reg == nil {
+			reg = e.registry
+		}
+		fn = compileFnDef(reg, fnDef)
 	}
 	if fn == nil && fnDef.Name != "" {
 		reg := fnDef.Registry
@@ -1823,13 +1833,6 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 			reg = e.registry
 		}
 		fn = reg.Lookup(fnDef.Name)
-	}
-	if fn == nil && len(fnDef.Sigs) > 0 {
-		reg := fnDef.Registry
-		if reg == nil {
-			reg = e.registry
-		}
-		fn = compileFnDef(reg, fnDef)
 	}
 	if fn == nil {
 		e.pointer++
@@ -1942,36 +1945,49 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	//     name) sidesteps any unnamed-param push ordering issues.
 	//
 	// See design/SIG-ORDER-REFACTOR.0.md for the architecture history.
-	if fnDef.Registry != nil && fnDef.Registry != e.registry && len(fnDef.Sigs) > 0 {
-		// Detect the trivial-delegation shape: a single-word body
-		// that references the same name as the wrapper, with all
-		// unnamed Params. Anything else routes through CallAQL.
-		wrapperSig := &fnDef.Sigs[0]
-		for i := range fnDef.Sigs {
-			if len(fnDef.Sigs[i].Params) == len(positions) {
-				wrapperSig = &fnDef.Sigs[i]
+	//
+	// Only AQL-BODIED definitions take the sub-registry path: a trivial-
+	// delegation wrapper (Body=[Word(inner)]) or a module-preamble fn (real
+	// Body). A reference to a Go NATIVE living in the sub-registry carries
+	// Body-less sigs and a real Go Handler — it must dispatch straight
+	// through execMatch below, exactly like any other native, so we require
+	// a body-bearing own sig before entering this branch.
+	if fnDef.Registry != nil && fnDef.Registry != e.registry {
+		ownSigs := fnDef.OwnSigs()
+		var wrapperSig *FnSig
+		for i := range ownSigs {
+			if len(ownSigs[i].Body) == 0 {
+				continue // native ref sig — not a wrapper/preamble body
+			}
+			if wrapperSig == nil {
+				wrapperSig = &ownSigs[i]
+			}
+			if len(ownSigs[i].Params) == len(positions) {
+				wrapperSig = &ownSigs[i]
 				break
 			}
 		}
-		trivialDelegation := isTrivialDelegationBody(wrapperSig, fnDef.Name)
-		if trivialDelegation && sig.Handler != nil {
-			match := &MatchResult{Sig: sig, Positions: positions, Name: fnDef.Name}
-			if len(positions) > 0 {
-				match.Args = make([]Value, len(positions))
-				for i, pos := range positions {
-					match.Args[i] = e.stack[pos]
+		if wrapperSig != nil {
+			trivialDelegation := isTrivialDelegationBody(wrapperSig, fnDef.Name)
+			if trivialDelegation && sig.Handler != nil {
+				match := &MatchResult{Sig: sig, Positions: positions, Name: fnDef.Name}
+				if len(positions) > 0 {
+					match.Args = make([]Value, len(positions))
+					for i, pos := range positions {
+						match.Args[i] = e.stack[pos]
+					}
 				}
+				return e.execMatch(match)
 			}
-			return e.execMatch(match)
+			// Non-trivial body — run via CallAQL in the captured sub-
+			// registry. The wrapper's body has module-private references
+			// that need fnDef.Registry's scope for resolution.
+			args := make([]Value, len(positions))
+			for i, pos := range positions {
+				args[i] = e.stack[pos]
+			}
+			return e.execFnDefSig(valIdx, wrapperSig, args, fnDef.Registry)
 		}
-		// Non-trivial body — run via CallAQL in the captured sub-
-		// registry. The wrapper's body has module-private references
-		// that need fnDef.Registry's scope for resolution.
-		args := make([]Value, len(positions))
-		for i, pos := range positions {
-			args[i] = e.stack[pos]
-		}
-		return e.execFnDefSig(valIdx, wrapperSig, args, fnDef.Registry)
 	}
 
 	// Pure-stack match: dispatch via execMatch the same way a bare
@@ -2045,15 +2061,15 @@ func trivialDelegationTarget(sig *FnSig) (string, bool) {
 	return w.Name, true
 }
 
-// execFnDefSigStackMatch is the legacy FnSig-based pure-stack
-// dispatch path for AQL-defined functions whose Sigs carry named
-// params. Used as a fallback when matchSignature's Signatures-based
-// match returns nothing.
+// execFnDefSigStackMatch is the legacy pure-stack dispatch path for
+// AQL-defined functions whose signatures carry named params. Used as a
+// fallback when matchSignature's aggregate match returns nothing.
 func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []Value) error {
 	resolvedIdx := e.resolvedIndicesBefore(len(resolved))
 	checkMode := e.registry != nil && e.registry.Check.Mode && fnDef.Anonymous
-	for i := range fnDef.Sigs {
-		sig := &fnDef.Sigs[i]
+	ownSigs := fnDef.OwnSigs()
+	for i := range ownSigs {
+		sig := &ownSigs[i]
 		nArgs := len(sig.Params)
 		if nArgs == 0 {
 			if checkMode {
@@ -2197,16 +2213,16 @@ func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Val
 	return nil
 }
 
-// compileFnDef produces the compiled-dispatch view of an FnDefInfo whose
-// Sigs are authored (named params + body) but whose Signatures have not
-// yet been built — the afn / captured-FnDef / lazy path. It is the single
-// boundary that turns `Sigs` into the `Signatures` matchSignature needs,
-// resolving the BarrierPos sentinel, attaching handlers, and sorting into
-// dispatch order, then computing MaxForwardArgs.
+// compileFnDef produces the compiled-dispatch view of a constructed
+// Function value (an afn closure or a captured FnDef) whose Signatures are
+// still in authored form (named params + body, unresolved BarrierPos, no
+// handler). It normalises each signature in place — resolving the BarrierPos
+// sentinel, attaching handlers, sorting into dispatch order — and computes
+// MaxForwardArgs. It is idempotent on already-compiled signatures.
 //
 // This centralisation is the seam the function-model consolidation builds
-// on: every site that needs a dispatchable FnDefInfo from raw Sigs routes
-// through here rather than constructing the struct inline.
+// on: every site that needs a dispatchable FnDefInfo from authored sigs
+// routes through here rather than constructing the struct inline.
 //
 // Each compiled Signature is given a Go Handler (the shared AQL body-
 // runner, buildFnBodyHandler) and a check-mode ReturnsFn
@@ -2229,19 +2245,19 @@ func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Val
 // the stack rather than the predicate firing). See execFnDefLiteral's
 // "predicate-type FnDefs landing bare are intentionally inert" guard.
 func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
-	out := make([]Signature, len(fnDef.Sigs))
-	for i := range fnDef.Sigs {
-		sig := fnDef.Sigs[i]
+	out := make([]Signature, len(fnDef.Signatures))
+	for i := range fnDef.Signatures {
+		sig := fnDef.Signatures[i]
 		barrier := sig.BarrierPos
 		if barrier == BarrierAllForward {
 			barrier = len(sig.Params)
 		}
-		compiled := Signature{
-			Params:        append([]FnParam(nil), sig.Params...),
-			BarrierPos:    barrier,
-			NoEvalArgs:    sig.NoEvalArgs,
-			NoEvalMapArgs: sig.NoEvalMapArgs,
-		}
+		// Keep the full authored sig (Params with names, Returns, Body,
+		// NoEval*) and layer the compiled dispatch fields on top, so a
+		// constructed Function value stays a single full-fidelity slice.
+		compiled := sig
+		compiled.Params = append([]FnParam(nil), sig.Params...)
+		compiled.BarrierPos = barrier
 		if fnDef.Anonymous {
 			compiled.Handler = buildFnBodyHandler(r, fnDef.Name, sig, fnDef)
 			compiled.ReturnsFn = buildFnBodyReturnsFn(r, fnDef.Name, sig, fnDef)
@@ -2255,6 +2271,8 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 		Signatures:     out,
 		MaxForwardArgs: calcMaxForwardArgs(out),
 		Registry:       fnDef.Registry,
+		Anonymous:      fnDef.Anonymous,
+		Captured:       fnDef.Captured,
 	}
 }
 
