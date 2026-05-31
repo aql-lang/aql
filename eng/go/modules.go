@@ -16,7 +16,14 @@ import "fmt"
 // minimal: most interaction is via the resolver/init-func callbacks
 // the host installs.
 type ModuleRegistry struct {
-	loaded map[string]bool
+	// loaded maps a native-module name to the ModuleDesc it resolved to.
+	// Presence means "already resolved" (so the resolver runs at most once
+	// per registry); the cached desc lets a re-import re-bind the module's
+	// namespace defs without re-resolving — needed because a fn-body /
+	// property-body import installs the namespace via InstallDef, which
+	// CallAQL's def-cleanup then strips, leaving the module marked loaded
+	// but its `pkg` name unbound. See resolveNativeMod (§11b.1).
+	loaded map[string]ModuleDesc
 	seq    int
 
 	// InitFunc is called when a fresh sub-Registry is minted for a
@@ -32,7 +39,7 @@ type ModuleRegistry struct {
 
 // NewModuleRegistry returns an empty module registry.
 func NewModuleRegistry() *ModuleRegistry {
-	return &ModuleRegistry{loaded: make(map[string]bool)}
+	return &ModuleRegistry{loaded: make(map[string]ModuleDesc)}
 }
 
 // InheritConfig copies the module CONFIG — the host-installed callbacks
@@ -53,23 +60,37 @@ func (m *ModuleRegistry) InheritConfig(parent *ModuleRegistry) {
 }
 
 // IsLoaded reports whether the named native module has already been
-// loaded (so a second import is a no-op rather than a re-installation).
+// loaded (so a second import re-binds from the cached desc rather than
+// re-resolving).
 func (m *ModuleRegistry) IsLoaded(name string) bool {
 	if m == nil || m.loaded == nil {
 		return false
 	}
-	return m.loaded[name]
+	_, ok := m.loaded[name]
+	return ok
 }
 
-// MarkLoaded records that the named native module has been loaded.
-func (m *ModuleRegistry) MarkLoaded(name string) {
+// LoadedDesc returns the cached ModuleDesc for an already-loaded native
+// module. The bool is false when the module has not been loaded.
+func (m *ModuleRegistry) LoadedDesc(name string) (ModuleDesc, bool) {
+	if m == nil || m.loaded == nil {
+		return ModuleDesc{}, false
+	}
+	d, ok := m.loaded[name]
+	return d, ok
+}
+
+// MarkLoaded records that the named native module has been loaded,
+// caching its ModuleDesc so a later re-import can re-bind the namespace
+// without re-resolving.
+func (m *ModuleRegistry) MarkLoaded(name string, desc ModuleDesc) {
 	if m == nil {
 		return
 	}
 	if m.loaded == nil {
-		m.loaded = make(map[string]bool)
+		m.loaded = make(map[string]ModuleDesc)
 	}
-	m.loaded[name] = true
+	m.loaded[name] = desc
 }
 
 // NextID generates a fresh unique module identifier of the form

@@ -479,8 +479,16 @@ func resolveNativeMod(r *Registry, path string) error {
 	if name == "" {
 		return fmt.Errorf("import: empty native module name in %q", path)
 	}
-	if r.Modules.IsLoaded(name) {
-		return nil // already loaded
+	if desc, ok := r.Modules.LoadedDesc(name); ok {
+		// Already resolved once in this registry. Re-bind any namespace
+		// defs that are no longer present — a fn-body / property-body
+		// import installs the namespace via InstallDef, which CallAQL's
+		// def-cleanup then strips, leaving the module marked loaded but
+		// `pkg` unbound for the next call. Rebinding only the absent names
+		// keeps repeated top-level imports from stacking shadow bindings.
+		// See §11b.1 in the DX report.
+		ensureExportsBound(r, desc)
+		return nil
 	}
 	if r.Modules.Resolver == nil {
 		return fmt.Errorf("import: native module resolver not configured (cannot import %q)", path)
@@ -490,8 +498,21 @@ func resolveNativeMod(r *Registry, path string) error {
 		return fmt.Errorf("import: %w", err)
 	}
 	installExports(r, desc, nil)
-	r.Modules.MarkLoaded(name)
+	r.Modules.MarkLoaded(name, desc)
 	return nil
+}
+
+// ensureExportsBound re-installs any module-namespace defs that are not
+// currently bound. Used when re-importing an already-resolved native
+// module whose namespace binding was torn down (e.g. by CallAQL's
+// fn-body def-cleanup). Only absent names are installed, so a plain
+// repeated top-level import stays a no-op rather than stacking bindings.
+func ensureExportsBound(r *Registry, desc ModuleDesc) {
+	for name, exportMap := range desc.Exports {
+		if !r.Defs.Has(name) {
+			InstallDef(r, name, NewMap(exportMap))
+		}
+	}
 }
 
 // valToAtomOrString extracts a string from a Value that is an atom, string, or word.

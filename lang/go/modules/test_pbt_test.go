@@ -43,6 +43,33 @@ func TestCheckProp_AlwaysPasses(t *testing.T) {
 	}
 }
 
+// TestCheckProp_PropertyBodyCanImportNativeModule pins §11b.1: a
+// property body may `import "aql:<name>"` and use the namespace across
+// MULTIPLE runs. The module is resolved once and cached; because each
+// property iteration runs via CallAQL — whose def-cleanup strips the
+// namespace binding installed during the body — a naive load-once guard
+// left the module "loaded" but `pkg` unbound from iteration 2 on. The
+// fix re-binds the cached desc's namespace when absent.
+func TestCheckProp_PropertyBodyCanImportNativeModule(t *testing.T) {
+	r := testRegistry(t)
+	InstallResolver(r) // enable `import "aql:math"` resolution
+
+	// Property body imports aql:math every iteration and uses math.sqrt;
+	// runs > 1 is the case that regressed.
+	src := `test.check-prop "sqrt-ok" [r.int 1 10] ` +
+		`[drop "aql:math" import end 4.0 math.sqrt end 2.0 eq] 5 1 0`
+	ok := runTestAndGetField(t, r, src, "ok")
+	b, err := ok.AsConcreteBoolean()
+	if err != nil {
+		t.Fatalf("ok field not Boolean: %v", err)
+	}
+	if !b {
+		// Surface the recorded error to make a regression obvious.
+		errField := runTestAndGetField(t, r, src, "error")
+		t.Errorf("property body importing aql:math should pass across runs; got ok=false, error=%s", errField.String())
+	}
+}
+
 // TestCheckProp_FailsOnSpecificInput introduces a property that's
 // very likely to fail within 100 iterations: "value > 0". The
 // generator draws from [0, 100), so 0 will eventually appear and
