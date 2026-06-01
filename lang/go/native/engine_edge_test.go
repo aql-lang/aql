@@ -3151,8 +3151,8 @@ func TestModuleImportBasic(t *testing.T) {
 	if len(result2) != 1 {
 		t.Fatalf("Foo: got %d results, want 1", len(result2))
 	}
-	if !result2[0].Parent.Equal(TMap) {
-		t.Errorf("Foo: type = %s, want map", result2[0].Parent)
+	if !result2[0].Parent.Equal(TModuleExport) {
+		t.Errorf("Foo: type = %s, want ModuleExport", result2[0].Parent)
 	}
 }
 
@@ -3226,8 +3226,8 @@ func TestModuleDefSubject(t *testing.T) {
 	// import my-mod should work.
 	runAQL(t, r, []Value{NewWord("import"), NewWord("my-mod")})
 	result2 := runAQL(t, r, []Value{NewWord("M")})
-	if len(result2) != 1 || !result2[0].Parent.Equal(TMap) {
-		t.Errorf("import my-mod: M = %v, want map", result2)
+	if len(result2) != 1 || !result2[0].Parent.Equal(TModuleExport) {
+		t.Errorf("import my-mod: M = %v, want ModuleExport", result2)
 	}
 }
 

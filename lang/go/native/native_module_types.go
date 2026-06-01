@@ -210,9 +210,3 @@ func getrModuleInstHandler(args []Value, _ map[string]Value, _ []Value, r *Regis
 	}
 	return nil, r.AqlError("getr_error", fmt.Sprintf("getr: field %q not found in Module", k), "getr")
 }
-
-// NewModuleInstance2 is an exported constructor (string fields) for hosts
-// and tests; mirrors NewModuleInstance with an unexported moduleInfo.
-func NewModuleInstance2(id, kind, file, folder string, exports []string) Value {
-	return NewModuleInstance(moduleInfo{ID: id, Kind: kind, File: file, Folder: folder, Exports: exports})
-}

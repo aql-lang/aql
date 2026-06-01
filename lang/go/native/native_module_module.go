@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -144,6 +145,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	desc := ModuleDesc{
 		ID:      modID,
 		Exports: exports,
+		Kind:    "inline", // overridden by loadFileModule / Resolve
 	}
 	return desc, nil
 }
@@ -280,6 +282,10 @@ func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("import: %s: %w", resolved, err)
 	}
+	desc.Ref = path
+	desc.Kind = "file"
+	desc.File = resolved
+	desc.Folder = modDir
 
 	// If the module's aql.json declares resources, load them as a
 	// "resource" export so they are available as Module.resource.key.
@@ -331,18 +337,39 @@ func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
 	return nil
 }
 
+// buildModuleInstance creates the Ideal/Module descriptor shared by all of
+// a module's ModuleExport bindings (referenced via each export's $module).
+// The exports list is sorted so Module.exports is deterministic.
+func buildModuleInstance(desc ModuleDesc) Value {
+	names := make([]string, 0, len(desc.Exports))
+	for name := range desc.Exports {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	kind := desc.Kind
+	if kind == "" {
+		kind = "inline"
+	}
+	return NewModuleInstance(moduleInfo{
+		ID: desc.Ref, Kind: kind, File: desc.File, Folder: desc.Folder, Exports: names,
+	})
+}
+
 // installExports installs all exports from a module descriptor as defs.
 // If names is nil, all exports are installed using their original names.
+// Each export is bound as a ModuleExport whose $module points at the shared
+// Module instance.
 func installExports(r *Registry, desc ModuleDesc, names []string) {
+	mod := buildModuleInstance(desc)
 	if names == nil {
 		for name, exportMap := range desc.Exports {
-			InstallDef(r, name, NewMap(exportMap))
+			InstallDef(r, name, NewModuleExport(name, exportMap, mod))
 		}
 		return
 	}
 	for _, name := range names {
 		if exportMap, ok := desc.Exports[name]; ok {
-			InstallDef(r, name, NewMap(exportMap))
+			InstallDef(r, name, NewModuleExport(name, exportMap, mod))
 		}
 	}
 }
@@ -366,7 +393,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 			if !ok {
 				return fmt.Errorf("import: export %q not found in module", fromName)
 			}
-			InstallDef(r, toName, NewMap(exportMap))
+			InstallDef(r, toName, NewModuleExport(fromName, exportMap, buildModuleInstance(desc)))
 		}
 	} else {
 		// Single rename pair: [from to]
@@ -379,7 +406,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 		if !ok {
 			return fmt.Errorf("import: export %q not found in module", fromName)
 		}
-		InstallDef(r, toName, NewMap(exportMap))
+		InstallDef(r, toName, NewModuleExport(fromName, exportMap, buildModuleInstance(desc)))
 	}
 	return nil
 }
@@ -393,8 +420,8 @@ func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
 	if len(desc.Exports) != 1 {
 		return fmt.Errorf("import: rename requires module with exactly one export, got %d", len(desc.Exports))
 	}
-	for _, exportMap := range desc.Exports {
-		InstallDef(r, newName, NewMap(exportMap))
+	for name, exportMap := range desc.Exports {
+		InstallDef(r, newName, NewModuleExport(name, exportMap, buildModuleInstance(desc)))
 	}
 	return nil
 }

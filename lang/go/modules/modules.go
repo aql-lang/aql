@@ -62,7 +62,13 @@ func Resolve(name string, parent *native.Registry) (native.ModuleDesc, error) {
 	if !ok {
 		return native.ModuleDesc{}, fmt.Errorf("unknown native module: %s", moduleID)
 	}
-	return fn(parent)
+	desc, err := fn(parent)
+	if err != nil {
+		return desc, err
+	}
+	desc.Ref = moduleID
+	desc.Kind = "native"
+	return desc, nil
 }
 
 // InstallResolver wires the native-module resolver onto reg — the single

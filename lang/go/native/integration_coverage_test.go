@@ -349,11 +349,10 @@ func TestIntegModuleImportAll(t *testing.T) {
 
 	// Now "stuff" should be defined as a map with val: 99
 	result := runAQL(t, r, []Value{NewWord("stuff")})
-	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
-		t.Fatalf("stuff should be a map, got %v", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
+		t.Fatalf("stuff should be a ModuleExport, got %v", result)
 	}
-	m, _ := AsMap(result[0])
-	v, ok := m.Get("val")
+	v, ok := moduleExportGet(result[0], "val")
 	_as9, _ := AsInteger(v)
 	if !ok || _as9 != 99 {
 		t.Errorf("stuff.val = %v, want 99", v)
@@ -378,8 +377,8 @@ func TestIntegModuleImportRename(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), renameList, NewWord("mymod2")})
 
 	result := runAQL(t, r, []Value{NewWord("renamed")})
-	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
-		t.Fatalf("renamed should be a map, got %v", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
+		t.Fatalf("renamed should be a ModuleExport, got %v", result)
 	}
 }
 
@@ -407,8 +406,8 @@ func TestIntegModuleImportMultiRename(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), renameList, NewWord("mm")})
 
 	result := runAQL(t, r, []Value{NewWord("newA")})
-	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
-		t.Fatalf("newA should be a map, got %v", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
+		t.Fatalf("newA should be a ModuleExport, got %v", result)
 	}
 }
 
@@ -449,8 +448,8 @@ func TestIntegValToAtomOrStringWord(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), renameList, NewWord("wmod")})
 
 	result := runAQL(t, r, []Value{NewWord("wordRenamed")})
-	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
-		t.Fatalf("wordRenamed should be a map, got %v", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
+		t.Fatalf("wordRenamed should be a ModuleExport, got %v", result)
 	}
 }
 
@@ -472,8 +471,8 @@ func TestIntegImportSingleRenameWord(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), NewAtom("NewName"), NewWord("mymod")})
 
 	result := runAQL(t, r, []Value{NewWord("NewName")})
-	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
-		t.Fatalf("NewName should be a map, got %v", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
+		t.Fatalf("NewName should be a ModuleExport, got %v", result)
 	}
 }
 
@@ -494,8 +493,8 @@ func TestIntegImportSingleRenameAtom(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), NewAtom("Renamed"), NewWord("mymod")})
 
 	result := runAQL(t, r, []Value{NewWord("Renamed")})
-	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
-		t.Fatalf("Renamed should be a map, got %v", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
+		t.Fatalf("Renamed should be a ModuleExport, got %v", result)
 	}
 }
 

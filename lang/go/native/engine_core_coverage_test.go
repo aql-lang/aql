@@ -618,11 +618,10 @@ func TestEngineCoreModuleImportAll(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), NewWord("cmod")})
 
 	result := runAQL(t, r, []Value{NewWord("coreExp")})
-	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
-		t.Fatalf("coreExp should be map, got %v", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
+		t.Fatalf("coreExp should be a ModuleExport, got %v", result)
 	}
-	m, _ := AsMap(result[0])
-	v, ok := m.Get("v")
+	v, ok := moduleExportGet(result[0], "v")
 	_as31, _ := AsInteger(v)
 	if !ok || _as31 != 88 {
 		t.Errorf("coreExp.v = %v, want 88", v)
@@ -645,8 +644,8 @@ func TestEngineCoreModuleImportRename(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), renameList, NewWord("rmod")})
 
 	result := runAQL(t, r, []Value{NewWord("newName")})
-	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
-		t.Fatalf("newName should be map, got %v", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
+		t.Fatalf("newName should be a ModuleExport, got %v", result)
 	}
 }
 
@@ -673,8 +672,8 @@ func TestEngineCoreModuleImportMultiRename(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), renameList, NewWord("mmod")})
 
 	result := runAQL(t, r, []Value{NewWord("ra")})
-	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
-		t.Fatalf("ra should be map, got %v", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
+		t.Fatalf("ra should be a ModuleExport, got %v", result)
 	}
 }
 
