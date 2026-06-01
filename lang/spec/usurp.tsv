@@ -74,9 +74,18 @@ usurp (ref if) [88] [99] true	99	inline usurp+ref of if, reversed order, cond la
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp (sub2/r) 10 3	-7	usurp of a grouped /r reference works
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp sub2/r 10 3	ERROR:signature_error	bare `usurp f/r` — group it as usurp (f/r), or use by-name `usurp f`
 #
-# ─── KNOWN LIMITATION: a usurp wrapper bound by name and then called as
-#     a word currently fails the fn return check (0 values). Use the
-#     inline / paren / map-slot / `/u` forms above instead. This row pins
-#     the current behavior; lift it (and this note) when the named-bind
-#     dispatch path is fixed.
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def fu (usurp (ref sub2))  fu 10 3	ERROR:type_error	named-bound usurp wrapper called as a word — known limitation
+# ─── bind a wrapper to a name and call it as a word (the alias idiom) ───
+# `def fu (usurp …)` binds the reversed wrapper; calling `fu` then
+# dispatches it like any fn. InstallFnDef preserves the wrapper's own
+# handler (it has no AQL body), so the call re-dispatches the original.
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def fu (usurp (ref sub2))  fu 10 3	-7	named-bound wrapper (by value) dispatches as a word
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def fu (usurp sub2)  fu 10 3	-7	named-bound wrapper (by name) dispatches as a word
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def fu (usurp sub2)  10 fu 3	7	swap form against the named wrapper
+#
+# ─── the cond-first `if` alias — usurp's motivating idiom ───
+def ifu (usurp if)  true ifu 88 99	99	def ifu (usurp if): reversed `if`, cond on the stack
+def ifu (usurp if)  false ifu 88 99	88	condition false selects the else branch (88)
+def ifu (usurp if)  if true 99 88	99	plain `if` is completely unaffected
+#
+# ─── a referenced native fn can be aliased to a name too ───
+def myadd (ref add)  myadd 2 3	5	def name (ref native) binds + dispatches the native

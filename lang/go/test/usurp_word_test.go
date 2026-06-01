@@ -383,3 +383,80 @@ func TestUsurpByNameUnboundRejected(t *testing.T) {
 		t.Errorf("usurp nope error = %v, want undefined_word", err)
 	}
 }
+
+// TestUsurpWrapperBoundByName pins that a usurp wrapper bound to a name
+// and called as a word dispatches correctly (the `def ifu (usurp if)`
+// alias idiom). Regression for the InstallFnDef path that used to wrap
+// the body-less wrapper sig in an AQL body-runner, producing zero values
+// and failing the fn return check.
+func TestUsurpWrapperBoundByName(t *testing.T) {
+	cases := []struct {
+		name  string
+		steps []string
+		want  int64
+	}{
+		{"by value", []string{
+			`def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`,
+			`def fu (usurp (ref sub2))`,
+			`fu 10 3`,
+		}, -7},
+		{"by name", []string{
+			`def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`,
+			`def fu (usurp sub2)`,
+			`fu 10 3`,
+		}, -7},
+		{"swap form against named wrapper", []string{
+			`def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`,
+			`def fu (usurp sub2)`,
+			`10 fu 3`,
+		}, 7},
+		{"anonymous original", []string{
+			`def f ([a:Integer b:Integer] => [a sub b])`,
+			`def g (usurp f)`,
+			`g 10 3`,
+		}, -7},
+		{"cond-first if alias true", []string{`def ifu (usurp if)`, `true ifu 88 99`}, 99},
+		{"cond-first if alias false", []string{`def ifu (usurp if)`, `false ifu 88 99`}, 88},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			res, err := runNativeSteps(t, nil, c.steps)
+			if err != nil {
+				t.Fatalf("run: %v", err)
+			}
+			if got := lastInt(t, res); got != c.want {
+				t.Errorf("got %d, want %d", got, c.want)
+			}
+		})
+	}
+}
+
+// TestRefNativeBoundByName checks the sibling case: a referenced NATIVE
+// fn bound to a name dispatches the native (InstallFnDef preserves the
+// body-less native handler rather than running an empty AQL body).
+func TestRefNativeBoundByName(t *testing.T) {
+	res, err := runNativeSteps(t, nil, []string{`def myadd (ref add)`, `myadd 2 3`})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got := lastInt(t, res); got != 5 {
+		t.Errorf("def myadd (ref add); myadd 2 3 = %d, want 5", got)
+	}
+}
+
+// TestNamedAQLFnUnaffected guards that an ordinary named AQL fn (and an
+// AQL fn re-bound through ref) still runs its body via the body-runner —
+// the preserve-handler branch must NOT swallow Body-bearing sigs.
+func TestNamedAQLFnUnaffected(t *testing.T) {
+	res, err := runNativeSteps(t, nil, []string{
+		`def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`,
+		`def fu (ref sub2)`,
+		`fu 10 3`,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got := lastInt(t, res); got != 7 {
+		t.Errorf("def fu (ref sub2); fu 10 3 = %d, want 7 (body-runner preserved)", got)
+	}
+}

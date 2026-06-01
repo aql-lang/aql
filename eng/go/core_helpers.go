@@ -375,8 +375,6 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 	for _, sig := range sigs {
 		s := sig           // capture for closure
 		fnDefCopy := fnDef // capture for closure (we need Captured at call time)
-		handler := buildFnBodyHandler(r, name, s, fnDefCopy)
-		returnsFn := buildFnBodyReturnsFn(r, name, s, fnDefCopy)
 
 		// BarrierPos sentinel resolution (No Zero-Value Overload): -1 =
 		// default all-forward → len(Params); 0 = explicit all-stack; >0 =
@@ -389,9 +387,21 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			barrier = len(s.Params)
 		}
 
-		cs := s // keep Params (names), Returns, Body, NoEval*
-		cs.Handler = handler
-		cs.ReturnsFn = returnsFn
+		cs := s // keep Params (names), Returns, Body, NoEval*, Handler
+		// AQL-bodied sigs get the body-splicing runner. A sig that already
+		// carries its own Handler with NO AQL Body is a pre-compiled /
+		// synthetic overload — a `usurp` wrapper (whose handler re-dispatches
+		// the wrapped fn through a paren) or a captured native fn value bound
+		// to a name. Wrapping the body-runner around its empty Body would
+		// emit zero values and fail the return check, so preserve the
+		// existing Handler/ReturnsFn instead; the fn it forwards to performs
+		// its own arg-binding and return validation. (An already-compiled AQL
+		// fn re-bound by name still has Body>0, so it correctly gets a fresh
+		// body-runner — only Body-less handler sigs are preserved.)
+		if s.Handler == nil || len(s.Body) > 0 {
+			cs.Handler = buildFnBodyHandler(r, name, s, fnDefCopy)
+			cs.ReturnsFn = buildFnBodyReturnsFn(r, name, s, fnDefCopy)
+		}
 		cs.BarrierPos = barrier
 		normalizeSig(&cs)
 		compiled = append(compiled, cs)

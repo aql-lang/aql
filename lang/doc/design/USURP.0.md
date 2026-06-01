@@ -1,33 +1,26 @@
 # `usurp` — Argument-Order Reversal as a Higher-Order Word (v0)
 
-> **Status (implemented — read this first).** This document is the
-> original v0 *design sketch*. The shipped word matches its core intent;
-> the authoritative, executable contract is the spec suite —
-> `lang/spec/usurp.tsv` (with `lang/spec/ref.tsv`,
-> `lang/spec/apply.tsv`, `lang/spec/modifiers.tsv`). Two notes:
+> **Status (implemented).** This document is the original v0 design
+> sketch; the shipped word matches it, including the `def ifu (usurp if)`
+> alias idiom below. The authoritative, executable contract is the spec
+> suite — `lang/spec/usurp.tsv` (with `lang/spec/ref.tsv`,
+> `lang/spec/apply.tsv`, `lang/spec/modifiers.tsv`). One clarification on
+> the surface form:
 >
-> 1. **`usurp` accepts either a bare name OR a function value.** It has
->    two overloads:
->    - `[Atom]` (by name): `usurp if <else> <then> <cond>` — captures the
->      word and resolves it to its bound function (companion of the `/u`
->      suffix). Shares `ref`'s rules: unbound → `undefined_word`, non-fn
->      → `illegal_ref`.
->    - `[Function]` (by value): `usurp (ref if) …` / `usurp (if/r) …`.
->    A *bare* `usurp if/r` does not resolve (the ref-word isn't evaluated
->    as a forward arg) — use `usurp if` or `usurp (if/r)`. The `/u`
->    suffix (`if/u`, `if/ur`) is the pure word-modifier form.
+> **`usurp` accepts either a bare name OR a function value** — two
+> overloads:
+> - `[Atom]` (by name): `usurp if <else> <then> <cond>` — captures the
+>   word and resolves it to its bound function (companion of the `/u`
+>   suffix). Shares `ref`'s rules: unbound → `undefined_word`, non-fn →
+>   `illegal_ref`.
+> - `[Function]` (by value): `usurp (ref if) …` / `usurp (if/r) …`.
 >
-> 2. **Named-binding a wrapper and calling it as a word is a KNOWN
->    LIMITATION.** `def ifu (usurp if)  cond ifu …` currently fails the
->    fn return-check (`type_error: expected 1 return value, got 0`).
->    Until that is fixed, use the inline / paren / map-slot / `/u`-suffix
->    forms, all of which work and are pinned in `usurp.tsv`. Wherever the
->    text below says "bind the result, `def ifu (usurp if)`", read it as
->    the *intended* end state, not current behaviour.
->
-> The cond-first motivation, the reversal mechanics, and the NoEval
-> handling described below are all accurate; only the *named-bind* path
-> differs from current behaviour.
+> A *bare* `usurp if/r` does not resolve (the ref-word isn't evaluated as
+> a forward arg) — use `usurp if` or `usurp (if/r)`. The `/u` suffix
+> (`if/u`, `if/ur`) is the pure word-modifier form. Binding the wrapper
+> to a name and calling it (`def ifu (usurp if)  cond ifu …`) works:
+> `InstallFnDef` preserves the wrapper's own (body-less) handler so the
+> call re-dispatches the wrapped fn.
 
 ## Problem
 
@@ -164,13 +157,9 @@ must still flow through `if`'s mark/move evaluation.
 
 ## Usage notes
 
-> See the Status note at the top: the shipped surface form differs from
-> the examples in this section. Use a function value (`usurp (ref if)`,
-> `if/u`); the `def ifu (usurp …)` named-bind path is a known limitation.
-
-- **Bind the result** (intended end state): `def ifu (usurp if)`, then
-  `cond ifu fail pass`. Inline `cond (usurp if) fail pass` (a bare
-  function value mid-stack) is not supported — bind it, like an alias.
+- **Bind the result**: `def ifu (usurp if)`, then `cond ifu fail
+  pass`. Inline `cond (usurp if) fail pass` (a bare function value
+  mid-stack) is not supported — bind it, like an alias.
 - **Reversal is total**: every argument flips. With `ifu`, branches
   read **else-first** (`cond ifu <else> <then>`). That is the
   documented, intended consequence of a general reverse primitive,
