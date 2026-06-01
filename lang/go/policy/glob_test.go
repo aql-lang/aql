@@ -34,8 +34,8 @@ func TestGlobBasic(t *testing.T) {
 		{"**/foo", "afoo", false},
 		// composed
 		{"aql:*", "aql:math", true},
-		{"aql:*", "aql:time", true},
-		{"aql:math", "aql:time", false},
+		{"aql:*", "aql:time-util", true},
+		{"aql:math", "aql:time-util", false},
 		{"read-*", "read-file", true},
 		{"read-*", "read", false},
 		{"read-*", "write-file", false},

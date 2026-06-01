@@ -31,7 +31,7 @@ func wrapGet(arg native.Value, word string) []native.Value {
 	return []native.Value{
 		arg,
 		native.NewOpenParen(),
-		native.NewWord("math"), native.NewWord("get"), native.NewWord(word),
+		native.NewWord("Math"), native.NewWord("get"), native.NewWord(word),
 		native.NewCloseParen(),
 	}
 }

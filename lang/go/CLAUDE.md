@@ -59,9 +59,14 @@ Language-agnostic content stays at the top of each component:
 - `formatter/` — code pretty-printer (no engine deps).
 - `capabilities/` — file I/O abstraction (`FileOps` interface
   + OS-backed and in-memory implementations).
-- `modules/` — loadable modules (`aql:math`, `aql:array`,
-  `aql:time`, `aql:matrix`, `aql:decision`, `aql:solardemo`,
-  `aql:bin`, `aql:type`).
+- `modules/` — loadable modules (`aql:math`, `aql:array-util`,
+  `aql:time-util`, `aql:matrix-util`, `aql:decision`, `aql:solardemo`,
+  `aql:bin`, `aql:type-util`). Import binds a CamelCase namespace
+  (`aql:math` → `Math.sqrt`); the four whose plain CamelCase name
+  collides with a builtin type carry a `-util` id and a `*Util`
+  namespace (`aql:array-util` → `ArrayUtil.shape`, likewise
+  `TimeUtil`, `TypeUtil`, `MatrixUtil`). Exported names must be
+  capitalised (`export "Foo"`; lowercase is rejected).
 - `test/` — integration tests and TSV spec runners.
 
 ## Build & Test
@@ -648,7 +653,7 @@ the static analyser and surface display; at runtime,
 No body execution, no token splicing, no push reordering.
 
 AQL fns defined inside a module preamble (named params + real
-body — e.g. `decision.cond`) take a different path: their body
+body — e.g. `Decision.cond`) take a different path: their body
 runs via `CallAQL` in the captured sub-registry so module-private
 words resolve correctly. Named params bind via `InstallDef`, so
 push ordering doesn't apply.

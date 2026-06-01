@@ -46,7 +46,7 @@ func TestDecisionModuleExports(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	decExport, ok := desc.Exports["decision"]
+	decExport, ok := desc.Exports["Decision"]
 	if !ok {
 		t.Fatal("expected 'decision' export")
 	}
@@ -62,7 +62,7 @@ func TestDecisionModuleExports(t *testing.T) {
 
 func TestDecisionCond(t *testing.T) {
 	r := decisionRegistry(t)
-	result := runDecisionAQL(t, r, `18 "gte" quote age decision.cond`)
+	result := runDecisionAQL(t, r, `18 "gte" quote age Decision.cond`)
 	m, _ := native.AsMap(result[0])
 	if m == nil {
 		t.Fatalf("expected map, got %s", result[0].Parent.String())
@@ -75,11 +75,11 @@ func TestDecisionCond(t *testing.T) {
 
 // --- Condition evaluation ---
 // Convention: condition nearest to word, input further.
-// e.g. {input} {condition} decision.eval-cond
+// e.g. {input} {condition} Decision.eval-cond
 
 func TestDecisionEvalCondTrue(t *testing.T) {
 	r := decisionRegistry(t)
-	result := runDecisionAQL(t, r, `{age:25} {field:"age",op:"gte",value:18} decision.eval-cond`)
+	result := runDecisionAQL(t, r, `{age:25} {field:"age",op:"gte",value:18} Decision.eval-cond`)
 	b, _ := native.AsBoolean(result[0])
 	if !b {
 		t.Error("expected true for age=25 gte 18")
@@ -88,7 +88,7 @@ func TestDecisionEvalCondTrue(t *testing.T) {
 
 func TestDecisionEvalCondFalse(t *testing.T) {
 	r := decisionRegistry(t)
-	result := runDecisionAQL(t, r, `{age:15} {field:"age",op:"gte",value:18} decision.eval-cond`)
+	result := runDecisionAQL(t, r, `{age:15} {field:"age",op:"gte",value:18} Decision.eval-cond`)
 	b, _ := native.AsBoolean(result[0])
 	if b {
 		t.Error("expected false for age=15 gte 18")
@@ -97,7 +97,7 @@ func TestDecisionEvalCondFalse(t *testing.T) {
 
 func TestDecisionEvalCondEq(t *testing.T) {
 	r := decisionRegistry(t)
-	result := runDecisionAQL(t, r, `{status:"active"} {field:"status",op:"eq",value:"active"} decision.eval-cond`)
+	result := runDecisionAQL(t, r, `{status:"active"} {field:"status",op:"eq",value:"active"} Decision.eval-cond`)
 	b, _ := native.AsBoolean(result[0])
 	if !b {
 		t.Error("expected true for status eq active")
@@ -109,8 +109,8 @@ func TestDecisionEvalCondEq(t *testing.T) {
 func TestDecisionEvalPredAllOf(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `
-		def pred ([{field:"age",op:"gte",value:18} {field:"score",op:"gt",value:50}] decision.all-of)
-		{age:25,score:80} pred decision.eval-pred
+		def pred ([{field:"age",op:"gte",value:18} {field:"score",op:"gt",value:50}] Decision.all-of)
+		{age:25,score:80} pred Decision.eval-pred
 	`)
 	b, _ := native.AsBoolean(result[0])
 	if !b {
@@ -121,8 +121,8 @@ func TestDecisionEvalPredAllOf(t *testing.T) {
 func TestDecisionEvalPredAllOfFalse(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `
-		def pred ([{field:"age",op:"gte",value:18} {field:"score",op:"gt",value:50}] decision.all-of)
-		{age:25,score:30} pred decision.eval-pred
+		def pred ([{field:"age",op:"gte",value:18} {field:"score",op:"gt",value:50}] Decision.all-of)
+		{age:25,score:30} pred Decision.eval-pred
 	`)
 	b, _ := native.AsBoolean(result[0])
 	if b {
@@ -133,8 +133,8 @@ func TestDecisionEvalPredAllOfFalse(t *testing.T) {
 func TestDecisionEvalPredAnyOf(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `
-		def pred ([{field:"age",op:"gte",value:18} {field:"score",op:"gt",value:50}] decision.any-of)
-		{age:10,score:80} pred decision.eval-pred
+		def pred ([{field:"age",op:"gte",value:18} {field:"score",op:"gt",value:50}] Decision.any-of)
+		{age:10,score:80} pred Decision.eval-pred
 	`)
 	b, _ := native.AsBoolean(result[0])
 	if !b {
@@ -145,8 +145,8 @@ func TestDecisionEvalPredAnyOf(t *testing.T) {
 func TestDecisionEvalPredNotOf(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `
-		def pred ({field:"age",op:"lt",value:18} decision.not-of)
-		{age:25} pred decision.eval-pred
+		def pred ({field:"age",op:"lt",value:18} Decision.not-of)
+		{age:25} pred Decision.eval-pred
 	`)
 	b, _ := native.AsBoolean(result[0])
 	if !b {
@@ -162,8 +162,8 @@ func TestDecisionTableFirst(t *testing.T) {
 		def tbl ([
 			{when:{field:"age",op:"lt",value:18}, then:{category:"minor"}}
 			{when:{field:"age",op:"gte",value:18}, then:{category:"adult"}}
-		] decision.make-table)
-		{age:25} tbl decision.eval-table
+		] Decision.make-table)
+		{age:25} tbl Decision.eval-table
 	`)
 	m, _ := native.AsMap(result[0])
 	cat, _ := m.Get("category")
@@ -179,8 +179,8 @@ func TestDecisionTableFirstMinor(t *testing.T) {
 		def tbl ([
 			{when:{field:"age",op:"lt",value:18}, then:{category:"minor"}}
 			{when:{field:"age",op:"gte",value:18}, then:{category:"adult"}}
-		] decision.make-table)
-		{age:12} tbl decision.eval-table
+		] Decision.make-table)
+		{age:12} tbl Decision.eval-table
 	`)
 	m, _ := native.AsMap(result[0])
 	cat, _ := m.Get("category")
@@ -196,9 +196,9 @@ func TestDecisionTableUnique(t *testing.T) {
 		def rawtbl ([
 			{when:{field:"score",op:"lt",value:50}, then:{grade:"fail"}}
 			{when:{field:"score",op:"gte",value:50}, then:{grade:"pass"}}
-		] decision.make-table)
-		def tbl (rawtbl "unique" decision.with-policy)
-		{score:75} tbl decision.eval-table
+		] Decision.make-table)
+		def tbl (rawtbl "unique" Decision.with-policy)
+		{score:75} tbl Decision.eval-table
 	`)
 	m, _ := native.AsMap(result[0])
 	grade, _ := m.Get("grade")
@@ -214,9 +214,9 @@ func TestDecisionTableCollect(t *testing.T) {
 		def rawtbl ([
 			{when:{field:"age",op:"gte",value:18}, then:{perk:"vote"}}
 			{when:{field:"age",op:"gte",value:21}, then:{perk:"drink"}}
-		] decision.make-table)
-		def tbl (rawtbl "collect" decision.with-policy)
-		{age:25} tbl decision.eval-table
+		] Decision.make-table)
+		def tbl (rawtbl "collect" Decision.with-policy)
+		{age:25} tbl Decision.eval-table
 	`)
 	list, _ := native.AsList(result[0])
 	if list.Len() != 2 {
@@ -227,8 +227,8 @@ func TestDecisionTableCollect(t *testing.T) {
 func TestDecisionTableNoMatch(t *testing.T) {
 	r := decisionRegistry(t)
 	result := runDecisionAQL(t, r, `
-		def tbl ([{when:{field:"age",op:"gt",value:100}, then:{x:1}}] decision.make-table)
-		{age:25} tbl decision.eval-table
+		def tbl ([{when:{field:"age",op:"gt",value:100}, then:{x:1}}] Decision.make-table)
+		{age:25} tbl Decision.eval-table
 	`)
 	m, _ := native.AsMap(result[0])
 	errVal, _ := m.Get("error")
@@ -245,7 +245,7 @@ func TestDecisionTableCompound(t *testing.T) {
 			{when:{kind:"group",op:"all",children:[{field:"age",op:"lt",value:30} {field:"score",op:"gte",value:90}]}, then:{tier:"premium"}}
 			{when:{field:"score",op:"gte",value:50}, then:{tier:"standard"}}
 		]})
-		{age:25,score:95} tbl decision.eval-table
+		{age:25,score:95} tbl Decision.eval-table
 	`)
 	m, _ := native.AsMap(result[0])
 	tier, _ := m.Get("tier")
@@ -268,7 +268,7 @@ func TestDecisionTree(t *testing.T) {
 			{id:"minor", kind:"leaf", result:{category:"minor"}}
 			{id:"adult", kind:"leaf", result:{category:"adult"}}
 		]})
-		{age:25} tree decision.eval-tree
+		{age:25} tree Decision.eval-tree
 	`)
 	m, _ := native.AsMap(result[0])
 	cat, _ := m.Get("category")
@@ -289,7 +289,7 @@ func TestDecisionTreeMinor(t *testing.T) {
 			{id:"minor", kind:"leaf", result:"too-young"}
 			{id:"adult", kind:"leaf", result:"welcome"}
 		]})
-		{age:12} tree decision.eval-tree
+		{age:12} tree Decision.eval-tree
 	`)
 	s, _ := native.AsString(result[0])
 	if s != "too-young" {
@@ -313,7 +313,7 @@ func TestDecisionTreeMultiLevel(t *testing.T) {
 			{id:"approve", kind:"leaf", result:"approved"}
 			{id:"review", kind:"leaf", result:"needs-review"}
 		]})
-		{age:25,score:90} tree decision.eval-tree
+		{age:25,score:90} tree Decision.eval-tree
 	`)
 	s, _ := native.AsString(result[0])
 	if s != "approved" {
@@ -330,7 +330,7 @@ func TestDecideTable(t *testing.T) {
 			{when:{field:"x",op:"gt",value:0}, then:{sign:"positive"}}
 			{when:{field:"x",op:"lt",value:0}, then:{sign:"negative"}}
 		]})
-		{x:5} model decision.decide
+		{x:5} model Decision.decide
 	`)
 	m, _ := native.AsMap(result[0])
 	sign, _ := m.Get("sign")
@@ -351,7 +351,7 @@ func TestDecideTree(t *testing.T) {
 			{id:"hot", kind:"leaf", result:"hot"}
 			{id:"cold", kind:"leaf", result:"cold"}
 		]})
-		{temp:35} model decision.decide
+		{temp:35} model Decision.decide
 	`)
 	s, _ := native.AsString(result[0])
 	if s != "hot" {
@@ -384,10 +384,10 @@ func TestDecisionDeepNestedPredicates(t *testing.T) {
 		def p3 {field:"c", op:"eq", value:"x"}
 		def p4 {field:"d", op:"neq", value:"y"}
 
-		def inner-not (p2 decision.not-of)
-		def left  ([p1 inner-not] decision.all-of)
-		def right ([p3 p4] decision.all-of)
-		def root  ([left right] decision.any-of)
+		def inner-not (p2 Decision.not-of)
+		def left  ([p1 inner-not] Decision.all-of)
+		def right ([p3 p4] Decision.all-of)
+		def root  ([left right] Decision.any-of)
 	`
 
 	cases := []struct {
@@ -408,7 +408,7 @@ func TestDecisionDeepNestedPredicates(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			result := runDecisionAQL(t, r, src+`
-				`+tc.input+` root decision.eval-pred
+				`+tc.input+` root Decision.eval-pred
 			`)
 			b, _ := native.AsBoolean(result[0])
 			if b != tc.want {
@@ -459,7 +459,7 @@ func TestDecisionDeepCompoundTable(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			result := runDecisionAQL(t, r, src+`
-				`+tc.input+` tbl decision.eval-table
+				`+tc.input+` tbl Decision.eval-table
 			`)
 			m, _ := native.AsMap(result[0])
 			if m == nil {
@@ -530,7 +530,7 @@ func TestDecisionDeepBranchingTree(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			result := runDecisionAQL(t, r, src+`
-				`+tc.input+` model decision.decide
+				`+tc.input+` model Decision.decide
 			`)
 			s, _ := native.AsString(result[0])
 			if s != tc.want {
@@ -563,7 +563,7 @@ func TestDecisionTreeDeepLeafResult(t *testing.T) {
 		  }}
 		  {id:"neg", kind:"leaf", result:"negative"}
 		]})
-		{x:5} model decision.decide
+		{x:5} model Decision.decide
 	`)
 	m, _ := native.AsMap(result[0])
 	if m == nil {
@@ -609,7 +609,7 @@ func TestDecisionDeepStructureRejectsUndefinedWords(t *testing.T) {
 		    {field:age, op:"gte", value:18}
 		  ]}, then:{ok:true}}
 		]})
-		{age:25} tbl decision.eval-table
+		{age:25} tbl Decision.eval-table
 	`
 	values, err := parser.Parse(src)
 	if err != nil {
@@ -638,7 +638,7 @@ func TestDecisionDeepTreeRejectsUndefinedWords(t *testing.T) {
 		  ]}
 		  {id:"us", kind:"leaf", result:"ok"}
 		]})
-		{region:"us"} model decision.decide
+		{region:"us"} model Decision.decide
 	`
 	values, err := parser.Parse(src)
 	if err != nil {

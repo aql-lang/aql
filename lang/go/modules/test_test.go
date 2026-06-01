@@ -50,7 +50,7 @@ func TestTestModuleExports(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildTestModule: %v", err)
 	}
-	testExp, ok := desc.Exports["test"]
+	testExp, ok := desc.Exports["Test"]
 	if !ok {
 		t.Fatal("missing 'test' export")
 	}
@@ -59,7 +59,7 @@ func TestTestModuleExports(t *testing.T) {
 			t.Errorf("missing test export %q", name)
 		}
 	}
-	assertExp, ok := desc.Exports["assert"]
+	assertExp, ok := desc.Exports["Assert"]
 	if !ok {
 		t.Fatal("missing 'assert' export")
 	}
@@ -73,9 +73,9 @@ func TestTestModuleExports(t *testing.T) {
 func TestImperativePass(t *testing.T) {
 	r := testRegistry(t)
 	runTestAQL(t, r, `
-		test.test "math works" [(3 4 add) 7 assert.equal]
+		Test.test "math works" [(3 4 add) 7 Assert.equal]
 	`)
-	result := runTestAQL(t, r, `test.summary`)
+	result := runTestAQL(t, r, `Test.summary`)
 	m, _ := native.AsMap(result[0])
 	total, _ := m.Get("total")
 	passed, _ := m.Get("passed")
@@ -91,9 +91,9 @@ func TestImperativePass(t *testing.T) {
 func TestImperativeFail(t *testing.T) {
 	r := testRegistry(t)
 	runTestAQL(t, r, `
-		test.test "math is wrong" [(3 4 add) 8 assert.equal]
+		Test.test "math is wrong" [(3 4 add) 8 Assert.equal]
 	`)
-	result := runTestAQL(t, r, `test.fail-count`)
+	result := runTestAQL(t, r, `Test.fail-count`)
 	n, _ := native.AsInteger(result[0])
 	if n != 1 {
 		t.Errorf("fail-count = %d, want 1", n)
@@ -103,14 +103,14 @@ func TestImperativeFail(t *testing.T) {
 func TestImperativeDescribeNesting(t *testing.T) {
 	r := testRegistry(t)
 	runTestAQL(t, r, `
-		test.describe "outer" [
-			test.test "a" [true assert.ok]
-			test.describe "inner" [
-				test.test "b" [false true assert.not-equal]
+		Test.describe "outer" [
+			Test.test "a" [true Assert.ok]
+			Test.describe "inner" [
+				Test.test "b" [false true Assert.not-equal]
 			]
 		]
 	`)
-	result := runTestAQL(t, r, `test.results`)
+	result := runTestAQL(t, r, `Test.results`)
 	td, ok := result[0].Data.(native.TableData)
 	if !ok {
 		t.Fatalf("results not a TableData: %T", result[0].Data)
@@ -130,12 +130,12 @@ func TestImperativeDescribeNesting(t *testing.T) {
 func TestAssertThrows(t *testing.T) {
 	r := testRegistry(t)
 	runTestAQL(t, r, `
-		test.test "div by zero" [[1 0 div] assert.throws]
+		Test.test "div by zero" [[1 0 div] Assert.throws]
 	`)
-	result := runTestAQL(t, r, `test.fail-count`)
+	result := runTestAQL(t, r, `Test.fail-count`)
 	n, _ := native.AsInteger(result[0])
 	if n != 0 {
-		t.Errorf("assert.throws should pass; fail-count = %d", n)
+		t.Errorf("Assert.throws should pass; fail-count = %d", n)
 	}
 }
 
@@ -149,10 +149,10 @@ func TestResultsThroughReport(t *testing.T) {
 		r.Defs.Push(name, native.NewMap(exp))
 	}
 	runTestAQL(t, r, `
-		test.test "ok" [1 1 assert.equal]
-		test.test "bad" [1 2 assert.equal]
+		Test.test "ok" [1 1 Assert.equal]
+		Test.test "bad" [1 2 Assert.equal]
 	`)
-	result := runTestAQL(t, r, `test.results report.value`)
+	result := runTestAQL(t, r, `Test.results Report.value`)
 	s, _ := native.AsString(result[0])
 	if !strings.Contains(s, "name") || !strings.Contains(s, "ok") {
 		t.Errorf("results table missing expected columns:\n%s", s)
@@ -173,9 +173,9 @@ func TestSpecRunnerHappyPath(t *testing.T) {
 		  ]
 		  subs: []
 		}
-		my-spec test.run-spec
+		my-spec Test.run-spec
 	`)
-	result := runTestAQL(t, r, `test.summary`)
+	result := runTestAQL(t, r, `Test.summary`)
 	m, _ := native.AsMap(result[0])
 	total, _ := m.Get("total")
 	failed, _ := m.Get("failed")
@@ -199,9 +199,9 @@ func TestSpecRunnerDetectsFailures(t *testing.T) {
 		  ]
 		  subs: []
 		}
-		bad-spec test.run-spec
+		bad-spec Test.run-spec
 	`)
-	result := runTestAQL(t, r, `test.summary`)
+	result := runTestAQL(t, r, `Test.summary`)
 	m, _ := native.AsMap(result[0])
 	failed, _ := m.Get("failed")
 	fn, _ := native.AsInteger(failed)

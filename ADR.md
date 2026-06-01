@@ -17,7 +17,7 @@ to reverse-engineer from the code, add a record here.
 
 ### Decision
 
-A native module (`aql:math`, `aql:array`, `aql:matrix`, …) must **never
+A native module (`aql:math`, `aql:array-util`, `aql:matrix-util`, …) must **never
 export a name that collides with a core (built-in) word**. If an
 operation would naturally share a core word's name, do one of the
 following instead:
@@ -31,46 +31,46 @@ following instead:
 AQL resolves words by signature and has no implicit `Word → Atom`
 fallback. When a module exports a name that also exists as a core word,
 two different operations end up wearing the "same" name, distinguished
-only by an `aql:array`-style prefix. That is confusing in exactly the
+only by an `aql:array-util`-style prefix. That is confusing in exactly the
 case it matters most: when both apply to the *same* value type but mean
 different things.
 
 The motivating case was the array vocabulary. Three array operations had
 been given `arr-`-prefixed built-in names (`arr-flatten`,
 `arr-transpose`, `arr-indexof`) purely to dodge collisions with the core
-`flatten` and `indexof`, and the first cut of the `aql:array` module
-re-exported them as `array.flatten`/`array.indexof`. That meant
-`flatten` (core, one level) and `array.flatten` (deep) did *different
+`flatten` and `indexof`, and the first cut of the `aql:array-util` module
+re-exported them as `ArrayUtil.flatten`/`ArrayUtil.indexof`. That meant
+`flatten` (core, one level) and `ArrayUtil.flatten` (deep) did *different
 things to the same list* — a foot-gun, and a symptom that the boundary
 was drawn in the wrong place.
 
 ### Consequences
 
-For `aql:array` specifically:
+For `aql:array-util` specifically:
 
 - **Deep flatten** is now `flatten -1` — a negative depth on the core
   `flatten` word (which removes one level by default, or `N` levels with
-  `flatten N`). There is no `array.flatten`.
+  `flatten N`). There is no `ArrayUtil.flatten`.
 - **List lookup** is now a `[List, List]` overload of the core `indexof`
   word (its string form returns a scalar position; the list form returns
-  a vector of indices). There is no `array.indexof`.
+  a vector of indices). There is no `ArrayUtil.indexof`.
 - **`transpose`** has no core counterpart, so it keeps its plain name and
-  remains `array.transpose`. The `arr-` workaround names are gone.
+  remains `ArrayUtil.transpose`. The `arr-` workaround names are gone.
 
-After this, the `aql:array` export set shares no name with any core word.
+After this, the `aql:array-util` export set shares no name with any core word.
 
-### Applied to `aql:matrix`
+### Applied to `aql:matrix-util`
 
-The `aql:matrix` module predated this record and exported `size`,
+The `aql:matrix-util` module predated this record and exported `size`,
 `flatten`, and `transpose`. These have been reconciled:
 
 - **`size`** — dropped. The core `size` word already reports a tensor's
-  entry count via the Sizer behavior (`TensorData`), so a `matrix.size`
+  entry count via the Sizer behavior (`TensorData`), so a `MatrixUtil.size`
   export only shadowed it.
-- **`flatten`** — renamed to **`matrix.values`** (the row-major list of
+- **`flatten`** — renamed to **`MatrixUtil.values`** (the row-major list of
   entries). The core `flatten` word remains the only `flatten`.
 - **`transpose`** — kept. `transpose` is *not* a core word; it lives in
-  the `aql:array` module. `matrix.transpose` and `array.transpose` are
+  the `aql:array-util` module. `MatrixUtil.transpose` and `ArrayUtil.transpose` are
   two namespaced module words, which this rule permits — the rule is
   about shadowing *core* words, not other module words.
 

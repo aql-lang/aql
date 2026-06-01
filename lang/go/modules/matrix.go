@@ -165,7 +165,7 @@ func newMatrix(rows, cols int, data []float64) native.Value {
 	return tensorValue(TMatrix, TensorData{Shape: []int{rows, cols}, Data: data})
 }
 
-// BuildMatrixModule creates the "aql:matrix" native module. It registers
+// BuildMatrixModule creates the "aql:matrix-util" native module. It registers
 // Go-implemented matrix words into an isolated sub-registry and returns a
 // ModuleDesc with a "matrix" export containing FnDef wrappers for each word.
 func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
@@ -193,7 +193,7 @@ func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	// Shape. No `size` export: the core `size` word already reports a
 	// tensor's entry count via the Sizer behavior (TensorData), so a
-	// matrix.size would only shadow it — see ADR-001.
+	// MatrixUtil.size would only shadow it — see ADR-001.
 	exports.Set("rows", makeMatrixToIntFnDef("matrix-rows", subReg))
 	exports.Set("cols", makeMatrixToIntFnDef("matrix-cols", subReg))
 
@@ -212,7 +212,7 @@ func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Transform. The flat row-major list of entries is exported as
 	// `values`, not `flatten`, so it does not shadow the core `flatten`
 	// word (ADR-001). `transpose` is an aql:array module word, not a
-	// core word, so matrix.transpose is fine.
+	// core word, so MatrixUtil.transpose is fine.
 	exports.Set("transpose", makeUnaryMatrixFnDef("matrix-transpose", subReg))
 	exports.Set("values", makeMatrixToListFnDef("matrix-flatten", subReg))
 
@@ -227,7 +227,7 @@ func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modID := parent.Modules.NextID()
 	desc := native.ModuleDesc{
 		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"matrix": exports},
+		Exports: map[string]*native.OrderedMap{"MatrixUtil": exports},
 	}
 	return desc, nil
 }
@@ -838,7 +838,7 @@ var MatrixNatives = []native.NativeFunc{
 
 // matrixFromRows builds a rank-2 TensorData from a list of equal-length
 // row lists. Shared by the `matrix-make` word and the Matrix Ideal's
-// Instantiate (see matrix_ideal.go) so `matrix.create` and
+// Instantiate (see matrix_ideal.go) so `MatrixUtil.create` and
 // `make Matrix …` agree.
 func matrixFromRows(v native.Value) (TensorData, error) {
 	rl, _ := native.AsList(v)

@@ -304,7 +304,7 @@ func TestModuleSubscopes(t *testing.T) {
 		t.Errorf("import aql:math: %v", err)
 	}
 	// Import of a different module denied.
-	if err := p.Check("modules", "import", Args{"module": "aql:time"}); err == nil {
+	if err := p.Check("modules", "import", Args{"module": "aql:time-util"}); err == nil {
 		t.Error("import aql:time should deny")
 	}
 	// Per-export within aql:math.

@@ -21,7 +21,7 @@ import (
 //
 // Deferred (Phase-4 stretch in PBT-PLAN): list-element dropping,
 // stack-op simplification (dup/drop→identity), generator-semantic
-// rewrites (rand.int min max → rand.int 0 1).
+// rewrites (Rand.int min max → Rand.int 0 1).
 func generateCandidates(form *stackform.StackForm, policy *Policy) []*stackform.StackForm {
 	var out []*stackform.StackForm
 	out = append(out, dropOpCandidates(form)...)

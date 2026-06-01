@@ -15,7 +15,7 @@ import "fmt"
 //
 // The motivating use case is improving the SQL DX of aql:query: after
 // `"aql:query" import`, the words live under a dot namespace
-// (query.from, query.where, …). Destructuring lifts the chosen ones to
+// (Query.from, Query.where, …). Destructuring lifts the chosen ones to
 // bare names:
 //
 //	"aql:query" import

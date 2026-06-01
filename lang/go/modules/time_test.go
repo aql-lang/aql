@@ -26,7 +26,7 @@ func callTimeDot(word string, stackVals ...native.Value) []native.Value {
 	input = append(input, stackVals...)
 	input = append(input,
 		native.NewOpenParen(),
-		native.NewWord("time"), native.NewWord("get"), native.NewWord(word),
+		native.NewWord("TimeUtil"), native.NewWord("get"), native.NewWord(word),
 		native.NewCloseParen(),
 	)
 	return input
@@ -43,7 +43,7 @@ func TestTimeModuleExports(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	timeExport, ok := desc.Exports["time"]
+	timeExport, ok := desc.Exports["TimeUtil"]
 	if !ok {
 		t.Fatal("expected 'time' export")
 	}

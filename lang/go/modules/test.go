@@ -16,7 +16,7 @@ import (
 // into. It is created lazily on first call to a test word and stored
 // under capTestRun on the parent (caller's) registry — so successive
 // test calls from the same Run() append to the same set, and
-// `test.results` returns everything seen so far.
+// `Test.results` returns everything seen so far.
 type testRun struct {
 	mu       sync.Mutex
 	path     []string       // active describe stack
@@ -24,7 +24,7 @@ type testRun struct {
 	failures int            // count of failed test cases
 }
 
-const capTestRun = "test.run.active"
+const capTestRun = "Test.run.active"
 
 // testParseOnce caches the parsed AQL preamble that defines the
 // TestCase / TestSet / TestSpec / TestResult record types plus the
@@ -230,7 +230,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				NoEvalArgs: map[int]bool{1: true},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					name, _ := args[0].AsConcreteString()
-					body, err := native.RequireConcreteList(args[1], "test.describe")
+					body, err := native.RequireConcreteList(args[1], "Test.describe")
 					if err != nil {
 						return nil, err
 					}
@@ -259,7 +259,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				NoEvalArgs: map[int]bool{1: true},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					name, _ := args[0].AsConcreteString()
-					body, err := native.RequireConcreteList(args[1], "test.test")
+					body, err := native.RequireConcreteList(args[1], "Test.test")
 					if err != nil {
 						return nil, err
 					}
@@ -270,7 +270,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				Returns: []*native.Type{}, BarrierPos: -1,
 			}},
 		},
-		// test.results — return the accumulated TestResult Table.
+		// Test.results — return the accumulated TestResult Table.
 		{
 			Name: "test-results",
 			Signatures: []native.NativeSig{{
@@ -281,7 +281,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				Returns: []*native.Type{native.TList}, BarrierPos: -1,
 			}},
 		},
-		// test.reset — clear the active TestRun.
+		// Test.reset — clear the active TestRun.
 		{
 			Name: "test-reset",
 			Signatures: []native.NativeSig{{
@@ -298,7 +298,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				Returns: []*native.Type{}, BarrierPos: -1,
 			}},
 		},
-		// test.summary — return a Record with pass/fail/total counts.
+		// Test.summary — return a Record with pass/fail/total counts.
 		{
 			Name: "test-summary",
 			Signatures: []native.NativeSig{{
@@ -309,9 +309,9 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				Returns: []*native.Type{native.TMap}, BarrierPos: -1,
 			}},
 		},
-		// test.report — return a one-line-per-property pass/fail/skip
+		// Test.report — return a one-line-per-property pass/fail/skip
 		// summary String (plus a tally line). §11b.5: the readable CI
-		// alternative to the verbose test.results table.
+		// alternative to the verbose Test.results table.
 		{
 			Name: "test-report",
 			Signatures: []native.NativeSig{{
@@ -322,7 +322,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				Returns: []*native.Type{native.TString}, BarrierPos: -1,
 			}},
 		},
-		// test.fail-count — return the failure count as an integer.
+		// Test.fail-count — return the failure count as an integer.
 		{
 			Name: "test-fail-count",
 			Signatures: []native.NativeSig{{
@@ -353,10 +353,10 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 					expected, actual := args[0], args[1]
 					if !native.ValuesEqual(expected, actual) {
 						return nil, r.AqlError("assertion_failure",
-							fmt.Sprintf("assert.equal: expected %s, got %s",
+							fmt.Sprintf("Assert.equal: expected %s, got %s",
 								native.FormatForPrint(expected),
 								native.FormatForPrint(actual)),
-							"assert.equal")
+							"Assert.equal")
 					}
 					return nil, nil
 				},
@@ -370,9 +370,9 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					if native.ValuesEqual(args[0], args[1]) {
 						return nil, r.AqlError("assertion_failure",
-							fmt.Sprintf("assert.not-equal: both sides equal %s",
+							fmt.Sprintf("Assert.not-equal: both sides equal %s",
 								native.FormatForPrint(args[0])),
-							"assert.not-equal")
+							"Assert.not-equal")
 					}
 					return nil, nil
 				},
@@ -386,8 +386,8 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					if !isTruthy(args[0]) {
 						return nil, r.AqlError("assertion_failure",
-							fmt.Sprintf("assert.ok: value is falsy: %s", native.FormatForPrint(args[0])),
-							"assert.ok")
+							fmt.Sprintf("Assert.ok: value is falsy: %s", native.FormatForPrint(args[0])),
+							"Assert.ok")
 					}
 					return nil, nil
 				},
@@ -400,15 +400,15 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				Args:       []*native.Type{native.TList},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-					body, err := native.RequireConcreteList(args[0], "assert.throws")
+					body, err := native.RequireConcreteList(args[0], "Assert.throws")
 					if err != nil {
 						return nil, err
 					}
 					_, runErr := native.New(r).Run(body.Slice())
 					if runErr == nil {
 						return nil, r.AqlError("assertion_failure",
-							"assert.throws: body did not throw",
-							"assert.throws")
+							"Assert.throws: body did not throw",
+							"Assert.throws")
 					}
 					return nil, nil
 				},
@@ -424,8 +424,8 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 					s, _ := args[1].AsConcreteString()
 					if !strings.Contains(s, sub) {
 						return nil, r.AqlError("assertion_failure",
-							fmt.Sprintf("assert.match: %q does not contain %q", s, sub),
-							"assert.match")
+							fmt.Sprintf("Assert.match: %q does not contain %q", s, sub),
+							"Assert.match")
 					}
 					return nil, nil
 				},
@@ -433,7 +433,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 			}},
 		},
 		// --- spec runner (Go side) ---
-		// test.invoke subject-atom inputs-list — call the subject in
+		// Test.invoke subject-atom inputs-list — call the subject in
 		// the parent registry by pushing inputs as tokens and
 		// dispatching the word in a sub-engine. Returns the top-of-
 		// stack result (or Error value). Runs against `parent` (the
@@ -461,7 +461,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				},
 			},
 		},
-		// test.record name path ok expected actual error duration-ms
+		// Test.record name path ok expected actual error duration-ms
 		//   — append a TestResult to the active TestRun. Used by the
 		//   AQL spec runner to assemble results uniformly with the
 		//   imperative API.
@@ -494,7 +494,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				Returns: []*native.Type{}, BarrierPos: -1,
 			}},
 		},
-		// test.prop name gen property → PropertySpec map.
+		// Test.prop name gen property → PropertySpec map.
 		//   — constructs a PropertySpec with default runs=100, seed=1,
 		//   max-shrinks=200. Implemented in Go (not as an AQL fn)
 		//   because gen/property are List bodies that would otherwise
@@ -530,7 +530,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				},
 			}},
 		},
-		// test.check-prop name gen property runs seed max-shrinks
+		// Test.check-prop name gen property runs seed max-shrinks
 		//   — property-based test driver. Runs the generator body
 		//   `runs` times, each iteration with a fresh seeded rand
 		//   instance bound as `r`. The property body is called with
@@ -561,10 +561,10 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				},
 			}},
 		},
-		// test.skip — a drop-in replacement for test.check-prop that does
+		// Test.skip — a drop-in replacement for Test.check-prop that does
 		// NOT run the generator/property bodies. It records a skipped
 		// result (ok=true, skipped=true) so the property still appears in
-		// test.report / test.results but contributes no failure and costs
+		// Test.report / Test.results but contributes no failure and costs
 		// nothing to evaluate. Swap `check-prop` → `skip` on a property to
 		// park it while iterating, instead of commenting it out (§11b.4).
 		{
@@ -591,7 +591,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 
 // runSkipProp records a skipped property result without running the
 // generator or property bodies. The skipped entry is ok=true and carries
-// a `skipped: true` marker so test.report renders it as `skip:` and it
+// a `skipped: true` marker so Test.report renders it as `skip:` and it
 // never counts as a failure. See §11b.4.
 func runSkipProp(parent *native.Registry, args []native.Value) ([]native.Value, error) {
 	name, _ := args[0].AsConcreteString()
@@ -612,11 +612,11 @@ func runSkipProp(parent *native.Registry, args []native.Value) ([]native.Value, 
 // the check-prop native's handler delegates here.
 func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value, error) {
 	name, _ := args[0].AsConcreteString()
-	genList, err := native.RequireConcreteList(args[1], "test.check-prop gen")
+	genList, err := native.RequireConcreteList(args[1], "Test.check-prop gen")
 	if err != nil {
 		return nil, err
 	}
-	propList, err := native.RequireConcreteList(args[2], "test.check-prop property")
+	propList, err := native.RequireConcreteList(args[2], "Test.check-prop property")
 	if err != nil {
 		return nil, err
 	}
@@ -669,7 +669,7 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 			failed = true
 			failingIter = i
 			failingError = native.NewError(parent.AqlError("check_prop_error",
-				"generator produced no value", "test.check-prop"))
+				"generator produced no value", "Test.check-prop"))
 			break
 		}
 		input := genResults[len(genResults)-1]
@@ -698,7 +698,7 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 			failingIter = i
 			failingInput = input
 			failingError = native.NewError(parent.AqlError("check_prop_error",
-				"property produced no value", "test.check-prop"))
+				"property produced no value", "Test.check-prop"))
 			break
 		}
 		propTop := propResults[len(propResults)-1]
@@ -709,7 +709,7 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 			failingInput = input
 			failingError = native.NewError(parent.AqlError("check_prop_error",
 				fmt.Sprintf("property returned non-Boolean (%s)", propTop.Parent.String()),
-				"test.check-prop"))
+				"Test.check-prop"))
 			break
 		}
 		if !propBool {
@@ -756,8 +756,8 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 	result.Set("shrunk-cost", native.NewInteger(shrunkCost))
 	result.Set("error", failingError)
 
-	// Append to the active test run so test.results and
-	// test.summary pick this up alongside table-driven tests.
+	// Append to the active test run so Test.results and
+	// Test.summary pick this up alongside table-driven tests.
 	resultVal := native.NewMap(result)
 	run := activeRun(parent)
 	run.mu.Lock()
@@ -891,7 +891,7 @@ func shrinkFailingProgram(
 //
 // maxShrinks caps the reducer's outer loop. 0 disables shrinking
 // (returns the failing input verbatim). Defaults to 200 when the
-// PropertySpec uses the test.prop constructor.
+// PropertySpec uses the Test.prop constructor.
 func shrinkFailingInput(
 	parent *native.Registry,
 	failingInput native.Value,
@@ -1014,7 +1014,7 @@ func makeResult(name string, path []string, ok bool, expected, actual, errVal na
 }
 
 // asTable wraps the accumulated results as a TableData value so the
-// caller can pipe them through `report.table`.
+// caller can pipe them through `Report.table`.
 func (run *testRun) asTable() native.Value {
 	run.mu.Lock()
 	defer run.mu.Unlock()
@@ -1037,7 +1037,7 @@ func (run *testRun) asTable() native.Value {
 // report renders one line per recorded result — `pass:`, `FAIL:`, or
 // `skip:` followed by the name (and the error / failing input for
 // failures) — plus a trailing `N passed, M failed, K skipped` tally.
-// This is the readable CI summary §11b.5 asks for: `test.results`
+// This is the readable CI summary §11b.5 asks for: `Test.results`
 // returns the full 7-column table + PropertyResult dumps, which is hard
 // to scan in logs.
 func (run *testRun) report() native.Value {
@@ -1120,7 +1120,7 @@ func (run *testRun) summary() native.Value {
 // parent registry. Shared by the Atom and String overloads of
 // test-invoke.
 func invokeSubject(parent *native.Registry, name string, inputArg native.Value) ([]native.Value, error) {
-	inputs, err := native.RequireConcreteList(inputArg, "test.invoke")
+	inputs, err := native.RequireConcreteList(inputArg, "Test.invoke")
 	if err != nil {
 		return nil, err
 	}
@@ -1139,10 +1139,10 @@ func invokeSubject(parent *native.Registry, name string, inputArg native.Value) 
 
 // dottedWordTokens returns the token sequence the engine would
 // produce for a dotted reference. A plain "foo" lexes to [Word(foo)];
-// "decision.eval-cond" lexes to [Word(decision), Word(get),
-// Atom(eval-cond)]. test.invoke uses this so a spec can name its
+// "Decision.eval-cond" lexes to [Word(decision), Word(get),
+// Atom(eval-cond)]. Test.invoke uses this so a spec can name its
 // subject as either `eval-cond/q` (when the user has imported the
-// module's words flat) or `decision.eval-cond/q` (the more common
+// module's words flat) or `Decision.eval-cond/q` (the more common
 // form, when the user has the bare module import).
 func dottedWordTokens(name string) []native.Value {
 	parts := strings.Split(name, ".")
@@ -1159,7 +1159,7 @@ func dottedWordTokens(name string) []native.Value {
 
 // isTruthy mirrors the AQL convention used by `if` / `and` / `or`:
 // false, none and the None type literal are falsy; everything else is
-// truthy. This keeps `assert.ok` aligned with the language's other
+// truthy. This keeps `Assert.ok` aligned with the language's other
 // boolean coercion sites without introducing a new rule.
 func isTruthy(v native.Value) bool {
 	if native.IsNone(v) {
@@ -1183,7 +1183,7 @@ func isTruthy(v native.Value) bool {
 //
 // Naming convention: Go words use kebab prefixes (test-X) to avoid
 // colliding with user-facing names; the export map renames them to
-// the dotted form (test.test, test.describe, assert.equal, ...).
+// the dotted form (Test.test, Test.describe, Assert.equal, ...).
 const testAQLPreamble = `
 
 # ============================================================
@@ -1203,7 +1203,7 @@ def TestSet refine Table (refine Record [name:String in:List out:Any])
 # name referring to a word resolvable in the def stack at run time)
 # and either inline cases or sub-specs (or both).
 # - subject:  Atom or String naming the word under test. Strings
-#             support dotted names like "decision.eval-cond" so a
+#             support dotted names like "Decision.eval-cond" so a
 #             spec can target a module export without first flat-
 #             importing the word.
 # - cases:    inline TestSet (may be empty)
@@ -1288,7 +1288,7 @@ def spec-with-subs fn [[subs:List cases:List subject:Any name:String] [Map] [
 # Go-side check-prop driver. Returns the PropertyResult map.
 #
 # The gen/property fields are stored Quoted in the map (set by
-# test.prop), so a plain map.get retrieval preserves them as data
+# Test.prop), so a plain map.get retrieval preserves them as data
 # rather than triggering auto-eval as they cross fn boundaries.
 #
 # Uses FORWARD form for the test-check-prop call so each arg fills
@@ -1347,7 +1347,7 @@ def run-spec fn [[| s:Map] [] [
 # Exports
 # ============================================================
 
-export "test" {
+export "Test" {
   # types
   TestCase:        TestCase
   TestSet:         TestSet
@@ -1382,7 +1382,7 @@ export "test" {
   invoke:       test-invoke/r
 }
 
-export "assert" {
+export "Assert" {
   equal:      assert-equal/r
   not-equal:  assert-not-equal/r
   ok:         assert-ok/r

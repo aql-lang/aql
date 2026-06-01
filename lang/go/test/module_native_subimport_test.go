@@ -69,7 +69,7 @@ func TestImportedFileCanImportNativeModule(t *testing.T) {
 	files := map[string]string{
 		// lib.aql imports a native module and uses it to compute an export.
 		"lib.aql": `import "aql:math"
-export "Lib" { hi: (math.ceil 2.3) }`,
+export "Lib" { hi: (Math.ceil 2.3) }`,
 	}
 	result, err := runNativeModuleSubImport(t, files, []string{
 		`import "./lib.aql"`,
@@ -87,7 +87,7 @@ export "Lib" { hi: (math.ceil 2.3) }`,
 func TestNativeModuleImportTransitiveDepth(t *testing.T) {
 	files := map[string]string{
 		"deep.aql": `import "aql:math"
-export "Deep" { r: (math.round 4.6) }`,
+export "Deep" { r: (Math.round 4.6) }`,
 		"lib.aql": `import "./deep.aql"
 export "Lib" { d: (Deep.r) }`,
 	}

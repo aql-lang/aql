@@ -20,10 +20,10 @@ func init() {
 // exposes one canonical operation — run code in a sub-engine with
 // an explicit policy — and a small surface of conveniences:
 //
-//	vm.run          code             # default sandbox profile
-//	vm.run-with     code policy-map  # explicit policy as data
-//	vm.run-sandbox  code             # built-in 'sandbox' profile
-//	vm.run-compute  code             # built-in 'compute' profile
+//	Vm.run          code             # default sandbox profile
+//	Vm.run-with     code policy-map  # explicit policy as data
+//	Vm.run-sandbox  code             # built-in 'sandbox' profile
+//	Vm.run-compute  code             # built-in 'compute' profile
 //
 // Each handler:
 //
@@ -63,7 +63,7 @@ func BuildVMModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modID := parent.Modules.NextID()
 	return native.ModuleDesc{
 		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"vm": exports},
+		Exports: map[string]*native.OrderedMap{"Vm": exports},
 	}, nil
 }
 
@@ -83,7 +83,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 					}
 					pol, err := policy.Load("sandbox")
 					if err != nil {
-						return nil, fmt.Errorf("vm.run: load sandbox: %w", err)
+						return nil, fmt.Errorf("running Vm.run: load sandbox: %w", err)
 					}
 					return runInSubEngine(parent, code, pol)
 				},
@@ -102,7 +102,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 					}
 					pol, err := policy.Load("sandbox")
 					if err != nil {
-						return nil, fmt.Errorf("vm.run-sandbox: %w", err)
+						return nil, fmt.Errorf("running Vm.run-sandbox: %w", err)
 					}
 					return runInSubEngine(parent, code, pol)
 				},
@@ -121,7 +121,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 					}
 					pol, err := policy.Load("compute")
 					if err != nil {
-						return nil, fmt.Errorf("vm.run-compute: %w", err)
+						return nil, fmt.Errorf("running Vm.run-compute: %w", err)
 					}
 					return runInSubEngine(parent, code, pol)
 				},
@@ -140,7 +140,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 					}
 					pol, err := policyFromMapValue(args[1])
 					if err != nil {
-						return nil, fmt.Errorf("vm.run-with: %w", err)
+						return nil, fmt.Errorf("running Vm.run-with: %w", err)
 					}
 					return runInSubEngine(parent, code, pol)
 				},
@@ -202,12 +202,12 @@ func runInSubEngine(parent *native.Registry, src string, pol policy.Policy) ([]n
 }
 
 // policyFromMapValue converts an AQL Map value (as received in a
-// vm.run-with arg) into a policy.Policy.
+// Vm.run-with arg) into a policy.Policy.
 func policyFromMapValue(v native.Value) (policy.Policy, error) {
 	if !native.IsConcrete(v) {
 		return nil, fmt.Errorf("policy map cannot be a type literal or carrier")
 	}
-	m, err := native.RequireConcreteMap(v, "vm.run-with policy")
+	m, err := native.RequireConcreteMap(v, "Vm.run-with policy")
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +241,7 @@ func makeRunFnDef(wordName string, subReg *native.Registry) native.Value {
 // position and pass them through to the native vm-run-with.
 //
 // The body uses TAny params (rather than the underlying TString +
-// TMap signature) because the dotted-form dispatch via `vm.run-with`
+// TMap signature) because the dotted-form dispatch via `Vm.run-with`
 // matches against the FnDef's own signature, and we want the dotted
 // form to dispatch against any-typed args (the native validates
 // types itself).

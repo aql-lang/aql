@@ -58,8 +58,8 @@ func TestBehave(t *testing.T) {
 			reg.SetParseFunc(parser.Parse)
 			reg.Modules.Resolver = modules.Resolve
 			// Pre-install the aql:time module so spec rows can use
-			// `time.unix`, `time.seconds`, … without the
-			// `"aql:time" import` boilerplate on every native row.
+			// `TimeUtil.unix`, `TimeUtil.seconds`, … without the
+			// `"aql:time-util" import` boilerplate on every native row.
 			if err := modules.InstallTimeExports(reg); err != nil {
 				t.Fatalf("install time exports: %v", err)
 			}

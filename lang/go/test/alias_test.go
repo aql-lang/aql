@@ -108,36 +108,36 @@ func TestAliasMod(t *testing.T) {
 
 func TestAliasAbs(t *testing.T) {
 	runAliasTest(t, aliasCase{
-		name:      "math.abs",
-		defStep:   "def magnitude fn [[Integer] [Integer] [math.abs]]",
-		origSteps: []string{"-5 math.abs"},
+		name:      "Math.abs",
+		defStep:   "def magnitude fn [[Integer] [Integer] [Math.abs]]",
+		origSteps: []string{"-5 Math.abs"},
 		aliaSteps: []string{"-5 magnitude"},
 	})
 }
 
 func TestAliasNegate(t *testing.T) {
 	runAliasTest(t, aliasCase{
-		name:      "math.negate",
-		defStep:   "def neg fn [[Integer] [Integer] [math.negate]]",
-		origSteps: []string{"5 math.negate"},
+		name:      "Math.negate",
+		defStep:   "def neg fn [[Integer] [Integer] [Math.negate]]",
+		origSteps: []string{"5 Math.negate"},
 		aliaSteps: []string{"5 neg"},
 	})
 }
 
 func TestAliasMin(t *testing.T) {
 	runAliasTest(t, aliasCase{
-		name:      "math.min",
-		defStep:   "def smallest fn [[Integer Integer] [Integer] [math.min]]",
-		origSteps: []string{"5 3 math.min"},
+		name:      "Math.min",
+		defStep:   "def smallest fn [[Integer Integer] [Integer] [Math.min]]",
+		origSteps: []string{"5 3 Math.min"},
 		aliaSteps: []string{"5 smallest 3"},
 	})
 }
 
 func TestAliasMax(t *testing.T) {
 	runAliasTest(t, aliasCase{
-		name:      "math.max",
-		defStep:   "def largest fn [[Integer Integer] [Integer] [math.max]]",
-		origSteps: []string{"5 3 math.max"},
+		name:      "Math.max",
+		defStep:   "def largest fn [[Integer Integer] [Integer] [Math.max]]",
+		origSteps: []string{"5 3 Math.max"},
 		aliaSteps: []string{"5 largest 3"},
 	})
 }

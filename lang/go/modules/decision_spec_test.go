@@ -27,7 +27,7 @@ func TestDecisionSpec(t *testing.T) {
 	r.SetParseFunc(parser.Parse)
 	r.Modules.Resolver = Resolve
 
-	// Install decision exports as a `decision` def so `decision.eval-cond/q`
+	// Install decision exports as a `decision` def so `Decision.eval-cond/q`
 	// resolves inside the spec subjects.
 	if err := InstallDecisionExports(r); err != nil {
 		t.Fatal(err)
@@ -55,14 +55,14 @@ func TestDecisionSpec(t *testing.T) {
 	}
 
 	// Now invoke the spec runner.
-	runSrc := `spec test.run-spec`
+	runSrc := `spec Test.run-spec`
 	runTokens, _ := parser.Parse(runSrc)
 	if _, err := native.NewTop(r).Run(runTokens); err != nil {
 		t.Fatalf("run-spec: %v", err)
 	}
 
 	// Summary check.
-	summarySrc := `test.summary`
+	summarySrc := `Test.summary`
 	summaryTokens, _ := parser.Parse(summarySrc)
 	result, err := native.NewTop(r).Run(summaryTokens)
 	if err != nil {
@@ -82,7 +82,7 @@ func TestDecisionSpec(t *testing.T) {
 		for n, exp := range desc.Exports {
 			r.Defs.Push(n, native.NewMap(exp))
 		}
-		rep, _ := parser.Parse(`test.results report.table`)
+		rep, _ := parser.Parse(`Test.results Report.table`)
 		repRes, _ := native.NewTop(r).Run(rep)
 		if len(repRes) > 0 {
 			s, _ := native.AsString(repRes[0])

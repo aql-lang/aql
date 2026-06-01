@@ -1,5 +1,5 @@
 // Stage 6 of PBT-PLAN.0.md: end-to-end demos exercising the PBT
-// framework (test.check-prop + the shrink reducer) against the
+// framework (Test.check-prop + the shrink reducer) against the
 // aql:decision module. These are the proof-of-life that the whole
 // stack works together — a generator that produces random decision
 // inputs, a property that asserts an invariant, and a negative-
@@ -69,7 +69,7 @@ func resultField(t *testing.T, m native.Value, key string) native.Value {
 func TestDecisionPBT_EvalCondAlwaysReturnsBoolean(t *testing.T) {
 	r := decisionPbtRegistry(t)
 	src := `
-		test.check-prop "eval-cond-returns-boolean"
+		Test.check-prop "eval-cond-returns-boolean"
 		  [
 		    # Generator: random condition checking age against a
 		    # random threshold, paired with a random input.
@@ -86,7 +86,7 @@ func TestDecisionPBT_EvalCondAlwaysReturnsBoolean(t *testing.T) {
 		    # Sub-expressions wrapped in parens so forward-collection
 		    # doesn't bleed across the eq/or calls.
 		    def pkg (args.0)
-		    def result ((pkg "input" get) (pkg "cond" get) decision.eval-cond)
+		    def result ((pkg "input" get) (pkg "cond" get) Decision.eval-cond)
 		    (result true eq) (result false eq) or
 		  ]
 		  50 1 0
@@ -113,7 +113,7 @@ func TestDecisionPBT_EvalCondAlwaysReturnsBoolean(t *testing.T) {
 func TestDecisionPBT_GreaterThanSelfIsAlwaysFalse(t *testing.T) {
 	r := decisionPbtRegistry(t)
 	src := `
-		test.check-prop "gt-self-is-false"
+		Test.check-prop "gt-self-is-false"
 		  [
 		    def v (r.int 0 100)
 		    {
@@ -123,7 +123,7 @@ func TestDecisionPBT_GreaterThanSelfIsAlwaysFalse(t *testing.T) {
 		  ]
 		  [
 		    def pkg (args.0)
-		    def result ((pkg "input" get) (pkg "cond" get) decision.eval-cond)
+		    def result ((pkg "input" get) (pkg "cond" get) Decision.eval-cond)
 		    # invariant: V > V is false, so eval-cond should return false.
 		    result false eq
 		  ]
@@ -154,7 +154,7 @@ func TestDecisionPBT_GreaterThanSelfIsAlwaysFalse(t *testing.T) {
 func TestDecisionPBT_NegativeControl_ShrinksFailingInput(t *testing.T) {
 	r := decisionPbtRegistry(t)
 	src := `
-		test.check-prop "values-are-large"
+		Test.check-prop "values-are-large"
 		  [
 		    # Generator: random integer in [0, 100).
 		    r.int 0 100

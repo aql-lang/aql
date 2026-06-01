@@ -334,14 +334,14 @@ forms `a b sub`, `a sub b`, and `sub b a` compute `a - b`.
 Additional numeric words (`abs`, `negate`, `sign`, `min`, `max`,
 `floor`, `ceil`, `round`, `trunc`, `sqrt`, `cbrt`, `exp`, `log`,
 `log2`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`,
-`atan2`, `hypot`, constants `math.pi`, `math.e`) live in the
+`atan2`, `hypot`, constants `Math.pi`, `Math.e`) live in the
 **`aql:math`** native module. Import to use:
 
 ```
 "aql:math" import end
-math.abs -5                   => 5
-math.floor 3.7                => 3
-math.sqrt 16                  => 4.0
+Math.abs -5                   => 5
+Math.floor 3.7                => 3
+Math.sqrt 16                  => 4.0
 ```
 
 ### Strings
@@ -557,7 +557,7 @@ iota 5 each [dup mul]     => [0 1 4 9 16]
 
 These are built-in (no import needed): the constructors, basic slicing,
 and `flatten`/`size`. The specialised array vocabulary lives in the
-[`aql:array` module](#the-aqlarray-module) below.
+[`aql:array-util` module](#the-aqlarray-module) below.
 
 | Word | Description | Example |
 |------|-------------|---------|
@@ -573,12 +573,12 @@ and `flatten`/`size`. The specialised array vocabulary lives in the
 `flatten` and `indexof` are single words with several type-dispatched
 signatures (see [ADR-001](ADR.md#adr-001)): a deep flatten is `flatten
 -1`, and the list form of `indexof` is just `indexof` on two lists — there
-are deliberately no `array.flatten`/`array.indexof` words.
+are deliberately no `ArrayUtil.flatten`/`ArrayUtil.indexof` words.
 
-### The `aql:array` module
+### The `aql:array-util` module
 
 The specialised APL-style array vocabulary lives in a built-in module,
-imported with `"aql:array" import` and reached via the `array.` prefix.
+imported with `"aql:array-util" import` and reached via the `array.` prefix.
 This keeps the global namespace lean (mirroring how `aql:math` gates
 `sin`/`cos`/…). Per [ADR-001](ADR.md#adr-001) no name here shadows a core
 word, so deep flatten and list lookup are core overloads (above), not
@@ -586,30 +586,30 @@ module words. `transpose` has no core counterpart and so appears here
 under its plain name.
 
 ```
-"aql:array" import end
-iota 6 array.reshape [2,3]        => [[0 1 2] [3 4 5]]
+"aql:array-util" import end
+iota 6 ArrayUtil.reshape [2,3]        => [[0 1 2] [3 4 5]]
 ```
 
 | Word | Description | Example |
 |------|-------------|---------|
-| `array.shape` | Dimensions of a nested list | `array.shape [[1,2,3],[4,5,6]] => [2,3]` |
-| `array.rank` | Number of dimensions | `array.rank [[1,2],[3,4]] => 2` |
-| `array.reshape` | Change dimensions | `iota 6 array.reshape [2,3]` |
-| `array.transpose` | Transpose a rank-2 list | `array.transpose [[1,2],[3,4]]` |
-| `array.where` | Indices of truthy elements | `array.where [true,false,true] => [0,2]` |
-| `array.grade` | Indices that would sort | `array.grade [3,1,2] => [1,2,0]` |
-| `array.at` | Select by index list | `[10,20,30] array.at [2,0] => [30,10]` |
-| `array.sortby` | Sort by parallel key list | `["b","a","c"] array.sortby [2,1,3]` |
-| `array.replicate` | Repeat each element N times | `[1,2,3] array.replicate [2,1,3]` |
-| `array.expand` | Expand by Boolean mask | `[1,2,3] array.expand [true,false,true]` |
-| `array.compress` | Select elements where a mask is true | `array.compress [true,false,true] [10,20,30] => [10,30]` |
-| `array.eachrank` | Apply a body at a given cell rank (0 = scalars, 1 = innermost lists, …) | `array.eachrank 1 [each [add 10]] [[1,2],[3,4]] => [[11,12],[13,14]]` |
-| `array.foldaxis` | Reduce a rank-2 list along an axis (0 = columns, 1 = rows) | `array.foldaxis 0 [add] [[1,2],[3,4]] => [4,6]` |
-| `array.member` | Per-element membership test | `[1,2,3] array.member [2,3,4] => [true,true,false]` |
-| `array.unique` | Remove duplicates | `array.unique [1,2,2,3] => [1,2,3]` |
-| `array.group` | Group values by parallel keys (or indices by value) | `array.group ["a","b","a"] [1,2,3]` |
-| `array.window` | Sliding window of size N | `[1,2,3,4] array.window 2` |
-| `array.pairs` | Adjacent pairs | `array.pairs [1,2,3] => [[1,2],[2,3]]` |
+| `ArrayUtil.shape` | Dimensions of a nested list | `ArrayUtil.shape [[1,2,3],[4,5,6]] => [2,3]` |
+| `ArrayUtil.rank` | Number of dimensions | `ArrayUtil.rank [[1,2],[3,4]] => 2` |
+| `ArrayUtil.reshape` | Change dimensions | `iota 6 ArrayUtil.reshape [2,3]` |
+| `ArrayUtil.transpose` | Transpose a rank-2 list | `ArrayUtil.transpose [[1,2],[3,4]]` |
+| `ArrayUtil.where` | Indices of truthy elements | `ArrayUtil.where [true,false,true] => [0,2]` |
+| `ArrayUtil.grade` | Indices that would sort | `ArrayUtil.grade [3,1,2] => [1,2,0]` |
+| `ArrayUtil.at` | Select by index list | `[10,20,30] ArrayUtil.at [2,0] => [30,10]` |
+| `ArrayUtil.sortby` | Sort by parallel key list | `["b","a","c"] ArrayUtil.sortby [2,1,3]` |
+| `ArrayUtil.replicate` | Repeat each element N times | `[1,2,3] ArrayUtil.replicate [2,1,3]` |
+| `ArrayUtil.expand` | Expand by Boolean mask | `[1,2,3] ArrayUtil.expand [true,false,true]` |
+| `ArrayUtil.compress` | Select elements where a mask is true | `ArrayUtil.compress [true,false,true] [10,20,30] => [10,30]` |
+| `ArrayUtil.eachrank` | Apply a body at a given cell rank (0 = scalars, 1 = innermost lists, …) | `ArrayUtil.eachrank 1 [each [add 10]] [[1,2],[3,4]] => [[11,12],[13,14]]` |
+| `ArrayUtil.foldaxis` | Reduce a rank-2 list along an axis (0 = columns, 1 = rows) | `ArrayUtil.foldaxis 0 [add] [[1,2],[3,4]] => [4,6]` |
+| `ArrayUtil.member` | Per-element membership test | `[1,2,3] ArrayUtil.member [2,3,4] => [true,true,false]` |
+| `ArrayUtil.unique` | Remove duplicates | `ArrayUtil.unique [1,2,2,3] => [1,2,3]` |
+| `ArrayUtil.group` | Group values by parallel keys (or indices by value) | `ArrayUtil.group ["a","b","a"] [1,2,3]` |
+| `ArrayUtil.window` | Sliding window of size N | `[1,2,3,4] ArrayUtil.window 2` |
+| `ArrayUtil.pairs` | Adjacent pairs | `ArrayUtil.pairs [1,2,3] => [[1,2],[2,3]]` |
 
 ### Higher-order array words
 
@@ -791,7 +791,7 @@ Requires the `sqlite` capability.
 import utils [def f [dup add]]
 utils.f 3                     => 6
 
-import aql:time
+import aql:time-util
 
 import [helper as h] "lib/utils.aql"
 ```
@@ -848,8 +848,8 @@ Built-in modules ship with the binary but are not auto-loaded —
 | Module | What's inside |
 |--------|---------------|
 | `aql:math` | Extended numerics: complex math, statistics, special functions. |
-| `aql:time` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`. |
-| `aql:matrix` | Tensor / Matrix / Vector types and linear algebra. |
+| `aql:time-util` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`. |
+| `aql:matrix-util` | Tensor / Matrix / Vector types and linear algebra. |
 | `aql:decision` | Decision tables (rules engine). |
 | `aql:solardemo` | Example host module backing the API tests. |
 

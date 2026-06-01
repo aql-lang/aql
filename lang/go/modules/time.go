@@ -7,7 +7,7 @@ import (
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
-// BuildTimeModule creates the "aql:time" native module.
+// BuildTimeModule creates the "aql:time-util" native module.
 func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	subReg, err := native.DefaultRegistry()
 	if err != nil {
@@ -126,7 +126,7 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modID := parent.Modules.NextID()
 	desc := native.ModuleDesc{
 		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"time": exports},
+		Exports: map[string]*native.OrderedMap{"TimeUtil": exports},
 	}
 	return desc, nil
 }

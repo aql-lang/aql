@@ -299,9 +299,9 @@ func TestFnArgCleanup_PrintThenReturn(t *testing.T) {
 // --- Multiple unnamed args, body uses some ---
 
 func TestFnArgCleanup_ThreeArgs_BodyUsesOne(t *testing.T) {
-	// 3 unnamed args, body only uses top one (math.negate), other 2 discarded.
+	// 3 unnamed args, body only uses top one (Math.negate), other 2 discarded.
 	result, err := runSteps(t, []string{
-		`def f fn [[Atom Atom Integer] [Integer] [math.negate]]`,
+		`def f fn [[Atom Atom Integer] [Integer] [Math.negate]]`,
 		`f (quote x) (quote y) 5`,
 	})
 	if err != nil {

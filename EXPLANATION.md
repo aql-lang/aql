@@ -452,7 +452,7 @@ dot is just field access on the module's exported map.
 
 File imports load source from disk; renaming on import (`import
 [helper as h] "..."`) prevents collisions; built-in modules
-(`aql:math`, `aql:time`, `aql:matrix`, `aql:decision`) are
+(`aql:math`, `aql:time-util`, `aql:matrix-util`, `aql:decision`) are
 host-provided and follow the same surface.
 
 There is no global namespace flattening: every imported binding
@@ -475,7 +475,7 @@ the type-constructor turned into data — `Object`, `Record`, `Table`,
 The practical consequence: a host program can register a *new*
 type-kind (e.g. `Graph`, `Tensor`, `Stream`) at runtime, and
 the kernel routes `refine`, `make`, `is`, and unification through
-it the same way it does for the built-ins. The `aql:matrix`
+it the same way it does for the built-ins. The `aql:matrix-util`
 module does exactly this for `Matrix` and `Vector`.
 
 You usually don't write Ideals — you use them via `refine`

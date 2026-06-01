@@ -156,19 +156,19 @@ constants, import the `aql:math` module — words register under the
 
 ```
 aql> "aql:math" import end
-aql> math.abs -5        => 5
-aql> math.min 3 5       => 3
-aql> math.max 3 5       => 5
-aql> math.floor 3.7     => 3
-aql> math.ceil 3.2      => 4
-aql> math.round 3.5     => 4
-aql> math.trunc 3.9     => 3
-aql> math.sqrt 16       => 4.0
-aql> math.log 2.718281828   => 1.0
-aql> math.sin 0         => 0.0
-aql> math.hypot 3 4     => 5.0
-aql> math.pi            => 3.141592653589793
-aql> math.e             => 2.718281828459045
+aql> Math.abs -5        => 5
+aql> Math.min 3 5       => 3
+aql> Math.max 3 5       => 5
+aql> Math.floor 3.7     => 3
+aql> Math.ceil 3.2      => 4
+aql> Math.round 3.5     => 4
+aql> Math.trunc 3.9     => 3
+aql> Math.sqrt 16       => 4.0
+aql> Math.log 2.718281828   => 1.0
+aql> Math.sin 0         => 0.0
+aql> Math.hypot 3 4     => 5.0
+aql> Math.pi            => 3.141592653589793
+aql> Math.e             => 2.718281828459045
 ```
 
 
@@ -387,14 +387,14 @@ aql> range 2 6                       => [2 3 4 5]
 aql> [1, 2, 3] reverse                => [3 2 1]
 ```
 
-Reshaping, ordering, and grouping live in the `aql:array` module
+Reshaping, ordering, and grouping live in the `aql:array-util` module
 (reached via the `array.` prefix after importing):
 
 ```
-aql> "aql:array" import end
-aql> iota 6 array.reshape [2, 3]     => [[0 1 2] [3 4 5]]
-aql> [1, 2, 2, 3] array.unique       => [1 2 3]
-aql> [3, 1, 2] array.grade           => [1 2 0]
+aql> "aql:array-util" import end
+aql> iota 6 ArrayUtil.reshape [2, 3]     => [[0 1 2] [3 4 5]]
+aql> [1, 2, 2, 3] ArrayUtil.unique       => [1 2 3]
+aql> [3, 1, 2] ArrayUtil.grade           => [1 2 0]
 ```
 
 `outer` and `inner` are APL-style array combinators (built-in):
@@ -471,7 +471,7 @@ rule):
 
 ```
 aql> "aql:math" import end
-aql> 3 4 var [[a b] (a mul a) add (b mul b) math.sqrt]   => 5.0
+aql> 3 4 var [[a b] (a mul a) add (b mul b) Math.sqrt]   => 5.0
 ```
 
 The first element of the list is the binding list. The remaining
@@ -607,13 +607,13 @@ Import from a file (path must start with `./`, `../`, or `/`):
 aql> "./lib/utils.aql" import
 ```
 
-Built-in native modules: `aql:math`, `aql:time`, `aql:matrix`,
+Built-in native modules: `aql:math`, `aql:time-util`, `aql:matrix-util`,
 `aql:decision`. Import them as quoted strings; the words register
 under a namespace prefix (e.g. `math.`, `time.`):
 
 ```
 aql> "aql:math" import end
-aql> 5 math.log                      => 1.6094379124341003
+aql> 5 Math.log                      => 1.6094379124341003
 ```
 
 The trailing `end` stops `import`'s forward collection from

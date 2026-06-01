@@ -26,7 +26,7 @@ import (
 //
 // Mixed-type pairs that CompareValues can't order fall back to
 // lexical comparison of their canonical Value.String forms, matching
-// the existing `array.sort` semantics — sort stays total even when
+// the existing `ArrayUtil.sort` semantics — sort stays total even when
 // the lattice walk doesn't find a Comparer for the pair.
 var sortNative = NativeFunc{
 	Name: "sort",

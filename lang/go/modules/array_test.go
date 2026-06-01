@@ -56,7 +56,7 @@ func TestArrayModuleExports(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	arrExport, ok := desc.Exports["array"]
+	arrExport, ok := desc.Exports["ArrayUtil"]
 	if !ok {
 		t.Fatal("expected 'array' export")
 	}
@@ -88,27 +88,27 @@ func TestArrayModuleWords(t *testing.T) {
 	r := arrayRegistry(t)
 	cases := []struct{ src, want string }{
 		// shape / structure
-		{`array.shape [[1,2,3],[4,5,6]]`, "[2 3]"},
-		{`array.rank [[1,2],[3,4]]`, "2"},
-		{`iota 6 array.reshape [2,3]`, "[[0 1 2] [3 4 5]]"},
-		{`array.transpose [[1,2,3],[4,5,6]]`, "[[1 4] [2 5] [3 6]]"},
+		{`ArrayUtil.shape [[1,2,3],[4,5,6]]`, "[2 3]"},
+		{`ArrayUtil.rank [[1,2],[3,4]]`, "2"},
+		{`iota 6 ArrayUtil.reshape [2,3]`, "[[0 1 2] [3 4 5]]"},
+		{`ArrayUtil.transpose [[1,2,3],[4,5,6]]`, "[[1 4] [2 5] [3 6]]"},
 		// selection / ordering
-		{`array.where [true,false,true,true]`, "[0 2 3]"},
-		{`array.grade [3,1,2]`, "[1 2 0]"},
-		{`[10,20,30] array.at [2,0]`, "[30 10]"},
-		{`[1,2,3] array.replicate [2,0,1]`, "[1 1 3]"},
-		{`array.compress [true,false,true] [10,20,30]`, "[10 30]"},
+		{`ArrayUtil.where [true,false,true,true]`, "[0 2 3]"},
+		{`ArrayUtil.grade [3,1,2]`, "[1 2 0]"},
+		{`[10,20,30] ArrayUtil.at [2,0]`, "[30 10]"},
+		{`[1,2,3] ArrayUtil.replicate [2,0,1]`, "[1 1 3]"},
+		{`ArrayUtil.compress [true,false,true] [10,20,30]`, "[10 30]"},
 		// rank polymorphism (quoted code body threads through the wrapper)
-		{`array.eachrank 1 [each [add 10]] [[1,2],[3,4]]`, "[[11 12] [13 14]]"},
-		{`array.eachrank 0 [mul 2] [[1,2],[3,4]]`, "[[2 4] [6 8]]"},
-		{`array.foldaxis 0 [add] [[1,2],[3,4]]`, "[4 6]"},
-		{`array.foldaxis 1 [add] [[1,2],[3,4]]`, "[3 7]"},
+		{`ArrayUtil.eachrank 1 [each [add 10]] [[1,2],[3,4]]`, "[[11 12] [13 14]]"},
+		{`ArrayUtil.eachrank 0 [mul 2] [[1,2],[3,4]]`, "[[2 4] [6 8]]"},
+		{`ArrayUtil.foldaxis 0 [add] [[1,2],[3,4]]`, "[4 6]"},
+		{`ArrayUtil.foldaxis 1 [add] [[1,2],[3,4]]`, "[3 7]"},
 		// membership / grouping
-		{`[1,2,3] array.member [2,3,4]`, "[true true false]"},
-		{`[1,2,2,3] array.unique`, "[1 2 3]"},
+		{`[1,2,3] ArrayUtil.member [2,3,4]`, "[true true false]"},
+		{`[1,2,2,3] ArrayUtil.unique`, "[1 2 3]"},
 		// neighborhoods
-		{`[1,2,3,4] array.window 2`, "[[1 2] [2 3] [3 4]]"},
-		{`array.pairs [1,2,3]`, "[[1 2] [2 3]]"},
+		{`[1,2,3,4] ArrayUtil.window 2`, "[[1 2] [2 3] [3 4]]"},
+		{`ArrayUtil.pairs [1,2,3]`, "[[1 2] [2 3]]"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.src, func(t *testing.T) {
@@ -123,10 +123,10 @@ func TestArrayEachrankCellRank(t *testing.T) {
 	r := arrayRegistry(t)
 	data := `[[[1,2],[3,4]],[[5,6],[7,8]]]` // rank 3
 	// rank 2: body sees each rank-2 matrix; reverse flips its rows.
-	assertArrayResult(t, r, `array.eachrank 2 [reverse] `+data,
+	assertArrayResult(t, r, `ArrayUtil.eachrank 2 [reverse] `+data,
 		`[[[3 4] [1 2]] [[7 8] [5 6]]]`)
 	// rank 1: body sees each innermost row; reverse flips its elements.
-	assertArrayResult(t, r, `array.eachrank 1 [reverse] `+data,
+	assertArrayResult(t, r, `ArrayUtil.eachrank 1 [reverse] `+data,
 		`[[[2 1] [4 3]] [[6 5] [8 7]]]`)
 }
 
@@ -134,9 +134,9 @@ func TestArrayEachrankCellRank(t *testing.T) {
 func TestArrayRankPolyErrors(t *testing.T) {
 	r := arrayRegistry(t)
 	for _, src := range []string{
-		`array.eachrank 5 [reverse] [[1,2]]`,   // rank exceeds data rank
-		`array.foldaxis 2 [add] [[1,2],[3,4]]`, // axis must be 0 or 1
-		`array.foldaxis 0 [add] [[1,2],[3]]`,   // not rectangular
+		`ArrayUtil.eachrank 5 [reverse] [[1,2]]`,   // rank exceeds data rank
+		`ArrayUtil.foldaxis 2 [add] [[1,2],[3,4]]`, // axis must be 0 or 1
+		`ArrayUtil.foldaxis 0 [add] [[1,2],[3]]`,   // not rectangular
 	} {
 		if _, err := runArraySrc(t, r, src); err == nil {
 			t.Errorf("%q: expected error, got none", src)
@@ -147,7 +147,7 @@ func TestArrayRankPolyErrors(t *testing.T) {
 // compress length mismatch is an error.
 func TestArrayCompressMismatch(t *testing.T) {
 	r := arrayRegistry(t)
-	if _, err := runArraySrc(t, r, `array.compress [true,false] [1,2,3]`); err == nil {
+	if _, err := runArraySrc(t, r, `ArrayUtil.compress [true,false] [1,2,3]`); err == nil {
 		t.Errorf("compress with mismatched lengths should error")
 	}
 }
@@ -156,13 +156,13 @@ func TestArrayCompressMismatch(t *testing.T) {
 func TestArrayModuleGroupBothSigs(t *testing.T) {
 	r := arrayRegistry(t)
 	// 1-arg: group equal values by their index.
-	assertArrayResult(t, r, `array.group ["a","b","a"]`, `{'a':[0 2] 'b':[1]}`)
+	assertArrayResult(t, r, `ArrayUtil.group ["a","b","a"]`, `{'a':[0 2] 'b':[1]}`)
 	// 2-arg (forward form, keys then values): group values by parallel keys.
-	assertArrayResult(t, r, `array.group ["a","b","a"] [1,2,3]`, `{'a':[1 3] 'b':[2]}`)
+	assertArrayResult(t, r, `ArrayUtil.group ["a","b","a"] [1,2,3]`, `{'a':[1 3] 'b':[2]}`)
 }
 
 // ADR-001 replacements: deep flatten and list indexof are core words,
-// reached without importing aql:array. (That array.flatten / array.indexof
+// reached without importing aql:array. (That ArrayUtil.flatten / ArrayUtil.indexof
 // are not exports is pinned in TestArrayModuleExports.)
 func TestFlattenAndIndexofAreCore(t *testing.T) {
 	r, err := native.DefaultRegistry()

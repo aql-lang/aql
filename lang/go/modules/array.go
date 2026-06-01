@@ -4,12 +4,12 @@ import (
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
-// BuildArrayModule creates the "aql:array" native module. It registers the
+// BuildArrayModule creates the "aql:array-util" native module. It registers the
 // Go-implemented array words into an isolated sub-registry and returns a
 // ModuleDesc with an "array" export containing FnDef wrappers for each word.
 //
-// After import, words are accessed via dot notation: array.shape,
-// array.reshape, array.where, etc.
+// After import, words are accessed via dot notation: ArrayUtil.shape,
+// ArrayUtil.reshape, ArrayUtil.where, etc.
 //
 // The everyday array words remain built-in and do NOT require this module:
 // the constructors iota/range, the basic slicing words take/shed/reverse,
@@ -43,7 +43,7 @@ func BuildArrayModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modID := parent.Modules.NextID()
 	desc := native.ModuleDesc{
 		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"array": exports},
+		Exports: map[string]*native.OrderedMap{"ArrayUtil": exports},
 	}
 	return desc, nil
 }
