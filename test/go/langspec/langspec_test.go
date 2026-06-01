@@ -21,6 +21,7 @@ import (
 
 	"github.com/aql-lang/aql/eng/go"
 	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/aql-lang/aql/lang/go/modules"
 	"github.com/aql-lang/aql/lang/go/native"
 	"github.com/aql-lang/aql/test/go/specrunner"
 )
@@ -46,6 +47,11 @@ func TestSpecProd(t *testing.T) {
 		// originally written for engspec (object, record, inspect, …)
 		// can run under the production setup too.
 		specrunner.RegisterQFixtures(reg)
+		// Install the loadable-module resolver so specs can `import
+		// "aql:math"` etc. — matching what lang.New() wires up in
+		// production. Without this the module words are unreachable and
+		// the formal spec could not cover them.
+		modules.InstallResolver(reg)
 		return native.NewTop(reg).Run(values)
 	})
 }
