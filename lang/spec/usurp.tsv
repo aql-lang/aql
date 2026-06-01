@@ -2,9 +2,20 @@
 # Format: input<TAB>expected<TAB>description
 #
 # usurp f         → wrap a function so its signature arg order is reversed
+# usurp (ref f)   → same, passing the function VALUE explicitly
 # name/u          → same, as a word-suffix modifier (resolves + usurps name)
 # name/ur         → usurp combined with ref: leave the wrapper as inert data
 # quote (usurp f) → capture the usurped wrapper as inert data
+#
+# `usurp` has two overloads:
+#   - [Function]  `usurp (ref f)` / `usurp (f/r)` — pass a function value.
+#   - [Atom] (/q) `usurp f`       — capture the word as a name and resolve
+#                                   it to its bound function (the function-
+#                                   form companion of the `/u` suffix).
+# When the next token is a Word the by-name [Atom] sig is preferred; a
+# parenthesised Function value takes the [Function] sig. The by-name form
+# shares `ref`'s rules: an unbound name → undefined_word, a non-fn binding
+# → illegal_ref.
 #
 # A usurped fn called `usurped a b c` dispatches the original as `f c b a`.
 # Like ref/`/r`, the wrapper is an unquoted Function value: it dispatches
@@ -23,7 +34,18 @@ def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def ops {rev: (usurp (ref
 def inc fn [[n:Integer][Integer][n add 1]]  quote (usurp (ref inc))	fn inc[[n:Integer][Integer][]]	quoted usurp is inert data — the Function value itself
 nope/u	ERROR:undefined_word	/u on an unbound name
 def x 5  x/u	ERROR:illegal_ref	/u on a non-fn binding is rejected
-def x 5  usurp x	ERROR:signature_error	usurp word rejects a non-function value (Function slot unmatched)
+#
+# ─── by-name form: `usurp f` resolves the word to its bound function ───
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp sub2 10 3	-7	usurp by name: capture + resolve + reverse
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp sub2	fn sub2[[b:Integer a:Integer][Integer][]]	by-name with no args holds the reversed wrapper
+def cat3 fn [[a:String b:String c:String][String][a add b add c]]  usurp cat3 'x' 'y' 'z'	'zyx'	by-name reverses all three args
+if true [99] [88]	99	baseline if: if cond then else
+usurp if [88] [99] true	99	by-name usurp of `if` — cond-first (else then cond)
+def f ([a:Integer b:Integer] => [a sub b])  usurp f 10 3	-7	by-name usurp of a bound anonymous fn
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def ops {rev: (usurp sub2)}  ops.rev 10 3	-7	by-name wrapper captured in a map dispatches
+usurp nope	ERROR:undefined_word	by-name usurp of an unbound name
+def x 5  usurp x	ERROR:illegal_ref	by-name usurp of a non-fn binding (shares ref's rule)
+usurp 5	ERROR:signature_error	usurp of a non-word literal matches neither overload
 #
 # ─── /ur : usurp combined with ref — leave the reversed wrapper INERT ───
 # /ur (and the equivalent /ru) build the reversed-arg wrapper but, like
@@ -45,13 +67,12 @@ if/u [88] [99] true	99	if/u reverses: if/u else then cond — true → then (99)
 if/u [99] [88] false	99	false → else (99) under reversed order
 usurp (ref if) [88] [99] true	99	inline usurp+ref of if, reversed order, cond last
 #
-# ─── usurp must receive a function VALUE — group ref/r, don't pass bare ───
-# `usurp` is forward-eligible on a Function slot, so its argument must
-# already BE a Function value when collected. A bare `f/r` ref-word token
-# is not yet resolved at collection time — group it in parens.
+# ─── value forms: a grouped reference is taken by the [Function] sig ───
+# `usurp (ref f)` and `usurp (f/r)` pass a function VALUE. A *bare* `f/r`
+# ref-word token, however, is not resolved as a forward arg — group it in
+# parens, or just use the by-name form `usurp f`.
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp (sub2/r) 10 3	-7	usurp of a grouped /r reference works
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp sub2/r 10 3	ERROR:signature_error	bare `usurp f/r` — the ref-word isn't resolved as a forward arg; group it
-def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp sub2	ERROR:signature_error	bare `usurp f` — usurp takes a Function value, not a word name
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp sub2/r 10 3	ERROR:signature_error	bare `usurp f/r` — group it as usurp (f/r), or use by-name `usurp f`
 #
 # ─── KNOWN LIMITATION: a usurp wrapper bound by name and then called as
 #     a word currently fails the fn return check (0 values). Use the

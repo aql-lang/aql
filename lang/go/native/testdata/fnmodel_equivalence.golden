@@ -468,6 +468,7 @@ WORD upper
   [Scalar/Atom] barrier=1 returns=[Scalar/String]
 WORD usurp
   [Type/Function] barrier=1 runcheck returns=[Type/Function]
+  [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Type/Function]
 WORD validate
   [Node/Map Any] barrier=2
 WORD var

@@ -283,3 +283,103 @@ func TestUsurpCheckModeUndefined(t *testing.T) {
 		t.Errorf("nope/u should produce a diagnostic in check mode")
 	}
 }
+
+// TestUsurpByNameReversesArgs checks the [Atom] overload: `usurp f`
+// captures the bare word, resolves it to its bound function, and returns
+// the argument-reversed wrapper — equivalent to `usurp (ref f)` and to
+// the `f/u` suffix, without needing a paren-grouped value.
+func TestUsurpByNameReversesArgs(t *testing.T) {
+	res, err := runNativeSteps(t, nil, []string{
+		`def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`,
+		`usurp sub2 10 3`,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got := lastInt(t, res); got != -7 {
+		t.Errorf("usurp sub2 10 3 = %d, want -7", got)
+	}
+}
+
+// TestUsurpByNameMatchesValueForm pins that the by-name and by-value
+// overloads agree across arities and dispatch positions.
+func TestUsurpByNameMatchesValueForm(t *testing.T) {
+	cases := []struct {
+		name    string
+		def     string
+		byName  string
+		byValue string
+		wantInt int64
+		isStr   bool
+		wantStr string
+	}{
+		{"2-arg", `def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`,
+			`usurp sub2 10 3`, `usurp (ref sub2) 10 3`, -7, false, ""},
+		{"3-arg str", `def cat3 fn [[a:String b:String c:String] [String] [a add b add c]]`,
+			`usurp cat3 'x' 'y' 'z'`, `usurp (ref cat3) 'x' 'y' 'z'`, 0, true, "zyx"},
+		{"1-arg noop", `def inc fn [[n:Integer] [Integer] [n add 1]]`,
+			`usurp inc 5`, `usurp (ref inc) 5`, 6, false, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rn, err := runNativeSteps(t, nil, []string{c.def, c.byName})
+			if err != nil {
+				t.Fatalf("by-name run: %v", err)
+			}
+			rv, err := runNativeSteps(t, nil, []string{c.def, c.byValue})
+			if err != nil {
+				t.Fatalf("by-value run: %v", err)
+			}
+			if c.isStr {
+				if g1, g2 := lastString(t, rn), lastString(t, rv); g1 != c.wantStr || g2 != c.wantStr {
+					t.Errorf("by-name=%q by-value=%q, want %q", g1, g2, c.wantStr)
+				}
+			} else {
+				if g1, g2 := lastInt(t, rn), lastInt(t, rv); g1 != c.wantInt || g2 != c.wantInt {
+					t.Errorf("by-name=%d by-value=%d, want %d", g1, g2, c.wantInt)
+				}
+			}
+		})
+	}
+}
+
+// TestUsurpByNameHeldWrapper checks `usurp f` with no trailing args holds
+// the reversed wrapper as an inert Function value (no auto-fire), just
+// like the by-value form.
+func TestUsurpByNameHeldWrapper(t *testing.T) {
+	res, err := runNativeSteps(t, nil, []string{
+		`def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`,
+		`usurp sub2`,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(res) != 1 || !res[len(res)-1].Parent.Equal(eng.TFunction) {
+		t.Errorf("usurp sub2 = %v, want a single held Function value", res)
+	}
+}
+
+// TestUsurpByNameNonFnRejected checks the by-name overload shares ref's
+// rule: a non-function binding raises illegal_ref (matching `/u`), not a
+// bare signature_error.
+func TestUsurpByNameNonFnRejected(t *testing.T) {
+	_, err := runNativeSteps(t, nil, []string{`def x 5`, `usurp x`})
+	if err == nil {
+		t.Fatalf("usurp x (x=5) should error")
+	}
+	if ae, ok := err.(*eng.AqlError); !ok || ae.Code != "illegal_ref" {
+		t.Errorf("usurp x error = %v, want illegal_ref", err)
+	}
+}
+
+// TestUsurpByNameUnboundRejected checks an unbound name raises
+// undefined_word (matching ref/`/u`).
+func TestUsurpByNameUnboundRejected(t *testing.T) {
+	_, err := runNativeSteps(t, nil, []string{`usurp nope`})
+	if err == nil {
+		t.Fatalf("usurp nope should error")
+	}
+	if ae, ok := err.(*eng.AqlError); !ok || ae.Code != "undefined_word" {
+		t.Errorf("usurp nope error = %v, want undefined_word", err)
+	}
+}
