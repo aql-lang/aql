@@ -40,6 +40,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	}
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
+	modReg.BaseFile = parent.BaseFile
 	// CheckMode is deliberately NOT propagated to the module sub-
 	// registry. Module bodies need concrete string literals (used as
 	// export names / map keys) which carrier-stripping under CheckMode
@@ -271,10 +272,11 @@ func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 	// Temporarily set parent BaseDir so the child module inherits the
 	// loaded file's directory (RunModuleBody copies BaseDir).
 	modDir := filepath.Dir(resolved)
-	saved := parent.BaseDir
+	savedDir, savedFile := parent.BaseDir, parent.BaseFile
 	parent.BaseDir = modDir
+	parent.BaseFile = resolved
 	desc, err := RunModuleBody(parent, parsed)
-	parent.BaseDir = saved
+	parent.BaseDir, parent.BaseFile = savedDir, savedFile
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("import: %s: %w", resolved, err)
 	}

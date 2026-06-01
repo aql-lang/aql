@@ -1,4 +1,8 @@
 === SIGNATURE TABLE ===
+WORD __file
+  [] barrier=0 returns=[Scalar/String]
+WORD __folder
+  [] barrier=0 returns=[Scalar/Path]
 WORD __pa
   [] barrier=0
 WORD add
