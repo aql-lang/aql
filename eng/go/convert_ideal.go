@@ -1,6 +1,10 @@
 package eng
 
-import "errors"
+import (
+	"errors"
+	"sort"
+	"strconv"
+)
 
 // ErrNoConverter lets a Behavior decline the IdealConverter capability so
 // the parent-chain walk continues — mirrors ErrNoComparer. A wrapper
@@ -73,4 +77,146 @@ func init() {
 	// (incl. TIdeal) are initialised before init() runs — see the
 	// compare_scalar_behaviors.go init for the same ordering rationale.
 	TIdeal.Behavior = idealConvertBehavior{}
+}
+
+// ---- concrete converters for the built-in Ideal kinds ----
+//
+// Each behavior adds the IdealConverter capability to a kernel Ideal
+// without changing its rendering: Format delegates to kernelFormatDefault
+// (Value.String calls that Format, so
+// error(…)/array/etc. output is unchanged). Match/Equal stay default.
+
+// objectConvertBehavior: an Object instance → its fields (own + inherited).
+type objectConvertBehavior struct{}
+
+func (objectConvertBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
+func (objectConvertBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
+func (objectConvertBehavior) Format(v Value) string       { return kernelFormatDefault(v) }
+func (objectConvertBehavior) ToMap(v Value) (Value, error) {
+	oi, err := AsObjectInstance(v)
+	if err != nil {
+		return NewMap(NewOrderedMap()), nil
+	}
+	return NewMap(objectFieldMap(&oi)), nil
+}
+func (objectConvertBehavior) ToList(v Value) (Value, error) {
+	oi, err := AsObjectInstance(v)
+	if err != nil {
+		return NewList(nil), nil
+	}
+	return NewList(orderedMapValues(objectFieldMap(&oi))), nil
+}
+
+// objectFieldMap flattens an object's prototype chain (base first) then
+// its own fields into a fresh OrderedMap.
+func objectFieldMap(oi *ObjectInstanceInfo) *OrderedMap {
+	out := NewOrderedMap()
+	var fill func(o *ObjectInstanceInfo)
+	fill = func(o *ObjectInstanceInfo) {
+		if o == nil {
+			return
+		}
+		fill(o.Prototype)
+		if o.Fields != nil {
+			for _, k := range o.Fields.Keys() {
+				val, _ := o.Fields.Get(k)
+				out.Set(k, val)
+			}
+		}
+	}
+	fill(oi)
+	return out
+}
+
+func orderedMapValues(m *OrderedMap) []Value {
+	out := make([]Value, 0, m.Len())
+	for _, k := range m.Keys() {
+		v, _ := m.Get(k)
+		out = append(out, v)
+	}
+	return out
+}
+
+// arrayConvertBehavior: an Array instance → its elements (List); ToMap is
+// an index→element map.
+type arrayConvertBehavior struct{}
+
+func (arrayConvertBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
+func (arrayConvertBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
+func (arrayConvertBehavior) Format(v Value) string       { return kernelFormatDefault(v) }
+func (arrayConvertBehavior) ToList(v Value) (Value, error) {
+	ai, err := AsArray(v)
+	if err != nil || ai == nil {
+		return NewList(nil), nil
+	}
+	return NewList(append([]Value(nil), ai.Elems...)), nil
+}
+func (arrayConvertBehavior) ToMap(v Value) (Value, error) {
+	ai, err := AsArray(v)
+	if err != nil || ai == nil {
+		return NewMap(NewOrderedMap()), nil
+	}
+	m := NewOrderedMap()
+	for i, e := range ai.Elems {
+		m.Set(strconv.Itoa(i), e)
+	}
+	return NewMap(m), nil
+}
+
+// storeConvertBehavior: a Store → its own key/value entries (sorted keys
+// for determinism); ToList is the values in that order.
+type storeConvertBehavior struct{}
+
+func (storeConvertBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
+func (storeConvertBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
+func (storeConvertBehavior) Format(v Value) string       { return kernelFormatDefault(v) }
+func (storeConvertBehavior) ToMap(v Value) (Value, error) {
+	return NewMap(storeEntryMap(v)), nil
+}
+func (storeConvertBehavior) ToList(v Value) (Value, error) {
+	return NewList(orderedMapValues(storeEntryMap(v))), nil
+}
+
+func storeEntryMap(v Value) *OrderedMap {
+	out := NewOrderedMap()
+	si, err := AsStore(v)
+	if err != nil || si == nil {
+		return out
+	}
+	keys := make([]string, 0, len(si.Data))
+	for k := range si.Data {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		out.Set(k, si.Data[k])
+	}
+	return out
+}
+
+// errorConvertBehavior: an Error → {message:…}; ToList is [message].
+type errorConvertBehavior struct{}
+
+func (errorConvertBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
+func (errorConvertBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
+func (errorConvertBehavior) Format(v Value) string       { return kernelFormatDefault(v) }
+func (errorConvertBehavior) ToMap(v Value) (Value, error) {
+	m := NewOrderedMap()
+	if ei, err := AsError(v); err == nil {
+		m.Set("message", NewString(ei.Message))
+	}
+	return NewMap(m), nil
+}
+func (errorConvertBehavior) ToList(v Value) (Value, error) {
+	if ei, err := AsError(v); err == nil {
+		return NewList([]Value{NewString(ei.Message)}), nil
+	}
+	return NewList(nil), nil
+}
+
+func init() {
+	TObject.Behavior = objectConvertBehavior{}
+	TArray.Behavior = arrayConvertBehavior{}
+	TStore.Behavior = storeConvertBehavior{}
+	TError.Behavior = errorConvertBehavior{}
 }

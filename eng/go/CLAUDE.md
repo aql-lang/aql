@@ -293,7 +293,12 @@ List <v>` words. Dispatch walks the value's Parent chain for the
 nearest implementation (like the `Comparer` walk); the base `Ideal`
 behavior is the terminal fallback returning `{}` / `[]`, so every
 Ideal — built-in or user-defined, in Go or AQL — is convertible.
-Return `ErrNoConverter` to decline and keep walking.
+Return `ErrNoConverter` to decline and keep walking. Concrete
+projections are installed for Object (→ fields), Array (→ elements /
+index map), Store (→ entries), Error (→ {message}), and (in
+lang/native) ModuleExport (→ exports) and Module (→ descriptor);
+each is a behavior whose `Format` delegates to `kernelFormatDefault`
+so rendering is unchanged.
 
 ## Where a Type Lives (kernel/domain boundary)
 

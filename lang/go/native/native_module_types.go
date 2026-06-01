@@ -234,3 +234,56 @@ func getrModuleInstHandler(args []Value, _ map[string]Value, _ []Value, r *Regis
 // (what `module […]` produces and `import` consumes). Exported for hosts
 // and integration tests; ok=false for non-Module values.
 func AsModuleDesc(v Value) (ModuleDesc, bool) { return asModuleDesc(v) }
+
+// ToMap / ToList implement eng.IdealConverter for Module / ModuleExport.
+// A ModuleExport projects to its exported fields; a Module projects to its
+// descriptor (id/kind/file/folder/exports).
+func (moduleTypeBehavior) ToMap(v Value) (Value, error) {
+	if me, ok := asModuleExportInfo(v); ok {
+		out := NewOrderedMap()
+		if me.Fields != nil {
+			for _, k := range me.Fields.Keys() {
+				val, _ := me.Fields.Get(k)
+				out.Set(k, val)
+			}
+		}
+		return NewMap(out), nil
+	}
+	if desc, ok := asModuleDesc(v); ok {
+		out := NewOrderedMap()
+		out.Set("id", NewString(desc.Ref))
+		out.Set("kind", NewString(moduleKind(desc)))
+		out.Set("file", NewString(desc.File))
+		out.Set("folder", NewString(desc.Folder))
+		names := moduleExportNames(desc)
+		elems := make([]Value, len(names))
+		for i, n := range names {
+			elems[i] = NewString(n)
+		}
+		out.Set("exports", NewList(elems))
+		return NewMap(out), nil
+	}
+	return NewMap(NewOrderedMap()), nil
+}
+
+func (moduleTypeBehavior) ToList(v Value) (Value, error) {
+	if me, ok := asModuleExportInfo(v); ok {
+		var vals []Value
+		if me.Fields != nil {
+			for _, k := range me.Fields.Keys() {
+				val, _ := me.Fields.Get(k)
+				vals = append(vals, val)
+			}
+		}
+		return NewList(vals), nil
+	}
+	if desc, ok := asModuleDesc(v); ok {
+		names := moduleExportNames(desc)
+		elems := make([]Value, len(names))
+		for i, n := range names {
+			elems[i] = NewString(n)
+		}
+		return NewList(elems), nil
+	}
+	return NewList(nil), nil
+}

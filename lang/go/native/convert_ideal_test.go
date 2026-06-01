@@ -1,6 +1,7 @@
 package native
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go"
@@ -77,5 +78,39 @@ func TestConvertIdealNativeOverride(t *testing.T) {
 	}
 	if got := runConvert(t, v, "convert List thing"); got != "['a' 'b']" {
 		t.Errorf("convert List (native Ideal, override) = %s, want ['a' 'b']", got)
+	}
+}
+
+// TestConvertIdealBuiltins covers the concrete IdealConverter overrides on
+// the built-in kernel Ideals (constructed in Go, exercised via the engine).
+func TestConvertIdealBuiltins(t *testing.T) {
+	// Array → its elements (List); index→element (Map).
+	arr := NewArray([]Value{NewInteger(10), NewInteger(20)})
+	if got := runConvert(t, arr, "convert List thing"); got != "[10 20]" {
+		t.Errorf("Array→List = %s, want [10 20]", got)
+	}
+	if got := runConvert(t, arr, "convert Map thing"); got != "{0:10 1:20}" {
+		t.Errorf("Array→Map = %s, want {0:10 1:20}", got)
+	}
+
+	// Error → {message:…} / [message].
+	erv := NewError(fmt.Errorf("boom"))
+	if got := runConvert(t, erv, "convert Map thing"); got != "{message:'boom'}" {
+		t.Errorf("Error→Map = %s, want {message:'boom'}", got)
+	}
+	if got := runConvert(t, erv, "convert List thing"); got != "['boom']" {
+		t.Errorf("Error→List = %s, want ['boom']", got)
+	}
+
+	// Object instance → its fields / field values.
+	fields := NewOrderedMap()
+	fields.Set("a", NewInteger(1))
+	fields.Set("b", NewString("x"))
+	obj := NewObjectInstance(TObject, ObjectInstanceInfo{Fields: fields})
+	if got := runConvert(t, obj, "convert Map thing"); got != "{a:1 b:'x'}" {
+		t.Errorf("Object→Map = %s, want {a:1 b:'x'}", got)
+	}
+	if got := runConvert(t, obj, "convert List thing"); got != "[1 'x']" {
+		t.Errorf("Object→List = %s, want [1 'x']", got)
 	}
 }
