@@ -1,8 +1,8 @@
 # Function Model Consolidation (v0)
 
-Status: the three structural unifications are complete and green. One
-follow-up (FnDefInfo's two-slice collapse) is deliberately deferred and
-documented at the end.
+Status: the three structural unifications are complete and green. The
+follow-up (FnDefInfo's two-slice collapse) is now also complete — see
+"FnDefInfo single-slice collapse" at the end.
 
 ## Goal
 
@@ -65,29 +65,46 @@ an AQL sig carries `Body` tokens; a native sig carries a Go `Handler`.
 unified `FnSig`/`Signature` at `RegisterNativeFunc`; the ~348 `NativeSig`
 literals are unchanged.
 
-## Open item: FnDefInfo two-slice collapse (deferred — redesign, not refactor)
+## FnDefInfo single-slice collapse (complete)
 
-`FnDefInfo` still has two `[]FnSig` fields — now the SAME element type, but
-two distinct lifecycle artifacts:
+`FnDefInfo` now has ONE signature slice, `Signatures []Signature`. The old
+`Sigs` field is gone. Each `Signature` is full-fidelity: it carries the
+authored shape (`Params` with names, `Returns`, AQL `Body`) AND, once
+compiled, the dispatch fields (`Handler`, resolved `BarrierPos`). Body vs
+Handler remains the sole Go-vs-AQL distinction within the one type.
 
-- `Sigs` — the **authored** signatures (carry `Body` + param names), built
-  at fn/afn *construction* time. Read by capture computation
-  (`ComputeCaptures`, before any install), `inspect`, targeted `undef`,
-  trivial-delegation detection, refine single-param probes, `canon`.
-- `Signatures` — the **install-time compiled dispatch table**: sorted by
-  `CompareSignatures`, handler-bearing, with an injected 0-arg `Fallback`
-  sig. Read by `matchSignature` / `execMatch` / `HasForwardSigs`.
-- Natives have `Signatures` only (`Sigs == nil`, no Body); an AQL fn at
-  construction has `Sigs` only (`Signatures` built later, at install).
+How the three reconciliation points were resolved:
 
-Collapsing to one slice is a behavioral **redesign**, not a mechanical
-merge: compiled sigs would need to also carry `Body`, capture computation
-would need re-timing (it runs before install), and the sorted order +
-injected `Fallback` sig would have to be reconciled with the authored-order
-readers. It touches ~30 call sites across eng + lang, carries real
-regression risk, and has near-zero behavioral payoff (the split is
-well-defined and internal). Recommended as its own focused effort with the
-equivalence goldens as the gate.
+- **Compiled sigs carry `Body`.** `compileFnDef` and `InstallFnDef` keep the
+  authored `Body`/`Params`/`Returns` while layering on the handler, instead
+  of lowering to a `Body`-less `NativeSig`.
+- **Per-entry own sigs vs the dispatch table.** A stored DefStack entry (or a
+  constructed Function value) now holds only THAT definition's own overloads.
+  The accumulated, sorted, fallback-bearing dispatch table is built on demand
+  at the registry boundary — `Registry.Lookup` → `aggregateDispatch` unions
+  every stacked entry's own sigs, sorts with `CompareSignatures`, and appends
+  the synthetic 0-arg `Fallback` when the name has any AQL-bodied overload.
+  This removed the carry-forward accumulation and the install-time fallback
+  injection, and let `undef` / overlap-removal simplify to plain entry
+  removal (the table just rebuilds from what remains).
+- **Authored-order readers** (`canon`, `inspect`, predicate probes, trivial-
+  delegation, targeted `undef`, overlap) read `FnDefInfo.OwnSigs()` — the
+  signatures with any `Fallback` filtered out. `FirstOwnSig()` serves the
+  single-overload readers (predicate input-type gate, refine probe).
+- **Capture timing** is unchanged: `ComputeCaptures` still walks each authored
+  sig at construction; it just reads the renamed field.
+- **Construction → dispatch.** `execFnDefLiteral` compiles a self-contained
+  value's own sigs (anonymous closure, or a fn defined in the current
+  registry) via `compileFnDef`; a value carrying a FOREIGN sub-registry (a
+  module wrapper or module-preamble fn) resolves the real definition in that
+  registry. The sub-registry wrapper path is gated on a **body-bearing** own
+  sig, so a `/r` reference to a Go native (Body-less sigs) dispatches straight
+  through its Go handler.
+
+Verified by the two equivalence goldens below plus the full eng + lang
+suites; the one intended behavior change is eng-level `inspect` of an AQL fn
+(`eng/spec/inspect.tsv`), which now reports `kind:defined` and the synthetic
+`{args:[]}` fallback, matching the lang surface.
 
 ## Verification
 

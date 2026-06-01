@@ -1,5 +1,27 @@
 # `usurp` — Argument-Order Reversal as a Higher-Order Word (v0)
 
+> **Status (implemented).** This document is the original v0 design
+> sketch; the shipped word matches it, including the `def ifu (usurp if)`
+> alias idiom below. The authoritative, executable contract is the spec
+> suite — `lang/spec/usurp.tsv` (with `lang/spec/ref.tsv`,
+> `lang/spec/apply.tsv`, `lang/spec/modifiers.tsv`). One clarification on
+> the surface form:
+>
+> **`usurp` accepts either a bare name OR a function value** — two
+> overloads:
+> - `[Atom]` (by name): `usurp if <else> <then> <cond>` — captures the
+>   word and resolves it to its bound function (companion of the `/u`
+>   suffix). Shares `ref`'s rules: unbound → `undefined_word`, non-fn →
+>   `illegal_ref`.
+> - `[Function]` (by value): `usurp (ref if) …` / `usurp (if/r) …`.
+>
+> A *bare* `usurp if/r` does not resolve (the ref-word isn't evaluated as
+> a forward arg) — use `usurp if` or `usurp (if/r)`. The `/u` suffix
+> (`if/u`, `if/ur`) is the pure word-modifier form. Binding the wrapper
+> to a name and calling it (`def ifu (usurp if)  cond ifu …`) works:
+> `InstallFnDef` preserves the wrapper's own (body-less) handler so the
+> call re-dispatches the wrapped fn.
+
 ## Problem
 
 AQL's unified dispatch rule maps a value sitting on the **stack**
@@ -38,9 +60,9 @@ correct one by construction.
 usurp <fn>   →   <fn'>      # fn' is fn with its argument order reversed
 ```
 
-It takes a function (by name, e.g. `usurp if`, or by value) and
-returns a **new function** whose signatures have their parameters
-reversed. Because dispatch maps a stack-prefix value to the last
+It takes a function (by name, e.g. `usurp if`, or by value, e.g.
+`usurp (ref if)`) and returns a **new function** whose signatures have
+their parameters reversed. Because dispatch maps a stack-prefix value to the last
 slot, reversing the parameters makes that slot the *first* logical
 argument — so the cond-first form binds correctly:
 
@@ -117,18 +139,24 @@ This is the primary correctness risk and the focus of testing — in
 particular a **list-valued condition** (`[1 gt 0] ifu fail pass`)
 must still flow through `if`'s mark/move evaluation.
 
-## Scope and limitations (v0)
+## Scope and limitations
 
 - **All-forward-eligible signatures** (`BarrierPos == len(Args)` —
   the common case, incl. `if`, math ops, typed user fns) are
   supported. Typed words work because the wrapper's reversed
   parameter **types** drive forward type-collection
   (`def subr (usurp sub)` ⇒ `subr a b ≡ sub b a`).
-- **Explicit `|` barrier signatures** (`0 < BarrierPos < N`) cannot
-  be faithfully reversed with a single `BarrierPos` (forward-
-  eligible positions would have to become trailing). v0 **rejects**
-  these with a clear error; revisit only if a concrete need
-  appears.
+- **Stack-only and mixed-barrier signatures** (`BarrierPos == 0` or
+  `0 < BarrierPos < N`) are also supported. The re-dispatch handler
+  lays the reversed args out *around* the original according to its
+  barrier — positions `0…B-1` after the original (forward), positions
+  `B…N-1` before it (stack, top-first) — so a stack-only or mixed
+  original receives its args in the right place and reverses
+  faithfully. (Earlier this was a stated limitation: the handler used
+  a fixed forward layout, so a stack-only original could not collect
+  the args and the wrapper was left inert. See
+  `usurpDispatchHandler` in `eng/go/core_ref.go` and the barrier rows
+  in `lang/spec/usurp.tsv`.)
 - **Pattern / Optional params** reverse positionally with the param
   list; index-keyed metadata is remapped. Any shape that cannot be
   faithfully reversed errors rather than mis-handling silently.

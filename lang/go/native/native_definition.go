@@ -513,9 +513,9 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	// Compute lexical captures: per-sig walks merged into one list.
 	// Nil at top-level (no enclosing fn) — natural no-op via
 	// ComputeCaptures' baseline check.
-	perSig := make([][]CapturedBinding, len(fnDef.Sigs))
-	for i := range fnDef.Sigs {
-		perSig[i] = eng.ComputeCaptures(r, &fnDef.Sigs[i])
+	perSig := make([][]CapturedBinding, len(fnDef.Signatures))
+	for i := range fnDef.Signatures {
+		perSig[i] = eng.ComputeCaptures(r, &fnDef.Signatures[i])
 	}
 	fnDef.Captured = eng.MergeCaptures(perSig)
 	return []Value{NewFunction(fnDef)}, nil
@@ -561,9 +561,9 @@ func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 		BarrierPos: barrierPos,
 	}
 	fnDef := FnDefInfo{
-		Sigs:      []FnSig{sig},
-		Anonymous: true,
-		Captured:  eng.ComputeCaptures(r, &sig),
+		Signatures: []FnSig{sig},
+		Anonymous:  true,
+		Captured:   eng.ComputeCaptures(r, &sig),
 	}
 	return []Value{NewFunction(fnDef)}, nil
 }

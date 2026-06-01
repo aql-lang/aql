@@ -34,10 +34,16 @@ var refNatives = []NativeFunc{
 			// /q on the name slot lets the parser capture the upcoming
 			// Word as an Atom rather than executing it. `ref add` then
 			// arrives here with args[0] = Atom(add).
-			Args:           []*Type{TAtom},
-			QuoteArgs:      map[int]bool{0: true},
-			Handler:        refHandler,
-			Returns:        []*Type{TAny},
+			Args:      []*Type{TAtom},
+			QuoteArgs: map[int]bool{0: true},
+			Handler:   refHandler,
+			Returns:   []*Type{TAny},
+			// ParkResult: leave the resolved Function value as inert data at
+			// the call site instead of re-stepping it — so `ref f` behaves
+			// exactly like `f/r`, never auto-invoking (not even a 0-arg fn).
+			// The value still dispatches when re-stepped elsewhere (from a
+			// map, a paren), matching `(f/r)` / `ops.f a b`.
+			ParkResult:     true,
 			RunInCheckMode: true, BarrierPos: -1,
 		}},
 	},
@@ -54,6 +60,66 @@ var refNatives = []NativeFunc{
 			Returns: []*Type{TAny}, BarrierPos: 0,
 		}},
 	},
+	{
+		Name: "usurp",
+		// Forward-eligible: `usurp fn` reads as "wrap this fn". Returns a
+		// Function value, so it dispatches immediately when args follow
+		// (`usurp (ref f) a b`) and stays inert under quote.
+		//
+		// Two overloads, mirroring how `ref` and `/u` accept a name:
+		//   - [Function]      `usurp (ref f)` / `usurp (f/r)` — a value.
+		//   - [Atom] (/q)     `usurp f` — capture the word as a name and
+		//                     resolve it to its bound function (the
+		//                     function-form companion of the `/u` suffix).
+		// When the next token is a Word, matchSignature prefers the /q
+		// Atom sig; a parenthesised Function value takes the [Function] sig.
+		Signatures: []NativeSig{
+			{
+				Args:           []*Type{TFunction},
+				Handler:        usurpHandler,
+				Returns:        []*Type{TFunction},
+				RunInCheckMode: true, BarrierPos: -1,
+			},
+			{
+				Args:           []*Type{TAtom},
+				QuoteArgs:      map[int]bool{0: true},
+				Handler:        usurpAtomHandler,
+				Returns:        []*Type{TFunction},
+				RunInCheckMode: true, BarrierPos: -1,
+			},
+		},
+	},
+}
+
+// usurpAtomHandler is the by-name form `usurp foo`: it resolves the
+// captured atom to its bound function value (sharing `ref`'s rules — an
+// unbound name raises undefined_word, a non-fn binding raises
+// illegal_ref) and then returns the argument-reversed wrapper. It is the
+// function-form companion of the `/u` word suffix; `usurp (ref foo)` /
+// `usurp (foo/r)` pass the value directly via the [Function] overload.
+func usurpAtomHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	if len(args) < 1 {
+		return nil, fmt.Errorf("usurp: missing name")
+	}
+	name, err := AsAtom(args[0])
+	if err != nil {
+		return nil, fmt.Errorf("usurp: expected an atom name, got %s", args[0].Parent.String())
+	}
+	v, ok := eng.ResolveRef(reg, name)
+	if !ok {
+		if reg != nil {
+			return nil, reg.AqlError("undefined_word", "usurp: name "+name+" is not bound", name)
+		}
+		return nil, fmt.Errorf("usurp: name %s is not bound", name)
+	}
+	if !eng.IsFunctionRef(v) {
+		detail := "usurp requires a function word: " + name + " is bound to " + v.Parent.String()
+		if reg != nil {
+			return nil, reg.AqlError("illegal_ref", detail, name)
+		}
+		return nil, fmt.Errorf("%s", detail)
+	}
+	return usurpHandler([]Value{v}, nil, nil, reg)
 }
 
 // refHandler resolves the captured atom name to its bound value and
@@ -112,4 +178,21 @@ func applyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 	}
 	v.Quoted = false
 	return []Value{v}, nil
+}
+
+// usurpHandler wraps a Function value so its signature argument order is
+// reversed: the wrapper called `usurped a b c` dispatches the original as
+// `f c b a`. Mirrors the /u modifier (eng.UsurpFunction). The wrapper is
+// returned unquoted, so — like a bare function word — it dispatches
+// immediately when args follow, and stays inert when captured with quote.
+func usurpHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	wrapped, ok := eng.UsurpFunction(args[0])
+	if !ok {
+		detail := "usurp requires a function value, got " + args[0].Parent.String()
+		if reg != nil {
+			return nil, reg.AqlError("illegal_ref", detail, "usurp")
+		}
+		return nil, fmt.Errorf("%s", detail)
+	}
+	return []Value{wrapped}, nil
 }

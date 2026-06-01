@@ -380,12 +380,122 @@ func calcMaxForwardArgs(sigs []Signature) int {
 // and the post-Lookup dispatch path).
 func (r *Registry) Lookup(name string) *FnDefInfo {
 	stack := r.Defs.Stack(name)
+	// Collect every FnDefInfo binding for the name, newest-first. Each
+	// entry holds only its OWN overloads; the dispatch table is the union
+	// across the stack (overloading across stacked defs of one name).
+	var entries []FnDefInfo
 	for i := len(stack) - 1; i >= 0; i-- {
 		if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
-			return &fnDef
+			entries = append(entries, fnDef)
 		}
 	}
-	return nil
+	if len(entries) == 0 {
+		return nil
+	}
+	return r.aggregateDispatch(name, entries)
+}
+
+// aggregateDispatch builds the cross-stack dispatch view for name from the
+// per-entry own-signature slices (newest-first). It unions every entry's
+// non-fallback overloads, sorts them with SortSignatures (most specific
+// first, fallbacks last), and appends a single synthetic 0-arg Fallback when
+// the name has any AQL-bodied overload — reproducing what the old carry-
+// forward + in-place fallback injection produced on the top DefStack entry,
+// but derived on demand so each stored entry stays its own authored unit
+// (needed by targeted undef and overlap detection). Metadata (Registry,
+// Anonymous, Captured) is taken from the newest entry.
+func (r *Registry) aggregateDispatch(name string, entries []FnDefInfo) *FnDefInfo {
+	top := entries[0]
+
+	// Fast path: a single entry with no AQL body (a pure native word)
+	// needs neither a union nor a synthetic fallback — its own sorted
+	// Signatures already ARE the dispatch table.
+	if len(entries) == 1 {
+		hasBody := false
+		for i := range top.Signatures {
+			if len(top.Signatures[i].Body) > 0 {
+				hasBody = true
+				break
+			}
+		}
+		if !hasBody {
+			return &top
+		}
+	}
+
+	sigs := make([]Signature, 0, len(top.Signatures)+1)
+	hasAQL := false
+	for _, e := range entries {
+		for _, s := range e.Signatures {
+			if s.Fallback {
+				continue
+			}
+			sigs = append(sigs, s)
+			if len(s.Body) > 0 {
+				hasAQL = true
+			}
+		}
+	}
+	if hasAQL {
+		sigs = append(sigs, r.fnFallbackSig(name))
+	}
+	SortSignatures(sigs)
+	return &FnDefInfo{
+		Name:           name,
+		Signatures:     sigs,
+		MaxForwardArgs: calcMaxForwardArgs(sigs),
+		Registry:       top.Registry,
+		Anonymous:      top.Anonymous,
+		Captured:       top.Captured,
+	}
+}
+
+// fnFallbackSig builds the synthetic 0-arg catch-all signature for an
+// AQL-defined word. It courtesy-dispatches a 0-arg overload when one
+// exists, otherwise raises a clean "no matching signature" error (with a
+// forward-collection hint when the word takes args). Injected into the
+// dispatch aggregate by aggregateDispatch; never stored on an authored entry.
+func (r *Registry) fnFallbackSig(name string) Signature {
+	return Signature{
+		Fallback:   true,
+		BarrierPos: 0,
+		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			top, ok := r.Defs.Top(name)
+			if !ok {
+				return nil, fmt.Errorf("undefined: %s", name)
+			}
+			// A 0-arg fn courtesy-dispatches its 0-arg sig; every other
+			// shape (no 0-arg sig, a plain Function, any other binding)
+			// is an unmatched call returning the same signature error,
+			// so that return is hoisted out of the branches.
+			hasForwardSig := false
+			if _, ok := top.Data.(FnDefInfo); ok {
+				if fn := r.Lookup(name); fn != nil {
+					for i := range fn.Signatures {
+						sig := &fn.Signatures[i]
+						if sig.TotalArgs() == 0 && sig.Handler != nil && !sig.Fallback {
+							return sig.Handler(nil, nil, nil, r)
+						}
+						if sig.TotalArgs() > 0 {
+							hasForwardSig = true
+						}
+					}
+				}
+			}
+			// A fn that takes arguments reached its 0-arg fallback,
+			// which means forward collection couldn't gather them —
+			// almost always because the next word (another call, a
+			// builtin) was hit first, e.g. `inc inc 5` or `f a g b`.
+			// Point at the fixes rather than leaving a bare error.
+			if hasForwardSig {
+				return nil, r.AqlErrorHint("signature_error",
+					"no matching signature for "+name, name,
+					"forward args for "+name+" may have run into the next word; "+
+						"group the call with parens — ("+name+" …) — or end it with `end` or `;`")
+			}
+			return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
+		},
+	}
 }
 
 // Match finds the best matching signature for a function name given the
@@ -396,21 +506,6 @@ func (r *Registry) Match(name string, resolved []Value, modifiers WordInfo) *Mat
 		return nil
 	}
 	return MatchSignature(fnDef.Signatures, resolved, modifiers)
-}
-
-// clearSigsKeepFallback resets the Signatures on the top FnDefInfo in
-// DefStacks[name] to only the Fallback entries (if any). Used during
-// rebuild after overlap filtering or undef.
-func (r *Registry) clearSigsKeepFallback(name string) {
-	top, ok := r.Defs.Top(name)
-	if !ok {
-		return
-	}
-	if fnDef, ok := top.Data.(FnDefInfo); ok {
-		fnDef.Signatures = KeepFallback(fnDef.Signatures)
-		top.Data = fnDef
-		r.Defs.Replace(name, top)
-	}
 }
 
 // InitRootContext initializes the root context Store with the __sys key.
@@ -712,6 +807,7 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 			ReturnsFn:        sig.ReturnsFn,
 			RunInCheckMode:   sig.RunInCheckMode,
 			CheckFullStackFn: sig.CheckFullStackFn,
+			ParkResult:       sig.ParkResult,
 		}
 		// One path. `BarrierAllForward` (-1) on a NativeSig is the
 		// "default all-forward" sentinel; `0` is explicit all-stack.
@@ -956,7 +1052,8 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	if !ok {
 		return Value{}, false, fmt.Errorf("RunPredicate: constraint has invalid payload (got %T)", constraint.Data)
 	}
-	if len(fnDef.Sigs) == 0 || len(fnDef.Sigs[0].Params) != 1 {
+	predSig, ok := fnDef.FirstOwnSig()
+	if !ok || len(predSig.Params) != 1 {
 		return Value{}, false, fmt.Errorf("RunPredicate: predicate must take exactly one argument")
 	}
 	// CheckMode: accept the binding without running the body. Real
@@ -972,7 +1069,7 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	// cross-type comparators like `gt` produce confusing answers).
 	// Skip the gate for the empty case (input declared as Any or
 	// unset) — those predicates explicitly accept any input.
-	if inputT := fnDef.Sigs[0].Params[0].Type; inputT != nil && !inputT.Equal(TAny) {
+	if inputT := predSig.Params[0].Type; inputT != nil && !inputT.Equal(TAny) {
 		if IsBareTypeNode(candidate) {
 			// Bare type literal: skip the gate (the literal IS a type,
 			// not an inhabitant — predicate has no value to test).
@@ -986,7 +1083,7 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	saved := snapshotPredicateState(r)
 	defer restorePredicateState(r, saved)
 
-	result, err := r.CallAQL(&fnDef.Sigs[0], []Value{candidate}, fnDef.Captured)
+	result, err := r.CallAQL(predSig, []Value{candidate}, fnDef.Captured)
 	if err != nil {
 		return Value{}, false, err
 	}
@@ -1012,7 +1109,7 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	if IsNoneShape(out) {
 		return out, false, nil
 	}
-	inputT := fnDef.Sigs[0].Params[0].Type
+	inputT := predSig.Params[0].Type
 	booleanIsValue := inputT != nil && TBoolean.Matches(inputT)
 	if !booleanIsValue && out.Parent != nil && out.Parent.Equal(TBoolean) && out.Data != nil {
 		if b, ok := out.Data.(BoolPayload); ok {

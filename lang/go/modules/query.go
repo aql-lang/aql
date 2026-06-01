@@ -120,7 +120,7 @@ func makeQueryFnDef(w qWord, subReg *native.Registry) native.Value {
 	}
 	return native.NewFnDef(native.FnDefInfo{
 		Name: w.internal,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:     params,
 			Returns:    []*native.Type{native.TList},
 			Body:       []native.Value{native.NewWord(w.internal)},

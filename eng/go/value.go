@@ -272,23 +272,45 @@ type FnSig struct {
 	ReturnsFn        ReturnsFunc
 	RunInCheckMode   bool
 	CheckFullStackFn CheckFullStackFunc
+	// ParkResult, when true, makes execMatch advance the pointer PAST the
+	// spliced handler result rather than leaving the pointer on it to be
+	// re-stepped. A re-stepped unquoted Function value auto-dispatches
+	// (and a 0-arg fn fires immediately); parking instead leaves the
+	// result as inert data at the call site — exactly what the `/r`
+	// word-suffix does in stepWord. This is what makes `ref f` behave
+	// identically to `f/r`: a bare reference never fires, even for a
+	// 0-arg fn, while the SAME value still dispatches when it is later
+	// re-stepped elsewhere (retrieved from a map, unwrapped from a paren).
+	// Used by `ref`; apply/usurp deliberately leave it false so they
+	// re-step and invoke.
+	ParkResult bool
 }
 
-// FnDefInfo holds the parsed function specification for a def-defined function.
+// FnDefInfo holds the function specification for a def-defined function.
 // Name is the function's registered name (set by InstallDef). If Registry is
 // non-nil, the function was defined in a module and should execute in that
 // registry's context (closure semantics).
 //
-// Signatures is the compiled dispatch table (typed args + Go handlers).
-// For Go builtins, Sigs is nil and Signatures holds the native handlers.
-// For AQL fn defs, InstallFnDef converts Sigs into Signatures with handler
-// closures that splice body tokens. Whether the engine tries forward
-// collection is determined per-signature via Signature.BarrierPos —
-// derive the word-level summary via fn.HasForwardSigs.
+// Signatures is the SINGLE per-function signature slice — one full-fidelity
+// overload per entry. Each Signature carries the authored shape (Params with
+// names, Returns, and the AQL Body) AND, once compiled, the dispatch fields
+// (a Go Handler, resolved BarrierPos, sorted order). Body vs Handler is the
+// only Go-vs-AQL distinction: a Go builtin has a Handler and no Body, an AQL
+// fn carries Body tokens and (after install/compile) a body-splicing Handler.
+//
+// The slice on a DefStack entry or a constructed Function value holds only
+// THAT definition's own overloads — it is NOT the cross-stack dispatch table.
+// The accumulated, sorted, fallback-bearing dispatch table is built on demand
+// at the registry boundary (Registry.Lookup → aggregateDispatch); every
+// matcher / forward-planner reads the aggregate's Signatures, while the
+// authored-shape readers (canon, inspect, predicate probes, trivial-delegation,
+// targeted undef, overlap) read a single definition's own Signatures, skipping
+// any synthetic Fallback. Whether the engine tries forward collection is
+// determined per-signature via Signature.BarrierPos — derive the word-level
+// summary via fn.HasForwardSigs.
 type FnDefInfo struct {
 	Name           string
-	Sigs           []FnSig     // AQL-defined overloads (nil for Go-implemented words)
-	Signatures     []Signature // compiled dispatch table
+	Signatures     []Signature // own full-fidelity overloads (see doc above)
 	MaxForwardArgs int         // longest forward arg count across all sigs (respecting barriers)
 	Registry       *Registry
 	// Anonymous is true iff the FnDef was produced by the `afn` word (i.e.
@@ -339,6 +361,51 @@ func (fn *FnDefInfo) HasForwardSigs() bool {
 		}
 	}
 	return false
+}
+
+// OwnSigs returns the function's authored overloads — its Signatures with
+// any synthetic 0-arg Fallback sig filtered out. This is the view the
+// authored-shape readers (canon, inspect, predicate probes, trivial-
+// delegation, targeted undef, overlap detection) want: the signatures the
+// user actually declared, never the dispatch-time fallback the aggregate
+// injects.
+func (fn *FnDefInfo) OwnSigs() []Signature {
+	if fn == nil {
+		return nil
+	}
+	hasFallback := false
+	for i := range fn.Signatures {
+		if fn.Signatures[i].Fallback {
+			hasFallback = true
+			break
+		}
+	}
+	if !hasFallback {
+		return fn.Signatures
+	}
+	out := make([]Signature, 0, len(fn.Signatures))
+	for i := range fn.Signatures {
+		if fn.Signatures[i].Fallback {
+			continue
+		}
+		out = append(out, fn.Signatures[i])
+	}
+	return out
+}
+
+// FirstOwnSig returns a pointer to the first non-fallback signature and
+// whether one exists. Used by the single-overload readers (predicate
+// input-type gate, refine single-param probe).
+func (fn *FnDefInfo) FirstOwnSig() (*Signature, bool) {
+	if fn == nil {
+		return nil, false
+	}
+	for i := range fn.Signatures {
+		if !fn.Signatures[i].Fallback {
+			return &fn.Signatures[i], true
+		}
+	}
+	return nil, false
 }
 
 // FnSigSpec describes a signature specification without a body, used for
@@ -605,6 +672,7 @@ type WordInfo struct {
 	ForceStack   bool // lower/s
 	ForceForward bool // lower/f
 	ForceRef     bool // lower/r — resolve to the bound value without invoking
+	ForceUsurp   bool // lower/u — wrap the bound fn so its sig arg order is reversed
 }
 
 // ForwardInfo tracks forward argument collection for a deferred function call.
@@ -1055,6 +1123,21 @@ func NewWordRef(name string) Value {
 		Name:     name,
 		ArgCount: -1,
 		ForceRef: true,
+	})
+}
+
+// NewWordUsurp creates a word value marked with the /u modifier: when
+// reached at the pointer it resolves the name to its bound Function value
+// and wraps it so its signature argument order is reversed (usurped a b c
+// ≡ f c b a). Like /r, /u is legal ONLY for function words. The usurped
+// wrapper is left UNQUOTED, so it dispatches immediately when args are
+// available; combine with /r (name/ur) to leave it as inert data instead.
+func NewWordUsurp(name string, ref bool) Value {
+	return NewValueRaw(TWord, WordInfo{
+		Name:       name,
+		ArgCount:   -1,
+		ForceUsurp: true,
+		ForceRef:   ref,
 	})
 }
 

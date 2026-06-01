@@ -88,7 +88,7 @@ func BuildTypeModule(parent *native.Registry) (native.ModuleDesc, error) {
 func makeTypeUnaryFnDef(wordName string, subReg *native.Registry, returnType *native.Type) native.Value {
 	return native.NewFnDef(native.FnDefInfo{
 		Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TAny}},
 			Returns: []*native.Type{returnType},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
@@ -104,7 +104,7 @@ func makeTypeUnaryFnDef(wordName string, subReg *native.Registry, returnType *na
 func makeTypeBinaryAnyFnDef(name, bodyWord string, subReg *native.Registry, returnType *native.Type) native.Value {
 	return native.NewFnDef(native.FnDefInfo{
 		Name: name,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TAny}, {Type: native.TAny}},
 			Returns: []*native.Type{returnType},
 			Body:    []native.Value{native.NewWord(bodyWord)}, BarrierPos: -1,
@@ -119,7 +119,7 @@ func makeTypeBinaryAnyFnDef(name, bodyWord string, subReg *native.Registry, retu
 func makeTypePickOmitFnDef(wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{
 		Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TAny}, {Type: native.TAny}},
 			Returns: []*native.Type{native.TType},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
@@ -134,7 +134,7 @@ func makeTypePickOmitFnDef(wordName string, subReg *native.Registry) native.Valu
 func makeTypeBrandFnDef(wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{
 		Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TAny}, {Type: native.TAny}},
 			Returns: []*native.Type{native.TType},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
@@ -241,7 +241,7 @@ func latticeNode(v native.Value) *native.Type {
 // fnSigs returns the signature list for a Function / FnDef / FnUndef value.
 func fnSigs(v native.Value, opName string, r *native.Registry) ([]native.FnSig, error) {
 	if fn, ok := v.Data.(native.FnDefInfo); ok {
-		return fn.Sigs, nil
+		return fn.OwnSigs(), nil
 	}
 	if fnu, ok := v.Data.(native.FnUndefInfo); ok {
 		out := make([]native.FnSig, len(fnu.Sigs))

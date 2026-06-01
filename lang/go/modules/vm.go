@@ -226,7 +226,7 @@ func policyFromMapValue(v native.Value) (policy.Policy, error) {
 func makeRunFnDef(wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{
 		Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params:     []native.FnParam{{Type: native.TString}},
 			Returns:    []*native.Type{native.TAny},
 			Body:       []native.Value{native.NewWord(wordName)},
@@ -248,7 +248,7 @@ func makeRunFnDef(wordName string, subReg *native.Registry) native.Value {
 func makeRunWithFnDef(wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{
 		Name: wordName,
-		Sigs: []native.FnSig{{
+		Signatures: []native.FnSig{{
 			Params: []native.FnParam{
 				{Type: native.TAny},
 				{Type: native.TAny},

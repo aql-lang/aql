@@ -1,0 +1,102 @@
+# AQL Language Specification: Argument Usurping (usurp / /u)
+# Format: input<TAB>expected<TAB>description
+#
+# usurp f         → wrap a function so its signature arg order is reversed
+# usurp (ref f)   → same, passing the function VALUE explicitly
+# name/u          → same, as a word-suffix modifier (resolves + usurps name)
+# name/ur         → usurp combined with ref: leave the wrapper as inert data
+# quote (usurp f) → capture the usurped wrapper as inert data
+#
+# `usurp` has two overloads:
+#   - [Function]  `usurp (ref f)` / `usurp (f/r)` — pass a function value.
+#   - [Atom] (/q) `usurp f`       — capture the word as a name and resolve
+#                                   it to its bound function (the function-
+#                                   form companion of the `/u` suffix).
+# When the next token is a Word the by-name [Atom] sig is preferred; a
+# parenthesised Function value takes the [Function] sig. The by-name form
+# shares `ref`'s rules: an unbound name → undefined_word, a non-fn binding
+# → illegal_ref.
+#
+# A usurped fn called `usurped a b c` dispatches the original as `f c b a`.
+# Like ref/`/r`, the wrapper is an unquoted Function value: it dispatches
+# when args follow (forward / paren-grouped) and stays inert under quote or
+# when reffed.
+#
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2 10 3	7	baseline: sub computes a-b
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp (ref sub2) 10 3	-7	usurp reverses args: now 3-10
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2/u 10 3	-7	/u modifier reverses the same way
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (usurp (ref sub2)) 10 3	-7	paren-grouped reffed wrapper dispatches
+def inc fn [[n:Integer][Integer][n add 1]]  inc/u 5	6	usurp of a 1-arg fn is a no-op on order
+def cat3 fn [[a:String b:String c:String][String][a add b add c]]  cat3/u 'x' 'y' 'z'	'zyx'	usurp reverses all three args
+def f fn [[a:Integer b:String][String][b add (a convert String)]]  f 7 'hi'	'hi7'	baseline: heterogeneous sig
+def f fn [[a:Integer b:String][String][b add (a convert String)]]  f/u 'hi' 7	'hi7'	usurped sig is [String Integer]; a=7 b='hi'
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def ops {rev: (usurp (ref sub2))}  ops.rev 10 3	-7	wrapper captured in a map dispatches via dot-access
+def inc fn [[n:Integer][Integer][n add 1]]  quote (usurp (ref inc))	fn inc[[n:Integer][Integer][]]	quoted usurp is inert data — the Function value itself
+nope/u	ERROR:undefined_word	/u on an unbound name
+def x 5  x/u	ERROR:illegal_ref	/u on a non-fn binding is rejected
+#
+# ─── by-name form: `usurp f` resolves the word to its bound function ───
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp sub2 10 3	-7	usurp by name: capture + resolve + reverse
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp sub2	fn sub2[[b:Integer a:Integer][Integer][]]	by-name with no args holds the reversed wrapper
+def cat3 fn [[a:String b:String c:String][String][a add b add c]]  usurp cat3 'x' 'y' 'z'	'zyx'	by-name reverses all three args
+if true [99] [88]	99	baseline if: if cond then else
+usurp if [88] [99] true	99	by-name usurp of `if` — cond-first (else then cond)
+def f ([a:Integer b:Integer] => [a sub b])  usurp f 10 3	-7	by-name usurp of a bound anonymous fn
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def ops {rev: (usurp sub2)}  ops.rev 10 3	-7	by-name wrapper captured in a map dispatches
+usurp nope	ERROR:undefined_word	by-name usurp of an unbound name
+def x 5  usurp x	ERROR:illegal_ref	by-name usurp of a non-fn binding (shares ref's rule)
+usurp 5	ERROR:signature_error	usurp of a non-word literal matches neither overload
+#
+# ─── /ur : usurp combined with ref — leave the reversed wrapper INERT ───
+# /ur (and the equivalent /ru) build the reversed-arg wrapper but, like
+# /r, leave it on the stack as data without invoking. The held wrapper
+# dispatches when re-stepped (grouped in a paren, or via apply).
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2/ur	fn sub2[[b:Integer a:Integer][Integer][]]	/ur holds the reversed wrapper (params b,a) — not invoked
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2/ru	fn sub2[[b:Integer a:Integer][Integer][]]	/ru is the same as /ur (order-independent modifier letters)
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/ur) 10 3	-7	grouped reffed-usurp wrapper dispatches (reversed: 3 sub 10)
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/ru) 10 3	-7	/ru grouped dispatches identically
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/ur apply	7	apply a held reversed wrapper (reversed args → 10 sub 3)
+def f ([a:Integer b:Integer] => [a sub b])  (f/ur) 10 3	-7	reffed-usurp of an anonymous fn, grouped → reversed dispatch
+#
+# ─── cond-first `if` via usurp (the motivating use case) ───
+# Plain `cond if then else` mis-binds because the stack `cond` falls into
+# the trailing `else` slot. Reversing if's args with /u (or usurp+ref)
+# makes the branches read else-first with the condition LAST.
+if true [99] [88]	99	baseline: if cond then else
+if/u [88] [99] true	99	if/u reverses: if/u else then cond — true → then (99)
+if/u [99] [88] false	99	false → else (99) under reversed order
+usurp (ref if) [88] [99] true	99	inline usurp+ref of if, reversed order, cond last
+#
+# ─── value forms: a grouped reference is taken by the [Function] sig ───
+# `usurp (ref f)` and `usurp (f/r)` pass a function VALUE. A *bare* `f/r`
+# ref-word token, however, is not resolved as a forward arg — group it in
+# parens, or just use the by-name form `usurp f`.
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp (sub2/r) 10 3	-7	usurp of a grouped /r reference works
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp sub2/r 10 3	ERROR:signature_error	bare `usurp f/r` — group it as usurp (f/r), or use by-name `usurp f`
+#
+# ─── bind a wrapper to a name and call it as a word (the alias idiom) ───
+# `def fu (usurp …)` binds the reversed wrapper; calling `fu` then
+# dispatches it like any fn. InstallFnDef preserves the wrapper's own
+# handler (it has no AQL body), so the call re-dispatches the original.
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def fu (usurp (ref sub2))  fu 10 3	-7	named-bound wrapper (by value) dispatches as a word
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def fu (usurp sub2)  fu 10 3	-7	named-bound wrapper (by name) dispatches as a word
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def fu (usurp sub2)  10 fu 3	7	swap form against the named wrapper
+#
+# ─── the cond-first `if` alias — usurp's motivating idiom ───
+def ifu (usurp if)  true ifu 88 99	99	def ifu (usurp if): reversed `if`, cond on the stack
+def ifu (usurp if)  false ifu 88 99	88	condition false selects the else branch (88)
+def ifu (usurp if)  if true 99 88	99	plain `if` is completely unaffected
+#
+# ─── a referenced native fn can be aliased to a name too ───
+def myadd (ref add)  myadd 2 3	5	def name (ref native) binds + dispatches the native
+#
+# ─── usurp respects the original's barrier (stack-only and mixed sigs) ───
+# The re-dispatch lays the reversed args around the original according to its
+# BarrierPos, so stack-only (`[| a b]`) and mixed (`[a | b]`) originals still
+# reverse correctly rather than leaving the wrapper inert.
+def s fn [[| a:Integer b:Integer][Integer][a sub b]]  10 3 s	-7	stack-only baseline: top→a (3), b=10 → 3-10
+def s fn [[| a:Integer b:Integer][Integer][a sub b]]  10 3 usurp s	7	usurp reverses a stack-only fn → a=10 b=3 → 10-3
+def s fn [[| a:Integer b:Integer][Integer][a sub b]]  10 3 s/u	7	/u reverses a stack-only fn the same way
+def s fn [[| a:Integer b:Integer][Integer][a sub b]]  def su (usurp s)  10 3 su	7	named stack-only wrapper dispatches as a word
+def m fn [[a:Integer | b:Integer][Integer][a sub b]]  3 m 10	7	mixed-barrier baseline: a=forward 10, b=stack 3 → 10-3
+def m fn [[a:Integer | b:Integer][Integer][a sub b]]  usurp m 10 3	-7	usurp reverses a mixed-barrier fn

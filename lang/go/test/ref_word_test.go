@@ -56,7 +56,7 @@ func TestRefBuildsDispatchTable(t *testing.T) {
 		if fnDef.Name != wantName {
 			t.Errorf("ops[%q] fnDef.Name = %q, want %q", key, fnDef.Name, wantName)
 		}
-		if len(fnDef.Sigs) == 0 {
+		if len(fnDef.OwnSigs()) == 0 {
 			t.Errorf("ops[%q] captured FnDef has no Sigs — handle is hollow", key)
 		}
 	}
@@ -253,6 +253,66 @@ func TestApplyErrorsOnNonFunction(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error applying to Integer, got nil")
+	}
+}
+
+// TestRefMatchesSlashR pins that the `ref` word and the `/r` suffix are the
+// SAME operation in every position: both leave an inert (but unquoted)
+// Function reference at the call site, and that reference dispatches only
+// when it is re-stepped elsewhere (unwrapped from a paren, retrieved from a
+// map). In particular a bare reference to a 0-arg fn does NOT auto-fire —
+// `ref f` and `f/r` both hold the function, where re-stepping (`(ref f)`,
+// `(f/r)`) fires it. This is the regression guard for the historical
+// divergence where `ref`'s result was re-stepped (firing 0-arg fns) while
+// `/r` advanced past it.
+func TestRefMatchesSlashR(t *testing.T) {
+	cases := []struct {
+		name      string
+		refStep   string // ref-word form
+		slashStep string // /r-suffix form
+		wantFn    bool   // true: top is an inert Function; false: top is the called result
+	}{
+		{"bare 0-arg held", `ref f`, `f/r`, true},
+		{"paren 0-arg fires", `(ref f)`, `(f/r)`, false},
+	}
+	def0 := `def f fn [[] [Integer] [42]]`
+	for _, c := range cases {
+		refRes, refErr := runNativeSteps(t, nil, []string{def0, c.refStep})
+		rRes, rErr := runNativeSteps(t, nil, []string{def0, c.slashStep})
+		if refErr != nil || rErr != nil {
+			t.Fatalf("%s: ref err=%v, /r err=%v", c.name, refErr, rErr)
+		}
+		if len(refRes) != 1 || len(rRes) != 1 {
+			t.Fatalf("%s: ref=%v /r=%v, want 1 value each", c.name, refRes, rRes)
+		}
+		refIsFn := refRes[0].Parent.Equal(eng.TFunction)
+		rIsFn := rRes[0].Parent.Equal(eng.TFunction)
+		if refIsFn != rIsFn {
+			t.Errorf("%s: ref-is-fn=%v but /r-is-fn=%v — ref and /r must match", c.name, refIsFn, rIsFn)
+		}
+		if refIsFn != c.wantFn {
+			t.Errorf("%s: got fn=%v, want fn=%v (ref=%v)", c.name, refIsFn, c.wantFn, refRes[0])
+		}
+	}
+
+	// A map-stored reference dispatches identically whether built with
+	// `ref` or `/r`.
+	for _, mk := range []struct{ name, slot string }{
+		{"ref", `(ref f1)`},
+		{"/r", `f1/r`},
+	} {
+		res, err := runNativeSteps(t, nil, []string{
+			`def f1 fn [[n:Integer] [Integer] [n add 1]]`,
+			`def ops {g: ` + mk.slot + `}`,
+			`ops.g 5`,
+		})
+		if err != nil {
+			t.Fatalf("map %s: %v", mk.name, err)
+		}
+		n, err := native.AsInteger(res[len(res)-1])
+		if err != nil || n != 6 {
+			t.Errorf("map %s: ops.g 5 = %v (err %v), want 6", mk.name, res, err)
+		}
 	}
 }
 

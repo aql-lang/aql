@@ -61,7 +61,7 @@ func BuildMathModule(parent *native.Registry) (native.ModuleDesc, error) {
 func makeUnaryFnDef(wordName string, subReg *native.Registry) native.Value {
 	fnDef := native.FnDefInfo{
 		Name: wordName,
-		Sigs: []native.FnSig{
+		Signatures: []native.FnSig{
 			{
 				Params:  []native.FnParam{{Type: native.TNumber}},
 				Returns: []*native.Type{native.TNumber},
@@ -78,7 +78,7 @@ func makeUnaryFnDef(wordName string, subReg *native.Registry) native.Value {
 func makeBinaryFnDef(wordName string, subReg *native.Registry) native.Value {
 	fnDef := native.FnDefInfo{
 		Name: wordName,
-		Sigs: []native.FnSig{
+		Signatures: []native.FnSig{
 			{
 				Params: []native.FnParam{
 					{Type: native.TNumber},
@@ -97,7 +97,7 @@ func makeBinaryFnDef(wordName string, subReg *native.Registry) native.Value {
 func makeConstFnDef(wordName string, subReg *native.Registry) native.Value {
 	fnDef := native.FnDefInfo{
 		Name: wordName,
-		Sigs: []native.FnSig{
+		Signatures: []native.FnSig{
 			{
 				Params:  []native.FnParam{},
 				Returns: []*native.Type{native.TDecimal},

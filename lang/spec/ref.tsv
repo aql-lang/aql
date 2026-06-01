@@ -1,0 +1,57 @@
+# AQL Language Specification: Function References (ref / /r)
+# Format: input<TAB>expected<TAB>description
+#
+# ref name   → resolve a function word to its bound Function value WITHOUT
+#              invoking it. Companion to the `/r` word-suffix modifier.
+# name/r     → the same operation as a suffix (resolve + reference).
+#
+# `ref` and `/r` are ONE operation and must behave identically in every
+# position. A bare reference is INERT at the reference site: it is left on
+# the stack as an (unquoted) Function value and is never auto-invoked —
+# not even a 0-arg fn. The SAME value dispatches normally when it is
+# re-stepped elsewhere: unwrapped from a paren, retrieved from a map slot,
+# or handed to `apply`. References are legal only for function words; a
+# non-fn binding raises [aql/illegal_ref] and an unbound name raises
+# [aql/undefined_word].
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  Bare reference is inert (held) — `ref` ≡ `/r`, no auto-fire
+def z fn [[][Integer][42]]  z/r	fn z[[][Integer][42]]	bare /r holds a 0-arg fn — NOT fired
+def z fn [[][Integer][42]]  ref z	fn z[[][Integer][42]]	bare ref holds identically (no re-step)
+def inc fn [[n:Integer][Integer][n add 1]]  typeof (inc/r)	Function	a held reference is a Function value
+def inc fn [[n:Integer][Integer][n add 1]]  typeof (ref inc)	Function	ref yields a Function value
+#
+# §2  The held value dispatches when RE-STEPPED (paren unwrap)
+def z fn [[][Integer][42]]  (z/r)	42	paren re-steps the 0-arg fn → fires
+def z fn [[][Integer][42]]  (ref z)	42	ref fires when re-stepped — same as /r
+def inc fn [[n:Integer][Integer][n add 1]]  (inc/r) 5	6	grouped 1-arg reference dispatches
+def inc fn [[n:Integer][Integer][n add 1]]  (ref inc) 5	6	ref dispatches when re-stepped
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/r) 10 3	7	grouped 2-arg reference dispatches
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (ref sub2) 10 3	7	ref ≡ /r for a 2-arg fn
+#
+# §3  Reference stored in a map slot dispatches via dot-access
+def inc fn [[n:Integer][Integer][n add 1]]  def ops {f: inc/r}  ops.f 5	6	/r in a map slot dispatches
+def inc fn [[n:Integer][Integer][n add 1]]  def ops {f: (ref inc)}  ops.f 5	6	ref in a map slot dispatches
+#
+# §4  Reference handed to `apply` (stack form: args... fn/r apply)
+def inc fn [[n:Integer][Integer][n add 1]]  5 inc/r apply	6	apply invokes a referenced fn against stack args
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/r apply	-7	apply on a 2-arg referenced fn (stack order)
+def z fn [[][Integer][42]]  z/r apply	42	apply fires a referenced 0-arg fn
+#
+# §5  Anonymous-function references behave identically
+def f ([a:Integer b:Integer] => [a sub b])  typeof (f/r)	Function	/r holds a bound lambda
+def f ([n:Integer] => [n add 1])  (f/r) 5	6	grouped lambda reference dispatches
+def f ([n:Integer] => [n add 1])  5 f/r apply	6	apply a referenced lambda
+[([] => [42])]	[fn [[][Any][42]]]	a lambda inside a list is held, never fired in place
+#
+# §6  Negatives — reference is legal only for function words
+def x 5  x/r	ERROR:illegal_ref	/r on a non-fn binding is rejected
+def x 5  ref x	ERROR:illegal_ref	ref on a non-fn binding is rejected
+nope/r	ERROR:undefined_word	/r on an unbound name
+ref nope	ERROR:undefined_word	ref on an unbound name
+#
+# §7  Gotcha — a bare reffed word does NOT resolve as another word's
+#     forward argument; it must be grouped in parens (or use the value
+#     from a binding). `typeof inc/r` reads the literal ref-word token
+#     before it resolves, so dispatch of `typeof` fails.
+def inc fn [[n:Integer][Integer][n add 1]]  typeof inc/r	ERROR:signature_error	bare /r as a forward arg doesn't resolve — group it: typeof (inc/r)

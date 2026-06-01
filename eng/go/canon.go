@@ -137,11 +137,12 @@ func canonFnDef(fd FnDefInfo) string {
 	b.WriteString("fn ")
 	b.WriteString(fd.Name)
 	b.WriteByte('[')
-	for i := range fd.Sigs {
+	sigs := fd.OwnSigs()
+	for i := range sigs {
 		if i > 0 {
 			b.WriteByte(' ')
 		}
-		sig := &fd.Sigs[i]
+		sig := &sigs[i]
 		b.WriteByte('[')
 		for j, p := range sig.Params {
 			if j > 0 {

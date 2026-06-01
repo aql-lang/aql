@@ -1,0 +1,104 @@
+# AQL Language Specification: Word Modifiers (the /… suffix)
+# Format: input<TAB>expected<TAB>description
+#
+# An unquoted word may carry a `/…` modifier suffix. The recognised
+# modifier characters are:
+#
+#   /f   force-forward : collect ALL args from forward tokens
+#   /s   force-stack   : collect ALL args from the prefix stack
+#   /N   arg-count     : a digit run; select the overload with N total args
+#   /q   quote         : parse the word as an Atom (data, not a call)
+#   /r   ref           : resolve a fn word to its Function value, uninvoked
+#   /u   usurp         : wrap a fn with its argument order reversed
+#
+# Stacking rules (parser: scanWordModifier):
+#   - letters may appear in ANY order  (foo/sq ≡ foo/qs, foo/ur ≡ foo/ru)
+#   - each letter appears AT MOST once  (no /ff, /ss, /qq, /rr, /uu)
+#   - f and s are MUTUALLY EXCLUSIVE
+#   - q is MUTUALLY EXCLUSIVE with r and with u
+#   - u MAY combine with r  (/ur ≡ /ru)
+#   - digits form a SINGLE contiguous run
+#   - any other letter, or a forbidden pairing, is INVALID
+#
+# Precedence when valid: q dominates (yields an Atom; f/s/digit ignored);
+# r and u yield reference / usurp words (f/s/digit accepted but ignored,
+# since they bypass ordinary dispatch).
+#
+# An INVALID suffix is NOT a parse error: the whole token (slash and all)
+# is treated as a single plain word, which then raises [aql/undefined_word]
+# at run time because no such word is registered.
+#
+# Full coverage of /r and /u lives in ref.tsv and usurp.tsv; this file is
+# the modifier matrix — every variation and combination, including errors.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  Baseline — no modifier
+add 2 3	5	forward form
+2 3 add	5	stack form (commutative)
+#
+# §2  /f  force-forward
+add/f 2 3	5	all args from forward tokens
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2/f 10 3	7	/f forward order: a=10 b=3 → 10 sub 3
+#
+# §3  /s  force-stack
+2 3 add/s	5	all args from the prefix stack
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/s	-7	/s stack order (top→sig[0]): a=3 b=10 → 3 sub 10
+add/s 2 3	ERROR:signature_error	/s but operands are forward — nothing on the stack
+#
+# §4  /N  arg-count selection
+add/2 2 3	5	/2 selects a 2-arg overload
+def inc fn [[n:Integer][Integer][n add 1]]  inc/1 5	6	/1 selects a 1-arg overload
+def g fn [[a:Integer][Integer][a add 100]  [a:Integer b:Integer][Integer][a add b]]  g/1 5	105	/1 picks the 1-arg sig of an overloaded fn
+def g fn [[a:Integer][Integer][a add 100]  [a:Integer b:Integer][Integer][a add b]]  g/2 5 6	11	/2 picks the 2-arg sig
+def g fn [[a:Integer][Integer][a add 100]  [a:Integer b:Integer][Integer][a add b]]  g/3 5 6	ERROR:signature_error	/3 — no 3-arg overload exists
+add/3 2 3	ERROR:signature_error	/3 on a 2-arg word — arity mismatch
+add/0	ERROR:signature_error	/0 — add has no 0-arg sig
+#
+# §5  /q  quote → Atom
+add/q	add/q	/q turns a word into an Atom (data, not a call)
+foo/q	foo/q	/q works on ANY name, bound or not — it is pure data
+#
+# §6  /r  ref (full coverage in ref.tsv)
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  typeof (sub2/r)	Function	/r references a fn value without invoking it
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/r) 10 3	7	grouped reference dispatches
+#
+# §7  /u, /ur  usurp (full coverage in usurp.tsv)
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2/u 10 3	-7	/u reverses argument order
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/ur) 10 3	-7	/ur holds the reversed wrapper; grouped → dispatch
+#
+# §8  VALID combinations — letters stack in any order
+add/qs	add/q	q dominates: s accepted but ignored
+add/sq	add/q	/sq ≡ /qs
+add/q2	add/q	q dominates: digit ignored
+add/2q	add/q	/2q ≡ /q2
+foo/qf	foo/q	q dominates: f ignored
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/ru) 10 3	-7	/ru ≡ /ur (usurp + ref)
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/rs) 10 3	7	/rs = ref (+ s ignored): plain dispatch, NOT reversed
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/us) 10 3	-7	/us = usurp (+ s ignored): reversed
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/u2) 10 3	-7	/u2 = usurp (+ digit ignored)
+#
+# §9  INVALID combinations — whole token becomes an unknown word
+add/fs	ERROR:undefined_word	f and s are mutually exclusive
+add/sf	ERROR:undefined_word	same pairing, other order
+add/qr	ERROR:undefined_word	q cannot combine with r
+add/qu	ERROR:undefined_word	q cannot combine with u
+add/ff	ERROR:undefined_word	a letter may appear at most once
+add/ss	ERROR:undefined_word	repeated s
+add/qq	ERROR:undefined_word	repeated q
+add/rr	ERROR:undefined_word	repeated r
+add/uu	ERROR:undefined_word	repeated u
+add/1f2	ERROR:undefined_word	digits must be a single contiguous run
+add/x	ERROR:undefined_word	unknown modifier letter
+add/z	ERROR:undefined_word	unknown modifier letter
+#
+# §10  On functions — combined with ref / usurp / apply
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/r apply	-7	/r + apply
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/ur apply	7	/ur + apply (reversed)
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def ops {f: sub2/r}  ops.f 10 3	7	/r in a map slot, dispatched via dot-access
+#
+# §11  On anonymous functions
+([n:Integer] => [n add 1]) 5	6	bare lambda invocation (no modifier)
+def f ([n:Integer] => [n add 1])  (f/r) 5	6	/r on a bound lambda, grouped → dispatch
+def f ([a:Integer b:Integer] => [a sub b])  f/u 10 3	-7	/u on a bound lambda
+def f ([a:Integer b:Integer] => [a sub b])  (f/ur) 10 3	-7	/ur on a bound lambda
+def f ([n:Integer] => [n add 1])  5 f/r apply	6	/r + apply on a lambda

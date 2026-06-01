@@ -95,7 +95,7 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 			BarrierPos: barrierPos,
 		})
 	}
-	return FnDefInfo{Sigs: sigs}, nil
+	return FnDefInfo{Signatures: sigs}, nil
 }
 
 // ParseFnUndefSpec parses a list of [input output] sig pairs (no body

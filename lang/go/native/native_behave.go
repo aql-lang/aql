@@ -129,10 +129,11 @@ func behaveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	if err != nil {
 		return nil, fmt.Errorf("behave %s: %w", name, err)
 	}
-	if len(info.Sigs) == 0 {
+	firstSig, ok := info.FirstOwnSig()
+	if !ok {
 		return nil, r.AqlError("behave_error", fmt.Sprintf("behave %s: fn has no signatures", name), "behave")
 	}
-	sig := info.Sigs[0]
+	sig := *firstSig
 
 	target, err := be.validate(sig)
 	if err != nil {

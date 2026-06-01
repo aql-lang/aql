@@ -20,8 +20,9 @@ func MatchFnSig(fn Value, args []Value) *FnSig {
 	if !ok {
 		return nil
 	}
-	for i := range fnDef.Sigs {
-		sig := &fnDef.Sigs[i]
+	ownSigs := fnDef.OwnSigs()
+	for i := range ownSigs {
+		sig := &ownSigs[i]
 		if len(sig.Params) != len(args) {
 			continue
 		}

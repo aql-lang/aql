@@ -298,7 +298,6 @@ var (
 	IsTypeLiteral             = eng.IsTypeLiteral
 	JoinCarrierStacks         = eng.JoinCarrierStacks
 	JoinCarriers              = eng.JoinCarriers
-	KeepFallback              = eng.KeepFallback
 	MakeAqlError              = eng.MakeAqlError
 	MapFieldBoolean           = eng.MapFieldBoolean
 	MapFieldDecimal           = eng.MapFieldDecimal

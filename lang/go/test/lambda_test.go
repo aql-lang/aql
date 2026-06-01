@@ -165,11 +165,12 @@ func TestLambdaProducesAnonymousFunction(t *testing.T) {
 	if !fnDef.Anonymous {
 		t.Errorf("FnDefInfo.Anonymous = false, want true (afn must mark its output)")
 	}
-	if len(fnDef.Sigs) != 1 {
-		t.Errorf("got %d sigs, want 1", len(fnDef.Sigs))
+	ownSigs := fnDef.OwnSigs()
+	if len(ownSigs) != 1 {
+		t.Errorf("got %d sigs, want 1", len(ownSigs))
 	}
-	if len(fnDef.Sigs[0].Returns) != 1 || fnDef.Sigs[0].Returns[0] != eng.TAny {
-		t.Errorf("Returns = %v, want [Any]", fnDef.Sigs[0].Returns)
+	if len(ownSigs[0].Returns) != 1 || ownSigs[0].Returns[0] != eng.TAny {
+		t.Errorf("Returns = %v, want [Any]", ownSigs[0].Returns)
 	}
 }
 

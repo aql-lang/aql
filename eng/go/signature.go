@@ -462,17 +462,6 @@ func SortSignatures(sigs []Signature) {
 	})
 }
 
-// KeepFallback returns a slice containing only the fallback signature.
-// If no fallback is found, returns nil.
-func KeepFallback(sigs []Signature) []Signature {
-	for i := range sigs {
-		if sigs[i].Fallback {
-			return []Signature{sigs[i]}
-		}
-	}
-	return nil
-}
-
 // RankSignatures returns the indices of sigs sorted by priority (best
 // first), using the same reversed-lattice order as SortSignatures.
 func RankSignatures(sigs []Signature) []int {

@@ -141,24 +141,13 @@ func FnUndefMatchesFnDef(undef Value, fnVal Value) bool {
 }
 
 // FnDefHasSig reports whether the candidate has at least one
-// signature that satisfies `want` under structural subtyping. Both
-// AQL-defined Sigs (with FnParam payload) and compiled Signatures
-// (with raw Type payload) are considered so Go-implemented words can
-// also satisfy a FnUndef type. The variance rule is delegated to
-// FnSigSatisfiesSpec.
+// signature that satisfies `want` under structural subtyping. It reads
+// the function's own overloads (OwnSigs — full-fidelity Params/Returns,
+// fallback excluded) so both AQL fns and Go-implemented words are
+// considered. The variance rule is delegated to FnSigSatisfiesSpec.
 func FnDefHasSig(fnDef FnDefInfo, want FnSigSpec) bool {
-	for _, s := range fnDef.Sigs {
+	for _, s := range fnDef.OwnSigs() {
 		if FnSigSatisfiesSpec(s, want) {
-			return true
-		}
-	}
-	for _, sig := range fnDef.Signatures {
-		if sig.Fallback {
-			continue
-		}
-		// Compiled Signatures store Args as []Type; lift to a FnSig
-		// shape so the shared comparison helper applies.
-		if FnSigSatisfiesSpec(FnSig{Params: sig.Params, Returns: sig.Returns, BarrierPos: -1}, want) {
 			return true
 		}
 	}

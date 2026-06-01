@@ -88,12 +88,23 @@ func buildInspection(r *Registry, name string) Value {
 		return NewValueRaw(TInspect, MapPayload{M: result})
 	}
 
-	if len(fn.Sigs) > 0 {
+	ownSigs := fn.OwnSigs()
+	isDefined := false
+	for i := range ownSigs {
+		if len(ownSigs[i].Body) > 0 {
+			isDefined = true
+			break
+		}
+	}
+	if isDefined {
 		result.Set("kind", NewAtom("defined"))
 	} else {
 		result.Set("kind", NewAtom("native"))
 	}
 
+	// Iterate the full aggregate dispatch table (which, for an AQL fn,
+	// includes the synthetic 0-arg fallback rendered as {args:[]}) so the
+	// inspect surface matches the dispatcher's view.
 	var sigMaps []Value
 	for _, sig := range fn.Signatures {
 		sm := NewOrderedMap()
