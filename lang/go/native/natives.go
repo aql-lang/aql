@@ -588,9 +588,11 @@ func stackCollectCheckFullStackFn(_ []Value, stack []Value, _ *Registry) []Value
 	return append(append([]Value(nil), stack...), NewCarrierTypedList(elem))
 }
 
-// nowHandler returns the current UTC instant as an Instant value.
-func nowHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return []Value{NewInstant(time.Now())}, nil
+// nowHandler returns the current instant as an Instant value, read from
+// the registry's Clock capability (a wall clock by default; a FixedClock
+// under test/spec) so temporal output is reproducible when frozen.
+func nowHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return []Value{NewInstant(EffectiveClock(r).Now())}, nil
 }
 
 // sleepHandler pauses the current goroutine for the given milliseconds.

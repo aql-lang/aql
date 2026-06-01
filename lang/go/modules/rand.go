@@ -4,7 +4,6 @@ import (
 	"fmt"
 	mathrand "math/rand"
 	"sync"
-	"time"
 
 	"github.com/aql-lang/aql/lang/go/native"
 )
@@ -38,7 +37,7 @@ type randState struct {
 func BuildRandModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Seed the top-level instance from the clock so default usage is
 	// non-deterministic — what most developers expect.
-	defaultState := newRandState(time.Now().UnixNano())
+	defaultState := newRandState(native.EffectiveClock(parent).Now().UnixNano())
 	exports, err := buildRandExportsForState(defaultState)
 	if err != nil {
 		return native.ModuleDesc{}, err

@@ -18,13 +18,19 @@ package langspec
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/aql-lang/aql/eng/go"
 	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/modules"
 	"github.com/aql-lang/aql/lang/go/native"
 	"github.com/aql-lang/aql/test/go/specrunner"
 )
+
+// specClock freezes time at a fixed instant so temporal words (`now`,
+// aql:time) and the default aql:rand seed are deterministic in specs.
+var specClock = capabilities.FixedClock{T: time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)}
 
 // TestSpecProd runs the .tsv spec files under aql/lang/spec/ against a
 // production-aql registry (native.DefaultRegistry + native.Register).
@@ -52,6 +58,8 @@ func TestSpecProd(t *testing.T) {
 		// production. Without this the module words are unreachable and
 		// the formal spec could not cover them.
 		modules.InstallResolver(reg)
+		// Freeze the clock so temporal / rand specs are reproducible.
+		native.SetHostClock(reg, specClock)
 		return native.NewTop(reg).Run(values)
 	})
 }

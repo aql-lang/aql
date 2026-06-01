@@ -16,7 +16,28 @@ const (
 	CapFormats    = "engine.formats"     // map[string]Format read/write registry
 	CapSQLite     = "engine.sqlite"      // *SQLiteStore
 	CapPolicy     = "engine.policy"      // policy.Policy enforcing permissions
+	CapClock      = "engine.clock"       // capabilities.Clock (the time source)
 )
+
+// EffectiveClock returns the time source for the current invocation. The
+// host (or the spec runner) may install a Clock under CapClock — e.g. a
+// capabilities.FixedClock for deterministic tests. When none is installed,
+// a real wall clock is used. Never returns nil.
+func EffectiveClock(r *Registry) capabilities.Clock {
+	if clk, ok, _ := eng.Cap[capabilities.Clock](r, CapClock); ok && clk != nil {
+		return clk
+	}
+	return capabilities.WallClock{}
+}
+
+// SetHostClock installs a Clock capability (used by the spec runner and
+// host embedders to freeze time).
+func SetHostClock(r *Registry, clk capabilities.Clock) {
+	if r == nil {
+		return
+	}
+	_ = r.Capabilities.Set(CapClock, clk)
+}
 
 // HostPolicy returns the policy installed on r, or nil if none. A
 // nil result means "no permissions configured" — the engine and
