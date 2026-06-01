@@ -1,0 +1,28 @@
+# AQL Language Specification: Control flow (if do for guard)
+# Format: input<TAB>expected<TAB>description
+#
+# Branch/body arguments are unevaluated code lists (NoEvalArgs): `if`
+# runs exactly one branch, `do` runs a body as a sub-program, `for`
+# repeats a body. `guard` is the short-circuit value gate (swap form).
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  if cond then else — runs exactly one branch
+if true [1] [2]	1	true → then branch
+if false [1] [2]	2	false → else branch
+if (5 gt 3) ['yes'] ['no']	'yes'	computed condition
+if true [1]	1	two-arg form (no else) runs then when true
+#
+# §2  do — run a body as a sub-program, leaving its results
+do [1 add 2]	3	evaluates the body
+do [10 20 30]	10 20 30	all body results remain on the stack
+#
+# §3  for count body — repeat a body N times
+for 3 ['x']	'x' 'x' 'x'	the body runs three times
+#
+# §4  guard — `cond guard value` → value if cond else None
+true guard 42	42	passes the value when the condition holds
+false guard 42	None	yields None when the condition fails
+#
+# §5  truthiness — if coerces its condition
+if 1 [1] [2]	1	non-zero is truthy → then
+if none [1] [2]	2	None is falsy → else
