@@ -479,7 +479,7 @@ func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (en
 		if qkSet[key] || ckSet[key] {
 			continue
 		}
-		if _, _, _, _, _, _, hasMod := scanWordModifier(key); hasMod {
+		if _, _, _, _, _, _, _, hasMod := scanWordModifier(key); hasMod {
 			return eng.Value{}, fmt.Errorf(
 				"[aql/illegal_key]: word modifier not allowed on map key %q (modifiers qualify values, not keys; quote the key as '%s' for a literal slash)",
 				key, key)
@@ -762,24 +762,27 @@ func sortedKeys(m map[string]any) []string {
 // scanWordModifier parses the optional `/...` modifier suffix of an
 // unquoted word token: name/f (forceForward), name/s (forceStack),
 // name/N (argCount), name/q (quote → Atom), name/r (ref → bound value),
-// and combinations like name/1f, name/qs, name/f2. Modifiers stack in
-// any order; f and s are mutually exclusive; q and r are mutually
-// exclusive; the argCount digits form a single number. When the token
-// has no `/` or a malformed modifier suffix, valid is false, base is the
-// whole text, and every flag is at its zero value (argCount -1).
-func scanWordModifier(text string) (base string, argCount int, forceStack, forceForward, quoteFlag, refFlag, valid bool) {
+// name/u (usurp → reversed-sig wrapper), and combinations like name/1f,
+// name/qs, name/f2, name/ur. Modifiers stack in any order; f and s are
+// mutually exclusive; q is mutually exclusive with both r and u (an atom
+// has no binding to reference or usurp); u may combine with r (name/ur);
+// the argCount digits form a single number. When the token has no `/` or a
+// malformed modifier suffix, valid is false, base is the whole text, and
+// every flag is at its zero value (argCount -1).
+func scanWordModifier(text string) (base string, argCount int, forceStack, forceForward, quoteFlag, refFlag, usurpFlag, valid bool) {
 	argCount = -1
 
 	idx := strings.LastIndex(text, "/")
 	if idx < 0 || idx >= len(text)-1 {
-		return text, argCount, false, false, false, false, false
+		return text, argCount, false, false, false, false, false, false
 	}
 	mod := text[idx+1:]
 	baseName := text[:idx]
 
-	// Scan modifier chars in any order: digits, 'f', 's', 'q', 'r'.
-	// Each letter appears at most once; f/s are mutually exclusive;
-	// digits run contiguously and form a single argCount value.
+	// Scan modifier chars in any order: digits, 'f', 's', 'q', 'r', 'u'.
+	// Each letter appears at most once; f/s are mutually exclusive; q is
+	// mutually exclusive with r and u; digits run contiguously and form a
+	// single argCount value.
 	valid = true
 	seenDigits := false
 	i := 0
@@ -817,7 +820,7 @@ func scanWordModifier(text string) (base string, argCount int, forceStack, force
 				forceStack = true
 			}
 		case c == 'q':
-			if quoteFlag || refFlag {
+			if quoteFlag || refFlag || usurpFlag {
 				valid = false
 			} else {
 				quoteFlag = true
@@ -827,6 +830,12 @@ func scanWordModifier(text string) (base string, argCount int, forceStack, force
 				valid = false
 			} else {
 				refFlag = true
+			}
+		case c == 'u':
+			if usurpFlag || quoteFlag {
+				valid = false
+			} else {
+				usurpFlag = true
 			}
 		default:
 			valid = false
@@ -839,25 +848,25 @@ func scanWordModifier(text string) (base string, argCount int, forceStack, force
 
 	if !valid {
 		// Unrecognized / malformed modifier — treat entire token as plain word.
-		return text, -1, false, false, false, false, false
+		return text, -1, false, false, false, false, false, false
 	}
-	return baseName, argCount, forceStack, forceForward, quoteFlag, refFlag, true
+	return baseName, argCount, forceStack, forceForward, quoteFlag, refFlag, usurpFlag, true
 }
 
 // wordBaseName returns the base name of an unquoted word token, stripping
 // a valid `/...` modifier suffix (foo/r → foo, foo → foo). Used to derive
 // the key of a shorthand map entry, whose value keeps the full token.
 func wordBaseName(text string) string {
-	base, _, _, _, _, _, _ := scanWordModifier(text)
+	base, _, _, _, _, _, _, _ := scanWordModifier(text)
 	return base
 }
 
 // parseWord interprets an unquoted text token as an AQL word, handling
 // the modifier syntax decoded by scanWordModifier. q produces an Atom and
-// overrides the other modifiers; r emits a ref-word that short-circuits
-// the rest.
+// overrides the other modifiers; u emits a usurp-word and r emits a
+// ref-word, both of which short-circuit the rest.
 func parseWord(text string) (eng.Value, error) {
-	name, argCount, forceStack, forceForward, quoteFlag, refFlag, _ := scanWordModifier(text)
+	name, argCount, forceStack, forceForward, quoteFlag, refFlag, usurpFlag, _ := scanWordModifier(text)
 
 	if name == "" {
 		return eng.Value{}, fmt.Errorf("empty word")
@@ -868,6 +877,15 @@ func parseWord(text string) (eng.Value, error) {
 	// not a function call.
 	if quoteFlag {
 		return eng.NewAtom(name), nil
+	}
+
+	// /u emits a usurp-word that resolves the name to its bound Function
+	// value and wraps it with reversed signature arg order. Legal only for
+	// function words (illegal_ref at run time otherwise). It may combine
+	// with /r: /u alone dispatches the wrapper, /ur leaves it as data.
+	// Argument-shape modifiers don't apply (the wrapper supplies its own).
+	if usurpFlag {
+		return eng.NewWordUsurp(name, refFlag), nil
 	}
 
 	// /r emits a ref-word that, when reached at the pointer, resolves the

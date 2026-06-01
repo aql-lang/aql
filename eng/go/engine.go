@@ -773,6 +773,83 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 func (e *Engine) stepWord(val Value) error {
 	w, _ := AsWord(val)
 
+	// /u modifier: resolve the name to its bound Function value and wrap it
+	// so its signature argument order is reversed (usurped a b c ≡ f c b a).
+	// Like /r, /u is legal only for function words. /u alone dispatches the
+	// wrapper immediately (like a bare word); /ur (combined with /r) leaves
+	// the wrapper on the stack as inert data. Handled before the /r branch
+	// so the /ur combo usurps rather than plain-referencing.
+	if w.ForceUsurp {
+		v, ok := ResolveUsurp(e.registry, w.Name)
+		if !ok {
+			if e.registry != nil && e.registry.Check.IsActive() {
+				e.registry.Check.AddDiagnostic(CheckDiagnostic{
+					Code:   "undefined_word",
+					Detail: "undefined word: " + w.Name,
+					Word:   w.Name,
+					Row:    val.Pos.Row,
+					Col:    val.Pos.Col,
+				})
+				placeholder := NewAtom(w.Name)
+				placeholder.Pos = val.Pos
+				placeholder.Undefined = true
+				e.stack[e.pointer] = placeholder
+				return e.stepLiteral()
+			}
+			return &AqlError{
+				Code:       "undefined_word",
+				Detail:     "undefined word: " + w.Name,
+				Src:        w.Name,
+				Row:        val.Pos.Row,
+				Col:        val.Pos.Col,
+				fullSource: e.effectiveSource(),
+			}
+		}
+		// /u may usurp only function words — a non-fn binding has no
+		// signature to reverse. ResolveUsurp returns the raw binding in
+		// that case so the IsFunctionRef check below raises illegal_ref.
+		if !IsFunctionRef(v) {
+			detail := "/u requires a function word: " + w.Name + " is bound to " + v.Parent.String()
+			if e.registry != nil && e.registry.Check.IsActive() {
+				e.registry.Check.AddDiagnostic(CheckDiagnostic{
+					Code:   "illegal_ref",
+					Detail: detail,
+					Word:   w.Name,
+					Row:    val.Pos.Row,
+					Col:    val.Pos.Col,
+				})
+				placeholder := NewAtom(w.Name)
+				placeholder.Pos = val.Pos
+				placeholder.Undefined = true
+				e.stack[e.pointer] = placeholder
+				return e.stepLiteral()
+			}
+			return &AqlError{
+				Code:       "illegal_ref",
+				Detail:     detail,
+				Src:        w.Name,
+				Row:        val.Pos.Row,
+				Col:        val.Pos.Col,
+				fullSource: e.effectiveSource(),
+			}
+		}
+		v.Pos = val.Pos
+		e.stack[e.pointer] = v
+		if w.ForceRef {
+			// /ur: leave the usurped wrapper as inert data (mirrors /r) — it
+			// still dispatches if args follow or it is later stepped.
+			if e.recorder != nil && isRecordableLiteral(v) {
+				e.recorder.OnPushLit(v)
+			}
+			e.pointer++
+			return nil
+		}
+		// /u alone: dispatch the unquoted wrapper now, exactly like a bare
+		// function word — stepLiteral routes it through execFnDefLiteral,
+		// which forward-collects any trailing args.
+		return e.stepLiteral()
+	}
+
 	// /r modifier: resolve the name to its bound Function value as data,
 	// with no argument collection or dispatch. The FnDef binding comes
 	// back as an (unquoted) Function value that sits on the stack like any

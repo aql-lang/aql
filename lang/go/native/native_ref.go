@@ -54,6 +54,18 @@ var refNatives = []NativeFunc{
 			Returns: []*Type{TAny}, BarrierPos: 0,
 		}},
 	},
+	{
+		Name: "usurp",
+		// Forward-eligible: `usurp fn` reads as "wrap this fn". Returns a
+		// Function value, so it dispatches immediately when args follow
+		// (`usurp (ref f) a b`) and stays inert under quote.
+		Signatures: []NativeSig{{
+			Args:           []*Type{TFunction},
+			Handler:        usurpHandler,
+			Returns:        []*Type{TFunction},
+			RunInCheckMode: true, BarrierPos: -1,
+		}},
+	},
 }
 
 // refHandler resolves the captured atom name to its bound value and
@@ -112,4 +124,21 @@ func applyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 	}
 	v.Quoted = false
 	return []Value{v}, nil
+}
+
+// usurpHandler wraps a Function value so its signature argument order is
+// reversed: the wrapper called `usurped a b c` dispatches the original as
+// `f c b a`. Mirrors the /u modifier (eng.UsurpFunction). The wrapper is
+// returned unquoted, so — like a bare function word — it dispatches
+// immediately when args follow, and stays inert when captured with quote.
+func usurpHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	wrapped, ok := eng.UsurpFunction(args[0])
+	if !ok {
+		detail := "usurp requires a function value, got " + args[0].Parent.String()
+		if reg != nil {
+			return nil, reg.AqlError("illegal_ref", detail, "usurp")
+		}
+		return nil, fmt.Errorf("%s", detail)
+	}
+	return []Value{wrapped}, nil
 }

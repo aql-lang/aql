@@ -660,6 +660,7 @@ type WordInfo struct {
 	ForceStack   bool // lower/s
 	ForceForward bool // lower/f
 	ForceRef     bool // lower/r — resolve to the bound value without invoking
+	ForceUsurp   bool // lower/u — wrap the bound fn so its sig arg order is reversed
 }
 
 // ForwardInfo tracks forward argument collection for a deferred function call.
@@ -1110,6 +1111,21 @@ func NewWordRef(name string) Value {
 		Name:     name,
 		ArgCount: -1,
 		ForceRef: true,
+	})
+}
+
+// NewWordUsurp creates a word value marked with the /u modifier: when
+// reached at the pointer it resolves the name to its bound Function value
+// and wraps it so its signature argument order is reversed (usurped a b c
+// ≡ f c b a). Like /r, /u is legal ONLY for function words. The usurped
+// wrapper is left UNQUOTED, so it dispatches immediately when args are
+// available; combine with /r (name/ur) to leave it as inert data instead.
+func NewWordUsurp(name string, ref bool) Value {
+	return NewValueRaw(TWord, WordInfo{
+		Name:       name,
+		ArgCount:   -1,
+		ForceUsurp: true,
+		ForceRef:   ref,
 	})
 }
 

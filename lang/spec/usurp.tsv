@@ -1,0 +1,26 @@
+# AQL Language Specification: Argument Usurping (usurp / /u)
+# Format: input<TAB>expected<TAB>description
+#
+# usurp f         → wrap a function so its signature arg order is reversed
+# name/u          → same, as a word-suffix modifier (resolves + usurps name)
+# name/ur         → usurp combined with ref: leave the wrapper as inert data
+# quote (usurp f) → capture the usurped wrapper as inert data
+#
+# A usurped fn called `usurped a b c` dispatches the original as `f c b a`.
+# Like ref/`/r`, the wrapper is an unquoted Function value: it dispatches
+# when args follow (forward / paren-grouped) and stays inert under quote or
+# when reffed.
+#
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2 10 3	7	baseline: sub computes a-b
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp (ref sub2) 10 3	-7	usurp reverses args: now 3-10
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2/u 10 3	-7	/u modifier reverses the same way
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (usurp (ref sub2)) 10 3	-7	paren-grouped reffed wrapper dispatches
+def inc fn [[n:Integer][Integer][n add 1]]  inc/u 5	6	usurp of a 1-arg fn is a no-op on order
+def cat3 fn [[a:String b:String c:String][String][a add b add c]]  cat3/u 'x' 'y' 'z'	'zyx'	usurp reverses all three args
+def f fn [[a:Integer b:String][String][b add (a convert String)]]  f 7 'hi'	'hi7'	baseline: heterogeneous sig
+def f fn [[a:Integer b:String][String][b add (a convert String)]]  f/u 'hi' 7	'hi7'	usurped sig is [String Integer]; a=7 b='hi'
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def ops {rev: (usurp (ref sub2))}  ops.rev 10 3	-7	wrapper captured in a map dispatches via dot-access
+def inc fn [[n:Integer][Integer][n add 1]]  quote (usurp (ref inc))	fn inc[[n:Integer][Integer][]]	quoted usurp is inert data — the Function value itself
+nope/u	ERROR:undefined_word	/u on an unbound name
+def x 5  x/u	ERROR:illegal_ref	/u on a non-fn binding is rejected
+def x 5  usurp x	ERROR:signature_error	usurp word rejects a non-function value (Function slot unmatched)
