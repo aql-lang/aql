@@ -34,10 +34,16 @@ var refNatives = []NativeFunc{
 			// /q on the name slot lets the parser capture the upcoming
 			// Word as an Atom rather than executing it. `ref add` then
 			// arrives here with args[0] = Atom(add).
-			Args:           []*Type{TAtom},
-			QuoteArgs:      map[int]bool{0: true},
-			Handler:        refHandler,
-			Returns:        []*Type{TAny},
+			Args:      []*Type{TAtom},
+			QuoteArgs: map[int]bool{0: true},
+			Handler:   refHandler,
+			Returns:   []*Type{TAny},
+			// ParkResult: leave the resolved Function value as inert data at
+			// the call site instead of re-stepping it — so `ref f` behaves
+			// exactly like `f/r`, never auto-invoking (not even a 0-arg fn).
+			// The value still dispatches when re-stepped elsewhere (from a
+			// map, a paren), matching `(f/r)` / `ops.f a b`.
+			ParkResult:     true,
 			RunInCheckMode: true, BarrierPos: -1,
 		}},
 	},

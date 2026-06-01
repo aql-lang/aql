@@ -1335,7 +1335,18 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		stampResultPos(results, e.stack[e.pointer].Pos)
 	}
 
-	return e.spliceMatchResults(match, sortedIndices, n, results)
+	if err := e.spliceMatchResults(match, sortedIndices, n, results); err != nil {
+		return err
+	}
+	// ParkResult words (notably `ref`) leave their result as inert data at
+	// the call site rather than re-stepping it: advance the pointer past the
+	// spliced result so an unquoted Function value does NOT auto-dispatch
+	// here (matching the `/r` word-suffix). The value still dispatches when
+	// re-stepped elsewhere — retrieved from a map, unwrapped from a paren.
+	if match.Sig.ParkResult {
+		e.pointer += len(results)
+	}
+	return nil
 }
 
 // maybeAddFnShapeHint wraps a signature_error from a fn-dispatch

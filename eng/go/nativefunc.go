@@ -67,4 +67,8 @@ type NativeSig struct {
 
 	// CheckFullStackFn — see Signature.CheckFullStackFn.
 	CheckFullStackFn CheckFullStackFunc
+
+	// ParkResult, when true, advances the pointer past the handler's
+	// spliced result instead of re-stepping it. See Signature.ParkResult.
+	ParkResult bool
 }

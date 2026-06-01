@@ -272,6 +272,18 @@ type FnSig struct {
 	ReturnsFn        ReturnsFunc
 	RunInCheckMode   bool
 	CheckFullStackFn CheckFullStackFunc
+	// ParkResult, when true, makes execMatch advance the pointer PAST the
+	// spliced handler result rather than leaving the pointer on it to be
+	// re-stepped. A re-stepped unquoted Function value auto-dispatches
+	// (and a 0-arg fn fires immediately); parking instead leaves the
+	// result as inert data at the call site — exactly what the `/r`
+	// word-suffix does in stepWord. This is what makes `ref f` behave
+	// identically to `f/r`: a bare reference never fires, even for a
+	// 0-arg fn, while the SAME value still dispatches when it is later
+	// re-stepped elsewhere (retrieved from a map, unwrapped from a paren).
+	// Used by `ref`; apply/usurp deliberately leave it false so they
+	// re-step and invoke.
+	ParkResult bool
 }
 
 // FnDefInfo holds the function specification for a def-defined function.
