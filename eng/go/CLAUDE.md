@@ -295,10 +295,12 @@ behavior is the terminal fallback returning `{}` / `[]`, so every
 Ideal — built-in or user-defined, in Go or AQL — is convertible.
 Return `ErrNoConverter` to decline and keep walking. Concrete
 projections are installed for Object (→ fields), Array (→ elements /
-index map), Store (→ entries), Error (→ {message}), and (in
-lang/native) ModuleExport (→ exports) and Module (→ descriptor);
-each is a behavior whose `Format` delegates to `kernelFormatDefault`
-so rendering is unchanged.
+index map), Store (→ entries), Error (→ {message}), Table (→ rows /
+columnar map), and — in their owning packages — ModuleExport
+(→ exports), Module (→ descriptor), Tensor/Matrix/Vector (→ nested
+rows / {shape,values}), Fetch Request/Response (→ their map), and
+Timeout/Interval (→ {id,ms}). Each is a behavior whose `Format`
+delegates to the kernel default so rendering is unchanged.
 
 ## Where a Type Lives (kernel/domain boundary)
 

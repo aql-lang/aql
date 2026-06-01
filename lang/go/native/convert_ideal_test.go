@@ -114,3 +114,47 @@ func TestConvertIdealBuiltins(t *testing.T) {
 		t.Errorf("Object→List = %s, want [1 'x']", got)
 	}
 }
+
+// TestConvertIdealMoreBuiltins covers Table, Timeout, and Fetch Response.
+func TestConvertIdealMoreBuiltins(t *testing.T) {
+	// Table → rows (List); columnar (Map).
+	fields := NewOrderedMap()
+	fields.Set("a", NewTypeLiteral(TInteger))
+	fields.Set("b", NewTypeLiteral(TString))
+	row1 := NewOrderedMap()
+	row1.Set("a", NewInteger(1))
+	row1.Set("b", NewString("x"))
+	row2 := NewOrderedMap()
+	row2.Set("a", NewInteger(2))
+	row2.Set("b", NewString("y"))
+	tbl := NewValueRaw(TTable, TableData{
+		Record: RecordTypeInfo{Fields: fields},
+		Rows:   []Value{NewMap(row1), NewMap(row2)},
+	})
+	if got := runConvert(t, tbl, "convert List thing"); got != "[{a:1 b:'x'} {a:2 b:'y'}]" {
+		t.Errorf("Table→List = %s", got)
+	}
+	if got := runConvert(t, tbl, "convert Map thing"); got != "{a:[1 2] b:['x' 'y']}" {
+		t.Errorf("Table→Map = %s", got)
+	}
+
+	// Timeout → {id ms} / [id ms].
+	to := Value{Parent: TTimeout, Data: &TimeoutInfo{ID: "t1", Ms: 500}}
+	if got := runConvert(t, to, "convert Map thing"); got != "{id:'t1' ms:500}" {
+		t.Errorf("Timeout→Map = %s", got)
+	}
+	if got := runConvert(t, to, "convert List thing"); got != "['t1' 500]" {
+		t.Errorf("Timeout→List = %s", got)
+	}
+
+	// Fetch Response (map-backed) → its map.
+	resp := NewOrderedMap()
+	resp.Set("status", NewInteger(200))
+	fr := Value{Parent: TFetchResponse, Data: MapPayload{M: resp}}
+	if got := runConvert(t, fr, "convert Map thing"); got != "{status:200}" {
+		t.Errorf("Fetch→Map = %s", got)
+	}
+	if got := runConvert(t, fr, "convert List thing"); got != "[200]" {
+		t.Errorf("Fetch→List = %s", got)
+	}
+}

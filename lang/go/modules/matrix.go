@@ -933,3 +933,55 @@ func matDet(m TensorData) (float64, error) {
 	}
 	return det, nil
 }
+
+// ToMap / ToList implement native.IdealConverter (eng.IdealConverter) for
+// the tensor kinds: ToList gives the nested row structure; ToMap gives
+// {shape:[…] values:[flat]}.
+func (tensorFormatBehavior) ToList(v native.Value) (native.Value, error) {
+	t, ok := tensorPayload(v)
+	if !ok {
+		return native.NewList(nil), nil
+	}
+	return tensorNested(t, 0, 0, len(t.Data)), nil
+}
+
+func (tensorFormatBehavior) ToMap(v native.Value) (native.Value, error) {
+	m := native.NewOrderedMap()
+	t, ok := tensorPayload(v)
+	if !ok {
+		return native.NewMap(m), nil
+	}
+	shape := make([]native.Value, len(t.Shape))
+	for i, d := range t.Shape {
+		shape[i] = native.NewInteger(int64(d))
+	}
+	vals := make([]native.Value, len(t.Data))
+	for i, d := range t.Data {
+		vals[i] = native.NewDecimal(d)
+	}
+	m.Set("shape", native.NewList(shape))
+	m.Set("values", native.NewList(vals))
+	return native.NewMap(m), nil
+}
+
+// tensorNested builds the nested-list view of t's [lo,hi) data slice for
+// the dimension at the given axis. Rank-1 → flat list of Decimals.
+func tensorNested(t TensorData, axis, lo, hi int) native.Value {
+	if axis >= len(t.Shape)-1 {
+		elems := make([]native.Value, 0, hi-lo)
+		for i := lo; i < hi; i++ {
+			elems = append(elems, native.NewDecimal(t.Data[i]))
+		}
+		return native.NewList(elems)
+	}
+	dim := t.Shape[axis]
+	if dim == 0 {
+		return native.NewList(nil)
+	}
+	stride := (hi - lo) / dim
+	rows := make([]native.Value, 0, dim)
+	for i := 0; i < dim; i++ {
+		rows = append(rows, tensorNested(t, axis+1, lo+i*stride, lo+(i+1)*stride))
+	}
+	return native.NewList(rows)
+}

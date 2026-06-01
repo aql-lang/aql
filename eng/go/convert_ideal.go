@@ -220,3 +220,41 @@ func init() {
 	TStore.Behavior = storeConvertBehavior{}
 	TError.Behavior = errorConvertBehavior{}
 }
+
+// tableConvertBehavior: a Table → its rows (List); ToMap is columnar —
+// {field: [value per row]} using the table's record field order.
+type tableConvertBehavior struct{}
+
+func (tableConvertBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
+func (tableConvertBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
+func (tableConvertBehavior) Format(v Value) string       { return kernelFormatDefault(v) }
+func (tableConvertBehavior) ToList(v Value) (Value, error) {
+	td, ok := v.Data.(TableData)
+	if !ok {
+		return NewList(nil), nil
+	}
+	return NewList(append([]Value(nil), td.Rows...)), nil
+}
+func (tableConvertBehavior) ToMap(v Value) (Value, error) {
+	out := NewOrderedMap()
+	td, ok := v.Data.(TableData)
+	if !ok || td.Record.Fields == nil {
+		return NewMap(out), nil
+	}
+	for _, col := range td.Record.Fields.Keys() {
+		vals := make([]Value, 0, len(td.Rows))
+		for _, row := range td.Rows {
+			rm, err := AsMap(row)
+			if err != nil {
+				continue
+			}
+			if cv, ok := rm.Get(col); ok {
+				vals = append(vals, cv)
+			}
+		}
+		out.Set(col, NewList(vals))
+	}
+	return NewMap(out), nil
+}
+
+func init() { TTable.Behavior = tableConvertBehavior{} }

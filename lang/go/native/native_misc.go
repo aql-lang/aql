@@ -754,3 +754,34 @@ func doAwait(r *Registry, mode string, parallels Value) ([]Value, error) {
 		return nil, r.AqlError("await_error", fmt.Sprintf("await: unknown mode %q, expected all, full, first, or any", mode), "await")
 	}
 }
+
+// ToMap / ToList implement eng.IdealConverter for Timeout / Interval:
+// {id:… ms:…} and [id ms].
+func (timeoutFormatBehavior) ToMap(v Value) (Value, error) {
+	m := NewOrderedMap()
+	if ti, ok := v.Data.(*TimeoutInfo); ok {
+		m.Set("id", NewString(ti.ID))
+		m.Set("ms", NewInteger(ti.Ms))
+	}
+	return NewMap(m), nil
+}
+func (timeoutFormatBehavior) ToList(v Value) (Value, error) {
+	if ti, ok := v.Data.(*TimeoutInfo); ok {
+		return NewList([]Value{NewString(ti.ID), NewInteger(ti.Ms)}), nil
+	}
+	return NewList(nil), nil
+}
+func (intervalFormatBehavior) ToMap(v Value) (Value, error) {
+	m := NewOrderedMap()
+	if ii, ok := v.Data.(*IntervalInfo); ok {
+		m.Set("id", NewString(ii.ID))
+		m.Set("ms", NewInteger(ii.Ms))
+	}
+	return NewMap(m), nil
+}
+func (intervalFormatBehavior) ToList(v Value) (Value, error) {
+	if ii, ok := v.Data.(*IntervalInfo); ok {
+		return NewList([]Value{NewString(ii.ID), NewInteger(ii.Ms)}), nil
+	}
+	return NewList(nil), nil
+}

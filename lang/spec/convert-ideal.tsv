@@ -28,3 +28,7 @@ module [export "Foo" {a:1}] import end convert List Foo.$module	['Foo']	…and t
 #
 # §4  negative — an Ideal converts only to Map or List
 def Foo (refine Object {}) convert Integer (make Foo {})	ERROR:signature	no Ideal→Scalar convert
+#
+# §5  Matrix / Tensor → nested rows (List) and {shape values} (Map)
+"aql:matrix-util" import end convert List (MatrixUtil.eye 2)	[[1.0 0.0] [0.0 1.0]]	a matrix → nested rows
+"aql:matrix-util" import end convert Map (MatrixUtil.eye 2)	{shape:[2 2] values:[1.0 0.0 0.0 1.0]}	…and a shape/values map
