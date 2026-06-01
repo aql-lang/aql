@@ -126,7 +126,6 @@ var (
 	TMap      = eng.TMap
 	TMark     = eng.TMark
 	// TMatrix moved to lang/go/internal/nativemod/matrix.go (Step 8).
-	TModule         = eng.TModule
 	TMove           = eng.TMove
 	TNever          = eng.TNever
 	TNode           = eng.TNode
@@ -196,7 +195,6 @@ var (
 	AsList                    = eng.AsList
 	AsMap                     = eng.AsMap
 	AsMark                    = eng.AsMark
-	AsModule                  = eng.AsModule
 	AsMove                    = eng.AsMove
 	AsMutableList             = eng.AsMutableList
 	AsMutableMap              = eng.AsMutableMap
@@ -223,7 +221,6 @@ var (
 	IsSplice                  = eng.IsSplice
 	AsSplice                  = eng.AsSplice
 	Canon                     = eng.Canon
-	IsModule                  = eng.IsModule
 	IsMove                    = eng.IsMove
 	IsNone                    = eng.IsNone
 	IsNoneShape               = eng.IsNoneShape
@@ -355,7 +352,6 @@ var (
 	NewList               = eng.NewList
 	NewMap                = eng.NewMap
 	NewMark               = eng.NewMark
-	NewModule             = eng.NewModule
 	NewMove               = eng.NewMove
 	NewMoveCont           = eng.NewMoveCont
 	NewMoveIf             = eng.NewMoveIf

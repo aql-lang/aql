@@ -618,10 +618,15 @@ module's exports share one **`Ideal/Module`** descriptor
 - `NewModuleInstance(moduleInfo{ID,Kind,File,Folder,Exports})` — the
   descriptor. `id`/`kind`/`file`/`folder`/`exports` are read via `get`.
 - Instances are backed by `ExtensionPayload` (lang-layer; no eng payload
-  type). `buildModuleInstance` (`native_module_module.go`) builds the
+  type). `NewModuleInstance(desc)` (`native_module_module.go`) builds the
   shared Module at install time; `ModuleDesc.{Ref,Kind,File,Folder}` are
   populated by `Resolve` (native), `loadFileModule` (file), and
   `RunModuleBody` (inline). FixedIDs: Module 5000, ModuleExport 5001.
+
+`module […]` itself now produces an `Ideal/Module` (carrying the full
+`ModuleDesc`) and `import` consumes it — so `typeof (module […]) → Module`
+and the old internal carrier type `Word/__MD` was retired. `AsModuleDesc`
+unwraps the `ModuleDesc` for hosts.
 
 See `lang/spec/module-instance.tsv` + `test/module_instance_test.go`.
 

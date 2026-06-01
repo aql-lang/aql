@@ -205,12 +205,12 @@ WORD implies
 WORD import
   [Node/List Scalar/Atom Node/List] barrier=3 runcheck noeval={0,2} quote={1}
   [Scalar/Atom Scalar/Atom Node/List] barrier=3 runcheck noeval={2} quote={1}
-  [Node/List Word/__MD] barrier=2 runcheck noeval={0}
+  [Node/List Ideal/Module] barrier=2 runcheck noeval={0}
   [Node/List Scalar/String] barrier=2 runcheck noeval={0}
-  [Scalar/Atom Word/__MD] barrier=2 runcheck
+  [Scalar/Atom Ideal/Module] barrier=2 runcheck
   [Scalar/Atom Node/List] barrier=2 runcheck noeval={1} quote={0}
-  [Word/__MD] barrier=1 runcheck
-  [Scalar/String] barrier=1 runcheck returns=[Word/__MD]
+  [Ideal/Module] barrier=1 runcheck
+  [Scalar/String] barrier=1 runcheck returns=[Ideal/Module]
 WORD indexof
   [Scalar/String Scalar/String Node/Map] barrier=3 returns=[Scalar/Number/Integer]
   [Node/List Node/List] barrier=2 +returnsfn
@@ -282,7 +282,7 @@ WORD merge
 WORD mod
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn
 WORD module
-  [Node/List] barrier=1 runcheck noeval={0} returns=[Word/__MD]
+  [Node/List] barrier=1 runcheck noeval={0} returns=[Ideal/Module]
 WORD mul
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn
 WORD nand

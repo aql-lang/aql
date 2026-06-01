@@ -320,11 +320,11 @@ func TestIntegModuleWithExport(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("module should return 1 value, got %d", len(result))
 	}
-	if !result[0].Parent.Equal(TModule) {
-		t.Fatalf("expected TModule, got %s", result[0].Parent)
+	if !result[0].Parent.Equal(TModuleInst) {
+		t.Fatalf("expected a Module, got %s", result[0].Parent)
 	}
 
-	desc, _ := AsModule(result[0])
+	desc, _ := asModuleDesc(result[0])
 	if _, ok := desc.Exports["myExport"]; !ok {
 		t.Error("expected 'myExport' in module exports")
 	}
@@ -423,7 +423,7 @@ func TestIntegModuleExportWithAtomName(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	desc, _ := AsModule(result[0])
+	desc, _ := asModuleDesc(result[0])
 	if _, ok := desc.Exports["wrdexp"]; !ok {
 		t.Error("expected 'wrdexp' in module exports")
 	}

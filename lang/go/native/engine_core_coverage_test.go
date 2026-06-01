@@ -594,10 +594,10 @@ func TestEngineCoreModuleSimple(t *testing.T) {
 		NewMap(singleMap("v", NewString("val"))),
 	})
 	result := runAQL(t, r, []Value{NewWord("module"), moduleBody})
-	if len(result) != 1 || !result[0].Parent.Equal(TModule) {
-		t.Fatalf("module should return TModule, got %v", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TModuleInst) {
+		t.Fatalf("module should return a Module, got %v", result)
 	}
-	desc, _ := AsModule(result[0])
+	desc, _ := asModuleDesc(result[0])
 	if _, ok := desc.Exports["myexp"]; !ok {
 		t.Error("missing 'myexp' export")
 	}
@@ -734,7 +734,7 @@ func TestEngineCoreModuleExportWithAtomString(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("module should return 1 value, got %d", len(result))
 	}
-	desc, _ := AsModule(result[0])
+	desc, _ := asModuleDesc(result[0])
 	if _, ok := desc.Exports["atexp"]; !ok {
 		t.Error("missing 'atexp' export")
 	}

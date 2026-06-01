@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -337,30 +336,12 @@ func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
 	return nil
 }
 
-// buildModuleInstance creates the Ideal/Module descriptor shared by all of
-// a module's ModuleExport bindings (referenced via each export's $module).
-// The exports list is sorted so Module.exports is deterministic.
-func buildModuleInstance(desc ModuleDesc) Value {
-	names := make([]string, 0, len(desc.Exports))
-	for name := range desc.Exports {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	kind := desc.Kind
-	if kind == "" {
-		kind = "inline"
-	}
-	return NewModuleInstance(moduleInfo{
-		ID: desc.Ref, Kind: kind, File: desc.File, Folder: desc.Folder, Exports: names,
-	})
-}
-
 // installExports installs all exports from a module descriptor as defs.
 // If names is nil, all exports are installed using their original names.
 // Each export is bound as a ModuleExport whose $module points at the shared
 // Module instance.
 func installExports(r *Registry, desc ModuleDesc, names []string) {
-	mod := buildModuleInstance(desc)
+	mod := NewModuleInstance(desc)
 	if names == nil {
 		for name, exportMap := range desc.Exports {
 			InstallDef(r, name, NewModuleExport(name, exportMap, mod))
@@ -379,6 +360,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 	if len(renameList) == 0 {
 		return fmt.Errorf("import: empty rename list")
 	}
+	mod := NewModuleInstance(desc)
 
 	if renameList[0].Parent.Equal(TList) {
 		// Multiple rename pairs: [[from1 to1] [from2 to2] ...]
@@ -393,7 +375,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 			if !ok {
 				return fmt.Errorf("import: export %q not found in module", fromName)
 			}
-			InstallDef(r, toName, NewModuleExport(fromName, exportMap, buildModuleInstance(desc)))
+			InstallDef(r, toName, NewModuleExport(fromName, exportMap, mod))
 		}
 	} else {
 		// Single rename pair: [from to]
@@ -406,7 +388,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 		if !ok {
 			return fmt.Errorf("import: export %q not found in module", fromName)
 		}
-		InstallDef(r, toName, NewModuleExport(fromName, exportMap, buildModuleInstance(desc)))
+		InstallDef(r, toName, NewModuleExport(fromName, exportMap, mod))
 	}
 	return nil
 }
@@ -414,6 +396,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 // installSingleRename renames the single export in a module to newName.
 // If the module has zero or more than one export, an error is returned.
 func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
+	mod := NewModuleInstance(desc)
 	if len(desc.Exports) == 0 {
 		return fmt.Errorf("import: module has no exports to rename")
 	}
@@ -421,7 +404,7 @@ func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
 		return fmt.Errorf("import: rename requires module with exactly one export, got %d", len(desc.Exports))
 	}
 	for name, exportMap := range desc.Exports {
-		InstallDef(r, newName, NewModuleExport(name, exportMap, buildModuleInstance(desc)))
+		InstallDef(r, newName, NewModuleExport(name, exportMap, mod))
 	}
 	return nil
 }

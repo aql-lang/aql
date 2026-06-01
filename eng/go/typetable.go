@@ -560,7 +560,6 @@ var builtinDecls = []builtinDecl{
 	{Path: "Word/__RC", FixedID: 25, IsInternal: true, Alias: "Returncheck", Rank: 50_100_007_000},
 	{Path: "Word/__MK", FixedID: 27, IsInternal: true, Alias: "Mark", Rank: 50_100_008_000},
 	{Path: "Word/__MV", FixedID: 28, IsInternal: true, Alias: "Move", Rank: 50_100_009_000},
-	{Path: "Word/__MD", FixedID: 29, IsInternal: true, Alias: "Module", Rank: 50_100_010_000},
 	{Path: "Word/__IN", FixedID: 20, IsInternal: true, Rank: 50_100_011_000},
 	{Path: "Word/__IN/__DC", FixedID: 64, IsInternal: true, Rank: 50_100_011_001},
 	{Path: "Word/__SP", FixedID: 75, IsInternal: true, Alias: "Splice", Rank: 50_100_012_000},

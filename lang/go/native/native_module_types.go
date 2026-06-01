@@ -2,6 +2,7 @@ package native
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/aql-lang/aql/eng/go"
@@ -31,9 +32,10 @@ const (
 	moduleExportFieldName   = "$name"
 )
 
-// TModuleInst is Ideal/Module — the module descriptor instance type.
-// (eng.TModule, alias-free Word/__MD, remains the internal carrier for the
-// `module […]` → `import` plumbing; this is the user-facing descriptor.)
+// TModuleInst is Ideal/Module — the module descriptor instance type. It is
+// also the value `module […]` produces and that `import` consumes (it
+// carries the full ModuleDesc), so there is no separate internal carrier
+// type.
 var TModuleInst = registerModuleType("Ideal/Module", 5000)
 
 // TModuleExport is Ideal/ModuleExport — the per-export namespace instance
@@ -50,15 +52,6 @@ func registerModuleType(path string, fixedID int) *Type {
 	return t
 }
 
-// moduleInfo is the descriptor payload behind an Ideal/Module value.
-type moduleInfo struct {
-	ID      string   // module reference, e.g. "aql:math" / "./lib.aql"
-	Kind    string   // "native" | "file" | "inline"
-	File    string   // source file path ("" for native/inline)
-	Folder  string   // source folder ("" for native/inline)
-	Exports []string // export names declared by the module
-}
-
 // moduleExportInfo is the payload behind an Ideal/ModuleExport value.
 type moduleExportInfo struct {
 	Name   string      // the export name, e.g. "Math"
@@ -66,9 +59,12 @@ type moduleExportInfo struct {
 	Module Value       // the owning Module instance (Ideal/Module)
 }
 
-// NewModuleInstance builds an Ideal/Module descriptor value.
-func NewModuleInstance(info moduleInfo) Value {
-	return Value{Parent: TModuleInst, Data: ExtensionPayload{Body: &info}}
+// NewModuleInstance builds an Ideal/Module value wrapping a ModuleDesc. The
+// descriptor metadata (Ref/Kind/File/Folder) and the export names are
+// surfaced as the id/kind/file/folder/exports fields; the carried Exports
+// map is what `import` installs.
+func NewModuleInstance(desc ModuleDesc) Value {
+	return Value{Parent: TModuleInst, Data: ExtensionPayload{Body: desc}}
 }
 
 // NewModuleExport builds an Ideal/ModuleExport value binding `name` to its
@@ -82,13 +78,13 @@ func NewModuleExport(name string, fields *OrderedMap, module Value) Value {
 	}}}
 }
 
-// asModuleInfo / asModuleExportInfo unwrap the ExtensionPayload.
-func asModuleInfo(v Value) (*moduleInfo, bool) {
+// asModuleDesc / asModuleExportInfo unwrap the ExtensionPayload.
+func asModuleDesc(v Value) (ModuleDesc, bool) {
 	if ep, ok := v.Data.(ExtensionPayload); ok {
-		mi, ok := ep.Body.(*moduleInfo)
-		return mi, ok
+		d, ok := ep.Body.(ModuleDesc)
+		return d, ok
 	}
-	return nil, false
+	return ModuleDesc{}, false
 }
 
 func asModuleExportInfo(v Value) (*moduleExportInfo, bool) {
@@ -119,24 +115,43 @@ func moduleExportGet(v Value, key string) (Value, bool) {
 	return me.Fields.Get(key)
 }
 
+// moduleKind returns a Module's kind, defaulting "" to "inline".
+func moduleKind(desc ModuleDesc) string {
+	if desc.Kind == "" {
+		return "inline"
+	}
+	return desc.Kind
+}
+
+// moduleExportNames returns a Module's export names, sorted for determinism.
+func moduleExportNames(desc ModuleDesc) []string {
+	names := make([]string, 0, len(desc.Exports))
+	for name := range desc.Exports {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // moduleGet resolves a key against a Module descriptor's normal fields.
 func moduleGet(v Value, key string) (Value, bool) {
-	mi, ok := asModuleInfo(v)
+	desc, ok := asModuleDesc(v)
 	if !ok {
 		return Value{}, false
 	}
 	switch key {
 	case "id":
-		return NewString(mi.ID), true
+		return NewString(desc.Ref), true
 	case "kind":
-		return NewString(mi.Kind), true
+		return NewString(moduleKind(desc)), true
 	case "file":
-		return NewString(mi.File), true
+		return NewString(desc.File), true
 	case "folder":
-		return NewString(mi.Folder), true
+		return NewString(desc.Folder), true
 	case "exports":
-		elems := make([]Value, len(mi.Exports))
-		for i, e := range mi.Exports {
+		names := moduleExportNames(desc)
+		elems := make([]Value, len(names))
+		for i, e := range names {
 			elems[i] = NewString(e)
 		}
 		return NewList(elems), true
@@ -161,8 +176,12 @@ func (b moduleTypeBehavior) Format(v Value) string {
 		}
 		return fmt.Sprintf("ModuleExport(%s){%s}", me.Name, strings.Join(keys, " "))
 	}
-	if mi, ok := asModuleInfo(v); ok {
-		return fmt.Sprintf("Module(%s)", mi.ID)
+	if desc, ok := asModuleDesc(v); ok {
+		ref := desc.Ref
+		if ref == "" {
+			ref = moduleKind(desc)
+		}
+		return fmt.Sprintf("Module(%s)", ref)
 	}
 	return b.path
 }
@@ -210,3 +229,8 @@ func getrModuleInstHandler(args []Value, _ map[string]Value, _ []Value, r *Regis
 	}
 	return nil, r.AqlError("getr_error", fmt.Sprintf("getr: field %q not found in Module", k), "getr")
 }
+
+// AsModuleDesc unwraps the ModuleDesc carried by an Ideal/Module value
+// (what `module […]` produces and `import` consumes). Exported for hosts
+// and integration tests; ok=false for non-Module values.
+func AsModuleDesc(v Value) (ModuleDesc, bool) { return asModuleDesc(v) }

@@ -60,7 +60,6 @@ func TestFixedIDStability(t *testing.T) {
 		"Type/Disjunct":                26,
 		"Word/__MK":                    27,
 		"Word/__MV":                    28,
-		"Word/__MD":                    29,
 		"Ideal":                        48,
 		"Ideal/Object":                 30,
 		"Node/Map/Inspect":             31,
