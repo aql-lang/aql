@@ -12,6 +12,12 @@ import (
 // filterHandler calls voxgigstruct.Filter with an AQL callback as predicate.
 // The callback receives a map with "key" and "value" fields and should return
 // a boolean indicating whether to keep the item.
+// filterHandler keeps the elements of a list/map for which the callback
+// returns true. The callback (args[0]) is a Function VALUE invoked once per
+// element with a SINGLE {key, value} pair Map — key is the list index (or
+// map key) and value is the element. A predicate therefore reads the
+// element via `.value`, e.g. `filter ([p:Any] => [p.value gt 3]) xs`. (The
+// afn param must be typed — a bare `[p]` parses as a type name.)
 func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	cb := args[0]
 	data := valueToAny(args[1])
