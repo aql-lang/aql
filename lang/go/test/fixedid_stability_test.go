@@ -82,6 +82,8 @@ func TestFixedIDStability(t *testing.T) {
 		"Ideal/Tensor":        2001, // matrix module range (2000-2999)
 		"Ideal/Tensor/Matrix": 2000, // historical Matrix FixedID, kept
 		"Ideal/Tensor/Vector": 2002,
+		"Ideal/Module":        5000,
+		"Ideal/ModuleExport":  5001,
 		"Word/__IS":           51,
 		"Type/Disjunct/Enum":  62,
 		"Word/__PE":           63,

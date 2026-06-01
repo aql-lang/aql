@@ -154,12 +154,16 @@ WORD for
 WORD for-each
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
 WORD get
+  [Scalar/String Ideal/ModuleExport] barrier=1 returns=[Any]
+  [Scalar/String Ideal/Module] barrier=1 returns=[Any]
   [Scalar/String Ideal/Store] barrier=1 +returnsfn
   [Scalar/String Ideal/Object] barrier=1 returns=[Any]
   [Scalar/String Node] barrier=1 returns=[Any]
   [Scalar/Number/Integer Ideal/Array] barrier=1 returns=[Any]
   [Scalar/Number/Integer Ideal/Object] barrier=1 returns=[Any]
   [Scalar/Number/Integer Node] barrier=1 returns=[Any]
+  [Scalar/Atom Ideal/ModuleExport] barrier=1 quote={0} returns=[Any]
+  [Scalar/Atom Ideal/Module] barrier=1 quote={0} returns=[Any]
   [Scalar/Atom Ideal/Store] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Ideal/Object] barrier=1 quote={0} returns=[Any]
   [Scalar/Atom Node] barrier=1 quote={0} returns=[Any]
@@ -167,10 +171,14 @@ WORD get
 WORD getpath
   [Scalar/String Any] barrier=2
 WORD getr
+  [Scalar/String Ideal/ModuleExport] barrier=1
+  [Scalar/String Ideal/Module] barrier=1
   [Scalar/String Ideal/Object] barrier=1
   [Scalar/String Node] barrier=1
   [Scalar/Number/Integer Ideal/Object] barrier=1
   [Scalar/Number/Integer Node] barrier=1
+  [Scalar/Atom Ideal/ModuleExport] barrier=1 quote={0}
+  [Scalar/Atom Ideal/Module] barrier=1 quote={0}
   [Scalar/Atom Ideal/Object] barrier=1 quote={0}
   [Scalar/Atom Node] barrier=1 quote={0}
   [Any None] barrier=1
