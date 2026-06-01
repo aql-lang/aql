@@ -1,0 +1,18 @@
+# AQL Language Specification: Source-location words (__file __folder)
+# Format: input<TAB>expected<TAB>description
+#
+# __file   → the base filename String of the source file the word appears
+#            in (e.g. 'lib.aml'); empty String at the REPL / string-eval.
+# __folder → the absolute directory Path of that file; empty Path when
+#            there is no source file.
+#
+# This spec suite evaluates strings (no source file), so both are empty
+# here — the file-backed behaviour (per-file resolution: an imported
+# module sees its OWN path) is covered by the Go test
+# lang/go/test/fileinfo_test.go::TestFileInfoWords.
+#
+# ─────────────────────────────────────────────────────────────────────
+__file	''	no source file → empty String
+size __file	0	the empty filename has length 0
+typeof __file	EmptyString	__file is String-typed (empty here)
+typeof __folder	Path	__folder is Path-typed (empty here)

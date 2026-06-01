@@ -74,6 +74,11 @@ func Register(r *Registry) {
 		r.RegisterNativeFunc(n)
 	}
 
+	// __folder / __file — source-location words.
+	for _, n := range fileInfoNatives {
+		r.RegisterNativeFunc(n)
+	}
+
 	// *Type
 	for _, n := range typeNatives {
 		r.RegisterNativeFunc(n)

@@ -3104,10 +3104,10 @@ func TestModuleBasic(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("module: got %d results, want 1", len(result))
 	}
-	if !IsModule(result[0]) {
+	if !result[0].Parent.Equal(TModuleInst) {
 		t.Fatalf("module: result is not a module, got %s", result[0].Parent)
 	}
-	desc, _ := AsModule(result[0])
+	desc, _ := asModuleDesc(result[0])
 	fooExport, ok := desc.Exports["Foo"]
 	if !ok {
 		t.Fatal("module: export 'Foo' not found")
@@ -3151,8 +3151,8 @@ func TestModuleImportBasic(t *testing.T) {
 	if len(result2) != 1 {
 		t.Fatalf("Foo: got %d results, want 1", len(result2))
 	}
-	if !result2[0].Parent.Equal(TMap) {
-		t.Errorf("Foo: type = %s, want map", result2[0].Parent)
+	if !result2[0].Parent.Equal(TModuleExport) {
+		t.Errorf("Foo: type = %s, want ModuleExport", result2[0].Parent)
 	}
 }
 
@@ -3219,15 +3219,15 @@ func TestModuleDefSubject(t *testing.T) {
 
 	// my-mod should resolve to a module descriptor.
 	result := runAQL(t, r, []Value{NewWord("my-mod")})
-	if len(result) != 1 || !IsModule(result[0]) {
+	if len(result) != 1 || !result[0].Parent.Equal(TModuleInst) {
 		t.Fatalf("def my-mod: expected module descriptor, got %v", result)
 	}
 
 	// import my-mod should work.
 	runAQL(t, r, []Value{NewWord("import"), NewWord("my-mod")})
 	result2 := runAQL(t, r, []Value{NewWord("M")})
-	if len(result2) != 1 || !result2[0].Parent.Equal(TMap) {
-		t.Errorf("import my-mod: M = %v, want map", result2)
+	if len(result2) != 1 || !result2[0].Parent.Equal(TModuleExport) {
+		t.Errorf("import my-mod: M = %v, want ModuleExport", result2)
 	}
 }
 
@@ -3242,7 +3242,7 @@ func TestModuleImportRename(t *testing.T) {
 		NewWord("export"), NewAtom("Foo"), makeMap("x", NewInteger(1)),
 	})
 	modResult := runAQL(t, r, []Value{NewWord("module"), body})
-	if len(modResult) != 1 || !IsModule(modResult[0]) {
+	if len(modResult) != 1 || !modResult[0].Parent.Equal(TModuleInst) {
 		t.Fatal("expected module descriptor")
 	}
 
@@ -3296,10 +3296,10 @@ func TestModuleFreshRegistry(t *testing.T) {
 		NewWord("export"), NewAtom("M"), makeMap("val", NewWord("foo")),
 	})
 	result := runAQL(t, r, []Value{NewWord("module"), body})
-	if len(result) != 1 || !IsModule(result[0]) {
+	if len(result) != 1 || !result[0].Parent.Equal(TModuleInst) {
 		t.Fatal("expected module")
 	}
-	desc, _ := AsModule(result[0])
+	desc, _ := asModuleDesc(result[0])
 	mExport, ok := desc.Exports["M"]
 	if !ok {
 		t.Fatal("module: export 'M' not found")

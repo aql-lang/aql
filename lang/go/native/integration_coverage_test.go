@@ -320,11 +320,11 @@ func TestIntegModuleWithExport(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("module should return 1 value, got %d", len(result))
 	}
-	if !result[0].Parent.Equal(TModule) {
-		t.Fatalf("expected TModule, got %s", result[0].Parent)
+	if !result[0].Parent.Equal(TModuleInst) {
+		t.Fatalf("expected a Module, got %s", result[0].Parent)
 	}
 
-	desc, _ := AsModule(result[0])
+	desc, _ := asModuleDesc(result[0])
 	if _, ok := desc.Exports["myExport"]; !ok {
 		t.Error("expected 'myExport' in module exports")
 	}
@@ -349,11 +349,10 @@ func TestIntegModuleImportAll(t *testing.T) {
 
 	// Now "stuff" should be defined as a map with val: 99
 	result := runAQL(t, r, []Value{NewWord("stuff")})
-	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
-		t.Fatalf("stuff should be a map, got %v", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
+		t.Fatalf("stuff should be a ModuleExport, got %v", result)
 	}
-	m, _ := AsMap(result[0])
-	v, ok := m.Get("val")
+	v, ok := moduleExportGet(result[0], "val")
 	_as9, _ := AsInteger(v)
 	if !ok || _as9 != 99 {
 		t.Errorf("stuff.val = %v, want 99", v)
@@ -378,8 +377,8 @@ func TestIntegModuleImportRename(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), renameList, NewWord("mymod2")})
 
 	result := runAQL(t, r, []Value{NewWord("renamed")})
-	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
-		t.Fatalf("renamed should be a map, got %v", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
+		t.Fatalf("renamed should be a ModuleExport, got %v", result)
 	}
 }
 
@@ -407,8 +406,8 @@ func TestIntegModuleImportMultiRename(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), renameList, NewWord("mm")})
 
 	result := runAQL(t, r, []Value{NewWord("newA")})
-	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
-		t.Fatalf("newA should be a map, got %v", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
+		t.Fatalf("newA should be a ModuleExport, got %v", result)
 	}
 }
 
@@ -424,7 +423,7 @@ func TestIntegModuleExportWithAtomName(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
-	desc, _ := AsModule(result[0])
+	desc, _ := asModuleDesc(result[0])
 	if _, ok := desc.Exports["wrdexp"]; !ok {
 		t.Error("expected 'wrdexp' in module exports")
 	}
@@ -449,8 +448,8 @@ func TestIntegValToAtomOrStringWord(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), renameList, NewWord("wmod")})
 
 	result := runAQL(t, r, []Value{NewWord("wordRenamed")})
-	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
-		t.Fatalf("wordRenamed should be a map, got %v", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
+		t.Fatalf("wordRenamed should be a ModuleExport, got %v", result)
 	}
 }
 
@@ -472,8 +471,8 @@ func TestIntegImportSingleRenameWord(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), NewAtom("NewName"), NewWord("mymod")})
 
 	result := runAQL(t, r, []Value{NewWord("NewName")})
-	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
-		t.Fatalf("NewName should be a map, got %v", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
+		t.Fatalf("NewName should be a ModuleExport, got %v", result)
 	}
 }
 
@@ -494,8 +493,8 @@ func TestIntegImportSingleRenameAtom(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("import"), NewAtom("Renamed"), NewWord("mymod")})
 
 	result := runAQL(t, r, []Value{NewWord("Renamed")})
-	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
-		t.Fatalf("Renamed should be a map, got %v", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
+		t.Fatalf("Renamed should be a ModuleExport, got %v", result)
 	}
 }
 

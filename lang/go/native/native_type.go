@@ -174,6 +174,13 @@ var typeNatives = []NativeFunc{
 		Name: "convert",
 
 		Signatures: []NativeSig{
+			// Ideal → Map / List (per-type IdealConverter; base Ideal → {} / [])
+			{
+				Args:      []*Type{TNode, TIdeal},
+				TypeArgs:  map[int]bool{0: true},
+				Handler:   convertIdealHandler,
+				ReturnsFn: ReturnsIdentity(0), BarrierPos: -1,
+			},
 			{
 				Args:      []*Type{TScalar, TMap, TScalar},
 				TypeArgs:  map[int]bool{0: true},
@@ -738,6 +745,31 @@ func convertTo(src Value, targetType *Type, base string) (Value, error) {
 
 	default:
 		return Value{}, fmt.Errorf("convert: unsupported target type %s", targetType)
+	}
+}
+
+func convertIdealHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	target := args[0]
+	src := args[1]
+	if target.Data != nil {
+		return nil, r.AqlError("convert_error", "convert: first argument must be a type literal (Map or List)", "convert")
+	}
+	t := ValueType(target)
+	switch {
+	case t.Equal(TMap):
+		m, err := eng.ConvertIdealToMap(src)
+		if err != nil {
+			return nil, r.AqlError("convert_error", "convert to Map: "+err.Error(), "convert")
+		}
+		return []Value{m}, nil
+	case t.Equal(TList):
+		l, err := eng.ConvertIdealToList(src)
+		if err != nil {
+			return nil, r.AqlError("convert_error", "convert to List: "+err.Error(), "convert")
+		}
+		return []Value{l}, nil
+	default:
+		return nil, r.AqlError("convert_error", "convert: an Ideal converts only to Map or List, got "+t.String(), "convert")
 	}
 }
 

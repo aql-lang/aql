@@ -245,8 +245,8 @@ func TestExecuteDescribeModule(t *testing.T) {
 	if !strings.Contains(out, "aql:math") {
 		t.Errorf("expected 'aql:math' header, got %q", out)
 	}
-	if !strings.Contains(out, "math.sin") {
-		t.Errorf("expected 'math.sin' export, got %q", out)
+	if !strings.Contains(out, "Math.sin") {
+		t.Errorf("expected 'Math.sin' export, got %q", out)
 	}
 }
 

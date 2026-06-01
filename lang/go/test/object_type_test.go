@@ -403,7 +403,7 @@ func TestValueIDPrefixes(t *testing.T) {
 	}
 
 	// Word values get W_ prefix
-	word := native.NewWord("test")
+	word := native.NewWord("Test")
 	if !strings.HasPrefix(word.ID, "W_") {
 		t.Errorf("word ID should start with W_, got %s", word.ID)
 	}

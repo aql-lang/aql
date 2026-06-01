@@ -1,0 +1,32 @@
+# AQL Language Specification: Collection operations (sort reverse
+# flatten size items take)
+# Format: input<TAB>expected<TAB>description
+#
+# Core list/map words available in the base registry. (Many richer
+# array combinators — each/fold/scan/filter/where/group/unique — live in
+# the `aql:array` module and are specified there.)
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  sort — ascending by the canonical total order
+sort [3 1 2]	[1 2 3]	numbers ascending
+sort ['c' 'a' 'b']	['a' 'b' 'c']	strings ascending
+#
+# §2  reverse
+reverse [1 2 3]	[3 2 1]	reverse element order
+#
+# §3  flatten — one level
+flatten [[1 2] [3 4]]	[1 2 3 4]	concatenate nested lists
+#
+# §4  size — element / entry / character count
+size [1 2 3]	3	list length
+size {a:1 b:2}	2	map entry count
+size 'hello'	5	string length
+#
+# §5  items — map entries as [key value] pairs
+items {a:1 b:2}	[['a' 1] ['b' 2]]	ordered key/value pairs
+#
+# §6  take count list — leading elements
+take 2 [1 2 3 4 5]	[1 2]	first two elements
+#
+# §7  errors
+sort 5	ERROR:signature_error	sort requires a collection

@@ -18,7 +18,7 @@ import (
 // user-defined scalar / node / object subtypes, Go-defined Ideals
 // (Tensor/Matrix/Vector from aql:matrix), and pattern-driven dispatch.
 // The runner installs the matrix module so rows can reference Matrix /
-// Tensor / Vector without a per-row `"aql:matrix" import`.
+// Tensor / Vector without a per-row `"aql:matrix-util" import`.
 //
 // The unit-test counterpart for user-defined comparators
 // (`behave compare/q`-style custom Comparer on a type) lives in

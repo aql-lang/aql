@@ -11,7 +11,7 @@ import (
 // and everyday slicing stay in core; the specialised APL-style data
 // vocabulary (shape/structure, selection/ordering, membership/
 // grouping, neighborhoods) lives in the module and is reached via
-// dot-access (array.shape, array.where, …).
+// dot-access (ArrayUtil.shape, ArrayUtil.where, …).
 //
 //	core   — iota, range, each, fold, scan, outer, inner,
 //	         take, shed, reverse

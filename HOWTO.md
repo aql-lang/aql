@@ -29,8 +29,8 @@ through the **[Tutorial](TUTORIAL.md)** and just need an answer to
 * [Type-check before running](#type-check-before-running)
 * [Use modules and imports](#use-modules-and-imports)
 * [Build, install, and publish a module](#build-install-and-publish-a-module)
-* [Use the built-in `aql:time` module](#use-the-built-in-aqltime-module)
-* [Use the built-in `aql:matrix` module](#use-the-built-in-aqlmatrix-module)
+* [Use the built-in `aql:time-util` module](#use-the-built-in-aqltime-module)
+* [Use the built-in `aql:matrix-util` module](#use-the-built-in-aqlmatrix-module)
 * [Use the built-in `aql:decision` module](#use-the-built-in-aqldecision-module)
 * [Store secrets in the vault](#store-secrets-in-the-vault)
 * [Trace and debug](#trace-and-debug)
@@ -143,16 +143,16 @@ indexof [20,10] [10,20,30]    => [1 0]          # index of each needle
 ```
 
 The richer array vocabulary — reshaping, ordering, grouping,
-neighborhoods, indexing — lives in the `aql:array` module:
+neighborhoods, indexing — lives in the `aql:array-util` module:
 
 ```
-"aql:array" import end
-iota 6 array.reshape [2, 3]   => [[0 1 2] [3 4 5]]
-[3,1,2] array.grade           => [1 2 0]      # sort indices
-[1,2,2,3] array.unique        => [1 2 3]
-[1,2,3,4] array.window 2      => [[1 2] [2 3] [3 4]]
-[1,2,3] array.pairs           => [[1 2] [2 3]]
-[10,20,30] array.at [2,0]     => [30 10]
+"aql:array-util" import end
+iota 6 ArrayUtil.reshape [2, 3]   => [[0 1 2] [3 4 5]]
+[3,1,2] ArrayUtil.grade           => [1 2 0]      # sort indices
+[1,2,2,3] ArrayUtil.unique        => [1 2 3]
+[1,2,3,4] ArrayUtil.window 2      => [[1 2] [2 3] [3 4]]
+[1,2,3] ArrayUtil.pairs           => [[1 2] [2 3]]
+[10,20,30] ArrayUtil.at [2,0]     => [30 10]
 ```
 
 
@@ -233,11 +233,11 @@ For controlled rounding, import the math module:
 <!-- aql-test: skip -->
 ```
 "aql:math" import end
-`${3.14159 100 mul math.round 100 div}` => '3.14'
+`${3.14159 100 mul Math.round 100 div}` => '3.14'
 ```
 
-For times, use the `aql:time` module — see
-[Use the built-in aql:time module](#use-the-built-in-aqltime-module).
+For times, use the `aql:time-util` module — see
+[Use the built-in aql:time-util module](#use-the-built-in-aqltime-module).
 
 
 ## Handle errors
@@ -510,7 +510,7 @@ Bare-word declarations pop from the stack:
 
 ```
 "aql:math" import end
-3 4 var [[a b] (a mul a) add (b mul b) math.sqrt]    => 5.0
+3 4 var [[a b] (a mul a) add (b mul b) Math.sqrt]    => 5.0
 ```
 
 `a` gets the topmost value (4) and `b` gets the next (3), matching
@@ -634,11 +634,11 @@ prefix):
 
 ```
 "aql:math" import end
-5 math.log                            => 1.6094379124341003
+5 Math.log                            => 1.6094379124341003
 ```
 
 Native module words are reached via the namespace prefix
-(`math.log`, `math.ceil`, …). The `end` after `import` prevents
+(`Math.log`, `Math.ceil`, …). The `end` after `import` prevents
 forward collection from grabbing the next token as another path —
 without it, `"aql:math" import "foo" print` would try to import a
 module named `"foo"`.
@@ -648,10 +648,10 @@ building bloom filters and other sketches:
 
 ```
 "aql:bin" import end
-"A" bin.ord                           => 65
-65 bin.chr                            => 'A'
-"hello" bin.fnv32                     => 1335831723   # 32-bit FNV-1a
-"hello" bin.fnv64                     # 64-bit FNV-1a, non-negative
+"A" Bin.ord                           => 65
+65 Bin.chr                            => 'A'
+"hello" Bin.fnv32                     => 1335831723   # 32-bit FNV-1a
+"hello" Bin.fnv64                     # 64-bit FNV-1a, non-negative
 ```
 
 ### One file, two modes: `export` at the top level
@@ -682,25 +682,25 @@ By default operations target the public registry; override with
 `-r <url>`. See [CLI Reference](CLI.md) for full flags.
 
 
-## Use the built-in `aql:time` module
+## Use the built-in `aql:time-util` module
 
-The native module name is `"aql:time"`; words register under the
+The native module name is `"aql:time-util"`; words register under the
 `time.` namespace prefix.
 
 ```
-"aql:time" import end
-time.parse "2026-01-15"               # Date value
+"aql:time-util" import end
+TimeUtil.parse "2026-01-15"               # Date value
 ```
 
 Provides `Date`, `DateTime`, `Instant`, `TimeOfDay`, `Duration`,
 `Timezone` types. See the module source for the complete word list.
 
 
-## Use the built-in `aql:matrix` module
+## Use the built-in `aql:matrix-util` module
 
 ```
-"aql:matrix" import end
-matrix.make-vector [1, 2, 3]          # Vector(3)
+"aql:matrix-util" import end
+MatrixUtil.make-vector [1, 2, 3]          # Vector(3)
 ```
 
 Provides `Tensor`, `Matrix`, `Vector` type-kinds and the standard
@@ -728,8 +728,8 @@ failing case.
 ```
 "aql:test" import end
 
-# test.check-prop  name  [gen]  [property]  runs  seed  max-shrinks
-test.check-prop "non-negative"
+# Test.check-prop  name  [gen]  [property]  runs  seed  max-shrinks
+Test.check-prop "non-negative"
   [r.int 0 100]                       # gen: leave ONE value on the stack
   [0 gte]                             # property: takes it, leaves a Boolean
   50 1 0
@@ -754,7 +754,7 @@ property body:
 <!-- aql-test: skip -->
 ```
 "aql:test" import end
-test.check-prop "pair-of-strings"
+Test.check-prop "pair-of-strings"
   [r.list-of [r.string "abc" 6] 2]    # ONE List of two strings
   [var [[pair]
     def a (pair.0)                    # destructure the compound input
@@ -765,21 +765,21 @@ test.check-prop "pair-of-strings"
 end
 ```
 
-Report results with `test.report` (one readable line per property)
-rather than the verbose `test.results` table, and park a
-work-in-progress property with `test.skip` (a drop-in for
-`test.check-prop` that records it as skipped without running it):
+Report results with `Test.report` (one readable line per property)
+rather than the verbose `Test.results` table, and park a
+work-in-progress property with `Test.skip` (a drop-in for
+`Test.check-prop` that records it as skipped without running it):
 
 <!-- aql-test: skip -->
 ```
 "aql:test" import end
-test.check-prop "ready"   [r.int 0 9] [0 gte] 10 1 0 end
-test.skip       "flaky"   [r.int 0 9] [false] 10 1 0 end   # parked
-test.report end print
+Test.check-prop "ready"   [r.int 0 9] [0 gte] 10 1 0 end
+Test.skip       "flaky"   [r.int 0 9] [false] 10 1 0 end   # parked
+Test.report end print
 #   pass: ready
 #   skip: flaky
 # 1 passed, 0 failed, 1 skipped
-test.fail-count end print             => 0
+Test.fail-count end print             => 0
 ```
 
 A property body may `import` a native module (e.g. `"aql:math" import`)
@@ -958,4 +958,4 @@ policies.
 
 For running AQL-from-AQL with stricter permissions (test harnesses,
 plugin sandboxes), the `aql:vm` native module exposes
-`vm.run`/`vm.run-with` with capability attenuation.
+`Vm.run`/`Vm.run-with` with capability attenuation.

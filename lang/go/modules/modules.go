@@ -6,8 +6,8 @@
 // modules. The exported words are accessed via dot notation:
 //
 //	"aql:math" import
-//	0.5 math.sin          # access sin via the math export
-//	3 math.min 7          # min of 3 and 7
+//	0.5 Math.sin          # access sin via the math export
+//	3 Math.min 7          # min of 3 and 7
 package modules
 
 import (
@@ -21,19 +21,19 @@ import (
 // Each builder creates a sub-registry with the module's words and returns
 // a ModuleDesc whose exports contain FnDef wrappers for those words.
 var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error){
-	"math":      BuildMathModule,
-	"array":     BuildArrayModule,
-	"time":      BuildTimeModule,
-	"matrix":    BuildMatrixModule,
-	"decision":  BuildDecisionModule,
-	"solardemo": BuildSolarDemoModule,
-	"bin":       BuildBinaryModule,
-	"type":      BuildTypeModule,
-	"vm":        BuildVMModule,
-	"report":    BuildReportModule,
-	"test":      BuildTestModule,
-	"rand":      BuildRandModule,
-	"query":     BuildQueryModule,
+	"math":        BuildMathModule,
+	"array-util":  BuildArrayModule,
+	"time-util":   BuildTimeModule,
+	"matrix-util": BuildMatrixModule,
+	"decision":    BuildDecisionModule,
+	"solardemo":   BuildSolarDemoModule,
+	"bin":         BuildBinaryModule,
+	"type-util":   BuildTypeModule,
+	"vm":          BuildVMModule,
+	"report":      BuildReportModule,
+	"test":        BuildTestModule,
+	"rand":        BuildRandModule,
+	"query":       BuildQueryModule,
 }
 
 // Resolve resolves a native module name and returns a ModuleDesc.
@@ -62,7 +62,13 @@ func Resolve(name string, parent *native.Registry) (native.ModuleDesc, error) {
 	if !ok {
 		return native.ModuleDesc{}, fmt.Errorf("unknown native module: %s", moduleID)
 	}
-	return fn(parent)
+	desc, err := fn(parent)
+	if err != nil {
+		return desc, err
+	}
+	desc.Ref = moduleID
+	desc.Kind = "native"
+	return desc, nil
 }
 
 // InstallResolver wires the native-module resolver onto reg — the single
@@ -93,7 +99,7 @@ func InstallMathExports(r *native.Registry) error {
 
 // InstallArrayExports builds the array module and installs its exports as defs
 // in the given registry. This is a convenience for test setup — equivalent to
-// what happens when AQL code runs "aql:array" import.
+// what happens when AQL code runs "aql:array-util" import.
 func InstallArrayExports(r *native.Registry) error {
 	desc, err := BuildArrayModule(r)
 	if err != nil {

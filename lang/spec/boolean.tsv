@@ -1,0 +1,59 @@
+# AQL Language Specification: Boolean & Logic (and or not all any
+# eq neq gt lt gte lte implies otherwise guard xor xnor nand nor iff)
+# Format: input<TAB>expected<TAB>description
+#
+# Comparison words gt/lt/gte/lte are non-commutative like the math words:
+# the handler computes `args[1] OP args[0]`, so the SWAP form `a gt b`
+# reads naturally (`5 gt 3 = true`). `or`/`otherwise`/`guard` are
+# short-circuit and use the swap form (BarrierPos 1): the left operand is
+# taken from the stack, the right from the forward token.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  and / not / all / any
+and true true	true	logical and
+and true false	false	and short-circuits to false
+not true	false	negation
+not false	true	negation
+all [true true true]	true	all elements truthy
+all [true false]	false	one false → false
+any [false false true]	true	at least one truthy
+any [false false]	false	none truthy
+3 and 0	0	and returns the falsy operand (value semantics)
+and 'x' 1	'x'	and of two truthy values returns an operand
+#
+# §2  or / otherwise — short-circuit, swap form `a or b`
+false or true	true	or returns the first truthy operand
+'x' or 'default'	'x'	non-empty left wins
+'' or 'fallback'	'fallback'	empty string is falsy → right operand
+5 otherwise 9	5	otherwise: left wins when not None
+none otherwise 9	9	otherwise: None → right operand
+#
+# §3  guard — `cond guard value` → value if cond else None
+true guard 42	42	condition true passes the value through
+false guard 42	None	condition false yields None
+#
+# §4  equality
+eq 1 1	true	equal integers
+eq 1 2	false	unequal
+neq 1 2	true	not-equal
+eq 1 1.0	true	cross-leaf numeric magnitude compares equal
+eq 'a' 'a'	true	string equality
+#
+# §5  ordering — non-commutative (swap form reads naturally)
+5 gt 3	true	`5 gt 3` = 5>3
+gt 5 3	false	forward `gt 5 3` = 3>5 = false
+5 lt 3	false	`5 lt 3` = 5<3
+5 gte 5	true	greater-or-equal
+6 lte 5	false	`6 lte 5` = 6<=5 = false
+#
+# §6  derived logical connectives
+implies true false	true	`implies true false` = false→true (b implies a)
+implies false true	false	`implies false true` = true→false = false
+xor true false	true	exclusive or
+xnor true true	true	xor's negation
+nand true true	false	not-and
+nor false false	true	not-or
+iff true true	true	if-and-only-if
+#
+# §7  errors
+or true	ERROR:signature_error	or needs two operands (swap form: a or b)

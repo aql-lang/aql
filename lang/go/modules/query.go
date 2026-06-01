@@ -13,13 +13,13 @@ import (
 // order:
 //
 //	"aql:query" import
-//	query.select [name age]
-//	  query.from people
-//	  query.where [age gt 18]
-//	  query.order [age desc]
+//	Query.select [name age]
+//	  Query.from people
+//	  Query.where [age gt 18]
+//	  Query.order [age desc]
 //
-// `query.select` is the entry word: it seeds a lazy query with the
-// projected columns. `query.from` sets the source table (resolved by
+// `Query.select` is the entry word: it seeds a lazy query with the
+// projected columns. `Query.from` sets the source table (resolved by
 // name from the context store, set via `context set <name> <table>`).
 // Every later word takes the running query off the stack and its own
 // clause as a forward argument. The query is lazy — it runs only when
@@ -46,7 +46,7 @@ func BuildQueryModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modID := parent.Modules.NextID()
 	desc := native.ModuleDesc{
 		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"query": exports},
+		Exports: map[string]*native.OrderedMap{"Query": exports},
 	}
 	return desc, nil
 }

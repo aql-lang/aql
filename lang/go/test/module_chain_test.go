@@ -198,7 +198,7 @@ export "IO" {mode:mode}`,
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{pi:3}")
+	assertResult(t, result, "ModuleExport(Math){pi}")
 }
 
 func TestBarrelTopLevelCombineSecond(t *testing.T) {
@@ -777,10 +777,10 @@ func TestModuleValueType(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
 	v := result[0]
-	if !native.IsModule(v) {
+	if !v.Parent.Equal(native.TModuleInst) {
 		t.Fatal("expected module type")
 	}
-	desc, _ := native.AsModule(v)
+	desc, _ := native.AsModuleDesc(v)
 	if desc.ID == "" {
 		t.Error("expected non-empty module ID")
 	}
@@ -788,8 +788,8 @@ func TestModuleValueType(t *testing.T) {
 		t.Errorf("expected 1 export, got %d", len(desc.Exports))
 	}
 	s := v.String()
-	if !strings.Contains(s, "module(") {
-		t.Errorf("expected 'module(' in string, got %s", s)
+	if !strings.Contains(s, "Module(") {
+		t.Errorf("expected 'Module(' in string, got %s", s)
 	}
 }
 

@@ -1,0 +1,11 @@
+# AQL Language Specification: Temporal core (now)
+# Format: input<TAB>expected<TAB>description
+#
+# `now` reads the current instant from the registry's Clock capability.
+# Production uses a wall clock; this spec suite installs a FixedClock
+# frozen at 2021-01-01T00:00:00Z, so `now` is deterministic here. The
+# aql:time-util module's time-now* family reads the same capability.
+#
+# ─────────────────────────────────────────────────────────────────────
+now	2021-01-01T00:00:00Z	now reads the (frozen, in specs) clock capability
+typeof now	Instant	now yields an Instant

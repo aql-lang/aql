@@ -14,9 +14,9 @@ import (
 // formatting. No word prints to stdout itself; the caller controls IO.
 //
 //	"aql:report" import
-//	some-record report.record print
-//	some-table  report.table  print
-//	some-value  report.value  print
+//	some-record Report.record print
+//	some-table  Report.table  print
+//	some-value  Report.value  print
 func BuildReportModule(parent *native.Registry) (native.ModuleDesc, error) {
 	subReg, err := native.DefaultRegistry()
 	if err != nil {
@@ -36,7 +36,7 @@ func BuildReportModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modID := parent.Modules.NextID()
 	return native.ModuleDesc{
 		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"report": exports},
+		Exports: map[string]*native.OrderedMap{"Report": exports},
 	}, nil
 }
 
@@ -105,7 +105,7 @@ func formatRecord(v native.Value) string {
 	if !native.IsConcrete(v) {
 		return native.FormatForPrint(v)
 	}
-	m, err := native.RequireConcreteMap(v, "report.record")
+	m, err := native.RequireConcreteMap(v, "Report.record")
 	if err != nil {
 		return native.FormatForPrint(v)
 	}

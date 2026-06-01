@@ -38,7 +38,7 @@ func runRandAQL(t *testing.T, r *native.Registry, src string) []native.Value {
 // has the data words (int, bool, float, string, one-of) plus the
 // seeded-instance factory `with-seed`. There is no `seed` or
 // `fresh-seed` at the top level — the top-level is clock-seeded by
-// default; for determinism, call `rand.with-seed N` and use the
+// default; for determinism, call `Rand.with-seed N` and use the
 // returned instance.
 func TestRandModuleExports(t *testing.T) {
 	r, err := native.DefaultRegistry()
@@ -50,7 +50,7 @@ func TestRandModuleExports(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	randExport, ok := desc.Exports["rand"]
+	randExport, ok := desc.Exports["Rand"]
 	if !ok {
 		t.Fatal("expected 'rand' export")
 	}
@@ -67,14 +67,14 @@ func TestRandModuleExports(t *testing.T) {
 	}
 }
 
-// TestRandIntHalfOpenRange asserts rand.int returns values in
+// TestRandIntHalfOpenRange asserts Rand.int returns values in
 // [lo, hi) — lo inclusive, hi exclusive. Draw many samples and
 // verify none equal `hi`.
 func TestRandIntHalfOpenRange(t *testing.T) {
 	r := randRegistry(t)
 	// Use a seeded instance for reproducibility, and use forward form
 	// throughout to avoid forward-collection trap.
-	src := `def r (rand.with-seed 1)`
+	src := `def r (Rand.with-seed 1)`
 	for i := 0; i < 200; i++ {
 		src += `  (r.int 0 3)` // values must be 0, 1, or 2 — NEVER 3
 	}
@@ -104,7 +104,7 @@ func TestRandIntHalfOpenRange(t *testing.T) {
 func TestRandIntRejectsEmptyRange(t *testing.T) {
 	r := randRegistry(t)
 	// hi == lo means [lo, lo) — empty range; must error.
-	values, _ := parser.Parse(`def r (rand.with-seed 1)  (r.int 5 5)`)
+	values, _ := parser.Parse(`def r (Rand.with-seed 1)  (r.int 5 5)`)
 	e := native.NewTop(r)
 	_, err := e.Run(values)
 	if err == nil {
@@ -114,8 +114,8 @@ func TestRandIntRejectsEmptyRange(t *testing.T) {
 
 func TestRandIntRejectsInvertedBounds(t *testing.T) {
 	r := randRegistry(t)
-	// Stack form `lo hi rand.int`: top=hi=0, deeper=lo=10 → hi <= lo.
-	values, _ := parser.Parse(`def r (rand.with-seed 1)  (r.int 10 0)`)
+	// Stack form `lo hi Rand.int`: top=hi=0, deeper=lo=10 → hi <= lo.
+	values, _ := parser.Parse(`def r (Rand.with-seed 1)  (r.int 10 0)`)
 	e := native.NewTop(r)
 	_, err := e.Run(values)
 	if err == nil {
@@ -132,9 +132,9 @@ func TestRandWithSeedIsolated(t *testing.T) {
 	// each; the two seed-42 instances must agree, seed-99 must
 	// differ, and the top-level must differ.
 	src := `
-		def a (rand.with-seed 42)
-		def b (rand.with-seed 42)
-		def c (rand.with-seed 99)
+		def a (Rand.with-seed 42)
+		def b (Rand.with-seed 42)
+		def c (Rand.with-seed 99)
 		(a.int 0 1000000) (a.int 0 1000000) (a.int 0 1000000)
 		(b.int 0 1000000) (b.int 0 1000000) (b.int 0 1000000)
 		(c.int 0 1000000) (c.int 0 1000000) (c.int 0 1000000)
@@ -167,7 +167,7 @@ func TestRandWithSeedIsolated(t *testing.T) {
 func TestRandTopLevelIsClockSeeded(t *testing.T) {
 	draw := func() int64 {
 		r := randRegistry(t)
-		res := runRandAQL(t, r, `rand.int 0 1000000`)
+		res := runRandAQL(t, r, `Rand.int 0 1000000`)
 		n, _ := res[0].AsConcreteInteger()
 		return n
 	}
@@ -185,7 +185,7 @@ func TestRandTopLevelIsClockSeeded(t *testing.T) {
 func TestRandBool(t *testing.T) {
 	r := randRegistry(t)
 	// 20 draws from a seeded instance should contain both true and false.
-	src := `def r (rand.with-seed 1)`
+	src := `def r (Rand.with-seed 1)`
 	for i := 0; i < 20; i++ {
 		src += `  (r.bool)`
 	}
@@ -212,7 +212,7 @@ func TestRandBool(t *testing.T) {
 
 func TestRandString(t *testing.T) {
 	r := randRegistry(t)
-	res := runRandAQL(t, r, `def r (rand.with-seed 1)  (r.string "abc" 10)`)
+	res := runRandAQL(t, r, `def r (Rand.with-seed 1)  (r.string "abc" 10)`)
 	if len(res) != 1 {
 		t.Fatalf("expected one value, got %d", len(res))
 	}
@@ -232,7 +232,7 @@ func TestRandString(t *testing.T) {
 
 func TestRandStringEmptyCharsetZeroLen(t *testing.T) {
 	r := randRegistry(t)
-	res := runRandAQL(t, r, `def r (rand.with-seed 1)  (r.string "" 0)`)
+	res := runRandAQL(t, r, `def r (Rand.with-seed 1)  (r.string "" 0)`)
 	if len(res) != 1 {
 		t.Fatalf("expected one value, got %d", len(res))
 	}
@@ -244,7 +244,7 @@ func TestRandStringEmptyCharsetZeroLen(t *testing.T) {
 
 func TestRandOneOfSingleCall(t *testing.T) {
 	r := randRegistry(t)
-	res := runRandAQL(t, r, `def r (rand.with-seed 7)  ([10 20 30] r.one-of)`)
+	res := runRandAQL(t, r, `def r (Rand.with-seed 7)  ([10 20 30] r.one-of)`)
 	if len(res) != 1 {
 		t.Fatalf("expected one value, got %d", len(res))
 	}
@@ -257,12 +257,12 @@ func TestRandOneOfSingleCall(t *testing.T) {
 	}
 }
 
-// TestRandListOf confirms the rand.list-of combinator runs its
+// TestRandListOf confirms the Rand.list-of combinator runs its
 // quoted body N times and collects the results. With NoEvalArgs[0]
 // the body survives the wrapper boundary as code (not as data).
 func TestRandListOf(t *testing.T) {
 	r := randRegistry(t)
-	res := runRandAQL(t, r, `def s (rand.with-seed 42)  rand.list-of [s.int 0 100] 5`)
+	res := runRandAQL(t, r, `def s (Rand.with-seed 42)  Rand.list-of [s.int 0 100] 5`)
 	if len(res) != 1 {
 		t.Fatalf("expected one list, got %d", len(res))
 	}
@@ -275,7 +275,7 @@ func TestRandListOf(t *testing.T) {
 	}
 	// Determinism: same seed → identical sequence.
 	r2 := randRegistry(t)
-	res2 := runRandAQL(t, r2, `def s (rand.with-seed 42)  rand.list-of [s.int 0 100] 5`)
+	res2 := runRandAQL(t, r2, `def s (Rand.with-seed 42)  Rand.list-of [s.int 0 100] 5`)
 	lst2, _ := native.RequireConcreteList(res2[0], "test")
 	for i := 0; i < lst.Len(); i++ {
 		a, _ := lst.Get(i).AsConcreteInteger()
@@ -294,8 +294,8 @@ func TestRandListOf(t *testing.T) {
 func TestRandMapFrom(t *testing.T) {
 	r := randRegistry(t)
 	res := runRandAQL(t, r, `
-		def s (rand.with-seed 42)
-		rand.map-from {age:[s.int 0 100] flag:[s.bool]}
+		def s (Rand.with-seed 42)
+		Rand.map-from {age:[s.int 0 100] flag:[s.bool]}
 	`)
 	if len(res) != 1 {
 		t.Fatalf("expected one map, got %d", len(res))
@@ -328,7 +328,7 @@ func TestRandMapFrom(t *testing.T) {
 // identical. The fix yields N distinct draws.
 func TestRandListOfBodyKeepsQuoted(t *testing.T) {
 	r := randRegistry(t)
-	res := runRandAQL(t, r, `def s (rand.with-seed 1)  rand.list-of [s.int 0 1000000] 4`)
+	res := runRandAQL(t, r, `def s (Rand.with-seed 1)  Rand.list-of [s.int 0 1000000] 4`)
 	lst, _ := native.RequireConcreteList(res[0], "test")
 	distinct := map[int64]bool{}
 	for i := 0; i < lst.Len(); i++ {
@@ -343,7 +343,7 @@ func TestRandListOfBodyKeepsQuoted(t *testing.T) {
 
 func TestRandFloatInUnitInterval(t *testing.T) {
 	r := randRegistry(t)
-	src := `def r (rand.with-seed 1)`
+	src := `def r (Rand.with-seed 1)`
 	for i := 0; i < 50; i++ {
 		src += `  (r.float)`
 	}

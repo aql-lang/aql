@@ -19,7 +19,7 @@ package shrink
 //     Arithmetic, comparisons, stack ops, literal construction.
 //   - Generator: produces randomness. rand.* family. The reducer
 //     prefers smaller-yielding alternatives (e.g.
-//     `rand.int 0 100` → `rand.int 0 1`).
+//     `Rand.int 0 100` → `Rand.int 0 1`).
 //   - Frozen: side effects on external state (clock, IO, network).
 //     Don't rewrite — semantics depend on environment. Priced high.
 //   - Opaque: unknown user words. Conservative default; the reducer
@@ -54,7 +54,7 @@ func (t Transparency) String() string {
 //
 // `Words` is keyed by the same name the stackform.Call op carries.
 // For module FnDef wrappers, that's the INNER NATIVE name (e.g.
-// rand.int's wrapper dispatches with Name="rand-int"), because the
+// Rand.int's wrapper dispatches with Name="rand-int"), because the
 // engine's trivial-delegation path passes fnDef.Name through to
 // matchSignature → execMatch → OnCall.
 //
@@ -116,7 +116,7 @@ func (p *Policy) Weight(t Transparency) int {
 //   - Transparent words add +0 (the reducer leaves cost equal to
 //     stackform.Cost so transparent-Op removal is the obvious win).
 //   - Generator words add +2 (slight bias against generator calls so
-//     constant-shrinks like `rand.int 0 1` are preferred over the
+//     constant-shrinks like `Rand.int 0 1` are preferred over the
 //     original range).
 //   - Frozen words add +10 (heavy bias against rewriting — the
 //     reducer essentially treats Frozen Ops as immovable).
@@ -188,14 +188,14 @@ func defaultWordTable() map[string]Transparency {
 }
 
 // defaultPrefixTable groups whole families by name prefix. Module
-// wrappers dispatch with their INNER NATIVE name (e.g. rand.int's
+// wrappers dispatch with their INNER NATIVE name (e.g. Rand.int's
 // wrapper produces Call{Name: "rand-int"} in the stackform), so a
 // "rand-" prefix catches every rand.* method.
 func defaultPrefixTable() map[string]Transparency {
 	return map[string]Transparency{
 		// All rand.* are Generator. The reducer biases against them
-		// slightly so it prefers tightening bounds (rand.int 0 100
-		// → rand.int 0 1) over leaving the original range.
+		// slightly so it prefers tightening bounds (Rand.int 0 100
+		// → Rand.int 0 1) over leaving the original range.
 		"rand-": Generator,
 		// time-tz, time-unix, time-format etc. — clock-dependent.
 		"time-": Frozen,

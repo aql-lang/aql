@@ -16,7 +16,7 @@
 
 def cond-spec {
   name: "eval-cond"
-  subject: "decision.eval-cond"
+  subject: "Decision.eval-cond"
   cases: [
     {name: "age gte true"   in: [{age:25}     {field:"age",   op:"gte",value:18}]      out: true}
     {name: "age gte false"  in: [{age:15}     {field:"age",   op:"gte",value:18}]      out: false}
@@ -27,7 +27,7 @@ def cond-spec {
 
 def pred-spec {
   name: "eval-pred"
-  subject: "decision.eval-pred"
+  subject: "Decision.eval-pred"
   cases: [
     {
       name: "all-of true"
@@ -76,7 +76,7 @@ def pred-spec {
 
 def table-spec {
   name: "eval-table"
-  subject: "decision.eval-table"
+  subject: "Decision.eval-table"
   cases: [
     {
       name: "first hit adult"
@@ -144,7 +144,7 @@ def table-spec {
 
 def tree-spec {
   name: "eval-tree"
-  subject: "decision.eval-tree"
+  subject: "Decision.eval-tree"
   cases: [
     {
       name: "tree adult"

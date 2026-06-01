@@ -10,7 +10,7 @@ import (
 // Go-implemented math words into an isolated sub-registry and returns a
 // ModuleDesc with a "math" export containing FnDef wrappers for each word.
 //
-// After import, words are accessed via dot notation: math.sin, math.abs, etc.
+// After import, words are accessed via dot notation: Math.sin, Math.abs, etc.
 //
 // The basic arithmetic operations (add, sub, mul, div, mod, pow) remain
 // built-in and do not require this module.
@@ -51,7 +51,7 @@ func BuildMathModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modID := parent.Modules.NextID()
 	desc := native.ModuleDesc{
 		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"math": exports},
+		Exports: map[string]*native.OrderedMap{"Math": exports},
 	}
 	return desc, nil
 }

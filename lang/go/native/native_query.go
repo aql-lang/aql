@@ -14,10 +14,10 @@ import (
 // updated builder. The query is lazy — it materializes (hits SQLite)
 // only when its result is printed, iterated, or otherwise needs rows.
 //
-//	query.select [name age]
-//	  query.from people
-//	  query.where [age gt 18]
-//	  query.order [age desc]
+//	Query.select [name age]
+//	  Query.from people
+//	  Query.where [age gt 18]
+//	  Query.order [age desc]
 //
 // All supporting parser/exec helpers (toQueryBuilder, buildWhereClause,
 // parseColumnSpec, …) live in query.go.

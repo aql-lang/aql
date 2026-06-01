@@ -1,0 +1,29 @@
+# AQL Language Specification: Bitwise Operators (band bor bxor bnot
+# bsl bsr busr)
+# Format: input<TAB>expected<TAB>description
+#
+# Integer bit operations. band/bor/bxor are commutative; the shifts
+# bsl/bsr/busr are non-commutative (handler computes `args[1] OP args[0]`),
+# so the SWAP form `value bsl count` reads naturally (`1 bsl 4 = 16`).
+# See lang/doc/design/BINARY-OPERATIONS.0.md.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  band / bor / bxor — commutative
+band 12 10	8	bitwise AND (1100 & 1010 = 1000)
+bor 12 10	14	bitwise OR (1100 | 1010 = 1110)
+bxor 12 10	6	bitwise XOR (1100 ^ 1010 = 0110)
+#
+# §2  bnot — ones' complement
+bnot 0	-1	~0 = -1
+bnot 5	-6	~5 = -6
+#
+# §3  shifts — non-commutative; swap form reads `value shift count`
+1 bsl 4	16	`1 bsl 4` = 1 << 4 = 16
+bsl 1 4	8	forward `bsl 1 4` = 4 << 1 = 8
+8 bsr 1	4	`8 bsr 1` = 8 >> 1 = 4
+256 bsr 2	64	`256 bsr 2` = 256 >> 2 = 64
+busr 1024 2	0	unsigned right shift: 2 >>> 1024 (count mod width) = 0
+#
+# §4  errors
+band 'x' 1	ERROR:signature_error	bitwise ops require Integer operands
+bor 1 2 3	3 3	bor is binary: the third value is left on the stack

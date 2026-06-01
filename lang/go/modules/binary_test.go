@@ -32,7 +32,7 @@ func TestBinResolve(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	binExport, ok := desc.Exports["bin"]
+	binExport, ok := desc.Exports["Bin"]
 	if !ok {
 		t.Fatal("expected 'bin' export in module descriptor")
 	}
@@ -59,7 +59,7 @@ func runBin(t *testing.T, tokens []native.Value) []native.Value {
 // `bin get <name>/q`.
 func dotChain(name string) []native.Value {
 	return []native.Value{
-		native.NewWord("bin"),
+		native.NewWord("Bin"),
 		native.NewWord("get"),
 		native.NewAtom(name),
 	}
@@ -143,7 +143,7 @@ func TestBinClzCtz(t *testing.T) {
 func TestBinRotates(t *testing.T) {
 	r := binRegistry(t)
 	e := native.New(r)
-	// 1 bin.rotl 1 → 2
+	// 1 Bin.rotl 1 → 2
 	out, err := e.Run(append([]native.Value{native.NewInteger(1)}, append(dotChain("rotl"), native.NewInteger(1))...))
 	if err != nil {
 		t.Fatal(err)
@@ -151,7 +151,7 @@ func TestBinRotates(t *testing.T) {
 	if n, _ := native.AsInteger(out[0]); n != 2 {
 		t.Errorf("1 rotl 1 = %d, want 2", n)
 	}
-	// 1 bin.rotr 1 → high bit set: -9223372036854775808
+	// 1 Bin.rotr 1 → high bit set: -9223372036854775808
 	e2 := native.New(r)
 	out, err = e2.Run(append([]native.Value{native.NewInteger(1)}, append(dotChain("rotr"), native.NewInteger(1))...))
 	if err != nil {
@@ -173,7 +173,7 @@ func TestBinRotates(t *testing.T) {
 
 func TestBinSingleBit(t *testing.T) {
 	r := binRegistry(t)
-	// 0xa5 (= 10100101) bin.test 0 → true
+	// 0xa5 (= 10100101) Bin.test 0 → true
 	e := native.New(r)
 	out, err := e.Run(append([]native.Value{native.NewInteger(0xa5)}, append(dotChain("test"), native.NewInteger(0))...))
 	if err != nil {
@@ -182,7 +182,7 @@ func TestBinSingleBit(t *testing.T) {
 	if b, _ := native.AsBoolean(out[0]); !b {
 		t.Error("0xa5 test 0 should be true")
 	}
-	// 0xa5 bin.test 1 → false
+	// 0xa5 Bin.test 1 → false
 	e2 := native.New(r)
 	out, err = e2.Run(append([]native.Value{native.NewInteger(0xa5)}, append(dotChain("test"), native.NewInteger(1))...))
 	if err != nil {
@@ -191,7 +191,7 @@ func TestBinSingleBit(t *testing.T) {
 	if b, _ := native.AsBoolean(out[0]); b {
 		t.Error("0xa5 test 1 should be false")
 	}
-	// 0 bin.set 3 → 8
+	// 0 Bin.set 3 → 8
 	e3 := native.New(r)
 	out, err = e3.Run(append([]native.Value{native.NewInteger(0)}, append(dotChain("set"), native.NewInteger(3))...))
 	if err != nil {
@@ -200,7 +200,7 @@ func TestBinSingleBit(t *testing.T) {
 	if n, _ := native.AsInteger(out[0]); n != 8 {
 		t.Errorf("0 set 3 = %d, want 8", n)
 	}
-	// 15 bin.clear 0 → 14
+	// 15 Bin.clear 0 → 14
 	e4 := native.New(r)
 	out, err = e4.Run(append([]native.Value{native.NewInteger(15)}, append(dotChain("clear"), native.NewInteger(0))...))
 	if err != nil {
@@ -209,7 +209,7 @@ func TestBinSingleBit(t *testing.T) {
 	if n, _ := native.AsInteger(out[0]); n != 14 {
 		t.Errorf("15 clear 0 = %d, want 14", n)
 	}
-	// 0 bin.toggle 5 → 32
+	// 0 Bin.toggle 5 → 32
 	e5 := native.New(r)
 	out, err = e5.Run(append([]native.Value{native.NewInteger(0)}, append(dotChain("toggle"), native.NewInteger(5))...))
 	if err != nil {
@@ -222,7 +222,7 @@ func TestBinSingleBit(t *testing.T) {
 
 func TestBinMaskReverseSwap(t *testing.T) {
 	r := binRegistry(t)
-	// bin.mask 8 → 255
+	// Bin.mask 8 → 255
 	e := native.New(r)
 	out, err := e.Run(append(dotChain("mask"), native.NewInteger(8)))
 	if err != nil {
@@ -231,7 +231,7 @@ func TestBinMaskReverseSwap(t *testing.T) {
 	if n, _ := native.AsInteger(out[0]); n != 255 {
 		t.Errorf("mask 8 = %d, want 255", n)
 	}
-	// bin.mask 0 → 0
+	// Bin.mask 0 → 0
 	e2 := native.New(r)
 	out, err = e2.Run(append(dotChain("mask"), native.NewInteger(0)))
 	if err != nil {
@@ -240,7 +240,7 @@ func TestBinMaskReverseSwap(t *testing.T) {
 	if n, _ := native.AsInteger(out[0]); n != 0 {
 		t.Errorf("mask 0 = %d, want 0", n)
 	}
-	// bin.mask 64 → -1
+	// Bin.mask 64 → -1
 	e3 := native.New(r)
 	out, err = e3.Run(append(dotChain("mask"), native.NewInteger(64)))
 	if err != nil {
@@ -249,7 +249,7 @@ func TestBinMaskReverseSwap(t *testing.T) {
 	if n, _ := native.AsInteger(out[0]); n != -1 {
 		t.Errorf("mask 64 = %d, want -1", n)
 	}
-	// 1 bin.reverse → high bit set: 1 << 63
+	// 1 Bin.reverse → high bit set: 1 << 63
 	e4 := native.New(r)
 	out, err = e4.Run(append([]native.Value{native.NewInteger(1)}, dotChain("reverse")...))
 	if err != nil {
@@ -259,7 +259,7 @@ func TestBinMaskReverseSwap(t *testing.T) {
 	if n, _ := native.AsInteger(out[0]); n != want {
 		t.Errorf("1 reverse = %d, want %d", n, want)
 	}
-	// 0x0102030405060708 bin.swap → 0x0807060504030201
+	// 0x0102030405060708 Bin.swap → 0x0807060504030201
 	e5 := native.New(r)
 	out, err = e5.Run(append([]native.Value{native.NewInteger(0x0102030405060708)}, dotChain("swap")...))
 	if err != nil {
@@ -272,10 +272,10 @@ func TestBinMaskReverseSwap(t *testing.T) {
 
 func TestBinExtractInsert(t *testing.T) {
 	r := binRegistry(t)
-	// 0xabcd bin.extract 4 12 → 0xbc (bits [4, 12))
+	// 0xabcd Bin.extract 4 12 → 0xbc (bits [4, 12))
 	e := native.New(r)
 	out, err := e.Run([]native.Value{
-		native.NewInteger(0xabcd), native.NewWord("bin"),
+		native.NewInteger(0xabcd), native.NewWord("Bin"),
 		native.NewWord("get"), native.NewAtom("extract"),
 		native.NewInteger(4), native.NewInteger(12),
 	})
@@ -285,11 +285,11 @@ func TestBinExtractInsert(t *testing.T) {
 	if n, _ := native.AsInteger(out[0]); n != 0xbc {
 		t.Errorf("0xabcd extract 4 12 = %x, want bc", n)
 	}
-	// 0xabcd bin.insert 4 12 0x00 → low 4 bits unchanged (0xd), bits [4,12) zeroed
+	// 0xabcd Bin.insert 4 12 0x00 → low 4 bits unchanged (0xd), bits [4,12) zeroed
 	// 0xabcd = 1010 1011 1100 1101 → clear bits 4..11 → 1010 0000 0000 1101 = 0xa00d
 	e2 := native.New(r)
 	out, err = e2.Run([]native.Value{
-		native.NewInteger(0xabcd), native.NewWord("bin"),
+		native.NewInteger(0xabcd), native.NewWord("Bin"),
 		native.NewWord("get"), native.NewAtom("insert"),
 		native.NewInteger(4), native.NewInteger(12), native.NewInteger(0),
 	})
@@ -305,7 +305,7 @@ func TestBinSingleBitRangeError(t *testing.T) {
 	r := binRegistry(t)
 	e := native.New(r)
 	_, err := e.Run([]native.Value{
-		native.NewInteger(0), native.NewWord("bin"),
+		native.NewInteger(0), native.NewWord("Bin"),
 		native.NewWord("get"), native.NewAtom("set"),
 		native.NewInteger(64),
 	})

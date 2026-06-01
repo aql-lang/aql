@@ -188,7 +188,7 @@ func init() {
 				Args:           []*Type{TList},
 				NoEvalArgs:     map[int]bool{0: true},
 				Handler:        moduleHandler,
-				Returns:        []*Type{TModule},
+				Returns:        []*Type{TModuleInst},
 				RunInCheckMode: true, BarrierPos: -1,
 			}},
 		},
@@ -197,7 +197,7 @@ func init() {
 
 			Signatures: []NativeSig{
 				{
-					Args:           []*Type{TModule},
+					Args:           []*Type{TModuleInst},
 					Handler:        importAllHandler,
 					Returns:        []*Type{},
 					RunInCheckMode: true, BarrierPos: -1,
@@ -208,14 +208,14 @@ func init() {
 					// not evaluable expressions. NoEvalArgs keeps them raw
 					// (bare words never degrade to data, so without this
 					// the unbound names would raise undefined_word).
-					Args:           []*Type{TList, TModule},
+					Args:           []*Type{TList, TModuleInst},
 					NoEvalArgs:     map[int]bool{0: true},
 					Handler:        importRenameHandler,
 					Returns:        []*Type{},
 					RunInCheckMode: true, BarrierPos: -1,
 				},
 				{
-					Args:           []*Type{TAtom, TModule},
+					Args:           []*Type{TAtom, TModuleInst},
 					Handler:        importSingleRenameHandler,
 					Returns:        []*Type{},
 					RunInCheckMode: true, BarrierPos: -1,
@@ -223,7 +223,7 @@ func init() {
 				{
 					Args:           []*Type{TString},
 					Handler:        importFileHandler,
-					Returns:        []*Type{TModule},
+					Returns:        []*Type{TModuleInst},
 					RunInCheckMode: true, BarrierPos: -1,
 				},
 				{
@@ -483,17 +483,17 @@ func moduleHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	if err != nil {
 		return nil, fmt.Errorf("module: %w", err)
 	}
-	return []Value{NewModule(desc)}, nil
+	return []Value{NewModuleInstance(desc)}, nil
 }
 
 func importAllHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	desc, _ := AsModule(args[0])
+	desc, _ := asModuleDesc(args[0])
 	installExports(r, desc, nil)
 	return nil, nil
 }
 
 func importRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	desc, _ := AsModule(args[1])
+	desc, _ := asModuleDesc(args[1])
 	if !IsConcrete(args[0]) {
 		return nil, r.AqlError("import_error", "import: rename list must be a concrete list, got type literal", "import")
 	}
@@ -502,7 +502,7 @@ func importRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 }
 
 func importSingleRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	desc, _ := AsModule(args[1])
+	desc, _ := asModuleDesc(args[1])
 	newName, _ := args[0].AsConcreteAtom()
 	return nil, installSingleRename(r, desc, newName)
 }
@@ -517,7 +517,7 @@ func importFileHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	// return a Module carrier and let analysis continue (imported names
 	// resolve to Any, which is the conservative check-mode default).
 	if path == "" && r.Check.IsActive() {
-		return []Value{NewCarrier(TModule)}, nil
+		return []Value{NewCarrier(TModuleInst)}, nil
 	}
 	// In check mode the path literal is preserved (see StripToCarriers /
 	// §4.3) so the importing file's cross-module references can be
@@ -528,7 +528,7 @@ func importFileHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	// back to an opaque Module carrier and let analysis continue.
 	if r.Check.IsActive() {
 		if err := loadImportForCheck(r, path); err != nil {
-			return []Value{NewCarrier(TModule)}, nil
+			return []Value{NewCarrier(TModuleInst)}, nil
 		}
 		return nil, nil
 	}
@@ -753,4 +753,35 @@ func doAwait(r *Registry, mode string, parallels Value) ([]Value, error) {
 	default:
 		return nil, r.AqlError("await_error", fmt.Sprintf("await: unknown mode %q, expected all, full, first, or any", mode), "await")
 	}
+}
+
+// ToMap / ToList implement eng.IdealConverter for Timeout / Interval:
+// {id:… ms:…} and [id ms].
+func (timeoutFormatBehavior) ToMap(v Value) (Value, error) {
+	m := NewOrderedMap()
+	if ti, ok := v.Data.(*TimeoutInfo); ok {
+		m.Set("id", NewString(ti.ID))
+		m.Set("ms", NewInteger(ti.Ms))
+	}
+	return NewMap(m), nil
+}
+func (timeoutFormatBehavior) ToList(v Value) (Value, error) {
+	if ti, ok := v.Data.(*TimeoutInfo); ok {
+		return NewList([]Value{NewString(ti.ID), NewInteger(ti.Ms)}), nil
+	}
+	return NewList(nil), nil
+}
+func (intervalFormatBehavior) ToMap(v Value) (Value, error) {
+	m := NewOrderedMap()
+	if ii, ok := v.Data.(*IntervalInfo); ok {
+		m.Set("id", NewString(ii.ID))
+		m.Set("ms", NewInteger(ii.Ms))
+	}
+	return NewMap(m), nil
+}
+func (intervalFormatBehavior) ToList(v Value) (Value, error) {
+	if ii, ok := v.Data.(*IntervalInfo); ok {
+		return NewList([]Value{NewString(ii.ID), NewInteger(ii.Ms)}), nil
+	}
+	return NewList(nil), nil
 }

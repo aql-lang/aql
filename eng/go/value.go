@@ -663,6 +663,12 @@ type IfCont struct {
 type ModuleDesc struct {
 	ID      string                 // generated internal identifier
 	Exports map[string]*OrderedMap // export name → export map (name → value)
+	// Descriptor metadata, populated by the loader (Resolve / loadFileModule
+	// / RunModuleBody) and surfaced on the Ideal/Module instance at import.
+	Ref    string // external module reference ("aql:math", "./lib.aql"); "" inline
+	Kind   string // "native" | "file" | "inline"
+	File   string // source file path ("" for native/inline)
+	Folder string // source folder ("" for native/inline)
 }
 
 // WordInfo carries the name and optional modifiers for a function reference.
@@ -1328,11 +1334,6 @@ func NewArrayEmpty() Value {
 	return NewValueRaw(TArray, &ArrayInstanceInfo{Elems: nil})
 }
 
-// NewModule creates a module descriptor value.
-func NewModule(desc ModuleDesc) Value {
-	return NewValueRaw(TModule, desc)
-}
-
 // As* accessors for Scalar/Time/* moved to
 // lang/go/engine/native_temporal.go (Step 6/7). The kernel no longer
 // carries methods named for types it doesn't own. CalDurationData
@@ -1605,20 +1606,6 @@ func AsObjectInstance(v Value) (ObjectInstanceInfo, error) {
 	info, ok := v.Data.(ObjectInstanceInfo)
 	if !ok {
 		return ObjectInstanceInfo{}, fmt.Errorf("AsObjectInstance: not an object instance value (got %T)", v.Data)
-	}
-	return info, nil
-}
-
-// IsModule reports whether this value is a module descriptor.
-func IsModule(v Value) bool {
-	return v.Parent.Equal(TModule)
-}
-
-// AsModule returns the ModuleDesc, panics if not a module.
-func AsModule(v Value) (ModuleDesc, error) {
-	info, ok := v.Data.(ModuleDesc)
-	if !ok {
-		return ModuleDesc{}, fmt.Errorf("AsModule: not a module value (got %T)", v.Data)
 	}
 	return info, nil
 }
@@ -1977,9 +1964,6 @@ func kernelFormatDefault(v Value) string {
 		return fmt.Sprintf("returncheck(%s)", rc.FuncName)
 	case IsDefCleanup(v):
 		return "__dc"
-	case IsModule(v):
-		md, _ := AsModule(v)
-		return fmt.Sprintf("module(%s)", md.ID)
 	case IsError(v):
 		_as3, _ := AsError(v)
 		return fmt.Sprintf("error(%s)", _as3.Message)

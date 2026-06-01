@@ -130,7 +130,7 @@ func TestQueryModuleExports(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	exp, ok := desc.Exports["query"]
+	exp, ok := desc.Exports["Query"]
 	if !ok {
 		t.Fatal("missing 'query' export map")
 	}
@@ -144,7 +144,7 @@ func TestQueryModuleExports(t *testing.T) {
 // --- select * ---
 
 func TestQuerySelectStar(t *testing.T) {
-	if got := rowCount(t, `query.select [] query.from people`); got != 4 {
+	if got := rowCount(t, `Query.select [] Query.from people`); got != 4 {
 		t.Errorf("select [] (all rows): expected 4, got %d", got)
 	}
 }
@@ -152,7 +152,7 @@ func TestQuerySelectStar(t *testing.T) {
 // --- where ---
 
 func TestQueryWhereFilter(t *testing.T) {
-	if got := rowCount(t, `query.select [] query.from people query.where [age gt 25]`); got != 2 {
+	if got := rowCount(t, `Query.select [] Query.from people Query.where [age gt 25]`); got != 2 {
 		t.Errorf("where age>25: expected 2 (Alice,Carol), got %d", got)
 	}
 }
@@ -161,7 +161,7 @@ func TestQueryWhereFilter(t *testing.T) {
 
 func TestQuerySelectColumns(t *testing.T) {
 	r := queryRegistry(t)
-	result, err := runQuerySrc(t, r, `query.select [name age] query.from people`)
+	result, err := runQuerySrc(t, r, `Query.select [name age] Query.from people`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +176,7 @@ func TestQuerySelectColumns(t *testing.T) {
 
 func TestQueryOrderLimit(t *testing.T) {
 	r := queryRegistry(t)
-	result, err := runQuerySrc(t, r, `query.select [name age] query.from people query.order [age desc] query.limit 2`)
+	result, err := runQuerySrc(t, r, `Query.select [name age] Query.from people Query.order [age desc] Query.limit 2`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +196,7 @@ func TestQueryOrderLimit(t *testing.T) {
 func TestQueryGroupHaving(t *testing.T) {
 	r := queryRegistry(t)
 	// Cities with more than one person: London (Alice, Carol).
-	src := `query.select [city [count city cnt]] query.from people query.group [city] query.having [cnt gt 1]`
+	src := `Query.select [city [count city cnt]] Query.from people Query.group [city] Query.having [cnt gt 1]`
 	result, err := runQuerySrc(t, r, src)
 	if err != nil {
 		t.Fatal(err)
@@ -211,7 +211,7 @@ func TestQueryGroupHaving(t *testing.T) {
 
 func TestQueryDistinct(t *testing.T) {
 	r := queryRegistry(t)
-	result, err := runQuerySrc(t, r, `query.select [city] query.from people query.distinct`)
+	result, err := runQuerySrc(t, r, `Query.select [city] Query.from people Query.distinct`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func TestQueryJoinOn(t *testing.T) {
 	r := queryRegistry(t)
 	makeVisitsTable(r)
 	// people JOIN visits ON people.name = visits.who
-	src := `query.select [name place] query.from people query.join visits query.on [name eq who]`
+	src := `Query.select [name place] Query.from people Query.join visits Query.on [name eq who]`
 	result, err := runQuerySrc(t, r, src)
 	if err != nil {
 		t.Fatal(err)
@@ -243,7 +243,7 @@ func TestQueryJoinOn(t *testing.T) {
 func TestQueryUnion(t *testing.T) {
 	r := queryRegistry(t)
 	// Londoners UNION Berliners.
-	src := `query.select [] query.from people query.where [city eq 'London'] query.union (query.select [] query.from people query.where [city eq 'Berlin'])`
+	src := `Query.select [] Query.from people Query.where [city eq 'London'] Query.union (Query.select [] Query.from people Query.where [city eq 'Berlin'])`
 	result, err := runQuerySrc(t, r, src)
 	if err != nil {
 		t.Fatal(err)
@@ -258,7 +258,7 @@ func TestQueryUnion(t *testing.T) {
 
 func TestQueryUnknownTable(t *testing.T) {
 	r := queryRegistry(t)
-	_, err := runQuerySrc(t, r, `query.select [] query.from nonexistent`)
+	_, err := runQuerySrc(t, r, `Query.select [] Query.from nonexistent`)
 	if err == nil {
 		t.Fatal("expected error for unknown table")
 	}
@@ -269,7 +269,7 @@ func TestQueryUnknownTable(t *testing.T) {
 func TestQueryFromNonTable(t *testing.T) {
 	r := queryRegistry(t)
 	r.ContextSet("notable", native.NewInteger(42))
-	_, err := runQuerySrc(t, r, `query.select [] query.from notable`)
+	_, err := runQuerySrc(t, r, `Query.select [] Query.from notable`)
 	if err == nil {
 		t.Fatal("expected error when source is not a table")
 	}
@@ -282,7 +282,7 @@ func TestQueryFromNonTable(t *testing.T) {
 // String() is taken (the print path), with no explicit run word.
 func TestQueryLazyPrintsAsTable(t *testing.T) {
 	r := queryRegistry(t)
-	result, err := runQuerySrc(t, r, `query.select [name] query.from people query.where [age gt 35]`)
+	result, err := runQuerySrc(t, r, `Query.select [name] Query.from people Query.where [age gt 35]`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +299,7 @@ func TestQueryLazyPrintsAsTable(t *testing.T) {
 // from errors when it is materialized.
 func TestQueryNoFromErrors(t *testing.T) {
 	r := queryRegistry(t)
-	result, err := runQuerySrc(t, r, `query.select [name]`)
+	result, err := runQuerySrc(t, r, `Query.select [name]`)
 	if err != nil {
 		t.Fatalf("seeding select should not error eagerly: %v", err)
 	}
@@ -322,7 +322,7 @@ func TestQueryNoFromErrors(t *testing.T) {
 // native's real signatures — exactly what dot-access dispatches against.
 func TestQueryUnpackBareWords(t *testing.T) {
 	r := queryRegistry(t)
-	src := `unpack [select from where] query
+	src := `unpack [select from where] Query
 	        select [name age] from people where [age gt 25]`
 	result, err := runQuerySrc(t, r, src)
 	if err != nil {
@@ -350,9 +350,9 @@ func TestQueryUnpackClauseCoverage(t *testing.T) {
 		src  string
 		rows int
 	}{
-		{"order", `unpack [select from where order] query  select [] from people where [city eq 'London'] order [age desc]`, 2},
-		{"group-having", `unpack [select from group having] query  select [city [count city cnt]] from people group [city] having [cnt gt 1]`, 1},
-		{"distinct", `unpack [select from distinct] query  select [city] from people distinct`, 3},
+		{"order", `unpack [select from where order] Query  select [] from people where [city eq 'London'] order [age desc]`, 2},
+		{"group-having", `unpack [select from group having] Query  select [city [count city cnt]] from people group [city] having [cnt gt 1]`, 1},
+		{"distinct", `unpack [select from distinct] Query  select [city] from people distinct`, 3},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -369,12 +369,12 @@ func TestQueryUnpackClauseCoverage(t *testing.T) {
 }
 
 // TestQueryUnpackRename confirms a wrapper rebound under a DIFFERENT name
-// (def w query.where) still dispatches via the inner native, including its
+// (def w Query.where) still dispatches via the inner native, including its
 // NoEvalArgs — the body word names the original inner native to look up.
 func TestQueryUnpackRename(t *testing.T) {
 	r := queryRegistry(t)
 	// fr is from under a new name; the clause words stay bare via unpack.
-	src := `def fr query.from  unpack [select where] query  select [] fr people where [age gt 25]`
+	src := `def fr Query.from  unpack [select where] Query  select [] fr people where [age gt 25]`
 	result, err := runQuerySrc(t, r, src)
 	if err != nil {
 		t.Fatalf("rename-alias pipeline failed: %v", err)

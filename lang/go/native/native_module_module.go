@@ -40,6 +40,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	}
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
+	modReg.BaseFile = parent.BaseFile
 	// CheckMode is deliberately NOT propagated to the module sub-
 	// registry. Module bodies need concrete string literals (used as
 	// export names / map keys) which carrier-stripping under CheckMode
@@ -143,6 +144,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	desc := ModuleDesc{
 		ID:      modID,
 		Exports: exports,
+		Kind:    "inline", // overridden by loadFileModule / Resolve
 	}
 	return desc, nil
 }
@@ -271,13 +273,18 @@ func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 	// Temporarily set parent BaseDir so the child module inherits the
 	// loaded file's directory (RunModuleBody copies BaseDir).
 	modDir := filepath.Dir(resolved)
-	saved := parent.BaseDir
+	savedDir, savedFile := parent.BaseDir, parent.BaseFile
 	parent.BaseDir = modDir
+	parent.BaseFile = resolved
 	desc, err := RunModuleBody(parent, parsed)
-	parent.BaseDir = saved
+	parent.BaseDir, parent.BaseFile = savedDir, savedFile
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("import: %s: %w", resolved, err)
 	}
+	desc.Ref = path
+	desc.Kind = "file"
+	desc.File = resolved
+	desc.Folder = modDir
 
 	// If the module's aql.json declares resources, load them as a
 	// "resource" export so they are available as Module.resource.key.
@@ -331,16 +338,19 @@ func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
 
 // installExports installs all exports from a module descriptor as defs.
 // If names is nil, all exports are installed using their original names.
+// Each export is bound as a ModuleExport whose $module points at the shared
+// Module instance.
 func installExports(r *Registry, desc ModuleDesc, names []string) {
+	mod := NewModuleInstance(desc)
 	if names == nil {
 		for name, exportMap := range desc.Exports {
-			InstallDef(r, name, NewMap(exportMap))
+			InstallDef(r, name, NewModuleExport(name, exportMap, mod))
 		}
 		return
 	}
 	for _, name := range names {
 		if exportMap, ok := desc.Exports[name]; ok {
-			InstallDef(r, name, NewMap(exportMap))
+			InstallDef(r, name, NewModuleExport(name, exportMap, mod))
 		}
 	}
 }
@@ -350,6 +360,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 	if len(renameList) == 0 {
 		return fmt.Errorf("import: empty rename list")
 	}
+	mod := NewModuleInstance(desc)
 
 	if renameList[0].Parent.Equal(TList) {
 		// Multiple rename pairs: [[from1 to1] [from2 to2] ...]
@@ -364,7 +375,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 			if !ok {
 				return fmt.Errorf("import: export %q not found in module", fromName)
 			}
-			InstallDef(r, toName, NewMap(exportMap))
+			InstallDef(r, toName, NewModuleExport(fromName, exportMap, mod))
 		}
 	} else {
 		// Single rename pair: [from to]
@@ -377,7 +388,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 		if !ok {
 			return fmt.Errorf("import: export %q not found in module", fromName)
 		}
-		InstallDef(r, toName, NewMap(exportMap))
+		InstallDef(r, toName, NewModuleExport(fromName, exportMap, mod))
 	}
 	return nil
 }
@@ -385,14 +396,15 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 // installSingleRename renames the single export in a module to newName.
 // If the module has zero or more than one export, an error is returned.
 func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
+	mod := NewModuleInstance(desc)
 	if len(desc.Exports) == 0 {
 		return fmt.Errorf("import: module has no exports to rename")
 	}
 	if len(desc.Exports) != 1 {
 		return fmt.Errorf("import: rename requires module with exactly one export, got %d", len(desc.Exports))
 	}
-	for _, exportMap := range desc.Exports {
-		InstallDef(r, newName, NewMap(exportMap))
+	for name, exportMap := range desc.Exports {
+		InstallDef(r, newName, NewModuleExport(name, exportMap, mod))
 	}
 	return nil
 }

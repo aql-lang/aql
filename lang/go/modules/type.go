@@ -7,13 +7,13 @@ import (
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
-// BuildTypeModule creates the "aql:type" native module — the second-
+// BuildTypeModule creates the "aql:type-util" native module — the second-
 // tier type-operation vocabulary. The core type ops (refine, pathof,
 // typeof, enum, is, teq, tpartial, guard, base, convert, tor, tand,
 // tany, tall) are AQL built-ins. This module covers the rest.
 //
-// After import, words are accessed via dot notation: type.pick,
-// type.exclude, type.lca, etc. The `t` prefix is dropped because the
+// After import, words are accessed via dot notation: TypeUtil.pick,
+// TypeUtil.exclude, TypeUtil.lca, etc. The `t` prefix is dropped because the
 // `type.` qualifier already disambiguates.
 //
 // Arg-order convention for module words:
@@ -78,7 +78,7 @@ func BuildTypeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modID := parent.Modules.NextID()
 	desc := native.ModuleDesc{
 		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"type": exports},
+		Exports: map[string]*native.OrderedMap{"TypeUtil": exports},
 	}
 	return desc, nil
 }
@@ -154,7 +154,7 @@ func typeBodyArg(v native.Value, opName string, r *native.Registry) (native.Valu
 }
 
 // altSubtypes reports whether alt is target itself or one of its
-// subtypes. Used by type.exclude / type.extract to give the
+// subtypes. Used by TypeUtil.exclude / TypeUtil.extract to give the
 // TypeScript-style `Exclude<T,U>` / `Extract<T,U>` semantics where
 // removing/keeping `Number` from a disjunct affects every numeric
 // subtype (Integer, Decimal). Walks the ancestry chain by `*Type.ID`
@@ -283,7 +283,7 @@ func fieldNames(list native.Value, opName string, r *native.Registry) ([]string,
 //
 // All binary handlers below read args using the standard swap-form
 // convention: args[0] = forward arg (surface-RIGHT), args[1] = stack
-// arg (surface-LEFT). For `target type.exclude what`, args[0]=what,
+// arg (surface-LEFT). For `target TypeUtil.exclude what`, args[0]=what,
 // args[1]=target.
 
 var typeModuleNatives = []native.NativeFunc{
@@ -294,11 +294,11 @@ var typeModuleNatives = []native.NativeFunc{
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny, native.TAny},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-				what, err := typeBodyArg(args[0], "type.exclude", r)
+				what, err := typeBodyArg(args[0], "TypeUtil.exclude", r)
 				if err != nil {
 					return nil, err
 				}
-				target, err := typeBodyArg(args[1], "type.exclude", r)
+				target, err := typeBodyArg(args[1], "TypeUtil.exclude", r)
 				if err != nil {
 					return nil, err
 				}
@@ -339,11 +339,11 @@ var typeModuleNatives = []native.NativeFunc{
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny, native.TAny},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-				what, err := typeBodyArg(args[0], "type.extract", r)
+				what, err := typeBodyArg(args[0], "TypeUtil.extract", r)
 				if err != nil {
 					return nil, err
 				}
-				target, err := typeBodyArg(args[1], "type.extract", r)
+				target, err := typeBodyArg(args[1], "TypeUtil.extract", r)
 				if err != nil {
 					return nil, err
 				}
@@ -384,7 +384,7 @@ var typeModuleNatives = []native.NativeFunc{
 				fields := fieldsOf(t)
 				if fields == nil {
 					return nil, r.AqlError("type_error",
-						fmt.Sprintf("type.required: argument must be a Record or Object type, got %s", t.String()), "required")
+						fmt.Sprintf("TypeUtil.required: argument must be a Record or Object type, got %s", t.String()), "required")
 				}
 				newFields := native.NewOrderedMap()
 				for _, k := range fields.Keys() {
@@ -410,9 +410,9 @@ var typeModuleNatives = []native.NativeFunc{
 				fields := fieldsOf(t)
 				if fields == nil {
 					return nil, r.AqlError("type_error",
-						fmt.Sprintf("type.pick: first argument must be a Record or Object type, got %s", t.String()), "pick")
+						fmt.Sprintf("TypeUtil.pick: first argument must be a Record or Object type, got %s", t.String()), "pick")
 				}
-				names, err := fieldNames(namesList, "type.pick", r)
+				names, err := fieldNames(namesList, "TypeUtil.pick", r)
 				if err != nil {
 					return nil, err
 				}
@@ -446,9 +446,9 @@ var typeModuleNatives = []native.NativeFunc{
 				fields := fieldsOf(t)
 				if fields == nil {
 					return nil, r.AqlError("type_error",
-						fmt.Sprintf("type.omit: first argument must be a Record or Object type, got %s", t.String()), "omit")
+						fmt.Sprintf("TypeUtil.omit: first argument must be a Record or Object type, got %s", t.String()), "omit")
 				}
-				names, err := fieldNames(namesList, "type.omit", r)
+				names, err := fieldNames(namesList, "TypeUtil.omit", r)
 				if err != nil {
 					return nil, err
 				}
@@ -484,7 +484,7 @@ var typeModuleNatives = []native.NativeFunc{
 				bf := fieldsOf(b)
 				if af == nil || bf == nil {
 					return nil, r.AqlError("type_error",
-						fmt.Sprintf("type.merge: both arguments must be Record or Object types, got %s and %s", a.String(), b.String()), "merge")
+						fmt.Sprintf("TypeUtil.merge: both arguments must be Record or Object types, got %s and %s", a.String(), b.String()), "merge")
 				}
 				newFields := native.NewOrderedMap()
 				for _, k := range af.Keys() {
@@ -497,7 +497,7 @@ var typeModuleNatives = []native.NativeFunc{
 						unified, uok := eng.Unify(existing, vb)
 						if !uok {
 							return nil, r.AqlError("type_error",
-								fmt.Sprintf("type.merge: field %q cannot unify (%s vs %s)", k, existing.String(), vb.String()), "merge")
+								fmt.Sprintf("TypeUtil.merge: field %q cannot unify (%s vs %s)", k, existing.String(), vb.String()), "merge")
 						}
 						newFields.Set(k, unified)
 					} else {
@@ -518,7 +518,7 @@ var typeModuleNatives = []native.NativeFunc{
 			Args: []*native.Type{native.TAny},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				fn := args[0]
-				sigs, err := fnSigs(fn, "type.paramsof", r)
+				sigs, err := fnSigs(fn, "TypeUtil.paramsof", r)
 				if err != nil {
 					return nil, err
 				}
@@ -548,7 +548,7 @@ var typeModuleNatives = []native.NativeFunc{
 			Args: []*native.Type{native.TAny},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				fn := args[0]
-				sigs, err := fnSigs(fn, "type.returnsof", r)
+				sigs, err := fnSigs(fn, "TypeUtil.returnsof", r)
 				if err != nil {
 					return nil, err
 				}
@@ -577,7 +577,7 @@ var typeModuleNatives = []native.NativeFunc{
 			Args: []*native.Type{native.TAny},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				fn := args[0]
-				sigs, err := fnSigs(fn, "type.arityof", r)
+				sigs, err := fnSigs(fn, "TypeUtil.arityof", r)
 				if err != nil {
 					return nil, err
 				}
@@ -603,7 +603,7 @@ var typeModuleNatives = []native.NativeFunc{
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-				t, err := typeBodyArg(args[0], "type.parent", r)
+				t, err := typeBodyArg(args[0], "TypeUtil.parent", r)
 				if err != nil {
 					return nil, err
 				}
@@ -624,7 +624,7 @@ var typeModuleNatives = []native.NativeFunc{
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-				t, err := typeBodyArg(args[0], "type.root", r)
+				t, err := typeBodyArg(args[0], "TypeUtil.root", r)
 				if err != nil {
 					return nil, err
 				}
@@ -648,11 +648,11 @@ var typeModuleNatives = []native.NativeFunc{
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny, native.TAny},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-				a, err := typeBodyArg(args[0], "type.lca", r)
+				a, err := typeBodyArg(args[0], "TypeUtil.lca", r)
 				if err != nil {
 					return nil, err
 				}
-				b, err := typeBodyArg(args[1], "type.lca", r)
+				b, err := typeBodyArg(args[1], "TypeUtil.lca", r)
 				if err != nil {
 					return nil, err
 				}
@@ -688,7 +688,7 @@ var typeModuleNatives = []native.NativeFunc{
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-				t, err := typeBodyArg(args[0], "type.alts", r)
+				t, err := typeBodyArg(args[0], "TypeUtil.alts", r)
 				if err != nil {
 					return nil, err
 				}
@@ -706,14 +706,14 @@ var typeModuleNatives = []native.NativeFunc{
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-				t, err := typeBodyArg(args[0], "type.nominal", r)
+				t, err := typeBodyArg(args[0], "TypeUtil.nominal", r)
 				if err != nil {
 					return nil, err
 				}
 				base := latticeNode(t)
 				if base == nil {
 					return nil, r.AqlError("type_error",
-						"type.nominal: argument must be a lattice-resident type", "nominal")
+						"TypeUtil.nominal: argument must be a lattice-resident type", "nominal")
 				}
 				anon := r.Types.MintRefinePrefab(native.CanonicalType(r, base))
 				return []native.Value{native.NewTypeLiteral(anon)}, nil
@@ -734,14 +734,14 @@ var typeModuleNatives = []native.NativeFunc{
 				if err != nil {
 					return nil, err
 				}
-				t, err := typeBodyArg(args[1], "type.brand", r)
+				t, err := typeBodyArg(args[1], "TypeUtil.brand", r)
 				if err != nil {
 					return nil, err
 				}
 				base := latticeNode(t)
 				if base == nil {
 					return nil, r.AqlError("type_error",
-						"type.brand: base must be a lattice-resident type", "brand")
+						"TypeUtil.brand: base must be a lattice-resident type", "brand")
 				}
 				anon := r.Types.MintRefinePrefab(native.CanonicalType(r, base))
 				anon.Name = "brand:" + tag

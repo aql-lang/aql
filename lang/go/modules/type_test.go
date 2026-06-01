@@ -47,11 +47,11 @@ func TestTypeResolve(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	desc, err := Resolve("type", r)
+	desc, err := Resolve("type-util", r)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	tx, ok := desc.Exports["type"]
+	tx, ok := desc.Exports["TypeUtil"]
 	if !ok {
 		t.Fatal("expected 'type' export in module descriptor")
 	}
@@ -74,16 +74,16 @@ func TestTypeExclude(t *testing.T) {
 		expr string
 		want string
 	}{
-		{`(String tor None) type.exclude None`, "String"},
-		{`(String tor Number tor Boolean) type.exclude Boolean`, "String|Number"},
-		{`(String tor Number) type.exclude (String tor Number)`, "Never"},
-		{`Integer type.exclude String`, "Integer"},
-		{`Integer type.exclude Integer`, "Never"},
+		{`(String tor None) TypeUtil.exclude None`, "String"},
+		{`(String tor Number tor Boolean) TypeUtil.exclude Boolean`, "String|Number"},
+		{`(String tor Number) TypeUtil.exclude (String tor Number)`, "Never"},
+		{`Integer TypeUtil.exclude String`, "Integer"},
+		{`Integer TypeUtil.exclude Integer`, "Never"},
 		// Subtype semantics (TypeScript `Exclude<T,U>`): removing a
 		// supertype drops every subtype that participates.
-		{`(Integer tor String) type.exclude Number`, "String"},
-		{`(Integer tor Decimal tor Boolean) type.exclude Number`, "Boolean"},
-		{`Integer type.exclude Number`, "Never"},
+		{`(Integer tor String) TypeUtil.exclude Number`, "String"},
+		{`(Integer tor Decimal tor Boolean) TypeUtil.exclude Number`, "Boolean"},
+		{`Integer TypeUtil.exclude Number`, "Never"},
 	}
 	for _, c := range cases {
 		got := runType(t, c.expr)
@@ -98,15 +98,15 @@ func TestTypeExtract(t *testing.T) {
 		expr string
 		want string
 	}{
-		{`(String tor Number tor Boolean) type.extract Number`, "Number"},
-		{`(String tor None) type.extract None`, "None"},
-		{`(String tor Number) type.extract Boolean`, "Never"},
-		{`Integer type.extract Integer`, "Integer"},
+		{`(String tor Number tor Boolean) TypeUtil.extract Number`, "Number"},
+		{`(String tor None) TypeUtil.extract None`, "None"},
+		{`(String tor Number) TypeUtil.extract Boolean`, "Never"},
+		{`Integer TypeUtil.extract Integer`, "Integer"},
 		// Subtype semantics (TypeScript `Extract<T,U>`): extracting a
 		// supertype keeps every numeric subtype in the disjunct.
-		{`(Integer tor Decimal tor String) type.extract Number`, "Integer|Decimal"},
-		{`(Integer tor String) type.extract Number`, "Integer"},
-		{`Integer type.extract Number`, "Integer"},
+		{`(Integer tor Decimal tor String) TypeUtil.extract Number`, "Integer|Decimal"},
+		{`(Integer tor String) TypeUtil.extract Number`, "Integer"},
+		{`Integer TypeUtil.extract Number`, "Integer"},
 	}
 	for _, c := range cases {
 		got := runType(t, c.expr)
@@ -119,28 +119,28 @@ func TestTypeExtract(t *testing.T) {
 // --- record surgery ---
 
 func TestTypePick(t *testing.T) {
-	got := runType(t, `(refine Record [x:Integer y:String z:Boolean]) type.pick [x/q z/q]`)
+	got := runType(t, `(refine Record [x:Integer y:String z:Boolean]) TypeUtil.pick [x/q z/q]`)
 	if len(got) != 1 || got[0].String() != "record{x:Integer z:Boolean}" {
 		t.Errorf("pick = %v", formatResults(got))
 	}
 }
 
 func TestTypeOmit(t *testing.T) {
-	got := runType(t, `(refine Record [x:Integer y:String z:Boolean]) type.omit [y/q]`)
+	got := runType(t, `(refine Record [x:Integer y:String z:Boolean]) TypeUtil.omit [y/q]`)
 	if len(got) != 1 || got[0].String() != "record{x:Integer z:Boolean}" {
 		t.Errorf("omit = %v", formatResults(got))
 	}
 }
 
 func TestTypeMerge(t *testing.T) {
-	got := runType(t, `(refine Record [x:Integer]) type.merge (refine Record [y:String])`)
+	got := runType(t, `(refine Record [x:Integer]) TypeUtil.merge (refine Record [y:String])`)
 	if len(got) != 1 || got[0].String() != "record{x:Integer y:String}" {
 		t.Errorf("merge = %v", formatResults(got))
 	}
 }
 
 func TestTypeRequired(t *testing.T) {
-	got := runType(t, `(refine Record [x:Integer y:[String tor None]]) type.required`)
+	got := runType(t, `(refine Record [x:Integer y:[String tor None]]) TypeUtil.required`)
 	if len(got) != 1 || got[0].String() != "record{x:Integer y:String}" {
 		t.Errorf("required = %v", formatResults(got))
 	}
@@ -152,7 +152,7 @@ func TestTypeParamsOf(t *testing.T) {
 	// Use a lambda literal so the Function value lands on the stack
 	// directly (no auto-invoke ambiguity that a bare def-bound name
 	// would cause).
-	got := runType(t, `([a:Integer b:Integer c:Integer] => [a]) type.paramsof`)
+	got := runType(t, `([a:Integer b:Integer c:Integer] => [a]) TypeUtil.paramsof`)
 	if len(got) != 1 {
 		t.Fatalf("paramsof: got %d results", len(got))
 	}
@@ -164,14 +164,14 @@ func TestTypeParamsOf(t *testing.T) {
 func TestTypeReturnsOf(t *testing.T) {
 	// Anonymous lambdas have Returns=[Any] (the conservative default
 	// for afn-produced fns). Use that as the smoke check.
-	got := runType(t, `([a:Integer b:Integer] => [a]) type.returnsof`)
+	got := runType(t, `([a:Integer b:Integer] => [a]) TypeUtil.returnsof`)
 	if len(got) != 1 || got[0].String() != "Any" {
 		t.Errorf("returnsof = %v", formatResults(got))
 	}
 }
 
 func TestTypeArityOf(t *testing.T) {
-	got := runType(t, `([a:Integer b:Integer c:Integer] => [a]) type.arityof`)
+	got := runType(t, `([a:Integer b:Integer c:Integer] => [a]) TypeUtil.arityof`)
 	if len(got) != 1 || got[0].String() != "3" {
 		t.Errorf("arityof = %v", formatResults(got))
 	}
@@ -184,10 +184,10 @@ func TestTypeParent(t *testing.T) {
 		expr string
 		want string
 	}{
-		{`type.parent Integer`, "Number"},
-		{`type.parent Number`, "Scalar"},
-		{`type.parent Scalar`, "Any"},
-		{`type.parent Any`, "Any"},
+		{`TypeUtil.parent Integer`, "Number"},
+		{`TypeUtil.parent Number`, "Scalar"},
+		{`TypeUtil.parent Scalar`, "Any"},
+		{`TypeUtil.parent Any`, "Any"},
 	}
 	for _, c := range cases {
 		got := runType(t, c.expr)
@@ -202,13 +202,13 @@ func TestTypeRoot(t *testing.T) {
 		expr string
 		want string
 	}{
-		{`type.root Integer`, "Scalar"},
-		{`type.root ProperString`, "Scalar"},
-		{`type.root List`, "Node"},
-		{`type.root Map`, "Node"},
-		{`type.root None`, "None"},
-		{`type.root Any`, "Any"},
-		{`type.root Scalar`, "Scalar"},
+		{`TypeUtil.root Integer`, "Scalar"},
+		{`TypeUtil.root ProperString`, "Scalar"},
+		{`TypeUtil.root List`, "Node"},
+		{`TypeUtil.root Map`, "Node"},
+		{`TypeUtil.root None`, "None"},
+		{`TypeUtil.root Any`, "Any"},
+		{`TypeUtil.root Scalar`, "Scalar"},
 	}
 	for _, c := range cases {
 		got := runType(t, c.expr)
@@ -223,11 +223,11 @@ func TestTypeLCA(t *testing.T) {
 		expr string
 		want string
 	}{
-		{`Integer type.lca Decimal`, "Number"},
-		{`Integer type.lca Number`, "Number"},
-		{`Integer type.lca String`, "Scalar"},
-		{`Integer type.lca List`, "Any"},
-		{`Integer type.lca Integer`, "Integer"},
+		{`Integer TypeUtil.lca Decimal`, "Number"},
+		{`Integer TypeUtil.lca Number`, "Number"},
+		{`Integer TypeUtil.lca String`, "Scalar"},
+		{`Integer TypeUtil.lca List`, "Any"},
+		{`Integer TypeUtil.lca Integer`, "Integer"},
 	}
 	for _, c := range cases {
 		got := runType(t, c.expr)
@@ -242,9 +242,9 @@ func TestTypeAlts(t *testing.T) {
 		expr string
 		want string
 	}{
-		{`type.alts (String tor None)`, "[String None]"},
-		{`type.alts (Integer tor Decimal tor Boolean)`, "[Integer Decimal Boolean]"},
-		{`type.alts Integer`, "[Integer]"},
+		{`TypeUtil.alts (String tor None)`, "[String None]"},
+		{`TypeUtil.alts (Integer tor Decimal tor Boolean)`, "[Integer Decimal Boolean]"},
+		{`TypeUtil.alts Integer`, "[Integer]"},
 	}
 	for _, c := range cases {
 		got := runType(t, c.expr)
@@ -257,7 +257,7 @@ func TestTypeAlts(t *testing.T) {
 // --- refinement primitives ---
 
 func TestTypeNominal(t *testing.T) {
-	// type.nominal mints a fresh refine prefab. The prefab is created
+	// TypeUtil.nominal mints a fresh refine prefab. The prefab is created
 	// in the module's sub-registry lattice; pairing with `def` in the
 	// outer registry currently fails because the prefab isn't in the
 	// outer lattice (cross-registry minting limitation — see the
@@ -265,13 +265,13 @@ func TestTypeNominal(t *testing.T) {
 	//
 	// Smoke-test only: verify the call returns a type-body value
 	// (so `is Type` is true) without trying to bind it via `def`.
-	got := runType(t, `(type.nominal Integer) is Type`)
+	got := runType(t, `(TypeUtil.nominal Integer) is Type`)
 	if len(got) != 1 {
 		t.Fatalf("got %d results", len(got))
 	}
 	b, _ := native.AsBoolean(got[0])
 	if !b {
-		t.Errorf("(type.nominal Integer) is Type = false, want true")
+		t.Errorf("(TypeUtil.nominal Integer) is Type = false, want true")
 	}
 }
 
@@ -279,13 +279,13 @@ func TestTypeBrand(t *testing.T) {
 	// Smoke-test: brand returns a type body. Same cross-registry
 	// limitation as TestTypeNominal — can't verify distinct identity
 	// via def-binding here.
-	got := runType(t, `(Integer type.brand userid/q) is Type`)
+	got := runType(t, `(Integer TypeUtil.brand userid/q) is Type`)
 	if len(got) != 1 {
 		t.Fatalf("got %d results", len(got))
 	}
 	b, _ := native.AsBoolean(got[0])
 	if !b {
-		t.Errorf("(Integer type.brand userid/q) is Type = false, want true")
+		t.Errorf("(Integer TypeUtil.brand userid/q) is Type = false, want true")
 	}
 }
 
@@ -294,11 +294,11 @@ func TestTypeBrand(t *testing.T) {
 func TestTypeErrors(t *testing.T) {
 	r := typeRegistry(t)
 	cases := []string{
-		`5 type.parent`,
-		`5 type.root`,
-		`5 type.required`,
-		`5 type.merge Integer`,
-		`5 type.pick [x/q]`,
+		`5 TypeUtil.parent`,
+		`5 TypeUtil.root`,
+		`5 TypeUtil.required`,
+		`5 TypeUtil.merge Integer`,
+		`5 TypeUtil.pick [x/q]`,
 	}
 	for _, expr := range cases {
 		values, err := parser.Parse(expr)

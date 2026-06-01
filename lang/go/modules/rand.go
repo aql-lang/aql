@@ -4,14 +4,13 @@ import (
 	"fmt"
 	mathrand "math/rand"
 	"sync"
-	"time"
 
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
 // randState holds a PRNG instance. Each instance is independent —
 // successive calls on the same state share the stream, but two
-// distinct states (e.g. top-level default vs `rand.with-seed N`) are
+// distinct states (e.g. top-level default vs `Rand.with-seed N`) are
 // fully isolated.
 type randState struct {
 	mu  sync.Mutex
@@ -25,26 +24,26 @@ type randState struct {
 // `"aql:rand" import` produces genuinely random values.
 //
 // For deterministic / reproducible sequences (property tests, demo
-// fixtures, replayable simulations) use `rand.with-seed N` — it
+// fixtures, replayable simulations) use `Rand.with-seed N` — it
 // returns a fresh isolated instance (an OrderedMap) carrying the same
 // methods as the top-level (`int`, `bool`, `float`, `string`,
 // `one-of`). The instance has its own PRNG sourced from `N` and does
 // not affect the top-level rand or any other instance.
 //
 //	"aql:rand" import
-//	rand.int 0 100              # random, [0, 100)
-//	def r (rand.with-seed 42)   # isolated, seeded with 42
+//	Rand.int 0 100              # random, [0, 100)
+//	def r (Rand.with-seed 42)   # isolated, seeded with 42
 //	r.int 0 100                 # deterministic at seed 42
 func BuildRandModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Seed the top-level instance from the clock so default usage is
 	// non-deterministic — what most developers expect.
-	defaultState := newRandState(time.Now().UnixNano())
+	defaultState := newRandState(native.EffectiveClock(parent).Now().UnixNano())
 	exports, err := buildRandExportsForState(defaultState)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
 
-	// `rand.with-seed` lives only at the top level. Its handler
+	// `Rand.with-seed` lives only at the top level. Its handler
 	// constructs a new randState seeded with N, builds a separate
 	// exports map with all the standard methods (int, bool, float,
 	// string, one-of), and returns that map as an OrderedMap. Each
@@ -79,7 +78,7 @@ func BuildRandModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	return native.ModuleDesc{
 		ID:      parent.Modules.NextID(),
-		Exports: map[string]*native.OrderedMap{"rand": exports},
+		Exports: map[string]*native.OrderedMap{"Rand": exports},
 	}, nil
 }
 
@@ -95,8 +94,8 @@ func newRandState(seed int64) *randState {
 //
 // Exposed so other modules (notably aql:test's PBT framework) can
 // build deterministic rand instances without going through AQL-level
-// `rand.with-seed N` invocation. The returned Map is functionally
-// identical to what `rand.with-seed N` produces from AQL.
+// `Rand.with-seed N` invocation. The returned Map is functionally
+// identical to what `Rand.with-seed N` produces from AQL.
 func BuildSeededRandInstance(seed int64) (*native.OrderedMap, error) {
 	state := newRandState(seed)
 	return buildRandExportsForState(state)
@@ -128,7 +127,7 @@ func BuildSeededRandRegistry(seed int64) (*native.Registry, error) {
 // buildRandExportsForState builds the OrderedMap of dotted methods
 // (`int`, `bool`, `float`, `string`, `one-of`) bound to the given
 // state. Used for both the top-level default and for each
-// `rand.with-seed` instance — each gets its own sub-registry of
+// `Rand.with-seed` instance — each gets its own sub-registry of
 // natives closing over its own randState.
 func buildRandExportsForState(state *randState) (*native.OrderedMap, error) {
 	subReg, err := native.DefaultRegistry()
@@ -143,7 +142,7 @@ func buildRandExportsForState(state *randState) (*native.OrderedMap, error) {
 	// Wrapper FnSig Params match the inner NativeSig.Args order
 	// (top-first per SIG-ORDER-REFACTOR.0.md). Aligned with the
 	// FORWARD canonical surface — sig[0] is the first arg written
-	// after the word: `rand.int LO HI`, `rand.string CHARSET LEN`.
+	// after the word: `Rand.int LO HI`, `Rand.string CHARSET LEN`.
 	exports.Set("int", wrapRandFnDef("rand-int",
 		[]native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}},
 		[]*native.Type{native.TInteger}, subReg))
@@ -185,7 +184,7 @@ func wrapRandFnDef(wordName string, params []native.FnParam, returns []*native.T
 
 // wrapRandFnDefNoEval is wrapRandFnDef plus NoEvalArgs / NoEvalMapArgs
 // passthrough for wrappers whose params are quoted code bodies
-// (rand.list-of, rand.map-from). Without these, execFnDefSig's
+// (Rand.list-of, Rand.map-from). Without these, execFnDefSig's
 // auto-eval would silently sub-Run the bodies before the inner
 // handler sees them.
 func wrapRandFnDefNoEval(
@@ -220,7 +219,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 		{
 			Name: "rand-int",
 			Signatures: []native.NativeSig{{
-				// Canonical surface (forward form): `rand.int LO HI`.
+				// Canonical surface (forward form): `Rand.int LO HI`.
 				// sig[0]=lo, sig[1]=hi. Returns a uniform integer in
 				// the HALF-OPEN range [lo, hi) — inclusive lower,
 				// exclusive upper. Matches Python's random.randrange,
@@ -239,8 +238,8 @@ func randNativesForState(state *randState) []native.NativeFunc {
 					}
 					if hi <= lo {
 						return nil, r.AqlError("rand_error",
-							fmt.Sprintf("rand.int: hi (%d) <= lo (%d); range must be non-empty", hi, lo),
-							"rand.int")
+							fmt.Sprintf("Rand.int: hi (%d) <= lo (%d); range must be non-empty", hi, lo),
+							"Rand.int")
 					}
 					state.mu.Lock()
 					n := lo + state.rng.Int63n(hi-lo)
@@ -282,7 +281,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 			Name: "rand-string",
 			Signatures: []native.NativeSig{{
 				// Canonical surface (forward form):
-				// `rand.string CHARSET LENGTH`. sig[0]=charset (String),
+				// `Rand.string CHARSET LENGTH`. sig[0]=charset (String),
 				// sig[1]=length (Integer).
 				Args:       []*native.Type{native.TString, native.TInteger},
 				Returns:    []*native.Type{native.TString},
@@ -298,7 +297,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 					}
 					if length < 0 {
 						return nil, r.AqlError("rand_error",
-							fmt.Sprintf("rand.string: length (%d) < 0", length), "rand.string")
+							fmt.Sprintf("Rand.string: length (%d) < 0", length), "Rand.string")
 					}
 					runes := []rune(charset)
 					if len(runes) == 0 {
@@ -306,7 +305,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 							return []native.Value{native.NewString("")}, nil
 						}
 						return nil, r.AqlError("rand_error",
-							"rand.string: empty charset", "rand.string")
+							"Rand.string: empty charset", "Rand.string")
 					}
 					out := make([]rune, length)
 					state.mu.Lock()
@@ -330,7 +329,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 				NoEvalArgs: map[int]bool{0: true},
 				BarrierPos: -1,
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-					body, err := native.RequireConcreteList(args[0], "rand.list-of body")
+					body, err := native.RequireConcreteList(args[0], "Rand.list-of body")
 					if err != nil {
 						return nil, err
 					}
@@ -340,7 +339,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 					}
 					if n < 0 {
 						return nil, r.AqlError("rand_error",
-							fmt.Sprintf("rand.list-of: length (%d) < 0", n), "rand.list-of")
+							fmt.Sprintf("Rand.list-of: length (%d) < 0", n), "Rand.list-of")
 					}
 					bodyTokens := body.Slice()
 					out := make([]native.Value, 0, n)
@@ -348,12 +347,12 @@ func randNativesForState(state *randState) []native.NativeFunc {
 						sub := native.New(r)
 						res, err := sub.Run(append([]native.Value(nil), bodyTokens...))
 						if err != nil {
-							return nil, fmt.Errorf("rand.list-of[%d]: %w", i, err)
+							return nil, fmt.Errorf("evaluating Rand.list-of[%d]: %w", i, err)
 						}
 						if len(res) == 0 {
 							return nil, r.AqlError("rand_error",
-								fmt.Sprintf("rand.list-of[%d]: body produced no value", i),
-								"rand.list-of")
+								fmt.Sprintf("Rand.list-of[%d]: body produced no value", i),
+								"Rand.list-of")
 						}
 						out = append(out, res[len(res)-1])
 					}
@@ -373,26 +372,26 @@ func randNativesForState(state *randState) []native.NativeFunc {
 				NoEvalMapArgs: map[int]bool{0: true},
 				BarrierPos:    -1,
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-					schema, err := native.RequireConcreteMap(args[0], "rand.map-from schema")
+					schema, err := native.RequireConcreteMap(args[0], "Rand.map-from schema")
 					if err != nil {
 						return nil, err
 					}
 					out := native.NewOrderedMap()
 					for _, key := range schema.Keys() {
 						bodyVal, _ := schema.Get(key)
-						body, err := native.RequireConcreteList(bodyVal, "rand.map-from value")
+						body, err := native.RequireConcreteList(bodyVal, "Rand.map-from value")
 						if err != nil {
-							return nil, fmt.Errorf("rand.map-from[%s]: %w", key, err)
+							return nil, fmt.Errorf("evaluating Rand.map-from[%s]: %w", key, err)
 						}
 						sub := native.New(r)
 						res, err := sub.Run(append([]native.Value(nil), body.Slice()...))
 						if err != nil {
-							return nil, fmt.Errorf("rand.map-from[%s]: %w", key, err)
+							return nil, fmt.Errorf("evaluating Rand.map-from[%s]: %w", key, err)
 						}
 						if len(res) == 0 {
 							return nil, r.AqlError("rand_error",
-								fmt.Sprintf("rand.map-from[%s]: body produced no value", key),
-								"rand.map-from")
+								fmt.Sprintf("Rand.map-from[%s]: body produced no value", key),
+								"Rand.map-from")
 						}
 						out.Set(key, res[len(res)-1])
 					}
@@ -407,14 +406,14 @@ func randNativesForState(state *randState) []native.NativeFunc {
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-					lst, err := native.RequireConcreteList(args[0], "rand.one-of")
+					lst, err := native.RequireConcreteList(args[0], "Rand.one-of")
 					if err != nil {
 						return nil, err
 					}
 					n := lst.Len()
 					if n == 0 {
 						return nil, r.AqlError("rand_error",
-							"rand.one-of: empty list", "rand.one-of")
+							"Rand.one-of: empty list", "Rand.one-of")
 					}
 					state.mu.Lock()
 					idx := state.rng.Intn(n)

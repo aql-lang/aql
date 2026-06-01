@@ -97,13 +97,13 @@ func hostPortFromURL(rawURL string) (string, int) {
 // documented lang/go/native/fetch range (3000-3999) — see
 // eng.TypeTable.RegisterExternalBuiltin for the allocation policy.
 var (
-	TFetchFunction = registerFetchType("Ideal/Fetch", 3000)
-	TFetchRequest  = registerFetchType("Ideal/Fetch/Request", 3001)
-	TFetchResponse = registerFetchType("Ideal/Fetch/Response", 3002)
+	TFetchFunction = registerFetchType("Ideal/Fetch", 3000, nil)
+	TFetchRequest  = registerFetchType("Ideal/Fetch/Request", 3001, fetchConvertBehavior{})
+	TFetchResponse = registerFetchType("Ideal/Fetch/Response", 3002, fetchConvertBehavior{})
 )
 
-func registerFetchType(path string, fixedID int) *eng.Type {
-	t, err := eng.Builtin.RegisterExternalBuiltin(path, fixedID, nil)
+func registerFetchType(path string, fixedID int, behavior eng.TypeBehavior) *eng.Type {
+	t, err := eng.Builtin.RegisterExternalBuiltin(path, fixedID, behavior)
 	if err != nil {
 		// lint:allow-panic — init-time builtin registration; see
 		// registerTimerType in engine/native_misc.go for rationale.
@@ -278,4 +278,32 @@ func doFetch(reqOM ReadMap, r *Registry) ([]Value, error) {
 	respOM.Set("url", NewString(resp.Request.URL.String()))
 
 	return []Value{{Parent: TFetchResponse, Data: MapPayload{M: respOM}}}, nil
+}
+
+// fetchConvertBehavior projects a Fetch Request/Response (map-backed
+// values) to its map via IdealConverter. Format/Match/Equal stay default.
+type fetchConvertBehavior struct{}
+
+func (fetchConvertBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
+func (fetchConvertBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
+func (fetchConvertBehavior) Format(v Value) string       { return eng.DefaultBehavior.Format(v) }
+func (fetchConvertBehavior) ToMap(v Value) (Value, error) {
+	out := NewOrderedMap()
+	if m, err := AsMap(v); err == nil {
+		for _, k := range m.Keys() {
+			val, _ := m.Get(k)
+			out.Set(k, val)
+		}
+	}
+	return NewMap(out), nil
+}
+func (fetchConvertBehavior) ToList(v Value) (Value, error) {
+	var vals []Value
+	if m, err := AsMap(v); err == nil {
+		for _, k := range m.Keys() {
+			val, _ := m.Get(k)
+			vals = append(vals, val)
+		}
+	}
+	return NewList(vals), nil
 }

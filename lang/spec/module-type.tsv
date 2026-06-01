@@ -1,0 +1,20 @@
+# AQL Language Specification: the aql:type module
+# Format: input<TAB>expected<TAB>description
+#
+# Loadable module for type-lattice reflection. Import binds the `type`
+# namespace: `"aql:type-util" import end  TypeUtil.word Type`.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  parent — the immediate supertype in the lattice
+"aql:type-util" import end  TypeUtil.parent Integer	Number	Integer's parent is Number
+"aql:type-util" import end  TypeUtil.parent Decimal	Number	Decimal's parent is Number
+#
+# §2  root — the branch root
+"aql:type-util" import end  TypeUtil.root Integer	Scalar	Integer's branch root is Scalar
+"aql:type-util" import end  TypeUtil.root String	Scalar	String's branch root is Scalar
+#
+# §3  swap form
+"aql:type-util" import end  Integer TypeUtil.parent	Number	swap form dispatches
+#
+# §4  negative — unbound without import
+TypeUtil.parent Integer	ERROR:undefined_word	`type` is unbound without `import`

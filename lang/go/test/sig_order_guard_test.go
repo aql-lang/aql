@@ -119,13 +119,13 @@ func TestSigOrder_UnnamedAqlFn_TopFirst(t *testing.T) {
 // TestSigOrder_ModuleWrapper_NaturalParams pins module-wrapper
 // dispatch on top-first sig order. The wrapper's FnSig.Params match
 // the inner native's NativeSig.Args order (top-first per the
-// canonical forward call form `rand.string CHARSET LENGTH`).
+// canonical forward call form `Rand.string CHARSET LENGTH`).
 // execFnDefLiteral's trivial-delegation short-circuit routes the call
 // straight to the inner native via execMatch.
 func TestSigOrder_ModuleWrapper_NaturalParams(t *testing.T) {
 	r := setupRandReg(t)
-	// Forward form: `rand.string "abc" 10` → charset="abc", length=10.
-	res, runErr := runSrc(t, r, `def s (rand.with-seed 1)  (s.string "abc" 10)`)
+	// Forward form: `Rand.string "abc" 10` → charset="abc", length=10.
+	res, runErr := runSrc(t, r, `def s (Rand.with-seed 1)  (s.string "abc" 10)`)
 	if runErr != nil {
 		t.Fatalf("dispatch failed: %v", runErr)
 	}

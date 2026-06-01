@@ -10,7 +10,28 @@ package capabilities
 import (
 	"os"
 	"path/filepath"
+	"time"
 )
+
+// Clock is the host capability that supplies "the current time" to AQL's
+// temporal words (`now`, the aql:time `time-now*` family) and to the
+// default seed of aql:rand. The default implementation reads the wall
+// clock; a FixedClock can be installed for deterministic tests/specs so
+// `now` and time-dependent output are reproducible.
+type Clock interface {
+	Now() time.Time
+}
+
+// WallClock is the default Clock: it returns the real system time.
+type WallClock struct{}
+
+func (WallClock) Now() time.Time { return time.Now() }
+
+// FixedClock is a Clock frozen at a single instant — used by the spec
+// runner and tests so temporal words produce deterministic results.
+type FixedClock struct{ T time.Time }
+
+func (c FixedClock) Now() time.Time { return c.T }
 
 // FileOps defines the file operations that AQL's read/write words use.
 // The default implementation delegates to the os package.

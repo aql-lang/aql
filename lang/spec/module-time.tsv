@@ -1,0 +1,30 @@
+# AQL Language Specification: the aql:time-util module
+# Format: input<TAB>expected<TAB>description
+#
+# Loadable module of time/date utilities. Its name collides with the
+# builtin `Time` type, so it carries a `-util` id and a `TimeUtil`
+# namespace: `"aql:time-util" import end  TimeUtil.word args`. The module
+# distinguishes Instant (a point in time, e.g. a unix timestamp) from
+# Date (a calendar day) — Date-typed words (to-iso, is-leap-year, …) take
+# a Date, not an Instant. The "current time" words (today-utc, now-local)
+# read the Clock capability, which this suite FREEZES at 2021-01-01, so
+# they are deterministic here. (Core `now` is in lang/spec/temporal.tsv.)
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  unix epoch ↔ Instant
+"aql:time-util" import end  TimeUtil.unix 0	1970-01-01T00:00:00Z	unix seconds → Instant
+"aql:time-util" import end  TimeUtil.to-unix (TimeUtil.unix 1700000000)	1700000000	Instant → unix seconds (round-trip)
+#
+# §2  current day — frozen at 2021-01-01 in this suite
+"aql:time-util" import end  TimeUtil.today-utc	2021-01-01	today (UTC) reads the frozen clock
+#
+# §3  Date formatting (Date-typed input)
+"aql:time-util" import end  TimeUtil.to-iso TimeUtil.today-utc	'2021-01-01'	ISO-8601 string of a Date
+"aql:time-util" import end  TimeUtil.to-string TimeUtil.today-utc	'2021-01-01'	default string form of a Date
+#
+# §4  leap-year predicate (Date-typed input)
+"aql:time-util" import end  TimeUtil.is-leap-year TimeUtil.today-utc	false	2021 is not a leap year
+"aql:time-util" import end  TimeUtil.is-leap-year (TimeUtil.to-date (TimeUtil.unix 1577836800))	true	2020 is a leap year
+#
+# §5  negative — the namespace is unbound until imported
+TimeUtil.unix 0	ERROR:undefined_word	`TimeUtil` is undefined without `import`

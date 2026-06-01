@@ -207,7 +207,7 @@ func inferExact(name string, sig Signature) []string {
 
 	// Module
 	case "module":
-		return []string{"Word/__MD"}
+		return []string{"Ideal/Module"}
 	case "import":
 		return nil
 

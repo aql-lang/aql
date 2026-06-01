@@ -1,0 +1,52 @@
+# AQL Language Specification: String operations (concat split trim
+# contains indexof replace changecase upper lower repeat pad escape match)
+# Format: input<TAB>expected<TAB>description
+#
+# String words are forward-eligible. Most take the subject string first;
+# several accept a trailing options Map (e.g. trim {chars:…}, changecase
+# {style:…}). concat reduces a List of values to one String.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  concat — join a list of values into one String
+concat ['a' 'b' 'c']	'abc'	concatenate string elements
+concat ['x' 1 true]	'x1true'	non-string elements coerce to text
+concat []	''	empty list → empty string
+#
+# §2  split
+split 'a,b,c' ','	['a' 'b' 'c']	split on a separator
+split 'hello' ''	['h' 'e' 'l' 'l' 'o']	empty separator splits into characters
+#
+# §3  trim — drop surrounding whitespace, or a custom char set
+trim '  hi  '	'hi'	default trims whitespace
+trim 'xxhixx' {chars: 'x'}	'hi'	{chars} option trims a custom set
+#
+# §4  contains / indexof
+contains 'hello' 'ell'	true	substring present
+contains 'hello' 'zzz'	false	substring absent
+indexof 'hello' 'l'	2	zero-based index of first occurrence
+indexof 'hello' 'z'	-1	-1 when not found
+#
+# §5  replace — first occurrence only
+replace 'a.b.c' '.' '-'	'a-b.c'	replaces only the first match by default
+#
+# §6  case
+changecase 'hello' {style: 'upper'}	'HELLO'	{style:'upper'}
+changecase 'Hello'	'hello'	default style lowercases
+changecase 'hello world' {style: 'title'}	'Hello World'	{style:'title'}
+upper 'hi'	'HI'	uppercase shortcut
+lower 'HI'	'hi'	lowercase shortcut
+#
+# §7  repeat / pad / escape
+repeat 'ab' 3	'ababab'	repeat n times
+pad 5 'x'	'x    '	pad string to a width (right-padded)
+escape 'a<b'	'a\<b'	escape special characters
+#
+# §8  match — literal substring search; result map exposes ok / n / ms
+(match 'abc123' '123').ok	true	a match was found
+(match 'abc123' 'xyz').ok	false	no match
+(match 'abc123' '123').n	1	number of matches
+#
+# §9  errors — string words reject non-string subjects
+split 5 ','	ERROR:signature_error	split requires a String subject
+trim 42	ERROR:signature_error	trim requires a String/Atom subject
+upper 5	ERROR:signature_error	upper requires a String subject

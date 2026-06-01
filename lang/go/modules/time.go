@@ -7,7 +7,7 @@ import (
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
-// BuildTimeModule creates the "aql:time" native module.
+// BuildTimeModule creates the "aql:time-util" native module.
 func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	subReg, err := native.DefaultRegistry()
 	if err != nil {
@@ -126,7 +126,7 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modID := parent.Modules.NextID()
 	desc := native.ModuleDesc{
 		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"time": exports},
+		Exports: map[string]*native.OrderedMap{"TimeUtil": exports},
 	}
 	return desc, nil
 }
@@ -400,8 +400,8 @@ var TimeNatives = func() []native.NativeFunc {
 
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{},
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-					return []native.Value{native.NewDateTime(time.Now())}, nil
+				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+					return []native.Value{native.NewDateTime(native.EffectiveClock(r).Now())}, nil
 				},
 				Returns: []*native.Type{native.TDateTime}, BarrierPos: 0,
 			}},
@@ -411,8 +411,8 @@ var TimeNatives = func() []native.NativeFunc {
 
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{},
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-					now := time.Now()
+				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+					now := native.EffectiveClock(r).Now()
 					d := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 					return []native.Value{native.NewDate(d)}, nil
 				},
@@ -424,8 +424,8 @@ var TimeNatives = func() []native.NativeFunc {
 
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{},
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-					now := time.Now().UTC()
+				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+					now := native.EffectiveClock(r).Now().UTC()
 					d := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 					return []native.Value{native.NewDate(d)}, nil
 				},

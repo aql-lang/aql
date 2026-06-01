@@ -1,0 +1,39 @@
+# AQL Language Specification: Higher-order list words (each fold scan join)
+# Format: input<TAB>expected<TAB>description
+#
+# each / fold / scan take an unevaluated CODE BODY (NoEvalArgs) as their
+# first argument and a collection as the second; the body runs against
+# each element on the stack. fold/scan optionally take an initial
+# accumulator. (filter, which takes a Function callback, and the richer
+# combinators — where/group/unique/sortby — live in the aql:array module.)
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  each — map a code body over a list
+each [mul 2] [1 2 3]	[2 4 6]	double each element
+each [add 1] [10 20 30]	[11 21 31]	increment each element
+each [dup add] [1 2 3]	[2 4 6]	the body may use stack ops
+[1 2 3] each [mul 2]	[2 4 6]	swap form (collection on the stack)
+#
+# §2  fold — reduce a list with a binary body
+fold [add] [1 2 3 4] 0	10	sum with explicit initial accumulator
+fold [add] [1 2 3 4]	10	no-init form folds from the first element
+fold [mul] [1 2 3 4] 1	24	product
+#
+# §3  scan — running (prefix) reduction
+scan [add] [1 2 3]	[1 3 6]	running sums
+#
+# §4  join — concatenate list elements into a String
+join ',' ['a' 'b' 'c']	'a,b,c'	join with a separator
+join ['a' 'b' 'c']	'a,b,c'	default separator is a comma
+#
+# §5  filter — keep elements whose callback returns true. The callback is
+#     a Function (not a code body) and receives a {key value} PAIR map per
+#     element (key = index for a list, the map key for a map); read the
+#     element via `.value`. The afn param must be typed, e.g. [p:Any].
+filter ([p:Any] => [(p.value mod 2) eq 0]) [1 2 3 4 5 6]	[2 4 6]	keep even elements (pair.value)
+filter ([p:Any] => [p.value gt 3]) [1 2 3 4 5]	[4 5]	keep elements greater than 3
+filter ([p:Any] => [(p.value mod 2) eq 0]) {a:1 b:2 c:3 d:4}	[2 4]	filter also walks a map's values
+#
+# §6  errors
+each [mul 2] 5	ERROR:signature_error	each requires a list collection
+fold [add] 5 0	ERROR:signature_error	fold requires a list collection

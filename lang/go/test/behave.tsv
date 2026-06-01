@@ -90,15 +90,15 @@ red/q	red/q	Atom renders with /q suffix
 # 2a. NATIVE compare: predefined domain Comparers
 # ---------------------------------------------------------------------
 # Constructed via the aql:time module — the test runner pre-installs
-# its exports so rows can use `time.unix`, `time.seconds`, … directly.
+# its exports so rows can use `TimeUtil.unix`, `TimeUtil.seconds`, … directly.
 
-(0 time.unix) (100 time.unix) lt	true	earlier Instant < later
-(100 time.unix) (0 time.unix) lt	false	later Instant > earlier
-(50 time.unix) (50 time.unix) lt	false	same Instant
-(50 time.unix) (50 time.unix) lte	true	same Instant (≤)
-(0 time.unix) (100 time.unix) gt	false	earlier !> later
-(5 time.seconds) (10 time.seconds) lt	true	5s < 10s ClkDuration
-(10 time.seconds) (5 time.seconds) lt	false	10s > 5s
+(0 TimeUtil.unix) (100 TimeUtil.unix) lt	true	earlier Instant < later
+(100 TimeUtil.unix) (0 TimeUtil.unix) lt	false	later Instant > earlier
+(50 TimeUtil.unix) (50 TimeUtil.unix) lt	false	same Instant
+(50 TimeUtil.unix) (50 TimeUtil.unix) lte	true	same Instant (≤)
+(0 TimeUtil.unix) (100 TimeUtil.unix) gt	false	earlier !> later
+(5 TimeUtil.seconds) (10 TimeUtil.seconds) lt	true	5s < 10s ClkDuration
+(10 TimeUtil.seconds) (5 TimeUtil.seconds) lt	false	10s > 5s
 
 # ---------------------------------------------------------------------
 # 2b. NATIVE canon: domain Format Behaviors
@@ -106,9 +106,9 @@ red/q	red/q	Atom renders with /q suffix
 # Each native type's FormatBehavior produces a domain-specific render
 # (Instant in RFC3339Nano, ClkDuration as a Go duration string, …).
 
-0 time.unix	1970-01-01T00:00:00Z	Instant renders chronologically
-100 time.unix	1970-01-01T00:01:40Z	Instant + 100s
-5 time.seconds	5s	ClkDuration
+0 TimeUtil.unix	1970-01-01T00:00:00Z	Instant renders chronologically
+100 TimeUtil.unix	1970-01-01T00:01:40Z	Instant + 100s
+5 TimeUtil.seconds	5s	ClkDuration
 
 # ---------------------------------------------------------------------
 # 3a. USER-DEFINED compare: behave compare/q (fn [[T T] [Integer] [body]])
@@ -198,7 +198,7 @@ true nodify	true	Boolean passes through
 
 # 4b. NATIVE pass-through — domain types with no jsonify behavior
 # attached also pass through unchanged.
-0 time.unix nodify	1970-01-01T00:00:00Z	Instant unchanged
+0 TimeUtil.unix nodify	1970-01-01T00:00:00Z	Instant unchanged
 
 # 4c. USER-DEFINED — a Person with a custom jsonify projects to a
 # Map with renamed / filtered fields. The body returns a Map (Node);

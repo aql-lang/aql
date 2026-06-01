@@ -1,0 +1,24 @@
+# AQL Language Specification: the aql:bin module
+# Format: input<TAB>expected<TAB>description
+#
+# Loadable module of bit/byte utilities. Import binds the `bin`
+# namespace: `"aql:bin" import end  Bin.word args`.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  bit population
+"aql:bin" import end  Bin.popcount 7	3	count of set bits (0b111)
+"aql:bin" import end  Bin.parity 7	true	odd number of set bits
+#
+# §2  leading / trailing zeros (64-bit)
+"aql:bin" import end  Bin.clz 1	63	count leading zeros
+"aql:bin" import end  Bin.ctz 8	3	count trailing zeros (0b1000)
+#
+# §3  character codes
+"aql:bin" import end  Bin.ord 'A'	65	code point of a character
+"aql:bin" import end  Bin.chr 65	'A'	character from a code point
+#
+# §4  swap form
+"aql:bin" import end  3 Bin.popcount	2	swap form dispatches (0b11 → 2)
+#
+# §5  negative — unbound without import
+Bin.popcount 7	ERROR:undefined_word	`bin` is unbound without `import`

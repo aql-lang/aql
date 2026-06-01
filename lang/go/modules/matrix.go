@@ -165,7 +165,7 @@ func newMatrix(rows, cols int, data []float64) native.Value {
 	return tensorValue(TMatrix, TensorData{Shape: []int{rows, cols}, Data: data})
 }
 
-// BuildMatrixModule creates the "aql:matrix" native module. It registers
+// BuildMatrixModule creates the "aql:matrix-util" native module. It registers
 // Go-implemented matrix words into an isolated sub-registry and returns a
 // ModuleDesc with a "matrix" export containing FnDef wrappers for each word.
 func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
@@ -193,7 +193,7 @@ func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	// Shape. No `size` export: the core `size` word already reports a
 	// tensor's entry count via the Sizer behavior (TensorData), so a
-	// matrix.size would only shadow it — see ADR-001.
+	// MatrixUtil.size would only shadow it — see ADR-001.
 	exports.Set("rows", makeMatrixToIntFnDef("matrix-rows", subReg))
 	exports.Set("cols", makeMatrixToIntFnDef("matrix-cols", subReg))
 
@@ -212,7 +212,7 @@ func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Transform. The flat row-major list of entries is exported as
 	// `values`, not `flatten`, so it does not shadow the core `flatten`
 	// word (ADR-001). `transpose` is an aql:array module word, not a
-	// core word, so matrix.transpose is fine.
+	// core word, so MatrixUtil.transpose is fine.
 	exports.Set("transpose", makeUnaryMatrixFnDef("matrix-transpose", subReg))
 	exports.Set("values", makeMatrixToListFnDef("matrix-flatten", subReg))
 
@@ -227,7 +227,7 @@ func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modID := parent.Modules.NextID()
 	desc := native.ModuleDesc{
 		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"matrix": exports},
+		Exports: map[string]*native.OrderedMap{"MatrixUtil": exports},
 	}
 	return desc, nil
 }
@@ -838,7 +838,7 @@ var MatrixNatives = []native.NativeFunc{
 
 // matrixFromRows builds a rank-2 TensorData from a list of equal-length
 // row lists. Shared by the `matrix-make` word and the Matrix Ideal's
-// Instantiate (see matrix_ideal.go) so `matrix.create` and
+// Instantiate (see matrix_ideal.go) so `MatrixUtil.create` and
 // `make Matrix …` agree.
 func matrixFromRows(v native.Value) (TensorData, error) {
 	rl, _ := native.AsList(v)
@@ -932,4 +932,56 @@ func matDet(m TensorData) (float64, error) {
 		}
 	}
 	return det, nil
+}
+
+// ToMap / ToList implement native.IdealConverter (eng.IdealConverter) for
+// the tensor kinds: ToList gives the nested row structure; ToMap gives
+// {shape:[…] values:[flat]}.
+func (tensorFormatBehavior) ToList(v native.Value) (native.Value, error) {
+	t, ok := tensorPayload(v)
+	if !ok {
+		return native.NewList(nil), nil
+	}
+	return tensorNested(t, 0, 0, len(t.Data)), nil
+}
+
+func (tensorFormatBehavior) ToMap(v native.Value) (native.Value, error) {
+	m := native.NewOrderedMap()
+	t, ok := tensorPayload(v)
+	if !ok {
+		return native.NewMap(m), nil
+	}
+	shape := make([]native.Value, len(t.Shape))
+	for i, d := range t.Shape {
+		shape[i] = native.NewInteger(int64(d))
+	}
+	vals := make([]native.Value, len(t.Data))
+	for i, d := range t.Data {
+		vals[i] = native.NewDecimal(d)
+	}
+	m.Set("shape", native.NewList(shape))
+	m.Set("values", native.NewList(vals))
+	return native.NewMap(m), nil
+}
+
+// tensorNested builds the nested-list view of t's [lo,hi) data slice for
+// the dimension at the given axis. Rank-1 → flat list of Decimals.
+func tensorNested(t TensorData, axis, lo, hi int) native.Value {
+	if axis >= len(t.Shape)-1 {
+		elems := make([]native.Value, 0, hi-lo)
+		for i := lo; i < hi; i++ {
+			elems = append(elems, native.NewDecimal(t.Data[i]))
+		}
+		return native.NewList(elems)
+	}
+	dim := t.Shape[axis]
+	if dim == 0 {
+		return native.NewList(nil)
+	}
+	stride := (hi - lo) / dim
+	rows := make([]native.Value, 0, dim)
+	for i := 0; i < dim; i++ {
+		rows = append(rows, tensorNested(t, axis+1, lo+i*stride, lo+(i+1)*stride))
+	}
+	return native.NewList(rows)
 }

@@ -69,7 +69,7 @@ func BuildSolarDemoModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modID := parent.Modules.NextID()
 	desc := native.ModuleDesc{
 		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"solardemo": exports},
+		Exports: map[string]*native.OrderedMap{"SolarDemo": exports},
 	}
 	return desc, nil
 }

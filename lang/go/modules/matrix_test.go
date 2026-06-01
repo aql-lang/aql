@@ -23,7 +23,7 @@ func matrixRegistry(t *testing.T) *native.Registry {
 // matGet is a shorthand: ( matrix get <word> )
 func matGet(word string) []native.Value {
 	return []native.Value{
-		native.NewOpenParen(), native.NewWord("matrix"), native.NewWord("get"), native.NewWord(word), native.NewCloseParen(),
+		native.NewOpenParen(), native.NewWord("MatrixUtil"), native.NewWord("get"), native.NewWord(word), native.NewCloseParen(),
 	}
 }
 
@@ -38,7 +38,7 @@ func TestMatrixModuleExports(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matExport, ok := desc.Exports["matrix"]
+	matExport, ok := desc.Exports["MatrixUtil"]
 	if !ok {
 		t.Fatal("expected 'matrix' export")
 	}
@@ -71,11 +71,11 @@ func TestTensorSize(t *testing.T) {
 	}
 }
 
-// --- Construction: matrix.eye ---
+// --- Construction: MatrixUtil.eye ---
 
 func TestMatrixEye(t *testing.T) {
 	r := matrixRegistry(t)
-	// 3 matrix.eye → 3x3 identity
+	// 3 MatrixUtil.eye → 3x3 identity
 	input := append([]native.Value{native.NewInteger(3)}, matGet("eye")...)
 	result := runAQL(t, r, input)
 	if len(result) != 1 {
@@ -99,7 +99,7 @@ func TestMatrixEye(t *testing.T) {
 	}
 }
 
-// --- Construction: matrix.zeros ---
+// --- Construction: MatrixUtil.zeros ---
 
 func TestMatrixZeros(t *testing.T) {
 	r := matrixRegistry(t)
@@ -116,7 +116,7 @@ func TestMatrixZeros(t *testing.T) {
 	}
 }
 
-// --- Construction: matrix.ones ---
+// --- Construction: MatrixUtil.ones ---
 
 func TestMatrixOnes(t *testing.T) {
 	r := matrixRegistry(t)
@@ -155,7 +155,7 @@ func TestMatrixCols(t *testing.T) {
 }
 
 // The core `size` word reports a matrix's entry count via the Sizer
-// behavior — there is no matrix.size export (ADR-001: it would only
+// behavior — there is no MatrixUtil.size export (ADR-001: it would only
 // shadow the core word).
 func TestMatrixSize(t *testing.T) {
 	r := matrixRegistry(t)
@@ -174,7 +174,7 @@ func TestMatrixAt(t *testing.T) {
 	r := matrixRegistry(t)
 	// 2x2 matrix: [[1,2],[3,4]]
 	mat := newMatrix(2, 2, []float64{1, 2, 3, 4})
-	// mat 1 0 matrix.at → element at row 1, col 0 = 3
+	// mat 1 0 MatrixUtil.at → element at row 1, col 0 = 3
 	input := append([]native.Value{mat, native.NewInteger(1), native.NewInteger(0)}, matGet("elem")...)
 	result := runAQL(t, r, input)
 	v, _ := native.AsNumber(result[0])
@@ -186,7 +186,7 @@ func TestMatrixAt(t *testing.T) {
 func TestMatrixRow(t *testing.T) {
 	r := matrixRegistry(t)
 	mat := newMatrix(2, 3, []float64{1, 2, 3, 4, 5, 6})
-	// mat 1 matrix.row → [4, 5, 6]
+	// mat 1 MatrixUtil.row → [4, 5, 6]
 	input := append([]native.Value{mat, native.NewInteger(1)}, matGet("row")...)
 	result := runAQL(t, r, input)
 	list, _ := native.AsList(result[0])
@@ -204,7 +204,7 @@ func TestMatrixRow(t *testing.T) {
 func TestMatrixCol(t *testing.T) {
 	r := matrixRegistry(t)
 	mat := newMatrix(2, 3, []float64{1, 2, 3, 4, 5, 6})
-	// mat 1 matrix.col → [2, 5]
+	// mat 1 MatrixUtil.col → [2, 5]
 	input := append([]native.Value{mat, native.NewInteger(1)}, matGet("col")...)
 	result := runAQL(t, r, input)
 	list, _ := native.AsList(result[0])
@@ -301,7 +301,7 @@ func TestMatrixTranspose(t *testing.T) {
 	}
 }
 
-// matrix.values returns the row-major list of entries. Named `values`,
+// MatrixUtil.values returns the row-major list of entries. Named `values`,
 // not `flatten`, so it does not shadow the core flatten word (ADR-001).
 func TestMatrixValues(t *testing.T) {
 	r := matrixRegistry(t)
@@ -398,7 +398,7 @@ func TestMatrixDot(t *testing.T) {
 	}
 }
 
-// --- matrix.make from list of rows ---
+// --- MatrixUtil.make from list of rows ---
 
 func TestMatrixMakeFromRows(t *testing.T) {
 	r := matrixRegistry(t)

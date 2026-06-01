@@ -33,7 +33,7 @@ func TestCheckProp_AlwaysPasses(t *testing.T) {
 	// Property: any drawn Integer in [0, 100) is >= 0.
 	// gen body: draws one Integer.
 	// property body: top-of-stack >= 0.
-	src := `test.check-prop "non-negative" [r.int 0 100] [0 gte] 20 1 0`
+	src := `Test.check-prop "non-negative" [r.int 0 100] [0 gte] 20 1 0`
 	ok := runTestAndGetField(t, r, src, "ok")
 	b, err := ok.AsConcreteBoolean()
 	if err != nil {
@@ -55,10 +55,10 @@ func TestCheckProp_PropertyBodyCanImportNativeModule(t *testing.T) {
 	r := testRegistry(t)
 	InstallResolver(r) // enable `import "aql:math"` resolution
 
-	// Property body imports aql:math every iteration and uses math.sqrt;
+	// Property body imports aql:math every iteration and uses Math.sqrt;
 	// runs > 1 is the case that regressed.
-	src := `test.check-prop "sqrt-ok" [r.int 1 10] ` +
-		`[drop "aql:math" import end 4.0 math.sqrt end 2.0 eq] 5 1 0`
+	src := `Test.check-prop "sqrt-ok" [r.int 1 10] ` +
+		`[drop "aql:math" import end 4.0 Math.sqrt end 2.0 eq] 5 1 0`
 	ok := runTestAndGetField(t, r, src, "ok")
 	b, err := ok.AsConcreteBoolean()
 	if err != nil {
@@ -71,40 +71,40 @@ func TestCheckProp_PropertyBodyCanImportNativeModule(t *testing.T) {
 	}
 }
 
-// TestSkip_RecordsSkippedWithoutRunning pins §11b.4: test.skip is a
-// drop-in for test.check-prop that records a skipped result (ok=true)
+// TestSkip_RecordsSkippedWithoutRunning pins §11b.4: Test.skip is a
+// drop-in for Test.check-prop that records a skipped result (ok=true)
 // without running the bodies — a [false] property that WOULD fail if run
 // must not contribute a failure.
 func TestSkip_RecordsSkippedWithoutRunning(t *testing.T) {
 	r := testRegistry(t)
-	res := runTestAndGetField(t, r, `test.skip "wip" [r.int 0 9] [false] 10 1 0`, "skipped")
+	res := runTestAndGetField(t, r, `Test.skip "wip" [r.int 0 9] [false] 10 1 0`, "skipped")
 	if b, err := res.AsConcreteBoolean(); err != nil || !b {
-		t.Fatalf("test.skip should mark the result skipped=true, got %v (err %v)", res, err)
+		t.Fatalf("Test.skip should mark the result skipped=true, got %v (err %v)", res, err)
 	}
 	// The skipped [false] property would fail if run; it must not raise
 	// the run's failure count.
-	out := runTestAQL(t, r, `test.fail-count`)
+	out := runTestAQL(t, r, `Test.fail-count`)
 	if n, _ := native.AsInteger(out[len(out)-1]); n != 0 {
 		t.Errorf("skipped properties must not count as failures; fail-count = %d, want 0", n)
 	}
 }
 
-// TestReport_OneLinePerProperty pins §11b.5: test.report renders one
+// TestReport_OneLinePerProperty pins §11b.5: Test.report renders one
 // line per recorded property (pass/FAIL/skip) plus a tally.
 func TestReport_OneLinePerProperty(t *testing.T) {
 	r := testRegistry(t)
-	runTestAQL(t, r, `test.check-prop "good" [r.int 0 9] [0 gte] 5 1 0`)
-	runTestAQL(t, r, `test.check-prop "bad" [r.int 0 9] [false] 5 1 0`)
-	runTestAQL(t, r, `test.skip "parked" [r.int 0 9] [false] 5 1 0`)
+	runTestAQL(t, r, `Test.check-prop "good" [r.int 0 9] [0 gte] 5 1 0`)
+	runTestAQL(t, r, `Test.check-prop "bad" [r.int 0 9] [false] 5 1 0`)
+	runTestAQL(t, r, `Test.skip "parked" [r.int 0 9] [false] 5 1 0`)
 
-	out := runTestAQL(t, r, `test.report`)
+	out := runTestAQL(t, r, `Test.report`)
 	s, err := out[len(out)-1].AsConcreteString()
 	if err != nil {
-		t.Fatalf("test.report should return a String, got %v", out[len(out)-1])
+		t.Fatalf("Test.report should return a String, got %v", out[len(out)-1])
 	}
 	for _, want := range []string{"pass: good", "FAIL: bad", "skip: parked", "1 passed", "1 failed", "1 skipped"} {
 		if !strings.Contains(s, want) {
-			t.Errorf("test.report output missing %q:\n%s", want, s)
+			t.Errorf("Test.report output missing %q:\n%s", want, s)
 		}
 	}
 }
@@ -115,7 +115,7 @@ func TestReport_OneLinePerProperty(t *testing.T) {
 // the property will report failure with the failing input.
 func TestCheckProp_FailsOnSpecificInput(t *testing.T) {
 	r := testRegistry(t)
-	src := `test.check-prop "positive" [r.int 0 100] [0 gt] 200 1 0`
+	src := `Test.check-prop "positive" [r.int 0 100] [0 gt] 200 1 0`
 	res := runTestAQL(t, r, src)
 	m, _ := native.AsMap(res[0])
 	okV, _ := m.Get("ok")
@@ -142,7 +142,7 @@ func TestCheckProp_DeterministicAcrossRuns(t *testing.T) {
 	// which it fails must be identical across registries.
 	draw := func() int64 {
 		r := testRegistry(t)
-		src := `test.check-prop "not-seven" [r.int 0 100] [7 neq] 200 42 0`
+		src := `Test.check-prop "not-seven" [r.int 0 100] [7 neq] 200 42 0`
 		res := runTestAQL(t, r, src)
 		m, _ := native.AsMap(res[0])
 		v, _ := m.Get("failing-input")
@@ -161,7 +161,7 @@ func TestCheckProp_DeterministicAcrossRuns(t *testing.T) {
 // properties, and the iteration that failed for failing ones).
 func TestCheckProp_RunsCount(t *testing.T) {
 	r := testRegistry(t)
-	src := `test.check-prop "always-true" [42] [true] 7 1 0`
+	src := `Test.check-prop "always-true" [42] [true] 7 1 0`
 	res := runTestAQL(t, r, src)
 	m, _ := native.AsMap(res[0])
 	v, _ := m.Get("runs")
@@ -176,7 +176,7 @@ func TestCheckProp_RunsCount(t *testing.T) {
 // silently.
 func TestCheckProp_RejectsNonBooleanProperty(t *testing.T) {
 	r := testRegistry(t)
-	src := `test.check-prop "bad-prop" [r.int 0 100] [42] 1 1 0`
+	src := `Test.check-prop "bad-prop" [r.int 0 100] [42] 1 1 0`
 	res := runTestAQL(t, r, src)
 	m, _ := native.AsMap(res[0])
 	okV, _ := m.Get("ok")
@@ -192,18 +192,18 @@ func TestCheckProp_RejectsNonBooleanProperty(t *testing.T) {
 
 // TestRunProperty_ViaSpecMap confirms the AQL `run-property` fn
 // destructures a PropertySpec map and dispatches the same way as
-// the imperative `test.check-prop` call.
+// the imperative `Test.check-prop` call.
 func TestRunProperty_ViaSpecMap(t *testing.T) {
 	r := testRegistry(t)
-	// Use test.prop (Go native) to build the spec — its NoEvalArgs
+	// Use Test.prop (Go native) to build the spec — its NoEvalArgs
 	// boundary preserves the quoted gen/property bodies so the
 	// embedded list literal [r.int 0 100] survives without being
 	// auto-evaluated at construction time.
-	// Forward form for test.prop so sig positions align with the
+	// Forward form for Test.prop so sig positions align with the
 	// canonical String/List/List declaration.
 	src := `
-		def p (test.prop "non-negative-via-spec" [r.int 0 100] [0 gte])
-		p test.run-property
+		def p (Test.prop "non-negative-via-spec" [r.int 0 100] [0 gte])
+		p Test.run-property
 	`
 	ok := runTestAndGetField(t, r, src, "ok")
 	b, _ := ok.AsConcreteBoolean()
@@ -219,21 +219,21 @@ func TestRunProperty_ViaSpecMap(t *testing.T) {
 
 // TestCheckProp_ResultsAccumulated confirms PropertyResults flow
 // into the same testRun results bucket as table-driven tests, so a
-// single test.summary covers both.
+// single Test.summary covers both.
 func TestCheckProp_ResultsAccumulated(t *testing.T) {
 	r := testRegistry(t)
 	// One passing, one failing.
-	runTestAQL(t, r, `test.check-prop "ok-prop" [r.int 0 10] [0 gte] 5 1 0`)
-	runTestAQL(t, r, `test.check-prop "bad-prop" [r.int 0 10] [false] 5 1 0`)
+	runTestAQL(t, r, `Test.check-prop "ok-prop" [r.int 0 10] [0 gte] 5 1 0`)
+	runTestAQL(t, r, `Test.check-prop "bad-prop" [r.int 0 10] [false] 5 1 0`)
 
-	resV := runTestAQL(t, r, `test.results`)
+	resV := runTestAQL(t, r, `Test.results`)
 	if len(resV) == 0 {
-		t.Fatal("test.results returned nothing")
+		t.Fatal("Test.results returned nothing")
 	}
 	// Just confirm we have entries and at least one failure recorded.
-	failV := runTestAQL(t, r, `test.fail-count`)
+	failV := runTestAQL(t, r, `Test.fail-count`)
 	if len(failV) == 0 {
-		t.Fatal("test.fail-count returned nothing")
+		t.Fatal("Test.fail-count returned nothing")
 	}
 	n, _ := failV[0].AsConcreteInteger()
 	if n < 1 {
@@ -251,7 +251,7 @@ func TestCheckProp_ShrinksFailingInput(t *testing.T) {
 	// Generate large ints in [0, 1000). Property: n < 10. Fails on
 	// every value ≥ 10. Reducer should shrink any failing input
 	// down to 10 (smallest violator).
-	src := `test.check-prop "n-lt-10" [r.int 0 1000] [10 lt] 50 1 200`
+	src := `Test.check-prop "n-lt-10" [r.int 0 1000] [10 lt] 50 1 200`
 	res := runTestAQL(t, r, src)
 	m, _ := native.AsMap(res[0])
 	okV, _ := m.Get("ok")
@@ -281,7 +281,7 @@ func TestCheckProp_ShrinksFailingInput(t *testing.T) {
 // bypasses the reducer — shrunk-input equals failing-input verbatim.
 func TestCheckProp_ShrinkDisabledByMaxShrinks(t *testing.T) {
 	r := testRegistry(t)
-	src := `test.check-prop "skip-shrink" [r.int 0 1000] [10 lt] 50 1 0`
+	src := `Test.check-prop "skip-shrink" [r.int 0 1000] [10 lt] 50 1 0`
 	res := runTestAQL(t, r, src)
 	m, _ := native.AsMap(res[0])
 	okV, _ := m.Get("ok")
@@ -308,7 +308,7 @@ func TestCheckProp_ShrinkDisabledByMaxShrinks(t *testing.T) {
 // original failing input.
 func TestCheckProp_GenProgramShrinkingReachesSmallerSource(t *testing.T) {
 	r := testRegistry(t)
-	src := `test.check-prop "always-fail" [r.int 0 1000] [false] 5 7 200`
+	src := `Test.check-prop "always-fail" [r.int 0 1000] [false] 5 7 200`
 	res := runTestAQL(t, r, src)
 	m, _ := native.AsMap(res[0])
 	okV, _ := m.Get("ok")
