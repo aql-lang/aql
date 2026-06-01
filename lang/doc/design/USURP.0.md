@@ -139,18 +139,24 @@ This is the primary correctness risk and the focus of testing — in
 particular a **list-valued condition** (`[1 gt 0] ifu fail pass`)
 must still flow through `if`'s mark/move evaluation.
 
-## Scope and limitations (v0)
+## Scope and limitations
 
 - **All-forward-eligible signatures** (`BarrierPos == len(Args)` —
   the common case, incl. `if`, math ops, typed user fns) are
   supported. Typed words work because the wrapper's reversed
   parameter **types** drive forward type-collection
   (`def subr (usurp sub)` ⇒ `subr a b ≡ sub b a`).
-- **Explicit `|` barrier signatures** (`0 < BarrierPos < N`) cannot
-  be faithfully reversed with a single `BarrierPos` (forward-
-  eligible positions would have to become trailing). v0 **rejects**
-  these with a clear error; revisit only if a concrete need
-  appears.
+- **Stack-only and mixed-barrier signatures** (`BarrierPos == 0` or
+  `0 < BarrierPos < N`) are also supported. The re-dispatch handler
+  lays the reversed args out *around* the original according to its
+  barrier — positions `0…B-1` after the original (forward), positions
+  `B…N-1` before it (stack, top-first) — so a stack-only or mixed
+  original receives its args in the right place and reverses
+  faithfully. (Earlier this was a stated limitation: the handler used
+  a fixed forward layout, so a stack-only original could not collect
+  the args and the wrapper was left inert. See
+  `usurpDispatchHandler` in `eng/go/core_ref.go` and the barrier rows
+  in `lang/spec/usurp.tsv`.)
 - **Pattern / Optional params** reverse positionally with the param
   list; index-keyed metadata is remapped. Any shape that cannot be
   faithfully reversed errors rather than mis-handling silently.

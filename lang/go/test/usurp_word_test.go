@@ -460,3 +460,48 @@ func TestNamedAQLFnUnaffected(t *testing.T) {
 		t.Errorf("def fu (ref sub2); fu 10 3 = %d, want 7 (body-runner preserved)", got)
 	}
 }
+
+// TestUsurpRespectsOriginalBarrier checks that usurp reverses correctly for
+// originals that are NOT all-forward: stack-only (`[| a b]`) and mixed
+// (`[a | b]`) signatures. Regression for PR #111 review (codex P2): the
+// re-dispatch used to always place the original before its args (forward
+// form), so a stack-only original could not collect them and the wrapper
+// was left inert. The handler now lays args out around the original per its
+// BarrierPos, so every barrier reverses faithfully.
+func TestUsurpRespectsOriginalBarrier(t *testing.T) {
+	cases := []struct {
+		name  string
+		steps []string
+		want  int64
+	}{
+		// stack-only original [| a b]: baseline `10 3 s` → a=3,b=10 → -7
+		{"stackonly baseline", []string{
+			`def s fn [[| a:Integer b:Integer] [Integer] [a sub b]]`, `10 3 s`}, -7},
+		{"stackonly usurp word", []string{
+			`def s fn [[| a:Integer b:Integer] [Integer] [a sub b]]`, `10 3 usurp s`}, 7},
+		{"stackonly /u", []string{
+			`def s fn [[| a:Integer b:Integer] [Integer] [a sub b]]`, `10 3 s/u`}, 7},
+		{"stackonly named wrapper", []string{
+			`def s fn [[| a:Integer b:Integer] [Integer] [a sub b]]`,
+			`def su (usurp s)`, `10 3 su`}, 7},
+		// mixed barrier [a | b]: baseline `3 m 10` → a=10,b=3 → 7
+		{"mixed baseline", []string{
+			`def m fn [[a:Integer | b:Integer] [Integer] [a sub b]]`, `3 m 10`}, 7},
+		{"mixed usurp", []string{
+			`def m fn [[a:Integer | b:Integer] [Integer] [a sub b]]`, `usurp m 10 3`}, -7},
+		// all-forward control: unchanged
+		{"forward control", []string{
+			`def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`, `usurp sub2 10 3`}, -7},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			res, err := runNativeSteps(t, nil, c.steps)
+			if err != nil {
+				t.Fatalf("run: %v", err)
+			}
+			if got := lastInt(t, res); got != c.want {
+				t.Errorf("got %d, want %d", got, c.want)
+			}
+		})
+	}
+}

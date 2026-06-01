@@ -89,3 +89,14 @@ def ifu (usurp if)  if true 99 88	99	plain `if` is completely unaffected
 #
 # ─── a referenced native fn can be aliased to a name too ───
 def myadd (ref add)  myadd 2 3	5	def name (ref native) binds + dispatches the native
+#
+# ─── usurp respects the original's barrier (stack-only and mixed sigs) ───
+# The re-dispatch lays the reversed args around the original according to its
+# BarrierPos, so stack-only (`[| a b]`) and mixed (`[a | b]`) originals still
+# reverse correctly rather than leaving the wrapper inert.
+def s fn [[| a:Integer b:Integer][Integer][a sub b]]  10 3 s	-7	stack-only baseline: top→a (3), b=10 → 3-10
+def s fn [[| a:Integer b:Integer][Integer][a sub b]]  10 3 usurp s	7	usurp reverses a stack-only fn → a=10 b=3 → 10-3
+def s fn [[| a:Integer b:Integer][Integer][a sub b]]  10 3 s/u	7	/u reverses a stack-only fn the same way
+def s fn [[| a:Integer b:Integer][Integer][a sub b]]  def su (usurp s)  10 3 su	7	named stack-only wrapper dispatches as a word
+def m fn [[a:Integer | b:Integer][Integer][a sub b]]  3 m 10	7	mixed-barrier baseline: a=forward 10, b=stack 3 → 10-3
+def m fn [[a:Integer | b:Integer][Integer][a sub b]]  usurp m 10 3	-7	usurp reverses a mixed-barrier fn

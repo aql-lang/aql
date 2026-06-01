@@ -100,7 +100,15 @@ func UsurpFunction(v Value) (Value, bool) {
 		rev.ReturnsFn = nil
 		rev.CheckFullStackFn = nil
 		rev.Fallback = false
-		rev.Handler = usurpDispatchHandler(orig)
+		// The re-dispatch layout must respect the ORIGINAL sig's barrier so a
+		// stack-only or mixed-barrier original still receives its args in the
+		// right place (the wrapper itself stays all-forward). Resolve the
+		// sentinel (-1 → all-forward) and clamp to [0, N].
+		origBarrier := src.BarrierPos
+		if origBarrier < 0 || origBarrier > len(src.Params) {
+			origBarrier = len(src.Params)
+		}
+		rev.Handler = usurpDispatchHandler(orig, origBarrier)
 		normalizeSig(&rev)
 		wrapped = append(wrapped, rev)
 	}
@@ -124,20 +132,43 @@ func reverseParams(params []FnParam) []FnParam {
 
 // usurpDispatchHandler builds the handler for one usurped signature. The
 // wrapper sig collected the caller's args in usurp order (args[0] is the
-// first value the caller wrote). To realise usurped a b c ≡ f c b a, the
-// handler emits the ORIGINAL function value followed by the args in REVERSE
-// order, paren-wrapped: ( origFn argN-1 … arg1 arg0 ). The engine re-steps
-// this; origFn forward-collects the reversed args, so the original's slot 0
-// receives the caller's last-written arg. The original sig runs unchanged,
-// preserving every original behaviour (barriers, return checks, closures,
-// module scope). The paren keeps the re-dispatch atomic so an outer forward
-// can't grab an intermediate value before the original call completes.
-func usurpDispatchHandler(orig Value) Handler {
+// first value the caller wrote). To realise usurped a0…a(N-1) ≡
+// orig a(N-1)…a0, it re-emits the ORIGINAL function value with the reversed
+// args laid out around it, paren-wrapped so the re-dispatch is atomic.
+//
+// WHERE the args go depends on the original sig's barrier B (= origBarrier):
+// the original collects positions 0…B-1 from forward tokens (after orig) and
+// positions B…N-1 from the stack (before orig, top-first). Its natural call
+// layout is therefore  [pN-1 … pB] orig [p0 … pB-1].  Substituting the
+// reversal pi = a(N-1-i) gives one layout that is correct for EVERY barrier:
+//
+//		( a0 a1 … a(N-1-B)   orig   a(N-1) a(N-2) … a(N-B) )
+//		  └── stack part ──┘        └──── forward part ────┘
+//
+//	  - B == N (all-forward, the common case): stack part empty → ( orig aN-1…a0 ).
+//	  - B == 0 (stack-only): forward part empty → ( a0…aN-1 orig ); orig reads
+//	    the stack top-first, yielding the reversal. (Fixes usurp of stack-only
+//	    words, which previously left the wrapper inert.)
+//	  - 0 < B < N (mixed): both parts populated, args split at the barrier.
+//
+// The original sig runs unchanged, preserving every original behaviour
+// (barriers, return checks, closures, module scope).
+func usurpDispatchHandler(orig Value, origBarrier int) Handler {
 	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		out := make([]Value, 0, len(args)+3)
+		n := len(args)
+		b := origBarrier
+		if b < 0 || b > n {
+			b = n
+		}
+		out := make([]Value, 0, n+3)
 		out = append(out, NewOpenParen())
+		// Stack part: a0 … a(N-1-B), in order (bottom→top).
+		for i := 0; i < n-b; i++ {
+			out = append(out, args[i])
+		}
 		out = append(out, orig)
-		for i := len(args) - 1; i >= 0; i-- {
+		// Forward part: a(N-1) down to a(N-B).
+		for i := n - 1; i >= n-b; i-- {
 			out = append(out, args[i])
 		}
 		out = append(out, NewCloseParen())
