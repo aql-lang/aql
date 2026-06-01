@@ -786,6 +786,23 @@ Requires the `sqlite` capability.
 | `module` | Define a module inline | `module [def x 1]` |
 | `import` | Import a module by name or file | `import "lib.aql"` |
 
+`import` binds each `export "Name" {…}` to a **`ModuleExport`** instance.
+A `ModuleExport` is *transparent* — `Math.sqrt 16.0` still calls the
+exported function — and carries two synthetic names: `Name.$name` (the
+export name) and `Name.$module`, the **`Module`** descriptor it belongs
+to. A `Module` (`Ideal/Module`) has fields `id`, `kind`
+(`native`/`file`/`inline`), `file`, `folder`, and `exports`:
+
+<!-- aql-test: skip -->
+```
+import aql:math
+typeof Math                   => ModuleExport
+Math.$name                    => 'Math'
+Math.$module.id               => 'aql:math'
+Math.$module.kind             => 'native'
+Math.$module.exports          => ['Math']
+```
+
 <!-- aql-test: skip -->
 ```
 import utils [def f [dup add]]

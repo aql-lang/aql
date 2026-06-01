@@ -603,6 +603,28 @@ with the v0.1.6 rule-aware `LexMatcher` signature
 `func(lex *Lex, rule *Rule) *Token` to read `rule.K`/`rule.N` maps.
 See the template string interpolation rules for a complete example.
 
+## Module / ModuleExport instances
+
+`import` does NOT bind a plain Map. Each `export "Name" {…}` becomes an
+**`Ideal/ModuleExport`** instance (`native.TModuleExport`), and all of a
+module's exports share one **`Ideal/Module`** descriptor
+(`native.TModuleInst`), reachable via the synthetic `$module`.
+
+- `NewModuleExport(name, fields, module)` — `name` (→ `.$name`), an
+  `*OrderedMap` of the raw exports, and the owning Module. A
+  ModuleExport is **transparent**: `get`/`getr` (`native_module_types.go`)
+  return the raw export for a plain key (so `Math.sqrt 16.0` dispatches
+  unchanged) and the synthetic value for `$module` / `$name`.
+- `NewModuleInstance(moduleInfo{ID,Kind,File,Folder,Exports})` — the
+  descriptor. `id`/`kind`/`file`/`folder`/`exports` are read via `get`.
+- Instances are backed by `ExtensionPayload` (lang-layer; no eng payload
+  type). `buildModuleInstance` (`native_module_module.go`) builds the
+  shared Module at install time; `ModuleDesc.{Ref,Kind,File,Folder}` are
+  populated by `Resolve` (native), `loadFileModule` (file), and
+  `RunModuleBody` (inline). FixedIDs: Module 5000, ModuleExport 5001.
+
+See `lang/spec/module-instance.tsv` + `test/module_instance_test.go`.
+
 ## Module FnDef Wrappers — inner sig BarrierPos (CRITICAL)
 
 Native modules under `lang/go/modules/` follow a sub-registry
