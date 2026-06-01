@@ -1,5 +1,33 @@
 # `usurp` — Argument-Order Reversal as a Higher-Order Word (v0)
 
+> **Status (implemented — read this first).** This document is the
+> original v0 *design sketch*; the shipped implementation diverged from
+> it in two ways that the prose below does not yet reflect. The
+> authoritative, executable contract is the spec suite —
+> `lang/spec/usurp.tsv` (with `lang/spec/ref.tsv`,
+> `lang/spec/apply.tsv`, `lang/spec/modifiers.tsv`). Corrections:
+>
+> 1. **`usurp` takes a Function VALUE, not a bare word name.** There is
+>    **no** `[Atom]`/`QuoteArgs` overload. The worked examples below that
+>    write `usurp if` or `def ifu (usurp if)` do **not** run as written —
+>    they raise `signature_error`. Pass a function value instead:
+>    - inline: `usurp (ref if) <else> <then> <cond>`
+>    - suffix: `if/u <else> <then> <cond>` (and `/ur` to hold the wrapper)
+>    - grouped `/r`: `usurp (if/r) …`  (a *bare* `usurp if/r` does not
+>      resolve — the ref-word must be parenthesised)
+>
+> 2. **Named-binding a wrapper and calling it as a word is a KNOWN
+>    LIMITATION.** `def ifu (usurp (ref if))  cond ifu …` currently fails
+>    the fn return-check (`type_error: expected 1 return value, got 0`).
+>    Until that is fixed, use the inline / paren / map-slot / `/u`-suffix
+>    forms, all of which work and are pinned in `usurp.tsv`. Wherever the
+>    text below says "bind the result, `def ifu (usurp if)`", read it as
+>    the *intended* end state, not current behaviour.
+>
+> The cond-first motivation, the reversal mechanics, and the NoEval
+> handling described below are all accurate; only the *surface call form*
+> (function value vs bare name) and the *named-bind* path differ.
+
 ## Problem
 
 AQL's unified dispatch rule maps a value sitting on the **stack**
@@ -38,9 +66,10 @@ correct one by construction.
 usurp <fn>   →   <fn'>      # fn' is fn with its argument order reversed
 ```
 
-It takes a function (by name, e.g. `usurp if`, or by value) and
-returns a **new function** whose signatures have their parameters
-reversed. Because dispatch maps a stack-prefix value to the last
+It takes a function **value** and returns a **new function** whose
+signatures have their parameters reversed. (NB: the shipped word takes
+a value only — `usurp (ref if)` or `if/u`, not bare `usurp if`; see the
+Status note at the top.) Because dispatch maps a stack-prefix value to the last
 slot, reversing the parameters makes that slot the *first* logical
 argument — so the cond-first form binds correctly:
 
@@ -135,9 +164,13 @@ must still flow through `if`'s mark/move evaluation.
 
 ## Usage notes
 
-- **Bind the result**: `def ifu (usurp if)`, then `cond ifu fail
-  pass`. Inline `cond (usurp if) fail pass` (a bare function value
-  mid-stack) is not supported — bind it, like an alias.
+> See the Status note at the top: the shipped surface form differs from
+> the examples in this section. Use a function value (`usurp (ref if)`,
+> `if/u`); the `def ifu (usurp …)` named-bind path is a known limitation.
+
+- **Bind the result** (intended end state): `def ifu (usurp if)`, then
+  `cond ifu fail pass`. Inline `cond (usurp if) fail pass` (a bare
+  function value mid-stack) is not supported — bind it, like an alias.
 - **Reversal is total**: every argument flips. With `ifu`, branches
   read **else-first** (`cond ifu <else> <then>`). That is the
   documented, intended consequence of a general reverse primitive,

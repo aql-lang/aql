@@ -24,3 +24,38 @@ def inc fn [[n:Integer][Integer][n add 1]]  quote (usurp (ref inc))	fn inc[[n:In
 nope/u	ERROR:undefined_word	/u on an unbound name
 def x 5  x/u	ERROR:illegal_ref	/u on a non-fn binding is rejected
 def x 5  usurp x	ERROR:signature_error	usurp word rejects a non-function value (Function slot unmatched)
+#
+# ─── /ur : usurp combined with ref — leave the reversed wrapper INERT ───
+# /ur (and the equivalent /ru) build the reversed-arg wrapper but, like
+# /r, leave it on the stack as data without invoking. The held wrapper
+# dispatches when re-stepped (grouped in a paren, or via apply).
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2/ur	fn sub2[[b:Integer a:Integer][Integer][]]	/ur holds the reversed wrapper (params b,a) — not invoked
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2/ru	fn sub2[[b:Integer a:Integer][Integer][]]	/ru is the same as /ur (order-independent modifier letters)
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/ur) 10 3	-7	grouped reffed-usurp wrapper dispatches (reversed: 3 sub 10)
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/ru) 10 3	-7	/ru grouped dispatches identically
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/ur apply	7	apply a held reversed wrapper (reversed args → 10 sub 3)
+def f ([a:Integer b:Integer] => [a sub b])  (f/ur) 10 3	-7	reffed-usurp of an anonymous fn, grouped → reversed dispatch
+#
+# ─── cond-first `if` via usurp (the motivating use case) ───
+# Plain `cond if then else` mis-binds because the stack `cond` falls into
+# the trailing `else` slot. Reversing if's args with /u (or usurp+ref)
+# makes the branches read else-first with the condition LAST.
+if true [99] [88]	99	baseline: if cond then else
+if/u [88] [99] true	99	if/u reverses: if/u else then cond — true → then (99)
+if/u [99] [88] false	99	false → else (99) under reversed order
+usurp (ref if) [88] [99] true	99	inline usurp+ref of if, reversed order, cond last
+#
+# ─── usurp must receive a function VALUE — group ref/r, don't pass bare ───
+# `usurp` is forward-eligible on a Function slot, so its argument must
+# already BE a Function value when collected. A bare `f/r` ref-word token
+# is not yet resolved at collection time — group it in parens.
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp (sub2/r) 10 3	-7	usurp of a grouped /r reference works
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp sub2/r 10 3	ERROR:signature_error	bare `usurp f/r` — the ref-word isn't resolved as a forward arg; group it
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp sub2	ERROR:signature_error	bare `usurp f` — usurp takes a Function value, not a word name
+#
+# ─── KNOWN LIMITATION: a usurp wrapper bound by name and then called as
+#     a word currently fails the fn return check (0 values). Use the
+#     inline / paren / map-slot / `/u` forms above instead. This row pins
+#     the current behavior; lift it (and this note) when the named-bind
+#     dispatch path is fixed.
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def fu (usurp (ref sub2))  fu 10 3	ERROR:type_error	named-bound usurp wrapper called as a word — known limitation

@@ -1,0 +1,38 @@
+# AQL Language Specification: Function Application (apply)
+# Format: input<TAB>expected<TAB>description
+#
+# apply is the opposite-direction complement of `ref`: where `ref`/`/r`
+# turns a call site into a Function VALUE, `apply` turns a Function value
+# back into a CALL against the preceding stack arguments.
+#
+# apply is STACK-ONLY (it reads its function off the top of the stack):
+#
+#     <arg> ... <fn> apply
+#
+# so the canonical form pairs it with the `/r` suffix, which leaves the
+# function on the stack without invoking:
+#
+#     5 inc/r apply        →  6        # inc applied to 5
+#
+# IMPORTANT — pair apply with the `/r` SUFFIX, not the `(ref …)` paren.
+# A paren re-steps its contents, so `5 (ref inc) apply` fires `inc`
+# against the stacked `5` FIRST (→ 6), leaving no function for `apply`.
+# The `/r` suffix parks the function instead, which is what apply needs.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  Basic application (args... fn/r apply)
+def inc fn [[n:Integer][Integer][n add 1]]  5 inc/r apply	6	apply a 1-arg referenced fn to one stack arg
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/r apply	-7	apply a 2-arg referenced fn (stack order: top→sig[0])
+def z fn [[][Integer][42]]  z/r apply	42	apply fires a referenced 0-arg fn
+def inc fn [[n:Integer][Integer][n add 1]]  5 inc/r apply  add 100	106	apply composes — its result stays on the stack
+#
+# §2  apply on an anonymous-function reference
+def f ([n:Integer] => [n add 1])  5 f/r apply	6	apply a referenced lambda
+#
+# §3  apply on a usurp (argument-reversed) wrapper
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/ur apply	7	apply a reffed-usurp wrapper: args reversed (3 sub 10... reversed → 10 sub 3)
+#
+# §4  Negatives
+5 apply	ERROR:signature_error	apply with no function on the stack
+def inc fn [[n:Integer][Integer][n add 1]]  5 inc apply	ERROR:signature_error	bare inc fires on 5 first (→6); apply then has no fn
+def inc fn [[n:Integer][Integer][n add 1]]  5 (ref inc) apply	ERROR:signature_error	(ref inc) paren re-steps inc on the stacked 5 — pair apply with /r, not (ref …)
