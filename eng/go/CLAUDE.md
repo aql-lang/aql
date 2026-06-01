@@ -283,9 +283,17 @@ descendants of a type with a custom Behavior inherit it — e.g.
 `Node/Map` map-formatting Behavior without per-subtype
 registration.
 
-Optional capability interfaces (`Comparer`, `Hasher`, `Walker`)
-let a type opt into extra operations without expanding the
-required `TypeBehavior` surface.
+Optional capability interfaces (`Comparer`, `Hasher`, `Walker`,
+`IdealConverter`) let a type opt into extra operations without
+expanding the required `TypeBehavior` surface.
+
+`IdealConverter` (`convert_ideal.go`) gives an Ideal value a
+conversion to a Map or List via the `convert Map <v>` / `convert
+List <v>` words. Dispatch walks the value's Parent chain for the
+nearest implementation (like the `Comparer` walk); the base `Ideal`
+behavior is the terminal fallback returning `{}` / `[]`, so every
+Ideal — built-in or user-defined, in Go or AQL — is convertible.
+Return `ErrNoConverter` to decline and keep walking.
 
 ## Where a Type Lives (kernel/domain boundary)
 

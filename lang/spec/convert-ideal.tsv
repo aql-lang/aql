@@ -1,0 +1,22 @@
+# AQL Language Specification: convert <Ideal> to Map / List
+# Format: input<TAB>expected<TAB>description
+#
+# Every Ideal value can be converted to a Map or a List via
+# `convert Map <ideal>` / `convert List <ideal>`. The conversion is a
+# per-type capability (IdealConverter); the base Ideal — and thus the
+# fallback for any Ideal that does not override it, including user-defined
+# Ideals — yields an empty Map ({}) or empty List ([]).
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  a user-defined Ideal (refine Object …) falls back to {} / []
+def Foo (refine Object {x:Integer}) convert Map (make Foo {x:5})	{}	user Ideal → empty Map (fallback)
+def Foo (refine Object {x:Integer}) convert List (make Foo {x:5})	[]	user Ideal → empty List (fallback)
+def Foo (refine Object {x:Integer}) typeof (convert Map (make Foo {x:5}))	Map	the result is a Map
+def Foo (refine Object {x:Integer}) typeof (convert List (make Foo {x:5}))	List	the result is a List
+#
+# §2  a bare nominal Ideal subtype also falls back
+def Bar (refine Object {}) convert Map (make Bar {})	{}	empty object → empty Map
+def Bar (refine Object {}) convert List (make Bar {})	[]	empty object → empty List
+#
+# §3  negative — an Ideal converts only to Map or List
+def Foo (refine Object {}) convert Integer (make Foo {})	ERROR:signature	no Ideal→Scalar convert

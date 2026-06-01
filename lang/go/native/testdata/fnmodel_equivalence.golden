@@ -77,6 +77,7 @@ WORD continue
   [] barrier=0
 WORD convert
   [Scalar Node/Map Scalar] barrier=3 typearg={0} +returnsfn
+  [Node Ideal] barrier=2 typearg={0} +returnsfn
   [Scalar Scalar] barrier=2 typearg={0} +returnsfn
 WORD create
   [Node/Map Ideal/Object/Resource/Entity] barrier=2
