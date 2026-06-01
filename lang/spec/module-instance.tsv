@@ -1,0 +1,45 @@
+# AQL Language Specification: Module / ModuleExport (Ideal types)
+# Format: input<TAB>expected<TAB>description
+#
+# `import` binds each `export "Name" {…}` to a ModuleExport instance
+# (Ideal/ModuleExport). A ModuleExport is TRANSPARENT — `X.field` returns
+# the raw export, so calling/using exports is unchanged — and carries two
+# synthetic names:
+#   X.$name    → the export name (String)
+#   X.$module  → the owning Module instance (Ideal/Module)
+# A Module (Ideal/Module) is the shared descriptor with normal fields
+# id, kind, file, folder, exports. The import reference stays lowercase
+# (import "aql:math"); the bound namespace is CamelCase (Math).
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  the bound namespace is a ModuleExport, transparent for use
+"aql:math" import end  typeof Math	ModuleExport	import binds a ModuleExport
+"aql:math" import end  Math is ModuleExport	true	…of the Ideal/ModuleExport type
+"aql:math" import end  Math.sqrt 16.0	4.0	transparent: exports are used as before
+"aql:math" import end  Math.$name	'Math'	$name is the export name
+#
+# §2  $module → the Module descriptor (Ideal/Module) and its fields
+"aql:math" import end  typeof Math.$module	Module	$module is an Ideal/Module
+"aql:math" import end  Math.$module is Module	true	…of the Module type
+"aql:math" import end  Math.$module.id	'aql:math'	id is the module reference
+"aql:math" import end  Math.$module.kind	'native'	kind: native / file / inline
+"aql:math" import end  Math.$module.exports	['Math']	exports lists the export names
+#
+# §3  the -util colliders carry their -util id
+"aql:array-util" import end  ArrayUtil.$module.id	'aql:array-util'	collider module id
+"aql:type-util" import end  TypeUtil.$module.kind	'native'	type-util is native too
+#
+# §4  inline modules — `module […] import` binds all exports; kind="inline"
+module [export "Foo" {a:1 b:2}] import end  Foo.a	1	inline export field access
+module [export "Foo" {a:1 b:2}] import end  typeof Foo	ModuleExport	inline binds a ModuleExport
+module [export "Foo" {a:1 b:2}] import end  Foo.$module.kind	'inline'	inline kind
+module [export "A" {x:1} export "B" {y:2}] import end  A.$module.exports	['A' 'B']	exports lists every export of the module
+module [export "A" {x:1} export "B" {y:2}] import end  B.y	2	a second export is independently accessible
+module [export "A" {x:1} export "B" {y:2}] import end  A.$module is B.$module	true	all exports of a module share one Module instance
+#
+# §5  rename import — $name keeps the original export name
+module [export "Foo" {a:1}] import [Foo Bar] end  Bar.a	1	renamed binding still a ModuleExport
+module [export "Foo" {a:1}] import [Foo Bar] end  Bar.$name	'Foo'	$name is the declared export name, not the alias
+#
+# §6  negative — a missing export via getr (!.) errors
+"aql:math" import end  Math!.nope	ERROR:getr_error	unknown export raises getr_error
