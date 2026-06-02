@@ -456,7 +456,9 @@ func TestNativeFnInFnBodyChained(t *testing.T) {
 	}{
 		{
 			name: "clone-then-merge",
-			def:  `def f fn [[m:Map] [Map] [m Struct.clone Struct.merge {extra:1}]]`,
+			// Struct.clone is forward-eligible, so group it to take m from the
+			// stack rather than collecting the following Struct.merge token.
+			def:  `def f fn [[m:Map] [Map] [(m Struct.clone) Struct.merge {extra:1}]]`,
 			call: `{a:1} f`,
 			check: func(t *testing.T, result []native.Value) {
 				t.Helper()

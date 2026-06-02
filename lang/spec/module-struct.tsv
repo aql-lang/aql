@@ -18,8 +18,9 @@
 # §3  setpath — write at a path (returns a new structure)
 "aql:struct" import end Struct.setpath {a:1} "b" 99	{a:1 b:99}	add a key by path
 #
-# §4  clone — deep copy (stack-only: value before the word)
-"aql:struct" import end {a:1 b:2} Struct.clone	{a:1 b:2}	value-equal copy
+# §4  clone — deep copy (forward or stack form)
+"aql:struct" import end Struct.clone {a:1 b:2}	{a:1 b:2}	forward form
+"aql:struct" import end {a:1 b:2} Struct.clone	{a:1 b:2}	stack form also works
 #
 # §5  items — map entries as [key value] pairs
 "aql:struct" import end Struct.items {a:1 b:2}	[['a' 1] ['b' 2]]	ordered key/value pairs

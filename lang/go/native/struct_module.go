@@ -21,9 +21,13 @@ package native
 //	validate  validate a structure against a shape spec
 //	selector  query-select out of a structure
 //
-// BarrierPos values are preserved from their original core registrations so
-// behaviour is identical: clone/walk stay stack-only (0); the rest are
-// all-forward eligible (-1).
+// All words are all-forward eligible (BarrierPos -1) so they dispatch in
+// both forward (`Struct.clone {a:1}`) and stack (`{a:1} Struct.clone`) form
+// through the namespace — the recommended shape for module words (see the
+// "Module FnDef Wrappers" note in lang/go/CLAUDE.md). clone/walk were
+// stack-only (0) as core words; -1 is a pure dispatch widening (the inner
+// native only ever runs via the trivial-delegation short-circuit, where
+// there are no forward tokens, so -1 and 0 behave identically there).
 var StructModuleNatives = []NativeFunc{
 	{
 		Name: "transform",
@@ -67,15 +71,15 @@ var StructModuleNatives = []NativeFunc{
 	{
 		Name: "clone",
 		Signatures: []NativeSig{
-			{Args: []*Type{TAny}, Handler: cloneHandler, BarrierPos: 0},
+			{Args: []*Type{TAny}, Handler: cloneHandler, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "walk",
 		Signatures: []NativeSig{
-			{Args: []*Type{TFunction, TFunction, TAny}, Handler: walkBeforeAfterHandler, BarrierPos: 0},
-			{Args: []*Type{TFunction, TAny}, Handler: walkBeforeHandler, BarrierPos: 0},
-			{Args: []*Type{TAny}, Handler: walkHandler, BarrierPos: 0},
+			{Args: []*Type{TFunction, TFunction, TAny}, Handler: walkBeforeAfterHandler, BarrierPos: -1},
+			{Args: []*Type{TFunction, TAny}, Handler: walkBeforeHandler, BarrierPos: -1},
+			{Args: []*Type{TAny}, Handler: walkHandler, BarrierPos: -1},
 		},
 	},
 	{
