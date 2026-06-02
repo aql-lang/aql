@@ -437,3 +437,108 @@ of six issues are resolved by changes that amount to *adopting a LISP idea*
 application). The two that remain — **a `list`/`eval` builder (#5)** and
 the **hygiene/`gensym` half of #2** — are Tier-1 items in §8, and they are
 the ones that would have kept the decision module pure AQL.
+
+---
+
+## Appendix B — the Voxgig bloom-filter + trie DX report through the LISP lens
+
+`design/VOXGIG-DX-REPORT.5.md` consolidates two independent library builds
+(a bloom filter, four trie variants + a HAMT feasibility study). Both authors
+shipped working code; the report's own framing is the headline finding:
+
+> "their friction was almost entirely in *discovering the idioms*, and nearly
+> every hour lost went to behaviour that failed **quietly** rather than
+> loudly."
+
+That sentence is, almost verbatim, the LISP critique of AQL from §2 and §7 of
+this document. LISP's parenthesised `(f a b)` makes two things impossible that
+AQL allows: (a) an application whose operator/operand boundary is ambiguous,
+and (b) an application that *fails to apply yet produces no error*. The whole
+of the report's dominant "Theme A — silent dispatch" is the cost of not having
+LISP's loud, explicit application form. Re-read through this analysis:
+
+### B.1 The core issue is *un-LISP-like application*
+
+| DX issue | LISP concept it's really about | Status (vs main) | What the LISP lens says |
+|---|---|---|---|
+| **T1** namespace dispatch type-miss leaves the fn on the stack **as data**, no error | **uniform, loud application** | ❌ open | This is the single most anti-LISP behaviour in the language. In LISP, a symbol in operator position is *applied*; an arity/type failure is **always** an error (`wrong-type-argument`, `wrong-number-of-arguments`). AQL conflates two distinct things — "a function used as a first-class **value**" and "a function that **failed to apply**" — into one stack state. LISP keeps them apart structurally: a function is a value only when it is *not* in operator position. The fix is the §8/§5 note made concrete: **when a function value is consumed in operator position and no signature matches, raise** — never silently park it as data. |
+| **B1** forward `set` on a `refine Object` store silently no-ops | same family (a missed overload that parks instead of erroring) | ❌ open | The report bisects this to "behaves exactly like a missed overload." Same cure: a write whose signature didn't match is a **loud** error, not a value that quietly evaporates. |
+| **T6** `xs get i` returns `none` — forward `get` grabs the bare word `i`, not its value | the **quote/eval boundary** + explicit application | ❌ open | In LISP every operand is evaluated unless explicitly quoted; you can never *accidentally* pass a symbol where you meant its value. AQL's forward collection sometimes captures a `Word` as data. The `/s` / `/f` / `stack-args` / `forward-args` levers (just landed) are AQL's way to *recover the explicit boundary* LISP gets from parens — `xs get (i)` already works; the levers generalise it. |
+| **T9.2** `filter` rejects a `[…]` quotation | a lambda is a lambda **everywhere** | ❌ open | In LISP a procedure is accepted in every higher-order position uniformly. `filter` refusing a quotation that `each`/`fold` accept is a per-word special case — the opposite of uniform application. |
+
+### B.2 The quote/eval boundary, again
+
+| DX issue | LISP concept | Status | Lens |
+|---|---|---|---|
+| **T4** `do {k:[v]}` evaluates each value; a stored string that *names a word* (`"if"`, `"get"`) gets **dispatched** instead of stored | **explicit quote vs eval** | ❌ open | The workaround in the trie code — "box every stored value in a one-element list" — is **hand-rolled quoting**, exactly like Appendix A's `__ec-op` prefixes were hand-rolled `gensym`. A real `quote` / quasiquote boundary for *data construction* (not just code) removes the tax: `` `{k: ,v} `` stores `v`'s value with no chance of dispatch. |
+| **T9.1** no map with **computed keys** (`set` on a Map literal raises) | **quasiquote with holes** + first-class maps | ❌ open | Building a structure with computed pieces is the canonical quasiquote use: `` `{,k: ,v} ``. Today the trie falls back to association lists — a LISP *alist*, the very workaround quasiquote exists to retire. |
+| **T8** string interp in a recursive fn body now leaks a **raw template AST** (`word()({…})`) into the output | **code-as-data leaking the wrong layer** | 🟠 changed | An unexpanded template AST surfacing as a value is a quasiquote-expansion bug: a code-as-data form was captured but never spliced/evaluated. Homoiconicity done right (one representation, explicit `unquote`) is what makes this class of bug expressible-and-caught rather than silently rendered. |
+
+### B.3 Equality, sequencing, and the rest
+
+| DX issue | LISP concept | Status | Lens |
+|---|---|---|---|
+| **T5** `eq` on lists is **identity**, not structure (`["a"] ["a"] eq → false`) | Scheme's `eq?` / `eqv?` / `equal?` trichotomy | ❌ open | This is *precisely* the distinction Scheme names explicitly. Users reached for `eq` expecting `equal?` (deep) and got `eq?` (identity), and a property test passed **vacuously**. The fix is the LISP fix: **name the levels** — keep `eq` for identity, add a structural `equal` (the report's `Assert.equal` already is one), and document the split. |
+| **B2a** chained `(expr) print (expr) print` prints in **reverse** | defined **sequencing** (`begin`/`progn`, left-to-right) | ❌ open | LISP guarantees evaluation order in a body. AQL's forward collection reorders side effects. The report's own suggestion ("make `print` stack-first") is a point fix; the general LISP answer is an explicit sequencing form with specified order. |
+| **B3** `def _ (void-call)` leaves stack residue → next word mis-dispatches | **everything is an expression with a value** | ❌ open | In LISP every form yields a value (or a defined "unspecified"); there is no "residue on the stack." A stack VM can't fully adopt that, but the `dip`/`keep` combinators (§4) give the disciplined "run this for effect, preserve the rest" contract that prevents residue from leaking into the next application. |
+
+### B.4 Missing primitives = missing the LISP metaprogramming floor
+
+The report's Theme G + HAMT study list exactly the primitives §6/§8 call out:
+
+- **`raise` / `throw`** (T9.6, missing) → LISP's **condition system**. Without
+  it there is no in-language way to signal "this is wrong, loudly" — which is
+  *why* so much of Theme A degrades to silent wrong values instead of errors.
+  `raise` is the user-space half of the P0 "make failures loud" recommendation.
+- **`parse` / `decode`** (T9.7, missing) → LISP's **`read`**. The report wants
+  to turn a string into AQL data; that is `read`, the front half of the
+  `read`→`eval`→`print` loop §6 sketches. Pair it with the still-absent `eval`
+  and AQL gains the metacircular floor that would have let the decision DSL
+  (Appendix A) and these libraries host their *own* interpreters.
+- **`with` / `assoc`** (missing) → Clojure's `assoc` — functional **shallow
+  single-key update**, the immutable-map idiom. Its absence is *why* T3's deep
+  `merge` got misused as a one-field update and silently fused subtrees.
+- **`popcount`, `insert-at`/`remove-at`** (HAMT Level A) → not LISP-specific,
+  but note the HAMT itself is a *persistent data structure* — the report
+  observes AQL's copy-returning ops already make path-copying tries "the path
+  of least resistance," which is the Clojure/persistent-LISP design point §7
+  praises. The gap is primitives, not philosophy.
+
+### B.5 What this confirms
+
+Three higher-order observations, parallel to Appendix A:
+
+1. **"Make silent failures loud" *is* "adopt LISP application semantics."**
+   The report's P0 — namespace dispatch must error, not no-op (T1/B1); `get`
+   on a bare undefined word must error, not return `none` (T6) — is one
+   principle: *application in operator position is loud*. LISP gets this free
+   from parens + the evaluator's apply step. AQL chose implicit forward
+   collection for ergonomics and inherited the ambiguity as silent failure.
+   The cure is not to abandon concatenative syntax but to make the **apply
+   step loud** the way LISP's is.
+
+2. **The report credits exactly the work this branch did.** Its cross-cutting
+   section names the new `force-arity` / `forward-args` / `stack-args` words as
+   "the foundation for fixing the symptoms while preserving the model." In LISP
+   terms, those modifiers re-introduce the *explicit operator/operand boundary*
+   that parens give for free — they are how a concatenative language buys back
+   the disambiguation §2 says it lacks. They are necessary but not sufficient:
+   they make the boundary *expressible*, while the P0 items make a *missed*
+   boundary *loud*.
+
+3. **Two independent author teams re-derived the §8 roadmap.** `raise`
+   (condition system), `parse` (`read`), `assoc`/`with` (functional update),
+   structural `equal` (the `eq?`/`equal?` split), and a sequencing fix for
+   `print` are all items §8 lists from first principles. The convergence across
+   three separate reports (decision, bloom, trie) is the strongest signal yet:
+   the next investment is the **Tier-1 metaprogramming + uniform-application
+   floor**, with **loud application** (a tiny, surgical change — raise instead
+   of park) as the highest-leverage single fix.
+
+**Bottom line:** Appendix A's libraries fell back to Go because AQL lacked the
+*metaprogramming* layer (eval/quasiquote/gensym). The Voxgig libraries
+*shipped* — but bled hours to *silent* failures because AQL lacked the
+*loud-application* layer. Both are the same LISP lesson from two sides:
+**application should be explicit at the boundary and loud on failure.** The
+modifier words on this branch deliver the first half; making dispatch
+type-misses raise (T1/B1) delivers the second.
