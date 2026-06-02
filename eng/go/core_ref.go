@@ -204,7 +204,10 @@ func ForceArityFunction(v Value, n int) (Value, bool) {
 	sig := Signature{
 		Params:     params,
 		BarrierPos: n, // all-forward: caller writes  f a b …
-		Handler:    forwardCallHandler(orig),
+		// Re-dispatch the original respecting ITS barrier (not always
+		// forward) so force-arity composes over stack-form wrappers
+		// (e.g. force-arity over stack-args).
+		Handler: rebarrierDispatchHandler(orig, funcSigBarrier(orig, n)),
 	}
 	normalizeSig(&sig)
 	return NewFunction(FnDefInfo{
@@ -215,16 +218,23 @@ func ForceArityFunction(v Value, n int) (Value, bool) {
 	}), true
 }
 
-// forwardCallHandler re-emits `( orig a0 a1 … )` so the original dispatches
-// in forward form with the collected args.
-func forwardCallHandler(orig Value) Handler {
-	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		out := make([]Value, 0, len(args)+3)
-		out = append(out, NewOpenParen(), orig)
-		out = append(out, args...)
-		out = append(out, NewCloseParen())
-		return out, nil
+// funcSigBarrier returns the resolved BarrierPos of orig's n-arg signature
+// (all-forward when there is none) — used to lay out a re-dispatch.
+func funcSigBarrier(orig Value, n int) int {
+	fnDef, ok := orig.Data.(FnDefInfo)
+	if !ok {
+		return n
 	}
+	for _, s := range fnDef.OwnSigs() {
+		if s.TotalArgs() == n {
+			b := s.BarrierPos
+			if b < 0 || b > n {
+				b = n
+			}
+			return b
+		}
+	}
+	return n
 }
 
 // rebarrierDispatchHandler re-emits the original function with the caller's

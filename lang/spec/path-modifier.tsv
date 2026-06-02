@@ -45,3 +45,10 @@ forward-args sub 10 3	-7	forward-args = /f
 10 3 stack-args sub	7	stack-args = /s (args from the stack)
 force-arity 2 (add/r) 1 2	3	force-arity N = /N
 typeof (stack-args sub)	Function	the companions return a new function
+#
+# §8  the function-form companions COMPOSE (each returns a function, so they
+#     can wrap one another)
+def m {s:sub/r} end usurp (forward-args (m.s)) 10 3	7	usurp ∘ forward-args
+def m {s:sub/r} end force-arity 2 (usurp (m.s)) 10 3	7	force-arity ∘ usurp
+def m {s:sub/r} end 10 3 stack-args (force-arity 2 (m.s))	7	stack-args ∘ force-arity
+def m {a:add/r} end force-arity 2 (usurp (forward-args (m.a))) 1 2	3	three deep

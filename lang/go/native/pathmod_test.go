@@ -45,3 +45,36 @@ func TestPathModifiers(t *testing.T) {
 		t.Errorf("m.a/r 1 2 should leave the fn as data with 1 2 separate, got %s", got)
 	}
 }
+
+// TestForceFnComposition pins that the force-* companion words compose:
+// each returns a function, so they wrap one another.
+func TestForceFnComposition(t *testing.T) {
+	run := func(src string) string {
+		t.Helper()
+		v, err := parser.Parse(src)
+		if err != nil {
+			return "PARSE:" + err.Error()
+		}
+		r, _ := DefaultRegistry()
+		o, e := NewTop(r).Run(v)
+		if e != nil {
+			return "ERR:" + e.Error()
+		}
+		return eng.Canon(o)
+	}
+	cases := []struct{ src, want string }{
+		{`def m {s:sub/r} end usurp (forward-args (m.s)) 10 3`, "7"},
+		{`def m {s:sub/r} end forward-args (usurp (m.s)) 10 3`, "7"},
+		{`def m {s:sub/r} end force-arity 2 (usurp (m.s)) 10 3`, "7"},
+		{`def m {s:sub/r} end usurp (force-arity 2 (m.s)) 10 3`, "7"},
+		{`def m {s:sub/r} end 10 3 stack-args (usurp (m.s))`, "-7"},
+		{`def m {s:sub/r} end 10 3 stack-args (force-arity 2 (m.s))`, "7"},
+		{`def m {s:sub/r} end force-arity 2 (stack-args (m.s)) 10 3`, "-7"},
+		{`def m {a:add/r} end force-arity 2 (usurp (forward-args (m.a))) 1 2`, "3"},
+	}
+	for _, c := range cases {
+		if got := run(c.src); got != c.want {
+			t.Errorf("%-54s => %s, want %s", c.src, got, c.want)
+		}
+	}
+}
