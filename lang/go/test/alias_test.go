@@ -477,19 +477,6 @@ func TestAliasGet(t *testing.T) {
 }
 
 // ==========================================================================
-// Builtin: Higher-order
-// ==========================================================================
-
-func TestAliasCall(t *testing.T) {
-	runAliasTest(t, aliasCase{
-		name:      "call",
-		defStep:   "def mycall word [call]",
-		origSteps: []string{"5 [dup mul] call"},
-		aliaSteps: []string{"5 [dup mul] mycall"},
-	})
-}
-
-// ==========================================================================
 // Native: clone
 // ==========================================================================
 

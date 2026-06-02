@@ -7,7 +7,7 @@ import (
 )
 
 // definitionNatives covers the binding / function-definition words:
-// def, undef, var, fn, call, args, __pa.
+// def, undef, var, fn, args, __pa.
 //
 // Pure helpers used by these handlers (parseFnDef, parseFnParams,
 // MatchFnSig, defName, defStackOnly, etc.) live alongside their
@@ -122,16 +122,6 @@ var definitionNatives = []NativeFunc{
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    fnsigHandler,
 			Returns:    []*Type{TFnUndef}, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "call",
-
-		Signatures: []NativeSig{{
-			Args:       []*Type{TList},
-			NoEvalArgs: map[int]bool{0: true},
-			Handler:    callHandler,
-			Returns:    []*Type{TAny}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -589,27 +579,6 @@ func fnsigHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		return nil, err
 	}
 	return []Value{NewFnUndef(info)}, nil
-}
-
-// ---- call ----
-
-func callHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	body := args[0]
-
-	if !IsConcrete(body) {
-		return nil, r.AqlError("call_error", "call: argument must be a concrete list, got type literal", "call")
-	}
-	if IsTypedList(body) || IsTableType(body) {
-		return nil, r.AqlError("call_error", "call: argument must be a plain list", "call")
-	}
-
-	bodyElems, _ := AsList(body)
-	if bodyElems.Len() == 0 {
-		return nil, nil
-	}
-
-	bodyCopy := bodyElems.Slice()
-	return bodyCopy, nil
 }
 
 // ---- args / __pa ----

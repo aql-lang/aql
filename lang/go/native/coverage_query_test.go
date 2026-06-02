@@ -737,44 +737,6 @@ func TestCallAQLNoMatchingSig(t *testing.T) {
 }
 
 // ========================
-// RegisterCall tests
-// ========================
-
-func TestCallBasic(t *testing.T) {
-	r, err := DefaultRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// 5 [dup mul] call => 25
-	result := runAQL(t, r, []Value{
-		NewInteger(5),
-		NewList([]Value{NewWord("dup"), NewWord("mul")}),
-		NewWord("call"),
-	})
-	_as60, _ := AsInteger(result[0])
-	if len(result) != 1 || _as60 != 25 {
-		t.Errorf("5 [dup mul] call = %v, want [25]", result)
-	}
-}
-
-func TestCallEmptyList(t *testing.T) {
-	r, err := DefaultRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// 42 [] call => 42 (empty call does nothing)
-	result := runAQL(t, r, []Value{
-		NewInteger(42),
-		NewList([]Value{}),
-		NewWord("call"),
-	})
-	_as61, _ := AsInteger(result[0])
-	if len(result) != 1 || _as61 != 42 {
-		t.Errorf("42 [] call = %v, want [42]", result)
-	}
-}
-
-// ========================
 // RegisterArgs tests
 // ========================
 

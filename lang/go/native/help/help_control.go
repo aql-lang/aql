@@ -120,13 +120,6 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:    "call",
-		Summary: "Evaluate a list as code.",
-		Description: "Takes a list and evaluates its contents as AQL code on the current stack. " +
-			"Useful for invoking callback lists in higher-order patterns.",
-	})
-
-	register(&Entry{
 		Word:    "args",
 		Summary: "Push the current function's argument list.",
 		Description: "Returns the list of arguments passed to the current fn-defined function. " +

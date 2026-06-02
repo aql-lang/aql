@@ -334,7 +334,6 @@ scalar type literal AND the forward arg is concrete; otherwise the
 |------|--------------------------|---------|-------|----------|
 | `__pa` /s | `[]` | `[]` | Internal: pops args stack | — |
 | `args` | `[]` | `[L]` | Returns current fn args from argsStack | — |
-| `call` | `[L]` | `[Any...]` | Splices list contents onto stack | `arg0: L` |
 | `def` | `[S, Any]` | `[]` | Define word (literal or fn body) | — |
 | | `[A, Any]` /q | `[]` | | — |
 | `fn` | `[L]` | `[Function]` | Parse signature triples from list | `arg0: L` |

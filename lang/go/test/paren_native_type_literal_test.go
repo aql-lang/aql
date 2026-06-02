@@ -240,7 +240,6 @@ func TestTypeLiteralNoPanic(t *testing.T) {
 		{"do-map", `do Map`},
 
 		// Definitions
-		{"call-list", `List call`},
 		{"fn-list", `fn List`},
 		{"var-list", `var List`},
 		{"record-list", `record List`},

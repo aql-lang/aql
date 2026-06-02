@@ -2124,21 +2124,6 @@ def square fn [[x:number] [number] [x mul x]]
 See [Function Signatures with `fn`](#function-signatures-with-fn)
 above for full details.
 
-#### `call`
-
-Evaluate a list as code on the current stack. Similar to `do` but
-designed for invoking callback lists in higher-order patterns.
-
-*Signature:* `[list] -> [any...]`
-*Precedence:* forward
-
-```
-5 [dup mul] call            => 25
-2 3 [add] call              => 5
-"hello" [upper] call        => 'HELLO'
-1 2 [add 10 mul] call       => 30
-```
-
 #### `args`
 
 Push the current function's argument list onto the stack. Only

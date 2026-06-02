@@ -20,12 +20,12 @@ hygienic macros, combinators, higher-order functions, and the broader
 
 | LISP capability | AQL today | Grade | One-line verdict |
 |---|---|---|---|
-| Code as data (homoiconicity) | lists evaluate by default; `quote`, `word` splice, `do`/`call`, fn bodies are lists | **B** | Real and idiomatic, but "code" is a *list of tokens*, not a uniform tree; no reader/printer round-trip for all forms |
+| Code as data (homoiconicity) | lists evaluate by default; `quote`, `word` splice, `do`, fn bodies are lists | **B** | Real and idiomatic, but "code" is a *list of tokens*, not a uniform tree; no reader/printer round-trip for all forms |
 | Higher-order functions | `fn`/`afn` lambdas, lexical closures, `ref`/`usurp`/`apply`, `each`/`fold`/`scan`/`outer`/`inner` | **A−** | Strong; first-class functions with capture; only naming/coverage gaps |
 | Combinators | implicit concatenative composition; `usurp`/`stack-args`/`forward-args`/`force-arity` (composable) | **B+** | Excellent point-free substrate; missing a few named staples (`compose`, `dip`, `keep`) |
 | Macros | `word` (Forth-style splice), `NoEvalArgs` quotation | **C** | Unhygienic, name-capturing, no expansion model; powerful but a footgun |
 | Hygiene / `gensym` | none | **D** | No fresh-symbol generation, no capture avoidance |
-| `eval` / metacircularity | `do`/`call`/`module` run lists as sub-programs | **B−** | Eval-by-another-name exists; no first-class `eval`/`read`, no environment reification |
+| `eval` / metacircularity | `do`/`module` run lists as sub-programs | **B−** | Eval-by-another-name exists; no first-class `eval`/`read`, no environment reification |
 | REPL / dynamic mentality | REPL, dynamic defs, minimal core + words, type-as-value | **A−** | Very lisp-ish in spirit |
 
 Net: **AQL already lives in the homoiconic, higher-order, REPL-driven
@@ -80,7 +80,7 @@ structure — has a genuine AQL analogue:
   both "a list of three tokens" and "the body that doubles its input."
 - **`quote` / `/q`** turn the dial from *evaluate* to *inspect*:
   `quote [1 add 2] → [Integer(1), Word(add), Integer(2)]`; `foo/q → Atom(foo)`.
-- **`do` / `call`** are *eval*: they run a list as a sub-program against
+- **`do`** is *eval*: it runs a list as a sub-program against
   the live stack (`do [body]`). `module [ … ]` runs a list as a module
   body.
 - **fn/afn bodies are lists**, captured raw via `NoEvalArgs` and later
@@ -234,7 +234,7 @@ lists as code, this is the biggest unrealized LISP dividend.
 
 ## 6. `eval`, environments, metacircularity
 
-- **`do` / `call` ≈ `eval`** of a code list against the current stack;
+- **`do` ≈ `eval`** of a code list against the current stack;
   `module [ … ]` evaluates in a fresh sub-registry (a reified, isolated
   *environment* — closer to a first-class environment than most languages
   expose).

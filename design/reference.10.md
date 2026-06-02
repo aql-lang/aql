@@ -321,7 +321,6 @@ inhabitant in the same family. See
 | `fn` | Create typed function | `fn [Integer Integer [dup mul]]` |
 | `var` | Scoped variable | `var [[x] x mul x]` |
 | `args` | Current function args | `args . 0` |
-| `call` | Splice list onto stack | `call [1 2 3]` |
 | `quote` | Prevent evaluation | `quote [1 add 2]` |
 
 ### Control Flow
