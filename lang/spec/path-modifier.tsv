@@ -43,7 +43,8 @@ def m {a:add/r} end m.a 1 2	3	bare path: the function still auto-dispatches
 usurp sub 10 3	7	usurp = /u (reversed sig)
 forward-args sub 10 3	-7	forward-args = /f
 10 3 stack-args sub	7	stack-args = /s (args from the stack)
-force-arity 2 (add/r) 1 2	3	force-arity N = /N
+force-arity 2 add 1 2	3	force-arity N = /N (by-name, like usurp)
+force-arity 2 (add/r) 1 2	3	force-arity N also takes a function value
 typeof (stack-args sub)	Function	the companions return a new function
 #
 # §8  the function-form companions COMPOSE (each returns a function, so they

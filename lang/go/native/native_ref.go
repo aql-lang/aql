@@ -114,13 +114,24 @@ var refNatives = []NativeFunc{
 		Name: "force-arity",
 		// The function-form companion of the `/N` modifier: wrap a function
 		// so it dispatches with exactly N args. `force-arity N fn` returns a
-		// new Function (forward-eligible), so it dispatches when args follow.
-		Signatures: []NativeSig{{
-			Args:           []*Type{TInteger, TFunction},
-			Handler:        forceArityHandler,
-			Returns:        []*Type{TFunction},
-			RunInCheckMode: true, BarrierPos: -1,
-		}},
+		// new Function. Like usurp, accepts a function value or a name:
+		//   - [Integer, Function]  `force-arity 2 (f/r)`
+		//   - [Integer, Atom] (/q) `force-arity 2 f`
+		Signatures: []NativeSig{
+			{
+				Args:           []*Type{TInteger, TFunction},
+				Handler:        forceArityHandler,
+				Returns:        []*Type{TFunction},
+				RunInCheckMode: true, BarrierPos: -1,
+			},
+			{
+				Args:           []*Type{TInteger, TAtom},
+				QuoteArgs:      map[int]bool{1: true},
+				Handler:        forceArityAtomHandler,
+				Returns:        []*Type{TFunction},
+				RunInCheckMode: true, BarrierPos: -1,
+			},
+		},
 	},
 	{
 		Name: "forward-args",
@@ -170,6 +181,31 @@ func forceArityHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 		return nil, fmt.Errorf("%s", detail)
 	}
 	return []Value{wrapped}, nil
+}
+
+// forceArityAtomHandler is the by-name form `force-arity N foo`: it
+// resolves the captured atom to its bound function (sharing usurp's rules)
+// and wraps it. The function-form companion of the `/N` suffix.
+func forceArityAtomHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	name, err := AsAtom(args[1])
+	if err != nil {
+		return nil, fmt.Errorf("force-arity: expected an atom name, got %s", args[1].Parent.String())
+	}
+	v, ok := eng.ResolveRef(reg, name)
+	if !ok {
+		if reg != nil {
+			return nil, reg.AqlError("undefined_word", "force-arity: name "+name+" is not bound", name)
+		}
+		return nil, fmt.Errorf("force-arity: name %s is not bound", name)
+	}
+	if !eng.IsFunctionRef(v) {
+		detail := "force-arity requires a function word: " + name + " is bound to " + v.Parent.String()
+		if reg != nil {
+			return nil, reg.AqlError("illegal_ref", detail, name)
+		}
+		return nil, fmt.Errorf("%s", detail)
+	}
+	return forceArityHandler([]Value{args[0], v}, nil, nil, reg)
 }
 
 func rebarrierResult(wrap func(Value) (Value, bool), v Value, word string, reg *Registry) ([]Value, error) {

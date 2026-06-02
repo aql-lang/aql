@@ -156,6 +156,7 @@ WORD for-each
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
 WORD force-arity
   [Scalar/Number/Integer Type/Function] barrier=2 runcheck returns=[Type/Function]
+  [Scalar/Number/Integer Scalar/Atom] barrier=2 runcheck quote={1} returns=[Type/Function]
 WORD forward-args
   [Type/Function] barrier=1 runcheck returns=[Type/Function]
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Type/Function]
