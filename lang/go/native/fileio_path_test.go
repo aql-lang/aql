@@ -28,6 +28,7 @@ func setupMemFSForIO(t *testing.T, r *Registry) *capabilities.MemFileOps {
 
 func TestWriteWithPath(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := setupMemFSForIO(t, r)
 
 	path := NewPath([]string{"data", "test.txt"}, false)
@@ -51,6 +52,7 @@ func TestWriteWithPath(t *testing.T) {
 
 func TestWriteWithAbsPath(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := setupMemFSForIO(t, r)
 
 	path := NewPath([]string{"tmp", "out.txt"}, true)
@@ -69,6 +71,7 @@ func TestWriteWithAbsPath(t *testing.T) {
 
 func TestReadWithPath(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := setupMemFSForIO(t, r)
 	mem.Files["greeting.txt"] = []byte("hello")
 
@@ -84,6 +87,7 @@ func TestReadWithPath(t *testing.T) {
 
 func TestReadWithAbsPath(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := setupMemFSForIO(t, r)
 	mem.Files["/etc/config"] = []byte("key=val")
 
@@ -101,6 +105,7 @@ func TestReadWithAbsPath(t *testing.T) {
 
 func TestWriteReadRoundtripPath(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	setupMemFSForIO(t, r)
 
 	path := NewPath([]string{"roundtrip.txt"}, false)
@@ -120,6 +125,7 @@ func TestWriteReadRoundtripPath(t *testing.T) {
 
 func TestWriteWithPathAndOptions(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := setupMemFSForIO(t, r)
 
 	path := NewPath([]string{"log.txt"}, false)
@@ -141,6 +147,7 @@ func TestWriteWithPathAndOptions(t *testing.T) {
 
 func TestReadWithPathAndOptions(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := setupMemFSForIO(t, r)
 	mem.Files["data.txt"] = []byte("content here")
 
@@ -160,6 +167,7 @@ func TestReadWithPathAndOptions(t *testing.T) {
 
 func TestWriteStringPathStillWorks(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := setupMemFSForIO(t, r)
 
 	result := runAQL(t, r, []Value{
@@ -177,6 +185,7 @@ func TestWriteStringPathStillWorks(t *testing.T) {
 
 func TestReadStringPathStillWorks(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := setupMemFSForIO(t, r)
 	mem.Files["compat.txt"] = []byte("compat")
 

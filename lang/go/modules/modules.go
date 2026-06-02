@@ -35,6 +35,7 @@ var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error
 	"rand":        BuildRandModule,
 	"query":       BuildQueryModule,
 	"struct":      BuildStructModule,
+	"io":          BuildIOModule,
 }
 
 // Resolve resolves a native module name and returns a ModuleDesc.
@@ -177,6 +178,20 @@ func InstallTestExports(r *native.Registry) error {
 // setup, so `Struct.merge` etc. resolve without wiring the full resolver.
 func InstallStructExports(r *native.Registry) error {
 	desc, err := BuildStructModule(r)
+	if err != nil {
+		return err
+	}
+	for name, exportMap := range desc.Exports {
+		r.Defs.Push(name, native.NewMap(exportMap))
+	}
+	return nil
+}
+
+// InstallIOExports builds the io module and installs its exports as defs —
+// the convenience equivalent of running `"aql:io" import` in test setup, so
+// `IO.read` etc. resolve without wiring the full resolver.
+func InstallIOExports(r *native.Registry) error {
+	desc, err := BuildIOModule(r)
 	if err != nil {
 		return err
 	}

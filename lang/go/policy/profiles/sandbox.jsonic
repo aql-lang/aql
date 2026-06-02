@@ -29,7 +29,7 @@
       words: {
         default: "deny"
         rules: [
-          { allow: ["import"], where: { module: ["aql:math", "aql:time"] } }
+          { allow: ["import"], where: { module: ["aql:math", "aql:time", "aql:io"] } }
         ]
       }
       scopes: {
@@ -40,6 +40,10 @@
             rules: [{ deny: ["sleep"] }]
           }
         }
+        // I/O words live here now; importing the module is allowed so
+        // disk.read works, but the actual disk.read / disk.write capability
+        // is still gated by the global scope above (write stays denied).
+        "aql:io": { words: { default: "allow" } }
       }
     }
 

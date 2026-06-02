@@ -324,8 +324,6 @@ WORD prepare
   [Node/Map] barrier=1
 WORD print
   [Any] barrier=1
-WORD printstr
-  [Any] barrier=1
 WORD push
   [Any Node/List] barrier=2
 WORD quote
@@ -334,13 +332,6 @@ WORD quote
 WORD range
   [Scalar/Number/Integer Scalar/Number/Integer Scalar/Number/Integer] barrier=3 +returnsfn
   [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 +returnsfn
-WORD read
-  [Node/Map Scalar/Path] barrier=2 returns=[Any]
-  [Node/Map Scalar/String] barrier=2 returns=[Any]
-  [Scalar/Path Node/Map] barrier=2 returns=[Any]
-  [Scalar/String Node/Map] barrier=2 returns=[Any]
-  [Scalar/Path] barrier=1 returns=[Any]
-  [Scalar/String] barrier=1 returns=[Any]
 WORD ref
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Any]
 WORD refine
@@ -399,12 +390,6 @@ WORD stack
 WORD stack-args
   [Type/Function] barrier=1 runcheck returns=[Type/Function]
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Type/Function]
-WORD stderr
-  [] barrier=0 returns=[Scalar/String]
-WORD stdin
-  [] barrier=0 returns=[Scalar/String]
-WORD stdout
-  [] barrier=0 returns=[Scalar/String]
 WORD sub
   [Scalar/Time/Instant Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/Instant]
   [Scalar/Time/DateTime Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/DateTime]
@@ -431,8 +416,6 @@ WORD tor
   [Any Any] barrier=1 +returnsfn
 WORD tpartial
   [Any] barrier=1 returns=[Type]
-WORD trace
-  [Node/List] barrier=1 returns=[Any]
 WORD trim
   [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
   [Scalar/Atom Node/Map] barrier=2 returns=[Scalar/String]
@@ -472,13 +455,6 @@ WORD var
   [Node/List] barrier=1 noeval={0} returns=[Any]
 WORD word
   [Any] barrier=1 noeval={0} returns=[Any]
-WORD write
-  [Scalar/Path Scalar/String Node/Map] barrier=3
-  [Scalar/Path Any Node/Map] barrier=3
-  [Scalar/String Scalar/String Node/Map] barrier=3
-  [Scalar/String Any Node/Map] barrier=3
-  [Scalar/Path Scalar/String] barrier=2
-  [Scalar/String Scalar/String] barrier=2
 WORD xnor
   [Scalar/Boolean Scalar/Boolean] barrier=2 returns=[Scalar/Boolean]
   [Any Any] barrier=2 returns=[Scalar/Boolean]

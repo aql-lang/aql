@@ -10,6 +10,7 @@ func TestTraceDemo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	r.Output = os.Stderr // so it shows with -v
 
 	// trace [1 add 2 mul 3]
@@ -34,6 +35,7 @@ func TestTraceDemoStringOps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	r.Output = os.Stderr
 
 	// trace ["hello" upper add " WORLD"]
@@ -58,6 +60,7 @@ func TestTraceDemoStackOps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	r.Output = os.Stderr
 
 	// trace [1 2 3 rot add mul]

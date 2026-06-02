@@ -9,6 +9,7 @@ import (
 // helper to run AQL expressions through the engine and return results
 func runAQL(t *testing.T, r *Registry, tokens []Value) []Value {
 	t.Helper()
+	registerIOWords(r) // read/write/etc moved to aql:io; seed them for the behaviour suite
 	e := NewTop(r)
 	result, err := e.Run(tokens)
 	if err != nil {
@@ -19,6 +20,7 @@ func runAQL(t *testing.T, r *Registry, tokens []Value) []Value {
 
 func runAQLError(t *testing.T, r *Registry, tokens []Value) error {
 	t.Helper()
+	registerIOWords(r)
 	e := NewTop(r)
 	_, err := e.Run(tokens)
 	return err

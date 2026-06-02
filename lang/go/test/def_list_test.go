@@ -10,6 +10,17 @@ import (
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
+// registerIOWords installs the aql:io module words (read/write/stdin/stdout/
+// stderr/printstr/trace) under their bare names into a test registry. They
+// moved out of core (see native/io_module.go); this harness helper lets the
+// internal behaviour suite keep exercising the unchanged handlers without an
+// explicit import. Production code must `import "aql:io"` and use IO.read etc.
+func registerIOWords(reg *native.Registry) {
+	for _, n := range native.IOModuleNatives {
+		reg.RegisterNativeFunc(n)
+	}
+}
+
 func runNativeSteps(t *testing.T, files map[string]string, steps []string) ([]native.Value, error) {
 	t.Helper()
 	mem := capabilities.NewMem()
@@ -30,6 +41,11 @@ func runNativeSteps(t *testing.T, files map[string]string, steps []string) ([]na
 	if err := modules.InstallStructExports(reg); err != nil {
 		t.Fatal(err)
 	}
+	// I/O words (read/write/stdin/stdout/stderr/printstr/trace) moved out of
+	// core into aql:io. The internal behaviour suite exercises the unchanged
+	// handlers under their bare names via this harness helper; production
+	// requires `import "aql:io"` + IO.read (proved by module-io.tsv).
+	registerIOWords(reg)
 
 	eng := native.NewTop(reg)
 	var result []native.Value

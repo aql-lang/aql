@@ -35,7 +35,7 @@ func BuildStructModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	exports := native.NewOrderedMap()
 	for _, n := range native.StructModuleNatives {
-		exports.Set(n.Name, makeStructFnDef(n, subReg))
+		exports.Set(n.Name, makeModuleFnDef(n, subReg))
 	}
 
 	modID := parent.Modules.NextID()
@@ -46,15 +46,15 @@ func BuildStructModule(parent *native.Registry) (native.ModuleDesc, error) {
 	return desc, nil
 }
 
-// makeStructFnDef builds a FnDef value wrapping a struct word. Each signature
-// delegates via a trivial body [Word(name)], which execFnDefLiteral
+// makeModuleFnDef builds a FnDef value wrapping a moved-out native word. Each
+// signature delegates via a trivial body [Word(name)], which execFnDefLiteral
 // short-circuits to a direct dispatch of the inner native in the
 // sub-registry. The wrapper FnSigs mirror the inner native's NativeSigs
 // exactly — same arg types, returns, NoEvalArgs, and BarrierPos — so dispatch
 // behaviour is identical to the former core word (dot-access dispatch keys
 // off the inner native's signatures; see the "Module FnDef Wrappers" note in
-// lang/go/CLAUDE.md).
-func makeStructFnDef(n native.NativeFunc, subReg *native.Registry) native.Value {
+// lang/go/CLAUDE.md). Shared by the aql:struct and aql:io modules.
+func makeModuleFnDef(n native.NativeFunc, subReg *native.Registry) native.Value {
 	fnSigs := make([]native.FnSig, len(n.Signatures))
 	for i, s := range n.Signatures {
 		params := make([]native.FnParam, len(s.Args))

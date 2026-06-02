@@ -106,9 +106,8 @@ func Register(r *Registry) {
 	for _, n := range printNatives {
 		r.RegisterNativeFunc(n)
 	}
-	for _, n := range traceNatives {
-		r.RegisterNativeFunc(n)
-	}
+	// printstr / read / write / stdin / stdout / stderr / trace moved to the
+	// aql:io module (see io_module.go); only `print` stays in core.
 
 	// Unify
 	for _, n := range unifyNatives {

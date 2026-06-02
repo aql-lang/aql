@@ -16,6 +16,7 @@ func runWithOSFiles(t *testing.T, expr string) ([]native.Value, error) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 
 	values, err := parser.Parse(expr)
 	if err != nil {
@@ -230,6 +231,7 @@ func TestFileReadCSVPrint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	var buf strings.Builder
 	reg.Output = &buf
 
@@ -269,6 +271,7 @@ func TestFileReadTSVPrint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	var buf strings.Builder
 	reg.Output = &buf
 

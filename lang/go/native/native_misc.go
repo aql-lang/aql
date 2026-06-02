@@ -90,69 +90,8 @@ var miscNatives []NativeFunc
 
 func init() {
 	miscNatives = []NativeFunc{
-		// ---- file I/O ----
-		{
-			Name: "read",
-
-			Signatures: []NativeSig{
-				// Path signatures
-				{Args: []*Type{TPath, TMap}, Handler: readOptsHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TPath}, Handler: readHandler, Returns: []*Type{TAny}, BarrierPos:
-				// String signatures (backward compatible)
-				-1},
-
-				{Args: []*Type{TString, TMap}, Handler: readOptsHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TString}, Handler: readHandler, Returns: []*Type{TAny}, BarrierPos:
-				// Reversed signatures for stack-first: "path" {opts} read
-				-1},
-
-				{Args: []*Type{TMap, TPath}, Handler: readOptsRevHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TMap, TString}, Handler: readOptsRevHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-			},
-		},
-		{
-			Name: "write",
-
-			Signatures: []NativeSig{
-				// Path signatures
-				{Args: []*Type{TPath, TString, TMap}, Handler: writeOptsHandler, Returns: []*Type{}, BarrierPos: -1},
-				{Args: []*Type{TPath, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []*Type{}, BarrierPos: -1},
-				{Args: []*Type{TPath, TString}, Handler: writeHandler, Returns: []*Type{}, BarrierPos:
-				// String signatures (backward compatible)
-				-1},
-
-				{Args: []*Type{TString, TString, TMap}, Handler: writeOptsHandler, Returns: []*Type{}, BarrierPos: -1},
-				{Args: []*Type{TString, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []*Type{}, BarrierPos: -1},
-				{Args: []*Type{TString, TString}, Handler: writeHandler, Returns: []*Type{}, BarrierPos: -1},
-			},
-		},
-		{
-			Name: "stdin",
-
-			Signatures: []NativeSig{{
-				Args:    []*Type{},
-				Handler: stdinHandler,
-				Returns: []*Type{TString}, BarrierPos: -1,
-			}},
-		},
-		{
-			Name: "stdout",
-
-			Signatures: []NativeSig{{
-				Args:    []*Type{},
-				Handler: stdoutHandler,
-				Returns: []*Type{TString}, BarrierPos: -1,
-			}},
-		},
-		{
-			Name: "stderr",
-
-			Signatures: []NativeSig{{
-				Args:    []*Type{},
-				Handler: stderrHandler,
-				Returns: []*Type{TString}, BarrierPos: -1,
-			}},
-		},
+		// file I/O (read/write) and stream words (stdin/stdout/stderr)
+		// moved to the aql:io module — see io_module.go.
 
 		// ---- help (language overview) ----
 		{

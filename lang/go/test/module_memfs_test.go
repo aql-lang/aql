@@ -21,6 +21,7 @@ func runMemFSModuleSteps(t *testing.T, files map[string]string, steps []string) 
 	}
 	reg.SetParseFunc(parser.Parse)
 	modules.InstallResolver(reg) // production module wiring (lang.New)
+	registerIOWords(reg)         // read/write moved to aql:io; expose bare for this suite
 
 	// Create an in-memory FS and pre-populate it with module files.
 	mem := capabilities.NewMem()

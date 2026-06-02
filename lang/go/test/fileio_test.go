@@ -23,6 +23,7 @@ func runWithFiles(t *testing.T, files map[string]string, expr string) (string, e
 		t.Fatal(err)
 	}
 	native.SetHostFileOps(reg, mem)
+	registerIOWords(reg)
 
 	values, err := parser.Parse(expr)
 	if err != nil {
@@ -52,6 +53,7 @@ func runWithMem(t *testing.T, files map[string]string, expr string) (*capabiliti
 		t.Fatal(err)
 	}
 	native.SetHostFileOps(reg, mem)
+	registerIOWords(reg)
 
 	values, err := parser.Parse(expr)
 	if err != nil {
@@ -276,6 +278,7 @@ func TestReadWriteRoundtrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	native.SetHostFileOps(reg, mem)
+	registerIOWords(reg)
 
 	// Write with all forward args to be explicit
 	values, err := parser.Parse(`write "dst.txt" (read "src.txt")`)
@@ -323,6 +326,7 @@ func runWithStdio(t *testing.T, stdin string, expr string) (stdout, stderr, stac
 		t.Fatal(err)
 	}
 	native.SetHostFileOps(reg, capabilities.NewMem())
+	registerIOWords(reg)
 
 	var outBuf, errBuf bytes.Buffer
 	reg.Output = &outBuf
@@ -350,6 +354,7 @@ func TestStdinWord(t *testing.T) {
 		t.Fatal(err)
 	}
 	native.SetHostFileOps(reg, capabilities.NewMem())
+	registerIOWords(reg)
 	var buf bytes.Buffer
 	reg.Output = &buf
 
@@ -373,6 +378,7 @@ func TestStdoutWord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	values, err := parser.Parse(`stdout`)
 	if err != nil {
 		t.Fatal(err)
@@ -393,6 +399,7 @@ func TestStderrWord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	values, err := parser.Parse(`stderr`)
 	if err != nil {
 		t.Fatal(err)

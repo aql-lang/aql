@@ -22,6 +22,7 @@ func runNativeWithFiles(t *testing.T, files map[string]string, expr string) ([]n
 		t.Fatal(err)
 	}
 	native.SetHostFileOps(reg, mem)
+	registerIOWords(reg)
 	native.Register(reg)
 
 	values, err := parser.Parse(expr)

@@ -30,8 +30,9 @@ func TestVMRunReturnsLastValue(t *testing.T) {
 
 func TestVMRunDefaultSandboxBlocksWrite(t *testing.T) {
 	a := newAQL(t, nil)
-	// Default Vm.run uses sandbox. Sandbox denies fileops.write.
-	out, err := a.Run(`("aql:vm" import) "write 'data' '/tmp/aql-test'" Vm.run`)
+	// Default Vm.run uses sandbox. Sandbox allows importing aql:io but
+	// still denies the disk.write capability, so IO.write is blocked.
+	out, err := a.Run(`("aql:vm" import) "\"aql:io\" import end IO.write 'data' '/tmp/aql-test'" Vm.run`)
 	if err == nil {
 		t.Errorf("expected sandbox denial, got %v", out)
 	}
@@ -101,7 +102,7 @@ func TestVMAttenuationParentDenyWinsOnGlobal(t *testing.T) {
 			modules: {
 				words: {
 					default: "deny"
-					rules: [{ allow: ["import"], where: { module: ["aql:vm"] } }]
+					rules: [{ allow: ["import"], where: { module: ["aql:vm", "aql:io"] } }]
 				}
 			}
 		}
@@ -116,7 +117,7 @@ func TestVMAttenuationParentDenyWinsOnGlobal(t *testing.T) {
 	_, err = a.Run(`
 		("aql:vm" import)
 		{ scopes: { global: { words: { default: "allow" } }, fileops: { words: { default: "allow" } } } }
-		"'data' write '/tmp/aql-attenuation-test'"
+		"\"aql:io\" import end 'data' IO.write '/tmp/aql-attenuation-test'"
 		Vm.run-with
 	`)
 	if err == nil {
@@ -140,7 +141,7 @@ func TestVMAttenuationParentDenyRuleSurvives(t *testing.T) {
 			modules: {
 				words: {
 					default: "deny"
-					rules: [{ allow: ["import"], where: { module: ["aql:vm"] } }]
+					rules: [{ allow: ["import"], where: { module: ["aql:vm", "aql:io"] } }]
 				}
 			}
 			fileops: {
@@ -161,7 +162,7 @@ func TestVMAttenuationParentDenyRuleSurvives(t *testing.T) {
 	_, err = a.Run(`
 		("aql:vm" import)
 		{ scopes: { fileops: { words: { default: "allow" } } } }
-		"read '/secret/credentials.txt'"
+		"\"aql:io\" import end IO.read '/secret/credentials.txt'"
 		Vm.run-with
 	`)
 	if err == nil {
