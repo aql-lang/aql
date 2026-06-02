@@ -28,8 +28,8 @@
 # §6  validate — check data against a shape spec (returns the validated spec)
 "aql:struct" import end Struct.validate {name:"$STRING"} {name:'Alice'}	{name:'$STRING'}	conforming data validates against the spec
 #
-# §7  transform — shape data via a spec (literal passthrough)
-"aql:struct" import end {a:'1'} Struct.transform {x:99}	{x:99}	literal spec value passes through
+# §7  transform — shape data via a spec (forward: spec then data)
+"aql:struct" import end Struct.transform {x:99} {a:'1'}	{x:99}	literal spec value passes through
 #
 # §8  jsonify — serialise a value (also moved here; output verified in the
 #     Go tests, the pretty-printed multiline form isn't tsv-expressible)
