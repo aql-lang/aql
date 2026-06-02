@@ -389,3 +389,51 @@ and both are *assembling existing primitives* (`word`, `NoEvalArgs`,
 inventing new machinery. Those are the investments that would let AQL
 honestly claim LISP's most enduring promise: **a language you extend in
 itself.**
+
+---
+
+## Appendix A — the `aql:decision` DX report through the LISP lens
+
+`design/AQL-DX-REPORT.5.md` records a concrete failure: a decision library
+that *should* have been ~80 lines of AQL became ~350 lines of Go + 30 of
+AQL, because the author hit six issues. Re-reading those issues through
+this analysis is striking — **every one is a place where AQL was missing a
+LISP idea**, and the fixes that have since landed are exactly the
+LISP-shaped ones. Current status (verified on this branch):
+
+| DX issue | LISP concept it's really about | Status now | What the LISP lens says |
+|---|---|---|---|
+| **1. `[c1 c2]` strips def refs** | the quote/eval boundary | **fixed** (`[c1 c2] → [10 20]`) | The bug was *context-decided* code-vs-data. LISP makes it **explicit**: `'(c1 c2)` (atoms) vs `(list c1 c2)` (values) vs `` `(,c1 ,c2) `` (holes). The deeper cure is a **quasiquote-for-code** form, not just "eval-by-default when consumed." |
+| **2. def leakage from fn bodies** | hygiene / lexical scope | **fixed** (body-local cleanup) | This *is* the hygiene problem. The report's workaround — prefix names `__ec-op`, `__ao-lhs` — is **hand-rolled `gensym`**. A `gensym` word + macro renaming removes the tax permanently. |
+| **3. arg ordering / the "atan2 swap"** | combinators | partly (docs) | The "swap args in the handler" workaround **is `flip`** (≡ `usurp` for two args). Named dataflow combinators (`flip`, `dip`, `keep`, `bi`) let authors *compose* instead of reasoning about stack positions per call site. |
+| **4. registered words shadow map keys** | keywords / self-quoting symbols | **fixed** (`m.trace → 99`) | LISP keywords (`:trace`) are self-quoting symbols distinct from function symbols. Quoting the post-dot key (now done) = treating it as a **keyword**, not a callable Word. |
+| **5. no list-of-evaluated-values builder** | `list` / quasiquote | **open** (`collect` / `eval` absent) | The report asks for `eval [c1 c2]` and `N collect`. Those are literally LISP's `eval` and `(list …)`. Tier-1 quasiquote + a `list`/`collect` word closes it. |
+| **6. FnDef values can't forward-collect** | uniform application | **fixed** (`Math.min 3 7 → 3`) | LISP's `(f …)` applies the same regardless of where `f` came from. Unifying module-wrapper dispatch with built-in words restored that uniformity. |
+
+Two higher-order observations:
+
+1. **The decision evaluator is a small interpreter.** `eval-cond` /
+   `eval-pred` / `eval-table` / `eval-tree` walk a data structure and
+   dispatch on `op`/`kind` tags — i.e. they are an `eval` over a
+   decision-DSL. That is *the* canonical LISP exercise (the metacircular
+   evaluator). A language with **code-as-data + `eval` + macros** doesn't
+   write such evaluators in the host language — it writes them *in itself*,
+   or makes the DSL a set of macros/combinators that lower to core words.
+   The 80→350-line blow-up is precisely the cost of *not* having the LISP
+   metaprogramming layer: the Go evaluators are a metacircular interpreter
+   that couldn't be hosted in AQL.
+
+2. **The DX report independently re-derived the Tier-1 roadmap.** Its
+   suggested fixes — an explicit `eval`, a `collect`/`list` builder, a
+   documented swap/flip convention, keyword-style keys — are the same items
+   §8 lists from first principles (`eval`/`read`, quasiquote, the
+   combinator vocabulary, keyword semantics). That convergence is strong
+   evidence the Tier-1 work is the right next investment: it is what turns
+   "fall back to Go" into "the library is AQL."
+
+**Bottom line:** the DX pain was LISP-shaped, and so were the fixes. Four
+of six issues are resolved by changes that amount to *adopting a LISP idea*
+(explicit eval of consumed lists, lexical cleanup, keyword keys, uniform
+application). The two that remain — **a `list`/`eval` builder (#5)** and
+the **hygiene/`gensym` half of #2** — are Tier-1 items in §8, and they are
+the ones that would have kept the decision module pure AQL.
