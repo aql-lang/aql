@@ -7,7 +7,7 @@ import (
 )
 
 // definitionNatives covers the binding / function-definition words:
-// def, undef, var, fn, call, dblcall, args, __pa.
+// def, undef, var, fn, call, args, __pa.
 //
 // Pure helpers used by these handlers (parseFnDef, parseFnParams,
 // MatchFnSig, defName, defStackOnly, etc.) live alongside their
@@ -131,16 +131,6 @@ var definitionNatives = []NativeFunc{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    callHandler,
-			Returns:    []*Type{TAny}, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "dblcall",
-
-		Signatures: []NativeSig{{
-			Args:       []*Type{TInteger, TList},
-			NoEvalArgs: map[int]bool{1: true},
-			Handler:    dblcallHandler,
 			Returns:    []*Type{TAny}, BarrierPos: -1,
 		}},
 	},
@@ -620,35 +610,6 @@ func callHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 
 	bodyCopy := bodyElems.Slice()
 	return bodyCopy, nil
-}
-
-// ---- dblcall ----
-
-func dblcallHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	n, _ := args[0].AsConcreteInteger()
-	body := args[1]
-
-	if !IsConcrete(body) {
-		return nil, r.AqlError("dblcall_error", "dblcall: callback must be a concrete list, got type literal", "dblcall")
-	}
-	if IsTypedList(body) || IsTableType(body) {
-		return nil, r.AqlError("dblcall_error", "dblcall: callback must be a plain list", "dblcall")
-	}
-
-	doubled := NewInteger(n * 2)
-
-	bodyElems, _ := AsList(body)
-	if bodyElems.Len() == 0 {
-		return []Value{doubled}, nil
-	}
-
-	tokens := make([]Value, 0, bodyElems.Len()+3)
-	tokens = append(tokens, NewOpenParen())
-	tokens = append(tokens, doubled)
-	bodyCopy := bodyElems.Slice()
-	tokens = append(tokens, bodyCopy...)
-	tokens = append(tokens, NewCloseParen())
-	return tokens, nil
 }
 
 // ---- args / __pa ----

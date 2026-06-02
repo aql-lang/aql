@@ -737,58 +737,6 @@ func TestCallAQLNoMatchingSig(t *testing.T) {
 }
 
 // ========================
-// RegisterDblcall tests
-// ========================
-
-func TestDblcallBasic(t *testing.T) {
-	r, err := DefaultRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// dblcall 5 [dup mul] => 100  (5*2=10, then 10 dup mul = 100)
-	result := runAQL(t, r, []Value{
-		NewWord("dblcall"), NewInteger(5),
-		NewList([]Value{NewWord("dup"), NewWord("mul")}),
-	})
-	_as57, _ := AsInteger(result[0])
-	if len(result) != 1 || _as57 != 100 {
-		t.Errorf("dblcall 5 [dup mul] = %v, want [100]", result)
-	}
-}
-
-func TestDblcallWithAdd(t *testing.T) {
-	r, err := DefaultRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// dblcall 3 [add 1] => 7  (3*2=6, then 6 add 1 = 7)
-	result := runAQL(t, r, []Value{
-		NewWord("dblcall"), NewInteger(3),
-		NewList([]Value{NewWord("add"), NewInteger(1)}),
-	})
-	_as58, _ := AsInteger(result[0])
-	if len(result) != 1 || _as58 != 7 {
-		t.Errorf("3 dblcall [add 1] = %v, want [7]", result)
-	}
-}
-
-func TestDblcallEmptyBody(t *testing.T) {
-	r, err := DefaultRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// dblcall 4 [] => 8
-	result := runAQL(t, r, []Value{
-		NewWord("dblcall"), NewInteger(4),
-		NewList([]Value{}),
-	})
-	_as59, _ := AsInteger(result[0])
-	if len(result) != 1 || _as59 != 8 {
-		t.Errorf("dblcall 4 [] = %v, want [8]", result)
-	}
-}
-
-// ========================
 // RegisterCall tests
 // ========================
 

@@ -86,8 +86,6 @@ WORD create
   [Node/Map Node/List] barrier=2
   [Ideal/Object/Resource/Entity] barrier=1
   [Node/Map] barrier=1
-WORD dblcall
-  [Scalar/Number/Integer Node/List] barrier=2 noeval={1} returns=[Any]
 WORD def
   [Node/Map Any] barrier=2 runcheck noevalmap={0}
   [Scalar/String Any] barrier=2 runcheck

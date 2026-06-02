@@ -277,9 +277,6 @@ func TestTypeLiteralNoPanic(t *testing.T) {
 		// Module
 		{"module-list", `module List`},
 
-		// Double call
-		{"dblcall-list", `List dblcall`},
-
 		// Additional accessors
 		{"dot-map-no-field", `Map dot`},
 		{"getr-list", `List 0 getr`},

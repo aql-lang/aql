@@ -489,15 +489,6 @@ func TestAliasCall(t *testing.T) {
 	})
 }
 
-func TestAliasDblcall(t *testing.T) {
-	runAliasTest(t, aliasCase{
-		name:      "dblcall",
-		defStep:   "def mydbl word [dblcall]",
-		origSteps: []string{"[dup mul] 5 dblcall"},
-		aliaSteps: []string{"[dup mul] 5 mydbl"},
-	})
-}
-
 // ==========================================================================
 // Native: clone
 // ==========================================================================
