@@ -20,6 +20,7 @@ package native
 //	transform shape one structure into another via a spec
 //	validate  validate a structure against a shape spec
 //	selector  query-select out of a structure
+//	jsonify   serialise a value to a jsonic/JSON string
 //
 // All words are all-forward eligible (BarrierPos -1) so they dispatch in
 // both forward (`Struct.clone {a:1}`) and stack (`{a:1} Struct.clone`) form
@@ -92,6 +93,13 @@ var StructModuleNatives = []NativeFunc{
 		Name: "items",
 		Signatures: []NativeSig{
 			{Args: []*Type{TAny}, Handler: itemsHandler, BarrierPos: -1},
+		},
+	},
+	{
+		Name: "jsonify",
+		Signatures: []NativeSig{
+			{Args: []*Type{TMap, TAny}, Handler: jsonifyFlagsHandler, BarrierPos: -1},
+			{Args: []*Type{TAny}, Handler: jsonifyDefaultHandler, BarrierPos: -1},
 		},
 	},
 }

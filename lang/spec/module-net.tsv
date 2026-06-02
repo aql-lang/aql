@@ -1,0 +1,22 @@
+# AQL Language Specification: the aql:net module
+# Format: input<TAB>expected<TAB>description
+#
+# Loadable module of HTTP / API access words that were moved out of the
+# core registry. They are reached only after `import`, under the `Net`
+# namespace: `"aql:net" import end Net.word args`.
+#
+#   Net.fetch    — perform an HTTP request
+#   Net.prepare  — build a request from an API descriptor (no send)
+#   Net.direct   — build-and-send a request against an API descriptor
+#
+# fetch/prepare/direct need a live network or an API SDK to exercise
+# end-to-end (covered by the Go fetch / prepare_direct tests), so the
+# spec here pins the namespace binding and the move out of core.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  import binds the Net namespace (the module's exported namespace name)
+"aql:net" import end convert List Net.$module	['Net']	import binds the Net namespace
+#
+# §2  negative — the words are gone from core (unbound without import)
+fetch "http://x"	ERROR:undefined_word	`fetch` is no longer a core word
+Net.fetch "http://x"	ERROR:undefined_word	`Net` is unbound without `import`

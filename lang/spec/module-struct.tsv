@@ -31,8 +31,12 @@
 # §7  transform — shape data via a spec (literal passthrough)
 "aql:struct" import end {a:'1'} Struct.transform {x:99}	{x:99}	literal spec value passes through
 #
-# §8  swap form dispatches through the namespace
+# §8  jsonify — serialise a value (also moved here; output verified in the
+#     Go tests, the pretty-printed multiline form isn't tsv-expressible)
+#
+# §9  swap form dispatches through the namespace
 "aql:struct" import end {a:1} Struct.merge {b:2}	{a:1 b:2}	data-on-stack + forward arg
 #
-# §9  negative — unbound without import
+# §10  negative — unbound without import
 Struct.merge {a:1} {b:2}	ERROR:undefined_word	`Struct` is unbound without `import`
+jsonify {a:1}	ERROR:undefined_word	jsonify also moved out of core

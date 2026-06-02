@@ -35,6 +35,7 @@ var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error
 	"query":       BuildQueryModule,
 	"struct":      BuildStructModule,
 	"io":          BuildIOModule,
+	"net":         BuildNetModule,
 }
 
 // Resolve resolves a native module name and returns a ModuleDesc.
@@ -191,6 +192,20 @@ func InstallStructExports(r *native.Registry) error {
 // `IO.read` etc. resolve without wiring the full resolver.
 func InstallIOExports(r *native.Registry) error {
 	desc, err := BuildIOModule(r)
+	if err != nil {
+		return err
+	}
+	for name, exportMap := range desc.Exports {
+		r.Defs.Push(name, native.NewMap(exportMap))
+	}
+	return nil
+}
+
+// InstallNetExports builds the net module and installs its exports as defs —
+// the convenience equivalent of running `"aql:net" import` in test setup, so
+// `Net.fetch` etc. resolve without wiring the full resolver.
+func InstallNetExports(r *native.Registry) error {
+	desc, err := BuildNetModule(r)
 	if err != nil {
 		return err
 	}

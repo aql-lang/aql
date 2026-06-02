@@ -505,8 +505,10 @@ func TestRegisterFunctions(t *testing.T) {
 	// items, transform, validate, selector) moved out of core into the
 	// aql:struct module — see native/struct_module.go — so they are no
 	// longer expected in the global registry.
+	// jsonify moved to aql:struct; fetch/prepare/direct moved to aql:net —
+	// so they are no longer expected in the global registry.
 	names := []string{
-		"create", "filter", "flatten", "join", "jsonify", "list", "load",
+		"create", "filter", "flatten", "join", "list", "load",
 		"pad", "remove", "size", "slice", "update",
 	}
 	for _, name := range names {

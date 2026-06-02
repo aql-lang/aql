@@ -216,34 +216,7 @@ var Natives = []NativeFunc{
 		},
 	},
 
-	// ---- fetch ----
-	{
-		Name: "fetch",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TString, TMap}, Handler: fetchStringMapHandler, BarrierPos: -1},
-			{Args: []*Type{TMap}, Handler: fetchMapHandler, BarrierPos: -1},
-			{Args: []*Type{TString}, Handler: fetchStringHandler, BarrierPos: -1},
-		},
-	},
-
-	// ---- prepare ----
-	{
-		Name: "prepare",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TMap}, Handler: prepareAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
-		},
-	},
-
-	// ---- direct ----
-	{
-		Name: "direct",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TMap}, Handler: directAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
-		},
-	},
+	// fetch / prepare / direct moved to the aql:net module — see net_module.go.
 
 	// ---- flatten ----
 	{
@@ -274,15 +247,7 @@ var Natives = []NativeFunc{
 		},
 	},
 
-	// ---- jsonify ----
-	{
-		Name: "jsonify",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TMap, TAny}, Handler: jsonifyFlagsHandler, BarrierPos: -1},
-			{Args: []*Type{TAny}, Handler: jsonifyDefaultHandler, BarrierPos: -1},
-		},
-	},
+	// jsonify moved to the aql:struct module — see struct_module.go.
 
 	// ---- listops (push/pop/unshift/shift) ----
 	{

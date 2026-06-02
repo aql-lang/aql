@@ -95,8 +95,6 @@ WORD describe
   [Scalar/Atom] barrier=1
   [Scalar/Atom] barrier=1 quote={0}
   [] barrier=0
-WORD direct
-  [Node/Map] barrier=1
 WORD div
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn
 WORD do
@@ -124,10 +122,6 @@ WORD escape
 WORD export
   [Scalar/String Node/Map] barrier=2 runcheck
   [Scalar/Atom Node/Map] barrier=2 runcheck
-WORD fetch
-  [Scalar/String Node/Map] barrier=2
-  [Node/Map] barrier=1
-  [Scalar/String] barrier=1
 WORD filter
   [Type/Function Any] barrier=2
 WORD flatten
@@ -231,9 +225,6 @@ WORD istype
 WORD join
   [Scalar/String Node/List] barrier=2
   [Node/List] barrier=1
-WORD jsonify
-  [Node/Map Any] barrier=2
-  [Any] barrier=1
 WORD list
   [Node/Map Ideal/Object/Resource/Entity] barrier=2
   [Node/Map Node/Map] barrier=2
@@ -320,8 +311,6 @@ WORD pop
   [Node/List] barrier=1
 WORD pow
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn
-WORD prepare
-  [Node/Map] barrier=1
 WORD print
   [Any] barrier=1
 WORD push

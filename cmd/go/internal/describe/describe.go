@@ -31,6 +31,9 @@ var moduleSummaries = map[string]string{
 	"report":   "Tabular reporting and formatting.",
 	"test":     "Assertions and helpers for in-language tests.",
 	"rand":     "Pseudo-random number generation.",
+	"struct":   "Structured-data utilities: merge, walk, transform, jsonify, ….",
+	"io":       "I/O: read, write, stdin/stdout/stderr, printstr, trace.",
+	"net":      "HTTP requests and API access: fetch, prepare, direct.",
 }
 
 type cmd struct{}

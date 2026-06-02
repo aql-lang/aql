@@ -66,7 +66,7 @@ func TestNativeFnInFnBody(t *testing.T) {
 		},
 		{
 			name: "jsonify",
-			def:  `def f fn [[m:Map] [String] [m jsonify]]`,
+			def:  `def f fn [[m:Map] [String] [m Struct.jsonify]]`,
 			call: `{a:1} f`,
 			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
@@ -168,7 +168,7 @@ func TestNativeInExplicitParens(t *testing.T) {
 		},
 		{
 			name: "jsonify",
-			expr: `({a:1} jsonify)`,
+			expr: `({a:1} Struct.jsonify)`,
 			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
 				if len(result) != 1 {
@@ -366,8 +366,6 @@ func TestTypeLiteralNoPanicNative(t *testing.T) {
 		// no-panic coverage lives in the module tests (struct_module_test.go).
 		{"size-map", `size Map`},
 		{"size-list", `size List`},
-		{"jsonify-map", `jsonify Map`},
-		{"jsonify-list", `jsonify List`},
 		{"flatten-list", `flatten List`},
 		{"join-list", `join List`},
 	}
@@ -489,7 +487,7 @@ func TestNativeFnInFnBodyChained(t *testing.T) {
 		},
 		{
 			name: "merge-then-jsonify",
-			def:  `def f fn [[m:Map] [String] [(m Struct.merge {b:2}) jsonify]]`,
+			def:  `def f fn [[m:Map] [String] [(m Struct.merge {b:2}) Struct.jsonify]]`,
 			call: `{a:1} f`,
 			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
