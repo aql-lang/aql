@@ -218,6 +218,19 @@ Key conversion functions in `parse.go`:
   becomes `getr`. Chained access `m.a.b` becomes the token sequence
   `m get a get b` and composes at runtime because each `get` produces
   the receiver for the next.
+- A `/` modifier on a paren / dotted-path result applies to the WHOLE
+  group, not the last key: `a.b/m` parses as `(a get b)/m`.
+  `convertTopLevelItems` strips the modifier off the final key (or a
+  standalone `/mod` token after the group) and places result-level
+  tokens around the group. `/u /s /f /N` desugar to the higher-order
+  **words** `usurp` / `stack-args` / `forward-args` / `force-arity N`
+  (each returns a NEW function, like `usurp`); they are emitted BEFORE
+  the group so they forward-collect the result before it can
+  auto-dispatch (critical for `/s`, whose args sit on the stack). `/r`
+  and `/q` emit an `eng.NewDispatchMod` marker (`Word/__DM`) AFTER the
+  group; `execFnDefLiteral` peeks+consumes it to leave the function as
+  inert data, and `stepLiteral` drops an unconsumed marker (a modifier
+  on a non-function result is a no-op). See `lang/spec/path-modifier.tsv`.
 
 ## Argument Ordering (CRITICAL)
 

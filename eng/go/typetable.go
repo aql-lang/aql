@@ -563,6 +563,7 @@ var builtinDecls = []builtinDecl{
 	{Path: "Word/__IN", FixedID: 20, IsInternal: true, Rank: 50_100_011_000},
 	{Path: "Word/__IN/__DC", FixedID: 64, IsInternal: true, Rank: 50_100_011_001},
 	{Path: "Word/__SP", FixedID: 75, IsInternal: true, Alias: "Splice", Rank: 50_100_012_000},
+	{Path: "Word/__DM", FixedID: 76, IsInternal: true, Alias: "DispatchMod", Rank: 50_100_013_000},
 
 	// Type (metatype) branch.
 	{Path: "Type/Function", FixedID: 19, Rank: 60_100_000_000},

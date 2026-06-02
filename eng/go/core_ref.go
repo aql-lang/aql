@@ -121,6 +121,147 @@ func UsurpFunction(v Value) (Value, bool) {
 	}), true
 }
 
+// ForceStackFunction / ForceForwardFunction are the function-form
+// companions of the `/s` and `/f` modifiers (emitted by the `stack-args`
+// and `forward-args` words), mirroring UsurpFunction. They wrap a function
+// value in a fresh TFunction whose signatures copy the originals — params
+// UNCHANGED — but with the wrapper's BarrierPos forced all-stack (`/s`) or
+// all-forward (`/f`), so the wrapper collects the caller's args in that
+// form. Each wrapper sig re-dispatches the ORIGINAL with the args in caller
+// order (respecting the original's own barrier), so all original behaviour
+// is preserved. Return false when v is not a function value.
+func ForceStackFunction(v Value) (Value, bool)   { return rebarrierFunction(v, true) }
+func ForceForwardFunction(v Value) (Value, bool) { return rebarrierFunction(v, false) }
+
+func rebarrierFunction(v Value, stack bool) (Value, bool) {
+	if !v.Parent.Equal(TFunction) && !v.Parent.Equal(TFnDef) {
+		return Value{}, false
+	}
+	fnDef, ok := v.Data.(FnDefInfo)
+	if !ok {
+		return Value{}, false
+	}
+	orig := NewFunction(fnDef)
+	own := fnDef.OwnSigs()
+	wrapped := make([]Signature, 0, len(own))
+	for i := range own {
+		src := own[i]
+		ws := src // copy Returns and other flags
+		ws.Params = append([]FnParam(nil), src.Params...)
+		if stack {
+			ws.BarrierPos = 0 // all-stack: caller writes  a b c fn
+		} else {
+			ws.BarrierPos = len(ws.Params) // all-forward: caller writes  fn a b c
+		}
+		// Drop per-position fields; the original sig re-applies them on
+		// re-dispatch. Args/Patterns are rebuilt from Params by normalizeSig.
+		ws.Args = nil
+		ws.Patterns = nil
+		ws.QuoteArgs = nil
+		ws.TypeArgs = nil
+		ws.NoEvalArgs = nil
+		ws.NoEvalMapArgs = nil
+		ws.Body = nil
+		ws.ReturnsFn = nil
+		ws.CheckFullStackFn = nil
+		ws.Fallback = false
+		origBarrier := src.BarrierPos
+		if origBarrier < 0 || origBarrier > len(src.Params) {
+			origBarrier = len(src.Params)
+		}
+		ws.Handler = rebarrierDispatchHandler(orig, origBarrier)
+		normalizeSig(&ws)
+		wrapped = append(wrapped, ws)
+	}
+	SortSignatures(wrapped)
+	return NewFunction(FnDefInfo{
+		Name:           fnDef.Name,
+		Signatures:     wrapped,
+		MaxForwardArgs: calcMaxForwardArgs(wrapped),
+		Registry:       fnDef.Registry,
+	}), true
+}
+
+// ForceArityFunction is the function-form companion of the `/N` modifier
+// (emitted by the `force-arity` word). It wraps a function value in a fresh
+// TFunction with a single N-arg all-forward signature that re-dispatches
+// the original in forward form — so `force-arity 2 f a b` runs `f a b`,
+// selecting the original's 2-arg overload. Returns false when v is not a
+// function value or n < 0.
+func ForceArityFunction(v Value, n int) (Value, bool) {
+	if n < 0 || (!v.Parent.Equal(TFunction) && !v.Parent.Equal(TFnDef)) {
+		return Value{}, false
+	}
+	fnDef, ok := v.Data.(FnDefInfo)
+	if !ok {
+		return Value{}, false
+	}
+	orig := NewFunction(fnDef)
+	params := make([]FnParam, n)
+	for i := range params {
+		params[i] = FnParam{Type: TAny}
+	}
+	sig := Signature{
+		Params:     params,
+		BarrierPos: n, // all-forward: caller writes  f a b …
+		// Re-dispatch the original respecting ITS barrier (not always
+		// forward) so force-arity composes over stack-form wrappers
+		// (e.g. force-arity over stack-args).
+		Handler: rebarrierDispatchHandler(orig, funcSigBarrier(orig, n)),
+	}
+	normalizeSig(&sig)
+	return NewFunction(FnDefInfo{
+		Name:           fnDef.Name,
+		Signatures:     []Signature{sig},
+		MaxForwardArgs: n,
+		Registry:       fnDef.Registry,
+	}), true
+}
+
+// funcSigBarrier returns the resolved BarrierPos of orig's n-arg signature
+// (all-forward when there is none) — used to lay out a re-dispatch.
+func funcSigBarrier(orig Value, n int) int {
+	fnDef, ok := orig.Data.(FnDefInfo)
+	if !ok {
+		return n
+	}
+	for _, s := range fnDef.OwnSigs() {
+		if s.TotalArgs() == n {
+			b := s.BarrierPos
+			if b < 0 || b > n {
+				b = n
+			}
+			return b
+		}
+	}
+	return n
+}
+
+// rebarrierDispatchHandler re-emits the original function with the caller's
+// args in ORDER (no reversal), laid out around `orig` to satisfy the
+// original's barrier B: positions B…N-1 on the stack (bottom→top, deepest
+// first) and positions 0…B-1 forward after orig.
+func rebarrierDispatchHandler(orig Value, origBarrier int) Handler {
+	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		n := len(args)
+		b := origBarrier
+		if b < 0 || b > n {
+			b = n
+		}
+		out := make([]Value, 0, n+3)
+		out = append(out, NewOpenParen())
+		for i := n - 1; i >= b; i-- { // stack part: pos n-1 … b
+			out = append(out, args[i])
+		}
+		out = append(out, orig)
+		for i := 0; i < b; i++ { // forward part: pos 0 … b-1
+			out = append(out, args[i])
+		}
+		out = append(out, NewCloseParen())
+		return out, nil
+	}
+}
+
 // reverseParams returns a new slice with the params in reverse order.
 func reverseParams(params []FnParam) []FnParam {
 	out := make([]FnParam, len(params))

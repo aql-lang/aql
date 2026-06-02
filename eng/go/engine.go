@@ -1585,6 +1585,14 @@ func (e *Engine) stepLiteral() error {
 			stackSplice(&e.stack, valIdx, 1, spliceExpand(info.Data)...)
 			return nil
 		}
+		// A dispatch-modifier marker reaching the pointer standalone means
+		// the preceding value was NOT a pending function (so execFnDefLiteral
+		// never consumed it) — e.g. `(1 add 2)/s`. The modifier is a no-op on
+		// a non-function result: drop the marker.
+		if IsDispatchMod(e.stack[valIdx]) {
+			e.stack = append(e.stack[:valIdx], e.stack[valIdx+1:]...)
+			return nil
+		}
 		// If the value is a FnDef/TFunction, execute it. Quoted function
 		// values are treated as data (not executed).
 		val := e.stack[valIdx]
@@ -1928,6 +1936,21 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	}
 
 	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
+
+	// A `/r` or `/q` modifier on a paren / dotted-path result is emitted by
+	// the parser as a Word/__DM marker right after the group (/u /s /f /N
+	// are the usurp / stack-args / forward-args / force-arity words). Peek
+	// and consume it: it leaves the function inert (data).
+	if valIdx+1 < len(e.stack) {
+		if _, ok := AsDispatchMod(e.stack[valIdx+1]); ok {
+			e.stack = append(e.stack[:valIdx+1], e.stack[valIdx+2:]...)
+			v := e.stack[valIdx]
+			v.Quoted = true
+			e.stack[valIdx] = v
+			e.pointer++
+			return nil
+		}
+	}
 
 	// Pre-evaluate paren expressions in the forward scan range so that
 	// matchSignature sees fully resolved values. Mirrors stepWord's

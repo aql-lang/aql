@@ -1491,6 +1491,34 @@ func AsSplice(v Value) (SpliceInfo, error) {
 	return info, nil
 }
 
+// DispatchModInfo carries a `/`-modifier applied to a paren / dotted-path
+// RESULT (a value), e.g. `(m.f)/s`, `path/3`, `m.a/r`. The parser emits a
+// Word/__DM marker right after the group; execFnDefLiteral peeks and
+// consumes it to dispatch the result function with these flags (or, for
+// Ref/Quote, to leave it as inert data). ArgCount is -1 when unset. The
+// `/u` (usurp) modifier is NOT carried here — it is emitted as the `usurp`
+// word.
+type DispatchModInfo struct {
+	Ref   bool // /r — leave the function as data (do not invoke)
+	Quote bool // /q — treat the result as data
+}
+
+func (DispatchModInfo) payloadMarker() {}
+
+// NewDispatchMod builds a Word/__DM dispatch-modifier marker.
+func NewDispatchMod(info DispatchModInfo) Value {
+	return NewValueRaw(TDispatchMod, info)
+}
+
+// IsDispatchMod reports whether v is a Word/__DM marker.
+func IsDispatchMod(v Value) bool { return v.Parent.Equal(TDispatchMod) }
+
+// AsDispatchMod returns the DispatchModInfo if v is a Word/__DM marker.
+func AsDispatchMod(v Value) (DispatchModInfo, bool) {
+	info, ok := v.Data.(DispatchModInfo)
+	return info, ok
+}
+
 // AsMove returns the MoveInfo, panics if not a move.
 func AsMove(v Value) (MoveInfo, error) {
 	info, ok := v.Data.(MoveInfo)

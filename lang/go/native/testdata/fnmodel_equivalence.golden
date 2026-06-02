@@ -154,6 +154,12 @@ WORD for
   [Scalar/Number/Integer Node/List] barrier=2 noeval={1} +returnsfn
 WORD for-each
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
+WORD force-arity
+  [Scalar/Number/Integer Type/Function] barrier=2 runcheck returns=[Type/Function]
+  [Scalar/Number/Integer Scalar/Atom] barrier=2 runcheck quote={1} returns=[Type/Function]
+WORD forward-args
+  [Type/Function] barrier=1 runcheck returns=[Type/Function]
+  [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Type/Function]
 WORD get
   [Scalar/String Ideal/ModuleExport] barrier=1 returns=[Any]
   [Scalar/String Ideal/Module] barrier=1 returns=[Any]
@@ -411,6 +417,9 @@ WORD split
   [Scalar/String Scalar/String] barrier=2 returns=[Node/List]
 WORD stack
   [Scalar/Number/Integer] barrier=0 fullstack
+WORD stack-args
+  [Type/Function] barrier=1 runcheck returns=[Type/Function]
+  [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Type/Function]
 WORD stderr
   [] barrier=0 returns=[Scalar/String]
 WORD stdin
