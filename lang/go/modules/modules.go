@@ -26,7 +26,6 @@ var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error
 	"time-util":   BuildTimeModule,
 	"matrix-util": BuildMatrixModule,
 	"decision":    BuildDecisionModule,
-	"solardemo":   BuildSolarDemoModule,
 	"bin":         BuildBinaryModule,
 	"type-util":   BuildTypeModule,
 	"vm":          BuildVMModule,

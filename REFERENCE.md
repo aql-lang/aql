@@ -867,7 +867,6 @@ Built-in modules ship with the binary but are not auto-loaded —
 | `aql:time-util` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`. |
 | `aql:matrix-util` | Tensor / Matrix / Vector types and linear algebra. |
 | `aql:decision` | Decision tables (rules engine). |
-| `aql:solardemo` | Example host module backing the API tests. |
 
 
 ## Error codes

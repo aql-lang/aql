@@ -20,18 +20,17 @@ import (
 // moduleSummaries gives a one-line description for each built-in module.
 // Keyed by the bare module name (the part after "aql:").
 var moduleSummaries = map[string]string{
-	"math":      "Floating-point math: trig, logs, roots, constants.",
-	"array":     "Numeric array construction and element-wise operations.",
-	"time":      "Clocks, timers, and intervals.",
-	"matrix":    "Tensors, matrices, and vectors with linear algebra.",
-	"decision":  "Decision tables and rule evaluation.",
-	"solardemo": "Demonstration module backed by an HTTP fixture.",
-	"bin":       "Binary encoding and byte-buffer helpers.",
-	"type":      "Type introspection and construction utilities.",
-	"vm":        "Low-level virtual-machine primitives.",
-	"report":    "Tabular reporting and formatting.",
-	"test":      "Assertions and helpers for in-language tests.",
-	"rand":      "Pseudo-random number generation.",
+	"math":     "Floating-point math: trig, logs, roots, constants.",
+	"array":    "Numeric array construction and element-wise operations.",
+	"time":     "Clocks, timers, and intervals.",
+	"matrix":   "Tensors, matrices, and vectors with linear algebra.",
+	"decision": "Decision tables and rule evaluation.",
+	"bin":      "Binary encoding and byte-buffer helpers.",
+	"type":     "Type introspection and construction utilities.",
+	"vm":       "Low-level virtual-machine primitives.",
+	"report":   "Tabular reporting and formatting.",
+	"test":     "Assertions and helpers for in-language tests.",
+	"rand":     "Pseudo-random number generation.",
 }
 
 type cmd struct{}
