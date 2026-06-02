@@ -1,0 +1,77 @@
+package modules
+
+import (
+	"github.com/aql-lang/aql/lang/go/native"
+)
+
+// BuildStructModule creates the "aql:struct" native module. It registers the
+// voxgig-struct data-manipulation words (formerly core words) into an
+// isolated sub-registry and returns a ModuleDesc with a "Struct" export
+// containing FnDef wrappers for each word.
+//
+// After import, the words are accessed via dot notation:
+//
+//	"aql:struct" import
+//	{a:1 b:2} {b:3 c:4} Struct.merge      # deep merge
+//	{a:1} Struct.clone                    # deep copy
+//	"a.b" {a:{b:42}} Struct.getpath        # path read
+//	{a:1} Struct.items                    # [['a' 1]]
+//
+// These words were moved OUT of the core registry (see
+// native/struct_module.go); they are no longer available unqualified. The
+// handlers still live in the native package, but only this module registers
+// them, so all access is through the Struct namespace.
+func BuildStructModule(parent *native.Registry) (native.ModuleDesc, error) {
+	// Isolated sub-registry holding the module's Go words. The struct words
+	// are deliberately absent from the global registry, so a fresh
+	// DefaultRegistry does not contain them; we add them here explicitly.
+	subReg, err := native.DefaultRegistry()
+	if err != nil {
+		return native.ModuleDesc{}, err
+	}
+	for _, n := range native.StructModuleNatives {
+		subReg.RegisterNativeFunc(n)
+	}
+
+	exports := native.NewOrderedMap()
+	for _, n := range native.StructModuleNatives {
+		exports.Set(n.Name, makeStructFnDef(n, subReg))
+	}
+
+	modID := parent.Modules.NextID()
+	desc := native.ModuleDesc{
+		ID:      modID,
+		Exports: map[string]*native.OrderedMap{"Struct": exports},
+	}
+	return desc, nil
+}
+
+// makeStructFnDef builds a FnDef value wrapping a struct word. Each signature
+// delegates via a trivial body [Word(name)], which execFnDefLiteral
+// short-circuits to a direct dispatch of the inner native in the
+// sub-registry. The wrapper FnSigs mirror the inner native's NativeSigs
+// exactly — same arg types, returns, NoEvalArgs, and BarrierPos — so dispatch
+// behaviour is identical to the former core word (dot-access dispatch keys
+// off the inner native's signatures; see the "Module FnDef Wrappers" note in
+// lang/go/CLAUDE.md).
+func makeStructFnDef(n native.NativeFunc, subReg *native.Registry) native.Value {
+	fnSigs := make([]native.FnSig, len(n.Signatures))
+	for i, s := range n.Signatures {
+		params := make([]native.FnParam, len(s.Args))
+		for j, t := range s.Args {
+			params[j] = native.FnParam{Type: t}
+		}
+		fnSigs[i] = native.FnSig{
+			Params:     params,
+			Returns:    s.Returns,
+			Body:       []native.Value{native.NewWord(n.Name)},
+			NoEvalArgs: s.NoEvalArgs,
+			BarrierPos: s.BarrierPos,
+		}
+	}
+	return native.NewFnDef(native.FnDefInfo{
+		Name:       n.Name,
+		Signatures: fnSigs,
+		Registry:   subReg,
+	})
+}

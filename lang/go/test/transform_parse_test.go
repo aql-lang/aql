@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-// {a:"hello"} transform {x:"`a`"} — injects value from data into spec
+// {a:"hello"} Struct.transform {x:"`a`"} — injects value from data into spec
 func TestTransformInject(t *testing.T) {
 	bt := string(rune(96)) // backtick character
-	input := `{a:"hello"} transform {x:"` + bt + `a` + bt + `"}`
+	input := `{a:"hello"} Struct.transform {x:"` + bt + `a` + bt + `"}`
 	result, err := runNativeSteps(t, nil, []string{input})
 	if err != nil {
 		t.Fatal(err)
@@ -27,10 +27,10 @@ func TestTransformInject(t *testing.T) {
 	}
 }
 
-// {a:"1"} transform {x:99} — literal spec passthrough
+// {a:"1"} Struct.transform {x:99} — literal spec passthrough
 func TestTransformPassthrough(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`{a:"1"} transform {x:99}`,
+		`{a:"1"} Struct.transform {x:99}`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -43,10 +43,10 @@ func TestTransformPassthrough(t *testing.T) {
 	}
 }
 
-// transform with nested path: {a:{b:42}} transform {val:"`a.b`"}
+// Struct.transform with nested path: {a:{b:42}} Struct.transform {val:"`a.b`"}
 func TestTransformNestedPath(t *testing.T) {
 	bt := string(rune(96)) // backtick character
-	input := `{a:{b:42}} transform {val:"` + bt + `a.b` + bt + `"}`
+	input := `{a:{b:42}} Struct.transform {val:"` + bt + `a.b` + bt + `"}`
 	result, err := runNativeSteps(t, nil, []string{input})
 	if err != nil {
 		t.Fatal(err)
@@ -59,13 +59,13 @@ func TestTransformNestedPath(t *testing.T) {
 	}
 }
 
-// foo load {id:"1"} transform {greeting:"`name`"} — chained prefix
+// foo load {id:"1"} Struct.transform {greeting:"`name`"} — chained prefix
 func TestDefTransformWithLoad(t *testing.T) {
 	csv := "id,name,city\n1,Alice,London\n2,Bob,Paris\n"
 	bt := string(rune(96)) // backtick character
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{
 		`def foo (read "data.csv")`,
-		`foo load {id:"1"} transform {greeting:"` + bt + `name` + bt + `"}`,
+		`foo load {id:"1"} Struct.transform {greeting:"` + bt + `name` + bt + `"}`,
 	})
 	if err != nil {
 		t.Fatal(err)

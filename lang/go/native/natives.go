@@ -197,92 +197,6 @@ var Natives = []NativeFunc{
 		},
 	},
 
-	// ---- transform ----
-	{
-		Name: "transform",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TMap, TAny}, Handler: transformHandler, BarrierPos: -1},
-		},
-	},
-
-	// ---- merge ----
-	{
-		Name: "merge",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TList, TMap}, Handler: mergeListMapHandler, BarrierPos: -1},
-			{Args: []*Type{TMap, TList}, Handler: mergeMapListHandler, BarrierPos: -1},
-			{Args: []*Type{TAny, TAny}, Handler: mergeHandler, BarrierPos: -1},
-		},
-	},
-
-	// ---- validate ----
-	{
-		Name: "validate",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TMap, TAny}, Handler: validateHandler, BarrierPos: -1},
-		},
-	},
-
-	// ---- getpath ----
-	{
-		Name: "getpath",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TString, TAny}, Handler: getpathHandler, BarrierPos: -1},
-		},
-	},
-
-	// ---- setpath ----
-	{
-		Name: "setpath",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TString, TAny, TAny}, Handler: setpathHandler, BarrierPos: -1},
-			{Args: []*Type{TAny, TString, TAny}, Handler: setpathHandler, BarrierPos: -1},
-		},
-	},
-
-	// ---- inject ----
-	{
-		Name: "inject",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TAny, TAny}, Handler: injectHandler, BarrierPos: -1},
-		},
-	},
-
-	// ---- clone ----
-	{
-		Name: "clone",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TAny}, Handler: cloneHandler, BarrierPos: 0},
-		},
-	},
-
-	// ---- walk ----
-	{
-		Name: "walk",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TFunction, TFunction, TAny}, Handler: walkBeforeAfterHandler, BarrierPos: 0},
-			{Args: []*Type{TFunction, TAny}, Handler: walkBeforeHandler, BarrierPos: 0},
-			{Args: []*Type{TAny}, Handler: walkHandler, BarrierPos: 0},
-		},
-	},
-
-	// ---- selector ----
-	{
-		Name: "selector",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TMap, TAny}, Handler: selectorHandler, BarrierPos: -1},
-		},
-	},
-
 	// ---- size ----
 	{
 		Name: "size",
@@ -299,15 +213,6 @@ var Natives = []NativeFunc{
 		Signatures: []NativeSig{
 			{Args: []*Type{TInteger, TAny}, Handler: padWidthHandler, BarrierPos: -1},
 			{Args: []*Type{TAny}, Handler: padDefaultHandler, BarrierPos: -1},
-		},
-	},
-
-	// ---- items ----
-	{
-		Name: "items",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TAny}, Handler: itemsHandler, BarrierPos: -1},
 		},
 	},
 

@@ -327,12 +327,10 @@ these positions — it evaluates the list and binds the result, so a
 Forth-style splice uses the explicit `word` form: `def double word
 [dup add]`.)
 
-To evaluate a held list at the point of use, two options:
+To evaluate a held list at the point of use, use `do`:
 
 * `do [1 add 2]` — runs it as a sub-program, leaving results on the
   stack.
-* `[1 add 2] call` — splices the list onto the current stack
-  (designed for callback patterns).
 
 The duality — lists as both data and code — is the homoiconic core
 that lets AQL do metaprogramming with no separate AST type.

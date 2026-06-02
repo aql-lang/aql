@@ -61,12 +61,17 @@ Language-agnostic content stays at the top of each component:
   + OS-backed and in-memory implementations).
 - `modules/` — loadable modules (`aql:math`, `aql:array-util`,
   `aql:time-util`, `aql:matrix-util`, `aql:decision`, `aql:solardemo`,
-  `aql:bin`, `aql:type-util`). Import binds a CamelCase namespace
-  (`aql:math` → `Math.sqrt`); the four whose plain CamelCase name
-  collides with a builtin type carry a `-util` id and a `*Util`
+  `aql:bin`, `aql:type-util`, `aql:struct`). Import binds a CamelCase
+  namespace (`aql:math` → `Math.sqrt`); the four whose plain CamelCase
+  name collides with a builtin type carry a `-util` id and a `*Util`
   namespace (`aql:array-util` → `ArrayUtil.shape`, likewise
   `TimeUtil`, `TypeUtil`, `MatrixUtil`). Exported names must be
   capitalised (`export "Foo"`; lowercase is rejected).
+  `aql:struct` (`Struct.` namespace) holds the voxgig-struct
+  data-manipulation words — `clone`, `getpath`, `setpath`, `inject`,
+  `merge`, `walk`, `items`, `transform`, `validate`, `selector` — which
+  were moved OUT of the core registry (see `native/struct_module.go`);
+  they are no longer available unqualified.
 - `test/` — integration tests and TSV spec runners.
 
 ## Build & Test

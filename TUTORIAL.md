@@ -483,7 +483,7 @@ aql> var [[[x 2] [y 10]] x add y]               => 12
 ```
 
 
-## 15. Evaluation with `do`, `call`, and `quote`
+## 15. Evaluation with `do` and `quote`
 
 A list literal evaluates its contents by default and keeps the
 results *as a list* — `[1 add 2]` becomes `[3]`, not `3`:
@@ -499,13 +499,6 @@ rather than in a list:
 ```
 aql> do [1 add 2]                    => 3
 aql> do {x: [3 add 4], y: 5}        => {x:7 y:5}
-```
-
-`call` splices a list onto the current stack:
-
-```
-aql> 1 2 [add] call                  => 3
-aql> [3 4 mul] call                  => 12
 ```
 
 `quote` prevents a single token from being interpreted:

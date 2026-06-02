@@ -24,6 +24,12 @@ func runNativeSteps(t *testing.T, files map[string]string, steps []string) ([]na
 	native.SetHostFileOps(reg, mem)
 	native.Register(reg)
 	modules.InstallMathExports(reg)
+	// Struct words (merge/walk/clone/…) moved to aql:struct; install the
+	// Struct namespace so tests can call Struct.merge etc. without wiring
+	// the full module resolver.
+	if err := modules.InstallStructExports(reg); err != nil {
+		t.Fatal(err)
+	}
 
 	eng := native.NewTop(reg)
 	var result []native.Value

@@ -185,8 +185,8 @@ quoted key (`{'a/b': 1}`) or a computed key (`{[a/b]: 1}`).
 * **Left-to-right.** Words that are still waiting evaluate strictly
   in source order. Use `(...)` to override.
 * **Quotation.** Lists are *unevaluated* by default. `do` evaluates
-  one; `call` splices one onto the stack; `quote` prevents
-  evaluation of the next token.
+  one as a sub-program; `quote` prevents evaluation of the next
+  token.
 * **`end`.** Forces the nearest waiting word to stop forward
   collection.
 
@@ -419,7 +419,6 @@ All comparison words route through one total order — see
 | `fn` | Create typed function | `fn [[Integer] [Integer] [dup mul]]` |
 | `var` | Scoped variable block | `5 var [[x] x mul x] => 25` |
 | `args` | Current `fn` args list (inside body) | `args . 0` |
-| `call` | Splice list onto stack | `call [1 2 3]` |
 | `quote` | Prevent evaluation of next token | `quote [1 add 2]` |
 
 #### `fn` shape

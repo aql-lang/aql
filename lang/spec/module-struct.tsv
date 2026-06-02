@@ -1,0 +1,37 @@
+# AQL Language Specification: the aql:struct module
+# Format: input<TAB>expected<TAB>description
+#
+# Loadable module of voxgig-struct data-manipulation utilities. These
+# words were moved out of the core registry; they are reached only after
+# `import`, under the `Struct` namespace: `"aql:struct" import end
+# Struct.word args`.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  merge — deep, index-wise merge (later argument wins)
+"aql:struct" import end Struct.merge {a:1 b:2} {b:3 c:4}	{a:1 b:3 c:4}	overlapping key b is overridden
+"aql:struct" import end Struct.merge {a:{x:1 y:2}} {a:{y:3 z:4}}	{a:{x:1 y:3 z:4}}	merge recurses into nested maps
+#
+# §2  getpath — read a dotted path
+"aql:struct" import end Struct.getpath "a.b" {a:{b:42}}	42	nested path read
+"aql:struct" import end Struct.getpath "name" {name:'Alice'}	'Alice'	top-level key read
+#
+# §3  setpath — write at a path (returns a new structure)
+"aql:struct" import end Struct.setpath {a:1} "b" 99	{a:1 b:99}	add a key by path
+#
+# §4  clone — deep copy (stack-only: value before the word)
+"aql:struct" import end {a:1 b:2} Struct.clone	{a:1 b:2}	value-equal copy
+#
+# §5  items — map entries as [key value] pairs
+"aql:struct" import end Struct.items {a:1 b:2}	[['a' 1] ['b' 2]]	ordered key/value pairs
+#
+# §6  validate — check data against a shape spec (returns the validated spec)
+"aql:struct" import end Struct.validate {name:"$STRING"} {name:'Alice'}	{name:'$STRING'}	conforming data validates against the spec
+#
+# §7  transform — shape data via a spec (literal passthrough)
+"aql:struct" import end {a:'1'} Struct.transform {x:99}	{x:99}	literal spec value passes through
+#
+# §8  swap form dispatches through the namespace
+"aql:struct" import end {a:1} Struct.merge {b:2}	{a:1 b:2}	data-on-stack + forward arg
+#
+# §9  negative — unbound without import
+Struct.merge {a:1} {b:2}	ERROR:undefined_word	`Struct` is unbound without `import`

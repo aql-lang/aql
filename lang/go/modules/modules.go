@@ -34,6 +34,7 @@ var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error
 	"test":        BuildTestModule,
 	"rand":        BuildRandModule,
 	"query":       BuildQueryModule,
+	"struct":      BuildStructModule,
 }
 
 // Resolve resolves a native module name and returns a ModuleDesc.
@@ -162,6 +163,20 @@ func InstallRandExports(r *native.Registry) error {
 // InstallTestExports builds the test module and installs its exports as defs.
 func InstallTestExports(r *native.Registry) error {
 	desc, err := BuildTestModule(r)
+	if err != nil {
+		return err
+	}
+	for name, exportMap := range desc.Exports {
+		r.Defs.Push(name, native.NewMap(exportMap))
+	}
+	return nil
+}
+
+// InstallStructExports builds the struct module and installs its exports as
+// defs — the convenience equivalent of running `"aql:struct" import` in test
+// setup, so `Struct.merge` etc. resolve without wiring the full resolver.
+func InstallStructExports(r *native.Registry) error {
+	desc, err := BuildStructModule(r)
 	if err != nil {
 		return err
 	}
