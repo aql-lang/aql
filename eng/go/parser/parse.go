@@ -239,17 +239,17 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 				return nil, err
 			}
 			j := i + 1
-			pathUsurp := false
+			var pathMod eng.Value
+			hasMod := false
 		chain:
 			for j < len(items) {
 				switch {
 				case isToken(items[j], "!") && j+2 < len(items) && isToken(items[j+1], "."):
 					values = append(values, withPos(eng.NewWord("getr"), poss[j]))
 					keyItem, kpos := items[j+2], poss[j+2]
-					// A `/u` on the final key applies to the whole path.
-					if base, ok := usurpModifier(keyItem); ok && base != "" {
-						keyItem = jsonic.Text{Str: base}
-						pathUsurp = true
+					// A `/`-modifier on the final key applies to the path.
+					if base, mod, ok := groupModifier(keyItem); ok && base != "" {
+						keyItem, pathMod, hasMod = jsonic.Text{Str: base}, mod, true
 					}
 					if err := emitPrimary(&values, keyItem, kpos); err != nil {
 						return nil, err
@@ -258,9 +258,8 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 				case isToken(items[j], ".") && j+1 < len(items):
 					values = append(values, withPos(eng.NewWord("get"), poss[j]))
 					keyItem, kpos := items[j+1], poss[j+1]
-					if base, ok := usurpModifier(keyItem); ok && base != "" {
-						keyItem = jsonic.Text{Str: base}
-						pathUsurp = true
+					if base, mod, ok := groupModifier(keyItem); ok && base != "" {
+						keyItem, pathMod, hasMod = jsonic.Text{Str: base}, mod, true
 					}
 					if err := emitPrimary(&values, keyItem, kpos); err != nil {
 						return nil, err
@@ -271,16 +270,16 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 				}
 			}
 			values = append(values, withPos(eng.NewCloseParen(), poss[i]))
-			// A standalone `/u` token immediately after the path also
-			// applies to the result (`(a.b) /u`).
-			if j < len(items) {
-				if base, ok := usurpModifier(items[j]); ok && base == "" {
-					pathUsurp = true
+			// A standalone `/mod` token immediately after the path also
+			// applies to the result (`(a.b)/mod`).
+			if !hasMod && j < len(items) {
+				if base, mod, ok := groupModifier(items[j]); ok && base == "" {
+					pathMod, hasMod = mod, true
 					j++
 				}
 			}
-			if pathUsurp {
-				values = append(values, withPos(eng.NewWord("usurp"), poss[i]))
+			if hasMod {
+				values = append(values, withPos(pathMod, poss[i]))
 			}
 			i = j - 1
 			continue
@@ -309,11 +308,11 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 		if err := emitPrimary(&values, items[i], poss[i]); err != nil {
 			return nil, err
 		}
-		// A standalone `/u` token right after a primary (e.g. `(expr)/u`)
-		// applies usurp to that primary's result.
+		// A standalone `/mod` token right after a primary (e.g. `(expr)/s`)
+		// applies the modifier to that primary's result.
 		if i+1 < len(items) {
-			if base, ok := usurpModifier(items[i+1]); ok && base == "" {
-				values = append(values, withPos(eng.NewWord("usurp"), poss[i]))
+			if base, mod, ok := groupModifier(items[i+1]); ok && base == "" {
+				values = append(values, withPos(mod, poss[i]))
 				i++
 			}
 		}
@@ -351,24 +350,36 @@ func isChainReceiver(item any) bool {
 	return !isToken(item, ".") && !isToken(item, "!")
 }
 
-// usurpModifier reports whether an unquoted word token carries a `/u`
-// (usurp) modifier, returning the base text (empty for a standalone `/u`
-// token that follows a paren / dotted path). A `/` modifier on a grouped
-// or dotted-path expression applies to the WHOLE group's result, so the
-// parser strips the `/u` here and emits a trailing `usurp` after the
-// group — `a.b/u` parses as `(a get b)/u` ≡ `(a get b) usurp`. Other
-// modifiers (`/q /r /s /f /N`) return ok=false and are left untouched.
-func usurpModifier(item any) (base string, ok bool) {
+// groupModifier decodes a `/`-modifier on a word token that should apply to
+// a parenthesised / dotted-path RESULT, returning the base text (empty for a
+// standalone `/mod` token following the group) and the value to append AFTER
+// the group so the modifier qualifies the whole result:
+//
+//	/u            → the `usurp` word (call the retrieved function)
+//	/s /f /N /r /q → a Word/__DM dispatch-modifier marker (force-stack /
+//	                 force-forward / arg-count / keep-as-data / quote)
+//
+// So `a.b/u` parses as `(a get b) usurp` and `a.b/s` as `(a get b) <__DM s>`.
+// ok=false for a plain word (no modifier).
+func groupModifier(item any) (base string, mod eng.Value, ok bool) {
 	node, _ := deSite(item)
 	t, isText := node.(jsonic.Text)
 	if !isText || t.Quote != "" {
-		return "", false
+		return "", eng.Value{}, false
 	}
-	b, _, _, _, q, _, u, valid := scanWordModifier(t.Str)
-	if valid && u && !q {
-		return b, true
+	b, argCount, fs, ff, q, r, u, valid := scanWordModifier(t.Str)
+	if !valid {
+		return "", eng.Value{}, false
 	}
-	return "", false
+	switch {
+	case u:
+		return b, eng.NewWord("usurp"), true
+	case r || q || fs || ff || argCount >= 0:
+		return b, eng.NewDispatchMod(eng.DispatchModInfo{
+			ArgCount: argCount, ForceStack: fs, ForceForward: ff, Ref: r, Quote: q,
+		}), true
+	}
+	return "", eng.Value{}, false
 }
 
 // emitPrimary appends the converted form of a single primary item — a

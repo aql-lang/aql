@@ -2,18 +2,37 @@
 # Format: input<TAB>expected<TAB>description
 #
 # A `/` modifier on a parenthesised expression or a dotted path applies to
-# the WHOLE group's result, not to the last key: `a.b/u` parses as
-# `(a get b)/u` ≡ `(a get b) usurp`. (Usurp calls a retrieved function
-# value, reversing its signature arg order.)
+# the WHOLE group's result, not to the last key: `a.b/m` parses as
+# `(a get b)/m`. The modifier qualifies how the result (a function value
+# retrieved from the map) is treated/dispatched:
+#   /u  usurp — call the function, reversing its signature arg order
+#   /s  force the dispatch to STACK form
+#   /f  force the dispatch to FORWARD form
+#   /N  dispatch with exactly N args
+#   /r  keep the function as DATA (do not invoke)
+#   /q  treat the result as data
 #
 # ─────────────────────────────────────────────────────────────────────
-# §1  /u usurps the function retrieved by a dotted path
+# §1  /u — usurp the function retrieved by a dotted path / paren
 def m {a:add/r} end m.a/u 1 2	3	usurp the retrieved add
 def m {s:sub/r} end m.s/u 10 3	7	usurp reverses sig order → 10-3
 def o {m:{a:add/r}} end o.m.a/u 1 2	3	works on a deeper path
-#
-# §2  /u on a parenthesised expression
 def m {a:add/r} end (m.a)/u 1 2	3	paren form is equivalent
 #
-# §3  a dotted path with no modifier auto-dispatches the function as before
-def m {a:add/r} end m.a 1 2	3	no modifier: the grouped function still auto-dispatches
+# §2  /f and /s — force the dispatch shape of the result function
+def m {s:sub/r} end m.s/f 10 3	-7	force forward: sub 10 3 → 3-10
+def m {s:sub/r} end 10 3 m.s/s	7	force stack: 10 3 on the stack → 10-3
+def m {s:sub/r} end 10 3 (m.s)/s	7	paren force-stack form
+#
+# §3  /N — dispatch the result with exactly N args
+def m {a:add/r} end m.a/2 1 2	3	arg-count 2
+#
+# §4  /r and /q — keep the result as data (do not invoke)
+def m {a:add/r} end typeof m.a/r	Function	/r yields the function as data
+def m {a:add/r} end typeof m.a/q	Function	/q yields the result as data
+#
+# §5  no modifier — the grouped function auto-dispatches forward
+def m {a:add/r} end m.a 1 2	3	bare path: the function still auto-dispatches
+#
+# §6  a modifier on a non-function result (e.g. /q on a number) is a no-op
+(1 add 2)/q	3	/q on a plain value is harmless

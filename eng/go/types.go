@@ -51,6 +51,7 @@ var (
 	TMark           = mustType("Word/__MK")
 	TMove           = mustType("Word/__MV")
 	TSplice         = mustType("Word/__SP")
+	TDispatchMod    = mustType("Word/__DM")
 	TInternal       = mustType("Word/__IN")
 	TInspect        = mustType("Node/Map/Inspect")
 	TObject         = mustType("Ideal/Object")
