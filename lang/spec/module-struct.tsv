@@ -34,6 +34,10 @@
 # §8  jsonify — serialise a value (also moved here; output verified in the
 #     Go tests, the pretty-printed multiline form isn't tsv-expressible)
 #
+# §8b  nodify — project a value to its Node/Scalar form (pass-through when no
+#      projection behavior is registered for the type)
+"aql:struct" import end Struct.nodify {a:1 b:2}	{a:1 b:2}	plain Map passes through
+#
 # §9  swap form dispatches through the namespace
 "aql:struct" import end {a:1} Struct.merge {b:2}	{a:1 b:2}	data-on-stack + forward arg
 #

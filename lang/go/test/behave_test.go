@@ -63,6 +63,13 @@ func TestBehave(t *testing.T) {
 			if err := modules.InstallTimeExports(reg); err != nil {
 				t.Fatalf("install time exports: %v", err)
 			}
+			// nodify moved to aql:struct; pre-install Struct so spec rows can
+			// use `Struct.nodify` (the projection word) without import
+			// boilerplate. The `nodify` *behavior* name (`behave nodify/q …`)
+			// is unaffected — it is a quoted atom, not the word.
+			if err := modules.InstallStructExports(reg); err != nil {
+				t.Fatalf("install struct exports: %v", err)
+			}
 
 			values, err := parser.Parse(expr)
 			if err != nil {

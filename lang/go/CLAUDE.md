@@ -70,7 +70,7 @@ Language-agnostic content stays at the top of each component:
   `aql:struct` (`Struct.` namespace) holds the voxgig-struct
   data-manipulation words — `clone`, `getpath`, `setpath`, `inject`,
   `merge`, `walk`, `items`, `transform`, `validate`, `selector`,
-  `jsonify` — moved OUT of core (see `native/struct_module.go`).
+  `jsonify`, `nodify` — moved OUT of core (see `native/struct_module.go`).
   `aql:io` (`IO.` namespace) holds the I/O words — `printstr`, `read`,
   `write`, `stdin`, `stdout`, `stderr`, `trace` — also moved out of core
   (see `native/io_module.go`); only `print` stays in core.

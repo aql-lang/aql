@@ -274,8 +274,6 @@ WORD neq
   [Any Any] barrier=2 returns=[Scalar/Boolean]
 WORD nip
   [Any Any] barrier=0 +returnsfn
-WORD nodify
-  [Any] barrier=1 returns=[Any]
 WORD nor
   [Scalar/Boolean Scalar/Boolean] barrier=2 returns=[Scalar/Boolean]
   [Any Any] barrier=2 returns=[Scalar/Boolean]

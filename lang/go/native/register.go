@@ -84,7 +84,7 @@ func Register(r *Registry) {
 		r.RegisterNativeFunc(n)
 	}
 	r.RegisterNativeFunc(behaveNative)
-	r.RegisterNativeFunc(nodifyNative)
+	// nodify moved to the aql:struct module (see struct_module.go).
 	r.RegisterNativeFunc(sortNative)
 	installResourceTypes(r)
 	installIdeals(r)
