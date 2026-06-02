@@ -1,0 +1,19 @@
+# AQL Language Specification: / modifiers on parens and dotted paths
+# Format: input<TAB>expected<TAB>description
+#
+# A `/` modifier on a parenthesised expression or a dotted path applies to
+# the WHOLE group's result, not to the last key: `a.b/u` parses as
+# `(a get b)/u` ≡ `(a get b) usurp`. (Usurp calls a retrieved function
+# value, reversing its signature arg order.)
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  /u usurps the function retrieved by a dotted path
+def m {a:add/r} end m.a/u 1 2	3	usurp the retrieved add
+def m {s:sub/r} end m.s/u 10 3	7	usurp reverses sig order → 10-3
+def o {m:{a:add/r}} end o.m.a/u 1 2	3	works on a deeper path
+#
+# §2  /u on a parenthesised expression
+def m {a:add/r} end (m.a)/u 1 2	3	paren form is equivalent
+#
+# §3  a dotted path with no modifier auto-dispatches the function as before
+def m {a:add/r} end m.a 1 2	3	no modifier: the grouped function still auto-dispatches

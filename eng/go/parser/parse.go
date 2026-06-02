@@ -239,18 +239,30 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 				return nil, err
 			}
 			j := i + 1
+			pathUsurp := false
 		chain:
 			for j < len(items) {
 				switch {
 				case isToken(items[j], "!") && j+2 < len(items) && isToken(items[j+1], "."):
 					values = append(values, withPos(eng.NewWord("getr"), poss[j]))
-					if err := emitPrimary(&values, items[j+2], poss[j+2]); err != nil {
+					keyItem, kpos := items[j+2], poss[j+2]
+					// A `/u` on the final key applies to the whole path.
+					if base, ok := usurpModifier(keyItem); ok && base != "" {
+						keyItem = jsonic.Text{Str: base}
+						pathUsurp = true
+					}
+					if err := emitPrimary(&values, keyItem, kpos); err != nil {
 						return nil, err
 					}
 					j += 3
 				case isToken(items[j], ".") && j+1 < len(items):
 					values = append(values, withPos(eng.NewWord("get"), poss[j]))
-					if err := emitPrimary(&values, items[j+1], poss[j+1]); err != nil {
+					keyItem, kpos := items[j+1], poss[j+1]
+					if base, ok := usurpModifier(keyItem); ok && base != "" {
+						keyItem = jsonic.Text{Str: base}
+						pathUsurp = true
+					}
+					if err := emitPrimary(&values, keyItem, kpos); err != nil {
 						return nil, err
 					}
 					j += 2
@@ -259,6 +271,17 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 				}
 			}
 			values = append(values, withPos(eng.NewCloseParen(), poss[i]))
+			// A standalone `/u` token immediately after the path also
+			// applies to the result (`(a.b) /u`).
+			if j < len(items) {
+				if base, ok := usurpModifier(items[j]); ok && base == "" {
+					pathUsurp = true
+					j++
+				}
+			}
+			if pathUsurp {
+				values = append(values, withPos(eng.NewWord("usurp"), poss[i]))
+			}
 			i = j - 1
 			continue
 		}
@@ -285,6 +308,14 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 		// A value, or a paren group expanded to ( … ) markers.
 		if err := emitPrimary(&values, items[i], poss[i]); err != nil {
 			return nil, err
+		}
+		// A standalone `/u` token right after a primary (e.g. `(expr)/u`)
+		// applies usurp to that primary's result.
+		if i+1 < len(items) {
+			if base, ok := usurpModifier(items[i+1]); ok && base == "" {
+				values = append(values, withPos(eng.NewWord("usurp"), poss[i]))
+				i++
+			}
 		}
 	}
 	return values, nil
@@ -318,6 +349,26 @@ func isChainReceiver(item any) bool {
 		return false
 	}
 	return !isToken(item, ".") && !isToken(item, "!")
+}
+
+// usurpModifier reports whether an unquoted word token carries a `/u`
+// (usurp) modifier, returning the base text (empty for a standalone `/u`
+// token that follows a paren / dotted path). A `/` modifier on a grouped
+// or dotted-path expression applies to the WHOLE group's result, so the
+// parser strips the `/u` here and emits a trailing `usurp` after the
+// group — `a.b/u` parses as `(a get b)/u` ≡ `(a get b) usurp`. Other
+// modifiers (`/q /r /s /f /N`) return ok=false and are left untouched.
+func usurpModifier(item any) (base string, ok bool) {
+	node, _ := deSite(item)
+	t, isText := node.(jsonic.Text)
+	if !isText || t.Quote != "" {
+		return "", false
+	}
+	b, _, _, _, q, _, u, valid := scanWordModifier(t.Str)
+	if valid && u && !q {
+		return b, true
+	}
+	return "", false
 }
 
 // emitPrimary appends the converted form of a single primary item — a
