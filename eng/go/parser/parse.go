@@ -234,34 +234,39 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 		// Dotted-access chain: a receiver primary followed by one or more
 		// `.key` / `!.key` segments → one group `( recv get k … )`.
 		if isChainReceiver(items[i]) && i+1 < len(items) && startsDot(items, i+1) {
-			values = append(values, withPos(eng.NewOpenParen(), poss[i]))
-			if err := emitPrimary(&values, items[i], poss[i]); err != nil {
+			// Build the access group into a temp slice so a trailing
+			// `/`-modifier can be placed correctly: a WORD modifier
+			// (usurp / stack-args / forward-args) is emitted BEFORE the
+			// group so it forward-collects the result (the result must not
+			// auto-dispatch first), while the Word/__DM marker (/N /r /q)
+			// is emitted AFTER for execFnDefLiteral to peek.
+			grp := []eng.Value{withPos(eng.NewOpenParen(), poss[i])}
+			if err := emitPrimary(&grp, items[i], poss[i]); err != nil {
 				return nil, err
 			}
 			j := i + 1
-			var pathMod eng.Value
-			hasMod := false
+			var pfx, sfx []eng.Value
 		chain:
 			for j < len(items) {
 				switch {
 				case isToken(items[j], "!") && j+2 < len(items) && isToken(items[j+1], "."):
-					values = append(values, withPos(eng.NewWord("getr"), poss[j]))
+					grp = append(grp, withPos(eng.NewWord("getr"), poss[j]))
 					keyItem, kpos := items[j+2], poss[j+2]
 					// A `/`-modifier on the final key applies to the path.
-					if base, mod, ok := groupModifier(keyItem); ok && base != "" {
-						keyItem, pathMod, hasMod = jsonic.Text{Str: base}, mod, true
+					if base, pre, suf, ok := groupModifier(keyItem); ok && base != "" {
+						keyItem, pfx, sfx = jsonic.Text{Str: base}, pre, suf
 					}
-					if err := emitPrimary(&values, keyItem, kpos); err != nil {
+					if err := emitPrimary(&grp, keyItem, kpos); err != nil {
 						return nil, err
 					}
 					j += 3
 				case isToken(items[j], ".") && j+1 < len(items):
-					values = append(values, withPos(eng.NewWord("get"), poss[j]))
+					grp = append(grp, withPos(eng.NewWord("get"), poss[j]))
 					keyItem, kpos := items[j+1], poss[j+1]
-					if base, mod, ok := groupModifier(keyItem); ok && base != "" {
-						keyItem, pathMod, hasMod = jsonic.Text{Str: base}, mod, true
+					if base, pre, suf, ok := groupModifier(keyItem); ok && base != "" {
+						keyItem, pfx, sfx = jsonic.Text{Str: base}, pre, suf
 					}
-					if err := emitPrimary(&values, keyItem, kpos); err != nil {
+					if err := emitPrimary(&grp, keyItem, kpos); err != nil {
 						return nil, err
 					}
 					j += 2
@@ -269,17 +274,21 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 					break chain
 				}
 			}
-			values = append(values, withPos(eng.NewCloseParen(), poss[i]))
+			grp = append(grp, withPos(eng.NewCloseParen(), poss[i]))
 			// A standalone `/mod` token immediately after the path also
 			// applies to the result (`(a.b)/mod`).
-			if !hasMod && j < len(items) {
-				if base, mod, ok := groupModifier(items[j]); ok && base == "" {
-					pathMod, hasMod = mod, true
+			if pfx == nil && sfx == nil && j < len(items) {
+				if base, pre, suf, ok := groupModifier(items[j]); ok && base == "" {
+					pfx, sfx = pre, suf
 					j++
 				}
 			}
-			if hasMod {
-				values = append(values, withPos(pathMod, poss[i]))
+			for _, p := range pfx {
+				values = append(values, withPos(p, poss[i]))
+			}
+			values = append(values, grp...)
+			for _, s := range sfx {
+				values = append(values, withPos(s, poss[i]))
 			}
 			i = j - 1
 			continue
@@ -304,17 +313,29 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 			return nil, eng.MakeAqlError("syntax_error", "unmatched opening parenthesis", "(", "", "")
 		}
 
+		// A standalone `/mod` token right after a primary (e.g. `(expr)/s`)
+		// applies the modifier to that primary's result. Word modifiers are
+		// emitted BEFORE the primary (so they forward-collect the result
+		// before any auto-dispatch); the /r /q marker is emitted AFTER.
+		if i+1 < len(items) {
+			if base, pre, suf, ok := groupModifier(items[i+1]); ok && base == "" {
+				for _, p := range pre {
+					values = append(values, withPos(p, poss[i]))
+				}
+				if err := emitPrimary(&values, items[i], poss[i]); err != nil {
+					return nil, err
+				}
+				for _, s := range suf {
+					values = append(values, withPos(s, poss[i]))
+				}
+				i++
+				continue
+			}
+		}
+
 		// A value, or a paren group expanded to ( … ) markers.
 		if err := emitPrimary(&values, items[i], poss[i]); err != nil {
 			return nil, err
-		}
-		// A standalone `/mod` token right after a primary (e.g. `(expr)/s`)
-		// applies the modifier to that primary's result.
-		if i+1 < len(items) {
-			if base, mod, ok := groupModifier(items[i+1]); ok && base == "" {
-				values = append(values, withPos(mod, poss[i]))
-				i++
-			}
 		}
 	}
 	return values, nil
@@ -351,35 +372,42 @@ func isChainReceiver(item any) bool {
 }
 
 // groupModifier decodes a `/`-modifier on a word token that should apply to
-// a parenthesised / dotted-path RESULT, returning the base text (empty for a
-// standalone `/mod` token following the group) and the value to append AFTER
-// the group so the modifier qualifies the whole result:
+// a parenthesised / dotted-path RESULT. It returns the base text (empty for
+// a standalone `/mod` token following the group) plus tokens to place around
+// the group:
 //
-//	/u            → the `usurp` word (call the retrieved function)
-//	/s /f /N /r /q → a Word/__DM dispatch-modifier marker (force-stack /
-//	                 force-forward / arg-count / keep-as-data / quote)
+//	/u  → prefix `usurp`            /s  → prefix `stack-args`
+//	/f  → prefix `forward-args`     /N  → prefix `force-arity N`
+//	/r /q → suffix Word/__DM marker (leave the result inert/data)
 //
-// So `a.b/u` parses as `(a get b) usurp` and `a.b/s` as `(a get b) <__DM s>`.
-// ok=false for a plain word (no modifier).
-func groupModifier(item any) (base string, mod eng.Value, ok bool) {
+// Word modifiers are PREFIXED (emitted before the group) so they
+// forward-collect the result before it can auto-dispatch; the marker is
+// SUFFIXED for execFnDefLiteral to peek. So `a.b/u` parses as
+// `usurp (a get b)` and `a.b/2` as `force-arity 2 (a get b)`. ok=false for
+// a plain word (no modifier).
+func groupModifier(item any) (base string, prefix, suffix []eng.Value, ok bool) {
 	node, _ := deSite(item)
 	t, isText := node.(jsonic.Text)
 	if !isText || t.Quote != "" {
-		return "", eng.Value{}, false
+		return "", nil, nil, false
 	}
 	b, argCount, fs, ff, q, r, u, valid := scanWordModifier(t.Str)
 	if !valid {
-		return "", eng.Value{}, false
+		return "", nil, nil, false
 	}
 	switch {
 	case u:
-		return b, eng.NewWord("usurp"), true
-	case r || q || fs || ff || argCount >= 0:
-		return b, eng.NewDispatchMod(eng.DispatchModInfo{
-			ArgCount: argCount, ForceStack: fs, ForceForward: ff, Ref: r, Quote: q,
-		}), true
+		return b, []eng.Value{eng.NewWord("usurp")}, nil, true
+	case fs:
+		return b, []eng.Value{eng.NewWord("stack-args")}, nil, true
+	case ff:
+		return b, []eng.Value{eng.NewWord("forward-args")}, nil, true
+	case argCount >= 0:
+		return b, []eng.Value{eng.NewWord("force-arity"), eng.NewInteger(int64(argCount))}, nil, true
+	case r || q:
+		return b, nil, []eng.Value{eng.NewDispatchMod(eng.DispatchModInfo{Ref: r, Quote: q})}, true
 	}
-	return "", eng.Value{}, false
+	return "", nil, nil, false
 }
 
 // emitPrimary appends the converted form of a single primary item — a

@@ -221,13 +221,16 @@ Key conversion functions in `parse.go`:
 - A `/` modifier on a paren / dotted-path result applies to the WHOLE
   group, not the last key: `a.b/m` parses as `(a get b)/m`.
   `convertTopLevelItems` strips the modifier off the final key (or a
-  standalone `/mod` token after the group) and appends a result-level
-  op: `/u` → the `usurp` word; `/s /f /N /r /q` → an `eng.NewDispatchMod`
-  marker (`Word/__DM`). `execFnDefLiteral` peeks+consumes the marker when
-  the result is a function — applying force-stack/forward/arg-count to
-  the dispatch, or (for `/r`/`/q`) leaving the function as inert data;
-  `stepLiteral` drops an unconsumed marker (modifier on a non-function
-  result is a no-op). See `lang/spec/path-modifier.tsv`.
+  standalone `/mod` token after the group) and places result-level
+  tokens around the group. `/u /s /f /N` desugar to the higher-order
+  **words** `usurp` / `stack-args` / `forward-args` / `force-arity N`
+  (each returns a NEW function, like `usurp`); they are emitted BEFORE
+  the group so they forward-collect the result before it can
+  auto-dispatch (critical for `/s`, whose args sit on the stack). `/r`
+  and `/q` emit an `eng.NewDispatchMod` marker (`Word/__DM`) AFTER the
+  group; `execFnDefLiteral` peeks+consumes it to leave the function as
+  inert data, and `stepLiteral` drops an unconsumed marker (a modifier
+  on a non-function result is a no-op). See `lang/spec/path-modifier.tsv`.
 
 ## Argument Ordering (CRITICAL)
 

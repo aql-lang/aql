@@ -1499,11 +1499,8 @@ func AsSplice(v Value) (SpliceInfo, error) {
 // `/u` (usurp) modifier is NOT carried here — it is emitted as the `usurp`
 // word.
 type DispatchModInfo struct {
-	ArgCount     int
-	ForceStack   bool
-	ForceForward bool
-	Ref          bool // /r — leave the function as data (do not invoke)
-	Quote        bool // /q — treat the result as data
+	Ref   bool // /r — leave the function as data (do not invoke)
+	Quote bool // /q — treat the result as data
 }
 
 func (DispatchModInfo) payloadMarker() {}

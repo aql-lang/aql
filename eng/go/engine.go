@@ -1937,26 +1937,18 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 
 	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
 
-	// A `/`-modifier applied to a paren / dotted-path result (e.g.
-	// `(m.f)/s`, `path/3`, `m.a/r`) is emitted by the parser as a
-	// Word/__DM marker right after the group. Peek and consume it: /r
-	// (Ref) and /q (Quote) leave the function inert (data); the
-	// force/argcount flags shape this dispatch.
+	// A `/r` or `/q` modifier on a paren / dotted-path result is emitted by
+	// the parser as a Word/__DM marker right after the group (/u /s /f /N
+	// are the usurp / stack-args / forward-args / force-arity words). Peek
+	// and consume it: it leaves the function inert (data).
 	if valIdx+1 < len(e.stack) {
-		if dm, ok := AsDispatchMod(e.stack[valIdx+1]); ok {
+		if _, ok := AsDispatchMod(e.stack[valIdx+1]); ok {
 			e.stack = append(e.stack[:valIdx+1], e.stack[valIdx+2:]...)
-			if dm.Ref || dm.Quote {
-				v := e.stack[valIdx]
-				v.Quoted = true
-				e.stack[valIdx] = v
-				e.pointer++
-				return nil
-			}
-			if dm.ArgCount >= 0 {
-				w.ArgCount = dm.ArgCount
-			}
-			w.ForceStack = dm.ForceStack
-			w.ForceForward = dm.ForceForward
+			v := e.stack[valIdx]
+			v.Quoted = true
+			e.stack[valIdx] = v
+			e.pointer++
+			return nil
 		}
 	}
 

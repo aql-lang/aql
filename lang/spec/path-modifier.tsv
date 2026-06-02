@@ -36,3 +36,12 @@ def m {a:add/r} end m.a 1 2	3	bare path: the function still auto-dispatches
 #
 # §6  a modifier on a non-function result (e.g. /q on a number) is a no-op
 (1 add 2)/q	3	/q on a plain value is harmless
+#
+# §7  the function-form companion words (what /u /s /f /N desugar to).
+#     Each returns a NEW function (like usurp); accepts a function value or
+#     a name.
+usurp sub 10 3	7	usurp = /u (reversed sig)
+forward-args sub 10 3	-7	forward-args = /f
+10 3 stack-args sub	7	stack-args = /s (args from the stack)
+force-arity 2 (add/r) 1 2	3	force-arity N = /N
+typeof (stack-args sub)	Function	the companions return a new function

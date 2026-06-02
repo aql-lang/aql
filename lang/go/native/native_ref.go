@@ -89,6 +89,124 @@ var refNatives = []NativeFunc{
 			},
 		},
 	},
+	{
+		Name: "stack-args",
+		// The function-form companion of the `/s` modifier: wrap a function
+		// so it dispatches in STACK form. Like `usurp`, returns a new
+		// Function and accepts a value ([Function]) or a name ([Atom] /q).
+		Signatures: []NativeSig{
+			{
+				Args:           []*Type{TFunction},
+				Handler:        stackArgsHandler,
+				Returns:        []*Type{TFunction},
+				RunInCheckMode: true, BarrierPos: -1,
+			},
+			{
+				Args:           []*Type{TAtom},
+				QuoteArgs:      map[int]bool{0: true},
+				Handler:        stackArgsAtomHandler,
+				Returns:        []*Type{TFunction},
+				RunInCheckMode: true, BarrierPos: -1,
+			},
+		},
+	},
+	{
+		Name: "force-arity",
+		// The function-form companion of the `/N` modifier: wrap a function
+		// so it dispatches with exactly N args. `force-arity N fn` returns a
+		// new Function (forward-eligible), so it dispatches when args follow.
+		Signatures: []NativeSig{{
+			Args:           []*Type{TInteger, TFunction},
+			Handler:        forceArityHandler,
+			Returns:        []*Type{TFunction},
+			RunInCheckMode: true, BarrierPos: -1,
+		}},
+	},
+	{
+		Name: "forward-args",
+		// The function-form companion of the `/f` modifier: wrap a function
+		// so it dispatches in FORWARD form.
+		Signatures: []NativeSig{
+			{
+				Args:           []*Type{TFunction},
+				Handler:        forwardArgsHandler,
+				Returns:        []*Type{TFunction},
+				RunInCheckMode: true, BarrierPos: -1,
+			},
+			{
+				Args:           []*Type{TAtom},
+				QuoteArgs:      map[int]bool{0: true},
+				Handler:        forwardArgsAtomHandler,
+				Returns:        []*Type{TFunction},
+				RunInCheckMode: true, BarrierPos: -1,
+			},
+		},
+	},
+}
+
+// stack-args / forward-args mirror usurp: a value form (wrap a Function) and
+// a by-name form (resolve a function word, then wrap).
+func stackArgsHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	return rebarrierResult(eng.ForceStackFunction, args[0], "stack-args", reg)
+}
+func forwardArgsHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	return rebarrierResult(eng.ForceForwardFunction, args[0], "forward-args", reg)
+}
+func stackArgsAtomHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	return rebarrierAtom(eng.ForceStackFunction, args, "stack-args", reg)
+}
+func forwardArgsAtomHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	return rebarrierAtom(eng.ForceForwardFunction, args, "forward-args", reg)
+}
+
+func forceArityHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	n, _ := args[0].AsConcreteInteger()
+	wrapped, ok := eng.ForceArityFunction(args[1], int(n))
+	if !ok {
+		detail := "force-arity requires a non-negative arity and a function value"
+		if reg != nil {
+			return nil, reg.AqlError("illegal_ref", detail, "force-arity")
+		}
+		return nil, fmt.Errorf("%s", detail)
+	}
+	return []Value{wrapped}, nil
+}
+
+func rebarrierResult(wrap func(Value) (Value, bool), v Value, word string, reg *Registry) ([]Value, error) {
+	wrapped, ok := wrap(v)
+	if !ok {
+		detail := word + " requires a function value, got " + v.Parent.String()
+		if reg != nil {
+			return nil, reg.AqlError("illegal_ref", detail, word)
+		}
+		return nil, fmt.Errorf("%s", detail)
+	}
+	return []Value{wrapped}, nil
+}
+
+func rebarrierAtom(wrap func(Value) (Value, bool), args []Value, word string, reg *Registry) ([]Value, error) {
+	if len(args) < 1 {
+		return nil, fmt.Errorf("%s: missing name", word)
+	}
+	name, err := AsAtom(args[0])
+	if err != nil {
+		return nil, fmt.Errorf("%s: expected an atom name, got %s", word, args[0].Parent.String())
+	}
+	v, ok := eng.ResolveRef(reg, name)
+	if !ok {
+		if reg != nil {
+			return nil, reg.AqlError("undefined_word", word+": name "+name+" is not bound", name)
+		}
+		return nil, fmt.Errorf("%s: name %s is not bound", word, name)
+	}
+	if !eng.IsFunctionRef(v) {
+		detail := word + " requires a function word: " + name + " is bound to " + v.Parent.String()
+		if reg != nil {
+			return nil, reg.AqlError("illegal_ref", detail, name)
+		}
+		return nil, fmt.Errorf("%s", detail)
+	}
+	return rebarrierResult(wrap, v, word, reg)
 }
 
 // usurpAtomHandler is the by-name form `usurp foo`: it resolves the
