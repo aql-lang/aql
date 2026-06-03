@@ -140,7 +140,7 @@ func moduleGet(v Value, key string) (Value, bool) {
 		return Value{}, false
 	}
 	switch key {
-	case "id":
+	case "name":
 		return NewString(desc.Ref), true
 	case "kind":
 		return NewString(moduleKind(desc)), true
@@ -251,7 +251,7 @@ func (moduleTypeBehavior) ToMap(v Value) (Value, error) {
 	}
 	if desc, ok := asModuleDesc(v); ok {
 		out := NewOrderedMap()
-		out.Set("id", NewString(desc.Ref))
+		out.Set("name", NewString(desc.Ref))
 		out.Set("kind", NewString(moduleKind(desc)))
 		out.Set("file", NewString(desc.File))
 		out.Set("folder", NewString(desc.Folder))

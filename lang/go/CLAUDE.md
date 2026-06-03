@@ -639,7 +639,7 @@ module's exports share one **`Ideal/Module`** descriptor
   return the raw export for a plain key (so `Math.sqrt 16.0` dispatches
   unchanged) and the synthetic value for `$module` / `$name`.
 - `NewModuleInstance(moduleInfo{ID,Kind,File,Folder,Exports})` — the
-  descriptor. `id`/`kind`/`file`/`folder`/`exports` are read via `get`.
+  descriptor. `name`/`kind`/`file`/`folder`/`exports` are read via `get`.
 - Instances are backed by `ExtensionPayload` (lang-layer; no eng payload
   type). `NewModuleInstance(desc)` (`native_module_module.go`) builds the
   shared Module at install time; `ModuleDesc.{Ref,Kind,File,Folder}` are

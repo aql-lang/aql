@@ -21,12 +21,12 @@
 # §2  $module → the Module descriptor (Ideal/Module) and its fields
 "aql:math" import end  typeof Math.$module	Module	$module is an Ideal/Module
 "aql:math" import end  Math.$module is Module	true	…of the Module type
-"aql:math" import end  Math.$module.id	'aql:math'	id is the module reference
+"aql:math" import end  Math.$module.name	'aql:math'	name is the module reference
 "aql:math" import end  Math.$module.kind	'native'	kind: native / file / inline
 "aql:math" import end  Math.$module.exports	['Math']	exports lists the export names
 #
 # §3  the -util colliders carry their -util id
-"aql:array-util" import end  ArrayUtil.$module.id	'aql:array-util'	collider module id
+"aql:array-util" import end  ArrayUtil.$module.name	'aql:array-util'	collider module name
 "aql:type-util" import end  TypeUtil.$module.kind	'native'	type-util is native too
 #
 # §4  inline modules — `module […] import` binds all exports; kind="inline"
