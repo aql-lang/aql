@@ -16,4 +16,5 @@
 #
 # §3  negative — the words are gone from core (unbound without import)
 read "x"	ERROR:undefined_word	`read` is no longer a core word
+folder "x"	ERROR:undefined_word	`folder` (filesystem op) also moved to aql:io
 IO.stdout	ERROR:undefined_word	`IO` is unbound without `import`

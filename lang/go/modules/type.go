@@ -38,8 +38,15 @@ func BuildTypeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	for _, n := range typeModuleNatives {
 		subReg.RegisterNativeFunc(n)
 	}
+	// tpartial moved here from core.
+	for _, n := range native.TPartialModuleNatives {
+		subReg.RegisterNativeFunc(n)
+	}
 
 	exports := native.NewOrderedMap()
+	for _, n := range native.TPartialModuleNatives {
+		exports.Set(n.Name, makeModuleFnDef(n, subReg))
+	}
 
 	// Unary Any -> Type.
 	for _, name := range []string{"required", "parent", "root", "nominal"} {

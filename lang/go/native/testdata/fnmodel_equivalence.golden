@@ -120,9 +120,6 @@ WORD fnsig
 WORD fold
   [Node/List Node/List Any] barrier=3 noeval={0} +returnsfn
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
-WORD folder
-  [Ideal/Options Scalar/Path] barrier=2 returns=[Node/List]
-  [Scalar/Path] barrier=1 returns=[Node/List]
 WORD for
   [Node/List Node/List] barrier=2 noeval={1} +returnsfn
   [Scalar/Number/Integer Node/List] barrier=2 noeval={1} +returnsfn
@@ -387,8 +384,6 @@ WORD timeout
   [Scalar/Number/Integer Scalar/Atom] barrier=2 quote={1} returns=[Ideal/Timeout]
 WORD tor
   [Any Any] barrier=1 +returnsfn
-WORD tpartial
-  [Any] barrier=1 returns=[Type]
 WORD trim
   [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
   [Scalar/Atom Node/Map] barrier=2 returns=[Scalar/String]

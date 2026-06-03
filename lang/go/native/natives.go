@@ -64,15 +64,7 @@ var Natives = []NativeFunc{
 		},
 	},
 
-	// ---- file ops ----
-	{
-		Name: "folder",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TOptions, TPath}, Handler: folderOptsHandler, Returns: []*Type{TList}, BarrierPos: -1},
-			{Args: []*Type{TPath}, Handler: folderHandler, Returns: []*Type{TList}, BarrierPos: -1},
-		},
-	},
+	// `folder` (filesystem op) moved to the aql:io module — see io_module.go.
 
 	// ---- string slice ----
 	stringSliceNative(),

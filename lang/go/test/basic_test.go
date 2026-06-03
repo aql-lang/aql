@@ -51,6 +51,7 @@ func TestBasic(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			registerIOWords(reg) // moved-out words (tpartial, …) available bare for the spec
 			eng := native.NewTop(reg)
 			result, err := eng.Run(values)
 

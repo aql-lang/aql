@@ -25,6 +25,7 @@ import "github.com/aql-lang/aql/eng/go"
 //	stdout    the standard-output stream handle
 //	stderr    the standard-error stream handle
 //	trace     run a list as a sub-program with step-by-step tracing
+//	folder    create / list a filesystem folder (Path; optional options)
 var IOModuleNatives = []NativeFunc{
 	{
 		Name: "printstr",
@@ -87,5 +88,12 @@ var IOModuleNatives = []NativeFunc{
 			Handler: eng.TraceHandler,
 			Returns: []*Type{TAny}, BarrierPos: -1,
 		}},
+	},
+	{
+		Name: "folder",
+		Signatures: []NativeSig{
+			{Args: []*Type{TOptions, TPath}, Handler: folderOptsHandler, Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TPath}, Handler: folderHandler, Returns: []*Type{TList}, BarrierPos: -1},
+		},
 	},
 }

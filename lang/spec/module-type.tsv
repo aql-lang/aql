@@ -16,5 +16,9 @@
 # §3  swap form
 "aql:type-util" import end  Integer TypeUtil.parent	Number	swap form dispatches
 #
-# §4  negative — unbound without import
+# §4  tpartial — make every field of a Record/Object type optional (moved here)
+"aql:type-util" import end  (TypeUtil.tpartial (refine Record [x:Integer])) istype	true	tpartial yields a type
+#
+# §5  negative — unbound without import
 TypeUtil.parent Integer	ERROR:undefined_word	`type` is unbound without `import`
+tpartial (refine Record [x:Integer])	ERROR:undefined_word	tpartial is no longer core

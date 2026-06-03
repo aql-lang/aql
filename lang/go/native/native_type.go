@@ -106,15 +106,6 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name: "tpartial",
-
-		Signatures: []NativeSig{{
-			Args:    []*Type{TAny},
-			Handler: tpartialHandler,
-			Returns: []*Type{TType}, BarrierPos: -1,
-		}},
-	},
-	{
 		Name: "guard",
 
 		Signatures: []NativeSig{{
@@ -526,6 +517,19 @@ func teqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 }
 
 // ---- tpartial ----
+
+// TPartialModuleNatives holds `tpartial`, moved out of core into the
+// aql:type-util module (TypeUtil.tpartial). Its handler stays here.
+var TPartialModuleNatives = []NativeFunc{
+	{
+		Name: "tpartial",
+		Signatures: []NativeSig{{
+			Args:    []*Type{TAny},
+			Handler: tpartialHandler,
+			Returns: []*Type{TType}, BarrierPos: -1,
+		}},
+	},
+}
 
 // tpartialHandler wraps every field of a Record or Object type in
 // `T | None`. Idempotent: a field whose value already includes None

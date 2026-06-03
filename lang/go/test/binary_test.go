@@ -60,11 +60,7 @@ func TestBinary(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// Bitwise operators moved to aql:bin; this spec exercises the
-			// unchanged handlers under their bare names via the harness.
-			for _, n := range native.BitwiseModuleNatives {
-				reg.RegisterNativeFunc(n)
-			}
+			registerIOWords(reg) // bitwise moved to aql:bin; available bare for the spec
 			eng := native.NewTop(reg)
 			result, err := eng.Run(values)
 
