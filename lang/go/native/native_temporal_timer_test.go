@@ -12,6 +12,7 @@ import (
 
 func TestSleepBasic(t *testing.T) {
 	reg, err := DefaultRegistry()
+	registerIOWords(reg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,6 +35,7 @@ func TestSleepBasic(t *testing.T) {
 
 func TestSleepNegativeErrors(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 	_, err := e.Run([]Value{
 		NewInteger(-1), NewWord("sleep"),
@@ -45,6 +47,7 @@ func TestSleepNegativeErrors(t *testing.T) {
 
 func TestSleepZero(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 	result, err := e.Run([]Value{
 		NewInteger(0), NewWord("sleep"),
@@ -63,6 +66,7 @@ func TestSleepZero(t *testing.T) {
 
 func TestTimeoutReturnType(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 	body := NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)})
 	body.Quoted = true
@@ -86,6 +90,7 @@ func TestTimeoutReturnType(t *testing.T) {
 
 func TestTimeoutCallbackExecutes(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 
 	// Register a custom word that sets an atomic flag when called.
 	var flag atomic.Int32
@@ -120,6 +125,7 @@ func TestTimeoutCallbackExecutes(t *testing.T) {
 
 func TestTimeoutWithWordCallback(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 
 	var flag atomic.Int32
 	reg.Register("testflag", Signature{
@@ -150,6 +156,7 @@ func TestTimeoutWithWordCallback(t *testing.T) {
 
 func TestTimeoutNegativeErrors(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 	body := NewList([]Value{NewInteger(1)})
 	body.Quoted = true
@@ -167,6 +174,7 @@ func TestTimeoutNegativeErrors(t *testing.T) {
 
 func TestIntervalReturnType(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 	body := NewList([]Value{NewInteger(1)})
 	body.Quoted = true
@@ -191,6 +199,7 @@ func TestIntervalReturnType(t *testing.T) {
 
 func TestIntervalCallbackRepeats(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 
 	var counter atomic.Int32
 	reg.Register("testinc", Signature{
@@ -227,6 +236,7 @@ func TestIntervalCallbackRepeats(t *testing.T) {
 
 func TestIntervalZeroErrors(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 	body := NewList([]Value{NewInteger(1)})
 	body.Quoted = true
@@ -244,6 +254,7 @@ func TestIntervalZeroErrors(t *testing.T) {
 
 func TestCancelTimeout(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 
 	var flag atomic.Int32
 	reg.Register("testflag", Signature{
@@ -280,6 +291,7 @@ func TestCancelTimeout(t *testing.T) {
 
 func TestCancelInterval(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 
 	var counter atomic.Int32
 	reg.Register("testinc", Signature{
@@ -328,6 +340,7 @@ func TestCancelInterval(t *testing.T) {
 
 func TestCancelIdempotent(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 	body := NewList([]Value{NewInteger(1)})
 	body.Quoted = true
@@ -376,6 +389,7 @@ func TestIntervalString(t *testing.T) {
 
 func TestTimerTypeLiteralNoPanic(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	for _, word := range []string{"cancel"} {
 		t.Run(word, func(t *testing.T) {
 			defer func() {

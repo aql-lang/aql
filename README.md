@@ -25,7 +25,7 @@ def square fn [[x:Number] [Number] [x mul x]]
 def Point refine Record [x:Number y:Number]
 make Point [3 4]                     => {x:3 y:4}
 
-await [[sleep 50 1] [sleep 50 2]]    => [1 2]
+"aql:time-util" import end TimeUtil.await [[1 add 2] [3 add 4]]    => [3 7]
 ```
 
 

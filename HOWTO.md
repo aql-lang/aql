@@ -270,7 +270,7 @@ If there is no error, the `error` word is a no-op.
 gathers the results:
 
 ```
-await [[1 add 2] [3 add 4]]           => [3 7]
+"aql:time-util" import end TimeUtil.await [[1 add 2] [3 add 4]]           => [3 7]
 ```
 
 Choose a mode via an Options map; these mirror JavaScript Promise

@@ -230,43 +230,8 @@ func init() {
 			},
 		},
 
-		// ---- temporal ----
-		{
-			Name: "timeout",
-
-			Signatures: []NativeSig{
-				{
-					Args:      []*Type{TInteger, TList},
-					QuoteArgs: map[int]bool{1: true},
-					Handler:   timeoutListHandler,
-					Returns:   []*Type{TTimeout}, BarrierPos: -1,
-				},
-				{
-					Args:      []*Type{TInteger, TAtom},
-					QuoteArgs: map[int]bool{1: true},
-					Handler:   timeoutWordHandler,
-					Returns:   []*Type{TTimeout}, BarrierPos: -1,
-				},
-			},
-		},
-		{
-			Name: "await",
-
-			Signatures: []NativeSig{
-				{
-					Args:       []*Type{TOptions, TList},
-					NoEvalArgs: map[int]bool{1: true},
-					Handler:    awaitWithOptsHandler,
-					Returns:    []*Type{TAny}, BarrierPos: -1,
-				},
-				{
-					Args:       []*Type{TList},
-					NoEvalArgs: map[int]bool{0: true},
-					Handler:    awaitDefaultHandler,
-					Returns:    []*Type{TAny}, BarrierPos: -1,
-				},
-			},
-		},
+		// timeout / await moved to the aql:time-util module — see
+		// native/time_async_module.go.
 	}
 }
 

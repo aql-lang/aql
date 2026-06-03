@@ -25,9 +25,6 @@ WORD apply
   [Type/Function] barrier=0 returns=[Any]
 WORD args
   [] barrier=0 returns=[Node/List]
-WORD await
-  [Ideal/Options Node/List] barrier=2 noeval={1} returns=[Any]
-  [Node/List] barrier=1 noeval={0} returns=[Any]
 WORD base
   [Any] barrier=1 +returnsfn
 WORD behave
@@ -37,9 +34,6 @@ WORD between
   [Scalar Scalar Scalar] barrier=3 runcheck typearg={2} returns=[Scalar]
 WORD break
   [] barrier=0
-WORD cancel
-  [Ideal/Timeout] barrier=1
-  [Ideal/Interval] barrier=1
 WORD changecase
   [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
   [Scalar/Atom Node/Map] barrier=2 returns=[Scalar/String]
@@ -196,9 +190,6 @@ WORD inner
 WORD inspect
   [Scalar/Atom] barrier=1 quote={0} returns=[Node/Map/Inspect]
   [Any] barrier=1 returns=[Node/Map/Inspect]
-WORD interval
-  [Scalar/Number/Integer Node/List] barrier=2 quote={1} returns=[Ideal/Interval]
-  [Scalar/Number/Integer Scalar/Atom] barrier=2 quote={1} returns=[Ideal/Interval]
 WORD iota
   [Scalar/Number/Integer] barrier=1 +returnsfn
 WORD is
@@ -266,8 +257,6 @@ WORD normalize
 WORD not
   [Scalar/Boolean] barrier=1 returns=[Scalar/Boolean]
   [Any] barrier=1 returns=[Scalar/Boolean]
-WORD now
-  [] barrier=0 returns=[Scalar/Time/Instant]
 WORD or
   [Scalar/Boolean Scalar/Boolean] barrier=1 returns=[Scalar/Boolean]
   [Any Any] barrier=1 returns=[Any]
@@ -340,8 +329,6 @@ WORD shift
   [Node/List] barrier=1
 WORD size
   [Any] barrier=1
-WORD sleep
-  [Scalar/Number/Integer] barrier=1
 WORD slice
   [Scalar/Number/Integer Scalar/Number/Integer Node/List] barrier=3 returns=[Node/List]
   [Scalar/Number/Integer Scalar/Number/Integer Scalar/String] barrier=3 returns=[Scalar/String]
@@ -379,9 +366,6 @@ WORD tany
   [Node/List] barrier=1 returns=[Any]
 WORD teq
   [Any Any] barrier=1 returns=[Scalar/Boolean]
-WORD timeout
-  [Scalar/Number/Integer Node/List] barrier=2 quote={1} returns=[Ideal/Timeout]
-  [Scalar/Number/Integer Scalar/Atom] barrier=2 quote={1} returns=[Ideal/Timeout]
 WORD tor
   [Any Any] barrier=1 +returnsfn
 WORD trim

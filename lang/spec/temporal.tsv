@@ -7,5 +7,5 @@
 # aql:time-util module's time-now* family reads the same capability.
 #
 # ─────────────────────────────────────────────────────────────────────
-now	2021-01-01T00:00:00Z	now reads the (frozen, in specs) clock capability
-typeof now	Instant	now yields an Instant
+"aql:time-util" import end TimeUtil.now	2021-01-01T00:00:00Z	now reads the (frozen, in specs) clock capability
+"aql:time-util" import end typeof TimeUtil.now	Instant	now yields an Instant

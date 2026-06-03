@@ -408,6 +408,11 @@ func TestNowStandardWord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// `now` moved to aql:time-util; register the time/async words bare to
+	// exercise the unchanged handler (production uses TimeUtil.now).
+	for _, n := range native.TimeAsyncModuleNatives {
+		r.RegisterNativeFunc(n)
+	}
 	e := native.New(r)
 	result, err := e.Run([]native.Value{native.NewWord("now")})
 	if err != nil {

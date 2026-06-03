@@ -17,8 +17,15 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	for _, n := range TimeNatives {
 		subReg.RegisterNativeFunc(n)
 	}
+	// now / sleep / timeout / interval / await / cancel moved here from core.
+	for _, n := range native.TimeAsyncModuleNatives {
+		subReg.RegisterNativeFunc(n)
+	}
 
 	exports := native.NewOrderedMap()
+	for _, n := range native.TimeAsyncModuleNatives {
+		exports.Set(n.Name, makeModuleFnDef(n, subReg))
+	}
 
 	// Construction — numeric and IANA-zone only. ISO 8601 date /
 	// datetime / instant / time-of-day / duration string parsing

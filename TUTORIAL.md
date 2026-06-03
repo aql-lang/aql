@@ -527,11 +527,11 @@ or inspect its fields with `.`.
 
 ## 17. Concurrency with `await`
 
-`await` runs a list of code blocks in parallel and collects the
-results:
+`await` (in the `aql:time-util` module) runs a list of code blocks
+in parallel and collects the results:
 
 ```
-aql> await [[1 add 2] [3 add 4]]     => [3 7]
+aql> "aql:time-util" import end TimeUtil.await [[1 add 2] [3 add 4]]     => [3 7]
 ```
 
 Pick a mode via an options map — these mirror JavaScript Promise

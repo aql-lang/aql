@@ -81,41 +81,8 @@ var Natives = []NativeFunc{
 		}},
 	},
 
-	// ---- temporal ----
-	{
-		Name: "now",
-
-		Signatures: []NativeSig{{
-			Args:    []*Type{},
-			Handler: nowHandler,
-			Returns: []*Type{TInstant}, BarrierPos: 0,
-		}},
-	},
-	{
-		Name: "sleep",
-
-		Signatures: []NativeSig{{
-			Args:    []*Type{TInteger},
-			Handler: sleepHandler,
-			Returns: []*Type{}, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "interval",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TInteger, TList}, QuoteArgs: map[int]bool{1: true}, Handler: intervalListHandler, Returns: []*Type{TInterval}, BarrierPos: -1},
-			{Args: []*Type{TInteger, TAtom}, QuoteArgs: map[int]bool{1: true}, Handler: intervalAtomHandler, Returns: []*Type{TInterval}, BarrierPos: -1},
-		},
-	},
-	{
-		Name: "cancel",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TTimeout}, Handler: cancelTimeoutHandler, Returns: []*Type{}, BarrierPos: -1},
-			{Args: []*Type{TInterval}, Handler: cancelIntervalHandler, Returns: []*Type{}, BarrierPos: -1},
-		},
-	},
+	// now / sleep / interval / cancel (with timeout / await) moved to the
+	// aql:time-util module — see native/time_async_module.go.
 
 	// ---- list (table query) ----
 	{

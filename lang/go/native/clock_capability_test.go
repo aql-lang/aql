@@ -31,6 +31,7 @@ func TestEffectiveClockFixed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registry: %v", err)
 	}
+	registerIOWords(r) // `now` moved to aql:time-util; seed it bare for this clock test
 	fixed := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
 	SetHostClock(r, capabilities.FixedClock{T: fixed})
 	if got := EffectiveClock(r).Now(); !got.Equal(fixed) {
