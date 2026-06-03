@@ -84,6 +84,7 @@ func TestNameCase_UndefUpperEmptiesType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
+	seedAQL(a)
 	if _, err := a.Run("def Foo Integer\nundef Foo\nFoo"); err == nil {
 		t.Fatal("expected error — Foo undefined after undef, got nil")
 	}

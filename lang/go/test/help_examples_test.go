@@ -19,6 +19,7 @@ func TestHandAuthoredExamplesWin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	cases := []struct {
 		word     string
 		wantLine string // a hand-authored example substring that must appear
@@ -53,6 +54,7 @@ func TestHelpAllWords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 
 	words := allRegisteredWords(reg)
 	if len(words) == 0 {
@@ -108,6 +110,7 @@ func TestHelpExamplesCorrect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	reg.SetParseFunc(parser.Parse)
 
 	// Enable in-memory filesystem for read/write examples.

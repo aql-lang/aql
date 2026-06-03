@@ -12,6 +12,7 @@ import (
 
 func TestIntegVarWithValueAssignment(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// var [[x 10]] x end => 10
 	varBody := NewList([]Value{
 		NewList([]Value{
@@ -28,6 +29,7 @@ func TestIntegVarWithValueAssignment(t *testing.T) {
 
 func TestIntegVarWithTypeValue(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// var [[x Integer]] x end  — x is the Integer type literal
 	varBody := NewList([]Value{
 		NewList([]Value{
@@ -43,6 +45,7 @@ func TestIntegVarWithTypeValue(t *testing.T) {
 
 func TestIntegVarMultipleDecls(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// var [[[x 2] [y 3]] x add y]
 	varBody := NewList([]Value{
 		NewList([]Value{
@@ -60,6 +63,7 @@ func TestIntegVarMultipleDecls(t *testing.T) {
 
 func TestIntegVarStringName(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// 42 var [["myvar"] myvar]  — string name, takes value from stack
 	varBody := NewList([]Value{
 		NewList([]Value{NewString("myvar")}),
@@ -74,6 +78,7 @@ func TestIntegVarStringName(t *testing.T) {
 
 func TestIntegVarNestedDoBlock(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// var [[[x 10]] do [x add 5]]
 	varBody := NewList([]Value{
 		NewList([]Value{
@@ -90,6 +95,7 @@ func TestIntegVarNestedDoBlock(t *testing.T) {
 
 func TestIntegVarErrorInvalidDecl(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// var [[42] x] — number as declaration should fail
 	varBody := NewList([]Value{
 		NewList([]Value{NewInteger(42)}),
@@ -103,6 +109,7 @@ func TestIntegVarErrorInvalidDecl(t *testing.T) {
 
 func TestIntegVarEmptyList(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// var [] — empty list should fail
 	varBody := NewList([]Value{})
 	err := runAQLError(t, r, []Value{NewWord("var"), varBody})
@@ -113,6 +120,7 @@ func TestIntegVarEmptyList(t *testing.T) {
 
 func TestIntegVarDeclListTooShort(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// var [[[x]] x] — decl list with only name, no value => error
 	varBody := NewList([]Value{
 		NewList([]Value{
@@ -130,6 +138,7 @@ func TestIntegVarDeclListTooShort(t *testing.T) {
 
 func TestIntegUndefRemovesDef(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// def my-val 99 end my-val undef my-val end
 	// After undef, my-val should not be found (error or just word)
 	result := runAQL(t, r, []Value{
@@ -153,6 +162,7 @@ func TestIntegUndefRemovesDef(t *testing.T) {
 
 func TestIntegUndefWithString(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// def my-val 42 end undef "my-val"
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("my-val"), NewInteger(42), NewEnd(),
@@ -165,6 +175,7 @@ func TestIntegUndefWithString(t *testing.T) {
 
 func TestIntegUndefFnTargeted(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// def my-fn fn [[x:Number] [Number] [x add 1]] end
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
@@ -194,6 +205,7 @@ func TestIntegUndefFnTargeted(t *testing.T) {
 
 func TestIntegFnMultipleParams(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// def add-two fn [[x:Number y:Number] [Number] [x add y]] end
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
@@ -220,6 +232,7 @@ func TestIntegFnMultipleParams(t *testing.T) {
 
 func TestIntegFnUnnamedParams(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// fn [[Number] [Number] [add 1]]  — unnamed Number param
 	fnBody := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
@@ -244,6 +257,7 @@ func TestIntegFnUnnamedParams(t *testing.T) {
 
 func TestIntegFnUndefSpecPairs(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// fnsig with 2 elements (one input/output pair) => FnUndefInfo
 	// fnsig [[Number] [Number]]
 	fnBody := NewList([]Value{
@@ -261,6 +275,7 @@ func TestIntegFnUndefSpecPairs(t *testing.T) {
 
 func TestIntegFnEmptyListError(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	err := runAQLError(t, r, []Value{NewWord("fn"), NewList([]Value{})})
 	if err == nil {
 		t.Error("expected error for fn with empty list")
@@ -269,6 +284,7 @@ func TestIntegFnEmptyListError(t *testing.T) {
 
 func TestIntegFnBadLengthError(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// fn with 4 elements (not a multiple of 3) — fn now requires
 	// strict triples; the 2-pair form moved to `fnsig`.
 	err := runAQLError(t, r, []Value{
@@ -283,6 +299,7 @@ func TestIntegFnBadLengthError(t *testing.T) {
 
 func TestIntegFnSingleValueAbbreviation(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// fn with non-list input/output/body (abbreviation: treated as single-element lists)
 	// fn [Number Number [add 1]]
 	fnBody := NewList([]Value{
@@ -307,6 +324,7 @@ func TestIntegFnSingleValueAbbreviation(t *testing.T) {
 
 func TestIntegModuleWithExport(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// module [
 	//   def x 42 end
 	//   export :myExport {val: x}
@@ -332,6 +350,7 @@ func TestIntegModuleWithExport(t *testing.T) {
 
 func TestIntegModuleImportAll(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Build module, then import it
 	moduleBody := NewList([]Value{
 		NewString("def"), NewString("x"), NewInteger(99), NewString("end"),
@@ -361,6 +380,7 @@ func TestIntegModuleImportAll(t *testing.T) {
 
 func TestIntegModuleImportRename(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	moduleBody := NewList([]Value{
 		NewString("def"), NewString("x"), NewInteger(55), NewString("end"),
 		NewString("export"), NewAtom("orig"),
@@ -384,6 +404,7 @@ func TestIntegModuleImportRename(t *testing.T) {
 
 func TestIntegModuleImportMultiRename(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	moduleBody := NewList([]Value{
 		NewString("def"), NewString("a"), NewInteger(1), NewString("end"),
 		NewString("def"), NewString("b"), NewInteger(2), NewString("end"),
@@ -413,6 +434,7 @@ func TestIntegModuleImportMultiRename(t *testing.T) {
 
 func TestIntegModuleExportWithAtomName(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// export with atom name (word signature removed; unknown words become atoms)
 	moduleBody := NewList([]Value{
 		NewString("def"), NewString("x"), NewInteger(7), NewString("end"),
@@ -432,6 +454,7 @@ func TestIntegModuleExportWithAtomName(t *testing.T) {
 func TestIntegValToAtomOrStringWord(t *testing.T) {
 	// Test valToAtomOrString with word values (used in import rename)
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	moduleBody := NewList([]Value{
 		NewString("def"), NewString("x"), NewInteger(10), NewString("end"),
 		NewString("export"), NewAtom("orig"),
@@ -455,6 +478,7 @@ func TestIntegValToAtomOrStringWord(t *testing.T) {
 
 func TestIntegImportSingleRenameWord(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	moduleBody := NewList([]Value{
 		NewString("def"), NewString("x"), NewInteger(42), NewString("end"),
 		NewString("export"), NewAtom("Orig"),
@@ -478,6 +502,7 @@ func TestIntegImportSingleRenameWord(t *testing.T) {
 
 func TestIntegImportSingleRenameAtom(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	moduleBody := NewList([]Value{
 		NewString("def"), NewString("x"), NewInteger(42), NewString("end"),
 		NewString("export"), NewAtom("Orig"),
@@ -500,6 +525,7 @@ func TestIntegImportSingleRenameAtom(t *testing.T) {
 
 func TestIntegImportSingleRenameMultiExportError(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("a", NewInteger(1))
 	moduleBody := NewList([]Value{
@@ -522,6 +548,7 @@ func TestIntegImportSingleRenameMultiExportError(t *testing.T) {
 
 func TestIntegConvertIntegerToString(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// 42 convert String
 	result := runAQL(t, r, []Value{
 		NewInteger(42), NewWord("convert"), NewTypeLiteral(TString),
@@ -534,6 +561,7 @@ func TestIntegConvertIntegerToString(t *testing.T) {
 
 func TestIntegConvertStringToInteger(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewString("123"), NewWord("convert"), NewTypeLiteral(TInteger),
 	})
@@ -545,6 +573,7 @@ func TestIntegConvertStringToInteger(t *testing.T) {
 
 func TestIntegConvertStringToDecimal(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewString("3.14"), NewWord("convert"), NewTypeLiteral(TDecimal),
 	})
@@ -556,6 +585,7 @@ func TestIntegConvertStringToDecimal(t *testing.T) {
 
 func TestIntegConvertToBoolean(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// integer to boolean
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("convert"), NewTypeLiteral(TBoolean),
@@ -613,6 +643,7 @@ func TestIntegConvertToBoolean(t *testing.T) {
 
 func TestIntegConvertIntToHexString(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// 255 convert String {base: "hex"}
 	hexOpts := NewOrderedMap()
 	hexOpts.Set("base", NewString("hex"))
@@ -627,6 +658,7 @@ func TestIntegConvertIntToHexString(t *testing.T) {
 
 func TestIntegConvertIntToHEXString(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	hexOpts := NewOrderedMap()
 	hexOpts.Set("base", NewString("HEX"))
 	result := runAQL(t, r, []Value{
@@ -640,6 +672,7 @@ func TestIntegConvertIntToHEXString(t *testing.T) {
 
 func TestIntegConvertIntToBinString(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	binOpts := NewOrderedMap()
 	binOpts.Set("base", NewString("bin"))
 	result := runAQL(t, r, []Value{
@@ -653,6 +686,7 @@ func TestIntegConvertIntToBinString(t *testing.T) {
 
 func TestIntegConvertIntToOctString(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	octOpts := NewOrderedMap()
 	octOpts.Set("base", NewString("oct"))
 	result := runAQL(t, r, []Value{
@@ -666,6 +700,7 @@ func TestIntegConvertIntToOctString(t *testing.T) {
 
 func TestIntegConvertHexStringToNumber(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// "ff" convert Number {base: "hex"}
 	hexOpts := NewOrderedMap()
 	hexOpts.Set("base", NewString("hex"))
@@ -680,6 +715,7 @@ func TestIntegConvertHexStringToNumber(t *testing.T) {
 
 func TestIntegConvertBinStringToNumber(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	binOpts := NewOrderedMap()
 	binOpts.Set("base", NewString("bin"))
 	result := runAQL(t, r, []Value{
@@ -693,6 +729,7 @@ func TestIntegConvertBinStringToNumber(t *testing.T) {
 
 func TestIntegConvertOctStringToNumber(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	octOpts := NewOrderedMap()
 	octOpts.Set("base", NewString("oct"))
 	result := runAQL(t, r, []Value{
@@ -706,6 +743,7 @@ func TestIntegConvertOctStringToNumber(t *testing.T) {
 
 func TestIntegConvertWithSettingsMap(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// 255 convert String {base: "hex"}
 	opts := NewOrderedMap()
 	opts.Set("base", NewString("hex"))
@@ -723,6 +761,7 @@ func TestIntegConvertWithSettingsMap(t *testing.T) {
 
 func TestIntegConvertBooleanPassthrough(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewBoolean(true), NewWord("convert"), NewTypeLiteral(TBoolean),
 	})
@@ -734,6 +773,7 @@ func TestIntegConvertBooleanPassthrough(t *testing.T) {
 
 func TestIntegConvertErrorBadDecimal(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	err := runAQLError(t, r, []Value{
 		NewString("notanumber"), NewWord("convert"), NewTypeLiteral(TDecimal),
 	})
@@ -744,6 +784,7 @@ func TestIntegConvertErrorBadDecimal(t *testing.T) {
 
 func TestIntegConvertErrorBadNumber(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	err := runAQLError(t, r, []Value{
 		NewString("notanumber"), NewWord("convert"), NewTypeLiteral(TNumber),
 	})
@@ -754,6 +795,7 @@ func TestIntegConvertErrorBadNumber(t *testing.T) {
 
 func TestIntegConvertErrorBadVariant(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	badOpts := NewOrderedMap()
 	badOpts.Set("base", NewString("badvariant"))
 	err := runAQLError(t, r, []Value{
@@ -766,6 +808,7 @@ func TestIntegConvertErrorBadVariant(t *testing.T) {
 
 func TestIntegConvertErrorBadNumberVariant(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	badOpts := NewOrderedMap()
 	badOpts.Set("base", NewString("badvariant"))
 	err := runAQLError(t, r, []Value{
@@ -778,6 +821,7 @@ func TestIntegConvertErrorBadNumberVariant(t *testing.T) {
 
 func TestIntegConvertErrorVariantNotInteger(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Variant conversion only supported for integer to string
 	hexOpts := NewOrderedMap()
 	hexOpts.Set("base", NewString("hex"))
@@ -793,6 +837,7 @@ func TestIntegConvertErrorVariantNotInteger(t *testing.T) {
 
 func TestIntegDoList(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("do"), NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)}),
 	})
@@ -804,6 +849,7 @@ func TestIntegDoList(t *testing.T) {
 
 func TestIntegDoMap(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// do {x: [3 add 4]}
 	innerList := NewList([]Value{NewInteger(3), NewString("add"), NewInteger(4)})
 	m := NewOrderedMap()
@@ -822,6 +868,7 @@ func TestIntegDoMap(t *testing.T) {
 
 func TestIntegDoNestedMap(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// do {outer: {inner: [2 add 3]}}
 	innerList := NewList([]Value{NewInteger(2), NewString("add"), NewInteger(3)})
 	innerMap := NewOrderedMap()
@@ -844,6 +891,7 @@ func TestIntegDoNestedMap(t *testing.T) {
 
 func TestIntegDoListMultipleResults(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// do [1 2 3] => returns list of all results
 	result := runAQL(t, r, []Value{
 		NewWord("do"), NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
@@ -858,6 +906,7 @@ func TestIntegDoListMultipleResults(t *testing.T) {
 
 func TestIntegFileIOWriteAndRead(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
@@ -882,6 +931,7 @@ func TestIntegFileIOWriteAndRead(t *testing.T) {
 
 func TestIntegFileIOWriteAppend(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
@@ -909,6 +959,7 @@ func TestIntegFileIOWriteAppend(t *testing.T) {
 
 func TestIntegFileIOWriteJSON(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
@@ -938,6 +989,7 @@ func TestIntegFileIOWriteJSON(t *testing.T) {
 
 func TestIntegFileIOWriteStdout(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -956,6 +1008,7 @@ func TestIntegFileIOWriteStdout(t *testing.T) {
 
 func TestIntegFileIOWriteStderr(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.ErrOutput = &buf
 
@@ -973,6 +1026,7 @@ func TestIntegFileIOWriteStderr(t *testing.T) {
 
 func TestIntegFileIOReadWithFmtOption(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
@@ -990,6 +1044,7 @@ func TestIntegFileIOReadWithFmtOption(t *testing.T) {
 
 func TestIntegFileIOReadJsonExtension(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
@@ -1004,6 +1059,7 @@ func TestIntegFileIOReadJsonExtension(t *testing.T) {
 
 func TestIntegFileIOWriteStringWithOpts(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
@@ -1024,6 +1080,7 @@ func TestIntegFileIOWriteStringWithOpts(t *testing.T) {
 
 func TestIntegCSVReadWrite(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
@@ -1044,6 +1101,7 @@ func TestIntegCSVReadWrite(t *testing.T) {
 
 func TestIntegTSVRead(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
@@ -1060,6 +1118,7 @@ func TestIntegTSVRead(t *testing.T) {
 
 func TestIntegCSVReadWithFmtOption(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
@@ -1080,6 +1139,7 @@ func TestIntegCSVReadWithFmtOption(t *testing.T) {
 
 func TestIntegTorDisjunctValues(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// 1 tor "hello" tor true
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("tor"), NewString("hello"), NewWord("tor"), NewBoolean(true),
@@ -1096,6 +1156,7 @@ func TestIntegTorDisjunctValues(t *testing.T) {
 
 func TestIntegTorDisjunctTwoValues(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewInteger(42), NewWord("tor"), NewString("hello"),
 	})
@@ -1111,6 +1172,7 @@ func TestIntegTorDisjunctTwoValues(t *testing.T) {
 
 func TestIntegTorDisjunctFlattensLeft(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Build a disjunct then tor with another value
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("tor"), NewInteger(2), NewWord("tor"), NewInteger(3),
@@ -1127,6 +1189,7 @@ func TestIntegTorDisjunctFlattensLeft(t *testing.T) {
 
 func TestIntegTorDisjunctFlattensRight(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Pre-build a disjunct on the right side
 	rightDisjunct := NewDisjunct([]Value{NewInteger(2), NewInteger(3)})
 	result := runAQL(t, r, []Value{
@@ -1144,6 +1207,7 @@ func TestIntegTorDisjunctFlattensRight(t *testing.T) {
 
 func TestIntegOrBooleanStillWorks(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Boolean or should still work as logical or
 	result := runAQL(t, r, []Value{
 		NewBoolean(false), NewWord("or"), NewBoolean(true),
@@ -1156,6 +1220,7 @@ func TestIntegOrBooleanStillWorks(t *testing.T) {
 
 func TestIntegOrShortCircuitReturnsValue(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// 1 or 0 → 1 (first truthy wins)
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("or"), NewInteger(0),
@@ -1191,6 +1256,7 @@ func TestIntegOrShortCircuitReturnsValue(t *testing.T) {
 
 func TestIntegAndShortCircuitReturnsValue(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// 1 and 2 → 2 (both truthy, last wins)
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("and"), NewInteger(2),
@@ -1225,6 +1291,7 @@ func TestIntegAndShortCircuitReturnsValue(t *testing.T) {
 
 func TestIntegTandMergeMaps(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// {x:1} tand {y:Integer} -> {x:1,y:Integer}
 	left := NewOrderedMap()
 	left.Set("x", NewInteger(1))
@@ -1261,6 +1328,7 @@ func TestIntegTandMergeMaps(t *testing.T) {
 
 func TestIntegTandMergeOverlap(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// {x:1} tand {x:Integer} -> {x:1} (1 unifies with Integer to 1)
 	left := NewOrderedMap()
 	left.Set("x", NewInteger(1))
@@ -1284,6 +1352,7 @@ func TestIntegTandMergeOverlap(t *testing.T) {
 
 func TestIntegTandUnifyScalars(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// 1 tand Integer -> 1
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("tand"), NewTypeLiteral(TInteger),
@@ -1300,6 +1369,7 @@ func TestIntegTandUnifyScalars(t *testing.T) {
 
 func TestIntegContextSetGet(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// set "key" 42 context get "key" context
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("mykey"), NewInteger(42),
@@ -1313,6 +1383,7 @@ func TestIntegContextSetGet(t *testing.T) {
 
 func TestIntegContextGetMissing(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// get on non-existent key => error (unknown key)
 	err := runAQLError(t, r, []Value{
 		NewWord("context"), NewWord("get"), NewString("nonexistent"),
@@ -1324,6 +1395,7 @@ func TestIntegContextGetMissing(t *testing.T) {
 
 func TestIntegContextSetWithWord(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// set wkey 99 context get wkey context
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewWord("wkey"), NewInteger(99),
@@ -1337,6 +1409,7 @@ func TestIntegContextSetWithWord(t *testing.T) {
 
 func TestIntegContextOverwrite(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// set, then overwrite, then get
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("k"), NewInteger(1),
@@ -1351,6 +1424,7 @@ func TestIntegContextOverwrite(t *testing.T) {
 
 func TestIntegContextPushesStore(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// context is a 0-arg word that pushes the context store onto the stack
 	result := runAQL(t, r, []Value{
 		NewWord("context"),
@@ -1364,6 +1438,7 @@ func TestIntegContextPushesStore(t *testing.T) {
 
 func TestIntegFileIOWriteListAsJSON(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
@@ -1386,6 +1461,7 @@ func TestIntegFileIOWriteListAsJSON(t *testing.T) {
 
 func TestIntegFileIOReadLines(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
@@ -1407,6 +1483,7 @@ func TestIntegFileIOReadLines(t *testing.T) {
 
 func TestIntegDoMapWithNonListValues(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// do {x: 42, y: "hello"} — non-list values should pass through
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(42))
@@ -1425,6 +1502,7 @@ func TestIntegDoMapWithNonListValues(t *testing.T) {
 
 func TestIntegVarWithDoBlock(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// var [[[a 3] [b 4]] do [a add b]]
 	varBody := NewList([]Value{
 		NewList([]Value{
@@ -1442,6 +1520,7 @@ func TestIntegVarWithDoBlock(t *testing.T) {
 
 func TestIntegFileIOReadJsonicFormat(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
@@ -1456,6 +1535,7 @@ func TestIntegFileIOReadJsonicFormat(t *testing.T) {
 
 func TestIntegFileIOWriteAppendNewFile(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 

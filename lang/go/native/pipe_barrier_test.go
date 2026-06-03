@@ -16,6 +16,7 @@ func TestPipeBarrierFnDef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// def f fn [[Integer | String] [String] [add]]
 	pairI := NewOrderedMap()
@@ -60,6 +61,7 @@ func TestPipeBarrierPreventsGreedyForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// Simulate module access: module_map get key module_map get key
 	m1 := NewOrderedMap()

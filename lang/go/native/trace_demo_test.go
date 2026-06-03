@@ -7,6 +7,7 @@ import (
 
 func TestTraceDemo(t *testing.T) {
 	r, err := DefaultRegistry()
+	registerIOWords(r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,6 +33,7 @@ func TestTraceDemo(t *testing.T) {
 
 func TestTraceDemoStringOps(t *testing.T) {
 	r, err := DefaultRegistry()
+	registerIOWords(r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,6 +59,7 @@ func TestTraceDemoStringOps(t *testing.T) {
 
 func TestTraceDemoStackOps(t *testing.T) {
 	r, err := DefaultRegistry()
+	registerIOWords(r)
 	if err != nil {
 		t.Fatal(err)
 	}

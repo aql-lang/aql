@@ -15,6 +15,7 @@ func TestEffectiveClockDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registry: %v", err)
 	}
+	registerIOWords(r)
 	clk := EffectiveClock(r)
 	if clk == nil {
 		t.Fatal("EffectiveClock returned nil")
@@ -28,6 +29,7 @@ func TestEffectiveClockDefault(t *testing.T) {
 // becomes deterministic.
 func TestEffectiveClockFixed(t *testing.T) {
 	r, err := DefaultRegistry()
+	registerIOWords(r)
 	if err != nil {
 		t.Fatalf("registry: %v", err)
 	}

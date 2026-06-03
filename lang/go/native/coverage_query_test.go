@@ -500,6 +500,7 @@ func TestPeekForwardValueInContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// Exercise curryOrPrefix and peekForwardValue through a word that uses forward arg collection
 	// e.g., "add" with forward: 1 add 2
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("add"), NewInteger(2)})
@@ -518,6 +519,7 @@ func TestStepEndWithMoveAndMark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def creates a mark; calling a def word triggers move
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("dbl"), NewWord("word"), NewList([]Value{NewWord("dup"), NewWord("add")}),
@@ -539,6 +541,7 @@ func TestBaseValueForConstraintCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// Create a typed list via the type system
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("typeof"),
@@ -668,6 +671,7 @@ func TestCallAQLBasic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// def double fn [[x:number] [number] [x add x]] end
 	xParam := NewOrderedMap()
@@ -714,6 +718,7 @@ func TestCallAQLNoMatchingSig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// def inc fn [[x:number] [number] [x add 1]] end
 	xParam := NewOrderedMap()
@@ -745,6 +750,7 @@ func TestArgsInsideFn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def sum2 fn [[a:number b:number] [number] [a add b]] end
 	// Using named params to exercise the args stack indirectly
 	aParam := NewOrderedMap()
@@ -773,6 +779,7 @@ func TestArgsDirectAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// Directly exercise the args stack by pushing and calling
 	r.Args.Push(NewList([]Value{NewInteger(42), NewString("hi")}))
 	e := New(r)
@@ -797,6 +804,7 @@ func TestArgsOutsideFnErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// args outside of a function should error
 	err = runAQLError(t, r, []Value{NewWord("args")})
 	if err == nil {
@@ -817,6 +825,7 @@ func TestResolveOrphanedForwardsCurry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// "2 add" with no second argument triggers orphan forward resolution => curry
 	e := NewTop(r)
 	result, err := e.Run([]Value{
@@ -837,6 +846,7 @@ func TestResolveOrphanedForwardsMultipleValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// Multiple values with no matching function should resolve gracefully
 	e := NewTop(r)
 	result, err := e.Run([]Value{
@@ -859,6 +869,7 @@ func TestResolveFieldTypeString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// Define a custom type: def MyNum Number
 	_ = runAQL(t, r, []Value{
@@ -877,6 +888,7 @@ func TestResolveFieldTypeStringUnknown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// Unknown name should pass through
 	v := NewString("NotAType")
@@ -892,6 +904,7 @@ func TestResolveFieldTypeList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// [String tor None] as code should evaluate to a disjunct
 	result := ResolveFieldType(r, NewList([]Value{
@@ -908,6 +921,7 @@ func TestResolveFieldTypePassthrough(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// A type literal should pass through unchanged
 	v := NewTypeLiteral(TNumber)
@@ -926,6 +940,7 @@ func TestSetParseFunc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	called := false
 	r.SetParseFunc(func(code string) ([]Value, error) {
@@ -1079,6 +1094,7 @@ func TestCallAQLMapPattern(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// Build a function with map pattern: fn [[x:{k:1}] [String] ["yes"]]
 	patternMap := NewOrderedMap()
@@ -1131,6 +1147,7 @@ func TestRegisterFnNonList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// fn with a non-list argument should error.
 	err = runAQLError(t, r, []Value{NewInteger(42), NewWord("fn")})
 	if err == nil {
@@ -1143,6 +1160,7 @@ func TestRegisterFnEmptyList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	err = runAQLError(t, r, []Value{NewList([]Value{}), NewWord("fn")})
 	if err == nil {
 		t.Error("expected error for fn with empty list")
@@ -1154,6 +1172,7 @@ func TestRegisterFnBadTriple(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// Triple with invalid input sig (non-list, non-map param element).
 	err = runAQLError(t, r, []Value{
 		NewList([]Value{
@@ -1177,6 +1196,7 @@ func TestParseFnUndefSpecParamError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// 4 elements = 2 pairs, first pair has bad input sig (invalid param type).
 	err = runAQLError(t, r, []Value{
 		NewList([]Value{
@@ -1197,6 +1217,7 @@ func TestParseFnUndefSpecReturnError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// 4 elements = 2 pairs, valid input sig but invalid return type.
 	err = runAQLError(t, r, []Value{
 		NewList([]Value{
@@ -1255,6 +1276,7 @@ func TestFnMapPatternViaEngine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// def foo fn [[x:{x:99}] [String] ["A"] [x:Map] [String] ["B"]]
 	patternMap := NewOrderedMap()

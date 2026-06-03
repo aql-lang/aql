@@ -49,6 +49,7 @@ func TestForLoop(t *testing.T) {
 
 			// Run through the engine with a fresh registry.
 			reg, err := native.DefaultRegistry()
+			registerIOWords(reg)
 			if err != nil {
 				t.Fatal(err)
 			}

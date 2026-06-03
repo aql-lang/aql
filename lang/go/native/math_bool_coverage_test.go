@@ -15,6 +15,7 @@ import (
 
 func TestMathPow(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Integer pow
 	result := runAQL(t, r, []Value{NewInteger(2), NewWord("pow"), NewInteger(3)})
 	_as0, _ := AsInteger(result[0])
@@ -42,6 +43,7 @@ func TestMathPow(t *testing.T) {
 
 func TestMathDiv(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Integer div
 	result := runAQL(t, r, []Value{NewInteger(10), NewWord("div"), NewInteger(3)})
 	_as3, _ := AsInteger(result[0])
@@ -63,6 +65,7 @@ func TestMathDiv(t *testing.T) {
 
 func TestMathMod(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Integer mod
 	result := runAQL(t, r, []Value{NewInteger(10), NewWord("mod"), NewInteger(3)})
 	_as5, _ := AsInteger(result[0])
@@ -84,6 +87,7 @@ func TestMathMod(t *testing.T) {
 
 func TestMathMulDecimal(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewDecimal(2.5), NewWord("mul"), NewDecimal(4)})
 	_as7, _ := AsNumber(result[0])
 	if _as7 != 10.0 {
@@ -93,6 +97,7 @@ func TestMathMulDecimal(t *testing.T) {
 
 func TestMathSubDecimal(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewDecimal(5.5), NewWord("sub"), NewDecimal(2.5)})
 	_as8, _ := AsNumber(result[0])
 	if _as8 != 3.0 {
@@ -102,6 +107,7 @@ func TestMathSubDecimal(t *testing.T) {
 
 func TestMathAddDecimal(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewDecimal(1.5), NewWord("add"), NewDecimal(2.5)})
 	_as9, _ := AsNumber(result[0])
 	if _as9 != 4.0 {
@@ -113,6 +119,7 @@ func TestMathAddDecimal(t *testing.T) {
 
 func TestBoolXor(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	tests := []struct {
 		a, b bool
 		want bool
@@ -134,6 +141,7 @@ func TestBoolXor(t *testing.T) {
 
 func TestBoolNand(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("nand"), NewBoolean(true)})
 	_as12, _ := AsBoolean(result[0])
 	if _as12 != false {
@@ -148,6 +156,7 @@ func TestBoolNand(t *testing.T) {
 
 func TestBoolImplies(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("implies"), NewBoolean(false)})
 	_as14, _ := AsBoolean(result[0])
 	if _as14 != false {
@@ -162,6 +171,7 @@ func TestBoolImplies(t *testing.T) {
 
 func TestBoolTorNonBoolean(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("tor"), NewInteger(2)})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -175,6 +185,7 @@ func TestBoolTorNonBoolean(t *testing.T) {
 
 func TestMathAddMixed(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("add"), NewDecimal(2.5)})
 	_as16, _ := AsNumber(result[0])
 	if _as16 != 3.5 {
@@ -191,6 +202,7 @@ func TestMathAddMixed(t *testing.T) {
 
 func TestStringAdd(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewString("hello"), NewWord("add"), NewString(" world")})
 	_as18, _ := AsString(result[0])
 	if _as18 != "hello world" {

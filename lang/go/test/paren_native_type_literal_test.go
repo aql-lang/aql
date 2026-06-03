@@ -343,6 +343,7 @@ func TestTypeLiteralNoPanic(t *testing.T) {
 			}
 
 			reg, err := native.DefaultRegistry()
+			registerIOWords(reg)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -384,6 +385,7 @@ func TestTypeLiteralNoPanicNative(t *testing.T) {
 			}
 
 			reg, err := native.DefaultRegistry()
+			registerIOWords(reg)
 			if err != nil {
 				t.Fatal(err)
 			}

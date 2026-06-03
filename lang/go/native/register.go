@@ -24,10 +24,7 @@ func Register(r *Registry) {
 	// break / continue are owned by lang (see native_control.go); the
 	// kernel only provides the FlowCtrl type and the Run-loop dispatch.
 
-	// String
-	for _, n := range stringNatives {
-		r.RegisterNativeFunc(n)
-	}
+	// String words moved to the aql:string-util module.
 
 	// Stack ops
 	for _, n := range stackNatives {

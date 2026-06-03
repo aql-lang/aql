@@ -464,6 +464,7 @@ func TestWalkBeforeIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
 	// walk moved to aql:struct; register the struct words into this registry.
@@ -521,6 +522,7 @@ func TestWalkBeforeIdentityNested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
 	// walk moved to aql:struct; register the struct words into this registry.
@@ -579,6 +581,7 @@ func TestWalkBeforeReplace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
 	// walk moved to aql:struct; register the struct words into this registry.
@@ -625,6 +628,7 @@ func TestWalkBeforeReturnPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
 	// walk moved to aql:struct; register the struct words into this registry.
@@ -679,6 +683,7 @@ func TestWalkBeforeAfterIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
 	// walk moved to aql:struct; register the struct words into this registry.
@@ -747,6 +752,7 @@ func TestWalkBeforeAfterPostOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
 	// walk moved to aql:struct; register the struct words into this registry.
@@ -806,6 +812,7 @@ func TestWalkBeforeAfterNested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
 	// walk moved to aql:struct; register the struct words into this registry.

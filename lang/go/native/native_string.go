@@ -6,7 +6,8 @@ import (
 	"unicode"
 )
 
-// stringNatives covers the string-manipulation words. Each entry uses
+// StringModuleNatives covers the string-manipulation words, moved OUT of core
+// into the aql:string-util module (StringUtil namespace). Formerly stringNatives. Each entry uses
 // the standard NativeFunc shape: forward-collecting words whose
 // signatures fan out across [TString], [TString, TMap], etc.
 //
@@ -14,7 +15,7 @@ import (
 // trivial upper/lower handlers are produced by the unaryStringNative
 // builder which returns a NativeFunc carrying both [TString] and
 // [TAtom] signatures.
-var stringNatives = []NativeFunc{
+var StringModuleNatives = []NativeFunc{
 	unaryStringNative("upper", strings.ToUpper),
 	unaryStringNative("lower", strings.ToLower),
 	{
@@ -104,6 +105,8 @@ var stringNatives = []NativeFunc{
 		Signatures: []NativeSig{
 			{Args: []*Type{TInteger, TMap, TString}, Handler: padOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TInteger, TString}, Handler: padHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TAny}, Handler: padWidthHandler, BarrierPos: -1},
+			{Args: []*Type{TAny}, Handler: padDefaultHandler, BarrierPos: -1},
 		},
 	},
 	{

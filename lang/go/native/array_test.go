@@ -12,6 +12,7 @@ import (
 // The core array words (iota, range, each, …) are present regardless.
 func arrayTestReg() *Registry {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	for _, n := range ArrayModuleNatives {
 		r.RegisterNativeFunc(n)
 	}
@@ -192,6 +193,7 @@ func TestReshape(t *testing.T) {
 // array word (ADR-001). A nested list collapses fully.
 func TestFlattenFull(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	input := NewList([]Value{
 		NewList([]Value{NewInteger(1), NewList([]Value{NewInteger(2), NewList([]Value{NewInteger(3)})})}),
 		NewInteger(4),
@@ -213,6 +215,7 @@ func TestFlattenFull(t *testing.T) {
 // only "fully flatten" form).
 func TestFlattenDefaultOneLevel(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	input := NewList([]Value{
 		NewList([]Value{NewInteger(1), NewList([]Value{NewInteger(2)})}),
 	})
@@ -256,6 +259,7 @@ func TestTranspose(t *testing.T) {
 // absent). Uses a plain registry, no aql:array import.
 func TestIndexofListOverload(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// forward form: needles then haystack.
 	result := runAQL(t, r, []Value{
 		NewWord("indexof"),
@@ -269,6 +273,7 @@ func TestIndexofListOverload(t *testing.T) {
 // overload, proving the two operations coexist under one name.
 func TestIndexofStringStillWorks(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("indexof"), NewString("hello"), NewString("ll"),
 	})

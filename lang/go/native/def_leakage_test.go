@@ -12,6 +12,7 @@ func TestDefLeakageFromCallAQL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// Define a fn that creates a local def inside its body:
 	// def myfn fn [[x:Integer] [Integer] [def localvar 99 x add localvar]]
@@ -53,6 +54,7 @@ func TestDefLeakageDotNotation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// Define a fn that creates a local def named 'op':
 	// def process fn [[m:Map] [String] [def op (m.op) op]]
@@ -107,6 +109,7 @@ func TestDefLeakageMultipleCalls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// def counter fn [[n:Integer] [Integer] [def tmp (n add 1) tmp]]
 	pairN := NewOrderedMap()

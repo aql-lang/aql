@@ -10,6 +10,7 @@ import (
 
 func TestSysStoreStructure(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	store := r.Contexts.Top()
 	if store == nil {
 		t.Fatal("no context store")
@@ -69,6 +70,7 @@ func TestSysStoreStructure(t *testing.T) {
 
 func TestEffectiveFileOpsDefaultIsOS(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	ops := EffectiveFileOps(r)
 	if _, ok := ops.(*capabilities.OSFileOps); !ok {
 		t.Fatalf("default EffectiveFileOps is %T, want *OSFileOps", ops)
@@ -77,6 +79,7 @@ func TestEffectiveFileOpsDefaultIsOS(t *testing.T) {
 
 func TestEffectiveFileOpsMemTrue(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 
 	// Set __sys.fs.mem = true via AQL
 	e := New(r)
@@ -99,6 +102,7 @@ func TestEffectiveFileOpsMemTrue(t *testing.T) {
 
 func TestMemFileOpsReadWrite(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 
 	// Enable in-memory fs
 	e := New(r)
@@ -131,6 +135,7 @@ func TestMemFileOpsReadWrite(t *testing.T) {
 
 func TestMemFileOpsPersistsAcrossRuns(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 
 	// Enable mem fs
 	e := New(r)
@@ -155,6 +160,7 @@ func TestMemFileOpsPersistsAcrossRuns(t *testing.T) {
 
 func TestSysValStoreSetGet(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	e := New(r)
 
 	// Set a value in __sys.__val

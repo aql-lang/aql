@@ -424,6 +424,7 @@ func TestImportFileNoParseFunc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	native.SetHostFileOps(reg, mem)
 	// No ParseFunc.
 
@@ -446,6 +447,7 @@ func TestImportFileRenameNoParseFunc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	native.SetHostFileOps(reg, mem)
 
 	vals, _ := parser.Parse(`import [M R] "./mod.aql"`)
@@ -830,6 +832,7 @@ func TestSetParseFuncNil(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	reg.SetParseFunc(nil)
 	if reg.ParseFunc != nil {
 		t.Error("expected nil")
@@ -841,6 +844,7 @@ func TestSetParseFuncRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	reg.SetParseFunc(parser.Parse)
 	if reg.ParseFunc == nil {
 		t.Error("expected non-nil")

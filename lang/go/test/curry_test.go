@@ -17,6 +17,7 @@ func runSteps(t *testing.T, steps []string) ([]native.Value, error) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	modules.InstallMathExports(reg)
 	eng := native.NewTop(reg)
 
@@ -286,6 +287,7 @@ func TestCurryNoOuterForwardErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	eng := native.NewTop(reg)
 	vals, err := parser.Parse(`add 5`)
 	if err != nil {

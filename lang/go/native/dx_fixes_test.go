@@ -16,6 +16,7 @@ func dxRun(t *testing.T, src string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	toks, err := parser.Parse(src)
 	if err != nil {
 		t.Fatalf("parse %q: %v", src, err)
@@ -34,6 +35,7 @@ func dxErr(t *testing.T, src string) error {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	toks, err := parser.Parse(src)
 	if err != nil {
 		return err
@@ -97,6 +99,7 @@ func TestDXCheckSiblingImportDoesNotHardFail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	r.Check.Mode = true
 	defer func() { r.Check.Mode = false }()
 
@@ -117,6 +120,7 @@ func TestDXTopLevelRecover(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "dx-boom",
 		Signatures: []NativeSig{{
@@ -146,6 +150,7 @@ func TestDXExportTopLevelNoOp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 	toks, err := parser.Parse(`export "Lib" {greet: 1}  print "ran"`)

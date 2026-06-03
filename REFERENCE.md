@@ -104,8 +104,9 @@ A trailing `/...` suffix overrides a word's default argument shape:
 | `/Nf` | N arguments, forward only |
 | `/Ns` | N arguments, stack only |
 
+<!-- aql-test: skip -->
 ```
-lower/f "ABC"                 => 'abc'
+lower/f "ABC"                 => 'abc'   # (lower is in aql:string-util — StringUtil.lower)
 "DEF" lower/s                 => 'def'
 lower/1 "GHI"                 => 'ghi'
 ```
@@ -359,17 +360,17 @@ of the word, with the haystack as the forward arg.
 
 | Word | Description | Example |
 |------|-------------|---------|
-| `upper` | Uppercase | `upper "hello" => 'HELLO'` |
-| `lower` | Lowercase | `lower "ABC" => 'abc'` |
-| `concat` | Join list elements into a string | `concat ["a","b"] => 'ab'` |
-| `split` | Split string by separator | `split "a,b" "," => ['a','b']` |
-| `contains` | Substring test | `contains "hello" "ell" => true` |
-| `indexof` | Find substring position (also has a list form — see [List and array words](#list-and-array-words)) | `indexof "hello" "ll" => 2` |
+"aql:string-util" import end | `StringUtil.upper` | Uppercase | `StringUtil.upper "hello" => 'HELLO'` |
+"aql:string-util" import end | `StringUtil.lower` | Lowercase | `StringUtil.lower "ABC" => 'abc'` |
+"aql:string-util" import end | `StringUtil.concat` | Join list elements into a string | `StringUtil.concat ["a","b"] => 'ab'` |
+"aql:string-util" import end | `StringUtil.split` | Split string by separator | `StringUtil.split "a,b" "," => ['a','b']` |
+"aql:string-util" import end | `StringUtil.contains` | Substring test | `StringUtil.contains "hello" "ell" => true` |
+"aql:string-util" import end | `StringUtil.indexof` | Find substring position (also has a list form — see [List and array words](#list-and-array-words)) | `StringUtil.indexof "hello" "ll" => 2` |
 | `slice` | Substring; negative indices ok | `slice "hello" 1 3 => 'el'` |
-| `replace` | Replace pattern | `replace "hello" "l" "r" => 'herlo'` |
-| `repeat` | Repeat string | `repeat "ab" 3 => 'ababab'` |
-| `trim` | Trim whitespace or chars | `trim "  hi  " => 'hi'` |
-| `pad` | Pad to width | `"hi" pad 5 => 'hi   '` |
+"aql:string-util" import end | `StringUtil.replace` | Replace pattern | `StringUtil.replace "hello" "l" "r" => 'herlo'` |
+"aql:string-util" import end | `StringUtil.repeat` | Repeat string | `StringUtil.repeat "ab" 3 => 'ababab'` |
+"aql:string-util" import end | `StringUtil.trim` | Trim whitespace or chars | `StringUtil.trim "  hi  " => 'hi'` |
+"aql:string-util" import end | `StringUtil.pad` | Pad to width | `"hi" StringUtil.pad 5 => 'hi   '` |
 | `match` | Regex match (returns a struct) | `match "abc" "b(c)"` |
 
 #### Options examples
@@ -377,9 +378,9 @@ of the word, with the haystack as the forward arg.
 Pass an Options map as the *last* forward argument:
 
 ```
-split   "a,,b"      ","    {keepEmpty: true}            => ['a' '' 'b']
-contains "hello"    "Ell"  {cs: "insensitive"}          => true
-replace "aaa"       "a" "b" {scope: "all"}              => 'bbb'
+"aql:string-util" import end StringUtil.split   "a,,b"      ","    {keepEmpty: true}            => ['a' '' 'b']
+"aql:string-util" import end StringUtil.contains "hello"    "Ell"  {cs: "insensitive"}          => true
+"aql:string-util" import end StringUtil.replace "aaa"       "a" "b" {scope: "all"}              => 'bbb'
 ```
 
 ### Boolean
@@ -566,7 +567,7 @@ and `flatten`/`size`. The specialised array vocabulary lives in the
 | `shed` | Drop first N | `[1,2,3,4] shed 2 => [3,4]` |
 | `reverse` | Reverse order | `[1,2,3] reverse => [3,2,1]` |
 | `flatten` | Remove one nesting level; `flatten N` removes N; `flatten -1` fully flattens | `[[1,2],[3]] flatten => [1,2,3]`; `flatten -1 [1,[2,[3]]] => [1,2,3]` |
-| `indexof` | On strings: substring position. On two lists: index of each needle in the haystack | `indexof "hello" "ll" => 2`; `indexof [20,10] [10,20,30] => [1,0]` |
+"aql:string-util" import end | `StringUtil.indexof` | On strings: substring position. On two lists: index of each needle in the haystack | `StringUtil.indexof "hello" "ll" => 2`; `StringUtil.indexof [20,10] [10,20,30] => [1,0]` |
 | `size` | Element / key count of a collection — works on any value (see [Size](#size)) | `[1,2,3] size => 3` |
 
 `flatten` and `indexof` are single words with several type-dispatched

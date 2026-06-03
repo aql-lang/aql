@@ -9,6 +9,7 @@ func TestUndefBugNamedStringParams(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def joiner fn [[a:string b:string c:string] [string] [a b add c add]] end
 	// Named string params: body concatenates a+b+c via add.
 	// All prefix: "A" "B" "C" joiner → nearest to joiner is "C"→sig[0](a),

@@ -57,6 +57,7 @@ func TestBoolean(t *testing.T) {
 			}
 
 			reg, err := native.DefaultRegistry()
+			registerIOWords(reg)
 			if err != nil {
 				t.Fatal(err)
 			}

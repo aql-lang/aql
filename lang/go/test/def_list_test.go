@@ -29,6 +29,7 @@ func registerIOWords(reg *native.Registry) {
 		native.TPartialModuleNatives,
 		native.TimeAsyncModuleNatives,
 		native.LogicModuleNatives,
+		native.StringModuleNatives,
 	}
 	for _, slice := range moved {
 		for _, n := range slice {
@@ -48,6 +49,7 @@ func runNativeSteps(t *testing.T, files map[string]string, steps []string) ([]na
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	native.SetHostFileOps(reg, mem)
 	native.Register(reg)
 	modules.InstallMathExports(reg)

@@ -139,7 +139,7 @@ Take, drop, reverse, flatten, indexof (built-in):
 [1,2,3] reverse               => [3 2 1]
 [[1,2],[3]] flatten           => [1 2 3]        # one level
 flatten -1 [1,[2,[3]]]        => [1 2 3]        # fully flatten
-indexof [20,10] [10,20,30]    => [1 0]          # index of each needle
+"aql:string-util" import end StringUtil.indexof [20,10] [10,20,30]    => [1 0]          # index of each needle
 ```
 
 The richer array vocabulary — reshaping, ordering, grouping,

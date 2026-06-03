@@ -40,6 +40,7 @@ func TestCheckGoldenFixtures(t *testing.T) {
 			if err != nil {
 				t.Fatalf("new: %v", err)
 			}
+			seedAQL(a)
 			res, err := a.Check(string(src))
 			if err != nil {
 				t.Fatalf("check %s: %v", aqlPath, err)

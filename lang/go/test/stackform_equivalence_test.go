@@ -24,6 +24,7 @@ func stackformReg(t *testing.T) *native.Registry {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	r.SetParseFunc(parser.Parse)
 	return r
 }

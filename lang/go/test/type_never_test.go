@@ -192,6 +192,7 @@ func TestNever_DefRejectsAllValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
+	seedAQL(a)
 	_, err = a.Run(`def x:Never 1`)
 	if err == nil {
 		t.Errorf("def x:Never 1 succeeded; want error (Never is uninhabited)")

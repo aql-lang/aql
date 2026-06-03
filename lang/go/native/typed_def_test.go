@@ -20,6 +20,7 @@ func TestTypedDefIntegerSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// Build the program: `def x:Integer 1` where x:Integer becomes
 	// a single-key map at the top level.
 	m := NewOrderedMap()
@@ -45,6 +46,7 @@ func TestTypedDefIntegerFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("x", NewTypeLiteral(TInteger))
 	e := New(r)
@@ -71,6 +73,7 @@ func TestTypedDefAnonymousDepIntegerSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	dep := NewDepScalar(DepGT, NewInteger(10))
 	m := NewOrderedMap()
 	m.Set("n", dep)
@@ -92,6 +95,7 @@ func TestTypedDefAnonymousDepIntegerFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	dep := NewDepScalar(DepGT, NewInteger(10))
 	m := NewOrderedMap()
 	m.Set("n", dep)
@@ -118,6 +122,7 @@ func TestTypedDefNamedTypeSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	g10 := NewDepScalar(DepGT, NewInteger(10))
 	m := NewOrderedMap()
 	m.Set("n", g10)
@@ -139,6 +144,7 @@ func TestTypedDefNamedTypeFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	g10 := NewDepScalar(DepGT, NewInteger(10))
 	m := NewOrderedMap()
 	m.Set("n", g10)
@@ -161,6 +167,7 @@ func TestTypedDefMultiKeyRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("a", NewTypeLiteral(TInteger))
 	m.Set("b", NewTypeLiteral(TString))
@@ -181,6 +188,7 @@ func TestTypedDefNonTypeValueRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(42)) // 42 is a literal, not a type
 	e := New(r)

@@ -128,7 +128,7 @@ func TestExecuteDoSimple(t *testing.T) {
 
 func TestExecuteDoStringArgs(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := execute([]string{"do", `"hello"`, "upper"}, nil, &stdout, &stderr)
+	code := execute([]string{"do", `"aql:string-util"`, "import", "end", `"hello"`, "StringUtil.upper"}, nil, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}

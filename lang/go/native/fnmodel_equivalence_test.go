@@ -198,6 +198,7 @@ func runCorpusEntry(t *testing.T, src string) string {
 	if err != nil {
 		return "REGERR: " + err.Error()
 	}
+	registerIOWords(r)
 	toks, perr := parser.Parse(src)
 	if perr != nil {
 		return "PARSEERR: " + perr.Error()
@@ -247,6 +248,7 @@ func runCheckEntry(src string) string {
 	if err != nil {
 		return "REGERR: " + err.Error()
 	}
+	registerIOWords(r)
 	r.Check.Mode = true
 	toks, perr := parser.Parse(src)
 	if perr != nil {
@@ -291,6 +293,7 @@ func TestFnModelEquivalence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registry: %v", err)
 	}
+	registerIOWords(r)
 
 	var got strings.Builder
 	got.WriteString("=== SIGNATURE TABLE ===\n")

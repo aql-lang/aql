@@ -509,7 +509,7 @@ func TestRegisterFunctions(t *testing.T) {
 	// so they are no longer expected in the global registry.
 	names := []string{
 		"create", "filter", "flatten", "join", "list", "load",
-		"pad", "remove", "size", "slice", "update",
+		"remove", "size", "slice", "update",
 	}
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
@@ -645,6 +645,7 @@ func defaultRegistry(t *testing.T) *Registry {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	return r
 }
 

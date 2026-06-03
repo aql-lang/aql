@@ -22,6 +22,7 @@ func runWithFiles(t *testing.T, files map[string]string, expr string) (string, e
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	native.SetHostFileOps(reg, mem)
 	registerIOWords(reg)
 
@@ -52,6 +53,7 @@ func runWithMem(t *testing.T, files map[string]string, expr string) (*capabiliti
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	native.SetHostFileOps(reg, mem)
 	registerIOWords(reg)
 
@@ -277,6 +279,7 @@ func TestReadWriteRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	native.SetHostFileOps(reg, mem)
 	registerIOWords(reg)
 
@@ -325,6 +328,7 @@ func runWithStdio(t *testing.T, stdin string, expr string) (stdout, stderr, stac
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	native.SetHostFileOps(reg, capabilities.NewMem())
 	registerIOWords(reg)
 
@@ -353,6 +357,7 @@ func TestStdinWord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	native.SetHostFileOps(reg, capabilities.NewMem())
 	registerIOWords(reg)
 	var buf bytes.Buffer
@@ -375,6 +380,7 @@ func TestStdinWord(t *testing.T) {
 
 func TestStdoutWord(t *testing.T) {
 	reg, err := native.DefaultRegistry()
+	registerIOWords(reg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -396,6 +402,7 @@ func TestStdoutWord(t *testing.T) {
 
 func TestStderrWord(t *testing.T) {
 	reg, err := native.DefaultRegistry()
+	registerIOWords(reg)
 	if err != nil {
 		t.Fatal(err)
 	}

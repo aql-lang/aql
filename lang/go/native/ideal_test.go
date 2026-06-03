@@ -14,6 +14,7 @@ func TestIdeals_KernelKindsRegistered(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	for _, name := range []string{"Object", "Record", "Table"} {
 		if r.Ideals.Get(name) == nil {
 			t.Errorf("kernel Ideal %q is not registered", name)
@@ -34,6 +35,7 @@ func TestIdeals_CustomKindDispatchesThroughType(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	called := false
 	r.Ideals.Register(&eng.Ideal{
 		Name:    "Stringy",
@@ -63,6 +65,7 @@ func TestIdeals_CustomKindInstantiatesThroughMake(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	called := false
 	r.Ideals.Register(&eng.Ideal{
 		Name:    "Listy",
@@ -94,6 +97,7 @@ func TestIdealConformance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	kernelKind := map[string]bool{"Object": true, "Record": true, "Table": true}
 	names := r.Ideals.Names()
 	if len(names) == 0 {
@@ -135,6 +139,7 @@ func TestIdealConformance_DisabledKind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	rec := r.Ideals.Get("Record")
 	if rec == nil {
 		t.Fatal("Record Ideal not registered")
@@ -157,6 +162,7 @@ func TestIdeals_DisabledKindErrorsFromType(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	rec := r.Ideals.Get("Record")
 	if rec == nil {
 		t.Fatal("Record Ideal not registered")

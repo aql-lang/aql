@@ -219,6 +219,7 @@ func TestTraceCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -286,6 +287,7 @@ func TestReadWriteJsonic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	mem.Files["data.jsonic"] = []byte(`{a: 1, b: "hello"}`)
 	SetHostFileOps(r, mem)
@@ -313,6 +315,7 @@ func TestReadWriteJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	mem.Files["data.json"] = []byte(`{"x": 42}`)
 	SetHostFileOps(r, mem)
@@ -330,6 +333,7 @@ func TestReadWriteLines(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
@@ -350,6 +354,7 @@ func TestReadWriteText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	mem.Files["hello.txt"] = []byte("hello world")
 	SetHostFileOps(r, mem)
@@ -372,6 +377,7 @@ func TestWriteStdout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -392,6 +398,7 @@ func TestWriteAppendMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	mem.Files["out.txt"] = []byte("first\n")
 	SetHostFileOps(r, mem)
@@ -418,6 +425,7 @@ func TestPrintCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -438,6 +446,7 @@ func TestPrintListCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -494,6 +503,7 @@ func TestRegistryMatchNoSig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// Try matching with no args against a word that needs args
 	result := r.Match("add", []Value{}, WordInfo{})
 	if result != nil {
@@ -542,6 +552,7 @@ func TestModuleImportFromFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	// Module file that exports "greet" with value "hello"
 	mem.Files["mod.aql"] = []byte(`export greet {val: 'world'}`)
@@ -571,6 +582,7 @@ func TestModuleImportFileWithRename(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	mem.Files["mod2.aql"] = []byte(`export foo {val: 42}`)
 	SetHostFileOps(r, mem)
@@ -599,6 +611,7 @@ func TestModuleExportWithStringName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// Module with string-named export
 	m := NewOrderedMap()
@@ -619,6 +632,7 @@ func TestModuleImportSelectedExports(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	m1 := NewOrderedMap()
 	m1.Set("x", NewInteger(1))
@@ -651,6 +665,7 @@ func TestModuleImportMultipleRenames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	m1 := NewOrderedMap()
 	m1.Set("x", NewInteger(1))
@@ -694,6 +709,7 @@ func TestMakeTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// Define a table type
 	fields := NewOrderedMap()
@@ -725,6 +741,7 @@ func TestMakeRecordWithBase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// Define a record type
 	fields := NewOrderedMap()
@@ -754,6 +771,7 @@ func TestMakeRecordWithNamedList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TInteger))
@@ -779,6 +797,7 @@ func TestMakeConvertDecimalToString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TString), NewDecimal(3.14),
 	})
@@ -794,6 +813,7 @@ func TestMakeConvertBoolFromNumber(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TBoolean), NewInteger(1),
 	})
@@ -815,6 +835,7 @@ func TestMakeConvertBoolFromNonBoolString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TBoolean), NewString("hello"),
 	})
@@ -836,6 +857,7 @@ func TestMakeConvertToAtomFromString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TAtom), NewString("hello"),
 	})
@@ -850,6 +872,7 @@ func TestMakeConvertFloatStringToNumber(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// "3.14" to integer should parse as float then truncate
 	result := runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TInteger), NewString("3.14"),

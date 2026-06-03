@@ -18,6 +18,7 @@ func TestPathModifiers(t *testing.T) {
 			return "PARSE:" + err.Error()
 		}
 		r, _ := DefaultRegistry()
+		registerIOWords(r)
 		o, e := NewTop(r).Run(v)
 		if e != nil {
 			return "ERR:" + e.Error()
@@ -56,6 +57,7 @@ func TestForceFnComposition(t *testing.T) {
 			return "PARSE:" + err.Error()
 		}
 		r, _ := DefaultRegistry()
+		registerIOWords(r)
 		o, e := NewTop(r).Run(v)
 		if e != nil {
 			return "ERR:" + e.Error()

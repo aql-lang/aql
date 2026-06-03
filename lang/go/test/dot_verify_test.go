@@ -22,6 +22,7 @@ func TestDotVerify(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	r.SetParseFunc(parser.Parse)
 
 	setup := `def p {x:{y:1}}

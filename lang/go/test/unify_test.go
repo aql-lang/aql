@@ -60,6 +60,7 @@ func TestUnify(t *testing.T) {
 
 			// Build and run the unify expression: left unify right
 			reg, err := native.DefaultRegistry()
+			registerIOWords(reg)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -112,6 +113,7 @@ func evalSingle(expr string) (native.Value, error) {
 	if err != nil {
 		return native.Value{}, fmt.Errorf("registry: %w", err)
 	}
+	registerIOWords(reg)
 	eng := native.NewTop(reg)
 	result, err := eng.Run(values)
 	if err != nil {

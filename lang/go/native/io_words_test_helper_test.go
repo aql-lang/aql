@@ -22,6 +22,7 @@ func registerIOWords(r *Registry) {
 		TPartialModuleNatives,
 		TimeAsyncModuleNatives,
 		LogicModuleNatives,
+		StringModuleNatives,
 	}
 	for _, slice := range moved {
 		for _, n := range slice {

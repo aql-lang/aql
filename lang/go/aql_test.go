@@ -759,6 +759,11 @@ func TestRegisterAddsAlongsideBuiltin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// `upper` moved to aql:string-util; register the string words so this test
+	// can demonstrate extending an existing (module) word with a new overload.
+	for _, n := range native.StringModuleNatives {
+		a.RegisterNativeFunc(n)
+	}
 	// Add a new integer signature to the built-in "upper" word.
 	// The existing string signature still works; the new one handles integers.
 	a.Register("upper", lang.Signature{

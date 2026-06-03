@@ -16,6 +16,7 @@ func TestStepEndNoForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewInteger(1), NewEnd()})
 	_as32, _ := AsInteger(result[0])
 	if len(result) != 1 || _as32 != 1 {
@@ -29,6 +30,7 @@ func TestDefEndExplicit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("foo"), NewInteger(42), NewEnd(),
 		NewWord("foo"),
@@ -45,6 +47,7 @@ func TestParenResolvesForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewOpenParen(), NewInteger(1), NewWord("add"), NewInteger(2), NewCloseParen(),
 	})
@@ -59,6 +62,7 @@ func TestUnmatchedCloseParen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	err = runAQLError(t, r, []Value{NewInteger(1), NewCloseParen()})
 	if err == nil {
 		t.Fatal("expected error for unmatched close paren")
@@ -260,6 +264,7 @@ func TestFnMultiSignature(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def f fn [[x:number] [number] [x mul x] [x:string] [string] [x upper]]
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("f"), NewWord("fn"),
@@ -435,6 +440,7 @@ func TestQueryFromWhereLt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -454,6 +460,7 @@ func TestQueryFromWhereGte(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -473,6 +480,7 @@ func TestQueryFromWhereLte(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -492,6 +500,7 @@ func TestQueryFromWhereNeq(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -511,6 +520,7 @@ func TestQueryFromOrderAsc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -528,6 +538,7 @@ func TestQueryFromLimitOffset(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -546,6 +557,7 @@ func TestQueryPrintTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 	makeTestTable(r)
@@ -826,6 +838,7 @@ func TestRunTraceError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 	tokens := []Value{NewInteger(10), NewWord("div"), NewInteger(0)}
@@ -1009,6 +1022,7 @@ func TestAsListQueryBuilder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -1034,6 +1048,7 @@ func TestStepEndWithForwardBeforeEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def myval 42 end 1 add myval
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("myval"), NewInteger(42), NewEnd(),
@@ -1050,6 +1065,7 @@ func TestStepEndTerminatesDef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def a [1 add] end 10 a
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("a"),
@@ -1072,6 +1088,7 @@ func TestNewRegistryHasStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// Store field removed; context store is initialized by InitRootContext.
 	if HostFormats(r) == nil {
 		t.Error("expected Formats capability to be installed")

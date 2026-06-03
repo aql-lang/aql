@@ -734,6 +734,7 @@ func TestExtraStepEndNoForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewInteger(1), NewEnd()})
 	_as1, _ := AsNumber(result[0])
 	if len(result) != 1 || _as1 != 1.0 {
@@ -747,6 +748,7 @@ func TestExtraStepEndAfterForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("add"), NewInteger(2), NewEnd(),
 	})
@@ -937,6 +939,7 @@ func TestExtraValuesEqualTypeLiteralVsConcrete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{a, b, NewWord("unify")})
 	if len(result) < 2 {
 		t.Fatalf("unify: got %d results", len(result))
@@ -954,6 +957,7 @@ func TestExtraValuesEqualDecimalsDirect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewDecimal(1.5), NewDecimal(2.5), NewWord("unify"),
 	})

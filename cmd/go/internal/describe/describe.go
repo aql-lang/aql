@@ -35,6 +35,7 @@ var moduleSummaries = map[string]string{
 	"io":          "I/O: read, write, stdin/stdout/stderr, printstr, trace.",
 	"net":         "HTTP requests and API access: fetch, prepare, direct.",
 	"logic-util":  "Derived boolean connectives: nand, nor, xnor, iff, implies.",
+	"string-util": "String manipulation: concat, split, trim, upper, lower, ….",
 }
 
 type cmd struct{}

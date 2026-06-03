@@ -207,6 +207,7 @@ func runCheckMode(t *testing.T, src string) []native.Value {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	native.Register(reg)
 	reg.Check.Mode = true
 	defer func() { reg.Check.Mode = false }()

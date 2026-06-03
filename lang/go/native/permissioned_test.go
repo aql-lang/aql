@@ -38,6 +38,7 @@ func TestSetHostFileOpsDoesNotWrapWithNoPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	ops := HostFileOps(r)
 	if ops == nil {
 		t.Fatal("expected HostFileOps to be installed")

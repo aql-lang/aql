@@ -31,6 +31,7 @@ func TestTypeRecordRejectsMap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
+	seedAQL(a)
 	if _, err := a.Run("refine Record {x:Integer}"); err == nil {
 		t.Fatal("expected error for `refine Record {x:Integer}` (map), got nil")
 	}
@@ -91,6 +92,7 @@ func TestTypeBadBase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
+	seedAQL(a)
 	if _, err := a.Run("refine Integer {x:1}"); err == nil {
 		t.Fatal("expected error for `refine Integer {x:1}`, got nil")
 	}

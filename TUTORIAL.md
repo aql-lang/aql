@@ -182,16 +182,16 @@ all-forward: `WORD input arg…`. See
 [§3: the argument-order rule](#the-argument-order-rule).
 
 ```
-aql> "hello" upper                 => 'HELLO'
-aql> "HELLO" lower                 => 'hello'
-aql> split "hello,world" ","       => ['hello' 'world']
-aql> ["a","b","c"] concat          => 'abc'   # joins list elements
-aql> contains "hello" "ell"        => true
-aql> indexof "hello" "ll"          => 2
+aql> "aql:string-util" import end "hello" StringUtil.upper                 => 'HELLO'
+aql> "aql:string-util" import end "HELLO" StringUtil.lower                 => 'hello'
+aql> "aql:string-util" import end StringUtil.split "hello,world" ","       => ['hello' 'world']
+aql> "aql:string-util" import end ["a","b","c"] StringUtil.concat          => 'abc'   # joins list elements
+aql> "aql:string-util" import end StringUtil.contains "hello" "ell"        => true
+aql> "aql:string-util" import end StringUtil.indexof "hello" "ll"          => 2
 aql> "hello" slice 1 3             => 'el'
-aql> replace "hello" "l" "r"       => 'herlo'
-aql> "  hi  " trim                 => 'hi'
-aql> "hi" pad 5                    => 'hi   '
+aql> "aql:string-util" import end StringUtil.replace "hello" "l" "r"       => 'herlo'
+aql> "aql:string-util" import end "  hi  " StringUtil.trim                 => 'hi'
+aql> "aql:string-util" import end "hi" StringUtil.pad 5                    => 'hi   '
 ```
 
 Backtick template strings interpolate `${...}` expressions:

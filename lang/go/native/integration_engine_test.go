@@ -11,6 +11,7 @@ func TestEngineConvert(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// 99 convert String
 	result := runAQL(t, r, []Value{
 		NewInteger(99), NewWord("convert"), NewWord("String"),
@@ -26,6 +27,7 @@ func TestEngineTypeof(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewWord("typeof"), NewInteger(42)})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -37,6 +39,7 @@ func TestEngineBase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewWord("base"), NewTypeLiteral(TInteger)})
 	_as23, _ := AsInteger(result[0])
 	if len(result) != 1 || _as23 != 0 {
@@ -49,6 +52,7 @@ func TestEngineDef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def inc [1 add] end 5 inc
 	body := NewList([]Value{NewInteger(1), NewWord("add")})
 	result := runAQL(t, r, []Value{
@@ -66,6 +70,7 @@ func TestEngineUndef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def foo 42 end foo undef foo end foo → error (foo undefined after undef)
 	e := New(r)
 	_, err = e.Run([]Value{
@@ -84,6 +89,7 @@ func TestEngineRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	e := NewTop(r)
 	// Parse a pair list manually: jsonic produces maps for x:number syntax
 	m1 := NewOrderedMap()
@@ -105,6 +111,7 @@ func TestEngineTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	e := NewTop(r)
 	// Build the record type first; `refine Table` then takes it from
 	// the stack as its body (a nested `refine` must not be inlined
@@ -126,6 +133,7 @@ func TestEngineUnify(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewInteger(1), NewTypeLiteral(TNumber), NewWord("unify")})
 	if len(result) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(result))
@@ -141,6 +149,7 @@ func TestEngineDo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	list := NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)})
 	result := runAQL(t, r, []Value{NewWord("do"), list})
 	_as27, _ := AsInteger(result[0])
@@ -154,6 +163,7 @@ func TestEngineDoMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("x", NewList([]Value{NewInteger(3), NewWord("add"), NewInteger(4)}))
 	result := runAQL(t, r, []Value{NewWord("do"), NewMap(m)})
@@ -167,6 +177,7 @@ func TestEngineOr(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("or"), NewBoolean(false)})
 	_as28, _ := AsBoolean(result[0])
 	if len(result) != 1 || !_as28 {
@@ -179,6 +190,7 @@ func TestEngineAnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("and"), NewBoolean(false)})
 	_as29, _ := AsBoolean(result[0])
 	if len(result) != 1 || _as29 {
@@ -191,6 +203,7 @@ func TestEngineNot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("not")})
 	_as30, _ := AsBoolean(result[0])
 	if len(result) != 1 || _as30 {
@@ -203,6 +216,7 @@ func TestEngineConvertStringVariants(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	hexOpts := NewOrderedMap()
 	hexOpts.Set("base", NewString("hex"))
 	HEXOpts := NewOrderedMap()
@@ -254,6 +268,7 @@ func TestEngineConvertToNumber(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// "42" convert Number → 42
 	result := runAQL(t, r, []Value{
 		NewString("42"), NewWord("convert"), NewWord("Number"),
@@ -303,6 +318,7 @@ func TestEngineConvertToBoolean(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// 1 convert Boolean → true
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("convert"), NewWord("Boolean"),
@@ -354,6 +370,7 @@ func TestEngineBaseTypes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	tests := []struct {
 		name    string
 		typeLit *Type
@@ -381,6 +398,7 @@ func TestEngineFn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def double fn [[number] [number] [dup add]] end 7 double
 	fnBody := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
@@ -402,6 +420,7 @@ func TestEngineFnNamed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def square fn [[x:number] [number] [x mul x]] end 5 square
 	xParam := NewOrderedMap()
 	xParam.Set("x", NewWord("Number"))
@@ -425,6 +444,7 @@ func TestEngineFnCatterPrefixOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def catter fn [[integer string] [string] [add]] end
 	// Case: [1 "a"|] -> catter -> all args from prefix
 	fnBody := NewList([]Value{
@@ -447,6 +467,7 @@ func TestEngineFnCatterPartialForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def catter fn [[integer string] [string] [add]] end
 	// Case: catter 2 "b" -> all forward (integer, string)
 	fnBody := NewList([]Value{
@@ -468,6 +489,7 @@ func TestEngineFnCatterFullForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def catter fn [[integer string] [string] [add]] end
 	// Case: [|] -> catter 3 "c" -> both args from forward (positional match)
 	fnBody := NewList([]Value{
@@ -504,6 +526,7 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 	// All positions are equivalent: values nearest the word map to sig[0].
 	t.Run("AllPrefix", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -521,6 +544,7 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 	// "A" joiner "B" "C" → fwd: "B"→sig[0], "C"→sig[1]; stack: "A"→sig[2]
 	t.Run("MixedPrefixForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -538,6 +562,7 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 	// "A" "B" joiner "C" → fwd: "C"→sig[0]; stack: top="B"→sig[1], "A"→sig[2]
 	t.Run("TwoPrefixOneForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -555,6 +580,7 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 	// joiner "A" "B" "C" -> args=["A","B","C"] -> concat -> "ABC"
 	t.Run("AllForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -597,6 +623,7 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 	// Stack bottom-to-top: "Z" true 7 "X" mix4
 	t.Run("AllPrefix", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -613,6 +640,7 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 	// sig[0]=String("X"), sig[1]=Integer(7), sig[2]=Boolean(true), sig[3]=String("Z" from stack).
 	t.Run("OnePrefixThreeForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -628,6 +656,7 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 	// mix4 "X" 7 true "Z" -> all forward
 	t.Run("TwoPrefixTwoForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -643,6 +672,7 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 	// mix4 "X" 7 true "Z" -> all forward
 	t.Run("AllForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -676,6 +706,7 @@ func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
 	// Stack bottom-to-top: "z" false 1.5 3 "a" mix5
 	t.Run("AllPrefix", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -692,6 +723,7 @@ func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
 	// mix5 "a" 3 1.5 false "z" -> all forward
 	t.Run("AllForwardExplicit", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -708,6 +740,7 @@ func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
 	// mix5 "a" 3 1.5 false "z" -> all forward
 	t.Run("AllForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -748,6 +781,7 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 	// sig[6]=String, sig[5]=Integer, sig[4]=String, sig[3]=Boolean, sig[2]=Decimal, sig[1]=Integer, sig[0]=String
 	t.Run("AllPrefix", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -767,6 +801,7 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 	// all forward (was 3+4 mixed, changed for sequential planner)
 	t.Run("ThreePrefixFourForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -783,6 +818,7 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 	// Forward types must align with sig[0..5], prefix fills sig[6].
 	t.Run("OnePrefixSixForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -799,6 +835,7 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 	// All forward
 	t.Run("AllForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -841,6 +878,7 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 	// cat3 "A" "B" "C" end "trailing" -> cat3 gets "ABC", "trailing" on stack
 	t.Run("EndStopsForward3", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -867,6 +905,7 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 	// sig[0]=String("X"), sig[1]=Integer(7), sig[2]=Boolean(true), sig[3]=String("Z" from stack).
 	t.Run("EndStopsForward4Mixed", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -893,6 +932,7 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 	// Parens isolate each call; end stops forward collection within each group.
 	t.Run("EndSeparatesTwoCalls", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -925,6 +965,7 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 	// Verifies end works when switching between fns of different arity/types.
 	t.Run("EndSeparatesDifferentFns", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -959,6 +1000,7 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 	// fwd: "R"→sig[0]; stack: top="Q"→sig[1], "P"→sig[2] → "RQP"
 	t.Run("EndAfterPartialForward", func(t *testing.T) {
 		r, err := DefaultRegistry()
+		registerIOWords(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1011,6 +1053,7 @@ func TestEngineFnLiteralType(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def adder fn [[0] [integer] [add 2]] end
 	// adder only matches the value 0, adds 2 to it
 	fnBody := NewList([]Value{
@@ -1033,6 +1076,7 @@ func TestEngineFnLiteralTypeNoMatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def adder fn [[0] [integer] [add 2]] end
 	// adder should NOT match 5 (only matches 0)
 	fnBody := NewList([]Value{
@@ -1054,6 +1098,7 @@ func TestEngineFnLiteralTypeMultiSig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def handler fn [[0] [integer] [add 10] [1] [integer] [add 20]] end
 	// handler 0 → 10, handler 1 → 21
 	fnBody := NewList([]Value{
@@ -1087,6 +1132,7 @@ func TestEngineFnDefPrefixOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def doubler/s fn [[x:integer] [integer] [x x add]] end
 	// doubler/s registers as stack-only: takes args from the stack only,
 	// never collects forward args via forward.
@@ -1115,6 +1161,7 @@ func TestEngineFnDefPrefixOnlyNoForwardCollection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def doubler/s fn [[x:integer] [integer] [x x add]] end
 	// doubler 5 — stack-only word should NOT collect 5 as forward arg.
 	// It should fail because there's nothing on the stack for prefix match.
@@ -1147,6 +1194,7 @@ func TestEngineFnAbbreviatedSignature(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// def foo fn [
 	//   [string] [string] [add "Q"]    -- full form
@@ -1208,6 +1256,7 @@ func TestEngineFnAbbreviatedSimple(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def double fn [number number [dup add]] end 7 double
 	// All three elements abbreviated (single-valued)
 	fnBody := NewList([]Value{
@@ -1230,6 +1279,7 @@ func TestEngineFnFactorial(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def fact fn [0 integer [drop 1] [x:integer] [integer] [x mul fact (x sub 1)]]
 	fnBody := NewList([]Value{
 		// sig 1 (base case): 0 integer [drop 1]
@@ -1276,6 +1326,7 @@ func TestEngineFnFactorialNoVars(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// Try several variable-free body forms for the recursive case.
 	// Base case is always: 0 integer [drop 1]
 	bodies := []struct {
@@ -1351,6 +1402,7 @@ func TestEngineFnFactorialNamedZero(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def fact fn [[_:0] integer [1] [x:integer] [integer] [x mul fact (x sub 1)]]
 	// Using {_:0} instead of bare 0 in the base case.
 	// Named param "_" consumes the 0 from the stack, so the body is just [1].
@@ -1403,6 +1455,7 @@ func TestEngineTypeRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def Point type Record [x:number y:number] end Point
 	xf := NewOrderedMap()
 	xf.Set("x", NewTypeLiteral(TNumber))
@@ -1423,6 +1476,7 @@ func TestEngineMakeRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def P type Record [x:number y:string] end make P [1 "hi"]
 	xf := NewOrderedMap()
 	xf.Set("x", NewTypeLiteral(TNumber))
@@ -1450,6 +1504,7 @@ func TestEngineUnifyMaps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// {x:1} unify {x:1}
 	m1 := NewOrderedMap()
 	m1.Set("x", NewInteger(1))
@@ -1467,6 +1522,7 @@ func TestEngineUnifyLists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	l1 := NewList([]Value{NewInteger(1), NewInteger(2)})
 	l2 := NewList([]Value{NewInteger(1), NewInteger(2)})
 	result := runAQL(t, r, []Value{l1, l2, NewWord("unify")})
@@ -1481,6 +1537,7 @@ func TestEngineUnifyFail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewInteger(1), NewString("a"), NewWord("unify")})
 	_as93, _ := AsBoolean(result[1])
 	if len(result) != 2 || _as93 {
@@ -1493,6 +1550,7 @@ func TestEngineUnifyTypedList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	tl := NewTypedList(NewTypeLiteral(TNumber))
 	cl := NewList([]Value{NewInteger(1), NewInteger(2)})
 	result := runAQL(t, r, []Value{tl, cl, NewWord("unify")})
@@ -1507,6 +1565,7 @@ func TestEngineUnifyTypedMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	tm := NewTypedMap(NewTypeLiteral(TNumber))
 	cm := NewOrderedMap()
 	cm.Set("a", NewInteger(1))
@@ -1523,6 +1582,7 @@ func TestEngineDisjunct(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// string tor none
 	result := runAQL(t, r, []Value{
 		NewTypeLiteral(TString), NewWord("tor"), NewTypeLiteral(TNone),
@@ -1537,6 +1597,7 @@ func TestEngineVar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// 5 var [[x] x mul x]
 	varBody := NewList([]Value{
 		NewList([]Value{NewWord("x")}),
@@ -1556,6 +1617,7 @@ func TestEngineAddStrings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewString("hello"), NewWord("add"), NewString(" world")})
 	_as97, _ := AsString(result[0])
 	if len(result) != 1 || _as97 != "hello world" {

@@ -17,6 +17,7 @@ func runUnpack(t *testing.T, src string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	toks, err := parser.Parse(src)
 	if err != nil {
 		t.Fatalf("parse %q: %v", src, err)
@@ -34,6 +35,7 @@ func runUnpackErr(t *testing.T, src string) error {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	toks, err := parser.Parse(src)
 	if err != nil {
 		return err
@@ -175,6 +177,7 @@ func TestUnpackHandlerNoPanic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	cases := [][2]Value{
 		{NewTypeLiteral(TList), NewTypeLiteral(TMap)},          // both type literals
 		{NewList([]Value{NewAtom("x")}), NewTypeLiteral(TMap)}, // type-literal map

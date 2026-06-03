@@ -30,6 +30,7 @@ func setupRandReg(t *testing.T) *native.Registry {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	r.SetParseFunc(parser.Parse)
 	if err := modules.InstallRandExports(r); err != nil {
 		t.Fatal(err)
@@ -55,6 +56,7 @@ func TestSigOrder_NamedAqlFn_TopFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	r.SetParseFunc(parser.Parse)
 	// def f fn [[a:Integer b:String] ...] "hello" 42 f
 	// Stack at call: ["hello", 42]. Top=42 (Integer). matchSignature
@@ -82,6 +84,7 @@ func TestSigOrder_NamedAqlFn_RejectsBottomFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	r.SetParseFunc(parser.Parse)
 	// 42 "hello" f puts String on top. sig[0]=Integer should reject.
 	_, runErr := runSrc(t, r, `def f fn [[a:Integer b:String] [Integer String] [a b]]  42 "hello" f`)
@@ -98,6 +101,7 @@ func TestSigOrder_UnnamedAqlFn_TopFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	r.SetParseFunc(parser.Parse)
 	// def h fn [[Integer String] [Integer String] [args.0 args.1]] "x" 5 h
 	// Stack: ["x", 5]. Top=5. args.0=5, args.1="x".

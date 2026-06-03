@@ -11,6 +11,7 @@ import (
 
 func TestEngineCoreStepEndMultipleEnds(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Multiple ends with no pending forwards — should be harmlessly removed
 	result := runAQL(t, r, []Value{
 		NewInteger(5), NewEnd(), NewEnd(),
@@ -23,6 +24,7 @@ func TestEngineCoreStepEndMultipleEnds(t *testing.T) {
 
 func TestEngineCoreStepEndTerminatesForwardAdd(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// "end" should terminate a forward expression: 10 add 20 end 99
 	// The add consumes 10 and 20 via end, leaving 30 and 99
 	result := runAQL(t, r, []Value{
@@ -43,6 +45,7 @@ func TestEngineCoreStepEndTerminatesForwardAdd(t *testing.T) {
 
 func TestEngineCoreStepEndSemicolonSequence(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// 1 add 2 end 3 add 4:
 	// First add: fwd 2→sig[0], stack 1→sig[1] → add(2,1)=3.
 	// Push 3 → stack=[3, 3]. Second add prefers stack: add(3,3)=6.
@@ -70,6 +73,7 @@ func TestEngineCoreStepEndSemicolonSequence(t *testing.T) {
 
 func TestEngineCoreParenSimple(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// ( 2 add 3 ) => 5
 	result := runAQL(t, r, []Value{
 		NewOpenParen(), NewInteger(2), NewWord("add"), NewInteger(3), NewCloseParen(),
@@ -82,6 +86,7 @@ func TestEngineCoreParenSimple(t *testing.T) {
 
 func TestEngineCoreParenNested(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// ( ( 1 add 2 ) add 3 ) => 6
 	result := runAQL(t, r, []Value{
 		NewOpenParen(), NewOpenParen(), NewInteger(1), NewWord("add"), NewInteger(2), NewCloseParen(),
@@ -95,6 +100,7 @@ func TestEngineCoreParenNested(t *testing.T) {
 
 func TestEngineCoreParenUnmatched(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	err := runAQLError(t, r, []Value{
 		NewCloseParen(),
 	})
@@ -105,6 +111,7 @@ func TestEngineCoreParenUnmatched(t *testing.T) {
 
 func TestEngineCoreParenUnmatchedOpen(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	err := runAQLError(t, r, []Value{
 		NewOpenParen(), NewInteger(1),
 	})
@@ -115,6 +122,7 @@ func TestEngineCoreParenUnmatchedOpen(t *testing.T) {
 
 func TestEngineCoreParenAsBarrier(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Parens create a scope barrier: 10 ( 2 add 3 ) => 10 5
 	result := runAQL(t, r, []Value{
 		NewInteger(10), NewOpenParen(), NewInteger(2), NewWord("add"), NewInteger(3), NewCloseParen(),
@@ -138,6 +146,7 @@ func TestEngineCoreParenAsBarrier(t *testing.T) {
 
 func TestEngineCoreFnDefNamedParam(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// def double fn [[x:Number] [Number] [x add x]] end
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
@@ -160,6 +169,7 @@ func TestEngineCoreFnDefNamedParam(t *testing.T) {
 
 func TestEngineCoreFnDefMultipleSigs(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Function with two overloads:
 	// sig1: (Integer) -> Integer: x add 10
 	// sig2: (String) -> String: x
@@ -198,6 +208,7 @@ func TestEngineCoreFnDefMultipleSigs(t *testing.T) {
 
 func TestEngineCoreFnReturnTypeCheck(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Function with return type checking: returns wrong type should error
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
@@ -219,6 +230,7 @@ func TestEngineCoreFnReturnTypeCheck(t *testing.T) {
 
 func TestEngineCoreFnNonListBody(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// fn with non-list body abbreviation and named param: fn [{x:Number} [] 42]
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
@@ -245,6 +257,7 @@ func TestEngineCoreFnNonListBody(t *testing.T) {
 
 func TestEngineCoreUndefBasic(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// def my-val 100 end my-val => 100
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("my-val-undef"), NewInteger(100), NewEnd(),
@@ -268,6 +281,7 @@ func TestEngineCoreUndefBasic(t *testing.T) {
 
 func TestEngineCoreUndefShadowing(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// def "x-shadow" 1 end def "x-shadow" 2 end x-shadow => 2
 	runAQL(t, r, []Value{
 		NewWord("def"), NewString("x-shadow"), NewInteger(1), NewEnd(),
@@ -292,6 +306,7 @@ func TestEngineCoreUndefShadowing(t *testing.T) {
 
 func TestEngineCoreUndefWithStringName(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("str-undef"), NewInteger(77), NewEnd(),
 	})
@@ -305,6 +320,7 @@ func TestEngineCoreUndefWithStringName(t *testing.T) {
 
 func TestEngineCoreUndefTargetedFnSig(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Define a function with a Number signature
 	pairX := NewOrderedMap()
 	pairX.Set("x", NewTypeLiteral(TNumber))
@@ -343,6 +359,7 @@ func TestEngineCoreUndefTargetedFnSig(t *testing.T) {
 
 func TestEngineCoreMakeStringToInteger(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TInteger), NewString("42"),
 	})
@@ -354,6 +371,7 @@ func TestEngineCoreMakeStringToInteger(t *testing.T) {
 
 func TestEngineCoreMakeStringToDecimal(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TDecimal), NewString("3.14"),
 	})
@@ -368,6 +386,7 @@ func TestEngineCoreMakeStringToDecimal(t *testing.T) {
 
 func TestEngineCoreMakeToBoolean(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TBoolean), NewString("true"),
 	})
@@ -395,6 +414,7 @@ func TestEngineCoreMakeToBoolean(t *testing.T) {
 
 func TestEngineCoreMakeToAtom(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TAtom), NewString("hello"),
 	})
@@ -406,6 +426,7 @@ func TestEngineCoreMakeToAtom(t *testing.T) {
 
 func TestEngineCoreMakeSameType(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// make Integer on integer should pass through
 	result := runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TInteger), NewInteger(99),
@@ -418,6 +439,7 @@ func TestEngineCoreMakeSameType(t *testing.T) {
 
 func TestEngineCoreMakeErrorBadConversion(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	err := runAQLError(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TInteger), NewString("notanumber"),
 	})
@@ -428,6 +450,7 @@ func TestEngineCoreMakeErrorBadConversion(t *testing.T) {
 
 func TestEngineCoreMakeDecimalTruncToInt(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// make Integer on decimal string should parse as float and truncate
 	result := runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TInteger), NewString("3.7"),
@@ -440,6 +463,7 @@ func TestEngineCoreMakeDecimalTruncToInt(t *testing.T) {
 
 func TestEngineCoreMakeBooleanFromNumber(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TBoolean), NewInteger(0),
 	})
@@ -458,6 +482,7 @@ func TestEngineCoreMakeBooleanFromNumber(t *testing.T) {
 
 func TestEngineCoreMakeToString(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TString), NewInteger(42),
 	})
@@ -469,6 +494,7 @@ func TestEngineCoreMakeToString(t *testing.T) {
 
 func TestEngineCoreMakeErrorBadDecimal(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	err := runAQLError(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TDecimal), NewString("xyz"),
 	})
@@ -483,6 +509,7 @@ func TestEngineCoreMakeErrorBadDecimal(t *testing.T) {
 
 func TestEngineCoreRecordMakePositional(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// record [x:Number y:String]
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TNumber))
@@ -508,6 +535,7 @@ func TestEngineCoreRecordMakePositional(t *testing.T) {
 
 func TestEngineCoreRecordMakeMap(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TNumber))
 	fields.Set("y", NewTypeLiteral(TString))
@@ -533,6 +561,7 @@ func TestEngineCoreRecordMakeMap(t *testing.T) {
 
 func TestEngineCoreRecordMakeMissingField(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TNumber))
 	fields.Set("y", NewTypeLiteral(TString))
@@ -551,6 +580,7 @@ func TestEngineCoreRecordMakeMissingField(t *testing.T) {
 
 func TestEngineCoreRecordMakeUnknownField(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TNumber))
 	recType := NewRecordType(fields)
@@ -568,6 +598,7 @@ func TestEngineCoreRecordMakeUnknownField(t *testing.T) {
 
 func TestEngineCoreRecordMakeWrongFieldCount(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TNumber))
 	fields.Set("y", NewTypeLiteral(TString))
@@ -588,6 +619,7 @@ func TestEngineCoreRecordMakeWrongFieldCount(t *testing.T) {
 
 func TestEngineCoreModuleSimple(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	moduleBody := NewList([]Value{
 		NewString("def"), NewString("val"), NewInteger(42), NewString("end"),
 		NewString("export"), NewAtom("myexp"),
@@ -605,6 +637,7 @@ func TestEngineCoreModuleSimple(t *testing.T) {
 
 func TestEngineCoreModuleImportAll(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	moduleBody := NewList([]Value{
 		NewString("def"), NewString("val"), NewInteger(88), NewString("end"),
 		NewString("export"), NewAtom("coreExp"),
@@ -630,6 +663,7 @@ func TestEngineCoreModuleImportAll(t *testing.T) {
 
 func TestEngineCoreModuleImportRename(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	moduleBody := NewList([]Value{
 		NewString("def"), NewString("val"), NewInteger(33), NewString("end"),
 		NewString("export"), NewAtom("origName"),
@@ -651,6 +685,7 @@ func TestEngineCoreModuleImportRename(t *testing.T) {
 
 func TestEngineCoreModuleImportMultiRename(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	moduleBody := NewList([]Value{
 		NewString("def"), NewString("a"), NewInteger(1), NewString("end"),
 		NewString("def"), NewString("b"), NewInteger(2), NewString("end"),
@@ -679,6 +714,7 @@ func TestEngineCoreModuleImportMultiRename(t *testing.T) {
 
 func TestEngineCoreModuleImportEmptyRenameError(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	moduleBody := NewList([]Value{
 		NewString("def"), NewString("x"), NewInteger(1), NewString("end"),
 		NewString("export"), NewAtom("ex"),
@@ -701,6 +737,7 @@ func TestEngineCoreModuleImportEmptyRenameError(t *testing.T) {
 
 func TestEngineCoreModuleImportMissingExportError(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	moduleBody := NewList([]Value{
 		NewString("def"), NewString("x"), NewInteger(1), NewString("end"),
 		NewString("export"), NewAtom("ex"),
@@ -724,6 +761,7 @@ func TestEngineCoreModuleImportMissingExportError(t *testing.T) {
 
 func TestEngineCoreModuleExportWithAtomString(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Export using atom name (strings inside module are promoted to words)
 	moduleBody := NewList([]Value{
 		NewString("def"), NewString("val"), NewInteger(77), NewString("end"),
@@ -746,6 +784,7 @@ func TestEngineCoreModuleExportWithAtomString(t *testing.T) {
 
 func TestEngineCoreBaseInteger(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewInteger(5), NewWord("base")})
 	_as32, _ := AsInteger(result[0])
 	if len(result) != 1 || _as32 != 0 {
@@ -755,6 +794,7 @@ func TestEngineCoreBaseInteger(t *testing.T) {
 
 func TestEngineCoreBaseDecimal(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewDecimal(3.14), NewWord("base")})
 	_as33, _ := AsDecimal(result[0])
 	if len(result) != 1 || _as33 != 0 {
@@ -764,6 +804,7 @@ func TestEngineCoreBaseDecimal(t *testing.T) {
 
 func TestEngineCoreBaseString(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewString("hello"), NewWord("base")})
 	_as34, _ := AsString(result[0])
 	if len(result) != 1 || _as34 != "" {
@@ -773,6 +814,7 @@ func TestEngineCoreBaseString(t *testing.T) {
 
 func TestEngineCoreBaseBoolean(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("base")})
 	_as35, _ := AsBoolean(result[0])
 	if len(result) != 1 || _as35 {
@@ -782,6 +824,7 @@ func TestEngineCoreBaseBoolean(t *testing.T) {
 
 func TestEngineCoreBaseList(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewList([]Value{NewInteger(1)}), NewWord("base"),
 	})
@@ -796,6 +839,7 @@ func TestEngineCoreBaseList(t *testing.T) {
 
 func TestEngineCoreBaseMap(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
 	result := runAQL(t, r, []Value{NewMap(m), NewWord("base")})
@@ -810,6 +854,7 @@ func TestEngineCoreBaseMap(t *testing.T) {
 
 func TestEngineCoreBaseAtom(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewAtom("foo"), NewWord("base")})
 	_as36, _ := AsAtom(result[0])
 	if len(result) != 1 || _as36 != "" {
@@ -868,6 +913,7 @@ func TestEngineCoreBaseValueForConstraintConcreteError(t *testing.T) {
 
 func TestEngineCorePeekForwardBoolTrue(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// "true" as forward should resolve to boolean
 	// Test indirectly: def myval true end myval => true
 	result := runAQL(t, r, []Value{
@@ -882,6 +928,7 @@ func TestEngineCorePeekForwardBoolTrue(t *testing.T) {
 
 func TestEngineCorePeekForwardBoolFalse(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("false-val"), NewWord("false"), NewEnd(),
 		NewWord("false-val"),
@@ -894,6 +941,7 @@ func TestEngineCorePeekForwardBoolFalse(t *testing.T) {
 
 func TestEngineCorePeekForwardAtom(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// An explicit Atom value can be the body of a def (def atom-val 'myatom).
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("atom-val"), NewAtom("myatom"), NewEnd(),
@@ -910,6 +958,7 @@ func TestEngineCorePeekForwardAtom(t *testing.T) {
 
 func TestEngineCoreForwardLeftToRight(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// left-to-right: 2 add 3 mul 4 => (2 + 3) * 4 = 20
 	result := runAQL(t, r, []Value{
 		NewInteger(2), NewWord("add"), NewInteger(3), NewWord("mul"), NewInteger(4),
@@ -922,6 +971,7 @@ func TestEngineCoreForwardLeftToRight(t *testing.T) {
 
 func TestEngineCoreForwardLeftToRightReverse(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// left-to-right: 2 mul 3 add 4 => (2 * 3) + 4 = 10
 	result := runAQL(t, r, []Value{
 		NewInteger(2), NewWord("mul"), NewInteger(3), NewWord("add"), NewInteger(4),
@@ -938,6 +988,7 @@ func TestEngineCoreForwardLeftToRightReverse(t *testing.T) {
 
 func TestEngineCoreForceForward(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Force forward on add: ALL args must come from forward.
 	// add/f 10 5 → forward-collects both → add(10, 5) = 15
 	result := runAQL(t, r, []Value{
@@ -957,6 +1008,7 @@ func TestEngineCoreForceForward(t *testing.T) {
 
 func TestEngineCoreTypeNameResolution(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Type names resolve to type literals
 	for _, name := range []string{"Number", "String", "Boolean", "Integer", "Decimal", "List", "Map", "Atom"} {
 		result := runAQL(t, r, []Value{NewWord(name)})
@@ -968,6 +1020,7 @@ func TestEngineCoreTypeNameResolution(t *testing.T) {
 
 func TestEngineCoreUnknownWordErrors(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	e := New(r)
 	_, err := e.Run([]Value{NewWord("unknownXyz")})
 	if err == nil {
@@ -1210,6 +1263,7 @@ func TestEngineCoreParseFnParamsExplicitMapIsUnnamedParam(t *testing.T) {
 
 func TestEngineCoreFnImplicitMapNamedParamE2E(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// def inc fn [[x:Integer] [Integer] [x add 1]] end 5 inc
 	xParam := NewOrderedMap()
 	xParam.Set("x", NewTypeLiteral(TInteger))
@@ -1230,6 +1284,7 @@ func TestEngineCoreFnImplicitMapNamedParamE2E(t *testing.T) {
 
 func TestEngineCoreFnExplicitMapPatternE2E(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// def foo fn [[{a:1}] [] ["matched"]] end
 	// {a:1} foo → should match
 	// {a:2} foo → should not match
@@ -1270,6 +1325,7 @@ func TestEngineCoreFnExplicitMapPatternE2E(t *testing.T) {
 
 func TestEngineCoreFnExplicitMapNotNamedParam(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// def bar fn [[{x:Integer}] [Integer] [x add 1]] end
 	// 5 bar → should FAIL because {x:Integer} is a map pattern, not a
 	// named param "x". So x is not bound and the body can't use it.
@@ -1318,6 +1374,7 @@ func TestEngineCoreValToAtomOrStringCoverage(t *testing.T) {
 
 func TestEngineCoreMakeRecordWithBase(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TNumber))
 	fields.Set("y", NewTypeLiteral(TString))
@@ -1351,6 +1408,7 @@ func TestEngineCoreMakeRecordWithBase(t *testing.T) {
 
 func TestEngineCoreResolveFieldTypePassthrough(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Non-string, non-list value should pass through. v is a type
 	// literal; its denoted lattice node is &v.
 	v := ResolveFieldType(r, NewTypeLiteral(TNumber))
@@ -1361,6 +1419,7 @@ func TestEngineCoreResolveFieldTypePassthrough(t *testing.T) {
 
 func TestEngineCoreResolveFieldTypeStringRef(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Define a type, then ResolveFieldType should find it
 	InstallDef(r, "MyType", NewTypeLiteral(TString))
 	v := ResolveFieldType(r, NewString("MyType"))
@@ -1372,6 +1431,7 @@ func TestEngineCoreResolveFieldTypeStringRef(t *testing.T) {
 
 func TestEngineCoreResolveFieldTypeStringNoRef(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	v := ResolveFieldType(r, NewString("NoSuchType"))
 	_as49, _ := AsString(v)
 	if _as49 != "NoSuchType" {
@@ -1381,6 +1441,7 @@ func TestEngineCoreResolveFieldTypeStringNoRef(t *testing.T) {
 
 func TestEngineCoreResolveFieldTypeList(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// A list like [string tor none] should be evaluated as code
 	list := NewList([]Value{NewString("string"), NewString("tor"), NewString("none")})
 	v := ResolveFieldType(r, list)
@@ -1481,6 +1542,7 @@ func TestEngineCoreMakeConvertToAtom(t *testing.T) {
 
 func TestEngineCoreImportFileNoParser(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	r.ParseFunc = nil
 	_, err := loadFileModule(r, "some.aql")
 	if err == nil {
@@ -1497,6 +1559,7 @@ func TestEngineCoreImportFileNoParser(t *testing.T) {
 
 func TestEngineCoreForceStack(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Force prefix on add: both args must be before the word
 	result := runAQL(t, r, []Value{
 		NewInteger(3), NewInteger(4),
@@ -1510,6 +1573,7 @@ func TestEngineCoreForceStack(t *testing.T) {
 
 func TestEngineCoreForceStackNoMatchError(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	// Force prefix with no matching args
 	err := runAQLError(t, r, []Value{
 		NewWordModified("add", -1, true, false),
@@ -1525,6 +1589,7 @@ func TestEngineCoreForceStackNoMatchError(t *testing.T) {
 
 func TestEngineCoreMakeRecordNamed(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	fields := NewOrderedMap()
 	fields.Set("name", NewTypeLiteral(TString))
 	fields.Set("age", NewTypeLiteral(TNumber))
@@ -1559,6 +1624,7 @@ func TestEngineCoreMakeRecordNamed(t *testing.T) {
 
 func TestEngineCoreMakeRecordBadSource(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TNumber))
 	recType := NewRecordType(fields)
@@ -1577,6 +1643,7 @@ func TestEngineCoreMakeRecordBadSource(t *testing.T) {
 
 func TestEngineCoreMakeTablePositional(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TNumber))
 	fields.Set("y", NewTypeLiteral(TString))
@@ -1603,6 +1670,7 @@ func TestEngineCoreMakeTablePositional(t *testing.T) {
 
 func TestEngineCoreMakeTableBadRowCount(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TNumber))
 	fields.Set("y", NewTypeLiteral(TString))
@@ -1623,6 +1691,7 @@ func TestEngineCoreMakeTableBadRowCount(t *testing.T) {
 
 func TestEngineCoreMakeTableNonList(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TNumber))
 	recType := RecordTypeInfo{Fields: fields}

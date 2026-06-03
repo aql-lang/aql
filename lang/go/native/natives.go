@@ -158,15 +158,8 @@ var Natives = []NativeFunc{
 		},
 	},
 
-	// ---- pad ----
-	{
-		Name: "pad",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TInteger, TAny}, Handler: padWidthHandler, BarrierPos: -1},
-			{Args: []*Type{TAny}, Handler: padDefaultHandler, BarrierPos: -1},
-		},
-	},
+	// `pad` (with the rest of the string words) moved to the aql:string-util
+	// module — see native/string_module.go.
 
 	// fetch / prepare / direct moved to the aql:net module — see net_module.go.
 
