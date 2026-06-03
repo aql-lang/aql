@@ -28,8 +28,6 @@ WORD args
 WORD await
   [Ideal/Options Node/List] barrier=2 noeval={1} returns=[Any]
   [Node/List] barrier=1 noeval={0} returns=[Any]
-WORD band
-  [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
 WORD base
   [Any] barrier=1 +returnsfn
 WORD behave
@@ -37,20 +35,8 @@ WORD behave
   [Scalar/Atom Type/Function] barrier=2 quote={0}
 WORD between
   [Scalar Scalar Scalar] barrier=3 runcheck typearg={2} returns=[Scalar]
-WORD bnot
-  [Scalar/Number/Integer] barrier=1 returns=[Scalar/Number/Integer]
-WORD bor
-  [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
 WORD break
   [] barrier=0
-WORD bsl
-  [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
-WORD bsr
-  [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
-WORD busr
-  [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
-WORD bxor
-  [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
 WORD cancel
   [Ideal/Timeout] barrier=1
   [Ideal/Interval] barrier=1

@@ -33,8 +33,16 @@ func BuildBinaryModule(parent *native.Registry) (native.ModuleDesc, error) {
 	for _, n := range binaryModuleNatives {
 		subReg.RegisterNativeFunc(n)
 	}
+	// The core bitwise operators (band/bor/bxor/bnot/bsl/bsr/busr) moved into
+	// this module; register them in the sub-registry and export them too.
+	for _, n := range native.BitwiseModuleNatives {
+		subReg.RegisterNativeFunc(n)
+	}
 
 	exports := native.NewOrderedMap()
+	for _, n := range native.BitwiseModuleNatives {
+		exports.Set(n.Name, makeModuleFnDef(n, subReg))
+	}
 
 	// Unary Integer -> Integer.
 	for _, name := range []string{"popcount", "clz", "ctz", "bitlen", "mask", "reverse", "swap"} {
