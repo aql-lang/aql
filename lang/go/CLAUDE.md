@@ -75,8 +75,13 @@ Language-agnostic content stays at the top of each component:
   `write`, `stdin`, `stdout`, `stderr`, `trace` — also moved out of core
   (see `native/io_module.go`); only `print` stays in core.
   `aql:net` (`Net.` namespace) holds the HTTP / API words — `fetch`,
-  `prepare`, `direct` (see `native/net_module.go`). All three sets are
-  no longer available unqualified.
+  `prepare`, `direct` (see `native/net_module.go`).
+  Further moves out of core: bitwise `band`/`bor`/`bxor`/`bnot`/`bsl`/`bsr`/
+  `busr` → `aql:bin` (`Bin.`); clock/async `now`/`sleep`/`timeout`/`interval`/
+  `await`/`cancel` → `aql:time-util` (`TimeUtil.`); `tpartial` → `aql:type-util`
+  (`TypeUtil.`); `folder` → `aql:io`; and the derived boolean connectives
+  `nand`/`nor`/`xnor`/`iff`/`implies` → `aql:logic-util` (`LogicUtil.`).
+  All moved words are no longer available unqualified.
 - `test/` — integration tests and TSV spec runners.
 
 ## Build & Test

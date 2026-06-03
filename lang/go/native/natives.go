@@ -12,15 +12,8 @@ import (
 // functions and their aggregator (registerAll). The public Register entry
 // point in native.go installs every entry into a registry.
 var Natives = []NativeFunc{
-	// ---- boolean ----
-	{
-		Name: "implies",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TBoolean, TBoolean}, Handler: impliesHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
-			{Args: []*Type{TAny, TAny}, Handler: impliesHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
-		},
-	},
+	// `implies` (with nand/nor/iff/xnor) moved to the aql:logic-util module —
+	// see native/logic_module.go.
 
 	// ---- control flow ----
 	{

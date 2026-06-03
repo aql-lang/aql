@@ -166,12 +166,6 @@ WORD if
   [Any Any Any] barrier=3 noeval={0,1,2} +returnsfn
   [Any Any] barrier=2 noeval={0,1} +returnsfn
   [Node/List] barrier=1 noeval={0} +returnsfn
-WORD iff
-  [Scalar/Boolean Scalar/Boolean] barrier=2 returns=[Scalar/Boolean]
-  [Any Any] barrier=2 returns=[Scalar/Boolean]
-WORD implies
-  [Scalar/Boolean Scalar/Boolean] barrier=2 returns=[Scalar/Boolean]
-  [Any Any] barrier=2 returns=[Scalar/Boolean]
 WORD import
   [Node/List Scalar/Atom Node/List] barrier=3 runcheck noeval={0,2} quote={1}
   [Scalar/Atom Scalar/Atom Node/List] barrier=3 runcheck noeval={2} quote={1}
@@ -241,16 +235,10 @@ WORD module
   [Node/List] barrier=1 runcheck noeval={0} returns=[Ideal/Module]
 WORD mul
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn
-WORD nand
-  [Scalar/Boolean Scalar/Boolean] barrier=2 returns=[Scalar/Boolean]
-  [Any Any] barrier=2 returns=[Scalar/Boolean]
 WORD neq
   [Any Any] barrier=2 returns=[Scalar/Boolean]
 WORD nip
   [Any Any] barrier=0 +returnsfn
-WORD nor
-  [Scalar/Boolean Scalar/Boolean] barrier=2 returns=[Scalar/Boolean]
-  [Any Any] barrier=2 returns=[Scalar/Boolean]
 WORD normalize
   [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
   [Scalar/String] barrier=1 returns=[Scalar/String]
@@ -407,9 +395,6 @@ WORD var
   [Node/List] barrier=1 noeval={0} returns=[Any]
 WORD word
   [Any] barrier=1 noeval={0} returns=[Any]
-WORD xnor
-  [Scalar/Boolean Scalar/Boolean] barrier=2 returns=[Scalar/Boolean]
-  [Any Any] barrier=2 returns=[Scalar/Boolean]
 WORD xor
   [Scalar/Boolean Scalar/Boolean] barrier=2 returns=[Scalar/Boolean]
   [Any Any] barrier=2 returns=[Scalar/Boolean]

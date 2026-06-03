@@ -60,6 +60,7 @@ func TestBoolean(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			registerIOWords(reg)
 			eng := native.NewTop(reg)
 			result, err := eng.Run(values)
 

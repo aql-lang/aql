@@ -36,6 +36,7 @@ var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error
 	"struct":      BuildStructModule,
 	"io":          BuildIOModule,
 	"net":         BuildNetModule,
+	"logic-util":  BuildLogicModule,
 }
 
 // Resolve resolves a native module name and returns a ModuleDesc.
