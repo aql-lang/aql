@@ -133,7 +133,7 @@ access to code** and a **reflective `read`/`eval`/`print`** surface.
   fns snapshot enclosing-fn locals — the canonical `make-adder` factory
   works (`def add5 (make-adder 5); add5 3 → 8`).
 - **Functions as data**: `ref`/`/r` produce a non-invoking function value;
-  `apply` / `usurp` consume one; `Math.sqrt` (a module export) is a
+  `apply` / `usurp` consume one; `MathUtil.sqrt` (a module export) is a
   retrievable, passable function value.
 - **The map/fold family**: `each`, `fold`, `scan`, `outer`, `inner`
   (`map`≈`each`, `reduce`≈`fold`). `filter` takes a `{key,value}`-pair
@@ -408,7 +408,7 @@ LISP-shaped ones. Current status (verified on this branch):
 | **3. arg ordering / the "atan2 swap"** | combinators | partly (docs) | The "swap args in the handler" workaround **is `flip`** (≡ `usurp` for two args). Named dataflow combinators (`flip`, `dip`, `keep`, `bi`) let authors *compose* instead of reasoning about stack positions per call site. |
 | **4. registered words shadow map keys** | keywords / self-quoting symbols | **fixed** (`m.trace → 99`) | LISP keywords (`:trace`) are self-quoting symbols distinct from function symbols. Quoting the post-dot key (now done) = treating it as a **keyword**, not a callable Word. |
 | **5. no list-of-evaluated-values builder** | `list` / quasiquote | **open** (`collect` / `eval` absent) | The report asks for `eval [c1 c2]` and `N collect`. Those are literally LISP's `eval` and `(list …)`. Tier-1 quasiquote + a `list`/`collect` word closes it. |
-| **6. FnDef values can't forward-collect** | uniform application | **fixed** (`Math.min 3 7 → 3`) | LISP's `(f …)` applies the same regardless of where `f` came from. Unifying module-wrapper dispatch with built-in words restored that uniformity. |
+| **6. FnDef values can't forward-collect** | uniform application | **fixed** (`MathUtil.min 3 7 → 3`) | LISP's `(f …)` applies the same regardless of where `f` came from. Unifying module-wrapper dispatch with built-in words restored that uniformity. |
 
 Two higher-order observations:
 

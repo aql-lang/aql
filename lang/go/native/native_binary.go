@@ -4,7 +4,7 @@ import "fmt"
 
 // BitwiseModuleNatives covers the bitwise / binary operators on the 64-bit
 // signed Integer type — moved OUT of core into the aql:bin module (see
-// modules/binary.go), reached as `Bin.band`, `Bin.bsl`, ….
+// modules/binary.go), reached as `BinUtil.band`, `BinUtil.bsl`, ….
 // See lang/doc/design/BINARY-OPERATIONS.0.md.
 //
 // Word names are `b`-prefixed to disambiguate from the boolean

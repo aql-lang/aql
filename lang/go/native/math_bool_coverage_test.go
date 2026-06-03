@@ -11,7 +11,7 @@ import (
 // Extended math operations (abs, negate, sign, min, max, ceil, floor,
 // round, trunc, sqrt, cbrt, exp, log, log2, log10, sin, cos, tan,
 // asin, acos, atan, atan2, hypot, math-pi, math-e) are now in the
-// "aql:math" native module and tested in internal/nativemod/.
+// "aql:math-util" native module and tested in internal/nativemod/.
 
 func TestMathPow(t *testing.T) {
 	r, _ := DefaultRegistry()

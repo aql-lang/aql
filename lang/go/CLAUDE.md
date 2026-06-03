@@ -59,15 +59,21 @@ Language-agnostic content stays at the top of each component:
 - `formatter/` — code pretty-printer (no engine deps).
 - `capabilities/` — file I/O abstraction (`FileOps` interface
   + OS-backed and in-memory implementations).
-- `modules/` — loadable modules (`aql:math`, `aql:array-util`,
-  `aql:time-util`, `aql:matrix-util`, `aql:decision`,
-  `aql:bin`, `aql:type-util`, `aql:struct`, `aql:io`, `aql:net`). Import
-  binds a CamelCase namespace (`aql:math` → `Math.sqrt`); the four whose
-  plain CamelCase name collides with a builtin type carry a `-util` id and
-  a `*Util` namespace (`aql:array-util` → `ArrayUtil.shape`, likewise
-  `TimeUtil`, `TypeUtil`, `MatrixUtil`). Exported names must be
-  capitalised (`export "Foo"`; lowercase is rejected).
-  `aql:struct` (`Struct.` namespace) holds the voxgig-struct
+- `modules/` — loadable modules. Import binds a CamelCase namespace
+  (`"aql:math-util" import` → `MathUtil.sqrt`).
+  **Naming rule:** a `-util` id + `*Util` namespace marks a **utility
+  library** (a collection of pure/domain helper functions):
+  `aql:math-util` (`MathUtil`), `aql:array-util` (`ArrayUtil`),
+  `aql:time-util` (`TimeUtil`), `aql:type-util` (`TypeUtil`),
+  `aql:matrix-util` (`MatrixUtil`), `aql:string-util` (`StringUtil`),
+  `aql:bin-util` (`BinUtil`), `aql:struct-util` (`StructUtil`),
+  `aql:logic-util` (`LogicUtil`). Capability / framework / DSL modules
+  stay plain: `aql:io` (`IO`), `aql:net` (`Net`), `aql:decision`,
+  `aql:vm`, `aql:report`, `aql:test`, `aql:rand`, `aql:query`.
+  (The `-util` suffix also conveniently avoids the type-name clashes for
+  `Array`/`Time`/`Type`/`Matrix`/`String`, which are builtin types.)
+  Exported names must be capitalised (`export "Foo"`; lowercase rejected).
+  `aql:struct-util` (`StructUtil.` namespace) holds the voxgig-struct
   data-manipulation words — `clone`, `getpath`, `setpath`, `inject`,
   `merge`, `walk`, `items`, `transform`, `validate`, `selector`,
   `jsonify`, `nodify` — moved OUT of core (see `native/struct_module.go`).
@@ -77,7 +83,7 @@ Language-agnostic content stays at the top of each component:
   `aql:net` (`Net.` namespace) holds the HTTP / API words — `fetch`,
   `prepare`, `direct` (see `native/net_module.go`).
   Further moves out of core: bitwise `band`/`bor`/`bxor`/`bnot`/`bsl`/`bsr`/
-  `busr` → `aql:bin` (`Bin.`); clock/async `now`/`sleep`/`timeout`/`interval`/
+  `busr` → `aql:bin-util` (`BinUtil.`); clock/async `now`/`sleep`/`timeout`/`interval`/
   `await`/`cancel` → `aql:time-util` (`TimeUtil.`); `tpartial` → `aql:type-util`
   (`TypeUtil.`); `folder` → `aql:io`; and the derived boolean connectives
   `nand`/`nor`/`xnor`/`iff`/`implies` → `aql:logic-util` (`LogicUtil.`).
@@ -641,7 +647,7 @@ module's exports share one **`Ideal/Module`** descriptor
 - `NewModuleExport(name, fields, module)` — `name` (→ `.$name`), an
   `*OrderedMap` of the raw exports, and the owning Module. A
   ModuleExport is **transparent**: `get`/`getr` (`native_module_types.go`)
-  return the raw export for a plain key (so `Math.sqrt 16.0` dispatches
+  return the raw export for a plain key (so `MathUtil.sqrt 16.0` dispatches
   unchanged) and the synthetic value for `$module` / `$name`.
 - `NewModuleInstance(moduleInfo{ID,Kind,File,Folder,Exports})` — the
   descriptor. `name`/`kind`/`file`/`folder`/`exports` are read via `get`.

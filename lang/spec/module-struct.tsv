@@ -3,44 +3,44 @@
 #
 # Loadable module of voxgig-struct data-manipulation utilities. These
 # words were moved out of the core registry; they are reached only after
-# `import`, under the `Struct` namespace: `"aql:struct" import end
-# Struct.word args`.
+# `import`, under the `Struct` namespace: `"aql:struct-util" import end
+# StructUtil.word args`.
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  merge — deep, index-wise merge (later argument wins)
-"aql:struct" import end Struct.merge {a:1 b:2} {b:3 c:4}	{a:1 b:3 c:4}	overlapping key b is overridden
-"aql:struct" import end Struct.merge {a:{x:1 y:2}} {a:{y:3 z:4}}	{a:{x:1 y:3 z:4}}	merge recurses into nested maps
+"aql:struct-util" import end StructUtil.merge {a:1 b:2} {b:3 c:4}	{a:1 b:3 c:4}	overlapping key b is overridden
+"aql:struct-util" import end StructUtil.merge {a:{x:1 y:2}} {a:{y:3 z:4}}	{a:{x:1 y:3 z:4}}	merge recurses into nested maps
 #
 # §2  getpath — read a dotted path
-"aql:struct" import end Struct.getpath "a.b" {a:{b:42}}	42	nested path read
-"aql:struct" import end Struct.getpath "name" {name:'Alice'}	'Alice'	top-level key read
+"aql:struct-util" import end StructUtil.getpath "a.b" {a:{b:42}}	42	nested path read
+"aql:struct-util" import end StructUtil.getpath "name" {name:'Alice'}	'Alice'	top-level key read
 #
 # §3  setpath — write at a path (returns a new structure)
-"aql:struct" import end Struct.setpath {a:1} "b" 99	{a:1 b:99}	add a key by path
+"aql:struct-util" import end StructUtil.setpath {a:1} "b" 99	{a:1 b:99}	add a key by path
 #
 # §4  clone — deep copy (forward or stack form)
-"aql:struct" import end Struct.clone {a:1 b:2}	{a:1 b:2}	forward form
-"aql:struct" import end {a:1 b:2} Struct.clone	{a:1 b:2}	stack form also works
+"aql:struct-util" import end StructUtil.clone {a:1 b:2}	{a:1 b:2}	forward form
+"aql:struct-util" import end {a:1 b:2} StructUtil.clone	{a:1 b:2}	stack form also works
 #
 # §5  items — map entries as [key value] pairs
-"aql:struct" import end Struct.items {a:1 b:2}	[['a' 1] ['b' 2]]	ordered key/value pairs
+"aql:struct-util" import end StructUtil.items {a:1 b:2}	[['a' 1] ['b' 2]]	ordered key/value pairs
 #
 # §6  validate — check data against a shape spec (returns the validated spec)
-"aql:struct" import end Struct.validate {name:"$STRING"} {name:'Alice'}	{name:'$STRING'}	conforming data validates against the spec
+"aql:struct-util" import end StructUtil.validate {name:"$STRING"} {name:'Alice'}	{name:'$STRING'}	conforming data validates against the spec
 #
 # §7  transform — shape data via a spec (forward: spec then data)
-"aql:struct" import end Struct.transform {x:99} {a:'1'}	{x:99}	literal spec value passes through
+"aql:struct-util" import end StructUtil.transform {x:99} {a:'1'}	{x:99}	literal spec value passes through
 #
 # §8  jsonify — serialise a value (also moved here; output verified in the
 #     Go tests, the pretty-printed multiline form isn't tsv-expressible)
 #
 # §8b  nodify — project a value to its Node/Scalar form (pass-through when no
 #      projection behavior is registered for the type)
-"aql:struct" import end Struct.nodify {a:1 b:2}	{a:1 b:2}	plain Map passes through
+"aql:struct-util" import end StructUtil.nodify {a:1 b:2}	{a:1 b:2}	plain Map passes through
 #
 # §9  swap form dispatches through the namespace
-"aql:struct" import end {a:1} Struct.merge {b:2}	{a:1 b:2}	data-on-stack + forward arg
+"aql:struct-util" import end {a:1} StructUtil.merge {b:2}	{a:1 b:2}	data-on-stack + forward arg
 #
 # §10  negative — unbound without import
-Struct.merge {a:1} {b:2}	ERROR:undefined_word	`Struct` is unbound without `import`
+StructUtil.merge {a:1} {b:2}	ERROR:undefined_word	`Struct` is unbound without `import`
 jsonify {a:1}	ERROR:undefined_word	jsonify also moved out of core

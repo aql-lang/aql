@@ -5,7 +5,7 @@ package native
 // tpartial, …) under their bare names into a test registry. The handlers are
 // unchanged by the move; this helper lets the native-package behaviour tests
 // keep exercising them without an explicit import. Production code must
-// `import "aql:<mod>"` and use the namespace (IO.read, Struct.merge, Bin.band,
+// `import "aql:<mod>"` and use the namespace (IO.read, StructUtil.merge, BinUtil.band,
 // …) — proved by the module-*.tsv specs.
 //
 // Idempotent: a no-op if the words are already present, so it is safe to call

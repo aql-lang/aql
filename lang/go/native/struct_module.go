@@ -24,7 +24,7 @@ package native
 //	nodify    project a value to its Node/Scalar form (voxgig/struct)
 //
 // All words are all-forward eligible (BarrierPos -1) so they dispatch in
-// both forward (`Struct.clone {a:1}`) and stack (`{a:1} Struct.clone`) form
+// both forward (`StructUtil.clone {a:1}`) and stack (`{a:1} StructUtil.clone`) form
 // through the namespace — the recommended shape for module words (see the
 // "Module FnDef Wrappers" note in lang/go/CLAUDE.md). clone/walk were
 // stack-only (0) as core words; -1 is a pure dispatch widening (the inner

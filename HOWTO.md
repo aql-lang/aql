@@ -232,8 +232,8 @@ For controlled rounding, import the math module:
 
 <!-- aql-test: skip -->
 ```
-"aql:math" import end
-`${3.14159 100 mul Math.round 100 div}` => '3.14'
+"aql:math-util" import end
+`${3.14159 100 mul MathUtil.round 100 div}` => '3.14'
 ```
 
 For times, use the `aql:time-util` module — see
@@ -509,8 +509,8 @@ and compose like any other word.
 Bare-word declarations pop from the stack:
 
 ```
-"aql:math" import end
-3 4 var [[a b] (a mul a) add (b mul b) Math.sqrt]    => 5.0
+"aql:math-util" import end
+3 4 var [[a b] (a mul a) add (b mul b) MathUtil.sqrt]    => 5.0
 ```
 
 `a` gets the topmost value (4) and `b` gets the next (3), matching
@@ -633,25 +633,25 @@ Import a built-in native module (registers words under a namespace
 prefix):
 
 ```
-"aql:math" import end
-5 Math.log                            => 1.6094379124341003
+"aql:math-util" import end
+5 MathUtil.log                            => 1.6094379124341003
 ```
 
 Native module words are reached via the namespace prefix
-(`Math.log`, `Math.ceil`, …). The `end` after `import` prevents
+(`MathUtil.log`, `MathUtil.ceil`, …). The `end` after `import` prevents
 forward collection from grabbing the next token as another path —
-without it, `"aql:math" import "foo" print` would try to import a
+without it, `"aql:math-util" import "foo" print` would try to import a
 module named `"foo"`.
 
 The string-hash and char-code words live in `aql:bin`, handy for
 building bloom filters and other sketches:
 
 ```
-"aql:bin" import end
-"A" Bin.ord                           => 65
-65 Bin.chr                            => 'A'
-"hello" Bin.fnv32                     => 1335831723   # 32-bit FNV-1a
-"hello" Bin.fnv64                     # 64-bit FNV-1a, non-negative
+"aql:bin-util" import end
+"A" BinUtil.ord                           => 65
+65 BinUtil.chr                            => 'A'
+"hello" BinUtil.fnv32                     => 1335831723   # 32-bit FNV-1a
+"hello" BinUtil.fnv64                     # 64-bit FNV-1a, non-negative
 ```
 
 ### One file, two modes: `export` at the top level
@@ -782,7 +782,7 @@ Test.report end print
 Test.fail-count end print             => 0
 ```
 
-A property body may `import` a native module (e.g. `"aql:math" import`)
+A property body may `import` a native module (e.g. `"aql:math-util" import`)
 and use it across every run.
 
 
@@ -848,7 +848,7 @@ second module name:
 
 <!-- aql-test: skip -->
 ```
-"aql:math" import end "foo" print     => 'foo'
+"aql:math-util" import end "foo" print     => 'foo'
 ```
 
 Without `end`, `import` would attempt to import a module named

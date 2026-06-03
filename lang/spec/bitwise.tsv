@@ -9,19 +9,19 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  band / bor / bxor — commutative
-"aql:bin" import end Bin.band 12 10	8	bitwise AND (1100 & 1010 = 1000)
-"aql:bin" import end Bin.bor 12 10	14	bitwise OR (1100 | 1010 = 1110)
-"aql:bin" import end Bin.bxor 12 10	6	bitwise XOR (1100 ^ 1010 = 0110)
+"aql:bin-util" import end BinUtil.band 12 10	8	bitwise AND (1100 & 1010 = 1000)
+"aql:bin-util" import end BinUtil.bor 12 10	14	bitwise OR (1100 | 1010 = 1110)
+"aql:bin-util" import end BinUtil.bxor 12 10	6	bitwise XOR (1100 ^ 1010 = 0110)
 #
 # §2  bnot — ones' complement
-"aql:bin" import end Bin.bnot 0	-1	~0 = -1
-"aql:bin" import end Bin.bnot 5	-6	~5 = -6
+"aql:bin-util" import end BinUtil.bnot 0	-1	~0 = -1
+"aql:bin-util" import end BinUtil.bnot 5	-6	~5 = -6
 #
 # §3  shifts — non-commutative; swap form reads `value shift count`
-"aql:bin" import end 1 Bin.bsl 4	16	`1 bsl 4` = 1 << 4 = 16
-"aql:bin" import end Bin.bsl 1 4	8	forward `bsl 1 4` = 4 << 1 = 8
-"aql:bin" import end 8 Bin.bsr 1	4	`8 bsr 1` = 8 >> 1 = 4
-"aql:bin" import end 256 Bin.bsr 2	64	`256 bsr 2` = 256 >> 2 = 64
-"aql:bin" import end Bin.busr 1024 2	0	unsigned right shift: 2 >>> 1024 (count mod width) = 0
+"aql:bin-util" import end 1 BinUtil.bsl 4	16	`1 bsl 4` = 1 << 4 = 16
+"aql:bin-util" import end BinUtil.bsl 1 4	8	forward `bsl 1 4` = 4 << 1 = 8
+"aql:bin-util" import end 8 BinUtil.bsr 1	4	`8 bsr 1` = 8 >> 1 = 4
+"aql:bin-util" import end 256 BinUtil.bsr 2	64	`256 bsr 2` = 256 >> 2 = 64
+"aql:bin-util" import end BinUtil.busr 1024 2	0	unsigned right shift: 2 >>> 1024 (count mod width) = 0
 #
 # §4  errors

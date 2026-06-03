@@ -26,7 +26,7 @@ func TestNativeFnInFnBody(t *testing.T) {
 	}{
 		{
 			name: "merge",
-			def:  `def f fn [[m:Map] [Map] [m Struct.merge {x:1}]]`,
+			def:  `def f fn [[m:Map] [Map] [m StructUtil.merge {x:1}]]`,
 			call: `{a:1} f`,
 			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
@@ -48,7 +48,7 @@ func TestNativeFnInFnBody(t *testing.T) {
 		},
 		{
 			name: "clone",
-			def:  `def f fn [[m:Map] [Map] [m Struct.clone]]`,
+			def:  `def f fn [[m:Map] [Map] [m StructUtil.clone]]`,
 			call: `{a:1} f`,
 			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
@@ -66,7 +66,7 @@ func TestNativeFnInFnBody(t *testing.T) {
 		},
 		{
 			name: "jsonify",
-			def:  `def f fn [[m:Map] [String] [m Struct.jsonify]]`,
+			def:  `def f fn [[m:Map] [String] [m StructUtil.jsonify]]`,
 			call: `{a:1} f`,
 			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
@@ -81,7 +81,7 @@ func TestNativeFnInFnBody(t *testing.T) {
 		},
 		{
 			name: "items",
-			def:  `def f fn [[m:Map] [List] [m Struct.items]]`,
+			def:  `def f fn [[m:Map] [List] [m StructUtil.items]]`,
 			call: `{a:1} f`,
 			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
@@ -97,7 +97,7 @@ func TestNativeFnInFnBody(t *testing.T) {
 		},
 		{
 			name: "getpath",
-			def:  `def f fn [[m:Map] [Any] [Struct.getpath "a" m]]`,
+			def:  `def f fn [[m:Map] [Any] [StructUtil.getpath "a" m]]`,
 			call: `{a:42} f`,
 			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
@@ -131,7 +131,7 @@ func TestNativeInExplicitParens(t *testing.T) {
 	}{
 		{
 			name: "merge",
-			expr: `({a:1} Struct.merge {b:2})`,
+			expr: `({a:1} StructUtil.merge {b:2})`,
 			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
 				if len(result) != 1 {
@@ -152,7 +152,7 @@ func TestNativeInExplicitParens(t *testing.T) {
 		},
 		{
 			name: "clone",
-			expr: `({a:1} Struct.clone)`,
+			expr: `({a:1} StructUtil.clone)`,
 			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
 				assertResult(t, result, "{a:1}")
@@ -168,7 +168,7 @@ func TestNativeInExplicitParens(t *testing.T) {
 		},
 		{
 			name: "jsonify",
-			expr: `({a:1} Struct.jsonify)`,
+			expr: `({a:1} StructUtil.jsonify)`,
 			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
 				if len(result) != 1 {
@@ -410,7 +410,7 @@ func TestNativeFnInNestedParens(t *testing.T) {
 	}{
 		{
 			name:     "merge-nested-parens",
-			expr:     `(({a:1} Struct.merge {b:2}) Struct.merge {c:3})`,
+			expr:     `(({a:1} StructUtil.merge {b:2}) StructUtil.merge {c:3})`,
 			expected: "",
 		},
 		{
@@ -420,7 +420,7 @@ func TestNativeFnInNestedParens(t *testing.T) {
 		},
 		{
 			name:     "clone-in-nested",
-			expr:     `(({a:1} Struct.clone) Struct.merge {b:2})`,
+			expr:     `(({a:1} StructUtil.clone) StructUtil.merge {b:2})`,
 			expected: "",
 		},
 	}
@@ -454,9 +454,9 @@ func TestNativeFnInFnBodyChained(t *testing.T) {
 	}{
 		{
 			name: "clone-then-merge",
-			// Struct.clone is forward-eligible, so group it to take m from the
-			// stack rather than collecting the following Struct.merge token.
-			def:  `def f fn [[m:Map] [Map] [(m Struct.clone) Struct.merge {extra:1}]]`,
+			// StructUtil.clone is forward-eligible, so group it to take m from the
+			// stack rather than collecting the following StructUtil.merge token.
+			def:  `def f fn [[m:Map] [Map] [(m StructUtil.clone) StructUtil.merge {extra:1}]]`,
 			call: `{a:1} f`,
 			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
@@ -478,7 +478,7 @@ func TestNativeFnInFnBodyChained(t *testing.T) {
 		},
 		{
 			name: "merge-then-size",
-			def:  `def f fn [[m:Map] [Integer] [(m Struct.merge {x:1}) size]]`,
+			def:  `def f fn [[m:Map] [Integer] [(m StructUtil.merge {x:1}) size]]`,
 			call: `{a:1} f`,
 			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
@@ -487,7 +487,7 @@ func TestNativeFnInFnBodyChained(t *testing.T) {
 		},
 		{
 			name: "merge-then-jsonify",
-			def:  `def f fn [[m:Map] [String] [(m Struct.merge {b:2}) Struct.jsonify]]`,
+			def:  `def f fn [[m:Map] [String] [(m StructUtil.merge {b:2}) StructUtil.jsonify]]`,
 			call: `{a:1} f`,
 			check: func(t *testing.T, result []native.Value) {
 				t.Helper()
@@ -548,7 +548,7 @@ func TestNativeFnInFnBodyCalledMultipleTimes(t *testing.T) {
 // native function body can be invoked multiple times in sequence.
 func TestNativeFnInFnBodyRepeatedCalls(t *testing.T) {
 	steps := []string{
-		`def f fn [[m:Map] [Map] [m Struct.merge {added:true}]]`,
+		`def f fn [[m:Map] [Map] [m StructUtil.merge {added:true}]]`,
 		`{a:1} f`,
 	}
 	result, err := runNativeSteps(t, nil, steps)

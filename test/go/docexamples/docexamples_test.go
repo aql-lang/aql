@@ -60,9 +60,9 @@ var knownMismatch = map[mismatchKey]string{
 	{"REFERENCE.md", "Integer lt 0"}:   "Integer lt 0 builds a DepScalar refinement, not a boolean; doc shows true",
 	{"EXPLANATION.md", "Integer lt 0"}: "Integer lt 0 builds a DepScalar refinement, not a boolean; doc shows true",
 
-	// Math.log of e is 0.9999999998311266 (float), not the exact 1.0 the
+	// MathUtil.log of e is 0.9999999998311266 (float), not the exact 1.0 the
 	// doc shows. Either round in the example or accept the float form.
-	{"TUTORIAL.md", "Math.log 2.718281828"}: "Math.log float precision: engine 0.9999999998311266 vs doc 1.0",
+	{"TUTORIAL.md", "MathUtil.log 2.718281828"}: "MathUtil.log float precision: engine 0.9999999998311266 vs doc 1.0",
 
 	// An absent optional record field renders as the None type literal
 	// (Canon: `None`); the doc writes lowercase `none`. Render-convention
@@ -198,7 +198,7 @@ func runProgramErr(src string) (string, error) {
 		return "", err
 	}
 	// Mirror lang.New's registry wiring so module imports
-	// (`"aql:math" import end`) resolve as they do for a CLI user.
+	// (`"aql:math-util" import end`) resolve as they do for a CLI user.
 	reg.SetParseFunc(parser.Parse)
 	modules.InstallResolver(reg)
 	result, err := native.NewTop(reg).Run(values)

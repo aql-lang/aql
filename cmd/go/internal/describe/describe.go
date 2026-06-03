@@ -20,21 +20,21 @@ import (
 // moduleSummaries gives a one-line description for each built-in module.
 // Keyed by the bare module name (the part after "aql:").
 var moduleSummaries = map[string]string{
-	"math":       "Floating-point math: trig, logs, roots, constants.",
-	"array":      "Numeric array construction and element-wise operations.",
-	"time":       "Clocks, timers, and intervals.",
-	"matrix":     "Tensors, matrices, and vectors with linear algebra.",
-	"decision":   "Decision tables and rule evaluation.",
-	"bin":        "Binary encoding and byte-buffer helpers.",
-	"type":       "Type introspection and construction utilities.",
-	"vm":         "Low-level virtual-machine primitives.",
-	"report":     "Tabular reporting and formatting.",
-	"test":       "Assertions and helpers for in-language tests.",
-	"rand":       "Pseudo-random number generation.",
-	"struct":     "Structured-data utilities: merge, walk, transform, jsonify, ….",
-	"io":         "I/O: read, write, stdin/stdout/stderr, printstr, trace.",
-	"net":        "HTTP requests and API access: fetch, prepare, direct.",
-	"logic-util": "Derived boolean connectives: nand, nor, xnor, iff, implies.",
+	"math-util":   "Floating-point math: trig, logs, roots, constants.",
+	"array":       "Numeric array construction and element-wise operations.",
+	"time":        "Clocks, timers, and intervals.",
+	"matrix":      "Tensors, matrices, and vectors with linear algebra.",
+	"decision":    "Decision tables and rule evaluation.",
+	"bin-util":    "Binary encoding and byte-buffer helpers.",
+	"type":        "Type introspection and construction utilities.",
+	"vm":          "Low-level virtual-machine primitives.",
+	"report":      "Tabular reporting and formatting.",
+	"test":        "Assertions and helpers for in-language tests.",
+	"rand":        "Pseudo-random number generation.",
+	"struct-util": "Structured-data utilities: merge, walk, transform, jsonify, ….",
+	"io":          "I/O: read, write, stdin/stdout/stderr, printstr, trace.",
+	"net":         "HTTP requests and API access: fetch, prepare, direct.",
+	"logic-util":  "Derived boolean connectives: nand, nor, xnor, iff, implies.",
 }
 
 type cmd struct{}

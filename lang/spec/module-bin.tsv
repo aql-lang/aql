@@ -2,30 +2,30 @@
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of bit/byte utilities. Import binds the `bin`
-# namespace: `"aql:bin" import end  Bin.word args`.
+# namespace: `"aql:bin-util" import end  BinUtil.word args`.
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  bit population
-"aql:bin" import end  Bin.popcount 7	3	count of set bits (0b111)
-"aql:bin" import end  Bin.parity 7	true	odd number of set bits
+"aql:bin-util" import end  BinUtil.popcount 7	3	count of set bits (0b111)
+"aql:bin-util" import end  BinUtil.parity 7	true	odd number of set bits
 #
 # §2  leading / trailing zeros (64-bit)
-"aql:bin" import end  Bin.clz 1	63	count leading zeros
-"aql:bin" import end  Bin.ctz 8	3	count trailing zeros (0b1000)
+"aql:bin-util" import end  BinUtil.clz 1	63	count leading zeros
+"aql:bin-util" import end  BinUtil.ctz 8	3	count trailing zeros (0b1000)
 #
 # §3  character codes
-"aql:bin" import end  Bin.ord 'A'	65	code point of a character
-"aql:bin" import end  Bin.chr 65	'A'	character from a code point
+"aql:bin-util" import end  BinUtil.ord 'A'	65	code point of a character
+"aql:bin-util" import end  BinUtil.chr 65	'A'	character from a code point
 #
 # §4  swap form
-"aql:bin" import end  3 Bin.popcount	2	swap form dispatches (0b11 → 2)
+"aql:bin-util" import end  3 BinUtil.popcount	2	swap form dispatches (0b11 → 2)
 #
 # §5  bitwise operators (moved here from core)
-"aql:bin" import end  Bin.band 12 10	8	bitwise AND (0b1100 & 0b1010)
-"aql:bin" import end  Bin.bor 12 10	14	bitwise OR
-"aql:bin" import end  Bin.bxor 12 10	6	bitwise XOR
-"aql:bin" import end  8 Bin.bsl 2	32	left shift (8 << 2)
+"aql:bin-util" import end  BinUtil.band 12 10	8	bitwise AND (0b1100 & 0b1010)
+"aql:bin-util" import end  BinUtil.bor 12 10	14	bitwise OR
+"aql:bin-util" import end  BinUtil.bxor 12 10	6	bitwise XOR
+"aql:bin-util" import end  8 BinUtil.bsl 2	32	left shift (8 << 2)
 #
 # §6  negative — unbound without import
-Bin.popcount 7	ERROR:undefined_word	`bin` is unbound without `import`
+BinUtil.popcount 7	ERROR:undefined_word	`bin` is unbound without `import`
 band 12 10	ERROR:undefined_word	bitwise ops are no longer core

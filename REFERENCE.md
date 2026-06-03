@@ -334,14 +334,14 @@ forms `a b sub`, `a sub b`, and `sub b a` compute `a - b`.
 Additional numeric words (`abs`, `negate`, `sign`, `min`, `max`,
 `floor`, `ceil`, `round`, `trunc`, `sqrt`, `cbrt`, `exp`, `log`,
 `log2`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`,
-`atan2`, `hypot`, constants `Math.pi`, `Math.e`) live in the
+`atan2`, `hypot`, constants `MathUtil.pi`, `MathUtil.e`) live in the
 **`aql:math`** native module. Import to use:
 
 ```
-"aql:math" import end
-Math.abs -5                   => 5
-Math.floor 3.7                => 3
-Math.sqrt 16                  => 4.0
+"aql:math-util" import end
+MathUtil.abs -5                   => 5
+MathUtil.floor 3.7                => 3
+MathUtil.sqrt 16                  => 4.0
 ```
 
 ### Strings
@@ -786,7 +786,7 @@ Requires the `sqlite` capability.
 | `import` | Import a module by name or file | `import "lib.aql"` |
 
 `import` binds each `export "Name" {…}` to a **`ModuleExport`** instance.
-A `ModuleExport` is *transparent* — `Math.sqrt 16.0` still calls the
+A `ModuleExport` is *transparent* — `MathUtil.sqrt 16.0` still calls the
 exported function — and carries two synthetic names: `Name.$name` (the
 export name) and `Name.$module`, the **`Module`** descriptor it belongs
 to. A `Module` (`Ideal/Module`) has fields `id`, `kind`
@@ -796,10 +796,10 @@ to. A `Module` (`Ideal/Module`) has fields `id`, `kind`
 ```
 import aql:math
 typeof Math                   => ModuleExport
-Math.$name                    => 'Math'
-Math.$module.id               => 'aql:math'
-Math.$module.kind             => 'native'
-Math.$module.exports          => ['Math']
+MathUtil.$name                    => 'Math'
+MathUtil.$module.id               => 'aql:math'
+MathUtil.$module.kind             => 'native'
+MathUtil.$module.exports          => ['Math']
 ```
 
 <!-- aql-test: skip -->

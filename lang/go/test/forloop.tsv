@@ -169,13 +169,13 @@ for 3 [(i add 1)]	1 2 3
 for 4 [(i mul i)]	0 1 4 9
 for 3 [(i mul 2 add 1)]	1 3 5
 
-# === For + Math.abs/Math.negate ===
-for 3 [i Math.negate]	0 -1 -2
-for [3,0,-1] [i Math.abs]	3 2 1
+# === For + MathUtil.abs/MathUtil.negate ===
+for 3 [i MathUtil.negate]	0 -1 -2
+for [3,0,-1] [i MathUtil.abs]	3 2 1
 
-# === For + Math.min/Math.max ===
-for 5 [i 2 Math.min]	0 1 2 2 2
-for 5 [i 2 Math.max]	2 2 2 3 4
+# === For + MathUtil.min/MathUtil.max ===
+for 5 [i 2 MathUtil.min]	0 1 2 2 2
+for 5 [i 2 MathUtil.max]	2 2 2 3 4
 
 # === For + conditional chains ===
 for 6 [(if [i lt 2] ["lo"] (if [i lt 4] ["mid"] ["hi"]))]	'lo' 'lo' 'mid' 'mid' 'hi' 'hi'

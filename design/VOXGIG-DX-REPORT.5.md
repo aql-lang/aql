@@ -34,7 +34,7 @@ Status legend in the per-theme tables below:
 **Verification deltas worth flagging up front:**
 - **Namespace export names are now CamelCase.** Commit `a3d701b1`
   (2026-06-01) made module exports enforce capital-initial names (`Test.test`,
-  `Assert.equal`, `Math.sqrt`) — the source reports used the lowercase
+  `Assert.equal`, `MathUtil.sqrt`) — the source reports used the lowercase
   `test.`/`assert.`/`math.` forms, so most of the voxgig test files now need
   a global rename before they will load.
 - **`aql:array` was renamed to `aql:array-util`** (and binds the `ArrayUtil`
@@ -229,7 +229,7 @@ Unverified (need a tighter repro):
 
 Collateral breaking changes (not DX bugs, but explain why a naive
 re-run of the voxgig suites looks broken): namespaces CamelCase
-(`Test.test`, `Math.sqrt`); `aql:array` → `aql:array-util`.
+(`Test.test`, `MathUtil.sqrt`); `aql:array` → `aql:array-util`.
 
 ---
 
@@ -288,7 +288,7 @@ A one-page "Gotchas" / "Idioms" reference covering the items that are
 - Promote the declarative spec test API (`Test.spec` / `Test.run-spec`) into
   the user docs.
 - **Upgrade note** for downstream voxgig-style libraries: namespaces are
-  CamelCase (`Test.`, `Assert.`, `Math.`), and `aql:array` is now
+  CamelCase (`Test.`, `Assert.`, `MathUtil.`), and `aql:array` is now
   `aql:array-util` (binds `ArrayUtil.`).
 
 Items dropped from the original gotchas list because they're now fixed:

@@ -43,7 +43,7 @@ func Overview() string {
 	b.WriteString("\n")
 	b.WriteString("Modules add more words; import one, then describe what it exports:\n")
 	b.WriteString("  \"aql:math\" import\n")
-	b.WriteString("  0.5 Math.sin           ;# call an imported word\n")
+	b.WriteString("  0.5 MathUtil.sin           ;# call an imported word\n")
 	b.WriteString("\n")
 	b.WriteString("Learn more:\n")
 	b.WriteString("  Tutorial:  " + TutorialURL + "\n")

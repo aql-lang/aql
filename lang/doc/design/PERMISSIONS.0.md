@@ -286,10 +286,10 @@ declaration is more readable.
     "modules": {
       "words": {
         "default": "deny",
-        "rules": [{ "allow": ["aql:math", "aql:time"] }]
+        "rules": [{ "allow": ["aql:math-util", "aql:time"] }]
       },
       "scopes": {
-        "aql:math": {
+        "aql:math-util": {
           "words": {
             "default": "allow",
             "rules": [{ "deny": ["pow"] }]
@@ -630,7 +630,7 @@ And per-export dispatch:
 // When dispatching a module-imported word "math.sin":
 if pol := HostPolicy(r); pol != nil {
     if err := pol.Check("modules", "call", policy.Args{
-        "module": "aql:math",
+        "module": "aql:math-util",
         "export": "sin",
     }); err != nil {
         return err

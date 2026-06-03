@@ -15,7 +15,7 @@ import (
 // under their bare names into a test registry. The handlers are unchanged by
 // the move; this harness helper lets the behaviour suites keep exercising them
 // without an explicit import. Production code must `import "aql:<mod>"` and use
-// the namespace (IO.read, Bin.band, …) — proved by the module-*.tsv specs.
+// the namespace (IO.read, BinUtil.band, …) — proved by the module-*.tsv specs.
 // Idempotent (guards on `read`).
 func registerIOWords(reg *native.Registry) {
 	if reg.Lookup("read") != nil {
@@ -52,7 +52,7 @@ func runNativeSteps(t *testing.T, files map[string]string, steps []string) ([]na
 	native.Register(reg)
 	modules.InstallMathExports(reg)
 	// Struct words (merge/walk/clone/…) moved to aql:struct; install the
-	// Struct namespace so tests can call Struct.merge etc. without wiring
+	// Struct namespace so tests can call StructUtil.merge etc. without wiring
 	// the full module resolver.
 	if err := modules.InstallStructExports(reg); err != nil {
 		t.Fatal(err)
