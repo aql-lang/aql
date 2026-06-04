@@ -129,8 +129,33 @@ registration in `lang/go/native/`, a `negationBehavior` in eng,
 `eng/go/carrier.go` (`ApplyComplementNarrowing` uses `tand (tnot …)`).
 Reuses `SimplifyDisjunctAlts` (`eng/go/core_helpers.go:755`) for cleanup.
 
-**Effort.** ~2–3 dev days. Self-contained; has a failing-by-design test
-already in the tree to anchor it.
+**Decisions (pinned 2026-06-04).**
+
+1. **Scope — first-class.** `tnot` is a real type-algebra word beside
+   `tor`/`tand`, valid in annotations and `is`. Completes the Boolean
+   closure; not an internal-only narrowing hack.
+2. **Decision procedure — tailored to the AQL lattice.** `T tand U =?
+   Never` is decided by tree-disjointness (incomparable nodes are
+   disjoint), DepScalar interval logic, and per-atom negation — *not* a
+   general DNF/BDD engine. Complete enough for a tree + DepScalar
+   lattice; revisit only if a future construct (e.g. structural record
+   negation) outgrows it.
+3. **Runtime — real value.** `x is (tnot String)` works at runtime via
+   `negationBehavior.Match` (pointwise `!inner`). Consistent with
+   `tor`/`tand`/`Never`/`Any`, which are all runtime type values;
+   check-mode narrowing is a second consumer, not the only one.
+4. **DepScalar — closed-form complement.** `tnot (Integer gt 0)`
+   simplifies to `Integer lte 0` within the base family, reusing
+   `depscalar.go` interval logic, so negated refinements merge and
+   simplify rather than staying opaque.
+
+**Effort.** ~5–6 dev days (up from a bare-word estimate): the
+tailored decision procedure (~2 d) and the DepScalar closed-form
+complement (~1 d) are the bulk, plus the word + `negationBehavior`
+(~1.5 d), the else-narrowing wiring (~0.5 d), and docs across
+`LANGREF`/`SIGNATURES`/`TYPES` (~0.5 d). The else-branch fix has a
+failing-by-design test already in the tree
+(`TestApplyComplementNarrowingNoOpOnConcrete`) to anchor it.
 
 ### 2. The `dynamic(T)` bounded modality — the deepest idea
 
