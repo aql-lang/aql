@@ -461,10 +461,21 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			}
 
 		case IsParenExpr(val):
-			// ParenExpr values are only used inside maps (created by
-			// the parser for paren groups in data context). They should
-			// not appear on the main stack; skip if encountered.
-			e.pointer++
+			// A word-context ParenExpr (paren-nesting work, Step 2 —
+			// design/PAREN-REPRESENTATION.0.md): evaluate it as an
+			// isolated sub-expression and splice its result(s) in place.
+			// The four contracts: errors propagate (a paren is NOT an
+			// error boundary, unlike `do`), defs leak (shared registry),
+			// the inner expression starts with a fresh operand view (the
+			// OpenParen stack barrier), and results flow out onto the
+			// shared stack. Do not advance — the spliced result(s) re-step
+			// onto the stack as the marker form leaves them inline.
+			items, _ := AsParenExpr(val)
+			results, perr := e.evalParenExprResults(items)
+			if perr != nil {
+				return nil, perr
+			}
+			stackSplice(&e.stack, e.pointer, 1, results...)
 
 		case IsInterpString(val):
 			result, err := e.evalInterpString(val)
@@ -1800,6 +1811,21 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 	return NewString(buf.String()), nil
 }
 
+// evalParenExprResults evaluates a word-context ParenExpr's tokens as an
+// isolated sub-expression and returns its result value(s). It shares the
+// registry (so defs leak, matching paren scope) and propagates errors (a
+// paren is not an error boundary, unlike `do`). The tokens are wrapped in
+// paren markers so the existing collapse machinery resolves any dangling
+// forwards via implicit end. See design/PAREN-REPRESENTATION.0.md §3.
+func (e *Engine) evalParenExprResults(items []Value) ([]Value, error) {
+	sub := New(e.registry)
+	input := make([]Value, 0, len(items)+2)
+	input = append(input, NewOpenParen())
+	input = append(input, items...)
+	input = append(input, NewCloseParen())
+	return sub.Run(input)
+}
+
 // autoEvalMap evaluates each value in a plain map using a sub-engine.
 // Word values resolve directly; lists auto-evaluate via autoEvalStack:
 //
@@ -1853,16 +1879,11 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 			continue
 		}
 
-		// Paren expression: evaluate items with paren markers so the
-		// engine's stepCloseParen collapses to a single result.
+		// Paren expression: evaluate items as an isolated sub-expression
+		// (shared via evalParenExprResults with the main-stack path).
 		if IsParenExpr(v) {
 			items, _ := AsParenExpr(v)
-			sub := New(e.registry)
-			input := make([]Value, 0, len(items)+2)
-			input = append(input, NewOpenParen())
-			input = append(input, items...)
-			input = append(input, NewCloseParen())
-			result, err := sub.Run(input)
+			result, err := e.evalParenExprResults(items)
 			if err != nil {
 				return Value{}, err
 			}
