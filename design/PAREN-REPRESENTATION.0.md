@@ -55,6 +55,39 @@ consumption-isolation a nested value would impose is **not a behavior
 change** — it is the current behavior, merely made explicit in the
 representation. This removes the main objection to nesting.
 
+### 2.1 Quotability: parens survive only via list-nesting, and only flat
+
+A direct test of the code-as-data gap. A **bare** paren cannot be quoted —
+it is collapsed before `quote` captures it:
+
+| Probe | Result | Reading |
+|---|---|---|
+| `quote (1 add 2)` | `3` | paren collapsed by `preEvalParens` first; `quote` sees the *value* |
+| `quote (1 2 3)` | `1 2 3` | same — multiple values, not code |
+| `(1 add 2)/q` | `3` | `/q`'s `__DM` is a no-op on a non-function |
+| `quote [1 add 2]` | `[1 word(add) 2]` | a **list** *is* quotable — the code-as-data container |
+| `quote [(1 add 2)]` | `[( 1 word(add) 2 )]` | a paren **nested in a quoted list** survives as data |
+
+Two facts fall out:
+
+1. **There is no way to quote a top-level paren.** `preEvalParens` only
+   collapses parens at the *top level of the forward window*; a bare
+   `(expr)` after `quote` is exactly there, so it evaluates before `quote`
+   captures. The `[...]` list is the only quotation boundary — it is
+   captured whole and never stepped, so a paren *inside* it is never
+   pre-evaluated.
+2. **Even when preserved, the paren is flat, not structural.**
+   `quote [(1 add 2)]` yields list elements `OpenParen, 1, word(add), 2,
+   CloseParen` — *flat markers*, not a nested `[1 add 2]` sub-list. So a
+   quoted paren is *quotable-but-not-walkable*: a code walker must still
+   understand the `OpenParen`/`CloseParen` markers.
+
+This is why the macro template (MACROS.0.md) is `quote [ ... ]`, **never**
+`quote ( ... )` — the list is the boundary that keeps inner forms (parens
+included) as data. Under the §3 nesting change the *same* `quote [(1 add 2)]`
+would yield `[[1 add 2]]` — a clean nested tree — which is exactly the
+structural quotability the macro walker wants.
+
 ---
 
 ## 3. What nesting would change
