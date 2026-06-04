@@ -1987,6 +1987,26 @@ func expandReach(info ReachInfo) []Value {
 	return expandParenExpr(lowerReach(info))
 }
 
+// ApplyReach evaluates a Reach against a concrete receiver value — the lens
+// "get" (design/REACH.0.md §7). The reach's own Receiver tokens are ignored
+// (a receiverless lens has none); recv becomes the base and the segments
+// (get/getr, literal/computed, in order) walk from it via the same Stage-1
+// lowering bare m.a.b uses, so getr strictness and computed-key evaluation
+// are identical. It is the primitive behind the `apply` word and the
+// receiverless-reach-as-Function higher-order behaviour.
+func ApplyReach(r *Registry, info ReachInfo, recv Value) (Value, error) {
+	toks := lowerReach(ReachInfo{Receiver: []Value{recv}, Segments: info.Segments})
+	sub := New(r)
+	res, err := sub.Run(expandParenExpr(toks))
+	if err != nil {
+		return Value{}, err
+	}
+	if len(res) == 0 {
+		return Value{}, fmt.Errorf("apply: reach produced no value")
+	}
+	return res[len(res)-1], nil
+}
+
 // evalParenExprResults evaluates a ParenExpr's tokens in a sub-engine and
 // returns its result value(s). Used by autoEvalMap for paren values in map
 // (data) context, where a single result value is collected for a key. It

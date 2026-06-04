@@ -22,6 +22,7 @@ WORD and
 WORD any
   [Node/List] barrier=1 returns=[Scalar/Boolean]
 WORD apply
+  [Ideal/Reach Any] barrier=2 returns=[Any]
   [Type/Function] barrier=0 returns=[Any]
 WORD args
   [] barrier=0 returns=[Node/List]
@@ -358,6 +359,8 @@ WORD read
   [Scalar/String Node/Map] barrier=2 returns=[Any]
   [Scalar/Path] barrier=1 returns=[Any]
   [Scalar/String] barrier=1 returns=[Any]
+WORD rebind
+  [Ideal/Reach Any] barrier=2 returns=[Ideal/Reach]
 WORD ref
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Any]
 WORD refine

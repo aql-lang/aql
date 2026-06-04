@@ -56,6 +56,46 @@ func TestReachConvertListKeys(t *testing.T) {
 	}
 }
 
+// A receiverless reach ($ sentinel) is an inert lens value, not eager access.
+func TestReceiverlessReachIsInertLens(t *testing.T) {
+	res, err := runNativeSteps(t, nil, []string{`$.name`})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(res) != 1 || !eng.IsReach(res[0]) {
+		t.Fatalf("$.name should be an inert Reach value, got %v", res)
+	}
+	info, _ := eng.AsReach(res[0])
+	if len(info.Receiver) != 0 || info.Eval {
+		t.Fatalf("$.name must be receiverless + inert, got %+v", info)
+	}
+}
+
+// apply applies a receiverless lens to a receiver (the lens "get"); rebind
+// swaps the receiver and stays inert data.
+func TestReachApplyAndRebind(t *testing.T) {
+	// apply reads the field.
+	res, err := runNativeSteps(t, nil, []string{`def p {a: {b: 7}}`, `apply $.a.b p`})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if n, _ := eng.AsInteger(res[0]); n != 7 {
+		t.Errorf("apply $.a.b p = %v, want 7", res[0])
+	}
+	// getr strictness survives apply: a missing strict key errors.
+	if _, err := runNativeSteps(t, nil, []string{`def p {a: 1}`, `apply $!.missing p`}); err == nil {
+		t.Error("apply $!.missing p should error (getr strict), got nil")
+	}
+	// rebind returns an inert bound lens, not the value.
+	res, err = runNativeSteps(t, nil, []string{`def p {name: "ada"}`, `rebind $.name p`})
+	if err != nil {
+		t.Fatalf("rebind: %v", err)
+	}
+	if len(res) != 1 || !eng.IsReach(res[0]) {
+		t.Fatalf("rebind should yield a Reach value, got %v", res)
+	}
+}
+
 // Parity guard: a parsed dot-access still evaluates eagerly (not a Reach value).
 func TestParsedDotAccessStaysEager(t *testing.T) {
 	res, err := runNativeSteps(t, nil, []string{`def m {a: {b: 7}}`, `m.a.b`})
