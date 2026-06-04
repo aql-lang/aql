@@ -21,6 +21,13 @@ def p {name:"ada"}  apply $!.name p	'ada'	getr segment finds a present key
 # §3  rebind — compose, don't evaluate: swap in a receiver, stay inert data.
 def p {name:"ada"}  typeof (rebind $.name p)	Reach	rebind returns a (bound) lens, not the value
 #
-# §4  Negatives
+# §4  Lens-as-Function — a receiverless reach is an arity-1 accessor in
+#     higher-order positions (each / filter / sortby).
+def people [{name:"ada" age:36} {name:"bob" age:20}]  each $.name people	['ada' 'bob']	each plucks the lens from every element
+def xs [{n:"a" on:true} {n:"b" on:false} {n:"c" on:true}]  each $.n (filter $.on xs)	['a' 'c']	filter keeps elements whose lens is truthy
+filter $.on {a:{on:true} b:{on:false}}	{a:{on:true}}	filter lens form works on a map (by value)
+"aql:array-util" import  def people [{name:"ada" age:36} {name:"bob" age:20}]  each $.name (ArrayUtil.sortby $.age people)	['bob' 'ada']	sortby derives the sort key via the lens
+#
+# §5  Negatives
 def p {name:"ada"}  apply $!.missing p	ERROR:getr_error	getr strictness: missing key errors through apply
 apply $.name 5	ERROR:	applying a field lens to a non-map yields no field (None/​error)

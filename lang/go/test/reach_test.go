@@ -96,6 +96,42 @@ func TestReachApplyAndRebind(t *testing.T) {
 	}
 }
 
+// A receiverless reach acts as an arity-1 accessor function in higher-order
+// positions: each plucks it, filter keeps truthy, sortby derives sort keys.
+func TestReachAsFunction(t *testing.T) {
+	// each plucks the lens from every element.
+	res, err := runNativeSteps(t, nil, []string{
+		`def people [{name: "ada" age: 36} {name: "bob" age: 20}]`,
+		`each $.name people`,
+	})
+	if err != nil {
+		t.Fatalf("each lens: %v", err)
+	}
+	l, err := eng.AsList(res[0])
+	if err != nil || l.Len() != 2 {
+		t.Fatalf("each $.name should yield 2 names, got %v", res[0])
+	}
+	if s, _ := eng.AsString(l.Get(0)); s != "ada" {
+		t.Errorf("each $.name[0] = %v, want ada", l.Get(0))
+	}
+	// filter keeps elements whose lens is truthy.
+	res, err = runNativeSteps(t, nil, []string{
+		`def xs [{n: "a" on: true} {n: "b" on: false}]`,
+		`filter $.on xs`,
+	})
+	if err != nil {
+		t.Fatalf("filter lens: %v", err)
+	}
+	l, err = eng.AsList(res[0])
+	if err != nil || l.Len() != 1 {
+		t.Fatalf("filter $.on should keep 1 element, got %v", res[0])
+	}
+	// Negative: the each lens form needs a concrete data list.
+	if _, err := runNativeSteps(t, nil, []string{`each $.name 5`}); err == nil {
+		t.Error("each $.name 5 should error (not a list), got nil")
+	}
+}
+
 // Parity guard: a parsed dot-access still evaluates eagerly (not a Reach value).
 func TestParsedDotAccessStaysEager(t *testing.T) {
 	res, err := runNativeSteps(t, nil, []string{`def m {a: {b: 7}}`, `m.a.b`})

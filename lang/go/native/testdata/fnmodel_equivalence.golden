@@ -117,6 +117,7 @@ WORD dup
 WORD dup2
   [Any Any] barrier=0 +returnsfn
 WORD each
+  [Ideal/Reach Node/List] barrier=2 returns=[Node/List]
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
 WORD enum
   [Node/List] barrier=1 noeval={0} returns=[Type/Disjunct/Enum]
@@ -136,6 +137,7 @@ WORD fetch
   [Scalar/String] barrier=1
 WORD filter
   [Type/Function Any] barrier=2
+  [Ideal/Reach Any] barrier=2
 WORD flatten
   [Scalar/Number/Integer Node/List] barrier=2
   [Node/List] barrier=1
