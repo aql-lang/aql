@@ -162,16 +162,26 @@ on `{a:[1 2 3]}` → `3`). The chain is **flat and left-composing**: each
    parens. Nesting parens helps (the wrapper becomes a sub-list) but does
    **not** turn the get-chain into a path node — the two issues stack.
 
-4. **The `/`-modifier interaction forces non-local parser logic.** A
-   modifier on a path applies to the **whole group**: `a.b/m` parses as
-   `(a get b)/m`. `convertTopLevelItems` must peel the modifier off the
-   *final key* (`groupModifier`), then place **word** modifiers
-   (`usurp`/`stack-args`/`forward-args`) *before* the group (so they
-   forward-collect the result before it auto-dispatches) and the
-   `/r`/`/q` `__DM` marker *after* (for `execFnDefLiteral` to peek). This
-   `pfx`/`sfx` repositioning is exactly the kind of look-ahead rewrite the
-   single-pass model otherwise avoids — dotted-access-with-modifiers is one
-   of the few genuine complexity hotspots in the linear converter.
+4. **The `/`-modifier is *parser* non-locality, not a code-as-data
+   defect.** *(Corrected — an earlier draft conflated the two.)* A modifier
+   on a path *denotes* a **word applied to the group**, and for
+   `/u`/`/s`/`/f`/`/N` it is **literally emitted that way**: `(a.b)/u` →
+   `usurp (a get b)`, a clean nested application `[usurp [a get b]]`
+   (`groupModifier`, parse.go:400–406). So the resulting **structure is
+   tree-clean**; these modifiers are fine for code-as-data. What is
+   non-local is the *parser work*: `convertTopLevelItems` peels the modifier
+   off the *final key* and repositions it (word modifiers *before* the
+   group so they forward-collect before auto-dispatch; the `/r`/`/q` marker
+   *after*). That look-ahead is an implementation wart in the linear
+   converter — but it does **not** make the value stream non-uniform. The
+   one genuinely non-word token is the trailing `__DM` marker that
+   `/r`/`/q` emit (`NewDispatchMod`, parse.go:408); even that *denotes*
+   `ref`/`quote (group)` and could be a prefix word like the other four —
+   it is a marker for dispatch-*timing* reasons (`execFnDefLiteral` peeks it
+   at the result's use site; `stepLiteral` drops it as a no-op on a
+   non-function), not because the structure must be irregular. **So the
+   modifier is not part of the code-as-data problem; points #1–#3 (the flat
+   `get`-chain) are.**
 
 5. **The post-dot key is keyword-like, a special case.** In word context a
    bare word is callable, but the key after `.` must be a self-quoting
@@ -203,8 +213,10 @@ per-paren eval cost and (b) committing to a tree-walk execution shape in a
 concatenative engine.
 
 Dotted access is the **residual**: even after nesting, a path is a flat,
-non-quotable `get`-chain that drags non-local modifier logic into the
-parser. Full code-as-data uniformity therefore wants **two** steps —
+non-quotable `get`-chain (§6.2 #1–#3). The `/`-modifier is *not* part of
+this — it desugars to a word applied to the group, which is structurally
+clean; its only cost is parser look-ahead (§6.2 #4). Full code-as-data
+uniformity therefore wants **two** steps —
 nest parens (this note) and then make dotted access a structural node —
 with the second downstream of the first.
 
