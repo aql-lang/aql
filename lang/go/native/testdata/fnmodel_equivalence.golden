@@ -276,6 +276,10 @@ WORD lt
 WORD lte
   [Scalar Scalar] barrier=2 runcheck typearg={1} returns=[Scalar]
   [Any Any] barrier=2 returns=[Scalar/Boolean]
+WORD macro
+  [Node/List] barrier=1 noeval={0} returns=[Type/Function]
+WORD macroexpand
+  [Any] barrier=1 returns=[Node/List]
 WORD make
   [Ideal/Object Any Ideal/Object] barrier=3 returns=[Ideal/Object]
   [Scalar Node/Map Any] barrier=3 typearg={0} +returnsfn
@@ -423,6 +427,8 @@ WORD slice
 WORD sort
   [Node/Map] barrier=1 returns=[Node/Map]
   [Node/List] barrier=1 returns=[Node/List]
+WORD splice
+  [Any] barrier=1 returns=[Any]
 WORD split
   [Scalar/String Scalar/String Node/Map] barrier=3 returns=[Node/List]
   [Scalar/String Scalar/String] barrier=2 returns=[Node/List]
@@ -489,6 +495,8 @@ WORD unpack
   [Scalar/Atom Node/Map] barrier=2 runcheck quote={0}
   [Scalar/Atom Scalar/String] barrier=2 quote={0}
   [Scalar/String] barrier=1
+WORD unquote
+  [Any] barrier=1 returns=[Any]
 WORD unshift
   [Any Node/List] barrier=2
 WORD update

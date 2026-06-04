@@ -6,7 +6,29 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §0  gensym — fresh, never-colliding atoms (Phase 0).
-gensym	tmp$G1/q	first gensym in a fresh registry
-[gensym gensym gensym]	[tmp$G1/q tmp$G2/q tmp$G3/q]	monotonic + unique per call
+gensym	tmp$g1/q	first gensym in a fresh registry
+[gensym gensym gensym]	[tmp$g1/q tmp$g2/q tmp$g3/q]	monotonic + unique per call
 gensym eq gensym	false	two gensyms never collide
 typeof gensym	Atom	gensym is an Atom
+#
+# §1  macro definer + unquote — operands arrive as code, spliced at the call site.
+def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])  twice 5	10	unquote inserts the operand form (twice)
+def unless (macro [[c body] [ quote [ if unquote c [0] unquote body ] ]])  unless false [42]	42	a control-flow macro (cond false → body)
+def unless (macro [[c body] [ quote [ if unquote c [0] unquote body ] ]])  unless true [42]	0	cond true → the then branch
+#
+# §2  splice — flatten a list operand into the surrounding sequence.
+def callit (macro [[f xs] [ quote [ unquote f splice xs ] ]])  def add3 fn [[a:Integer b:Integer c:Integer][Integer][a add b add c]]  callit add3 [1 2 3]	6	splice spreads [1 2 3] as add3's args
+#
+# §3  manual hygiene via gensym — an introduced binder does NOT capture a same-named user var.
+def myor (macro [[a b] [ def g (gensym)  quote [ def unquote g unquote a  if unquote g [unquote g] [unquote b] ] ]])  def tmp 42  myor false tmp	42	gensym temp doesn't capture the user's tmp
+def myor2 (macro [[a b] [ quote [ def tmp unquote a  if tmp [tmp] [unquote b] ] ]])  def tmp 42  myor2 false tmp	false	UNHYGIENIC: literal tmp captures the user's tmp (the bug gensym fixes)
+#
+# §4  macroexpand — show the expansion as data (no splice/run).
+def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])  macroexpand (twice 5)	[5 word(add) 5]	expansion is the spliced token list
+#
+# §5  Negatives
+unquote 5	ERROR:unquote: only valid inside a macro template	unquote outside a template
+splice [1 2 3]	ERROR:splice: only valid inside a macro template	splice outside a template
+macro [[a]]	ERROR:expected [[params] [body]]	macro needs [[params][body]]
+def m (macro [[a b] [quote [unquote a]]])  m 1	ERROR:expects 2 operand	too few operands
+def m (macro [[a] [quote [splice a]]])  m 5	ERROR:did not evaluate to a list	splice of a non-list

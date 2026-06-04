@@ -1141,6 +1141,14 @@ func (e *Engine) stepWord(val Value) error {
 				}
 			}
 		}
+		// Macro dispatch (design/MACROS-PHASE1.0.md §5): a macro word is
+		// applied to its raw operands ahead on the tape — BEFORE preEvalParens
+		// (1228) or any forward collection, so operands arrive as code. The
+		// word sits at e.pointer; execMacro replaces `mac operand…` with the
+		// spliced expansion and lets the __SP marker re-step the result.
+		if fn.Macro {
+			return e.execMacro(e.pointer, fn)
+		}
 	}
 
 	if fn == nil {
@@ -2157,6 +2165,13 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		return nil
 	}
 
+	// A macro FnDef reaching here is a VALUE, not an application — e.g. the
+	// `(macro …)` result being bound by `def`, or a parked macro. It must
+	// stay as DATA: a macro is applied only by name (the stepWord branch
+	// captures its raw operands before collection). The anonymous-0-arg
+	// short-circuit below also returns macros as data. (Applying a macro is
+	// never a stack-value dispatch — design/MACROS-PHASE1.0.md §5, D4.)
+
 	// Resolve the dispatchable signatures. A self-contained Function value
 	// (an anonymous closure, or a fn defined in THIS registry) is a STABLE
 	// handle: we compile and use its OWN signatures rather than a fresh
@@ -2266,7 +2281,10 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// consumers (def, a stored map entry, call) take it as-is rather
 	// than auto-invoking. This is what makes `def f ([] => [body])`
 	// bind f to the Function value instead of to the body's result.
-	if fnDef.Anonymous && fwdCount == 0 && len(positions) == 0 {
+	// Macro values are likewise data here — a `(macro …)` result must bind
+	// to its name, not auto-expand (it expands only via the named stepWord
+	// branch). See design/MACROS-PHASE1.0.md §5.
+	if (fnDef.Anonymous || fnDef.Macro) && fwdCount == 0 && len(positions) == 0 {
 		e.pointer++
 		return nil
 	}

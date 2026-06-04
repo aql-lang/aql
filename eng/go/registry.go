@@ -95,19 +95,20 @@ type Registry struct {
 	FnBaselines []map[string]int
 
 	// gensymN is the monotonic counter behind the `gensym` word: each call
-	// mints a fresh, never-colliding atom name `tmp$G<n>`. Used for
-	// capture-free temporaries in (hand-written and, later, expanded)
-	// macros. See design/MACROS-PHASE1.0.md §7. `tmp$G<n>` is a mixed-`$`
-	// name, so it stays a legal word under ValidateWordName's all-`$`
-	// reservation.
+	// mints a fresh, never-colliding atom name `tmp$g<n>`. Used for
+	// capture-free temporaries in (hand-written and, later, expanded) macros.
+	// See design/MACROS-PHASE1.0.md §7. The name is lowercase + mixed-`$` so
+	// it is a LEGAL word name (ValidateWordName: lowercase-only, all-`$`
+	// reserved) — gensyms are used as binders (`def <gensym> …`).
 	gensymN uint64
 }
 
-// NextGensym mints the next fresh gensym name (`tmp$G<n>`, n starting at 1).
-// Monotonic per registry; the `gensym` word wraps the result in an Atom.
+// NextGensym mints the next fresh gensym name (`tmp$g<n>`, n starting at 1).
+// Monotonic per registry; the `gensym` word wraps the result in an Atom. The
+// name is a valid word identifier so it can be used as a `def` binder.
 func (r *Registry) NextGensym() string {
 	r.gensymN++
-	return fmt.Sprintf("tmp$G%d", r.gensymN)
+	return fmt.Sprintf("tmp$g%d", r.gensymN)
 }
 
 // CheckState aggregates the static type-checking state that used to
@@ -462,6 +463,7 @@ func (r *Registry) aggregateDispatch(name string, entries []FnDefInfo) *FnDefInf
 		MaxForwardArgs: calcMaxForwardArgs(sigs),
 		Registry:       top.Registry,
 		Anonymous:      top.Anonymous,
+		Macro:          top.Macro,
 		Captured:       top.Captured,
 	}
 }
