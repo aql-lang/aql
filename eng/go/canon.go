@@ -169,7 +169,9 @@ func canonReach(v Value) string {
 	var b strings.Builder
 	switch len(info.Receiver) {
 	case 0:
-		// receiverless reach (a lens): leading dot.
+		// receiverless reach (a lens): the reserved `$` sentinel receiver,
+		// so `read ∘ print` round-trips ($.name parses back to a lens).
+		b.WriteString("$")
 	case 1:
 		b.WriteString(canonReachToken(info.Receiver[0]))
 	default:

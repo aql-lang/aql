@@ -59,6 +59,10 @@ func TestReachCanonRoundTrip(t *testing.T) {
 		{"numkey", mk([]Value{NewWord("a")}, []ReachSeg{{KeyLit: NewInteger(0)}}), "a.0"},
 		{"computed", mk([]Value{NewWord("m")}, []ReachSeg{{Computed: true, KeyExpr: []Value{NewWord("k")}}}), "m.(k)"},
 		{"parenrecv", mk([]Value{NewParenExpr([]Value{NewWord("m"), NewWord("a")})}, []ReachSeg{{KeyLit: NewWord("b")}}), "(m a).b"},
+		// Receiverless reach (a detached lens) renders with the reserved
+		// `$` sentinel receiver, so `$.a.b` round-trips back to a lens.
+		{"receiverless", mk(nil, []ReachSeg{{KeyLit: NewWord("a")}, {KeyLit: NewWord("b")}}), "$.a.b"},
+		{"receiverless-getr", mk(nil, []ReachSeg{{Getr: true, KeyLit: NewWord("x")}}), "$!.x"},
 	}
 	for _, c := range cases {
 		if got := CanonValue(c.v); got != c.want {

@@ -66,6 +66,28 @@ func ValidateWordName(name string) error {
 			Detail: "word name cannot be empty",
 		}
 	}
+	// An all-`$` name ("$", "$$", "$$$", …) is a reserved syntactic
+	// sentinel — `$` is the receiverless-Reach marker (`$.name` parses to a
+	// lens, not a `$ get name` chain). Keeping the whole all-dollar family
+	// un-definable leaves them free for special syntactic roles. A `$` mixed
+	// with other characters ($path, $home, foo$, $1) stays a valid
+	// shell-style identifier (mirrors the all-hyphens rule below).
+	allDollars := true
+	for i := 0; i < len(name); i++ {
+		if name[i] != '$' {
+			allDollars = false
+			break
+		}
+	}
+	if allDollars {
+		return &AqlError{
+			Code: "invalid_word_name",
+			Detail: fmt.Sprintf(
+				"word %q is reserved (an all-$ name is the receiverless-reach sentinel; e.g. $.name)",
+				name,
+			),
+		}
+	}
 	first := name[0]
 	if !(first >= 'a' && first <= 'z') && first != '_' && first != '-' && first != '$' {
 		return &AqlError{

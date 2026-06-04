@@ -32,8 +32,10 @@ func TestValidateWordNameAccepts(t *testing.T) {
 		"_unused-arg",
 		// CLI-style flag names (leading hyphen).
 		"-h", "-v", "-x5", "--help", "--limit", "--no-push",
-		// Dollar-sign anywhere (shell-style names).
-		"$", "$path", "$home", "foo$", "foo$bar", "$$",
+		// Dollar-sign MIXED with other characters (shell-style names) stays
+		// legal. All-$ names ("$", "$$", …) are reserved (the receiverless-
+		// reach sentinel) and tested in the rejects list.
+		"$path", "$home", "foo$", "foo$bar",
 		"$1", "$a-b", "f$o", "_$inner",
 	}
 	for _, name := range good {
@@ -57,6 +59,10 @@ func TestValidateWordNameRejects(t *testing.T) {
 		{"2dup", "[a-z_-$]"},      // digit first
 		{"?question", "[a-z_-$]"}, // ? first
 		{"!bang", "[a-z_-$]"},     // ! first
+		// All-$ names are the reserved receiverless-reach sentinel family.
+		{"$", "reserved"},
+		{"$$", "reserved"},
+		{"$$$", "reserved"},
 		// All-hyphen names rejected (carry no identifier).
 		{"-", "only hyphens"},
 		{"--", "only hyphens"},

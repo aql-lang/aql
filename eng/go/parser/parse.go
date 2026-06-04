@@ -292,7 +292,17 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 				}
 				segs = append(segs, seg)
 			}
-			pe := withPos(eng.NewReach(eng.ReachInfo{Receiver: recv, Segments: segs, Eval: true}), poss[i])
+			// A `$` receiver marks a RECEIVERLESS reach — a detached lens
+			// (`$.name`), not a `$ get name` chain. It is inert (Eval=false):
+			// it evaluates to itself (a Reach value) so it can be passed as a
+			// reusable accessor (`people each $.name`) and applied/rebound to a
+			// receiver later. `$` is reserved as a user word (see
+			// ValidateWordName), so this never shadows a real binding.
+			reachInfo := eng.ReachInfo{Receiver: recv, Segments: segs, Eval: true}
+			if isDollarReceiver(recv) {
+				reachInfo.Receiver, reachInfo.Eval = nil, false
+			}
+			pe := withPos(eng.NewReach(reachInfo), poss[i])
 			// A standalone `/mod` token immediately after the path also
 			// applies to the result (`(a.b)/mod`).
 			if pfx == nil && sfx == nil && j < len(items) {
@@ -377,6 +387,17 @@ func startsDot(items []any, j int) bool {
 		return true
 	}
 	return isToken(items[j], "!") && j+1 < len(items) && isToken(items[j+1], ".")
+}
+
+// isDollarReceiver reports whether a dot-chain receiver is the lone reserved
+// `$` sentinel — the marker for a receiverless reach (`$.name` → a lens). The
+// receiver emits as a single Word("$") (see emitPrimary / convertTopLevelValue).
+func isDollarReceiver(recv []eng.Value) bool {
+	if len(recv) != 1 || !eng.IsWord(recv[0]) {
+		return false
+	}
+	w, _ := eng.AsWord(recv[0])
+	return w.Name == "$"
 }
 
 // isChainReceiver reports whether an item can be the receiver of a dot

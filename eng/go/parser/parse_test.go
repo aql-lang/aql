@@ -1286,6 +1286,40 @@ func TestParseListWithDottedWord(t *testing.T) {
 	}
 }
 
+// --- Receiverless reach ($ sentinel) ---
+
+func TestParseReceiverlessReach(t *testing.T) {
+	// `$.a.b` → a RECEIVERLESS reach (a detached lens): empty Receiver,
+	// two get segments, and inert (Eval=false) so it evaluates to itself
+	// rather than lowering to a `$ get a get b` chain.
+	got, err := Parse("$.a.b")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 || !eng.IsReach(got[0]) {
+		t.Fatalf("expected a single Reach value, got %d: %v", len(got), got)
+	}
+	info, _ := eng.AsReach(got[0])
+	if len(info.Receiver) != 0 {
+		t.Fatalf("receiverless reach must have empty Receiver, got %+v", info.Receiver)
+	}
+	if info.Eval {
+		t.Fatalf("receiverless reach must be inert (Eval=false), got Eval=true")
+	}
+	if len(info.Segments) != 2 {
+		t.Fatalf("expected 2 segments (a, b), got %+v", info.Segments)
+	}
+	// getr form: `$!.x` → one strict segment, still receiverless/inert.
+	got, err = Parse("$!.x")
+	if err != nil {
+		t.Fatalf("Parse error ($!.x): %v", err)
+	}
+	info, _ = eng.AsReach(got[0])
+	if len(info.Receiver) != 0 || info.Eval || len(info.Segments) != 1 || !info.Segments[0].Getr {
+		t.Fatalf("$!.x: want receiverless inert getr reach, got %+v", info)
+	}
+}
+
 // --- Map with single key (sortedKeys edge case) ---
 
 func TestParseMapSingleKey(t *testing.T) {
