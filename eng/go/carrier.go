@@ -54,6 +54,20 @@ func NewCarrierTypedListValue(child Value) Value {
 	return v
 }
 
+// NewCarrierTypedListLen constructs a typed-list carrier with a
+// statically-known length, so a downstream index check can reason
+// about a computed list (e.g. `iota n`). n MUST be the exact length
+// or an upper bound — never an underestimate (see ChildTypeInfo.Len).
+func NewCarrierTypedListLen(elem *Type, n int) Value {
+	v := NewCarrierTypedList(elem)
+	if ct, ok := v.Data.(ChildTypeInfo); ok {
+		ln := n
+		ct.Len = &ln
+		v.Data = ct
+	}
+	return v
+}
+
 // ReturnsPreserveListAt builds a ReturnsFunc that returns a typed-
 // list carrier whose element type matches the data-list arg at
 // index i. Used by list-preserving words like reverse, take, shed,
@@ -127,6 +141,17 @@ func toCarrier(v Value) Value {
 	// Keep lists and maps concrete for now — matchSignature relies
 	// on Data presence for a few compound cases.
 	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) {
+		return v
+	}
+	// Keep concrete integer literals concrete so static index checking
+	// can recover the value (an out-of-bounds literal index like
+	// `[10 20] 5 getr`). Stripping would lose the value and force the
+	// index check to give up. This only preserves genuine concrete
+	// integers (IntPayload) — DepScalar constraints (Data is a
+	// DepScalarInfo) and carriers are untouched. Precision only
+	// increases: a literal stays concrete until a word consumes it and
+	// produces a computed carrier, exactly as lists/maps already behave.
+	if v.Parent.Equal(TInteger) && IsConcrete(v) && !v.IsDepScalar() {
 		return v
 	}
 	// Keep FnDef / Function payloads (FnDefInfo) concrete. Stripping

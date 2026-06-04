@@ -23,7 +23,7 @@ var accessorNatives = []NativeFunc{
 			// [Key | Node] — key forward, container from stack
 			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrMapHandler},
 			{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: getrMapHandler},
-			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getrMapHandler},
+			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getrMapHandler, ReturnsFn: returnsGetrIndexChecked},
 			// [Key | Object]
 			{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrObjectHandler},
 			{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: getrObjectHandler},
@@ -37,6 +37,20 @@ var accessorNatives = []NativeFunc{
 			{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: getrNoneHandler},
 		},
 	},
+}
+
+// returnsGetrIndexChecked is the check-mode ReturnsFn for the
+// integer-index `getr` sig. It runs the static bounds check (a no-op
+// for map/object containers and unknown-length carriers) and returns
+// the container's element-type carrier. `getr` errors at runtime on an
+// out-of-bounds list index, so a provably out-of-range literal —
+// `[10 20] 5 getr` — is flagged at `aql check`.
+func returnsGetrIndexChecked(args []Value, r *Registry) []Value {
+	if len(args) >= 2 {
+		CheckListIndex(r, args[0], args[1], "getr")
+		return ReturnsListElemAt(1)(args, r)
+	}
+	return []Value{NewCarrier(TAny)}
 }
 
 func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

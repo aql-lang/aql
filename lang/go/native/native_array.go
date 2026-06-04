@@ -37,7 +37,7 @@ var allArrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TInteger},
 			Handler:   iotaHandler,
-			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
+			ReturnsFn: returnsIotaLen, BarrierPos: -1,
 		}},
 	},
 	{
@@ -161,7 +161,7 @@ var allArrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
 			Handler:   atHandler,
-			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
+			ReturnsFn: returnsAtChecked, BarrierPos: -1,
 		}},
 	},
 	{
@@ -382,6 +382,30 @@ var arrayNatives, ArrayModuleNatives = func() (core, module []NativeFunc) {
 
 func returnsCarrierTypedListInteger(_ []Value, _ *Registry) []Value {
 	return []Value{NewCarrierTypedList(TInteger)}
+}
+
+// returnsIotaLen returns a length-refined integer-list carrier: iota's
+// result length is exactly its non-negative count argument, so a
+// downstream static index check can reason about an `iota n` list (a
+// computed list whose length would otherwise be unknown). Falls back to
+// an unrefined carrier when the count isn't a concrete integer.
+func returnsIotaLen(args []Value, _ *Registry) []Value {
+	if len(args) >= 1 {
+		if n, err := args[0].AsConcreteInteger(); err == nil && n >= 0 {
+			return []Value{NewCarrierTypedListLen(TInteger, int(n))}
+		}
+	}
+	return []Value{NewCarrierTypedList(TInteger)}
+}
+
+// returnsAtChecked runs the check-mode index-bounds check for `at` (the
+// list of indices against the data list) and then delegates to the
+// element-type-preserving return shape.
+func returnsAtChecked(args []Value, r *Registry) []Value {
+	if len(args) >= 2 {
+		CheckAtIndices(r, args[0], args[1], "at")
+	}
+	return ReturnsPreserveListAt(1)(args, r)
 }
 
 func returnsCarrierTypedListBoolean(_ []Value, _ *Registry) []Value {

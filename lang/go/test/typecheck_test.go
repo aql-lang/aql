@@ -1712,3 +1712,68 @@ func TestCheckUndefinedWordTypoNextToValid(t *testing.T) {
 		t.Errorf("expected String carrier from `upper \"hi\"`, got stack=%v", res.Stack)
 	}
 }
+
+// TestCheckIndexOutOfRange pins the static index/size check
+// (design/elixir-types-in-aql-report.0.md item 4). A provably
+// out-of-range list index — past the end, equal to the length, or
+// negative — is flagged at `aql check` with an index_out_of_range
+// warning; in-bounds, unknown-length, and non-list accesses stay
+// silent (soundness: never a false positive).
+func TestCheckIndexOutOfRange(t *testing.T) {
+	countOOB := func(t *testing.T, src string) (int, []lang.CheckDiagnostic) {
+		t.Helper()
+		a, err := lang.New()
+		if err != nil {
+			t.Fatalf("new: %v", err)
+		}
+		res, err := a.Check(src)
+		if err != nil {
+			t.Fatalf("check %q: %v", src, err)
+		}
+		n := 0
+		for _, d := range res.Diagnostics {
+			if d.Code == "index_out_of_range" {
+				n++
+			}
+		}
+		return n, res.Diagnostics
+	}
+
+	// Positive: every one of these is a guaranteed runtime failure, so
+	// it must be flagged.
+	flagged := []struct{ name, src string }{
+		{"getr past end", "[10 20] 5 getr"},
+		{"getr at length boundary", "[10 20] 2 getr"},
+		{"getr negative", "[10 20] -1 getr"},
+		{"getr on iota-computed length", "(iota 3) 5 getr"},
+		{"getr on empty list", "[] 0 getr"},
+		{"getr on bound concrete list", "def xs [10 20] end  xs 5 getr"},
+		{"at index past end", `import "aql:array-util" end  [10 20] [0 5] ArrayUtil.at`},
+	}
+	for _, tc := range flagged {
+		t.Run("flag/"+tc.name, func(t *testing.T) {
+			n, diags := countOOB(t, tc.src)
+			if n == 0 {
+				t.Errorf("expected index_out_of_range for %q, got: %+v", tc.src, diags)
+			}
+		})
+	}
+
+	// Negative: in-bounds, unknown-length, or non-list — must NOT be
+	// flagged. A false positive here would be worse than a missed one.
+	silent := []struct{ name, src string }{
+		{"getr first element", "[10 20] 0 getr"},
+		{"getr last valid", "[10 20] 1 getr"},
+		{"unknown-length carrier", "([10 20] reverse) 5 getr"},
+		{"map container, not a list", "{a:1} 5 getr"},
+		{"at all in bounds", `import "aql:array-util" end  [10 20] [0 1] ArrayUtil.at`},
+	}
+	for _, tc := range silent {
+		t.Run("silent/"+tc.name, func(t *testing.T) {
+			n, diags := countOOB(t, tc.src)
+			if n != 0 {
+				t.Errorf("expected NO index_out_of_range for %q, got %d: %+v", tc.src, n, diags)
+			}
+		})
+	}
+}

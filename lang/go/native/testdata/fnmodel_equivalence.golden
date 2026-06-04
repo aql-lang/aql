@@ -179,7 +179,7 @@ WORD getr
   [Scalar/String Ideal/Object] barrier=1
   [Scalar/String Node] barrier=1
   [Scalar/Number/Integer Ideal/Object] barrier=1
-  [Scalar/Number/Integer Node] barrier=1
+  [Scalar/Number/Integer Node] barrier=1 +returnsfn
   [Scalar/Atom Ideal/ModuleExport] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Ideal/Module] barrier=1 quote={0}
   [Scalar/Atom Ideal/Object] barrier=1 quote={0}

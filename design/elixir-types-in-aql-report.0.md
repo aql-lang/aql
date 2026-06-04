@@ -321,6 +321,36 @@ range checks), `eng/go/depscalar.go` (reused).
 **Effort.** ~3–4 dev days. Most speculative; composes two existing
 features rather than inventing one. Lowest priority of the four.
 
+**Status (landed 2026-06-04). Implemented.** The sound core lives in
+`eng/go/indexcheck.go` (`StaticListLen`, `indexProvablyOOB`,
+`CheckListIndex`, `CheckAtIndices`); the `index_out_of_range` warning is
+registered in `eng/go/registry.go` and documented in
+`design/LANGREF.10.md`. Wired into `getr` (single integer index → list)
+and `at` (indices list). Two enabling pieces:
+
+- *Index value recovery.* Concrete integer literals are now kept
+  concrete in check mode (`eng/go/carrier.go::toCarrier`, mirroring how
+  lists/maps are already preserved) so the checker sees the literal
+  index. Precision only increases — a literal stays concrete until a
+  word consumes it and produces a computed carrier.
+- *Length refinement on a list carrier.* `ChildTypeInfo` gained an
+  optional `Len`; `NewCarrierTypedListLen` builds a length-refined list
+  carrier, and `iota` populates it (exact length), so a computed list
+  like `(iota 3) 5 getr` is checkable, not just literal lists.
+
+Soundness is the binding constraint: the length used is always the
+exact count or an upper bound (never an underestimate, which would turn
+an in-bounds access into a false positive), and an index is flagged only
+when its whole range lies outside `[0, len)`. Unknown-length carriers
+(`[10 20] reverse`), map/object containers, and unknown indices are
+silently passed. The DepScalar path (`Integer gte 100` index) and the
+indices-list path (`at`) both reuse the same `indexProvablyOOB` core.
+`take`/`drop` length arithmetic and length-preserving propagation
+(reverse/sortby) are the natural next extensions — left out here because
+each needs an exact (never under-) length to stay sound. Coverage:
+`eng/go/indexcheck_test.go` (pure core) + `TestCheckIndexOutOfRange`
+(`lang/go/test/typecheck_test.go`, 7 flagged + 5 silent rows).
+
 ## The strategic frontier: recursive + parametric types
 
 The article's own "pending" list — recursive types, parametric types,

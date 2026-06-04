@@ -3560,6 +3560,7 @@ stdout for editor/tooling integration.
 | `unused_def`             | warning  | A `def` was installed but never referenced.                                 |
 | `unreachable_branch`     | warning  | `if` condition is a constant `true`/`false`; the other branch never runs.  |
 | `unreachable_signature`  | warning  | An `fn` overload an earlier, more general overload already subsumes; first-match dispatch can never reach it. |
+| `index_out_of_range`     | warning  | A list index is provably out of bounds — past the end, equal to the length, or negative — for a statically-known length (e.g. `[10 20] 5 getr`). Flagged only when guaranteed; `getr`/`at` error at runtime. |
 | `body_error`             | warning  | Higher-order body (do/each/fold/...) analysis raised an error.              |
 
 ### Returned Types

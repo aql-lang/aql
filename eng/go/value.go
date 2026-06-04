@@ -157,6 +157,14 @@ type ChildTypeInfo struct {
 	Child    Value
 	Elements []Value // optional: concrete elements alongside the child constraint
 	Entries  []ChildEntry
+	// Len is an optional statically-known length for a typed-list
+	// carrier (nil = unknown). Set by length-producing words whose
+	// result length can be computed exactly in check mode (e.g. iota),
+	// it lets StaticListLen recover a bound for a computed list so the
+	// index checker can flag a provably out-of-range access. It MUST be
+	// an exact length or an upper bound — never an underestimate, which
+	// would turn an in-bounds access into a false positive.
+	Len *int
 }
 
 // ChildEntry is a (key, value) pair retained for typed maps that
