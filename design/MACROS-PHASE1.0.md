@@ -1,8 +1,20 @@
 # Macros Phase 1 — Implementation Scope
 
-**Status:** scope / pre-implementation. Companion to `MACROS.0.md` (the
-overall plan); this doc turns its Phase 0+1 row into a concrete, line-level
-build order grounded in the current code.
+**Status:** **1a–1d + `macroexpand` LANDED (green).** The only remaining tail
+is the expansion cache (1e). Companion to `MACROS.0.md` (the overall plan);
+this doc turns its Phase 0+1 row into a concrete, line-level build order
+grounded in the current code.
+
+> **Landed (green):** `gensym` (1a, atoms `tmp$g<n>`); `FnDefInfo.Macro` +
+> `FnSig.FormArgs` raw-capture (1b); the `macro` definer, the `stepWord`
+> dispatch branch, and the `macro_expand.go` expander with `unquote`/`splice`
+> (1c+1d); `macroexpand` introspection. Integration notes discovered in
+> implementation: `aggregateDispatch` must carry the `Macro` flag (so `Lookup`
+> returns it); a macro VALUE stays data via the anonymous-0-arg short-circuit
+> and is applied only by name; a resolved name (a gensym atom) is spliced as a
+> **Word** so it is a code identifier; `gensym` must be lowercase to be a legal
+> binder. **Deferred:** the expansion cache (1e) — a pure optimization;
+> correctness is complete without it.
 **Scope:** `gensym` (Phase 0) + an unhygienic-but-real `macro` definer with
 raw-form capture, `unquote`/`splice`, interpreter-mode expansion, and an
 expansion cache (Phase 1). Hygiene (Phase 4) and compiled-mode (Phase 5) are
