@@ -301,6 +301,28 @@ Ordered so each step is independently testable and the engine stays green
 between steps. The four-contract checklist (§4) is the acceptance gate
 throughout.
 
+> **Implementation status (landed, green):** Steps **1–4 are done**. Word-
+> context parens and dot-chains are nested `ParenExpr` values (Step 1),
+> evaluated by in-place marker expansion on the parent engine (Steps 2/3 —
+> recorder-transparent, so `stackform`/PBT shrinking still works; nested
+> parens handled via `stepLiteral`). Step 4 (quotability) shipped as a
+> **new `codequote` word** rather than by changing `quote`: `quote (expr)`
+> keeps its evaluate-then-quote semantics (the inert-Function idiom used by
+> `apply`/`usurp`), while `codequote (expr)` captures the paren RAW as code.
+> The raw-capture mechanism is an opt-in `RawParens` sig flag + a three-part
+> engine change (`preEvalParens` leaves it raw, `pendingForwardWantsRawParen`
+> routes the forward-collection re-step through `stepLiteral` instead of
+> expanding, and Step-2/`stepLiteral` skip expansion for Quoted/raw parens).
+> **Step 5 (delete markers) is intentionally NOT done** — markers are now the
+> internal in-place eval mechanism; deleting them would mean replacing the
+> whole collapse machinery for no behavioral gain.
+>
+> **Key finding:** overloading `quote` for raw capture is a genuine
+> *semantics fork*, not test churn — `quote (fn-expr)` is a deliberate
+> "evaluate then keep as inert/Quoted data" idiom (incompatible with
+> "capture as code" for the same syntax). The new-word resolution gives
+> macros structural quotability while preserving the existing idiom.
+
 **Step 1 — Parser: emit `ParenExpr` in word context.**
 Change word-context paren emission (`convertTopLevelItems` / `emitPrimary`,
 parse.go) to produce a single `ParenExpr` value (`ParenExprPayload{Toks}`)
