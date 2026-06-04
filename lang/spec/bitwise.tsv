@@ -5,7 +5,7 @@
 # Integer bit operations. band/bor/bxor are commutative; the shifts
 # bsl/bsr/busr are non-commutative (handler computes `args[1] OP args[0]`),
 # so the SWAP form `value bsl count` reads naturally (`1 bsl 4 = 16`).
-# See lang/doc/design/BINARY-OPERATIONS.0.md.
+# See design/BINARY-OPERATIONS.0.md.
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  band / bor / bxor — commutative

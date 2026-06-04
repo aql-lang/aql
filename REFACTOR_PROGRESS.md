@@ -62,7 +62,7 @@ After Stage 1, every Signature.Handler is non-nil.
 - Stage 5: remove dead bridges (execFnDefSig, execFnDefSigStackMatch,
   fnDefSigByParamCount, lazy compile). Update eng/go/CLAUDE.md (Signature
   Ordering, trivial-delegation, "two representations"). Add
-  lang/doc/design/FUNCTION-MODEL.0.md. Fix USURP.0.md FnDefInfo note.
+  design/FUNCTION-MODEL.0.md. Fix USURP.0.md FnDefInfo note.
 
 ## INVARIANTS (do not regress)
 - Signature ordering: top-first sig order; matchSignature sole source of truth.
@@ -385,7 +385,7 @@ THE GOAL (one uniform function operation) — DELIVERED:
    Signature-only fields folded into FnSig. Body vs Handler is the sole
    Go-vs-AQL distinction in the one type. (Stage 3e)
 NativeSig stays as the Go authoring shim (lowers into FnSig); 348 literals
-untouched. Design doc: lang/doc/design/FUNCTION-MODEL.0.md.
+untouched. Design doc: design/FUNCTION-MODEL.0.md.
 
 DEFERRED (documented in the design doc — a redesign, not a finish):
 FnDefInfo.Sigs (authored: Body+names, construction-time) vs .Signatures
