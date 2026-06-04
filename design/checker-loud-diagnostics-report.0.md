@@ -1,0 +1,234 @@
+# Making the AQL Type Checker Catch Silent-Dispatch Failures: Implementation Plan
+
+## Scope
+
+AQL's `aql check` is a capable flow-sensitive abstract interpreter
+(`design/CARRIER-STATIC-TYPECHECK-REPORT.10.md`), yet the pain that
+dominates every DX report — dispatch that fails **quietly** instead of
+loudly — slips straight through it. This note plans the additive "loud
+diagnostics" layer that closes that gap. It is the operational companion
+to items 2 (`dynamic(T)`) and 3 (dead-overload detection) of
+`elixir-types-in-aql-report.0.md`; where that report argues *what* the
+type system should gain, this one plans *how* the checker starts catching
+the bugs users actually hit.
+
+Nothing here changes the analysis engine or runtime semantics. Every
+addition is gated behind `r.IsCheckMode()`.
+
+## The problem (from the DX reports)
+
+Both voxgig reports (`VOXGIG-DX-REPORT.5.md`) and the decision-module
+report (`AQL-DX-REPORT.5.md`) independently reach the same diagnosis:
+**"nearly every hour lost went to behaviour that failed quietly rather
+than loudly."** The headline shapes, all ❌ open against current `main`:
+
+- **T1 / B1** — a namespace/FnDef word whose top-of-stack type doesn't
+  match the first signature parameter leaves the **function value on the
+  stack as data, with no error**. A plain (non-namespace) word *does*
+  error in the same case. (`b set k v` silently not mutating; a
+  wrong-order namespace call printing `a fn my-get(Map, String)`.)
+- **B3** — `def _ (void-call)` leaves stack residue; the next word
+  mis-dispatches.
+- **T6** — forward `get` grabs the bare word `i` instead of its binding,
+  returning `none`.
+
+The VOXGIG report's **P0** is literally "make silent failures loud," and
+its first recommendation is to **align namespace-word dispatch with
+plain-word dispatch** so a type miss errors instead of no-oping.
+
+### Why the checker doesn't already catch them
+
+The checker achieves runtime/check **parity** by running the same
+dispatch machinery in carrier mode. That is its great strength — and the
+reason it inherits the silent-dispatch blind spot. Confirmed in the tree:
+
+- The documented diagnostic surface (`LANGREF.10.md`) has **no** code for
+  "a Function left unconsumed on the stack" or "residual at a statement
+  boundary." `no_signature` (`eng/go/engine.go:3897`) fires for
+  *plain-word* misses only — exactly the case T1 says namespace words do
+  **not** cover.
+- Tests **enshrine** leave-as-data as normal: `usurp_word_test.go:136`
+  ("reffed wrapper is left on the stack as data"), `fn_arg_cleanup_test.go:8`
+  ("Unconsumed unnamed args should be discarded").
+
+And the tell: **neither report's authors ever ran `aql check`** — it is
+absent from the developer loop. A sophisticated checker that nobody
+reaches for has ~zero impact on the reported pain.
+
+## Current checker baseline
+
+What `aql check` already does (so the plan only adds, never rebuilds):
+
+- Carrier-based abstract interpretation with runtime parity; flow typing
+  / guard narrowing; branch join (`JoinCarriers`); recursion via memoised
+  fn-body summaries (`AnalyseFnBody`); DepScalar interval reasoning.
+- Diagnostics today: `no_signature`, `undefined_word`, `illegal_ref`,
+  `record_shape_mismatch`, `unused_def`, `unreachable_branch`,
+  `missing_returns`, `step_budget_exceeded`, `fn_body_error`,
+  `branch_error`, `body_error`, `type_error`, `invalid_word_name`,
+  `fnsig_invalid_spec`.
+- Already DX-relevant: `undefined_word` (check mode keeps the lenient
+  "undefined → Any carrier + diagnostic" path), `unused_def`,
+  `record_shape_mismatch`, `unreachable_branch`.
+
+The gaps are exactly three: the namespace/FnDef leave-as-data path, dead
+overloads, and adoption.
+
+## Decisions (pinned 2026-06-04)
+
+1. **Home — a dedicated note** (this file), cross-referencing the Elixir
+   report rather than enlarging it.
+2. **Residual diagnostic — a residual Function/FnDef → error**, fired at
+   the failed-match call site (high precision, not a residual-stack
+   scan).
+3. **Dead-overload detection — both** user fns at `aql check` time **and**
+   native signature tables at registration (behind a dev/lint flag +
+   whole-vocabulary regression test).
+4. **Adoption — opt-in.** Keep bare `aql run` unchanged; add a prominent
+   `run --check` flag, promote the existing `aql check`, and surface
+   diagnostics through the LSP. No latency change to `run`.
+
+## Plan
+
+### Phase 1 — `uncalled_function`: align the FnDef path with plain words
+
+The headline fix; kills T1 (and, per the report, likely B1).
+
+**Mechanism.** `execFnDefLiteral` (`eng/go/engine.go`) is the gate that
+already decides "anonymous + no positions matched → treat as data;
+otherwise dispatch" (see `lang/go/CLAUDE.md`, "0-arg lambdas as values vs
+as calls"). In check mode, add a diagnostic in its **no-match branch**,
+fired only when all three hold:
+
+- the FnDef is **named** (not an anonymous lambda),
+- it was reached **as a call** (resolved from a word / dot-access), not an
+  explicitly inert value — i.e. **`!val.Quoted`** and not produced by
+  `/r` / `ref` (engine.go:853, 1597 already treat those as data), and
+- there were **candidate args present** that failed to match any
+  signature — distinguishing "no matching signature" (the bug) from "no
+  args available to apply" (an intentional 0-arg function value).
+
+That last clause is what keeps `def f ([] => [body])` and
+`def add5 (make-adder 5)` quiet while flagging `xs my-get "k"` in the
+wrong order. Emit `uncalled_function` (Error) carrying the function name,
+the arg types seen, and the source position — mirroring what plain words
+already do via `signatureError` → `no_signature`.
+
+**Tests.** Positive: the `t1_ns_dispatch` shape (wrong-order namespace
+call) now errors in check mode. Negative (per `lang/go/CLAUDE.md` test
+discipline): a `def`-bound function, a `/r`-reffed wrapper, and a
+deliberately-stacked 0-arg lambda must **not** fire.
+
+**Effort.** ~2 d.
+
+### Phase 2 — `unreachable_signature`: dead-overload detection
+
+Elixir-note item 3. A signature `S` is unreachable when an earlier,
+higher-priority signature `S'` (per `SortSignatures`, which runs at
+registration) subsumes it: every positional type of `S'` is a
+supertype-or-equal of `S`'s corresponding type, **and** the full
+discriminator set agrees.
+
+**Subsumption check.** Reuse `Type.Matches` and the subsumption notion
+already in `SimplifyDisjunctAlts` (`eng/go/core_helpers.go:755`).
+**Critically, honour every discriminator**, not just positional `Parent`:
+`TypeArgs` slots (type-literal expectations), structural patterns
+(`sigPattern` / `Unify`), arity, and `BarrierPos`. Ignoring these would
+false-positive on native overloads that differ only by `TypeArgs` or
+barrier (the kernel has many — e.g. the arithmetic and `add` temporal
+sigs). This is the main correctness risk and the bulk of the effort.
+
+**Two surfaces (both, per the decision):**
+
+- *User fns at check time.* During `aql check`, run the check over each
+  user `FnDef`'s sorted signatures; emit `unreachable_signature` (Warning)
+  with the dead sig and the shadowing sig's positions.
+- *Natives at registration, behind a dev/lint flag.* Gate a pass over
+  every registered word's `NativeSig` table behind an env var / build tag
+  (audience: kernel authors, not end users — production startup stays
+  quiet). The natural home is a **whole-vocabulary regression test**,
+  `TestNoDeadNativeOverloads`, that fails CI if a kernel sig table has an
+  unreachable entry — catching `SortSignatures` ordering mistakes the way
+  `fixedid_stability_test.go` catches FixedID drift.
+
+**Effort.** ~3 d (most of it in the discriminator-complete subsumption
+check and the vocabulary sweep).
+
+### Phase 3 — Adoption: get the checker into the loop
+
+`aql check [--json] [--soft]` already exists
+(`cmd/go/internal/check/check.go`; `--soft` downgrades to advisory, else
+any Error-severity diagnostic exits non-zero for CI). The gap is reach,
+not capability.
+
+- **`aql run --check` flag.** Run the check pass first, print diagnostics,
+  then run (or abort on Error unless `--soft`). Bare `aql run` is
+  unchanged — opt-in only, no latency cost by default.
+- **LSP.** Ensure the `lsp` service (`cmd/go serve lsp`) runs the check
+  pass and surfaces `CheckDiagnostic`s as editor diagnostics on change.
+  Verify current wiring; fill the gap if diagnostics aren't already
+  pushed.
+- **Docs.** A "Catch bugs early with `aql check`" section in `TUTORIAL` /
+  `CLI.md`, and the one-page "Gotchas / Idioms" reference the DX reports
+  asked for (the still-load-bearing items: arg order, `fold` binding
+  order, deep `merge`, `do`-evaluates-words, list `eq` identity,
+  forward-`get`). Promote the existing `aql check` so it stops being
+  invisible.
+
+**Effort.** ~1.5 d.
+
+### Out of scope (cross-referenced, not solved here)
+
+- **T6 / B3 fully** are partly *runtime* forward-collection semantics
+  (VOXGIG "Cross-cutting suggestion"), not pure checker fixes. Phase 1's
+  call-site alignment helps the dispatch-miss half; the forward-collection
+  half is tracked under the `/s` / `/f` / `/N` modifier work.
+- **`dynamic(T)`** (Elixir-note item 2) is the complementary precision
+  win — it lets the checker flag mismatches *through* escape hatches
+  instead of degrading to `Any`. Sequenced after this note's Phase 1–2.
+
+## Diagnostics added
+
+| Code | Severity | Meaning |
+|---|---|---|
+| `uncalled_function` | error | A named FnDef / namespace call found args but matched no signature and was left as data (T1/B1). |
+| `unreachable_signature` | warning | An overload is fully subsumed by an earlier, higher-priority signature (honouring TypeArgs / patterns / arity / barrier). |
+
+Both slot into the existing `CheckDiagnostic` structure and the
+`LANGREF.10.md` diagnostics table.
+
+## Effort summary
+
+| Phase | Work | Effort |
+|---|---|---|
+| 1 | `uncalled_function` at the FnDef no-match branch + intentional-value exemptions + tests | ~2 d |
+| 2 | discriminator-complete subsumption; user-fn check + gated native sweep + `TestNoDeadNativeOverloads` | ~3 d |
+| 3 | `run --check` flag, LSP diagnostic wiring, docs/gotchas page | ~1.5 d |
+
+**Total ≈ 6–7 dev days.**
+
+## Risks
+
+- **False positives on intentional function-as-value (Phase 1).**
+  Mitigated by firing at the failed-match call site under the three-part
+  guard (named + called + args-present-but-unmatched), not by scanning
+  the residual stack. The negative tests are the contract.
+- **False positives in dead-overload (Phase 2)** from ignoring
+  `TypeArgs` / patterns / `BarrierPos`. The check must consume the full
+  discriminator set; the kernel's own overloaded words are the test
+  oracle (a clean run over the whole vocabulary is the bar).
+- **Parity drift.** These are check-mode-only additions; runtime still
+  leaves-as-data. Keep every new diagnostic behind `r.IsCheckMode()` so
+  runtime behaviour is untouched.
+
+## Verdict
+
+The fix is additive and well-scoped. Aligning the namespace/FnDef
+dispatch path with the plain-word path in check mode (Phase 1) kills the
+single dominant DX footgun; dead-overload detection (Phase 2) makes
+dispatch *resolution* loud and gives the kernel a CI guard; opt-in
+surfacing (Phase 3) finally puts the checker where the pain is — without
+touching the analysis engine or runtime semantics. Combined with
+`dynamic(T)` (Elixir-note item 2) for escape-hatch precision, it turns a
+capable-but-unused checker into the safety net the DX reports keep asking
+for.
