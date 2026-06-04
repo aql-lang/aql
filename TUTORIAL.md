@@ -508,7 +508,66 @@ aql> quote foo                       => foo/q
 ```
 
 
-## 16. Error handling
+## 16. Macros
+
+`quote` lets you *hold* code as data. A **macro** lets you *transform*
+it: a macro runs at expansion time on its arguments **as code** and
+splices the result into the call site. Where `fn` receives values, a
+macro receives unevaluated forms — so you can build new syntax in AQL
+itself.
+
+You write a macro with `macro [[params] [body]]`. The body produces a
+template — a `quote [ … ]` list — with `unquote` marking the holes
+where the operands go:
+
+```
+aql> def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])
+aql> twice 5                         => 10
+```
+
+`twice 5` isn't a function call — it *rewrites itself* into the code
+`5 add 5`, which then runs. See exactly what a macro produces with
+`macroexpand` (it doesn't run the result):
+
+```
+aql> def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])
+aql> macroexpand (twice 5)           => [5 word(add) 5]
+```
+
+(It's a *token list* — `add` shows as `word(add)` because it's an
+unevaluated word in the expansion, not a call yet.)
+
+Because a macro sees its arguments as code, it can make new control
+forms. Here is an `unless` — `if`, but inverted — that takes its
+condition and body unevaluated:
+
+```
+aql> def unless (macro [[cond body] [ quote [ if unquote cond [] unquote body ] ]])
+aql> unless false [42]               => 42
+```
+
+`splice` is `unquote`'s sibling: it spreads a *list* operand's elements
+into the surrounding code, instead of inserting one node.
+
+**Macros are hygienic.** A name a macro introduces with a literal `def`
+is automatically renamed, so it can never clash with one of your
+variables — even if the names match:
+
+```
+aql> def myor (macro [[a b] [ quote [ def tmp unquote a  if tmp [tmp] [unquote b] ] ]])
+aql> def tmp 42
+aql> myor false tmp                  => 42
+```
+
+The template's `tmp` and your `tmp` stay separate; `myor` returns your
+`42` untouched. (To bind a name the *caller* should see, pass it
+through `unquote` — `def unquote name …`.)
+
+Macros are the deep end — see **[Reference: Macros](REFERENCE.md#macros)**
+for the full set (`macro`, `unquote`, `splice`, `gensym`, `macroexpand`).
+
+
+## 17. Error handling
 
 Errors are values, not exceptions. `do` catches them and the
 `error` word pattern-matches:
@@ -525,7 +584,7 @@ error value is on the stack — `drop` it and push a recovery value,
 or inspect its fields with `.`.
 
 
-## 17. Concurrency with `await`
+## 18. Concurrency with `await`
 
 `await` (in the `aql:time-util` module) runs a list of code blocks
 in parallel and collects the results:
@@ -561,7 +620,7 @@ aql> t cancel
 ```
 
 
-## 18. Reading and writing files
+## 19. Reading and writing files
 
 ```
 aql> read "data.json"
@@ -578,7 +637,7 @@ File access requires the **`fileio`** capability to be enabled.
 The CLI enables it by default; embeddings may disable it.
 
 
-## 19. Modules — namespaces and imports
+## 20. Modules — namespaces and imports
 
 A *module* is a fresh evaluation context. Define one inline with
 the `module` form, calling `export "namespace" {…}` to publish
@@ -613,7 +672,7 @@ The trailing `end` stops `import`'s forward collection from
 grabbing the next token as a second module name.
 
 
-## 20. Where to next
+## 21. Where to next
 
 - **[How-To Guides](HOWTO.md)** — practical recipes by task.
 - **[Reference](REFERENCE.md)** — every word, every type.
