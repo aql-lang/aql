@@ -462,20 +462,17 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 
 		case IsParenExpr(val):
 			// A word-context ParenExpr (paren-nesting work, Step 2 —
-			// design/PAREN-REPRESENTATION.0.md): evaluate it as an
-			// isolated sub-expression and splice its result(s) in place.
-			// The four contracts: errors propagate (a paren is NOT an
-			// error boundary, unlike `do`), defs leak (shared registry),
-			// the inner expression starts with a fresh operand view (the
-			// OpenParen stack barrier), and results flow out onto the
-			// shared stack. Do not advance — the spliced result(s) re-step
-			// onto the stack as the marker form leaves them inline.
+			// design/PAREN-REPRESENTATION.0.md): expand it back to its
+			// OpenParen … CloseParen marker span in place and let the
+			// existing in-place collapse machinery evaluate it on THIS
+			// engine. That keeps exact parity with the former marker
+			// representation (recorder-transparent, same stack/registry
+			// semantics) — the four contracts hold because markers already
+			// honor them: errors propagate, defs leak, the OpenParen is a
+			// stack barrier, and results flow out. Do not advance — the
+			// OpenParen now sits at the pointer.
 			items, _ := AsParenExpr(val)
-			results, perr := e.evalParenExprResults(items)
-			if perr != nil {
-				return nil, perr
-			}
-			stackSplice(&e.stack, e.pointer, 1, results...)
+			stackSplice(&e.stack, e.pointer, 1, expandParenExpr(items)...)
 
 		case IsInterpString(val):
 			result, err := e.evalInterpString(val)
@@ -755,25 +752,16 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 			continue
 		}
 
-		// Paren expression value (paren-nesting Step 3): evaluate as an
-		// isolated sub-expression and splice its result(s) in place so
-		// matchSignature sees fully resolved forward values. Equivalent to
-		// the OpenParen collapse above (a paren cannot consume the
-		// enclosing stack — the barrier — so a sub-engine eval matches the
-		// in-place collapse), but for the nested ParenExpr representation.
-		// See design/PAREN-REPRESENTATION.0.md Step 3.
+		// Paren expression value (paren-nesting Step 3): expand it back to
+		// its OpenParen … CloseParen marker span in place, then re-process
+		// — the IsOpenParen branch above collapses it on THIS engine,
+		// exactly as the former word-context marker representation did
+		// (recorder-transparent; a paren cannot consume the enclosing
+		// stack, so the in-place collapse is correct). See
+		// design/PAREN-REPRESENTATION.0.md Step 3.
 		if IsParenExpr(tok) {
 			peItems, _ := AsParenExpr(tok)
-			peResults, perr := e.evalParenExprResults(peItems)
-			if perr != nil {
-				return perr
-			}
-			stackSplice(&e.stack, scanIdx, 1, peResults...)
-			if len(peResults) == 0 {
-				continue
-			}
-			resolved += len(peResults)
-			scanIdx += len(peResults)
+			stackSplice(&e.stack, scanIdx, 1, expandParenExpr(peItems)...)
 			continue
 		}
 
@@ -1593,6 +1581,19 @@ func spliceExpand(data Value) []Value {
 func (e *Engine) stepLiteral() error {
 	valIdx := e.pointer
 
+	// A ParenExpr reaching stepLiteral (nested inside a collapsing paren
+	// span, where the in-place collapse loops in preEvalParens and
+	// stepCloseParen fall through to here) is expanded to its marker span
+	// in place and re-stepped — the surrounding loop's OpenParen handling
+	// then collapses it on this engine. Without this, a nested ParenExpr
+	// would be pushed unevaluated. See design/PAREN-REPRESENTATION.0.md
+	// (paren-nesting Steps 2/3).
+	if IsParenExpr(e.stack[valIdx]) {
+		items, _ := AsParenExpr(e.stack[valIdx])
+		stackSplice(&e.stack, valIdx, 1, expandParenExpr(items)...)
+		return nil
+	}
+
 	// Look backwards for the nearest forward entry, stopping at open-paren barriers.
 	fwdIdx := -1
 	for i := valIdx - 1; i >= 0; i-- {
@@ -1833,19 +1834,28 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 	return NewString(buf.String()), nil
 }
 
-// evalParenExprResults evaluates a word-context ParenExpr's tokens as an
-// isolated sub-expression and returns its result value(s). It shares the
-// registry (so defs leak, matching paren scope) and propagates errors (a
-// paren is not an error boundary, unlike `do`). The tokens are wrapped in
-// paren markers so the existing collapse machinery resolves any dangling
-// forwards via implicit end. See design/PAREN-REPRESENTATION.0.md §3.
+// expandParenExpr returns a ParenExpr's tokens wrapped in OpenParen …
+// CloseParen markers — the span the existing in-place collapse machinery
+// (stepCloseParen / preEvalParens) evaluates. Used to expand a word-context
+// ParenExpr value back to markers on encounter (paren-nesting Steps 2/3),
+// keeping exact parity with the former marker representation. See
+// design/PAREN-REPRESENTATION.0.md.
+func expandParenExpr(items []Value) []Value {
+	span := make([]Value, 0, len(items)+2)
+	span = append(span, NewOpenParen())
+	span = append(span, items...)
+	span = append(span, NewCloseParen())
+	return span
+}
+
+// evalParenExprResults evaluates a ParenExpr's tokens in a sub-engine and
+// returns its result value(s). Used by autoEvalMap for paren values in map
+// (data) context, where a single result value is collected for a key. It
+// shares the registry (defs leak) and propagates errors (a paren is not an
+// error boundary, unlike `do`).
 func (e *Engine) evalParenExprResults(items []Value) ([]Value, error) {
 	sub := New(e.registry)
-	input := make([]Value, 0, len(items)+2)
-	input = append(input, NewOpenParen())
-	input = append(input, items...)
-	input = append(input, NewCloseParen())
-	return sub.Run(input)
+	return sub.Run(expandParenExpr(items))
 }
 
 // autoEvalMap evaluates each value in a plain map using a sub-engine.

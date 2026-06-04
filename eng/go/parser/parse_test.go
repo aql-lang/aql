@@ -208,47 +208,41 @@ func TestParseSetWithEnd(t *testing.T) {
 func TestParseSimpleParens(t *testing.T) {
 	// (1 add 2)
 	assertParse(t, "(1 add 2)", []eng.Value{
-		eng.NewOpenParen(),
-		eng.NewInteger(1),
-		eng.NewWord("add"),
-		eng.NewInteger(2),
-		eng.NewCloseParen(),
+		eng.NewParenExpr([]eng.Value{
+			eng.NewInteger(1),
+			eng.NewWord("add"),
+			eng.NewInteger(2),
+		}),
 	})
 }
 
 func TestParseNestedParens(t *testing.T) {
 	// (1 add (2 mul 3))
 	assertParse(t, "(1 add (2 mul 3))", []eng.Value{
-		eng.NewOpenParen(),
-		eng.NewInteger(1),
-		eng.NewWord("add"),
-		eng.NewOpenParen(),
-		eng.NewInteger(2),
-		eng.NewWord("mul"),
-		eng.NewInteger(3),
-		eng.NewCloseParen(),
-		eng.NewCloseParen(),
+		eng.NewParenExpr([]eng.Value{
+			eng.NewInteger(1),
+			eng.NewWord("add"),
+			eng.NewParenExpr([]eng.Value{
+				eng.NewInteger(2),
+				eng.NewWord("mul"),
+				eng.NewInteger(3),
+			}),
+		}),
 	})
 }
 
 func TestParseAdjacentParens(t *testing.T) {
 	// (1)(2) — no space between groups
 	assertParse(t, "(1)(2)", []eng.Value{
-		eng.NewOpenParen(),
-		eng.NewInteger(1),
-		eng.NewCloseParen(),
-		eng.NewOpenParen(),
-		eng.NewInteger(2),
-		eng.NewCloseParen(),
+		eng.NewParenExpr([]eng.Value{eng.NewInteger(1)}),
+		eng.NewParenExpr([]eng.Value{eng.NewInteger(2)}),
 	})
 }
 
 func TestParseParenAroundWord(t *testing.T) {
 	// (add)
 	assertParse(t, "(add)", []eng.Value{
-		eng.NewOpenParen(),
-		eng.NewWord("add"),
-		eng.NewCloseParen(),
+		eng.NewParenExpr([]eng.Value{eng.NewWord("add")}),
 	})
 }
 
@@ -581,11 +575,11 @@ func TestParseFullInfixWithParens(t *testing.T) {
 	assertParse(t, "2 mul (3 add 4)", []eng.Value{
 		eng.NewInteger(2),
 		eng.NewWord("mul"),
-		eng.NewOpenParen(),
-		eng.NewInteger(3),
-		eng.NewWord("add"),
-		eng.NewInteger(4),
-		eng.NewCloseParen(),
+		eng.NewParenExpr([]eng.Value{
+			eng.NewInteger(3),
+			eng.NewWord("add"),
+			eng.NewInteger(4),
+		}),
 	})
 }
 
@@ -1269,8 +1263,8 @@ func TestParseNestedList(t *testing.T) {
 // --- List with dotted word ---
 
 func TestParseListWithDottedWord(t *testing.T) {
-	// [foo.bar] → list with the dot chain grouped: ( foo get bar ) = 5
-	// elements (OpenParen, foo, get, bar, CloseParen).
+	// [foo.bar] → list with the dot chain grouped as a single ParenExpr
+	// value: paren([foo get bar]).
 	got, err := Parse("[foo.bar]")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
@@ -1280,8 +1274,15 @@ func TestParseListWithDottedWord(t *testing.T) {
 	}
 	_lst, _ := eng.AsList(got[0])
 	elems := _lst.Slice()
-	if len(elems) != 5 {
-		t.Fatalf("expected 5 elements ( foo get bar ), got %d", len(elems))
+	if len(elems) != 1 {
+		t.Fatalf("expected 1 element (the dot-chain ParenExpr), got %d", len(elems))
+	}
+	if !eng.IsParenExpr(elems[0]) {
+		t.Fatalf("expected element to be a ParenExpr, got %s", elems[0])
+	}
+	toks, _ := eng.AsParenExpr(elems[0])
+	if len(toks) != 3 {
+		t.Fatalf("expected 3 chain tokens (foo get bar), got %d: %v", len(toks), toks)
 	}
 }
 
@@ -1374,14 +1375,17 @@ func TestParseDottedWordTopLevel(t *testing.T) {
 }
 
 func TestParseDottedWordInExpression(t *testing.T) {
-	// 1 foo.bar → 1 ( foo get bar ) = 6 values. The dot chain is grouped so
-	// it binds to foo, not to the result of `1 foo`.
+	// 1 foo.bar → 1 paren([foo get bar]) = 2 values. The dot chain is a
+	// single ParenExpr so it binds to foo, not to the result of `1 foo`.
 	got, err := Parse("1 foo.bar")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	if len(got) != 6 {
-		t.Fatalf("expected 6 values (1 ( foo get bar )), got %d: %v", len(got), got)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 values (1 paren([foo get bar])), got %d: %v", len(got), got)
+	}
+	if !eng.IsParenExpr(got[1]) {
+		t.Fatalf("expected got[1] to be the dot-chain ParenExpr, got %s", got[1])
 	}
 }
 
@@ -1434,13 +1438,16 @@ func TestParseDottedMapValueMultiPair(t *testing.T) {
 
 func TestParseDottedWordStillWorksInWordContext(t *testing.T) {
 	// The map-value fold must NOT change word context: `1 foo.bar` is
-	// still `1 ( foo get bar )` = 6 values (no double-wrap).
+	// still `1 paren([foo get bar])` = 2 values (no double-wrap).
 	got, err := Parse("1 foo.bar")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	if len(got) != 6 {
-		t.Fatalf("expected 6 values, got %d: %v", len(got), got)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 values, got %d: %v", len(got), got)
+	}
+	if !eng.IsParenExpr(got[1]) {
+		t.Fatalf("expected got[1] to be the dot-chain ParenExpr, got %s", got[1])
 	}
 }
 
