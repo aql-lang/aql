@@ -214,11 +214,68 @@ func (errorConvertBehavior) ToList(v Value) (Value, error) {
 	return NewList(nil), nil
 }
 
+// reachConvertBehavior: an Ideal/Reach → an inspectable map describing its
+// receiver and segments, and a list of its segment keys. Format renders the
+// dotted surface (m.a.b) so Value.String() matches canon. See REACH.0.md §7.
+type reachConvertBehavior struct{}
+
+func (reachConvertBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
+func (reachConvertBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
+func (reachConvertBehavior) Format(v Value) string       { return canonReach(v) }
+
+func (reachConvertBehavior) ToMap(v Value) (Value, error) {
+	info, err := AsReach(v)
+	if err != nil {
+		return NewMap(NewOrderedMap()), nil
+	}
+	out := NewOrderedMap()
+	if len(info.Receiver) == 1 {
+		out.Set("receiver", info.Receiver[0])
+	} else {
+		out.Set("receiver", NewList(append([]Value(nil), info.Receiver...)))
+	}
+	segs := make([]Value, len(info.Segments))
+	for i, s := range info.Segments {
+		sm := NewOrderedMap()
+		op := "get"
+		if s.Getr {
+			op = "getr"
+		}
+		sm.Set("op", NewAtom(op))
+		sm.Set("computed", NewBoolean(s.Computed))
+		if s.Computed {
+			sm.Set("key", NewList(append([]Value(nil), s.KeyExpr...)))
+		} else {
+			sm.Set("key", s.KeyLit)
+		}
+		segs[i] = NewMap(sm)
+	}
+	out.Set("segments", NewList(segs))
+	return NewMap(out), nil
+}
+
+func (reachConvertBehavior) ToList(v Value) (Value, error) {
+	info, err := AsReach(v)
+	if err != nil {
+		return NewList(nil), nil
+	}
+	out := make([]Value, 0, len(info.Segments))
+	for _, s := range info.Segments {
+		if s.Computed {
+			out = append(out, NewList(append([]Value(nil), s.KeyExpr...)))
+		} else {
+			out = append(out, s.KeyLit)
+		}
+	}
+	return NewList(out), nil
+}
+
 func init() {
 	TObject.Behavior = objectConvertBehavior{}
 	TArray.Behavior = arrayConvertBehavior{}
 	TStore.Behavior = storeConvertBehavior{}
 	TError.Behavior = errorConvertBehavior{}
+	TReach.Behavior = reachConvertBehavior{}
 }
 
 // tableConvertBehavior: a Table → its rows (List); ToMap is columnar —

@@ -65,6 +65,24 @@ var Natives = []NativeFunc{
 		},
 	},
 
+	// `reach <receiver> [keys]` builds a first-class Reach value (a lens)
+	// programmatically: an inert (non-evaluating) dot-access over the
+	// receiver with literal `get` segments. Unlike a parsed m.a.b (which
+	// evaluates eagerly), a constructed reach is data you can inspect,
+	// pass, and convert (see design/REACH.0.md §7). getr/computed segments
+	// come from source via codequote; the list-encoding for them is TBD.
+	{
+		Name: "reach",
+
+		Signatures: []NativeSig{
+			{
+				Args:    []*Type{TAny, TList},
+				Handler: reachHandler,
+				Returns: []*Type{TReach}, BarrierPos: -1,
+			},
+		},
+	},
+
 	// `word <value>` wraps its argument (unevaluated) in an __SP splice
 	// marker. When the marker reaches the stack pointer its payload is
 	// spliced in: a plain list contributes its top-level elements, any
@@ -344,6 +362,16 @@ func quoteAnyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 	v := args[0]
 	v.Quoted = true
 	return []Value{v}, nil
+}
+
+// reachHandler builds an inert Reach over a receiver value and a list of
+// literal `get` keys: `reach m [a/q b/q]` → an m.a.b lens (data).
+func reachHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	keys, err := RequireConcreteList(args[1], "reach")
+	if err != nil {
+		return nil, err
+	}
+	return []Value{NewReachFromKeys(args[0], keys.Slice())}, nil
 }
 
 // wordHandler wraps its (unevaluated) argument in an __SP splice marker. The

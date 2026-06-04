@@ -486,17 +486,17 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			}
 
 		case IsReach(val):
-			// A Reach (dot-access node, m.a.b — Reach Phase B) evaluates by
-			// lowering to its get/getr chain in place, exactly like the
-			// ParenExpr it replaced. Quoted (codequote-captured) reaches stay
-			// data, like Quoted parens.
-			if val.Quoted || e.pendingForwardWantsRawParen() {
+			// A parsed Reach (dot-access node, m.a.b — Eval=true) evaluates
+			// by lowering to its get/getr chain in place, exactly like the
+			// ParenExpr it replaced. An inert reach (Eval=false, from `reach`)
+			// or a codequote'd one (Quoted) is data — left via stepLiteral.
+			if isEvalReach(val) && !e.pendingForwardWantsRawParen() {
+				info, _ := AsReach(val)
+				stackSplice(&e.stack, e.pointer, 1, expandReach(info)...)
+			} else {
 				if err := e.stepLiteral(); err != nil {
 					return nil, err
 				}
-			} else {
-				info, _ := AsReach(val)
-				stackSplice(&e.stack, e.pointer, 1, expandReach(info)...)
 			}
 
 		case IsInterpString(val):
@@ -838,7 +838,7 @@ func (e *Engine) preEvalParens(maxFwd int, fn *FnDefInfo) error {
 		// then re-process. Quoted/raw-capture reaches are left for the
 		// matched sig (parity with the ParenExpr branch above).
 		if IsReach(tok) {
-			if tok.Quoted || rawParenForward(fn, resolved) {
+			if !isEvalReach(tok) || rawParenForward(fn, resolved) {
 				resolved++
 				scanIdx++
 				continue
@@ -1684,7 +1684,7 @@ func (e *Engine) stepLiteral() error {
 	// A Reach reaching stepLiteral (nested in a collapsing span, or a
 	// collected list/map element) lowers to its get-chain in place, like a
 	// ParenExpr (Reach Phase B). Quoted/raw-pending reaches fall through.
-	if IsReach(e.stack[valIdx]) && !e.stack[valIdx].Quoted && !e.pendingForwardWantsRawParen() {
+	if isEvalReach(e.stack[valIdx]) && !e.pendingForwardWantsRawParen() {
 		info, _ := AsReach(e.stack[valIdx])
 		stackSplice(&e.stack, valIdx, 1, expandReach(info)...)
 		return nil
@@ -1968,6 +1968,18 @@ func lowerReach(info ReachInfo) []Value {
 	return out
 }
 
+// isEvalReach reports whether v is a Reach that should auto-evaluate now:
+// a parsed dot-access (Eval=true) that has not been quote-captured. An inert
+// constructor-built reach (Eval=false, from `reach …`) or a codequote'd one
+// (Quoted) is data and is left alone.
+func isEvalReach(v Value) bool {
+	if !IsReach(v) || v.Quoted {
+		return false
+	}
+	info, _ := AsReach(v)
+	return info.Eval
+}
+
 // expandReach returns the marker span an Eval Reach evaluates to — its
 // lowered get-chain wrapped in paren markers, run in place exactly like a
 // ParenExpr (Stage-1 lowering).
@@ -2056,7 +2068,7 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 
 		// Reach map value (e.g. {x: m.a}) — evaluate its lowered get-chain
 		// as an isolated sub-expression, like a ParenExpr (Reach Phase B).
-		if IsReach(v) && !v.Quoted {
+		if isEvalReach(v) {
 			info, _ := AsReach(v)
 			result, err := e.evalParenExprResults(lowerReach(info))
 			if err != nil {

@@ -136,6 +136,7 @@ var (
 	TOpenParen      = eng.TOpenParen
 	TOptions        = eng.TOptions
 	TParenExpr      = eng.TParenExpr
+	TReach          = eng.TReach
 	TPath           = eng.TPath
 	TRecord         = eng.TRecord
 	TResource       = eng.TResource
@@ -229,6 +230,9 @@ var (
 	IsOpenParen               = eng.IsOpenParen
 	IsOptionsType             = eng.IsOptionsType
 	IsParenExpr               = eng.IsParenExpr
+	IsReach                   = eng.IsReach
+	AsReach                   = eng.AsReach
+	NewReachFromKeys          = eng.NewReachFromKeys
 	IsPath                    = eng.IsPath
 	IsRecordType              = eng.IsRecordType
 	IsReturnCheck             = eng.IsReturnCheck

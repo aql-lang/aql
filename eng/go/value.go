@@ -1191,6 +1191,18 @@ func NewReach(info ReachInfo) Value {
 	return NewValueRaw(TReach, info)
 }
 
+// NewReachFromKeys builds an inert (non-evaluating, Eval=false) Reach over a
+// concrete receiver value with literal `get` segments — the programmatic
+// `reach` constructor. The result is data (a lens): it does not auto-evaluate
+// like a parsed m.a.b. See design/REACH.0.md §7.
+func NewReachFromKeys(receiver Value, keys []Value) Value {
+	segs := make([]ReachSeg, len(keys))
+	for i, k := range keys {
+		segs[i] = ReachSeg{KeyLit: k}
+	}
+	return NewReach(ReachInfo{Receiver: []Value{receiver}, Segments: segs, Eval: false})
+}
+
 // IsReach reports whether v is an Ideal/Reach value.
 func IsReach(v Value) bool {
 	return v.Parent.Equal(TReach)
