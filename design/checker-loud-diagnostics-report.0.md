@@ -181,8 +181,31 @@ member now checks with its real type — `import "aql:math-util" end 16.0
 MathUtil.sqrt` checks as `Decimal` (was `Any`), `Decision.cond age "gt"
 18` as `Map` (was `Any`). This also removes the spurious `missing_returns`
 that `getr` on an export used to emit in check mode. Covered by
-`TestCheckModuleExportTypePropagation`. Pieces (1) and (2) remain to make
-the actual `uncalled_function` diagnostic fire for module dispatch.
+`TestCheckModuleExportTypePropagation`.
+
+**Piece (1) — LANDED 2026-06-04.** The `uncalled_function` diagnostic
+fires at the no-match fall-through in `execFnDefSigStackMatch`
+(`eng/go/engine.go`): a *named*, non-anonymous, non-`Quoted` function
+value reached as a call whose args (stack-before *or* upcoming forward
+tokens, via `upcomingArgs`, up to the next boundary) match no signature
+is flagged as a silent-dispatch failure (severity error, `registry.go`).
+With prerequisite (0) in place this covers the marquee cases: module
+namespace dispatch — both typed-param preamble fns (`Decision.cond 5 6 7`)
+and wrapper-exported natives (`MathUtil.sqrt "hello"`) — and local
+function values (`(usurp f) "hello"`); correct calls and bare zero-arg
+references stay quiet. Covered by `TestCheckUncalledFunction`; in the
+`LANGREF` diagnostics table.
+
+The `/r` edge dissolved on inspection: `(f/r) arg` actually
+*re-dispatches* (`(f/r) 5 → 25` at runtime), so flagging `(f/r) "hello"`
+is a true positive, not the feared false one; only the genuinely-inert
+`f/r arg` (no paren, `Quoted` preserved) stays quiet, which it does.
+
+**Piece (2) — largely unnecessary.** The loose-wrapper masking concern
+did not materialise: prerequisite (0) makes a wrapper export resolve to
+the *real typed* function in check mode, so the inner signature is what
+gets matched — `MathUtil.sqrt "hello"` already flags. Left as a watch
+item rather than planned work.
 
 ### Phase 2 — `unreachable_signature`: dead-overload detection
 

@@ -71,6 +71,51 @@ func TestCheckModuleExportTypePropagation(t *testing.T) {
 	}
 }
 
+// TestCheckUncalledFunction verifies the uncalled_function diagnostic
+// makes silent FnDef-value dispatch failures loud: a named function
+// reached as a call whose args match no signature is left on the stack
+// as data at runtime (DX-report T1/B1) — check mode now flags it,
+// aligning the FnDef-value path with plain words. With module exports
+// carrying their real types, this covers namespace dispatch as well as
+// local function values.
+func TestCheckUncalledFunction(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	count := func(src string) int {
+		res, err := a.Check(src)
+		if err != nil {
+			t.Fatalf("check %q: %v", src, err)
+		}
+		n := 0
+		for _, d := range res.Diagnostics {
+			if d.Code == "uncalled_function" {
+				n++
+			}
+		}
+		return n
+	}
+
+	cases := []struct {
+		src  string
+		want int
+		desc string
+	}{
+		{`import "aql:decision" end  Decision.cond 5 6 7`, 1, "module namespace call, mismatched args"},
+		{`import "aql:decision" end  Decision.cond age/q "gt" 18`, 0, "module namespace call, correct args"},
+		{`import "aql:decision" end  Decision.cond`, 0, "bare module reference, no args"},
+		{`def f fn [[x:Integer] [Integer] [x mul x]]  (usurp f) "hello"`, 1, "local fn value, wrong-typed arg"},
+		{`def f fn [[x:Integer] [Integer] [x mul x]]  (usurp f) 5`, 0, "local fn value, correct arg"},
+		{`def f fn [[x:Integer] [Integer] [x mul x]]  f/r "hello"`, 0, "genuinely inert /r ref (no paren) is not a call"},
+	}
+	for _, c := range cases {
+		if got := count(c.src); got != c.want {
+			t.Errorf("%s: want %d uncalled_function, got %d  (%s)", c.desc, c.want, got, c.src)
+		}
+	}
+}
+
 // TestCheckAddDecimalWiden validates that mixing integer and decimal
 // carriers widens the result to Decimal — this is the
 // "else" branch of ReturnsNumericBinary.

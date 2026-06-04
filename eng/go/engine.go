@@ -2172,6 +2172,38 @@ func trivialDelegationTarget(sig *FnSig) (string, bool) {
 	return w.Name, true
 }
 
+// argTypeList renders a comma-separated list of the values' lattice
+// types, for the uncalled_function diagnostic's "arguments: …" detail.
+func argTypeList(vals []Value) string {
+	parts := make([]string, len(vals))
+	for i, v := range vals {
+		parts[i] = v.Parent.String()
+	}
+	return strings.Join(parts, ", ")
+}
+
+// upcomingArgs returns the value/literal tokens that follow valIdx up to
+// the next statement or group boundary (End / CloseParen / Mark / Move)
+// — the forward args a function-value call had available to collect.
+// Forward-collection markers are skipped; everything before the first
+// boundary is a candidate arg. Lets a failed forward-form call
+// (`Pkg.fn a b`) be recognised as a call, not a bare value reference.
+func (e *Engine) upcomingArgs(valIdx int) []Value {
+	var out []Value
+	for i := valIdx + 1; i < len(e.stack); i++ {
+		v := e.stack[i]
+		switch {
+		case IsForward(v):
+			continue
+		case IsMark(v) || IsMove(v) || IsCloseParen(v) || IsEnd(v):
+			return out
+		default:
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 // execFnDefSigStackMatch is the legacy pure-stack dispatch path for
 // AQL-defined functions whose signatures carry named params. Used as a
 // fallback when matchSignature's aggregate match returns nothing.
@@ -2271,6 +2303,31 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 				}
 				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
 			}
+		}
+	}
+
+	// Check mode: a NAMED function reached as a call — args on the stack
+	// (swap/prefix form) or upcoming forward tokens (`Pkg.fn a b`) — that
+	// matched no signature is the silent-dispatch footgun: at runtime the
+	// value is left on the stack as data with no error (DX-report T1/B1).
+	// Make it loud, aligning the FnDef path with plain words, which error
+	// here via signatureError → no_signature. Guards keep it precise:
+	// named (not an anonymous lambda value), not explicitly inert (`/r` /
+	// `quote` set Quoted), and at least one candidate arg available — so a
+	// bare function-as-value reference with no args is left alone.
+	if e.registry != nil && e.registry.Check.IsActive() &&
+		fnDef.Name != "" && !fnDef.Anonymous &&
+		valIdx < len(e.stack) && !e.stack[valIdx].Quoted {
+		candidates := append(append([]Value{}, resolved...), e.upcomingArgs(valIdx)...)
+		if len(candidates) > 0 {
+			pos := e.stack[valIdx].Pos
+			e.registry.Check.AddDiagnostic(CheckDiagnostic{
+				Code:   "uncalled_function",
+				Detail: "call to '" + fnDef.Name + "' matched no signature and was left on the stack as data (arguments: " + argTypeList(candidates) + ")",
+				Word:   fnDef.Name,
+				Row:    pos.Row,
+				Col:    pos.Col,
+			})
 		}
 	}
 

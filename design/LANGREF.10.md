@@ -3550,6 +3550,7 @@ stdout for editor/tooling integration.
 | Code                     | Severity | Meaning                                                                     |
 |--------------------------|----------|-----------------------------------------------------------------------------|
 | `no_signature`           | error    | No signature matched at a call site; assumed best-fit candidate.            |
+| `uncalled_function`      | error    | A named function value (e.g. `Pkg.fn`) was called with args that matched no signature, so it was silently left on the stack as data. |
 | `undefined_word`         | error    | Word reference with no def; replaced with `Any` carrier to continue.        |
 | `fn_body_error`          | error    | Analysis of a user-defined fn body raised an error.                         |
 | `branch_error`           | error    | A branch (if/each/fold body) raised an error during symbolic analysis.      |
