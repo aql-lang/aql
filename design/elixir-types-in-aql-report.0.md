@@ -157,6 +157,40 @@ complement (~1 d) are the bulk, plus the word + `negationBehavior`
 failing-by-design test already in the tree
 (`TestApplyComplementNarrowingNoOpOnConcrete`) to anchor it.
 
+**Implementation plan (five phases).** Phases 1+4 are the user-visible
+word plus the anchored bug fix; 2+3 are the decision-procedure depth.
+Land as two PRs (1,4 then 2,3) or one branch.
+
+1. *Runtime `tnot` + matching.* Add a `NegationInfo{Inner Value}`
+   payload and its marker (`eng/go/payload.go`); a `negationBehavior`
+   whose `Match(v, t)` returns `!innerType.Match(v)` (alongside the
+   refine/predicate behaviors); register `tnot` as a 1-arg
+   forward-collecting type word beside `tor`/`tand`
+   (`lang/go/native/native_type.go`) with a `Returns` of the negation
+   type; De Morgan + identities (`tnot (A tor B) = tnot A tand tnot B`,
+   `tnot (tnot A) = A`, `tnot Never = Any`, `tnot Any = Never`) in
+   `eng/go/core_boolean.go`; wire `is` / `typeof` / render. Negative
+   tests: double negation, `tnot Any`, `tnot Never`, `tnot None`.
+2. *`tand` emptiness with negated atoms.* Extend `TandValues`
+   (`eng/go/core_boolean.go`): `T tand (tnot U) → Never` when `U`
+   contains `T` (ancestor walk), stays a refined `tand` formula
+   otherwise; incomparable atoms are disjoint by the tree order. Tests:
+   collapse-to-`Never` and stay-refined cases.
+3. *DepScalar closed-form complement.* In `eng/go/depscalar.go`,
+   complement a predicate within its base family (`tnot (Integer gt 0)
+   → Integer lte 0`; interval flips; open/closed bounds), composing
+   with the existing interval `tand`. Tests across the comparator set +
+   boundary values.
+4. *Else-branch narrowing fix.* `ApplyComplementNarrowing`
+   (`eng/go/carrier.go:648`) pushes `cur tand (tnot guardType)` instead
+   of bailing on non-disjuncts; flip
+   `TestApplyComplementNarrowingNoOpOnConcrete`
+   (`lang/go/native/carrier_narrow_test.go`) to assert the narrow and
+   add the positive concrete case.
+5. *Docs.* `LANGREF` (type-algebra section + the existing `<`/`>`-free
+   note), `SIGNATURES` (`tnot`), `TYPES` (negation, De Morgan, and the
+   closure status from this item).
+
 ### 2. The `dynamic(T)` bounded modality — the deepest idea
 
 **Gap, and a correction to AQL's own notes.** The carrier report states
