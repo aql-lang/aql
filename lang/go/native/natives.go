@@ -12,15 +12,8 @@ import (
 // functions and their aggregator (registerAll). The public Register entry
 // point in native.go installs every entry into a registry.
 var Natives = []NativeFunc{
-	// ---- boolean ----
-	{
-		Name: "implies",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TBoolean, TBoolean}, Handler: impliesHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
-			{Args: []*Type{TAny, TAny}, Handler: impliesHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
-		},
-	},
+	// `implies` (with nand/nor/iff/xnor) moved to the aql:logic-util module —
+	// see native/logic_module.go.
 
 	// ---- control flow ----
 	{
@@ -64,15 +57,7 @@ var Natives = []NativeFunc{
 		},
 	},
 
-	// ---- file ops ----
-	{
-		Name: "folder",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TOptions, TPath}, Handler: folderOptsHandler, Returns: []*Type{TList}, BarrierPos: -1},
-			{Args: []*Type{TPath}, Handler: folderHandler, Returns: []*Type{TList}, BarrierPos: -1},
-		},
-	},
+	// `folder` (filesystem op) moved to the aql:io module — see io_module.go.
 
 	// ---- string slice ----
 	stringSliceNative(),
@@ -89,41 +74,8 @@ var Natives = []NativeFunc{
 		}},
 	},
 
-	// ---- temporal ----
-	{
-		Name: "now",
-
-		Signatures: []NativeSig{{
-			Args:    []*Type{},
-			Handler: nowHandler,
-			Returns: []*Type{TInstant}, BarrierPos: 0,
-		}},
-	},
-	{
-		Name: "sleep",
-
-		Signatures: []NativeSig{{
-			Args:    []*Type{TInteger},
-			Handler: sleepHandler,
-			Returns: []*Type{}, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "interval",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TInteger, TList}, QuoteArgs: map[int]bool{1: true}, Handler: intervalListHandler, Returns: []*Type{TInterval}, BarrierPos: -1},
-			{Args: []*Type{TInteger, TAtom}, QuoteArgs: map[int]bool{1: true}, Handler: intervalAtomHandler, Returns: []*Type{TInterval}, BarrierPos: -1},
-		},
-	},
-	{
-		Name: "cancel",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TTimeout}, Handler: cancelTimeoutHandler, Returns: []*Type{}, BarrierPos: -1},
-			{Args: []*Type{TInterval}, Handler: cancelIntervalHandler, Returns: []*Type{}, BarrierPos: -1},
-		},
-	},
+	// now / sleep / interval / cancel (with timeout / await) moved to the
+	// aql:time-util module — see native/time_async_module.go.
 
 	// ---- list (table query) ----
 	{
@@ -197,92 +149,6 @@ var Natives = []NativeFunc{
 		},
 	},
 
-	// ---- transform ----
-	{
-		Name: "transform",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TMap, TAny}, Handler: transformHandler, BarrierPos: -1},
-		},
-	},
-
-	// ---- merge ----
-	{
-		Name: "merge",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TList, TMap}, Handler: mergeListMapHandler, BarrierPos: -1},
-			{Args: []*Type{TMap, TList}, Handler: mergeMapListHandler, BarrierPos: -1},
-			{Args: []*Type{TAny, TAny}, Handler: mergeHandler, BarrierPos: -1},
-		},
-	},
-
-	// ---- validate ----
-	{
-		Name: "validate",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TMap, TAny}, Handler: validateHandler, BarrierPos: -1},
-		},
-	},
-
-	// ---- getpath ----
-	{
-		Name: "getpath",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TString, TAny}, Handler: getpathHandler, BarrierPos: -1},
-		},
-	},
-
-	// ---- setpath ----
-	{
-		Name: "setpath",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TString, TAny, TAny}, Handler: setpathHandler, BarrierPos: -1},
-			{Args: []*Type{TAny, TString, TAny}, Handler: setpathHandler, BarrierPos: -1},
-		},
-	},
-
-	// ---- inject ----
-	{
-		Name: "inject",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TAny, TAny}, Handler: injectHandler, BarrierPos: -1},
-		},
-	},
-
-	// ---- clone ----
-	{
-		Name: "clone",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TAny}, Handler: cloneHandler, BarrierPos: 0},
-		},
-	},
-
-	// ---- walk ----
-	{
-		Name: "walk",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TFunction, TFunction, TAny}, Handler: walkBeforeAfterHandler, BarrierPos: 0},
-			{Args: []*Type{TFunction, TAny}, Handler: walkBeforeHandler, BarrierPos: 0},
-			{Args: []*Type{TAny}, Handler: walkHandler, BarrierPos: 0},
-		},
-	},
-
-	// ---- selector ----
-	{
-		Name: "selector",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TMap, TAny}, Handler: selectorHandler, BarrierPos: -1},
-		},
-	},
-
 	// ---- size ----
 	{
 		Name: "size",
@@ -292,53 +158,10 @@ var Natives = []NativeFunc{
 		},
 	},
 
-	// ---- pad ----
-	{
-		Name: "pad",
+	// `pad` (with the rest of the string words) moved to the aql:string-util
+	// module — see native/string_module.go.
 
-		Signatures: []NativeSig{
-			{Args: []*Type{TInteger, TAny}, Handler: padWidthHandler, BarrierPos: -1},
-			{Args: []*Type{TAny}, Handler: padDefaultHandler, BarrierPos: -1},
-		},
-	},
-
-	// ---- items ----
-	{
-		Name: "items",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TAny}, Handler: itemsHandler, BarrierPos: -1},
-		},
-	},
-
-	// ---- fetch ----
-	{
-		Name: "fetch",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TString, TMap}, Handler: fetchStringMapHandler, BarrierPos: -1},
-			{Args: []*Type{TMap}, Handler: fetchMapHandler, BarrierPos: -1},
-			{Args: []*Type{TString}, Handler: fetchStringHandler, BarrierPos: -1},
-		},
-	},
-
-	// ---- prepare ----
-	{
-		Name: "prepare",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TMap}, Handler: prepareAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
-		},
-	},
-
-	// ---- direct ----
-	{
-		Name: "direct",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TMap}, Handler: directAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
-		},
-	},
+	// fetch / prepare / direct moved to the aql:net module — see net_module.go.
 
 	// ---- flatten ----
 	{
@@ -369,15 +192,7 @@ var Natives = []NativeFunc{
 		},
 	},
 
-	// ---- jsonify ----
-	{
-		Name: "jsonify",
-
-		Signatures: []NativeSig{
-			{Args: []*Type{TMap, TAny}, Handler: jsonifyFlagsHandler, BarrierPos: -1},
-			{Args: []*Type{TAny}, Handler: jsonifyDefaultHandler, BarrierPos: -1},
-		},
-	},
+	// jsonify moved to the aql:struct module — see struct_module.go.
 
 	// ---- listops (push/pop/unshift/shift) ----
 	{

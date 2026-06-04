@@ -64,6 +64,7 @@ func newAQLWithSDK(t *testing.T) *lang.AQL {
 	if err != nil {
 		t.Fatal(err)
 	}
+	seedAQL(a)
 	a.SetSDK("voxgig-solardemo", makeTestSDKForOps(t))
 	return a
 }

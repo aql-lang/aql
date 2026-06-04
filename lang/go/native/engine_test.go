@@ -91,6 +91,7 @@ func TestLiteralSelfInsert(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	tests := []struct {
@@ -125,6 +126,7 @@ func TestPrefixUpper(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewString("a"), NewWord("upper")})
 	if err != nil {
@@ -146,6 +148,7 @@ func TestPrefixLower(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewString("C"), NewWord("lower")})
 	if err != nil {
@@ -169,6 +172,7 @@ func TestForwardLower(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewWord("lower"), NewString("B")})
 	if err != nil {
@@ -192,6 +196,7 @@ func TestSignatureError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{NewInteger(99), NewWord("lower")})
 	if err == nil {
@@ -206,6 +211,7 @@ func TestDup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewWord("dup")})
 	if err != nil {
@@ -226,6 +232,7 @@ func TestSwap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("swap")})
 	if err != nil {
@@ -246,6 +253,7 @@ func TestDrop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewWord("drop")})
 	if err != nil {
@@ -264,6 +272,7 @@ func TestDupForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWordModified("dup", -1, false, true),
@@ -295,6 +304,7 @@ func TestSwapForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWordModified("swap", -1, false, true),
@@ -319,6 +329,7 @@ func TestSwapInfix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{
 		NewInteger(1), NewWord("swap"), NewInteger(2),
@@ -334,6 +345,7 @@ func TestDropForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWordModified("drop", -1, false, true),
@@ -352,6 +364,7 @@ func TestOver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("over")})
 	if err != nil {
@@ -370,6 +383,7 @@ func TestRot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewWord("rot")})
 	if err != nil {
@@ -388,6 +402,7 @@ func TestNip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("nip")})
 	if err != nil {
@@ -404,6 +419,7 @@ func TestTuck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("tuck")})
 	if err != nil {
@@ -422,6 +438,7 @@ func Test2Dup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("dup2")})
 	if err != nil {
@@ -441,6 +458,7 @@ func Test2Swap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4), NewWord("swap2")})
 	if err != nil {
@@ -460,6 +478,7 @@ func Test2Drop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewWord("drop2")})
 	if err != nil {
@@ -475,6 +494,7 @@ func Test2Over(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4), NewWord("over2")})
 	if err != nil {
@@ -496,6 +516,7 @@ func TestDepthEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewWord("depth")})
 	if err != nil {
@@ -512,6 +533,7 @@ func TestDepth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewWord("depth")})
 	if err != nil {
@@ -529,6 +551,7 @@ func TestPick0(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(0), NewWord("pick")})
 	if err != nil {
@@ -549,6 +572,7 @@ func TestPick2(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(2), NewWord("pick")})
 	if err != nil {
@@ -568,6 +592,7 @@ func TestPickOutOfRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{NewInteger(1), NewInteger(5), NewWord("pick")})
 	if err == nil {
@@ -581,6 +606,7 @@ func TestRoll2(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(2), NewWord("roll")})
 	if err != nil {
@@ -600,6 +626,7 @@ func TestRoll1(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(1), NewWord("roll")})
 	if err != nil {
@@ -619,6 +646,7 @@ func TestRoll0(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(0), NewWord("roll")})
 	if err != nil {
@@ -642,6 +670,7 @@ func TestForceForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWordModified("lower", -1, false, true),
@@ -666,6 +695,7 @@ func TestForceStack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewString("F"),
@@ -690,6 +720,7 @@ func TestArgCountForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWordModified("lower", 1, false, false),
@@ -715,6 +746,7 @@ func TestUnknownWordErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{NewWord("foo")})
 	if err == nil {
@@ -729,6 +761,7 @@ func TestArithmeticPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	tests := []struct {
 		name  string
@@ -775,6 +808,7 @@ func TestArithmeticInfix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	tests := []struct {
 		name  string
@@ -819,6 +853,7 @@ func TestArithmeticErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	tests := []struct {
@@ -849,6 +884,7 @@ func TestArithmeticChaining(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	tests := []struct {
@@ -898,6 +934,7 @@ func TestLeftToRightMulAndAdd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	tests := []struct {
 		name  string
@@ -946,6 +983,7 @@ func TestLeftToRightSameLevel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	tests := []struct {
 		name  string
@@ -985,6 +1023,7 @@ func TestLeftToRightPrefixUnaffected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(2), NewInteger(3), NewWord("mul"),
@@ -1011,6 +1050,7 @@ func TestSetGetForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99),
@@ -1036,6 +1076,7 @@ func TestSetGetWithoutEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99),
@@ -1060,6 +1101,7 @@ func TestSetGetPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewInteger(42), NewString("bar"), NewWord("set"),
@@ -1084,6 +1126,7 @@ func TestSetGetString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewString("name"), NewString("hello"),
@@ -1109,6 +1152,7 @@ func TestSetOverwrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("x"), NewInteger(1),
@@ -1135,6 +1179,7 @@ func TestGetUnknownKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{NewWord("context"), NewWord("get"), NewWord("missing")})
 	if err == nil {
@@ -1148,6 +1193,7 @@ func TestEndNoOp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(42), NewEnd()})
 	if err != nil {
@@ -1169,6 +1215,7 @@ func TestEndMultiple(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewEnd(),
@@ -1196,6 +1243,7 @@ func TestEndTerminatesForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99), NewEnd(), NewInteger(88),
@@ -1219,6 +1267,7 @@ func TestEndTerminatesForwardNoRemainder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99),
@@ -1244,6 +1293,7 @@ func TestEndInsufficientArgs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{
 		NewWord("set"), NewWord("foo"), NewEnd(),
@@ -1259,6 +1309,7 @@ func TestSetGetStorePersistsWithinRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("key"), NewInteger(100),
@@ -1282,6 +1333,7 @@ func TestChainedOps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewString("a"),
@@ -1308,6 +1360,7 @@ func TestParenSimpleArithmetic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	tests := []struct {
 		name  string
@@ -1358,6 +1411,7 @@ func TestParenWithSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("foo"),
@@ -1384,6 +1438,7 @@ func TestParenNested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewOpenParen(),
@@ -1410,6 +1465,7 @@ func TestParenLiteral(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewOpenParen(), NewInteger(42), NewCloseParen(),
@@ -1432,6 +1488,7 @@ func TestParenUnmatchedOpen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{
 		NewOpenParen(), NewInteger(1),
@@ -1446,6 +1503,7 @@ func TestParenUnmatchedClose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{
 		NewInteger(1), NewCloseParen(),
@@ -1460,6 +1518,7 @@ func TestParenWithLeftToRight(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	tests := []struct {
 		name  string

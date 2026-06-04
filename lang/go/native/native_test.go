@@ -501,11 +501,15 @@ func TestRegisterFunctions(t *testing.T) {
 	// installed via the public Register entry point. Verify each formerly
 	// per-word name still resolves to a registered function with at least
 	// one signature whose handler is non-nil.
+	// The voxgig-struct words (clone, getpath, setpath, inject, merge, walk,
+	// items, transform, validate, selector) moved out of core into the
+	// aql:struct module — see native/struct_module.go — so they are no
+	// longer expected in the global registry.
+	// jsonify moved to aql:struct; fetch/prepare/direct moved to aql:net —
+	// so they are no longer expected in the global registry.
 	names := []string{
-		"clone", "create", "filter", "flatten", "getpath", "inject",
-		"items", "join", "jsonify", "list", "load", "merge", "pad",
-		"remove", "selector", "setpath", "size", "slice", "transform",
-		"update", "validate", "walk",
+		"create", "filter", "flatten", "join", "list", "load",
+		"remove", "size", "slice", "update",
 	}
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
@@ -641,6 +645,7 @@ func defaultRegistry(t *testing.T) *Registry {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	return r
 }
 
@@ -697,6 +702,11 @@ func makeWalkValueFn() Value {
 func TestWalkBeforeHandler(t *testing.T) {
 	r := defaultRegistry(t)
 	Register(r)
+	// getpath moved to aql:struct; the walk callback body uses it, so make
+	// it resolvable in this handler-level test registry.
+	for _, n := range StructModuleNatives {
+		r.RegisterNativeFunc(n)
+	}
 	data := newMap("a", NewInteger(1))
 	fn := makeWalkValueFn()
 	result, err := walkBeforeHandler([]Value{fn, data}, nil, nil, r)
@@ -713,6 +723,9 @@ func TestWalkBeforeHandler(t *testing.T) {
 func TestWalkBeforeAfterHandler(t *testing.T) {
 	r := defaultRegistry(t)
 	Register(r)
+	for _, n := range StructModuleNatives {
+		r.RegisterNativeFunc(n)
+	}
 	data := newMap("x", NewString("hello"))
 	fn := makeWalkValueFn()
 	result, err := walkBeforeAfterHandler([]Value{fn, fn, data}, nil, nil, r)

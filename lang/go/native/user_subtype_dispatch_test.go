@@ -51,6 +51,7 @@ func TestUserTypeBindingShape_ObjectRefinement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registry: %v", err)
 	}
+	registerIOWords(r)
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Foo"),
 		NewOpenParen(),
@@ -137,6 +138,7 @@ func TestResolveSigType_AllUserTypeKinds(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			r, _ := DefaultRegistry()
+			registerIOWords(r)
 			input := append([]Value{
 				NewWord("def"), NewWord("X"),
 				NewOpenParen(),
@@ -170,6 +172,7 @@ func TestResolveSigType_AllUserTypeKinds(t *testing.T) {
 
 func TestProbeIsHandlerPath_DEBUG(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Pos"),
 		NewWord("refine"), NewWord("Integer"),
@@ -201,6 +204,7 @@ func TestProbeIsHandlerPath_DEBUG(t *testing.T) {
 
 func TestProbeFooInstance_DEBUG(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Foo"),
 		NewOpenParen(),
@@ -240,6 +244,7 @@ func TestProbeFooInstance_DEBUG(t *testing.T) {
 
 func TestProbeMaybe_DEBUG(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Maybe"),
 		NewOpenParen(),

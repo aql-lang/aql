@@ -11,6 +11,7 @@ func TestPrintString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -27,6 +28,7 @@ func TestPrintInteger(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -43,6 +45,7 @@ func TestPrintBoolean(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -59,6 +62,7 @@ func TestPrintMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -78,6 +82,7 @@ func TestPrintMapMultiKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -98,6 +103,7 @@ func TestPrintList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -116,6 +122,7 @@ func TestPrintTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -167,6 +174,7 @@ func TestPrintConsumesValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -182,6 +190,7 @@ func TestPrintEmptyTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -205,6 +214,7 @@ func TestPrintstrString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -221,6 +231,7 @@ func TestPrintstrNoNewline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -237,6 +248,7 @@ func TestPrintstrInteger(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -253,6 +265,7 @@ func TestPrintstrConsumesValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 

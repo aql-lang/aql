@@ -8,7 +8,7 @@ import (
 
 // --- Naming rule: capitalisation selects type vs value binding ---
 //
-// `def` is the universal binder (lang/doc/design/TYPE-UNIFORM.0.md).
+// `def` is the universal binder (design/TYPE-UNIFORM.0.md).
 // The *name's capitalisation* selects what is bound: a capitalised
 // name is a TYPE binding, a lowercase name is a VALUE binding.
 
@@ -84,6 +84,7 @@ func TestNameCase_UndefUpperEmptiesType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
+	seedAQL(a)
 	if _, err := a.Run("def Foo Integer\nundef Foo\nFoo"); err == nil {
 		t.Fatal("expected error — Foo undefined after undef, got nil")
 	}

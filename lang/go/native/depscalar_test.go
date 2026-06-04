@@ -212,6 +212,7 @@ func TestRunDecimalGTEReturnsDepDecimal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewTypeLiteral(TDecimal),
 		NewWord("gte"),
@@ -227,6 +228,7 @@ func TestRunStringLTReturnsDepString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewTypeLiteral(TString),
 		NewWord("lt"),
@@ -244,6 +246,7 @@ func TestRunAtomGTEReturnsDepAtom(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewTypeLiteral(TAtom),
 		NewWord("gte"),
@@ -261,6 +264,7 @@ func TestDepConstructorRejectsMismatchedBound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	e := New(r)
 	_, err = e.Run([]Value{
 		NewTypeLiteral(TInteger),
@@ -278,6 +282,7 @@ func TestIsCheckWithDepDecimal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewDecimal(2.0),
 		NewWord("is"),
@@ -298,6 +303,7 @@ func TestIsCheckWithDepString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewString("apple"),
 		NewWord("is"),

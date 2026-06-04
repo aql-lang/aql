@@ -334,8 +334,6 @@ scalar type literal AND the forward arg is concrete; otherwise the
 |------|--------------------------|---------|-------|----------|
 | `__pa` /s | `[]` | `[]` | Internal: pops args stack | — |
 | `args` | `[]` | `[L]` | Returns current fn args from argsStack | — |
-| `call` | `[L]` | `[Any...]` | Splices list contents onto stack | `arg0: L` |
-| `dblcall` | `[I, L]` | `[Any...]` | Doubles integer, then calls body | `arg1: L` |
 | `def` | `[S, Any]` | `[]` | Define word (literal or fn body) | — |
 | | `[A, Any]` /q | `[]` | | — |
 | `fn` | `[L]` | `[Function]` | Parse signature triples from list | `arg0: L` |
@@ -399,16 +397,10 @@ scalar type literal AND the forward arg is concrete; otherwise the
 | Word | Signatures (match order) | Returns | Notes | Data Arg |
 |------|--------------------------|---------|-------|----------|
 | `print` | `[Any]` | `[]` | Print value to stdout with newline | — |
-| `printstr` | `[Any]` | `[]` | Print value to stdout without newline | — |
-| `read` | `[S, M]` | `[Any]` | Opts: {enc, fmt, nl}; read file | — |
-| | `[S]` | `[Any]` | Read file at path | — |
-| `stderr` | `[]` | `[S]` | Push stderr path string | — |
-| `stdin` | `[]` | `[S]` | Push stdin path string | — |
-| `stdout` | `[]` | `[S]` | Push stdout path string | — |
-| `trace` | `[L]` | `[Any...]` | Evaluate list with step-by-step trace output | `arg0: L` |
-| `write` | `[S, S, M]` | `[S]` | Opts: {enc, fmt, mode, nl}; write string to file | — |
-| | `[S, Any, M]` | `[S]` | Write non-string data (auto-format as jsonic) | — |
-| | `[S, S]` | `[S]` | Write string to file at path | — |
+
+(`printstr`, `read`, `write`, `stdin`, `stdout`, `stderr`, `trace` moved
+to the `aql:io` module — `IO.` namespace. `print` is the only output word
+that stays in core.)
 
 
 ## Module

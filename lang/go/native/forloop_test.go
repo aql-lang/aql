@@ -12,6 +12,7 @@ func TestForCount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -39,6 +40,7 @@ func TestForRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -65,6 +67,7 @@ func TestForRangeStep(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -91,6 +94,7 @@ func TestForZeroIterations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -114,6 +118,7 @@ func TestForBodyAccumulates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// for 3 [i] → each iteration pushes i to results → [0, 1, 2]
 	result := runAQL(t, r, []Value{
@@ -139,6 +144,7 @@ func TestForPrintstr(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -159,6 +165,7 @@ func TestForBreak(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -191,6 +198,7 @@ func TestForContinue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -222,6 +230,7 @@ func TestForStepZero(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	err = runAQLError(t, r, []Value{
 		NewWord("for"),
 		NewList([]Value{NewInteger(0), NewInteger(10), NewInteger(0)}),
@@ -241,6 +250,7 @@ func TestForNegativeStep(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -268,6 +278,7 @@ func TestForNoStackGrowth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -289,6 +300,7 @@ func TestForIteratorScoping(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// After "for 3 [i]", the word "i" is out of scope and should error
 	e := New(r)

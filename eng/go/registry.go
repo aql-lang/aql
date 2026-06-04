@@ -43,7 +43,7 @@ type Registry struct {
 	Capabilities *CapabilityRegistry
 	// Ideals holds the type-kind descriptors — the registered,
 	// dynamically controllable constructors `type` dispatches through.
-	// See ideal.go and lang/doc/design/IDEAL.0.md.
+	// See ideal.go and design/IDEAL.0.md.
 	Ideals    *IdealRegistry
 	Output    io.Writer // output writer for print/printstr and stdout
 	ErrOutput io.Writer // error output writer for stderr

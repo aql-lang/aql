@@ -27,6 +27,7 @@ func TestMapFunctionAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	r.SetParseFunc(parser.Parse)
 
 	setup := `

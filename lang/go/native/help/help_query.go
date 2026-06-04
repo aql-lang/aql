@@ -114,7 +114,7 @@ func init() {
 			"For .csv/.tsv files, loads data as a table. " +
 			"Use a list argument to rename imports (not supported for data files).",
 		Examples: []string{
-			`"aql:math" import end   ;# native module → math.* namespace`,
+			`"aql:math-util" import end   ;# native module → math.* namespace`,
 			`"./lib.aql" import end  ;# sibling file's exports`,
 			`import [Orig Alias] "./lib.aql" end  ;# rename on import`,
 		},

@@ -37,7 +37,6 @@ func init() {
 		"bsr 2 3":                       "0",
 		"busr 2 3":                      "0",
 		"bxor 2 3":                      "1",
-		"call ['a','b']":                "'a' 'b'",
 		"changecase 'a' {a:1,b:2}":      "'a'",
 		"changecase 'b'":                "'b'",
 		"changecase a/q {c:3,d:4}":      "'a'",

@@ -108,36 +108,36 @@ func TestAliasMod(t *testing.T) {
 
 func TestAliasAbs(t *testing.T) {
 	runAliasTest(t, aliasCase{
-		name:      "Math.abs",
-		defStep:   "def magnitude fn [[Integer] [Integer] [Math.abs]]",
-		origSteps: []string{"-5 Math.abs"},
+		name:      "MathUtil.abs",
+		defStep:   "def magnitude fn [[Integer] [Integer] [MathUtil.abs]]",
+		origSteps: []string{"-5 MathUtil.abs"},
 		aliaSteps: []string{"-5 magnitude"},
 	})
 }
 
 func TestAliasNegate(t *testing.T) {
 	runAliasTest(t, aliasCase{
-		name:      "Math.negate",
-		defStep:   "def neg fn [[Integer] [Integer] [Math.negate]]",
-		origSteps: []string{"5 Math.negate"},
+		name:      "MathUtil.negate",
+		defStep:   "def neg fn [[Integer] [Integer] [MathUtil.negate]]",
+		origSteps: []string{"5 MathUtil.negate"},
 		aliaSteps: []string{"5 neg"},
 	})
 }
 
 func TestAliasMin(t *testing.T) {
 	runAliasTest(t, aliasCase{
-		name:      "Math.min",
-		defStep:   "def smallest fn [[Integer Integer] [Integer] [Math.min]]",
-		origSteps: []string{"5 3 Math.min"},
+		name:      "MathUtil.min",
+		defStep:   "def smallest fn [[Integer Integer] [Integer] [MathUtil.min]]",
+		origSteps: []string{"5 3 MathUtil.min"},
 		aliaSteps: []string{"5 smallest 3"},
 	})
 }
 
 func TestAliasMax(t *testing.T) {
 	runAliasTest(t, aliasCase{
-		name:      "Math.max",
-		defStep:   "def largest fn [[Integer Integer] [Integer] [Math.max]]",
-		origSteps: []string{"5 3 Math.max"},
+		name:      "MathUtil.max",
+		defStep:   "def largest fn [[Integer Integer] [Integer] [MathUtil.max]]",
+		origSteps: []string{"5 3 MathUtil.max"},
 		aliaSteps: []string{"5 largest 3"},
 	})
 }
@@ -476,140 +476,11 @@ func TestAliasGet(t *testing.T) {
 	})
 }
 
-// ==========================================================================
-// Builtin: Higher-order
-// ==========================================================================
-
-func TestAliasCall(t *testing.T) {
-	runAliasTest(t, aliasCase{
-		name:      "call",
-		defStep:   "def mycall word [call]",
-		origSteps: []string{"5 [dup mul] call"},
-		aliaSteps: []string{"5 [dup mul] mycall"},
-	})
-}
-
-func TestAliasDblcall(t *testing.T) {
-	runAliasTest(t, aliasCase{
-		name:      "dblcall",
-		defStep:   "def mydbl word [dblcall]",
-		origSteps: []string{"[dup mul] 5 dblcall"},
-		aliaSteps: []string{"[dup mul] 5 mydbl"},
-	})
-}
-
-// ==========================================================================
-// Native: clone
-// ==========================================================================
-
-func TestAliasClone(t *testing.T) {
-	runAliasTest(t, aliasCase{
-		name:      "clone",
-		defStep:   "def myclone word [clone]",
-		origSteps: []string{"{a:1 b:2} clone"},
-		aliaSteps: []string{"{a:1 b:2} myclone"},
-	})
-}
-
-// ==========================================================================
-// Native: merge
-// ==========================================================================
-
-func TestAliasMerge(t *testing.T) {
-	runAliasTest(t, aliasCase{
-		name:      "merge",
-		defStep:   "def mymerge word [merge]",
-		origSteps: []string{"merge {a:1} {b:2}"},
-		aliaSteps: []string{"mymerge {a:1} {b:2}"},
-	})
-}
-
-// ==========================================================================
-// Native: walk
-// ==========================================================================
-
-func TestAliasWalkNoCallback(t *testing.T) {
-	runAliasTest(t, aliasCase{
-		name:      "walk (no callback)",
-		defStep:   "def mywalk word [walk]",
-		origSteps: []string{"{a:1 b:2} walk"},
-		aliaSteps: []string{"{a:1 b:2} mywalk"},
-	})
-}
-
-func TestAliasWalkWithBefore(t *testing.T) {
-	runAliasTest(t, aliasCase{
-		name:      "walk (before callback)",
-		defStep:   "def mywalk word [walk]",
-		origSteps: []string{"{a:1 b:2} (fn [[m:Map] [Any] [m.value]]) walk"},
-		aliaSteps: []string{"{a:1 b:2} (fn [[m:Map] [Any] [m.value]]) mywalk"},
-	})
-}
-
-// ==========================================================================
-// Native: transform
-// ==========================================================================
-
-func TestAliasTransform(t *testing.T) {
-	runAliasTest(t, aliasCase{
-		name:      "transform",
-		defStep:   "def mytransform word [transform]",
-		origSteps: []string{`{a:1 b:2} transform {a:"a"}`},
-		aliaSteps: []string{`{a:1 b:2} mytransform {a:"a"}`},
-	})
-}
-
-// ==========================================================================
-// Native: getpath
-// ==========================================================================
-
-func TestAliasGetpath(t *testing.T) {
-	runAliasTest(t, aliasCase{
-		name:      "getpath",
-		defStep:   "def mygetpath word [getpath]",
-		origSteps: []string{`getpath "a.b" {a:{b:42}}`},
-		aliaSteps: []string{`mygetpath "a.b" {a:{b:42}}`},
-	})
-}
-
-// ==========================================================================
-// Native: setpath
-// ==========================================================================
-
-func TestAliasSetpath(t *testing.T) {
-	runAliasTest(t, aliasCase{
-		name:      "setpath",
-		defStep:   "def mysetpath word [setpath]",
-		origSteps: []string{`{a:1} setpath "b" 99`},
-		aliaSteps: []string{`{a:1} mysetpath "b" 99`},
-	})
-}
-
-// ==========================================================================
-// Native: validate
-// ==========================================================================
-
-func TestAliasValidate(t *testing.T) {
-	runAliasTest(t, aliasCase{
-		name:      "validate",
-		defStep:   "def myvalidate word [validate]",
-		origSteps: []string{`validate {name:"$STRING" age:"$NUMBER"} {name:"Alice" age:30}`},
-		aliaSteps: []string{`myvalidate {name:"$STRING" age:"$NUMBER"} {name:"Alice" age:30}`},
-	})
-}
-
-// ==========================================================================
-// Native: inject
-// ==========================================================================
-
-func TestAliasInject(t *testing.T) {
-	runAliasTest(t, aliasCase{
-		name:      "inject",
-		defStep:   "def myinject word [inject]",
-		origSteps: []string{"{a:`b`} inject {b:42}"},
-		aliaSteps: []string{"{a:`b`} myinject {b:42}"},
-	})
-}
+// (clone / merge / walk / transform / getpath / setpath / validate / inject
+// alias tests were removed when those voxgig-struct words moved out of core
+// into the aql:struct module — they are no longer unqualified words, so the
+// `def myX word [X]` core-alias idiom no longer applies. Struct-module
+// behaviour is covered by struct_functions_test.go and the module tests.)
 
 // ==========================================================================
 // Native: list

@@ -155,20 +155,20 @@ constants, import the `aql:math` module — words register under the
 `math.` prefix:
 
 ```
-aql> "aql:math" import end
-aql> Math.abs -5        => 5
-aql> Math.min 3 5       => 3
-aql> Math.max 3 5       => 5
-aql> Math.floor 3.7     => 3
-aql> Math.ceil 3.2      => 4
-aql> Math.round 3.5     => 4
-aql> Math.trunc 3.9     => 3
-aql> Math.sqrt 16       => 4.0
-aql> Math.log 2.718281828   => 1.0
-aql> Math.sin 0         => 0.0
-aql> Math.hypot 3 4     => 5.0
-aql> Math.pi            => 3.141592653589793
-aql> Math.e             => 2.718281828459045
+aql> "aql:math-util" import end
+aql> MathUtil.abs -5        => 5
+aql> MathUtil.min 3 5       => 3
+aql> MathUtil.max 3 5       => 5
+aql> MathUtil.floor 3.7     => 3
+aql> MathUtil.ceil 3.2      => 4
+aql> MathUtil.round 3.5     => 4
+aql> MathUtil.trunc 3.9     => 3
+aql> MathUtil.sqrt 16       => 4.0
+aql> MathUtil.log 2.718281828   => 1.0
+aql> MathUtil.sin 0         => 0.0
+aql> MathUtil.hypot 3 4     => 5.0
+aql> MathUtil.pi            => 3.141592653589793
+aql> MathUtil.e             => 2.718281828459045
 ```
 
 
@@ -182,16 +182,16 @@ all-forward: `WORD input arg…`. See
 [§3: the argument-order rule](#the-argument-order-rule).
 
 ```
-aql> "hello" upper                 => 'HELLO'
-aql> "HELLO" lower                 => 'hello'
-aql> split "hello,world" ","       => ['hello' 'world']
-aql> ["a","b","c"] concat          => 'abc'   # joins list elements
-aql> contains "hello" "ell"        => true
-aql> indexof "hello" "ll"          => 2
+aql> "aql:string-util" import end "hello" StringUtil.upper                 => 'HELLO'
+aql> "aql:string-util" import end "HELLO" StringUtil.lower                 => 'hello'
+aql> "aql:string-util" import end StringUtil.split "hello,world" ","       => ['hello' 'world']
+aql> "aql:string-util" import end ["a","b","c"] StringUtil.concat          => 'abc'   # joins list elements
+aql> "aql:string-util" import end StringUtil.contains "hello" "ell"        => true
+aql> "aql:string-util" import end StringUtil.indexof "hello" "ll"          => 2
 aql> "hello" slice 1 3             => 'el'
-aql> replace "hello" "l" "r"       => 'herlo'
-aql> "  hi  " trim                 => 'hi'
-aql> "hi" pad 5                    => 'hi   '
+aql> "aql:string-util" import end StringUtil.replace "hello" "l" "r"       => 'herlo'
+aql> "aql:string-util" import end "  hi  " StringUtil.trim                 => 'hi'
+aql> "aql:string-util" import end "hi" StringUtil.pad 5                    => 'hi   '
 ```
 
 Backtick template strings interpolate `${...}` expressions:
@@ -470,8 +470,8 @@ the end of the block. Bare-word declarations pop from the stack
 rule):
 
 ```
-aql> "aql:math" import end
-aql> 3 4 var [[a b] (a mul a) add (b mul b) Math.sqrt]   => 5.0
+aql> "aql:math-util" import end
+aql> 3 4 var [[a b] (a mul a) add (b mul b) MathUtil.sqrt]   => 5.0
 ```
 
 The first element of the list is the binding list. The remaining
@@ -483,7 +483,7 @@ aql> var [[[x 2] [y 10]] x add y]               => 12
 ```
 
 
-## 15. Evaluation with `do`, `call`, and `quote`
+## 15. Evaluation with `do` and `quote`
 
 A list literal evaluates its contents by default and keeps the
 results *as a list* — `[1 add 2]` becomes `[3]`, not `3`:
@@ -499,13 +499,6 @@ rather than in a list:
 ```
 aql> do [1 add 2]                    => 3
 aql> do {x: [3 add 4], y: 5}        => {x:7 y:5}
-```
-
-`call` splices a list onto the current stack:
-
-```
-aql> 1 2 [add] call                  => 3
-aql> [3 4 mul] call                  => 12
 ```
 
 `quote` prevents a single token from being interpreted:
@@ -534,11 +527,11 @@ or inspect its fields with `.`.
 
 ## 17. Concurrency with `await`
 
-`await` runs a list of code blocks in parallel and collects the
-results:
+`await` (in the `aql:time-util` module) runs a list of code blocks
+in parallel and collects the results:
 
 ```
-aql> await [[1 add 2] [3 add 4]]     => [3 7]
+aql> "aql:time-util" import end TimeUtil.await [[1 add 2] [3 add 4]]     => [3 7]
 ```
 
 Pick a mode via an options map — these mirror JavaScript Promise
@@ -612,8 +605,8 @@ Built-in native modules: `aql:math`, `aql:time-util`, `aql:matrix-util`,
 under a namespace prefix (e.g. `math.`, `time.`):
 
 ```
-aql> "aql:math" import end
-aql> 5 Math.log                      => 1.6094379124341003
+aql> "aql:math-util" import end
+aql> 5 MathUtil.log                      => 1.6094379124341003
 ```
 
 The trailing `end` stops `import`'s forward collection from

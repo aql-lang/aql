@@ -2,31 +2,31 @@
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module. Import binds the `math` namespace, then words are
-# called via dot-access: `"aql:math" import end  Math.word args`. Words
+# called via dot-access: `"aql:math-util" import end  MathUtil.word args`. Words
 # operate on Numbers; results are Decimal for the transcendental/root
 # functions and Integer for the rounding family applied to Integers.
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  sign / magnitude
-"aql:math" import end  Math.abs -5	5	absolute value
-"aql:math" import end  Math.sign -7	-1	sign: -1 / 0 / 1
-"aql:math" import end  Math.negate 5	-5	arithmetic negation
+"aql:math-util" import end  MathUtil.abs -5	5	absolute value
+"aql:math-util" import end  MathUtil.sign -7	-1	sign: -1 / 0 / 1
+"aql:math-util" import end  MathUtil.negate 5	-5	arithmetic negation
 #
 # §2  rounding family
-"aql:math" import end  Math.ceil 2.3	3	round up
-"aql:math" import end  Math.floor 2.7	2	round down
-"aql:math" import end  Math.round 4.6	5	round to nearest
-"aql:math" import end  Math.trunc 4.9	4	truncate toward zero
+"aql:math-util" import end  MathUtil.ceil 2.3	3	round up
+"aql:math-util" import end  MathUtil.floor 2.7	2	round down
+"aql:math-util" import end  MathUtil.round 4.6	5	round to nearest
+"aql:math-util" import end  MathUtil.trunc 4.9	4	truncate toward zero
 #
 # §3  roots / logs (Decimal results)
-"aql:math" import end  Math.sqrt 16.0	4.0	square root
-"aql:math" import end  Math.cbrt 27.0	3.0	cube root
-"aql:math" import end  Math.log2 8.0	3.0	base-2 log
-"aql:math" import end  Math.log10 1000.0	3.0	base-10 log
+"aql:math-util" import end  MathUtil.sqrt 16.0	4.0	square root
+"aql:math-util" import end  MathUtil.cbrt 27.0	3.0	cube root
+"aql:math-util" import end  MathUtil.log2 8.0	3.0	base-2 log
+"aql:math-util" import end  MathUtil.log10 1000.0	3.0	base-10 log
 #
 # §4  composition and swap form
-"aql:math" import end  Math.sqrt 16.0 add 1.0	5.0	results compose like any value
-"aql:math" import end  16.0 Math.sqrt	4.0	swap form also dispatches
+"aql:math-util" import end  MathUtil.sqrt 16.0 add 1.0	5.0	results compose like any value
+"aql:math-util" import end  16.0 MathUtil.sqrt	4.0	swap form also dispatches
 #
 # §5  negative — a namespace word is undefined until the module is imported
-Math.sqrt 16.0	ERROR:undefined_word	`math` is unbound without `import`
+MathUtil.sqrt 16.0	ERROR:undefined_word	`math` is unbound without `import`

@@ -40,7 +40,12 @@ func newAQLWithDirectSDK(t *testing.T) *lang.AQL {
 	if err != nil {
 		t.Fatal(err)
 	}
+	seedAQL(a)
 	a.SetSDK("voxgig-solardemo", makeTestSDKForDirect(t))
+	// prepare/direct moved to aql:net; import once (state persists across Run).
+	if _, err := a.Run(`"aql:net" import`); err != nil {
+		t.Fatal(err)
+	}
 	return a
 }
 
@@ -49,7 +54,7 @@ func newAQLWithDirectSDK(t *testing.T) *lang.AQL {
 func TestPrepareAPIBasic(t *testing.T) {
 	a := newAQLWithDirectSDK(t)
 
-	result, err := a.Run(`prepare {kind:"api", spec:"voxgig-solardemo", path:"/planets", method:"GET"}`)
+	result, err := a.Run(`Net.prepare {kind:"api", spec:"voxgig-solardemo", path:"/planets", method:"GET"}`)
 	if err != nil {
 		t.Fatalf("prepare failed: %v", err)
 	}
@@ -77,7 +82,7 @@ func TestPrepareAPIBasic(t *testing.T) {
 func TestPrepareAPIWithHeaders(t *testing.T) {
 	a := newAQLWithDirectSDK(t)
 
-	result, err := a.Run(`prepare {kind:"api", spec:"voxgig-solardemo", path:"/planets", method:"POST", headers:{Authorization:"Bearer test123"}}`)
+	result, err := a.Run(`Net.prepare {kind:"api", spec:"voxgig-solardemo", path:"/planets", method:"POST", headers:{Authorization:"Bearer test123"}}`)
 	if err != nil {
 		t.Fatalf("prepare with headers failed: %v", err)
 	}
@@ -100,7 +105,7 @@ func TestPrepareAPIDefaultMethod(t *testing.T) {
 	a := newAQLWithDirectSDK(t)
 
 	// Without method, should default to GET.
-	result, err := a.Run(`prepare {kind:"api", spec:"voxgig-solardemo", path:"/planets"}`)
+	result, err := a.Run(`Net.prepare {kind:"api", spec:"voxgig-solardemo", path:"/planets"}`)
 	if err != nil {
 		t.Fatalf("prepare default method failed: %v", err)
 	}
@@ -122,7 +127,7 @@ func TestPrepareAPIDefaultMethod(t *testing.T) {
 func TestPrepareAPIWithJsonExtension(t *testing.T) {
 	a := newAQLWithDirectSDK(t)
 
-	result, err := a.Run(`prepare {kind:"api", spec:"voxgig-solardemo.json", path:"/test"}`)
+	result, err := a.Run(`Net.prepare {kind:"api", spec:"voxgig-solardemo.json", path:"/test"}`)
 	if err != nil {
 		t.Fatalf("prepare with .json extension failed: %v", err)
 	}
@@ -137,7 +142,7 @@ func TestPrepareAPIWithJsonExtension(t *testing.T) {
 func TestDirectAPIBasic(t *testing.T) {
 	a := newAQLWithDirectSDK(t)
 
-	result, err := a.Run(`direct {kind:"api", spec:"voxgig-solardemo", path:"/planets", method:"GET"}`)
+	result, err := a.Run(`Net.direct {kind:"api", spec:"voxgig-solardemo", path:"/planets", method:"GET"}`)
 	if err != nil {
 		t.Fatalf("direct failed: %v", err)
 	}
@@ -163,7 +168,7 @@ func TestDirectAPIBasic(t *testing.T) {
 func TestDirectAPIWithJsonExtension(t *testing.T) {
 	a := newAQLWithDirectSDK(t)
 
-	result, err := a.Run(`direct {kind:"api", spec:"voxgig-solardemo.json", path:"/test"}`)
+	result, err := a.Run(`Net.direct {kind:"api", spec:"voxgig-solardemo.json", path:"/test"}`)
 	if err != nil {
 		t.Fatalf("direct with .json extension failed: %v", err)
 	}
@@ -176,7 +181,7 @@ func TestDirectAPIWithJsonExtension(t *testing.T) {
 func TestDirectAPIPost(t *testing.T) {
 	a := newAQLWithDirectSDK(t)
 
-	result, err := a.Run(`direct {kind:"api", spec:"voxgig-solardemo", path:"/planets", method:"POST", body:"{\"name\":\"Mars\"}"}`)
+	result, err := a.Run(`Net.direct {kind:"api", spec:"voxgig-solardemo", path:"/planets", method:"POST", body:"{\"name\":\"Mars\"}"}`)
 	if err != nil {
 		t.Fatalf("direct POST failed: %v", err)
 	}

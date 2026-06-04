@@ -41,6 +41,7 @@ func (convOverrideBehavior) ToList(Value) (Value, error) {
 func runConvert(t *testing.T, val Value, src string) string {
 	t.Helper()
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	InstallDef(r, "thing", val)
 	toks, err := parser.Parse(src)
 	if err != nil {

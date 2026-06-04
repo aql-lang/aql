@@ -1,0 +1,20 @@
+# AQL Language Specification: the aql:io module
+# Format: input<TAB>expected<TAB>description
+#
+# Loadable module of input/output words that were moved out of the core
+# registry. They are reached only after `import`, under the `IO`
+# namespace: `"aql:io" import end IO.word args`. `print` is NOT here — it
+# stays a core word so basic output needs no import.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  stream handles
+"aql:io" import end IO.stdout	'<stdout>'	standard-output handle
+"aql:io" import end IO.stderr	'<stderr>'	standard-error handle
+#
+# §2  trace — run a list as a traced sub-program, returning its result
+"aql:io" import end IO.trace [1 add 2 mul 3]	9	traced evaluation returns the value
+#
+# §3  negative — the words are gone from core (unbound without import)
+read "x"	ERROR:undefined_word	`read` is no longer a core word
+folder "x"	ERROR:undefined_word	`folder` (filesystem op) also moved to aql:io
+IO.stdout	ERROR:undefined_word	`IO` is unbound without `import`

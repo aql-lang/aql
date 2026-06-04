@@ -63,24 +63,15 @@ var behaveNative = NativeFunc{
 // voxgig/struct's JSON encoder; `nodify` exposes just the projection
 // so tests and downstream pipelines can observe the Node/Scalar
 // directly.
-var nodifyNative = NativeFunc{
-	Name: "nodify",
-
-	Signatures: []NativeSig{{
-		Args: []*Type{TAny},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-			out, err := eng.NodifyValue(args[0])
-			if err != nil {
-				return nil, err
-			}
-			return []Value{out}, nil
-		},
-		Returns: []*Type{TAny}, BarrierPos:
-
-		// behaviorEntry describes how `behave` should validate the supplied
-		// fn and where the resulting body lives on the target Type's wrapper.
-		-1,
-	}},
+// nodifyHandler exposes voxgig/struct's Node/Scalar projection. `nodify`
+// moved to the aql:struct module (see struct_module.go); the handler stays
+// here next to its sibling `behave`.
+func nodifyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	out, err := eng.NodifyValue(args[0])
+	if err != nil {
+		return nil, err
+	}
+	return []Value{out}, nil
 }
 
 type behaviorEntry struct {

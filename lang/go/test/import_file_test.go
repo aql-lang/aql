@@ -23,9 +23,19 @@ func runModuleSteps(t *testing.T, files map[string]string, steps []string) ([]na
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	native.SetHostFileOps(reg, mem)
 	reg.SetParseFunc(parser.Parse)
 	modules.InstallResolver(reg) // production module wiring (lang.New)
+	{
+		prev := reg.Modules.InitFunc
+		reg.Modules.InitFunc = func(child *native.Registry) {
+			if prev != nil {
+				prev(child)
+			}
+			registerIOWords(child)
+		}
+	}
 
 	eng := native.New(reg)
 	var result []native.Value
@@ -588,9 +598,19 @@ func runModuleStepsWithCwd(t *testing.T, cwd string, files map[string]string, st
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	native.SetHostFileOps(reg, mem)
 	reg.SetParseFunc(parser.Parse)
 	modules.InstallResolver(reg) // production module wiring (lang.New)
+	{
+		prev := reg.Modules.InitFunc
+		reg.Modules.InitFunc = func(child *native.Registry) {
+			if prev != nil {
+				prev(child)
+			}
+			registerIOWords(child)
+		}
+	}
 
 	eng := native.New(reg)
 	var result []native.Value

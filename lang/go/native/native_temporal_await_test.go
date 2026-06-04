@@ -13,6 +13,7 @@ import (
 
 func TestAwaitAllDefault(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 
 	// await [[1 add 2] [3 add 4]]
@@ -45,6 +46,7 @@ func TestAwaitAllDefault(t *testing.T) {
 
 func TestAwaitAllWithError(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 
 	// await [[1 add 2] [1 div 0]]
@@ -69,6 +71,7 @@ func TestAwaitAllWithError(t *testing.T) {
 
 func TestAwaitAllRunsInParallel(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 
 	// Each branch sleeps 50ms. If parallel, total should be ~50ms, not ~150ms.
@@ -101,6 +104,7 @@ func TestAwaitAllRunsInParallel(t *testing.T) {
 
 func TestAwaitAllEmpty(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 
 	inner := NewList([]Value{})
@@ -124,6 +128,7 @@ func TestAwaitAllEmpty(t *testing.T) {
 
 func TestAwaitFull(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 
 	// Build options: make Options {mode:'full}
@@ -190,6 +195,7 @@ func TestAwaitFull(t *testing.T) {
 
 func TestAwaitFirst(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 
 	// Register a word that records call order.
 	var order atomic.Int32
@@ -229,6 +235,7 @@ func TestAwaitFirst(t *testing.T) {
 
 func TestAwaitFirstWithError(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 
 	optsFields := NewOrderedMap()
@@ -258,6 +265,7 @@ func TestAwaitFirstWithError(t *testing.T) {
 
 func TestAwaitAny(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 
 	optsFields := NewOrderedMap()
@@ -287,6 +295,7 @@ func TestAwaitAny(t *testing.T) {
 
 func TestAwaitAnyAllReject(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 
 	optsFields := NewOrderedMap()
@@ -311,6 +320,7 @@ func TestAwaitAnyAllReject(t *testing.T) {
 
 func TestAwaitAnyFirstSuccess(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 
 	optsFields := NewOrderedMap()
@@ -340,6 +350,7 @@ func TestAwaitAnyFirstSuccess(t *testing.T) {
 
 func TestAwaitWithSleep(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 
 	// Two branches that sleep then return a value.
@@ -371,6 +382,7 @@ func TestAwaitWithSleep(t *testing.T) {
 
 func TestAwaitAllMultipleErrors(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 
 	// All branches error — should return the first error in order.
@@ -391,6 +403,7 @@ func TestAwaitAllMultipleErrors(t *testing.T) {
 
 func TestAwaitFullAllSucceed(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 
 	optsFields := NewOrderedMap()
@@ -429,6 +442,7 @@ func TestAwaitFullAllSucceed(t *testing.T) {
 
 func TestAwaitInvalidMode(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 
 	optsFields := NewOrderedMap()
@@ -455,6 +469,7 @@ func TestAwaitInvalidMode(t *testing.T) {
 
 func TestAwaitTypeLiteralNoPanic(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("panic: %v", r)
@@ -471,6 +486,7 @@ func TestAwaitTypeLiteralNoPanic(t *testing.T) {
 
 func TestAwaitNonListElement(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 
 	// Non-list elements are returned as-is.
@@ -506,6 +522,7 @@ func TestAwaitNonListElement(t *testing.T) {
 
 func TestAwaitMultiValueBranch(t *testing.T) {
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 
 	// Branch that leaves multiple values on the stack: [1 2 3]

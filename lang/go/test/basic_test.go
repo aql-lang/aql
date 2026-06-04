@@ -48,9 +48,11 @@ func TestBasic(t *testing.T) {
 
 			// Run through the engine with a fresh registry.
 			reg, err := native.DefaultRegistry()
+			registerIOWords(reg)
 			if err != nil {
 				t.Fatal(err)
 			}
+			registerIOWords(reg) // moved-out words (tpartial, …) available bare for the spec
 			eng := native.NewTop(reg)
 			result, err := eng.Run(values)
 

@@ -1,6 +1,9 @@
 package native
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // unpackNatives covers the destructuring word `unpack`, which extracts
 // selected entries from a Map (or Record) value and binds each to a
@@ -76,8 +79,103 @@ var unpackNatives = []NativeFunc{
 				RunInCheckMode: true,
 				BarrierPos:     -1,
 			},
+			// `unpack 'aql:time-util'`: import a module and bind every word
+			// of every export namespace as a bare local — `now`, `sleep`, …
+			// usable without the `TimeUtil.` prefix.
+			{
+				Args:       []*Type{TString},
+				Handler:    unpackModuleHandler,
+				Returns:    []*Type{},
+				BarrierPos: -1,
+			},
+			// `unpack ExportName 'aql:mod'`: import the module and unpack only
+			// the named export namespace (for multi-export modules). The name
+			// is captured as an atom via /q.
+			{
+				Args:       []*Type{TAtom, TString},
+				QuoteArgs:  map[int]bool{0: true},
+				Handler:    unpackModuleExportHandler,
+				Returns:    []*Type{},
+				BarrierPos: -1,
+			},
 		},
 	},
+}
+
+// resolveModuleDescForUnpack resolves a module name (with or without the
+// "aql:" prefix) to its ModuleDesc via the registry's native-module resolver.
+func resolveModuleDescForUnpack(r *Registry, modName string) (ModuleDesc, error) {
+	name := strings.TrimPrefix(modName, "aql:")
+	if name == "" {
+		return ModuleDesc{}, r.AqlError("unpack_error", "unpack: empty module name", "unpack")
+	}
+	if r.Modules.Resolver == nil {
+		return ModuleDesc{}, r.AqlError("unpack_error", "unpack: module resolver not configured (cannot unpack "+modName+")", "unpack")
+	}
+	desc, err := r.Modules.Resolver(name, r)
+	if err != nil {
+		return ModuleDesc{}, r.AqlError("unpack_error", "unpack: "+err.Error(), "unpack")
+	}
+	desc.Ref = "aql:" + name
+	desc.Kind = "native"
+	return desc, nil
+}
+
+// unpackExportMap binds each word in an export namespace's map as a bare def
+// in the current scope. Capitalised (type) names are skipped — unpack binds
+// values only.
+func unpackExportMap(r *Registry, exportMap *OrderedMap) {
+	if exportMap == nil {
+		return
+	}
+	for _, k := range exportMap.Keys() {
+		if IsCapitalisedName(k) || strings.HasPrefix(k, "$") {
+			continue
+		}
+		if v, ok := exportMap.Get(k); ok {
+			InstallDef(r, k, v)
+		}
+	}
+}
+
+// unpackModuleHandler implements `unpack 'aql:mod'` — resolve the module and
+// bind every word of every export namespace as a bare local.
+func unpackModuleHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	modName, err := args[0].AsConcreteString()
+	if err != nil {
+		return nil, r.AqlError("unpack_error", "unpack: module name must be a string", "unpack")
+	}
+	desc, err := resolveModuleDescForUnpack(r, modName)
+	if err != nil {
+		return nil, err
+	}
+	for _, exportMap := range desc.Exports {
+		unpackExportMap(r, exportMap)
+	}
+	return nil, nil
+}
+
+// unpackModuleExportHandler implements `unpack ExportName 'aql:mod'` — resolve
+// the module and unpack only the named export namespace.
+func unpackModuleExportHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	exportName, err := AsAtom(args[0])
+	if err != nil {
+		return nil, r.AqlError("unpack_error", "unpack: export name must be a word/atom", "unpack")
+	}
+	modName, err := args[1].AsConcreteString()
+	if err != nil {
+		return nil, r.AqlError("unpack_error", "unpack: module name must be a string", "unpack")
+	}
+	desc, err := resolveModuleDescForUnpack(r, modName)
+	if err != nil {
+		return nil, err
+	}
+	exportMap, ok := desc.Exports[exportName]
+	if !ok {
+		return nil, r.AqlError("unpack_error", fmt.Sprintf("unpack: export %q not found in module %q", exportName, modName), "unpack")
+	}
+	unpackExportMap(r, exportMap)
+	return nil, nil
 }
 
 // unpackSource resolves the source (sig[1]) to a keyed lookup plus its

@@ -14,6 +14,7 @@ func TestMarkMoveBasic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -68,6 +69,7 @@ func TestMarkMoveOneShotRemoval(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -103,6 +105,7 @@ func TestMarkMoveNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	input := []Value{
 		NewMove("nonexistent", "test: dangling move"),
 	}
@@ -125,6 +128,7 @@ func TestMarkMoveMultiplePairs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 
@@ -180,6 +184,7 @@ func TestMarkMoveWithLiterals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	id := NextMarkID()
 	// [1, mark, 2, 3, add, move] → first pass: 2+3=5, move triggers,
@@ -270,6 +275,7 @@ func TestHaltOnUndefinedStackEntry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	input := []Value{
 		NewInteger(1),
 		{}, // undefined/zero Value

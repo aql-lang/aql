@@ -11,7 +11,7 @@ import (
 // typeNatives covers the type-system words: refine, pathof, enum,
 // typeof, is, teq, tpartial, guard, base, tor, tand, tany, tall,
 // convert. New type ops follow the `t`-prefix convention — see
-// lang/doc/design/TYPE-OPERATIONS.0.md.
+// design/TYPE-OPERATIONS.0.md.
 //
 // `Resource` and `Entity` (the builtin object types) are NOT installed
 // via NativeFunc — they are user-typed values pushed onto the type
@@ -19,7 +19,7 @@ import (
 var typeNatives = []NativeFunc{
 	{
 		// refine is the uniform type constructor — see
-		// lang/doc/design/TYPE-UNIFORM.0.md. `refine BaseType arg`
+		// design/TYPE-UNIFORM.0.md. `refine BaseType arg`
 		// builds a (sub)type:
 		//   refine Object {fields}     → object type
 		//   refine <objtype> {fields}  → object subtype (inheritance)
@@ -103,15 +103,6 @@ var typeNatives = []NativeFunc{
 			BarrierPos: 1,
 			Handler:    teqHandler,
 			Returns:    []*Type{TBoolean},
-		}},
-	},
-	{
-		Name: "tpartial",
-
-		Signatures: []NativeSig{{
-			Args:    []*Type{TAny},
-			Handler: tpartialHandler,
-			Returns: []*Type{TType}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -253,7 +244,7 @@ func tableHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 // constructor. It does not branch on the base type itself — dispatch
 // is data-driven through the Ideal registry (r.Ideals): whichever
 // type-kind claims the base value supplies the construction logic.
-// See lang/doc/design/IDEAL.0.md. `refine` does not bind — pair it
+// See design/IDEAL.0.md. `refine` does not bind — pair it
 // with `def` (`def Foo (refine …)`).
 func refineHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	base := args[0]
@@ -284,7 +275,7 @@ func refineHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 // paired `def Name` then mints a fresh subtype parented at BaseType
 // (InstallType → MintType). `def Foo refine List` thus produces a
 // distinct List subtype that can serve as a dispatch surface for
-// `behave` — see lang/doc/design/TYPE-UNIFORM.0.md.
+// `behave` — see design/TYPE-UNIFORM.0.md.
 func refineBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	base := args[0]
 	if !IsTypeBody(base) {
@@ -316,7 +307,7 @@ func refineBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 // predicate, and the value-level Instantiate — are registered by the
 // eng kernel (registerKernelIdeals); type construction additionally
 // reuses the surface object/record/table handlers, wired here. See
-// lang/doc/design/IDEAL.0.md.
+// design/IDEAL.0.md.
 func installIdeals(r *Registry) {
 	if obj := r.Ideals.Get("Object"); obj != nil {
 		obj.Construct = func(base, arg Value, r *Registry) ([]Value, error) {
@@ -526,6 +517,19 @@ func teqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 }
 
 // ---- tpartial ----
+
+// TPartialModuleNatives holds `tpartial`, moved out of core into the
+// aql:type-util module (TypeUtil.tpartial). Its handler stays here.
+var TPartialModuleNatives = []NativeFunc{
+	{
+		Name: "tpartial",
+		Signatures: []NativeSig{{
+			Args:    []*Type{TAny},
+			Handler: tpartialHandler,
+			Returns: []*Type{TType}, BarrierPos: -1,
+		}},
+	},
+}
 
 // tpartialHandler wraps every field of a Record or Object type in
 // `T | None`. Idempotent: a field whose value already includes None

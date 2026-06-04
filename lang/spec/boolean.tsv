@@ -47,13 +47,13 @@ gt 5 3	false	forward `gt 5 3` = 3>5 = false
 6 lte 5	false	`6 lte 5` = 6<=5 = false
 #
 # §6  derived logical connectives
-implies true false	true	`implies true false` = false→true (b implies a)
-implies false true	false	`implies false true` = true→false = false
+"aql:logic-util" import end LogicUtil.implies true false	true	`implies true false` = false→true (b implies a)
+"aql:logic-util" import end LogicUtil.implies false true	false	`implies false true` = true→false = false
 xor true false	true	exclusive or
-xnor true true	true	xor's negation
-nand true true	false	not-and
-nor false false	true	not-or
-iff true true	true	if-and-only-if
+"aql:logic-util" import end LogicUtil.xnor true true	true	xor's negation
+"aql:logic-util" import end LogicUtil.nand true true	false	not-and
+"aql:logic-util" import end LogicUtil.nor false false	true	not-or
+"aql:logic-util" import end LogicUtil.iff true true	true	if-and-only-if
 #
 # §7  errors
 or true	ERROR:signature_error	or needs two operands (swap form: a or b)

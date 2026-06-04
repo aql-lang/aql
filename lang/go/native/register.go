@@ -24,10 +24,7 @@ func Register(r *Registry) {
 	// break / continue are owned by lang (see native_control.go); the
 	// kernel only provides the FlowCtrl type and the Run-loop dispatch.
 
-	// String
-	for _, n := range stringNatives {
-		r.RegisterNativeFunc(n)
-	}
+	// String words moved to the aql:string-util module.
 
 	// Stack ops
 	for _, n := range stackNatives {
@@ -44,10 +41,7 @@ func Register(r *Registry) {
 		r.RegisterNativeFunc(n)
 	}
 
-	// Binary (bitwise) — see lang/doc/design/BINARY-OPERATIONS.0.md.
-	for _, n := range binaryNatives {
-		r.RegisterNativeFunc(n)
-	}
+	// Bitwise operators (band, bor, …) moved to the aql:bin module.
 
 	// Comparison
 	for _, n := range comparisonNatives {
@@ -84,7 +78,7 @@ func Register(r *Registry) {
 		r.RegisterNativeFunc(n)
 	}
 	r.RegisterNativeFunc(behaveNative)
-	r.RegisterNativeFunc(nodifyNative)
+	// nodify moved to the aql:struct module (see struct_module.go).
 	r.RegisterNativeFunc(sortNative)
 	installResourceTypes(r)
 	installIdeals(r)
@@ -106,9 +100,8 @@ func Register(r *Registry) {
 	for _, n := range printNatives {
 		r.RegisterNativeFunc(n)
 	}
-	for _, n := range traceNatives {
-		r.RegisterNativeFunc(n)
-	}
+	// printstr / read / write / stdin / stdout / stderr / trace moved to the
+	// aql:io module (see io_module.go); only `print` stays in core.
 
 	// Unify
 	for _, n := range unifyNatives {

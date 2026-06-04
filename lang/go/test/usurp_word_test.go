@@ -254,6 +254,7 @@ func TestUsurpCheckModeClean(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
+	seedAQL(a)
 	res, err := a.Check(`
 		def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]
 		sub2/u 10 3
@@ -275,6 +276,7 @@ func TestUsurpCheckModeUndefined(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
+	seedAQL(a)
 	res, err := a.Check(`nope/u`)
 	if err != nil {
 		t.Fatalf("check: %v", err)

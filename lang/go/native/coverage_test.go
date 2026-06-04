@@ -40,6 +40,7 @@ func TestQueryFrom(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -59,6 +60,7 @@ func TestQueryFromSelect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -76,6 +78,7 @@ func TestQueryFromWhereSimple(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	// from people where [name eq "alice"]
@@ -96,6 +99,7 @@ func TestQueryFromWhere(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	// from people where [age gt 28]
@@ -134,6 +138,7 @@ func TestQueryFromOrderBy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -151,6 +156,7 @@ func TestQueryFromLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -168,6 +174,7 @@ func TestQueryFromOffset(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -185,6 +192,7 @@ func TestQueryFromDistinct(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -202,6 +210,7 @@ func TestQueryFromAs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -219,6 +228,7 @@ func TestQueryFromGroupBy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	result := runAQL(t, r, []Value{
@@ -235,6 +245,7 @@ func TestQueryStarWordErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	e := New(r)
 	_, err = e.Run([]Value{NewWord("star")})
 	if err == nil {
@@ -248,6 +259,7 @@ func TestQueryMaterializeSelectStar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	// from people select star — triggers full materialization pipeline
@@ -277,6 +289,7 @@ func TestQueryJoin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	// Create a second table "scores"
@@ -311,6 +324,7 @@ func TestQueryUnion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	makeTestTable(r)
 
 	// Create second table with same schema
@@ -622,6 +636,7 @@ func TestDotMapAtom(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(42))
 	result := runAQL(t, r, []Value{NewMap(m), NewAtom("x"), NewWord("get")})
@@ -636,6 +651,7 @@ func TestDotMapString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("key", NewInteger(99))
 	result := runAQL(t, r, []Value{NewMap(m), NewString("key"), NewWord("get")})
@@ -650,6 +666,7 @@ func TestDotListIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	list := NewList([]Value{NewString("a"), NewString("b"), NewString("c")})
 	result := runAQL(t, r, []Value{list, NewInteger(1), NewWord("get")})
 	_as2, _ := AsString(result[0])
@@ -663,6 +680,7 @@ func TestDotListOutOfBounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	list := NewList([]Value{NewString("a")})
 	result := runAQL(t, r, []Value{list, NewInteger(5), NewWord("get")})
 	if len(result) != 1 || !IsNoneShape(result[0]) {
@@ -675,6 +693,7 @@ func TestDotMapMissing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
 	result := runAQL(t, r, []Value{NewMap(m), NewAtom("y"), NewWord("get")})
@@ -688,6 +707,7 @@ func TestDotMapIntegerKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("0", NewString("zero"))
 	result := runAQL(t, r, []Value{NewMap(m), NewInteger(0), NewWord("get")})
@@ -702,6 +722,7 @@ func TestDotNone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewTypeLiteral(TNone), NewAtom("x"), NewWord("get")})
 	if len(result) != 1 || !IsNoneShape(result[0]) {
 		t.Errorf("expected none, got %v", result)
@@ -715,6 +736,7 @@ func TestDotListByIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	list := NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)})
 	result := runAQL(t, r, []Value{list, NewInteger(1), NewWord("get")})
 	_as4, _ := AsInteger(result[0])
@@ -728,6 +750,7 @@ func TestDotListAtomKeyReturnsNone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	list := NewList([]Value{NewInteger(10), NewInteger(20)})
 	result := runAQL(t, r, []Value{list, NewAtom("x"), NewWord("get")})
 	if len(result) != 1 || !IsNoneShape(result[0]) {
@@ -740,6 +763,7 @@ func TestDotListStringKeyReturnsNone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	list := NewList([]Value{NewInteger(10)})
 	result := runAQL(t, r, []Value{list, NewString("x"), NewWord("get")})
 	if len(result) != 1 || !IsNoneShape(result[0]) {
@@ -755,6 +779,7 @@ func TestDotNestedMapChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	inner := NewOrderedMap()
 	inner.Set("c", NewInteger(1))
 	mid := NewOrderedMap()
@@ -782,6 +807,7 @@ func TestDotMapThenList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("items", NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)}))
 	result := runAQL(t, r, []Value{
@@ -803,6 +829,7 @@ func TestDotListThenMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	m0 := NewOrderedMap()
 	m0.Set("x", NewInteger(1))
 	m1 := NewOrderedMap()
@@ -825,6 +852,7 @@ func TestDotListThenMapSecondElement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	m0 := NewOrderedMap()
 	m0.Set("x", NewInteger(1))
 	m1 := NewOrderedMap()
@@ -848,6 +876,7 @@ func TestDotAliasMapAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("key", NewInteger(99))
 	result := runAQL(t, r, []Value{NewMap(m), NewAtom("key"), NewWord("get")})
@@ -862,6 +891,7 @@ func TestDotAliasListAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	list := NewList([]Value{NewString("a"), NewString("b")})
 	result := runAQL(t, r, []Value{list, NewInteger(0), NewWord("get")})
 	_as10, _ := AsString(result[0])
@@ -878,6 +908,7 @@ func TestDotDeepListMapCombo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	b0 := NewList([]Value{NewInteger(100), NewInteger(200)})
 	b1 := NewList([]Value{NewInteger(300), NewInteger(400)})
 	m0 := NewOrderedMap()
@@ -904,6 +935,7 @@ func TestDotrMapSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(42))
 	result := runAQL(t, r, []Value{NewMap(m), NewAtom("x"), NewWord("getr")})
@@ -918,6 +950,7 @@ func TestDotrMapMissingError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
 	err = runAQLError(t, r, []Value{NewMap(m), NewAtom("y"), NewWord("getr")})
@@ -934,6 +967,7 @@ func TestDotrNoneError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	err = runAQLError(t, r, []Value{NewTypeLiteral(TNone), NewAtom("x"), NewWord("getr")})
 	if err == nil {
 		t.Fatal("expected error for none parent")
@@ -948,6 +982,7 @@ func TestDotrListOutOfBounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	list := NewList([]Value{NewString("a")})
 	err = runAQLError(t, r, []Value{list, NewInteger(5), NewWord("getr")})
 	if err == nil {
@@ -963,6 +998,7 @@ func TestDotrMapStringKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("key", NewInteger(99))
 	result := runAQL(t, r, []Value{NewMap(m), NewString("key"), NewWord("getr")})
@@ -977,6 +1013,7 @@ func TestDotrMapStringMissing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
 	err = runAQLError(t, r, []Value{NewMap(m), NewString("nope"), NewWord("getr")})
@@ -990,6 +1027,7 @@ func TestDotrMapIntegerKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("5", NewString("five"))
 	result := runAQL(t, r, []Value{NewMap(m), NewInteger(5), NewWord("getr")})
@@ -1004,6 +1042,7 @@ func TestDotrMapIntegerKeyMissing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("0", NewString("zero"))
 	err = runAQLError(t, r, []Value{NewMap(m), NewInteger(9), NewWord("getr")})
@@ -1021,6 +1060,7 @@ func TestMakeRecordPositional(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def Point type Record [x:number y:number]
 	// make Point [1 2]
 	result := runAQL(t, r, []Value{
@@ -1056,6 +1096,7 @@ func TestMakeRecordNamed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Pt"),
 		NewWord("refine"), NewWord("Record"), NewList([]Value{
@@ -1086,6 +1127,7 @@ func TestMakeRecordMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	src := NewOrderedMap()
 	src.Set("x", NewInteger(5))
 	src.Set("y", NewInteger(6))
@@ -1111,6 +1153,7 @@ func TestConvertIntToString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewInteger(42), NewWord("convert"), NewWord("String"),
 	})
@@ -1125,6 +1168,7 @@ func TestConvertIntToStringHex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	hexOpts := NewOrderedMap()
 	hexOpts.Set("base", NewString("hex"))
 	result := runAQL(t, r, []Value{
@@ -1141,6 +1185,7 @@ func TestConvertIntToStringBin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	binOpts := NewOrderedMap()
 	binOpts.Set("base", NewString("bin"))
 	result := runAQL(t, r, []Value{
@@ -1157,6 +1202,7 @@ func TestConvertIntToStringOct(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	octOpts := NewOrderedMap()
 	octOpts.Set("base", NewString("oct"))
 	result := runAQL(t, r, []Value{
@@ -1173,6 +1219,7 @@ func TestConvertStringToNumber(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewString("99"), NewWord("convert"), NewWord("Number"),
 	})
@@ -1187,6 +1234,7 @@ func TestConvertBoolToString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewBoolean(true), NewWord("convert"), NewWord("String"),
 	})
@@ -1201,6 +1249,7 @@ func TestConvertIntToBool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("convert"), NewWord("Boolean"),
 	})
@@ -1215,6 +1264,7 @@ func TestConvertIntToBoolZero(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewInteger(0), NewWord("convert"), NewWord("Boolean"),
 	})
@@ -1229,6 +1279,7 @@ func TestConvertStringToBool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewString("true"), NewWord("convert"), NewWord("Boolean"),
 	})
@@ -1243,6 +1294,7 @@ func TestConvertWithSettingsMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	settings := NewOrderedMap()
 	settings.Set("base", NewString("hex"))
 	result := runAQL(t, r, []Value{
@@ -1263,6 +1315,7 @@ func TestVarStringName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// 5 var [["x"] x mul x]
 	result := runAQL(t, r, []Value{
 		NewInteger(5),
@@ -1282,6 +1335,7 @@ func TestVarWithDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// var [[[x 10]] x add 1]
 	result := runAQL(t, r, []Value{
 		NewWord("var"), NewList([]Value{
@@ -1485,6 +1539,7 @@ func TestRunTrace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 	tokens := []Value{NewInteger(1), NewWord("add"), NewInteger(2)}
@@ -1511,6 +1566,7 @@ func TestRunTraceLong(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	var buf bytes.Buffer
 	r.Output = &buf
 	tokens := make([]Value, 0)

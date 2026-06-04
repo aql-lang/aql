@@ -370,6 +370,7 @@ func TestMaxArgsExceededReturnsError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new registry: %v", err)
 	}
+	registerIOWords(r)
 	args := make([]*Type, MaxArgs+1)
 	for i := range args {
 		args[i] = TAny

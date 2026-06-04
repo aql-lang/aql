@@ -665,7 +665,7 @@ type ModuleDesc struct {
 	Exports map[string]*OrderedMap // export name → export map (name → value)
 	// Descriptor metadata, populated by the loader (Resolve / loadFileModule
 	// / RunModuleBody) and surfaced on the Ideal/Module instance at import.
-	Ref    string // external module reference ("aql:math", "./lib.aql"); "" inline
+	Ref    string // external module reference ("aql:math-util", "./lib.aql"); "" inline
 	Kind   string // "native" | "file" | "inline"
 	File   string // source file path ("" for native/inline)
 	Folder string // source folder ("" for native/inline)

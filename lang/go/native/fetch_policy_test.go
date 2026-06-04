@@ -98,6 +98,7 @@ func TestFetchPolicyNoPolicyAllowsAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	if err := checkFetchPolicy(r, "https://anywhere.example/x"); err != nil {
 		t.Errorf("no policy should allow: %v", err)
 	}

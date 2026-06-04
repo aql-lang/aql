@@ -29,6 +29,7 @@ func runPred(t *testing.T, src string) []any {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
+	seedAQL(a)
 	out, err := a.Run(src)
 	if err != nil {
 		t.Fatalf("run %q: %v", src, err)
@@ -43,6 +44,7 @@ func runPredExpectErr(t *testing.T, src string) string {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
+	seedAQL(a)
 	_, err = a.Run(src)
 	if err == nil {
 		t.Fatalf("expected error from %q", src)

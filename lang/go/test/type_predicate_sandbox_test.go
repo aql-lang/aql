@@ -33,6 +33,7 @@ func TestPredicateSandbox_TypeMutationIsContained(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
+	seedAQL(a)
 	src := `def Sneaky fn [x:Any Any [
   def Leaked Integer
   x
@@ -59,6 +60,7 @@ func TestPredicateSandbox_IsAlsoSandboxed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
+	seedAQL(a)
 	_, err = a.Run(`def Sneaky fn [x:Any Any [
   def LeakedB Integer
   x
@@ -83,6 +85,7 @@ func TestPredicateCheckMode_TypedBindingAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
+	seedAQL(a)
 	res, err := a.Check(`def Bbd fn [x:Any Any [if (x is String) [x] [None]]]
 def s:Bbd "hello"
 s`)
@@ -108,6 +111,7 @@ func TestDepScalarCheckMode_CarrierAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
+	seedAQL(a)
 	res, err := a.Check(`def G10 (Integer gt 10)
 def x:G10 15`)
 	if err != nil {
@@ -127,6 +131,7 @@ func TestDepScalarCheckMode_CrossBaseStillRejects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
+	seedAQL(a)
 	_, err = a.Check(`def G10 (Integer gt 10)
 def s:G10 "hi"`)
 	// Check mode collects diagnostics but may not return a hard
@@ -147,6 +152,7 @@ func TestPredicateRuntime_StillErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
+	seedAQL(a)
 	_, err = a.Run(`def Bbd fn [x:Any Any [if (x is String) [x] [None]]]
 def n:Bbd 99`)
 	if err == nil {

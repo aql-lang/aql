@@ -9,24 +9,24 @@
 #   X.$module  → the owning Module instance (Ideal/Module)
 # A Module (Ideal/Module) is the shared descriptor with normal fields
 # id, kind, file, folder, exports. The import reference stays lowercase
-# (import "aql:math"); the bound namespace is CamelCase (Math).
+# (import "aql:math-util"); the bound namespace is CamelCase (MathUtil).
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  the bound namespace is a ModuleExport, transparent for use
-"aql:math" import end  typeof Math	ModuleExport	import binds a ModuleExport
-"aql:math" import end  Math is ModuleExport	true	…of the Ideal/ModuleExport type
-"aql:math" import end  Math.sqrt 16.0	4.0	transparent: exports are used as before
-"aql:math" import end  Math.$name	'Math'	$name is the export name
+"aql:math-util" import end  typeof MathUtil	ModuleExport	import binds a ModuleExport
+"aql:math-util" import end  MathUtil is ModuleExport	true	…of the Ideal/ModuleExport type
+"aql:math-util" import end  MathUtil.sqrt 16.0	4.0	transparent: exports are used as before
+"aql:math-util" import end  MathUtil.$name	'MathUtil'	$name is the export name
 #
 # §2  $module → the Module descriptor (Ideal/Module) and its fields
-"aql:math" import end  typeof Math.$module	Module	$module is an Ideal/Module
-"aql:math" import end  Math.$module is Module	true	…of the Module type
-"aql:math" import end  Math.$module.id	'aql:math'	id is the module reference
-"aql:math" import end  Math.$module.kind	'native'	kind: native / file / inline
-"aql:math" import end  Math.$module.exports	['Math']	exports lists the export names
+"aql:math-util" import end  typeof MathUtil.$module	Module	$module is an Ideal/Module
+"aql:math-util" import end  MathUtil.$module is Module	true	…of the Module type
+"aql:math-util" import end  MathUtil.$module.name	'aql:math-util'	name is the module reference
+"aql:math-util" import end  MathUtil.$module.kind	'native'	kind: native / file / inline
+"aql:math-util" import end  MathUtil.$module.exports	['MathUtil']	exports lists the export names
 #
 # §3  the -util colliders carry their -util id
-"aql:array-util" import end  ArrayUtil.$module.id	'aql:array-util'	collider module id
+"aql:array-util" import end  ArrayUtil.$module.name	'aql:array-util'	collider module name
 "aql:type-util" import end  TypeUtil.$module.kind	'native'	type-util is native too
 #
 # §4  inline modules — `module […] import` binds all exports; kind="inline"
@@ -42,4 +42,4 @@ module [export "Foo" {a:1}] import [Foo Bar] end  Bar.a	1	renamed binding still 
 module [export "Foo" {a:1}] import [Foo Bar] end  Bar.$name	'Foo'	$name is the declared export name, not the alias
 #
 # §6  negative — a missing export via getr (!.) errors
-"aql:math" import end  Math!.nope	ERROR:getr_error	unknown export raises getr_error
+"aql:math-util" import end  MathUtil!.nope	ERROR:getr_error	unknown export raises getr_error

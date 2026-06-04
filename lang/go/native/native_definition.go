@@ -7,7 +7,7 @@ import (
 )
 
 // definitionNatives covers the binding / function-definition words:
-// def, undef, var, fn, call, dblcall, args, __pa.
+// def, undef, var, fn, args, __pa.
 //
 // Pure helpers used by these handlers (parseFnDef, parseFnParams,
 // MatchFnSig, defName, defStackOnly, etc.) live alongside their
@@ -125,26 +125,6 @@ var definitionNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name: "call",
-
-		Signatures: []NativeSig{{
-			Args:       []*Type{TList},
-			NoEvalArgs: map[int]bool{0: true},
-			Handler:    callHandler,
-			Returns:    []*Type{TAny}, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "dblcall",
-
-		Signatures: []NativeSig{{
-			Args:       []*Type{TInteger, TList},
-			NoEvalArgs: map[int]bool{1: true},
-			Handler:    dblcallHandler,
-			Returns:    []*Type{TAny}, BarrierPos: -1,
-		}},
-	},
-	{
 		Name: "args",
 
 		Signatures: []NativeSig{{
@@ -180,7 +160,7 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	stackOnly := defStackOnly(args[0])
 	body := args[1]
 	if IsCapitalisedName(name) {
-		// `def` is the universal binder (lang/doc/design/TYPE-UNIFORM.0.md
+		// `def` is the universal binder (design/TYPE-UNIFORM.0.md
 		// Phase 2): a capitalised name is a TYPE binding. Delegate to
 		// the kernel type installer — the same path the `type` word
 		// uses — so object/predicate lattice-minting and all
@@ -388,7 +368,7 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	name := defName(args[0])
 	if IsCapitalisedName(name) {
 		// `undef` is the universal unbinder (the symmetric completion
-		// of Phase 2's universal `def` — lang/doc/design/TYPE-UNIFORM.0.md):
+		// of Phase 2's universal `def` — design/TYPE-UNIFORM.0.md):
 		// a capitalised name is a TYPE binding, so pop it from the single
 		// binding store and retire the minted lattice type.
 		entry, ok := r.Defs.PopEntry(name)
@@ -599,56 +579,6 @@ func fnsigHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		return nil, err
 	}
 	return []Value{NewFnUndef(info)}, nil
-}
-
-// ---- call ----
-
-func callHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	body := args[0]
-
-	if !IsConcrete(body) {
-		return nil, r.AqlError("call_error", "call: argument must be a concrete list, got type literal", "call")
-	}
-	if IsTypedList(body) || IsTableType(body) {
-		return nil, r.AqlError("call_error", "call: argument must be a plain list", "call")
-	}
-
-	bodyElems, _ := AsList(body)
-	if bodyElems.Len() == 0 {
-		return nil, nil
-	}
-
-	bodyCopy := bodyElems.Slice()
-	return bodyCopy, nil
-}
-
-// ---- dblcall ----
-
-func dblcallHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	n, _ := args[0].AsConcreteInteger()
-	body := args[1]
-
-	if !IsConcrete(body) {
-		return nil, r.AqlError("dblcall_error", "dblcall: callback must be a concrete list, got type literal", "dblcall")
-	}
-	if IsTypedList(body) || IsTableType(body) {
-		return nil, r.AqlError("dblcall_error", "dblcall: callback must be a plain list", "dblcall")
-	}
-
-	doubled := NewInteger(n * 2)
-
-	bodyElems, _ := AsList(body)
-	if bodyElems.Len() == 0 {
-		return []Value{doubled}, nil
-	}
-
-	tokens := make([]Value, 0, bodyElems.Len()+3)
-	tokens = append(tokens, NewOpenParen())
-	tokens = append(tokens, doubled)
-	bodyCopy := bodyElems.Slice()
-	tokens = append(tokens, bodyCopy...)
-	tokens = append(tokens, NewCloseParen())
-	return tokens, nil
 }
 
 // ---- args / __pa ----

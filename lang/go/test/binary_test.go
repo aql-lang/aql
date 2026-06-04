@@ -57,9 +57,11 @@ func TestBinary(t *testing.T) {
 			}
 
 			reg, err := native.DefaultRegistry()
+			registerIOWords(reg)
 			if err != nil {
 				t.Fatal(err)
 			}
+			registerIOWords(reg) // bitwise moved to aql:bin; available bare for the spec
 			eng := native.NewTop(reg)
 			result, err := eng.Run(values)
 

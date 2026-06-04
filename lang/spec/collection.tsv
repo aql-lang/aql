@@ -1,5 +1,5 @@
 # AQL Language Specification: Collection operations (sort reverse
-# flatten size items take)
+# flatten size take)
 # Format: input<TAB>expected<TAB>description
 #
 # Core list/map words available in the base registry. (Many richer
@@ -22,8 +22,8 @@ size [1 2 3]	3	list length
 size {a:1 b:2}	2	map entry count
 size 'hello'	5	string length
 #
-# §5  items — map entries as [key value] pairs
-items {a:1 b:2}	[['a' 1] ['b' 2]]	ordered key/value pairs
+# (items — map entries as [key value] pairs — moved to the aql:struct
+#  module; see module-struct.tsv.)
 #
 # §6  take count list — leading elements
 take 2 [1 2 3 4 5]	[1 2]	first two elements

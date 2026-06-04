@@ -59,14 +59,35 @@ Language-agnostic content stays at the top of each component:
 - `formatter/` — code pretty-printer (no engine deps).
 - `capabilities/` — file I/O abstraction (`FileOps` interface
   + OS-backed and in-memory implementations).
-- `modules/` — loadable modules (`aql:math`, `aql:array-util`,
-  `aql:time-util`, `aql:matrix-util`, `aql:decision`, `aql:solardemo`,
-  `aql:bin`, `aql:type-util`). Import binds a CamelCase namespace
-  (`aql:math` → `Math.sqrt`); the four whose plain CamelCase name
-  collides with a builtin type carry a `-util` id and a `*Util`
-  namespace (`aql:array-util` → `ArrayUtil.shape`, likewise
-  `TimeUtil`, `TypeUtil`, `MatrixUtil`). Exported names must be
-  capitalised (`export "Foo"`; lowercase is rejected).
+- `modules/` — loadable modules. Import binds a CamelCase namespace
+  (`"aql:math-util" import` → `MathUtil.sqrt`).
+  **Naming rule:** a `-util` id + `*Util` namespace marks a **utility
+  library** (a collection of pure/domain helper functions):
+  `aql:math-util` (`MathUtil`), `aql:array-util` (`ArrayUtil`),
+  `aql:time-util` (`TimeUtil`), `aql:type-util` (`TypeUtil`),
+  `aql:matrix-util` (`MatrixUtil`), `aql:string-util` (`StringUtil`),
+  `aql:bin-util` (`BinUtil`), `aql:struct-util` (`StructUtil`),
+  `aql:logic-util` (`LogicUtil`). Capability / framework / DSL modules
+  stay plain: `aql:io` (`IO`), `aql:net` (`Net`), `aql:decision`,
+  `aql:vm`, `aql:report`, `aql:test`, `aql:rand`, `aql:query`.
+  (The `-util` suffix also conveniently avoids the type-name clashes for
+  `Array`/`Time`/`Type`/`Matrix`/`String`, which are builtin types.)
+  Exported names must be capitalised (`export "Foo"`; lowercase rejected).
+  `aql:struct-util` (`StructUtil.` namespace) holds the voxgig-struct
+  data-manipulation words — `clone`, `getpath`, `setpath`, `inject`,
+  `merge`, `walk`, `items`, `transform`, `validate`, `selector`,
+  `jsonify`, `nodify` — moved OUT of core (see `native/struct_module.go`).
+  `aql:io` (`IO.` namespace) holds the I/O words — `printstr`, `read`,
+  `write`, `stdin`, `stdout`, `stderr`, `trace` — also moved out of core
+  (see `native/io_module.go`); only `print` stays in core.
+  `aql:net` (`Net.` namespace) holds the HTTP / API words — `fetch`,
+  `prepare`, `direct` (see `native/net_module.go`).
+  Further moves out of core: bitwise `band`/`bor`/`bxor`/`bnot`/`bsl`/`bsr`/
+  `busr` → `aql:bin-util` (`BinUtil.`); clock/async `now`/`sleep`/`timeout`/`interval`/
+  `await`/`cancel` → `aql:time-util` (`TimeUtil.`); `tpartial` → `aql:type-util`
+  (`TypeUtil.`); `folder` → `aql:io`; and the derived boolean connectives
+  `nand`/`nor`/`xnor`/`iff`/`implies` → `aql:logic-util` (`LogicUtil.`).
+  All moved words are no longer available unqualified.
 - `test/` — integration tests and TSV spec runners.
 
 ## Build & Test
@@ -626,10 +647,10 @@ module's exports share one **`Ideal/Module`** descriptor
 - `NewModuleExport(name, fields, module)` — `name` (→ `.$name`), an
   `*OrderedMap` of the raw exports, and the owning Module. A
   ModuleExport is **transparent**: `get`/`getr` (`native_module_types.go`)
-  return the raw export for a plain key (so `Math.sqrt 16.0` dispatches
+  return the raw export for a plain key (so `MathUtil.sqrt 16.0` dispatches
   unchanged) and the synthetic value for `$module` / `$name`.
 - `NewModuleInstance(moduleInfo{ID,Kind,File,Folder,Exports})` — the
-  descriptor. `id`/`kind`/`file`/`folder`/`exports` are read via `get`.
+  descriptor. `name`/`kind`/`file`/`folder`/`exports` are read via `get`.
 - Instances are backed by `ExtensionPayload` (lang-layer; no eng payload
   type). `NewModuleInstance(desc)` (`native_module_module.go`) builds the
   shared Module at install time; `ModuleDesc.{Ref,Kind,File,Folder}` are
@@ -786,7 +807,7 @@ methods on `Value`; only `Is(t)` and `String()` remain as methods.)
   `Value` since they're the canonical handler-side error path; the
   low-level accessors were drained to free functions in `eng/` as part
   of the type-decoupling work — see
-  `lang/doc/design/TYPE-DECOUPLING.0.md`.
+  `design/TYPE-DECOUPLING.0.md`.
 
 **Check mode**:
 - `r.IsCheckMode()` — read-side helper. Replaces `r.Check.Mode` and
@@ -822,7 +843,7 @@ methods on `Value`; only `Is(t)` and `String()` remain as methods.)
   from `&v` of a by-value type-literal Value — `behave` Behavior
   installs and LCA-walk identity must reach the canonical pointer,
   not a stack-local copy. See
-  `lang/doc/design/TYPE-CANONICALIZATION.0.md`.
+  `design/TYPE-CANONICALIZATION.0.md`.
 
 **Typed-def reparent**:
 - `ReparentValue(v, def) Value` — return a fresh copy of v with
@@ -874,7 +895,7 @@ to the corresponding Atom position. Without `/q`, callers will see an
 ## Value Comparison & Ordering
 
 `cmp` / `lt` / `gt` / `lte` / `gte` / `sort` route through one total
-order — see `lang/doc/design/TYPE-ORDERING.0.md` for the canonical
+order — see `design/TYPE-ORDERING.0.md` for the canonical
 design. The kernel-side implementation lives in `eng/go/compare.go`
 and `eng/go/compare_scalar_behaviors.go`; this section captures
 what handler authors and word implementers need to know.

@@ -35,6 +35,7 @@ func TestEngineReadCSVByExtension(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	mem.Files["data.csv"] = []byte("name,age\nAlice,30\nBob,25")
 	SetHostFileOps(r, mem)
@@ -69,6 +70,7 @@ func TestEngineReadTSVByExtension(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	mem.Files["data.tsv"] = []byte("name\tage\nAlice\t30\nBob\t25")
 	SetHostFileOps(r, mem)
@@ -93,6 +95,7 @@ func TestEngineReadCSVExplicitFormat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	mem.Files["data.txt"] = []byte("a,b\n1,2")
 	SetHostFileOps(r, mem)
@@ -114,6 +117,7 @@ func TestEngineReadOverrideExtension(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	mem.Files["data.csv"] = []byte("hello,world")
 	SetHostFileOps(r, mem)
@@ -140,6 +144,7 @@ func TestEngineReadJSONByExtension(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	mem.Files["data.json"] = []byte(`{"key":"value"}`)
 	SetHostFileOps(r, mem)
@@ -160,6 +165,7 @@ func TestEngineInspectBuiltin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// inspect add => word_inspection map
 	result := runAQL(t, r, []Value{NewWord("inspect"), NewWord("add")})
 	if len(result) != 1 {
@@ -211,6 +217,7 @@ func TestEngineInspectUserDefined(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def double [2 mul] ; inspect double
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("double"), NewList([]Value{NewInteger(2), NewWord("mul")}),
@@ -239,6 +246,7 @@ func TestEngineInspectUnknown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewWord("inspect"), NewAtom("nonexistent")})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
@@ -263,6 +271,7 @@ func TestEngineInspectDotAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// inspect upper .name => 'upper'
 	result := runAQL(t, r, []Value{
 		NewWord("inspect"), NewWord("upper"),
@@ -282,6 +291,7 @@ func TestEngineInspectTypeLiteral(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def Qty number ; inspect Qty
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Qty"), NewTypeLiteral(TNumber),
@@ -325,6 +335,7 @@ func TestEngineInspectRecordType(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def Pos record{x:number,y:number} ; inspect Pos
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TNumber))
@@ -370,6 +381,7 @@ func TestEngineInspectTypeDotAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def Qty number ; inspect Qty .kind
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Qty"), NewTypeLiteral(TNumber),
@@ -416,6 +428,7 @@ func TestEngineFnReturnTypeCorrect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def double fn [[number] [number] [dup add]] end
 	fnBody := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
@@ -437,6 +450,7 @@ func TestEngineFnReturnTypeWrong(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def bad fn [[number] [string] [dup add]] end
 	// Returns a number but declares string return type.
 	fnBody := NewList([]Value{
@@ -461,6 +475,7 @@ func TestEngineFnReturnCountWrong(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def toomany fn [[number] [number] [dup]] end
 	// Body produces 2 values (dup), signature declares 1 return.
 	// The extra value is the unconsumed unnamed arg which is discarded,
@@ -503,6 +518,7 @@ func TestEngineFnReturnTypeAny(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def identity fn [[any] [any] []] end
 	// [any] return type should accept any value.
 	fnBody := NewList([]Value{
@@ -525,6 +541,7 @@ func TestEngineFnReturnTypeUncheckedEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def dbl fn [[number] [] [dup add]] end
 	// Empty return sig means no checking (backwards compat).
 	fnBody := NewList([]Value{
@@ -547,6 +564,7 @@ func TestEngineFnReturnTypeMultipleValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def dup2 fn [[number] [number number] [dup]] end
 	// Returns 2 numbers.
 	fnBody := NewList([]Value{
@@ -570,6 +588,7 @@ func TestEngineFnReturnTypeNamedParams(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def square fn [[x:number] [number] [x mul x]] end
 	xParam := NewOrderedMap()
 	xParam.Set("x", NewWord("Number"))
@@ -593,6 +612,7 @@ func TestEngineFnReturnTypeNamedParamsWrongReturn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def isbig fn [[x:number] [number] [x gt 10]] end
 	// Declares number return but body returns boolean via gt.
 	xParam := NewOrderedMap()
@@ -619,6 +639,7 @@ func TestEngineFnReturnTypeMultiOverload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// def add1 fn [[number] [number] [1 add] [string] [string] ["1" add]] end
 	fnBody := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
@@ -652,6 +673,7 @@ func TestPiecemealDef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// Define foo with number sig, then add string sig
 	numBody := NewList([]Value{
@@ -695,6 +717,7 @@ func TestPiecemealUndefPopsRecent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	numBody := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
@@ -728,6 +751,7 @@ func TestFnUndefTargeted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	numBody := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
@@ -769,6 +793,7 @@ func TestFnUndefTargetedReverse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	numBody := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
@@ -809,6 +834,7 @@ func TestFnUndefNonExistentNoOp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	numBody := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
@@ -843,6 +869,7 @@ func TestFnUndefRemovesAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	numBody := NewList([]Value{
 		NewList([]Value{NewWord("Number")}),
@@ -873,6 +900,7 @@ func TestPiecemealStackUnwind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// def A (number -> dup mul), def B (string -> dup add), undef B, A still works
 	bodyA := NewList([]Value{
@@ -928,6 +956,7 @@ func TestTypeofMetatypes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// Post the typeof-collapse + Any-root work, typeof is a single
 	// Parent hop. None and Never are degenerate roots that saturate
@@ -997,6 +1026,7 @@ func TestIs_BroadTypeRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	tests := []struct {
 		name string
@@ -1035,6 +1065,7 @@ func TestInterpStringLiteral(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	parts := []InterpPart{
 		{Lit: "hello world"},
 	}
@@ -1053,6 +1084,7 @@ func TestInterpStringWithExpression(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewString("world"), NewWord("def"), NewWord("name"), NewEnd(),
 		NewInterpString([]InterpPart{
@@ -1074,6 +1106,7 @@ func TestInterpStringArithmetic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewInterpString([]InterpPart{
 			{Lit: "answer: "},
@@ -1094,6 +1127,7 @@ func TestInterpStringMultipleExprs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewInteger(1), NewWord("def"), NewWord("a"), NewEnd(),
 		NewInteger(2), NewWord("def"), NewWord("b"), NewEnd(),
@@ -1117,6 +1151,7 @@ func TestInterpStringInMapValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewInteger(42), NewWord("def"), NewWord("x"), NewEnd(),
 		NewEvalMap(func() *OrderedMap {
@@ -1150,6 +1185,7 @@ func TestInterpStringAsWordArg(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewInterpString([]InterpPart{
 			{Lit: "hello"},
@@ -1172,6 +1208,7 @@ func TestTpartialRejectsNonType(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	cases := []struct {
 		name string
 		arg  Value

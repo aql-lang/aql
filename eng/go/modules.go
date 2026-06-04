@@ -48,7 +48,7 @@ func NewModuleRegistry() *ModuleRegistry {
 // untouched. Module-body spin-up sites MUST call this instead of copying
 // the callback fields one at a time: the field-by-field copying is exactly
 // how the Resolver came to be silently dropped, which broke
-// `import "aql:math"` from file-imported modules (native-module imports
+// `import "aql:math-util"` from file-imported modules (native-module imports
 // only worked from the top-level script). A new config field added here is
 // then inherited at every spin-up site by default.
 func (m *ModuleRegistry) InheritConfig(parent *ModuleRegistry) {

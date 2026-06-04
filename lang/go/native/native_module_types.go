@@ -10,16 +10,16 @@ import (
 
 // Module / ModuleExport — the Ideal types that describe an imported module.
 //
-// When AQL code runs `import "aql:math"`, the bound name `Math` is a
+// When AQL code runs `import "aql:math-util"`, the bound name `Math` is a
 // ModuleExport instance (one per `export "Name" {…}` declaration). A
-// ModuleExport is transparent: `Math.sqrt` reads the raw exported value
-// (so `Math.sqrt 16.0 → 4.0` still works), while the synthetic names
+// ModuleExport is transparent: `MathUtil.sqrt` reads the raw exported value
+// (so `MathUtil.sqrt 16.0 → 4.0` still works), while the synthetic names
 // `$module` and `$name` expose metadata:
 //
-//	Math.sqrt          → the exported sqrt function (raw, callable)
-//	Math.$name         → 'Math'                (the export name)
-//	Math.$module       → the Module instance   (Ideal/Module)
-//	Math.$module.id    → 'aql:math'            (the module reference)
+//	MathUtil.sqrt          → the exported sqrt function (raw, callable)
+//	MathUtil.$name         → 'Math'                (the export name)
+//	MathUtil.$module       → the Module instance   (Ideal/Module)
+//	MathUtil.$module.id    → 'aql:math'            (the module reference)
 //
 // A Module instance (Ideal/Module) is the descriptor shared by all of a
 // module's ModuleExports via $module. Its normal fields are id, kind,
@@ -140,7 +140,7 @@ func moduleGet(v Value, key string) (Value, bool) {
 		return Value{}, false
 	}
 	switch key {
-	case "id":
+	case "name":
 		return NewString(desc.Ref), true
 	case "kind":
 		return NewString(moduleKind(desc)), true
@@ -251,7 +251,7 @@ func (moduleTypeBehavior) ToMap(v Value) (Value, error) {
 	}
 	if desc, ok := asModuleDesc(v); ok {
 		out := NewOrderedMap()
-		out.Set("id", NewString(desc.Ref))
+		out.Set("name", NewString(desc.Ref))
 		out.Set("kind", NewString(moduleKind(desc)))
 		out.Set("file", NewString(desc.File))
 		out.Set("folder", NewString(desc.Folder))

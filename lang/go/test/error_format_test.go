@@ -20,6 +20,7 @@ func runWithSource(t *testing.T, src string) error {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	reg.Source = src
 	eng := native.NewTop(reg)
 	eng.SetSource(src)

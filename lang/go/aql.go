@@ -253,6 +253,14 @@ func (a *AQL) Register(name string, sigs ...Signature) {
 	a.registry.Register(name, sigs...)
 }
 
+// RegisterNativeFunc installs a full NativeFunc (name + signatures) on the
+// instance's registry. Convenience for callers that already hold a
+// native.NativeFunc value (e.g. seeding the words that moved into loadable
+// modules into a test instance without an explicit import).
+func (a *AQL) RegisterNativeFunc(n native.NativeFunc) {
+	a.registry.RegisterNativeFunc(n)
+}
+
 // (RegisterStackOnly was retired. To install a stack-only word, set
 // `BarrierPos: 0` on each Signature and call `Register` — that's the
 // canonical encoding of "this sig consumes its args from the prefix

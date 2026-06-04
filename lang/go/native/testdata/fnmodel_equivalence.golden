@@ -51,8 +51,6 @@ WORD busr
   [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
 WORD bxor
   [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
-WORD call
-  [Node/List] barrier=1 noeval={0} returns=[Any]
 WORD cancel
   [Ideal/Timeout] barrier=1
   [Ideal/Interval] barrier=1
@@ -62,7 +60,7 @@ WORD changecase
   [Scalar/String] barrier=1 returns=[Scalar/String]
   [Scalar/Atom] barrier=1 returns=[Scalar/String]
 WORD clone
-  [Any] barrier=0
+  [Any] barrier=1
 WORD cmp
   [Any Any] barrier=2 returns=[Scalar/Number/Integer]
 WORD concat
@@ -86,8 +84,6 @@ WORD create
   [Node/Map Node/List] barrier=2
   [Ideal/Object/Resource/Entity] barrier=1
   [Node/Map] barrier=1
-WORD dblcall
-  [Scalar/Number/Integer Node/List] barrier=2 noeval={1} returns=[Any]
 WORD def
   [Node/Map Any] barrier=2 runcheck noevalmap={0}
   [Scalar/String Any] barrier=2 runcheck
@@ -300,7 +296,7 @@ WORD neq
 WORD nip
   [Any Any] barrier=0 +returnsfn
 WORD nodify
-  [Any] barrier=1 returns=[Any]
+  [Any] barrier=1
 WORD nor
   [Scalar/Boolean Scalar/Boolean] barrier=2 returns=[Scalar/Boolean]
   [Any Any] barrier=2 returns=[Scalar/Boolean]
@@ -476,6 +472,8 @@ WORD unpack
   [Node/Map Node/Map] barrier=2 runcheck noevalmap={0}
   [Node/List Node/Map] barrier=2 runcheck noeval={0}
   [Scalar/Atom Node/Map] barrier=2 runcheck quote={0}
+  [Scalar/Atom Scalar/String] barrier=2 quote={0}
+  [Scalar/String] barrier=1
 WORD unshift
   [Any Node/List] barrier=2
 WORD update
@@ -496,9 +494,9 @@ WORD validate
 WORD var
   [Node/List] barrier=1 noeval={0} returns=[Any]
 WORD walk
-  [Type/Function Type/Function Any] barrier=0
-  [Type/Function Any] barrier=0
-  [Any] barrier=0
+  [Type/Function Type/Function Any] barrier=3
+  [Type/Function Any] barrier=2
+  [Any] barrier=1
 WORD word
   [Any] barrier=1 noeval={0} returns=[Any]
 WORD write

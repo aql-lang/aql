@@ -93,6 +93,7 @@ func checkNoPanic(t *testing.T, src string) (res lang.CheckResult) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
+	seedAQL(a)
 	res, err = a.Check(src)
 	if err != nil {
 		// A returned error is an acceptable, non-panicking outcome; only

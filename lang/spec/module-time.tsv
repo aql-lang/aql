@@ -26,5 +26,11 @@
 "aql:time-util" import end  TimeUtil.is-leap-year TimeUtil.today-utc	false	2021 is not a leap year
 "aql:time-util" import end  TimeUtil.is-leap-year (TimeUtil.to-date (TimeUtil.unix 1577836800))	true	2020 is a leap year
 #
-# §5  negative — the namespace is unbound until imported
+# §5  clock / async words (moved here from core)
+"aql:time-util" import end TimeUtil.now	2021-01-01T00:00:00Z	now reads the (frozen, in specs) clock
+"aql:time-util" import end typeof TimeUtil.now	Instant	now yields an Instant
+"aql:time-util" import end TimeUtil.await [[1 add 2] [3 add 4]]	[3 7]	await runs bodies in parallel
+#
+# §6  negative — the namespace is unbound until imported; words gone from core
 TimeUtil.unix 0	ERROR:undefined_word	`TimeUtil` is undefined without `import`
+now	ERROR:undefined_word	`now` is no longer a core word

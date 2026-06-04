@@ -13,9 +13,11 @@ import (
 func runWithOSFiles(t *testing.T, expr string) ([]native.Value, error) {
 	t.Helper()
 	reg, err := native.DefaultRegistry()
+	registerIOWords(reg)
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 
 	values, err := parser.Parse(expr)
 	if err != nil {
@@ -227,9 +229,11 @@ func TestFileReadCSVExplicitFmt(t *testing.T) {
 
 func TestFileReadCSVPrint(t *testing.T) {
 	reg, err := native.DefaultRegistry()
+	registerIOWords(reg)
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	var buf strings.Builder
 	reg.Output = &buf
 
@@ -266,9 +270,11 @@ func TestFileReadCSVPrint(t *testing.T) {
 
 func TestFileReadTSVPrint(t *testing.T) {
 	reg, err := native.DefaultRegistry()
+	registerIOWords(reg)
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	var buf strings.Builder
 	reg.Output = &buf
 

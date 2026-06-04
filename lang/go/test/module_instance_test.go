@@ -43,7 +43,7 @@ func TestModuleInstanceFileModule(t *testing.T) {
 	if s, _ := native.AsString(run(`Lib.$module.folder`)); !strings.HasSuffix(s, "proj") {
 		t.Errorf("Lib.$module.folder = %q, want suffix proj", s)
 	}
-	if s, _ := native.AsString(run(`Lib.$module.id`)); s != "./proj/lib.aql" {
-		t.Errorf("Lib.$module.id = %q, want \"./proj/lib.aql\"", s)
+	if s, _ := native.AsString(run(`Lib.$module.name`)); s != "./proj/lib.aql" {
+		t.Errorf("Lib.$module.name = %q, want \"./proj/lib.aql\"", s)
 	}
 }

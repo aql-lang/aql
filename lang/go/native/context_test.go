@@ -11,6 +11,7 @@ func TestContextSetGetString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("x"), NewInteger(42),
 		NewWord("context"), NewWord("get"), NewString("x"),
@@ -26,6 +27,7 @@ func TestContextSetGetWordKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99),
 		NewWord("context"), NewWord("get"), NewWord("foo"),
@@ -41,6 +43,7 @@ func TestContextSetOverwrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("k"), NewInteger(1),
 		NewWord("context"), NewWord("set"), NewString("k"), NewInteger(2),
@@ -59,6 +62,7 @@ func TestContextGetUnknownKeyReturnsError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	e := New(r)
 	_, err = e.Run([]Value{
 		NewWord("context"), NewWord("get"), NewString("missing"),
@@ -75,6 +79,7 @@ func TestContextSubEngineInherits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// Set in parent, read in sub-engine via do
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("x"), NewInteger(10),
@@ -95,6 +100,7 @@ func TestContextSubEngineIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// Set in parent, override in sub-engine, check parent still has original
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("x"), NewInteger(1),
@@ -116,6 +122,7 @@ func TestContextSubEngineNewKeyDoesNotLeak(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	e := New(r)
 	_, err = e.Run([]Value{
 		NewWord("do"), NewList([]Value{
@@ -135,6 +142,7 @@ func TestContextNestedThreeLevels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// Level 0: set level=0
 	// Level 1 (do): set level=1, then do level 2
 	// Level 2 (do do): read level → should see 1, set level=2
@@ -174,6 +182,7 @@ func TestContextMultipleKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("a"), NewInteger(1),
 		NewWord("context"), NewWord("set"), NewString("b"), NewInteger(2),
@@ -197,6 +206,7 @@ func TestContextDifferentValueTypes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// Wrap each context get in parens so previous results on the stack
 	// don't get consumed by the next get (stack-preference rule: when
 	// a String result is on the stack, context-get would take it as
@@ -236,6 +246,7 @@ func TestContextValuesByReference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// Store a map in context, retrieve it in sub-engine — should be the same map
 	m := NewOrderedMap()
 	m.Set("key", NewInteger(100))
@@ -263,6 +274,7 @@ func TestContextModuleInherits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("parent_val"), NewInteger(77),
 		NewWord("module"), NewList([]Value{
@@ -291,6 +303,7 @@ func TestContextModuleIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("x"), NewInteger(1),
 		NewWord("module"), NewList([]Value{
@@ -376,6 +389,7 @@ func TestContextIfSubEngineInherits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("val"), NewInteger(5),
 		NewWord("if"), NewList([]Value{NewBoolean(true)}),

@@ -553,6 +553,7 @@ func nativeDecisionRegistry(t *testing.T) *native.Registry {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	r.SetParseFunc(parser.Parse)
 	if err := modules.InstallDecisionExports(r); err != nil {
 		t.Fatal(err)
@@ -577,6 +578,7 @@ func inlineDecisionRegistry(t *testing.T) *native.Registry {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	r.SetParseFunc(parser.Parse)
 	native.Register(r)
 

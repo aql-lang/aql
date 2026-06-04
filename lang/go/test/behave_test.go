@@ -52,6 +52,7 @@ func TestBehave(t *testing.T) {
 		ran++
 		t.Run(fmt.Sprintf("L%d_%s", lineNum, sanitiseName(expr)), func(t *testing.T) {
 			reg, err := native.DefaultRegistry()
+			registerIOWords(reg)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -62,6 +63,13 @@ func TestBehave(t *testing.T) {
 			// `"aql:time-util" import` boilerplate on every native row.
 			if err := modules.InstallTimeExports(reg); err != nil {
 				t.Fatalf("install time exports: %v", err)
+			}
+			// nodify moved to aql:struct; pre-install Struct so spec rows can
+			// use `StructUtil.nodify` (the projection word) without import
+			// boilerplate. The `nodify` *behavior* name (`behave nodify/q …`)
+			// is unaffected — it is a quoted atom, not the word.
+			if err := modules.InstallStructExports(reg); err != nil {
+				t.Fatalf("install struct exports: %v", err)
 			}
 
 			values, err := parser.Parse(expr)

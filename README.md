@@ -25,7 +25,7 @@ def square fn [[x:Number] [Number] [x mul x]]
 def Point refine Record [x:Number y:Number]
 make Point [3 4]                     => {x:3 y:4}
 
-await [[sleep 50 1] [sleep 50 2]]    => [1 2]
+"aql:time-util" import end TimeUtil.await [[1 add 2] [3 add 4]]    => [3 7]
 ```
 
 
@@ -99,7 +99,7 @@ Suggested reading orders:
 | `test/` | Shared TSV spec-runner scaffolding and HTTP test fixtures. |
 | `docs/` | The bundled wasm playground (`index.html`). |
 | `lang/spec/` | Engine spec TSV files (the language's executable spec). |
-| `lang/doc/design/` | Internal design notes and proposals. |
+| `design/` | Internal design notes and proposals. |
 
 
 ## Building from source
@@ -127,7 +127,7 @@ make fmt && make vet && make lint && make test
 Bug reports, proposals, and pull requests are welcome on
 [GitHub](https://github.com/aql-lang/aql). For non-trivial
 language changes, open an issue first — the design notes under
-`lang/doc/design/` are the historical record of how previous
+`design/` are the historical record of how previous
 proposals played out.
 
 

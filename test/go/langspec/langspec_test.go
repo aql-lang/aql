@@ -54,7 +54,7 @@ func TestSpecProd(t *testing.T) {
 		// can run under the production setup too.
 		specrunner.RegisterQFixtures(reg)
 		// Install the loadable-module resolver so specs can `import
-		// "aql:math"` etc. — matching what lang.New() wires up in
+		// "aql:math-util"` etc. — matching what lang.New() wires up in
 		// production. Without this the module words are unreachable and
 		// the formal spec could not cover them.
 		modules.InstallResolver(reg)

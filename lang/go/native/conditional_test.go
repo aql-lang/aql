@@ -19,6 +19,7 @@ func TestIfClauseList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	L := func(vs ...Value) Value { return NewList(vs) }
 	S, B, I, W := NewString, NewBoolean, NewInteger, NewWord
 
@@ -124,6 +125,7 @@ func TestIfListConditionMarkMove(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// if [1 add 2 gt 2] 10 20 — condition evaluates to true (3>2)
 	condList := NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2), NewWord("gt"), NewInteger(2)})
 	result := runAQL(t, r, []Value{
@@ -140,6 +142,7 @@ func TestIfListConditionFalseMarkMove(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// if [1 gt 2] 10 20 — condition is false
 	condList := NewList([]Value{NewInteger(1), NewWord("gt"), NewInteger(2)})
 	result := runAQL(t, r, []Value{
@@ -156,6 +159,7 @@ func TestIfScalar2ArgTrue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// if true 42 — 2-arg, scalar true condition
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(true), NewInteger(42),
@@ -171,6 +175,7 @@ func TestIfScalar2ArgFalse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// if false 42 — 2-arg, scalar false condition returns nothing
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(false), NewInteger(42),
@@ -187,6 +192,7 @@ func TestIfConditionSharesContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	condList := NewList([]Value{NewWord("context"), NewWord("get"), NewString("flag")})
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("flag"), NewBoolean(true),
@@ -205,6 +211,7 @@ func TestIfConditionCanSetContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// Condition sets a context value, then we read it after if
 	condList := NewList([]Value{
 		NewWord("context"), NewWord("set"), NewString("seen"), NewBoolean(true),

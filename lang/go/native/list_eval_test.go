@@ -13,6 +13,7 @@ func TestListEvalAsArg(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// Register a word that takes a list and returns it unchanged.
 	r.Register("passlist", Signature{
@@ -57,6 +58,7 @@ func TestListEvalArithmetic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	r.Register("passlist", Signature{
 		Args: []*Type{TList},
@@ -89,6 +91,7 @@ func TestListEvalQuotedSkipped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	r.Register("passlist", Signature{
 		Args: []*Type{TList},
@@ -125,6 +128,7 @@ func TestWordSplicePreservesCodeBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// def double word [dup add]
 	// 5 double → 10
@@ -148,6 +152,7 @@ func TestListEvalFnDefAutoInvoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// Register a word "listlen" that takes a list and returns its length,
 	// via a module function (FnDef with captured registry).
@@ -186,6 +191,7 @@ func TestListEvalRuntimeListNotEvaluated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// Register a word that produces a list with words in it (Eval=false).
 	r.Register("makelist", Signature{

@@ -71,10 +71,10 @@ twos-complement representation:
 
 ## `aql:bin` module words
 
-Loaded via `"aql:bin" import` and used with dot notation:
+Loaded via `"aql:bin-util" import` and used with dot notation:
 
 ```
-"aql:bin" import
+"aql:bin-util" import
 255 bin.popcount      => 8
 0xff bin.bitlen       => 8
 0xa5 5 bin.test       => true

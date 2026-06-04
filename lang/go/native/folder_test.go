@@ -29,6 +29,7 @@ func setupMemFS(t *testing.T, r *Registry) *capabilities.MemFileOps {
 
 func TestFolderCreatesDir(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := setupMemFS(t, r)
 
 	result := runAQL(t, r, []Value{
@@ -51,6 +52,7 @@ func TestFolderCreatesDir(t *testing.T) {
 
 func TestFolderAbsolutePath(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := setupMemFS(t, r)
 
 	result := runAQL(t, r, []Value{
@@ -71,6 +73,7 @@ func TestFolderAbsolutePath(t *testing.T) {
 
 func TestFolderIdempotent(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	setupMemFS(t, r)
 
 	path := NewPath([]string{"x", "y"}, false)
@@ -86,6 +89,7 @@ func TestFolderIdempotent(t *testing.T) {
 
 func TestFolderWithParentsTrue(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := setupMemFS(t, r)
 
 	opts := NewOrderedMap()
@@ -104,6 +108,7 @@ func TestFolderWithParentsTrue(t *testing.T) {
 
 func TestFolderWithParentsFalse(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	setupMemFS(t, r)
 
 	opts := NewOrderedMap()
@@ -121,6 +126,7 @@ func TestFolderWithParentsFalse(t *testing.T) {
 
 func TestFolderWithMakePath(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := setupMemFS(t, r)
 
 	result := runAQL(t, r, []Value{
@@ -143,6 +149,7 @@ func TestFolderWithMakePath(t *testing.T) {
 
 func TestFolderCreatesParentDirs(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	mem := setupMemFS(t, r)
 
 	runAQL(t, r, []Value{

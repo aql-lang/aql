@@ -1,0 +1,20 @@
+# AQL Language Specification: the aql:logic-util module
+# Format: input<TAB>expected<TAB>description
+#
+# Derived boolean connectives moved out of core into the LogicUtil
+# namespace. The everyday connectives (and, or, not, xor, any, all) stay
+# built-in; these are the second-tier ones:
+#
+#   LogicUtil.nand / nor / xnor / iff / implies
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  the connectives
+"aql:logic-util" import end LogicUtil.nand true true	false	not (a and b)
+"aql:logic-util" import end LogicUtil.nor false false	true	not (a or b)
+"aql:logic-util" import end LogicUtil.iff true true	true	biconditional
+"aql:logic-util" import end LogicUtil.xnor true false	false	iff alias
+"aql:logic-util" import end LogicUtil.implies false true	false	(b implies a): true→false
+#
+# §2  negative — the words are gone from core (unbound without import)
+nand true true	ERROR:undefined_word	derived connectives are no longer core
+LogicUtil.nand true true	ERROR:undefined_word	`LogicUtil` is unbound without `import`

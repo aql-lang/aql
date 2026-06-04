@@ -228,6 +228,7 @@ func TestClosureNoOuterDefLeak(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	native.Register(reg)
 	e := native.NewTop(reg)
 	src := `def make-adder ([x:Integer] => [([y:Integer] => [x add y])])
@@ -254,6 +255,7 @@ func TestClosureCheckModeFactoryDefCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	native.Register(reg)
 	reg.Check.Mode = true
 	defer func() { reg.Check.Mode = false }()
@@ -292,6 +294,7 @@ func TestClosureCheckModeAnalyseFnBodyUsesCaptures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	native.Register(reg)
 	reg.Check.Mode = true
 	defer func() { reg.Check.Mode = false }()
@@ -329,6 +332,7 @@ func TestClosureCheckModeAnalyseFnBodyWithoutCaptures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	native.Register(reg)
 	reg.Check.Mode = true
 	defer func() { reg.Check.Mode = false }()

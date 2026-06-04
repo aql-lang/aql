@@ -170,8 +170,6 @@ func inferExact(name string, sig Signature) []string {
 		return nil
 	case "fn":
 		return []string{"Word/Function"}
-	case "call":
-		return []string{"Any"}
 	case "args":
 		return []string{"Node/List"}
 	case "var":

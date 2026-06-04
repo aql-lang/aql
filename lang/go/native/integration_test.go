@@ -9,6 +9,7 @@ import (
 // helper to run AQL expressions through the engine and return results
 func runAQL(t *testing.T, r *Registry, tokens []Value) []Value {
 	t.Helper()
+	registerIOWords(r) // read/write/etc moved to aql:io; seed them for the behaviour suite
 	e := NewTop(r)
 	result, err := e.Run(tokens)
 	if err != nil {
@@ -19,6 +20,7 @@ func runAQL(t *testing.T, r *Registry, tokens []Value) []Value {
 
 func runAQLError(t *testing.T, r *Registry, tokens []Value) error {
 	t.Helper()
+	registerIOWords(r)
 	e := NewTop(r)
 	_, err := e.Run(tokens)
 	return err
@@ -31,6 +33,7 @@ func TestEngineLt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("lt"), NewInteger(2)})
 	_as0, _ := AsBoolean(result[0])
 	if len(result) != 1 || !_as0 {
@@ -43,6 +46,7 @@ func TestEngineGt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewInteger(3), NewWord("gt"), NewInteger(1)})
 	_as1, _ := AsBoolean(result[0])
 	if len(result) != 1 || !_as1 {
@@ -55,6 +59,7 @@ func TestEngineLte(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("lte"), NewInteger(1)})
 	_as2, _ := AsBoolean(result[0])
 	if len(result) != 1 || !_as2 {
@@ -67,6 +72,7 @@ func TestEngineGte(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewInteger(2), NewWord("gte"), NewInteger(1)})
 	_as3, _ := AsBoolean(result[0])
 	if len(result) != 1 || !_as3 {
@@ -79,6 +85,7 @@ func TestEngineEq(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewInteger(5), NewWord("eq"), NewInteger(5)})
 	_as4, _ := AsBoolean(result[0])
 	if len(result) != 1 || !_as4 {
@@ -91,6 +98,7 @@ func TestEngineNeq(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewInteger(5), NewWord("neq"), NewInteger(3)})
 	_as5, _ := AsBoolean(result[0])
 	if len(result) != 1 || !_as5 {
@@ -108,6 +116,7 @@ func TestEngineDeq(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{NewString("a"), NewWord("deq"), NewString("a")})
 	_as7, _ := AsBoolean(result[0])
 	if len(result) != 1 || !_as7 {
@@ -120,6 +129,7 @@ func TestEngineLtTotalOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// lt is total — comparing across type branches no longer errors.
 	result := runAQL(t, r, []Value{NewInteger(1), NewWord("lt"), NewList([]Value{NewInteger(2)})})
 	if len(result) != 1 || !result[0].Parent.Equal(TBoolean) {
@@ -134,6 +144,7 @@ func TestEngineIf3True(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(true), NewInteger(1), NewInteger(2),
 	})
@@ -148,6 +159,7 @@ func TestEngineIf3False(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(false), NewInteger(1), NewInteger(2),
 	})
@@ -162,6 +174,7 @@ func TestEngineIf2True(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(true), NewInteger(42),
 	})
@@ -176,6 +189,7 @@ func TestEngineIf2False(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewBoolean(false), NewInteger(42),
 	})
@@ -189,6 +203,7 @@ func TestEngineIfListCondition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// if [1 lt 2] 10 20 → should evaluate condition [1 lt 2] → true → return 10
 	condList := NewList([]Value{NewInteger(1), NewWord("lt"), NewInteger(2)})
 	result := runAQL(t, r, []Value{
@@ -205,6 +220,7 @@ func TestEngineIfListBranch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// if true [1 add 2] [3 add 4] → should evaluate [1 add 2] → 3
 	thenList := NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)})
 	elseList := NewList([]Value{NewInteger(3), NewWord("add"), NewInteger(4)})
@@ -224,6 +240,7 @@ func TestEngineIfOnlyChosenBranchExecutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	r.Register("side-effect",
 		Signature{
 			Args: []*Type{TAny},
@@ -269,6 +286,7 @@ func TestEngineIfFalsy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// if 0 1 2 → 0 is falsy → return 2
 	result := runAQL(t, r, []Value{
 		NewWord("if"), NewInteger(0), NewInteger(1), NewInteger(2),
@@ -286,6 +304,7 @@ func TestEngineReadBasic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	mem.Files["test.txt"] = []byte("hello world")
 	SetHostFileOps(r, mem)
@@ -302,6 +321,7 @@ func TestEngineReadWithOpts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	mem.Files["data.txt"] = []byte("a\nb\nc")
 	SetHostFileOps(r, mem)
@@ -324,6 +344,7 @@ func TestEngineReadJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	mem.Files["data.json"] = []byte(`{"x":1}`)
 	SetHostFileOps(r, mem)
@@ -341,6 +362,7 @@ func TestEngineReadNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
@@ -355,6 +377,7 @@ func TestEngineReadUnknownFormat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	mem.Files["test.txt"] = []byte("data")
 	SetHostFileOps(r, mem)
@@ -372,6 +395,7 @@ func TestEngineWriteBasic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
@@ -390,6 +414,7 @@ func TestEngineWriteWithOpts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
@@ -409,6 +434,7 @@ func TestEngineWriteAppend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	mem.Files["log.txt"] = []byte("first\n")
 	SetHostFileOps(r, mem)
@@ -426,6 +452,7 @@ func TestEngineWriteAppendNewFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
@@ -442,6 +469,7 @@ func TestEngineWriteAnyOpts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
@@ -464,6 +492,7 @@ func TestEngineReadLineEndings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	mem.Files["crlf.txt"] = []byte("a\r\nb\r\nc")
 	SetHostFileOps(r, mem)
@@ -494,6 +523,7 @@ func TestRegistrySetFileOps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 	if HostFileOps(r) != mem {
@@ -506,6 +536,7 @@ func TestRegistryMatchNoFunction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	result := r.Match("nonexistent", []Value{}, WordInfo{})
 	if result != nil {
 		t.Error("expected nil for nonexistent function")

@@ -10,14 +10,14 @@ are accessed via dot notation.
 Use the standard `import` word with an `aql:` prefixed string:
 
 ```
-"aql:math" import
+"aql:math-util" import
 ```
 
 This creates a `math` def containing all the module's words. Access
 them via dot notation:
 
 ```
-"aql:math" import
+"aql:math-util" import
 
 -5 math.abs           # 5
 0.5 math.sin          # 0.479...
@@ -53,7 +53,7 @@ To use a module word in a forward-argument position (e.g. inside a list
 body), place args before the dot expression:
 
 ```
-"aql:math" import
+"aql:math-util" import
 for 5 [i 2 math.min]     # 0 1 2 2 2
 for 3 [i math.negate]     # 0 -1 -2
 ```
@@ -65,7 +65,7 @@ for 3 [i math.negate]     # 0 -1 -2
 Extended math operations beyond the built-in arithmetic (`add`, `sub`,
 `mul`, `div`, `mod`, `pow`).
 
-**Import:** `"aql:math" import`
+**Import:** `"aql:math-util" import`
 
 #### Unary Operations
 

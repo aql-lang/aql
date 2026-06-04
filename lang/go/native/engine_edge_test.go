@@ -174,6 +174,7 @@ func TestEdgeEmptyInput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{})
 	if err != nil {
@@ -191,6 +192,7 @@ func TestEdgeMultipleLiterals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewInteger(2), NewInteger(3),
@@ -212,6 +214,7 @@ func TestEdgeMultipleUnknownWordsError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{
 		NewWord("foo"), NewWord("bar"), NewWord("baz"),
@@ -227,6 +230,7 @@ func TestEdgeUnknownWordCollectedByForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewWord("lower"), NewString("foo")})
 	if err != nil {
@@ -248,6 +252,7 @@ func TestEdgeUnknownWordAsSetKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("mykey"), NewInteger(42),
@@ -270,6 +275,7 @@ func TestEdgeUpperAlreadyUpper(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewString("ABC"), NewWord("upper")})
 	if err != nil {
@@ -287,6 +293,7 @@ func TestEdgeUpperEmptyString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewString(""), NewWord("upper")})
 	if err != nil {
@@ -305,6 +312,7 @@ func TestEdgeUpperOnInteger(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{NewInteger(42), NewWord("upper")})
 	if err == nil {
@@ -319,6 +327,7 @@ func TestEdgeLowerAlreadyLower(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewString("abc"), NewWord("lower")})
 	if err != nil {
@@ -337,6 +346,7 @@ func TestEdgeLowerForwardOnInteger(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{NewWord("lower"), NewInteger(42)})
 	if err == nil {
@@ -351,6 +361,7 @@ func TestEdgeDupString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewString("hello"), NewWord("dup")})
 	if err != nil {
@@ -372,6 +383,7 @@ func TestEdgeDupNoArgs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{NewWord("dup")})
 	if err == nil {
@@ -387,6 +399,7 @@ func TestEdgeSwapMixedTypes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewString("hello"), NewInteger(42), NewWord("swap")})
 	if err != nil {
@@ -410,6 +423,7 @@ func TestEdgeSwapNoArgs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{NewWord("swap")})
 	if err == nil {
@@ -422,6 +436,7 @@ func TestEdgeSwapOneArg(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{NewInteger(1), NewWord("swap")})
 	if err == nil {
@@ -436,6 +451,7 @@ func TestEdgeDropNoArgs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{NewWord("drop")})
 	if err == nil {
@@ -448,6 +464,7 @@ func TestEdgeDropString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewString("gone"), NewWord("drop")})
 	if err != nil {
@@ -464,6 +481,7 @@ func TestEdgeDropPreservesOthers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewInteger(2), NewInteger(3), NewWord("drop"),
@@ -488,6 +506,7 @@ func TestEdgeArithmeticLargeNumbers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	// 1000000 mul 1000000 → 1000000000000
 	result, err := e.Run([]Value{
@@ -508,6 +527,7 @@ func TestEdgeArithmeticNegativeResults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	tests := []struct {
 		name  string
@@ -543,6 +563,7 @@ func TestEdgeArithmeticZeroOperations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	tests := []struct {
 		name  string
@@ -576,6 +597,7 @@ func TestEdgeArithmeticIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	tests := []struct {
 		name  string
@@ -608,6 +630,7 @@ func TestEdgeArithmeticNoArgs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{NewWord("add")})
 	if err == nil {
@@ -622,6 +645,7 @@ func TestEdgeArithmeticOneArg(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{NewInteger(1), NewWord("add")})
 	if err == nil {
@@ -635,6 +659,7 @@ func TestEdgeArithmeticStringOperands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewString("hello"), NewWord("add"), NewString("world")})
 	if err != nil {
@@ -654,6 +679,7 @@ func TestEdgeLongInfixChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewWord("add"), NewInteger(2),
@@ -680,6 +706,7 @@ func TestEdgeLongMixedLeftToRight(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewWord("add"), NewInteger(2), NewWord("mul"), NewInteger(3),
@@ -705,6 +732,7 @@ func TestEdgePrefixChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewInteger(2), NewWord("add"),
@@ -732,6 +760,7 @@ func TestEdgeForceStackOnForwardOnlyLower(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{
 		NewWordModified("lower", -1, true, false),
@@ -748,6 +777,7 @@ func TestEdgeForceForwardWithPrefixAvailable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewString("A"),
@@ -778,6 +808,7 @@ func TestEdgeArgCountMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{
 		NewString("X"),
@@ -794,6 +825,7 @@ func TestEdgeForceStackAdd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewInteger(2),
@@ -816,6 +848,7 @@ func TestEdgeEndAtStart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewEnd()})
 	if err != nil {
@@ -832,6 +865,7 @@ func TestEdgeEndConsecutive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewEnd(), NewEnd(), NewEnd(),
@@ -850,6 +884,7 @@ func TestEdgeEndTerminatesGetForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewInteger(42), NewString("mykey"), NewWord("set"),
@@ -874,6 +909,7 @@ func TestEdgeEndWithMultipleForwards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("a"), NewInteger(99), NewEnd(),
@@ -905,6 +941,7 @@ func TestEdgeEndBetweenLiterals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewInteger(2), NewEnd(), NewInteger(3),
@@ -926,6 +963,7 @@ func TestEdgeSetWithIntegerKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewString("42"), NewInteger(100),
@@ -946,6 +984,7 @@ func TestEdgeSetEmptyString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewInteger(1), NewString(""), NewWord("set"),
@@ -968,6 +1007,7 @@ func TestEdgeSetValueIsString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewString("greeting"), NewString("hello"),
@@ -990,6 +1030,7 @@ func TestEdgeSetThenUseValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("x"), NewInteger(10),
@@ -1012,6 +1053,7 @@ func TestEdgeSetComputedValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("total"),
@@ -1036,6 +1078,7 @@ func TestEdgeLeftToRightSubMul(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(10), NewWord("sub"), NewInteger(2), NewWord("mul"), NewInteger(3),
@@ -1056,6 +1099,7 @@ func TestEdgeLeftToRightMulSub(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(2), NewWord("mul"), NewInteger(3), NewWord("sub"), NewInteger(1),
@@ -1076,6 +1120,7 @@ func TestEdgeLeftToRightDivAdd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewWord("add"), NewInteger(10), NewWord("div"), NewInteger(2),
@@ -1096,6 +1141,7 @@ func TestEdgeLeftToRightModAdd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewWord("add"), NewInteger(10), NewWord("mod"), NewInteger(3),
@@ -1116,6 +1162,7 @@ func TestEdgeLeftToRightAllOps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewWord("add"), NewInteger(2), NewWord("mul"), NewInteger(3),
@@ -1139,6 +1186,7 @@ func TestEdgeEmptyParens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewOpenParen(), NewCloseParen(),
@@ -1157,6 +1205,7 @@ func TestEdgeParenMultipleValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewOpenParen(), NewInteger(1), NewInteger(2), NewInteger(3), NewCloseParen(),
@@ -1182,6 +1231,7 @@ func TestEdgeParenDeeplyNested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewOpenParen(), NewOpenParen(), NewOpenParen(),
@@ -1203,6 +1253,7 @@ func TestEdgeParenNestedArithmetic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewOpenParen(),
@@ -1226,6 +1277,7 @@ func TestEdgeParenWithFunction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewOpenParen(), NewString("hello"), NewWord("upper"), NewCloseParen(),
@@ -1245,6 +1297,7 @@ func TestEdgeParenWithDup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewOpenParen(), NewInteger(1), NewWord("dup"), NewCloseParen(),
@@ -1263,6 +1316,7 @@ func TestEdgeParenAfterLiteral(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(10), NewOpenParen(), NewInteger(5), NewCloseParen(),
@@ -1286,6 +1340,7 @@ func TestEdgeParenCloseWithNoOpen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{NewCloseParen()})
 	if err == nil {
@@ -1299,6 +1354,7 @@ func TestEdgeParenMultipleOpenUnmatched(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{
 		NewOpenParen(), NewOpenParen(), NewInteger(1), NewCloseParen(),
@@ -1314,6 +1370,7 @@ func TestEdgeParenConsecutive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewOpenParen(), NewInteger(1), NewCloseParen(),
@@ -1335,6 +1392,7 @@ func TestEdgeParenWithUnknownWordErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{
 		NewOpenParen(), NewWord("foo"), NewCloseParen(),
@@ -1351,6 +1409,7 @@ func TestEdgeParenOrphanedForwardInside(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{
 		NewOpenParen(), NewWord("add"), NewInteger(1), NewCloseParen(),
@@ -1367,6 +1426,7 @@ func TestEdgeParenBarrierStopsForwardSearch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewWord("add"),
@@ -1387,6 +1447,7 @@ func TestEdgeParenWithEndNoOp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewOpenParen(), NewInteger(1), NewEnd(), NewCloseParen(),
@@ -1406,6 +1467,7 @@ func TestEdgeParenComplexExpression(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(2), NewWord("mul"),
@@ -1426,6 +1488,7 @@ func TestEdgeParenSiblingExpressions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewOpenParen(), NewInteger(1), NewWord("add"), NewInteger(2), NewCloseParen(),
@@ -1450,6 +1513,7 @@ func TestEdgeSetGetComputedKeyAndValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"),
@@ -1473,6 +1537,7 @@ func TestEdgeDupThenAdd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(5), NewWord("dup"), NewWord("add"),
@@ -1492,6 +1557,7 @@ func TestEdgeSwapThenSub(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(3), NewInteger(10), NewWord("swap"), NewWord("sub"),
@@ -1511,6 +1577,7 @@ func TestEdgeDropThenOp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewInteger(2), NewInteger(3), NewWord("drop"), NewWord("add"),
@@ -1530,6 +1597,7 @@ func TestEdgeUpperInParens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewOpenParen(), NewString("abc"), NewWord("upper"), NewCloseParen(),
@@ -1549,6 +1617,7 @@ func TestEdgeMixedStringAndIntOnStack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewString("hello"), NewInteger(42), NewString("world"),
@@ -1567,6 +1636,7 @@ func TestEdgeChainUpperLower(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewString("Hello"), NewWord("upper"), NewWord("lower"),
@@ -1586,6 +1656,7 @@ func TestEdgeForwardUpperThenLower(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("lower"),
@@ -1608,6 +1679,7 @@ func TestEdgeAddWithStringAndInt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewString("hello"), NewInteger(1), NewWord("add"),
@@ -1628,6 +1700,7 @@ func TestEdgePrefixMatchSpecificity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewString("test"), NewWord("upper")})
 	if err != nil {
@@ -1651,6 +1724,7 @@ func TestEdgePrefixMatchDoesNotCrossParen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	_, err = e.Run([]Value{
 		NewInteger(1),
@@ -1668,6 +1742,7 @@ func TestEdgeLookupUnknown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	fn := r.Lookup("nonexistent")
 	if fn != nil {
 		t.Errorf("expected nil for unknown function, got %v", fn)
@@ -1730,6 +1805,7 @@ func TestEdgeResultCollectedByPendingForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("lower"),
@@ -1752,6 +1828,7 @@ func TestEdgePrefixResultFeedsInfix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(2), NewInteger(3), NewWord("add"),
@@ -1774,10 +1851,12 @@ func TestEdgeStoreIsolationBetweenRegistries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg1)
 	reg2, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg2)
 	e1 := New(reg1)
 	e2 := New(reg2)
 
@@ -1811,6 +1890,7 @@ func TestEdgeSingleInteger(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewInteger(0)})
 	if err != nil {
@@ -1827,6 +1907,7 @@ func TestEdgeSingleString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewString("x")})
 	if err != nil {
@@ -1843,6 +1924,7 @@ func TestEdgeSingleEmptyString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{NewString("")})
 	if err != nil {
@@ -1961,6 +2043,7 @@ func TestEdgeSignatureReturnsNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewInteger(1), NewInteger(2), NewWord("drop"), NewWord("drop"),
@@ -1981,6 +2064,7 @@ func TestEdgeEndInsideParenNoForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewOpenParen(), NewInteger(42), NewEnd(), NewCloseParen(),
@@ -2001,6 +2085,7 @@ func TestEdgeEndOutsideParenDoesNotCrossBarrier(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("a"),
@@ -2025,6 +2110,7 @@ func TestDefBasicListBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	// First run: define increment
@@ -2055,6 +2141,7 @@ func TestDefScalarBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	_, err = e.Run([]Value{
@@ -2082,6 +2169,7 @@ func TestDefStringName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	_, err = e.Run([]Value{
@@ -2110,6 +2198,7 @@ func TestDefPrefixBodyStringName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	_, err = e.Run([]Value{
@@ -2138,6 +2227,7 @@ func TestDefPrefixBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	_, err = e.Run([]Value{
@@ -2166,6 +2256,7 @@ func TestDefAndUseSameRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -2189,6 +2280,7 @@ func TestDefDoesNotBreakExistingWordCoercion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewString("a"), NewWord("upper"),
@@ -2209,6 +2301,7 @@ func TestDefUndefinedWordAcceptedByTWord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -2230,6 +2323,7 @@ func TestDefStringBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -2251,6 +2345,7 @@ func TestDefUsedMultipleTimes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -2277,6 +2372,7 @@ func TestDefForthSquare(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -2301,6 +2397,7 @@ func TestDefForthNegate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -2327,6 +2424,7 @@ func TestDefForthOver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -2358,6 +2456,7 @@ func TestDefForthComposition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	// Define double
@@ -2400,6 +2499,7 @@ func TestDefForthThreeDeepComposition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	_, err = e.Run([]Value{
@@ -2450,6 +2550,7 @@ func TestDefForthSumOfSquares(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	_, err = e.Run([]Value{
@@ -2483,6 +2584,7 @@ func TestDefForthCube(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	_, err = e.Run([]Value{
@@ -2521,6 +2623,7 @@ func TestDefForthWithInfixOps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	_, err = e.Run([]Value{
@@ -2551,6 +2654,7 @@ func TestDefForthConstant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -2574,6 +2678,7 @@ func TestDefForthStackEffectMultipleValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -2598,6 +2703,7 @@ func TestDefForthSwapSub(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -2627,6 +2733,7 @@ func TestDefForthAbsDiff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -2652,6 +2759,7 @@ func TestDefForthMultipleDefsInSameRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -2678,6 +2786,7 @@ func TestDefForthStringWord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -2701,6 +2810,7 @@ func TestDefForthPersistsAcrossRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	// Run 1: define square
@@ -2754,6 +2864,7 @@ func TestDefForthDefWithEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -2780,6 +2891,7 @@ func TestDefForthFactorial5(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -2806,6 +2918,7 @@ func TestDefForthDefInteractsWithStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	result, err := e.Run([]Value{
@@ -2829,6 +2942,7 @@ func TestRecordTypeCreation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	// type Record [x:number y:number] => record{x:Number,y:Number}
@@ -2858,6 +2972,7 @@ func TestRecordTypeWithDef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	// def Point type Record [x:number y:number]
@@ -2892,6 +3007,7 @@ func TestRecordTypeUnify(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	// Helper to run a unify test and return "result_string bool_string".
@@ -3006,6 +3122,7 @@ func TestRecordTypeListWithMapElement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 
 	// type Record [{x:{z:boolean}} "y":1]
@@ -3045,6 +3162,7 @@ func TestDoList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	// do [1 add 2] → 3
 	input := []Value{
@@ -3065,6 +3183,7 @@ func TestDoMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	e := New(reg)
 	// do {x:[3 add 4]} → {x:7}
 	innerList := NewList([]Value{NewInteger(3), NewWord("add"), NewInteger(4)})
@@ -3096,6 +3215,7 @@ func TestModuleBasic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	body := NewList([]Value{
 		NewWord("def"), NewWord("inc"), NewList([]Value{NewWord("add"), NewInteger(1)}),
 		NewWord("export"), NewAtom("Foo"), makeMap("inc", NewWord("inc")),
@@ -3132,6 +3252,7 @@ func TestModuleImportBasic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	body := NewList([]Value{
 		NewWord("def"), NewWord("inc"), NewList([]Value{NewWord("add"), NewInteger(1)}),
 		NewWord("export"), NewAtom("Foo"), makeMap("inc", NewWord("inc")),
@@ -3163,6 +3284,7 @@ func TestModuleImportDotAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	body := NewList([]Value{
 		NewWord("def"), NewWord("inc"), NewList([]Value{NewWord("add"), NewInteger(1)}),
 		NewWord("export"), NewAtom("Foo"), makeMap("inc", NewWord("inc")),
@@ -3191,6 +3313,7 @@ func TestModuleIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	body := NewList([]Value{
 		NewWord("def"), NewWord("secret"), NewInteger(42),
 		NewWord("export"), NewAtom("M"), makeMap("x", NewInteger(1)),
@@ -3210,6 +3333,7 @@ func TestModuleDefSubject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	body := NewList([]Value{
 		NewWord("export"), NewAtom("M"), makeMap("x", NewInteger(1)),
 	})
@@ -3238,6 +3362,7 @@ func TestModuleImportRename(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	body := NewList([]Value{
 		NewWord("export"), NewAtom("Foo"), makeMap("x", NewInteger(1)),
 	})
@@ -3263,6 +3388,7 @@ func TestModuleImportMultiRename(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	body := NewList([]Value{
 		NewWord("export"), NewAtom("Foo"), makeMap("x", NewInteger(1)),
 	})
@@ -3285,6 +3411,7 @@ func TestModuleFreshRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// Define "foo" in parent.
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("foo"), NewInteger(99),
@@ -3325,6 +3452,7 @@ func BenchmarkSimpleExpression(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	registerIOWords(reg)
 	input := []Value{NewInteger(1), NewInteger(2), NewWord("add")}
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
@@ -3338,6 +3466,7 @@ func BenchmarkComplexExpression(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	registerIOWords(reg)
 	input := []Value{
 		NewInteger(1), NewInteger(2), NewWord("add"),
 		NewInteger(3), NewWord("mul"),
@@ -3354,6 +3483,7 @@ func BenchmarkRepeatedRun(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	registerIOWords(reg)
 	input := []Value{NewInteger(1), NewInteger(2), NewWord("add")}
 	eng := New(reg)
 	b.ReportAllocs()

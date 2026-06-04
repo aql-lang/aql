@@ -170,7 +170,11 @@ func TestFlattenAndIndexofAreCore(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.SetParseFunc(parser.Parse)
-	// No aql:array import — these are core.
+	// flatten is core. indexof moved to aql:string-util (StringUtil.indexof,
+	// covering both string and list-membership overloads); seed it bare here.
+	for _, n := range native.StringModuleNatives {
+		r.RegisterNativeFunc(n)
+	}
 	assertArrayResult(t, r, `flatten -1 [1,[2,[3,[4]]]]`, "[1 2 3 4]")  // deep flatten
 	assertArrayResult(t, r, `flatten [1,[2,[3]]]`, "[1 2 [3]]")         // default = one level
 	assertArrayResult(t, r, `indexof [20,99,10] [10,20,30]`, "[1 3 0]") // list overload

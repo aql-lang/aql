@@ -11,7 +11,7 @@ import (
 
 func TestMergeMaps(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`merge {a:1 b:2} {b:3 c:4}`,
+		`StructUtil.merge {a:1 b:2} {b:3 c:4}`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -39,7 +39,7 @@ func TestMergeMaps(t *testing.T) {
 
 func TestMergeNested(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`merge {a:{x:1 y:2}} {a:{y:3 z:4}}`,
+		`StructUtil.merge {a:{x:1 y:2}} {a:{y:3 z:4}}`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +68,7 @@ func TestMergeNested(t *testing.T) {
 
 func TestMergeListMap(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`["a","b","c"] merge {1:"d"}`,
+		`["a","b","c"] StructUtil.merge {1:"d"}`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -94,7 +94,7 @@ func TestMergeListMap(t *testing.T) {
 
 func TestMergeMapList(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`{3:"d"} merge ["a","b","c"]`,
+		`{3:"d"} StructUtil.merge ["a","b","c"]`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -112,7 +112,7 @@ func TestMergeMapList(t *testing.T) {
 
 func TestMergeMapListIgnoreNonInt(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`{x:"X",y:"Y"} merge ["a","b"]`,
+		`{x:"X",y:"Y"} StructUtil.merge ["a","b"]`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -230,7 +230,7 @@ func TestShift(t *testing.T) {
 
 func TestGetpathSimple(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`getpath "a.b" {a:{b:42}}`,
+		`StructUtil.getpath "a.b" {a:{b:42}}`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -246,7 +246,7 @@ func TestGetpathSimple(t *testing.T) {
 
 func TestGetpathTopLevel(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`getpath "name" {name:"Alice"}`,
+		`StructUtil.getpath "name" {name:"Alice"}`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -261,7 +261,7 @@ func TestGetpathTopLevel(t *testing.T) {
 
 func TestSetpathSimple(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`setpath {a:1} "b" 99`,
+		`StructUtil.setpath {a:1} "b" 99`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -284,7 +284,7 @@ func TestSetpathSimple(t *testing.T) {
 
 func TestSetpathNewKey(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`setpath {a:1} "b" 2`,
+		`StructUtil.setpath {a:1} "b" 2`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -306,7 +306,7 @@ func TestSetpathNewKey(t *testing.T) {
 
 func TestCloneMap(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`{a:1 b:2} clone`,
+		`{a:1 b:2} StructUtil.clone`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -331,7 +331,7 @@ func TestCloneMap(t *testing.T) {
 
 func TestInjectPaths(t *testing.T) {
 	bt := string(rune(96)) // backtick character
-	input := `inject {greeting:"` + bt + `name` + bt + `"} {name:"Alice"}`
+	input := `StructUtil.inject {greeting:"` + bt + `name` + bt + `"} {name:"Alice"}`
 	result, err := runNativeSteps(t, nil, []string{input})
 	if err != nil {
 		t.Fatal(err)
@@ -354,7 +354,7 @@ func TestInjectPaths(t *testing.T) {
 
 func TestValidateReturnsSpec(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`validate {name:"$STRING" age:"$NUMBER"} {name:"Alice" age:30}`,
+		`StructUtil.validate {name:"$STRING" age:"$NUMBER"} {name:"Alice" age:30}`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -385,7 +385,7 @@ func TestValidateReturnsSpec(t *testing.T) {
 
 func TestWalkFlat(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`{a:1 b:"hello"} walk`,
+		`{a:1 b:"hello"} StructUtil.walk`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -417,7 +417,7 @@ func TestWalkFlat(t *testing.T) {
 
 func TestWalkNested(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
-		`{a:{x:1 y:2} b:3} walk`,
+		`{a:{x:1 y:2} b:3} StructUtil.walk`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -464,8 +464,13 @@ func TestWalkBeforeIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
+	// walk moved to aql:struct; register the struct words into this registry.
+	for _, n := range native.StructModuleNatives {
+		reg.RegisterNativeFunc(n)
+	}
 
 	// Push the fn as a Quoted function value so it doesn't auto-execute
 	// before walk can consume it from the stack.
@@ -517,8 +522,13 @@ func TestWalkBeforeIdentityNested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
+	// walk moved to aql:struct; register the struct words into this registry.
+	for _, n := range native.StructModuleNatives {
+		reg.RegisterNativeFunc(n)
+	}
 
 	fnVal := native.NewFunction(fnDef)
 	fnVal.Quoted = true
@@ -571,8 +581,13 @@ func TestWalkBeforeReplace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
+	// walk moved to aql:struct; register the struct words into this registry.
+	for _, n := range native.StructModuleNatives {
+		reg.RegisterNativeFunc(n)
+	}
 
 	fnVal := native.NewFunction(fnDef)
 	fnVal.Quoted = true
@@ -613,8 +628,13 @@ func TestWalkBeforeReturnPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
+	// walk moved to aql:struct; register the struct words into this registry.
+	for _, n := range native.StructModuleNatives {
+		reg.RegisterNativeFunc(n)
+	}
 
 	fnVal := native.NewFunction(fnDef)
 	fnVal.Quoted = true
@@ -663,8 +683,13 @@ func TestWalkBeforeAfterIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
+	// walk moved to aql:struct; register the struct words into this registry.
+	for _, n := range native.StructModuleNatives {
+		reg.RegisterNativeFunc(n)
+	}
 
 	fnVal1 := native.NewFunction(fnDef1)
 	fnVal1.Quoted = true
@@ -727,8 +752,13 @@ func TestWalkBeforeAfterPostOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
+	// walk moved to aql:struct; register the struct words into this registry.
+	for _, n := range native.StructModuleNatives {
+		reg.RegisterNativeFunc(n)
+	}
 
 	fnVal1 := native.NewFunction(fnDef1)
 	fnVal1.Quoted = true
@@ -782,8 +812,13 @@ func TestWalkBeforeAfterNested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	reg.SetParseFunc(parser.Parse)
 	native.Register(reg)
+	// walk moved to aql:struct; register the struct words into this registry.
+	for _, n := range native.StructModuleNatives {
+		reg.RegisterNativeFunc(n)
+	}
 
 	fnVal1 := native.NewFunction(fnDef1)
 	fnVal1.Quoted = true

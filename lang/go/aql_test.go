@@ -375,12 +375,16 @@ func TestSetFileOps(t *testing.T) {
 	ops := lang.NewMemFileOps()
 	a.SetFileOps(ops)
 
+	// read/write moved to aql:io; import once (state persists across Run).
+	if _, err = a.Run(`"aql:io" import`); err != nil {
+		t.Fatal(err)
+	}
 	// Write and read back via the mem file ops.
-	_, err = a.Run(`write "test.txt" "hello"`)
+	_, err = a.Run(`IO.write "test.txt" "hello"`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := a.Run(`read "test.txt"`)
+	result, err := a.Run(`IO.read "test.txt"`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -401,8 +405,12 @@ func TestRunDefaultBranch(t *testing.T) {
 
 	// Write a JSON file with a map value, then read it back.
 	// The result is a map which hits the default v.String() branch.
+	// read moved to aql:io; import once (state persists across Run).
+	if _, err = a.Run(`"aql:io" import`); err != nil {
+		t.Fatal(err)
+	}
 	ops.Files["data.json"] = []byte(`{"a":1}`)
-	result, err := a.Run(`read "data.json"`)
+	result, err := a.Run(`IO.read "data.json"`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -750,6 +758,11 @@ func TestRegisterAddsAlongsideBuiltin(t *testing.T) {
 	a, err := lang.New()
 	if err != nil {
 		t.Fatal(err)
+	}
+	// `upper` moved to aql:string-util; register the string words so this test
+	// can demonstrate extending an existing (module) word with a new overload.
+	for _, n := range native.StringModuleNatives {
+		a.RegisterNativeFunc(n)
 	}
 	// Add a new integer signature to the built-in "upper" word.
 	// The existing string signature still works; the new one handles integers.

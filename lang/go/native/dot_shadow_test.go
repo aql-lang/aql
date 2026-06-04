@@ -12,6 +12,7 @@ func TestDotNotationRegisteredWordKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// Build a map with keys that shadow registered words.
 	m := NewOrderedMap()
@@ -49,6 +50,7 @@ func TestDotNotationModuleExportShadow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// Simulate a module map with an export named "trace".
 	moduleMap := NewOrderedMap()
@@ -77,6 +79,7 @@ func TestDotNotationNormalKeysStillWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	m := NewOrderedMap()
 	m.Set("name", NewString("alice"))

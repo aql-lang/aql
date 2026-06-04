@@ -45,10 +45,20 @@ func runRealFileSteps(t *testing.T, dir string, steps []string) ([]native.Value,
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	native.Register(reg)
 	native.SetHostFileOps(reg, capabilities.NewDefault())
 	reg.SetParseFunc(parser.Parse)
 	modules.InstallResolver(reg) // production module wiring (lang.New)
+	{
+		prev := reg.Modules.InitFunc
+		reg.Modules.InitFunc = func(child *native.Registry) {
+			if prev != nil {
+				prev(child)
+			}
+			registerIOWords(child)
+		}
+	}
 	reg.BaseDir = absDir
 
 	eng := native.New(reg)
@@ -130,9 +140,19 @@ func checkRealFile(t *testing.T, dir, name string) []native.CheckDiagnostic {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	native.SetHostFileOps(reg, capabilities.NewDefault())
 	reg.SetParseFunc(parser.Parse)
 	modules.InstallResolver(reg)
+	{
+		prev := reg.Modules.InitFunc
+		reg.Modules.InitFunc = func(child *native.Registry) {
+			if prev != nil {
+				prev(child)
+			}
+			registerIOWords(child)
+		}
+	}
 	reg.BaseDir = dir
 	reg.Check.Mode = true
 	defer func() { reg.Check.Mode = false }()

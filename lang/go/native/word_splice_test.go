@@ -16,6 +16,7 @@ func runSplice(t *testing.T, src string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	toks, err := parser.Parse(src)
 	if err != nil {
 		t.Fatalf("parse %q: %v", src, err)
@@ -33,6 +34,7 @@ func runSpliceErr(t *testing.T, src string) error {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	toks, err := parser.Parse(src)
 	if err != nil {
 		return err
@@ -119,6 +121,7 @@ func TestSpliceTypedListSplicesAsValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	typed := NewTypedListWithElements(
 		NewTypeLiteral(TInteger),
 		[]Value{NewInteger(1), NewInteger(2), NewInteger(3)},

@@ -30,6 +30,7 @@ func TestErrorValueType(t *testing.T) {
 func TestTopLevelErrorHalts(t *testing.T) {
 	// 1 div 0 mul 2 → halts with error, mul 2 never runs
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 	_, err := e.Run([]Value{
 		NewInteger(1), NewWord("div"), NewInteger(0),
@@ -46,6 +47,7 @@ func TestTopLevelErrorHalts(t *testing.T) {
 func TestDoBlockCatchesError(t *testing.T) {
 	// do [1 div 0] → error value on stack (not a Go error)
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 	result, err := e.Run([]Value{
 		NewWord("do"),
@@ -70,6 +72,7 @@ func TestDoBlockCatchesError(t *testing.T) {
 func TestErrorWordSimple(t *testing.T) {
 	// do [1 div 0] error [print] → prints "division by zero", continues
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	reg.Output = &bytes.Buffer{}
 	e := NewTop(reg)
 	result, err := e.Run([]Value{
@@ -94,6 +97,7 @@ func TestErrorWordWithList(t *testing.T) {
 	// do [1 div 0] error [print] 3 mul 4 → 12
 	// The error is on the stack inside the handler list; print consumes it.
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	reg.Output = &bytes.Buffer{}
 	e := NewTop(reg)
 	result, err := e.Run([]Value{
@@ -119,6 +123,7 @@ func TestErrorWordWithList(t *testing.T) {
 func TestErrorWordContinuesExecution(t *testing.T) {
 	// do [1 div 0] error [drop] 3 mul 4 → 12
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	reg.Output = &bytes.Buffer{}
 	e := NewTop(reg)
 	result, err := e.Run([]Value{
@@ -140,6 +145,7 @@ func TestErrorWordContinuesExecution(t *testing.T) {
 func TestDoBlockSuccessNoError(t *testing.T) {
 	// do [1 add 2] → 3 (no error, normal result)
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	e := NewTop(reg)
 	result, err := e.Run([]Value{
 		NewWord("do"),
@@ -159,6 +165,7 @@ func TestUnhandledErrorOnStack(t *testing.T) {
 	// The error is inert data — it doesn't block subsequent operations
 	// that don't consume it.
 	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
 	reg.Output = &bytes.Buffer{}
 	e := NewTop(reg)
 	result, err := e.Run([]Value{

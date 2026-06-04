@@ -54,7 +54,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	// run InitFunc to seed the child sub-registry with native words.
 	// Using ModuleRegistry.InheritConfig rather than copying fields one
 	// at a time is what keeps a future config field from being silently
-	// dropped here — the Resolver omission that broke `import "aql:math"`
+	// dropped here — the Resolver omission that broke `import "aql:math-util"`
 	// from file-imported modules (native imports only worked at the top
 	// level) was exactly that field-by-field bug.
 	modReg.Modules.InheritConfig(parent.Modules)
@@ -481,7 +481,7 @@ func isNativeModImport(path string) bool {
 	return strings.HasPrefix(path, "aql:")
 }
 
-// resolveNativeMod resolves a native module import (e.g. "aql:math").
+// resolveNativeMod resolves a native module import (e.g. "aql:math-util").
 // The module name is extracted from the "aql:" prefix and resolved via the
 // registry's NativeModResolver callback. The resolver returns a ModuleDesc
 // whose exports are installed as defs, just like file-based modules.

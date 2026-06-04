@@ -350,7 +350,7 @@ aql exec --perms=trusted --no-install=network --no-install=sqlite
 
 See **[HOWTO §Sandbox untrusted code](HOWTO.md#sandbox-untrusted-code)**
 for a walkthrough, and
-**[lang/doc/design/PERMISSIONS.0.md](lang/doc/design/PERMISSIONS.0.md)**
+**[design/PERMISSIONS.0.md](design/PERMISSIONS.0.md)**
 for the schema.
 
 

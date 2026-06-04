@@ -53,12 +53,12 @@ func TestCheckProp_AlwaysPasses(t *testing.T) {
 // fix re-binds the cached desc's namespace when absent.
 func TestCheckProp_PropertyBodyCanImportNativeModule(t *testing.T) {
 	r := testRegistry(t)
-	InstallResolver(r) // enable `import "aql:math"` resolution
+	InstallResolver(r) // enable `import "aql:math-util"` resolution
 
-	// Property body imports aql:math every iteration and uses Math.sqrt;
+	// Property body imports aql:math every iteration and uses MathUtil.sqrt;
 	// runs > 1 is the case that regressed.
 	src := `Test.check-prop "sqrt-ok" [r.int 1 10] ` +
-		`[drop "aql:math" import end 4.0 Math.sqrt end 2.0 eq] 5 1 0`
+		`[drop "aql:math-util" import end 4.0 MathUtil.sqrt end 2.0 eq] 5 1 0`
 	ok := runTestAndGetField(t, r, src, "ok")
 	b, err := ok.AsConcreteBoolean()
 	if err != nil {

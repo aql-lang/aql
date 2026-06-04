@@ -590,6 +590,7 @@ func TestRegistryJsonicFormatHasResolver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	jf, ok := HostFormats(r)["jsonic"].(*JsonicFormat)
 	if !ok {
 		t.Fatal("jsonic format should be *JsonicFormat")
@@ -604,6 +605,7 @@ func TestRegistryJSONFormatHasNoResolver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	// JSON format should remain unchanged — no multisource.
 	_, ok := HostFormats(r)["json"].(*JSONFormat)
 	if !ok {
@@ -616,6 +618,7 @@ func TestSetFileOpsUpdatesJsonicResolver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	mem := capabilities.NewMem()
 	mem.Files["test.jsonic"] = []byte(`{val:42}`)

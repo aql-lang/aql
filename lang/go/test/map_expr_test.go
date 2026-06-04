@@ -19,6 +19,7 @@ func runExpr(t *testing.T, expr string) ([]native.Value, error) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	eng := native.NewTop(reg)
 	return eng.Run(values)
 }

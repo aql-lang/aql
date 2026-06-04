@@ -950,34 +950,6 @@ None otherwise None	None
 # Scalar unification: type Narrows to concrete
 1 tand Integer	1
 
-# === dblcall (callback function example) ===
-
-# dblcall doubles integer then invokes callback with result
-dblcall 5 [dup mul]	100
-
-# callback is a simple word
-dblcall 3 [dup add]	12
-
-# all forward form
-dblcall 5 [add 1]	11
-
-# callback that just leaves the doubled value
-dblcall 4 []	8
-
-# callback calls a fn-defined function
-def sq fn [[x:Number] [Number] [x mul x]] dblcall 3 [sq]	36
-
-# === call (execute a list as code) ===
-
-# call splices list contents as code in a paren scope
-10 [dup mul] call	100
-
-# call with add
-3 [add 7] call	10
-
-# empty list call is a no-op (value passes through)
-5 [] call	5
-
 # === def fn style dblcall (passing lambdas as arguments) ===
 
 # lambda using named param

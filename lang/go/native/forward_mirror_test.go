@@ -92,6 +92,7 @@ func TestForwardMirror1Arg(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	RegisterMirrorTestWord(r, "m1", 1)
 
 	args := []Value{NewInteger(1)}
@@ -120,6 +121,7 @@ func TestForwardMirror2Args(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	RegisterMirrorTestWord(r, "m2", 2)
 
 	args := []Value{NewInteger(1), NewInteger(2)}
@@ -148,6 +150,7 @@ func TestForwardMirror2ArgsInvalid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	RegisterMirrorTestWord(r, "m2i", 2)
 
 	// a f b should give sig[0]=b, sig[1]=a → 21, NOT 12.
@@ -174,6 +177,7 @@ func TestForwardMirror3Args(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	RegisterMirrorTestWord(r, "m3", 3)
 
 	args := []Value{NewInteger(1), NewInteger(2), NewInteger(3)}
@@ -202,6 +206,7 @@ func TestForwardMirror4Args(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	RegisterMirrorTestWord(r, "m4", 4)
 
 	args := []Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4)}
@@ -230,6 +235,7 @@ func TestForwardMirror5Args(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	RegisterMirrorTestWord(r, "m5", 5)
 
 	args := []Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4), NewInteger(5)}
@@ -258,6 +264,7 @@ func TestForwardMirror6Args(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	RegisterMirrorTestWord(r, "m6", 6)
 
 	args := []Value{
@@ -289,6 +296,7 @@ func TestForwardMirror7Args(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	RegisterMirrorTestWord(r, "m7", 7)
 
 	args := []Value{
@@ -322,6 +330,7 @@ func TestForwardMirror3ArgsInvalidPlacements(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 	RegisterMirrorTestWord(r, "m3x", 3)
 
 	canonical := int64(123)
@@ -362,6 +371,7 @@ func TestForwardMirrorSubVerification(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(r)
 
 	// sub is 2-arg, non-commutative: 10 sub 3 = 7, 3 sub 10 = -7.
 	// Mirror: sub a b <=> b sub a <=> b a sub.

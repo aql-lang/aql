@@ -11,7 +11,7 @@ import (
 
 // runNativeModuleSubImport builds a registry wired exactly like the
 // production entry point (lang.New): the native-module Resolver is
-// installed so `import "aql:math"` (and friends) resolve. Files are
+// installed so `import "aql:math-util"` (and friends) resolve. Files are
 // served from an in-memory FS. This is the setup the plain memfs helper
 // deliberately omits — it uses a bare DefaultRegistry with no Resolver.
 func runNativeModuleSubImport(t *testing.T, files map[string]string, steps []string) ([]native.Value, error) {
@@ -21,10 +21,20 @@ func runNativeModuleSubImport(t *testing.T, files map[string]string, steps []str
 	if err != nil {
 		t.Fatal(err)
 	}
+	registerIOWords(reg)
 	reg.SetParseFunc(parser.Parse)
 	// The production wiring (lang/go/aql.go:New). Without this a file
 	// imported via "./lib.aql" cannot itself import a native module.
 	modules.InstallResolver(reg)
+	{
+		prev := reg.Modules.InitFunc
+		reg.Modules.InitFunc = func(child *native.Registry) {
+			if prev != nil {
+				prev(child)
+			}
+			registerIOWords(child)
+		}
+	}
 
 	mem := capabilities.NewMem()
 	for path, content := range files {
@@ -63,13 +73,13 @@ func runNativeModuleSubImport(t *testing.T, files map[string]string, steps []str
 //
 // Root cause: RunModuleBody ran the imported file in a fresh
 // DefaultRegistry but never propagated parent.Modules.Resolver, so the
-// child's `import "aql:math"` hit a nil Resolver and failed with
+// child's `import "aql:math-util"` hit a nil Resolver and failed with
 // "native module resolver not configured".
 func TestImportedFileCanImportNativeModule(t *testing.T) {
 	files := map[string]string{
 		// lib.aql imports a native module and uses it to compute an export.
-		"lib.aql": `import "aql:math"
-export "Lib" { hi: (Math.ceil 2.3) }`,
+		"lib.aql": `import "aql:math-util"
+export "Lib" { hi: (MathUtil.ceil 2.3) }`,
 	}
 	result, err := runNativeModuleSubImport(t, files, []string{
 		`import "./lib.aql"`,
@@ -86,8 +96,8 @@ export "Lib" { hi: (Math.ceil 2.3) }`,
 // importing the native module.
 func TestNativeModuleImportTransitiveDepth(t *testing.T) {
 	files := map[string]string{
-		"deep.aql": `import "aql:math"
-export "Deep" { r: (Math.round 4.6) }`,
+		"deep.aql": `import "aql:math-util"
+export "Deep" { r: (MathUtil.round 4.6) }`,
 		"lib.aql": `import "./deep.aql"
 export "Lib" { d: (Deep.r) }`,
 	}

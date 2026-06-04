@@ -10,6 +10,7 @@ func TestObjectSetFieldAtom(t *testing.T) {
 	// alice set name "Bob" end
 	// alice . name => "Bob"
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 
 	fields := NewOrderedMap()
 	fields.Set("name", NewTypeLiteral(TString))
@@ -56,6 +57,7 @@ func TestObjectSetFieldAtom(t *testing.T) {
 func TestObjectSetFieldString(t *testing.T) {
 	// set with string key
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TInteger))
@@ -94,6 +96,7 @@ func TestObjectSetFieldString(t *testing.T) {
 func TestObjectSetAddsNewField(t *testing.T) {
 	// set can add a new field not in the original type schema
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 
 	fields := NewOrderedMap()
 	fields.Set("a", NewTypeLiteral(TInteger))
@@ -131,6 +134,7 @@ func TestObjectSetAddsNewField(t *testing.T) {
 func TestObjectMutationSharedReference(t *testing.T) {
 	// Two references to the same Object instance see mutations
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 
 	fields := NewOrderedMap()
 	fields.Set("v", NewTypeLiteral(TInteger))
@@ -171,6 +175,7 @@ func TestObjectMutationSharedReference(t *testing.T) {
 func TestNodeMapIsImmutable(t *testing.T) {
 	// Attempting to set on a Map should fail (no matching signature)
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
 	mapVal := NewMap(m)
@@ -186,6 +191,7 @@ func TestNodeMapIsImmutable(t *testing.T) {
 func TestNodeListIsImmutable(t *testing.T) {
 	// Attempting to set on a List should fail (no matching signature)
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	listVal := NewList([]Value{NewInteger(10), NewInteger(20)})
 
 	err := runAQLError(t, r, []Value{
@@ -200,6 +206,7 @@ func TestNodeMapUnchangedAfterObjectSet(t *testing.T) {
 	// Creating a Map, storing it, and doing set on an Object should not
 	// affect the Map — they are different types with different semantics.
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
@@ -318,6 +325,7 @@ func TestAsListReturnsReadList(t *testing.T) {
 
 func TestArrayGetByIndex(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	arr := NewArray([]Value{NewInteger(10), NewInteger(20), NewInteger(30)})
 
 	result := runAQL(t, r, []Value{
@@ -331,6 +339,7 @@ func TestArrayGetByIndex(t *testing.T) {
 
 func TestArrayGetOutOfBoundsReturnsNone(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	arr := NewArray([]Value{NewInteger(10)})
 
 	result := runAQL(t, r, []Value{
@@ -343,6 +352,7 @@ func TestArrayGetOutOfBoundsReturnsNone(t *testing.T) {
 
 func TestArraySetByIndex(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	arr := NewArray([]Value{NewInteger(10), NewInteger(20)})
 
 	// set 0 99 arr
@@ -362,6 +372,7 @@ func TestArraySetByIndex(t *testing.T) {
 
 func TestArraySetOutOfBoundsErrors(t *testing.T) {
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	arr := NewArray([]Value{NewInteger(10)})
 
 	err := runAQLError(t, r, []Value{
@@ -375,6 +386,7 @@ func TestArraySetOutOfBoundsErrors(t *testing.T) {
 func TestArrayMutationSharedReference(t *testing.T) {
 	// Two values wrapping the same ArrayInstanceInfo see mutations
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	ai := &ArrayInstanceInfo{Elems: []Value{NewInteger(0)}}
 	ref1 := NewValueRaw(TArray, ai)
 	ref2 := NewValueRaw(TArray, ai)
@@ -424,6 +436,7 @@ func TestArrayStringRepresentation(t *testing.T) {
 func TestStoreCOWBasic(t *testing.T) {
 	// set on a Store creates a new COW layer; get resolves through prototype.
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewWord("k"), NewInteger(7),
 		NewEnd(),
@@ -442,6 +455,7 @@ func TestStoreCOWDoesNotMutateOriginal(t *testing.T) {
 		Data:     map[string]Value{"x": NewInteger(1)},
 	}
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	r.InitRootContext()
 	// Put store in context
 	ctx := r.Contexts.Top()
@@ -472,6 +486,7 @@ func TestStoreCOWParentPropagation(t *testing.T) {
 	// Nested stores: context → parent → child
 	// Set on child should COW child AND propagate to parent in context.
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	r.InitRootContext()
 	ctx := r.Contexts.Top()
 
@@ -517,6 +532,7 @@ func TestStoreCOWParentPropagation(t *testing.T) {
 func TestStoreCOWPrototypeResolution(t *testing.T) {
 	// After COW, unchanged keys resolve through the prototype chain.
 	r, _ := DefaultRegistry()
+	registerIOWords(r)
 	r.InitRootContext()
 	ctx := r.Contexts.Top()
 
