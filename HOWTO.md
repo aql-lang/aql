@@ -9,6 +9,7 @@ through the **[Tutorial](TUTORIAL.md)** and just need an answer to
 * [Define and use custom words](#define-and-use-custom-words)
 * [Write a typed function](#write-a-typed-function)
 * [Overload a word with multiple signatures](#overload-a-word-with-multiple-signatures)
+* [Define a macro (add new syntax)](#define-a-macro-add-new-syntax)
 * [Work with lists](#work-with-lists)
 * [Work with maps](#work-with-maps)
 * [Format strings with interpolation](#format-strings-with-interpolation)
@@ -106,6 +107,39 @@ add1 5                        => 6
 add1 2.5                      => 3.5
 add1 "abc"                    => 'abc_1'
 ```
+
+
+## Define a macro (add new syntax)
+
+When you need a new **control form** — something that must see its
+arguments as *code*, not as already-computed values — reach for `macro`
+instead of `fn`. A macro receives its operands raw, runs its body at
+expansion time to build a template, and the template is spliced in place
+of the call. Use `quote [ … ]` for the template and `unquote` / `splice`
+for the holes:
+
+```
+def unless (macro [[cond body] [
+  quote [ if unquote cond [] unquote body ]
+]])
+def x 5
+unless (x gt 10) [99]         => 99        # body runs only when the condition is false
+```
+
+Macros are **hygienic**: a name the template introduces with a literal
+`def` is auto-renamed, so it can't clash with a caller's variable — you
+don't need to manage temporaries by hand:
+
+```
+def myor (macro [[a b] [ quote [ def tmp unquote a  if tmp [tmp] [unquote b] ] ]])
+def tmp 42
+myor false tmp                => 42        # the template's `tmp` is renamed; your `tmp` is safe
+```
+
+To bind a name the *caller* should see, take it through `unquote` (`def
+unquote name …`). Use `macroexpand (mac args…)` to see what a call
+expands to without running it, and `gensym` for unique names in
+hand-written cases. See **[Reference: Macros](REFERENCE.md#macros)**.
 
 
 ## Work with lists
