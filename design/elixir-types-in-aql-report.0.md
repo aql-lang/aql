@@ -1,0 +1,315 @@
+# Elixir v1.20 Set-Theoretic Types in AQL: Applicability Report
+
+## Scope
+
+Evaluate whether the type-system work shipped in Elixir v1.20
+([release notes](https://elixir-lang.org/blog/2026/06/03/elixir-v1-20-0-released/))
+has anything to teach AQL's type system. The honest framing up front:
+**AQL has independently arrived at most of what the article describes.**
+The value is not a new paradigm — it is four specific places where AQL's
+version is currently *weaker* than Elixir's, plus a real-world data point
+on the exact frontier `GENERICS.0.md` is parked at.
+
+This report ranks the four genuine applications by leverage, ties each to
+concrete AQL machinery, and states plainly what does **not** transfer.
+
+## Elixir v1.20 recap
+
+Elixir's type system is a gradual, set-theoretic system (Castagna-style
+semantic subtyping). v1.20's relevant pieces:
+
+- **Set-theoretic types** — closed under union, intersection, **and
+  negation**. The negation closure is the part AQL lacks.
+- **The `dynamic()` type as a gradual modality** — *not* a top type.
+  Two load-bearing properties:
+  - *Compatibility*: a `dynamic()` value only triggers a violation when
+    the supplied and accepted types are **completely disjoint**.
+    `dynamic(integer() or binary())` passed to `/` (which wants a
+    number) does not error; passed to an operation requiring full
+    incompatibility, it does.
+  - *Narrowing through use*: `dynamic()` refines as code runs. Using
+    `data.a` and `data.b` narrows `data` to "a map with those fields
+    holding numbers" — bugs are found by refinement, not by blanket
+    restriction.
+- **Inference from guards and patterns** — `is_list(x) and is_integer(y)`
+  yields unions/intersections/negations; patterns carry type guards.
+- **Clause narrowing → dead-code detection** — earlier case clauses
+  refine the types reaching later clauses, so an unreachable clause is
+  flagged.
+- **Size assertions** — tracks data-structure sizes, catching index
+  violations statically.
+- **Still pending** (the article's own caveat): type *signatures* remain
+  blocked on **recursive types, parametric types, and efficient map
+  enumeration**.
+
+The non-type items (parallel compile-time improvements,
+`:module_definition`) are out of scope here.
+
+## AQL baseline — the parallel-evolution table
+
+Most of the article is already true of AQL. Stating this first keeps the
+"applications" section honest — it is *refinement*, not adoption.
+
+| Elixir v1.20 feature | AQL today | Where |
+|---|---|---|
+| Union, intersection | `tor` (disjunct) + `tand` (intersection, distributes `(A tor B) tand C`) | `eng/go/core_boolean.go` |
+| Bottom / top | `Never` (annihilator for `tand`, identity for `tor`) + `Any` | `eng/go/core_boolean.go`, `eng/go/types.go` |
+| Gradual static+dynamic | Carrier-based abstract interpreter (`aql check`), mapped explicitly to abstract interpretation | `design/CARRIER-STATIC-TYPECHECK-REPORT.10.md`, `eng/go/carrier.go` |
+| Guard/pattern narrowing | `x is T` narrows the then-branch carrier; branch join via `JoinCarriers` | `eng/go/carrier.go` (`ApplyGuardNarrowing`, `extractGuardClauses`) |
+| Refinement reasoning | DepScalar subset types: `(Integer gt 5) tand (Integer lt 10)` → interval `(5,10)`; disjoint → `Never` | `eng/go/depscalar.go` |
+| Dead-code detection | **Partial** — constant-`if` only (`unreachable_branch`) | `lang/go/native/native_control.go:281,321` |
+| Set-theoretic **negation** | **Absent** | — |
+| `dynamic()` **modality** | **Absent** — `Any` is a strict top, not a bounded dynamic | `eng/go/signature.go:236` |
+| Dead **clause/overload** detection | **Absent** for overload tables | — |
+| Static **size/index** check | **Absent** — runtime-only | `lang/go/native/native_array.go:780` |
+
+The last four rows are this report.
+
+## Where the article applies — four refinements
+
+### 1. First-class type negation (`tnot`) — the cleanest win
+
+**Gap.** AQL's algebra is closed under `tor` and `tand` but not
+negation. The cost is visible right now in else-branch narrowing.
+`ApplyComplementNarrowing` (`eng/go/carrier.go:648`) can only subtract a
+matched alternative *from an existing disjunction*. The regression test
+`TestApplyComplementNarrowingNoOpOnConcrete`
+(`lang/go/native/carrier_narrow_test.go`) pins the limitation: given
+`x : Integer` and a guard `x is String`, the else-branch narrowing is a
+**no-op**, because "we can't subtract a type from a non-disjunct in the
+current lattice." Elixir narrows the else-branch to `Integer and
+not(String)` — trivially, because its types are negation-closed.
+
+**Proposal.** Add a `tnot` type-level word and a `Negation` carrier
+shape, completing the set-theoretic algebra:
+
+- `tnot T` denotes the complement of `T` within `Any`. `tnot Never = Any`,
+  `tnot Any = Never`.
+- Normalisation via De Morgan so the existing `tand`/`tor` simplifier
+  stays the single reducer: `tnot (A tor B) = (tnot A) tand (tnot B)`,
+  `tnot (A tand B) = (tnot A) tor (tnot B)`, `tnot (tnot A) = A`.
+- `tand` gains a complement-aware rule: `T tand (tnot U)` is `Never`
+  when `U` is a supertype of `T` (subsumption already computed by
+  `Matches`), and otherwise stands as a refined type. This is the
+  minimal addition that makes else-narrowing general:
+  `ApplyComplementNarrowing` pushes `cur tand (tnot guardType)` instead
+  of bailing on non-disjuncts.
+- Matching: a value matches `tnot T` iff it does **not** match `T`.
+  Routes through the existing `Type.Behavior.Match` capability (same
+  hook DepScalar and refine types already use), so no new dispatch path.
+
+**Closure under negation — the precise status.** AQL today is *not*
+closed under negation. `tor`/`tand`/`Never`/`Any` form a bounded
+**distributive lattice**, but it is **not complemented** (not a Boolean
+algebra): `tnot Integer` has no positive representation, because the type
+universe is **open** (types register at runtime — `MintType`,
+`RegisterExternalBuiltin`) and **infinite** (literals are types —
+`Integer/42` is a node), so "everything that isn't an Integer" can never
+be enumerated as a finite `tor`. Closure is therefore achievable in
+exactly one way: keep `tnot` a **primitive constructor, not sugar**. De
+Morgan pushes negations down to *atoms* but does not eliminate them — a
+negated atom (`tnot Integer`) stays an irreducible formula. This is sound
+and tractable because both questions the checker actually asks are
+decidable **without enumerating the universe**:
+
+- *Membership* is pointwise: `v ⊨ tnot T ≡ ¬(v ⊨ T)` — decided by the
+  `Behavior.Match` hook (a `negationBehavior` returning `!inner`).
+- *Subtyping / disjointness* is decided by **emptiness**, `T tand U =?
+  Never`, reusing the disjoint-collapse already in `TandValues`
+  (`core_boolean.go`) and the interval logic in `depscalar.go`
+  (`(Integer gt 10) tand (Integer lt 5) → Never`).
+
+The net effect is to promote the current distributive lattice to its
+**Boolean closure** — that is what "completes the algebra" means here. It
+is a genuine algebra extension, not just a new word.
+
+**Files.** `eng/go/core_boolean.go` (the `tnot` algorithm + De Morgan
+normalisation alongside `TorHandler`/`TandValues`), a `native_type.go`
+registration in `lang/go/native/`, a `negationBehavior` in eng,
+`eng/go/carrier.go` (`ApplyComplementNarrowing` uses `tand (tnot …)`).
+Reuses `SimplifyDisjunctAlts` (`eng/go/core_helpers.go:755`) for cleanup.
+
+**Effort.** ~2–3 dev days. Self-contained; has a failing-by-design test
+already in the tree to anchor it.
+
+### 2. The `dynamic(T)` bounded modality — the deepest idea
+
+**Gap, and a correction to AQL's own notes.** The carrier report states
+AQL's approach is "stronger — it tracks precise types where known and
+degrades to `Any` only at escape hatches, rather than using `?`
+throughout." That conflates *coverage* (where the dynamic type appears)
+with the *semantics of the dynamic type itself*, which is Elixir's actual
+contribution. Concretely, `sigTypeMatches` (`eng/go/signature.go:236`)
+resolves to `v.Parent.Matches(t)`, so a bare `Carry<Any>` against an
+`Integer` slot is `TAny.Matches(TInteger)` = **false** — a parent does
+not match a child. **AQL's `Any` is a strict top type.** Elixir's
+`dynamic()` is deliberately the opposite: compatible unless *provably
+disjoint*, and narrowing through use.
+
+The practical consequence is that AQL's escape hatches (`do` on a
+computed list, `context get`, dynamic `def` rebinding) all collapse to
+bare `Carry<Any>` and lose everything; downstream a `Carry<Any>` either
+falls through to a `TAny` catch-all overload or fails the match and
+emits a diagnostic. AQL cannot say "dynamically an Integer."
+
+**Proposal.** Introduce a *bounded dynamic* carrier — a modality over the
+existing lattice, not a new lattice node:
+
+- Represent as a carrier flag `Dynamic bool` plus the existing `Parent`
+  bound (and `DisjunctInfo` for `dynamic(A tor B)`). `dynamic(Integer
+  tor String)` is a carrier whose bound is the disjunct, marked dynamic.
+- *Compatibility rule* in matching: a dynamic carrier matches slot `T`
+  iff its bound is **not disjoint** from `T` — i.e.
+  `TandValues(bound, T)` is not `Never`. This is the single
+  semantic change; the disjointness test is already implemented by
+  `tand`. Bare `dynamic()` (bound `Any`) matches everything, recovering
+  classic gradual behaviour without the strict-top false positives.
+- *Narrowing through use*: when a dynamic carrier flows into a word whose
+  matched signature constrains it (e.g. `.a`/`get`), intersect the bound
+  with the demanded type and carry the refined dynamic carrier forward —
+  the dual of `ApplyGuardNarrowing`, applied at use sites rather than
+  guard sites.
+- Escape hatches emit `dynamic(<best static bound>)` instead of
+  `Carry<Any>`: `context get` over a statically-known store keeps the
+  value-union bound; `do` on a computed list keeps the element bound.
+
+**Files.** `eng/go/carrier.go` (new constructor + `Dynamic` flag,
+`StripToCarriers` for escape hatches), `eng/go/signature.go`
+(`sigTypeMatches` gains the not-disjoint rule, gated on `v.Dynamic`),
+`eng/go/depscalar.go`/`core_boolean.go` reused for the disjointness test.
+Diagnostics stay in `eng/go/carrier.go`'s `CheckDiagnostic` path.
+
+**Risk.** Soundness (a dynamic value that lies at runtime is the gradual
+guarantee's known cost — same as Elixir), and dispatch determinism:
+"matches unless disjoint" can make a dynamic carrier match several
+overloads, so the checker must pick the runtime's first-match order, not
+join all candidates. Document the policy alongside `SortSignatures`.
+
+**Effort.** ~6–10 dev days. Largest item; deepest payoff. Stage behind
+items 1 and 3.
+
+### 3. Dead-overload detection — Elixir's dead-clause check, generalised
+
+**Gap.** AQL flags dead `if` branches (`unreachable_branch`) but not dead
+*signatures*. With first-match-wins overload dispatch (`SortSignatures`,
+longest/most-specific first), a later signature whose argument types are
+all subsumed by an earlier, more-general signature can **never win
+dispatch** — exactly Elixir's "earlier clauses shadow later ones" dead
+code, lifted from function clauses to AQL's overload tables.
+
+**Proposal.** At registration time (or as an `aql check` pass), for each
+signature compare it against every earlier signature in sorted order: if
+every positional type of the candidate `Matches` the corresponding type
+of an earlier sig (and arities/barriers align), the candidate is
+unreachable. The subsumption machinery already exists — `Matches`, and
+`SimplifyDisjunctAlts` (`eng/go/core_helpers.go:755`) already drops
+subsumed alternatives for exactly this notion of "covered by." Emit a new
+`unreachable_signature` warning carrying both the dead sig and the
+shadowing sig's positions.
+
+**Files.** A small analysis next to `SortSignatures` in
+`eng/go/signature.go`; new diagnostic code registered with the others in
+`eng/go/carrier.go` / documented in `design/LANGREF.10.md`'s diagnostics
+table (where `unreachable_branch` already lives, ~line 3560).
+
+**Effort.** ~2 dev days. Pure tooling win; no runtime change; reuses
+existing subsumption.
+
+### 4. Static size/index checking
+
+**Gap.** Elixir tracks structure sizes to catch index violations
+statically. AQL catches `at`/`getr` out-of-bounds **only at runtime**
+(`lang/go/native/native_array.go:780`,
+`lang/go/native/native_accessor.go:54`).
+
+**Proposal.** AQL already has both ingredients — DepScalar integer
+refinements (`eng/go/depscalar.go`) and typed-list carriers
+(`NewCarrierTypedList`, `eng/go/carrier.go`). Carry an optional length
+refinement on a list carrier, and type index arguments as DepScalars;
+the `at`/`getr`/`take`/`drop` `Returns`/`ReturnsFn` annotations then
+reject a statically out-of-range index. `[10 20] 5 at` fails at
+`aql check` with a new `index_out_of_range` diagnostic.
+
+**Files.** `eng/go/carrier.go` (length-refined list carrier),
+`lang/go/native/native_array.go` and `native_accessor.go` (`ReturnsFn`
+range checks), `eng/go/depscalar.go` (reused).
+
+**Effort.** ~3–4 dev days. Most speculative; composes two existing
+features rather than inventing one. Lowest priority of the four.
+
+## The strategic frontier: recursive + parametric types
+
+The article's own "pending" list — recursive types, parametric types,
+efficient map enumeration — is **almost verbatim** the open problems in
+`design/GENERICS.0.md`, which proposes parametric polymorphism over the
+same `tand`/`tor`/`Never`/`Any` algebra and handles recursive/F-bounded
+types via `(schema, normalised args)` memoisation (§7.7). Elixir hitting
+the same wall is direct evidence for:
+
+- **Sequencing.** Generics before signatures, as `GENERICS.0.md` already
+  plans — Elixir is shipping inference and narrowing *ahead of* full
+  signatures for the same reason.
+- **The hard parts.** Recursive types and variance are where Elixir is
+  blocked; `GENERICS.0.md` §7.4/§9.4 should treat those as the risk
+  centre, and the per-schema disjunct collapse (§9.4) is the kind of
+  pragmatic narrowing Elixir's `dynamic()` narrowing validates.
+
+No new work item here — it is corroboration that the generics roadmap is
+aimed correctly.
+
+## What does NOT transfer
+
+- **Dispatch + subtyping model.** Elixir is BEAM pattern-match clauses
+  over *semantic* subtyping (subtyping = subset of value denotations).
+  AQL is concatenative first-match overload resolution over a
+  *nominal/lattice* hierarchy with an explicit `Parent` chain. The
+  carrier report already notes Hindley-Milner is a poor fit for AQL for
+  this reason. Items 1 and 2 move AQL *toward* semantic subtyping (it is
+  already partway: `tand`/`tor` with `Never`-on-disjoint), but they must
+  not be lifted wholesale without respecting the lattice's nominal core
+  (`refine` newtypes are nominal by design — see
+  `design/REFINE-NEWTYPE-VS-SUBSET.0.md`).
+- **Parallel compile-time / `:module_definition`.** Not type-system; no
+  AQL analogue beyond the loose echo that AQL's planned bytecode compiler
+  is "the carrier checker with a recording side effect"
+  (`design/aql-bytecode-report.0.md`).
+- **Efficient map enumeration.** A BEAM runtime-representation concern;
+  AQL's `OrderedMap` does not share it.
+
+## Feasibility verdict
+
+| Item | Leverage | Engine change | Soundness | Effort | Priority |
+|---|---|---|---|---|---|
+| 1. `tnot` negation | High — completes algebra, fixes else-narrowing | Small, localised | Sound | ~2–3 d | **First** |
+| 3. Dead-overload detection | High — pure tooling win | None (analysis only) | Sound | ~2 d | **Second** |
+| 2. `dynamic(T)` modality | Highest — fixes strict-top `Any` | Moderate (matching rule) | Gradual (by design) | ~6–10 d | Third |
+| 4. Static size/index check | Medium — composes existing features | Moderate | Sound | ~3–4 d | Fourth |
+| Recursive/parametric frontier | — corroborates `GENERICS.0.md` | n/a | n/a | n/a | (roadmap) |
+
+## Recommended first cut
+
+Ship **item 1 (`tnot`) first**: it is self-contained, completes a
+half-built algebra, and has a failing-by-design test
+(`TestApplyComplementNarrowingNoOpOnConcrete`) already in the tree to
+anchor the change. Follow with **item 3 (dead-overload detection)** as a
+zero-runtime-cost `aql check` diagnostic that reuses existing
+subsumption. Treat **item 2 (`dynamic(T)`)** as the headline follow-up
+once negation has exercised the set-theoretic path end to end. **Item 4**
+is opportunistic — pick it up only when index bugs show up in real
+modules.
+
+Per the test discipline in `lang/go/CLAUDE.md`, every item lands with
+negative rows: `tnot` with disjointness-collapse-to-`Never` cases,
+dead-overload with a *reachable* sibling that must NOT be flagged,
+`dynamic(T)` with a *disjoint* bound that must still error, size-checking
+with an in-range index that must pass.
+
+## Verdict
+
+**Applicable, as four targeted refinements rather than a rewrite.** AQL
+reached the set-theoretic, gradual, flow-typed design independently;
+Elixir v1.20 sharpens the four corners AQL left rounded — negation
+closure, a real bounded-dynamic modality instead of a strict top `Any`,
+dead-overload detection, and static index safety — and confirms that
+AQL's generics roadmap is pointed at the same frontier the wider
+set-theoretic-types community is still clearing.
