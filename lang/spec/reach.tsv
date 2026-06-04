@@ -37,6 +37,16 @@ filter $.on {a:{on:true} b:{on:false}}	{a:{on:true}}	filter lens form works on a
 "aql:struct-util" import end  StructUtil.setpath $.1 99 [10 20 30]	[10 99 30]	setpath into a list index
 "aql:struct-util" import end  StructUtil.getpath $.a.b (StructUtil.setpath $.a.b 7 {a:{b:1}})	7	get ∘ set round-trips
 #
-# §6  Negatives
+# §6  reach constructor — build a lens programmatically. The key list is NOT
+#     evaluated; it encodes one segment per key: bare key = get, `!` marks the
+#     NEXT key strict (getr), `(expr)` = a computed (deferred) key.
+reach 5 [a b]	5.a.b	bare-word keys → get segments
+reach 5 [a !b]	5.a!.b	a `!` marker makes the next key strict (getr)
+reach 5 [a (add 1 2) c]	5.a.(add 1 2).c	a paren key is a deferred computed segment
+def p {a:{b:7}}  apply (reach 0 [a b]) p	7	a constructed lens applies like a parsed one
+def p {x:{y:9}}  def k "y"  apply (reach 0 [x (k)]) p	9	computed key evaluated at apply time
+reach 5 [a !]	ERROR:reach_error	trailing `!` with no following key
+#
+# §7  Negatives
 def p {name:"ada"}  apply $!.missing p	ERROR:getr_error	getr strictness: missing key errors through apply
 apply $.name 5	ERROR:	applying a field lens to a non-map yields no field (None/​error)

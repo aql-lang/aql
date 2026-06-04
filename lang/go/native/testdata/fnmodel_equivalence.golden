@@ -354,7 +354,7 @@ WORD range
   [Scalar/Number/Integer Scalar/Number/Integer Scalar/Number/Integer] barrier=3 +returnsfn
   [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 +returnsfn
 WORD reach
-  [Any Node/List] barrier=2 returns=[Ideal/Reach]
+  [Any Node/List] barrier=2 noeval={1} returns=[Ideal/Reach]
 WORD read
   [Node/Map Scalar/Path] barrier=2 returns=[Any]
   [Node/Map Scalar/String] barrier=2 returns=[Any]

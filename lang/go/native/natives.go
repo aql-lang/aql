@@ -76,9 +76,10 @@ var Natives = []NativeFunc{
 
 		Signatures: []NativeSig{
 			{
-				Args:    []*Type{TAny, TList},
-				Handler: reachHandler,
-				Returns: []*Type{TReach}, BarrierPos: -1,
+				Args:       []*Type{TAny, TList},
+				NoEvalArgs: map[int]bool{1: true},
+				Handler:    reachHandler,
+				Returns:    []*Type{TReach}, BarrierPos: -1,
 			},
 		},
 	},
@@ -368,14 +369,66 @@ func quoteAnyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 	return []Value{v}, nil
 }
 
-// reachHandler builds an inert Reach over a receiver value and a list of
-// literal `get` keys: `reach m [a/q b/q]` → an m.a.b lens (data).
+// reachHandler builds an inert Reach over a receiver value (args[0]) and a
+// key list (args[1], NOT evaluated). The list encodes one segment per key:
+//
+//   - a bare word / atom / string / number → a `get` (lenient) segment
+//   - a `!` marker element → the NEXT key is a `getr` (strict) segment
+//     (so `reach m [a !b]` ≡ m.a!.b — `!b` lexes as `! b`)
+//   - a `(expr)` paren element → a computed segment (key evaluated at apply)
+//
+// e.g. `reach m [a !b (k)]` → an inert m.a!.b.(k) lens (data).
 func reachHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	keys, err := RequireConcreteList(args[1], "reach")
 	if err != nil {
 		return nil, err
 	}
-	return []Value{NewReachFromKeys(args[0], keys.Slice())}, nil
+	segs, err := decodeReachSegments(keys.Slice(), r)
+	if err != nil {
+		return nil, err
+	}
+	return []Value{NewReach(ReachInfo{Receiver: []Value{args[0]}, Segments: segs, Eval: false})}, nil
+}
+
+// decodeReachSegments turns a `reach` key list into Reach segments (see
+// reachHandler for the encoding).
+func decodeReachSegments(elems []Value, r *Registry) ([]ReachSeg, error) {
+	segs := make([]ReachSeg, 0, len(elems))
+	getrNext := false
+	for _, el := range elems {
+		if isReachBang(el) {
+			getrNext = true
+			continue
+		}
+		seg := ReachSeg{Getr: getrNext}
+		getrNext = false
+		if IsParenExpr(el) {
+			toks, _ := AsParenExpr(el)
+			seg.Computed = true
+			seg.KeyExpr = toks
+		} else {
+			seg.KeyLit = el
+		}
+		segs = append(segs, seg)
+	}
+	if getrNext {
+		return nil, r.AqlError("reach_error", "reach: trailing `!` with no following key", "reach")
+	}
+	return segs, nil
+}
+
+// isReachBang reports whether a key-list element is the `!` getr marker (a
+// bare `!` lexes to a word; an atom `!` covers the quoted form).
+func isReachBang(v Value) bool {
+	if IsWord(v) {
+		w, _ := AsWord(v)
+		return w.Name == "!"
+	}
+	if IsAtom(v) {
+		a, _ := AsAtom(v)
+		return a == "!"
+	}
+	return false
 }
 
 // wordHandler wraps its (unevaluated) argument in an __SP splice marker. The

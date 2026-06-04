@@ -21,6 +21,36 @@ func TestReachConstructorIsInert(t *testing.T) {
 	}
 }
 
+// The reach constructor's key list (NOT evaluated) encodes segment ops:
+// bare key = get, `!` marks the next key getr, `(expr)` = a computed key.
+func TestReachConstructorEncodesOps(t *testing.T) {
+	res, err := runNativeSteps(t, nil, []string{`reach 0 [a !b (k)]`})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	info, err := eng.AsReach(res[0])
+	if err != nil {
+		t.Fatalf("AsReach: %v", err)
+	}
+	if len(info.Segments) != 3 {
+		t.Fatalf("want 3 segments (a, !b, (k)), got %+v", info.Segments)
+	}
+	// a = get, b = getr (the `!` was consumed as a marker), (k) = computed.
+	if info.Segments[0].Getr {
+		t.Error("segment a should be get")
+	}
+	if !info.Segments[1].Getr {
+		t.Error("segment b should be getr (preceded by !)")
+	}
+	if !info.Segments[2].Computed {
+		t.Error("segment (k) should be computed")
+	}
+	// Negative: a trailing `!` with no following key is rejected.
+	if _, err := runNativeSteps(t, nil, []string{`reach 0 [a !]`}); err == nil {
+		t.Error("reach 0 [a !] should error (dangling !), got nil")
+	}
+}
+
 func TestReachConvertMapInspects(t *testing.T) {
 	// convert Map on a codequote'd reach exposes receiver + segments.
 	res, err := runNativeSteps(t, nil, []string{`convert Map (codequote m.a.b)`})
