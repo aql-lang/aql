@@ -755,6 +755,28 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 			continue
 		}
 
+		// Paren expression value (paren-nesting Step 3): evaluate as an
+		// isolated sub-expression and splice its result(s) in place so
+		// matchSignature sees fully resolved forward values. Equivalent to
+		// the OpenParen collapse above (a paren cannot consume the
+		// enclosing stack — the barrier — so a sub-engine eval matches the
+		// in-place collapse), but for the nested ParenExpr representation.
+		// See design/PAREN-REPRESENTATION.0.md Step 3.
+		if IsParenExpr(tok) {
+			peItems, _ := AsParenExpr(tok)
+			peResults, perr := e.evalParenExprResults(peItems)
+			if perr != nil {
+				return perr
+			}
+			stackSplice(&e.stack, scanIdx, 1, peResults...)
+			if len(peResults) == 0 {
+				continue
+			}
+			resolved += len(peResults)
+			scanIdx += len(peResults)
+			continue
+		}
+
 		if IsWord(tok) {
 			ww, _ := AsWord(tok)
 			// Function word: count as resolved (may be captured by

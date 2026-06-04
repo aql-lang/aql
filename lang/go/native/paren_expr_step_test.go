@@ -70,6 +70,41 @@ func TestParenExprStepDefLeaks(t *testing.T) {
 	}
 }
 
+// Step 3: a ParenExpr in a word's forward window is pre-evaluated so the
+// outer word dispatches on its result (preEvalParens ParenExpr branch).
+
+func TestParenExprForwardArgTrailing(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// add 10 (1 add 2) → 13
+	pe := NewParenExpr([]Value{NewInteger(1), NewWord("add"), NewInteger(2)})
+	result := runAQL(t, r, []Value{NewWord("add"), NewInteger(10), pe})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %v", result)
+	}
+	if n, _ := AsInteger(result[0]); n != 13 {
+		t.Fatalf("expected 13, got %v", result[0])
+	}
+}
+
+func TestParenExprForwardArgLeading(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// add (1 add 2) 10 → 13 (paren first in the forward window)
+	pe := NewParenExpr([]Value{NewInteger(1), NewWord("add"), NewInteger(2)})
+	result := runAQL(t, r, []Value{NewWord("add"), pe, NewInteger(10)})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %v", result)
+	}
+	if n, _ := AsInteger(result[0]); n != 13 {
+		t.Fatalf("expected 13, got %v", result[0])
+	}
+}
+
 func TestParenExprStepErrorPropagates(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
