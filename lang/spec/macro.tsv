@@ -1,0 +1,12 @@
+# Macro system — design/MACROS.0.md + design/MACROS-PHASE1.0.md.
+#
+# Columns: <input><TAB><expected>[<TAB><note>]. Output is eng.Canon, so a bare
+# atom renders name/q. Each spec row runs on a fresh registry, so gensym's
+# counter starts at 1 every row.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §0  gensym — fresh, never-colliding atoms (Phase 0).
+gensym	tmp$G1/q	first gensym in a fresh registry
+[gensym gensym gensym]	[tmp$G1/q tmp$G2/q tmp$G3/q]	monotonic + unique per call
+gensym eq gensym	false	two gensyms never collide
+typeof gensym	Atom	gensym is an Atom

@@ -93,6 +93,21 @@ type Registry struct {
 	// global scope and stays dynamic. Nil baseline (empty stack) means
 	// the construction is at top-level and nothing is captured.
 	FnBaselines []map[string]int
+
+	// gensymN is the monotonic counter behind the `gensym` word: each call
+	// mints a fresh, never-colliding atom name `tmp$G<n>`. Used for
+	// capture-free temporaries in (hand-written and, later, expanded)
+	// macros. See design/MACROS-PHASE1.0.md §7. `tmp$G<n>` is a mixed-`$`
+	// name, so it stays a legal word under ValidateWordName's all-`$`
+	// reservation.
+	gensymN uint64
+}
+
+// NextGensym mints the next fresh gensym name (`tmp$G<n>`, n starting at 1).
+// Monotonic per registry; the `gensym` word wraps the result in an Atom.
+func (r *Registry) NextGensym() string {
+	r.gensymN++
+	return fmt.Sprintf("tmp$G%d", r.gensymN)
 }
 
 // CheckState aggregates the static type-checking state that used to

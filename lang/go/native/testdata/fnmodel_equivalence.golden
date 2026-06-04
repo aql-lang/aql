@@ -162,6 +162,8 @@ WORD force-arity
 WORD forward-args
   [Type/Function] barrier=1 runcheck returns=[Type/Function]
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Type/Function]
+WORD gensym
+  [] barrier=0 returns=[Scalar/Atom]
 WORD get
   [Scalar/String Ideal/ModuleExport] barrier=1 returns=[Any]
   [Scalar/String Ideal/Module] barrier=1 returns=[Any]
