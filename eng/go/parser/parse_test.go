@@ -1263,8 +1263,8 @@ func TestParseNestedList(t *testing.T) {
 // --- List with dotted word ---
 
 func TestParseListWithDottedWord(t *testing.T) {
-	// [foo.bar] → list with the dot chain grouped as a single ParenExpr
-	// value: paren([foo get bar]).
+	// [foo.bar] → list with the dot chain as a single Reach node
+	// (receiver foo, one segment get bar).
 	got, err := Parse("[foo.bar]")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
@@ -1275,14 +1275,14 @@ func TestParseListWithDottedWord(t *testing.T) {
 	_lst, _ := eng.AsList(got[0])
 	elems := _lst.Slice()
 	if len(elems) != 1 {
-		t.Fatalf("expected 1 element (the dot-chain ParenExpr), got %d", len(elems))
+		t.Fatalf("expected 1 element (the dot-chain Reach), got %d", len(elems))
 	}
-	if !eng.IsParenExpr(elems[0]) {
-		t.Fatalf("expected element to be a ParenExpr, got %s", elems[0])
+	if !eng.IsReach(elems[0]) {
+		t.Fatalf("expected element to be a Reach, got %s", elems[0])
 	}
-	toks, _ := eng.AsParenExpr(elems[0])
-	if len(toks) != 3 {
-		t.Fatalf("expected 3 chain tokens (foo get bar), got %d: %v", len(toks), toks)
+	info, _ := eng.AsReach(elems[0])
+	if len(info.Receiver) != 1 || len(info.Segments) != 1 {
+		t.Fatalf("expected receiver[foo] + 1 segment, got %+v", info)
 	}
 }
 
@@ -1375,17 +1375,17 @@ func TestParseDottedWordTopLevel(t *testing.T) {
 }
 
 func TestParseDottedWordInExpression(t *testing.T) {
-	// 1 foo.bar → 1 paren([foo get bar]) = 2 values. The dot chain is a
-	// single ParenExpr so it binds to foo, not to the result of `1 foo`.
+	// 1 foo.bar → 1 <Reach foo.bar> = 2 values. The dot chain is a single
+	// Reach node so it binds to foo, not to the result of `1 foo`.
 	got, err := Parse("1 foo.bar")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
 	if len(got) != 2 {
-		t.Fatalf("expected 2 values (1 paren([foo get bar])), got %d: %v", len(got), got)
+		t.Fatalf("expected 2 values (1 <Reach>), got %d: %v", len(got), got)
 	}
-	if !eng.IsParenExpr(got[1]) {
-		t.Fatalf("expected got[1] to be the dot-chain ParenExpr, got %s", got[1])
+	if !eng.IsReach(got[1]) {
+		t.Fatalf("expected got[1] to be the dot-chain Reach, got %s", got[1])
 	}
 }
 
@@ -1438,7 +1438,7 @@ func TestParseDottedMapValueMultiPair(t *testing.T) {
 
 func TestParseDottedWordStillWorksInWordContext(t *testing.T) {
 	// The map-value fold must NOT change word context: `1 foo.bar` is
-	// still `1 paren([foo get bar])` = 2 values (no double-wrap).
+	// still `1 <Reach foo.bar>` = 2 values (no double-wrap).
 	got, err := Parse("1 foo.bar")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
@@ -1446,8 +1446,8 @@ func TestParseDottedWordStillWorksInWordContext(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("expected 2 values, got %d: %v", len(got), got)
 	}
-	if !eng.IsParenExpr(got[1]) {
-		t.Fatalf("expected got[1] to be the dot-chain ParenExpr, got %s", got[1])
+	if !eng.IsReach(got[1]) {
+		t.Fatalf("expected got[1] to be the dot-chain Reach, got %s", got[1])
 	}
 }
 

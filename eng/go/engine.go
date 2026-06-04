@@ -485,6 +485,20 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 				stackSplice(&e.stack, e.pointer, 1, expandParenExpr(items)...)
 			}
 
+		case IsReach(val):
+			// A Reach (dot-access node, m.a.b — Reach Phase B) evaluates by
+			// lowering to its get/getr chain in place, exactly like the
+			// ParenExpr it replaced. Quoted (codequote-captured) reaches stay
+			// data, like Quoted parens.
+			if val.Quoted || e.pendingForwardWantsRawParen() {
+				if err := e.stepLiteral(); err != nil {
+					return nil, err
+				}
+			} else {
+				info, _ := AsReach(val)
+				stackSplice(&e.stack, e.pointer, 1, expandReach(info)...)
+			}
+
 		case IsInterpString(val):
 			result, err := e.evalInterpString(val)
 			if err != nil {
@@ -816,6 +830,21 @@ func (e *Engine) preEvalParens(maxFwd int, fn *FnDefInfo) error {
 			}
 			peItems, _ := AsParenExpr(tok)
 			stackSplice(&e.stack, scanIdx, 1, expandParenExpr(peItems)...)
+			continue
+		}
+
+		// A Reach in the forward window evaluates like a ParenExpr (Reach
+		// Phase B): expand to its lowered get-chain marker span in place,
+		// then re-process. Quoted/raw-capture reaches are left for the
+		// matched sig (parity with the ParenExpr branch above).
+		if IsReach(tok) {
+			if tok.Quoted || rawParenForward(fn, resolved) {
+				resolved++
+				scanIdx++
+				continue
+			}
+			info, _ := AsReach(tok)
+			stackSplice(&e.stack, scanIdx, 1, expandReach(info)...)
 			continue
 		}
 
@@ -1652,6 +1681,14 @@ func (e *Engine) stepLiteral() error {
 		stackSplice(&e.stack, valIdx, 1, expandParenExpr(items)...)
 		return nil
 	}
+	// A Reach reaching stepLiteral (nested in a collapsing span, or a
+	// collected list/map element) lowers to its get-chain in place, like a
+	// ParenExpr (Reach Phase B). Quoted/raw-pending reaches fall through.
+	if IsReach(e.stack[valIdx]) && !e.stack[valIdx].Quoted && !e.pendingForwardWantsRawParen() {
+		info, _ := AsReach(e.stack[valIdx])
+		stackSplice(&e.stack, valIdx, 1, expandReach(info)...)
+		return nil
+	}
 
 	// Look backwards for the nearest forward entry, stopping at open-paren barriers.
 	fwdIdx := -1
@@ -1907,6 +1944,37 @@ func expandParenExpr(items []Value) []Value {
 	return span
 }
 
+// lowerReach turns a Reach into its equivalent get/getr chain tokens:
+// `recv get k1 getr k2 …`. A computed segment's key becomes a ParenExpr so
+// the chain evaluates it before get/getr consumes it. This is the Stage-1
+// evaluator (design/REACH.0.md §4): the chain is identical to the former
+// dot-access ParenExpr, so wrapping it with expandParenExpr and running it
+// in place reproduces exact get/getr semantics.
+func lowerReach(info ReachInfo) []Value {
+	out := make([]Value, 0, len(info.Receiver)+len(info.Segments)*2)
+	out = append(out, info.Receiver...)
+	for _, seg := range info.Segments {
+		if seg.Getr {
+			out = append(out, NewWord("getr"))
+		} else {
+			out = append(out, NewWord("get"))
+		}
+		if seg.Computed {
+			out = append(out, NewParenExpr(seg.KeyExpr))
+		} else {
+			out = append(out, seg.KeyLit)
+		}
+	}
+	return out
+}
+
+// expandReach returns the marker span an Eval Reach evaluates to — its
+// lowered get-chain wrapped in paren markers, run in place exactly like a
+// ParenExpr (Stage-1 lowering).
+func expandReach(info ReachInfo) []Value {
+	return expandParenExpr(lowerReach(info))
+}
+
 // evalParenExprResults evaluates a ParenExpr's tokens in a sub-engine and
 // returns its result value(s). Used by autoEvalMap for paren values in map
 // (data) context, where a single result value is collected for a key. It
@@ -1975,6 +2043,22 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 		if IsParenExpr(v) {
 			items, _ := AsParenExpr(v)
 			result, err := e.evalParenExprResults(items)
+			if err != nil {
+				return Value{}, err
+			}
+			if len(result) == 1 {
+				out.Set(resolvedKey, result[0])
+			} else if len(result) > 1 {
+				out.Set(resolvedKey, NewList(result))
+			}
+			continue
+		}
+
+		// Reach map value (e.g. {x: m.a}) — evaluate its lowered get-chain
+		// as an isolated sub-expression, like a ParenExpr (Reach Phase B).
+		if IsReach(v) && !v.Quoted {
+			info, _ := AsReach(v)
+			result, err := e.evalParenExprResults(lowerReach(info))
 			if err != nil {
 				return Value{}, err
 			}

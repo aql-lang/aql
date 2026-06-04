@@ -240,44 +240,59 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 			// group so it forward-collects the result (the result must not
 			// auto-dispatch first), while the Word/__DM marker (/N /r /q)
 			// is emitted AFTER for execFnDefLiteral to peek.
-			var grp []eng.Value
-			if err := emitPrimary(&grp, items[i], poss[i]); err != nil {
+			// Build a first-class Reach node (design/REACH.0.md Phase B):
+			// receiver tokens + per-segment {op, literal-or-computed key}.
+			var recv []eng.Value
+			if err := emitPrimary(&recv, items[i], poss[i]); err != nil {
 				return nil, err
 			}
+			var segs []eng.ReachSeg
 			j := i + 1
 			var pfx, sfx []eng.Value
 		chain:
 			for j < len(items) {
+				var getr bool
+				var keyItem any
+				var kpos eng.SrcPos
 				switch {
 				case isToken(items[j], "!") && j+2 < len(items) && isToken(items[j+1], "."):
-					grp = append(grp, withPos(eng.NewWord("getr"), poss[j]))
-					keyItem, kpos := items[j+2], poss[j+2]
-					// A `/`-modifier on the final key applies to the path.
-					if base, pre, suf, ok := groupModifier(keyItem); ok && base != "" {
-						keyItem, pfx, sfx = jsonic.Text{Str: base}, pre, suf
-					}
-					if err := emitPrimary(&grp, keyItem, kpos); err != nil {
-						return nil, err
-					}
+					getr, keyItem, kpos = true, items[j+2], poss[j+2]
 					j += 3
 				case isToken(items[j], ".") && j+1 < len(items):
-					grp = append(grp, withPos(eng.NewWord("get"), poss[j]))
-					keyItem, kpos := items[j+1], poss[j+1]
-					if base, pre, suf, ok := groupModifier(keyItem); ok && base != "" {
-						keyItem, pfx, sfx = jsonic.Text{Str: base}, pre, suf
-					}
-					if err := emitPrimary(&grp, keyItem, kpos); err != nil {
-						return nil, err
-					}
+					getr, keyItem, kpos = false, items[j+1], poss[j+1]
 					j += 2
 				default:
 					break chain
 				}
+				// A `/`-modifier on the final key applies to the whole reach.
+				if base, pre, suf, ok := groupModifier(keyItem); ok && base != "" {
+					keyItem, pfx, sfx = jsonic.Text{Str: base}, pre, suf
+				}
+				seg := eng.ReachSeg{Getr: getr}
+				if pg, ok := keyItem.(parenGroup); ok {
+					// Computed key: m.(expr) — store the paren's tokens.
+					inner, err := convertTopLevelItems([]any(pg))
+					if err != nil {
+						return nil, err
+					}
+					seg.Computed = true
+					seg.KeyExpr = inner
+				} else {
+					// Literal key (word → atom-via-get/q, string, number).
+					var tmp []eng.Value
+					if err := emitPrimary(&tmp, keyItem, kpos); err != nil {
+						return nil, err
+					}
+					if len(tmp) == 1 {
+						seg.KeyLit = tmp[0]
+					} else {
+						seg.Computed = true
+						seg.KeyExpr = tmp
+					}
+				}
+				segs = append(segs, seg)
 			}
-			// Wrap the get-chain as a single ParenExpr value (paren-nesting
-			// Step 1) — the dot-chain group `( recv get k … )` becomes one
-			// nested value, like every other word-context paren group.
-			pe := withPos(eng.NewParenExpr(grp), poss[i])
+			pe := withPos(eng.NewReach(eng.ReachInfo{Receiver: recv, Segments: segs, Eval: true}), poss[i])
 			// A standalone `/mod` token immediately after the path also
 			// applies to the result (`(a.b)/mod`).
 			if pfx == nil && sfx == nil && j < len(items) {
