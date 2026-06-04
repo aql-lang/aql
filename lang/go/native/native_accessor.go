@@ -29,8 +29,8 @@ var accessorNatives = []NativeFunc{
 			{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: getrObjectHandler},
 			{Args: []*Type{TInteger, TObject}, BarrierPos: 1, Handler: getrObjectHandler},
 			// [Key | ModuleExport] / [Key | Module]
-			{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrModuleExportHandler},
-			{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Handler: getrModuleExportHandler},
+			{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrModuleExportHandler, ReturnsFn: moduleExportGetReturns},
+			{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Handler: getrModuleExportHandler, ReturnsFn: moduleExportGetReturns},
 			{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrModuleInstHandler},
 			{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Handler: getrModuleInstHandler},
 			// [Key | None]

@@ -76,8 +76,8 @@ var storageNatives = []NativeFunc{
 			{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
 			{Args: []*Type{TInteger, TObject}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
 			// [Key | ModuleExport] — transparent export access + $module/$name
-			{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getModuleExportHandler, Returns: []*Type{TAny}},
-			{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Handler: getModuleExportHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getModuleExportHandler, ReturnsFn: moduleExportGetReturns},
+			{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Handler: getModuleExportHandler, ReturnsFn: moduleExportGetReturns},
 			// [Key | Module] — descriptor fields (id/kind/file/folder/exports)
 			{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getModuleInstHandler, Returns: []*Type{TAny}},
 			{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Handler: getModuleInstHandler, Returns: []*Type{TAny}},

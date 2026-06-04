@@ -37,6 +37,40 @@ func TestCheckAddIntegerPrecision(t *testing.T) {
 	}
 }
 
+// TestCheckModuleExportTypePropagation verifies that an imported export
+// carries its real type through check mode rather than degrading to Any.
+// `get`/`getr` on a ModuleExport resolve the concrete export in carrier
+// mode, so a function export's call propagates its declared return type
+// and a bare export reference keeps its Function type. Before this, every
+// `Pkg.member` reference checked as Any.
+func TestCheckModuleExportTypePropagation(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+
+	// A function export called with a matching arg propagates its return
+	// type: MathUtil.sqrt : [Decimal] -> Decimal.
+	res, err := a.Check(`import "aql:math-util" end  16.0 MathUtil.sqrt`)
+	if err != nil {
+		t.Fatalf("check error: %v", err)
+	}
+	if len(res.Stack) != 1 || res.Stack[0] != "Decimal" {
+		t.Fatalf("expected residual [Decimal] (sqrt return type propagated), got %v", res.Stack)
+	}
+
+	// A bare export reference keeps a function type (FnDef wrapper renders
+	// as __FN; an AQL-preamble fn export renders as Function) — the point
+	// is that it is no longer the bare Any it used to degrade to.
+	res2, err := a.Check(`import "aql:math-util" end  MathUtil.sqrt`)
+	if err != nil {
+		t.Fatalf("check error: %v", err)
+	}
+	if len(res2.Stack) != 1 || (res2.Stack[0] != "__FN" && res2.Stack[0] != "Function") {
+		t.Fatalf("expected bare MathUtil.sqrt to carry a function type, got %v", res2.Stack)
+	}
+}
+
 // TestCheckAddDecimalWiden validates that mixing integer and decimal
 // carriers widens the result to Decimal — this is the
 // "else" branch of ReturnsNumericBinary.

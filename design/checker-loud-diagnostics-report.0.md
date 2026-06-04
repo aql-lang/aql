@@ -168,6 +168,22 @@ flag alone (without 0) already covers the non-module FnDef-value footgun
 and could land first as a Warning, promoted to Error once the `/r` edge
 is nailed.
 
+**Prerequisite (0) — LANDED 2026-06-04.** `get`/`getr` on a
+`ModuleExport` now carry a `ReturnsFn` (`moduleExportGetReturns`,
+`native_module_types.go`) that resolves the concrete export in check
+mode instead of synthesising an `Any` carrier. The key arrives as a
+/q-captured atom and the `ModuleExport` is concrete under check, so both
+args are available; a function export keeps its `FnDefInfo` (so it stays
+dispatchable/checkable downstream), a data export becomes a carrier of
+its real type, and anything unresolved degrades to `Any` as before. The
+precision win is immediate and independent of the flag: every imported
+member now checks with its real type — `import "aql:math-util" end 16.0
+MathUtil.sqrt` checks as `Decimal` (was `Any`), `Decision.cond age "gt"
+18` as `Map` (was `Any`). This also removes the spurious `missing_returns`
+that `getr` on an export used to emit in check mode. Covered by
+`TestCheckModuleExportTypePropagation`. Pieces (1) and (2) remain to make
+the actual `uncalled_function` diagnostic fire for module dispatch.
+
 ### Phase 2 — `unreachable_signature`: dead-overload detection
 
 Elixir-note item 3. A signature `S` is unreachable when an earlier,
