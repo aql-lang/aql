@@ -208,47 +208,41 @@ func TestParseSetWithEnd(t *testing.T) {
 func TestParseSimpleParens(t *testing.T) {
 	// (1 add 2)
 	assertParse(t, "(1 add 2)", []eng.Value{
-		eng.NewOpenParen(),
-		eng.NewInteger(1),
-		eng.NewWord("add"),
-		eng.NewInteger(2),
-		eng.NewCloseParen(),
+		eng.NewParenExpr([]eng.Value{
+			eng.NewInteger(1),
+			eng.NewWord("add"),
+			eng.NewInteger(2),
+		}),
 	})
 }
 
 func TestParseNestedParens(t *testing.T) {
 	// (1 add (2 mul 3))
 	assertParse(t, "(1 add (2 mul 3))", []eng.Value{
-		eng.NewOpenParen(),
-		eng.NewInteger(1),
-		eng.NewWord("add"),
-		eng.NewOpenParen(),
-		eng.NewInteger(2),
-		eng.NewWord("mul"),
-		eng.NewInteger(3),
-		eng.NewCloseParen(),
-		eng.NewCloseParen(),
+		eng.NewParenExpr([]eng.Value{
+			eng.NewInteger(1),
+			eng.NewWord("add"),
+			eng.NewParenExpr([]eng.Value{
+				eng.NewInteger(2),
+				eng.NewWord("mul"),
+				eng.NewInteger(3),
+			}),
+		}),
 	})
 }
 
 func TestParseAdjacentParens(t *testing.T) {
 	// (1)(2) — no space between groups
 	assertParse(t, "(1)(2)", []eng.Value{
-		eng.NewOpenParen(),
-		eng.NewInteger(1),
-		eng.NewCloseParen(),
-		eng.NewOpenParen(),
-		eng.NewInteger(2),
-		eng.NewCloseParen(),
+		eng.NewParenExpr([]eng.Value{eng.NewInteger(1)}),
+		eng.NewParenExpr([]eng.Value{eng.NewInteger(2)}),
 	})
 }
 
 func TestParseParenAroundWord(t *testing.T) {
 	// (add)
 	assertParse(t, "(add)", []eng.Value{
-		eng.NewOpenParen(),
-		eng.NewWord("add"),
-		eng.NewCloseParen(),
+		eng.NewParenExpr([]eng.Value{eng.NewWord("add")}),
 	})
 }
 
@@ -581,11 +575,11 @@ func TestParseFullInfixWithParens(t *testing.T) {
 	assertParse(t, "2 mul (3 add 4)", []eng.Value{
 		eng.NewInteger(2),
 		eng.NewWord("mul"),
-		eng.NewOpenParen(),
-		eng.NewInteger(3),
-		eng.NewWord("add"),
-		eng.NewInteger(4),
-		eng.NewCloseParen(),
+		eng.NewParenExpr([]eng.Value{
+			eng.NewInteger(3),
+			eng.NewWord("add"),
+			eng.NewInteger(4),
+		}),
 	})
 }
 
@@ -1269,8 +1263,8 @@ func TestParseNestedList(t *testing.T) {
 // --- List with dotted word ---
 
 func TestParseListWithDottedWord(t *testing.T) {
-	// [foo.bar] → list with the dot chain grouped: ( foo get bar ) = 5
-	// elements (OpenParen, foo, get, bar, CloseParen).
+	// [foo.bar] → list with the dot chain as a single Reach node
+	// (receiver foo, one segment get bar).
 	got, err := Parse("[foo.bar]")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
@@ -1280,8 +1274,49 @@ func TestParseListWithDottedWord(t *testing.T) {
 	}
 	_lst, _ := eng.AsList(got[0])
 	elems := _lst.Slice()
-	if len(elems) != 5 {
-		t.Fatalf("expected 5 elements ( foo get bar ), got %d", len(elems))
+	if len(elems) != 1 {
+		t.Fatalf("expected 1 element (the dot-chain Reach), got %d", len(elems))
+	}
+	if !eng.IsReach(elems[0]) {
+		t.Fatalf("expected element to be a Reach, got %s", elems[0])
+	}
+	info, _ := eng.AsReach(elems[0])
+	if len(info.Receiver) != 1 || len(info.Segments) != 1 {
+		t.Fatalf("expected receiver[foo] + 1 segment, got %+v", info)
+	}
+}
+
+// --- Receiverless reach ($ sentinel) ---
+
+func TestParseReceiverlessReach(t *testing.T) {
+	// `$.a.b` → a RECEIVERLESS reach (a detached lens): empty Receiver,
+	// two get segments, and inert (Eval=false) so it evaluates to itself
+	// rather than lowering to a `$ get a get b` chain.
+	got, err := Parse("$.a.b")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(got) != 1 || !eng.IsReach(got[0]) {
+		t.Fatalf("expected a single Reach value, got %d: %v", len(got), got)
+	}
+	info, _ := eng.AsReach(got[0])
+	if len(info.Receiver) != 0 {
+		t.Fatalf("receiverless reach must have empty Receiver, got %+v", info.Receiver)
+	}
+	if info.Eval {
+		t.Fatalf("receiverless reach must be inert (Eval=false), got Eval=true")
+	}
+	if len(info.Segments) != 2 {
+		t.Fatalf("expected 2 segments (a, b), got %+v", info.Segments)
+	}
+	// getr form: `$!.x` → one strict segment, still receiverless/inert.
+	got, err = Parse("$!.x")
+	if err != nil {
+		t.Fatalf("Parse error ($!.x): %v", err)
+	}
+	info, _ = eng.AsReach(got[0])
+	if len(info.Receiver) != 0 || info.Eval || len(info.Segments) != 1 || !info.Segments[0].Getr {
+		t.Fatalf("$!.x: want receiverless inert getr reach, got %+v", info)
 	}
 }
 
@@ -1374,14 +1409,17 @@ func TestParseDottedWordTopLevel(t *testing.T) {
 }
 
 func TestParseDottedWordInExpression(t *testing.T) {
-	// 1 foo.bar → 1 ( foo get bar ) = 6 values. The dot chain is grouped so
-	// it binds to foo, not to the result of `1 foo`.
+	// 1 foo.bar → 1 <Reach foo.bar> = 2 values. The dot chain is a single
+	// Reach node so it binds to foo, not to the result of `1 foo`.
 	got, err := Parse("1 foo.bar")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	if len(got) != 6 {
-		t.Fatalf("expected 6 values (1 ( foo get bar )), got %d: %v", len(got), got)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 values (1 <Reach>), got %d: %v", len(got), got)
+	}
+	if !eng.IsReach(got[1]) {
+		t.Fatalf("expected got[1] to be the dot-chain Reach, got %s", got[1])
 	}
 }
 
@@ -1434,13 +1472,16 @@ func TestParseDottedMapValueMultiPair(t *testing.T) {
 
 func TestParseDottedWordStillWorksInWordContext(t *testing.T) {
 	// The map-value fold must NOT change word context: `1 foo.bar` is
-	// still `1 ( foo get bar )` = 6 values (no double-wrap).
+	// still `1 <Reach foo.bar>` = 2 values (no double-wrap).
 	got, err := Parse("1 foo.bar")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	if len(got) != 6 {
-		t.Fatalf("expected 6 values, got %d: %v", len(got), got)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 values, got %d: %v", len(got), got)
+	}
+	if !eng.IsReach(got[1]) {
+		t.Fatalf("expected got[1] to be the dot-chain Reach, got %s", got[1])
 	}
 }
 

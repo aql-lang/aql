@@ -282,6 +282,38 @@ func TestSetpathSimple(t *testing.T) {
 	}
 }
 
+func TestSetpathNested(t *testing.T) {
+	// Regression: a nested dotted path must keep the outer wrapper + siblings
+	// (voxgigstruct.SetPath returned the inner sub-node — `setpath {a:{b:1} c:2}
+	// "a.b" 99` wrongly gave {b:99}). The native setter deep-sets correctly.
+	result, err := runNativeSteps(t, nil, []string{
+		`StructUtil.setpath {a:{b:1} c:2} "a.b" 99`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, _ := native.AsMap(result[0])
+	if m == nil || m.Len() != 2 {
+		t.Fatalf("expected a 2-key map {a c}, got %v", result[0])
+	}
+	inner, ok := m.Get("a")
+	if !ok {
+		t.Fatal("outer key 'a' was dropped")
+	}
+	im, _ := native.AsMap(inner)
+	if im == nil {
+		t.Fatalf("a should still be a map, got %v", inner)
+	}
+	b, _ := im.Get("b")
+	if bi, _ := native.AsInteger(b); bi != 99 {
+		t.Errorf("a.b = %v, want 99", b)
+	}
+	c, _ := m.Get("c")
+	if ci, _ := native.AsInteger(c); ci != 2 {
+		t.Errorf("sibling c = %v, want 2 (preserved)", c)
+	}
+}
+
 func TestSetpathNewKey(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
 		`StructUtil.setpath {a:1} "b" 2`,

@@ -167,11 +167,20 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "sortby",
 
-		Signatures: []NativeSig{{
-			Args:      []*Type{TList, TList},
-			Handler:   sortbyHandler,
-			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
-		}},
+		Signatures: []NativeSig{
+			{
+				Args:      []*Type{TList, TList},
+				Handler:   sortbyHandler,
+				ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
+			},
+			// Lens form: `sortby $.age people` derives the sort key from each
+			// element via the reach, then sorts the data by those keys.
+			{
+				Args:      []*Type{TReach, TList},
+				Handler:   sortbyReachHandler,
+				ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
+			},
+		},
 	},
 	{
 		Name: "member",
@@ -239,12 +248,21 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "each",
 
-		Signatures: []NativeSig{{
-			Args:       []*Type{TList, TList},
-			NoEvalArgs: map[int]bool{0: true},
-			Handler:    eachHandler,
-			ReturnsFn:  eachReturnsFn, BarrierPos: -1,
-		}},
+		Signatures: []NativeSig{
+			{
+				Args:       []*Type{TList, TList},
+				NoEvalArgs: map[int]bool{0: true},
+				Handler:    eachHandler,
+				ReturnsFn:  eachReturnsFn, BarrierPos: -1,
+			},
+			// Lens form: `each $.name people` plucks the reach from every
+			// element (the receiverless Reach acts as an arity-1 accessor fn).
+			{
+				Args:    []*Type{TReach, TList},
+				Handler: eachReachHandler,
+				Returns: []*Type{TList}, BarrierPos: -1,
+			},
+		},
 	},
 	{
 		// `data for-each [body]` — like `each` but discards every body
@@ -1069,6 +1087,64 @@ func eachHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		results[i] = res[len(res)-1] // take top of stack
 	}
 	return []Value{NewList(results)}, nil
+}
+
+// eachReachHandler is the lens form of each: it applies a receiverless Reach
+// (args[0]) to every element of the data list (args[1]) — `each $.name people`
+// → the list of names. The reach acts as an arity-1 accessor function.
+func eachReachHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	info, err := AsReach(args[0])
+	if err != nil {
+		return nil, fmt.Errorf("each: %w", err)
+	}
+	if !IsConcrete(args[1]) {
+		return nil, reg.AqlError("each_error", "each: expected a concrete data list", "each")
+	}
+	data, _ := AsList(args[1])
+	results := make([]Value, data.Len())
+	for i := 0; i < data.Len(); i++ {
+		v, err := ApplyReach(reg, info, data.Get(i))
+		if err != nil {
+			return nil, fmt.Errorf("each: element %d: %w", i, err)
+		}
+		results[i] = v
+	}
+	return []Value{NewList(results)}, nil
+}
+
+// sortbyReachHandler is the lens form of sortby: it derives a sort key from
+// each element via the Reach (args[0]), then returns the data list (args[1])
+// sorted by those keys — `sortby $.age people`.
+func sortbyReachHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	info, err := AsReach(args[0])
+	if err != nil {
+		return nil, fmt.Errorf("sortby: %w", err)
+	}
+	if !IsConcrete(args[1]) {
+		return nil, r.AqlError("sortby_error", "sortby: expected a concrete data list", "sortby")
+	}
+	data, _ := AsList(args[1])
+	n := data.Len()
+	keys := make([]Value, n)
+	for i := 0; i < n; i++ {
+		k, err := ApplyReach(r, info, data.Get(i))
+		if err != nil {
+			return nil, fmt.Errorf("sortby: element %d: %w", i, err)
+		}
+		keys[i] = k
+	}
+	indices := make([]int, n)
+	for i := range indices {
+		indices[i] = i
+	}
+	sort.SliceStable(indices, func(a, b int) bool {
+		return arrCompareValues(keys[indices[a]], keys[indices[b]]) < 0
+	})
+	result := make([]Value, n)
+	for i, idx := range indices {
+		result[i] = data.Get(idx)
+	}
+	return []Value{NewList(result)}, nil
 }
 
 // forEachHandler runs the body once per data element for its side effects,

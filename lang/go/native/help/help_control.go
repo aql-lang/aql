@@ -20,6 +20,21 @@ func init() {
 	})
 
 	register(&Entry{
+		Word:    "codequote",
+		Summary: "Quote a paren as code (structural quotability).",
+		Description: "Like `quote`, but a forward parenthesised group is captured RAW — as " +
+			"code (a paren-expression value) — instead of being evaluated. Words become " +
+			"atoms and lists are kept unevaluated, exactly like `quote`; only the paren " +
+			"handling differs.",
+		Notes: []string{
+			"`codequote (1 add 2)` — captures the paren as code (NOT the value 3).",
+			"`quote (1 add 2)` — by contrast evaluates the paren, then quotes the result (3).",
+			"`codequote foo` → Atom; `codequote [1 add 2]` → the list, unevaluated.",
+			"For metaprogramming: capture a source expression as data to inspect or splice.",
+		},
+	})
+
+	register(&Entry{
 		Word:    "do",
 		Summary: "Evaluate a list or map as code.",
 		Description: "Evaluates the elements of a list as AQL code. For maps, recursively " +

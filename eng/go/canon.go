@@ -111,6 +111,8 @@ func CanonValue(v Value) string {
 			parts[i] = k + ":" + CanonValue(val)
 		}
 		return "{" + strings.Join(parts, " ") + "}"
+	case IsReach(v):
+		return canonReach(v)
 	case isFnDefValue(v):
 		// A function value participates in the total order (cmp/sort),
 		// so its canon form must DISCRIMINATE between distinct fns —
@@ -125,6 +127,72 @@ func CanonValue(v Value) string {
 	default:
 		return v.String()
 	}
+}
+
+// canonReachToken renders one receiver/key token of a Reach as source:
+// a Word as its bare name (m.a, not m.a/q), a ParenExpr / nested Reach
+// recursively, anything else via CanonValue.
+func canonReachToken(v Value) string {
+	switch {
+	case IsWord(v):
+		w, _ := AsWord(v)
+		return w.Name
+	case IsParenExpr(v):
+		toks, _ := AsParenExpr(v)
+		return "(" + canonReachTokens(toks) + ")"
+	case IsReach(v):
+		return canonReach(v)
+	default:
+		return CanonValue(v)
+	}
+}
+
+// canonReachTokens renders a token sequence (receiver / computed-key / paren
+// body) as source, each token via canonReachToken so words stay bare.
+func canonReachTokens(toks []Value) string {
+	parts := make([]string, len(toks))
+	for i, t := range toks {
+		parts[i] = canonReachToken(t)
+	}
+	return strings.Join(parts, " ")
+}
+
+// canonReach renders a Reach back to its dotted surface — m.a.b, m!.x,
+// m.'k', m.(expr), (expr).k — the read∘print round-trip (design/REACH.0.md
+// §6). A Quoted (codequote-captured) reach wraps in (codequote …) so it
+// round-trips, mirroring the list quote convention.
+func canonReach(v Value) string {
+	info, err := AsReach(v)
+	if err != nil {
+		return v.String()
+	}
+	var b strings.Builder
+	switch len(info.Receiver) {
+	case 0:
+		// receiverless reach (a lens): the reserved `$` sentinel receiver,
+		// so `read ∘ print` round-trips ($.name parses back to a lens).
+		b.WriteString("$")
+	case 1:
+		b.WriteString(canonReachToken(info.Receiver[0]))
+	default:
+		b.WriteString("(" + canonReachTokens(info.Receiver) + ")")
+	}
+	for _, seg := range info.Segments {
+		if seg.Getr {
+			b.WriteString("!.")
+		} else {
+			b.WriteString(".")
+		}
+		if seg.Computed {
+			b.WriteString("(" + canonReachTokens(seg.KeyExpr) + ")")
+		} else {
+			b.WriteString(canonReachToken(seg.KeyLit))
+		}
+	}
+	if v.Quoted {
+		return "(codequote " + b.String() + ")"
+	}
+	return b.String()
 }
 
 // canonFnDef renders a function value's discriminating canonical form:
