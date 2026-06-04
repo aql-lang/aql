@@ -249,6 +249,13 @@ type FnSig struct {
 	// RAW (not pre-evaluated) so the handler receives the paren as code.
 	// Opt-in; see NativeSig.RawParens and design/PAREN-REPRESENTATION.0.md.
 	RawParens map[int]bool
+	// FormArgs marks arg positions captured as a raw FORM — a generalization
+	// of RawParens (don't pre-eval a paren) and QuoteArgs (capture a bare word
+	// as data) to ANY operand: a word stays a Word, a paren/list/literal is
+	// captured unevaluated, with no def resolution, no dispatch, and no
+	// Word→Atom coercion. The macro definer sets it on every param so a macro
+	// receives its operands as code. See design/MACROS-PHASE1.0.md §3.
+	FormArgs map[int]bool
 
 	// --- Dispatch fields (folded in from the former Signature struct;
 	// the two are now ONE type via `type Signature = FnSig`). Body
@@ -324,6 +331,14 @@ type FnDefInfo struct {
 	// return type for downstream type propagation. Named fns leave this
 	// false and the check-mode path uses sig.Returns as authored.
 	Anonymous bool
+	// Macro is true iff the FnDef was produced by the `macro` definer. A
+	// macro is an fn the expander runs on UNEVALUATED operand forms (every
+	// param is FormArgs raw-capture; §3 of design/MACROS-PHASE1.0.md), whose
+	// returned token list is spliced into the call site rather than left as a
+	// value. Read at dispatch (stepWord / execFnDefLiteral) to branch to the
+	// expander before normal forward collection. Unlike Anonymous (check-mode
+	// only), Macro gates runtime dispatch.
+	Macro bool
 	// Captured holds enclosing-fn-local bindings snapshotted at fn-
 	// construction time — the implementation of lexical closures.
 	// Populated by computeCaptures during afn / fn handler execution

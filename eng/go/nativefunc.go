@@ -47,6 +47,12 @@ type NativeSig struct {
 	// Step 4.
 	RawParens map[int]bool
 
+	// FormArgs marks arg positions captured as a raw FORM (word stays a
+	// Word; paren/list/literal captured unevaluated; no resolution, dispatch,
+	// or Word→Atom coercion). See Signature.FormArgs and
+	// design/MACROS-PHASE1.0.md §3.
+	FormArgs map[int]bool
+
 	// NoEvalMapArgs marks arg positions where map auto-evaluation
 	// should be suppressed. See Signature.NoEvalMapArgs.
 	NoEvalMapArgs map[int]bool

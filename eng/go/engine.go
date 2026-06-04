@@ -681,6 +681,22 @@ func rawParenForward(fn *FnDefInfo, pos int) bool {
 	return false
 }
 
+// rawFormForward reports whether any of fn's signatures captures the forward
+// operand at sig position pos as a raw FORM (FormArgs[pos]) — the macro
+// raw-capture mode. Like rawParenForward, it gates preEvalParens so a paren /
+// reach at that position is left unevaluated. See design/MACROS-PHASE1.0.md §3.
+func rawFormForward(fn *FnDefInfo, pos int) bool {
+	if fn == nil {
+		return false
+	}
+	for i := range fn.Signatures {
+		if fn.Signatures[i].FormArgs != nil && fn.Signatures[i].FormArgs[pos] {
+			return true
+		}
+	}
+	return false
+}
+
 // pendingForwardWantsRawParen reports whether the nearest enclosing pending
 // Forward (collecting args at the pointer) was matched to a signature that
 // captures a ParenExpr raw. When true, a ParenExpr reached during forward
@@ -693,7 +709,10 @@ func (e *Engine) pendingForwardWantsRawParen() bool {
 		}
 		if IsForward(e.stack[i]) {
 			fwd, _ := AsForward(e.stack[i])
-			return fwd.Sig != nil && len(fwd.Sig.RawParens) > 0
+			// RawParens or FormArgs (macro raw capture) both want a forward
+			// ParenExpr / Reach left raw at the pointer rather than evaluated
+			// during collection.
+			return fwd.Sig != nil && (len(fwd.Sig.RawParens) > 0 || len(fwd.Sig.FormArgs) > 0)
 		}
 	}
 	return false
@@ -823,7 +842,7 @@ func (e *Engine) preEvalParens(maxFwd int, fn *FnDefInfo) error {
 			// (NOT Quoted — matchSignature accepts a raw ParenExpr) so the
 			// matched sig captures the paren as code. The forward-collection
 			// re-step then collects it raw (pendingForwardWantsRawParen).
-			if tok.Quoted || rawParenForward(fn, resolved) {
+			if tok.Quoted || rawParenForward(fn, resolved) || rawFormForward(fn, resolved) {
 				resolved++
 				scanIdx++
 				continue
@@ -838,7 +857,7 @@ func (e *Engine) preEvalParens(maxFwd int, fn *FnDefInfo) error {
 		// then re-process. Quoted/raw-capture reaches are left for the
 		// matched sig (parity with the ParenExpr branch above).
 		if IsReach(tok) {
-			if !isEvalReach(tok) || rawParenForward(fn, resolved) {
+			if !isEvalReach(tok) || rawParenForward(fn, resolved) || rawFormForward(fn, resolved) {
 				resolved++
 				scanIdx++
 				continue
@@ -1035,6 +1054,15 @@ func (e *Engine) stepWord(val Value) error {
 	// `undef foo` works even when foo is currently defined. See
 	// signature.go §1.5 on /q.
 	if e.hasPendingForwardQuoteArg() {
+		return e.stepLiteral()
+	}
+
+	// If a pending forward's next slot is FormArgs (macro raw capture),
+	// collect this Word as a raw Word — do NOT execute it, and (unlike
+	// QuoteArgs) do NOT coerce it to an Atom. stepLiteral collects the value
+	// at the pointer; the Word matches the macro's Any-typed slot, so no
+	// conversion fires. See design/MACROS-PHASE1.0.md §3.
+	if e.hasPendingForwardFormArg() {
 		return e.stepLiteral()
 	}
 
@@ -3623,6 +3651,27 @@ func (e *Engine) hasPendingForwardQuoteArg() bool {
 	return false
 }
 
+// hasPendingForwardFormArg reports whether the nearest enclosing pending
+// Forward's next slot is FormArgs — meaning the upcoming Word should be
+// collected as a raw Word (not executed, not coerced to an Atom). Mirrors
+// hasPendingForwardQuoteArg. See design/MACROS-PHASE1.0.md §3.
+func (e *Engine) hasPendingForwardFormArg() bool {
+	for i := e.pointer - 1; i >= 0; i-- {
+		if IsOpenParen(e.stack[i]) {
+			break
+		}
+		if IsForward(e.stack[i]) {
+			fwd, _ := AsForward(e.stack[i])
+			nextIdx := fwd.CollectedArgs
+			if nextIdx < fwd.Sig.TotalArgs() {
+				return fwd.Sig.FormArgs != nil && fwd.Sig.FormArgs[nextIdx]
+			}
+			break
+		}
+	}
+	return false
+}
+
 // hasPendingForwardExpectingFunction checks if there is a pending forward
 // whose next expected argument is TFunction.
 func (e *Engine) hasPendingForwardExpectingFunction() bool {
@@ -3771,6 +3820,18 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				// before matching begins. If one remains, treat as boundary.
 				if IsOpenParen(tok) {
 					break
+				}
+
+				// FormArgs (macro raw capture): accept ANY form at this
+				// position — a word stays a Word, a paren/list/literal stays
+				// as-is — with no resolution, no dispatch, no Word→Atom
+				// coercion, and no function-word boundary. The operand is
+				// captured unevaluated. See design/MACROS-PHASE1.0.md §3.
+				if sig.FormArgs != nil && sig.FormArgs[fwd] {
+					positions[fwd] = scanIdx
+					fwd++
+					scanIdx++
+					continue
 				}
 
 				if IsWord(tok) {
