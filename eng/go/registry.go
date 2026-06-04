@@ -800,6 +800,7 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 			FullStack:        sig.FullStack,
 			QuoteArgs:        sig.QuoteArgs,
 			NoEvalArgs:       sig.NoEvalArgs,
+			RawParens:        sig.RawParens,
 			NoEvalMapArgs:    sig.NoEvalMapArgs,
 			TypeArgs:         sig.TypeArgs,
 			BarrierPos:       sig.BarrierPos,

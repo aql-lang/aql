@@ -471,8 +471,19 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			// honor them: errors propagate, defs leak, the OpenParen is a
 			// stack barrier, and results flow out. Do not advance — the
 			// OpenParen now sits at the pointer.
-			items, _ := AsParenExpr(val)
-			stackSplice(&e.stack, e.pointer, 1, expandParenExpr(items)...)
+			//
+			// Step 4: a codequote-captured ParenExpr (Quoted) is data, and a
+			// raw-capture pending forward (pendingForwardWantsRawParen) wants
+			// the paren collected as-is — both route through stepLiteral
+			// (push data / collect the forward arg) rather than expanding.
+			if val.Quoted || e.pendingForwardWantsRawParen() {
+				if err := e.stepLiteral(); err != nil {
+					return nil, err
+				}
+			} else {
+				items, _ := AsParenExpr(val)
+				stackSplice(&e.stack, e.pointer, 1, expandParenExpr(items)...)
+			}
 
 		case IsInterpString(val):
 			result, err := e.evalInterpString(val)
@@ -641,7 +652,40 @@ func (e *Engine) resolveOrphanedForwards() error {
 // maxFwd is the maximum number of forward values needed (FnDefInfo.MaxForwardArgs).
 // The scan stops after finding maxFwd resolved values or hitting a boundary
 // (function word, pipe, "end", ")").
-func (e *Engine) preEvalParens(maxFwd int) error {
+// rawParenForward reports whether any of fn's signatures captures a forward
+// ParenExpr RAW at sig position pos (RawParens[pos]). See
+// design/PAREN-REPRESENTATION.0.md Step 4.
+func rawParenForward(fn *FnDefInfo, pos int) bool {
+	if fn == nil {
+		return false
+	}
+	for i := range fn.Signatures {
+		if fn.Signatures[i].RawParens != nil && fn.Signatures[i].RawParens[pos] {
+			return true
+		}
+	}
+	return false
+}
+
+// pendingForwardWantsRawParen reports whether the nearest enclosing pending
+// Forward (collecting args at the pointer) was matched to a signature that
+// captures a ParenExpr raw. When true, a ParenExpr reached during forward
+// collection is collected as data (via stepLiteral) rather than expanded.
+// Stops at an OpenParen barrier. See Step 4.
+func (e *Engine) pendingForwardWantsRawParen() bool {
+	for i := e.pointer - 1; i >= 0; i-- {
+		if IsOpenParen(e.stack[i]) {
+			return false
+		}
+		if IsForward(e.stack[i]) {
+			fwd, _ := AsForward(e.stack[i])
+			return fwd.Sig != nil && len(fwd.Sig.RawParens) > 0
+		}
+	}
+	return false
+}
+
+func (e *Engine) preEvalParens(maxFwd int, fn *FnDefInfo) error {
 	if maxFwd <= 0 {
 		return nil
 	}
@@ -760,6 +804,16 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 		// stack, so the in-place collapse is correct). See
 		// design/PAREN-REPRESENTATION.0.md Step 3.
 		if IsParenExpr(tok) {
+			// Step 4: a quote-captured ParenExpr (already Quoted) or a
+			// raw-capture forward position (codequote) is left unevaluated
+			// (NOT Quoted — matchSignature accepts a raw ParenExpr) so the
+			// matched sig captures the paren as code. The forward-collection
+			// re-step then collects it raw (pendingForwardWantsRawParen).
+			if tok.Quoted || rawParenForward(fn, resolved) {
+				resolved++
+				scanIdx++
+				continue
+			}
 			peItems, _ := AsParenExpr(tok)
 			stackSplice(&e.stack, scanIdx, 1, expandParenExpr(peItems)...)
 			continue
@@ -1114,7 +1168,7 @@ func (e *Engine) stepWord(val Value) error {
 	// and the call hasn't been forced to stack mode via /s; or when /f
 	// explicitly forces forward collection.
 	if (fn.HasForwardSigs() && !w.ForceStack) || w.ForceForward {
-		if err := e.preEvalParens(fn.MaxForwardArgs); err != nil {
+		if err := e.preEvalParens(fn.MaxForwardArgs, fn); err != nil {
 			return err
 		}
 	}
@@ -1588,7 +1642,12 @@ func (e *Engine) stepLiteral() error {
 	// then collapses it on this engine. Without this, a nested ParenExpr
 	// would be pushed unevaluated. See design/PAREN-REPRESENTATION.0.md
 	// (paren-nesting Steps 2/3).
-	if IsParenExpr(e.stack[valIdx]) {
+	// Step 4: a Quoted ParenExpr (codequote-captured data) and a ParenExpr
+	// being collected by a raw-capture pending forward are NOT expanded —
+	// they fall through to normal literal handling (pushed as data /
+	// collected as the forward arg). Otherwise expand and re-step (the
+	// nested-paren case).
+	if IsParenExpr(e.stack[valIdx]) && !e.stack[valIdx].Quoted && !e.pendingForwardWantsRawParen() {
 		items, _ := AsParenExpr(e.stack[valIdx])
 		stackSplice(&e.stack, valIdx, 1, expandParenExpr(items)...)
 		return nil
@@ -2010,7 +2069,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// pre-eval pass — the unified rule says Function values at the
 	// pointer dispatch with the same forward+stack matching as words.
 	if (fn.HasForwardSigs() && !w.ForceStack) || w.ForceForward {
-		if err := e.preEvalParens(fn.MaxForwardArgs); err != nil {
+		if err := e.preEvalParens(fn.MaxForwardArgs, fn); err != nil {
 			return err
 		}
 	}

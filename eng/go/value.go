@@ -245,6 +245,10 @@ type FnSig struct {
 	// Used by sigs that take a Map at a code-body slot (e.g. a spec
 	// schema where map values are quoted generators).
 	NoEvalMapArgs map[int]bool
+	// RawParens marks arg positions where a forward ParenExpr is captured
+	// RAW (not pre-evaluated) so the handler receives the paren as code.
+	// Opt-in; see NativeSig.RawParens and design/PAREN-REPRESENTATION.0.md.
+	RawParens map[int]bool
 
 	// --- Dispatch fields (folded in from the former Signature struct;
 	// the two are now ONE type via `type Signature = FnSig`). Body

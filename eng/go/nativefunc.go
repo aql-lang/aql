@@ -39,6 +39,14 @@ type NativeSig struct {
 	// suppressed.
 	NoEvalArgs map[int]bool
 
+	// RawParens marks arg positions where a forward ParenExpr must be
+	// captured RAW (not pre-evaluated), so the handler receives the paren
+	// as code/data. Opt-in (currently only `codequote`); distinct from
+	// NoEvalArgs, which control words use on conditions/bodies that must
+	// still pre-evaluate a paren. See design/PAREN-REPRESENTATION.0.md
+	// Step 4.
+	RawParens map[int]bool
+
 	// NoEvalMapArgs marks arg positions where map auto-evaluation
 	// should be suppressed. See Signature.NoEvalMapArgs.
 	NoEvalMapArgs map[int]bool

@@ -38,6 +38,33 @@ var Natives = []NativeFunc{
 		},
 	},
 
+	// `codequote` is `quote`'s code-capturing sibling: it also captures a
+	// forward *paren* RAW (as a ParenExpr value) instead of evaluating it.
+	// `quote (expr)` evaluates expr then quotes the result (the inert-value
+	// idiom); `codequote (expr)` keeps the paren as code — the structural
+	// quotability the macro layer wants. Words → atoms and lists → raw list
+	// behave exactly like `quote`. See design/PAREN-REPRESENTATION.0.md §2.2.
+	{
+		Name: "codequote",
+
+		Signatures: []NativeSig{
+			{
+				Args:      []*Type{TAtom},
+				QuoteArgs: map[int]bool{0: true},
+				Handler:   quoteWordHandler,
+				Returns:   []*Type{TAtom}, BarrierPos: -1,
+			},
+			{
+				Args:           []*Type{TAny},
+				NoEvalArgs:     map[int]bool{0: true},
+				RawParens:      map[int]bool{0: true},
+				Handler:        quoteAnyHandler,
+				RunInCheckMode: true,
+				ReturnsFn:      ReturnsIdentity(0), BarrierPos: -1,
+			},
+		},
+	},
+
 	// `word <value>` wraps its argument (unevaluated) in an __SP splice
 	// marker. When the marker reaches the stack pointer its payload is
 	// spliced in: a plain list contributes its top-level elements, any
