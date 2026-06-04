@@ -1,6 +1,7 @@
 # Reach — a first-class node for dot-access sugar
 
-**Status:** design / implementation plan — **Phases A–E landed (green)**
+**Status:** design / implementation plan — **Phases A–E + the §11 deferred
+work (F–J) landed (green)**
 **Scope:** lift dotted access (`m.a.b`, `a."x".c`, `a.(expr).b`, `a!.x`) from
 its current flat `get`-chain (a `ParenExpr` after the paren-nesting work) to a
 **first-class, quotable, round-trippable `Reach` value** with per-segment
@@ -39,9 +40,30 @@ residual" finding) and `LISP-ANALYSIS.0.md` §2/§8 #5 (uniform code-as-data).
 >   intentionally not done (it would require moving get/getr access into eng —
 >   large and risky for no gain), mirroring the paren-work Step 5 decision.
 >
-> **Deferred** (need the §11 open sub-decisions, not blockers): getr/computed
-> construction encoding for `reach`; `apply`/rebind; `getpath`/`setpath`
-> unification; receiverless reach (`.a.b` as a lens).
+> **Deferred work — now LANDED (green), Phases F–J:**
+> - **F  Receiverless reach** — a `$` receiver (the reserved sentinel) parses
+>   to a receiverless, inert Reach: a detached lens `$.name` that evaluates to
+>   itself. `canon` round-trips it. All-`$` names (`$`, `$$`, …) are reserved
+>   as user words (`ValidateWordName`), mixed-`$` names ($path) stay legal.
+>   (Chosen over leading `.a.b`, which is ambiguous — `.` is a whitespace-
+>   insensitive standalone token, so `. a . b` ≡ `.a.b` has no syntactic way to
+>   mark "no receiver".)
+> - **H  apply + rebind** — `eng.ApplyReach(r, info, recv)` evaluates a reach's
+>   segments against a receiver (the lens "get", honoring getr strictness +
+>   computed keys). `apply $.name p` rebinds + evaluates; `rebind $.name p`
+>   composes an inert bound lens.
+> - **J  Lens-as-Function** — a receiverless reach is an arity-1 accessor in
+>   higher-order positions: `each $.name people`, `filter $.active xs` (reads
+>   the element, not the {key,value} wrapper), `sortby $.age people`. Each word
+>   gains an `[Reach, …]` overload delegating to `ApplyReach`.
+> - **I  getpath/setpath accept a Reach** (full native) — `getpath $.a.b m`
+>   reads via `ApplyReach`; `setpath $.a.b v m` is an immutable NESTED set
+>   walked natively (`setReachNative`) — preserves siblings, creates
+>   intermediates, handles list indices + computed keys. (Strictly better than
+>   the dotted-string voxgigstruct form, which does not deep-set.)
+> - **G  `reach` constructor encoding** — the key list is NOT evaluated and
+>   encodes one segment per key: bare key = get, `!` marks the next key getr
+>   (`reach m [a !b]` ≡ m.a!.b), `(expr)` = a deferred computed key.
 
 > The dot-chain is the last non-uniform corner of "code as data": today
 > `m.a.b` is an *idiom* (`( m get a get b )`), not a *node* — you can't quote
@@ -316,18 +338,19 @@ programmatic capability; E the perf optimisation.
 4. **Computed-key side effects / ordering** — a computed key `(expr)` evaluates
    at reach time, left-to-right; Stage-1 lowering gets this free, Stage-2 must
    replicate.
-5. **Receiverless reach (open decision, highest leverage).** Today the grammar
-   *requires* a receiver. If `.a.b` parsed to a **receiverless `Reach`** (a
-   pure accessor / lens value), you'd get `people each .name`,
-   `users sort-by .age`, `setpath .config.timeout 30 cfg` — Clojure
-   keyword-as-fn / Haskell-lens ergonomics, and it directly addresses the
-   `filter`/`each` predicate friction (LISP-ANALYSIS §3). It is a real grammar
-   addition (the leading `.` currently has no receiver) and a separate decision
-   from the core node — flagged here, not assumed.
-6. **`reach` segment encoding** — the list form needs a compact way to express
-   getr and computed segments (`!name`? `(expr)`?). Decide before Phase D.
-7. **Scope of `getpath`/`setpath` unification** — minimal: accept a `Reach`
-   by lowering it to a key list; fuller: native `Reach` handling.
+5. **Receiverless reach (RESOLVED — Phase F).** The surface is the reserved
+   `$` sentinel receiver: `$.a.b` → a receiverless lens, `people each $.name`,
+   `sortby $.age people`, `setpath $.config.timeout 30 cfg`. A leading `.a.b`
+   was rejected as the surface because `.` is a whitespace-insensitive
+   standalone token (`. a . b` ≡ `.a.b`), leaving no syntactic way to mark "no
+   receiver"; `$` is unambiguous and reserved (all-`$` names are un-definable).
+6. **`reach` segment encoding (RESOLVED — Phase G).** The (un-evaluated) key
+   list encodes ops: bare key = get, a `!` marker element = the next key is
+   getr, `(expr)` = a deferred computed key.
+7. **Scope of `getpath`/`setpath` unification (RESOLVED — Phase I).** The
+   fuller option: native `Reach` handling. `getpath` reads via `ApplyReach`;
+   `setpath` does a native immutable nested set (correct nesting, unlike the
+   dotted-string form).
 
 **Recommended first slice:** Phases **A + B** (type + parser flip + Stage-1
 lowering) — lands the structural node at exact semantic parity, gated like the
