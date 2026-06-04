@@ -59,8 +59,11 @@ residual" finding) and `LISP-ANALYSIS.0.md` §2/§8 #5 (uniform code-as-data).
 > - **I  getpath/setpath accept a Reach** (full native) — `getpath $.a.b m`
 >   reads via `ApplyReach`; `setpath $.a.b v m` is an immutable NESTED set
 >   walked natively (`setReachNative`) — preserves siblings, creates
->   intermediates, handles list indices + computed keys. (Strictly better than
->   the dotted-string voxgigstruct form, which does not deep-set.)
+>   intermediates, handles list indices + computed keys. The dotted-**string**
+>   `setpath` now shares the same native setter too: `voxgigstruct.SetPath`
+>   returned the innermost sub-node instead of the updated root (every nested
+>   set silently dropped the outer structure), so both forms route through
+>   `setReachNative`.
 > - **G  `reach` constructor encoding** — the key list is NOT evaluated and
 >   encodes one segment per key: bare key = get, `!` marks the next key getr
 >   (`reach m [a !b]` ≡ m.a!.b), `(expr)` = a deferred computed key.

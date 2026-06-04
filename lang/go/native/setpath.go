@@ -2,17 +2,17 @@ package native
 
 import (
 	"fmt"
-
-	voxgigstruct "github.com/voxgig/struct"
+	"strconv"
+	"strings"
 )
 
 // The "setpath" word is registered via the consolidated Natives slice in
 // natives.go.
 //
 // setpathHandler sets a nested value, returning a NEW structure. The path is
-// either a dotted String (handled by voxgigstruct.SetPath) or a Reach lens
-// (handled natively by setReachNative). Position-agnostic: it finds the path
-// arg, then determines which of the remaining args is data vs new value.
+// either a dotted String or a Reach lens; both walk the same native setter
+// (setReachNative — an immutable deep set). Position-agnostic: it finds the
+// path arg, then determines which of the remaining args is data vs new value.
 func setpathHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	// Find the path arg — a String dotted path, or a Reach lens.
 	pathIdx := -1
@@ -81,12 +81,47 @@ func setpathHandler(args []Value, ctx map[string]Value, stack []Value, r *Regist
 	if err != nil {
 		return nil, fmt.Errorf("setpath: path: %w", err)
 	}
-	result := voxgigstruct.SetPath(valueToAny(data), path, valueToAny(newVal))
-	val, err := anyToValue(result)
+	// Walk the dotted path natively (same setter as the reach form). NOT
+	// voxgigstruct.SetPath: that function returns the innermost sub-node
+	// rather than the updated root, so any nested set lost the outer
+	// structure (`setpath {a:{b:1}} "a.b" 99` → {b:99} instead of
+	// {a:{b:99}}). The native setter deep-sets correctly + immutably.
+	out, err := setReachNative(data, stringPathKeys(path), newVal)
 	if err != nil {
-		return nil, fmt.Errorf("setpath: %w", err)
+		return nil, err
 	}
-	return []Value{val}, nil
+	return []Value{out}, nil
+}
+
+// stringPathKeys splits a dotted path ("a.b.0") into the key Values to walk:
+// an all-digit segment becomes an Integer (a list index / numeric key), any
+// other segment a String. Mirrors voxgigstruct's `.`-split, feeding the same
+// native setter the reach form uses.
+func stringPathKeys(path string) []Value {
+	rawParts := strings.Split(path, ".")
+	keys := make([]Value, len(rawParts))
+	for i, p := range rawParts {
+		if n, err := strconv.Atoi(p); err == nil && isAllDigits(p) {
+			keys[i] = NewInteger(int64(n))
+		} else {
+			keys[i] = NewString(p)
+		}
+	}
+	return keys
+}
+
+// isAllDigits reports whether s is non-empty and every rune is 0-9 (so "01"
+// and "0" are indices, but "-1" / "1a" / "" stay string keys).
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // reachPathKeys decodes a Reach's segments into the key Values to walk

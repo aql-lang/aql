@@ -17,6 +17,9 @@
 #
 # §3  setpath — write at a path (returns a new structure)
 "aql:struct-util" import end StructUtil.setpath {a:1} "b" 99	{a:1 b:99}	add a key by path
+"aql:struct-util" import end StructUtil.setpath {a:{b:1} c:2} "a.b" 99	{a:{b:99} c:2}	nested set keeps the outer wrapper + siblings
+"aql:struct-util" import end StructUtil.setpath {a:1} "x.y" 5	{a:1 x:{y:5}}	a nested path creates intermediate maps
+"aql:struct-util" import end StructUtil.setpath {xs:[10 20 30]} "xs.1" 9	{xs:[10 9 30]}	a numeric segment indexes a list
 #
 # §4  clone — deep copy (forward or stack form)
 "aql:struct-util" import end StructUtil.clone {a:1 b:2}	{a:1 b:2}	forward form

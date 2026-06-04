@@ -30,7 +30,7 @@ filter $.on {a:{on:true} b:{on:false}}	{a:{on:true}}	filter lens form works on a
 #
 # §5  getpath / setpath accept a Reach lens (struct-util). getpath reads
 #     natively (getr strict, computed keys); setpath does an immutable nested
-#     set (honors nesting + siblings, unlike the dotted-string form).
+#     set. Both forms (reach + dotted string) share the same native setter.
 "aql:struct-util" import end  StructUtil.getpath $.a.b {a:{b:7}}	7	getpath reads through a lens
 "aql:struct-util" import end  StructUtil.setpath $.a.b 99 {a:{b:1} c:2}	{a:{b:99} c:2}	setpath nests + preserves siblings
 "aql:struct-util" import end  StructUtil.setpath $.x.y 5 {a:1}	{a:1 x:{y:5}}	setpath creates intermediate maps
