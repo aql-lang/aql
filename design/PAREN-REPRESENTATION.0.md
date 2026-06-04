@@ -317,6 +317,18 @@ throughout.
 > internal in-place eval mechanism; deleting them would mean replacing the
 > whole collapse machinery for no behavioral gain.
 >
+> **Step 6 (tests) done:** `lang/spec/codequote.tsv` (executable spec) +
+> `lang/go/test/codequote_test.go` (behavior) + a `describe codequote` help
+> entry. **Step 7 (benchmark) done — verdict GO.** A/B (HEAD nested-ParenExpr
+> vs the pre-change marker baseline, `lang/go/paren_bench_test.go`, median of
+> 5): **memory is consistently lower** on HEAD (B/op −3%…−13% — the ParenExpr
+> value is more compact than the `OpenParen…CloseParen` span), validating the
+> §5 hypothesis. CPU is a wash (nested3 −20%, flat3 −10%; most within ±2.5%).
+> Two localized costs: `loop` allocs +6.3% (per-paren value alloc in a tight
+> loop, as predicted) and `dotchain` ns/op +17% (dotted access round-trips
+> through ParenExpr→marker expansion — exactly what **Step 9**'s structural
+> `Path` node would remove). No blocking regression.
+>
 > **Key finding:** overloading `quote` for raw capture is a genuine
 > *semantics fork*, not test churn — `quote (fn-expr)` is a deliberate
 > "evaluate then keep as inert/Quoted data" idiom (incompatible with
