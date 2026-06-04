@@ -132,6 +132,10 @@ func TestReachAsFunction(t *testing.T) {
 	}
 }
 
+// getpath / setpath accepting a Reach lens (struct-util module words) are
+// covered end-to-end in lang/spec/reach.tsv §5 (the langspec runner wires
+// up the module resolver; runNativeSteps here does not).
+
 // Parity guard: a parsed dot-access still evaluates eagerly (not a Reach value).
 func TestParsedDotAccessStaysEager(t *testing.T) {
 	res, err := runNativeSteps(t, nil, []string{`def m {a: {b: 7}}`, `m.a.b`})

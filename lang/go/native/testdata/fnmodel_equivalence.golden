@@ -178,6 +178,7 @@ WORD get
   [Scalar/Atom Node] barrier=1 quote={0} returns=[Any]
   [Any None] barrier=1 returns=[None]
 WORD getpath
+  [Ideal/Reach Any] barrier=2
   [Scalar/String Any] barrier=2
 WORD getr
   [Scalar/String Ideal/ModuleExport] barrier=1
@@ -398,7 +399,9 @@ WORD set
   [Scalar/Atom Any Ideal/Store] barrier=3 quote={0} +returnsfn
   [Scalar/Atom Any Ideal/Object] barrier=3 quote={0}
 WORD setpath
+  [Ideal/Reach Any Any] barrier=3
   [Scalar/String Any Any] barrier=3
+  [Any Ideal/Reach Any] barrier=3
   [Any Scalar/String Any] barrier=3
 WORD shed
   [Scalar/Number/Integer Node/List] barrier=2 +returnsfn
