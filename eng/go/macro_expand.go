@@ -142,7 +142,22 @@ func expandMacroWith(r *Registry, fnDef *FnDefInfo, operands []Value) ([]Value, 
 		tmpl = []Value{template}
 	}
 
-	expanded, expErr := expandTemplate(r, tmpl, bindings)
+	// Automatic hygiene (design/MACROS.0.md §5.2 #1): rename every
+	// template-origin `def` binder to a fresh gensym, consistently across the
+	// template, so an introduced name can't capture a same-named use-site
+	// variable. User-origin names — those supplied through unquote/splice,
+	// including the `def unquote <name>` escape — are NOT in this set and pass
+	// through unchanged, so a macro that intentionally binds a user-visible
+	// name still can. (Free-word capture-pinning (#2) and DefCleanup teardown
+	// are refinements — see MACROS-PHASE1.0.md.)
+	renames := map[string]string{}
+	binders := map[string]bool{}
+	collectTemplateBinders(tmpl, binders)
+	for name := range binders {
+		renames[name] = r.NextGensym()
+	}
+
+	expanded, expErr := expandTemplate(r, tmpl, bindings, renames)
 	r.Defs.Restore(snap)
 	if expErr != nil {
 		return nil, fmt.Errorf("macro %s: %w", fnDef.Name, expErr)
@@ -150,10 +165,51 @@ func expandMacroWith(r *Registry, fnDef *FnDefInfo, operands []Value) ([]Value, 
 	return expanded, nil
 }
 
+// collectTemplateBinders gathers the names a template binds with a literal
+// `def <name>` (template-origin binders), recursing into nested containers. A
+// `def unquote …` / `def splice …` name is user-controlled and excluded, so it
+// is never auto-renamed.
+func collectTemplateBinders(toks []Value, set map[string]bool) {
+	for i := 0; i < len(toks); i++ {
+		t := toks[i]
+		if IsWord(t) {
+			w, _ := AsWord(t)
+			if w.Name == "def" && i+1 < len(toks) && IsWord(toks[i+1]) {
+				nm, _ := AsWord(toks[i+1])
+				if nm.Name != "unquote" && nm.Name != "splice" {
+					set[nm.Name] = true
+				}
+			}
+		}
+		collectBindersNested(t, set)
+	}
+}
+
+// collectBindersNested recurses collectTemplateBinders into a container value.
+func collectBindersNested(t Value, set map[string]bool) {
+	switch {
+	case t.Parent.Equal(TList) && IsConcrete(t):
+		l, _ := AsList(t)
+		collectTemplateBinders(l.Slice(), set)
+	case IsParenExpr(t):
+		pt, _ := AsParenExpr(t)
+		collectTemplateBinders(pt, set)
+	case t.Parent.Equal(TMap) && IsConcrete(t):
+		m, _ := AsMap(t)
+		if m == nil {
+			return
+		}
+		for _, k := range m.Keys() {
+			v, _ := m.Get(k)
+			collectBindersNested(v, set)
+		}
+	}
+}
+
 // expandTemplate walks a template token list, resolving `unquote x` (insert one
 // grouped node) and `splice xs` (flatten a list's elements), and recursing into
 // nested List / ParenExpr / Map values. Bare tokens pass through as code.
-func expandTemplate(r *Registry, toks []Value, bindings map[string]Value) ([]Value, error) {
+func expandTemplate(r *Registry, toks []Value, bindings map[string]Value, renames map[string]string) ([]Value, error) {
 	out := make([]Value, 0, len(toks))
 	for i := 0; i < len(toks); i++ {
 		t := toks[i]
@@ -164,6 +220,8 @@ func expandTemplate(r *Registry, toks []Value, bindings map[string]Value) ([]Val
 					return nil, &AqlError{Code: "macro_error",
 						Detail: w.Name + ": missing operand in template"}
 				}
+				// The escape's operand is USER-origin: resolved against the
+				// macro scope, NOT subject to hygiene renaming.
 				val, err := resolveTemplateEscape(r, toks[i+1], bindings)
 				if err != nil {
 					return nil, err
@@ -181,8 +239,16 @@ func expandTemplate(r *Registry, toks []Value, bindings map[string]Value) ([]Val
 				}
 				continue
 			}
+			// A template-origin literal Word that names an auto-renamed
+			// binder → its fresh gensym (hygiene #1).
+			if g, ok := renames[w.Name]; ok {
+				gw := NewWord(g)
+				gw.Pos = t.Pos
+				out = append(out, gw)
+				continue
+			}
 		}
-		nested, err := expandNested(r, t, bindings)
+		nested, err := expandNested(r, t, bindings, renames)
 		if err != nil {
 			return nil, err
 		}
@@ -233,11 +299,11 @@ func asTemplateNode(v Value) Value {
 
 // expandNested recurses the escape walk into container values (a template may
 // embed unquote/splice inside a list, a paren, or a map value — §3.1).
-func expandNested(r *Registry, t Value, bindings map[string]Value) (Value, error) {
+func expandNested(r *Registry, t Value, bindings map[string]Value, renames map[string]string) (Value, error) {
 	switch {
 	case t.Parent.Equal(TList) && IsConcrete(t):
 		l, _ := AsList(t)
-		inner, err := expandTemplate(r, l.Slice(), bindings)
+		inner, err := expandTemplate(r, l.Slice(), bindings, renames)
 		if err != nil {
 			return Value{}, err
 		}
@@ -246,7 +312,7 @@ func expandNested(r *Registry, t Value, bindings map[string]Value) (Value, error
 		return nl, nil
 	case IsParenExpr(t):
 		toks, _ := AsParenExpr(t)
-		inner, err := expandTemplate(r, toks, bindings)
+		inner, err := expandTemplate(r, toks, bindings, renames)
 		if err != nil {
 			return Value{}, err
 		}
@@ -259,7 +325,7 @@ func expandNested(r *Registry, t Value, bindings map[string]Value) (Value, error
 		out := NewOrderedMap()
 		for _, k := range m.Keys() {
 			v, _ := m.Get(k)
-			rv, err := expandNested(r, v, bindings)
+			rv, err := expandNested(r, v, bindings, renames)
 			if err != nil {
 				return Value{}, err
 			}

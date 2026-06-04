@@ -100,3 +100,34 @@ func TestMacroExpandAndHygiene(t *testing.T) {
 		t.Error("macro with too few operands should error, got nil")
 	}
 }
+
+// Phase 4: automatic hygiene. A literal `def <name>` binder in a template is
+// renamed to a fresh gensym, so it can't capture a same-named use-site var —
+// no manual gensym needed. `def unquote <name>` stays user-controlled.
+func TestMacroAutoHygiene(t *testing.T) {
+	// Literal `def tmp` in the template must NOT capture the user's tmp.
+	res, err := runNativeSteps(t, nil, []string{
+		`def myor2 (macro [[a b] [ quote [ def tmp unquote a  if tmp [tmp] [unquote b] ] ]])`,
+		`def tmp 42`,
+		`myor2 false tmp`,
+	})
+	if err != nil {
+		t.Fatalf("auto-hygiene myor2: %v", err)
+	}
+	if n, _ := eng.AsInteger(res[0]); n != 42 {
+		t.Errorf("auto-hygienic myor2 false tmp = %v, want 42 (user tmp untouched)", res[0])
+	}
+
+	// `def unquote name` is the escape: an intentional user-visible binding.
+	res, err = runNativeSteps(t, nil, []string{
+		`def defconst (macro [[name val] [ quote [ def unquote name unquote val ] ]])`,
+		`defconst answer 42`,
+		`answer`,
+	})
+	if err != nil {
+		t.Fatalf("defconst: %v", err)
+	}
+	if n, _ := eng.AsInteger(res[0]); n != 42 {
+		t.Errorf("defconst answer 42; answer = %v, want 42 (user-visible binding)", res[0])
+	}
+}
