@@ -1,0 +1,25 @@
+# AQL Language Specification: codequote (structural paren quotability)
+# Format: input<TAB>expected<TAB>description
+# =====================================================================
+# `codequote` is `quote`'s code-capturing sibling. It captures a forward
+# PAREN raw — as a ParenExpr value (code/data) — instead of evaluating it.
+# This is the structural quotability the macro layer wants:
+#   quote (1 add 2)      -> 3                 (evaluate, then quote result)
+#   codequote (1 add 2)  -> the paren as code (NOT evaluated)
+# Words -> atoms and lists -> raw list behave exactly like `quote`.
+# Expected values use the canon renderer.
+# See design/PAREN-REPRESENTATION.0.md Step 4.
+# =====================================================================
+
+# --- word / scalar / list forms behave like quote ---
+codequote foo	foo/q	bare word -> Atom (data, not a call)
+codequote add	add/q	works on bound names too (pure data)
+codequote 99	99	scalar passes through unchanged
+codequote [1 add 2]	(quote [1 word(add) 2])	list captured raw (unevaluated)
+
+# --- the new behaviour: a paren is captured RAW as code ---
+codequote (1 add 2)	paren([1 word(add) 2])	paren captured raw — NOT evaluated to 3
+codequote (nosuchword)	paren([word(nosuchword)])	contents NOT evaluated — no undefined_word error
+
+# --- guard: quote keeps its evaluate-then-quote semantics (unchanged) ---
+quote (1 add 2)	3	quote still evaluates the paren, then quotes the result
