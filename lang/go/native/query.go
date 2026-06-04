@@ -561,7 +561,7 @@ func parseColumnSpec(colList Value) ([]columnSpec, error) {
 		case e.Parent.Equal(TAtom):
 			_as6, _ := AsAtom(e)
 			cols = append(cols, columnSpec{Name: _as6})
-		case e.Parent.Matches(TString):
+		case e.Parent.ConformsTo(TString):
 			_as7, _ := AsString(e)
 			cols = append(cols, columnSpec{Name: _as7})
 		case IsWord(e):
@@ -641,7 +641,7 @@ func nameFromValue(v Value) string {
 		_as9, _ := AsAtom(v)
 		return _as9
 	}
-	if v.Parent.Matches(TString) {
+	if v.Parent.ConformsTo(TString) {
 		_as10, _ := AsString(v)
 		return _as10
 	}
@@ -747,7 +747,7 @@ func valueToColName(v Value) string {
 		_as12, _ := AsAtom(v)
 		return _as12
 	}
-	if v.Parent.Matches(TString) {
+	if v.Parent.ConformsTo(TString) {
 		_as13, _ := AsString(v)
 		return _as13
 	}
@@ -1190,13 +1190,13 @@ func resolveScalarValue(v Value) (Value, error) {
 // valueToSQL converts a Value to a SQL literal string.
 func valueToSQL(v Value) (string, error) {
 	switch {
-	case v.Parent.Matches(TString):
+	case v.Parent.ConformsTo(TString):
 		_as23, _ := AsString(v)
 		return "'" + strings.ReplaceAll(_as23, "'", "''") + "'", nil
-	case v.Parent.Matches(TInteger):
+	case v.Parent.ConformsTo(TInteger):
 		_as24, _ := AsInteger(v)
 		return fmt.Sprintf("%d", _as24), nil
-	case v.Parent.Matches(TBoolean):
+	case v.Parent.ConformsTo(TBoolean):
 		_as25, _ := AsBoolean(v)
 		if _as25 {
 			return "'true'", nil
@@ -1339,7 +1339,7 @@ func buildOrderClause(colList Value) (string, error) {
 	for i < len(elems) {
 		e := elems[i]
 
-		if e.Parent.Matches(TInteger) {
+		if e.Parent.ConformsTo(TInteger) {
 			_as28, _ := AsInteger(e)
 			parts = append(parts, fmt.Sprintf("%d", _as28))
 			i++

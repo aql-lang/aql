@@ -115,9 +115,9 @@ func tensorKindName(vt *eng.Type) string {
 	switch {
 	case vt == nil:
 		return "Tensor"
-	case vt.Matches(TVector):
+	case vt.ConformsTo(TVector):
 		return "Vector"
-	case vt.Matches(TMatrix):
+	case vt.ConformsTo(TMatrix):
 		return "Matrix"
 	default:
 		return "Tensor"

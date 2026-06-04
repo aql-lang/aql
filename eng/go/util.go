@@ -106,7 +106,7 @@ func RequireConcreteMap(v Value, op string) (ReadMap, error) {
 // MapFieldString fetches a String-valued field from a ReadMap.
 // Returns the string and true on hit; "" and false when the key is
 // absent OR the value's type is not String. Replaces the
-// `if v, ok := m.Get(k); ok && v.Parent.Matches(TString) { s, _ := v.AsString(); … }`
+// `if v, ok := m.Get(k); ok && v.Parent.ConformsTo(TString) { s, _ := v.AsString(); … }`
 // pattern that appeared in fileio.go, native_string_helpers.go, and
 // native_type_make.go.
 //
@@ -116,7 +116,7 @@ func MapFieldString(m ReadMap, key string) (string, bool) {
 		return "", false
 	}
 	v, ok := m.Get(key)
-	if !ok || !v.Parent.Matches(TString) {
+	if !ok || !v.Parent.ConformsTo(TString) {
 		return "", false
 	}
 	s, err := AsString(v)
@@ -133,7 +133,7 @@ func MapFieldInteger(m ReadMap, key string) (int64, bool) {
 		return 0, false
 	}
 	v, ok := m.Get(key)
-	if !ok || !v.Parent.Matches(TInteger) || v.IsDepScalar() {
+	if !ok || !v.Parent.ConformsTo(TInteger) || v.IsDepScalar() {
 		return 0, false
 	}
 	n, err := AsInteger(v)
@@ -149,7 +149,7 @@ func MapFieldBoolean(m ReadMap, key string) (bool, bool) {
 		return false, false
 	}
 	v, ok := m.Get(key)
-	if !ok || !v.Parent.Matches(TBoolean) {
+	if !ok || !v.Parent.ConformsTo(TBoolean) {
 		return false, false
 	}
 	b, err := AsBoolean(v)
@@ -165,7 +165,7 @@ func MapFieldDecimal(m ReadMap, key string) (float64, bool) {
 		return 0, false
 	}
 	v, ok := m.Get(key)
-	if !ok || !v.Parent.Matches(TDecimal) || v.IsDepScalar() {
+	if !ok || !v.Parent.ConformsTo(TDecimal) || v.IsDepScalar() {
 		return 0, false
 	}
 	f, err := AsDecimal(v)
@@ -266,7 +266,7 @@ func restorePredicateState(r *Registry, s predicateSandbox) {
 // AsConcreteString unwraps a String-typed Value into its Go string,
 // returning a clear error if the value is a DepScalar constraint
 // payload rather than a concrete String. The lattice override makes
-// `DepString.Matches(TString)` true for sig-matching purposes, so
+// `DepString.ConformsTo(TString)` true for sig-matching purposes, so
 // any code path that sees a TString value and immediately calls
 // `AsString` will hit a `DepString → "" + error` silent miscompile
 // when the caller swallows the error. Use AsConcreteString in any
@@ -333,7 +333,7 @@ func (v Value) AsConcreteAtom() (string, error) {
 // as Type/Disjunct/Enum) but whose payload isn't a real DisjunctInfo
 // fall back to the single-element slice.
 func FlattenDisjunctAlts(v Value) []Value {
-	if d, ok := v.Data.(DisjunctInfo); ok && v.Parent.Matches(TDisjunct) {
+	if d, ok := v.Data.(DisjunctInfo); ok && v.Parent.ConformsTo(TDisjunct) {
 		return d.Alternatives
 	}
 	return []Value{v}

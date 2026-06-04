@@ -279,7 +279,7 @@ func sigTypeMatchesAsType(v Value, t *Type) bool {
 		if v.Parent != nil && v.Parent.Equal(TNone) && v.Name == "" {
 			return false
 		}
-		return (&v).Matches(t)
+		return (&v).ConformsTo(t)
 	}
 	// DepScalar bodies are NOT accepted at TypeArgs slots: they're
 	// constraints over a base scalar (used as runtime values), not
@@ -294,7 +294,7 @@ func sigTypeMatchesAsType(v Value, t *Type) bool {
 	// record shape) are "types" — accept them when their lattice
 	// family matches the slot.
 	if IsTypeBody(v) {
-		return v.Parent.Matches(t)
+		return v.Parent.ConformsTo(t)
 	}
 	return false
 }
@@ -374,7 +374,7 @@ func positionalMatch(values []Value, sig *Signature) bool {
 		v := values[i]
 		// /q modifier (forward-only): treat Word as Atom for matching.
 		if sig.QuoteArgs != nil && sig.QuoteArgs[i] && v.Parent.Equal(TWord) {
-			if !TAtom.Matches(t) {
+			if !TAtom.ConformsTo(t) {
 				return false
 			}
 			continue

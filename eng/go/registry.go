@@ -629,23 +629,23 @@ func ValToString(v Value) string {
 	switch {
 	case v.IsDepScalar():
 		// Must come before TString/TInteger/etc. matches: the
-		// lattice override makes DepString.Matches(TString) true,
+		// lattice override makes DepString.ConformsTo(TString) true,
 		// so without this case AsString would crash on the wrong
 		// payload type.
 		return renderDepScalar(v)
-	case v.Parent.Matches(TString):
+	case v.Parent.ConformsTo(TString):
 		_as8, _ := AsString(v)
 		return _as8
 	case IsAtom(v):
 		_as9, _ := AsAtom(v)
 		return _as9
-	case v.Parent.Matches(TDecimal):
+	case v.Parent.ConformsTo(TDecimal):
 		_as10, _ := AsDecimal(v)
 		return formatDecimal(_as10)
-	case v.Parent.Matches(TInteger):
+	case v.Parent.ConformsTo(TInteger):
 		_as11, _ := AsInteger(v)
 		return strconv.FormatInt(_as11, 10)
-	case v.Parent.Matches(TBoolean):
+	case v.Parent.ConformsTo(TBoolean):
 		_as12, _ := AsBoolean(v)
 		if _as12 {
 			return "true"
@@ -741,7 +741,7 @@ func StoreKey(v Value) string {
 		_as15, _ := AsWord(v)
 		return _as15.Name
 	}
-	if v.Parent.Matches(TString) {
+	if v.Parent.ConformsTo(TString) {
 		_as16, _ := AsString(v)
 		return _as16
 	}
@@ -749,15 +749,15 @@ func StoreKey(v Value) string {
 		_as17, _ := AsAtom(v)
 		return _as17
 	}
-	if v.Parent.Matches(TInteger) {
+	if v.Parent.ConformsTo(TInteger) {
 		n, _ := AsInteger(v)
 		return strconv.FormatInt(n, 10)
 	}
-	if v.Parent.Matches(TDecimal) {
+	if v.Parent.ConformsTo(TDecimal) {
 		f, _ := AsDecimal(v)
 		return FormatDecimal(f)
 	}
-	if v.Parent.Matches(TBoolean) {
+	if v.Parent.ConformsTo(TBoolean) {
 		b, _ := AsBoolean(v)
 		if b {
 			return "true"
@@ -1076,7 +1076,7 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 		if IsBareTypeNode(candidate) {
 			// Bare type literal: skip the gate (the literal IS a type,
 			// not an inhabitant — predicate has no value to test).
-		} else if !candidate.Parent.Matches(inputT) {
+		} else if !candidate.Parent.ConformsTo(inputT) {
 			return candidate, false, nil
 		}
 	}
@@ -1113,7 +1113,7 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 		return out, false, nil
 	}
 	inputT := predSig.Params[0].Type
-	booleanIsValue := inputT != nil && TBoolean.Matches(inputT)
+	booleanIsValue := inputT != nil && TBoolean.ConformsTo(inputT)
 	if !booleanIsValue && out.Parent != nil && out.Parent.Equal(TBoolean) && out.Data != nil {
 		if b, ok := out.Data.(BoolPayload); ok {
 			if !b.B {

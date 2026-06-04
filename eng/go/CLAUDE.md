@@ -263,7 +263,7 @@ type TypeBehavior interface {
 ```
 
 `DefaultBehavior` is the kernel's no-op: `Match` delegates to
-`v.Parent.Matches(t)`, `Format` delegates to `v.String()` (with
+`v.Parent.ConformsTo(t)`, `Format` delegates to `v.String()` (with
 the dispatch carefully avoiding re-entry), `Equal` delegates to
 `valuesEqualDefault`. Every type registered through the kernel
 paths gets `DefaultBehavior` if the caller doesn't supply one.
@@ -570,13 +570,13 @@ predicate — `v.Is(t)` (routed through the type's Behavior) — applied
 (`signature.go::sigTypeMatches`), the `is` word, and the fn **return**
 check (`engine.go`, which uses `v.Is(exp)` for exactly this reason).
 Never reintroduce a boundary that asks a different question (e.g. a raw
-`v.Parent.Matches(exp)` on returns) — that is the param/return
+`v.Parent.ConformsTo(exp)` on returns) — that is the param/return
 asymmetry that `design/REFINE-NEWTYPE-VS-SUBSET.0.md` removed.
 
 - **Bare refine** (`def Pos (refine Integer)` — no payload,
   `IsBareTypeNode(body)`): a **nominal newtype**.
   `bareRefineUnifier.Match` is nominal — a value is a `Pos` only if its
-  tag is `Pos` or a subtype (`v.Parent.Matches(t)`, NOT the base type).
+  tag is `Pos` or a subtype (`v.Parent.ConformsTo(t)`, NOT the base type).
   A plain `Integer` is not a `Pos`; construct one with `def x:Pos 42`
   (Unify/reparent — a separate path from Match). Symmetric-strict, like
   Haskell/Rust/Go newtypes.
@@ -589,5 +589,5 @@ asymmetry that `design/REFINE-NEWTYPE-VS-SUBSET.0.md` removed.
   refinement types.
 
 Builtins and objects keep `DefaultBehavior` / nominal object matching,
-where `v.Is(t)` coincides with `v.Parent.Matches(t)` on concrete
+where `v.Is(t)` coincides with `v.Parent.ConformsTo(t)` on concrete
 values — so routing returns through `v.Is` left them unchanged.

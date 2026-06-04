@@ -682,8 +682,9 @@ func formatFixedID(path string, num int) string {
 
 // MintTestType is a test-only helper that mints a *Type from a
 // slash-separated path, walking from the builtin root where possible
-// and minting intermediate *Types as needed. Used by lattice / Matches /
-// Specificity tests that need synthetic type hierarchies; production
+// and minting intermediate *Types as needed. Used by lattice /
+// ConformsTo / Specificity tests that need synthetic type hierarchies;
+// production
 // code goes through NewType (strict — unknown paths error) or
 // TypeTable.MintType (explicit name + parent).
 //

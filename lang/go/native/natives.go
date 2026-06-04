@@ -334,7 +334,7 @@ func folderOptsHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 	}
 	parents := true
 	if optsMap, _ := AsMap(optsVal); optsMap != nil {
-		if v, ok := optsMap.Get("parents"); ok && v.Parent.Matches(TBoolean) {
+		if v, ok := optsMap.Get("parents"); ok && v.Parent.ConformsTo(TBoolean) {
 			parents, _ = AsBoolean(v)
 		}
 	}

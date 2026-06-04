@@ -22,11 +22,11 @@ func valuesEqual(a, b eng.Value) bool {
 			aw.ForceForward == bw.ForceForward
 	case eng.IsOpenParen(a):
 		return true
-	case a.Parent.Matches(eng.TString):
+	case a.Parent.ConformsTo(eng.TString):
 		as, _ := eng.AsString(a)
 		bs, _ := eng.AsString(b)
 		return as == bs
-	case a.Parent.Matches(eng.TInteger):
+	case a.Parent.ConformsTo(eng.TInteger):
 		an, _ := eng.AsInteger(a)
 		bn, _ := eng.AsInteger(b)
 		return an == bn
@@ -1192,7 +1192,7 @@ func TestParseDecimalNumber(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	if !got[0].Parent.Matches(eng.TDecimal) {
+	if !got[0].Parent.ConformsTo(eng.TDecimal) {
 		t.Errorf("expected decimal type, got %s", got[0].Parent)
 	}
 }
@@ -1206,7 +1206,7 @@ func TestParseDecimalInExpression(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("expected 3 values, got %d", len(got))
 	}
-	if !got[0].Parent.Matches(eng.TDecimal) {
+	if !got[0].Parent.ConformsTo(eng.TDecimal) {
 		t.Errorf("expected decimal, got %s", got[0].Parent)
 	}
 }
@@ -1222,7 +1222,7 @@ func TestParseMapWithDecimal(t *testing.T) {
 	}
 	m, _ := eng.AsMap(got[0])
 	xVal, _ := m.Get("x")
-	if !xVal.Parent.Matches(eng.TDecimal) {
+	if !xVal.Parent.ConformsTo(eng.TDecimal) {
 		t.Errorf("expected decimal, got %s", xVal.Parent)
 	}
 }
@@ -1499,7 +1499,7 @@ func TestParseMapWithStringValues(t *testing.T) {
 	m, _ := eng.AsMap(got[0])
 	xVal, _ := m.Get("x")
 	xValS, _ := eng.AsString(xVal)
-	if !xVal.Parent.Matches(eng.TString) || xValS != "hello" {
+	if !xVal.Parent.ConformsTo(eng.TString) || xValS != "hello" {
 		t.Errorf("expected string hello, got %s", xVal)
 	}
 }
@@ -1669,7 +1669,7 @@ func TestParseSlashFModifier(t *testing.T) {
 func TestFloatToValueWholeNumber(t *testing.T) {
 	// Whole number float → integer
 	v := floatToValue(42.0)
-	if !v.Parent.Matches(eng.TInteger) {
+	if !v.Parent.ConformsTo(eng.TInteger) {
 		t.Errorf("expected integer, got %s", v.Parent)
 	}
 }
@@ -1677,7 +1677,7 @@ func TestFloatToValueWholeNumber(t *testing.T) {
 func TestFloatToValueFractional(t *testing.T) {
 	// Fractional float → decimal
 	v := floatToValue(3.14)
-	if !v.Parent.Matches(eng.TDecimal) {
+	if !v.Parent.ConformsTo(eng.TDecimal) {
 		t.Errorf("expected decimal, got %s", v.Parent)
 	}
 }
@@ -1708,11 +1708,11 @@ func TestResolveTextValueTypes(t *testing.T) {
 		input string
 		check func(eng.Value) bool
 	}{
-		{"true", func(v eng.Value) bool { b, _ := eng.AsBoolean(v); return v.Parent.Matches(eng.TBoolean) && b }},
-		{"false", func(v eng.Value) bool { b, _ := eng.AsBoolean(v); return v.Parent.Matches(eng.TBoolean) && !b }},
+		{"true", func(v eng.Value) bool { b, _ := eng.AsBoolean(v); return v.Parent.ConformsTo(eng.TBoolean) && b }},
+		{"false", func(v eng.Value) bool { b, _ := eng.AsBoolean(v); return v.Parent.ConformsTo(eng.TBoolean) && !b }},
 		{"Number", func(v eng.Value) bool { return v.Equal(eng.TNumber) }},
 		{"String", func(v eng.Value) bool { return v.Equal(eng.TString) }},
-		{"hello", func(v eng.Value) bool { s, _ := eng.AsAtom(v); return v.Parent.Matches(eng.TAtom) && s == "hello" }},
+		{"hello", func(v eng.Value) bool { s, _ := eng.AsAtom(v); return v.Parent.ConformsTo(eng.TAtom) && s == "hello" }},
 	}
 	for _, tt := range tests {
 		v := resolveTextValue(tt.input)
@@ -1730,7 +1730,7 @@ func TestConvertTopLevelValueBool(t *testing.T) {
 		t.Fatal(err)
 	}
 	b1, _ := eng.AsBoolean(v)
-	if !v.Parent.Matches(eng.TBoolean) || !b1 {
+	if !v.Parent.ConformsTo(eng.TBoolean) || !b1 {
 		t.Errorf("expected true, got %s", v)
 	}
 	v, err = convertTopLevelValue(false)
@@ -1738,7 +1738,7 @@ func TestConvertTopLevelValueBool(t *testing.T) {
 		t.Fatal(err)
 	}
 	b2, _ := eng.AsBoolean(v)
-	if !v.Parent.Matches(eng.TBoolean) || b2 {
+	if !v.Parent.ConformsTo(eng.TBoolean) || b2 {
 		t.Errorf("expected false, got %s", v)
 	}
 }
@@ -1770,7 +1770,7 @@ func TestConvertDataValueBool(t *testing.T) {
 		t.Fatal(err)
 	}
 	b3, _ := eng.AsBoolean(v)
-	if !v.Parent.Matches(eng.TBoolean) || !b3 {
+	if !v.Parent.ConformsTo(eng.TBoolean) || !b3 {
 		t.Errorf("expected true, got %s", v)
 	}
 }

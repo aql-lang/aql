@@ -179,7 +179,7 @@ func doEvalDataList(r *Registry, elems []Value) ([]Value, error) {
 // doPromoteToWord converts a string or atom value to a word if it
 // names a registered function.
 func doPromoteToWord(r *Registry, v Value) Value {
-	if v.Parent.Matches(TString) || v.Parent.Matches(TAtom) {
+	if v.Parent.ConformsTo(TString) || v.Parent.ConformsTo(TAtom) {
 		name, _ := AsString(v)
 		if r.Lookup(name) != nil {
 			return NewWord(name)

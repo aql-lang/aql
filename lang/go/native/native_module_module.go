@@ -121,7 +121,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 
 	// Promote strings to words for code evaluation inside module.
 	promoteToWord := func(v Value) Value {
-		if v.Parent.Matches(TString) || v.Parent.Matches(TAtom) {
+		if v.Parent.ConformsTo(TString) || v.Parent.ConformsTo(TAtom) {
 			name, _ := AsString(v)
 			if modReg.Lookup(name) != nil {
 				return NewWord(name)
@@ -434,7 +434,7 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 	if IsWord(v) {
 		_as3, _ := AsWord(v)
 		name = _as3.Name
-	} else if v.Parent.Matches(TString) {
+	} else if v.Parent.ConformsTo(TString) {
 		name, _ = AsString(v)
 	} else if IsAtom(v) {
 		name, _ = AsAtom(v)
@@ -537,7 +537,7 @@ func valToAtomOrString(v Value) string {
 		_as5, _ := AsAtom(v)
 		return _as5
 	}
-	if v.Parent.Matches(TString) {
+	if v.Parent.ConformsTo(TString) {
 		_as6, _ := AsString(v)
 		return _as6
 	}

@@ -115,7 +115,7 @@ type Unifier interface {
 // existing kernel paths so introducing the Behavior seam is
 // observably a no-op:
 //
-//   - Match → v.Parent.Matches(t) (the historical lattice walk plus
+//   - Match → v.Parent.ConformsTo(t) (the historical lattice walk plus
 //     DepScalar override).
 //   - Format → Value.String() (today's full switch).
 //   - Equal → ValuesEqual (today's deep-compare).
@@ -133,9 +133,9 @@ func (defaultBehavior) Match(v Value, t *Type) bool {
 	// A bare type literal IS a lattice node — test it directly. Any
 	// other value (concrete, or a carrier) is tested by its Parent.
 	if IsBareTypeNode(v) {
-		return v.Matches(t)
+		return v.ConformsTo(t)
 	}
-	return v.Parent.Matches(t)
+	return v.Parent.ConformsTo(t)
 }
 
 func (defaultBehavior) Format(v Value) string {

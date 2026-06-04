@@ -823,7 +823,7 @@ func NewValueRaw(t *Type, data Payload) Value {
 // String subtype: EmptyString for "" (the unique inhabitant of the
 // EmptyString singleton type) and ProperString for any non-empty
 // payload. Both subtypes match Scalar/String via the type lattice
-// (TStringProper.Matches(TString) and TStringEmpty.Matches(TString)
+// (TStringProper.ConformsTo(TString) and TStringEmpty.ConformsTo(TString)
 // are true), so signatures declared on TString continue to dispatch
 // transparently — the difference is observable only via typeof,
 // pattern dispatch, or explicit subtype-equality checks.
@@ -1052,7 +1052,7 @@ func NewNone() Value {
 // Is reports whether v satisfies type t, routed through t.Behavior.
 // The canonical dispatch point for "is v a T?" — used by handlers,
 // the matcher, and `is` / `guard`. Default Behavior delegates to the
-// lattice walk (v.Parent.Matches(t)); types with custom Behavior
+// lattice walk (v.Parent.ConformsTo(t)); types with custom Behavior
 // override (predicate types invoke their body, record types check
 // field-by-field conformance, etc.).
 //
@@ -1065,7 +1065,7 @@ func (v Value) Is(t *Type) bool {
 		return false
 	}
 	if t.Behavior == nil {
-		return v.Parent.Matches(t)
+		return v.Parent.ConformsTo(t)
 	}
 	return t.Behavior.Match(v, t)
 }
@@ -1424,7 +1424,7 @@ func IsForward(v Value) bool {
 
 // IsBoolean reports whether this value is a boolean type.
 func IsBoolean(v Value) bool {
-	return v.Parent.Matches(TBoolean)
+	return v.Parent.ConformsTo(TBoolean)
 }
 
 // IsOpenParen reports whether this value is an open-paren marker.
@@ -1577,7 +1577,7 @@ func AsDefCleanup(v Value) (DefCleanupInfo, error) {
 // (Type/Disjunct/Enum).
 func IsDisjunct(v Value) bool {
 	_, ok := v.Data.(DisjunctInfo)
-	return ok && v.Parent.Matches(TDisjunct)
+	return ok && v.Parent.ConformsTo(TDisjunct)
 }
 
 // AsDisjunct returns the DisjunctInfo, panics if not a disjunct.
@@ -1592,7 +1592,7 @@ func AsDisjunct(v Value) (DisjunctInfo, error) {
 // IsNegation reports whether v is a negation (complement) type value.
 func IsNegation(v Value) bool {
 	_, ok := v.Data.(NegationInfo)
-	return ok && v.Parent.Matches(TNegation)
+	return ok && v.Parent.ConformsTo(TNegation)
 }
 
 // AsNegation returns the NegationInfo payload, or an error if v is not
@@ -1627,7 +1627,7 @@ func AsObjectType(v Value) (ObjectTypeInfo, error) {
 // IsStore reports whether this value is a Store instance.
 func IsStore(v Value) bool {
 	_, ok := v.Data.(*StoreInstanceInfo)
-	return ok && v.Parent.Matches(TStore)
+	return ok && v.Parent.ConformsTo(TStore)
 }
 
 // AsStore returns the StoreInstanceInfo pointer. Returns an error if not a store.
@@ -1642,7 +1642,7 @@ func AsStore(v Value) (*StoreInstanceInfo, error) {
 // IsArray reports whether this value is an Array instance.
 func IsArray(v Value) bool {
 	_, ok := v.Data.(*ArrayInstanceInfo)
-	return ok && v.Parent.Matches(TArray)
+	return ok && v.Parent.ConformsTo(TArray)
 }
 
 // AsArray returns the ArrayInstanceInfo pointer. Returns an error if not an array.
@@ -1842,7 +1842,7 @@ func AsDecimal(v Value) (float64, error) {
 // AsNumber returns the numeric value as float64 regardless of whether it is
 // an integer or decimal.
 func AsNumber(v Value) (float64, error) {
-	if v.Parent.Matches(TDecimal) {
+	if v.Parent.ConformsTo(TDecimal) {
 		f, err := AsDecimal(v)
 		return f, err
 	}
@@ -2034,23 +2034,23 @@ func kernelFormatDefault(v Value) string {
 		return typeNodeOf(v).Leaf()
 	case v.IsDepScalar():
 		// Must come before TString / TInteger / TDecimal matches: the
-		// lattice override makes DepString.Matches(TString) (and the
+		// lattice override makes DepString.ConformsTo(TString) (and the
 		// numeric counterparts) true, so without this case the value
 		// payload would be cast to the wrong concrete type.
 		return renderDepScalar(v)
-	case v.Parent.Matches(TString):
+	case v.Parent.ConformsTo(TString):
 		s, _ := AsString(v)
 		return fmt.Sprintf("'%s'", s)
 	case v.Parent.Equal(TAtom):
 		s, _ := AsAtom(v)
 		return s
-	case v.Parent.Matches(TDecimal):
+	case v.Parent.ConformsTo(TDecimal):
 		_as4, _ := AsDecimal(v)
 		return formatDecimal(_as4)
-	case v.Parent.Matches(TInteger):
+	case v.Parent.ConformsTo(TInteger):
 		n, _ := AsInteger(v)
 		return fmt.Sprintf("%d", n)
-	case v.Parent.Matches(TBoolean):
+	case v.Parent.ConformsTo(TBoolean):
 		_as5, _ := AsBoolean(v)
 		if _as5 {
 			return "true"
@@ -2191,7 +2191,7 @@ func IsTypeValue(v Value) bool {
 	}
 
 	// Concrete list: check each element recursively.
-	if v.Parent.Matches(TList) && v.Data != nil {
+	if v.Parent.ConformsTo(TList) && v.Data != nil {
 		elems, _ := AsList(v)
 		if !elems.IsNil() {
 			for _, elem := range elems.Slice() {
@@ -2203,7 +2203,7 @@ func IsTypeValue(v Value) bool {
 	}
 
 	// Concrete map: check each value recursively.
-	if v.Parent.Matches(TMap) && v.Data != nil {
+	if v.Parent.ConformsTo(TMap) && v.Data != nil {
 		m, _ := AsMap(v)
 		if m != nil {
 			for _, key := range m.Keys() {

@@ -262,7 +262,7 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 
 		val = ResolveWordValue(val)
 
-		if val.Parent.Matches(ValueType(constraint)) {
+		if val.Parent.ConformsTo(ValueType(constraint)) {
 			result.Set(key, val)
 		} else {
 			converted, err := MakeConvert(val, ValueType(constraint))
@@ -304,13 +304,13 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 func makePath(srcVal Value, abs bool) ([]Value, error) {
 	var raw []string
 	switch {
-	case srcVal.Parent.Matches(TList) && srcVal.Data != nil:
+	case srcVal.Parent.ConformsTo(TList) && srcVal.Data != nil:
 		elems, _ := AsList(srcVal)
 		raw = make([]string, elems.Len())
 		for i := 0; i < elems.Len(); i++ {
 			raw[i] = ValToString(elems.Get(i))
 		}
-	case srcVal.Parent.Matches(TString) && srcVal.Data != nil:
+	case srcVal.Parent.ConformsTo(TString) && srcVal.Data != nil:
 		s, _ := AsString(srcVal)
 		raw = []string{s}
 	default:
@@ -371,7 +371,7 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 	}
 
 	targetType := &targetVal
-	if srcVal.Parent.Matches(targetType) {
+	if srcVal.Parent.ConformsTo(targetType) {
 		return []Value{srcVal}, nil
 	}
 
@@ -593,7 +593,7 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 	if IsBareTypeNode(targetVal) && targetVal.Equal(TPath) {
 		abs := false
 		if optsMap, _ := AsMap(optsVal); optsMap != nil {
-			if v, ok := optsMap.Get("abs"); ok && v.Parent.Matches(TBoolean) {
+			if v, ok := optsMap.Get("abs"); ok && v.Parent.ConformsTo(TBoolean) {
 				abs, _ = AsBoolean(v)
 			}
 		}
@@ -615,7 +615,7 @@ func MakeScalarHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 	if targetType.Equal(TPath) {
 		return makePath(srcVal, false)
 	}
-	if srcVal.Parent.Matches(targetType) {
+	if srcVal.Parent.ConformsTo(targetType) {
 		return []Value{srcVal}, nil
 	}
 	result, err := MakeConvert(srcVal, targetType)
@@ -665,7 +665,7 @@ func MakeScalarOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Regis
 	if IsBareTypeNode(targetVal) && targetVal.Equal(TPath) {
 		abs := false
 		if optsMap, _ := AsMap(optsVal); optsMap != nil {
-			if v, ok := optsMap.Get("abs"); ok && v.Parent.Matches(TBoolean) {
+			if v, ok := optsMap.Get("abs"); ok && v.Parent.ConformsTo(TBoolean) {
 				abs, _ = AsBoolean(v)
 			}
 		}
@@ -679,10 +679,10 @@ func MakeScalarOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Regis
 // same scalar-coercion logic that backs `make`.
 func MakeConvert(src Value, targetType *Type) (Value, error) {
 	switch {
-	case targetType.Matches(TString):
+	case targetType.ConformsTo(TString):
 		return NewString(ValToString(src)), nil
 
-	case targetType.Matches(TDecimal):
+	case targetType.ConformsTo(TDecimal):
 		text := ValToString(src)
 		f, err := strconv.ParseFloat(text, 64)
 		if err != nil {
@@ -690,7 +690,7 @@ func MakeConvert(src Value, targetType *Type) (Value, error) {
 		}
 		return NewDecimal(f), nil
 
-	case targetType.Matches(TNumber) || targetType.Matches(TInteger):
+	case targetType.ConformsTo(TNumber) || targetType.ConformsTo(TInteger):
 		text := ValToString(src)
 		n, err := strconv.ParseInt(text, 10, 64)
 		if err != nil {
@@ -702,11 +702,11 @@ func MakeConvert(src Value, targetType *Type) (Value, error) {
 		}
 		return NewInteger(n), nil
 
-	case targetType.Matches(TBoolean):
+	case targetType.ConformsTo(TBoolean):
 		switch {
-		case src.Parent.Matches(TBoolean):
+		case src.Parent.ConformsTo(TBoolean):
 			return src, nil
-		case src.Parent.Matches(TNumber):
+		case src.Parent.ConformsTo(TNumber):
 			_as0, _ := AsNumber(src)
 			return NewBoolean(_as0 != 0), nil
 		default:
@@ -754,7 +754,7 @@ func MakeFieldValueR(val Value, constraint Value, r *Registry) (Value, error) {
 
 	if IsBareTypeNode(constraint) {
 		constraintType := ValueType(constraint)
-		if val.Parent.Matches(constraintType) {
+		if val.Parent.ConformsTo(constraintType) {
 			return val, nil
 		}
 		return MakeConvert(val, constraintType)
@@ -781,7 +781,7 @@ func MakeFieldValueR(val Value, constraint Value, r *Registry) (Value, error) {
 //     expressions like [string or none] produce a disjunction.
 //  3. Everything else passes through unchanged.
 func ResolveFieldType(r *Registry, v Value) Value {
-	if v.Data != nil && (v.Parent.Matches(TString) || v.Parent.Matches(TAtom) || IsWord(v)) {
+	if v.Data != nil && (v.Parent.ConformsTo(TString) || v.Parent.ConformsTo(TAtom) || IsWord(v)) {
 		var name string
 		if IsWord(v) {
 			_as2, _ := AsWord(v)
@@ -806,7 +806,7 @@ func ResolveFieldType(r *Registry, v Value) Value {
 		elems, _ := AsList(v)
 		input := make([]Value, elems.Len())
 		for i, e := range elems.Slice() {
-			if (e.Parent.Matches(TString) || e.Parent.Matches(TAtom)) && e.Data != nil {
+			if (e.Parent.ConformsTo(TString) || e.Parent.ConformsTo(TAtom)) && e.Data != nil {
 				name, _ := AsString(e)
 				if r.Lookup(name) != nil {
 					input[i] = NewWord(name)

@@ -84,15 +84,15 @@ func shrinkLiteral(v eng.Value) []eng.Value {
 		return nil
 	}
 	switch {
-	case v.Parent.Matches(eng.TInteger):
+	case v.Parent.ConformsTo(eng.TInteger):
 		return shrinkInteger(v)
-	case v.Parent.Matches(eng.TDecimal):
+	case v.Parent.ConformsTo(eng.TDecimal):
 		return shrinkDecimal(v)
-	case v.Parent.Matches(eng.TString):
+	case v.Parent.ConformsTo(eng.TString):
 		return shrinkString(v)
-	case v.Parent.Matches(eng.TBoolean):
+	case v.Parent.ConformsTo(eng.TBoolean):
 		return shrinkBoolean(v)
-	case v.Parent.Matches(eng.TList):
+	case v.Parent.ConformsTo(eng.TList):
 		return shrinkList(v)
 	}
 	return nil

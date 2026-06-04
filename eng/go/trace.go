@@ -42,11 +42,11 @@ func TraceColorize(v Value) string {
 		// Type literal — render the value's OWN type name (it IS its
 		// lattice node), not its parent (which is the supertype).
 		return cCyan + typeNodeOf(v).String() + cReset
-	case v.Parent.Matches(TString):
+	case v.Parent.ConformsTo(TString):
 		return cGreen + fmt.Sprintf("%q", v.Data) + cReset
-	case v.Parent.Matches(TInteger):
+	case v.Parent.ConformsTo(TInteger):
 		return cBlue + fmt.Sprintf("%d", v.Data) + cReset
-	case v.Parent.Matches(TBoolean):
+	case v.Parent.ConformsTo(TBoolean):
 		_as0, _ := AsBoolean(v)
 		if _as0 {
 			return cCyan + "true" + cReset

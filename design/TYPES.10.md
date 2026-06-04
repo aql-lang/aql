@@ -121,11 +121,11 @@ prefix is derived from the **topmost ancestor that is NOT `Any`** —
 
 ## Type Matching
 
-* `Any` matches everything (a deliberate fast-path in `Type.Matches`).
+* `Any` matches everything (a deliberate fast-path in `Type.ConformsTo`).
 * A child matches a parent via the ancestor walk.
 * A parent does NOT match a child.
 * DepScalar values (`Integer gt 0`) inherit their base scalar as
-  `Parent`, so `(Integer gt 0).Parent.Matches(Integer)` is true via
+  `Parent`, so `(Integer gt 0).Parent.ConformsTo(Integer)` is true via
   the regular ancestor walk; no special override needed.
 * Signature matching routes through `Type.Behavior.Match` so per-
   type custom matchers participate (predicate types, refinement

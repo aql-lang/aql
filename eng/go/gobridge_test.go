@@ -92,7 +92,7 @@ func TestRoundTripNested(t *testing.T) {
 func TestFromNativeFallback(t *testing.T) {
 	type custom struct{ X int }
 	v := FromNative(custom{X: 5})
-	if !v.Parent.Matches(TString) {
+	if !v.Parent.ConformsTo(TString) {
 		t.Fatalf("expected fallback to String for unknown type, got %s", v.Parent)
 	}
 }

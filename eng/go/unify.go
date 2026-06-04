@@ -147,7 +147,7 @@ func resolvePredicateRef(v Value, r *Registry) (Value, bool) {
 	case IsWord(v):
 		w, _ := AsWord(v)
 		name = w.Name
-	case v.Parent != nil && v.Parent.Matches(TAtom) && v.Data != nil:
+	case v.Parent != nil && v.Parent.ConformsTo(TAtom) && v.Data != nil:
 		w, _ := AsAtom(v)
 		name = w
 	case IsBareTypeNode(v) && v.ID != "" && v.Name != "":
@@ -373,10 +373,10 @@ func unifySameOrSubtype(a, b Value) (Value, *UnifyError) {
 	bType := denotedType(b)
 
 	// Type literal unifies with any concrete whose type matches.
-	if IsBareTypeNode(a) && b.Data != nil && bType.Matches(aType) {
+	if IsBareTypeNode(a) && b.Data != nil && bType.ConformsTo(aType) {
 		return b, nil
 	}
-	if IsBareTypeNode(b) && a.Data != nil && aType.Matches(bType) {
+	if IsBareTypeNode(b) && a.Data != nil && aType.ConformsTo(bType) {
 		return a, nil
 	}
 

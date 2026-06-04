@@ -395,7 +395,7 @@ func TestScalarFromTableOneRow(t *testing.T) {
 		t.Fatal(err)
 	}
 	_as51, _ := AsInteger(val)
-	if !val.Parent.Matches(TInteger) || _as51 != 42 {
+	if !val.Parent.ConformsTo(TInteger) || _as51 != 42 {
 		t.Errorf("expected 42, got %v", val)
 	}
 }
@@ -911,7 +911,7 @@ func TestResolveFieldTypeList(t *testing.T) {
 		NewWord("String"), NewWord("tor"), NewWord("None"),
 	}))
 	// Should be a disjunct type, not a raw list
-	if result.Parent.Matches(TList) && !IsTypedList(result) {
+	if result.Parent.ConformsTo(TList) && !IsTypedList(result) {
 		t.Error("expected resolved type, not raw list")
 	}
 }

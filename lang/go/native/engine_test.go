@@ -6,7 +6,7 @@ import (
 
 // --- *Type system tests ---
 
-func TestTypeMatches(t *testing.T) {
+func TestTypeConformsTo(t *testing.T) {
 	tests := []struct {
 		name    string
 		typ     *Type
@@ -23,9 +23,9 @@ func TestTypeMatches(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.typ.Matches(tt.pattern)
+			got := tt.typ.ConformsTo(tt.pattern)
 			if got != tt.want {
-				t.Errorf("%s.Matches(%s) = %v, want %v", tt.typ, tt.pattern, got, tt.want)
+				t.Errorf("%s.ConformsTo(%s) = %v, want %v", tt.typ, tt.pattern, got, tt.want)
 			}
 		})
 	}
@@ -36,14 +36,14 @@ func TestTypeMatches(t *testing.T) {
 func TestNewString(t *testing.T) {
 	// Strings carry the String subtype: ProperString for non-empty,
 	// EmptyString for "". Both still match TString via the type
-	// lattice, so Equal(TString) is false but Matches(TString) is
+	// lattice, so Equal(TString) is false but ConformsTo(TString) is
 	// true; specific-value dispatch still routes through
 	// Signature.Patterns where finer granularity is needed.
 	v := NewString("hello")
 	if !v.Parent.Equal(TStringProper) {
 		t.Errorf("type = %s, want ProperString", v.Parent)
 	}
-	if !v.Parent.Matches(TString) {
+	if !v.Parent.ConformsTo(TString) {
 		t.Errorf("ProperString should match TString")
 	}
 	_as0, _ := AsString(v)
@@ -55,14 +55,14 @@ func TestNewString(t *testing.T) {
 	if !empty.Parent.Equal(TStringEmpty) {
 		t.Errorf("empty type = %s, want EmptyString", empty.Parent)
 	}
-	if !empty.Parent.Matches(TString) {
+	if !empty.Parent.ConformsTo(TString) {
 		t.Errorf("EmptyString should match TString")
 	}
 }
 
 func TestNewInteger(t *testing.T) {
 	v := NewInteger(42)
-	if !v.Parent.Matches(TInteger) {
+	if !v.Parent.ConformsTo(TInteger) {
 		t.Errorf("type = %s, want matches number/integer", v.Parent)
 	}
 	_as2, _ := AsInteger(v)

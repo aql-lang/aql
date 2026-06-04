@@ -1306,7 +1306,7 @@ func TestEngineCoreFnExplicitMapPatternE2E(t *testing.T) {
 	found := false
 	for _, v := range result {
 		_as47, _ := AsString(v)
-		if v.Parent.Matches(TString) && _as47 == "matched" {
+		if v.Parent.ConformsTo(TString) && _as47 == "matched" {
 			found = true
 		}
 	}

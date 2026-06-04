@@ -311,10 +311,10 @@ func (a *AQL) Run(src string) ([]any, error) {
 			// rather than trying to extract an Integer/String payload
 			// that isn't there.
 			out[i] = v.String()
-		case v.Parent.Matches(native.TInteger):
+		case v.Parent.ConformsTo(native.TInteger):
 			n, _ := native.AsInteger(v)
 			out[i] = n
-		case v.Parent.Matches(native.TString):
+		case v.Parent.ConformsTo(native.TString):
 			s, _ := native.AsString(v)
 			out[i] = s
 		default:

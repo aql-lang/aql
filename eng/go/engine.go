@@ -644,8 +644,8 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 		tok := e.stack[scanIdx]
 
 		// Boundary conditions: stop scanning.
-		if IsForward(tok) || tok.Parent.Matches(TMark) || tok.Parent.Matches(TMove) ||
-			tok.Parent.Matches(TInternal) || tok.Parent.Matches(TReturnCheck) {
+		if IsForward(tok) || tok.Parent.ConformsTo(TMark) || tok.Parent.ConformsTo(TMove) ||
+			tok.Parent.ConformsTo(TInternal) || tok.Parent.ConformsTo(TReturnCheck) {
 			break
 		}
 
@@ -1628,7 +1628,7 @@ func (e *Engine) stepLiteral() error {
 		nextIdx := fwd.CollectedArgs
 		matches := sigArgMatches(fwd.Sig, nextIdx, val)
 		if !matches && fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx] &&
-			val.Parent.Equal(TWord) && TAtom.Matches(sigArgType(fwd.Sig, nextIdx)) {
+			val.Parent.Equal(TWord) && TAtom.ConformsTo(sigArgType(fwd.Sig, nextIdx)) {
 			w, _ := AsWord(val)
 			atom := NewAtom(w.Name)
 			atom.Pos = val.Pos // preserve source position across /q Word→Atom conversion
@@ -1833,7 +1833,7 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 				return Value{}, fmt.Errorf("computed key [%s]: %w", key, err)
 			}
 			if len(keyResult) == 1 {
-				if keyResult[0].Parent.Matches(TString) {
+				if keyResult[0].Parent.ConformsTo(TString) {
 					resolvedKey, _ = AsString(keyResult[0])
 				} else if IsAtom(keyResult[0]) {
 					resolvedKey, _ = AsAtom(keyResult[0])
@@ -2125,8 +2125,8 @@ func isRecordableLiteral(v Value) bool {
 	switch {
 	case IsForward(v), IsOpenParen(v), IsCloseParen(v), IsEnd(v):
 		return false
-	case v.Parent.Matches(TMark), v.Parent.Matches(TMove),
-		v.Parent.Matches(TReturnCheck), v.Parent.Matches(TInternal):
+	case v.Parent.ConformsTo(TMark), v.Parent.ConformsTo(TMove),
+		v.Parent.ConformsTo(TReturnCheck), v.Parent.ConformsTo(TInternal):
 		return false
 	}
 	return true
@@ -3175,7 +3175,7 @@ func (e *Engine) stepCloseParen() error {
 			// type's Behavior governs both ends symmetrically: a predicate
 			// refine runs its predicate on the way out (subset semantics),
 			// a bare refine stays nominal (newtype), and builtins/objects
-			// are unchanged (v.Is ≡ v.Parent.Matches on concrete values).
+			// are unchanged (v.Is ≡ v.Parent.ConformsTo on concrete values).
 			// See design/REFINE-NEWTYPE-VS-SUBSET.0.md.
 			for k, exp := range rc.Returns {
 				if !results[extra+k].Is(exp) {
@@ -3586,8 +3586,8 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				expectedType := sigArgType(sig, fwd)
 
 				// 1.4: structural boundaries — stop forward scan.
-				if IsForward(tok) || tok.Parent.Matches(TMark) || tok.Parent.Matches(TMove) ||
-					tok.Parent.Matches(TInternal) || tok.Parent.Matches(TReturnCheck) {
+				if IsForward(tok) || tok.Parent.ConformsTo(TMark) || tok.Parent.ConformsTo(TMove) ||
+					tok.Parent.ConformsTo(TInternal) || tok.Parent.ConformsTo(TReturnCheck) {
 					break
 				}
 
@@ -3608,7 +3608,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					// (the conversion happens at insertForward / stepLiteral
 					// time; here we just count it as a match).
 					if sig.QuoteArgs != nil && sig.QuoteArgs[fwd] {
-						if TAtom.Matches(expectedType) {
+						if TAtom.ConformsTo(expectedType) {
 							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
@@ -3796,7 +3796,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			// an [Atom/q, ...] sig via the regular sigTypeMatches path
 			// just below, no /q involvement required.
 			if sig.QuoteArgs != nil && sig.QuoteArgs[sigIdx] && stackVal.Parent.Equal(TWord) {
-				if !TAtom.Matches(sigArgType(sig, sigIdx)) {
+				if !TAtom.ConformsTo(sigArgType(sig, sigIdx)) {
 					allMatch = false
 					break
 				}

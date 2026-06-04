@@ -281,7 +281,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		}
 	}
 	if r.Check.IsActive() && constraint.IsDepScalar() {
-		if body.Parent.Matches(constraint.Parent) {
+		if body.Parent.ConformsTo(constraint.Parent) {
 			return installAndRecordDef(r, name, body, args[0].Pos)
 		}
 	}
@@ -438,7 +438,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 			if IsWord(declElems.Get(0)) {
 				_as1, _ := AsWord(declElems.Get(0))
 				name = _as1.Name
-			} else if declElems.Get(0).Parent.Matches(TString) {
+			} else if declElems.Get(0).Parent.ConformsTo(TString) {
 				name, _ = AsString(declElems.Get(0))
 			} else {
 				return nil, r.AqlError("var_error", "var: declaration name must be a word or string", "var")
@@ -448,7 +448,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 			result = append(result, declElems.Slice()[1:]...)
 			result = append(result, NewEnd())
 
-		case decl.Parent.Matches(TString):
+		case decl.Parent.ConformsTo(TString):
 			name, _ := AsString(decl)
 			varNames = append(varNames, name)
 			result = append(result, NewWord("def"), NewWord(name), NewEnd())

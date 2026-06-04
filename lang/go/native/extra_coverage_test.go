@@ -919,10 +919,10 @@ func TestExtraTypeEqual(t *testing.T) {
 func TestExtraTypeMatches(t *testing.T) {
 	child := MintTestType("String/Proper")
 	parent, _ := NewType("String")
-	if !child.Matches(parent) {
+	if !child.ConformsTo(parent) {
 		t.Error("String/Proper should match String pattern")
 	}
-	if parent.Matches(child) {
+	if parent.ConformsTo(child) {
 		t.Error("String should not match String/Proper pattern")
 	}
 }

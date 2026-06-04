@@ -179,7 +179,7 @@ var checkModeLiteralWords = map[string]bool{
 func StripToCarriers(in []Value) []Value {
 	out := make([]Value, len(in))
 	for i, v := range in {
-		if v.Parent.Matches(TString) && IsConcrete(v) && adjacentToLiteralWord(in, i) {
+		if v.Parent.ConformsTo(TString) && IsConcrete(v) && adjacentToLiteralWord(in, i) {
 			out[i] = v
 			continue
 		}
@@ -291,8 +291,8 @@ func ReturnsStatic(types ...*Type) ReturnsFunc {
 func ReturnsNumericBinary() ReturnsFunc {
 	return func(args []Value, _ *Registry) []Value {
 		if len(args) == 2 &&
-			args[0].Parent.Matches(TInteger) &&
-			args[1].Parent.Matches(TInteger) {
+			args[0].Parent.ConformsTo(TInteger) &&
+			args[1].Parent.ConformsTo(TInteger) {
 			return []Value{NewCarrier(TInteger)}
 		}
 		return []Value{NewCarrier(TDecimal)}
@@ -363,11 +363,11 @@ func JoinCarriers(a, b Value) Value {
 		return out
 	}
 	if !IsDisjunct(a) && !IsDisjunct(b) {
-		if a.Parent.Matches(b.Parent) {
+		if a.Parent.ConformsTo(b.Parent) {
 			// a is subtype of b → widen to b
 			return NewCarrier(b.Parent)
 		}
-		if b.Parent.Matches(a.Parent) {
+		if b.Parent.ConformsTo(a.Parent) {
 			return NewCarrier(a.Parent)
 		}
 		// Check for a non-trivial common ancestor (shared prefix of at
@@ -614,7 +614,7 @@ func LiteralCondValue(condList Value) (bool, bool) {
 		}
 	}
 	// Concrete Boolean value with Data set (post-runtime path).
-	if only.Parent.Matches(TBoolean) && only.Data != nil {
+	if only.Parent.ConformsTo(TBoolean) && only.Data != nil {
 		b, err := AsBoolean(only)
 		if err == nil {
 			return b, true

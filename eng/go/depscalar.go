@@ -442,7 +442,7 @@ func MakeDepScalarSig(opName string, kind DepKind) NativeSig {
 					opName, ValueType(args[1]).String())
 			}
 			// Bound must be the same scalar base as the type literal.
-			if !args[0].Parent.Matches(base) {
+			if !args[0].Parent.ConformsTo(base) {
 				return nil, fmt.Errorf("%s: bound %s does not match dependent base %s",
 					opName, args[0].Parent.String(), base.String())
 			}
@@ -472,11 +472,11 @@ func BetweenHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 		return nil, fmt.Errorf("between: unsupported base type %s",
 			ValueType(args[2]).String())
 	}
-	if !args[0].Parent.Matches(base) {
+	if !args[0].Parent.ConformsTo(base) {
 		return nil, fmt.Errorf("between: low bound %s does not match base %s",
 			args[0].Parent.String(), base.String())
 	}
-	if !args[1].Parent.Matches(base) {
+	if !args[1].Parent.ConformsTo(base) {
 		return nil, fmt.Errorf("between: high bound %s does not match base %s",
 			args[1].Parent.String(), base.String())
 	}

@@ -72,7 +72,7 @@ func FormatForPrint(v Value) string {
 	}
 
 	// String: printed as-is (no quotes).
-	if v.Parent.Matches(TString) {
+	if v.Parent.ConformsTo(TString) {
 		_as0, _ := AsString(v)
 		return _as0
 	}
@@ -131,7 +131,7 @@ func FormatValueJSON(v Value) string {
 		// Type literal — render the leaf, quoted as a JSON string.
 		return fmt.Sprintf("%q", typeNodeOf(v).Leaf())
 	}
-	// DepScalar pre-empts the Matches(TString)/... dispatch so its
+	// DepScalar pre-empts the ConformsTo(TString)/... dispatch so its
 	// constraint payload renders via the DepScalar formatter rather
 	// than crashing through AsString. Quote the form so it's a valid
 	// JSON string.
@@ -139,13 +139,13 @@ func FormatValueJSON(v Value) string {
 		return fmt.Sprintf("%q", s)
 	}
 	switch {
-	case v.Parent.Matches(TString):
+	case v.Parent.ConformsTo(TString):
 		_as1, _ := AsString(v)
 		return fmt.Sprintf("%q", _as1)
-	case v.Parent.Matches(TInteger):
+	case v.Parent.ConformsTo(TInteger):
 		_as2, _ := AsInteger(v)
 		return fmt.Sprintf("%d", _as2)
-	case v.Parent.Matches(TBoolean):
+	case v.Parent.ConformsTo(TBoolean):
 		_as3, _ := AsBoolean(v)
 		if _as3 {
 			return "true"

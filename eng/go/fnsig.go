@@ -77,9 +77,9 @@ func FnSigSatisfiesSpec(sig FnSig, spec FnSigSpec) bool {
 		sp := spec.Params[i]
 		sg := sig.Params[i]
 		// Contravariant: spec_input must be a subtype of sig_input.
-		// `t.Matches(pattern)` is true iff t ⊆ pattern in the type
-		// lattice, so spec.Type.Matches(sig.Type) checks spec ⊆ sig.
-		if !sp.Type.Matches(sg.Type) {
+		// `t.ConformsTo(pattern)` is true iff t ⊆ pattern in the type
+		// lattice, so spec.Type.ConformsTo(sig.Type) checks spec ⊆ sig.
+		if !sp.Type.ConformsTo(sg.Type) {
 			return false
 		}
 		// Optional alignment: spec-optional → candidate must also be
@@ -107,7 +107,7 @@ func FnSigSatisfiesSpec(sig FnSig, spec FnSigSpec) bool {
 	}
 	for i := range sig.Returns {
 		// Covariant: sig_return must be a subtype of spec_return.
-		if !sig.Returns[i].Matches(spec.Returns[i]) {
+		if !sig.Returns[i].ConformsTo(spec.Returns[i]) {
 			return false
 		}
 	}

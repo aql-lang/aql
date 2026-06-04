@@ -262,17 +262,17 @@ func TestObjectTypeVTypeMatches(t *testing.T) {
 	barType := result[0].Parent
 	// Bar (Object/Foo/Bar) should match Object
 	tObj, _ := native.NewType("Object")
-	if !barType.Matches(tObj) {
+	if !barType.ConformsTo(tObj) {
 		t.Error("Object/Foo/Bar should match Object")
 	}
 	// Bar (Object/Foo/Bar) should match Object/Foo
 	tObjFoo, _ := native.NewType("Object/Foo")
-	if !barType.Matches(tObjFoo) {
+	if !barType.ConformsTo(tObjFoo) {
 		t.Error("Object/Foo/Bar should match Object/Foo")
 	}
 	// Bar (Object/Foo/Bar) should match Object/Foo/Bar
 	tObjFooBar, _ := native.NewType("Object/Foo/Bar")
-	if !barType.Matches(tObjFooBar) {
+	if !barType.ConformsTo(tObjFooBar) {
 		t.Error("Object/Foo/Bar should match Object/Foo/Bar")
 	}
 }
@@ -920,7 +920,7 @@ func TestMakeObjectInstanceTypeMatchesObjectType(t *testing.T) {
 		t.Fatal(err)
 	}
 	inst := result[0]
-	if !inst.Parent.Matches(native.TObject) {
+	if !inst.Parent.ConformsTo(native.TObject) {
 		t.Errorf("expected instance type to match TObject, got %s", inst.Parent)
 	}
 	oi, _ := native.AsObjectInstance(inst)

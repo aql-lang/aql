@@ -248,7 +248,7 @@ func IsValueOfType(v, t Value) bool {
 			if v.Carrier {
 				return false
 			}
-			return IsBareTypeNode(v) || IsTypeBody(v) || IsRecordShape(v) || v.Parent.Matches(TType)
+			return IsBareTypeNode(v) || IsTypeBody(v) || IsRecordShape(v) || v.Parent.ConformsTo(TType)
 		}
 		// Canonical dispatch site: route through Behavior so custom
 		// type semantics (predicate types, dependent scalars, future

@@ -79,7 +79,7 @@ func listFilterHandler(args []Value, ctx map[string]Value, stack []Value, r *Reg
 
 	var matched []Value
 	for _, row := range rows {
-		if !row.Parent.Matches(TMap) {
+		if !row.Parent.ConformsTo(TMap) {
 			continue
 		}
 		rec, _ := AsMap(row)
@@ -126,15 +126,15 @@ func recordMatches(rec ReadMap, filter ReadMap) bool {
 // valuesEqual checks equality between two values using type-aware comparison.
 func valuesEqual(a, b Value) bool {
 	switch {
-	case a.Parent.Matches(TInteger) && b.Parent.Matches(TInteger):
+	case a.Parent.ConformsTo(TInteger) && b.Parent.ConformsTo(TInteger):
 		ai, _ := AsInteger(a)
 		bi, _ := AsInteger(b)
 		return ai == bi
-	case a.Parent.Matches(TString) && b.Parent.Matches(TString):
+	case a.Parent.ConformsTo(TString) && b.Parent.ConformsTo(TString):
 		as, _ := AsString(a)
 		bs, _ := AsString(b)
 		return as == bs
-	case a.Parent.Matches(TBoolean) && b.Parent.Matches(TBoolean):
+	case a.Parent.ConformsTo(TBoolean) && b.Parent.ConformsTo(TBoolean):
 		ab, _ := AsBoolean(a)
 		bb, _ := AsBoolean(b)
 		return ab == bb
@@ -143,11 +143,11 @@ func valuesEqual(a, b Value) bool {
 		ba, _ := AsAtom(b)
 		return aa == ba
 	// Cross-type: atom and string are interchangeable for equality.
-	case a.Parent.Equal(TAtom) && b.Parent.Matches(TString):
+	case a.Parent.Equal(TAtom) && b.Parent.ConformsTo(TString):
 		aa, _ := AsAtom(a)
 		bs, _ := AsString(b)
 		return aa == bs
-	case a.Parent.Matches(TString) && b.Parent.Equal(TAtom):
+	case a.Parent.ConformsTo(TString) && b.Parent.Equal(TAtom):
 		as, _ := AsString(a)
 		ba, _ := AsAtom(b)
 		return as == ba

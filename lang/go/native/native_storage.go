@@ -142,9 +142,9 @@ func getNodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		return nil, r.AqlError("get_error", "get: cannot access property on type literal", "get")
 	}
 	// Integer key: list index access.
-	if key.Parent.Matches(TInteger) {
+	if key.Parent.ConformsTo(TInteger) {
 		idx, _ := AsInteger(key)
-		if list, _ := AsList(container); !list.IsNil() && container.Parent.Matches(TList) {
+		if list, _ := AsList(container); !list.IsNil() && container.Parent.ConformsTo(TList) {
 			i := int(idx)
 			if i < 0 || i >= list.Len() {
 				return []Value{NewTypeLiteral(TNone)}, nil

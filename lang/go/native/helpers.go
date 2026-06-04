@@ -9,11 +9,11 @@ import (
 // []interface{} with element-wise conversion, anything else falls back
 // to its String() form. Used by stringSliceNative in natives.go.
 func valueToSliceArg(v Value) interface{} {
-	if v.Parent.Matches(TString) {
+	if v.Parent.ConformsTo(TString) {
 		_as3, _ := AsString(v)
 		return _as3
 	}
-	if v.Parent.Matches(TList) {
+	if v.Parent.ConformsTo(TList) {
 		list, _ := AsList(v)
 		result := make([]interface{}, list.Len())
 		for i, elem := range list.Slice() {

@@ -71,16 +71,16 @@ func CanonValue(v Value) string {
 		return "none"
 	case v.IsDepScalar():
 		return v.String()
-	case v.Parent.Matches(TInteger):
+	case v.Parent.ConformsTo(TInteger):
 		n, _ := AsInteger(v)
 		return strconv.FormatInt(n, 10)
-	case v.Parent.Matches(TDecimal):
+	case v.Parent.ConformsTo(TDecimal):
 		f, _ := AsDecimal(v)
 		return FormatDecimal(f)
-	case v.Parent.Matches(TString):
+	case v.Parent.ConformsTo(TString):
 		s, _ := AsString(v)
 		return "'" + s + "'"
-	case v.Parent.Matches(TBoolean):
+	case v.Parent.ConformsTo(TBoolean):
 		b, _ := AsBoolean(v)
 		if b {
 			return "true"
@@ -89,7 +89,7 @@ func CanonValue(v Value) string {
 	case v.Parent.Equal(TAtom):
 		s, _ := AsAtom(v)
 		return s + "/q"
-	case v.Parent.Matches(TList) && v.Data != nil:
+	case v.Parent.ConformsTo(TList) && v.Data != nil:
 		lst, _ := AsList(v)
 		parts := make([]string, lst.Len())
 		for i := 0; i < lst.Len(); i++ {

@@ -46,8 +46,8 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		return nil, r.AqlError("getr_error", "getr: cannot access property on type literal", "getr")
 	}
 	// Integer key on list.
-	if key.Parent.Matches(TInteger) {
-		if list, _ := AsList(container); !list.IsNil() && container.Parent.Matches(TList) {
+	if key.Parent.ConformsTo(TInteger) {
+		if list, _ := AsList(container); !list.IsNil() && container.Parent.ConformsTo(TList) {
 			_as3, _ := AsInteger(key)
 			idx := int(_as3)
 			if idx < 0 || idx >= list.Len() {

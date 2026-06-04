@@ -267,7 +267,7 @@ func TestMapFieldInteger_NilMap(t *testing.T) {
 }
 
 func TestMapFieldInteger_DepScalarRejected(t *testing.T) {
-	// DepInteger.Parent.Matches(TInteger)=true via lattice override —
+	// DepInteger.Parent.ConformsTo(TInteger)=true via lattice override —
 	// the helper must reject DepScalar payloads explicitly so the
 	// caller doesn't get a zero-value silent miscompile.
 	m := newOptsMap([2]any{"n", NewDepScalar(DepGTE, NewInteger(10))})

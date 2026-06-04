@@ -11,31 +11,31 @@ import (
 // --- Edge: type system ---
 
 func TestEdgeTypeAnyMatchesWord(t *testing.T) {
-	if !TWord.Matches(TAny) {
+	if !TWord.ConformsTo(TAny) {
 		t.Error("word should match any")
 	}
 }
 
 func TestEdgeTypeAnyMatchesForward(t *testing.T) {
-	if !TForward.Matches(TAny) {
+	if !TForward.ConformsTo(TAny) {
 		t.Error("forward should match any")
 	}
 }
 
 func TestEdgeTypeAnyMatchesOpenParen(t *testing.T) {
-	if !TOpenParen.Matches(TAny) {
+	if !TOpenParen.ConformsTo(TAny) {
 		t.Error("paren/open should match any")
 	}
 }
 
 func TestEdgeTypeWordMatchesItself(t *testing.T) {
-	if !TWord.Matches(TWord) {
+	if !TWord.ConformsTo(TWord) {
 		t.Error("word should match word")
 	}
 }
 
 func TestEdgeTypeForwardMatchesItself(t *testing.T) {
-	if !TForward.Matches(TForward) {
+	if !TForward.ConformsTo(TForward) {
 		t.Error("forward should match forward")
 	}
 }
@@ -46,13 +46,13 @@ func TestEdgeTypeOpenParenMatchesParen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !TOpenParen.Matches(tParen) {
+	if !TOpenParen.ConformsTo(tParen) {
 		t.Error("paren/open should match paren")
 	}
 }
 
 func TestEdgeTypeEmptyStringMatchesAny(t *testing.T) {
-	if !TStringEmpty.Matches(TAny) {
+	if !TStringEmpty.ConformsTo(TAny) {
 		t.Error("string/empty should match any")
 	}
 }
@@ -60,7 +60,7 @@ func TestEdgeTypeEmptyStringMatchesAny(t *testing.T) {
 func TestEdgeTypeUnrelatedTypes(t *testing.T) {
 	tFoo := MintTestType("Foo/Bar")
 	tBaz := MintTestType("Baz")
-	if tFoo.Matches(tBaz) {
+	if tFoo.ConformsTo(tBaz) {
 		t.Error("foo/bar should not match baz")
 	}
 }
@@ -68,10 +68,10 @@ func TestEdgeTypeUnrelatedTypes(t *testing.T) {
 func TestEdgeTypeDeeplyNested(t *testing.T) {
 	tDeep := MintTestType("A/B/C/D")
 	tShallow := MintTestType("A/B")
-	if !tDeep.Matches(tShallow) {
+	if !tDeep.ConformsTo(tShallow) {
 		t.Error("a/b/c/d should match a/b")
 	}
-	if tShallow.Matches(tDeep) {
+	if tShallow.ConformsTo(tDeep) {
 		t.Error("a/b should not match a/b/c/d")
 	}
 }
@@ -79,7 +79,7 @@ func TestEdgeTypeDeeplyNested(t *testing.T) {
 func TestEdgeTypeSelfMatch(t *testing.T) {
 	types := []*Type{TAny, TString, TStringProper, TStringEmpty, TInteger}
 	for _, typ := range types {
-		if !typ.Matches(typ) {
+		if !typ.ConformsTo(typ) {
 			t.Errorf("%s should match itself", typ)
 		}
 	}
@@ -3433,7 +3433,7 @@ func TestModuleFreshRegistry(t *testing.T) {
 	}
 	val, _ := mExport.Get("val")
 	// "foo" inside module should be an atom (not resolved), not 99.
-	if val.Parent.Matches(TInteger) {
+	if val.Parent.ConformsTo(TInteger) {
 		t.Error("module: parent def 'foo' leaked into module")
 	}
 }

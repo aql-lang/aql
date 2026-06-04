@@ -40,7 +40,7 @@ var specReplayCounter int
 // type-lattice core.
 func registerSpecWords(r *eng.Registry) {
 	toFloat := func(v eng.Value) float64 {
-		if v.Parent.Matches(eng.TInteger) {
+		if v.Parent.ConformsTo(eng.TInteger) {
 			n, _ := eng.AsInteger(v)
 			return float64(n)
 		}
@@ -49,7 +49,7 @@ func registerSpecWords(r *eng.Registry) {
 	}
 	numericBinary := func(intOp func(a, b int64) int64, floatOp func(a, b float64) float64) eng.Handler {
 		return func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-			if args[0].Parent.Matches(eng.TInteger) && args[1].Parent.Matches(eng.TInteger) {
+			if args[0].Parent.ConformsTo(eng.TInteger) && args[1].Parent.ConformsTo(eng.TInteger) {
 				a, _ := eng.AsInteger(args[0])
 				b, _ := eng.AsInteger(args[1])
 				return []eng.Value{eng.NewInteger(intOp(a, b))}, nil
@@ -88,7 +88,7 @@ func registerSpecWords(r *eng.Registry) {
 		Signatures: []eng.NativeSig{{
 			Args: []*eng.Type{eng.TNumber}, BarrierPos: 1,
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-				if args[0].Parent.Matches(eng.TInteger) {
+				if args[0].Parent.ConformsTo(eng.TInteger) {
 					n, _ := eng.AsInteger(args[0])
 					return []eng.Value{eng.NewInteger(-n)}, nil
 				}
@@ -798,9 +798,9 @@ func registerEngSpecStorage(r *eng.Registry) {
 		if !eng.IsConcrete(container) {
 			return nil, fmt.Errorf("get: cannot access property on type literal")
 		}
-		if key.Parent.Matches(eng.TInteger) {
+		if key.Parent.ConformsTo(eng.TInteger) {
 			idx, _ := eng.AsInteger(key)
-			if list, _ := eng.AsList(container); !list.IsNil() && container.Parent.Matches(eng.TList) {
+			if list, _ := eng.AsList(container); !list.IsNil() && container.Parent.ConformsTo(eng.TList) {
 				i := int(idx)
 				if i < 0 || i >= list.Len() {
 					return []eng.Value{eng.NewTypeLiteral(eng.TNone)}, nil
@@ -1396,7 +1396,7 @@ func doEvalMapValue(r *eng.Registry, v eng.Value) (eng.Value, error) {
 // payload names a registered function — so `{op:[1 "add" 2]}` lets
 // `do` dispatch "add" as a callable inside the embedded list.
 func doPromoteToWord(r *eng.Registry, v eng.Value) eng.Value {
-	if v.Parent.Matches(eng.TString) || v.Parent.Matches(eng.TAtom) {
+	if v.Parent.ConformsTo(eng.TString) || v.Parent.ConformsTo(eng.TAtom) {
 		name, _ := eng.AsString(v)
 		if r.Lookup(name) != nil {
 			return eng.NewWord(name)

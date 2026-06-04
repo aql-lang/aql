@@ -68,7 +68,7 @@ func sigSubsumes(s1, s2 *Signature) bool {
 			return false
 		}
 		// s1 admits every value of type t2 iff t2 is t1 or a descendant.
-		if !t2.Matches(t1) {
+		if !t2.ConformsTo(t1) {
 			return false
 		}
 	}

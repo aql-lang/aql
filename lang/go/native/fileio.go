@@ -162,16 +162,16 @@ func sortedMapKeys(m map[string]any) []string {
 // valueToJsonic converts an AQL Value to a jsonic-compatible string.
 func valueToJsonic(v Value) string {
 	switch {
-	case v.Parent.Matches(TString):
+	case v.Parent.ConformsTo(TString):
 		_as0, _ := AsString(v)
 		return fmt.Sprintf("%q", _as0)
-	case v.Parent.Matches(TDecimal):
+	case v.Parent.ConformsTo(TDecimal):
 		_as1, _ := AsDecimal(v)
 		return strconv.FormatFloat(_as1, 'f', -1, 64)
-	case v.Parent.Matches(TInteger):
+	case v.Parent.ConformsTo(TInteger):
 		_as2, _ := AsInteger(v)
 		return fmt.Sprintf("%d", _as2)
-	case v.Parent.Matches(TBoolean):
+	case v.Parent.ConformsTo(TBoolean):
 		_as3, _ := AsBoolean(v)
 		if _as3 {
 			return "true"

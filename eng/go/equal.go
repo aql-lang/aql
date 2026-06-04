@@ -53,8 +53,8 @@ func valuesEqualDefault(a, b Value) bool {
 		return false
 	}
 	// Dependent scalar: route to payload comparison BEFORE the
-	// Matches(TString)/Matches(TInteger)/... dispatch below. The
-	// lattice override makes DepString.Matches(TString)=true, so
+	// ConformsTo(TString)/ConformsTo(TInteger)/... dispatch below. The
+	// lattice override makes DepString.ConformsTo(TString)=true, so
 	// without this branch a DepScalar would fall into AsString and
 	// silently compare zero-value payloads.
 	if a.IsDepScalar() || b.IsDepScalar() {
@@ -72,15 +72,15 @@ func valuesEqualDefault(a, b Value) bool {
 		return depScalarsEqual(ai, bi)
 	}
 	switch {
-	case a.Parent.Matches(TString):
+	case a.Parent.ConformsTo(TString):
 		as, _ := AsString(a)
 		bs, _ := AsString(b)
 		return as == bs
-	case a.Parent.Matches(TInteger):
+	case a.Parent.ConformsTo(TInteger):
 		ai, _ := AsInteger(a)
 		bi, _ := AsInteger(b)
 		return ai == bi
-	case a.Parent.Matches(TBoolean):
+	case a.Parent.ConformsTo(TBoolean):
 		ab, _ := AsBoolean(a)
 		bb, _ := AsBoolean(b)
 		return ab == bb

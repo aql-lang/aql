@@ -49,10 +49,10 @@ func unifyNegation(neg NegationInfo, val Value) (Value, *UnifyError) {
 	// so admit it: AQL has no positive representation for an exact set
 	// difference, and admitting val is the sound over-approximation (it
 	// never wrongly proves emptiness).
-	// Matches is the containment test (val is Inner or a descendant of
-	// Inner — i.e. val ⊆ Inner), unlike the strict IsSubtypeOf which
+	// ConformsTo is the containment test (val is Inner or a descendant
+	// of Inner — i.e. val ⊆ Inner), unlike the strict IsSubtypeOf which
 	// excludes the equal case.
-	if isPlainTypeRef(neg.Inner) && denotedType(val).Matches(denotedType(neg.Inner)) {
+	if isPlainTypeRef(neg.Inner) && denotedType(val).ConformsTo(denotedType(neg.Inner)) {
 		return Value{}, unifyFail("type is wholly contained in the negated type", NewNegation(neg.Inner), val)
 	}
 	return val, nil

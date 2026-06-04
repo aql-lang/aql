@@ -182,7 +182,7 @@ func IsSigTypeValue(r *Registry, v Value) bool {
 		_as0, _ := AsWord(v)
 		return isSigTypeName(r, _as0.Name)
 	}
-	if v.Parent.Matches(TAtom) || v.Parent.Matches(TString) {
+	if v.Parent.ConformsTo(TAtom) || v.Parent.ConformsTo(TString) {
 		name, _ := AsString(v)
 		return isSigTypeName(r, name)
 	}

@@ -174,7 +174,7 @@ func resolveTestExport(modReg *native.Registry, v native.Value) native.Value {
 	case native.IsWord(v):
 		w, _ := native.AsWord(v)
 		name = w.Name
-	case v.Parent.Matches(native.TString):
+	case v.Parent.ConformsTo(native.TString):
 		name, _ = native.AsString(v)
 	case native.IsAtom(v):
 		name, _ = native.AsAtom(v)
@@ -1165,7 +1165,7 @@ func isTruthy(v native.Value) bool {
 	if native.IsNone(v) {
 		return false
 	}
-	if v.Parent.Matches(native.TBoolean) {
+	if v.Parent.ConformsTo(native.TBoolean) {
 		b, _ := native.AsBoolean(v)
 		return b
 	}

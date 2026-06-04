@@ -57,7 +57,7 @@ func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 			callErr = err
 			return false
 		}
-		if len(cbResult) > 0 && cbResult[0].Parent.Matches(TBoolean) {
+		if len(cbResult) > 0 && cbResult[0].Parent.ConformsTo(TBoolean) {
 			b, _ := AsBoolean(cbResult[0])
 			return b
 		}
