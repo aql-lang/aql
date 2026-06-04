@@ -1,0 +1,45 @@
+# AQL Language Specification: Type Negation (tnot)
+# Format: input<TAB>expected<TAB>description
+#
+# `tnot T` is the set-theoretic complement of T: a value satisfies it
+# iff it does NOT satisfy T. Together with `tor` (union) and `tand`
+# (intersection) it closes the type algebra under Boolean operations.
+# See design/elixir-types-in-aql-report.0.md.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  membership via `is`
+5 is (tnot String)	true	integer is not a string
+"hi" is (tnot String)	false	string IS a string — rejected
+5 is (tnot Integer)	false	integer IS an integer — rejected
+5 is (tnot Number)	false	integer IS a number — rejected
+"hi" is (tnot Number)	true	string is not a number
+
+# §2  algebraic identities
+5 is (tnot Never)	true	tnot Never = Any — admits everything
+5 is (tnot Any)	false	tnot Any = Never — admits nothing
+5 is (tnot (tnot Integer))	true	double-negation elimination
+"hi" is (tnot (tnot Integer))	false	double negation still rejects non-integer
+
+# §3  negation of a disjunct (De Morgan semantics)
+5 is (tnot (String tor Boolean))	true	neither a string nor a boolean
+"hi" is (tnot (String tor Boolean))	false	is a string — rejected
+true is (tnot (String tor Boolean))	false	is a boolean — rejected
+
+# §4  negation of a refinement (DepScalar) — checked pointwise
+5 is (tnot (Integer gt 0))	false	5 > 0 — rejected
+0 is (tnot (Integer gt 0))	true	0 is not > 0 — admitted
+
+# §5  intersection with negation (tand)
+Integer tand (tnot String)	Integer	disjoint complement is a no-op
+String tand (tnot String)	Never	self-complement is empty
+Integer tand (tnot Number)	Never	subtype is wholly excluded
+Number tand (tnot Integer)	Number	supertype minus subtype is not empty
+(Integer tor String) tand (tnot String)	Integer	disjunct loses the excluded alternative
+
+# §6  named negation type (def + refine)
+def NotStr (tnot String)  5 is NotStr	true	named negation admits a non-string
+def NotStr (tnot String)  "hi" is NotStr	false	named negation rejects a string
+
+# §7  typeof / rendering
+typeof (tnot String)	Negation	a negation value is a Type/Negation
+tnot String	tnot String	negation renders as `tnot <inner>`

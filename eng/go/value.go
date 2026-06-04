@@ -434,6 +434,16 @@ type DisjunctInfo struct {
 	Alternatives []Value
 }
 
+// NegationInfo holds the inner type of a negation (complement) type. A
+// value satisfies `tnot Inner` iff it does NOT satisfy Inner. The
+// negation is the kernel's set-theoretic complement; together with
+// DisjunctInfo (union) and TandValues (intersection) it closes the type
+// algebra under Boolean operations — see
+// design/elixir-types-in-aql-report.0.md.
+type NegationInfo struct {
+	Inner Value
+}
+
 // ObjectTypeInfo holds the type definition for an object type.
 // Object types form an inheritance hierarchy analogous to class inheritance.
 // For example, Object/Foo has parent Object, Object/Foo/Bar has parent Foo.
@@ -1268,6 +1278,12 @@ func NewEnum(alternatives []Value) Value {
 	return NewValueRaw(TEnum, DisjunctInfo{Alternatives: alternatives})
 }
 
+// NewNegation creates a negation (complement) type value whose
+// inhabitants are exactly the values that do NOT satisfy inner.
+func NewNegation(inner Value) Value {
+	return NewValueRaw(TNegation, NegationInfo{Inner: inner})
+}
+
 // NewObjectType creates an object type value. The caller must
 // provide the canonical *Type identity — typically minted via
 // r.Types.MintType for named types being installed, or for anonymous
@@ -1569,6 +1585,22 @@ func AsDisjunct(v Value) (DisjunctInfo, error) {
 	info, ok := v.Data.(DisjunctInfo)
 	if !ok {
 		return DisjunctInfo{}, fmt.Errorf("AsDisjunct: not a disjunct value (got %T)", v.Data)
+	}
+	return info, nil
+}
+
+// IsNegation reports whether v is a negation (complement) type value.
+func IsNegation(v Value) bool {
+	_, ok := v.Data.(NegationInfo)
+	return ok && v.Parent.Matches(TNegation)
+}
+
+// AsNegation returns the NegationInfo payload, or an error if v is not
+// a negation value.
+func AsNegation(v Value) (NegationInfo, error) {
+	info, ok := v.Data.(NegationInfo)
+	if !ok {
+		return NegationInfo{}, fmt.Errorf("AsNegation: not a negation value (got %T)", v.Data)
 	}
 	return info, nil
 }
@@ -2079,6 +2111,9 @@ func kernelFormatDefault(v Value) string {
 			parts[i] = alt.String()
 		}
 		return strings.Join(parts, "|")
+	case IsNegation(v):
+		ni, _ := AsNegation(v)
+		return "tnot " + ni.Inner.String()
 	// A function value (TFnDef / TFunction, payload FnDefInfo) renders
 	// as a compact `fn name(sig…)` summary. Crucially it does NOT fall
 	// through to the `%v` default, which would dump the whole FnDefInfo

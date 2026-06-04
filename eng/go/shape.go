@@ -22,6 +22,7 @@ const (
 	ShapeCarrier                   // Data==nil, Carrier=true — abstract value of a type
 	ShapeTypeLiteral               // bare type literal (Data==nil, not carrier, not none/never/any)
 	ShapeDisjunct                  // DisjunctInfo
+	ShapeNegation                  // NegationInfo — set-theoretic complement
 	ShapeFnUndef                   // FnUndefInfo — structural fn-shape constraint
 	ShapeFnDef                     // FnDefInfo on TFnDef
 	ShapeFunction                  // FnDefInfo on TFunction
@@ -67,6 +68,9 @@ func Shape(v Value) ValueShape {
 	// the discriminator, not the Parent.
 	if IsDisjunct(v) {
 		return ShapeDisjunct
+	}
+	if IsNegation(v) {
+		return ShapeNegation
 	}
 	if v.IsDepScalar() {
 		return ShapeDepScalar

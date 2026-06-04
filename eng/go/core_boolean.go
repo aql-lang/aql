@@ -124,6 +124,63 @@ func isNeverShape(v Value) bool {
 	return IsBareTypeNode(v) && (&v).Equal(TNever)
 }
 
+// isAnyShape reports whether v is any form of Any: the carrier/sentinel
+// (Parent=TAny) or the bare type literal (NewTypeLiteral(TAny)).
+func isAnyShape(v Value) bool {
+	if v.Parent.Equal(TAny) {
+		return true
+	}
+	return IsBareTypeNode(v) && (&v).Equal(TAny)
+}
+
+// NegateType computes the set-theoretic complement of a type value,
+// applying the algebraic identities that have a closed form:
+//
+//	tnot Never    → Any    (complement of the empty type is the top)
+//	tnot Any      → Never  (complement of the top is empty)
+//	tnot (tnot A) → A      (double-negation elimination)
+//
+// Every other inner type wraps in a NegationInfo value, whose matching
+// semantics (v matches `tnot A` iff v does not match A — see
+// unify_negation.go) are correct without further structural reduction.
+// De Morgan distribution over disjuncts is unnecessary for correctness:
+// `tnot (A tor B)` already admits exactly the values matching neither A
+// nor B.
+func NegateType(inner Value) Value {
+	if isNeverShape(inner) {
+		return NewTypeLiteral(TAny)
+	}
+	if isAnyShape(inner) {
+		return NewTypeLiteral(TNever)
+	}
+	if IsNegation(inner) {
+		if ni, err := AsNegation(inner); err == nil {
+			return ni.Inner
+		}
+	}
+	return NewNegation(inner)
+}
+
+// TnotHandler is the runtime handler for the `tnot` type-negation word.
+// `tnot T` produces the complement type of T.
+func TnotHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	return []Value{NegateType(args[0])}, nil
+}
+
+// TnotReturnsFn is the carrier-mode counterpart: produces the negation
+// carrier so `aql check` propagates the complement type. The result
+// carries Carrier=true so the carrier-stripping pass preserves its
+// NegationInfo payload (mirrors how TorReturnsFn's disjunct carrier
+// survives toCarrier).
+func TnotReturnsFn(args []Value, _ *Registry) []Value {
+	if len(args) != 1 {
+		return []Value{NewCarrier(TAny)}
+	}
+	out := NegateType(args[0])
+	out.Carrier = true
+	return []Value{out}
+}
+
 // isPlainConcreteMap reports whether v is a non-typed, non-record,
 // non-options concrete map (Data is *OrderedMap).
 func isPlainConcreteMap(v Value) bool {

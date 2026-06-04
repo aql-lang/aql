@@ -225,6 +225,7 @@ func (ModuleDesc) payloadMarker()         {}
 func (FnDefInfo) payloadMarker()          {}
 func (FnUndefInfo) payloadMarker()        {}
 func (DisjunctInfo) payloadMarker()       {}
+func (NegationInfo) payloadMarker()       {}
 func (ChildTypeInfo) payloadMarker()      {}
 func (RecordTypeInfo) payloadMarker()     {}
 func (OptionsTypeInfo) payloadMarker()    {}

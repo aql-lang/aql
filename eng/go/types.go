@@ -48,6 +48,7 @@ var (
 	TDefCleanup     = mustType("Word/__IN/__DC")
 	TDisjunct       = mustType("Type/Disjunct")
 	TEnum           = mustType("Type/Disjunct/Enum")
+	TNegation       = mustType("Type/Negation")
 	TMark           = mustType("Word/__MK")
 	TMove           = mustType("Word/__MV")
 	TSplice         = mustType("Word/__SP")

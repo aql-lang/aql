@@ -667,33 +667,35 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 		if !ok {
 			continue
 		}
-		if !IsDisjunct(cur) {
+		// Else-branch narrowing: x had type `cur`; the guard `x is T`
+		// failed, so on the else path x is `cur tand (tnot T)`. The
+		// negation + intersection algebra computes this uniformly and is
+		// strictly more capable than the old exact-alternative subtraction:
+		//   - a disjunct loses every alternative contained in T, including
+		//     when T is a *supertype* of an alternative ((Integer tor
+		//     String) tand tnot Number → String);
+		//   - a plain type disjoint from T is unchanged (no-op);
+		//   - a type wholly inside T collapses to Never (unreachable else).
+		complement := NegateType(NewTypeLiteral(c.Type))
+		narrowed := TandValues(cur, complement)
+		if isNeverShape(narrowed) {
+			// Else branch is unreachable for x — leave the binding as-is
+			// rather than push a Never carrier that fails every later use.
 			continue
 		}
-		di, err := AsDisjunct(cur)
-		if err != nil {
-			continue
-		}
-		var remaining []Value
-		for _, alt := range di.Alternatives {
-			if ValueType(alt).Equal(c.Type) {
-				continue
-			}
-			remaining = append(remaining, alt)
-		}
-		if len(remaining) == len(di.Alternatives) || len(remaining) == 0 {
-			// No change (alt not found) or all subtracted — skip.
-			continue
-		}
-		var narrowed Value
-		if len(remaining) == 1 {
-			// remaining[0] is a type literal (a by-value copy of its
-			// lattice node); the denoted type is ValueType(remaining[0]),
-			// not remaining[0].Parent (which is the supertype).
-			narrowed = NewCarrier(ValueType(remaining[0]))
+		// Normalise to carrier form: a single surviving type becomes a
+		// carrier of that type (Parent = the type, like NewCarrier); a
+		// disjunct or other compound keeps its payload and is marked
+		// abstract.
+		if IsBareTypeNode(narrowed) {
+			narrowed = NewCarrier(ValueType(narrowed))
 		} else {
-			narrowed = NewDisjunct(remaining)
 			narrowed.Carrier = true
+		}
+		if ValuesEqual(narrowed, cur) {
+			// Complement did not refine cur (T disjoint from cur, or AQL
+			// has no positive representation for the exact difference).
+			continue
 		}
 		r.Defs.Push(c.Name, narrowed)
 		pushed = append(pushed, applied{name: c.Name})

@@ -191,6 +191,21 @@ Land as two PRs (1,4 then 2,3) or one branch.
    note), `SIGNATURES` (`tnot`), `TYPES` (negation, De Morgan, and the
    closure status from this item).
 
+**Status (landed 2026-06-04).** Phases 1, 2, 4, and 5 are implemented:
+the runtime `tnot` word + `negationUnifier` + `NegateType` identities
+(`eng/go/unify_negation.go`, `core_boolean.go`, `value.go`, `Type/Negation`
+FixedID 77), the `tand`-with-negation decision procedure (which fell out
+of `unifyInner` — `(Integer tor String) tand (tnot String) → Integer`,
+`String tand (tnot String) → Never`), the else-branch narrowing fix
+(`carrier.go`, now also handling *supertype* guards), and the docs.
+Coverage: `lang/spec/negation.tsv` (26 rows) plus the carrier-narrow Go
+tests. **Phase 3 (closed-form DepScalar complement) is deferred** —
+negation already matches DepScalars correctly *pointwise*
+(`5 is (tnot (Integer gt 0)) → false`, `0 → true`), so the closed form
+(`tnot (Integer gt 0) → Integer lte 0`) is a rendering / interval-merge
+nicety, not a correctness requirement; a clean follow-up in
+`depscalar.go`.
+
 ### 2. The `dynamic(T)` bounded modality — the deepest idea
 
 **Gap, and a correction to AQL's own notes.** The carrier report states

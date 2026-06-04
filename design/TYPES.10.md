@@ -71,6 +71,7 @@ Any/Type                           -- the "type of types" branch
   FunctionSignature                -- function-shape value
   Disjunct                         -- tor-union (`Integer tor String`)
     Enum                           -- enumerated atoms (`enum [red green blue]`)
+  Negation                         -- tnot-complement (`tnot String`)
 ```
 
 ## Lattice principles
@@ -144,7 +145,7 @@ Type names auto-expand via the kernel `Builtin` table:
 | `Object`, `Resource`, `Entity`, `Array`, `Record`, `Options`, `Error`, `Store`, `Table` | `Ideal/[…]` |
 | `Tensor`, `Matrix`, `Vector` | `Ideal/Tensor/[…]` (external) |
 | `Timeout`, `Interval` | `Ideal/[…]` (external) |
-| `Function`, `FunctionSignature`, `Disjunct`, `Enum` | `Type/[…]` |
+| `Function`, `FunctionSignature`, `Disjunct`, `Enum`, `Negation` | `Type/[…]` |
 
 ## Comparison and Ordering
 

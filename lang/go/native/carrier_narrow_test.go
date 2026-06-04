@@ -42,10 +42,12 @@ func TestApplyComplementNarrowing(t *testing.T) {
 	}
 }
 
-// TestApplyComplementNarrowingNoOpOnConcrete verifies that when the
-// current binding is NOT a disjunct (e.g. concrete Integer), the
-// complement narrower leaves the DefStack untouched — we can't
-// subtract a type from a non-disjunct in the current lattice.
+// TestApplyComplementNarrowingNoOpOnConcrete verifies that narrowing a
+// plain Integer binding by `tnot String` is a no-op: Integer is
+// disjoint from String, so `Integer tand (tnot String)` = Integer and
+// the DefStack is left untouched. (The complement narrower no longer
+// bails on non-disjuncts — it computes the real intersection and finds
+// no refinement, which is the correct result here.)
 func TestApplyComplementNarrowingNoOpOnConcrete(t *testing.T) {
 	r, err := NewRegistry()
 	if err != nil {
@@ -66,5 +68,41 @@ func TestApplyComplementNarrowingNoOpOnConcrete(t *testing.T) {
 
 	if d := r.Defs.Depth("x"); d != 1 {
 		t.Errorf("expected DefStack depth to remain 1, got %d", d)
+	}
+}
+
+// TestApplyComplementNarrowingSupertypeGuard exercises the capability
+// the old exact-alternative subtraction lacked: a guard whose type is a
+// SUPERTYPE of an alternative. `x : Integer|String` with guard `x is
+// Number` must narrow the else branch to String, because every Integer
+// is a Number and is therefore excluded by `tnot Number`. The old code
+// only removed alternatives whose type Equalled the guard exactly, so
+// it would have left the disjunct unchanged.
+func TestApplyComplementNarrowingSupertypeGuard(t *testing.T) {
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatalf("new registry: %v", err)
+	}
+	r.Check.Mode = true
+
+	disjunct := NewDisjunct([]Value{
+		NewTypeLiteral(TInteger),
+		NewTypeLiteral(TString),
+	})
+	disjunct.Carrier = true
+	r.Defs.Push("x", disjunct)
+
+	cond := NewEvalList([]Value{
+		NewWord("x"),
+		NewWord("is"),
+		NewTypeLiteral(TNumber),
+	})
+
+	restore := ApplyComplementNarrowing(r, cond)
+	defer restore()
+
+	top, _ := r.Defs.Top("x")
+	if !top.Parent.Equal(TString) {
+		t.Errorf("expected x to narrow to String (Integer excluded as a Number), got %s", top.String())
 	}
 }

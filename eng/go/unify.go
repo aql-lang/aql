@@ -278,6 +278,18 @@ func unifyInner(a, b Value) (Value, *UnifyError) {
 		return unifyDisjunct(disj, a)
 	}
 
+	// Negation fold — `tnot T` admits v iff v does not satisfy T. Placed
+	// after the disjunct fold and before the degenerate roots so a
+	// negation built over None/Never/Any still routes through here.
+	if sa == ShapeNegation {
+		neg, _ := AsNegation(a)
+		return unifyNegation(neg, b)
+	}
+	if sb == ShapeNegation {
+		neg, _ := AsNegation(b)
+		return unifyNegation(neg, a)
+	}
+
 	// Never — bottom type, only unifies with itself.
 	if sa == ShapeNever || sb == ShapeNever {
 		if sa == sb {

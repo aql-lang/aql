@@ -231,7 +231,8 @@ Any
 │   └── (internal control words)
 └── Type
     ├── Function, FunctionSignature
-    └── Disjunct (Enum)
+    ├── Disjunct (Enum)
+    └── Negation
 ```
 
 A child matches its parent (`Integer` is a `Number` is a `Scalar`
@@ -270,6 +271,27 @@ OptInt unify 5                => 5 true
 OptInt unify none             => none true
 OptInt unify "x"              => '~unify-fail' false
 ```
+
+### Negation
+
+`tnot T` produces the complement type — a value matches it if it does
+**not** match `T`. With `tor` (union) and `tand` (intersection) it
+closes the type algebra under Boolean operations:
+
+```
+def NotStr (tnot String)
+5 is NotStr                              => true
+"x" is NotStr                            => false
+5 is (tnot (String tor Boolean))         => true     # neither
+Integer tand (tnot String)               => Integer  # disjoint — no-op
+String tand (tnot String)                => Never     # self-complement is empty
+(Integer tor String) tand (tnot String)  => Integer  # drops the excluded alternative
+```
+
+The identities hold: `tnot Never` is `Any`, `tnot Any` is `Never`, and
+`tnot (tnot T)` is `T`. A guard narrows the else branch by the
+complement — after `if (x is T) […] […]`, `x` is `cur tand (tnot T)`
+in the else branch.
 
 ### Type ordering
 

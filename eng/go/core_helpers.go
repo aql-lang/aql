@@ -606,6 +606,10 @@ func IsTypeBody(v Value) bool {
 	if IsDisjunct(v) {
 		return true
 	}
+	// Negation (complement) type
+	if IsNegation(v) {
+		return true
+	}
 	// Typed list [:type]
 	if IsTypedList(v) {
 		return true

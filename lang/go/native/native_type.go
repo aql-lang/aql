@@ -147,6 +147,19 @@ var typeNatives = []NativeFunc{
 			Returns:    []*Type{TAny},
 		}},
 	},
+	// `tnot` (type negation / complement) — closes the type algebra
+	// under Boolean operations. `tnot T` matches v iff v does not match
+	// T. Algorithm lives in eng (eng.TnotHandler / eng.NegateType).
+	{
+		Name: "tnot",
+
+		Signatures: []NativeSig{{
+			Args:       []*Type{TAny},
+			BarrierPos: -1,
+			Handler:    eng.TnotHandler,
+			ReturnsFn:  eng.TnotReturnsFn,
+		}},
+	},
 	{
 		Name: "tany",
 

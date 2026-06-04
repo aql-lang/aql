@@ -444,6 +444,8 @@ WORD teq
 WORD timeout
   [Scalar/Number/Integer Node/List] barrier=2 quote={1} returns=[Ideal/Timeout]
   [Scalar/Number/Integer Scalar/Atom] barrier=2 quote={1} returns=[Ideal/Timeout]
+WORD tnot
+  [Any] barrier=1 +returnsfn
 WORD tor
   [Any Any] barrier=1 +returnsfn
 WORD tpartial
