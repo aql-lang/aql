@@ -276,14 +276,14 @@ other names.
 
 ## 6. Build order
 
-| Phase | Deliverable | Effort | Depends on | Grade move (LISP-ANALYSIS) |
+| Phase | Deliverable | Effort | Depends on | Status |
 |---|---|---|---|---|
-| 0 | `gensym` word | S | — | hygiene D→C |
-| 1 | `macro` definer + `FormArgs` raw capture + `unquote`/`splice` + interpreter expansion + expansion cache | M | 0 | macros C→B |
-| 2 | `macroexpand` introspection word; loud expansion-error surface | S–M | 1 | macros B (tooling) |
-| 3 | `` `[ … ] `` quasiquote sugar (InterpString-reuse) | M | 1 | code-as-data |
-| 4 | automatic hygiene (rename + teardown + capture-pin) | L | 1, 3 | hygiene C→A |
-| 5 | compiled-mode expander (staging) | L | 1; IR backend | — |
+| 0 | `gensym` word | S | — | **LANDED** (1a) |
+| 1 | `macro` definer + `FormArgs` raw capture + `unquote`/`splice` + interpreter expansion + expansion cache | M | 0 | **LANDED** (1a–1e; `MACROS-PHASE1.0.md`) |
+| 2 | `macroexpand` introspection (recursive / macroexpand-all); loud expansion-error surface | S–M | 1 | **LANDED** |
+| 3 | `` `[ … ] `` quasiquote sugar (InterpString-reuse) | M | 1 | **DEFERRED** |
+| 4 | automatic hygiene — auto-rename template-origin binders (#1) | L | 1 | **LANDED** (#1; #2 free-word capture-pin + teardown deferred — refinements) |
+| 5 | compiled-mode expander (staging) | L | 1; IR backend | **interpreter staging LANDED + tested; compiled-mode BLOCKED on the IR backend** (`MACROS-PHASE5.0.md`) |
 
 **Smallest shippable slice:** Phase 0 + Phase 1 — `gensym` plus an
 unhygienic-but-real `macro`. That alone moves all metaprogramming that

@@ -131,3 +131,26 @@ func TestMacroAutoHygiene(t *testing.T) {
 		t.Errorf("defconst answer 42; answer = %v, want 42 (user-visible binding)", res[0])
 	}
 }
+
+// Phase 5 (interpreter staging): a macro is define-before-USE; a macro in a fn
+// body expands at call time (so it need only be defined before the call). The
+// compiled-mode expander (expansion moved to compile time) awaits the IR
+// backend — see design/MACROS-PHASE5.0.md.
+func TestMacroStaging(t *testing.T) {
+	// Use before definition errors.
+	if _, err := runNativeSteps(t, nil, []string{`nope 1`, `def nope (macro [[a] [quote [unquote a]]])`}); err == nil {
+		t.Error("using a macro before defining it should error, got nil")
+	}
+	// A macro defined after the fn but before the call expands at call time.
+	res, err := runNativeSteps(t, nil, []string{
+		`def f fn [[n:Integer] [Integer] [ twice n ]]`,
+		`def twice (macro [[e] [quote [unquote e add unquote e]]])`,
+		`f 5`,
+	})
+	if err != nil {
+		t.Fatalf("call-time staging: %v", err)
+	}
+	if n, _ := eng.AsInteger(res[0]); n != 10 {
+		t.Errorf("f 5 = %v, want 10 (twice expands at call time)", res[0])
+	}
+}

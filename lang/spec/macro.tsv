@@ -43,3 +43,11 @@ def inc1 (macro [[a] [ quote [ unquote a add 1 ] ]])  [(inc1 4) (inc1 4) (inc1 9
 #     another macro is expanded too. A runaway recursive macro errors loudly.
 def inner (macro [[x] [quote [unquote x add 1]]])  def outer (macro [[y] [quote [inner unquote y]]])  macroexpand (outer 5)	[5 word(add) 1]	nested macro fully expanded
 def loopy (macro [[a] [quote [loopy unquote a]]])  macroexpand (loopy 1)	ERROR:expansion too deep	recursive macro is caught, not looped
+#
+# §8  Staging (Phase 5, interpreter): a macro is define-before-USE — using it
+#     before definition errors. A macro referenced in a fn body expands at
+#     CALL time, so it need only be defined before the call (more lenient than
+#     compiled mode, where expansion moves to compile time — IR-backend work).
+nope 1  def nope (macro [[a] [quote [unquote a]]])	ERROR:undefined word: nope	use before definition errors
+def unless (macro [[c body] [ quote [ if unquote c [0] unquote body ] ]])  def f fn [[n:Integer] [Integer] [ unless (n gt 10) [n] ]]  f 5	5	a macro composes inside a fn body
+def f fn [[n:Integer] [Integer] [ twice n ]]  def twice (macro [[e] [quote [unquote e add unquote e]]])  f 5	10	macro defined after the fn but before the call → expands at call time
