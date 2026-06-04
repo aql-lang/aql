@@ -1,6 +1,9 @@
 package eng
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // Macro expansion (design/MACROS-PHASE1.0.md §6). A macro is an FnDef flagged
 // Macro=true whose every param is FormArgs raw-capture. At dispatch the
@@ -28,15 +31,36 @@ func (e *Engine) execMacro(valIdx int, fnDef *FnDefInfo) error {
 	if err != nil {
 		return err
 	}
-	expanded, err := expandMacroWith(e.registry, fnDef, operands)
-	if err != nil {
-		return err
+	// Memoize on (name + operand canon): the expansion is deterministic, so a
+	// macro re-applied to the same operand forms (e.g. in a loop) expands once
+	// and re-splices the cached tokens. See design/MACROS-PHASE1.0.md §8.
+	key := macroOperandsKey(fnDef.Name, operands)
+	expanded, ok := e.registry.macroCacheGet(key)
+	if !ok {
+		expanded, err = expandMacroWith(e.registry, fnDef, operands)
+		if err != nil {
+			return err
+		}
+		e.registry.macroCachePut(key, expanded)
 	}
 	// Replace the whole `mac operand…` span (valIdx..endIdx) with one __SP
 	// marker; e.pointer == valIdx is left unchanged so the Run loop steps the
 	// marker next, splicing the expansion onto the live tape and re-stepping.
 	stackSplice(&e.stack, valIdx, endIdx-valIdx+1, NewSplice(NewList(expanded)))
 	return nil
+}
+
+// macroOperandsKey builds the expansion-cache key from the macro name and the
+// canon of each operand form — two calls with the same name and operand forms
+// share an expansion, regardless of where they appear.
+func macroOperandsKey(name string, operands []Value) string {
+	var b strings.Builder
+	b.WriteString(name)
+	for _, op := range operands {
+		b.WriteByte(0)
+		b.WriteString(CanonValue(op))
+	}
+	return b.String()
 }
 
 // scanMacroOperands grabs the next `arity` operand FORMS after the macro value

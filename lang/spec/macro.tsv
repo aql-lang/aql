@@ -32,3 +32,7 @@ splice [1 2 3]	ERROR:splice: only valid inside a macro template	splice outside a
 macro [[a]]	ERROR:expected [[params] [body]]	macro needs [[params][body]]
 def m (macro [[a b] [quote [unquote a]]])  m 1	ERROR:expects 2 operand	too few operands
 def m (macro [[a] [quote [splice a]]])  m 5	ERROR:did not evaluate to a list	splice of a non-list
+#
+# §6  Expansion cache (1e) — repeated calls with the same operands reuse the
+#     expansion; correctness is unchanged (a hit re-splices identical code).
+def inc1 (macro [[a] [ quote [ unquote a add 1 ] ]])  [(inc1 4) (inc1 4) (inc1 9)]	[5 5 10]	cache hits (inc1 4 twice) + a miss (inc1 9)

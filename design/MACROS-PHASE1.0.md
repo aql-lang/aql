@@ -1,7 +1,6 @@
 # Macros Phase 1 — Implementation Scope
 
-**Status:** **1a–1d + `macroexpand` LANDED (green).** The only remaining tail
-is the expansion cache (1e). Companion to `MACROS.0.md` (the overall plan);
+**Status:** **Phase 1 COMPLETE (1a–1e, green).** Companion to `MACROS.0.md` (the overall plan);
 this doc turns its Phase 0+1 row into a concrete, line-level build order
 grounded in the current code.
 
@@ -13,8 +12,12 @@ grounded in the current code.
 > returns it); a macro VALUE stays data via the anonymous-0-arg short-circuit
 > and is applied only by name; a resolved name (a gensym atom) is spliced as a
 > **Word** so it is a code identifier; `gensym` must be lowercase to be a legal
-> binder. **Deferred:** the expansion cache (1e) — a pure optimization;
-> correctness is complete without it.
+> binder. **Cache (1e):** memoizes expansions keyed on `(macro name + operand
+> canon)` rather than source `Pos` — simpler, fully correct (an expansion
+> depends only on the template + operand forms, never runtime state), and
+> collision-free (a `Pos` could collide across re-parsed/synthetic sources,
+> e.g. the help system's synthetic example runs). Cleared by the `macro`
+> definer on (re)construction so a redefined macro re-expands.
 **Scope:** `gensym` (Phase 0) + an unhygienic-but-real `macro` definer with
 raw-form capture, `unquote`/`splice`, interpreter-mode expansion, and an
 expansion cache (Phase 1). Hygiene (Phase 4) and compiled-mode (Phase 5) are

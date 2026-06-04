@@ -149,6 +149,9 @@ func macroHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		Macro:      true,
 		Captured:   eng.ComputeCaptures(r, &sig),
 	}
+	// (Re)constructing a macro invalidates any memoized expansions: a
+	// redefined macro must re-expand at its call sites.
+	r.MacroCacheClear()
 	return []Value{NewFunction(fnDef)}, nil
 }
 
