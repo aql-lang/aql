@@ -42,3 +42,36 @@ func TestAsReachRejectsNonReach(t *testing.T) {
 		t.Fatal("AsReach(5) should error, got nil")
 	}
 }
+
+// Phase C: canon renders a Reach back to its dotted surface (round-trip).
+func TestReachCanonRoundTrip(t *testing.T) {
+	mk := func(recv []Value, segs []ReachSeg) Value {
+		return NewReach(ReachInfo{Receiver: recv, Segments: segs, Eval: true})
+	}
+	cases := []struct {
+		name string
+		v    Value
+		want string
+	}{
+		{"bare", mk([]Value{NewWord("m")}, []ReachSeg{{KeyLit: NewWord("a")}, {KeyLit: NewWord("b")}}), "m.a.b"},
+		{"getr", mk([]Value{NewWord("m")}, []ReachSeg{{Getr: true, KeyLit: NewWord("x")}}), "m!.x"},
+		{"strkey", mk([]Value{NewWord("a")}, []ReachSeg{{KeyLit: NewString("x")}, {KeyLit: NewWord("c")}}), "a.'x'.c"},
+		{"numkey", mk([]Value{NewWord("a")}, []ReachSeg{{KeyLit: NewInteger(0)}}), "a.0"},
+		{"computed", mk([]Value{NewWord("m")}, []ReachSeg{{Computed: true, KeyExpr: []Value{NewWord("k")}}}), "m.(k)"},
+		{"parenrecv", mk([]Value{NewParenExpr([]Value{NewWord("m"), NewWord("a")})}, []ReachSeg{{KeyLit: NewWord("b")}}), "(m a).b"},
+	}
+	for _, c := range cases {
+		if got := CanonValue(c.v); got != c.want {
+			t.Errorf("%s: canon = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+// A Quoted (codequote-captured) reach wraps in (codequote …) so it round-trips.
+func TestReachCanonQuotedWraps(t *testing.T) {
+	v := NewReach(ReachInfo{Receiver: []Value{NewWord("m")}, Segments: []ReachSeg{{KeyLit: NewWord("a")}}, Eval: true})
+	v.Quoted = true
+	if got := CanonValue(v); got != "(codequote m.a)" {
+		t.Errorf("quoted reach canon = %q, want %q", got, "(codequote m.a)")
+	}
+}
