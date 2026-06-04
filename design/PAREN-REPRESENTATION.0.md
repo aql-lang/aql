@@ -88,6 +88,42 @@ included) as data. Under the §3 nesting change the *same* `quote [(1 add 2)]`
 would yield `[[1 add 2]]` — a clean nested tree — which is exactly the
 structural quotability the macro walker wants.
 
+### 2.2 Quotability is a *free rider* on the nesting change
+
+Making parens a `ParenExpr` value does not grant quotability on its own — it
+grants it *if* `ParenExpr` is given the same **auto-eval-unless-quoted**
+discipline lists already have. That is two coupled requirements:
+
+1. **Evaluate on demand at the consume/match site, not in a pre-scan.** A
+   paren in a forward window becomes one inert value, not a span eagerly
+   collapsed by `preEvalParens`.
+2. **Route suppression through `QuoteArgs`/`NoEvalArgs`, exactly as lists
+   do.** The matcher already runs `autoEvalList` on a list arg *unless* the
+   position is quoted; `ParenExpr` joins that same gate.
+
+The discriminator is the **quote flag** — the same one that already
+separates `quote [list]` from `add [list]`:
+
+- **quoted position** (`quote`, macro param, `NoEvalArgs`) → capture the
+  `ParenExpr` raw → **quotable** (and, being a nested value, *walkable* — a
+  real sub-list, not the flat markers of §2.1).
+- **unquoted position** (`add`, `if`, …) → evaluate on demand → **dispatch
+  preserved** (`add 10 (add 1 2) → 13`).
+
+**The one paren-specific wrinkle.** A list's dispatch type is always
+`TList`, so the matcher never needs its contents and can auto-eval *after*
+matching. A paren's dispatch type is the type of its *evaluated result*
+(`(1 add 2)` dispatches as `Integer`) — the very reason `preEvalParens`
+evaluates *before* matching today. So at an **unquoted** forward position
+the `ParenExpr` must be evaluated *during* matching to expose its result
+type. That re-imports the timing obligations from §4: the on-demand eval
+must be **once-only** (memoize, so a `ForceStack` retry does not re-run side
+effects) and must **propagate** errors. Both are already in the §4
+checklist.
+
+So quotability needs no separate feature: it is a consequence of the §3
+representation change plus "evaluate on demand, gated by the quote flag."
+
 ---
 
 ## 3. What nesting would change
@@ -256,3 +292,75 @@ with the second downstream of the first.
 **Recommended order:** prototype nested parens behind the §4 four-contract
 checklist; measure per-paren cost; then revisit dotted access as a
 structural `Path` node once grouping is a real tree.
+
+---
+
+## 8. Step-by-step implementation plan
+
+Ordered so each step is independently testable and the engine stays green
+between steps. The four-contract checklist (§4) is the acceptance gate
+throughout.
+
+**Step 1 — Parser: emit `ParenExpr` in word context.**
+Change word-context paren emission (`convertTopLevelItems` / `emitPrimary`,
+parse.go) to produce a single `ParenExpr` value (`ParenExprPayload{Toks}`)
+instead of `OpenParen … CloseParen` markers — i.e. make word context do what
+data context already does. Dotted-access desugaring (which wraps a path in a
+paren *group*) now wraps it in a `ParenExpr` for free. *Unifies the two
+parser contexts; removes the word-vs-data divergence.*
+
+**Step 2 — Engine: evaluate a `ParenExpr` stepped at the pointer.**
+Replace the main-loop `IsParenExpr → pointer++` skip with real evaluation:
+run the sub-list's tokens and splice the result(s) onto the stack. Must
+honor the four contracts — fresh operand view (stack barrier), results
+splice out, **same registry** (def leak), **propagating** eval (NOT `do`'s
+catch-and-reify). This is the replacement for `stepCloseParen`.
+
+**Step 3 — Matcher: on-demand eval for *unquoted* forward `ParenExpr` args.**
+In `matchSignature` / forward collection, when a forward arg is a
+`ParenExpr` at a **non-quoted** position, evaluate it to expose its result
+value/type for dispatch — replacing `preEvalParens`' blanket pre-scan.
+**Memoize** the result so a `ForceStack` retry does not re-run side effects
+(once-only). This is the §2.2 wrinkle (paren dispatch type = evaluated
+result type).
+
+**Step 4 — Quote/NoEval suppression: capture `ParenExpr` raw.**
+Make `QuoteArgs`/`NoEvalArgs` positions capture a `ParenExpr` *without*
+evaluating it — the same gate that already suppresses `autoEvalList` for
+lists. Extend the consumption path (`execMatch`/`autoEvalList`) and
+end-of-`Run` `autoEvalStack` so an unconsumed, unquoted `ParenExpr`
+auto-evaluates (preserving `(1 add 2)` alone → `3`) but a quoted one stays
+data. *This is the step that makes `quote (1 add 2)` quotable (§2.1, §2.2).*
+
+**Step 5 — Delete the flat-marker machinery.**
+Remove `stepOpenParen`, `stepCloseParen`, the grouping `preEvalParens` scan,
+`findCloseParenAfter`, the `OpenParen`/`CloseParen` main-loop cases, and the
+span `stackRemove` logic. Retire the `OpenParen`/`CloseParen` token kinds if
+nothing else emits them. (~150+ lines net deletion.)
+
+**Step 6 — Tests / spec (the acceptance gate).**
+Pin the four contracts: `5 (dup)` errors (barrier), `(1 2 3) 99 → 1 2 3 99`
+(results out), `(def x 1) x → 1` (leak), `(1 div 0) 99` halts (propagate).
+Pin dispatch: `add 10 (add 1 2) → 13`, `if (1 lt 2) …`, `size m.a → 3`,
+multiple values. Pin quotability: `quote (1 add 2)` → `ParenExpr` data,
+`quote [(1 add 2)] → [[1 add 2]]` (nested, not flat markers). Pin dotted
+access still evaluates (`m.a.b`).
+
+**Step 7 — Measure per-paren cost.**
+Benchmark a paren-heavy / loop-nested workload against `main`. Confirm the
+deleted machinery offsets the per-paren value alloc; if not, use a
+lightweight recursive eval frame on the same registry rather than a full
+sub-engine (§5 cost #1).
+
+**Step 8 — Downstream: simplify the macro walker.**
+With parens as nested values, the MACROS.0.md `unquote`/`splice` expander
+recurses on sub-lists; `WalkBodyWords` simplifies. Update MACROS.0.md
+risk #1 (marker-tape) to "resolved for parens."
+
+**Step 9 — Later / separate: dotted access as a structural `Path` node.**
+The §6.3 residual — lift `m.a.b` from a flat `get`-chain to a quotable
+`Path` node. Downstream of Steps 1–5; not required for the macro system but
+needed for *full* code-as-data uniformity.
+
+Steps 1–6 are the core change (nesting + quotability); 7 is the go/no-go
+measurement; 8–9 are the dividends.
