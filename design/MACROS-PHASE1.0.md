@@ -88,6 +88,26 @@ walk (`engine.go:739` depth loop) is only relevant if a macro arg appears as a
 raw open-paren marker span mid-collection; treat that as an edge case to test,
 not a primary path.
 
+### 3.1 Maps are a separate capture channel (`autoEvalMap`)
+
+**Maps don't go through the list/paren capture path** — their values are
+evaluated by `autoEvalMap`, which is **deliberately NOT gated by `NoEvalArgs`
+or `RawParens`** (the documented exception in lang/go/CLAUDE.md "Quotation").
+Verified empirically:
+
+```
+codequote {k: (add 1 2)}   → {k:3}                 # paren value EVALUATED before capture
+codequote {k: m.a.b}       → error: undefined m    # reach value EVALUATED before capture
+quote [ {k: (add 1 2)} ]   → [{k:paren([add 1 2])}] # but a quoted LIST preserves map interiors
+```
+
+So a macro operand that is a **map literal** would arrive with its values
+already evaluated unless suppressed. The fix is the existing map counterpart of
+`NoEvalArgs`: **`FnSig.NoEvalMapArgs`** (`value.go`, `nativefunc.go:52`,
+copied through at `registry.go:804`), which gates `autoEvalMap` at
+`engine.go:1312`. `macro` therefore sets `NoEvalMapArgs` on every param
+alongside `FormArgs` (§4). No new machinery — another existing primitive.
+
 ---
 
 ## 4. `macro` definer
@@ -104,7 +124,9 @@ def unless macro [[cond body] [ quote [ if unquote cond [] unquote body ] ]]
    like `afn`, not `fn`'s 3-triple). Reuse `parseFnParams` for the params.
 2. Build one `FnSig{Params, Body, Returns:[Any], BarrierPos}` exactly as
    `afnHandler` does.
-3. **Set `sig.FormArgs[i] = true` for every param position** `i`.
+3. **Set `sig.FormArgs[i] = true` AND `sig.NoEvalMapArgs[i] = true` for every
+   param position** `i` (the latter so a *map* operand is captured raw too —
+   see §3.1).
 4. Build `FnDefInfo{Signatures:[sig], Macro:true, Captured: ComputeCaptures(...)}`.
    (Captures are needed now for Phase-4 referential transparency and are free
    to compute — same call `fnHandler`/`afnHandler` already make.)
@@ -165,13 +187,23 @@ ethos); revisit if a use case appears.
    fn.Captured)` (`registry.go:830`). Because the body is `quote [ … ]`, the
    result is the **inert template token list** (words stay words; `unquote`/
    `splice`/their operands are literal tokens inside it).
-4. **Expand the template** — walk the returned token list (structured, so
-   `WalkBodyWords`-style recursion over List/ParenExpr):
+4. **Expand the template** — walk the returned token list, **recursing into
+   List, ParenExpr, AND Map values**. `WalkBodyWords` (`fn_capture.go:18`)
+   already does exactly this recursion (it has a `TMap` branch at `:68`), so the
+   expander reuses/extends it rather than re-deriving the walk:
    - bare token → emit as-is (template-origin code);
    - `unquote x` → resolve `x` against the macro's arg bindings, emit the bound
      form as **one grouped node** (wrap a multi-token form as a `ParenExpr` so
      the generated word forward-collects it as a single arg);
    - `splice xs` → resolve `xs` to a list, emit its elements **flattened**.
+
+   **Map values must be parenthesized to carry `unquote`/`splice`.** A map
+   literal splits on whitespace, so `{k: unquote v}` parses as *two* entries
+   (`k:unquote`, `v:v`); the template author writes `{k: (unquote v)}`, which
+   parses to `{k: paren([unquote v])}` — the expander recurses into that
+   ParenExpr and resolves it. When the expanded map is later spliced and
+   re-stepped, `autoEvalMap` evaluates its (now unquote-resolved) values in the
+   *generated* context — the correct deferral, same as parens elsewhere.
 5. **Splice** the expanded token list into the call site: replace the
    `unless …operands` span ahead of the pointer with `NewSplice(NewList(tokens))`
    and let the existing `__SP` step (`engine.go:1713`) re-step the tape.
@@ -245,6 +277,11 @@ into `register.go`).
 - **FormArgs capture:** operands arrive unevaluated; a `(x gt 10)` arg is **not**
   `preEvalParens`-collapsed at capture but **is** in the expansion; a bare word
   arrives as a Word (not an Atom, not undefined-word error).
+- **Map capture + expansion (§3.1):** a map operand `{k: (x gt 10)}` is captured
+  with its value **un-evaluated** (`NoEvalMapArgs`), negative — without it the
+  value would auto-eval at capture; a template map value `{k: (unquote v)}`
+  resolves the unquote and defers evaluation to the spliced/generated code;
+  negative — `{k: unquote v}` (unparenthesized) splits into two entries.
 - **Expansion correctness:** `unless`; `macroexpand` shows the expected token
   list.
 - **`unquote` vs `splice`:** grouped node vs flattened; negative — `splice` of a
@@ -280,6 +317,9 @@ into `register.go`).
 
 - `eng/go/value.go:315` — `FnDefInfo.Macro`; `:251`-cluster — `FnSig.FormArgs`.
 - `eng/go/nativefunc.go:42` — `NativeSig.FormArgs`; `registry.go:803` — copy-through.
+- `eng/go/value.go` `NoEvalMapArgs` (`nativefunc.go:52`, `registry.go:804`) —
+  set by `macro` per-param; gates `autoEvalMap` at `engine.go:1312` (§3.1).
+- `eng/go/fn_capture.go:68` — `WalkBodyWords` map-value recursion (reused by the expander).
 - `eng/go/engine.go:672` — `rawFormForward` (next to `rawParenForward`);
   `:826,:841` — `preEvalParens` gate; `:~3781` — `matchSignature` forward scan.
 - `eng/go/engine.go:1099–1199` — `stepWord` macro branch; `:2146` —
