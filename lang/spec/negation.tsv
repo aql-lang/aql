@@ -43,3 +43,19 @@ def NotStr (tnot String)  "hi" is NotStr	false	named negation rejects a string
 # §7  typeof / rendering
 typeof (tnot String)	Negation	a negation value is a Type/Negation
 tnot String	tnot String	negation renders as `tnot <inner>`
+
+# §8  De Morgan — conjunction of negations
+(tnot Integer) tand (tnot String)	tnot (Integer|String)	tnot A tand tnot B = tnot (A tor B)
+true is ((tnot Integer) tand (tnot String))	true	a boolean is neither integer nor string
+5 is ((tnot Integer) tand (tnot String))	false	5 is an integer — rejected
+(tnot Integer) tand (tnot Number)	tnot Number	tnot Integer tand tnot Number = tnot Number
+
+# §9  De Morgan — disjunction of negations
+(tnot Integer) tor (tnot String)	Any	tnot A tor tnot B = tnot (A tand B) = tnot Never = Any
+(tnot Integer) tor (tnot Number)	tnot Integer	collapses to the broader complement
+
+# §10  closed-form refinement complement (composes via tand)
+Integer tand (tnot (Integer gt 0))	(Integer lte 0)	complement within the base flips the bound
+Integer tand (tnot (Integer gte 0))	(Integer lt 0)	inclusive flips to strict
+"hi" is (tnot (Integer gt 0))	true	full complement includes non-integers
+Integer tand (tnot (between 5 10 Integer))	(Integer lt 5)|(Integer gt 10)	interval complement is the two outside rays

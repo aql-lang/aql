@@ -191,20 +191,30 @@ Land as two PRs (1,4 then 2,3) or one branch.
    note), `SIGNATURES` (`tnot`), `TYPES` (negation, De Morgan, and the
    closure status from this item).
 
-**Status (landed 2026-06-04).** Phases 1, 2, 4, and 5 are implemented:
-the runtime `tnot` word + `negationUnifier` + `NegateType` identities
+**Status (landed 2026-06-04). All five phases implemented.** The runtime
+`tnot` word + `negationUnifier` + `NegateType` identities
 (`eng/go/unify_negation.go`, `core_boolean.go`, `value.go`, `Type/Negation`
-FixedID 77), the `tand`-with-negation decision procedure (which fell out
-of `unifyInner` — `(Integer tor String) tand (tnot String) → Integer`,
-`String tand (tnot String) → Never`), the else-branch narrowing fix
-(`carrier.go`, now also handling *supertype* guards), and the docs.
-Coverage: `lang/spec/negation.tsv` (26 rows) plus the carrier-narrow Go
-tests. **Phase 3 (closed-form DepScalar complement) is deferred** —
-negation already matches DepScalars correctly *pointwise*
-(`5 is (tnot (Integer gt 0)) → false`, `0 → true`), so the closed form
-(`tnot (Integer gt 0) → Integer lte 0`) is a rendering / interval-merge
-nicety, not a correctness requirement; a clean follow-up in
-`depscalar.go`.
+FixedID 77); the `tand`-with-negation decision procedure (fell out of
+`unifyInner` — `(Integer tor String) tand (tnot String) → Integer`,
+`String tand (tnot String) → Never`); the else-branch narrowing fix
+(`carrier.go`, now also handling *supertype* guards); and docs.
+
+Phase 3 + De Morgan landed in the follow-up:
+
+- **De Morgan folds** (`core_boolean.go`): `(tnot A) tand (tnot B) → tnot
+  (A tor B)` (this also fixed a real bug where two negations wrongly
+  collapsed to `Never`), and `(tnot A) tor (tnot B) → tnot (A tand B)`
+  (so `(tnot Integer) tor (tnot String) → Any`).
+- **Closed-form refinement complement** (`depscalar.go::complementWithinBase`):
+  `tnot (Integer gt 0)` is the full complement `(Integer lte 0) tor (tnot
+  Integer)` — the bound flips within the base, the base itself is
+  negated — so `Integer tand (tnot (Integer gt 0)) → Integer lte 0` and
+  an interval complements to its two outside rays. Membership stays
+  correct, including non-base values (`"hi" is (tnot (Integer gt 0)) →
+  true`).
+
+Coverage: `lang/spec/negation.tsv` (33 rows) plus carrier-narrow Go
+tests; all `make fmt`/`vet`/`lint`/`test` gates green.
 
 ### 2. The `dynamic(T)` bounded modality — the deepest idea
 

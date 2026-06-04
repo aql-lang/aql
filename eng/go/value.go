@@ -2113,6 +2113,11 @@ func kernelFormatDefault(v Value) string {
 		return strings.Join(parts, "|")
 	case IsNegation(v):
 		ni, _ := AsNegation(v)
+		// Parenthesise a compound inner so `tnot (A|B)` doesn't misread
+		// as `(tnot A)|B`.
+		if IsDisjunct(ni.Inner) || IsNegation(ni.Inner) {
+			return "tnot (" + ni.Inner.String() + ")"
+		}
 		return "tnot " + ni.Inner.String()
 	// A function value (TFnDef / TFunction, payload FnDefInfo) renders
 	// as a compact `fn name(sig…)` summary. Crucially it does NOT fall

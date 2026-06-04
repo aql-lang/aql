@@ -293,6 +293,22 @@ The identities hold: `tnot Never` is `Any`, `tnot Any` is `Never`, and
 complement — after `if (x is T) […] […]`, `x` is `cur tand (tnot T)`
 in the else branch.
 
+De Morgan's laws fold conjunctions and disjunctions of negations:
+
+```
+(tnot Integer) tand (tnot String)  => tnot (Integer|String)   # tnot A tand tnot B = tnot (A tor B)
+(tnot Integer) tor (tnot String)   => Any                      # tnot A tor tnot B = tnot (A tand B) = tnot Never
+```
+
+Negating a refinement (`DepScalar`) takes its closed-form complement —
+the bound flips within the base, so intersecting with the base reduces
+to a positive refinement:
+
+```
+Integer tand (tnot (Integer gt 0))        => (Integer lte 0)
+Integer tand (tnot (between 5 10 Integer))  => (Integer lt 5)|(Integer gt 10)
+```
+
 ### Type ordering
 
 Every type has a unified integer rank. `cmp` / `lt` / `gt` / `sort`
