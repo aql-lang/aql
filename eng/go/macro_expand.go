@@ -301,5 +301,111 @@ func ExpandMacroForm(r *Registry, form Value) ([]Value, error) {
 		return nil, &AqlError{Code: "macroexpand_error",
 			Detail: "macroexpand: " + name.Name + " is not a macro"}
 	}
-	return expandMacroWith(r, &fnDef, toks[1:])
+	first, err := expandMacroWith(r, &fnDef, toks[1:])
+	if err != nil {
+		return nil, err
+	}
+	// Fully expand: a macro whose expansion calls another macro is expanded
+	// too (macroexpand-all), matching what the runtime would do as the
+	// spliced tokens re-step. Bounded to catch a runaway recursive macro.
+	return expandAllMacros(r, first, 0)
+}
+
+// maxMacroExpandDepth bounds recursive macroexpand-all so a macro that expands
+// to (a call to) itself fails loudly instead of looping forever.
+const maxMacroExpandDepth = 256
+
+// macroByName returns the macro FnDef bound to name, if any.
+func macroByName(r *Registry, name string) (FnDefInfo, bool) {
+	bound, ok := r.Defs.Top(name)
+	if !ok {
+		return FnDefInfo{}, false
+	}
+	fd, ok := bound.Data.(FnDefInfo)
+	if !ok || !fd.Macro {
+		return FnDefInfo{}, false
+	}
+	return fd, true
+}
+
+// expandAllMacros walks a token list expanding every macro call it finds — at
+// the head of the list (`mac op…`, consuming the macro's arity in following
+// tokens) and inside nested List / ParenExpr / Map values — recursing into
+// each expansion. Non-macro tokens pass through. The depth bound guards
+// runaway self-expansion.
+func expandAllMacros(r *Registry, toks []Value, depth int) ([]Value, error) {
+	if depth > maxMacroExpandDepth {
+		return nil, &AqlError{Code: "macroexpand_error",
+			Detail: "macroexpand: expansion too deep (recursive macro?)"}
+	}
+	out := make([]Value, 0, len(toks))
+	for i := 0; i < len(toks); i++ {
+		t := toks[i]
+		if IsWord(t) {
+			w, _ := AsWord(t)
+			if fd, ok := macroByName(r, w.Name); ok {
+				arity := len(fd.Signatures[0].Params)
+				if i+1+arity <= len(toks) {
+					operands := toks[i+1 : i+1+arity]
+					exp, err := expandMacroWith(r, &fd, operands)
+					if err != nil {
+						return nil, err
+					}
+					rec, err := expandAllMacros(r, exp, depth+1)
+					if err != nil {
+						return nil, err
+					}
+					out = append(out, rec...)
+					i += arity // operands consumed; loop's i++ skips the macro word
+					continue
+				}
+				// Not enough following tokens for a full call — leave as-is.
+			}
+		}
+		nested, err := expandAllNested(r, t, depth)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, nested)
+	}
+	return out, nil
+}
+
+// expandAllNested recurses expandAllMacros into a container value.
+func expandAllNested(r *Registry, t Value, depth int) (Value, error) {
+	switch {
+	case t.Parent.Equal(TList) && IsConcrete(t):
+		l, _ := AsList(t)
+		inner, err := expandAllMacros(r, l.Slice(), depth+1)
+		if err != nil {
+			return Value{}, err
+		}
+		nl := NewList(inner)
+		nl.Quoted = t.Quoted
+		return nl, nil
+	case IsParenExpr(t):
+		pt, _ := AsParenExpr(t)
+		inner, err := expandAllMacros(r, pt, depth+1)
+		if err != nil {
+			return Value{}, err
+		}
+		return NewParenExpr(inner), nil
+	case t.Parent.Equal(TMap) && IsConcrete(t):
+		m, _ := AsMap(t)
+		if m == nil {
+			return t, nil
+		}
+		out := NewOrderedMap()
+		for _, k := range m.Keys() {
+			v, _ := m.Get(k)
+			rv, err := expandAllNested(r, v, depth)
+			if err != nil {
+				return Value{}, err
+			}
+			out.Set(k, rv)
+		}
+		return NewMap(out), nil
+	default:
+		return t, nil
+	}
 }
