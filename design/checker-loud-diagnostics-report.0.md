@@ -240,6 +240,20 @@ sigs). This is the main correctness risk and the bulk of the effort.
 **Effort.** ~3 d (most of it in the discriminator-complete subsumption
 check and the vocabulary sweep).
 
+**Phase 2 — LANDED 2026-06-04.** `eng/go/deadsig.go` implements the
+subsumption rule (`sigSubsumes` / `DeadSignatures`): same arity, same
+`BarrierPos`, same per-position `TypeArgs` *and* `QuoteArgs` kind, no
+structural patterns on either side, and every later-sig type a subtype
+of the earlier-sig type (`t2.Matches(t1)`). Both surfaces shipped:
+`unreachable_signature` (warning) is emitted at `fn` construction in
+check mode (`native_definition.go`) for user overloads, and
+`TestNoDeadNativeOverloads` sweeps the whole built-in vocabulary as a
+CI gate — which came back clean once `QuoteArgs` was added as a
+discriminator (it was the only thing distinguishing `describe`'s two
+`[Atom]` sigs). Piece (2)'s "loose-wrapper" worry from Phase 1 is
+unrelated here. Tests: `TestCheckUnreachableSignature`,
+`TestNoDeadNativeOverloads`; in the `LANGREF` diagnostics table.
+
 ### Phase 3 — Adoption: get the checker into the loop
 
 `aql check [--json] [--soft]` already exists
@@ -262,6 +276,20 @@ not capability.
   invisible.
 
 **Effort.** ~1.5 d.
+
+**Phase 3 — LANDED 2026-06-04.** Mostly already built, plus one fix:
+- **`aql run --check`** existed (`run.go`) but passed `soft=true`, so it
+  never aborted despite its "abort on error" help. Fixed to a clean
+  pre-flight: a new `check.Preflight` prints diagnostics to stderr and
+  returns an error on any Error-severity finding, so `aql --check`
+  aborts before executing while leaving stdout entirely for the program.
+- **LSP** already publishes the same `lang.Check` diagnostics on change
+  (`cmd/go/internal/lsp/diagnostics.go`) — so `uncalled_function` and
+  `unreachable_signature` surface in-editor for free.
+- **Docs.** The `CLI.md` `aql check` section now documents what the
+  checker catches (with the new codes), the `aql run --check`
+  pre-flight, and the LSP pointer. (The standalone "Gotchas / Idioms"
+  page remains a separate docs task.)
 
 ### Out of scope (cross-referenced, not solved here)
 

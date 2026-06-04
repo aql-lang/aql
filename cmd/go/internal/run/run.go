@@ -89,7 +89,12 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	if hasSource {
 		if *checkFirst {
-			if err := check.Run(stdout, stderr, source, *registry, *seed, false, true); err != nil {
+			// Pre-flight gate: print diagnostics to stderr, abort on any
+			// Error-severity finding before executing (the point of
+			// --check — surface real bugs in the run loop). stdout is
+			// left clean for the program. For advisory-only output, use
+			// the standalone `aql check --soft`.
+			if err := check.Preflight(stderr, source, *registry, *seed); err != nil {
 				fmt.Fprintf(stderr, "%s\n", err)
 				return 1
 			}

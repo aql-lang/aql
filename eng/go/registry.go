@@ -190,15 +190,16 @@ const (
 // Unknown codes default to SeverityInfo so new codes don't
 // accidentally trip CI gates until they're classified.
 var checkCodeSeverity = map[string]CheckSeverity{
-	"no_signature":         SeverityError,
-	"undefined_word":       SeverityError,
-	"fn_body_error":        SeverityError,
-	"branch_error":         SeverityError,
-	"type_error":           SeverityError,
-	"uncalled_function":    SeverityError,
-	"missing_returns":      SeverityWarning,
-	"step_budget_exceeded": SeverityWarning,
-	"body_error":           SeverityWarning,
+	"no_signature":          SeverityError,
+	"undefined_word":        SeverityError,
+	"fn_body_error":         SeverityError,
+	"branch_error":          SeverityError,
+	"type_error":            SeverityError,
+	"uncalled_function":     SeverityError,
+	"unreachable_signature": SeverityWarning,
+	"missing_returns":       SeverityWarning,
+	"step_budget_exceeded":  SeverityWarning,
+	"body_error":            SeverityWarning,
 }
 
 // SeverityFor returns the default severity classification for a

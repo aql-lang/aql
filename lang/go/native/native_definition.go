@@ -2,6 +2,7 @@ package native
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/aql-lang/aql/eng/go"
 )
@@ -498,7 +499,37 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		perSig[i] = eng.ComputeCaptures(r, &fnDef.Signatures[i])
 	}
 	fnDef.Captured = eng.MergeCaptures(perSig)
+
+	// Check mode: flag overloads that an earlier, higher-priority
+	// signature already subsumes — under first-match-wins dispatch they
+	// can never fire (the dead-clause analogue). A static property of the
+	// sig list, emitted once at fn construction.
+	if r.Check.IsActive() && len(fnDef.Signatures) > 1 {
+		for _, d := range eng.DeadSignatures(fnDef.Signatures) {
+			r.Check.AddDiagnostic(eng.CheckDiagnostic{
+				Code:   "unreachable_signature",
+				Detail: "fn overload " + fnSigArgList(d.Sig) + " is unreachable — the earlier signature " + fnSigArgList(d.ShadowedBy) + " already accepts every call it would match",
+				Word:   "fn",
+			})
+		}
+	}
+
 	return []Value{NewFunction(fnDef)}, nil
+}
+
+// fnSigArgList renders a signature's argument types as a short
+// `[Integer String]` list for the unreachable_signature diagnostic.
+func fnSigArgList(s eng.Signature) string {
+	ts := s.ArgTypes()
+	parts := make([]string, len(ts))
+	for i, t := range ts {
+		if t == nil {
+			parts[i] = "Any"
+			continue
+		}
+		parts[i] = t.Leaf()
+	}
+	return "[" + strings.Join(parts, " ") + "]"
 }
 
 // afnHandler — `afn input body` constructs an anonymous Function value

@@ -110,17 +110,7 @@ func Run(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut,
 		return nil
 	}
 
-	for _, d := range res.Diagnostics {
-		sev := string(d.Severity)
-		if sev == "" {
-			sev = "info"
-		}
-		if d.Row > 0 {
-			fmt.Fprintf(stderr, "check: %d:%d: [%s] %s: %s\n", d.Row, d.Col, sev, d.Code, d.Detail)
-		} else {
-			fmt.Fprintf(stderr, "check: [%s] %s: %s\n", sev, d.Code, d.Detail)
-		}
-	}
+	printDiagnostics(stderr, res.Diagnostics)
 	if err != nil {
 		return fmt.Errorf("check error: %s", err)
 	}
@@ -134,6 +124,43 @@ func Run(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut,
 		fmt.Fprintln(stdout, "check: (empty stack)")
 	}
 	if !soft && res.Summary.Errors > 0 {
+		return fmt.Errorf("check failed: %d error(s)", res.Summary.Errors)
+	}
+	return nil
+}
+
+// printDiagnostics writes each diagnostic to w in the `check: row:col:
+// [sev] code: detail` form shared by Run and Preflight.
+func printDiagnostics(w io.Writer, diags []lang.CheckDiagnostic) {
+	for _, d := range diags {
+		sev := string(d.Severity)
+		if sev == "" {
+			sev = "info"
+		}
+		if d.Row > 0 {
+			fmt.Fprintf(w, "check: %d:%d: [%s] %s: %s\n", d.Row, d.Col, sev, d.Code, d.Detail)
+		} else {
+			fmt.Fprintf(w, "check: [%s] %s: %s\n", sev, d.Code, d.Detail)
+		}
+	}
+}
+
+// Preflight runs the static checker as a pre-execution gate for
+// `aql run --check`: it prints any diagnostics to stderr and returns a
+// non-nil error when an Error-severity diagnostic is present, so the
+// caller aborts before executing. Unlike Run it prints no summary or
+// result-stack line — stdout is left entirely for the program.
+func Preflight(stderr io.Writer, source, registry string, seed int64) error {
+	a, err := lang.New(lang.Options{Registry: registry, Seed: seed})
+	if err != nil {
+		return fmt.Errorf("init error: %s", err)
+	}
+	res, cerr := a.Check(source)
+	printDiagnostics(stderr, res.Diagnostics)
+	if cerr != nil {
+		return fmt.Errorf("check error: %s", cerr)
+	}
+	if res.Summary.Errors > 0 {
 		return fmt.Errorf("check failed: %d error(s)", res.Summary.Errors)
 	}
 	return nil

@@ -3559,6 +3559,7 @@ stdout for editor/tooling integration.
 | `step_budget_exceeded`   | warning  | Global analysis budget (default 500,000 steps) was exhausted.               |
 | `unused_def`             | warning  | A `def` was installed but never referenced.                                 |
 | `unreachable_branch`     | warning  | `if` condition is a constant `true`/`false`; the other branch never runs.  |
+| `unreachable_signature`  | warning  | An `fn` overload an earlier, more general overload already subsumes; first-match dispatch can never reach it. |
 | `body_error`             | warning  | Higher-order body (do/each/fold/...) analysis raised an error.              |
 
 ### Returned Types

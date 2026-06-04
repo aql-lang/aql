@@ -116,6 +116,46 @@ func TestCheckUncalledFunction(t *testing.T) {
 	}
 }
 
+// TestCheckUnreachableSignature verifies dead-overload detection: under
+// first-match-wins dispatch, an `fn` overload that an earlier,
+// higher-priority signature already subsumes can never fire and is
+// flagged (the dead-clause analogue). Distinct or properly subtype-
+// ordered overloads stay reachable and are not flagged.
+func TestCheckUnreachableSignature(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	count := func(src string) int {
+		res, err := a.Check(src)
+		if err != nil {
+			t.Fatalf("check %q: %v", src, err)
+		}
+		n := 0
+		for _, d := range res.Diagnostics {
+			if d.Code == "unreachable_signature" {
+				n++
+			}
+		}
+		return n
+	}
+	cases := []struct {
+		src  string
+		want int
+		desc string
+	}{
+		{`def f fn [[x:Integer] [Integer] [x] [y:Integer] [Integer] [y]]`, 1, "duplicate Integer overload"},
+		{`def g fn [[a:Integer b:String] [Integer] [a] [c:Integer d:String] [Integer] [c]]`, 1, "duplicate 2-arg overload"},
+		{`def f fn [[x:Integer] [Integer] [x] [s:String] [String] [s]]`, 0, "distinct Integer/String overloads"},
+		{`def f fn [[x:Number] [Number] [x] [y:Integer] [Integer] [y]]`, 0, "Integer subtype of Number — both reachable"},
+	}
+	for _, c := range cases {
+		if got := count(c.src); got != c.want {
+			t.Errorf("%s: want %d unreachable_signature, got %d  (%s)", c.desc, c.want, got, c.src)
+		}
+	}
+}
+
 // TestCheckAddDecimalWiden validates that mixing integer and decimal
 // carriers widens the result to Decimal — this is the
 // "else" branch of ReturnsNumericBinary.
