@@ -160,7 +160,7 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	stackOnly := defStackOnly(args[0])
 	body := args[1]
 	if IsCapitalisedName(name) {
-		// `def` is the universal binder (lang/doc/design/TYPE-UNIFORM.0.md
+		// `def` is the universal binder (design/TYPE-UNIFORM.0.md
 		// Phase 2): a capitalised name is a TYPE binding. Delegate to
 		// the kernel type installer — the same path the `type` word
 		// uses — so object/predicate lattice-minting and all
@@ -368,7 +368,7 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	name := defName(args[0])
 	if IsCapitalisedName(name) {
 		// `undef` is the universal unbinder (the symmetric completion
-		// of Phase 2's universal `def` — lang/doc/design/TYPE-UNIFORM.0.md):
+		// of Phase 2's universal `def` — design/TYPE-UNIFORM.0.md):
 		// a capitalised name is a TYPE binding, so pop it from the single
 		// binding store and retire the minted lattice type.
 		entry, ok := r.Defs.PopEntry(name)

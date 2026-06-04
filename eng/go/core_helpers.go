@@ -556,7 +556,7 @@ func CowSet(store *StoreInstanceInfo, key string, val Value, r *Registry) {
 // host Ideal: an ExtensionPayload whose Body embeds eng.HostTypeBody.
 // The kernel recognises such a value as a type without inspecting its
 // concrete shape (the payload Body being opaque). See
-// lang/doc/design/IDEAL.0.md §6.
+// design/IDEAL.0.md §6.
 func IsHostTypeBody(v Value) bool {
 	ep, ok := v.Data.(ExtensionPayload)
 	if !ok {

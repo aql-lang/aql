@@ -349,7 +349,7 @@ MathUtil.sqrt 16                  => 4.0
 
 All forward-collecting. The "options" form takes a trailing map
 with named flags (see each word's docs in
-`lang/doc/design/LANGREF.10.md` for the full set).
+`design/LANGREF.10.md` for the full set).
 
 **Argument-order note:** for binary/ternary string words like
 `contains`, `indexof`, `slice`, `replace`, `split`, the

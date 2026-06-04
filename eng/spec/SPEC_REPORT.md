@@ -4,7 +4,7 @@ This report accompanies the new TSV files added under
 `aqleng/test/spec/`. It does NOT propose fixes; per the brief, it
 records what each new file pins down, then catalogues every
 *observed deviation* between aqleng's Go engine and the language
-design as documented in `lang/doc/design/*.md` (notably
+design as documented in `design/*.md` (notably
 `LANGREF.10.md`, `ENGINE.10.md`, `ENGINE-UNIFIED-ALGO.8.md`,
 `SIGNATURES.10.md`, and `TYPES.10.md`).
 

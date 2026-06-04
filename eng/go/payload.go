@@ -31,7 +31,7 @@ package eng
 // mismatched-shape constructions are rejected at the type-check
 // level. The seal is the kernel guarantee that fulfils the
 // "make illegal values unrepresentable" goal stated in
-// lang/doc/design/TYPE-DECOUPLING.0.md.
+// design/TYPE-DECOUPLING.0.md.
 type Payload interface {
 	payloadMarker()
 }
@@ -156,7 +156,7 @@ func NewExtension(t *Type, body any) Value {
 // (IsTypeBody, TypeOf, isTypeLike, InstallType) then recognises the
 // value as a type without inspecting its concrete shape, which it
 // cannot — the payload Body is opaque to the kernel. See
-// lang/doc/design/IDEAL.0.md §6.
+// design/IDEAL.0.md §6.
 type HostTypeBody struct{}
 
 func (HostTypeBody) hostTypeBody() {}

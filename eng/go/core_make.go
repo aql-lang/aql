@@ -341,7 +341,7 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 	targetVal = ResolveTypeLiteralDef(targetVal, reg)
 
 	// Structural kinds (object / record / table) instantiate through
-	// the Ideal registry — see ideal.go and lang/doc/design/IDEAL.0.md.
+	// the Ideal registry — see ideal.go and design/IDEAL.0.md.
 	if reg != nil {
 		if ideal := reg.Ideals.For(targetVal); ideal != nil && ideal.Instantiate != nil {
 			return ideal.Instantiate(targetVal, srcVal, reg)

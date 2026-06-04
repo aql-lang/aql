@@ -442,7 +442,7 @@ leaking.
 Result is a strict total order over distinct lattice nodes, with
 one deliberate value-level equivalence: cross-leaf numeric
 magnitude (`1 cmp 1.0 → 0`). Full design at
-`lang/doc/design/TYPE-ORDERING.0.md`; verification at
+`design/TYPE-ORDERING.0.md`; verification at
 `lang/spec/compare.tsv`.
 
 ## Value Has Two Methods
@@ -511,7 +511,7 @@ Current call sites that must canonicalize:
 - `lang/native/native_type.go::refineBareHandler` — `MintRefinePrefab`
   parent.
 
-See `lang/doc/design/TYPE-CANONICALIZATION.0.md`.
+See `design/TYPE-CANONICALIZATION.0.md`.
 
 ## Typed-Def Reparent
 

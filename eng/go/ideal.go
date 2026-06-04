@@ -4,7 +4,7 @@ package eng
 // dynamically controllable descriptor for a family of types (Object,
 // Record, Table, …). It is the `type` constructor turned into data:
 // the kernel routes `type ‹base› arg` through the Ideal registry
-// instead of a hard-coded switch. See lang/doc/design/IDEAL.0.md.
+// instead of a hard-coded switch. See design/IDEAL.0.md.
 //
 // This is Phase 1 of that design — the type-level constructor path
 // only (Accepts + Construct). Value-level operations (instantiate,
@@ -20,7 +20,7 @@ type Ideal struct {
 	// vtable-inheritance pointer: a refinement is available for
 	// dispatch only when its whole Refines chain is enabled (disabling
 	// Tensor disables Matrix and Vector). nil for a base kind. See
-	// lang/doc/design/IDEAL.0.md §8.
+	// design/IDEAL.0.md §8.
 	Refines *Ideal
 	// Accepts reports whether base is a type value of this kind — the
 	// dispatch predicate the registry consults to route `type`.

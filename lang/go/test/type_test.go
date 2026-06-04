@@ -7,7 +7,7 @@ import (
 )
 
 // Tests for the uniform type constructor `type` — see
-// lang/doc/design/TYPE-UNIFORM.0.md. `refine BaseType arg` constructs
+// design/TYPE-UNIFORM.0.md. `refine BaseType arg` constructs
 // a type from a base type plus an argument, and is paired with `def`:
 //
 //	def Acct (type Object {x:Integer})
