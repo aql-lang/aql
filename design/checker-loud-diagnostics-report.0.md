@@ -119,7 +119,54 @@ call) now errors in check mode. Negative (per `lang/go/CLAUDE.md` test
 discipline): a `def`-bound function, a `/r`-reffed wrapper, and a
 deliberately-stacked 0-arg lambda must **not** fire.
 
-**Effort.** ~2 d.
+**Effort.** ~2 d *(revised — see findings; the dispatch-side flag is ~2 d
+but the prerequisites below are larger).*
+
+**Implementation findings (2026-06-04 — first attempt, reverted).** A
+spike implemented the dispatch-side flag and proved the *mechanism* but
+also surfaced two prerequisites that make the marquee T1/B1 (module
+namespace dispatch) unreachable without prior work. The flag fires
+correctly for any FnDef **value** the checker can observe — a named,
+non-anonymous, non-quoted function reached as a call with mismatched or
+insufficient args, in either form: stack/swap (`"x" (usurp f)`) and
+forward (`Pkg.fn a b`). The hook is the no-match fall-through in
+`execFnDefSigStackMatch` (not `execFnDefLiteral`), and "args present"
+must consider **both** the stack-before values *and* the upcoming forward
+tokens up to the next statement/group boundary (`End`/`CloseParen`/`Mark`/
+`Move`). Verified: `(usurp f) "hello"` → `uncalled_function`; correct
+call, bare value, and 0-arg reference stay quiet.
+
+The blockers:
+
+1. **Module exports resolve to `Any` in check mode.** `Pkg.fn` (a
+   `get` on a `ModuleExport`) returns an `Any` carrier under check, so
+   there is **no FnDef value at the call site to flag** — `execFnDefLiteral`
+   isn't even reached. Catching module-namespace T1 therefore requires a
+   prerequisite: a `ModuleExport`'s `get` must carry the export's
+   function/signature type through check mode (return the typed FnDef
+   carrier, not `Any`). This is the highest-value enabling change and
+   should precede the flag.
+2. **Trivial-delegation wrappers mask inner mismatches.** A module
+   wrapper declares loose `Any` display-params, so even when the inner
+   native's signature rejects the args, the wrapper's loose sig "matches"
+   and dispatches — the mismatch never reaches the no-match branch.
+   Catching this means consulting the *inner* resolution result
+   (`reg.Lookup(name)`'s match in `execFnDefLiteral`), not the wrapper's
+   loose `OwnSigs`.
+
+A third, smaller edge: `(f/r) arg` can lose its `Quoted` flag through the
+paren group and false-fire, so the inert-value guard must be made robust
+across the `/r`-through-paren path before the flag is trustworthy as an
+**error** severity.
+
+**Revised plan.** (0) Module-export type propagation in check mode
+(~2–3 d) — the prerequisite, and a precision win in its own right;
+(1) the dispatch-side flag with the stack+forward "args present" guard
+and a robust inert check (~2 d); (2) inner-vs-wrapper sig resolution so
+loose wrappers don't mask inner mismatches (~1–2 d). The dispatch-side
+flag alone (without 0) already covers the non-module FnDef-value footgun
+and could land first as a Warning, promoted to Error once the `/r` edge
+is nailed.
 
 ### Phase 2 — `unreachable_signature`: dead-overload detection
 
