@@ -545,6 +545,9 @@ var builtinDecls = []builtinDecl{
 	{Path: "Ideal/Store", FixedID: 42, Rank: 40_600_000_000},
 	{Path: "Ideal/Store/System", FixedID: 43, Rank: 40_610_000_000},
 	{Path: "Ideal/Table", FixedID: 15, Rank: 40_700_000_000},
+	// Ideal/Reach — a first-class dot-access node (m.a.b). The parser emits
+	// it, so it is kernel-declared. See design/REACH.0.md.
+	{Path: "Ideal/Reach", FixedID: 29, Rank: 40_800_000_000},
 
 	// Word branch — Word/__XX entries are internal runtime markers,
 	// packed at 1e3 Rank spacing. They expose friendly short-name

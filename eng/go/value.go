@@ -1183,6 +1183,27 @@ func NewParenExpr(items []Value) Value {
 	return NewValueRaw(TParenExpr, ParenExprPayload{Toks: items})
 }
 
+// NewReach creates an Ideal/Reach value — a first-class dot-access node
+// (m.a.b). receiver is the base expression's tokens (nil/empty for a
+// receiverless reach); segments are the .key / !.key steps; eval marks it
+// evaluate-by-default. See design/REACH.0.md.
+func NewReach(info ReachInfo) Value {
+	return NewValueRaw(TReach, info)
+}
+
+// IsReach reports whether v is an Ideal/Reach value.
+func IsReach(v Value) bool {
+	return v.Parent.Equal(TReach)
+}
+
+// AsReach returns the ReachInfo of a Reach value.
+func AsReach(v Value) (ReachInfo, error) {
+	if ri, ok := v.Data.(ReachInfo); ok {
+		return ri, nil
+	}
+	return ReachInfo{}, fmt.Errorf("AsReach: not a reach value (got %T)", v.Data)
+}
+
 // InterpPart represents one segment of an interpolated string.
 // If Expr is nil, Lit is a literal string segment.
 // If Expr is non-nil, it contains parsed AQL values to evaluate.

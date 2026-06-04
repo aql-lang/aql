@@ -77,6 +77,25 @@ type MapPayload struct{ M *OrderedMap }
 // awaiting inline evaluation. Wrapping []Value.
 type ParenExprPayload struct{ Toks []Value }
 
+// ReachInfo is the payload of an Ideal/Reach value — a first-class dot-access
+// node (m.a.b). Receiver is the token sequence of the base expression (empty
+// for a receiverless reach); Segments are the .key / !.key steps. See
+// design/REACH.0.md.
+type ReachInfo struct {
+	Receiver []Value
+	Segments []ReachSeg
+	Eval     bool // evaluate-by-default (like list Eval); quote/codequote suppress
+}
+
+// ReachSeg is one step of a Reach: get (lenient) or getr (strict), with a
+// literal key (KeyLit) or a computed-key expression (KeyExpr when Computed).
+type ReachSeg struct {
+	Getr     bool
+	Computed bool
+	KeyLit   Value
+	KeyExpr  []Value
+}
+
 // InterpStringPayload carries the parts of a template-string
 // interpolation. Wrapping []InterpPart.
 type InterpStringPayload struct{ Parts []InterpPart }
@@ -196,6 +215,7 @@ func (HostTypeBody) hostTypeBody() {}
 // the catalogue centralised; the methods are dispatch-free.
 
 // Wrapper-variant markers.
+func (ReachInfo) payloadMarker()           {}
 func (IntPayload) payloadMarker()          {}
 func (DecPayload) payloadMarker()          {}
 func (StrPayload) payloadMarker()          {}
