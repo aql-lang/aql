@@ -1,6 +1,6 @@
 # Reach — a first-class node for dot-access sugar
 
-**Status:** design / implementation plan
+**Status:** design / implementation plan — **Phases A–E landed (green)**
 **Scope:** lift dotted access (`m.a.b`, `a."x".c`, `a.(expr).b`, `a!.x`) from
 its current flat `get`-chain (a `ParenExpr` after the paren-nesting work) to a
 **first-class, quotable, round-trippable `Reach` value** with per-segment
@@ -14,6 +14,34 @@ residual" finding) and `LISP-ANALYSIS.0.md` §2/§8 #5 (uniform code-as-data).
 > reading as "reach into `m` for `a.b`". It is deliberately *not* "Path"
 > (clashes with the unrelated `Scalar/Path` filesystem type) and *not* "Access"
 > (evokes permissions/security, the wrong concept).
+
+> **Implementation status (landed, green):**
+> - **A** `Ideal/Reach` type (FixedID 29) + `ReachInfo`/`ReachSeg` payload +
+>   `NewReach`/`IsReach`/`AsReach`.
+> - **B** parser emits a `Reach` for dot-chains; Stage-1 lowering evaluator at
+>   all four `ParenExpr` sites — exact semantic parity across the six §5
+>   auto-eval contexts, getr strictness, computed/string/numeric keys, paren
+>   receivers, and `size m.a` grouping. `codequote m.a` captures it
+>   (`typeof → Reach`).
+> - **C** `canon` round-trips a `Reach` to `m.a.b` / `m!.x` / `m.'k'` /
+>   `m.(expr)` / `(expr).k`; a Quoted reach wraps `(codequote …)`. `Format`
+>   makes `Value.String()` match.
+> - **D** `reachConvertBehavior` (`convert Map` → `{receiver, segments}`,
+>   `convert List` → keys); the **`reach`** constructor builds an *inert*
+>   (Eval=false) lens; an `isEvalReach` gate keeps inert/quoted reaches as data
+>   while parsed ones auto-evaluate.
+> - **E** *no code needed.* The Step-7 `dotchain` +17% (ParenExpr form) is
+>   **erased by the representation change itself** — a compact `Reach` node
+>   parses cheaper than a 9-token get-chain, more than offsetting the Stage-1
+>   lowering. Same-session A/B (`dotchain`, median of 5): **Reach 132.7µs vs
+>   the pre-paren marker baseline 136.3µs (~3% faster)**, vs the ParenExpr
+>   regression ~168µs. The **Stage-2 direct-walk is therefore unnecessary** and
+>   intentionally not done (it would require moving get/getr access into eng —
+>   large and risky for no gain), mirroring the paren-work Step 5 decision.
+>
+> **Deferred** (need the §11 open sub-decisions, not blockers): getr/computed
+> construction encoding for `reach`; `apply`/rebind; `getpath`/`setpath`
+> unification; receiverless reach (`.a.b` as a lens).
 
 > The dot-chain is the last non-uniform corner of "code as data": today
 > `m.a.b` is an *idiom* (`( m get a get b )`), not a *node* — you can't quote
