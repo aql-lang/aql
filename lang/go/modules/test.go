@@ -982,6 +982,20 @@ func (run *testRun) runCase(r *native.Registry, name string, body []native.Value
 	var errVal native.Value
 	if err != nil {
 		errVal = native.NewError(err)
+		// Surface the failure loudly and NAMED at the point it happens.
+		// `Test.test` catches the error so later cases still run, which
+		// otherwise leaves the only signal a count (`Test.fail-count`)
+		// whose summary-line assertion names nothing about which case
+		// failed (voxgig DX report B7). A `FAIL <case> — <reason>` line
+		// on stderr makes example-test failures as identifiable as the
+		// property drivers' `failing-input`.
+		if r != nil && r.ErrOutput != nil {
+			label := name
+			if len(pathCopy) > 0 {
+				label = strings.Join(pathCopy, " / ") + " / " + name
+			}
+			fmt.Fprintf(r.ErrOutput, "FAIL %s — %s\n", label, firstErrLine(err))
+		}
 	} else {
 		errVal = native.NewNone()
 	}
@@ -993,6 +1007,17 @@ func (run *testRun) runCase(r *native.Registry, name string, body []native.Value
 		run.failures++
 	}
 	run.mu.Unlock()
+}
+
+// firstErrLine returns the first line of an error's message. AQL errors
+// carry a multi-line source extract; the loud per-case FAIL line wants a
+// single scannable reason.
+func firstErrLine(err error) string {
+	msg := err.Error()
+	if i := strings.IndexByte(msg, '\n'); i >= 0 {
+		return msg[:i]
+	}
+	return msg
 }
 
 // makeResult builds a TestResult Map value matching the schema declared
