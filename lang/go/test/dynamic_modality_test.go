@@ -56,6 +56,30 @@ func TestDynamicCarrierRendersInCheckStack(t *testing.T) {
 	}
 }
 
+// TestDynamicDoComputedBody pins the `do` escape hatch: running a
+// computed body the checker can't analyze statically yields a bounded
+// gradual dynamic(Any), while a concrete body is analyzed normally.
+func TestDynamicDoComputedBody(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	computed, err := a.Check(`do (iota 3)`)
+	if err != nil {
+		t.Fatalf("check computed: %v", err)
+	}
+	if len(computed.Stack) != 1 || computed.Stack[0] != "dynamic(Any)" {
+		t.Errorf("do on a computed body should be dynamic(Any), got %v", computed.Stack)
+	}
+	concrete, err := a.Check(`do [1 add 2]`)
+	if err != nil {
+		t.Fatalf("check concrete: %v", err)
+	}
+	if len(concrete.Stack) != 1 || concrete.Stack[0] != "Integer" {
+		t.Errorf("do on a concrete body should be analyzed (Integer), got %v", concrete.Stack)
+	}
+}
+
 // hasDiag reports whether a check produced a diagnostic with the given
 // code.
 func hasDiag(diags []lang.CheckDiagnostic, code string) bool {

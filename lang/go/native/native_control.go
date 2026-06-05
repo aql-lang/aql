@@ -137,6 +137,15 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 			body = v
 		}
 	}
+	// Escape hatch: a computed body the checker cannot run statically (a
+	// list carrier rather than concrete tokens) has a genuinely unknown
+	// residual, so emit a bounded gradual dynamic(Any) — optimistically
+	// usable downstream — rather than strict Carry<Any>.
+	// (design/dynamic-modality-report.0.md, do/eval hatch.) A concrete
+	// body is analyzed normally; one that runs to nothing stays strict.
+	if !(IsConcrete(body) && body.Parent.ConformsTo(TList)) {
+		return []Value{NewDynamicCarrier(TAny)}
+	}
 	stk := RunCarrierBody(r, body)
 	if len(stk) == 0 {
 		return []Value{NewCarrier(TAny)}
