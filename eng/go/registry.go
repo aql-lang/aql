@@ -65,6 +65,7 @@ type Registry struct {
 	errs           []error           // registration errors accumulated during setup
 	ready          bool              // true after initial setup; triggers dynamic help generation
 	OnRegisterHook func(name string) // called when a function is registered after startup
+	builtinWords   map[string]bool   // names registered via Register (natives + host words); user def/undef must not shadow these
 
 	// Check holds all static type-checking state, bundled together
 	// so the future predicate-sandbox work (TYPE-SYSTEM-REVIEW.md
@@ -360,10 +361,37 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 			return
 		}
 	}
+	// Record the name as a built-in word. Register is the native /
+	// host-API word-registration path (RegisterNativeFunc and the public
+	// (*AQL).Register both route here); user `def`s install through
+	// InstallFnDef / DefTable.Push and never reach here. So this set is
+	// exactly the core vocabulary that `def` / `undef` must refuse to
+	// redefine — see IsBuiltinWord.
+	if r.builtinWords == nil {
+		r.builtinWords = make(map[string]bool)
+	}
+	r.builtinWords[name] = true
 	r.upsertFnDef(name, sigs...)
 	if r.ready && r.OnRegisterHook != nil {
 		r.OnRegisterHook(name)
 	}
+}
+
+// reservedLiterals are the value literals the parser produces directly
+// (not registered words), so they never appear in builtinWords yet must
+// also be protected from redefinition.
+var reservedLiterals = map[string]bool{"true": true, "false": true, "none": true}
+
+// IsBuiltinWord reports whether name is a core word that user code must
+// not redefine or undefine: a word registered via Register (every
+// native / kernel word, plus host words added through (*AQL).Register)
+// or a reserved literal (true / false / none). User `def`s never reach
+// Register, so they are never flagged here.
+func (r *Registry) IsBuiltinWord(name string) bool {
+	if reservedLiterals[name] {
+		return true
+	}
+	return r != nil && r.builtinWords[name]
 }
 
 // upsertFnDef finds or creates a FnDefInfo at the top of DefStacks[name]

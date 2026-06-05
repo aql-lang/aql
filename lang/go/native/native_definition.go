@@ -171,10 +171,22 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	if err := ValidateWordName(name); err != nil {
 		return nil, fmt.Errorf("def %s: %w", name, err)
 	}
+	if r.IsBuiltinWord(name) {
+		return nil, reservedWordError(r, "def", name)
+	}
 	if r.Defs.IsType(name) {
 		return nil, r.AqlError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
 	}
 	return installAndRecordDef(r, name, body, args[0].Pos, stackOnly)
+}
+
+// reservedWordError is the error raised when def / undef targets a core
+// word (a native / kernel / host-registered word, or a reserved literal
+// true/false/none). Core words are frozen — extend the language by
+// defining a NEW word, not by shadowing a built-in.
+func reservedWordError(r *Registry, op, name string) error {
+	return r.AqlError("reserved_word",
+		fmt.Sprintf("%s %s: '%s' is a built-in word and cannot be redefined", op, name, name), op)
 }
 
 func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -191,6 +203,9 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	}
 	if err := ValidateWordName(name); err != nil {
 		return nil, fmt.Errorf("def %s: %w", name, err)
+	}
+	if r.IsBuiltinWord(name) {
+		return nil, reservedWordError(r, "def", name)
 	}
 	if r.Defs.IsType(name) {
 		return nil, r.AqlError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
@@ -367,6 +382,9 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 
 func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := defName(args[0])
+	if r.IsBuiltinWord(name) {
+		return nil, reservedWordError(r, "undef", name)
+	}
 	if IsCapitalisedName(name) {
 		// `undef` is the universal unbinder (the symmetric completion
 		// of Phase 2's universal `def` — design/TYPE-UNIFORM.0.md):

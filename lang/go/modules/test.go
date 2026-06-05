@@ -1362,8 +1362,8 @@ def run-spec fn [[| s:Map] [] [
     cases subject run-cases
     for (subs size) [
       def _i i
-      def sub (subs _i get)
-      sub run-spec
+      def subspec (subs _i get)
+      subspec run-spec
     ] end
   ] (s get "name") test-describe
 ]]

@@ -937,7 +937,7 @@ func TestExportDefResolution(t *testing.T) {
 
 func TestExportListDefResolution(t *testing.T) {
 	result, err := runModuleSteps(t, nil, []string{
-		`import module [def items [1 2 3] export "M" {items:items}]`,
+		`import module [def itms [1 2 3] export "M" {items:itms}]`,
 		`M.items`,
 	})
 	if err != nil {

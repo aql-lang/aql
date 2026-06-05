@@ -296,10 +296,17 @@ $ aql do -- 'def add fn [[x:Number y:Number] [Number] [x sub y]] 5 3 add'  => -2
 `def true` shadows the boolean literal; `def add` redefines addition. No
 warning.
 
-> **Fix.** Maintain a reserved-name set (`true`, `false`, `none`, and the
-> kernel words) that `def`/`InstallType` refuse to shadow, or at minimum
-> warn on. Lands in the `def` handler / registry. Low risk — only blocks
-> pathological redefinitions; legitimate user words are unaffected.
+> **Fix.** ✅ **Done.** Redefining a core word is now illegal everywhere.
+> The registry records every name registered via `Register` (all native /
+> kernel words, plus host words added through `(*AQL).Register`) in a
+> `builtinWords` set; `r.IsBuiltinWord` also covers the reserved literals
+> `true`/`false`/`none`. The `def` and `undef` handlers reject any such
+> name with `[aql/reserved_word]`. User `def`s install through
+> `InstallFnDef`/`DefTable.Push` and never reach `Register`, so user words
+> (and re-`def` shadowing of user words) are unaffected. Built-in TYPE
+> names (`Integer`, …) and `none` were already unredefinable — they parse
+> as type/value literals, not nameable tokens. `def add` / `def true` /
+> `undef add` now error; extend the language with a NEW word instead.
 
 ## N. "Errors are values, not exceptions" — only inside `do [...]` — `doc`
 

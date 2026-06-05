@@ -546,6 +546,14 @@ restricted words refuse. See
 | `args` | Current `fn` args list (inside body) | `args . 0` |
 | `quote` | Prevent evaluation of next token | `quote [1 add 2]` |
 
+> **Core words are frozen.** `def`/`undef` may not redefine a built-in
+> word, nor the literals `true`/`false`/`none` — `def add …`,
+> `def true …`, `undef if` all raise `[aql/reserved_word]`. Extend the
+> language by defining a **new** word, not by shadowing a built-in.
+> Re-`def`ing your **own** words still shadows as before (`def x 1; def
+> x 2` ⇒ `x` is `2`), and a built-in *type* name (`Integer`, …) was
+> already unusable as a `def` target.
+
 #### `fn` shape
 
 A `fn` body is a flat list of `[input-sig] [output-sig] [body]`
@@ -1136,6 +1144,8 @@ Errors are values of type `Ideal/Error` with a `code` atom and a
 | Code | Meaning |
 |------|---------|
 | `undefined_word` | A bare name was used outside a quoted slot. |
+| `reserved_word` | `def`/`undef` targeted a built-in word or the literal `true`/`false`/`none`. |
+| `incomparable` | `cmp`/`lt`/`lte`/`gt`/`gte` got cross-family operands — use `tcmp`. |
 | `type_mismatch` | A value didn't match an expected signature slot. |
 | `arity_mismatch` | Wrong number of arguments. |
 | `div_zero` | Division by zero. |

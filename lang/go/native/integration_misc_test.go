@@ -573,13 +573,13 @@ func TestEngineFnReturnTypeMultipleValues(t *testing.T) {
 		NewList([]Value{NewWord("dup")}),
 	})
 	result := runAQL(t, r, []Value{
-		NewWord("def"), NewWord("dup2"), NewWord("fn"), fnBody, NewEnd(),
-		NewInteger(3), NewWord("dup2"),
+		NewWord("def"), NewWord("fdup2"), NewWord("fn"), fnBody, NewEnd(),
+		NewInteger(3), NewWord("fdup2"),
 	})
 	_as121, _ := AsInteger(result[0])
 	_as120, _ := AsInteger(result[1])
 	if len(result) != 2 || _as121 != 3 || _as120 != 3 {
-		t.Errorf("3 dup2 = %v, want [3 3]", result)
+		t.Errorf("3 fdup2 = %v, want [3 3]", result)
 	}
 }
 
