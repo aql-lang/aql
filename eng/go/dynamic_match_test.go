@@ -85,6 +85,45 @@ func TestDynamicResultContagion(t *testing.T) {
 	}
 }
 
+// TestDynamicFirstMatchPartition pins the first-match partition for the
+// dispatch RESULT: when a dynamic bound reaches several overloads with
+// divergent returns, the result is the UNION of those returns (sound),
+// not just the first match's (too narrow). No production word has
+// return-divergent overloads spanned by a dynamic bound, so this is
+// verified with a synthetic word.
+func TestDynamicFirstMatchPartition(t *testing.T) {
+	r, _ := NewRegistry()
+	r.RegisterNativeFunc(NativeFunc{
+		Name: "wdiv",
+		Signatures: []NativeSig{
+			{Args: []*Type{TInteger}, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TString}, Returns: []*Type{TAtom}},
+		},
+	})
+	intStr := NewDynamicCarrierValue(NewDisjunct([]Value{NewTypeLiteral(TInteger), NewTypeLiteral(TString)}))
+
+	// dynamic(Integer|String) reaches BOTH overloads → union {Boolean, Atom}.
+	if rets := dynamicReachableReturns(r, "wdiv", []Value{intStr}); len(rets) != 2 {
+		t.Fatalf("expected 2 reachable returns for dynamic(Integer|String), got %v", rets)
+	}
+
+	// The dispatch result is dynamic(Boolean|Atom), not just dynamic(Boolean).
+	sig := &Signature{Args: []*Type{TInteger}, Returns: []*Type{TBoolean}}
+	out := carrierResults(r, "wdiv", sig, []Value{intStr}, SrcPos{})
+	if len(out) != 1 || !out[0].Dynamic {
+		t.Fatalf("expected a single dynamic result, got %v", out)
+	}
+	if got := out[0].String(); got != "dynamic(Boolean|Atom)" && got != "dynamic(Atom|Boolean)" {
+		t.Errorf("partition result = %q, want dynamic(Boolean|Atom)", got)
+	}
+
+	// A dynamic bound reaching only ONE overload → no refinement (the
+	// matched return is already correct).
+	if got := dynamicReachableReturns(r, "wdiv", []Value{NewDynamicCarrier(TInteger)}); got != nil {
+		t.Errorf("dynamic(Integer) reaches one overload; expected no union, got %v", got)
+	}
+}
+
 // TestDynamicCarrierString pins the trace rendering: a dynamic carrier
 // renders as dynamic(<bound>) so the modality is legible, while a strict
 // carrier is unchanged.

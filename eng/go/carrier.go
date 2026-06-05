@@ -325,8 +325,64 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 			out[i].Carrier = true
 			out[i].Dynamic = true
 		}
+		// First-match partition (design/dynamic-modality-report.0.md): a
+		// dynamic bound can reach MULTIPLE of the word's overloads, whose
+		// returns may differ. The single matched-sig return is then too
+		// narrow — it would wrongly reject a downstream use of one of the
+		// other reachable returns. Widen the (single) result to the union
+		// of all reachable returns. No-op for the common case (one
+		// reachable return), so unobservable with return-uniform words.
+		if len(out) == 1 {
+			if rets := dynamicReachableReturns(r, word, args); len(rets) >= 2 {
+				alts := make([]Value, len(rets))
+				for i, t := range rets {
+					alts[i] = NewTypeLiteral(t)
+				}
+				out[0] = NewDynamicCarrierValue(NewDisjunct(alts))
+			}
+		}
 	}
 	return out
+}
+
+// dynamicReachableReturns returns the distinct single-position return
+// types of every signature of `word` that the (dynamic) args reach, but
+// only when there are TWO OR MORE distinct returns — the case the
+// single matched-sig return would get wrong. Returns nil otherwise (the
+// common case: contagion's matched-sig return is already correct).
+// Restricted to same-arity, single-static-return sigs; any other shape
+// falls back to contagion.
+func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
+	fn := r.Lookup(word)
+	if fn == nil || len(fn.Signatures) < 2 {
+		return nil
+	}
+	var rets []*Type
+	seen := map[string]bool{}
+	for i := range fn.Signatures {
+		s := &fn.Signatures[i]
+		if len(s.Args) != len(args) || len(s.Returns) != 1 || s.Returns[0] == nil {
+			return nil // a shape we don't refine — defer to contagion
+		}
+		reach := true
+		for j := range args {
+			if !sigTypeMatches(args[j], s.Args[j]) {
+				reach = false
+				break
+			}
+		}
+		if !reach {
+			continue
+		}
+		if t := s.Returns[0]; !seen[t.ID] {
+			seen[t.ID] = true
+			rets = append(rets, t)
+		}
+	}
+	if len(rets) < 2 {
+		return nil
+	}
+	return rets
 }
 
 // narrowDynamicUses implements narrowing-through-use

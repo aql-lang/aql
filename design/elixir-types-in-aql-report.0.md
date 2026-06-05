@@ -331,11 +331,35 @@ mask a likely typo worse than the strict fallback (which fails loudly at
 the next typed slot). Dynamic hatches are for genuinely unknown VALUES,
 not unresolved NAMES.
 
-Still deferred: more escape-hatch bounds (the genuinely-unknown-value
-ones — `do` on a computed body, external IO), *precise*
-narrowing-through-use (downstream uses of a named binding tighten to
-`T ∩ S` — needs arg provenance), and the first-match partition for the
-result bound (currently the declared return).
+**Status (slice 4 landed 2026-06-05). Hatches + narrowing + partition —
+the modality is complete.**
+
+- *`do` escape hatch* (`native_control.go`): `do` on a computed body the
+  checker can't run statically (a list carrier, not concrete tokens)
+  emits `dynamic(Any)` rather than strict `Carry<Any>`. A concrete body
+  is analyzed as before. (The module-export hatch was deliberately
+  declined — see slice 3.)
+- *Narrowing-through-use* (`Value.DynFrom` provenance set in `stepWord`;
+  `carrierResults::narrowDynamicUses`): a typed use of a dynamic binding
+  tightens it to `dynamic(bound ∩ slot)`, so a later provably-disjoint
+  use of the same name is flagged WITHOUT a guard
+  (`x 1 add  x "s" join` → no_signature). Pushed onto the def stack so
+  branch analysis scopes it — a then-branch narrowing never leaks to the
+  else-branch or past the `if`; the bound only tightens, so a leak could
+  at worst miss a detection, never false-positive.
+- *First-match partition for the result* (`carrierResults::dynamic-
+  ReachableReturns`): when a dynamic bound reaches several overloads with
+  divergent returns, the result is the UNION of those returns, not just
+  the first match's — which would be too narrow and wrongly reject a
+  downstream use of one of the other returns. Soundness, not just
+  precision; no production word is return-divergent over a dynamic bound,
+  so it is verified with a synthetic word.
+
+Coverage: `TestDynamicDoComputedBody`, `TestDynamicNarrowingThroughUse`
+(lang), `TestDynamicFirstMatchPartition` (eng). The bounded `dynamic(T)`
+modality is now functionally complete: introduced at escape hatches,
+flows by contagion, tightens through use, discharged by a guard, and
+legible in traces.
 
 ### 3. Dead-overload detection — Elixir's dead-clause check, generalised
 
