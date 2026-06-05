@@ -286,6 +286,7 @@ func isLiteralWord(v Value) bool {
 // args that would be passed to the runtime handler). pos carries the
 // word's source location so diagnostics can point at it.
 func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos SrcPos) []Value {
+	narrowDynamicUses(r, sig, args)
 	var out []Value
 	switch {
 	case sig.ReturnsFn != nil:
@@ -326,6 +327,46 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 		}
 	}
 	return out
+}
+
+// narrowDynamicUses implements narrowing-through-use
+// (design/dynamic-modality-report.0.md): when a dynamic carrier resolved
+// from a binding is consumed by a typed slot, the binding tightens to
+// dynamic(bound ∩ slot) for downstream uses, so a later provably-disjoint
+// use of the same name fails the match rule and is flagged — no explicit
+// guard needed. Scoped via the def stack: branch analysis
+// (RunCarrierBodyWithDefs) truncates these pushes, so a then-branch
+// narrowing never leaks to the else-branch. Sound — the bound only
+// tightens, never widens.
+func narrowDynamicUses(r *Registry, sig *Signature, args []Value) {
+	if r == nil || sig == nil || !r.Check.IsActive() {
+		return
+	}
+	for i, a := range args {
+		if !a.Dynamic || a.DynFrom == "" {
+			continue
+		}
+		// Only narrow a binding that is itself still dynamic (consistent
+		// with this value) — guards against a since-rebound name.
+		cur, ok := r.Defs.Top(a.DynFrom)
+		if !ok || !cur.Dynamic {
+			continue
+		}
+		slot := sigArgType(sig, i)
+		if slot == nil {
+			continue
+		}
+		bound := cur
+		bound.Dynamic, bound.DynFrom = false, ""
+		narrowed := TandValues(bound, NewCarrier(slot))
+		// A successful match guarantees a non-disjoint intersection; skip
+		// when the bound did not actually tighten (no-op / avoids
+		// unbounded layer growth on repeated same-type uses).
+		if isNeverShape(narrowed) || ValuesEqual(bound, narrowed) {
+			continue
+		}
+		r.Defs.Push(a.DynFrom, NewDynamicCarrierValue(narrowed))
+	}
 }
 
 // anyDynamicCarrier reports whether any value is a dynamic carrier — the

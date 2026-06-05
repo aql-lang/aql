@@ -1119,6 +1119,11 @@ func (e *Engine) stepWord(val Value) error {
 			// onto the stack (the old implicit behaviour / Forth-style
 			// macros) use the explicit `def name word [list]` form, whose
 			// __SP marker is handled in stepLiteral.
+			if top.Dynamic && e.registry.Check.IsActive() {
+				// Tag the gradual value with its binding so a typed use
+				// downstream narrows the binding (narrowing-through-use).
+				top.DynFrom = w.Name
+			}
 			e.stack[e.pointer] = top
 			return e.stepLiteral()
 		}

@@ -782,6 +782,12 @@ type Value struct {
 	// carriers the checker cannot prove exactly (escape hatches); cleared
 	// by a successful guard, which discharges the gradual obligation.
 	Dynamic bool
+	// DynFrom is the binding name a dynamic carrier was resolved from
+	// (check mode only). It lets narrowing-through-use tighten that
+	// binding to dynamic(bound ∩ slot) at a typed use, so a later
+	// provably-disjoint use of the same name is caught. Empty for
+	// non-binding-derived carriers; never read at runtime.
+	DynFrom string
 }
 
 // idRand is the package-level RNG used for ID generation.

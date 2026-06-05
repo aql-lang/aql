@@ -109,6 +109,56 @@ func TestDynamicContagionFlows(t *testing.T) {
 	}
 }
 
+// TestDynamicNarrowingThroughUse pins narrowing-through-use: a typed use
+// of a dynamic binding tightens it to dynamic(bound ∩ slot), so a later
+// provably-disjoint use of the same name is caught WITHOUT an explicit
+// guard. Branch analysis must scope the narrowing — it can't leak into a
+// sibling branch or past the `if`.
+func TestDynamicNarrowingThroughUse(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+
+	// Linear: used as Number, then as a List (join) → contradiction caught.
+	contra, err := a.Check(`def x (context get "k") end  x 1 add  x "s" join`)
+	if err != nil {
+		t.Fatalf("check contra: %v", err)
+	}
+	if !hasDiag(contra.Diagnostics, "no_signature") {
+		t.Errorf("a Number-then-String use of a dynamic binding should be flagged, got %+v", contra.Diagnostics)
+	}
+
+	// Valid: used as Number twice → no contradiction.
+	valid, err := a.Check(`def x (context get "k") end  x 1 add  x 2 add`)
+	if err != nil {
+		t.Fatalf("check valid: %v", err)
+	}
+	if hasDiag(valid.Diagnostics, "no_signature") {
+		t.Errorf("two Number uses must not be flagged, got %+v", valid.Diagnostics)
+	}
+
+	// Branch-scoped: the then-branch narrows x to Number, but the
+	// else-branch uses x as a List — the narrowing must NOT leak, so no
+	// false positive. (Non-constant condition so both branches analyze.)
+	scoped, err := a.Check(`def c (context get "f") end  def x (context get "k") end  if [c] [x 1 add] [x "s" join]`)
+	if err != nil {
+		t.Fatalf("check scoped: %v", err)
+	}
+	if hasDiag(scoped.Diagnostics, "no_signature") {
+		t.Errorf("then-branch narrowing must not leak to the else-branch, got %+v", scoped.Diagnostics)
+	}
+
+	// And it must not leak PAST the if either.
+	after, err := a.Check(`def x (context get "k") end  if [true false or] [x 1 add] [0] end  x "s" join`)
+	if err != nil {
+		t.Fatalf("check after: %v", err)
+	}
+	if hasDiag(after.Diagnostics, "no_signature") {
+		t.Errorf("branch narrowing must not leak past the if, got %+v", after.Diagnostics)
+	}
+}
+
 // TestDynamicGuardDischarge pins the bridge back to strict typing: a
 // guard on a dynamic binding discharges the modality — inside the
 // then-branch the value is strictly its guarded type, so a provably
