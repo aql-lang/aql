@@ -119,21 +119,14 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 		},
 	})
 
-	// Promote strings to words for code evaluation inside module.
-	promoteToWord := func(v Value) Value {
-		if v.Parent.ConformsTo(TString) || v.Parent.ConformsTo(TAtom) {
-			name, _ := AsString(v)
-			if modReg.Lookup(name) != nil {
-				return NewWord(name)
-			}
-		}
-		return v
-	}
-
+	// A module body is code: unquoted words (as the parser yields them)
+	// run; quoted strings and atoms are DATA and are left untouched. A
+	// string is never silently promoted to a word and dispatched — a
+	// quoted value whose text happens to name a word (`"def"`, `"print"`)
+	// stays a string, the same contract `do` and every other evaluator
+	// honour.
 	input := make([]Value, len(elems))
-	for i, e := range elems {
-		input[i] = promoteToWord(e)
-	}
+	copy(input, elems)
 	sub := New(modReg)
 	_, err = sub.Run(input)
 	if err != nil {

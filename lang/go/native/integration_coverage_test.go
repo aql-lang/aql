@@ -330,8 +330,8 @@ func TestIntegModuleWithExport(t *testing.T) {
 	//   export :myExport {val: x}
 	// ] end
 	moduleBody := NewList([]Value{
-		NewString("def"), NewString("x"), NewInteger(42), NewString("end"),
-		NewString("export"), NewAtom("myExport"),
+		NewWord("def"), NewString("x"), NewInteger(42), NewEnd(),
+		NewWord("export"), NewAtom("myExport"),
 		NewMap(singleMap("val", NewString("x"))),
 	})
 	result := runAQL(t, r, []Value{NewWord("module"), moduleBody})
@@ -353,8 +353,8 @@ func TestIntegModuleImportAll(t *testing.T) {
 	registerIOWords(r)
 	// Build module, then import it
 	moduleBody := NewList([]Value{
-		NewString("def"), NewString("x"), NewInteger(99), NewString("end"),
-		NewString("export"), NewAtom("stuff"),
+		NewWord("def"), NewString("x"), NewInteger(99), NewEnd(),
+		NewWord("export"), NewAtom("stuff"),
 		NewMap(singleMap("val", NewString("x"))),
 	})
 	runAQL(t, r, []Value{
@@ -382,8 +382,8 @@ func TestIntegModuleImportRename(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	moduleBody := NewList([]Value{
-		NewString("def"), NewString("x"), NewInteger(55), NewString("end"),
-		NewString("export"), NewAtom("orig"),
+		NewWord("def"), NewString("x"), NewInteger(55), NewEnd(),
+		NewWord("export"), NewAtom("orig"),
 		NewMap(singleMap("val", NewString("x"))),
 	})
 	runAQL(t, r, []Value{
@@ -406,11 +406,11 @@ func TestIntegModuleImportMultiRename(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	moduleBody := NewList([]Value{
-		NewString("def"), NewString("a"), NewInteger(1), NewString("end"),
-		NewString("def"), NewString("b"), NewInteger(2), NewString("end"),
-		NewString("export"), NewAtom("expA"),
+		NewWord("def"), NewString("a"), NewInteger(1), NewEnd(),
+		NewWord("def"), NewString("b"), NewInteger(2), NewEnd(),
+		NewWord("export"), NewAtom("expA"),
 		NewMap(singleMap("val", NewString("a"))),
-		NewString("export"), NewAtom("expB"),
+		NewWord("export"), NewAtom("expB"),
 		NewMap(singleMap("val", NewString("b"))),
 	})
 	runAQL(t, r, []Value{
@@ -437,8 +437,8 @@ func TestIntegModuleExportWithAtomName(t *testing.T) {
 	registerIOWords(r)
 	// export with atom name (word signature removed; unknown words become atoms)
 	moduleBody := NewList([]Value{
-		NewString("def"), NewString("x"), NewInteger(7), NewString("end"),
-		NewString("export"), NewAtom("wrdexp"),
+		NewWord("def"), NewString("x"), NewInteger(7), NewEnd(),
+		NewWord("export"), NewAtom("wrdexp"),
 		NewMap(singleMap("val", NewString("x"))),
 	})
 	result := runAQL(t, r, []Value{NewWord("module"), moduleBody})
@@ -456,8 +456,8 @@ func TestIntegValToAtomOrStringWord(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	moduleBody := NewList([]Value{
-		NewString("def"), NewString("x"), NewInteger(10), NewString("end"),
-		NewString("export"), NewAtom("orig"),
+		NewWord("def"), NewString("x"), NewInteger(10), NewEnd(),
+		NewWord("export"), NewAtom("orig"),
 		NewMap(singleMap("val", NewString("x"))),
 	})
 	runAQL(t, r, []Value{
@@ -480,8 +480,8 @@ func TestIntegImportSingleRenameWord(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	moduleBody := NewList([]Value{
-		NewString("def"), NewString("x"), NewInteger(42), NewString("end"),
-		NewString("export"), NewAtom("Orig"),
+		NewWord("def"), NewString("x"), NewInteger(42), NewEnd(),
+		NewWord("export"), NewAtom("Orig"),
 		NewMap(singleMap("val", NewString("x"))),
 	})
 	runAQL(t, r, []Value{
@@ -504,8 +504,8 @@ func TestIntegImportSingleRenameAtom(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	moduleBody := NewList([]Value{
-		NewString("def"), NewString("x"), NewInteger(42), NewString("end"),
-		NewString("export"), NewAtom("Orig"),
+		NewWord("def"), NewString("x"), NewInteger(42), NewEnd(),
+		NewWord("export"), NewAtom("Orig"),
 		NewMap(singleMap("val", NewString("x"))),
 	})
 	runAQL(t, r, []Value{
@@ -529,8 +529,8 @@ func TestIntegImportSingleRenameMultiExportError(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("a", NewInteger(1))
 	moduleBody := NewList([]Value{
-		NewString("export"), NewAtom("X"), NewMap(singleMap("v", NewInteger(1))),
-		NewString("export"), NewAtom("Y"), NewMap(singleMap("v", NewInteger(2))),
+		NewWord("export"), NewAtom("X"), NewMap(singleMap("v", NewInteger(1))),
+		NewWord("export"), NewAtom("Y"), NewMap(singleMap("v", NewInteger(2))),
 	})
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("mm"),
