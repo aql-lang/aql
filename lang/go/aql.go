@@ -190,7 +190,13 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 
 	stack := make([]string, len(result))
 	for i, v := range result {
-		stack[i] = v.Parent.Leaf()
+		if v.Dynamic {
+			// Surface the gradual modality in the residual stack so a
+			// dynamic carrier is distinguishable from a strict one.
+			stack[i] = "dynamic(" + v.Parent.Leaf() + ")"
+		} else {
+			stack[i] = v.Parent.Leaf()
+		}
 	}
 
 	// Diagnostics carry the source position stamped by the parser onto

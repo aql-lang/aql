@@ -225,6 +225,11 @@ func moduleExportGetReturns(args []Value, _ *Registry) []Value {
 			return []Value{val}
 		}
 	}
+	// A missing / unresolved export stays a strict Any: emitting
+	// dynamic(Any) here would *admit* downstream typed uses and so mask
+	// a likely typo worse than the strict fallback (which fails loudly
+	// at the next typed slot). Dynamic escape hatches are for genuinely
+	// unknown VALUES, not unresolved names.
 	return []Value{NewCarrier(TAny)}
 }
 

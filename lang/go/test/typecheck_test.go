@@ -1185,8 +1185,11 @@ func TestCheckContextMissingKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
-	if len(res.Stack) != 1 || res.Stack[0] != "Any" {
-		t.Errorf("expected Any carrier for unset key, got %v", res.Stack)
+	// An unset key is an escape hatch: the checker emits a bounded gradual
+	// dynamic(Any) (optimistically compatible downstream) rather than a
+	// strict Any, surfaced in the residual stack as dynamic(Any).
+	if len(res.Stack) != 1 || res.Stack[0] != "dynamic(Any)" {
+		t.Errorf("expected dynamic(Any) carrier for unset key, got %v", res.Stack)
 	}
 }
 

@@ -2024,6 +2024,15 @@ func AsMutableMap(v Value) (*OrderedMap, error) {
 
 // String returns a human-readable representation.
 func (v Value) String() string {
+	// A dynamic carrier renders as dynamic(<bound>) so the gradual
+	// modality is legible in traces / `aql check` output instead of
+	// masquerading as its bare bound (design/dynamic-modality-report.0.md).
+	// Render the bound by clearing the flag and recursing.
+	if v.Dynamic {
+		inner := v
+		inner.Dynamic = false
+		return "dynamic(" + inner.String() + ")"
+	}
 	// Behavior-driven format delegation: types that supply a custom
 	// TypeBehavior route through their Format. Walks the Parent
 	// chain so descendants of a type with a custom Behavior inherit

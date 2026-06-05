@@ -85,6 +85,26 @@ func TestDynamicResultContagion(t *testing.T) {
 	}
 }
 
+// TestDynamicCarrierString pins the trace rendering: a dynamic carrier
+// renders as dynamic(<bound>) so the modality is legible, while a strict
+// carrier is unchanged.
+func TestDynamicCarrierString(t *testing.T) {
+	cases := []struct {
+		v    Value
+		want string
+	}{
+		{NewDynamicCarrier(TInteger), "dynamic(Integer)"},
+		{NewDynamicCarrier(TAny), "dynamic(Any)"},
+		{NewDynamicCarrierValue(NewDisjunct([]Value{NewTypeLiteral(TInteger), NewTypeLiteral(TString)})), "dynamic(Integer|String)"},
+		{NewCarrier(TInteger), "Integer"}, // strict carrier unchanged
+	}
+	for _, tc := range cases {
+		if got := tc.v.String(); got != tc.want {
+			t.Errorf("String() = %q, want %q", got, tc.want)
+		}
+	}
+}
+
 // TestDynamicCarrierConstructors pins the invariants of the dynamic
 // constructors: Dynamic implies Carrier, the bound is preserved, and
 // toCarrier never strips a dynamic carrier (which would null its bound).

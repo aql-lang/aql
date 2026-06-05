@@ -32,8 +32,27 @@ func TestDynamicContextGetGradualMatch(t *testing.T) {
 			t.Fatalf("dynamic(Any) from context get should match the Number slot; got no_signature: %+v", res.Diagnostics)
 		}
 	}
-	if len(res.Stack) != 1 || (res.Stack[0] != "Decimal" && res.Stack[0] != "Integer") {
-		t.Fatalf("expected a numeric result from the gradual match, got stack=%v", res.Stack)
+	// The result is itself dynamic (contagion): the modality flows through
+	// add, and the residual stack renders it as dynamic(<bound>).
+	if len(res.Stack) != 1 || (res.Stack[0] != "dynamic(Decimal)" && res.Stack[0] != "dynamic(Integer)") {
+		t.Fatalf("expected a dynamic numeric result from the gradual match, got stack=%v", res.Stack)
+	}
+}
+
+// TestDynamicCarrierRendersInCheckStack pins that a dynamic carrier is
+// surfaced as dynamic(<bound>) in the `aql check` residual stack, so the
+// gradual modality is visible rather than masquerading as a strict type.
+func TestDynamicCarrierRendersInCheckStack(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	res, err := a.Check(`context get "k"`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if len(res.Stack) != 1 || res.Stack[0] != "dynamic(Any)" {
+		t.Errorf("expected dynamic(Any) in the residual stack, got %v", res.Stack)
 	}
 }
 

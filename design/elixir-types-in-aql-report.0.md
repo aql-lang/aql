@@ -313,11 +313,29 @@ lifecycle.** The modality now *flows* and is *dischargeable*:
   value would have admitted it, and a valid use (`x 1 add`) passes.
 
 Coverage: `TestDynamicResultContagion` (eng), `TestDynamicContagionFlows`
-+ `TestDynamicGuardDischarge` (lang). Still deferred: the remaining
-escape-hatch bounds, *precise* narrowing-through-use (downstream uses of
-a named binding tighten to `T ∩ S` — needs arg provenance), the
-first-match partition for the result bound (currently the declared
-return), and trace rendering.
++ `TestDynamicGuardDischarge` (lang).
+
+**Status (slice 3 landed 2026-06-05). Trace rendering.** A dynamic
+carrier now renders as `dynamic(<bound>)` — in `Value.String()`
+(`eng/go/value.go`, for diagnostics/traces) and in the `aql check`
+residual stack (`lang/go/aql.go`) — so the gradual modality is legible
+instead of masquerading as its bare bound (`context get "k"` →
+`dynamic(Any)`, not `Any`; `context get "k" 1 add` → `dynamic(Decimal)`,
+showing contagion). Coverage: `TestDynamicCarrierString` (eng),
+`TestDynamicCarrierRendersInCheckStack` (lang).
+
+The module-export escape hatch was evaluated and **declined**: an
+unresolved/missing export keeps its strict `Carry<Any>` fallback, because
+emitting `dynamic(Any)` there would *admit* downstream typed uses and
+mask a likely typo worse than the strict fallback (which fails loudly at
+the next typed slot). Dynamic hatches are for genuinely unknown VALUES,
+not unresolved NAMES.
+
+Still deferred: more escape-hatch bounds (the genuinely-unknown-value
+ones — `do` on a computed body, external IO), *precise*
+narrowing-through-use (downstream uses of a named binding tighten to
+`T ∩ S` — needs arg provenance), and the first-match partition for the
+result bound (currently the declared return).
 
 ### 3. Dead-overload detection — Elixir's dead-clause check, generalised
 
