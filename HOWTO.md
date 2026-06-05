@@ -4,6 +4,11 @@ Short, task-oriented recipes. Each entry assumes you've worked
 through the **[Tutorial](TUTORIAL.md)** and just need an answer to
 "how do I…?" Use the index below to jump straight in.
 
+> **Notation.** `expr => value` means "`expr` evaluates to `value`" —
+> the `=>` is an annotation, not program text. (Bare `=>` is the
+> anonymous-function arrow, sugar for `afn`; don't paste the
+> annotation into the REPL.)
+
 ## Index
 
 * [Define and use custom words](#define-and-use-custom-words)

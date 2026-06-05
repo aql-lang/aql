@@ -11,6 +11,16 @@ If you only want a recipe for a specific task, see the
 **[How-To Guides](HOWTO.md)**. If you want the precise behaviour of
 a word, see the **[Reference](REFERENCE.md)**.
 
+> **Notation.** Examples are shown either as `expr => value` or as a
+> REPL transcript `aql> expr => value`. The `=>` and the text after it
+> mean "evaluates to" — they are an annotation, not part of the
+> program, so don't type them. (`=>` by itself is real syntax: the
+> anonymous-function arrow, sugar for the word `afn`. Typing a line
+> *with* its `=> value` annotation builds a function rather than
+> checking the result.) Note also that the REPL clears the stack after
+> each line, so a multi-step computation that relies on leftover stack
+> values must go on **one** line (or in a file).
+
 
 ## 1. Install and start the REPL
 
@@ -45,8 +55,12 @@ Or run a file:
 
 ```bash
 aql script.aql
-aql -e '"hello" upper'
+aql -e '10 3 sub'
 ```
+
+(`-e` evaluates one expression and exits. Uppercasing a string needs
+the string-util module — `aql -e '"aql:string-util" import end
+StringUtil.upper "hello"'` — see [§5: Strings](#5-strings).)
 
 
 ## 2. The stack — your first expression
@@ -348,6 +362,13 @@ The branches are lists (which is why they're not evaluated up-front):
 aql> if (5 gt 3) ["yes"] ["no"]      => 'yes'
 aql> 0 if ["truthy"] ["falsy"]       => 'falsy'
 ```
+
+The condition is coerced to a boolean. Falsey values are `false`,
+`0`, `none`, the empty list/map/string, and — watch out — the *exact*
+string `"false"`. Every other non-empty string is **true**, so
+`"FALSE"`, `"0"`, and `"no"` all take the then-branch. When in doubt,
+compare explicitly (`x eq 0`, `s eq ""`) rather than relying on string
+truthiness.
 
 `for` iterates over a numeric range, pushing the counter into the
 body each step:

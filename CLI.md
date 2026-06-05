@@ -55,7 +55,7 @@ aql                                 # start the REPL
 aql do '1 add 2'                    # one-shot expression
 aql script.aql                      # run a file
 aql check script.aql                # type-check without running
-aql fmt -w script.aql               # format in place
+aql fmt script.aql                  # format in place (always rewrites)
 ```
 
 
@@ -108,6 +108,15 @@ extra quoting.
 aql do 1 add 2                  # prints 3
 aql do '"aql:string-util" import end "hello" StringUtil.upper'  # prints HELLO
 aql do 'iota 5 each [dup mul]'  # prints [0 1 4 9 16]
+```
+
+If the expression **begins** with a negative number, the leading
+`-N` is parsed as an unknown command-line flag
+(`flag provided but not defined: -7`). Separate the flags from the
+expression with `--`:
+
+```bash
+aql do -- '-7 0 add'           # leading negative literal needs --   (prints -7)
 ```
 
 ### `aql check`
@@ -175,14 +184,16 @@ Inside the REPL the `help` *word* is also available — typing
 
 ### `aql fmt`
 
-Format `.aql` source. With `-w`, rewrite in place; otherwise print
-to stdout.
+Format `.aql` source **in place**. `fmt` takes file paths only — it has
+no flags and no stdout/diff mode; every named file that changes is
+rewritten and its path is printed. With **no** arguments it walks the
+current directory tree and reformats every `.aql` file it finds
+(skipping anything under `.aql/`).
 
 ```bash
-aql fmt script.aql              # print formatted source
-aql fmt -w script.aql           # rewrite in place
-aql fmt -w lib/*.aql            # multiple files
-aql fmt < input.aql             # stdin → stdout
+aql fmt script.aql              # rewrite this file in place
+aql fmt lib/*.aql               # rewrite several files in place
+aql fmt                         # rewrite every .aql file under the cwd
 ```
 
 

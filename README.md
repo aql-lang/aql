@@ -2,12 +2,20 @@
 
 **AQL** is a concatenative query language: programs are sequences
 of *words* that transform a *stack*. Every value carries a
-hierarchical type, every word declares typed signatures, and the
-same word can be called in prefix, infix, or suffix position. The
-reference implementation is in Go and ships as a single `aql`
-binary that includes a REPL, a type checker, a formatter, an LSP
-server, a registry client, a secrets vault, and a multi-service
-supervisor.
+hierarchical type, every word declares typed signatures, and most
+words can be called in prefix, infix, or suffix position (the
+exceptions are stack-shuffling words like `dup` and `swap`, which
+only take their arguments from the stack). The reference
+implementation is in Go and ships as a single `aql` binary that
+includes a REPL, a type checker, a formatter, an LSP server, a
+registry client, a secrets vault, and a multi-service supervisor.
+
+> **Notation.** In the examples below, `expr => value` means "`expr`
+> evaluates to `value`." The `=>` and the result are an *annotation*,
+> not part of the program — don't type them. (`=>` on its own is real
+> syntax: it is the anonymous-function arrow, sugar for the word
+> `afn`. So a line pasted *with* its `=> value` annotation builds a
+> function instead of checking the result.)
 
 ```aql
 # stack-based arithmetic — three equivalent forms (all compute a-b)
@@ -53,7 +61,7 @@ aql                                  # start the REPL
 aql do '1 add 2'                     # one-shot expression
 aql script.aql                       # run a file
 aql check script.aql                 # type-check, don't run
-aql fmt -w script.aql                # format in place
+aql fmt script.aql                   # format in place (always rewrites)
 aql help                             # list every built-in word
 ```
 

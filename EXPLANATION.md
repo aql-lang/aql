@@ -5,6 +5,11 @@ syntax, the type system, and the runtime. It complements the
 **[Tutorial](TUTORIAL.md)** (learning), **[How-To Guides](HOWTO.md)**
 (tasks), and **[Reference](REFERENCE.md)** (precise behaviour).
 
+> **Notation.** `expr => value` means "`expr` evaluates to `value`."
+> The `=>` is an annotation, not part of the program. (Bare `=>` is
+> the anonymous-function arrow — sugar for the word `afn` — so don't
+> paste the annotation into the REPL.)
+
 ## Contents
 
 * [What is a concatenative language?](#what-is-a-concatenative-language)
@@ -66,9 +71,15 @@ Written as one line the two steps compose by parenthesising the first
 14: because `add` can also *collect forward* (the next section), it
 grabs the following `2` as a second argument — computing `4 add 2 =
 6` — which leaves `3` and `6` on the stack for `mul`, giving `18`.
-Parenthesise, or keep each step on its own line, when a trailing word
-would otherwise reach forward past the value you mean to leave on the
-stack.
+When a trailing word would otherwise reach forward past the value you
+mean to leave on the stack, insert a barrier: parenthesise the first
+step — `(3 4 add) 2 mul` — or stop the collection with `end` or `;`
+(`3 4 add ; 2 mul`). All three give `14`. A newline is **not** a
+barrier: in a file `3 4 add` followed by `2 mul` on the next line still
+evaluates to `18`, because the stack and forward collection both carry
+across line breaks. (The REPL is the exception — it evaluates and
+clears the stack line by line, so `3 4 add` then `2 mul` there prints
+`7` and then errors for want of a second operand.)
 
 This eliminates the need for variable binding in simple cases. When
 naming actually helps readability, `def`, `var`, and named-parameter
@@ -93,8 +104,12 @@ fewer are on the stack when it runs, it enters a forward-collecting
 mode and consumes following tokens until its signature is filled.
 
 This lets AQL read naturally in infix position. `10 sub 3` reads
-"ten minus three"; `"hello" upper` reads "uppercase hello"; you
-never have to mentally reverse-engineer `10 3 -`.
+"ten minus three"; `not true` reads "not true"; and with the string
+module imported, `StringUtil.upper "hello"` reads "uppercase hello".
+You never have to mentally reverse-engineer `10 3 -`. (String words
+like `upper`/`lower`/`split` are not built in — they live in
+`aql:string-util`; see the [Reference](REFERENCE.md). Only words such
+as `add`, `sub`, `mul`, `not`, `dup` are available without an import.)
 
 ### How collection works
 
@@ -133,18 +148,21 @@ came from.
 Forward collection respects types. Consider:
 
 ```
-upper "hello" 42
+not true 42
 ```
 
-1. `upper` needs one `String`. Stack is empty. Enter forward mode.
-2. `"hello"` matches `String`. Collected. `upper` runs → `'HELLO'`.
+1. `not` needs one `Boolean`. Stack is empty. Enter forward mode.
+2. `true` matches `Boolean`. Collected. `not` runs → `false`.
 3. `42` is not consumed (no waiting word). It is pushed.
 
-Result: `'HELLO' 42`. The same logic prevents `add 1 "x"` from
-silently doing the wrong thing: after `1` is collected as
-`add`'s first argument, `"x"` won't match the second `Number`
-slot, so collection stops. `add` then fails for arity reasons
-(rather than computing nonsense).
+Result: `false 42`. Type matching governs *how far* a word reaches,
+but it does **not** make a word reject an argument of a type one of
+its signatures accepts. `add`, for instance, has both a numeric
+signature and a `Scalar`-concatenation signature, so a string is a
+*valid* second argument: `add 1 "x"` does not stop and fail — it
+collects `"x"` and concatenates, giving `'x1'`. Forward collection
+narrows where the boundary falls; it is not a guarantee that a
+"wrong-looking" value will be refused.
 
 
 ## The `end` keyword
@@ -384,6 +402,8 @@ room for growth:
 
 <!-- aql-test: skip -->
 ```
+# split/replace live in aql:string-util; shown unqualified here for
+# brevity (in real code: "aql:string-util" import end StringUtil.split …).
 "hello world" split " "                              # basic
 "hello world" split " " {trim: true}                 # with options
 "aaa" "a" "b" {scope:'all, count:2} replace          => 'bba'
@@ -425,13 +445,19 @@ side effects within a branch are local to that branch's sub-engine.
 
 ## Errors as values
 
-AQL treats errors as values, not exceptions. When `1 div 0`
-"fails", it doesn't unwind the stack — it produces an `Error` value
-that sits on the stack like any other:
+AQL lets you treat errors as values rather than as exceptions — but
+this happens at a `do [...]` boundary, not automatically. When a word
+fails *in the open*, it unwinds: `1 div 0` on its own aborts the
+program (and `1 div 0 dup` never reaches `dup`). Wrap the failing code
+in a `do [...]` block and the failure is instead *reified* — the block
+produces an `Error` value that sits on the stack like any other:
 
 ```
 do [1 div 0]                      => error(division by zero)
 ```
+
+So `do [...]` is the construct that converts an unwinding failure into
+a first-class value; outside it, errors propagate.
 
 `error` is a pattern-match: if the top of the stack is an `Error`,
 run the handler; otherwise no-op. Handlers see the error value on

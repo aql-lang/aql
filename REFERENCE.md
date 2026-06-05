@@ -6,6 +6,12 @@ built-in word library. For learning AQL, start with the
 **[How-To Guides](HOWTO.md)**. For *why* AQL is shaped the way it
 is, see the **[Explanation](EXPLANATION.md)**.
 
+> **Notation.** Throughout, `expr => value` means "`expr` evaluates to
+> `value`." The `=>` and the result are an annotation, not part of the
+> program. Bare `=>` is itself a word — the anonymous-function arrow,
+> sugar for `afn` — so a line typed *with* its `=> value` annotation
+> builds a function instead of asserting the result.
+
 ## Contents
 
 * [Syntax](#syntax)
@@ -71,7 +77,13 @@ type you define with `def`.
 | `{:Type}` | Typed map (every value must match `Type`) |
 
 Commas are optional inside list and map literals — `[1 2 3]` and
-`[1, 2, 3]` are equivalent.
+`[1, 2, 3]` are equivalent. Two edge cases worth knowing:
+
+* An **empty slot between two commas** is not ignored — it
+  materialises a `null` element: `[1,,2] => [1 null 2]`. (This `null`
+  list-gap value is distinct from `none`: `null none eq => false`.)
+* A **duplicate key** in a map literal is accepted silently and the
+  last value wins: `{a: 1, a: 2} => {a:2}`.
 
 ### Comments
 
@@ -186,9 +198,17 @@ quoted key (`{'a/b': 1}`) or a computed key (`{[a/b]: 1}`).
   enough).
 * **Left-to-right.** Words that are still waiting evaluate strictly
   in source order. Use `(...)` to override.
-* **Quotation.** Lists are *unevaluated* by default. `do` evaluates
-  one as a sub-program; `quote` prevents evaluation of the next
-  token.
+* **Quotation.** A `[ … ]` literal **evaluates its contents** as a
+  sub-program and collects the resulting stack into the list — so
+  `[1 2 add] => [3]`, not `[1 2 add]`, and a bare `[dup mul]` errors
+  (it runs `dup` on an empty stack). To hold code *unevaluated*, use
+  `quote` (`quote [1 2 add] => [1 2 word(add)]`). `do` runs a list as
+  a program and leaves its result stack (`do [1 2 add] => 3`). The one
+  subtlety: when a `[ … ]` is written **directly as the block
+  argument** of a word that expects code — `do`, `each`, `if`/`for`
+  branches, `fn`/`macro` bodies — it is held deferred and run by that
+  word, which is why `each [dup mul]` works even though the same
+  bracket evaluated on its own would not.
 * **Macros.** A `macro` runs at expansion time on its operands *as
   code* and splices the result into the call site — new syntax in
   AQL itself. See **[Macros](#macros)**.
@@ -263,6 +283,15 @@ slash-separated paths in `pathof`; short names like `Number` or
 | `Timeout` | `Ideal/Timeout` |
 | `Interval` | `Ideal/Interval` |
 | `Function` | `Word/Function` |
+
+> **`Decimal` is a binary float.** Despite the name, a `Decimal` is an
+> IEEE-754 `float64`, not an exact base-10 number. Expect the usual
+> binary-floating-point results (`0.1 add 0.2 => 0.30000000000000004`).
+> `Integer` and `Decimal` are distinct nodes but compare equal by
+> magnitude (`1 eq 1.0 => true`, `1 cmp 1.0 => 0`); they are **not**
+> interchangeable, because integer `div` truncates while decimal `div`
+> does not. `convert` does not move a value between the two numeric
+> nodes — see [Type words](#type-words).
 
 ### Disjunctions
 
@@ -372,7 +401,25 @@ forms `a b sub`, `a sub b`, and `sub b a` compute `a - b`.
 | `pow` | `a ^ b` | `2 pow 10 => 1024` |
 
 `add` on non-numeric scalars performs string concatenation:
-`"a" add "b" => 'ab'`.
+`"a" add "b" => 'ab'`. This wins whenever **either** operand is
+non-numeric: the other operand is rendered to text and the result is
+a `String`, so `1 add "x" => '1x'` and `true 1 add => 'true1'` (no
+type error — `add` simply concatenates). Use it deliberately, not as
+a guard against mixed-type mistakes.
+
+Two further sharp edges on numbers:
+
+* **Integer division truncates** toward zero and never produces a
+  remainder or a `Decimal`: `7 div 2 => 3`, `1 div 2 => 0`. Use a
+  `Decimal` operand to get real division — `7.0 div 2 => 3.5`.
+* **Integer overflow is silent and inconsistent.** `add`/`mul` past
+  `maxint` promote to `Decimal` (losing integer precision):
+  `9223372036854775807 add 1 => 9223372036854776000.0`; `pow`
+  instead wraps two's-complement: `2 pow 63 => -9223372036854775808`.
+* `Decimal` is an IEEE-754 binary `float64`, **not** a base-10
+  decimal — `0.1 add 0.2 => 0.30000000000000004` and `1 eq 1.0 =>
+  true` even though the two divide differently. See
+  [Type system](#type-system).
 
 Additional numeric words (`abs`, `negate`, `sign`, `min`, `max`,
 `floor`, `ceil`, `round`, `trunc`, `sqrt`, `cbrt`, `exp`, `log`,
@@ -408,7 +455,7 @@ of the word, with the haystack as the forward arg.
 "aql:string-util" import end | `StringUtil.split` | Split string by separator | `StringUtil.split "a,b" "," => ['a','b']` |
 "aql:string-util" import end | `StringUtil.contains` | Substring test | `StringUtil.contains "hello" "ell" => true` |
 "aql:string-util" import end | `StringUtil.indexof` | Find substring position (also has a list form — see [List and array words](#list-and-array-words)) | `StringUtil.indexof "hello" "ll" => 2` |
-| `slice` | Substring; negative indices ok | `slice "hello" 1 3 => 'el'` |
+| `slice` | Substring; negative indices ok | `"hello" slice 1 3 => 'el'` |
 "aql:string-util" import end | `StringUtil.replace` | Replace pattern | `StringUtil.replace "hello" "l" "r" => 'herlo'` |
 "aql:string-util" import end | `StringUtil.repeat` | Repeat string | `StringUtil.repeat "ab" 3 => 'ababab'` |
 "aql:string-util" import end | `StringUtil.trim` | Trim whitespace or chars | `StringUtil.trim "  hi  " => 'hi'` |
@@ -427,19 +474,36 @@ Pass an Options map as the *last* forward argument:
 
 ### Boolean
 
+The built-in boolean words are `and`, `or`, `not`, and `xor`. The
+remaining gates — `nand`, `nor`, `xnor`, `implies`, `iff` — live in
+the `aql:logic-util` module and are called qualified after importing
+it.
+
 | Word | Description | Example |
 |------|-------------|---------|
-| `and` | Logical AND | `true and false => false` |
-| `or` | Logical OR | `true or false => true` |
+| `and` | Logical AND (short-circuit) | `true and false => false` |
+| `or` | Logical OR (short-circuit) | `true or false => true` |
 | `not` | Logical NOT | `not true => false` |
 | `xor` | Exclusive OR | `true xor true => false` |
-| `nand` | NOT AND | `true nand true => false` |
-| `implies` | Implication | `true implies false => false` |
+| `LogicUtil.nand` | NOT AND (needs `aql:logic-util`) | `LogicUtil.nand true true => false` |
+| `LogicUtil.implies` | Implication (needs `aql:logic-util`) | `true LogicUtil.implies false => false` |
+
+> **`and` / `or` return an operand, not a coerced boolean.** They
+> short-circuit and yield the value that decided the result, of
+> whatever type: `1 2 and => 2`, `false 5 and => false`, `0 9 or =>
+> 9`. Wrap with `not not` (or compare) if you need a strict `Boolean`.
 
 ### Comparison
 
 All comparison words route through one total order — see
 **[Explanation §Type ordering](EXPLANATION.md#type-ordering)**.
+
+> **Comparisons never reject mismatched types.** Because the order is
+> total across *every* type (roughly `Boolean < Number < String < …`),
+> `lt`/`gt`/`cmp` silently compare values of different families instead
+> of erroring: `1 lt "a" => true`, `true lt 1 => true`, and a
+> mixed list `[3 "a" 1 true] sort => [true 1 3 'a']`. If you mean to
+> compare like with like, check the types first — the engine will not.
 
 | Word | Description | Example |
 |------|-------------|---------|
@@ -683,6 +747,15 @@ For `if`, the canonical form is all-forward `if cond [then] [else]`
 expects. See
 **[Tutorial §3](TUTORIAL.md#the-argument-order-rule)**.
 
+`if` coerces its condition to a boolean (the same rule as `convert
+boolean`). The values that count as **false** are: `false`, `0` (and
+`0.0`), `none`, the empty list `[]`/empty map `{}`, the empty string
+`""`, and — as a special case — the exact string `"false"`.
+**Everything else is true**, including non-empty strings that look
+falsy: `"FALSE"`, `"0"`, and `"no"` are all truthy (only lowercase
+`"false"` is special). A condition that produces *no* value at all
+(e.g. an empty block `[]` as the condition) is an error, not a false.
+
 #### `for` forms
 
 ```
@@ -811,10 +884,20 @@ word — `size` subsumes it.
 
 | Word | Description | Example |
 |------|-------------|---------|
-| `get` / `.` | Lookup field/key | `{x:1} . x => 1` |
+| `get` / `.` | Lookup field/key, or index a list | `{x:1} . x => 1`; `[10,20,30] 0 get => 10` |
 | `getr` / `!.` | Strict lookup (errors if missing) | `{x:1} !. y => error` |
 | `set` | Set a key in a Store | `context set foo 99` |
 | `context` | Push the current context Store | `context` |
+
+> **`get`/`.` return `none` for anything not found — silently.** A
+> missing map key (`{a:1} . b => None`), an out-of-range list index
+> (`[10,20,30] 5 get => None`), and a negative index (`[10,20,30] -1
+> get => None` — there is **no** Python-style end-indexing) all yield
+> `none` rather than an error. Use the strict `getr`/`!.` form when a
+> missing key should fail loudly. Note also that `get` indexes **lists
+> and maps only** — strings are not indexable (`"hello" 0 get` is a
+> signature error), and string length is `StringUtil`-module
+> territory, not a base word.
 
 **Dotted access binds tightly.** A `.`/`!.` chain groups to a single
 `( … )` so it binds to its immediate receiver, not to a surrounding call:
@@ -858,10 +941,20 @@ consequences:
 | `typeof` | Type of a value (single Parent hop) | `typeof 42 => Integer` |
 | `pathof` | Ancestry path (root first, leaf last) | `pathof Integer` |
 | `is` | Type-compatibility test | `42 is Number => true` |
-| `convert` | Convert scalar between types | `convert Integer "42" => 42` |
+| `convert` | Parse/serialise a scalar to a type | `convert Integer "42" => 42` |
 | `base` | Zero / base value for a type | `base Integer => 0` |
 | `refine` | Build a refinement of a base type | `refine Object {count:0}` |
 | `make` | Construct typed value or instance | `make Point [1 2]` |
+
+> **`convert` parses text; it does not re-bucket numbers.** It turns a
+> `String` into a number (`convert Integer "42" => 42`) or a number
+> into text, but it will **not** move a value between the `Integer`
+> and `Decimal` nodes: `3.9 convert Integer` and even `3.0 convert
+> Integer` both error. To go from `Decimal` to `Integer`, use a
+> rounding word (`MathUtil.floor`, `MathUtil.round`, `MathUtil.trunc`
+> from `aql:math-util`). Note `make` is more permissive than
+> `convert`: a `:Number` record field accepts a numeric **string** and
+> coerces it (`make Point ["1" "2"] => {x:1 y:2}`).
 
 Named types are introduced by pairing `def` with a `refine`
 expression: `def Point refine Record [x:Number y:Number]`,
