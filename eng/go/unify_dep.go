@@ -33,7 +33,7 @@ func (d *depScalarUnifier) Match(v Value, t *Type) bool {
 		}
 		return DefaultBehavior.Match(v, t)
 	}
-	if !v.Parent.Matches(d.baseType) {
+	if !v.Parent.ConformsTo(d.baseType) {
 		return false
 	}
 	return depScalarCheck(d.depInfo, v)
@@ -122,7 +122,7 @@ func unifyDepScalar(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *Uni
 	// DepScalar vs concrete scalar over the same base.
 	depType := denotedType(dep)
 	otherType := denotedType(other)
-	if !otherType.Matches(depType) {
+	if !otherType.ConformsTo(depType) {
 		return Value{}, unifyFail("DepScalar base type does not match value's type", a, b)
 	}
 	info, err := dep.AsDepScalar()

@@ -621,8 +621,8 @@ func TestEngineCoreModuleSimple(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	moduleBody := NewList([]Value{
-		NewString("def"), NewString("val"), NewInteger(42), NewString("end"),
-		NewString("export"), NewAtom("myexp"),
+		NewWord("def"), NewString("val"), NewInteger(42), NewEnd(),
+		NewWord("export"), NewAtom("myexp"),
 		NewMap(singleMap("v", NewString("val"))),
 	})
 	result := runAQL(t, r, []Value{NewWord("module"), moduleBody})
@@ -639,8 +639,8 @@ func TestEngineCoreModuleImportAll(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	moduleBody := NewList([]Value{
-		NewString("def"), NewString("val"), NewInteger(88), NewString("end"),
-		NewString("export"), NewAtom("coreExp"),
+		NewWord("def"), NewString("val"), NewInteger(88), NewEnd(),
+		NewWord("export"), NewAtom("coreExp"),
 		NewMap(singleMap("v", NewString("val"))),
 	})
 	runAQL(t, r, []Value{
@@ -665,8 +665,8 @@ func TestEngineCoreModuleImportRename(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	moduleBody := NewList([]Value{
-		NewString("def"), NewString("val"), NewInteger(33), NewString("end"),
-		NewString("export"), NewAtom("origName"),
+		NewWord("def"), NewString("val"), NewInteger(33), NewEnd(),
+		NewWord("export"), NewAtom("origName"),
 		NewMap(singleMap("v", NewString("val"))),
 	})
 	runAQL(t, r, []Value{
@@ -687,11 +687,11 @@ func TestEngineCoreModuleImportMultiRename(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	moduleBody := NewList([]Value{
-		NewString("def"), NewString("a"), NewInteger(1), NewString("end"),
-		NewString("def"), NewString("b"), NewInteger(2), NewString("end"),
-		NewString("export"), NewAtom("ea"),
+		NewWord("def"), NewString("a"), NewInteger(1), NewEnd(),
+		NewWord("def"), NewString("b"), NewInteger(2), NewEnd(),
+		NewWord("export"), NewAtom("ea"),
 		NewMap(singleMap("v", NewString("a"))),
-		NewString("export"), NewAtom("eb"),
+		NewWord("export"), NewAtom("eb"),
 		NewMap(singleMap("v", NewString("b"))),
 	})
 	runAQL(t, r, []Value{
@@ -716,8 +716,8 @@ func TestEngineCoreModuleImportEmptyRenameError(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	moduleBody := NewList([]Value{
-		NewString("def"), NewString("x"), NewInteger(1), NewString("end"),
-		NewString("export"), NewAtom("ex"),
+		NewWord("def"), NewString("x"), NewInteger(1), NewEnd(),
+		NewWord("export"), NewAtom("ex"),
 		NewMap(singleMap("v", NewString("x"))),
 	})
 	runAQL(t, r, []Value{
@@ -739,8 +739,8 @@ func TestEngineCoreModuleImportMissingExportError(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	moduleBody := NewList([]Value{
-		NewString("def"), NewString("x"), NewInteger(1), NewString("end"),
-		NewString("export"), NewAtom("ex"),
+		NewWord("def"), NewString("x"), NewInteger(1), NewEnd(),
+		NewWord("export"), NewAtom("ex"),
 		NewMap(singleMap("v", NewString("x"))),
 	})
 	runAQL(t, r, []Value{
@@ -764,8 +764,8 @@ func TestEngineCoreModuleExportWithAtomString(t *testing.T) {
 	registerIOWords(r)
 	// Export using atom name (strings inside module are promoted to words)
 	moduleBody := NewList([]Value{
-		NewString("def"), NewString("val"), NewInteger(77), NewString("end"),
-		NewString("export"), NewAtom("atexp"),
+		NewWord("def"), NewString("val"), NewInteger(77), NewEnd(),
+		NewWord("export"), NewAtom("atexp"),
 		NewMap(singleMap("v", NewString("val"))),
 	})
 	result := runAQL(t, r, []Value{NewWord("module"), moduleBody})
@@ -1306,7 +1306,7 @@ func TestEngineCoreFnExplicitMapPatternE2E(t *testing.T) {
 	found := false
 	for _, v := range result {
 		_as47, _ := AsString(v)
-		if v.Parent.Matches(TString) && _as47 == "matched" {
+		if v.Parent.ConformsTo(TString) && _as47 == "matched" {
 			found = true
 		}
 	}

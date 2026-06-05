@@ -41,16 +41,16 @@ func TestTypePathBuiltins(t *testing.T) {
 
 func TestTypeMatchHierarchy(t *testing.T) {
 	// Integer is a subtype of Number is a subtype of Scalar.
-	if !TInteger.Matches(TNumber) {
+	if !TInteger.ConformsTo(TNumber) {
 		t.Error("Integer should match Number")
 	}
-	if !TInteger.Matches(TScalar) {
+	if !TInteger.ConformsTo(TScalar) {
 		t.Error("Integer should match Scalar")
 	}
-	if !TInteger.Matches(TAny) {
+	if !TInteger.ConformsTo(TAny) {
 		t.Error("Integer should match Any")
 	}
-	if TNumber.Matches(TInteger) {
+	if TNumber.ConformsTo(TInteger) {
 		t.Error("Number should NOT match Integer (only the reverse)")
 	}
 }
@@ -84,7 +84,7 @@ func TestValueConstructors(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if !c.value.Parent.Matches(c.want) {
+			if !c.value.Parent.ConformsTo(c.want) {
 				t.Errorf("Parent = %v does not match expected %v", c.value.Parent, c.want)
 			}
 			if !IsConcrete(c.value) {

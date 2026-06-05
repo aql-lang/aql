@@ -42,24 +42,24 @@ func ToNative(v Value) any {
 	switch {
 	case v.Parent == nil:
 		return nil
-	case v.Parent.Matches(TNone):
+	case v.Parent.ConformsTo(TNone):
 		return nil
-	case v.Parent.Matches(TString):
+	case v.Parent.ConformsTo(TString):
 		s, _ := AsString(v)
 		return s
-	case v.Parent.Matches(TInteger):
+	case v.Parent.ConformsTo(TInteger):
 		n, _ := AsInteger(v)
 		return n
-	case v.Parent.Matches(TDecimal):
+	case v.Parent.ConformsTo(TDecimal):
 		f, _ := AsDecimal(v)
 		return f
-	case v.Parent.Matches(TBoolean):
+	case v.Parent.ConformsTo(TBoolean):
 		b, _ := AsBoolean(v)
 		return b
-	case v.Parent.Matches(TAtom):
+	case v.Parent.ConformsTo(TAtom):
 		a, _ := AsAtom(v)
 		return a
-	case v.Parent.Matches(TMap):
+	case v.Parent.ConformsTo(TMap):
 		rm, err := AsMap(v)
 		if err != nil {
 			return v.String()
@@ -70,7 +70,7 @@ func ToNative(v Value) any {
 			out[k] = ToNative(vv)
 		}
 		return out
-	case v.Parent.Matches(TList):
+	case v.Parent.ConformsTo(TList):
 		rl, err := AsList(v)
 		if err != nil {
 			return v.String()

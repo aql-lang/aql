@@ -10,9 +10,9 @@ import (
 
 // --- DepScalar safety: don't fall through scalar dispatch ---
 //
-// `*Type.Matches` is overridden so that `DepInteger.Matches(TInteger)`
-// is true (used by sig matching). The risk is any code that does
-// `if v.Parent.Matches(TString) { _, _ := v.engine.AsString() }` — on a
+// `*Type.ConformsTo` reports `DepInteger.ConformsTo(TInteger)` as
+// true (used by sig matching). The risk is any code that does
+// `if v.Parent.ConformsTo(TString) { _, _ := v.engine.AsString() }` — on a
 // DepScalar payload, AsString errors, the underscore swallows the
 // error, and the caller gets a zero value. These tests pin the
 // DepScalar-specific branches in the four most-traveled equality /
@@ -125,7 +125,7 @@ func TestDepScalar_PrintRendersConstraint(t *testing.T) {
 }
 
 // --- Recover-based panic guard: a DepScalar flowing through any
-// surface that uses Matches(scalar)→AsX must not panic. Exercises
+// surface that uses ConformsTo(scalar)→AsX must not panic. Exercises
 // eq, lt (caught), and print together.
 func TestDepScalar_NoPanicOnHotPaths(t *testing.T) {
 	a, err := lang.New()
@@ -150,7 +150,7 @@ x print`)
 //
 // `ResolveSigType` historically had a dispatch ordering bug: String
 // and Atom DepScalars matched the IsWord/String/Atom name-resolution
-// branch (because their Parent.Matches(TString)/TAtom), where
+// branch (because their Parent.ConformsTo(TString)/TAtom), where
 // AsString silently failed and ResolveTypeName errored on the empty
 // name. The fix guards that branch with !v.IsDepScalar() so all
 // scalar-base DepScalars fall into the scalar-pattern branch (kind =

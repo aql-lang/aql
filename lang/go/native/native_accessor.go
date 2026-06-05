@@ -23,20 +23,34 @@ var accessorNatives = []NativeFunc{
 			// [Key | Node] — key forward, container from stack
 			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrMapHandler},
 			{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: getrMapHandler},
-			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getrMapHandler},
+			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getrMapHandler, ReturnsFn: returnsGetrIndexChecked},
 			// [Key | Object]
 			{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrObjectHandler},
 			{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: getrObjectHandler},
 			{Args: []*Type{TInteger, TObject}, BarrierPos: 1, Handler: getrObjectHandler},
 			// [Key | ModuleExport] / [Key | Module]
-			{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrModuleExportHandler},
-			{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Handler: getrModuleExportHandler},
+			{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrModuleExportHandler, ReturnsFn: moduleExportGetReturns},
+			{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Handler: getrModuleExportHandler, ReturnsFn: moduleExportGetReturns},
 			{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrModuleInstHandler},
 			{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Handler: getrModuleInstHandler},
 			// [Key | None]
 			{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: getrNoneHandler},
 		},
 	},
+}
+
+// returnsGetrIndexChecked is the check-mode ReturnsFn for the
+// integer-index `getr` sig. It runs the static bounds check (a no-op
+// for map/object containers and unknown-length carriers) and returns
+// the container's element-type carrier. `getr` errors at runtime on an
+// out-of-bounds list index, so a provably out-of-range literal —
+// `[10 20] 5 getr` — is flagged at `aql check`.
+func returnsGetrIndexChecked(args []Value, r *Registry) []Value {
+	if len(args) >= 2 {
+		CheckListIndex(r, args[0], args[1], "getr")
+		return ReturnsListElemAt(1)(args, r)
+	}
+	return []Value{NewCarrier(TAny)}
 }
 
 func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -46,8 +60,8 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		return nil, r.AqlError("getr_error", "getr: cannot access property on type literal", "getr")
 	}
 	// Integer key on list.
-	if key.Parent.Matches(TInteger) {
-		if list, _ := AsList(container); !list.IsNil() && container.Parent.Matches(TList) {
+	if key.Parent.ConformsTo(TInteger) {
+		if list, _ := AsList(container); !list.IsNil() && container.Parent.ConformsTo(TList) {
 			_as3, _ := AsInteger(key)
 			idx := int(_as3)
 			if idx < 0 || idx >= list.Len() {

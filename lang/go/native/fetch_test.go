@@ -371,7 +371,7 @@ func TestFetchResponseType(t *testing.T) {
 
 	resp := result[0]
 	// Ideal/Fetch/Response is an Ideal-family kind.
-	if !resp.Parent.Matches(TIdeal) {
+	if !resp.Parent.ConformsTo(TIdeal) {
 		t.Errorf("expected response to match Ideal, got %s", resp.Parent)
 	}
 	if !resp.Parent.Equal(TFetchResponse) {

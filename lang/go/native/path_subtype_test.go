@@ -2,7 +2,7 @@ package native
 
 import "testing"
 
-// PathSubtype is the lexical, path-prefix-only sibling of Matches.
+// PathSubtype is the lexical, path-prefix-only sibling of ConformsTo.
 // These tests pin its semantics — no `Any` matches-everything, no
 // metatype rules, no Dep<Leaf> override. The simpler check is
 // what callers want when they're about to do `v.AsX()` and a
@@ -39,21 +39,21 @@ func TestPathSubtype_DisjointTypes(t *testing.T) {
 
 // Under the Any-root lattice, `Any` IS the structural top — every
 // type chains to it via Parent — so PathSubtype now agrees with
-// Matches: Integer.PathSubtype(Any) is true (Any is on Integer's
-// parent chain), and Matches returns true for the same reason
-// (Any is still TAny-special-cased in Matches as a fast path, but
+// ConformsTo: Integer.PathSubtype(Any) is true (Any is on Integer's
+// parent chain), and ConformsTo returns true for the same reason
+// (Any is still TAny-special-cased in ConformsTo as a fast path, but
 // the ancestor walk would find it anyway).
 func TestPathSubtype_AnyIsLatticeRoot(t *testing.T) {
 	if !TInteger.PathSubtype(TAny) {
 		t.Errorf("Integer.PathSubtype(Any) = false (Any is the lattice root — every type chains up to it)")
 	}
-	if !TInteger.Matches(TAny) {
-		t.Errorf("Integer.Matches(Any) = false")
+	if !TInteger.ConformsTo(TAny) {
+		t.Errorf("Integer.ConformsTo(Any) = false")
 	}
 }
 
 // A DepScalar value's Parent IS the base scalar (e.g. TInteger), so
-// PathSubtype is trivially the identity relation here and Matches is
+// PathSubtype is trivially the identity relation here and ConformsTo is
 // true by ancestry walk — no bolt-on override is needed. The
 // constraint payload (DepScalarInfo) carries the refinement, detected
 // via v.IsDepScalar() at unify time.
@@ -62,24 +62,24 @@ func TestPathSubtype_DepScalarParentIsBase(t *testing.T) {
 	if !dep.Parent.Equal(TInteger) {
 		t.Errorf("DepScalar(Integer).Parent = %s, want Integer", dep.Parent.String())
 	}
-	if !dep.Parent.Matches(TInteger) {
-		t.Errorf("DepScalar(Integer).Matches(Integer) = false")
+	if !dep.Parent.ConformsTo(TInteger) {
+		t.Errorf("DepScalar(Integer).ConformsTo(Integer) = false")
 	}
 	if !dep.IsDepScalar() {
 		t.Errorf("DepScalar(Integer).IsDepScalar() = false")
 	}
 }
 
-// PathSubtype agrees with Matches on the cases neither special-rule
+// PathSubtype agrees with ConformsTo on the cases neither special-rule
 // touches — strict path-prefix relationships at the bottom of the
 // lattice.
-func TestPathSubtype_AgreesWithMatchesOnPrefixCases(t *testing.T) {
+func TestPathSubtype_AgreesWithConformsToOnPrefixCases(t *testing.T) {
 	cases := []struct {
 		name            string
 		t               *Type
 		pattern         *Type
 		wantPathSubtype bool
-		wantMatches     bool
+		wantConforms    bool
 	}{
 		{"Integer⊆Number", TInteger, TNumber, true, true},
 		{"Number⊆Scalar", TNumber, TScalar, true, true},
@@ -92,8 +92,8 @@ func TestPathSubtype_AgreesWithMatchesOnPrefixCases(t *testing.T) {
 			if got := tc.t.PathSubtype(tc.pattern); got != tc.wantPathSubtype {
 				t.Errorf("PathSubtype: got %v, want %v", got, tc.wantPathSubtype)
 			}
-			if got := tc.t.Matches(tc.pattern); got != tc.wantMatches {
-				t.Errorf("Matches: got %v, want %v", got, tc.wantMatches)
+			if got := tc.t.ConformsTo(tc.pattern); got != tc.wantConforms {
+				t.Errorf("ConformsTo: got %v, want %v", got, tc.wantConforms)
 			}
 		})
 	}

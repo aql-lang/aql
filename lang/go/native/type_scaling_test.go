@@ -71,7 +71,7 @@ func TestSupertypeMatchesSubtype(t *testing.T) {
 		child := mustTestType(t, levels[i])
 		for j := 0; j <= i; j++ {
 			parent := mustTestType(t, levels[j])
-			if !child.Matches(parent) {
+			if !child.ConformsTo(parent) {
 				t.Errorf("%q should match parent pattern %q", levels[i], levels[j])
 			}
 		}
@@ -95,7 +95,7 @@ func TestParentDoesNotMatchChildPattern(t *testing.T) {
 		parent := mustTestType(t, levels[i])
 		for j := i + 1; j < len(levels); j++ {
 			childPattern := mustTestType(t, levels[j])
-			if parent.Matches(childPattern) {
+			if parent.ConformsTo(childPattern) {
 				t.Errorf("%q should NOT match child pattern %q", levels[i], levels[j])
 			}
 		}
@@ -183,10 +183,10 @@ func TestSiblingTypesDoNotMatch(t *testing.T) {
 		for j := i + 1; j < len(siblings); j++ {
 			a := mustTestType(t, siblings[i])
 			b := mustTestType(t, siblings[j])
-			if a.Matches(b) {
+			if a.ConformsTo(b) {
 				t.Errorf("%q should not match %q", siblings[i], siblings[j])
 			}
-			if b.Matches(a) {
+			if b.ConformsTo(a) {
 				t.Errorf("%q should not match %q", siblings[j], siblings[i])
 			}
 		}
@@ -202,7 +202,7 @@ func TestAnyMatchesDeepTypes(t *testing.T) {
 			path += fmt.Sprintf("/Level%d", i)
 		}
 		typ := mustTestType(t, path)
-		if !typ.Matches(TAny) {
+		if !typ.ConformsTo(TAny) {
 			t.Errorf("depth %d: %q should match 'any'", depth, path)
 		}
 	}
@@ -222,7 +222,7 @@ func TestScalarMatchesNumberSubtypes(t *testing.T) {
 	}
 	for _, path := range subtypes {
 		typ := mustTestType(t, path)
-		if !typ.Matches(TScalar) {
+		if !typ.ConformsTo(TScalar) {
 			t.Errorf("%q should match scalar", path)
 		}
 	}
@@ -232,7 +232,7 @@ func TestScalarMatchesNumberSubtypes(t *testing.T) {
 
 func TestNumberIntegerWellKnownRelationships(t *testing.T) {
 	// number/integer matches number
-	if !TInteger.Matches(TNumber) {
+	if !TInteger.ConformsTo(TNumber) {
 		t.Error("number/integer should match number")
 	}
 	// number/integer is a subtype of number
@@ -240,7 +240,7 @@ func TestNumberIntegerWellKnownRelationships(t *testing.T) {
 		t.Error("number/integer should be subtype of number")
 	}
 	// number does NOT match number/integer
-	if TNumber.Matches(TInteger) {
+	if TNumber.ConformsTo(TInteger) {
 		t.Error("number should NOT match number/integer")
 	}
 	// number is NOT a subtype of number/integer
@@ -248,11 +248,11 @@ func TestNumberIntegerWellKnownRelationships(t *testing.T) {
 		t.Error("number should NOT be subtype of number/integer")
 	}
 	// number/integer matches any
-	if !TInteger.Matches(TAny) {
+	if !TInteger.ConformsTo(TAny) {
 		t.Error("number/integer should match any")
 	}
 	// number/integer matches scalar
-	if !TInteger.Matches(TScalar) {
+	if !TInteger.ConformsTo(TScalar) {
 		t.Error("number/integer should match scalar")
 	}
 }
@@ -658,11 +658,11 @@ func TestUnifySymmetry(t *testing.T) {
 
 // ===== Efficiency tests: thousands of sibling types =====
 
-// TestMatchesEfficiencyThousandsOfSiblings confirms that matching a/b/x against
+// TestConformsToEfficiencyThousandsOfSiblings confirms that matching a/b/x against
 // a/b is O(len(pattern)) and not affected by how many sibling types a/b/x<N> exist.
 // We create 10,000 distinct types under the same parent and verify that matching
 // each one against the parent pattern takes constant time per check.
-func TestMatchesEfficiencyThousandsOfSiblings(t *testing.T) {
+func TestConformsToEfficiencyThousandsOfSiblings(t *testing.T) {
 	const numSiblings = 10_000
 	parent := mustTestType(t, "A/B")
 
@@ -674,23 +674,23 @@ func TestMatchesEfficiencyThousandsOfSiblings(t *testing.T) {
 
 	// Every sibling must match the parent
 	for i, sib := range siblings {
-		if !sib.Matches(parent) {
+		if !sib.ConformsTo(parent) {
 			t.Fatalf("sibling A/B/%d should match A/B", i)
 		}
 	}
 
-	// Time the full pass: 10,000 Matches calls should be very fast (<50ms easily)
+	// Time the full pass: 10,000 ConformsTo calls should be very fast (<50ms easily)
 	start := time.Now()
 	for _, sib := range siblings {
-		sib.Matches(parent)
+		sib.ConformsTo(parent)
 	}
 	elapsed := time.Since(start)
 
 	// 10,000 prefix comparisons should be sub-millisecond; generous 50ms limit
 	if elapsed > 50*time.Millisecond {
-		t.Errorf("10,000 Matches calls took %v — expected <50ms", elapsed)
+		t.Errorf("10,000 ConformsTo calls took %v — expected <50ms", elapsed)
 	}
-	t.Logf("10,000 Matches calls completed in %v", elapsed)
+	t.Logf("10,000 ConformsTo calls completed in %v", elapsed)
 }
 
 // TestIsSubtypeOfEfficiencyThousandsOfSiblings confirms IsSubtypeOf is O(len(parent)).

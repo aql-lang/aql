@@ -157,6 +157,14 @@ type ChildTypeInfo struct {
 	Child    Value
 	Elements []Value // optional: concrete elements alongside the child constraint
 	Entries  []ChildEntry
+	// Len is an optional statically-known length for a typed-list
+	// carrier (nil = unknown). Set by length-producing words whose
+	// result length can be computed exactly in check mode (e.g. iota),
+	// it lets StaticListLen recover a bound for a computed list so the
+	// index checker can flag a provably out-of-range access. It MUST be
+	// an exact length or an upper bound — never an underestimate, which
+	// would turn an in-bounds access into a false positive.
+	Len *int
 }
 
 // ChildEntry is a (key, value) pair retained for typed maps that
@@ -451,6 +459,16 @@ type ReturnCheckInfo struct {
 // A disjunct unifies if any of its alternatives unifies with the target.
 type DisjunctInfo struct {
 	Alternatives []Value
+}
+
+// NegationInfo holds the inner type of a negation (complement) type. A
+// value satisfies `tnot Inner` iff it does NOT satisfy Inner. The
+// negation is the kernel's set-theoretic complement; together with
+// DisjunctInfo (union) and TandValues (intersection) it closes the type
+// algebra under Boolean operations — see
+// design/elixir-types-in-aql-report.0.md.
+type NegationInfo struct {
+	Inner Value
 }
 
 // ObjectTypeInfo holds the type definition for an object type.
@@ -756,6 +774,20 @@ type Value struct {
 	Pos       SrcPos  // source position for error reporting (zero value = unknown)
 	Undefined bool    // atom created from an undefined word (error if left on result stack)
 	Carrier   bool    // static-typecheck carrier (type-only, Data stripped of concrete payload)
+	// Dynamic marks a carrier as a bounded gradual value (Elixir-style
+	// dynamic(T) — design/dynamic-modality-report.0.md). Implies Carrier.
+	// Its Parent/Data is a BOUND, not a proven type: at a signature
+	// boundary it matches the slot unless PROVABLY disjoint from it
+	// (not-disjoint rule), rather than by strict ConformsTo. Set only on
+	// carriers the checker cannot prove exactly (escape hatches); cleared
+	// by a successful guard, which discharges the gradual obligation.
+	Dynamic bool
+	// DynFrom is the binding name a dynamic carrier was resolved from
+	// (check mode only). It lets narrowing-through-use tighten that
+	// binding to dynamic(bound ∩ slot) at a typed use, so a later
+	// provably-disjoint use of the same name is caught. Empty for
+	// non-binding-derived carriers; never read at runtime.
+	DynFrom string
 }
 
 // idRand is the package-level RNG used for ID generation.
@@ -832,7 +864,7 @@ func NewValueRaw(t *Type, data Payload) Value {
 // String subtype: EmptyString for "" (the unique inhabitant of the
 // EmptyString singleton type) and ProperString for any non-empty
 // payload. Both subtypes match Scalar/String via the type lattice
-// (TStringProper.Matches(TString) and TStringEmpty.Matches(TString)
+// (TStringProper.ConformsTo(TString) and TStringEmpty.ConformsTo(TString)
 // are true), so signatures declared on TString continue to dispatch
 // transparently — the difference is observable only via typeof,
 // pattern dispatch, or explicit subtype-equality checks.
@@ -1061,7 +1093,7 @@ func NewNone() Value {
 // Is reports whether v satisfies type t, routed through t.Behavior.
 // The canonical dispatch point for "is v a T?" — used by handlers,
 // the matcher, and `is` / `guard`. Default Behavior delegates to the
-// lattice walk (v.Parent.Matches(t)); types with custom Behavior
+// lattice walk (v.Parent.ConformsTo(t)); types with custom Behavior
 // override (predicate types invoke their body, record types check
 // field-by-field conformance, etc.).
 //
@@ -1074,7 +1106,7 @@ func (v Value) Is(t *Type) bool {
 		return false
 	}
 	if t.Behavior == nil {
-		return v.Parent.Matches(t)
+		return v.Parent.ConformsTo(t)
 	}
 	return t.Behavior.Match(v, t)
 }
@@ -1320,6 +1352,12 @@ func NewEnum(alternatives []Value) Value {
 	return NewValueRaw(TEnum, DisjunctInfo{Alternatives: alternatives})
 }
 
+// NewNegation creates a negation (complement) type value whose
+// inhabitants are exactly the values that do NOT satisfy inner.
+func NewNegation(inner Value) Value {
+	return NewValueRaw(TNegation, NegationInfo{Inner: inner})
+}
+
 // NewObjectType creates an object type value. The caller must
 // provide the canonical *Type identity — typically minted via
 // r.Types.MintType for named types being installed, or for anonymous
@@ -1460,7 +1498,7 @@ func IsForward(v Value) bool {
 
 // IsBoolean reports whether this value is a boolean type.
 func IsBoolean(v Value) bool {
-	return v.Parent.Matches(TBoolean)
+	return v.Parent.ConformsTo(TBoolean)
 }
 
 // IsOpenParen reports whether this value is an open-paren marker.
@@ -1613,7 +1651,7 @@ func AsDefCleanup(v Value) (DefCleanupInfo, error) {
 // (Type/Disjunct/Enum).
 func IsDisjunct(v Value) bool {
 	_, ok := v.Data.(DisjunctInfo)
-	return ok && v.Parent.Matches(TDisjunct)
+	return ok && v.Parent.ConformsTo(TDisjunct)
 }
 
 // AsDisjunct returns the DisjunctInfo, panics if not a disjunct.
@@ -1621,6 +1659,22 @@ func AsDisjunct(v Value) (DisjunctInfo, error) {
 	info, ok := v.Data.(DisjunctInfo)
 	if !ok {
 		return DisjunctInfo{}, fmt.Errorf("AsDisjunct: not a disjunct value (got %T)", v.Data)
+	}
+	return info, nil
+}
+
+// IsNegation reports whether v is a negation (complement) type value.
+func IsNegation(v Value) bool {
+	_, ok := v.Data.(NegationInfo)
+	return ok && v.Parent.ConformsTo(TNegation)
+}
+
+// AsNegation returns the NegationInfo payload, or an error if v is not
+// a negation value.
+func AsNegation(v Value) (NegationInfo, error) {
+	info, ok := v.Data.(NegationInfo)
+	if !ok {
+		return NegationInfo{}, fmt.Errorf("AsNegation: not a negation value (got %T)", v.Data)
 	}
 	return info, nil
 }
@@ -1647,7 +1701,7 @@ func AsObjectType(v Value) (ObjectTypeInfo, error) {
 // IsStore reports whether this value is a Store instance.
 func IsStore(v Value) bool {
 	_, ok := v.Data.(*StoreInstanceInfo)
-	return ok && v.Parent.Matches(TStore)
+	return ok && v.Parent.ConformsTo(TStore)
 }
 
 // AsStore returns the StoreInstanceInfo pointer. Returns an error if not a store.
@@ -1662,7 +1716,7 @@ func AsStore(v Value) (*StoreInstanceInfo, error) {
 // IsArray reports whether this value is an Array instance.
 func IsArray(v Value) bool {
 	_, ok := v.Data.(*ArrayInstanceInfo)
-	return ok && v.Parent.Matches(TArray)
+	return ok && v.Parent.ConformsTo(TArray)
 }
 
 // AsArray returns the ArrayInstanceInfo pointer. Returns an error if not an array.
@@ -1862,7 +1916,7 @@ func AsDecimal(v Value) (float64, error) {
 // AsNumber returns the numeric value as float64 regardless of whether it is
 // an integer or decimal.
 func AsNumber(v Value) (float64, error) {
-	if v.Parent.Matches(TDecimal) {
+	if v.Parent.ConformsTo(TDecimal) {
 		f, err := AsDecimal(v)
 		return f, err
 	}
@@ -1976,6 +2030,15 @@ func AsMutableMap(v Value) (*OrderedMap, error) {
 
 // String returns a human-readable representation.
 func (v Value) String() string {
+	// A dynamic carrier renders as dynamic(<bound>) so the gradual
+	// modality is legible in traces / `aql check` output instead of
+	// masquerading as its bare bound (design/dynamic-modality-report.0.md).
+	// Render the bound by clearing the flag and recursing.
+	if v.Dynamic {
+		inner := v
+		inner.Dynamic = false
+		return "dynamic(" + inner.String() + ")"
+	}
 	// Behavior-driven format delegation: types that supply a custom
 	// TypeBehavior route through their Format. Walks the Parent
 	// chain so descendants of a type with a custom Behavior inherit
@@ -2054,23 +2117,23 @@ func kernelFormatDefault(v Value) string {
 		return typeNodeOf(v).Leaf()
 	case v.IsDepScalar():
 		// Must come before TString / TInteger / TDecimal matches: the
-		// lattice override makes DepString.Matches(TString) (and the
+		// lattice override makes DepString.ConformsTo(TString) (and the
 		// numeric counterparts) true, so without this case the value
 		// payload would be cast to the wrong concrete type.
 		return renderDepScalar(v)
-	case v.Parent.Matches(TString):
+	case v.Parent.ConformsTo(TString):
 		s, _ := AsString(v)
 		return fmt.Sprintf("'%s'", s)
 	case v.Parent.Equal(TAtom):
 		s, _ := AsAtom(v)
 		return s
-	case v.Parent.Matches(TDecimal):
+	case v.Parent.ConformsTo(TDecimal):
 		_as4, _ := AsDecimal(v)
 		return formatDecimal(_as4)
-	case v.Parent.Matches(TInteger):
+	case v.Parent.ConformsTo(TInteger):
 		n, _ := AsInteger(v)
 		return fmt.Sprintf("%d", n)
-	case v.Parent.Matches(TBoolean):
+	case v.Parent.ConformsTo(TBoolean):
 		_as5, _ := AsBoolean(v)
 		if _as5 {
 			return "true"
@@ -2131,6 +2194,14 @@ func kernelFormatDefault(v Value) string {
 			parts[i] = alt.String()
 		}
 		return strings.Join(parts, "|")
+	case IsNegation(v):
+		ni, _ := AsNegation(v)
+		// Parenthesise a compound inner so `tnot (A|B)` doesn't misread
+		// as `(tnot A)|B`.
+		if IsDisjunct(ni.Inner) || IsNegation(ni.Inner) {
+			return "tnot (" + ni.Inner.String() + ")"
+		}
+		return "tnot " + ni.Inner.String()
 	// A function value (TFnDef / TFunction, payload FnDefInfo) renders
 	// as a compact `fn name(sig…)` summary. Crucially it does NOT fall
 	// through to the `%v` default, which would dump the whole FnDefInfo
@@ -2203,7 +2274,7 @@ func IsTypeValue(v Value) bool {
 	}
 
 	// Concrete list: check each element recursively.
-	if v.Parent.Matches(TList) && v.Data != nil {
+	if v.Parent.ConformsTo(TList) && v.Data != nil {
 		elems, _ := AsList(v)
 		if !elems.IsNil() {
 			for _, elem := range elems.Slice() {
@@ -2215,7 +2286,7 @@ func IsTypeValue(v Value) bool {
 	}
 
 	// Concrete map: check each value recursively.
-	if v.Parent.Matches(TMap) && v.Data != nil {
+	if v.Parent.ConformsTo(TMap) && v.Data != nil {
 		m, _ := AsMap(v)
 		if m != nil {
 			for _, key := range m.Keys() {

@@ -209,6 +209,30 @@ func getrModuleExportHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 	return nil, r.AqlError("getr_error", fmt.Sprintf("getr: export %q not found in module", k), "getr")
 }
 
+// moduleExportGetReturns is the check-mode counterpart for `get`/`getr`
+// on a ModuleExport. Without it `Pkg.fn` resolves to a bare Any carrier
+// under static analysis, and every downstream use of an imported export
+// loses its type (a function export can no longer be dispatched or
+// checked). When the ModuleExport and key are both concrete — which they
+// are for `Pkg.key` access, since the key arrives as a /q-captured atom —
+// it returns the raw export value: a function export keeps its FnDefInfo
+// (toCarrier preserves it, so it stays dispatchable), a data export
+// becomes a carrier of its concrete type. Anything unresolved degrades
+// to Any, matching the previous behaviour.
+func moduleExportGetReturns(args []Value, _ *Registry) []Value {
+	if len(args) == 2 && IsConcrete(args[1]) {
+		if val, ok := moduleExportGet(args[1], getKey(args[0])); ok {
+			return []Value{val}
+		}
+	}
+	// A missing / unresolved export stays a strict Any: emitting
+	// dynamic(Any) here would *admit* downstream typed uses and so mask
+	// a likely typo worse than the strict fallback (which fails loudly
+	// at the next typed slot). Dynamic escape hatches are for genuinely
+	// unknown VALUES, not unresolved names.
+	return []Value{NewCarrier(TAny)}
+}
+
 func getModuleInstHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[1]) {
 		return nil, r.AqlError("get_error", "get: cannot access property on type literal", "get")

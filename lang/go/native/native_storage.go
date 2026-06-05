@@ -76,8 +76,8 @@ var storageNatives = []NativeFunc{
 			{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
 			{Args: []*Type{TInteger, TObject}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
 			// [Key | ModuleExport] — transparent export access + $module/$name
-			{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getModuleExportHandler, Returns: []*Type{TAny}},
-			{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Handler: getModuleExportHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getModuleExportHandler, ReturnsFn: moduleExportGetReturns},
+			{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Handler: getModuleExportHandler, ReturnsFn: moduleExportGetReturns},
 			// [Key | Module] — descriptor fields (id/kind/file/folder/exports)
 			{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getModuleInstHandler, Returns: []*Type{TAny}},
 			{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Handler: getModuleInstHandler, Returns: []*Type{TAny}},
@@ -142,9 +142,9 @@ func getNodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		return nil, r.AqlError("get_error", "get: cannot access property on type literal", "get")
 	}
 	// Integer key: list index access.
-	if key.Parent.Matches(TInteger) {
+	if key.Parent.ConformsTo(TInteger) {
 		idx, _ := AsInteger(key)
-		if list, _ := AsList(container); !list.IsNil() && container.Parent.Matches(TList) {
+		if list, _ := AsList(container); !list.IsNil() && container.Parent.ConformsTo(TList) {
 			i := int(idx)
 			if i < 0 || i >= list.Len() {
 				return []Value{NewTypeLiteral(TNone)}, nil
@@ -237,7 +237,17 @@ func getStoreHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 }
 
 func getStoreReturnsFn(args []Value, r *Registry) []Value {
-	v, _ := r.Check.LookupContextType(StoreKey(args[0]))
+	v, ok := r.Check.LookupContextType(StoreKey(args[0]))
+	if !ok {
+		// Escape hatch: the checker has no proven type for this key.
+		// Emit a bounded gradual carrier dynamic(Any) — optimistically
+		// compatible with any slot — rather than strict Carry<Any>, which
+		// would fail every typed slot downstream and force a no_signature
+		// or Any catch-all. (design/dynamic-modality-report.0.md, escape
+		// hatch 1.) A key recorded by a prior `set` keeps its real, strict
+		// carrier.
+		return []Value{NewDynamicCarrier(TAny)}
+	}
 	return []Value{v}
 }
 

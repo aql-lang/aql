@@ -32,6 +32,27 @@ func NewCarrier(t *Type) Value {
 	return v
 }
 
+// NewDynamicCarrier constructs a bounded gradual carrier dynamic(t):
+// a carrier whose Parent is the BOUND t and whose Dynamic flag flips
+// matching to the not-disjoint rule (design/dynamic-modality-report.0.md).
+// dynamic(Any) is the classic gradual `any` — compatible with every
+// slot. Use this at an escape hatch where the checker has a best static
+// bound but cannot prove the exact type.
+func NewDynamicCarrier(t *Type) Value {
+	v := NewCarrier(t)
+	v.Dynamic = true
+	return v
+}
+
+// NewDynamicCarrierValue promotes an existing carrier value (e.g. a
+// disjunct carrier for dynamic(A tor B), or a narrowed bound) to the
+// dynamic modality, preserving its Parent/Data bound.
+func NewDynamicCarrierValue(bound Value) Value {
+	bound.Carrier = true
+	bound.Dynamic = true
+	return bound
+}
+
 // NewCarrierTypedList constructs a typed-list carrier — a list
 // carrier whose element type is known. Implemented as a regular
 // Value with Parent=TList and Data=ChildTypeInfo{Child: NewCarrier(elem)}.
@@ -51,6 +72,20 @@ func NewCarrierTypedList(elem *Type) Value {
 func NewCarrierTypedListValue(child Value) Value {
 	v := NewTypedList(child)
 	v.Carrier = true
+	return v
+}
+
+// NewCarrierTypedListLen constructs a typed-list carrier with a
+// statically-known length, so a downstream index check can reason
+// about a computed list (e.g. `iota n`). n MUST be the exact length
+// or an upper bound — never an underestimate (see ChildTypeInfo.Len).
+func NewCarrierTypedListLen(elem *Type, n int) Value {
+	v := NewCarrierTypedList(elem)
+	if ct, ok := v.Data.(ChildTypeInfo); ok {
+		ln := n
+		ct.Len = &ln
+		v.Data = ct
+	}
 	return v
 }
 
@@ -124,9 +159,26 @@ func toCarrier(v Value) Value {
 		IsReturnCheck(v) || IsDefCleanup(v) {
 		return v
 	}
+	// A dynamic carrier already IS a carrier; its Parent/Data is the
+	// gradual bound (which may be a disjunct). Return it unchanged so
+	// stripping never nulls the bound or clears the Dynamic flag.
+	if v.Dynamic {
+		return v
+	}
 	// Keep lists and maps concrete for now — matchSignature relies
 	// on Data presence for a few compound cases.
 	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) {
+		return v
+	}
+	// Keep concrete integer literals concrete so static index checking
+	// can recover the value (an out-of-bounds literal index like
+	// `[10 20] 5 getr`). Stripping would lose the value and force the
+	// index check to give up. This only preserves genuine concrete
+	// integers (IntPayload) — DepScalar constraints (Data is a
+	// DepScalarInfo) and carriers are untouched. Precision only
+	// increases: a literal stays concrete until a word consumes it and
+	// produces a computed carrier, exactly as lists/maps already behave.
+	if v.Parent.Equal(TInteger) && IsConcrete(v) && !v.IsDepScalar() {
 		return v
 	}
 	// Keep FnDef / Function payloads (FnDefInfo) concrete. Stripping
@@ -136,6 +188,17 @@ func toCarrier(v Value) Value {
 	// than to the inner FnDefInfo, breaking subsequent invocation +
 	// inference of `add5 3`.
 	if _, ok := v.Data.(FnDefInfo); ok {
+		return v
+	}
+	// Keep Reach values (dot-access `m.a`, `Pkg.fn`) concrete. A parsed
+	// dot-access is a Reach whose ReachInfo carries the Eval flag and the
+	// get/getr segments; the engine expands it in place at step time
+	// (isEvalReach → expandReach). Stripping would null the ReachInfo,
+	// so isEvalReach goes false and the chain never expands — dot-access
+	// would be opaque in check mode, silently dropping module-export type
+	// propagation, index checks, and dispatch diagnostics. Same rationale
+	// as the FnDefInfo case above.
+	if IsReach(v) {
 		return v
 	}
 	// Type literals (Data already nil) are already in the right
@@ -179,7 +242,7 @@ var checkModeLiteralWords = map[string]bool{
 func StripToCarriers(in []Value) []Value {
 	out := make([]Value, len(in))
 	for i, v := range in {
-		if v.Parent.Matches(TString) && IsConcrete(v) && adjacentToLiteralWord(in, i) {
+		if v.Parent.ConformsTo(TString) && IsConcrete(v) && adjacentToLiteralWord(in, i) {
 			out[i] = v
 			continue
 		}
@@ -223,17 +286,18 @@ func isLiteralWord(v Value) bool {
 // args that would be passed to the runtime handler). pos carries the
 // word's source location so diagnostics can point at it.
 func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos SrcPos) []Value {
-	if sig.ReturnsFn != nil {
+	narrowDynamicUses(r, sig, args)
+	var out []Value
+	switch {
+	case sig.ReturnsFn != nil:
 		raw := sig.ReturnsFn(args, r)
-		out := make([]Value, len(raw))
+		out = make([]Value, len(raw))
 		for i, v := range raw {
 			out[i] = toCarrier(v)
 		}
-		return out
-	}
-	// Explicit nil (no annotation) triggers the fallback. An empty but
-	// non-nil slice is a valid "returns nothing" declaration.
-	if sig.Returns == nil {
+	case sig.Returns == nil:
+		// Explicit nil (no annotation) triggers the fallback. An empty but
+		// non-nil slice is a valid "returns nothing" declaration.
 		r.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "missing_returns",
 			Detail: "word " + word + " has no declared Returns for matched signature; assuming Any",
@@ -241,13 +305,135 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 			Row:    pos.Row,
 			Col:    pos.Col,
 		})
-		return []Value{NewCarrier(TAny)}
+		out = []Value{NewCarrier(TAny)}
+	default:
+		out = make([]Value, len(sig.Returns))
+		for i, t := range sig.Returns {
+			out[i] = NewCarrier(t)
+		}
 	}
-	out := make([]Value, len(sig.Returns))
-	for i, t := range sig.Returns {
-		out[i] = NewCarrier(t)
+	// Gradual contagion (design/dynamic-modality-report.0.md): a result
+	// derived from a dynamic carrier is itself dynamic, so the modality
+	// flows downstream instead of dying after one dispatch. The bound is
+	// the sig's declared return (the first-cut result; the full
+	// first-match partition over the bound is a later slice). Sound — it
+	// only loosens matching, never tightens — and a guard discharges it
+	// back to strict. ReturnsFn results that are already dynamic (e.g.
+	// ReturnsIdentity of a dynamic input) stay so via toCarrier.
+	if anyDynamicCarrier(args) {
+		for i := range out {
+			out[i].Carrier = true
+			out[i].Dynamic = true
+		}
+		// First-match partition (design/dynamic-modality-report.0.md): a
+		// dynamic bound can reach MULTIPLE of the word's overloads, whose
+		// returns may differ. The single matched-sig return is then too
+		// narrow — it would wrongly reject a downstream use of one of the
+		// other reachable returns. Widen the (single) result to the union
+		// of all reachable returns. No-op for the common case (one
+		// reachable return), so unobservable with return-uniform words.
+		if len(out) == 1 {
+			if rets := dynamicReachableReturns(r, word, args); len(rets) >= 2 {
+				alts := make([]Value, len(rets))
+				for i, t := range rets {
+					alts[i] = NewTypeLiteral(t)
+				}
+				out[0] = NewDynamicCarrierValue(NewDisjunct(alts))
+			}
+		}
 	}
 	return out
+}
+
+// dynamicReachableReturns returns the distinct single-position return
+// types of every signature of `word` that the (dynamic) args reach, but
+// only when there are TWO OR MORE distinct returns — the case the
+// single matched-sig return would get wrong. Returns nil otherwise (the
+// common case: contagion's matched-sig return is already correct).
+// Restricted to same-arity, single-static-return sigs; any other shape
+// falls back to contagion.
+func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
+	fn := r.Lookup(word)
+	if fn == nil || len(fn.Signatures) < 2 {
+		return nil
+	}
+	var rets []*Type
+	seen := map[string]bool{}
+	for i := range fn.Signatures {
+		s := &fn.Signatures[i]
+		if len(s.Args) != len(args) || len(s.Returns) != 1 || s.Returns[0] == nil {
+			return nil // a shape we don't refine — defer to contagion
+		}
+		reach := true
+		for j := range args {
+			if !sigTypeMatches(args[j], s.Args[j]) {
+				reach = false
+				break
+			}
+		}
+		if !reach {
+			continue
+		}
+		if t := s.Returns[0]; !seen[t.ID] {
+			seen[t.ID] = true
+			rets = append(rets, t)
+		}
+	}
+	if len(rets) < 2 {
+		return nil
+	}
+	return rets
+}
+
+// narrowDynamicUses implements narrowing-through-use
+// (design/dynamic-modality-report.0.md): when a dynamic carrier resolved
+// from a binding is consumed by a typed slot, the binding tightens to
+// dynamic(bound ∩ slot) for downstream uses, so a later provably-disjoint
+// use of the same name fails the match rule and is flagged — no explicit
+// guard needed. Scoped via the def stack: branch analysis
+// (RunCarrierBodyWithDefs) truncates these pushes, so a then-branch
+// narrowing never leaks to the else-branch. Sound — the bound only
+// tightens, never widens.
+func narrowDynamicUses(r *Registry, sig *Signature, args []Value) {
+	if r == nil || sig == nil || !r.Check.IsActive() {
+		return
+	}
+	for i, a := range args {
+		if !a.Dynamic || a.DynFrom == "" {
+			continue
+		}
+		// Only narrow a binding that is itself still dynamic (consistent
+		// with this value) — guards against a since-rebound name.
+		cur, ok := r.Defs.Top(a.DynFrom)
+		if !ok || !cur.Dynamic {
+			continue
+		}
+		slot := sigArgType(sig, i)
+		if slot == nil {
+			continue
+		}
+		bound := cur
+		bound.Dynamic, bound.DynFrom = false, ""
+		narrowed := TandValues(bound, NewCarrier(slot))
+		// A successful match guarantees a non-disjoint intersection; skip
+		// when the bound did not actually tighten (no-op / avoids
+		// unbounded layer growth on repeated same-type uses).
+		if isNeverShape(narrowed) || ValuesEqual(bound, narrowed) {
+			continue
+		}
+		r.Defs.Push(a.DynFrom, NewDynamicCarrierValue(narrowed))
+	}
+}
+
+// anyDynamicCarrier reports whether any value is a dynamic carrier — the
+// trigger for gradual contagion in carrierResults.
+func anyDynamicCarrier(vs []Value) bool {
+	for _, v := range vs {
+		if v.Dynamic {
+			return true
+		}
+	}
+	return false
 }
 
 // ReturnsIdentity is a ReturnsFunc helper that returns its inputs
@@ -291,8 +477,8 @@ func ReturnsStatic(types ...*Type) ReturnsFunc {
 func ReturnsNumericBinary() ReturnsFunc {
 	return func(args []Value, _ *Registry) []Value {
 		if len(args) == 2 &&
-			args[0].Parent.Matches(TInteger) &&
-			args[1].Parent.Matches(TInteger) {
+			args[0].Parent.ConformsTo(TInteger) &&
+			args[1].Parent.ConformsTo(TInteger) {
 			return []Value{NewCarrier(TInteger)}
 		}
 		return []Value{NewCarrier(TDecimal)}
@@ -363,11 +549,11 @@ func JoinCarriers(a, b Value) Value {
 		return out
 	}
 	if !IsDisjunct(a) && !IsDisjunct(b) {
-		if a.Parent.Matches(b.Parent) {
+		if a.Parent.ConformsTo(b.Parent) {
 			// a is subtype of b → widen to b
 			return NewCarrier(b.Parent)
 		}
-		if b.Parent.Matches(a.Parent) {
+		if b.Parent.ConformsTo(a.Parent) {
 			return NewCarrier(a.Parent)
 		}
 		// Check for a non-trivial common ancestor (shared prefix of at
@@ -614,7 +800,7 @@ func LiteralCondValue(condList Value) (bool, bool) {
 		}
 	}
 	// Concrete Boolean value with Data set (post-runtime path).
-	if only.Parent.Matches(TBoolean) && only.Data != nil {
+	if only.Parent.ConformsTo(TBoolean) && only.Data != nil {
 		b, err := AsBoolean(only)
 		if err == nil {
 			return b, true
@@ -667,33 +853,35 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 		if !ok {
 			continue
 		}
-		if !IsDisjunct(cur) {
+		// Else-branch narrowing: x had type `cur`; the guard `x is T`
+		// failed, so on the else path x is `cur tand (tnot T)`. The
+		// negation + intersection algebra computes this uniformly and is
+		// strictly more capable than the old exact-alternative subtraction:
+		//   - a disjunct loses every alternative contained in T, including
+		//     when T is a *supertype* of an alternative ((Integer tor
+		//     String) tand tnot Number → String);
+		//   - a plain type disjoint from T is unchanged (no-op);
+		//   - a type wholly inside T collapses to Never (unreachable else).
+		complement := NegateType(NewTypeLiteral(c.Type))
+		narrowed := TandValues(cur, complement)
+		if isNeverShape(narrowed) {
+			// Else branch is unreachable for x — leave the binding as-is
+			// rather than push a Never carrier that fails every later use.
 			continue
 		}
-		di, err := AsDisjunct(cur)
-		if err != nil {
-			continue
-		}
-		var remaining []Value
-		for _, alt := range di.Alternatives {
-			if ValueType(alt).Equal(c.Type) {
-				continue
-			}
-			remaining = append(remaining, alt)
-		}
-		if len(remaining) == len(di.Alternatives) || len(remaining) == 0 {
-			// No change (alt not found) or all subtracted — skip.
-			continue
-		}
-		var narrowed Value
-		if len(remaining) == 1 {
-			// remaining[0] is a type literal (a by-value copy of its
-			// lattice node); the denoted type is ValueType(remaining[0]),
-			// not remaining[0].Parent (which is the supertype).
-			narrowed = NewCarrier(ValueType(remaining[0]))
+		// Normalise to carrier form: a single surviving type becomes a
+		// carrier of that type (Parent = the type, like NewCarrier); a
+		// disjunct or other compound keeps its payload and is marked
+		// abstract.
+		if IsBareTypeNode(narrowed) {
+			narrowed = NewCarrier(ValueType(narrowed))
 		} else {
-			narrowed = NewDisjunct(remaining)
 			narrowed.Carrier = true
+		}
+		if ValuesEqual(narrowed, cur) {
+			// Complement did not refine cur (T disjoint from cur, or AQL
+			// has no positive representation for the exact difference).
+			continue
 		}
 		r.Defs.Push(c.Name, narrowed)
 		pushed = append(pushed, applied{name: c.Name})

@@ -189,15 +189,15 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 			elemType := elem
 			params = append(params, FnParam{Type: &elemType})
 
-		case elem.Parent.Matches(TInteger):
+		case elem.Parent.ConformsTo(TInteger):
 			pat := elem
 			params = append(params, FnParam{Type: TInteger, Pattern: &pat})
 
-		case elem.Parent.Matches(TBoolean):
+		case elem.Parent.ConformsTo(TBoolean):
 			pat := elem
 			params = append(params, FnParam{Type: TBoolean, Pattern: &pat})
 
-		case elem.Parent.Matches(TString):
+		case elem.Parent.ConformsTo(TString):
 			pat := elem
 			params = append(params, FnParam{Type: TString, Pattern: &pat})
 
@@ -247,12 +247,12 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 	// identity-stable at every hop.
 	//
 	// DepScalars are excluded: a String/Atom DepScalar has
-	// `Parent.Matches(TString)` true but its payload is
+	// `Parent.ConformsTo(TString)` true but its payload is
 	// `DepScalarInfo`, not `StrPayload` — `AsString(v)` would fail
 	// silently, name="" would then fail the kernel-name lookup. The
 	// scalar-pattern branch below catches DepScalars correctly
 	// (kind = the base type, pattern = the DepScalar Value).
-	if (IsWord(v) || v.Parent.Matches(TString) || v.Parent.Matches(TAtom)) && !v.IsDepScalar() {
+	if (IsWord(v) || v.Parent.ConformsTo(TString) || v.Parent.ConformsTo(TAtom)) && !v.IsDepScalar() {
 		var name string
 		if IsWord(v) {
 			w, _ := AsWord(v)
@@ -299,21 +299,21 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 		t, err := ResolveTypeName(name)
 		return t, nil, err
 	}
-	if v.Data != nil && (v.Parent.Matches(TInteger) ||
-		v.Parent.Matches(TDecimal) ||
-		v.Parent.Matches(TBoolean) ||
-		v.Parent.Matches(TString) ||
-		v.Parent.Matches(TAtom)) {
+	if v.Data != nil && (v.Parent.ConformsTo(TInteger) ||
+		v.Parent.ConformsTo(TDecimal) ||
+		v.Parent.ConformsTo(TBoolean) ||
+		v.Parent.ConformsTo(TString) ||
+		v.Parent.ConformsTo(TAtom)) {
 		pattern := v
 		var kind *Type
 		switch {
-		case v.Parent.Matches(TInteger):
+		case v.Parent.ConformsTo(TInteger):
 			kind = TInteger
-		case v.Parent.Matches(TDecimal):
+		case v.Parent.ConformsTo(TDecimal):
 			kind = TDecimal
-		case v.Parent.Matches(TBoolean):
+		case v.Parent.ConformsTo(TBoolean):
 			kind = TBoolean
-		case v.Parent.Matches(TString):
+		case v.Parent.ConformsTo(TString):
 			kind = TString
 		default:
 			kind = TAtom

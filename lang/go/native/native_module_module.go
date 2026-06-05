@@ -119,21 +119,14 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 		},
 	})
 
-	// Promote strings to words for code evaluation inside module.
-	promoteToWord := func(v Value) Value {
-		if v.Parent.Matches(TString) || v.Parent.Matches(TAtom) {
-			name, _ := AsString(v)
-			if modReg.Lookup(name) != nil {
-				return NewWord(name)
-			}
-		}
-		return v
-	}
-
+	// A module body is code: unquoted words (as the parser yields them)
+	// run; quoted strings and atoms are DATA and are left untouched. A
+	// string is never silently promoted to a word and dispatched — a
+	// quoted value whose text happens to name a word (`"def"`, `"print"`)
+	// stays a string, the same contract `do` and every other evaluator
+	// honour.
 	input := make([]Value, len(elems))
-	for i, e := range elems {
-		input[i] = promoteToWord(e)
-	}
+	copy(input, elems)
 	sub := New(modReg)
 	_, err = sub.Run(input)
 	if err != nil {
@@ -434,7 +427,7 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 	if IsWord(v) {
 		_as3, _ := AsWord(v)
 		name = _as3.Name
-	} else if v.Parent.Matches(TString) {
+	} else if v.Parent.ConformsTo(TString) {
 		name, _ = AsString(v)
 	} else if IsAtom(v) {
 		name, _ = AsAtom(v)
@@ -537,7 +530,7 @@ func valToAtomOrString(v Value) string {
 		_as5, _ := AsAtom(v)
 		return _as5
 	}
-	if v.Parent.Matches(TString) {
+	if v.Parent.ConformsTo(TString) {
 		_as6, _ := AsString(v)
 		return _as6
 	}

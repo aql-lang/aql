@@ -327,7 +327,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 					})
 					continue
 				}
-				if IsBareTypeNode(pv) && !av.Parent.Matches(pv.Parent) && !av.Parent.Equal(TAny) {
+				if IsBareTypeNode(pv) && !av.Parent.ConformsTo(pv.Parent) && !av.Parent.Equal(TAny) {
 					r.Check.AddDiagnostic(CheckDiagnostic{
 						Code:     "record_shape_mismatch",
 						Detail:   "argument to " + nameCopy + ": field " + key + " expected " + pv.Parent.String() + ", got " + av.Parent.String(),
@@ -460,10 +460,10 @@ func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 // literally, all other values are non-empty.
 func CoerceBoolean(v Value) bool {
 	switch {
-	case ValueType(v).Matches(TBoolean):
+	case ValueType(v).ConformsTo(TBoolean):
 		b, _ := AsBoolean(v)
 		return b
-	case ValueType(v).Matches(TNumber):
+	case ValueType(v).ConformsTo(TNumber):
 		n, _ := AsNumber(v)
 		return n != 0
 	case ValueType(v).Equal(TNone):
@@ -606,6 +606,10 @@ func IsTypeBody(v Value) bool {
 	if IsDisjunct(v) {
 		return true
 	}
+	// Negation (complement) type
+	if IsNegation(v) {
+		return true
+	}
 	// Typed list [:type]
 	if IsTypedList(v) {
 		return true
@@ -684,11 +688,11 @@ func IsLiteralTypeBody(v Value) bool {
 		return true
 	}
 	switch {
-	case v.Parent.Matches(TInteger),
-		v.Parent.Matches(TDecimal),
-		v.Parent.Matches(TNumber),
-		v.Parent.Matches(TString),
-		v.Parent.Matches(TBoolean),
+	case v.Parent.ConformsTo(TInteger),
+		v.Parent.ConformsTo(TDecimal),
+		v.Parent.ConformsTo(TNumber),
+		v.Parent.ConformsTo(TString),
+		v.Parent.ConformsTo(TBoolean),
 		v.Parent.Equal(TAtom),
 		v.Parent.Equal(TPath):
 		return v.Data != nil
@@ -766,7 +770,7 @@ outer:
 			if candType.Equal(otherType) {
 				continue
 			}
-			if !candType.Matches(otherType) {
+			if !candType.ConformsTo(otherType) {
 				continue
 			}
 			// cand's type is a strict subtype of other's.
@@ -809,23 +813,23 @@ func FnDefsOverlap(a, b FnDefInfo) bool {
 // zero values. Used by both the "base" word and "make" with base:true option.
 func BaseValue(t *Type) (Value, error) {
 	switch {
-	case t.Matches(TInteger):
+	case t.ConformsTo(TInteger):
 		return NewInteger(0), nil
-	case t.Matches(TDecimal):
+	case t.ConformsTo(TDecimal):
 		return NewDecimal(0), nil
-	case t.Matches(TNumber):
+	case t.ConformsTo(TNumber):
 		return NewInteger(0), nil
-	case t.Matches(TString):
+	case t.ConformsTo(TString):
 		return NewString(""), nil
-	case t.Matches(TBoolean):
+	case t.ConformsTo(TBoolean):
 		return NewBoolean(false), nil
-	case t.Matches(TList):
+	case t.ConformsTo(TList):
 		return NewList([]Value{}), nil
-	case t.Matches(TMap):
+	case t.ConformsTo(TMap):
 		return NewMap(NewOrderedMap()), nil
-	case t.Matches(TNone):
+	case t.ConformsTo(TNone):
 		return NewTypeLiteral(TNone), nil
-	case t.Matches(TAtom):
+	case t.ConformsTo(TAtom):
 		return NewAtom(""), nil
 	default:
 		return Value{}, fmt.Errorf("base: unsupported type %s", t.String())

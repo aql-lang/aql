@@ -147,6 +147,19 @@ var typeNatives = []NativeFunc{
 			Returns:    []*Type{TAny},
 		}},
 	},
+	// `tnot` (type negation / complement) — closes the type algebra
+	// under Boolean operations. `tnot T` matches v iff v does not match
+	// T. Algorithm lives in eng (eng.TnotHandler / eng.NegateType).
+	{
+		Name: "tnot",
+
+		Signatures: []NativeSig{{
+			Args:       []*Type{TAny},
+			BarrierPos: -1,
+			Handler:    eng.TnotHandler,
+			ReturnsFn:  eng.TnotReturnsFn,
+		}},
+	},
 	{
 		Name: "tany",
 
@@ -461,13 +474,13 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 			if a.Carrier {
 				return []Value{NewBoolean(false)}, nil
 			}
-			return []Value{NewBoolean(IsBareTypeNode(a) || IsTypeBody(a) || IsRecordShape(a) || a.Parent.Matches(TType))}, nil
+			return []Value{NewBoolean(IsBareTypeNode(a) || IsTypeBody(a) || IsRecordShape(a) || a.Parent.ConformsTo(TType))}, nil
 		}
-		if bNode.Matches(TType) {
+		if bNode.ConformsTo(TType) {
 			// Type/-rooted subtype RHS (`Function` / `Disjunct` / `Enum`
 			// / `FunctionSignature`): plain subtype check on the
 			// value's Parent.
-			return []Value{NewBoolean(a.Parent.Matches(bNode))}, nil
+			return []Value{NewBoolean(a.Parent.ConformsTo(bNode))}, nil
 		}
 		// Both sides are bare type literals: the question is purely
 		// lattice subtyping. Settle directly via IsSubtypeOf rather
@@ -684,11 +697,11 @@ func convertOptsPattern() Value {
 // convertTo performs the actual scalar-type conversion.
 func convertTo(src Value, targetType *Type, base string) (Value, error) {
 	switch {
-	case targetType.Matches(TString):
+	case targetType.ConformsTo(TString):
 		if base == "" {
 			return NewString(ValToString(src)), nil
 		}
-		if !src.Parent.Matches(TInteger) {
+		if !src.Parent.ConformsTo(TInteger) {
 			return Value{}, fmt.Errorf("convert: base %q only supported for integer to string", base)
 		}
 		n, _ := AsInteger(src)
@@ -707,7 +720,7 @@ func convertTo(src Value, targetType *Type, base string) (Value, error) {
 		}
 		return NewString(s), nil
 
-	case targetType.Matches(TDecimal):
+	case targetType.ConformsTo(TDecimal):
 		text := ValToString(src)
 		f, err := strconv.ParseFloat(text, 64)
 		if err != nil {
@@ -715,7 +728,7 @@ func convertTo(src Value, targetType *Type, base string) (Value, error) {
 		}
 		return NewDecimal(f), nil
 
-	case targetType.Matches(TNumber) || targetType.Matches(TInteger):
+	case targetType.ConformsTo(TNumber) || targetType.ConformsTo(TInteger):
 		text := ValToString(src)
 		if base == "" {
 			n, err := strconv.ParseInt(text, 10, 64)
@@ -741,7 +754,7 @@ func convertTo(src Value, targetType *Type, base string) (Value, error) {
 		}
 		return NewInteger(n), nil
 
-	case targetType.Matches(TBoolean):
+	case targetType.ConformsTo(TBoolean):
 		return NewBoolean(CoerceBoolean(src)), nil
 
 	case targetType.Equal(TAtom):

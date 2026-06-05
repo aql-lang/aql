@@ -409,16 +409,16 @@ func TestArrayIsDistinctFromList(t *testing.T) {
 	arr := NewArray([]Value{NewInteger(1)})
 	list := NewList([]Value{NewInteger(1)})
 
-	if arr.Parent.Matches(TList) {
+	if arr.Parent.ConformsTo(TList) {
 		t.Error("Array should not match TList")
 	}
-	if list.Parent.Matches(TArray) {
+	if list.Parent.ConformsTo(TArray) {
 		t.Error("List should not match TArray")
 	}
-	if !arr.Parent.Matches(TIdeal) {
+	if !arr.Parent.ConformsTo(TIdeal) {
 		t.Error("Array should match TIdeal")
 	}
-	if !arr.Parent.Matches(TArray) {
+	if !arr.Parent.ConformsTo(TArray) {
 		t.Error("Array should match TArray")
 	}
 }

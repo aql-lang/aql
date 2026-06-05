@@ -360,7 +360,7 @@ func TestUnifyDisjunctMatch(t *testing.T) {
 	if !ok {
 		t.Fatal("expected unification to succeed")
 	}
-	if !result.Parent.Matches(TString) {
+	if !result.Parent.ConformsTo(TString) {
 		t.Errorf("expected string type, got %s", result.Parent)
 	}
 }

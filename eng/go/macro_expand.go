@@ -75,8 +75,8 @@ func (e *Engine) scanMacroOperands(fnDef *FnDefInfo, arity, valIdx int) ([]Value
 	for len(operands) < arity && idx < len(e.stack) {
 		t := e.stack[idx]
 		if IsEnd(t) || IsCloseParen(t) || IsOpenParen(t) || IsForward(t) ||
-			t.Parent.Matches(TMark) || t.Parent.Matches(TMove) ||
-			t.Parent.Matches(TInternal) || t.Parent.Matches(TReturnCheck) {
+			t.Parent.ConformsTo(TMark) || t.Parent.ConformsTo(TMove) ||
+			t.Parent.ConformsTo(TInternal) || t.Parent.ConformsTo(TReturnCheck) {
 			break
 		}
 		operands = append(operands, t)

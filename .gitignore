@@ -151,3 +151,6 @@ calc/bin/
 
 # Local-run binary from `go run .` / `go build .` inside cmd/go/aql/
 cmd/go/aql/aql
+
+# Build artifact occasionally produced under cmd/go (ar archive)
+cmd/go/aqlbin

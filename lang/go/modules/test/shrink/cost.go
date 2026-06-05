@@ -63,26 +63,26 @@ func literalComplexity(v eng.Value) int {
 		return 0
 	}
 	switch {
-	case v.Parent.Matches(eng.TInteger):
+	case v.Parent.ConformsTo(eng.TInteger):
 		if n, err := eng.AsInteger(v); err == nil {
 			return intMagnitude(n)
 		}
-	case v.Parent.Matches(eng.TDecimal):
+	case v.Parent.ConformsTo(eng.TDecimal):
 		if f, err := eng.AsDecimal(v); err == nil {
 			return intMagnitude(int64(f))
 		}
-	case v.Parent.Matches(eng.TString):
+	case v.Parent.ConformsTo(eng.TString):
 		if s, err := eng.AsString(v); err == nil {
 			return len(s)
 		}
-	case v.Parent.Matches(eng.TBoolean):
+	case v.Parent.ConformsTo(eng.TBoolean):
 		if b, err := eng.AsBoolean(v); err == nil {
 			if b {
 				return 1
 			}
 		}
 		return 0
-	case v.Parent.Matches(eng.TList):
+	case v.Parent.ConformsTo(eng.TList):
 		if lst, err := eng.RequireConcreteList(v, "literalComplexity"); err == nil {
 			c := lst.Len()
 			for i := 0; i < lst.Len(); i++ {

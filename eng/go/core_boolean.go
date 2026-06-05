@@ -28,6 +28,14 @@ package eng
 // Exported so lang's tor registration (lang/go/engine/native_type.go)
 // can wire dispatch into it without forking the algorithm.
 func TorHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	// De Morgan: (tnot A) tor (tnot B) = tnot (A tand B). Fold the two
+	// negations into the negation of their inners' intersection rather
+	// than leaving a disjunct of negations that denotes the same set.
+	if IsNegation(args[0]) && IsNegation(args[1]) {
+		a0, _ := AsNegation(args[0])
+		a1, _ := AsNegation(args[1])
+		return []Value{NegateType(TandValues(a1.Inner, a0.Inner))}, nil
+	}
 	alts := append(FlattenDisjunctAlts(args[1]), FlattenDisjunctAlts(args[0])...)
 	simplified := SimplifyDisjunctAlts(alts)
 	if len(simplified) == 0 {
@@ -46,6 +54,23 @@ func TorReturnsFn(args []Value, _ *Registry) []Value {
 		return []Value{NewCarrier(TAny)}
 	}
 	return []Value{JoinCarriers(args[1], args[0])}
+}
+
+// unionType builds the simplified disjunction of two type values
+// (flatten, dedupe, subsume): Never for an empty union, the lone
+// alternative for a singleton, else a fresh disjunct. The same
+// reduction TorHandler applies, factored out for the De Morgan folds
+// and the DepScalar complement.
+func unionType(a, b Value) Value {
+	s := SimplifyDisjunctAlts(append(FlattenDisjunctAlts(a), FlattenDisjunctAlts(b)...))
+	switch len(s) {
+	case 0:
+		return NewTypeLiteral(TNever)
+	case 1:
+		return s[0]
+	default:
+		return NewDisjunct(s)
+	}
 }
 
 // TandHandler delegates to TandValues for the actual intersection
@@ -75,6 +100,16 @@ func TandValues(a, b Value) Value {
 	// intersection is Never.
 	if isNeverShape(a) || isNeverShape(b) {
 		return NewTypeLiteral(TNever)
+	}
+
+	// De Morgan: (tnot A) tand (tnot B) = tnot (A tor B). Without this
+	// the two negations fall through to Unify and wrongly collapse to
+	// Never; folding the inners into a union and negating is both correct
+	// and the canonical single-negation form.
+	if IsNegation(a) && IsNegation(b) {
+		ai, _ := AsNegation(a)
+		bi, _ := AsNegation(b)
+		return NegateType(unionType(ai.Inner, bi.Inner))
 	}
 
 	if IsDisjunct(a) || IsDisjunct(b) {
@@ -122,6 +157,77 @@ func isNeverShape(v Value) bool {
 		return true
 	}
 	return IsBareTypeNode(v) && (&v).Equal(TNever)
+}
+
+// isAnyShape reports whether v is any form of Any: the carrier/sentinel
+// (Parent=TAny) or the bare type literal (NewTypeLiteral(TAny)).
+func isAnyShape(v Value) bool {
+	if v.Parent.Equal(TAny) {
+		return true
+	}
+	return IsBareTypeNode(v) && (&v).Equal(TAny)
+}
+
+// NegateType computes the set-theoretic complement of a type value,
+// applying the algebraic identities that have a closed form:
+//
+//	tnot Never    → Any    (complement of the empty type is the top)
+//	tnot Any      → Never  (complement of the top is empty)
+//	tnot (tnot A) → A      (double-negation elimination)
+//
+// Every other inner type wraps in a NegationInfo value, whose matching
+// semantics (v matches `tnot A` iff v does not match A — see
+// unify_negation.go) are correct without further structural reduction.
+// De Morgan distribution over disjuncts is unnecessary for correctness:
+// `tnot (A tor B)` already admits exactly the values matching neither A
+// nor B.
+func NegateType(inner Value) Value {
+	if isNeverShape(inner) {
+		return NewTypeLiteral(TAny)
+	}
+	if isAnyShape(inner) {
+		return NewTypeLiteral(TNever)
+	}
+	if IsNegation(inner) {
+		if ni, err := AsNegation(inner); err == nil {
+			return ni.Inner
+		}
+	}
+	if inner.IsDepScalar() {
+		if di, err := inner.AsDepScalar(); err == nil {
+			// Closed-form complement of a refinement. Over the universe
+			// the complement of `Integer gt 0` is "integers that are not
+			// > 0" PLUS "everything that isn't an Integer at all", i.e.
+			// (Integer lte 0) tor (tnot Integer). The within-base part is
+			// a positive DepScalar (or a union of two rays for an
+			// interval), so `Integer tand (tnot (Integer gt 0))` reduces
+			// to `Integer lte 0` through the disjunct distribution in
+			// TandValues.
+			base := inner.Parent
+			return unionType(complementWithinBase(base, di), NewNegation(NewTypeLiteral(base)))
+		}
+	}
+	return NewNegation(inner)
+}
+
+// TnotHandler is the runtime handler for the `tnot` type-negation word.
+// `tnot T` produces the complement type of T.
+func TnotHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	return []Value{NegateType(args[0])}, nil
+}
+
+// TnotReturnsFn is the carrier-mode counterpart: produces the negation
+// carrier so `aql check` propagates the complement type. The result
+// carries Carrier=true so the carrier-stripping pass preserves its
+// NegationInfo payload (mirrors how TorReturnsFn's disjunct carrier
+// survives toCarrier).
+func TnotReturnsFn(args []Value, _ *Registry) []Value {
+	if len(args) != 1 {
+		return []Value{NewCarrier(TAny)}
+	}
+	out := NegateType(args[0])
+	out.Carrier = true
+	return []Value{out}
 }
 
 // isPlainConcreteMap reports whether v is a non-typed, non-record,

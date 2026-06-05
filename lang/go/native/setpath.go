@@ -17,7 +17,7 @@ func setpathHandler(args []Value, ctx map[string]Value, stack []Value, r *Regist
 	// Find the path arg — a String dotted path, or a Reach lens.
 	pathIdx := -1
 	for i := range args {
-		if args[i].Parent.Matches(TString) || IsReach(args[i]) {
+		if args[i].Parent.ConformsTo(TString) || IsReach(args[i]) {
 			pathIdx = i
 			break
 		}
@@ -45,11 +45,11 @@ func setpathHandler(args []Value, ctx map[string]Value, stack []Value, r *Regist
 	a, b := args[others[0]], args[others[1]]
 	var data, newVal Value
 	if others[0] < others[1] {
-		if (a.Parent.Matches(TMap) || a.Parent.Matches(TList)) &&
-			!(b.Parent.Matches(TMap) || b.Parent.Matches(TList)) {
+		if (a.Parent.ConformsTo(TMap) || a.Parent.ConformsTo(TList)) &&
+			!(b.Parent.ConformsTo(TMap) || b.Parent.ConformsTo(TList)) {
 			data, newVal = a, b
-		} else if (b.Parent.Matches(TMap) || b.Parent.Matches(TList)) &&
-			!(a.Parent.Matches(TMap) || a.Parent.Matches(TList)) {
+		} else if (b.Parent.ConformsTo(TMap) || b.Parent.ConformsTo(TList)) &&
+			!(a.Parent.ConformsTo(TMap) || a.Parent.ConformsTo(TList)) {
 			data, newVal = b, a
 		} else {
 			data, newVal = a, b
@@ -160,7 +160,7 @@ func setReachNative(data Value, keys []Value, val Value) (Value, error) {
 	rest := keys[1:]
 
 	// List index.
-	if k.Parent.Matches(TInteger) && data.Parent.Matches(TList) && IsConcrete(data) {
+	if k.Parent.ConformsTo(TInteger) && data.Parent.ConformsTo(TList) && IsConcrete(data) {
 		lst, _ := AsList(data)
 		n := lst.Len()
 		idx64, _ := AsInteger(k)
@@ -183,7 +183,7 @@ func setReachNative(data Value, keys []Value, val Value) (Value, error) {
 	// Map key (the default). Shallow-clone the source map (or start fresh
 	// when the level is absent / not a map).
 	out := NewOrderedMap()
-	if data.Parent.Matches(TMap) && IsConcrete(data) {
+	if data.Parent.ConformsTo(TMap) && IsConcrete(data) {
 		src, _ := AsMap(data)
 		for _, key := range src.Keys() {
 			v, _ := src.Get(key)
@@ -214,7 +214,7 @@ func reachKeyString(k Value) string {
 	case IsAtom(k):
 		a, _ := AsAtom(k)
 		return a
-	case k.Parent.Matches(TString):
+	case k.Parent.ConformsTo(TString):
 		s, _ := AsString(k)
 		return s
 	default:

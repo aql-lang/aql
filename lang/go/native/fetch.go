@@ -222,7 +222,7 @@ func doFetch(reqOM ReadMap, r *Registry) ([]Value, error) {
 	}
 
 	// Set headers.
-	if hv, ok := reqOM.Get("headers"); ok && hv.Parent.Matches(TMap) {
+	if hv, ok := reqOM.Get("headers"); ok && hv.Parent.ConformsTo(TMap) {
 		hm, _ := AsMap(hv)
 		for _, key := range hm.Keys() {
 			val, _ := hm.Get(key)

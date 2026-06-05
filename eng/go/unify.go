@@ -147,7 +147,7 @@ func resolvePredicateRef(v Value, r *Registry) (Value, bool) {
 	case IsWord(v):
 		w, _ := AsWord(v)
 		name = w.Name
-	case v.Parent != nil && v.Parent.Matches(TAtom) && v.Data != nil:
+	case v.Parent != nil && v.Parent.ConformsTo(TAtom) && v.Data != nil:
 		w, _ := AsAtom(v)
 		name = w
 	case IsBareTypeNode(v) && v.ID != "" && v.Name != "":
@@ -278,6 +278,18 @@ func unifyInner(a, b Value) (Value, *UnifyError) {
 		return unifyDisjunct(disj, a)
 	}
 
+	// Negation fold — `tnot T` admits v iff v does not satisfy T. Placed
+	// after the disjunct fold and before the degenerate roots so a
+	// negation built over None/Never/Any still routes through here.
+	if sa == ShapeNegation {
+		neg, _ := AsNegation(a)
+		return unifyNegation(neg, b)
+	}
+	if sb == ShapeNegation {
+		neg, _ := AsNegation(b)
+		return unifyNegation(neg, a)
+	}
+
 	// Never — bottom type, only unifies with itself.
 	if sa == ShapeNever || sb == ShapeNever {
 		if sa == sb {
@@ -361,10 +373,10 @@ func unifySameOrSubtype(a, b Value) (Value, *UnifyError) {
 	bType := denotedType(b)
 
 	// Type literal unifies with any concrete whose type matches.
-	if IsBareTypeNode(a) && b.Data != nil && bType.Matches(aType) {
+	if IsBareTypeNode(a) && b.Data != nil && bType.ConformsTo(aType) {
 		return b, nil
 	}
-	if IsBareTypeNode(b) && a.Data != nil && aType.Matches(bType) {
+	if IsBareTypeNode(b) && a.Data != nil && aType.ConformsTo(bType) {
 		return a, nil
 	}
 

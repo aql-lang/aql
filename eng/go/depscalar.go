@@ -371,6 +371,40 @@ func combineDepScalars(a, b DepScalarInfo) (DepScalarInfo, bool) {
 	return out, true
 }
 
+// flipBound returns the opposite-side complement of a single bound: the
+// complement of `> v` is `<= v`, of `>= v` is `< v`, and so on — same
+// Value, negated inclusivity. complementWithinBase places the result on
+// the correct Lo/Hi slot (a lower bound complements to an upper one).
+func flipBound(b *DepBound) *DepBound {
+	return &DepBound{Inclusive: !b.Inclusive, Value: b.Value}
+}
+
+// complementWithinBase returns the complement of a DepScalar constraint
+// *within its base type* — the values of base that do NOT satisfy info:
+//
+//	tnot (Integer gt 0)        → Integer lte 0
+//	tnot (Integer gte 0)       → Integer lt 0
+//	tnot (Integer gt 5 lt 10)  → (Integer lte 5) tor (Integer gte 10)
+//
+// A single bound flips to the opposite side; an interval complements to
+// the union of the two rays outside it. The FULL type complement also
+// includes everything outside the base — NegateType wraps this in
+// `… tor (tnot base)`.
+func complementWithinBase(base *Type, info DepScalarInfo) Value {
+	switch {
+	case info.Lo != nil && info.Hi != nil:
+		low := NewValueRaw(base, DepScalarInfo{Hi: flipBound(info.Lo)})
+		high := NewValueRaw(base, DepScalarInfo{Lo: flipBound(info.Hi)})
+		return NewDisjunct([]Value{low, high})
+	case info.Lo != nil:
+		return NewValueRaw(base, DepScalarInfo{Hi: flipBound(info.Lo)})
+	case info.Hi != nil:
+		return NewValueRaw(base, DepScalarInfo{Lo: flipBound(info.Hi)})
+	default:
+		return NewTypeLiteral(base)
+	}
+}
+
 // MakeDepScalarSig builds the [TScalar, TScalar/type] -> [TScalar]
 // signature variant for a comparison op. `Integer gte 10`, `String lt
 // "z"`, `Decimal gte 1.5` all hit this sig: arg0 is the bound, arg1 is
@@ -408,7 +442,7 @@ func MakeDepScalarSig(opName string, kind DepKind) NativeSig {
 					opName, ValueType(args[1]).String())
 			}
 			// Bound must be the same scalar base as the type literal.
-			if !args[0].Parent.Matches(base) {
+			if !args[0].Parent.ConformsTo(base) {
 				return nil, fmt.Errorf("%s: bound %s does not match dependent base %s",
 					opName, args[0].Parent.String(), base.String())
 			}
@@ -438,11 +472,11 @@ func BetweenHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 		return nil, fmt.Errorf("between: unsupported base type %s",
 			ValueType(args[2]).String())
 	}
-	if !args[0].Parent.Matches(base) {
+	if !args[0].Parent.ConformsTo(base) {
 		return nil, fmt.Errorf("between: low bound %s does not match base %s",
 			args[0].Parent.String(), base.String())
 	}
-	if !args[1].Parent.Matches(base) {
+	if !args[1].Parent.ConformsTo(base) {
 		return nil, fmt.Errorf("between: high bound %s does not match base %s",
 			args[1].Parent.String(), base.String())
 	}

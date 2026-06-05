@@ -76,7 +76,7 @@ func TestUnmatchedCloseParen(t *testing.T) {
 func TestResolveWordValueTrue(t *testing.T) {
 	v := ResolveWordValue(NewWord("true"))
 	_as35, _ := AsBoolean(v)
-	if !v.Parent.Matches(TBoolean) || !_as35 {
+	if !v.Parent.ConformsTo(TBoolean) || !_as35 {
 		t.Errorf("expected boolean true, got %s", v)
 	}
 }
@@ -84,7 +84,7 @@ func TestResolveWordValueTrue(t *testing.T) {
 func TestResolveWordValueFalse(t *testing.T) {
 	v := ResolveWordValue(NewWord("false"))
 	_as36, _ := AsBoolean(v)
-	if !v.Parent.Matches(TBoolean) || _as36 {
+	if !v.Parent.ConformsTo(TBoolean) || _as36 {
 		t.Errorf("expected boolean false, got %s", v)
 	}
 }
@@ -105,7 +105,7 @@ func TestResolveWordValueOther(t *testing.T) {
 
 func TestResolveWordValueNonWord(t *testing.T) {
 	v := ResolveWordValue(NewInteger(42))
-	if !v.Parent.Matches(TInteger) {
+	if !v.Parent.ConformsTo(TInteger) {
 		t.Errorf("expected integer passthrough, got %s", v)
 	}
 }
@@ -150,7 +150,7 @@ func TestResolveSigTypeInteger(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !tp.Matches(TInteger) {
+	if !tp.ConformsTo(TInteger) {
 		t.Errorf("expected integer type, got %s", tp)
 	}
 }
@@ -161,7 +161,7 @@ func TestResolveSigTypeBoolean(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !tp.Matches(TBoolean) {
+	if !tp.ConformsTo(TBoolean) {
 		t.Errorf("expected boolean type, got %s", tp)
 	}
 }

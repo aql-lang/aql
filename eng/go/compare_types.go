@@ -81,10 +81,10 @@ func cmpInt(a, b int) int {
 // Word, and Atom.
 func compareStructural(a, b Value) (int, error) {
 	if IsConcrete(a) && IsConcrete(b) {
-		if a.Parent.Matches(TList) {
+		if a.Parent.ConformsTo(TList) {
 			return compareListElems(a, b)
 		}
-		if a.Parent.Matches(TMap) {
+		if a.Parent.ConformsTo(TMap) {
 			return compareMapEntries(a, b)
 		}
 	}

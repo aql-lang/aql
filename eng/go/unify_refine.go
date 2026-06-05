@@ -35,7 +35,7 @@ func (b *bareRefineUnifier) Match(v Value, t *Type) bool {
 	}
 	// Nominal: the value's tag must be the refine type itself (or a
 	// subtype), NOT merely the base type.
-	return v.Parent.Matches(t)
+	return v.Parent.ConformsTo(t)
 }
 
 func (b *bareRefineUnifier) Format(v Value) string {

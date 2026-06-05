@@ -573,6 +573,7 @@ var builtinDecls = []builtinDecl{
 	{Path: "Type/FunctionSignature", FixedID: 24, Rank: 60_200_000_000},
 	{Path: "Type/Disjunct", FixedID: 26, Rank: 60_300_000_000},
 	{Path: "Type/Disjunct/Enum", FixedID: 62, Rank: 60_310_000_000},
+	{Path: "Type/Negation", FixedID: 77, Rank: 60_400_000_000},
 }
 
 // Builtin is the package-level TypeTable holding every builtin type.
@@ -684,8 +685,9 @@ func formatFixedID(path string, num int) string {
 
 // MintTestType is a test-only helper that mints a *Type from a
 // slash-separated path, walking from the builtin root where possible
-// and minting intermediate *Types as needed. Used by lattice / Matches /
-// Specificity tests that need synthetic type hierarchies; production
+// and minting intermediate *Types as needed. Used by lattice /
+// ConformsTo / Specificity tests that need synthetic type hierarchies;
+// production
 // code goes through NewType (strict — unknown paths error) or
 // TypeTable.MintType (explicit name + parent).
 //

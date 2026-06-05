@@ -3550,6 +3550,7 @@ stdout for editor/tooling integration.
 | Code                     | Severity | Meaning                                                                     |
 |--------------------------|----------|-----------------------------------------------------------------------------|
 | `no_signature`           | error    | No signature matched at a call site; assumed best-fit candidate.            |
+| `uncalled_function`      | error    | A named function value (e.g. `Pkg.fn`) was called with args that matched no signature, so it was silently left on the stack as data. |
 | `undefined_word`         | error    | Word reference with no def; replaced with `Any` carrier to continue.        |
 | `fn_body_error`          | error    | Analysis of a user-defined fn body raised an error.                         |
 | `branch_error`           | error    | A branch (if/each/fold body) raised an error during symbolic analysis.      |
@@ -3558,6 +3559,8 @@ stdout for editor/tooling integration.
 | `step_budget_exceeded`   | warning  | Global analysis budget (default 500,000 steps) was exhausted.               |
 | `unused_def`             | warning  | A `def` was installed but never referenced.                                 |
 | `unreachable_branch`     | warning  | `if` condition is a constant `true`/`false`; the other branch never runs.  |
+| `unreachable_signature`  | warning  | An `fn` overload an earlier, more general overload already subsumes; first-match dispatch can never reach it. |
+| `index_out_of_range`     | warning  | A list index is provably out of bounds — past the end, equal to the length, or negative — for a statically-known length (e.g. `[10 20] 5 getr`). Flagged only when guaranteed; `getr`/`at` error at runtime. |
 | `body_error`             | warning  | Higher-order body (do/each/fold/...) analysis raised an error.              |
 
 ### Returned Types

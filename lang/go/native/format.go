@@ -29,7 +29,7 @@ func (f *TextFormat) Decode(content string) ([]Value, error) {
 }
 
 func (f *TextFormat) Encode(v Value) (string, error) {
-	if v.Parent.Matches(TString) {
+	if v.Parent.ConformsTo(TString) {
 		_as0, _ := AsString(v)
 		return _as0, nil
 	}
@@ -149,7 +149,7 @@ func (f *LinesFormat) Encode(v Value) (string, error) {
 		if elems, err := AsMutableList(v); err == nil {
 			parts := make([]string, len(elems))
 			for i, e := range elems {
-				if e.Parent.Matches(TString) {
+				if e.Parent.ConformsTo(TString) {
 					_as1, _ := AsString(e)
 					parts[i] = _as1
 				} else {
@@ -316,7 +316,7 @@ func encodeDelimited(v Value, sep string) (string, error) {
 				parts[i] = ""
 				continue
 			}
-			if val.Parent.Matches(TString) {
+			if val.Parent.ConformsTo(TString) {
 				s, _ := AsString(val)
 				if strings.ContainsAny(s, sep+"\"\n\r") {
 					s = "\"" + strings.ReplaceAll(s, "\"", "\"\"") + "\""

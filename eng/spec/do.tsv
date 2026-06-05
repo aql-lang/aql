@@ -11,12 +11,13 @@
 #                 contain words pulled from the def stack flow through		
 #                 unchanged.		
 #		
-#   do {map}    — recursively walks a map literal. List values inside		
-#                 the map are evaluated as sub-programs; everything		
-#                 else passes through unchanged. Strings/atoms inside		
-#                 those lists that name a registered native word are		
-#                 promoted to Words first, so the embedded code can be		
-#                 written as data.		
+#   do {map}    — recursively walks a map literal. List values inside
+#                 the map are evaluated as sub-programs; everything
+#                 else passes through unchanged. Unquoted words inside
+#                 those lists run as code; quoted strings and atoms are
+#                 DATA and are left untouched, so a value whose text
+#                 happens to name a word (`"if"`, `"get"`) is stored,
+#                 not dispatched.
 #		
 # Errors inside `do [body]` are caught and returned as an Error value		
 # on the stack rather than aborting the host program — `do` is a		
@@ -60,6 +61,8 @@ do { a:5 }	{a:5}	scalar values pass through untouched
 do { a:[ 1 addq 2 ] }	{a:3}	list inside map gets evaluated; result replaces the slot
 do { a:[ 1 addq 2 ] b:[ 4 mulq 5 ] }	{a:3 b:20}	multiple slots evaluate independently
 do { a:1 b:[ 2 addq 3 ] c:'hi' }	{a:1 b:5 c:'hi'}	non-list slots pass through
+do { a:[ "addq" ] }	{a:'addq'}	quoted word-name string in a list is DATA, not dispatched (T4)
+do { a:[ "hello" ] }	{a:'hello'}	quoted non-word string passes through unchanged
 		
 # Nested maps — recursion descends.		
 do { outer:{ inner:[ 6 addq 7 ] } }	{outer:{inner:13}}	deep walk evaluates leaf list

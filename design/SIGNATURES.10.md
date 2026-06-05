@@ -387,6 +387,7 @@ scalar type literal AND the forward arg is concrete; otherwise the
 | `tall` | `[L]` | `[Any]` | List-tand: folds via map-merge / unify; errors on `[]` | — |
 | `tand` | `[Any, Any]` | `[Any]` | Conjunction: merges concrete maps; unifies otherwise | — |
 | `tany` | `[L]` | `[Any]` | List-tor: builds flattened disjunct of all elements; errors on `[]` | — |
+| `tnot` | `[Any]` | `[Negation]` | Complement: matches v iff v does NOT match the inner type. `tnot Never`=Any, `tnot Any`=Never, `tnot (tnot T)`=T | — |
 | `tor` | `[Any, Any]` | `[Disjunct]` | Creates/flattens disjunction union | — |
 | `def` | `[A, Any]` /q | `[]` | Bind a name; a capitalised name installs a type (`def Name (refine …)`) | — |
 | `typeof` | `[Any]` | `[A]` | Short type name (e.g. `String`) | — |

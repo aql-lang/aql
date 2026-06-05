@@ -190,7 +190,13 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 
 	stack := make([]string, len(result))
 	for i, v := range result {
-		stack[i] = v.Parent.Leaf()
+		if v.Dynamic {
+			// Surface the gradual modality in the residual stack so a
+			// dynamic carrier is distinguishable from a strict one.
+			stack[i] = "dynamic(" + v.Parent.Leaf() + ")"
+		} else {
+			stack[i] = v.Parent.Leaf()
+		}
 	}
 
 	// Diagnostics carry the source position stamped by the parser onto
@@ -311,10 +317,10 @@ func (a *AQL) Run(src string) ([]any, error) {
 			// rather than trying to extract an Integer/String payload
 			// that isn't there.
 			out[i] = v.String()
-		case v.Parent.Matches(native.TInteger):
+		case v.Parent.ConformsTo(native.TInteger):
 			n, _ := native.AsInteger(v)
 			out[i] = n
-		case v.Parent.Matches(native.TString):
+		case v.Parent.ConformsTo(native.TString):
 			s, _ := native.AsString(v)
 			out[i] = s
 		default:

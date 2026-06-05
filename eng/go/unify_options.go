@@ -125,7 +125,7 @@ func unifyOptionsField(optVal, cVal Value) (Value, *UnifyError) {
 	}
 	if optVal.Data != nil {
 		baseType := optionsBaseType(optVal)
-		if cVal.Parent.Matches(baseType) {
+		if cVal.Parent.ConformsTo(baseType) {
 			return cVal, nil
 		}
 		return Value{}, unifyFail("value does not match field's base type", optVal, cVal)
@@ -138,13 +138,13 @@ func unifyOptionsField(optVal, cVal Value) (Value, *UnifyError) {
 // TInteger.
 func optionsBaseType(v Value) *Type {
 	switch {
-	case v.Parent.Matches(TInteger):
+	case v.Parent.ConformsTo(TInteger):
 		return TInteger
-	case v.Parent.Matches(TDecimal):
+	case v.Parent.ConformsTo(TDecimal):
 		return TDecimal
-	case v.Parent.Matches(TString):
+	case v.Parent.ConformsTo(TString):
 		return TString
-	case v.Parent.Matches(TBoolean):
+	case v.Parent.ConformsTo(TBoolean):
 		return TBoolean
 	case v.Parent.Equal(TMap):
 		return TMap

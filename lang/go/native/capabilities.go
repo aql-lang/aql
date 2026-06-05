@@ -182,7 +182,7 @@ func EffectiveFileOps(r *Registry) capabilities.FileOps {
 		return HostFileOps(r)
 	}
 	asBool, _ := AsBoolean(memVal)
-	if memVal.Parent.Matches(TBoolean) && asBool {
+	if memVal.Parent.ConformsTo(TBoolean) && asBool {
 		if mem, _, _ := eng.Cap[capabilities.FileOps](r, CapMemFileOps); mem != nil {
 			return mem
 		}

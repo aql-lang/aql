@@ -112,8 +112,10 @@ aql do 'iota 5 each [dup mul]'  # prints [0 1 4 9 16]
 
 ### `aql check`
 
-Run the static type-checker without executing. Reports diagnostics
-to stderr; exit code 1 if any are found.
+Run the static type-checker without executing. It drives the same
+engine in carrier mode — so checking stays in lockstep with runtime
+dispatch — reports diagnostics to stderr, and exits non-zero when any
+Error-severity diagnostic is found (exit 0 with `--soft`).
 
 ```bash
 aql check script.aql
@@ -128,6 +130,34 @@ Flags:
 * `--json` — emit JSON diagnostics.
 * `--soft` — return exit code 0 even when diagnostics are reported.
 * `-r PATH`, `-s SEED` — same as `aql run`.
+
+**What it catches** (full list in the language reference's diagnostics
+table):
+
+* `no_signature` / `uncalled_function` — a call that matches no
+  signature. `uncalled_function` covers the silent case where a named
+  function value (e.g. an imported `Pkg.fn`) is called with the wrong
+  arguments and would be left on the stack as data at runtime instead
+  of erroring.
+* `unreachable_signature` — an `fn` overload that an earlier, more
+  general overload already subsumes, so first-match dispatch can never
+  reach it.
+* `undefined_word`, `unused_def`, `unreachable_branch`,
+  `record_shape_mismatch`, … — typos, dead bindings, constant `if`
+  branches, record-field mismatches.
+
+**Pre-flight a run.** `aql run --check` (or the short `aql --check`)
+runs the checker first and aborts before executing if any error is
+found, so a type bug can't slip into a run; stdout stays clean for the
+program's own output:
+
+```bash
+aql --check script.aql       # check, then run; abort on any error
+aql --check -e '1 add 2'     # one-shot, checked first
+```
+
+**In your editor.** `aql lsp` publishes these same diagnostics as you
+type — see [`aql lsp`](#aql-lsp).
 
 ### `aql help`
 

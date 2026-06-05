@@ -85,7 +85,7 @@ func TestNewDepScalarAtom(t *testing.T) {
 func TestDepDecimalMatchesDecimalAncestors(t *testing.T) {
 	d := NewDepScalar(DepGTE, NewDecimal(0.0))
 	for _, anc := range []*Type{TDecimal, TNumber, TScalar, TAny} {
-		if !d.Parent.Matches(anc) {
+		if !d.Parent.ConformsTo(anc) {
 			t.Errorf("DepDecimal does not match ancestor %s", anc)
 		}
 	}
@@ -94,13 +94,13 @@ func TestDepDecimalMatchesDecimalAncestors(t *testing.T) {
 func TestDepStringMatchesStringAncestors(t *testing.T) {
 	d := NewDepScalar(DepLT, NewString("m"))
 	for _, anc := range []*Type{TString, TScalar, TAny} {
-		if !d.Parent.Matches(anc) {
+		if !d.Parent.ConformsTo(anc) {
 			t.Errorf("DepString does not match ancestor %s", anc)
 		}
 	}
 	// DepString must NOT match Number or Boolean.
 	for _, foreign := range []*Type{TNumber, TInteger, TBoolean} {
-		if d.Parent.Matches(foreign) {
+		if d.Parent.ConformsTo(foreign) {
 			t.Errorf("DepString unexpectedly matches %s", foreign)
 		}
 	}
@@ -108,10 +108,10 @@ func TestDepStringMatchesStringAncestors(t *testing.T) {
 
 func TestDepAtomMatchesAtom(t *testing.T) {
 	d := NewDepScalar(DepGTE, NewAtom("foo"))
-	if !d.Parent.Matches(TAtom) {
+	if !d.Parent.ConformsTo(TAtom) {
 		t.Errorf("DepAtom does not match TAtom")
 	}
-	if !d.Parent.Matches(TScalar) {
+	if !d.Parent.ConformsTo(TScalar) {
 		t.Errorf("DepAtom does not match TScalar")
 	}
 }
@@ -120,7 +120,7 @@ func TestDepAtomMatchesAtom(t *testing.T) {
 func TestDepIntegerStillMatchesInteger(t *testing.T) {
 	d := NewDepScalar(DepGTE, NewInteger(10))
 	for _, anc := range []*Type{TInteger, TNumber, TScalar, TAny} {
-		if !d.Parent.Matches(anc) {
+		if !d.Parent.ConformsTo(anc) {
 			t.Errorf("DepInteger no longer matches ancestor %s", anc)
 		}
 	}

@@ -57,7 +57,7 @@ func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 			callErr = err
 			return false
 		}
-		if len(cbResult) > 0 && cbResult[0].Parent.Matches(TBoolean) {
+		if len(cbResult) > 0 && cbResult[0].Parent.ConformsTo(TBoolean) {
 			b, _ := AsBoolean(cbResult[0])
 			return b
 		}
@@ -89,7 +89,7 @@ func filterReachHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 		if err != nil {
 			return false, err
 		}
-		if res.Parent.Matches(TBoolean) {
+		if res.Parent.ConformsTo(TBoolean) {
 			b, _ := AsBoolean(res)
 			return b, nil
 		}
@@ -97,7 +97,7 @@ func filterReachHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 	}
 
 	switch {
-	case args[1].Parent.Matches(TList) && IsConcrete(args[1]):
+	case args[1].Parent.ConformsTo(TList) && IsConcrete(args[1]):
 		data, _ := AsList(args[1])
 		out := make([]Value, 0, data.Len())
 		for i := 0; i < data.Len(); i++ {
@@ -111,7 +111,7 @@ func filterReachHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 			}
 		}
 		return []Value{NewList(out)}, nil
-	case args[1].Parent.Matches(TMap) && IsConcrete(args[1]):
+	case args[1].Parent.ConformsTo(TMap) && IsConcrete(args[1]):
 		data, _ := AsMap(args[1])
 		out := NewOrderedMap()
 		for _, k := range data.Keys() {

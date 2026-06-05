@@ -137,6 +137,15 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 			body = v
 		}
 	}
+	// Escape hatch: a computed body the checker cannot run statically (a
+	// list carrier rather than concrete tokens) has a genuinely unknown
+	// residual, so emit a bounded gradual dynamic(Any) — optimistically
+	// usable downstream — rather than strict Carry<Any>.
+	// (design/dynamic-modality-report.0.md, do/eval hatch.) A concrete
+	// body is analyzed normally; one that runs to nothing stays strict.
+	if !(IsConcrete(body) && body.Parent.ConformsTo(TList)) {
+		return []Value{NewDynamicCarrier(TAny)}
+	}
 	stk := RunCarrierBody(r, body)
 	if len(stk) == 0 {
 		return []Value{NewCarrier(TAny)}
@@ -165,27 +174,18 @@ func doEvalList(r *Registry, elems []Value) ([]Value, error) {
 	return result, nil
 }
 
-// doEvalDataList evaluates a list from data context (inside a map).
-// Strings that name registered functions are promoted to words.
+// doEvalDataList evaluates a list value inside a `do` map as code.
+// Unquoted words in the list arrive as Word values and run normally
+// (`do {a:[add 1 2]}` → {a:3}); quoted strings and atoms are DATA and
+// are left untouched — a `do {a:["if"]}` stores the string "if", it
+// does not dispatch the `if` word. Respecting the quote is what keeps
+// data values whose text happens to name a word (`"if"`, `"get"`,
+// `"do"`) storable without boxing tricks (voxgig DX report T4).
 func doEvalDataList(r *Registry, elems []Value) ([]Value, error) {
 	sub := New(r)
 	input := make([]Value, len(elems))
-	for i, e := range elems {
-		input[i] = doPromoteToWord(r, e)
-	}
+	copy(input, elems)
 	return sub.Run(input)
-}
-
-// doPromoteToWord converts a string or atom value to a word if it
-// names a registered function.
-func doPromoteToWord(r *Registry, v Value) Value {
-	if v.Parent.Matches(TString) || v.Parent.Matches(TAtom) {
-		name, _ := AsString(v)
-		if r.Lookup(name) != nil {
-			return NewWord(name)
-		}
-	}
-	return v
 }
 
 // doEvalMapValue recursively evaluates list values within a map. Used

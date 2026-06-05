@@ -37,7 +37,7 @@ var allArrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TInteger},
 			Handler:   iotaHandler,
-			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
+			ReturnsFn: returnsIotaLen, BarrierPos: -1,
 		}},
 	},
 	{
@@ -161,7 +161,7 @@ var allArrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
 			Handler:   atHandler,
-			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
+			ReturnsFn: returnsAtChecked, BarrierPos: -1,
 		}},
 	},
 	{
@@ -402,6 +402,30 @@ func returnsCarrierTypedListInteger(_ []Value, _ *Registry) []Value {
 	return []Value{NewCarrierTypedList(TInteger)}
 }
 
+// returnsIotaLen returns a length-refined integer-list carrier: iota's
+// result length is exactly its non-negative count argument, so a
+// downstream static index check can reason about an `iota n` list (a
+// computed list whose length would otherwise be unknown). Falls back to
+// an unrefined carrier when the count isn't a concrete integer.
+func returnsIotaLen(args []Value, _ *Registry) []Value {
+	if len(args) >= 1 {
+		if n, err := args[0].AsConcreteInteger(); err == nil && n >= 0 {
+			return []Value{NewCarrierTypedListLen(TInteger, int(n))}
+		}
+	}
+	return []Value{NewCarrierTypedList(TInteger)}
+}
+
+// returnsAtChecked runs the check-mode index-bounds check for `at` (the
+// list of indices against the data list) and then delegates to the
+// element-type-preserving return shape.
+func returnsAtChecked(args []Value, r *Registry) []Value {
+	if len(args) >= 2 {
+		CheckAtIndices(r, args[0], args[1], "at")
+	}
+	return ReturnsPreserveListAt(1)(args, r)
+}
+
 func returnsCarrierTypedListBoolean(_ []Value, _ *Registry) []Value {
 	return []Value{NewCarrierTypedList(TBoolean)}
 }
@@ -482,7 +506,7 @@ func computeShape(v Value) []int {
 		return dims
 	}
 	first := list.Get(0)
-	if !first.Parent.Matches(TList) || !IsConcrete(first) {
+	if !first.Parent.ConformsTo(TList) || !IsConcrete(first) {
 		return dims
 	}
 	_lst, _ := AsList(first)
@@ -490,7 +514,7 @@ func computeShape(v Value) []int {
 	for i := 1; i < list.Len(); i++ {
 		sub := list.Get(i)
 		_subLst, _ := AsList(sub)
-		if !sub.Parent.Matches(TList) || !IsConcrete(sub) || _subLst.Len() != firstLen {
+		if !sub.Parent.ConformsTo(TList) || !IsConcrete(sub) || _subLst.Len() != firstLen {
 			return dims
 		}
 	}
@@ -545,7 +569,7 @@ func flattenList(v Value) []Value {
 	var result []Value
 	for i := 0; i < list.Len(); i++ {
 		elem := list.Get(i)
-		if elem.Parent.Matches(TList) && elem.Data != nil {
+		if elem.Parent.ConformsTo(TList) && elem.Data != nil {
 			result = append(result, flattenList(elem)...)
 		} else {
 			result = append(result, elem)
@@ -589,7 +613,7 @@ func arrTransposeHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 		return []Value{NewList(nil)}, nil
 	}
 	first := outer.Get(0)
-	if !first.Parent.Matches(TList) || !IsConcrete(first) {
+	if !first.Parent.ConformsTo(TList) || !IsConcrete(first) {
 		return nil, r.AqlError("transpose_error", "transpose: expected rank-2 list", "transpose")
 	}
 	_lst, _ := AsList(first)
@@ -597,7 +621,7 @@ func arrTransposeHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	for i := 1; i < outer.Len(); i++ {
 		sub := outer.Get(i)
 		_subLst, _ := AsList(sub)
-		if !sub.Parent.Matches(TList) || !IsConcrete(sub) || _subLst.Len() != cols {
+		if !sub.Parent.ConformsTo(TList) || !IsConcrete(sub) || _subLst.Len() != cols {
 			return nil, r.AqlError("transpose_error", "transpose: expected rectangular rank-2 list", "transpose")
 		}
 	}
@@ -1413,7 +1437,7 @@ func innerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 	right, _ := AsList(args[3])
 
 	// 1D case: zip then fold
-	if left.Len() > 0 && !left.Get(0).Parent.Matches(TList) {
+	if left.Len() > 0 && !left.Get(0).Parent.ConformsTo(TList) {
 		if left.Len() != right.Len() {
 			return nil, reg.AqlError("inner_error", "inner: vectors must have same length", "inner")
 		}
@@ -1581,7 +1605,7 @@ func eachrankHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry)
 // spine: a scalar is 0, a flat list 1, a list of lists 2, and so on.
 func listDepth(v Value) int {
 	d := 0
-	for v.Parent.Matches(TList) && IsConcrete(v) {
+	for v.Parent.ConformsTo(TList) && IsConcrete(v) {
 		list, _ := AsList(v)
 		d++
 		if list.Len() == 0 {
@@ -1610,7 +1634,7 @@ func eachrankWalk(reg *Registry, depth int, bodySlice []Value, cell Value) ([]Va
 		}
 		return []Value{res[len(res)-1]}, nil
 	}
-	if !cell.Parent.Matches(TList) || !IsConcrete(cell) {
+	if !cell.Parent.ConformsTo(TList) || !IsConcrete(cell) {
 		return nil, reg.AqlError("eachrank_error", fmt.Sprintf("eachrank: rank exceeds nesting depth at %v", cell), "eachrank")
 	}
 	list, _ := AsList(cell)
@@ -1649,14 +1673,14 @@ func foldaxisHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry)
 		return []Value{NewList([]Value{})}, nil
 	}
 	// Validate a rectangular rank-2 list.
-	if !rows.Get(0).Parent.Matches(TList) || !IsConcrete(rows.Get(0)) {
+	if !rows.Get(0).Parent.ConformsTo(TList) || !IsConcrete(rows.Get(0)) {
 		return nil, reg.AqlError("foldaxis_error", "foldaxis: expected a rank-2 list", "foldaxis")
 	}
 	first, _ := AsList(rows.Get(0))
 	cols := first.Len()
 	for i := 1; i < rows.Len(); i++ {
 		ri, _ := AsList(rows.Get(i))
-		if !rows.Get(i).Parent.Matches(TList) || !IsConcrete(rows.Get(i)) || ri.Len() != cols {
+		if !rows.Get(i).Parent.ConformsTo(TList) || !IsConcrete(rows.Get(i)) || ri.Len() != cols {
 			return nil, reg.AqlError("foldaxis_error", "foldaxis: expected a rectangular rank-2 list", "foldaxis")
 		}
 	}

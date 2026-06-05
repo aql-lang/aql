@@ -191,7 +191,7 @@ const diagMaxListHead = 8
 // function values, which already render compactly via formatFnDef) is
 // shown by its normal String().
 func diagValue(v Value) string {
-	if v.Parent != nil && v.Parent.Matches(TList) && IsConcrete(v) {
+	if v.Parent != nil && v.Parent.ConformsTo(TList) && IsConcrete(v) {
 		lst, err := AsList(v)
 		if err == nil && lst.Len() > diagMaxListHead {
 			elems := lst.Slice()
@@ -237,19 +237,19 @@ func describeStackTypes(stack []Value, pointer int) string {
 			label = "atom(" + a + ")"
 		} else if s := renderDepScalar(v); s != "" {
 			// Render the constraint payload rather than falling
-			// into a Matches(TString)/AsString path that would
+			// into a ConformsTo(TString)/AsString path that would
 			// silently produce an empty label.
 			label = s
-		} else if v.Parent.Matches(TString) {
+		} else if v.Parent.ConformsTo(TString) {
 			s, _ := AsString(v)
 			if len(s) > 20 {
 				s = s[:20] + "..."
 			}
 			label = "'" + s + "'"
-		} else if v.Parent.Matches(TInteger) {
+		} else if v.Parent.ConformsTo(TInteger) {
 			n, _ := AsInteger(v)
 			label = strconv.FormatInt(n, 10)
-		} else if v.Parent.Matches(TDecimal) {
+		} else if v.Parent.ConformsTo(TDecimal) {
 			f, _ := AsDecimal(v)
 			label = formatDecimal(f)
 		}

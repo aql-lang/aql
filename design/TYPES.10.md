@@ -71,6 +71,7 @@ Any/Type                           -- the "type of types" branch
   FunctionSignature                -- function-shape value
   Disjunct                         -- tor-union (`Integer tor String`)
     Enum                           -- enumerated atoms (`enum [red green blue]`)
+  Negation                         -- tnot-complement (`tnot String`)
 ```
 
 ## Lattice principles
@@ -120,11 +121,11 @@ prefix is derived from the **topmost ancestor that is NOT `Any`** —
 
 ## Type Matching
 
-* `Any` matches everything (a deliberate fast-path in `Type.Matches`).
+* `Any` matches everything (a deliberate fast-path in `Type.ConformsTo`).
 * A child matches a parent via the ancestor walk.
 * A parent does NOT match a child.
 * DepScalar values (`Integer gt 0`) inherit their base scalar as
-  `Parent`, so `(Integer gt 0).Parent.Matches(Integer)` is true via
+  `Parent`, so `(Integer gt 0).Parent.ConformsTo(Integer)` is true via
   the regular ancestor walk; no special override needed.
 * Signature matching routes through `Type.Behavior.Match` so per-
   type custom matchers participate (predicate types, refinement
@@ -144,7 +145,7 @@ Type names auto-expand via the kernel `Builtin` table:
 | `Object`, `Resource`, `Entity`, `Array`, `Record`, `Options`, `Error`, `Store`, `Table` | `Ideal/[…]` |
 | `Tensor`, `Matrix`, `Vector` | `Ideal/Tensor/[…]` (external) |
 | `Timeout`, `Interval` | `Ideal/[…]` (external) |
-| `Function`, `FunctionSignature`, `Disjunct`, `Enum` | `Type/[…]` |
+| `Function`, `FunctionSignature`, `Disjunct`, `Enum`, `Negation` | `Type/[…]` |
 
 ## Comparison and Ordering
 

@@ -63,7 +63,7 @@ func (p *predicateUnifier) Match(v Value, t *Type) bool {
 	}
 	// Gate 1: input-type compatibility.
 	if inputT := PredicateInputType(p.constraint); inputT != nil {
-		if !v.Parent.Matches(inputT) {
+		if !v.Parent.ConformsTo(inputT) {
 			return false
 		}
 	}

@@ -28,7 +28,7 @@ func MatchFnSig(fn Value, args []Value) *FnSig {
 		}
 		match := true
 		for j, p := range sig.Params {
-			if !args[j].Parent.Matches(p.Type) {
+			if !args[j].Parent.ConformsTo(p.Type) {
 				match = false
 				break
 			}

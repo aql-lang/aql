@@ -37,6 +37,125 @@ func TestCheckAddIntegerPrecision(t *testing.T) {
 	}
 }
 
+// TestCheckModuleExportTypePropagation verifies that an imported export
+// carries its real type through check mode rather than degrading to Any.
+// `get`/`getr` on a ModuleExport resolve the concrete export in carrier
+// mode, so a function export's call propagates its declared return type
+// and a bare export reference keeps its Function type. Before this, every
+// `Pkg.member` reference checked as Any.
+func TestCheckModuleExportTypePropagation(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+
+	// A function export called with a matching arg propagates its return
+	// type: MathUtil.sqrt : [Decimal] -> Decimal.
+	res, err := a.Check(`import "aql:math-util" end  16.0 MathUtil.sqrt`)
+	if err != nil {
+		t.Fatalf("check error: %v", err)
+	}
+	if len(res.Stack) != 1 || res.Stack[0] != "Decimal" {
+		t.Fatalf("expected residual [Decimal] (sqrt return type propagated), got %v", res.Stack)
+	}
+
+	// A bare export reference keeps a function type (FnDef wrapper renders
+	// as __FN; an AQL-preamble fn export renders as Function) — the point
+	// is that it is no longer the bare Any it used to degrade to.
+	res2, err := a.Check(`import "aql:math-util" end  MathUtil.sqrt`)
+	if err != nil {
+		t.Fatalf("check error: %v", err)
+	}
+	if len(res2.Stack) != 1 || (res2.Stack[0] != "__FN" && res2.Stack[0] != "Function") {
+		t.Fatalf("expected bare MathUtil.sqrt to carry a function type, got %v", res2.Stack)
+	}
+}
+
+// TestCheckUncalledFunction verifies the uncalled_function diagnostic
+// makes silent FnDef-value dispatch failures loud: a named function
+// reached as a call whose args match no signature is left on the stack
+// as data at runtime (DX-report T1/B1) — check mode now flags it,
+// aligning the FnDef-value path with plain words. With module exports
+// carrying their real types, this covers namespace dispatch as well as
+// local function values.
+func TestCheckUncalledFunction(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	count := func(src string) int {
+		res, err := a.Check(src)
+		if err != nil {
+			t.Fatalf("check %q: %v", src, err)
+		}
+		n := 0
+		for _, d := range res.Diagnostics {
+			if d.Code == "uncalled_function" {
+				n++
+			}
+		}
+		return n
+	}
+
+	cases := []struct {
+		src  string
+		want int
+		desc string
+	}{
+		{`import "aql:decision" end  Decision.cond 5 6 7`, 1, "module namespace call, mismatched args"},
+		{`import "aql:decision" end  Decision.cond age/q "gt" 18`, 0, "module namespace call, correct args"},
+		{`import "aql:decision" end  Decision.cond`, 0, "bare module reference, no args"},
+		{`def f fn [[x:Integer] [Integer] [x mul x]]  (usurp f) "hello"`, 1, "local fn value, wrong-typed arg"},
+		{`def f fn [[x:Integer] [Integer] [x mul x]]  (usurp f) 5`, 0, "local fn value, correct arg"},
+		{`def f fn [[x:Integer] [Integer] [x mul x]]  f/r "hello"`, 0, "genuinely inert /r ref (no paren) is not a call"},
+	}
+	for _, c := range cases {
+		if got := count(c.src); got != c.want {
+			t.Errorf("%s: want %d uncalled_function, got %d  (%s)", c.desc, c.want, got, c.src)
+		}
+	}
+}
+
+// TestCheckUnreachableSignature verifies dead-overload detection: under
+// first-match-wins dispatch, an `fn` overload that an earlier,
+// higher-priority signature already subsumes can never fire and is
+// flagged (the dead-clause analogue). Distinct or properly subtype-
+// ordered overloads stay reachable and are not flagged.
+func TestCheckUnreachableSignature(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	count := func(src string) int {
+		res, err := a.Check(src)
+		if err != nil {
+			t.Fatalf("check %q: %v", src, err)
+		}
+		n := 0
+		for _, d := range res.Diagnostics {
+			if d.Code == "unreachable_signature" {
+				n++
+			}
+		}
+		return n
+	}
+	cases := []struct {
+		src  string
+		want int
+		desc string
+	}{
+		{`def f fn [[x:Integer] [Integer] [x] [y:Integer] [Integer] [y]]`, 1, "duplicate Integer overload"},
+		{`def g fn [[a:Integer b:String] [Integer] [a] [c:Integer d:String] [Integer] [c]]`, 1, "duplicate 2-arg overload"},
+		{`def f fn [[x:Integer] [Integer] [x] [s:String] [String] [s]]`, 0, "distinct Integer/String overloads"},
+		{`def f fn [[x:Number] [Number] [x] [y:Integer] [Integer] [y]]`, 0, "Integer subtype of Number — both reachable"},
+	}
+	for _, c := range cases {
+		if got := count(c.src); got != c.want {
+			t.Errorf("%s: want %d unreachable_signature, got %d  (%s)", c.desc, c.want, got, c.src)
+		}
+	}
+}
+
 // TestCheckAddDecimalWiden validates that mixing integer and decimal
 // carriers widens the result to Decimal — this is the
 // "else" branch of ReturnsNumericBinary.
@@ -1066,8 +1185,11 @@ func TestCheckContextMissingKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
-	if len(res.Stack) != 1 || res.Stack[0] != "Any" {
-		t.Errorf("expected Any carrier for unset key, got %v", res.Stack)
+	// An unset key is an escape hatch: the checker emits a bounded gradual
+	// dynamic(Any) (optimistically compatible downstream) rather than a
+	// strict Any, surfaced in the residual stack as dynamic(Any).
+	if len(res.Stack) != 1 || res.Stack[0] != "dynamic(Any)" {
+		t.Errorf("expected dynamic(Any) carrier for unset key, got %v", res.Stack)
 	}
 }
 
@@ -1591,5 +1713,70 @@ func TestCheckUndefinedWordTypoNextToValid(t *testing.T) {
 	}
 	if !foundString {
 		t.Errorf("expected String carrier from `upper \"hi\"`, got stack=%v", res.Stack)
+	}
+}
+
+// TestCheckIndexOutOfRange pins the static index/size check
+// (design/elixir-types-in-aql-report.0.md item 4). A provably
+// out-of-range list index — past the end, equal to the length, or
+// negative — is flagged at `aql check` with an index_out_of_range
+// warning; in-bounds, unknown-length, and non-list accesses stay
+// silent (soundness: never a false positive).
+func TestCheckIndexOutOfRange(t *testing.T) {
+	countOOB := func(t *testing.T, src string) (int, []lang.CheckDiagnostic) {
+		t.Helper()
+		a, err := lang.New()
+		if err != nil {
+			t.Fatalf("new: %v", err)
+		}
+		res, err := a.Check(src)
+		if err != nil {
+			t.Fatalf("check %q: %v", src, err)
+		}
+		n := 0
+		for _, d := range res.Diagnostics {
+			if d.Code == "index_out_of_range" {
+				n++
+			}
+		}
+		return n, res.Diagnostics
+	}
+
+	// Positive: every one of these is a guaranteed runtime failure, so
+	// it must be flagged.
+	flagged := []struct{ name, src string }{
+		{"getr past end", "[10 20] 5 getr"},
+		{"getr at length boundary", "[10 20] 2 getr"},
+		{"getr negative", "[10 20] -1 getr"},
+		{"getr on iota-computed length", "(iota 3) 5 getr"},
+		{"getr on empty list", "[] 0 getr"},
+		{"getr on bound concrete list", "def xs [10 20] end  xs 5 getr"},
+		{"at index past end", `import "aql:array-util" end  [10 20] [0 5] ArrayUtil.at`},
+	}
+	for _, tc := range flagged {
+		t.Run("flag/"+tc.name, func(t *testing.T) {
+			n, diags := countOOB(t, tc.src)
+			if n == 0 {
+				t.Errorf("expected index_out_of_range for %q, got: %+v", tc.src, diags)
+			}
+		})
+	}
+
+	// Negative: in-bounds, unknown-length, or non-list — must NOT be
+	// flagged. A false positive here would be worse than a missed one.
+	silent := []struct{ name, src string }{
+		{"getr first element", "[10 20] 0 getr"},
+		{"getr last valid", "[10 20] 1 getr"},
+		{"unknown-length carrier", "([10 20] reverse) 5 getr"},
+		{"map container, not a list", "{a:1} 5 getr"},
+		{"at all in bounds", `import "aql:array-util" end  [10 20] [0 1] ArrayUtil.at`},
+	}
+	for _, tc := range silent {
+		t.Run("silent/"+tc.name, func(t *testing.T) {
+			n, diags := countOOB(t, tc.src)
+			if n != 0 {
+				t.Errorf("expected NO index_out_of_range for %q, got %d: %+v", tc.src, n, diags)
+			}
+		})
 	}
 }

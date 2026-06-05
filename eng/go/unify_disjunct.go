@@ -7,7 +7,7 @@ package eng
 // Before this Unifier existed, `def Maybe (Integer tor none)` minted
 // a lattice node parented at TDisjunct but left its Behavior as the
 // kernel DefaultBehavior. DefaultBehavior.Match falls back to a plain
-// lattice walk: it asks `v.Parent.Matches(Maybe)`, which is false for
+// lattice walk: it asks `v.Parent.ConformsTo(Maybe)`, which is false for
 // every value (Integer's lattice path is Integer → Number → Scalar →
 // Any, none of which is Maybe). So `42.Is(Maybe)` returned false at
 // every dispatch site — fn sig matching, the `is` word, options

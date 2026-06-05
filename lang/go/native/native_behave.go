@@ -370,7 +370,7 @@ func (u *userBehavior) runCompareBody(a, b Value) (int, error) {
 		return 0, fmt.Errorf("behave compare %s: body produced no result", u.typeName)
 	}
 	top := result[len(result)-1]
-	if !top.Parent.Matches(eng.TInteger) {
+	if !top.Parent.ConformsTo(eng.TInteger) {
 		return 0, fmt.Errorf("behave compare %s: body must return Integer, got %s", u.typeName, top.Parent.String())
 	}
 	n, err := eng.AsInteger(top)
@@ -546,7 +546,7 @@ func (u *userBehavior) runCanonBody(v Value) (string, error) {
 		return "", fmt.Errorf("body produced no result")
 	}
 	top := result[len(result)-1]
-	if !top.Parent.Matches(eng.TString) {
+	if !top.Parent.ConformsTo(eng.TString) {
 		return "", fmt.Errorf("body must return String, got %s", top.Parent.String())
 	}
 	s, err := eng.AsString(top)

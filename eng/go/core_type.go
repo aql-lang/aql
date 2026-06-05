@@ -248,7 +248,7 @@ func IsValueOfType(v, t Value) bool {
 			if v.Carrier {
 				return false
 			}
-			return IsBareTypeNode(v) || IsTypeBody(v) || IsRecordShape(v) || v.Parent.Matches(TType)
+			return IsBareTypeNode(v) || IsTypeBody(v) || IsRecordShape(v) || v.Parent.ConformsTo(TType)
 		}
 		// Canonical dispatch site: route through Behavior so custom
 		// type semantics (predicate types, dependent scalars, future
@@ -389,6 +389,17 @@ func InstallType(r *Registry, name string, body Value) error {
 		di, _ := AsDisjunct(body)
 		def := r.Types.MintType(name, body.Parent)
 		installDisjunctUnifier(def, di.Alternatives, name)
+		r.Defs.PushType(name, def, body)
+	} else if IsNegation(body) {
+		// `def NotStr (tnot String)` route: mint a lattice node parented
+		// at the body's lattice (TNegation) and attach a negationUnifier
+		// so `5.Is(NotStr)` and sig dispatch consult the complement
+		// (admit v iff v does NOT match the inner type). Same dispatch-
+		// vs-`is` asymmetry as the disjunct branch: install on `def`,
+		// not on `body`.
+		ni, _ := AsNegation(body)
+		def := r.Types.MintType(name, body.Parent)
+		installNegationUnifier(def, ni.Inner, name)
 		r.Defs.PushType(name, def, body)
 	} else if body.IsDepScalar() {
 		// `def Big (Integer gt 10)` route: mint a lattice node

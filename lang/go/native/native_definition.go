@@ -2,6 +2,7 @@ package native
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/aql-lang/aql/eng/go"
 )
@@ -280,7 +281,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		}
 	}
 	if r.Check.IsActive() && constraint.IsDepScalar() {
-		if body.Parent.Matches(constraint.Parent) {
+		if body.Parent.ConformsTo(constraint.Parent) {
 			return installAndRecordDef(r, name, body, args[0].Pos)
 		}
 	}
@@ -437,7 +438,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 			if IsWord(declElems.Get(0)) {
 				_as1, _ := AsWord(declElems.Get(0))
 				name = _as1.Name
-			} else if declElems.Get(0).Parent.Matches(TString) {
+			} else if declElems.Get(0).Parent.ConformsTo(TString) {
 				name, _ = AsString(declElems.Get(0))
 			} else {
 				return nil, r.AqlError("var_error", "var: declaration name must be a word or string", "var")
@@ -447,7 +448,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 			result = append(result, declElems.Slice()[1:]...)
 			result = append(result, NewEnd())
 
-		case decl.Parent.Matches(TString):
+		case decl.Parent.ConformsTo(TString):
 			name, _ := AsString(decl)
 			varNames = append(varNames, name)
 			result = append(result, NewWord("def"), NewWord(name), NewEnd())
@@ -498,7 +499,37 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		perSig[i] = eng.ComputeCaptures(r, &fnDef.Signatures[i])
 	}
 	fnDef.Captured = eng.MergeCaptures(perSig)
+
+	// Check mode: flag overloads that an earlier, higher-priority
+	// signature already subsumes — under first-match-wins dispatch they
+	// can never fire (the dead-clause analogue). A static property of the
+	// sig list, emitted once at fn construction.
+	if r.Check.IsActive() && len(fnDef.Signatures) > 1 {
+		for _, d := range eng.DeadSignatures(fnDef.Signatures) {
+			r.Check.AddDiagnostic(eng.CheckDiagnostic{
+				Code:   "unreachable_signature",
+				Detail: "fn overload " + fnSigArgList(d.Sig) + " is unreachable — the earlier signature " + fnSigArgList(d.ShadowedBy) + " already accepts every call it would match",
+				Word:   "fn",
+			})
+		}
+	}
+
 	return []Value{NewFunction(fnDef)}, nil
+}
+
+// fnSigArgList renders a signature's argument types as a short
+// `[Integer String]` list for the unreachable_signature diagnostic.
+func fnSigArgList(s eng.Signature) string {
+	ts := s.ArgTypes()
+	parts := make([]string, len(ts))
+	for i, t := range ts {
+		if t == nil {
+			parts[i] = "Any"
+			continue
+		}
+		parts[i] = t.Leaf()
+	}
+	return "[" + strings.Join(parts, " ") + "]"
 }
 
 // afnHandler — `afn input body` constructs an anonymous Function value

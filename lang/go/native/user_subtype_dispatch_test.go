@@ -238,8 +238,8 @@ func TestProbeFooInstance_DEBUG(t *testing.T) {
 	t.Logf("inst.Is(def): %v", inst.Is(def))
 	bNode := body
 	t.Logf("inst.Is(&body): %v", inst.Is(&bNode))
-	t.Logf("inst.Parent.Matches(def): %v", inst.Parent.Matches(def))
-	t.Logf("inst.Parent.Matches(&body): %v", inst.Parent.Matches(&bNode))
+	t.Logf("inst.Parent.ConformsTo(def): %v", inst.Parent.ConformsTo(def))
+	t.Logf("inst.Parent.ConformsTo(&body): %v", inst.Parent.ConformsTo(&bNode))
 }
 
 func TestProbeMaybe_DEBUG(t *testing.T) {

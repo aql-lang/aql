@@ -65,7 +65,7 @@ func TestConvertIdealNativeFallback(t *testing.T) {
 		t.Errorf("convert List (native Ideal, no override) = %s, want []", got)
 	}
 	// And it really is an Ideal that resolves the fallback, not a Map.
-	if !v.Parent.Matches(TIdeal) {
+	if !v.Parent.ConformsTo(TIdeal) {
 		t.Errorf("%s is not under Ideal", v.Parent)
 	}
 }

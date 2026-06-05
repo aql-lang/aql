@@ -729,8 +729,8 @@ func (e *Engine) preEvalParens(maxFwd int, fn *FnDefInfo) error {
 		tok := e.stack[scanIdx]
 
 		// Boundary conditions: stop scanning.
-		if IsForward(tok) || tok.Parent.Matches(TMark) || tok.Parent.Matches(TMove) ||
-			tok.Parent.Matches(TInternal) || tok.Parent.Matches(TReturnCheck) {
+		if IsForward(tok) || tok.Parent.ConformsTo(TMark) || tok.Parent.ConformsTo(TMove) ||
+			tok.Parent.ConformsTo(TInternal) || tok.Parent.ConformsTo(TReturnCheck) {
 			break
 		}
 
@@ -1119,6 +1119,11 @@ func (e *Engine) stepWord(val Value) error {
 			// onto the stack (the old implicit behaviour / Forth-style
 			// macros) use the explicit `def name word [list]` form, whose
 			// __SP marker is handled in stepLiteral.
+			if top.Dynamic && e.registry.Check.IsActive() {
+				// Tag the gradual value with its binding so a typed use
+				// downstream narrows the binding (narrowing-through-use).
+				top.DynFrom = w.Name
+			}
 			e.stack[e.pointer] = top
 			return e.stepLiteral()
 		}
@@ -1794,7 +1799,7 @@ func (e *Engine) stepLiteral() error {
 		nextIdx := fwd.CollectedArgs
 		matches := sigArgMatches(fwd.Sig, nextIdx, val)
 		if !matches && fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx] &&
-			val.Parent.Equal(TWord) && TAtom.Matches(sigArgType(fwd.Sig, nextIdx)) {
+			val.Parent.Equal(TWord) && TAtom.ConformsTo(sigArgType(fwd.Sig, nextIdx)) {
 			w, _ := AsWord(val)
 			atom := NewAtom(w.Name)
 			atom.Pos = val.Pos // preserve source position across /q Word→Atom conversion
@@ -2086,7 +2091,7 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 				return Value{}, fmt.Errorf("computed key [%s]: %w", key, err)
 			}
 			if len(keyResult) == 1 {
-				if keyResult[0].Parent.Matches(TString) {
+				if keyResult[0].Parent.ConformsTo(TString) {
 					resolvedKey, _ = AsString(keyResult[0])
 				} else if IsAtom(keyResult[0]) {
 					resolvedKey, _ = AsAtom(keyResult[0])
@@ -2399,8 +2404,8 @@ func isRecordableLiteral(v Value) bool {
 	switch {
 	case IsForward(v), IsOpenParen(v), IsCloseParen(v), IsEnd(v):
 		return false
-	case v.Parent.Matches(TMark), v.Parent.Matches(TMove),
-		v.Parent.Matches(TReturnCheck), v.Parent.Matches(TInternal):
+	case v.Parent.ConformsTo(TMark), v.Parent.ConformsTo(TMove),
+		v.Parent.ConformsTo(TReturnCheck), v.Parent.ConformsTo(TInternal):
 		return false
 	}
 	return true
@@ -2444,6 +2449,38 @@ func trivialDelegationTarget(sig *FnSig) (string, bool) {
 		return "", false
 	}
 	return w.Name, true
+}
+
+// argTypeList renders a comma-separated list of the values' lattice
+// types, for the uncalled_function diagnostic's "arguments: …" detail.
+func argTypeList(vals []Value) string {
+	parts := make([]string, len(vals))
+	for i, v := range vals {
+		parts[i] = v.Parent.String()
+	}
+	return strings.Join(parts, ", ")
+}
+
+// upcomingArgs returns the value/literal tokens that follow valIdx up to
+// the next statement or group boundary (End / CloseParen / Mark / Move)
+// — the forward args a function-value call had available to collect.
+// Forward-collection markers are skipped; everything before the first
+// boundary is a candidate arg. Lets a failed forward-form call
+// (`Pkg.fn a b`) be recognised as a call, not a bare value reference.
+func (e *Engine) upcomingArgs(valIdx int) []Value {
+	var out []Value
+	for i := valIdx + 1; i < len(e.stack); i++ {
+		v := e.stack[i]
+		switch {
+		case IsForward(v):
+			continue
+		case IsMark(v) || IsMove(v) || IsCloseParen(v) || IsEnd(v):
+			return out
+		default:
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // execFnDefSigStackMatch is the legacy pure-stack dispatch path for
@@ -2545,6 +2582,31 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 				}
 				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
 			}
+		}
+	}
+
+	// Check mode: a NAMED function reached as a call — args on the stack
+	// (swap/prefix form) or upcoming forward tokens (`Pkg.fn a b`) — that
+	// matched no signature is the silent-dispatch footgun: at runtime the
+	// value is left on the stack as data with no error (DX-report T1/B1).
+	// Make it loud, aligning the FnDef path with plain words, which error
+	// here via signatureError → no_signature. Guards keep it precise:
+	// named (not an anonymous lambda value), not explicitly inert (`/r` /
+	// `quote` set Quoted), and at least one candidate arg available — so a
+	// bare function-as-value reference with no args is left alone.
+	if e.registry != nil && e.registry.Check.IsActive() &&
+		fnDef.Name != "" && !fnDef.Anonymous &&
+		valIdx < len(e.stack) && !e.stack[valIdx].Quoted {
+		candidates := append(append([]Value{}, resolved...), e.upcomingArgs(valIdx)...)
+		if len(candidates) > 0 {
+			pos := e.stack[valIdx].Pos
+			e.registry.Check.AddDiagnostic(CheckDiagnostic{
+				Code:   "uncalled_function",
+				Detail: "call to '" + fnDef.Name + "' matched no signature and was left on the stack as data (arguments: " + argTypeList(candidates) + ")",
+				Word:   fnDef.Name,
+				Row:    pos.Row,
+				Col:    pos.Col,
+			})
 		}
 	}
 
@@ -3392,7 +3454,7 @@ func (e *Engine) stepCloseParen() error {
 			// type's Behavior governs both ends symmetrically: a predicate
 			// refine runs its predicate on the way out (subset semantics),
 			// a bare refine stays nominal (newtype), and builtins/objects
-			// are unchanged (v.Is ≡ v.Parent.Matches on concrete values).
+			// are unchanged (v.Is ≡ v.Parent.ConformsTo on concrete values).
 			// See design/REFINE-NEWTYPE-VS-SUBSET.0.md.
 			for k, exp := range rc.Returns {
 				if !results[extra+k].Is(exp) {
@@ -3824,8 +3886,8 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				expectedType := sigArgType(sig, fwd)
 
 				// 1.4: structural boundaries — stop forward scan.
-				if IsForward(tok) || tok.Parent.Matches(TMark) || tok.Parent.Matches(TMove) ||
-					tok.Parent.Matches(TInternal) || tok.Parent.Matches(TReturnCheck) {
+				if IsForward(tok) || tok.Parent.ConformsTo(TMark) || tok.Parent.ConformsTo(TMove) ||
+					tok.Parent.ConformsTo(TInternal) || tok.Parent.ConformsTo(TReturnCheck) {
 					break
 				}
 
@@ -3858,7 +3920,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					// (the conversion happens at insertForward / stepLiteral
 					// time; here we just count it as a match).
 					if sig.QuoteArgs != nil && sig.QuoteArgs[fwd] {
-						if TAtom.Matches(expectedType) {
+						if TAtom.ConformsTo(expectedType) {
 							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
@@ -4046,7 +4108,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			// an [Atom/q, ...] sig via the regular sigTypeMatches path
 			// just below, no /q involvement required.
 			if sig.QuoteArgs != nil && sig.QuoteArgs[sigIdx] && stackVal.Parent.Equal(TWord) {
-				if !TAtom.Matches(sigArgType(sig, sigIdx)) {
+				if !TAtom.ConformsTo(sigArgType(sig, sigIdx)) {
 					allMatch = false
 					break
 				}

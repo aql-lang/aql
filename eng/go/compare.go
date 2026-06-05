@@ -104,7 +104,7 @@ func ExactEqual(a, b Value) bool {
 		return true
 	}
 
-	// DepScalar pre-empts the Matches(TNumber)/Matches(TString)/...
+	// DepScalar pre-empts the ConformsTo(TNumber)/ConformsTo(TString)/...
 	// dispatch below: the lattice override would otherwise route
 	// DepInteger payloads into AsNumber and silently compare zero
 	// values. Two DepScalars are equal iff their constraint shapes
@@ -122,17 +122,17 @@ func ExactEqual(a, b Value) bool {
 	}
 
 	// Scalars: compare by value.
-	if a.Parent.Matches(TNumber) && b.Parent.Matches(TNumber) {
+	if a.Parent.ConformsTo(TNumber) && b.Parent.ConformsTo(TNumber) {
 		_as9, _ := AsNumber(a)
 		_as8, _ := AsNumber(b)
 		return _as9 == _as8
 	}
-	if a.Parent.Matches(TString) && b.Parent.Matches(TString) {
+	if a.Parent.ConformsTo(TString) && b.Parent.ConformsTo(TString) {
 		_as11, _ := AsString(a)
 		_as10, _ := AsString(b)
 		return _as11 == _as10
 	}
-	if a.Parent.Matches(TBoolean) && b.Parent.Matches(TBoolean) {
+	if a.Parent.ConformsTo(TBoolean) && b.Parent.ConformsTo(TBoolean) {
 		_as13, _ := AsBoolean(a)
 		_as12, _ := AsBoolean(b)
 		return _as13 == _as12
@@ -206,17 +206,17 @@ func DeepEqual(a, b Value) bool {
 	}
 
 	// Scalars.
-	if a.Parent.Matches(TNumber) && b.Parent.Matches(TNumber) {
+	if a.Parent.ConformsTo(TNumber) && b.Parent.ConformsTo(TNumber) {
 		_as17, _ := AsNumber(a)
 		_as16, _ := AsNumber(b)
 		return _as17 == _as16
 	}
-	if a.Parent.Matches(TString) && b.Parent.Matches(TString) {
+	if a.Parent.ConformsTo(TString) && b.Parent.ConformsTo(TString) {
 		_as19, _ := AsString(a)
 		_as18, _ := AsString(b)
 		return _as19 == _as18
 	}
-	if a.Parent.Matches(TBoolean) && b.Parent.Matches(TBoolean) {
+	if a.Parent.ConformsTo(TBoolean) && b.Parent.ConformsTo(TBoolean) {
 		_as21, _ := AsBoolean(a)
 		_as20, _ := AsBoolean(b)
 		return _as21 == _as20

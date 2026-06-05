@@ -48,6 +48,7 @@ var (
 	TDefCleanup     = mustType("Word/__IN/__DC")
 	TDisjunct       = mustType("Type/Disjunct")
 	TEnum           = mustType("Type/Disjunct/Enum")
+	TNegation       = mustType("Type/Negation")
 	TMark           = mustType("Word/__MK")
 	TMove           = mustType("Word/__MV")
 	TSplice         = mustType("Word/__SP")
@@ -190,18 +191,25 @@ func ResolveTypePath(name string) (*Type, bool) {
 	return nil, false
 }
 
-// Matches reports whether this type satisfies the given pattern.
-//   - "Any" pattern matches everything.
-//   - A child matches a parent: Scalar/String/ProperString matches Scalar/String.
-//   - A parent does NOT match a child: Scalar/String does not match Scalar/String/ProperString.
+// ConformsTo reports whether t is a subtype of — conforms to — pattern:
+// every value of type t is also a value of type pattern. The relation
+// is directional (a partial order, NOT symmetric): a child conforms to
+// its parent; a parent does NOT conform to its child.
+//   - everything conforms to "Any" (and to a nil pattern, vacuously).
+//   - Scalar/String/ProperString conforms to Scalar/String.
+//   - Scalar/String does NOT conform to Scalar/String/ProperString.
+//
+// (Formerly named Matches; renamed because "matches" read as a symmetric
+// predicate when this is the asymmetric conformance order. The strict /
+// irreflexive form — t below pattern, not equal — is IsSubtypeOf.)
 //
 // DepScalar values carry their base scalar as Parent (e.g. an
-// `Integer gte 0` value has Parent=Integer), so they satisfy any
+// `Integer gte 0` value has Parent=Integer), so they conform to any
 // scalar-typed slot via the normal ancestor walk — no special-case
 // override here. Per-value satisfaction (does 5 lie in [10, ∞)?) is
 // handled at Unify time; this method answers the type-level question
 // only.
-func (t *Type) Matches(pattern *Type) bool {
+func (t *Type) ConformsTo(pattern *Type) bool {
 	// Empty pattern (nil Type) is a vacuous match — preserves the
 	// old PathSubtype semantics where a zero-iteration prefix loop
 	// returned true. Dispatcher / coercion code relies on this.
@@ -219,7 +227,7 @@ func (t *Type) Matches(pattern *Type) bool {
 
 // PathSubtype reports whether t is a strict path-prefix subtype of
 // pattern. With ID-based identity, this is equivalent to the ancestry
-// walk used by Matches — no `Any` bolt-on.
+// walk used by ConformsTo — no `Any` bolt-on.
 //
 // `t.PathSubtype(t)` is always true (identity is a subtype of itself).
 func (t *Type) PathSubtype(pattern *Type) bool {

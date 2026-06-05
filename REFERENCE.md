@@ -235,7 +235,8 @@ Any
 │   └── (internal control words)
 └── Type
     ├── Function, FunctionSignature
-    └── Disjunct (Enum)
+    ├── Disjunct (Enum)
+    └── Negation
 ```
 
 A child matches its parent (`Integer` is a `Number` is a `Scalar`
@@ -273,6 +274,43 @@ def OptInt (Integer tor none)
 OptInt unify 5                => 5 true
 OptInt unify none             => none true
 OptInt unify "x"              => '~unify-fail' false
+```
+
+### Negation
+
+`tnot T` produces the complement type — a value matches it if it does
+**not** match `T`. With `tor` (union) and `tand` (intersection) it
+closes the type algebra under Boolean operations:
+
+```
+def NotStr (tnot String)
+5 is NotStr                              => true
+"x" is NotStr                            => false
+5 is (tnot (String tor Boolean))         => true     # neither
+Integer tand (tnot String)               => Integer  # disjoint — no-op
+String tand (tnot String)                => Never     # self-complement is empty
+(Integer tor String) tand (tnot String)  => Integer  # drops the excluded alternative
+```
+
+The identities hold: `tnot Never` is `Any`, `tnot Any` is `Never`, and
+`tnot (tnot T)` is `T`. A guard narrows the else branch by the
+complement — after `if (x is T) […] […]`, `x` is `cur tand (tnot T)`
+in the else branch.
+
+De Morgan's laws fold conjunctions and disjunctions of negations:
+
+```
+(tnot Integer) tand (tnot String)  => tnot (Integer|String)   # tnot A tand tnot B = tnot (A tor B)
+(tnot Integer) tor (tnot String)   => Any                      # tnot A tor tnot B = tnot (A tand B) = tnot Never
+```
+
+Negating a refinement (`DepScalar`) takes its closed-form complement —
+the bound flips within the base, so intersecting with the base reduces
+to a positive refinement:
+
+```
+Integer tand (tnot (Integer gt 0))        => (Integer lte 0)
+Integer tand (tnot (between 5 10 Integer))  => (Integer lt 5)|(Integer gt 10)
 ```
 
 ### Type ordering
