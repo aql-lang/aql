@@ -55,7 +55,7 @@ is, see the **[Explanation](EXPLANATION.md)**.
 | Syntax | Type | Example |
 |--------|------|---------|
 | Digits with optional `-` | `Integer` | `42`, `-5`, `0` |
-| Digits with `.` | `Decimal` | `3.14`, `-0.5` |
+| Digits with `.` | `Float` | `3.14`, `-0.5` |
 | Double or single quotes | `String` | `"hello"`, `'world'` |
 | Backticks with `${...}` | `String` (template) | `` `x = ${x}` `` |
 | `true`, `false` | `Boolean` | `true` |
@@ -63,7 +63,7 @@ is, see the **[Explanation](EXPLANATION.md)**.
 | Bare unquoted word | atom, only inside a `/q`-quoted slot | `foo` |
 | `quote foo` | `Atom` | `foo` |
 
-Type literals: `Number`, `Integer`, `Decimal`, `String`, `Boolean`,
+Type literals: `Number`, `Integer`, `Float`, `String`, `Boolean`,
 `Atom`, `Scalar`, `Any`, `None`, `List`, `Map`, plus every named
 type you define with `def`.
 
@@ -233,7 +233,7 @@ Any
 │   ├── Boolean                     -- false | true
 │   ├── Number
 │   │   ├── Integer
-│   │   └── Decimal
+│   │   └── Float
 │   ├── String
 │   │   ├── EmptyString
 │   │   └── ProperString
@@ -272,7 +272,7 @@ slash-separated paths in `pathof`; short names like `Number` or
 | `String` | `Scalar/String` |
 | `Number` | `Scalar/Number` |
 | `Integer` | `Scalar/Number/Integer` |
-| `Decimal` | `Scalar/Number/Decimal` |
+| `Float` | `Scalar/Number/Float` |
 | `Boolean` | `Scalar/Boolean` |
 | `Atom` | `Scalar/Atom` |
 | `List` | `Node/List` |
@@ -285,14 +285,15 @@ slash-separated paths in `pathof`; short names like `Number` or
 | `Interval` | `Ideal/Interval` |
 | `Function` | `Word/Function` |
 
-> **`Decimal` is a binary float.** Despite the name, a `Decimal` is an
-> IEEE-754 `float64`, not an exact base-10 number. Expect the usual
-> binary-floating-point results (`0.1 add 0.2` returns `0.30000000000000004`).
-> `Integer` and `Decimal` are distinct nodes but compare equal by
-> magnitude (`1 eq 1.0` returns `true`, `1 cmp 1.0` returns `0`); they are **not**
-> interchangeable, because integer `div` truncates while decimal `div`
+> **`Float` is IEEE-754 `float64`.** A fractional literal like `3.14`
+> is a `Float`, so expect binary-floating-point behaviour, not exact
+> base-10: `0.1 add 0.2` returns `0.30000000000000004`. `Integer` and
+> `Float` are distinct nodes but compare equal by magnitude (`1 eq 1.0`
+> returns `true`, `1 cmp 1.0` returns `0`); they are **not**
+> interchangeable, because integer `div` truncates while float `div`
 > does not. `convert` does not move a value between the two numeric
-> nodes — see [Type words](#type-words).
+> nodes — see [Type words](#type-words). (The name `Decimal` is
+> reserved for a future exact base-10 type; it is not yet defined.)
 
 ### Disjunctions
 
@@ -386,7 +387,7 @@ All stack words are stack-only (modifier `/s`).
 
 ### Arithmetic
 
-Forward-collecting, Integer/Decimal with auto-promotion. The
+Forward-collecting, Integer/Float with auto-promotion. The
 asymmetric ops (`sub`, `div`, `mod`, `pow`) follow the
 **argument-order rule** — see
 [Tutorial §3](TUTORIAL.md#the-argument-order-rule). All three call
@@ -411,13 +412,13 @@ a guard against mixed-type mistakes.
 Two further sharp edges on numbers:
 
 * **Integer division truncates** toward zero and never produces a
-  remainder or a `Decimal`: `7 div 2` returns `3`, `1 div 2` returns `0`. Use a
-  `Decimal` operand to get real division — `7.0 div 2` returns `3.5`.
+  remainder or a `Float`: `7 div 2` returns `3`, `1 div 2` returns `0`. Use a
+  `Float` operand to get real division — `7.0 div 2` returns `3.5`.
 * **Integer overflow is silent and inconsistent.** `add`/`mul` past
-  `maxint` promote to `Decimal` (losing integer precision):
+  `maxint` promote to `Float` (losing integer precision):
   `9223372036854775807 add 1` returns `9223372036854776000.0`; `pow`
   instead wraps two's-complement: `2 pow 63` returns `-9223372036854775808`.
-* `Decimal` is an IEEE-754 binary `float64`, **not** a base-10
+* `Float` is an IEEE-754 binary `float64`, **not** a base-10
   decimal — `0.1 add 0.2` returns `0.30000000000000004` and `1 eq 1.0`
   returns `true` even though the two divide differently. See
   [Type system](#type-system).
@@ -541,7 +542,7 @@ return type(s):
 def inc fn [[n:Integer] [Integer] [n add 1]]
 inc 5                         # returns 6
 
-def avg fn [[a:Number b:Number] [Decimal] [(a add b) div 2.0]]
+def avg fn [[a:Number b:Number] [Float] [(a add b) div 2.0]]
 avg 3 4                       # returns 3.5
 ```
 
@@ -871,7 +872,7 @@ type:
 | Map | key count | `{a:1, b:2} size` returns `2` |
 | String | length in bytes | `"hello" size` returns `5` |
 | Atom | length of the name | `foo/q size` returns `3` |
-| Integer / Decimal | floored magnitude | `42 size` returns `42`, `7.9 size` returns `7` |
+| Integer / Float | floored magnitude | `42 size` returns `42`, `7.9 size` returns `7` |
 | Boolean | `1` for `true`, `0` for `false` | `true size` returns `1` |
 | Path | segment count | `(make Path "a/b/c") size` returns `3` |
 | Object / Array / Store / Table | field / element / entry / row count | `(make Pt {x:1 y:2}) size` returns `2` |
@@ -952,8 +953,8 @@ consequences:
 > **`convert` parses text; it does not re-bucket numbers.** It turns a
 > `String` into a number (`convert Integer "42"` returns `42`) or a number
 > into text, but it will **not** move a value between the `Integer`
-> and `Decimal` nodes: `3.9 convert Integer` and even `3.0 convert
-> Integer` both error. To go from `Decimal` to `Integer`, use a
+> and `Float` nodes: `3.9 convert Integer` and even `3.0 convert
+> Integer` both error. To go from `Float` to `Integer`, use a
 > rounding word (`MathUtil.floor`, `MathUtil.round`, `MathUtil.trunc`
 > from `aql:math-util`). Note `make` is more permissive than
 > `convert`: a `:Number` record field accepts a numeric **string** and

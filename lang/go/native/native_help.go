@@ -241,7 +241,7 @@ func inferExact(name string, sig Signature) []string {
 
 	// Constants
 	case "math-pi", "math-e":
-		return []string{"Scalar/Number/Decimal"}
+		return []string{"Scalar/Number/Float"}
 
 	// Stack ops
 	case "depth":
@@ -326,7 +326,7 @@ func inferArithReturns(name string, sig Signature) []string {
 	if a0 == "Scalar/Number/Integer" && a1 == "Scalar/Number/Integer" {
 		return []string{"Scalar/Number/Integer"}
 	}
-	return []string{"Scalar/Number/Decimal"}
+	return []string{"Scalar/Number/Float"}
 }
 
 func inferUnaryMathReturns(name string, sig Signature) []string {
@@ -339,6 +339,6 @@ func inferUnaryMathReturns(name string, sig Signature) []string {
 	case "ceil", "floor", "round", "trunc":
 		return []string{"Scalar/Number/Integer"}
 	default:
-		return []string{"Scalar/Number/Decimal"}
+		return []string{"Scalar/Number/Float"}
 	}
 }

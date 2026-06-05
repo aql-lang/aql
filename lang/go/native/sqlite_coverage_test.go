@@ -10,7 +10,7 @@ func TestAqlTypeToSQLType(t *testing.T) {
 		want string
 	}{
 		{TInteger, "INTEGER"},
-		{TDecimal, "REAL"},
+		{TFloat, "REAL"},
 		{TNumber, "REAL"},
 		{TBoolean, "INTEGER"},
 		{TString, "TEXT"},
@@ -114,7 +114,7 @@ func TestAqlValueToSQLParam(t *testing.T) {
 	}
 
 	// Number column with decimal
-	got = aqlValueToSQLParam(NewDecimal(3.14), TNumber)
+	got = aqlValueToSQLParam(NewFloat(3.14), TNumber)
 	if got != float64(3.14) {
 		t.Errorf("expected 3.14, got %v", got)
 	}
@@ -195,14 +195,14 @@ func TestSQLiteStoreBasic(t *testing.T) {
 	fields := NewOrderedMap()
 	fields.Set("name", NewTypeLiteral(TString))
 	fields.Set("age", NewTypeLiteral(TInteger))
-	fields.Set("score", NewTypeLiteral(TDecimal))
+	fields.Set("score", NewTypeLiteral(TFloat))
 	fields.Set("active", NewTypeLiteral(TBoolean))
 	rec := RecordTypeInfo{Fields: fields}
 
 	row1 := NewOrderedMap()
 	row1.Set("name", NewString("alice"))
 	row1.Set("age", NewInteger(30))
-	row1.Set("score", NewDecimal(95.5))
+	row1.Set("score", NewFloat(95.5))
 	row1.Set("active", NewBoolean(true))
 
 	td := TableData{

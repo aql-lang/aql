@@ -369,18 +369,18 @@ func TestEngineCoreMakeStringToInteger(t *testing.T) {
 	}
 }
 
-func TestEngineCoreMakeStringToDecimal(t *testing.T) {
+func TestEngineCoreMakeStringToFloat(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	result := runAQL(t, r, []Value{
-		NewWord("make"), NewTypeLiteral(TDecimal), NewString("3.14"),
+		NewWord("make"), NewTypeLiteral(TFloat), NewString("3.14"),
 	})
 	if len(result) != 1 {
-		t.Fatalf("make Decimal '3.14' got %d results", len(result))
+		t.Fatalf("make Float '3.14' got %d results", len(result))
 	}
-	_as18, _ := AsDecimal(result[0])
+	_as18, _ := AsFloat(result[0])
 	if _as18 != 3.14 {
-		t.Errorf("make Decimal '3.14' = %v, want 3.14", result[0])
+		t.Errorf("make Float '3.14' = %v, want 3.14", result[0])
 	}
 }
 
@@ -448,7 +448,7 @@ func TestEngineCoreMakeErrorBadConversion(t *testing.T) {
 	}
 }
 
-func TestEngineCoreMakeDecimalTruncToInt(t *testing.T) {
+func TestEngineCoreMakeFloatTruncToInt(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// make Integer on decimal string should parse as float and truncate
@@ -492,14 +492,14 @@ func TestEngineCoreMakeToString(t *testing.T) {
 	}
 }
 
-func TestEngineCoreMakeErrorBadDecimal(t *testing.T) {
+func TestEngineCoreMakeErrorBadFloat(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	err := runAQLError(t, r, []Value{
-		NewWord("make"), NewTypeLiteral(TDecimal), NewString("xyz"),
+		NewWord("make"), NewTypeLiteral(TFloat), NewString("xyz"),
 	})
 	if err == nil {
-		t.Error("expected error for make Decimal 'xyz'")
+		t.Error("expected error for make Float 'xyz'")
 	}
 }
 
@@ -792,13 +792,13 @@ func TestEngineCoreBaseInteger(t *testing.T) {
 	}
 }
 
-func TestEngineCoreBaseDecimal(t *testing.T) {
+func TestEngineCoreBaseFloat(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{NewDecimal(3.14), NewWord("base")})
-	_as33, _ := AsDecimal(result[0])
+	result := runAQL(t, r, []Value{NewFloat(3.14), NewWord("base")})
+	_as33, _ := AsFloat(result[0])
 	if len(result) != 1 || _as33 != 0 {
-		t.Errorf("base Decimal = %v, want 0", result)
+		t.Errorf("base Float = %v, want 0", result)
 	}
 }
 
@@ -1010,7 +1010,7 @@ func TestEngineCoreTypeNameResolution(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// Type names resolve to type literals
-	for _, name := range []string{"Number", "String", "Boolean", "Integer", "Decimal", "List", "Map", "Atom"} {
+	for _, name := range []string{"Number", "String", "Boolean", "Integer", "Float", "List", "Map", "Atom"} {
 		result := runAQL(t, r, []Value{NewWord(name)})
 		if len(result) != 1 || result[0].Data != nil {
 			t.Errorf("%s should resolve to type literal, got %v", name, result)
@@ -1111,7 +1111,7 @@ func TestEngineCoreResolveTypeName(t *testing.T) {
 		{"None", TNone},
 		{"Number", TNumber},
 		{"Integer", TInteger},
-		{"Decimal", TDecimal},
+		{"Float", TFloat},
 		{"String", TString},
 		{"Boolean", TBoolean},
 		{"List", TList},
@@ -1467,19 +1467,19 @@ func TestEngineCoreMakeConvertStringToString(t *testing.T) {
 	}
 }
 
-func TestEngineCoreMakeConvertStringToDecimal(t *testing.T) {
-	v, err := makeConvert(NewString("2.5"), TDecimal)
+func TestEngineCoreMakeConvertStringToFloat(t *testing.T) {
+	v, err := makeConvert(NewString("2.5"), TFloat)
 	if err != nil {
 		t.Fatalf("makeConvert to decimal: %v", err)
 	}
-	_as51, _ := AsDecimal(v)
+	_as51, _ := AsFloat(v)
 	if _as51 != 2.5 {
-		t.Errorf("makeConvert '2.5' to Decimal = %v, want 2.5", v)
+		t.Errorf("makeConvert '2.5' to Float = %v, want 2.5", v)
 	}
 }
 
-func TestEngineCoreMakeConvertBadDecimal(t *testing.T) {
-	_, err := makeConvert(NewString("abc"), TDecimal)
+func TestEngineCoreMakeConvertBadFloat(t *testing.T) {
+	_, err := makeConvert(NewString("abc"), TFloat)
 	if err == nil {
 		t.Error("expected error converting 'abc' to decimal")
 	}

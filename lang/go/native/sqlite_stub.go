@@ -15,7 +15,7 @@ func aqlTypeToSQLType(t *Type) string {
 	switch {
 	case t.ConformsTo(TInteger):
 		return "INTEGER"
-	case t.ConformsTo(TDecimal):
+	case t.ConformsTo(TFloat):
 		return "REAL"
 	case t.ConformsTo(TNumber):
 		return "REAL"
@@ -240,8 +240,8 @@ func aqlValueToJSParam(v Value, colType *Type) any {
 		}
 		return ValToString(v)
 	case colType.ConformsTo(TNumber):
-		if v.Parent.ConformsTo(TDecimal) {
-			_as3, _ := AsDecimal(v)
+		if v.Parent.ConformsTo(TFloat) {
+			_as3, _ := AsFloat(v)
 			return _as3
 		}
 		if v.Parent.ConformsTo(TInteger) {
@@ -289,7 +289,7 @@ func jsValueToAQL(v js.Value, colType *Type) Value {
 	case colType.ConformsTo(TInteger):
 		return NewInteger(int64(v.Float()))
 	case colType.ConformsTo(TNumber):
-		return NewDecimal(v.Float())
+		return NewFloat(v.Float())
 	case colType.ConformsTo(TBoolean):
 		return NewBoolean(v.Float() != 0)
 	default:

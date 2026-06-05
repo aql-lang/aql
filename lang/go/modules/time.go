@@ -82,7 +82,7 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	// Duration extraction
 	for _, name := range []string{"total-hours", "total-minutes", "total-seconds", "total-ms"} {
-		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TClkDuration}}, []*native.Type{native.TDecimal}, subReg))
+		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TClkDuration}}, []*native.Type{native.TFloat}, subReg))
 	}
 	for _, name := range []string{"dur-years", "dur-months", "dur-days"} {
 		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TCalDuration}}, []*native.Type{native.TInteger}, subReg))
@@ -266,11 +266,11 @@ func numToClkDurationNative(name string, unit time.Duration) native.NativeFunc {
 	}
 }
 
-// clkDurationToDecimalNative builds a NativeFunc with
-// [TClkDuration] -> [TDecimal] for a total-* extraction. `returnType`
+// clkDurationToFloatNative builds a NativeFunc with
+// [TClkDuration] -> [TFloat] for a total-* extraction. `returnType`
 // is exposed because total-ms historically declared TInteger even
-// though the value pushed is Decimal.
-func clkDurationToDecimalNative(name string, returnType *native.Type, fn func(time.Duration) float64) native.NativeFunc {
+// though the value pushed is Float.
+func clkDurationToFloatNative(name string, returnType *native.Type, fn func(time.Duration) float64) native.NativeFunc {
 	return native.NativeFunc{
 		Name: name,
 
@@ -278,7 +278,7 @@ func clkDurationToDecimalNative(name string, returnType *native.Type, fn func(ti
 			Args: []*native.Type{native.TClkDuration},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				d, _ := native.AsClkDuration(args[0])
-				return []native.Value{native.NewDecimal(fn(d))}, nil
+				return []native.Value{native.NewFloat(fn(d))}, nil
 			},
 			Returns: []*native.Type{returnType}, BarrierPos: -1,
 		}},
@@ -622,11 +622,11 @@ var TimeNatives = func() []native.NativeFunc {
 		},
 		// time-duration (ISO 8601 P1Y2M3D parser) removed as a feature.
 		// --- Duration extraction ---
-		clkDurationToDecimalNative("total-hours", native.TDecimal, func(d time.Duration) float64 { return d.Hours() }),
-		clkDurationToDecimalNative("total-minutes", native.TDecimal, func(d time.Duration) float64 { return d.Minutes() }),
-		clkDurationToDecimalNative("total-seconds", native.TDecimal, func(d time.Duration) float64 { return d.Seconds() }),
-		// total-ms: handler pushes Decimal but historical Returns is TInteger.
-		clkDurationToDecimalNative("total-ms", native.TInteger, func(d time.Duration) float64 { return float64(d.Milliseconds()) }),
+		clkDurationToFloatNative("total-hours", native.TFloat, func(d time.Duration) float64 { return d.Hours() }),
+		clkDurationToFloatNative("total-minutes", native.TFloat, func(d time.Duration) float64 { return d.Minutes() }),
+		clkDurationToFloatNative("total-seconds", native.TFloat, func(d time.Duration) float64 { return d.Seconds() }),
+		// total-ms: handler pushes Float but historical Returns is TInteger.
+		clkDurationToFloatNative("total-ms", native.TInteger, func(d time.Duration) float64 { return float64(d.Milliseconds()) }),
 		calDurationToIntNative("dur-years", func(cd native.CalDurationData) int64 { return int64(cd.Years) }),
 		calDurationToIntNative("dur-months", func(cd native.CalDurationData) int64 { return int64(cd.Months) }),
 		calDurationToIntNative("dur-days", func(cd native.CalDurationData) int64 { return int64(cd.Days) }),

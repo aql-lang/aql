@@ -74,7 +74,7 @@ reverse Map	ERROR:signature_error
 		
 # Subtype satisfaction.		
 { x:5 } is { x:Number }	true	Integer is a Number subtype
-{ x:5.0 } is { x:Number }	true	Decimal is a Number subtype
+{ x:5.0 } is { x:Number }	true	Float is a Number subtype
 		
 # Nested record shapes.		
 { inner:{ x:5 } } is { inner:{ x:Integer } }	true	depth-2 unification

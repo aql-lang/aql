@@ -7,7 +7,7 @@ package eng
 //
 // Forward vs stack handling:
 //
-//   - Scalar-literal patterns (Integer, Decimal, String, Boolean,
+//   - Scalar-literal patterns (Integer, Float, String, Boolean,
 //     Atom — concrete `Data != nil` payloads) are checked on EVERY
 //     position. This is the §1.1 entry point: a sig with
 //     `Patterns[0] = NewInteger(0)` must reject any non-zero arg

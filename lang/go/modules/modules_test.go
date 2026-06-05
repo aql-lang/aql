@@ -131,7 +131,7 @@ func TestMathDotAbs(t *testing.T) {
 func TestMathDotSin(t *testing.T) {
 	r := mathRegistry(t)
 	result := runAQL(t, r, []native.Value{
-		native.NewDecimal(0),
+		native.NewFloat(0),
 		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("get"), native.NewWord("sin"),
 		native.NewCloseParen(),
@@ -145,7 +145,7 @@ func TestMathDotSin(t *testing.T) {
 func TestMathDotCos(t *testing.T) {
 	r := mathRegistry(t)
 	result := runAQL(t, r, []native.Value{
-		native.NewDecimal(0),
+		native.NewFloat(0),
 		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("get"), native.NewWord("cos"),
 		native.NewCloseParen(),
@@ -159,7 +159,7 @@ func TestMathDotCos(t *testing.T) {
 func TestMathDotSqrt(t *testing.T) {
 	r := mathRegistry(t)
 	result := runAQL(t, r, []native.Value{
-		native.NewDecimal(4),
+		native.NewFloat(4),
 		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("get"), native.NewWord("sqrt"),
 		native.NewCloseParen(),
@@ -243,7 +243,7 @@ func TestMathDotNegate(t *testing.T) {
 func TestMathDotCeil(t *testing.T) {
 	r := mathRegistry(t)
 	result := runAQL(t, r, []native.Value{
-		native.NewDecimal(1.2),
+		native.NewFloat(1.2),
 		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("get"), native.NewWord("ceil"),
 		native.NewCloseParen(),
@@ -257,7 +257,7 @@ func TestMathDotCeil(t *testing.T) {
 func TestMathDotFloor(t *testing.T) {
 	r := mathRegistry(t)
 	result := runAQL(t, r, []native.Value{
-		native.NewDecimal(1.8),
+		native.NewFloat(1.8),
 		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("get"), native.NewWord("floor"),
 		native.NewCloseParen(),
@@ -271,7 +271,7 @@ func TestMathDotFloor(t *testing.T) {
 func TestMathDotRound(t *testing.T) {
 	r := mathRegistry(t)
 	result := runAQL(t, r, []native.Value{
-		native.NewDecimal(1.5),
+		native.NewFloat(1.5),
 		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("get"), native.NewWord("round"),
 		native.NewCloseParen(),

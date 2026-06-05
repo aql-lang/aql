@@ -19,7 +19,7 @@ var ErrNoComparer = errors.New("eng: no comparer in this Behavior")
 // Dispatch is type-driven: the compare logic for a pair of values lives
 // on the type's Behavior (Comparer capability), not in a switch ladder
 // here. The dispatch routes through the lowest common ancestor of the
-// two operand VTypes — e.g. Integer-vs-Decimal walks up to Number,
+// two operand VTypes — e.g. Integer-vs-Float walks up to Number,
 // which owns the numeric ordering; Integer-vs-String walks up to
 // Scalar, which owns the cross-branch ordering; Date-vs-Date stays
 // on Date.

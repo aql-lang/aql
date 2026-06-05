@@ -969,7 +969,7 @@ func TestTypeofMetatypes(t *testing.T) {
 		{"String", NewTypeLiteral(TString), "Scalar"},
 		{"Number", NewTypeLiteral(TNumber), "Scalar"},
 		{"Integer", NewTypeLiteral(TInteger), "Number"},
-		{"Decimal", NewTypeLiteral(TDecimal), "Number"},
+		{"Float", NewTypeLiteral(TFloat), "Number"},
 		{"Boolean", NewTypeLiteral(TBoolean), "Scalar"},
 		{"List", NewTypeLiteral(TList), "Node"},
 		{"Map", NewTypeLiteral(TMap), "Node"},

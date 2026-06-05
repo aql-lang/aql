@@ -349,7 +349,7 @@ func TestRandFloatInUnitInterval(t *testing.T) {
 	}
 	res := runRandAQL(t, r, src)
 	for _, v := range res {
-		f, err := v.AsConcreteDecimal()
+		f, err := v.AsConcreteFloat()
 		if err != nil {
 			t.Fatalf("not a decimal: %v", err)
 		}

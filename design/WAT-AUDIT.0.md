@@ -13,6 +13,11 @@ audit commit. Commands are shown exactly as run. `=>` in this document
 means "evaluates to" (a human annotation — see Exhibit U for why that
 matters), not literal syntax.
 
+> **Post-audit note.** The float64 type was since renamed `Decimal` →
+> `Float` (Exhibit L, resolved). Exhibit transcripts below predate that
+> rename and still show `Decimal`; read it as `Float`. The name
+> `Decimal` is now reserved for a future exact base-10 type.
+
 ## How to read this
 
 Each exhibit is tagged with a disposition:
@@ -271,15 +276,15 @@ $ aql do -- '0.1 0.2 add 0.3 eq'  => false
 `typeof 0.1` is `Decimal`, a name that implies base-10 exactness. It is
 IEEE-754 binary float with the standard `0.1 + 0.2 ≠ 0.3` behaviour.
 
-> **Fix.** Done in docs (a note states `Decimal` is binary `float64`).
-> Decision taken: **rename the float64 type `Decimal` → `Float`**, which
-> frees the name `Decimal` for a future *true* arbitrary-precision
-> base-10 type (likely backed by an `apd`-style coefficient+exponent
-> decimal, with `big.Rat` reserved for exact rationals). The rename is a
-> kernel change — `typetable.go` decls, the `T*` constant, parser literal
-> tagging, renderers, and a FixedID/stability-test update — so it is a
-> deliberate, wire-affecting edit, not a doc tweak. See the separate
-> design discussion for the numeric-tower plan.
+> **Fix.** ✅ **Done** — the float64 type was renamed `Decimal` →
+> `Float` across the kernel, docs, spec TSVs, and the FixedID stability
+> snapshot (the type keeps FixedID 9 under the new path
+> `Scalar/Number/Float`, so the wire format is unchanged). `typeof 3.14`
+> now returns `Float`; `Decimal` is undefined and **reserved** for a
+> future *true* arbitrary-precision base-10 type (likely an `apd`-style
+> coefficient+exponent decimal, with `big.Rat` for exact rationals if
+> ever needed). No new numeric type was added in this pass — that is the
+> separate numeric-tower work.
 
 ## M. Core literals and builtins are unprotected mutable bindings — `design`
 

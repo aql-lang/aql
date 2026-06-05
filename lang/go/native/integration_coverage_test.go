@@ -571,15 +571,15 @@ func TestIntegConvertStringToInteger(t *testing.T) {
 	}
 }
 
-func TestIntegConvertStringToDecimal(t *testing.T) {
+func TestIntegConvertStringToFloat(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	result := runAQL(t, r, []Value{
-		NewString("3.14"), NewWord("convert"), NewTypeLiteral(TDecimal),
+		NewString("3.14"), NewWord("convert"), NewTypeLiteral(TFloat),
 	})
-	_as12, _ := AsDecimal(result[0])
+	_as12, _ := AsFloat(result[0])
 	if len(result) != 1 || _as12 != 3.14 {
-		t.Errorf("'3.14' convert Decimal = %v, want 3.14", result)
+		t.Errorf("'3.14' convert Float = %v, want 3.14", result)
 	}
 }
 
@@ -771,11 +771,11 @@ func TestIntegConvertBooleanPassthrough(t *testing.T) {
 	}
 }
 
-func TestIntegConvertErrorBadDecimal(t *testing.T) {
+func TestIntegConvertErrorBadFloat(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	err := runAQLError(t, r, []Value{
-		NewString("notanumber"), NewWord("convert"), NewTypeLiteral(TDecimal),
+		NewString("notanumber"), NewWord("convert"), NewTypeLiteral(TFloat),
 	})
 	if err == nil {
 		t.Error("expected error converting non-numeric string to decimal")

@@ -34,7 +34,7 @@ func TestDynamicContextGetGradualMatch(t *testing.T) {
 	}
 	// The result is itself dynamic (contagion): the modality flows through
 	// add, and the residual stack renders it as dynamic(<bound>).
-	if len(res.Stack) != 1 || (res.Stack[0] != "dynamic(Decimal)" && res.Stack[0] != "dynamic(Integer)") {
+	if len(res.Stack) != 1 || (res.Stack[0] != "dynamic(Float)" && res.Stack[0] != "dynamic(Integer)") {
 		t.Fatalf("expected a dynamic numeric result from the gradual match, got stack=%v", res.Stack)
 	}
 }

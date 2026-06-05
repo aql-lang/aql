@@ -39,7 +39,7 @@
 5 cmp Boolean	1
 5 cmp Number	1
 5 cmp Integer	1
-5 cmp Decimal	1
+5 cmp Float	1
 5 cmp String	-1
 5 cmp EmptyString	-1
 5 cmp ProperString	-1
@@ -60,7 +60,7 @@
 -2 cmp Boolean	1
 -2 cmp Number	1
 -2 cmp Integer	1
--2 cmp Decimal	1
+-2 cmp Float	1
 -2 cmp String	-1
 -2 cmp EmptyString	-1
 -2 cmp ProperString	-1
@@ -81,7 +81,7 @@
 3.5 cmp Boolean	1
 3.5 cmp Number	1
 3.5 cmp Integer	1
-3.5 cmp Decimal	1
+3.5 cmp Float	1
 3.5 cmp String	-1
 3.5 cmp EmptyString	-1
 3.5 cmp ProperString	-1
@@ -102,7 +102,7 @@
 '' cmp Boolean	1
 '' cmp Number	1
 '' cmp Integer	1
-'' cmp Decimal	1
+'' cmp Float	1
 '' cmp String	1
 '' cmp EmptyString	1
 '' cmp ProperString	1
@@ -123,7 +123,7 @@
 'hi' cmp Boolean	1
 'hi' cmp Number	1
 'hi' cmp Integer	1
-'hi' cmp Decimal	1
+'hi' cmp Float	1
 'hi' cmp String	1
 'hi' cmp EmptyString	1
 'hi' cmp ProperString	1
@@ -144,7 +144,7 @@ true cmp Atom	1
 true cmp Boolean	1
 true cmp Number	-1
 true cmp Integer	-1
-true cmp Decimal	-1
+true cmp Float	-1
 true cmp String	-1
 true cmp EmptyString	-1
 true cmp ProperString	-1
@@ -165,7 +165,7 @@ false cmp Atom	1
 false cmp Boolean	1
 false cmp Number	-1
 false cmp Integer	-1
-false cmp Decimal	-1
+false cmp Float	-1
 false cmp String	-1
 false cmp EmptyString	-1
 false cmp ProperString	-1
@@ -186,7 +186,7 @@ cat/q cmp Atom	1
 cat/q cmp Boolean	-1
 cat/q cmp Number	-1
 cat/q cmp Integer	-1
-cat/q cmp Decimal	-1
+cat/q cmp Float	-1
 cat/q cmp String	-1
 cat/q cmp EmptyString	-1
 cat/q cmp ProperString	-1
@@ -207,7 +207,7 @@ cat/q cmp Path	-1
 (make Path ['a' 'b']) cmp Boolean	1
 (make Path ['a' 'b']) cmp Number	1
 (make Path ['a' 'b']) cmp Integer	1
-(make Path ['a' 'b']) cmp Decimal	1
+(make Path ['a' 'b']) cmp Float	1
 (make Path ['a' 'b']) cmp String	1
 (make Path ['a' 'b']) cmp EmptyString	1
 (make Path ['a' 'b']) cmp ProperString	1
@@ -228,7 +228,7 @@ Scalar cmp Atom	-1
 Scalar cmp Boolean	-1
 Scalar cmp Number	-1
 Scalar cmp Integer	-1
-Scalar cmp Decimal	-1
+Scalar cmp Float	-1
 Scalar cmp String	-1
 Scalar cmp EmptyString	-1
 Scalar cmp ProperString	-1
@@ -249,7 +249,7 @@ Atom cmp Atom	0
 Atom cmp Boolean	-1
 Atom cmp Number	-1
 Atom cmp Integer	-1
-Atom cmp Decimal	-1
+Atom cmp Float	-1
 Atom cmp String	-1
 Atom cmp EmptyString	-1
 Atom cmp ProperString	-1
@@ -270,7 +270,7 @@ Boolean cmp Atom	1
 Boolean cmp Boolean	0
 Boolean cmp Number	-1
 Boolean cmp Integer	-1
-Boolean cmp Decimal	-1
+Boolean cmp Float	-1
 Boolean cmp String	-1
 Boolean cmp EmptyString	-1
 Boolean cmp ProperString	-1
@@ -291,7 +291,7 @@ Number cmp Atom	1
 Number cmp Boolean	1
 Number cmp Number	0
 Number cmp Integer	-1
-Number cmp Decimal	-1
+Number cmp Float	-1
 Number cmp String	-1
 Number cmp EmptyString	-1
 Number cmp ProperString	-1
@@ -312,32 +312,32 @@ Integer cmp Atom	1
 Integer cmp Boolean	1
 Integer cmp Number	1
 Integer cmp Integer	0
-Integer cmp Decimal	-1
+Integer cmp Float	-1
 Integer cmp String	-1
 Integer cmp EmptyString	-1
 Integer cmp ProperString	-1
 Integer cmp Path	-1
 
-# a = Decimal
-Decimal cmp 5	-1
-Decimal cmp -2	-1
-Decimal cmp 3.5	-1
-Decimal cmp ''	-1
-Decimal cmp 'hi'	-1
-Decimal cmp true	1
-Decimal cmp false	1
-Decimal cmp cat/q	1
-Decimal cmp (make Path ['a' 'b'])	-1
-Decimal cmp Scalar	1
-Decimal cmp Atom	1
-Decimal cmp Boolean	1
-Decimal cmp Number	1
-Decimal cmp Integer	1
-Decimal cmp Decimal	0
-Decimal cmp String	-1
-Decimal cmp EmptyString	-1
-Decimal cmp ProperString	-1
-Decimal cmp Path	-1
+# a = Float
+Float cmp 5	-1
+Float cmp -2	-1
+Float cmp 3.5	-1
+Float cmp ''	-1
+Float cmp 'hi'	-1
+Float cmp true	1
+Float cmp false	1
+Float cmp cat/q	1
+Float cmp (make Path ['a' 'b'])	-1
+Float cmp Scalar	1
+Float cmp Atom	1
+Float cmp Boolean	1
+Float cmp Number	1
+Float cmp Integer	1
+Float cmp Float	0
+Float cmp String	-1
+Float cmp EmptyString	-1
+Float cmp ProperString	-1
+Float cmp Path	-1
 
 # a = String
 String cmp 5	1
@@ -354,7 +354,7 @@ String cmp Atom	1
 String cmp Boolean	1
 String cmp Number	1
 String cmp Integer	1
-String cmp Decimal	1
+String cmp Float	1
 String cmp String	0
 String cmp EmptyString	-1
 String cmp ProperString	-1
@@ -375,7 +375,7 @@ EmptyString cmp Atom	1
 EmptyString cmp Boolean	1
 EmptyString cmp Number	1
 EmptyString cmp Integer	1
-EmptyString cmp Decimal	1
+EmptyString cmp Float	1
 EmptyString cmp String	1
 EmptyString cmp EmptyString	0
 EmptyString cmp ProperString	-1
@@ -396,7 +396,7 @@ ProperString cmp Atom	1
 ProperString cmp Boolean	1
 ProperString cmp Number	1
 ProperString cmp Integer	1
-ProperString cmp Decimal	1
+ProperString cmp Float	1
 ProperString cmp String	1
 ProperString cmp EmptyString	1
 ProperString cmp ProperString	0
@@ -417,7 +417,7 @@ Path cmp Atom	1
 Path cmp Boolean	1
 Path cmp Number	1
 Path cmp Integer	1
-Path cmp Decimal	1
+Path cmp Float	1
 Path cmp String	1
 Path cmp EmptyString	1
 Path cmp ProperString	1
@@ -425,12 +425,12 @@ Path cmp Path	0
 
 # =============================================================================
 # Cross-numeric magnitude — traditional arithmetic order survives the
-# Integer/Decimal lattice split.
+# Integer/Float lattice split.
 #
 # The Number Comparer (`numberCompareBehavior` on TNumber) is the
-# lowest common ancestor for any Integer/Decimal pair; it projects
+# lowest common ancestor for any Integer/Float pair; it projects
 # both sides into float64 and orders by magnitude. The per-leaf Rank
-# (Integer 2.031·10¹⁰, Decimal 2.032·10¹⁰) is never consulted because
+# (Integer 2.031·10¹⁰, Float 2.032·10¹⁰) is never consulted because
 # the LCA walk finds the Comparer first.
 # =============================================================================
 
@@ -442,7 +442,7 @@ Path cmp Path	0
 2 cmp 2.5	-1
 1 cmp 1.0001	-1
 1.0001 cmp 1	1
-1.0 cmp 1	0	# magnitude equality across Integer/Decimal collapses to 0
+1.0 cmp 1	0	# magnitude equality across Integer/Float collapses to 0
 1 cmp 1.0	0
 -1 cmp -1.0	0
 0 cmp 0.0	0
@@ -580,7 +580,7 @@ foo/q cmp {a:1}	-1
 (-5 lt 0) and (0 lt 5) and (-5 lt 5)	true
 (0 lt 1) and (1 lt 99) and (0 lt 99)	true
 
-# Cross-numeric chain (Integer/Decimal mixed).
+# Cross-numeric chain (Integer/Float mixed).
 (1 lt 1.5) and (1.5 lt 2) and (1 lt 2)	true
 (0 lt 1.1) and (1.1 lt 2) and (0 lt 2)	true
 (0.5 lt 1.5) and (1.5 lt 2.5) and (0.5 lt 2.5)	true
@@ -639,8 +639,8 @@ foo/q cmp foo/q	0
 # Type literal < family zero value (and < every concrete inhabitant).
 Integer cmp 0	-1
 0 cmp Integer	1
-Decimal cmp 0	-1
-Decimal cmp 0.0	-1
+Float cmp 0	-1
+Float cmp 0.0	-1
 Number cmp 0	-1
 Boolean cmp false	-1
 false cmp Boolean	1
@@ -651,8 +651,8 @@ EmptyString cmp ''	-1
 # Same-family type literals order by lattice Rank (litVsLitOrder
 # delegates to compareTypes).
 Integer cmp Number	1	# Integer Rank 20.31·10⁹ > Number Rank 20.3·10⁹
-Number cmp Decimal	-1	# Number 20.3 < Decimal 20.32
-Integer cmp Decimal	-1	# Integer 20.31 < Decimal 20.32
+Number cmp Float	-1	# Number 20.3 < Float 20.32
+Integer cmp Float	-1	# Integer 20.31 < Float 20.32
 EmptyString cmp ProperString	-1	# EmptyStr 20.41 < ProperStr 20.42
 EmptyString cmp String	1	# EmptyStr 20.41 > String 20.4
 ProperString cmp String	1	# ProperStr 20.42 > String 20.4

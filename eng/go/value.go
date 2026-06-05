@@ -888,19 +888,19 @@ func NewInteger(n int64) Value {
 	return NewValueRaw(TInteger, IntPayload{N: n})
 }
 
-// NewDecimal creates a number/decimal value with a float64 payload.
-func NewDecimal(f float64) Value {
-	return NewValueRaw(TDecimal, DecPayload{F: f})
+// NewFloat creates a number/float value with a float64 payload.
+func NewFloat(f float64) Value {
+	return NewValueRaw(TFloat, FloatPayload{F: f})
 }
 
-// FormatDecimal renders a float64 with a guaranteed decimal point so the
+// FormatFloat renders a float64 with a guaranteed decimal point so the
 // type stays visually distinct from Integer. Uses 'f' format with -1
 // precision (shortest round-trip), then appends ".0" when the result
 // has neither a fractional part nor an exponent. Float artefacts like
 // 0.1 + 0.2 = 0.30000000000000004 are preserved verbatim — see the
 // note in spec/SPEC_REPORT.md §2 on the apd-port plan if exact
 // decimal arithmetic is required.
-func FormatDecimal(f float64) string {
+func FormatFloat(f float64) string {
 	s := strconv.FormatFloat(f, 'f', -1, 64)
 	if !strings.ContainsAny(s, ".eE") {
 		s += ".0"
@@ -908,9 +908,9 @@ func FormatDecimal(f float64) string {
 	return s
 }
 
-// formatDecimal is the lowercase alias retained for in-package call
+// formatFloat is the lowercase alias retained for in-package call
 // sites that pre-date the exported form.
-func formatDecimal(f float64) string { return FormatDecimal(f) }
+func formatFloat(f float64) string { return FormatFloat(f) }
 
 // NewBoolean creates a boolean value. The boolean payload (true/false) is the
 // value; there are no Boolean/True or Boolean/False sub-types.
@@ -1902,22 +1902,22 @@ func AsInteger(v Value) (int64, error) {
 	return 0, fmt.Errorf("AsInteger: not an integer value (got %T)", v.Data)
 }
 
-// AsDecimal returns the float64 payload. Returns 0.0 if Data is nil (type literal).
-func AsDecimal(v Value) (float64, error) {
+// AsFloat returns the float64 payload. Returns 0.0 if Data is nil (type literal).
+func AsFloat(v Value) (float64, error) {
 	if v.Data == nil {
-		return 0.0, fmt.Errorf("AsDecimal: nil data")
+		return 0.0, fmt.Errorf("AsFloat: nil data")
 	}
-	if dp, ok := v.Data.(DecPayload); ok {
+	if dp, ok := v.Data.(FloatPayload); ok {
 		return dp.F, nil
 	}
-	return 0.0, fmt.Errorf("AsDecimal: not a decimal value (got %T)", v.Data)
+	return 0.0, fmt.Errorf("AsFloat: not a float value (got %T)", v.Data)
 }
 
 // AsNumber returns the numeric value as float64 regardless of whether it is
 // an integer or decimal.
 func AsNumber(v Value) (float64, error) {
-	if v.Parent.ConformsTo(TDecimal) {
-		f, err := AsDecimal(v)
+	if v.Parent.ConformsTo(TFloat) {
+		f, err := AsFloat(v)
 		return f, err
 	}
 	n, err := AsInteger(v)
@@ -2116,7 +2116,7 @@ func kernelFormatDefault(v Value) string {
 		// leaf alone is unambiguous.
 		return typeNodeOf(v).Leaf()
 	case v.IsDepScalar():
-		// Must come before TString / TInteger / TDecimal matches: the
+		// Must come before TString / TInteger / TFloat matches: the
 		// lattice override makes DepString.ConformsTo(TString) (and the
 		// numeric counterparts) true, so without this case the value
 		// payload would be cast to the wrong concrete type.
@@ -2127,9 +2127,9 @@ func kernelFormatDefault(v Value) string {
 	case v.Parent.Equal(TAtom):
 		s, _ := AsAtom(v)
 		return s
-	case v.Parent.ConformsTo(TDecimal):
-		_as4, _ := AsDecimal(v)
-		return formatDecimal(_as4)
+	case v.Parent.ConformsTo(TFloat):
+		_as4, _ := AsFloat(v)
+		return formatFloat(_as4)
 	case v.Parent.ConformsTo(TInteger):
 		n, _ := AsInteger(v)
 		return fmt.Sprintf("%d", n)
@@ -2228,7 +2228,7 @@ func isFnDefValue(v Value) bool {
 
 // formatFnDef renders a function value as a compact one-line summary:
 // `fn name(argTypes…)` per overload, e.g. `fn inc(Integer)` or
-// `fn (Integer, String) or (Decimal)`. It reads ONLY Name and the
+// `fn (Integer, String) or (Float)`. It reads ONLY Name and the
 // argument types of each Signature — never Registry, Captured, or the
 // raw FnSig bodies — so a function value can appear in an error message
 // or a printed list without spilling its closure environment (the

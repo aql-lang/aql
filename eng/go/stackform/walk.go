@@ -36,7 +36,7 @@ func walk(form *StackForm, prefix []int, visit func([]int, Op) bool) bool {
 // equal nested bodies.
 //
 // Literal equality uses eng.DeepEqual, which is value-equality
-// modulo representation (Integer 1 equals Decimal 1.0 if the eng
+// modulo representation (Integer 1 equals Float 1.0 if the eng
 // comparator says so — see eng/go/compare.go).
 func Equal(a, b *StackForm) bool {
 	if a == nil || b == nil {

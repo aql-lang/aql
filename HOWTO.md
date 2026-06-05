@@ -106,7 +106,7 @@ wins:
 ```
 def add1 fn [
   [Integer] [Integer] [1 add]
-  [Decimal] [Decimal] [1.0 add]
+  [Float] [Float] [1.0 add]
   [String]  [String]  [`${args.0}_1`]
 ]
 add1 5                        # returns 6
@@ -618,7 +618,7 @@ Convert with `convert`:
 ```
 convert Integer "42"          # returns 42
 convert String 42             # returns '42'
-convert Decimal 5             # returns 5.0
+convert Float 5             # returns 5.0
 ```
 
 

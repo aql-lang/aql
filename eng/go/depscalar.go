@@ -53,7 +53,7 @@ type DepBound struct {
 }
 
 // DepScalarInfo is the payload carried by a Value whose Parent is one
-// of the well-known scalar base types (Integer, Decimal, Number,
+// of the well-known scalar base types (Integer, Float, Number,
 // String, Boolean, Atom) when the value represents a constraint
 // rather than a concrete scalar.
 //
@@ -125,7 +125,7 @@ func BoundToKind(b *DepBound, lower bool) DepKind {
 
 // NewDepScalar builds a DepScalar Value from a comparison kind and a
 // concrete bound. The bound's lattice ancestry is walked to find a
-// well-known scalar base (Integer, Decimal, Number, String, Boolean,
+// well-known scalar base (Integer, Float, Number, String, Boolean,
 // Atom); the resulting Value's Parent IS that base type, and the
 // DepScalarInfo payload carries the bound. Returns a Value with a
 // None Parent (and no payload) if the bound is not rooted at a
@@ -150,7 +150,7 @@ func NewDepScalar(kind DepKind, bound Value) Value {
 }
 
 // canonicalBaseType walks t's ancestry from most-specific to root,
-// returning the first well-known scalar base (Integer, Decimal,
+// returning the first well-known scalar base (Integer, Float,
 // Number, String, Boolean, Atom) encountered. Value-tagged subtypes
 // (e.g. Number/Integer/42) strip down to their last named ancestor.
 // Returns nil for types not rooted at a supported scalar base.
@@ -159,8 +159,8 @@ func canonicalBaseType(t *Type) *Type {
 		switch {
 		case d.Equal(TInteger):
 			return TInteger
-		case d.Equal(TDecimal):
-			return TDecimal
+		case d.Equal(TFloat):
+			return TFloat
 		case d.Equal(TNumber):
 			return TNumber
 		case d.Equal(TString):
@@ -407,7 +407,7 @@ func complementWithinBase(base *Type, info DepScalarInfo) Value {
 
 // MakeDepScalarSig builds the [TScalar, TScalar/type] -> [TScalar]
 // signature variant for a comparison op. `Integer gte 10`, `String lt
-// "z"`, `Decimal gte 1.5` all hit this sig: arg0 is the bound, arg1 is
+// "z"`, `Float gte 1.5` all hit this sig: arg0 is the bound, arg1 is
 // the base-type literal (TypeArgs[1]=true requires a type literal at
 // that slot — the successor to the historical TScalarType slot). The
 // result Value's Parent IS the base scalar type, with a DepScalarInfo

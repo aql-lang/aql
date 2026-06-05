@@ -159,16 +159,16 @@ func MapFieldBoolean(m ReadMap, key string) (bool, bool) {
 	return b, true
 }
 
-// MapFieldDecimal fetches a Decimal-valued field.
-func MapFieldDecimal(m ReadMap, key string) (float64, bool) {
+// MapFieldFloat fetches a Float-valued field.
+func MapFieldFloat(m ReadMap, key string) (float64, bool) {
 	if m == nil {
 		return 0, false
 	}
 	v, ok := m.Get(key)
-	if !ok || !v.Parent.ConformsTo(TDecimal) || v.IsDepScalar() {
+	if !ok || !v.Parent.ConformsTo(TFloat) || v.IsDepScalar() {
 		return 0, false
 	}
-	f, err := AsDecimal(v)
+	f, err := AsFloat(v)
 	if err != nil {
 		return 0, false
 	}
@@ -296,12 +296,12 @@ func (v Value) AsConcreteInteger() (int64, error) {
 	return AsInteger(v)
 }
 
-// AsConcreteDecimal — DepScalar-rejecting accessor. See AsConcreteString.
-func (v Value) AsConcreteDecimal() (float64, error) {
+// AsConcreteFloat — DepScalar-rejecting accessor. See AsConcreteString.
+func (v Value) AsConcreteFloat() (float64, error) {
 	if v.IsDepScalar() {
-		return 0, fmt.Errorf("AsConcreteDecimal: value is a dependent-type constraint (%s), not a concrete Decimal", v.Parent.String())
+		return 0, fmt.Errorf("AsConcreteFloat: value is a dependent-type constraint (%s), not a concrete Float", v.Parent.String())
 	}
-	return AsDecimal(v)
+	return AsFloat(v)
 }
 
 // AsConcreteBoolean — DepScalar-rejecting accessor. See AsConcreteString.

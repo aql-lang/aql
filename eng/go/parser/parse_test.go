@@ -1175,9 +1175,9 @@ func TestParseDataListWithBoolAndNil(t *testing.T) {
 	}
 }
 
-// --- Decimal number tests ---
+// --- Float number tests ---
 
-func TestParseDecimalNumber(t *testing.T) {
+func TestParseFloatNumber(t *testing.T) {
 	// 1.5 → decimal (float64 path in convertTopLevelValue and floatToValue)
 	got, err := Parse("1.5")
 	if err != nil {
@@ -1186,12 +1186,12 @@ func TestParseDecimalNumber(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
-	if !got[0].Parent.ConformsTo(eng.TDecimal) {
+	if !got[0].Parent.ConformsTo(eng.TFloat) {
 		t.Errorf("expected decimal type, got %s", got[0].Parent)
 	}
 }
 
-func TestParseDecimalInExpression(t *testing.T) {
+func TestParseFloatInExpression(t *testing.T) {
 	// 1.5 add 2.3 → two decimals and a word
 	got, err := Parse("1.5 add 2.3")
 	if err != nil {
@@ -1200,12 +1200,12 @@ func TestParseDecimalInExpression(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("expected 3 values, got %d", len(got))
 	}
-	if !got[0].Parent.ConformsTo(eng.TDecimal) {
+	if !got[0].Parent.ConformsTo(eng.TFloat) {
 		t.Errorf("expected decimal, got %s", got[0].Parent)
 	}
 }
 
-func TestParseMapWithDecimal(t *testing.T) {
+func TestParseMapWithFloat(t *testing.T) {
 	// {x:1.5} → map with decimal in data context (float64 path in convertDataValue)
 	got, err := Parse("{x:1.5}")
 	if err != nil {
@@ -1216,7 +1216,7 @@ func TestParseMapWithDecimal(t *testing.T) {
 	}
 	m, _ := eng.AsMap(got[0])
 	xVal, _ := m.Get("x")
-	if !xVal.Parent.ConformsTo(eng.TDecimal) {
+	if !xVal.Parent.ConformsTo(eng.TFloat) {
 		t.Errorf("expected decimal, got %s", xVal.Parent)
 	}
 }
@@ -1655,9 +1655,9 @@ func TestParseMapManyKeys(t *testing.T) {
 	}
 }
 
-// --- Decimal inside data list ---
+// --- Float inside data list ---
 
-func TestParseDataListWithDecimal(t *testing.T) {
+func TestParseDataListWithFloat(t *testing.T) {
 	got, err := Parse("{x:[1.5,2.7]}")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
@@ -1718,7 +1718,7 @@ func TestFloatToValueWholeNumber(t *testing.T) {
 func TestFloatToValueFractional(t *testing.T) {
 	// Fractional float → decimal
 	v := floatToValue(3.14)
-	if !v.Parent.ConformsTo(eng.TDecimal) {
+	if !v.Parent.ConformsTo(eng.TFloat) {
 		t.Errorf("expected decimal, got %s", v.Parent)
 	}
 }
@@ -2312,9 +2312,9 @@ func TestParseDashWordWithIntegerArg(t *testing.T) {
 	})
 }
 
-func TestParseDashWordPreservesNegativeDecimal(t *testing.T) {
-	// `-3.14` must still tokenise as Decimal, not Word("-3.14").
-	assertParse(t, "-3.14", []eng.Value{eng.NewDecimal(-3.14)})
+func TestParseDashWordPreservesNegativeFloat(t *testing.T) {
+	// `-3.14` must still tokenise as Float, not Word("-3.14").
+	assertParse(t, "-3.14", []eng.Value{eng.NewFloat(-3.14)})
 }
 
 func TestParseDashWordPreservesNegativeInteger(t *testing.T) {

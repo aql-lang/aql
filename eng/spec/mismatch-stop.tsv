@@ -57,7 +57,7 @@
 #   concatq  — [String String] forward-prec — args[1] + args[0] (string concat)		
 #   firstq   — [List] forward-prec — first element or None for empty list		
 #   lengthq  — [List] forward-prec — list length as Integer		
-#   negq     — [Number|] BarrierPos=1 — unary -args[0]; preserves Integer/Decimal tag		
+#   negq     — [Number|] BarrierPos=1 — unary -args[0]; preserves Integer/Float tag		
 # === end fixtures ===		
 		
 		

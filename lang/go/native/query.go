@@ -733,7 +733,7 @@ func sqlTypeToAQLType(sqlType string) *Type {
 	case "INTEGER":
 		return TInteger
 	case "REAL":
-		return TDecimal
+		return TFloat
 	case "TEXT":
 		return TString
 	default:

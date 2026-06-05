@@ -13,7 +13,7 @@ import (
 // access.
 //
 // Numeric and Boolean values render via their canonical
-// FormatDecimal / FormatInt forms, matching the language's
+// FormatFloat / FormatInt forms, matching the language's
 // printing rules.
 func GetKey(v Value) string {
 	if IsWord(v) {
@@ -32,9 +32,9 @@ func GetKey(v Value) string {
 		n, _ := AsInteger(v)
 		return strconv.FormatInt(n, 10)
 	}
-	if v.Parent.ConformsTo(TDecimal) {
-		f, _ := AsDecimal(v)
-		return FormatDecimal(f)
+	if v.Parent.ConformsTo(TFloat) {
+		f, _ := AsFloat(v)
+		return FormatFloat(f)
 	}
 	if v.Parent.ConformsTo(TBoolean) {
 		b, _ := AsBoolean(v)

@@ -220,7 +220,7 @@ Payload variants live in `eng/go/payload.go`. Two flavours:
 
 1. **Wrapper variants** — for Go built-in types we can't add
    methods to: `IntPayload{N: int64}`, `StrPayload{S: string}`,
-   `BoolPayload{B: bool}`, `DecPayload{F: float64}`,
+   `BoolPayload{B: bool}`, `FloatPayload{F: float64}`,
    `AtomPayload{Name: string}`, `PathPayload{Info: PathInfo}`,
    `ListPayload{Elems: []Value}`, `MapPayload{M: *OrderedMap}`,
    `ParenExprPayload{Toks: []Value}`,
@@ -308,7 +308,7 @@ delegates to the kernel default so rendering is unchanged.
 `eng/go/typetable.go::builtinDecls` and `eng/go/types.go`'s `T*`
 constants) **iff** one of these holds:
 
-1. The parser emits it directly: `Integer`, `Decimal`, `String`,
+1. The parser emits it directly: `Integer`, `Float`, `String`,
    `Boolean`, `Atom`, `Path`, `None`, `List`, `Map`.
 2. The interpreter loop branches on it structurally: `Word`,
    `Forward`, `Mark`, `Move`, `OpenParen`, `CloseParen`, `End`,

@@ -14,7 +14,7 @@ import (
 // (eng.CompareValues), so:
 //
 //   - Lists of homogeneous scalars sort numerically / lexically /
-//     by atom-name as appropriate (Integer / Decimal / String /
+//     by atom-name as appropriate (Integer / Float / String /
 //     Boolean / Atom kernel Comparers).
 //   - Lists of domain values (Date / DateTime / Instant /
 //     ClkDuration) sort chronologically via their native Comparers.

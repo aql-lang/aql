@@ -43,8 +43,8 @@ var wrapperCases = []struct {
 	{"abs", wrapGet(native.NewInteger(-5), "abs")},
 	{"sign", wrapGet(native.NewInteger(-3), "sign")},
 	{"negate", wrapGet(native.NewInteger(4), "negate")},
-	{"ceil", wrapGet(native.NewDecimal(2.3), "ceil")},
-	{"floor", wrapGet(native.NewDecimal(2.7), "floor")},
+	{"ceil", wrapGet(native.NewFloat(2.3), "ceil")},
+	{"floor", wrapGet(native.NewFloat(2.7), "floor")},
 }
 
 func TestFnModelWrapperEquivalence(t *testing.T) {

@@ -5,11 +5,11 @@ import (
 	"testing"
 )
 
-// TestDecimalFormat pins down formatDecimal's contract: every TDecimal
+// TestFloatFormat pins down formatFloat's contract: every TFloat
 // value renders with at least one '.' or an exponent, so the type stays
 // visually distinct from TInteger. Whole-valued floats receive a ".0"
 // suffix; fractional values pass through 'f' formatting unchanged.
-func TestDecimalFormat(t *testing.T) {
+func TestFloatFormat(t *testing.T) {
 	cases := []struct {
 		in   float64
 		want string
@@ -20,20 +20,20 @@ func TestDecimalFormat(t *testing.T) {
 		{-3.0, "-3.0"},
 		{3.14, "3.14"},
 		{-0.5, "-0.5"},
-		{1e20, "100000000000000000000.0"}, // 'f' expands; formatDecimal then appends ".0" since no fractional/exponent
+		{1e20, "100000000000000000000.0"}, // 'f' expands; formatFloat then appends ".0" since no fractional/exponent
 		{1e-7, "0.0000001"},
 		{0.1, "0.1"},
 		{0.2, "0.2"},
 	}
 	for _, c := range cases {
-		got := formatDecimal(c.in)
+		got := formatFloat(c.in)
 		if got != c.want {
-			t.Errorf("formatDecimal(%v) = %q, want %q", c.in, got, c.want)
+			t.Errorf("formatFloat(%v) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
 
-// TestDecimalArithmeticIsFloat64 documents the float64 imprecision that
+// TestFloatArithmeticIsFloat64 documents the float64 imprecision that
 // the engine inherits from Go's underlying numeric type. 0.1 + 0.2 is
 // the canonical demo: in IEEE 754 binary float, neither 0.1 nor 0.2
 // has an exact representation, and their sum lands at 0.30000000000000004,
@@ -44,19 +44,19 @@ func TestDecimalFormat(t *testing.T) {
 // problem") flips the expected string and the conversion is verified
 // by this test passing against the new payload.
 //
-// Until that port lands, the contract is: aqleng's TDecimal IS a
+// Until that port lands, the contract is: aqleng's TFloat IS a
 // float64. The engine does not silently round, does not display-trim,
 // and does not pretend the result is 0.3. Honest arithmetic, ugly
 // output for this specific input.
-func TestDecimalArithmeticIsFloat64(t *testing.T) {
-	a, _ := AsDecimal(NewDecimal(0.1))
-	b, _ := AsDecimal(NewDecimal(0.2))
+func TestFloatArithmeticIsFloat64(t *testing.T) {
+	a, _ := AsFloat(NewFloat(0.1))
+	b, _ := AsFloat(NewFloat(0.2))
 	got := a + b
 
-	// Surface form: render via formatDecimal and assert the canonical
+	// Surface form: render via formatFloat and assert the canonical
 	// float artefact string.
 
-	// Pin the surface form: render via formatDecimal and assert the
+	// Pin the surface form: render via formatFloat and assert the
 	// canonical float artefact string. If a future port to exact
 	// decimal arithmetic lands, this row flips to "0.3".
 	//
@@ -67,8 +67,8 @@ func TestDecimalArithmeticIsFloat64(t *testing.T) {
 	// reader into thinking the engine somehow rounds. The runtime
 	// float64 sum is 0.30000000000000004; the string pins that.
 	const wantStr = "0.30000000000000004"
-	if gotStr := formatDecimal(got); gotStr != wantStr {
-		t.Errorf("formatDecimal(0.1 + 0.2) = %q, want %q", gotStr, wantStr)
+	if gotStr := formatFloat(got); gotStr != wantStr {
+		t.Errorf("formatFloat(0.1 + 0.2) = %q, want %q", gotStr, wantStr)
 	}
 
 	// Cross-check: parsing 0.30000000000000004 back gives the same

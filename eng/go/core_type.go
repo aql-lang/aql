@@ -14,7 +14,7 @@ import (
 // the type of v, expressed as a value:
 //
 //	typeof 5            → Integer        (concrete value's exact type)
-//	typeof 5.0          → Decimal
+//	typeof 5.0          → Float
 //	typeof "x"          → String
 //	typeof true         → Boolean
 //	typeof none         → None           (None has a single inhabitant)

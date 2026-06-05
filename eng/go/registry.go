@@ -616,14 +616,14 @@ func (r *Registry) Err() error {
 func UnaryNumOpNative(name string, op func(float64) float64) NativeFunc {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		v, _ := AsNumber(args[0])
-		return []Value{NewDecimal(op(v))}, nil
+		return []Value{NewFloat(op(v))}, nil
 	}
 	return NativeFunc{
 		Name: name,
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TInteger}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
-			{Args: []*Type{TDecimal}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
+			{Args: []*Type{TInteger}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TFloat}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
 		},
 	}
 }
@@ -639,15 +639,15 @@ func BinaryNumOpNative(name string, op func(a, b float64) (float64, error)) Nati
 		if err != nil {
 			return nil, err
 		}
-		return []Value{NewDecimal(result)}, nil
+		return []Value{NewFloat(result)}, nil
 	}
 	return NativeFunc{
 		Name: name,
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TDecimal, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
-			{Args: []*Type{TNumber, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
-			{Args: []*Type{TDecimal, TNumber}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
+			{Args: []*Type{TFloat, TFloat}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TNumber, TFloat}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TFloat, TNumber}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
 		},
 	}
 }
@@ -692,9 +692,9 @@ func ValToString(v Value) string {
 	case IsAtom(v):
 		_as9, _ := AsAtom(v)
 		return _as9
-	case v.Parent.ConformsTo(TDecimal):
-		_as10, _ := AsDecimal(v)
-		return formatDecimal(_as10)
+	case v.Parent.ConformsTo(TFloat):
+		_as10, _ := AsFloat(v)
+		return formatFloat(_as10)
 	case v.Parent.ConformsTo(TInteger):
 		_as11, _ := AsInteger(v)
 		return strconv.FormatInt(_as11, 10)
@@ -806,9 +806,9 @@ func StoreKey(v Value) string {
 		n, _ := AsInteger(v)
 		return strconv.FormatInt(n, 10)
 	}
-	if v.Parent.ConformsTo(TDecimal) {
-		f, _ := AsDecimal(v)
-		return FormatDecimal(f)
+	if v.Parent.ConformsTo(TFloat) {
+		f, _ := AsFloat(v)
+		return FormatFloat(f)
 	}
 	if v.Parent.ConformsTo(TBoolean) {
 		b, _ := AsBoolean(v)

@@ -200,7 +200,7 @@ separate dispatch construct:
 
 ```
 add 1 2                           # returns 3 — Integer + Integer
-add 1.0 2                         # returns 3.0 — Decimal + Number, promotes
+add 1.0 2                         # returns 3.0 — Float + Number, promotes
 "a" "b" add                       # returns 'ab' — Scalar + Scalar, concatenates
 ```
 
@@ -217,7 +217,7 @@ it drives behaviour.
 A `fn` declares types for both its inputs and its outputs:
 
 ```
-def avg fn [[a:Number b:Number] [Decimal] [(a add b) div 2.0]]
+def avg fn [[a:Number b:Number] [Float] [(a add b) div 2.0]]
 ```
 
 Inputs are checked when the function is called; outputs are checked
@@ -277,7 +277,7 @@ AQL exposes a single total order over every value. `cmp`, `lt`,
 
 1. **LCA-Comparer.** Find the least common ancestor of the two
    types. If the ancestor declares a comparer, use it (so
-   `Integer cmp Decimal` runs the numeric comparer at the
+   `Integer cmp Float` runs the numeric comparer at the
    `Number` level).
 2. **Rank fallback.** Otherwise compare the integer `Rank` each
    type carries (cross-family comparisons are *defined*, not an

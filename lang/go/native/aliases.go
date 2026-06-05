@@ -29,7 +29,7 @@ type (
 	// Sealed Payload variants (post Step 5).
 	Payload             = eng.Payload
 	IntPayload          = eng.IntPayload
-	DecPayload          = eng.DecPayload
+	FloatPayload          = eng.FloatPayload
 	StrPayload          = eng.StrPayload
 	BoolPayload         = eng.BoolPayload
 	AtomPayload         = eng.AtomPayload
@@ -105,7 +105,7 @@ var (
 	// TCalDuration / TClkDuration / TDate / TDateTime / TDuration
 	// moved to lang/go/engine/native_temporal.go (Step 8) — declared
 	// directly in this package, no eng alias needed.
-	TDecimal    = eng.TDecimal
+	TFloat    = eng.TFloat
 	TDefCleanup = eng.TDefCleanup
 	TDisjunct   = eng.TDisjunct
 	TEnum       = eng.TEnum
@@ -248,7 +248,7 @@ var (
 	IsValueOfType             = eng.IsValueOfType
 	IsWord                    = eng.IsWord
 	AsBoolean                 = eng.AsBoolean
-	AsDecimal                 = eng.AsDecimal
+	AsFloat                 = eng.AsFloat
 	AsForward                 = eng.AsForward
 	AsInteger                 = eng.AsInteger
 	AsNumber                  = eng.AsNumber
@@ -277,7 +277,7 @@ var (
 	TypePathOf                = eng.TypePathOf
 	ValueType                 = eng.ValueType
 	NewNone                   = eng.NewNone
-	FormatDecimal             = eng.FormatDecimal
+	FormatFloat             = eng.FormatFloat
 	NewTypedListWithElements  = eng.NewTypedListWithElements
 	NewTypedMapWithEntries    = eng.NewTypedMapWithEntries
 	FlattenDisjunctAlts       = eng.FlattenDisjunctAlts
@@ -305,7 +305,7 @@ var (
 	JoinCarriers              = eng.JoinCarriers
 	MakeAqlError              = eng.MakeAqlError
 	MapFieldBoolean           = eng.MapFieldBoolean
-	MapFieldDecimal           = eng.MapFieldDecimal
+	MapFieldFloat           = eng.MapFieldFloat
 	MapFieldInteger           = eng.MapFieldInteger
 	MapFieldString            = eng.MapFieldString
 	MatchSignature            = eng.MatchSignature
@@ -342,7 +342,7 @@ var (
 	NewDynamicCarrierValue   = eng.NewDynamicCarrierValue
 	// NewClkDuration moved to lang/go/engine/native_temporal.go (Step 8).
 	// NewDate / NewDateTime moved to lang/go/engine/native_temporal.go (Step 8).
-	NewDecimal     = eng.NewDecimal
+	NewFloat     = eng.NewFloat
 	NewDefCleanup  = eng.NewDefCleanup
 	NewDepScalar   = eng.NewDepScalar
 	NewDisjunct    = eng.NewDisjunct

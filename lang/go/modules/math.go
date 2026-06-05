@@ -44,7 +44,7 @@ func BuildMathModule(parent *native.Registry) (native.ModuleDesc, error) {
 		exports.Set(name, makeBinaryFnDef(name, subReg))
 	}
 
-	// Constants: [] -> [Decimal]
+	// Constants: [] -> [Float]
 	exports.Set("pi", makeConstFnDef("math-pi", subReg))
 	exports.Set("e", makeConstFnDef("math-e", subReg))
 
@@ -100,7 +100,7 @@ func makeConstFnDef(wordName string, subReg *native.Registry) native.Value {
 		Signatures: []native.FnSig{
 			{
 				Params:  []native.FnParam{},
-				Returns: []*native.Type{native.TDecimal},
+				Returns: []*native.Type{native.TFloat},
 				Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 			},
 		},
@@ -134,15 +134,15 @@ var MathNatives = func() []native.NativeFunc {
 					Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 				},
 				{
-					Args: []*native.Type{native.TDecimal},
+					Args: []*native.Type{native.TFloat},
 					Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-						d, err := args[0].AsConcreteDecimal()
+						d, err := args[0].AsConcreteFloat()
 						if err != nil {
 							return nil, err
 						}
-						return []native.Value{native.NewDecimal(math.Abs(d))}, nil
+						return []native.Value{native.NewFloat(math.Abs(d))}, nil
 					},
-					Returns: []*native.Type{native.TDecimal}, BarrierPos: -1,
+					Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
 				},
 			},
 		},
@@ -163,15 +163,15 @@ var MathNatives = func() []native.NativeFunc {
 					Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 				},
 				{
-					Args: []*native.Type{native.TDecimal},
+					Args: []*native.Type{native.TFloat},
 					Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-						d, err := args[0].AsConcreteDecimal()
+						d, err := args[0].AsConcreteFloat()
 						if err != nil {
 							return nil, err
 						}
-						return []native.Value{native.NewDecimal(-d)}, nil
+						return []native.Value{native.NewFloat(-d)}, nil
 					},
-					Returns: []*native.Type{native.TDecimal}, BarrierPos: -1,
+					Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
 				},
 			},
 		},
@@ -199,9 +199,9 @@ var MathNatives = func() []native.NativeFunc {
 					Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 				},
 				{
-					Args: []*native.Type{native.TDecimal},
+					Args: []*native.Type{native.TFloat},
 					Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-						v, err := args[0].AsConcreteDecimal()
+						v, err := args[0].AsConcreteFloat()
 						if err != nil {
 							return nil, err
 						}
@@ -258,7 +258,7 @@ var MathNatives = func() []native.NativeFunc {
 	}
 
 	// Unary float -> float words. Each becomes a NativeFunc with two
-	// overloads ([integer] and [decimal]) returning Decimal, courtesy of
+	// overloads ([integer] and [decimal]) returning Float, courtesy of
 	// native.UnaryNumOpNative.
 	for _, p := range []struct {
 		name string
@@ -292,9 +292,9 @@ var MathNatives = func() []native.NativeFunc {
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{},
 			Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				return []native.Value{native.NewDecimal(math.Pi)}, nil
+				return []native.Value{native.NewFloat(math.Pi)}, nil
 			},
-			Returns: []*native.Type{native.TDecimal}, BarrierPos: 0,
+			Returns: []*native.Type{native.TFloat}, BarrierPos: 0,
 		}},
 	})
 	out = append(out, native.NativeFunc{
@@ -303,9 +303,9 @@ var MathNatives = func() []native.NativeFunc {
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{},
 			Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				return []native.Value{native.NewDecimal(math.E)}, nil
+				return []native.Value{native.NewFloat(math.E)}, nil
 			},
-			Returns: []*native.Type{native.TDecimal}, BarrierPos: 0,
+			Returns: []*native.Type{native.TFloat}, BarrierPos: 0,
 		}},
 	})
 
@@ -334,9 +334,9 @@ func ceilFloorNative(name string, fn func(float64) float64) native.NativeFunc {
 		Name: name,
 
 		Signatures: []native.NativeSig{{
-			Args: []*native.Type{native.TDecimal},
+			Args: []*native.Type{native.TFloat},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				d, err := args[0].AsConcreteDecimal()
+				d, err := args[0].AsConcreteFloat()
 				if err != nil {
 					return nil, err
 				}
@@ -354,15 +354,15 @@ func atan2Native() native.NativeFunc {
 	numHandler := func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 		a, _ := native.AsNumber(args[0])
 		b, _ := native.AsNumber(args[1])
-		return []native.Value{native.NewDecimal(math.Atan2(b, a))}, nil
+		return []native.Value{native.NewFloat(math.Atan2(b, a))}, nil
 	}
 	return native.NativeFunc{
 		Name: "atan2",
 
 		Signatures: []native.NativeSig{
-			{Args: []*native.Type{native.TDecimal, native.TDecimal}, Handler: numHandler, Returns: []*native.Type{native.TDecimal}, BarrierPos: -1},
-			{Args: []*native.Type{native.TNumber, native.TDecimal}, Handler: numHandler, Returns: []*native.Type{native.TDecimal}, BarrierPos: -1},
-			{Args: []*native.Type{native.TDecimal, native.TNumber}, Handler: numHandler, Returns: []*native.Type{native.TDecimal}, BarrierPos: -1},
+			{Args: []*native.Type{native.TFloat, native.TFloat}, Handler: numHandler, Returns: []*native.Type{native.TFloat}, BarrierPos: -1},
+			{Args: []*native.Type{native.TNumber, native.TFloat}, Handler: numHandler, Returns: []*native.Type{native.TFloat}, BarrierPos: -1},
+			{Args: []*native.Type{native.TFloat, native.TNumber}, Handler: numHandler, Returns: []*native.Type{native.TFloat}, BarrierPos: -1},
 			{
 				Args: []*native.Type{native.TInteger, native.TInteger},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -374,9 +374,9 @@ func atan2Native() native.NativeFunc {
 					if err != nil {
 						return nil, err
 					}
-					return []native.Value{native.NewDecimal(math.Atan2(float64(a1), float64(a0)))}, nil
+					return []native.Value{native.NewFloat(math.Atan2(float64(a1), float64(a0)))}, nil
 				},
-				Returns: []*native.Type{native.TDecimal}, BarrierPos: -1,
+				Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
 			},
 		},
 	}
@@ -399,9 +399,9 @@ func hypotNative() native.NativeFunc {
 			if err != nil {
 				return nil, err
 			}
-			return []native.Value{native.NewDecimal(math.Hypot(float64(a0), float64(a1)))}, nil
+			return []native.Value{native.NewFloat(math.Hypot(float64(a0), float64(a1)))}, nil
 		},
-		Returns: []*native.Type{native.TDecimal}, BarrierPos: -1,
+		Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
 	}
 	return native.NativeFunc{
 		Name: base.Name,

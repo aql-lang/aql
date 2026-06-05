@@ -40,7 +40,7 @@ func TestFixedIDStability(t *testing.T) {
 		"Scalar/String/EmptyString":    6,
 		"Scalar/Number":                7,
 		"Scalar/Number/Integer":        8,
-		"Scalar/Number/Decimal":        9,
+		"Scalar/Number/Float":        9,
 		"Scalar/Boolean":               10,
 		"Node":                         11,
 		"Node/List":                    12,

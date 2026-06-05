@@ -152,7 +152,7 @@ for the underlying mechanics.
 
 ## 4. Numbers, rounding, math
 
-Integers and decimals are different leaves of the same `Number`
+Integers and floats are different leaves of the same `Number`
 type. Arithmetic auto-promotes. The core arithmetic words live at
 the top level:
 
@@ -160,7 +160,7 @@ the top level:
 aql> 4 mul 5            # returns 20
 aql> 2 pow 10           # returns 1024
 aql> 7 div 2            # returns 3 — integer division
-aql> 7.0 div 2          # returns 3.5 — decimal: real division
+aql> 7.0 div 2          # returns 3.5 — float: real division
 aql> 10 mod 3           # returns 1
 aql> 10 sub 3           # returns 7 — a sub b ≡ a - b (see §3)
 ```
@@ -347,7 +347,7 @@ Multiple signatures give you ad-hoc polymorphism — first match wins:
 ```
 aql> def inc fn [
   [Integer] [Integer] [1 add]
-  [Decimal] [Decimal] [1.0 add]
+  [Float] [Float] [1.0 add]
 ]
 aql> inc 5                           # returns 6
 aql> inc 2.5                         # returns 3.5

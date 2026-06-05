@@ -298,7 +298,7 @@ func makeMatrixIntIntToDecFnDef(wordName string, subReg *native.Registry) native
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}, {Type: native.TInteger}, {Type: native.TInteger}},
-			Returns: []*native.Type{native.TDecimal},
+			Returns: []*native.Type{native.TFloat},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
@@ -364,7 +364,7 @@ func makeMatrixToDecFnDef(wordName string, subReg *native.Registry) native.Value
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}},
-			Returns: []*native.Type{native.TDecimal},
+			Returns: []*native.Type{native.TFloat},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
@@ -375,7 +375,7 @@ func makeListListToDecFnDef(wordName string, subReg *native.Registry) native.Val
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TList}, {Type: native.TList}},
-			Returns: []*native.Type{native.TDecimal},
+			Returns: []*native.Type{native.TFloat},
 			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 		}},
 		Registry: subReg,
@@ -560,9 +560,9 @@ var MatrixNatives = []native.NativeFunc{
 				if row < 0 || row >= m.Rows() || col < 0 || col >= m.Cols() {
 					return nil, fmt.Errorf("at: index (%d,%d) out of bounds for %dx%d matrix", row, col, m.Rows(), m.Cols())
 				}
-				return []native.Value{native.NewDecimal(m.Data[row*m.Cols()+col])}, nil
+				return []native.Value{native.NewFloat(m.Data[row*m.Cols()+col])}, nil
 			},
-			Returns: []*native.Type{native.TDecimal}, BarrierPos: -1,
+			Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -582,7 +582,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				elems := make([]native.Value, m.Cols())
 				for j := 0; j < m.Cols(); j++ {
-					elems[j] = native.NewDecimal(m.Data[row*m.Cols()+j])
+					elems[j] = native.NewFloat(m.Data[row*m.Cols()+j])
 				}
 				return []native.Value{native.NewList(elems)}, nil
 			},
@@ -606,7 +606,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				elems := make([]native.Value, m.Rows())
 				for i := 0; i < m.Rows(); i++ {
-					elems[i] = native.NewDecimal(m.Data[i*m.Cols()+col])
+					elems[i] = native.NewFloat(m.Data[i*m.Cols()+col])
 				}
 				return []native.Value{native.NewList(elems)}, nil
 			},
@@ -741,7 +741,7 @@ var MatrixNatives = []native.NativeFunc{
 				m := AsTensor(args[0])
 				elems := make([]native.Value, len(m.Data))
 				for i, v := range m.Data {
-					elems[i] = native.NewDecimal(v)
+					elems[i] = native.NewFloat(v)
 				}
 				return []native.Value{native.NewList(elems)}, nil
 			},
@@ -760,9 +760,9 @@ var MatrixNatives = []native.NativeFunc{
 				for _, v := range m.Data {
 					s += v
 				}
-				return []native.Value{native.NewDecimal(s)}, nil
+				return []native.Value{native.NewFloat(s)}, nil
 			},
-			Returns: []*native.Type{native.TDecimal}, BarrierPos: -1,
+			Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -779,9 +779,9 @@ var MatrixNatives = []native.NativeFunc{
 				for i := 0; i < m.Rows(); i++ {
 					s += m.Data[i*m.Cols()+i]
 				}
-				return []native.Value{native.NewDecimal(s)}, nil
+				return []native.Value{native.NewFloat(s)}, nil
 			},
-			Returns: []*native.Type{native.TDecimal}, BarrierPos: -1,
+			Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -795,9 +795,9 @@ var MatrixNatives = []native.NativeFunc{
 				if err != nil {
 					return nil, err
 				}
-				return []native.Value{native.NewDecimal(d)}, nil
+				return []native.Value{native.NewFloat(d)}, nil
 			},
-			Returns: []*native.Type{native.TDecimal}, BarrierPos: -1,
+			Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
 		}},
 	},
 	// Vector.
@@ -827,9 +827,9 @@ var MatrixNatives = []native.NativeFunc{
 					}
 					s += av * bv
 				}
-				return []native.Value{native.NewDecimal(s)}, nil
+				return []native.Value{native.NewFloat(s)}, nil
 			},
-			Returns: []*native.Type{native.TDecimal}, BarrierPos: -1,
+			Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
 		}},
 	},
 }
@@ -957,7 +957,7 @@ func (tensorFormatBehavior) ToMap(v native.Value) (native.Value, error) {
 	}
 	vals := make([]native.Value, len(t.Data))
 	for i, d := range t.Data {
-		vals[i] = native.NewDecimal(d)
+		vals[i] = native.NewFloat(d)
 	}
 	m.Set("shape", native.NewList(shape))
 	m.Set("values", native.NewList(vals))
@@ -965,12 +965,12 @@ func (tensorFormatBehavior) ToMap(v native.Value) (native.Value, error) {
 }
 
 // tensorNested builds the nested-list view of t's [lo,hi) data slice for
-// the dimension at the given axis. Rank-1 → flat list of Decimals.
+// the dimension at the given axis. Rank-1 → flat list of Floats.
 func tensorNested(t TensorData, axis, lo, hi int) native.Value {
 	if axis >= len(t.Shape)-1 {
 		elems := make([]native.Value, 0, hi-lo)
 		for i := lo; i < hi; i++ {
-			elems = append(elems, native.NewDecimal(t.Data[i]))
+			elems = append(elems, native.NewFloat(t.Data[i]))
 		}
 		return native.NewList(elems)
 	}

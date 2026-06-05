@@ -369,7 +369,7 @@ func writeSigs(b *strings.Builder, sigs []SigInfo) {
 // Standard example values by type leaf name.
 var exampleValues = map[string][]string{
 	"Integer": {"2", "3", "4", "5", "6", "7", "8", "9"},
-	"Decimal": {"2.25", "3.5", "4.75", "5.25", "6.5", "7.75", "8.25", "9.5"},
+	"Float": {"2.25", "3.5", "4.75", "5.25", "6.5", "7.75", "8.25", "9.5"},
 	"Number":  {"2", "3.5", "4", "5.25", "6", "7.5", "8", "9.25"},
 	"String":  {"'a'", "'b'", "'c'", "'d'", "'e'", "'f'"},
 	"Scalar":  {"'a'", "'b'", "'c'", "'d'", "'e'", "'f'"},

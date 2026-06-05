@@ -56,7 +56,7 @@
 # === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===		
 #   addq  — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)		
 #   mulq  — [Number Number] forward-prec — args[1] * args[0] (decimal contagion)		
-#   negq  — [Number|] BarrierPos=1 — unary -args[0]; preserves Integer/Decimal tag		
+#   negq  — [Number|] BarrierPos=1 — unary -args[0]; preserves Integer/Float tag		
 #   subq  — [Number Number] forward-prec — args[1] - args[0] (decimal contagion)		
 # === end fixtures ===		
 		

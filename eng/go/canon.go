@@ -74,9 +74,9 @@ func CanonValue(v Value) string {
 	case v.Parent.ConformsTo(TInteger):
 		n, _ := AsInteger(v)
 		return strconv.FormatInt(n, 10)
-	case v.Parent.ConformsTo(TDecimal):
-		f, _ := AsDecimal(v)
-		return FormatDecimal(f)
+	case v.Parent.ConformsTo(TFloat):
+		f, _ := AsFloat(v)
+		return FormatFloat(f)
 	case v.Parent.ConformsTo(TString):
 		s, _ := AsString(v)
 		return "'" + s + "'"

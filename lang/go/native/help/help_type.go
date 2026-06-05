@@ -4,7 +4,7 @@ func init() {
 	register(&Entry{
 		Word:    "convert",
 		Summary: "Convert a value to a different type.",
-		Description: "Converts the first argument to the target type. Supports integer, decimal, " +
+		Description: "Converts the first argument to the target type. Supports integer, float, " +
 			"string, boolean conversions. An optional third argument provides settings " +
 			"like base for numeric conversions.",
 	})
@@ -49,7 +49,7 @@ func init() {
 		Word:    "base",
 		Summary: "Return the zero/default value for the type of a value.",
 		Description: "Consumes a value and returns the zero value for its type: 0 for integers, " +
-			"0.0 for decimals, empty string for strings, false for booleans, empty list for lists.",
+			"0.0 for floats, empty string for strings, false for booleans, empty list for lists.",
 	})
 
 	register(&Entry{

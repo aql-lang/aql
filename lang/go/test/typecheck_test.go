@@ -50,13 +50,13 @@ func TestCheckModuleExportTypePropagation(t *testing.T) {
 	}
 
 	// A function export called with a matching arg propagates its return
-	// type: MathUtil.sqrt : [Decimal] -> Decimal.
+	// type: MathUtil.sqrt : [Float] -> Float.
 	res, err := a.Check(`import "aql:math-util" end  16.0 MathUtil.sqrt`)
 	if err != nil {
 		t.Fatalf("check error: %v", err)
 	}
-	if len(res.Stack) != 1 || res.Stack[0] != "Decimal" {
-		t.Fatalf("expected residual [Decimal] (sqrt return type propagated), got %v", res.Stack)
+	if len(res.Stack) != 1 || res.Stack[0] != "Float" {
+		t.Fatalf("expected residual [Float] (sqrt return type propagated), got %v", res.Stack)
 	}
 
 	// A bare export reference keeps a function type (FnDef wrapper renders
@@ -156,10 +156,10 @@ func TestCheckUnreachableSignature(t *testing.T) {
 	}
 }
 
-// TestCheckAddDecimalWiden validates that mixing integer and decimal
-// carriers widens the result to Decimal — this is the
+// TestCheckAddFloatWiden validates that mixing integer and decimal
+// carriers widens the result to Float — this is the
 // "else" branch of ReturnsNumericBinary.
-func TestCheckAddDecimalWiden(t *testing.T) {
+func TestCheckAddFloatWiden(t *testing.T) {
 	a, err := lang.New()
 	if err != nil {
 		t.Fatalf("new: %v", err)
@@ -174,7 +174,7 @@ func TestCheckAddDecimalWiden(t *testing.T) {
 	if len(res.Stack) != 1 {
 		t.Fatalf("expected 1 carrier, got %v", res.Stack)
 	}
-	if got, want := res.Stack[0], "Decimal"; got != want {
+	if got, want := res.Stack[0], "Float"; got != want {
 		t.Fatalf("expected %q, got %q", want, got)
 	}
 }
@@ -594,7 +594,7 @@ func TestCheckDisjunctWidthCap(t *testing.T) {
 		t.Fatalf("disjunction should have been width-capped, got %q", got)
 	}
 	scalars := map[string]bool{
-		"Scalar": true, "Number": true, "Integer": true, "Decimal": true,
+		"Scalar": true, "Number": true, "Integer": true, "Float": true,
 		"String": true, "Boolean": true, "Atom": true, "Path": true,
 	}
 	if !scalars[got] {
@@ -1398,7 +1398,7 @@ func TestCheckBuiltinsAnnotated(t *testing.T) {
 		{"1 add 2", "Integer"},
 		{"1 sub 2", "Integer"},
 		{"1 mul 2", "Integer"},
-		{"1 add 2.5", "Decimal"},
+		{"1 add 2.5", "Float"},
 		{"true and false", "Boolean"},
 		{"not true", "Boolean"},
 		{"1 eq 1", "Boolean"},

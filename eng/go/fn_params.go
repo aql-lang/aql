@@ -300,7 +300,7 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 		return t, nil, err
 	}
 	if v.Data != nil && (v.Parent.ConformsTo(TInteger) ||
-		v.Parent.ConformsTo(TDecimal) ||
+		v.Parent.ConformsTo(TFloat) ||
 		v.Parent.ConformsTo(TBoolean) ||
 		v.Parent.ConformsTo(TString) ||
 		v.Parent.ConformsTo(TAtom)) {
@@ -309,8 +309,8 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 		switch {
 		case v.Parent.ConformsTo(TInteger):
 			kind = TInteger
-		case v.Parent.ConformsTo(TDecimal):
-			kind = TDecimal
+		case v.Parent.ConformsTo(TFloat):
+			kind = TFloat
 		case v.Parent.ConformsTo(TBoolean):
 			kind = TBoolean
 		case v.Parent.ConformsTo(TString):
@@ -430,8 +430,8 @@ func ResolveTypeName(name string) (*Type, error) {
 		return TNumber, nil
 	case "Integer":
 		return TInteger, nil
-	case "Decimal":
-		return TDecimal, nil
+	case "Float":
+		return TFloat, nil
 	case "String":
 		return TString, nil
 	case "Boolean":

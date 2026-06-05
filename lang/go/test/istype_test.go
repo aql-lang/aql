@@ -54,8 +54,8 @@ func TestIstype_TypeLiteral_Number(t *testing.T) {
 	assertResult(t, result, "true")
 }
 
-func TestIstype_TypeLiteral_Decimal(t *testing.T) {
-	result, err := runNativeSteps(t, nil, []string{`istype Decimal`})
+func TestIstype_TypeLiteral_Float(t *testing.T) {
+	result, err := runNativeSteps(t, nil, []string{`istype Float`})
 	if err != nil {
 		t.Fatal(err)
 	}

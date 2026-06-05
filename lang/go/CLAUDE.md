@@ -797,7 +797,7 @@ panic on `.Len()`. (`AsList` / `AsMap` are free functions in eng, not
 methods on `Value`; only `Is(t)` and `String()` remain as methods.)
 
 **DepScalar-rejecting accessors**:
-- `v.AsConcreteString()`, `v.AsConcreteInteger()`, `v.AsConcreteDecimal()`,
+- `v.AsConcreteString()`, `v.AsConcreteInteger()`, `v.AsConcreteFloat()`,
   `v.AsConcreteBoolean()`, `v.AsConcreteAtom()` — reject DepScalar
   payloads with a clear error rather than silently returning the zero
   value. Always prefer these over the bare free-function accessors
@@ -925,7 +925,7 @@ does NOT apply it (cross-family pairs must be Rank-only — otherwise
 `true cmp Integer` flips wrong).
 
 **Cross-leaf numeric equivalence.** `1 cmp 1.0 → 0` is preserved:
-the Number Comparer projects both Integer and Decimal to `float64`,
+the Number Comparer projects both Integer and Float to `float64`,
 so magnitude equality across leaves stays consistent with
 arithmetic (`1 + 0 == 1`, `1.0 == 1`).
 

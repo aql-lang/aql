@@ -1055,7 +1055,7 @@ func parseWord(text string) (eng.Value, error) {
 	}
 
 	// *Type names resolve to type literals even in word context, so that
-	// they retain their meaning inside quotations (e.g. [String,Decimal]).
+	// they retain their meaning inside quotations (e.g. [String,Float]).
 	if t, ok := typeNames[name]; ok {
 		return eng.NewTypeLiteral(t), nil
 	}
@@ -1153,7 +1153,7 @@ func floatToValue(f float64) eng.Value {
 	if f == float64(int64(f)) && !math.IsInf(f, 0) && !math.IsNaN(f) {
 		return eng.NewInteger(int64(f))
 	}
-	return eng.NewDecimal(f)
+	return eng.NewFloat(f)
 }
 
 // numberValToValue converts a numberVal (float64 + source) to the appropriate
@@ -1161,7 +1161,7 @@ func floatToValue(f float64) eng.Value {
 // treated as a decimal — even for whole numbers like 5.0.
 func numberValToValue(nv numberVal) eng.Value {
 	if strings.Contains(nv.Src, ".") {
-		return eng.NewDecimal(nv.Val)
+		return eng.NewFloat(nv.Val)
 	}
 	return floatToValue(nv.Val)
 }

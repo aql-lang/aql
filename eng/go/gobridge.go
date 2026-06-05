@@ -12,7 +12,7 @@ package eng
 // ToNative maps a Value down to a plain Go value:
 //   String   → string
 //   Integer  → int64
-//   Decimal  → float64
+//   Float  → float64
 //   Boolean  → bool
 //   Atom     → string (the atom name)
 //   List     → []any  (each element recursively ToNative'd)
@@ -25,7 +25,7 @@ package eng
 //   string        → String
 //   bool          → Boolean
 //   int / int64   → Integer
-//   float64       → Integer if integral-valued, else Decimal
+//   float64       → Integer if integral-valued, else Float
 //   []any         → List (each element recursively FromNative'd)
 //   map[string]any→ Map (likewise)
 //   fmt.Stringer / anything else → String of fmt.Sprintf("%v", x)
@@ -50,8 +50,8 @@ func ToNative(v Value) any {
 	case v.Parent.ConformsTo(TInteger):
 		n, _ := AsInteger(v)
 		return n
-	case v.Parent.ConformsTo(TDecimal):
-		f, _ := AsDecimal(v)
+	case v.Parent.ConformsTo(TFloat):
+		f, _ := AsFloat(v)
 		return f
 	case v.Parent.ConformsTo(TBoolean):
 		b, _ := AsBoolean(v)
@@ -131,15 +131,15 @@ func FromNative(x any) Value {
 
 // floatToValue promotes integer-valued floats to Integer to keep CLI
 // output compact (e.g. JSON's `1.0` renders as `1` rather than `1.0`).
-// Non-integral floats stay as Decimal.
+// Non-integral floats stay as Float.
 func floatToValue(f float64) Value {
 	if !isFinite(f) {
-		return NewDecimal(f)
+		return NewFloat(f)
 	}
 	if f == float64(int64(f)) {
 		return NewInteger(int64(f))
 	}
-	return NewDecimal(f)
+	return NewFloat(f)
 }
 
 func isFinite(f float64) bool {

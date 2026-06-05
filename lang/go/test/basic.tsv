@@ -359,7 +359,7 @@ tpartial (refine Record [x:Integer y:[String tor None]])	record{x:Integer|None y
 tpartial (tpartial (refine Record [x:Integer])) teq tpartial (refine Record [x:Integer])	true
 
 # is - per-element type List: type Names in lists match element-wise
-["a" 1.1] is [String Decimal]	true
+["a" 1.1] is [String Float]	true
 [1 2] is [Integer Integer]	true
 [1 "a"] is [Integer String]	true
 ["a" 1] is [String Integer]	true

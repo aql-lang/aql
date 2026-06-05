@@ -692,7 +692,7 @@ func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
 	// 5 args: string, integer, decimal, boolean, string
 	fnBody := NewList([]Value{
 		NewList([]Value{
-			NewWord("String"), NewWord("Integer"), NewWord("Decimal"),
+			NewWord("String"), NewWord("Integer"), NewWord("Float"),
 			NewWord("Boolean"), NewWord("String"),
 		}),
 		NewList([]Value{NewWord("String")}),
@@ -711,7 +711,7 @@ func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
 			t.Fatal(err)
 		}
 		result := runAQL(t, r, append(append([]Value{}, defTokens...),
-			NewString("z"), NewBoolean(false), NewDecimal(1.5), NewInteger(3), NewString("a"),
+			NewString("z"), NewBoolean(false), NewFloat(1.5), NewInteger(3), NewString("a"),
 			NewWord("mix5"),
 		))
 		_as54, _ := AsString(result[0])
@@ -729,7 +729,7 @@ func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
 		}
 		result := runAQL(t, r, append(append([]Value{}, defTokens...),
 			NewWord("mix5"), NewString("a"), NewInteger(3),
-			NewDecimal(1.5), NewBoolean(false), NewString("z"),
+			NewFloat(1.5), NewBoolean(false), NewString("z"),
 		))
 		_as55, _ := AsString(result[0])
 		if len(result) != 1 || _as55 != "a31.5falsez" {
@@ -746,7 +746,7 @@ func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
 		}
 		result := runAQL(t, r, append(append([]Value{}, defTokens...),
 			NewWord("mix5"), NewString("a"), NewInteger(3),
-			NewDecimal(1.5), NewBoolean(false), NewString("z"),
+			NewFloat(1.5), NewBoolean(false), NewString("z"),
 		))
 		_as56, _ := AsString(result[0])
 		if len(result) != 1 || _as56 != "a31.5falsez" {
@@ -761,7 +761,7 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 	// 7 args covering all scalar types with repeats.
 	fnBody := NewList([]Value{
 		NewList([]Value{
-			NewWord("String"), NewWord("Integer"), NewWord("Decimal"),
+			NewWord("String"), NewWord("Integer"), NewWord("Float"),
 			NewWord("Boolean"), NewWord("String"), NewWord("Integer"), NewWord("String"),
 		}),
 		NewList([]Value{NewWord("String")}),
@@ -773,12 +773,12 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 	// Expected concat in sig order: "p123.5trueq456r7"
 	want := "p123.5trueq456r7"
 	argVals := []Value{
-		NewString("p1"), NewInteger(2), NewDecimal(3.5),
+		NewString("p1"), NewInteger(2), NewFloat(3.5),
 		NewBoolean(true), NewString("q4"), NewInteger(56), NewString("r7"),
 	}
 
 	// All prefix: stack bottom-to-top reversed from sig order (nearest→sig[0])
-	// sig[6]=String, sig[5]=Integer, sig[4]=String, sig[3]=Boolean, sig[2]=Decimal, sig[1]=Integer, sig[0]=String
+	// sig[6]=String, sig[5]=Integer, sig[4]=String, sig[3]=Boolean, sig[2]=Float, sig[1]=Integer, sig[0]=String
 	t.Run("AllPrefix", func(t *testing.T) {
 		r, err := DefaultRegistry()
 		registerIOWords(r)
@@ -787,7 +787,7 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 		}
 		argValsReversed := []Value{
 			NewString("r7"), NewInteger(56), NewString("q4"),
-			NewBoolean(true), NewDecimal(3.5), NewInteger(2), NewString("p1"),
+			NewBoolean(true), NewFloat(3.5), NewInteger(2), NewString("p1"),
 		}
 		tokens := append(append([]Value{}, defTokens...), argValsReversed...)
 		tokens = append(tokens, NewWord("mix7"))

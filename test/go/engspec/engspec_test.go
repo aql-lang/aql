@@ -44,7 +44,7 @@ func registerSpecWords(r *eng.Registry) {
 			n, _ := eng.AsInteger(v)
 			return float64(n)
 		}
-		f, _ := eng.AsDecimal(v)
+		f, _ := eng.AsFloat(v)
 		return f
 	}
 	numericBinary := func(intOp func(a, b int64) int64, floatOp func(a, b float64) float64) eng.Handler {
@@ -54,7 +54,7 @@ func registerSpecWords(r *eng.Registry) {
 				b, _ := eng.AsInteger(args[1])
 				return []eng.Value{eng.NewInteger(intOp(a, b))}, nil
 			}
-			return []eng.Value{eng.NewDecimal(floatOp(toFloat(args[0]), toFloat(args[1])))}, nil
+			return []eng.Value{eng.NewFloat(floatOp(toFloat(args[0]), toFloat(args[1])))}, nil
 		}
 	}
 	numberPair := []*eng.Type{eng.TNumber, eng.TNumber}
@@ -92,8 +92,8 @@ func registerSpecWords(r *eng.Registry) {
 					n, _ := eng.AsInteger(args[0])
 					return []eng.Value{eng.NewInteger(-n)}, nil
 				}
-				f, _ := eng.AsDecimal(args[0])
-				return []eng.Value{eng.NewDecimal(-f)}, nil
+				f, _ := eng.AsFloat(args[0])
+				return []eng.Value{eng.NewFloat(-f)}, nil
 			},
 			Returns: []*eng.Type{eng.TNumber},
 		}},
