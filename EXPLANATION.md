@@ -272,27 +272,49 @@ rationale is in `design/REFINE-NEWTYPE-VS-SUBSET.0.md`.
 
 ## Type ordering
 
-AQL exposes a single total order over every value. `cmp`, `lt`,
-`gt`, `lte`, `gte`, and `sort` all consult it. The order is:
+AQL has a single total order over every value, computed in two stages:
 
 1. **LCA-Comparer.** Find the least common ancestor of the two
    types. If the ancestor declares a comparer, use it (so
-   `Integer cmp Float` runs the numeric comparer at the
-   `Number` level).
+   `Integer`↔`Float` runs the numeric comparer at the `Number`
+   level, and the instant-bearing `Time` leaves —
+   `Date`/`DateTime`/`Instant` — compare chronologically at the
+   `Time` level).
 2. **Rank fallback.** Otherwise compare the integer `Rank` each
-   type carries (cross-family comparisons are *defined*, not an
-   error).
+   type carries, giving cross-family pairs a defined position
+   (roughly `Boolean < Number < String < … < List < Map < …`).
+
+That total order is what **`sort`** and the collection words use, and
+it is surfaced directly by **`tcmp`** (`1 tcmp "a"` returns `-1`).
+
+But ordering values of *unrelated* families is almost always a
+mistake, so the everyday ordering words — `cmp`, `lt`, `lte`, `gt`,
+`gte` — are **family-restricted**. They compare only same-type values
+or values stage 1 can place with a real family comparer; a pair that
+would only order by the stage-2 Rank fallback (`1 lt "a"`,
+`List lt Map`) raises `[aql/incomparable]` and points you at `tcmp`:
+
+```
+1 lt 2.0                          # returns true        — Integer and Float share Number
+1 lt "a"                          # returns error       — different families; use tcmp
+1 tcmp "a"                        # returns -1          — the total order, on demand
+```
+
+**Equality is *not* restricted.** `eq`/`neq`/`deq` compare across types
+freely — values of different types are simply not equal (`1 eq "1"`
+returns `false`), which is safe and needs no escape hatch.
 
 A bare type literal sorts strictly below every concrete inhabitant
-of its family:
+of its family (same-family, so the restricted words allow it):
 
 ```
 Integer lt 0                      # returns true
 ```
 
 Lists are length-first then element-wise; maps are key-set then
-value-wise. The end effect is that everything is sortable and the
-order is well-defined.
+value-wise. The end effect: everything is sortable through `tcmp` /
+`sort`, while a stray cross-type `lt`/`cmp` is caught rather than
+silently answered.
 
 
 ## Immutability and mutability

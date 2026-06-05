@@ -67,9 +67,11 @@ green/q red/q lt	true	green < red lex
 red/q red/q lt	false	same atom
 
 # Cross-branch scalars order by branch precedence
-# (Atom < Boolean < Number < String < Path) via the Scalar Comparer.
-1 'a' lt	true	cross-branch: Integer ranks below String
-1 true lt	false	cross-branch: Integer outranks Boolean
+# (Atom < Boolean < Number < String < Path). lt is family-restricted, so
+# cross-branch pairs use tcmp — the unrestricted total order.
+1 'a' lt	ERROR:incomparable	cross-branch lt is rejected
+1 'a' tcmp	-1	cross-branch: Integer ranks below String
+1 true tcmp	1	cross-branch: Integer outranks Boolean
 
 # ---------------------------------------------------------------------
 # 1b. CORE canon: kernel default rendering through CanonValue

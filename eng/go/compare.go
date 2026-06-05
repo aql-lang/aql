@@ -36,39 +36,97 @@ var ErrNoComparer = errors.New("eng: no comparer in this Behavior")
 // DepScalar values (type-level constraints) flow through this same
 // path.
 func CompareValues(a, b Value) (int, error) {
+	n, _, err := compareValuesClassified(a, b)
+	return n, err
+}
+
+// compareValuesClassified is CompareValues plus a report of HOW the
+// order was decided. viaFamily is true when the result came from a
+// same-family Comparer (a Comparer on a lattice node other than the
+// cross-family catch-all TScalar) OR the two operands are the exact same
+// type. It is false when the pair only orders via the cross-family
+// scalar catch-all (scalarCompareBehavior@TScalar) or the lattice Rank
+// fallback — i.e. values of unrelated families.
+//
+// The restricted ordering words (cmp / lt / lte / gt / gte) accept a
+// pair only when viaFamily is true; tcmp and every internal caller use
+// CompareValues, which keeps the full total order over all values.
+func compareValuesClassified(a, b Value) (n int, viaFamily bool, err error) {
 	// A bare type literal IS its lattice node; its type-for-comparison
 	// is itself, not its Parent (now the supertype).
 	aType := ValueType(a)
 	bType := ValueType(b)
 	if aType == nil || bType == nil {
-		return 0, fmt.Errorf("cannot compare values with nil type")
+		return 0, false, fmt.Errorf("cannot compare values with nil type")
 	}
+	sameType := aType.Equal(bType)
 	for t := lowestCommonAncestor(aType, bType); t != nil; t = t.Parent {
 		cmp, ok := t.Behavior.(Comparer)
 		if !ok {
 			continue
 		}
-		n, err := cmp.Compare(a, b)
-		if errors.Is(err, ErrNoComparer) {
+		res, e := cmp.Compare(a, b)
+		if errors.Is(e, ErrNoComparer) {
 			// Wrapper Behavior signalled "I satisfy Comparer
-			// structurally but have no body installed" — keep
-			// walking the parent chain.
+			// structurally but have no body installed" (DepScalar
+			// opt-out; the Time comparer declining instant-vs-duration;
+			// …) — keep walking the parent chain.
 			continue
 		}
-		return n, err
+		// Resolved by a Comparer. It counts as a same-family resolution
+		// unless it is the cross-family catch-all on TScalar applied to
+		// two different types (Integer-vs-String, Boolean-vs-Number).
+		return res, sameType || !t.Equal(TScalar), e
 	}
 	// No Comparer in the shared lattice — order by the type lattice.
 	// compareTypes is a total order on *Type (Rank, then depth, name,
-	// id), so any two values of distinct types resolve here.
+	// id), so any two values of distinct types resolve here. Reached
+	// only for cross-branch pairs, so this is never a family resolution.
 	if c := compareTypes(aType, bType); c != 0 {
-		return c, nil
+		return c, false, nil
 	}
 	// Identical type — order by value: size, then element-wise
 	// structure, so distinct values never collapse to 0.
 	if sa, sb := SizeOf(a), SizeOf(b); sa != sb {
-		return cmpInt(sa, sb), nil
+		return cmpInt(sa, sb), sameType, nil
 	}
-	return compareStructural(a, b)
+	res, e := compareStructural(a, b)
+	return res, sameType, e
+}
+
+// OrderComparable reports whether a and b may be compared by the
+// family-restricted ordering words (cmp / lt / lte / gt / gte): true
+// when they are the same type or share a same-family Comparer, false
+// when they only order via the cross-type total order (use tcmp).
+func OrderComparable(a, b Value) bool {
+	_, viaFamily, err := compareValuesClassified(a, b)
+	return err == nil && viaFamily
+}
+
+// orderedCompare runs the family-restricted comparison behind the
+// ordering words. It returns the -1/0/1 result, or an [aql/incomparable]
+// error when the pair only orders via the cross-type total order — the
+// caller should reach for tcmp instead.
+func orderedCompare(op string, a, b Value) (int, error) {
+	n, viaFamily, err := compareValuesClassified(a, b)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", op, err)
+	}
+	if !viaFamily {
+		return 0, incomparableError(op, a, b)
+	}
+	return n, nil
+}
+
+// incomparableError is the [aql/incomparable] error the restricted
+// ordering words raise for cross-family operands.
+func incomparableError(op string, a, b Value) error {
+	return &AqlError{
+		Code: "incomparable",
+		Detail: fmt.Sprintf("%s: cannot order %s and %s",
+			op, ValueType(a).String(), ValueType(b).String()),
+		Hint: "different types with no shared ordering; use tcmp for a cross-type total order",
+	}
 }
 
 // lowestCommonAncestor returns the closest type that is an ancestor
@@ -278,56 +336,83 @@ func DeepEqual(a, b Value) bool {
 // neq / deq / between) live in lang/go/engine/native_compare.go. The
 // handlers and MakeDepScalarSig helper are exported eng primitives.
 
+// The ordering words lt / gt / lte / gte / cmp are family-restricted:
+// they compare only same-type values, or values a shared same-family
+// Comparer can handle (Integer-vs-Float, two Dates, …). A cross-family
+// pair (Integer-vs-String, List-vs-Map) raises [aql/incomparable] and
+// directs the caller to tcmp, which keeps the full cross-type total
+// order. The guard lives in orderedCompare; tcmp (TcmpHandler) bypasses
+// it.
+
 func LtHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	cmp, err := CompareValues(args[1], args[0])
+	cmp, err := orderedCompare("lt", args[1], args[0])
 	if err != nil {
-		return nil, fmt.Errorf("lt: %w", err)
+		return nil, err
 	}
 	return []Value{NewBoolean(cmp < 0)}, nil
 }
 
 func GtHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	cmp, err := CompareValues(args[1], args[0])
+	cmp, err := orderedCompare("gt", args[1], args[0])
 	if err != nil {
-		return nil, fmt.Errorf("gt: %w", err)
+		return nil, err
 	}
 	return []Value{NewBoolean(cmp > 0)}, nil
 }
 
 func LteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	cmp, err := CompareValues(args[1], args[0])
+	cmp, err := orderedCompare("lte", args[1], args[0])
 	if err != nil {
-		return nil, fmt.Errorf("lte: %w", err)
+		return nil, err
 	}
 	return []Value{NewBoolean(cmp <= 0)}, nil
 }
 
 func GteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	cmp, err := CompareValues(args[1], args[0])
+	cmp, err := orderedCompare("gte", args[1], args[0])
 	if err != nil {
-		return nil, fmt.Errorf("gte: %w", err)
+		return nil, err
 	}
 	return []Value{NewBoolean(cmp >= 0)}, nil
 }
 
-// CmpHandler implements `cmp` — a three-way comparison. `a b cmp`
-// returns -1 when a sorts before b, 0 when they tie, and 1 when a
-// sorts after b, using the same total order as lt / gt / sort. The
-// CompareValues result is normalised to its sign, so a custom
-// `behave compare` body that returns a nonzero magnitude other than
-// ±1 still yields exactly -1 / 0 / 1.
+// CmpHandler implements `cmp` — a three-way comparison restricted to
+// same-family operands. `a b cmp` returns -1 when a sorts before b, 0
+// when they tie, and 1 when a sorts after b, using the same family
+// ordering as lt / gt. Cross-family operands raise [aql/incomparable];
+// use tcmp for a cross-type total order. The result is normalised to
+// its sign, so a custom `behave compare` body that returns a nonzero
+// magnitude other than ±1 still yields exactly -1 / 0 / 1.
 func CmpHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	cmp, err := orderedCompare("cmp", args[1], args[0])
+	if err != nil {
+		return nil, err
+	}
+	return []Value{NewInteger(int64(signOf(cmp)))}, nil
+}
+
+// TcmpHandler implements `tcmp` — the total-order three-way comparison.
+// Unlike cmp, it compares ANY two values via the unified lattice order
+// (the same order sort and the collection words use), returning -1 / 0
+// / 1. Use it when you deliberately want cross-type ordering that cmp
+// refuses (e.g. `1 tcmp "a"`).
+func TcmpHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	cmp, err := CompareValues(args[1], args[0])
 	if err != nil {
-		return nil, fmt.Errorf("cmp: %w", err)
+		return nil, fmt.Errorf("tcmp: %w", err)
 	}
+	return []Value{NewInteger(int64(signOf(cmp)))}, nil
+}
+
+// signOf normalises an arbitrary comparison magnitude to -1 / 0 / 1.
+func signOf(n int) int {
 	switch {
-	case cmp < 0:
-		return []Value{NewInteger(-1)}, nil
-	case cmp > 0:
-		return []Value{NewInteger(1)}, nil
+	case n < 0:
+		return -1
+	case n > 0:
+		return 1
 	default:
-		return []Value{NewInteger(0)}, nil
+		return 0
 	}
 }
 

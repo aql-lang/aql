@@ -460,6 +460,8 @@ WORD tand
   [Any Any] barrier=1 returns=[Any]
 WORD tany
   [Node/List] barrier=1 returns=[Any]
+WORD tcmp
+  [Any Any] barrier=2 returns=[Scalar/Number/Integer]
 WORD teq
   [Any Any] barrier=1 returns=[Scalar/Boolean]
 WORD timeout

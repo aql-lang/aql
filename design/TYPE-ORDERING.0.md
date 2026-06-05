@@ -3,8 +3,21 @@
 This document records the design of AQL's value ordering: the lattice
 that places every Value in a total preorder, the cascade
 `CompareValues` uses to settle a pair, and the deliberate anomalies
-we accepted. It is the canonical reference for `cmp` / `lt` / `gt` /
-`lte` / `gte` / `sort` and the `Comparer` capability seam.
+we accepted. It is the canonical reference for `tcmp` / `sort` and the
+`Comparer` capability seam.
+
+> **Surface split (post-`tcmp`).** `CompareValues` — everything below —
+> is the **unrestricted total order**, unchanged. It is surfaced
+> directly by `tcmp` and used by `sort` and the collection words. The
+> everyday ordering words `cmp` / `lt` / `lte` / `gt` / `gte` add a
+> shallow guard *on top*: they accept a pair only when it is the same
+> type or resolves via a same-family Comparer (stage 1 below), and
+> raise `[aql/incomparable]` for pairs that would settle only by the
+> Rank fallback (stage 2). So this document describes what `tcmp`
+> computes; the restricted words compute the same number but refuse the
+> cross-family cases. Equality (`eq`/`neq`/`deq`) is independent of this
+> cascade and stays total. See WAT-AUDIT Exhibit P and
+> `lang/spec/compare-restrict.tsv`.
 
 ## TL;DR
 
@@ -225,9 +238,10 @@ Words                                                 (Word band)
 Functions < FunctionSignatures < Disjuncts < Enums    (Type band)
 ```
 
-Example: `true cmp 5 = -1` (Boolean Rank `20.2·10⁹` < Integer Rank
-`20.31·10⁹`); `5 cmp 'a' = -1` (Integer < String); `'a' cmp [1] =
--1` (String band < List band).
+Example: `true tcmp 5 = -1` (Boolean Rank `20.2·10⁹` < Integer Rank
+`20.31·10⁹`); `5 tcmp 'a' = -1` (Integer < String); `'a' tcmp [1] =
+-1` (String band < List band). (These are cross-family, so `tcmp` —
+the restricted `cmp`/`lt` raise `[aql/incomparable]` here.)
 
 ## Type-literal-first rule (the family-zero anomaly, now fixed)
 
@@ -268,9 +282,11 @@ The rule applies **only within a family** — `scalarCompareBehavior`
 NOT apply it, so cross-family ordering remains Rank-only:
 
 ```
-true cmp Integer → -1   # Boolean Rank 20.2·10⁹ < Integer Rank 20.31·10⁹
-5    cmp String  → -1   # Integer Rank < String Rank
+true tcmp Integer → -1   # Boolean Rank 20.2·10⁹ < Integer Rank 20.31·10⁹
+5    tcmp String  → -1   # Integer Rank < String Rank
 ```
+(Cross-family → shown with `tcmp`; `cmp`/`lt` would raise
+`[aql/incomparable]`.)
 
 The Path family runs through `comparePaths` (no Comparer on `TPath`
 itself; the LCA walk reaches `Scalar`); `comparePaths` carries its
@@ -303,13 +319,14 @@ ancestor; comparisons against them go straight through the Rank
 cascade:
 
 ```
-none cmp 5     → -1     (None Rank 12·10⁹ < Integer band)
-none cmp Any   →  1     (None Rank 12·10⁹ > Any Rank 11·10⁹)
-Never cmp Any  →  1     (Never Rank 13·10⁹ > Any Rank 11·10⁹)
+none tcmp 5     → -1     (None Rank 12·10⁹ < Integer band)
+none tcmp Any   →  1     (None Rank 12·10⁹ > Any Rank 11·10⁹)
+Never tcmp Any  →  1     (Never Rank 13·10⁹ > Any Rank 11·10⁹)
 ```
 
-`none cmp none = 0`; `none` and any other value compare strictly
-by Rank.
+`none tcmp none = 0` (same type — `cmp` accepts it too); `none` and any
+other value compare strictly by Rank, so a cross-type pair needs
+`tcmp` (`cmp`/`lt` raise `[aql/incomparable]`).
 
 ### Summary of order properties
 

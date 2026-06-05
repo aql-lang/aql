@@ -22,7 +22,7 @@ var (
 	TStringEmpty    = mustType("Scalar/String/EmptyString")
 	TNumber         = mustType("Scalar/Number")
 	TInteger        = mustType("Scalar/Number/Integer")
-	TFloat        = mustType("Scalar/Number/Float")
+	TFloat          = mustType("Scalar/Number/Float")
 	TBoolean        = mustType("Scalar/Boolean")
 	TPath           = mustType("Scalar/Path")
 	TNode           = mustType("Node")

@@ -498,26 +498,41 @@ it.
 
 ### Comparison
 
-All comparison words route through one total order — see
+The **ordering** words (`cmp`, `lt`, `lte`, `gt`, `gte`) are
+**family-restricted**: they compare only same-type values, or values a
+shared same-family comparer can handle (`Integer`↔`Float` via `Number`,
+two `Date`s, `EmptyString`↔`ProperString` via `String`, the
+instant-bearing `Time` leaves chronologically). A cross-family pair
+(`Integer`↔`String`, `List`↔`Map`) raises `[aql/incomparable]`.
+
+`tcmp` is the **unrestricted** total order — it compares *any* two
+values (the same order `sort` and the collection words use), returning
+`-1` / `0` / `1`. Reach for it when you want the cross-type ordering the
+restricted words refuse. See
 **[Explanation §Type ordering](EXPLANATION.md#type-ordering)**.
 
-> **Comparisons never reject mismatched types.** Because the order is
-> total across *every* type (roughly `Boolean < Number < String < …`),
-> `lt`/`gt`/`cmp` silently compare values of different families instead
-> of erroring: `1 lt "a"` returns `true`, `true lt 1` returns `true`, and a
-> mixed list `[3 "a" 1 true] sort` returns `[true 1 3 'a']`. If you mean to
-> compare like with like, check the types first — the engine will not.
+> **Equality is not restricted.** `eq`/`neq`/`deq` compare across types
+> safely — different types are simply *not equal* (`1 eq "1"` returns
+> `false`, never an error). Only the **ordering** words restrict.
+
+```
+1 lt 2.0                      # returns true        — Integer vs Float (shared Number)
+1 lt "a"                      # returns error       — [aql/incomparable]; use tcmp
+1 tcmp "a"                    # returns -1          — Integer ranks below String
+[3 "a" 1 true] sort           # returns [true 1 3 'a']   — sort uses the total order
+```
 
 | Word | Description | Example |
 |------|-------------|---------|
-| `eq` | Equal (cross-leaf magnitude allowed) | `1 eq 1.0` returns `true` |
+| `eq` | Equal (cross-leaf magnitude allowed; cross-type → false) | `1 eq 1.0` returns `true` |
 | `neq` | Not equal | `1 neq 2` returns `true` |
 | `deq` | Deep / strict-identity equality | `[1,2] deq [1,2]` returns `true` |
-| `lt` | Less than | `1 lt 2` returns `true` |
-| `gt` | Greater than | `2 gt 1` returns `true` |
-| `lte` | Less or equal | `1 lte 1` returns `true` |
-| `gte` | Greater or equal | `2 gte 1` returns `true` |
-| `cmp` | Three-way: `-1` / `0` / `1` | `5 cmp 10` returns `-1` |
+| `lt` | Less than (same-family) | `1 lt 2` returns `true` |
+| `gt` | Greater than (same-family) | `2 gt 1` returns `true` |
+| `lte` | Less or equal (same-family) | `1 lte 1` returns `true` |
+| `gte` | Greater or equal (same-family) | `2 gte 1` returns `true` |
+| `cmp` | Three-way (same-family): `-1` / `0` / `1` | `5 cmp 10` returns `-1` |
+| `tcmp` | Three-way across **any** types (total order) | `1 tcmp "a"` returns `-1` |
 | `between` | Build closed-interval refinement | `Integer between 10 20` |
 
 ### Definition and scoping

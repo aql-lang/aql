@@ -217,7 +217,7 @@ func (HostTypeBody) hostTypeBody() {}
 // Wrapper-variant markers.
 func (ReachInfo) payloadMarker()           {}
 func (IntPayload) payloadMarker()          {}
-func (FloatPayload) payloadMarker()          {}
+func (FloatPayload) payloadMarker()        {}
 func (StrPayload) payloadMarker()          {}
 func (BoolPayload) payloadMarker()         {}
 func (AtomPayload) payloadMarker()         {}

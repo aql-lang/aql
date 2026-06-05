@@ -46,7 +46,7 @@ var (
 	TString         = native.TString
 	TNumber         = native.TNumber
 	TInteger        = native.TInteger
-	TFloat        = native.TFloat
+	TFloat          = native.TFloat
 	TBoolean        = native.TBoolean
 	TNode           = native.TNode
 	TAtom           = native.TAtom

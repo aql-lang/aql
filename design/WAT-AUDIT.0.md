@@ -351,12 +351,20 @@ $ aql do '[3 "a" 1 true] sort'   => [true 1 3 'a']
 A universal total order `bool < number < string` means cross-type
 comparison silently succeeds; heterogeneous lists sort without error.
 
-> **Fix.** Keep the total order in `CompareValues`
-> (`eng/go/compare_types.go`) so `sort`/`cmp` stay defined on mixed
-> lists, but make the *boolean comparison words* `lt`/`gt`/`lte`/`gte`
-> reject cross-**family** operands (e.g. Number vs String) with a type
-> error. That stops `1 lt "a"` silently being `true` without losing
-> sortability. Risk: medium.
+> **Fix.** ✅ **Done.** `CompareValues` (`eng/go/compare.go`) is
+> unchanged — it stays the total order that `sort` and the collection
+> words use — and is now surfaced by a new word **`tcmp`** (compares any
+> two values, -1/0/1). The ordering words `cmp`/`lt`/`lte`/`gt`/`gte`
+> gained a shallow family guard (`orderedCompare`): they accept a pair
+> only when it is the same type or shares a same-family comparer
+> (Integer↔Float, two Dates, the instant-bearing Time leaves), and
+> otherwise raise `[aql/incomparable]` pointing at `tcmp`. Equality
+> (`eq`/`neq`/`deq`) was left total (cross-type → not-equal, never an
+> error). The Time leaves Date/DateTime/Instant were additionally
+> unified to compare chronologically (a new comparer on `Scalar/Time`).
+> Specs: `lang/spec/compare.tsv` now exercises the total order via
+> `tcmp`, and `lang/spec/compare-restrict.tsv` pins the restriction both
+> ways. `1 lt "a"` is now an error; `1 tcmp "a"` is `-1`.
 
 ## Q/W. `convert Integer` takes a string but refuses a number — `bug`
 
