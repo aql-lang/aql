@@ -5,10 +5,11 @@ syntax, the type system, and the runtime. It complements the
 **[Tutorial](TUTORIAL.md)** (learning), **[How-To Guides](HOWTO.md)**
 (tasks), and **[Reference](REFERENCE.md)** (precise behaviour).
 
-> **Notation.** `expr => value` means "`expr` evaluates to `value`."
-> The `=>` is an annotation, not part of the program. (Bare `=>` is
-> the anonymous-function arrow — sugar for the word `afn` — so don't
-> paste the annotation into the REPL.)
+> **Notation.** In code, a `# returns …` comment shows what an
+> expression evaluates to (`4 square  # returns 16`); in prose we say
+> "`4 square` returns `16`". The comment is ordinary documentation, not
+> special syntax. (AQL has no result arrow — `=>` is the
+> anonymous-function word `afn` — so results are written as comments.)
 
 ## Contents
 
@@ -42,7 +43,7 @@ output of one is the input of the next. Composition is concatenation.
 ```
 def double word [dup add]
 def quadruple word [double double]
-5 quadruple                       => 20
+5 quadruple                       # returns 20
 ```
 
 `quadruple` is not "calling double twice" in the usual sense. It is
@@ -58,8 +59,8 @@ its arguments and pushes its results. The stack is the implicit
 data flow.
 
 ```
-3 4 add                           => 7
-7 2 mul                           => 14
+3 4 add                           # returns 7
+7 2 mul                           # returns 14
 ```
 
 Step by step: push 3, push 4, `add` consumes both and pushes 7; then
@@ -67,7 +68,7 @@ push 2, `mul` consumes both and pushes 14. There is no `tmp = a + b`
 intermediate — the stack *is* the intermediate.
 
 Written as one line the two steps compose by parenthesising the first
-— `(3 4 add) 2 mul => 14`. The bare `3 4 add 2 mul` does **not** give
+— `(3 4 add) 2 mul` returns `14`. The bare `3 4 add 2 mul` does **not** give
 14: because `add` can also *collect forward* (the next section), it
 grabs the following `2` as a second argument — computing `4 add 2 =
 6` — which leaves `3` and `6` on the stack for `mul`, giving `18`.
@@ -94,9 +95,9 @@ extends this with **forward collection**: a word can gather
 arguments that appear *after* it.
 
 ```
-1 2 add                           => 3    # classic prefix
-add 1 2                           => 3    # fully forward
-1 add 2                           => 3    # infix: one stack, one forward
+1 2 add                           # returns 3 — classic prefix
+add 1 2                           # returns 3 — fully forward
+1 add 2                           # returns 3 — infix: one stack, one forward
 ```
 
 All three are equivalent. The word `add` needs two arguments. If
@@ -172,7 +173,7 @@ goes too far. It stops the nearest waiting word, forcing any
 remaining arguments to come from the stack:
 
 ```
-set foo 99 end get foo            => 99
+set foo 99 end get foo            # returns 99
 ```
 
 Without `end`, `set` would try to collect `get` and `foo` as
@@ -198,9 +199,9 @@ first that matches. This produces natural overloading without a
 separate dispatch construct:
 
 ```
-add 1 2                           => 3      # Integer + Integer
-add 1.0 2                         => 3.0    # Decimal + Number, promotes
-"a" "b" add                       => 'ab'   # Scalar + Scalar, concatenates
+add 1 2                           # returns 3 — Integer + Integer
+add 1.0 2                         # returns 3.0 — Decimal + Number, promotes
+"a" "b" add                       # returns 'ab' — Scalar + Scalar, concatenates
 ```
 
 The same `add` covers numeric addition and string concatenation —
@@ -253,12 +254,12 @@ and Ada's range subtypes: value-sensitive and symmetric.
 
 ```
 def UserId (refine Integer)               # newtype — identity
-42 is UserId                  => false    # a raw Integer is not a UserId
-def id:UserId 42   id is UserId => true   # constructed explicitly
+42 is UserId                  # returns false — a raw Integer is not a UserId
+def id:UserId 42   id is UserId  # returns true — constructed explicitly
 
 def Big (Integer gt 10)                   # subset — validation
-50 is Big                     => true     # 50 qualifies, no construction
-5  is Big                     => false    # 5 does not
+50 is Big                     # returns true — 50 qualifies, no construction
+5  is Big                     # returns false — 5 does not
 ```
 
 The trap AQL avoids is treating these asymmetrically — lenient on the
@@ -286,7 +287,7 @@ A bare type literal sorts strictly below every concrete inhabitant
 of its family:
 
 ```
-Integer lt 0                      => true
+Integer lt 0                      # returns true
 ```
 
 Lists are length-first then element-wise; maps are key-set then
@@ -323,8 +324,8 @@ default a list literal is **evaluated** — its elements run and the
 list holds the results:
 
 ```
-[1 add 2]                         => [3]          # evaluated by default
-[1 2 3]                           => [1 2 3]       # plain data, nothing to run
+[1 add 2]                         # returns [3] — evaluated by default
+[1 2 3]                           # returns [1 2 3] — plain data, nothing to run
 ```
 
 `quote` is the opt-out. It keeps the list (or the next token)
@@ -332,8 +333,8 @@ unevaluated, as data — so the elements stay as written (words become
 atoms) and can be run later with `do`:
 
 ```
-[1 add 2] size                    => 1             # already evaluated: one element, 3
-quote [1 add 2] do                => 3             # held as data, then run
+[1 add 2] size                    # returns 1 — already evaluated: one element, 3
+quote [1 add 2] do                # returns 3 — held as data, then run
 ```
 
 Some positions are *implicitly* quoted — they take a list as code to
@@ -366,7 +367,7 @@ structures and syntax in AQL itself, not in Go.
 
 ```
 def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])
-twice 5                           => 10
+twice 5                           # returns 10
 ```
 
 `twice 5` does not pass `5` to a function; it rewrites the call to the
@@ -406,8 +407,8 @@ room for growth:
 # brevity (in real code: "aql:string-util" import end StringUtil.split …).
 "hello world" split " "                              # basic
 "hello world" split " " {trim: true}                 # with options
-"aaa" "a" "b" {scope:'all, count:2} replace          => 'bba'
-await {mode: 'first} [[sleep 100 1] [sleep 10 2]]    => 2
+"aaa" "a" "b" {scope:'all, count:2} replace          # returns 'bba'
+await {mode: 'first} [[sleep 100 1] [sleep 10 2]]    # returns 2
 ```
 
 By convention, every word that takes options declares the option
@@ -425,7 +426,7 @@ goroutine with an independent sub-engine:
 
 <!-- aql-test: skip -->
 ```
-await [[sleep 100 1] [sleep 100 2]]   => [1 2]
+await [[sleep 100 1] [sleep 100 2]]   # returns [1 2]
 ```
 
 The four modes mirror JavaScript's Promise combinators, providing
@@ -453,7 +454,7 @@ in a `do [...]` block and the failure is instead *reified* — the block
 produces an `Error` value that sits on the stack like any other:
 
 ```
-do [1 div 0]                      => error(division by zero)
+do [1 div 0]                      # returns error(division by zero)
 ```
 
 So `do [...]` is the construct that converts an unwinding failure into
@@ -464,7 +465,7 @@ run the handler; otherwise no-op. Handlers see the error value on
 the stack and choose what to do with it:
 
 ```
-do [1 div 0] error [drop 42]      => 42
+do [1 div 0] error [drop 42]      # returns 42
 
 do [read "missing.json"] error [
   dup .code eq 'io_error if [
@@ -489,7 +490,7 @@ by `do`, `for`, `each`, `await`) inherit from the parent's store.
 
 ```
 context set x 42
-context get x                     => 42
+context get x                     # returns 42
 ```
 
 This is functionally JavaScript-style prototype inheritance: child

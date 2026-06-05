@@ -285,9 +285,17 @@ $ aql do -- 'def square fn [[x:Number][Number][x mul x]] 4 square => 9999'  => f
 
 Pasting a whole doc line (annotation included) builds a function and
 silently discards the computed value — the false claim `=> 9999` raises
-no error. The doc-test harness (`test/go/docexamples`) splits on `=>`
-and evaluates only the left side, so CI never sees this; a human pasting
-into the REPL does. The documentation pass adds a notation note.
+no error. The doc-test harness (`test/go/docexamples`) split on `=>`
+and evaluated only the left side, so CI never saw this; a human pasting
+into the REPL did.
+
+**Resolution.** The `=>` result annotation was retired from the prose
+docs entirely. Code examples now show results as a trailing comment —
+`4 square  # returns 16` — and prose says "`4 square` returns `16`".
+The doc-test harness was updated to parse the `# returns …` form (an
+optional ` — description` after the value is ignored), so every example
+stays CI-verified. `=>` now appears in the docs only where the docs
+*describe* the `afn` operator itself.
 
 ## V. `:Number` record fields launder strings into numbers — `design`/`bug`
 
@@ -427,8 +435,10 @@ the docs already discuss the topic) were edited:
   stack-reset behaviour documented (D).
 - The "any word, any position" claim qualified for stack words (I).
 - The "Errors as values" section reworded to require `do [...]` (N).
-- A **Notation** note added wherever `=>` is used, stating it is an
-  annotation and that bare `=>` is the lambda arrow (U).
+- The `=>` result annotation retired across all prose docs in favour of
+  `# returns …` comments / "returns" in prose; the doc-test harness
+  updated to parse the new form so examples stay CI-verified; a
+  **Notation** note added to each doc (U).
 - Accuracy notes added for truthiness (E), `and`/`or` (F),
   `Decimal`/float (L), `convert` limits (Q/W), `null` vs `none` (Z), and
   string indexing (AC) where the relevant section already exists.

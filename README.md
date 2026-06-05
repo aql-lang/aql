@@ -10,12 +10,12 @@ implementation is in Go and ships as a single `aql` binary that
 includes a REPL, a type checker, a formatter, an LSP server, a
 registry client, a secrets vault, and a multi-service supervisor.
 
-> **Notation.** In the examples below, `expr => value` means "`expr`
-> evaluates to `value`." The `=>` and the result are an *annotation*,
-> not part of the program — don't type them. (`=>` on its own is real
-> syntax: it is the anonymous-function arrow, sugar for the word
-> `afn`. So a line pasted *with* its `=> value` annotation builds a
-> function instead of checking the result.)
+> **Notation.** In code, a trailing `# returns …` comment shows what an
+> expression evaluates to (`4 square  # returns 16`); in prose we say
+> "`4 square` returns `16`". The comment is ordinary documentation — `#`
+> just begins a line comment — not special syntax. (We deliberately
+> avoid an `=>` arrow for results: `=>` is real syntax in AQL, the
+> anonymous-function arrow, sugar for the word `afn`.)
 
 ```aql
 # stack-based arithmetic — three equivalent forms (all compute a-b)
@@ -25,19 +25,19 @@ sub 3 10                             # all-forward
 
 # typed functions, lists, maps, records, concurrency
 def square fn [[x:Number] [Number] [x mul x]]
-4 square                             => 16
+4 square                             # returns 16
 
-[1, 2, 3] each [dup mul]             => [1 4 9]
-{name: "Ada"} . name                 => 'Ada'
+[1, 2, 3] each [dup mul]             # returns [1 4 9]
+{name: "Ada"} . name                 # returns 'Ada'
 
 def Point refine Record [x:Number y:Number]
-make Point [3 4]                     => {x:3 y:4}
+make Point [3 4]                     # returns {x:3 y:4}
 
-"aql:time-util" import end TimeUtil.await [[1 add 2] [3 add 4]]    => [3 7]
+"aql:time-util" import end TimeUtil.await [[1 add 2] [3 add 4]]    # returns [3 7]
 
 # macros: add new syntax in AQL itself (hygienic; this one expands to an `if`)
 def unless (macro [[c body] [quote [if unquote c [] unquote body]]])
-unless false [42]                    => 42
+unless false [42]                    # returns 42
 ```
 
 

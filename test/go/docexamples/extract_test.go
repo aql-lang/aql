@@ -2,8 +2,8 @@ package docexamples
 
 import "testing"
 
-func TestExtract_InlineArrow(t *testing.T) {
-	src := "intro\n\n```\n2 mul 3   => 6\n```\n"
+func TestExtract_Inline(t *testing.T) {
+	src := "intro\n\n```\n2 mul 3   # returns 6\n```\n"
 	got := Extract("X.md", src)
 	if len(got) != 1 {
 		t.Fatalf("got %d examples, want 1: %+v", len(got), got)
@@ -24,7 +24,7 @@ func TestExtract_InlineArrow(t *testing.T) {
 }
 
 func TestExtract_ReplPromptStripped(t *testing.T) {
-	src := "```\naql> 1 2 add   => 3\n```\n"
+	src := "```\naql> 1 2 add   # returns 3\n```\n"
 	got := Extract("X.md", src)
 	if len(got) != 1 || got[0].Expr != "1 2 add" || got[0].Expected != "3" {
 		t.Fatalf("got %+v", got)
@@ -32,8 +32,9 @@ func TestExtract_ReplPromptStripped(t *testing.T) {
 }
 
 func TestExtract_SharedSetupState(t *testing.T) {
-	// def lines (no arrow) become setup prepended to the later => line.
-	src := "```\naql> def x 1\naql> def y 2\naql> {x y}   => {x:1 y:2}\n```\n"
+	// def lines (no result) become setup prepended to the later
+	// `# returns` line.
+	src := "```\naql> def x 1\naql> def y 2\naql> {x y}   # returns {x:1 y:2}\n```\n"
 	got := Extract("X.md", src)
 	if len(got) != 1 {
 		t.Fatalf("got %d examples, want 1: %+v", len(got), got)
@@ -47,10 +48,10 @@ func TestExtract_SharedSetupState(t *testing.T) {
 	}
 }
 
-func TestExtract_PriorArrowLinesNotInProgram(t *testing.T) {
-	// Two independent => lines in one block: the second must NOT carry
-	// the first as setup (it was an asserted result, not state).
-	src := "```\naql> 5 dup    => 5 5\naql> 1 2 swap  => 2 1\n```\n"
+func TestExtract_PriorResultLinesNotInProgram(t *testing.T) {
+	// Two independent result lines in one block: the second must NOT
+	// carry the first as setup (it was an asserted result, not state).
+	src := "```\naql> 5 dup    # returns 5 5\naql> 1 2 swap  # returns 2 1\n```\n"
 	got := Extract("X.md", src)
 	if len(got) != 2 {
 		t.Fatalf("got %d examples, want 2", len(got))
@@ -60,19 +61,45 @@ func TestExtract_PriorArrowLinesNotInProgram(t *testing.T) {
 	}
 }
 
-func TestExtract_TrailingCommentStripped(t *testing.T) {
-	src := "```\nadd 1 2   => 3   # classic prefix\n```\n"
+func TestExtract_DescriptionAfterEmDashStripped(t *testing.T) {
+	src := "```\nadd 1 2   # returns 3 — classic prefix\n```\n"
 	got := Extract("X.md", src)
 	if len(got) != 1 || got[0].Expected != "3" {
 		t.Fatalf("Expected = %q (want 3)", got[0].Expected)
 	}
 }
 
-func TestExtract_CommentHashInsideStringSurvives(t *testing.T) {
-	src := "```\nfoo   => 'a # b'\n```\n"
+func TestExtract_MultiTokenValue(t *testing.T) {
+	// The value can span spaces (a multi-value stack render).
+	src := "```\n5 dup   # returns 5 5 — duplicate top\n```\n"
 	got := Extract("X.md", src)
-	if len(got) != 1 || got[0].Expected != "'a # b'" {
-		t.Fatalf("Expected = %q, want %q", got[0].Expected, "'a # b'")
+	if len(got) != 1 || got[0].Expected != "5 5" {
+		t.Fatalf("Expected = %q (want '5 5')", got[0].Expected)
+	}
+}
+
+func TestExtract_HashInsideStringIsNotTheComment(t *testing.T) {
+	// A `#` inside the expression's string must not be mistaken for the
+	// result comment.
+	src := "```\n\"a#b\" foo   # returns 'a#b'\n```\n"
+	got := Extract("X.md", src)
+	if len(got) != 1 {
+		t.Fatalf("got %d examples, want 1: %+v", len(got), got)
+	}
+	if got[0].Expr != `"a#b" foo` {
+		t.Errorf("Expr = %q, want %q", got[0].Expr, `"a#b" foo`)
+	}
+	if got[0].Expected != "'a#b'" {
+		t.Errorf("Expected = %q, want %q", got[0].Expected, "'a#b'")
+	}
+}
+
+func TestExtract_DescriptiveCommentNotAsserted(t *testing.T) {
+	// A trailing comment that does not start with `returns` is just a
+	// description; the line is not an asserted example.
+	src := "```\n\"x,y\" StringUtil.split \",\"   # split on comma\n```\n"
+	if got := Extract("X.md", src); len(got) != 0 {
+		t.Errorf("descriptive comment must not assert, got %+v", got)
 	}
 }
 
@@ -99,39 +126,30 @@ func TestExtract_ErrorForms(t *testing.T) {
 	}
 }
 
-func TestExtract_FirstArrowWins(t *testing.T) {
-	// An expr containing => later, or an expected with => in a string,
-	// splits on the first => only.
-	_, rhs, ok := splitArrow("a => b => c")
-	if !ok || rhs != " b => c" {
-		t.Errorf("splitArrow rhs = %q ok=%v", rhs, ok)
-	}
-}
-
 func TestExtract_BashFenceIgnored(t *testing.T) {
-	src := "```bash\naql do '2 mul 3'   => 6\n```\n"
+	src := "```bash\naql do '2 mul 3'   # returns 6\n```\n"
 	if got := Extract("X.md", src); len(got) != 0 {
 		t.Errorf("bash fence should be ignored, got %+v", got)
 	}
 }
 
 func TestExtract_SkipMarker(t *testing.T) {
-	src := skipMarker + "\n```\nnow   => 2026-01-01\n```\n"
+	src := skipMarker + "\n```\nnow   # returns 2026-01-01\n```\n"
 	if got := Extract("X.md", src); len(got) != 0 {
 		t.Errorf("skip-marked block should be ignored, got %+v", got)
 	}
 }
 
 func TestExtract_AqlTaggedFenceRuns(t *testing.T) {
-	src := "```aql\n2 mul 3   => 6\n```\n"
+	src := "```aql\n2 mul 3   # returns 6\n```\n"
 	if got := Extract("X.md", src); len(got) != 1 {
 		t.Errorf("```aql fence should run, got %+v", got)
 	}
 }
 
 func TestExtract_ResultOnOwnLine(t *testing.T) {
-	// The expression is one line; its `=> result` is the next line.
-	src := "```\naql> make Inventory [[1] [2]]\n=> [{a:1} {a:2}]\n```\n"
+	// The expression is one line; its `# returns result` is the next line.
+	src := "```\naql> make Inventory [[1] [2]]\n# returns [{a:1} {a:2}]\n```\n"
 	got := Extract("X.md", src)
 	if len(got) != 1 {
 		t.Fatalf("got %d examples, want 1: %+v", len(got), got)
@@ -147,9 +165,9 @@ func TestExtract_ResultOnOwnLine(t *testing.T) {
 	}
 }
 
-func TestExtract_ProseArrowOutsideFenceIgnored(t *testing.T) {
-	src := "this maps a => b in prose, not code\n"
+func TestExtract_ProseOutsideFenceIgnored(t *testing.T) {
+	src := "this sentence says foo returns bar in prose, not code\n"
 	if got := Extract("X.md", src); len(got) != 0 {
-		t.Errorf("prose => should be ignored, got %+v", got)
+		t.Errorf("prose should be ignored, got %+v", got)
 	}
 }
