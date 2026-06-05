@@ -55,6 +55,9 @@ var StructModuleNatives = []NativeFunc{
 		Name: "getpath",
 		Signatures: []NativeSig{
 			{Args: []*Type{TString, TAny}, Handler: getpathHandler, BarrierPos: -1},
+			// Lens form: `getpath $.a.b m` reads through a Reach (honors
+			// per-segment getr strictness + computed keys, natively).
+			{Args: []*Type{TReach, TAny}, Handler: getpathReachHandler, BarrierPos: -1},
 		},
 	},
 	{
@@ -62,6 +65,10 @@ var StructModuleNatives = []NativeFunc{
 		Signatures: []NativeSig{
 			{Args: []*Type{TString, TAny, TAny}, Handler: setpathHandler, BarrierPos: -1},
 			{Args: []*Type{TAny, TString, TAny}, Handler: setpathHandler, BarrierPos: -1},
+			// Lens forms: a Reach path in the leading or middle slot
+			// (`setpath $.a.b 9 m` / `setpath m $.a.b 9`).
+			{Args: []*Type{TReach, TAny, TAny}, Handler: setpathHandler, BarrierPos: -1},
+			{Args: []*Type{TAny, TReach, TAny}, Handler: setpathHandler, BarrierPos: -1},
 		},
 	},
 	{

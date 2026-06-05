@@ -93,6 +93,57 @@ type Registry struct {
 	// global scope and stays dynamic. Nil baseline (empty stack) means
 	// the construction is at top-level and nothing is captured.
 	FnBaselines []map[string]int
+
+	// gensymN is the monotonic counter behind the `gensym` word: each call
+	// mints a fresh, never-colliding atom name `tmp$g<n>`. Used for
+	// capture-free temporaries in (hand-written and, later, expanded) macros.
+	// See design/MACROS-PHASE1.0.md §7. The name is lowercase + mixed-`$` so
+	// it is a LEGAL word name (ValidateWordName: lowercase-only, all-`$`
+	// reserved) — gensyms are used as binders (`def <gensym> …`).
+	gensymN uint64
+
+	// macroCache memoizes macro expansions keyed on (macro name + operand
+	// canon). See macroCacheGet / MacroCacheClear. Nil until first use.
+	macroCache map[string][]Value
+}
+
+// NextGensym mints the next fresh gensym name (`tmp$g<n>`, n starting at 1).
+// Monotonic per registry; the `gensym` word wraps the result in an Atom. The
+// name is a valid word identifier so it can be used as a `def` binder.
+func (r *Registry) NextGensym() string {
+	r.gensymN++
+	return fmt.Sprintf("tmp$g%d", r.gensymN)
+}
+
+// macroCache memoizes macro expansions (design/MACROS-PHASE1.0.md §8). A
+// macro's expansion depends ONLY on its template and the operand FORMS — never
+// on runtime state — so it is deterministic and cacheable. The key is the
+// macro name + the canon of its operands (NOT source Pos, which can collide
+// across re-parsed sources / synthetic tokens), so identical calls anywhere
+// reuse the expansion and a macro's per-call side effects (a `gensym`) fire
+// once. Cleared whenever a macro is (re)constructed (MacroCacheClear, called
+// by the `macro` definer) so a redefined macro re-expands. Nil until first use.
+//
+// macroCacheGet / macroCachePut / MacroCacheClear are the access API.
+func (r *Registry) macroCacheGet(key string) ([]Value, bool) {
+	if r.macroCache == nil {
+		return nil, false
+	}
+	toks, ok := r.macroCache[key]
+	return toks, ok
+}
+
+func (r *Registry) macroCachePut(key string, toks []Value) {
+	if r.macroCache == nil {
+		r.macroCache = make(map[string][]Value)
+	}
+	r.macroCache[key] = toks
+}
+
+// MacroCacheClear drops every memoized expansion. Called by the `macro`
+// definer so (re)defining a macro invalidates stale expansions.
+func (r *Registry) MacroCacheClear() {
+	r.macroCache = nil
 }
 
 // CheckState aggregates the static type-checking state that used to
@@ -450,6 +501,7 @@ func (r *Registry) aggregateDispatch(name string, entries []FnDefInfo) *FnDefInf
 		MaxForwardArgs: calcMaxForwardArgs(sigs),
 		Registry:       top.Registry,
 		Anonymous:      top.Anonymous,
+		Macro:          top.Macro,
 		Captured:       top.Captured,
 	}
 }
@@ -803,6 +855,8 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 			FullStack:        sig.FullStack,
 			QuoteArgs:        sig.QuoteArgs,
 			NoEvalArgs:       sig.NoEvalArgs,
+			RawParens:        sig.RawParens,
+			FormArgs:         sig.FormArgs,
 			NoEvalMapArgs:    sig.NoEvalMapArgs,
 			TypeArgs:         sig.TypeArgs,
 			BarrierPos:       sig.BarrierPos,

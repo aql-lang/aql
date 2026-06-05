@@ -461,10 +461,43 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			}
 
 		case IsParenExpr(val):
-			// ParenExpr values are only used inside maps (created by
-			// the parser for paren groups in data context). They should
-			// not appear on the main stack; skip if encountered.
-			e.pointer++
+			// A word-context ParenExpr (paren-nesting work, Step 2 —
+			// design/PAREN-REPRESENTATION.0.md): expand it back to its
+			// OpenParen … CloseParen marker span in place and let the
+			// existing in-place collapse machinery evaluate it on THIS
+			// engine. That keeps exact parity with the former marker
+			// representation (recorder-transparent, same stack/registry
+			// semantics) — the four contracts hold because markers already
+			// honor them: errors propagate, defs leak, the OpenParen is a
+			// stack barrier, and results flow out. Do not advance — the
+			// OpenParen now sits at the pointer.
+			//
+			// Step 4: a codequote-captured ParenExpr (Quoted) is data, and a
+			// raw-capture pending forward (pendingForwardWantsRawParen) wants
+			// the paren collected as-is — both route through stepLiteral
+			// (push data / collect the forward arg) rather than expanding.
+			if val.Quoted || e.pendingForwardWantsRawParen() {
+				if err := e.stepLiteral(); err != nil {
+					return nil, err
+				}
+			} else {
+				items, _ := AsParenExpr(val)
+				stackSplice(&e.stack, e.pointer, 1, expandParenExpr(items)...)
+			}
+
+		case IsReach(val):
+			// A parsed Reach (dot-access node, m.a.b — Eval=true) evaluates
+			// by lowering to its get/getr chain in place, exactly like the
+			// ParenExpr it replaced. An inert reach (Eval=false, from `reach`)
+			// or a codequote'd one (Quoted) is data — left via stepLiteral.
+			if isEvalReach(val) && !e.pendingForwardWantsRawParen() {
+				info, _ := AsReach(val)
+				stackSplice(&e.stack, e.pointer, 1, expandReach(info)...)
+			} else {
+				if err := e.stepLiteral(); err != nil {
+					return nil, err
+				}
+			}
 
 		case IsInterpString(val):
 			result, err := e.evalInterpString(val)
@@ -633,7 +666,59 @@ func (e *Engine) resolveOrphanedForwards() error {
 // maxFwd is the maximum number of forward values needed (FnDefInfo.MaxForwardArgs).
 // The scan stops after finding maxFwd resolved values or hitting a boundary
 // (function word, pipe, "end", ")").
-func (e *Engine) preEvalParens(maxFwd int) error {
+// rawParenForward reports whether any of fn's signatures captures a forward
+// ParenExpr RAW at sig position pos (RawParens[pos]). See
+// design/PAREN-REPRESENTATION.0.md Step 4.
+func rawParenForward(fn *FnDefInfo, pos int) bool {
+	if fn == nil {
+		return false
+	}
+	for i := range fn.Signatures {
+		if fn.Signatures[i].RawParens != nil && fn.Signatures[i].RawParens[pos] {
+			return true
+		}
+	}
+	return false
+}
+
+// rawFormForward reports whether any of fn's signatures captures the forward
+// operand at sig position pos as a raw FORM (FormArgs[pos]) — the macro
+// raw-capture mode. Like rawParenForward, it gates preEvalParens so a paren /
+// reach at that position is left unevaluated. See design/MACROS-PHASE1.0.md §3.
+func rawFormForward(fn *FnDefInfo, pos int) bool {
+	if fn == nil {
+		return false
+	}
+	for i := range fn.Signatures {
+		if fn.Signatures[i].FormArgs != nil && fn.Signatures[i].FormArgs[pos] {
+			return true
+		}
+	}
+	return false
+}
+
+// pendingForwardWantsRawParen reports whether the nearest enclosing pending
+// Forward (collecting args at the pointer) was matched to a signature that
+// captures a ParenExpr raw. When true, a ParenExpr reached during forward
+// collection is collected as data (via stepLiteral) rather than expanded.
+// Stops at an OpenParen barrier. See Step 4.
+func (e *Engine) pendingForwardWantsRawParen() bool {
+	for i := e.pointer - 1; i >= 0; i-- {
+		if IsOpenParen(e.stack[i]) {
+			return false
+		}
+		if IsForward(e.stack[i]) {
+			fwd, _ := AsForward(e.stack[i])
+			// RawParens or FormArgs (macro raw capture) both want a forward
+			// ParenExpr / Reach left raw at the pointer rather than evaluated
+			// during collection.
+			return fwd.Sig != nil && (len(fwd.Sig.RawParens) > 0 || len(fwd.Sig.FormArgs) > 0)
+		}
+	}
+	return false
+}
+
+func (e *Engine) preEvalParens(maxFwd int, fn *FnDefInfo) error {
 	if maxFwd <= 0 {
 		return nil
 	}
@@ -741,6 +826,44 @@ func (e *Engine) preEvalParens(maxFwd int) error {
 			// Just count the value at scanIdx as one resolved value.
 			resolved++
 			scanIdx++
+			continue
+		}
+
+		// Paren expression value (paren-nesting Step 3): expand it back to
+		// its OpenParen … CloseParen marker span in place, then re-process
+		// — the IsOpenParen branch above collapses it on THIS engine,
+		// exactly as the former word-context marker representation did
+		// (recorder-transparent; a paren cannot consume the enclosing
+		// stack, so the in-place collapse is correct). See
+		// design/PAREN-REPRESENTATION.0.md Step 3.
+		if IsParenExpr(tok) {
+			// Step 4: a quote-captured ParenExpr (already Quoted) or a
+			// raw-capture forward position (codequote) is left unevaluated
+			// (NOT Quoted — matchSignature accepts a raw ParenExpr) so the
+			// matched sig captures the paren as code. The forward-collection
+			// re-step then collects it raw (pendingForwardWantsRawParen).
+			if tok.Quoted || rawParenForward(fn, resolved) || rawFormForward(fn, resolved) {
+				resolved++
+				scanIdx++
+				continue
+			}
+			peItems, _ := AsParenExpr(tok)
+			stackSplice(&e.stack, scanIdx, 1, expandParenExpr(peItems)...)
+			continue
+		}
+
+		// A Reach in the forward window evaluates like a ParenExpr (Reach
+		// Phase B): expand to its lowered get-chain marker span in place,
+		// then re-process. Quoted/raw-capture reaches are left for the
+		// matched sig (parity with the ParenExpr branch above).
+		if IsReach(tok) {
+			if !isEvalReach(tok) || rawParenForward(fn, resolved) || rawFormForward(fn, resolved) {
+				resolved++
+				scanIdx++
+				continue
+			}
+			info, _ := AsReach(tok)
+			stackSplice(&e.stack, scanIdx, 1, expandReach(info)...)
 			continue
 		}
 
@@ -934,6 +1057,15 @@ func (e *Engine) stepWord(val Value) error {
 		return e.stepLiteral()
 	}
 
+	// If a pending forward's next slot is FormArgs (macro raw capture),
+	// collect this Word as a raw Word — do NOT execute it, and (unlike
+	// QuoteArgs) do NOT coerce it to an Atom. stepLiteral collects the value
+	// at the pointer; the Word matches the macro's Any-typed slot, so no
+	// conversion fires. See design/MACROS-PHASE1.0.md §3.
+	if e.hasPendingForwardFormArg() {
+		return e.stepLiteral()
+	}
+
 	// If a pending forward expects TFunction, resolve this word to a
 	// function reference value rather than executing it. The word must
 	// have a FnDef entry in DefStacks.
@@ -1008,6 +1140,14 @@ func (e *Engine) stepWord(val Value) error {
 					return err
 				}
 			}
+		}
+		// Macro dispatch (design/MACROS-PHASE1.0.md §5): a macro word is
+		// applied to its raw operands ahead on the tape — BEFORE preEvalParens
+		// (1228) or any forward collection, so operands arrive as code. The
+		// word sits at e.pointer; execMacro replaces `mac operand…` with the
+		// spliced expansion and lets the __SP marker re-step the result.
+		if fn.Macro {
+			return e.execMacro(e.pointer, fn)
 		}
 	}
 
@@ -1093,7 +1233,7 @@ func (e *Engine) stepWord(val Value) error {
 	// and the call hasn't been forced to stack mode via /s; or when /f
 	// explicitly forces forward collection.
 	if (fn.HasForwardSigs() && !w.ForceStack) || w.ForceForward {
-		if err := e.preEvalParens(fn.MaxForwardArgs); err != nil {
+		if err := e.preEvalParens(fn.MaxForwardArgs, fn); err != nil {
 			return err
 		}
 	}
@@ -1560,6 +1700,32 @@ func spliceExpand(data Value) []Value {
 func (e *Engine) stepLiteral() error {
 	valIdx := e.pointer
 
+	// A ParenExpr reaching stepLiteral (nested inside a collapsing paren
+	// span, where the in-place collapse loops in preEvalParens and
+	// stepCloseParen fall through to here) is expanded to its marker span
+	// in place and re-stepped — the surrounding loop's OpenParen handling
+	// then collapses it on this engine. Without this, a nested ParenExpr
+	// would be pushed unevaluated. See design/PAREN-REPRESENTATION.0.md
+	// (paren-nesting Steps 2/3).
+	// Step 4: a Quoted ParenExpr (codequote-captured data) and a ParenExpr
+	// being collected by a raw-capture pending forward are NOT expanded —
+	// they fall through to normal literal handling (pushed as data /
+	// collected as the forward arg). Otherwise expand and re-step (the
+	// nested-paren case).
+	if IsParenExpr(e.stack[valIdx]) && !e.stack[valIdx].Quoted && !e.pendingForwardWantsRawParen() {
+		items, _ := AsParenExpr(e.stack[valIdx])
+		stackSplice(&e.stack, valIdx, 1, expandParenExpr(items)...)
+		return nil
+	}
+	// A Reach reaching stepLiteral (nested in a collapsing span, or a
+	// collected list/map element) lowers to its get-chain in place, like a
+	// ParenExpr (Reach Phase B). Quoted/raw-pending reaches fall through.
+	if isEvalReach(e.stack[valIdx]) && !e.pendingForwardWantsRawParen() {
+		info, _ := AsReach(e.stack[valIdx])
+		stackSplice(&e.stack, valIdx, 1, expandReach(info)...)
+		return nil
+	}
+
 	// Look backwards for the nearest forward entry, stopping at open-paren barriers.
 	fwdIdx := -1
 	for i := valIdx - 1; i >= 0; i-- {
@@ -1800,6 +1966,93 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 	return NewString(buf.String()), nil
 }
 
+// expandParenExpr returns a ParenExpr's tokens wrapped in OpenParen …
+// CloseParen markers — the span the existing in-place collapse machinery
+// (stepCloseParen / preEvalParens) evaluates. Used to expand a word-context
+// ParenExpr value back to markers on encounter (paren-nesting Steps 2/3),
+// keeping exact parity with the former marker representation. See
+// design/PAREN-REPRESENTATION.0.md.
+func expandParenExpr(items []Value) []Value {
+	span := make([]Value, 0, len(items)+2)
+	span = append(span, NewOpenParen())
+	span = append(span, items...)
+	span = append(span, NewCloseParen())
+	return span
+}
+
+// lowerReach turns a Reach into its equivalent get/getr chain tokens:
+// `recv get k1 getr k2 …`. A computed segment's key becomes a ParenExpr so
+// the chain evaluates it before get/getr consumes it. This is the Stage-1
+// evaluator (design/REACH.0.md §4): the chain is identical to the former
+// dot-access ParenExpr, so wrapping it with expandParenExpr and running it
+// in place reproduces exact get/getr semantics.
+func lowerReach(info ReachInfo) []Value {
+	out := make([]Value, 0, len(info.Receiver)+len(info.Segments)*2)
+	out = append(out, info.Receiver...)
+	for _, seg := range info.Segments {
+		if seg.Getr {
+			out = append(out, NewWord("getr"))
+		} else {
+			out = append(out, NewWord("get"))
+		}
+		if seg.Computed {
+			out = append(out, NewParenExpr(seg.KeyExpr))
+		} else {
+			out = append(out, seg.KeyLit)
+		}
+	}
+	return out
+}
+
+// isEvalReach reports whether v is a Reach that should auto-evaluate now:
+// a parsed dot-access (Eval=true) that has not been quote-captured. An inert
+// constructor-built reach (Eval=false, from `reach …`) or a codequote'd one
+// (Quoted) is data and is left alone.
+func isEvalReach(v Value) bool {
+	if !IsReach(v) || v.Quoted {
+		return false
+	}
+	info, _ := AsReach(v)
+	return info.Eval
+}
+
+// expandReach returns the marker span an Eval Reach evaluates to — its
+// lowered get-chain wrapped in paren markers, run in place exactly like a
+// ParenExpr (Stage-1 lowering).
+func expandReach(info ReachInfo) []Value {
+	return expandParenExpr(lowerReach(info))
+}
+
+// ApplyReach evaluates a Reach against a concrete receiver value — the lens
+// "get" (design/REACH.0.md §7). The reach's own Receiver tokens are ignored
+// (a receiverless lens has none); recv becomes the base and the segments
+// (get/getr, literal/computed, in order) walk from it via the same Stage-1
+// lowering bare m.a.b uses, so getr strictness and computed-key evaluation
+// are identical. It is the primitive behind the `apply` word and the
+// receiverless-reach-as-Function higher-order behaviour.
+func ApplyReach(r *Registry, info ReachInfo, recv Value) (Value, error) {
+	toks := lowerReach(ReachInfo{Receiver: []Value{recv}, Segments: info.Segments})
+	sub := New(r)
+	res, err := sub.Run(expandParenExpr(toks))
+	if err != nil {
+		return Value{}, err
+	}
+	if len(res) == 0 {
+		return Value{}, fmt.Errorf("apply: reach produced no value")
+	}
+	return res[len(res)-1], nil
+}
+
+// evalParenExprResults evaluates a ParenExpr's tokens in a sub-engine and
+// returns its result value(s). Used by autoEvalMap for paren values in map
+// (data) context, where a single result value is collected for a key. It
+// shares the registry (defs leak) and propagates errors (a paren is not an
+// error boundary, unlike `do`).
+func (e *Engine) evalParenExprResults(items []Value) ([]Value, error) {
+	sub := New(e.registry)
+	return sub.Run(expandParenExpr(items))
+}
+
 // autoEvalMap evaluates each value in a plain map using a sub-engine.
 // Word values resolve directly; lists auto-evaluate via autoEvalStack:
 //
@@ -1853,16 +2106,27 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 			continue
 		}
 
-		// Paren expression: evaluate items with paren markers so the
-		// engine's stepCloseParen collapses to a single result.
+		// Paren expression: evaluate items as an isolated sub-expression
+		// (shared via evalParenExprResults with the main-stack path).
 		if IsParenExpr(v) {
 			items, _ := AsParenExpr(v)
-			sub := New(e.registry)
-			input := make([]Value, 0, len(items)+2)
-			input = append(input, NewOpenParen())
-			input = append(input, items...)
-			input = append(input, NewCloseParen())
-			result, err := sub.Run(input)
+			result, err := e.evalParenExprResults(items)
+			if err != nil {
+				return Value{}, err
+			}
+			if len(result) == 1 {
+				out.Set(resolvedKey, result[0])
+			} else if len(result) > 1 {
+				out.Set(resolvedKey, NewList(result))
+			}
+			continue
+		}
+
+		// Reach map value (e.g. {x: m.a}) — evaluate its lowered get-chain
+		// as an isolated sub-expression, like a ParenExpr (Reach Phase B).
+		if isEvalReach(v) {
+			info, _ := AsReach(v)
+			result, err := e.evalParenExprResults(lowerReach(info))
 			if err != nil {
 				return Value{}, err
 			}
@@ -1900,6 +2164,13 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		e.pointer++
 		return nil
 	}
+
+	// A macro FnDef reaching here is a VALUE, not an application — e.g. the
+	// `(macro …)` result being bound by `def`, or a parked macro. It must
+	// stay as DATA: a macro is applied only by name (the stepWord branch
+	// captures its raw operands before collection). The anonymous-0-arg
+	// short-circuit below also returns macros as data. (Applying a macro is
+	// never a stack-value dispatch — design/MACROS-PHASE1.0.md §5, D4.)
 
 	// Resolve the dispatchable signatures. A self-contained Function value
 	// (an anonymous closure, or a fn defined in THIS registry) is a STABLE
@@ -1957,7 +2228,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// pre-eval pass — the unified rule says Function values at the
 	// pointer dispatch with the same forward+stack matching as words.
 	if (fn.HasForwardSigs() && !w.ForceStack) || w.ForceForward {
-		if err := e.preEvalParens(fn.MaxForwardArgs); err != nil {
+		if err := e.preEvalParens(fn.MaxForwardArgs, fn); err != nil {
 			return err
 		}
 	}
@@ -2010,7 +2281,10 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// consumers (def, a stored map entry, call) take it as-is rather
 	// than auto-invoking. This is what makes `def f ([] => [body])`
 	// bind f to the Function value instead of to the body's result.
-	if fnDef.Anonymous && fwdCount == 0 && len(positions) == 0 {
+	// Macro values are likewise data here — a `(macro …)` result must bind
+	// to its name, not auto-expand (it expands only via the named stepWord
+	// branch). See design/MACROS-PHASE1.0.md §5.
+	if (fnDef.Anonymous || fnDef.Macro) && fwdCount == 0 && len(positions) == 0 {
 		e.pointer++
 		return nil
 	}
@@ -3452,6 +3726,27 @@ func (e *Engine) hasPendingForwardQuoteArg() bool {
 	return false
 }
 
+// hasPendingForwardFormArg reports whether the nearest enclosing pending
+// Forward's next slot is FormArgs — meaning the upcoming Word should be
+// collected as a raw Word (not executed, not coerced to an Atom). Mirrors
+// hasPendingForwardQuoteArg. See design/MACROS-PHASE1.0.md §3.
+func (e *Engine) hasPendingForwardFormArg() bool {
+	for i := e.pointer - 1; i >= 0; i-- {
+		if IsOpenParen(e.stack[i]) {
+			break
+		}
+		if IsForward(e.stack[i]) {
+			fwd, _ := AsForward(e.stack[i])
+			nextIdx := fwd.CollectedArgs
+			if nextIdx < fwd.Sig.TotalArgs() {
+				return fwd.Sig.FormArgs != nil && fwd.Sig.FormArgs[nextIdx]
+			}
+			break
+		}
+	}
+	return false
+}
+
 // hasPendingForwardExpectingFunction checks if there is a pending forward
 // whose next expected argument is TFunction.
 func (e *Engine) hasPendingForwardExpectingFunction() bool {
@@ -3600,6 +3895,18 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				// before matching begins. If one remains, treat as boundary.
 				if IsOpenParen(tok) {
 					break
+				}
+
+				// FormArgs (macro raw capture): accept ANY form at this
+				// position — a word stays a Word, a paren/list/literal stays
+				// as-is — with no resolution, no dispatch, no Word→Atom
+				// coercion, and no function-word boundary. The operand is
+				// captured unevaluated. See design/MACROS-PHASE1.0.md §3.
+				if sig.FormArgs != nil && sig.FormArgs[fwd] {
+					positions[fwd] = scanIdx
+					fwd++
+					scanIdx++
+					continue
 				}
 
 				if IsWord(tok) {

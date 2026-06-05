@@ -1,0 +1,52 @@
+# Reach — first-class dot-access lens (design/REACH.0.md §7, §11).
+#
+# Columns: <input><TAB><expected>[<TAB><note>]. Output is rendered through
+# eng.Canon, so strings render single-quoted ('ada') and a reach renders as
+# its dotted surface ($.name).
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  Receiverless reach — the $ sentinel builds a detached, inert lens
+#     ($.name evaluates to itself, NOT to a `$ get name` chain).
+$.name	$.name	a receiverless reach is an inert lens value
+$.a.b	$.a.b	multi-segment receiverless lens
+$!.x	$!.x	receiverless getr lens
+typeof $.name	Reach	a receiverless reach has type Reach
+#
+# §2  apply — the lens "get": rebind the receiver and evaluate.
+def p {name:"ada" age:36}  apply $.name p	'ada'	apply a lens to a receiver reads the field
+def p {a:{b:7}}  apply $.a.b p	7	apply walks nested segments
+def xs [10 20 30]  apply $.1 xs	20	apply a numeric-key lens to a list
+def p {name:"ada"}  apply $!.name p	'ada'	getr segment finds a present key
+#
+# §3  rebind — compose, don't evaluate: swap in a receiver, stay inert data.
+def p {name:"ada"}  typeof (rebind $.name p)	Reach	rebind returns a (bound) lens, not the value
+#
+# §4  Lens-as-Function — a receiverless reach is an arity-1 accessor in
+#     higher-order positions (each / filter / sortby).
+def people [{name:"ada" age:36} {name:"bob" age:20}]  each $.name people	['ada' 'bob']	each plucks the lens from every element
+def xs [{n:"a" on:true} {n:"b" on:false} {n:"c" on:true}]  each $.n (filter $.on xs)	['a' 'c']	filter keeps elements whose lens is truthy
+filter $.on {a:{on:true} b:{on:false}}	{a:{on:true}}	filter lens form works on a map (by value)
+"aql:array-util" import  def people [{name:"ada" age:36} {name:"bob" age:20}]  each $.name (ArrayUtil.sortby $.age people)	['bob' 'ada']	sortby derives the sort key via the lens
+#
+# §5  getpath / setpath accept a Reach lens (struct-util). getpath reads
+#     natively (getr strict, computed keys); setpath does an immutable nested
+#     set. Both forms (reach + dotted string) share the same native setter.
+"aql:struct-util" import end  StructUtil.getpath $.a.b {a:{b:7}}	7	getpath reads through a lens
+"aql:struct-util" import end  StructUtil.setpath $.a.b 99 {a:{b:1} c:2}	{a:{b:99} c:2}	setpath nests + preserves siblings
+"aql:struct-util" import end  StructUtil.setpath $.x.y 5 {a:1}	{a:1 x:{y:5}}	setpath creates intermediate maps
+"aql:struct-util" import end  StructUtil.setpath $.1 99 [10 20 30]	[10 99 30]	setpath into a list index
+"aql:struct-util" import end  StructUtil.getpath $.a.b (StructUtil.setpath $.a.b 7 {a:{b:1}})	7	get ∘ set round-trips
+#
+# §6  reach constructor — build a lens programmatically. The key list is NOT
+#     evaluated; it encodes one segment per key: bare key = get, `!` marks the
+#     NEXT key strict (getr), `(expr)` = a computed (deferred) key.
+reach 5 [a b]	5.a.b	bare-word keys → get segments
+reach 5 [a !b]	5.a!.b	a `!` marker makes the next key strict (getr)
+reach 5 [a (add 1 2) c]	5.a.(add 1 2).c	a paren key is a deferred computed segment
+def p {a:{b:7}}  apply (reach 0 [a b]) p	7	a constructed lens applies like a parsed one
+def p {x:{y:9}}  def k "y"  apply (reach 0 [x (k)]) p	9	computed key evaluated at apply time
+reach 5 [a !]	ERROR:reach_error	trailing `!` with no following key
+#
+# §7  Negatives
+def p {name:"ada"}  apply $!.missing p	ERROR:getr_error	getr strictness: missing key errors through apply
+apply $.name 5	ERROR:	applying a field lens to a non-map yields no field (None/​error)

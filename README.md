@@ -26,6 +26,10 @@ def Point refine Record [x:Number y:Number]
 make Point [3 4]                     => {x:3 y:4}
 
 "aql:time-util" import end TimeUtil.await [[1 add 2] [3 add 4]]    => [3 7]
+
+# macros: add new syntax in AQL itself (hygienic; this one expands to an `if`)
+def unless (macro [[c body] [quote [if unquote c [] unquote body]]])
+unless false [42]                    => 42
 ```
 
 

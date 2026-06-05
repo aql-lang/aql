@@ -106,7 +106,7 @@ extra quoting.
 
 ```bash
 aql do 1 add 2                  # prints 3
-aql do '"hello" size'           # prints 5
+aql do '"aql:string-util" import end "hello" StringUtil.upper'  # prints HELLO
 aql do 'iota 5 each [dup mul]'  # prints [0 1 4 9 16]
 ```
 

@@ -240,41 +240,69 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 			// group so it forward-collects the result (the result must not
 			// auto-dispatch first), while the Word/__DM marker (/N /r /q)
 			// is emitted AFTER for execFnDefLiteral to peek.
-			grp := []eng.Value{withPos(eng.NewOpenParen(), poss[i])}
-			if err := emitPrimary(&grp, items[i], poss[i]); err != nil {
+			// Build a first-class Reach node (design/REACH.0.md Phase B):
+			// receiver tokens + per-segment {op, literal-or-computed key}.
+			var recv []eng.Value
+			if err := emitPrimary(&recv, items[i], poss[i]); err != nil {
 				return nil, err
 			}
+			var segs []eng.ReachSeg
 			j := i + 1
 			var pfx, sfx []eng.Value
 		chain:
 			for j < len(items) {
+				var getr bool
+				var keyItem any
+				var kpos eng.SrcPos
 				switch {
 				case isToken(items[j], "!") && j+2 < len(items) && isToken(items[j+1], "."):
-					grp = append(grp, withPos(eng.NewWord("getr"), poss[j]))
-					keyItem, kpos := items[j+2], poss[j+2]
-					// A `/`-modifier on the final key applies to the path.
-					if base, pre, suf, ok := groupModifier(keyItem); ok && base != "" {
-						keyItem, pfx, sfx = jsonic.Text{Str: base}, pre, suf
-					}
-					if err := emitPrimary(&grp, keyItem, kpos); err != nil {
-						return nil, err
-					}
+					getr, keyItem, kpos = true, items[j+2], poss[j+2]
 					j += 3
 				case isToken(items[j], ".") && j+1 < len(items):
-					grp = append(grp, withPos(eng.NewWord("get"), poss[j]))
-					keyItem, kpos := items[j+1], poss[j+1]
-					if base, pre, suf, ok := groupModifier(keyItem); ok && base != "" {
-						keyItem, pfx, sfx = jsonic.Text{Str: base}, pre, suf
-					}
-					if err := emitPrimary(&grp, keyItem, kpos); err != nil {
-						return nil, err
-					}
+					getr, keyItem, kpos = false, items[j+1], poss[j+1]
 					j += 2
 				default:
 					break chain
 				}
+				// A `/`-modifier on the final key applies to the whole reach.
+				if base, pre, suf, ok := groupModifier(keyItem); ok && base != "" {
+					keyItem, pfx, sfx = jsonic.Text{Str: base}, pre, suf
+				}
+				seg := eng.ReachSeg{Getr: getr}
+				if pg, ok := keyItem.(parenGroup); ok {
+					// Computed key: m.(expr) — store the paren's tokens.
+					inner, err := convertTopLevelItems([]any(pg))
+					if err != nil {
+						return nil, err
+					}
+					seg.Computed = true
+					seg.KeyExpr = inner
+				} else {
+					// Literal key (word → atom-via-get/q, string, number).
+					var tmp []eng.Value
+					if err := emitPrimary(&tmp, keyItem, kpos); err != nil {
+						return nil, err
+					}
+					if len(tmp) == 1 {
+						seg.KeyLit = tmp[0]
+					} else {
+						seg.Computed = true
+						seg.KeyExpr = tmp
+					}
+				}
+				segs = append(segs, seg)
 			}
-			grp = append(grp, withPos(eng.NewCloseParen(), poss[i]))
+			// A `$` receiver marks a RECEIVERLESS reach — a detached lens
+			// (`$.name`), not a `$ get name` chain. It is inert (Eval=false):
+			// it evaluates to itself (a Reach value) so it can be passed as a
+			// reusable accessor (`people each $.name`) and applied/rebound to a
+			// receiver later. `$` is reserved as a user word (see
+			// ValidateWordName), so this never shadows a real binding.
+			reachInfo := eng.ReachInfo{Receiver: recv, Segments: segs, Eval: true}
+			if isDollarReceiver(recv) {
+				reachInfo.Receiver, reachInfo.Eval = nil, false
+			}
+			pe := withPos(eng.NewReach(reachInfo), poss[i])
 			// A standalone `/mod` token immediately after the path also
 			// applies to the result (`(a.b)/mod`).
 			if pfx == nil && sfx == nil && j < len(items) {
@@ -286,7 +314,7 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 			for _, p := range pfx {
 				values = append(values, withPos(p, poss[i]))
 			}
-			values = append(values, grp...)
+			values = append(values, pe)
 			for _, s := range sfx {
 				values = append(values, withPos(s, poss[i]))
 			}
@@ -361,6 +389,17 @@ func startsDot(items []any, j int) bool {
 	return isToken(items[j], "!") && j+1 < len(items) && isToken(items[j+1], ".")
 }
 
+// isDollarReceiver reports whether a dot-chain receiver is the lone reserved
+// `$` sentinel — the marker for a receiverless reach (`$.name` → a lens). The
+// receiver emits as a single Word("$") (see emitPrimary / convertTopLevelValue).
+func isDollarReceiver(recv []eng.Value) bool {
+	if len(recv) != 1 || !eng.IsWord(recv[0]) {
+		return false
+	}
+	w, _ := eng.AsWord(recv[0])
+	return w.Name == "$"
+}
+
 // isChainReceiver reports whether an item can be the receiver of a dot
 // chain — anything except the "." / "!" operator markers and an unclosed
 // paren (i.e. a real value, word, or paren group).
@@ -411,18 +450,21 @@ func groupModifier(item any) (base string, prefix, suffix []eng.Value, ok bool) 
 }
 
 // emitPrimary appends the converted form of a single primary item — a
-// value, or a parenthesised group expanded to ( … ) markers — to dst. Used
+// value, or a parenthesised group as a nested ParenExpr value — to dst. Used
 // for the receiver, the keys of a dot chain, and ordinary top-level items.
 // pos is the source position of item (caller has already deSited it).
+//
+// Word-context paren groups become a single ParenExpr value (paren-nesting
+// Step 1, design/PAREN-REPRESENTATION.0.md), the same representation data
+// context already uses. The engine evaluates it via evalParenExprResults
+// (Step 2 at the pointer, Step 3 in a forward window).
 func emitPrimary(dst *[]eng.Value, item any, pos eng.SrcPos) error {
 	if pg, ok := item.(parenGroup); ok {
-		*dst = append(*dst, withPos(eng.NewOpenParen(), pos))
 		inner, err := convertTopLevelItems([]any(pg))
 		if err != nil {
 			return err
 		}
-		*dst = append(*dst, inner...)
-		*dst = append(*dst, withPos(eng.NewCloseParen(), pos))
+		*dst = append(*dst, withPos(eng.NewParenExpr(inner), pos))
 		return nil
 	}
 	v, err := convertTopLevelValue(item)

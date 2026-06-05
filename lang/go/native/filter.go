@@ -74,3 +74,58 @@ func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 	}
 	return []Value{val}, nil
 }
+
+// filterReachHandler is the lens form of filter: it keeps the elements of a
+// list (or the values of a map) for which the receiverless Reach (args[0])
+// applies to Boolean true. Unlike the Function form, the reach reads the
+// element directly — `filter $.active xs` keeps each x where x.active is true.
+func filterReachHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	info, err := AsReach(args[0])
+	if err != nil {
+		return nil, fmt.Errorf("filter: %w", err)
+	}
+	keep := func(elem Value) (bool, error) {
+		res, err := ApplyReach(r, info, elem)
+		if err != nil {
+			return false, err
+		}
+		if res.Parent.ConformsTo(TBoolean) {
+			b, _ := AsBoolean(res)
+			return b, nil
+		}
+		return false, nil
+	}
+
+	switch {
+	case args[1].Parent.ConformsTo(TList) && IsConcrete(args[1]):
+		data, _ := AsList(args[1])
+		out := make([]Value, 0, data.Len())
+		for i := 0; i < data.Len(); i++ {
+			elem := data.Get(i)
+			ok, err := keep(elem)
+			if err != nil {
+				return nil, fmt.Errorf("filter: element %d: %w", i, err)
+			}
+			if ok {
+				out = append(out, elem)
+			}
+		}
+		return []Value{NewList(out)}, nil
+	case args[1].Parent.ConformsTo(TMap) && IsConcrete(args[1]):
+		data, _ := AsMap(args[1])
+		out := NewOrderedMap()
+		for _, k := range data.Keys() {
+			v, _ := data.Get(k)
+			ok, err := keep(v)
+			if err != nil {
+				return nil, fmt.Errorf("filter: key %q: %w", k, err)
+			}
+			if ok {
+				out.Set(k, v)
+			}
+		}
+		return []Value{NewMap(out)}, nil
+	default:
+		return nil, r.AqlError("filter_error", "filter: lens form expects a concrete list or map", "filter")
+	}
+}

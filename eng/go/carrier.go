@@ -163,6 +163,17 @@ func toCarrier(v Value) Value {
 	if _, ok := v.Data.(FnDefInfo); ok {
 		return v
 	}
+	// Keep Reach values (dot-access `m.a`, `Pkg.fn`) concrete. A parsed
+	// dot-access is a Reach whose ReachInfo carries the Eval flag and the
+	// get/getr segments; the engine expands it in place at step time
+	// (isEvalReach → expandReach). Stripping would null the ReachInfo,
+	// so isEvalReach goes false and the chain never expands — dot-access
+	// would be opaque in check mode, silently dropping module-export type
+	// propagation, index checks, and dispatch diagnostics. Same rationale
+	// as the FnDefInfo case above.
+	if IsReach(v) {
+		return v
+	}
 	// Type literals (Data already nil) are already in the right
 	// shape for sig matching — preserve their Carrier=false marker
 	// so sigTypeMatchesAsType can still recognise them as type

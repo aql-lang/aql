@@ -253,6 +253,17 @@ type FnSig struct {
 	// Used by sigs that take a Map at a code-body slot (e.g. a spec
 	// schema where map values are quoted generators).
 	NoEvalMapArgs map[int]bool
+	// RawParens marks arg positions where a forward ParenExpr is captured
+	// RAW (not pre-evaluated) so the handler receives the paren as code.
+	// Opt-in; see NativeSig.RawParens and design/PAREN-REPRESENTATION.0.md.
+	RawParens map[int]bool
+	// FormArgs marks arg positions captured as a raw FORM — a generalization
+	// of RawParens (don't pre-eval a paren) and QuoteArgs (capture a bare word
+	// as data) to ANY operand: a word stays a Word, a paren/list/literal is
+	// captured unevaluated, with no def resolution, no dispatch, and no
+	// Word→Atom coercion. The macro definer sets it on every param so a macro
+	// receives its operands as code. See design/MACROS-PHASE1.0.md §3.
+	FormArgs map[int]bool
 
 	// --- Dispatch fields (folded in from the former Signature struct;
 	// the two are now ONE type via `type Signature = FnSig`). Body
@@ -328,6 +339,14 @@ type FnDefInfo struct {
 	// return type for downstream type propagation. Named fns leave this
 	// false and the check-mode path uses sig.Returns as authored.
 	Anonymous bool
+	// Macro is true iff the FnDef was produced by the `macro` definer. A
+	// macro is an fn the expander runs on UNEVALUATED operand forms (every
+	// param is FormArgs raw-capture; §3 of design/MACROS-PHASE1.0.md), whose
+	// returned token list is spliced into the call site rather than left as a
+	// value. Read at dispatch (stepWord / execFnDefLiteral) to branch to the
+	// expander before normal forward collection. Unlike Anonymous (check-mode
+	// only), Macro gates runtime dispatch.
+	Macro bool
 	// Captured holds enclosing-fn-local bindings snapshotted at fn-
 	// construction time — the implementation of lexical closures.
 	// Populated by computeCaptures during afn / fn handler execution
@@ -1195,6 +1214,39 @@ func NewEnd() Value {
 // paren markers, producing a single result value.
 func NewParenExpr(items []Value) Value {
 	return NewValueRaw(TParenExpr, ParenExprPayload{Toks: items})
+}
+
+// NewReach creates an Ideal/Reach value — a first-class dot-access node
+// (m.a.b). receiver is the base expression's tokens (nil/empty for a
+// receiverless reach); segments are the .key / !.key steps; eval marks it
+// evaluate-by-default. See design/REACH.0.md.
+func NewReach(info ReachInfo) Value {
+	return NewValueRaw(TReach, info)
+}
+
+// NewReachFromKeys builds an inert (non-evaluating, Eval=false) Reach over a
+// concrete receiver value with literal `get` segments — the programmatic
+// `reach` constructor. The result is data (a lens): it does not auto-evaluate
+// like a parsed m.a.b. See design/REACH.0.md §7.
+func NewReachFromKeys(receiver Value, keys []Value) Value {
+	segs := make([]ReachSeg, len(keys))
+	for i, k := range keys {
+		segs[i] = ReachSeg{KeyLit: k}
+	}
+	return NewReach(ReachInfo{Receiver: []Value{receiver}, Segments: segs, Eval: false})
+}
+
+// IsReach reports whether v is an Ideal/Reach value.
+func IsReach(v Value) bool {
+	return v.Parent.Equal(TReach)
+}
+
+// AsReach returns the ReachInfo of a Reach value.
+func AsReach(v Value) (ReachInfo, error) {
+	if ri, ok := v.Data.(ReachInfo); ok {
+		return ri, nil
+	}
+	return ReachInfo{}, fmt.Errorf("AsReach: not a reach value (got %T)", v.Data)
 }
 
 // InterpPart represents one segment of an interpolated string.

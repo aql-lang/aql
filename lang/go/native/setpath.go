@@ -2,31 +2,28 @@ package native
 
 import (
 	"fmt"
-
-	voxgigstruct "github.com/voxgig/struct"
+	"strconv"
+	"strings"
 )
 
 // The "setpath" word is registered via the consolidated Natives slice in
 // natives.go.
 //
-// setpathHandler calls voxgigstruct.SetPath to set a nested value.
-// Position-agnostic: finds the string arg (path), then determines
-// which of the remaining args is data vs new value.
+// setpathHandler sets a nested value, returning a NEW structure. The path is
+// either a dotted String or a Reach lens; both walk the same native setter
+// (setReachNative — an immutable deep set). Position-agnostic: it finds the
+// path arg, then determines which of the remaining args is data vs new value.
 func setpathHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
-	// Find the string arg — that's always the path.
+	// Find the path arg — a String dotted path, or a Reach lens.
 	pathIdx := -1
 	for i := range args {
-		if args[i].Parent.ConformsTo(TString) {
+		if args[i].Parent.ConformsTo(TString) || IsReach(args[i]) {
 			pathIdx = i
 			break
 		}
 	}
 	if pathIdx < 0 {
-		return nil, r.AqlError("setpath_error", "setpath: path argument must be a string", "setpath")
-	}
-	path, err := AsString(args[pathIdx])
-	if err != nil {
-		return nil, fmt.Errorf("setpath: path: %w", err)
+		return nil, r.AqlError("setpath_error", "setpath: path argument must be a string or a reach", "setpath")
 	}
 
 	// Collect the two non-path args.
@@ -48,9 +45,6 @@ func setpathHandler(args []Value, ctx map[string]Value, stack []Value, r *Regist
 	a, b := args[others[0]], args[others[1]]
 	var data, newVal Value
 	if others[0] < others[1] {
-		// Normal order: first=data, second=newVal
-		// But if first is after the path and second is even later (all forward),
-		// or if last arg is a map/list (likely data from stack), adjust.
 		if (a.Parent.ConformsTo(TMap) || a.Parent.ConformsTo(TList)) &&
 			!(b.Parent.ConformsTo(TMap) || b.Parent.ConformsTo(TList)) {
 			data, newVal = a, b
@@ -58,19 +52,172 @@ func setpathHandler(args []Value, ctx map[string]Value, stack []Value, r *Regist
 			!(a.Parent.ConformsTo(TMap) || a.Parent.ConformsTo(TList)) {
 			data, newVal = b, a
 		} else {
-			// Both same type — use original convention: args[0]=data, args[2]=newVal
-			// For infix, data is last (from stack). For prefix, data is first.
 			data, newVal = a, b
 		}
 	} else {
 		data, newVal = b, a
 	}
 
-	result := voxgigstruct.SetPath(valueToAny(data), path, valueToAny(newVal))
-
-	val, err := anyToValue(result)
-	if err != nil {
-		return nil, fmt.Errorf("setpath: %w", err)
+	// Reach lens: set natively so nesting is honored (an immutable nested
+	// set, the lens "set" — the dotted-string voxgigstruct form does not
+	// deep-set). The reach's receiver is ignored; data is the base.
+	if IsReach(args[pathIdx]) {
+		info, err := AsReach(args[pathIdx])
+		if err != nil {
+			return nil, fmt.Errorf("setpath: %w", err)
+		}
+		keys, err := reachPathKeys(r, info)
+		if err != nil {
+			return nil, err
+		}
+		out, err := setReachNative(data, keys, newVal)
+		if err != nil {
+			return nil, err
+		}
+		return []Value{out}, nil
 	}
-	return []Value{val}, nil
+
+	path, err := AsString(args[pathIdx])
+	if err != nil {
+		return nil, fmt.Errorf("setpath: path: %w", err)
+	}
+	// Walk the dotted path natively (same setter as the reach form). NOT
+	// voxgigstruct.SetPath: that function returns the innermost sub-node
+	// rather than the updated root, so any nested set lost the outer
+	// structure (`setpath {a:{b:1}} "a.b" 99` → {b:99} instead of
+	// {a:{b:99}}). The native setter deep-sets correctly + immutably.
+	out, err := setReachNative(data, stringPathKeys(path), newVal)
+	if err != nil {
+		return nil, err
+	}
+	return []Value{out}, nil
+}
+
+// stringPathKeys splits a dotted path ("a.b.0") into the key Values to walk:
+// an all-digit segment becomes an Integer (a list index / numeric key), any
+// other segment a String. Mirrors voxgigstruct's `.`-split, feeding the same
+// native setter the reach form uses.
+func stringPathKeys(path string) []Value {
+	rawParts := strings.Split(path, ".")
+	keys := make([]Value, len(rawParts))
+	for i, p := range rawParts {
+		if n, err := strconv.Atoi(p); err == nil && isAllDigits(p) {
+			keys[i] = NewInteger(int64(n))
+		} else {
+			keys[i] = NewString(p)
+		}
+	}
+	return keys
+}
+
+// isAllDigits reports whether s is non-empty and every rune is 0-9 (so "01"
+// and "0" are indices, but "-1" / "1a" / "" stay string keys).
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// reachPathKeys decodes a Reach's segments into the key Values to walk
+// (literal keys as-is; computed keys m.(expr) evaluated first). The get/getr
+// distinction is irrelevant on a write path — setpath creates the path.
+func reachPathKeys(r *Registry, info ReachInfo) ([]Value, error) {
+	keys := make([]Value, 0, len(info.Segments))
+	for i, seg := range info.Segments {
+		if seg.Computed {
+			sub := New(r)
+			out, runErr := sub.Run(seg.KeyExpr)
+			if runErr != nil {
+				return nil, fmt.Errorf("setpath: computed key %d: %w", i, runErr)
+			}
+			if len(out) == 0 {
+				return nil, fmt.Errorf("setpath: computed key %d produced no value", i)
+			}
+			keys = append(keys, out[len(out)-1])
+		} else {
+			keys = append(keys, seg.KeyLit)
+		}
+	}
+	return keys, nil
+}
+
+// setReachNative immutably sets val at the key-path within data, returning a
+// new structure. A numeric key into a concrete list updates that index (in a
+// copy); any other key updates a map (shallow-cloned). Missing intermediate
+// maps are created. Sibling values are shared by reference — safe because
+// nothing is mutated in place.
+func setReachNative(data Value, keys []Value, val Value) (Value, error) {
+	if len(keys) == 0 {
+		return val, nil
+	}
+	k := keys[0]
+	rest := keys[1:]
+
+	// List index.
+	if k.Parent.ConformsTo(TInteger) && data.Parent.ConformsTo(TList) && IsConcrete(data) {
+		lst, _ := AsList(data)
+		n := lst.Len()
+		idx64, _ := AsInteger(k)
+		idx := int(idx64)
+		if idx < 0 || idx >= n {
+			return Value{}, fmt.Errorf("setpath: list index %d out of range (len %d)", idx, n)
+		}
+		cp := make([]Value, n)
+		for i := 0; i < n; i++ {
+			cp[i] = lst.Get(i)
+		}
+		child, err := setReachNative(cp[idx], rest, val)
+		if err != nil {
+			return Value{}, err
+		}
+		cp[idx] = child
+		return NewList(cp), nil
+	}
+
+	// Map key (the default). Shallow-clone the source map (or start fresh
+	// when the level is absent / not a map).
+	out := NewOrderedMap()
+	if data.Parent.ConformsTo(TMap) && IsConcrete(data) {
+		src, _ := AsMap(data)
+		for _, key := range src.Keys() {
+			v, _ := src.Get(key)
+			out.Set(key, v)
+		}
+	}
+	keyStr := reachKeyString(k)
+	if len(rest) == 0 {
+		out.Set(keyStr, val)
+	} else {
+		existing, _ := out.Get(keyStr)
+		child, err := setReachNative(existing, rest, val)
+		if err != nil {
+			return Value{}, err
+		}
+		out.Set(keyStr, child)
+	}
+	return NewMap(out), nil
+}
+
+// reachKeyString renders a reach key Value as its map-key string (a word /
+// atom by name, a string by value, anything else via ValToString).
+func reachKeyString(k Value) string {
+	switch {
+	case IsWord(k):
+		w, _ := AsWord(k)
+		return w.Name
+	case IsAtom(k):
+		a, _ := AsAtom(k)
+		return a
+	case k.Parent.ConformsTo(TString):
+		s, _ := AsString(k)
+		return s
+	default:
+		return ValToString(k)
+	}
 }

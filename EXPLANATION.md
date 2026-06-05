@@ -16,6 +16,7 @@ syntax, the type system, and the runtime. It complements the
 * [Type ordering](#type-ordering)
 * [Immutability and mutability](#immutability-and-mutability)
 * [Quotation and evaluation](#quotation-and-evaluation)
+* [Macros](#macros)
 * [The Options pattern](#the-options-pattern)
 * [Parallel execution model](#parallel-execution-model)
 * [Errors as values](#errors-as-values)
@@ -334,6 +335,45 @@ To evaluate a held list at the point of use, use `do`:
 
 The duality — lists as both data and code — is the homoiconic core
 that lets AQL do metaprogramming with no separate AST type.
+
+
+## Macros
+
+Quotation lets you *hold* code as data; **macros** let you *transform*
+it. A macro is a function the engine runs at **expansion time**, on its
+operands **as unevaluated code**, whose returned tokens are spliced into
+the call site in place of the call. Where a normal word receives
+*values*, a macro receives *forms* — so it can build new control
+structures and syntax in AQL itself, not in Go.
+
+```
+def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])
+twice 5                           => 10
+```
+
+`twice 5` does not pass `5` to a function; it rewrites the call to the
+code `5 add 5`, which then runs. The template is an ordinary `quote
+[ … ]` region — default-data, the polarity flip from AQL's default-eval
+— and `unquote` / `splice` are the holes where operands flow back in:
+`unquote x` inserts one node, `splice xs` spreads a list's elements.
+
+This is the classic LISP dividend, and AQL builds it from parts it
+already had — `quote`, the splice marker behind `word`, raw-form
+argument capture, and closure capture — rather than a new engine. Two
+LISP problems come along for free:
+
+* **Hygiene.** A name a macro introduces (a literal `def tmp` in a
+  template) is auto-renamed to a fresh `gensym`, so it can never clash
+  with a same-named variable at the call site. The `unquote`/`splice`
+  boundary doubles as the provenance marker — names that came *from* the
+  caller (through an escape) are left alone, which is exactly the
+  distinction hygienic macro systems must otherwise synthesize.
+* **Staging.** Macros are define-before-use and expand left-to-right, so
+  generated code is just more source that re-enters the same evaluator.
+
+Reference details and the full operator set are in
+**[Reference: Macros](REFERENCE.md#macros)**; the design and its LISP
+lineage are in `design/MACROS.0.md`.
 
 
 ## The Options pattern

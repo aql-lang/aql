@@ -23,6 +23,8 @@ type (
 	CheckSeverity      = eng.CheckSeverity
 	CheckState         = eng.CheckState
 	ChildTypeInfo      = eng.ChildTypeInfo
+	ReachInfo          = eng.ReachInfo
+	ReachSeg           = eng.ReachSeg
 	ChildEntry         = eng.ChildEntry
 	// Sealed Payload variants (post Step 5).
 	Payload             = eng.Payload
@@ -136,6 +138,7 @@ var (
 	TOpenParen      = eng.TOpenParen
 	TOptions        = eng.TOptions
 	TParenExpr      = eng.TParenExpr
+	TReach          = eng.TReach
 	TPath           = eng.TPath
 	TRecord         = eng.TRecord
 	TResource       = eng.TResource
@@ -229,6 +232,11 @@ var (
 	IsOpenParen               = eng.IsOpenParen
 	IsOptionsType             = eng.IsOptionsType
 	IsParenExpr               = eng.IsParenExpr
+	IsReach                   = eng.IsReach
+	AsReach                   = eng.AsReach
+	NewReach                  = eng.NewReach
+	NewReachFromKeys          = eng.NewReachFromKeys
+	ApplyReach                = eng.ApplyReach
 	IsPath                    = eng.IsPath
 	IsRecordType              = eng.IsRecordType
 	IsReturnCheck             = eng.IsReturnCheck

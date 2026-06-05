@@ -38,6 +38,52 @@ var Natives = []NativeFunc{
 		},
 	},
 
+	// `codequote` is `quote`'s code-capturing sibling: it also captures a
+	// forward *paren* RAW (as a ParenExpr value) instead of evaluating it.
+	// `quote (expr)` evaluates expr then quotes the result (the inert-value
+	// idiom); `codequote (expr)` keeps the paren as code — the structural
+	// quotability the macro layer wants. Words → atoms and lists → raw list
+	// behave exactly like `quote`. See design/PAREN-REPRESENTATION.0.md §2.2.
+	{
+		Name: "codequote",
+
+		Signatures: []NativeSig{
+			{
+				Args:      []*Type{TAtom},
+				QuoteArgs: map[int]bool{0: true},
+				Handler:   quoteWordHandler,
+				Returns:   []*Type{TAtom}, BarrierPos: -1,
+			},
+			{
+				Args:           []*Type{TAny},
+				NoEvalArgs:     map[int]bool{0: true},
+				RawParens:      map[int]bool{0: true},
+				Handler:        quoteAnyHandler,
+				RunInCheckMode: true,
+				ReturnsFn:      ReturnsIdentity(0), BarrierPos: -1,
+			},
+		},
+	},
+
+	// `reach <receiver> [keys]` builds a first-class Reach value (a lens)
+	// programmatically: an inert (non-evaluating) dot-access over the
+	// receiver with literal `get` segments. Unlike a parsed m.a.b (which
+	// evaluates eagerly), a constructed reach is data you can inspect,
+	// pass, and convert (see design/REACH.0.md §7). getr/computed segments
+	// come from source via codequote; the list-encoding for them is TBD.
+	{
+		Name: "reach",
+
+		Signatures: []NativeSig{
+			{
+				Args:       []*Type{TAny, TList},
+				NoEvalArgs: map[int]bool{1: true},
+				Handler:    reachHandler,
+				Returns:    []*Type{TReach}, BarrierPos: -1,
+			},
+		},
+	},
+
 	// `word <value>` wraps its argument (unevaluated) in an __SP splice
 	// marker. When the marker reaches the stack pointer its payload is
 	// spliced in: a plain list contributes its top-level elements, any
@@ -179,6 +225,10 @@ var Natives = []NativeFunc{
 
 		Signatures: []NativeSig{
 			{Args: []*Type{TFunction, TAny}, Handler: filterHandler, BarrierPos: -1},
+			// Lens form: `filter $.active xs` keeps the elements whose reach
+			// applies to a truthy value (the reach reads the ELEMENT, not the
+			// {key,value} wrapper the Function form receives).
+			{Args: []*Type{TReach, TAny}, Handler: filterReachHandler, BarrierPos: -1},
 		},
 	},
 
@@ -317,6 +367,68 @@ func quoteAnyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 	v := args[0]
 	v.Quoted = true
 	return []Value{v}, nil
+}
+
+// reachHandler builds an inert Reach over a receiver value (args[0]) and a
+// key list (args[1], NOT evaluated). The list encodes one segment per key:
+//
+//   - a bare word / atom / string / number → a `get` (lenient) segment
+//   - a `!` marker element → the NEXT key is a `getr` (strict) segment
+//     (so `reach m [a !b]` ≡ m.a!.b — `!b` lexes as `! b`)
+//   - a `(expr)` paren element → a computed segment (key evaluated at apply)
+//
+// e.g. `reach m [a !b (k)]` → an inert m.a!.b.(k) lens (data).
+func reachHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	keys, err := RequireConcreteList(args[1], "reach")
+	if err != nil {
+		return nil, err
+	}
+	segs, err := decodeReachSegments(keys.Slice(), r)
+	if err != nil {
+		return nil, err
+	}
+	return []Value{NewReach(ReachInfo{Receiver: []Value{args[0]}, Segments: segs, Eval: false})}, nil
+}
+
+// decodeReachSegments turns a `reach` key list into Reach segments (see
+// reachHandler for the encoding).
+func decodeReachSegments(elems []Value, r *Registry) ([]ReachSeg, error) {
+	segs := make([]ReachSeg, 0, len(elems))
+	getrNext := false
+	for _, el := range elems {
+		if isReachBang(el) {
+			getrNext = true
+			continue
+		}
+		seg := ReachSeg{Getr: getrNext}
+		getrNext = false
+		if IsParenExpr(el) {
+			toks, _ := AsParenExpr(el)
+			seg.Computed = true
+			seg.KeyExpr = toks
+		} else {
+			seg.KeyLit = el
+		}
+		segs = append(segs, seg)
+	}
+	if getrNext {
+		return nil, r.AqlError("reach_error", "reach: trailing `!` with no following key", "reach")
+	}
+	return segs, nil
+}
+
+// isReachBang reports whether a key-list element is the `!` getr marker (a
+// bare `!` lexes to a word; an atom `!` covers the quoted form).
+func isReachBang(v Value) bool {
+	if IsWord(v) {
+		w, _ := AsWord(v)
+		return w.Name == "!"
+	}
+	if IsAtom(v) {
+		a, _ := AsAtom(v)
+		return a == "!"
+	}
+	return false
 }
 
 // wordHandler wraps its (unevaluated) argument in an __SP splice marker. The

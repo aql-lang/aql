@@ -22,6 +22,7 @@ is, see the **[Explanation](EXPLANATION.md)**.
   * [Boolean](#boolean)
   * [Comparison](#comparison)
   * [Definition and scoping](#definition-and-scoping)
+  * [Macros](#macros)
   * [Control flow](#control-flow)
   * [List and array words](#list-and-array-words)
   * [Higher-order array words](#higher-order-array-words)
@@ -188,6 +189,9 @@ quoted key (`{'a/b': 1}`) or a computed key (`{[a/b]: 1}`).
 * **Quotation.** Lists are *unevaluated* by default. `do` evaluates
   one as a sub-program; `quote` prevents evaluation of the next
   token.
+* **Macros.** A `macro` runs at expansion time on its operands *as
+  code* and splices the result into the call site — new syntax in
+  AQL itself. See **[Macros](#macros)**.
 * **`end`.** Forces the nearest waiting word to stop forward
   collection.
 
@@ -557,6 +561,110 @@ mkbad                                              => [aql/type_error] return va
 The newtype-vs-subset distinction and its cross-language rationale are
 explained in **[Explanation: Function signatures](EXPLANATION.md#function-signatures-and-refinement-types)**
 and pinned in `design/REFINE-NEWTYPE-VS-SUBSET.0.md`.
+
+### Macros
+
+A **macro** is `fn`'s expand-time sibling: a transformer the engine runs on
+its operands **as unevaluated code**, whose returned token list is **spliced
+into the call site** in place of the call. Macros add new syntax / control
+forms in AQL itself, rather than in Go.
+
+| Word | Description | Example |
+|------|-------------|---------|
+| `macro` | Create a macro from `[[params] [body]]` | `def unless (macro [[c body] [quote [if unquote c [] unquote body]]])` |
+| `unquote` | In a template: insert an operand's **value/form** as one node | `unquote cond` |
+| `splice` | In a template: insert a list operand's **elements**, flattened | `splice xs` |
+| `gensym` | A fresh, never-colliding atom (a unique name) | `gensym` => `tmp$g1` |
+| `macroexpand` | Expand a macro call to its token list, without running it | `macroexpand (unless x [y])` |
+
+#### Defining and using a macro
+
+`macro [[params] [body]]` mirrors `fn`, with two differences baked in: every
+parameter is captured **raw** (the operand arrives as code — a word, literal,
+`(paren)`, `[list]`, or `{map}` — never evaluated), and the body runs at
+**expansion time** to produce a **template** whose tokens replace the call.
+
+```
+def unless (macro [[cond body] [
+  quote [ if unquote cond [] unquote body ]
+]])
+
+def x 5
+unless (x gt 10) [99]                 => 99       # body runs: the condition is false
+```
+
+`unless (x gt 10) [99]` expands to `if (x gt 10) [] [99]`, which then runs
+normally — the condition is evaluated in the *generated* code, exactly as
+written, so the body runs only when `x gt 10` is false.
+
+#### The template — `quote`, `unquote`, `splice`
+
+The template is an ordinary `quote [ … ]` region (default-data, the opposite of
+AQL's default-eval). Inside it:
+
+* bare tokens are literal code of the expansion;
+* **`unquote x`** inserts `x` as **one grouped node** — a bare parameter name
+  inserts that operand's captured form; a `(paren)` evaluates and inserts the
+  result;
+* **`splice xs`** evaluates `xs` to a list and inserts its **elements**,
+  flattened into the surrounding sequence.
+
+```
+def callit (macro [[f xs] [ quote [ unquote f splice xs ] ]])
+def add3 fn [[a:Integer b:Integer c:Integer] [Integer] [a add b add c]]
+callit add3 [1 2 3]                   => 6        # splice spreads [1 2 3] as 1 2 3
+```
+
+A map value that needs an escape must be parenthesised — `{k: (unquote v)}`,
+not `{k: unquote v}` (the latter splits into two map entries).
+
+#### Hygiene
+
+Macros are **hygienic by default**: a literal `def <name>` binder in a template
+is automatically renamed to a fresh `gensym`, so it can never capture a
+same-named variable at the call site — no manual `gensym` needed.
+
+```
+def myor (macro [[a b] [ quote [ def tmp unquote a  if tmp [tmp] [unquote b] ] ]])
+def tmp 42
+myor false tmp                        => 42       # the template's `tmp` is renamed; user `tmp` is safe
+```
+
+To bind a name the caller *should* see (an intentional, non-hygienic binding),
+take the name through `unquote` — `def unquote name …` — so it is user-origin
+and left untouched:
+
+```
+def defconst (macro [[name val] [ quote [ def unquote name unquote val ] ]])
+defconst answer 42  answer            => 42
+```
+
+`gensym` mints a unique atom directly for hand-written cases; each call is
+distinct (`gensym eq gensym` => `false`).
+
+#### Inspecting and staging
+
+`macroexpand (mac operand…)` returns the **fully expanded** token list as data
+(recursively expanding any nested macro calls) without running it — the tool
+for seeing what a macro produces. A runaway recursive macro is caught with a
+clear error rather than looping.
+
+```
+def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])
+macroexpand (twice 5)                 => [5 word(add) 5]
+```
+
+(The result is a *token list*: `add` shows as `word(add)` because it is an
+unevaluated word in the expansion, not a call yet.)
+
+Macros are **define-before-use**: a macro must be defined before its call site
+is reached (using one earlier raises `undefined_word`). A macro referenced
+inside a `fn` body expands when the body *runs*, so it need only be defined
+before the call.
+
+> **Deferred.** A `` `[ … ] `` quasiquote sugar (Phase 3) and compiled-mode
+> expansion / `eval-when` staging (Phase 5, awaiting the IR backend) are
+> designed but not yet shipped. See `design/MACROS.0.md`.
 
 ### Control flow
 

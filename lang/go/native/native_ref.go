@@ -54,10 +54,32 @@ var refNatives = []NativeFunc{
 		// collection would force callers to put fn-args after the fn,
 		// which fights AQL's left-to-right stack flow.
 
+		Signatures: []NativeSig{
+			{
+				Args:    []*Type{TFunction},
+				Handler: applyHandler,
+				Returns: []*Type{TAny}, BarrierPos: 0,
+			},
+			// Apply a Reach (a lens) to a receiver: `apply $.name person`
+			// rebinds the reach's receiver to `person` and evaluates it —
+			// the lens "get". Forward-eligible so the reach reads first.
+			{
+				Args:    []*Type{TReach, TAny},
+				Handler: applyReachHandler,
+				Returns: []*Type{TAny}, BarrierPos: -1,
+			},
+		},
+	},
+	{
+		Name: "rebind",
+		// Compose, don't evaluate: `rebind $.name person` returns a NEW
+		// Reach with `person` as the receiver (inert data — a bound lens).
+		// Apply it / read it later with `apply` or `getpath`. For an
+		// already-bound reach it swaps the receiver. Forward-eligible.
 		Signatures: []NativeSig{{
-			Args:    []*Type{TFunction},
-			Handler: applyHandler,
-			Returns: []*Type{TAny}, BarrierPos: 0,
+			Args:    []*Type{TReach, TAny},
+			Handler: rebindHandler,
+			Returns: []*Type{TReach}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -332,6 +354,37 @@ func applyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 	}
 	v.Quoted = false
 	return []Value{v}, nil
+}
+
+// applyReachHandler applies a Reach (a lens) to a receiver value: it rebinds
+// the reach's receiver to args[1] and evaluates the segment walk (the lens
+// "get"). getr strictness and computed keys behave exactly as bare m.a.b.
+func applyReachHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	info, err := AsReach(args[0])
+	if err != nil {
+		return nil, fmt.Errorf("apply: %w", err)
+	}
+	out, err := ApplyReach(r, info, args[1])
+	if err != nil {
+		return nil, err
+	}
+	return []Value{out}, nil
+}
+
+// rebindHandler returns a new inert Reach with its receiver swapped to
+// args[1] — composition, not evaluation. The result is a bound lens (data);
+// `apply` / `getpath` read through it.
+func rebindHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	info, err := AsReach(args[0])
+	if err != nil {
+		return nil, fmt.Errorf("rebind: %w", err)
+	}
+	bound := ReachInfo{
+		Receiver: []Value{args[1]},
+		Segments: info.Segments,
+		Eval:     false,
+	}
+	return []Value{NewReach(bound)}, nil
 }
 
 // usurpHandler wraps a Function value so its signature argument order is
