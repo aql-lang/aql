@@ -1,11 +1,12 @@
 # WAT Audit — Surprising Behaviours of the Reference Implementation
 
-Status: **observational**. This is an audit, not a proposal. It records
+Status: **observational + suggested remediations**. This records
 behaviours of the `aql` reference implementation (as built from this
 tree) that are likely to surprise a user, contradict the prose
-documentation, or both. Nothing here changes engine behaviour; the
-companion documentation pass only makes the prose match what the binary
-actually does.
+documentation, or both, and proposes a fix for each. No remediation
+here has been applied to engine behaviour; the only committed change is
+the companion documentation pass, which makes the prose match what the
+binary actually does.
 
 Every entry below was reproduced against `cmd/go/bin/aql` built at the
 audit commit. Commands are shown exactly as run. `=>` in this document
@@ -24,6 +25,12 @@ Each exhibit is tagged with a disposition:
 
 The documentation pass that accompanies this audit touches only **doc**
 items plus accuracy notes for **design** items. No **bug** was fixed.
+
+Each exhibit ends with a **Fix** — a concrete remediation (the change,
+where it lands in the tree, and the compatibility risk). These are
+recommendations, not yet applied; see
+[Suggested remediation priority](#suggested-remediation-priority) for
+sequencing. ⭐ marks unambiguous, low-risk correctness wins.
 
 ---
 
@@ -44,6 +51,12 @@ module words (`abs`, `changecase`, `split`, `trim`, …) under bare names
 with no import hint. `describe abs` shows docs for a word that
 `aql do -- '-1 abs'` cannot call.
 
+> **Fix.** Done in docs (examples now use `StringUtil.upper` with the
+> import shown). Code follow-up: make `aql describe` annotate module
+> words with their import path and qualified name (a small change in
+> `genhelp` / the `describe` handler) so the help system stops listing
+> words bare that the base environment can't call.
+
 ## B. The CLI cannot evaluate a leading negative number — `bug`
 
 ```
@@ -56,6 +69,15 @@ $ aql do -- '-7 0 add'
 A leading `-7` is parsed as an unknown flag. The `--` separator works
 but is undocumented.
 
+> **Fix.** ⭐ `cmd/go/internal/do/do.go:29` uses
+> `flag.NewFlagSet(…, ContinueOnError)` + `fs.Parse(args)`; Go's flag
+> package rejects `-7`. Since all perms flags are `--`-prefixed, split
+> argv at the first token that isn't a recognized `--flag` (or is `--`),
+> `Parse` only that head, and join the tail as the expression. Apply the
+> same to the `-e` path in `run`/`main.go`. Low risk — only widens what
+> is accepted; add a regression test for `-7 0 add`. (`--` is now
+> documented in CLI.md as the interim workaround.)
+
 ## C. Forward collection breaks composition — `design`
 
 ```
@@ -67,6 +89,14 @@ $ aql do -- '1 lt 2 lt 3'       => 1 false 2
 `4+2=6`, leaving `3 6` for `mul`. Comparisons don't chain; they leave
 debris. The "reads naturally" claim holds only for a single isolated
 operation.
+
+> **Fix.** This is the language's defining mechanic — do **not** change
+> the semantics. Remediate with tooling: add an `aql check` warning when
+> a value computed by one word is stranded because a following word
+> forward-collected past it (the `a b op c op2` shape). That catches the
+> trap at author time without altering behaviour. Already documented;
+> teaching the `/s` (stack-only) modifier (`mul/s`) gives readers an
+> explicit escape. See also AD.
 
 ## D. "Keep each step on its own line" is false; the REPL resets the stack — `doc`
 
@@ -88,6 +118,10 @@ error: no matching signature for mul   (stack: 2)
 
 So the same two lines give `18` in a file and `7` + a crash in the REPL.
 
+> **Fix.** Done in docs (the "own line" advice was corrected and the
+> REPL's per-line stack reset is now documented). No code change needed;
+> the file/REPL split is intentional behaviour, it was just mis-described.
+
 ## E. String truthiness: only `""` and exactly `"false"` are falsy — `design`
 
 ```
@@ -102,6 +136,13 @@ string is truthy unless it is exactly the lowercase word `"false"`.
 `if []` is a separate inconsistency: it errors (`condition produced no
 value`) rather than being falsy like `""`.
 
+> **Fix.** Remove the string-content special case in
+> `CoerceBoolean` (`eng/go/core_helpers.go:494`): a non-empty string is
+> truthy, full stop (only `""` falsy). Stringly truthiness with one
+> magic lowercase token is indefensible. Keep the number / `none` /
+> empty-collection rules. Risk: changes `if "false"`; grep `lang/spec`
+> for dependents first.
+
 ## F. `and` / `or` return operands, not booleans — `design`
 
 ```
@@ -113,6 +154,13 @@ $ aql do -- '0 9 or'       => 9
 `describe and` says "Logical AND of two booleans." The implementation is
 Python-style operand-returning short-circuit over any type.
 
+> **Fix.** In `lang/go/native/native_boolean.go`, either (a) make `and`/
+> `or` strict `Boolean × Boolean → Boolean` and add separate coalescing
+> words if the truthy-pick behaviour is wanted, or (b) keep the current
+> behaviour but correct the declared signature and `describe` text so
+> they stop claiming "two booleans". (a) is the right call for a typed
+> language; (b) is the cheap honesty fix (partly done in the doc pass).
+
 ## G. `add` of a boolean and an int is a string; the checker approves — `design`
 
 ```
@@ -122,6 +170,13 @@ $ aql check -e 'true 1 add'  => check: 0 error(s), 0 warning(s)
 
 Boolean stringifies and concatenates with the number. The static
 checker reports no problem.
+
+> **Fix.** Tighten the `Scalar Scalar` concat signature of `add`
+> (`native_math.go`, `addConcatHandler`) so it requires both operands be
+> `String`/`Atom` rather than any `Scalar`. A `Boolean`/`Number` mix then
+> becomes a type error the checker can see, instead of silently
+> stringifying. Risk: medium — `"a" add "b"` still works, but
+> `true 1 add` becomes an error (which is the point).
 
 ## H. Equal values that are not substitutable — `design`
 
@@ -135,6 +190,14 @@ $ aql do '1.0 2 div'   => 0.5    # real division
 `1` and `1.0` are equal by both `eq` and `cmp`, yet not interchangeable.
 `1 2 div` silently truncates with no remainder warning.
 
+> **Fix.** The root is that integer `div` truncates while `1 eq 1.0` is
+> true. Cleanest: make `div` **always** produce a `Decimal` (real
+> division) and add an explicit `idiv`/`quot` for truncating integer
+> division — then equal numbers behave equally. Alternative: make
+> `1 eq 1.0` false (strict by type). The first is friendlier, the second
+> more honest; either removes the trap. Risk: high — `div` is pervasive;
+> this is a genuine language decision.
+
 ## I. "Any word, any position" is selectively false — `doc`
 
 ```
@@ -145,6 +208,11 @@ $ aql do 'reverse [1 2 3]'  => [3 2 1]   # but this forward-collects fine
 
 `reverse`/`add` collect forward; `dup`/`swap` don't. The universal
 prefix/infix/suffix claim does not hold for stack-shuffling words.
+
+> **Fix.** Done in docs (README now qualifies the claim: stack-shuffling
+> words take their args from the stack only). No code change recommended
+> — forward-collecting `dup`/`swap` would be ambiguous; the honest fix
+> is the qualified claim already shipped.
 
 ## J. `aql fmt -w` is documented everywhere and always errors — `doc` (+ `bug`-adjacent)
 
@@ -161,15 +229,37 @@ stdout/diff mode. Formatting is always in place. `aql fmt` with **no**
 args reformats every `.aql` file in the working tree — convenient and
 dangerous. CLI.md (×3) and README all show the non-existent `-w` flag.
 
+> **Fix.** Done in docs (`aql fmt -w` → `aql fmt`; the always-in-place /
+> no-arg-walks-tree reality stated). Optional code follow-up for
+> familiarity: give `cmd/go/internal/fmt/fmt.go` a real `flag.FlagSet`
+> matching the `gofmt` contract — default to stdout, `-w` to rewrite,
+> `-l` to list — so muscle memory works and `-h` prints usage instead of
+> trying to open a file named `-h`.
+
 ## K. Integer overflow has two contradictory silent behaviours — `bug`
 
 ```
-$ aql do '9223372036854775807 1 add'   => 9223372036854776000.0
-$ aql do '2 63 pow'                     => -9223372036854775808
+$ aql do '9223372036854775807 1 add'      => 9223372036854776000.0
+$ aql do '2 63 pow'                        => -9223372036854775808
+$ aql do '4000000000 4000000000 mul'       => -2446744073709551616
 ```
 
-`add` promotes to float (and loses precision); `pow` wraps two's
-complement to negative. Neither flags anything.
+Two distinct defects hide here. The first line is a **lexer** problem:
+`9223372036854775807` parses as a `Decimal`, not an `Integer`
+(`typeof` confirms), so the float result comes from the literal, not
+from `add`. The other two are **runtime** wraps: `pow` and `mul` do raw
+int64 arithmetic that silently overflows two's-complement. Neither path
+flags anything.
+
+> **Fix.** Two changes. (1) Lexer: parse integer literals with
+> `strconv.ParseInt` and, on `ErrRange`, raise `integer literal out of
+> range` instead of silently falling back to `Decimal` (or adopt
+> `big.Int` for true bignums — larger change). (2) Runtime: in
+> `numericBinaryHandler`'s `intFn` (`lang/go/native/native_helpers.go:33`)
+> and the `pow` loop (`native_math.go`), use checked arithmetic
+> (`math/bits.Mul64`/`Add64` or an overflow test) and apply **one**
+> policy — error, or promote to `Decimal` — uniformly across
+> `add`/`sub`/`mul`/`pow`. Risk: medium; changes boundary results.
 
 ## L. The type named `Decimal` is binary float64 — `doc`/`design`
 
@@ -181,6 +271,16 @@ $ aql do -- '0.1 0.2 add 0.3 eq'  => false
 `typeof 0.1` is `Decimal`, a name that implies base-10 exactness. It is
 IEEE-754 binary float with the standard `0.1 + 0.2 ≠ 0.3` behaviour.
 
+> **Fix.** Done in docs (a note states `Decimal` is binary `float64`).
+> Decision taken: **rename the float64 type `Decimal` → `Float`**, which
+> frees the name `Decimal` for a future *true* arbitrary-precision
+> base-10 type (likely backed by an `apd`-style coefficient+exponent
+> decimal, with `big.Rat` reserved for exact rationals). The rename is a
+> kernel change — `typetable.go` decls, the `T*` constant, parser literal
+> tagging, renderers, and a FixedID/stability-test update — so it is a
+> deliberate, wire-affecting edit, not a doc tweak. See the separate
+> design discussion for the numeric-tower plan.
+
 ## M. Core literals and builtins are unprotected mutable bindings — `design`
 
 ```
@@ -190,6 +290,11 @@ $ aql do -- 'def add fn [[x:Number y:Number] [Number] [x sub y]] 5 3 add'  => -2
 
 `def true` shadows the boolean literal; `def add` redefines addition. No
 warning.
+
+> **Fix.** Maintain a reserved-name set (`true`, `false`, `none`, and the
+> kernel words) that `def`/`InstallType` refuse to shadow, or at minimum
+> warn on. Lands in the `def` handler / registry. Low risk — only blocks
+> pathological redefinitions; legitimate user words are unaffected.
 
 ## N. "Errors are values, not exceptions" — only inside `do [...]` — `doc`
 
@@ -203,6 +308,11 @@ $ aql do -- 'do [1 div 0]'   => error(division by zero)    # value — but only 
 
 Errors become values only when a `do [...]` (or the `error` handler)
 captures them. Bare operations unwind.
+
+> **Fix.** Done in docs (the "Errors as values" section now says the
+> reification happens at a `do [...]` boundary; bare operations
+> propagate). This is coherent design once described correctly — no code
+> change recommended.
 
 ## O. Schrödinger's quotation — `[...]` evaluates or defers by receiver — `design`
 
@@ -218,6 +328,12 @@ a deferred block when consumed by a word like `do`/`each`. There is no
 lexical way to tell which. (Note: `eval` does not exist; the evaluator
 is the overloaded word `do`.)
 
+> **Fix.** Done in docs (the Reference now explains list literals
+> evaluate, `quote` defers, and block-arg positions are held by their
+> receiver). This is the homoiconic core — no semantic change
+> recommended; the remediation is the accurate description already
+> shipped, plus an earlier tutorial example contrasting `[…]` and `do […]`.
+
 ## P. `lt`/`gt` compare across any types and never error — `design`
 
 ```
@@ -229,6 +345,13 @@ $ aql do '[3 "a" 1 true] sort'   => [true 1 3 'a']
 
 A universal total order `bool < number < string` means cross-type
 comparison silently succeeds; heterogeneous lists sort without error.
+
+> **Fix.** Keep the total order in `CompareValues`
+> (`eng/go/compare_types.go`) so `sort`/`cmp` stay defined on mixed
+> lists, but make the *boolean comparison words* `lt`/`gt`/`lte`/`gte`
+> reject cross-**family** operands (e.g. Number vs String) with a type
+> error. That stops `1 lt "a"` silently being `true` without losing
+> sortability. Risk: medium.
 
 ## Q/W. `convert Integer` takes a string but refuses a number — `bug`
 
@@ -242,6 +365,16 @@ Text-to-int works; number-to-int fails — even for whole-valued floats.
 The error message stringifies the float (`"3.0"`) and then claims it is
 not a number.
 
+> **Fix.** ⭐ The convert handler (`lang/go/native/native_type.go:723`,
+> `MakeConvert`) builds the target via `ValToString(src)` →
+> `strconv.ParseInt`, so a numeric `src` is stringified and then fails to
+> reparse. Add a numeric-source branch *before* stringifying: if `src` is
+> already a `Number`, convert numerically (`Decimal`/`Float`→`Integer` by
+> truncation, `Integer`→float by `float64()`), and fix the error message.
+> Low risk — only adds conversions that currently error. (See also V:
+> this is a *different* `MakeConvert` from the one `make` uses — unify
+> them.)
+
 ## R. Missing data is `None` in some places and a crash in others — `design`
 
 ```
@@ -254,6 +387,13 @@ $ aql do '{a: 1} . a . b'      => error: no matching signature for get   # field
 Silent `None` from bad indices means off-by-one and accidental-negative
 bugs vanish until a downstream stage chokes.
 
+> **Fix.** Pick one rule and apply it symmetrically. Recommended: keep
+> lenient `get`/`.` → `none` (the strict `getr`/`!.` already exists for
+> fail-loud), and make scalar member-access *also* return `none` instead
+> of a signature error. Separately decide negative list indices —
+> implement Python-style end-indexing or make a negative index an error;
+> silent `none` is the worst of the three. Risk: low-medium.
+
 ## S. `"${...}"` interpolation works only in backtick strings — `doc`/`design`
 
 ```
@@ -264,6 +404,11 @@ $ aql do -- '`sum is ${1 add 2}`'   => sum is 3            # backticks: interpol
 A `${}` in a double-quoted string is emitted verbatim with no
 diagnostic.
 
+> **Fix.** Documented (interpolation is a backtick-string feature).
+> Optional safety net: have the lexer emit a check-time warning when an
+> un-escaped `${` appears in a double-quoted string, since that is almost
+> always a mistyped template. Low risk.
+
 ## T. Duplicate map-literal keys collapse silently — `design`
 
 ```
@@ -271,6 +416,12 @@ $ aql do '{a: 1, a: 2}'   => {a:2}
 ```
 
 Last write wins; no duplicate-key warning.
+
+> **Fix.** ⭐ In the map-literal construction path (parser / `OrderedMap`
+> builder), raise a parse/build error on a duplicate literal key (or at
+> least a check-time warning). Cheap, high-value for a query language
+> where map literals describe records and config. Low risk — a duplicate
+> literal key is essentially always a typo.
 
 ## U. The `=>` in every doc example is the anonymous-function arrow — `doc`
 
@@ -297,6 +448,9 @@ optional ` — description` after the value is ignored), so every example
 stays CI-verified. `=>` now appears in the docs only where the docs
 *describe* the `afn` operator itself.
 
+> **Fix.** ✅ Resolved (see Resolution above). The convention change and
+> harness update are committed.
+
 ## V. `:Number` record fields launder strings into numbers — `design`/`bug`
 
 ```
@@ -308,6 +462,14 @@ $ aql do -- 'def P refine Record [x:Number] end make P [true]'   => error: canno
 A `:Number` field coerces by stringify-then-reparse rather than
 rejecting non-numbers. `make P [true]` exposes the mechanism. Note this
 contradicts Exhibit Q/W: `make` coerces freely while `convert` refuses.
+
+> **Fix.** `make` uses its own `MakeConvert` (`eng/go/core_make.go:680`)
+> that stringifies the source and `ParseInt`/`ParseFloat`s it. Make field
+> construction **strict** — a `:Number` field rejects a non-`Number`
+> rather than coercing a numeric-looking string — and **unify** with the
+> `convert` path (Q/W) so the two agree on what "to a number" means.
+> Risk: medium — anyone relying on string→number coercion in `make`
+> breaks, but the type annotation should mean what it says.
 
 ## X. Moving `if` one position turns a 3-step countdown into a 1 GB stack blowup — `design`/`bug`
 
@@ -322,6 +484,14 @@ $ aql do -- 'def cd fn [[n:Integer][Integer][n 0 eq [0] [n 1 sub cd] if]] 3 cd'
 In suffix position, forward collection mis-binds `if`'s arguments so the
 base case never fires.
 
+> **Fix.** Add a call-depth (or step) counter to the engine step loop
+> with a configurable limit that raises a clean `[aql/recursion_limit]`
+> error *before* the Go stack is exhausted. That bounds this case and
+> Y's `runaway`. Separately, the suffix-`if` mis-binding is the
+> forward-collection trap (C) striking a control word — the depth guard
+> turns the symptom from a 1 GB crash into a clear diagnostic. Risk:
+> low-medium; choose a generous default depth.
+
 ## Y. Stack overflow is reported with two wrong names — `bug`
 
 ```
@@ -334,6 +504,12 @@ parentheses (which are balanced). The other overflow path (Exhibit X)
 reports `runtime: goroutine stack exceeds 1GB`. Neither says "recursion
 too deep."
 
+> **Fix.** Same depth guard as X (front-runs the overflow with a clean
+> `[aql/recursion_limit]`). Additionally, the `recover()` in
+> `eng/go/engine.go:361` should map a Go stack-overflow panic to that
+> error instead of falling through to the `unmatched opening parenthesis`
+> message (`engine.go:562`), which is unrelated. Risk: low.
+
 ## Z. Two distinct "nothing" values that are not equal — `design`
 
 ```
@@ -344,6 +520,12 @@ $ aql do -- 'null none eq'     => false
 
 `null` (list gap-filler) and `none` (`None({})`) are different bottom
 values and compare unequal.
+
+> **Fix.** ⭐ Unify on a single nothing: eliminate the separate `null`
+> value (the empty-slot gap-filler — see AA — should be a parse error,
+> not a `null`), so `none` is the only bottom. If `null` must remain for
+> some interop reason, make it `eq none`. Low risk once AA is fixed,
+> since `null` then has no way to enter a program.
 
 ## AA. A double comma fabricates a `null` element — `design`/`bug`
 
@@ -356,6 +538,11 @@ $ aql do -- '[1,,2]'      => [1 null 2]   # double comma invents an element
 Commas are decorative no-ops everywhere except an empty slot between
 two, which materialises a `null` and lengthens the list.
 
+> **Fix.** ⭐ Make an empty element between commas a parse error
+> (`[1,,2]` → "empty list element") in the list/map literal parser. This
+> also closes Z by removing the only way `null` enters a program. Low
+> risk — empty slots are virtually always typos.
+
 ## AB. A typo'd float yields a signature error about `get` — `design`
 
 ```
@@ -364,6 +551,11 @@ $ aql do '1.2.3'   => error: [aql/signature_error]: no matching signature for ge
 
 `1.2.3` lexes as `1.2` then `.` (field access) then `3`. The diagnostic
 points at an accessor the user never wrote.
+
+> **Fix.** Add a lexer rule: a numeric literal already containing a `.`
+> immediately followed by `.<digit>` is a malformed number — raise
+> `invalid numeric literal '1.2.3'` rather than silently re-reading the
+> second `.` as the accessor word. Low risk.
 
 ## AC. Strings are not indexable and have no built-in length; maps are not `each`-able — `design`
 
@@ -377,6 +569,11 @@ String index and length (`len`/`length`) are absent from the base
 vocabulary (length is an unimported module word); `each` iterates lists
 but not maps.
 
+> **Fix.** Additive, low risk: give `get`/`.` a `String × Integer →
+> String` signature (grapheme index), extend the existing `size` to
+> strings (and surface it / `len` in the base vocabulary), and add an
+> `each` signature for `Map` that iterates entries.
+
 ## AD. Two fields of the same record cannot be added inline — `design`
 
 ```
@@ -386,6 +583,12 @@ $ aql do -- '{first: 1 second: 2} . first add . second'
 
 Forward collection has `add` reach past the `. second` accessor word.
 `record.first + record.second` requires parentheses or stack juggling.
+
+> **Fix.** Same root as C — forward collection. No semantic change
+> recommended; the stranded-value `aql check` warning proposed in C would
+> flag this pattern, and the docs show the parenthesised form. A dotted
+> `.`-chain already binds tightly; the trap is purely `add` reaching
+> forward past it.
 
 ---
 
@@ -444,3 +647,21 @@ the docs already discuss the topic) were edited:
   string indexing (AC) where the relevant section already exists.
 
 No engine behaviour was changed. Every **bug** above remains live.
+
+## Suggested remediation priority
+
+Sequenced by value-to-risk. The first column is unambiguous correctness
+with near-zero compatibility cost; the second needs an owner to commit
+to what AQL's types *mean*; the third is documentation/lint or additive.
+
+| Do now (cheap, clearly-right) | Decide then do (behavioural) | Docs / lint / additive |
+| --- | --- | --- |
+| Q/W convert numeric ⭐ · B `-7` flag ⭐ · T duplicate keys ⭐ · AA/Z empty-slot → `null` ⭐ · AB `1.2.3` lexer · X/Y recursion-depth guard · A `describe` import hint | E truthiness · F `and`/`or` · G `add` concat · V `make` strict (unify with `convert`) · P cross-type compare · H `div`/`eq` · L `Decimal`→`Float` + numeric tower · M reserved names | C / AD forward-collection `check` warning · N · O · R policy · S `${}` warning · AC string index / `len` / map `each` |
+
+Most of the middle column traces to one root the audit kept hitting:
+**coercion is doing the type system's job** (E, F, G, V, H). They are
+best resolved as a single coherent "numeric/coercion" proposal rather
+than piecemeal. L (rename `Decimal` → `Float`, reserve `Decimal` for a
+true arbitrary-precision type) is the anchor of that proposal.
+
+These remain recommendations; no fix here is applied.
