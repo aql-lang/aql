@@ -294,10 +294,30 @@ Shipped:
 
 Coverage: `eng/go/dynamic_match_test.go` (the not-disjoint rule across
 Any / Integer / disjunct bounds + the strict contrast) and
-`TestDynamicContextGetGradualMatch` (end-to-end). Deferred to later
-slices: the remaining escape-hatch bounds, narrowing-through-use + guard
-discharge, the first-match partition for the dispatch *result*, and
-trace rendering (`dynamic(T)` vs the bound's bare name).
+`TestDynamicContextGetGradualMatch` (end-to-end).
+
+**Status (slice 2 landed 2026-06-05). Contagion + guard discharge — the
+lifecycle.** The modality now *flows* and is *dischargeable*:
+
+- *Gradual contagion* (`carrierResults`, `eng/go/carrier.go`): a result
+  derived from a dynamic carrier is itself dynamic (bound = the sig's
+  declared return), so the modality propagates downstream instead of
+  dying after one dispatch. `context get "k" "x" get 1 add` now checks
+  clean — the dynamic flows through `get` and matches `add`'s `Number`
+  slot, where a strict `Carry<Any>` from `get` would have failed. Sound:
+  contagion only loosens matching.
+- *Guard discharge*: a guard on a dynamic binding restores strict typing.
+  `ApplyGuardNarrowing` already pushes a strict `NewCarrier(T)`, so inside
+  `if [x is Integer] [...]` the dynamic `x` is strictly `Integer` — a
+  provably disjoint use (`x "s" join`) is flagged, while the bare dynamic
+  value would have admitted it, and a valid use (`x 1 add`) passes.
+
+Coverage: `TestDynamicResultContagion` (eng), `TestDynamicContagionFlows`
++ `TestDynamicGuardDischarge` (lang). Still deferred: the remaining
+escape-hatch bounds, *precise* narrowing-through-use (downstream uses of
+a named binding tighten to `T ∩ S` — needs arg provenance), the
+first-match partition for the result bound (currently the declared
+return), and trace rendering.
 
 ### 3. Dead-overload detection — Elixir's dead-clause check, generalised
 

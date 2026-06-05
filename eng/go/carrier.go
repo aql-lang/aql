@@ -286,17 +286,17 @@ func isLiteralWord(v Value) bool {
 // args that would be passed to the runtime handler). pos carries the
 // word's source location so diagnostics can point at it.
 func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos SrcPos) []Value {
-	if sig.ReturnsFn != nil {
+	var out []Value
+	switch {
+	case sig.ReturnsFn != nil:
 		raw := sig.ReturnsFn(args, r)
-		out := make([]Value, len(raw))
+		out = make([]Value, len(raw))
 		for i, v := range raw {
 			out[i] = toCarrier(v)
 		}
-		return out
-	}
-	// Explicit nil (no annotation) triggers the fallback. An empty but
-	// non-nil slice is a valid "returns nothing" declaration.
-	if sig.Returns == nil {
+	case sig.Returns == nil:
+		// Explicit nil (no annotation) triggers the fallback. An empty but
+		// non-nil slice is a valid "returns nothing" declaration.
 		r.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "missing_returns",
 			Detail: "word " + word + " has no declared Returns for matched signature; assuming Any",
@@ -304,13 +304,39 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 			Row:    pos.Row,
 			Col:    pos.Col,
 		})
-		return []Value{NewCarrier(TAny)}
+		out = []Value{NewCarrier(TAny)}
+	default:
+		out = make([]Value, len(sig.Returns))
+		for i, t := range sig.Returns {
+			out[i] = NewCarrier(t)
+		}
 	}
-	out := make([]Value, len(sig.Returns))
-	for i, t := range sig.Returns {
-		out[i] = NewCarrier(t)
+	// Gradual contagion (design/dynamic-modality-report.0.md): a result
+	// derived from a dynamic carrier is itself dynamic, so the modality
+	// flows downstream instead of dying after one dispatch. The bound is
+	// the sig's declared return (the first-cut result; the full
+	// first-match partition over the bound is a later slice). Sound — it
+	// only loosens matching, never tightens — and a guard discharges it
+	// back to strict. ReturnsFn results that are already dynamic (e.g.
+	// ReturnsIdentity of a dynamic input) stay so via toCarrier.
+	if anyDynamicCarrier(args) {
+		for i := range out {
+			out[i].Carrier = true
+			out[i].Dynamic = true
+		}
 	}
 	return out
+}
+
+// anyDynamicCarrier reports whether any value is a dynamic carrier — the
+// trigger for gradual contagion in carrierResults.
+func anyDynamicCarrier(vs []Value) bool {
+	for _, v := range vs {
+		if v.Dynamic {
+			return true
+		}
+	}
+	return false
 }
 
 // ReturnsIdentity is a ReturnsFunc helper that returns its inputs

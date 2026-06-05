@@ -63,6 +63,28 @@ func TestDynamicCarrierMatch(t *testing.T) {
 	}
 }
 
+// TestDynamicResultContagion pins gradual contagion: a result derived
+// from a dynamic carrier is itself dynamic (so the modality flows
+// downstream), with the sig's declared return as its bound — while a
+// result from only strict args stays strict.
+func TestDynamicResultContagion(t *testing.T) {
+	r, _ := NewRegistry()
+	sig := &Signature{Returns: []*Type{TInteger}}
+
+	strict := carrierResults(r, "w", sig, []Value{NewCarrier(TString)}, SrcPos{})
+	if len(strict) != 1 || strict[0].Dynamic {
+		t.Errorf("strict args must yield a strict result, got Dynamic=%v", strict[0].Dynamic)
+	}
+
+	dyn := carrierResults(r, "w", sig, []Value{NewDynamicCarrier(TAny)}, SrcPos{})
+	if len(dyn) != 1 || !dyn[0].Dynamic {
+		t.Fatalf("a dynamic arg must make the result dynamic, got Dynamic=%v", dyn[0].Dynamic)
+	}
+	if !dyn[0].Parent.Equal(TInteger) {
+		t.Errorf("contagion result bound = %s, want the declared return Integer", dyn[0].Parent)
+	}
+}
+
 // TestDynamicCarrierConstructors pins the invariants of the dynamic
 // constructors: Dynamic implies Carrier, the bound is preserved, and
 // toCarrier never strips a dynamic carrier (which would null its bound).
