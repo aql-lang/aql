@@ -234,6 +234,20 @@ func FlexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
 // satisfy ordinary value slots (Carrier{Integer} matches TInteger)
 // and are rejected at TypeArgs slots by sigTypeMatchesAsType.
 func sigTypeMatches(v Value, t *Type) bool {
+	// Gradual (dynamic) carrier: matches the slot unless its bound is
+	// PROVABLY disjoint from t — the not-disjoint rule, the optimistic
+	// dual of strict ConformsTo (design/dynamic-modality-report.0.md).
+	// Reuses `tand` for the disjointness proof; dynamic(Any) matches
+	// every inhabited slot, dynamic(Integer) fails only provably-disjoint
+	// slots (String, Atom, …). Checked first so a dynamic carrier never
+	// falls into the strict path below. The flag is cleared on the
+	// operand copy so the bound flows through `tand` as an ordinary
+	// carrier.
+	if v.Dynamic {
+		bound := v
+		bound.Dynamic = false
+		return !isNeverShape(TandValues(bound, NewCarrier(t)))
+	}
 	if v.Is(t) {
 		return true
 	}

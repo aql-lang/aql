@@ -272,6 +272,33 @@ join all candidates. Document the policy alongside `SortSignatures`.
 **Effort.** ~6–10 dev days. Largest item; deepest payoff. Stage behind
 items 1 and 3.
 
+**Status (slice 1 landed 2026-06-05). Foundation + match rule + first
+escape hatch.** The full design is `design/dynamic-modality-report.0.md`.
+Shipped:
+
+- *Representation.* A `Dynamic bool` modality on the carrier
+  (`eng/go/value.go`; implies `Carrier`), with `NewDynamicCarrier(t)` /
+  `NewDynamicCarrierValue(bound)` (`eng/go/carrier.go`). `toCarrier`
+  preserves dynamic carriers so stripping never nulls the bound.
+- *Compatibility rule.* `sigTypeMatches` (`eng/go/signature.go`) gains a
+  not-disjoint branch gated on `v.Dynamic`: a dynamic carrier matches a
+  slot unless `tand(bound, slot)` is `Never`. `dynamic(Any)` matches
+  every inhabited slot; `dynamic(Integer)` fails only provably-disjoint
+  slots. Non-dynamic dispatch is byte-for-byte unchanged (the contrast
+  `strict Carry<Any>` still fails `Integer`).
+- *First escape hatch.* `context get` on a statically-untracked key now
+  emits `dynamic(Any)` instead of strict `Carry<Any>`
+  (`native_storage.go::getStoreReturnsFn`), so `context get "k" 1 add`
+  type-checks (gradual match into the `Number` slot) where it previously
+  degraded. Tracked keys keep their strict carrier.
+
+Coverage: `eng/go/dynamic_match_test.go` (the not-disjoint rule across
+Any / Integer / disjunct bounds + the strict contrast) and
+`TestDynamicContextGetGradualMatch` (end-to-end). Deferred to later
+slices: the remaining escape-hatch bounds, narrowing-through-use + guard
+discharge, the first-match partition for the dispatch *result*, and
+trace rendering (`dynamic(T)` vs the bound's bare name).
+
 ### 3. Dead-overload detection — Elixir's dead-clause check, generalised
 
 **Gap.** AQL flags dead `if` branches (`unreachable_branch`) but not dead

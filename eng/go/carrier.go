@@ -32,6 +32,27 @@ func NewCarrier(t *Type) Value {
 	return v
 }
 
+// NewDynamicCarrier constructs a bounded gradual carrier dynamic(t):
+// a carrier whose Parent is the BOUND t and whose Dynamic flag flips
+// matching to the not-disjoint rule (design/dynamic-modality-report.0.md).
+// dynamic(Any) is the classic gradual `any` — compatible with every
+// slot. Use this at an escape hatch where the checker has a best static
+// bound but cannot prove the exact type.
+func NewDynamicCarrier(t *Type) Value {
+	v := NewCarrier(t)
+	v.Dynamic = true
+	return v
+}
+
+// NewDynamicCarrierValue promotes an existing carrier value (e.g. a
+// disjunct carrier for dynamic(A tor B), or a narrowed bound) to the
+// dynamic modality, preserving its Parent/Data bound.
+func NewDynamicCarrierValue(bound Value) Value {
+	bound.Carrier = true
+	bound.Dynamic = true
+	return bound
+}
+
 // NewCarrierTypedList constructs a typed-list carrier — a list
 // carrier whose element type is known. Implemented as a regular
 // Value with Parent=TList and Data=ChildTypeInfo{Child: NewCarrier(elem)}.
@@ -136,6 +157,12 @@ func toCarrier(v Value) Value {
 	if IsWord(v) || IsForward(v) || IsMark(v) || IsMove(v) ||
 		IsOpenParen(v) || IsParenExpr(v) || IsInterpString(v) ||
 		IsReturnCheck(v) || IsDefCleanup(v) {
+		return v
+	}
+	// A dynamic carrier already IS a carrier; its Parent/Data is the
+	// gradual bound (which may be a disjunct). Return it unchanged so
+	// stripping never nulls the bound or clears the Dynamic flag.
+	if v.Dynamic {
 		return v
 	}
 	// Keep lists and maps concrete for now — matchSignature relies

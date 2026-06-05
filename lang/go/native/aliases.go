@@ -338,6 +338,8 @@ var (
 	NewCarrier               = eng.NewCarrier
 	NewCarrierTypedList      = eng.NewCarrierTypedList
 	NewCarrierTypedListValue = eng.NewCarrierTypedListValue
+	NewDynamicCarrier        = eng.NewDynamicCarrier
+	NewDynamicCarrierValue   = eng.NewDynamicCarrierValue
 	// NewClkDuration moved to lang/go/engine/native_temporal.go (Step 8).
 	// NewDate / NewDateTime moved to lang/go/engine/native_temporal.go (Step 8).
 	NewDecimal     = eng.NewDecimal

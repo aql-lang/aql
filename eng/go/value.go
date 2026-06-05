@@ -774,6 +774,14 @@ type Value struct {
 	Pos       SrcPos  // source position for error reporting (zero value = unknown)
 	Undefined bool    // atom created from an undefined word (error if left on result stack)
 	Carrier   bool    // static-typecheck carrier (type-only, Data stripped of concrete payload)
+	// Dynamic marks a carrier as a bounded gradual value (Elixir-style
+	// dynamic(T) — design/dynamic-modality-report.0.md). Implies Carrier.
+	// Its Parent/Data is a BOUND, not a proven type: at a signature
+	// boundary it matches the slot unless PROVABLY disjoint from it
+	// (not-disjoint rule), rather than by strict ConformsTo. Set only on
+	// carriers the checker cannot prove exactly (escape hatches); cleared
+	// by a successful guard, which discharges the gradual obligation.
+	Dynamic bool
 }
 
 // idRand is the package-level RNG used for ID generation.

@@ -237,7 +237,17 @@ func getStoreHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 }
 
 func getStoreReturnsFn(args []Value, r *Registry) []Value {
-	v, _ := r.Check.LookupContextType(StoreKey(args[0]))
+	v, ok := r.Check.LookupContextType(StoreKey(args[0]))
+	if !ok {
+		// Escape hatch: the checker has no proven type for this key.
+		// Emit a bounded gradual carrier dynamic(Any) — optimistically
+		// compatible with any slot — rather than strict Carry<Any>, which
+		// would fail every typed slot downstream and force a no_signature
+		// or Any catch-all. (design/dynamic-modality-report.0.md, escape
+		// hatch 1.) A key recorded by a prior `set` keeps its real, strict
+		// carrier.
+		return []Value{NewDynamicCarrier(TAny)}
+	}
 	return []Value{v}
 }
 
