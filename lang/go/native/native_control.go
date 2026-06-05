@@ -165,27 +165,18 @@ func doEvalList(r *Registry, elems []Value) ([]Value, error) {
 	return result, nil
 }
 
-// doEvalDataList evaluates a list from data context (inside a map).
-// Strings that name registered functions are promoted to words.
+// doEvalDataList evaluates a list value inside a `do` map as code.
+// Unquoted words in the list arrive as Word values and run normally
+// (`do {a:[add 1 2]}` → {a:3}); quoted strings and atoms are DATA and
+// are left untouched — a `do {a:["if"]}` stores the string "if", it
+// does not dispatch the `if` word. Respecting the quote is what keeps
+// data values whose text happens to name a word (`"if"`, `"get"`,
+// `"do"`) storable without boxing tricks (voxgig DX report T4).
 func doEvalDataList(r *Registry, elems []Value) ([]Value, error) {
 	sub := New(r)
 	input := make([]Value, len(elems))
-	for i, e := range elems {
-		input[i] = doPromoteToWord(r, e)
-	}
+	copy(input, elems)
 	return sub.Run(input)
-}
-
-// doPromoteToWord converts a string or atom value to a word if it
-// names a registered function.
-func doPromoteToWord(r *Registry, v Value) Value {
-	if v.Parent.ConformsTo(TString) || v.Parent.ConformsTo(TAtom) {
-		name, _ := AsString(v)
-		if r.Lookup(name) != nil {
-			return NewWord(name)
-		}
-	}
-	return v
 }
 
 // doEvalMapValue recursively evaluates list values within a map. Used

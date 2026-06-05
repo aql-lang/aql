@@ -559,5 +559,37 @@ func TestMapExprShorthandUnboundErrors(t *testing.T) {
 	assertErrorContains(t, err, "undefined", "foo")
 }
 
+// TestDoMapListValueRespectsQuoting pins voxgig DX report T4: a list
+// value inside a `do` map evaluates unquoted words as code, but leaves
+// quoted strings and atoms as DATA — so a stored value whose text
+// happens to name a registered word (`"if"`, `"get"`, `"do"`) is kept,
+// not dispatched. Before the fix, the promote-strings-to-words step
+// dispatched them, forcing the boxing workaround the report describes
+// (and breaking even that).
+func TestDoMapListValueRespectsQuoting(t *testing.T) {
+	cases := []struct{ name, src, want string }{
+		// Data preserved — quoted strings that name words stay as strings.
+		{"word-name string if", `do {val:["if"]}`, `{val:'if'}`},
+		{"word-name string get", `do {a:["get"]}`, `{a:'get'}`},
+		{"word-name string do", `do {a:["do"]}`, `{a:'do'}`},
+		{"non-word string", `do {a:["hello"]}`, `{a:'hello'}`},
+		// Code still runs — unquoted words evaluate as before.
+		{"unquoted word runs", `do {a:[add 1 2]}`, `{a:3}`},
+		{"unquoted bound name resolves", `def x 5 do {a:[x]}`, `{a:5}`},
+		{"plain value list passes through", `do {a:[1 2 3]}`, `{a:[1 2 3]}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := runExpr(t, tc.src)
+			if err != nil {
+				t.Fatalf("%s: unexpected error: %v", tc.src, err)
+			}
+			if got := formatStack(out); got != tc.want {
+				t.Errorf("%s\n got: %s\nwant: %s", tc.src, got, tc.want)
+			}
+		})
+	}
+}
+
 // suppress unused import warning
 var _ = strings.Join

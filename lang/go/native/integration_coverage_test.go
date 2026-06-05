@@ -850,8 +850,10 @@ func TestIntegDoList(t *testing.T) {
 func TestIntegDoMap(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	// do {x: [3 add 4]}
-	innerList := NewList([]Value{NewInteger(3), NewString("add"), NewInteger(4)})
+	// do {x: [3 add 4]} — `add` is an unquoted Word, exactly as the
+	// parser produces it from source; a `do`-map list runs words as code.
+	// (A quoted "add" String is data and is left untouched — DX report T4.)
+	innerList := NewList([]Value{NewInteger(3), NewWord("add"), NewInteger(4)})
 	m := NewOrderedMap()
 	m.Set("x", innerList)
 	result := runAQL(t, r, []Value{NewWord("do"), NewMap(m)})
@@ -869,8 +871,9 @@ func TestIntegDoMap(t *testing.T) {
 func TestIntegDoNestedMap(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	// do {outer: {inner: [2 add 3]}}
-	innerList := NewList([]Value{NewInteger(2), NewString("add"), NewInteger(3)})
+	// do {outer: {inner: [2 add 3]}} — `add` is an unquoted Word (as the
+	// parser yields), which a `do`-map list evaluates as code.
+	innerList := NewList([]Value{NewInteger(2), NewWord("add"), NewInteger(3)})
 	innerMap := NewOrderedMap()
 	innerMap.Set("inner", innerList)
 	outerMap := NewOrderedMap()

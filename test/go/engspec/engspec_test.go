@@ -1361,9 +1361,7 @@ func doEvalMapValue(r *eng.Registry, v eng.Value) (eng.Value, error) {
 		lst, _ := eng.AsList(v)
 		sub := eng.New(r)
 		input := make([]eng.Value, lst.Len())
-		for i, e := range lst.Slice() {
-			input[i] = doPromoteToWord(r, e)
-		}
+		copy(input, lst.Slice())
 		results, err := sub.Run(input)
 		if err != nil {
 			return eng.Value{}, err
@@ -1390,19 +1388,6 @@ func doEvalMapValue(r *eng.Registry, v eng.Value) (eng.Value, error) {
 		return eng.NewMap(out), nil
 	}
 	return v, nil
-}
-
-// doPromoteToWord converts a string or atom to a Word when the
-// payload names a registered function — so `{op:[1 "add" 2]}` lets
-// `do` dispatch "add" as a callable inside the embedded list.
-func doPromoteToWord(r *eng.Registry, v eng.Value) eng.Value {
-	if v.Parent.ConformsTo(eng.TString) || v.Parent.ConformsTo(eng.TAtom) {
-		name, _ := eng.AsString(v)
-		if r.Lookup(name) != nil {
-			return eng.NewWord(name)
-		}
-	}
-	return v
 }
 
 // registerEngSpecTypeOps installs tor/tand as spec-runner fixtures
