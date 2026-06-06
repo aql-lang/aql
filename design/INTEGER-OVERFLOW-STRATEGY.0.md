@@ -1,10 +1,15 @@
 # Integer Overflow — Strategy
 
-Status: **proposal / design-only**. No engine behaviour is changed by
-this document. It expands [WAT-AUDIT](WAT-AUDIT.0.md) Exhibit K
-("Integer overflow has two contradictory silent behaviours"), establishes
-what AQL actually does today (which is worse than the audit recorded),
-surveys what other languages do, and recommends a phased strategy.
+Status: **Phase 0 implemented; Phase 1 proposed**. This document expands
+[WAT-AUDIT](WAT-AUDIT.0.md) Exhibit K ("Integer overflow has two
+contradictory silent behaviours"), establishes what AQL did before the
+fix (which was worse than the audit recorded), surveys what other
+languages do, and recommends a phased strategy. **Phase 0 (the real
+integer lexer + checked, uniformly-erroring arithmetic) has been
+implemented** — see [Phase 0 status](#phase-0-status) below. The §1
+transcripts describe the *pre-fix* behaviour they motivated; they no
+longer reproduce against the current tree. Phase 1 (arbitrary-precision
+`Integer`) remains a proposal.
 
 Notation: examples use the `# returns …` convention (a trailing comment,
 the documentation result form — see REFERENCE). `cmd/go/bin/aql` at the
@@ -268,6 +273,33 @@ After Phase 0, AQL is *consistent and honest*: every overflow, in the
 lexer or the runtime, in any word, produces the same clean error. No
 silent wrong answer survives. This is shippable on its own and is the
 correctness floor under either Phase-1 outcome.
+
+#### Phase 0 status
+
+**Done.** As implemented:
+
+- **0a (lexer).** `setupNumberSub` (`eng/go/parser/grammar.go`) now
+  carries the source digits for *every* number token, and
+  `numberValToValue` (`eng/go/parser/parse.go`) parses a *plain decimal
+  integer* (optional `-`, digits, `_` separators) from its exact text
+  with `strconv.ParseInt`. `9007199254740993` is now its true value (was
+  silently `…992`); `9223372036854775807` is finally a usable `Integer`
+  (was a `Float`); an out-of-range literal raises
+  `[aql/integer_overflow]`. Base-prefixed (`0x`/`0o`/`0b`) and scientific
+  (`1e3`) literals are deliberately left on the existing float-derived
+  path, so jsonic's base interpretation and the `1e3 → Integer` /
+  `1.5 → Float` rules are unchanged.
+- **0b (runtime).** `add`/`sub`/`mul`/`pow`
+  (`lang/go/native/native_math.go`) use checked int64 helpers
+  (`checkedAddInt`/`checkedSubInt`/`checkedMulInt`/`checkedPowInt`) and
+  raise `[aql/integer_overflow]` uniformly on overflow instead of
+  wrapping. Float handlers are untouched (they saturate to ±Inf).
+- **Tests.** Parser exactness/overflow + non-decimal preservation
+  (`eng/go/parser/parse_test.go`), checked-helper boundary tests
+  (`lang/go/native/checked_arith_test.go`), and spec rows
+  (`lang/spec/arithmetic.tsv` §6, positive + negative).
+- **Docs.** `REFERENCE.md` and the `add`/`sub`/`mul`/`pow` help entries
+  now state the int64 range and the overflow-is-an-error contract.
 
 ### Phase 1 — arbitrary-precision Integer (decide, then do)
 

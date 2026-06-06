@@ -9,6 +9,9 @@ func init() {
 		Description: "Adds two numeric values. When both are integers the result is an integer; " +
 			"if either is a float the result is a float. For non-numeric scalars, " +
 			"concatenates their string representations.",
+		Notes: []string{
+			"Integer overflow raises [aql/integer_overflow]; use a Float operand for an approximate result.",
+		},
 	})
 
 	register(&Entry{
@@ -17,12 +20,18 @@ func init() {
 		Description: "All three call forms `a b sub`, `a sub b`, and `sub b a` " +
 			"compute a - b. The handler returns args[1] - args[0]; under the " +
 			"argument-order rule args[0] is the rightmost source-position arg.",
+		Notes: []string{
+			"Integer overflow raises [aql/integer_overflow]; use a Float operand for an approximate result.",
+		},
 	})
 
 	register(&Entry{
 		Word:        "mul",
 		Summary:     "Multiply two numbers.",
 		Description: "Multiplies two numeric values (commutative).",
+		Notes: []string{
+			"Integer overflow raises [aql/integer_overflow]; use a Float operand for an approximate result.",
+		},
 	})
 
 	register(&Entry{
@@ -49,6 +58,7 @@ func init() {
 			"compute a^b.",
 		Notes: []string{
 			"Negative exponents produce an error for integer pow.",
+			"Integer overflow raises [aql/integer_overflow]; use a Float operand for an approximate result.",
 		},
 	})
 

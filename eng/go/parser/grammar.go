@@ -1,8 +1,6 @@
 package parser
 
 import (
-	"strings"
-
 	"github.com/aql-lang/aql/eng/go"
 	jsonic "github.com/jsonicjs/jsonic/go"
 )
@@ -768,13 +766,20 @@ func setupInterpGrammar(j *jsonic.Jsonic, t parserTokens) {
 	})
 }
 
-// setupNumberSub registers a token subscriber that wraps decimal number
-// tokens in a numberVal struct so the converter can distinguish "5" (integer)
-// from "5.0" (decimal).
+// setupNumberSub registers a token subscriber that wraps every number
+// token in a numberVal struct carrying the original source text. The
+// source text lets the converter (1) distinguish "5" (integer) from
+// "5.0" (decimal), and (2) parse plain decimal integers from their exact
+// digits via strconv.ParseInt rather than round-tripping through the
+// float64 jsonic already produced — float64 silently corrupts any
+// integer above 2^53, so the source string is the only exact record.
+// See numberValToValue and design/INTEGER-OVERFLOW-STRATEGY.0.md.
 func setupNumberSub(j *jsonic.Jsonic) {
 	j.Sub(func(tkn *jsonic.Token, rule *jsonic.Rule, ctx *jsonic.Context) {
-		if tkn.Tin == jsonic.TinNR && strings.Contains(tkn.Src, ".") {
-			tkn.Val = numberVal{Val: tkn.Val.(float64), Src: tkn.Src}
+		if tkn.Tin == jsonic.TinNR {
+			if f, ok := tkn.Val.(float64); ok {
+				tkn.Val = numberVal{Val: f, Src: tkn.Src}
+			}
 		}
 	}, nil)
 }

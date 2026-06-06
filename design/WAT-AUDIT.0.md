@@ -256,15 +256,19 @@ from `add`. The other two are **runtime** wraps: `pow` and `mul` do raw
 int64 arithmetic that silently overflows two's-complement. Neither path
 flags anything.
 
-> **Fix.** Two changes. (1) Lexer: parse integer literals with
-> `strconv.ParseInt` and, on `ErrRange`, raise `integer literal out of
-> range` instead of silently falling back to `Decimal` (or adopt
-> `big.Int` for true bignums — larger change). (2) Runtime: in
-> `numericBinaryHandler`'s `intFn` (`lang/go/native/native_helpers.go:33`)
-> and the `pow` loop (`native_math.go`), use checked arithmetic
-> (`math/bits.Mul64`/`Add64` or an overflow test) and apply **one**
-> policy — error, or promote to `Decimal` — uniformly across
-> `add`/`sub`/`mul`/`pow`. Risk: medium; changes boundary results.
+> **Fix.** ✅ **Phase 0 done** (see
+> [INTEGER-OVERFLOW-STRATEGY](INTEGER-OVERFLOW-STRATEGY.0.md), which also
+> documents that the lexer defect was worse than recorded — sub-2⁵³
+> literals were silently *value-corrupted*, not just floated). (1) Lexer:
+> plain decimal integer literals are now parsed from their exact digits
+> with `strconv.ParseInt`; an out-of-int64-range literal raises
+> `[aql/integer_overflow]` instead of silently degrading to `Float`.
+> (2) Runtime: `numericBinaryHandler`'s `intFn` and the `pow` loop use
+> checked arithmetic and raise `[aql/integer_overflow]` **uniformly**
+> across `add`/`sub`/`mul`/`pow` instead of wrapping. Phase 1 (adopt
+> `big.Int` for true bignums so overflow *promotes* rather than errors)
+> is proposed in the strategy doc and planned alongside the numeric
+> tower.
 
 ## L. The type named `Decimal` is binary float64 — `doc`/`design`
 
@@ -679,7 +683,11 @@ the docs already discuss the topic) were edited:
   `Decimal`/float (L), `convert` limits (Q/W), `null` vs `none` (Z), and
   string indexing (AC) where the relevant section already exists.
 
-No engine behaviour was changed. Every **bug** above remains live.
+No engine behaviour was changed *by the documentation pass*. Engine
+fixes have since landed for several items under their own changes —
+including **K** (integer overflow, Phase 0: see
+[INTEGER-OVERFLOW-STRATEGY](INTEGER-OVERFLOW-STRATEGY.0.md)) — as noted
+in each exhibit's ✅ markers above.
 
 ## Suggested remediation priority
 

@@ -516,7 +516,7 @@ func convertTopLevelValueInner(v any) (eng.Value, error) {
 		return convertInterpGroup(val)
 
 	case numberVal:
-		return numberValToValue(val), nil
+		return numberValToValue(val)
 
 	case float64:
 		return floatToValue(val), nil
@@ -781,7 +781,7 @@ func convertDataValueInner(v any) (eng.Value, error) {
 		return convertInterpGroup(val)
 
 	case numberVal:
-		return numberValToValue(val), nil
+		return numberValToValue(val)
 
 	case float64:
 		return floatToValue(val), nil
@@ -1209,12 +1209,87 @@ func floatToValue(f float64) eng.Value {
 	return eng.NewFloat(f)
 }
 
-// numberValToValue converts a numberVal (float64 + source) to the appropriate
-// AQL numeric value. If the source text contains a ".", the value is always
-// treated as a decimal — even for whole numbers like 5.0.
-func numberValToValue(nv numberVal) eng.Value {
+// numberValToValue converts a numberVal (float64 + source) to the
+// appropriate AQL numeric value.
+//
+//   - A source containing "." is always a Float (even whole-valued, e.g.
+//     5.0), using the float64 jsonic produced.
+//   - A *plain decimal integer* source (optional leading '-', then digits
+//     and '_' separators only — no base prefix, no exponent) is parsed
+//     from its exact digits with strconv.ParseInt. This is the fix for
+//     WAT Exhibit K: routing through float64 silently corrupts any
+//     integer above 2^53 (e.g. 9007199254740993 → ...992) and turns
+//     near-int64-max literals into Floats. An out-of-int64-range literal
+//     now raises [aql/integer_overflow] instead of silently degrading.
+//   - Everything else (scientific notation like 1e3, or a base prefix
+//     like 0x10 / 0o17 / 0b101) keeps the existing float64-derived path,
+//     which already matches jsonic's own base interpretation.
+//
+// See design/INTEGER-OVERFLOW-STRATEGY.0.md.
+func numberValToValue(nv numberVal) (eng.Value, error) {
 	if strings.Contains(nv.Src, ".") {
-		return eng.NewFloat(nv.Val)
+		return eng.NewFloat(nv.Val), nil
 	}
-	return floatToValue(nv.Val)
+	if isPlainDecimalInteger(nv.Src) {
+		n, err := strconv.ParseInt(stripUnderscores(nv.Src), 10, 64)
+		if err != nil {
+			return eng.Value{}, integerLiteralOverflowError(nv.Src)
+		}
+		return eng.NewInteger(n), nil
+	}
+	return floatToValue(nv.Val), nil
+}
+
+// isPlainDecimalInteger reports whether src is a base-10 integer literal:
+// an optional leading '-' followed by one or more decimal digits, with
+// '_' permitted as a digit separator. It deliberately rejects base
+// prefixes (0x/0o/0b) and exponents (1e3) so those keep the existing
+// float64-derived conversion and jsonic's base interpretation. Leading
+// zeros stay decimal (jsonic treats 010 as 10, not octal), which base-10
+// ParseInt also does.
+func isPlainDecimalInteger(src string) bool {
+	if src == "" {
+		return false
+	}
+	i := 0
+	if src[0] == '-' {
+		i = 1
+	}
+	if i == len(src) {
+		return false
+	}
+	sawDigit := false
+	for ; i < len(src); i++ {
+		c := src[i]
+		switch {
+		case c >= '0' && c <= '9':
+			sawDigit = true
+		case c == '_':
+			// separator; allowed between digits
+		default:
+			return false
+		}
+	}
+	return sawDigit
+}
+
+// stripUnderscores removes '_' digit separators so strconv.ParseInt
+// (base 10) accepts a source jsonic lexed with separators (e.g. 1_000).
+func stripUnderscores(src string) string {
+	if !strings.Contains(src, "_") {
+		return src
+	}
+	return strings.ReplaceAll(src, "_", "")
+}
+
+// integerLiteralOverflowError reports a decimal integer literal that does
+// not fit in int64. Until Integer becomes arbitrary-precision (Phase 1 of
+// design/INTEGER-OVERFLOW-STRATEGY.0.md), this is a hard parse error
+// rather than a silent fall-back to Float.
+func integerLiteralOverflowError(src string) error {
+	return &eng.AqlError{
+		Code:   "integer_overflow",
+		Detail: "integer literal out of range: " + src + " exceeds the Integer range (-9223372036854775808..9223372036854775807)",
+		Hint:   "use a Float literal (add a decimal point, e.g. " + src + ".0) if an approximate value is acceptable",
+	}
 }

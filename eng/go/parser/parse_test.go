@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -1242,6 +1243,124 @@ func TestParseMapWithFloat(t *testing.T) {
 	xVal, _ := m.Get("x")
 	if !xVal.Parent.ConformsTo(eng.TFloat) {
 		t.Errorf("expected decimal, got %s", xVal.Parent)
+	}
+}
+
+// --- Integer literal exactness & overflow (WAT Exhibit K, Phase 0a) ---
+
+// TestParseIntegerLiteralExact pins that decimal integer literals are
+// parsed from their exact digits (strconv.ParseInt), not round-tripped
+// through float64 — which silently corrupts any integer above 2^53.
+func TestParseIntegerLiteralExact(t *testing.T) {
+	cases := []struct {
+		src  string
+		want int64
+	}{
+		{"5", 5},
+		{"-7", -7},
+		{"0", 0},
+		{"9007199254740992", 9007199254740992},  // 2^53
+		{"9007199254740993", 9007199254740993},  // 2^53+1 — was silently → ...992
+		{"9007199254740995", 9007199254740995},  // 2^53+3 — was silently → ...996
+		{"9223372036854775807", math.MaxInt64},  // int64 max — was a Float
+		{"-9223372036854775808", math.MinInt64}, // int64 min
+		{"1_000", 1000},                         // underscore separators
+		{"010", 10},                             // leading zero is decimal, not octal
+		{"08", 8},                               // 8 is not a valid octal digit, but it's decimal here
+	}
+	for _, c := range cases {
+		got, err := Parse(c.src)
+		if err != nil {
+			t.Errorf("Parse(%q) error: %v", c.src, err)
+			continue
+		}
+		if len(got) != 1 {
+			t.Errorf("Parse(%q): expected 1 value, got %d", c.src, len(got))
+			continue
+		}
+		if !got[0].Parent.ConformsTo(eng.TInteger) {
+			t.Errorf("Parse(%q): expected Integer, got %s", c.src, got[0].Parent)
+			continue
+		}
+		n, aerr := eng.AsInteger(got[0])
+		if aerr != nil || n != c.want {
+			t.Errorf("Parse(%q): got value %d (err=%v), want %d", c.src, n, aerr, c.want)
+		}
+	}
+}
+
+// TestParseIntegerLiteralOverflow pins that a decimal integer literal
+// outside the int64 range is a hard [aql/integer_overflow] error rather
+// than a silent fall-back to Float.
+func TestParseIntegerLiteralOverflow(t *testing.T) {
+	for _, src := range []string{
+		"9223372036854775808",     // int64 max + 1
+		"-9223372036854775809",    // int64 min - 1
+		"99999999999999999999999", // far out of range
+	} {
+		_, err := Parse(src)
+		if err == nil {
+			t.Errorf("Parse(%q): expected an integer_overflow error, got nil", src)
+			continue
+		}
+		ae, ok := err.(*eng.AqlError)
+		if !ok || ae.Code != "integer_overflow" {
+			t.Errorf("Parse(%q): expected [aql/integer_overflow], got %v", src, err)
+		}
+	}
+}
+
+// TestParseNonDecimalLiteralsPreserved pins that scientific notation and
+// base-prefixed literals keep their existing conversion (they are NOT
+// routed through the new exact-decimal path, so jsonic's own base
+// interpretation stands).
+func TestParseNonDecimalLiteralsPreserved(t *testing.T) {
+	intCases := map[string]int64{
+		"1e3":   1000, // scientific, whole-valued → Integer (unchanged)
+		"0x10":  16,   // hex
+		"0o17":  15,   // octal
+		"0b101": 5,    // binary
+	}
+	for src, want := range intCases {
+		got, err := Parse(src)
+		if err != nil {
+			t.Errorf("Parse(%q) error: %v", src, err)
+			continue
+		}
+		if !got[0].Parent.ConformsTo(eng.TInteger) {
+			t.Errorf("Parse(%q): expected Integer, got %s", src, got[0].Parent)
+			continue
+		}
+		if n, _ := eng.AsInteger(got[0]); n != want {
+			t.Errorf("Parse(%q): got %d, want %d", src, n, want)
+		}
+	}
+	// A decimal point still yields a Float, even whole-valued.
+	for _, src := range []string{"5.0", "1.5", "1.5e2"} {
+		got, err := Parse(src)
+		if err != nil {
+			t.Fatalf("Parse(%q) error: %v", src, err)
+		}
+		if !got[0].Parent.ConformsTo(eng.TFloat) {
+			t.Errorf("Parse(%q): expected Float, got %s", src, got[0].Parent)
+		}
+	}
+}
+
+// TestParseIntegerLiteralExactInMap pins the same exactness in data
+// context (map values go through convertDataValue, a separate switch).
+func TestParseIntegerLiteralExactInMap(t *testing.T) {
+	got, err := Parse("{x: 9007199254740993}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	m, _ := eng.AsMap(got[0])
+	xVal, _ := m.Get("x")
+	if !xVal.Parent.ConformsTo(eng.TInteger) {
+		t.Fatalf("expected Integer, got %s", xVal.Parent)
+	}
+	if n, _ := eng.AsInteger(xVal); n != 9007199254740993 {
+		t.Errorf("map value: got %d, want 9007199254740993", n)
 	}
 }
 

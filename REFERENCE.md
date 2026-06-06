@@ -415,10 +415,15 @@ Two further sharp edges on numbers:
 * **Integer division truncates** toward zero and never produces a
   remainder or a `Float`: `7 div 2` returns `3`, `1 div 2` returns `0`. Use a
   `Float` operand to get real division — `7.0 div 2` returns `3.5`.
-* **Integer overflow is silent and inconsistent.** `add`/`mul` past
-  `maxint` promote to `Float` (losing integer precision):
-  `9223372036854775807 add 1` returns `9223372036854776000.0`; `pow`
-  instead wraps two's-complement: `2 pow 63` returns `-9223372036854775808`.
+* **Integer is a 64-bit signed integer; overflow is an error, not a
+  wrap.** An `Integer` holds any whole number in
+  `-9223372036854775808..9223372036854775807` (int64). A literal outside
+  that range, or an `add`/`sub`/`mul`/`pow` whose result would leave it,
+  raises `[aql/integer_overflow]` rather than silently wrapping or
+  degrading to a `Float`: `2 pow 63` and `9223372036854775807 add 1` both
+  error. Make an operand a `Float` (e.g. `9223372036854775807 add 1.0`)
+  for an approximate IEEE-754 result. (Arbitrary-precision integers are a
+  planned future change — see `design/INTEGER-OVERFLOW-STRATEGY.0.md`.)
 * `Float` is an IEEE-754 binary `float64`, **not** a base-10
   decimal — `0.1 add 0.2` returns `0.30000000000000004` and `1 eq 1.0`
   returns `true` even though the two divide differently. See

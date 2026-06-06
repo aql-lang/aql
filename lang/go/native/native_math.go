@@ -18,6 +18,80 @@ import (
 // b-op-a body therefore yields the natural reading (`10 sub 3` → 7,
 // `10 div 3` → 3). The mirror forms (`op a b`, `b op a`, `b a op`)
 // produce the reversed result.
+// integerOverflowError reports an int64 arithmetic overflow. Until
+// Integer becomes arbitrary-precision (Phase 1 of
+// design/INTEGER-OVERFLOW-STRATEGY.0.md), integer add/sub/mul/pow that
+// cross the int64 range raise this rather than silently wrapping
+// two's-complement (the WAT Exhibit K bug). The policy is uniform across
+// every integer arithmetic word, mirroring the existing division-by-zero
+// error. The float64 handlers are unaffected (they saturate to ±Inf per
+// IEEE-754).
+func integerOverflowError(op string, a, b int64) error {
+	return &AqlError{
+		Code: "integer_overflow",
+		Detail: fmt.Sprintf(
+			"integer overflow in %s: %d %s %d does not fit in the Integer range (-9223372036854775808..9223372036854775807)",
+			op, b, op, a),
+		Hint: "convert an operand to a Float (e.g. add a decimal point) if an approximate result is acceptable",
+	}
+}
+
+// checkedAddInt, checkedSubInt, checkedMulInt return (result, true) on
+// success and (_, false) on int64 overflow. They test the overflow
+// condition before computing so they never rely on wrap behaviour.
+func checkedAddInt(a, b int64) (int64, bool) {
+	if (b > 0 && a > math.MaxInt64-b) || (b < 0 && a < math.MinInt64-b) {
+		return 0, false
+	}
+	return a + b, true
+}
+
+func checkedSubInt(a, b int64) (int64, bool) {
+	if (b < 0 && a > math.MaxInt64+b) || (b > 0 && a < math.MinInt64+b) {
+		return 0, false
+	}
+	return a - b, true
+}
+
+func checkedMulInt(a, b int64) (int64, bool) {
+	if a == 0 || b == 0 {
+		return 0, true
+	}
+	// MinInt64 * -1 has no positive counterpart; guard before the
+	// division check (Go defines MinInt64 / -1 as wrap, so c/b == a
+	// would otherwise mask the overflow).
+	if (a == math.MinInt64 && b == -1) || (b == math.MinInt64 && a == -1) {
+		return 0, false
+	}
+	c := a * b
+	if c/b != a {
+		return 0, false
+	}
+	return c, true
+}
+
+// checkedPowInt computes base**exp (exp >= 0) by square-and-multiply,
+// returning false on int64 overflow at any intermediate step.
+func checkedPowInt(base, exp int64) (int64, bool) {
+	result := int64(1)
+	for exp > 0 {
+		if exp%2 == 1 {
+			var ok bool
+			if result, ok = checkedMulInt(result, base); !ok {
+				return 0, false
+			}
+		}
+		exp /= 2
+		if exp > 0 {
+			var ok bool
+			if base, ok = checkedMulInt(base, base); !ok {
+				return 0, false
+			}
+		}
+	}
+	return result, true
+}
+
 var mathNatives = []NativeFunc{
 	{
 		Name: "add",
@@ -26,7 +100,13 @@ var mathNatives = []NativeFunc{
 			{
 				Args: []*Type{TNumber, TNumber},
 				Handler: numericBinaryHandler(
-					func(a, b int64) (Value, error) { return NewInteger(b + a), nil },
+					func(a, b int64) (Value, error) {
+						c, ok := checkedAddInt(b, a)
+						if !ok {
+							return Value{}, integerOverflowError("add", a, b)
+						}
+						return NewInteger(c), nil
+					},
 					func(a, b float64) (Value, error) { return NewFloat(b + a), nil },
 				),
 				ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
@@ -45,7 +125,13 @@ var mathNatives = []NativeFunc{
 			{
 				Args: []*Type{TNumber, TNumber},
 				Handler: numericBinaryHandler(
-					func(a, b int64) (Value, error) { return NewInteger(b - a), nil },
+					func(a, b int64) (Value, error) {
+						c, ok := checkedSubInt(b, a)
+						if !ok {
+							return Value{}, integerOverflowError("sub", a, b)
+						}
+						return NewInteger(c), nil
+					},
 					func(a, b float64) (Value, error) { return NewFloat(b - a), nil },
 				),
 				ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
@@ -61,7 +147,13 @@ var mathNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args: []*Type{TNumber, TNumber},
 			Handler: numericBinaryHandler(
-				func(a, b int64) (Value, error) { return NewInteger(b * a), nil },
+				func(a, b int64) (Value, error) {
+					c, ok := checkedMulInt(b, a)
+					if !ok {
+						return Value{}, integerOverflowError("mul", a, b)
+					}
+					return NewInteger(c), nil
+				},
 				func(a, b float64) (Value, error) { return NewFloat(b * a), nil },
 			),
 			ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
@@ -122,15 +214,9 @@ var mathNatives = []NativeFunc{
 					if a < 0 {
 						return Value{}, fmt.Errorf("pow: negative exponent %d", a)
 					}
-					result := int64(1)
-					base := b
-					exp := a
-					for exp > 0 {
-						if exp%2 == 1 {
-							result *= base
-						}
-						base *= base
-						exp /= 2
+					result, ok := checkedPowInt(b, a)
+					if !ok {
+						return Value{}, integerOverflowError("pow", a, b)
 					}
 					return NewInteger(result), nil
 				},
