@@ -927,6 +927,13 @@ word — `size` subsumes it.
 > signature error), and string length is `StringUtil`-module
 > territory, not a base word.
 
+> **A number can't be a reach receiver.** `get`'s receiver is always a
+> container (Map / List / Store / Object / module), so a numeric literal
+> before a `.` is a **syntax error**, not a `get` on a number. In
+> particular `1.2.3` (a malformed numeric literal), `1 . 2`, and
+> `5 . foo` all raise `[aql/syntax_error]: a number has no members`. A
+> plain `Float` like `5.0` is unaffected.
+
 **Dotted access binds tightly.** A `.`/`!.` chain groups to a single
 `( … )` so it binds to its immediate receiver, not to a surrounding call:
 `size m.x` means `size (m.x)`, and `a.b.c` is `( a get b get c )`. Two

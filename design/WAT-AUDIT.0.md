@@ -578,10 +578,17 @@ $ aql do '1.2.3'   => error: [aql/signature_error]: no matching signature for ge
 `1.2.3` lexes as `1.2` then `.` (field access) then `3`. The diagnostic
 points at an accessor the user never wrote.
 
-> **Fix.** Add a lexer rule: a numeric literal already containing a `.`
-> immediately followed by `.<digit>` is a malformed number — raise
-> `invalid numeric literal '1.2.3'` rather than silently re-reading the
-> second `.` as the accessor word. Low risk.
+> **Fix.** ✅ **Done** (via the general rule). A `.`-access (reach)
+> receiver must be a container `get` can index into — `get`'s receiver
+> is only ever a Map / List / Store / Object / ModuleExport / Module, so
+> a **number can never be a reach receiver**. The parser now rejects a
+> numeric-literal receiver before a `.` at parse time
+> (`convertTopLevelItems` in `eng/go/parser/parse.go`,
+> `numberReceiverError`): `1.2.3` (the malformed-number case), `1 . 2`,
+> and `5 . foo` all raise `[aql/syntax_error]: a number has no members
+> to access with .` with a source position, instead of the runtime "no
+> matching signature for get". `5.0` (a plain Float) and real reaches
+> (`{a:1} . a`, `[1 2 3] . 0`) are unaffected.
 
 ## AC. Strings are not indexable and have no built-in length; maps are not `each`-able — `design`
 

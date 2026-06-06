@@ -234,6 +234,15 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 		// Dotted-access chain: a receiver primary followed by one or more
 		// `.key` / `!.key` segments → one group `( recv get k … )`.
 		if isChainReceiver(items[i]) && i+1 < len(items) && startsDot(items, i+1) {
+			// A reach receiver must be something `get` can index into (a
+			// Map, List, Store, Object, ModuleExport, …). A number has no
+			// members, so a numeric literal before a `.` can never be a
+			// valid reach — `1.2.3` (a malformed numeric literal), `1 . 2`,
+			// or `5 . foo`. Reject it here with a clear message rather than
+			// the runtime "no matching signature for get".
+			if isNumberLiteral(items[i]) {
+				return nil, numberReceiverError(poss[i])
+			}
 			// Build the access group into a temp slice so a trailing
 			// `/`-modifier can be placed correctly: a WORD modifier
 			// (usurp / stack-args / forward-args) is emitted BEFORE the
@@ -572,6 +581,35 @@ func emptyElementError() error {
 	return &eng.AqlError{
 		Code:   "syntax_error",
 		Detail: "empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)",
+	}
+}
+
+// isNumberLiteral reports whether a (deSited) jsonic item is a numeric
+// literal: an integer arrives from jsonic as a float64, a decimal as a
+// numberVal (dot-bearing source wrapped by setupNumberSub).
+func isNumberLiteral(item any) bool {
+	switch item.(type) {
+	case float64, numberVal:
+		return true
+	default:
+		return false
+	}
+}
+
+// numberReceiverError rejects a `.`-access whose receiver is a numeric
+// literal. `get`'s receiver is always a container (Map / List / Store /
+// Object / ModuleExport / …) — a number has no members — so `1.2.3` (a
+// malformed numeric literal), `1 . 2`, or `5 . foo` can never be a valid
+// reach. Caught at parse time instead of surfacing the runtime
+// "no matching signature for get".
+func numberReceiverError(pos eng.SrcPos) error {
+	return &eng.AqlError{
+		Code:   "syntax_error",
+		Detail: "a number has no members to access with `.`",
+		Hint:   "this looks like a malformed numeric literal (e.g. `1.2.3`) or `.`-access on a number — numbers have no fields or keys",
+		Row:    pos.Row,
+		Col:    pos.Col,
+		Src:    pos.Src,
 	}
 }
 

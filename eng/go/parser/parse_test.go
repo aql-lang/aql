@@ -60,6 +60,30 @@ func assertParseError(t *testing.T, input string) {
 	}
 }
 
+// TestNumberReceiverReachIsSyntaxError pins WAT-audit Exhibit AB: a
+// number can never be a `.`-access (reach) receiver — `get`'s receiver
+// is always a container — so a numeric literal before a `.` is a parse
+// error, not the runtime "no matching signature for get".
+func TestNumberReceiverReachIsSyntaxError(t *testing.T) {
+	for _, src := range []string{"1.2.3", "1 . 2", "5 . foo", "5.0.foo", "1 . 2 . 3"} {
+		_, err := Parse(src)
+		if err == nil {
+			t.Errorf("Parse(%q): expected a syntax error, got none", src)
+			continue
+		}
+		if !strings.Contains(err.Error(), "no members") {
+			t.Errorf("Parse(%q): expected a 'no members' error, got %v", src, err)
+		}
+	}
+	// Valid reaches (container receivers) and plain numeric literals must
+	// still parse cleanly.
+	for _, src := range []string{"{a:1} . a", "{a:{b:9}} . a . b", "[1 2 3] . 0", "5.0", "1.5", "5"} {
+		if _, err := Parse(src); err != nil {
+			t.Errorf("Parse(%q): unexpected error: %v", src, err)
+		}
+	}
+}
+
 // --- Basic literal tests ---
 
 func TestParseEmpty(t *testing.T) {
