@@ -1785,16 +1785,15 @@ func TestConvertTopLevelValueBool(t *testing.T) {
 }
 
 func TestConvertTopLevelValueNil(t *testing.T) {
-	v, err := convertTopLevelValue(nil)
-	if err != nil {
-		t.Fatal(err)
+	// A nil element is an empty list slot (`[1,,2]`, `[,1]`) — a syntax
+	// error, not a fabricated `null`. (Explicit `null` arrives as the
+	// jsonic.Text "null" token, not as nil.)
+	_, err := convertTopLevelValue(nil)
+	if err == nil {
+		t.Fatal("expected an empty-element error for a nil element, got none")
 	}
-	if !eng.IsAtom(v) {
-		t.Fatalf("expected atom for null, got %s", v.Parent)
-	}
-	name, _ := eng.AsAtom(v)
-	if name != "null" {
-		t.Errorf("expected atom('null'), got atom(%q)", name)
+	if !strings.Contains(err.Error(), "empty list element") {
+		t.Errorf("expected empty-element error, got %v", err)
 	}
 }
 
@@ -1817,16 +1816,13 @@ func TestConvertDataValueBool(t *testing.T) {
 }
 
 func TestConvertDataValueNil(t *testing.T) {
-	v, err := convertDataValue(nil)
-	if err != nil {
-		t.Fatal(err)
+	// As TestConvertTopLevelValueNil, in data (map-value) context.
+	_, err := convertDataValue(nil)
+	if err == nil {
+		t.Fatal("expected an empty-element error for a nil element, got none")
 	}
-	if !eng.IsAtom(v) {
-		t.Fatalf("expected atom for null, got %s", v.Parent)
-	}
-	name, _ := eng.AsAtom(v)
-	if name != "null" {
-		t.Errorf("expected atom('null'), got atom(%q)", name)
+	if !strings.Contains(err.Error(), "empty list element") {
+		t.Errorf("expected empty-element error, got %v", err)
 	}
 }
 

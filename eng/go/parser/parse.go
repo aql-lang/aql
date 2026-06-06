@@ -552,13 +552,26 @@ func convertTopLevelValueInner(v any) (eng.Value, error) {
 		return eng.NewBoolean(val), nil
 
 	case nil:
-		// JSON null → Atom("null"). The unique inhabitant of None is
-		// spelled `none` (a separate keyword); `null` is the JSON-null
-		// atom at the value level.
-		return eng.NewAtom("null"), nil
+		// An untyped-nil element is an EMPTY list slot — `[1,,2]`, `[,1]`,
+		// a leading/repeated comma. (An explicit `null` arrives as the
+		// jsonic.Text token "null", handled above, so this case only fires
+		// for a genuinely empty element.) A repeated or leading comma is a
+		// typo, not a value — reject it rather than fabricating a `null`.
+		return eng.Value{}, emptyElementError()
 
 	default:
 		return eng.Value{}, fmt.Errorf("unsupported value type %T", v)
+	}
+}
+
+// emptyElementError is raised when a list literal contains an empty
+// element produced by a leading or repeated comma (`[1,,2]`, `[,1]`).
+// AQL has no implicit "hole" value; commas are optional separators, so a
+// missing element is a typo. Use `none` for an explicit empty value.
+func emptyElementError() error {
+	return &eng.AqlError{
+		Code:   "syntax_error",
+		Detail: "empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)",
 	}
 }
 
@@ -769,10 +782,12 @@ func convertDataValueInner(v any) (eng.Value, error) {
 		return eng.NewBoolean(val), nil
 
 	case nil:
-		// JSON null → Atom("null"). The unique inhabitant of None is
-		// spelled `none` (a separate keyword); `null` is the JSON-null
-		// atom at the value level.
-		return eng.NewAtom("null"), nil
+		// An untyped-nil element is an EMPTY list slot — `[1,,2]`, `[,1]`,
+		// a leading/repeated comma. (An explicit `null` arrives as the
+		// jsonic.Text token "null", handled above, so this case only fires
+		// for a genuinely empty element.) A repeated or leading comma is a
+		// typo, not a value — reject it rather than fabricating a `null`.
+		return eng.Value{}, emptyElementError()
 
 	default:
 		return eng.Value{}, fmt.Errorf("unsupported value type %T", v)

@@ -78,11 +78,12 @@ type you define with `def`.
 | `{:Type}` | Typed map (every value must match `Type`) |
 
 Commas are optional inside list and map literals — `[1 2 3]` and
-`[1, 2, 3]` are equivalent. Two edge cases worth knowing:
+`[1, 2, 3]` are equivalent. Two things to know:
 
-* An **empty slot between two commas** is not ignored — it
-  materialises a `null` element: `[1,,2]` returns `[1 null 2]`. (This `null`
-  list-gap value is distinct from `none`: `null none eq` returns `false`.)
+* An **empty element** — a leading or repeated comma (`[,1]`, `[1,,2]`)
+  — is a **syntax error** (`[aql/syntax_error]`), not a fabricated
+  `null`. AQL has no implicit hole value; write `none` for an explicit
+  empty value. (A trailing comma, `[1,]`, is fine.)
 * A **duplicate key** in a map literal is accepted silently and the
   last value wins: `{a: 1, a: 2}` returns `{a:2}`.
 

@@ -558,10 +558,16 @@ $ aql do -- '[1,,2]'      => [1 null 2]   # double comma invents an element
 Commas are decorative no-ops everywhere except an empty slot between
 two, which materialises a `null` and lengthens the list.
 
-> **Fix.** ⭐ Make an empty element between commas a parse error
-> (`[1,,2]` → "empty list element") in the list/map literal parser. This
-> also closes Z by removing the only way `null` enters a program. Low
-> risk — empty slots are virtually always typos.
+> **Fix.** ✅ **Done.** An empty list element — a leading or repeated
+> comma (`[,1]`, `[1,,2]`, `[1,,,2]`) — is now an `[aql/syntax_error]`
+> rather than a fabricated `null`. An empty slot reaches the parser as
+> an untyped-nil element (an explicit `null` token comes through as the
+> `jsonic.Text` "null", so it is unaffected), so the `case nil:` arm of
+> `convertTopLevelValue` / `convertDataValue`
+> (`eng/go/parser/parse.go`) returns `emptyElementError()`. A trailing
+> comma (`[1,]`) is still fine; explicit `null` (for JSON data) still
+> works. This also shrinks Z: `null` can no longer enter a program via a
+> comma typo.
 
 ## AB. A typo'd float yields a signature error about `get` — `design`
 
