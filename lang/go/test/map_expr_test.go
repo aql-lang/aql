@@ -231,8 +231,8 @@ export "M" {x:a, y:b}`,
 
 func TestMapExprModuleExportParen(t *testing.T) {
 	files := map[string]string{
-		"mod.aql": `def base 10
-export "M" {x:(base add 5)}`,
+		"mod.aql": `def bse 10
+export "M" {x:(bse add 5)}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import "./mod.aql"`,

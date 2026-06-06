@@ -7,7 +7,7 @@
 # ─────────────────────────────────────────────────────────────────────
 # §1  parent — the immediate supertype in the lattice
 "aql:type-util" import end  TypeUtil.parent Integer	Number	Integer's parent is Number
-"aql:type-util" import end  TypeUtil.parent Decimal	Number	Decimal's parent is Number
+"aql:type-util" import end  TypeUtil.parent Float	Number	Float's parent is Number
 #
 # §2  root — the branch root
 "aql:type-util" import end  TypeUtil.root Integer	Scalar	Integer's branch root is Scalar

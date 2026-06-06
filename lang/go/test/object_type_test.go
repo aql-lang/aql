@@ -345,7 +345,7 @@ func TestBuiltinTypeFixedIDs(t *testing.T) {
 		"TAny": native.TAny, "TNone": native.TNone, "TScalar": native.TScalar,
 		"TString": native.TString, "TStringProper": native.TStringProper,
 		"TStringEmpty": native.TStringEmpty, "TNumber": native.TNumber,
-		"TInteger": native.TInteger, "TDecimal": native.TDecimal,
+		"TInteger": native.TInteger, "TFloat": native.TFloat,
 		"TBoolean": native.TBoolean, "TNode": native.TNode,
 		"TList": native.TList, "TListArgs": native.TListArgs,
 		"TMap": native.TMap, "TTable": native.TTable, "TRecord": native.TRecord,
@@ -381,7 +381,7 @@ func TestValueIDPrefixes(t *testing.T) {
 		t.Errorf("integer ID should start with S_, got %s", num.ID)
 	}
 
-	dec := native.NewDecimal(3.14)
+	dec := native.NewFloat(3.14)
 	if !strings.HasPrefix(dec.ID, "S_") {
 		t.Errorf("decimal ID should start with S_, got %s", dec.ID)
 	}

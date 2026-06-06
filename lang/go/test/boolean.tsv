@@ -227,7 +227,7 @@ Boolean tor None	Boolean|None
 
 # Three or more (flattened).
 String tor Number tor Boolean	String|Number|Boolean
-Integer tor Decimal tor String tor None	Integer|Decimal|String|None
+Integer tor Float tor String tor None	Integer|Float|String|None
 
 # Concrete values produce a disjunct of values.
 1 tor 2	1|2
@@ -590,7 +590,7 @@ String tor Number tor Boolean tor None	String|Number|Boolean|None
 # 25. any/all — scalar edge cases (numeric)
 # =====================================================================
 
-# Decimals — only literal zero is falsy.
+# Floats — only literal zero is falsy.
 [1.5 0.0 2.5] any	true
 [0.0 0.0 0.0] any	false
 [0.0 1.5] any	true

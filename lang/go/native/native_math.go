@@ -27,7 +27,7 @@ var mathNatives = []NativeFunc{
 				Args: []*Type{TNumber, TNumber},
 				Handler: numericBinaryHandler(
 					func(a, b int64) (Value, error) { return NewInteger(b + a), nil },
-					func(a, b float64) (Value, error) { return NewDecimal(b + a), nil },
+					func(a, b float64) (Value, error) { return NewFloat(b + a), nil },
 				),
 				ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
 			},
@@ -46,7 +46,7 @@ var mathNatives = []NativeFunc{
 				Args: []*Type{TNumber, TNumber},
 				Handler: numericBinaryHandler(
 					func(a, b int64) (Value, error) { return NewInteger(b - a), nil },
-					func(a, b float64) (Value, error) { return NewDecimal(b - a), nil },
+					func(a, b float64) (Value, error) { return NewFloat(b - a), nil },
 				),
 				ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
 			},
@@ -62,7 +62,7 @@ var mathNatives = []NativeFunc{
 			Args: []*Type{TNumber, TNumber},
 			Handler: numericBinaryHandler(
 				func(a, b int64) (Value, error) { return NewInteger(b * a), nil },
-				func(a, b float64) (Value, error) { return NewDecimal(b * a), nil },
+				func(a, b float64) (Value, error) { return NewFloat(b * a), nil },
 			),
 			ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
 		}},
@@ -83,7 +83,7 @@ var mathNatives = []NativeFunc{
 					if a == 0 {
 						return Value{}, fmt.Errorf("division by zero")
 					}
-					return NewDecimal(b / a), nil
+					return NewFloat(b / a), nil
 				},
 			),
 			ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
@@ -105,7 +105,7 @@ var mathNatives = []NativeFunc{
 					if a == 0 {
 						return Value{}, fmt.Errorf("modulo by zero")
 					}
-					return NewDecimal(math.Mod(b, a)), nil
+					return NewFloat(math.Mod(b, a)), nil
 				},
 			),
 			ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
@@ -134,7 +134,7 @@ var mathNatives = []NativeFunc{
 					}
 					return NewInteger(result), nil
 				},
-				func(a, b float64) (Value, error) { return NewDecimal(math.Pow(b, a)), nil },
+				func(a, b float64) (Value, error) { return NewFloat(math.Pow(b, a)), nil },
 			),
 			ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
 		}},

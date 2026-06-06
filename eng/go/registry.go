@@ -65,6 +65,7 @@ type Registry struct {
 	errs           []error           // registration errors accumulated during setup
 	ready          bool              // true after initial setup; triggers dynamic help generation
 	OnRegisterHook func(name string) // called when a function is registered after startup
+	builtinWords   map[string]bool   // names registered via Register (natives + host words); user def/undef must not shadow these
 
 	// Check holds all static type-checking state, bundled together
 	// so the future predicate-sandbox work (TYPE-SYSTEM-REVIEW.md
@@ -360,10 +361,37 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 			return
 		}
 	}
+	// Record the name as a built-in word. Register is the native /
+	// host-API word-registration path (RegisterNativeFunc and the public
+	// (*AQL).Register both route here); user `def`s install through
+	// InstallFnDef / DefTable.Push and never reach here. So this set is
+	// exactly the core vocabulary that `def` / `undef` must refuse to
+	// redefine — see IsBuiltinWord.
+	if r.builtinWords == nil {
+		r.builtinWords = make(map[string]bool)
+	}
+	r.builtinWords[name] = true
 	r.upsertFnDef(name, sigs...)
 	if r.ready && r.OnRegisterHook != nil {
 		r.OnRegisterHook(name)
 	}
+}
+
+// reservedLiterals are the value literals the parser produces directly
+// (not registered words), so they never appear in builtinWords yet must
+// also be protected from redefinition.
+var reservedLiterals = map[string]bool{"true": true, "false": true, "none": true}
+
+// IsBuiltinWord reports whether name is a core word that user code must
+// not redefine or undefine: a word registered via Register (every
+// native / kernel word, plus host words added through (*AQL).Register)
+// or a reserved literal (true / false / none). User `def`s never reach
+// Register, so they are never flagged here.
+func (r *Registry) IsBuiltinWord(name string) bool {
+	if reservedLiterals[name] {
+		return true
+	}
+	return r != nil && r.builtinWords[name]
 }
 
 // upsertFnDef finds or creates a FnDefInfo at the top of DefStacks[name]
@@ -616,14 +644,14 @@ func (r *Registry) Err() error {
 func UnaryNumOpNative(name string, op func(float64) float64) NativeFunc {
 	handler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		v, _ := AsNumber(args[0])
-		return []Value{NewDecimal(op(v))}, nil
+		return []Value{NewFloat(op(v))}, nil
 	}
 	return NativeFunc{
 		Name: name,
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TInteger}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
-			{Args: []*Type{TDecimal}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
+			{Args: []*Type{TInteger}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TFloat}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
 		},
 	}
 }
@@ -639,15 +667,15 @@ func BinaryNumOpNative(name string, op func(a, b float64) (float64, error)) Nati
 		if err != nil {
 			return nil, err
 		}
-		return []Value{NewDecimal(result)}, nil
+		return []Value{NewFloat(result)}, nil
 	}
 	return NativeFunc{
 		Name: name,
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TDecimal, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
-			{Args: []*Type{TNumber, TDecimal}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
-			{Args: []*Type{TDecimal, TNumber}, Handler: handler, Returns: []*Type{TDecimal}, BarrierPos: -1},
+			{Args: []*Type{TFloat, TFloat}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TNumber, TFloat}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TFloat, TNumber}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
 		},
 	}
 }
@@ -692,9 +720,9 @@ func ValToString(v Value) string {
 	case IsAtom(v):
 		_as9, _ := AsAtom(v)
 		return _as9
-	case v.Parent.ConformsTo(TDecimal):
-		_as10, _ := AsDecimal(v)
-		return formatDecimal(_as10)
+	case v.Parent.ConformsTo(TFloat):
+		_as10, _ := AsFloat(v)
+		return formatFloat(_as10)
 	case v.Parent.ConformsTo(TInteger):
 		_as11, _ := AsInteger(v)
 		return strconv.FormatInt(_as11, 10)
@@ -806,9 +834,9 @@ func StoreKey(v Value) string {
 		n, _ := AsInteger(v)
 		return strconv.FormatInt(n, 10)
 	}
-	if v.Parent.ConformsTo(TDecimal) {
-		f, _ := AsDecimal(v)
-		return FormatDecimal(f)
+	if v.Parent.ConformsTo(TFloat) {
+		f, _ := AsFloat(v)
+		return FormatFloat(f)
 	}
 	if v.Parent.ConformsTo(TBoolean) {
 		b, _ := AsBoolean(v)

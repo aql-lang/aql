@@ -1,20 +1,26 @@
-// Package docexamples extracts and runs the `expr => result` examples
-// embedded in AQL's prose documentation (README, REFERENCE, TUTORIAL,
-// HOWTO, EXPLANATION) so the docs can't silently drift from real engine
-// behavior. The extractor (this file) is pure text→[]Example with no
-// engine dependency, so it is unit-testable in isolation; the runner
-// (docexamples_test.go) evaluates each Example through the production
-// language layer and compares the rendered stack to the documented
-// result.
+// Package docexamples extracts and runs the `expr  # returns result`
+// examples embedded in AQL's prose documentation (README, REFERENCE,
+// TUTORIAL, HOWTO, EXPLANATION) so the docs can't silently drift from
+// real engine behavior. The extractor (this file) is pure
+// text→[]Example with no engine dependency, so it is unit-testable in
+// isolation; the runner (docexamples_test.go) evaluates each Example
+// through the production language layer and compares the rendered stack
+// to the documented result.
 //
-// Two surface forms are recognised inside fenced code blocks:
+// The documentation convention is a trailing `# returns …` comment
+// (never the `=>` arrow, which is real syntax — the anonymous-function
+// word `afn`). Two surface forms are recognised inside fenced code
+// blocks:
 //
-//   - inline arrow:   `expr => result`        (REFERENCE/HOWTO/README/…)
-//   - REPL prompt:     `aql> expr => result`   (TUTORIAL), and the bare
-//     `aql> expr` continuation lines that set up state (e.g. `def`)
-//     consumed by a later `=>` line in the same block.
+//   - inline:        `expr            # returns result`   (all docs)
+//   - REPL prompt:    `aql> expr       # returns result`   (TUTORIAL), and
+//     the bare `aql> expr` continuation lines that set up state (e.g.
+//     `def`) consumed by a later `# returns` line in the same block.
 //
-// A documented result of `error` / `build error` / `error: …` means the
+// The expected value is the text after `returns`. An optional human
+// description may follow it after an em-dash, which the extractor
+// ignores: `# returns 5 5 — duplicate top` asserts `5 5`. A documented
+// result of `error` / `build error` / `error: …` / `[aql/…]` means the
 // example is expected to fail (loose substring match), not to equal a
 // rendered value.
 package docexamples
@@ -24,21 +30,22 @@ import "strings"
 // Example is one extracted documentation example.
 type Example struct {
 	File string // source file basename, e.g. "REFERENCE.md"
-	Line int    // 1-based line number of the `=>` line in File
+	Line int    // 1-based line number of the `# returns` line in File
 
 	// Program is the full AQL source to evaluate: the block's preceding
-	// setup lines (everything before this line that was not itself an
-	// `=>` line) joined by newlines, then the expression on this line.
-	// Setup-only `=>` lines are deliberately excluded so a block with
-	// several result lines doesn't pile multiple values on the stack.
+	// setup lines (everything before this line that was not itself a
+	// `# returns` line) joined by newlines, then the expression on this
+	// line. Setup-only result lines are deliberately excluded so a block
+	// with several result lines doesn't pile multiple values on the stack.
 	Program string
 
 	// Expr is just this line's left-hand expression (for subtest names
 	// and diagnostics).
 	Expr string
 
-	// Expected is the documented right-hand side with any trailing
-	// ` # comment` stripped. Meaningful only when WantErr is false.
+	// Expected is the documented value (the text after `# returns`, with
+	// any ` — description` suffix removed). Meaningful only when WantErr
+	// is false.
 	Expected string
 
 	// WantErr is true when the documented result denotes a failure
@@ -54,8 +61,19 @@ type Example struct {
 // stacks, and syntax-template fragments).
 const skipMarker = "<!-- aql-test: skip -->"
 
-// Extract pulls every checkable `=>` example out of one markdown file.
-// file is the basename recorded on each Example; src is the file body.
+// returnsKeyword introduces an asserted result inside a trailing
+// comment. A comment that does not begin with it is treated as an
+// ordinary description and the line is not asserted.
+const returnsKeyword = "returns"
+
+// descSep separates the asserted value from an optional human-readable
+// description in a `# returns` comment (`# returns 5 5 — duplicate top`).
+// Em-dash never appears in rendered AQL values, so splitting on it is
+// unambiguous.
+const descSep = "—"
+
+// Extract pulls every checkable `# returns` example out of one markdown
+// file. file is the basename recorded on each Example; src is the body.
 func Extract(file, src string) []Example {
 	var out []Example
 	lines := strings.Split(src, "\n")
@@ -65,14 +83,15 @@ func Extract(file, src string) []Example {
 	prevNonBlank := "" // last non-blank line seen before the current fence
 
 	// setup accumulates the binding (`def`/`undef`) lines of the current
-	// block, in order, so a later `=>` line can prepend them as shared
-	// state. setupOpen tracks unbalanced `[`/`(` from a multi-line `def`
-	// so its continuation lines are captured too.
+	// block, in order, so a later `# returns` line can prepend them as
+	// shared state. setupOpen tracks unbalanced `[`/`(` from a multi-line
+	// `def` so its continuation lines are captured too.
 	var setup []string
 	setupOpen := 0
 
-	// prevCode/prevLine hold the most recent non-arrow expression line so
-	// a following `=> result` (result on its own line) can attach to it.
+	// prevCode/prevLine hold the most recent non-result expression line so
+	// a following bare `# returns result` (result on its own line) can
+	// attach to it.
 	prevCode := ""
 	prevLine := 0
 
@@ -117,21 +136,21 @@ func Extract(file, src string) []Example {
 			continue
 		}
 
-		exprPart, rhs, isArrow := splitArrow(code)
-		if !isArrow {
-			// A non-arrow line is shared state for later `=>` lines ONLY
-			// when it's a binding statement (`def`/`undef`/import) or a
-			// continuation of one still open across physical lines
-			// (multi-line `def … fn [ … ]`). Other bare expressions are
-			// illustrative — their result isn't asserted and they must
+		exprPart, rhs, isResult := splitReturns(code)
+		if !isResult {
+			// A non-result line is shared state for later `# returns`
+			// lines ONLY when it's a binding statement (`def`/`undef`/
+			// import) or a continuation of one still open across physical
+			// lines (multi-line `def … fn [ … ]`). Other bare expressions
+			// are illustrative — their result isn't asserted and they must
 			// NOT pile onto a following example's stack.
 			if isSetupLine(code, setupOpen) {
 				setup = append(setup, code)
 				setupOpen += bracketDelta(code)
 				prevCode, prevLine = "", 0
 			} else {
-				// Remember it: a following `=> result` line (result on its
-				// own line) attaches to this expression.
+				// Remember it: a following bare `# returns result` line
+				// (result on its own line) attaches to this expression.
 				prevCode, prevLine = code, i+1
 			}
 			continue
@@ -140,10 +159,10 @@ func Extract(file, src string) []Example {
 		expr := strings.TrimSpace(exprPart)
 		exprLine := i + 1
 		if expr == "" {
-			// Result-on-own-line form: `=> result` whose expression was
-			// the preceding code line in this block.
+			// Result-on-own-line form: `# returns result` whose expression
+			// was the preceding code line in this block.
 			if prevCode == "" {
-				continue // stray `=>` with nothing to evaluate
+				continue // stray result with nothing to evaluate
 			}
 			expr, exprLine = prevCode, prevLine
 		}
@@ -170,7 +189,7 @@ func Extract(file, src string) []Example {
 	return out
 }
 
-// isSetupLine reports whether a non-arrow code line is shared state for
+// isSetupLine reports whether a non-result code line is shared state for
 // later examples in the same block. True for binding / side-effecting
 // statements (`def`, `undef`, and the `… import end` / `use` module
 // forms) and for continuation lines of a multi-line statement still open
@@ -225,21 +244,54 @@ func stripPrompt(line string) string {
 	return line
 }
 
-// splitArrow splits a code line on its first ` => ` / `=>` separator.
-// Returns (lhs, rhs, true) when an arrow is present, else ("", "", false).
-func splitArrow(code string) (string, string, bool) {
-	idx := strings.Index(code, "=>")
-	if idx < 0 {
+// splitReturns splits a code line on its trailing `# returns …` result
+// comment. Returns (expr, value, true) when the line's first unquoted
+// `#` introduces a comment beginning with the `returns` keyword; the
+// `value` is the comment text after `returns`, with any ` — description`
+// suffix stripped. Otherwise returns ("", "", false) — the line is a
+// setup statement or an unasserted illustration.
+func splitReturns(code string) (expr string, value string, isResult bool) {
+	hash := firstUnquotedHash(code)
+	if hash < 0 {
 		return "", "", false
 	}
-	return code[:idx], code[idx+len("=>"):], true
+	comment := strings.TrimSpace(code[hash+1:])
+	rest, ok := strings.CutPrefix(comment, returnsKeyword)
+	if !ok || (rest != "" && rest[0] != ' ' && rest[0] != '\t') {
+		// Comment is an ordinary description, not a `returns` assertion.
+		return "", "", false
+	}
+	value = strings.TrimSpace(rest)
+	if idx := strings.Index(value, descSep); idx >= 0 {
+		value = strings.TrimSpace(value[:idx])
+	}
+	return strings.TrimSpace(code[:hash]), value, true
 }
 
-// classifyRHS interprets the documented right-hand side. It strips a
-// trailing ` # comment` (quote-aware so a `#` inside a '…' string
-// survives) and decides whether the example expects an error.
+// firstUnquotedHash returns the byte index of the first `#` that is not
+// inside a single- or double-quoted string, or -1 if there is none.
+func firstUnquotedHash(s string) int {
+	var quote byte // 0 when outside a string, else the open quote char
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			}
+		case c == '\'' || c == '"':
+			quote = c
+		case c == '#':
+			return i
+		}
+	}
+	return -1
+}
+
+// classifyRHS interprets the documented value. It decides whether the
+// example expects an error (`error`, `build error`, `error: …`, or an
+// `[aql/code]` notation) or an exact rendered value.
 func classifyRHS(rhs string) (expected string, wantErr bool, errSubstr string) {
-	rhs = stripTrailingComment(rhs)
 	rhs = strings.TrimSpace(rhs)
 
 	low := strings.ToLower(rhs)
@@ -260,22 +312,4 @@ func classifyRHS(rhs string) (expected string, wantErr bool, errSubstr string) {
 	default:
 		return rhs, false, ""
 	}
-}
-
-// stripTrailingComment removes a ` #…` trailing comment from s, ignoring
-// any `#` that appears inside a single-quoted AQL string so result
-// values like `'a # b'` are preserved.
-func stripTrailingComment(s string) string {
-	inStr := false
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case '\'':
-			inStr = !inStr
-		case '#':
-			if !inStr {
-				return s[:i]
-			}
-		}
-	}
-	return s
 }

@@ -172,8 +172,8 @@ func TestClosureTopLevelFnHasNoCaptures(t *testing.T) {
 // fn body and verify the inner FnDefInfo has the outer param captured.
 func TestClosureInnerFnHasCaptures(t *testing.T) {
 	out, err := runNativeSteps(t, nil, []string{
-		`def make ([x:Integer] => [([y:Integer] => [x add y])])`,
-		`make 5`,
+		`def mk ([x:Integer] => [([y:Integer] => [x add y])])`,
+		`mk 5`,
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -202,8 +202,8 @@ func TestClosureInnerFnHasCaptures(t *testing.T) {
 // the capture.
 func TestClosureParamShadowsCapture(t *testing.T) {
 	out, err := runNativeSteps(t, nil, []string{
-		`def make ([x:Integer] => [([x:String] => [x])])`,
-		`(make 5) "hello"`,
+		`def mk ([x:Integer] => [([x:String] => [x])])`,
+		`(mk 5) "hello"`,
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -357,8 +357,8 @@ func TestClosureCheckModeAnalyseFnBodyWithoutCaptures(t *testing.T) {
 // surrounding scope's.
 func TestClosureArgsStaysDynamic(t *testing.T) {
 	out, err := runNativeSteps(t, nil, []string{
-		`def outer ([a:Any] => [([] => [args])])`,
-		`def captured-lam (outer 42)`,
+		`def outr ([a:Any] => [([] => [args])])`,
+		`def captured-lam (outr 42)`,
 		`captured-lam`,
 	})
 	if err != nil {

@@ -75,7 +75,7 @@ func literalShrinkCandidates(form *stackform.StackForm) []*stackform.StackForm {
 //
 // Per type:
 //   - Integer: → 0; → N/2 (binary halving toward 0).
-//   - Decimal: → 0.0; → N/2.
+//   - Float: → 0.0; → N/2.
 //   - String : → "" (if non-empty); → first char only (if len > 1).
 //   - Boolean: true → false.
 //   - List   : → [] (if non-empty); → first half; → first element.
@@ -86,8 +86,8 @@ func shrinkLiteral(v eng.Value) []eng.Value {
 	switch {
 	case v.Parent.ConformsTo(eng.TInteger):
 		return shrinkInteger(v)
-	case v.Parent.ConformsTo(eng.TDecimal):
-		return shrinkDecimal(v)
+	case v.Parent.ConformsTo(eng.TFloat):
+		return shrinkFloat(v)
 	case v.Parent.ConformsTo(eng.TString):
 		return shrinkString(v)
 	case v.Parent.ConformsTo(eng.TBoolean):
@@ -122,17 +122,17 @@ func shrinkInteger(v eng.Value) []eng.Value {
 	return out
 }
 
-func shrinkDecimal(v eng.Value) []eng.Value {
-	f, err := eng.AsDecimal(v)
+func shrinkFloat(v eng.Value) []eng.Value {
+	f, err := eng.AsFloat(v)
 	if err != nil {
 		return nil
 	}
 	var out []eng.Value
 	if f != 0 {
-		out = append(out, eng.NewDecimal(0))
+		out = append(out, eng.NewFloat(0))
 	}
 	if f > 1 || f < -1 {
-		out = append(out, eng.NewDecimal(f/2))
+		out = append(out, eng.NewFloat(f/2))
 	}
 	return out
 }

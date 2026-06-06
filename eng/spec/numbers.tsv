@@ -1,16 +1,16 @@
 # tokens	expected	note
 # =====================================================================		
-# Principle: Number arithmetic — Integer + Decimal + operator dispatch.		
+# Principle: Number arithmetic — Integer + Float + operator dispatch.		
 # =====================================================================		
 #		
 # This file is the canonical numeric-operations spec. It covers:		
 #		
-#   - Integer and Decimal literal round-trip		
+#   - Integer and Float literal round-trip		
 #   - The three operator-arity patterns:		
 #       commutative binary    (addq)		
 #       non-commutative binary (subq)		
 #       unary                  (negq)		
-#   - Decimal-contagion type promotion		
+#   - Float-contagion type promotion		
 #   - The two equivalence classes for non-commutative arrangements		
 #     (see mirror.tsv for the abstract rule)		
 #   - Composition with parens		
@@ -29,15 +29,15 @@
 # AQL has two concrete numeric types under the same Number root:		
 #		
 #   Scalar/Number/Integer  — written as digits with optional leading minus		
-#   Scalar/Number/Decimal  — written with a decimal point		
+#   Scalar/Number/Float  — written with a decimal point		
 #		
 # All three test words are sigged on [TNumber, TNumber] (or [TNumber|]		
 # for unary — the `|` makes the arg forward-eligible with stack		
-# fallback). Integer and Decimal both match Number. Each handler		
+# fallback). Integer and Float both match Number. Each handler		
 # dispatches on argument types at runtime:		
 #		
 #     - both args Integer  →  integer op,  result is Integer		
-#     - any arg Decimal    →  float64 op,  result is Decimal  (contagion)		
+#     - any arg Float    →  float64 op,  result is Float  (contagion)		
 #		
 # Mirrors the production engine's `numericBinaryHandler` in		
 # `lang/internal/engine/native_math.go`.		
@@ -63,7 +63,7 @@
 # Why this matters		
 # ----------------		
 # Numeric dispatch is the foundational test of the type lattice and		
-# the matching algorithm together. The Integer/Decimal split is the		
+# the matching algorithm together. The Integer/Float split is the		
 # language's first lattice decision; the contagion rule is its first		
 # closure rule; the b-op-a handler convention is the production		
 # engine's first surface contract. These rows pin all three.		
@@ -71,7 +71,7 @@
 # === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===		
 #   addq   — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)		
 #   mulq   — [Number Number] forward-prec — args[1] * args[0] (decimal contagion)		
-#   negq   — [Number|] BarrierPos=1 — unary -args[0]; preserves Integer/Decimal tag		
+#   negq   — [Number|] BarrierPos=1 — unary -args[0]; preserves Integer/Float tag		
 #   subq   — [Number Number] forward-prec — args[1] - args[0] (decimal contagion)		
 #   tagq   — two overloads [Integer]→'specific' / [Any]→'any' — specificity scoring		
 #   tripq  — [Integer Integer Integer] forward-prec — 'a,b,c' (3-arg position mixing)		
@@ -86,36 +86,36 @@
 0	0	zero (no sign bit)
 1 2 3	1 2 3	multiple integers on the stack
 		
-# Decimal — formatDecimal always emits '.0' or an exponent so the		
-# Decimal type tag is visually distinct from Integer.		
+# Float — formatFloat always emits '.0' or an exponent so the		
+# Float type tag is visually distinct from Integer.		
 3.14	3.14	canonical decimal — fractional digits preserved
 -0.5	-0.5	negative decimal
 0.0	0.0	whole-valued decimal still renders as '0.0'
 2.0	2.0	whole-valued decimal still renders as '2.0'
 2.5 3.5	2.5 3.5	multiple decimals on the stack
-1 2.0	1 2.0	Integer + Decimal coexist; type tag visible per-value
+1 2.0	1 2.0	Integer + Float coexist; type tag visible per-value
 		
 # ---------- 2. addq — commutative binary across all I/D combinations ----------		
 # Three structural arrangements (prefix, infix, postfix) × four type		
 # combinations (II, ID, DI, DD). addq is commutative so the value is		
 # invariant under sig flip; we verify the type-promotion rule.		
 addq 2 3	5	II prefix: fwd=[2, 3] → handler 3+2 = 5
-addq 2 3.0	5.0	ID contagion → Decimal
-addq 2.0 3	5.0	DI contagion → Decimal
-addq 2.0 3.0	5.0	DD → Decimal
+addq 2 3.0	5.0	ID contagion → Float
+addq 2.0 3	5.0	DI contagion → Float
+addq 2.0 3.0	5.0	DD → Float
 2 addq 3	5	II infix
 2 addq 3.0	5.0	ID infix
 2.0 addq 3	5.0	DI infix
 2.0 addq 3.0	5.0	DD infix
 2 3 addq	5	II postfix
-2 3.0 addq	5.0	stack=[2, 3.0]: top=3.0 → sig[0], deeper=2 → sig[1]; result is 5.0 (Decimal contagion)
+2 3.0 addq	5.0	stack=[2, 3.0]: top=3.0 → sig[0], deeper=2 → sig[1]; result is 5.0 (Float contagion)
 2.0 3.0 addq	5.0	DD postfix
 		
 # Specific decimal values to surface arithmetic correctness:		
-addq 1.5 2.5	4.0	non-integer fractions sum to a whole — but result still renders as Decimal '4.0'
+addq 1.5 2.5	4.0	non-integer fractions sum to a whole — but result still renders as Float '4.0'
 addq 0.5 0.5	1.0	1/2 + 1/2 = 1; result is '1.0', never '1'
 addq -1.5 4.5	3.0	negative + positive
-addq 0.0 0.0	0.0	zero plus zero stays Decimal
+addq 0.0 0.0	0.0	zero plus zero stays Float
 		
 # ---------- 3. subq — non-commutative binary, both equivalence classes ----------		
 # Class A — the matching algorithm produces sig=[3, 10] (or sig=[X, Y]		
@@ -152,17 +152,17 @@ subq 0.9 1.0	0.09999999999999998	IEEE 754 imprecision: 1.0 - 0.9 is NOT exactly 
 # arg is forward-eligible with stack fallback, so both forms work:		
 #   negq X   — forward dispatch		
 #   X negq   — fwd-scan empty, stack supplies the arg		
-# Type-preserving: Integer in, Integer out; Decimal in, Decimal out.		
+# Type-preserving: Integer in, Integer out; Float in, Float out.		
 negq 5	-5	I forward
-negq 5.0	-5.0	D forward — preserves Decimal type
+negq 5.0	-5.0	D forward — preserves Float type
 negq -5.5	5.5	negation of negative decimal
 negq 0	0	Integer zero stays zero (no sign bit)
-negq 0.0	-0.0	Decimal zero → -0.0 (IEEE sign flip; +0.0 and -0.0 are distinct bit patterns)
+negq 0.0	-0.0	Float zero → -0.0 (IEEE sign flip; +0.0 and -0.0 are distinct bit patterns)
 5 negq	-5	stack-fallback form on Integer
-5.0 negq	-5.0	stack-fallback form on Decimal
+5.0 negq	-5.0	stack-fallback form on Float
 -3.5 negq	3.5	stack-fallback on negative decimal
 3 negq negq	3	double negation cancels (Integer)
-5.0 negq negq	5.0	double negation cancels (Decimal)
+5.0 negq negq	5.0	double negation cancels (Float)
 		
 # ---------- 5. The 0.1 + 0.2 float artefact ----------		
 # IEEE 754 binary float cannot represent 0.1 or 0.2 exactly. Their		
@@ -196,7 +196,7 @@ addq 1.5 ( addq 2 3 )	6.5	inner integer addq → 5; outer 1.5 + 5 → 6.5 (conta
 mulq 2.0 ( subq 1 5 )	8.0	inner subq class B: fwd=[1, 5] → sig=[1, 5] → 5-1 = 4; outer 2.0 * 4 → 8.0 (contagion)
 negq ( addq 2 3 )	-5	inner addq = 5; negq(5) = -5
 negq ( subq 10 3 )	7	inner subq class B → 3-10 = -7; outer negq(-7) = 7
-negq ( addq 2.0 3.0 )	-5.0	composes with Decimal contagion
+negq ( addq 2.0 3.0 )	-5.0	composes with Float contagion
 		
 # ---- 6b. Multiple paren siblings in one call ----		
 # Both arg slots filled by separate paren groups. Each evaluates		
@@ -272,9 +272,9 @@ mulq ( mulq ( mulq ( mulq ( mulq ( mulq 2 2 ) 2 ) 2 ) 2 ) 2 ) 2	128	2^7 = 128 vi
 subq ( subq ( subq ( subq 100 1 ) 1 ) 1 ) 1	100	4 subq layers; flip-flop pattern returns to 100
 		
 # ---- 6f. Mixed-type contagion through deep nesting ----		
-addq 1 ( addq 2.0 ( addq 3 ( addq 4.5 5 ) ) )	15.5	any Decimal in any layer taints the whole result → final Decimal
+addq 1 ( addq 2.0 ( addq 3 ( addq 4.5 5 ) ) )	15.5	any Float in any layer taints the whole result → final Float
 mulq 2 ( mulq 3.0 ( mulq 4 5 ) )	120.0	contagion through middle layer
-negq ( addq ( mulq 2 3.0 ) ( subq 1 7 ) )	-12.0	mulq 2 3.0 = 6.0 (Decimal contagion); subq 1 7 = sig=[1,7] → b-a = 7-1 = 6; outer addq fwd=[6.0, 6] → 6+6.0 = 12.0; negq → -12.0
+negq ( addq ( mulq 2 3.0 ) ( subq 1 7 ) )	-12.0	mulq 2 3.0 = 6.0 (Float contagion); subq 1 7 = sig=[1,7] → b-a = 7-1 = 6; outer addq fwd=[6.0, 6] → 6+6.0 = 12.0; negq → -12.0
 		
 # ---- 6g. Multivalues, empty parens, residues ----		
 ( 1 dup )	1 1	body produces multivalue [1, 1]; both flow onto outer stack
@@ -309,10 +309,10 @@ def doub fn [ [ n:Integer ] [ Integer ] [ n n addq ] ] 5 doub	10	user fn computi
 def sqr fn [ [ n:Integer ] [ Integer ] [ n n mulq ] ] 7 sqr	49	user fn computing n * n via mulq
 def neg2 fn [ [ n:Integer ] [ Integer ] [ n negq ] ] 5 neg2	-5	user fn wrapping negq
 		
-# Decimal version — the body's args/return types still match Integer		
+# Float version — the body's args/return types still match Integer		
 # in this fn (the spec runner's fn sig only accepts a single typed		
 # param list); but the Number-typed addq still handles Integer args		
-# normally. For Decimal args, the call would fail sig match at fn's		
+# normally. For Float args, the call would fail sig match at fn's		
 # [Integer] entry — pinned in the next row.		
 def inc fn [ [ n:Integer ] [ Integer ] [ n 1 addq ] ] 5.0 inc	ERROR:signature	5.0 fails the fn's [Integer] param sig
 		
@@ -335,7 +335,7 @@ def trip fn [ [ n:Integer ] [ Integer ] [ n n addq n addq ] ] 4 trip	12	body com
 # type's BaseValue:		
 #		
 #   Integer ? → 0		
-#   Decimal ? → 0.0		
+#   Float ? → 0.0		
 #   Number  ? → 0  (defaults to Integer; Number/BaseValue picks I)		
 #   String  ? → ''		
 #   Boolean ? → false		
@@ -344,7 +344,7 @@ def trip fn [ [ n:Integer ] [ Integer ] [ n n addq n addq ] ] 4 trip	12	body com
 #   None    ? → null		
 #   Atom    ? → atom()  (empty-named atom)		
 #		
-# These rows exercise the numeric subset (Integer / Decimal / Number).		
+# These rows exercise the numeric subset (Integer / Float / Number).		
 		
 # One-arg fn with the param optional. Both call forms work — providing		
 # the arg or omitting it.		
@@ -363,15 +363,15 @@ def both fn [ [ a:Integer ? b:Integer ? ] [ Integer ] [ a b addq ] ] both 1 2	3	
 def both fn [ [ a:Integer ? b:Integer ? ] [ Integer ] [ a b addq ] ] both 1	1	one provided — matches the 1-arg reduced sig (here: a=1, b defaulted to 0); 1+0=1
 def both fn [ [ a:Integer ? b:Integer ? ] [ Integer ] [ a b addq ] ] both	0	none provided — matches the 0-arg reduced sig; both defaulted to 0 → 0+0=0
 		
-# Decimal optional — defaults to 0.0.		
-def dub fn [ [ a:Decimal ? ] [ Decimal ] [ a a addq ] ] dub 5.0	10.0	a=5.0, body 5.0+5.0=10.0
-def dub fn [ [ a:Decimal ? ] [ Decimal ] [ a a addq ] ] dub	0.0	a defaulted to BaseValue(Decimal)=0.0, body 0.0+0.0=0.0
+# Float optional — defaults to 0.0.		
+def dub fn [ [ a:Float ? ] [ Float ] [ a a addq ] ] dub 5.0	10.0	a=5.0, body 5.0+5.0=10.0
+def dub fn [ [ a:Float ? ] [ Float ] [ a a addq ] ] dub	0.0	a defaulted to BaseValue(Float)=0.0, body 0.0+0.0=0.0
 		
 # Number optional — BaseValue picks Integer (0) for the Number root.		
-# Calls with Decimal still flow through the Number-typed sig and stay		
-# as Decimal via the contagion rule.		
+# Calls with Float still flow through the Number-typed sig and stay		
+# as Float via the contagion rule.		
 def m fn [ [ a:Number ? ] [ Number ] [ a a addq ] ] m 5	10	a=5 (Integer), body 5+5=10
-def m fn [ [ a:Number ? ] [ Number ] [ a a addq ] ] m 5.0	10.0	a=5.0 (Decimal), contagion → 10.0
+def m fn [ [ a:Number ? ] [ Number ] [ a a addq ] ] m 5.0	10.0	a=5.0 (Float), contagion → 10.0
 def m fn [ [ a:Number ? ] [ Number ] [ a a addq ] ] m	0	a defaulted to BaseValue(Number)=Integer 0; 0+0=0
 		
 # Mixed required/optional params — required must always be present,		
@@ -400,12 +400,12 @@ addq 1	ERROR:	insufficient args for forward-prec word; only one arg available
 subq	ERROR:	zero args
 negq	ERROR:	zero args for unary
 		
-# ---------- 10. Specificity still works for Decimal vs Any ----------		
-# `tagq` has overloads [Any] and [Integer] (no [Decimal]); a Decimal		
+# ---------- 10. Specificity still works for Float vs Any ----------		
+# `tagq` has overloads [Any] and [Integer] (no [Float]); a Float		
 # arg falls through to [Any]. This is unchanged by the Number-typing		
 # of addq/subq because tagq's sigs are not Number-rooted.		
-tagq 3.14	'any'	Decimal hits [Any] catch-all (tagq has no [Decimal] overload)
+tagq 3.14	'any'	Float hits [Any] catch-all (tagq has no [Float] overload)
 tagq -0.5	'any'	negative decimal also hits [Any]
 tagq 7	'specific'	control: Integer still hits the [Integer]-specific overload
 tagq 0	'specific'	zero is still Integer
-tagq 0.0	'any'	0.0 is Decimal, falls through to [Any]
+tagq 0.0	'any'	0.0 is Float, falls through to [Any]

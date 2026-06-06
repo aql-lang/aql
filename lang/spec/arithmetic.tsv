@@ -6,7 +6,7 @@
 # (`10 sub 3 = 7`, `20 div 4 = 5`, `2 pow 10 = 1024`) while the pure
 # forward form `op a b` computes `b OP a` (`sub 10 3 = 3-10 = -7`). add and
 # mul are commutative so both forms agree. Integer/Integer stays Integer
-# (integer division truncates); any Decimal operand promotes to Decimal.
+# (integer division truncates); any Float operand promotes to Float.
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  add / mul — commutative
@@ -15,17 +15,17 @@ add 2 3	5	addition
 add -3 8	5	negative operand
 mul 4 5	20	multiplication
 mul -2 -3	6	negative × negative
-add 2.5 1.5	4.0	Decimal addition stays Decimal
-mul 2.5 4	10.0	Integer operand promotes to Decimal
+add 2.5 1.5	4.0	Float addition stays Float
+mul 2.5 4	10.0	Integer operand promotes to Float
 #
 # §2  sub / div / mod / pow — non-commutative (handler computes b OP a)
 sub 10 3	-7	forward `sub 10 3` = 3-10
 10 sub 3	7	swap `10 sub 3` = 10-3 (natural reading)
-sub 1.0 0.25	-0.75	Decimal subtraction
+sub 1.0 0.25	-0.75	Float subtraction
 div 20 4	0	forward `div 20 4` = 4/20 = 0 (integer division truncates)
 20 div 4	5	swap `20 div 4` = 20/4 = 5 (natural reading)
 div 7 2	0	integer division truncates toward zero
-div 7.0 2	0.2857142857142857	Decimal operand → Decimal division
+div 7.0 2	0.2857142857142857	Float operand → Float division
 mod 17 5	5	forward `mod 17 5` = 5 mod 17 = 5
 10 mod 3	1	swap `10 mod 3` = 10 mod 3 = 1 (natural reading)
 pow 2 10	100	forward `pow 2 10` = 10^2 = 100
@@ -38,7 +38,7 @@ add 'a' 'b'	'ba'	String + String concatenates in b++a order
 add true 1	'1true'	Boolean + Integer coerces to String concat
 #
 # §4  numeric equivalence across leaves
-eq 1 1.0	true	Integer and Decimal of equal magnitude compare equal
+eq 1 1.0	true	Integer and Float of equal magnitude compare equal
 #
 # §5  errors
 20 div 0	ERROR:division by zero	integer division by zero

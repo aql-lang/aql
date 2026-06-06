@@ -481,7 +481,7 @@ func ReturnsNumericBinary() ReturnsFunc {
 			args[1].Parent.ConformsTo(TInteger) {
 			return []Value{NewCarrier(TInteger)}
 		}
-		return []Value{NewCarrier(TDecimal)}
+		return []Value{NewCarrier(TFloat)}
 	}
 }
 

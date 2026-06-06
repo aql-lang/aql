@@ -375,7 +375,7 @@ func TestSizeHandlerBehaviour(t *testing.T) {
 		val  Value
 		want int64
 	}{
-		{"decimal_floors", NewDecimal(7.9), 7},
+		{"decimal_floors", NewFloat(7.9), 7},
 		{"integer_magnitude", NewInteger(42), 42},
 		{"boolean_true", NewBoolean(true), 1},
 		{"boolean_false", NewBoolean(false), 0},

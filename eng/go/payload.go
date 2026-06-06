@@ -44,9 +44,9 @@ type Payload interface {
 // value. Constructed by NewInteger.
 type IntPayload struct{ N int64 }
 
-// DecPayload carries the float64 payload for a Scalar/Number/Decimal
-// value. Constructed by NewDecimal.
-type DecPayload struct{ F float64 }
+// FloatPayload carries the float64 payload for a Scalar/Number/Float
+// value. Constructed by NewFloat.
+type FloatPayload struct{ F float64 }
 
 // StrPayload carries the string payload for a Scalar/String value.
 // Constructed by NewString.
@@ -192,7 +192,7 @@ func (HostTypeBody) hostTypeBody() {}
 // — it's a checklist, not active code yet.
 //
 // Wrapper variants:
-//   IntPayload, DecPayload, StrPayload, BoolPayload, AtomPayload,
+//   IntPayload, FloatPayload, StrPayload, BoolPayload, AtomPayload,
 //   PathPayload, ListPayload, MapPayload, ParenExprPayload,
 //   InterpStringPayload, TimePayload, DurationPayload,
 //   TimezonePayload, NonePayload, ExtensionPayload.
@@ -217,7 +217,7 @@ func (HostTypeBody) hostTypeBody() {}
 // Wrapper-variant markers.
 func (ReachInfo) payloadMarker()           {}
 func (IntPayload) payloadMarker()          {}
-func (DecPayload) payloadMarker()          {}
+func (FloatPayload) payloadMarker()        {}
 func (StrPayload) payloadMarker()          {}
 func (BoolPayload) payloadMarker()         {}
 func (AtomPayload) payloadMarker()         {}

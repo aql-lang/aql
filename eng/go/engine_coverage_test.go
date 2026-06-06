@@ -56,9 +56,9 @@ func TestTypeMatchHierarchy(t *testing.T) {
 }
 
 func TestCommonAncestorType(t *testing.T) {
-	// Integer + Decimal → Number; String + Integer → Scalar; List + Integer → Any.
-	if got := CommonAncestorType(TInteger, TDecimal); !got.Equal(TNumber) {
-		t.Errorf("Integer+Decimal: got %v, want Number", got)
+	// Integer + Float → Number; String + Integer → Scalar; List + Integer → Any.
+	if got := CommonAncestorType(TInteger, TFloat); !got.Equal(TNumber) {
+		t.Errorf("Integer+Float: got %v, want Number", got)
 	}
 	if got := CommonAncestorType(TString, TInteger); !got.Equal(TScalar) {
 		t.Errorf("String+Integer: got %v, want Scalar", got)
@@ -77,7 +77,7 @@ func TestValueConstructors(t *testing.T) {
 		want  *Type
 	}{
 		{"integer", NewInteger(42), TInteger},
-		{"decimal", NewDecimal(3.14), TDecimal},
+		{"decimal", NewFloat(3.14), TFloat},
 		{"string", NewString("hi"), TString},
 		{"boolean", NewBoolean(true), TBoolean},
 		{"atom", NewAtom("x"), TAtom},

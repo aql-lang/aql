@@ -151,7 +151,7 @@ func buildRandExportsForState(state *randState) (*native.OrderedMap, error) {
 		[]*native.Type{native.TBoolean}, subReg))
 	exports.Set("float", wrapRandFnDef("rand-float",
 		nil,
-		[]*native.Type{native.TDecimal}, subReg))
+		[]*native.Type{native.TFloat}, subReg))
 	exports.Set("string", wrapRandFnDef("rand-string",
 		[]native.FnParam{{Type: native.TString}, {Type: native.TInteger}},
 		[]*native.Type{native.TString}, subReg))
@@ -267,13 +267,13 @@ func randNativesForState(state *randState) []native.NativeFunc {
 			Signatures: []native.NativeSig{{
 				// Returns a uniform decimal in [0.0, 1.0).
 				Args:       []*native.Type{},
-				Returns:    []*native.Type{native.TDecimal},
+				Returns:    []*native.Type{native.TFloat},
 				BarrierPos: -1,
 				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					state.mu.Lock()
 					f := state.rng.Float64()
 					state.mu.Unlock()
-					return []native.Value{native.NewDecimal(f)}, nil
+					return []native.Value{native.NewFloat(f)}, nil
 				},
 			}},
 		},

@@ -111,7 +111,7 @@ func jsonicToValue(v any) (Value, error) {
 		if val == float64(int64(val)) && !math.IsInf(val, 0) && !math.IsNaN(val) {
 			return NewInteger(int64(val)), nil
 		}
-		return NewDecimal(val), nil
+		return NewFloat(val), nil
 	case string:
 		return NewString(val), nil
 	case []any:
@@ -165,8 +165,8 @@ func valueToJsonic(v Value) string {
 	case v.Parent.ConformsTo(TString):
 		_as0, _ := AsString(v)
 		return fmt.Sprintf("%q", _as0)
-	case v.Parent.ConformsTo(TDecimal):
-		_as1, _ := AsDecimal(v)
+	case v.Parent.ConformsTo(TFloat):
+		_as1, _ := AsFloat(v)
 		return strconv.FormatFloat(_as1, 'f', -1, 64)
 	case v.Parent.ConformsTo(TInteger):
 		_as2, _ := AsInteger(v)

@@ -30,7 +30,7 @@
 		
 # String target — every value flows through ValToString.		
 make String 42	'42'	Integer → String via decimal text
-make String 3.14	'3.14'	Decimal → String
+make String 3.14	'3.14'	Float → String
 make String true	'true'	Boolean → String
 make String 'hi'	'hi'	String passthrough
 		
@@ -42,10 +42,10 @@ make Integer 42	42	passthrough
 # Number target — same parser as Integer (Number is the supertype).		
 make Number '42'	42	parsed as Integer (the most-specific Number subtype)
 		
-# Decimal target — strict float parse.		
-make Decimal '3.14'	3.14	
-make Decimal '-2.5'	-2.5	
-make Decimal 7	7.0	Integer→Decimal goes through ValToString → ParseFloat → 7.0
+# Float target — strict float parse.		
+make Float '3.14'	3.14	
+make Float '-2.5'	-2.5	
+make Float 7	7.0	Integer→Float goes through ValToString → ParseFloat → 7.0
 		
 # Boolean target — literal forms, numeric, fallback to non-empty.		
 make Boolean 'true'	true	
@@ -69,7 +69,7 @@ make Atom 'Bar123'	Bar123/q
 5 make Integer	5	stack-prefix form; 5 sits behind, Integer arrives forward
 '42' make Integer	42	String coerces via the same path as the prefix form
 make Integer 5	5	bare prefix
-3.14 make Decimal	3.14	
+3.14 make Float	3.14	
 'hi' make String	'hi'	
 		
 # ====================================================================		
@@ -80,7 +80,7 @@ make Integer 5	5	bare prefix
 # input's type.		
 		
 make Integer '5' typeof	Integer	parsed Integer reports its target type
-make Decimal '3.14' typeof	Decimal	
+make Float '3.14' typeof	Float	
 make Boolean 'true' typeof	Boolean	
 make Atom 'x' typeof	Atom	
 # Strings get the more-specific ProperString / EmptyString subtype based		
@@ -136,7 +136,7 @@ make Options { a:1 } typeof	Map
 # Conversion failures produce concrete error messages.		
 		
 make Integer 'abc'	ERROR:cannot convert	non-numeric strings cannot become Integers
-make Decimal 'x'	ERROR:cannot convert	
+make Float 'x'	ERROR:cannot convert	
 make Number 'y'	ERROR:cannot convert	
 make Path 99	ERROR:Path source must be a list or string	Path requires list/string source
 		

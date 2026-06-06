@@ -4,6 +4,12 @@ Short, task-oriented recipes. Each entry assumes you've worked
 through the **[Tutorial](TUTORIAL.md)** and just need an answer to
 "how do I…?" Use the index below to jump straight in.
 
+> **Notation.** In code, a `# returns …` comment shows what an
+> expression evaluates to (`5 double  # returns 10`); in prose we say
+> "`5 double` returns `10`". The comment is ordinary documentation, not
+> special syntax. (AQL has no result arrow — `=>` is the
+> anonymous-function word `afn`.)
+
 ## Index
 
 * [Define and use custom words](#define-and-use-custom-words)
@@ -42,7 +48,7 @@ through the **[Tutorial](TUTORIAL.md)** and just need an answer to
 
 ```
 def double word [dup add]
-5 double                      => 10
+5 double                      # returns 10
 ```
 
 Custom words compose:
@@ -50,7 +56,7 @@ Custom words compose:
 <!-- aql-test: skip -->
 ```
 def quadruple word [double double]
-5 quadruple                   => 20
+5 quadruple                   # returns 20
 ```
 
 Re-bind by calling `def` again; `undef` removes the latest binding:
@@ -58,9 +64,9 @@ Re-bind by calling `def` again; `undef` removes the latest binding:
 ```
 def foo 1
 def foo 2
-foo                           => 2
+foo                           # returns 2
 undef foo
-foo                           => 1
+foo                           # returns 1
 ```
 
 
@@ -71,7 +77,7 @@ foo                           => 1
 
 ```
 def square fn [[x:Number] [Number] [x mul x]]
-5 square                      => 25
+5 square                      # returns 25
 ```
 
 Inside the body, named parameters (`x:Number`) bind to argument
@@ -81,9 +87,9 @@ second is `args[1]`, etc. You can also access the full slot list via
 
 ```
 def show fn [[a:Number b:Number] [String] [`${a} and ${b}`]]
-show 1 2                      => '1 and 2'
-2 show 1                      => '1 and 2'
-2 1 show                      => '1 and 2'
+show 1 2                      # returns '1 and 2'
+2 show 1                      # returns '1 and 2'
+2 1 show                      # returns '1 and 2'
 ```
 
 All three calls compute the same thing: AQL fills argument slots by
@@ -100,12 +106,12 @@ wins:
 ```
 def add1 fn [
   [Integer] [Integer] [1 add]
-  [Decimal] [Decimal] [1.0 add]
+  [Float] [Float] [1.0 add]
   [String]  [String]  [`${args.0}_1`]
 ]
-add1 5                        => 6
-add1 2.5                      => 3.5
-add1 "abc"                    => 'abc_1'
+add1 5                        # returns 6
+add1 2.5                      # returns 3.5
+add1 "abc"                    # returns 'abc_1'
 ```
 
 
@@ -123,7 +129,7 @@ def unless (macro [[cond body] [
   quote [ if unquote cond [] unquote body ]
 ]])
 def x 5
-unless (x gt 10) [99]         => 99        # body runs only when the condition is false
+unless (x gt 10) [99]         # returns 99 — body runs only when the condition is false
 ```
 
 Macros are **hygienic**: a name the template introduces with a literal
@@ -133,7 +139,7 @@ don't need to manage temporaries by hand:
 ```
 def myor (macro [[a b] [ quote [ def tmp unquote a  if tmp [tmp] [unquote b] ] ]])
 def tmp 42
-myor false tmp                => 42        # the template's `tmp` is renamed; your `tmp` is safe
+myor false tmp                # returns 42 — the template's `tmp` is renamed; your `tmp` is safe
 ```
 
 To bind a name the *caller* should see, take it through `unquote` (`def
@@ -147,12 +153,12 @@ hand-written cases. See **[Reference: Macros](REFERENCE.md#macros)**.
 Create, access, build:
 
 ```
-[10, 20, 30]                  => [10 20 30]
-[10, 20, 30] . 1              => 20
-iota 5                        => [0 1 2 3 4]
-range 2 6                     => [2 3 4 5]        # start/stop
-range 0 10 3                  => [0 3 6 9]        # start/stop/step
-for 5 [42]                    => 42 42 42 42 42   # body runs 5 times
+[10, 20, 30]                  # returns [10 20 30]
+[10, 20, 30] . 1              # returns 20
+iota 5                        # returns [0 1 2 3 4]
+range 2 6                     # returns [2 3 4 5] — start/stop
+range 0 10 3                  # returns [0 3 6 9] — start/stop/step
+for 5 [42]                    # returns 42 42 42 42 42 — body runs 5 times
 ```
 
 Transform with higher-order words. Argument order follows the rule
@@ -160,20 +166,20 @@ from **[Tutorial §3](TUTORIAL.md#the-argument-order-rule)** — `fold`
 takes `body data init` in all-forward form:
 
 ```
-[1, 2, 3] each [dup mul]      => [1 4 9]
-fold [add] [1, 2, 3] 0        => 6              # all-forward
-0 [1, 2, 3] [add] fold        => 6              # all-stack, same result
+[1, 2, 3] each [dup mul]      # returns [1 4 9]
+fold [add] [1, 2, 3] 0        # returns 6 — all-forward
+0 [1, 2, 3] [add] fold        # returns 6 — all-stack, same result
 ```
 
 Take, drop, reverse, flatten, indexof (built-in):
 
 ```
-[1,2,3,4] take 2              => [1 2]
-[1,2,3,4] shed 2              => [3 4]
-[1,2,3] reverse               => [3 2 1]
-[[1,2],[3]] flatten           => [1 2 3]        # one level
-flatten -1 [1,[2,[3]]]        => [1 2 3]        # fully flatten
-"aql:string-util" import end StringUtil.indexof [20,10] [10,20,30]    => [1 0]          # index of each needle
+[1,2,3,4] take 2              # returns [1 2]
+[1,2,3,4] shed 2              # returns [3 4]
+[1,2,3] reverse               # returns [3 2 1]
+[[1,2],[3]] flatten           # returns [1 2 3] — one level
+flatten -1 [1,[2,[3]]]        # returns [1 2 3] — fully flatten
+"aql:string-util" import end StringUtil.indexof [20,10] [10,20,30]    # returns [1 0] — index of each needle
 ```
 
 The richer array vocabulary — reshaping, ordering, grouping,
@@ -181,21 +187,21 @@ neighborhoods, indexing — lives in the `aql:array-util` module:
 
 ```
 "aql:array-util" import end
-iota 6 ArrayUtil.reshape [2, 3]   => [[0 1 2] [3 4 5]]
-[3,1,2] ArrayUtil.grade           => [1 2 0]      # sort indices
-[1,2,2,3] ArrayUtil.unique        => [1 2 3]
-[1,2,3,4] ArrayUtil.window 2      => [[1 2] [2 3] [3 4]]
-[1,2,3] ArrayUtil.pairs           => [[1 2] [2 3]]
-[10,20,30] ArrayUtil.at [2,0]     => [30 10]
+iota 6 ArrayUtil.reshape [2, 3]   # returns [[0 1 2] [3 4 5]]
+[3,1,2] ArrayUtil.grade           # returns [1 2 0] — sort indices
+[1,2,2,3] ArrayUtil.unique        # returns [1 2 3]
+[1,2,3,4] ArrayUtil.window 2      # returns [[1 2] [2 3] [3 4]]
+[1,2,3] ArrayUtil.pairs           # returns [[1 2] [2 3]]
+[10,20,30] ArrayUtil.at [2,0]     # returns [30 10]
 ```
 
 
 ## Work with maps
 
 ```
-{x:1, y:2}                    => {x:1 y:2}
-{x:1} . x                     => 1
-{users: ["Ada"]} . users . 0  => 'Ada'
+{x:1, y:2}                    # returns {x:1 y:2}
+{x:1} . x                     # returns 1
+{users: ["Ada"]} . users . 0  # returns 'Ada'
 ```
 
 A bare name with no `: value` is **field shorthand** — `{foo}` means
@@ -203,8 +209,8 @@ A bare name with no `: value` is **field shorthand** — `{foo}` means
 
 ```
 def x 1  def y 2
-{x y}                         => {x:1 y:2}
-{x z:3 y}                     => {x:1 y:2 z:3}   # mix with explicit pairs
+{x y}                         # returns {x:1 y:2}
+{x z:3 y}                     # returns {x:1 y:2 z:3} — mix with explicit pairs
 ```
 
 The key is the base name and the value is the whole token, so word
@@ -216,7 +222,7 @@ identifiers qualify; quoted keys like `{'foo'}` stay errors. See
 `do` evaluates list-valued entries inside a map:
 
 ```
-do {x: [1 add 2], y: [3 mul 4]}        => {x:3 y:12}
+do {x: [1 add 2], y: [3 mul 4]}        # returns {x:3 y:12}
 ```
 
 A function stored in a map is callable through the dotted accessor when
@@ -225,7 +231,7 @@ you store it with the `/r` ref modifier, which keeps it as a data value:
 ```
 def inc fn [[n:Integer] [Integer] [n add 1]]
 def m {inc: inc/r}
-m.inc 5                                => 6
+m.inc 5                                # returns 6
 ```
 
 Stored bare (`{inc: inc}`), the map value is auto-evaluated and `inc` is
@@ -240,14 +246,14 @@ Backtick strings interpolate `${...}` expressions:
 
 ```
 def name "world"
-`hello ${name}`                       => 'hello world'
-`2 + 3 = ${2 add 3}`                  => '2 + 3 = 5'
+`hello ${name}`                       # returns 'hello world'
+`2 + 3 = ${2 add 3}`                  # returns '2 + 3 = 5'
 ```
 
 Nest as deep as needed:
 
 ```
-`a${`inner ${1 add 2}`}b`             => 'ainner 3b'
+`a${`inner ${1 add 2}`}b`             # returns 'ainner 3b'
 ```
 
 Escapes inside templates: `\\`, `` \` ``, `\$`, `\n`, `\t`, `\r`.
@@ -258,8 +264,8 @@ Escapes inside templates: `\\`, `` \` ``, `\$`, `\n`, `\t`, `\r`.
 Use template strings for general value-to-string formatting:
 
 ```
-`pi = ${3.14159}`                     => 'pi = 3.14159'
-`hello ${"world"}`                    => 'hello world'
+`pi = ${3.14159}`                     # returns 'pi = 3.14159'
+`hello ${"world"}`                    # returns 'hello world'
 ```
 
 For controlled rounding, import the math module:
@@ -267,7 +273,7 @@ For controlled rounding, import the math module:
 <!-- aql-test: skip -->
 ```
 "aql:math-util" import end
-`${3.14159 100 mul MathUtil.round 100 div}` => '3.14'
+`${3.14159 100 mul MathUtil.round 100 div}`  # returns '3.14'
 ```
 
 For times, use the `aql:time-util` module — see
@@ -280,7 +286,7 @@ For times, use the `aql:time-util` module — see
 value on the stack. `error` pattern-matches the result:
 
 ```
-do [1 div 0] error [drop 42]          => 42
+do [1 div 0] error [drop 42]          # returns 42
 ```
 
 Pattern: `do [risky] error [handler]`. Inside the handler the error
@@ -304,7 +310,7 @@ If there is no error, the `error` word is a no-op.
 gathers the results:
 
 ```
-"aql:time-util" import end TimeUtil.await [[1 add 2] [3 add 4]]           => [3 7]
+"aql:time-util" import end TimeUtil.await [[1 add 2] [3 add 4]]           # returns [3 7]
 ```
 
 Choose a mode via an Options map; these mirror JavaScript Promise
@@ -314,19 +320,19 @@ combinators:
 ```
 # 'all (default): all must succeed; first error fails the lot
 await {mode: 'all}   [[sleep 10 1] [sleep 10 2]]
-=> [1 2]
+  # returns [1 2]
 
 # 'full: always returns all results with status
 await {mode: 'full}  [[1] [1 div 0]]
-=> [{status:'ok,value:1},{status:'error value:...}]
+  # returns [{status:'ok,value:1},{status:'error value:...}]
 
 # 'first: the first to complete wins
 await {mode: 'first} [[sleep 100 1] [sleep 10 2]]
-=> 2
+  # returns 2
 
 # 'any: the first non-error result wins
 await {mode: 'any}   [[1 div 0] [sleep 10 42]]
-=> 42
+  # returns 42
 ```
 
 Each branch runs in a sub-engine, so writes to mutable objects
@@ -406,7 +412,7 @@ def db sqlite-open "data.db"
 db sqlite-exec "CREATE TABLE IF NOT EXISTS users (id INTEGER, name TEXT)"
 db sqlite-exec "INSERT INTO users VALUES (?, ?)" [1, "Ada"]
 db sqlite-query "SELECT * FROM users WHERE id = ?" [1]
-=> [{id:1 name:'Ada'}]
+  # returns [{id:1 name:'Ada'}]
 db sqlite-close
 ```
 
@@ -419,8 +425,8 @@ A record is a struct with named, typed fields. Order is significant.
 
 ```
 def Point refine Record [x:Number y:Number]
-make Point [3 4]                      => {x:3 y:4}
-make Point {x:1 y:2}                  => {x:1 y:2}
+make Point [3 4]                      # returns {x:3 y:4}
+make Point {x:1 y:2}                  # returns {x:1 y:2}
 ```
 
 
@@ -433,7 +439,7 @@ def Row refine Record [name:String qty:Integer]
 def Inventory refine Table Row
 
 make Inventory [["Widget" 5] ["Bolt" 12]]
-=> [{name:'Widget' qty:5} {name:'Bolt' qty:12}]
+  # returns [{name:'Widget' qty:5} {name:'Bolt' qty:12}]
 ```
 
 
@@ -452,7 +458,7 @@ def Counter (refine Object {count: 0})
 def c (make Counter {})
 c 1 "count" set                       # c.count := 1
 c 2 "count" set                       # c.count := 2
-c.count                               => 2
+c.count                               # returns 2
 ```
 
 Wrap `make` in `(…)` so `def` binds the *result* to `c` (rather than
@@ -465,8 +471,8 @@ construct** — dotted access binds tightly to its immediate receiver:
 
 ```
 def Counter (refine Object {count: 0})
-(make Counter {}).count               => 0       # parenthesise the make
-make Counter {} .count                => error   # parses as make Counter ({}.count)
+(make Counter {}).count               # returns 0 — parenthesise the make
+make Counter {} .count                # returns error — parses as make Counter ({}.count)
 ```
 
 Binding to `c` first (as above) sidesteps this; otherwise wrap the
@@ -487,7 +493,7 @@ def Foo  (refine Object {bits: (make Bits {})})   # construct the default
 
 def inst (make Foo {})
 inst.bits 1 "0" set                               # mutate the nested object
-inst.bits                             => Object/Bits{0:1}
+inst.bits                             # returns Object/Bits{0:1}
 ```
 
 The `field: NestedType` form looks reasonable (it reads like a type
@@ -515,7 +521,7 @@ def doubled fn [[c:Counter] [Integer] [c.count 2 mul]]
 
 def c (make Counter {})
 c 5 "count" set
-c doubled                             => 10
+c doubled                             # returns 10
 ```
 
 A mutator changes the instance in place. `set` returns nothing, so the
@@ -530,7 +536,7 @@ def bump fn [[c:Counter] [] [c (c.count 1 add) "count" set]]
 def c (make Counter {})
 c bump
 c bump
-c.count                               => 2
+c.count                               # returns 2
 ```
 
 Because methods are just typed functions, they overload, type-check,
@@ -544,20 +550,20 @@ Bare-word declarations pop from the stack:
 
 ```
 "aql:math-util" import end
-3 4 var [[a b] (a mul a) add (b mul b) MathUtil.sqrt]    => 5.0
+3 4 var [[a b] (a mul a) add (b mul b) MathUtil.sqrt]    # returns 5.0
 ```
 
 `a` gets the topmost value (4) and `b` gets the next (3), matching
 the argument-order rule. Inline values are also accepted:
 
 ```
-var [[[x 2] [y 10]] x add y]          => 12
+var [[[x 2] [y 10]] x add y]          # returns 12
 ```
 
 Mix the two:
 
 ```
-10 var [[[x 2] y] x add y]            => 12       # x=2 inline, y=10 from stack
+10 var [[[x 2] y] x add y]            # returns 12 — x=2 inline, y=10 from stack
 ```
 
 
@@ -567,21 +573,21 @@ Numeric loop runs the body N times (the body sees an empty stack —
 `for` does not push the iteration index):
 
 ```
-for 5 [42]                    => 42 42 42 42 42
+for 5 [42]                    # returns 42 42 42 42 42
 ```
 
 Range form (start, stop) and (start, stop, step):
 
 ```
-for [1, 4] [99]               => 99 99 99
-for [0, 10, 2] [99]           => 99 99 99 99 99
+for [1, 4] [99]               # returns 99 99 99
+for [0, 10, 2] [99]           # returns 99 99 99 99 99
 ```
 
 If you want the index inside the body, use `iota N each [...]`
 instead — `each` does pass the element to the body:
 
 ```
-iota 5 each [dup mul]         => [0 1 4 9 16]
+iota 5 each [dup mul]         # returns [0 1 4 9 16]
 ```
 
 For a **side-effecting loop that collects nothing** — mutating an object,
@@ -593,26 +599,26 @@ the stack empty (no throwaway sentinel needed), and it produces no result:
 def Box (refine Object {sum: 0})
 def b (make Box {})
 [1 2 3] for-each [var [[x] b (b.sum x add) "sum" set]]
-b.sum                         => 6
+b.sum                         # returns 6
 ```
 
 
 ## Check types and convert values
 
 ```
-typeof 42                     => Integer
-typeof "hello"                => ProperString
-pathof Integer                => [Scalar Number Integer]
-42 is Number                  => true
-42 is String                  => false
+typeof 42                     # returns Integer
+typeof "hello"                # returns ProperString
+pathof Integer                # returns [Scalar Number Integer]
+42 is Number                  # returns true
+42 is String                  # returns false
 ```
 
 Convert with `convert`:
 
 ```
-convert Integer "42"          => 42
-convert String 42             => '42'
-convert Decimal 5             => 5.0
+convert Integer "42"          # returns 42
+convert String 42             # returns '42'
+convert Float 5             # returns 5.0
 ```
 
 
@@ -650,7 +656,7 @@ import module [
   def greet fn [[name:String] [String] [`hello ${name}`]]
   export "utils" {base: base, greet: greet/r}
 ]
-"Ada" utils.greet                     => 'hello Ada'
+"Ada" utils.greet                     # returns 'hello Ada'
 ```
 
 Here `base` (a value) exports bare, while `greet` (a function) exports
@@ -668,7 +674,7 @@ prefix):
 
 ```
 "aql:math-util" import end
-5 MathUtil.log                            => 1.6094379124341003
+5 MathUtil.log                            # returns 1.6094379124341003
 ```
 
 Native module words are reached via the namespace prefix
@@ -682,9 +688,9 @@ building bloom filters and other sketches:
 
 ```
 "aql:bin-util" import end
-"A" BinUtil.ord                           => 65
-65 BinUtil.chr                            => 'A'
-"hello" BinUtil.fnv32                     => 1335831723   # 32-bit FNV-1a
+"A" BinUtil.ord                           # returns 65
+65 BinUtil.chr                            # returns 'A'
+"hello" BinUtil.fnv32                     # returns 1335831723 — 32-bit FNV-1a
 "hello" BinUtil.fnv64                     # 64-bit FNV-1a, non-negative
 ```
 
@@ -813,7 +819,7 @@ Test.report end print
 #   pass: ready
 #   skip: flaky
 # 1 passed, 0 failed, 1 skipped
-Test.fail-count end print             => 0
+Test.fail-count end print             # returns 0
 ```
 
 A property body may `import` a native module (e.g. `"aql:math-util" import`)
@@ -861,7 +867,7 @@ In the REPL, `:trace on` toggles tracing for every expression.
 `depth` reports the current stack size:
 
 ```
-1 2 3 depth                   => 1 2 3 3   # depth pushes the count; the values stay
+1 2 3 depth                   # returns 1 2 3 3 — depth pushes the count; the values stay
 ```
 
 For deeper debugging, `inspect` returns a structured view of a word
@@ -882,7 +888,7 @@ second module name:
 
 <!-- aql-test: skip -->
 ```
-"aql:math-util" import end "foo" print     => 'foo'
+"aql:math-util" import end "foo" print     # returns 'foo'
 ```
 
 Without `end`, `import` would attempt to import a module named

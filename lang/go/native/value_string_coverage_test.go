@@ -19,8 +19,8 @@ func TestValueStringOpenParen(t *testing.T) {
 	}
 }
 
-func TestValueStringDecimalCov(t *testing.T) {
-	v := NewDecimal(3.14)
+func TestValueStringFloatCov(t *testing.T) {
+	v := NewFloat(3.14)
 	if v.String() != "3.14" {
 		t.Errorf("expected 3.14, got %s", v.String())
 	}
@@ -92,7 +92,7 @@ func TestValueAsNumberCov(t *testing.T) {
 		_as1, _ := AsNumber(v)
 		t.Errorf("expected 42.0, got %f", _as1)
 	}
-	v = NewDecimal(3.14)
+	v = NewFloat(3.14)
 	_as2, _ := AsNumber(v)
 	if _as2 != 3.14 {
 		_as3, _ := AsNumber(v)

@@ -31,7 +31,7 @@ func toFloat(v eng.Value) float64 {
 		n, _ := eng.AsInteger(v)
 		return float64(n)
 	}
-	f, _ := eng.AsDecimal(v)
+	f, _ := eng.AsFloat(v)
 	return f
 }
 
@@ -42,7 +42,7 @@ func numericBinary(intOp func(a, b int64) int64, floatOp func(a, b float64) floa
 			b, _ := eng.AsInteger(args[1])
 			return []eng.Value{eng.NewInteger(intOp(a, b))}, nil
 		}
-		return []eng.Value{eng.NewDecimal(floatOp(toFloat(args[0]), toFloat(args[1])))}, nil
+		return []eng.Value{eng.NewFloat(floatOp(toFloat(args[0]), toFloat(args[1])))}, nil
 	}
 }
 
@@ -81,8 +81,8 @@ func registerArith(r *eng.Registry) {
 					n, _ := eng.AsInteger(args[0])
 					return []eng.Value{eng.NewInteger(-n)}, nil
 				}
-				f, _ := eng.AsDecimal(args[0])
-				return []eng.Value{eng.NewDecimal(-f)}, nil
+				f, _ := eng.AsFloat(args[0])
+				return []eng.Value{eng.NewFloat(-f)}, nil
 			},
 			Returns: []*eng.Type{eng.TNumber},
 		}},

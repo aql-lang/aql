@@ -148,8 +148,8 @@ func TestExtraStringTypeLiteral(t *testing.T) {
 	}
 }
 
-func TestExtraStringDecimal(t *testing.T) {
-	v := NewDecimal(3.14)
+func TestExtraStringFloat(t *testing.T) {
+	v := NewFloat(3.14)
 	s := v.String()
 	if !strings.Contains(s, "3.14") {
 		t.Errorf("decimal String() = %q, want '3.14'", s)
@@ -174,8 +174,8 @@ func TestExtraAsNumberInteger(t *testing.T) {
 	}
 }
 
-func TestExtraAsNumberDecimal(t *testing.T) {
-	v := NewDecimal(3.14)
+func TestExtraAsNumberFloat(t *testing.T) {
+	v := NewFloat(3.14)
 	n, _ := AsNumber(v)
 	if n != 3.14 {
 		t.Errorf("AsNumber() on decimal = %f, want 3.14", n)
@@ -481,10 +481,10 @@ func TestExtraUnifyBooleanEquality(t *testing.T) {
 	}
 }
 
-func TestExtraUnifyDecimalEquality(t *testing.T) {
-	// Decimal values: same value should unify
-	a := NewDecimal(3.14)
-	b := NewDecimal(3.14)
+func TestExtraUnifyFloatEquality(t *testing.T) {
+	// Float values: same value should unify
+	a := NewFloat(3.14)
+	b := NewFloat(3.14)
 	_, ok := Unify(a, b)
 	if !ok {
 		t.Error("same decimals should unify")
@@ -828,9 +828,9 @@ func TestExtraIsTruthyAtom(t *testing.T) {
 	}
 }
 
-func TestExtraIsTruthyDecimal(t *testing.T) {
-	// Decimals go through the default/string branch
-	if !CoerceBoolean(NewDecimal(1.5)) {
+func TestExtraIsTruthyFloat(t *testing.T) {
+	// Floats go through the default/string branch
+	if !CoerceBoolean(NewFloat(1.5)) {
 		t.Error("non-zero decimal should be truthy")
 	}
 }
@@ -907,7 +907,7 @@ func TestExtraTypeIsSubtypeOf(t *testing.T) {
 func TestExtraTypeEqual(t *testing.T) {
 	a, _ := NewType("Number/Integer")
 	b, _ := NewType("Number/Integer")
-	c, _ := NewType("Number/Decimal")
+	c, _ := NewType("Number/Float")
 	if !a.Equal(b) {
 		t.Error("same types should be equal")
 	}
@@ -951,7 +951,7 @@ func TestExtraValuesEqualTypeLiteralVsConcrete(t *testing.T) {
 	}
 }
 
-func TestExtraValuesEqualDecimalsDirect(t *testing.T) {
+func TestExtraValuesEqualFloatsDirect(t *testing.T) {
 	// Test via unify word: two decimals with different values
 	r, err := DefaultRegistry()
 	if err != nil {
@@ -959,7 +959,7 @@ func TestExtraValuesEqualDecimalsDirect(t *testing.T) {
 	}
 	registerIOWords(r)
 	result := runAQL(t, r, []Value{
-		NewDecimal(1.5), NewDecimal(2.5), NewWord("unify"),
+		NewFloat(1.5), NewFloat(2.5), NewWord("unify"),
 	})
 	if len(result) < 2 {
 		t.Fatalf("unify: got %d results", len(result))

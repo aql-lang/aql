@@ -52,7 +52,7 @@ func ShrinkCost(form *stackform.StackForm, policy *Policy) int {
 //
 //   - Integer: bit-length of |n|, +1 for negative sign.
 //     0→0, 1→1, 2→1, 8→4, 1024→10. Halving reliably reduces cost.
-//   - Decimal: same as integer (uses the integer-cast magnitude).
+//   - Float: same as integer (uses the integer-cast magnitude).
 //   - String: byte length. "" → 0, "hello" → 5.
 //   - Boolean: 1 for true, 0 for false. Lets the reducer accept
 //     true→false even though both PushLits have the same Op base.
@@ -67,8 +67,8 @@ func literalComplexity(v eng.Value) int {
 		if n, err := eng.AsInteger(v); err == nil {
 			return intMagnitude(n)
 		}
-	case v.Parent.ConformsTo(eng.TDecimal):
-		if f, err := eng.AsDecimal(v); err == nil {
+	case v.Parent.ConformsTo(eng.TFloat):
+		if f, err := eng.AsFloat(v); err == nil {
 			return intMagnitude(int64(f))
 		}
 	case v.Parent.ConformsTo(eng.TString):

@@ -140,8 +140,8 @@ func optionsBaseType(v Value) *Type {
 	switch {
 	case v.Parent.ConformsTo(TInteger):
 		return TInteger
-	case v.Parent.ConformsTo(TDecimal):
-		return TDecimal
+	case v.Parent.ConformsTo(TFloat):
+		return TFloat
 	case v.Parent.ConformsTo(TString):
 		return TString
 	case v.Parent.ConformsTo(TBoolean):

@@ -195,8 +195,8 @@ func TestValueToJsonicMapCov(t *testing.T) {
 	}
 }
 
-func TestValueToJsonicDecimal(t *testing.T) {
-	v := NewDecimal(3.14)
+func TestValueToJsonicFloat(t *testing.T) {
+	v := NewFloat(3.14)
 	s := valueToJsonic(v)
 	if s != "3.14" {
 		t.Errorf("expected 3.14, got %s", s)
@@ -700,7 +700,7 @@ func TestModuleImportMultipleRenames(t *testing.T) {
 
 // ── Math binary ops with decimal coverage ────────────────────────────
 
-// TestMathMinMaxDecimal moved to internal/nativemod/ (aql:math module).
+// TestMathMinMaxFloat moved to internal/nativemod/ (aql:math module).
 
 // ── Make table ───────────────────────────────────────────────────────
 
@@ -792,14 +792,14 @@ func TestMakeRecordWithNamedList(t *testing.T) {
 	}
 }
 
-func TestMakeConvertDecimalToString(t *testing.T) {
+func TestMakeConvertFloatToString(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
 	result := runAQL(t, r, []Value{
-		NewWord("make"), NewTypeLiteral(TString), NewDecimal(3.14),
+		NewWord("make"), NewTypeLiteral(TString), NewFloat(3.14),
 	})
 	_as10, _ := AsString(result[0])
 	if _as10 != "3.14" {

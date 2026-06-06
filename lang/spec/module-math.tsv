@@ -3,7 +3,7 @@
 #
 # Loadable module. Import binds the `math` namespace, then words are
 # called via dot-access: `"aql:math-util" import end  MathUtil.word args`. Words
-# operate on Numbers; results are Decimal for the transcendental/root
+# operate on Numbers; results are Float for the transcendental/root
 # functions and Integer for the rounding family applied to Integers.
 #
 # ─────────────────────────────────────────────────────────────────────
@@ -18,7 +18,7 @@
 "aql:math-util" import end  MathUtil.round 4.6	5	round to nearest
 "aql:math-util" import end  MathUtil.trunc 4.9	4	truncate toward zero
 #
-# §3  roots / logs (Decimal results)
+# §3  roots / logs (Float results)
 "aql:math-util" import end  MathUtil.sqrt 16.0	4.0	square root
 "aql:math-util" import end  MathUtil.cbrt 27.0	3.0	cube root
 "aql:math-util" import end  MathUtil.log2 8.0	3.0	base-2 log

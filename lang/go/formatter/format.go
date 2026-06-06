@@ -11,7 +11,7 @@ const maxLineWidth = 70
 // when they appear in type annotation positions (after :).
 var knownTypes = map[string]bool{
 	"any": true, "none": true, "scalar": true, "number": true,
-	"integer": true, "decimal": true, "string": true, "boolean": true,
+	"integer": true, "float": true, "string": true, "boolean": true,
 	"atom": true, "node": true, "list": true, "map": true,
 	"table": true, "record": true, "object": true, "function": true,
 }

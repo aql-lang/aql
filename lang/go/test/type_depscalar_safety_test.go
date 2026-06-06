@@ -165,11 +165,11 @@ func TestDepScalar_InSig_Integer(t *testing.T) {
 	}
 }
 
-func TestDepScalar_InSig_Decimal(t *testing.T) {
-	got := runOK(t, `def f fn [[n:(Decimal gte 1.5)] [Decimal] [n]]
+func TestDepScalar_InSig_Float(t *testing.T) {
+	got := runOK(t, `def f fn [[n:(Float gte 1.5)] [Float] [n]]
 2.5 f`)
 	if len(got) != 1 || got[0] != "2.5" {
-		t.Errorf("Decimal DepScalar in sig: got %v, want [2.5]", got)
+		t.Errorf("Float DepScalar in sig: got %v, want [2.5]", got)
 	}
 }
 

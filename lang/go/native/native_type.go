@@ -720,13 +720,13 @@ func convertTo(src Value, targetType *Type, base string) (Value, error) {
 		}
 		return NewString(s), nil
 
-	case targetType.ConformsTo(TDecimal):
+	case targetType.ConformsTo(TFloat):
 		text := ValToString(src)
 		f, err := strconv.ParseFloat(text, 64)
 		if err != nil {
-			return Value{}, fmt.Errorf("convert: cannot convert %q to decimal", text)
+			return Value{}, fmt.Errorf("convert: cannot convert %q to float", text)
 		}
-		return NewDecimal(f), nil
+		return NewFloat(f), nil
 
 	case targetType.ConformsTo(TNumber) || targetType.ConformsTo(TInteger):
 		text := ValToString(src)

@@ -154,6 +154,13 @@ def doub word [ dup add ] 5 doub	10	body splice — dup, add — runs against ca
 def a { b:5 } [ a.b ]	[5]	dotted access as a list element
 def a { b:{ c:9 } } [ a.b.c ]	[9]	chained dotted access in a list
 def a { b:5 } def c { d:6 } [ a.b c.d ]	[5 6]	two dotted elements stay separate
+
+# A reach receiver must be a container; a number has no members, so a
+# numeric-literal receiver before a `.` is a syntax error (not a get).
+1.2.3	ERROR:no members	malformed numeric literal — number can't be a reach receiver
+1 . 2	ERROR:no members	integer receiver rejected
+5 . foo	ERROR:no members	integer receiver, word key, rejected
+5.0	5.0	a plain Float is unaffected
 		
 # ====================================================================		
 # 9. List equality via `is`		
@@ -167,3 +174,13 @@ def a { b:5 } def c { d:6 } [ a.b c.d ]	[5 6]	two dotted elements stay separate
 [ 1 2 3 ] is [ 1 2 4 ]	false	element mismatch
 [ 1 ] is [ Integer ]	true	scalars unify against their type literal
 [ 1 'x' ] is [ Integer String ]	true	per-position type unification
+
+# Commas are optional separators; an EMPTY element (leading or repeated
+# comma) is a syntax error, not a fabricated null. Trailing comma is OK.
+[1, 2, 3]	[1 2 3]	commas are optional separators
+[1 2 3]	[1 2 3]	no commas needed
+[1,]	[1]	trailing comma is fine
+[1,,2]	ERROR:empty list element	repeated comma — empty element
+[,1]	ERROR:empty list element	leading comma — empty element
+[1,,,2]	ERROR:empty list element	triple comma
+[null]	[null/q]	explicit null token still works (not an empty slot; renders as the null atom)

@@ -13,7 +13,7 @@ func TestToNativeScalars(t *testing.T) {
 	}{
 		{"string", NewString("hi"), "hi"},
 		{"integer", NewInteger(42), int64(42)},
-		{"decimal", NewDecimal(3.14), float64(3.14)},
+		{"decimal", NewFloat(3.14), float64(3.14)},
 		{"boolean-true", NewBoolean(true), true},
 		{"boolean-false", NewBoolean(false), false},
 		{"atom", NewAtom("book"), "book"},

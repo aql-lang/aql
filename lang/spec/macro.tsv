@@ -41,7 +41,7 @@ def inc1 (macro [[a] [ quote [ unquote a add 1 ] ]])  [(inc1 4) (inc1 4) (inc1 9
 #
 # §7  macroexpand is recursive (macroexpand-all): a macro whose expansion calls
 #     another macro is expanded too. A runaway recursive macro errors loudly.
-def inner (macro [[x] [quote [unquote x add 1]]])  def outer (macro [[y] [quote [inner unquote y]]])  macroexpand (outer 5)	[5 word(add) 1]	nested macro fully expanded
+def innr (macro [[x] [quote [unquote x add 1]]])  def outr (macro [[y] [quote [innr unquote y]]])  macroexpand (outr 5)	[5 word(add) 1]	nested macro fully expanded
 def loopy (macro [[a] [quote [loopy unquote a]]])  macroexpand (loopy 1)	ERROR:expansion too deep	recursive macro is caught, not looped
 #
 # §8  Staging (Phase 5, interpreter): a macro is define-before-USE — using it

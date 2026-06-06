@@ -11,6 +11,17 @@ If you only want a recipe for a specific task, see the
 **[How-To Guides](HOWTO.md)**. If you want the precise behaviour of
 a word, see the **[Reference](REFERENCE.md)**.
 
+> **Notation.** In code, a trailing `# returns …` comment shows what an
+> expression evaluates to — `4 square  # returns 16` — and in a REPL
+> transcript the same appears after the prompt: `aql> 4 square  #
+> returns 16`. The comment is ordinary documentation (`#` begins a line
+> comment), not special syntax; in prose we just say "`4 square`
+> returns `16`". (AQL has no result arrow — `=>` is real syntax, the
+> anonymous-function word `afn` — which is why results are written as
+> comments here.) Note also that the REPL clears the stack after each
+> line, so a multi-step computation that relies on leftover stack
+> values must go on **one** line (or in a file).
+
 
 ## 1. Install and start the REPL
 
@@ -45,8 +56,12 @@ Or run a file:
 
 ```bash
 aql script.aql
-aql -e '"hello" upper'
+aql -e '10 3 sub'
 ```
+
+(`-e` evaluates one expression and exits. Uppercasing a string needs
+the string-util module — `aql -e '"aql:string-util" import end
+StringUtil.upper "hello"'` — see [§5: Strings](#5-strings).)
 
 
 ## 2. The stack — your first expression
@@ -137,17 +152,17 @@ for the underlying mechanics.
 
 ## 4. Numbers, rounding, math
 
-Integers and decimals are different leaves of the same `Number`
+Integers and floats are different leaves of the same `Number`
 type. Arithmetic auto-promotes. The core arithmetic words live at
 the top level:
 
 ```
-aql> 4 mul 5            => 20
-aql> 2 pow 10           => 1024
-aql> 7 div 2            => 3        # integer division
-aql> 7.0 div 2          => 3.5      # decimal: real division
-aql> 10 mod 3           => 1
-aql> 10 sub 3           => 7        # a sub b ≡ a - b (see §3)
+aql> 4 mul 5            # returns 20
+aql> 2 pow 10           # returns 1024
+aql> 7 div 2            # returns 3 — integer division
+aql> 7.0 div 2          # returns 3.5 — float: real division
+aql> 10 mod 3           # returns 1
+aql> 10 sub 3           # returns 7 — a sub b ≡ a - b (see §3)
 ```
 
 For absolute value, rounding, roots, logs, trig, and the standard
@@ -156,19 +171,19 @@ constants, import the `aql:math` module — words register under the
 
 ```
 aql> "aql:math-util" import end
-aql> MathUtil.abs -5        => 5
-aql> MathUtil.min 3 5       => 3
-aql> MathUtil.max 3 5       => 5
-aql> MathUtil.floor 3.7     => 3
-aql> MathUtil.ceil 3.2      => 4
-aql> MathUtil.round 3.5     => 4
-aql> MathUtil.trunc 3.9     => 3
-aql> MathUtil.sqrt 16       => 4.0
-aql> MathUtil.log 2.718281828   => 1.0
-aql> MathUtil.sin 0         => 0.0
-aql> MathUtil.hypot 3 4     => 5.0
-aql> MathUtil.pi            => 3.141592653589793
-aql> MathUtil.e             => 2.718281828459045
+aql> MathUtil.abs -5        # returns 5
+aql> MathUtil.min 3 5       # returns 3
+aql> MathUtil.max 3 5       # returns 5
+aql> MathUtil.floor 3.7     # returns 3
+aql> MathUtil.ceil 3.2      # returns 4
+aql> MathUtil.round 3.5     # returns 4
+aql> MathUtil.trunc 3.9     # returns 3
+aql> MathUtil.sqrt 16       # returns 4.0
+aql> MathUtil.log 2.718281828   # returns 1.0
+aql> MathUtil.sin 0         # returns 0.0
+aql> MathUtil.hypot 3 4     # returns 5.0
+aql> MathUtil.pi            # returns 3.141592653589793
+aql> MathUtil.e             # returns 2.718281828459045
 ```
 
 
@@ -182,30 +197,30 @@ all-forward: `WORD input arg…`. See
 [§3: the argument-order rule](#the-argument-order-rule).
 
 ```
-aql> "aql:string-util" import end "hello" StringUtil.upper                 => 'HELLO'
-aql> "aql:string-util" import end "HELLO" StringUtil.lower                 => 'hello'
-aql> "aql:string-util" import end StringUtil.split "hello,world" ","       => ['hello' 'world']
-aql> "aql:string-util" import end ["a","b","c"] StringUtil.concat          => 'abc'   # joins list elements
-aql> "aql:string-util" import end StringUtil.contains "hello" "ell"        => true
-aql> "aql:string-util" import end StringUtil.indexof "hello" "ll"          => 2
-aql> "hello" slice 1 3             => 'el'
-aql> "aql:string-util" import end StringUtil.replace "hello" "l" "r"       => 'herlo'
-aql> "aql:string-util" import end "  hi  " StringUtil.trim                 => 'hi'
-aql> "aql:string-util" import end "hi" StringUtil.pad 5                    => 'hi   '
+aql> "aql:string-util" import end "hello" StringUtil.upper                 # returns 'HELLO'
+aql> "aql:string-util" import end "HELLO" StringUtil.lower                 # returns 'hello'
+aql> "aql:string-util" import end StringUtil.split "hello,world" ","       # returns ['hello' 'world']
+aql> "aql:string-util" import end ["a","b","c"] StringUtil.concat          # returns 'abc' — joins list elements
+aql> "aql:string-util" import end StringUtil.contains "hello" "ell"        # returns true
+aql> "aql:string-util" import end StringUtil.indexof "hello" "ll"          # returns 2
+aql> "hello" slice 1 3             # returns 'el'
+aql> "aql:string-util" import end StringUtil.replace "hello" "l" "r"       # returns 'herlo'
+aql> "aql:string-util" import end "  hi  " StringUtil.trim                 # returns 'hi'
+aql> "aql:string-util" import end "hi" StringUtil.pad 5                    # returns 'hi   '
 ```
 
 Backtick template strings interpolate `${...}` expressions:
 
 ```
 aql> def name "world"
-aql> `hello ${name}`               => 'hello world'
-aql> `2 + 3 = ${2 add 3}`         => '2 + 3 = 5'
+aql> `hello ${name}`               # returns 'hello world'
+aql> `2 + 3 = ${2 add 3}`         # returns '2 + 3 = 5'
 ```
 
 Templates nest:
 
 ```
-aql> `a${`inner ${1 add 2}`}b`     => 'ainner 3b'
+aql> `a${`inner ${1 add 2}`}b`     # returns 'ainner 3b'
 ```
 
 
@@ -214,14 +229,14 @@ aql> `a${`inner ${1 add 2}`}b`     => 'ainner 3b'
 When the stack model isn't quite enough, these words rearrange it:
 
 ```
-aql> 5 dup              => 5 5             # duplicate top
-aql> 1 2 swap           => 2 1             # exchange top two
-aql> 1 2 3 drop         => 1 2             # discard top
-aql> 1 2 over           => 1 2 1           # copy second to top
-aql> 1 2 3 rot          => 2 3 1           # rotate top three
-aql> 1 2 nip            => 2               # remove second
-aql> 1 2 tuck           => 2 1 2           # copy top below second
-aql> depth              => 0               # current stack size
+aql> 5 dup              # returns 5 5 — duplicate top
+aql> 1 2 swap           # returns 2 1 — exchange top two
+aql> 1 2 3 drop         # returns 1 2 — discard top
+aql> 1 2 over           # returns 1 2 1 — copy second to top
+aql> 1 2 3 rot          # returns 2 3 1 — rotate top three
+aql> 1 2 nip            # returns 2 — remove second
+aql> 1 2 tuck           # returns 2 1 2 — copy top below second
+aql> depth              # returns 0 — current stack size
 ```
 
 Most of the time you won't need these — forward collection covers
@@ -234,8 +249,8 @@ fights you.
 Lists use square brackets, maps use braces:
 
 ```
-aql> [1, 2, 3]                       => [1 2 3]
-aql> {name: "Alice", age: 30}        => {age:30 name:'Alice'}   # keys sort
+aql> [1, 2, 3]                       # returns [1 2 3]
+aql> {name: "Alice", age: 30}        # returns {age:30 name:'Alice'} — keys sort
 ```
 
 Commas are optional inside literals — both `[1 2 3]` and `[1, 2, 3]`
@@ -247,7 +262,7 @@ A map entry can be just a bare name — `{foo}` is shorthand for
 ```
 aql> def x 1
 aql> def y 2
-aql> {x y}                           => {x:1 y:2}
+aql> {x y}                           # returns {x:1 y:2}
 ```
 
 (See [Reference: Map field shorthand](REFERENCE.md#map-field-shorthand)
@@ -256,16 +271,16 @@ for the `/r` and `?` variants.)
 The dot operator accesses fields by name or by index:
 
 ```
-aql> {name: "Alice"} . name          => 'Alice'
-aql> [10, 20, 30] . 1                => 20
-aql> {a: {b: 99}} . a . b            => 99
+aql> {name: "Alice"} . name          # returns 'Alice'
+aql> [10, 20, 30] . 1                # returns 20
+aql> {a: {b: 99}} . a . b            # returns 99
 ```
 
 Use `!.` (also called `getr`) when the key *must* exist — it raises
 an error instead of returning `none`:
 
 ```
-aql> {x:1} !. y                      => error: key "y" not found
+aql> {x:1} !. y                      # returns error: key "y" not found
 ```
 
 Lists and maps nest freely:
@@ -282,15 +297,15 @@ Use `def` to give a value (or a code block) a name:
 
 ```
 aql> def x 42
-aql> x                               => 42
+aql> x                               # returns 42
 ```
 
 When the body is a list, calling the word *runs* the list:
 
 ```
 aql> def double word [dup add]
-aql> 5 double                        => 10
-aql> 3 double double                 => 12
+aql> 5 double                        # returns 10
+aql> 3 double double                 # returns 12
 ```
 
 Composition is concatenation:
@@ -298,7 +313,7 @@ Composition is concatenation:
 <!-- aql-test: skip -->
 ```
 aql> def quadruple word [double double]
-aql> 5 quadruple                     => 20
+aql> 5 quadruple                     # returns 20
 ```
 
 To remove a definition use `undef`:
@@ -315,8 +330,8 @@ aql> undef x
 
 ```
 aql> def square fn [[x:Number] [Number] [x mul x]]
-aql> 5 square                        => 25
-aql> 2.5 square                      => 6.25
+aql> 5 square                        # returns 25
+aql> 2.5 square                      # returns 6.25
 ```
 
 Named parameters (like `x:Number`) bind to stack values automatically
@@ -324,7 +339,7 @@ inside the body. You can also use the implicit `args` list:
 
 ```
 aql> def greet fn [[String] [String] [`hello ${args.0}`]]
-aql> greet "world"                   => 'hello world'
+aql> greet "world"                   # returns 'hello world'
 ```
 
 Multiple signatures give you ad-hoc polymorphism — first match wins:
@@ -332,10 +347,10 @@ Multiple signatures give you ad-hoc polymorphism — first match wins:
 ```
 aql> def inc fn [
   [Integer] [Integer] [1 add]
-  [Decimal] [Decimal] [1.0 add]
+  [Float] [Float] [1.0 add]
 ]
-aql> inc 5                           => 6
-aql> inc 2.5                         => 3.5
+aql> inc 5                           # returns 6
+aql> inc 2.5                         # returns 3.5
 ```
 
 
@@ -345,18 +360,25 @@ aql> inc 2.5                         => 3.5
 The branches are lists (which is why they're not evaluated up-front):
 
 ```
-aql> if (5 gt 3) ["yes"] ["no"]      => 'yes'
-aql> 0 if ["truthy"] ["falsy"]       => 'falsy'
+aql> if (5 gt 3) ["yes"] ["no"]      # returns 'yes'
+aql> 0 if ["truthy"] ["falsy"]       # returns 'falsy'
 ```
+
+The condition is coerced to a boolean. Falsey values are `false`,
+`0`, `none`, the empty list/map/string, and — watch out — the *exact*
+string `"false"`. Every other non-empty string is **true**, so
+`"FALSE"`, `"0"`, and `"no"` all take the then-branch. When in doubt,
+compare explicitly (`x eq 0`, `s eq ""`) rather than relying on string
+truthiness.
 
 `for` iterates over a numeric range, pushing the counter into the
 body each step:
 
 <!-- aql-test: skip -->
 ```
-aql> for 5 [dup mul]                 => 0 1 4 9 16
-aql> for [1, 4] [dup mul]            => 1 4 9
-aql> for [0, 10, 2] [dup mul]        => 0 4 16 36 64
+aql> for 5 [dup mul]                 # returns 0 1 4 9 16
+aql> for [1, 4] [dup mul]            # returns 1 4 9
+aql> for [0, 10, 2] [dup mul]        # returns 0 4 16 36 64
 ```
 
 `break` and `continue` work inside the body:
@@ -374,17 +396,17 @@ each list argument lands in a predictable slot — see
 [§3: the argument-order rule](#the-argument-order-rule).
 
 ```
-aql> [1, 2, 3] each [dup mul]        => [1 4 9]
-aql> fold [add] [1, 2, 3, 4, 5] 0    => 15        # body, data, init
-aql> scan [add] [1, 2, 3]            => [1 3 6]
+aql> [1, 2, 3] each [dup mul]        # returns [1 4 9]
+aql> fold [add] [1, 2, 3, 4, 5] 0    # returns 15 — body, data, init
+aql> scan [add] [1, 2, 3]            # returns [1 3 6]
 ```
 
 Sequence-building:
 
 ```
-aql> iota 5                          => [0 1 2 3 4]
-aql> range 2 6                       => [2 3 4 5]
-aql> [1, 2, 3] reverse                => [3 2 1]
+aql> iota 5                          # returns [0 1 2 3 4]
+aql> range 2 6                       # returns [2 3 4 5]
+aql> [1, 2, 3] reverse                # returns [3 2 1]
 ```
 
 Reshaping, ordering, and grouping live in the `aql:array-util` module
@@ -392,15 +414,15 @@ Reshaping, ordering, and grouping live in the `aql:array-util` module
 
 ```
 aql> "aql:array-util" import end
-aql> iota 6 ArrayUtil.reshape [2, 3]     => [[0 1 2] [3 4 5]]
-aql> [1, 2, 2, 3] ArrayUtil.unique       => [1 2 3]
-aql> [3, 1, 2] ArrayUtil.grade           => [1 2 0]
+aql> iota 6 ArrayUtil.reshape [2, 3]     # returns [[0 1 2] [3 4 5]]
+aql> [1, 2, 2, 3] ArrayUtil.unique       # returns [1 2 3]
+aql> [3, 1, 2] ArrayUtil.grade           # returns [1 2 0]
 ```
 
 `outer` and `inner` are APL-style array combinators (built-in):
 
 ```
-aql> outer [mul] [10, 20] [1, 2]     => [[10 20] [20 40]]
+aql> outer [mul] [10, 20] [1, 2]     # returns [[10 20] [20 40]]
 aql> inner [add] [mul] [3, 4] [1, 2] # body order: combine, product
 ```
 
@@ -411,26 +433,26 @@ Every value has a type, organised into a hierarchy. Inspect a
 value's type with `typeof`, or walk its ancestry with `pathof`:
 
 ```
-aql> typeof 42                       => Integer
-aql> typeof "hello"                  => ProperString
-aql> typeof [1, 2]                   => List
-aql> pathof Integer                  => [Scalar Number Integer]
+aql> typeof 42                       # returns Integer
+aql> typeof "hello"                  # returns ProperString
+aql> typeof [1, 2]                   # returns List
+aql> pathof Integer                  # returns [Scalar Number Integer]
 ```
 
 Use `is` to test membership against any ancestor in the hierarchy:
 
 ```
-aql> 42 is Integer                   => true
-aql> 42 is Number                    => true
-aql> 42 is Scalar                    => true
-aql> 42 is String                    => false
+aql> 42 is Integer                   # returns true
+aql> 42 is Number                    # returns true
+aql> 42 is Scalar                    # returns true
+aql> 42 is String                    # returns false
 ```
 
 Convert with `convert`:
 
 ```
-aql> convert Integer "42"            => 42
-aql> convert String 42               => '42'
+aql> convert Integer "42"            # returns 42
+aql> convert String 42               # returns '42'
 ```
 
 
@@ -443,13 +465,13 @@ list-of-rows-conforming-to-a-record. Define both with
 
 ```
 aql> def Point refine Record [x:Number y:Number]
-aql> make Point [3 4]                => {x:3 y:4}
-aql> make Point {x:1 y:2}            => {x:1 y:2}
+aql> make Point [3 4]                # returns {x:3 y:4}
+aql> make Point {x:1 y:2}            # returns {x:1 y:2}
 
 aql> def Row refine Record [name:String qty:Integer]
 aql> def Inventory refine Table Row
 aql> make Inventory [["Widget" 5] ["Bolt" 12]]
-=> [{name:'Widget' qty:5} {name:'Bolt' qty:12}]
+  # returns [{name:'Widget' qty:5} {name:'Bolt' qty:12}]
 ```
 
 Field constraints can be disjunctive — `(String tor none)` means
@@ -457,8 +479,8 @@ Field constraints can be disjunctive — `(String tor none)` means
 
 ```
 aql> def Person refine Record [name:String nick:(String tor none)]
-aql> make Person {name:"Alice" nick:"ace"}     => {name:'Alice' nick:'ace'}
-aql> make Person {name:"Bob"}                  => {name:'Bob' nick:none}
+aql> make Person {name:"Alice" nick:"ace"}     # returns {name:'Alice' nick:'ace'}
+aql> make Person {name:"Bob"}                  # returns {name:'Bob' nick:none}
 ```
 
 
@@ -471,7 +493,7 @@ rule):
 
 ```
 aql> "aql:math-util" import end
-aql> 3 4 var [[a b] (a mul a) add (b mul b) MathUtil.sqrt]   => 5.0
+aql> 3 4 var [[a b] (a mul a) add (b mul b) MathUtil.sqrt]   # returns 5.0
 ```
 
 The first element of the list is the binding list. The remaining
@@ -479,7 +501,7 @@ elements are the body. `a` here binds to `4` (top of stack), `b` to
 `3`. Inline values:
 
 ```
-aql> var [[[x 2] [y 10]] x add y]               => 12
+aql> var [[[x 2] [y 10]] x add y]               # returns 12
 ```
 
 
@@ -489,7 +511,7 @@ A list literal evaluates its contents by default and keeps the
 results *as a list* — `[1 add 2]` becomes `[3]`, not `3`:
 
 ```
-aql> [1 add 2]                       => [3]
+aql> [1 add 2]                       # returns [3]
 ```
 
 Use `quote` to hold a list as unevaluated data instead (see below).
@@ -497,14 +519,14 @@ Use `quote` to hold a list as unevaluated data instead (see below).
 rather than in a list:
 
 ```
-aql> do [1 add 2]                    => 3
-aql> do {x: [3 add 4], y: 5}        => {x:7 y:5}
+aql> do [1 add 2]                    # returns 3
+aql> do {x: [3 add 4], y: 5}        # returns {x:7 y:5}
 ```
 
 `quote` prevents a single token from being interpreted:
 
 ```
-aql> quote foo                       => foo/q
+aql> quote foo                       # returns foo/q
 ```
 
 
@@ -522,7 +544,7 @@ where the operands go:
 
 ```
 aql> def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])
-aql> twice 5                         => 10
+aql> twice 5                         # returns 10
 ```
 
 `twice 5` isn't a function call — it *rewrites itself* into the code
@@ -531,7 +553,7 @@ aql> twice 5                         => 10
 
 ```
 aql> def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])
-aql> macroexpand (twice 5)           => [5 word(add) 5]
+aql> macroexpand (twice 5)           # returns [5 word(add) 5]
 ```
 
 (It's a *token list* — `add` shows as `word(add)` because it's an
@@ -543,7 +565,7 @@ condition and body unevaluated:
 
 ```
 aql> def unless (macro [[cond body] [ quote [ if unquote cond [] unquote body ] ]])
-aql> unless false [42]               => 42
+aql> unless false [42]               # returns 42
 ```
 
 `splice` is `unquote`'s sibling: it spreads a *list* operand's elements
@@ -556,7 +578,7 @@ variables — even if the names match:
 ```
 aql> def myor (macro [[a b] [ quote [ def tmp unquote a  if tmp [tmp] [unquote b] ] ]])
 aql> def tmp 42
-aql> myor false tmp                  => 42
+aql> myor false tmp                  # returns 42
 ```
 
 The template's `tmp` and your `tmp` stay separate; `myor` returns your
@@ -576,7 +598,7 @@ Errors are values, not exceptions. `do` catches them and the
 aql> do [1 div 0]
 Error(div: division by zero)
 
-aql> do [1 div 0] error [drop 42]    => 42
+aql> do [1 div 0] error [drop 42]    # returns 42
 ```
 
 The pattern is `do [risky] error [handler]`. Inside the handler the
@@ -590,7 +612,7 @@ or inspect its fields with `.`.
 in parallel and collects the results:
 
 ```
-aql> "aql:time-util" import end TimeUtil.await [[1 add 2] [3 add 4]]     => [3 7]
+aql> "aql:time-util" import end TimeUtil.await [[1 add 2] [3 add 4]]     # returns [3 7]
 ```
 
 Pick a mode via an options map — these mirror JavaScript Promise
@@ -599,16 +621,16 @@ combinators:
 <!-- aql-test: skip -->
 ```
 aql> await {mode: 'all}   [[sleep 10 1] [sleep 10 2]]
-=> [1 2]                                # all must succeed
+  # returns [1 2] — all must succeed
 
 aql> await {mode: 'first} [[sleep 100 1] [sleep 10 2]]
-=> 2                                    # race winner
+  # returns 2 — race winner
 
 aql> await {mode: 'any}   [[1 div 0] [sleep 10 42]]
-=> 42                                   # first non-error
+  # returns 42 — first non-error
 
 aql> await {mode: 'full}  [[1] [1 div 0]]
-=> [{status:'ok,value:1},{status:'error value:...}]
+  # returns [{status:'ok,value:1},{status:'error value:...}]
 ```
 
 Schedule deferred work with `timeout` and `interval`, cancel with
@@ -650,7 +672,7 @@ aql> import module [
        def greet fn [[name:String] [String] [`hello ${name}`]]
        export "utils" {helper: helper, greet: greet}
      ]
-aql> "Ada" utils.greet               => 'hello Ada'
+aql> "Ada" utils.greet               # returns 'hello Ada'
 ```
 
 Import from a file (path must start with `./`, `../`, or `/`):
@@ -665,7 +687,7 @@ under a namespace prefix (e.g. `math.`, `time.`):
 
 ```
 aql> "aql:math-util" import end
-aql> 5 MathUtil.log                      => 1.6094379124341003
+aql> 5 MathUtil.log                      # returns 1.6094379124341003
 ```
 
 The trailing `end` stops `import`'s forward collection from

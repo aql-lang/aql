@@ -1,0 +1,51 @@
+# compare-restrict.tsv — the ordering words cmp / lt / lte / gt / gte are
+# FAMILY-RESTRICTED. They compare only same-type values, or values a
+# shared same-family comparer handles (Integer-vs-Float via Number, two
+# Dates, EmptyString-vs-ProperString via String, …). A cross-family pair
+# (Integer-vs-String, List-vs-Map, value-vs-cross-family-type-literal)
+# raises [aql/incomparable] and directs the caller to tcmp. The full
+# total order itself is exercised in compare.tsv via tcmp.
+#
+# Equality (eq / neq / deq) is NOT restricted: cross-type compares as
+# not-equal, never an error.
+#
+# Format: input<TAB>expected<TAB>description
+
+# ── Same-family ordering works ───────────────────────────────────────
+5 cmp 3	1	Integer vs Integer
+1 lt 2.0	true	Integer vs Float — shared Number comparer
+2.5 cmp 2	1	Float vs Integer
+1.5 gt 2	false	Float vs Integer
+'a' lt 'b'	true	String vs String
+'' lt 'a'	true	EmptyString vs ProperString — shared String comparer
+false lt true	true	Boolean vs Boolean
+5 cmp Number	1	value vs same-family type literal (literal sorts first)
+5 cmp Integer	1	value vs its own type literal
+Number cmp Integer	-1	two same-family type literals, by rank
+[1 2] cmp [1 3]	-1	same type (List) — element-wise
+{a:1} cmp {a:2}	-1	same type (Map)
+
+# ── Cross-family ordering errors ([aql/incomparable]) ─────────────────
+1 cmp 'a'	ERROR:incomparable	Integer vs String
+1 lt 'a'	ERROR:incomparable	Integer vs String
+'a' gt 1	ERROR:incomparable	String vs Integer
+true lt 1	ERROR:incomparable	Boolean vs Number
+1 lte true	ERROR:incomparable	Integer vs Boolean
+5 cmp Scalar	ERROR:incomparable	value vs cross-family root literal
+[1] cmp {a:1}	ERROR:incomparable	List vs Map
+[1] lt 5	ERROR:incomparable	List vs Integer
+List lt Map	ERROR:incomparable	two cross-branch type literals
+
+# ── Equality stays total (cross-type → not equal, never an error) ─────
+1 eq 'a'	false	cross-type equality is false, not an error
+1 neq 'a'	true	cross-type inequality is true
+1 eq 1.0	true	cross-leaf numeric magnitude is equal
+[1] deq [1]	true	deep equality, same type
+1 eq none	false	equality against none is safe
+
+# ── tcmp compares anything (the escape hatch) ─────────────────────────
+1 tcmp 'a'	-1	Integer ranks below String
+'a' tcmp 1	1	mirror of the above
+[1] tcmp {a:1}	-1	List ranks below Map
+true tcmp 5	-1	Boolean ranks below Number
+1 tcmp 1.0	0	cross-leaf magnitude ties

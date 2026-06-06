@@ -92,13 +92,13 @@ error**, not a silent element-wise map.
 
 ```
 add 10 [1,2,3]            # type error — no matching signature
-each [add 10] [1,2,3]     # => [11,12,13]   (the supported form)
+each [add 10] [1,2,3]     #  # returns [11,12,13]   (the supported form)
 ```
 
 ### Context
 
 An earlier draft of `design/ARRAYIFICATION.6.md` proposed broadcasting:
-`add 10 [1,2,3] => [11,12,13]`, with rules for scalar+list, equal-length
+`add 10 [1,2,3]` returns `[11,12,13]`, with rules for scalar+list, equal-length
 list+list zip, and nested alignment. It is attractive (it reads like
 NumPy/APL) but a poor fit for AQL:
 

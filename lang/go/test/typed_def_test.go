@@ -82,13 +82,13 @@ def n:G10 5`)
 	}
 }
 
-// Multiple typed defs in sequence work. Decimal comes back through
+// Multiple typed defs in sequence work. Float comes back through
 // lang.Run's catch-all default branch as a stringified value, so we
 // just check non-nil + the integer/string entries.
 func TestTypedDefMultipleBindings(t *testing.T) {
 	got := runOne(t, `def a:Integer 1
 def b:String "two"
-def c:Decimal 3.5
+def c:Float 3.5
 a b c`)
 	if len(got) != 3 {
 		t.Fatalf("got %v, want 3 results", got)

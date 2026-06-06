@@ -359,7 +359,7 @@ tpartial (refine Record [x:Integer y:[String tor None]])	record{x:Integer|None y
 tpartial (tpartial (refine Record [x:Integer])) teq tpartial (refine Record [x:Integer])	true
 
 # is - per-element type List: type Names in lists match element-wise
-["a" 1.1] is [String Decimal]	true
+["a" 1.1] is [String Float]	true
 [1 2] is [Integer Integer]	true
 [1 "a"] is [Integer String]	true
 ["a" 1] is [String Integer]	true
@@ -536,20 +536,24 @@ Number neq Number	false
 {x:1} deq {x:1,y:2}	false
 None deq None	true
 
-# Comparison - cross-branch scalars order Atom < Boolean < Number < String < Path
-1 lt "a"	true
-"a" lt 1	false
-3 gt "z"	false
+# Comparison - cross-branch scalars order Atom < Boolean < Number < String < Path.
+# lt/gt/cmp are family-restricted (cross-family → [aql/incomparable]);
+# the cross-branch total order is reached via tcmp.
+1 lt "a"	ERROR:incomparable
+1 tcmp "a"	-1
+"a" tcmp 1	1
+3 tcmp "z"	-1
 
 # Comparison - total order: cross-branch by precedence
 # (Never < Any < None < Word < Type < Scalar < Node < Ideal); same
-# branch by size, then type (List < Map), then element-wise
+# branch by size, then type (List < Map), then element-wise. Same-type
+# pairs compare with lt; cross-branch pairs need tcmp.
 [1] lt [2]	true
 [1 2] lt [1 3]	true
 [9] lt [1 2 3]	true
-List lt Map	true
-[1] lt 5	false
-5 lt [1]	true
+List tcmp Map	-1
+[1] tcmp 5	1
+5 tcmp [1]	-1
 
 # Comparison - forward style (swap convention: args[0]=1, args[1]=2, compare(args[1],args[0]))
 lt 1 2	false

@@ -7,7 +7,7 @@ func init() {
 		Word:    "add",
 		Summary: "Add two numbers, or concatenate two scalars as strings.",
 		Description: "Adds two numeric values. When both are integers the result is an integer; " +
-			"if either is a decimal the result is a decimal. For non-numeric scalars, " +
+			"if either is a float the result is a float. For non-numeric scalars, " +
 			"concatenates their string representations.",
 	})
 
@@ -91,21 +91,21 @@ func init() {
 
 	register(&Entry{
 		Word:        "ceil",
-		Summary:     "Round a decimal up to the nearest integer.",
+		Summary:     "Round a float up to the nearest integer.",
 		Description: "Returns the smallest integer value greater than or equal to the input.",
 		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
 		Word:        "floor",
-		Summary:     "Round a decimal down to the nearest integer.",
+		Summary:     "Round a float down to the nearest integer.",
 		Description: "Returns the largest integer value less than or equal to the input.",
 		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 
 	register(&Entry{
 		Word:        "round",
-		Summary:     "Round a decimal to the nearest integer.",
+		Summary:     "Round a float to the nearest integer.",
 		Description: "Rounds to the nearest integer; ties round away from zero.",
 		Notes: []string{
 			"Uses Go's math.Round: 0.5 rounds away from zero.",
@@ -115,7 +115,7 @@ func init() {
 
 	register(&Entry{
 		Word:        "trunc",
-		Summary:     "Truncate a decimal toward zero.",
+		Summary:     "Truncate a float toward zero.",
 		Description: "Removes the fractional part, rounding toward zero.",
 		Notes:       []string{"Requires: \"aql:math\" import"},
 	})

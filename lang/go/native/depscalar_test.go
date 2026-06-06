@@ -6,19 +6,19 @@ import (
 
 // --- General dependent types: DepScalar over any scalar base ---
 //
-// `Decimal gte 1.5`, `String lt "z"`, `Boolean eq true`, `Atom eq foo`
+// `Float gte 1.5`, `String lt "z"`, `Boolean eq true`, `Atom eq foo`
 // each construct a DepScalar value whose Parent IS the base scalar
-// (typeof (Decimal gte 1.5) → Decimal). The DepScalarInfo payload
+// (typeof (Float gte 1.5) → Float). The DepScalarInfo payload
 // carries the constraint; IsDepScalar detects it via payload type.
 // Unifying a DepScalar with a concrete value of the base type runs
 // the comparison and returns the concrete value on success.
 
 // --- Construction across base types ---
 
-func TestNewDepScalarDecimal(t *testing.T) {
-	d := NewDepScalar(DepGTE, NewDecimal(1.5))
-	if !d.Parent.Equal(TDecimal) {
-		t.Errorf("Parent = %s, want Decimal", d.Parent.String())
+func TestNewDepScalarFloat(t *testing.T) {
+	d := NewDepScalar(DepGTE, NewFloat(1.5))
+	if !d.Parent.Equal(TFloat) {
+		t.Errorf("Parent = %s, want Float", d.Parent.String())
 	}
 	if !d.IsDepScalar() {
 		t.Errorf("IsDepScalar = false, want true (DepScalarInfo payload missing)")
@@ -33,7 +33,7 @@ func TestNewDepScalarDecimal(t *testing.T) {
 	if info.Hi != nil {
 		t.Errorf("Hi = %+v, want nil for single-bound DepScalar", info.Hi)
 	}
-	bv, _ := AsDecimal(info.Lo.Value)
+	bv, _ := AsFloat(info.Lo.Value)
 	if bv != 1.5 {
 		t.Errorf("Lo.Value = %v, want 1.5", bv)
 	}
@@ -82,11 +82,11 @@ func TestNewDepScalarAtom(t *testing.T) {
 
 // --- Lattice subtyping for each base ---
 
-func TestDepDecimalMatchesDecimalAncestors(t *testing.T) {
-	d := NewDepScalar(DepGTE, NewDecimal(0.0))
-	for _, anc := range []*Type{TDecimal, TNumber, TScalar, TAny} {
+func TestDepFloatMatchesFloatAncestors(t *testing.T) {
+	d := NewDepScalar(DepGTE, NewFloat(0.0))
+	for _, anc := range []*Type{TFloat, TNumber, TScalar, TAny} {
 		if !d.Parent.ConformsTo(anc) {
-			t.Errorf("DepDecimal does not match ancestor %s", anc)
+			t.Errorf("DepFloat does not match ancestor %s", anc)
 		}
 	}
 }
@@ -128,8 +128,8 @@ func TestDepIntegerStillMatchesInteger(t *testing.T) {
 
 // --- Unify across base types ---
 
-func TestUnifyDepDecimal(t *testing.T) {
-	d := NewDepScalar(DepGTE, NewDecimal(1.5))
+func TestUnifyDepFloat(t *testing.T) {
+	d := NewDepScalar(DepGTE, NewFloat(1.5))
 	cases := []struct {
 		val    float64
 		expect bool
@@ -140,12 +140,12 @@ func TestUnifyDepDecimal(t *testing.T) {
 		{0.0, false},
 	}
 	for _, tc := range cases {
-		got, ok := Unify(NewDecimal(tc.val), d)
+		got, ok := Unify(NewFloat(tc.val), d)
 		if ok != tc.expect {
-			t.Errorf("Unify(%v, Decimal gte 1.5) = %v; want %v", tc.val, ok, tc.expect)
+			t.Errorf("Unify(%v, Float gte 1.5) = %v; want %v", tc.val, ok, tc.expect)
 		}
 		if ok {
-			f, _ := AsDecimal(got)
+			f, _ := AsFloat(got)
 			if f != tc.val {
 				t.Errorf("Unify result = %v, want %v", f, tc.val)
 			}
@@ -207,19 +207,19 @@ func TestUnifyDepRejectsCrossType(t *testing.T) {
 
 // --- AQL-level construction across base types ---
 
-func TestRunDecimalGTEReturnsDepDecimal(t *testing.T) {
+func TestRunFloatGTEReturnsDepFloat(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
 	result := runAQL(t, r, []Value{
-		NewTypeLiteral(TDecimal),
+		NewTypeLiteral(TFloat),
 		NewWord("gte"),
-		NewDecimal(1.5),
+		NewFloat(1.5),
 	})
-	if len(result) != 1 || !result[0].Parent.Equal(TDecimal) || !result[0].IsDepScalar() {
-		t.Fatalf("Decimal gte 1.5: got %v, want DepScalar with Parent=Decimal", result)
+	if len(result) != 1 || !result[0].Parent.Equal(TFloat) || !result[0].IsDepScalar() {
+		t.Fatalf("Float gte 1.5: got %v, want DepScalar with Parent=Float", result)
 	}
 }
 
@@ -257,8 +257,8 @@ func TestRunAtomGTEReturnsDepAtom(t *testing.T) {
 	}
 }
 
-// Mismatched bound type: `Integer gte 1.5` (Decimal bound) must error
-// rather than silently building a DepInteger with a Decimal bound.
+// Mismatched bound type: `Integer gte 1.5` (Float bound) must error
+// rather than silently building a DepInteger with a Float bound.
 func TestDepConstructorRejectsMismatchedBound(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
@@ -269,7 +269,7 @@ func TestDepConstructorRejectsMismatchedBound(t *testing.T) {
 	_, err = e.Run([]Value{
 		NewTypeLiteral(TInteger),
 		NewWord("gte"),
-		NewDecimal(1.5),
+		NewFloat(1.5),
 	})
 	if err == nil {
 		t.Fatal("expected type-mismatch error from Integer gte 1.5")
@@ -277,24 +277,24 @@ func TestDepConstructorRejectsMismatchedBound(t *testing.T) {
 }
 
 // `is` overload across base types still works.
-func TestIsCheckWithDepDecimal(t *testing.T) {
+func TestIsCheckWithDepFloat(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
 	result := runAQL(t, r, []Value{
-		NewDecimal(2.0),
+		NewFloat(2.0),
 		NewWord("is"),
 		NewOpenParen(),
-		NewTypeLiteral(TDecimal),
+		NewTypeLiteral(TFloat),
 		NewWord("gte"),
-		NewDecimal(1.5),
+		NewFloat(1.5),
 		NewCloseParen(),
 	})
 	got, _ := AsBoolean(result[0])
 	if !got {
-		t.Errorf("2.0 is (Decimal gte 1.5) = false; want true")
+		t.Errorf("2.0 is (Float gte 1.5) = false; want true")
 	}
 }
 

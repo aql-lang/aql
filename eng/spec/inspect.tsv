@@ -106,7 +106,7 @@ inspect Never	{type:'Type' struct:'Never' kind:literal}
 inspect Scalar	{type:'Type' struct:'Scalar' kind:literal}	
 inspect Number	{type:'Type' struct:'Number' kind:literal}	
 inspect Integer	{type:'Type' struct:'Integer' kind:literal}	
-inspect Decimal	{type:'Type' struct:'Decimal' kind:literal}	
+inspect Float	{type:'Type' struct:'Float' kind:literal}	
 inspect String	{type:'Type' struct:'String' kind:literal}	
 inspect ProperString	{type:'Type' struct:'ProperString' kind:literal}	
 inspect EmptyString	{type:'Type' struct:'EmptyString' kind:literal}	
@@ -138,8 +138,8 @@ inspect FunctionSignature	{type:'Type' struct:'FunctionSignature' kind:function_
 # --- scalars ---		
 inspect 5	{type:'Integer' kind:literal}	
 inspect -7	{type:'Integer' kind:literal}	
-inspect 5.0	{type:'Decimal' kind:literal}	
-inspect 3.14	{type:'Decimal' kind:literal}	
+inspect 5.0	{type:'Float' kind:literal}	
+inspect 3.14	{type:'Float' kind:literal}	
 inspect 'hello'	{type:'ProperString' kind:literal}	
 inspect ''	{type:'EmptyString' kind:literal}	
 inspect none	{type:'None' kind:literal}	

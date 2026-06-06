@@ -387,8 +387,8 @@ func TestMatrixDetIdentity(t *testing.T) {
 
 func TestMatrixDot(t *testing.T) {
 	r := matrixRegistry(t)
-	a := native.NewList([]native.Value{native.NewDecimal(1), native.NewDecimal(2), native.NewDecimal(3)})
-	b := native.NewList([]native.Value{native.NewDecimal(4), native.NewDecimal(5), native.NewDecimal(6)})
+	a := native.NewList([]native.Value{native.NewFloat(1), native.NewFloat(2), native.NewFloat(3)})
+	b := native.NewList([]native.Value{native.NewFloat(4), native.NewFloat(5), native.NewFloat(6)})
 	// [1,2,3] . [4,5,6] = 4+10+18 = 32
 	input := append([]native.Value{a, b}, matGet("dot")...)
 	result := runAQL(t, r, input)

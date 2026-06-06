@@ -27,7 +27,7 @@ const (
 	ShapeFnDef                     // FnDefInfo on TFnDef
 	ShapeFunction                  // FnDefInfo on TFunction
 	ShapeDepScalar                 // DepScalarInfo — refined scalar with bounds
-	ShapeScalar                    // concrete scalar leaf (Integer/Decimal/String/Boolean/Atom/...)
+	ShapeScalar                    // concrete scalar leaf (Integer/Float/String/Boolean/Atom/...)
 	ShapeList                      // plain list — Parent=TList, Data=ListPayload
 	ShapeTypedList                 // typed list — Parent=TList, Data=ChildTypeInfo
 	ShapeTable                     // table — Parent=TList, Data=TableTypeInfo/TableData/Materializer

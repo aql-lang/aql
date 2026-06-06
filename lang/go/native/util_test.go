@@ -183,7 +183,7 @@ func newOptsMap(pairs ...[2]any) ReadMap {
 		case bool:
 			om.Set(key, NewBoolean(v))
 		case float64:
-			om.Set(key, NewDecimal(v))
+			om.Set(key, NewFloat(v))
 		case Value:
 			om.Set(key, v)
 		}
@@ -333,51 +333,51 @@ func TestMapFieldBoolean_TypeLiteralValue(t *testing.T) {
 	}
 }
 
-// MapFieldDecimal
+// MapFieldFloat
 
-func TestMapFieldDecimal_Hit(t *testing.T) {
+func TestMapFieldFloat_Hit(t *testing.T) {
 	m := newOptsMap([2]any{"f", 1.5})
-	f, ok := MapFieldDecimal(m, "f")
+	f, ok := MapFieldFloat(m, "f")
 	if !ok || f != 1.5 {
 		t.Errorf("got (%v, %v), want (1.5, true)", f, ok)
 	}
 }
 
-func TestMapFieldDecimal_Missing(t *testing.T) {
-	_, ok := MapFieldDecimal(newOptsMap(), "f")
+func TestMapFieldFloat_Missing(t *testing.T) {
+	_, ok := MapFieldFloat(newOptsMap(), "f")
 	if ok {
 		t.Errorf("missing key returned ok=true")
 	}
 }
 
-func TestMapFieldDecimal_WrongType(t *testing.T) {
+func TestMapFieldFloat_WrongType(t *testing.T) {
 	m := newOptsMap([2]any{"f", 42})
-	_, ok := MapFieldDecimal(m, "f")
+	_, ok := MapFieldFloat(m, "f")
 	if ok {
-		t.Errorf("Integer at Decimal slot returned ok=true")
+		t.Errorf("Integer at Float slot returned ok=true")
 	}
 }
 
-func TestMapFieldDecimal_NilMap(t *testing.T) {
-	_, ok := MapFieldDecimal(nil, "f")
+func TestMapFieldFloat_NilMap(t *testing.T) {
+	_, ok := MapFieldFloat(nil, "f")
 	if ok {
 		t.Errorf("nil map returned ok=true")
 	}
 }
 
-func TestMapFieldDecimal_DepScalarRejected(t *testing.T) {
-	m := newOptsMap([2]any{"f", NewDepScalar(DepGTE, NewDecimal(1.5))})
-	_, ok := MapFieldDecimal(m, "f")
+func TestMapFieldFloat_DepScalarRejected(t *testing.T) {
+	m := newOptsMap([2]any{"f", NewDepScalar(DepGTE, NewFloat(1.5))})
+	_, ok := MapFieldFloat(m, "f")
 	if ok {
-		t.Errorf("DepDecimal at Decimal slot returned ok=true")
+		t.Errorf("DepFloat at Float slot returned ok=true")
 	}
 }
 
-func TestMapFieldDecimal_TypeLiteralValue(t *testing.T) {
-	m := newOptsMap([2]any{"f", NewTypeLiteral(TDecimal)})
-	_, ok := MapFieldDecimal(m, "f")
+func TestMapFieldFloat_TypeLiteralValue(t *testing.T) {
+	m := newOptsMap([2]any{"f", NewTypeLiteral(TFloat)})
+	_, ok := MapFieldFloat(m, "f")
 	if ok {
-		t.Errorf("type literal at Decimal slot returned ok=true")
+		t.Errorf("type literal at Float slot returned ok=true")
 	}
 }
 
@@ -490,18 +490,18 @@ func TestAsConcreteInteger_DepScalarRejected(t *testing.T) {
 	}
 }
 
-func TestAsConcreteDecimal_Concrete(t *testing.T) {
-	f, err := NewDecimal(1.5).AsConcreteDecimal()
+func TestAsConcreteFloat_Concrete(t *testing.T) {
+	f, err := NewFloat(1.5).AsConcreteFloat()
 	if err != nil || f != 1.5 {
 		t.Errorf("got (%v, %v), want (1.5, nil)", f, err)
 	}
 }
 
-func TestAsConcreteDecimal_DepScalarRejected(t *testing.T) {
-	v := NewDepScalar(DepGTE, NewDecimal(1.5))
-	_, err := v.AsConcreteDecimal()
+func TestAsConcreteFloat_DepScalarRejected(t *testing.T) {
+	v := NewDepScalar(DepGTE, NewFloat(1.5))
+	_, err := v.AsConcreteFloat()
 	if err == nil {
-		t.Errorf("expected error for DepDecimal")
+		t.Errorf("expected error for DepFloat")
 	}
 }
 

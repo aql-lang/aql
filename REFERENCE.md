@@ -6,6 +6,13 @@ built-in word library. For learning AQL, start with the
 **[How-To Guides](HOWTO.md)**. For *why* AQL is shaped the way it
 is, see the **[Explanation](EXPLANATION.md)**.
 
+> **Notation.** Throughout, a trailing `# returns …` comment shows what
+> an expression evaluates to (`2 mul 3  # returns 6`); in prose we say
+> "`2 mul 3` returns `6`". The comment is ordinary documentation (`#`
+> begins a line comment), not special syntax. AQL has no result arrow:
+> `=>` is itself a word — the anonymous-function arrow, sugar for `afn`
+> — so results are written as comments rather than with `=>`.
+
 ## Contents
 
 * [Syntax](#syntax)
@@ -48,7 +55,7 @@ is, see the **[Explanation](EXPLANATION.md)**.
 | Syntax | Type | Example |
 |--------|------|---------|
 | Digits with optional `-` | `Integer` | `42`, `-5`, `0` |
-| Digits with `.` | `Decimal` | `3.14`, `-0.5` |
+| Digits with `.` | `Float` | `3.14`, `-0.5` |
 | Double or single quotes | `String` | `"hello"`, `'world'` |
 | Backticks with `${...}` | `String` (template) | `` `x = ${x}` `` |
 | `true`, `false` | `Boolean` | `true` |
@@ -56,7 +63,7 @@ is, see the **[Explanation](EXPLANATION.md)**.
 | Bare unquoted word | atom, only inside a `/q`-quoted slot | `foo` |
 | `quote foo` | `Atom` | `foo` |
 
-Type literals: `Number`, `Integer`, `Decimal`, `String`, `Boolean`,
+Type literals: `Number`, `Integer`, `Float`, `String`, `Boolean`,
 `Atom`, `Scalar`, `Any`, `None`, `List`, `Map`, plus every named
 type you define with `def`.
 
@@ -71,7 +78,14 @@ type you define with `def`.
 | `{:Type}` | Typed map (every value must match `Type`) |
 
 Commas are optional inside list and map literals — `[1 2 3]` and
-`[1, 2, 3]` are equivalent.
+`[1, 2, 3]` are equivalent. Two things to know:
+
+* An **empty element** — a leading or repeated comma (`[,1]`, `[1,,2]`)
+  — is a **syntax error** (`[aql/syntax_error]`), not a fabricated
+  `null`. AQL has no implicit hole value; write `none` for an explicit
+  empty value. (A trailing comma, `[1,]`, is fine.)
+* A **duplicate key** in a map literal is accepted silently and the
+  last value wins: `{a: 1, a: 2}` returns `{a:2}`.
 
 ### Comments
 
@@ -86,7 +100,7 @@ Commas are optional inside list and map literals — `[1 2 3]` and
 collection:
 
 ```
-2 mul (3 add 4)               => 14
+2 mul (3 add 4)               # returns 14
 ```
 
 ### Template-string escapes
@@ -107,9 +121,9 @@ A trailing `/...` suffix overrides a word's default argument shape:
 
 <!-- aql-test: skip -->
 ```
-lower/f "ABC"                 => 'abc'   # (lower is in aql:string-util — StringUtil.lower)
-"DEF" lower/s                 => 'def'
-lower/1 "GHI"                 => 'ghi'
+lower/f "ABC"                 # returns 'abc' — (lower is in aql:string-util — StringUtil.lower)
+"DEF" lower/s                 # returns 'def'
+lower/1 "GHI"                 # returns 'ghi'
 ```
 
 ### Map field shorthand
@@ -130,11 +144,11 @@ value.
 
 ```
 def x 1
-{x}                           => {x:1}
+{x}                           # returns {x:1}
 def a 10  def b 20
-{a b}                         => {a:10 b:20}        # keys sort
-{a c:3 b}                     => {a:10 b:20 c:3}    # mixes with explicit pairs
-{outer: {a}}                  => {outer:{a:10}}     # nests
+{a b}                         # returns {a:10 b:20} — keys sort
+{a c:3 b}                     # returns {a:10 b:20 c:3} — mixes with explicit pairs
+{outer: {a}}                  # returns {outer:{a:10}} — nests
 ```
 
 Because a shorthand value is auto-evaluated exactly like any bare map
@@ -145,9 +159,9 @@ data with `/r` (or stored as an atom with `/q`):
 
 ```
 def inc fn [[n:Integer] [Integer] [n add 1]]
-{inc}                         => build error    # inc dispatched 0-arg, fails its signature
-{inc/r} . inc 5               => 6              # /r holds the function as data
-{inc/q} . inc is Atom         => true           # /q stores the bare name as an atom
+{inc}                         # returns build error — inc dispatched 0-arg, fails its signature
+{inc/r} . inc 5               # returns 6 — /r holds the function as data
+{inc/q} . inc is Atom         # returns true — /q stores the bare name as an atom
 ```
 
 The optional form composes with the `?:` optional-field rule: `{foo?}`
@@ -186,9 +200,17 @@ quoted key (`{'a/b': 1}`) or a computed key (`{[a/b]: 1}`).
   enough).
 * **Left-to-right.** Words that are still waiting evaluate strictly
   in source order. Use `(...)` to override.
-* **Quotation.** Lists are *unevaluated* by default. `do` evaluates
-  one as a sub-program; `quote` prevents evaluation of the next
-  token.
+* **Quotation.** A `[ … ]` literal **evaluates its contents** as a
+  sub-program and collects the resulting stack into the list — so
+  `[1 2 add]` returns `[3]`, not `[1 2 add]`, and a bare `[dup mul]` errors
+  (it runs `dup` on an empty stack). To hold code *unevaluated*, use
+  `quote` (`quote [1 2 add]` returns `[1 2 word(add)]`). `do` runs a list as
+  a program and leaves its result stack (`do [1 2 add]` returns `3`). The one
+  subtlety: when a `[ … ]` is written **directly as the block
+  argument** of a word that expects code — `do`, `each`, `if`/`for`
+  branches, `fn`/`macro` bodies — it is held deferred and run by that
+  word, which is why `each [dup mul]` works even though the same
+  bracket evaluated on its own would not.
 * **Macros.** A `macro` runs at expansion time on its operands *as
   code* and splices the result into the call site — new syntax in
   AQL itself. See **[Macros](#macros)**.
@@ -212,7 +234,7 @@ Any
 │   ├── Boolean                     -- false | true
 │   ├── Number
 │   │   ├── Integer
-│   │   └── Decimal
+│   │   └── Float
 │   ├── String
 │   │   ├── EmptyString
 │   │   └── ProperString
@@ -251,7 +273,7 @@ slash-separated paths in `pathof`; short names like `Number` or
 | `String` | `Scalar/String` |
 | `Number` | `Scalar/Number` |
 | `Integer` | `Scalar/Number/Integer` |
-| `Decimal` | `Scalar/Number/Decimal` |
+| `Float` | `Scalar/Number/Float` |
 | `Boolean` | `Scalar/Boolean` |
 | `Atom` | `Scalar/Atom` |
 | `List` | `Node/List` |
@@ -264,6 +286,16 @@ slash-separated paths in `pathof`; short names like `Number` or
 | `Interval` | `Ideal/Interval` |
 | `Function` | `Word/Function` |
 
+> **`Float` is IEEE-754 `float64`.** A fractional literal like `3.14`
+> is a `Float`, so expect binary-floating-point behaviour, not exact
+> base-10: `0.1 add 0.2` returns `0.30000000000000004`. `Integer` and
+> `Float` are distinct nodes but compare equal by magnitude (`1 eq 1.0`
+> returns `true`, `1 cmp 1.0` returns `0`); they are **not**
+> interchangeable, because integer `div` truncates while float `div`
+> does not. `convert` does not move a value between the two numeric
+> nodes — see [Type words](#type-words). (The name `Decimal` is
+> reserved for a future exact base-10 type; it is not yet defined.)
+
 ### Disjunctions
 
 `A tor B` produces a disjunctive type — values match if they match
@@ -271,9 +303,9 @@ either side:
 
 ```
 def OptInt (Integer tor none)
-OptInt unify 5                => 5 true
-OptInt unify none             => none true
-OptInt unify "x"              => '~unify-fail' false
+OptInt unify 5                # returns 5 true
+OptInt unify none             # returns none true
+OptInt unify "x"              # returns '~unify-fail' false
 ```
 
 ### Negation
@@ -284,12 +316,12 @@ closes the type algebra under Boolean operations:
 
 ```
 def NotStr (tnot String)
-5 is NotStr                              => true
-"x" is NotStr                            => false
-5 is (tnot (String tor Boolean))         => true     # neither
-Integer tand (tnot String)               => Integer  # disjoint — no-op
-String tand (tnot String)                => Never     # self-complement is empty
-(Integer tor String) tand (tnot String)  => Integer  # drops the excluded alternative
+5 is NotStr                              # returns true
+"x" is NotStr                            # returns false
+5 is (tnot (String tor Boolean))         # returns true — neither
+Integer tand (tnot String)               # returns Integer — disjoint — no-op
+String tand (tnot String)                # returns Never — self-complement is empty
+(Integer tor String) tand (tnot String)  # returns Integer — drops the excluded alternative
 ```
 
 The identities hold: `tnot Never` is `Any`, `tnot Any` is `Never`, and
@@ -300,8 +332,8 @@ in the else branch.
 De Morgan's laws fold conjunctions and disjunctions of negations:
 
 ```
-(tnot Integer) tand (tnot String)  => tnot (Integer|String)   # tnot A tand tnot B = tnot (A tor B)
-(tnot Integer) tor (tnot String)   => Any                      # tnot A tor tnot B = tnot (A tand B) = tnot Never
+(tnot Integer) tand (tnot String)  # returns tnot (Integer|String) — tnot A tand tnot B = tnot (A tor B)
+(tnot Integer) tor (tnot String)   # returns Any — tnot A tor tnot B = tnot (A tand B) = tnot Never
 ```
 
 Negating a refinement (`DepScalar`) takes its closed-form complement —
@@ -309,8 +341,8 @@ the bound flips within the base, so intersecting with the base reduces
 to a positive refinement:
 
 ```
-Integer tand (tnot (Integer gt 0))        => (Integer lte 0)
-Integer tand (tnot (between 5 10 Integer))  => (Integer lt 5)|(Integer gt 10)
+Integer tand (tnot (Integer gt 0))        # returns (Integer lte 0)
+Integer tand (tnot (between 5 10 Integer))  # returns (Integer lt 5)|(Integer gt 10)
 ```
 
 ### Type ordering
@@ -321,8 +353,8 @@ comparisons are well-defined and total. Type literals sort strictly
 below their concrete inhabitants of the same family:
 
 ```
-Integer lt 0                  => true
-[1,2] cmp [1,3]               => -1
+Integer lt 0                  # returns true
+[1,2] cmp [1,3]               # returns -1
 ```
 
 
@@ -356,7 +388,7 @@ All stack words are stack-only (modifier `/s`).
 
 ### Arithmetic
 
-Forward-collecting, Integer/Decimal with auto-promotion. The
+Forward-collecting, Integer/Float with auto-promotion. The
 asymmetric ops (`sub`, `div`, `mod`, `pow`) follow the
 **argument-order rule** — see
 [Tutorial §3](TUTORIAL.md#the-argument-order-rule). All three call
@@ -364,15 +396,33 @@ forms `a b sub`, `a sub b`, and `sub b a` compute `a - b`.
 
 | Word | Operation | Example |
 |------|-----------|---------|
-| `add` | `a + b` (commutative) | `1 add 2 => 3` |
-| `sub` | `a - b` | `10 sub 3 => 7` |
-| `mul` | `a * b` (commutative) | `4 mul 5 => 20` |
-| `div` | `a / b` | `10 div 2 => 5` |
-| `mod` | `a % b` | `10 mod 3 => 1` |
-| `pow` | `a ^ b` | `2 pow 10 => 1024` |
+| `add` | `a + b` (commutative) | `1 add 2` returns `3` |
+| `sub` | `a - b` | `10 sub 3` returns `7` |
+| `mul` | `a * b` (commutative) | `4 mul 5` returns `20` |
+| `div` | `a / b` | `10 div 2` returns `5` |
+| `mod` | `a % b` | `10 mod 3` returns `1` |
+| `pow` | `a ^ b` | `2 pow 10` returns `1024` |
 
 `add` on non-numeric scalars performs string concatenation:
-`"a" add "b" => 'ab'`.
+`"a" add "b"` returns `'ab'`. This wins whenever **either** operand is
+non-numeric: the other operand is rendered to text and the result is
+a `String`, so `1 add "x"` returns `'1x'` and `true 1 add` returns `'true1'` (no
+type error — `add` simply concatenates). Use it deliberately, not as
+a guard against mixed-type mistakes.
+
+Two further sharp edges on numbers:
+
+* **Integer division truncates** toward zero and never produces a
+  remainder or a `Float`: `7 div 2` returns `3`, `1 div 2` returns `0`. Use a
+  `Float` operand to get real division — `7.0 div 2` returns `3.5`.
+* **Integer overflow is silent and inconsistent.** `add`/`mul` past
+  `maxint` promote to `Float` (losing integer precision):
+  `9223372036854775807 add 1` returns `9223372036854776000.0`; `pow`
+  instead wraps two's-complement: `2 pow 63` returns `-9223372036854775808`.
+* `Float` is an IEEE-754 binary `float64`, **not** a base-10
+  decimal — `0.1 add 0.2` returns `0.30000000000000004` and `1 eq 1.0`
+  returns `true` even though the two divide differently. See
+  [Type system](#type-system).
 
 Additional numeric words (`abs`, `negate`, `sign`, `min`, `max`,
 `floor`, `ceil`, `round`, `trunc`, `sqrt`, `cbrt`, `exp`, `log`,
@@ -382,9 +432,9 @@ Additional numeric words (`abs`, `negate`, `sign`, `min`, `max`,
 
 ```
 "aql:math-util" import end
-MathUtil.abs -5                   => 5
-MathUtil.floor 3.7                => 3
-MathUtil.sqrt 16                  => 4.0
+MathUtil.abs -5                   # returns 5
+MathUtil.floor 3.7                # returns 3
+MathUtil.sqrt 16                  # returns 4.0
 ```
 
 ### Strings
@@ -402,17 +452,17 @@ of the word, with the haystack as the forward arg.
 
 | Word | Description | Example |
 |------|-------------|---------|
-"aql:string-util" import end | `StringUtil.upper` | Uppercase | `StringUtil.upper "hello" => 'HELLO'` |
-"aql:string-util" import end | `StringUtil.lower` | Lowercase | `StringUtil.lower "ABC" => 'abc'` |
-"aql:string-util" import end | `StringUtil.concat` | Join list elements into a string | `StringUtil.concat ["a","b"] => 'ab'` |
-"aql:string-util" import end | `StringUtil.split` | Split string by separator | `StringUtil.split "a,b" "," => ['a','b']` |
-"aql:string-util" import end | `StringUtil.contains` | Substring test | `StringUtil.contains "hello" "ell" => true` |
-"aql:string-util" import end | `StringUtil.indexof` | Find substring position (also has a list form — see [List and array words](#list-and-array-words)) | `StringUtil.indexof "hello" "ll" => 2` |
-| `slice` | Substring; negative indices ok | `slice "hello" 1 3 => 'el'` |
-"aql:string-util" import end | `StringUtil.replace` | Replace pattern | `StringUtil.replace "hello" "l" "r" => 'herlo'` |
-"aql:string-util" import end | `StringUtil.repeat` | Repeat string | `StringUtil.repeat "ab" 3 => 'ababab'` |
-"aql:string-util" import end | `StringUtil.trim` | Trim whitespace or chars | `StringUtil.trim "  hi  " => 'hi'` |
-"aql:string-util" import end | `StringUtil.pad` | Pad to width | `"hi" StringUtil.pad 5 => 'hi   '` |
+"aql:string-util" import end | `StringUtil.upper` | Uppercase | `StringUtil.upper "hello"` returns `'HELLO'` |
+"aql:string-util" import end | `StringUtil.lower` | Lowercase | `StringUtil.lower "ABC"` returns `'abc'` |
+"aql:string-util" import end | `StringUtil.concat` | Join list elements into a string | `StringUtil.concat ["a","b"]` returns `'ab'` |
+"aql:string-util" import end | `StringUtil.split` | Split string by separator | `StringUtil.split "a,b" ","` returns `['a','b']` |
+"aql:string-util" import end | `StringUtil.contains` | Substring test | `StringUtil.contains "hello" "ell"` returns `true` |
+"aql:string-util" import end | `StringUtil.indexof` | Find substring position (also has a list form — see [List and array words](#list-and-array-words)) | `StringUtil.indexof "hello" "ll"` returns `2` |
+| `slice` | Substring; negative indices ok | `"hello" slice 1 3` returns `'el'` |
+"aql:string-util" import end | `StringUtil.replace` | Replace pattern | `StringUtil.replace "hello" "l" "r"` returns `'herlo'` |
+"aql:string-util" import end | `StringUtil.repeat` | Repeat string | `StringUtil.repeat "ab" 3` returns `'ababab'` |
+"aql:string-util" import end | `StringUtil.trim` | Trim whitespace or chars | `StringUtil.trim "  hi  "` returns `'hi'` |
+"aql:string-util" import end | `StringUtil.pad` | Pad to width | `"hi" StringUtil.pad 5` returns `'hi   '` |
 | `match` | Regex match (returns a struct) | `match "abc" "b(c)"` |
 
 #### Options examples
@@ -420,37 +470,70 @@ of the word, with the haystack as the forward arg.
 Pass an Options map as the *last* forward argument:
 
 ```
-"aql:string-util" import end StringUtil.split   "a,,b"      ","    {keepEmpty: true}            => ['a' '' 'b']
-"aql:string-util" import end StringUtil.contains "hello"    "Ell"  {cs: "insensitive"}          => true
-"aql:string-util" import end StringUtil.replace "aaa"       "a" "b" {scope: "all"}              => 'bbb'
+"aql:string-util" import end StringUtil.split   "a,,b"      ","    {keepEmpty: true}            # returns ['a' '' 'b']
+"aql:string-util" import end StringUtil.contains "hello"    "Ell"  {cs: "insensitive"}          # returns true
+"aql:string-util" import end StringUtil.replace "aaa"       "a" "b" {scope: "all"}              # returns 'bbb'
 ```
 
 ### Boolean
 
+The built-in boolean words are `and`, `or`, `not`, and `xor`. The
+remaining gates — `nand`, `nor`, `xnor`, `implies`, `iff` — live in
+the `aql:logic-util` module and are called qualified after importing
+it.
+
 | Word | Description | Example |
 |------|-------------|---------|
-| `and` | Logical AND | `true and false => false` |
-| `or` | Logical OR | `true or false => true` |
-| `not` | Logical NOT | `not true => false` |
-| `xor` | Exclusive OR | `true xor true => false` |
-| `nand` | NOT AND | `true nand true => false` |
-| `implies` | Implication | `true implies false => false` |
+| `and` | Logical AND (short-circuit) | `true and false` returns `false` |
+| `or` | Logical OR (short-circuit) | `true or false` returns `true` |
+| `not` | Logical NOT | `not true` returns `false` |
+| `xor` | Exclusive OR | `true xor true` returns `false` |
+| `LogicUtil.nand` | NOT AND (needs `aql:logic-util`) | `LogicUtil.nand true true` returns `false` |
+| `LogicUtil.implies` | Implication (needs `aql:logic-util`) | `true LogicUtil.implies false` returns `false` |
+
+> **`and` / `or` return an operand, not a coerced boolean.** They
+> short-circuit and yield the value that decided the result, of
+> whatever type: `1 2 and` returns `2`, `false 5 and` returns `false`,
+> `0 9 or` returns `9`. Wrap with `not not` (or compare) if you need a
+> strict `Boolean`.
 
 ### Comparison
 
-All comparison words route through one total order — see
+The **ordering** words (`cmp`, `lt`, `lte`, `gt`, `gte`) are
+**family-restricted**: they compare only same-type values, or values a
+shared same-family comparer can handle (`Integer`↔`Float` via `Number`,
+two `Date`s, `EmptyString`↔`ProperString` via `String`, the
+instant-bearing `Time` leaves chronologically). A cross-family pair
+(`Integer`↔`String`, `List`↔`Map`) raises `[aql/incomparable]`.
+
+`tcmp` is the **unrestricted** total order — it compares *any* two
+values (the same order `sort` and the collection words use), returning
+`-1` / `0` / `1`. Reach for it when you want the cross-type ordering the
+restricted words refuse. See
 **[Explanation §Type ordering](EXPLANATION.md#type-ordering)**.
+
+> **Equality is not restricted.** `eq`/`neq`/`deq` compare across types
+> safely — different types are simply *not equal* (`1 eq "1"` returns
+> `false`, never an error). Only the **ordering** words restrict.
+
+```
+1 lt 2.0                      # returns true        — Integer vs Float (shared Number)
+1 lt "a"                      # returns error       — [aql/incomparable]; use tcmp
+1 tcmp "a"                    # returns -1          — Integer ranks below String
+[3 "a" 1 true] sort           # returns [true 1 3 'a']   — sort uses the total order
+```
 
 | Word | Description | Example |
 |------|-------------|---------|
-| `eq` | Equal (cross-leaf magnitude allowed) | `1 eq 1.0 => true` |
-| `neq` | Not equal | `1 neq 2 => true` |
-| `deq` | Deep / strict-identity equality | `[1,2] deq [1,2] => true` |
-| `lt` | Less than | `1 lt 2 => true` |
-| `gt` | Greater than | `2 gt 1 => true` |
-| `lte` | Less or equal | `1 lte 1 => true` |
-| `gte` | Greater or equal | `2 gte 1 => true` |
-| `cmp` | Three-way: `-1` / `0` / `1` | `5 cmp 10 => -1` |
+| `eq` | Equal (cross-leaf magnitude allowed; cross-type → false) | `1 eq 1.0` returns `true` |
+| `neq` | Not equal | `1 neq 2` returns `true` |
+| `deq` | Deep / strict-identity equality | `[1,2] deq [1,2]` returns `true` |
+| `lt` | Less than (same-family) | `1 lt 2` returns `true` |
+| `gt` | Greater than (same-family) | `2 gt 1` returns `true` |
+| `lte` | Less or equal (same-family) | `1 lte 1` returns `true` |
+| `gte` | Greater or equal (same-family) | `2 gte 1` returns `true` |
+| `cmp` | Three-way (same-family): `-1` / `0` / `1` | `5 cmp 10` returns `-1` |
+| `tcmp` | Three-way across **any** types (total order) | `1 tcmp "a"` returns `-1` |
 | `between` | Build closed-interval refinement | `Integer between 10 20` |
 
 ### Definition and scoping
@@ -460,9 +543,17 @@ All comparison words route through one total order — see
 | `def` | Define a word | `def x 42` |
 | `undef` | Remove the latest definition | `undef x` |
 | `fn` | Create typed function | `fn [[Integer] [Integer] [dup mul]]` |
-| `var` | Scoped variable block | `5 var [[x] x mul x] => 25` |
+| `var` | Scoped variable block | `5 var [[x] x mul x]` returns `25` |
 | `args` | Current `fn` args list (inside body) | `args . 0` |
 | `quote` | Prevent evaluation of next token | `quote [1 add 2]` |
+
+> **Core words are frozen.** `def`/`undef` may not redefine a built-in
+> word, nor the literals `true`/`false`/`none` — `def add …`,
+> `def true …`, `undef if` all raise `[aql/reserved_word]`. Extend the
+> language by defining a **new** word, not by shadowing a built-in.
+> Re-`def`ing your **own** words still shadows as before (`def x 1; def
+> x 2` ⇒ `x` is `2`), and a built-in *type* name (`Integer`, …) was
+> already unusable as a `def` target.
 
 #### `fn` shape
 
@@ -473,10 +564,10 @@ return type(s):
 
 ```
 def inc fn [[n:Integer] [Integer] [n add 1]]
-inc 5                         => 6
+inc 5                         # returns 6
 
-def avg fn [[a:Number b:Number] [Decimal] [(a add b) div 2.0]]
-avg 3 4                       => 3.5
+def avg fn [[a:Number b:Number] [Float] [(a add b) div 2.0]]
+avg 3 4                       # returns 3.5
 ```
 
 **Return types are checked.** When the body finishes, each declared
@@ -486,7 +577,7 @@ below). A mismatch is an error, not a silent pass:
 
 ```
 def bad fn [[] [Integer] ['hi']]
-bad                           => [aql/type_error] return value 1: expected Integer got ProperString
+bad                           # returns [aql/type_error] return value 1: expected Integer got ProperString
 ```
 
 Multiple triples declare overloads (the engine tries each in order);
@@ -506,7 +597,7 @@ matches when its own type is the declared type or a descendant.
 
 ```
 def first fn [[xs:List] [Any] [xs get 0]]
-first [10 20 30]              => 10
+first [10 20 30]              # returns 10
 ```
 
 **Object / Record / Table types — nominal, by construction.** An
@@ -516,8 +607,8 @@ both parameter and return slots of that type (and of any supertype):
 ```
 def Box (refine Object {v:0})
 def wrap fn [[n:Integer] [Box] [make Box {v:n}]]
-typeof (wrap 5)               => Box
-(wrap 5) get 'v'              => 5
+typeof (wrap 5)               # returns Box
+(wrap 5) get 'v'              # returns 5
 ```
 
 **Bare refinement — a *newtype*.** `def Pos (refine Integer)` adds no
@@ -527,15 +618,15 @@ strict rule holds at parameters and returns:
 
 ```
 def Pos (refine Integer)
-42 is Pos                                          => false
+42 is Pos                                          # returns false
 def g fn [[n:Pos] [Integer] [n]]
-42 g                                               => [aql/signature_error] no matching signature for g
-def x:Pos 42   x g                                 => 42
+42 g                                               # returns [aql/signature_error] no matching signature for g
+def x:Pos 42   x g                                 # returns 42
 
 def mk fn [[] [Pos] [7]]
-mk                                                 => [aql/type_error] return value 1: expected Pos got Integer
+mk                                                 # returns [aql/type_error] return value 1: expected Pos got Integer
 def mk2 fn [[] [Pos] [def x:Pos 7 x]]
-mk2                                                => 7
+mk2                                                # returns 7
 ```
 
 **Predicate refinement — a *subset type*.** `def Big (Integer gt 10)`
@@ -546,16 +637,16 @@ alike:
 
 ```
 def Big (Integer gt 10)
-50 is Big                                          => true
-5  is Big                                          => false
+50 is Big                                          # returns true
+5  is Big                                          # returns false
 def g fn [[n:Big] [Integer] [n]]
-50 g                                               => 50
-5  g                                               => [aql/signature_error] no matching signature for g
+50 g                                               # returns 50
+5  g                                               # returns [aql/signature_error] no matching signature for g
 
 def mk fn [[] [Big] [50]]
-mk                                                 => 50
+mk                                                 # returns 50
 def mkbad fn [[] [Big] [5]]
-mkbad                                              => [aql/type_error] return value 1: expected Big got Integer
+mkbad                                              # returns [aql/type_error] return value 1: expected Big got Integer
 ```
 
 The newtype-vs-subset distinction and its cross-language rationale are
@@ -574,7 +665,7 @@ forms in AQL itself, rather than in Go.
 | `macro` | Create a macro from `[[params] [body]]` | `def unless (macro [[c body] [quote [if unquote c [] unquote body]]])` |
 | `unquote` | In a template: insert an operand's **value/form** as one node | `unquote cond` |
 | `splice` | In a template: insert a list operand's **elements**, flattened | `splice xs` |
-| `gensym` | A fresh, never-colliding atom (a unique name) | `gensym` => `tmp$g1` |
+| `gensym` | A fresh, never-colliding atom (a unique name) | `gensym` returns `tmp$g1` |
 | `macroexpand` | Expand a macro call to its token list, without running it | `macroexpand (unless x [y])` |
 
 #### Defining and using a macro
@@ -590,7 +681,7 @@ def unless (macro [[cond body] [
 ]])
 
 def x 5
-unless (x gt 10) [99]                 => 99       # body runs: the condition is false
+unless (x gt 10) [99]                 # returns 99 — body runs: the condition is false
 ```
 
 `unless (x gt 10) [99]` expands to `if (x gt 10) [] [99]`, which then runs
@@ -612,7 +703,7 @@ AQL's default-eval). Inside it:
 ```
 def callit (macro [[f xs] [ quote [ unquote f splice xs ] ]])
 def add3 fn [[a:Integer b:Integer c:Integer] [Integer] [a add b add c]]
-callit add3 [1 2 3]                   => 6        # splice spreads [1 2 3] as 1 2 3
+callit add3 [1 2 3]                   # returns 6 — splice spreads [1 2 3] as 1 2 3
 ```
 
 A map value that needs an escape must be parenthesised — `{k: (unquote v)}`,
@@ -627,7 +718,7 @@ same-named variable at the call site — no manual `gensym` needed.
 ```
 def myor (macro [[a b] [ quote [ def tmp unquote a  if tmp [tmp] [unquote b] ] ]])
 def tmp 42
-myor false tmp                        => 42       # the template's `tmp` is renamed; user `tmp` is safe
+myor false tmp                        # returns 42 — the template's `tmp` is renamed; user `tmp` is safe
 ```
 
 To bind a name the caller *should* see (an intentional, non-hygienic binding),
@@ -636,11 +727,11 @@ and left untouched:
 
 ```
 def defconst (macro [[name val] [ quote [ def unquote name unquote val ] ]])
-defconst answer 42  answer            => 42
+defconst answer 42  answer            # returns 42
 ```
 
 `gensym` mints a unique atom directly for hand-written cases; each call is
-distinct (`gensym eq gensym` => `false`).
+distinct (`gensym eq gensym` returns `false`).
 
 #### Inspecting and staging
 
@@ -651,7 +742,7 @@ clear error rather than looping.
 
 ```
 def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])
-macroexpand (twice 5)                 => [5 word(add) 5]
+macroexpand (twice 5)                 # returns [5 word(add) 5]
 ```
 
 (The result is a *token list*: `add` shows as `word(add)` because it is an
@@ -672,7 +763,7 @@ before the call.
 |------|-------------|---------|
 | `if` | Conditional; else branch optional | `if (5 gt 3) ["y"] ["n"]` |
 | `for` | Numeric loop (counter or range) | `for 5 [42]` |
-| `do` | Evaluate list as program | `do [1 add 2] => 3` |
+| `do` | Evaluate list as program | `do [1 add 2]` returns `3` |
 | `error` | Pattern-match an error value | `do [1 div 0] error [drop 42]` |
 | `break` | Exit `for` loop early | `for 10 [break]` |
 | `continue` | Skip to next iteration | `for 10 [continue]` |
@@ -682,6 +773,15 @@ For `if`, the canonical form is all-forward `if cond [then] [else]`
 `args[0]`, then into `args[1]`, else into `args[2]` as the handler
 expects. See
 **[Tutorial §3](TUTORIAL.md#the-argument-order-rule)**.
+
+`if` coerces its condition to a boolean (the same rule as `convert
+boolean`). The values that count as **false** are: `false`, `0` (and
+`0.0`), `none`, the empty list `[]`/empty map `{}`, the empty string
+`""`, and — as a special case — the exact string `"false"`.
+**Everything else is true**, including non-empty strings that look
+falsy: `"FALSE"`, `"0"`, and `"no"` are all truthy (only lowercase
+`"false"` is special). A condition that produces *no* value at all
+(e.g. an empty block `[]` as the condition) is an error, not a false.
 
 #### `for` forms
 
@@ -696,7 +796,7 @@ process a sequence with the index/element, use `iota N each [body]`
 (each pushes the element before running the body):
 
 ```
-iota 5 each [dup mul]     => [0 1 4 9 16]
+iota 5 each [dup mul]     # returns [0 1 4 9 16]
 ```
 
 ### List and array words
@@ -707,14 +807,14 @@ and `flatten`/`size`. The specialised array vocabulary lives in the
 
 | Word | Description | Example |
 |------|-------------|---------|
-| `iota` | Generate `[0..N-1]` | `iota 5 => [0,1,2,3,4]` |
-| `range` | Generate an arithmetic sequence `[start..stop)` | `range 2 6 => [2,3,4,5]`; `range 0 10 3 => [0,3,6,9]` |
-| `take` | First N elements | `[1,2,3,4] take 2 => [1,2]` |
-| `shed` | Drop first N | `[1,2,3,4] shed 2 => [3,4]` |
-| `reverse` | Reverse order | `[1,2,3] reverse => [3,2,1]` |
-| `flatten` | Remove one nesting level; `flatten N` removes N; `flatten -1` fully flattens | `[[1,2],[3]] flatten => [1,2,3]`; `flatten -1 [1,[2,[3]]] => [1,2,3]` |
-"aql:string-util" import end | `StringUtil.indexof` | On strings: substring position. On two lists: index of each needle in the haystack | `StringUtil.indexof "hello" "ll" => 2`; `StringUtil.indexof [20,10] [10,20,30] => [1,0]` |
-| `size` | Element / key count of a collection — works on any value (see [Size](#size)) | `[1,2,3] size => 3` |
+| `iota` | Generate `[0..N-1]` | `iota 5` returns `[0,1,2,3,4]` |
+| `range` | Generate an arithmetic sequence `[start..stop)` | `range 2 6` returns `[2,3,4,5]`; `range 0 10 3` returns `[0,3,6,9]` |
+| `take` | First N elements | `[1,2,3,4] take 2` returns `[1,2]` |
+| `shed` | Drop first N | `[1,2,3,4] shed 2` returns `[3,4]` |
+| `reverse` | Reverse order | `[1,2,3] reverse` returns `[3,2,1]` |
+| `flatten` | Remove one nesting level; `flatten N` removes N; `flatten -1` fully flattens | `[[1,2],[3]] flatten` returns `[1,2,3]`; `flatten -1 [1,[2,[3]]]` returns `[1,2,3]` |
+"aql:string-util" import end | `StringUtil.indexof` | On strings: substring position. On two lists: index of each needle in the haystack | `StringUtil.indexof "hello" "ll"` returns `2`; `StringUtil.indexof [20,10] [10,20,30]` returns `[1,0]` |
+| `size` | Element / key count of a collection — works on any value (see [Size](#size)) | `[1,2,3] size` returns `3` |
 
 `flatten` and `indexof` are single words with several type-dispatched
 signatures (see [ADR-001](ADR.md#adr-001)): a deep flatten is `flatten
@@ -733,36 +833,36 @@ under its plain name.
 
 ```
 "aql:array-util" import end
-iota 6 ArrayUtil.reshape [2,3]        => [[0 1 2] [3 4 5]]
+iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 ```
 
 | Word | Description | Example |
 |------|-------------|---------|
-| `ArrayUtil.shape` | Dimensions of a nested list | `ArrayUtil.shape [[1,2,3],[4,5,6]] => [2,3]` |
-| `ArrayUtil.rank` | Number of dimensions | `ArrayUtil.rank [[1,2],[3,4]] => 2` |
+| `ArrayUtil.shape` | Dimensions of a nested list | `ArrayUtil.shape [[1,2,3],[4,5,6]]` returns `[2,3]` |
+| `ArrayUtil.rank` | Number of dimensions | `ArrayUtil.rank [[1,2],[3,4]]` returns `2` |
 | `ArrayUtil.reshape` | Change dimensions | `iota 6 ArrayUtil.reshape [2,3]` |
 | `ArrayUtil.transpose` | Transpose a rank-2 list | `ArrayUtil.transpose [[1,2],[3,4]]` |
-| `ArrayUtil.where` | Indices of truthy elements | `ArrayUtil.where [true,false,true] => [0,2]` |
-| `ArrayUtil.grade` | Indices that would sort | `ArrayUtil.grade [3,1,2] => [1,2,0]` |
-| `ArrayUtil.at` | Select by index list | `[10,20,30] ArrayUtil.at [2,0] => [30,10]` |
+| `ArrayUtil.where` | Indices of truthy elements | `ArrayUtil.where [true,false,true]` returns `[0,2]` |
+| `ArrayUtil.grade` | Indices that would sort | `ArrayUtil.grade [3,1,2]` returns `[1,2,0]` |
+| `ArrayUtil.at` | Select by index list | `[10,20,30] ArrayUtil.at [2,0]` returns `[30,10]` |
 | `ArrayUtil.sortby` | Sort by parallel key list | `["b","a","c"] ArrayUtil.sortby [2,1,3]` |
 | `ArrayUtil.replicate` | Repeat each element N times | `[1,2,3] ArrayUtil.replicate [2,1,3]` |
 | `ArrayUtil.expand` | Expand by Boolean mask | `[1,2,3] ArrayUtil.expand [true,false,true]` |
-| `ArrayUtil.compress` | Select elements where a mask is true | `ArrayUtil.compress [true,false,true] [10,20,30] => [10,30]` |
-| `ArrayUtil.eachrank` | Apply a body at a given cell rank (0 = scalars, 1 = innermost lists, …) | `ArrayUtil.eachrank 1 [each [add 10]] [[1,2],[3,4]] => [[11,12],[13,14]]` |
-| `ArrayUtil.foldaxis` | Reduce a rank-2 list along an axis (0 = columns, 1 = rows) | `ArrayUtil.foldaxis 0 [add] [[1,2],[3,4]] => [4,6]` |
-| `ArrayUtil.member` | Per-element membership test | `[1,2,3] ArrayUtil.member [2,3,4] => [true,true,false]` |
-| `ArrayUtil.unique` | Remove duplicates | `ArrayUtil.unique [1,2,2,3] => [1,2,3]` |
+| `ArrayUtil.compress` | Select elements where a mask is true | `ArrayUtil.compress [true,false,true] [10,20,30]` returns `[10,30]` |
+| `ArrayUtil.eachrank` | Apply a body at a given cell rank (0 = scalars, 1 = innermost lists, …) | `ArrayUtil.eachrank 1 [each [add 10]] [[1,2],[3,4]]` returns `[[11,12],[13,14]]` |
+| `ArrayUtil.foldaxis` | Reduce a rank-2 list along an axis (0 = columns, 1 = rows) | `ArrayUtil.foldaxis 0 [add] [[1,2],[3,4]]` returns `[4,6]` |
+| `ArrayUtil.member` | Per-element membership test | `[1,2,3] ArrayUtil.member [2,3,4]` returns `[true,true,false]` |
+| `ArrayUtil.unique` | Remove duplicates | `ArrayUtil.unique [1,2,2,3]` returns `[1,2,3]` |
 | `ArrayUtil.group` | Group values by parallel keys (or indices by value) | `ArrayUtil.group ["a","b","a"] [1,2,3]` |
 | `ArrayUtil.window` | Sliding window of size N | `[1,2,3,4] ArrayUtil.window 2` |
-| `ArrayUtil.pairs` | Adjacent pairs | `ArrayUtil.pairs [1,2,3] => [[1,2],[2,3]]` |
+| `ArrayUtil.pairs` | Adjacent pairs | `ArrayUtil.pairs [1,2,3]` returns `[[1,2],[2,3]]` |
 
 ### Higher-order array words
 
 | Word | Description | Example |
 |------|-------------|---------|
 | `each` | Map a function | `[1,2,3] each [dup mul]` |
-| `fold` | Reduce with accumulator | `fold [add] [1,2,3] 0 => 6` |
+| `fold` | Reduce with accumulator | `fold [add] [1,2,3] 0` returns `6` |
 | `scan` | Running fold | `scan [add] [1,2,3]` |
 | `outer` | Outer product | `outer [mul] [3,4] [1,2]` |
 | `inner` | Inner product | `inner [add] [mul] [3,4] [1,2]` |
@@ -784,7 +884,7 @@ the element count, so it is the canonical way to ask "how long is this
 list?"; it also generalises to maps, strings, numbers, and user types.
 
 ```
-[10,20,30] size          => 3
+[10,20,30] size          # returns 3
 ```
 
 The size of a value is the size of the collection it stands for, by
@@ -792,15 +892,15 @@ type:
 
 | Value | Size | Example |
 |-------|------|---------|
-| List | element count | `[10,20,30] size => 3` |
-| Map | key count | `{a:1, b:2} size => 2` |
-| String | length in bytes | `"hello" size => 5` |
-| Atom | length of the name | `foo/q size => 3` |
-| Integer / Decimal | floored magnitude | `42 size => 42`, `7.9 size => 7` |
-| Boolean | `1` for `true`, `0` for `false` | `true size => 1` |
-| Path | segment count | `(make Path "a/b/c") size => 3` |
-| Object / Array / Store / Table | field / element / entry / row count | `(make Pt {x:1 y:2}) size => 2` |
-| `None`, a Date, a bare scalar, or any non-concrete value (e.g. a bare type literal) | `0` (never errors) | `None size => 0`, `List size => 0` |
+| List | element count | `[10,20,30] size` returns `3` |
+| Map | key count | `{a:1, b:2} size` returns `2` |
+| String | length in bytes | `"hello" size` returns `5` |
+| Atom | length of the name | `foo/q size` returns `3` |
+| Integer / Float | floored magnitude | `42 size` returns `42`, `7.9 size` returns `7` |
+| Boolean | `1` for `true`, `0` for `false` | `true size` returns `1` |
+| Path | segment count | `(make Path "a/b/c") size` returns `3` |
+| Object / Array / Store / Table | field / element / entry / row count | `(make Pt {x:1 y:2}) size` returns `2` |
+| `None`, a Date, a bare scalar, or any non-concrete value (e.g. a bare type literal) | `0` (never errors) | `None size` returns `0`, `List size` returns `0` |
 
 Dispatch is type-driven: each type contributes its own size rule via
 the kernel's `Sizer` capability (`eng.SizeOf`), and a type with no
@@ -811,10 +911,28 @@ word — `size` subsumes it.
 
 | Word | Description | Example |
 |------|-------------|---------|
-| `get` / `.` | Lookup field/key | `{x:1} . x => 1` |
-| `getr` / `!.` | Strict lookup (errors if missing) | `{x:1} !. y => error` |
+| `get` / `.` | Lookup field/key, or index a list | `{x:1} . x` returns `1`; `[10,20,30] 0 get` returns `10` |
+| `getr` / `!.` | Strict lookup (errors if missing) | `{x:1} !. y` returns `error` |
 | `set` | Set a key in a Store | `context set foo 99` |
 | `context` | Push the current context Store | `context` |
+
+> **`get`/`.` return `none` for anything not found — silently.** A
+> missing map key (`{a:1} . b` returns `None`), an out-of-range list index
+> (`[10,20,30] 5 get` returns `None`), and a negative index
+> (`[10,20,30] -1 get` returns `None` — there is **no** Python-style
+> end-indexing) all yield
+> `none` rather than an error. Use the strict `getr`/`!.` form when a
+> missing key should fail loudly. Note also that `get` indexes **lists
+> and maps only** — strings are not indexable (`"hello" 0 get` is a
+> signature error), and string length is `StringUtil`-module
+> territory, not a base word.
+
+> **A number can't be a reach receiver.** `get`'s receiver is always a
+> container (Map / List / Store / Object / module), so a numeric literal
+> before a `.` is a **syntax error**, not a `get` on a number. In
+> particular `1.2.3` (a malformed numeric literal), `1 . 2`, and
+> `5 . foo` all raise `[aql/syntax_error]: a number has no members`. A
+> plain `Float` like `5.0` is unaffected.
 
 **Dotted access binds tightly.** A `.`/`!.` chain groups to a single
 `( … )` so it binds to its immediate receiver, not to a surrounding call:
@@ -855,13 +973,23 @@ consequences:
 
 | Word | Description | Example |
 |------|-------------|---------|
-| `typeof` | Type of a value (single Parent hop) | `typeof 42 => Integer` |
+| `typeof` | Type of a value (single Parent hop) | `typeof 42` returns `Integer` |
 | `pathof` | Ancestry path (root first, leaf last) | `pathof Integer` |
-| `is` | Type-compatibility test | `42 is Number => true` |
-| `convert` | Convert scalar between types | `convert Integer "42" => 42` |
-| `base` | Zero / base value for a type | `base Integer => 0` |
+| `is` | Type-compatibility test | `42 is Number` returns `true` |
+| `convert` | Parse/serialise a scalar to a type | `convert Integer "42"` returns `42` |
+| `base` | Zero / base value for a type | `base Integer` returns `0` |
 | `refine` | Build a refinement of a base type | `refine Object {count:0}` |
 | `make` | Construct typed value or instance | `make Point [1 2]` |
+
+> **`convert` parses text; it does not re-bucket numbers.** It turns a
+> `String` into a number (`convert Integer "42"` returns `42`) or a number
+> into text, but it will **not** move a value between the `Integer`
+> and `Float` nodes: `3.9 convert Integer` and even `3.0 convert
+> Integer` both error. To go from `Float` to `Integer`, use a
+> rounding word (`MathUtil.floor`, `MathUtil.round`, `MathUtil.trunc`
+> from `aql:math-util`). Note `make` is more permissive than
+> `convert`: a `:Number` record field accepts a numeric **string** and
+> coerces it (`make Point ["1" "2"]` returns `{x:1 y:2}`).
 
 Named types are introduced by pairing `def` with a `refine`
 expression: `def Point refine Record [x:Number y:Number]`,
@@ -942,17 +1070,17 @@ to. A `Module` (`Ideal/Module`) has fields `id`, `kind`
 <!-- aql-test: skip -->
 ```
 import aql:math
-typeof Math                   => ModuleExport
-MathUtil.$name                    => 'Math'
-MathUtil.$module.id               => 'aql:math'
-MathUtil.$module.kind             => 'native'
-MathUtil.$module.exports          => ['Math']
+typeof Math                   # returns ModuleExport
+MathUtil.$name                    # returns 'Math'
+MathUtil.$module.id               # returns 'aql:math'
+MathUtil.$module.kind             # returns 'native'
+MathUtil.$module.exports          # returns ['Math']
 ```
 
 <!-- aql-test: skip -->
 ```
 import utils [def f [dup add]]
-utils.f 3                     => 6
+utils.f 3                     # returns 6
 
 import aql:time-util
 
@@ -986,9 +1114,9 @@ Await modes (passed as `{mode: 'atom}` in the Options map):
 | `unify` | Unify two values; returns result and Boolean |
 
 ```
-1 unify Number                       => 1 true
-1 unify "x"                          => '~unify-fail' false
-refine Record [x:Number] unify {x:1} => '~unify-fail' false   # records ≠ maps
+1 unify Number                       # returns 1 true
+1 unify "x"                          # returns '~unify-fail' false
+refine Record [x:Number] unify {x:1}  # returns '~unify-fail' false — records ≠ maps
 ```
 
 ### Help
@@ -1024,6 +1152,8 @@ Errors are values of type `Ideal/Error` with a `code` atom and a
 | Code | Meaning |
 |------|---------|
 | `undefined_word` | A bare name was used outside a quoted slot. |
+| `reserved_word` | `def`/`undef` targeted a built-in word or the literal `true`/`false`/`none`. |
+| `incomparable` | `cmp`/`lt`/`lte`/`gt`/`gte` got cross-family operands — use `tcmp`. |
 | `type_mismatch` | A value didn't match an expected signature slot. |
 | `arity_mismatch` | Wrong number of arguments. |
 | `div_zero` | Division by zero. |

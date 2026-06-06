@@ -16,7 +16,7 @@ import "strings"
 // reached only when the LCA walk finds no branch-level Comparer.
 
 // numberCompareBehavior compares any pair of values rooted under
-// Scalar/Number (Integer, Decimal, or their dep variants) via the
+// Scalar/Number (Integer, Float, or their dep variants) via the
 // canonical float promotion in AsNumber.
 type numberCompareBehavior struct{ defaultBehavior }
 
@@ -74,7 +74,7 @@ func litVsLitOrder(a, b Value) int {
 }
 
 func (numberCompareBehavior) Compare(a, b Value) (int, error) {
-	// DepScalar values share a numeric Parent (Integer, Decimal,
+	// DepScalar values share a numeric Parent (Integer, Float,
 	// Number) with concrete scalars but carry a DepScalarInfo payload
 	// rather than a number — they have no numeric ordering. Signal
 	// "I don't apply" so CompareValues falls through to the lattice

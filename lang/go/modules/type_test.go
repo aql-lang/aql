@@ -82,7 +82,7 @@ func TestTypeExclude(t *testing.T) {
 		// Subtype semantics (TypeScript `Exclude<T,U>`): removing a
 		// supertype drops every subtype that participates.
 		{`(Integer tor String) TypeUtil.exclude Number`, "String"},
-		{`(Integer tor Decimal tor Boolean) TypeUtil.exclude Number`, "Boolean"},
+		{`(Integer tor Float tor Boolean) TypeUtil.exclude Number`, "Boolean"},
 		{`Integer TypeUtil.exclude Number`, "Never"},
 	}
 	for _, c := range cases {
@@ -104,7 +104,7 @@ func TestTypeExtract(t *testing.T) {
 		{`Integer TypeUtil.extract Integer`, "Integer"},
 		// Subtype semantics (TypeScript `Extract<T,U>`): extracting a
 		// supertype keeps every numeric subtype in the disjunct.
-		{`(Integer tor Decimal tor String) TypeUtil.extract Number`, "Integer|Decimal"},
+		{`(Integer tor Float tor String) TypeUtil.extract Number`, "Integer|Float"},
 		{`(Integer tor String) TypeUtil.extract Number`, "Integer"},
 		{`Integer TypeUtil.extract Number`, "Integer"},
 	}
@@ -223,7 +223,7 @@ func TestTypeLCA(t *testing.T) {
 		expr string
 		want string
 	}{
-		{`Integer TypeUtil.lca Decimal`, "Number"},
+		{`Integer TypeUtil.lca Float`, "Number"},
 		{`Integer TypeUtil.lca Number`, "Number"},
 		{`Integer TypeUtil.lca String`, "Scalar"},
 		{`Integer TypeUtil.lca List`, "Any"},
@@ -243,7 +243,7 @@ func TestTypeAlts(t *testing.T) {
 		want string
 	}{
 		{`TypeUtil.alts (String tor None)`, "[String None]"},
-		{`TypeUtil.alts (Integer tor Decimal tor Boolean)`, "[Integer Decimal Boolean]"},
+		{`TypeUtil.alts (Integer tor Float tor Boolean)`, "[Integer Float Boolean]"},
 		{`TypeUtil.alts Integer`, "[Integer]"},
 	}
 	for _, c := range cases {

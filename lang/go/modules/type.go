@@ -164,7 +164,7 @@ func typeBodyArg(v native.Value, opName string, r *native.Registry) (native.Valu
 // subtypes. Used by TypeUtil.exclude / TypeUtil.extract to give the
 // TypeScript-style `Exclude<T,U>` / `Extract<T,U>` semantics where
 // removing/keeping `Number` from a disjunct affects every numeric
-// subtype (Integer, Decimal). Walks the ancestry chain by `*Type.ID`
+// subtype (Integer, Float). Walks the ancestry chain by `*Type.ID`
 // so non-canonical pointers from `latticeNode` still match.
 //
 // Structural type bodies (record/disjunct/object) fall back to

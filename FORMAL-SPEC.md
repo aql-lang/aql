@@ -156,7 +156,7 @@ The modifier meanings are:
 
 ```ebnf
 IntegerLit  ::= [ "-" ] Digit { Digit }
-DecimalLit  ::= [ "-" ] Digit { Digit } "." Digit { Digit }
+FloatLit  ::= [ "-" ] Digit { Digit } "." Digit { Digit }
 Digit       ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
 StringLit   ::= DoubleString | SingleString
 DoubleString ::= '"' { StringChar | Escape } '"'
@@ -175,7 +175,7 @@ implementation's source-compatible form.
 
 A bare token that resolves to a built-in or in-scope user-defined type name is a
 type literal in word context. Built-in short names include `Any`, `None`,
-`Never`, `Scalar`, `Atom`, `Boolean`, `Number`, `Integer`, `Decimal`, `String`,
+`Never`, `Scalar`, `Atom`, `Boolean`, `Number`, `Integer`, `Float`, `String`,
 `List`, `Map`, `Record`, `Options`, `Store`, `Table`, `Timeout`, `Interval`, and
 `Function`, along with full slash-separated type paths accepted by the engine.
 
@@ -197,7 +197,7 @@ Primary       ::= Literal
                 | TypedList
                 | TypedMap
 
-Literal       ::= IntegerLit | DecimalLit | StringLit | TemplateLit | BoolLit | NoneLit
+Literal       ::= IntegerLit | FloatLit | StringLit | TemplateLit | BoolLit | NoneLit
 Word          ::= WordToken
 Group         ::= "(" Program ")"
 
@@ -292,7 +292,7 @@ not.
 Tape       ::= Item*
 Item       ::= Value | WordCall | WordRef | EndMark | OpenMark | CloseMark
 Value      ::= Scalar | TypeLiteral | ListValue | MapValue | InterpString
-Scalar     ::= Integer | Decimal | String | Boolean | None | Atom
+Scalar     ::= Integer | Float | String | Boolean | None | Atom
 WordCall   ::= word(name, modifier?)
 WordRef    ::= ref(name)
 TypeLiteral ::= type(T)
@@ -340,7 +340,7 @@ Any
 │   ├── Boolean
 │   ├── Number
 │   │   ├── Integer
-│   │   └── Decimal
+│   │   └── Float
 │   ├── String
 │   │   ├── EmptyString
 │   │   └── ProperString

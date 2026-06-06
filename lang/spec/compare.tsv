@@ -1,9 +1,13 @@
-# compare.tsv — the `cmp` three-way comparison, exhaustive over scalars.
+# compare.tsv — the `tcmp` three-way comparison, exhaustive over scalars.
 #
-# `a cmp b` yields -1 / 0 / 1 — a sorts before / with / after b, the
-# same total order as lt / gt / sort (see eng/go/compare.go). The rows
-# are the full cross product of a representative value of each scalar
-# kind, a path value, and every scalar type literal.
+# `a tcmp b` yields -1 / 0 / 1 — a sorts before / with / after b — over
+# the UNIFIED total order across every value (the order `sort` and the
+# collection words use; see eng/go/compare.go). The family-restricted
+# words cmp / lt / lte / gt / gte share this order but reject cross-
+# family pairs ([aql/incomparable]) — see compare-restrict.tsv — so this
+# exhaustive cross-product is exercised through tcmp. The rows are the
+# full cross product of a representative value of each scalar kind, a
+# path value, and every scalar type literal.
 #
 # Order rules:
 #
@@ -13,445 +17,445 @@
 #   2. Same-family pairs settle through the family Comparer (Number,
 #      String, Boolean, Atom, Path). Within a family:
 #      a. Type literal vs concrete: type literal sorts FIRST.
-#         (`Integer cmp 0 → -1`, `String cmp '' → -1`, etc.)
+#         (`Integer tcmp 0 → -1`, `String tcmp '' → -1`, etc.)
 #      b. Type literal vs type literal: by lattice Rank
-#         (`Number cmp Integer → -1` because Number < Integer in Rank).
+#         (`Number tcmp Integer → -1` because Number < Integer in Rank).
 #      c. Concrete vs concrete: by value content (numeric magnitude,
 #         lex, etc.). Cross-leaf numeric magnitude can tie
-#         (`1 cmp 1.0 → 0` — by design).
+#         (`1 tcmp 1.0 → 0` — by design).
 #
 # The result is a strict total order over distinct lattice nodes; the
 # only equivalence is cross-leaf numeric magnitude (1 == 1.0). See
 # design/TYPE-ORDERING.0.md.
 
 # a = 5
-5 cmp 5	0
-5 cmp -2	1
-5 cmp 3.5	1
-5 cmp ''	-1
-5 cmp 'hi'	-1
-5 cmp true	1
-5 cmp false	1
-5 cmp cat/q	1
-5 cmp (make Path ['a' 'b'])	-1
-5 cmp Scalar	1
-5 cmp Atom	1
-5 cmp Boolean	1
-5 cmp Number	1
-5 cmp Integer	1
-5 cmp Decimal	1
-5 cmp String	-1
-5 cmp EmptyString	-1
-5 cmp ProperString	-1
-5 cmp Path	-1
+5 tcmp 5	0
+5 tcmp -2	1
+5 tcmp 3.5	1
+5 tcmp ''	-1
+5 tcmp 'hi'	-1
+5 tcmp true	1
+5 tcmp false	1
+5 tcmp cat/q	1
+5 tcmp (make Path ['a' 'b'])	-1
+5 tcmp Scalar	1
+5 tcmp Atom	1
+5 tcmp Boolean	1
+5 tcmp Number	1
+5 tcmp Integer	1
+5 tcmp Float	1
+5 tcmp String	-1
+5 tcmp EmptyString	-1
+5 tcmp ProperString	-1
+5 tcmp Path	-1
 
 # a = -2
--2 cmp 5	-1
--2 cmp -2	0
--2 cmp 3.5	-1
--2 cmp ''	-1
--2 cmp 'hi'	-1
--2 cmp true	1
--2 cmp false	1
--2 cmp cat/q	1
--2 cmp (make Path ['a' 'b'])	-1
--2 cmp Scalar	1
--2 cmp Atom	1
--2 cmp Boolean	1
--2 cmp Number	1
--2 cmp Integer	1
--2 cmp Decimal	1
--2 cmp String	-1
--2 cmp EmptyString	-1
--2 cmp ProperString	-1
--2 cmp Path	-1
+-2 tcmp 5	-1
+-2 tcmp -2	0
+-2 tcmp 3.5	-1
+-2 tcmp ''	-1
+-2 tcmp 'hi'	-1
+-2 tcmp true	1
+-2 tcmp false	1
+-2 tcmp cat/q	1
+-2 tcmp (make Path ['a' 'b'])	-1
+-2 tcmp Scalar	1
+-2 tcmp Atom	1
+-2 tcmp Boolean	1
+-2 tcmp Number	1
+-2 tcmp Integer	1
+-2 tcmp Float	1
+-2 tcmp String	-1
+-2 tcmp EmptyString	-1
+-2 tcmp ProperString	-1
+-2 tcmp Path	-1
 
 # a = 3.5
-3.5 cmp 5	-1
-3.5 cmp -2	1
-3.5 cmp 3.5	0
-3.5 cmp ''	-1
-3.5 cmp 'hi'	-1
-3.5 cmp true	1
-3.5 cmp false	1
-3.5 cmp cat/q	1
-3.5 cmp (make Path ['a' 'b'])	-1
-3.5 cmp Scalar	1
-3.5 cmp Atom	1
-3.5 cmp Boolean	1
-3.5 cmp Number	1
-3.5 cmp Integer	1
-3.5 cmp Decimal	1
-3.5 cmp String	-1
-3.5 cmp EmptyString	-1
-3.5 cmp ProperString	-1
-3.5 cmp Path	-1
+3.5 tcmp 5	-1
+3.5 tcmp -2	1
+3.5 tcmp 3.5	0
+3.5 tcmp ''	-1
+3.5 tcmp 'hi'	-1
+3.5 tcmp true	1
+3.5 tcmp false	1
+3.5 tcmp cat/q	1
+3.5 tcmp (make Path ['a' 'b'])	-1
+3.5 tcmp Scalar	1
+3.5 tcmp Atom	1
+3.5 tcmp Boolean	1
+3.5 tcmp Number	1
+3.5 tcmp Integer	1
+3.5 tcmp Float	1
+3.5 tcmp String	-1
+3.5 tcmp EmptyString	-1
+3.5 tcmp ProperString	-1
+3.5 tcmp Path	-1
 
 # a = ''
-'' cmp 5	1
-'' cmp -2	1
-'' cmp 3.5	1
-'' cmp ''	0
-'' cmp 'hi'	-1
-'' cmp true	1
-'' cmp false	1
-'' cmp cat/q	1
-'' cmp (make Path ['a' 'b'])	-1
-'' cmp Scalar	1
-'' cmp Atom	1
-'' cmp Boolean	1
-'' cmp Number	1
-'' cmp Integer	1
-'' cmp Decimal	1
-'' cmp String	1
-'' cmp EmptyString	1
-'' cmp ProperString	1
-'' cmp Path	-1
+'' tcmp 5	1
+'' tcmp -2	1
+'' tcmp 3.5	1
+'' tcmp ''	0
+'' tcmp 'hi'	-1
+'' tcmp true	1
+'' tcmp false	1
+'' tcmp cat/q	1
+'' tcmp (make Path ['a' 'b'])	-1
+'' tcmp Scalar	1
+'' tcmp Atom	1
+'' tcmp Boolean	1
+'' tcmp Number	1
+'' tcmp Integer	1
+'' tcmp Float	1
+'' tcmp String	1
+'' tcmp EmptyString	1
+'' tcmp ProperString	1
+'' tcmp Path	-1
 
 # a = 'hi'
-'hi' cmp 5	1
-'hi' cmp -2	1
-'hi' cmp 3.5	1
-'hi' cmp ''	1
-'hi' cmp 'hi'	0
-'hi' cmp true	1
-'hi' cmp false	1
-'hi' cmp cat/q	1
-'hi' cmp (make Path ['a' 'b'])	-1
-'hi' cmp Scalar	1
-'hi' cmp Atom	1
-'hi' cmp Boolean	1
-'hi' cmp Number	1
-'hi' cmp Integer	1
-'hi' cmp Decimal	1
-'hi' cmp String	1
-'hi' cmp EmptyString	1
-'hi' cmp ProperString	1
-'hi' cmp Path	-1
+'hi' tcmp 5	1
+'hi' tcmp -2	1
+'hi' tcmp 3.5	1
+'hi' tcmp ''	1
+'hi' tcmp 'hi'	0
+'hi' tcmp true	1
+'hi' tcmp false	1
+'hi' tcmp cat/q	1
+'hi' tcmp (make Path ['a' 'b'])	-1
+'hi' tcmp Scalar	1
+'hi' tcmp Atom	1
+'hi' tcmp Boolean	1
+'hi' tcmp Number	1
+'hi' tcmp Integer	1
+'hi' tcmp Float	1
+'hi' tcmp String	1
+'hi' tcmp EmptyString	1
+'hi' tcmp ProperString	1
+'hi' tcmp Path	-1
 
 # a = true
-true cmp 5	-1
-true cmp -2	-1
-true cmp 3.5	-1
-true cmp ''	-1
-true cmp 'hi'	-1
-true cmp true	0
-true cmp false	1
-true cmp cat/q	1
-true cmp (make Path ['a' 'b'])	-1
-true cmp Scalar	1
-true cmp Atom	1
-true cmp Boolean	1
-true cmp Number	-1
-true cmp Integer	-1
-true cmp Decimal	-1
-true cmp String	-1
-true cmp EmptyString	-1
-true cmp ProperString	-1
-true cmp Path	-1
+true tcmp 5	-1
+true tcmp -2	-1
+true tcmp 3.5	-1
+true tcmp ''	-1
+true tcmp 'hi'	-1
+true tcmp true	0
+true tcmp false	1
+true tcmp cat/q	1
+true tcmp (make Path ['a' 'b'])	-1
+true tcmp Scalar	1
+true tcmp Atom	1
+true tcmp Boolean	1
+true tcmp Number	-1
+true tcmp Integer	-1
+true tcmp Float	-1
+true tcmp String	-1
+true tcmp EmptyString	-1
+true tcmp ProperString	-1
+true tcmp Path	-1
 
 # a = false
-false cmp 5	-1
-false cmp -2	-1
-false cmp 3.5	-1
-false cmp ''	-1
-false cmp 'hi'	-1
-false cmp true	-1
-false cmp false	0
-false cmp cat/q	1
-false cmp (make Path ['a' 'b'])	-1
-false cmp Scalar	1
-false cmp Atom	1
-false cmp Boolean	1
-false cmp Number	-1
-false cmp Integer	-1
-false cmp Decimal	-1
-false cmp String	-1
-false cmp EmptyString	-1
-false cmp ProperString	-1
-false cmp Path	-1
+false tcmp 5	-1
+false tcmp -2	-1
+false tcmp 3.5	-1
+false tcmp ''	-1
+false tcmp 'hi'	-1
+false tcmp true	-1
+false tcmp false	0
+false tcmp cat/q	1
+false tcmp (make Path ['a' 'b'])	-1
+false tcmp Scalar	1
+false tcmp Atom	1
+false tcmp Boolean	1
+false tcmp Number	-1
+false tcmp Integer	-1
+false tcmp Float	-1
+false tcmp String	-1
+false tcmp EmptyString	-1
+false tcmp ProperString	-1
+false tcmp Path	-1
 
 # a = cat/q
-cat/q cmp 5	-1
-cat/q cmp -2	-1
-cat/q cmp 3.5	-1
-cat/q cmp ''	-1
-cat/q cmp 'hi'	-1
-cat/q cmp true	-1
-cat/q cmp false	-1
-cat/q cmp cat/q	0
-cat/q cmp (make Path ['a' 'b'])	-1
-cat/q cmp Scalar	1
-cat/q cmp Atom	1
-cat/q cmp Boolean	-1
-cat/q cmp Number	-1
-cat/q cmp Integer	-1
-cat/q cmp Decimal	-1
-cat/q cmp String	-1
-cat/q cmp EmptyString	-1
-cat/q cmp ProperString	-1
-cat/q cmp Path	-1
+cat/q tcmp 5	-1
+cat/q tcmp -2	-1
+cat/q tcmp 3.5	-1
+cat/q tcmp ''	-1
+cat/q tcmp 'hi'	-1
+cat/q tcmp true	-1
+cat/q tcmp false	-1
+cat/q tcmp cat/q	0
+cat/q tcmp (make Path ['a' 'b'])	-1
+cat/q tcmp Scalar	1
+cat/q tcmp Atom	1
+cat/q tcmp Boolean	-1
+cat/q tcmp Number	-1
+cat/q tcmp Integer	-1
+cat/q tcmp Float	-1
+cat/q tcmp String	-1
+cat/q tcmp EmptyString	-1
+cat/q tcmp ProperString	-1
+cat/q tcmp Path	-1
 
 # a = (make Path ['a' 'b'])
-(make Path ['a' 'b']) cmp 5	1
-(make Path ['a' 'b']) cmp -2	1
-(make Path ['a' 'b']) cmp 3.5	1
-(make Path ['a' 'b']) cmp ''	1
-(make Path ['a' 'b']) cmp 'hi'	1
-(make Path ['a' 'b']) cmp true	1
-(make Path ['a' 'b']) cmp false	1
-(make Path ['a' 'b']) cmp cat/q	1
-(make Path ['a' 'b']) cmp (make Path ['a' 'b'])	0
-(make Path ['a' 'b']) cmp Scalar	1
-(make Path ['a' 'b']) cmp Atom	1
-(make Path ['a' 'b']) cmp Boolean	1
-(make Path ['a' 'b']) cmp Number	1
-(make Path ['a' 'b']) cmp Integer	1
-(make Path ['a' 'b']) cmp Decimal	1
-(make Path ['a' 'b']) cmp String	1
-(make Path ['a' 'b']) cmp EmptyString	1
-(make Path ['a' 'b']) cmp ProperString	1
-(make Path ['a' 'b']) cmp Path	1
+(make Path ['a' 'b']) tcmp 5	1
+(make Path ['a' 'b']) tcmp -2	1
+(make Path ['a' 'b']) tcmp 3.5	1
+(make Path ['a' 'b']) tcmp ''	1
+(make Path ['a' 'b']) tcmp 'hi'	1
+(make Path ['a' 'b']) tcmp true	1
+(make Path ['a' 'b']) tcmp false	1
+(make Path ['a' 'b']) tcmp cat/q	1
+(make Path ['a' 'b']) tcmp (make Path ['a' 'b'])	0
+(make Path ['a' 'b']) tcmp Scalar	1
+(make Path ['a' 'b']) tcmp Atom	1
+(make Path ['a' 'b']) tcmp Boolean	1
+(make Path ['a' 'b']) tcmp Number	1
+(make Path ['a' 'b']) tcmp Integer	1
+(make Path ['a' 'b']) tcmp Float	1
+(make Path ['a' 'b']) tcmp String	1
+(make Path ['a' 'b']) tcmp EmptyString	1
+(make Path ['a' 'b']) tcmp ProperString	1
+(make Path ['a' 'b']) tcmp Path	1
 
 # a = Scalar
-Scalar cmp 5	-1
-Scalar cmp -2	-1
-Scalar cmp 3.5	-1
-Scalar cmp ''	-1
-Scalar cmp 'hi'	-1
-Scalar cmp true	-1
-Scalar cmp false	-1
-Scalar cmp cat/q	-1
-Scalar cmp (make Path ['a' 'b'])	-1
-Scalar cmp Scalar	0
-Scalar cmp Atom	-1
-Scalar cmp Boolean	-1
-Scalar cmp Number	-1
-Scalar cmp Integer	-1
-Scalar cmp Decimal	-1
-Scalar cmp String	-1
-Scalar cmp EmptyString	-1
-Scalar cmp ProperString	-1
-Scalar cmp Path	-1
+Scalar tcmp 5	-1
+Scalar tcmp -2	-1
+Scalar tcmp 3.5	-1
+Scalar tcmp ''	-1
+Scalar tcmp 'hi'	-1
+Scalar tcmp true	-1
+Scalar tcmp false	-1
+Scalar tcmp cat/q	-1
+Scalar tcmp (make Path ['a' 'b'])	-1
+Scalar tcmp Scalar	0
+Scalar tcmp Atom	-1
+Scalar tcmp Boolean	-1
+Scalar tcmp Number	-1
+Scalar tcmp Integer	-1
+Scalar tcmp Float	-1
+Scalar tcmp String	-1
+Scalar tcmp EmptyString	-1
+Scalar tcmp ProperString	-1
+Scalar tcmp Path	-1
 
 # a = Atom
-Atom cmp 5	-1
-Atom cmp -2	-1
-Atom cmp 3.5	-1
-Atom cmp ''	-1
-Atom cmp 'hi'	-1
-Atom cmp true	-1
-Atom cmp false	-1
-Atom cmp cat/q	-1
-Atom cmp (make Path ['a' 'b'])	-1
-Atom cmp Scalar	1
-Atom cmp Atom	0
-Atom cmp Boolean	-1
-Atom cmp Number	-1
-Atom cmp Integer	-1
-Atom cmp Decimal	-1
-Atom cmp String	-1
-Atom cmp EmptyString	-1
-Atom cmp ProperString	-1
-Atom cmp Path	-1
+Atom tcmp 5	-1
+Atom tcmp -2	-1
+Atom tcmp 3.5	-1
+Atom tcmp ''	-1
+Atom tcmp 'hi'	-1
+Atom tcmp true	-1
+Atom tcmp false	-1
+Atom tcmp cat/q	-1
+Atom tcmp (make Path ['a' 'b'])	-1
+Atom tcmp Scalar	1
+Atom tcmp Atom	0
+Atom tcmp Boolean	-1
+Atom tcmp Number	-1
+Atom tcmp Integer	-1
+Atom tcmp Float	-1
+Atom tcmp String	-1
+Atom tcmp EmptyString	-1
+Atom tcmp ProperString	-1
+Atom tcmp Path	-1
 
 # a = Boolean
-Boolean cmp 5	-1
-Boolean cmp -2	-1
-Boolean cmp 3.5	-1
-Boolean cmp ''	-1
-Boolean cmp 'hi'	-1
-Boolean cmp true	-1
-Boolean cmp false	-1
-Boolean cmp cat/q	1
-Boolean cmp (make Path ['a' 'b'])	-1
-Boolean cmp Scalar	1
-Boolean cmp Atom	1
-Boolean cmp Boolean	0
-Boolean cmp Number	-1
-Boolean cmp Integer	-1
-Boolean cmp Decimal	-1
-Boolean cmp String	-1
-Boolean cmp EmptyString	-1
-Boolean cmp ProperString	-1
-Boolean cmp Path	-1
+Boolean tcmp 5	-1
+Boolean tcmp -2	-1
+Boolean tcmp 3.5	-1
+Boolean tcmp ''	-1
+Boolean tcmp 'hi'	-1
+Boolean tcmp true	-1
+Boolean tcmp false	-1
+Boolean tcmp cat/q	1
+Boolean tcmp (make Path ['a' 'b'])	-1
+Boolean tcmp Scalar	1
+Boolean tcmp Atom	1
+Boolean tcmp Boolean	0
+Boolean tcmp Number	-1
+Boolean tcmp Integer	-1
+Boolean tcmp Float	-1
+Boolean tcmp String	-1
+Boolean tcmp EmptyString	-1
+Boolean tcmp ProperString	-1
+Boolean tcmp Path	-1
 
 # a = Number
-Number cmp 5	-1
-Number cmp -2	-1
-Number cmp 3.5	-1
-Number cmp ''	-1
-Number cmp 'hi'	-1
-Number cmp true	1
-Number cmp false	1
-Number cmp cat/q	1
-Number cmp (make Path ['a' 'b'])	-1
-Number cmp Scalar	1
-Number cmp Atom	1
-Number cmp Boolean	1
-Number cmp Number	0
-Number cmp Integer	-1
-Number cmp Decimal	-1
-Number cmp String	-1
-Number cmp EmptyString	-1
-Number cmp ProperString	-1
-Number cmp Path	-1
+Number tcmp 5	-1
+Number tcmp -2	-1
+Number tcmp 3.5	-1
+Number tcmp ''	-1
+Number tcmp 'hi'	-1
+Number tcmp true	1
+Number tcmp false	1
+Number tcmp cat/q	1
+Number tcmp (make Path ['a' 'b'])	-1
+Number tcmp Scalar	1
+Number tcmp Atom	1
+Number tcmp Boolean	1
+Number tcmp Number	0
+Number tcmp Integer	-1
+Number tcmp Float	-1
+Number tcmp String	-1
+Number tcmp EmptyString	-1
+Number tcmp ProperString	-1
+Number tcmp Path	-1
 
 # a = Integer
-Integer cmp 5	-1
-Integer cmp -2	-1
-Integer cmp 3.5	-1
-Integer cmp ''	-1
-Integer cmp 'hi'	-1
-Integer cmp true	1
-Integer cmp false	1
-Integer cmp cat/q	1
-Integer cmp (make Path ['a' 'b'])	-1
-Integer cmp Scalar	1
-Integer cmp Atom	1
-Integer cmp Boolean	1
-Integer cmp Number	1
-Integer cmp Integer	0
-Integer cmp Decimal	-1
-Integer cmp String	-1
-Integer cmp EmptyString	-1
-Integer cmp ProperString	-1
-Integer cmp Path	-1
+Integer tcmp 5	-1
+Integer tcmp -2	-1
+Integer tcmp 3.5	-1
+Integer tcmp ''	-1
+Integer tcmp 'hi'	-1
+Integer tcmp true	1
+Integer tcmp false	1
+Integer tcmp cat/q	1
+Integer tcmp (make Path ['a' 'b'])	-1
+Integer tcmp Scalar	1
+Integer tcmp Atom	1
+Integer tcmp Boolean	1
+Integer tcmp Number	1
+Integer tcmp Integer	0
+Integer tcmp Float	-1
+Integer tcmp String	-1
+Integer tcmp EmptyString	-1
+Integer tcmp ProperString	-1
+Integer tcmp Path	-1
 
-# a = Decimal
-Decimal cmp 5	-1
-Decimal cmp -2	-1
-Decimal cmp 3.5	-1
-Decimal cmp ''	-1
-Decimal cmp 'hi'	-1
-Decimal cmp true	1
-Decimal cmp false	1
-Decimal cmp cat/q	1
-Decimal cmp (make Path ['a' 'b'])	-1
-Decimal cmp Scalar	1
-Decimal cmp Atom	1
-Decimal cmp Boolean	1
-Decimal cmp Number	1
-Decimal cmp Integer	1
-Decimal cmp Decimal	0
-Decimal cmp String	-1
-Decimal cmp EmptyString	-1
-Decimal cmp ProperString	-1
-Decimal cmp Path	-1
+# a = Float
+Float tcmp 5	-1
+Float tcmp -2	-1
+Float tcmp 3.5	-1
+Float tcmp ''	-1
+Float tcmp 'hi'	-1
+Float tcmp true	1
+Float tcmp false	1
+Float tcmp cat/q	1
+Float tcmp (make Path ['a' 'b'])	-1
+Float tcmp Scalar	1
+Float tcmp Atom	1
+Float tcmp Boolean	1
+Float tcmp Number	1
+Float tcmp Integer	1
+Float tcmp Float	0
+Float tcmp String	-1
+Float tcmp EmptyString	-1
+Float tcmp ProperString	-1
+Float tcmp Path	-1
 
 # a = String
-String cmp 5	1
-String cmp -2	1
-String cmp 3.5	1
-String cmp ''	-1
-String cmp 'hi'	-1
-String cmp true	1
-String cmp false	1
-String cmp cat/q	1
-String cmp (make Path ['a' 'b'])	-1
-String cmp Scalar	1
-String cmp Atom	1
-String cmp Boolean	1
-String cmp Number	1
-String cmp Integer	1
-String cmp Decimal	1
-String cmp String	0
-String cmp EmptyString	-1
-String cmp ProperString	-1
-String cmp Path	-1
+String tcmp 5	1
+String tcmp -2	1
+String tcmp 3.5	1
+String tcmp ''	-1
+String tcmp 'hi'	-1
+String tcmp true	1
+String tcmp false	1
+String tcmp cat/q	1
+String tcmp (make Path ['a' 'b'])	-1
+String tcmp Scalar	1
+String tcmp Atom	1
+String tcmp Boolean	1
+String tcmp Number	1
+String tcmp Integer	1
+String tcmp Float	1
+String tcmp String	0
+String tcmp EmptyString	-1
+String tcmp ProperString	-1
+String tcmp Path	-1
 
 # a = EmptyString
-EmptyString cmp 5	1
-EmptyString cmp -2	1
-EmptyString cmp 3.5	1
-EmptyString cmp ''	-1
-EmptyString cmp 'hi'	-1
-EmptyString cmp true	1
-EmptyString cmp false	1
-EmptyString cmp cat/q	1
-EmptyString cmp (make Path ['a' 'b'])	-1
-EmptyString cmp Scalar	1
-EmptyString cmp Atom	1
-EmptyString cmp Boolean	1
-EmptyString cmp Number	1
-EmptyString cmp Integer	1
-EmptyString cmp Decimal	1
-EmptyString cmp String	1
-EmptyString cmp EmptyString	0
-EmptyString cmp ProperString	-1
-EmptyString cmp Path	-1
+EmptyString tcmp 5	1
+EmptyString tcmp -2	1
+EmptyString tcmp 3.5	1
+EmptyString tcmp ''	-1
+EmptyString tcmp 'hi'	-1
+EmptyString tcmp true	1
+EmptyString tcmp false	1
+EmptyString tcmp cat/q	1
+EmptyString tcmp (make Path ['a' 'b'])	-1
+EmptyString tcmp Scalar	1
+EmptyString tcmp Atom	1
+EmptyString tcmp Boolean	1
+EmptyString tcmp Number	1
+EmptyString tcmp Integer	1
+EmptyString tcmp Float	1
+EmptyString tcmp String	1
+EmptyString tcmp EmptyString	0
+EmptyString tcmp ProperString	-1
+EmptyString tcmp Path	-1
 
 # a = ProperString
-ProperString cmp 5	1
-ProperString cmp -2	1
-ProperString cmp 3.5	1
-ProperString cmp ''	-1
-ProperString cmp 'hi'	-1
-ProperString cmp true	1
-ProperString cmp false	1
-ProperString cmp cat/q	1
-ProperString cmp (make Path ['a' 'b'])	-1
-ProperString cmp Scalar	1
-ProperString cmp Atom	1
-ProperString cmp Boolean	1
-ProperString cmp Number	1
-ProperString cmp Integer	1
-ProperString cmp Decimal	1
-ProperString cmp String	1
-ProperString cmp EmptyString	1
-ProperString cmp ProperString	0
-ProperString cmp Path	-1
+ProperString tcmp 5	1
+ProperString tcmp -2	1
+ProperString tcmp 3.5	1
+ProperString tcmp ''	-1
+ProperString tcmp 'hi'	-1
+ProperString tcmp true	1
+ProperString tcmp false	1
+ProperString tcmp cat/q	1
+ProperString tcmp (make Path ['a' 'b'])	-1
+ProperString tcmp Scalar	1
+ProperString tcmp Atom	1
+ProperString tcmp Boolean	1
+ProperString tcmp Number	1
+ProperString tcmp Integer	1
+ProperString tcmp Float	1
+ProperString tcmp String	1
+ProperString tcmp EmptyString	1
+ProperString tcmp ProperString	0
+ProperString tcmp Path	-1
 
 # a = Path
-Path cmp 5	1
-Path cmp -2	1
-Path cmp 3.5	1
-Path cmp ''	1
-Path cmp 'hi'	1
-Path cmp true	1
-Path cmp false	1
-Path cmp cat/q	1
-Path cmp (make Path ['a' 'b'])	-1
-Path cmp Scalar	1
-Path cmp Atom	1
-Path cmp Boolean	1
-Path cmp Number	1
-Path cmp Integer	1
-Path cmp Decimal	1
-Path cmp String	1
-Path cmp EmptyString	1
-Path cmp ProperString	1
-Path cmp Path	0
+Path tcmp 5	1
+Path tcmp -2	1
+Path tcmp 3.5	1
+Path tcmp ''	1
+Path tcmp 'hi'	1
+Path tcmp true	1
+Path tcmp false	1
+Path tcmp cat/q	1
+Path tcmp (make Path ['a' 'b'])	-1
+Path tcmp Scalar	1
+Path tcmp Atom	1
+Path tcmp Boolean	1
+Path tcmp Number	1
+Path tcmp Integer	1
+Path tcmp Float	1
+Path tcmp String	1
+Path tcmp EmptyString	1
+Path tcmp ProperString	1
+Path tcmp Path	0
 
 # =============================================================================
 # Cross-numeric magnitude — traditional arithmetic order survives the
-# Integer/Decimal lattice split.
+# Integer/Float lattice split.
 #
 # The Number Comparer (`numberCompareBehavior` on TNumber) is the
-# lowest common ancestor for any Integer/Decimal pair; it projects
+# lowest common ancestor for any Integer/Float pair; it projects
 # both sides into float64 and orders by magnitude. The per-leaf Rank
-# (Integer 2.031·10¹⁰, Decimal 2.032·10¹⁰) is never consulted because
+# (Integer 2.031·10¹⁰, Float 2.032·10¹⁰) is never consulted because
 # the LCA walk finds the Comparer first.
 # =============================================================================
 
-1.1 cmp 2	-1	# 1.1 < 2 — the headline traditional-semantics case
-2 cmp 1.1	1
+1.1 tcmp 2	-1	# 1.1 < 2 — the headline traditional-semantics case
+2 tcmp 1.1	1
 1.1 lt 2	true
 2 gt 1.1	true
-2.5 cmp 2	1
-2 cmp 2.5	-1
-1 cmp 1.0001	-1
-1.0001 cmp 1	1
-1.0 cmp 1	0	# magnitude equality across Integer/Decimal collapses to 0
-1 cmp 1.0	0
--1 cmp -1.0	0
-0 cmp 0.0	0
-0.0 cmp 0	0
-1.5 cmp 2.5	-1
-2.5 cmp 1.5	1
--3 cmp 2	-1
--3 cmp -2	-1
--2 cmp -3	1
+2.5 tcmp 2	1
+2 tcmp 2.5	-1
+1 tcmp 1.0001	-1
+1.0001 tcmp 1	1
+1.0 tcmp 1	0	# magnitude equality across Integer/Float collapses to 0
+1 tcmp 1.0	0
+-1 tcmp -1.0	0
+0 tcmp 0.0	0
+0.0 tcmp 0	0
+1.5 tcmp 2.5	-1
+2.5 tcmp 1.5	1
+-3 tcmp 2	-1
+-3 tcmp -2	-1
+-2 tcmp -3	1
 
 # =============================================================================
 # Same-length List comparisons — element-wise via CompareValues.
@@ -461,39 +465,39 @@ Path cmp Path	0
 # comparison.
 # =============================================================================
 
-[] cmp []	0
-[1] cmp [1]	0
-[1 2 3] cmp [1 2 3]	0
-[1] cmp [2]	-1
-[2] cmp [1]	1
-[1 2] cmp [1 3]	-1
-[1 3] cmp [1 2]	1
-[1 2 3] cmp [1 2 4]	-1
-[1 2 4] cmp [1 2 3]	1
-[1 'a'] cmp [1 'b']	-1
-[1 'a'] cmp [1 'a']	0
-[true false] cmp [true true]	-1
-['a' 1] cmp ['a' 2]	-1
+[] tcmp []	0
+[1] tcmp [1]	0
+[1 2 3] tcmp [1 2 3]	0
+[1] tcmp [2]	-1
+[2] tcmp [1]	1
+[1 2] tcmp [1 3]	-1
+[1 3] tcmp [1 2]	1
+[1 2 3] tcmp [1 2 4]	-1
+[1 2 4] tcmp [1 2 3]	1
+[1 'a'] tcmp [1 'b']	-1
+[1 'a'] tcmp [1 'a']	0
+[true false] tcmp [true true]	-1
+['a' 1] tcmp ['a' 2]	-1
 
 # Cross-numeric inside lists (verifies the per-element Comparer
 # walks all the way down).
-[1.1 2] cmp [1 2.1]	1	# (1.1 cmp 1) = 1 — stops the walk
+[1.1 2] tcmp [1 2.1]	1	# (1.1 tcmp 1) = 1 — stops the walk
 
 # Length-differs is decisive — element-wise is not reached.
-[] cmp [1]	-1
-[1] cmp []	1
-[1] cmp [1 2]	-1
-[1 2] cmp [1]	1
-[1 2 3] cmp [1 2 3 4]	-1
-[1 2 3 4] cmp [1 2 3]	1
-[1 2 99] cmp [9]	1	# length 3 > length 1 — content irrelevant
-[9] cmp [1 2 99]	-1
+[] tcmp [1]	-1
+[1] tcmp []	1
+[1] tcmp [1 2]	-1
+[1 2] tcmp [1]	1
+[1 2 3] tcmp [1 2 3 4]	-1
+[1 2 3 4] tcmp [1 2 3]	1
+[1 2 99] tcmp [9]	1	# length 3 > length 1 — content irrelevant
+[9] tcmp [1 2 99]	-1
 
 # Nested — recursive CompareValues.
-[[1] [2]] cmp [[1] [3]]	-1
-[[1 2] [3]] cmp [[1 2] [3]]	0
-[[1] [2 3]] cmp [[1] [2 4]]	-1
-[[1] []] cmp [[1] [0]]	-1	# inner length differs
+[[1] [2]] tcmp [[1] [3]]	-1
+[[1 2] [3]] tcmp [[1 2] [3]]	0
+[[1] [2 3]] tcmp [[1] [2 4]]	-1
+[[1] []] tcmp [[1] [0]]	-1	# inner length differs
 
 # =============================================================================
 # Same-length Map comparisons — sorted-keys then per-key values.
@@ -503,49 +507,49 @@ Path cmp Path	0
 # key order.
 # =============================================================================
 
-{} cmp {}	0
-{a:1} cmp {a:1}	0
-{a:1 b:2} cmp {a:1 b:2}	0
-{a:1 b:2} cmp {b:2 a:1}	0	# declaration order doesn't matter
+{} tcmp {}	0
+{a:1} tcmp {a:1}	0
+{a:1 b:2} tcmp {a:1 b:2}	0
+{a:1 b:2} tcmp {b:2 a:1}	0	# declaration order doesn't matter
 
 # Same length, same keyset, different values.
-{a:1} cmp {a:2}	-1
-{a:2} cmp {a:1}	1
-{a:1 b:2} cmp {a:1 b:3}	-1
-{a:1 b:3} cmp {a:1 b:2}	1
-{a:2 b:1} cmp {a:1 b:2}	1	# first key-walk diff (a: 2>1) wins
+{a:1} tcmp {a:2}	-1
+{a:2} tcmp {a:1}	1
+{a:1 b:2} tcmp {a:1 b:3}	-1
+{a:1 b:3} tcmp {a:1 b:2}	1
+{a:2 b:1} tcmp {a:1 b:2}	1	# first key-walk diff (a: 2>1) wins
 
 # Same length, different keyset → keys decide.
-{a:1} cmp {b:1}	-1
-{b:1} cmp {a:1}	1
-{a:1 c:2} cmp {a:1 b:2}	1	# c > b lex
-{a:1 b:2} cmp {a:1 c:2}	-1
+{a:1} tcmp {b:1}	-1
+{b:1} tcmp {a:1}	1
+{a:1 c:2} tcmp {a:1 b:2}	1	# c > b lex
+{a:1 b:2} tcmp {a:1 c:2}	-1
 
 # Length differs.
-{} cmp {a:1}	-1
-{a:1} cmp {}	1
-{a:1 b:2} cmp {a:1}	1
-{a:1} cmp {a:1 b:2}	-1
+{} tcmp {a:1}	-1
+{a:1} tcmp {}	1
+{a:1 b:2} tcmp {a:1}	1
+{a:1} tcmp {a:1 b:2}	-1
 
 # Nested.
-{a:[1 2]} cmp {a:[1 3]}	-1
-{a:{b:1}} cmp {a:{b:2}}	-1
-[{a:1}] cmp [{a:2}]	-1
+{a:[1 2]} tcmp {a:[1 3]}	-1
+{a:{b:1}} tcmp {a:{b:2}}	-1
+[{a:1}] tcmp [{a:2}]	-1
 
 # =============================================================================
 # None / Never / Any ordering — degenerate roots sort cleanly by Rank.
 # =============================================================================
 
-none cmp none	0
-none cmp Any	1	# None Rank 12·10⁹ > Any Rank 11·10⁹
-Any cmp none	-1
-none cmp 5	-1	# None < Integer band
-5 cmp none	1
-Never cmp Any	1
-Any cmp Never	-1
-Never cmp none	1
-none cmp Never	-1
-Never cmp 5	-1	# Never Rank 13·10⁹ < Integer Rank 20.31·10⁹
+none tcmp none	0
+none tcmp Any	1	# None Rank 12·10⁹ > Any Rank 11·10⁹
+Any tcmp none	-1
+none tcmp 5	-1	# None < Integer band
+5 tcmp none	1
+Never tcmp Any	1
+Any tcmp Never	-1
+Never tcmp none	1
+none tcmp Never	-1
+Never tcmp 5	-1	# Never Rank 13·10⁹ < Integer Rank 20.31·10⁹
 
 # =============================================================================
 # Cross-branch ordering — Rank decides cleanly.
@@ -557,17 +561,17 @@ Never cmp 5	-1	# Never Rank 13·10⁹ < Integer Rank 20.31·10⁹
 # < Functions < Disjuncts < …                     (Type 6·10¹⁰ band)
 # =============================================================================
 
-true cmp 5	-1	# Boolean band < Integer
-5 cmp true	1
-5 cmp 'a'	-1	# Integer < ProperString
-'a' cmp 5	1
-'a' cmp [1]	-1	# String band < List band
-[1] cmp 'a'	1
-[1] cmp {a:1}	-1	# List < Map
-{a:1} cmp [1]	1
-{a:1} cmp foo/q	1	# Atom Rank 20.1·10⁹ < Map Rank 30.2·10⁹
-foo/q cmp {a:1}	-1
-{a:1} cmp 'x'	1	# Map > String (30·10⁹ > 20·10⁹)
+true tcmp 5	-1	# Boolean band < Integer
+5 tcmp true	1
+5 tcmp 'a'	-1	# Integer < ProperString
+'a' tcmp 5	1
+'a' tcmp [1]	-1	# String band < List band
+[1] tcmp 'a'	1
+[1] tcmp {a:1}	-1	# List < Map
+{a:1} tcmp [1]	1
+{a:1} tcmp foo/q	1	# Atom Rank 20.1·10⁹ < Map Rank 30.2·10⁹
+foo/q tcmp {a:1}	-1
+{a:1} tcmp 'x'	1	# Map > String (30·10⁹ > 20·10⁹)
 
 # =============================================================================
 # Transitivity battery — for each chain a < b < c we assert a < c
@@ -580,7 +584,7 @@ foo/q cmp {a:1}	-1
 (-5 lt 0) and (0 lt 5) and (-5 lt 5)	true
 (0 lt 1) and (1 lt 99) and (0 lt 99)	true
 
-# Cross-numeric chain (Integer/Decimal mixed).
+# Cross-numeric chain (Integer/Float mixed).
 (1 lt 1.5) and (1.5 lt 2) and (1 lt 2)	true
 (0 lt 1.1) and (1.1 lt 2) and (0 lt 2)	true
 (0.5 lt 1.5) and (1.5 lt 2.5) and (0.5 lt 2.5)	true
@@ -590,23 +594,24 @@ foo/q cmp {a:1}	-1
 ('' lt 'a') and ('a' lt 'b') and ('' lt 'b')	true
 ('apple' lt 'banana') and ('banana' lt 'cherry') and ('apple' lt 'cherry')	true
 
-# Boolean chain.
-(false lt true) and (true lt 0) and (false lt 0)	true	# Bool < Int
+# Boolean chain. (Cross-family clauses use tcmp — the total order —
+# since lt only orders within a family; `(a tcmp b) lt 0` ≡ "a < b".)
+((false tcmp true) lt 0) and ((true tcmp 0) lt 0) and ((false tcmp 0) lt 0)	true	# Bool < Int
 
 # Cross-family chain (Boolean → Integer → String → List).
-(false lt 5) and (5 lt 'a') and (false lt 'a')	true
-(true lt 5) and (5 lt 'hi') and (true lt 'hi')	true
-('a' lt [1]) and ([1] lt {x:1}) and ('a' lt {x:1})	true
-(true lt 'x') and ('x' lt [0]) and (true lt [0])	true
+((false tcmp 5) lt 0) and ((5 tcmp 'a') lt 0) and ((false tcmp 'a') lt 0)	true
+((true tcmp 5) lt 0) and ((5 tcmp 'hi') lt 0) and ((true tcmp 'hi') lt 0)	true
+(('a' tcmp [1]) lt 0) and (([1] tcmp {x:1}) lt 0) and (('a' tcmp {x:1}) lt 0)	true
+((true tcmp 'x') lt 0) and (('x' tcmp [0]) lt 0) and ((true tcmp [0]) lt 0)	true
 
 # Long chain (six values, transitive across the whole length).
-(false lt 0) and (0 lt 1) and (1 lt 'a') and ('a' lt [1]) and ([1] lt {x:1})	true
-(false lt 1) and (1 lt 'a') and (false lt 'a')	true
+((false tcmp 0) lt 0) and ((0 tcmp 1) lt 0) and ((1 tcmp 'a') lt 0) and (('a' tcmp [1]) lt 0) and (([1] tcmp {x:1}) lt 0)	true
+((false tcmp 1) lt 0) and ((1 tcmp 'a') lt 0) and ((false tcmp 'a') lt 0)	true
 
 # none / Any / Never chain.
-(Any lt none) and (none lt Never) and (Any lt Never)	true
-(Any lt 5) and (none lt 5) and (Never lt 5)	true
-(Any lt none) and (none lt 5) and (Any lt 5)	true
+((Any tcmp none) lt 0) and ((none tcmp Never) lt 0) and ((Any tcmp Never) lt 0)	true
+((Any tcmp 5) lt 0) and ((none tcmp 5) lt 0) and ((Never tcmp 5) lt 0)	true
+((Any tcmp none) lt 0) and ((none tcmp 5) lt 0) and ((Any tcmp 5) lt 0)	true
 
 # Antisymmetry for the strict-order cases (a < b ⇒ ¬(b < a)).
 (1 lt 2) and (not (2 lt 1))	true
@@ -614,19 +619,19 @@ foo/q cmp {a:1}	-1
 (false lt true) and (not (true lt false))	true
 (1.1 lt 2) and (not (2 lt 1.1))	true
 
-# Reflexivity — a cmp a is 0 for every type literal and concrete value.
-0 cmp 0	0
-1 cmp 1	0
-3.14 cmp 3.14	0
-'' cmp ''	0
-'hello' cmp 'hello'	0
-true cmp true	0
-false cmp false	0
-foo/q cmp foo/q	0
-[] cmp []	0
-{} cmp {}	0
-[1 2 3] cmp [1 2 3]	0
-{a:1} cmp {a:1}	0
+# Reflexivity — a tcmp a is 0 for every type literal and concrete value.
+0 tcmp 0	0
+1 tcmp 1	0
+3.14 tcmp 3.14	0
+'' tcmp ''	0
+'hello' tcmp 'hello'	0
+true tcmp true	0
+false tcmp false	0
+foo/q tcmp foo/q	0
+[] tcmp []	0
+{} tcmp {}	0
+[1 2 3] tcmp [1 2 3]	0
+{a:1} tcmp {a:1}	0
 
 # =============================================================================
 # Type-literal-first rule (the former family-zero-collapse anomaly,
@@ -637,31 +642,31 @@ foo/q cmp foo/q	0
 # =============================================================================
 
 # Type literal < family zero value (and < every concrete inhabitant).
-Integer cmp 0	-1
-0 cmp Integer	1
-Decimal cmp 0	-1
-Decimal cmp 0.0	-1
-Number cmp 0	-1
-Boolean cmp false	-1
-false cmp Boolean	1
-String cmp ''	-1
-'' cmp String	1
-EmptyString cmp ''	-1
+Integer tcmp 0	-1
+0 tcmp Integer	1
+Float tcmp 0	-1
+Float tcmp 0.0	-1
+Number tcmp 0	-1
+Boolean tcmp false	-1
+false tcmp Boolean	1
+String tcmp ''	-1
+'' tcmp String	1
+EmptyString tcmp ''	-1
 
 # Same-family type literals order by lattice Rank (litVsLitOrder
 # delegates to compareTypes).
-Integer cmp Number	1	# Integer Rank 20.31·10⁹ > Number Rank 20.3·10⁹
-Number cmp Decimal	-1	# Number 20.3 < Decimal 20.32
-Integer cmp Decimal	-1	# Integer 20.31 < Decimal 20.32
-EmptyString cmp ProperString	-1	# EmptyStr 20.41 < ProperStr 20.42
-EmptyString cmp String	1	# EmptyStr 20.41 > String 20.4
-ProperString cmp String	1	# ProperStr 20.42 > String 20.4
+Integer tcmp Number	1	# Integer Rank 20.31·10⁹ > Number Rank 20.3·10⁹
+Number tcmp Float	-1	# Number 20.3 < Float 20.32
+Integer tcmp Float	-1	# Integer 20.31 < Float 20.32
+EmptyString tcmp ProperString	-1	# EmptyStr 20.41 < ProperStr 20.42
+EmptyString tcmp String	1	# EmptyStr 20.41 > String 20.4
+ProperString tcmp String	1	# ProperStr 20.42 > String 20.4
 
 # Atom and Path follow the same rule.
-Atom cmp foo/q	-1	# Atom literal < every concrete atom
-Atom cmp Atom	0	# self-equal
-Path cmp (make Path ['a'])	-1	# Path literal < every concrete path
-Path cmp Path	0	# self-equal
+Atom tcmp foo/q	-1	# Atom literal < every concrete atom
+Atom tcmp Atom	0	# self-equal
+Path tcmp (make Path ['a'])	-1	# Path literal < every concrete path
+Path tcmp Path	0	# self-equal
 
 # =============================================================================
 # DepScalar ordering — canonical-form lex when paired with itself;
@@ -669,8 +674,8 @@ Path cmp Path	0	# self-equal
 # fall-through reaches Scalar/comparePaths.
 # =============================================================================
 
-(Integer gt 10) cmp (Integer gt 10)	0
-(Integer gt 10) cmp (Integer gt 20)	-1	# "(Integer gt 10)" < "(Integer gt 20)" lex
+(Integer gt 10) tcmp (Integer gt 10)	0
+(Integer gt 10) tcmp (Integer gt 20)	-1	# "(Integer gt 10)" < "(Integer gt 20)" lex
 (Integer gt 10) lt (Integer gt 20)	true
 (Integer gt 20) lt (Integer gt 10)	false
 
@@ -692,57 +697,57 @@ Path cmp Path	0	# self-equal
 # =============================================================================
 
 # --- Object-subtype kind (lattice-minted via `refine Object`) ---
-def Cat refine Object {color:String} def Dog refine Object {breed:String} Cat cmp Dog	-1
-def Cat refine Object {color:String} def Dog refine Object {breed:String} Dog cmp Cat	1
-def Cat refine Object {color:String} def Dog refine Object {breed:String} Cat cmp Cat	0
-def Cat refine Object {color:String} Cat cmp Object	1
-def Cat refine Object {color:String} Object cmp Cat	-1
-def Cat refine Object {color:String} (make Cat {color:'orange'}) cmp Cat	1
-def Cat refine Object {color:String} Cat cmp (make Cat {color:'orange'})	-1
-def Cat refine Object {color:String} (make Cat {color:'a'}) cmp (make Cat {color:'b'})	-1
-def Cat refine Object {color:String} (make Cat {color:'b'}) cmp (make Cat {color:'a'})	1
-def Cat refine Object {color:String} (make Cat {color:'a'}) cmp (make Cat {color:'a'})	0
+def Cat refine Object {color:String} def Dog refine Object {breed:String} Cat tcmp Dog	-1
+def Cat refine Object {color:String} def Dog refine Object {breed:String} Dog tcmp Cat	1
+def Cat refine Object {color:String} def Dog refine Object {breed:String} Cat tcmp Cat	0
+def Cat refine Object {color:String} Cat tcmp Object	1
+def Cat refine Object {color:String} Object tcmp Cat	-1
+def Cat refine Object {color:String} (make Cat {color:'orange'}) tcmp Cat	1
+def Cat refine Object {color:String} Cat tcmp (make Cat {color:'orange'})	-1
+def Cat refine Object {color:String} (make Cat {color:'a'}) tcmp (make Cat {color:'b'})	-1
+def Cat refine Object {color:String} (make Cat {color:'b'}) tcmp (make Cat {color:'a'})	1
+def Cat refine Object {color:String} (make Cat {color:'a'}) tcmp (make Cat {color:'a'})	0
 
 # --- Record kind (Value-typed — RecordTypeInfo body) ---
-def Person refine Record [name:String age:Integer] Person cmp Person	0
-def Person refine Record [name:String age:Integer] def House refine Record [addr:String] Person cmp House	1
-def Person refine Record [name:String age:Integer] def House refine Record [addr:String] House cmp Person	-1
-def Person refine Record [name:String age:Integer] (make Person {name:'a' age:1}) cmp Person	1
-def Person refine Record [name:String age:Integer] Person cmp Record	-1	# Person is a Map-typed body (Node band) — Record kernel is in Ideal band
-def Person refine Record [name:String age:Integer] Record cmp Person	1
+def Person refine Record [name:String age:Integer] Person tcmp Person	0
+def Person refine Record [name:String age:Integer] def House refine Record [addr:String] Person tcmp House	1
+def Person refine Record [name:String age:Integer] def House refine Record [addr:String] House tcmp Person	-1
+def Person refine Record [name:String age:Integer] (make Person {name:'a' age:1}) tcmp Person	1
+def Person refine Record [name:String age:Integer] Person tcmp Record	-1	# Person is a Map-typed body (Node band) — Record kernel is in Ideal band
+def Person refine Record [name:String age:Integer] Record tcmp Person	1
 
 # --- Disjunct kind (`tor` union) ---
-def Maybe (String tor None) Maybe cmp Maybe	0
-def Maybe (String tor None) def Choice (Integer tor Boolean) Maybe cmp Choice	1
-def Maybe (String tor None) def Choice (Integer tor Boolean) Choice cmp Maybe	-1
-def Maybe (String tor None) Maybe cmp Disjunct	1
-def Maybe (String tor None) Disjunct cmp Maybe	-1
+def Maybe (String tor None) Maybe tcmp Maybe	0
+def Maybe (String tor None) def Choice (Integer tor Boolean) Maybe tcmp Choice	1
+def Maybe (String tor None) def Choice (Integer tor Boolean) Choice tcmp Maybe	-1
+def Maybe (String tor None) Maybe tcmp Disjunct	1
+def Maybe (String tor None) Disjunct tcmp Maybe	-1
 
 # --- Enum kind (Value-typed Disjunct subtype) ---
-def Color enum [red green blue] Color cmp Color	0
-def Color enum [red green blue] def Size enum [small large] Color cmp Size	-1
-def Color enum [red green blue] def Size enum [small large] Size cmp Color	1
-def Color enum [red green blue] Color cmp Enum	1
-def Color enum [red green blue] Enum cmp Color	-1
+def Color enum [red green blue] Color tcmp Color	0
+def Color enum [red green blue] def Size enum [small large] Color tcmp Size	-1
+def Color enum [red green blue] def Size enum [small large] Size tcmp Color	1
+def Color enum [red green blue] Color tcmp Enum	1
+def Color enum [red green blue] Enum tcmp Color	-1
 
 # --- Predicate kind (lattice-minted under the input type) ---
-def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] Positive cmp Positive	0
-def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] def Negative fn [n:Integer Integer [if (n lt 0) [n] [None]]] Negative cmp Positive	1	# canonical-form fallback — Negative body lex > Positive
-def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] def Negative fn [n:Integer Integer [if (n lt 0) [n] [None]]] Positive cmp Negative	-1
-def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] Positive cmp Function	1
-def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] Function cmp Positive	-1
+def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] Positive tcmp Positive	0
+def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] def Negative fn [n:Integer Integer [if (n lt 0) [n] [None]]] Negative tcmp Positive	1	# canonical-form fallback — Negative body lex > Positive
+def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] def Negative fn [n:Integer Integer [if (n lt 0) [n] [None]]] Positive tcmp Negative	-1
+def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] Positive tcmp Function	1
+def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] Function tcmp Positive	-1
 
 # --- Cross-kind user types (Rank bands decide) ---
-def Cat refine Object {x:Integer} def Maybe (String tor None) Cat cmp Maybe	-1
-def Cat refine Object {x:Integer} def Maybe (String tor None) Maybe cmp Cat	1
-def Cat refine Object {x:Integer} def Color enum [a b] Cat cmp Color	-1
-def Cat refine Object {x:Integer} def Color enum [a b] Color cmp Cat	1
+def Cat refine Object {x:Integer} def Maybe (String tor None) Cat tcmp Maybe	-1
+def Cat refine Object {x:Integer} def Maybe (String tor None) Maybe tcmp Cat	1
+def Cat refine Object {x:Integer} def Color enum [a b] Cat tcmp Color	-1
+def Cat refine Object {x:Integer} def Color enum [a b] Color tcmp Cat	1
 
 # --- Transitivity across user types ---
-def Cat refine Object {x:Integer} def Dog refine Object {y:Integer} ((Cat lt Dog) and (Dog lt (make Dog {y:1})) and (Cat lt (make Dog {y:1})))	true	# transitive: Cat < Dog < Dog-instance, so Cat < Dog-instance
-def Cat refine Object {x:Integer} def Dog refine Object {y:Integer} ((Object lt Cat) and (Cat lt Dog) and (Object lt Dog))	true
-def A refine Object {x:Integer} def B refine Object {x:Integer} def C refine Object {x:Integer} ((A lt B) and (B lt C) and (A lt C))	true
+def Cat refine Object {x:Integer} def Dog refine Object {y:Integer} (((Cat tcmp Dog) lt 0) and ((Dog tcmp (make Dog {y:1})) lt 0) and ((Cat tcmp (make Dog {y:1})) lt 0))	true	# transitive: Cat < Dog < Dog-instance, so Cat < Dog-instance
+def Cat refine Object {x:Integer} def Dog refine Object {y:Integer} (((Object tcmp Cat) lt 0) and ((Cat tcmp Dog) lt 0) and ((Object tcmp Dog) lt 0))	true
+def A refine Object {x:Integer} def B refine Object {x:Integer} def C refine Object {x:Integer} (((A tcmp B) lt 0) and ((B tcmp C) lt 0) and ((A tcmp C) lt 0))	true
 
 # --- User type sorts after every kernel type in its branch ---
-def Cat refine Object {x:Integer} ((Object lt Cat) and (Resource lt Cat) and (Entity lt Cat))	true
-def Maybe (String tor None) ((Disjunct lt Maybe) and (Function lt Maybe))	true
+def Cat refine Object {x:Integer} (((Object tcmp Cat) lt 0) and ((Resource tcmp Cat) lt 0) and ((Entity tcmp Cat) lt 0))	true
+def Maybe (String tor None) (((Disjunct tcmp Maybe) lt 0) and ((Function tcmp Maybe) lt 0))	true

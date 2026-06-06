@@ -2428,9 +2428,9 @@ func TestDefForthOver(t *testing.T) {
 	e := New(reg)
 
 	result, err := e.Run([]Value{
-		NewWord("def"), NewWord("dup2"),
+		NewWord("def"), NewWord("fdup2"),
 		NewWord("word"), NewList([]Value{NewWord("dup"), NewWord("dup")}),
-		NewInteger(3), NewWord("dup2"),
+		NewInteger(3), NewWord("fdup2"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2707,9 +2707,9 @@ func TestDefForthSwapSub(t *testing.T) {
 	e := New(reg)
 
 	result, err := e.Run([]Value{
-		NewWord("def"), NewString("nip"),
+		NewWord("def"), NewString("fnip"),
 		NewWord("word"), NewList([]Value{NewWord("swap"), NewWord("drop")}),
-		NewInteger(10), NewInteger(20), NewWord("nip"),
+		NewInteger(10), NewInteger(20), NewWord("fnip"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

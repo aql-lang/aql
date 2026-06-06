@@ -47,7 +47,7 @@ func aqlTypeToSQLType(t *Type) string {
 	switch {
 	case t.ConformsTo(TInteger):
 		return "INTEGER"
-	case t.ConformsTo(TDecimal):
+	case t.ConformsTo(TFloat):
 		return "REAL"
 	case t.ConformsTo(TNumber):
 		return "REAL"
@@ -268,8 +268,8 @@ func aqlValueToSQLParam(v Value, colType *Type) interface{} {
 
 	case colType.ConformsTo(TNumber):
 		// Column wants REAL.
-		if v.Parent.ConformsTo(TDecimal) {
-			_as3, _ := AsDecimal(v)
+		if v.Parent.ConformsTo(TFloat) {
+			_as3, _ := AsFloat(v)
 			return _as3
 		}
 		if v.Parent.ConformsTo(TInteger) {
@@ -323,7 +323,7 @@ func sqlResultToAQLValue(raw interface{}, colType *Type) Value {
 	case colType.ConformsTo(TInteger):
 		return NewInteger(toInt64(raw))
 	case colType.ConformsTo(TNumber):
-		return NewDecimal(toFloat64(raw))
+		return NewFloat(toFloat64(raw))
 	case colType.ConformsTo(TBoolean):
 		return NewBoolean(toInt64(raw) != 0)
 	default:

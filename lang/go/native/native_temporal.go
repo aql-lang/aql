@@ -28,7 +28,7 @@ import (
 // Parents (Scalar/Time and Scalar/Time/Duration) register first so
 // children's parent paths resolve.
 var (
-	TTime        = registerTemporalType("Scalar/Time", 1000, nil)
+	TTime        = registerTemporalType("Scalar/Time", 1000, timeCompareBehavior{})
 	TDate        = registerTemporalType("Scalar/Time/Date", 1001, dateFormatBehavior{})
 	TDateTime    = registerTemporalType("Scalar/Time/DateTime", 1002, dateTimeFormatBehavior{})
 	TInstant     = registerTemporalType("Scalar/Time/Instant", 1003, instantFormatBehavior{})
@@ -267,6 +267,38 @@ func compareDurationPayloads(a, b Value) int {
 		return 1
 	default:
 		return 0
+	}
+}
+
+// timeCompareBehavior is the Comparer installed on the abstract
+// Scalar/Time node. It is reached by the CompareValues LCA walk only
+// for CROSS-leaf Time pairs (same-leaf pairs hit their own per-leaf
+// Comparer first). It unifies the instant-bearing leaves — Date,
+// DateTime, Instant — so they order chronologically against one another
+// (a date and a datetime are both moments in time). Pairs it can't
+// place chronologically (TimeOfDay and the Duration leaves, type
+// literals — none of which carry a time.Time) decline with
+// ErrNoComparer, so the cascade falls through to the lattice Rank, and
+// the family-restricted ordering words reject them in favour of tcmp.
+type timeCompareBehavior struct{}
+
+func (timeCompareBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
+func (timeCompareBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
+func (timeCompareBehavior) Format(v Value) string       { return eng.DefaultBehavior.Format(v) }
+
+func (timeCompareBehavior) Compare(a, b Value) (int, error) {
+	ta, aok := timeFromValue(a)
+	tb, bok := timeFromValue(b)
+	if !aok || !bok {
+		return 0, eng.ErrNoComparer
+	}
+	switch {
+	case ta.Before(tb):
+		return -1, nil
+	case ta.After(tb):
+		return 1, nil
+	default:
+		return 0, nil
 	}
 }
 

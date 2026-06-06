@@ -241,7 +241,7 @@ func decodeDelimited(content string, sep string) ([]Value, error) {
 					if v == float64(int64(v)) && !math.IsInf(v, 0) && !math.IsNaN(v) {
 						om.Set(col, NewInteger(int64(v)))
 					} else {
-						om.Set(col, NewDecimal(v))
+						om.Set(col, NewFloat(v))
 					}
 				case bool:
 					om.Set(col, NewBoolean(v))

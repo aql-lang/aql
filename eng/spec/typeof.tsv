@@ -38,8 +38,8 @@
 		
 typeof 5	Integer	an Integer literal
 typeof -7	Integer	negatives too
-typeof 5.0	Decimal	a Decimal literal
-typeof 3.14	Decimal	
+typeof 5.0	Float	a Float literal
+typeof 3.14	Float	
 typeof true	Boolean	
 typeof false	Boolean	
 typeof 'hello'	ProperString	a non-empty string is a ProperString
@@ -75,7 +75,7 @@ typeof Never	Never	Never is a degenerate root (bottom) — saturates at itself
 typeof Scalar	Any	Scalar's lattice parent is Any
 typeof Number	Scalar
 typeof Integer	Number	one Parent hop — no metatype layer
-typeof Decimal	Number
+typeof Float	Number
 typeof String	Scalar
 typeof ProperString	String
 typeof EmptyString	String	
@@ -157,7 +157,7 @@ typeof typeof none	None	`typeof none` is the type literal `None`; `typeof None` 
 pathof Scalar	[Scalar]	a root has a one-element path
 pathof Number	[Scalar Number]	
 pathof Integer	[Scalar Number Integer]	the canonical example
-pathof Decimal	[Scalar Number Decimal]	
+pathof Float	[Scalar Number Float]	
 pathof String	[Scalar String]	
 pathof ProperString	[Scalar String ProperString]	
 pathof EmptyString	[Scalar String EmptyString]	
@@ -192,7 +192,7 @@ pathof Never	[Never]
 		
 # --- pathof composed with typeof: the ancestry of a VALUE's type ---		
 pathof ( typeof 5 )	[Scalar Number Integer]	= pathof Integer
-pathof ( typeof 5.0 )	[Scalar Number Decimal]	
+pathof ( typeof 5.0 )	[Scalar Number Float]	
 pathof ( typeof true )	[Scalar Boolean]	
 pathof ( typeof 'hello' )	[Scalar String ProperString]	
 pathof ( typeof '' )	[Scalar String EmptyString]	

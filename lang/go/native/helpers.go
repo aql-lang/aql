@@ -59,7 +59,7 @@ func sliceResultItem(item interface{}) (Value, error) {
 	case int64:
 		return NewInteger(v), nil
 	case float64:
-		return NewDecimal(v), nil
+		return NewFloat(v), nil
 	case bool:
 		return NewBoolean(v), nil
 	case nil:

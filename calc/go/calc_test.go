@@ -89,7 +89,7 @@ func TestArithBasic(t *testing.T) {
 	}
 }
 
-func TestArithDecimals(t *testing.T) {
+func TestArithFloats(t *testing.T) {
 	c, _ := newCalc(t)
 	stk, err := c.Eval("add 1.5 2.5")
 	if err != nil {
@@ -99,15 +99,15 @@ func TestArithDecimals(t *testing.T) {
 		t.Errorf("want 4.0, got %v", got)
 	}
 
-	// div always produces Decimal, even on integer inputs. Infix `1 div 2`
+	// div always produces Float, even on integer inputs. Infix `1 div 2`
 	// reads naturally as 1/2 = 0.5.
 	c, _ = newCalc(t)
 	stk, err = c.Eval("1 div 2")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !stk[0].Parent.ConformsTo(eng.TDecimal) {
-		t.Errorf("1 div 2: want Decimal result, got %s", stk[0].Parent.String())
+	if !stk[0].Parent.ConformsTo(eng.TFloat) {
+		t.Errorf("1 div 2: want Float result, got %s", stk[0].Parent.String())
 	}
 	if got := asDec(t, stk, "1 div 2"); got != 0.5 {
 		t.Errorf("1 div 2 = %v, want 0.5", got)

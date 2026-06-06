@@ -1,4 +1,4 @@
-// docexamples_test.go runs every checkable `=>` example extracted from
+// docexamples_test.go runs every checkable `# returns` example extracted from
 // the prose docs against the production language layer and compares the
 // rendered stack to the documented result.
 //
@@ -22,7 +22,7 @@ import (
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
-// docFiles are the prose docs scanned for `=>` examples, relative to
+// docFiles are the prose docs scanned for `# returns` examples, relative to
 // this package (repo-root files two dirs up from test/go/docexamples).
 var docFiles = []string{
 	"README.md",
@@ -54,7 +54,7 @@ type mismatchKey struct {
 var knownMismatch = map[mismatchKey]string{
 	// `lt` with a type-literal left operand builds a DepScalar refinement
 	// `(Integer lt 0)`, it does not perform a boolean ordering compare —
-	// so the doc's `=> true` (illustrating type-literal-sorts-low) never
+	// so the doc's `# returns true` (illustrating type-literal-sorts-low) never
 	// matches. Needs author decision: change the example to `cmp`, or
 	// reconsider `lt`'s type-literal overload.
 	{"REFERENCE.md", "Integer lt 0"}:   "Integer lt 0 builds a DepScalar refinement, not a boolean; doc shows true",
@@ -103,7 +103,7 @@ func TestDocExamples(t *testing.T) {
 		}
 		examples := Extract(name, string(body))
 		if len(examples) == 0 {
-			t.Errorf("%s: no => examples extracted", name)
+			t.Errorf("%s: no `# returns` examples extracted", name)
 			continue
 		}
 		for _, ex := range examples {

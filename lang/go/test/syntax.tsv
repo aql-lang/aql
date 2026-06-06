@@ -259,7 +259,7 @@ unify Number String end	'~unify-fail' false
 [true,false]	[true false]
 [1,"a",true]	[1 'a' true]
 [Number,String]	[Number String]
-[Integer,Decimal,Boolean]	[Integer Decimal Boolean]
+[Integer,Float,Boolean]	[Integer Float Boolean]
 [Any,None]	[Any None]
 [String,foo]		undefined_word
 

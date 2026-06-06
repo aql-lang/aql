@@ -186,8 +186,8 @@ func TestSqlTypeToAQLType(t *testing.T) {
 	if got := sqlTypeToAQLType("INTEGER"); !got.Equal(TInteger) {
 		t.Errorf("expected TInteger, got %v", got)
 	}
-	if got := sqlTypeToAQLType("REAL"); !got.Equal(TDecimal) {
-		t.Errorf("expected TDecimal, got %v", got)
+	if got := sqlTypeToAQLType("REAL"); !got.Equal(TFloat) {
+		t.Errorf("expected TFloat, got %v", got)
 	}
 	if got := sqlTypeToAQLType("TEXT"); !got.Equal(TString) {
 		t.Errorf("expected TString, got %v", got)
@@ -986,23 +986,23 @@ func TestResolveSigTypeList(t *testing.T) {
 	}
 }
 
-func TestResolveSigTypeDecimalLiteral(t *testing.T) {
-	// Post §1.1 fix: scalar literals (Integer, Decimal, Boolean,
+func TestResolveSigTypeFloatLiteral(t *testing.T) {
+	// Post §1.1 fix: scalar literals (Integer, Float, Boolean,
 	// String, Atom) are routed through Signature.Patterns. The type
 	// is normalised to the kind, and the literal value lands in the
 	// pattern slot.
-	v := NewDecimal(3.14)
+	v := NewFloat(3.14)
 	tp, pattern, err := resolveSigType(nil, v)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !tp.Equal(TDecimal) {
-		t.Errorf("expected TDecimal kind for decimal literal, got %s", tp)
+	if !tp.Equal(TFloat) {
+		t.Errorf("expected TFloat kind for decimal literal, got %s", tp)
 	}
 	if pattern == nil {
 		t.Fatal("expected pattern to carry the literal value, got nil")
 	}
-	if got, _ := AsDecimal(*pattern); got != 3.14 {
+	if got, _ := AsFloat(*pattern); got != 3.14 {
 		t.Errorf("pattern value = %v, want 3.14", got)
 	}
 }
@@ -1176,7 +1176,7 @@ func TestRegisterFnBadTriple(t *testing.T) {
 	// Triple with invalid input sig (non-list, non-map param element).
 	err = runAQLError(t, r, []Value{
 		NewList([]Value{
-			NewList([]Value{NewDecimal(1.5)}), // invalid param type
+			NewList([]Value{NewFloat(1.5)}), // invalid param type
 			NewTypeLiteral(TString),
 			NewList([]Value{NewString("body")}),
 		}),
@@ -1200,9 +1200,9 @@ func TestParseFnUndefSpecParamError(t *testing.T) {
 	// 4 elements = 2 pairs, first pair has bad input sig (invalid param type).
 	err = runAQLError(t, r, []Value{
 		NewList([]Value{
-			NewList([]Value{NewDecimal(1.5)}), // invalid param
+			NewList([]Value{NewFloat(1.5)}), // invalid param
 			NewTypeLiteral(TString),
-			NewList([]Value{NewDecimal(1.5)}), // invalid param
+			NewList([]Value{NewFloat(1.5)}), // invalid param
 			NewTypeLiteral(TString),
 		}),
 		NewWord("fn"),

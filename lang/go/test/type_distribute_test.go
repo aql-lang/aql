@@ -89,7 +89,7 @@ func TestDistribute_BothDisjunctsBothMatch(t *testing.T) {
 
 // All-disjoint: every cross-product pair fails. Result is Never.
 func TestDistribute_AllDisjointToNever(t *testing.T) {
-	got := runOne(t, `(Integer tor Boolean) tand (String tor Decimal)`)
+	got := runOne(t, `(Integer tor Boolean) tand (String tor Float)`)
 	if len(got) != 1 || got[0] != "Never" {
 		t.Errorf("(Int tor Bool) tand (Str tor Dec) = %v, want [\"Never\"]", got)
 	}

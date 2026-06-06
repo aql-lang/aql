@@ -5,6 +5,12 @@ syntax, the type system, and the runtime. It complements the
 **[Tutorial](TUTORIAL.md)** (learning), **[How-To Guides](HOWTO.md)**
 (tasks), and **[Reference](REFERENCE.md)** (precise behaviour).
 
+> **Notation.** In code, a `# returns …` comment shows what an
+> expression evaluates to (`4 square  # returns 16`); in prose we say
+> "`4 square` returns `16`". The comment is ordinary documentation, not
+> special syntax. (AQL has no result arrow — `=>` is the
+> anonymous-function word `afn` — so results are written as comments.)
+
 ## Contents
 
 * [What is a concatenative language?](#what-is-a-concatenative-language)
@@ -37,7 +43,7 @@ output of one is the input of the next. Composition is concatenation.
 ```
 def double word [dup add]
 def quadruple word [double double]
-5 quadruple                       => 20
+5 quadruple                       # returns 20
 ```
 
 `quadruple` is not "calling double twice" in the usual sense. It is
@@ -53,8 +59,8 @@ its arguments and pushes its results. The stack is the implicit
 data flow.
 
 ```
-3 4 add                           => 7
-7 2 mul                           => 14
+3 4 add                           # returns 7
+7 2 mul                           # returns 14
 ```
 
 Step by step: push 3, push 4, `add` consumes both and pushes 7; then
@@ -62,13 +68,19 @@ push 2, `mul` consumes both and pushes 14. There is no `tmp = a + b`
 intermediate — the stack *is* the intermediate.
 
 Written as one line the two steps compose by parenthesising the first
-— `(3 4 add) 2 mul => 14`. The bare `3 4 add 2 mul` does **not** give
+— `(3 4 add) 2 mul` returns `14`. The bare `3 4 add 2 mul` does **not** give
 14: because `add` can also *collect forward* (the next section), it
 grabs the following `2` as a second argument — computing `4 add 2 =
 6` — which leaves `3` and `6` on the stack for `mul`, giving `18`.
-Parenthesise, or keep each step on its own line, when a trailing word
-would otherwise reach forward past the value you mean to leave on the
-stack.
+When a trailing word would otherwise reach forward past the value you
+mean to leave on the stack, insert a barrier: parenthesise the first
+step — `(3 4 add) 2 mul` — or stop the collection with `end` or `;`
+(`3 4 add ; 2 mul`). All three give `14`. A newline is **not** a
+barrier: in a file `3 4 add` followed by `2 mul` on the next line still
+evaluates to `18`, because the stack and forward collection both carry
+across line breaks. (The REPL is the exception — it evaluates and
+clears the stack line by line, so `3 4 add` then `2 mul` there prints
+`7` and then errors for want of a second operand.)
 
 This eliminates the need for variable binding in simple cases. When
 naming actually helps readability, `def`, `var`, and named-parameter
@@ -83,9 +95,9 @@ extends this with **forward collection**: a word can gather
 arguments that appear *after* it.
 
 ```
-1 2 add                           => 3    # classic prefix
-add 1 2                           => 3    # fully forward
-1 add 2                           => 3    # infix: one stack, one forward
+1 2 add                           # returns 3 — classic prefix
+add 1 2                           # returns 3 — fully forward
+1 add 2                           # returns 3 — infix: one stack, one forward
 ```
 
 All three are equivalent. The word `add` needs two arguments. If
@@ -93,8 +105,12 @@ fewer are on the stack when it runs, it enters a forward-collecting
 mode and consumes following tokens until its signature is filled.
 
 This lets AQL read naturally in infix position. `10 sub 3` reads
-"ten minus three"; `"hello" upper` reads "uppercase hello"; you
-never have to mentally reverse-engineer `10 3 -`.
+"ten minus three"; `not true` reads "not true"; and with the string
+module imported, `StringUtil.upper "hello"` reads "uppercase hello".
+You never have to mentally reverse-engineer `10 3 -`. (String words
+like `upper`/`lower`/`split` are not built in — they live in
+`aql:string-util`; see the [Reference](REFERENCE.md). Only words such
+as `add`, `sub`, `mul`, `not`, `dup` are available without an import.)
 
 ### How collection works
 
@@ -133,18 +149,21 @@ came from.
 Forward collection respects types. Consider:
 
 ```
-upper "hello" 42
+not true 42
 ```
 
-1. `upper` needs one `String`. Stack is empty. Enter forward mode.
-2. `"hello"` matches `String`. Collected. `upper` runs → `'HELLO'`.
+1. `not` needs one `Boolean`. Stack is empty. Enter forward mode.
+2. `true` matches `Boolean`. Collected. `not` runs → `false`.
 3. `42` is not consumed (no waiting word). It is pushed.
 
-Result: `'HELLO' 42`. The same logic prevents `add 1 "x"` from
-silently doing the wrong thing: after `1` is collected as
-`add`'s first argument, `"x"` won't match the second `Number`
-slot, so collection stops. `add` then fails for arity reasons
-(rather than computing nonsense).
+Result: `false 42`. Type matching governs *how far* a word reaches,
+but it does **not** make a word reject an argument of a type one of
+its signatures accepts. `add`, for instance, has both a numeric
+signature and a `Scalar`-concatenation signature, so a string is a
+*valid* second argument: `add 1 "x"` does not stop and fail — it
+collects `"x"` and concatenates, giving `'x1'`. Forward collection
+narrows where the boundary falls; it is not a guarantee that a
+"wrong-looking" value will be refused.
 
 
 ## The `end` keyword
@@ -154,7 +173,7 @@ goes too far. It stops the nearest waiting word, forcing any
 remaining arguments to come from the stack:
 
 ```
-set foo 99 end get foo            => 99
+set foo 99 end get foo            # returns 99
 ```
 
 Without `end`, `set` would try to collect `get` and `foo` as
@@ -180,9 +199,9 @@ first that matches. This produces natural overloading without a
 separate dispatch construct:
 
 ```
-add 1 2                           => 3      # Integer + Integer
-add 1.0 2                         => 3.0    # Decimal + Number, promotes
-"a" "b" add                       => 'ab'   # Scalar + Scalar, concatenates
+add 1 2                           # returns 3 — Integer + Integer
+add 1.0 2                         # returns 3.0 — Float + Number, promotes
+"a" "b" add                       # returns 'ab' — Scalar + Scalar, concatenates
 ```
 
 The same `add` covers numeric addition and string concatenation —
@@ -198,7 +217,7 @@ it drives behaviour.
 A `fn` declares types for both its inputs and its outputs:
 
 ```
-def avg fn [[a:Number b:Number] [Decimal] [(a add b) div 2.0]]
+def avg fn [[a:Number b:Number] [Float] [(a add b) div 2.0]]
 ```
 
 Inputs are checked when the function is called; outputs are checked
@@ -235,12 +254,12 @@ and Ada's range subtypes: value-sensitive and symmetric.
 
 ```
 def UserId (refine Integer)               # newtype — identity
-42 is UserId                  => false    # a raw Integer is not a UserId
-def id:UserId 42   id is UserId => true   # constructed explicitly
+42 is UserId                  # returns false — a raw Integer is not a UserId
+def id:UserId 42   id is UserId  # returns true — constructed explicitly
 
 def Big (Integer gt 10)                   # subset — validation
-50 is Big                     => true     # 50 qualifies, no construction
-5  is Big                     => false    # 5 does not
+50 is Big                     # returns true — 50 qualifies, no construction
+5  is Big                     # returns false — 5 does not
 ```
 
 The trap AQL avoids is treating these asymmetrically — lenient on the
@@ -253,27 +272,49 @@ rationale is in `design/REFINE-NEWTYPE-VS-SUBSET.0.md`.
 
 ## Type ordering
 
-AQL exposes a single total order over every value. `cmp`, `lt`,
-`gt`, `lte`, `gte`, and `sort` all consult it. The order is:
+AQL has a single total order over every value, computed in two stages:
 
 1. **LCA-Comparer.** Find the least common ancestor of the two
    types. If the ancestor declares a comparer, use it (so
-   `Integer cmp Decimal` runs the numeric comparer at the
-   `Number` level).
+   `Integer`↔`Float` runs the numeric comparer at the `Number`
+   level, and the instant-bearing `Time` leaves —
+   `Date`/`DateTime`/`Instant` — compare chronologically at the
+   `Time` level).
 2. **Rank fallback.** Otherwise compare the integer `Rank` each
-   type carries (cross-family comparisons are *defined*, not an
-   error).
+   type carries, giving cross-family pairs a defined position
+   (roughly `Boolean < Number < String < … < List < Map < …`).
 
-A bare type literal sorts strictly below every concrete inhabitant
-of its family:
+That total order is what **`sort`** and the collection words use, and
+it is surfaced directly by **`tcmp`** (`1 tcmp "a"` returns `-1`).
+
+But ordering values of *unrelated* families is almost always a
+mistake, so the everyday ordering words — `cmp`, `lt`, `lte`, `gt`,
+`gte` — are **family-restricted**. They compare only same-type values
+or values stage 1 can place with a real family comparer; a pair that
+would only order by the stage-2 Rank fallback (`1 lt "a"`,
+`List lt Map`) raises `[aql/incomparable]` and points you at `tcmp`:
 
 ```
-Integer lt 0                      => true
+1 lt 2.0                          # returns true        — Integer and Float share Number
+1 lt "a"                          # returns error       — different families; use tcmp
+1 tcmp "a"                        # returns -1          — the total order, on demand
+```
+
+**Equality is *not* restricted.** `eq`/`neq`/`deq` compare across types
+freely — values of different types are simply not equal (`1 eq "1"`
+returns `false`), which is safe and needs no escape hatch.
+
+A bare type literal sorts strictly below every concrete inhabitant
+of its family (same-family, so the restricted words allow it):
+
+```
+Integer lt 0                      # returns true
 ```
 
 Lists are length-first then element-wise; maps are key-set then
-value-wise. The end effect is that everything is sortable and the
-order is well-defined.
+value-wise. The end effect: everything is sortable through `tcmp` /
+`sort`, while a stray cross-type `lt`/`cmp` is caught rather than
+silently answered.
 
 
 ## Immutability and mutability
@@ -305,8 +346,8 @@ default a list literal is **evaluated** — its elements run and the
 list holds the results:
 
 ```
-[1 add 2]                         => [3]          # evaluated by default
-[1 2 3]                           => [1 2 3]       # plain data, nothing to run
+[1 add 2]                         # returns [3] — evaluated by default
+[1 2 3]                           # returns [1 2 3] — plain data, nothing to run
 ```
 
 `quote` is the opt-out. It keeps the list (or the next token)
@@ -314,8 +355,8 @@ unevaluated, as data — so the elements stay as written (words become
 atoms) and can be run later with `do`:
 
 ```
-[1 add 2] size                    => 1             # already evaluated: one element, 3
-quote [1 add 2] do                => 3             # held as data, then run
+[1 add 2] size                    # returns 1 — already evaluated: one element, 3
+quote [1 add 2] do                # returns 3 — held as data, then run
 ```
 
 Some positions are *implicitly* quoted — they take a list as code to
@@ -348,7 +389,7 @@ structures and syntax in AQL itself, not in Go.
 
 ```
 def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])
-twice 5                           => 10
+twice 5                           # returns 10
 ```
 
 `twice 5` does not pass `5` to a function; it rewrites the call to the
@@ -384,10 +425,12 @@ room for growth:
 
 <!-- aql-test: skip -->
 ```
+# split/replace live in aql:string-util; shown unqualified here for
+# brevity (in real code: "aql:string-util" import end StringUtil.split …).
 "hello world" split " "                              # basic
 "hello world" split " " {trim: true}                 # with options
-"aaa" "a" "b" {scope:'all, count:2} replace          => 'bba'
-await {mode: 'first} [[sleep 100 1] [sleep 10 2]]    => 2
+"aaa" "a" "b" {scope:'all, count:2} replace          # returns 'bba'
+await {mode: 'first} [[sleep 100 1] [sleep 10 2]]    # returns 2
 ```
 
 By convention, every word that takes options declares the option
@@ -405,7 +448,7 @@ goroutine with an independent sub-engine:
 
 <!-- aql-test: skip -->
 ```
-await [[sleep 100 1] [sleep 100 2]]   => [1 2]
+await [[sleep 100 1] [sleep 100 2]]   # returns [1 2]
 ```
 
 The four modes mirror JavaScript's Promise combinators, providing
@@ -425,20 +468,26 @@ side effects within a branch are local to that branch's sub-engine.
 
 ## Errors as values
 
-AQL treats errors as values, not exceptions. When `1 div 0`
-"fails", it doesn't unwind the stack — it produces an `Error` value
-that sits on the stack like any other:
+AQL lets you treat errors as values rather than as exceptions — but
+this happens at a `do [...]` boundary, not automatically. When a word
+fails *in the open*, it unwinds: `1 div 0` on its own aborts the
+program (and `1 div 0 dup` never reaches `dup`). Wrap the failing code
+in a `do [...]` block and the failure is instead *reified* — the block
+produces an `Error` value that sits on the stack like any other:
 
 ```
-do [1 div 0]                      => error(division by zero)
+do [1 div 0]                      # returns error(division by zero)
 ```
+
+So `do [...]` is the construct that converts an unwinding failure into
+a first-class value; outside it, errors propagate.
 
 `error` is a pattern-match: if the top of the stack is an `Error`,
 run the handler; otherwise no-op. Handlers see the error value on
 the stack and choose what to do with it:
 
 ```
-do [1 div 0] error [drop 42]      => 42
+do [1 div 0] error [drop 42]      # returns 42
 
 do [read "missing.json"] error [
   dup .code eq 'io_error if [
@@ -463,7 +512,7 @@ by `do`, `for`, `each`, `await`) inherit from the parent's store.
 
 ```
 context set x 42
-context get x                     => 42
+context get x                     # returns 42
 ```
 
 This is functionally JavaScript-style prototype inheritance: child

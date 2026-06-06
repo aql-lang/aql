@@ -24,10 +24,10 @@ func RegisterWords(r *eng.Registry, out io.Writer) {
 	registerDisplay(r, out)
 }
 
-// numHandler runs op on two numeric args (Integer or Decimal). If either
-// arg is Decimal the result is Decimal; otherwise Integer division falls
-// back to Decimal when op signals fractional output. div is the one
-// exception: it always returns Decimal so 1 div 2 = 0.5 rather than 0.
+// numHandler runs op on two numeric args (Integer or Float). If either
+// arg is Float the result is Float; otherwise Integer division falls
+// back to Float when op signals fractional output. div is the one
+// exception: it always returns Float so 1 div 2 = 0.5 rather than 0.
 func numHandler(op func(a, b float64) (float64, error), preferInt bool) eng.Handler {
 	return func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 		a, err := eng.AsNumber(args[0])
@@ -50,7 +50,7 @@ func numHandler(op func(a, b float64) (float64, error), preferInt bool) eng.Hand
 			!math.IsNaN(res) {
 			return []eng.Value{eng.NewInteger(int64(res))}, nil
 		}
-		return []eng.Value{eng.NewDecimal(res)}, nil
+		return []eng.Value{eng.NewFloat(res)}, nil
 	}
 }
 
@@ -103,7 +103,7 @@ func registerUnary(r *eng.Registry) {
 			if preferInt && args[0].Parent.ConformsTo(eng.TInteger) && res == math.Trunc(res) {
 				return []eng.Value{eng.NewInteger(int64(res))}, nil
 			}
-			return []eng.Value{eng.NewDecimal(res)}, nil
+			return []eng.Value{eng.NewFloat(res)}, nil
 		}
 		r.RegisterNativeFunc(eng.NativeFunc{
 			Name: name,
@@ -135,8 +135,8 @@ func registerConstants(r *eng.Registry) {
 			}},
 		})
 	}
-	push("pi", eng.NewDecimal(math.Pi))
-	push("e", eng.NewDecimal(math.E))
+	push("pi", eng.NewFloat(math.Pi))
+	push("e", eng.NewFloat(math.E))
 }
 
 func registerStackOps(r *eng.Registry) {

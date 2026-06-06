@@ -682,13 +682,13 @@ func MakeConvert(src Value, targetType *Type) (Value, error) {
 	case targetType.ConformsTo(TString):
 		return NewString(ValToString(src)), nil
 
-	case targetType.ConformsTo(TDecimal):
+	case targetType.ConformsTo(TFloat):
 		text := ValToString(src)
 		f, err := strconv.ParseFloat(text, 64)
 		if err != nil {
-			return Value{}, fmt.Errorf("make: cannot convert %q to decimal", text)
+			return Value{}, fmt.Errorf("make: cannot convert %q to float", text)
 		}
-		return NewDecimal(f), nil
+		return NewFloat(f), nil
 
 	case targetType.ConformsTo(TNumber) || targetType.ConformsTo(TInteger):
 		text := ValToString(src)

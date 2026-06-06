@@ -140,7 +140,7 @@ func TestValueToAnyNone(t *testing.T) {
 
 func TestValueToAnyDefault(t *testing.T) {
 	// A decimal value should fall through to default and return String()
-	v := NewDecimal(3.14)
+	v := NewFloat(3.14)
 	result := valueToAny(v)
 	s, ok := result.(string)
 	if !ok {

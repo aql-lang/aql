@@ -80,7 +80,7 @@ typeof Node	Any	Node's lattice parent is Any
 # concrete typed-list form — see types.tsv §11h.)		
 [ 1 2 3 ] is [ :Integer ]	true	all elements are Integers
 [ 1 2 3 ] is [ :Number ]	true	Integer is a subtype of Number
-[ 1 2.0 3 ] is [ :Number ]	true	mixed Integer/Decimal — both Number
+[ 1 2.0 3 ] is [ :Number ]	true	mixed Integer/Float — both Number
 [ 1 2 3 ] is [ :String ]	false	Integers are not Strings
 [ 1 'x' 3 ] is [ :Integer ]	false	one element ('x') breaks conformance
 [ ] is [ :Integer ]	true	an empty list vacuously satisfies any element type

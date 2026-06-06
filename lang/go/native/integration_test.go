@@ -1,6 +1,7 @@
 package native
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/aql-lang/aql/lang/go/capabilities"
@@ -130,10 +131,17 @@ func TestEngineLtTotalOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	// lt is total — comparing across type branches no longer errors.
-	result := runAQL(t, r, []Value{NewInteger(1), NewWord("lt"), NewList([]Value{NewInteger(2)})})
-	if len(result) != 1 || !result[0].Parent.Equal(TBoolean) {
-		t.Errorf("1 lt [2] = %v, want a Boolean", result)
+	// lt is family-restricted: comparing across type branches (Integer
+	// vs List) now raises [aql/incomparable].
+	if err := runAQLError(t, r, []Value{NewInteger(1), NewWord("lt"), NewList([]Value{NewInteger(2)})}); err == nil {
+		t.Errorf("1 lt [2]: want an incomparable error, got none")
+	} else if !strings.Contains(err.Error(), "incomparable") {
+		t.Errorf("1 lt [2]: want incomparable error, got %v", err)
+	}
+	// tcmp keeps the cross-branch total order: Integer ranks below List.
+	result := runAQL(t, r, []Value{NewInteger(1), NewWord("tcmp"), NewList([]Value{NewInteger(2)})})
+	if len(result) != 1 || !result[0].Parent.Equal(TInteger) {
+		t.Errorf("1 tcmp [2] = %v, want an Integer", result)
 	}
 }
 

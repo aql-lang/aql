@@ -249,9 +249,9 @@ func describeStackTypes(stack []Value, pointer int) string {
 		} else if v.Parent.ConformsTo(TInteger) {
 			n, _ := AsInteger(v)
 			label = strconv.FormatInt(n, 10)
-		} else if v.Parent.ConformsTo(TDecimal) {
-			f, _ := AsDecimal(v)
-			label = formatDecimal(f)
+		} else if v.Parent.ConformsTo(TFloat) {
+			f, _ := AsFloat(v)
+			label = formatFloat(f)
 		}
 		if i == pointer {
 			label = ">>>" + label + "<<<"
