@@ -75,24 +75,27 @@ type you define with `def`.
 **Integer** is a signed 64-bit value:
 `-9223372036854775808 .. 9223372036854775807`.
 
-- Decimal (`42`, `-5`, `+7`), with `_` digit separators (`1_000_000`).
-  Leading zeros are decimal, **not** octal (`010` is 10).
+- Decimal (`42`, `-5`, `+7`). An optional leading sign (`-`/`+`) is part
+  of the literal; `+` is a no-op. Leading zeros are decimal, **not**
+  octal (`010` is 10).
 - Hex `0x…`, octal `0o…`, binary `0b…` (case-insensitive prefix), with an
-  optional sign and `_` separators (`0xFF_FF`, `-0o17`).
+  optional sign (`0xFF`, `-0o17`).
+- `_` may be used as a **single** digit-separator **between** digits
+  (`1_000_000`, `0xFF_FF`). Leading, trailing, or repeated underscores
+  (`_1`, `1_`, `1__0`) are a syntax error.
 - All integer literals — decimal **and** base-prefixed — are parsed
-  exactly at every magnitude in range. A literal outside the int64 range
-  raises `[aql/integer_overflow]` (it never silently wraps or loses
-  precision). *Caveat:* a base-prefixed literal whose value exceeds the
-  int64 range may instead be reported as `undefined_word` (the lexer
-  can't form the token) — still an error, never a wrong value.
+  exactly at every magnitude in range, and a value outside the int64
+  range raises `[aql/integer_overflow]`. It never silently wraps or loses
+  precision. (This includes the hex int64 minimum `-0x8000000000000000`.)
 
 **Float** is IEEE-754 `binary64` (see
 [design/IEEE-754-COMPLIANCE.0.md](design/IEEE-754-COMPLIANCE.0.md)):
 
 - Any literal with a `.` is a `Float`, parsed correctly-rounded
   (round-ties-to-even): `3.14`, `-0.5`, trailing-dot `5.` → `5.0`.
-  A **leading** `.` is **not** valid — `.5` is a syntax error (the `.`
-  is the member-access operator). Write `0.5`.
+  A **leading** `.` is **not** valid — `.5`, **and the signed `-.5` /
+  `+.5`**, are all syntax errors. A number needs a digit before the dot;
+  write `0.5` / `-0.5`.
 - Scientific notation: `1.5e3`, `2e-2`. A whole-valued exponent form
   with no `.` and within int64 (`1e3`) is an `Integer`; otherwise it is a
   `Float`.

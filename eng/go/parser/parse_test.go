@@ -1368,7 +1368,9 @@ func TestParsePlusPrefixInteger(t *testing.T) {
 // `!.`) — e.g. `.5`, `.name`, `!.x` — is a syntax error, not a
 // receiverless get/getr. `0.5` and `$.name` remain valid.
 func TestParseLeadingDotRejected(t *testing.T) {
-	for _, src := range []string{".5", ".0", ".name", "!.x"} {
+	// Bare leading dot (a stray `.` token) and the SIGNED leading-dot
+	// forms (which jsonic lexes as one number token) are all rejected.
+	for _, src := range []string{".5", ".0", ".name", "!.x", "-.5", "+.5"} {
 		_, err := Parse(src)
 		ae, ok := err.(*eng.AqlError)
 		if !ok || ae.Code != "syntax_error" {
@@ -1376,9 +1378,47 @@ func TestParseLeadingDotRejected(t *testing.T) {
 		}
 	}
 	// These must still parse cleanly.
-	for _, src := range []string{"0.5", "$.name", "$!.name"} {
+	for _, src := range []string{"0.5", "-0.5", "+0.5", "5.", "$.name", "$!.name"} {
 		if _, err := Parse(src); err != nil {
 			t.Errorf("Parse(%q): unexpected error %v", src, err)
+		}
+	}
+}
+
+// TestParseUnderscoreSeparators pins that `_` is a single digit-separator:
+// leading/trailing/repeated underscores are a syntax error.
+func TestParseUnderscoreSeparators(t *testing.T) {
+	for _, src := range []string{"1__0", "1_", "1_000__0", "0xFF__FF", "1__0.5"} {
+		_, err := Parse(src)
+		ae, ok := err.(*eng.AqlError)
+		if !ok || ae.Code != "syntax_error" {
+			t.Errorf("Parse(%q): expected [aql/syntax_error] for misplaced _, got %v", src, err)
+		}
+	}
+	for _, src := range []string{"1_0", "1_000_000", "0xFF_FF", "1_000.5", "-1_0"} {
+		if _, err := Parse(src); err != nil {
+			t.Errorf("Parse(%q): unexpected error %v", src, err)
+		}
+	}
+}
+
+// TestParseBasePrefixOverflowAndMin pins that a base-prefixed integer
+// whose magnitude jsonic can't lex (>= 2^63) is handled exactly: the
+// signed int64 minimum parses, and a truly out-of-range value is a clean
+// integer_overflow (not undefined_word).
+func TestParseBasePrefixOverflowAndMin(t *testing.T) {
+	got, err := Parse("-0x8000000000000000") // int64 min
+	if err != nil {
+		t.Fatalf("Parse(-0x8000000000000000) error: %v", err)
+	}
+	if n, _ := eng.AsInteger(got[0]); n != math.MinInt64 {
+		t.Errorf("hex int64 min: got %d, want %d", n, int64(math.MinInt64))
+	}
+	for _, src := range []string{"0x8000000000000000", "0xFFFFFFFFFFFFFFFF"} {
+		_, err := Parse(src)
+		ae, ok := err.(*eng.AqlError)
+		if !ok || ae.Code != "integer_overflow" {
+			t.Errorf("Parse(%q): expected [aql/integer_overflow], got %v", src, err)
 		}
 	}
 }

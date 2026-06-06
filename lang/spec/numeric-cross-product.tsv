@@ -127,3 +127,15 @@
 0x7FFFFFFFFFFFFFFF	9223372036854775807	int64 max via hex
 +9223372036854775807	9223372036854775807	leading + parses exactly
 +9223372036854775808	ERROR:integer_overflow	leading + is range-checked too
+-0x8000000000000000	-9223372036854775808	hex int64 min now parses (was undefined_word)
+0x8000000000000000	ERROR:integer_overflow	hex above int64 max → clean overflow (was undefined_word)
+#
+# 9. Numeric-literal syntax rules.
+#    `_` is a single separator between digits; a leading `.` (even signed)
+#    is not a number.
+1_000_000	1000000	single underscores between digits are fine
+1__0	ERROR:syntax_error	repeated `_` rejected
+1_	ERROR:syntax_error	trailing `_` rejected
+-.5	ERROR:syntax_error	signed leading dot rejected — write -0.5
++.5	ERROR:syntax_error	signed leading dot rejected — write 0.5
+-0.5	-0.5	the digit-before-dot form is valid

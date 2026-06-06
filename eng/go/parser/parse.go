@@ -1155,6 +1155,29 @@ func parseWord(text string) (eng.Value, error) {
 		return eng.NewTypeLiteral(t), nil
 	}
 
+	// A base-prefixed integer token whose magnitude jsonic could not lex
+	// as a number (>= 2^63) arrives here as bare text. Parse it exactly:
+	// `-0x8000000000000000` (= int64 min) succeeds, while a truly
+	// out-of-range magnitude becomes a clean [aql/integer_overflow]
+	// instead of an opaque undefined_word. (In-range base-prefixed
+	// literals never reach this path — jsonic lexes them as numbers.)
+	if isBasePrefixedInteger(name) {
+		if strings.IndexByte(name, '_') >= 0 && !validUnderscores(name) {
+			return eng.Value{}, &eng.AqlError{Code: "syntax_error", Src: name,
+				Detail: "misplaced `_` in numeric literal: " + name,
+				Hint:   "`_` is a single digit-separator — use one between digits"}
+		}
+		n, err := strconv.ParseInt(stripUnderscores(name), 0, 64)
+		if err == nil {
+			return eng.NewInteger(n), nil
+		}
+		if numErr, ok := err.(*strconv.NumError); ok && numErr.Err == strconv.ErrRange {
+			return eng.Value{}, integerLiteralOverflowError(name, 0, 0)
+		}
+		// Other parse errors (e.g. an invalid digit) fall through to the
+		// undefined-word path below.
+	}
+
 	return eng.NewWord(name), nil
 }
 
@@ -1269,7 +1292,20 @@ func floatToValue(f float64) eng.Value {
 //
 // See design/INTEGER-OVERFLOW-STRATEGY.0.md.
 func numberValToValue(nv numberVal) (eng.Value, error) {
+	// `_` is a single digit-separator only: it must sit between two
+	// digits (no leading, trailing, or repeated underscores). `1__0` and
+	// `1_` are rejected.
+	if strings.IndexByte(nv.Src, '_') >= 0 && !validUnderscores(nv.Src) {
+		return eng.Value{}, underscoreError(nv)
+	}
 	if strings.Contains(nv.Src, ".") {
+		// A leading `.` (with or without a sign) is not a valid number —
+		// `.5`, `-.5`, `+.5` are rejected; write `0.5` / `-0.5`. The bare
+		// `.5` is caught earlier as a stray `.` token; the signed forms
+		// reach here because jsonic lexes them as one number token.
+		if isLeadingDotFloat(nv.Src) {
+			return eng.Value{}, leadingDotNumberError(nv)
+		}
 		// Parse the Float from its exact source digits for a guaranteed
 		// correctly-rounded (round-ties-to-even) decimal→binary64
 		// conversion, rather than trusting the float64 jsonic produced.
@@ -1283,7 +1319,7 @@ func numberValToValue(nv numberVal) (eng.Value, error) {
 	if isPlainDecimalInteger(nv.Src) {
 		n, err := strconv.ParseInt(stripUnderscores(nv.Src), 10, 64)
 		if err != nil {
-			return eng.Value{}, integerLiteralOverflowError(nv)
+			return eng.Value{}, integerLiteralOverflowError(nv.Src, nv.Row, nv.Col)
 		}
 		return eng.NewInteger(n), nil
 	}
@@ -1293,11 +1329,43 @@ func numberValToValue(nv numberVal) (eng.Value, error) {
 		// the decimal path (out of int64 range → integer_overflow).
 		n, err := strconv.ParseInt(stripUnderscores(nv.Src), 0, 64)
 		if err != nil {
-			return eng.Value{}, integerLiteralOverflowError(nv)
+			return eng.Value{}, integerLiteralOverflowError(nv.Src, nv.Row, nv.Col)
 		}
 		return eng.NewInteger(n), nil
 	}
 	return floatToValue(nv.Val), nil
+}
+
+// isAlnum reports whether c is an ASCII letter or digit (the chars that
+// may flank a `_` digit-separator: decimal/hex digits and the x/o/b/e of
+// a prefix or exponent).
+func isAlnum(c byte) bool {
+	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+// validUnderscores reports whether every `_` in src is a single separator
+// flanked by alphanumeric characters — no leading, trailing, or repeated
+// underscores. `1_000` and `0xFF_FF` pass; `1__0`, `1_`, `_1` fail.
+func validUnderscores(src string) bool {
+	for i := 0; i < len(src); i++ {
+		if src[i] != '_' {
+			continue
+		}
+		if i == 0 || i == len(src)-1 || !isAlnum(src[i-1]) || !isAlnum(src[i+1]) {
+			return false
+		}
+	}
+	return true
+}
+
+// isLeadingDotFloat reports whether src is a `.`-leading number (after an
+// optional sign): `.5`, `-.5`, `+.5`. These need a digit before the dot.
+func isLeadingDotFloat(src string) bool {
+	s := src
+	if len(s) > 0 && (s[0] == '-' || s[0] == '+') {
+		s = s[1:]
+	}
+	return len(s) > 0 && s[0] == '.'
 }
 
 // isPlainDecimalInteger reports whether src is a base-10 integer literal:
@@ -1360,18 +1428,44 @@ func stripUnderscores(src string) string {
 	return strings.ReplaceAll(src, "_", "")
 }
 
-// integerLiteralOverflowError reports a decimal integer literal that does
-// not fit in int64, located at the literal's source position. Until
-// Integer becomes arbitrary-precision (Phase 1 of
-// design/INTEGER-OVERFLOW-STRATEGY.0.md), this is a hard parse error
-// rather than a silent fall-back to Float.
-func integerLiteralOverflowError(nv numberVal) error {
+// integerLiteralOverflowError reports an integer literal (decimal or
+// base-prefixed) that does not fit in int64, located at the literal's
+// source position when known (row/col 0 = unknown). Until Integer becomes
+// arbitrary-precision (Phase 1 of design/INTEGER-OVERFLOW-STRATEGY.0.md),
+// this is a hard parse error rather than a silent fall-back to Float.
+func integerLiteralOverflowError(src string, row, col int) error {
 	return &eng.AqlError{
 		Code:   "integer_overflow",
-		Detail: "integer literal out of range: " + nv.Src + " exceeds the Integer range (-9223372036854775808..9223372036854775807)",
+		Detail: "integer literal out of range: " + src + " exceeds the Integer range (-9223372036854775808..9223372036854775807)",
+		Row:    row,
+		Col:    col,
+		Src:    src,
+		Hint:   "this value exceeds the 64-bit signed Integer range; use a Float (e.g. add a decimal point) for an approximate magnitude",
+	}
+}
+
+// underscoreError reports a misused `_` digit-separator (leading, trailing,
+// or repeated) in a numeric literal.
+func underscoreError(nv numberVal) error {
+	return &eng.AqlError{
+		Code:   "syntax_error",
+		Detail: "misplaced `_` in numeric literal: " + nv.Src,
 		Row:    nv.Row,
 		Col:    nv.Col,
 		Src:    nv.Src,
-		Hint:   "use a Float literal (add a decimal point, e.g. " + nv.Src + ".0) if an approximate value is acceptable",
+		Hint:   "`_` is a single digit-separator — use one between digits, e.g. `1_000` (not `1__0` or `1_`)",
+	}
+}
+
+// leadingDotNumberError reports a `.`-leading numeric literal (`-.5`,
+// `+.5`); a number needs a digit before the decimal point.
+func leadingDotNumberError(nv numberVal) error {
+	return &eng.AqlError{
+		Code:   "syntax_error",
+		Detail: "numeric literal has no digit before `.`: " + nv.Src,
+		Row:    nv.Row,
+		Col:    nv.Col,
+		Src:    nv.Src,
+		Hint:   "write a leading zero, e.g. `-0.5` instead of `-.5`",
 	}
 }
