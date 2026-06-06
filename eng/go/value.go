@@ -913,6 +913,18 @@ func FormatFloat(f float64) string {
 	case math.IsInf(f, -1):
 		return "-inf"
 	}
+	// Use scientific notation only for genuinely extreme magnitudes, where
+	// plain decimal would be gratuitously long (hundreds of digits). The
+	// bounds deliberately leave the everyday range — including small
+	// decimals like 0.00001 (1e-5) and large values up to ~1e20 — rendered
+	// in full, exactly as before. 1e21 (Go's own 'g' upper threshold) and
+	// magnitudes below 1e-10 switch to 'e'. Both forms re-parse to the same
+	// Float, so the choice is purely about readability.
+	if f != 0 {
+		if a := math.Abs(f); a >= 1e21 || a < 1e-10 {
+			return strconv.FormatFloat(f, 'e', -1, 64)
+		}
+	}
 	s := strconv.FormatFloat(f, 'f', -1, 64)
 	if !strings.ContainsAny(s, ".eE") {
 		s += ".0"

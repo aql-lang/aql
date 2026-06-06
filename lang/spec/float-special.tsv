@@ -63,3 +63,14 @@ nan 5.0 tcmp	1	tcmp agrees with cmp on the total order
 # ───────── reserved: the literals cannot be redefined ─────────
 def inf 5	ERROR:	`inf` is a reserved literal — def is rejected
 def nan 5	ERROR:	`nan` is a reserved literal — def is rejected
+
+# ───────── extreme magnitudes render in scientific notation ─────────
+# The everyday range stays plain decimal; only |x| >= 1e21 or < 1e-10
+# switch to 'e' form. Both forms re-parse to the same Float.
+1e21	1e+21	large magnitude → scientific
+1.5e30	1.5e+30	large magnitude with mantissa
+1e-11	1e-11	tiny magnitude → scientific
+1e20	100000000000000000000.0	just inside the cutoff — still plain
+1e-10	0.0000000001	just inside the cutoff — still plain
+0.00001	0.00001	small but everyday — stays plain (not 1e-05)
+1e21 typeof	Float	scientific literals are Floats

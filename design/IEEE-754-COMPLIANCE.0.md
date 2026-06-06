@@ -1,6 +1,6 @@
 # IEEE-754 Compliance — what `Float` would require
 
-Status: **Tier 0 done; Tier 1 mostly done; Tier 2 proposed**. This audits AQL's
+Status: **Tier 0 done; Tier 1 done; Tier 2 proposed (impractical on wasm)**. This audits AQL's
 `Float` (binary64) against IEEE 754-2019 and states what full and
 partial conformance would require. **Tier 0 (the NaN-comparison fix) is
 done**, and the `inf`/`-inf`/`nan` literals + matching rendering from
@@ -60,7 +60,7 @@ catalogue) — a much larger effort, partly impractical on the wasm target.
 | **`fma`** (§5.4.1) | `MathUtil.fma` (single-rounding `a·b+c`) | ✅ |
 | **`roundToIntegral*`** (§5.9) | all 5 directions: trunc/floor/ceil/round/round-even | ✅ (returns Integer, not Float) |
 | **min/max with NaN** (§9.6) | `min/max` ignore NaN, order-independent (2008 `minNum`) | ✅ 2008-style |
-| **Decimal↔binary string conversion** (§5.12) | parse correctly-rounded (`ParseFloat`); format lacks exponential form for extremes | ⚠️ parse ✅ / format partial |
+| **Decimal↔binary string conversion** (§5.12) | parse correctly-rounded (`ParseFloat`); format shortest + scientific for extremes; round-trips | ✅ |
 | **`Inf`/`NaN` literals & canonical strings** (§5.12) | `inf`/`-inf`/`nan` literals; render to same tokens (round-trip) | ✅ Tier 0 |
 | **Signaling NaN** (§6.2) | not exposed (Go doesn't) | ❌ |
 
@@ -113,9 +113,9 @@ IEEE ambition** and should be fixed regardless. See
 IEEE `totalOrder` for `cmp`/`sort`, while keeping the relational
 predicates unordered.
 
-### 3. The float-to-string formatter is not conformant — ⚠️ PARTLY RESOLVED
+### 3. The float-to-string formatter is not conformant — ✅ RESOLVED
 
-*(Special values now render as the parseable `inf`/`-inf`/`nan` literals (Tier 0), so the round-trip break below is fixed. The remaining gap is exponential notation for extreme finite magnitudes — see the deferral note in the tier list.)*
+*(Special values now render as the parseable `inf`/`-inf`/`nan` literals (Tier 0), and extreme magnitudes use scientific notation (`|x| >= 1e21` or `< 1e-10`) while the everyday range stays plain. All forms re-parse to the same Float.)*
 
 `FormatFloat` (`eng/go/value.go:903`) uses `strconv.FormatFloat(f,'f',-1,64)`
 — shortest mantissa, but **never exponential** — then appends `.0`:
@@ -257,16 +257,15 @@ unparseable `+Inf.0`/`NaN.0`), so print∘parse is identity. Verified by
   trunc/floor/ceil/round/round-even); `scalb`/`logb`.
 - ✅ A defined `min`/`max` NaN policy — IEEE-2008 `minNum`/`maxNum`
   (ignore NaN, order-independent: `min nan 5 → 5`, both NaN → NaN).
-- ⬜ Exponential `FormatFloat` for extreme magnitudes. **Deliberately
-  deferred:** finite values already round-trip via the long decimal
-  form, and switching `'f'` → `'g'` would change the rendering of
-  ordinary small decimals (`0.00001` → `1e-05`), churning many specs for
-  a cosmetic gain on extreme values. Revisit with a magnitude threshold
-  that doesn't disturb the common range.
+- ✅ Exponential `FormatFloat` for extreme magnitudes — `|x| >= 1e21` or
+  `< 1e-10` render in `'e'` form; the everyday range (incl. small
+  decimals like `0.00001`) is untouched. Both forms re-parse to the same
+  Float. The conservative magnitude threshold (rather than Go's `'g'`,
+  whose `exp < -4` rule would have rewritten `0.00001` → `1e-05`) keeps
+  the common range stable, so no existing spec changed.
 
-Tier 1 is essentially complete bar the cosmetic exponential-formatting
-item; AQL's Float now behaves like every other mainstream language's
-double — which is what "IEEE-754" colloquially means.
+Tier 1 is complete; AQL's Float now behaves like every other mainstream
+language's double — which is what "IEEE-754" colloquially means.
 
 **Tier 2 — full clause conformance (largely impractical on wasm).**
 - The five dynamic rounding-direction modes (§4) via a scoped context.
