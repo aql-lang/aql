@@ -380,7 +380,7 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 // reservedLiterals are the value literals the parser produces directly
 // (not registered words), so they never appear in builtinWords yet must
 // also be protected from redefinition.
-var reservedLiterals = map[string]bool{"true": true, "false": true, "none": true}
+var reservedLiterals = map[string]bool{"true": true, "false": true, "none": true, "inf": true, "nan": true}
 
 // IsBuiltinWord reports whether name is a core word that user code must
 // not redefine or undefine: a word registered via Register (every

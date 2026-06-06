@@ -194,10 +194,10 @@ All stack words are stack-only (`/s`).
 | `rot` | `a b c -> b c a` | Rotate top three |
 | `nip` | `a b -> b` | Remove second |
 | `tuck` | `a b -> b a b` | Copy top below second |
-| `2dup` | `a b -> a b a b` | Duplicate top pair |
-| `2drop` | `a b ->` | Remove top pair |
-| `2swap` | `a b c d -> c d a b` | Swap top two pairs |
-| `2over` | `a b c d -> a b c d a b` | Copy third pair to top |
+| `dup2` | `a b -> a b a b` | Duplicate top pair |
+| `drop2` | `a b ->` | Remove top pair |
+| `swap2` | `a b c d -> c d a b` | Swap top two pairs |
+| `over2` | `a b c d -> a b c d a b` | Copy third pair to top |
 | `pick` | `n -> v` | Copy value at depth n |
 | `roll` | `n -> v` | Move value at depth n to top |
 | `depth` | `-> n` | Current stack size |

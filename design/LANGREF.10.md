@@ -1590,44 +1590,44 @@ Copy the top value below the second.
 1 2 tuck            => 2 1 2
 ```
 
-#### `2dup`
+#### `dup2`
 
 Duplicate the top two values.
 
 *Signature:* `[any, any] -> [any, any, any, any]`
 
 ```
-1 2 2dup            => 1 2 1 2
+1 2 dup2            => 1 2 1 2
 ```
 
-#### `2swap`
+#### `swap2`
 
 Swap the top two pairs.
 
 *Signature:* `[any, any, any, any] -> [any, any, any, any]`
 
 ```
-1 2 3 4 2swap       => 3 4 1 2
+1 2 3 4 swap2       => 3 4 1 2
 ```
 
-#### `2drop`
+#### `drop2`
 
 Remove the top two values.
 
 *Signature:* `[any, any] -> []`
 
 ```
-1 2 2drop           =>
+1 2 drop2           =>
 ```
 
-#### `2over`
+#### `over2`
 
 Copy the second pair over the top pair.
 
 *Signature:* `[any, any, any, any] -> [any, any, any, any, any, any]`
 
 ```
-1 2 3 4 2over       => 1 2 3 4 1 2
+1 2 3 4 over2       => 1 2 3 4 1 2
 ```
 
 #### `depth`

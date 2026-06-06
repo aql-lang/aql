@@ -50,3 +50,8 @@ reach 5 [a !]	ERROR:reach_error	trailing `!` with no following key
 # §7  Negatives
 def p {name:"ada"}  apply $!.missing p	ERROR:getr_error	getr strictness: missing key errors through apply
 apply $.name 5	ERROR:	applying a field lens to a non-map yields no field (None/​error)
+# A leading / receiverless `.` (or `!.`) is a syntax error — member access
+# must follow a value; `$.key` is the supported detached-accessor form.
+.name	ERROR:syntax_error	receiverless `.` has no value to access
+.5	ERROR:syntax_error	`.5` is not a fraction — write `0.5`
+!.x	ERROR:syntax_error	receiverless `!.` is rejected too

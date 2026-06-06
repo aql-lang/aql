@@ -56,10 +56,18 @@ func TestMathDiv(t *testing.T) {
 	if _as4 != 2.5 {
 		t.Errorf("10.0 div 4.0 = %v, want 2.5", result[0])
 	}
-	// Float div by zero
-	err := runAQLError(t, r, []Value{NewFloat(1), NewWord("div"), NewFloat(0)})
-	if err == nil {
-		t.Error("expected error for decimal division by zero")
+	// Float div by zero is IEEE-754, not an error: x/0 → ±inf, 0/0 → nan.
+	result = runAQL(t, r, []Value{NewFloat(1), NewWord("div"), NewFloat(0)})
+	if f, _ := AsNumber(result[0]); !math.IsInf(f, 1) {
+		t.Errorf("1.0 div 0.0 = %v, want +inf", result[0])
+	}
+	result = runAQL(t, r, []Value{NewFloat(0), NewWord("div"), NewFloat(0)})
+	if f, _ := AsNumber(result[0]); !math.IsNaN(f) {
+		t.Errorf("0.0 div 0.0 = %v, want nan", result[0])
+	}
+	// Integer div by zero stays a hard error (no integer infinity).
+	if err := runAQLError(t, r, []Value{NewInteger(1), NewWord("div"), NewInteger(0)}); err == nil {
+		t.Error("expected error for integer division by zero")
 	}
 }
 
@@ -78,10 +86,14 @@ func TestMathMod(t *testing.T) {
 	if math.Abs(_as6-1.5) > 0.0001 {
 		t.Errorf("10.5 mod 3.0 = %v, want 1.5", result[0])
 	}
-	// Float mod by zero
-	err := runAQLError(t, r, []Value{NewFloat(1), NewWord("mod"), NewFloat(0)})
-	if err == nil {
-		t.Error("expected error for decimal modulo by zero")
+	// Float mod by zero is IEEE-754 nan, not an error.
+	result = runAQL(t, r, []Value{NewFloat(1), NewWord("mod"), NewFloat(0)})
+	if f, _ := AsNumber(result[0]); !math.IsNaN(f) {
+		t.Errorf("1.0 mod 0.0 = %v, want nan", result[0])
+	}
+	// Integer mod by zero stays a hard error.
+	if err := runAQLError(t, r, []Value{NewInteger(1), NewWord("mod"), NewInteger(0)}); err == nil {
+		t.Error("expected error for integer modulo by zero")
 	}
 }
 

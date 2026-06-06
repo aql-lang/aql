@@ -44,25 +44,25 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:        "2dup",
+		Word:        "dup2",
 		Summary:     "Duplicate the top two stack values.",
 		Description: "Copies the top two values as a pair. Stack-only.",
 	})
 
 	register(&Entry{
-		Word:        "2swap",
+		Word:        "swap2",
 		Summary:     "Swap the top two pairs of values.",
 		Description: "Exchanges the top pair with the pair below. Stack-only.",
 	})
 
 	register(&Entry{
-		Word:        "2drop",
+		Word:        "drop2",
 		Summary:     "Remove the top two stack values.",
 		Description: "Discards the top two values. Stack-only.",
 	})
 
 	register(&Entry{
-		Word:        "2over",
+		Word:        "over2",
 		Summary:     "Copy the second pair to the top.",
 		Description: "Copies the pair below the top pair and pushes them on top. Stack-only.",
 	})

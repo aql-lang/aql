@@ -9,6 +9,9 @@ func init() {
 		Description: "Adds two numeric values. When both are integers the result is an integer; " +
 			"if either is a float the result is a float. For non-numeric scalars, " +
 			"concatenates their string representations.",
+		Notes: []string{
+			"Integer overflow raises [aql/integer_overflow]; use a Float operand for an approximate result.",
+		},
 	})
 
 	register(&Entry{
@@ -17,12 +20,18 @@ func init() {
 		Description: "All three call forms `a b sub`, `a sub b`, and `sub b a` " +
 			"compute a - b. The handler returns args[1] - args[0]; under the " +
 			"argument-order rule args[0] is the rightmost source-position arg.",
+		Notes: []string{
+			"Integer overflow raises [aql/integer_overflow]; use a Float operand for an approximate result.",
+		},
 	})
 
 	register(&Entry{
 		Word:        "mul",
 		Summary:     "Multiply two numbers.",
 		Description: "Multiplies two numeric values (commutative).",
+		Notes: []string{
+			"Integer overflow raises [aql/integer_overflow]; use a Float operand for an approximate result.",
+		},
 	})
 
 	register(&Entry{
@@ -31,7 +40,7 @@ func init() {
 		Description: "All three call forms `a b div`, `a div b`, and `div b a` " +
 			"compute a / b. Integer division truncates toward zero.",
 		Notes: []string{
-			"Division by zero produces an error.",
+			"Integer division by zero is an error; Float division by zero is IEEE-754 (x/0 → ±inf, 0/0 → nan).",
 		},
 	})
 
@@ -39,7 +48,10 @@ func init() {
 		Word:    "mod",
 		Summary: "Remainder: a mod b ≡ a %% b.",
 		Description: "All three call forms `a b mod`, `a mod b`, and `mod b a` " +
-			"compute a %% b (the remainder of integer division).",
+			"compute a %% b (the truncated remainder). For the IEEE round-to-nearest remainder, use `MathUtil.remainder`.",
+		Notes: []string{
+			"Integer modulo by zero is an error; Float modulo by zero is IEEE-754 nan.",
+		},
 	})
 
 	register(&Entry{
@@ -49,6 +61,7 @@ func init() {
 			"compute a^b.",
 		Notes: []string{
 			"Negative exponents produce an error for integer pow.",
+			"Integer overflow raises [aql/integer_overflow]; use a Float operand for an approximate result.",
 		},
 	})
 
@@ -118,6 +131,34 @@ func init() {
 		Summary:     "Truncate a float toward zero.",
 		Description: "Removes the fractional part, rounding toward zero.",
 		Notes:       []string{"Requires: \"aql:math\" import"},
+	})
+
+	register(&Entry{
+		Word:        "round-even",
+		Summary:     "Round a float to the nearest integer, ties to even.",
+		Description: "Rounds to nearest; halves go to the even neighbour (IEEE-754 roundTiesToEven). `2.5 round-even` is 2, `3.5 round-even` is 4. Contrast `round`, which rounds halves away from zero.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
+		Word:        "logb",
+		Summary:     "The unbiased radix-2 exponent of a number.",
+		Description: "Returns the exponent e such that the value is m*2^e with 1 <= |m| < 2 (math.Logb). `8.0 logb` is 3.0.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
+		Word:        "scalb",
+		Summary:     "Scale by a power of two: x scalb n = x * 2^n.",
+		Description: "`x scalb n` returns x * 2^n efficiently (math.Ldexp); n is truncated to an integer.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
+		Word:        "fma",
+		Summary:     "Fused multiply-add: fma a b c = a*b + c (single rounding).",
+		Description: "`fma a b c` computes a*b + c with only one rounding step (math.FMA), more accurate than a separate mul then add. Use forward form so a*b is the product and c the addend.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
 	})
 
 	register(&Entry{
@@ -216,6 +257,56 @@ func init() {
 		Summary:     "Compute the hypotenuse length.",
 		Description: "Returns sqrt(x*x + y*y) without overflow: x y hypot.",
 		Notes:       []string{"Requires: \"aql:math\" import"},
+	})
+
+	register(&Entry{
+		Word:        "is-nan",
+		Summary:     "Test whether a Float is NaN (not-a-number).",
+		Description: "Returns true when the value is NaN. Use this to detect NaN, since `nan eq nan` is false by IEEE-754.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
+		Word:        "is-inf",
+		Summary:     "Test whether a Float is +inf or -inf.",
+		Description: "Returns true when the value is positive or negative infinity.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
+		Word:        "is-finite",
+		Summary:     "Test whether a number is finite (neither inf nor NaN).",
+		Description: "Returns true for any finite value. Integers are always finite.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
+		Word:        "signbit",
+		Summary:     "Test whether a number's sign bit is set (negative, incl. -0.0).",
+		Description: "Returns true when the value is negative, including negative zero.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
+		Word:    "remainder",
+		Summary: "IEEE-754 remainder: a remainder b, rounding the quotient to nearest.",
+		Description: "Returns a - n*b where n is a/b rounded to the nearest integer (ties to even). " +
+			"Distinct from `mod`, which is the truncated remainder (fmod): `5.0 remainder 3.0` is -1.0 while `5.0 3.0 mod` is 2.0.",
+		Notes: []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
+		Word:        "copysign",
+		Summary:     "Combine the magnitude of one number with the sign of another.",
+		Description: "`a copysign b` returns a value with the magnitude of a and the sign of b.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
+		Word:        "nextafter",
+		Summary:     "The next representable Float after a, toward b.",
+		Description: "`a nextafter b` returns the adjacent float64 stepping from a toward b.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
 	})
 
 	register(&Entry{

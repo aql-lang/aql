@@ -253,7 +253,7 @@ def Nested { kind:String n:Number } typeof Nested	Map
 # whose only inhabitant equals that value). Only a NAME that violates
 # the word-name rule (a leading digit, say) is rejected.
 def foo Integer		lowercase NAME — a value binding (foo holds the Integer type)
-def 1Foo Integer	ERROR:invalid_word_name	digit first char fails the word-name rule
+def 1Foo Integer	ERROR:invalid numeric literal	a digit-first token is a (malformed) number, never a name
 		
 # =====================================================================		
 # 7. type / def namespace independence		

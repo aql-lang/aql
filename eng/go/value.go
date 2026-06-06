@@ -3,12 +3,16 @@ package eng
 import (
 	"encoding/hex"
 	"fmt"
+	"math"
+	"math/big"
 	"math/rand/v2"
 	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/cockroachdb/apd/v3"
 )
 
 // ReadList is a read-only view of a list of Values.
@@ -893,6 +897,18 @@ func NewFloat(f float64) Value {
 	return NewValueRaw(TFloat, FloatPayload{F: f})
 }
 
+// NewBigInteger creates a Scalar/Number/BigInteger value wrapping an
+// arbitrary-precision integer. The caller must not mutate n afterwards.
+func NewBigInteger(n *big.Int) Value {
+	return NewValueRaw(TBigInteger, BigIntPayload{N: n})
+}
+
+// NewBigDecimal creates a Scalar/Number/BigDecimal value wrapping an
+// arbitrary-precision base-10 decimal. The caller must not mutate d.
+func NewBigDecimal(d *apd.Decimal) Value {
+	return NewValueRaw(TBigDecimal, DecimalPayload{D: d})
+}
+
 // FormatFloat renders a float64 with a guaranteed decimal point so the
 // type stays visually distinct from Integer. Uses 'f' format with -1
 // precision (shortest round-trip), then appends ".0" when the result
@@ -901,6 +917,29 @@ func NewFloat(f float64) Value {
 // note in spec/SPEC_REPORT.md §2 on the apd-port plan if exact
 // decimal arithmetic is required.
 func FormatFloat(f float64) string {
+	// Special values render as the parseable literals inf / -inf / nan
+	// (matching the parser's word-context literals) so print∘parse is
+	// identity. The historical +Inf.0 / NaN.0 forms could not be re-read.
+	switch {
+	case math.IsNaN(f):
+		return "nan"
+	case math.IsInf(f, 1):
+		return "inf"
+	case math.IsInf(f, -1):
+		return "-inf"
+	}
+	// Use scientific notation only for genuinely extreme magnitudes, where
+	// plain decimal would be gratuitously long (hundreds of digits). The
+	// bounds deliberately leave the everyday range — including small
+	// decimals like 0.00001 (1e-5) and large values up to ~1e20 — rendered
+	// in full, exactly as before. 1e21 (Go's own 'g' upper threshold) and
+	// magnitudes below 1e-10 switch to 'e'. Both forms re-parse to the same
+	// Float, so the choice is purely about readability.
+	if f != 0 {
+		if a := math.Abs(f); a >= 1e21 || a < 1e-10 {
+			return strconv.FormatFloat(f, 'e', -1, 64)
+		}
+	}
 	s := strconv.FormatFloat(f, 'f', -1, 64)
 	if !strings.ContainsAny(s, ".eE") {
 		s += ".0"
@@ -911,6 +950,32 @@ func FormatFloat(f float64) string {
 // formatFloat is the lowercase alias retained for in-package call
 // sites that pre-date the exported form.
 func formatFloat(f float64) string { return FormatFloat(f) }
+
+// FormatBigInteger renders a BigInteger as the parseable literal `0d…`,
+// with the sign before the marker (`-0d5`), so print∘parse is identity.
+func FormatBigInteger(n *big.Int) string {
+	if n == nil {
+		return "0d0"
+	}
+	if n.Sign() < 0 {
+		return "-0d" + new(big.Int).Abs(n).String()
+	}
+	return "0d" + n.String()
+}
+
+// FormatBigDecimal renders a BigDecimal as the parseable literal `0d…`
+// using apd's plain 'f' form (preserving scale, e.g. 0d0.30), with the
+// sign before the marker.
+func FormatBigDecimal(d *apd.Decimal) string {
+	if d == nil {
+		return "0d0"
+	}
+	s := d.Text('f')
+	if strings.HasPrefix(s, "-") {
+		return "-0d" + s[1:]
+	}
+	return "0d" + s
+}
 
 // NewBoolean creates a boolean value. The boolean payload (true/false) is the
 // value; there are no Boolean/True or Boolean/False sub-types.
@@ -1913,15 +1978,67 @@ func AsFloat(v Value) (float64, error) {
 	return 0.0, fmt.Errorf("AsFloat: not a float value (got %T)", v.Data)
 }
 
-// AsNumber returns the numeric value as float64 regardless of whether it is
-// an integer or decimal.
+// AsBigInteger returns the *big.Int payload of a BigInteger value.
+func AsBigInteger(v Value) (*big.Int, error) {
+	if v.Data == nil {
+		return nil, fmt.Errorf("AsBigInteger: nil data")
+	}
+	if bp, ok := v.Data.(BigIntPayload); ok {
+		return bp.N, nil
+	}
+	return nil, fmt.Errorf("AsBigInteger: not a BigInteger value (got %T)", v.Data)
+}
+
+// AsBigDecimal returns the *apd.Decimal payload of a BigDecimal value.
+func AsBigDecimal(v Value) (*apd.Decimal, error) {
+	if v.Data == nil {
+		return nil, fmt.Errorf("AsBigDecimal: nil data")
+	}
+	if dp, ok := v.Data.(DecimalPayload); ok {
+		return dp.D, nil
+	}
+	return nil, fmt.Errorf("AsBigDecimal: not a BigDecimal value (got %T)", v.Data)
+}
+
+// AsNumber returns the numeric value as float64. It is defined ONLY for
+// the fixed-width leaves Integer and Float; the arbitrary-precision Big
+// leaves return an error rather than silently projecting to float64 (that
+// would reopen the precision-loss trap across ~60 callers). Code that
+// genuinely wants a lossy Big→float64 projection must call AsFloatApprox.
 func AsNumber(v Value) (float64, error) {
 	if v.Parent.ConformsTo(TFloat) {
-		f, err := AsFloat(v)
-		return f, err
+		return AsFloat(v)
+	}
+	if v.Parent.ConformsTo(TBigInteger) || v.Parent.ConformsTo(TBigDecimal) {
+		return 0, fmt.Errorf("AsNumber: %s is arbitrary-precision; use AsFloatApprox for a lossy float64", v.Parent)
 	}
 	n, err := AsInteger(v)
 	return float64(n), err
+}
+
+// AsFloatApprox projects any numeric leaf to float64, accepting the
+// precision loss for the Big leaves. This is the explicit, auditable
+// home for the lossy projection (e.g. transcendental math on Big values,
+// IEEE classifiers) — never reach for it where exactness is required.
+func AsFloatApprox(v Value) (float64, error) {
+	switch {
+	case v.Parent.ConformsTo(TBigInteger):
+		n, err := AsBigInteger(v)
+		if err != nil {
+			return 0, err
+		}
+		f := new(big.Float).SetInt(n)
+		out, _ := f.Float64()
+		return out, nil
+	case v.Parent.ConformsTo(TBigDecimal):
+		d, err := AsBigDecimal(v)
+		if err != nil {
+			return 0, err
+		}
+		return d.Float64()
+	default:
+		return AsNumber(v)
+	}
 }
 
 // AsBoolean returns the bool payload. Returns false if Data is nil (type literal).
@@ -2127,6 +2244,15 @@ func kernelFormatDefault(v Value) string {
 	case v.Parent.Equal(TAtom):
 		s, _ := AsAtom(v)
 		return s
+	// Big leaves come before Integer/Float: they don't conform to either,
+	// but listing them first keeps the numeric arms grouped and guards
+	// against a future widening of those checks.
+	case v.Parent.ConformsTo(TBigInteger):
+		n, _ := AsBigInteger(v)
+		return FormatBigInteger(n)
+	case v.Parent.ConformsTo(TBigDecimal):
+		d, _ := AsBigDecimal(v)
+		return FormatBigDecimal(d)
 	case v.Parent.ConformsTo(TFloat):
 		_as4, _ := AsFloat(v)
 		return formatFloat(_as4)

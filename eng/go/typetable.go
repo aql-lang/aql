@@ -517,6 +517,8 @@ var builtinDecls = []builtinDecl{
 	{Path: "Scalar/Number", FixedID: 7, Rank: 20_300_000_000},
 	{Path: "Scalar/Number/Integer", FixedID: 8, Rank: 20_310_000_000},
 	{Path: "Scalar/Number/Float", FixedID: 9, Rank: 20_320_000_000},
+	{Path: "Scalar/Number/BigInteger", FixedID: 100, Rank: 20_330_000_000},
+	{Path: "Scalar/Number/BigDecimal", FixedID: 101, Rank: 20_340_000_000},
 	{Path: "Scalar/String", FixedID: 4, Rank: 20_400_000_000},
 	{Path: "Scalar/String/EmptyString", FixedID: 6, Rank: 20_410_000_000},
 	{Path: "Scalar/String/ProperString", FixedID: 5, Rank: 20_420_000_000},

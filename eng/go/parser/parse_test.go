@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -1242,6 +1243,311 @@ func TestParseMapWithFloat(t *testing.T) {
 	xVal, _ := m.Get("x")
 	if !xVal.Parent.ConformsTo(eng.TFloat) {
 		t.Errorf("expected decimal, got %s", xVal.Parent)
+	}
+}
+
+// --- Integer literal exactness & overflow (WAT Exhibit K, Phase 0a) ---
+
+// TestParseIntegerLiteralExact pins that decimal integer literals are
+// parsed from their exact digits (strconv.ParseInt), not round-tripped
+// through float64 — which silently corrupts any integer above 2^53.
+func TestParseIntegerLiteralExact(t *testing.T) {
+	cases := []struct {
+		src  string
+		want int64
+	}{
+		{"5", 5},
+		{"-7", -7},
+		{"0", 0},
+		{"9007199254740992", 9007199254740992},  // 2^53
+		{"9007199254740993", 9007199254740993},  // 2^53+1 — was silently → ...992
+		{"9007199254740995", 9007199254740995},  // 2^53+3 — was silently → ...996
+		{"9223372036854775807", math.MaxInt64},  // int64 max — was a Float
+		{"-9223372036854775808", math.MinInt64}, // int64 min
+		{"1_000", 1000},                         // underscore separators
+		{"010", 10},                             // leading zero is decimal, not octal
+		{"08", 8},                               // 8 is not a valid octal digit, but it's decimal here
+	}
+	for _, c := range cases {
+		got, err := Parse(c.src)
+		if err != nil {
+			t.Errorf("Parse(%q) error: %v", c.src, err)
+			continue
+		}
+		if len(got) != 1 {
+			t.Errorf("Parse(%q): expected 1 value, got %d", c.src, len(got))
+			continue
+		}
+		if !got[0].Parent.ConformsTo(eng.TInteger) {
+			t.Errorf("Parse(%q): expected Integer, got %s", c.src, got[0].Parent)
+			continue
+		}
+		n, aerr := eng.AsInteger(got[0])
+		if aerr != nil || n != c.want {
+			t.Errorf("Parse(%q): got value %d (err=%v), want %d", c.src, n, aerr, c.want)
+		}
+	}
+}
+
+// TestParseIntegerLiteralOverflow pins that a decimal integer literal
+// outside the int64 range is a hard [aql/integer_overflow] error rather
+// than a silent fall-back to Float.
+func TestParseIntegerLiteralOverflow(t *testing.T) {
+	for _, src := range []string{
+		"9223372036854775808",     // int64 max + 1
+		"-9223372036854775809",    // int64 min - 1
+		"99999999999999999999999", // far out of range
+	} {
+		_, err := Parse(src)
+		if err == nil {
+			t.Errorf("Parse(%q): expected an integer_overflow error, got nil", src)
+			continue
+		}
+		ae, ok := err.(*eng.AqlError)
+		if !ok || ae.Code != "integer_overflow" {
+			t.Errorf("Parse(%q): expected [aql/integer_overflow], got %v", src, err)
+			continue
+		}
+		if ae.Row == 0 {
+			t.Errorf("Parse(%q): overflow error carries no source position", src)
+		}
+	}
+}
+
+// TestParseBasePrefixedExact pins that hex/octal/binary literals are
+// parsed from their exact digits — so magnitudes above 2^53 keep full
+// precision instead of round-tripping through float64 — and that a
+// leading sign works.
+func TestParseBasePrefixedExact(t *testing.T) {
+	cases := []struct {
+		src  string
+		want int64
+	}{
+		{"0x10", 16},
+		{"0xFF_FF", 65535},
+		{"0o17", 15},
+		{"0b101", 5},
+		{"-0x10", -16},
+		{"0x20000000000000", 9007199254740992}, // 2^53 (exact before and after)
+		{"0x20000000000001", 9007199254740993}, // 2^53+1 — was silently ...992
+		{"0x7FFFFFFFFFFFFFFF", math.MaxInt64},  // int64 max via hex — was a lossy Float
+		{"0o777777777777777777777", math.MaxInt64},
+	}
+	for _, c := range cases {
+		got, err := Parse(c.src)
+		if err != nil {
+			t.Errorf("Parse(%q) error: %v", c.src, err)
+			continue
+		}
+		if !got[0].Parent.ConformsTo(eng.TInteger) {
+			t.Errorf("Parse(%q): expected Integer, got %s", c.src, got[0].Parent)
+			continue
+		}
+		if n, _ := eng.AsInteger(got[0]); n != c.want {
+			t.Errorf("Parse(%q): got %d, want %d", c.src, n, c.want)
+		}
+	}
+}
+
+// TestParsePlusPrefixInteger pins that a leading '+' on a decimal integer
+// is parsed exactly and range-checked like the unsigned/negative forms.
+func TestParsePlusPrefixInteger(t *testing.T) {
+	got, err := Parse("+9223372036854775807")
+	if err != nil {
+		t.Fatalf("Parse(+maxint) error: %v", err)
+	}
+	if n, _ := eng.AsInteger(got[0]); n != math.MaxInt64 {
+		t.Errorf("+maxint: got %d, want %d", n, int64(math.MaxInt64))
+	}
+	if _, err := Parse("+9223372036854775808"); err == nil {
+		t.Error("+(maxint+1): expected integer_overflow, got nil")
+	}
+}
+
+// TestParseLeadingDotRejected pins that a receiverless / prefix `.` (or
+// `!.`) — e.g. `.5`, `.name`, `!.x` — is a syntax error, not a
+// receiverless get/getr. `0.5` and `$.name` remain valid.
+func TestParseLeadingDotRejected(t *testing.T) {
+	// Bare leading dot (a stray `.` token) and the SIGNED leading-dot
+	// forms (which jsonic lexes as one number token) are all rejected.
+	for _, src := range []string{".5", ".0", ".name", "!.x", "-.5", "+.5"} {
+		_, err := Parse(src)
+		ae, ok := err.(*eng.AqlError)
+		if !ok || ae.Code != "syntax_error" {
+			t.Errorf("Parse(%q): expected [aql/syntax_error], got %v", src, err)
+		}
+	}
+	// These must still parse cleanly.
+	for _, src := range []string{"0.5", "-0.5", "+0.5", "5.", "$.name", "$!.name"} {
+		if _, err := Parse(src); err != nil {
+			t.Errorf("Parse(%q): unexpected error %v", src, err)
+		}
+	}
+}
+
+// TestParseUnderscoreSeparators pins that `_` is a single digit-separator:
+// leading/trailing/repeated underscores are a syntax error.
+func TestParseUnderscoreSeparators(t *testing.T) {
+	for _, src := range []string{"1__0", "1_", "1_000__0", "0xFF__FF", "1__0.5"} {
+		_, err := Parse(src)
+		ae, ok := err.(*eng.AqlError)
+		if !ok || ae.Code != "syntax_error" {
+			t.Errorf("Parse(%q): expected [aql/syntax_error] for misplaced _, got %v", src, err)
+		}
+	}
+	for _, src := range []string{"1_0", "1_000_000", "0xFF_FF", "1_000.5", "-1_0"} {
+		if _, err := Parse(src); err != nil {
+			t.Errorf("Parse(%q): unexpected error %v", src, err)
+		}
+	}
+}
+
+// TestParseBasePrefixOverflowAndMin pins that a base-prefixed integer
+// whose magnitude jsonic can't lex (>= 2^63) is handled exactly: the
+// signed int64 minimum parses, and a truly out-of-range value is a clean
+// integer_overflow (not undefined_word).
+func TestParseBasePrefixOverflowAndMin(t *testing.T) {
+	got, err := Parse("-0x8000000000000000") // int64 min
+	if err != nil {
+		t.Fatalf("Parse(-0x8000000000000000) error: %v", err)
+	}
+	if n, _ := eng.AsInteger(got[0]); n != math.MinInt64 {
+		t.Errorf("hex int64 min: got %d, want %d", n, int64(math.MinInt64))
+	}
+	for _, src := range []string{"0x8000000000000000", "0xFFFFFFFFFFFFFFFF"} {
+		_, err := Parse(src)
+		ae, ok := err.(*eng.AqlError)
+		if !ok || ae.Code != "integer_overflow" {
+			t.Errorf("Parse(%q): expected [aql/integer_overflow], got %v", src, err)
+		}
+	}
+}
+
+// TestParseDigitLedTokens pins that a digit-led token — which can never
+// be a word (ValidateWordName forbids a digit first) — is diagnosed as a
+// number: an out-of-range value is [aql/float_overflow]; any other
+// digit-led junk (including the digit-first `2dup`, now renamed to
+// `dup2`) is a malformed-numeric [aql/syntax_error].
+func TestParseDigitLedTokens(t *testing.T) {
+	for _, src := range []string{"1e309", "1e400", "-1e400"} {
+		_, err := Parse(src)
+		ae, ok := err.(*eng.AqlError)
+		if !ok || ae.Code != "float_overflow" {
+			t.Errorf("Parse(%q): expected [aql/float_overflow], got %v", src, err)
+		}
+	}
+	for _, src := range []string{"1e", "1foo", "5x", "2dup", "0x1p4"} {
+		_, err := Parse(src)
+		ae, ok := err.(*eng.AqlError)
+		if !ok || ae.Code != "syntax_error" {
+			t.Errorf("Parse(%q): expected malformed-number [aql/syntax_error], got %v", src, err)
+		}
+	}
+	// In-range numbers and letter-led words still parse without error.
+	for _, src := range []string{"1e308", "1.5", "42", "dup2", "foo"} {
+		if _, err := Parse(src); err != nil {
+			t.Errorf("Parse(%q): unexpected parse error %v", src, err)
+		}
+	}
+}
+
+// TestParseIntegerLiteralOverflowPos pins that the literal-overflow error
+// is located at the offending literal, not at the start of the line.
+func TestParseIntegerLiteralOverflowPos(t *testing.T) {
+	_, err := Parse("add 1 9223372036854775808")
+	ae, ok := err.(*eng.AqlError)
+	if !ok {
+		t.Fatalf("expected *eng.AqlError, got %v", err)
+	}
+	if ae.Row != 1 || ae.Col != 7 {
+		t.Errorf("expected position 1:7 (the literal), got %d:%d", ae.Row, ae.Col)
+	}
+}
+
+// TestParseNonDecimalLiteralsPreserved pins that scientific notation and
+// base-prefixed literals keep their existing conversion (they are NOT
+// routed through the new exact-decimal path, so jsonic's own base
+// interpretation stands).
+func TestParseNonDecimalLiteralsPreserved(t *testing.T) {
+	intCases := map[string]int64{
+		"1e3":   1000, // scientific, whole-valued → Integer (unchanged)
+		"0x10":  16,   // hex
+		"0o17":  15,   // octal
+		"0b101": 5,    // binary
+	}
+	for src, want := range intCases {
+		got, err := Parse(src)
+		if err != nil {
+			t.Errorf("Parse(%q) error: %v", src, err)
+			continue
+		}
+		if !got[0].Parent.ConformsTo(eng.TInteger) {
+			t.Errorf("Parse(%q): expected Integer, got %s", src, got[0].Parent)
+			continue
+		}
+		if n, _ := eng.AsInteger(got[0]); n != want {
+			t.Errorf("Parse(%q): got %d, want %d", src, n, want)
+		}
+	}
+	// A decimal point still yields a Float, even whole-valued.
+	for _, src := range []string{"5.0", "1.5", "1.5e2"} {
+		got, err := Parse(src)
+		if err != nil {
+			t.Fatalf("Parse(%q) error: %v", src, err)
+		}
+		if !got[0].Parent.ConformsTo(eng.TFloat) {
+			t.Errorf("Parse(%q): expected Float, got %s", src, got[0].Parent)
+		}
+	}
+}
+
+// TestParseIntegerLiteralExactInMap pins the same exactness in data
+// context (map values go through convertDataValue, a separate switch).
+func TestParseIntegerLiteralExactInMap(t *testing.T) {
+	got, err := Parse("{x: 9007199254740993}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	m, _ := eng.AsMap(got[0])
+	xVal, _ := m.Get("x")
+	if !xVal.Parent.ConformsTo(eng.TInteger) {
+		t.Fatalf("expected Integer, got %s", xVal.Parent)
+	}
+	if n, _ := eng.AsInteger(xVal); n != 9007199254740993 {
+		t.Errorf("map value: got %d, want 9007199254740993", n)
+	}
+}
+
+// TestParseSpecialFloatLiterals pins the IEEE special-value literals
+// (inf / -inf / nan) — lowercase reserved literals, like true/false/none,
+// that parse directly to the corresponding Float (Tier 0).
+func TestParseSpecialFloatLiterals(t *testing.T) {
+	check := func(src string, pred func(float64) bool) {
+		got, err := Parse(src)
+		if err != nil {
+			t.Fatalf("Parse(%q) error: %v", src, err)
+		}
+		if !got[0].Parent.ConformsTo(eng.TFloat) {
+			t.Errorf("Parse(%q): expected Float, got %s", src, got[0].Parent)
+			return
+		}
+		f, _ := eng.AsNumber(got[0])
+		if !pred(f) {
+			t.Errorf("Parse(%q): float value %v failed predicate", src, f)
+		}
+	}
+	check("inf", func(f float64) bool { return math.IsInf(f, 1) })
+	check("-inf", func(f float64) bool { return math.IsInf(f, -1) })
+	check("nan", func(f float64) bool { return math.IsNaN(f) })
+	// Same in data context (map value).
+	got, err := Parse("{x: nan}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	m, _ := eng.AsMap(got[0])
+	xv, _ := m.Get("x")
+	if f, _ := eng.AsNumber(xv); !math.IsNaN(f) {
+		t.Errorf("map value: expected NaN, got %v", f)
 	}
 }
 

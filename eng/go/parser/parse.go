@@ -3,11 +3,13 @@ package parser
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/aql-lang/aql/eng/go"
+	"github.com/cockroachdb/apd/v3"
 	jsonic "github.com/jsonicjs/jsonic/go"
 )
 
@@ -98,6 +100,7 @@ func Parse(src string) ([]eng.Value, error) {
 	// Stage 1: Lex setup — register tokens and custom matchers.
 	t := setupBaseTokens(j)
 	setupTemplateLiteralMatcher(j, t)
+	setupBigNumberMatcher(j, t)
 
 	// Stage 2: Grammar setup — extend rules for AQL syntax.
 	setupValRule(j, t)
@@ -331,17 +334,18 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 			continue
 		}
 
-		// "!" followed by "." → getr word (lone, no receiver).
+		// A "!." or "." with no receiver before it is the leading / prefix
+		// dot form (e.g. `.5`, `.name`, `!.x`). It has nothing to access,
+		// so reject it at parse time with a clear message instead of
+		// emitting a receiverless get/getr that fails later as an obscure
+		// signature error. The receiverless reach `$.name` is unaffected:
+		// it carries an explicit `$` receiver and is built in the chain
+		// branch above.
 		if isToken(items[i], "!") && i+1 < len(items) && isToken(items[i+1], ".") {
-			values = append(values, withPos(eng.NewWord("getr"), poss[i]))
-			i++ // skip the dot
-			continue
+			return nil, danglingDotError(poss[i])
 		}
-
-		// "." → get word (lone, no receiver).
 		if isToken(items[i], ".") {
-			values = append(values, withPos(eng.NewWord("get"), poss[i]))
-			continue
+			return nil, danglingDotError(poss[i])
 		}
 
 		// Unclosed paren: error at parse time.
@@ -516,7 +520,7 @@ func convertTopLevelValueInner(v any) (eng.Value, error) {
 		return convertInterpGroup(val)
 
 	case numberVal:
-		return numberValToValue(val), nil
+		return numberValToValue(val)
 
 	case float64:
 		return floatToValue(val), nil
@@ -607,6 +611,22 @@ func numberReceiverError(pos eng.SrcPos) error {
 		Code:   "syntax_error",
 		Detail: "a number has no members to access with `.`",
 		Hint:   "this looks like a malformed numeric literal (e.g. `1.2.3`) or `.`-access on a number — numbers have no fields or keys",
+		Row:    pos.Row,
+		Col:    pos.Col,
+		Src:    pos.Src,
+	}
+}
+
+// danglingDotError rejects a leading / receiverless `.` or `!.` — the
+// prefix dot form (e.g. `.5`, `.name`, `!.x`). Member access must follow
+// a value (`m.key`); a leading `.` is never valid. In particular `.5` is
+// not a fraction — write `0.5`. The receiverless reach `$.name` is the
+// supported way to write a detached accessor.
+func danglingDotError(pos eng.SrcPos) error {
+	return &eng.AqlError{
+		Code:   "syntax_error",
+		Detail: "`.` member access has no receiver",
+		Hint:   "a `.`/`!.` access must follow a value (e.g. `m.key`); a leading `.` is not valid — write `0.5` for a fraction, or `$.key` for a detached accessor",
 		Row:    pos.Row,
 		Col:    pos.Col,
 		Src:    pos.Src,
@@ -781,7 +801,7 @@ func convertDataValueInner(v any) (eng.Value, error) {
 		return convertInterpGroup(val)
 
 	case numberVal:
-		return numberValToValue(val), nil
+		return numberValToValue(val)
 
 	case float64:
 		return floatToValue(val), nil
@@ -921,6 +941,14 @@ func resolveTextValue(text string) eng.Value {
 	if text == "false" {
 		return eng.NewBoolean(false)
 	}
+	switch text {
+	case "inf":
+		return eng.NewFloat(math.Inf(1))
+	case "-inf":
+		return eng.NewFloat(math.Inf(-1))
+	case "nan":
+		return eng.NewFloat(math.NaN())
+	}
 	if t, ok := typeNames[text]; ok {
 		return eng.NewTypeLiteral(t)
 	}
@@ -1057,6 +1085,14 @@ func parseWord(text string) (eng.Value, error) {
 		return eng.Value{}, fmt.Errorf("empty word")
 	}
 
+	// `0d…` arbitrary-precision literals (BigInteger / BigDecimal). The
+	// lexer matcher claims the whole run as one text token (so an embedded
+	// `.` isn't split off); here we build the value. Checked early — these
+	// never take modifiers and must not fall through to word/number paths.
+	if isBigNumberLiteral(name) {
+		return parseBigNumber(name)
+	}
+
 	// /q produces an Atom: equivalent to (quote name). Other modifiers
 	// in the same suffix are accepted but ignored — the atom is data,
 	// not a function call.
@@ -1096,6 +1132,20 @@ func parseWord(text string) (eng.Value, error) {
 		return eng.NewNone(), nil
 	}
 
+	// IEEE-754 special-value literals, following the AQL reserved-literal
+	// convention (lowercase, parser-emitted, like true / false / none):
+	// `inf` / `-inf` / `nan` produce the corresponding Float. They render
+	// back to these same tokens (see FormatFloat), so print∘parse is
+	// identity. `inf negate` is the long form for -inf.
+	switch name {
+	case "inf":
+		return eng.NewFloat(math.Inf(1)), nil
+	case "-inf":
+		return eng.NewFloat(math.Inf(-1)), nil
+	case "nan":
+		return eng.NewFloat(math.NaN()), nil
+	}
+
 	// Reserved tape-syntax tokens emit typed marker values so the
 	// engine recognises them by Parent identity (parens, end / ';').
 	// These would otherwise become plain Word values that the engine
@@ -1116,7 +1166,86 @@ func parseWord(text string) (eng.Value, error) {
 		return eng.NewTypeLiteral(t), nil
 	}
 
+	// A base-prefixed integer token whose magnitude jsonic could not lex
+	// as a number (>= 2^63) arrives here as bare text. Parse it exactly:
+	// `-0x8000000000000000` (= int64 min) succeeds, while a truly
+	// out-of-range magnitude becomes a clean [aql/integer_overflow]
+	// instead of an opaque undefined_word. (In-range base-prefixed
+	// literals never reach this path — jsonic lexes them as numbers.)
+	if isBasePrefixedInteger(name) {
+		if strings.IndexByte(name, '_') >= 0 && !validUnderscores(name) {
+			return eng.Value{}, &eng.AqlError{Code: "syntax_error", Src: name,
+				Detail: "misplaced `_` in numeric literal: " + name,
+				Hint:   "`_` is a single digit-separator — use one between digits"}
+		}
+		n, err := strconv.ParseInt(stripUnderscores(name), 0, 64)
+		if err == nil {
+			return eng.NewInteger(n), nil
+		}
+		if isRangeError(err) {
+			return eng.Value{}, integerLiteralOverflowError(name, 0, 0)
+		}
+		// Other parse errors (e.g. an invalid digit) fall through to the
+		// numeric-shape classification below.
+	}
+
+	// A digit-led token reached here only because jsonic could not lex it
+	// as a number — and no word may start with a digit (see
+	// ValidateWordName), so it can only be a malformed or out-of-range
+	// numeric literal. Classify it for a clear diagnostic instead of an
+	// opaque "undefined word": a value ParseFloat recognises but reports
+	// out of range overflowed binary64; anything else is malformed (e.g.
+	// `1e`, `2dup` — the renamed-away stack words are now `dup2` etc.).
+	if isDigitLed(name) {
+		f, err := strconv.ParseFloat(stripUnderscores(name), 64)
+		if isRangeError(err) || math.IsInf(f, 0) {
+			return eng.Value{}, floatLiteralOverflowError(name)
+		}
+		return eng.Value{}, malformedNumberError(name)
+	}
+
 	return eng.NewWord(name), nil
+}
+
+// isDigitLed reports whether s starts (after an optional sign) with a
+// decimal digit. Because no word may begin with a digit
+// (ValidateWordName), a digit-led token is always a numeric literal —
+// never an identifier.
+func isDigitLed(s string) bool {
+	if len(s) > 0 && (s[0] == '-' || s[0] == '+') {
+		s = s[1:]
+	}
+	return len(s) > 0 && s[0] >= '0' && s[0] <= '9'
+}
+
+// isRangeError reports whether err is a strconv range (overflow) error.
+func isRangeError(err error) bool {
+	ne, ok := err.(*strconv.NumError)
+	return ok && ne.Err == strconv.ErrRange
+}
+
+// floatLiteralOverflowError reports a floating-point literal whose
+// magnitude overflows binary64 to ±infinity (e.g. 1e309).
+func floatLiteralOverflowError(src string) error {
+	return &eng.AqlError{
+		Code:   "float_overflow",
+		Detail: "floating-point literal out of range: " + src + " overflows to infinity",
+		Src:    src,
+		Hint:   "the Float range is about ±1.8e308; write the `inf` literal for infinity",
+	}
+}
+
+// malformedNumberError reports a digit-led token that is not a valid
+// number. Since no word may start with a digit, such a token can only be
+// a botched numeric literal (`1e`, `0x1p4`) or a digit-first name (`2dup`
+// — the stack words are now `dup2`/`swap2`/`drop2`/`over2`).
+func malformedNumberError(src string) error {
+	return &eng.AqlError{
+		Code:   "syntax_error",
+		Detail: "invalid numeric literal: " + src,
+		Src:    src,
+		Hint:   "a number is digits with an optional sign, base prefix (0x/0o/0b), `.`, exponent (`e`), and single `_` separators — and a name cannot start with a digit",
+	}
 }
 
 // convertInterpGroup converts an interpGroup (produced by the interp/ielem/iexpr
@@ -1192,12 +1321,15 @@ func processTemplateEscapes(s string) string {
 	return buf.String()
 }
 
-// numberVal wraps a float64 with source text so we can distinguish
-// integer literals (e.g. "5") from decimal literals (e.g. "5.0").
-// Injected by the jsonic LexSub callback when the source contains a ".".
+// numberVal wraps a float64 with its source text and source position so
+// we can (1) distinguish integer literals (e.g. "5") from decimal
+// literals (e.g. "5.0"), (2) parse integers from their exact digits, and
+// (3) locate an out-of-range integer literal in the source. Injected by
+// the jsonic Sub callback for every number token (setupNumberSub).
 type numberVal struct {
-	Val float64
-	Src string
+	Val      float64
+	Src      string
+	Row, Col int // 1-based source position of the literal (0 = unknown)
 }
 
 // floatToValue converts a JSON float64 to the appropriate AQL numeric value.
@@ -1209,12 +1341,252 @@ func floatToValue(f float64) eng.Value {
 	return eng.NewFloat(f)
 }
 
-// numberValToValue converts a numberVal (float64 + source) to the appropriate
-// AQL numeric value. If the source text contains a ".", the value is always
-// treated as a decimal — even for whole numbers like 5.0.
-func numberValToValue(nv numberVal) eng.Value {
-	if strings.Contains(nv.Src, ".") {
-		return eng.NewFloat(nv.Val)
+// numberValToValue converts a numberVal (float64 + source) to the
+// appropriate AQL numeric value.
+//
+//   - A source containing "." is always a Float (even whole-valued, e.g.
+//     5.0), using the float64 jsonic produced.
+//   - A *plain decimal integer* source (optional leading '-', then digits
+//     and '_' separators only — no base prefix, no exponent) is parsed
+//     from its exact digits with strconv.ParseInt. This is the fix for
+//     WAT Exhibit K: routing through float64 silently corrupts any
+//     integer above 2^53 (e.g. 9007199254740993 → ...992) and turns
+//     near-int64-max literals into Floats. An out-of-int64-range literal
+//     now raises [aql/integer_overflow] instead of silently degrading.
+//   - Everything else (scientific notation like 1e3, or a base prefix
+//     like 0x10 / 0o17 / 0b101) keeps the existing float64-derived path,
+//     which already matches jsonic's own base interpretation.
+//
+// See design/INTEGER-OVERFLOW-STRATEGY.0.md.
+func numberValToValue(nv numberVal) (eng.Value, error) {
+	// `_` is a single digit-separator only: it must sit between two
+	// digits (no leading, trailing, or repeated underscores). `1__0` and
+	// `1_` are rejected.
+	if strings.IndexByte(nv.Src, '_') >= 0 && !validUnderscores(nv.Src) {
+		return eng.Value{}, underscoreError(nv)
 	}
-	return floatToValue(nv.Val)
+	if strings.Contains(nv.Src, ".") {
+		// A leading `.` (with or without a sign) is not a valid number —
+		// `.5`, `-.5`, `+.5` are rejected; write `0.5` / `-0.5`. The bare
+		// `.5` is caught earlier as a stray `.` token; the signed forms
+		// reach here because jsonic lexes them as one number token.
+		if isLeadingDotFloat(nv.Src) {
+			return eng.Value{}, leadingDotNumberError(nv)
+		}
+		// Parse the Float from its exact source digits for a guaranteed
+		// correctly-rounded (round-ties-to-even) decimal→binary64
+		// conversion, rather than trusting the float64 jsonic produced.
+		// strconv.ParseFloat is IEEE-correct; fall back to jsonic's value
+		// only if the (jsonic-validated) token somehow fails to reparse.
+		if f, err := strconv.ParseFloat(stripUnderscores(nv.Src), 64); err == nil {
+			return eng.NewFloat(f), nil
+		}
+		return eng.NewFloat(nv.Val), nil
+	}
+	if isPlainDecimalInteger(nv.Src) {
+		n, err := strconv.ParseInt(stripUnderscores(nv.Src), 10, 64)
+		if err != nil {
+			return eng.Value{}, integerLiteralOverflowError(nv.Src, nv.Row, nv.Col)
+		}
+		return eng.NewInteger(n), nil
+	}
+	if isBasePrefixedInteger(nv.Src) {
+		// base 0 auto-detects the 0x / 0o / 0b prefix; parsing the exact
+		// digits keeps full precision above 2^53 and range-checks like
+		// the decimal path (out of int64 range → integer_overflow).
+		n, err := strconv.ParseInt(stripUnderscores(nv.Src), 0, 64)
+		if err != nil {
+			return eng.Value{}, integerLiteralOverflowError(nv.Src, nv.Row, nv.Col)
+		}
+		return eng.NewInteger(n), nil
+	}
+	return floatToValue(nv.Val), nil
+}
+
+// isBigNumberLiteral reports whether src is a `0d`/`0D`-prefixed literal
+// (optional leading sign). The lexer matcher claims these as one text
+// token; parseWord routes them here.
+func isBigNumberLiteral(src string) bool {
+	s := src
+	if len(s) > 0 && (s[0] == '-' || s[0] == '+') {
+		s = s[1:]
+	}
+	return len(s) >= 3 && s[0] == '0' && (s[1] == 'd' || s[1] == 'D')
+}
+
+// parseBigNumber converts a `0d…` literal string to a BigInteger or
+// BigDecimal. A `.` or exponent makes it a BigDecimal (apd-parsed, exact);
+// otherwise a BigInteger (math/big, unbounded). Sign and `_` separators
+// are handled like the int/float paths. Errors carry no source position
+// (parseWord has none — mirrors the other parseWord numeric errors).
+func parseBigNumber(src string) (eng.Value, error) {
+	if strings.IndexByte(src, '_') >= 0 && !validUnderscores(src) {
+		return eng.Value{}, bigLiteralError(src)
+	}
+	body := src
+	sign := ""
+	if len(body) > 0 && (body[0] == '-' || body[0] == '+') {
+		sign = string(body[0])
+		body = body[1:]
+	}
+	digits := stripUnderscores(body[2:]) // body[0:2] is the 0d / 0D prefix
+	if digits == "" {
+		return eng.Value{}, bigLiteralError(src)
+	}
+	text := sign + digits
+	if strings.ContainsAny(digits, ".eE") {
+		d, _, err := apd.NewFromString(text)
+		if err != nil {
+			return eng.Value{}, bigLiteralError(src)
+		}
+		return eng.NewBigDecimal(d), nil
+	}
+	n, ok := new(big.Int).SetString(text, 10)
+	if !ok {
+		return eng.Value{}, bigLiteralError(src)
+	}
+	return eng.NewBigInteger(n), nil
+}
+
+func bigLiteralError(src string) error {
+	return &eng.AqlError{
+		Code:   "syntax_error",
+		Detail: "invalid 0d numeric literal: " + src,
+		Src:    src,
+		Hint:   "a 0d literal is `0d` then digits, with an optional `.fraction`, exponent, and `_` separators",
+	}
+}
+
+// isAlnum reports whether c is an ASCII letter or digit (the chars that
+// may flank a `_` digit-separator: decimal/hex digits and the x/o/b/e of
+// a prefix or exponent).
+func isAlnum(c byte) bool {
+	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+// validUnderscores reports whether every `_` in src is a single separator
+// flanked by alphanumeric characters — no leading, trailing, or repeated
+// underscores. `1_000` and `0xFF_FF` pass; `1__0`, `1_`, `_1` fail.
+func validUnderscores(src string) bool {
+	for i := 0; i < len(src); i++ {
+		if src[i] != '_' {
+			continue
+		}
+		if i == 0 || i == len(src)-1 || !isAlnum(src[i-1]) || !isAlnum(src[i+1]) {
+			return false
+		}
+	}
+	return true
+}
+
+// isLeadingDotFloat reports whether src is a `.`-leading number (after an
+// optional sign): `.5`, `-.5`, `+.5`. These need a digit before the dot.
+func isLeadingDotFloat(src string) bool {
+	s := src
+	if len(s) > 0 && (s[0] == '-' || s[0] == '+') {
+		s = s[1:]
+	}
+	return len(s) > 0 && s[0] == '.'
+}
+
+// isPlainDecimalInteger reports whether src is a base-10 integer literal:
+// an optional leading sign ('-' or '+') followed by one or more decimal
+// digits, with '_' permitted as a digit separator. It deliberately
+// rejects base prefixes (0x/0o/0b — handled by isBasePrefixedInteger) and
+// exponents (1e3). Leading zeros stay decimal (jsonic treats 010 as 10,
+// not octal), which base-10 ParseInt also does.
+func isPlainDecimalInteger(src string) bool {
+	if src == "" {
+		return false
+	}
+	i := 0
+	if src[0] == '-' || src[0] == '+' {
+		i = 1
+	}
+	if i == len(src) {
+		return false
+	}
+	sawDigit := false
+	for ; i < len(src); i++ {
+		c := src[i]
+		switch {
+		case c >= '0' && c <= '9':
+			sawDigit = true
+		case c == '_':
+			// separator; allowed between digits
+		default:
+			return false
+		}
+	}
+	return sawDigit
+}
+
+// isBasePrefixedInteger reports whether src is a hex / octal / binary
+// integer literal — an optional sign then a 0x / 0o / 0b prefix. These are
+// parsed exactly (strconv.ParseInt base 0) rather than via float64, so
+// values above 2^53 keep full precision instead of silently rounding.
+func isBasePrefixedInteger(src string) bool {
+	s := src
+	if len(s) > 0 && (s[0] == '-' || s[0] == '+') {
+		s = s[1:]
+	}
+	if len(s) < 3 || s[0] != '0' {
+		return false
+	}
+	switch s[1] {
+	case 'x', 'X', 'o', 'O', 'b', 'B':
+		return true
+	}
+	return false
+}
+
+// stripUnderscores removes '_' digit separators so strconv.ParseInt
+// (base 10) accepts a source jsonic lexed with separators (e.g. 1_000).
+func stripUnderscores(src string) string {
+	if !strings.Contains(src, "_") {
+		return src
+	}
+	return strings.ReplaceAll(src, "_", "")
+}
+
+// integerLiteralOverflowError reports an integer literal (decimal or
+// base-prefixed) that does not fit in int64, located at the literal's
+// source position when known (row/col 0 = unknown). Until Integer becomes
+// arbitrary-precision (Phase 1 of design/INTEGER-OVERFLOW-STRATEGY.0.md),
+// this is a hard parse error rather than a silent fall-back to Float.
+func integerLiteralOverflowError(src string, row, col int) error {
+	return &eng.AqlError{
+		Code:   "integer_overflow",
+		Detail: "integer literal out of range: " + src + " exceeds the Integer range (-9223372036854775808..9223372036854775807)",
+		Row:    row,
+		Col:    col,
+		Src:    src,
+		Hint:   "this value exceeds the 64-bit signed Integer range; use a Float (e.g. add a decimal point) for an approximate magnitude",
+	}
+}
+
+// underscoreError reports a misused `_` digit-separator (leading, trailing,
+// or repeated) in a numeric literal.
+func underscoreError(nv numberVal) error {
+	return &eng.AqlError{
+		Code:   "syntax_error",
+		Detail: "misplaced `_` in numeric literal: " + nv.Src,
+		Row:    nv.Row,
+		Col:    nv.Col,
+		Src:    nv.Src,
+		Hint:   "`_` is a single digit-separator — use one between digits, e.g. `1_000` (not `1__0` or `1_`)",
+	}
+}
+
+// leadingDotNumberError reports a `.`-leading numeric literal (`-.5`,
+// `+.5`); a number needs a digit before the decimal point.
+func leadingDotNumberError(nv numberVal) error {
+	return &eng.AqlError{
+		Code:   "syntax_error",
+		Detail: "numeric literal has no digit before `.`: " + nv.Src,
+		Row:    nv.Row,
+		Col:    nv.Col,
+		Src:    nv.Src,
+		Hint:   "write a leading zero, e.g. `-0.5` instead of `-.5`",
+	}
 }

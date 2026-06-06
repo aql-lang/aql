@@ -1,8 +1,6 @@
 package parser
 
 import (
-	"strings"
-
 	"github.com/aql-lang/aql/eng/go"
 	jsonic "github.com/jsonicjs/jsonic/go"
 )
@@ -45,6 +43,75 @@ func setupBaseTokens(j *jsonic.Jsonic) parserTokens {
 		IS: j.Token("#IS", "${"),
 		TL: j.Token("#TL"),
 	}
+}
+
+// setupBigNumberMatcher registers a high-priority lex matcher that claims a
+// whole `0d…` literal — `[+-]?0[dD][0-9_]+(\.[0-9_]+)?([eE][+-]?[0-9_]+)?` —
+// as a single #BD token BEFORE jsonic's number matcher or the `.` (#DT)
+// fixed token can split it (jsonic does not know the `0d` prefix, and would
+// otherwise break `0d12.5` into `0d12` · `.` · `5`). The token carries a
+// bigNumberVal; the val rule (setupValRule) turns it into r.Node, and
+// convertTopLevelValueInner / convertDataValue route it to bigNumberToValue.
+// A trailing `.` is consumed ONLY when followed by a digit, so `0d5.foo`
+// stays `0d5` + dot-access. Runs only outside template strings.
+func setupBigNumberMatcher(j *jsonic.Jsonic, t parserTokens) {
+	isDigit := func(c byte) bool { return (c >= '0' && c <= '9') || c == '_' }
+	j.AddMatcher("big_number", 1000001, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
+		if rule != nil {
+			if _, ok := rule.K["aql_tpl"]; ok {
+				return nil // inside a template string: leave to the literal matcher
+			}
+		}
+		cursor := lex.Cursor()
+		s := lex.Src
+		si := cursor.SI
+		start := si
+		if si < len(s) && (s[si] == '+' || s[si] == '-') {
+			si++ // optional sign, glued to the literal
+		}
+		// Require the 0d / 0D prefix.
+		if si+1 >= len(s) || s[si] != '0' || (s[si+1] != 'd' && s[si+1] != 'D') {
+			return nil
+		}
+		si += 2
+		// Require at least one integer digit.
+		if si >= len(s) || !isDigit(s[si]) {
+			return nil
+		}
+		for si < len(s) && isDigit(s[si]) {
+			si++
+		}
+		// Optional fraction — consume `.` only when a digit follows, so a
+		// dot-access (`0d5.foo`) is left for the #DT token.
+		if si+1 < len(s) && s[si] == '.' && isDigit(s[si+1]) {
+			si++
+			for si < len(s) && isDigit(s[si]) {
+				si++
+			}
+		}
+		// Optional exponent.
+		if si < len(s) && (s[si] == 'e' || s[si] == 'E') {
+			j2 := si + 1
+			if j2 < len(s) && (s[j2] == '+' || s[j2] == '-') {
+				j2++
+			}
+			if j2 < len(s) && isDigit(s[j2]) {
+				si = j2
+				for si < len(s) && isDigit(s[si]) {
+					si++
+				}
+			}
+		}
+		src := s[start:si]
+		// Emit the whole run as ONE text token. jsonic's val rule already
+		// opens on text, so it flows to parseWord, which recognises the
+		// `0d` prefix and builds the BigInteger/BigDecimal. The matcher's
+		// only job is to claim the run so the embedded `.` isn't split off.
+		tkn := lex.Token("#TX", jsonic.TinTX, src, src)
+		cursor.SI = si
+		cursor.CI += si - start // a 0d literal never spans newlines
+		return tkn
+	})
 }
 
 // setupTemplateLiteralMatcher registers a high-priority lex matcher that
@@ -768,13 +835,20 @@ func setupInterpGrammar(j *jsonic.Jsonic, t parserTokens) {
 	})
 }
 
-// setupNumberSub registers a token subscriber that wraps decimal number
-// tokens in a numberVal struct so the converter can distinguish "5" (integer)
-// from "5.0" (decimal).
+// setupNumberSub registers a token subscriber that wraps every number
+// token in a numberVal struct carrying the original source text. The
+// source text lets the converter (1) distinguish "5" (integer) from
+// "5.0" (decimal), and (2) parse plain decimal integers from their exact
+// digits via strconv.ParseInt rather than round-tripping through the
+// float64 jsonic already produced — float64 silently corrupts any
+// integer above 2^53, so the source string is the only exact record.
+// See numberValToValue and design/INTEGER-OVERFLOW-STRATEGY.0.md.
 func setupNumberSub(j *jsonic.Jsonic) {
 	j.Sub(func(tkn *jsonic.Token, rule *jsonic.Rule, ctx *jsonic.Context) {
-		if tkn.Tin == jsonic.TinNR && strings.Contains(tkn.Src, ".") {
-			tkn.Val = numberVal{Val: tkn.Val.(float64), Src: tkn.Src}
+		if tkn.Tin == jsonic.TinNR {
+			if f, ok := tkn.Val.(float64); ok {
+				tkn.Val = numberVal{Val: f, Src: tkn.Src, Row: tkn.RI, Col: tkn.CI}
+			}
 		}
 	}, nil)
 }

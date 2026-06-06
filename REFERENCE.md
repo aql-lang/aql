@@ -54,8 +54,13 @@ is, see the **[Explanation](EXPLANATION.md)**.
 
 | Syntax | Type | Example |
 |--------|------|---------|
-| Digits with optional `-` | `Integer` | `42`, `-5`, `0` |
-| Digits with `.` | `Float` | `3.14`, `-0.5` |
+| Decimal digits, optional `-`/`+`, `_` separators | `Integer` | `42`, `-5`, `+7`, `0`, `1_000` |
+| `0x` / `0o` / `0b` prefix | `Integer` | `0xFF`, `0o17`, `0b101` |
+| Digits with `.` | `Float` | `3.14`, `-0.5`, `5.` |
+| Scientific (`e`/`E`) | `Float` (or `Integer` if whole) | `1.5e3`, `2e-2`, `1e3` |
+| `inf`, `-inf`, `nan` | `Float` (IEEE special) | `inf` |
+| `0d` prefix, digits only | `BigInteger` (unbounded, exact) | `0d123`, `-0d5`, `0d1_000` |
+| `0d` prefix with `.` or `e`/`E` | `BigDecimal` (exact base-10) | `0d12.5`, `0d0.1`, `0d1.5e3`, `0d1e3` |
 | Double or single quotes | `String` | `"hello"`, `'world'` |
 | Backticks with `${...}` | `String` (template) | `` `x = ${x}` `` |
 | `true`, `false` | `Boolean` | `true` |
@@ -63,9 +68,133 @@ is, see the **[Explanation](EXPLANATION.md)**.
 | Bare unquoted word | atom, only inside a `/q`-quoted slot | `foo` |
 | `quote foo` | `Atom` | `foo` |
 
-Type literals: `Number`, `Integer`, `Float`, `String`, `Boolean`,
-`Atom`, `Scalar`, `Any`, `None`, `List`, `Map`, plus every named
-type you define with `def`.
+Type literals: `Number`, `Integer`, `Float`, `BigInteger`, `BigDecimal`,
+`String`, `Boolean`, `Atom`, `Scalar`, `Any`, `None`, `List`, `Map`, plus
+every named type you define with `def`.
+
+#### Numeric literals in detail
+
+**Integer** is a signed 64-bit value:
+`-9223372036854775808 .. 9223372036854775807`.
+
+- Decimal (`42`, `-5`, `+7`). An optional leading sign (`-`/`+`) is part
+  of the literal; `+` is a no-op. Leading zeros are decimal, **not**
+  octal (`010` is 10).
+- Hex `0x…`, octal `0o…`, binary `0b…` (case-insensitive prefix), with an
+  optional sign (`0xFF`, `-0o17`).
+- `_` may be used as a **single** digit-separator **between** digits
+  (`1_000_000`, `0xFF_FF`). Leading, trailing, or repeated underscores
+  (`_1`, `1_`, `1__0`) are a syntax error.
+- All integer literals — decimal **and** base-prefixed — are parsed
+  exactly at every magnitude in range, and a value outside the int64
+  range raises `[aql/integer_overflow]`. It never silently wraps or loses
+  precision. (This includes the hex int64 minimum `-0x8000000000000000`.)
+
+**Float** is IEEE-754 `binary64` (see
+[design/IEEE-754-COMPLIANCE.0.md](design/IEEE-754-COMPLIANCE.0.md)):
+
+- Any literal with a `.` is a `Float`, parsed correctly-rounded
+  (round-ties-to-even): `3.14`, `-0.5`, trailing-dot `5.` → `5.0`.
+  A **leading** `.` is **not** valid — `.5`, **and the signed `-.5` /
+  `+.5`**, are all syntax errors. A number needs a digit before the dot;
+  write `0.5` / `-0.5`.
+- Scientific notation: `1.5e3`, `2e-2`. A whole-valued exponent form
+  with no `.` and within int64 (`1e3`) is an `Integer`; otherwise it is a
+  `Float`.
+- Special values are the lowercase literals `inf`, `-inf`, `nan` (they
+  render back to those same tokens).
+
+**Recommended practice for the boundary cases:**
+
+- **Exact large integers:** write them in **decimal** (or hex/oct/bin),
+  which are exact and range-checked. Do **not** use scientific notation
+  for a value you need to be an exact `Integer` — `1e19` exceeds the
+  int64 range and silently becomes an (inexact) `Float`, whereas the
+  decimal `10000000000000000000` is a clean `[aql/integer_overflow]`.
+- **Infinity:** write the `inf` / `-inf` literal. An *overflowing*
+  float literal such as `1e309` raises `[aql/float_overflow]` (you cannot
+  spell ±∞ by overflowing a literal); use `inf`, or compute it
+  (`1e308 mul 10`).
+- **Tiny values:** the smallest positive subnormal is `5e-324`; a literal
+  that underflows below that (e.g. `1e-400`) rounds to `0`. If you mean
+  zero, write `0.0`.
+- **Casing:** the special literals are lowercase only — `Inf`, `NaN`,
+  `Infinity`, `+inf` are not recognised.
+- **A name cannot start with a digit.** A digit-first token is always
+  read as a number, so `2dup` is an `invalid numeric literal`, never a
+  word. Word names begin with `[a-z_-$]` and may contain digits after the
+  first character — so the paired-stack words put the digit **last**:
+  `dup2`, `swap2`, `drop2`, `over2`.
+
+#### Arbitrary-precision numbers: `BigInteger` and `BigDecimal`
+
+The `0d` (or `0D`) prefix opts a literal into one of two **exact**,
+arbitrary-precision numeric leaves under `Number` — siblings of `Integer`
+and `Float`. They exist for the cases where the fixed-width leaves lose
+information: integers beyond the int64 range, and decimals (money,
+fractions) that binary `Float` cannot represent exactly (`0.1 + 0.2`).
+
+- **`BigInteger`** (`math/big`): a `0d` literal with **digits only** —
+  `0d123`, `-0d5`, `0d1_000_000`, `0d99999999999999999999999999999999`.
+  Unbounded; never overflows.
+- **`BigDecimal`** (`cockroachdb/apd`): a `0d` literal carrying a `.`
+  **or** an exponent — `0d12.5`, `0d0.1`, `0d1.5e3`, **and** `0d1e3`
+  (the exponent alone makes it a BigDecimal). Exact base-10; the scale is
+  preserved on round-trip (`0d0.10` renders `0d0.10`).
+
+A leading sign (`-0d5`, `+0d12.5`) and single `_` digit-separators are
+allowed, exactly as for the fixed-width literals. Both render back with
+the `0d` prefix so they re-parse to the same value.
+
+**Type infection — widest exact leaf wins.** Among the exact leaves the
+ladder is `Integer < BigInteger < BigDecimal`, so a mixed-leaf operation
+promotes to the widest operand: `1 add 0d2` → `0d3` (BigInteger),
+`0d2 add 0d0.5` → `0d2.5` (BigDecimal), `1 add 0d0.5` → `0d1.5`. The
+existing `Integer ⊕ Float` rule is **unchanged** (`1 add 2.0` → `3.0`).
+
+**A Big type never silently becomes a `Float`.** Mixing an exact Big
+type with a binary `Float` in arithmetic is an `[aql/type_error]`
+(`0d2 add 1.0`, `0d0.1 add 0.2`) — degrading to `Float` would throw away
+the exactness the Big types exist to provide. Convert one operand
+explicitly first. For the same reason `convert BigInteger 3.14` and
+`convert BigDecimal 3.14` are **refused** (build a BigDecimal from a
+`String` or the `0d` literal instead); `convert` between the exact leaves
+and to/from `Integer`/`String` is exact, and `convert Float 0d2.5` is
+allowed but documented as a lossy projection.
+
+**Division.** `BigInteger div BigInteger` truncates toward zero and
+returns a BigInteger (with `mod`), like `Integer div`. `BigDecimal div
+BigDecimal` returns a BigDecimal rounded to the active decimal context —
+by default IEEE **decimal128** (34 significant digits, round-half-even),
+so `0d1.0 div 0d3.0` → `0d0.3333333333333333333333333333333333`.
+
+**Comparison is honest across leaves.** `0d5 eq 5`, `1 cmp 0d1.0` → `0`,
+and `0d0.5 eq 0.5` are all true (those magnitudes are exact in every
+leaf). But a `Float` that is **not** an exact decimal does not equal its
+`0d` lookalike: `0.1 eq 0d0.1` → `false`, because the Float's true value
+is `0.1000000000000000055…`, not exactly one tenth (the same result
+Python's `Decimal('0.1') == 0.1` gives).
+
+**Transcendentals.** With an imported `MathUtil`, the apd-backed
+functions return a `BigDecimal` for a Big argument computed to the active
+context (`MathUtil.sqrt 0d2`, `cbrt`, `exp`, `log` (natural), `log10`),
+and fractional `pow` (`0d2 pow 0d0.5`) likewise. Functions apd cannot
+compute exactly — the trig family (`sin`/`cos`/`tan`/…), `log2`, `logb`
+— accept a Big argument but return an (approximate) `Float`.
+
+**Scoped precision — `with-decimal`.** Wrap a body in
+`with-decimal {precision: N, rounding: "…"} [ … ]` to override the
+BigDecimal context for every BigDecimal op inside it (arithmetic and the
+apd-backed transcendentals). The override unwinds at the end of the
+block and nests:
+
+```
+with-decimal {precision: 5} [0d1.0 div 0d3.0]                  # returns 0d0.33333
+with-decimal {precision: 4 rounding: "down"} [0d2.0 div 0d3.0]  # returns 0d0.6666
+```
+
+Rounding names: `half-even` (default), `half-up`, `half-down`, `down`,
+`up`, `ceiling`, `floor` (apd's `half_even` spellings are also accepted).
 
 ### Compound data
 
@@ -233,8 +362,10 @@ Any
 │   ├── Atom
 │   ├── Boolean                     -- false | true
 │   ├── Number
-│   │   ├── Integer
-│   │   └── Float
+│   │   ├── Integer                  -- signed int64 (overflow → error)
+│   │   ├── Float                    -- IEEE-754 binary64
+│   │   ├── BigInteger               -- unbounded exact int   (`0d123`)
+│   │   └── BigDecimal               -- exact base-10 decimal (`0d12.5`)
 │   ├── String
 │   │   ├── EmptyString
 │   │   └── ProperString
@@ -377,10 +508,10 @@ All stack words are stack-only (modifier `/s`).
 | `rot` | `a b c → b c a` | Rotate top three |
 | `nip` | `a b → b` | Remove second |
 | `tuck` | `a b → b a b` | Copy top below second |
-| `2dup` | `a b → a b a b` | Duplicate top pair |
-| `2drop` | `a b →` | Remove top pair |
-| `2swap` | `a b c d → c d a b` | Swap top two pairs |
-| `2over` | `a b c d → a b c d a b` | Copy third pair to top |
+| `dup2` | `a b → a b a b` | Duplicate top pair |
+| `drop2` | `a b →` | Remove top pair |
+| `swap2` | `a b c d → c d a b` | Swap top two pairs |
+| `over2` | `a b c d → a b c d a b` | Copy third pair to top |
 | `pick` | `n → v` | Copy value at depth n |
 | `roll` | `n → v` | Move value at depth n to top |
 | `depth` | `→ n` | Current stack size |
@@ -415,14 +546,35 @@ Two further sharp edges on numbers:
 * **Integer division truncates** toward zero and never produces a
   remainder or a `Float`: `7 div 2` returns `3`, `1 div 2` returns `0`. Use a
   `Float` operand to get real division — `7.0 div 2` returns `3.5`.
-* **Integer overflow is silent and inconsistent.** `add`/`mul` past
-  `maxint` promote to `Float` (losing integer precision):
-  `9223372036854775807 add 1` returns `9223372036854776000.0`; `pow`
-  instead wraps two's-complement: `2 pow 63` returns `-9223372036854775808`.
+* **Division/modulo by zero splits by type.** Integer `div`/`mod` by zero
+  is a hard error (there is no integer infinity). Float `div`/`mod` by
+  zero follows IEEE-754: `1.0 div 0.0` returns `inf`, `-1.0 div 0.0`
+  returns `-inf`, and `0.0 div 0.0` (and any `mod` by zero) returns `nan`.
+  A `Float` operand routes the whole operation through the Float path, so
+  `7 div 0.0` is `inf`. Detect the results with `MathUtil.is-inf` /
+  `MathUtil.is-nan`.
+* **Integer is a 64-bit signed integer; overflow is an error, not a
+  wrap.** An `Integer` holds any whole number in
+  `-9223372036854775808..9223372036854775807` (int64). A literal outside
+  that range, or an `add`/`sub`/`mul`/`pow` whose result would leave it,
+  raises `[aql/integer_overflow]` rather than silently wrapping or
+  degrading to a `Float`: `2 pow 63` and `9223372036854775807 add 1` both
+  error. Make an operand a `Float` (e.g. `9223372036854775807 add 1.0`)
+  for an approximate IEEE-754 result. (Arbitrary-precision integers are a
+  planned future change — see `design/INTEGER-OVERFLOW-STRATEGY.0.md`.)
 * `Float` is an IEEE-754 binary `float64`, **not** a base-10
   decimal — `0.1 add 0.2` returns `0.30000000000000004` and `1 eq 1.0`
   returns `true` even though the two divide differently. See
   [Type system](#type-system).
+* **Special Float values** are written with the lowercase literals
+  `inf`, `-inf`, and `nan` (reserved, like `true`/`false`/`none`); they
+  render back to those same tokens. NaN follows IEEE rules for the
+  ordering words: `nan lt 5.0`, `nan lte 5.0`, `nan gt 5.0`, `nan gte
+  5.0`, and `nan eq nan` are **all `false`** (a comparison involving NaN
+  is *unordered*), while `nan neq nan` is `true`. For a **total** order —
+  what `cmp`, `tcmp`, and `sort` use — NaN is treated as the greatest
+  value (`-inf < finite < inf < nan`), so sorting a list with a NaN is
+  deterministic (NaN sorts last) rather than leaving it unordered.
 
 Additional numeric words (`abs`, `negate`, `sign`, `min`, `max`,
 `floor`, `ceil`, `round`, `trunc`, `sqrt`, `cbrt`, `exp`, `log`,

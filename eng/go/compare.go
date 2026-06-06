@@ -3,6 +3,7 @@ package eng
 import (
 	"errors"
 	"fmt"
+	"math"
 )
 
 // ErrNoComparer is returned by Comparer.Compare implementations that
@@ -181,6 +182,14 @@ func ExactEqual(a, b Value) bool {
 
 	// Scalars: compare by value.
 	if a.Parent.ConformsTo(TNumber) && b.Parent.ConformsTo(TNumber) {
+		// An arbitrary-precision operand is compared exactly via apd
+		// (cross-leaf magnitude: 1 == 0d1 == 1.0). A NaN/non-finite Float
+		// fails toDecimalExact, so it is never equal — preserving nan≠nan.
+		if numIsBig(a) || numIsBig(b) {
+			ar, aok := toRatExact(a)
+			br, bok := toRatExact(b)
+			return aok && bok && ar.Cmp(br) == 0
+		}
 		_as9, _ := AsNumber(a)
 		_as8, _ := AsNumber(b)
 		return _as9 == _as8
@@ -265,6 +274,11 @@ func DeepEqual(a, b Value) bool {
 
 	// Scalars.
 	if a.Parent.ConformsTo(TNumber) && b.Parent.ConformsTo(TNumber) {
+		if numIsBig(a) || numIsBig(b) {
+			ar, aok := toRatExact(a)
+			br, bok := toRatExact(b)
+			return aok && bok && ar.Cmp(br) == 0
+		}
 		_as17, _ := AsNumber(a)
 		_as16, _ := AsNumber(b)
 		return _as17 == _as16
@@ -344,7 +358,34 @@ func DeepEqual(a, b Value) bool {
 // order. The guard lives in orderedCompare; tcmp (TcmpHandler) bypasses
 // it.
 
+// numericUnordered reports whether a relational comparison of a and b is
+// IEEE-754 *unordered*: both are concrete numbers and at least one is
+// NaN. The ordering words lt / lte / gt / gte all yield false in that
+// case (NaN is neither less, equal, nor greater). Cross-family pairs
+// (e.g. Float-vs-String) are NOT unordered here — they fall through to
+// the family guard, which raises [aql/incomparable]. The total-order
+// words cmp / tcmp / sort deliberately bypass this and give NaN a defined
+// slot (see numberCompareBehavior.Compare).
+func numericUnordered(a, b Value) bool {
+	return isConcreteNumber(a) && isConcreteNumber(b) && (isNaNValue(a) || isNaNValue(b))
+}
+
+func isConcreteNumber(v Value) bool {
+	return !v.IsDepScalar() && IsConcrete(v) && ValueType(v).ConformsTo(TNumber)
+}
+
+func isNaNValue(v Value) bool {
+	if !isConcreteNumber(v) {
+		return false
+	}
+	f, err := AsNumber(v)
+	return err == nil && math.IsNaN(f)
+}
+
 func LtHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	if numericUnordered(args[0], args[1]) {
+		return []Value{NewBoolean(false)}, nil
+	}
 	cmp, err := orderedCompare("lt", args[1], args[0])
 	if err != nil {
 		return nil, err
@@ -353,6 +394,9 @@ func LtHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Valu
 }
 
 func GtHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	if numericUnordered(args[0], args[1]) {
+		return []Value{NewBoolean(false)}, nil
+	}
 	cmp, err := orderedCompare("gt", args[1], args[0])
 	if err != nil {
 		return nil, err
@@ -361,6 +405,9 @@ func GtHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Valu
 }
 
 func LteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	if numericUnordered(args[0], args[1]) {
+		return []Value{NewBoolean(false)}, nil
+	}
 	cmp, err := orderedCompare("lte", args[1], args[0])
 	if err != nil {
 		return nil, err
@@ -369,6 +416,9 @@ func LteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 }
 
 func GteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	if numericUnordered(args[0], args[1]) {
+		return []Value{NewBoolean(false)}, nil
+	}
 	cmp, err := orderedCompare("gte", args[1], args[0])
 	if err != nil {
 		return nil, err

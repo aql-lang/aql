@@ -365,7 +365,7 @@ Migration scope:
 - aqleng spec runners (Go + TS): only `swap` is multi-arg
   stack-only; handler updated.
 - lang/go/internal/engine native stack ops: swap, over, rot, nip, tuck,
-  2dup, 2swap, 2over rewritten to top-down indexing.
+  dup2, swap2, over2 rewritten to top-down indexing.
 - aql/test rows: a small number of test rows assumed the legacy
   swap-form binding (`a f b → F(b, a)`) was the only mirror-violator;
   under the unified rule, the four equivalent forms (`f a b`,

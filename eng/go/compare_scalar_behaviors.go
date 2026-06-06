@@ -1,6 +1,10 @@
 package eng
 
-import "strings"
+import (
+	"math"
+	"math/big"
+	"strings"
+)
 
 // Comparer implementations for the kernel scalar types and Word. Each embeds
 // defaultBehavior so Match/Format/Equal stay at the kernel default;
@@ -88,8 +92,45 @@ func (numberCompareBehavior) Compare(a, b Value) (int, error) {
 	if a.Data == nil && b.Data == nil {
 		return litVsLitOrder(a, b), nil
 	}
+	// Arbitrary-precision operand on either side: compare EXACTLY via
+	// apd.Decimal so cross-leaf magnitude equality holds (1 == 0d1 == 1.0
+	// == 0d1.0) with no binary error. A Float that is not an exact decimal
+	// keeps its true binary value, so e.g. Float 0.1 ≠ BigDecimal 0d0.1 —
+	// the mathematically honest result. A non-finite Float opposite a Big
+	// value takes the IEEE total-order slot (NaN greatest, ±Inf extremes).
+	if numIsBig(a) || numIsBig(b) {
+		if r, ok := compareNonFiniteFloat(a, b); ok {
+			return r, nil
+		}
+		ar, aok := toRatExact(a)
+		br, bok := toRatExact(b)
+		if aok && bok {
+			return ar.Cmp(br), nil
+		}
+		return 0, ErrNoComparer
+	}
 	af, _ := AsNumber(a)
 	bf, _ := AsNumber(b)
+	// IEEE-754 has no native order for NaN, but `cmp`/`tcmp`/`sort` need a
+	// TOTAL order or the sort comparator violates transitivity (the bug
+	// this fixes: NaN previously fell through to 0, comparing "equal" to
+	// everything, which silently left lists unsorted). Per the IEEE
+	// totalOrder predicate (§5.10), NaN sorts after every non-NaN value
+	// (greatest); two NaNs tie. The relational words lt/lte/gt/gte do NOT
+	// use this slot — they apply the IEEE *unordered* rule (always false)
+	// via numericUnordered in compare.go — so this affects only the total
+	// order that sort and the collection words consume.
+	aNaN, bNaN := math.IsNaN(af), math.IsNaN(bf)
+	if aNaN || bNaN {
+		switch {
+		case aNaN && bNaN:
+			return 0, nil
+		case aNaN:
+			return 1, nil
+		default:
+			return -1, nil
+		}
+	}
 	switch {
 	case af < bf:
 		return -1, nil
@@ -98,6 +139,88 @@ func (numberCompareBehavior) Compare(a, b Value) (int, error) {
 	default:
 		return 0, nil
 	}
+}
+
+// numIsBig reports whether v is an arbitrary-precision numeric leaf.
+func numIsBig(v Value) bool {
+	return v.Parent.ConformsTo(TBigInteger) || v.Parent.ConformsTo(TBigDecimal)
+}
+
+// toRatExact projects a finite numeric value to an exact *big.Rat:
+// Integer/BigInteger are exact, BigDecimal parses its plain-decimal text
+// exactly (e.g. 0d0.1 → 1/10), and a finite Float uses big.Rat.SetFloat64
+// which captures its EXACT binary value (so Float 0.1 → ...00055.../2^… ≠
+// 1/10). Comparing in this domain gives the mathematically honest
+// cross-leaf result — matching Python's `Decimal('0.1') == 0.1 → False`.
+// Returns false for a non-finite Float (handled by compareNonFiniteFloat)
+// or a non-number.
+func toRatExact(v Value) (*big.Rat, bool) {
+	switch {
+	case v.Parent.ConformsTo(TBigDecimal):
+		d, err := AsBigDecimal(v)
+		if err != nil {
+			return nil, false
+		}
+		// SetString fails for non-finite text ("Infinity"/"NaN"), so a
+		// non-finite BigDecimal correctly returns ok=false here.
+		r, ok := new(big.Rat).SetString(d.Text('f'))
+		return r, ok
+	case v.Parent.ConformsTo(TBigInteger):
+		n, err := AsBigInteger(v)
+		if err != nil {
+			return nil, false
+		}
+		return new(big.Rat).SetInt(n), true
+	case v.Parent.ConformsTo(TFloat):
+		f, err := AsFloat(v)
+		if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
+			return nil, false
+		}
+		return new(big.Rat).SetFloat64(f), true
+	case v.Parent.ConformsTo(TInteger):
+		n, err := AsInteger(v)
+		if err != nil {
+			return nil, false
+		}
+		return new(big.Rat).SetInt64(n), true
+	}
+	return nil, false
+}
+
+// compareNonFiniteFloat handles a comparison where exactly one operand is
+// a non-finite Float (NaN / ±Inf) and the other is finite, giving the
+// non-finite value its IEEE total-order slot: NaN sorts after everything
+// (greatest), +Inf above any finite value, -Inf below. Returns ok=false
+// when neither operand is a non-finite Float.
+func compareNonFiniteFloat(a, b Value) (int, bool) {
+	if r, nf := nonFiniteRank(a); nf {
+		return r, true // a is non-finite, b is finite
+	}
+	if r, nf := nonFiniteRank(b); nf {
+		return -r, true // b is non-finite, a is finite
+	}
+	return 0, false
+}
+
+// nonFiniteRank returns +1 for NaN/+Inf, -1 for -Inf, and ok=false when v
+// is not a non-finite Float.
+func nonFiniteRank(v Value) (int, bool) {
+	if !v.Parent.ConformsTo(TFloat) {
+		return 0, false
+	}
+	f, err := AsFloat(v)
+	if err != nil {
+		return 0, false
+	}
+	switch {
+	case math.IsNaN(f):
+		return 1, true
+	case math.IsInf(f, 1):
+		return 1, true
+	case math.IsInf(f, -1):
+		return -1, true
+	}
+	return 0, false
 }
 
 // stringCompareBehavior orders strings lexicographically (UTF-8 byte
