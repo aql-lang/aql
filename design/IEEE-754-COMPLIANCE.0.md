@@ -1,6 +1,6 @@
 # IEEE-754 Compliance — what `Float` would require
 
-Status: **Tier 0 implemented; Tiers 1–2 proposed**. This audits AQL's
+Status: **Tier 0 done; Tier 1 mostly done; Tier 2 proposed**. This audits AQL's
 `Float` (binary64) against IEEE 754-2019 and states what full and
 partial conformance would require. **Tier 0 (the NaN-comparison fix) is
 done**, and the `inf`/`-inf`/`nan` literals + matching rendering from
@@ -51,7 +51,7 @@ catalogue) — a much larger effort, partly impractical on the wasm target.
 | **±∞ propagation** (§6.1) | overflow → `+Inf.0` / `-Inf.0` | ✅ (produced by overflow) |
 | **Subnormals** (§3.4) | stored/propagated (`5e-324` survives) | ✅ |
 | **NaN propagation** (§6.2) | `√−8 → NaN`, propagates through ops | ✅ (quiet only) |
-| **`x ÷ 0 → ±∞`, `0÷0 → NaN` + divByZero/invalid flag** (§7.3) | **errors** (`division by zero`) | ❌ deviation |
+| **`x ÷ 0 → ±∞`, `0÷0 → NaN`** (§7.3) | Float: ✅ (±inf/nan); Integer: hard error by design; no sticky flag | ✅ value / ❌ flag |
 | **NaN comparison = unordered** (§5.11) | `eq/neq/lt/lte/gt/gte` all correct (false for NaN) | ✅ Tier 0 |
 | **`totalOrder` predicate** (§5.10) | `cmp`/`tcmp`/`sort` place NaN greatest (deterministic) | ✅ Tier 0 |
 | **Directed rounding modes** (§4.3) | only the hardware default (ties-to-even) | ❌ |
@@ -66,20 +66,25 @@ catalogue) — a much larger effort, partly impractical on the wasm target.
 
 ## The three deviations AQL introduced
 
-### 1. Division / modulo by zero errors instead of ±∞ / NaN
+### 1. Division / modulo by zero errors instead of ±∞ / NaN — ✅ RESOLVED
+
+Originally both leaves errored. The chosen resolution is option (1) below
+(*Float is IEEE, Integer is strict*): **Float** div/mod by zero now
+follows IEEE-754, while **Integer** stays a hard error (there is no
+integer infinity).
 
 ```
-1.0 0.0 div    # error: division by zero      IEEE: +Inf
-0.0 0.0 div    # error: division by zero      IEEE: NaN (invalid)
-7.0 0.0 mod    # error: modulo by zero        IEEE: NaN (invalid)
+1.0 0.0 div    # inf                  (was: error)
+-1.0 0.0 div   # -inf
+0.0 0.0 div    # nan
+7.0 0.0 mod    # nan
+1 0.0 div      # inf                  (a Float operand routes via the Float path)
+1 0 div        # error: division by zero   (Integer — unchanged, by design)
 ```
 
-IEEE-754 makes these *defined operations* that return `±∞`/NaN and raise
-a sticky flag — they never trap unless the program asks. AQL instead
-makes them hard errors. This is a real conflict with AQL's own
-"errors-as-values, fail-loud" philosophy (the same instinct behind the
-integer-overflow Phase 0). **A decision is required** (see
-[The philosophical tension](#the-philosophical-tension)).
+What is still *not* IEEE here: there is no sticky `divByZero`/`invalid`
+status flag (Go does not expose FPU flags — Tier 2). The result *values*
+are conformant; the *signalling* is not.
 
 ### 2. NaN comparison is internally incoherent (genuine bug)
 
@@ -238,17 +243,23 @@ unparseable `+Inf.0`/`NaN.0`), so print∘parse is identity. Verified by
 > separate Tier-1 item.
 
 **Tier 1 — IEEE arithmetic *semantics* (the realistic compliance target).**
-- Decision (1) above: `Float` div/mod by zero → `±∞`/NaN, not error.
-- `Inf`/`NaN`/`-0.0` literals + conformant `FormatFloat` (exponent +
-  parseable specials) so print∘parse round-trips.
-- Correctly-rounded `Float` literal parse (verify/own the decimal→binary64
-  step).
-- `remainder`, `fma`, `copySign`, `nextAfter`, the `isX` classifiers, and
-  the `roundToIntegral` family as words (thin `math` wrappers).
-- 2019 `minimum`/`maximum` alongside `min`/`max`.
+- ✅ Decision (1) above: `Float` div/mod by zero → `±∞`/NaN, not error;
+  Integer stays strict.
+- ✅ `inf`/`-inf`/`nan` literals + `FormatFloat` rendering them back, so
+  print∘parse round-trips for specials (landed with Tier 0).
+- ✅ `remainder`, `copysign`, `nextafter`, and the `is-nan`/`is-inf`/
+  `is-finite`/`signbit` classifiers as words in `aql:math-util`.
+- ⬜ Correctly-rounded `Float` literal parse (verify/own the
+  decimal→binary64 step).
+- ⬜ `fma`; the full `roundToIntegral` mode set; `scalb`/`logb`.
+- ⬜ Exponential `FormatFloat` for extreme magnitudes (finite values
+  still round-trip via the long decimal form, just unreadably).
+- ⬜ A defined `min`/`max` NaN policy (2008 ignore vs 2019 propagate).
 
-After Tier 1, AQL's Float behaves like every other mainstream language's
-double — which is what "IEEE-754" colloquially means.
+Most of Tier 1 has landed; the remainder is `fma`, the literal-parse
+rounding guarantee, exponential formatting, and the `min`/`max` NaN
+policy. After those, AQL's Float behaves like every other mainstream
+language's double — which is what "IEEE-754" colloquially means.
 
 **Tier 2 — full clause conformance (largely impractical on wasm).**
 - The five dynamic rounding-direction modes (§4) via a scoped context.

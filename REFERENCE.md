@@ -415,6 +415,13 @@ Two further sharp edges on numbers:
 * **Integer division truncates** toward zero and never produces a
   remainder or a `Float`: `7 div 2` returns `3`, `1 div 2` returns `0`. Use a
   `Float` operand to get real division — `7.0 div 2` returns `3.5`.
+* **Division/modulo by zero splits by type.** Integer `div`/`mod` by zero
+  is a hard error (there is no integer infinity). Float `div`/`mod` by
+  zero follows IEEE-754: `1.0 div 0.0` returns `inf`, `-1.0 div 0.0`
+  returns `-inf`, and `0.0 div 0.0` (and any `mod` by zero) returns `nan`.
+  A `Float` operand routes the whole operation through the Float path, so
+  `7 div 0.0` is `inf`. Detect the results with `MathUtil.is-inf` /
+  `MathUtil.is-nan`.
 * **Integer is a 64-bit signed integer; overflow is an error, not a
   wrap.** An `Integer` holds any whole number in
   `-9223372036854775808..9223372036854775807` (int64). A literal outside

@@ -166,15 +166,18 @@ var mathNatives = []NativeFunc{
 			Args: []*Type{TNumber, TNumber},
 			Handler: numericBinaryHandler(
 				func(a, b int64) (Value, error) {
+					// Integer division by zero has no defined result
+					// (there is no integer infinity) — it stays a hard
+					// error. The Float path below follows IEEE-754 instead.
 					if a == 0 {
 						return Value{}, fmt.Errorf("division by zero")
 					}
 					return NewInteger(b / a), nil
 				},
 				func(a, b float64) (Value, error) {
-					if a == 0 {
-						return Value{}, fmt.Errorf("division by zero")
-					}
+					// Float division by zero is IEEE-754: x/0 → ±inf,
+					// 0/0 → nan. Go's float division already produces
+					// these, so we do NOT special-case a == 0.
 					return NewFloat(b / a), nil
 				},
 			),
@@ -188,15 +191,16 @@ var mathNatives = []NativeFunc{
 			Args: []*Type{TNumber, TNumber},
 			Handler: numericBinaryHandler(
 				func(a, b int64) (Value, error) {
+					// Integer modulo by zero stays a hard error (no
+					// integer infinity / NaN). The Float path is IEEE.
 					if a == 0 {
 						return Value{}, fmt.Errorf("modulo by zero")
 					}
 					return NewInteger(b % a), nil
 				},
 				func(a, b float64) (Value, error) {
-					if a == 0 {
-						return Value{}, fmt.Errorf("modulo by zero")
-					}
+					// Float modulo by zero is IEEE-754: math.Mod(x, 0)
+					// returns NaN. No special-case error.
 					return NewFloat(math.Mod(b, a)), nil
 				},
 			),

@@ -106,12 +106,14 @@
 2 0.5 pow	1.4142135623730951	sqrt(2)
 -8.0 0.5 pow	nan	sqrt of a negative → NaN, rendered as the `nan` literal
 
-# 6. Division / modulo by zero is an ERROR for BOTH leaves — a Float
-#    `div`/`mod` by zero does NOT follow IEEE-754 (no +Inf / NaN).
-7 0 div	ERROR:division by zero	Integer divide by zero
-7 0.0 div	ERROR:division by zero	Float divide by zero is also an error (not +Inf)
+# 6. Division / modulo by zero splits by leaf: Integer is a hard error
+#    (no integer infinity), Float follows IEEE-754 (±inf / nan). A Float
+#    operand routes the whole op through the Float path.
+7 0 div	ERROR:division by zero	Integer divide by zero — no integer infinity
+7 0.0 div	inf	Float divide by zero is IEEE +inf (a Float operand wins)
+0.0 0.0 div	nan	0/0 is IEEE nan
 7 0 mod	ERROR:modulo by zero	Integer modulo by zero
-7 0.0 mod	ERROR:modulo by zero	Float modulo by zero is also an error (not NaN)
+7 0.0 mod	nan	Float modulo by zero is IEEE nan
 
 # 7. Contagion can SILENTLY LOSE integer precision. II stays exact;
 #    mixing a large Integer with a Float drops to float64's 53-bit

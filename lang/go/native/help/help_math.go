@@ -40,7 +40,7 @@ func init() {
 		Description: "All three call forms `a b div`, `a div b`, and `div b a` " +
 			"compute a / b. Integer division truncates toward zero.",
 		Notes: []string{
-			"Division by zero produces an error.",
+			"Integer division by zero is an error; Float division by zero is IEEE-754 (x/0 → ±inf, 0/0 → nan).",
 		},
 	})
 
@@ -48,7 +48,10 @@ func init() {
 		Word:    "mod",
 		Summary: "Remainder: a mod b ≡ a %% b.",
 		Description: "All three call forms `a b mod`, `a mod b`, and `mod b a` " +
-			"compute a %% b (the remainder of integer division).",
+			"compute a %% b (the truncated remainder). For the IEEE round-to-nearest remainder, use `MathUtil.remainder`.",
+		Notes: []string{
+			"Integer modulo by zero is an error; Float modulo by zero is IEEE-754 nan.",
+		},
 	})
 
 	register(&Entry{

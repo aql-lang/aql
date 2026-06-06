@@ -41,8 +41,9 @@ add true 1	'1true'	Boolean + Integer coerces to String concat
 eq 1 1.0	true	Integer and Float of equal magnitude compare equal
 #
 # §5  errors
-20 div 0	ERROR:division by zero	integer division by zero
-0.0 div 0.0	ERROR:division by zero	decimal division by zero
+20 div 0	ERROR:division by zero	integer division by zero (no integer infinity)
+0.0 div 0.0	nan	Float 0/0 is IEEE-754 NaN, not an error
+1.0 div 0.0	inf	Float x/0 is IEEE-754 +inf
 mod 7 0	0	`mod 7 0` = 0 mod 7 = 0 (divisor is the swapped operand, no error)
 add 1 'x' 'y'	'x1' 'y'	add is binary: the third value is left on the stack
 #
