@@ -71,6 +71,12 @@ func CanonValue(v Value) string {
 		return "none"
 	case v.IsDepScalar():
 		return v.String()
+	case v.Parent.ConformsTo(TBigInteger):
+		n, _ := AsBigInteger(v)
+		return FormatBigInteger(n)
+	case v.Parent.ConformsTo(TBigDecimal):
+		d, _ := AsBigDecimal(v)
+		return FormatBigDecimal(d)
 	case v.Parent.ConformsTo(TInteger):
 		n, _ := AsInteger(v)
 		return strconv.FormatInt(n, 10)

@@ -524,6 +524,8 @@ WORD walk
   [Type/Function Type/Function Any] barrier=3
   [Type/Function Any] barrier=2
   [Any] barrier=1
+WORD with-decimal
+  [Node/Map Node/List] barrier=2 noeval={1} returns=[Any]
 WORD word
   [Any] barrier=1 noeval={0} returns=[Any]
 WORD write

@@ -120,6 +120,8 @@ var (
 	TInspect  = eng.TInspect
 	// TInstant moved to lang/go/engine/native_temporal.go (Step 8).
 	TInteger      = eng.TInteger
+	TBigInteger   = eng.TBigInteger
+	TBigDecimal   = eng.TBigDecimal
 	TInternal     = eng.TInternal
 	TInterpString = eng.TInterpString
 	// TInterval moved to lang/go/engine/native_misc.go (Step 8).
@@ -252,6 +254,9 @@ var (
 	AsForward                 = eng.AsForward
 	AsInteger                 = eng.AsInteger
 	AsNumber                  = eng.AsNumber
+	AsFloatApprox             = eng.AsFloatApprox
+	AsBigInteger              = eng.AsBigInteger
+	AsBigDecimal              = eng.AsBigDecimal
 	AsPath                    = eng.AsPath
 	AsString                  = eng.AsString
 	AsWord                    = eng.AsWord
@@ -356,8 +361,12 @@ var (
 	NewFunction    = eng.NewFunction
 	NewImplicitMap = eng.NewImplicitMap
 	// NewInstant moved to lang/go/engine/native_temporal.go (Step 8).
-	NewInteger      = eng.NewInteger
-	NewInterpString = eng.NewInterpString
+	NewInteger       = eng.NewInteger
+	NewBigInteger    = eng.NewBigInteger
+	NewBigDecimal    = eng.NewBigDecimal
+	FormatBigInteger = eng.FormatBigInteger
+	FormatBigDecimal = eng.FormatBigDecimal
+	NewInterpString  = eng.NewInterpString
 	// NewInterval moved to lang/go/engine/native_misc.go (Step 8).
 	NewList               = eng.NewList
 	NewMap                = eng.NewMap

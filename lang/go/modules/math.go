@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/cockroachdb/apd/v3"
 )
 
 // BuildMathModule creates the "aql:math-util" native module. It registers the
@@ -323,19 +324,35 @@ var MathNatives = func() []native.NativeFunc {
 		ceilFloorNative("trunc", math.Trunc),
 	}
 
-	// Unary float -> float words. Each becomes a NativeFunc with two
-	// overloads ([integer] and [decimal]) returning Float, courtesy of
-	// native.UnaryNumOpNative.
+	// Unary numeric words. Integer/Float arguments stay on the Float
+	// path (unchanged); a Big argument is routed per the word's exactness.
+	//
+	// apd-backed group — sqrt/cbrt/exp/log(ln)/log10: a Big argument is
+	// computed EXACTLY to the active decimal context and returns a
+	// BigDecimal (apd implements all five). math.Log is natural log, so
+	// `log` pairs with apd's Ln.
+	for _, p := range []struct {
+		name    string
+		floatFn func(float64) float64
+		apdFn   func(c *apd.Context, d, x *apd.Decimal) (apd.Condition, error)
+	}{
+		{"sqrt", math.Sqrt, (*apd.Context).Sqrt},
+		{"cbrt", math.Cbrt, (*apd.Context).Cbrt},
+		{"exp", math.Exp, (*apd.Context).Exp},
+		{"log", math.Log, (*apd.Context).Ln},
+		{"log10", math.Log10, (*apd.Context).Log10},
+	} {
+		out = append(out, native.ApdUnaryNative(p.name, p.floatFn, p.apdFn))
+	}
+
+	// Float-only group — trig + log2/logb: apd has no exact form, so a
+	// Big argument is accepted via the lossy AsFloatApprox projection and
+	// the result is a Float.
 	for _, p := range []struct {
 		name string
 		fn   func(float64) float64
 	}{
-		{"sqrt", math.Sqrt},
-		{"cbrt", math.Cbrt},
-		{"exp", math.Exp},
-		{"log", math.Log},
 		{"log2", math.Log2},
-		{"log10", math.Log10},
 		{"sin", math.Sin},
 		{"cos", math.Cos},
 		{"tan", math.Tan},
@@ -344,7 +361,7 @@ var MathNatives = func() []native.NativeFunc {
 		{"atan", math.Atan},
 		{"logb", math.Logb}, // IEEE: the unbiased radix-2 exponent of |x|
 	} {
-		out = append(out, native.UnaryNumOpNative(p.name, p.fn))
+		out = append(out, native.FloatUnaryBigNative(p.name, p.fn))
 	}
 
 	// atan2: standard binary-num overloads + an integer-integer overload.

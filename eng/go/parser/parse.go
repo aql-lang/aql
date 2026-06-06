@@ -3,11 +3,13 @@ package parser
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/aql-lang/aql/eng/go"
+	"github.com/cockroachdb/apd/v3"
 	jsonic "github.com/jsonicjs/jsonic/go"
 )
 
@@ -98,6 +100,7 @@ func Parse(src string) ([]eng.Value, error) {
 	// Stage 1: Lex setup — register tokens and custom matchers.
 	t := setupBaseTokens(j)
 	setupTemplateLiteralMatcher(j, t)
+	setupBigNumberMatcher(j, t)
 
 	// Stage 2: Grammar setup — extend rules for AQL syntax.
 	setupValRule(j, t)
@@ -1082,6 +1085,14 @@ func parseWord(text string) (eng.Value, error) {
 		return eng.Value{}, fmt.Errorf("empty word")
 	}
 
+	// `0d…` arbitrary-precision literals (BigInteger / BigDecimal). The
+	// lexer matcher claims the whole run as one text token (so an embedded
+	// `.` isn't split off); here we build the value. Checked early — these
+	// never take modifiers and must not fall through to word/number paths.
+	if isBigNumberLiteral(name) {
+		return parseBigNumber(name)
+	}
+
 	// /q produces an Atom: equivalent to (quote name). Other modifiers
 	// in the same suffix are accepted but ignored — the atom is data,
 	// not a function call.
@@ -1390,6 +1401,60 @@ func numberValToValue(nv numberVal) (eng.Value, error) {
 		return eng.NewInteger(n), nil
 	}
 	return floatToValue(nv.Val), nil
+}
+
+// isBigNumberLiteral reports whether src is a `0d`/`0D`-prefixed literal
+// (optional leading sign). The lexer matcher claims these as one text
+// token; parseWord routes them here.
+func isBigNumberLiteral(src string) bool {
+	s := src
+	if len(s) > 0 && (s[0] == '-' || s[0] == '+') {
+		s = s[1:]
+	}
+	return len(s) >= 3 && s[0] == '0' && (s[1] == 'd' || s[1] == 'D')
+}
+
+// parseBigNumber converts a `0d…` literal string to a BigInteger or
+// BigDecimal. A `.` or exponent makes it a BigDecimal (apd-parsed, exact);
+// otherwise a BigInteger (math/big, unbounded). Sign and `_` separators
+// are handled like the int/float paths. Errors carry no source position
+// (parseWord has none — mirrors the other parseWord numeric errors).
+func parseBigNumber(src string) (eng.Value, error) {
+	if strings.IndexByte(src, '_') >= 0 && !validUnderscores(src) {
+		return eng.Value{}, bigLiteralError(src)
+	}
+	body := src
+	sign := ""
+	if len(body) > 0 && (body[0] == '-' || body[0] == '+') {
+		sign = string(body[0])
+		body = body[1:]
+	}
+	digits := stripUnderscores(body[2:]) // body[0:2] is the 0d / 0D prefix
+	if digits == "" {
+		return eng.Value{}, bigLiteralError(src)
+	}
+	text := sign + digits
+	if strings.ContainsAny(digits, ".eE") {
+		d, _, err := apd.NewFromString(text)
+		if err != nil {
+			return eng.Value{}, bigLiteralError(src)
+		}
+		return eng.NewBigDecimal(d), nil
+	}
+	n, ok := new(big.Int).SetString(text, 10)
+	if !ok {
+		return eng.Value{}, bigLiteralError(src)
+	}
+	return eng.NewBigInteger(n), nil
+}
+
+func bigLiteralError(src string) error {
+	return &eng.AqlError{
+		Code:   "syntax_error",
+		Detail: "invalid 0d numeric literal: " + src,
+		Src:    src,
+		Hint:   "a 0d literal is `0d` then digits, with an optional `.fraction`, exponent, and `_` separators",
+	}
 }
 
 // isAlnum reports whether c is an ASCII letter or digit (the chars that

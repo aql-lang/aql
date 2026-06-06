@@ -59,6 +59,8 @@ is, see the **[Explanation](EXPLANATION.md)**.
 | Digits with `.` | `Float` | `3.14`, `-0.5`, `5.` |
 | Scientific (`e`/`E`) | `Float` (or `Integer` if whole) | `1.5e3`, `2e-2`, `1e3` |
 | `inf`, `-inf`, `nan` | `Float` (IEEE special) | `inf` |
+| `0d` prefix, digits only | `BigInteger` (unbounded, exact) | `0d123`, `-0d5`, `0d1_000` |
+| `0d` prefix with `.` or `e`/`E` | `BigDecimal` (exact base-10) | `0d12.5`, `0d0.1`, `0d1.5e3`, `0d1e3` |
 | Double or single quotes | `String` | `"hello"`, `'world'` |
 | Backticks with `${...}` | `String` (template) | `` `x = ${x}` `` |
 | `true`, `false` | `Boolean` | `true` |
@@ -66,9 +68,9 @@ is, see the **[Explanation](EXPLANATION.md)**.
 | Bare unquoted word | atom, only inside a `/q`-quoted slot | `foo` |
 | `quote foo` | `Atom` | `foo` |
 
-Type literals: `Number`, `Integer`, `Float`, `String`, `Boolean`,
-`Atom`, `Scalar`, `Any`, `None`, `List`, `Map`, plus every named
-type you define with `def`.
+Type literals: `Number`, `Integer`, `Float`, `BigInteger`, `BigDecimal`,
+`String`, `Boolean`, `Atom`, `Scalar`, `Any`, `None`, `List`, `Map`, plus
+every named type you define with `def`.
 
 #### Numeric literals in detail
 
@@ -123,6 +125,76 @@ type you define with `def`.
   word. Word names begin with `[a-z_-$]` and may contain digits after the
   first character — so the paired-stack words put the digit **last**:
   `dup2`, `swap2`, `drop2`, `over2`.
+
+#### Arbitrary-precision numbers: `BigInteger` and `BigDecimal`
+
+The `0d` (or `0D`) prefix opts a literal into one of two **exact**,
+arbitrary-precision numeric leaves under `Number` — siblings of `Integer`
+and `Float`. They exist for the cases where the fixed-width leaves lose
+information: integers beyond the int64 range, and decimals (money,
+fractions) that binary `Float` cannot represent exactly (`0.1 + 0.2`).
+
+- **`BigInteger`** (`math/big`): a `0d` literal with **digits only** —
+  `0d123`, `-0d5`, `0d1_000_000`, `0d99999999999999999999999999999999`.
+  Unbounded; never overflows.
+- **`BigDecimal`** (`cockroachdb/apd`): a `0d` literal carrying a `.`
+  **or** an exponent — `0d12.5`, `0d0.1`, `0d1.5e3`, **and** `0d1e3`
+  (the exponent alone makes it a BigDecimal). Exact base-10; the scale is
+  preserved on round-trip (`0d0.10` renders `0d0.10`).
+
+A leading sign (`-0d5`, `+0d12.5`) and single `_` digit-separators are
+allowed, exactly as for the fixed-width literals. Both render back with
+the `0d` prefix so they re-parse to the same value.
+
+**Type infection — widest exact leaf wins.** Among the exact leaves the
+ladder is `Integer < BigInteger < BigDecimal`, so a mixed-leaf operation
+promotes to the widest operand: `1 add 0d2` → `0d3` (BigInteger),
+`0d2 add 0d0.5` → `0d2.5` (BigDecimal), `1 add 0d0.5` → `0d1.5`. The
+existing `Integer ⊕ Float` rule is **unchanged** (`1 add 2.0` → `3.0`).
+
+**A Big type never silently becomes a `Float`.** Mixing an exact Big
+type with a binary `Float` in arithmetic is an `[aql/type_error]`
+(`0d2 add 1.0`, `0d0.1 add 0.2`) — degrading to `Float` would throw away
+the exactness the Big types exist to provide. Convert one operand
+explicitly first. For the same reason `convert BigInteger 3.14` and
+`convert BigDecimal 3.14` are **refused** (build a BigDecimal from a
+`String` or the `0d` literal instead); `convert` between the exact leaves
+and to/from `Integer`/`String` is exact, and `convert Float 0d2.5` is
+allowed but documented as a lossy projection.
+
+**Division.** `BigInteger div BigInteger` truncates toward zero and
+returns a BigInteger (with `mod`), like `Integer div`. `BigDecimal div
+BigDecimal` returns a BigDecimal rounded to the active decimal context —
+by default IEEE **decimal128** (34 significant digits, round-half-even),
+so `0d1.0 div 0d3.0` → `0d0.3333333333333333333333333333333333`.
+
+**Comparison is honest across leaves.** `0d5 eq 5`, `1 cmp 0d1.0` → `0`,
+and `0d0.5 eq 0.5` are all true (those magnitudes are exact in every
+leaf). But a `Float` that is **not** an exact decimal does not equal its
+`0d` lookalike: `0.1 eq 0d0.1` → `false`, because the Float's true value
+is `0.1000000000000000055…`, not exactly one tenth (the same result
+Python's `Decimal('0.1') == 0.1` gives).
+
+**Transcendentals.** With an imported `MathUtil`, the apd-backed
+functions return a `BigDecimal` for a Big argument computed to the active
+context (`MathUtil.sqrt 0d2`, `cbrt`, `exp`, `log` (natural), `log10`),
+and fractional `pow` (`0d2 pow 0d0.5`) likewise. Functions apd cannot
+compute exactly — the trig family (`sin`/`cos`/`tan`/…), `log2`, `logb`
+— accept a Big argument but return an (approximate) `Float`.
+
+**Scoped precision — `with-decimal`.** Wrap a body in
+`with-decimal {precision: N, rounding: "…"} [ … ]` to override the
+BigDecimal context for every BigDecimal op inside it (arithmetic and the
+apd-backed transcendentals). The override unwinds at the end of the
+block and nests:
+
+```
+with-decimal {precision: 5} [0d1.0 div 0d3.0]                  # returns 0d0.33333
+with-decimal {precision: 4 rounding: "down"} [0d2.0 div 0d3.0]  # returns 0d0.6666
+```
+
+Rounding names: `half-even` (default), `half-up`, `half-down`, `down`,
+`up`, `ceiling`, `floor` (apd's `half_even` spellings are also accepted).
 
 ### Compound data
 
@@ -290,8 +362,10 @@ Any
 │   ├── Atom
 │   ├── Boolean                     -- false | true
 │   ├── Number
-│   │   ├── Integer
-│   │   └── Float
+│   │   ├── Integer                  -- signed int64 (overflow → error)
+│   │   ├── Float                    -- IEEE-754 binary64
+│   │   ├── BigInteger               -- unbounded exact int   (`0d123`)
+│   │   └── BigDecimal               -- exact base-10 decimal (`0d12.5`)
 │   ├── String
 │   │   ├── EmptyString
 │   │   └── ProperString

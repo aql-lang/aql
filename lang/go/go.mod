@@ -11,6 +11,8 @@ require (
 	voxgiguniversalsdk v0.1.1
 )
 
+require github.com/cockroachdb/apd/v3 v3.2.3 // indirect
+
 require (
 	github.com/jsonicjs/directive/go v0.1.0 // indirect
 	github.com/jsonicjs/multisource/go v0.1.2

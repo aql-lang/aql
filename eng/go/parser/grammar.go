@@ -45,6 +45,75 @@ func setupBaseTokens(j *jsonic.Jsonic) parserTokens {
 	}
 }
 
+// setupBigNumberMatcher registers a high-priority lex matcher that claims a
+// whole `0d…` literal — `[+-]?0[dD][0-9_]+(\.[0-9_]+)?([eE][+-]?[0-9_]+)?` —
+// as a single #BD token BEFORE jsonic's number matcher or the `.` (#DT)
+// fixed token can split it (jsonic does not know the `0d` prefix, and would
+// otherwise break `0d12.5` into `0d12` · `.` · `5`). The token carries a
+// bigNumberVal; the val rule (setupValRule) turns it into r.Node, and
+// convertTopLevelValueInner / convertDataValue route it to bigNumberToValue.
+// A trailing `.` is consumed ONLY when followed by a digit, so `0d5.foo`
+// stays `0d5` + dot-access. Runs only outside template strings.
+func setupBigNumberMatcher(j *jsonic.Jsonic, t parserTokens) {
+	isDigit := func(c byte) bool { return (c >= '0' && c <= '9') || c == '_' }
+	j.AddMatcher("big_number", 1000001, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
+		if rule != nil {
+			if _, ok := rule.K["aql_tpl"]; ok {
+				return nil // inside a template string: leave to the literal matcher
+			}
+		}
+		cursor := lex.Cursor()
+		s := lex.Src
+		si := cursor.SI
+		start := si
+		if si < len(s) && (s[si] == '+' || s[si] == '-') {
+			si++ // optional sign, glued to the literal
+		}
+		// Require the 0d / 0D prefix.
+		if si+1 >= len(s) || s[si] != '0' || (s[si+1] != 'd' && s[si+1] != 'D') {
+			return nil
+		}
+		si += 2
+		// Require at least one integer digit.
+		if si >= len(s) || !isDigit(s[si]) {
+			return nil
+		}
+		for si < len(s) && isDigit(s[si]) {
+			si++
+		}
+		// Optional fraction — consume `.` only when a digit follows, so a
+		// dot-access (`0d5.foo`) is left for the #DT token.
+		if si+1 < len(s) && s[si] == '.' && isDigit(s[si+1]) {
+			si++
+			for si < len(s) && isDigit(s[si]) {
+				si++
+			}
+		}
+		// Optional exponent.
+		if si < len(s) && (s[si] == 'e' || s[si] == 'E') {
+			j2 := si + 1
+			if j2 < len(s) && (s[j2] == '+' || s[j2] == '-') {
+				j2++
+			}
+			if j2 < len(s) && isDigit(s[j2]) {
+				si = j2
+				for si < len(s) && isDigit(s[si]) {
+					si++
+				}
+			}
+		}
+		src := s[start:si]
+		// Emit the whole run as ONE text token. jsonic's val rule already
+		// opens on text, so it flows to parseWord, which recognises the
+		// `0d` prefix and builds the BigInteger/BigDecimal. The matcher's
+		// only job is to claim the run so the embedded `.` isn't split off.
+		tkn := lex.Token("#TX", jsonic.TinTX, src, src)
+		cursor.SI = si
+		cursor.CI += si - start // a 0d literal never spans newlines
+		return tkn
+	})
+}
+
 // setupTemplateLiteralMatcher registers a high-priority lex matcher that
 // produces #TL tokens for literal text inside template strings. Active only
 // when rule.K["aql_tpl"] is set (inside a backtick-opened interp rule).

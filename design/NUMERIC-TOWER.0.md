@@ -1,9 +1,14 @@
 # Numeric Tower — adding a true `Decimal` to AQL
 
-Status: **proposal / design-only**. No code. This document specifies how
-AQL would grow from two numeric leaves (`Integer`, `Float`) to a small
-*numeric tower* that includes an exact base-10 `Decimal`, and how that
-interacts with the proposed
+Status: **superseded by [BIGNUM-0D.0.md](BIGNUM-0D.0.md)** (the exact
+leaves shipped as `BigInteger`/`BigDecimal` opted into via the `0d`
+literal prefix, rather than the single `Decimal`/`d`-suffix sketched
+here). Retained for the motivation and the units-of-measure interaction.
+
+Original status: **proposal / design-only**. No code. This document
+specifies how AQL would grow from two numeric leaves (`Integer`, `Float`)
+to a small *numeric tower* that includes an exact base-10 `Decimal`, and
+how that interacts with the proposed
 [F# units of measure](fsharp-units-in-aql-report.0.md).
 
 Notation: examples use the `# returns …` convention (a trailing comment,

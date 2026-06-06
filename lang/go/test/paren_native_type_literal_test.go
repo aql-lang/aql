@@ -325,6 +325,25 @@ func TestTypeLiteralNoPanic(t *testing.T) {
 		{"undef-map", `undef Map`},
 		{"undef-list", `undef List`},
 		{"undef-string", `undef String`},
+
+		// BigInteger / BigDecimal type literals (bare, no payload)
+		{"typeof-biginteger", `BigInteger typeof`},
+		{"typeof-bigdecimal", `BigDecimal typeof`},
+		{"add-biginteger", `BigInteger add 1`},
+		{"add-bigdecimal", `BigDecimal add 0d1`},
+		{"div-bigdecimal", `BigDecimal div 0d2`},
+		{"mod-biginteger", `BigInteger mod 0d2`},
+		{"pow-bigdecimal", `BigDecimal pow 0d2`},
+		{"convert-biginteger", `convert BigInteger BigDecimal`},
+		{"convert-bigdecimal", `convert BigDecimal BigInteger`},
+		{"is-biginteger", `BigInteger is Number`},
+		{"eq-bigdecimal", `BigDecimal eq 0d1`},
+		{"cmp-biginteger", `BigInteger cmp 0d1`},
+
+		// with-decimal with type-literal args
+		{"with-decimal-typelit-opts", `with-decimal Map [0d1.0 div 0d3.0]`},
+		{"with-decimal-typelit-body", `with-decimal {precision: 5} List`},
+		{"with-decimal-both-typelit", `with-decimal Map List`},
 	}
 
 	for _, tc := range cases {

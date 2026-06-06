@@ -182,6 +182,14 @@ func ExactEqual(a, b Value) bool {
 
 	// Scalars: compare by value.
 	if a.Parent.ConformsTo(TNumber) && b.Parent.ConformsTo(TNumber) {
+		// An arbitrary-precision operand is compared exactly via apd
+		// (cross-leaf magnitude: 1 == 0d1 == 1.0). A NaN/non-finite Float
+		// fails toDecimalExact, so it is never equal — preserving nan≠nan.
+		if numIsBig(a) || numIsBig(b) {
+			ar, aok := toRatExact(a)
+			br, bok := toRatExact(b)
+			return aok && bok && ar.Cmp(br) == 0
+		}
 		_as9, _ := AsNumber(a)
 		_as8, _ := AsNumber(b)
 		return _as9 == _as8
@@ -266,6 +274,11 @@ func DeepEqual(a, b Value) bool {
 
 	// Scalars.
 	if a.Parent.ConformsTo(TNumber) && b.Parent.ConformsTo(TNumber) {
+		if numIsBig(a) || numIsBig(b) {
+			ar, aok := toRatExact(a)
+			br, bok := toRatExact(b)
+			return aok && bok && ar.Cmp(br) == 0
+		}
 		_as17, _ := AsNumber(a)
 		_as16, _ := AsNumber(b)
 		return _as17 == _as16

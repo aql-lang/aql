@@ -1,5 +1,11 @@
 package eng
 
+import (
+	"math/big"
+
+	"github.com/cockroachdb/apd/v3"
+)
+
 // Payload is the static type of Value.Data — the kernel-known shape
 // of the data a Value carries. During the type-decoupling migration
 // (Step 5 of TYPE-DECOUPLING.0.md), Payload is a `= any` alias so
@@ -47,6 +53,18 @@ type IntPayload struct{ N int64 }
 // FloatPayload carries the float64 payload for a Scalar/Number/Float
 // value. Constructed by NewFloat.
 type FloatPayload struct{ F float64 }
+
+// BigIntPayload carries an arbitrary-precision integer for a
+// Scalar/Number/BigInteger value. Constructed by NewBigInteger. The
+// *big.Int is treated as immutable after construction — arithmetic
+// always allocates a fresh result — so the shallow Value copy and
+// sameContainer identity stay sound (see eng/go/CLAUDE.md Sealed Payload).
+type BigIntPayload struct{ N *big.Int }
+
+// DecimalPayload carries an arbitrary-precision base-10 decimal for a
+// Scalar/Number/BigDecimal value. Constructed by NewBigDecimal. The
+// *apd.Decimal is likewise treated as immutable after construction.
+type DecimalPayload struct{ D *apd.Decimal }
 
 // StrPayload carries the string payload for a Scalar/String value.
 // Constructed by NewString.
@@ -218,6 +236,8 @@ func (HostTypeBody) hostTypeBody() {}
 func (ReachInfo) payloadMarker()           {}
 func (IntPayload) payloadMarker()          {}
 func (FloatPayload) payloadMarker()        {}
+func (BigIntPayload) payloadMarker()       {}
+func (DecimalPayload) payloadMarker()      {}
 func (StrPayload) payloadMarker()          {}
 func (BoolPayload) payloadMarker()         {}
 func (AtomPayload) payloadMarker()         {}

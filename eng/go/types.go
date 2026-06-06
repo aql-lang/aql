@@ -23,6 +23,8 @@ var (
 	TNumber         = mustType("Scalar/Number")
 	TInteger        = mustType("Scalar/Number/Integer")
 	TFloat          = mustType("Scalar/Number/Float")
+	TBigInteger     = mustType("Scalar/Number/BigInteger")
+	TBigDecimal     = mustType("Scalar/Number/BigDecimal")
 	TBoolean        = mustType("Scalar/Boolean")
 	TPath           = mustType("Scalar/Path")
 	TNode           = mustType("Node")

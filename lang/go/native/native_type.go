@@ -2,10 +2,12 @@ package native
 
 import (
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 
 	"github.com/aql-lang/aql/eng/go"
+	"github.com/cockroachdb/apd/v3"
 )
 
 // typeNatives covers the type-system words: refine, pathof, enum,
@@ -721,6 +723,15 @@ func convertTo(src Value, targetType *Type, base string) (Value, error) {
 		return NewString(s), nil
 
 	case targetType.ConformsTo(TFloat):
+		// Big → Float is a deliberately lossy projection (the exact
+		// value is approximated to the nearest binary float64).
+		if src.Parent.ConformsTo(TBigInteger) || src.Parent.ConformsTo(TBigDecimal) {
+			f, err := AsFloatApprox(src)
+			if err != nil {
+				return Value{}, fmt.Errorf("convert: cannot convert %s to float", src.Parent.Leaf())
+			}
+			return NewFloat(f), nil
+		}
 		text := ValToString(src)
 		f, err := strconv.ParseFloat(text, 64)
 		if err != nil {
@@ -728,7 +739,32 @@ func convertTo(src Value, targetType *Type, base string) (Value, error) {
 		}
 		return NewFloat(f), nil
 
+	case targetType.ConformsTo(TBigInteger):
+		return convertToBigInteger(src, base)
+
+	case targetType.ConformsTo(TBigDecimal):
+		return convertToBigDecimal(src, base)
+
 	case targetType.ConformsTo(TNumber) || targetType.ConformsTo(TInteger):
+		// Big → Integer: BigInteger range-checks int64; BigDecimal
+		// truncates toward zero, then range-checks.
+		if src.Parent.ConformsTo(TBigInteger) {
+			n, _ := AsBigInteger(src)
+			if !n.IsInt64() {
+				return Value{}, fmt.Errorf("convert: %s overflows Integer (int64) range", FormatBigInteger(n))
+			}
+			return NewInteger(n.Int64()), nil
+		}
+		if src.Parent.ConformsTo(TBigDecimal) {
+			n, err := bigDecimalToBigIntTrunc(src)
+			if err != nil {
+				return Value{}, err
+			}
+			if !n.IsInt64() {
+				return Value{}, fmt.Errorf("convert: %s overflows Integer (int64) range", FormatBigInteger(n))
+			}
+			return NewInteger(n.Int64()), nil
+		}
 		text := ValToString(src)
 		if base == "" {
 			n, err := strconv.ParseInt(text, 10, 64)
@@ -763,6 +799,106 @@ func convertTo(src Value, targetType *Type, base string) (Value, error) {
 	default:
 		return Value{}, fmt.Errorf("convert: unsupported target type %s", targetType)
 	}
+}
+
+// convertToBigInteger converts a scalar source to BigInteger. Exact
+// sources (Integer, BigInteger) and the truncated integer part of a
+// BigDecimal are accepted; a String is parsed exactly (base-aware). A
+// Float is REFUSED — a binary Float is inexact, so silently absorbing it
+// into an arbitrary-precision exact type would re-introduce the very
+// rounding error the Big types exist to avoid (convert to Integer first
+// if a truncating projection is really wanted).
+func convertToBigInteger(src Value, base string) (Value, error) {
+	switch {
+	case src.Parent.ConformsTo(TBigInteger):
+		return src, nil
+	case src.Parent.ConformsTo(TBigDecimal):
+		n, err := bigDecimalToBigIntTrunc(src)
+		if err != nil {
+			return Value{}, err
+		}
+		return NewBigInteger(n), nil
+	case src.Parent.ConformsTo(TFloat):
+		return Value{}, fmt.Errorf("convert: cannot convert Float to BigInteger (a binary Float is inexact; convert to Integer first)")
+	case src.Parent.ConformsTo(TInteger):
+		i, _ := src.AsConcreteInteger()
+		return NewBigInteger(big.NewInt(i)), nil
+	default:
+		text := ValToString(src)
+		var numBase int
+		switch base {
+		case "", "dec":
+			numBase = 10
+		case "hex", "HEX":
+			numBase = 16
+		case "bin":
+			numBase = 2
+		case "oct":
+			numBase = 8
+		default:
+			return Value{}, fmt.Errorf("convert: unknown base %q", base)
+		}
+		n, ok := new(big.Int).SetString(text, numBase)
+		if !ok {
+			return Value{}, fmt.Errorf("convert: cannot convert %q to BigInteger", text)
+		}
+		return NewBigInteger(n), nil
+	}
+}
+
+// convertToBigDecimal converts a scalar source to BigDecimal. Integer and
+// BigInteger widen exactly; BigDecimal is returned as-is; a String is
+// parsed exactly via apd. A Float is REFUSED for the same reason as
+// convertToBigInteger (the float is already rounded — WAT Exhibit L).
+func convertToBigDecimal(src Value, base string) (Value, error) {
+	if base != "" {
+		return Value{}, fmt.Errorf("convert: base %q is not supported for BigDecimal", base)
+	}
+	switch {
+	case src.Parent.ConformsTo(TBigDecimal):
+		return src, nil
+	case src.Parent.ConformsTo(TBigInteger):
+		n, _ := AsBigInteger(src)
+		d, _, err := apd.NewFromString(n.String())
+		if err != nil {
+			return Value{}, fmt.Errorf("convert: cannot convert %s to BigDecimal", FormatBigInteger(n))
+		}
+		return NewBigDecimal(d), nil
+	case src.Parent.ConformsTo(TFloat):
+		return Value{}, fmt.Errorf("convert: cannot convert Float to BigDecimal (a binary Float is already rounded; build the BigDecimal from a String or the 0d literal)")
+	case src.Parent.ConformsTo(TInteger):
+		i, _ := src.AsConcreteInteger()
+		return NewBigDecimal(apd.New(i, 0)), nil
+	default:
+		text := ValToString(src)
+		d, _, err := apd.NewFromString(text)
+		if err != nil {
+			return Value{}, fmt.Errorf("convert: cannot convert %q to BigDecimal", text)
+		}
+		return NewBigDecimal(d), nil
+	}
+}
+
+// bigDecimalToBigIntTrunc returns the integer part of a BigDecimal,
+// truncated toward zero (the C / Go float→int convention). Done via the
+// plain decimal text so the sign and scale are handled uniformly.
+func bigDecimalToBigIntTrunc(src Value) (*big.Int, error) {
+	d, err := AsBigDecimal(src)
+	if err != nil {
+		return nil, err
+	}
+	s := d.Text('f')
+	if i := strings.IndexByte(s, '.'); i >= 0 {
+		s = s[:i]
+	}
+	if s == "" || s == "-" {
+		s = "0"
+	}
+	n, ok := new(big.Int).SetString(s, 10)
+	if !ok {
+		return nil, fmt.Errorf("convert: cannot truncate %s to an integer", FormatBigDecimal(d))
+	}
+	return n, nil
 }
 
 func convertIdealHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

@@ -1,0 +1,99 @@
+# AQL Language Specification: BigInteger & BigDecimal (0d literals)
+# Format: input<TAB>expected<TAB>description
+#
+# Two arbitrary-precision exact numeric leaves under Scalar/Number, opted
+# into via the `0d` literal prefix:
+#   0d123    → BigInteger (math/big, unbounded, exact integers)
+#   0d12.5   → BigDecimal (cockroachdb/apd, exact base-10)
+# A `.` OR an exponent makes a 0d literal a BigDecimal.
+# Integer/Float are unchanged. See design/BIGNUM-0D.0.md.
+
+# ───────── literals & typeof ─────────
+0d123	0d123	BigInteger literal round-trips
+0d12.5	0d12.5	BigDecimal literal round-trips
+-0d5	-0d5	negative BigInteger
+0d1_000_000	0d1000000	underscore separators
+0d1.5e3	0d1500	exponent → BigDecimal
+0d1e3	0d1000	exponent (no dot) → BigDecimal
+0d123 typeof	BigInteger	type of a 0d integer
+0d12.5 typeof	BigDecimal	type of a 0d decimal
+0d1e3 typeof	BigDecimal	exponent form is BigDecimal
+{a: 0d5, b: 0d1.5} . a	0d5	0d literals in map values
+0d0.10	0d0.10	scale is preserved on round-trip
+
+# ───────── BigInteger arithmetic (exact, unbounded) ─────────
+0d2 add 0d3	0d5	addition
+0d10 sub 0d3	0d7	subtraction
+0d6 mul 0d7	0d42	multiplication
+0d7 div 0d2	0d3	truncating division (like Integer div)
+0d7 mod 0d2	0d1	remainder
+0d2 pow 0d100	0d1267650600228229401496703205376	exact 2^100 — unbounded
+0d99999999999999999999 add 0d1	0d100000000000000000000	no overflow
+
+# ───────── BigDecimal arithmetic (exact + decimal128 context) ─────────
+0d0.1 add 0d0.2	0d0.3	exact — the headline (0.1+0.2 = 0.3, not 0.30000000000000004)
+0d19.99 mul 0d3	0d59.97	exact money
+0d0.30 add 0d0.70	0d1.00	scale preserved
+0d1.0 div 0d3.0	0d0.3333333333333333333333333333333333	34-digit half-even (decimal128)
+
+# ───────── promotion: widest exact leaf wins ─────────
+1 add 0d2	0d3	Integer ⊕ BigInteger → BigInteger
+0d2 add 0d0.5	0d2.5	BigInteger ⊕ BigDecimal → BigDecimal
+1 add 0d0.5	0d1.5	Integer ⊕ BigDecimal → BigDecimal
+1 add 0d2 typeof	BigInteger	promotion result type
+1 add 0d0.5 typeof	BigDecimal	promotion result type
+
+# ───────── comparison & sort (cross-leaf magnitude) ─────────
+0d5 eq 5	true	BigInteger equals Integer of same magnitude
+1 cmp 0d1.0	0	Integer vs BigDecimal magnitude
+0d1 eq 0d1.0	true	BigInteger equals BigDecimal of same magnitude
+0d0.5 eq 0.5	true	0.5 is exact in binary, so equal to BigDecimal
+0d5 lt 0d10	true	ordering
+0d10 gt 5	true	cross-leaf ordering
+[0d10 0d2 0d100 0d3] sort	[0d2 0d3 0d10 0d100]	numeric sort (not lexical)
+[0d3 1 2.0 0d0.5] sort	[0d0.5 1 2.0 0d3]	mixed leaves sort by magnitude
+
+# ───────── NEGATIVE: Big ⊕ Float is an error (exactness is never lost) ─────────
+0d2 add 1.0	ERROR:type_error	BigInteger ⊕ Float → error
+0d0.1 add 0.2	ERROR:type_error	BigDecimal ⊕ Float → error
+1.0 mul 0d3	ERROR:type_error	Float ⊕ BigInteger → error
+# Integer ⊕ Float is UNCHANGED (still infects to Float).
+1 add 2.0	3.0	Integer ⊕ Float → Float (unchanged)
+# A Float that is not an exact decimal does NOT equal its 0d lookalike.
+0.1 eq 0d0.1	false	Float 0.1 ≠ exact BigDecimal 0d0.1 (honest, like Python)
+
+# ───────── transcendentals (apd-backed → BigDecimal; trig → Float) ─────────
+"aql:math-util" import end  MathUtil.sqrt 0d4	0d2.000000000000000000000000000000000	sqrt of a Big → BigDecimal (exact context)
+"aql:math-util" import end  MathUtil.sqrt 0d2 typeof	BigDecimal	apd-backed transcendental returns BigDecimal
+"aql:math-util" import end  MathUtil.log10 0d1000	0d3.000000000000000000000000000000000	log10 of a Big → BigDecimal
+"aql:math-util" import end  MathUtil.cbrt 0d27 typeof	BigDecimal	cbrt is apd-backed
+"aql:math-util" import end  MathUtil.sqrt 16.0	4.0	Float arg stays on the Float path (unchanged)
+"aql:math-util" import end  MathUtil.sin 0d2 typeof	Float	trig has no exact apd form → Float (lossy)
+0d2 pow 0d0.5 typeof	BigDecimal	fractional pow → BigDecimal (apd Pow)
+
+# ───────── with-decimal: scoped rounding context ─────────
+with-decimal {precision: 5} [0d1.0 div 0d3.0]	0d0.33333	precision override inside the block
+with-decimal {precision: 4 rounding: "down"} [0d2.0 div 0d3.0]	0d0.6666	rounding override (round-down truncates)
+with-decimal {precision: 4 rounding: "half-even"} [0d2.0 div 0d3.0]	0d0.6667	half-even rounds the last digit up
+with-decimal {precision: 6} [with-decimal {precision: 3} [0d1.0 div 0d3.0]]	0d0.333	nested blocks: inner override wins
+"aql:math-util" import end  with-decimal {precision: 10} [0d2 MathUtil.sqrt]	0d1.414213562	the context also threads through transcendentals
+
+# ───────── convert (explicit, exactness-preserving) ─────────
+convert BigInteger 42	0d42	Integer → BigInteger (exact)
+convert BigDecimal 42	0d42	Integer → BigDecimal (exact)
+convert BigDecimal 0d7	0d7	BigInteger → BigDecimal (exact)
+convert BigInteger "12345678901234567890123"	0d12345678901234567890123	String → BigInteger (beyond int64)
+convert BigDecimal "3.14159"	0d3.14159	String → BigDecimal (exact, no Float rounding)
+0d255 convert Integer	255	BigInteger → Integer (in range)
+0d3.99 convert Integer	3	BigDecimal → Integer truncates toward zero
+convert Float 0d2.5	2.5	BigDecimal → Float (documented lossy)
+# A Float never silently becomes an exact Big type (WAT Exhibit L).
+convert BigInteger 3.14	ERROR:cannot convert Float	Float → BigInteger refused
+convert BigDecimal 3.14	ERROR:cannot convert Float	Float → BigDecimal refused
+
+# ───────── NEGATIVE: malformed 0d literals & zero divisor ─────────
+0d	ERROR:syntax_error	0d with no digits
+0d1__0	ERROR:syntax_error	repeated underscore
+0d1 div 0d0	ERROR:division by zero	BigInteger divide by zero
+0d1 mod 0d0	ERROR:modulo by zero	BigInteger modulo by zero
+0d1.0 div 0d0.0	ERROR:division by zero	BigDecimal divide by zero

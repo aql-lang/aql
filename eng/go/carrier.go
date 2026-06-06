@@ -470,18 +470,28 @@ func ReturnsStatic(types ...*Type) ReturnsFunc {
 	}
 }
 
-// ReturnsNumericBinary models the common arithmetic pattern: when
-// both args are integers the result is an integer, otherwise the
-// result is a decimal. Applies to add, sub, mul, div, mod, pow when
-// the matched signature is [TNumber, TNumber].
+// ReturnsNumericBinary models the arithmetic-tower result type for
+// add/sub/mul/div/mod/pow on [TNumber, TNumber]: the widest leaf wins
+// among the exact types (Integer < BigInteger < BigDecimal); an
+// Integer⊕Float mix is Float. A Big⊕Float mix errors at runtime (the
+// exact types never silently become Float); statically it is modelled as
+// the Big leaf so analysis can continue past it.
 func ReturnsNumericBinary() ReturnsFunc {
 	return func(args []Value, _ *Registry) []Value {
-		if len(args) == 2 &&
-			args[0].Parent.ConformsTo(TInteger) &&
-			args[1].Parent.ConformsTo(TInteger) {
+		if len(args) != 2 {
+			return []Value{NewCarrier(TFloat)}
+		}
+		a, b := args[0].Parent, args[1].Parent
+		switch {
+		case a.ConformsTo(TBigDecimal) || b.ConformsTo(TBigDecimal):
+			return []Value{NewCarrier(TBigDecimal)}
+		case a.ConformsTo(TBigInteger) || b.ConformsTo(TBigInteger):
+			return []Value{NewCarrier(TBigInteger)}
+		case a.ConformsTo(TFloat) || b.ConformsTo(TFloat):
+			return []Value{NewCarrier(TFloat)}
+		default:
 			return []Value{NewCarrier(TInteger)}
 		}
-		return []Value{NewCarrier(TFloat)}
 	}
 }
 
