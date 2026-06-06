@@ -56,11 +56,11 @@ catalogue) — a much larger effort, partly impractical on the wasm target.
 | **`totalOrder` predicate** (§5.10) | `cmp`/`tcmp`/`sort` place NaN greatest (deterministic) | ✅ Tier 0 |
 | **Directed rounding modes** (§4.3) | only the hardware default (ties-to-even) | ❌ |
 | **Sticky exception flags** (§7) | none | ❌ |
-| **`remainder` (round-to-nearest)** (§5.3.1) | `mod` is `fmod` (truncated) | ❌ (different op) |
-| **`fma`** (§5.4.1) | absent | ❌ |
-| **`roundToIntegral*`** (§5.9) | partial (`floor/ceil/round/trunc` in math) | ⚠️ not the full named set |
-| **min/max with NaN** (§9.6) | `min/max` ignore NaN (2008 `minNum`) | ⚠️ 2008-style, not 2019 |
-| **Decimal↔binary string conversion, correctly rounded, round-trips** (§5.12) | parse OK for finite; **format non-conformant** | ❌ |
+| **`remainder` (round-to-nearest)** (§5.3.1) | `MathUtil.remainder` (`mod` stays truncated `fmod`) | ✅ |
+| **`fma`** (§5.4.1) | `MathUtil.fma` (single-rounding `a·b+c`) | ✅ |
+| **`roundToIntegral*`** (§5.9) | all 5 directions: trunc/floor/ceil/round/round-even | ✅ (returns Integer, not Float) |
+| **min/max with NaN** (§9.6) | `min/max` ignore NaN, order-independent (2008 `minNum`) | ✅ 2008-style |
+| **Decimal↔binary string conversion** (§5.12) | parse correctly-rounded (`ParseFloat`); format lacks exponential form for extremes | ⚠️ parse ✅ / format partial |
 | **`Inf`/`NaN` literals & canonical strings** (§5.12) | `inf`/`-inf`/`nan` literals; render to same tokens (round-trip) | ✅ Tier 0 |
 | **Signaling NaN** (§6.2) | not exposed (Go doesn't) | ❌ |
 
@@ -86,7 +86,9 @@ What is still *not* IEEE here: there is no sticky `divByZero`/`invalid`
 status flag (Go does not expose FPU flags — Tier 2). The result *values*
 are conformant; the *signalling* is not.
 
-### 2. NaN comparison is internally incoherent (genuine bug)
+### 2. NaN comparison is internally incoherent (genuine bug) — ✅ RESOLVED (Tier 0)
+
+*(Transcript below shows the pre-fix behaviour; see [Tier-0 status](#tier-0-status) for the resolution — `lte`/`gte` are now unordered-false and `cmp`/`sort` use a NaN-last total order.)*
 
 ```
 nan nan eq    # false   ✅ IEEE
@@ -111,7 +113,9 @@ IEEE ambition** and should be fixed regardless. See
 IEEE `totalOrder` for `cmp`/`sort`, while keeping the relational
 predicates unordered.
 
-### 3. The float-to-string formatter is not conformant
+### 3. The float-to-string formatter is not conformant — ⚠️ PARTLY RESOLVED
+
+*(Special values now render as the parseable `inf`/`-inf`/`nan` literals (Tier 0), so the round-trip break below is fixed. The remaining gap is exponential notation for extreme finite magnitudes — see the deferral note in the tier list.)*
 
 `FormatFloat` (`eng/go/value.go:903`) uses `strconv.FormatFloat(f,'f',-1,64)`
 — shortest mantissa, but **never exponential** — then appends `.0`:
@@ -233,14 +237,11 @@ unparseable `+Inf.0`/`NaN.0`), so print∘parse is identity. Verified by
 `lang/spec/float-special.tsv`, `eng/go/compare_nan_test.go`, and
 `eng/go/parser/parse_test.go::TestParseSpecialFloatLiterals`.
 
-> **Unchanged, still imperfect: `min`/`max` with NaN.** `MathUtil.min`/
-> `max` are built on the relational predicates, so with the IEEE
-> unordered rule they are *order-dependent* for NaN (`max 5.0 nan → nan`
-> but `max nan 5.0 → 5.0`). This fix neither improved nor regressed that
-> (the relational predicates returned false for NaN before too); giving
-> `min`/`max` a defined NaN policy — IEEE-2008 `minNum`/`maxNum`
-> (ignore NaN) or 2019 `minimum`/`maximum` (propagate NaN) — is a
-> separate Tier-1 item.
+> **`min`/`max` with NaN — resolved (Tier 1).** `MathUtil.min`/`max` now
+> ignore NaN (IEEE-2008 `minNum`/`maxNum`): a NaN operand is dropped, so
+> the result is order-independent (`min nan 5` and `min 5 nan` are both
+> 5); only when every operand is NaN is the result NaN. This treats NaN
+> as "missing", which suits a data/query language.
 
 **Tier 1 — IEEE arithmetic *semantics* (the realistic compliance target).**
 - ✅ Decision (1) above: `Float` div/mod by zero → `±∞`/NaN, not error;
@@ -249,17 +250,23 @@ unparseable `+Inf.0`/`NaN.0`), so print∘parse is identity. Verified by
   print∘parse round-trips for specials (landed with Tier 0).
 - ✅ `remainder`, `copysign`, `nextafter`, and the `is-nan`/`is-inf`/
   `is-finite`/`signbit` classifiers as words in `aql:math-util`.
-- ⬜ Correctly-rounded `Float` literal parse (verify/own the
-  decimal→binary64 step).
-- ⬜ `fma`; the full `roundToIntegral` mode set; `scalb`/`logb`.
-- ⬜ Exponential `FormatFloat` for extreme magnitudes (finite values
-  still round-trip via the long decimal form, just unreadably).
-- ⬜ A defined `min`/`max` NaN policy (2008 ignore vs 2019 propagate).
+- ✅ Correctly-rounded `Float` literal parse — the dotted-literal path
+  now parses the exact source digits with `strconv.ParseFloat`
+  (round-ties-to-even) rather than trusting jsonic's float64.
+- ✅ `fma`; `round-even` (the IEEE roundTiesToEven mode, completing
+  trunc/floor/ceil/round/round-even); `scalb`/`logb`.
+- ✅ A defined `min`/`max` NaN policy — IEEE-2008 `minNum`/`maxNum`
+  (ignore NaN, order-independent: `min nan 5 → 5`, both NaN → NaN).
+- ⬜ Exponential `FormatFloat` for extreme magnitudes. **Deliberately
+  deferred:** finite values already round-trip via the long decimal
+  form, and switching `'f'` → `'g'` would change the rendering of
+  ordinary small decimals (`0.00001` → `1e-05`), churning many specs for
+  a cosmetic gain on extreme values. Revisit with a magnitude threshold
+  that doesn't disturb the common range.
 
-Most of Tier 1 has landed; the remainder is `fma`, the literal-parse
-rounding guarantee, exponential formatting, and the `min`/`max` NaN
-policy. After those, AQL's Float behaves like every other mainstream
-language's double — which is what "IEEE-754" colloquially means.
+Tier 1 is essentially complete bar the cosmetic exponential-formatting
+item; AQL's Float now behaves like every other mainstream language's
+double — which is what "IEEE-754" colloquially means.
 
 **Tier 2 — full clause conformance (largely impractical on wasm).**
 - The five dynamic rounding-direction modes (§4) via a scoped context.

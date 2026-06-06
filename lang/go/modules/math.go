@@ -32,17 +32,20 @@ func BuildMathModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Unary operations: [Number] -> [Number]
 	for _, name := range []string{
 		"abs", "negate", "sign",
-		"ceil", "floor", "round", "trunc",
-		"sqrt", "cbrt", "exp", "log", "log2", "log10",
+		"ceil", "floor", "round", "round-even", "trunc",
+		"sqrt", "cbrt", "exp", "log", "log2", "log10", "logb",
 		"sin", "cos", "tan", "asin", "acos", "atan",
 	} {
 		exports.Set(name, makeUnaryFnDef(name, subReg))
 	}
 
 	// Binary operations: [Number, Number] -> [Number]
-	for _, name := range []string{"min", "max", "atan2", "hypot", "remainder", "copysign", "nextafter"} {
+	for _, name := range []string{"min", "max", "atan2", "hypot", "remainder", "copysign", "nextafter", "scalb"} {
 		exports.Set(name, makeBinaryFnDef(name, subReg))
 	}
+
+	// Ternary operations: [Number, Number, Number] -> [Number]
+	exports.Set("fma", makeTernaryFnDef("fma", subReg))
 
 	// IEEE-754 classifier predicates: [Number] -> [Boolean].
 	for _, name := range []string{"is-nan", "is-inf", "is-finite", "signbit"} {
@@ -103,6 +106,27 @@ func makeBinaryFnDef(wordName string, subReg *native.Registry) native.Value {
 		Signatures: []native.FnSig{
 			{
 				Params: []native.FnParam{
+					{Type: native.TNumber},
+					{Type: native.TNumber},
+				},
+				Returns: []*native.Type{native.TNumber},
+				Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+			},
+		},
+		Registry: subReg,
+	}
+	return native.NewFnDef(fnDef)
+}
+
+// makeTernaryFnDef creates a FnDef value that wraps a ternary math word
+// ([Number, Number, Number] -> [Number]) — used for fma.
+func makeTernaryFnDef(wordName string, subReg *native.Registry) native.Value {
+	fnDef := native.FnDefInfo{
+		Name: wordName,
+		Signatures: []native.FnSig{
+			{
+				Params: []native.FnParam{
+					{Type: native.TNumber},
 					{Type: native.TNumber},
 					{Type: native.TNumber},
 				},
@@ -244,6 +268,11 @@ var MathNatives = func() []native.NativeFunc {
 		// pair so each word carries an integer overload and a decimal
 		// overload, matching the historical RegisterBinaryIntOp +
 		// RegisterBinaryNumOp split.
+		// min / max ignore NaN (IEEE-2008 minNum/maxNum): if one operand
+		// is NaN the other is returned, so the result is order-independent
+		// (`min nan 5` and `min 5 nan` both give 5). Only when BOTH are
+		// NaN is the result NaN. This treats NaN as "missing", which suits
+		// a data/query language; see design/IEEE-754-COMPLIANCE.0.md.
 		mergeBinaryNumNatives("min",
 			native.BinaryIntOpNative("min", func(a, b int64) (int64, error) {
 				if a < b {
@@ -252,6 +281,12 @@ var MathNatives = func() []native.NativeFunc {
 				return b, nil
 			}),
 			native.BinaryNumOpNative("min", func(a, b float64) (float64, error) {
+				if math.IsNaN(a) {
+					return b, nil
+				}
+				if math.IsNaN(b) {
+					return a, nil
+				}
 				if a < b {
 					return a, nil
 				}
@@ -266,16 +301,25 @@ var MathNatives = func() []native.NativeFunc {
 				return b, nil
 			}),
 			native.BinaryNumOpNative("max", func(a, b float64) (float64, error) {
+				if math.IsNaN(a) {
+					return b, nil
+				}
+				if math.IsNaN(b) {
+					return a, nil
+				}
 				if a > b {
 					return a, nil
 				}
 				return b, nil
 			}),
 		),
-		// ceil/floor/round/trunc: decimal -> integer.
+		// ceil/floor/round/round-even/trunc: decimal -> integer.
+		// `round` rounds halves away from zero; `round-even` rounds halves
+		// to even (IEEE-754 roundTiesToEven, the default rounding mode).
 		ceilFloorNative("ceil", math.Ceil),
 		ceilFloorNative("floor", math.Floor),
 		ceilFloorNative("round", math.Round),
+		ceilFloorNative("round-even", math.RoundToEven),
 		ceilFloorNative("trunc", math.Trunc),
 	}
 
@@ -298,6 +342,7 @@ var MathNatives = func() []native.NativeFunc {
 		{"asin", math.Asin},
 		{"acos", math.Acos},
 		{"atan", math.Atan},
+		{"logb", math.Logb}, // IEEE: the unbiased radix-2 exponent of |x|
 	} {
 		out = append(out, native.UnaryNumOpNative(p.name, p.fn))
 	}
@@ -327,6 +372,41 @@ var MathNatives = func() []native.NativeFunc {
 		swapBinaryFloatNative("copysign", math.Copysign),
 		swapBinaryFloatNative("nextafter", math.Nextafter),
 	)
+
+	// scalb: `x scalb n` = x * 2^n (math.Ldexp). The exponent is the
+	// forward operand; truncated to int. b-op-a convention so the swap
+	// form reads naturally.
+	out = append(out, native.NativeFunc{
+		Name: "scalb",
+
+		Signatures: []native.NativeSig{{
+			Args: []*native.Type{native.TNumber, native.TNumber},
+			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				n, _ := native.AsNumber(args[0])
+				x, _ := native.AsNumber(args[1])
+				return []native.Value{native.NewFloat(math.Ldexp(x, int(n)))}, nil
+			},
+			Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
+		}},
+	})
+
+	// fma: fused multiply-add, `fma a b c` = a*b + c computed with a
+	// single rounding (math.FMA). Forward form is canonical: args are
+	// taken in written order, so a*b is the product and c the addend.
+	out = append(out, native.NativeFunc{
+		Name: "fma",
+
+		Signatures: []native.NativeSig{{
+			Args: []*native.Type{native.TNumber, native.TNumber, native.TNumber},
+			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				a, _ := native.AsNumber(args[0])
+				b, _ := native.AsNumber(args[1])
+				c, _ := native.AsNumber(args[2])
+				return []native.Value{native.NewFloat(math.FMA(a, b, c))}, nil
+			},
+			Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
+		}},
+	})
 
 	// Math constants — zero-arg stack-only.
 	out = append(out, native.NativeFunc{

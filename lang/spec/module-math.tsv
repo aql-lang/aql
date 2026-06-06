@@ -46,6 +46,18 @@
 "aql:math-util" import end  3.0 MathUtil.copysign -1.0	-3.0	magnitude of 3, sign of -1
 "aql:math-util" import end  -3.0 MathUtil.copysign 2.0	3.0	magnitude of -3, sign of +2
 "aql:math-util" import end  1.0 MathUtil.nextafter 2.0	1.0000000000000002	next representable Float toward 2
+# round-even ties to even (IEEE default); round ties away from zero.
+"aql:math-util" import end  2.5 MathUtil.round	3	round ties away from zero
+"aql:math-util" import end  2.5 MathUtil.round-even	2	ties-to-even: 2.5 -> 2
+"aql:math-util" import end  3.5 MathUtil.round-even	4	ties-to-even: 3.5 -> 4
+# logb / scalb (powers of two)
+"aql:math-util" import end  8.0 MathUtil.logb	3.0	radix-2 exponent of 8
+"aql:math-util" import end  3.0 MathUtil.scalb 4	48.0	3 * 2^4
+# fma: a*b + c with a single rounding (forward form)
+"aql:math-util" import end  MathUtil.fma 2.0 3.0 4.0	10.0	2*3 + 4
+# min / max ignore NaN and are order-independent (IEEE-2008 minNum/maxNum).
+"aql:math-util" import end  MathUtil.min nan 5.0	5.0	NaN ignored
+"aql:math-util" import end  MathUtil.max 5.0 nan	5.0	NaN ignored, order-independent
 #
 # §6  negative — a namespace word is undefined until the module is imported
 MathUtil.sqrt 16.0	ERROR:undefined_word	`math` is unbound without `import`

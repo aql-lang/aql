@@ -1253,6 +1253,14 @@ func floatToValue(f float64) eng.Value {
 // See design/INTEGER-OVERFLOW-STRATEGY.0.md.
 func numberValToValue(nv numberVal) (eng.Value, error) {
 	if strings.Contains(nv.Src, ".") {
+		// Parse the Float from its exact source digits for a guaranteed
+		// correctly-rounded (round-ties-to-even) decimal→binary64
+		// conversion, rather than trusting the float64 jsonic produced.
+		// strconv.ParseFloat is IEEE-correct; fall back to jsonic's value
+		// only if the (jsonic-validated) token somehow fails to reparse.
+		if f, err := strconv.ParseFloat(stripUnderscores(nv.Src), 64); err == nil {
+			return eng.NewFloat(f), nil
+		}
 		return eng.NewFloat(nv.Val), nil
 	}
 	if isPlainDecimalInteger(nv.Src) {

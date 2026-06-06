@@ -134,6 +134,34 @@ func init() {
 	})
 
 	register(&Entry{
+		Word:        "round-even",
+		Summary:     "Round a float to the nearest integer, ties to even.",
+		Description: "Rounds to nearest; halves go to the even neighbour (IEEE-754 roundTiesToEven). `2.5 round-even` is 2, `3.5 round-even` is 4. Contrast `round`, which rounds halves away from zero.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
+		Word:        "logb",
+		Summary:     "The unbiased radix-2 exponent of a number.",
+		Description: "Returns the exponent e such that the value is m*2^e with 1 <= |m| < 2 (math.Logb). `8.0 logb` is 3.0.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
+		Word:        "scalb",
+		Summary:     "Scale by a power of two: x scalb n = x * 2^n.",
+		Description: "`x scalb n` returns x * 2^n efficiently (math.Ldexp); n is truncated to an integer.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
+		Word:        "fma",
+		Summary:     "Fused multiply-add: fma a b c = a*b + c (single rounding).",
+		Description: "`fma a b c` computes a*b + c with only one rounding step (math.FMA), more accurate than a separate mul then add. Use forward form so a*b is the product and c the addend.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
 		Word:        "sqrt",
 		Summary:     "Compute the square root.",
 		Description: "Returns the square root of the input.",
