@@ -1306,7 +1306,24 @@ func TestParseIntegerLiteralOverflow(t *testing.T) {
 		ae, ok := err.(*eng.AqlError)
 		if !ok || ae.Code != "integer_overflow" {
 			t.Errorf("Parse(%q): expected [aql/integer_overflow], got %v", src, err)
+			continue
 		}
+		if ae.Row == 0 {
+			t.Errorf("Parse(%q): overflow error carries no source position", src)
+		}
+	}
+}
+
+// TestParseIntegerLiteralOverflowPos pins that the literal-overflow error
+// is located at the offending literal, not at the start of the line.
+func TestParseIntegerLiteralOverflowPos(t *testing.T) {
+	_, err := Parse("add 1 9223372036854775808")
+	ae, ok := err.(*eng.AqlError)
+	if !ok {
+		t.Fatalf("expected *eng.AqlError, got %v", err)
+	}
+	if ae.Row != 1 || ae.Col != 7 {
+		t.Errorf("expected position 1:7 (the literal), got %d:%d", ae.Row, ae.Col)
 	}
 }
 

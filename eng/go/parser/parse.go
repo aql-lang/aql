@@ -1192,12 +1192,15 @@ func processTemplateEscapes(s string) string {
 	return buf.String()
 }
 
-// numberVal wraps a float64 with source text so we can distinguish
-// integer literals (e.g. "5") from decimal literals (e.g. "5.0").
-// Injected by the jsonic LexSub callback when the source contains a ".".
+// numberVal wraps a float64 with its source text and source position so
+// we can (1) distinguish integer literals (e.g. "5") from decimal
+// literals (e.g. "5.0"), (2) parse integers from their exact digits, and
+// (3) locate an out-of-range integer literal in the source. Injected by
+// the jsonic Sub callback for every number token (setupNumberSub).
 type numberVal struct {
-	Val float64
-	Src string
+	Val      float64
+	Src      string
+	Row, Col int // 1-based source position of the literal (0 = unknown)
 }
 
 // floatToValue converts a JSON float64 to the appropriate AQL numeric value.
@@ -1233,7 +1236,7 @@ func numberValToValue(nv numberVal) (eng.Value, error) {
 	if isPlainDecimalInteger(nv.Src) {
 		n, err := strconv.ParseInt(stripUnderscores(nv.Src), 10, 64)
 		if err != nil {
-			return eng.Value{}, integerLiteralOverflowError(nv.Src)
+			return eng.Value{}, integerLiteralOverflowError(nv)
 		}
 		return eng.NewInteger(n), nil
 	}
@@ -1283,13 +1286,17 @@ func stripUnderscores(src string) string {
 }
 
 // integerLiteralOverflowError reports a decimal integer literal that does
-// not fit in int64. Until Integer becomes arbitrary-precision (Phase 1 of
+// not fit in int64, located at the literal's source position. Until
+// Integer becomes arbitrary-precision (Phase 1 of
 // design/INTEGER-OVERFLOW-STRATEGY.0.md), this is a hard parse error
 // rather than a silent fall-back to Float.
-func integerLiteralOverflowError(src string) error {
+func integerLiteralOverflowError(nv numberVal) error {
 	return &eng.AqlError{
 		Code:   "integer_overflow",
-		Detail: "integer literal out of range: " + src + " exceeds the Integer range (-9223372036854775808..9223372036854775807)",
-		Hint:   "use a Float literal (add a decimal point, e.g. " + src + ".0) if an approximate value is acceptable",
+		Detail: "integer literal out of range: " + nv.Src + " exceeds the Integer range (-9223372036854775808..9223372036854775807)",
+		Row:    nv.Row,
+		Col:    nv.Col,
+		Src:    nv.Src,
+		Hint:   "use a Float literal (add a decimal point, e.g. " + nv.Src + ".0) if an approximate value is acceptable",
 	}
 }

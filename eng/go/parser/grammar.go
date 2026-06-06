@@ -778,7 +778,7 @@ func setupNumberSub(j *jsonic.Jsonic) {
 	j.Sub(func(tkn *jsonic.Token, rule *jsonic.Rule, ctx *jsonic.Context) {
 		if tkn.Tin == jsonic.TinNR {
 			if f, ok := tkn.Val.(float64); ok {
-				tkn.Val = numberVal{Val: f, Src: tkn.Src}
+				tkn.Val = numberVal{Val: f, Src: tkn.Src, Row: tkn.RI, Col: tkn.CI}
 			}
 		}
 	}, nil)

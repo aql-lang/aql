@@ -294,9 +294,15 @@ correctness floor under either Phase-1 outcome.
   (`checkedAddInt`/`checkedSubInt`/`checkedMulInt`/`checkedPowInt`) and
   raise `[aql/integer_overflow]` uniformly on overflow instead of
   wrapping. Float handlers are untouched (they saturate to ±Inf).
-- **Tests.** Parser exactness/overflow + non-decimal preservation
-  (`eng/go/parser/parse_test.go`), checked-helper boundary tests
-  (`lang/go/native/checked_arith_test.go`), and spec rows
+- **Source positions.** Both overflow errors are located in the source:
+  the runtime error is stamped at the operator token by the engine's
+  `stampErrPos`, and the literal error carries the offending literal's
+  row/col (captured into `numberVal` in `setupNumberSub` and threaded
+  into the parse error).
+- **Tests.** Parser exactness/overflow/position + non-decimal
+  preservation (`eng/go/parser/parse_test.go`), checked-helper boundary
+  tests (`lang/go/native/checked_arith_test.go`), end-to-end error
+  position (`lang/go/test/overflow_position_test.go`), and spec rows
   (`lang/spec/arithmetic.tsv` §6, positive + negative).
 - **Docs.** `REFERENCE.md` and the `add`/`sub`/`mul`/`pow` help entries
   now state the int64 range and the overflow-is-an-error contract.
