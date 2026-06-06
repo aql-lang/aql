@@ -110,9 +110,9 @@ type you define with `def`.
   int64 range and silently becomes an (inexact) `Float`, whereas the
   decimal `10000000000000000000` is a clean `[aql/integer_overflow]`.
 - **Infinity:** write the `inf` / `-inf` literal. An *overflowing*
-  numeric literal such as `1e309` is rejected as `undefined_word` (you
-  cannot spell ±∞ by overflowing a decimal literal); compute it
-  (`1e308 mul 10`) or use `inf`.
+  float literal such as `1e309` raises `[aql/float_overflow]` (you cannot
+  spell ±∞ by overflowing a literal); use `inf`, or compute it
+  (`1e308 mul 10`).
 - **Tiny values:** the smallest positive subnormal is `5e-324`; a literal
   that underflows below that (e.g. `1e-400`) rounds to `0`. If you mean
   zero, write `0.0`.

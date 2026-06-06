@@ -139,3 +139,10 @@
 -.5	ERROR:syntax_error	signed leading dot rejected — write -0.5
 +.5	ERROR:syntax_error	signed leading dot rejected — write 0.5
 -0.5	-0.5	the digit-before-dot form is valid
+#
+# 10. A float literal that overflows binary64 is a clear float_overflow
+#     (not an opaque undefined_word); use the `inf` literal for infinity.
+1e309	ERROR:float_overflow	overflowing float literal
+-1e400	ERROR:float_overflow	overflowing negative float literal
+1e308	1e+308	in range — renders in scientific form
+inf	inf	the infinity literal is how you write ±inf

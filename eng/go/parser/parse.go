@@ -1171,14 +1171,55 @@ func parseWord(text string) (eng.Value, error) {
 		if err == nil {
 			return eng.NewInteger(n), nil
 		}
-		if numErr, ok := err.(*strconv.NumError); ok && numErr.Err == strconv.ErrRange {
+		if isRangeError(err) {
 			return eng.Value{}, integerLiteralOverflowError(name, 0, 0)
 		}
 		// Other parse errors (e.g. an invalid digit) fall through to the
-		// undefined-word path below.
+		// numeric-shape classification below.
+	}
+
+	// A digit-led token whose magnitude OVERFLOWS binary64 (e.g. 1e309)
+	// reached here because jsonic could not lex it. Report a clear
+	// float-overflow error instead of an opaque "undefined word". We use
+	// ParseFloat's *range* error as the discriminator: it means the token
+	// is a well-formed number that is merely out of range — never a
+	// digit-led WORD (e.g. `2dup`, which fails ParseFloat with a *syntax*
+	// error and falls through to be resolved as a word).
+	if isDigitLed(name) {
+		if f, err := strconv.ParseFloat(stripUnderscores(name), 64); isRangeError(err) || math.IsInf(f, 0) {
+			return eng.Value{}, floatLiteralOverflowError(name)
+		}
 	}
 
 	return eng.NewWord(name), nil
+}
+
+// isDigitLed reports whether s starts (after an optional sign) with a
+// decimal digit — a necessary precondition for the numeric-overflow
+// check. Note a digit-led token is NOT necessarily a number: `2dup` and
+// friends are valid words.
+func isDigitLed(s string) bool {
+	if len(s) > 0 && (s[0] == '-' || s[0] == '+') {
+		s = s[1:]
+	}
+	return len(s) > 0 && s[0] >= '0' && s[0] <= '9'
+}
+
+// isRangeError reports whether err is a strconv range (overflow) error.
+func isRangeError(err error) bool {
+	ne, ok := err.(*strconv.NumError)
+	return ok && ne.Err == strconv.ErrRange
+}
+
+// floatLiteralOverflowError reports a floating-point literal whose
+// magnitude overflows binary64 to ±infinity (e.g. 1e309).
+func floatLiteralOverflowError(src string) error {
+	return &eng.AqlError{
+		Code:   "float_overflow",
+		Detail: "floating-point literal out of range: " + src + " overflows to infinity",
+		Src:    src,
+		Hint:   "the Float range is about ±1.8e308; write the `inf` literal for infinity",
+	}
 }
 
 // convertInterpGroup converts an interpGroup (produced by the interp/ielem/iexpr
