@@ -40,8 +40,13 @@ func BuildMathModule(parent *native.Registry) (native.ModuleDesc, error) {
 	}
 
 	// Binary operations: [Number, Number] -> [Number]
-	for _, name := range []string{"min", "max", "atan2", "hypot"} {
+	for _, name := range []string{"min", "max", "atan2", "hypot", "remainder", "copysign", "nextafter"} {
 		exports.Set(name, makeBinaryFnDef(name, subReg))
+	}
+
+	// IEEE-754 classifier predicates: [Number] -> [Boolean].
+	for _, name := range []string{"is-nan", "is-inf", "is-finite", "signbit"} {
+		exports.Set(name, makeUnaryPredFnDef(name, subReg))
 	}
 
 	// Constants: [] -> [Float]
@@ -65,6 +70,23 @@ func makeUnaryFnDef(wordName string, subReg *native.Registry) native.Value {
 			{
 				Params:  []native.FnParam{{Type: native.TNumber}},
 				Returns: []*native.Type{native.TNumber},
+				Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+			},
+		},
+		Registry: subReg,
+	}
+	return native.NewFnDef(fnDef)
+}
+
+// makeUnaryPredFnDef wraps a unary math predicate word: [Number] ->
+// [Boolean] (the IEEE classifiers is-nan / is-inf / is-finite / signbit).
+func makeUnaryPredFnDef(wordName string, subReg *native.Registry) native.Value {
+	fnDef := native.FnDefInfo{
+		Name: wordName,
+		Signatures: []native.FnSig{
+			{
+				Params:  []native.FnParam{{Type: native.TNumber}},
+				Returns: []*native.Type{native.TBoolean},
 				Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
 			},
 		},
@@ -285,6 +307,27 @@ var MathNatives = func() []native.NativeFunc {
 	// hypot: same shape as atan2.
 	out = append(out, hypotNative())
 
+	// IEEE-754 classifier predicates: [Number] -> Boolean. Integers are
+	// always finite (never NaN/Inf), so the Integer arg yields the
+	// constant answer (is-finite → true, the rest → false / sign).
+	out = append(out,
+		classifierNative("is-nan", func(f float64) bool { return math.IsNaN(f) }),
+		classifierNative("is-inf", func(f float64) bool { return math.IsInf(f, 0) }),
+		classifierNative("is-finite", func(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }),
+		classifierNative("signbit", math.Signbit),
+	)
+
+	// IEEE-754 binary float ops. Both compute fn(args[1], args[0]) so the
+	// swap form reads naturally (`a remainder b` = remainder of a by b,
+	// `a copysign b` = |a| with the sign of b), matching the b-op-a
+	// convention of the core arithmetic words. `remainder` is the IEEE
+	// round-to-nearest remainder — distinct from `mod` (truncated fmod).
+	out = append(out,
+		swapBinaryFloatNative("remainder", math.Remainder),
+		swapBinaryFloatNative("copysign", math.Copysign),
+		swapBinaryFloatNative("nextafter", math.Nextafter),
+	)
+
 	// Math constants — zero-arg stack-only.
 	out = append(out, native.NativeFunc{
 		Name: "math-pi",
@@ -344,6 +387,43 @@ func ceilFloorNative(name string, fn func(float64) float64) native.NativeFunc {
 			},
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
+	}
+}
+
+// classifierNative builds a [Number] -> Boolean predicate word. It
+// accepts any Number (Integer or Float) and projects to float64 before
+// applying the test, so `5 is-finite` and `5.0 is-finite` both work.
+func classifierNative(name string, pred func(float64) bool) native.NativeFunc {
+	return native.NativeFunc{
+		Name: name,
+
+		Signatures: []native.NativeSig{{
+			Args: []*native.Type{native.TNumber},
+			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				f, _ := native.AsNumber(args[0])
+				return []native.Value{native.NewBoolean(pred(f))}, nil
+			},
+			Returns: []*native.Type{native.TBoolean}, BarrierPos: -1,
+		}},
+	}
+}
+
+// swapBinaryFloatNative builds a [Number, Number] -> Float word whose
+// handler computes fn(args[1], args[0]) — the b-op-a convention — so the
+// swap surface form `a word b` evaluates fn(a, b). Accepts any Number on
+// either side (the result is always a Float).
+func swapBinaryFloatNative(name string, fn func(a, b float64) float64) native.NativeFunc {
+	handler := func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+		a, _ := native.AsNumber(args[0])
+		b, _ := native.AsNumber(args[1])
+		return []native.Value{native.NewFloat(fn(b, a))}, nil
+	}
+	return native.NativeFunc{
+		Name: name,
+
+		Signatures: []native.NativeSig{
+			{Args: []*native.Type{native.TNumber, native.TNumber}, Handler: handler, Returns: []*native.Type{native.TFloat}, BarrierPos: -1},
+		},
 	}
 }
 

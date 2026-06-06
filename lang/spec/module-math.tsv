@@ -28,5 +28,24 @@
 "aql:math-util" import end  MathUtil.sqrt 16.0 add 1.0	5.0	results compose like any value
 "aql:math-util" import end  16.0 MathUtil.sqrt	4.0	swap form also dispatches
 #
-# §5  negative — a namespace word is undefined until the module is imported
+# §5  IEEE-754 classifiers & ops (see design/IEEE-754-COMPLIANCE.0.md)
+"aql:math-util" import end  nan MathUtil.is-nan	true	NaN detected
+"aql:math-util" import end  5.0 MathUtil.is-nan	false	a finite Float is not NaN
+"aql:math-util" import end  inf MathUtil.is-inf	true	infinity detected
+"aql:math-util" import end  5.0 MathUtil.is-inf	false	finite is not infinite
+"aql:math-util" import end  inf MathUtil.is-finite	false	infinity is not finite
+"aql:math-util" import end  nan MathUtil.is-finite	false	NaN is not finite
+"aql:math-util" import end  5.0 MathUtil.is-finite	true	a finite Float is finite
+"aql:math-util" import end  5 MathUtil.is-finite	true	an Integer is always finite
+"aql:math-util" import end  5 MathUtil.is-nan	false	an Integer is never NaN
+"aql:math-util" import end  -3.0 MathUtil.signbit	true	negative sign bit
+"aql:math-util" import end  3.0 MathUtil.signbit	false	positive sign bit
+# remainder is the IEEE round-to-nearest remainder — distinct from `mod`.
+"aql:math-util" import end  7.0 MathUtil.remainder 3.0	1.0	7 = 2*3 + 1
+"aql:math-util" import end  5.0 MathUtil.remainder 3.0	-1.0	5 rounds to 2*3, remainder -1 (mod gives 2)
+"aql:math-util" import end  3.0 MathUtil.copysign -1.0	-3.0	magnitude of 3, sign of -1
+"aql:math-util" import end  -3.0 MathUtil.copysign 2.0	3.0	magnitude of -3, sign of +2
+"aql:math-util" import end  1.0 MathUtil.nextafter 2.0	1.0000000000000002	next representable Float toward 2
+#
+# §6  negative — a namespace word is undefined until the module is imported
 MathUtil.sqrt 16.0	ERROR:undefined_word	`math` is unbound without `import`

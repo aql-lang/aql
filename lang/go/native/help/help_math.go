@@ -229,6 +229,56 @@ func init() {
 	})
 
 	register(&Entry{
+		Word:        "is-nan",
+		Summary:     "Test whether a Float is NaN (not-a-number).",
+		Description: "Returns true when the value is NaN. Use this to detect NaN, since `nan eq nan` is false by IEEE-754.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
+		Word:        "is-inf",
+		Summary:     "Test whether a Float is +inf or -inf.",
+		Description: "Returns true when the value is positive or negative infinity.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
+		Word:        "is-finite",
+		Summary:     "Test whether a number is finite (neither inf nor NaN).",
+		Description: "Returns true for any finite value. Integers are always finite.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
+		Word:        "signbit",
+		Summary:     "Test whether a number's sign bit is set (negative, incl. -0.0).",
+		Description: "Returns true when the value is negative, including negative zero.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
+		Word:    "remainder",
+		Summary: "IEEE-754 remainder: a remainder b, rounding the quotient to nearest.",
+		Description: "Returns a - n*b where n is a/b rounded to the nearest integer (ties to even). " +
+			"Distinct from `mod`, which is the truncated remainder (fmod): `5.0 remainder 3.0` is -1.0 while `5.0 3.0 mod` is 2.0.",
+		Notes: []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
+		Word:        "copysign",
+		Summary:     "Combine the magnitude of one number with the sign of another.",
+		Description: "`a copysign b` returns a value with the magnitude of a and the sign of b.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
+		Word:        "nextafter",
+		Summary:     "The next representable Float after a, toward b.",
+		Description: "`a nextafter b` returns the adjacent float64 stepping from a toward b.",
+		Notes:       []string{"Requires: \"aql:math-util\" import"},
+	})
+
+	register(&Entry{
 		Word:        "math-pi",
 		Summary:     "Push the constant pi onto the stack.",
 		Description: "Pushes the mathematical constant pi (3.14159...). Stack-only.",
