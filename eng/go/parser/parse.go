@@ -331,17 +331,18 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 			continue
 		}
 
-		// "!" followed by "." → getr word (lone, no receiver).
+		// A "!." or "." with no receiver before it is the leading / prefix
+		// dot form (e.g. `.5`, `.name`, `!.x`). It has nothing to access,
+		// so reject it at parse time with a clear message instead of
+		// emitting a receiverless get/getr that fails later as an obscure
+		// signature error. The receiverless reach `$.name` is unaffected:
+		// it carries an explicit `$` receiver and is built in the chain
+		// branch above.
 		if isToken(items[i], "!") && i+1 < len(items) && isToken(items[i+1], ".") {
-			values = append(values, withPos(eng.NewWord("getr"), poss[i]))
-			i++ // skip the dot
-			continue
+			return nil, danglingDotError(poss[i])
 		}
-
-		// "." → get word (lone, no receiver).
 		if isToken(items[i], ".") {
-			values = append(values, withPos(eng.NewWord("get"), poss[i]))
-			continue
+			return nil, danglingDotError(poss[i])
 		}
 
 		// Unclosed paren: error at parse time.
@@ -607,6 +608,22 @@ func numberReceiverError(pos eng.SrcPos) error {
 		Code:   "syntax_error",
 		Detail: "a number has no members to access with `.`",
 		Hint:   "this looks like a malformed numeric literal (e.g. `1.2.3`) or `.`-access on a number — numbers have no fields or keys",
+		Row:    pos.Row,
+		Col:    pos.Col,
+		Src:    pos.Src,
+	}
+}
+
+// danglingDotError rejects a leading / receiverless `.` or `!.` — the
+// prefix dot form (e.g. `.5`, `.name`, `!.x`). Member access must follow
+// a value (`m.key`); a leading `.` is never valid. In particular `.5` is
+// not a fraction — write `0.5`. The receiverless reach `$.name` is the
+// supported way to write a detached accessor.
+func danglingDotError(pos eng.SrcPos) error {
+	return &eng.AqlError{
+		Code:   "syntax_error",
+		Detail: "`.` member access has no receiver",
+		Hint:   "a `.`/`!.` access must follow a value (e.g. `m.key`); a leading `.` is not valid — write `0.5` for a fraction, or `$.key` for a detached accessor",
 		Row:    pos.Row,
 		Col:    pos.Col,
 		Src:    pos.Src,
@@ -1270,22 +1287,31 @@ func numberValToValue(nv numberVal) (eng.Value, error) {
 		}
 		return eng.NewInteger(n), nil
 	}
+	if isBasePrefixedInteger(nv.Src) {
+		// base 0 auto-detects the 0x / 0o / 0b prefix; parsing the exact
+		// digits keeps full precision above 2^53 and range-checks like
+		// the decimal path (out of int64 range → integer_overflow).
+		n, err := strconv.ParseInt(stripUnderscores(nv.Src), 0, 64)
+		if err != nil {
+			return eng.Value{}, integerLiteralOverflowError(nv)
+		}
+		return eng.NewInteger(n), nil
+	}
 	return floatToValue(nv.Val), nil
 }
 
 // isPlainDecimalInteger reports whether src is a base-10 integer literal:
-// an optional leading '-' followed by one or more decimal digits, with
-// '_' permitted as a digit separator. It deliberately rejects base
-// prefixes (0x/0o/0b) and exponents (1e3) so those keep the existing
-// float64-derived conversion and jsonic's base interpretation. Leading
-// zeros stay decimal (jsonic treats 010 as 10, not octal), which base-10
-// ParseInt also does.
+// an optional leading sign ('-' or '+') followed by one or more decimal
+// digits, with '_' permitted as a digit separator. It deliberately
+// rejects base prefixes (0x/0o/0b — handled by isBasePrefixedInteger) and
+// exponents (1e3). Leading zeros stay decimal (jsonic treats 010 as 10,
+// not octal), which base-10 ParseInt also does.
 func isPlainDecimalInteger(src string) bool {
 	if src == "" {
 		return false
 	}
 	i := 0
-	if src[0] == '-' {
+	if src[0] == '-' || src[0] == '+' {
 		i = 1
 	}
 	if i == len(src) {
@@ -1304,6 +1330,25 @@ func isPlainDecimalInteger(src string) bool {
 		}
 	}
 	return sawDigit
+}
+
+// isBasePrefixedInteger reports whether src is a hex / octal / binary
+// integer literal — an optional sign then a 0x / 0o / 0b prefix. These are
+// parsed exactly (strconv.ParseInt base 0) rather than via float64, so
+// values above 2^53 keep full precision instead of silently rounding.
+func isBasePrefixedInteger(src string) bool {
+	s := src
+	if len(s) > 0 && (s[0] == '-' || s[0] == '+') {
+		s = s[1:]
+	}
+	if len(s) < 3 || s[0] != '0' {
+		return false
+	}
+	switch s[1] {
+	case 'x', 'X', 'o', 'O', 'b', 'B':
+		return true
+	}
+	return false
 }
 
 // stripUnderscores removes '_' digit separators so strconv.ParseInt

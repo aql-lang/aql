@@ -281,14 +281,17 @@ correctness floor under either Phase-1 outcome.
 - **0a (lexer).** `setupNumberSub` (`eng/go/parser/grammar.go`) now
   carries the source digits for *every* number token, and
   `numberValToValue` (`eng/go/parser/parse.go`) parses a *plain decimal
-  integer* (optional `-`, digits, `_` separators) from its exact text
-  with `strconv.ParseInt`. `9007199254740993` is now its true value (was
-  silently `…992`); `9223372036854775807` is finally a usable `Integer`
-  (was a `Float`); an out-of-range literal raises
-  `[aql/integer_overflow]`. Base-prefixed (`0x`/`0o`/`0b`) and scientific
-  (`1e3`) literals are deliberately left on the existing float-derived
-  path, so jsonic's base interpretation and the `1e3 → Integer` /
-  `1.5 → Float` rules are unchanged.
+  integer* (optional sign `-`/`+`, digits, `_` separators) from its exact
+  text with `strconv.ParseInt`. `9007199254740993` is now its true value
+  (was silently `…992`); `9223372036854775807` is finally a usable
+  `Integer` (was a `Float`); an out-of-range literal raises
+  `[aql/integer_overflow]`. **Base-prefixed (`0x`/`0o`/`0b`) literals are
+  also parsed exactly** (`strconv.ParseInt` base 0), so hex/oct/bin above
+  2^53 keep full precision and are range-checked too — a later follow-up
+  to the original Phase 0, which had left them on the float path. Only
+  *scientific* whole literals (`1e3`) remain on the float-derived path
+  (the `1e3 → Integer` / `1.5 → Float` rules are unchanged); writing an
+  exact large integer in scientific notation is discouraged in REFERENCE.
 - **0b (runtime).** `add`/`sub`/`mul`/`pow`
   (`lang/go/native/native_math.go`) use checked int64 helpers
   (`checkedAddInt`/`checkedSubInt`/`checkedMulInt`/`checkedPowInt`) and

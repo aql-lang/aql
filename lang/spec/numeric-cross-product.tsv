@@ -120,3 +120,10 @@
 #    mantissa — the `+ 1` vanishes.
 10000000000000000 1 add	10000000000000001	II is exact
 10000000000000000 1.0 add	10000000000000000.0	IF: the +1 is lost to float64 precision
+#
+# 8. Integer literals are exact at every magnitude — decimal AND
+#    base-prefixed — and a leading + is accepted and range-checked.
+0x20000000000001	9007199254740993	hex above 2^53 keeps full precision (not ...992)
+0x7FFFFFFFFFFFFFFF	9223372036854775807	int64 max via hex
++9223372036854775807	9223372036854775807	leading + parses exactly
++9223372036854775808	ERROR:integer_overflow	leading + is range-checked too

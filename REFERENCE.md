@@ -54,8 +54,11 @@ is, see the **[Explanation](EXPLANATION.md)**.
 
 | Syntax | Type | Example |
 |--------|------|---------|
-| Digits with optional `-` | `Integer` | `42`, `-5`, `0` |
-| Digits with `.` | `Float` | `3.14`, `-0.5` |
+| Decimal digits, optional `-`/`+`, `_` separators | `Integer` | `42`, `-5`, `+7`, `0`, `1_000` |
+| `0x` / `0o` / `0b` prefix | `Integer` | `0xFF`, `0o17`, `0b101` |
+| Digits with `.` | `Float` | `3.14`, `-0.5`, `5.` |
+| Scientific (`e`/`E`) | `Float` (or `Integer` if whole) | `1.5e3`, `2e-2`, `1e3` |
+| `inf`, `-inf`, `nan` | `Float` (IEEE special) | `inf` |
 | Double or single quotes | `String` | `"hello"`, `'world'` |
 | Backticks with `${...}` | `String` (template) | `` `x = ${x}` `` |
 | `true`, `false` | `Boolean` | `true` |
@@ -66,6 +69,52 @@ is, see the **[Explanation](EXPLANATION.md)**.
 Type literals: `Number`, `Integer`, `Float`, `String`, `Boolean`,
 `Atom`, `Scalar`, `Any`, `None`, `List`, `Map`, plus every named
 type you define with `def`.
+
+#### Numeric literals in detail
+
+**Integer** is a signed 64-bit value:
+`-9223372036854775808 .. 9223372036854775807`.
+
+- Decimal (`42`, `-5`, `+7`), with `_` digit separators (`1_000_000`).
+  Leading zeros are decimal, **not** octal (`010` is 10).
+- Hex `0x…`, octal `0o…`, binary `0b…` (case-insensitive prefix), with an
+  optional sign and `_` separators (`0xFF_FF`, `-0o17`).
+- All integer literals — decimal **and** base-prefixed — are parsed
+  exactly at every magnitude in range. A literal outside the int64 range
+  raises `[aql/integer_overflow]` (it never silently wraps or loses
+  precision). *Caveat:* a base-prefixed literal whose value exceeds the
+  int64 range may instead be reported as `undefined_word` (the lexer
+  can't form the token) — still an error, never a wrong value.
+
+**Float** is IEEE-754 `binary64` (see
+[design/IEEE-754-COMPLIANCE.0.md](design/IEEE-754-COMPLIANCE.0.md)):
+
+- Any literal with a `.` is a `Float`, parsed correctly-rounded
+  (round-ties-to-even): `3.14`, `-0.5`, trailing-dot `5.` → `5.0`.
+  A **leading** `.` is **not** valid — `.5` is a syntax error (the `.`
+  is the member-access operator). Write `0.5`.
+- Scientific notation: `1.5e3`, `2e-2`. A whole-valued exponent form
+  with no `.` and within int64 (`1e3`) is an `Integer`; otherwise it is a
+  `Float`.
+- Special values are the lowercase literals `inf`, `-inf`, `nan` (they
+  render back to those same tokens).
+
+**Recommended practice for the boundary cases:**
+
+- **Exact large integers:** write them in **decimal** (or hex/oct/bin),
+  which are exact and range-checked. Do **not** use scientific notation
+  for a value you need to be an exact `Integer` — `1e19` exceeds the
+  int64 range and silently becomes an (inexact) `Float`, whereas the
+  decimal `10000000000000000000` is a clean `[aql/integer_overflow]`.
+- **Infinity:** write the `inf` / `-inf` literal. An *overflowing*
+  numeric literal such as `1e309` is rejected as `undefined_word` (you
+  cannot spell ±∞ by overflowing a decimal literal); compute it
+  (`1e308 mul 10`) or use `inf`.
+- **Tiny values:** the smallest positive subnormal is `5e-324`; a literal
+  that underflows below that (e.g. `1e-400`) rounds to `0`. If you mean
+  zero, write `0.0`.
+- **Casing:** the special literals are lowercase only — `Inf`, `NaN`,
+  `Infinity`, `+inf` are not recognised.
 
 ### Compound data
 

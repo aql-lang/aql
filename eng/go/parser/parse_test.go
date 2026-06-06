@@ -1314,6 +1314,75 @@ func TestParseIntegerLiteralOverflow(t *testing.T) {
 	}
 }
 
+// TestParseBasePrefixedExact pins that hex/octal/binary literals are
+// parsed from their exact digits — so magnitudes above 2^53 keep full
+// precision instead of round-tripping through float64 — and that a
+// leading sign works.
+func TestParseBasePrefixedExact(t *testing.T) {
+	cases := []struct {
+		src  string
+		want int64
+	}{
+		{"0x10", 16},
+		{"0xFF_FF", 65535},
+		{"0o17", 15},
+		{"0b101", 5},
+		{"-0x10", -16},
+		{"0x20000000000000", 9007199254740992}, // 2^53 (exact before and after)
+		{"0x20000000000001", 9007199254740993}, // 2^53+1 — was silently ...992
+		{"0x7FFFFFFFFFFFFFFF", math.MaxInt64},  // int64 max via hex — was a lossy Float
+		{"0o777777777777777777777", math.MaxInt64},
+	}
+	for _, c := range cases {
+		got, err := Parse(c.src)
+		if err != nil {
+			t.Errorf("Parse(%q) error: %v", c.src, err)
+			continue
+		}
+		if !got[0].Parent.ConformsTo(eng.TInteger) {
+			t.Errorf("Parse(%q): expected Integer, got %s", c.src, got[0].Parent)
+			continue
+		}
+		if n, _ := eng.AsInteger(got[0]); n != c.want {
+			t.Errorf("Parse(%q): got %d, want %d", c.src, n, c.want)
+		}
+	}
+}
+
+// TestParsePlusPrefixInteger pins that a leading '+' on a decimal integer
+// is parsed exactly and range-checked like the unsigned/negative forms.
+func TestParsePlusPrefixInteger(t *testing.T) {
+	got, err := Parse("+9223372036854775807")
+	if err != nil {
+		t.Fatalf("Parse(+maxint) error: %v", err)
+	}
+	if n, _ := eng.AsInteger(got[0]); n != math.MaxInt64 {
+		t.Errorf("+maxint: got %d, want %d", n, int64(math.MaxInt64))
+	}
+	if _, err := Parse("+9223372036854775808"); err == nil {
+		t.Error("+(maxint+1): expected integer_overflow, got nil")
+	}
+}
+
+// TestParseLeadingDotRejected pins that a receiverless / prefix `.` (or
+// `!.`) — e.g. `.5`, `.name`, `!.x` — is a syntax error, not a
+// receiverless get/getr. `0.5` and `$.name` remain valid.
+func TestParseLeadingDotRejected(t *testing.T) {
+	for _, src := range []string{".5", ".0", ".name", "!.x"} {
+		_, err := Parse(src)
+		ae, ok := err.(*eng.AqlError)
+		if !ok || ae.Code != "syntax_error" {
+			t.Errorf("Parse(%q): expected [aql/syntax_error], got %v", src, err)
+		}
+	}
+	// These must still parse cleanly.
+	for _, src := range []string{"0.5", "$.name", "$!.name"} {
+		if _, err := Parse(src); err != nil {
+			t.Errorf("Parse(%q): unexpected error %v", src, err)
+		}
+	}
+}
+
 // TestParseIntegerLiteralOverflowPos pins that the literal-overflow error
 // is located at the offending literal, not at the start of the line.
 func TestParseIntegerLiteralOverflowPos(t *testing.T) {
