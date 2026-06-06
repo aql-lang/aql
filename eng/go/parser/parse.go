@@ -921,6 +921,14 @@ func resolveTextValue(text string) eng.Value {
 	if text == "false" {
 		return eng.NewBoolean(false)
 	}
+	switch text {
+	case "inf":
+		return eng.NewFloat(math.Inf(1))
+	case "-inf":
+		return eng.NewFloat(math.Inf(-1))
+	case "nan":
+		return eng.NewFloat(math.NaN())
+	}
 	if t, ok := typeNames[text]; ok {
 		return eng.NewTypeLiteral(t)
 	}
@@ -1094,6 +1102,20 @@ func parseWord(text string) (eng.Value, error) {
 	// for engine-side resolution).
 	if name == "none" {
 		return eng.NewNone(), nil
+	}
+
+	// IEEE-754 special-value literals, following the AQL reserved-literal
+	// convention (lowercase, parser-emitted, like true / false / none):
+	// `inf` / `-inf` / `nan` produce the corresponding Float. They render
+	// back to these same tokens (see FormatFloat), so print∘parse is
+	// identity. `inf negate` is the long form for -inf.
+	switch name {
+	case "inf":
+		return eng.NewFloat(math.Inf(1)), nil
+	case "-inf":
+		return eng.NewFloat(math.Inf(-1)), nil
+	case "nan":
+		return eng.NewFloat(math.NaN()), nil
 	}
 
 	// Reserved tape-syntax tokens emit typed marker values so the

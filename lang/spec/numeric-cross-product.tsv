@@ -104,7 +104,7 @@
 #    as a Float, and a non-real result is NaN.
 9 0.5 pow	3.0	sqrt(9) via Float exponent — Float even though whole
 2 0.5 pow	1.4142135623730951	sqrt(2)
--8.0 0.5 pow	NaN.0	sqrt of a negative → NaN, rendered with the Float suffix
+-8.0 0.5 pow	nan	sqrt of a negative → NaN, rendered as the `nan` literal
 
 # 6. Division / modulo by zero is an ERROR for BOTH leaves — a Float
 #    `div`/`mod` by zero does NOT follow IEEE-754 (no +Inf / NaN).

@@ -1,8 +1,12 @@
 # IEEE-754 Compliance — what `Float` would require
 
-Status: **analysis / design-only**. No code changes. This audits AQL's
+Status: **Tier 0 implemented; Tiers 1–2 proposed**. This audits AQL's
 `Float` (binary64) against IEEE 754-2019 and states what full and
-partial conformance would require. It is a companion to
+partial conformance would require. **Tier 0 (the NaN-comparison fix) is
+done**, and the `inf`/`-inf`/`nan` literals + matching rendering from
+Tier 1 landed alongside it — see [Tier-0 status](#tier-0-status). The
+pre-fix transcripts in §"The three deviations" are retained as the record
+of what was fixed. It is a companion to
 [NUMERIC-TOWER](NUMERIC-TOWER.0.md) and
 [INTEGER-OVERFLOW-STRATEGY](INTEGER-OVERFLOW-STRATEGY.0.md); the
 WAT-AUDIT Exhibits H (eq-but-not-substitutable) and L (Decimal-is-float)
@@ -48,8 +52,8 @@ catalogue) — a much larger effort, partly impractical on the wasm target.
 | **Subnormals** (§3.4) | stored/propagated (`5e-324` survives) | ✅ |
 | **NaN propagation** (§6.2) | `√−8 → NaN`, propagates through ops | ✅ (quiet only) |
 | **`x ÷ 0 → ±∞`, `0÷0 → NaN` + divByZero/invalid flag** (§7.3) | **errors** (`division by zero`) | ❌ deviation |
-| **NaN comparison = unordered** (§5.11) | `eq/neq/lt/gt` correct; **`lte/gte/cmp` wrong** | ❌ bug (breaks `sort`) |
-| **`totalOrder` predicate** (§5.10) | absent; `cmp` puts NaN "equal" to all | ❌ |
+| **NaN comparison = unordered** (§5.11) | `eq/neq/lt/lte/gt/gte` all correct (false for NaN) | ✅ Tier 0 |
+| **`totalOrder` predicate** (§5.10) | `cmp`/`tcmp`/`sort` place NaN greatest (deterministic) | ✅ Tier 0 |
 | **Directed rounding modes** (§4.3) | only the hardware default (ties-to-even) | ❌ |
 | **Sticky exception flags** (§7) | none | ❌ |
 | **`remainder` (round-to-nearest)** (§5.3.1) | `mod` is `fmod` (truncated) | ❌ (different op) |
@@ -57,7 +61,7 @@ catalogue) — a much larger effort, partly impractical on the wasm target.
 | **`roundToIntegral*`** (§5.9) | partial (`floor/ceil/round/trunc` in math) | ⚠️ not the full named set |
 | **min/max with NaN** (§9.6) | `min/max` ignore NaN (2008 `minNum`) | ⚠️ 2008-style, not 2019 |
 | **Decimal↔binary string conversion, correctly rounded, round-trips** (§5.12) | parse OK for finite; **format non-conformant** | ❌ |
-| **`Inf`/`NaN` literals & canonical strings** (§5.12) | none; renders `+Inf.0`/`NaN.0` (unparseable) | ❌ |
+| **`Inf`/`NaN` literals & canonical strings** (§5.12) | `inf`/`-inf`/`nan` literals; render to same tokens (round-trip) | ✅ Tier 0 |
 | **Signaling NaN** (§6.2) | not exposed (Go doesn't) | ❌ |
 
 ## The three deviations AQL introduced
@@ -210,11 +214,28 @@ adding one, and it leaves Integer's fail-loud behaviour intact.
 
 ## What "required" means, by tier
 
-**Tier 0 — fix the bug (do regardless of any IEEE goal).**
-The NaN comparison incoherence (§Deviation 2): make `lte`/`gte` honour
-the unordered rule (false for NaN) and give `cmp`/`sort` an IEEE
-`totalOrder` so NaN has a defined slot. This is a correctness fix, not a
-feature.
+**Tier 0 — fix the bug (do regardless of any IEEE goal).** ✅ **Done.**
+The NaN comparison incoherence (§Deviation 2): `lt`/`lte`/`gt`/`gte` now
+honour the unordered rule (false for NaN) via `numericUnordered`
+(`eng/go/compare.go`), and `cmp`/`tcmp`/`sort` use a total order where
+NaN sorts greatest (`numberCompareBehavior.Compare`,
+`eng/go/compare_scalar_behaviors.go`), so a list with a NaN sorts
+deterministically instead of being left unsorted. `eq`/`neq` were already
+correct. As part of the same change the `inf`/`-inf`/`nan` reserved
+literals were added (parser, mirroring `true`/`false`/`none`) and
+`FormatFloat` now renders specials as those parseable tokens (was the
+unparseable `+Inf.0`/`NaN.0`), so print∘parse is identity. Verified by
+`lang/spec/float-special.tsv`, `eng/go/compare_nan_test.go`, and
+`eng/go/parser/parse_test.go::TestParseSpecialFloatLiterals`.
+
+> **Unchanged, still imperfect: `min`/`max` with NaN.** `MathUtil.min`/
+> `max` are built on the relational predicates, so with the IEEE
+> unordered rule they are *order-dependent* for NaN (`max 5.0 nan → nan`
+> but `max nan 5.0 → 5.0`). This fix neither improved nor regressed that
+> (the relational predicates returned false for NaN before too); giving
+> `min`/`max` a defined NaN policy — IEEE-2008 `minNum`/`maxNum`
+> (ignore NaN) or 2019 `minimum`/`maximum` (propagate NaN) — is a
+> separate Tier-1 item.
 
 **Tier 1 — IEEE arithmetic *semantics* (the realistic compliance target).**
 - Decision (1) above: `Float` div/mod by zero → `±∞`/NaN, not error.

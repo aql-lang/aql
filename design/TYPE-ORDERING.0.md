@@ -312,6 +312,23 @@ This equivalence is confined to the cross-leaf magnitude case and
 does not produce the per-family-zero collapse that the type-literal
 issue did.
 
+### NaN in the total order
+
+IEEE-754 leaves `NaN` *unordered* (every relational comparison with it
+is false), but the total order this document defines must place every
+value, or `sort` over a list containing a NaN would violate transitivity
+and silently leave it unsorted. So `numberCompareBehavior.Compare` gives
+NaN a defined slot: it sorts **after every non-NaN value**
+(`-inf < finite < inf < nan`), and two NaNs tie. This is the IEEE
+`totalOrder` placement (with a single, unsigned quiet NaN) and is what
+`cmp` / `tcmp` / `sort` and the collection words consume.
+
+This is deliberately **separate** from the relational words `lt` / `lte`
+/ `gt` / `gte`, which keep the IEEE *unordered* semantics (false whenever
+a NaN is involved) via `numericUnordered` in `eng/go/compare.go` — they
+do **not** read the total-order slot. `eq` stays false for NaN (so `neq`
+is true). See `design/IEEE-754-COMPLIANCE.0.md` Tier 0.
+
 ### `none` and `Never`
 
 `none` and `Never` are degenerate roots with no Comparer-bearing

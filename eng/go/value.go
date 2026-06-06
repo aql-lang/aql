@@ -3,6 +3,7 @@ package eng
 import (
 	"encoding/hex"
 	"fmt"
+	"math"
 	"math/rand/v2"
 	"sort"
 	"strconv"
@@ -901,6 +902,17 @@ func NewFloat(f float64) Value {
 // note in spec/SPEC_REPORT.md §2 on the apd-port plan if exact
 // decimal arithmetic is required.
 func FormatFloat(f float64) string {
+	// Special values render as the parseable literals inf / -inf / nan
+	// (matching the parser's word-context literals) so print∘parse is
+	// identity. The historical +Inf.0 / NaN.0 forms could not be re-read.
+	switch {
+	case math.IsNaN(f):
+		return "nan"
+	case math.IsInf(f, 1):
+		return "inf"
+	case math.IsInf(f, -1):
+		return "-inf"
+	}
 	s := strconv.FormatFloat(f, 'f', -1, 64)
 	if !strings.ContainsAny(s, ".eE") {
 		s += ".0"

@@ -1,0 +1,65 @@
+# AQL Language Specification: Float special values (inf / -inf / nan)
+# Format: input<TAB>expected<TAB>description
+#
+# AQL exposes the IEEE-754 special values as lowercase reserved literals,
+# following the true / false / none convention: `inf`, `-inf`, `nan`.
+# They are parser-emitted Floats and render back to the same tokens, so
+# print∘parse is identity. See design/IEEE-754-COMPLIANCE.0.md (Tier 0).
+#
+# Comparison has TWO regimes, deliberately:
+#   * cmp / tcmp / sort use a TOTAL order — NaN sorts after every other
+#     value (greatest); -inf < finite < inf < nan. This is what the
+#     collection words need (a non-total comparator silently corrupts
+#     sort — the bug this fixed).
+#   * lt / lte / gt / gte use IEEE *unordered* — any comparison involving
+#     NaN is false. eq is false for NaN, neq is true.
+
+# ───────── literals & round-trip rendering ─────────
+inf	inf	+infinity literal
+-inf	-inf	-infinity literal
+nan	nan	NaN literal
+inf typeof	Float	inf is a Float
+nan typeof	Float	nan is a Float
+-inf typeof	Float	-inf is a Float
+[inf -inf nan]	[inf -inf nan]	specials survive in a list, render canonically
+{a: inf, b: nan}	{a:inf b:nan}	specials in data context (map values)
+
+# ───────── inf arithmetic (IEEE) ─────────
+inf 1.0 add	inf	inf + finite = inf
+inf inf sub	nan	inf - inf = nan
+1.0 inf div	0.0	finite / inf = 0
+inf 2.0 mul	inf	inf * finite = inf
+
+# ───────── relational predicates: IEEE unordered (all false for NaN) ─────────
+nan 5.0 lt	false	NaN is not less than anything
+nan 5.0 lte	false	…nor less-or-equal (this was the bug: used to be true)
+nan 5.0 gt	false	…nor greater
+nan 5.0 gte	false	…nor greater-or-equal (was true)
+5.0 nan lt	false	unordered is symmetric
+nan nan lt	false	NaN vs NaN is unordered too
+nan nan lte	false	…including lte (was true)
+nan inf lt	false	NaN vs inf still unordered
+# eq / neq keep the IEEE rule: NaN never equals anything, including itself.
+nan nan eq	false	NaN != NaN
+nan 5.0 eq	false	NaN != 5
+nan nan neq	true	so neq is true
+nan nan deq	false	deep-equality is also false for NaN
+# inf is an ordinary ordered value (only NaN is unordered).
+inf 5.0 gt	true	inf > finite
+-inf inf lt	true	-inf < inf
+inf 5.0 lte	false	inf is not <= 5
+
+# ───────── total order: cmp / tcmp / sort (NaN greatest) ─────────
+nan 5.0 cmp	1	NaN sorts after 5 (total order)
+5.0 nan cmp	-1	…and 5 before NaN
+nan nan cmp	0	two NaNs tie
+inf 5.0 cmp	1	inf after finite
+-inf 5.0 cmp	-1	-inf before finite
+inf nan cmp	-1	inf sorts before NaN
+nan 5.0 tcmp	1	tcmp agrees with cmp on the total order
+[3.0 nan 1.0 2.0] sort	[1.0 2.0 3.0 nan]	NaN sorts last (was left UNSORTED before the fix)
+[inf 1.0 -inf nan 0.0] sort	[-inf 0.0 1.0 inf nan]	full ordering across specials
+
+# ───────── reserved: the literals cannot be redefined ─────────
+def inf 5	ERROR:	`inf` is a reserved literal — def is rejected
+def nan 5	ERROR:	`nan` is a reserved literal — def is rejected

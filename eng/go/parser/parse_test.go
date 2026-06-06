@@ -1381,6 +1381,39 @@ func TestParseIntegerLiteralExactInMap(t *testing.T) {
 	}
 }
 
+// TestParseSpecialFloatLiterals pins the IEEE special-value literals
+// (inf / -inf / nan) — lowercase reserved literals, like true/false/none,
+// that parse directly to the corresponding Float (Tier 0).
+func TestParseSpecialFloatLiterals(t *testing.T) {
+	check := func(src string, pred func(float64) bool) {
+		got, err := Parse(src)
+		if err != nil {
+			t.Fatalf("Parse(%q) error: %v", src, err)
+		}
+		if !got[0].Parent.ConformsTo(eng.TFloat) {
+			t.Errorf("Parse(%q): expected Float, got %s", src, got[0].Parent)
+			return
+		}
+		f, _ := eng.AsNumber(got[0])
+		if !pred(f) {
+			t.Errorf("Parse(%q): float value %v failed predicate", src, f)
+		}
+	}
+	check("inf", func(f float64) bool { return math.IsInf(f, 1) })
+	check("-inf", func(f float64) bool { return math.IsInf(f, -1) })
+	check("nan", func(f float64) bool { return math.IsNaN(f) })
+	// Same in data context (map value).
+	got, err := Parse("{x: nan}")
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	m, _ := eng.AsMap(got[0])
+	xv, _ := m.Get("x")
+	if f, _ := eng.AsNumber(xv); !math.IsNaN(f) {
+		t.Errorf("map value: expected NaN, got %v", f)
+	}
+}
+
 // --- Nested list/map in word context ---
 
 func TestParseListWithMap(t *testing.T) {

@@ -428,6 +428,15 @@ Two further sharp edges on numbers:
   decimal — `0.1 add 0.2` returns `0.30000000000000004` and `1 eq 1.0`
   returns `true` even though the two divide differently. See
   [Type system](#type-system).
+* **Special Float values** are written with the lowercase literals
+  `inf`, `-inf`, and `nan` (reserved, like `true`/`false`/`none`); they
+  render back to those same tokens. NaN follows IEEE rules for the
+  ordering words: `nan lt 5.0`, `nan lte 5.0`, `nan gt 5.0`, `nan gte
+  5.0`, and `nan eq nan` are **all `false`** (a comparison involving NaN
+  is *unordered*), while `nan neq nan` is `true`. For a **total** order —
+  what `cmp`, `tcmp`, and `sort` use — NaN is treated as the greatest
+  value (`-inf < finite < inf < nan`), so sorting a list with a NaN is
+  deterministic (NaN sorts last) rather than leaving it unordered.
 
 Additional numeric words (`abs`, `negate`, `sign`, `min`, `max`,
 `floor`, `ceil`, `round`, `trunc`, `sqrt`, `cbrt`, `exp`, `log`,

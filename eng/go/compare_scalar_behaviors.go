@@ -1,6 +1,9 @@
 package eng
 
-import "strings"
+import (
+	"math"
+	"strings"
+)
 
 // Comparer implementations for the kernel scalar types and Word. Each embeds
 // defaultBehavior so Match/Format/Equal stay at the kernel default;
@@ -90,6 +93,26 @@ func (numberCompareBehavior) Compare(a, b Value) (int, error) {
 	}
 	af, _ := AsNumber(a)
 	bf, _ := AsNumber(b)
+	// IEEE-754 has no native order for NaN, but `cmp`/`tcmp`/`sort` need a
+	// TOTAL order or the sort comparator violates transitivity (the bug
+	// this fixes: NaN previously fell through to 0, comparing "equal" to
+	// everything, which silently left lists unsorted). Per the IEEE
+	// totalOrder predicate (§5.10), NaN sorts after every non-NaN value
+	// (greatest); two NaNs tie. The relational words lt/lte/gt/gte do NOT
+	// use this slot — they apply the IEEE *unordered* rule (always false)
+	// via numericUnordered in compare.go — so this affects only the total
+	// order that sort and the collection words consume.
+	aNaN, bNaN := math.IsNaN(af), math.IsNaN(bf)
+	if aNaN || bNaN {
+		switch {
+		case aNaN && bNaN:
+			return 0, nil
+		case aNaN:
+			return 1, nil
+		default:
+			return -1, nil
+		}
+	}
 	switch {
 	case af < bf:
 		return -1, nil
