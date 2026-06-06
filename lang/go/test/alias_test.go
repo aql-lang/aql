@@ -209,39 +209,39 @@ func TestAliasTuck(t *testing.T) {
 	})
 }
 
-func TestAlias2Dup(t *testing.T) {
+func TestAliasDup2(t *testing.T) {
 	runAliasTest(t, aliasCase{
-		name:      "2dup",
-		defStep:   "def my2dup word [2dup]",
-		origSteps: []string{"do [1 2 2dup]"},
-		aliaSteps: []string{"do [1 2 my2dup]"},
+		name:      "dup2",
+		defStep:   "def mydup2 word [dup2]",
+		origSteps: []string{"do [1 2 dup2]"},
+		aliaSteps: []string{"do [1 2 mydup2]"},
 	})
 }
 
-func TestAlias2Swap(t *testing.T) {
+func TestAliasSwap2(t *testing.T) {
 	runAliasTest(t, aliasCase{
-		name:      "2swap",
-		defStep:   "def my2swap word [2swap]",
-		origSteps: []string{"do [1 2 3 4 2swap]"},
-		aliaSteps: []string{"do [1 2 3 4 my2swap]"},
+		name:      "swap2",
+		defStep:   "def myswap2 word [swap2]",
+		origSteps: []string{"do [1 2 3 4 swap2]"},
+		aliaSteps: []string{"do [1 2 3 4 myswap2]"},
 	})
 }
 
-func TestAlias2Drop(t *testing.T) {
+func TestAliasDrop2(t *testing.T) {
 	runAliasTest(t, aliasCase{
-		name:      "2drop",
-		defStep:   "def my2drop word [2drop]",
-		origSteps: []string{"do [1 2 3 2drop]"},
-		aliaSteps: []string{"do [1 2 3 my2drop]"},
+		name:      "drop2",
+		defStep:   "def mydrop2 word [drop2]",
+		origSteps: []string{"do [1 2 3 drop2]"},
+		aliaSteps: []string{"do [1 2 3 mydrop2]"},
 	})
 }
 
-func TestAlias2Over(t *testing.T) {
+func TestAliasOver2(t *testing.T) {
 	runAliasTest(t, aliasCase{
-		name:      "2over",
-		defStep:   "def my2over word [2over]",
-		origSteps: []string{"do [1 2 3 4 2over]"},
-		aliaSteps: []string{"do [1 2 3 4 my2over]"},
+		name:      "over2",
+		defStep:   "def myover2 word [over2]",
+		origSteps: []string{"do [1 2 3 4 over2]"},
+		aliaSteps: []string{"do [1 2 3 4 myover2]"},
 	})
 }
 

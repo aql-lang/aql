@@ -118,6 +118,11 @@ type you define with `def`.
   zero, write `0.0`.
 - **Casing:** the special literals are lowercase only — `Inf`, `NaN`,
   `Infinity`, `+inf` are not recognised.
+- **A name cannot start with a digit.** A digit-first token is always
+  read as a number, so `2dup` is an `invalid numeric literal`, never a
+  word. Word names begin with `[a-z_-$]` and may contain digits after the
+  first character — so the paired-stack words put the digit **last**:
+  `dup2`, `swap2`, `drop2`, `over2`.
 
 ### Compound data
 
@@ -429,10 +434,10 @@ All stack words are stack-only (modifier `/s`).
 | `rot` | `a b c → b c a` | Rotate top three |
 | `nip` | `a b → b` | Remove second |
 | `tuck` | `a b → b a b` | Copy top below second |
-| `2dup` | `a b → a b a b` | Duplicate top pair |
-| `2drop` | `a b →` | Remove top pair |
-| `2swap` | `a b c d → c d a b` | Swap top two pairs |
-| `2over` | `a b c d → a b c d a b` | Copy third pair to top |
+| `dup2` | `a b → a b a b` | Duplicate top pair |
+| `drop2` | `a b →` | Remove top pair |
+| `swap2` | `a b c d → c d a b` | Swap top two pairs |
+| `over2` | `a b c d → a b c d a b` | Copy third pair to top |
 | `pick` | `n → v` | Copy value at depth n |
 | `roll` | `n → v` | Move value at depth n to top |
 | `depth` | `→ n` | Current stack size |

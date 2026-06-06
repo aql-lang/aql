@@ -76,10 +76,10 @@ Consequences for sig design:
 
 | Word | Signatures (match order) | Returns | Notes | Data Arg |
 |------|--------------------------|---------|-------|----------|
-| `2drop` /s | `[Any, Any]` | `[]` | Drop top 2 | — |
-| `2dup` /s | `[Any, Any]` | `[Any, Any, Any, Any]` | Duplicate top 2 | — |
-| `2over` /s | `[Any, Any, Any, Any]` | `[Any, Any, Any, Any, Any, Any]` | Copy 3rd–4th to top | — |
-| `2swap` /s | `[Any, Any, Any, Any]` | `[Any, Any, Any, Any]` | Swap top two pairs | — |
+| `drop2` /s | `[Any, Any]` | `[]` | Drop top 2 | — |
+| `dup2` /s | `[Any, Any]` | `[Any, Any, Any, Any]` | Duplicate top 2 | — |
+| `over2` /s | `[Any, Any, Any, Any]` | `[Any, Any, Any, Any, Any, Any]` | Copy 3rd–4th to top | — |
+| `swap2` /s | `[Any, Any, Any, Any]` | `[Any, Any, Any, Any]` | Swap top two pairs | — |
 | `depth` /s /f | `[]` | `[Integer]` | Returns stack size | — |
 | `drop` /s | `[Any]` | `[]` | Remove top | — |
 | `dup` /s | `[Any]` | `[Any, Any]` | Duplicate top | — |

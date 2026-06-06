@@ -1178,26 +1178,28 @@ func parseWord(text string) (eng.Value, error) {
 		// numeric-shape classification below.
 	}
 
-	// A digit-led token whose magnitude OVERFLOWS binary64 (e.g. 1e309)
-	// reached here because jsonic could not lex it. Report a clear
-	// float-overflow error instead of an opaque "undefined word". We use
-	// ParseFloat's *range* error as the discriminator: it means the token
-	// is a well-formed number that is merely out of range — never a
-	// digit-led WORD (e.g. `2dup`, which fails ParseFloat with a *syntax*
-	// error and falls through to be resolved as a word).
+	// A digit-led token reached here only because jsonic could not lex it
+	// as a number — and no word may start with a digit (see
+	// ValidateWordName), so it can only be a malformed or out-of-range
+	// numeric literal. Classify it for a clear diagnostic instead of an
+	// opaque "undefined word": a value ParseFloat recognises but reports
+	// out of range overflowed binary64; anything else is malformed (e.g.
+	// `1e`, `2dup` — the renamed-away stack words are now `dup2` etc.).
 	if isDigitLed(name) {
-		if f, err := strconv.ParseFloat(stripUnderscores(name), 64); isRangeError(err) || math.IsInf(f, 0) {
+		f, err := strconv.ParseFloat(stripUnderscores(name), 64)
+		if isRangeError(err) || math.IsInf(f, 0) {
 			return eng.Value{}, floatLiteralOverflowError(name)
 		}
+		return eng.Value{}, malformedNumberError(name)
 	}
 
 	return eng.NewWord(name), nil
 }
 
 // isDigitLed reports whether s starts (after an optional sign) with a
-// decimal digit — a necessary precondition for the numeric-overflow
-// check. Note a digit-led token is NOT necessarily a number: `2dup` and
-// friends are valid words.
+// decimal digit. Because no word may begin with a digit
+// (ValidateWordName), a digit-led token is always a numeric literal —
+// never an identifier.
 func isDigitLed(s string) bool {
 	if len(s) > 0 && (s[0] == '-' || s[0] == '+') {
 		s = s[1:]
@@ -1219,6 +1221,19 @@ func floatLiteralOverflowError(src string) error {
 		Detail: "floating-point literal out of range: " + src + " overflows to infinity",
 		Src:    src,
 		Hint:   "the Float range is about ±1.8e308; write the `inf` literal for infinity",
+	}
+}
+
+// malformedNumberError reports a digit-led token that is not a valid
+// number. Since no word may start with a digit, such a token can only be
+// a botched numeric literal (`1e`, `0x1p4`) or a digit-first name (`2dup`
+// — the stack words are now `dup2`/`swap2`/`drop2`/`over2`).
+func malformedNumberError(src string) error {
+	return &eng.AqlError{
+		Code:   "syntax_error",
+		Detail: "invalid numeric literal: " + src,
+		Src:    src,
+		Hint:   "a number is digits with an optional sign, base prefix (0x/0o/0b), `.`, exponent (`e`), and single `_` separators — and a name cannot start with a digit",
 	}
 }
 

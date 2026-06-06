@@ -155,7 +155,7 @@ func defaultWordTable() map[string]Transparency {
 		"and", "or", "xor", "nand", "implies", "not",
 		// Stack ops
 		"dup", "drop", "swap", "over", "rot", "nip", "tuck",
-		"2dup", "2drop", "2swap", "2over", "depth", "pick", "roll",
+		"dup2", "drop2", "swap2", "over2", "depth", "pick", "roll",
 		// List/Map construction & access
 		"size", "append", "prepend", "head", "tail", "first", "last",
 		"reverse", "concat", "flatten", "get", "getr", "set",

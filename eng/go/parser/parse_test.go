@@ -1423,11 +1423,12 @@ func TestParseBasePrefixOverflowAndMin(t *testing.T) {
 	}
 }
 
-// TestParseFloatLiteralOverflow pins that a float literal overflowing
-// binary64 (e.g. 1e309) is a clean [aql/float_overflow] — while a
-// digit-led WORD (2dup) and a malformed/ambiguous token (1e, 1foo) are
-// NOT misclassified as numbers (they stay words, resolved at runtime).
-func TestParseFloatLiteralOverflow(t *testing.T) {
+// TestParseDigitLedTokens pins that a digit-led token — which can never
+// be a word (ValidateWordName forbids a digit first) — is diagnosed as a
+// number: an out-of-range value is [aql/float_overflow]; any other
+// digit-led junk (including the digit-first `2dup`, now renamed to
+// `dup2`) is a malformed-numeric [aql/syntax_error].
+func TestParseDigitLedTokens(t *testing.T) {
 	for _, src := range []string{"1e309", "1e400", "-1e400"} {
 		_, err := Parse(src)
 		ae, ok := err.(*eng.AqlError)
@@ -1435,18 +1436,17 @@ func TestParseFloatLiteralOverflow(t *testing.T) {
 			t.Errorf("Parse(%q): expected [aql/float_overflow], got %v", src, err)
 		}
 	}
-	// Digit-led words and in-range floats must parse without error.
-	for _, src := range []string{"2dup", "2swap", "1e308", "1.5", "42"} {
-		if _, err := Parse(src); err != nil {
-			t.Errorf("Parse(%q): unexpected parse error %v", src, err)
+	for _, src := range []string{"1e", "1foo", "5x", "2dup", "0x1p4"} {
+		_, err := Parse(src)
+		ae, ok := err.(*eng.AqlError)
+		if !ok || ae.Code != "syntax_error" {
+			t.Errorf("Parse(%q): expected malformed-number [aql/syntax_error], got %v", src, err)
 		}
 	}
-	// Ambiguous digit-led junk (`1e`, `1foo`) is left as a word — it is
-	// NOT a float_overflow (we can't tell it from a digit-led word at
-	// parse time); it surfaces as undefined_word only at run time.
-	for _, src := range []string{"1e", "1foo"} {
+	// In-range numbers and letter-led words still parse without error.
+	for _, src := range []string{"1e308", "1.5", "42", "dup2", "foo"} {
 		if _, err := Parse(src); err != nil {
-			t.Errorf("Parse(%q): should parse to a word, got %v", src, err)
+			t.Errorf("Parse(%q): unexpected parse error %v", src, err)
 		}
 	}
 }
