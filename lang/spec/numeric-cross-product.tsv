@@ -1,0 +1,120 @@
+# AQL Language Specification: Integer × Float numeric cross product
+# Format: input<TAB>expected<TAB>description
+#
+# Postfix form `a b op` computes `a OP b` in natural reading order
+# (stack=[a,b]; top=b→sig[0], deeper=a→sig[1]; handler returns b'OP'a
+# where the names line up to a OP b — see arithmetic.tsv §2).
+#
+# THE CONTRACT UNDER TEST: float contagion. The two numeric leaves are
+# Integer and Float. For add/sub/mul/div/mod/pow, Integer⊕Integer stays
+# Integer; if EITHER operand is a Float the result is a Float. This file
+# pins the full 6-ops × 4-type-combos (II, IF, FI, FF) cross product for
+# both the value and its type, plus the edge cases where the result is
+# more surprising than "same number, wider type" (see
+# design/INTEGER-OVERFLOW-STRATEGY.0.md and WAT-AUDIT Exhibit H/L).
+
+# ───────────────────────── add ─────────────────────────
+7 2 add	9	II → Integer
+7 2.0 add	9.0	IF → Float (contagion)
+7.0 2 add	9.0	FI → Float (contagion)
+7.0 2.0 add	9.0	FF → Float
+7 2 add typeof	Integer	II result type
+7 2.0 add typeof	Float	IF result type
+7.0 2 add typeof	Float	FI result type
+7.0 2.0 add typeof	Float	FF result type
+
+# ───────────────────────── sub ─────────────────────────
+7 2 sub	5	II → Integer
+7 2.0 sub	5.0	IF → Float
+7.0 2 sub	5.0	FI → Float
+7.0 2.0 sub	5.0	FF → Float
+7 2 sub typeof	Integer	II result type
+7 2.0 sub typeof	Float	IF result type
+7.0 2 sub typeof	Float	FI result type
+7.0 2.0 sub typeof	Float	FF result type
+
+# ───────────────────────── mul ─────────────────────────
+7 2 mul	14	II → Integer
+7 2.0 mul	14.0	IF → Float
+7.0 2 mul	14.0	FI → Float
+7.0 2.0 mul	14.0	FF → Float
+7 2 mul typeof	Integer	II result type
+7 2.0 mul typeof	Float	IF result type
+7.0 2 mul typeof	Float	FI result type
+7.0 2.0 mul typeof	Float	FF result type
+
+# ───────────────────────── div ─────────────────────────
+# ODDITY: II truncates to an Integer quotient (3), every mixed/FF
+# variant does REAL division (3.5). A Float operand changes the VALUE,
+# not just the type — even though `7 eq 7.0` is true (see eq rows below).
+7 2 div	3	II → Integer, TRUNCATED quotient (not 3.5!)
+7 2.0 div	3.5	IF → Float, real division
+7.0 2 div	3.5	FI → Float, real division
+7.0 2.0 div	3.5	FF → Float, real division
+7 2 div typeof	Integer	II result type
+7 2.0 div typeof	Float	IF result type
+7.0 2 div typeof	Float	FI result type
+7.0 2.0 div typeof	Float	FF result type
+
+# ───────────────────────── mod ─────────────────────────
+7 2 mod	1	II → Integer
+7 2.0 mod	1.0	IF → Float
+7.0 2 mod	1.0	FI → Float
+7.0 2.0 mod	1.0	FF → Float
+7 2 mod typeof	Integer	II result type
+7 2.0 mod typeof	Float	IF result type
+7.0 2 mod typeof	Float	FI result type
+7.0 2.0 mod typeof	Float	FF result type
+
+# ───────────────────────── pow ─────────────────────────
+7 2 pow	49	II → Integer
+7 2.0 pow	49.0	IF → Float
+7.0 2 pow	49.0	FI → Float
+7.0 2.0 pow	49.0	FF → Float
+7 2 pow typeof	Integer	II result type
+7 2.0 pow typeof	Float	IF result type
+7.0 2 pow typeof	Float	FI result type
+7.0 2.0 pow typeof	Float	FF result type
+
+# ───────── ODDITIES surfaced by the cross product ─────────
+
+# 1. Equal-but-not-substitutable (WAT Exhibit H). 7 and 7.0 compare
+#    equal, yet div gives different VALUES (3 vs 3.5) above.
+7 7.0 eq	true	cross-leaf magnitude equality
+7 7.0 cmp	0	cross-leaf magnitude ordering
+
+# 2. div truncation is toward zero (not floor) for negatives.
+-7 2 div	-3	-3, not -4 (truncation toward zero)
+-7.0 2 div	-3.5	the Float variant keeps the fraction
+
+# 3. mod result takes the sign of the dividend (a), consistently for
+#    both Integer (Go %) and Float (math.Mod).
+-7 2 mod	-1	sign follows dividend
+7 -2 mod	1	divisor sign does not affect result sign
+-7.0 2.0 mod	-1.0	Float mod, same sign rule
+
+# 4. pow asymmetry: a negative exponent is an ERROR for integer pow but
+#    a Float exponent (or base) makes it legal (real-valued). Contagion
+#    changes whether the op is even defined, not just the type.
+2 -1 pow	ERROR:negative exponent	II rejects a negative exponent
+2 -1.0 pow	0.5	a Float exponent is allowed → real reciprocal
+2.0 -1 pow	0.5	a Float base also flips it to the real path
+
+# 5. Fractional exponent always goes real; a whole result still renders
+#    as a Float, and a non-real result is NaN.
+9 0.5 pow	3.0	sqrt(9) via Float exponent — Float even though whole
+2 0.5 pow	1.4142135623730951	sqrt(2)
+-8.0 0.5 pow	NaN.0	sqrt of a negative → NaN, rendered with the Float suffix
+
+# 6. Division / modulo by zero is an ERROR for BOTH leaves — a Float
+#    `div`/`mod` by zero does NOT follow IEEE-754 (no +Inf / NaN).
+7 0 div	ERROR:division by zero	Integer divide by zero
+7 0.0 div	ERROR:division by zero	Float divide by zero is also an error (not +Inf)
+7 0 mod	ERROR:modulo by zero	Integer modulo by zero
+7 0.0 mod	ERROR:modulo by zero	Float modulo by zero is also an error (not NaN)
+
+# 7. Contagion can SILENTLY LOSE integer precision. II stays exact;
+#    mixing a large Integer with a Float drops to float64's 53-bit
+#    mantissa — the `+ 1` vanishes.
+10000000000000000 1 add	10000000000000001	II is exact
+10000000000000000 1.0 add	10000000000000000.0	IF: the +1 is lost to float64 precision
