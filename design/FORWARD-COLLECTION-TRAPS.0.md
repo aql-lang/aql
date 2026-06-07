@@ -88,23 +88,31 @@ words are binding" is a language-design call with test blast radius (e.g. the
 
 ---
 
-## Trap 2 — a bare variable as a `get` key/index is captured as a literal atom
+## Trap 2 — a bare word as a `get` key is a literal key, like JS `.key`
+
+### Resolution: document only — this is intended, JS-equivalent semantics
+
+This is **not a bug** and needs no behaviour change. It is the direct analogue
+of JavaScript member access, with `()` playing the role of `[]`:
+
+| JavaScript | AQL | meaning |
+|---|---|---|
+| `xs.i` | `xs get i` | literal key/property named `i` |
+| `xs[i]` | `xs get (i)` | computed key — the **value** of `i` |
+
+So `xs get i` looks up the key `"i"`, and `()` forces evaluation just as `[]`
+does in JS. The trie author hit it because the mental model wasn't documented,
+not because the behaviour is wrong. The resolution is a docs line, nothing more.
 
 ### Symptom (trie #6)
-
-A bound variable used as an index/key is not resolved — it is taken as the
-literal key-atom, yielding a silent `None`:
 
 ```aql
 def xs [10 20 30]
 def i 1
-xs get i        # => None      (NOT 20)
-xs get (i)      # => 20        (parenthesised: i evaluates to 1)
-xs get 1        # => 20        (literal index)
+xs get i        # => None      literal key "i" — like xs.i
+xs get (i)      # => 20        computed — like xs[i]
+xs get 1        # => 20        literal index
 ```
-
-It bit the trie author twice and passes tests vacuously — `None` propagates
-quietly into later code.
 
 ### Scope & root cause (verified)
 
@@ -130,45 +138,42 @@ Consequences, all confirmed:
 - `m get a` where `a` is **both** a defined value (`0`) and a map key (`a:99`) →
   `99` — the literal-key interpretation wins; the binding is shadowed.
 
-So this is the dot-access ergonomic (`m.key`) colliding with "variable as a
-computed key/index." The only disambiguator today is parens: `xs get (i)`.
+All three are exactly the JS `.key` semantics: a literal name, evaluated
+against the container, with no variable resolution and no error on a missing
+key. The `i`-undefined-still-`None` case is `xs.i` returning `undefined` in JS,
+not a defect; the `a`/`99` case is `m.a` reading property `a`, not the variable
+`a`. The only disambiguator — and the JS-`[]` analogue — is parens: `xs get
+(i)`.
 
-### Why it's nasty
+### Resolution
 
-The same property that makes `m.key` convenient — capture the bare word as a
-name — silently defeats `get <var>`, and it specifically **suppresses** the
-strict-undefined-word error that would otherwise catch the typo. `None` is a
-valid value, so nothing downstream complains.
+**Documentation only.** No runtime change, no check advisory (that would warn
+on correct, idiomatic code). Add a docs line wherever `get`/`set`/dot-access is
+explained:
 
-### Options (for discussion)
+> A bare word key is a **literal** name — `xs get key` is `xs.key`. To use a
+> variable (or any expression) as the key/index, wrap it in parens:
+> `xs get (i)` is `xs[i]`.
 
-1. **Prefer a bound value over an atom key.** If the bare word resolves to a
-   binding, use its value; fall back to the literal atom only for unbound
-   names. Most intuitive, but a behaviour change to `m get key` dispatch and to
-   dot-access desugaring, and ambiguous when a name is *both* a binding and a
-   real key (the `a`/`99` case above) — picks the variable, which may surprise
-   the dot-access reader.
-2. **Check-mode advisory.** Flag `get`/`set` whose key is a bare word that is
-   *also* a live binding (the likely "I meant the variable" case) and suggest
-   `(name)`. Zero runtime change; consistent with the other advisories.
-3. **Docs + a structural note.** Document that `get`/`set` keys are literal
-   names; use `(expr)` for a computed key/index. Cheapest; leaves the silent
-   `None` in place.
-
-Recommendation: **(2) + (3)** — keep the dot-access ergonomic intact, surface
-the likely mistake via `aql check`, and document the `(expr)` rule. (1) is the
-"correct-feeling" fix but is the riskiest and changes a core, widely-relied-on
-dispatch.
+A worked `i`-vs-`(i)` example next to the `get` reference closes the gap the
+trie author hit.
 
 ---
 
 ## Common thread
 
-Both traps are forward collection making a locally-sensible choice that is
-globally surprising **and silent**: Trap 1 reaches past a vanished argument;
-Trap 2 captures a name where a value was meant. Neither is a crash or a clear
-error — they produce wrong values or mislocated failures, which is exactly the
-class the DX reports flag as the costliest. The consistent remedy direction —
-loud where it is safe (binding words), advisory where runtime behaviour must
-stay (general dispatch, dot-access) — mirrors the `forward_strands_operand`
-advisory already shipped (`design/FORWARD-STRAND-ADVISORY.0.md`).
+Both surfaced as "bare word does something I didn't expect," but they are
+different in kind:
+
+- **Trap 1 is a real silent failure.** A vanished argument is reached past, and
+  the result is a wrong binding or a mislocated error — the class the DX reports
+  flag as costliest. Worth a fix (loud error for binding words; advisory
+  elsewhere), in the spirit of the shipped `forward_strands_operand` advisory
+  (`design/FORWARD-STRAND-ADVISORY.0.md`).
+- **Trap 2 is working as intended** — JS `.key` vs `[expr]`, with `()` for `[]`.
+  The only gap is that the mental model wasn't written down. Documentation
+  closes it; no code change.
+
+The shared lesson is narrower than "forward collection is surprising": where
+behaviour is genuinely wrong (Trap 1) make it loud; where it is a correct but
+unstated convention (Trap 2) write it down.
