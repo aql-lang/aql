@@ -353,6 +353,13 @@ func describeSelfHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) 
 
 func describeWordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := ValToString(args[0])
+	// A dotted name (ArrayUtil.indices) describes a module export: resolve
+	// it from the namespace binding `import` installed, rendering the
+	// export's own doc + module provenance + signatures.
+	if info := BuildQualifiedFuncInfo(r, name); info != nil {
+		fmt.Fprint(r.Output, help.FormatDynamic(*info))
+		return nil, nil
+	}
 	// Prefer live registry data (signatures + examples). Fall back to
 	// the static entry for words that are documented but not registered
 	// in this build, then report nothing if neither exists.

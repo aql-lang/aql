@@ -53,6 +53,99 @@ func makeDynamicEval(r *Registry) func(string) (string, error) {
 	}
 }
 
+// BuildQualifiedFuncInfo builds help.FuncInfo for a dotted module-export
+// name (e.g. "ArrayUtil.indices") by resolving the namespace binding that
+// `import` installed in the def stack and reading the export's FnDefInfo
+// provenance (Module/Doc) and signatures. Returns nil when name is not a
+// dotted name, the namespace is unbound (module not imported), or the word
+// is not an exported function. This is the runtime `describe` path; it needs
+// no access to the modules package because the namespace value is already a
+// ModuleExport bound in r.Defs.
+func BuildQualifiedFuncInfo(r *Registry, name string) *help.FuncInfo {
+	dot := strings.IndexByte(name, '.')
+	if dot <= 0 || dot >= len(name)-1 {
+		return nil
+	}
+	ns, word := name[:dot], name[dot+1:]
+	binding, ok := r.Defs.Top(ns)
+	if !ok {
+		return nil
+	}
+	exp, ok := moduleExportGet(binding, word)
+	if !ok {
+		return nil
+	}
+	fnDef, ok := exp.Data.(FnDefInfo)
+	if !ok {
+		return nil
+	}
+	return FnDefFuncInfo(name, &fnDef)
+}
+
+// FnDefFromValue unwraps an FnDefInfo carried by a function Value (e.g. a
+// module export's wrapper), for callers outside the engine package that hold
+// the Value but not the payload. ok=false when v is not an FnDef.
+func FnDefFromValue(v Value) (*FnDefInfo, bool) {
+	fn, ok := v.Data.(FnDefInfo)
+	if !ok {
+		return nil, false
+	}
+	return &fn, true
+}
+
+// FnDefFuncInfo builds a help.FuncInfo from a function's FnDefInfo, under the
+// display label (e.g. "ArrayUtil.indices"). It carries module provenance
+// (Module/Doc) when present and prefers the signatures' authored Returns —
+// module wrappers declare them explicitly — falling back to inferReturns for
+// core words whose Returns are derived. Shared by the qualified-name path
+// above and any caller that already holds an FnDefInfo (e.g. the CLI).
+func FnDefFuncInfo(display string, fn *FnDefInfo) *help.FuncInfo {
+	info := &help.FuncInfo{
+		Name:        display,
+		ForwardArgs: fnDefForwardEligible(fn),
+		Module:      fn.Module,
+		Doc:         fn.Doc,
+	}
+	// A module export has no static help Entry; a bare core word might.
+	if fn.Module == "" {
+		info.Entry = help.Lookup(fn.Name)
+	}
+	for i := range fn.Signatures {
+		sig := fn.Signatures[i]
+		if sig.Fallback {
+			continue
+		}
+		si := help.SigInfo{BarrierPos: sig.BarrierPos}
+		for _, t := range sig.ArgTypes() {
+			si.Args = append(si.Args, t.String())
+		}
+		if len(sig.Returns) > 0 {
+			for _, t := range sig.Returns {
+				si.Returns = append(si.Returns, t.String())
+			}
+		} else {
+			si.Returns = inferReturns(fn.Name, sig)
+		}
+		info.Sigs = append(info.Sigs, si)
+	}
+	return info
+}
+
+// fnDefForwardEligible reports whether any signature can collect forward
+// arguments. Unlike HasForwardSigs (which only counts a positive resolved
+// BarrierPos), this also treats the -1 "all-forward" sentinel as forward —
+// module wrappers carry BarrierPos: -1 and are called in forward form, so
+// describe should show forward precedence for them. Only a sig pinned to 0
+// (pure stack) is non-forward.
+func fnDefForwardEligible(fn *FnDefInfo) bool {
+	for i := range fn.Signatures {
+		if fn.Signatures[i].BarrierPos != 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // BuildFuncInfo extracts dynamic signature data from the registry for a word.
 func BuildFuncInfo(r *Registry, name string) *help.FuncInfo {
 	fn := r.Lookup(name)
