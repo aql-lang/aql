@@ -98,9 +98,10 @@ var StringModuleNatives = []NativeFunc{
 	{
 		Name: "repeat",
 
+		// Subject-last: `repeat count input` (count then the string).
 		Signatures: []NativeSig{
-			{Args: []*Type{TString, TInteger, TMap}, Handler: repeatOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
-			{Args: []*Type{TString, TInteger}, Handler: repeatHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TString, TMap}, Handler: repeatOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TString}, Handler: repeatHandler, Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 	{
@@ -198,16 +199,17 @@ func doConcat(listVal Value, o strOpts) ([]Value, error) {
 // ---- split ----
 
 func splitHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	_as1, _ := args[0].AsConcreteString()
-	_as0, _ := args[1].AsConcreteString()
-	return doSplit(_as1, _as0, strOpts{cs: "sensitive", mode: "literal"})
+	// Subject (input) is the LAST argument: forward `split sep input`.
+	sep, _ := args[0].AsConcreteString()
+	input, _ := args[1].AsConcreteString()
+	return doSplit(input, sep, strOpts{cs: "sensitive", mode: "literal"})
 }
 
 func splitOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	opts := parseStrOpts(args[2])
-	_as3, _ := args[0].AsConcreteString()
-	_as2, _ := args[1].AsConcreteString()
-	return doSplit(_as3, _as2, opts)
+	sep, _ := args[0].AsConcreteString()
+	input, _ := args[1].AsConcreteString()
+	return doSplit(input, sep, opts)
 }
 
 func doSplit(input, sep string, o strOpts) ([]Value, error) {
@@ -362,16 +364,17 @@ func doTrim(input string, o strOpts) ([]Value, error) {
 // ---- contains ----
 
 func containsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	_as1, _ := args[0].AsConcreteString()
-	_as0, _ := args[1].AsConcreteString()
-	return doContains(_as1, _as0, strOpts{cs: "sensitive", mode: "literal"})
+	// Haystack (input) is the LAST argument: forward `contains needle haystack`.
+	needle, _ := args[0].AsConcreteString()
+	haystack, _ := args[1].AsConcreteString()
+	return doContains(haystack, needle, strOpts{cs: "sensitive", mode: "literal"})
 }
 
 func containsOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	opts := parseStrOpts(args[2])
-	_as3, _ := args[0].AsConcreteString()
-	_as2, _ := args[1].AsConcreteString()
-	return doContains(_as3, _as2, opts)
+	needle, _ := args[0].AsConcreteString()
+	haystack, _ := args[1].AsConcreteString()
+	return doContains(haystack, needle, opts)
 }
 
 func doContains(input, search string, o strOpts) ([]Value, error) {
@@ -542,19 +545,20 @@ func shellFindLast(s, pattern string, caseInsensitive bool) int {
 // ---- replace ----
 
 func replaceHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	_as2, _ := args[0].AsConcreteString()
-	_as1, _ := args[1].AsConcreteString()
-	_as0, _ := args[2].AsConcreteString()
-	return doReplace(_as2, _as1, _as0,
+	// Subject (input) is the LAST argument: forward `replace search repl input`.
+	search, _ := args[0].AsConcreteString()
+	repl, _ := args[1].AsConcreteString()
+	input, _ := args[2].AsConcreteString()
+	return doReplace(input, search, repl,
 		strOpts{cs: "sensitive", mode: "literal", scope: "first"})
 }
 
 func replaceOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	opts := parseStrOpts(args[3])
-	_as5, _ := args[0].AsConcreteString()
-	_as4, _ := args[1].AsConcreteString()
-	_as3, _ := args[2].AsConcreteString()
-	return doReplace(_as5, _as4, _as3, opts)
+	search, _ := args[0].AsConcreteString()
+	repl, _ := args[1].AsConcreteString()
+	input, _ := args[2].AsConcreteString()
+	return doReplace(input, search, repl, opts)
 }
 
 func doReplace(input, search, repl string, o strOpts) ([]Value, error) {
@@ -829,16 +833,17 @@ func doNormalize(input string, o strOpts) ([]Value, error) {
 // ---- repeat ----
 
 func repeatHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	_as1, _ := args[0].AsConcreteString()
-	_as0, _ := args[1].AsConcreteInteger()
-	return doRepeat(_as1, _as0, strOpts{})
+	// Subject (input) is the LAST argument: forward `repeat count input`.
+	count, _ := args[0].AsConcreteInteger()
+	input, _ := args[1].AsConcreteString()
+	return doRepeat(input, count, strOpts{})
 }
 
 func repeatOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	opts := parseStrOpts(args[2])
-	_as3, _ := args[0].AsConcreteString()
-	_as2, _ := args[1].AsConcreteInteger()
-	return doRepeat(_as3, _as2, opts)
+	count, _ := args[0].AsConcreteInteger()
+	input, _ := args[1].AsConcreteString()
+	return doRepeat(input, count, opts)
 }
 
 func doRepeat(input string, count int64, o strOpts) ([]Value, error) {
@@ -930,17 +935,18 @@ func doPad(input string, targetLen int64, o strOpts) ([]Value, error) {
 // ---- match ----
 
 func matchHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	_as1, _ := args[0].AsConcreteString()
-	_as0, _ := args[1].AsConcreteString()
-	return doMatch(_as1, _as0,
+	// Subject (input) is the LAST argument: forward `match pattern input`.
+	pattern, _ := args[0].AsConcreteString()
+	input, _ := args[1].AsConcreteString()
+	return doMatch(input, pattern,
 		strOpts{cs: "sensitive", mode: "literal", scope: "first"})
 }
 
 func matchOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	opts := parseStrOpts(args[2])
-	_as3, _ := args[0].AsConcreteString()
-	_as2, _ := args[1].AsConcreteString()
-	return doMatch(_as3, _as2, opts)
+	pattern, _ := args[0].AsConcreteString()
+	input, _ := args[1].AsConcreteString()
+	return doMatch(input, pattern, opts)
 }
 
 func doMatch(input, pattern string, o strOpts) ([]Value, error) {

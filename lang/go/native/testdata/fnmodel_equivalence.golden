@@ -384,8 +384,8 @@ WORD remove
   [Ideal/Object/Resource/Entity] barrier=1
   [Node/Map] barrier=1
 WORD repeat
-  [Scalar/String Scalar/Number/Integer Node/Map] barrier=3 returns=[Scalar/String]
-  [Scalar/String Scalar/Number/Integer] barrier=2 returns=[Scalar/String]
+  [Scalar/Number/Integer Scalar/String Node/Map] barrier=3 returns=[Scalar/String]
+  [Scalar/Number/Integer Scalar/String] barrier=2 returns=[Scalar/String]
 WORD replace
   [Scalar/String Scalar/String Scalar/String Node/Map] barrier=4 returns=[Scalar/String]
   [Scalar/String Scalar/String Scalar/String] barrier=3 returns=[Scalar/String]

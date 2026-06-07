@@ -191,20 +191,22 @@ aql> MathUtil.e             # returns 2.718281828459045
 
 Strings use single or double quotes (they're interchangeable):
 
-For string words that take multiple arguments (`split`, `contains`,
-`indexof`, `slice`, `replace`), the clearest call form is
-all-forward: `WORD input arg…`. See
+The `aql:string-util` words put the **subject string last** (the data-last
+grain), so the clearest all-forward form is `WORD arg… subject` — e.g.
+`split sep input`, `contains needle haystack`, `indexof needle haystack`,
+`replace search repl input`. This also lets the subject flow from a pipeline
+(`input WORD arg`). An options map, when present, trails the subject. See
 [§3: the argument-order rule](#the-argument-order-rule).
 
 ```
 aql> "aql:string-util" import end "hello" StringUtil.upper                 # returns 'HELLO'
 aql> "aql:string-util" import end "HELLO" StringUtil.lower                 # returns 'hello'
-aql> "aql:string-util" import end StringUtil.split "hello,world" ","       # returns ['hello' 'world']
+aql> "aql:string-util" import end StringUtil.split "," "hello,world"       # returns ['hello' 'world'] — subject (input) LAST
 aql> "aql:string-util" import end ["a","b","c"] StringUtil.concat          # returns 'abc' — joins list elements
-aql> "aql:string-util" import end StringUtil.contains "hello" "ell"        # returns true
+aql> "aql:string-util" import end StringUtil.contains "ell" "hello"        # returns true — haystack LAST
 aql> "aql:string-util" import end StringUtil.indexof "ll" "hello"          # returns 2 — haystack LAST: `indexof needle haystack`
 aql> "hello" slice 1 3             # returns 'el'
-aql> "aql:string-util" import end StringUtil.replace "hello" "l" "r"       # returns 'herlo'
+aql> "aql:string-util" import end StringUtil.replace "l" "r" "hello"       # returns 'herlo' — subject (input) LAST
 aql> "aql:string-util" import end "  hi  " StringUtil.trim                 # returns 'hi'
 aql> "aql:string-util" import end "hi" StringUtil.pad 5                    # returns 'hi   '
 ```

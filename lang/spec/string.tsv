@@ -12,25 +12,27 @@
 "aql:string-util" import end StringUtil.concat ['x' 1 true]	'x1true'	non-string elements coerce to text
 "aql:string-util" import end StringUtil.concat []	''	empty list → empty string
 #
-# §2  split
-"aql:string-util" import end StringUtil.split 'a,b,c' ','	['a' 'b' 'c']	split on a separator
-"aql:string-util" import end StringUtil.split 'hello' ''	['h' 'e' 'l' 'l' 'o']	empty separator splits into characters
+# §2  split — subject (input) LAST: `split sep input`
+"aql:string-util" import end StringUtil.split ',' 'a,b,c'	['a' 'b' 'c']	split on a separator
+"aql:string-util" import end StringUtil.split '' 'hello'	['h' 'e' 'l' 'l' 'o']	empty separator splits into characters
+"aql:string-util" import end 'a,b,c' StringUtil.split ','	['a' 'b' 'c']	swap form: input flows from the stack
 #
 # §3  trim — drop surrounding whitespace, or a custom char set
 "aql:string-util" import end StringUtil.trim '  hi  '	'hi'	default trims whitespace
 "aql:string-util" import end StringUtil.trim 'xxhixx' {chars: 'x'}	'hi'	{chars} option trims a custom set
 #
-# §4  contains / indexof
-"aql:string-util" import end StringUtil.contains 'hello' 'ell'	true	substring present
-"aql:string-util" import end StringUtil.contains 'hello' 'zzz'	false	substring absent
+# §4  contains / indexof — haystack LAST: `contains needle haystack`
+"aql:string-util" import end StringUtil.contains 'ell' 'hello'	true	substring present
+"aql:string-util" import end StringUtil.contains 'zzz' 'hello'	false	substring absent
+"aql:string-util" import end 'hello' StringUtil.contains 'ell'	true	swap form: haystack flows from the stack
 # indexof is HAYSTACK-LAST: `indexof needle haystack` (data-last grain).
 "aql:string-util" import end StringUtil.indexof 'l' 'hello'	2	zero-based index of needle in haystack
 "aql:string-util" import end StringUtil.indexof 'z' 'hello'	-1	-1 when the needle is absent
 "aql:string-util" import end 'hello' StringUtil.indexof 'l'	2	swap form reads needle-in-haystack left-to-right
 "aql:string-util" import end 'hello' 'l' StringUtil.indexof	2	pipeline form: haystack flows from the stack
 #
-# §5  replace — first occurrence only
-"aql:string-util" import end StringUtil.replace 'a.b.c' '.' '-'	'a-b.c'	replaces only the first match by default
+# §5  replace — first occurrence only; subject (input) LAST: `replace search repl input`
+"aql:string-util" import end StringUtil.replace '.' '-' 'a.b.c'	'a-b.c'	replaces only the first match by default
 #
 # §6  case
 "aql:string-util" import end StringUtil.changecase 'hello' {style: 'upper'}	'HELLO'	{style:'upper'}
@@ -39,14 +41,14 @@
 "aql:string-util" import end StringUtil.upper 'hi'	'HI'	uppercase shortcut
 "aql:string-util" import end StringUtil.lower 'HI'	'hi'	lowercase shortcut
 #
-# §7  repeat / pad / escape
-"aql:string-util" import end StringUtil.repeat 'ab' 3	'ababab'	repeat n times
+# §7  repeat / pad / escape — repeat is subject-last: `repeat count input`
+"aql:string-util" import end StringUtil.repeat 3 'ab'	'ababab'	repeat n times
 "aql:string-util" import end StringUtil.pad 5 'x'	'x    '	pad string to a width (right-padded)
 "aql:string-util" import end StringUtil.escape 'a<b'	'a\<b'	escape special characters
 #
-# §8  match — literal substring search; result map exposes ok / n / ms
-"aql:string-util" import end (StringUtil.match 'abc123' '123').ok	true	a match was found
-"aql:string-util" import end (StringUtil.match 'abc123' 'xyz').ok	false	no match
-"aql:string-util" import end (StringUtil.match 'abc123' '123').n	1	number of matches
+# §8  match — literal substring search; subject (input) LAST: `match pattern input`
+"aql:string-util" import end (StringUtil.match '123' 'abc123').ok	true	a match was found
+"aql:string-util" import end (StringUtil.match 'xyz' 'abc123').ok	false	no match
+"aql:string-util" import end (StringUtil.match '123' 'abc123').n	1	number of matches
 #
 # §9  errors — string words reject non-string subjects

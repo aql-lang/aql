@@ -637,24 +637,24 @@ of the word, with the haystack as the forward arg.
 "aql:string-util" import end | `StringUtil.upper` | Uppercase | `StringUtil.upper "hello"` returns `'HELLO'` |
 "aql:string-util" import end | `StringUtil.lower` | Lowercase | `StringUtil.lower "ABC"` returns `'abc'` |
 "aql:string-util" import end | `StringUtil.concat` | Join list elements into a string | `StringUtil.concat ["a","b"]` returns `'ab'` |
-"aql:string-util" import end | `StringUtil.split` | Split string by separator | `StringUtil.split "a,b" ","` returns `['a','b']` |
-"aql:string-util" import end | `StringUtil.contains` | Substring test | `StringUtil.contains "hello" "ell"` returns `true` |
+"aql:string-util" import end | `StringUtil.split` | Split string by separator (subject last) | `StringUtil.split "," "a,b"` returns `['a','b']` |
+"aql:string-util" import end | `StringUtil.contains` | Substring test (haystack last) | `StringUtil.contains "ell" "hello"` returns `true` |
 "aql:string-util" import end | `StringUtil.indexof` | Index of a needle in a haystack — **haystack last**: `indexof needle haystack` (string only; for the list form see `ArrayUtil.indices` under [List and array words](#list-and-array-words)) | `StringUtil.indexof "ll" "hello"` returns `2` |
 | `slice` | Substring; negative indices ok | `"hello" slice 1 3` returns `'el'` |
-"aql:string-util" import end | `StringUtil.replace` | Replace pattern | `StringUtil.replace "hello" "l" "r"` returns `'herlo'` |
-"aql:string-util" import end | `StringUtil.repeat` | Repeat string | `StringUtil.repeat "ab" 3` returns `'ababab'` |
+"aql:string-util" import end | `StringUtil.replace` | Replace pattern (subject last) | `StringUtil.replace "l" "r" "hello"` returns `'herlo'` |
+"aql:string-util" import end | `StringUtil.repeat` | Repeat string (subject last) | `StringUtil.repeat 3 "ab"` returns `'ababab'` |
 "aql:string-util" import end | `StringUtil.trim` | Trim whitespace or chars | `StringUtil.trim "  hi  "` returns `'hi'` |
 "aql:string-util" import end | `StringUtil.pad` | Pad to width | `"hi" StringUtil.pad 5` returns `'hi   '` |
-| `match` | Regex match (returns a struct) | `match "abc" "b(c)"` |
+"aql:string-util" import end | `StringUtil.match` | Substring match, returns a struct (subject last) | `StringUtil.match "b" "abc"` |
 
 #### Options examples
 
-Pass an Options map as the *last* forward argument:
+The subject string is the **last** string operand; an Options map trails it:
 
 ```
-"aql:string-util" import end StringUtil.split   "a,,b"      ","    {keepEmpty: true}            # returns ['a' '' 'b']
-"aql:string-util" import end StringUtil.contains "hello"    "Ell"  {cs: "insensitive"}          # returns true
-"aql:string-util" import end StringUtil.replace "aaa"       "a" "b" {scope: "all"}              # returns 'bbb'
+"aql:string-util" import end StringUtil.split   ","    "a,,b"  {keepEmpty: true}            # returns ['a' '' 'b']
+"aql:string-util" import end StringUtil.contains "Ell"  "hello" {cs: "insensitive"}          # returns true
+"aql:string-util" import end StringUtil.replace "a" "b" "aaa"   {scope: "all"}               # returns 'bbb'
 ```
 
 ### Boolean
