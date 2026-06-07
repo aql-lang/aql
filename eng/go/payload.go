@@ -74,9 +74,21 @@ type StrPayload struct{ S string }
 // Constructed by NewBoolean.
 type BoolPayload struct{ B bool }
 
-// AtomPayload carries the unquoted-name payload for a Scalar/Atom
-// value. Constructed by NewAtom.
-type AtomPayload struct{ Name string }
+// AtomPayload carries the unquoted-name payload for a Scalar/Atom value.
+// Constructed by NewAtom.
+//
+// Referent, when non-nil, is a snapshot of the value the atom's name was
+// bound to at the moment it was quoted (by the `quote` word) or when the
+// program was loaded (the run-start resolution pass) — it records what a
+// quoted name referred to. It is nil when the name was unbound at capture
+// time. Referent is METADATA ONLY: atom identity — equality, ordering,
+// canonical form — is by Name alone and must ignore Referent (see
+// valuesEqualDefault's TAtom case and CanonValue), so two atoms with the
+// same name stay equal regardless of what each referred to.
+type AtomPayload struct {
+	Name     string
+	Referent *Value
+}
 
 // PathPayload wraps a PathInfo for a Scalar/Path value.
 type PathPayload struct{ Info PathInfo }

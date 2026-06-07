@@ -84,6 +84,13 @@ func valuesEqualDefault(a, b Value) bool {
 		ab, _ := AsBoolean(a)
 		bb, _ := AsBoolean(b)
 		return ab == bb
+	case a.Parent.ConformsTo(TAtom):
+		// Atom identity is by name only — the AtomPayload.Referent snapshot
+		// is metadata and must not affect equality (otherwise the default
+		// %v-format branch below would compare the referent pointer too).
+		an, _ := AsAtom(a)
+		bn, _ := AsAtom(b)
+		return an == bn
 	case a.Parent.Equal(TList):
 		aTT, aTbl := a.Data.(TableTypeInfo)
 		bTT, bTbl := b.Data.(TableTypeInfo)

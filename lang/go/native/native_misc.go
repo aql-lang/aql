@@ -119,6 +119,15 @@ func init() {
 			},
 		},
 
+		// ---- referent (what a quoted atom refers to) ----
+		{
+			Name: "referent",
+
+			Signatures: []NativeSig{
+				{Args: []*Type{TAtom}, Handler: referentHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			},
+		},
+
 		// ---- module / import ----
 		{
 			Name: "module",
@@ -373,6 +382,27 @@ func describeWordHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	}
 	fmt.Fprintf(r.Output, "describe: no description available for %q\n", name)
 	return nil, nil
+}
+
+// referentHandler implements `referent`: given an atom, return what its name
+// refers to. A captured snapshot (from `quote` or the load-time resolution
+// pass) is returned as-is; otherwise the atom's name is resolved against the
+// current bindings (the lazy fallback, which covers a bare `name/q` whose
+// binding was made at runtime). An atom whose name is unbound is an error.
+func referentHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	v := args[0]
+	if ref, ok := AtomReferent(v); ok {
+		return []Value{ref}, nil
+	}
+	name, err := AsAtom(v)
+	if err != nil {
+		return nil, r.AqlError("referent_error", "referent: expected an atom", "referent")
+	}
+	if bound, ok := r.Defs.Top(name); ok {
+		return []Value{bound}, nil
+	}
+	return nil, r.AqlError("referent_error",
+		fmt.Sprintf("referent: atom %q has no referent (name is unbound)", name), "referent")
 }
 
 // ---- module / import handlers ----

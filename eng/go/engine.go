@@ -349,6 +349,28 @@ func traceSigStr(name string, sig *Signature) string {
 // returned. Callers decide the shape they want: take [0] for a single
 // value, keep the slice for a list, or splice it back into a parent
 // tape.
+// resolveAtomReferents walks a loaded program and stamps each atom that has
+// no referent yet with a snapshot of what its name is currently bound to,
+// when such a binding exists. It recurses into list payloads so quoted
+// atoms nested in code/data lists are covered. Atom identity is unaffected
+// (the referent is metadata; see AtomPayload). Names with no current binding
+// are left unresolved — that is the honest "bound only at runtime" case.
+func resolveAtomReferents(r *Registry, vals []Value) {
+	for i := range vals {
+		switch data := vals[i].Data.(type) {
+		case AtomPayload:
+			if data.Referent != nil {
+				continue
+			}
+			if bound, ok := r.Defs.Top(data.Name); ok {
+				vals[i] = SetAtomReferent(vals[i], bound)
+			}
+		case ListPayload:
+			resolveAtomReferents(r, data.Elems)
+		}
+	}
+}
+
 func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// Last-resort panic guard at the top-level engine boundary. A bug in
 	// any handler or in the step loop should surface to the user as a
@@ -392,6 +414,17 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	}
 	copy(e.stack, input)
 	e.pointer = 0
+
+	// Post-parse referent resolution: stamp each /q-style atom in the loaded
+	// top-level program with a snapshot of what its name refers to, for any
+	// name already bound when the program loads (pre-installed module/global
+	// defs). Names bound only later, during execution, stay unresolved here —
+	// the `quote` word captures those at quote time instead. Top engine only
+	// (sub-engines run fragments already walked) and not in check mode (the
+	// program has been stripped to carriers).
+	if e.isTop && !e.registry.Check.IsActive() {
+		resolveAtomReferents(e.registry, e.stack)
+	}
 
 	// stepLimit is always set by the constructors (New / NewTop); the
 	// defensive check that used to substitute a default if the field

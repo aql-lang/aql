@@ -348,6 +348,21 @@ quoted key (`{'a/b': 1}`) or a computed key (`{[a/b]: 1}`).
   branches, `fn`/`macro` bodies — it is held deferred and run by that
   word, which is why `each [dup mul]` works even though the same
   bracket evaluated on its own would not.
+* **Referents.** A quoted atom can remember what its name referred to.
+  `quote foo` (and `(quote foo)`) snapshots `foo`'s current binding onto the
+  atom as its **referent**; `referent` reads it back:
+  ```
+  def x 5  def q (quote x)  def x 9
+  q referent              # returns 5 — the value x had WHEN quoted (a frozen snapshot)
+  ```
+  The snapshot is shallow (the same copy semantics as closure capture). A bare
+  `name/q` atom carries no snapshot, so `referent` falls back to the name's
+  **current** binding (`def x 9  x/q referent` returns `9`); an unbound name is
+  an error. The referent is metadata only — it never affects atom identity:
+  same-named atoms stay equal and canonicalise to `name/q` regardless of what
+  each referred to. (At load time a resolution pass also stamps referents for
+  names already bound when the program starts; names bound only during
+  execution are captured by `quote`.)
 * **Macros.** A `macro` runs at expansion time on its operands *as
   code* and splices the result into the call site — new syntax in
   AQL itself. See **[Macros](#macros)**.
@@ -713,6 +728,7 @@ restricted words refuse. See
 | `var` | Scoped variable block | `5 var [[x] x mul x]` returns `25` |
 | `args` | Current `fn` args list (inside body) | `args . 0` |
 | `quote` | Prevent evaluation of next token | `quote [1 add 2]` |
+| `referent` | What a quoted atom's name refers to | `def x 5  (quote x) referent` returns `5` |
 
 > **Core words are frozen.** `def`/`undef` may not redefine a built-in
 > word, nor the literals `true`/`false`/`none` — `def add …`,

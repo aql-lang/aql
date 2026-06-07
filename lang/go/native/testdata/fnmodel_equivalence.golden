@@ -371,6 +371,8 @@ WORD rebind
   [Ideal/Reach Any] barrier=2 returns=[Ideal/Reach]
 WORD ref
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Any]
+WORD referent
+  [Scalar/Atom] barrier=1 returns=[Any]
 WORD refine
   [Any Node] barrier=2 runcheck returns=[Type]
   [Any] barrier=1 runcheck returns=[Type]

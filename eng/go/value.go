@@ -1092,6 +1092,31 @@ func NewAtom(name string) Value {
 	return NewValueRaw(TAtom, AtomPayload{Name: name})
 }
 
+// AtomReferent returns the value an atom's name was snapshotted to refer to,
+// if one was captured (by `quote` or the run-start resolution pass). ok=false
+// when v is not an atom or carries no referent.
+func AtomReferent(v Value) (Value, bool) {
+	ap, ok := v.Data.(AtomPayload)
+	if !ok || ap.Referent == nil {
+		return Value{}, false
+	}
+	return *ap.Referent, true
+}
+
+// SetAtomReferent returns a copy of atom v carrying ref as its referent (a
+// snapshot of what its name refers to). Name, Quoted, and Pos are preserved.
+// Returns v unchanged when it is not an atom.
+func SetAtomReferent(v Value, ref Value) Value {
+	ap, ok := v.Data.(AtomPayload)
+	if !ok {
+		return v
+	}
+	snap := ref
+	ap.Referent = &snap
+	v.Data = ap
+	return v
+}
+
 // NewPath creates a Path value from parts and an absolute flag.
 func NewPath(parts []string, abs bool) Value {
 	p := make([]string, len(parts))
