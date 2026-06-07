@@ -55,14 +55,13 @@ var StringModuleNatives = []NativeFunc{
 	{
 		Name: "indexof",
 
+		// String-only: substring position. The list-membership form
+		// (for each needle, its index in the haystack) is a separate
+		// word, ArrayUtil.indices, in the aql:array-util module — see
+		// native_array.go and ADR-001.
 		Signatures: []NativeSig{
 			{Args: []*Type{TString, TString, TMap}, Handler: indexOfOptsHandler, Returns: []*Type{TInteger}, BarrierPos: -1},
 			{Args: []*Type{TString, TString}, Handler: indexOfHandler, Returns: []*Type{TInteger}, BarrierPos: -1},
-			// List overload: for each needle, its index in the haystack
-			// (or the haystack length when absent). Vectorised lookup —
-			// returns a list, not a scalar. Disjoint from the string sigs
-			// above, so dispatch is unambiguous by type.
-			{Args: []*Type{TList, TList}, Handler: listIndexofHandler, ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1},
 		},
 	},
 	{

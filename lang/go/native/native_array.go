@@ -15,16 +15,17 @@ import (
 //
 //	core   — iota, range, each, fold, scan, outer, inner,
 //	         take, shed, reverse
-//	module — shape, rank, reshape, transpose, where, unique, grade,
-//	         at, sortby, member, group, replicate, expand, compress,
-//	         eachrank, foldaxis, window, pairs
+//	module — shape, rank, reshape, transpose, where, unique, indices,
+//	         grade, at, sortby, member, group, replicate, expand,
+//	         compress, eachrank, foldaxis, window, pairs
 //
 // Per ADR-001 (no module export shadows a core word — see ADR.md in
-// the repo root), the two operations that overlap a core word are NOT
-// array-module words: deep flatten is `flatten -1` (a depth on the
-// core flatten word, flatten.go) and list indexof is a [List, List]
-// overload of the core indexof word (native_string.go). transpose has
-// no core counterpart, so it keeps its plain name.
+// the repo root), deep flatten is NOT an array-module word: it is
+// `flatten -1` (a depth on the core flatten word, flatten.go). The
+// list-membership lookup IS an array-module word, `indices` (for each
+// needle, its index in the haystack, -1 when absent) — a distinct name,
+// not a shadow of the string word indexof (string-only, native_string.go).
+// transpose has no core counterpart, so it keeps its plain name.
 //
 // Pure helpers (computeShape, flattenList, buildNested,
 // arrCompareValues, transposeListOfLists, doFold,
@@ -144,6 +145,15 @@ var allArrayNatives = []NativeFunc{
 			Args:      []*Type{TList},
 			Handler:   uniqueHandler,
 			ReturnsFn: ReturnsPreserveListAt(0), BarrierPos: -1,
+		}},
+	},
+	{
+		Name: "indices",
+
+		Signatures: []NativeSig{{
+			Args:      []*Type{TList, TList},
+			Handler:   indicesHandler,
+			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
 		}},
 	},
 	{
@@ -877,18 +887,18 @@ func memberHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	return []Value{NewList(result)}, nil
 }
 
-// ---- indexof (list overload) ----
+// ---- indices ----
 
-// listIndexofHandler backs the [List, List] signature of the core
-// indexof word (registered in native_string.go alongside the string
-// overloads): for each needle, its index in the haystack, or the
-// haystack length when absent.
-func listIndexofHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+// indicesHandler backs ArrayUtil.indices (aql:array-util): for each
+// needle in the first list, its index in the second (haystack) list, or
+// -1 when absent. Vectorised lookup — returns a list of indices, one per
+// needle. The first match wins for duplicate haystack entries.
+func indicesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("indexof_error", "indexof: expected concrete needles list", "indexof")
+		return nil, r.AqlError("indices_error", "indices: expected concrete needles list", "indices")
 	}
 	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("indexof_error", "indexof: expected concrete haystack list", "indexof")
+		return nil, r.AqlError("indices_error", "indices: expected concrete haystack list", "indices")
 	}
 	needles, _ := AsList(args[0])
 	haystack, _ := AsList(args[1])
@@ -906,7 +916,7 @@ func listIndexofHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 		if idx, exists := indexMap[key]; exists {
 			result[i] = NewInteger(int64(idx))
 		} else {
-			result[i] = NewInteger(int64(haystackLen))
+			result[i] = NewInteger(-1)
 		}
 	}
 	return []Value{NewList(result)}, nil

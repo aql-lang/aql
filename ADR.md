@@ -51,9 +51,20 @@ For `aql:array-util` specifically:
 - **Deep flatten** is now `flatten -1` — a negative depth on the core
   `flatten` word (which removes one level by default, or `N` levels with
   `flatten N`). There is no `ArrayUtil.flatten`.
-- **List lookup** is now a `[List, List]` overload of the core `indexof`
-  word (its string form returns a scalar position; the list form returns
-  a vector of indices). There is no `ArrayUtil.indexof`.
+- **List lookup** is `ArrayUtil.indices` — a distinctly-named array word
+  (for each needle, its index in the haystack, or `-1` when absent). There
+  is no `ArrayUtil.indexof`.
+
+  > **Amendment (2026-06-07).** This was originally folded into the core
+  > `indexof` word as a `[List, List]` overload. Two later changes undid
+  > that: `indexof` itself moved out of core into `aql:string-util`
+  > (`StringUtil.indexof`, string-only), and overloading one word across
+  > two unrelated domains proved a smell — the string form returns a
+  > scalar with `-1`-when-absent, while the list form returns a vector
+  > with a *different* absent sentinel. The list form is now its own word,
+  > `ArrayUtil.indices`, in `aql:array-util`, with `-1` for an absent
+  > needle (consistent with the string form's not-found value). This still
+  > honours the ADR: `indices` shadows no core word.
 - **`transpose`** has no core counterpart, so it keeps its plain name and
   remains `ArrayUtil.transpose`. The `arr-` workaround names are gone.
 

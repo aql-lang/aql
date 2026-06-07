@@ -225,7 +225,6 @@ WORD import
   [Scalar/String] barrier=1 runcheck returns=[Ideal/Module]
 WORD indexof
   [Scalar/String Scalar/String Node/Map] barrier=3 returns=[Scalar/Number/Integer]
-  [Node/List Node/List] barrier=2 +returnsfn
   [Scalar/String Scalar/String] barrier=2 returns=[Scalar/Number/Integer]
 WORD inject
   [Any Any] barrier=2

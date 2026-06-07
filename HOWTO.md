@@ -171,7 +171,7 @@ fold [add] [1, 2, 3] 0        # returns 6 — all-forward
 0 [1, 2, 3] [add] fold        # returns 6 — all-stack, same result
 ```
 
-Take, drop, reverse, flatten, indexof (built-in):
+Take, drop, reverse, flatten (built-in):
 
 ```
 [1,2,3,4] take 2              # returns [1 2]
@@ -179,7 +179,6 @@ Take, drop, reverse, flatten, indexof (built-in):
 [1,2,3] reverse               # returns [3 2 1]
 [[1,2],[3]] flatten           # returns [1 2 3] — one level
 flatten -1 [1,[2,[3]]]        # returns [1 2 3] — fully flatten
-"aql:string-util" import end StringUtil.indexof [20,10] [10,20,30]    # returns [1 0] — index of each needle
 ```
 
 The richer array vocabulary — reshaping, ordering, grouping,
@@ -190,6 +189,7 @@ neighborhoods, indexing — lives in the `aql:array-util` module:
 iota 6 ArrayUtil.reshape [2, 3]   # returns [[0 1 2] [3 4 5]]
 [3,1,2] ArrayUtil.grade           # returns [1 2 0] — sort indices
 [1,2,2,3] ArrayUtil.unique        # returns [1 2 3]
+ArrayUtil.indices [20,99,10] [10,20,30]   # returns [1 -1 0] — index of each needle (-1 = absent)
 [1,2,3,4] ArrayUtil.window 2      # returns [[1 2] [2 3] [3 4]]
 [1,2,3] ArrayUtil.pairs           # returns [[1 2] [2 3]]
 [10,20,30] ArrayUtil.at [2,0]     # returns [30 10]

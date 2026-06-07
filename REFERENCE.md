@@ -624,7 +624,7 @@ of the word, with the haystack as the forward arg.
 "aql:string-util" import end | `StringUtil.concat` | Join list elements into a string | `StringUtil.concat ["a","b"]` returns `'ab'` |
 "aql:string-util" import end | `StringUtil.split` | Split string by separator | `StringUtil.split "a,b" ","` returns `['a','b']` |
 "aql:string-util" import end | `StringUtil.contains` | Substring test | `StringUtil.contains "hello" "ell"` returns `true` |
-"aql:string-util" import end | `StringUtil.indexof` | Find substring position (also has a list form — see [List and array words](#list-and-array-words)) | `StringUtil.indexof "hello" "ll"` returns `2` |
+"aql:string-util" import end | `StringUtil.indexof` | Find substring position (string only; for the list form see `ArrayUtil.indices` under [List and array words](#list-and-array-words)) | `StringUtil.indexof "hello" "ll"` returns `2` |
 | `slice` | Substring; negative indices ok | `"hello" slice 1 3` returns `'el'` |
 "aql:string-util" import end | `StringUtil.replace` | Replace pattern | `StringUtil.replace "hello" "l" "r"` returns `'herlo'` |
 "aql:string-util" import end | `StringUtil.repeat` | Repeat string | `StringUtil.repeat "ab" 3` returns `'ababab'` |
@@ -980,13 +980,15 @@ and `flatten`/`size`. The specialised array vocabulary lives in the
 | `shed` | Drop first N | `[1,2,3,4] shed 2` returns `[3,4]` |
 | `reverse` | Reverse order | `[1,2,3] reverse` returns `[3,2,1]` |
 | `flatten` | Remove one nesting level; `flatten N` removes N; `flatten -1` fully flattens | `[[1,2],[3]] flatten` returns `[1,2,3]`; `flatten -1 [1,[2,[3]]]` returns `[1,2,3]` |
-"aql:string-util" import end | `StringUtil.indexof` | On strings: substring position. On two lists: index of each needle in the haystack | `StringUtil.indexof "hello" "ll"` returns `2`; `StringUtil.indexof [20,10] [10,20,30]` returns `[1,0]` |
+"aql:array-util" import end | `ArrayUtil.indices` | Index of each needle in the haystack (`-1` when absent). Forward form `indices <needles> <haystack>` — haystack last | `ArrayUtil.indices [20,99,10] [10,20,30]` returns `[1,-1,0]` |
 | `size` | Element / key count of a collection — works on any value (see [Size](#size)) | `[1,2,3] size` returns `3` |
 
-`flatten` and `indexof` are single words with several type-dispatched
-signatures (see [ADR-001](ADR.md#adr-001)): a deep flatten is `flatten
--1`, and the list form of `indexof` is just `indexof` on two lists — there
-are deliberately no `ArrayUtil.flatten`/`ArrayUtil.indexof` words.
+A deep flatten is `flatten -1` (the core `flatten` word with a negative
+depth) — there is deliberately no `ArrayUtil.flatten` (see
+[ADR-001](ADR.md#adr-001)). Substring search is the string-only
+`StringUtil.indexof` (`aql:string-util`); the list-membership lookup is
+the distinctly-named `ArrayUtil.indices` (`aql:array-util`) — one word per
+job, rather than one overloaded name.
 
 ### The `aql:array-util` module
 
@@ -994,9 +996,10 @@ The specialised APL-style array vocabulary lives in a built-in module,
 imported with `"aql:array-util" import` and reached via the `array.` prefix.
 This keeps the global namespace lean (mirroring how `aql:math` gates
 `sin`/`cos`/…). Per [ADR-001](ADR.md#adr-001) no name here shadows a core
-word, so deep flatten and list lookup are core overloads (above), not
-module words. `transpose` has no core counterpart and so appears here
-under its plain name.
+word: deep flatten stays a core overload (`flatten -1`), and the
+list-membership lookup is the distinctly-named `ArrayUtil.indices` rather
+than a duplicate of the string word `indexof`. `transpose` has no core
+counterpart and so appears here under its plain name.
 
 ```
 "aql:array-util" import end
@@ -1020,6 +1023,7 @@ iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 | `ArrayUtil.foldaxis` | Reduce a rank-2 list along an axis (0 = columns, 1 = rows) | `ArrayUtil.foldaxis 0 [add] [[1,2],[3,4]]` returns `[4,6]` |
 | `ArrayUtil.member` | Per-element membership test | `[1,2,3] ArrayUtil.member [2,3,4]` returns `[true,true,false]` |
 | `ArrayUtil.unique` | Remove duplicates | `ArrayUtil.unique [1,2,2,3]` returns `[1,2,3]` |
+| `ArrayUtil.indices` | Index of each needle in the haystack (`-1` when absent); haystack is the final argument | `ArrayUtil.indices [20,99,10] [10,20,30]` returns `[1,-1,0]` |
 | `ArrayUtil.group` | Group values by parallel keys (or indices by value) | `ArrayUtil.group ["a","b","a"] [1,2,3]` |
 | `ArrayUtil.window` | Sliding window of size N | `[1,2,3,4] ArrayUtil.window 2` |
 | `ArrayUtil.pairs` | Adjacent pairs | `ArrayUtil.pairs [1,2,3]` returns `[[1,2],[2,3]]` |
