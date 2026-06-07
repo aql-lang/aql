@@ -165,6 +165,38 @@ collects `"x"` and concatenates, giving `'x1'`. Forward collection
 narrows where the boundary falls; it is not a guarantee that a
 "wrong-looking" value will be refused.
 
+### Forward greediness and stranded operands
+
+Forward collection reaches *past* values already on the stack, which can
+surprise you when a binary word sits between its operands:
+
+```
+1 2 add 3 mul                     # returns 5 — not the 9 you might expect
+```
+
+Reading left to right you might expect `(1 + 2) * 3 = 9`. Instead `add`
+reaches forward for `3` and takes `2` from the stack — computing `3 + 2 = 5`
+and leaving the `1` stranded underneath. `mul` then multiplies `5 * 1 = 5`.
+Group the operands you actually mean to combine:
+
+```
+(1 2 add) 3 mul                   # returns 9
+```
+
+`aql check` surfaces the suspicious case as a non-gating advisory:
+
+```text
+$ aql check -e '1 2 add 3 mul'
+check: [info] forward_strands_operand: add collected a forward argument
+  while a Number operand was left unconsumed on the stack — it may be
+  stranded; group the intended operands, e.g. (… add …)
+```
+
+It fires only when a word both reaches forward *and* takes a stack argument
+while leaving a **sibling** operand (a value of the same type it just
+consumed) behind — so the idiomatic swap form `10 sub 3` and a deliberately
+deeper stack such as `1 2 3 add` stay quiet.
+
 
 ## The `end` keyword
 
@@ -184,6 +216,35 @@ It's needed less often than you might think — type-directed
 collection cuts most of the cases — but when the type system can't
 disambiguate (e.g., two adjacent words that both happen to accept
 the same type), `end` is the simple, explicit fix.
+
+### A word only reaches for what it can use
+
+Collection is *structure-first*: a word forward-collects a following token
+only when one of its signatures could actually take it. Anything else — a
+parenthesised expression, or a value whose type fits none of the word's
+remaining argument slots — is left alone to run as its own expression. This
+is why an unterminated `import` no longer swallows the code that uses it:
+
+```
+import "aql:string-util"          # no `end` needed…
+(StringUtil.upper "hi")           # …this paren runs on its own → 'HI'
+```
+
+`import` takes its module path and stops, because the following
+parenthesised expression matches none of its argument shapes. (Earlier
+builds eagerly evaluated that paren *before* `import` ran, so it failed with
+`undefined word: StringUtil` — see `design/LAZY-ARG-RESOLUTION.0.md`.) You
+still reach for `end` when the next token *could* legitimately be the word's
+argument — most commonly a second string path right after `import`:
+
+```
+"aql:math-util" import end "foo" print    # without `end`, import would load "foo"
+```
+
+An empty paren `()` is the empty expression: it produces no value, so it
+contributes nothing where it appears (`5 () add 3` → `8`; the `()` is
+simply skipped). Empty parens nest freely: `(())`, `( () )`, `(add 1 ())`
+all parse.
 
 
 ## Type-directed dispatch

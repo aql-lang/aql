@@ -327,6 +327,14 @@ quoted key (`{'a/b': 1}`) or a computed key (`{[a/b]: 1}`).
   it matches the next expected type; mismatches stop collection and
   the word executes with what it has (or fails if it doesn't have
   enough).
+* **Structure-first.** A word forward-collects a following token only
+  when one of its signatures could actually take it; a parenthesised
+  expression or a value of an incompatible type is left to run on its
+  own. So `import "mod"` takes its path and stops — no `end` needed
+  before using the namespace (`import "aql:math-util"` then
+  `5 MathUtil.log`).
+* **Empty parens.** `()` is the empty expression: it yields no value
+  (`5 () add 3` returns `8`) and nests freely (`(())`, `(add 1 ())`).
 * **Left-to-right.** Words that are still waiting evaluate strictly
   in source order. Use `(...)` to override.
 * **Quotation.** A `[ … ]` literal **evaluates its contents** as a
@@ -344,7 +352,14 @@ quoted key (`{'a/b': 1}`) or a computed key (`{[a/b]: 1}`).
   code* and splices the result into the call site — new syntax in
   AQL itself. See **[Macros](#macros)**.
 * **`end`.** Forces the nearest waiting word to stop forward
-  collection.
+  collection — needed only when the next token would otherwise be a
+  valid argument (e.g. `"aql:math-util" import end "foo" print`). `;`
+  is a synonym.
+* **`aql check` advisories.** The checker raises non-gating advisories
+  (info level) for likely mistakes that still run — notably the
+  forward-greediness gotcha `1 2 add 3 mul` (returns `5`, not `9`;
+  group as `(1 2 add) 3 mul`). See
+  **[Explanation §Forward greediness](EXPLANATION.md#forward-greediness-and-stranded-operands)**.
 
 See **[Explanation §The stack model](EXPLANATION.md#the-stack-model)**
 for a longer treatment.

@@ -690,8 +690,17 @@ aql> "aql:math-util" import end
 aql> 5 MathUtil.log                      # returns 1.6094379124341003
 ```
 
-The trailing `end` stops `import`'s forward collection from
-grabbing the next token as a second module name.
+The trailing `end` here is optional — `import` takes its path and stops,
+so the namespace is ready to use on the next line:
+
+```
+aql> "aql:math-util" import
+aql> 5 MathUtil.log                      # returns 1.6094379124341003
+```
+
+You only need `end` when the token right after `import` could itself be a
+module path, e.g. `"aql:math-util" import end "foo" print` (without `end`,
+`import` would try to load `"foo"`).
 
 
 ## 21. Where to next
