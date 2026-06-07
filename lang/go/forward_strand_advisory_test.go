@@ -6,7 +6,7 @@ import (
 	lang "github.com/aql-lang/aql/lang/go"
 )
 
-// The "forward greediness" advisory (prototype): in check mode, flag the
+// The "forward greediness" advisory: in check mode, flag the
 // `1 2 add 3 mul → 5` surprise — a word that forward-collects an argument
 // while a SIBLING operand (same type as the slot it just took) is left
 // unconsumed on the stack below it. Advisory only (info severity, never

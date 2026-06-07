@@ -1,6 +1,7 @@
-# Prototype: forward-greediness "stranded operand" advisory
+# Forward-greediness "stranded operand" advisory
 
-**Status:** prototype / RFC. Check-mode advisory, info severity, non-gating.
+**Status:** accepted. Check-mode advisory, info severity, non-gating; enabled
+by default under `aql check`.
 
 ## The gotcha
 
@@ -13,7 +14,7 @@ help, and what its impact would be.
 
 A naive "any leftover value" warning is unusable — in a concatenative language
 leftover stack values are the norm (multiple results, stack idioms, pipelines).
-This prototype implements a **sharpened** predicate instead.
+This feature implements a **sharpened** predicate instead.
 
 ## The predicate
 

@@ -1435,14 +1435,14 @@ func (e *Engine) stepWord(val Value) error {
 		}
 	}
 
-	// Check-mode advisory (prototype): the forward-greediness gotcha.
-	// When a word forward-collects an argument AND also takes a stack
-	// argument (a swap-form dispatch) while a SIBLING operand — a value of
-	// the same type the word just consumed — remains unconsumed on the
-	// stack below it, the author likely meant the stacked operands to be
-	// consumed together (the `1 2 add 3 mul → 5` surprise: `add` grabs the
-	// forward `3` and strands the `1`). Advisory only, emitted in check
-	// mode, never gating. See design discussion / DX report.
+	// Check-mode advisory: the forward-greediness gotcha. When a word
+	// forward-collects an argument AND also takes a stack argument (a
+	// swap-form dispatch) while a SIBLING operand — a value of the same
+	// type the word just consumed — remains unconsumed on the stack below
+	// it, the author likely meant the stacked operands to be consumed
+	// together (the `1 2 add 3 mul → 5` surprise: `add` grabs the forward
+	// `3` and strands the `1`). Advisory only (info severity), emitted in
+	// check mode, never gating. See design/FORWARD-STRAND-ADVISORY.0.md.
 	if e.registry.Check.IsActive() && fwdCount > 0 && stkCount > 0 {
 		e.checkForwardStrandsOperand(w, sig, positions, val.Pos)
 	}
@@ -1465,9 +1465,9 @@ func (e *Engine) stepWord(val Value) error {
 	return e.execMatch(match)
 }
 
-// checkForwardStrandsOperand implements the prototype "forward greediness"
-// advisory (check mode only). Preconditions (checked by the caller): the
-// dispatch is mixed — it forward-collected ≥1 arg AND took ≥1 stack arg.
+// checkForwardStrandsOperand implements the "forward greediness" advisory
+// (check mode only). Preconditions (checked by the caller): the dispatch is
+// mixed — it forward-collected ≥1 arg AND took ≥1 stack arg.
 //
 // It flags the case where a SIBLING operand is stranded: a value sitting on
 // the stack just below the deepest stack arg the word consumed, in the same
