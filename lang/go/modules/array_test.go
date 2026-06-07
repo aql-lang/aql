@@ -180,7 +180,7 @@ func TestFlattenIsCoreIndexofIsString(t *testing.T) {
 	}
 	assertArrayResult(t, r, `flatten -1 [1,[2,[3,[4]]]]`, "[1 2 3 4]") // deep flatten
 	assertArrayResult(t, r, `flatten [1,[2,[3]]]`, "[1 2 [3]]")        // default = one level
-	assertArrayResult(t, r, `indexof "hello" "ll"`, "2")               // string form only
+	assertArrayResult(t, r, `indexof "ll" "hello"`, "2")               // string form only (needle haystack)
 }
 
 // --- Negative: the moved words are NOT globally available ---

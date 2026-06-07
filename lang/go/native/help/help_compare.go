@@ -51,20 +51,31 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:        "eq",
-		Summary:     "Test if two values are equal.",
-		Description: "Compares two values for equality. Numbers, strings, booleans, and atoms are compared by value.",
+		Word:    "eq",
+		Summary: "Test if two values are equal (scalars by value, compounds by identity).",
+		Description: "Scalars — numbers (cross-leaf magnitude allowed, 1 eq 1.0), " +
+			"strings, booleans, atoms — compare by value. Compound values " +
+			"(lists, maps) compare by IDENTITY, not structure: two distinct " +
+			"equal-looking lists are NOT eq. This is by design — use deq for a " +
+			"deep, structural comparison of contents.",
+		Notes: []string{
+			"`[\"a\" \"b\"] eq [\"a\" \"b\"]` is `false` (distinct list values); " +
+				"`deq` returns `true`.",
+		},
 	})
 
 	register(&Entry{
 		Word:        "neq",
-		Summary:     "Test if two values are not equal.",
-		Description: "Returns true if the two values are different.",
+		Summary:     "Test if two values are not equal (the negation of eq).",
+		Description: "Returns true exactly when eq is false; carries eq's identity-for-compounds semantics (see eq).",
 	})
 
 	register(&Entry{
-		Word:        "deq",
-		Summary:     "Deep equality test for two values.",
-		Description: "Recursively compares two values including nested lists and maps.",
+		Word:    "deq",
+		Summary: "Deep, structural equality of two values.",
+		Description: "Recursively compares two values by structure, including nested " +
+			"lists and maps, so equal-looking compounds are deq-equal regardless " +
+			"of identity. The structural counterpart to eq (which compares " +
+			"compounds by identity).",
 	})
 }

@@ -55,8 +55,13 @@ var StringModuleNatives = []NativeFunc{
 	{
 		Name: "indexof",
 
-		// String-only: substring position. The list-membership form
-		// (for each needle, its index in the haystack) is a separate
+		// String-only: substring position. Argument order is
+		// HAYSTACK-LAST (data-last grain): forward form
+		// `indexof needle haystack` returns the index of needle in
+		// haystack, -1 if absent; the pipeline form is
+		// `haystack needle indexof`. The opts form takes a trailing
+		// options map: `indexof needle haystack {…}`. The list-membership
+		// form (for each needle, its index in the haystack) is a separate
 		// word, ArrayUtil.indices, in the aql:array-util module — see
 		// native_array.go and ADR-001.
 		Signatures: []NativeSig{
@@ -461,16 +466,19 @@ func containsWholeWord(input, search string, ci bool) bool {
 // ---- indexof ----
 
 func indexOfHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	_as1, _ := args[0].AsConcreteString()
-	_as0, _ := args[1].AsConcreteString()
-	return doIndexOf(_as1, _as0, strOpts{cs: "sensitive", mode: "literal", occ: "first"})
+	// Haystack is the LAST argument (data-last): forward form is
+	// `indexof needle haystack`, so args[0]=needle, args[1]=haystack. The
+	// equivalent stack/pipeline form is `haystack needle indexof`.
+	needle, _ := args[0].AsConcreteString()
+	haystack, _ := args[1].AsConcreteString()
+	return doIndexOf(haystack, needle, strOpts{cs: "sensitive", mode: "literal", occ: "first"})
 }
 
 func indexOfOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	opts := parseStrOpts(args[2])
-	_as3, _ := args[0].AsConcreteString()
-	_as2, _ := args[1].AsConcreteString()
-	return doIndexOf(_as3, _as2, opts)
+	needle, _ := args[0].AsConcreteString()
+	haystack, _ := args[1].AsConcreteString()
+	return doIndexOf(haystack, needle, opts)
 }
 
 func doIndexOf(input, search string, o strOpts) ([]Value, error) {

@@ -36,7 +36,7 @@ func runLazy(t *testing.T, src string) []interface{} {
 
 // 1. Unterminated import followed by a use of the imported namespace.
 func TestLazyArg_UnterminatedImport(t *testing.T) {
-	res := runLazy(t, "import \"aql:string-util\"\n(StringUtil.indexof \" ABC\" \"B\") end")
+	res := runLazy(t, "import \"aql:string-util\"\n(StringUtil.indexof \"B\" \" ABC\") end")
 	if len(res) != 1 || res[0] != int64(2) {
 		t.Fatalf("got %#v, want [2]", res)
 	}
@@ -83,7 +83,7 @@ func TestLazyArg_CheckModeNoFalsePositive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cr, err := a.Check("import \"aql:string-util\"\n(StringUtil.indexof \" ABC\" \"B\") end")
+	cr, err := a.Check("import \"aql:string-util\"\n(StringUtil.indexof \"B\" \" ABC\") end")
 	if err != nil {
 		t.Fatalf("Check errored: %v", err)
 	}

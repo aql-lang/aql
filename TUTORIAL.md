@@ -202,7 +202,7 @@ aql> "aql:string-util" import end "HELLO" StringUtil.lower                 # ret
 aql> "aql:string-util" import end StringUtil.split "hello,world" ","       # returns ['hello' 'world']
 aql> "aql:string-util" import end ["a","b","c"] StringUtil.concat          # returns 'abc' — joins list elements
 aql> "aql:string-util" import end StringUtil.contains "hello" "ell"        # returns true
-aql> "aql:string-util" import end StringUtil.indexof "hello" "ll"          # returns 2
+aql> "aql:string-util" import end StringUtil.indexof "ll" "hello"          # returns 2 — haystack LAST: `indexof needle haystack`
 aql> "hello" slice 1 3             # returns 'el'
 aql> "aql:string-util" import end StringUtil.replace "hello" "l" "r"       # returns 'herlo'
 aql> "aql:string-util" import end "  hi  " StringUtil.trim                 # returns 'hi'

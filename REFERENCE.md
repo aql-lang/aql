@@ -639,7 +639,7 @@ of the word, with the haystack as the forward arg.
 "aql:string-util" import end | `StringUtil.concat` | Join list elements into a string | `StringUtil.concat ["a","b"]` returns `'ab'` |
 "aql:string-util" import end | `StringUtil.split` | Split string by separator | `StringUtil.split "a,b" ","` returns `['a','b']` |
 "aql:string-util" import end | `StringUtil.contains` | Substring test | `StringUtil.contains "hello" "ell"` returns `true` |
-"aql:string-util" import end | `StringUtil.indexof` | Find substring position (string only; for the list form see `ArrayUtil.indices` under [List and array words](#list-and-array-words)) | `StringUtil.indexof "hello" "ll"` returns `2` |
+"aql:string-util" import end | `StringUtil.indexof` | Index of a needle in a haystack — **haystack last**: `indexof needle haystack` (string only; for the list form see `ArrayUtil.indices` under [List and array words](#list-and-array-words)) | `StringUtil.indexof "ll" "hello"` returns `2` |
 | `slice` | Substring; negative indices ok | `"hello" slice 1 3` returns `'el'` |
 "aql:string-util" import end | `StringUtil.replace` | Replace pattern | `StringUtil.replace "hello" "l" "r"` returns `'herlo'` |
 "aql:string-util" import end | `StringUtil.repeat` | Repeat string | `StringUtil.repeat "ab" 3` returns `'ababab'` |
@@ -697,6 +697,14 @@ restricted words refuse. See
 > **Equality is not restricted.** `eq`/`neq`/`deq` compare across types
 > safely — different types are simply *not equal* (`1 eq "1"` returns
 > `false`, never an error). Only the **ordering** words restrict.
+>
+> **`eq` is identity for compounds; `deq` is structural — by design.**
+> `eq` compares scalars (numbers, strings, booleans, atoms) by value, but
+> lists and maps by *identity*: two distinct equal-looking lists are not
+> `eq` (`["a" "b"] eq ["a" "b"]` → `false`). To compare compound *contents*,
+> use `deq`, the deep/structural form (`["a" "b"] deq ["a" "b"]` → `true`).
+> `assert.equal` (the test word) is deep, so a property body written with
+> `eq` over lists can pass vacuously — reach for `deq` there.
 
 ```
 1 lt 2.0                      # returns true        — Integer vs Float (shared Number)
@@ -707,9 +715,9 @@ restricted words refuse. See
 
 | Word | Description | Example |
 |------|-------------|---------|
-| `eq` | Equal (cross-leaf magnitude allowed; cross-type → false) | `1 eq 1.0` returns `true` |
-| `neq` | Not equal | `1 neq 2` returns `true` |
-| `deq` | Deep / strict-identity equality | `[1,2] deq [1,2]` returns `true` |
+| `eq` | Equal — scalars by value, **compounds by identity** | `1 eq 1.0` returns `true`; `[1,2] eq [1,2]` returns `false` |
+| `neq` | Not equal (negation of `eq`) | `1 neq 2` returns `true` |
+| `deq` | **Deep / structural** equality (compares contents) | `[1,2] deq [1,2]` returns `true` |
 | `lt` | Less than (same-family) | `1 lt 2` returns `true` |
 | `gt` | Greater than (same-family) | `2 gt 1` returns `true` |
 | `lte` | Less or equal (same-family) | `1 lte 1` returns `true` |

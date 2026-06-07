@@ -273,12 +273,13 @@ func TestIndicesListLookup(t *testing.T) {
 func TestIndexofStringStillWorks(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
+	// Haystack-last: forward form is `indexof needle haystack`.
 	result := runAQL(t, r, []Value{
-		NewWord("indexof"), NewString("hello"), NewString("ll"),
+		NewWord("indexof"), NewString("ll"), NewString("hello"),
 	})
 	got, _ := AsInteger(result[0])
 	if got != 2 {
-		t.Errorf(`indexof "hello" "ll" = %d, want 2`, got)
+		t.Errorf(`indexof "ll" "hello" = %d, want 2`, got)
 	}
 }
 
