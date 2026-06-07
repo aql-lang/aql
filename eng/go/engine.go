@@ -1434,6 +1434,19 @@ func (e *Engine) stepWord(val Value) error {
 			stkCount++
 		}
 	}
+
+	// Check-mode advisory (prototype): the forward-greediness gotcha.
+	// When a word forward-collects an argument AND also takes a stack
+	// argument (a swap-form dispatch) while a SIBLING operand — a value of
+	// the same type the word just consumed — remains unconsumed on the
+	// stack below it, the author likely meant the stacked operands to be
+	// consumed together (the `1 2 add 3 mul → 5` surprise: `add` grabs the
+	// forward `3` and strands the `1`). Advisory only, emitted in check
+	// mode, never gating. See design discussion / DX report.
+	if e.registry.Check.IsActive() && fwdCount > 0 && stkCount > 0 {
+		e.checkForwardStrandsOperand(w, sig, positions, val.Pos)
+	}
+
 	// Forward collection needed: defer execution.
 	if fwdCount > 0 {
 		e.traceNote = "forward→ " + traceSigStr(w.Name, sig)
@@ -1450,6 +1463,66 @@ func (e *Engine) stepWord(val Value) error {
 	}
 	e.traceNote = "stack " + traceSigStr(w.Name, sig)
 	return e.execMatch(match)
+}
+
+// checkForwardStrandsOperand implements the prototype "forward greediness"
+// advisory (check mode only). Preconditions (checked by the caller): the
+// dispatch is mixed — it forward-collected ≥1 arg AND took ≥1 stack arg.
+//
+// It flags the case where a SIBLING operand is stranded: a value sitting on
+// the stack just below the deepest stack arg the word consumed, in the same
+// scope, whose type matches that consumed slot — i.e. an operand the word
+// could equally have taken from the stack. The sibling-type test is what
+// separates the genuine `1 2 add 3` gotcha (a stranded Number under `add`)
+// from a deliberately-kept value of an unrelated type left by an earlier
+// statement.
+func (e *Engine) checkForwardStrandsOperand(w WordInfo, sig *Signature, positions []int, pos SrcPos) {
+	// Deepest stack position the word consumed, and its sig slot.
+	minStack := -1
+	minSigPos := -1
+	for sp, p := range positions {
+		if p < e.pointer && (minStack == -1 || p < minStack) {
+			minStack = p
+			minSigPos = sp
+		}
+	}
+	if minStack <= 0 || minSigPos < 0 {
+		return
+	}
+	slotType := sigArgType(sig, minSigPos)
+	// An Any-typed slot matches everything, so it cannot tell a sibling
+	// operand from unrelated residue — too weak to be a reliable signal.
+	if slotType == nil || slotType.Equal(TAny) {
+		return
+	}
+
+	// Scan downward from just below the consumed stack args, stopping at the
+	// nearest scope boundary. The first data value found is "stranded".
+	for i := minStack - 1; i >= 0; i-- {
+		v := e.stack[i]
+		if IsOpenParen(v) || IsCloseParen(v) || IsForward(v) || IsDefCleanup(v) ||
+			v.Parent.ConformsTo(TMark) || v.Parent.ConformsTo(TMove) ||
+			v.Parent.ConformsTo(TInternal) || v.Parent.ConformsTo(TReturnCheck) {
+			return // scope boundary: nothing stranded in this scope
+		}
+		if !IsConcrete(v) && !IsBareTypeNode(v) {
+			continue // structural residue, keep scanning
+		}
+		// Sibling-operand heuristic: only flag a stranded value the word
+		// could itself have consumed (same type as the slot it just took).
+		if v.Is(slotType) {
+			e.registry.Check.AddDiagnostic(CheckDiagnostic{
+				Code: "forward_strands_operand",
+				Detail: w.Name + " collected a forward argument while a " +
+					slotType.String() + " operand was left unconsumed on the stack — " +
+					"it may be stranded; group the intended operands, e.g. (… " + w.Name + " …)",
+				Word: w.Name,
+				Row:  pos.Row,
+				Col:  pos.Col,
+			})
+		}
+		return // only the nearest value below matters
+	}
 }
 
 // execMatch executes a matched signature, splicing args and results.
