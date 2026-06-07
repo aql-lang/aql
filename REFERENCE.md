@@ -1101,6 +1101,28 @@ word — `size` subsumes it.
 > `5 . foo` all raise `[aql/syntax_error]: a number has no members`. A
 > plain `Float` like `5.0` is unaffected.
 
+> **A bare word key is a *literal* name — like JavaScript `.key`. Wrap a
+> variable (or any expression) in parens to use its *value* as the key —
+> like `[expr]`.** `()` is to AQL what `[]` is to JS member access:
+>
+> | JavaScript | AQL | meaning |
+> |------------|-----|---------|
+> | `xs.i`     | `xs get i` or `xs.i` | literal key/index named `i` |
+> | `xs[i]`    | `xs get (i)`         | computed — the **value** of `i` |
+>
+> ```
+> def xs [10 20 30]
+> def i 1
+> xs get i          # returns None — literal key "i", absent (like xs.i)
+> xs get (i)        # returns 20   — i evaluates to 1 (like xs[i])
+> xs get 1          # returns 20   — literal index
+> ```
+>
+> This is why a bare word index never resolves a same-named variable, and
+> why an *undefined* bare key still returns `None` rather than raising
+> `undefined word` — exactly as `xs.i` reads a missing property as
+> `undefined` in JS. Reach for parens whenever the key/index is computed.
+
 **Dotted access binds tightly.** A `.`/`!.` chain groups to a single
 `( … )` so it binds to its immediate receiver, not to a surrounding call:
 `size m.x` means `size (m.x)`, and `a.b.c` is `( a get b get c )`. Two
