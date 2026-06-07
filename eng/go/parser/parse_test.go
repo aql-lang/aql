@@ -2703,3 +2703,28 @@ func TestNoSitedLeak(t *testing.T) {
 		}
 	}
 }
+
+// TestParseNestedEmptyParen pins the fix for a grammar bug where an empty
+// paren `()` as the LAST element of an enclosing paren made the enclosing
+// paren appear unclosed (`(())`, `(1 ())`, `( () )` → bogus
+// "unmatched opening parenthesis" with no source position). The empty-paren
+// Open alternative used to CONSUME the ")", so the Close phase then ate a
+// SECOND ")", stealing the enclosing paren's closer. It now backtracks and
+// lets the Close phase consume the single ")", like a non-empty paren.
+func TestParseNestedEmptyParen(t *testing.T) {
+	ok := []string{
+		"()", "(())", "((()))", "( () )", "(() 1)", "(1 ())",
+		"(()())", "((1)())", "(()(()))", "(add 1 ())", "[() 1]", "[1 ()]",
+	}
+	for _, src := range ok {
+		if _, err := Parse(src); err != nil {
+			t.Errorf("Parse(%q): unexpected error: %v", src, err)
+		}
+	}
+	// Genuinely-unclosed parens must STILL be a syntax error.
+	for _, src := range []string{"(", "(1", "((1)", "(()"} {
+		if _, err := Parse(src); err == nil {
+			t.Errorf("Parse(%q): expected a syntax error, got none", src)
+		}
+	}
+}

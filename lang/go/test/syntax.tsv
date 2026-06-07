@@ -530,6 +530,14 @@ lower "B"	'b'
 # Nested unmatched opening parenthesis
 ((1)		syntax_error
 
+# Nested empty paren as the last element (regression: a closed `()` used to
+# steal the enclosing paren's `)`, producing a bogus unmatched-paren error)
+(())
+( () )
+(()())
+[() 1]	[1]
+(add 1 ())		signature_error
+
 # Missing forward argument for add
 1 add		signature_error
 
