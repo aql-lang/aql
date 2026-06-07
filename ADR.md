@@ -51,9 +51,20 @@ For `aql:array-util` specifically:
 - **Deep flatten** is now `flatten -1` — a negative depth on the core
   `flatten` word (which removes one level by default, or `N` levels with
   `flatten N`). There is no `ArrayUtil.flatten`.
-- **List lookup** is now a `[List, List]` overload of the core `indexof`
-  word (its string form returns a scalar position; the list form returns
-  a vector of indices). There is no `ArrayUtil.indexof`.
+- **List lookup** is `ArrayUtil.indices` — a distinctly-named array word
+  (for each needle, its index in the haystack, or `-1` when absent). There
+  is no `ArrayUtil.indexof`.
+
+  > **Amendment (2026-06-07).** This was originally folded into the core
+  > `indexof` word as a `[List, List]` overload. Two later changes undid
+  > that: `indexof` itself moved out of core into `aql:string-util`
+  > (`StringUtil.indexof`, string-only), and overloading one word across
+  > two unrelated domains proved a smell — the string form returns a
+  > scalar with `-1`-when-absent, while the list form returns a vector
+  > with a *different* absent sentinel. The list form is now its own word,
+  > `ArrayUtil.indices`, in `aql:array-util`, with `-1` for an absent
+  > needle (consistent with the string form's not-found value). This still
+  > honours the ADR: `indices` shadows no core word.
 - **`transpose`** has no core counterpart, so it keeps its plain name and
   remains `ArrayUtil.transpose`. The `arr-` workaround names are gone.
 
@@ -131,3 +142,71 @@ NumPy/APL) but a poor fit for AQL:
   behaviour can still be offered by a word with an explicit `[List, …]`
   signature (as `add` does for string concatenation, or `indexof` for
   lists) — that is normal signature dispatch, not broadcasting.
+
+---
+
+## ADR-003 — Every native-module export must be spec-covered {#adr-003}
+
+**Status:** Accepted · **Date:** 2026-06-07
+
+### Decision
+
+Every word exported by a native module under `lang/go/modules/` —
+i.e. every name reachable as `Namespace.word` after `import` — **must be
+exercised by at least one row in the `lang/spec/*.tsv` suite**. A
+content-based guard enforces this: a new export that ships without a
+spec row fails the build.
+
+The coverage unit is the **qualified name** `Namespace.word`
+(`ArrayUtil.indices`, `MatrixUtil.transpose`), not the bare word. The
+qualified form is what a user actually types after `import`, and it
+disambiguates the legitimate cross-module name reuse the language allows
+(`ArrayUtil.transpose` vs `MatrixUtil.transpose` — see ADR-001).
+
+### Context
+
+Of the seventeen native modules, four (`array-util`, `matrix-util`,
+`string-util` in part, and the AQL-implemented `decision`/`report`/`test`
+/`vm`/`query` modules) had grown export sets with **zero** rows in the
+formal spec suite, and even the modules *with* a spec file
+(`math-util`, `type-util`, `time-util`, …) covered only a fraction of
+their exports. Nothing flagged the gap, so a newly-added module word
+could ship completely untested by the language-level specs — the same
+class of silent hole the user-type return-annotation bug exploited
+(see `lang/go/CLAUDE.md` "Test discipline").
+
+Per-word Go unit tests exist for many of these, but they test the Go
+implementation, not the *imported, dot-accessed surface* a user calls.
+The `.tsv` suite is the contract for that surface; it should be
+exhaustive over the public export set, not a sample of it.
+
+### Consequences
+
+- A guard test, `TestModuleExportCoverage`
+  (`test/go/langspec/coverage_test.go`), enumerates the live export set
+  straight from the module registry (`modules.Names()` → `Resolve` →
+  `ModuleDesc.Exports`), forms each `Namespace.word`, and asserts the
+  literal string appears in at least one `lang/spec/*.tsv` input. It
+  fails with the concrete list of uncovered names. Because it reads the
+  registry rather than a hard-coded list, a new export is covered by the
+  guard automatically — there is no second place to update.
+- The companion `TestSpecProd` actually *runs* every row; this guard
+  only asserts the rows exist. Together they make "exported" imply
+  "imported, called, and checked at least once" in the formal suite.
+- The initial backfill added the missing rows across
+  `lang/spec/module-*.tsv` (new files for array/matrix/query/decision/
+  vm/report/test/string; appended sections for the partially-covered
+  modules) so the guard passes at adoption.
+- Adding a native-module export now means adding at least one
+  `Namespace.word` spec row in the same change. This is the module-export
+  analogue of the "always pair positive with negative" test discipline.
+- A **narrow hermetic-exemption escape hatch** exists for the rare export
+  that cannot be exercised by a hermetic, deterministic spec row — currently
+  only `IO.folder`, a host-filesystem `mkdir` whose in-memory-FS toggle does
+  not engage through a spec row's context layering and whose `mem://` scheme
+  is mangled by `make Path`. Such words are listed in `hermeticExempt`
+  (`coverage_test.go`) with a justification and remain covered by Go tests
+  (e.g. `lang/go/native/folder_test.go`). The list is asserted to contain
+  only live exports so it cannot rot, and is meant to stay tiny: prefer the
+  `mem://` scheme or a deterministic validation-error row (as the `aql:net`
+  `prepare`/`direct` rows do) before reaching for an exemption.

@@ -354,19 +354,40 @@ func impliesHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 }
 
 // quoteWordHandler marks the captured atom (already converted from the
-// upcoming Word by /q) as Quoted=true.
-func quoteWordHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+// upcoming Word by /q) as Quoted=true and, when its name is currently bound,
+// snapshots the binding as the atom's referent — so a quoted name records
+// what it referred to at quote time.
+func quoteWordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	v := args[0]
 	v.Quoted = true
-	return []Value{v}, nil
+	return []Value{captureAtomReferent(v, r)}, nil
 }
 
 // quoteAnyHandler returns the value with Quoted=true, suppressing
-// downstream auto-evaluation. Lists/maps are left structurally intact.
-func quoteAnyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+// downstream auto-evaluation. Lists/maps are left structurally intact. An
+// atom value additionally captures its referent (see quoteWordHandler).
+func quoteAnyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	v := args[0]
 	v.Quoted = true
-	return []Value{v}, nil
+	return []Value{captureAtomReferent(v, r)}, nil
+}
+
+// captureAtomReferent snapshots the current binding of an atom's name onto
+// the atom as its referent, when the value is an atom that has none yet and
+// the name is bound. Non-atoms and already-captured atoms are returned
+// unchanged.
+func captureAtomReferent(v Value, r *Registry) Value {
+	name, err := AsAtom(v)
+	if err != nil {
+		return v
+	}
+	if _, has := AtomReferent(v); has {
+		return v
+	}
+	if bound, ok := r.Defs.Top(name); ok {
+		return SetAtomReferent(v, bound)
+	}
+	return v
 }
 
 // reachHandler builds an inert Reach over a receiver value (args[0]) and a

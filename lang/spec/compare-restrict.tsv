@@ -40,7 +40,11 @@ List lt Map	ERROR:incomparable	two cross-branch type literals
 1 eq 'a'	false	cross-type equality is false, not an error
 1 neq 'a'	true	cross-type inequality is true
 1 eq 1.0	true	cross-leaf numeric magnitude is equal
-[1] deq [1]	true	deep equality, same type
+# eq is identity for compounds; deq is structural — by design.
+[1] eq [1]	false	eq on two distinct equal-looking lists is identity, not structure
+[1] deq [1]	true	deq compares list structure (deep), so contents match
+{a:1} eq {a:1}	false	eq on two distinct equal-looking maps is identity, not structure
+{a:1} deq {a:1}	true	deq compares map structure (deep), so contents match
 1 eq none	false	equality against none is safe
 
 # ── tcmp compares anything (the escape hatch) ─────────────────────────

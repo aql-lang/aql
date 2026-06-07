@@ -12,25 +12,28 @@ import (
 	"strings"
 
 	"github.com/aql-lang/aql/cmd/go/internal/command"
+	parse "github.com/aql-lang/aql/eng/go/parser"
 	"github.com/aql-lang/aql/lang/go/modules"
 	"github.com/aql-lang/aql/lang/go/native"
 	helppkg "github.com/aql-lang/aql/lang/go/native/help"
 )
 
 // moduleSummaries gives a one-line description for each built-in module.
-// Keyed by the bare module name (the part after "aql:").
+// Keys are the bare module ids returned by modules.Names() (the part after
+// "aql:"), so they must carry the "-util" suffix where the module has one.
 var moduleSummaries = map[string]string{
 	"math-util":   "Floating-point math: trig, logs, roots, constants.",
-	"array":       "Numeric array construction and element-wise operations.",
-	"time":        "Clocks, timers, and intervals.",
-	"matrix":      "Tensors, matrices, and vectors with linear algebra.",
+	"array-util":  "APL-style array vocabulary: shape, select, group, windows.",
+	"time-util":   "Dates, durations, timezones, clocks, timers, and intervals.",
+	"matrix-util": "Tensors, matrices, and vectors with linear algebra.",
 	"decision":    "Decision tables and rule evaluation.",
-	"bin-util":    "Binary encoding and byte-buffer helpers.",
-	"type":        "Type introspection and construction utilities.",
+	"bin-util":    "Bitwise and byte-buffer helpers: masks, rotates, hashes.",
+	"type-util":   "Type introspection and construction utilities.",
 	"vm":          "Low-level virtual-machine primitives.",
 	"report":      "Tabular reporting and formatting.",
 	"test":        "Assertions and helpers for in-language tests.",
 	"rand":        "Pseudo-random number generation.",
+	"query":       "SQL-style query pipelines: from, where, join, group, order.",
 	"struct-util": "Structured-data utilities: merge, walk, transform, jsonify, ….",
 	"io":          "I/O: read, write, stdin/stdout/stderr, printstr, trace.",
 	"net":         "HTTP requests and API access: fetch, prepare, direct.",
@@ -63,6 +66,15 @@ func Run(args []string, w io.Writer) int {
 	// module and its exported words.
 	if mod := strings.TrimPrefix(name, "aql:"); isModule(mod) {
 		return describeModule(w, mod)
+	}
+
+	// A dotted name (ArrayUtil.indices) describes a single module export —
+	// resolve it from the module registry and render its doc + provenance.
+	if strings.Contains(name, ".") {
+		if info := qualifiedExportInfo(name); info != nil {
+			fmt.Fprint(w, helppkg.FormatDynamic(*info))
+			return 0
+		}
 	}
 
 	reg, err := native.DefaultRegistry()
@@ -143,6 +155,45 @@ func describeModule(w io.Writer, name string) int {
 	fmt.Fprintf(w, "Import with \"aql:%s\" import, then call e.g. %s.<word>.\n", name, name)
 	fmt.Fprintln(w, "Docs: "+helppkg.ReferenceURL)
 	return 0
+}
+
+// qualifiedExportInfo resolves a dotted "Namespace.word" export across the
+// native modules and builds its help.FuncInfo (doc + provenance + signatures).
+// Returns nil when the namespace or word is unknown. Unlike the runtime
+// `describe`, the CLI has nothing imported, so it consults the module
+// registry directly.
+func qualifiedExportInfo(name string) *helppkg.FuncInfo {
+	dot := strings.IndexByte(name, '.')
+	if dot <= 0 || dot >= len(name)-1 {
+		return nil
+	}
+	ns, word := name[:dot], name[dot+1:]
+
+	reg, err := native.DefaultRegistry()
+	if err != nil {
+		return nil
+	}
+	reg.SetParseFunc(parse.Parse)
+	for _, m := range modules.Names() {
+		desc, derr := modules.Resolve(m, reg)
+		if derr != nil {
+			continue
+		}
+		exports, ok := desc.Exports[ns]
+		if !ok {
+			continue
+		}
+		ev, ok := exports.Get(word)
+		if !ok {
+			return nil // namespace matched but no such word
+		}
+		fn, ok := native.FnDefFromValue(ev)
+		if !ok {
+			return nil
+		}
+		return native.FnDefFuncInfo(name, fn)
+	}
+	return nil
 }
 
 func isModule(name string) bool {

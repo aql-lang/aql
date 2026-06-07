@@ -252,34 +252,49 @@ func TestTranspose(t *testing.T) {
 	}
 }
 
-// --- indexof: list overload of the core word (ADR-001) ---
+// --- indices: list-membership lookup (aql:array-util) ---
 
-// indexof on two lists is a core overload (native_string.go), not an
-// array word — for each needle, its index in the haystack (length when
-// absent). Uses a plain registry, no aql:array import.
-func TestIndexofListOverload(t *testing.T) {
-	r, _ := DefaultRegistry()
-	registerIOWords(r)
-	// forward form: needles then haystack.
+// indices is an array word (ArrayUtil.indices), distinct from the
+// string word indexof: for each needle, its index in the haystack, or
+// -1 when absent. Forward form is `indices <needles> <haystack>` — the
+// haystack (the larger reference collection) is the final argument.
+func TestIndicesListLookup(t *testing.T) {
+	r := arrayTestReg() // seeds ArrayModuleNatives as bare words
 	result := runAQL(t, r, []Value{
-		NewWord("indexof"),
+		NewWord("indices"),
 		NewList([]Value{NewInteger(20), NewInteger(99), NewInteger(10)}),
 		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)}),
 	})
-	assertIntList(t, "indexof [20,99,10] [10,20,30]", result, []int64{1, 3, 0})
+	// 20→1, 99→absent→-1, 10→0.
+	assertIntList(t, "indices [20,99,10] [10,20,30]", result, []int64{1, -1, 0})
 }
 
-// The same word still serves strings — type dispatch picks the right
-// overload, proving the two operations coexist under one name.
+// indexof is now string-only — the list form no longer dispatches here.
 func TestIndexofStringStillWorks(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
+	// Haystack-last: forward form is `indexof needle haystack`.
 	result := runAQL(t, r, []Value{
-		NewWord("indexof"), NewString("hello"), NewString("ll"),
+		NewWord("indexof"), NewString("ll"), NewString("hello"),
 	})
 	got, _ := AsInteger(result[0])
 	if got != 2 {
-		t.Errorf(`indexof "hello" "ll" = %d, want 2`, got)
+		t.Errorf(`indexof "ll" "hello" = %d, want 2`, got)
+	}
+}
+
+// indexof no longer accepts two lists — the list form moved to
+// ArrayUtil.indices, so the [List, List] call must NOT match a string sig.
+func TestIndexofListFormRemoved(t *testing.T) {
+	r, _ := DefaultRegistry()
+	registerIOWords(r)
+	err := runAQLError(t, r, []Value{
+		NewWord("indexof"),
+		NewList([]Value{NewInteger(20)}),
+		NewList([]Value{NewInteger(10), NewInteger(20)}),
+	})
+	if err == nil {
+		t.Fatalf("indexof [20] [10,20] should error (no list overload), got nil")
 	}
 }
 

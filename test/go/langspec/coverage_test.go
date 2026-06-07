@@ -1,0 +1,140 @@
+// Spec-coverage guard for native-module exports (ADR-003).
+//
+// Every word exported by a native module (the ones under
+// lang/go/modules/, reachable as `Namespace.word` after `import`) must be
+// exercised by at least one row in the lang/spec/*.tsv suite. This test
+// enumerates the live export set straight from the module registry — so a
+// newly-added export cannot escape notice — and asserts each qualified
+// name `Namespace.word` appears literally in some spec file's input.
+//
+// The check is intentionally content-based (a substring scan of the .tsv
+// inputs) rather than a parse of each row: a single row whose INPUT column
+// mentions the qualified name is enough to prove the word is reachable and
+// tested. Only the input column of real data rows counts — comments and the
+// expected/description columns are excluded, so a word cannot be "covered"
+// by merely naming it in a comment. The companion TestSpecProd actually runs
+// those rows; this guard only asserts they exist for every export.
+package langspec
+
+import (
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"testing"
+
+	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/aql-lang/aql/lang/go/modules"
+	"github.com/aql-lang/aql/lang/go/native"
+)
+
+// hermeticExempt lists the few exports that cannot be exercised by a
+// hermetic, deterministic spec row and are covered by Go tests instead.
+// This is the escape hatch ADR-003 deliberately almost never allows — keep
+// it TINY and justify every entry. Each key must still be a live export
+// (the test fails on a stale entry) so the list can't rot.
+var hermeticExempt = map[string]string{
+	// IO.folder is a host-FS mkdir: the in-memory-FS toggle does not engage
+	// through a spec row's context layering, and `make Path` mangles a
+	// "mem://" scheme, so there is no hermetic spec surface. Covered by
+	// lang/go/native/folder_test.go.
+	"IO.folder": "host-FS mkdir; no hermetic spec surface (folder_test.go)",
+}
+
+// TestModuleExportCoverage fails when any native-module export lacks a
+// lang/spec row mentioning its qualified `Namespace.word` name.
+func TestModuleExportCoverage(t *testing.T) {
+	specDir := filepath.Join("..", "..", "..", "lang", "spec")
+
+	// Slurp every spec file once into a single haystack.
+	entries, err := os.ReadDir(specDir)
+	if err != nil {
+		t.Fatalf("read spec dir %s: %v", specDir, err)
+	}
+	var haystack strings.Builder
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
+			continue
+		}
+		data, rerr := os.ReadFile(filepath.Join(specDir, e.Name()))
+		if rerr != nil {
+			t.Fatalf("read %s: %v", e.Name(), rerr)
+		}
+		// Collect only the INPUT column (field 0) of real data rows.
+		// Comment lines (leading '#') and the expected/description columns
+		// are excluded so a comment mention can't fake coverage.
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "#") {
+				continue
+			}
+			input := line
+			if tab := strings.IndexByte(line, '\t'); tab >= 0 {
+				input = line[:tab]
+			}
+			haystack.WriteString(input)
+			haystack.WriteByte('\n')
+		}
+	}
+	specText := haystack.String()
+
+	// Enumerate the live export set from the module registry.
+	reg, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry: %v", err)
+	}
+	// AQL-implemented modules (decision/report/test) parse their source via
+	// the registry's ParseFunc — mirror lang.New's wiring so Resolve works.
+	reg.SetParseFunc(parser.Parse)
+
+	var qualified []string // every "Namespace.word" the modules export
+	names := modules.Names()
+	sort.Strings(names)
+	for _, name := range names {
+		desc, derr := modules.Resolve(name, reg)
+		if derr != nil {
+			t.Fatalf("resolve module %q: %v", name, derr)
+		}
+		// Exports is keyed by namespace (e.g. "ArrayUtil"); each value is
+		// an OrderedMap of word -> FnDef.
+		nss := make([]string, 0, len(desc.Exports))
+		for ns := range desc.Exports {
+			nss = append(nss, ns)
+		}
+		sort.Strings(nss)
+		for _, ns := range nss {
+			for _, word := range desc.Exports[ns].Keys() {
+				qualified = append(qualified, ns+"."+word)
+			}
+		}
+	}
+
+	exportSet := make(map[string]bool, len(qualified))
+	for _, q := range qualified {
+		exportSet[q] = true
+	}
+	// A hermetic-exemption entry must name a live export, else it's stale.
+	for q := range hermeticExempt {
+		if !exportSet[q] {
+			t.Errorf("hermeticExempt names %q, which is not (or no longer) a "+
+				"native-module export — remove the stale exemption", q)
+		}
+	}
+
+	var uncovered []string
+	for _, q := range qualified {
+		if hermeticExempt[q] != "" {
+			continue // covered by Go tests; see hermeticExempt.
+		}
+		if !strings.Contains(specText, q) {
+			uncovered = append(uncovered, q)
+		}
+	}
+
+	if len(uncovered) > 0 {
+		sort.Strings(uncovered)
+		t.Fatalf("%d native-module export(s) have no lang/spec row "+
+			"mentioning their qualified name (ADR-003). Add at least one "+
+			"row per word to lang/spec/module-*.tsv:\n  %s",
+			len(uncovered), strings.Join(uncovered, "\n  "))
+	}
+}

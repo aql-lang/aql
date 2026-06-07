@@ -22,3 +22,27 @@
 # §5  negative — unbound without import
 TypeUtil.parent Integer	ERROR:undefined_word	`type` is unbound without `import`
 tpartial (refine Record [x:Integer])	ERROR:undefined_word	tpartial is no longer core
+#
+# §6  reflection & set-algebra over the type lattice
+# alts — the alternatives of a disjunct as a List of types
+"aql:type-util" import end  TypeUtil.alts (Integer tor String)	[Integer String]	disjunct alternatives
+# arityof / paramsof / returnsof — function-signature reflection
+"aql:type-util" import end  TypeUtil.arityof (fn [[a:Integer b:Integer] [Integer] [a add b]])	2	count of required params
+"aql:type-util" import end  TypeUtil.paramsof (fn [[a:Integer b:String] [Integer] [a]])	[Integer String]	param types as a List
+"aql:type-util" import end  TypeUtil.returnsof (fn [[a:Integer] [Integer] [a]])	Integer	the return type
+# brand — a nominal subtype tagged with an atom (swap-arg: tag then base)
+"aql:type-util" import end  TypeUtil.brand userid/q Integer	brand:userid	tagged nominal subtype of Integer
+# exclude / extract — TypeScript-style set difference / intersection (swap form: target op what)
+"aql:type-util" import end  (Integer tor String) TypeUtil.exclude String	Integer	remove String from the disjunct
+"aql:type-util" import end  (Integer tor String) TypeUtil.extract Integer	Integer	keep only the Integer alternative
+# lca — least common ancestor in the lattice
+"aql:type-util" import end  TypeUtil.lca Integer Float	Number	common supertype of Integer and Float
+# merge — combine two record types (swap form: a op b)
+"aql:type-util" import end  (refine Record [x:Integer]) TypeUtil.merge (refine Record [y:String])	record{x:Integer y:String}	union of fields
+# nominal — mint an anonymous nominal alias of a base type
+"aql:type-util" import end  (TypeUtil.nominal Integer) istype	true	nominal yields a type
+# omit / pick — drop / retain named fields (swap form: record op [names])
+"aql:type-util" import end  (refine Record [x:Integer y:String]) TypeUtil.omit [x/q]	record{y:String}	drop field x
+"aql:type-util" import end  (refine Record [x:Integer y:String]) TypeUtil.pick [x/q]	record{x:Integer}	keep only field x
+# required — strip the optional (None) alternative from every field
+"aql:type-util" import end  TypeUtil.required (refine Record [x:(Integer tor None)])	record{x:Integer}	make every field required

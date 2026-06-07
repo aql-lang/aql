@@ -17,11 +17,12 @@ import (
 // holds the specialised APL-style data vocabulary — shape/structure,
 // selection/ordering, membership/grouping, and neighborhood words.
 //
-// Per ADR-001 (ADR.md in the repo root) no export here shadows a core word. The two
-// operations that overlap a core word are therefore NOT in this module:
-// deep flatten is the core `flatten -1`, and list lookup is a [List, List]
-// overload of the core `indexof`. Only `transpose` (which has no core
-// counterpart) remains, under its plain name.
+// Per ADR-001 (ADR.md in the repo root) no export here shadows a core word.
+// Deep flatten is not duplicated here — it is the core `flatten -1`. The
+// list-membership lookup lives here as `ArrayUtil.indices` (for each
+// needle, its index in the haystack, or -1 when absent); it is a distinct
+// name, not a shadow of the string word `indexof` (which is string-only,
+// in aql:string-util).
 func BuildArrayModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Create an isolated sub-registry for the module's Go words.
 	subReg, err := native.DefaultRegistry()
@@ -98,6 +99,9 @@ var arrayExports = []arrWord{
 	// --- membership / grouping ---
 	{export: "member", internal: "member", sigs: sig2(native.TList, native.TList, native.TList)},
 	{export: "unique", internal: "unique", sigs: sig1(native.TList, native.TList)},
+	// indices: forward form is `indices <needles> <haystack>` — the
+	// haystack (the larger reference collection) is the final argument.
+	{export: "indices", internal: "indices", sigs: sig2(native.TList, native.TList, native.TList)},
 	{export: "group", internal: "group", sigs: []arrSig{
 		{[]*native.Type{native.TList, native.TList}, []*native.Type{native.TMap}},
 		{[]*native.Type{native.TList}, []*native.Type{native.TMap}},

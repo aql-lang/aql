@@ -29,3 +29,20 @@
 # §6  negative — unbound without import
 BinUtil.popcount 7	ERROR:undefined_word	`bin` is unbound without `import`
 band 12 10	ERROR:undefined_word	bitwise ops are no longer core
+#
+# §7  second-tier bit utilities
+"aql:bin-util" import end  BinUtil.bitlen 255	8	minimum bits to represent the value
+"aql:bin-util" import end  BinUtil.mask 4	15	low-4-bit mask (0b1111)
+"aql:bin-util" import end  BinUtil.reverse 1	-9223372036854775808	reverse all 64 bits
+"aql:bin-util" import end  BinUtil.swap 1	72057594037927936	reverse the 8 bytes
+"aql:bin-util" import end  255 BinUtil.rotl 8	65280	rotate left by 8 bits
+"aql:bin-util" import end  65280 BinUtil.rotr 8	255	rotate right by 8 bits
+"aql:bin-util" import end  0 BinUtil.set 3	8	set bit 3 (0b1000)
+"aql:bin-util" import end  15 BinUtil.clear 0	14	clear bit 0
+"aql:bin-util" import end  5 BinUtil.toggle 1	7	flip bit 1 (0b101 → 0b111)
+"aql:bin-util" import end  5 BinUtil.test 0	true	bit 0 is set
+"aql:bin-util" import end  5 BinUtil.test 1	false	bit 1 is clear
+"aql:bin-util" import end  255 BinUtil.extract 0 4	15	bits [0,4) of the value
+"aql:bin-util" import end  255 BinUtil.insert 0 4 0	240	replace bits [0,4) with zero
+"aql:bin-util" import end  BinUtil.fnv32 'hello'	1335831723	32-bit FNV-1a string hash
+"aql:bin-util" import end  BinUtil.fnv64 'hello'	2607821981565500683	64-bit FNV-1a hash (sign bit cleared)

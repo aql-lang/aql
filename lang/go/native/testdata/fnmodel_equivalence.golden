@@ -225,7 +225,6 @@ WORD import
   [Scalar/String] barrier=1 runcheck returns=[Ideal/Module]
 WORD indexof
   [Scalar/String Scalar/String Node/Map] barrier=3 returns=[Scalar/Number/Integer]
-  [Node/List Node/List] barrier=2 +returnsfn
   [Scalar/String Scalar/String] barrier=2 returns=[Scalar/Number/Integer]
 WORD inject
   [Any Any] barrier=2
@@ -372,6 +371,8 @@ WORD rebind
   [Ideal/Reach Any] barrier=2 returns=[Ideal/Reach]
 WORD ref
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Any]
+WORD referent
+  [Scalar/Atom] barrier=1 returns=[Any]
 WORD refine
   [Any Node] barrier=2 runcheck returns=[Type]
   [Any] barrier=1 runcheck returns=[Type]
@@ -383,8 +384,8 @@ WORD remove
   [Ideal/Object/Resource/Entity] barrier=1
   [Node/Map] barrier=1
 WORD repeat
-  [Scalar/String Scalar/Number/Integer Node/Map] barrier=3 returns=[Scalar/String]
-  [Scalar/String Scalar/Number/Integer] barrier=2 returns=[Scalar/String]
+  [Scalar/Number/Integer Scalar/String Node/Map] barrier=3 returns=[Scalar/String]
+  [Scalar/Number/Integer Scalar/String] barrier=2 returns=[Scalar/String]
 WORD replace
   [Scalar/String Scalar/String Scalar/String Node/Map] barrier=4 returns=[Scalar/String]
   [Scalar/String Scalar/String Scalar/String] barrier=3 returns=[Scalar/String]

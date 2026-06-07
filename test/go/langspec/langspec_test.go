@@ -53,6 +53,11 @@ func TestSpecProd(t *testing.T) {
 		// originally written for engspec (object, record, inspect, …)
 		// can run under the production setup too.
 		specrunner.RegisterQFixtures(reg)
+		// Wire the parser so the AQL-implemented modules (decision,
+		// report, test) can parse their source on import — exactly what
+		// lang.New() does in production. Without this `import
+		// "aql:decision"` fails with "parser not configured".
+		reg.SetParseFunc(parser.Parse)
 		// Install the loadable-module resolver so specs can `import
 		// "aql:math-util"` etc. — matching what lang.New() wires up in
 		// production. Without this the module words are unreachable and

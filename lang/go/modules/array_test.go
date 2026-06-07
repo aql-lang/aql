@@ -64,7 +64,7 @@ func TestArrayModuleExports(t *testing.T) {
 		"shape", "rank", "reshape", "transpose",
 		"where", "grade", "at", "sortby", "replicate", "expand", "compress",
 		"eachrank", "foldaxis",
-		"member", "unique", "group",
+		"member", "unique", "indices", "group",
 		"window", "pairs",
 	}
 	for _, name := range expected {
@@ -72,12 +72,13 @@ func TestArrayModuleExports(t *testing.T) {
 			t.Errorf("missing array export %q", name)
 		}
 	}
-	// ADR-001: no export may shadow a core word. flatten and indexof are
-	// core words, so they must NOT be array exports (deep flatten is
-	// `flatten -1`; list lookup is the core indexof list overload).
+	// ADR-001: no export may shadow a core word. `flatten` is a core word,
+	// so it must NOT be an array export (deep flatten is `flatten -1`).
+	// `indexof` is the string word (aql:string-util); the array module's
+	// list lookup is the distinctly-named `indices`, not `indexof`.
 	for _, name := range []string{"flatten", "indexof"} {
 		if _, ok := arrExport.Get(name); ok {
-			t.Errorf("array must not export %q (shadows a core word — ADR-001)", name)
+			t.Errorf("array must not export %q (shadows a core/other word — ADR-001)", name)
 		}
 	}
 }
@@ -106,6 +107,9 @@ func TestArrayModuleWords(t *testing.T) {
 		// membership / grouping
 		{`[1,2,3] ArrayUtil.member [2,3,4]`, "[true true false]"},
 		{`[1,2,2,3] ArrayUtil.unique`, "[1 2 3]"},
+		// indices: forward form `indices <needles> <haystack>` (haystack last);
+		// for each needle its index in the haystack, or -1 when absent.
+		{`ArrayUtil.indices [20,99,10] [10,20,30]`, "[1 -1 0]"},
 		// neighborhoods
 		{`[1,2,3,4] ArrayUtil.window 2`, "[[1 2] [2 3] [3 4]]"},
 		{`ArrayUtil.pairs [1,2,3]`, "[[1 2] [2 3]]"},
@@ -161,24 +165,22 @@ func TestArrayModuleGroupBothSigs(t *testing.T) {
 	assertArrayResult(t, r, `ArrayUtil.group ["a","b","a"] [1,2,3]`, `{'a':[1 3] 'b':[2]}`)
 }
 
-// ADR-001 replacements: deep flatten and list indexof are core words,
-// reached without importing aql:array. (That ArrayUtil.flatten / ArrayUtil.indexof
-// are not exports is pinned in TestArrayModuleExports.)
-func TestFlattenAndIndexofAreCore(t *testing.T) {
+// Deep flatten is the core `flatten -1` (no ArrayUtil.flatten); `indexof`
+// is the string-only word in aql:string-util. The list-membership lookup
+// is the distinctly-named ArrayUtil.indices (see TestArrayModuleWords).
+func TestFlattenIsCoreIndexofIsString(t *testing.T) {
 	r, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
 	r.SetParseFunc(parser.Parse)
-	// flatten is core. indexof moved to aql:string-util (StringUtil.indexof,
-	// covering both string and list-membership overloads); seed it bare here.
+	// indexof moved to aql:string-util (string-only now); seed it bare.
 	for _, n := range native.StringModuleNatives {
 		r.RegisterNativeFunc(n)
 	}
-	assertArrayResult(t, r, `flatten -1 [1,[2,[3,[4]]]]`, "[1 2 3 4]")  // deep flatten
-	assertArrayResult(t, r, `flatten [1,[2,[3]]]`, "[1 2 [3]]")         // default = one level
-	assertArrayResult(t, r, `indexof [20,99,10] [10,20,30]`, "[1 3 0]") // list overload
-	assertArrayResult(t, r, `indexof "hello" "ll"`, "2")                // string overload, same word
+	assertArrayResult(t, r, `flatten -1 [1,[2,[3,[4]]]]`, "[1 2 3 4]") // deep flatten
+	assertArrayResult(t, r, `flatten [1,[2,[3]]]`, "[1 2 [3]]")        // default = one level
+	assertArrayResult(t, r, `indexof "ll" "hello"`, "2")               // string form only (needle haystack)
 }
 
 // --- Negative: the moved words are NOT globally available ---

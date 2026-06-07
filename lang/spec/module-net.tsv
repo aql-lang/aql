@@ -20,3 +20,12 @@
 # §2  negative — the words are gone from core (unbound without import)
 fetch "http://x"	ERROR:undefined_word	`fetch` is no longer a core word
 Net.fetch "http://x"	ERROR:undefined_word	`Net` is unbound without `import`
+#
+# §3  prepare / direct — building a request from an API descriptor. A full
+#     send needs a live network / API SDK (covered by the Go fetch /
+#     prepare_direct tests), but the descriptor-validation path is reachable
+#     and deterministic: an "api"-kind descriptor missing its "spec" is
+#     rejected, exercising dispatch through the Net.prepare / Net.direct
+#     wrappers without any network.
+"aql:net" import end Net.prepare {kind:"api"}	ERROR:missing required "spec" field	prepare validates the API descriptor
+"aql:net" import end Net.direct {kind:"api"}	ERROR:missing required "spec" field	direct validates the API descriptor

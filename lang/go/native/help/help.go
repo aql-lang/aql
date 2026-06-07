@@ -42,6 +42,14 @@ type FuncInfo struct {
 	ForwardArgs bool
 	Sigs        []SigInfo
 	Entry       *Entry // static docs (may be nil)
+
+	// Module/Doc are populated for native-module exports (e.g.
+	// ArrayUtil.indices): Module is the import id ("aql:array-util"), Doc a
+	// one-line summary carried on the function's FnDefInfo. When set, the
+	// header shows the doc and a "Module:" line. Empty for core words, which
+	// fall back to their static help Entry.
+	Module string
+	Doc    string
 }
 
 // registry holds all help entries keyed by word name.
@@ -177,12 +185,25 @@ func FormatDynamic(info FuncInfo) string {
 	if entry != nil && entry.Summary != "" {
 		summary = entry.Summary
 	}
+	// A module export's own Doc wins over any same-named core help entry —
+	// it describes this specific export (e.g. ArrayUtil.indices), not a
+	// coincidentally-named built-in.
+	if info.Doc != "" {
+		summary = info.Doc
+	}
 
 	// Header
 	b.WriteString(info.Name)
 	b.WriteString(" — ")
 	b.WriteString(summary)
 	b.WriteByte('\n')
+
+	// Module provenance, when this is a native-module export.
+	if info.Module != "" {
+		b.WriteString("Module: ")
+		b.WriteString(info.Module)
+		b.WriteByte('\n')
+	}
 
 	// Precedence
 	b.WriteByte('\n')
@@ -202,6 +223,8 @@ func FormatDynamic(info FuncInfo) string {
 	desc := "<not described>"
 	if entry != nil && entry.Description != "" {
 		desc = entry.Description
+	} else if info.Doc != "" {
+		desc = info.Doc
 	}
 	b.WriteString("\nDescription:\n")
 	writeWrapped(&b, desc, 70, "  ")

@@ -1,0 +1,50 @@
+# AQL Language Specification: the aql:query module
+# Format: input<TAB>expected<TAB>description
+#
+# Loadable SQL-style query DSL. Import binds the `Query` namespace:
+# `"aql:query" import end  Query.select [...] Query.from <table> ...`.
+#
+# The pipeline is LAZY: `select` seeds a query, later words attach
+# clauses, and it only runs when materialized (printed / iterated /
+# canonicalised). `from` resolves its source table by name from the
+# context store. A self-contained spec row has no Go-registered table,
+# so these rows seed and chain each clause word and let the sourceless
+# query canonicalise to the empty table `[]` — proving each word parses,
+# dispatches through its module wrapper, accepts its declared argument
+# shape, and composes into the pipeline. The `from`-with-a-real-table
+# path is exercised by the Go suite (modules/query_test.go); here it is
+# pinned by its negative (unknown-table) contract.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  seed: select
+"aql:query" import end  Query.select []	[]	SELECT * seeds an all-columns query
+"aql:query" import end  Query.select [name age]	[]	projection seeds the named columns
+#
+# §2  filter / order / limit / offset / distinct
+"aql:query" import end  Query.where [age gt 1] (Query.select [name])	[]	WHERE attaches a condition clause
+"aql:query" import end  Query.order [age desc] (Query.select [name])	[]	ORDER BY attaches a sort clause
+"aql:query" import end  Query.limit 5 (Query.select [name])	[]	LIMIT caps the row count
+"aql:query" import end  Query.offset 2 (Query.select [name])	[]	OFFSET skips leading rows
+"aql:query" import end  Query.distinct (Query.select [name])	[]	DISTINCT dedupes rows
+#
+# §3  grouping
+"aql:query" import end  Query.group [city] (Query.select [city])	[]	GROUP BY attaches grouping keys
+"aql:query" import end  Query.having [cnt gt 1] (Query.group [city] (Query.select [city]))	[]	HAVING filters groups
+#
+# §4  joins
+"aql:query" import end  Query.join visits (Query.select [name])	[]	JOIN attaches another table
+"aql:query" import end  Query.innerjoin visits (Query.select [name])	[]	INNER JOIN
+"aql:query" import end  Query.leftjoin visits (Query.select [name])	[]	LEFT JOIN
+"aql:query" import end  Query.crossjoin visits (Query.select [name])	[]	CROSS JOIN
+"aql:query" import end  Query.on [name eq who] (Query.join visits (Query.select [name]))	[]	ON attaches a join predicate
+"aql:query" import end  Query.using [name] (Query.join visits (Query.select [name]))	[]	USING joins on a shared column
+#
+# §5  set operations
+"aql:query" import end  Query.union (Query.select [name]) (Query.select [name])	[]	UNION (distinct) of two queries
+"aql:query" import end  Query.unionall (Query.select [name]) (Query.select [name])	[]	UNION ALL keeps duplicates
+"aql:query" import end  Query.intersect (Query.select [name]) (Query.select [name])	[]	INTERSECT of two queries
+"aql:query" import end  Query.except (Query.select [name]) (Query.select [name])	[]	EXCEPT (set difference)
+#
+# §6  from + negatives
+"aql:query" import end  Query.select [] Query.from people	ERROR:unknown table	FROM resolves the source by name; absent table errors
+Query.select []	ERROR:undefined_word	`Query` is unbound without `import`

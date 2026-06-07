@@ -336,6 +336,15 @@ type FnDefInfo struct {
 	Signatures     []Signature // own full-fidelity overloads (see doc above)
 	MaxForwardArgs int         // longest forward arg count across all sigs (respecting barriers)
 	Registry       *Registry
+	// Module/Export/Doc record a function's origin and one-line summary
+	// when it is a native-module export (e.g. ArrayUtil.indices). They are
+	// the provenance `describe` renders for a qualified name. Module is the
+	// import id ("aql:array-util"), Export the namespace ("ArrayUtil"), Doc
+	// a one-line summary. All three are empty for user/anonymous fns and
+	// core words, which carry no module origin.
+	Module string
+	Export string
+	Doc    string
 	// Anonymous is true iff the FnDef was produced by the `afn` word (i.e.
 	// via the `=>` lambda sugar). The flag is read only in check mode: an
 	// anonymous fn's static Returns is the conservative [Any], and the
@@ -1081,6 +1090,31 @@ func NewTableType(record RecordTypeInfo) Value {
 // NewAtom creates an atom value from a bare unquoted word.
 func NewAtom(name string) Value {
 	return NewValueRaw(TAtom, AtomPayload{Name: name})
+}
+
+// AtomReferent returns the value an atom's name was snapshotted to refer to,
+// if one was captured (by `quote` or the run-start resolution pass). ok=false
+// when v is not an atom or carries no referent.
+func AtomReferent(v Value) (Value, bool) {
+	ap, ok := v.Data.(AtomPayload)
+	if !ok || ap.Referent == nil {
+		return Value{}, false
+	}
+	return *ap.Referent, true
+}
+
+// SetAtomReferent returns a copy of atom v carrying ref as its referent (a
+// snapshot of what its name refers to). Name, Quoted, and Pos are preserved.
+// Returns v unchanged when it is not an atom.
+func SetAtomReferent(v Value, ref Value) Value {
+	ap, ok := v.Data.(AtomPayload)
+	if !ok {
+		return v
+	}
+	snap := ref
+	ap.Referent = &snap
+	v.Data = ap
+	return v
 }
 
 // NewPath creates a Path value from parts and an absolute flag.

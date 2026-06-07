@@ -47,3 +47,19 @@
 # §10  negative — unbound without import
 StructUtil.merge {a:1} {b:2}	ERROR:undefined_word	`Struct` is unbound without `import`
 jsonify {a:1}	ERROR:undefined_word	jsonify also moved out of core
+#
+# §11  inject — resolve backtick `$`-path references against a store
+"aql:struct-util" import end StructUtil.inject {greeting:'`name`'} {name:'Alice'}	{greeting:'Alice'}	`name` is replaced from the store
+#
+# §12  selector — query-select children matching a spec
+"aql:struct-util" import end StructUtil.selector {color:'red'} {a:{color:'red'} b:{color:'blue'}}	[{$KEY:'a' color:'red'}]	matching child carries its $KEY
+#
+# §13  walk — collect leaf path/value pairs
+"aql:struct-util" import end StructUtil.walk {a:1 b:{c:2}}	[{path:'a' value:1} {path:'b.c' value:2}]	dotted leaf paths
+#
+# §14  jsonify — serialise a value. Scalars render on one line (the
+#      pretty-printed multiline form for maps/lists isn't tsv-expressible —
+#      see §8 — so the Map output is verified in the Go tests).
+"aql:struct-util" import end StructUtil.jsonify 42	'42'	a number
+"aql:struct-util" import end StructUtil.jsonify 'hi'	'"hi"'	a string is JSON-quoted
+"aql:struct-util" import end StructUtil.jsonify true	'true'	a boolean

@@ -327,6 +327,14 @@ quoted key (`{'a/b': 1}`) or a computed key (`{[a/b]: 1}`).
   it matches the next expected type; mismatches stop collection and
   the word executes with what it has (or fails if it doesn't have
   enough).
+* **Structure-first.** A word forward-collects a following token only
+  when one of its signatures could actually take it; a parenthesised
+  expression or a value of an incompatible type is left to run on its
+  own. So `import "mod"` takes its path and stops — no `end` needed
+  before using the namespace (`import "aql:math-util"` then
+  `5 MathUtil.log`).
+* **Empty parens.** `()` is the empty expression: it yields no value
+  (`5 () add 3` returns `8`) and nests freely (`(())`, `(add 1 ())`).
 * **Left-to-right.** Words that are still waiting evaluate strictly
   in source order. Use `(...)` to override.
 * **Quotation.** A `[ … ]` literal **evaluates its contents** as a
@@ -340,11 +348,33 @@ quoted key (`{'a/b': 1}`) or a computed key (`{[a/b]: 1}`).
   branches, `fn`/`macro` bodies — it is held deferred and run by that
   word, which is why `each [dup mul]` works even though the same
   bracket evaluated on its own would not.
+* **Referents.** A quoted atom can remember what its name referred to.
+  `quote foo` (and `(quote foo)`) snapshots `foo`'s current binding onto the
+  atom as its **referent**; `referent` reads it back:
+  ```
+  def x 5  def q (quote x)  def x 9
+  q referent              # returns 5 — the value x had WHEN quoted (a frozen snapshot)
+  ```
+  The snapshot is shallow (the same copy semantics as closure capture). A bare
+  `name/q` atom carries no snapshot, so `referent` falls back to the name's
+  **current** binding (`def x 9  x/q referent` returns `9`); an unbound name is
+  an error. The referent is metadata only — it never affects atom identity:
+  same-named atoms stay equal and canonicalise to `name/q` regardless of what
+  each referred to. (At load time a resolution pass also stamps referents for
+  names already bound when the program starts; names bound only during
+  execution are captured by `quote`.)
 * **Macros.** A `macro` runs at expansion time on its operands *as
   code* and splices the result into the call site — new syntax in
   AQL itself. See **[Macros](#macros)**.
 * **`end`.** Forces the nearest waiting word to stop forward
-  collection.
+  collection — needed only when the next token would otherwise be a
+  valid argument (e.g. `"aql:math-util" import end "foo" print`). `;`
+  is a synonym.
+* **`aql check` advisories.** The checker raises non-gating advisories
+  (info level) for likely mistakes that still run — notably the
+  forward-greediness gotcha `1 2 add 3 mul` (returns `5`, not `9`;
+  group as `(1 2 add) 3 mul`). See
+  **[Explanation §Forward greediness](EXPLANATION.md#forward-greediness-and-stranded-operands)**.
 
 See **[Explanation §The stack model](EXPLANATION.md#the-stack-model)**
 for a longer treatment.
@@ -607,24 +637,24 @@ of the word, with the haystack as the forward arg.
 "aql:string-util" import end | `StringUtil.upper` | Uppercase | `StringUtil.upper "hello"` returns `'HELLO'` |
 "aql:string-util" import end | `StringUtil.lower` | Lowercase | `StringUtil.lower "ABC"` returns `'abc'` |
 "aql:string-util" import end | `StringUtil.concat` | Join list elements into a string | `StringUtil.concat ["a","b"]` returns `'ab'` |
-"aql:string-util" import end | `StringUtil.split` | Split string by separator | `StringUtil.split "a,b" ","` returns `['a','b']` |
-"aql:string-util" import end | `StringUtil.contains` | Substring test | `StringUtil.contains "hello" "ell"` returns `true` |
-"aql:string-util" import end | `StringUtil.indexof` | Find substring position (also has a list form — see [List and array words](#list-and-array-words)) | `StringUtil.indexof "hello" "ll"` returns `2` |
+"aql:string-util" import end | `StringUtil.split` | Split string by separator (subject last) | `StringUtil.split "," "a,b"` returns `['a','b']` |
+"aql:string-util" import end | `StringUtil.contains` | Substring test (haystack last) | `StringUtil.contains "ell" "hello"` returns `true` |
+"aql:string-util" import end | `StringUtil.indexof` | Index of a needle in a haystack — **haystack last**: `indexof needle haystack` (string only; for the list form see `ArrayUtil.indices` under [List and array words](#list-and-array-words)) | `StringUtil.indexof "ll" "hello"` returns `2` |
 | `slice` | Substring; negative indices ok | `"hello" slice 1 3` returns `'el'` |
-"aql:string-util" import end | `StringUtil.replace` | Replace pattern | `StringUtil.replace "hello" "l" "r"` returns `'herlo'` |
-"aql:string-util" import end | `StringUtil.repeat` | Repeat string | `StringUtil.repeat "ab" 3` returns `'ababab'` |
+"aql:string-util" import end | `StringUtil.replace` | Replace pattern (subject last) | `StringUtil.replace "l" "r" "hello"` returns `'herlo'` |
+"aql:string-util" import end | `StringUtil.repeat` | Repeat string (subject last) | `StringUtil.repeat 3 "ab"` returns `'ababab'` |
 "aql:string-util" import end | `StringUtil.trim` | Trim whitespace or chars | `StringUtil.trim "  hi  "` returns `'hi'` |
 "aql:string-util" import end | `StringUtil.pad` | Pad to width | `"hi" StringUtil.pad 5` returns `'hi   '` |
-| `match` | Regex match (returns a struct) | `match "abc" "b(c)"` |
+"aql:string-util" import end | `StringUtil.match` | Substring match, returns a struct (subject last) | `StringUtil.match "b" "abc"` |
 
 #### Options examples
 
-Pass an Options map as the *last* forward argument:
+The subject string is the **last** string operand; an Options map trails it:
 
 ```
-"aql:string-util" import end StringUtil.split   "a,,b"      ","    {keepEmpty: true}            # returns ['a' '' 'b']
-"aql:string-util" import end StringUtil.contains "hello"    "Ell"  {cs: "insensitive"}          # returns true
-"aql:string-util" import end StringUtil.replace "aaa"       "a" "b" {scope: "all"}              # returns 'bbb'
+"aql:string-util" import end StringUtil.split   ","    "a,,b"  {keepEmpty: true}            # returns ['a' '' 'b']
+"aql:string-util" import end StringUtil.contains "Ell"  "hello" {cs: "insensitive"}          # returns true
+"aql:string-util" import end StringUtil.replace "a" "b" "aaa"   {scope: "all"}               # returns 'bbb'
 ```
 
 ### Boolean
@@ -667,6 +697,14 @@ restricted words refuse. See
 > **Equality is not restricted.** `eq`/`neq`/`deq` compare across types
 > safely — different types are simply *not equal* (`1 eq "1"` returns
 > `false`, never an error). Only the **ordering** words restrict.
+>
+> **`eq` is identity for compounds; `deq` is structural — by design.**
+> `eq` compares scalars (numbers, strings, booleans, atoms) by value, but
+> lists and maps by *identity*: two distinct equal-looking lists are not
+> `eq` (`["a" "b"] eq ["a" "b"]` → `false`). To compare compound *contents*,
+> use `deq`, the deep/structural form (`["a" "b"] deq ["a" "b"]` → `true`).
+> `assert.equal` (the test word) is deep, so a property body written with
+> `eq` over lists can pass vacuously — reach for `deq` there.
 
 ```
 1 lt 2.0                      # returns true        — Integer vs Float (shared Number)
@@ -677,9 +715,9 @@ restricted words refuse. See
 
 | Word | Description | Example |
 |------|-------------|---------|
-| `eq` | Equal (cross-leaf magnitude allowed; cross-type → false) | `1 eq 1.0` returns `true` |
-| `neq` | Not equal | `1 neq 2` returns `true` |
-| `deq` | Deep / strict-identity equality | `[1,2] deq [1,2]` returns `true` |
+| `eq` | Equal — scalars by value, **compounds by identity** | `1 eq 1.0` returns `true`; `[1,2] eq [1,2]` returns `false` |
+| `neq` | Not equal (negation of `eq`) | `1 neq 2` returns `true` |
+| `deq` | **Deep / structural** equality (compares contents) | `[1,2] deq [1,2]` returns `true` |
 | `lt` | Less than (same-family) | `1 lt 2` returns `true` |
 | `gt` | Greater than (same-family) | `2 gt 1` returns `true` |
 | `lte` | Less or equal (same-family) | `1 lte 1` returns `true` |
@@ -698,6 +736,7 @@ restricted words refuse. See
 | `var` | Scoped variable block | `5 var [[x] x mul x]` returns `25` |
 | `args` | Current `fn` args list (inside body) | `args . 0` |
 | `quote` | Prevent evaluation of next token | `quote [1 add 2]` |
+| `referent` | What a quoted atom's name refers to | `def x 5  (quote x) referent` returns `5` |
 
 > **Core words are frozen.** `def`/`undef` may not redefine a built-in
 > word, nor the literals `true`/`false`/`none` — `def add …`,
@@ -965,13 +1004,15 @@ and `flatten`/`size`. The specialised array vocabulary lives in the
 | `shed` | Drop first N | `[1,2,3,4] shed 2` returns `[3,4]` |
 | `reverse` | Reverse order | `[1,2,3] reverse` returns `[3,2,1]` |
 | `flatten` | Remove one nesting level; `flatten N` removes N; `flatten -1` fully flattens | `[[1,2],[3]] flatten` returns `[1,2,3]`; `flatten -1 [1,[2,[3]]]` returns `[1,2,3]` |
-"aql:string-util" import end | `StringUtil.indexof` | On strings: substring position. On two lists: index of each needle in the haystack | `StringUtil.indexof "hello" "ll"` returns `2`; `StringUtil.indexof [20,10] [10,20,30]` returns `[1,0]` |
+"aql:array-util" import end | `ArrayUtil.indices` | Index of each needle in the haystack (`-1` when absent). Forward form `indices <needles> <haystack>` — haystack last | `ArrayUtil.indices [20,99,10] [10,20,30]` returns `[1,-1,0]` |
 | `size` | Element / key count of a collection — works on any value (see [Size](#size)) | `[1,2,3] size` returns `3` |
 
-`flatten` and `indexof` are single words with several type-dispatched
-signatures (see [ADR-001](ADR.md#adr-001)): a deep flatten is `flatten
--1`, and the list form of `indexof` is just `indexof` on two lists — there
-are deliberately no `ArrayUtil.flatten`/`ArrayUtil.indexof` words.
+A deep flatten is `flatten -1` (the core `flatten` word with a negative
+depth) — there is deliberately no `ArrayUtil.flatten` (see
+[ADR-001](ADR.md#adr-001)). Substring search is the string-only
+`StringUtil.indexof` (`aql:string-util`); the list-membership lookup is
+the distinctly-named `ArrayUtil.indices` (`aql:array-util`) — one word per
+job, rather than one overloaded name.
 
 ### The `aql:array-util` module
 
@@ -979,9 +1020,10 @@ The specialised APL-style array vocabulary lives in a built-in module,
 imported with `"aql:array-util" import` and reached via the `array.` prefix.
 This keeps the global namespace lean (mirroring how `aql:math` gates
 `sin`/`cos`/…). Per [ADR-001](ADR.md#adr-001) no name here shadows a core
-word, so deep flatten and list lookup are core overloads (above), not
-module words. `transpose` has no core counterpart and so appears here
-under its plain name.
+word: deep flatten stays a core overload (`flatten -1`), and the
+list-membership lookup is the distinctly-named `ArrayUtil.indices` rather
+than a duplicate of the string word `indexof`. `transpose` has no core
+counterpart and so appears here under its plain name.
 
 ```
 "aql:array-util" import end
@@ -1005,6 +1047,7 @@ iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 | `ArrayUtil.foldaxis` | Reduce a rank-2 list along an axis (0 = columns, 1 = rows) | `ArrayUtil.foldaxis 0 [add] [[1,2],[3,4]]` returns `[4,6]` |
 | `ArrayUtil.member` | Per-element membership test | `[1,2,3] ArrayUtil.member [2,3,4]` returns `[true,true,false]` |
 | `ArrayUtil.unique` | Remove duplicates | `ArrayUtil.unique [1,2,2,3]` returns `[1,2,3]` |
+| `ArrayUtil.indices` | Index of each needle in the haystack (`-1` when absent); haystack is the final argument | `ArrayUtil.indices [20,99,10] [10,20,30]` returns `[1,-1,0]` |
 | `ArrayUtil.group` | Group values by parallel keys (or indices by value) | `ArrayUtil.group ["a","b","a"] [1,2,3]` |
 | `ArrayUtil.window` | Sliding window of size N | `[1,2,3,4] ArrayUtil.window 2` |
 | `ArrayUtil.pairs` | Adjacent pairs | `ArrayUtil.pairs [1,2,3]` returns `[[1,2],[2,3]]` |
@@ -1085,6 +1128,28 @@ word — `size` subsumes it.
 > particular `1.2.3` (a malformed numeric literal), `1 . 2`, and
 > `5 . foo` all raise `[aql/syntax_error]: a number has no members`. A
 > plain `Float` like `5.0` is unaffected.
+
+> **A bare word key is a *literal* name — like JavaScript `.key`. Wrap a
+> variable (or any expression) in parens to use its *value* as the key —
+> like `[expr]`.** `()` is to AQL what `[]` is to JS member access:
+>
+> | JavaScript | AQL | meaning |
+> |------------|-----|---------|
+> | `xs.i`     | `xs get i` or `xs.i` | literal key/index named `i` |
+> | `xs[i]`    | `xs get (i)`         | computed — the **value** of `i` |
+>
+> ```
+> def xs [10 20 30]
+> def i 1
+> xs get i          # returns None — literal key "i", absent (like xs.i)
+> xs get (i)        # returns 20   — i evaluates to 1 (like xs[i])
+> xs get 1          # returns 20   — literal index
+> ```
+>
+> This is why a bare word index never resolves a same-named variable, and
+> why an *undefined* bare key still returns `None` rather than raising
+> `undefined word` — exactly as `xs.i` reads a missing property as
+> `undefined` in JS. Reach for parens whenever the key/index is computed.
 
 **Dotted access binds tightly.** A `.`/`!.` chain groups to a single
 `( … )` so it binds to its immediate receiver, not to a surrounding call:

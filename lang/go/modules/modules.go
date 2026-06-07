@@ -72,7 +72,52 @@ func Resolve(name string, parent *native.Registry) (native.ModuleDesc, error) {
 	}
 	desc.Ref = moduleID
 	desc.Kind = "native"
+	stampExportProvenance(desc)
 	return desc, nil
+}
+
+// stampExportProvenance records, for each exported function, its origin and
+// one-line doc so `describe Namespace.word` can show where the word comes
+// from and what it does: Module (the import id, e.g. "aql:array-util"),
+// Export (the namespace, e.g. "ArrayUtil"), and Doc (from the central
+// moduleDocs table, see docs.go). Done once here rather than in every
+// per-module maker — the makers stay free of provenance/doc plumbing and the
+// docs live as data in one place. Values a builder already populated are left
+// untouched. Type exports and other non-function values are skipped. The
+// Value's Parent (FnDef vs Function) is preserved so dispatch is unchanged.
+func stampExportProvenance(desc native.ModuleDesc) {
+	for ns, om := range desc.Exports {
+		if om == nil {
+			continue
+		}
+		for _, key := range om.Keys() {
+			v, _ := om.Get(key)
+			fn, ok := native.FnDefFromValue(v)
+			if !ok {
+				continue
+			}
+			changed := false
+			if fn.Module == "" {
+				fn.Module, changed = desc.Ref, true
+			}
+			if fn.Export == "" {
+				fn.Export, changed = ns, true
+			}
+			if fn.Doc == "" {
+				if d := moduleDocs[desc.Ref][key]; d != "" {
+					fn.Doc, changed = d, true
+				}
+			}
+			if !changed {
+				continue
+			}
+			if v.Parent == native.TFunction {
+				om.Set(key, native.NewFunction(*fn))
+			} else {
+				om.Set(key, native.NewFnDef(*fn))
+			}
+		}
+	}
 }
 
 // InstallResolver wires the native-module resolver onto reg — the single

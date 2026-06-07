@@ -642,8 +642,13 @@ func setupParenGrammar(j *jsonic.Jsonic, t parserTokens) {
 			},
 		}
 		rs.Open = []*jsonic.AltSpec{
-			// Empty parens: ()
-			{S: [][]jsonic.Tin{{t.CP}}, U: map[string]any{"closed": true}},
+			// Empty parens: (). Match the ")" but BACKTRACK (B:1) so the
+			// Close phase consumes it exactly once — like a non-empty paren,
+			// whose pelem also backtracks the ")" for paren.Close. Consuming
+			// it here instead would let the Close phase eat a SECOND ")",
+			// stealing the closer of an enclosing paren when an empty paren
+			// is the last element (e.g. `(())`, `(1 ())`).
+			{S: [][]jsonic.Tin{{t.CP}}, B: 1},
 			// First element
 			{P: "pelem"},
 		}

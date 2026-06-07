@@ -1,0 +1,26 @@
+# AQL Language Specification: the aql:report module
+# Format: input<TAB>expected<TAB>description
+#
+# Loadable module of pretty-printers for kernel value types. Import binds
+# the `Report` namespace; each word returns a String the caller can
+# `print` or compose: `"aql:report" import end  some-value Report.value`.
+# No word performs I/O itself. The record / table / list renderers produce
+# multi-line aligned blocks for populated inputs (verified in the Go
+# tests, since embedded newlines aren't TSV-expressible); the rows below
+# pin the single-line value rendering and the empty-input fallbacks.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  value — generic single-value rendering (FormatForPrint)
+"aql:report" import end 42 Report.value	'42'	a scalar renders as its print form
+"aql:report" import end {name:"alice"} Report.value	'{"name": "alice"}'	a map renders inline as its print form
+#
+# §2  record — vertical key:value block (single-key stays one line)
+"aql:report" import end {age:30} Report.record	'age : 30'	one field renders as a single aligned line
+"aql:report" import end {} Report.record	'(empty record)'	empty record fallback
+#
+# §3  table — list-of-maps grid (empty fallback; populated form is multi-line)
+"aql:report" import end [] Report.table	'(empty table)'	empty table fallback
+#
+# §4  list — indexed one-per-line (single element stays one line)
+"aql:report" import end [42] Report.list	'[0] 42'	a one-element list renders as a single indexed line
+"aql:report" import end [] Report.list	'(empty list)'	empty list fallback

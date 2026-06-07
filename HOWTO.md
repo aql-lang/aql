@@ -171,7 +171,7 @@ fold [add] [1, 2, 3] 0        # returns 6 — all-forward
 0 [1, 2, 3] [add] fold        # returns 6 — all-stack, same result
 ```
 
-Take, drop, reverse, flatten, indexof (built-in):
+Take, drop, reverse, flatten (built-in):
 
 ```
 [1,2,3,4] take 2              # returns [1 2]
@@ -179,7 +179,6 @@ Take, drop, reverse, flatten, indexof (built-in):
 [1,2,3] reverse               # returns [3 2 1]
 [[1,2],[3]] flatten           # returns [1 2 3] — one level
 flatten -1 [1,[2,[3]]]        # returns [1 2 3] — fully flatten
-"aql:string-util" import end StringUtil.indexof [20,10] [10,20,30]    # returns [1 0] — index of each needle
 ```
 
 The richer array vocabulary — reshaping, ordering, grouping,
@@ -190,6 +189,7 @@ neighborhoods, indexing — lives in the `aql:array-util` module:
 iota 6 ArrayUtil.reshape [2, 3]   # returns [[0 1 2] [3 4 5]]
 [3,1,2] ArrayUtil.grade           # returns [1 2 0] — sort indices
 [1,2,2,3] ArrayUtil.unique        # returns [1 2 3]
+ArrayUtil.indices [20,99,10] [10,20,30]   # returns [1 -1 0] — index of each needle (-1 = absent)
 [1,2,3,4] ArrayUtil.window 2      # returns [[1 2] [2 3] [3 4]]
 [1,2,3] ArrayUtil.pairs           # returns [[1 2] [2 3]]
 [10,20,30] ArrayUtil.at [2,0]     # returns [30 10]
@@ -631,6 +631,21 @@ aql check script.aql
 aql check -e '1 add "x"'         # reports a type error
 ```
 
+It also raises **advisories** (info level, non-gating) for likely
+mistakes that still run. For example, the forward-greediness gotcha —
+`1 2 add 3 mul` returns `5`, not `9`, because `add` reaches forward for
+`3` and strands the `1`:
+
+```bash
+aql check -e '1 2 add 3 mul'
+# check: [info] forward_strands_operand: add collected a forward argument
+#   while a Number operand was left unconsumed on the stack — it may be
+#   stranded; group the intended operands, e.g. (… add …)
+```
+
+Group the operands you mean to combine — `(1 2 add) 3 mul` returns `9`
+and the advisory clears. Advisories never fail the check (only errors do).
+
 To both type-check and then run:
 
 ```bash
@@ -678,10 +693,17 @@ prefix):
 ```
 
 Native module words are reached via the namespace prefix
-(`MathUtil.log`, `MathUtil.ceil`, …). The `end` after `import` prevents
-forward collection from grabbing the next token as another path —
+(`MathUtil.log`, `MathUtil.ceil`, …). The trailing `end` after `import`
+is **only needed when the next token could itself be a module path** —
 without it, `"aql:math-util" import "foo" print` would try to import a
-module named `"foo"`.
+module named `"foo"`. You do **not** need `end` before ordinary use of
+the namespace; `import` takes its path and stops, leaving the rest to run:
+
+```
+import "aql:math-util"
+5 MathUtil.log                            # returns 1.6094379124341003
+(MathUtil.ceil 4.2)                       # the paren runs on its own → 5
+```
 
 The string-hash and char-code words live in `aql:bin`, handy for
 building bloom filters and other sketches:
@@ -881,19 +903,27 @@ inspect (quote add)
 
 ## Use `end` to stop forward collection
 
-When a word would otherwise vacuum up more tokens than you want,
-use `end` to stop its collection. For example, `import` is
-forward-precedence and will try to consume the next string as a
-second module name:
+A word only forward-collects a token it could actually take as an
+argument — a paren or an incompatible value is left to run on its own
+(`import "aql:string-util"` followed by `(StringUtil.upper "hi")` works
+with no terminator). You reach for `end` in the remaining case: when the
+next token *would* be a valid argument but you mean it for the next word.
+The classic example is two adjacent module paths:
 
 <!-- aql-test: skip -->
 ```
 "aql:math-util" import end "foo" print     # returns 'foo'
 ```
 
-Without `end`, `import` would attempt to import a module named
-`"foo"`. The same idiom is useful any time a forward-precedence
-word sits next to a value the next word actually needs.
+Without `end`, `import` would treat `"foo"` as a second module path and
+try to load it. The same idiom helps any time a forward-collecting word
+sits next to a value of a type it would accept.
+
+`;` is a synonym for `end`, handy between statements:
+
+```
+1 add 2 ; 3 add 4                          # returns 3 7 — two statements
+```
 
 Read more in
 **[Explanation §the end keyword](EXPLANATION.md#the-end-keyword)**.

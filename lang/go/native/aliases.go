@@ -338,6 +338,8 @@ var (
 	FormatForPrint            = eng.FormatForPrint
 	FormatValueJSON           = eng.FormatValueJSON
 	NewAtom                   = eng.NewAtom
+	AtomReferent              = eng.AtomReferent
+	SetAtomReferent           = eng.SetAtomReferent
 	NewBoolean                = eng.NewBoolean
 	// NewCalDuration moved to lang/go/engine/native_temporal.go (Step 8).
 	NewCarrier               = eng.NewCarrier
