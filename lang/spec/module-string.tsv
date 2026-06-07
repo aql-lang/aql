@@ -1,0 +1,19 @@
+# AQL Language Specification: the aql:string-util module — normalize
+# Format: input<TAB>expected<TAB>description
+#
+# Loadable utility library. Import binds the `StringUtil` namespace:
+# `"aql:string-util" import end  StringUtil.word args`. The broad string
+# vocabulary (concat, split, trim, contains, …) lives in string.tsv; this
+# file covers `normalize` — Unicode + whitespace normalisation.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  normalize — Unicode NFC by default; whitespace handling is opt-in
+"aql:string-util" import end StringUtil.normalize 'hello'	'hello'	default applies Unicode NFC (already-composed text is unchanged)
+"aql:string-util" import end StringUtil.normalize '  a   b  ' {collapseWs: true trim: true}	'a b'	{collapseWs}/{trim} collapse runs and strip the ends
+#
+# §2  a couple of sibling words for context
+"aql:string-util" import end StringUtil.upper 'abc'	'ABC'	uppercase
+"aql:string-util" import end StringUtil.lower 'ABC'	'abc'	lowercase
+#
+# §3  negative — the namespace is unbound until imported
+StringUtil.normalize 'hello'	ERROR:undefined_word	`StringUtil` is undefined without `import`

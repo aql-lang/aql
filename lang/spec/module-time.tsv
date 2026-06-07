@@ -34,3 +34,95 @@
 # §6  negative — the namespace is unbound until imported; words gone from core
 TimeUtil.unix 0	ERROR:undefined_word	`TimeUtil` is undefined without `import`
 now	ERROR:undefined_word	`now` is no longer a core word
+#
+# §7  Instant construction & unix conversions
+"aql:time-util" import end  TimeUtil.unix-ms 1700000000000	2023-11-14T22:13:20Z	unix milliseconds → Instant
+"aql:time-util" import end  TimeUtil.unix-ns 1700000000000000000	2023-11-14T22:13:20Z	unix nanoseconds → Instant
+"aql:time-util" import end  TimeUtil.to-unix-ms (TimeUtil.unix 1700000000)	1700000000000	Instant → unix milliseconds
+#
+# §8  timezones
+"aql:time-util" import end  TimeUtil.tz "America/New_York"	America/New_York	IANA zone name → Timezone
+"aql:time-util" import end  TimeUtil.tz-utc	UTC	the UTC timezone
+"aql:time-util" import end  TimeUtil.tz-local	Local	the host-local timezone
+"aql:time-util" import end  TimeUtil.tz-name (TimeUtil.tz-utc)	'UTC'	name of a Timezone
+"aql:time-util" import end  TimeUtil.tz-offset (TimeUtil.tz-utc) (TimeUtil.unix 1700000000)	'+00:00'	offset of an Instant in a zone
+"aql:time-util" import end  TimeUtil.is-dst (TimeUtil.tz "America/New_York") (TimeUtil.unix 1700000000)	false	DST active? (Nov → false)
+#
+# §9  current local datetime — frozen at 2021-01-01
+"aql:time-util" import end  TimeUtil.now-local	2021-01-01T00:00:00	now-local reads the frozen clock
+#
+# §10  Date field extraction (Date → Integer/String)
+"aql:time-util" import end  TimeUtil.year (TimeUtil.to-date (TimeUtil.unix 1700000000))	2023	calendar year
+"aql:time-util" import end  TimeUtil.month (TimeUtil.to-date (TimeUtil.unix 1700000000))	11	month number (1-12)
+"aql:time-util" import end  TimeUtil.day (TimeUtil.to-date (TimeUtil.unix 1700000000))	14	day of month
+"aql:time-util" import end  TimeUtil.weekday (TimeUtil.to-date (TimeUtil.unix 1700000000))	2	ISO weekday (Mon=1..Sun=7)
+"aql:time-util" import end  TimeUtil.weekday-name (TimeUtil.to-date (TimeUtil.unix 1700000000))	'Tuesday'	weekday name
+"aql:time-util" import end  TimeUtil.month-name (TimeUtil.to-date (TimeUtil.unix 1700000000))	'November'	month name
+"aql:time-util" import end  TimeUtil.year-day (TimeUtil.to-date (TimeUtil.unix 1700000000))	318	ordinal day of the year
+"aql:time-util" import end  TimeUtil.iso-week (TimeUtil.to-date (TimeUtil.unix 1700000000))	46	ISO-8601 week number
+"aql:time-util" import end  TimeUtil.quarter (TimeUtil.to-date (TimeUtil.unix 1700000000))	4	calendar quarter (1-4)
+"aql:time-util" import end  TimeUtil.days-in-month (TimeUtil.to-date (TimeUtil.unix 1700000000))	30	days in that month
+"aql:time-util" import end  TimeUtil.days-in-year (TimeUtil.to-date (TimeUtil.unix 1700000000))	365	days in that year
+"aql:time-util" import end  TimeUtil.format "2006-01-02" (TimeUtil.to-date (TimeUtil.unix 1700000000))	'2023-11-14'	Go-layout format of a Date
+#
+# §11  Date arithmetic (shift a Date by n units)
+"aql:time-util" import end  TimeUtil.add-days 10 (TimeUtil.to-date (TimeUtil.unix 1700000000))	2023-11-24	add days
+"aql:time-util" import end  TimeUtil.add-months 2 (TimeUtil.to-date (TimeUtil.unix 1700000000))	2024-01-14	add months
+"aql:time-util" import end  TimeUtil.add-years 3 (TimeUtil.to-date (TimeUtil.unix 1700000000))	2026-11-14	add years
+#
+# §12  duration constructors — calendar (Integer → CalDuration)
+"aql:time-util" import end  TimeUtil.years 2	P2Y0M0D	n years as a CalDuration
+"aql:time-util" import end  TimeUtil.months 6	P0Y6M0D	n months as a CalDuration
+"aql:time-util" import end  TimeUtil.weeks 2	P0Y0M14D	n weeks (→ days)
+"aql:time-util" import end  TimeUtil.days 30	P0Y0M30D	n days
+"aql:time-util" import end  TimeUtil.cal-dur 1 6 15	P15Y6M1D	years/months/days → CalDuration
+#
+# §13  duration constructors — clock (Number → ClkDuration)
+"aql:time-util" import end  TimeUtil.hours 3	3h0m0s	n hours
+"aql:time-util" import end  TimeUtil.minutes 90	1h30m0s	n minutes
+"aql:time-util" import end  TimeUtil.seconds 30	30s	n seconds
+"aql:time-util" import end  TimeUtil.ms 500	500ms	n milliseconds
+"aql:time-util" import end  TimeUtil.us 250	250µs	n microseconds
+"aql:time-util" import end  TimeUtil.ns 1000	1µs	n nanoseconds
+#
+# §14  duration extraction
+"aql:time-util" import end  TimeUtil.total-hours (TimeUtil.minutes 90)	1.5	ClkDuration → total hours (Float)
+"aql:time-util" import end  TimeUtil.total-minutes (TimeUtil.hours 2)	120.0	→ total minutes
+"aql:time-util" import end  TimeUtil.total-seconds (TimeUtil.minutes 1)	60.0	→ total seconds
+"aql:time-util" import end  TimeUtil.total-ms (TimeUtil.seconds 2)	2000.0	→ total milliseconds
+"aql:time-util" import end  TimeUtil.dur-years (TimeUtil.cal-dur 1 6 15)	15	CalDuration years field
+"aql:time-util" import end  TimeUtil.dur-months (TimeUtil.cal-dur 1 6 15)	6	CalDuration months field
+"aql:time-util" import end  TimeUtil.dur-days (TimeUtil.cal-dur 1 6 15)	1	CalDuration days field
+"aql:time-util" import end  TimeUtil.dur-sign (TimeUtil.cal-dur 1 0 0)	1	sign of a CalDuration
+#
+# §15  date/instant differences
+"aql:time-util" import end  TimeUtil.until (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	P-54Y1M18D	calendar span from→to
+"aql:time-util" import end  TimeUtil.since (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.to-date (TimeUtil.unix 0))	P-54Y1M18D	calendar span (later, earlier)
+"aql:time-util" import end  TimeUtil.diff (TimeUtil.unix 1700003600) (TimeUtil.unix 1700000000)	1h0m0s	clock duration between Instants
+"aql:time-util" import end  TimeUtil.dur-sign (TimeUtil.elapsed (TimeUtil.unix 1700000000))	1	elapsed since a past Instant is positive
+#
+# §16  comparison & ordering (Date Date)
+"aql:time-util" import end  TimeUtil.compare (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	1	-1/0/1 ordering
+"aql:time-util" import end  TimeUtil.is-before (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	false	before? (swap reads later<earlier)
+"aql:time-util" import end  TimeUtil.is-after (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	true	after?
+"aql:time-util" import end  TimeUtil.is-equal (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 0))	true	equal?
+"aql:time-util" import end  TimeUtil.is-between (TimeUtil.to-date (TimeUtil.unix 850000000)) (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	false	within [start,end]? (date start end)
+"aql:time-util" import end  TimeUtil.earliest (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	1970-01-01	min of two Dates
+"aql:time-util" import end  TimeUtil.latest (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	2023-11-14	max of two Dates
+#
+# §17  rounding
+"aql:time-util" import end  TimeUtil.start-of "month" (TimeUtil.to-date (TimeUtil.unix 1700000000))	2023-11-01	first day of the unit
+"aql:time-util" import end  TimeUtil.end-of "month" (TimeUtil.to-date (TimeUtil.unix 1700000000))	2023-11-30	last day of the unit
+#
+# §18  conversions between Date / DateTime / Instant
+"aql:time-util" import end  TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000))	2023-11-14T00:00:00	Date → DateTime (midnight)
+"aql:time-util" import end  TimeUtil.to-time-of-day (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000)))	00:00:00	DateTime → TimeOfDay
+"aql:time-util" import end  TimeUtil.to-instant (TimeUtil.tz-utc) (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000)))	2023-11-14T00:00:00Z	DateTime + zone → Instant
+"aql:time-util" import end  TimeUtil.to-local (TimeUtil.tz-utc) (TimeUtil.unix 1700000000)	2023-11-14T22:13:20	Instant + zone → local DateTime
+"aql:time-util" import end  TimeUtil.to-utc (TimeUtil.unix 1700000000)	2023-11-14T22:13:20	Instant → UTC DateTime
+#
+# §19  async / timer words — deterministic exercises
+"aql:time-util" import end  typeof (TimeUtil.timeout 1000 [1 add 2])	Timeout	timeout schedules a body → Timeout handle
+"aql:time-util" import end  typeof (TimeUtil.interval 1000 [1 add 2])	Interval	interval repeats a body → Interval handle
+"aql:time-util" import end  100 (TimeUtil.cancel (TimeUtil.timeout 1000 [1 add 2])) add 23	123	cancel stops a timer (no value); 100+23
+"aql:time-util" import end  100 (TimeUtil.sleep 0) add 23	123	sleep 0 pauses then continues; 100+23
