@@ -658,14 +658,6 @@ func (e *Engine) resolveOrphanedForwards() error {
 	return nil
 }
 
-// preEvalParens scans forward from the current pointer and evaluates any
-// paren expressions in-place before signature matching. This implements
-// rule 1.5: paren expressions are resolved to their results so that
-// matchSignature sees fully evaluated values.
-//
-// maxFwd is the maximum number of forward values needed (FnDefInfo.MaxForwardArgs).
-// The scan stops after finding maxFwd resolved values or hitting a boundary
-// (function word, pipe, "end", ")").
 // rawParenForward reports whether any of fn's signatures captures a forward
 // ParenExpr RAW at sig position pos (RawParens[pos]). See
 // design/PAREN-REPRESENTATION.0.md Step 4.
@@ -718,14 +710,98 @@ func (e *Engine) pendingForwardWantsRawParen() bool {
 	return false
 }
 
-func (e *Engine) preEvalParens(maxFwd int, fn *FnDefInfo) error {
-	if maxFwd <= 0 {
+// resolveForwardArgs implements structure-first, lazy forward-argument
+// resolution (design/LAZY-ARG-RESOLUTION.0.md). It replaces the former
+// eager `preEvalParens(MaxForwardArgs)` scan, which evaluated EVERY forward
+// paren group up to the highest-arity overload's needs before any signature
+// was chosen — the cause of the `import "mod" (expr)` hazard (gotcha N1),
+// where the trailing paren was evaluated before `import` installed the
+// namespace it referenced.
+//
+// The scan is identical to the old one in every respect EXCEPT one: before
+// evaluating a forward paren group, it checks whether any still-viable
+// overload actually consumes a forward argument at that position. A
+// signature is pruned from the viable set only when a concrete forward
+// value (a literal, or a previously-evaluated group's result) DEFINITELY
+// cannot satisfy a non-raw, non-Any slot the signature consumes — exactly
+// the rejection `matchSignature` would make on the same value. So the
+// signature `matchSignature` ultimately selects is never pruned, its
+// claimed groups are always evaluated, and the only behavioural change is
+// that a group NO surviving overload consumes is left raw (an OpenParen
+// boundary that `matchSignature` stops at) rather than speculatively run.
+//
+// For `import "aql:string-util" (StringUtil.indexof ...)`: the leading
+// String literal prunes the viable set to `[String]` (arity 1); at position
+// 1 the paren is consumed by no viable overload, so it is left raw — import
+// selects `[String]`, installs the namespace, and the paren then runs as an
+// ordinary trailing statement.
+func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
+	// Forward-eligible signatures paired with their effective barrier
+	// (the /s and /f modifiers override the declared BarrierPos, mirroring
+	// matchSignature's forwardLimit computation).
+	type viableSig struct {
+		sig     *Signature
+		barrier int
+	}
+	viable := make([]viableSig, 0, len(fn.Signatures))
+	maxBarrier := 0
+	for si := range fn.Signatures {
+		sig := &fn.Signatures[si]
+		if sig.Fallback {
+			continue
+		}
+		barrier := sig.BarrierPos
+		switch {
+		case w.ForceStack:
+			barrier = 0
+		case w.ForceForward:
+			barrier = sig.TotalArgs()
+		}
+		if barrier > 0 {
+			viable = append(viable, viableSig{sig, barrier})
+			if barrier > maxBarrier {
+				maxBarrier = barrier
+			}
+		}
+	}
+	if maxBarrier <= 0 {
 		return nil
 	}
-	resolved := 0
-	scanIdx := e.pointer + 1
 
-	for resolved < maxFwd && scanIdx < len(e.stack) {
+	// viableConsumes reports whether any still-viable signature collects a
+	// forward argument at position pos (i.e. pos is within its barrier).
+	viableConsumes := func(pos int) bool {
+		for _, vs := range viable {
+			if pos < vs.barrier {
+				return true
+			}
+		}
+		return false
+	}
+
+	// pruneViable drops every signature that a concrete forward value at
+	// position pos definitely rules out (parity with matchSignature's
+	// per-position rejection). Raw/Form/TypeArg slots and Any slots are
+	// never used to prune (conservative — keep the signature viable).
+	pruneViable := func(pos int, v Value) {
+		kept := viable[:0]
+		for _, vs := range viable {
+			keep := true
+			if pos < vs.barrier && !sigRawSlot(vs.sig, pos) {
+				if et := sigArgType(vs.sig, pos); !et.Equal(TAny) && !sigArgMatches(vs.sig, pos, v) {
+					keep = false
+				}
+			}
+			if keep {
+				kept = append(kept, vs)
+			}
+		}
+		viable = kept
+	}
+
+	pos := 0
+	scanIdx := e.pointer + 1
+	for pos < maxBarrier && scanIdx < len(e.stack) {
 		tok := e.stack[scanIdx]
 
 		// Boundary conditions: stop scanning.
@@ -734,116 +810,48 @@ func (e *Engine) preEvalParens(maxFwd int, fn *FnDefInfo) error {
 			break
 		}
 
-		// Boundary tokens: end / ) stop the pre-eval scan.
+		// Boundary tokens: end / ) stop the scan.
 		if IsEnd(tok) || IsCloseParen(tok) {
 			break
 		}
 
-		// Open paren: evaluate the sub-expression in-place.
+		// Open paren: a forward group of unknown type.
 		if IsOpenParen(tok) {
-			savedPointer := e.pointer
-			e.pointer = scanIdx
-
-			// Advance past the OpenParen marker.
-			if err := e.stepOpenParen(); err != nil {
-				e.pointer = savedPointer
+			// Structure-first gate: evaluate ONLY if some still-viable
+			// overload consumes a forward argument at this position.
+			// Otherwise no signature wants a value here — leave the
+			// paren raw so matchSignature treats it as a boundary.
+			if !viableConsumes(pos) {
+				break
+			}
+			if err := e.evalParenGroupAt(scanIdx); err != nil {
 				return err
 			}
-
-			// Step through contents until we reach the matching ")".
-			// Track paren depth so that inner parens (e.g. from fn
-			// body expansion) are processed without prematurely
-			// breaking on their ")" tokens.
-			depth := 1
-			for limit := 0; limit < 2222 && depth > 0; limit++ {
-				if e.pointer >= len(e.stack) {
-					break
-				}
-				v := e.stack[e.pointer]
-
-				if IsOpenParen(v) {
-					depth++
-					e.pointer++
-					continue
-				}
-				if IsCloseParen(v) {
-					depth--
-					if err := e.stepCloseParen(); err != nil {
-						e.pointer = savedPointer
-						return err
-					}
-					if depth == 0 {
-						break
-					}
-					continue
-				}
-
-				// Normal evaluation inside paren.
-				switch {
-				case IsWord(v):
-					if err := e.stepWord(v); err != nil {
-						e.pointer = savedPointer
-						return err
-					}
-				case IsEnd(v):
-					if err := e.stepEnd(); err != nil {
-						e.pointer = savedPointer
-						return err
-					}
-				case IsMark(v):
-					e.stepMark(v)
-				case IsMove(v):
-					if err := e.stepMove(v); err != nil {
-						e.pointer = savedPointer
-						return err
-					}
-				case IsForward(v):
-					e.pointer++
-				case IsReturnCheck(v):
-					e.pointer++
-				case IsDefCleanup(v):
-					e.stepDefCleanup(v)
-					e.pointer++
-				default:
-					if err := e.stepLiteral(); err != nil {
-						e.pointer = savedPointer
-						return err
-					}
-				}
-				// Propagate any flow-control signal raised by
-				// the step; the outer Run frame will resolve it.
-				if e.registry.FlowCtrl != FlowNone {
-					e.pointer = savedPointer
-					return nil
-				}
+			// Flow-control raised inside the paren: let the outer Run
+			// frame resolve it (parity with the former preEvalParens).
+			if e.registry.FlowCtrl != FlowNone {
+				return nil
 			}
-
-			e.pointer = savedPointer
-			// The paren has been collapsed; the result value(s) are now
-			// at scanIdx. Each result counts as a resolved value.
-			// Count how many values replaced the paren expression.
-			// We don't know exactly, but at least one was produced.
-			// Just count the value at scanIdx as one resolved value.
-			resolved++
+			// The paren collapsed to its result value(s) at scanIdx; count
+			// it as one resolved position and advance, exactly as the
+			// former scan did. (The result's runtime type is not used to
+			// prune further: a group can collapse to zero or many values,
+			// so we keep the conservative one-slot accounting.)
+			pos++
 			scanIdx++
 			continue
 		}
 
 		// Paren expression value (paren-nesting Step 3): expand it back to
 		// its OpenParen … CloseParen marker span in place, then re-process
-		// — the IsOpenParen branch above collapses it on THIS engine,
-		// exactly as the former word-context marker representation did
-		// (recorder-transparent; a paren cannot consume the enclosing
-		// stack, so the in-place collapse is correct). See
+		// — the IsOpenParen branch above collapses it on THIS engine. See
 		// design/PAREN-REPRESENTATION.0.md Step 3.
 		if IsParenExpr(tok) {
 			// Step 4: a quote-captured ParenExpr (already Quoted) or a
-			// raw-capture forward position (codequote) is left unevaluated
-			// (NOT Quoted — matchSignature accepts a raw ParenExpr) so the
-			// matched sig captures the paren as code. The forward-collection
-			// re-step then collects it raw (pendingForwardWantsRawParen).
-			if tok.Quoted || rawParenForward(fn, resolved) || rawFormForward(fn, resolved) {
-				resolved++
+			// raw-capture forward position is left unevaluated so the
+			// matched sig captures the paren as code.
+			if tok.Quoted || rawParenForward(fn, pos) || rawFormForward(fn, pos) {
+				pos++
 				scanIdx++
 				continue
 			}
@@ -857,8 +865,8 @@ func (e *Engine) preEvalParens(maxFwd int, fn *FnDefInfo) error {
 		// then re-process. Quoted/raw-capture reaches are left for the
 		// matched sig (parity with the ParenExpr branch above).
 		if IsReach(tok) {
-			if !isEvalReach(tok) || rawParenForward(fn, resolved) || rawFormForward(fn, resolved) {
-				resolved++
+			if !isEvalReach(tok) || rawParenForward(fn, pos) || rawFormForward(fn, pos) {
+				pos++
 				scanIdx++
 				continue
 			}
@@ -867,23 +875,151 @@ func (e *Engine) preEvalParens(maxFwd int, fn *FnDefInfo) error {
 			continue
 		}
 
-		if IsWord(tok) {
-			ww, _ := AsWord(tok)
-			// Function word: count as resolved (may be captured by
-			// QuoteArgs/TWord matching). Don't stop — continue scanning
-			// so that parens beyond function words are pre-evaluated
-			// (e.g. undef foo (fn [...]) needs the paren evaluated).
-			if e.registry.Lookup(ww.Name) != nil {
-				resolved++
-				scanIdx++
-				continue
-			}
+		// Non-group token. A concrete literal carries a final type that
+		// matchSignature tests identically, so it is sound to prune the
+		// viable set on it. Words and other non-concrete tokens are left
+		// un-pruned (their matchSignature treatment is contextual) but are
+		// still counted as one resolved position — so, exactly like the
+		// former scan, groups beyond a word remain reachable.
+		if mt, kind := e.staticForwardType(tok); kind == fwdValue {
+			pruneViable(pos, mt)
 		}
-
-		// Any other token: count as one resolved value.
-		resolved++
+		pos++
 		scanIdx++
 	}
+	return nil
+}
+
+// sigRawSlot reports whether signature sig captures position pos structurally
+// (raw paren / macro form / type-literal slot) rather than by ordinary value
+// type — positions where a concrete-value type-prune would be unsound.
+func sigRawSlot(sig *Signature, pos int) bool {
+	return (sig.RawParens != nil && sig.RawParens[pos]) ||
+		(sig.FormArgs != nil && sig.FormArgs[pos]) ||
+		(sig.TypeArgs != nil && sig.TypeArgs[pos])
+}
+
+// fwdKind classifies a forward token by what it presents to signature
+// matching WITHOUT evaluation.
+type fwdKind int
+
+const (
+	fwdValue    fwdKind = iota // a token whose match-value/type is knowable now
+	fwdGroup                   // an unevaluated paren/expr/reach group, type unknown
+	fwdBoundary                // stops or is transparent to forward matching
+)
+
+// staticForwardType classifies a forward token by what it presents to
+// signature matching WITHOUT evaluation, returning a match-value (for
+// fwdValue) plus the classification.
+//
+// Only a concrete LITERAL value yields fwdValue: its type is final and
+// matchSignature type-tests it identically (its literal-arg branch calls the
+// same sigArgMatches), so it is sound to prune the viable set on it. A WORD
+// is deliberately NOT a prunable value — matchSignature's treatment of a word
+// is contextual (a `/q` QuoteArgs slot captures it as an Atom *name*
+// regardless of any current binding; a word bound to an FnDef can still match
+// a type-name slot via fall-through). Pruning on a word's resolved binding
+// would diverge from the binder, so a word is classified as fwdBoundary:
+// counted as one resolved position with the viable set left intact, exactly
+// as the former eager scan treated it.
+func (e *Engine) staticForwardType(tok Value) (match Value, kind fwdKind) {
+	if IsOpenParen(tok) || IsParenExpr(tok) || IsReach(tok) {
+		return Value{}, fwdGroup
+	}
+	if IsWord(tok) {
+		return Value{}, fwdBoundary
+	}
+	if IsConcrete(tok) {
+		return tok, fwdValue
+	}
+	// Type literals, carriers, markers: not a prunable concrete value.
+	return Value{}, fwdBoundary
+}
+
+// evalParenGroupAt collapses the forward paren group at stack index scanIdx
+// in place, evaluating its contents on this engine and leaving the result
+// value(s) at scanIdx. Extracted verbatim from the former preEvalParens
+// OpenParen branch; e.pointer is saved and restored. A flow-control signal
+// raised inside the paren is left on the registry for the outer Run frame.
+func (e *Engine) evalParenGroupAt(scanIdx int) error {
+	savedPointer := e.pointer
+	e.pointer = scanIdx
+
+	// Advance past the OpenParen marker.
+	if err := e.stepOpenParen(); err != nil {
+		e.pointer = savedPointer
+		return err
+	}
+
+	// Step through contents until we reach the matching ")". Track paren
+	// depth so inner parens are processed without prematurely breaking on
+	// their ")" tokens.
+	depth := 1
+	for limit := 0; limit < 2222 && depth > 0; limit++ {
+		if e.pointer >= len(e.stack) {
+			break
+		}
+		v := e.stack[e.pointer]
+
+		if IsOpenParen(v) {
+			depth++
+			e.pointer++
+			continue
+		}
+		if IsCloseParen(v) {
+			depth--
+			if err := e.stepCloseParen(); err != nil {
+				e.pointer = savedPointer
+				return err
+			}
+			if depth == 0 {
+				break
+			}
+			continue
+		}
+
+		// Normal evaluation inside paren.
+		switch {
+		case IsWord(v):
+			if err := e.stepWord(v); err != nil {
+				e.pointer = savedPointer
+				return err
+			}
+		case IsEnd(v):
+			if err := e.stepEnd(); err != nil {
+				e.pointer = savedPointer
+				return err
+			}
+		case IsMark(v):
+			e.stepMark(v)
+		case IsMove(v):
+			if err := e.stepMove(v); err != nil {
+				e.pointer = savedPointer
+				return err
+			}
+		case IsForward(v):
+			e.pointer++
+		case IsReturnCheck(v):
+			e.pointer++
+		case IsDefCleanup(v):
+			e.stepDefCleanup(v)
+			e.pointer++
+		default:
+			if err := e.stepLiteral(); err != nil {
+				e.pointer = savedPointer
+				return err
+			}
+		}
+		// Propagate any flow-control signal raised by the step; the outer
+		// Run frame will resolve it.
+		if e.registry.FlowCtrl != FlowNone {
+			e.pointer = savedPointer
+			return nil
+		}
+	}
+
+	e.pointer = savedPointer
 	return nil
 }
 
@@ -1238,7 +1374,7 @@ func (e *Engine) stepWord(val Value) error {
 	// and the call hasn't been forced to stack mode via /s; or when /f
 	// explicitly forces forward collection.
 	if (fn.HasForwardSigs() && !w.ForceStack) || w.ForceForward {
-		if err := e.preEvalParens(fn.MaxForwardArgs, fn); err != nil {
+		if err := e.resolveForwardArgs(fn, w); err != nil {
 			return err
 		}
 	}
@@ -2233,7 +2369,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// pre-eval pass — the unified rule says Function values at the
 	// pointer dispatch with the same forward+stack matching as words.
 	if (fn.HasForwardSigs() && !w.ForceStack) || w.ForceForward {
-		if err := e.preEvalParens(fn.MaxForwardArgs, fn); err != nil {
+		if err := e.resolveForwardArgs(fn, w); err != nil {
 			return err
 		}
 	}
