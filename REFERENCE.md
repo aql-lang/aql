@@ -1138,17 +1138,28 @@ word — `size` subsumes it.
 |------|-------------|---------|
 | `get` / `.` | Lookup field/key, or index a list | `{x:1} . x` returns `1`; `[10,20,30] 0 get` returns `10` |
 | `getr` / `!.` | Strict lookup (errors if missing) | `{x:1} !. y` returns `error` |
-| `set` | Set a key in a Store / Object / Array — **mutates in place, returns nothing** | `context set foo 99` |
+| `set` | Set a key — in place on Store / Object / Array; copy-returning on Map | `{a:1} set b 2` returns `{a:1 b:2}` |
 | `context` | Push the current context Store | `context` |
 
-> **`set` is an in-place mutator and produces no value.** Both the
-> forward form (`b set flag 1`) and the stack form (`b 1 'flag' set`)
-> write into the receiver itself; read the store back to observe the
-> write. Because `set` returns nothing, `def r (b set k v)` binds
-> nothing — there is no "updated copy" to capture. For a
-> **copy-returning** single-field update on plain data, use
-> `StructUtil.setpath` (`{a:1,b:2} StructUtil.setpath "b" 3` returns
-> `{a:1, b:3}` and leaves the original untouched).
+> **`set` has two contracts, decided by the receiver's mutability.**
+> On the **mutable** containers — Store, Object instance, Array — both
+> the forward form (`b set flag 1`) and the stack form
+> (`b 1 'flag' set`) write into the receiver itself and produce **no
+> value**; read the container back to observe the write (so
+> `def r (b set k v)` binds nothing). On an **immutable Map**, `set`
+> returns a **new map** with the key bound and leaves the receiver
+> untouched — the same copy-returning contract as `push`, so calls
+> chain:
+>
+> ```
+> {a:1} set b 2                 # returns {a:1 b:2} — new map; the literal is unchanged
+> def k 'dyn'
+> {a:1} set (k) 2               # returns {a:1 dyn:2} — computed key, like get (k)
+> {} set a 1 set b 2            # returns {a:1 b:2} — incremental build chains
+> ```
+>
+> For deep-path updates on plain data, `StructUtil.setpath` remains
+> the tool (`{a:{b:1}} StructUtil.setpath "a/b" 2`).
 
 > **`get`/`.` return `none` for anything not found — silently.** A
 > missing map key (`{a:1} . b` returns `None`), an out-of-range list index

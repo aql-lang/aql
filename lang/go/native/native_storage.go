@@ -59,6 +59,22 @@ var storageNatives = []NativeFunc{
 				Returns:   []*Type{},
 				ReturnsFn: setStoreReturnsFn, BarrierPos: -1,
 			},
+
+			// Map (immutable — copy-returning). Unlike the three
+			// mutable containers above, a Map is a value: set returns
+			// a NEW map with the key bound and leaves the receiver
+			// untouched — the same contract as push / StructUtil.setpath.
+			{
+				Args:    []*Type{TString, TAny, TMap},
+				Handler: setMapHandler,
+				Returns: []*Type{TMap}, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TAtom, TAny, TMap},
+				QuoteArgs: map[int]bool{0: true},
+				Handler:   setMapHandler,
+				Returns:   []*Type{TMap}, BarrierPos: -1,
+			},
 		},
 	},
 	{
@@ -120,6 +136,28 @@ func setObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	}
 	oi.Fields.Set(key, args[1])
 	return nil, nil
+}
+
+// setMapHandler is the Map form of set. A Map stays immutable: the
+// handler returns a NEW map with the key bound (overwriting an existing
+// entry), leaving the receiver untouched. This is the language's rule
+// of thumb made concrete — mutable containers (Store / Object / Array)
+// mutate in place and return nothing; immutable values return the
+// updated copy. Keys are strings or atoms, computed keys via parens:
+// `m set (k) v`.
+func setMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	m, err := RequireConcreteMap(args[2], "set")
+	if err != nil {
+		return nil, err
+	}
+	key := StoreKey(args[0])
+	out := NewOrderedMap()
+	for _, k := range m.Keys() {
+		v, _ := m.Get(k)
+		out.Set(k, v)
+	}
+	out.Set(key, args[1])
+	return []Value{NewMap(out)}, nil
 }
 
 func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

@@ -170,21 +170,42 @@ func TestObjectMutationSharedReference(t *testing.T) {
 	}
 }
 
-// --- Node immutability: set must NOT work on Maps or Lists ---
+// --- Node immutability: set is copy-returning on Map, rejected on List ---
 
 func TestNodeMapIsImmutable(t *testing.T) {
-	// Attempting to set on a Map should fail (no matching signature)
+	// `set` on a Map is copy-returning: the result is a NEW map with
+	// the key bound, and the receiver Map is untouched. (The original
+	// contract — set rejects Map outright — was replaced 2026-06-09:
+	// Map keeps its immutability, but the obvious word now works, the
+	// way push does. In-place semantics remain exclusive to the
+	// mutable containers; see TestNodeListIsImmutable below.)
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
 	mapVal := NewMap(m)
 
-	err := runAQLError(t, r, []Value{
+	result := runAQL(t, r, []Value{
 		mapVal, NewWord("set"), NewWord("x"), NewInteger(99),
 	})
-	if err == nil {
-		t.Fatal("expected error: set should not work on Map (Nodes are immutable)")
+	if len(result) != 1 {
+		t.Fatalf("expected one result (the new map), got %d", len(result))
+	}
+	out, err := AsMap(result[0])
+	if err != nil || out == nil {
+		t.Fatalf("expected a map result, got %v", result[0])
+	}
+	v, ok := out.Get("x")
+	if !ok {
+		t.Fatal("new map is missing key x")
+	}
+	if n, _ := AsInteger(v); n != 99 {
+		t.Fatalf("new map: expected x=99, got %v", v)
+	}
+	// The receiver is NOT mutated.
+	rv, _ := m.Get("x")
+	if n, _ := AsInteger(rv); n != 1 {
+		t.Fatalf("receiver map was mutated: x=%v, want 1", rv)
 	}
 }
 

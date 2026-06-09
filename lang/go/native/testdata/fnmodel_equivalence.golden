@@ -403,9 +403,11 @@ WORD selector
 WORD set
   [Scalar/String Any Ideal/Store] barrier=3 +returnsfn
   [Scalar/String Any Ideal/Object] barrier=3
+  [Scalar/String Any Node/Map] barrier=3 returns=[Node/Map]
   [Scalar/Number/Integer Any Ideal/Array] barrier=3
   [Scalar/Atom Any Ideal/Store] barrier=3 quote={0} +returnsfn
   [Scalar/Atom Any Ideal/Object] barrier=3 quote={0}
+  [Scalar/Atom Any Node/Map] barrier=3 quote={0} returns=[Node/Map]
 WORD setpath
   [Ideal/Reach Any Any] barrier=3
   [Scalar/String Any Any] barrier=3

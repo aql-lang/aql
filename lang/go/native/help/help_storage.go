@@ -3,13 +3,19 @@ package help
 func init() {
 	register(&Entry{
 		Word:    "set",
-		Summary: "Store a value in a Store.",
-		Description: "Stores a value under a key in the given Store. " +
-			"The key is typically a string or atom. The Store is the context or any Store instance.",
+		Summary: "Set a key in a container (Store, Object, Array, or Map).",
+		Description: "Stores a value under a key. On the MUTABLE containers — a Store " +
+			"(copy-on-write context layer), an Object instance (in-place field write), or " +
+			"an Array (in-place indexed write) — set mutates the receiver and returns " +
+			"nothing. On an immutable MAP, set returns a NEW map with the key bound and " +
+			"leaves the receiver untouched (the same copy-returning contract as push), so " +
+			"calls chain: `{} set a 1 set b 2`. Keys are strings or atoms (integers for " +
+			"Array); wrap a variable in parens for a computed key: `m set (k) v`.",
 		// Canonical order: `receiver value key set`.
 		Examples: []string{
 			`ctx 42 "x" set         ;# store 42 under key "x" in a Store/context`,
 			`c 1 "count" set        ;# Object: set field count (c.count := 1)`,
+			`{a:1} set b 2          ;# => {a:1 b:2} — new map; {a:1} is unchanged`,
 		},
 	})
 

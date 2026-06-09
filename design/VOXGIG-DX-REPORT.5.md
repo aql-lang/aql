@@ -125,7 +125,7 @@ isolation but surprising in combination (`merge` depth, ~~`do` evaluation~~
 
 | Tag | Sev | Status | Issue |
 |-----|-----|--------|-------|
-| T9.1 | 🟡 | ❌ open | No way to build a map with **computed keys**: `set` on a `Map` literal still raises `no matching signature for set` (signatures cover Store/Object/Array only — re-confirmed on `8fdd4e1`). (Repro: `t9_1_map_set.aql`.) `refine Object` dynamic fields aren't enumerable. The trie code still has to use association-list workarounds. |
+| T9.1 | 🟡 | ✅ fixed (semantics) / 🟠 open (perf) | Maps with **computed keys** now work end-to-end: `{[k]: v}` literals evaluate the key, `m get (k)` reads, and `set` gained a **copy-returning Map form** — `{a:1} set (k) 2` returns a new map with the receiver untouched, and calls chain (`{} set a 1 set b 2`). Together with `StructUtil.items` for enumeration, the association-list workaround is retired. Residual: each set copies the map (O(n) per insert, like setpath), so bulk incremental construction still wants the P4 native persistent map (HAMT Level B). Side gap still open: `refine Object` *dynamic* fields remain non-enumerable (`StructUtil.items` returns `[]` for them). |
 | T9.2 | 🟡 | ✅ fixed | `filter` now accepts a `[…]` quotation like `each`/`fold`: `filter [2 gt] [1 2 3 4]` → `[3 4]` (element pushed first, no `{key,value}` wrapper; maps filter by value to a map; a non-Boolean body result is a **loud error**, not a silent drop). The Reach lens (`filter $.active xs`) and Function-callback forms remain. Spec rows in `lang/spec/higher-order.tsv` §5b. |
 | T9.6 | 🟡 | ❌ missing → `design/ERRORS.0.md` §2 | `raise` is still undefined; the word is now fully specified (message / code+message / spec-map forms, `Ideal/Error` result, caught by the existing `do … error […]`) in the error design doc. |
 | T9.7 | 🟡 | ❌ missing → `design/PARSING.0.md` | Still no in-memory parser. Note `Vm.run "1 add 2"` → `3` covers *evaluate from a string*; the parse-without-eval gap is now specified as `StructUtil.parse` (jsonic text → data, the `jsonify` complement) and `Vm.parse` (AQL source → quoted structure) in the parsing design doc. |
@@ -411,5 +411,8 @@ were moved out of this report into those documents):
 
 **Real engine work (unchanged):**
 
-- T9.1 computed map keys — properly retired by a native persistent map
-  (P4 / HAMT Level B).
+- T9.1 residual — the copy-returning Map `set` (landed 2026-06-09)
+  makes computed-key maps *work*; making bulk incremental construction
+  *fast* (O(n) copy per insert today) still wants the P4 native
+  persistent map (HAMT Level B), which would also subsume the
+  non-enumerable Object dynamic-fields gap.
