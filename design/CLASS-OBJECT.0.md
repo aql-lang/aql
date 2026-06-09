@@ -490,9 +490,26 @@ reify Point3 "…json…"   # hydrate from JSON text
   machinery as `StructUtil.parse` (`design/PARSING.0.md` §2); one
   implementation serves both.
 
-Open sub-questions (asked 2026-06-09): `$`-key escaping for user data,
-explicit-target vs `$class`-driven dispatch, strict vs tolerant
-unknown keys, and where `reify` lives (core vs StructUtil).
+Sub-questions resolved (2026-06-09, second pass):
+
+- **`$`-escaping: escape on write.** `jsonify` escapes user-data keys
+  beginning with `$` (→ `$$class`); `parse`/`reify` unescape. User
+  maps containing MongoDB-style `$`-keys round-trip, and a spoofed
+  `$class` inside user data is structurally impossible.
+- **`reify` target: explicit + union-bounded.** `reify Point3 data`
+  (explicit class; `$class` cross-checked if present) and
+  `reify Shape data` where `Shape` is a `tor` union — `$class`
+  selects the member, **but only from the union**. Auto-instantiation
+  is always bounded by a named type; there is no unbounded
+  registry-driven construction (the Java-deserialization lesson).
+  This is also the discriminated-union sweet spot: `const`-`kind`
+  fields + union-bounded reify give tagged-union hydration for free.
+- **Unknown keys: strict.** A key the schema doesn't declare is a
+  loud reify error, mirroring `make`'s unknown-field error and
+  sealing. Schema evolution is handled by adding *defaulted* fields —
+  old data lacking them still reifies.
+- **Home: `StructUtil.reify`**, paired with `jsonify` and sharing the
+  module's parse machinery (`design/PARSING.0.md` §2).
 
 ## 4. Interactions with open proposals
 
