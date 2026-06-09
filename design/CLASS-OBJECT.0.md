@@ -483,7 +483,66 @@ spec rows (sealed write, unknown-key `make`, removed-form error,
 enumeration coverage), fnmodel golden regeneration, `describe` /
 REFERENCE / TUTORIAL / README-upgrade-notes in the same change.
 
-## 6. Open questions
+## 5b. Phase A readiness review (2026-06-09)
+
+**Decided and implementable now:** the class/refine surface (paren-free,
+no aliases), flat eager-default instances, sealing, typed=required /
+valued=default, typed defaults via `(make Foo 1)`, predicate-field
+enforcement at make/set, coercions → loud type errors, `const`
+singleton members, `object`/`array` sugars, the dot-access guarantee,
+both `set` contracts, no prototypes, no constructor bodies.
+
+**Missed — settle before refactoring** (cheap to decide now, expensive
+mid-refactor):
+
+1. **Lattice placement of class types vs the Object container.**
+   Instances today are `Object/P` — *under* Object. If plain Object
+   becomes the open mutable container, do class instances remain
+   Object subtypes (every existing `TObject` sig — `set`, `get`,
+   enumeration — keeps matching them, but container-words-on-sealed-
+   instances needs a story), or do classes get their own branch
+   (clean separation; every instance-relevant sig needs revisiting)?
+   This decision touches more code than any other open item.
+2. **Record/Table reconciliation.** Structural record types exist
+   (`refine Record [{a:Integer}]`, `lang/spec/record.tsv`; the
+   generics design builds on them) plus Table types. Is `class` the
+   *nominal* sibling of *structural* Record (keep both, document the
+   choice), or does class subsume? Undecided and unmentioned until
+   now.
+3. **Instance equality and ordering** — verified gap: two
+   structurally identical instances of the *same* class are
+   `deq`-unequal today (`false`). Define: `eq` = identity; `deq` =
+   same class **and** structurally equal fields; `cmp` ordering for
+   instances (the compare cascade needs an instance rule).
+4. **Serialization contract** — verified gap: `StructUtil.jsonify`
+   on an instance emits the *debug string* (`"Object/P{x:1}"`), not
+   structured JSON. Define the shape (fields only vs a `$type`
+   discriminator), and the rehydration path — the §3d
+   discriminated-union payoff depends on this.
+5. **StructUtil words on instances** — `clone` (type-preserving?),
+   `setpath` (what does a copy-returning update of a *mutable*
+   instance mean — new instance of same class?), `walk`.
+6. **`describe`/canon rendering** for class types and instances
+   (promote open question §6.4 into Phase A — `describe Point3` must
+   show schema, parent, defaults, consts).
+7. Smaller, decide-in-passing: `undef` of a class with live
+   instances; a parallel-execution note for mutable containers
+   (Objects/instances have no Store-style COW isolation); spec rows
+   for module-exported classes (`make Mod.Point {…}`).
+
+**Spikes before committing:**
+
+- **Parser spike:** confirm `def Foo class {…}` paren-free genuinely
+  rides the `def name fn […]` nested-collection path (stated as
+  parser-known territory; verify before building on it).
+- **Migration inventory:** ~213 `refine Object` call sites measured
+  across specs/tests/docs (`object.tsv`, `user-types.tsv`,
+  `compare.tsv`, `storage.tsv`, `convert-ideal.tsv`, …) — mechanical
+  but broad; the spec rewrite is the bulk of Phase A's diff.
+
+**Not blocking** (explicitly deferred/parked): contract-construct
+naming + implementation (rides generics), `final`, Phase C column
+completion, constructible Store, class type parameters (generics).
 
 1. **List `set`** — proposed yes (§2.2) to complete the column rule;
    confirm before Phase C.
