@@ -299,28 +299,35 @@ are stack-only").
 
 ## ADR-005 — Container symmetry: Object is the mutable keyed core type; classes get the `class` word {#adr-005}
 
-**Status:** Accepted (implementation pending) · **Date:** 2026-06-09
+**Status:** Accepted (implementation pending) · **Date:** 2026-06-09 · **Revised:** 2026-06-09 (no aliases; paren-free forms; flat instances)
 
 ### Decision
 
-Four linked decisions, accepted together (design and phased plan in
-`design/CLASS-OBJECT.0.md`):
+Linked decisions, accepted together (design, surface code, and phased
+plan in `design/CLASS-OBJECT.0.md`):
 
 1. **The container vocabulary is a 2×2:** `List : Array :: Map :
    Object` — immutable value vs mutable container, indexed vs keyed.
    `Object` becomes a core, constructible (`make Object {}`),
    fully-enumerable, mutable keyed container. **Store remains a
    separate surface type** for scoped copy-on-write context semantics.
-2. **The class mechanism splits out under a `class` word:**
-   `def Box (class {v:0})`, subclassing `def Sub (class Box {…})`,
-   `make Box {…}` constructing instances. `refine Object` becomes a
-   deprecated alias; bare/predicate `refine` on scalars is untouched.
+2. **`class` defines, `refine` extends:** `def Foo class {…}` defines
+   a root class (paren-free, the same nested-collection shape as
+   `def name fn […]`); `def Bar refine Foo {…}` defines a subclass —
+   `refine` keeps its general "refine an existing type" meaning, and
+   bare/predicate `refine` on scalars is untouched. **No deprecated
+   aliases:** `refine Object {…}` is removed outright and raises a
+   loud error with a hint pointing at `class {…}`.
 3. **Class instances are sealed:** writing an undeclared field raises
    `[aql/sealed_field]` loudly at the `set`. Open dynamic data belongs
    on plain Object.
-4. **Prototype chains stay internal.** The engine's two prototype
-   walks (instance defaults, context scoping) are implementation
-   details; there is no surface `proto`, and no prototype *method*
+4. **Classes have no prototypes — just instances.** A class is a
+   schema (fields + defaults + parent class); `make` resolves the
+   full default set eagerly, **flat into the instance**. Instances
+   carry one flat field map — no `Prototype` link, no delegation at
+   `get` (the instance-side `buildBasePrototype`/`GetField` walk is
+   deleted; the context/Store scope chain is separate machinery and
+   unaffected). There is no surface `proto` and no prototype *method*
    dispatch — polymorphism stays with signature dispatch through the
    type lattice. One dispatch mechanism, the same principle ADR-004
    applies to argument collection.
@@ -344,11 +351,16 @@ the rule this symmetry completes.
 - `make Object {}` becomes valid (an empty open Object), retiring the
   B5 error-hint proposal in `design/ERRORS.0.md` §4 — resolved by
   design, not by message.
-- Sealing (phase 3) and the `refine Object` deprecation (phase 4) are
-  breaking; both carry README upgrade-note entries.
+- One clean break instead of a deprecation wave: Phase A lands
+  `class` + `refine`-subclassing + sealing + the `refine Object`
+  removal together, since every call site must be rewritten anyway.
+  README upgrade-note entry in the same change.
+- Flat eager-default instances make instance reads a single map
+  lookup, and the "dynamic fields invisible to enumeration" bug class
+  ceases to exist structurally.
 - Methods remain free functions over instances; any future implicit
   receiver must arrive as a signature parameter
   (`design/OBJECT-METHODS.0.md` Option A), never as prototype lookup.
 - Open questions tracked in the design doc: List copy-returning `set`
-  for column consistency, `make Array` constructibility, class
-  introspection rendering.
+  for column consistency, `make Array` constructibility, the
+  `convert` freeze/thaw pair, class introspection rendering.
