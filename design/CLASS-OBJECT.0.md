@@ -237,6 +237,45 @@ value, the sanctioned route is making Store constructible with an
 bolting a `proto` onto Object. Parked as open question §6.5; no use
 case demands it yet.
 
+### The full for/against (review follow-up, 2026-06-09)
+
+Steelman **for** JS-style protos on Object: shared defaults with
+live update (one prototype backs many instances; layered data like
+config cascades is delegation natively); near-zero implementation
+cost (the engine chain exists); minimal-kernel elegance (Self proved
+delegation can express classes/mixins as patterns); REPL dynamism;
+and AQL already teaches `get` via the JS analogy.
+
+**Against** (decisive): (1) delegation structurally reintroduces the
+reads-vs-enumeration split — the silent-lie bug class the voxgig
+reports paid for and flat instances eliminated; (2) **data delegation
+IS method delegation** — fns are first-class field values that
+auto-dispatch, so a fn on a proto reached via delegated `get` becomes
+prototype method dispatch through the back door; the one-mechanism
+principle cannot be defended once field delegation exists; (3) action
+at a distance under shared mutation (and captures share pointers) —
+JS's named vulnerability class *prototype pollution*, plus
+SmooshGate; (4) every structural word (`deq`, `jsonify`, `clone`,
+`merge`, `walk`, `size`) needs a chain policy, each a future DX row;
+(5) checker-hostile — proto-touched reads degrade to `dynamic(Any)`;
+JS made delegation fast only via hidden classes/shapes, machinery
+whose purpose is to pretend objects are flat; (6) redundant here —
+defaults/class schemas, layering/`merge`+`setpath`, scoping/Store,
+polymorphism/signature dispatch already own the use cases.
+
+**Community consensus (2025/26):** prototypes survived as a runtime
+substrate and lost as a programming model. ES6 classes won the
+surface; `__proto__` is Annex-B legacy and `setPrototypeOf` carries
+engine-deopt warnings; the JS community moved the *dictionary* use
+case to proto-free containers (`Object.create(null)`, then `Map`) —
+i.e. JS itself corrected toward what AQL's flat Object is from the
+start; no mainstream newer language (Swift/Rust/Go/Kotlin/Julia)
+adopted prototypes, with Lua metatables the closest survivor —
+promptly wrapped in class libraries; JS's own trajectory (class
+fields, `#private`, Records & Tuples) points away from proto-as-API.
+Academic summary: a good minimal kernel for *implementing* object
+systems, a poor application-level model.
+
 ## 4. Interactions with open proposals
 
 - **B5 (`make Object {}`)** — resolved by design in Phase B (becomes
