@@ -374,3 +374,59 @@ the rule this symmetry completes.
 - Open questions tracked in the design doc: List copy-returning `set`
   for column consistency, `make Array` constructibility, the
   `convert` freeze/thaw pair, class introspection rendering.
+
+---
+
+## ADR-006 — Traits: explicit, checkable contracts; never a dispatch mechanism {#adr-006}
+
+**Status:** Accepted (implementation scheduled with generics) · **Date:** 2026-06-09
+
+### Decision
+
+AQL adopts **traits** as named contracts over the existing open
+multimethods (design in `design/TRAITS.0.md`):
+
+1. `def Shape trait { area: fn [[Self] [Float]] … }` declares a
+   contract — full signatures with a `Self` placeholder, not bare
+   word names.
+2. Conformance is **explicit and checked immediately**:
+   `Circle implements Shape` verifies at the declaration that every
+   required overload exists with conforming types (Self substituted),
+   erroring loudly with the missing list (`[aql/trait_unsatisfied]`);
+   on success it registers membership. No Go-style implicit
+   structural conformance.
+3. A trait is a **lattice type** — the set of conforming types —
+   usable in signature slots, `is`, the `tor`/`tand`/`tnot` algebra,
+   and as the referent of generics' `T extends C` constraint
+   (`design/GENERICS.0.md`, which used `Comparable` as an example
+   constraint without defining it; traits are that definition).
+4. **Traits constrain and check; they never dispatch.** Calling a
+   required word on a trait-typed value is ordinary signature-matched
+   multimethod dispatch — one dispatch mechanism, the same principle
+   ADR-004 applies to argument collection and ADR-005 to prototypes.
+5. **No default method bodies, no state in v1** — pure contracts;
+   mixin defaults could be added compatibly later, not removed.
+
+### Context
+
+The dispatch half of typeclasses already exists: separate `def`s of
+one fn name merge into an open multimethod table, and the
+`tor`/`tand`/`tnot` algebra makes types-as-sets native. What was
+missing is the contract half — a named operation bundle, a
+completeness check at the site where conformance is intended (rather
+than `no matching signature` at a distant call site), and a type
+meaning "anything satisfying this" for parameter slots and generics
+constraints. `behave` proved the explicit-implementation pattern for
+the four kernel capabilities; traits generalise the *shape* of that
+idea to user-defined vocabularies without touching kernel hooks.
+
+### Consequences
+
+- Implementation rides the generics phase; until then the design
+  costs nothing and `extends` has a defined referent.
+- Check mode gains real types from trait-typed carriers (trait sigs
+  with Self substituted), instead of degrading to Any.
+- Open questions parked in the design doc: super-traits, orphan
+  declarations, blanket conformance (generics-dependent), and which
+  standard traits ship seeded (`Comparable`, …) with the eventual
+  behave bridge.
