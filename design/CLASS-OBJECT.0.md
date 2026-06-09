@@ -457,6 +457,43 @@ situation.
 `tor` practical for data modelling, with discriminants present in
 enumeration and serialization.
 
+## 3e. Serialization and `reify` (direction set 2026-06-09)
+
+```
+def Point3 class {x:0, y:0, z:0, kind:(const 'p3')}
+def p (make Point3 {x:1})
+
+StructUtil.jsonify p
+# returns pure JSON:
+# {"$class": "Point3", "x": 1, "y": 0, "z": 0, "kind": "p3"}
+
+reify Point3 {…}        # hydrate from an already-parsed Node (Map)
+reify Point3 "…json…"   # hydrate from JSON text
+```
+
+- Metadata rides the existing **`$`-prefix synthetic-key convention**
+  (`$name`/`$module` on ModuleExports). `$class` carries the class
+  name; nested instances each carry their own.
+- Output is **pure JSON** — no custom syntax. Non-JSON field scalars
+  (Atoms, dates, BigDecimal, …) serialize to their natural JSON
+  projections; the **schema drives recovery** at reify (the class
+  knows the field is an Atom/Date/BigDecimal and converts back) —
+  this is also how scalar-newtype fields round-trip without any
+  `$`-key per field.
+- `reify` ≈ parse (when given text) + the `make` path: defaults fill,
+  required fields enforced, predicate field types validated, sealing
+  applied. Hydration is *construction*, with construction's
+  guarantees.
+- Cycles among instances: `jsonify` errors loudly (pure JSON has no
+  references).
+- Synergy: `reify` from text needs in-memory JSON parsing — the same
+  machinery as `StructUtil.parse` (`design/PARSING.0.md` §2); one
+  implementation serves both.
+
+Open sub-questions (asked 2026-06-09): `$`-key escaping for user data,
+explicit-target vs `$class`-driven dispatch, strict vs tolerant
+unknown keys, and where `reify` lives (core vs StructUtil).
+
 ## 4. Interactions with open proposals
 
 - **B5 (`make Object {}`)** — resolved by design in Phase B (becomes
@@ -492,33 +529,36 @@ enforcement at make/set, coercions → loud type errors, `const`
 singleton members, `object`/`array` sugars, the dot-access guarantee,
 both `set` contracts, no prototypes, no constructor bodies.
 
-**Missed — settle before refactoring** (cheap to decide now, expensive
-mid-refactor):
+**Missed — now resolved (review, 2026-06-09 second pass):**
 
-1. **Lattice placement of class types vs the Object container.**
-   Instances today are `Object/P` — *under* Object. If plain Object
-   becomes the open mutable container, do class instances remain
-   Object subtypes (every existing `TObject` sig — `set`, `get`,
-   enumeration — keeps matching them, but container-words-on-sealed-
-   instances needs a story), or do classes get their own branch
-   (clean separation; every instance-relevant sig needs revisiting)?
-   This decision touches more code than any other open item.
-2. **Record/Table reconciliation.** Structural record types exist
-   (`refine Record [{a:Integer}]`, `lang/spec/record.tsv`; the
-   generics design builds on them) plus Table types. Is `class` the
-   *nominal* sibling of *structural* Record (keep both, document the
-   choice), or does class subsume? Undecided and unmentioned until
-   now.
-3. **Instance equality and ordering** — verified gap: two
-   structurally identical instances of the *same* class are
-   `deq`-unequal today (`false`). Define: `eq` = identity; `deq` =
-   same class **and** structurally equal fields; `cmp` ordering for
-   instances (the compare cascade needs an instance rule).
-4. **Serialization contract** — verified gap: `StructUtil.jsonify`
-   on an instance emits the *debug string* (`"Object/P{x:1}"`), not
-   structured JSON. Define the shape (fields only vs a `$type`
-   discriminator), and the rehydration path — the §3d
-   discriminated-union payoff depends on this.
+1. **Lattice placement — RESOLVED: classes live under `Ideal/Class`,
+   instances under their class.** `typeof p` → `Point3`,
+   `typeof Point3` → (parent class or) `Class`. Class instances are
+   **not** Object subtypes — a clean branch. Consequences: every
+   instance-relevant word (`get`/`set`/dot/`items`/`size`,
+   `StructUtil` words) gains Class-branch signatures rather than
+   inheriting Object's; `p is Object` becomes false (migration note);
+   `Class` joins the reserved builtin type names (verified
+   unclaimed). Recommendation pending no objection: instances get the
+   *full* container-read vocabulary (`get`, dot, `items`, `size`)
+   plus schema-checked `set` — sealing lives in the Class-branch
+   `set` sig, not in word absence.
+2. **Record/Table — RESOLVED: special fundamental types, not
+   classes.** `class` does not subsume them; structural `Record`
+   (and `Table`) remain their own type kinds (the generics design's
+   `refine Record` is untouched). User-facing guidance to write:
+   *Record for anonymous structural shapes, class for named nominal
+   entities.*
+3. **Instance equality/ordering — RESOLVED: needed, as proposed.**
+   `eq` = identity; `deq` = same class AND structurally equal fields
+   (verified gap today: same-class structural twins are deq-unequal);
+   `cmp` gains an instance rule in the compare cascade (class
+   identity first, then field-wise).
+4. **Serialization — RESOLVED in direction:** metadata under the
+   existing **`$`-prefix synthetic-key convention** (`$name`/`$module`
+   precedent on ModuleExports); output is **pure JSON**; round-trips
+   via a new **`reify`** word hydrating from JSON text *or*
+   already-parsed Nodes. Sketch in §3e; open sub-questions queued.
 5. **StructUtil words on instances** — `clone` (type-preserving?),
    `setpath` (what does a copy-returning update of a *mutable*
    instance mean — new instance of same class?), `walk`.
