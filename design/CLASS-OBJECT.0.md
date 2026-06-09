@@ -330,11 +330,27 @@ open data are explicit `merge`/`setpath`. (Prototypes — JS's
 defaults-for-objects mechanism — were just removed; defaults through
 another door would repeat the mistake.)
 
-**Semantics of a value default (verified):** in `{x:1}` the literal
-plays two roles — the **default** when the field is omitted, and a
-**type exemplar**: the field's type is `typeof(1)` = Integer (the
-type, not the value — `make Foo {x:2}` works, `make Foo {}` gives
-`x:1`). Enforcement today is *conversion to the exemplar's type*:
+**Semantics of a value default (verified):** the schema discriminates
+each entry on **whether its value is a bare type literal or a
+concrete value** — not via `typeof` (note `typeof String` is
+`Scalar`, the literal's *parent*; the schema never asks). In data
+context the parser turns type names into type-literal nodes, so:
+
+- `{x:String}` — the entry's value IS the String lattice node
+  (`Data == nil`, the engine's `IsTypeLiteral` test) → a **type
+  constraint**: field `x` is a required String (verified: accepts
+  `'hi'`, errors `missing field "x"` when omitted; user types like
+  `{x:Pos}` behave identically).
+- `{x:1}` — the entry's value is a **concrete value** → a
+  **default**, and the field's type is the value's own type
+  (`1`'s parent, Integer): `make Foo {x:2}` works, `make Foo {}`
+  gives `x:1`.
+
+Corner this implies: a field whose *data* should itself be a type
+literal (storing a type as a value) is inexpressible in a schema —
+a type-literal entry is always read as a constraint. (Verified
+oddity: `make Foo {x:Integer}` against `x:String` coerces to the
+string `'Integer'` — the same coercion softness, same fix.) Enforcement today is *conversion to the exemplar's type*:
 `{x:'hi'}` errors ("cannot convert"), but `{x:2.5}` silently
 **truncates to 2** — the same lossy-coercion softness as the
 `a:String`/`42` case, to become a loud type error. Also verified: a
