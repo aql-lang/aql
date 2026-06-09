@@ -538,11 +538,20 @@ Sub-questions resolved (2026-06-09, second pass):
 > `InstallType` roots class types at `Class/Foo`; `p is Object` →
 > false. Spec battery in `lang/spec/class.tsv` (defaults, required,
 > sealing, subclass chain, negatives). Remaining in Phase A:
-> `refine Object` removal sweep (~213 sites), predicate-field
-> enforcement at make/set, loud coercion errors, `const`, typed
+> `refine Object` removal sweep (~213 sites), `const`, typed
 > defaults via tagged `make`, instance equality (`deq`/`cmp`),
 > `$class` jsonify + `reify`, `describe` rendering, enumeration
 > (`items`/`size`) for instances.
+>
+> **Phase A increment 2 LANDED (2026-06-09):** strict field typing
+> at make AND set via `MakeClassFieldValue` — typed fields reject
+> non-conforming values loudly (no conversion), predicate fields run
+> their predicate (`{r:Radius}` rejects `-1.0` at make and at
+> `set`), defaulted fields constrain to the default's own type
+> (`{x:1}` rejects `'hi'` and `2.5` — the silent-coercion
+> softnesses closed for classes); registry threaded through
+> makeObject; make-with-prototype on a class errors. Spec rows in
+> class.tsv §6.
 | B | `object {…}` sugar + `make Object {…}` construct plain open Objects; full enumeration; dot-access spec battery for Object receivers; docs lead with the 2×2 table | no (turns an error into a value) |
 | C | Column completion: List copy-returning `set`; `array […]` sugar + `make Array […]`; dot-access battery for Array; `convert` freeze/thaw pair | no (additive) |
 
