@@ -116,6 +116,56 @@ Subtype propagation: if `Circle implements Shape`, a
 `def SmallCircle refine Circle {…}` is a Shape too — its instances
 satisfy every Circle-typed overload.
 
+### Where is the instance? (mechanics of methods-as-free-functions)
+
+There is no implicit receiver anywhere in this design — no `this`, no
+`self` binding. The instance is an **explicit, named parameter** of an
+ordinary `fn`, and "method-ness" lives entirely in the multimethod
+table:
+
+```
+def Shape concept { area: fn [[Self] [Float]] }     # name TBD, see §7a
+def Circle class {r: 0.0}
+
+def area fn [[c:Circle] [Float] [
+  c.r dup mul 3.14159 mul      # the instance is `c` — a normal named
+]]                             # param; fields read via dot / get
+
+def c (make Circle {r: 2.0})
+c area                         # pipeline form: instance flows from the
+                               # stack into the c parameter
+area c                         # forward form — same call, same binding
+```
+
+The contract construct never *holds* `area`; it only **names a
+required subset of the multimethod table and checks it** at
+`implements`. A contract-typed function works the same way — the
+instance is its parameter:
+
+```
+def total fn [[s:Shape] [Float] [(s area) add (s perimeter)]]
+```
+
+Inside `total`, `s` is the instance; `s area` is ordinary dispatch
+that lands on the Circle overload when `s` holds a Circle. Because
+dispatch considers *all* argument types (not a privileged receiver),
+binary operations are symmetric without ceremony:
+`cmp: fn [[Self Self] [Integer]]` dispatches on both operands —
+something receiver-based interfaces handle awkwardly.
+
+Precedent: CLOS, Dylan, and Julia all attach methods to **generic
+functions**, not classes — classes are data plus a tag. AQL's
+concatenative call syntax adds the trick that `c area` *reads* like a
+receiver method call while having no receiver semantics at all.
+
+The one real cost vs class-attached methods: a required word like
+`area` is global vocabulary, not namespaced per class. Signature
+dispatch separates same-named operations by type, and modules
+namespace words (`Decision.cond`) — but two domains wanting
+*conflicting* contracts for one name on one type share a single
+multimethod. (This is the same trade CLOS/Julia make; noted, not
+solved here.)
+
 ## 4. Static checking
 
 - A `Shape`-typed carrier flowing through check mode lets the
@@ -177,14 +227,26 @@ trait. The keyword pair already reads as interface vocabulary
 (`Circle implements Shape` is Java's exact pair; "implements a trait"
 is Rust's incongruity).
 
-**Recommendation: call them interfaces** (`def Shape interface {…}`,
-`Circle implements Shape`), and *reserve* `trait` for a possible
-future code-carrying mixin construct — keeping both words at their
-historical meanings, orthogonal: interface = contract, trait =
-implementation bundle. One caveat to note in docs if adopted: AQL
-conformance is explicit (Java-style), not structural-implicit
-(Go/TS-style), despite the shared word. Rename this file to
-`INTERFACES.0.md` when confirmed.
+**Review verdict (2026-06-09):** the construct is interface-*like*
+(pure contract, no bodies — so `trait` stays rejected and reserved
+for a possible future code-carrying mixin construct), but the word
+**interface** is rejected for its duck-typing connotation (Go/TS
+structural-implicit conformance is exactly what this design refuses),
+and **protocol** is rejected for its wire-format connotation.
+Candidate replacements (all verified unclaimed):
+
+| Word | For | Against |
+|------|-----|---------|
+| `concept` | C++20's name for *exactly this* — a named, checkable predicate over types whose primary job is constraining generics, which is also this design's primary consumer (`T extends Shape`); no duck-typing or wire baggage; verb pairs available: `models` (the C++ literature's own verb), `satisfies`, `implements` | abstract-sounding; C++ mindshare smaller than Java/Rust |
+| `contract` | says precisely what it does — a checked obligation; design-by-contract heritage matches the loud-completeness-check culture | legal flavour; Solidity gave it smart-contract baggage; 8 chars |
+| `role` | short; reads naturally with classes ("Circle plays the Shape role"); DCI heritage | Raku/Moose roles *carry code* (mixin-flavoured), inviting the same confusion trait has |
+| `ability` | plain-English capability reading ("types with the Shape ability") | adjacent to AQL's existing *capabilities* (runtime I/O feature flags, REFERENCE.md) — real confusion risk |
+
+**Leaning: `concept`**, with `models` or `satisfies` as the
+conformance verb (`Circle models Shape` / `Circle satisfies Shape`) —
+C++ precedent is the closest construct match in any mainstream
+language, and the generics-constraint use case is shared. Decision
+still open; rename this file when settled.
 
 ## 7b. Open questions
 
