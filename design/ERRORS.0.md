@@ -101,10 +101,16 @@ This is also the natural home for documenting the `set` contract that
 replaced VOXGIG B1: mutators like `set` return **nothing** by design,
 so `def r (b set k v)` is exactly the shape the new error catches.
 
-## 4. Proposal: actionable hint on `make Object {}` (VOXGIG B5)
+## 4. ~~Proposal: actionable hint on `make Object {}`~~ (VOXGIG B5) — superseded
 
-Current: `make: expected a constructed object type, got Object` —
-correct but unactionable. Proposal: route through `AqlErrorHint` with:
+> **Superseded 2026-06-09 by ADR-005 / `design/CLASS-OBJECT.0.md`.**
+> Under the container-symmetry decision, `make Object {}` becomes
+> *valid* — it constructs an empty, open, mutable Object (Phase 2 of
+> the class/object split). B5 is resolved by design rather than by a
+> better message; do **not** implement the hint below ahead of that.
+
+Original proposal (kept for the record): route through `AqlErrorHint`
+with:
 
 ```
 [aql/make_error]: make: expected a constructed object type, got Object
@@ -112,9 +118,6 @@ correct but unactionable. Proposal: route through `AqlErrorHint` with:
     (def Box (refine Object {v:0})  make Box {v:1}), or use a plain
     map literal {…} if you don't need a nominal type
 ```
-
-One-line change plus spec rows; the only design decision is the hint
-text, fixed here.
 
 ## 5. Proposal: loud runtime dispatch for namespace words (VOXGIG T1)
 
@@ -189,7 +192,7 @@ well-pointed"):
 
 | Item | Effort | Retires |
 |------|--------|---------|
-| §4 make-hint | trivial | B5 |
+| ~~§4 make-hint~~ | — | B5 — superseded: resolved by design under ADR-005 (`make Object {}` becomes valid) |
 | §2 `raise` | small | T9.6 (+ unblocks library-side validation everywhere) |
 | §3 void-def error | small-medium (collection-boundary check) | B3 |
 | §6.1 sibling-group source order | medium (engine) | B2a |

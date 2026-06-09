@@ -294,3 +294,61 @@ are stack-only").
   stack-only word needs the same justification weight as a new
   init-time panic (lang/go/CLAUDE.md "Panic Prevention") — i.e. its
   semantics must be *about* the stack itself.
+
+---
+
+## ADR-005 — Container symmetry: Object is the mutable keyed core type; classes get the `class` word {#adr-005}
+
+**Status:** Accepted (implementation pending) · **Date:** 2026-06-09
+
+### Decision
+
+Four linked decisions, accepted together (design and phased plan in
+`design/CLASS-OBJECT.0.md`):
+
+1. **The container vocabulary is a 2×2:** `List : Array :: Map :
+   Object` — immutable value vs mutable container, indexed vs keyed.
+   `Object` becomes a core, constructible (`make Object {}`),
+   fully-enumerable, mutable keyed container. **Store remains a
+   separate surface type** for scoped copy-on-write context semantics.
+2. **The class mechanism splits out under a `class` word:**
+   `def Box (class {v:0})`, subclassing `def Sub (class Box {…})`,
+   `make Box {…}` constructing instances. `refine Object` becomes a
+   deprecated alias; bare/predicate `refine` on scalars is untouched.
+3. **Class instances are sealed:** writing an undeclared field raises
+   `[aql/sealed_field]` loudly at the `set`. Open dynamic data belongs
+   on plain Object.
+4. **Prototype chains stay internal.** The engine's two prototype
+   walks (instance defaults, context scoping) are implementation
+   details; there is no surface `proto`, and no prototype *method*
+   dispatch — polymorphism stays with signature dispatch through the
+   type lattice. One dispatch mechanism, the same principle ADR-004
+   applies to argument collection.
+
+### Context
+
+`Object` was playing three roles at once: class machinery
+(`refine Object` + `make` + nominal dispatch), an accidental mutable
+bag (undeclared dynamic fields that `set` accepts but enumeration
+cannot see), and — internally — the Store/context scope chain. The
+voxgig DX reports hit the seams: `make Object {}` rejected with an
+unactionable error (B5), computed-key maps forced into workarounds
+(T9.1), dynamic fields enumerating as `[]`. The 2026-06-09
+copy-returning `set` on Map fixed the immutable column and made the
+mutability rule explicit — *mutable containers mutate in place and
+return nothing; immutable values return the updated copy* — which is
+the rule this symmetry completes.
+
+### Consequences
+
+- `make Object {}` becomes valid (an empty open Object), retiring the
+  B5 error-hint proposal in `design/ERRORS.0.md` §4 — resolved by
+  design, not by message.
+- Sealing (phase 3) and the `refine Object` deprecation (phase 4) are
+  breaking; both carry README upgrade-note entries.
+- Methods remain free functions over instances; any future implicit
+  receiver must arrive as a signature parameter
+  (`design/OBJECT-METHODS.0.md` Option A), never as prototype lookup.
+- Open questions tracked in the design doc: List copy-returning `set`
+  for column consistency, `make Array` constructibility, class
+  introspection rendering.
