@@ -13,6 +13,31 @@ The implementation ultimately became a hybrid: AQL builders + Go
 evaluators. This report explains why, documents the issues encountered,
 and suggests language improvements.
 
+## Status (re-verified 2026-06-09, main `8fdd4e1`)
+
+All six issues were re-verified with minimal repros against a fresh
+build of `cmd/go/bin/aql`. **Every issue in this report is now either
+fixed or addressed:**
+
+| Issue | Status |
+|-------|--------|
+| 1. List auto-eval strips def refs | ✅ fixed — `[c1 c2]` as an fn arg now contains the evaluated values (regression: `lang/go/native/list_eval_test.go`) |
+| 2. Def leakage from fn bodies | ✅ fixed — body-local defs are cleaned up on return (regression: `lang/go/native/def_leakage_test.go`) |
+| 3. Arg ordering confusing | 📖 addressed by docs — lang/go/CLAUDE.md "Argument Ordering (CRITICAL)" (§1.4 unified sig-order rule); `aql describe <word>` prints the word's precedence plus its equivalence forms; REFERENCE.md documents the `/s` / `/f` / `/N` arity modifiers |
+| 4. Registered words shadow map keys | ✅ fixed — dot access / bare `get` keys are literal by design (JS `.key` semantics, REFERENCE.md "Maps and access"); `m.trace`, `m.make`, `m.at` all do key lookup (regression: `lang/go/native/dot_shadow_test.go`) |
+| 5. No list-building word | ✅ moot — with Issue 1 fixed, `[c1 c2]` *is* the list-building idiom; no `collect` word was needed |
+| 6. FnDef no forward collection | ✅ fixed — module words forward-collect like builtins (`MathUtil.min 3 7` → `3`), via the structure-first lazy forward-argument resolution (`6687638`) |
+
+Two collateral notes for anyone replaying the examples below: module
+namespaces are now capital-initial (`decision.cond` → `Decision.cond`),
+and bare atoms in value position must be quoted (`quote age` / `'age'`)
+— a bare `age` is an undefined word.
+
+With Issues 1, 2, 5, and 6 resolved, the constraints that forced the
+hybrid architecture are gone: a pure-AQL decision engine is now
+feasible. The body of the report below is preserved as written for the
+historical record.
+
 ---
 
 ## What worked well
@@ -65,6 +90,9 @@ condition evaluation. The `if` word with its three-arg form
 
 ### Issue 1: List auto-evaluation strips def references (critical)
 
+> **Status 2026-06-09: ✅ fixed.** `[c1 c2]` passed as an fn argument
+> now contains the evaluated maps, verified by repro.
+
 **Severity:** Critical — blocks compositional programming patterns.
 
 The most impactful problem. When a list literal like `[c1 c2]` is
@@ -100,6 +128,9 @@ list evaluation: `eval [c1 c2]` → `[map1, map2]`.
 
 ### Issue 2: Def leakage from `fn` bodies via CallAQL (critical)
 
+> **Status 2026-06-09: ✅ fixed.** A body-local def is undefined after
+> the fn returns (`undefined word` on reference), verified by repro.
+
 **Severity:** Critical — causes silent, hard-to-diagnose failures.
 
 Local `def` bindings inside an fn body persist in the registry's
@@ -134,6 +165,12 @@ it already cleans up named parameters via `uninstallDef`).
 
 ### Issue 3: Arg ordering is confusing across contexts (moderate)
 
+> **Status 2026-06-09: 📖 addressed by docs.** The §1.4 unified
+> sig-order rule is documented in lang/go/CLAUDE.md ("Argument
+> Ordering (CRITICAL)"), `aql describe <word>` prints each word's
+> precedence and equivalence forms, and REFERENCE.md covers the
+> `/s` / `/f` / `/N` arity modifiers.
+
 **Severity:** Moderate — causes development friction and bugs.
 
 In prefix matching, `args[0]` is the top of stack (nearest to the
@@ -167,6 +204,11 @@ stack position.
 
 ### Issue 4: Registered words shadow map keys in dot notation (moderate)
 
+> **Status 2026-06-09: ✅ fixed.** Dot access (and a bare word after
+> `get`) is a *literal* key by design — JS `.key` semantics — so
+> `m.trace`, `m.make`, `m.at` all do key lookup regardless of the word
+> namespace. Verified by repro; documented in REFERENCE.md.
+
 **Severity:** Moderate — forces awkward naming choices.
 
 Any registered word name becomes unusable as a module export key
@@ -197,6 +239,10 @@ access always work as a key lookup regardless of the word namespace.
 
 ### Issue 5: No way to build a list of evaluated values (moderate)
 
+> **Status 2026-06-09: ✅ moot.** With Issue 1 fixed, `[c1 c2]`
+> evaluates its elements, so the list literal *is* the collection
+> idiom. No `collect` word exists (or is needed for this case).
+
 **Severity:** Moderate — blocks common data construction patterns.
 
 There is no ergonomic way to create a list containing the evaluated
@@ -221,6 +267,10 @@ Or extend `stack-collect` to return a proper list value.
 
 
 ### Issue 6: FnDef values don't support forward argument collection (design limitation)
+
+> **Status 2026-06-09: ✅ fixed.** Module words forward-collect like
+> builtins: `MathUtil.min 3 7` returns `3`. Landed with the
+> structure-first lazy forward-argument resolution (`6687638`).
 
 **Severity:** Design limitation — two calling conventions in one language.
 
@@ -282,16 +332,18 @@ lines of AQL. The Go code is more verbose but works reliably.
 
 ## Summary of suggested improvements
 
-| Priority | Issue | Fix |
-|----------|-------|-----|
-| **P0** | Def leakage from fn bodies | CallAQL should clean up body-local defs on return |
-| **P0** | List auto-eval strips def refs | Resolve word elements when list consumed as fn arg |
-| **P1** | Dot notation shadowed by registered words | Emit string keys at the dot-to-get conversion site: `x.y` → `x get "y"` |
-| **P1** | No list-building word | Add `N collect` to gather stack values into a list |
-| **P2** | FnDef no forward collection | Extend `execFnDefLiteral` with forward attempt |
-| **P2** | Arg ordering confusing | Document prefix/forward/FnDef arg ordering for module authors |
+| Priority | Issue | Fix | Status (2026-06-09) |
+|----------|-------|-----|---------------------|
+| **P0** | Def leakage from fn bodies | CallAQL should clean up body-local defs on return | ✅ fixed |
+| **P0** | List auto-eval strips def refs | Resolve word elements when list consumed as fn arg | ✅ fixed |
+| **P1** | Dot notation shadowed by registered words | Emit string keys at the dot-to-get conversion site: `x.y` → `x get "y"` | ✅ fixed (literal-key semantics) |
+| **P1** | No list-building word | Add `N collect` to gather stack values into a list | ✅ moot (list literals evaluate) |
+| **P2** | FnDef no forward collection | Extend `execFnDefLiteral` with forward attempt | ✅ fixed (lazy forward resolution) |
+| **P2** | Arg ordering confusing | Document prefix/forward/FnDef arg ordering for module authors | 📖 documented |
 
-The P0 issues (def leakage and list evaluation) are the primary
-blockers for writing non-trivial AQL libraries. Fixing them would
-make the decision module — and similar data-processing libraries —
-implementable entirely in AQL.
+The P0 issues (def leakage and list evaluation) were the primary
+blockers for writing non-trivial AQL libraries. Both are now fixed,
+which makes the decision module — and similar data-processing
+libraries — implementable entirely in AQL. Rewriting the Go
+evaluators (`eval-cond`, `eval-pred`, `eval-table`, `eval-tree`,
+`decide`) in pure AQL is now follow-up work rather than blocked work.

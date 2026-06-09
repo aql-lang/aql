@@ -185,7 +185,7 @@ they describe or recommend is in the codebase.
 | BATTERIES-INCLUDED-REPORT.5.md | Standard-library coverage analysis; partial uptake. |
 | CARRIER-STATIC-TYPECHECK-REPORT.10.md | Carrier-based static type checking — implemented. |
 | TYPE-SYSTEM-REVIEW.7.md | Algebraic + dependent type review; majority resolved. |
-| AQL-DX-REPORT.5.md | DX feedback from `aql:decision`; several issues open. |
+| AQL-DX-REPORT.5.md | DX feedback from `aql:decision`; all issues resolved or documented (re-verified 2026-06-09). |
 | jsonic-matcher-rule-access-report.10.md | Jsonic LexMatcher rule access; landed in jsonic v0.1.6. |
 | aql-boolean-operations-report.10.md | Boolean ops review; ops are implemented. |
 | aql-bytecode-outline.0.md | Bytecode AOT compilation outline. |
@@ -218,16 +218,17 @@ parity with the codebase, not pending work.
 
 ## Open Design Issues
 
-From AQL-DX-REPORT.5.md (building `aql:decision`):
+From AQL-DX-REPORT.5.md (building `aql:decision`) — re-verified
+2026-06-09 against `8fdd4e1`; all six are now resolved or documented:
 
 | Priority | Issue | Status |
 |----------|-------|--------|
-| P0 | List auto-eval strips def references, blocking composition | Open |
-| P0 | Def leakage from fn bodies via CallAQL | Partially addressed (undefined word errors help) |
-| P1 | Arg ordering confusing across prefix/forward/FnDef contexts | Open |
-| P1 | Registered words shadow map keys in dot notation | Open |
-| P2 | No ergonomic list-building word | Open |
-| P2 | FnDef words cannot forward-collect like builtins | Open |
+| P0 | List auto-eval strips def references, blocking composition | Fixed (`lang/go/native/list_eval_test.go`) |
+| P0 | Def leakage from fn bodies via CallAQL | Fixed (`lang/go/native/def_leakage_test.go`) |
+| P1 | Arg ordering confusing across prefix/forward/FnDef contexts | Documented (lang/go/CLAUDE.md §Argument Ordering; `aql describe`; `/s` `/f` `/N` modifiers) |
+| P1 | Registered words shadow map keys in dot notation | Fixed (literal-key dot access; `lang/go/native/dot_shadow_test.go`) |
+| P2 | No ergonomic list-building word | Moot (list literals evaluate def refs since the Issue-1 fix) |
+| P2 | FnDef words cannot forward-collect like builtins | Fixed (structure-first lazy forward-argument resolution) |
 
 
 ## Summary
