@@ -646,6 +646,21 @@ aql check -e '1 2 add 3 mul'
 Group the operands you mean to combine — `(1 2 add) 3 mul` returns `9`
 and the advisory clears. Advisories never fail the check (only errors do).
 
+The checker also catches the one silent failure mode the runtime still
+permits: a **namespace word whose arguments match no signature**. At
+runtime the function value is left on the stack as data (it might be a
+deliberate higher-order use); `aql check` flags it as an **error**:
+
+```bash
+aql check script.aql
+# check: [error] uncalled_function: call to 'my-get' matched no
+#   signature and was left on the stack as data (arguments: Map, String)
+```
+
+This is almost always an argument-order or arity bug. Because it is
+silent at runtime, **run `aql check` as a matter of course** — in CI,
+and before committing — the same way you'd run a linter.
+
 To both type-check and then run:
 
 ```bash
@@ -846,6 +861,48 @@ Test.fail-count end print             # returns 0
 
 A property body may `import` a native module (e.g. `"aql:math-util" import`)
 and use it across every run.
+
+
+## Write unit tests and declarative specs
+
+For example-based tests, `aql:test` provides `Test.test` (run a body,
+catch assertion failures) and the `Assert` namespace. A failing case is
+reported **loudly and by name**, and later cases still run:
+
+<!-- aql-test: skip -->
+```
+"aql:test" import end
+[ 1 1 Assert.equal ] "identity holds" Test.test end
+[ 1 2 Assert.equal ] "this one fails" Test.test end
+# FAIL this one fails — [aql/assertion_failure]: Assert.equal: expected 2, got 1
+0 Test.fail-count end Assert.equal end       # gate: no failures allowed
+```
+
+For table-driven suites, the **declarative spec form** separates the
+cases (data) from the runner. A spec names a subject (the word under
+test, passed as `subject/q`) and a list of `{name in out}` cases;
+`Test.run-spec` invokes the subject on each case's `in` list and
+checks the result against `out`:
+
+<!-- aql-test: skip -->
+```
+"aql:test" import end
+def double fn [[n:Integer] [Integer] [n 2 mul]] end
+
+def s (Test.spec [
+  {name: "d3", in: [3], out: 6}
+  {name: "d0", in: [0], out: 0}
+] double/q "doubling") end
+
+s Test.run-spec end
+Test.summary end print                # returns {total:2 passed:2 failed:0}
+```
+
+`Test.spec-with-subs` nests sub-specs for grouped suites, and
+`Test.describe "group" [ … ]` prefixes every failure inside the body
+with the group path. Prefer the spec form whenever the cases are
+naturally a table — the data reads at a glance and new cases are
+one-line edits.
 
 
 ## Store secrets in the vault

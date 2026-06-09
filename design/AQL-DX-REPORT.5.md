@@ -23,7 +23,7 @@ fixed or addressed:**
 |-------|--------|
 | 1. List auto-eval strips def refs | ✅ fixed — `[c1 c2]` as an fn arg now contains the evaluated values (regression: `lang/go/native/list_eval_test.go`) |
 | 2. Def leakage from fn bodies | ✅ fixed — body-local defs are cleaned up on return (regression: `lang/go/native/def_leakage_test.go`) |
-| 3. Arg ordering confusing | 📖 addressed by docs — lang/go/CLAUDE.md "Argument Ordering (CRITICAL)" (§1.4 unified sig-order rule); `aql describe <word>` prints the word's precedence plus its equivalence forms; REFERENCE.md documents the `/s` / `/f` / `/N` arity modifiers |
+| 3. Arg ordering confusing | 📖 addressed by docs — lang/go/CLAUDE.md "Argument Ordering (CRITICAL)" (§1.4 unified sig-order rule); `aql describe <word>` prints the word's precedence plus its equivalence forms; REFERENCE.md documents the `/s` / `/f` / `/N` arity modifiers; ADR-004 pins *forward by default* as the cultural rule, with a user-facing distillation in EXPLANATION.md "Forward by default — a cultural rule" |
 | 4. Registered words shadow map keys | ✅ fixed — dot access / bare `get` keys are literal by design (JS `.key` semantics, REFERENCE.md "Maps and access"); `m.trace`, `m.make`, `m.at` all do key lookup (regression: `lang/go/native/dot_shadow_test.go`) |
 | 5. No list-building word | ✅ moot — with Issue 1 fixed, `[c1 c2]` *is* the list-building idiom; no `collect` word was needed |
 | 6. FnDef no forward collection | ✅ fixed — module words forward-collect like builtins (`MathUtil.min 3 7` → `3`), via the structure-first lazy forward-argument resolution (`6687638`) |
@@ -169,7 +169,9 @@ it already cleans up named parameters via `uninstallDef`).
 > sig-order rule is documented in lang/go/CLAUDE.md ("Argument
 > Ordering (CRITICAL)"), `aql describe <word>` prints each word's
 > precedence and equivalence forms, and REFERENCE.md covers the
-> `/s` / `/f` / `/N` arity modifiers.
+> `/s` / `/f` / `/N` arity modifiers. ADR-004 pins *forward by
+> default* as the language cultural rule; EXPLANATION.md "Forward by
+> default — a cultural rule" is the user-facing distillation.
 
 **Severity:** Moderate — causes development friction and bugs.
 

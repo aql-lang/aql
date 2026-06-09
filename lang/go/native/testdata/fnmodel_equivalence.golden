@@ -138,6 +138,7 @@ WORD fetch
 WORD filter
   [Type/Function Any] barrier=2
   [Ideal/Reach Any] barrier=2
+  [Node/List Any] barrier=2 noeval={0}
 WORD flatten
   [Scalar/Number/Integer Node/List] barrier=2
   [Node/List] barrier=1

@@ -44,6 +44,8 @@ func init() {
 		"where":     "Indices of the truthy elements.",
 		"grade":     "Indices that would sort the list ascending.",
 		"at":        "Select data elements by an index list.",
+		"insert-at": "New list with an element inserted at an index (insert-at idx elem list).",
+		"remove-at": "New list with the element at an index removed (remove-at idx list).",
 		"sortby":    "Reorder a list by a parallel list of sort keys.",
 		"replicate": "Repeat each element by its count.",
 		"expand":    "Spread data into true slots, 0 into false slots.",

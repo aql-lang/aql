@@ -1,0 +1,197 @@
+# Error Design — Loud Failures, User-Raised Errors, and Diagnosis
+
+Status: proposals (nothing in this document is implemented unless
+marked otherwise). Source material: the error-related items from the
+two DX field reports (`design/VOXGIG-DX-REPORT.5.md` tags T9.6, B3,
+B5, T1, B2a, T9.4 and `design/AQL-DX-REPORT.5.md`), consolidated here
+so the reports can track *status* while this document owns the
+*designs*. Decisions here must respect ADR-004 (all words forward by
+default) — none of these proposals changes a word's collection mode.
+
+## 1. Current state (for orientation)
+
+- **Errors are values** of type `Ideal/Error` carrying a `code` atom
+  and a `message` string (REFERENCE.md "Error codes"). Native handlers
+  construct them via `r.AqlError(code, detail, word)` /
+  `r.AqlErrorHint(...)`.
+- **Catching:** `do [body] error [handler]` — the handler list runs
+  with the Error value pushed first. An uncaught error aborts the run
+  with the formatted `[aql/<code>]` report, source span, and (where
+  applicable) a hint line.
+- **There is no user-facing constructor or raiser.** `make Error {…}`
+  is rejected ("unsupported target type Error"), and no `raise` /
+  `throw` word exists. AQL code that wants to fail must contrive a
+  native error (e.g. divide by zero) — the gap both voxgig libraries
+  hit (T9.6).
+- **Static diagnosis** (`aql check`) already catches several silent
+  shapes: `uncalled_function` (a call that matched no signature and
+  was left on the stack as data — errors), `forward_strands_operand`
+  (forward collection stranding an operand — advisory),
+  dead-overload detection, and static index/size checking
+  (`index_out_of_range`).
+
+The cultural target, set by both DX reports: **failures must be loud.**
+Every silent wrong-result mechanism that survives below is a costlier
+bug than any loud error.
+
+## 2. Proposal: `raise` (DX report T9.6)
+
+A core word that constructs an `Ideal/Error` and returns it as the
+in-flight error, so it aborts unless caught by `do … error […]`.
+
+```
+raise "boom"                          # code = user_error, message = "boom"
+raise bad_input/q "expected a list"   # code = bad_input, message follows
+raise {code: bad_input, message: "expected a list", data: {got: 42}}
+```
+
+Signatures (forward by default per ADR-004):
+
+| Form | Sig | Behaviour |
+|------|-----|-----------|
+| `raise <message>` | `[String]` | code `user_error`, message as given |
+| `raise <code> <message>` | `[Atom/q String]` | explicit code atom (the `/q` position lets a bare word name the code) |
+| `raise <spec>` | `[Map]` | `code` + `message` keys required; remaining keys preserved on the Error value for the handler |
+
+Design points:
+
+- The raised value is the same `Ideal/Error` the runtime produces, so
+  one `error [handler]` form catches both native and user errors, and
+  `.code` dispatch works uniformly.
+- `raise` *returns* the error condition the way native handlers do
+  (Go-side `error` return), so the engine's existing abort/catch
+  machinery applies unchanged — no new control-flow primitive.
+- A `data` field (any map keys beyond code/message) rides along for
+  programmatic handlers; the formatter prints code + message only.
+- Name: `raise` (not `throw`) — it raises a condition, there is no
+  stack-unwinding exception object distinct from the error value.
+- Companion (optional, later): `make Error {…}` could be allowed to
+  construct an Error *as data* without raising it; `raise` would then
+  also accept `[Error]`. Not required for the T9.6 use cases.
+
+## 3. Proposal: `def` of a void expression is an error (VOXGIG B3)
+
+Today `def _ (void-call)` — where the call's return list is `[]` —
+leaves `def` with no value; the def silently fails to bind, the
+residue mis-dispatches the *next* word, and the reported error points
+at an innocent line ("no matching signature for print"). This is the
+classic blame-shift failure.
+
+Proposal: when `def name <expr>` collects its value position and the
+expression produces **no value**, raise immediately at the `def`:
+
+```
+[aql/def_error]: def: expression produced no value to bind to 'name'
+  = hint: the called word returns nothing — call it without def,
+    or give it a return value
+```
+
+Implementation sketch: `def`'s handler already knows its collected
+arg count; the failing shape is "paren group evaluated to zero
+values". The check is at the collection boundary in `def`'s sig
+match — when the value slot would have to be filled by nothing,
+that is *this* error rather than a generic signature mismatch on a
+later word. The same guard generalises to any word whose forward
+paren-group argument evaluates to zero values while a sig position
+still needs filling: report "argument expression produced no value
+for <word>" at the *producing* call site, not wherever the starved
+stack next mis-dispatches.
+
+This is also the natural home for documenting the `set` contract that
+replaced VOXGIG B1: mutators like `set` return **nothing** by design,
+so `def r (b set k v)` is exactly the shape the new error catches.
+
+## 4. Proposal: actionable hint on `make Object {}` (VOXGIG B5)
+
+Current: `make: expected a constructed object type, got Object` —
+correct but unactionable. Proposal: route through `AqlErrorHint` with:
+
+```
+[aql/make_error]: make: expected a constructed object type, got Object
+  = hint: Object itself cannot be made — define a subtype first
+    (def Box (refine Object {v:0})  make Box {v:1}), or use a plain
+    map literal {…} if you don't need a nominal type
+```
+
+One-line change plus spec rows; the only design decision is the hint
+text, fixed here.
+
+## 5. Proposal: loud runtime dispatch for namespace words (VOXGIG T1)
+
+The remaining 🔴 silent failure. When a namespace word's args don't
+match any signature, `execFnDefLiteral` leaves the Function value on
+the stack as data — by design, because a Function value must be able
+to sit on the stack for higher-order use (`filter f xs`, `def g f`).
+`aql check` now reports this shape as an `uncalled_function` error,
+but at runtime it is still silent.
+
+Options considered:
+
+1. **Error whenever a named FnDef fails to match with args present.**
+   Strawman — breaks legitimate "push the function, args happen to be
+   nearby" data uses; indistinguishable from intent at that point.
+2. **Defer the judgement to end-of-run:** if a Function value placed
+   by a failed dispatch is still on the stack *unconsumed* when `Run`
+   drains, raise `uncalled_function` at runtime with the original
+   source span. The higher-order cases consume the value, so they
+   never trigger; the bug cases (nothing consumes it) become loud at
+   the only point we can be sure no consumer exists. **Recommended.**
+3. **Warning channel** (print to stderr, continue). Weaker form of 2;
+   keeps exit code 0, which test harnesses then miss.
+
+Option 2 mirrors how the engine already treats *other* end-of-run
+residue (auto-evaluation of unconsumed lists) and exactly matches the
+check-mode diagnostic, so check and runtime would name the same bug
+the same way. Cost: tracking a "placed by failed dispatch" bit on the
+stack entry until consumption.
+
+## 6. Chained forward calls — evaluation order, not word flips (VOXGIG B2a, T9.4)
+
+Two related residual issues live at the forward-collection edges:
+
+- **B2a:** `(1 add 1) print (2 add 2) print` prints `4` then `2` —
+  un-separated chained forward calls evaluate right-to-left.
+- **T9.4:** the mixed form `(x 3 gt) if [a] [b]` binds differently
+  from the all-forward `if (x 3 gt) [a] [b]` and silently takes the
+  wrong branch.
+
+Per **ADR-004** the rejected fix is flipping `print` (or `if`) to
+stack-first — no per-word cultural exceptions. The sanctioned
+directions, in preference order:
+
+1. **Fix the evaluation order of sibling forward groups** so that
+   `(…) w1 (…) w2` evaluates and dispatches in source order. This is
+   an engine-semantics change inside the existing model (the
+   structure-first lazy-resolution rework is the natural place); it
+   fixes B2a for every word at once, not just `print`.
+2. **`check` advisories for the surviving mixed shapes**: a call that
+   takes one argument from a *preceding* paren group while also
+   forward-collecting (the T9.4 shape) gets a
+   `mixed_form_call` advisory recommending the all-forward form or
+   explicit grouping. Builds directly on `forward_strands_operand`.
+3. **Docs**: the all-forward form is already the documented canonical
+   form (ADR-004, CLAUDE.md "prefer FORWARD form"); REFERENCE's
+   gotcha for B2a is statement separation (`end` / `;`) or `print/s`
+   at the call site.
+
+## 7. Error-message quality bar
+
+Every loud failure added above must meet the bar the DX reports
+praised in existing errors ("where they fire, they are specific and
+well-pointed"):
+
+- the span points at the **causing** site, not the downstream victim
+  (the whole point of §3);
+- a `= hint:` line says what to *do*, not just what went wrong;
+- the code is stable and dispatchable (`.code` in `error [handler]`).
+
+## 8. Suggested order of work
+
+| Item | Effort | Retires |
+|------|--------|---------|
+| §4 make-hint | trivial | B5 |
+| §2 `raise` | small | T9.6 (+ unblocks library-side validation everywhere) |
+| §3 void-def error | small-medium (collection-boundary check) | B3 |
+| §6.1 sibling-group source order | medium (engine) | B2a |
+| §6.2 `mixed_form_call` advisory | medium (checker) | T9.4 (diagnosed) |
+| §5 end-of-run uncalled-function | medium (engine bookkeeping) | T1 runtime |

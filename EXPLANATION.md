@@ -112,6 +112,29 @@ like `upper`/`lower`/`split` are not built in — they live in
 `aql:string-util`; see the [Reference](REFERENCE.md). Only words such
 as `add`, `sub`, `mul`, `not`, `dup` are available without an import.)
 
+### Forward by default — a cultural rule
+
+Forward collection is not just available, it is the **language
+default**, pinned as [ADR-004](ADR.md#adr-004): every word — core,
+module, and your own `fn` definitions — collects forward unless its
+semantics are intrinsically about the stack. The only standing
+exception is the traditional Forth stack vocabulary (`dup`, `swap`,
+`drop`, `over`, `rot`, …), which is stack-only because manipulating
+the stack *is* what those words mean.
+
+Two practical consequences:
+
+- **Write the forward form first.** `word arg1 arg2` is the canonical
+  call shape in code, docs, and examples; the pipeline form
+  (`arg2 arg1 word`) is an equivalent you reach for when a value is
+  already flowing on the stack.
+- **Don't ask for a word to be flipped.** When forward collection is
+  awkward at one call site, the per-call levers are grouping
+  (`(…)`, `end`, `;`) and the modifiers `/s` (stack-only here),
+  `/f` (forward-only here), and `/N` (exactly N args) — not a change
+  to the word's default. `(1 add 1) print/s`, for instance, prints a
+  value that is already on the stack.
+
 ### How collection works
 
 When a word executes, AQL fills its argument slots in this order:

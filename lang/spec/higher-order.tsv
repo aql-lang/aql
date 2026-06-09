@@ -34,6 +34,16 @@ filter ([p:Any] => [(p.value mod 2) eq 0]) [1 2 3 4 5 6]	[2 4 6]	keep even eleme
 filter ([p:Any] => [p.value gt 3]) [1 2 3 4 5]	[4 5]	keep elements greater than 3
 filter ([p:Any] => [(p.value mod 2) eq 0]) {a:1 b:2 c:3 d:4}	[2 4]	filter also walks a map's values
 #
+# §5b filter quotation form — like each/fold, a [body] runs once per
+#     element with the ELEMENT pushed first (no {key value} wrapper).
+#     Keeps the elements whose body result is Boolean true; a
+#     non-Boolean body result is a loud error (DX report T9.2).
+filter [2 gt] [1 2 3 4]	[3 4]	quotation form: keep elements greater than 2
+[1 2 3 4] [2 gt] filter	[3 4]	quotation form, stack form
+filter [mod 2 eq 0] [1 2 3 4 5 6]	[2 4 6]	quotation form: keep even elements
+filter [2 gt] {a:1 b:5 c:3}	{b:5 c:3}	quotation form on a map filters by value, keeping a map
+filter [add 1] [1 2 3]	ERROR:filter_error	a body that yields a non-Boolean is a loud error, not a silent drop
+#
 # §6  errors
 each [mul 2] 5	ERROR:signature_error	each requires a list collection
 fold [add] 5 0	ERROR:signature_error	fold requires a list collection

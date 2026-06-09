@@ -210,3 +210,87 @@ exhaustive over the public export set, not a sample of it.
   only live exports so it cannot rot, and is meant to stay tiny: prefer the
   `mem://` scheme or a deterministic validation-error row (as the `aql:net`
   `prepare`/`direct` rows do) before reaching for an exemption.
+
+---
+
+## ADR-004 — All words are forward by default {#adr-004}
+
+**Status:** Accepted · **Date:** 2026-06-09
+
+### Decision
+
+Every AQL word is **forward-collecting by default**: a word looks ahead
+for its arguments first, so the canonical call form is
+`word arg1 arg2 …` — written argument order matches declared parameter
+order, and code reads like a function call. The only standing exception
+is the **traditional Forth stack-manipulation vocabulary** — `dup`,
+`swap`, `drop`, `over`, `rot`, `dup2`, `swap2`, `drop2`, `over2`,
+`depth`, … — which is stack-only (`/s`) by nature: its entire meaning
+*is* the stack, so there is nothing sensible to collect forward.
+
+This is a **language cultural default**, not merely an implementation
+detail. New words — core, module, and user `fn` definitions alike —
+ship forward-eligible (`BarrierPos: -1`) unless their semantics are
+intrinsically about the stack. Proposals to flip an individual word to
+stack-first for local ergonomic relief are rejected; the per-call
+modifiers (`/s`, `/f`, `/N`) and grouping (`(…)`, `end`, `;`) are the
+sanctioned levers when a particular call site wants different
+collection behaviour.
+
+### Context
+
+AQL is a concatenative language with a stack, but it deliberately does
+not *read* like Forth. The §1.4 sig-order unification (see lang/go/
+CLAUDE.md "Argument Ordering") made one rule govern every word, with
+the forward phase first and the stack as fallback; the mirror
+equivalence `f a b ≡ b f a ≡ b a f` means pipeline code and call-style
+code are the same word. Both DX field reports
+(`design/VOXGIG-DX-REPORT.5.md`, `design/AQL-DX-REPORT.5.md`)
+confirmed the direction: the issues users hit were *edges* of forward
+collection (grouping, mixed forms), and the fixes that landed
+(structure-first lazy forward-argument resolution, FnDef forward
+collection for module words) all moved the language *toward* uniform
+forward behaviour, not away from it.
+
+The cultural framing matters because the alternative — deciding
+forward-vs-stack per word on ergonomic grounds — re-creates exactly
+the "two calling conventions" complaint the DX reports documented for
+module words. One memorable default beats a per-word lookup table.
+
+The boundary is drawn at the traditional Forth words because they are
+the vocabulary a stack-language user already holds in their head as
+stack operations; making `dup` or `swap` forward-collect would be
+gibberish. The full list is pinned in REFERENCE.md ("All stack words
+are stack-only").
+
+### Consequences
+
+- **`print` stays forward.** The bloom-filter report suggested making
+  `print` stack-first to fix the chained-print reversal
+  (`(1 add 1) print (2 add 2) print` printing 4 then 2 — VOXGIG B2a).
+  Under this ADR that fix is rejected: `print` is not a Forth stack
+  word, and a one-off flip would be the first per-word cultural
+  exception. The sanctioned forms are statement separation
+  (`(1 add 1) print end (2 add 2) print`), the explicit modifier
+  (`(1 add 1) print/s`), or the forward form (`print (1 add 1)`).
+  The *residual* problem — chained un-separated forward calls
+  evaluating right-to-left — is an evaluation-order question to fix
+  (or diagnose via `aql check`) without changing any word's default;
+  see `design/ERRORS.0.md` §"Chained forward calls".
+- **Mixed-form calls are user error territory, diagnosed not blessed.**
+  Forms that split one call's args across both sides without grouping
+  (`(x 3 gt) if [a] [b]` — VOXGIG T9.4) are not given bespoke per-word
+  semantics; the investment goes into `check`-mode advisories
+  (`forward_strands_operand`, `uncalled_function`) that catch the
+  stranded shapes.
+- **Module wrappers must keep `BarrierPos: -1`** (already a hard rule —
+  see lang/go/CLAUDE.md "Module FnDef Wrappers"). A stack-only inner
+  sig silently breaks the swap form, which is a forward-culture
+  violation *and* a silent-failure bug.
+- **Docs and examples lead with the forward form.** REFERENCE.md,
+  TUTORIAL.md, help entries, and spec rows show `word args` first and
+  present the pipeline/stack forms as derived equivalents.
+- The traditional-Forth exception list is closed by default: a new
+  stack-only word needs the same justification weight as a new
+  init-time panic (lang/go/CLAUDE.md "Panic Prevention") — i.e. its
+  semantics must be *about* the stack itself.

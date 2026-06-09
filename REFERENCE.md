@@ -1039,6 +1039,8 @@ iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 | `ArrayUtil.where` | Indices of truthy elements | `ArrayUtil.where [true,false,true]` returns `[0,2]` |
 | `ArrayUtil.grade` | Indices that would sort | `ArrayUtil.grade [3,1,2]` returns `[1,2,0]` |
 | `ArrayUtil.at` | Select by index list | `[10,20,30] ArrayUtil.at [2,0]` returns `[30,10]` |
+| `ArrayUtil.insert-at` | New list with an element inserted at an index (`insert-at idx elem list`; index `len` appends; out of range errors) | `ArrayUtil.insert-at 1 99 [1,2,3]` returns `[1,99,2,3]` |
+| `ArrayUtil.remove-at` | New list with the element at an index removed (out of range errors) | `ArrayUtil.remove-at 1 [1,2,3]` returns `[1,3]` |
 | `ArrayUtil.sortby` | Sort by parallel key list | `["b","a","c"] ArrayUtil.sortby [2,1,3]` |
 | `ArrayUtil.replicate` | Repeat each element N times | `[1,2,3] ArrayUtil.replicate [2,1,3]` |
 | `ArrayUtil.expand` | Expand by Boolean mask | `[1,2,3] ArrayUtil.expand [true,false,true]` |
@@ -1059,6 +1061,7 @@ iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 | `each` | Map a function | `[1,2,3] each [dup mul]` |
 | `fold` | Reduce with accumulator | `fold [add] [1,2,3] 0` returns `6` |
 | `scan` | Running fold | `scan [add] [1,2,3]` |
+| `filter` | Keep elements where a predicate holds | `filter [2 gt] [1,2,3,4]` returns `[3,4]` |
 | `outer` | Outer product | `outer [mul] [3,4] [1,2]` |
 | `inner` | Inner product | `inner [add] [mul] [3,4] [1,2]` |
 
@@ -1068,6 +1071,33 @@ all-forward form shown above maps each list argument left-to-right
 into the signature: `fold` takes `body data init`, `scan` takes
 `body data`, `outer` takes `body listB listA`, `inner` takes
 `combineBody productBody listB listA`.
+
+> **`fold` body stack order.** The body runs with the **accumulator
+> pushed first and the current element on top of it**, so a two-arg
+> word in the body sees `(element, accumulator)` as `(top, deeper)`:
+>
+> ```
+> 0 fold [add] [1 2 3]      # returns 6
+> 0 fold [sub] [10]         # returns -10  — acc minus element (0 - 10)
+> [] fold [push] [1 2 3]    # returns [1 2 3] — element pushed onto the acc list
+> ```
+
+> **`filter` takes three predicate forms.** A quotation `[body]` runs
+> once per element with the element on the stack — exactly like
+> `each`/`fold` — and keeps the elements whose result is Boolean
+> `true` (a non-Boolean result is an **error**, not a silent drop). A
+> receiverless Reach lens keeps elements whose field is true. A
+> Function callback receives a `{key value}` pair map per element —
+> read the element via `.value`:
+>
+> ```
+> filter [2 gt] [1 2 3 4]                          # returns [3 4]
+> filter [2 gt] {a:1 b:5 c:3}                      # returns {b:5 c:3} — maps filter by value
+> filter ([p:Any] => [p.value gt 3]) [1 2 3 4 5]   # returns [4 5]
+> ```
+>
+> The lens form reads a field: `filter $.active accounts` keeps the
+> elements whose `.active` is `true`.
 
 ### Size
 
@@ -1108,8 +1138,17 @@ word — `size` subsumes it.
 |------|-------------|---------|
 | `get` / `.` | Lookup field/key, or index a list | `{x:1} . x` returns `1`; `[10,20,30] 0 get` returns `10` |
 | `getr` / `!.` | Strict lookup (errors if missing) | `{x:1} !. y` returns `error` |
-| `set` | Set a key in a Store | `context set foo 99` |
+| `set` | Set a key in a Store / Object / Array — **mutates in place, returns nothing** | `context set foo 99` |
 | `context` | Push the current context Store | `context` |
+
+> **`set` is an in-place mutator and produces no value.** Both the
+> forward form (`b set flag 1`) and the stack form (`b 1 'flag' set`)
+> write into the receiver itself; read the store back to observe the
+> write. Because `set` returns nothing, `def r (b set k v)` binds
+> nothing — there is no "updated copy" to capture. For a
+> **copy-returning** single-field update on plain data, use
+> `StructUtil.setpath` (`{a:1,b:2} StructUtil.setpath "b" 3` returns
+> `{a:1, b:3}` and leaves the original untouched).
 
 > **`get`/`.` return `none` for anything not found — silently.** A
 > missing map key (`{a:1} . b` returns `None`), an out-of-range list index
@@ -1351,14 +1390,37 @@ while `aql describe [word\|module]` documents the language. In the REPL,
 ## Built-in modules
 
 Built-in modules ship with the binary but are not auto-loaded —
-`import aql:xxx` to enable.
+`import aql:xxx` to enable. Each binds one capital-initial namespace
+(`"aql:math-util" import` → `MathUtil.sqrt`). The `-util` suffix marks
+a utility library of pure helper functions; capability / framework
+modules keep plain names.
 
-| Module | What's inside |
-|--------|---------------|
-| `aql:math` | Extended numerics: complex math, statistics, special functions. |
-| `aql:time-util` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`. |
-| `aql:matrix-util` | Tensor / Matrix / Vector types and linear algebra. |
-| `aql:decision` | Decision tables (rules engine). |
+| Module | Namespace | What's inside |
+|--------|-----------|---------------|
+| `aql:math-util` | `MathUtil` | Extended numerics: trig, statistics, special functions, IEEE-754 classifiers. |
+| `aql:array-util` | `ArrayUtil` | Specialised APL-style array vocabulary (see above). |
+| `aql:string-util` | `StringUtil` | String words — `upper`, `split`, `indexof` (haystack-last), `replace`, … all subject-last. |
+| `aql:struct-util` | `StructUtil` | voxgig-struct data words — `clone`, `getpath`, `setpath`, `merge`, `walk`, `transform`, `jsonify`, … |
+| `aql:bin-util` | `BinUtil` | Bitwise ops plus `popcount`, `clz`, `ctz`, `bitlen`, `fnv32`/`fnv64`. |
+| `aql:logic-util` | `LogicUtil` | Derived boolean connectives — `nand`, `nor`, `xnor`, `iff`, `implies`. |
+| `aql:type-util` | `TypeUtil` | Type utilities — `tpartial`, … |
+| `aql:time-util` | `TimeUtil` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`, timers. |
+| `aql:matrix-util` | `MatrixUtil` | Tensor / Matrix / Vector types and linear algebra. |
+| `aql:io` | `IO` | File and stream I/O — `read`, `write`, `stdin`, `stdout`, `trace` (only `print` stays in core). |
+| `aql:net` | `Net` | HTTP / API words — `fetch`, `prepare`, `direct`. |
+| `aql:decision` | `Decision` | Decision tables (rules engine). |
+| `aql:test` | `Test`, `Assert` | Unit tests, declarative specs, property-based testing. |
+| `aql:rand` | `Rand` | Seeded random generators (drives `Test.check-prop`). |
+| `aql:query` | `Query` | SQL-flavoured query pipeline. |
+| `aql:report` | `Report` | Tabular result reporting. |
+| `aql:vm` | `Vm` | Run AQL source in-memory — `run`, `run-with`, `run-sandbox`, `run-compute`. |
+
+> **`StructUtil.merge` is a deep, index-wise merge** — lists merge
+> element-by-element (`{kids:[99]} {kids:[10,20]} StructUtil.merge`
+> returns `{kids:[99,20]}`), so using it as a one-field update can fuse
+> sibling structures. For a single-field edit, use the copy-returning
+> `StructUtil.setpath`: `{a:1,b:2} StructUtil.setpath "b" 3` returns
+> `{a:1, b:3}` (deep paths work too: `setpath "a/b/c" v`).
 
 
 ## Error codes

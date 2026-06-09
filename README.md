@@ -134,6 +134,33 @@ make fmt && make vet && make lint && make test
 ```
 
 
+## Upgrade notes (pre-1.0 breaking changes)
+
+AQL is pre-1.0 and the surface still moves. Libraries written against
+mid-2026 snapshots most commonly need these renames:
+
+- **Namespaces are capital-initial.** `test.test` → `Test.test`,
+  `assert.equal` → `Assert.equal`, `math.sqrt` → `MathUtil.sqrt`.
+  Lowercase export names are rejected.
+- **Utility modules took a `-util` suffix** (avoiding builtin type-name
+  clashes): `aql:array` → `aql:array-util` (binds `ArrayUtil`), and
+  likewise `aql:math-util`, `aql:time-util`, `aql:type-util`,
+  `aql:matrix-util`, `aql:bin-util`, `aql:struct-util`,
+  `aql:logic-util`, `aql:string-util`.
+- **Words moved out of core into modules:** string words →
+  `aql:string-util` (with `indexof` now **haystack-last**, and the list
+  form split out as `ArrayUtil.indices`); voxgig-struct words
+  (`merge`, `setpath`, `jsonify`, …) → `aql:struct-util`; bitwise →
+  `aql:bin-util`; I/O except `print` → `aql:io`; HTTP → `aql:net`;
+  clock/async → `aql:time-util`; derived boolean connectives →
+  `aql:logic-util`. Moved words are no longer available unqualified.
+- **Module fn exports use the referent form:**
+  `export "Mod" {double: double/r}` (a bare fn name in an export map
+  would be invoked, not referenced).
+- **`set` mutates in place and returns nothing** — `def r (b set k v)`
+  binds nothing; read the store back instead.
+
+
 ## Contributing
 
 Bug reports, proposals, and pull requests are welcome on

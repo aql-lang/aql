@@ -96,6 +96,11 @@ var arrayExports = []arrWord{
 		sigs:   []arrSig{{[]*native.Type{native.TInteger, native.TList, native.TList}, []*native.Type{native.TList}}},
 		noEval: []int{1}},
 
+	// --- editing (copy-returning single-element edits) ---
+	{export: "insert-at", internal: "insert-at",
+		sigs: []arrSig{{[]*native.Type{native.TInteger, native.TAny, native.TList}, []*native.Type{native.TList}}}},
+	{export: "remove-at", internal: "remove-at", sigs: sig2(native.TInteger, native.TList, native.TList)},
+
 	// --- membership / grouping ---
 	{export: "member", internal: "member", sigs: sig2(native.TList, native.TList, native.TList)},
 	{export: "unique", internal: "unique", sigs: sig1(native.TList, native.TList)},

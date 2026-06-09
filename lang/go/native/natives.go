@@ -229,6 +229,10 @@ var Natives = []NativeFunc{
 			// applies to a truthy value (the reach reads the ELEMENT, not the
 			// {key,value} wrapper the Function form receives).
 			{Args: []*Type{TReach, TAny}, Handler: filterReachHandler, BarrierPos: -1},
+			// Quotation form: `filter [body] xs` runs the quoted body once
+			// per element (element pushed first, like each/fold) and keeps
+			// the elements whose body result is Boolean true.
+			{Args: []*Type{TList, TAny}, NoEvalArgs: map[int]bool{0: true}, Handler: filterBodyHandler, BarrierPos: -1},
 		},
 	},
 

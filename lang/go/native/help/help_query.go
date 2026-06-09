@@ -161,10 +161,32 @@ func init() {
 		Summary: "Reduce a list to a single value with an accumulator.",
 		Description: "Runs the body with the accumulator and each element, threading the " +
 			"result forward. With an initial value: `init fold [body] data`. Without one, " +
-			"the first element seeds the accumulator: `fold [body] data`.",
+			"the first element seeds the accumulator: `fold [body] data`. " +
+			"Body stack order: the accumulator is pushed first and the current ELEMENT " +
+			"sits on top of it, so a two-arg word in the body sees (element, accumulator) " +
+			"as (top, deeper) — `0 fold [sub] [10]` is acc-minus-element = -10, and " +
+			"`[] fold [push] data` pushes each element onto the accumulator list.",
 		Examples: []string{
 			`0 fold [add] [1 2 3 4]  ;# => 10  (with initial value)`,
 			`fold [add] [1 2 3]      ;# => 6   (first element seeds it)`,
+			`[] fold [push] [1 2 3]  ;# => [1 2 3]  (element on top, acc beneath)`,
+		},
+	})
+
+	register(&Entry{
+		Word:    "filter",
+		Summary: "Keep the elements for which a predicate holds.",
+		Description: "Three predicate forms. Quotation: `filter [body] xs` runs the body " +
+			"once per element with the element on the stack (like each/fold) and keeps the " +
+			"elements whose result is Boolean true — a non-Boolean result is an error, not " +
+			"a silent drop. Reach lens: `filter $.active xs` keeps elements whose field is " +
+			"true. Function: the callback receives a {key value} pair map per element — " +
+			"read the element via `.value`. Lists filter to lists; maps filter by value " +
+			"(the quotation and lens forms keep a map, the Function form collects values).",
+		Examples: []string{
+			`filter [2 gt] [1 2 3 4]              ;# => [3 4]`,
+			`filter $.active accounts             ;# keep where .active is true`,
+			`filter ([p:Any] => [p.value gt 3]) [1 2 3 4 5]  ;# => [4 5]`,
 		},
 	})
 }
