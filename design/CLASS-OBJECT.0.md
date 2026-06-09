@@ -357,8 +357,31 @@ string `'Integer'` — the same coercion softness, same fix.) Enforcement today 
 default value carrying a *refined* type does not retain it as the
 field type (`def d:Pos 5` … `{x:d}` infers Integer, accepts a plain
 `7`), so "type T **and** default v" is currently inexpressible when
-T is narrower/wider than the literal's natural type — open design
-item (candidate spellings: `x:Number 1` / `x:(1 as Radius)`).
+T is narrower/wider than the literal's natural type.
+
+**Typed defaults — chosen spelling (review, 2026-06-09):**
+`{x: (make Foo 1)}` — a default value *constructed at the refined
+type* declares that type as the field type AND supplies the default.
+No new syntax; `make` becomes the universal constructor (classes,
+Objects, Arrays, refined scalars). Three gaps make it aspirational
+today, all Phase A items:
+
+1. `make Foo 1` on a scalar refinement does **not** tag the value —
+   `typeof (make Foo 1)` → Integer, `(make Foo 1) is Foo` → false —
+   even though the minting machinery exists (`def d:Foo 1` →
+   `typeof d` → Foo, `d is Foo` → true). Fix: `make <ScalarRefine>
+   <value>` routes through the same tagging as the typed def, and
+   validates predicate refinements (`make Radius -1.0` errors).
+2. Schema field-type inference must use the default value's
+   **declared (nominal) type** — its Parent — not its base type.
+3. Field-type enforcement at `make` / instance `set` (already
+   queued).
+
+With those three, `def S class {x:(make Foo 1)}` gives: omitted →
+`x` = Foo(1); provided `(make Foo 7)` → accepted; provided plain
+`7` → loud type error (a bare Integer is not a Foo — the newtype
+strictness REFERENCE already documents for params and returns,
+extended to fields).
 
 **Phase A additions from this analysis:** enforce predicate field
 types at `make`/instance-`set`; replace the provided-value coercions
