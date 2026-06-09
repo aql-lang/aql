@@ -1,0 +1,41 @@
+# AQL Language Specification: the `class` word — sealed nominal records
+# Format: input<TAB>expected<TAB>description
+#
+# `def Foo class {schema}` defines a class: a sealed nominal record
+# type rooted under Ideal/Class (NOT under Object — Object is the open
+# mutable keyed container; classes are sealed nominal records — see
+# design/CLASS-OBJECT.0.md). Schema entries: a TYPE value declares a
+# required field; a CONCRETE value declares a default (the field's
+# type is the value's own type). Instances are FLAT (every field, own
+# and inherited, resolves eagerly at make — no prototype chain) and
+# SEALED (writing an undeclared field is a loud sealed_field error).
+# Subclassing reuses refine: `def Bar refine Foo {…}`.
+#
+# ---------------------------------------------------------------------
+# §1  definition + construction (paren-free def, defaults, dot reads)
+def Point class {x:1, y:2} (make Point {}) get x	1	paren-free def + make; omitted field takes its default
+def Point class {x:1, y:2} (make Point {x:9}) get x	9	provided value overrides the default
+def Point class {x:1, y:2} def p (make Point {x:9}) p.y	2	dot access reads an instance field (literal key)
+def Point class {x:1} (make Point {}) typeof	Point	typeof an instance is the class name
+def Point class {x:1} (make Point {}) is Point	true	an instance is its class
+def Point class {x:1} (make Point {}) is Object	false	a class instance is NOT an Object — classes root under Ideal/Class
+#
+# §2  required vs defaulted fields (type = required, value = default)
+def User class {name:String, age:0} (make User {name:'ann'}) get age	0	typed field provided, valued field defaults
+def User class {name:String, age:0} make User {}	ERROR:missing field	a typed field is REQUIRED — omitting it is a loud error
+def Point class {x:1} make Point {z:5}	ERROR:unknown field	an undeclared key at make is a loud error
+#
+# §3  sealing — set writes declared fields in place, rejects others
+def Point class {x:1} def p (make Point {}) p set x 7 end p.x	7	declared-field set writes in place (returns nothing)
+def Point class {x:1} def p (make Point {}) p set z 9	ERROR:sealed_field	an undeclared field write is a loud sealed_field error
+#
+# §4  subclassing via refine — flat inherited defaults, sealed across the chain
+def Point class {x:1} def Point3 refine Point {z:3} (make Point3 {}) get x	1	inherited default resolves flat into the instance
+def Point class {x:1} def Point3 refine Point {z:3} (make Point3 {x:7}) get z	3	own default alongside provided inherited field
+def Point class {x:1} def Point3 refine Point {z:3} (make Point3 {}) is Point	true	an instance of the subclass is the parent class (nominal chain)
+def Point class {x:1} def Point3 refine Point {z:3} (make Point3 {}) is Point3	true	…and is its own class
+def Point class {x:1} def Point3 refine Point {z:3} (make Point3 {}) set w 1	ERROR:sealed_field	sealing covers the whole inherited field set
+#
+# §5  errors — malformed definitions
+def Bad class 5	ERROR:signature_error	the schema must be a map
+class Map	ERROR:signature_error	a bare Map type literal is not a concrete schema map (matcher refuses it)

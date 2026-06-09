@@ -309,15 +309,24 @@ func InstallType(r *Registry, name string, body Value) error {
 	}
 	if IsObjectType(body) {
 		info, _ := AsObjectType(body)
+		// Class types root under Ideal/Class, not Object — classes are
+		// sealed nominal records, Object is the open mutable container
+		// (design/CLASS-OBJECT.0.md).
+		rootName := "Object"
+		rootDef := TObject
+		if info.Class {
+			rootName = "Class"
+			rootDef = TClass
+		}
 		if info.Parent != nil {
 			info.Name = info.Parent.Name + "/" + name
 		} else {
-			info.Name = "Object/" + name
+			info.Name = rootName + "/" + name
 		}
 		for _, p := range strings.Split(info.Name, "/") {
 			r.RegisterPart(p)
 		}
-		parentDef := TObject
+		parentDef := rootDef
 		if info.Parent != nil && info.Parent.Type != nil {
 			parentDef = info.Parent.Type
 		}

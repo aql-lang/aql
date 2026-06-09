@@ -57,6 +57,24 @@ var typeNatives = []NativeFunc{
 		},
 	},
 	{
+		// class {schema} — define a class type: a sealed nominal record
+		// minted under Ideal/Class. Schema entries: a TYPE value
+		// (`{name:String}`) declares a required field; a CONCRETE value
+		// (`{retries:3}`) declares a default (and the field's type is
+		// the value's own type). Instances are flat (defaults resolved
+		// eagerly at make) and sealed (writing an undeclared field is a
+		// sealed_field error). Subclassing reuses refine:
+		// `def Bar refine Foo {…}`. See design/CLASS-OBJECT.0.md.
+		Name: "class",
+
+		Signatures: []NativeSig{{
+			Args:           []*Type{TMap},
+			Handler:        classHandler,
+			Returns:        []*Type{TType},
+			RunInCheckMode: true, BarrierPos: -1,
+		}},
+	},
+	{
 		Name: "pathof",
 
 		Signatures: []NativeSig{{

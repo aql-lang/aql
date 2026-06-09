@@ -136,6 +136,7 @@ var (
 	TNone           = eng.TNone
 	TNumber         = eng.TNumber
 	TObject         = eng.TObject
+	TClass          = eng.TClass
 	TIdeal          = eng.TIdeal
 	TOpenParen      = eng.TOpenParen
 	TOptions        = eng.TOptions

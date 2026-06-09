@@ -498,6 +498,7 @@ type ObjectTypeInfo struct {
 	ID              string          // unique internal ID: "T_" + 12 hex chars
 	Name            string          // full type path (e.g. "Object/Foo/Bar")
 	Type            *Type           // canonical *Type identity; populated by MintType during installation
+	Class           bool            // class-rooted (minted under Ideal/Class): sealed, flat instances — see design/CLASS-OBJECT.0.md
 	cachedAllFields *OrderedMap     // lazily computed merged field map (immutable after first call)
 }
 

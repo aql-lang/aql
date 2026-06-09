@@ -526,6 +526,23 @@ Sub-questions resolved (2026-06-09, second pass):
 | Phase | Content | Breaking? |
 |-------|---------|-----------|
 | A | `class` word + `refine <Class>` subclassing + flat eager-default instances + sealing + **removal of `refine Object`** (loud `refine_error` with hint) | **yes** — one clean break, README upgrade note; all `refine Object` call sites rewrite to `class` |
+
+> **Phase A increment 1 LANDED (2026-06-09):** `Ideal/Class` lattice
+> node (FixedID 102); `class {schema}` word (paren-free `def Foo
+> class {…}` verified — it rides the def-name-fn collection path as
+> predicted); flat sealed `make` path (`makeClassInstance`: all
+> fields resolved eagerly, no Prototype; unknown/missing-required
+> fields loud); `sealed_field` error with field list + hint on
+> instance `set`; subclassing via `refine Foo {…}` propagating the
+> Class flag; Class-branch `get`/`set` sigs (dot access works);
+> `InstallType` roots class types at `Class/Foo`; `p is Object` →
+> false. Spec battery in `lang/spec/class.tsv` (defaults, required,
+> sealing, subclass chain, negatives). Remaining in Phase A:
+> `refine Object` removal sweep (~213 sites), predicate-field
+> enforcement at make/set, loud coercion errors, `const`, typed
+> defaults via tagged `make`, instance equality (`deq`/`cmp`),
+> `$class` jsonify + `reify`, `describe` rendering, enumeration
+> (`items`/`size`) for instances.
 | B | `object {…}` sugar + `make Object {…}` construct plain open Objects; full enumeration; dot-access spec battery for Object receivers; docs lead with the 2×2 table | no (turns an error into a value) |
 | C | Column completion: List copy-returning `set`; `array […]` sugar + `make Array […]`; dot-access battery for Array; `convert` freeze/thaw pair | no (additive) |
 

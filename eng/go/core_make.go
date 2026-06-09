@@ -223,6 +223,13 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 		return nil, fmt.Errorf("make: expected concrete map, got %s", srcVal.String())
 	}
 
+	// Class types take the flat path: every field (own + inherited)
+	// resolves eagerly into one field map — no prototype chain, no
+	// delegation at get. See design/CLASS-OBJECT.0.md §3.
+	if objType.Class {
+		return makeClassInstance(objType, provided)
+	}
+
 	if prototype == nil && objType.Parent != nil {
 		prototype, err = buildBasePrototype(*objType.Parent)
 		if err != nil {
@@ -291,6 +298,57 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 		TypeRef:   &objType,
 		Fields:    result,
 		Prototype: prototype,
+	})}, nil
+}
+
+// makeClassInstance constructs a flat, sealed class instance: the
+// full field set (inherited first, then own — AllFields order) is
+// resolved eagerly into a single field map. A provided key the schema
+// doesn't declare is an error; a missing field takes its schema
+// default when one exists (constraint with a concrete payload) and is
+// otherwise a loud missing-field error. The instance carries no
+// Prototype — reads are a single map lookup.
+func makeClassInstance(objType ObjectTypeInfo, provided *OrderedMap) ([]Value, error) {
+	allFields := objType.AllFields()
+
+	for _, key := range provided.Keys() {
+		if _, ok := allFields.Get(key); !ok {
+			return nil, fmt.Errorf("make: unknown field %q for class %s", key, objType.Name)
+		}
+	}
+
+	result := NewOrderedMap()
+	for _, key := range allFields.Keys() {
+		constraint, _ := allFields.Get(key)
+		val, hasVal := provided.Get(key)
+
+		if !hasVal {
+			if constraint.Data != nil {
+				result.Set(key, constraint)
+				continue
+			}
+			return nil, fmt.Errorf("make: missing field %q for class %s", key, objType.Name)
+		}
+
+		val = ResolveWordValue(val)
+		if val.Parent.ConformsTo(ValueType(constraint)) {
+			result.Set(key, val)
+			continue
+		}
+		converted, err := MakeConvert(val, ValueType(constraint))
+		if err != nil {
+			return nil, fmt.Errorf("make: field %q: %w", key, err)
+		}
+		result.Set(key, converted)
+	}
+
+	instanceType := objType.Type
+	if instanceType == nil {
+		instanceType = TClass
+	}
+	return []Value{NewObjectInstance(instanceType, ObjectInstanceInfo{
+		TypeRef: &objType,
+		Fields:  result,
 	})}, nil
 }
 

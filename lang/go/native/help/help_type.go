@@ -46,6 +46,25 @@ func init() {
 	})
 
 	register(&Entry{
+		Word:    "class",
+		Summary: "Define a class: a sealed nominal record type.",
+		Description: "`def Foo class {schema}` mints a class type under Ideal/Class. " +
+			"Schema entries: a TYPE value ({name:String}) declares a REQUIRED field; a " +
+			"CONCRETE value ({retries:3}) declares a default, typed by the value itself. " +
+			"Instances (`make Foo {\u2026}`) are flat \u2014 every field, own and inherited, " +
+			"resolves at make \u2014 and sealed: writing an undeclared field raises " +
+			"sealed_field. Subclass with refine: `def Bar refine Foo {\u2026}`. Class " +
+			"instances are NOT Objects \u2014 classes and the open keyed container are " +
+			"separate branches.",
+		Examples: []string{
+			`def Point class {x:1, y:2}     ;# x,y default to 1,2`,
+			`def p (make Point {x:9})       ;# p.x => 9, p.y => 2`,
+			`def Point3 refine Point {z:3}  ;# subclass, inherits x,y`,
+			`p set w 5                      ;# ERROR sealed_field`,
+		},
+	})
+
+	register(&Entry{
 		Word:    "base",
 		Summary: "Return the zero/default value for the type of a value.",
 		Description: "Consumes a value and returns the zero value for its type: 0 for integers, " +

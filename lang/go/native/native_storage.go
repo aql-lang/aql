@@ -1,6 +1,9 @@
 package native
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // storageNatives covers `set` / `get` / `context`. The unified
 // dispatch table mixes Node / Object / Array (kernel-territory
@@ -75,6 +78,22 @@ var storageNatives = []NativeFunc{
 				Handler:   setMapHandler,
 				Returns:   []*Type{TMap}, BarrierPos: -1,
 			},
+
+			// Class instance (in-place, SEALED): a declared field
+			// writes in place and returns nothing; an undeclared
+			// field is a loud sealed_field error — see
+			// design/CLASS-OBJECT.0.md §3.3.
+			{
+				Args:    []*Type{TString, TAny, TClass},
+				Handler: setClassInstanceHandler,
+				Returns: []*Type{}, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TAtom, TAny, TClass},
+				QuoteArgs: map[int]bool{0: true},
+				Handler:   setClassInstanceHandler,
+				Returns:   []*Type{}, BarrierPos: -1,
+			},
 		},
 	},
 	{
@@ -97,6 +116,10 @@ var storageNatives = []NativeFunc{
 			// [Key | Module] — descriptor fields (id/kind/file/folder/exports)
 			{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getModuleInstHandler, Returns: []*Type{TAny}},
 			{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Handler: getModuleInstHandler, Returns: []*Type{TAny}},
+			// [Key | Class instance] — flat field read (no prototype
+			// chain; class instances resolve every field at make).
+			{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TString, TClass}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
 			// [Key | None] — chained-read propagation
 			{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: getNoneHandler, Returns: []*Type{TNone}},
 			// [Key | Store] — check-mode-aware ReturnsFn picks up a
@@ -158,6 +181,38 @@ func setMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 	}
 	out.Set(key, args[1])
 	return []Value{NewMap(out)}, nil
+}
+
+// setClassInstanceHandler is the sealed in-place write for class
+// instances: a field declared in the class schema (own or inherited)
+// writes into the flat field map and returns nothing; an undeclared
+// field raises sealed_field loudly — the open-bag use case belongs to
+// plain maps/Objects, not class instances (design/CLASS-OBJECT.0.md).
+func setClassInstanceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	container := args[2]
+	if !IsConcrete(container) {
+		return nil, r.AqlError("set_error", "set: cannot set field on type literal", "set")
+	}
+	oi, ok := container.Data.(ObjectInstanceInfo)
+	if !ok {
+		return nil, fmt.Errorf("set: expected a class instance, got %s", container.Parent.String())
+	}
+	key := StoreKey(args[0])
+	if oi.TypeRef != nil {
+		all := oi.TypeRef.AllFields()
+		if _, declared := all.Get(key); !declared {
+			name := oi.TypeRef.Name
+			if name == "" {
+				name = container.Parent.Name
+			}
+			return nil, r.AqlErrorHint("sealed_field",
+				fmt.Sprintf("set: %q is not a field of %s (fields: %s)", key, name, strings.Join(all.Keys(), " ")),
+				"set",
+				"class instances are sealed — declare the field in the class schema, or use a plain map for open data")
+		}
+	}
+	oi.Fields.Set(key, args[1])
+	return nil, nil
 }
 
 func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

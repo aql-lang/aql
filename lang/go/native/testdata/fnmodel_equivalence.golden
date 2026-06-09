@@ -60,6 +60,8 @@ WORD changecase
   [Scalar/Atom Node/Map] barrier=2 returns=[Scalar/String]
   [Scalar/String] barrier=1 returns=[Scalar/String]
   [Scalar/Atom] barrier=1 returns=[Scalar/String]
+WORD class
+  [Node/Map] barrier=1 runcheck returns=[Type]
 WORD clone
   [Any] barrier=1
 WORD cmp
@@ -168,6 +170,7 @@ WORD gensym
 WORD get
   [Scalar/String Ideal/ModuleExport] barrier=1 +returnsfn
   [Scalar/String Ideal/Module] barrier=1 returns=[Any]
+  [Scalar/String Ideal/Class] barrier=1 returns=[Any]
   [Scalar/String Ideal/Store] barrier=1 +returnsfn
   [Scalar/String Ideal/Object] barrier=1 returns=[Any]
   [Scalar/String Node] barrier=1 returns=[Any]
@@ -176,6 +179,7 @@ WORD get
   [Scalar/Number/Integer Node] barrier=1 returns=[Any]
   [Scalar/Atom Ideal/ModuleExport] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Ideal/Module] barrier=1 quote={0} returns=[Any]
+  [Scalar/Atom Ideal/Class] barrier=1 quote={0} returns=[Any]
   [Scalar/Atom Ideal/Store] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Ideal/Object] barrier=1 quote={0} returns=[Any]
   [Scalar/Atom Node] barrier=1 quote={0} returns=[Any]
@@ -401,10 +405,12 @@ WORD scan
 WORD selector
   [Node/Map Any] barrier=2
 WORD set
+  [Scalar/String Any Ideal/Class] barrier=3
   [Scalar/String Any Ideal/Store] barrier=3 +returnsfn
   [Scalar/String Any Ideal/Object] barrier=3
   [Scalar/String Any Node/Map] barrier=3 returns=[Node/Map]
   [Scalar/Number/Integer Any Ideal/Array] barrier=3
+  [Scalar/Atom Any Ideal/Class] barrier=3 quote={0}
   [Scalar/Atom Any Ideal/Store] barrier=3 quote={0} +returnsfn
   [Scalar/Atom Any Ideal/Object] barrier=3 quote={0}
   [Scalar/Atom Any Node/Map] barrier=3 quote={0} returns=[Node/Map]

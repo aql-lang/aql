@@ -82,6 +82,35 @@ func objectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	return []Value{NewObjectType(def, info)}, nil
 }
 
+// classHandler implements `class {schema}` — a sealed nominal record
+// type minted under Ideal/Class (NOT under Object: classes and the
+// open mutable Object container are separate branches — see
+// design/CLASS-OBJECT.0.md). The schema map follows the object rules:
+// a type value declares a required field, a concrete value declares a
+// default. Subclassing reuses `refine <ClassType> {…}`, which routes
+// through objectWithParentHandler and propagates the Class flag.
+func classHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	fieldsVal := args[0]
+	if !fieldsVal.Parent.Equal(TMap) {
+		return nil, r.AqlError("class_error",
+			fmt.Sprintf("class: argument must be a map of field definitions, got %s", fieldsVal.String()), "class")
+	}
+	m, err := AsMutableMap(fieldsVal)
+	if err != nil {
+		return nil, r.AqlError("class_error",
+			fmt.Sprintf("class: argument must be a concrete map, got %s", fieldsVal.String()), "class")
+	}
+	fields := parseObjectFields(m, r)
+	id := GenerateObjectTypeID()
+	info := ObjectTypeInfo{
+		Fields: fields,
+		ID:     id,
+		Class:  true,
+	}
+	def := r.Types.MintType(id, TClass)
+	return []Value{NewObjectType(def, info)}, nil
+}
+
 func objectWithParentHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	fieldsVal := args[0]
 	parentVal := args[1]
@@ -121,10 +150,18 @@ func objectWithParentHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 		Parent: &parentInfo,
 		ID:     id,
 		Name:   "",
+		// Subclassing a class type (refine Foo {…}) yields a class
+		// type: sealed, flat instances, minted under the parent's
+		// Class-branch node.
+		Class: parentInfo.Class,
 	}
 	parentDef := parentInfo.Type
 	if parentDef == nil {
-		parentDef = TObject
+		if parentInfo.Class {
+			parentDef = TClass
+		} else {
+			parentDef = TObject
+		}
 	}
 	def := r.Types.MintType(id, parentDef)
 	return []Value{NewObjectType(def, info)}, nil

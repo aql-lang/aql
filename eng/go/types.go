@@ -58,6 +58,7 @@ var (
 	TInternal       = mustType("Word/__IN")
 	TInspect        = mustType("Node/Map/Inspect")
 	TObject         = mustType("Ideal/Object")
+	TClass          = mustType("Ideal/Class")
 	TStore          = mustType("Ideal/Store")
 	TStoreSystem    = mustType("Ideal/Store/System")
 	TArray          = mustType("Ideal/Array")
