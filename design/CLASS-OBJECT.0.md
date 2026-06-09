@@ -330,10 +330,27 @@ open data are explicit `merge`/`setpath`. (Prototypes — JS's
 defaults-for-objects mechanism — were just removed; defaults through
 another door would repeat the mistake.)
 
+**Semantics of a value default (verified):** in `{x:1}` the literal
+plays two roles — the **default** when the field is omitted, and a
+**type exemplar**: the field's type is `typeof(1)` = Integer (the
+type, not the value — `make Foo {x:2}` works, `make Foo {}` gives
+`x:1`). Enforcement today is *conversion to the exemplar's type*:
+`{x:'hi'}` errors ("cannot convert"), but `{x:2.5}` silently
+**truncates to 2** — the same lossy-coercion softness as the
+`a:String`/`42` case, to become a loud type error. Also verified: a
+default value carrying a *refined* type does not retain it as the
+field type (`def d:Pos 5` … `{x:d}` infers Integer, accepts a plain
+`7`), so "type T **and** default v" is currently inexpressible when
+T is narrower/wider than the literal's natural type — open design
+item (candidate spellings: `x:Number 1` / `x:(1 as Radius)`).
+
 **Phase A additions from this analysis:** enforce predicate field
-types at `make`/instance-`set`; replace the provided-value coercion
-with a loud type error; spec rows for required-vs-defaulted, predicate
-enforcement (positive + violation), and per-instance default copying.
+types at `make`/instance-`set`; replace the provided-value coercions
+(`a:String`+`42`→`'42'`, `x:1`+`2.5`→`2`) with loud type errors; spec
+rows for required-vs-defaulted, predicate enforcement (positive +
+violation), per-instance default copying, and the two-role
+default semantics (`{x:1}` accepts `{x:2}`, defaults to 1, rejects
+non-Integers loudly).
 
 ## 4. Interactions with open proposals
 
