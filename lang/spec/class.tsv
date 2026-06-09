@@ -39,3 +39,12 @@ def Point class {x:1} def Point3 refine Point {z:3} (make Point3 {}) set w 1	ERR
 # §5  errors — malformed definitions
 def Bad class 5	ERROR:signature_error	the schema must be a map
 class Map	ERROR:signature_error	a bare Map type literal is not a concrete schema map (matcher refuses it)
+#
+# §6  strict field typing — no silent conversion (unlike legacy objects)
+def Point class {x:1} make Point {x:'hi'}	ERROR:expected Integer	a defaulted field rejects values outside the default's own type
+def Point class {x:1} make Point {x:2.5}	ERROR:expected Integer	no silent Float→Integer truncation — loud type error
+def User class {name:String} make User {name:42}	ERROR:expected String	a typed field rejects non-conforming values (no conversion)
+def Radius (Float gte 0.0) def Circle class {r:Radius} (make Circle {r:2.0}) get r	2.0	a predicate-typed field runs its predicate at make and accepts
+def Radius (Float gte 0.0) def Circle class {r:Radius} make Circle {r:-1.0}	ERROR:does not satisfy	…and rejects a violating value loudly
+def Radius (Float gte 0.0) def Circle class {r:Radius} def c (make Circle {r:1.0}) c set r -5.0	ERROR:type_error	write-time enforcement matches construction (predicate runs at set)
+def Radius (Float gte 0.0) def Circle class {r:Radius} def c (make Circle {r:1.0}) c set r 3.0 end c.r	3.0	a conforming write succeeds

@@ -280,7 +280,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if IsObjectType(constraint) {
 		info, _ := AsObjectType(constraint)
 		if body.Parent.Equal(TMap) {
-			result, err := eng.MakeObject(info, body, nil)
+			result, err := eng.MakeObject(info, body, nil, r)
 			if err != nil {
 				return nil, fmt.Errorf("def %s: %w", name, err)
 			}

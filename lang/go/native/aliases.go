@@ -298,6 +298,7 @@ var (
 	GenerateObjectTypeID      = eng.GenerateObjectTypeID
 	IDPrefixForType           = eng.IDPrefixForType
 	CanonicalType             = eng.CanonicalType
+	MakeClassFieldValue       = eng.MakeClassFieldValue
 	ReparentValue             = eng.ReparentValue
 	InstallDef                = eng.InstallDef
 	InstallFnDef              = eng.InstallFnDef

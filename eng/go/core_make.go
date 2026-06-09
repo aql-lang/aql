@@ -210,11 +210,11 @@ func buildBasePrototype(objType ObjectTypeInfo) (*ObjectInstanceInfo, error) {
 // Person-typed ObjectInstance from a raw Map body when the typed
 // binding's constraint is an ObjectType — closes the
 // structural-vs-nominal dispatch gap for object types.
-func MakeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceInfo) ([]Value, error) {
-	return makeObject(objType, srcVal, prototype)
+func MakeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceInfo, r *Registry) ([]Value, error) {
+	return makeObject(objType, srcVal, prototype, r)
 }
 
-func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceInfo) ([]Value, error) {
+func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceInfo, r *Registry) ([]Value, error) {
 	if !srcVal.Parent.Equal(TMap) {
 		return nil, fmt.Errorf("make: object values must be a map, got %s", srcVal.String())
 	}
@@ -227,7 +227,7 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 	// resolves eagerly into one field map — no prototype chain, no
 	// delegation at get. See design/CLASS-OBJECT.0.md §3.
 	if objType.Class {
-		return makeClassInstance(objType, provided)
+		return makeClassInstance(objType, provided, r)
 	}
 
 	if prototype == nil && objType.Parent != nil {
@@ -308,7 +308,13 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 // default when one exists (constraint with a concrete payload) and is
 // otherwise a loud missing-field error. The instance carries no
 // Prototype — reads are a single map lookup.
-func makeClassInstance(objType ObjectTypeInfo, provided *OrderedMap) ([]Value, error) {
+//
+// Field validation is STRICT (no silent conversion — unlike the
+// legacy object path): a typed field rejects non-conforming values
+// loudly, predicate-typed fields run their predicate via Unify, and
+// a defaulted field rejects values outside the default's own type.
+// See design/CLASS-OBJECT.0.md §3c.
+func makeClassInstance(objType ObjectTypeInfo, provided *OrderedMap, r *Registry) ([]Value, error) {
 	allFields := objType.AllFields()
 
 	for _, key := range provided.Keys() {
@@ -330,16 +336,11 @@ func makeClassInstance(objType ObjectTypeInfo, provided *OrderedMap) ([]Value, e
 			return nil, fmt.Errorf("make: missing field %q for class %s", key, objType.Name)
 		}
 
-		val = ResolveWordValue(val)
-		if val.Parent.ConformsTo(ValueType(constraint)) {
-			result.Set(key, val)
-			continue
-		}
-		converted, err := MakeConvert(val, ValueType(constraint))
+		checked, err := MakeClassFieldValue(val, constraint, r)
 		if err != nil {
 			return nil, fmt.Errorf("make: field %q: %w", key, err)
 		}
-		result.Set(key, converted)
+		result.Set(key, checked)
 	}
 
 	instanceType := objType.Type
@@ -350,6 +351,39 @@ func makeClassInstance(objType ObjectTypeInfo, provided *OrderedMap) ([]Value, e
 		TypeRef: &objType,
 		Fields:  result,
 	})}, nil
+}
+
+// MakeClassFieldValue validates one value against a class-schema
+// field constraint, strictly: a bare type-node constraint requires a
+// conforming value (no conversion fallback — a Float is not an
+// Integer; say so); a predicate / disjunction constraint runs through
+// Unify so the predicate body executes; a concrete default constrains
+// the field to the default's own (declared) type, which makes
+// refined-typed defaults enforce their refinement. Shared by `make`
+// and the class-instance `set` handler so write-time enforcement
+// matches construction.
+func MakeClassFieldValue(val Value, constraint Value, r *Registry) (Value, error) {
+	val = ResolveWordValue(val)
+
+	// Concrete default — the field's type is the default value's own
+	// type (its Parent), so {x:1} accepts Integers and rejects the
+	// rest, and a default carrying a refined type enforces it.
+	if constraint.Data != nil && !IsTypeBody(constraint) {
+		if val.Parent.ConformsTo(constraint.Parent) {
+			return val, nil
+		}
+		return Value{}, fmt.Errorf("expected %s (the default's type), got %s (%s)",
+			constraint.Parent.Name, val.Parent.Name, val.String())
+	}
+
+	// Type constraint — bare node, predicate type, disjunction.
+	// UnifyExplainR runs predicates and reports the reason on failure.
+	unified, uerr := UnifyExplainR(constraint, val, r)
+	if uerr != nil {
+		return Value{}, fmt.Errorf("expected %s, got %s (%s): %s",
+			constraint.String(), val.Parent.Name, val.String(), uerr.Error())
+	}
+	return unified, nil
 }
 
 // makePath creates a Path value from a source: a string ("a/b") or a
@@ -545,12 +579,12 @@ func registerKernelIdeals(r *Registry) {
 		Accepts: func(v Value) bool {
 			return (IsBareTypeNode(v) && v.Equal(TObject)) || IsObjectType(v)
 		},
-		Instantiate: func(typ, data Value, _ *Registry) ([]Value, error) {
+		Instantiate: func(typ, data Value, r *Registry) ([]Value, error) {
 			objType, err := AsObjectType(typ)
 			if err != nil {
 				return nil, fmt.Errorf("make: expected a constructed object type, got %s", typ.String())
 			}
-			return makeObject(objType, data, nil)
+			return makeObject(objType, data, nil, r)
 		},
 	})
 	r.Ideals.Register(&Ideal{
@@ -610,7 +644,10 @@ func MakeWithPrototype(args []Value, _ map[string]Value, _ []Value, reg *Registr
 
 	objType, _ := AsObjectType(targetVal)
 	protoInfo, _ := AsObjectInstance(protoVal)
-	return makeObject(objType, srcVal, &protoInfo)
+	if objType.Class {
+		return nil, fmt.Errorf("make: a class has no prototypes — instances are flat; construct with `make %s {…}`", objType.Name)
+	}
+	return makeObject(objType, srcVal, &protoInfo, reg)
 }
 
 // MakeWithOpts is the 3-arg make-with-options dispatcher.
@@ -640,7 +677,7 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 
 	if IsObjectType(targetVal) {
 		objType, _ := AsObjectType(targetVal)
-		return makeObject(objType, srcVal, nil)
+		return makeObject(objType, srcVal, nil, reg)
 	}
 
 	if IsRecordType(targetVal) {
@@ -700,7 +737,7 @@ func MakeObjHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) 
 	}
 	if IsObjectType(targetVal) {
 		objType, _ := AsObjectType(targetVal)
-		return makeObject(objType, srcVal, nil)
+		return makeObject(objType, srcVal, nil, reg)
 	}
 	// Not an object type and unclaimed by an Ideal kind (e.g.
 	// Options) — defer to the generic make dispatcher.

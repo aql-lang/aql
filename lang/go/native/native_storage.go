@@ -198,9 +198,11 @@ func setClassInstanceHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 		return nil, fmt.Errorf("set: expected a class instance, got %s", container.Parent.String())
 	}
 	key := StoreKey(args[0])
+	val := args[1]
 	if oi.TypeRef != nil {
 		all := oi.TypeRef.AllFields()
-		if _, declared := all.Get(key); !declared {
+		constraint, declared := all.Get(key)
+		if !declared {
 			name := oi.TypeRef.Name
 			if name == "" {
 				name = container.Parent.Name
@@ -210,8 +212,17 @@ func setClassInstanceHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 				"set",
 				"class instances are sealed — declare the field in the class schema, or use a plain map for open data")
 		}
+		// Write-time enforcement matches construction: the same strict
+		// field check make runs (typed fields conform, predicates run,
+		// defaulted fields constrain to the default's own type).
+		checked, err := MakeClassFieldValue(val, constraint, r)
+		if err != nil {
+			return nil, r.AqlError("type_error",
+				fmt.Sprintf("set: field %q: %s", key, err.Error()), "set")
+		}
+		val = checked
 	}
-	oi.Fields.Set(key, args[1])
+	oi.Fields.Set(key, val)
 	return nil, nil
 }
 
