@@ -276,6 +276,65 @@ fields, `#private`, Records & Tuples) points away from proto-as-API.
 Academic summary: a good minimal kernel for *implementing* object
 systems, a poor application-level model.
 
+## 3c. Constructors and default member values (review follow-up, 2026-06-09)
+
+**Baseline (verified on main):** the required/defaulted split already
+exists — a schema field given a *type* (`a:String`) is **required**
+(`make: missing field "a"`, loud); a field given a *value* (`w:9`)
+**defaults** when omitted (and the value infers the type); unknown
+keys at `make` already error. Two gaps found: predicate field types
+(`r:Radius` where `def Radius (Float gte 0.0)`) are accepted but
+**not enforced** at `make` (`{r:-1.0}` constructs); and a wrong-typed
+provided value coerces silently (`a:String` given `42` stores `'42'`).
+
+**Default member values — adopt, with the split blessed as contract:**
+
+- *type = required, value = default.* Loud `missing field` for
+  required; defaults fill the rest. This is the modern consensus
+  design (Kotlin/Swift/Rust/dataclasses moved to required-by-default
+  with explicit defaults; Go's everything-has-a-zero-value is the
+  cautionary tale), and it resolves the one culture tension: a field
+  whose absence would be a bug should be *typed*, not defaulted.
+- Defaults + sealing + flat instances give **totality**: every
+  instance has every field, always — complete enumeration, no
+  null-holes, checker-trustable presence.
+- Rules to pin: defaults are **pure literal values** (no computed
+  defaults — that smuggles constructor logic back in); copied per
+  instance, never shared (the 2×2 already defuses most of this:
+  List/Map defaults are immutable values); the silent provided-value
+  coercion becomes a **loud type error**.
+
+**Constructors — no constructor bodies; `make` stays the only
+primitive constructor (dumb field-filling + checks):**
+
+- *Validation belongs in the type system:* field types already accept
+  predicate refinements — **enforce them at `make` and at instance
+  `set`** (closing the gap above). Declarative, unforgettable,
+  schema-visible, checker-reasonable.
+- *Smart constructors are free functions* —
+  `def circle fn [[r:Float] [Circle] [… make Circle {r:r}]]` —
+  zero new surface, module-exportable, owns derived/normalized
+  fields. Consistent with methods-as-free-functions.
+- Avoided wholesale: a second function kind, the
+  partially-initialized-object escape problem, `this`/`self` (still
+  not introduced), and make-vs-constructor bypass anxiety.
+- Consensus check: the field moved to "constructors should be dumb" —
+  Java *records* (fields only), Kotlin data classes, Python
+  dataclasses, no-work-in-constructor testing doctrine; validation
+  lives in factories and type constraints.
+
+**Plain Objects: neither.** `object {…}` literal seeding is the whole
+construction story — no schema, no defaults, no hooks. An Object
+wanting defaults is a class in a trench coat; ad-hoc defaults over
+open data are explicit `merge`/`setpath`. (Prototypes — JS's
+defaults-for-objects mechanism — were just removed; defaults through
+another door would repeat the mistake.)
+
+**Phase A additions from this analysis:** enforce predicate field
+types at `make`/instance-`set`; replace the provided-value coercion
+with a loud type error; spec rows for required-vs-defaulted, predicate
+enforcement (positive + violation), and per-instance default copying.
+
 ## 4. Interactions with open proposals
 
 - **B5 (`make Object {}`)** — resolved by design in Phase B (becomes
