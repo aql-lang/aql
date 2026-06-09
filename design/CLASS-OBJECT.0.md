@@ -391,6 +391,72 @@ violation), per-instance default copying, and the two-role
 default semantics (`{x:1}` accepts `{x:2}`, defaults to 1, rejects
 non-Integers loudly).
 
+## 3d. `const` members — singleton types (review follow-up, 2026-06-09)
+
+Proposal: `{x:(const 1)}` — field `x` can only ever hold `1`. `const`
+mints an **interned singleton type** (one inhabitant) and returns the
+value **tagged with it** (the same reparenting `def d:Foo 1` already
+performs), so `typeof (const 1)` is the singleton, whose canon prints
+as `1`. `set x 2` on an instance then fails the ordinary field-type
+check.
+
+**Already in the language (verified):** `def One 1` is a singleton
+type today (`1 is One` true, `2 is One` false); literal unions work
+(`def M ('GET' tor 'POST')` — membership and fn-param dispatch both
+correct, `'PUT'` fails loudly); membership is same-type strict
+(`1.0 is (1 tor 2)` → false — `cmp`'s cross-leaf magnitude
+equivalence does not leak into membership). Wired-but-dead nearby:
+`(Integer eq 1)` predicate refinements don't work, and value patterns
+in fn sigs don't dispatch — `const` subsumes the first and supplies
+semantics for the second.
+
+**The unification:** because `const 1` returns a concrete value whose
+*declared Parent* is the singleton, `{x:(const 1)}` needs **zero
+schema special-casing** — it rides the §3c typed-default rule
+(`{x:(make Foo 1)}`): field type from the value's Parent, default =
+the value. A const member is a typed default whose type has one
+inhabitant; `make S {x:1}` accepted, `make S {x:2}` and instance
+`set x 2` are loud type errors, `make S {}` fills the forced default.
+
+**Gotchas to pin:** intern singletons by (base, value) — two
+`(const 1)`s must be one lattice node (canonicalization invariants,
+no mint bloat); type-algebra closure (`(const 1) tand Integer` =
+`(const 1)`, `(const 1) tand (const 2)` = `Never`, `tnot (const 1)`
+within Integer = a neq refinement — same wiring the dead eq-refinement
+needs); compound consts are structural-`deq` and fine for immutable
+List/Map, but **mutable values (Object/Array) are rejected**; NaN
+membership defined via the coherent total order, not IEEE eq (or
+rejected); pin `typeof s.x` (recommend: the stored value stays
+singleton-tagged so reads round-trip); per-instance storage of the
+invariant value is accepted (enumeration/serialization want
+discriminants in the data — class-level storage is a later
+optimization, not a semantic).
+
+**Alternatives considered:** today's workaround `def K 'point'` +
+`{kind:K}` (works but: separate def, and as a *type* entry the field
+is required-with-no-default — callers must spell the only possible
+value at every make; `const` fuses singleton + forced default
+inline); fixing `(T eq v)` refinements with `const` as sugar (same
+destination — adopt eq-refinement as the internal encoding); **`final`
+(write-once per instance) is the orthogonal feature** — TS
+readonly-vs-literal-types, Python Final-vs-Literal — deliberately not
+conflated, separate pass if wanted; real ADTs (Rust/Haskell enums)
+are the road not taken — AQL's `tor` + literal discriminants is the
+TypeScript path, which makes `const` *more* load-bearing here.
+
+**Prior art:** TypeScript literal types + `as const` + discriminated
+unions (the proven model and payoff — flow narrowing later via the
+existing `dynamic(T)` narrowing machinery); Python `Literal`/`Final`;
+Scala 3 first-class literal types; Haskell DataKinds; Java/Go none;
+Rust skipped them in favour of declared enums. Verdict: literal types
+earn their keep exactly where unions are structural — AQL's
+situation.
+
+**Payoff:** `def Circle class {kind:(const 'circle'), r:0.0}` +
+`def Shape (Circle tor Square)` — discriminated unions that make
+`tor` practical for data modelling, with discriminants present in
+enumeration and serialization.
+
 ## 4. Interactions with open proposals
 
 - **B5 (`make Object {}`)** — resolved by design in Phase B (becomes
