@@ -77,31 +77,44 @@ xs                            # returns [1 2 3]
 ### 2.3 Object — mutable, keyed, open, fully enumerable (Phase B)
 
 ```
-def o make Object {}          # empty open object — today an error (retires B5)
-def o2 make Object {a:1}      # seeded from a map
+def o object {}               # sugar — exactly `make Object {}`
+def o2 object {a:1}           # seeded from a map (today an error; retires B5)
 o2 set b 2                    # in place; returns NOTHING — read o2 back
 def k 'dyn'
 o2 set (k) 3                  # computed key, in place
-o2 get b                      # returns 2
+o2.b                          # returns 2 — dot access (literal key)
 o2 get (k)                    # returns 3
 StructUtil.items o2           # returns [['a' 1] ['b' 2] ['dyn' 3]] — ALL
                               # fields enumerate (no invisible-dynamic-field
                               # class of bug)
 o2 size                       # returns 3
 def alias o2                  # bindings share the container (mutable column):
-alias set a 9 end o2 get a    # returns 9
+alias set a 9 end o2.a        # returns 9
 ```
 
 ### 2.4 Array — mutable, indexed (constructor proposed)
 
 ```
-def a make Array [1 2 3]      # PROPOSED constructor — today Array is
-                              # host-side-only (§6.2)
+def a array [1 2 3]           # sugar — exactly `make Array [1 2 3]`
+                              # (today Array is host-side-only, §6.2)
 a set 0 99                    # in place; returns NOTHING — bounds-checked
-a get 0                       # returns 99
+a.0                           # returns 99 — dot index (get already has the
+                              # [Integer, Array] signature)
 a size                        # returns 3
 a set 5 1                     # ERROR — index out of bounds (current set rule)
 ```
+
+### 2.4b Constructor sugars
+
+`object {…}` ≡ `make Object {…}` and `array […]` ≡ `make Array […]`.
+Both names are unclaimed today (verified — no word, no module export;
+the array module namespace is the capitalised `ArrayUtil`). They are
+ordinary forward words per ADR-004, so the paren-free `def o object
+{…}` rides the same nested-collection path as `def Foo class {…}` and
+`def name fn […]`. The lowercase trio reads as a family: `class`
+mints a type, `object`/`array` mint containers. `make` remains the
+general constructor (and the only spelling for class instances —
+`make Point {…}`; a per-class sugar would shadow user namespaces).
 
 ### 2.5 Classes and instances
 
@@ -133,7 +146,31 @@ def Box refine Object {v:0}
 #   hint: def Box class {v:0}
 ```
 
-### 2.6 Crossing the columns (proposed, small)
+### 2.6 Dot access works for everything
+
+`.` is `get`, and the guarantee is uniform: **every container and
+instance answers dot access**, with the literal-vs-computed key rule
+(`x.k` literal, `x get (k)` computed) everywhere. Status against
+current main (verified by probe):
+
+| Receiver | Form | Status |
+|----------|------|--------|
+| Map | `m.a`, nested `m.a.b` | ✅ works today |
+| List | `xs.1` (index) | ✅ works today |
+| Class instance | `p.x` | ✅ works today (refine-Object instances) |
+| Store | `context.n` | ✅ works today |
+| Module export | `MathUtil.sqrt` | ✅ works today |
+| Object (plain) | `o.a` | Phase B — same `get` Object sig; pin with spec rows |
+| Array | `a.0` | Phase C — `get` already has the `[Integer, Array]` sig; pin with spec rows once `array` makes instances reachable |
+| Call result | `(object {a:1}).a` | parenthesised receiver, existing rule |
+
+So this is a **guarantee to pin**, not new machinery: Phases B and C
+each carry a dot-access spec battery over the receivers they
+introduce (positive + missing-key-returns-None + `!.` strict rows).
+Writes stay with `set` — there is no dot-assignment form; `.` remains
+read-only sugar for `get`.
+
+### 2.7 Crossing the columns (proposed, small)
 
 ```
 convert Map o2                # Object → Map   — freeze: immutable snapshot
@@ -170,6 +207,35 @@ match the rest of the copy semantics.
   `def name fn […]` work; `class` needs the same treatment in the
   forward collector as `fn`.
 
+## 3b. What about Object prototypes?
+
+Reopened during review: classes are now flat — should plain mutable
+*Objects* carry a JS-style prototype (delegating `get` up a chain)?
+
+**Resolution: no — Object is flat; delegation is Store's job.** The
+2×2 stays honest precisely because each cell has one behaviour:
+
+- A delegating Object reintroduces the bug class this design just
+  killed structurally — reads that see fields enumeration doesn't
+  show. JS lives with `own` vs `in` vs `for…in` precisely because of
+  this split; AQL doesn't have to.
+- Array doesn't delegate; its keyed sibling shouldn't either.
+- The delegation use cases are already owned elsewhere: **defaults**
+  → class schemas (resolved flat at `make`); **data layering** →
+  `StructUtil.merge` / `setpath` (explicit, copy-returning);
+  **scope-chain lookup** → `Store`, which IS the prototype-chain
+  container — chained copy-on-write layers with fallback reads are
+  its entire identity, and the reason it stays a separate surface
+  type in this design.
+
+That last point sharpens the Store story: *"if you want a delegating
+keyed container, that's what Store is."* Today the only Store is the
+ambient `context`; if user-space delegation is ever wanted as a
+value, the sanctioned route is making Store constructible with an
+**explicit parent** — `store {a:1} parent-store` — rather than
+bolting a `proto` onto Object. Parked as open question §6.5; no use
+case demands it yet.
+
 ## 4. Interactions with open proposals
 
 - **B5 (`make Object {}`)** — resolved by design in Phase B (becomes
@@ -185,8 +251,8 @@ match the rest of the copy semantics.
 | Phase | Content | Breaking? |
 |-------|---------|-----------|
 | A | `class` word + `refine <Class>` subclassing + flat eager-default instances + sealing + **removal of `refine Object`** (loud `refine_error` with hint) | **yes** — one clean break, README upgrade note; all `refine Object` call sites rewrite to `class` |
-| B | `make Object {…}` / `make Object {}` constructs plain open Objects; full enumeration; docs lead with the 2×2 table | no (turns an error into a value) |
-| C | Column completion: List copy-returning `set`; `make Array […]`; `convert` freeze/thaw pair | no (additive) |
+| B | `object {…}` sugar + `make Object {…}` construct plain open Objects; full enumeration; dot-access spec battery for Object receivers; docs lead with the 2×2 table | no (turns an error into a value) |
+| C | Column completion: List copy-returning `set`; `array […]` sugar + `make Array […]`; dot-access battery for Array; `convert` freeze/thaw pair | no (additive) |
 
 Phase A bundles sealing with the rewrite on purpose: every
 `refine Object` site must be touched anyway, so the sealed contract
@@ -205,3 +271,6 @@ REFERENCE / TUTORIAL / README-upgrade-notes in the same change.
 4. **Class introspection** — what `describe Point3` renders (schema,
    parent, defaults). Decide during Phase A from the existing
    ObjectTypeInfo rendering.
+5. **Constructible Store with explicit parent** (§3b) — the sanctioned
+   delegation container if user-space chained lookup is ever needed;
+   parked until a use case demands it.

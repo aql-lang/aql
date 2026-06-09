@@ -308,9 +308,14 @@ plan in `design/CLASS-OBJECT.0.md`):
 
 1. **The container vocabulary is a 2×2:** `List : Array :: Map :
    Object` — immutable value vs mutable container, indexed vs keyed.
-   `Object` becomes a core, constructible (`make Object {}`),
-   fully-enumerable, mutable keyed container. **Store remains a
-   separate surface type** for scoped copy-on-write context semantics.
+   `Object` becomes a core, constructible, fully-enumerable, mutable
+   keyed container, with `object {…}` / `array […]` as sugars for
+   `make Object {…}` / `make Array […]`. Dot access (`.` = `get`)
+   is guaranteed across every receiver — Map, List, Object, Array,
+   class instance, Store, module — read-only, literal-key semantics.
+   **Store remains a separate surface type**: it is the language's
+   *delegating* keyed container (chained copy-on-write lookup), which
+   is why plain Object stays flat — see decision 4.
 2. **`class` defines, `refine` extends:** `def Foo class {…}` defines
    a root class (paren-free, the same nested-collection shape as
    `def name fn […]`); `def Bar refine Foo {…}` defines a subclass —
@@ -321,13 +326,18 @@ plan in `design/CLASS-OBJECT.0.md`):
 3. **Class instances are sealed:** writing an undeclared field raises
    `[aql/sealed_field]` loudly at the `set`. Open dynamic data belongs
    on plain Object.
-4. **Classes have no prototypes — just instances.** A class is a
-   schema (fields + defaults + parent class); `make` resolves the
-   full default set eagerly, **flat into the instance**. Instances
-   carry one flat field map — no `Prototype` link, no delegation at
-   `get` (the instance-side `buildBasePrototype`/`GetField` walk is
-   deleted; the context/Store scope chain is separate machinery and
-   unaffected). There is no surface `proto` and no prototype *method*
+4. **No prototypes on classes or Objects — delegation is Store's
+   job.** A class is a schema (fields + defaults + parent class);
+   `make` resolves the full default set eagerly, **flat into the
+   instance**. Instances and plain Objects carry one flat field map —
+   no `Prototype` link, no delegation at `get` (the instance-side
+   `buildBasePrototype`/`GetField` walk is deleted). A delegating
+   Object would reintroduce the reads-see-what-enumeration-doesn't
+   bug class this design removes; the delegation use cases are owned
+   elsewhere — defaults by class schemas, data layering by
+   `StructUtil.merge`/`setpath`, chained lookup by **Store** (whose
+   copy-on-write parent chain is its identity and the reason it stays
+   separate). There is no surface `proto` and no prototype *method*
    dispatch — polymorphism stays with signature dispatch through the
    type lattice. One dispatch mechanism, the same principle ADR-004
    applies to argument collection.
