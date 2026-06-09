@@ -1,10 +1,11 @@
 # Traits — Named Contracts over Open Multimethods
 
-Status: **decisions accepted 2026-06-09** (language owner, via design
-review); **implementation scheduled with generics**
-(`design/GENERICS.0.md` — whose `T extends Comparable` constraint
-examples are waiting for exactly this). ADR-006 records the decision
-summary; this document owns the design.
+Status: **discovery note** — directions agreed in design conversation
+(2026-06-09, language owner); **not an ADR** (ADRs are added only on
+explicit instruction). Implementation intended to ride the generics
+phase (`design/GENERICS.0.md` — whose `T extends Comparable`
+constraint examples are waiting for exactly this). This document owns
+the design. Naming is under discussion — see §8.
 
 ## 1. Decisions
 
@@ -45,8 +46,10 @@ generics constraints meaning "anything that satisfies this".
 
 Traits therefore **constrain and check; they never dispatch**.
 Calling a required word on a trait-typed value is ordinary
-multimethod dispatch. One dispatch mechanism — the ADR-004 / ADR-005
-principle, applied a third time.
+multimethod dispatch. One dispatch mechanism — the same principle
+ADR-004 applies to argument collection, and the class/object
+discovery note (`design/CLASS-OBJECT.0.md`) applies to prototypes —
+applied a third time.
 
 ## 3. Surface
 
@@ -148,7 +151,42 @@ declaration site, actionable hint, dispatchable code.
   hook. A later bridge may define e.g. `Comparable` as the trait the
   compare behavior witnesses, but v1 keeps them separate.
 
-## 7. Open questions
+## 7a. Naming: interface vs trait (under discussion)
+
+The historical distinction is crisp:
+
+- **Interface** (Java/C#): a named set of operation signatures with
+  **no implementations** — a pure contract.
+- **Trait** (the original — Schärli et al. 2003, Smalltalk): a
+  composable unit of **method implementations without state**, for
+  building classes by composition. Code reuse is the point; the
+  contract is incidental.
+- **Rust's "trait"** blurred the line: it is contract-first like an
+  interface but carries optional default bodies, associated types,
+  and retroactive `impl` — functionally a typeclass wearing the
+  trait name.
+- **Protocol** (Clojure/Elixir/Swift): named operation set,
+  retroactive per-type implementation, dispatch via the language's
+  existing mechanism — the closest living relative of this design.
+
+What this note specifies is: **no bodies, no state** (pure contract),
+**explicit retroactive conformance**, **existing multimethod
+dispatch**. On the carries-code axis that is an *interface*, not a
+trait — v1 deliberately excludes the thing that makes a trait a
+trait. The keyword pair already reads as interface vocabulary
+(`Circle implements Shape` is Java's exact pair; "implements a trait"
+is Rust's incongruity).
+
+**Recommendation: call them interfaces** (`def Shape interface {…}`,
+`Circle implements Shape`), and *reserve* `trait` for a possible
+future code-carrying mixin construct — keeping both words at their
+historical meanings, orthogonal: interface = contract, trait =
+implementation bundle. One caveat to note in docs if adopted: AQL
+conformance is explicit (Java-style), not structural-implicit
+(Go/TS-style), despite the shared word. Rename this file to
+`INTERFACES.0.md` when confirmed.
+
+## 7b. Open questions
 
 1. **Super-traits** — `def Shape3 trait Shape {volume: …}` (a trait
    requiring another). Natural extension of the `refine`-extends

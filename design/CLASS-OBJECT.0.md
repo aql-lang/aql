@@ -1,9 +1,10 @@
 # Class / Object Split — Container Symmetry and the `class` Word
 
-Status: **decisions accepted 2026-06-09** (language owner, via design
-review; revised same day — no aliases, paren-free definition forms,
-flat instances); **implementation pending**. ADR-005 records the
-decision summary; this document owns the design and plan.
+Status: **discovery note** — directions agreed in design conversation
+(2026-06-09, language owner; revised same day — no aliases, paren-free
+definition forms, flat instances). **Not an ADR** (ADRs are added only
+on explicit instruction) and **implementation pending**; this document
+owns the design and plan.
 
 ## 1. Decisions
 

@@ -90,6 +90,14 @@ Language-agnostic content stays at the top of each component:
   All moved words are no longer available unqualified.
 - `test/` — integration tests and TSV spec runners.
 
+## ADRs — only on explicit instruction
+
+**Never add an entry to `ADR.md` unless the maintainer explicitly
+instructs it** ("add an ADR for X"). Design conversations, reviews,
+and directions accepted in discussion are *discovery* — they are
+captured in `design/*.md` notes, not as ADR entries, however settled
+they sound. The same rule is stated in the `ADR.md` header.
+
 ## Build & Test
 
 ```bash
