@@ -876,6 +876,14 @@ interactive no-echo prompt you get when you pass none of them.
 Windows; if you run a clipboard manager, clear its history too,
 since it may keep a copy the wipe cannot reach.
 
+Aliases can be namespaced — `proj1:github_token` and
+`proj2:github_token` are different keys. Set a default with
+`aql vault config --set namespace.default=proj1` and bare names
+resolve into it (`vault add key` stores `proj1:key`; `vault get key`
+reads it back); `:key` forces the root namespace. Filter reports with
+`vault list --namespace=proj1` or `vault audit --namespace=proj1`
+(`:` = root only).
+
 Passphrases work the same way: `vault init` and every command that
 opens the file keyring prompt for the vault passphrase with echo
 suppressed, and `vault export`/`import` prompt for the bundle

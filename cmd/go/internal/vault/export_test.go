@@ -27,7 +27,7 @@ func TestExportImportRoundTripAcrossVaults(t *testing.T) {
 	t.Setenv(EnvExportPassphrase, "bundle-pass")
 	bundle := filepath.Join(t.TempDir(), "vault.aqlx")
 
-	// Source vault.
+	// Source vault. --namespace qualifies, so k1 is stored as proj:k1.
 	src := t.TempDir()
 	initVaultAt(t, src, "src-pass")
 	if code, _, e := runVault(t, "value-one\n", "add", "--from-stdin", "--provider=openai", "--namespace=proj", "k1"); code != 0 {
@@ -53,12 +53,12 @@ func TestExportImportRoundTripAcrossVaults(t *testing.T) {
 	initVaultAt(t, dst, "dst-pass")
 	if code, out, e := runVault(t, "", "import", bundle); code != 0 {
 		t.Fatalf("import: %s", e)
-	} else if !strings.Contains(out, "imported k1") || !strings.Contains(out, "imported k2") {
+	} else if !strings.Contains(out, "imported proj:k1") || !strings.Contains(out, "imported k2") {
 		t.Errorf("import output missing aliases: %q", out)
 	}
 
-	// Values survived the move.
-	for alias, want := range map[string]string{"k1": "value-one", "k2": "value-two"} {
+	// Values survived the move, qualified names intact.
+	for alias, want := range map[string]string{"proj:k1": "value-one", "k2": "value-two"} {
 		code, out, _ := runVault(t, "", "get", "--reveal", alias)
 		if code != 0 || !strings.Contains(out, want) {
 			t.Errorf("get %s = %q (code %d), want %q", alias, out, code, want)
@@ -66,8 +66,8 @@ func TestExportImportRoundTripAcrossVaults(t *testing.T) {
 	}
 	// Metadata survived too.
 	s, _ := LoadStore(dst)
-	if a, _ := s.FindAlias("k1"); a == nil || a.Provider != "openai" || a.Namespace != "proj" {
-		t.Errorf("k1 metadata not preserved: %+v", a)
+	if a, _ := s.FindAlias("proj:k1"); a == nil || a.Provider != "openai" || a.Namespace != "proj" {
+		t.Errorf("proj:k1 metadata not preserved: %+v", a)
 	}
 }
 

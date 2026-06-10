@@ -218,21 +218,23 @@ trailing=value # with comment
 	if code != 0 {
 		t.Fatalf("import: %s", errOut)
 	}
+	// --namespace qualifies the imported names (it is the ns: prefix,
+	// not just a metadata tag).
 	for _, k := range []string{"FOO", "QUOTED", "SINGLE", "trailing"} {
-		if !strings.Contains(out, "imported "+k) {
-			t.Errorf("missing import of %s in %q", k, out)
+		if !strings.Contains(out, "imported test:"+k) {
+			t.Errorf("missing import of test:%s in %q", k, out)
 		}
 	}
 	// EMPTY_KEY has an empty value; the keyring still accepts it but
 	// it is a weak default — verify we did not crash. The alias may
 	// or may not be created depending on policy; current behavior is
 	// to accept it because parseDotenv yields val="".
-	code, out, _ = runVault(t, "", "get", "--reveal", "QUOTED")
+	code, out, _ = runVault(t, "", "get", "--reveal", "test:QUOTED")
 	if code != 0 {
-		t.Fatal("get QUOTED")
+		t.Fatal("get test:QUOTED")
 	}
 	if !strings.Contains(out, "hello world") {
-		t.Errorf("get QUOTED expected 'hello world', got %q", out)
+		t.Errorf("get test:QUOTED expected 'hello world', got %q", out)
 	}
 }
 

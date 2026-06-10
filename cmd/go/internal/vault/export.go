@@ -73,8 +73,13 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	fs := flag.NewFlagSet("vault export", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	out := fs.String("out", "", "write the encrypted bundle to this file (default: stdout)")
-	namespace := fs.String("namespace", "", "only export aliases tagged with this namespace")
+	namespace := fs.String("namespace", "", "only export aliases in this namespace (':' = root only)")
 	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	nsFilter, nsFiltered, err := normalizeNSFilter(*namespace)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
 	s, err := requireStore(homeDir)
@@ -87,7 +92,11 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		return 1
 	}
 
-	selected := selectExportAliases(s, fs.Args(), *namespace)
+	selected, err := selectExportAliases(s, fs.Args(), nsFilter, nsFiltered)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
 	if len(selected) == 0 {
 		fmt.Fprintln(stderr, "error: no matching aliases to export")
 		return 1
@@ -158,25 +167,31 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	return 0
 }
 
-// selectExportAliases returns the aliases to export: the named ones if
-// any are given, otherwise all, filtered by namespace when set.
-func selectExportAliases(s *Store, names []string, namespace string) []Alias {
+// selectExportAliases returns the aliases to export: the referenced
+// ones if any are given (each resolved through the namespace rule, so
+// bare names follow the active default), otherwise all, filtered by
+// namespace when one was specified ("" with filtered=true means root
+// only).
+func selectExportAliases(s *Store, names []string, nsFilter string, nsFiltered bool) ([]Alias, error) {
 	var out []Alias
 	if len(names) > 0 {
-		for _, n := range names {
-			a, _ := s.FindAlias(n)
-			if a != nil && (namespace == "" || a.Namespace == namespace) {
+		for _, ref := range names {
+			a, _, err := findAliasRef(s, ref)
+			if err != nil {
+				return nil, err
+			}
+			if !nsFiltered || aliasNamespace(*a) == nsFilter {
 				out = append(out, *a)
 			}
 		}
-		return out
+		return out, nil
 	}
 	for _, a := range s.SortedAliases() {
-		if namespace == "" || a.Namespace == namespace {
+		if !nsFiltered || aliasNamespace(a) == nsFilter {
 			out = append(out, a)
 		}
 	}
-	return out
+	return out, nil
 }
 
 // exportSealPassphrase reads the bundle passphrase from the environment
@@ -255,9 +270,34 @@ func importBundle(data []byte, fromStdin bool, homeDir string, stdin io.Reader, 
 		return 1
 	}
 
+	// Bundle names are stored-form, so they are kept as-is — the default
+	// namespace never silently rewrites them. --namespace explicitly
+	// remaps every imported alias into the given namespace (":" = root);
+	// --prefix applies to the base name, inside the namespace.
+	remap := false
+	remapNS := ""
+	switch namespaceOverride {
+	case "":
+	case rootNamespaceRef:
+		remap = true
+	default:
+		if !validNamespaceName(namespaceOverride) {
+			fmt.Fprintf(stderr, "error: invalid namespace %q\n", namespaceOverride)
+			return 1
+		}
+		remap, remapNS = true, namespaceOverride
+	}
+
 	imported, skipped := 0, 0
 	for _, a := range bundle.Aliases {
-		name := prefix + a.Name
+		ns, base := splitAlias(a.Name)
+		if remap {
+			ns = remapNS
+		}
+		name := prefix + base
+		if ns != "" {
+			name = ns + ":" + name
+		}
 		if !validAlias(name) {
 			fmt.Fprintf(stderr, "warning: skipping invalid alias %q\n", name)
 			continue
@@ -275,11 +315,14 @@ func importBundle(data []byte, fromStdin bool, homeDir string, stdin io.Reader, 
 			fmt.Fprintf(stderr, "error: storing %s: %s\n", name, err)
 			return 1
 		}
-		ns := a.Namespace
-		if namespaceOverride != "" {
-			ns = namespaceOverride
+		// Metadata namespace: derived from the final name; a root-level
+		// name keeps the bundle's legacy tag unless root was an explicit
+		// remap target.
+		metaNS := ns
+		if ns == "" && !remap {
+			metaNS = a.Namespace
 		}
-		s.UpsertAlias(Alias{Name: name, Provider: a.Provider, Namespace: ns, Source: "import:bundle"})
+		s.UpsertAlias(Alias{Name: name, Provider: a.Provider, Namespace: metaNS, Source: "import:bundle"})
 		_ = appendAudit(homeDir, AuditEvent{
 			Action: "vault.import", Alias: name, Provider: a.Provider,
 			Outcome: "ok", Reason: "source=bundle",

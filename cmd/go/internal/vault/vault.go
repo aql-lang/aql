@@ -109,6 +109,8 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Backends: auto (default), keychain, secret-service, wincred, file, 1password.")
 	fmt.Fprintln(w, "Passphrases are prompted interactively (hidden); set AQL_VAULT_PASSPHRASE only for non-interactive use.")
+	fmt.Fprintln(w, "Namespaces: qualify aliases as ns:name; bare names use the default namespace")
+	fmt.Fprintln(w, "  (vault config --set namespace.default=NS, or AQL_VAULT_NAMESPACE; ':' = root, :name forces root).")
 }
 
 type modeDoc struct{ name, summary string }
@@ -296,9 +298,39 @@ func runStatus(args []string, homeDir string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "store:         %s\n", StorePath(homeDir))
 	fmt.Fprintf(stdout, "locked:        %t\n", s.Locked)
 	fmt.Fprintf(stdout, "aliases:       %d\n", len(s.Aliases))
+	if line := namespaceBreakdown(s); line != "" {
+		fmt.Fprintf(stdout, "namespaces:    %s\n", line)
+	}
 	fmt.Fprintf(stdout, "capabilities:  %d active / %d total\n", len(active), len(s.Capabilities))
 	fmt.Fprintf(stdout, "agents:        %d registered\n", len(s.Agents))
 	return 0
+}
+
+// namespaceBreakdown renders per-namespace alias counts, e.g.
+// "(root)=2 proj=3". Empty when every alias is root-level, so the
+// status output is unchanged for vaults that don't use namespaces.
+func namespaceBreakdown(s *Store) string {
+	counts := map[string]int{}
+	for _, a := range s.Aliases {
+		counts[aliasNamespace(a)]++
+	}
+	if len(counts) == 1 && counts[""] > 0 {
+		return ""
+	}
+	names := make([]string, 0, len(counts))
+	for ns := range counts {
+		names = append(names, ns)
+	}
+	sort.Strings(names) // "" (root) sorts first
+	parts := make([]string, 0, len(names))
+	for _, ns := range names {
+		label := ns
+		if ns == "" {
+			label = "(root)"
+		}
+		parts = append(parts, fmt.Sprintf("%s=%d", label, counts[ns]))
+	}
+	return strings.Join(parts, " ")
 }
 
 // --- add -------------------------------------------------------------------
@@ -310,18 +342,30 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 	fromStdin := fs.Bool("from-stdin", false, "read value from a single line on stdin")
 	fromClipboard := fs.Bool("from-clipboard", false, "read value from the OS clipboard, then wipe the clipboard")
 	provider := fs.String("provider", "", "tag this secret with a provider (openai, anthropic, github, ...)")
-	namespace := fs.String("namespace", "", "tag this secret with a project namespace")
+	namespace := fs.String("namespace", "", "store under this namespace (same as the ns: prefix; ':' = root)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintf(stderr, "error: usage: aql vault add [--from-env=VAR | --from-stdin | --from-clipboard | --provider=...] <alias>\n")
+		fmt.Fprintf(stderr, "error: usage: aql vault add [--from-env=VAR | --from-stdin | --from-clipboard | --provider=...] [--namespace=NS] <[ns:]alias>\n")
 		return 1
 	}
-	alias := fs.Arg(0)
-	if !validAlias(alias) {
-		fmt.Fprintf(stderr, "error: invalid alias %q (allowed: letters, digits, dot, dash, underscore)\n", alias)
-		return 1
+	aliasRef := fs.Arg(0)
+	// --namespace is sugar for the ns: prefix; both at once is a
+	// conflict rather than a precedence puzzle.
+	if *namespace != "" {
+		if strings.Contains(aliasRef, ":") {
+			fmt.Fprintf(stderr, "error: alias %q already carries a namespace; drop --namespace or the prefix\n", aliasRef)
+			return 1
+		}
+		if *namespace == rootNamespaceRef {
+			aliasRef = rootNamespaceRef + aliasRef
+		} else if !validNamespaceName(*namespace) {
+			fmt.Fprintf(stderr, "error: invalid namespace %q\n", *namespace)
+			return 1
+		} else {
+			aliasRef = *namespace + ":" + aliasRef
+		}
 	}
 	s, err := requireStore(homeDir)
 	if err != nil {
@@ -330,6 +374,11 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 	}
 	if s.Locked {
 		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
+		return 1
+	}
+	alias, err := resolveAliasRef(s, aliasRef)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
 
@@ -352,10 +401,11 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	ns, _ := splitAlias(alias)
 	s.UpsertAlias(Alias{
 		Name:      alias,
 		Provider:  *provider,
-		Namespace: *namespace,
+		Namespace: ns, // derived from the name so the two can't disagree
 		Source:    source,
 	})
 	if err := SaveStore(homeDir, s); err != nil {
@@ -441,7 +491,6 @@ func runGet(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: usage: aql vault get [--reveal] <alias>\n")
 		return 1
 	}
-	alias := fs.Arg(0)
 	s, err := requireStore(homeDir)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
@@ -451,8 +500,9 @@ func runGet(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
 		return 1
 	}
-	if a, _ := s.FindAlias(alias); a == nil {
-		fmt.Fprintf(stderr, "error: no alias named %q\n", alias)
+	_, alias, err := findAliasRef(s, fs.Arg(0))
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
 	kr, err := openKeyring(s, homeDir, os.Stdin, stdout, "Vault passphrase: ")
@@ -492,8 +542,13 @@ func redact(v string) string {
 func runList(args []string, homeDir string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("vault list", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	namespace := fs.String("namespace", "", "filter by namespace")
+	namespace := fs.String("namespace", "", "filter by namespace (':' = root only)")
 	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	nsFilter, nsFiltered, err := normalizeNSFilter(*namespace)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
 	s, err := requireStore(homeDir)
@@ -508,11 +563,11 @@ func runList(args []string, homeDir string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "%-24s %-12s %-16s %-20s %s\n", "ALIAS", "PROVIDER", "NAMESPACE", "CREATED", "SOURCE")
 	for _, a := range aliases {
-		if *namespace != "" && a.Namespace != *namespace {
+		if nsFiltered && aliasNamespace(a) != nsFilter {
 			continue
 		}
 		fmt.Fprintf(stdout, "%-24s %-12s %-16s %-20s %s\n",
-			a.Name, dash(a.Provider), dash(a.Namespace), a.CreatedAt, dash(a.Source))
+			a.Name, dash(a.Provider), dash(aliasNamespace(a)), a.CreatedAt, dash(a.Source))
 	}
 	return 0
 }
@@ -536,14 +591,14 @@ func runRemove(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: usage: aql vault rm <alias>\n")
 		return 1
 	}
-	alias := fs.Arg(0)
 	s, err := requireStore(homeDir)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
-	if a, _ := s.FindAlias(alias); a == nil {
-		fmt.Fprintf(stderr, "error: no alias named %q\n", alias)
+	_, alias, err := findAliasRef(s, fs.Arg(0))
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
 	kr, err := openKeyring(s, homeDir, os.Stdin, stdout, "Vault passphrase: ")
@@ -576,7 +631,7 @@ func runRemove(args []string, homeDir string, stdout, stderr io.Writer) int {
 func runImport(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("vault import", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	namespace := fs.String("namespace", "", "tag imported secrets with this namespace")
+	namespace := fs.String("namespace", "", "namespace for imported secrets (.env: qualifies bare keys; bundle: remaps; ':' = root)")
 	provider := fs.String("provider", "", "tag imported secrets with this provider (.env only)")
 	prefix := fs.String("prefix", "", "prepend this prefix to each alias")
 	overwrite := fs.Bool("overwrite", false, "replace aliases that already exist (bundle import)")
@@ -630,9 +685,23 @@ func importDotenv(data []byte, srcName string, fromStdin bool, homeDir string, s
 		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
 		return 1
 	}
+	// .env keys are bare names, so they follow the same resolution rule
+	// as `vault add`: the --namespace flag (':' = root) wins, else the
+	// active default namespace, else root.
+	effNS, err := importNamespace(s, namespace)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	qualify := func(name string) string {
+		if effNS == "" {
+			return name
+		}
+		return effNS + ":" + name
+	}
 	if dryRun {
 		for _, k := range sortedKeys(entries) {
-			fmt.Fprintf(stdout, "would import %s%s (%d bytes)\n", prefix, k, len(entries[k]))
+			fmt.Fprintf(stdout, "would import %s (%d bytes)\n", qualify(prefix+k), len(entries[k]))
 		}
 		return 0
 	}
@@ -648,7 +717,7 @@ func importDotenv(data []byte, srcName string, fromStdin bool, homeDir string, s
 		return 1
 	}
 	for _, k := range sortedKeys(entries) {
-		alias := prefix + k
+		alias := qualify(prefix + k)
 		if !validAlias(alias) {
 			fmt.Fprintf(stderr, "warning: skipping invalid alias %q\n", alias)
 			continue
@@ -660,7 +729,7 @@ func importDotenv(data []byte, srcName string, fromStdin bool, homeDir string, s
 		s.UpsertAlias(Alias{
 			Name:      alias,
 			Provider:  provider,
-			Namespace: namespace,
+			Namespace: effNS,
 			Source:    "import:" + srcName,
 		})
 		_ = appendAudit(homeDir, AuditEvent{
@@ -739,7 +808,6 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: usage: aql vault grant [--agent=NAME] [--hosts=H,H] [--methods=GET,POST] [--ttl=2h] [--max-calls=N] [--max-cost-cents=N] [--require-approval] <alias>\n")
 		return 1
 	}
-	alias := fs.Arg(0)
 	s, err := requireStore(homeDir)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
@@ -749,8 +817,9 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
 		return 1
 	}
-	if a, _ := s.FindAlias(alias); a == nil {
-		fmt.Fprintf(stderr, "error: no alias named %q\n", alias)
+	_, alias, err := findAliasRef(s, fs.Arg(0))
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
 	_, token, err := s.NewCapability(alias, *agent, splitCSV(*hosts), splitCSV(*methods), *ttl)
@@ -945,7 +1014,6 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		fmt.Fprintf(stderr, "error: usage: aql vault rotate [--from-env=VAR | --from-stdin | --from-clipboard | --revoke-caps] <alias>\n")
 		return 1
 	}
-	alias := fs.Arg(0)
 	s, err := requireStore(homeDir)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
@@ -955,9 +1023,9 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
 		return 1
 	}
-	a, _ := s.FindAlias(alias)
-	if a == nil {
-		fmt.Fprintf(stderr, "error: no alias named %q\n", alias)
+	a, alias, err := findAliasRef(s, fs.Arg(0))
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
 
@@ -1043,11 +1111,26 @@ func runProviders(stdout io.Writer) int {
 	return 0
 }
 
-// validAlias accepts the conservative ASCII subset
-// [A-Za-z0-9._-] of length 1..128. This matches typical .env key
-// shapes and disallows shell metacharacters and whitespace.
+// validAlias accepts a stored alias name: either one segment of the
+// conservative ASCII subset [A-Za-z0-9._-], or two such segments
+// joined by exactly one ':' (a namespace-qualified name, see
+// namespace.go). Total length 1..128. A leading ':' is CLI sugar for
+// the root namespace and is never part of a stored name, so it is
+// rejected here. The charset disallows shell metacharacters and
+// whitespace and matches typical .env key shapes.
 func validAlias(s string) bool {
 	if s == "" || len(s) > 128 {
+		return false
+	}
+	if i := strings.IndexByte(s, ':'); i >= 0 {
+		return validAliasSegment(s[:i]) && validAliasSegment(s[i+1:])
+	}
+	return validAliasSegment(s)
+}
+
+// validAliasSegment accepts one colon-free name segment.
+func validAliasSegment(s string) bool {
+	if s == "" {
 		return false
 	}
 	for _, r := range s {

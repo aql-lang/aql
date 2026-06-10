@@ -321,6 +321,26 @@ straight from the OS clipboard and wipes the clipboard afterwards;
 it works on macOS (pbpaste/pbcopy), Linux (wl-clipboard on Wayland,
 or xclip / xsel on X11), and Windows (PowerShell).
 
+**Namespaces.** Alias names may carry one namespace qualifier,
+`ns:name`, so two projects can each have an `openai_key`
+(`proj1:openai_key`, `proj2:openai_key`). The namespace is part of the
+alias identity — it flows through capabilities, the proxy URL
+(`/proj1:openai_key/v1/...`), export bundles, and the audit log. Set a
+default namespace with `vault config --set namespace.default=proj` (or
+per-invocation with `AQL_VAULT_NAMESPACE`); bare names then resolve
+into it for every command — `vault add key` stores `proj:key`, `vault
+get key` reads it back. `:name` (leading colon) forces the root
+namespace, and `:` means root anywhere a namespace is named, including
+filter values and the env var. There is no silent fallback between
+namespaces: a bare name that misses errors (with a hint when a
+root-level twin exists). Reporting filters by namespace: `list
+--namespace=proj`, `audit --namespace=proj`, `export --namespace=proj`
+(`:` = root only), and `status` breaks alias counts down per
+namespace. `vault exec proj:key -- cmd` injects the secret as `$key` —
+the env name derives from the base name. Policy files take names
+literally (no default applied), so a committed policy means the same
+thing on every machine.
+
 Passphrases follow the same rule: every command that needs one (the
 vault passphrase for the file backend, the bundle passphrase for
 `export`/`import`) prompts for it interactively with echo suppressed —

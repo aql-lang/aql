@@ -35,6 +35,12 @@ const policyVersion = 1
 // from if it is not already in the keyring. FromEnv reads from
 // an environment variable at apply time, leaving the value out of
 // the file itself.
+//
+// Policy names are stored-form and taken literally — `name` or
+// `ns:name`, never the `:name` root sugar — and the default
+// namespace is deliberately NOT applied: a committed policy must
+// mean the same thing on every machine that applies it, regardless
+// of local namespace configuration.
 type PolicyAlias struct {
 	Name      string `json:"name"`
 	Provider  string `json:"provider,omitempty"`
