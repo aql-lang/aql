@@ -80,3 +80,20 @@ jsonify {a:1}	ERROR:undefined_word	jsonify also moved out of core
 "aql:struct-util" import end  def Radius (Float gte 0.0) def Circle class {r:Radius} StructUtil.reify Circle '{"r": -1.5}'	ERROR:does not satisfy	predicate field types run during hydration
 "aql:struct-util" import end  def Radius (Float gte 0.0) def Circle class {r:Radius} (StructUtil.reify Circle '{"r": 5}') get r	5.0	schema-driven recovery: a JSON integer lands as the Float the field declares
 "aql:struct-util" import end  StructUtil.reify Integer {x:1}	ERROR:must be a class	a non-class target is rejected
+#
+# §  struct words on class / Object instances — type-preserving.
+#    clone gives a fresh instance of the same type (deq-equal,
+#    eq-distinct); setpath round-trips through construction, so a
+#    class edit runs the same strict schema checks as make and the
+#    receiver is untouched; walk sees the field projection.
+"aql:struct-util" import end  def Point class {x:1, y:2} (StructUtil.clone (make Point {})) typeof	Point	clone preserves the class
+"aql:struct-util" import end  def Point class {x:1} def p (make Point {}) (StructUtil.clone p) deq p	true	a clone is structurally equal…
+"aql:struct-util" import end  def Point class {x:1} def p (make Point {}) (StructUtil.clone p) eq p	false	…but a distinct instance (fresh field map)
+"aql:struct-util" import end  def Point class {x:1, y:2} (StructUtil.setpath (make Point {}) "x" 9) typeof	Point	setpath on an instance returns a NEW instance
+"aql:struct-util" import end  def Point class {x:1, y:2} (StructUtil.setpath (make Point {}) "x" 9) get x	9	…with the edit applied
+"aql:struct-util" import end  def Point class {x:1} def p (make Point {}) def w (StructUtil.setpath p "x" 9) p get x	1	…and the receiver untouched
+"aql:struct-util" import end  def Point class {x:1} StructUtil.setpath (make Point {}) "nope" 9	ERROR:unknown field	a class edit re-makes: unknown fields stay loud
+"aql:struct-util" import end  def Point class {x:1} StructUtil.setpath (make Point {}) "x" 'hi'	ERROR:expected Integer	…and off-schema values stay loud
+"aql:struct-util" import end  (StructUtil.setpath (object {a:1}) "b" 2) typeof	Object	an open Object edit stays an Object
+"aql:struct-util" import end  (StructUtil.setpath (object {a:1}) "b" 2) get b	2	…and accepts new keys (open contract)
+"aql:struct-util" import end  def Point class {x:1} StructUtil.walk (make Point {})	[{path:'x' value:1}]	walk sees the instance's field projection

@@ -93,3 +93,13 @@ def One (typeof (const 1)) end 1.0 is One	false	same-base strict — cmp's cross
 def P class {x:1} end const (make P {})	ERROR:const_error	a mutable instance cannot pin a value
 const nan	ERROR:const_error	NaN cannot pin a value (not equal to itself)
 (typeof (const 1)) teq (typeof (const 1))	true	const singletons intern — one lattice node per (base, value)
+#
+# §11  undef of a class with live instances — undef removes the NAME
+#      (make on the old name is a loud undefined_word), but live
+#      instances keep their identity: reads, typed writes, and typeof
+#      keep working against the retired node.
+def Point class {x:1} def p (make Point {x:5}) undef Point end p typeof	Point	a live instance keeps its type identity after undef
+def Point class {x:1} def p (make Point {x:5}) undef Point end p get x	5	…and its fields stay readable
+def Point class {x:1} def p (make Point {x:5}) undef Point end p set x 9 end p.x	9	…and typed writes still run the schema check
+def Point class {x:1} def p (make Point {x:5}) undef Point end p set x 'hi'	ERROR:expected Integer	…which still rejects off-schema values
+def Point class {x:1} def p (make Point {}) undef Point end make Point {}	ERROR:undefined word	the NAME is gone — construction is a loud error

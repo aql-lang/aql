@@ -353,6 +353,18 @@ func makeClassInstance(objType ObjectTypeInfo, provided *OrderedMap, r *Registry
 	})}, nil
 }
 
+// MakeClassInstance constructs a class instance from a field map,
+// running the same strict validation as `make` — exported for the
+// struct-utility writers (StructUtil.setpath, clone) whose instance
+// edits round-trip through construction so schema checks run.
+func MakeClassInstance(objType ObjectTypeInfo, provided *OrderedMap, r *Registry) (Value, error) {
+	vals, err := makeClassInstance(objType, provided, r)
+	if err != nil {
+		return Value{}, err
+	}
+	return vals[0], nil
+}
+
 // MakeClassFieldValue validates one value against a class-schema
 // field constraint, strictly: a bare type-node constraint requires a
 // conforming value (no conversion fallback — a Float is not an

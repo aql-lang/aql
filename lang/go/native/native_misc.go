@@ -2,6 +2,7 @@ package native
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aql-lang/aql/eng/go"
@@ -369,6 +370,14 @@ func describeWordHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 		fmt.Fprint(r.Output, help.FormatDynamic(*info))
 		return nil, nil
 	}
+	// A name def'd to a class (or object) type is not a word — the
+	// word-help view has nothing to say about it. Render the schema
+	// view instead: kind, lattice path, ancestry, field table with
+	// required-vs-default annotations.
+	if bound, ok := r.Defs.Top(name); ok && IsObjectType(bound) {
+		fmt.Fprint(r.Output, formatTypeSchema(name, bound))
+		return nil, nil
+	}
 	// Prefer live registry data (signatures + examples). Fall back to
 	// the static entry for words that are documented but not registered
 	// in this build, then report nothing if neither exists.
@@ -382,6 +391,53 @@ func describeWordHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	}
 	fmt.Fprintf(r.Output, "describe: no description available for %q\n", name)
 	return nil, nil
+}
+
+// formatTypeSchema renders the `describe <Class>` schema view for a
+// name def'd to a class or object type. Field rule mirrors make: a
+// type-valued constraint declares a required field, a concrete value
+// declares a default (whose own type then constrains the field).
+// Inherited fields from the refine chain are listed and marked.
+func formatTypeSchema(name string, v Value) string {
+	info, _ := AsObjectType(v)
+	var b strings.Builder
+	kind := "object type"
+	if info.Class {
+		kind = "class"
+	}
+	fmt.Fprintf(&b, "%s — %s", name, kind)
+	if info.Name != "" {
+		fmt.Fprintf(&b, " (%s)", info.Name)
+	}
+	b.WriteString("\n")
+	if info.Parent != nil {
+		fmt.Fprintf(&b, "\nRefines: %s\n", info.Parent.Name)
+	}
+	b.WriteString("\nFields:\n")
+	all := info.AllFields()
+	w := 0
+	for _, k := range all.Keys() {
+		if len(k) > w {
+			w = len(k)
+		}
+	}
+	for _, k := range all.Keys() {
+		c, _ := all.Get(k)
+		_, own := info.Fields.Get(k)
+		inherited := ""
+		if !own {
+			inherited = "  (inherited)"
+		}
+		if IsConcrete(c) {
+			fmt.Fprintf(&b, "  %-*s : %s = %s  (default)%s\n", w, k, c.Parent.Name, c.String(), inherited)
+		} else {
+			fmt.Fprintf(&b, "  %-*s : %s  (required)%s\n", w, k, c.String(), inherited)
+		}
+	}
+	if info.Class {
+		fmt.Fprintf(&b, "\nInstances: make %s {…} — sealed (typed set of existing fields only).\n", name)
+	}
+	return b.String()
 }
 
 // referentHandler implements `referent`: given an atom, return what its name

@@ -541,6 +541,24 @@ Sub-questions resolved (2026-06-09, second pass):
 > B/C (Object/Array containers, sugars, List set, convert
 > freeze/thaw). **Every designed Phase A feature is now LANDED.**
 >
+> **Phase A residuals LANDED (2026-06-10):** `describe <Class>`
+> schema view (kind + lattice path + Refines line + field table with
+> required/default/inherited annotations + sealing note; a def'd
+> type is detected before the word-help fallback). StructUtil on
+> instances pinned type-preserving: `clone` yields a fresh instance
+> of the same type (deq-equal, eq-distinct), `setpath` round-trips
+> through MakeClassInstance so edits run the same strict schema
+> checks as `make` (unknown field / off-schema value loud; open
+> Objects accept new keys, returning a new Object), `walk` sees the
+> field projection. `undef <Class>` pinned: the NAME goes (make is
+> a loud undefined_word) but live instances keep identity, reads,
+> and typed writes. Known pre-existing quirk (all user types, not
+> class-specific): re-`def`ing a name after `undef` fails on the
+> type-name-part registry ("name part conflicts"). REFERENCE.md
+> gained a "Classes" section (schema rules, strictness, sealing,
+> equality, serialization, the 2×2 container table, and the
+> parallel-mutation caution for the mutable column).
+>
 > **Phase A increment 7 LANDED (2026-06-09) — `const` singleton
 > members (§3d complete):** `const v` mints a per-registry interned
 > singleton node under v's own type (one node per base+canonical

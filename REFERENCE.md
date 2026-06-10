@@ -409,6 +409,7 @@ Any
 │   └── Map
 ├── Ideal
 │   ├── Object (Resource (Entity))
+│   ├── Class                       -- user classes root here
 │   ├── Array, Record, Options, Error
 │   ├── Store, Table
 │   ├── Fetch (Request | Response)
@@ -518,6 +519,75 @@ Integer lt 0                  # returns true
 [1,2] cmp [1,3]               # returns -1
 ```
 
+### Classes
+
+`class {schema}` mints a sealed nominal record type under
+`Ideal/Class`. The schema map declares each field once: a **type**
+value declares a required field, a **concrete** value declares a
+default (and the default's own type becomes the field's type).
+`make` constructs flat instances — every field resolved eagerly,
+no prototypes:
+
+```
+def Point class {x:Float y:0.0}     # x required, y defaults to 0.0
+def p (make Point {x:1.0})
+p.x                                  # returns 1.0 — dot access reads fields
+p get y                              # returns 0.0
+describe Point                       # prints the schema view
+```
+
+Field typing is **strict**, at `make` and at `set` alike — no silent
+conversion. Predicate types run their predicate, refined types
+enforce the refinement, and `const v` pins a field to exactly one
+value:
+
+```
+def Radius (Float gte 0.0)
+def Circle class {r:Radius}
+make Circle {r:-1.0}                # error — predicate fields run their predicate
+def Tagged class {kind:(const 'point')}   # kind can only ever be 'point'
+def Foo refine Integer
+def S class {x:(make Foo 1)}        # a Foo-typed field defaulting to Foo(1)
+```
+
+Instances are **sealed**: `set` re-types an existing field, and a
+new key is a loud `sealed_field` error. Subclass with
+`refine <Class> {…}` — child fields must unify with the parent's,
+and instances resolve the whole chain flat:
+
+```
+def Point3 refine Point {z:Float}   # Class/Point/Point3
+```
+
+Equality: `deq` is structural within the same exact class (a
+subclass instance never equals a parent instance); `eq` is identity
+(two names alias the same instance only if they share its fields).
+`undef <Class>` removes the *name* (construction errors), but live
+instances keep their identity, reads, and typed writes.
+
+Serialization: `StructUtil.jsonify` emits a `$class` marker on
+instances (user keys starting with `$` are escaped to `$$`), and
+`StructUtil.reify Target json-or-node` hydrates back through `make`
+— defaults fill, required fields and predicates enforce, unknown
+keys error. The target is an explicit class or a `tor` union the
+`$class` selects within. `StructUtil.clone` copies an instance
+type-preservingly; `StructUtil.setpath` returns a *new* instance
+with the edit applied, schema-checked.
+
+Classes complete a 2×2 container table:
+
+|  | immutable (`set` returns a copy) | mutable (`set` writes in place) |
+|---|---|---|
+| **open keys** | `Map` `{…}` | `Object` — `object {…}` |
+| **fixed shape** | `List` `[…]` | `Array` — `array […]`; class instances (typed, sealed) |
+
+`object {…}` / `array […]` are sugar for `make Object {…}` /
+`make Array […]`. `convert Map <obj>` freezes an Object to a Map;
+`convert Object <map>` thaws. Note that Object, Array, and class
+instances are shared mutable state: writes are visible through
+every alias, and concurrent writers (e.g. inside `parallel`
+branches) must coordinate — prefer the immutable column for data
+that crosses branch boundaries.
 
 ## Word reference
 
