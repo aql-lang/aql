@@ -283,7 +283,11 @@ func rawToValue(raw any) (Value, error) {
 	case Value:
 		return v, nil
 	case nil:
-		return NewTypeLiteral(TNone), nil
+		// JSON null hydrates as the CONCRETE none value, not the bare
+		// None type literal — jsonify emits null for `none`, so reify
+		// must return `none` to keep the jsonify→reify inverse exact
+		// (field reads and deq round-trips must match the original).
+		return NewNone(), nil
 	case bool:
 		return NewBoolean(v), nil
 	case string:

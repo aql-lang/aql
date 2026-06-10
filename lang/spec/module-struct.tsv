@@ -80,6 +80,7 @@ jsonify {a:1}	ERROR:undefined_word	jsonify also moved out of core
 "aql:struct-util" import end  def Radius (Float gte 0.0) def Circle class {r:Radius} StructUtil.reify Circle '{"r": -1.5}'	ERROR:does not satisfy	predicate field types run during hydration
 "aql:struct-util" import end  def Radius (Float gte 0.0) def Circle class {r:Radius} (StructUtil.reify Circle '{"r": 5}') get r	5.0	schema-driven recovery: a JSON integer lands as the Float the field declares
 "aql:struct-util" import end  StructUtil.reify Integer {x:1}	ERROR:must be a class	a non-class target is rejected
+"aql:struct-util" import end  def P class {name:'x' note:none} (StructUtil.reify P (StructUtil.jsonify (make P {note:none}))) get note	none	JSON null hydrates as the CONCRETE none value (the exact jsonify→reify inverse), not the None type literal
 #
 # §  struct words on class / Object instances — type-preserving.
 #    clone gives a fresh instance of the same type (deq-equal,
