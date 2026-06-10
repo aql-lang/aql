@@ -223,6 +223,41 @@ func (s *Store) RemoveAlias(name string) bool {
 	return true
 }
 
+// RenameAlias renames alias from to to in place, preserving
+// provenance (Provider, Source, CreatedAt) and re-deriving the
+// namespace metadata from the new name. Capabilities bound to from
+// follow the rename, or are revoked instead when revokeCaps is set.
+// Returns the number of capabilities touched and whether from
+// existed. The caller pre-flights destination collisions; from == to
+// is a pure metadata refresh (used when a namespace move only
+// re-tags a legacy alias).
+func (s *Store) RenameAlias(from, to string, revokeCaps bool) (int, bool) {
+	_, idx := s.FindAlias(from)
+	if idx < 0 {
+		return 0, false
+	}
+	ns, _ := splitAlias(to)
+	s.Aliases[idx].Name = to
+	s.Aliases[idx].Namespace = ns
+	s.Aliases[idx].UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	touched := 0
+	for i := range s.Capabilities {
+		if s.Capabilities[i].Alias != from {
+			continue
+		}
+		if revokeCaps {
+			if !s.Capabilities[i].Revoked {
+				s.Capabilities[i].Revoked = true
+				touched++
+			}
+			continue
+		}
+		s.Capabilities[i].Alias = to
+		touched++
+	}
+	return touched, true
+}
+
 // SortedAliases returns aliases ordered by name for stable display.
 func (s *Store) SortedAliases() []Alias {
 	out := append([]Alias(nil), s.Aliases...)

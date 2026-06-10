@@ -882,7 +882,10 @@ Aliases can be namespaced — `proj1:github_token` and
 resolve into it (`vault add key` stores `proj1:key`; `vault get key`
 reads it back); `:key` forces the root namespace. Filter reports with
 `vault list --namespace=proj1` or `vault audit --namespace=proj1`
-(`:` = root only).
+(`:` = root only). Reorganise with `vault mv`: `vault mv key proj1:key`
+moves one key, `vault mv proj1: team:` renames a whole namespace —
+capabilities follow the key, values are copy-verified before the old
+entry is removed, and `--dry-run` previews.
 
 Passphrases work the same way: `vault init` and every command that
 opens the file keyring prompt for the vault passphrase with echo
