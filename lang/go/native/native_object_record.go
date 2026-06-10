@@ -61,27 +61,6 @@ func parseObjectFields(fieldsMap *OrderedMap, r *Registry) *OrderedMap {
 	return fields
 }
 
-func objectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	fieldsVal := args[0]
-	if !fieldsVal.Parent.Equal(TMap) {
-		return nil, fmt.Errorf("object: argument must be a map of field definitions, got %s", fieldsVal.String())
-	}
-	m, err := AsMutableMap(fieldsVal)
-	if err != nil {
-		return nil, fmt.Errorf("object: argument must be a concrete map, got %s", fieldsVal.String())
-	}
-	fields := parseObjectFields(m, r)
-	id := GenerateObjectTypeID()
-	info := ObjectTypeInfo{
-		Fields: fields,
-		Parent: nil,
-		ID:     id,
-		Name:   "",
-	}
-	def := r.Types.MintType(id, TObject)
-	return []Value{NewObjectType(def, info)}, nil
-}
-
 // classHandler implements `class {schema}` — a sealed nominal record
 // type minted under Ideal/Class (NOT under Object: classes and the
 // open mutable Object container are separate branches — see
