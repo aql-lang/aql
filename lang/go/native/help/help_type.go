@@ -65,6 +65,24 @@ func init() {
 	})
 
 	register(&Entry{
+		Word:    "const",
+		Summary: "Make a singleton type: a value whose TYPE has one inhabitant.",
+		Description: "`const v` mints an interned singleton type under v's own type and " +
+			"returns v tagged with it — `typeof (const 1)` renders as `1`. In a class " +
+			"schema, `{kind:(const 'point')}` declares a field that can only ever hold " +
+			"'point': the default is forced, the exact value is accepted at make/set, " +
+			"anything else is a loud type error. Membership is same-base strict (1.0 is " +
+			"not a member of (const 1)). Exemplars must be immutable (scalars, Lists, " +
+			"Maps); NaN is rejected. With tor unions this gives discriminated records: " +
+			"def Circle class {kind:(const 'circle'), r:0.0}.",
+		Examples: []string{
+			`def S class {kind:(const 'point'), x:1}`,
+			`make S {}                     ;# kind='point' — forced default`,
+			`make S {kind:'other'}         ;# ERROR — only 'point' inhabits the type`,
+		},
+	})
+
+	register(&Entry{
 		Word:    "base",
 		Summary: "Return the zero/default value for the type of a value.",
 		Description: "Consumes a value and returns the zero value for its type: 0 for integers, " +

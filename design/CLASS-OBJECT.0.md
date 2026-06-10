@@ -537,11 +537,22 @@ Sub-questions resolved (2026-06-09, second pass):
 > Class flag; Class-branch `get`/`set` sigs (dot access works);
 > `InstallType` roots class types at `Class/Foo`; `p is Object` →
 > false. Spec battery in `lang/spec/class.tsv` (defaults, required,
-> sealing, subclass chain, negatives). Remaining (follow-up; the Phase A core is COMPLETE):
-> `const` singleton members (§3d) — fully designed, not yet
-> implemented. Also pending: the `describe <Class>` schema view
-> (polish) and Phases B/C (Object/Array containers, sugars, List
-> set, convert freeze/thaw).
+> sealing, subclass chain, negatives). Remaining: the `describe <Class>` schema view (polish) and Phases
+> B/C (Object/Array containers, sugars, List set, convert
+> freeze/thaw). **Every designed Phase A feature is now LANDED.**
+>
+> **Phase A increment 7 LANDED (2026-06-09) — `const` singleton
+> members (§3d complete):** `const v` mints a per-registry interned
+> singleton node under v's own type (one node per base+canonical
+> value, via a hidden type binding) with a value-equality Behavior,
+> and returns v tagged — so `typeof (const 1)` renders as `1` and
+> `{kind:(const 'point')}` rides the typed-default rule unchanged.
+> The schema membership check moved from raw ConformsTo to the
+> one-predicate `v.Is(t)` rule, so the plain inhabitant is accepted
+> at make/set while everything else (including the cross-leaf `1.0`)
+> errors loudly; `is` gained the const-membership branch (narrowly —
+> newtype `is` stays strict-identity). Mutable exemplars and NaN are
+> rejected. Spec rows class.tsv §10.
 >
 > **Phase A increment 6 LANDED (2026-06-09) — typed defaults via
 > tagged `make` (§3c complete):** `make Foo v` on a user scalar

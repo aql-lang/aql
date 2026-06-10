@@ -79,3 +79,17 @@ def Foo refine Integer end (make Foo "42") is Foo	true	make casts to the base fi
 def Foo refine Integer end def S class {x:(make Foo 1)} end (typeof ((make S {}) get x))	Foo	a tagged default declares the field type AND fills when omitted
 def Foo refine Integer end def S class {x:(make Foo 1)} end make S {x:7}	ERROR:expected Foo	a bare Integer is not a Foo — newtype strictness extends to fields
 def Foo refine Integer end def S class {x:(make Foo 1)} end (make S {x:(make Foo 7)}) get x	7	a properly-tagged value is accepted
+#
+# §10  const — singleton types: a field that can only ever hold one value
+def S class {kind:(const 'point'), x:1} end (make S {}) get kind	'point'	a const member's default is forced — the only inhabitant fills in
+def S class {kind:(const 'point'), x:1} end (make S {kind:'point', x:2}) get x	2	providing the exact inhabitant is accepted
+def S class {kind:(const 'point')} end make S {kind:'other'}	ERROR:expected 'point'	any other value is a loud type error at make
+def S class {kind:(const 'point')} end def s (make S {}) end s set kind 'other'	ERROR:type_error	…and at instance set
+def S class {kind:(const 'point')} end def s (make S {}) end s set kind 'point' end s.kind	'point'	re-writing the inhabitant succeeds
+typeof (const 1)	1	the singleton's name renders as its value
+def One (typeof (const 1)) end 1 is One	true	the plain inhabitant is a member
+def One (typeof (const 1)) end 2 is One	false	other values are not
+def One (typeof (const 1)) end 1.0 is One	false	same-base strict — cmp's cross-leaf magnitude equivalence does not leak into membership
+def P class {x:1} end const (make P {})	ERROR:const_error	a mutable instance cannot pin a value
+const nan	ERROR:const_error	NaN cannot pin a value (not equal to itself)
+(typeof (const 1)) teq (typeof (const 1))	true	const singletons intern — one lattice node per (base, value)

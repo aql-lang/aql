@@ -367,9 +367,14 @@ func MakeClassFieldValue(val Value, constraint Value, r *Registry) (Value, error
 
 	// Concrete default — the field's type is the default value's own
 	// type (its Parent), so {x:1} accepts Integers and rejects the
-	// rest, and a default carrying a refined type enforces it.
+	// rest, a default carrying a refined type enforces it, and a
+	// const-singleton default admits exactly its inhabitant. The
+	// membership question routes through v.Is(t) — the one-predicate
+	// rule — so the type's Behavior decides: DefaultBehavior is plain
+	// lattice conformance, bareRefineUnifier stays nominal, and a
+	// const singleton's Behavior matches by value equality.
 	if constraint.Data != nil && !IsTypeBody(constraint) {
-		if val.Parent.ConformsTo(constraint.Parent) {
+		if val.Is(constraint.Parent) {
 			return val, nil
 		}
 		return Value{}, fmt.Errorf("expected %s (the default's type), got %s (%s)",

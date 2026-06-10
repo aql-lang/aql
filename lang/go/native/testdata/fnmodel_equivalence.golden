@@ -72,6 +72,8 @@ WORD codequote
 WORD concat
   [Node/Map Node/List] barrier=2 returns=[Scalar/String]
   [Node/List] barrier=1 returns=[Scalar/String]
+WORD const
+  [Any] barrier=1 runcheck returns=[Any]
 WORD contains
   [Scalar/String Scalar/String Node/Map] barrier=3 returns=[Scalar/Boolean]
   [Scalar/String Scalar/String] barrier=2 returns=[Scalar/Boolean]
