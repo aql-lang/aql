@@ -65,11 +65,15 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
 		return 1
 	}
-	for _, m := range mappings {
-		if a, _ := s.FindAlias(m.alias); a == nil {
-			fmt.Fprintf(stderr, "error: no alias named %q\n", m.alias)
+	// Resolve every alias reference (default-namespace sugar, ':name'
+	// root escape) to its stored name before any keyring access.
+	for i := range mappings {
+		_, name, err := findAliasRef(s, mappings[i].alias)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}
+		mappings[i].alias = name
 	}
 
 	kr, err := openKeyring(s, homeDir, stdin, stdout, "Vault passphrase: ")
@@ -156,11 +160,14 @@ func parseExecAliases(spec, prefix string, upper bool) ([]execMapping, error) {
 			alias = strings.TrimSpace(part[:eq])
 			envName = strings.TrimSpace(part[eq+1:])
 		}
-		if !validAlias(alias) {
+		if !validAliasRef(alias) {
 			return nil, fmt.Errorf("invalid alias %q", alias)
 		}
 		if envName == "" {
-			envName = alias
+			// Derive from the base name: a namespace qualifier contains
+			// ':' which no env var name can carry, and `proj:key` and
+			// `key` should both surface as $key by default.
+			envName = aliasBase(strings.TrimPrefix(alias, rootNamespaceRef))
 			if upper {
 				envName = strings.ToUpper(envName)
 			}

@@ -911,12 +911,51 @@ The `aql` binary ships with a local key vault:
 
 ```bash
 aql vault init
-aql vault add github_token 'ghp_xxx'
+
+# Paste a token you copied from a SaaS console: the value is read
+# from the OS clipboard and the clipboard is wiped immediately after.
+aql vault add --from-clipboard --provider=github github_token
+
+# ...or, in scripts/CI, pipe it in without it touching shell history:
+printf %s "$TOKEN" | aql vault add --from-stdin --provider=github github_token
+
 aql vault list
-aql vault get github_token
-aql vault grant github_token <process-id>
+aql vault get github_token                       # redacted
+aql vault grant --agent=ci --ttl=2h github_token # scoped capability
 aql vault exec github_token=GITHUB_TOKEN -- gh repo list
 ```
+
+The secret is never passed as a command-line argument (that would
+leak it into your shell history and the process listing). Use
+`--from-clipboard`, `--from-stdin`, `--from-env=VAR`, or the
+interactive no-echo prompt you get when you pass none of them.
+`--from-clipboard` works on macOS, Linux (Wayland or X11), and
+Windows; if you run a clipboard manager, clear its history too,
+since it may keep a copy the wipe cannot reach.
+
+Aliases can be namespaced — `proj1:github_token` and
+`proj2:github_token` are different keys. Set a default with
+`aql vault config --set namespace.default=proj1` and bare names
+resolve into it (`vault add key` stores `proj1:key`; `vault get key`
+reads it back); `:key` forces the root namespace. Filter reports with
+`vault list --namespace=proj1` or `vault audit --namespace=proj1`
+(`:` = root only). Reorganise with `vault mv`: `vault mv key proj1:key`
+moves one key, `vault mv proj1: team:` renames a whole namespace —
+capabilities follow the key, values are copy-verified before the old
+entry is removed, and `--dry-run` previews.
+
+Passphrases work the same way: `vault init` and every command that
+opens the file keyring prompt for the vault passphrase with echo
+suppressed, and `vault export`/`import` prompt for the bundle
+passphrase — just run the command and type when asked. The
+environment variables `AQL_VAULT_PASSPHRASE` and
+`AQL_VAULT_EXPORT_PASSPHRASE` exist for contexts that cannot prompt:
+services (`vault proxy`, `vault mcp`), CI, and pipelines where stdin
+already carries the secret (`--from-stdin`, bundle import from
+stdin). Avoid `export`-ing them in an interactive shell — that puts
+the passphrase in your shell history and into the environment of
+every child process; set them per-invocation from a secrets source
+instead.
 
 `aql vault exec <alias[=ENV][,...]> -- <cmd> [args...]` runs an
 external command with vault secrets injected as environment

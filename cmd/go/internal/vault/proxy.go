@@ -11,9 +11,20 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
+)
+
+const (
+	// proxyProtocol is the credential-broker wire protocol version. It
+	// is advertised on every response via headerProtocol; a client that
+	// sends headerProtocol declaring a newer protocol than this broker
+	// supports is refused, so a stale agent fails loudly instead of
+	// silently misbehaving.
+	proxyProtocol  = 1
+	headerProtocol = "X-AQL-Vault-Protocol"
 )
 
 // Proxy is the local credential broker. It listens on a loopback
@@ -60,10 +71,15 @@ func runProxy(args []string, homeDir string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("vault proxy", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	listen := fs.String("listen", "127.0.0.1:8787", "address to listen on (loopback recommended)")
+	allowPublic := fs.Bool("allow-public", false, "permit binding to a non-loopback address (exposes the credential broker to the network)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	if !isLoopback(*listen) {
+		if !*allowPublic {
+			fmt.Fprintf(stderr, "error: %s is not a loopback address; refusing to expose the credential broker to the network. Re-run with --allow-public to override.\n", *listen)
+			return 1
+		}
 		fmt.Fprintf(stderr, "warning: %s is not a loopback address; the proxy will accept connections from other hosts\n", *listen)
 	}
 	s, err := requireStore(homeDir)
@@ -128,6 +144,15 @@ func (p *Proxy) Serve(ctx context.Context) error {
 // 4xx responses with a short, secret-free body.
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
+	w.Header().Set(headerProtocol, strconv.Itoa(proxyProtocol))
+	if v := r.Header.Get(headerProtocol); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > proxyProtocol {
+			writeDenied(w, http.StatusBadRequest, fmt.Sprintf(
+				"client speaks vault protocol %d but this broker supports up to %d; upgrade the broker", n, proxyProtocol))
+			p.log(started, r, "", http.StatusBadRequest, "protocol-mismatch")
+			return
+		}
+	}
 	alias, upstreamPath, ok := splitAliasPath(r.URL.Path)
 	if !ok {
 		writeDenied(w, http.StatusBadRequest, "path must be /<alias>/<upstream-path>")
@@ -154,51 +179,19 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tok, _ := s.FindCapability(token)
+	// Authenticate the bearer token against stored hashes, then confirm
+	// it is bound to the alias in the request path. These two checks are
+	// token-specific and stay here; the policy checks (state, method,
+	// host, quotas, approval) are shared with the MCP server below.
+	tok, _ := s.FindCapabilityByToken(token)
 	if tok == nil {
 		writeDenied(w, http.StatusUnauthorized, "unknown capability")
 		p.log(started, r, alias, http.StatusUnauthorized, "no-cap")
 		return
 	}
-	if tok.Revoked {
-		writeDenied(w, http.StatusForbidden, "capability revoked")
-		p.log(started, r, alias, http.StatusForbidden, "revoked")
-		return
-	}
-	if !capabilityActive(tok, time.Now()) {
-		writeDenied(w, http.StatusForbidden, "capability expired")
-		p.log(started, r, alias, http.StatusForbidden, "expired")
-		return
-	}
 	if tok.Alias != alias {
 		writeDenied(w, http.StatusForbidden, "capability bound to a different alias")
 		p.log(started, r, alias, http.StatusForbidden, "alias-mismatch")
-		return
-	}
-	if len(tok.Methods) > 0 && !contains(tok.Methods, r.Method) {
-		writeDenied(w, http.StatusForbidden, "method not permitted by capability")
-		p.log(started, r, alias, http.StatusForbidden, "method-deny")
-		return
-	}
-	if tok.MaxCalls > 0 && tok.UsedCalls >= tok.MaxCalls {
-		writeDenied(w, http.StatusTooManyRequests, "capability call quota exhausted")
-		p.log(started, r, alias, http.StatusTooManyRequests, "calls-exhausted")
-		return
-	}
-	if tok.MaxCostCents > 0 && tok.UsedCostCents >= tok.MaxCostCents {
-		writeDenied(w, http.StatusPaymentRequired, "capability cost budget exhausted")
-		p.log(started, r, alias, http.StatusPaymentRequired, "budget-exhausted")
-		return
-	}
-	if tok.RequireApproval {
-		// Approval flow is currently advisory: the proxy refuses
-		// the request and emits an audit event so an operator can
-		// inspect and (out of band) flip RequireApproval off, grant
-		// a new capability, or proceed via a different channel. A
-		// future revision could park requests in a queue with an
-		// interactive `vault approve <id>` command.
-		writeDenied(w, http.StatusForbidden, "capability requires human approval (advisory; see audit log)")
-		p.log(started, r, alias, http.StatusForbidden, "approval-required")
 		return
 	}
 
@@ -216,9 +209,10 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	upstreamHost := mustHost(provider.BaseURL)
-	if len(tok.Hosts) > 0 && !contains(tok.Hosts, upstreamHost) {
-		writeDenied(w, http.StatusForbidden, "upstream host not permitted by capability")
-		p.log(started, r, alias, http.StatusForbidden, "host-deny")
+
+	if reason := capabilityDenial(tok, r.Method, upstreamHost, time.Now()); reason != "" {
+		writeDenied(w, denialStatus(reason), denialMessage(reason))
+		p.log(started, r, alias, denialStatus(reason), reason)
 		return
 	}
 
@@ -277,18 +271,73 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // (recorded to stderr) because a bookkeeping failure must not
 // affect the in-flight response, which has already been authorized.
 func (p *Proxy) recordUse(capID string, costCents int) {
-	s, err := LoadStore(p.homeDir)
-	if err != nil || s == nil {
-		return
-	}
-	c, idx := s.FindCapability(capID)
-	if c == nil {
-		return
-	}
-	s.Capabilities[idx].UsedCalls++
-	s.Capabilities[idx].UsedCostCents += costCents
-	if err := SaveStore(p.homeDir, s); err != nil {
+	if err := recordCapabilityUse(p.homeDir, capID, costCents); err != nil {
 		fmt.Fprintf(p.stderr, "vault proxy: persisting capability counters: %s\n", err)
+	}
+}
+
+// capabilityDenial reports why c may not be used for a request with the
+// given method against upstreamHost at now, as a short machine reason,
+// or "" if the request is permitted. Quota counters are read, not
+// mutated. Both the proxy and the MCP server gate on this so the two
+// enforcement paths cannot drift. Pass upstreamHost "" to skip the host
+// check (e.g. when the host is not yet resolved).
+func capabilityDenial(c *Capability, method, upstreamHost string, now time.Time) string {
+	switch {
+	case c.Revoked:
+		return "revoked"
+	case !capabilityActive(c, now):
+		return "expired"
+	case len(c.Methods) > 0 && !contains(c.Methods, method):
+		return "method-deny"
+	case c.MaxCalls > 0 && c.UsedCalls >= c.MaxCalls:
+		return "calls-exhausted"
+	case c.MaxCostCents > 0 && c.UsedCostCents >= c.MaxCostCents:
+		return "budget-exhausted"
+	case c.RequireApproval:
+		// Advisory: deny and audit so an operator can inspect and (out
+		// of band) clear approval, grant a fresh capability, or proceed
+		// another way.
+		return "approval-required"
+	case len(c.Hosts) > 0 && upstreamHost != "" && !contains(c.Hosts, upstreamHost):
+		return "host-deny"
+	}
+	return ""
+}
+
+// denialStatus maps a capabilityDenial reason to the HTTP status the
+// proxy returns for it.
+func denialStatus(reason string) int {
+	switch reason {
+	case "calls-exhausted":
+		return http.StatusTooManyRequests
+	case "budget-exhausted":
+		return http.StatusPaymentRequired
+	default:
+		return http.StatusForbidden
+	}
+}
+
+// denialMessage maps a capabilityDenial reason to the human-readable
+// body the proxy returns for it.
+func denialMessage(reason string) string {
+	switch reason {
+	case "revoked":
+		return "capability revoked"
+	case "expired":
+		return "capability expired"
+	case "method-deny":
+		return "method not permitted by capability"
+	case "calls-exhausted":
+		return "capability call quota exhausted"
+	case "budget-exhausted":
+		return "capability cost budget exhausted"
+	case "approval-required":
+		return "capability requires human approval (advisory; see audit log)"
+	case "host-deny":
+		return "upstream host not permitted by capability"
+	default:
+		return "capability denied"
 	}
 }
 

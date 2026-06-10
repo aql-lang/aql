@@ -29,6 +29,17 @@ import (
 	"time"
 )
 
+const (
+	// mcpProtocolVersion is the MCP spec revision this server implements
+	// and reports from `initialize`.
+	mcpProtocolVersion = "2024-11-05"
+	// mcpServerVersion is this vault MCP server's own version, bumped
+	// when its tool surface or behavior changes. It is "2" since the
+	// server now gates tools on capabilities rather than exposing every
+	// provider-tagged alias.
+	mcpServerVersion = "2"
+)
+
 // mcpRequest mirrors a JSON-RPC 2.0 request frame. ID is decoded
 // as json.RawMessage so we can echo it back unchanged regardless
 // of whether the client sent a string, number, or null.
@@ -125,10 +136,10 @@ func (s *mcpServer) dispatch(req *mcpRequest) *mcpResponse {
 	switch req.Method {
 	case "initialize":
 		return ok(req, map[string]any{
-			"protocolVersion": "2024-11-05",
+			"protocolVersion": mcpProtocolVersion,
 			"serverInfo": map[string]string{
 				"name":    "aql-vault",
-				"version": "1",
+				"version": mcpServerVersion,
 			},
 			"capabilities": map[string]any{
 				"tools": map[string]any{},
@@ -156,8 +167,52 @@ func (s *mcpServer) dispatch(req *mcpRequest) *mcpResponse {
 	}
 }
 
-// listTools returns one MCP tool per non-locked alias. Each tool
-// is named "<alias>_request" and accepts a small input schema.
+// mcpToolName derives the tool name for an alias. MCP clients
+// commonly restrict tool names to [A-Za-z0-9_-], so the namespace
+// separator ':' is mangled to '_'. The mangling can collide with a
+// literal alias (`proj:key` vs `proj_key`); forEachAgentTool resolves
+// collisions deterministically.
+func mcpToolName(alias string) string {
+	return strings.ReplaceAll(alias, ":", "_") + "_request"
+}
+
+// forEachAgentTool walks the aliases this server's agent may broker —
+// provider-tagged, with a live capability — in sorted-name order,
+// yielding each with its mangled tool name. When two aliases mangle to
+// the same tool name, the first (sorted) wins and later ones are
+// reported via onSkip (nil ok) and not yielded. fn returns false to
+// stop early. listTools and callTool both route through this walk so
+// what tools/list advertises is exactly what tools/call resolves.
+func (s *mcpServer) forEachAgentTool(st *Store, now time.Time, onSkip func(alias, tool, winner string), fn func(a Alias, tool string) bool) {
+	seen := map[string]string{} // tool name -> winning alias
+	for _, a := range st.SortedAliases() {
+		if LookupProvider(a.Provider).BaseURL == "" {
+			// Aliases without a provider preset cannot be brokered;
+			// skip rather than expose a half-working tool.
+			continue
+		}
+		if c, _ := st.FindActiveCapability(a.Name, s.agent, now); c == nil {
+			// Only expose tools this agent holds a live capability for,
+			// so tools/list never advertises something tools/call would
+			// then refuse.
+			continue
+		}
+		tool := mcpToolName(a.Name)
+		if winner, taken := seen[tool]; taken {
+			if onSkip != nil {
+				onSkip(a.Name, tool, winner)
+			}
+			continue
+		}
+		seen[tool] = a.Name
+		if !fn(a, tool) {
+			return
+		}
+	}
+}
+
+// listTools returns one MCP tool per brokerable alias granted to the
+// agent (see forEachAgentTool).
 func (s *mcpServer) listTools() ([]map[string]any, error) {
 	st, err := LoadStore(s.homeDir)
 	if err != nil {
@@ -167,15 +222,12 @@ func (s *mcpServer) listTools() ([]map[string]any, error) {
 		return nil, errors.New("vault not initialized")
 	}
 	out := make([]map[string]any, 0, len(st.Aliases))
-	for _, a := range st.SortedAliases() {
+	s.forEachAgentTool(st, time.Now(), func(alias, tool, winner string) {
+		fmt.Fprintf(s.stderr, "vault mcp: skipping tool %s for alias %s: name collides with alias %s\n", tool, alias, winner)
+	}, func(a Alias, tool string) bool {
 		prov := LookupProvider(a.Provider)
-		if prov.BaseURL == "" {
-			// Aliases without a provider preset cannot be brokered;
-			// skip rather than expose a half-working tool.
-			continue
-		}
 		out = append(out, map[string]any{
-			"name":        a.Name + "_request",
+			"name":        tool,
 			"description": fmt.Sprintf("Issue an HTTP request to %s via the %q vault alias. The real credential is not exposed.", prov.BaseURL, a.Name),
 			"inputSchema": map[string]any{
 				"type": "object",
@@ -188,7 +240,8 @@ func (s *mcpServer) listTools() ([]map[string]any, error) {
 				"required": []string{"path"},
 			},
 		})
-	}
+		return true
+	})
 	return out, nil
 }
 
@@ -218,6 +271,19 @@ func (s *mcpServer) callTool(req *mcpRequest) *mcpResponse {
 	if st.Locked {
 		return fail(req, -32603, "vault is locked")
 	}
+	// Map the tool name back to its alias by the same walk tools/list
+	// used to generate it (':' mangled to '_', first-wins collisions).
+	// Falling back to the literal trimmed name keeps the specific
+	// unknown-alias / no-provider / no-capability errors reachable for
+	// tools that were never advertised.
+	now := time.Now()
+	s.forEachAgentTool(st, now, nil, func(a Alias, tool string) bool {
+		if tool == params.Name {
+			alias = a.Name
+			return false
+		}
+		return true
+	})
 	a, _ := st.FindAlias(alias)
 	if a == nil {
 		return fail(req, -32602, "unknown alias: "+alias)
@@ -233,6 +299,31 @@ func (s *mcpServer) callTool(req *mcpRequest) *mcpResponse {
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
+
+	// Authorize against a capability granted to this agent for the
+	// alias. The MCP server enforces the same policy as the proxy
+	// (TTL, method/host allowlists, call and cost quotas, approval),
+	// via the shared capabilityDenial; the difference is only how the
+	// capability is resolved — by agent identity here, by bearer token
+	// in the proxy.
+	capab, _ := st.FindActiveCapability(alias, s.agent, now)
+	if capab == nil {
+		_ = appendAudit(s.homeDir, AuditEvent{
+			Action: "mcp.request", Actor: "mcp", Agent: s.agent, Alias: alias,
+			Method: method, Path: path, Outcome: "no-cap",
+		})
+		return fail(req, -32603, fmt.Sprintf(
+			"no capability for alias %q granted to agent %q; run `aql vault grant --agent=%s %s`",
+			alias, s.agent, s.agent, alias))
+	}
+	if reason := capabilityDenial(capab, method, mustHost(prov.BaseURL), now); reason != "" {
+		_ = appendAudit(s.homeDir, AuditEvent{
+			Action: "mcp.request", Actor: "mcp", Agent: s.agent, Alias: alias,
+			Method: method, Path: path, Outcome: reason,
+		})
+		return fail(req, -32603, "capability denied: "+denialMessage(reason))
+	}
+
 	url := prov.BaseURL + path
 	if q, ok := params.Arguments["query"].(map[string]any); ok && len(q) > 0 {
 		sep := "?"
@@ -268,6 +359,13 @@ func (s *mcpServer) callTool(req *mcpRequest) *mcpResponse {
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
+
+	// Debit the capability the same way the proxy does, so call and
+	// cost quotas are enforced across MCP invocations too.
+	cost := parseCostHeader(resp.Header.Get("X-AQL-Vault-Cost-Cents"))
+	if err := recordCapabilityUse(s.homeDir, capab.ID, cost); err != nil {
+		fmt.Fprintf(s.stderr, "vault mcp: persisting capability counters: %s\n", err)
+	}
 
 	_ = appendAudit(s.homeDir, AuditEvent{
 		Action:  "mcp.request",
