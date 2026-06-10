@@ -9,6 +9,14 @@
 // `vault get --reveal`), in command echoes, or in stored logs.
 // The metadata file holds only aliases, policies, and short-lived
 // capability token records.
+//
+// Secret values are also kept off the argv of the helper processes
+// each backend shells out to — a same-user `ps` must not be able to
+// read them. The file backend stays in-process; secret-tool, the
+// macOS `security -i` command stream, and the Windows CredWrite
+// helper all receive the secret on stdin; and 1Password is fed a
+// template on stdin. Only alias names (a restricted character set)
+// travel on argv or in the environment.
 package vault
 
 import (
@@ -42,7 +50,8 @@ const (
 	// BackendSecretService uses the freedesktop Secret Service API
 	// via the secret-tool command from libsecret-tools.
 	BackendSecretService = "secret-service"
-	// BackendWinCred uses Windows Credential Manager via cmdkey.
+	// BackendWinCred uses the Windows Credential Manager via a PowerShell
+	// CredWrite/CredRead helper.
 	BackendWinCred = "wincred"
 	// BackendFile uses an AES-256-GCM encrypted file at
 	// ~/.aql/vault.keyring. Used when no host keychain is available
@@ -105,8 +114,8 @@ func selectKeyring(backend string, fileDir, passphrase string) (keyring, error) 
 		if runtime.GOOS != "windows" {
 			return nil, fmt.Errorf("vault: wincred backend requires windows, got %s", runtime.GOOS)
 		}
-		if _, err := exec.LookPath("cmdkey"); err != nil {
-			return nil, fmt.Errorf("vault: cmdkey not found")
+		if _, err := exec.LookPath("powershell"); err != nil {
+			return nil, fmt.Errorf("vault: powershell not found (needed for the Windows Credential Manager backend)")
 		}
 		return &winCred{}, nil
 	case BackendFile:
@@ -134,7 +143,7 @@ func autoBackend() string {
 			return BackendSecretService
 		}
 	case "windows":
-		if _, err := exec.LookPath("cmdkey"); err == nil {
+		if _, err := exec.LookPath("powershell"); err == nil {
 			return BackendWinCred
 		}
 	}
@@ -147,26 +156,63 @@ type macKeychain struct{}
 
 func (*macKeychain) Name() string { return BackendKeychain }
 
-func (*macKeychain) Set(alias, value string) error {
-	// -U updates if the entry already exists.
+func (k *macKeychain) Set(alias, value string) error {
+	// The secret is NOT passed on argv (where a same-user `ps` could read
+	// it). `security -i` reads its *command stream* from stdin, so the
+	// add-generic-password line — secret included — travels on the
+	// tool's stdin. `security`'s -w password prompt is no use here: it
+	// reads /dev/tty, not stdin, whenever a terminal is present.
 	//
-	// NOTE(argv exposure): the secret is passed as the -w argument, so
-	// it is briefly visible to other *same-user* processes via `ps`
-	// while `security` runs. macOS does not expose another process's
-	// argv across users, and `security` reads its interactive password
-	// prompt from the controlling tty rather than stdin, so there is no
-	// reliable stdin hand-off for this subcommand. A fully argv-free
-	// path needs the native Keychain API (cgo) or a carefully escaped
-	// `security -i` command stream; both want testing on real macOS and
-	// are left as a follow-up. On a single-user machine the residual
-	// risk is small.
-	cmd := exec.Command("security", "add-generic-password",
-		"-s", keyringService, "-a", alias, "-w", value, "-U")
-	out, err := cmd.CombinedOutput()
+	// A newline would terminate the single-line interactive command (and
+	// could inject a second one), so it is rejected; every other byte of
+	// the secret is backslash-escaped so nothing splits the token.
+	if strings.ContainsAny(value, "\r\n") {
+		return errors.New("vault: keychain backend cannot store a secret containing a newline; use --backend=file")
+	}
+	cmd := macSetCmd(alias, value)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("security -i add-generic-password: %s: %s", err, strings.TrimSpace(string(out)))
+	}
+	// `security -i` exits 0 even when a sub-command fails, so confirm the
+	// value round-trips. If a macOS build parses the escaping differently
+	// this fails loudly (and cleans up) instead of leaving a corrupted
+	// credential.
+	got, err := k.Get(alias)
 	if err != nil {
-		return fmt.Errorf("security add-generic-password: %s: %s", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("security: stored %q but could not read it back: %w", alias, err)
+	}
+	if got != value {
+		_ = k.Delete(alias)
+		return fmt.Errorf("security: stored value for %q did not round-trip; refusing to keep a corrupted entry (use --backend=file)", alias)
 	}
 	return nil
+}
+
+// macSetCmd builds the `security -i` invocation that stores value under
+// alias with the secret on the tool's stdin command stream rather than
+// on argv. Exposed for testing the off-argv invariant.
+func macSetCmd(alias, value string) *exec.Cmd {
+	line := fmt.Sprintf("add-generic-password -U -s %s -a %s -w %s\n",
+		keyringService, alias, backslashEscapeAll(value))
+	cmd := exec.Command("security", "-i")
+	cmd.Stdin = strings.NewReader(line)
+	return cmd
+}
+
+// backslashEscapeAll prefixes every byte of s with a backslash. Escaping
+// uniformly means no space or metacharacter survives unescaped to split
+// the argument or be misread by security's interactive parser. In the
+// worst case (a build that does not treat backslash as an escape) the
+// value simply fails Set's round-trip check rather than corrupting data
+// or injecting a command.
+func backslashEscapeAll(s string) string {
+	var b strings.Builder
+	b.Grow(len(s) * 2)
+	for i := 0; i < len(s); i++ {
+		b.WriteByte('\\')
+		b.WriteByte(s[i])
+	}
+	return b.String()
 }
 
 func (*macKeychain) Get(alias string) (string, error) {
@@ -239,49 +285,183 @@ func (*secretService) Delete(alias string) error {
 	return nil
 }
 
-// --- Windows Credential Manager via cmdkey ----------------------------------
+// --- Windows Credential Manager via PowerShell CredWrite/CredRead -----------
 
-// winCred is a best-effort wrapper around cmdkey. cmdkey can store
-// and delete credentials but cannot return the password to stdout
-// without third-party helpers, so Get returns an explanatory error
-// instructing the user to switch to the file backend or install
-// a credential-reading helper. Set and Delete still work.
+// winCred stores secrets in the Windows Credential Manager through a
+// small PowerShell helper that P/Invokes CredWrite / CredRead /
+// CredDelete. Unlike the previous cmdkey wrapper, the secret is handed
+// to the helper on stdin (never on argv, where a same-user process
+// could read it), and Get can actually return the value — cmdkey could
+// not read passwords back.
 type winCred struct{}
 
 func (*winCred) Name() string { return BackendWinCred }
 
-func (*winCred) Set(alias, value string) error {
-	// NOTE(argv exposure): cmdkey takes the password as the /pass:
-	// argument, briefly visible to same-user processes via Task
-	// Manager / WMI. cmdkey has no stdin input mode and cannot read a
-	// stored password back (see Get), so a robust fix means replacing
-	// this backend with a PowerShell PasswordVault / CredWrite
-	// implementation that also supports retrieval. That wants testing
-	// on real Windows and is left as a follow-up; prefer the file or
-	// 1password backend on Windows in the meantime.
-	cmd := exec.Command("cmdkey",
-		"/generic:"+keyringService+":"+alias,
-		"/user:"+alias, "/pass:"+value)
+func (k *winCred) Set(alias, value string) error {
+	cmd := winCredCmd("set", alias)
+	cmd.Stdin = strings.NewReader(value)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("cmdkey: %s: %s", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("credential write: %s: %s", err, strings.TrimSpace(string(out)))
+	}
+	// Confirm the value round-trips; otherwise fail loudly (and clean
+	// up) rather than leave a silently-wrong credential.
+	got, err := k.Get(alias)
+	if err != nil {
+		return fmt.Errorf("credential stored %q but could not read it back: %w", alias, err)
+	}
+	if got != value {
+		_ = k.Delete(alias)
+		return fmt.Errorf("credential value for %q did not round-trip; refusing to keep a corrupted entry (use --backend=file)", alias)
 	}
 	return nil
 }
 
-func (*winCred) Get(string) (string, error) {
-	return "", errors.New("vault: cmdkey cannot read passwords back; use --backend=file or install a credential-reading helper")
+func (*winCred) Get(alias string) (string, error) {
+	cmd := winCredCmd("get", alias)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() == 2 {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("credential read: %s: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return stdout.String(), nil
 }
 
 func (*winCred) Delete(alias string) error {
-	cmd := exec.Command("cmdkey", "/delete:"+keyringService+":"+alias)
+	cmd := winCredCmd("delete", alias)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		if strings.Contains(string(out), "Element not found") {
-			return nil
-		}
-		return fmt.Errorf("cmdkey /delete: %s: %s", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("credential delete: %s: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
+
+// winCredCmd builds the PowerShell helper invocation for op (set | get |
+// delete) on alias. The operation and the credential target/user travel
+// in environment variables, and for set the secret is supplied on stdin
+// by the caller; the script itself carries no secret. So nothing
+// sensitive reaches any process's argv. Exposed for testing.
+func winCredCmd(op, alias string) *exec.Cmd {
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", winCredScript)
+	cmd.Env = append(os.Environ(),
+		"AQL_KR_OP="+op,
+		"AQL_KR_TARGET="+keyringService+":"+alias,
+		"AQL_KR_USER="+alias,
+	)
+	return cmd
+}
+
+// winCredScript is the PowerShell helper. It defines a C# type that
+// P/Invokes the Win32 Credential Manager API and dispatches on
+// $env:AQL_KR_OP. For "set" the secret is read from stdin; for "get" the
+// value is written to stdout (exit code 2 means "not found"); "delete"
+// removes the entry (a missing entry is success).
+const winCredScript = `
+$ErrorActionPreference = 'Stop'
+try { [Console]::InputEncoding  = New-Object System.Text.UTF8Encoding $false } catch {}
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch {}
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class AqlCred {
+    [StructLayout(LayoutKind.Sequential)]
+    struct CREDENTIAL {
+        public uint Flags;
+        public uint Type;
+        public IntPtr TargetName;
+        public IntPtr Comment;
+        public System.Runtime.InteropServices.ComTypes.FILETIME LastWritten;
+        public uint CredentialBlobSize;
+        public IntPtr CredentialBlob;
+        public uint Persist;
+        public uint AttributeCount;
+        public IntPtr Attributes;
+        public IntPtr TargetAlias;
+        public IntPtr UserName;
+    }
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern bool CredWriteW(ref CREDENTIAL cred, uint flags);
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "CredReadW")]
+    static extern bool CredReadW(string target, uint type, uint flags, out IntPtr cred);
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "CredDeleteW")]
+    static extern bool CredDeleteW(string target, uint type, uint flags);
+    [DllImport("advapi32.dll")]
+    static extern void CredFree(IntPtr buf);
+    const uint GENERIC = 1;
+    const uint PERSIST_LOCAL_MACHINE = 2;
+    const int ERROR_NOT_FOUND = 1168;
+    public static void Write(string target, string user, string secret) {
+        byte[] blob = Encoding.Unicode.GetBytes(secret);
+        CREDENTIAL c = new CREDENTIAL();
+        c.Type = GENERIC;
+        c.TargetName = Marshal.StringToCoTaskMemUni(target);
+        c.UserName = Marshal.StringToCoTaskMemUni(user);
+        c.CredentialBlobSize = (uint)blob.Length;
+        c.CredentialBlob = Marshal.AllocCoTaskMem(blob.Length == 0 ? 1 : blob.Length);
+        Marshal.Copy(blob, 0, c.CredentialBlob, blob.Length);
+        c.Persist = PERSIST_LOCAL_MACHINE;
+        bool ok = CredWriteW(ref c, 0);
+        int err = Marshal.GetLastWin32Error();
+        Marshal.FreeCoTaskMem(c.TargetName);
+        Marshal.FreeCoTaskMem(c.UserName);
+        Marshal.FreeCoTaskMem(c.CredentialBlob);
+        if (!ok) throw new Exception("CredWrite failed: " + err);
+    }
+    public static int Read(string target, out string value) {
+        value = null;
+        IntPtr p;
+        if (!CredReadW(target, GENERIC, 0, out p)) {
+            int err = Marshal.GetLastWin32Error();
+            if (err == ERROR_NOT_FOUND) return 2;
+            throw new Exception("CredRead failed: " + err);
+        }
+        try {
+            CREDENTIAL c = (CREDENTIAL)Marshal.PtrToStructure(p, typeof(CREDENTIAL));
+            if (c.CredentialBlobSize == 0) { value = ""; return 0; }
+            byte[] blob = new byte[c.CredentialBlobSize];
+            Marshal.Copy(c.CredentialBlob, blob, 0, (int)c.CredentialBlobSize);
+            value = Encoding.Unicode.GetString(blob);
+            return 0;
+        } finally {
+            CredFree(p);
+        }
+    }
+    public static void Delete(string target) {
+        if (!CredDeleteW(target, GENERIC, 0)) {
+            int err = Marshal.GetLastWin32Error();
+            if (err == ERROR_NOT_FOUND) return;
+            throw new Exception("CredDelete failed: " + err);
+        }
+    }
+}
+'@
+$op = $env:AQL_KR_OP
+$target = $env:AQL_KR_TARGET
+$user = $env:AQL_KR_USER
+switch ($op) {
+    'set' {
+        $secret = [Console]::In.ReadToEnd()
+        [AqlCred]::Write($target, $user, $secret)
+    }
+    'get' {
+        $value = $null
+        $rc = [AqlCred]::Read($target, [ref]$value)
+        if ($rc -eq 2) { exit 2 }
+        [Console]::Out.Write($value)
+    }
+    'delete' {
+        [AqlCred]::Delete($target)
+    }
+    default {
+        [Console]::Error.Write("unknown op")
+        exit 3
+    }
+}
+`
 
 // --- File-backed AES-256-GCM fallback ---------------------------------------
 
