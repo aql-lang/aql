@@ -624,7 +624,7 @@ dot is just field access on the module's exported map.
 File imports load source from disk; renaming on import (`import
 [helper as h] "..."`) prevents collisions; built-in modules
 (`aql:math`, `aql:time-util`, `aql:matrix-util`, `aql:decision`) are
-host-provided and follow the same surface.
+host-provided and follow the same shape.
 
 There is no global namespace flattening: every imported binding
 lives under the module's prefix until you alias it explicitly.
@@ -663,7 +663,7 @@ turns them all on by default; embeddings (Wasm playground, an
 LLM tool host) can disable any of them.
 
 When a disabled word runs, it raises `Error{code:'cap_denied}`.
-This is the same surface as any other error: the calling code can
+This is the same shape as any other error: the calling code can
 catch it with `do ... error [...]` and react appropriately.
 
 Capabilities are deliberately coarse — one flag per system —

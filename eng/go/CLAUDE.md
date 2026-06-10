@@ -16,7 +16,7 @@ one left-to-right walk. Do not introduce post-conversion rewrite
 passes that re-walk the value stream — they accumulate complexity
 (paren-expansion ordering, data-context vs word-context divergence,
 nested-container recursion) and entangle the parser with handler
-semantics. When a surface form needs sugar, prefer a token-level
+semantics. When a syntax form needs sugar, prefer a token-level
 substitution (an `AltSpec.A` callback that emits a `jsonic.Text`
 marker — see `;` → `"end"`, `=>` → `"afn"`, `|` → `"|"` in
 `parser/grammar.go::setupValRule`) so the conversion path stays
@@ -41,7 +41,7 @@ construction time: an inner-fn body Word whose `Defs.Depth(name) >
 TopFnBaseline()[name]` lives inside an enclosing fn (param or
 body-local) and is captured; depth ≤ baseline means module / global
 scope and the reference stays dynamic. See lang/go/CLAUDE.md
-"Closures and Capture" for the surface semantics.
+"Closures and Capture" for the language-level semantics.
 
 ## Signature Ordering (CRITICAL)
 
@@ -96,7 +96,7 @@ There is **no exception path**. Anything that looks like a
 sig[1]=b, …) and avoids the apparent inversion that stack form
 produces (`c b a f` is mirror-equivalent but reads backwards).
 The Phase-4 unified rule says `f a b ≡ b f a ≡ b a f`, so any of
-those work, but forward form is the recommended canonical surface
+those work, but forward form is the recommended canonical form
 for new code, examples, and documentation.
 
 The swap form `a f b` is the ONE non-equivalent two-arg
@@ -285,7 +285,7 @@ registration.
 
 Optional capability interfaces (`Comparer`, `Hasher`, `Walker`,
 `IdealConverter`) let a type opt into extra operations without
-expanding the required `TypeBehavior` surface.
+expanding the required `TypeBehavior` interface.
 
 `IdealConverter` (`convert_ideal.go`) gives an Ideal value a
 conversion to a Map or List via the `convert Map <v>` / `convert
@@ -466,7 +466,7 @@ between packages without affecting the kernel.
 ## Type installation
 
 A capitalised `def Foo body` installs a type binding (the
-TYPE-UNIFORM surface: `def` binds, `make` instantiates, `refine`
+TYPE-UNIFORM syntax: `def` binds, `make` instantiates, `refine`
 constructs — the legacy `type`-binder / `object` / `record` /
 `table` / `untype` words were removed in Phase 3, and the `type`
 constructor was renamed to `refine`).
@@ -475,13 +475,13 @@ The single source of truth is `eng/go/core_type.go::InstallType`. It
 validates `body` is a valid type body, mints the lattice identity
 via `TypeTable.MintType`, and binds it in the single `DefTable`
 (`PushType`, carrying the minted `*Type`). `def`'s handler delegates
-here for capitalised names regardless of which surface (eng or lang)
+here for capitalised names regardless of which layer (eng or lang)
 registered `def` — do not fork the logic. `undef` of a capitalised
 name pops the binding and retires the minted type
 (`TypeTable.Retire`).
 
 If you need to extend the installation policy (a new name shape, an
-extra validation rule), modify `InstallType` so every surface picks
+extra validation rule), modify `InstallType` so every layer picks
 it up.
 
 ## Canonical `*Type` Pointers (CRITICAL)
@@ -550,7 +550,7 @@ same:
   lattice node with `Parent = BaseType`; the body bound to Foo is
   the new lattice's type literal.
 
-The protocol channel between the two surfaces:
+The protocol channel between the two forms:
 
 - `TypeTable.MintRefinePrefab(parent) *Type` — what
   `refineBareHandler` emits for the bare 1-arg form.

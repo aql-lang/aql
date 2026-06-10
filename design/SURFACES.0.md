@@ -375,8 +375,12 @@ surface are untouched.
 4. **Reserved-name cost (tiny).** `surface` + `exposes` become core
    words (both unclaimed); `Self` is only special inside a surface
    body.
-5. **Docs terminology sweep (mechanical).** Disambiguate the 8 prose
-   uses of "surface" in contributor docs; user docs are clean.
+5. **Docs terminology sweep (mechanical).** ✅ done (2026-06-10):
+   the noun-jargon uses of "surface" in contributor docs
+   (eng/go/CLAUDE.md, lang/go/CLAUDE.md, EXPLANATION.md) were
+   disambiguated to "syntax form" / "layer" / "shape"; verb uses
+   ("check surfaces the case") are unambiguous and stay. User docs
+   were already clean.
 
 ## 7b. Open questions
 

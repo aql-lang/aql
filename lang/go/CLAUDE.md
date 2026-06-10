@@ -397,7 +397,7 @@ sub 10 3    → forward [10,3]                  → sig=[10,3] → 3-10 = -7
 (b) and sig[1] from the prefix (a). The mirror equivalence
 `f a b ≡ b f a ≡ b a f` holds; `a f b` is the only non-equivalent
 two-arg arrangement. The phase-4 handler convention picks the swap
-form as the canonical surface syntax: `10 sub 3 = 7` matches how
+form as the canonical syntax: `10 sub 3 = 7` matches how
 a reader scans left-to-right.
 
 ### Implementation
@@ -419,7 +419,7 @@ runtime path, and no rewrite pass.
 
 `afn` has signature `[Any Any |]` (both args forward-eligible, both
 typed `Any`, body and sig captured via `NoEvalArgs`). The canonical
-surface form is the swap `input afn body` (i.e. `input => body`),
+call form is the swap `input afn body` (i.e. `input => body`),
 mirroring the AQL `args[1] op args[0]` reading convention — afn
 collects the body as the forward arg and the input sig from the
 stack.
@@ -715,7 +715,7 @@ position 0 (= top of stack under matchSignature).
 
 This is uniform with everywhere else in the kernel — there is
 ONE convention. The wrapper's `Params` types are only used for
-the static analyser and surface display; at runtime,
+the static analyser and user-facing display; at runtime,
 `execFnDefLiteral` detects the trivial-delegation shape
 (`Body=[Word(fnDef.Name)]`, all-unnamed Params) and calls
 `execMatch` on the inner native directly via the matched sig.

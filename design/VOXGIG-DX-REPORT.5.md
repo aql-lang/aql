@@ -100,7 +100,7 @@ isolation but surprising in combination (`merge` depth, ~~`do` evaluation~~
 | Tag | Sev | Status | Issue |
 |-----|-----|--------|-------|
 | B3 | 🟡 | ✅ fixed | Landed (2026-06-10) per `design/ERRORS.0.md` §3: `def r (void-call)` now raises `[aql/def_error] def: expression produced no value to bind to 'r'` at the def (with the returns-nothing hint); a void group starving any other word raises `[aql/no_value_error]` at the causing call; and an undefined reference to a never-bound name explains the real cause. Legitimate void groups (`1 2 add ()`, `add () 5 6`) are untouched. Spec rows in `lang/spec/error.tsv` §3. |
-| B5 | 🟢 | ❌ open → `design/CLASS-OBJECT.0.md` | `make Object {}` rejected: "expected a constructed object type, got Object". Resolution changed 2026-06-09: under the container-symmetry direction (class/object discovery note), `make Object {}` will become *valid* (an empty mutable Object, Phase B of the class/object split) — resolved by design, superseding the hint proposal that briefly lived in `design/ERRORS.0.md` §4. |
+| B5 | 🟢 | ✅ fixed | Resolved by design under the container symmetry (class/object split, `design/CLASS-OBJECT.0.md`): `make Object {}` is now *valid* — it constructs an empty, open, mutable Object (Phase B landed 2026-06-10, with the `object {…}` sugar). The hint proposal that briefly lived in `design/ERRORS.0.md` §4 stays superseded. |
 | B6 | 🟢 | ✅ fixed | `indexof` is now **haystack-last**, on the data-last grain: it moved to `aql:string-util` as `StringUtil.indexof needle haystack` (`StringUtil.indexof "ll" "hello"` → `2`), with the list form split out as `ArrayUtil.indices` (commits `3b3316c`, `0fedfc0`, `ec5aa25` — the whole string module is now subject-last). The bare core word is gone, so old haystack-first call sites fail loudly rather than answering `-1`. |
 
 ### Theme D — Reserved identifiers
@@ -125,7 +125,7 @@ isolation but surprising in combination (`merge` depth, ~~`do` evaluation~~
 
 | Tag | Sev | Status | Issue |
 |-----|-----|--------|-------|
-| T9.1 | 🟡 | ✅ fixed (semantics) / 🟠 open (perf) | Maps with **computed keys** now work end-to-end: `{[k]: v}` literals evaluate the key, `m get (k)` reads, and `set` gained a **copy-returning Map form** — `{a:1} set (k) 2` returns a new map with the receiver untouched, and calls chain (`{} set a 1 set b 2`). Together with `StructUtil.items` for enumeration, the association-list workaround is retired. Residual: each set copies the map (O(n) per insert, like setpath), so bulk incremental construction still wants the P4 native persistent map (HAMT Level B). Side gap still open: `refine Object` *dynamic* fields remain non-enumerable (`StructUtil.items` returns `[]` for them) — slated for removal under the class/object split: class instances become sealed (undeclared writes error) and plain Objects become fully enumerable (`design/CLASS-OBJECT.0.md`). |
+| T9.1 | 🟡 | ✅ fixed (semantics) / 🟠 open (perf) | Maps with **computed keys** now work end-to-end: `{[k]: v}` literals evaluate the key, `m get (k)` reads, and `set` gained a **copy-returning Map form** — `{a:1} set (k) 2` returns a new map with the receiver untouched, and calls chain (`{} set a 1 set b 2`). Together with `StructUtil.items` for enumeration, the association-list workaround is retired. Residual: each set copies the map (O(n) per insert, like setpath), so bulk incremental construction still wants the P4 native persistent map (HAMT Level B). The former side gap (`refine Object` dynamic fields non-enumerable) is gone structurally: `refine Object` was removed under the class/object split (2026-06-09) — class instances are sealed and enumerate their flat field map, and plain Objects are fully enumerable (`design/CLASS-OBJECT.0.md`). |
 | T9.2 | 🟡 | ✅ fixed | `filter` now accepts a `[…]` quotation like `each`/`fold`: `filter [2 gt] [1 2 3 4]` → `[3 4]` (element pushed first, no `{key,value}` wrapper; maps filter by value to a map; a non-Boolean body result is a **loud error**, not a silent drop). The Reach lens (`filter $.active xs`) and Function-callback forms remain. Spec rows in `lang/spec/higher-order.tsv` §5b. |
 | T9.6 | 🟡 | ✅ fixed | `raise` landed (2026-06-10) per `design/ERRORS.0.md` §2: message / code+message / spec-map forms, raising the same `Ideal/Error` natives produce, caught by the existing `do … error […]`; handlers read `e.code` / `e.message` / payload keys, `convert Map` projects them. Spec rows in `lang/spec/error.tsv`. |
 | T9.7 | 🟡 | ✅ fixed | In-memory parsing landed (2026-06-10) per `design/PARSING.0.md`: `StructUtil.parse` decodes jsonic/JSON text to data (the `jsonify` complement — data context, jsonic superset, loud `parse_error` on malformed/empty input) and `Vm.parse` parses AQL source to a quoted token list without evaluating it (element shapes are the engine's parse values, implementation-defined for now). Spec rows in `module-struct.tsv` / `module-vm.tsv`. |
@@ -277,21 +277,25 @@ Most of the lost hours in both reports trace to **two** mechanisms.
 Status after the second pass:
 
 1. **Namespace dispatch type-mismatch must error, not no-op.** (T1 —
-   🟠 **half done.** `aql check` now errors with `uncalled_function`;
-   the runtime still leaves the fn value as data. B1, which looked like
-   the same mechanism, turned out separable and is ✅ fixed: `set` now
-   mutates in place in both forms.) Remaining: make the *runtime* loud,
-   or accept check-time-only and promote `aql check` hard in the docs.
+   ✅ **done** (2026-06-10). `aql check` errors with `uncalled_function`,
+   and the *runtime* is now loud too: a named Function value left by a
+   failed dispatch raises `uncalled_function` at the top-level
+   end-of-run drain if nothing consumed it, with the original call-site
+   span (`design/ERRORS.0.md` §5). B1, which looked like the same
+   mechanism, turned out separable and is ✅ fixed: `set` now mutates
+   in place in both forms.)
 2. **`get` on a bare undefined word should error, not return `none`**
    (T6 — 📖 **resolved by design instead**: bare keys are literal
    (JS `.key`), parenthesised keys are computed (JS `[expr]`), and the
    `None`-for-missing behaviour is documented as intentional.)
 3. **A "loud diagnostics" pass for the common silent shapes** —
-   🟠 **partially landed**: `aql check` gained `uncalled_function`,
-   the `forward_strands_operand` advisory (catches `1 2 add 3 mul`),
-   and dead-overload detection; T4 was fixed outright. Still silent at
-   check time and runtime: B3 void-`def` residue, B2a print reversal,
-   T9.4 mixed-form `if`.
+   ✅ **largely landed** (2026-06-10): `aql check` has
+   `uncalled_function`, `forward_strands_operand`, `mixed_form_call`
+   (the T9.4 shape), and dead-overload detection; T4 was fixed
+   outright; B3 void-`def` residue and the runtime uncalled-function
+   case are now loud at runtime (`design/ERRORS.0.md` §3/§5). The one
+   survivor is B2a print reversal — sibling-group source order rides
+   the structure-first rework (`ERRORS.0.md` §6.1).
 
 ### P1 — A small set of new primitives that retire workarounds
 
