@@ -50,3 +50,15 @@ gen [T]	ERROR:gen_without_constructor	an orphan gen (no constructor consumed it)
 gen [T] gen [U] refine Record [x:Integer]	ERROR:gen_without_constructor	two gens with no constructor between them
 def Box gen [T] refine Record [value:T] end Integer of [String]	ERROR:not a generic schema	of requires a schema head
 def NotGen refine Record [x:Integer] end NotGen of [Integer]	ERROR:not a generic schema	a plain record is not instantiable
+#
+# §7  integration — typed defs, fn params, modules, shadowing
+def Box gen [T] class {value:T} end def b:(Box of [Integer]) {value:42} b typeof	Box of [Integer]	a parenthesised annotation evaluates — typed def constructs the instance
+def Box gen [T] class {value:T} end def b:(Box of [Integer]) {value:'no'}	ERROR:expected Integer	…with the substituted field typing enforced
+def Pair gen [K V] refine Record [key:K value:V] end make (Pair of [String Integer]) {key:'a' value:1}	{key:'a' value:1}	records construct through make
+def Pair gen [K V] refine Record [key:K value:V] end make (Pair of [String Integer]) {key:1 value:1}	{key:'1' value:1}	…with record make's existing convert-to-field-type contract (strictness is the CLASS contract)
+def Box gen [T] class {value:T} def f fn [[x:(Box of [Integer])] [Integer] [x get value]] end f (make (Box of [Integer]) {value:7})	7	an instantiation-typed fn param dispatches
+def Box gen [T] class {value:T} def f fn [[x:(Box of [Integer])] [Integer] [x get value]] end f (make (Box of [String]) {value:'s'})	ERROR:signature	…and REJECTS a sibling instantiation (no silent Any degrade)
+def Box gen [T] class {value:T} def g fn [[x:Box] [Integer] [1]] end g (make (Box of [String]) {value:'s'})	1	a bare-schema param admits any instantiation (family membership)
+def Box gen [T] class {value:T} def g fn [[x:Box] [Integer] [1]] end g 5	ERROR:signature	…and rejects non-members
+module [def Box gen [T] refine Record [value:T] export "Pkg" {Box: Box}] import end Pkg.Box of [Integer]	record{value:Integer}	a module exports a schema; importer-side of instantiates
+def Box gen [T] class {value:T} def Box Integer end Box of [Integer]	ERROR:not a generic schema	a shadowing def wins resolution — the schema is no longer reachable

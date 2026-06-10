@@ -299,6 +299,31 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 		t, err := ResolveTypeName(name)
 		return t, nil, err
 	}
+	// Type VALUES arriving directly rather than by name — the paren
+	// annotation path (`x:(Box of [Integer])`) delivers the
+	// instantiation body itself. Without these branches they fell to
+	// the TAny tail: a silent wildcard (the same degradation the
+	// TypeDef refactor closed for NAMED types).
+	if IsObjectType(v) {
+		if oi, aerr := AsObjectType(v); aerr == nil && oi.Type != nil {
+			return CanonicalType(r, oi.Type), nil, nil
+		}
+	}
+	if IsSurfaceType(v) {
+		if si, aerr := AsSurfaceType(v); aerr == nil && si.Type != nil {
+			return CanonicalType(r, si.Type), nil, nil
+		}
+	}
+	if IsTypeSchema(v) {
+		// A bare schema as a param type means "any instantiation"
+		// (family membership by ancestry — D3 in GENERICS.0.md).
+		if ti, aerr := AsTypeSchema(v); aerr == nil && ti.Type != nil {
+			return CanonicalType(r, ti.Type), nil, nil
+		}
+	}
+	if IsRecordType(v) {
+		return ResolveDefType(r, v)
+	}
 	if v.Data != nil && (v.Parent.ConformsTo(TInteger) ||
 		v.Parent.ConformsTo(TFloat) ||
 		v.Parent.ConformsTo(TBoolean) ||

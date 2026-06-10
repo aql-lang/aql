@@ -217,6 +217,25 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		return nil, r.AqlError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
 	}
 	constraint, _ := nameMap.Get(name)
+	// A parenthesised annotation — `def b:(Box of [Integer]) {…}` —
+	// evaluates inline (def's NoEvalMapArgs keeps the typed-name map
+	// raw, so the ParenExpr arrives unevaluated). Generic
+	// instantiations are the main client; any expression producing a
+	// single type value works.
+	if IsParenExpr(constraint) {
+		toks, _ := AsParenExpr(constraint)
+		body := make([]Value, len(toks))
+		copy(body, toks)
+		sub := New(r)
+		out, err := sub.Run(body)
+		if err != nil {
+			return nil, fmt.Errorf("def %s: type annotation: %w", name, err)
+		}
+		if len(out) != 1 {
+			return nil, fmt.Errorf("def %s: type annotation must produce one type, got %d values", name, len(out))
+		}
+		constraint = out[0]
+	}
 	var typeName string
 	constraint, typeName, _ = r.ResolveTypedNameValue(constraint)
 	if !IsTypeBody(constraint) {

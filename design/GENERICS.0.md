@@ -1139,6 +1139,29 @@ unconstrained-param strictness, per-schema disjunct collapse).
 > re-instantiation stays a fast-follow). Battery:
 > `lang/spec/generics-class.tsv` §1-§5.
 
+## 15c. Landed state — Phase 3: integration gate (2026-06-10)
+
+> **Phase 3 LANDED:** instantiations behave as ordinary types at the
+> consumption boundaries, with two real fixes surfaced by the gate:
+> (1) `defTypedHandler` now evaluates PARENTHESISED annotations
+> (`def b:(Box of [Integer]) {…}` — def's NoEvalMapArgs had left the
+> ParenExpr raw); (2) `ResolveSigType` gained branches for type
+> VALUES arriving directly rather than by name (ObjectType /
+> Surface / TypeSchema → their minted node; RecordType → the
+> structural pattern path) — previously they fell to the TAny tail,
+> so `fn [[x:(Box of [Integer])] …]` was a silent wildcard that
+> ACCEPTED sibling instantiations. Pins: instantiation-typed params
+> dispatch and reject siblings; a bare-schema param means family
+> membership (D3); records construct via `make` (typed-def-binding
+> a record stays the pre-existing unify error; record `make` keeps
+> its convert-to-field-type contract — strictness is the CLASS
+> contract); module-exported schemas instantiate importer-side
+> (§12.6); a shadowing def wins resolution (§12.4). Known upstream
+> gap (not generics-specific): `case` does not match class
+> instances against class-type literals — plain classes behave the
+> same; the §15.2.7 synergy row waits on that. Battery: generics.tsv
+> §7.
+
 ## 15. Review (2026-06-10) — against the post-2026-06-04 landings
 
 Between the 2026-06-04 refresh and this review, the language landed:
