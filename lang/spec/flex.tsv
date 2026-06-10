@@ -173,7 +173,14 @@ List tcmp FlexList	-1	bare type literals keep their lattice Rank order
 		
 (flex {}) is FlexMap	true	
 (flex {}) is Map	true	a FlexMap IS a Map (child type)
-(flex {}) is Node	false	consistent with plain nodes: `{} is Node` is false too
+(flex {}) is Node	true	lattice transitivity: FlexMap < Map < Node
+(flex []) is Node	true	
+{} is Node	true	plain containers are Nodes too
+[] is Node	true	
+1 is Node	false	scalars are not Nodes
+Node unify (flex [1 2])	(flex [1 2]) true	the Node literal accepts and keeps a flex value
+Node unify {a:1}	{a:1} true	
+Node unify 1	'~unify-fail' false	no scalar passes the Node literal
 {} is FlexMap	false	a plain map is NOT a FlexMap
 (flex []) is FlexList	true	
 (flex []) is List	true	

@@ -337,6 +337,38 @@ func unifyInner(a, b Value) (Value, *UnifyError) {
 		return v, err
 	}
 
+	// Bare Node type literal: the abstract family root. A concrete
+	// container would otherwise route to its family handler below,
+	// which doesn't know the Node literal and would reject the pair —
+	// breaking lattice transitivity (`{} is Map` is true and Map is a
+	// child of Node, so `{} is Node` must be true too). Delegate to
+	// the family handler with the corresponding family literal so the
+	// per-family rules (Record/Table exclusions, Options projection)
+	// stay in one place.
+	aNodeLit := sa == ShapeTypeLiteral && denotedType(a).Equal(TNode)
+	bNodeLit := sb == ShapeTypeLiteral && denotedType(b).Equal(TNode)
+	if aNodeLit || bNodeLit {
+		if aNodeLit && bNodeLit {
+			return a, nil
+		}
+		other, so := b, sb
+		if bNodeLit {
+			other, so = a, sa
+		}
+		if IsMapShape(so) {
+			return unifyMapFamily(NewTypeLiteral(TMap), ShapeTypeLiteral, other, so)
+		}
+		if IsListShape(so) {
+			return unifyListFamily(NewTypeLiteral(TList), ShapeTypeLiteral, other, so)
+		}
+		// Node vs a narrower node-family type literal (Map, List,
+		// FlexMap, FlexList, …) — the narrower literal wins.
+		if so == ShapeTypeLiteral && denotedType(other).ConformsTo(TNode) {
+			return other, nil
+		}
+		return Value{}, unifyFail("Node type literal needs a node-family value", a, b)
+	}
+
 	// Family handlers — any side in the family routes to that family's
 	// owner, which canonicalizes argument order internally. A bare
 	// type literal whose denoted type is List/Map also routes to the
