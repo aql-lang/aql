@@ -89,6 +89,11 @@ func Register(r *Registry) {
 		r.RegisterNativeFunc(n)
 	}
 
+	// Error raising (raise) + Error-value field access
+	for _, n := range errorNatives {
+		r.RegisterNativeFunc(n)
+	}
+
 	// Accessors
 	for _, n := range accessorNatives {
 		r.RegisterNativeFunc(n)

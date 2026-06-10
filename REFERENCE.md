@@ -1536,11 +1536,25 @@ modules keep plain names.
 ## Error codes
 
 Errors are values of type `Ideal/Error` with a `code` atom and a
-`message` string. Common codes:
+`message` string. Raise your own with `raise`:
+
+```
+raise "boom"                          # code user_error
+raise bad_input "expected a list"     # a bare word names the code
+raise {code: bad_input/q, message: "expected a list", got: 42}
+```
+
+The map form's extra keys ride along on the Error value: a handler
+reads `e.code`, `e.message`, and any payload keys (`e.got`), and
+`convert Map e` projects them all. Common codes:
 
 | Code | Meaning |
 |------|---------|
 | `undefined_word` | A bare name was used outside a quoted slot. |
+| `user_error` | Default code for `raise "message"`. |
+| `def_error` | `def`'s value expression produced no value to bind. |
+| `no_value_error` | A parenthesised argument expression produced no value for a call. |
+| `uncalled_function` | A call matched no signature and its function value was never consumed. |
 | `reserved_word` | `def`/`undef` targeted a built-in word or the literal `true`/`false`/`none`. |
 | `incomparable` | `cmp`/`lt`/`lte`/`gt`/`gte` got cross-family operands — use `tcmp`. |
 | `type_mismatch` | A value didn't match an expected signature slot. |

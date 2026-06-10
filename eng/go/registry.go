@@ -255,6 +255,7 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"body_error":            SeverityWarning,
 	// Advisory (non-gating): a readability nudge, not a defect.
 	"forward_strands_operand": SeverityInfo,
+	"mixed_form_call":         SeverityInfo,
 }
 
 // SeverityFor returns the default severity classification for a

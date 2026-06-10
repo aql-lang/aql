@@ -1,7 +1,8 @@
 # Error Design — Loud Failures, User-Raised Errors, and Diagnosis
 
-Status: proposals (nothing in this document is implemented unless
-marked otherwise). Source material: the error-related items from the
+Status: **§2, §3, §5, §6.2 LANDED (2026-06-10)**; §4 superseded by
+design; §6.1 deferred to the structure-first lazy-resolution rework
+(see the landed-state note below). Source material: the error-related items from the
 two DX field reports (`design/VOXGIG-DX-REPORT.5.md` tags T9.6, B3,
 B5, T1, B2a, T9.4 and `design/AQL-DX-REPORT.5.md`), consolidated here
 so the reports can track *status* while this document owns the
@@ -33,6 +34,41 @@ default) — none of these proposals changes a word's collection mode.
 The cultural target, set by both DX reports: **failures must be loud.**
 Every silent wrong-result mechanism that survives below is a costlier
 bug than any loud error.
+
+> **Landed state (2026-06-10):**
+> **§2 `raise`** — all three forms as designed; the raised value is a
+> real `*AqlError`, so abort/catch is unchanged. `ErrorInfo` gained
+> `Code` and `Data`: a caught Error now exposes `e.code` (atom),
+> `e.message` (the SHORT detail, not the formatted report), and any
+> raise-payload keys via `get`/dot access, and `convert Map` projects
+> code + message + payload (plain Go errors stay `{message:…}`).
+> Battery: `lang/spec/error.tsv` §1–2; help entry for `raise`.
+> **§3 void-def / blame shift** — a paren group resolving to ZERO
+> values is recorded with its candidate consumers (the pending word
+> names below it); a same-statement signature failure on one of them
+> reports `[aql/def_error] def: expression produced no value to bind
+> to 'name'` (def) or `[aql/no_value_error] argument expression
+> produced no value for <word>` at the causing site, and an undefined
+> reference to the never-bound name gets the explanatory hint.
+> Legitimate void groups (`1 2 add ()`, `add () 5 6`, `5 () add 3` —
+> collection resumes past a void group) are untouched. Battery: §3
+> rows in error.tsv; re-pinned `eng/spec/numbers.tsv` + syntax.tsv.
+> **§5 runtime uncalled-function** — option 2 as recommended: a named
+> Function value left by a failed dispatch is marked
+> (`Value.FailedDispatch`); the TOP-LEVEL end-of-Run drain raises
+> `[aql/uncalled_function]` with the original call-site span if
+> nothing consumed it. Higher-order/function-as-value uses are
+> unaffected (consumption clears the residue); check and runtime now
+> name the same bug the same way. The wrapper-dispatch regression
+> test re-pinned to the loud contract.
+> **§6.2 `mixed_form_call`** — check-mode advisory (info severity,
+> never gating) on calls of ≥3 args that mix stack and forward
+> collection (the T9.4 `(cond) if [a] [b]` shape); two-arg mixed
+> calls are the documented swap form and stay clean.
+> **§6.1 sibling-group source order** — NOT landed: the fix belongs
+> to the structure-first lazy-resolution rework per the design text;
+> until then B2a's mitigations are §6.2's advisory cousin + the
+> documented `end`/`;` separation.
 
 ## 2. Proposal: `raise` (DX report T9.6)
 

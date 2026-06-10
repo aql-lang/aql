@@ -282,7 +282,7 @@ addq ( 1 dup )	2	outer addq consumes the multivalue: sig=[1, 1] → 1+1 = 2
 mulq ( 2 dup )	4	2 * 2 = 4
 ( 1 2 3 )	1 2 3	multi-element paren leaves three values on the outer stack
 ( )		empty paren — empty residue, empty stack
-addq 1 ( )	ERROR:signature	empty paren can't fill addq's sig[1]; stack also empty
+addq 1 ( )	ERROR:no value	empty paren can't fill addq's sig[1] and the stack is empty — blamed on the void argument expression (ERRORS.0.md §3)
 		
 # Sibling parens with multivalues — they concatenate.		
 ( 1 dup ) ( 2 dup )	1 1 2 2	four values on the stack from two paren groups

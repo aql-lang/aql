@@ -2,6 +2,7 @@ package eng
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -787,7 +788,15 @@ type Value struct {
 	Eval      bool    // parser-created list that should auto-evaluate at end of Run
 	Pos       SrcPos  // source position for error reporting (zero value = unknown)
 	Undefined bool    // atom created from an undefined word (error if left on result stack)
-	Carrier   bool    // static-typecheck carrier (type-only, Data stripped of concrete payload)
+	// FailedDispatch marks a named Function value that a dispatch
+	// attempt left on the stack as data because no signature matched
+	// (the silent-failure shape of design/ERRORS.0.md §5, VOXGIG T1).
+	// Harmless while anything consumes the value (higher-order use,
+	// def); if it survives unconsumed to the top-level end-of-Run
+	// drain, the engine raises uncalled_function at the original call
+	// site — the same bug check mode diagnoses under that name.
+	FailedDispatch bool
+	Carrier        bool // static-typecheck carrier (type-only, Data stripped of concrete payload)
 	// Dynamic marks a carrier as a bounded gradual value (Elixir-style
 	// dynamic(T) — design/dynamic-modality-report.0.md). Implies Carrier.
 	// Its Parent/Data is a BOUND, not a proven type: at a signature
@@ -1540,12 +1549,32 @@ type CalDurationData struct {
 
 // ErrorInfo holds the details of an AQL error value.
 type ErrorInfo struct {
-	Message string // the error description
+	Message string // the short error description (an AqlError's Detail)
+	// Code is the stable, dispatchable error code ("user_error",
+	// "type_error", …) when the source was an AqlError (native or
+	// `raise`d); empty for plain Go errors. Handlers branch on it via
+	// `e.code` / `convert Map`.
+	Code string
+	// Data carries the extra keys of a `raise {code:… message:… …}`
+	// spec map for programmatic handlers; nil otherwise. The formatter
+	// prints code + message only.
+	Data *OrderedMap
 }
 
-// NewError creates an error value from a Go error.
+// NewError creates an error value from a Go error. An AqlError (the
+// engine's structured error, including everything `raise` produces)
+// contributes its stable Code, its SHORT Detail as the message (not
+// the formatted multi-line report), and any raise payload; a plain Go
+// error contributes only its text.
 func NewError(err error) Value {
-	return NewValueRaw(TError, ErrorInfo{Message: err.Error()})
+	info := ErrorInfo{Message: err.Error()}
+	var ae *AqlError
+	if errors.As(err, &ae) {
+		info.Code = ae.Code
+		info.Message = ae.Detail
+		info.Data = ae.Data
+	}
+	return NewValueRaw(TError, info)
 }
 
 // IsError reports whether this value is an error.

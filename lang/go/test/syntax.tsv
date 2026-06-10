@@ -536,7 +536,7 @@ lower "B"	'b'
 ( () )
 (()())
 [() 1]	[1]
-(add 1 ())		signature_error
+(add 1 ())		no_value_error
 
 # Missing forward argument for add
 1 add		signature_error

@@ -2,6 +2,7 @@ package eng
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -34,6 +35,15 @@ type Engine struct {
 	marks     map[string]bool // active mark IDs (for mark/move control flow)
 	source    string          // original source text for error reporting
 	isTop     bool            // true for engines created via NewTop; an unhandled FlowCtrl at end-of-Run is an error here, propagates upward otherwise
+	// voidGroups records the candidate consumers of paren groups that
+	// resolved to ZERO values in the current statement: the pending
+	// word names sitting below such a group when it closed. A
+	// following signature failure on one of those words is reported
+	// as "argument expression produced no value" at the causing site
+	// rather than as a generic mismatch — the blame-shift fix of
+	// design/ERRORS.0.md §3 (VOXGIG B3). Cleared at every statement
+	// boundary (stepEnd).
+	voidGroups []string
 }
 
 // RecorderSkipper is an optional extension to Recorder. When a
@@ -123,6 +133,13 @@ func (e *Engine) effectiveSource() string {
 // It includes the word name, available signatures, and the actual
 // types found on the stack near the word.
 func (e *Engine) sigError(name string, fn *FnDefInfo, pos SrcPos) *AqlError {
+	// A word starved by a VOID argument group (a parenthesised call in
+	// its argument range that produced no value, recorded by
+	// stepCloseParen) reports the causing expression, not the generic
+	// mismatch (ERRORS.0.md §3).
+	if verr := e.voidArgErrorFor(name, pos); verr != nil {
+		return verr
+	}
 	detail := "no matching signature for " + name
 
 	// Build hint with available signatures and actual stack types.
@@ -244,6 +261,75 @@ func (e *Engine) insufficientArgsError(name string, expected int, pos SrcPos) *A
 	hint := "stack: " + describeStackTypes(e.stack, e.pointer)
 	src := e.effectiveSource()
 	return makeAqlErrorAt("signature_error", detail, name, src, hint, pos)
+}
+
+// undefinedWordHint tailors the undefined_word hint to the two known
+// causes worth pointing at:
+//   - `def name foo` where foo is undefined: the user almost
+//     certainly meant to bind foo's VALUE, not the bare word. `def`
+//     does not auto-quote its body, so a bare word is dispatched (and
+//     errors when undefined). Point at the fixes: `(foo)` to
+//     evaluate, or `foo/q` to bind the name.
+//   - The undefined name was pending next to a paren group that
+//     produced NO value (`def r (returns-nothing …)` — the def
+//     silently never bound, and this reference is the blame-shifted
+//     victim). Name the real cause (ERRORS.0.md §3, VOXGIG B3).
+func (e *Engine) undefinedWordHint(name string) string {
+	if e.pendingForwardFunc() == "def" {
+		return "did you mean `def … (" + name + ")` to bind its value, " +
+			"or `def … " + name + "/q` to bind the name itself?"
+	}
+	for _, vg := range e.voidGroups {
+		if vg == name {
+			return "an earlier expression produced no value to bind to '" + name +
+				"' — the def never happened; give that expression a return value"
+		}
+	}
+	return ""
+}
+
+// voidArgErrorFor reports the §3 "argument expression produced no
+// value" error when the failing word was a candidate consumer of a
+// paren group that resolved to ZERO values in the current statement;
+// nil otherwise so the caller falls through to its generic error.
+// `def` gets the tailored message (with the bound name read from the
+// nearest collected atom below the pointer), since a void value
+// expression is its classic blame-shift shape (VOXGIG B3:
+// `def r (returns-nothing 1)`).
+func (e *Engine) voidArgErrorFor(name string, pos SrcPos) *AqlError {
+	matched := false
+	for _, vg := range e.voidGroups {
+		if vg == name {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return nil
+	}
+	src := e.effectiveSource()
+	if name == "def" {
+		n := "<name>"
+		for i := e.pointer - 1; i >= 0; i-- {
+			if IsOpenParen(e.stack[i]) {
+				break
+			}
+			if IsAtom(e.stack[i]) {
+				n, _ = AsAtom(e.stack[i])
+				break
+			}
+		}
+		return makeAqlErrorAt("def_error",
+			"def: expression produced no value to bind to '"+n+"'",
+			"def", src,
+			"hint: the called word returns nothing — call it without def, or give it a return value",
+			pos)
+	}
+	return makeAqlErrorAt("no_value_error",
+		"argument expression produced no value for "+name,
+		name, src,
+		"hint: a parenthesised argument evaluated to nothing — give it a return value, or drop it from the call",
+		pos)
 }
 
 // stampResultPos stamps pos onto handler-produced values that lack a source
@@ -605,6 +691,28 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// Values marked Quoted (by the quote word) are left as-is.
 	if err := e.autoEvalStack(); err != nil {
 		return nil, err
+	}
+
+	// Runtime uncalled-function residue (ERRORS.0.md §5, VOXGIG T1): a
+	// named Function value placed by a FAILED dispatch that nothing
+	// ever consumed. Higher-order uses consume the value, so they never
+	// reach here; only at the top level — where no consumer can exist
+	// anymore — does the residue become an error, with the original
+	// call-site span. The same bug check mode names uncalled_function.
+	if e.isTop && !e.registry.Check.IsActive() {
+		for _, v := range e.stack {
+			if v.FailedDispatch && (v.Parent.Equal(TFnDef) || v.Parent.Equal(TFunction)) {
+				name := ""
+				if info, ok := v.Data.(FnDefInfo); ok {
+					name = info.Name
+				}
+				return nil, makeAqlErrorAt("uncalled_function",
+					"call to '"+name+"' matched no signature and was left on the stack as data",
+					name, e.effectiveSource(),
+					"hint: check the call's argument types and arity — or use "+name+"/r to push the function as a value deliberately",
+					v.Pos)
+			}
+		}
 	}
 
 	// Drain any Undefined-Atom values left on the stack. Outside check
@@ -1367,16 +1475,7 @@ func (e *Engine) stepWord(val Value) error {
 		// reach the result stack — recording at the source guarantees
 		// every undefined word produces exactly one diagnostic.
 		if !e.registry.Check.IsActive() {
-			hint := ""
-			// `def name foo` where foo is undefined: the user almost
-			// certainly meant to bind foo's VALUE, not the bare word.
-			// `def` does not auto-quote its body, so a bare word is
-			// dispatched (and errors here when undefined). Point at the
-			// fixes: `(foo)` to evaluate, or `foo/q` to bind the name.
-			if e.pendingForwardFunc() == "def" {
-				hint = "did you mean `def … (" + w.Name + ")` to bind its value, " +
-					"or `def … " + w.Name + "/q` to bind the name itself?"
-			}
+			hint := e.undefinedWordHint(w.Name)
 			return &AqlError{
 				Code:       "undefined_word",
 				Detail:     "undefined word: " + w.Name,
@@ -1478,6 +1577,24 @@ func (e *Engine) stepWord(val Value) error {
 	// check mode, never gating. See design/FORWARD-STRAND-ADVISORY.0.md.
 	if e.registry.Check.IsActive() && fwdCount > 0 && stkCount > 0 {
 		e.checkForwardStrandsOperand(w, sig, positions, val.Pos)
+		// Mixed-form advisory (ERRORS.0.md §6.2, VOXGIG T9.4): a call
+		// of three or more args that takes operand(s) from a PRECEDING
+		// expression while also forward-collecting binds differently
+		// from the all-forward reading — `(cond) if [a] [b]` is the
+		// reported shape — and the divergence is silent. Two-arg mixed
+		// calls are the documented swap form (`10 sub 3`) and stay
+		// clean. Advisory only (info severity), never gating.
+		if sig.TotalArgs() >= 3 {
+			e.registry.Check.AddDiagnostic(CheckDiagnostic{
+				Code: "mixed_form_call",
+				Detail: w.Name + " takes " + strconv.Itoa(stkCount) + " argument(s) from the stack while forward-collecting " +
+					strconv.Itoa(fwdCount) + " — the mixed form binds differently from the all-forward form; " +
+					"prefer " + w.Name + " arg1 arg2 … or group explicitly",
+				Word: w.Name,
+				Row:  val.Pos.Row,
+				Col:  val.Pos.Col,
+			})
+		}
 	}
 
 	// Forward collection needed: defer execution.
@@ -2827,28 +2944,49 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 		}
 	}
 
-	// Check mode: a NAMED function reached as a call — args on the stack
+	// A NAMED function reached as a call — args on the stack
 	// (swap/prefix form) or upcoming forward tokens (`Pkg.fn a b`) — that
-	// matched no signature is the silent-dispatch footgun: at runtime the
-	// value is left on the stack as data with no error (DX-report T1/B1).
-	// Make it loud, aligning the FnDef path with plain words, which error
-	// here via signatureError → no_signature. Guards keep it precise:
-	// named (not an anonymous lambda value), not explicitly inert (`/r` /
-	// `quote` set Quoted), and at least one candidate arg available — so a
-	// bare function-as-value reference with no args is left alone.
-	if e.registry != nil && e.registry.Check.IsActive() &&
+	// matched no signature is the silent-dispatch footgun: the value is
+	// left on the stack as data with no error (DX-report T1/B1). Guards
+	// keep the detection precise: named (not an anonymous lambda value),
+	// not explicitly inert (`/r` / `quote` set Quoted), and at least one
+	// candidate arg available — so a bare function-as-value reference
+	// with no args is left alone.
+	//
+	// Check mode diagnoses it immediately (uncalled_function). At
+	// runtime the value MAY still be a legitimate higher-order operand
+	// (`filter f xs`), so it is only marked here; the top-level
+	// end-of-Run drain raises uncalled_function if nothing consumed it
+	// (ERRORS.0.md §5 option 2) — check and runtime name the same bug
+	// the same way.
+	if e.registry != nil &&
 		fnDef.Name != "" && !fnDef.Anonymous &&
 		valIdx < len(e.stack) && !e.stack[valIdx].Quoted {
 		candidates := append(append([]Value{}, resolved...), e.upcomingArgs(valIdx)...)
 		if len(candidates) > 0 {
-			pos := e.stack[valIdx].Pos
-			e.registry.Check.AddDiagnostic(CheckDiagnostic{
-				Code:   "uncalled_function",
-				Detail: "call to '" + fnDef.Name + "' matched no signature and was left on the stack as data (arguments: " + argTypeList(candidates) + ")",
-				Word:   fnDef.Name,
-				Row:    pos.Row,
-				Col:    pos.Col,
-			})
+			if e.registry.Check.IsActive() {
+				pos := e.stack[valIdx].Pos
+				e.registry.Check.AddDiagnostic(CheckDiagnostic{
+					Code:   "uncalled_function",
+					Detail: "call to '" + fnDef.Name + "' matched no signature and was left on the stack as data (arguments: " + argTypeList(candidates) + ")",
+					Word:   fnDef.Name,
+					Row:    pos.Row,
+					Col:    pos.Col,
+				})
+			} else {
+				e.stack[valIdx].FailedDispatch = true
+				// Borrow a span from the nearest argument when the
+				// FnDef value itself carries none, so the end-of-run
+				// report can point somewhere real.
+				if e.stack[valIdx].Pos.Row == 0 {
+					for _, c := range candidates {
+						if c.Pos.Row > 0 {
+							e.stack[valIdx].Pos = c.Pos
+							break
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -3178,6 +3316,9 @@ func (e *Engine) implicitEnd(fwdIdx int) error {
 
 // stepEnd handles the "end" keyword.
 func (e *Engine) stepEnd() error {
+	// Statement boundary: void-group records do not blame failures
+	// across statements (ERRORS.0.md §3).
+	e.voidGroups = e.voidGroups[:0]
 	endIdx := e.pointer
 
 	// Find nearest pending forward, stopping at open-paren barriers.
@@ -3651,7 +3792,37 @@ func (e *Engine) stepCloseParen() error {
 	for i := openIdx + 1; i < closeIdx; i++ {
 		if IsForward(e.stack[i]) {
 			fwd, _ := AsForward(e.stack[i])
+			if verr := e.voidArgErrorFor(fwd.FuncName, fwd.Pos); verr != nil {
+				return verr
+			}
 			return e.insufficientArgsError(fwd.FuncName, fwd.ExpectedArgs, fwd.Pos)
+		}
+	}
+
+	// A group that resolved to ZERO values is recorded together with
+	// its candidate consumers — the pending words below it on the
+	// stack — for the blame-shift shape of ERRORS.0.md §3 (VOXGIG B3):
+	// a void call in an argument position starves the consuming word,
+	// which then fails LATER with a generic error at an innocent site.
+	// Collection may legitimately resume past a void group
+	// (`add () 5 6` → 11), so nothing errors here; the record speaks
+	// only if one of those candidates raises a signature failure in
+	// the same statement (sigError / insufficientArgsError consult it
+	// via voidArgErrorFor).
+	if closeIdx == openIdx+1 {
+		for i := openIdx - 1; i >= 0; i-- {
+			v := e.stack[i]
+			if IsOpenParen(v) {
+				break
+			}
+			switch {
+			case IsWord(v):
+				w, _ := AsWord(v)
+				e.voidGroups = append(e.voidGroups, w.Name)
+			case IsForward(v):
+				fwd, _ := AsForward(v)
+				e.voidGroups = append(e.voidGroups, fwd.FuncName)
+			}
 		}
 	}
 

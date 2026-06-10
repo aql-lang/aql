@@ -211,7 +211,18 @@ func (errorConvertBehavior) Format(v Value) string       { return kernelFormatDe
 func (errorConvertBehavior) ToMap(v Value) (Value, error) {
 	m := NewOrderedMap()
 	if ei, err := AsError(v); err == nil {
+		// Code first when present (an AqlError-backed or `raise`d
+		// error); a plain Go error stays {message:…} as before.
+		if ei.Code != "" {
+			m.Set("code", NewAtom(ei.Code))
+		}
 		m.Set("message", NewString(ei.Message))
+		if ei.Data != nil {
+			for _, k := range ei.Data.Keys() {
+				dv, _ := ei.Data.Get(k)
+				m.Set(k, dv)
+			}
+		}
 	}
 	return NewMap(m), nil
 }

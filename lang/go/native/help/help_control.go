@@ -45,6 +45,23 @@ func init() {
 	})
 
 	register(&Entry{
+		Word:    "raise",
+		Summary: "Raise an error: construct an Ideal/Error and abort unless caught.",
+		Description: "Raises the same Ideal/Error the runtime produces, so one " +
+			"`do [body] error [handler]` form catches both native and user errors. " +
+			"Three forms: `raise \"msg\"` (code user_error), `raise some_code \"msg\"` " +
+			"(a bare word names the code), and `raise {code: c, message: m, …}` — " +
+			"extra spec-map keys ride along on the Error value for the handler. " +
+			"Handlers read `e.code` (atom), `e.message` (string), and any payload " +
+			"keys; `convert Map e` projects the same fields.",
+		Examples: []string{
+			`raise "boom"                          ;# [aql/user_error]: boom`,
+			`raise bad_input "expected a list"     ;# [aql/bad_input]: …`,
+			`do [raise {code: nope/q, message: "m", got: 42}] error [dup.got print]`,
+		},
+	})
+
+	register(&Entry{
 		Word:    "if",
 		Summary: "Conditional execution.",
 		Description: "If the condition is true, evaluates the then branch; with a third " +
