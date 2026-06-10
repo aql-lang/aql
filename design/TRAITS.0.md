@@ -242,11 +242,120 @@ Candidate replacements (all verified unclaimed):
 | `role` | short; reads naturally with classes ("Circle plays the Shape role"); DCI heritage | Raku/Moose roles *carry code* (mixin-flavoured), inviting the same confusion trait has |
 | `ability` | plain-English capability reading ("types with the Shape ability") | adjacent to AQL's existing *capabilities* (runtime I/O feature flags, REFERENCE.md) — real confusion risk |
 
-**Leaning: `concept`**, with `models` or `satisfies` as the
-conformance verb (`Circle models Shape` / `Circle satisfies Shape`) —
-C++ precedent is the closest construct match in any mainstream
-language, and the generics-constraint use case is shared. Decision
-still open; rename this file when settled.
+~~Leaning: `concept`~~ — superseded by review (2026-06-09):
+**`surface`** is the proposed term, and it is the strongest candidate
+yet:
+
+- It is plain-English self-describing in exactly the right register:
+  "API surface" is how working engineers already talk about the set
+  of operations a thing exposes. *A surface declares what a type
+  exposes; `exposes` declares that a type provides it.*
+- It carries none of the competitors' baggage: no structural
+  duck-typing connotation (interface), no wire formats (protocol),
+  no mixin history (trait), no single-language mindshare (concept).
+- The conformance verb pairs naturally: `Circle exposes Shape`
+  (verified unclaimed, as are `surface` and `Self`).
+- One honest caveat: AQL's contributor docs use "surface" as prose
+  jargon ("surface form", "surface syntax"). Measured: zero uses in
+  the user-facing docs (REFERENCE/TUTORIAL), 8 total in
+  CLAUDE/EXPLANATION — a small mechanical sweep to "syntax form"
+  disambiguates.
+
+Working surface (so to speak):
+
+```
+def Shape surface {
+  area:      fn [[Self] [Float]]
+  perimeter: fn [[Self] [Float]]
+}
+Circle exposes Shape          # immediate loud completeness check
+def total fn [[s:Shape] [Float] [(s area) add (s perimeter)]]
+```
+
+Rename this file to `SURFACES.0.md` when the term is confirmed.
+
+## 7c. Implementation plan sketch + blast radius (2026-06-09)
+
+### Plan — four increments, S1 is the feature
+
+**S1 — declaration + conformance (the core).**
+
+1. `surface {schema}` word: paren-free `def Shape surface {…}` (the
+   proven nested-collection path). The handler evaluates the schema
+   map with **`Self` pushed as a placeholder type binding** for the
+   duration (the §7.3 `gen` technique from GENERICS.0.md — note gen
+   itself is unimplemented, so this is new-but-precedented
+   machinery), yielding `SurfaceInfo{required: name → []FnShape}`
+   minted under a new `Ideal/Surface` node. `Self` is scoped to the
+   surface body only — no global reservation.
+2. `exposes` word: `Circle exposes Shape` — for each required name,
+   look up the word's overload table (FnDef Signatures + native
+   sigs), substitute `Self := Circle`, and require a sig whose Self
+   positions accept Circle (contravariant) and whose returns conform
+   (covariant). Failure: `[aql/surface_unsatisfied]` listing each
+   missing name with its expected substituted sig. Success: record
+   Circle in the surface's conformance set. Idempotent.
+3. Membership: a `surfaceUnifier` Behavior on the minted node —
+   `Match(v, t)` walks `typeof v`'s parent chain against the
+   conformance set, so subclass instances of an exposer conform.
+   This makes the surface a normal type for sig slots, `is`,
+   `unify`, and (largely for free) the `tor`/`tand`/`tnot` algebra.
+4. Battery: `lang/spec/surface.tsv` — declare; expose-success;
+   missing-overload failure (names listed); wrong-return failure;
+   surface-typed param dispatch; `is`; subclass propagation;
+   idempotent re-expose; malformed schema negatives. Plus describe/
+   help entries, fnmodel golden, no-panic rows.
+
+**S2 — checker integration** (deferable): a Shape-typed carrier lets
+check mode type `s area` calls via the substituted shapes instead of
+degrading to Any; `exposes` is fully static-checkable.
+
+**S3 — algebra pinning**: spec rows for surface ∩/∪/¬ shapes (mostly
+verification, the Disjunct/negation machinery is type-generic).
+
+**S4 — generics**: `gen [(T extends Shape)]` consults the same
+membership (`isSubtype` → Match). Rides the generics phase.
+
+Size estimate: comparable to class increments 1+2 combined.
+
+### Blast radius
+
+**What it cannot break (the reassuring list):** fully additive — no
+parser changes (two ordinary words), no dispatch-algorithm changes
+(constrain-and-check only; Behavior.Match is the existing extension
+point predicate types already use), no changes to any existing word
+or type, zero breaking changes; programs that never declare a
+surface are untouched.
+
+**Risk concentrations, by severity:**
+
+1. **Hot-path Match + conformance storage (the real engineering
+   risk).** The surfaceUnifier runs inside signature matching, so
+   membership must be an O(1) set probe. The set is *post-hoc
+   mutable* (exposes happens after minting), so it lives on the
+   minted node's payload behind the same canonical-pointer
+   discipline as `behave` installs — the known sharp edge
+   (TYPE-CANONICALIZATION). Cross-registry reach is the subtle part:
+   module sub-registries match against their own lookups, so a
+   surface declared in the user registry needs its conformance
+   visible wherever its type literal travels. v1 constraint worth
+   stating: surfaces are registry-local; the module-boundary story
+   is explicit later work.
+2. **Conformance staleness (semantic, accepted).** `exposes` checks
+   the overload table *at declaration*; a later `undef area` makes
+   the contract stale — dispatch on the surface still admits the
+   type, and the call fails loudly downstream. Position: accept and
+   document (declaration-time check, like every AOT contract), with
+   check-mode re-verification as the S2 mitigation. Re-checking on
+   every undef is complexity disproportionate to the hazard.
+3. **`Self` machinery (contained novelty).** Placeholder-type
+   binding + substitution is new code, but scoped entirely to the
+   two handlers; the gen design already specifies the technique.
+4. **Reserved-name cost (tiny).** `surface` + `exposes` become core
+   words (both unclaimed); `Self` is only special inside a surface
+   body.
+5. **Docs terminology sweep (mechanical).** Disambiguate the 8 prose
+   uses of "surface" in contributor docs; user docs are clean.
 
 ## 7b. Open questions
 
