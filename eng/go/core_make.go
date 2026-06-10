@@ -478,11 +478,46 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		return []Value{srcVal}, nil
 	}
 
+	// A user-minted scalar refinement (def Foo refine Integer) is a
+	// nominal newtype, and `make Foo v` is its constructor: cast v to
+	// the BASE type if needed, then tag the result with the refinement
+	// — the same reparent the typed-def path (`def x:Foo v`) performs.
+	// Without this, make silently returned a base-tagged value
+	// (design/CLASS-OBJECT.0.md §3c typed-defaults gap 1), so
+	// `(make Foo 1) is Foo` was false and a Foo-typed schema default
+	// could not be expressed.
+	if canon := CanonicalType(reg, targetType); reg != nil && canon != nil && canon.Origin == OriginUserDef {
+		targetType = canon
+		base := builtinBaseOf(targetType)
+		if base != nil && base.ConformsTo(TScalar) {
+			conv := srcVal
+			if !srcVal.Parent.ConformsTo(base) {
+				c, cerr := MakeConvert(srcVal, base)
+				if cerr != nil {
+					return nil, cerr
+				}
+				conv = c
+			}
+			return []Value{ReparentValue(conv, targetType)}, nil
+		}
+	}
+
 	result, err := MakeConvert(srcVal, targetType)
 	if err != nil {
 		return nil, err
 	}
 	return []Value{result}, nil
+}
+
+// builtinBaseOf walks a user-minted type's parent chain to the first
+// builtin ancestor — the conversion base for `make <Refinement> v`.
+func builtinBaseOf(t *Type) *Type {
+	for p := t.Parent; p != nil; p = p.Parent {
+		if p.Origin == OriginBuiltin {
+			return p
+		}
+	}
+	return nil
 }
 
 // MakeTable instantiates a table value — a list of record-conforming
@@ -712,7 +747,7 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 }
 
 // MakeScalarHandler converts a scalar value to a target scalar type.
-func MakeScalarHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func MakeScalarHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	targetVal, srcVal := args[0], args[1]
 	if targetVal.Data != nil {
 		return nil, fmt.Errorf("make: expected a type literal, got %s", targetVal.String())
@@ -723,6 +758,26 @@ func MakeScalarHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 	}
 	if srcVal.Parent.ConformsTo(targetType) {
 		return []Value{srcVal}, nil
+	}
+	// A user-minted scalar refinement (def Foo refine Integer) is a
+	// nominal newtype, and `make Foo v` is its constructor: cast v to
+	// the BASE type if needed, then tag the result with the refinement
+	// — the same reparent the typed-def path (`def x:Foo v`) performs.
+	// Without this, make silently returned a base-tagged value, so
+	// `(make Foo 1) is Foo` was false and a Foo-typed schema default
+	// could not be expressed (design/CLASS-OBJECT.0.md §3c gap 1).
+	if canon := CanonicalType(reg, targetType); reg != nil && canon != nil && canon.Origin == OriginUserDef {
+		if base := builtinBaseOf(canon); base != nil && base.ConformsTo(TScalar) {
+			conv := srcVal
+			if !srcVal.Parent.ConformsTo(base) {
+				c, cerr := MakeConvert(srcVal, base)
+				if cerr != nil {
+					return nil, cerr
+				}
+				conv = c
+			}
+			return []Value{ReparentValue(conv, canon)}, nil
+		}
 	}
 	result, err := MakeConvert(srcVal, targetType)
 	if err != nil {

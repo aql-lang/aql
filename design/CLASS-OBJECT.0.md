@@ -537,9 +537,23 @@ Sub-questions resolved (2026-06-09, second pass):
 > Class flag; Class-branch `get`/`set` sigs (dot access works);
 > `InstallType` roots class types at `Class/Foo`; `p is Object` →
 > false. Spec battery in `lang/spec/class.tsv` (defaults, required,
-> sealing, subclass chain, negatives). Remaining (follow-ups; the Phase A core is COMPLETE):
-> `const` singleton members (§3d) and typed defaults via tagged
-> `make` (§3c) — both fully designed, not yet implemented.
+> sealing, subclass chain, negatives). Remaining (follow-up; the Phase A core is COMPLETE):
+> `const` singleton members (§3d) — fully designed, not yet
+> implemented. Also pending: the `describe <Class>` schema view
+> (polish) and Phases B/C (Object/Array containers, sugars, List
+> set, convert freeze/thaw).
+>
+> **Phase A increment 6 LANDED (2026-06-09) — typed defaults via
+> tagged `make` (§3c complete):** `make Foo v` on a user scalar
+> refinement now casts v to the BASE type and tags the result
+> (`(make Foo 1) is Foo` → true, `typeof` → Foo) — the same reparent
+> the typed-def path performs, implemented in MakeScalarHandler
+> (which previously discarded the registry and the tag). With the
+> increment-2 strict default branch this completes the chosen
+> spelling: `def S class {x:(make Foo 1)}` declares a Foo-typed
+> field defaulting to Foo(1); a bare Integer is rejected loudly, a
+> tagged value is accepted, and `make Foo "42"` casts to base then
+> tags. Spec rows class.tsv §9.
 >
 > **Phase A increment 5 LANDED (2026-06-09) — the clean break:**
 > `refine Object {…}` is removed; it raises `[aql/refine_error]`

@@ -65,6 +65,17 @@ def P class {x:1} convert Map (make P {})	{x:1}	convert Map: the flat field map
 def P class {x:1} (make P {x:1}) cmp (make P {x:2})	-1	cmp: same-class instances order field-wise
 #
 # §8  the removed legacy form + paren-free def
-def Box class {v:0} def b make Box {v:9} b.v	9	def + make is paren-free — the nested-collection shape, like def name fn […]
+def Box class {v:0} def b make Box {v:9} end b.v	9	def + make is paren-free — the nested-collection shape, like def name fn […]
 def Box (refine Object {v:0})	ERROR:refine_error	refine Object is removed — class {…} is the class form (no alias)
 refine Object {v:0}	ERROR:refine_error	…also without def
+#
+# §9  typed defaults via tagged make — `make Foo v` constructs a
+#     scalar-refinement value (cast to base, then tagged), so a
+#     default constructed at the refined type declares BOTH the field
+#     type and the default: {x:(make Foo 1)}.
+def Foo refine Integer end (make Foo 1) is Foo	true	make on a newtype tags the value
+def Foo refine Integer end (make Foo 1) typeof	Foo	…and typeof shows the refinement
+def Foo refine Integer end (make Foo "42") is Foo	true	make casts to the base first (String → Integer), then tags
+def Foo refine Integer end def S class {x:(make Foo 1)} end (typeof ((make S {}) get x))	Foo	a tagged default declares the field type AND fills when omitted
+def Foo refine Integer end def S class {x:(make Foo 1)} end make S {x:7}	ERROR:expected Foo	a bare Integer is not a Foo — newtype strictness extends to fields
+def Foo refine Integer end def S class {x:(make Foo 1)} end (make S {x:(make Foo 7)}) get x	7	a properly-tagged value is accepted
