@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -360,37 +359,22 @@ func (s *Store) NewCapability(alias, agent string, hosts, methods []string, ttl 
 	return &s.Capabilities[len(s.Capabilities)-1], token, nil
 }
 
-// storeWriteMu serializes the in-process load-modify-save of the
-// metadata store for the one writer that runs concurrently within a
-// single process: capability-quota persistence from the broker, whose
-// HTTP handler (and the MCP server alongside it under `aql serve`) can
-// call recordCapabilityUse from several goroutines at once. Without
-// it, two requests both load the same counter, both increment, and
-// one update is lost. This does NOT serialize across separate `aql`
-// processes — that needs the on-disk lock added in a follow-up; the
-// atomic rename still guarantees no torn file in the cross-process
-// case, only a possible lost update.
-var storeWriteMu sync.Mutex
-
 // recordCapabilityUse debits the call counter and cost meter on the
 // capability with the given public ID and persists the store. A missing
 // capability is a no-op. Shared by the proxy and the MCP server so both
-// enforce quotas the same way; concurrent callers are serialized so no
-// increment is lost.
+// enforce quotas the same way. The mutateStore lock serializes it
+// against every other store writer — its own request goroutines, and
+// CLI commands in other processes — so no increment is lost.
 func recordCapabilityUse(homeDir, capID string, costCents int) error {
-	storeWriteMu.Lock()
-	defer storeWriteMu.Unlock()
-	s, err := LoadStore(homeDir)
-	if err != nil || s == nil {
-		return err
-	}
-	_, idx := s.FindCapabilityExact(capID)
-	if idx < 0 {
+	return mutateStore(homeDir, func(s *Store) error {
+		_, idx := s.FindCapabilityExact(capID)
+		if idx < 0 {
+			return nil
+		}
+		s.Capabilities[idx].UsedCalls++
+		s.Capabilities[idx].UsedCostCents += costCents
 		return nil
-	}
-	s.Capabilities[idx].UsedCalls++
-	s.Capabilities[idx].UsedCostCents += costCents
-	return SaveStore(homeDir, s)
+	})
 }
 
 // ActiveCapabilities returns capabilities that are neither revoked

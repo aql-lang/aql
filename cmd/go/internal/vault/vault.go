@@ -268,12 +268,18 @@ func runInit(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 		}
 	}
 
-	s := &Store{
-		Version: storeVersion,
-		Backend: chosen,
-		Config:  map[string]any{},
-	}
-	if err := SaveStore(homeDir, s); err != nil {
+	if err := withVaultLock(homeDir, func() error {
+		// Re-check under the lock so two concurrent inits can't both
+		// create a store (the early check above is best-effort).
+		if existing, _ := LoadStore(homeDir); existing != nil && !*force {
+			return fmt.Errorf("vault already initialized at %s (use --force to reinitialize)", StorePath(homeDir))
+		}
+		return SaveStore(homeDir, &Store{
+			Version: storeVersion,
+			Backend: chosen,
+			Config:  map[string]any{},
+		})
+	}); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
@@ -408,13 +414,18 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 		return 1
 	}
 	ns, _ := splitAlias(alias)
-	s.UpsertAlias(Alias{
-		Name:      alias,
-		Provider:  *provider,
-		Namespace: ns, // derived from the name so the two can't disagree
-		Source:    source,
-	})
-	if err := SaveStore(homeDir, s); err != nil {
+	if err := mutateStore(homeDir, func(s *Store) error {
+		if s.Locked {
+			return errLocked
+		}
+		s.UpsertAlias(Alias{
+			Name:      alias,
+			Provider:  *provider,
+			Namespace: ns, // derived from the name so the two can't disagree
+			Source:    source,
+		})
+		return nil
+	}); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
@@ -616,8 +627,10 @@ func runRemove(args []string, homeDir string, stdout, stderr io.Writer) int {
 	// between the two leaves an orphaned (unreferenced) keyring entry —
 	// harmless and reclaimable — rather than a metadata alias whose
 	// secret is already gone, which would fail every subsequent get.
-	s.RemoveAlias(alias)
-	if err := SaveStore(homeDir, s); err != nil {
+	if err := mutateStore(homeDir, func(s *Store) error {
+		s.RemoveAlias(alias)
+		return nil
+	}); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
@@ -725,6 +738,7 @@ func importDotenv(data []byte, srcName string, fromStdin bool, homeDir string, s
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	var done []string
 	for _, k := range sortedKeys(entries) {
 		alias := qualify(prefix + k)
 		if !validAlias(alias) {
@@ -735,19 +749,24 @@ func importDotenv(data []byte, srcName string, fromStdin bool, homeDir string, s
 			fmt.Fprintf(stderr, "error: storing %s: %s\n", alias, err)
 			return 1
 		}
-		s.UpsertAlias(Alias{
-			Name:      alias,
-			Provider:  provider,
-			Namespace: effNS,
-			Source:    "import:" + srcName,
-		})
+		done = append(done, alias)
 		_ = appendAudit(homeDir, AuditEvent{
 			Action: "vault.import", Alias: alias, Provider: provider,
 			Outcome: "ok", Reason: "source=" + srcName,
 		})
 		fmt.Fprintf(stdout, "imported %s\n", alias)
 	}
-	if err := SaveStore(homeDir, s); err != nil {
+	if err := mutateStore(homeDir, func(s *Store) error {
+		for _, alias := range done {
+			s.UpsertAlias(Alias{
+				Name:      alias,
+				Provider:  provider,
+				Namespace: effNS,
+				Source:    "import:" + srcName,
+			})
+		}
+		return nil
+	}); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
@@ -831,17 +850,26 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
-	_, token, err := s.NewCapability(alias, *agent, splitCSV(*hosts), splitCSV(*methods), *ttl)
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
-		return 1
-	}
-	idx := len(s.Capabilities) - 1
-	s.Capabilities[idx].MaxCalls = *maxCalls
-	s.Capabilities[idx].MaxCostCents = *maxCostCents
-	s.Capabilities[idx].RequireApproval = *approval
-	tok := &s.Capabilities[idx]
-	if err := SaveStore(homeDir, s); err != nil {
+	var token string
+	var tok Capability
+	if err := mutateStore(homeDir, func(s *Store) error {
+		if s.Locked {
+			return errLocked
+		}
+		if a, _ := s.FindAlias(alias); a == nil {
+			return fmt.Errorf("no alias named %q", alias)
+		}
+		_, tk, err := s.NewCapability(alias, *agent, splitCSV(*hosts), splitCSV(*methods), *ttl)
+		if err != nil {
+			return err
+		}
+		idx := len(s.Capabilities) - 1
+		s.Capabilities[idx].MaxCalls = *maxCalls
+		s.Capabilities[idx].MaxCostCents = *maxCostCents
+		s.Capabilities[idx].RequireApproval = *approval
+		token, tok = tk, s.Capabilities[idx]
+		return nil
+	}); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
@@ -888,39 +916,35 @@ func runRevoke(args []string, homeDir string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	id := fs.Arg(0)
-	s, err := requireStore(homeDir)
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
-		return 1
-	}
-	c, idx := s.FindCapability(id)
-	if c == nil {
-		fmt.Fprintf(stderr, "error: no capability matching %q\n", id)
-		return 1
-	}
-	s.Capabilities[idx].Revoked = true
-	if err := SaveStore(homeDir, s); err != nil {
+	var revokedID, revokedAlias string
+	if err := mutateStore(homeDir, func(s *Store) error {
+		c, idx := s.FindCapability(id)
+		if c == nil {
+			return fmt.Errorf("no capability matching %q", id)
+		}
+		s.Capabilities[idx].Revoked = true
+		revokedID = s.Capabilities[idx].ID
+		revokedAlias = s.Capabilities[idx].Alias
+		return nil
+	}); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
 	_ = appendAudit(homeDir, AuditEvent{
-		Action: "vault.revoke", Capability: s.Capabilities[idx].ID,
-		Alias: s.Capabilities[idx].Alias, Outcome: "ok",
+		Action: "vault.revoke", Capability: revokedID,
+		Alias: revokedAlias, Outcome: "ok",
 	})
-	fmt.Fprintf(stdout, "revoked %s\n", s.Capabilities[idx].ID)
+	fmt.Fprintf(stdout, "revoked %s\n", revokedID)
 	return 0
 }
 
 // --- lock / unlock ---------------------------------------------------------
 
 func runLock(homeDir string, stdout, stderr io.Writer) int {
-	s, err := requireStore(homeDir)
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
-		return 1
-	}
-	s.Locked = true
-	if err := SaveStore(homeDir, s); err != nil {
+	if err := mutateStore(homeDir, func(s *Store) error {
+		s.Locked = true
+		return nil
+	}); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
@@ -930,13 +954,10 @@ func runLock(homeDir string, stdout, stderr io.Writer) int {
 }
 
 func runUnlock(homeDir string, stdout, stderr io.Writer) int {
-	s, err := requireStore(homeDir)
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
-		return 1
-	}
-	s.Locked = false
-	if err := SaveStore(homeDir, s); err != nil {
+	if err := mutateStore(homeDir, func(s *Store) error {
+		s.Locked = false
+		return nil
+	}); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
@@ -955,14 +976,6 @@ func runConfig(args []string, homeDir string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	s, err := requireStore(homeDir)
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
-		return 1
-	}
-	if s.Config == nil {
-		s.Config = map[string]any{}
-	}
 	switch {
 	case *set != "":
 		eq := strings.IndexByte(*set, '=')
@@ -970,22 +983,35 @@ func runConfig(args []string, homeDir string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "error: --set requires key=value")
 			return 1
 		}
-		s.Config[(*set)[:eq]] = (*set)[eq+1:]
-		if err := SaveStore(homeDir, s); err != nil {
+		key, val := (*set)[:eq], (*set)[eq+1:]
+		if err := mutateStore(homeDir, func(s *Store) error {
+			if s.Config == nil {
+				s.Config = map[string]any{}
+			}
+			s.Config[key] = val
+			return nil
+		}); err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}
-		fmt.Fprintf(stdout, "set %s=%s\n", (*set)[:eq], (*set)[eq+1:])
+		fmt.Fprintf(stdout, "set %s=%s\n", key, val)
 		return 0
 	case *unset != "":
-		delete(s.Config, *unset)
-		if err := SaveStore(homeDir, s); err != nil {
+		if err := mutateStore(homeDir, func(s *Store) error {
+			delete(s.Config, *unset)
+			return nil
+		}); err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}
 		fmt.Fprintf(stdout, "unset %s\n", *unset)
 		return 0
 	default:
+		s, err := requireStore(homeDir)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
 		keys := make([]string, 0, len(s.Config))
 		for k := range s.Config {
 			keys = append(keys, k)
@@ -1032,7 +1058,7 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
 		return 1
 	}
-	a, alias, err := findAliasRef(s, fs.Arg(0))
+	_, alias, err := findAliasRef(s, fs.Arg(0))
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -1061,17 +1087,17 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	// capabilities the operator was trying to kill.
 	revoked := 0
 	if *revokeCaps {
-		for i := range s.Capabilities {
-			if s.Capabilities[i].Alias == alias && !s.Capabilities[i].Revoked {
-				s.Capabilities[i].Revoked = true
-				revoked++
+		if err := mutateStore(homeDir, func(s *Store) error {
+			for i := range s.Capabilities {
+				if s.Capabilities[i].Alias == alias && !s.Capabilities[i].Revoked {
+					s.Capabilities[i].Revoked = true
+					revoked++
+				}
 			}
-		}
-		if revoked > 0 {
-			if err := SaveStore(homeDir, s); err != nil {
-				fmt.Fprintf(stderr, "error: %s\n", err)
-				return 1
-			}
+			return nil
+		}); err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
 		}
 	}
 
@@ -1079,9 +1105,15 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
-	a.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-	a.Source = source
-	if err := SaveStore(homeDir, s); err != nil {
+	if err := mutateStore(homeDir, func(s *Store) error {
+		a, _ := s.FindAlias(alias)
+		if a == nil {
+			return fmt.Errorf("no alias named %q", alias)
+		}
+		a.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+		a.Source = source
+		return nil
+	}); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}

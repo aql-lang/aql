@@ -172,15 +172,28 @@ func runMv(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wri
 		copied = append(copied, m.to)
 	}
 
-	// Phase 2: rename the records and persist. On a save failure the
-	// keyring copies are rolled back, returning to the pre-move state
-	// (the store on disk still references the old names).
+	// Phase 2: rename the records and persist, under the vault lock and
+	// against a freshly-loaded store, re-checking destination
+	// collisions so a concurrent writer cannot be clobbered. On any
+	// failure the keyring copies are rolled back, returning to the
+	// pre-move state (the store on disk still references the old names).
 	touched := 0
-	for _, m := range moves {
-		n, _ := s.RenameAlias(m.from, m.to, *revokeCaps)
-		touched += n
-	}
-	if err := SaveStore(homeDir, s); err != nil {
+	if err := mutateStore(homeDir, func(s *Store) error {
+		for _, m := range moves {
+			if m.from == m.to {
+				continue
+			}
+			if a, _ := s.FindAlias(m.to); a != nil {
+				return fmt.Errorf("destination alias %q now exists; aborting", m.to)
+			}
+		}
+		touched = 0
+		for _, m := range moves {
+			n, _ := s.RenameAlias(m.from, m.to, *revokeCaps)
+			touched += n
+		}
+		return nil
+	}); err != nil {
 		for _, c := range copied {
 			_ = kr.Delete(c)
 		}

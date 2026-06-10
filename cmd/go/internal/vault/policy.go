@@ -127,99 +127,111 @@ func runPolicyApply(args []string, homeDir string, stdin io.Reader, stdout, stde
 		return 1
 	}
 
+	// Apply under the vault lock against a freshly-loaded store so a
+	// concurrent writer is never clobbered. The passphrase prompt
+	// already happened above (openKeyring); only env-sourced keyring
+	// writes and store mutation run inside the lock.
 	var changes []string
 	var grantedTokens []string
-	for _, a := range pol.Aliases {
-		if !validAlias(a.Name) {
-			fmt.Fprintf(stderr, "error: invalid alias %q\n", a.Name)
-			return 1
-		}
-		existing, _ := s.FindAlias(a.Name)
-		if existing == nil {
-			changes = append(changes, "+alias "+a.Name)
-		} else if existing.Provider != a.Provider || existing.Namespace != a.Namespace {
-			changes = append(changes, "~alias "+a.Name)
-		}
-		// Provision value from env if requested and not already in
-		// the keyring. The store metadata is upserted unconditionally
-		// so apply is idempotent.
-		if a.FromEnv != "" {
-			if _, err := kr.Get(a.Name); err == ErrNotFound {
-				val := os.Getenv(a.FromEnv)
-				if val == "" {
-					fmt.Fprintf(stderr, "error: alias %q FromEnv=%s is empty\n", a.Name, a.FromEnv)
-					return 1
-				}
-				if !*dryRun {
-					if err := kr.Set(a.Name, val); err != nil {
-						fmt.Fprintf(stderr, "error: storing %s: %s\n", a.Name, err)
-						return 1
-					}
-				}
-				changes = append(changes, "+secret "+a.Name+" (from $"+a.FromEnv+")")
-			}
-		}
-		if !*dryRun {
-			s.UpsertAlias(Alias{
-				Name:      a.Name,
-				Provider:  a.Provider,
-				Namespace: a.Namespace,
-				Source:    "policy:" + path,
-			})
-		}
-	}
-
-	for _, c := range pol.Capabilities {
-		if a, _ := s.FindAlias(c.Alias); a == nil {
-			fmt.Fprintf(stderr, "error: policy capability references unknown alias %q\n", c.Alias)
-			return 1
-		}
-		ttl, err := parsePolicyTTL(c.TTL)
+	applyErr := withVaultLock(homeDir, func() error {
+		s, err := LoadStore(homeDir)
 		if err != nil {
-			fmt.Fprintf(stderr, "error: capability for %s: %s\n", c.Alias, err)
-			return 1
+			return err
 		}
-		// Revoke any prior live capabilities for the same
-		// (alias, agent) tuple so reapplying the policy does not
-		// pile up stale capabilities.
-		revokedAny := false
-		for i := range s.Capabilities {
-			cur := &s.Capabilities[i]
-			if cur.Alias != c.Alias || cur.Agent != c.Agent || cur.Revoked {
-				continue
+		if s == nil {
+			return fmt.Errorf("vault not initialized; run \"aql vault init\"")
+		}
+		if s.Locked {
+			return errLocked
+		}
+		for _, a := range pol.Aliases {
+			if !validAlias(a.Name) {
+				return fmt.Errorf("invalid alias %q", a.Name)
 			}
-			cur.Revoked = true
-			revokedAny = true
-		}
-		if revokedAny {
-			changes = append(changes, "~capability "+c.Alias+"@"+c.Agent)
-		} else {
-			changes = append(changes, "+capability "+c.Alias+"@"+c.Agent)
-		}
-		if !*dryRun {
-			tok, token, err := s.NewCapability(c.Alias, c.Agent, c.Hosts, c.Methods, ttl)
-			if err != nil {
-				fmt.Fprintf(stderr, "error: granting capability for %s: %s\n", c.Alias, err)
-				return 1
+			existing, _ := s.FindAlias(a.Name)
+			if existing == nil {
+				changes = append(changes, "+alias "+a.Name)
+			} else if existing.Provider != a.Provider || existing.Namespace != a.Namespace {
+				changes = append(changes, "~alias "+a.Name)
 			}
-			idx := len(s.Capabilities) - 1
-			s.Capabilities[idx].MaxCalls = c.MaxCalls
-			s.Capabilities[idx].MaxCostCents = c.MaxCostCents
-			s.Capabilities[idx].RequireApproval = c.RequireApproval
-			grantedTokens = append(grantedTokens,
-				fmt.Sprintf("token %s@%s: %s", c.Alias, c.Agent, token))
-			_ = appendAudit(homeDir, AuditEvent{
-				Action: "vault.policy.apply", Alias: c.Alias, Agent: c.Agent,
-				Capability: tok.ID, Outcome: "ok",
-			})
+			// Provision value from env if requested and not already in
+			// the keyring. The store metadata is upserted unconditionally
+			// so apply is idempotent.
+			if a.FromEnv != "" {
+				if _, err := kr.Get(a.Name); err == ErrNotFound {
+					val := os.Getenv(a.FromEnv)
+					if val == "" {
+						return fmt.Errorf("alias %q FromEnv=%s is empty", a.Name, a.FromEnv)
+					}
+					if !*dryRun {
+						if err := kr.Set(a.Name, val); err != nil {
+							return fmt.Errorf("storing %s: %w", a.Name, err)
+						}
+					}
+					changes = append(changes, "+secret "+a.Name+" (from $"+a.FromEnv+")")
+				}
+			}
+			if !*dryRun {
+				s.UpsertAlias(Alias{
+					Name:      a.Name,
+					Provider:  a.Provider,
+					Namespace: a.Namespace,
+					Source:    "policy:" + path,
+				})
+			}
 		}
-	}
 
-	if !*dryRun {
-		if err := SaveStore(homeDir, s); err != nil {
-			fmt.Fprintf(stderr, "error: %s\n", err)
-			return 1
+		for _, c := range pol.Capabilities {
+			if a, _ := s.FindAlias(c.Alias); a == nil {
+				return fmt.Errorf("policy capability references unknown alias %q", c.Alias)
+			}
+			ttl, err := parsePolicyTTL(c.TTL)
+			if err != nil {
+				return fmt.Errorf("capability for %s: %w", c.Alias, err)
+			}
+			// Revoke any prior live capabilities for the same
+			// (alias, agent) tuple so reapplying the policy does not
+			// pile up stale capabilities.
+			revokedAny := false
+			for i := range s.Capabilities {
+				cur := &s.Capabilities[i]
+				if cur.Alias != c.Alias || cur.Agent != c.Agent || cur.Revoked {
+					continue
+				}
+				cur.Revoked = true
+				revokedAny = true
+			}
+			if revokedAny {
+				changes = append(changes, "~capability "+c.Alias+"@"+c.Agent)
+			} else {
+				changes = append(changes, "+capability "+c.Alias+"@"+c.Agent)
+			}
+			if !*dryRun {
+				tok, token, err := s.NewCapability(c.Alias, c.Agent, c.Hosts, c.Methods, ttl)
+				if err != nil {
+					return fmt.Errorf("granting capability for %s: %w", c.Alias, err)
+				}
+				idx := len(s.Capabilities) - 1
+				s.Capabilities[idx].MaxCalls = c.MaxCalls
+				s.Capabilities[idx].MaxCostCents = c.MaxCostCents
+				s.Capabilities[idx].RequireApproval = c.RequireApproval
+				grantedTokens = append(grantedTokens,
+					fmt.Sprintf("token %s@%s: %s", c.Alias, c.Agent, token))
+				_ = appendAudit(homeDir, AuditEvent{
+					Action: "vault.policy.apply", Alias: c.Alias, Agent: c.Agent,
+					Capability: tok.ID, Outcome: "ok",
+				})
+			}
 		}
+
+		if *dryRun {
+			return nil
+		}
+		return SaveStore(homeDir, s)
+	})
+	if applyErr != nil {
+		fmt.Fprintf(stderr, "error: %s\n", applyErr)
+		return 1
 	}
 
 	if len(changes) == 0 {

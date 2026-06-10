@@ -288,6 +288,8 @@ func importBundle(data []byte, fromStdin bool, homeDir string, stdin io.Reader, 
 		remap, remapNS = true, namespaceOverride
 	}
 
+	type imp struct{ name, provider, metaNS string }
+	var done []imp
 	imported, skipped := 0, 0
 	for _, a := range bundle.Aliases {
 		ns, base := splitAlias(a.Name)
@@ -322,7 +324,7 @@ func importBundle(data []byte, fromStdin bool, homeDir string, stdin io.Reader, 
 		if ns == "" && !remap {
 			metaNS = a.Namespace
 		}
-		s.UpsertAlias(Alias{Name: name, Provider: a.Provider, Namespace: metaNS, Source: "import:bundle"})
+		done = append(done, imp{name: name, provider: a.Provider, metaNS: metaNS})
 		_ = appendAudit(homeDir, AuditEvent{
 			Action: "vault.import", Alias: name, Provider: a.Provider,
 			Outcome: "ok", Reason: "source=bundle",
@@ -330,7 +332,12 @@ func importBundle(data []byte, fromStdin bool, homeDir string, stdin io.Reader, 
 		fmt.Fprintf(stdout, "imported %s\n", name)
 		imported++
 	}
-	if err := SaveStore(homeDir, s); err != nil {
+	if err := mutateStore(homeDir, func(s *Store) error {
+		for _, d := range done {
+			s.UpsertAlias(Alias{Name: d.name, Provider: d.provider, Namespace: d.metaNS, Source: "import:bundle"})
+		}
+		return nil
+	}); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}

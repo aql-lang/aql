@@ -346,8 +346,12 @@ thing on every machine.
 
 The store (`vault.jsonic`) and the secret keyring are separate files,
 written one after the other; each write is atomic and fsync-durable
-(temp file → fsync → rename → directory fsync), but a crash between
-the two — or a partial import — can still desync them. `vault verify`
+(temp file → fsync → rename → directory fsync), and concurrent writers
+— the broker persisting quota counters while you run a command, two
+commands at once — are serialized by an advisory lock
+(`~/.aql/vault.lock`) held only around each load-modify-save, so no
+update is lost across processes. A crash between the two file writes —
+or a partial import — can still desync them, so `vault verify`
 reconciles them: it reports dangling metadata (an alias with no
 secret), orphaned keyring entries (a secret with no metadata, file
 backend only), capabilities bound to a vanished alias, and stale
