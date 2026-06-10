@@ -108,7 +108,11 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		return 1
 	}
 
-	kr, err := openKeyring(s, homeDir, stdin, stdout, "Vault passphrase: ")
+	// Prompts go to stderr, never stdout: in the default mode the bundle
+	// IS stdout (e.g. `aql vault export > vault.aqlx`), so a prompt on
+	// stdout would corrupt the file — and the user wouldn't see it on
+	// their terminal either.
+	kr, err := openKeyring(s, homeDir, stdin, stderr, "Vault passphrase: ")
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -126,7 +130,7 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		})
 	}
 
-	pass, err := exportSealPassphrase(stdin, stdout)
+	pass, err := exportSealPassphrase(stdin, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -195,17 +199,19 @@ func selectExportAliases(s *Store, names []string, nsFilter string, nsFiltered b
 }
 
 // exportSealPassphrase reads the bundle passphrase from the environment
-// or, failing that, prompts for it twice (with confirmation).
-func exportSealPassphrase(stdin io.Reader, stdout io.Writer) (string, error) {
+// or, failing that, prompts for it twice (with confirmation). promptW
+// is where the prompts are written — stderr for export, so they never
+// land in a bundle written to stdout.
+func exportSealPassphrase(stdin io.Reader, promptW io.Writer) (string, error) {
 	if p := os.Getenv(EnvExportPassphrase); p != "" {
 		return p, nil
 	}
 	ir := auth.NewInputReader(stdin)
-	p1, err := ir.ReadPassword("Set export passphrase: ", stdout)
+	p1, err := ir.ReadPassword("Set export passphrase: ", promptW)
 	if err != nil {
 		return "", err
 	}
-	p2, err := ir.ReadPassword("Confirm export passphrase: ", stdout)
+	p2, err := ir.ReadPassword("Confirm export passphrase: ", promptW)
 	if err != nil {
 		return "", err
 	}
@@ -228,7 +234,7 @@ func importBundle(data []byte, fromStdin bool, homeDir string, stdin io.Reader, 
 			return 1
 		}
 		ir := auth.NewInputReader(stdin)
-		p, err := ir.ReadPassword("Export passphrase: ", stdout)
+		p, err := ir.ReadPassword("Export passphrase: ", stderr) // prompt to stderr; stdout carries import results
 		if err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1

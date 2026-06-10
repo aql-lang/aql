@@ -71,6 +71,42 @@ func TestExportImportRoundTripAcrossVaults(t *testing.T) {
 	}
 }
 
+// TestExportToStdoutKeepsPromptsOffBundle guards the corruption bug
+// where passphrase prompts were written to the same stdout stream as
+// the bundle, so `aql vault export > vault.aqlx` produced an
+// unimportable file prefixed with prompt text. With no
+// AQL_VAULT_EXPORT_PASSPHRASE set, the export passphrase is typed at
+// the prompt (twice, for confirmation); the captured stdout must be a
+// clean, importable bundle.
+func TestExportToStdoutKeepsPromptsOffBundle(t *testing.T) {
+	testHome(t) // sets AQL_VAULT_PASSPHRASE, so only the export prompt fires
+	mustInit(t)
+	if code, _, e := runVault(t, "secret-val\n", "add", "--from-stdin", "k"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+
+	// No --out (bundle to stdout), no export-passphrase env: prompt path.
+	code, out, errOut := runVault(t, "bundlepass\nbundlepass\n", "export")
+	if code != 0 {
+		t.Fatalf("export: code %d, stderr=%q", code, errOut)
+	}
+	if !strings.HasPrefix(out, exportMagic) {
+		t.Fatalf("stdout bundle does not start with %q magic — prompt text leaked into it: %.50q", exportMagic, out)
+	}
+	// The prompts must have gone to stderr instead.
+	if !strings.Contains(errOut, "export passphrase") {
+		t.Errorf("expected the passphrase prompt on stderr, got %q", errOut)
+	}
+	// And the captured bytes are a real, decryptable bundle.
+	plain, err := openExport([]byte(out), "bundlepass")
+	if err != nil {
+		t.Fatalf("captured stdout is not a valid bundle: %v", err)
+	}
+	if !strings.Contains(string(plain), `"k"`) {
+		t.Errorf("bundle missing alias k: %s", plain)
+	}
+}
+
 func TestExportSubsetByName(t *testing.T) {
 	t.Setenv(EnvExportPassphrase, "bp")
 	dir := t.TempDir()
