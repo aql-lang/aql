@@ -609,14 +609,17 @@ func runRemove(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
-	if err := kr.Delete(alias); err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
-		return 1
-	}
+	// Drop the metadata reference first, then the keyring entry. A crash
+	// between the two leaves an orphaned (unreferenced) keyring entry —
+	// harmless and reclaimable — rather than a metadata alias whose
+	// secret is already gone, which would fail every subsequent get.
 	s.RemoveAlias(alias)
 	if err := SaveStore(homeDir, s); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
+	}
+	if err := kr.Delete(alias); err != nil {
+		fmt.Fprintf(stderr, "warning: removed %s from the vault but could not delete its keyring entry: %s\n", alias, err)
 	}
 	_ = appendAudit(homeDir, AuditEvent{Action: "vault.rm", Alias: alias, Outcome: "ok"})
 	fmt.Fprintf(stdout, "removed %s\n", alias)
@@ -1047,13 +1050,12 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
-	if err := kr.Set(alias, value); err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
-		return 1
-	}
-	a.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-	a.Source = source
 
+	// When revoking capabilities (the incident-response path), persist
+	// the revocation BEFORE the new value goes live. A crash between the
+	// two then leaves the old capabilities dead and the old value still
+	// in place — fail-closed — never the new value reachable by the very
+	// capabilities the operator was trying to kill.
 	revoked := 0
 	if *revokeCaps {
 		for i := range s.Capabilities {
@@ -1062,7 +1064,20 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 				revoked++
 			}
 		}
+		if revoked > 0 {
+			if err := SaveStore(homeDir, s); err != nil {
+				fmt.Fprintf(stderr, "error: %s\n", err)
+				return 1
+			}
+		}
 	}
+
+	if err := kr.Set(alias, value); err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	a.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	a.Source = source
 	if err := SaveStore(homeDir, s); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1

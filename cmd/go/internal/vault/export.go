@@ -148,7 +148,7 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	}
 
 	if *out != "" {
-		if err := os.WriteFile(*out, blob, 0600); err != nil {
+		if err := writeFileAtomic(*out, blob, 0600); err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}

@@ -531,11 +531,7 @@ func (f *fileKeyring) save(m map[string]string) error {
 	if err != nil {
 		return err
 	}
-	tmp := f.path() + ".tmp"
-	if err := os.WriteFile(tmp, enc, 0600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, f.path())
+	return writeFileAtomic(f.path(), enc, 0600)
 }
 
 func (f *fileKeyring) Set(alias, value string) error {
