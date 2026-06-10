@@ -9,6 +9,14 @@
 // `vault get --reveal`), in command echoes, or in stored logs.
 // The metadata file holds only aliases, policies, and short-lived
 // capability token records.
+//
+// Secret values are also kept off the argv of the helper processes
+// each backend shells out to — a same-user `ps` must not be able to
+// read them. The file backend stays in-process; secret-tool, the
+// macOS `security -i` command stream, and the Windows CredWrite
+// helper all receive the secret on stdin; and 1Password is fed a
+// template on stdin. Only alias names (a restricted character set)
+// travel on argv or in the environment.
 package vault
 
 import (
@@ -17,6 +25,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -41,7 +50,8 @@ const (
 	// BackendSecretService uses the freedesktop Secret Service API
 	// via the secret-tool command from libsecret-tools.
 	BackendSecretService = "secret-service"
-	// BackendWinCred uses Windows Credential Manager via cmdkey.
+	// BackendWinCred uses the Windows Credential Manager via a PowerShell
+	// CredWrite/CredRead helper.
 	BackendWinCred = "wincred"
 	// BackendFile uses an AES-256-GCM encrypted file at
 	// ~/.aql/vault.keyring. Used when no host keychain is available
@@ -104,8 +114,8 @@ func selectKeyring(backend string, fileDir, passphrase string) (keyring, error) 
 		if runtime.GOOS != "windows" {
 			return nil, fmt.Errorf("vault: wincred backend requires windows, got %s", runtime.GOOS)
 		}
-		if _, err := exec.LookPath("cmdkey"); err != nil {
-			return nil, fmt.Errorf("vault: cmdkey not found")
+		if _, err := exec.LookPath("powershell"); err != nil {
+			return nil, fmt.Errorf("vault: powershell not found (needed for the Windows Credential Manager backend)")
 		}
 		return &winCred{}, nil
 	case BackendFile:
@@ -133,7 +143,7 @@ func autoBackend() string {
 			return BackendSecretService
 		}
 	case "windows":
-		if _, err := exec.LookPath("cmdkey"); err == nil {
+		if _, err := exec.LookPath("powershell"); err == nil {
 			return BackendWinCred
 		}
 	}
@@ -146,16 +156,63 @@ type macKeychain struct{}
 
 func (*macKeychain) Name() string { return BackendKeychain }
 
-func (*macKeychain) Set(alias, value string) error {
-	// -U updates if the entry already exists; -w passes the value
-	// without echoing to the process listing on most macOS builds.
-	cmd := exec.Command("security", "add-generic-password",
-		"-s", keyringService, "-a", alias, "-w", value, "-U")
-	out, err := cmd.CombinedOutput()
+func (k *macKeychain) Set(alias, value string) error {
+	// The secret is NOT passed on argv (where a same-user `ps` could read
+	// it). `security -i` reads its *command stream* from stdin, so the
+	// add-generic-password line — secret included — travels on the
+	// tool's stdin. `security`'s -w password prompt is no use here: it
+	// reads /dev/tty, not stdin, whenever a terminal is present.
+	//
+	// A newline would terminate the single-line interactive command (and
+	// could inject a second one), so it is rejected; every other byte of
+	// the secret is backslash-escaped so nothing splits the token.
+	if strings.ContainsAny(value, "\r\n") {
+		return errors.New("vault: keychain backend cannot store a secret containing a newline; use --backend=file")
+	}
+	cmd := macSetCmd(alias, value)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("security -i add-generic-password: %s: %s", err, strings.TrimSpace(string(out)))
+	}
+	// `security -i` exits 0 even when a sub-command fails, so confirm the
+	// value round-trips. If a macOS build parses the escaping differently
+	// this fails loudly (and cleans up) instead of leaving a corrupted
+	// credential.
+	got, err := k.Get(alias)
 	if err != nil {
-		return fmt.Errorf("security add-generic-password: %s: %s", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("security: stored %q but could not read it back: %w", alias, err)
+	}
+	if got != value {
+		_ = k.Delete(alias)
+		return fmt.Errorf("security: stored value for %q did not round-trip; refusing to keep a corrupted entry (use --backend=file)", alias)
 	}
 	return nil
+}
+
+// macSetCmd builds the `security -i` invocation that stores value under
+// alias with the secret on the tool's stdin command stream rather than
+// on argv. Exposed for testing the off-argv invariant.
+func macSetCmd(alias, value string) *exec.Cmd {
+	line := fmt.Sprintf("add-generic-password -U -s %s -a %s -w %s\n",
+		keyringService, alias, backslashEscapeAll(value))
+	cmd := exec.Command("security", "-i")
+	cmd.Stdin = strings.NewReader(line)
+	return cmd
+}
+
+// backslashEscapeAll prefixes every byte of s with a backslash. Escaping
+// uniformly means no space or metacharacter survives unescaped to split
+// the argument or be misread by security's interactive parser. In the
+// worst case (a build that does not treat backslash as an escape) the
+// value simply fails Set's round-trip check rather than corrupting data
+// or injecting a command.
+func backslashEscapeAll(s string) string {
+	var b strings.Builder
+	b.Grow(len(s) * 2)
+	for i := 0; i < len(s); i++ {
+		b.WriteByte('\\')
+		b.WriteByte(s[i])
+	}
+	return b.String()
 }
 
 func (*macKeychain) Get(alias string) (string, error) {
@@ -228,41 +285,183 @@ func (*secretService) Delete(alias string) error {
 	return nil
 }
 
-// --- Windows Credential Manager via cmdkey ----------------------------------
+// --- Windows Credential Manager via PowerShell CredWrite/CredRead -----------
 
-// winCred is a best-effort wrapper around cmdkey. cmdkey can store
-// and delete credentials but cannot return the password to stdout
-// without third-party helpers, so Get returns an explanatory error
-// instructing the user to switch to the file backend or install
-// a credential-reading helper. Set and Delete still work.
+// winCred stores secrets in the Windows Credential Manager through a
+// small PowerShell helper that P/Invokes CredWrite / CredRead /
+// CredDelete. Unlike the previous cmdkey wrapper, the secret is handed
+// to the helper on stdin (never on argv, where a same-user process
+// could read it), and Get can actually return the value — cmdkey could
+// not read passwords back.
 type winCred struct{}
 
 func (*winCred) Name() string { return BackendWinCred }
 
-func (*winCred) Set(alias, value string) error {
-	cmd := exec.Command("cmdkey",
-		"/generic:"+keyringService+":"+alias,
-		"/user:"+alias, "/pass:"+value)
+func (k *winCred) Set(alias, value string) error {
+	cmd := winCredCmd("set", alias)
+	cmd.Stdin = strings.NewReader(value)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("cmdkey: %s: %s", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("credential write: %s: %s", err, strings.TrimSpace(string(out)))
+	}
+	// Confirm the value round-trips; otherwise fail loudly (and clean
+	// up) rather than leave a silently-wrong credential.
+	got, err := k.Get(alias)
+	if err != nil {
+		return fmt.Errorf("credential stored %q but could not read it back: %w", alias, err)
+	}
+	if got != value {
+		_ = k.Delete(alias)
+		return fmt.Errorf("credential value for %q did not round-trip; refusing to keep a corrupted entry (use --backend=file)", alias)
 	}
 	return nil
 }
 
-func (*winCred) Get(string) (string, error) {
-	return "", errors.New("vault: cmdkey cannot read passwords back; use --backend=file or install a credential-reading helper")
+func (*winCred) Get(alias string) (string, error) {
+	cmd := winCredCmd("get", alias)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() == 2 {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("credential read: %s: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return stdout.String(), nil
 }
 
 func (*winCred) Delete(alias string) error {
-	cmd := exec.Command("cmdkey", "/delete:"+keyringService+":"+alias)
+	cmd := winCredCmd("delete", alias)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		if strings.Contains(string(out), "Element not found") {
-			return nil
-		}
-		return fmt.Errorf("cmdkey /delete: %s: %s", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("credential delete: %s: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
+
+// winCredCmd builds the PowerShell helper invocation for op (set | get |
+// delete) on alias. The operation and the credential target/user travel
+// in environment variables, and for set the secret is supplied on stdin
+// by the caller; the script itself carries no secret. So nothing
+// sensitive reaches any process's argv. Exposed for testing.
+func winCredCmd(op, alias string) *exec.Cmd {
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", winCredScript)
+	cmd.Env = append(os.Environ(),
+		"AQL_KR_OP="+op,
+		"AQL_KR_TARGET="+keyringService+":"+alias,
+		"AQL_KR_USER="+alias,
+	)
+	return cmd
+}
+
+// winCredScript is the PowerShell helper. It defines a C# type that
+// P/Invokes the Win32 Credential Manager API and dispatches on
+// $env:AQL_KR_OP. For "set" the secret is read from stdin; for "get" the
+// value is written to stdout (exit code 2 means "not found"); "delete"
+// removes the entry (a missing entry is success).
+const winCredScript = `
+$ErrorActionPreference = 'Stop'
+try { [Console]::InputEncoding  = New-Object System.Text.UTF8Encoding $false } catch {}
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch {}
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class AqlCred {
+    [StructLayout(LayoutKind.Sequential)]
+    struct CREDENTIAL {
+        public uint Flags;
+        public uint Type;
+        public IntPtr TargetName;
+        public IntPtr Comment;
+        public System.Runtime.InteropServices.ComTypes.FILETIME LastWritten;
+        public uint CredentialBlobSize;
+        public IntPtr CredentialBlob;
+        public uint Persist;
+        public uint AttributeCount;
+        public IntPtr Attributes;
+        public IntPtr TargetAlias;
+        public IntPtr UserName;
+    }
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern bool CredWriteW(ref CREDENTIAL cred, uint flags);
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "CredReadW")]
+    static extern bool CredReadW(string target, uint type, uint flags, out IntPtr cred);
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "CredDeleteW")]
+    static extern bool CredDeleteW(string target, uint type, uint flags);
+    [DllImport("advapi32.dll")]
+    static extern void CredFree(IntPtr buf);
+    const uint GENERIC = 1;
+    const uint PERSIST_LOCAL_MACHINE = 2;
+    const int ERROR_NOT_FOUND = 1168;
+    public static void Write(string target, string user, string secret) {
+        byte[] blob = Encoding.Unicode.GetBytes(secret);
+        CREDENTIAL c = new CREDENTIAL();
+        c.Type = GENERIC;
+        c.TargetName = Marshal.StringToCoTaskMemUni(target);
+        c.UserName = Marshal.StringToCoTaskMemUni(user);
+        c.CredentialBlobSize = (uint)blob.Length;
+        c.CredentialBlob = Marshal.AllocCoTaskMem(blob.Length == 0 ? 1 : blob.Length);
+        Marshal.Copy(blob, 0, c.CredentialBlob, blob.Length);
+        c.Persist = PERSIST_LOCAL_MACHINE;
+        bool ok = CredWriteW(ref c, 0);
+        int err = Marshal.GetLastWin32Error();
+        Marshal.FreeCoTaskMem(c.TargetName);
+        Marshal.FreeCoTaskMem(c.UserName);
+        Marshal.FreeCoTaskMem(c.CredentialBlob);
+        if (!ok) throw new Exception("CredWrite failed: " + err);
+    }
+    public static int Read(string target, out string value) {
+        value = null;
+        IntPtr p;
+        if (!CredReadW(target, GENERIC, 0, out p)) {
+            int err = Marshal.GetLastWin32Error();
+            if (err == ERROR_NOT_FOUND) return 2;
+            throw new Exception("CredRead failed: " + err);
+        }
+        try {
+            CREDENTIAL c = (CREDENTIAL)Marshal.PtrToStructure(p, typeof(CREDENTIAL));
+            if (c.CredentialBlobSize == 0) { value = ""; return 0; }
+            byte[] blob = new byte[c.CredentialBlobSize];
+            Marshal.Copy(c.CredentialBlob, blob, 0, (int)c.CredentialBlobSize);
+            value = Encoding.Unicode.GetString(blob);
+            return 0;
+        } finally {
+            CredFree(p);
+        }
+    }
+    public static void Delete(string target) {
+        if (!CredDeleteW(target, GENERIC, 0)) {
+            int err = Marshal.GetLastWin32Error();
+            if (err == ERROR_NOT_FOUND) return;
+            throw new Exception("CredDelete failed: " + err);
+        }
+    }
+}
+'@
+$op = $env:AQL_KR_OP
+$target = $env:AQL_KR_TARGET
+$user = $env:AQL_KR_USER
+switch ($op) {
+    'set' {
+        $secret = [Console]::In.ReadToEnd()
+        [AqlCred]::Write($target, $user, $secret)
+    }
+    'get' {
+        $value = $null
+        $rc = [AqlCred]::Read($target, [ref]$value)
+        if ($rc -eq 2) { exit 2 }
+        [Console]::Out.Write($value)
+    }
+    'delete' {
+        [AqlCred]::Delete($target)
+    }
+    default {
+        [Console]::Error.Write("unknown op")
+        exit 3
+    }
+}
+`
 
 // --- File-backed AES-256-GCM fallback ---------------------------------------
 
@@ -332,11 +531,7 @@ func (f *fileKeyring) save(m map[string]string) error {
 	if err != nil {
 		return err
 	}
-	tmp := f.path() + ".tmp"
-	if err := os.WriteFile(tmp, enc, 0600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, f.path())
+	return writeFileAtomic(f.path(), enc, 0600)
 }
 
 func (f *fileKeyring) Set(alias, value string) error {
@@ -372,6 +567,23 @@ func (f *fileKeyring) Delete(alias string) error {
 	return f.save(m)
 }
 
+// list returns every stored key, satisfying keyringLister so `vault
+// verify` can detect orphaned entries. Only the file backend can
+// enumerate; the OS-keychain and 1Password backends do not implement
+// keyringLister, and verify degrades to dangling-metadata detection
+// for them.
+func (f *fileKeyring) list() ([]string, error) {
+	m, err := f.load()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out, nil
+}
+
 // scryptKey derives a 32-byte AES-256 key from passphrase + salt.
 // The N=2^15 cost is conservative for an interactive vault on a
 // developer machine; it dominates each Set/Get on the file backend
@@ -380,9 +592,27 @@ func scryptKey(passphrase string, salt []byte) ([]byte, error) {
 	return scrypt.Key([]byte(passphrase), salt, 1<<15, 8, 1, 32)
 }
 
-// File layout: 16-byte salt | 12-byte nonce | ciphertext|tag.
+const (
+	// keyringMagic prefixes a self-describing keyring file. Older files
+	// were written without it (a raw salt|nonce|ciphertext blob) and are
+	// still readable; they are re-written in the current format on the
+	// next save.
+	keyringMagic = "AQLK"
+	// keyringFormat is the keyring layout version this binary writes.
+	// Bump it (and add a branch in decryptHeadered) when the KDF,
+	// cipher, or byte layout changes.
+	//
+	//	1 — scrypt(N=2^15,r=8,p=1) + AES-256-GCM, header-bound AAD.
+	keyringFormat   = 1
+	keyringSaltLen  = 16
+	keyringNonceLen = 12
+)
+
+// Headered layout: "AQLK" | format(1 byte) | salt(16) | nonce(12) | ciphertext|tag.
+// The GCM additional data is the header bytes + salt, so the format
+// byte is authenticated and cannot be downgraded by tampering.
 func encryptBlob(plain []byte, passphrase string) ([]byte, error) {
-	salt := make([]byte, 16)
+	salt := make([]byte, keyringSaltLen)
 	if _, err := rand.Read(salt); err != nil {
 		return nil, err
 	}
@@ -402,21 +632,72 @@ func encryptBlob(plain []byte, passphrase string) ([]byte, error) {
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, err
 	}
-	ct := gcm.Seal(nil, nonce, plain, salt)
-	out := make([]byte, 0, len(salt)+len(nonce)+len(ct))
+	header := append([]byte(keyringMagic), byte(keyringFormat))
+	ct := gcm.Seal(nil, nonce, plain, keyringAAD(header, salt))
+	out := make([]byte, 0, len(header)+len(salt)+len(nonce)+len(ct))
+	out = append(out, header...)
 	out = append(out, salt...)
 	out = append(out, nonce...)
 	out = append(out, ct...)
 	return out, nil
 }
 
+// keyringAAD binds the header and salt into the AEAD additional data.
+func keyringAAD(header, salt []byte) []byte {
+	aad := make([]byte, 0, len(header)+len(salt))
+	aad = append(aad, header...)
+	aad = append(aad, salt...)
+	return aad
+}
+
 func decryptBlob(blob []byte, passphrase string) ([]byte, error) {
-	if len(blob) < 16+12+16 {
+	if len(blob) >= len(keyringMagic)+1 && string(blob[:len(keyringMagic)]) == keyringMagic {
+		return decryptHeadered(blob, passphrase)
+	}
+	return decryptLegacy(blob, passphrase)
+}
+
+// decryptHeadered reads the self-describing format, dispatching on the
+// format byte. A newer format than this binary understands is reported
+// clearly rather than surfaced as a generic "corrupt keyring".
+func decryptHeadered(blob []byte, passphrase string) ([]byte, error) {
+	const off = len(keyringMagic) + 1 // magic + format byte
+	format := int(blob[len(keyringMagic)])
+	if format > keyringFormat {
+		return nil, fmt.Errorf("vault: keyring is format %d but this aql understands up to %d; upgrade aql", format, keyringFormat)
+	}
+	if format != 1 {
+		return nil, fmt.Errorf("vault: unknown keyring format %d", format)
+	}
+	if len(blob) < off+keyringSaltLen+keyringNonceLen+16 {
 		return nil, errors.New("vault: keyring file is truncated")
 	}
-	salt := blob[:16]
-	nonce := blob[16:28]
-	ct := blob[28:]
+	salt := blob[off : off+keyringSaltLen]
+	nonce := blob[off+keyringSaltLen : off+keyringSaltLen+keyringNonceLen]
+	ct := blob[off+keyringSaltLen+keyringNonceLen:]
+	plain, err := aesGCMOpen(passphrase, salt, nonce, ct, keyringAAD(blob[:off], salt))
+	if err != nil {
+		return nil, err
+	}
+	return plain, nil
+}
+
+// decryptLegacy reads the original headerless salt|nonce|ciphertext
+// layout (AAD = salt). Retained so vaults written before the format
+// header remain readable; they are upgraded on the next save.
+func decryptLegacy(blob []byte, passphrase string) ([]byte, error) {
+	if len(blob) < keyringSaltLen+keyringNonceLen+16 {
+		return nil, errors.New("vault: keyring file is truncated")
+	}
+	salt := blob[:keyringSaltLen]
+	nonce := blob[keyringSaltLen : keyringSaltLen+keyringNonceLen]
+	ct := blob[keyringSaltLen+keyringNonceLen:]
+	return aesGCMOpen(passphrase, salt, nonce, ct, salt)
+}
+
+// aesGCMOpen derives the scrypt key and opens the GCM ciphertext,
+// mapping any authentication failure to a single non-revealing error.
+func aesGCMOpen(passphrase string, salt, nonce, ct, aad []byte) ([]byte, error) {
 	key, err := scryptKey(passphrase, salt)
 	if err != nil {
 		return nil, err
@@ -429,7 +710,7 @@ func decryptBlob(blob []byte, passphrase string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	plain, err := gcm.Open(nil, nonce, ct, salt)
+	plain, err := gcm.Open(nil, nonce, ct, aad)
 	if err != nil {
 		return nil, errors.New("vault: wrong passphrase or corrupt keyring")
 	}
@@ -460,19 +741,48 @@ func (k *onePasswordKeyring) opVault() string {
 	return k.vault
 }
 
+// opItemTemplate / opField are the minimal subset of the 1Password
+// item-create JSON template needed to store a single concealed
+// credential. The value rides in this JSON (delivered on stdin), never
+// on argv.
+type opItemTemplate struct {
+	Title    string    `json:"title"`
+	Category string    `json:"category"`
+	Fields   []opField `json:"fields"`
+}
+
+type opField struct {
+	ID    string `json:"id"`
+	Type  string `json:"type"`
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
 func (k *onePasswordKeyring) Set(alias, value string) error {
-	// `op item delete` to clear any prior item, then `op item create`.
-	// The delete is best-effort: missing items return non-zero, which
-	// we ignore. Creating is the operation that matters.
+	// Best-effort delete of any prior item first. This uses the item
+	// title, not the secret, so nothing sensitive reaches argv here.
 	_ = exec.Command("op", "item", "delete", k.itemTitle(alias),
 		"--vault", k.opVault()).Run()
-	cmd := exec.Command("op", "item", "create",
-		"--category", "API Credential",
-		"--vault", k.opVault(),
-		"--title", k.itemTitle(alias),
-		"credential="+value)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("op item create: %s: %s", err, strings.TrimSpace(string(out)))
+
+	// Create from a JSON template piped on stdin (`op item create -`)
+	// so the credential value never appears on this process's — or
+	// op's — argv, where a same-user `ps` could read it. The label
+	// "credential" matches what Get reads back.
+	blob, err := json.Marshal(opItemTemplate{
+		Title:    k.itemTitle(alias),
+		Category: "API_CREDENTIAL",
+		Fields:   []opField{{ID: "credential", Type: "CONCEALED", Label: "credential", Value: value}},
+	})
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command("op", "item", "create", "--vault", k.opVault(), "-")
+	cmd.Stdin = bytes.NewReader(blob)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("op item create: %s: %s", err, strings.TrimSpace(out.String()))
 	}
 	return nil
 }

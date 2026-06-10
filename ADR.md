@@ -210,3 +210,81 @@ exhaustive over the public export set, not a sample of it.
   only live exports so it cannot rot, and is meant to stay tiny: prefer the
   `mem://` scheme or a deterministic validation-error row (as the `aql:net`
   `prepare`/`direct` rows do) before reaching for an exemption.
+
+---
+
+## ADR-004 — Vault on-disk formats are versioned and forward-incompatible by refusal {#adr-004}
+
+**Status:** Accepted · **Date:** 2026-06-10
+
+### Decision
+
+Every persistent vault artifact carries an explicit format version, and
+the rules for reading one are fixed:
+
+1. **Older than the running binary → migrate forward.** Each on-disk
+   version has an ordered, pure migration to the next. The store
+   (`vault.jsonic`) uses the `storeMigrations` registry keyed by
+   `Store.Version`; the encrypted keyring (`vault.keyring`) uses a
+   `"AQLK" | format-byte | …` header and dispatches on the byte.
+2. **Newer than the running binary → refuse, never parse leniently.**
+   Go's `encoding/json` silently drops unknown fields, so loading then
+   saving a future-version store with an old binary would *erase* data
+   it doesn't understand. A higher version than the binary supports is a
+   hard error that says "upgrade aql", for the store, the keyring, and
+   `vault policy` files alike.
+3. **Bumping a format version is a three-part commit:** raise the
+   constant (`storeVersion` / `keyringFormat` / `policyVersion`), add the
+   migration (where applicable), and check in a golden fixture plus a
+   load-and-migrate test. `TestMigrationRegistryLength` asserts the
+   registry stays in lockstep with `storeVersion` so the three cannot
+   drift.
+
+The live wire protocols are versioned too: the credential broker
+advertises `X-AQL-Vault-Protocol` on every response and refuses a client
+that declares a newer one; the MCP server reports its protocol and
+server version from `initialize`.
+
+### Context
+
+`aql` is under active development while the vault must keep working
+across binary upgrades and, increasingly, across machines. Three failure
+modes motivated formalizing this:
+
+- **Silent field-stripping.** The store already wrote a `version` field
+  that nothing read. The first additive schema change (hashing
+  capability tokens) proved the hazard: an older binary doing any
+  load-modify-save would drop the new field. A *read-time* version gate
+  is the only thing that converts that silent loss into a clear error.
+- **Unversionable ciphertext.** The keyring blob was a headerless
+  `salt | nonce | ciphertext`, so the KDF, cipher, or layout could never
+  change — old files were indistinguishable from new. A magic + format
+  byte (authenticated as AEAD additional data, so it can't be downgraded
+  by tampering) makes the format evolvable; legacy headerless files stay
+  readable and are rewritten with a header on the next save.
+- **Mysterious breakage as the "migration."** When token hashing landed,
+  pre-existing capabilities just started returning 401. The v1→v2 store
+  migration now revokes those legacy capabilities explicitly, so the
+  transition is visible in `vault status` and the audit trail instead of
+  being debugged from first principles.
+
+### Consequences
+
+- A newer-format vault on an older binary fails loudly and actionably
+  rather than corrupting data — the property that lets the vault "keep
+  working" across in-flight changes.
+- The cost of a breaking on-disk change is now a fixed, testable recipe
+  (constant + migration + golden file), which is cheap enough that there
+  is no excuse to make an unversioned breaking change.
+- Backups and cross-machine moves are well-defined: a `file`-backend
+  vault is two self-describing files (`vault.jsonic` + `vault.keyring`)
+  plus the passphrase, portable to any OS; keychain-backed vaults are
+  not, because the secret values live in the host OS store rather than
+  under `~/.aql`.
+- For the keychain case — and for any cross-backend or cross-OS move —
+  `vault export` writes a passphrase-encrypted bundle (its own `"AQLX"`
+  magic + format byte, same envelope discipline) carrying the aliases
+  and their values, which `vault import` restores into any backend.
+  Because the bundle is versioned the same way, an older `aql` refuses a
+  newer bundle rather than mishandling it. `import` auto-detects whether
+  its input is a bundle or a `.env` file.

@@ -51,7 +51,7 @@ func TestProxyExhaustsCallQuotaAfterMaxCalls(t *testing.T) {
 	// Grant with max-calls=2 directly via the store so we don't
 	// have to round-trip through the CLI.
 	s, _ := LoadStore(home)
-	tok, _ := s.NewCapability("k", "test", nil, nil, hour())
+	_, token, _ := s.NewCapability("k", "test", nil, nil, hour())
 	idx := len(s.Capabilities) - 1
 	s.Capabilities[idx].MaxCalls = 2
 	_ = SaveStore(home, s)
@@ -59,7 +59,7 @@ func TestProxyExhaustsCallQuotaAfterMaxCalls(t *testing.T) {
 	base := startProxy(t)
 	for i := 1; i <= 3; i++ {
 		req, _ := http.NewRequest("GET", base+"/k/x", nil)
-		req.Header.Set("Authorization", "Bearer "+tok.ID)
+		req.Header.Set("Authorization", "Bearer "+token)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
@@ -94,7 +94,7 @@ func TestProxyExhaustsCostBudget(t *testing.T) {
 		t.Fatal("add")
 	}
 	s, _ := LoadStore(home)
-	tok, _ := s.NewCapability("k", "test", nil, nil, hour())
+	_, token, _ := s.NewCapability("k", "test", nil, nil, hour())
 	idx := len(s.Capabilities) - 1
 	s.Capabilities[idx].MaxCostCents = 50
 	_ = SaveStore(home, s)
@@ -102,7 +102,7 @@ func TestProxyExhaustsCostBudget(t *testing.T) {
 	base := startProxy(t)
 	for i := 1; i <= 3; i++ {
 		req, _ := http.NewRequest("GET", base+"/k/x", nil)
-		req.Header.Set("Authorization", "Bearer "+tok.ID)
+		req.Header.Set("Authorization", "Bearer "+token)
 		resp, _ := http.DefaultClient.Do(req)
 		resp.Body.Close()
 		switch {
@@ -127,13 +127,13 @@ func TestProxyDeniesRequireApproval(t *testing.T) {
 		t.Fatal("add")
 	}
 	s, _ := LoadStore(home)
-	tok, _ := s.NewCapability("k", "test", nil, nil, hour())
+	_, token, _ := s.NewCapability("k", "test", nil, nil, hour())
 	s.Capabilities[len(s.Capabilities)-1].RequireApproval = true
 	_ = SaveStore(home, s)
 
 	base := startProxy(t)
 	req, _ := http.NewRequest("GET", base+"/k/x", nil)
-	req.Header.Set("Authorization", "Bearer "+tok.ID)
+	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -343,20 +343,26 @@ func TestMCPInitializeAndPing(t *testing.T) {
 	}
 }
 
-func TestMCPListToolsExposesAliases(t *testing.T) {
+func TestMCPListToolsExposesGrantedAliases(t *testing.T) {
 	testHome(t)
 	mustInit(t)
 	fu := newFakeUpstream(t)
 	registerTestProvider(t, "fake", fu, "bearer")
-	if code, _, _ := runVault(t, "v\n", "add", "--from-stdin", "--provider=fake", "alpha"); code != 0 {
-		t.Fatal("add alpha")
+	for _, a := range []string{"alpha", "gamma"} {
+		if code, _, _ := runVault(t, "v\n", "add", "--from-stdin", "--provider=fake", a); code != 0 {
+			t.Fatalf("add %s", a)
+		}
 	}
 	// Alias with no provider should be omitted.
 	if code, _, _ := runVault(t, "v\n", "add", "--from-stdin", "beta"); code != 0 {
 		t.Fatal("add beta")
 	}
+	// Grant alpha to the MCP agent; gamma is left ungranted.
+	if code, _, errOut := runVault(t, "", "grant", "--agent=claude", "alpha"); code != 0 {
+		t.Fatalf("grant: %s", errOut)
+	}
 
-	srv := &mcpServer{homeDir: os.Getenv(EnvHome), stderr: io.Discard, client: http.DefaultClient}
+	srv := &mcpServer{homeDir: os.Getenv(EnvHome), agent: "claude", stderr: io.Discard, client: http.DefaultClient}
 	resp := mcpRPC(t, srv, "tools/list", nil)
 	if resp.Error != nil {
 		t.Fatalf("tools/list error: %+v", resp.Error)
@@ -364,10 +370,13 @@ func TestMCPListToolsExposesAliases(t *testing.T) {
 	b, _ := json.Marshal(resp.Result)
 	body := string(b)
 	if !strings.Contains(body, "alpha_request") {
-		t.Errorf("missing alpha tool: %s", body)
+		t.Errorf("missing alpha tool (granted): %s", body)
 	}
 	if strings.Contains(body, "beta_request") {
 		t.Errorf("beta (no provider) should be omitted: %s", body)
+	}
+	if strings.Contains(body, "gamma_request") {
+		t.Errorf("gamma (no capability for agent) should be omitted: %s", body)
 	}
 }
 
@@ -379,6 +388,10 @@ func TestMCPCallToolForwardsAndAuthInjects(t *testing.T) {
 	if code, _, _ := runVault(t, "real-mcp-secret\n", "add",
 		"--from-stdin", "--provider=fake", "k"); code != 0 {
 		t.Fatal("add")
+	}
+	// The MCP server now enforces capabilities: grant one to the agent.
+	if code, _, errOut := runVault(t, "", "grant", "--agent=claude", "k"); code != 0 {
+		t.Fatalf("grant: %s", errOut)
 	}
 
 	srv := &mcpServer{homeDir: os.Getenv(EnvHome), agent: "claude", stderr: io.Discard, client: http.DefaultClient}
@@ -407,6 +420,33 @@ func TestMCPCallToolUnknownAlias(t *testing.T) {
 	resp := mcpRPC(t, srv, "tools/call", map[string]any{"name": "nope_request"})
 	if resp.Error == nil {
 		t.Fatal("expected error for unknown alias")
+	}
+}
+
+func TestMCPCallToolDeniedWithoutCapability(t *testing.T) {
+	testHome(t)
+	mustInit(t)
+	fu := newFakeUpstream(t)
+	registerTestProvider(t, "fake", fu, "bearer")
+	if code, _, _ := runVault(t, "v\n", "add", "--from-stdin", "--provider=fake", "k"); code != 0 {
+		t.Fatal("add")
+	}
+	// No capability granted to this agent for k.
+	srv := &mcpServer{homeDir: os.Getenv(EnvHome), agent: "claude", stderr: io.Discard, client: http.DefaultClient}
+	resp := mcpRPC(t, srv, "tools/call", map[string]any{
+		"name":      "k_request",
+		"arguments": map[string]any{"path": "/x"},
+	})
+	if resp.Error == nil {
+		t.Fatal("expected error when no capability is granted")
+	}
+	if !strings.Contains(resp.Error.Message, "capability") {
+		t.Errorf("error should mention capability, got %q", resp.Error.Message)
+	}
+	fu.mu.Lock()
+	defer fu.mu.Unlock()
+	if fu.lastPath != "" {
+		t.Errorf("upstream was called despite missing capability: path=%q", fu.lastPath)
 	}
 }
 
