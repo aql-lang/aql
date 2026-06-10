@@ -290,12 +290,19 @@ A local credentials vault, backed by the OS keyring where possible
 
 ```bash
 aql vault init                          # initialise, pick backend
-aql vault add github_token 'ghp_xxx'    # store a secret
+aql vault add --from-clipboard github_token   # read from clipboard, then wipe it
+aql vault add --from-stdin github_token       # read one line from stdin
+aql vault add github_token                     # prompt (input not echoed)
 aql vault list                          # aliases and metadata
 aql vault get github_token              # redacted by default
 aql vault get github_token --reveal     # show the value
 aql vault rm github_token               # remove (also: remove, delete)
-aql vault grant github_token <pid>      # issue scoped capability token
+aql vault mv github_token proj:gh       # rename / move between namespaces (also: rename)
+aql vault mv proj: team:                # rename a whole namespace
+aql vault verify                        # reconcile store + keyring (--prune repairs)
+aql vault export --out=vault.aqlx       # portable, passphrase-encrypted bundle
+aql vault import vault.aqlx             # restore a bundle (or a .env file)
+aql vault grant --agent=ci --ttl=2h github_token   # issue scoped capability token
 aql vault revoke <token-id>             # revoke a token
 aql vault providers                     # list built-in provider presets
 aql vault scan .                        # scan files for leaked secrets
@@ -303,10 +310,103 @@ aql vault audit                         # show the structured audit log
 aql vault audit --action proxy.request --last 20
 aql vault audit --json                  # raw JSONL
 aql vault policy apply policy.aql       # declaratively apply policy
-aql vault proxy                         # run local credential broker
+aql vault proxy                         # run local credential broker (loopback only)
 aql vault mcp                           # stdio MCP server over aliases
 aql vault exec gh,openai -- mycmd       # run mycmd with secrets in env
 ```
+
+The secret value is never taken as a command-line argument — that
+would leak it into your shell history and the process listing.
+`vault add` (and `vault rotate`) read it from `--from-clipboard`,
+`--from-stdin`, `--from-env=VAR`, or, with none of those, an
+interactive no-echo prompt. `--from-clipboard` reads the value
+straight from the OS clipboard and wipes the clipboard afterwards;
+it works on macOS (pbpaste/pbcopy), Linux (wl-clipboard on Wayland,
+or xclip / xsel on X11), and Windows (PowerShell).
+
+**Namespaces.** Alias names may carry one namespace qualifier,
+`ns:name`, so two projects can each have an `openai_key`
+(`proj1:openai_key`, `proj2:openai_key`). The namespace is part of the
+alias identity — it flows through capabilities, the proxy URL
+(`/proj1:openai_key/v1/...`), export bundles, and the audit log. Set a
+default namespace with `vault config --set namespace.default=proj` (or
+per-invocation with `AQL_VAULT_NAMESPACE`); bare names then resolve
+into it for every command — `vault add key` stores `proj:key`, `vault
+get key` reads it back. `:name` (leading colon) forces the root
+namespace, and `:` means root anywhere a namespace is named, including
+filter values and the env var. There is no silent fallback between
+namespaces: a bare name that misses errors (with a hint when a
+root-level twin exists). Reporting filters by namespace: `list
+--namespace=proj`, `audit --namespace=proj`, `export --namespace=proj`
+(`:` = root only), and `status` breaks alias counts down per
+namespace. `vault exec proj:key -- cmd` injects the secret as `$key` —
+the env name derives from the base name. Policy files take names
+literally (no default applied), so a committed policy means the same
+thing on every machine.
+
+The store (`vault.jsonic`) and the secret keyring are separate files,
+written one after the other; each write is atomic and fsync-durable
+(temp file → fsync → rename → directory fsync), and concurrent writers
+— the broker persisting quota counters while you run a command, two
+commands at once — are serialized by an advisory lock
+(`~/.aql/vault.lock`) held only around each load-modify-save, so no
+update is lost across processes. A crash between the two file writes —
+or a partial import — can still desync them, so `vault verify`
+reconciles them: it reports dangling metadata (an alias with no
+secret), orphaned keyring entries (a secret with no metadata, file
+backend only), capabilities bound to a vanished alias, and stale
+`.tmp` files, exiting non-zero when anything is found; `--prune`
+repairs them. Verify runs under the same vault lock as the writers,
+so its snapshot is consistent — a half-committed `add` can never show
+up as a false orphan — and a repair can never clobber a concurrent
+command. The mutating commands are ordered to fail safe (a crash
+leaves a harmless orphan, never a dangling reference), so in practice
+`verify` should find nothing — it's the audit that proves it.
+
+Rename and move with `vault mv <src> <dst>`: both sides are alias
+references (`vault mv key proj:key`), or both denote whole namespaces
+with a trailing colon (`vault mv proj: team:`; `:` alone is root, so
+`vault mv proj: :` moves everything in `proj` to root). Destinations
+are pre-flighted — a bulk rename never half-commits — and the keyring
+copy is verified before the old entry is deleted, so a failure can
+leave a duplicate but never lose a secret. Capabilities follow the
+key by default (the same bearer token then works against the new
+proxy path); pass `--revoke-caps` to revoke them instead, and
+`--dry-run` to preview. Legacy aliases whose namespace is only a
+metadata tag are selected by namespace moves too, gaining properly
+qualified names (or just losing the tag when moved to root).
+
+Passphrases follow the same rule: every command that needs one (the
+vault passphrase for the file backend, the bundle passphrase for
+`export`/`import`) prompts for it interactively with echo suppressed —
+no flags or environment setup needed. `AQL_VAULT_PASSPHRASE` and
+`AQL_VAULT_EXPORT_PASSPHRASE` are the non-interactive overrides for
+services, CI, and stdin pipelines; prefer setting them per-invocation
+over `export`-ing them into an interactive shell, where they would
+land in shell history and every child process's environment.
+
+`aql vault grant` issues a scoped capability for an alias and prints
+a one-time bearer **token**; only the token's hash is stored, so save
+it when shown. The credential broker (`aql vault proxy`) authenticates
+that token and never accepts a prefix of it, and binds to loopback
+only unless you pass `--allow-public`. The MCP server (`aql vault mcp
+--agent=NAME`) is gated the same way: it exposes and forwards only
+aliases the named agent has been granted a capability for, enforcing
+the same TTL, host/method allowlists, and call/cost quotas. The file
+backend requires a non-empty passphrase.
+
+**Moving a vault between machines or OSes.** A `file`-backend vault is
+already portable: copy `~/.aql/vault.jsonic` and `~/.aql/vault.keyring`
+and bring the passphrase. Secrets stored in an OS keychain or 1Password
+do *not* live under `~/.aql`, so to move those — or to move to a
+different OS — use `aql vault export`, which writes a self-describing,
+passphrase-encrypted bundle (you are prompted for the bundle
+passphrase; `AQL_VAULT_EXPORT_PASSPHRASE` overrides for scripts) of
+the aliases and their values, independent of the source backend. `aql vault import` restores it into any backend on the target,
+skipping aliases that already exist unless you pass `--overwrite`.
+`import` reads a `.env` file or an export bundle, auto-detected. Both
+formats are versioned: an older `aql` refuses a newer bundle rather than
+mishandling it.
 
 `aql vault exec` resolves the listed aliases against the keyring
 and spawns the given command with each value injected as an

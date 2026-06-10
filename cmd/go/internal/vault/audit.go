@@ -101,10 +101,16 @@ func runAudit(args []string, homeDir string, stdout, stderr io.Writer) int {
 	flagSet.SetOutput(stderr)
 	action := flagSet.String("action", "", "show only events with this action (e.g. proxy.request)")
 	alias := flagSet.String("alias", "", "show only events touching this alias")
+	namespace := flagSet.String("namespace", "", "show only events touching aliases in this namespace (':' = root)")
 	actor := flagSet.String("actor", "", "show only events from this actor")
 	last := flagSet.Int("last", 0, "show only the last N matching events (0 = all)")
 	jsonOut := flagSet.Bool("json", false, "emit raw JSONL instead of human-readable lines")
 	if err := flagSet.Parse(args); err != nil {
+		return 1
+	}
+	nsFilter, nsFiltered, err := normalizeNSFilter(*namespace)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
 
@@ -136,6 +142,17 @@ func runAudit(args []string, homeDir string, stdout, stderr io.Writer) int {
 		}
 		if *alias != "" && ev.Alias != *alias {
 			continue
+		}
+		if nsFiltered {
+			// Events carry the stored (qualified) alias name; the
+			// namespace is derived from it. Events without an alias
+			// never match a namespace filter.
+			if ev.Alias == "" {
+				continue
+			}
+			if ns, _ := splitAlias(ev.Alias); ns != nsFilter {
+				continue
+			}
 		}
 		if *actor != "" && ev.Actor != *actor {
 			continue

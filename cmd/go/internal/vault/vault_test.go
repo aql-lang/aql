@@ -63,6 +63,23 @@ func TestInitRefusesReinitWithoutForce(t *testing.T) {
 	}
 }
 
+func TestInitRefusesEmptyPassphrase(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(EnvHome, dir)
+	t.Setenv(EnvPassphrase, "") // force the interactive prompt path
+	// Two empty lines answer the passphrase + confirmation prompts.
+	code, _, errOut := runVault(t, "\n\n", "init", "--backend=file")
+	if code == 0 {
+		t.Fatal("expected non-zero exit for an empty passphrase")
+	}
+	if !strings.Contains(errOut, "empty passphrase") {
+		t.Errorf("missing empty-passphrase error in %q", errOut)
+	}
+	if _, err := os.Stat(StorePath(dir)); err == nil {
+		t.Errorf("store was created despite empty passphrase")
+	}
+}
+
 func TestAddGetListRemove(t *testing.T) {
 	testHome(t)
 	mustInit(t)
@@ -201,21 +218,23 @@ trailing=value # with comment
 	if code != 0 {
 		t.Fatalf("import: %s", errOut)
 	}
+	// --namespace qualifies the imported names (it is the ns: prefix,
+	// not just a metadata tag).
 	for _, k := range []string{"FOO", "QUOTED", "SINGLE", "trailing"} {
-		if !strings.Contains(out, "imported "+k) {
-			t.Errorf("missing import of %s in %q", k, out)
+		if !strings.Contains(out, "imported test:"+k) {
+			t.Errorf("missing import of test:%s in %q", k, out)
 		}
 	}
 	// EMPTY_KEY has an empty value; the keyring still accepts it but
 	// it is a weak default — verify we did not crash. The alias may
 	// or may not be created depending on policy; current behavior is
 	// to accept it because parseDotenv yields val="".
-	code, out, _ = runVault(t, "", "get", "--reveal", "QUOTED")
+	code, out, _ = runVault(t, "", "get", "--reveal", "test:QUOTED")
 	if code != 0 {
-		t.Fatal("get QUOTED")
+		t.Fatal("get test:QUOTED")
 	}
 	if !strings.Contains(out, "hello world") {
-		t.Errorf("get QUOTED expected 'hello world', got %q", out)
+		t.Errorf("get test:QUOTED expected 'hello world', got %q", out)
 	}
 }
 
@@ -262,7 +281,7 @@ func TestGrantAndRevoke(t *testing.T) {
 
 func TestCapabilityExpiry(t *testing.T) {
 	s := &Store{}
-	c, err := s.NewCapability("openai", "agent", nil, nil, time.Millisecond)
+	c, _, err := s.NewCapability("openai", "agent", nil, nil, time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
