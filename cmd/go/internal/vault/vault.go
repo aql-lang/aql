@@ -64,6 +64,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runRemove(rest, homeDir, stdout, stderr)
 	case "mv", "rename":
 		return runMv(rest, homeDir, stdin, stdout, stderr)
+	case "verify", "fsck":
+		return runVerify(rest, homeDir, stdin, stdout, stderr)
 	case "import":
 		return runImport(rest, homeDir, stdin, stdout, stderr)
 	case "export":
@@ -125,6 +127,7 @@ var modeDocs = []modeDoc{
 	{"list", "list aliases and metadata (no values)"},
 	{"rm", "remove a secret"},
 	{"mv", "rename a key, move it between namespaces, or rename a namespace (ns:)"},
+	{"verify", "reconcile the store and keyring; --prune repairs (also: fsck)"},
 	{"import", "import secrets from a .env file or an encrypted export bundle"},
 	{"export", "export secrets to a portable, passphrase-encrypted bundle"},
 	{"grant", "issue a scoped capability token for an alias"},

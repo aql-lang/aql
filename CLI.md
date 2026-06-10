@@ -299,6 +299,7 @@ aql vault get github_token --reveal     # show the value
 aql vault rm github_token               # remove (also: remove, delete)
 aql vault mv github_token proj:gh       # rename / move between namespaces (also: rename)
 aql vault mv proj: team:                # rename a whole namespace
+aql vault verify                        # reconcile store + keyring (--prune repairs)
 aql vault export --out=vault.aqlx       # portable, passphrase-encrypted bundle
 aql vault import vault.aqlx             # restore a bundle (or a .env file)
 aql vault grant --agent=ci --ttl=2h github_token   # issue scoped capability token
@@ -342,6 +343,18 @@ namespace. `vault exec proj:key -- cmd` injects the secret as `$key` —
 the env name derives from the base name. Policy files take names
 literally (no default applied), so a committed policy means the same
 thing on every machine.
+
+The store (`vault.jsonic`) and the secret keyring are separate files,
+written one after the other; each write is atomic and fsync-durable
+(temp file → fsync → rename → directory fsync), but a crash between
+the two — or a partial import — can still desync them. `vault verify`
+reconciles them: it reports dangling metadata (an alias with no
+secret), orphaned keyring entries (a secret with no metadata, file
+backend only), capabilities bound to a vanished alias, and stale
+`.tmp` files, exiting non-zero when anything is found; `--prune`
+repairs them. The mutating commands are ordered to fail safe (a crash
+leaves a harmless orphan, never a dangling reference), so in practice
+`verify` should find nothing — it's the audit that proves it.
 
 Rename and move with `vault mv <src> <dst>`: both sides are alias
 references (`vault mv key proj:key`), or both denote whole namespaces

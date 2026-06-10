@@ -567,6 +567,23 @@ func (f *fileKeyring) Delete(alias string) error {
 	return f.save(m)
 }
 
+// list returns every stored key, satisfying keyringLister so `vault
+// verify` can detect orphaned entries. Only the file backend can
+// enumerate; the OS-keychain and 1Password backends do not implement
+// keyringLister, and verify degrades to dangling-metadata detection
+// for them.
+func (f *fileKeyring) list() ([]string, error) {
+	m, err := f.load()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out, nil
+}
+
 // scryptKey derives a 32-byte AES-256 key from passphrase + salt.
 // The N=2^15 cost is conservative for an interactive vault on a
 // developer machine; it dominates each Set/Get on the file backend
