@@ -297,6 +297,8 @@ aql vault list                          # aliases and metadata
 aql vault get github_token              # redacted by default
 aql vault get github_token --reveal     # show the value
 aql vault rm github_token               # remove (also: remove, delete)
+aql vault export --out=vault.aqlx       # portable, passphrase-encrypted bundle
+aql vault import vault.aqlx             # restore a bundle (or a .env file)
 aql vault grant --agent=ci --ttl=2h github_token   # issue scoped capability token
 aql vault revoke <token-id>             # revoke a token
 aql vault providers                     # list built-in provider presets
@@ -328,6 +330,19 @@ only unless you pass `--allow-public`. The MCP server (`aql vault mcp
 aliases the named agent has been granted a capability for, enforcing
 the same TTL, host/method allowlists, and call/cost quotas. The file
 backend requires a non-empty passphrase.
+
+**Moving a vault between machines or OSes.** A `file`-backend vault is
+already portable: copy `~/.aql/vault.jsonic` and `~/.aql/vault.keyring`
+and bring the passphrase. Secrets stored in an OS keychain or 1Password
+do *not* live under `~/.aql`, so to move those — or to move to a
+different OS — use `aql vault export`, which writes a self-describing,
+passphrase-encrypted bundle (set `AQL_VAULT_EXPORT_PASSPHRASE` or be
+prompted) of the aliases and their values, independent of the source
+backend. `aql vault import` restores it into any backend on the target,
+skipping aliases that already exist unless you pass `--overwrite`.
+`import` reads a `.env` file or an export bundle, auto-detected. Both
+formats are versioned: an older `aql` refuses a newer bundle rather than
+mishandling it.
 
 `aql vault exec` resolves the listed aliases against the keyring
 and spawns the given command with each value injected as an

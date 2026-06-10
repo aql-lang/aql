@@ -281,3 +281,10 @@ modes motivated formalizing this:
   plus the passphrase, portable to any OS; keychain-backed vaults are
   not, because the secret values live in the host OS store rather than
   under `~/.aql`.
+- For the keychain case — and for any cross-backend or cross-OS move —
+  `vault export` writes a passphrase-encrypted bundle (its own `"AQLX"`
+  magic + format byte, same envelope discipline) carrying the aliases
+  and their values, which `vault import` restores into any backend.
+  Because the bundle is versioned the same way, an older `aql` refuses a
+  newer bundle rather than mishandling it. `import` auto-detects whether
+  its input is a bundle or a `.env` file.

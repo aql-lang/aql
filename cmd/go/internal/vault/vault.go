@@ -63,7 +63,9 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case "rm", "remove", "delete":
 		return runRemove(rest, homeDir, stdout, stderr)
 	case "import":
-		return runImport(rest, homeDir, stdout, stderr)
+		return runImport(rest, homeDir, stdin, stdout, stderr)
+	case "export":
+		return runExport(rest, homeDir, stdin, stdout, stderr)
 	case "grant":
 		return runGrant(rest, homeDir, stdout, stderr)
 	case "revoke":
@@ -118,7 +120,8 @@ var modeDocs = []modeDoc{
 	{"get", "retrieve a secret (redacted unless --reveal)"},
 	{"list", "list aliases and metadata (no values)"},
 	{"rm", "remove a secret"},
-	{"import", "import secrets from a .env file"},
+	{"import", "import secrets from a .env file or an encrypted export bundle"},
+	{"export", "export secrets to a portable, passphrase-encrypted bundle"},
 	{"grant", "issue a scoped capability token for an alias"},
 	{"revoke", "revoke a capability token"},
 	{"lock", "mark the vault locked (block get/grant)"},
@@ -563,29 +566,58 @@ func runRemove(args []string, homeDir string, stdout, stderr io.Writer) int {
 
 // --- import ----------------------------------------------------------------
 
-func runImport(args []string, homeDir string, stdout, stderr io.Writer) int {
+// runImport ingests secrets from a positional file (or stdin when no
+// path is given). The source is dispatched by content: an encrypted
+// export bundle (recognized by its magic header) is handled by
+// importBundle; anything else is parsed as a .env file. The two share
+// the --namespace/--provider/--prefix flags; --overwrite and the
+// AQL_VAULT_EXPORT_PASSPHRASE are bundle-only.
+func runImport(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("vault import", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	namespace := fs.String("namespace", "", "tag imported secrets with this namespace")
-	provider := fs.String("provider", "", "tag imported secrets with this provider")
+	provider := fs.String("provider", "", "tag imported secrets with this provider (.env only)")
 	prefix := fs.String("prefix", "", "prepend this prefix to each alias")
-	dryRun := fs.Bool("dry-run", false, "show what would be imported without changing the vault")
+	overwrite := fs.Bool("overwrite", false, "replace aliases that already exist (bundle import)")
+	dryRun := fs.Bool("dry-run", false, "show what would be imported without changing the vault (.env)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if fs.NArg() < 1 {
-		fmt.Fprintf(stderr, "error: usage: aql vault import [--namespace=NS] [--provider=...] [--prefix=...] [--dry-run] <.env>\n")
-		return 1
+
+	srcName := "stdin"
+	fromStdin := true
+	var data []byte
+	if fs.NArg() >= 1 {
+		srcName = fs.Arg(0)
+		fromStdin = false
+		b, err := os.ReadFile(srcName)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+		data = b
+	} else {
+		b, err := io.ReadAll(stdin)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: reading stdin: %s\n", err)
+			return 1
+		}
+		data = b
 	}
-	path := fs.Arg(0)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
-		return 1
+
+	if isExportBundle(data) {
+		return importBundle(data, fromStdin, homeDir, stdin, stdout, stderr, *prefix, *namespace, *overwrite)
 	}
+	return importDotenv(data, srcName, fromStdin, homeDir, stdin, stdout, stderr, *namespace, *provider, *prefix, *dryRun)
+}
+
+// importDotenv loads KEY=VALUE pairs from .env-shaped content. This is
+// the original `vault import` behavior, parameterized over an already
+// read buffer so runImport can dispatch by content.
+func importDotenv(data []byte, srcName string, fromStdin bool, homeDir string, stdin io.Reader, stdout, stderr io.Writer, namespace, provider, prefix string, dryRun bool) int {
 	entries := parseDotenv(string(data))
 	if len(entries) == 0 {
-		fmt.Fprintln(stderr, "error: no key=value pairs in file")
+		fmt.Fprintln(stderr, "error: no key=value pairs in input")
 		return 1
 	}
 	s, err := requireStore(homeDir)
@@ -597,19 +629,25 @@ func runImport(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
 		return 1
 	}
-	if *dryRun {
+	if dryRun {
 		for _, k := range sortedKeys(entries) {
-			fmt.Fprintf(stdout, "would import %s%s (%d bytes)\n", *prefix, k, len(entries[k]))
+			fmt.Fprintf(stdout, "would import %s%s (%d bytes)\n", prefix, k, len(entries[k]))
 		}
 		return 0
 	}
-	kr, err := openKeyring(s, homeDir, os.Stdin, stdout, "Vault passphrase: ")
+	// When the content arrived on stdin, stdin is exhausted and cannot
+	// also carry an interactive passphrase, so require it from the env.
+	krStdin := stdin
+	if fromStdin {
+		krStdin = nil
+	}
+	kr, err := openKeyring(s, homeDir, krStdin, stdout, "Vault passphrase: ")
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
 	for _, k := range sortedKeys(entries) {
-		alias := *prefix + k
+		alias := prefix + k
 		if !validAlias(alias) {
 			fmt.Fprintf(stderr, "warning: skipping invalid alias %q\n", alias)
 			continue
@@ -620,13 +658,13 @@ func runImport(args []string, homeDir string, stdout, stderr io.Writer) int {
 		}
 		s.UpsertAlias(Alias{
 			Name:      alias,
-			Provider:  *provider,
-			Namespace: *namespace,
-			Source:    "import:" + path,
+			Provider:  provider,
+			Namespace: namespace,
+			Source:    "import:" + srcName,
 		})
 		_ = appendAudit(homeDir, AuditEvent{
-			Action: "vault.import", Alias: alias, Provider: *provider,
-			Outcome: "ok", Reason: "source=" + path,
+			Action: "vault.import", Alias: alias, Provider: provider,
+			Outcome: "ok", Reason: "source=" + srcName,
 		})
 		fmt.Fprintf(stdout, "imported %s\n", alias)
 	}
