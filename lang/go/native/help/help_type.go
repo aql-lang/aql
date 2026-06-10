@@ -104,6 +104,74 @@ func init() {
 	})
 
 	register(&Entry{
+		Word:    "gen",
+		Summary: "Declare type parameters for a generic schema.",
+		Description: "`def Box gen [T] refine Record [value:T]` declares a generic " +
+			"SCHEMA: gen's list names the type parameters (bare name = " +
+			"unconstrained; `(T extends C)` bounds it; `(E default D)` defaults " +
+			"it; both combine). The placeholders are bound while the following " +
+			"type constructor (refine Record / fnsig) builds its body, so `T` " +
+			"resolves in field and signature positions. Instantiate with " +
+			"`Box of [Integer]`. Recursion uses `Self of [T]` (the schema's own " +
+			"name is unbound while its body builds).",
+		Examples: []string{
+			`def Box gen [T] refine Record [value:T]`,
+			`def Pair gen [K V] refine Record [key:K value:V]`,
+			`def Sorted gen [(T extends Number)] refine Record [items:[:T]]`,
+			`def Result gen [T (E default Error)] refine Record [ok:T err:E]`,
+			`Box of [Integer]              ;# record{value:Integer}`,
+		},
+	})
+
+	register(&Entry{
+		Word:    "of",
+		Summary: "Instantiate a generic schema with type arguments.",
+		Description: "`Box of [Integer]` substitutes the schema's parameters: arity " +
+			"is checked (defaults fill omitted trailing parameters), every " +
+			"argument is checked against its `extends` bound (Is-membership — " +
+			"lattice bounds, predicate refinements, disjunctions, negations, and " +
+			"surfaces all answer uniformly), and the result is MEMOISED: one " +
+			"instantiation per (schema, canonical arguments), so repeated " +
+			"`Box of [Integer]` is the same type (`teq` true).",
+		Examples: []string{
+			`def Box gen [T] refine Record [value:T]`,
+			`Box of [Integer]              ;# record{value:Integer}`,
+			`(Box of [Integer]) teq (Box of [Integer])   ;# true`,
+			`Box of []                     ;# ERROR arity_mismatch`,
+		},
+	})
+
+	register(&Entry{
+		Word:    "extends",
+		Summary: "Bound a gen type parameter (inside gen [...]).",
+		Description: "`gen [(T extends Comparable)]` constrains the parameter: every " +
+			"instantiation argument must be a member of the bound — checked " +
+			"loudly at `of` (constraint_violation). The bound is any type: a " +
+			"lattice type (Number), a refinement ((Integer gt 0)), a disjunction, " +
+			"a negation, or a surface (membership = explicit `exposes` " +
+			"conformance). Only meaningful inside a gen parameter entry.",
+		Examples: []string{
+			`def Sorted gen [(T extends Number)] refine Record [items:[:T]]`,
+			`Sorted of [Integer]           ;# ok — Integer is a Number`,
+			`Sorted of [String]            ;# ERROR constraint_violation`,
+		},
+	})
+
+	register(&Entry{
+		Word:    "default",
+		Summary: "Default a gen type parameter (inside gen [...]).",
+		Description: "`gen [T (E default Error)]` lets `of` omit trailing arguments: " +
+			"`Result of [Integer]` fills E with Error. Defaults are LAZY and may " +
+			"reference earlier parameters (`gen [T (U default T)]`). Chains after " +
+			"extends: `(T extends C default D)`.",
+		Examples: []string{
+			`def Result gen [T (E default Error)] refine Record [ok:T err:E]`,
+			`Result of [Integer]           ;# record{ok:Integer err:Error}`,
+			`Result of [Integer String]    ;# the default is overridable`,
+		},
+	})
+
+	register(&Entry{
 		Word:    "const",
 		Summary: "Make a singleton type: a value whose TYPE has one inhabitant.",
 		Description: "`const v` mints an interned singleton type under v's own type and " +

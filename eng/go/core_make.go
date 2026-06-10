@@ -992,6 +992,16 @@ func ResolveFieldType(r *Registry, v Value) Value {
 		} else {
 			name, _ = AsString(v)
 		}
+		// Only CAPITALISED names are type references (the type-name
+		// convention). Without this gate, a lowercase string default
+		// that happens to spell a registered word name resolved to
+		// that word's FnDef — `class {op:"add"}` seeded the field
+		// with add's function value instead of the string "add"
+		// (IsTypeBody admits FnDef values because predicate types are
+		// fn-bodied).
+		if !IsCapitalisedName(name) {
+			return v
+		}
 		if tv, ok := r.TopTypeBody(name); ok {
 			if IsTypeBody(tv) {
 				return tv

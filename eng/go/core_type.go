@@ -333,6 +333,32 @@ func InstallType(r *Registry, name string, body Value) error {
 		def := r.Types.MintType(name, parentDef)
 		body = NewObjectType(def, info)
 		r.Defs.PushType(name, def, body)
+	} else if IsTypeSchema(body) {
+		// `def Box gen [T] class {…}` route: mint the SCHEMA node where
+		// the non-generic equivalent would mint (D3 — class schemas
+		// under Ideal/Class, record schemas under the body's parent,
+		// fnsig schemas under FunctionSignature) and attach a
+		// schemaUnifier sharing the *TypeSchemaInfo payload.
+		// Instantiation nodes mint as CHILDREN of this node at `of`
+		// time, so bare `Box` admits any instantiation by plain
+		// lattice ancestry.
+		info, _ := AsTypeSchema(body)
+		parent := TType
+		switch info.Kind {
+		case SchemaClass:
+			parent = TClass
+			r.RegisterPart("Class")
+		case SchemaRecord:
+			parent = TRecord
+		case SchemaFnSig, SchemaFn:
+			parent = TFnUndef
+		}
+		def := r.Types.MintType(name, parent)
+		info.Name = parent.Name + "/" + name
+		info.Type = def
+		InstallSchemaUnifier(def, info)
+		r.RegisterPart(name)
+		r.Defs.PushType(name, def, NewValueRaw(def, info))
 	} else if IsSurfaceType(body) {
 		// `def Shape surface {…}` route: mint a lattice node under
 		// Ideal/Surface and attach a surfaceUnifier so dispatch / `is`

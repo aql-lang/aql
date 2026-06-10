@@ -124,7 +124,9 @@ var definitionNatives = []NativeFunc{
 			Handler:    fnsigHandler,
 			// Pure construction — runs in check mode too, so surface
 			// schemas carry REAL shapes statically and `exposes` is
-			// fully static-checkable (design/SURFACES.0.md S2).
+			// fully static-checkable (design/SURFACES.0.md S2). A
+			// pending gen spec turns the result into a generic
+			// fn-shape schema (see the handler).
 			RunInCheckMode: true,
 			Returns:        []*Type{TFnUndef}, BarrierPos: -1,
 		}},
@@ -629,7 +631,16 @@ func fnsigHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	}
 	info, err := parseFnUndefSpec(r, spec)
 	if err != nil {
+		if g := r.TakePendingGen(); g != nil {
+			PopGenBindings(r, g)
+		}
 		return nil, err
+	}
+	// A pending gen spec turns the shape into a generic fn-shape
+	// schema (`def Mapper gen [T U] fnsig [[T] [U]]`): the
+	// placeholders were live while ParseFnParams resolved T/U above.
+	if g := r.TakePendingGen(); g != nil {
+		return genWrapSchema(r, g, NewFnUndef(info), SchemaFnSig)
 	}
 	return []Value{NewFnUndef(info)}, nil
 }

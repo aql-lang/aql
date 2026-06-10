@@ -626,6 +626,10 @@ func IsTypeBody(v Value) bool {
 	if IsSurfaceType(v) {
 		return true
 	}
+	// Generic type schema (gen [...] + constructor)
+	if IsTypeSchema(v) {
+		return true
+	}
 	// Dependent scalar type (Integer gt 10, String lt "z", …)
 	if v.IsDepScalar() {
 		return true

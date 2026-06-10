@@ -81,6 +81,18 @@ type Registry struct {
 	// See flowctrl.go.
 	FlowCtrl FlowCtrl
 
+	// pendingGen holds the GenSpec the `gen [...]` word produced,
+	// awaiting consumption by the NEXT type constructor (refine /
+	// class / fnsig / fn). `gen` returns no value precisely so that
+	// `def Box gen [T] refine Record [...]` collection flows past it
+	// to the constructor's result; the spec travels out-of-band
+	// through this slot (generics plan D2, revised — the
+	// trailing-stack delivery was defeated by def's forward
+	// collection, which captures a produced value before the next
+	// constructor can see the stack). Orphans are drained loudly at
+	// end-of-Run.
+	pendingGen *GenSpecInfo
+
 	// FnBaselines is a stack of def-depth snapshots, one per currently
 	// active fn-body execution. Pushed at every body-entry point that
 	// also takes a defSnapshot for body-local-def cleanup; popped at
@@ -253,6 +265,11 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"missing_returns":       SeverityWarning,
 	"step_budget_exceeded":  SeverityWarning,
 	"body_error":            SeverityWarning,
+	// Generics (design/GENERICS.0.md §9.2).
+	"constraint_violation": SeverityError,
+	"unbound_param":        SeverityError,
+	"arity_mismatch":       SeverityError,
+	"static_warning":       SeverityWarning,
 	// Advisory (non-gating): a readability nudge, not a defect.
 	"forward_strands_operand": SeverityInfo,
 	"mixed_form_call":         SeverityInfo,

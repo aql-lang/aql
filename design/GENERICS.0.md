@@ -1062,6 +1062,58 @@ unconstrained-param strictness, per-schema disjunct collapse).
   before the sugar so the engine is exercised independently of the
   parser changes.
 
+## 15a. Landed state — Phase 1 (2026-06-10)
+
+> **Phase 1 LANDED:** the four canonical words + record/fnsig schemas
+> + `of` instantiation, per the approved plan, with these deviations
+> pinned during implementation:
+>
+> - **D2 revised — the spec travels out-of-band, not on the stack.**
+>   `gen [...]` returns NO value and parks its GenSpec on a registry
+>   pending-slot; the next type constructor (refine/fnsig; class/fn in
+>   later phases) consumes it at handler entry. The planned
+>   trailing-stack-position delivery was defeated by `def`'s forward
+>   collection, which captures a produced value before the next
+>   constructor can see the stack. The pending spec is SUSPENDED
+>   during argument auto-evaluation (`execMatch`), so a constructor
+>   nested inside an argument (`f:(fnsig [[T] [T]])`) builds a plain
+>   shape instead of stealing the outer spec; an orphan spec errors
+>   loudly (`gen_without_constructor`) at the TOP-level end-of-run
+>   drain (sub-runs legitimately execute while a spec is pending).
+> - **D4 refined — structural kinds stay structural.** Record and
+>   fn-shape instantiations keep their structural identity
+>   (Parent=TMap / FunctionSignature); the minted per-(schema,args)
+>   node carries the memo (`teq` identity) and the display name
+>   (`Box of [Integer]`). Nominal instance identity arrives with
+>   generic CLASSES (Phase 2), as planned.
+> - **Word-shape pins:** `of`/`extends`/`default` use BarrierPos 1
+>   (the tor/tand swap pattern) — all-forward let a trailing-context
+>   `of` defer and steal a later stack value at end-of-run
+>   resolution. The bound/default slots are ORDINARY TAny slots
+>   (TypeArgs slots are literal-exclusive and reject DepScalar
+>   bounds; TAny ordinaries admit literals via the rejectsTypeLiteral
+>   carve-out AND payload bounds).
+> - **Substitution covers**: record fields, class fields (ready for
+>   Phase 2), typed-list/map children (`[:T]` survives as a raw Word
+>   at schema build — substitution resolves words by parameter name),
+>   fn-shape params/returns, disjunct alternatives, negation inners,
+>   and nested `GenInstRef`s. Recursion via `Self of [T]` (D5) works:
+>   the memo registers the in-flight node before substituting.
+> - **Bounds verified end-to-end** for lattice types, refine
+>   newtypes, predicate refinements (`(Integer gt 0)`), and SURFACES
+>   (`(T extends Shape)`) — S4 of SURFACES.0.md confirmed: zero new
+>   membership machinery.
+> - **Rode along:** `ResolveFieldType` now resolves only CAPITALISED
+>   names as type references — a lowercase string field default that
+>   spelled a word name (`class {op:"add"}`) used to seed the field
+>   with that word's FnDef.
+>
+> Battery: `lang/spec/generics.tsv` (§1-§6, positive + negative),
+> `lang/go/test/generics_core_test.go` (binding-leak lifecycle,
+> nested-schema isolation, memo identity); help entries for all four
+> words. Phases 2+ (classes, integration, generic fns, checker,
+> sugar, inference, retrofit, docs) follow.
+
 ## 15. Review (2026-06-10) — against the post-2026-06-04 landings
 
 Between the 2026-06-04 refresh and this review, the language landed:

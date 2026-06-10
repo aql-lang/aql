@@ -101,6 +101,9 @@ WORD def
   [Node/Map Any] barrier=2 runcheck noevalmap={0}
   [Scalar/String Any] barrier=2 runcheck
   [Scalar/Atom Any] barrier=2 runcheck quote={0}
+WORD default
+  [Any Type/GenParam] barrier=1 runcheck returns=[Type/GenParam]
+  [Any Type] barrier=1 runcheck typearg={1} returns=[Type/GenParam]
 WORD depth
   [] barrier=0 fullstack
 WORD deq
@@ -143,6 +146,8 @@ WORD export
   [Scalar/Atom Node/Map] barrier=2 runcheck
 WORD exposes
   [Any Any] barrier=1 runcheck
+WORD extends
+  [Any Type] barrier=1 runcheck typearg={1} returns=[Type/GenParam]
 WORD fetch
   [Scalar/String Node/Map] barrier=2
   [Node/Map] barrier=1
@@ -175,6 +180,8 @@ WORD force-arity
 WORD forward-args
   [Type/Function] barrier=1 runcheck returns=[Type/Function]
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Type/Function]
+WORD gen
+  [Node/List] barrier=1 runcheck noeval={0}
 WORD gensym
   [] barrier=0 returns=[Scalar/Atom]
 WORD get
@@ -339,6 +346,8 @@ WORD now
   [] barrier=0 returns=[Scalar/Time/Instant]
 WORD object
   [Node/Map] barrier=1 returns=[Ideal/Object]
+WORD of
+  [Node/List Any] barrier=1 runcheck typearg={1} returns=[Type]
 WORD or
   [Scalar/Boolean Scalar/Boolean] barrier=1 returns=[Scalar/Boolean]
   [Any Any] barrier=1 returns=[Any]

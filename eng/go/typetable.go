@@ -593,8 +593,20 @@ var builtinDecls = []builtinDecl{
 	// surface schema use (`{area: fnsig [[Self] [Float]]}`). `exposes`
 	// substitutes the candidate type for Self when checking
 	// conformance. As a constraint outside a surface schema, no value
-	// matches Self — it is a placeholder, not a category.
+	// matches Self — it is a placeholder, not a category. Generic
+	// schemas reuse it for self-reference (`Self of [T]` — D5 in
+	// design/GENERICS.0.md).
 	{Path: "Type/Self", FixedID: 104, Rank: 60_500_000_000},
+	// Generics metatypes (design/GENERICS.0.md): TypeParam is the root
+	// unconstrained type-parameter placeholders mint under (bounded
+	// ones mint under their bound's node); GenSpec is the value `gen
+	// […]` produces and the GenSpec-aware constructor overloads
+	// consume; GenParam is the per-parameter value `extends`/`default`
+	// build inside a gen list. Schema and instantiation nodes are
+	// MintType-dynamic — only these three roots are kernel-declared.
+	{Path: "Type/TypeParam", FixedID: 105, Rank: 60_600_000_000},
+	{Path: "Type/GenSpec", FixedID: 106, Rank: 60_700_000_000},
+	{Path: "Type/GenParam", FixedID: 107, Rank: 60_800_000_000},
 }
 
 // Builtin is the package-level TypeTable holding every builtin type.

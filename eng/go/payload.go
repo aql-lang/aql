@@ -286,6 +286,10 @@ func (TableData) payloadMarker()          {}
 func (ObjectTypeInfo) payloadMarker()     {}
 func (ObjectInstanceInfo) payloadMarker() {}
 func (*SurfaceInfo) payloadMarker()       {}
+func (*GenSpecInfo) payloadMarker()       {}
+func (GenParam) payloadMarker()           {}
+func (*TypeSchemaInfo) payloadMarker()    {}
+func (GenInstRef) payloadMarker()         {}
 func (*StoreInstanceInfo) payloadMarker() {}
 func (*ArrayInstanceInfo) payloadMarker() {}
 func (*TimeoutInfo) payloadMarker()       {}

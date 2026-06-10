@@ -1,0 +1,52 @@
+# AQL Language Specification: generic types — schemas + instantiation
+# Format: input<TAB>expected<TAB>description
+#
+# `def Box gen [T] refine Record [value:T]` declares a generic SCHEMA:
+# `gen [...]` declares the type parameters (binding placeholder types
+# for the constructor body and parking the spec for the next type
+# constructor), `refine Record` / `fnsig` builds the body with the
+# placeholders live, and `def` installs the schema. `Box of [Integer]`
+# instantiates: arity-checks (defaults fill), constraint-checks each
+# argument against its `extends` bound (Is-membership — lattice bounds,
+# predicates, disjuncts, negations, and surfaces all answer uniformly),
+# and memoises ONE instantiation per (schema, canonical args).
+# Recursion uses `Self of [T]` (the schema's own name is unbound while
+# its body builds). See design/GENERICS.0.md.
+#
+# §1  record schemas — declare + instantiate
+def Box gen [T] refine Record [value:T] end Box	schema<Record/Box>[T]	a schema renders with its parameter list
+def Box gen [T] refine Record [value:T] end Box of [Integer]	record{value:Integer}	instantiation substitutes the parameter
+def Box gen [T] refine Record [value:T] end Box of [String]	record{value:String}	…independently per argument
+def Pair gen [K V] refine Record [key:K value:V] end Pair of [String Integer]	record{key:String value:Integer}	two parameters substitute positionally
+def Box gen [T] refine Record [value:T] end (Box of [Integer]) teq (Box of [Integer])	true	instantiations are memoised — one identity per (schema, args)
+def Stack gen [T] refine Record [items:[:T]] end Stack of [Integer]	record{items:[:Integer]}	a typed-list child constraint substitutes
+def Wrap gen [T] refine Record [tags:{:T}] end Wrap of [String]	record{tags:{:String}}	a typed-map child constraint substitutes
+#
+# §2  fn-shape schemas
+def Mapper gen [T U] fnsig [[T] [U]] end (Mapper of [Integer String]) typeof	FunctionSignature	a generic fn shape instantiates to a concrete FunctionSignature
+def Mapper gen [T U] fnsig [[T] [U]] end (Mapper of [Integer String]) teq (Mapper of [Integer String])	true	fn-shape instantiations memoise too
+#
+# §3  bounds (extends) — Is-membership, uniformly
+def Sorted gen [(T extends Number)] refine Record [items:[:T]] end Sorted of [Integer]	record{items:[:Integer]}	a lattice bound admits a subtype
+def Sorted gen [(T extends Number)] refine Record [items:[:T]] end Sorted of [String]	ERROR:constraint_violation	…and rejects a non-member loudly
+def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [1.0]] Circle exposes Shape def Holder gen [(T extends Shape)] refine Record [item:T] end Holder of [Circle]	record{item:object<Class/Circle>{r:1.0}}	a SURFACE bound admits an exposer (S4: same membership machinery)
+def Shape surface {area: (fnsig [[Self] [Float]])} def Holder gen [(T extends Shape)] refine Record [item:T] end Holder of [Integer]	ERROR:constraint_violation	…and rejects a non-exposer
+def Pos (Integer gt 0) def H gen [(T extends Pos)] refine Record [x:T] end H of [Pos]	record{x:(Integer gt 0)}	a predicate-refinement bound admits itself
+#
+# §4  defaults — lazy, may reference earlier parameters
+def Result gen [T (E default Error)] refine Record [ok:T err:E] end Result of [Integer]	record{ok:Integer err:Error}	a defaulted parameter fills when omitted
+def Result gen [T (E default Error)] refine Record [ok:T err:E] end Result of [Integer String]	record{ok:Integer err:String}	…and is overridable
+def P gen [T (U default T)] refine Record [a:T b:U] end P of [Integer]	record{a:Integer b:Integer}	a default may reference an earlier parameter (lazy)
+#
+# §5  recursion — Self of [...]
+def Tree gen [T] refine Record [value:T left:(Self of [T])] end Tree of [Integer]	record{value:Integer left:Tree of [Integer]}	Self ties the recursive knot to the in-flight instantiation
+#
+# §6  negatives — loud at the right site
+def Box gen [T] refine Record [value:T] end Box of [Integer String]	ERROR:arity_mismatch	too many type arguments
+def Box gen [T] refine Record [value:T] end Box of []	ERROR:arity_mismatch	too few without defaults — the missing parameter is named
+gen [t] refine Record [x:Integer]	ERROR:capital letter	parameters follow the type-name convention
+gen [T T] refine Record [x:Integer]	ERROR:duplicate	duplicate parameter names are rejected
+gen [T]	ERROR:gen_without_constructor	an orphan gen (no constructor consumed it) is loud
+gen [T] gen [U] refine Record [x:Integer]	ERROR:gen_without_constructor	two gens with no constructor between them
+def Box gen [T] refine Record [value:T] end Integer of [String]	ERROR:not a generic schema	of requires a schema head
+def NotGen refine Record [x:Integer] end NotGen of [Integer]	ERROR:not a generic schema	a plain record is not instantiable

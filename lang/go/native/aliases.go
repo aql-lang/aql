@@ -74,6 +74,11 @@ type (
 	ObjectInstanceInfo  = eng.ObjectInstanceInfo
 	ObjectTypeInfo      = eng.ObjectTypeInfo
 	SurfaceInfo         = eng.SurfaceInfo
+	GenParam            = eng.GenParam
+	GenSpecInfo         = eng.GenSpecInfo
+	TypeSchemaInfo      = eng.TypeSchemaInfo
+	GenInstRef          = eng.GenInstRef
+	SchemaKind          = eng.SchemaKind
 	OptionsTypeInfo     = eng.OptionsTypeInfo
 	OrderedMap          = eng.OrderedMap
 	PathInfo            = eng.PathInfo
@@ -140,6 +145,9 @@ var (
 	TClass          = eng.TClass
 	TSurface        = eng.TSurface
 	TSelf           = eng.TSelf
+	TTypeParam      = eng.TTypeParam
+	TGenSpec        = eng.TGenSpec
+	TGenParam       = eng.TGenParam
 	TIdeal          = eng.TIdeal
 	TOpenParen      = eng.TOpenParen
 	TOptions        = eng.TOptions
@@ -169,6 +177,14 @@ const (
 	SeverityError   = eng.SeverityError
 	SeverityWarning = eng.SeverityWarning
 	SeverityInfo    = eng.SeverityInfo
+)
+
+// Generic-schema kind constants (eng.SchemaKind).
+const (
+	SchemaRecord = eng.SchemaRecord
+	SchemaClass  = eng.SchemaClass
+	SchemaFnSig  = eng.SchemaFnSig
+	SchemaFn     = eng.SchemaFn
 )
 
 // Engine-level constants.
@@ -292,6 +308,27 @@ var (
 	FlattenDisjunctAlts       = eng.FlattenDisjunctAlts
 	FnDefHasSig               = eng.FnDefHasSig
 	SubstituteSelf            = eng.SubstituteSelf
+	NewGenSpec                = eng.NewGenSpec
+	IsGenSpec                 = eng.IsGenSpec
+	AsGenSpec                 = eng.AsGenSpec
+	NewGenParamValue          = eng.NewGenParamValue
+	IsGenParamValue           = eng.IsGenParamValue
+	AsGenParamValue           = eng.AsGenParamValue
+	NewTypeSchema             = eng.NewTypeSchema
+	IsTypeSchema              = eng.IsTypeSchema
+	AsTypeSchema              = eng.AsTypeSchema
+	NewGenInstRef             = eng.NewGenInstRef
+	IsGenInstRef              = eng.IsGenInstRef
+	AsGenInstRef              = eng.AsGenInstRef
+	MintTypeParam             = eng.MintTypeParam
+	AttachGenBound            = eng.AttachGenBound
+	IsTypeParamNode           = eng.IsTypeParamNode
+	TypeParamName             = eng.TypeParamName
+	PushGenBindings           = eng.PushGenBindings
+	PopGenBindings            = eng.PopGenBindings
+	InstantiateSchema         = eng.InstantiateSchema
+	SubstituteTypeParams      = eng.SubstituteTypeParams
+	SchemaInfoOf              = eng.SchemaInfoOf
 	NewSurfaceType            = eng.NewSurfaceType
 	AsSurfaceType             = eng.AsSurfaceType
 	IsSurfaceType             = eng.IsSurfaceType

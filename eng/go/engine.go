@@ -693,6 +693,26 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 		return nil, err
 	}
 
+	// Orphan GenSpec residue (generics plan D1/D2): a `gen [...]`
+	// whose spec no constructor consumed leaves placeholder type
+	// bindings behind — pop them and report the gen loudly. TOP-level
+	// engines only: sub-engine Runs (paren groups, list/map arg
+	// auto-evaluation) legitimately execute while a spec is pending
+	// for the enclosing constructor — `refine Record [value:T]`
+	// auto-evaluates its list arg in a sub-engine BETWEEN gen and the
+	// refine handler.
+	if e.isTop {
+		if spec := e.registry.TakePendingGen(); spec != nil {
+			PopGenBindings(e.registry, spec)
+			if !e.registry.Check.IsActive() {
+				return nil, makeAqlError("gen_without_constructor",
+					"gen: parameter spec was not consumed by a type constructor",
+					"gen", e.effectiveSource(),
+					"hint: follow gen [...] with refine Record [...], class {...}, fnsig [...], or fn [...]")
+			}
+		}
+	}
+
 	// Runtime uncalled-function residue (ERRORS.0.md §5, VOXGIG T1): a
 	// named Function value placed by a FAILED dispatch that nothing
 	// ever consumed. Higher-order uses consume the value, so they never
@@ -1708,6 +1728,14 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	//   handlers receive resolved data (e.g. [c1 c2] → [map1, map2]).
 	//   Lists at QuoteArgs positions are NOT evaluated (code bodies for
 	//   def, if, for, do, etc.).
+	//
+	// A pending gen spec is SUSPENDED for the duration: it belongs to
+	// the word being dispatched (the constructor following `gen
+	// [...]`), not to constructors nested inside its arguments — a
+	// record field like `f:(fnsig [[T] [T]])` must build a plain
+	// fn-shape, not steal the spec.
+	restoreGen := e.registry.SuspendPendingGen()
+	defer restoreGen()
 	for i := range match.Args {
 		if match.Args[i].Eval && !match.Args[i].Quoted {
 			if match.Args[i].Parent.Equal(TMap) &&
@@ -1748,6 +1776,9 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		match.Args[i].Eval = false
 		match.Args[i].Undefined = false
 	}
+	// Arg evaluation done — the dispatched word's handler is the
+	// intended consumer of any suspended gen spec.
+	restoreGen()
 
 	// Static type-check mode: skip the handler, splice carrier results
 	// derived from Signature.ReturnsFn / Signature.Returns. The rest of
@@ -4220,6 +4251,7 @@ func (e *Engine) hasPendingForwardExpectingFunction() bool {
 //
 //nolint:gocyclo,gocognit // dispatch is inherently a big switch; see STATIC_ANALYSIS_REPORT.md
 func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*Signature, []int) {
+
 	// Unified dispatch (post §1.4 fix): no more stackOnly/forward-prec
 	// dichotomy at the word level. Each sig declares its own boundary
 	// via BarrierPos — the count of leading args that may be collected

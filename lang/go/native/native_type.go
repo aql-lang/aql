@@ -349,6 +349,27 @@ func tableHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 func refineHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	base := args[0]
 	arg := args[1]
+	// A pending gen spec (the preceding `gen [...]`) turns this
+	// construction into a generic SCHEMA: the body is built with the
+	// placeholder bindings still live (so [value:T] resolves), then
+	// the bindings pop and the result wraps as a TypeSchema for
+	// InstallType. v1 supports Record schemas through refine; classes
+	// go through `class {...}`, fn shapes through `fnsig [...]`.
+	if spec := r.TakePendingGen(); spec != nil {
+		out, err := refinePlain(base, arg, r)
+		if err != nil {
+			PopGenBindings(r, spec)
+			return nil, err
+		}
+		if !IsRecordType(out[0]) {
+			return nil, genUnsupported(r, spec, "refine", out[0].String())
+		}
+		return genWrapSchema(r, spec, out[0], SchemaRecord)
+	}
+	return refinePlain(base, arg, r)
+}
+
+func refinePlain(base, arg Value, r *Registry) ([]Value, error) {
 	ideal := r.Ideals.For(base)
 	if ideal == nil {
 		// Distinguish a disabled kind from an unknown base.

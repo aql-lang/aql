@@ -74,6 +74,10 @@ func Register(r *Registry) {
 	}
 
 	// *Type
+	for _, n := range genNatives {
+		r.RegisterNativeFunc(n)
+	}
+
 	for _, n := range typeNatives {
 		r.RegisterNativeFunc(n)
 	}
