@@ -1,11 +1,32 @@
-# Traits — Named Contracts over Open Multimethods
+# Surfaces — Named Contracts over Open Multimethods
 
-Status: **discovery note** — directions agreed in design conversation
-(2026-06-09, language owner); **not an ADR** (ADRs are added only on
-explicit instruction). Implementation intended to ride the generics
-phase (`design/GENERICS.0.md` — whose `T extends Comparable`
-constraint examples are waiting for exactly this). This document owns
-the design. Naming is under discussion — see §8.
+Status: **S1 + S3 LANDED (2026-06-10)** under the term **surface**
+(verbs: `<Type> exposes <Surface>`) — see the landed-state note below.
+Originally a discovery note (2026-06-09, language owner); **not an
+ADR** (ADRs are added only on explicit instruction). S2 (checker
+integration) and S4 (generics `T extends Shape`) remain future work
+(`design/GENERICS.0.md`). The body below preserves the discovery
+analysis; "trait"/"implements" in the prose are the working terms the
+conversation used before §7a settled on surface/exposes.
+
+> **Landed state (2026-06-10):** `Ideal/Surface` (FixedID 103) and
+> the `Type/Self` placeholder (FixedID 104) are kernel builtins.
+> `def Shape surface {area: (fnsig [[Self] [Float]])}` declares;
+> InstallType mints under Ideal/Surface and installs a surfaceUnifier
+> whose Match is a parent-chain probe of the conformance set (held on
+> the shared *SurfaceInfo payload). `Circle exposes Shape` checks the
+> overload table via eng.FnDefHasSig with Self := Circle substituted
+> (contravariant params, covariant returns — eng.FnSigSatisfiesSpec),
+> raising `surface_unsatisfied` listing every gap; success registers
+> Circle's node; idempotent. Membership rides sig dispatch, `is`,
+> `unify` (a surface fold in unifyInner), and the tor/tand/tnot
+> algebra (`Circle tand Shape` → Circle for an exposer; distinct
+> surfaces → Never; `tnot Shape` excludes members). Subclass
+> instances of an exposer conform. Battery: `lang/spec/surface.tsv`;
+> help entries for both words. v1 constraints as designed: explicit
+> conformance only, declaration-time check (no undef re-verification),
+> registry-local conformance. One syntax note: inside a map literal
+> the fnsig call needs parens — `{area: (fnsig [[Self] [Float]])}`.
 
 ## 1. Decisions
 

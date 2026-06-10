@@ -65,6 +65,45 @@ func init() {
 	})
 
 	register(&Entry{
+		Word:    "surface",
+		Summary: "Declare a surface: a pure operation contract types can expose.",
+		Description: "`def Shape surface {schema}` mints a surface type under " +
+			"Ideal/Surface: a named set of required operation shapes with no bodies " +
+			"and no state. Each schema entry maps an operation name to an fnsig " +
+			"shape, with `Self` marking the positions the conforming type occupies. " +
+			"Conformance is EXPLICIT \u2014 declare it with `<Type> exposes Shape` " +
+			"(no structural duck typing). Members then dispatch through surface-typed " +
+			"fn params, answer `is`, and ride the tor/tand/tnot type algebra.",
+		Examples: []string{
+			`def Shape surface {area: (fnsig [[Self] [Float]])}`,
+			`def Circle class {r:1.0}`,
+			`def area fn [[c:Circle] [Float] [(c get r) mul 6.28]]`,
+			`Circle exposes Shape           ;# loud completeness check`,
+			`def total fn [[s:Shape] [Float] [area s]]`,
+		},
+	})
+
+	register(&Entry{
+		Word:    "exposes",
+		Summary: "Declare (and loudly check) that a type provides a surface.",
+		Description: "`<Type> exposes <Surface>` checks the overload table for every " +
+			"operation the surface requires, with `Self` replaced by the type " +
+			"(contravariant params, covariant returns). Any gap raises " +
+			"surface_unsatisfied listing every missing operation with its expected " +
+			"signature; success registers the type in the surface's conformance set. " +
+			"Idempotent. Subclass instances of an exposer conform automatically. The " +
+			"check runs at declaration time \u2014 a later undef of an operation is " +
+			"not re-checked (the call then fails loudly downstream).",
+		Examples: []string{
+			`def Shape surface {area: (fnsig [[Self] [Float]])}`,
+			`def Circle class {r:1.0}`,
+			`def area fn [[c:Circle] [Float] [3.14]]`,
+			`Circle exposes Shape`,
+			`(make Circle {}) is Shape      ;# true`,
+		},
+	})
+
+	register(&Entry{
 		Word:    "const",
 		Summary: "Make a singleton type: a value whose TYPE has one inhabitant.",
 		Description: "`const v` mints an interned singleton type under v's own type and " +

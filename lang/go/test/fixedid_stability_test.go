@@ -101,6 +101,9 @@ func TestFixedIDStability(t *testing.T) {
 		"Word/__SP":     75,
 		"Word/__DM":     76,
 		"Type/Negation": 77,
+		"Ideal/Class":   102,
+		"Ideal/Surface": 103,
+		"Type/Self":     104,
 		// --- Externally-registered types (Step 8 migration) ---
 		"Scalar/Time":                      1000, // time family — lang/go/engine/native_temporal.go
 		"Scalar/Time/Date":                 1001,

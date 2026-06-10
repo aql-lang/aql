@@ -410,6 +410,7 @@ Any
 ├── Ideal
 │   ├── Object (Resource (Entity))
 │   ├── Class                       -- user classes root here
+│   ├── Surface                     -- user surfaces (operation contracts)
 │   ├── Array, Record, Options, Error
 │   ├── Store, Table
 │   ├── Fetch (Request | Response)
@@ -588,6 +589,34 @@ instances are shared mutable state: writes are visible through
 every alias, and concurrent writers (e.g. inside `parallel`
 branches) must coordinate — prefer the immutable column for data
 that crosses branch boundaries.
+
+### Surfaces
+
+A surface is a pure operation contract: a named set of required
+signatures with no bodies and no state, minted under
+`Ideal/Surface`. `Self` marks the positions the conforming type
+occupies. Conformance is **explicit** — a type joins a surface only
+by declaring `exposes`, which checks the word's overload table
+(with `Self` substituted; contravariant parameters, covariant
+returns) and raises `surface_unsatisfied` listing every gap:
+
+```
+def Shape surface {area: (fnsig [[Self] [Float]])}
+def Circle class {r:1.0}
+def area fn [[c:Circle] [Float] [(c get r) mul 6.28]]
+Circle exposes Shape
+def total fn [[s:Shape] [Float] [area s]]
+total (make Circle {r:2.0})   # 12.56
+(make Circle {}) is Shape     # true
+5 is Shape                    # false — no exposes, no membership
+```
+
+A surface is a normal type after that: surface-typed fn parameters
+dispatch on membership, subclass instances of an exposer conform,
+and the type algebra applies (`Shape tor none`, `tnot Shape`,
+`Circle tand Shape` → `Circle` for an exposer). The conformance
+check runs at declaration time; `describe Shape` prints the
+contract.
 
 ## Word reference
 

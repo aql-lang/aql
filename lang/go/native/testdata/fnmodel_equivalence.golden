@@ -138,6 +138,8 @@ WORD escape
 WORD export
   [Scalar/String Node/Map] barrier=2 runcheck
   [Scalar/Atom Node/Map] barrier=2 runcheck
+WORD exposes
+  [Any Any] barrier=1 runcheck
 WORD fetch
   [Scalar/String Node/Map] barrier=2
   [Node/Map] barrier=1
@@ -469,6 +471,8 @@ WORD sub
   [Scalar/Time/DateTime Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/DateTime]
   [Scalar/Time/Date Scalar/Time/Duration/CalDuration] barrier=2 returns=[Scalar/Time/Date]
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn
+WORD surface
+  [Node/Map] barrier=1 runcheck returns=[Type]
 WORD swap
   [Any Any] barrier=0 +returnsfn
 WORD swap2

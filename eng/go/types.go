@@ -59,6 +59,8 @@ var (
 	TInspect        = mustType("Node/Map/Inspect")
 	TObject         = mustType("Ideal/Object")
 	TClass          = mustType("Ideal/Class")
+	TSurface        = mustType("Ideal/Surface")
+	TSelf           = mustType("Type/Self")
 	TStore          = mustType("Ideal/Store")
 	TStoreSystem    = mustType("Ideal/Store/System")
 	TArray          = mustType("Ideal/Array")

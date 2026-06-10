@@ -73,6 +73,7 @@ type (
 	NativeSig           = eng.NativeSig
 	ObjectInstanceInfo  = eng.ObjectInstanceInfo
 	ObjectTypeInfo      = eng.ObjectTypeInfo
+	SurfaceInfo         = eng.SurfaceInfo
 	OptionsTypeInfo     = eng.OptionsTypeInfo
 	OrderedMap          = eng.OrderedMap
 	PathInfo            = eng.PathInfo
@@ -137,6 +138,8 @@ var (
 	TNumber         = eng.TNumber
 	TObject         = eng.TObject
 	TClass          = eng.TClass
+	TSurface        = eng.TSurface
+	TSelf           = eng.TSelf
 	TIdeal          = eng.TIdeal
 	TOpenParen      = eng.TOpenParen
 	TOptions        = eng.TOptions
@@ -288,6 +291,10 @@ var (
 	NewTypedMapWithEntries    = eng.NewTypedMapWithEntries
 	FlattenDisjunctAlts       = eng.FlattenDisjunctAlts
 	FnDefHasSig               = eng.FnDefHasSig
+	SubstituteSelf            = eng.SubstituteSelf
+	NewSurfaceType            = eng.NewSurfaceType
+	AsSurfaceType             = eng.AsSurfaceType
+	IsSurfaceType             = eng.IsSurfaceType
 	FnDefsOverlap             = eng.FnDefsOverlap
 	FnSigMatchesSpec          = eng.FnSigMatchesSpec
 	FnSigSatisfiesSpec        = eng.FnSigSatisfiesSpec

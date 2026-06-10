@@ -290,6 +290,16 @@ func unifyInner(a, b Value) (Value, *UnifyError) {
 		return unifyNegation(neg, a)
 	}
 
+	// Surface fold — membership in a surface is the conformance set,
+	// answered by the minted node's surfaceUnifier (explicit `exposes`
+	// declarations only). Placed with the other compound-type folds so
+	// negation (`tnot Shape`), disjunct alternatives, and tand's Unify
+	// fallback consult the same membership the `is` word and sig
+	// dispatch use. See unifySurface.
+	if IsSurfaceType(a) || IsSurfaceType(b) {
+		return unifySurface(a, b)
+	}
+
 	// Never — bottom type, only unifies with itself.
 	if sa == ShapeNever || sb == ShapeNever {
 		if sa == sb {

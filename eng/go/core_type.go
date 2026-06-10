@@ -333,6 +333,20 @@ func InstallType(r *Registry, name string, body Value) error {
 		def := r.Types.MintType(name, parentDef)
 		body = NewObjectType(def, info)
 		r.Defs.PushType(name, def, body)
+	} else if IsSurfaceType(body) {
+		// `def Shape surface {…}` route: mint a lattice node under
+		// Ideal/Surface and attach a surfaceUnifier so dispatch / `is`
+		// consult the conformance set `exposes` fills in. The payload
+		// pointer is shared between body and unifier — a post-mint
+		// `exposes` is visible through both.
+		info, _ := AsSurfaceType(body)
+		info.Name = "Surface/" + name
+		r.RegisterPart("Surface")
+		r.RegisterPart(name)
+		def := r.Types.MintType(name, TSurface)
+		info.Type = def
+		installSurfaceUnifier(def, info, name)
+		r.Defs.PushType(name, def, NewValueRaw(def, info))
 	} else if inputT := PredicateInputType(body); inputT != nil {
 		// Predicate type with a concrete input type: mint the *Type
 		// parented at the input rather than at TFnDef so values

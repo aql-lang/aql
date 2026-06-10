@@ -75,6 +75,36 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
+		// surface {schema} — declare a pure operation contract: a map
+		// of operation name → fnsig shape with Self marking the
+		// conforming type's positions. `def Shape surface {…}` mints it
+		// under Ideal/Surface; `<Type> exposes Shape` declares (and
+		// loudly checks) conformance. See design/SURFACES.0.md.
+		Name: "surface",
+
+		Signatures: []NativeSig{{
+			Args:           []*Type{TMap},
+			Handler:        surfaceHandler,
+			Returns:        []*Type{TType},
+			RunInCheckMode: true, BarrierPos: -1,
+		}},
+	},
+	{
+		// <Type> exposes <Surface> — explicit conformance: check the
+		// overload table against every required shape (Self := Type;
+		// contravariant params, covariant returns) and register the
+		// type in the surface's conformance set. All-or-nothing, loud
+		// (surface_unsatisfied lists every gap), idempotent.
+		Name: "exposes",
+
+		Signatures: []NativeSig{{
+			Args:           []*Type{TAny, TAny},
+			Handler:        exposesHandler,
+			Returns:        []*Type{},
+			RunInCheckMode: true, BarrierPos: 1,
+		}},
+	},
+	{
 		// object {…} — construct a plain OPEN mutable keyed container,
 		// sugar for `make Object {…}`. Open (any key writes, computed
 		// keys via parens), fully enumerable, in-place set returning
@@ -495,6 +525,13 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	if (IsObjectType(b) || IsTableType(b)) && b.Parent != nil {
 		latticeNode := b.Parent
 		return []Value{NewBoolean(a.Parent.Equal(latticeNode) || a.Parent.IsSubtypeOf(latticeNode))}, nil
+	}
+	// Surface RHS: membership is the conformance set, answered by the
+	// minted node's surfaceUnifier via the v.Is(t) doctrine — explicit
+	// `exposes` declarations only, walking a's parent chain so subclass
+	// instances of an exposer conform.
+	if IsSurfaceType(b) && b.Parent != nil {
+		return []Value{NewBoolean(a.Is(b.Parent))}, nil
 	}
 	// Note: a consolidation attempt to delegate structural-pattern
 	// RHS (typed list, typed map, record shape) to IsValueOfType was

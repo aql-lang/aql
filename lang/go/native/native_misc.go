@@ -378,6 +378,12 @@ func describeWordHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 		fmt.Fprint(r.Output, formatTypeSchema(name, bound))
 		return nil, nil
 	}
+	// Same for a surface: render its contract (required operations)
+	// rather than the empty word-help view.
+	if bound, ok := r.Defs.Top(name); ok && IsSurfaceType(bound) {
+		fmt.Fprint(r.Output, formatSurfaceSchema(name, bound))
+		return nil, nil
+	}
 	// Prefer live registry data (signatures + examples). Fall back to
 	// the static entry for words that are documented but not registered
 	// in this build, then report nothing if neither exists.
@@ -437,6 +443,41 @@ func formatTypeSchema(name string, v Value) string {
 	if info.Class {
 		fmt.Fprintf(&b, "\nInstances: make %s {…} — sealed (typed set of existing fields only).\n", name)
 	}
+	return b.String()
+}
+
+// formatSurfaceSchema renders the `describe <Surface>` contract view:
+// the required operation shapes and how to declare conformance.
+func formatSurfaceSchema(name string, v Value) string {
+	info, err := AsSurfaceType(v)
+	if err != nil {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s — surface", name)
+	if info.Name != "" {
+		fmt.Fprintf(&b, " (%s)", info.Name)
+	}
+	b.WriteString("\n\nRequired operations:\n")
+	w := 0
+	for _, k := range info.Required.Keys() {
+		if len(k) > w {
+			w = len(k)
+		}
+	}
+	for _, k := range info.Required.Keys() {
+		shape, _ := info.Required.Get(k)
+		shapeStr := shape.String()
+		if undef, ok := shape.Data.(FnUndefInfo); ok {
+			var parts []string
+			for _, spec := range undef.Sigs {
+				parts = append(parts, renderSpec(spec))
+			}
+			shapeStr = strings.Join(parts, ", ")
+		}
+		fmt.Fprintf(&b, "  %-*s : %s\n", w, k, shapeStr)
+	}
+	fmt.Fprintf(&b, "\nConformance: <Type> exposes %s — explicit, checked loudly at declaration.\n", name)
 	return b.String()
 }
 

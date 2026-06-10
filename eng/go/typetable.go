@@ -557,6 +557,12 @@ var builtinDecls = []builtinDecl{
 	// keyed container, classes are sealed nominal records. See
 	// design/CLASS-OBJECT.0.md.
 	{Path: "Ideal/Class", FixedID: 102, Rank: 40_900_000_000},
+	// Ideal/Surface — the root of user-defined surface types (the
+	// pure-contract operation sets minted by the `surface` word).
+	// Conformance is explicit (`<Type> exposes <Surface>`) and checked
+	// loudly at declaration; membership is a conformance-set probe via
+	// surfaceUnifier. See design/SURFACES.0.md.
+	{Path: "Ideal/Surface", FixedID: 103, Rank: 40_910_000_000},
 
 	// Word branch — Word/__XX entries are internal runtime markers,
 	// packed at 1e3 Rank spacing. They expose friendly short-name
@@ -583,6 +589,12 @@ var builtinDecls = []builtinDecl{
 	{Path: "Type/Disjunct", FixedID: 26, Rank: 60_300_000_000},
 	{Path: "Type/Disjunct/Enum", FixedID: 62, Rank: 60_310_000_000},
 	{Path: "Type/Negation", FixedID: 77, Rank: 60_400_000_000},
+	// Type/Self — the placeholder the receiver/argument positions of a
+	// surface schema use (`{area: fnsig [[Self] [Float]]}`). `exposes`
+	// substitutes the candidate type for Self when checking
+	// conformance. As a constraint outside a surface schema, no value
+	// matches Self — it is a placeholder, not a category.
+	{Path: "Type/Self", FixedID: 104, Rank: 60_500_000_000},
 }
 
 // Builtin is the package-level TypeTable holding every builtin type.

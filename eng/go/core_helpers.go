@@ -622,6 +622,10 @@ func IsTypeBody(v Value) bool {
 	if IsObjectType(v) {
 		return true
 	}
+	// Surface type (pure operation contract)
+	if IsSurfaceType(v) {
+		return true
+	}
 	// Dependent scalar type (Integer gt 10, String lt "z", …)
 	if v.IsDepScalar() {
 		return true
