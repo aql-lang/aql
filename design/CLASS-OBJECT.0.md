@@ -537,9 +537,21 @@ Sub-questions resolved (2026-06-09, second pass):
 > Class flag; Class-branch `get`/`set` sigs (dot access works);
 > `InstallType` roots class types at `Class/Foo`; `p is Object` →
 > false. Spec battery in `lang/spec/class.tsv` (defaults, required,
-> sealing, subclass chain, negatives). Remaining in Phase A:
-> `refine Object` removal sweep (~213 sites), `const`, typed
-> defaults via tagged `make`, `describe` rendering.
+> sealing, subclass chain, negatives). Remaining (follow-ups; the Phase A core is COMPLETE):
+> `const` singleton members (§3d) and typed defaults via tagged
+> `make` (§3c) — both fully designed, not yet implemented.
+>
+> **Phase A increment 5 LANDED (2026-06-09) — the clean break:**
+> `refine Object {…}` is removed; it raises `[aql/refine_error]`
+> with the class hint. All call sites swept to `class` (~213 across
+> specs, Go tests, live docs); tests pinning the removed semantics
+> (silent conversion, prototype seeding/chains, Object-conformance)
+> were rewritten to the class contract; the nested class-typed field
+> nominal check landed in MakeClassFieldValue; the dead bare-Object
+> construction handler is deleted; README carries the upgrade note.
+> Type rendering: a class type shows as `object<Class/Point>{…}`
+> with its schema — adequate; a dedicated `describe Point` schema
+> view is a polish follow-up.
 >
 > **Phase A increment 3 LANDED (2026-06-09):** instance equality —
 > `deq` = same exact class + field-wise structural (cross-class and
