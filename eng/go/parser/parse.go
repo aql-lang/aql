@@ -27,6 +27,21 @@ type parenGroup []any
 // The converter produces an error for these.
 type unclosedParen struct{ items []any }
 
+// angleGroup represents a generics angle-bracket sugar group
+// (design/GENERICS.0.md Phase 6): `Box<Integer>` folds the receiver
+// name and the collected items into one node. The conversion walks
+// desugar it to the canonical stream (D15): a def head emits
+// `Name gen [params]`, every other position the paren span
+// `( Name of [args] )` — so no angle marker ever reaches the engine.
+type angleGroup struct {
+	Name  string
+	Items []any
+}
+
+// unclosedAngle marks an angle group auto-closed at EOF (no matching
+// `>`). The converter produces an error for these.
+type unclosedAngle struct{ Name string }
+
 // interpGroup represents the parts collected between backticks by the interp
 // grammar rule. Each element is either a jsonic.Text{Quote:"tl"} (literal
 // segment) or an iexprGroup (interpolated expression).
@@ -106,6 +121,7 @@ func Parse(src string) ([]eng.Value, error) {
 	setupValRule(j, t)
 	setupPairGrammar(j, t)
 	setupParenGrammar(j, t)
+	setupAngleGrammar(j, t)
 	setupInterpGrammar(j, t)
 	setupNumberSub(j)
 
@@ -354,6 +370,23 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 			return nil, eng.MakeAqlError("syntax_error", "unmatched opening parenthesis", "(", "", "")
 		}
 
+		// Generic-def head sugar (D15): `def Name<params>` desugars to
+		// the canonical `Name gen [params]` token run, in place. Only
+		// the DIRECT `def` + angle adjacency is a def head; every other
+		// angle group is a use-site (handled by the angleGroup case in
+		// convertTopLevelValueInner via emitPrimary below).
+		if ag, ok := items[i].(angleGroup); ok && i > 0 && isToken(items[i-1], "def") {
+			params, err := angleGenList(ag.Items, poss[i])
+			if err != nil {
+				return nil, err
+			}
+			values = append(values,
+				withPos(eng.NewWord(ag.Name), poss[i]),
+				withPos(eng.NewWord("gen"), poss[i]),
+				params)
+			continue
+		}
+
 		// A standalone `/mod` token right after a primary (e.g. `(expr)/s`)
 		// applies the modifier to that primary's result. Word modifiers are
 		// emitted BEFORE the primary (so they forward-collect the result
@@ -560,6 +593,15 @@ func convertTopLevelValueInner(v any) (eng.Value, error) {
 			return convertTypedList(val)
 		}
 		return convertWordList(val.Val)
+
+	case angleGroup:
+		// Use-site sugar: `Box<Integer>` → the canonical paren span
+		// `( Box of [Integer] )` (a ParenExpr, exactly what the
+		// canonical source produces in word context).
+		return angleUseSite(val)
+
+	case unclosedAngle:
+		return eng.Value{}, unclosedAngleError(val)
 
 	case bool:
 		return eng.NewBoolean(val), nil
@@ -836,6 +878,16 @@ func convertDataValueInner(v any) (eng.Value, error) {
 		}
 		return eng.NewParenExpr(items), nil
 
+	case angleGroup:
+		// Use-site sugar in data context — `{x: Box<Integer>}`, the
+		// `[:Box<Integer>]` child constraint, `b:Box<Integer>` typed
+		// annotations — becomes the same ParenExpr the canonical
+		// `(Box of [Integer])` produces here.
+		return angleUseSite(val)
+
+	case unclosedAngle:
+		return eng.Value{}, unclosedAngleError(val)
+
 	case bool:
 		return eng.NewBoolean(val), nil
 
@@ -919,6 +971,101 @@ func convertTypedMap(m map[string]any) (eng.Value, error) {
 		entries = append(entries, eng.ChildEntry{Key: k, Value: ev})
 	}
 	return eng.NewTypedMapWithEntries(childVal, entries), nil
+}
+
+// angleUseSite desugars a use-site angle group to the canonical paren
+// span: `Box<Integer>` → ParenExpr[ Word(Box) Word(of) [Word(Integer)] ]
+// — byte-for-byte what `(Box of [Integer])` converts to, so the engine,
+// macros, quote, and Vm.parse never see an angle form (D15). Each item
+// converts in word context; nested sugar (`Box<Pair<A, B>>`) recurses
+// through the angleGroup case.
+func angleUseSite(ag angleGroup) (eng.Value, error) {
+	args := make([]eng.Value, 0, len(ag.Items))
+	for _, it := range ag.Items {
+		v, err := convertTopLevelValue(it)
+		if err != nil {
+			return eng.Value{}, err
+		}
+		args = append(args, v)
+	}
+	toks := []eng.Value{
+		eng.NewWord(ag.Name),
+		eng.NewWord("of"),
+		eng.NewEvalList(args),
+	}
+	return eng.NewParenExpr(toks), nil
+}
+
+// angleGenList desugars a def-head angle group's items to the
+// canonical `gen` parameter list:
+//
+//	T                 → Word(T)
+//	T extends C       → ParenExpr[ Word(T) Word(extends) C ]
+//	T = D             → ParenExpr[ Word(T) Word(default) D ]
+//
+// Items arrive as a flat val sequence (commas are optional separators,
+// like list elements), so entries are recognised by the grammar above:
+// a capitalised name, optionally followed by an `extends`/`=` operator
+// and its operand.
+func angleGenList(items []any, pos eng.SrcPos) (eng.Value, error) {
+	entries := make([]eng.Value, 0, len(items))
+	i := 0
+	for i < len(items) {
+		node, epos := deSite(items[i])
+		txt, ok := node.(jsonic.Text)
+		if !ok || txt.Quote != "" || txt.Str == "" || !(txt.Str[0] >= 'A' && txt.Str[0] <= 'Z') {
+			return eng.Value{}, &eng.AqlError{
+				Code:   "syntax_error",
+				Detail: "generic parameter must be a capitalised name",
+				Hint:   "write def Name<T> / def Name<T extends Bound> / def Name<T = Default>",
+				Row:    epos.Row, Col: epos.Col, Src: epos.Src,
+			}
+		}
+		name := txt.Str
+		if i+1 < len(items) {
+			op, _ := deSite(items[i+1])
+			if opTxt, isTxt := op.(jsonic.Text); isTxt && opTxt.Quote == "" {
+				var kw string
+				switch opTxt.Str {
+				case "extends":
+					kw = "extends"
+				case "=":
+					kw = "default"
+				}
+				if kw != "" {
+					if i+2 >= len(items) {
+						return eng.Value{}, &eng.AqlError{
+							Code:   "syntax_error",
+							Detail: "generic parameter " + name + ": " + opTxt.Str + " needs a value",
+							Row:    epos.Row, Col: epos.Col, Src: epos.Src,
+						}
+					}
+					operand, err := convertTopLevelValue(items[i+2])
+					if err != nil {
+						return eng.Value{}, err
+					}
+					entries = append(entries, withPos(eng.NewParenExpr([]eng.Value{
+						eng.NewWord(name),
+						eng.NewWord(kw),
+						operand,
+					}), epos))
+					i += 3
+					continue
+				}
+			}
+		}
+		entries = append(entries, withPos(eng.NewWord(name), epos))
+		i++
+	}
+	return withPos(eng.NewEvalList(entries), pos), nil
+}
+
+// unclosedAngleError is raised for an angle group auto-closed at EOF.
+func unclosedAngleError(ua unclosedAngle) error {
+	return &eng.AqlError{
+		Code:   "syntax_error",
+		Detail: "unclosed angle bracket: " + ua.Name + "<… has no matching `>`",
+	}
 }
 
 // convertDataList converts a list in data context (inside maps).

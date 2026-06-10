@@ -236,6 +236,15 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		}
 		constraint = out[0]
 	}
+	// A typed-list/map annotation whose CHILD is a paren expression —
+	// `def xs:[:(Pair of [String Integer])] […]` — needs the child
+	// evaluated the same way a top-level paren annotation is (the
+	// parser leaves it as a raw ParenExpr payload).
+	if evaluated, cerr := eng.ResolveChildTypeExpr(r, constraint); cerr != nil {
+		return nil, fmt.Errorf("def %s: type annotation: %w", name, cerr)
+	} else {
+		constraint = evaluated
+	}
 	var typeName string
 	constraint, typeName, _ = r.ResolveTypedNameValue(constraint)
 	if !IsTypeBody(constraint) {

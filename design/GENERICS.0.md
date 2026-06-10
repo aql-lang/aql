@@ -1236,6 +1236,45 @@ unconstrained-param strictness, per-schema disjunct collapse).
 > (`TestGenCheckJoinNoExplosion` is the canary that would justify
 > revisiting). Battery: lang/go/test/generics_check_test.go.
 
+## 15f. Landed state — Phase 6: angle-bracket sugar (2026-06-10)
+
+> **Phase 6 LANDED** per D14/D15, superseding §6.4. `<` (#LA) and `>`
+> (#RA) are GENERAL-PURPOSE standalone fixed tokens; the generics
+> angle rule is their only v1 consumer, gated contextually — a
+> val.Close alternate (the dotchain technique) opens the
+> "angle"/"aelem" rule pair (the paren-rule skeleton) only when the
+> just-closed value is a CAPITALISED bare name. A `<` anywhere else
+> is a syntax error only because no other consumer exists yet;
+> future rules (embedded XML, …) can register more consumers without
+> re-lexing; comparisons stay lt/gt. Note the gate's corollary:
+> generic FN defs keep the canonical `def name gen [T] fn […]` form
+> (fn names are lowercase — sugar heads are for TYPES). Desugaring
+> is parse-time, inside the conversion walks (D15): `def Name<…>`
+> emits `Name gen […]` (entries: `T` → word; `T extends C` /
+> `T = D` → the canonical paren forms — `=` needed no token, it
+> already lexes as bare text); every other position emits the
+> ParenExpr `( Name of […] )`, byte-identical to canonical source —
+> pinned by macroexpand/Vm.parse rows showing
+> `paren([word(Box) word(of) [Integer]])`. Commas are optional
+> separators (list-element rule); nested sugar needs no `>>`
+> handling (standalone tokens); `Name<Integer> teq (Name of
+> [Integer])` — one memoised node. The phase also closed three
+> integration gaps the sugar's target positions exposed (all
+> CANONICAL-form fixes, sugar rides them): (1) typed-list/map CHILD
+> constraints that are ParenExprs now evaluate
+> (`eng.ResolveChildTypeExpr`, wired into defTypedHandler and
+> ResolveSigType — `[:(Box of [Integer])]` worked in neither form
+> before); (2) unifyInner gained an OBJECT-TYPE fold (Is-membership,
+> mirroring the surface fold) so class/instantiation literals admit
+> instances in unify positions — this also fixed the §15c known gap:
+> `case` now matches class instances against bare class names; (3)
+> `case` evaluates ParenExpr clause patterns, so `case b [(Box of
+> [Integer]) …]` matches. Record-vs-concrete-map unify remains
+> nominal (records construct via `make`) — unchanged, documented.
+> Battery: lang/spec/generics-sugar.tsv (twins, data/child
+> positions, D15 rows, negatives incl. the gate); generics.tsv §7
+> canonical rows for the three integration fixes.
+
 ## 15. Review (2026-06-10) — against the post-2026-06-04 landings
 
 Between the 2026-06-04 refresh and this review, the language landed:

@@ -1,5 +1,7 @@
 package eng
 
+import "fmt"
+
 // Binding inference for generic fns (design/GENERICS.0.md §9.2.2,
 // Phase 4): at each call of a generic fn, the type parameters bind
 // from the actual arguments' types — a placeholder param slot binds
@@ -44,6 +46,49 @@ func ResolveSigChildParam(r *Registry, v Value) Value {
 		return NewTypedListWithElements(child, ci.Elements)
 	}
 	return NewTypedList(child)
+}
+
+// ResolveChildTypeExpr evaluates a typed-list/map child constraint
+// that arrived as an unevaluated ParenExpr — `[:(Pair of [String
+// Integer])]` in data context parses with the paren span as the
+// child payload, and nothing downstream evaluates it. Returns the
+// rebuilt typed list/map (or v unchanged when the child is not a
+// ParenExpr). The expression must produce exactly one type value.
+func ResolveChildTypeExpr(r *Registry, v Value) (Value, error) {
+	if r == nil || (!IsTypedList(v) && !IsTypedMap(v)) {
+		return v, nil
+	}
+	ci, err := AsChildType(v)
+	if err != nil || !IsParenExpr(ci.Child) {
+		return v, nil
+	}
+	toks, terr := AsParenExpr(ci.Child)
+	if terr != nil {
+		return v, nil
+	}
+	sub := New(r)
+	input := make([]Value, 0, len(toks)+2)
+	input = append(input, NewOpenParen())
+	input = append(input, toks...)
+	input = append(input, NewCloseParen())
+	out, rerr := sub.Run(input)
+	if rerr != nil {
+		return v, fmt.Errorf("child type expression: %w", rerr)
+	}
+	if len(out) != 1 {
+		return v, fmt.Errorf("child type expression must produce one type, got %d values", len(out))
+	}
+	child := out[0]
+	if IsTypedMap(v) {
+		if len(ci.Entries) > 0 {
+			return NewTypedMapWithEntries(child, ci.Entries), nil
+		}
+		return NewTypedMap(child), nil
+	}
+	if len(ci.Elements) > 0 {
+		return NewTypedListWithElements(child, ci.Elements), nil
+	}
+	return NewTypedList(child), nil
 }
 
 // typeParamLitNode returns the placeholder node when v is a bare type

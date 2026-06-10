@@ -100,6 +100,24 @@ func caseClauses(r *Registry, v Value, elems []Value) ([]Value, error) {
 					m = ResolveWordValue(m)
 				}
 			}
+			// A parenthesised match — `case b [(Box of [Integer]) […]]`
+			// — evaluates inline, the same contract paren annotations
+			// follow in typed defs. Generic instantiations are the main
+			// client; any expression producing one value works. An
+			// evaluation error or multi-value result keeps the raw
+			// ParenExpr (which then simply fails to unify).
+			if IsParenExpr(m) {
+				if toks, perr := AsParenExpr(m); perr == nil {
+					input := make([]Value, 0, len(toks)+2)
+					input = append(input, NewOpenParen())
+					input = append(input, toks...)
+					input = append(input, NewCloseParen())
+					sub := New(r)
+					if out, rerr := sub.Run(input); rerr == nil && len(out) == 1 {
+						m = out[0]
+					}
+				}
+			}
 			_, ok := UnifyR(m, v, r)
 			matched = ok
 		}

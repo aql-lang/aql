@@ -19,6 +19,8 @@ type parserTokens struct {
 	BT jsonic.Tin // ` (backtick)
 	IS jsonic.Tin // ${ (interp start)
 	TL jsonic.Tin // template literal segment
+	LA jsonic.Tin // < (angle open — general-purpose token, D14)
+	RA jsonic.Tin // > (angle close)
 }
 
 // setupBaseTokens registers the fixed AQL tokens and removes backtick from
@@ -42,6 +44,14 @@ func setupBaseTokens(j *jsonic.Jsonic) parserTokens {
 		BT: j.Token("#BT", "`"),
 		IS: j.Token("#IS", "${"),
 		TL: j.Token("#TL"),
+		// `<` / `>` are GENERAL-PURPOSE tokens (design/GENERICS.0.md
+		// D14): independent fixed tokens with contextual consumers.
+		// The generics angle rule (setupAngleGrammar) is the only v1
+		// consumer; future rules (e.g. embedded XML) can register
+		// additional consumers without re-lexing. Comparisons stay on
+		// lt/gt. (`=>` still lexes as one token — longest match wins.)
+		LA: j.Token("#LA", "<"),
+		RA: j.Token("#RA", ">"),
 	}
 }
 
@@ -836,6 +846,147 @@ func setupInterpGrammar(j *jsonic.Jsonic, t parserTokens) {
 			{S: [][]jsonic.Tin{{jsonic.TinCA}}, R: "ieval"},
 			// Space-separated: next expression value.
 			{R: "ieval", B: 1},
+		}
+	})
+}
+
+// setupAngleGrammar defines the generics angle-bracket sugar rules
+// (design/GENERICS.0.md Phase 6, decisions D14/D15): `Box<Integer>`.
+//
+// The consumer is CONTEXTUALLY GATED (D14): an angle group opens only
+// when the value that just closed is a capitalised bare name — the
+// type-name convention — via a val.Close alternate (the dotchain
+// technique). A `<` in any other position matches no rule and is a
+// syntax error in v1, only because no other consumer exists yet.
+//
+// The "angle"/"aelem" rule pair is modeled on "paren"/"pelem": items
+// collect into a flat list (commas are optional separators, exactly
+// like list/paren elements), and the BC fold replaces the receiver
+// val's node with an angleGroup{Name, Items}. Desugaring to the
+// canonical stream happens in the conversion walks (parse.go), so no
+// angle marker ever reaches the engine value stream — macros, quote,
+// and Vm.parse see the canonical form (D15).
+func setupAngleGrammar(j *jsonic.Jsonic, t parserTokens) {
+	// Gate: the just-closed val is a capitalised bare name.
+	angleGate := func(r *jsonic.Rule, ctx *jsonic.Context) bool {
+		n := r.Node
+		if s, ok := n.(sited); ok {
+			n = s.Node
+		}
+		txt, ok := n.(jsonic.Text)
+		if !ok || txt.Quote != "" || txt.Str == "" {
+			return false
+		}
+		c := txt.Str[0]
+		return c >= 'A' && c <= 'Z'
+	}
+	j.Rule("val", func(rs *jsonic.RuleSpec) {
+		rs.Close = append([]*jsonic.AltSpec{
+			{S: [][]jsonic.Tin{{t.LA}}, C: angleGate, P: "angle"},
+		}, rs.Close...)
+	})
+
+	j.Rule("angle", func(rs *jsonic.RuleSpec) {
+		rs.BO = []jsonic.StateAction{
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				r.Node = make([]any, 0)
+			},
+			// Suppress implicit list/map formation inside the group
+			// (same bump the paren rule applies).
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				if v, ok := r.N["dlist"]; ok {
+					r.N["dlist"] = v + 1
+				} else {
+					r.N["dlist"] = 1
+				}
+				if v, ok := r.N["dmap"]; ok {
+					r.N["dmap"] = v + 1
+				} else {
+					r.N["dmap"] = 1
+				}
+			},
+		}
+		rs.BC = []jsonic.StateAction{
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				if r.Parent == nil || r.Parent == jsonic.NoRule {
+					return
+				}
+				recv := r.Parent.Node
+				var pos eng.SrcPos
+				if s, ok := recv.(sited); ok {
+					pos, recv = s.Pos, s.Node
+				}
+				name := ""
+				if txt, ok := recv.(jsonic.Text); ok {
+					name = txt.Str
+				}
+				arr, _ := r.Node.([]any)
+				r.Parent.Node = sited{Node: angleGroup{Name: name, Items: arr}, Pos: pos}
+			},
+		}
+		// The "closed" flag is set by the Close alternate, which runs
+		// AFTER BC — so the unclosed-at-EOF rewrite happens in AC (the
+		// unclosed-paren technique).
+		rs.AC = []jsonic.StateAction{
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				if r.U["closed"] == true {
+					return
+				}
+				if r.Parent == nil || r.Parent == jsonic.NoRule {
+					return
+				}
+				name := ""
+				if s, ok := r.Parent.Node.(sited); ok {
+					if ag, isAg := s.Node.(angleGroup); isAg {
+						name = ag.Name
+					}
+				}
+				r.Parent.Node = unclosedAngle{Name: name}
+			},
+		}
+		rs.Open = []*jsonic.AltSpec{
+			// Empty group `Name<>`: backtrack so Close consumes the `>`
+			// exactly once (the empty-paren technique).
+			{S: [][]jsonic.Tin{{t.RA}}, B: 1},
+			{P: "aelem"},
+		}
+		rs.Close = []*jsonic.AltSpec{
+			{S: [][]jsonic.Tin{{t.RA}}, U: map[string]any{"closed": true}},
+			// End of source: unclosed — flagged by the BC fold above.
+			{S: [][]jsonic.Tin{{jsonic.TinZZ}}},
+		}
+	})
+
+	// Aelem: each item inside an angle group (the pelem shape with `>`
+	// as the boundary). Nested sugar works naturally: an inner val that
+	// closes on another `<` re-enters the angle rule, and the two `>`s
+	// close inner then outer (no C++-style `>>` shift problem — `>` is
+	// a standalone token).
+	j.Rule("aelem", func(rs *jsonic.RuleSpec) {
+		rs.BC = []jsonic.StateAction{
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				if !jsonic.IsUndefined(r.Child.Node) {
+					if arr, ok := r.Node.([]any); ok {
+						r.Node = append(arr, r.Child.Node)
+						if r.Parent != nil && r.Parent != jsonic.NoRule {
+							r.Parent.Node = r.Node
+						}
+					}
+				}
+			},
+		}
+		rs.Open = []*jsonic.AltSpec{
+			{P: "val"},
+		}
+		rs.Close = []*jsonic.AltSpec{
+			// > ends the group (backtrack so angle.Close consumes it).
+			{S: [][]jsonic.Tin{{t.RA}}, B: 1},
+			// End of source inside the group: unclosed.
+			{S: [][]jsonic.Tin{{jsonic.TinZZ}}},
+			// Comma: next item.
+			{S: [][]jsonic.Tin{{jsonic.TinCA}}, R: "aelem"},
+			// Space-separated: next item.
+			{R: "aelem", B: 1},
 		}
 	})
 }

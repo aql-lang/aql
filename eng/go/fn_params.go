@@ -347,18 +347,27 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 	}
 	if v.Parent.Equal(TMap) {
 		if IsTypedMap(v) {
-			resolved := ResolveSigChildParam(r, v)
+			resolved, err := ResolveChildTypeExpr(r, v)
+			if err != nil {
+				return nil, nil, err
+			}
+			resolved = ResolveSigChildParam(r, resolved)
 			return TMap, &resolved, nil
 		}
 		return TMap, &v, nil
 	}
 	if v.Parent.Equal(TList) {
 		if IsTypedList(v) {
-			// `xs:[:T]` with a gen placeholder live: resolve the child
-			// Word to the placeholder literal NOW — the binding pops
-			// when the def completes, so dispatch-time resolution is
-			// impossible (see ResolveSigChildParam).
-			resolved := ResolveSigChildParam(r, v)
+			// A ParenExpr child (`xs:[:(Pair of [String Integer])]`)
+			// evaluates now; a child Word naming a live gen placeholder
+			// (`xs:[:T]`) resolves to the placeholder literal NOW — the
+			// binding pops when the def completes, so dispatch-time
+			// resolution is impossible (see ResolveSigChildParam).
+			resolved, err := ResolveChildTypeExpr(r, v)
+			if err != nil {
+				return nil, nil, err
+			}
+			resolved = ResolveSigChildParam(r, resolved)
 			return TList, &resolved, nil
 		}
 		return TList, &v, nil

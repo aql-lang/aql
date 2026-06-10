@@ -336,6 +336,20 @@ func unifyInner(a, b Value) (Value, *UnifyError) {
 		return a, nil
 	}
 
+	// Object-type fold — an object/class TYPE value (an ObjectTypeInfo
+	// body: the binding of `def Circle class {…}` or a generic
+	// instantiation `Box of [Integer]`) admits values by Is-membership
+	// in its minted node, the same doctrine the surface fold applies.
+	// Without this, ObjectType-vs-instance pairs fell to
+	// unifySameOrSubtype's "same type, different literal values"
+	// failure (both sides carry the class node as their type), so a
+	// class literal in a unify position — a typed-list child
+	// constraint (`[:(Box of [Integer])]`), a `case` branch, the
+	// `unify` word — could never admit an instance.
+	if IsObjectType(a) || IsObjectType(b) {
+		return unifyObjectType(a, b)
+	}
+
 	// Type-parameter fold — a bare placeholder literal (a minted
 	// gen-param node, design/GENERICS.0.md) admits the other side by
 	// the parameter's bound, mirroring the surface fold above. Placed
@@ -386,6 +400,41 @@ func unifyInner(a, b Value) (Value, *UnifyError) {
 	// compare, subtype relation. Handled together because they're all
 	// just "pick the narrower side if compatible".
 	return unifySameOrSubtype(a, b)
+}
+
+// unifyObjectType admits the non-ObjectType side by Is-membership in
+// the object type's minted node (see the fold in unifyInner). Two
+// object types unify only when they are the same type (nominal —
+// matching the Record/Options exclusivity rules).
+func unifyObjectType(a, b Value) (Value, *UnifyError) {
+	ot, other := a, b
+	if !IsObjectType(ot) {
+		ot, other = b, a
+	}
+	oi, err := AsObjectType(ot)
+	if err != nil || oi.Type == nil {
+		return Value{}, unifyFail("object type has no minted node (declare it with def)", a, b)
+	}
+	if IsObjectType(other) {
+		ooi, oerr := AsObjectType(other)
+		if oerr == nil && ooi.ID == oi.ID {
+			return ot, nil
+		}
+		return Value{}, unifyFail("distinct object types do not unify", a, b)
+	}
+	// A bare node literal: the class node itself (or a subclass node).
+	if IsBareTypeNode(other) {
+		if (&other).ConformsTo(oi.Type) {
+			return other, nil
+		}
+		return Value{}, unifyFail("type does not conform to the object type", a, b)
+	}
+	// Concrete instance or check-mode carrier: Is-membership via the
+	// node's Behavior (subclass instances conform by ancestry).
+	if other.Is(oi.Type) {
+		return other, nil
+	}
+	return Value{}, unifyFail("value is not an instance of the object type", a, b)
 }
 
 // unifySameOrSubtype is the general scalar-narrowing fall-through. By
