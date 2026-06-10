@@ -78,3 +78,52 @@ func shiftHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry
 
 	return []Value{NewList(newList), shifted}, nil
 }
+
+// ---- FlexList variants: mutate IN PLACE through the pointer-backed
+// store and return the same node (plus the removed element for
+// pop/shift). The shapes mirror the plain handlers above so the two
+// semantics stay side by side.
+
+func pushFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	fd, err := AsFlexList(args[1])
+	if err != nil {
+		return nil, r.AqlError("push_error", "push: expected a FlexList, got "+args[1].Parent.String(), "push")
+	}
+	fd.Elems = append(fd.Elems, args[0])
+	return []Value{args[1]}, nil
+}
+
+func popFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	fd, err := AsFlexList(args[0])
+	if err != nil {
+		return nil, r.AqlError("pop_error", "pop: expected a FlexList, got "+args[0].Parent.String(), "pop")
+	}
+	if len(fd.Elems) == 0 {
+		return nil, r.AqlError("pop_error", "pop: cannot pop from empty list", "pop")
+	}
+	popped := fd.Elems[len(fd.Elems)-1]
+	fd.Elems = fd.Elems[:len(fd.Elems)-1]
+	return []Value{args[0], popped}, nil
+}
+
+func unshiftFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	fd, err := AsFlexList(args[1])
+	if err != nil {
+		return nil, r.AqlError("unshift_error", "unshift: expected a FlexList, got "+args[1].Parent.String(), "unshift")
+	}
+	fd.Elems = append([]Value{args[0]}, fd.Elems...)
+	return []Value{args[1]}, nil
+}
+
+func shiftFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	fd, err := AsFlexList(args[0])
+	if err != nil {
+		return nil, r.AqlError("shift_error", "shift: expected a FlexList, got "+args[0].Parent.String(), "shift")
+	}
+	if len(fd.Elems) == 0 {
+		return nil, r.AqlError("shift_error", "shift: cannot shift from empty list", "shift")
+	}
+	shifted := fd.Elems[0]
+	fd.Elems = append([]Value(nil), fd.Elems[1:]...)
+	return []Value{args[0], shifted}, nil
+}

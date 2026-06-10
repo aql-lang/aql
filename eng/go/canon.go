@@ -95,6 +95,26 @@ func CanonValue(v Value) string {
 	case v.Parent.Equal(TAtom):
 		s, _ := AsAtom(v)
 		return s + "/q"
+	case IsFlexList(v):
+		// Round-trippable source form — a plain `[...]` would parse
+		// back as an immutable List and lose the flexness.
+		lst, _ := AsList(v)
+		parts := make([]string, lst.Len())
+		for i := 0; i < lst.Len(); i++ {
+			parts[i] = CanonValue(lst.Get(i))
+		}
+		return "(flex [" + strings.Join(parts, " ") + "])"
+	case IsFlexMap(v):
+		m, err := AsMap(v)
+		if err != nil || m == nil {
+			return v.String()
+		}
+		parts := make([]string, m.Len())
+		for i, k := range m.Keys() {
+			val, _ := m.Get(k)
+			parts[i] = k + ":" + CanonValue(val)
+		}
+		return "(flex {" + strings.Join(parts, " ") + "})"
 	case v.Parent.ConformsTo(TList) && v.Data != nil:
 		lst, _ := AsList(v)
 		parts := make([]string, lst.Len())

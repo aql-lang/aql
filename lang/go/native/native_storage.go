@@ -59,6 +59,27 @@ var storageNatives = []NativeFunc{
 				Returns:   []*Type{},
 				ReturnsFn: setStoreReturnsFn, BarrierPos: -1,
 			},
+
+			// FlexMap (in-place key set; returns the node for chaining)
+			{
+				Args:    []*Type{TString, TAny, TFlexMap},
+				Handler: setFlexMapHandler,
+				Returns: []*Type{TFlexMap}, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TAtom, TAny, TFlexMap},
+				QuoteArgs: map[int]bool{0: true},
+				Handler:   setFlexMapHandler,
+				Returns:   []*Type{TFlexMap}, BarrierPos: -1,
+			},
+
+			// FlexList (in-place index set; 0..len-1 only — sparse is
+			// an error, growth is append's job)
+			{
+				Args:    []*Type{TInteger, TAny, TFlexList},
+				Handler: setFlexListHandler,
+				Returns: []*Type{TFlexList}, BarrierPos: -1,
+			},
 		},
 	},
 	{
@@ -120,6 +141,36 @@ func setObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	}
 	oi.Fields.Set(key, args[1])
 	return nil, nil
+}
+
+func setFlexMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	container := args[2]
+	m, err := AsMutableMap(container)
+	if err != nil {
+		return nil, r.AqlError("set_error", "set: expected a FlexMap, got "+container.Parent.String(), "set")
+	}
+	m.Set(StoreKey(args[0]), args[1])
+	return []Value{container}, nil
+}
+
+func setFlexListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	container := args[2]
+	fd, err := AsFlexList(container)
+	if err != nil {
+		return nil, r.AqlError("set_error", "set: expected a FlexList, got "+container.Parent.String(), "set")
+	}
+	asInt, ierr := args[0].AsConcreteInteger()
+	if ierr != nil {
+		return nil, r.AqlError("set_error", "set: FlexList index must be a concrete integer", "set")
+	}
+	idx := int(asInt)
+	if idx < 0 || idx >= len(fd.Elems) {
+		return nil, r.AqlErrorHint("set_error",
+			fmt.Sprintf("set: index %d out of bounds for FlexList (length %d)", idx, len(fd.Elems)),
+			"set", "use append to grow a FlexList; sparse FlexLists are an error")
+	}
+	fd.Elems[idx] = args[1]
+	return []Value{container}, nil
 }
 
 func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

@@ -11,6 +11,26 @@ import "fmt"
 // comes first. This collapses the mirrored "aTyped vs concrete" and
 // "concrete vs bTyped" arms in the prior implementation into one path.
 func unifyListFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *UnifyError) {
+	// Bare FlexList type literal: nominal-subtype rule — unifies only
+	// with a concrete FlexList (or another FlexList literal). A plain
+	// list is NOT a FlexList; the supertype literal `List` accepts
+	// flex values below via the ordinary family rule.
+	aFlexLit := sa == ShapeTypeLiteral && denotedType(a).Equal(TFlexList)
+	bFlexLit := sb == ShapeTypeLiteral && denotedType(b).Equal(TFlexList)
+	if aFlexLit || bFlexLit {
+		if aFlexLit && bFlexLit {
+			return a, nil
+		}
+		lit, other := a, b
+		if bFlexLit {
+			lit, other = b, a
+		}
+		if IsFlexList(other) {
+			return other, nil
+		}
+		return Value{}, unifyFail("FlexList type literal needs a concrete FlexList", lit, other)
+	}
+
 	// If one side is the bare List type literal (`List`), it unifies
 	// with any List-family value except a table.
 	aLit := sa == ShapeTypeLiteral && denotedType(a).Equal(TList)

@@ -21,6 +21,9 @@ WORD and
   [Any Any] barrier=2 returns=[Any]
 WORD any
   [Node/List] barrier=1 returns=[Scalar/Boolean]
+WORD append
+  [Node/List Node/List/FlexList] barrier=2 returns=[Node/List/FlexList]
+  [Any Node/List/FlexList] barrier=2 returns=[Node/List/FlexList]
 WORD apply
   [Ideal/Reach Any] barrier=2 returns=[Any]
   [Type/Function] barrier=0 returns=[Any]
@@ -141,6 +144,8 @@ WORD filter
 WORD flatten
   [Scalar/Number/Integer Node/List] barrier=2
   [Node/List] barrier=1
+WORD flex
+  [Node] barrier=1 returns=[Node]
 WORD fn
   [Node/List] barrier=1 runcheck noeval={0} returns=[Type/Function]
 WORD fnsig
@@ -285,6 +290,7 @@ WORD make
   [Any Any Node/Map] barrier=3 returns=[Any]
   [Ideal/Array Node/List] barrier=2 returns=[Ideal/Array]
   [Ideal Node/Map] barrier=2 typearg={0} +returnsfn
+  [Node Any] barrier=2 typearg={0} +returnsfn
   [Scalar Any] barrier=2 typearg={0} +returnsfn
   [Any Any] barrier=2 returns=[Any]
 WORD match
@@ -307,6 +313,8 @@ WORD neq
   [Any Any] barrier=2 returns=[Scalar/Boolean]
 WORD nip
   [Any Any] barrier=0 +returnsfn
+WORD node
+  [Node] barrier=1 returns=[Node]
 WORD nodify
   [Any] barrier=1
 WORD nor
@@ -341,6 +349,7 @@ WORD pathof
 WORD pick
   [Scalar/Number/Integer] barrier=0 fullstack
 WORD pop
+  [Node/List/FlexList] barrier=1 returns=[Node/List/FlexList Any]
   [Node/List] barrier=1
 WORD pow
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn
@@ -351,6 +360,7 @@ WORD print
 WORD printstr
   [Any] barrier=1
 WORD push
+  [Any Node/List/FlexList] barrier=2 returns=[Node/List/FlexList]
   [Any Node/List] barrier=2
 WORD quote
   [Scalar/Atom] barrier=1 quote={0} returns=[Scalar/Atom]
@@ -402,9 +412,12 @@ WORD selector
 WORD set
   [Scalar/String Any Ideal/Store] barrier=3 +returnsfn
   [Scalar/String Any Ideal/Object] barrier=3
+  [Scalar/String Any Node/Map/FlexMap] barrier=3 returns=[Node/Map/FlexMap]
   [Scalar/Number/Integer Any Ideal/Array] barrier=3
+  [Scalar/Number/Integer Any Node/List/FlexList] barrier=3 returns=[Node/List/FlexList]
   [Scalar/Atom Any Ideal/Store] barrier=3 quote={0} +returnsfn
   [Scalar/Atom Any Ideal/Object] barrier=3 quote={0}
+  [Scalar/Atom Any Node/Map/FlexMap] barrier=3 quote={0} returns=[Node/Map/FlexMap]
 WORD setpath
   [Ideal/Reach Any Any] barrier=3
   [Scalar/String Any Any] barrier=3
@@ -413,6 +426,7 @@ WORD setpath
 WORD shed
   [Scalar/Number/Integer Node/List] barrier=2 +returnsfn
 WORD shift
+  [Node/List/FlexList] barrier=1 returns=[Node/List/FlexList Any]
   [Node/List] barrier=1
 WORD size
   [Any] barrier=1
@@ -503,6 +517,7 @@ WORD unpack
 WORD unquote
   [Any] barrier=1 returns=[Any]
 WORD unshift
+  [Any Node/List/FlexList] barrier=2 returns=[Node/List/FlexList]
   [Any Node/List] barrier=2
 WORD update
   [Node/Map Ideal/Object/Resource/Entity] barrier=2

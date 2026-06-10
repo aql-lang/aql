@@ -35,6 +35,7 @@ type (
 	AtomPayload         = eng.AtomPayload
 	PathPayload         = eng.PathPayload
 	ListPayload         = eng.ListPayload
+	FlexListData        = eng.FlexListData
 	MapPayload          = eng.MapPayload
 	ExtensionPayload    = eng.ExtensionPayload
 	MaterializerPayload = eng.MaterializerPayload
@@ -127,7 +128,9 @@ var (
 	// TInterval moved to lang/go/engine/native_misc.go (Step 8).
 	TList     = eng.TList
 	TListArgs = eng.TListArgs
+	TFlexList = eng.TFlexList
 	TMap      = eng.TMap
+	TFlexMap  = eng.TFlexMap
 	TMark     = eng.TMark
 	// TMatrix moved to lang/go/internal/nativemod/matrix.go (Step 8).
 	TMove           = eng.TMove
@@ -203,6 +206,7 @@ var (
 	AsMove                    = eng.AsMove
 	AsMutableList             = eng.AsMutableList
 	AsMutableMap              = eng.AsMutableMap
+	AsFlexList                = eng.AsFlexList
 	AsObjectInstance          = eng.AsObjectInstance
 	AsObjectType              = eng.AsObjectType
 	AsOptionsType             = eng.AsOptionsType
@@ -247,6 +251,9 @@ var (
 	IsTypeValue               = eng.IsTypeValue
 	IsTypedList               = eng.IsTypedList
 	IsTypedMap                = eng.IsTypedMap
+	IsFlexMap                 = eng.IsFlexMap
+	IsFlexList                = eng.IsFlexList
+	IsFlexNode                = eng.IsFlexNode
 	IsValueOfType             = eng.IsValueOfType
 	IsWord                    = eng.IsWord
 	AsBoolean                 = eng.AsBoolean
@@ -371,7 +378,9 @@ var (
 	NewInterpString  = eng.NewInterpString
 	// NewInterval moved to lang/go/engine/native_misc.go (Step 8).
 	NewList               = eng.NewList
+	NewFlexList           = eng.NewFlexList
 	NewMap                = eng.NewMap
+	NewFlexMap            = eng.NewFlexMap
 	NewMark               = eng.NewMark
 	NewMove               = eng.NewMove
 	NewMoveCont           = eng.NewMoveCont

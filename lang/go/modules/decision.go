@@ -147,7 +147,7 @@ def eval-table fn [[table:Map input:Map] [Any] [def rules quote (table get "rule
 
 # --- eval-tree helpers ---
 
-def find-node fn [[id:Any nodes:List] [Any] [def found None for (nodes size) [def idx i def node (nodes idx get) if ((node get "id" convert String) (id convert String) eq) [def found node] []] end found]]
+def find-node fn [[id:Any nodes:List] [Any] [def found None for (nodes size) [def idx i def nd (nodes idx get) if ((nd get "id" convert String) (id convert String) eq) [def found nd] []] end found]]
 
 def find-branch-next fn [[branches:List input:Map] [Any] [def next-id None for (branches size) [def idx i def br (branches idx get) if (input (br get "when") eval-pred) [def next-id (br get "next")] []] end next-id]]
 
