@@ -12,7 +12,8 @@ func init() {
 		"transform": "Shape data via a spec.",
 		"validate":  "Check data against a shape spec.",
 		"selector":  "Query-select children matching a spec.",
-		"jsonify":   "Serialise a value to JSON text.",
+		"jsonify":   "Serialise a value to JSON text (class instances carry $class; user $-keys escape to $$).",
+		"reify":     "Hydrate a class instance from JSON text or a Node — explicit class or tor-union target.",
 		"nodify":    "Project a value to its Node/Scalar form.",
 	})
 }

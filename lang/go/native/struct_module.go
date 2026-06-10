@@ -111,6 +111,17 @@ var StructModuleNatives = []NativeFunc{
 		},
 	},
 	{
+		// reify — hydrate a class instance from JSON text or a Node.
+		// The inverse of the instance-aware jsonify; the target is an
+		// explicit class type or a tor union of classes ($class then
+		// selects the member). See reify.go + design/CLASS-OBJECT.0.md §3e.
+		Name: "reify",
+		Signatures: []NativeSig{
+			{Args: []*Type{TAny, TMap}, Handler: reifyHandler, BarrierPos: -1},
+			{Args: []*Type{TAny, TString}, Handler: reifyHandler, BarrierPos: -1},
+		},
+	},
+	{
 		Name: "nodify",
 		Signatures: []NativeSig{
 			{Args: []*Type{TAny}, Handler: nodifyHandler, BarrierPos: -1},

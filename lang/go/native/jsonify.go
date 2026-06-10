@@ -24,9 +24,69 @@ func jsonifyDefaultHandler(args []Value, ctx map[string]Value, stack []Value, r 
 	if err != nil {
 		return nil, err
 	}
-	data := valueToAny(projected)
+	data := valueToAnySer(projected)
 	result := voxgigstruct.Jsonify(data)
 	return []Value{NewString(result)}, nil
+}
+
+// valueToAnySer is the serialization projection behind jsonify: like
+// valueToAny, but (a) a CLASS instance carries its identity as a
+// "$class" metadata key (the user-facing class name — "$" sorts before
+// letters, so it leads the output), and (b) user map keys beginning
+// with "$" escape to "$$", so a spoofed "$class" inside plain data is
+// structurally impossible and MongoDB-style $-keys round-trip through
+// reify's unescape. Output is pure JSON (design/CLASS-OBJECT.0.md §3e).
+func valueToAnySer(v Value) any {
+	if !IsConcrete(v) {
+		return nil
+	}
+	if IsObjectInstance(v) {
+		oi, err := AsObjectInstance(v)
+		if err != nil {
+			return v.String()
+		}
+		flat := ObjectFields(&oi)
+		out := make(map[string]any, flat.Len()+1)
+		if oi.TypeRef != nil && oi.TypeRef.Class {
+			out["$class"] = classShortName(oi.TypeRef)
+		}
+		for _, key := range flat.Keys() {
+			val, _ := flat.Get(key)
+			out[escapeSerKey(key)] = valueToAnySer(val)
+		}
+		return out
+	}
+	if v.Parent.ConformsTo(TMap) {
+		if m, _ := AsMap(v); m != nil {
+			out := make(map[string]any, m.Len())
+			for _, key := range m.Keys() {
+				val, _ := m.Get(key)
+				out[escapeSerKey(key)] = valueToAnySer(val)
+			}
+			return out
+		}
+	}
+	if v.Parent.ConformsTo(TList) {
+		if _lst, _ := AsList(v); !_lst.IsNil() {
+			elems := _lst.Slice()
+			out := make([]any, len(elems))
+			for i, elem := range elems {
+				out[i] = valueToAnySer(elem)
+			}
+			return out
+		}
+	}
+	return valueToAny(v)
+}
+
+// escapeSerKey escapes a user data key for serialization: a leading
+// "$" gains a second one ("$class" → "$$class"), reserving the single
+// "$" prefix for metadata. reify (and a future parse) unescape.
+func escapeSerKey(k string) string {
+	if len(k) > 0 && k[0] == '$' {
+		return "$" + k
+	}
+	return k
 }
 
 // jsonifyFlagsHandler calls voxgigstruct.Jsonify with a flags map.
@@ -39,7 +99,7 @@ func jsonifyFlagsHandler(args []Value, ctx map[string]Value, stack []Value, r *R
 	if err != nil {
 		return nil, err
 	}
-	data := valueToAny(projected)
+	data := valueToAnySer(projected)
 	result := voxgigstruct.Jsonify(data, flags)
 	return []Value{NewString(result)}, nil
 }

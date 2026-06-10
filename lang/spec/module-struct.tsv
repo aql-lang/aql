@@ -63,3 +63,20 @@ jsonify {a:1}	ERROR:undefined_word	jsonify also moved out of core
 "aql:struct-util" import end StructUtil.jsonify 42	'42'	a number
 "aql:struct-util" import end StructUtil.jsonify 'hi'	'"hi"'	a string is JSON-quoted
 "aql:struct-util" import end StructUtil.jsonify true	'true'	a boolean
+#
+# §  reify — hydrate a class instance from JSON text or a Node; the
+#    inverse of the instance-aware jsonify. Explicit class target (with
+#    $class cross-check) or tor-union target ($class selects the
+#    member, bounded to the union). Hydration routes through make:
+#    defaults fill, required fields enforced, predicates run, unknown
+#    keys error. jsonify carries $class on class instances and escapes
+#    user $-keys to $$ (spoof-proof round-trip).
+"aql:struct-util" import end  def Point class {x:1, y:2} def p (StructUtil.reify Point {x:9}) p typeof	Point	reify from a Node constructs a typed instance
+"aql:struct-util" import end  def Point class {x:1, y:2} (StructUtil.reify Point {x:9}) get y	2	…with schema defaults filling omitted fields
+"aql:struct-util" import end  def Point class {x:1} (StructUtil.reify Point (StructUtil.jsonify (make Point {x:9}))) get x	9	full jsonify→reify round trip through JSON text
+"aql:struct-util" import end  def Circle class {r:1.0} def Square class {side:1.0} def Shape (Circle tor Square) (StructUtil.reify Shape (StructUtil.jsonify (make Square {side:4.0}))) typeof	Square	union-bounded: $class selects the member
+"aql:struct-util" import end  def Circle class {r:1.0} def Square class {side:1.0} def Shape (Circle tor Square) StructUtil.reify Shape {r:2.0}	ERROR:needs a $class	a union target without $class is a loud error
+"aql:struct-util" import end  def Point class {x:1} StructUtil.reify Point {z:5}	ERROR:unknown field	an undeclared key errors (hydration is sealed construction)
+"aql:struct-util" import end  def Radius (Float gte 0.0) def Circle class {r:Radius} StructUtil.reify Circle '{"r": -1.5}'	ERROR:does not satisfy	predicate field types run during hydration
+"aql:struct-util" import end  def Radius (Float gte 0.0) def Circle class {r:Radius} (StructUtil.reify Circle '{"r": 5}') get r	5.0	schema-driven recovery: a JSON integer lands as the Float the field declares
+"aql:struct-util" import end  StructUtil.reify Integer {x:1}	ERROR:must be a class	a non-class target is rejected

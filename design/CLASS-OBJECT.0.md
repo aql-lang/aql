@@ -539,9 +539,25 @@ Sub-questions resolved (2026-06-09, second pass):
 > false. Spec battery in `lang/spec/class.tsv` (defaults, required,
 > sealing, subclass chain, negatives). Remaining in Phase A:
 > `refine Object` removal sweep (~213 sites), `const`, typed
-> defaults via tagged `make`, instance equality (`deq`/`cmp`),
-> `$class` jsonify + `reify`, `describe` rendering, enumeration
-> (`items`/`size`) for instances.
+> defaults via tagged `make`, `describe` rendering.
+>
+> **Phase A increment 3 LANDED (2026-06-09):** instance equality —
+> `deq` = same exact class + field-wise structural (cross-class and
+> subclass-vs-parent never equal); `eq` = identity via the shared
+> field map (Map's aliasing rule); `cmp` orders same-class instances
+> field-wise. Enumeration — `valueToAny` projects instances to flat
+> field maps (eng.ObjectFields), so items/walk/transform see real
+> data; `convert Map`/`List` on instances; `size` = field count.
+>
+> **Phase A increment 4 LANDED (2026-06-09):** serialization +
+> hydration per §3e — `jsonify` emits `$class` on class instances and
+> escapes user `$`-keys to `$$` (spoof-proof); `StructUtil.reify`
+> hydrates from JSON text or Nodes with explicit-class or
+> tor-union-bounded targets ($class selects within the union only),
+> routing through the make path (defaults, required, predicates,
+> sealing) with schema-driven recovery of JSON's poor scalars
+> (Integer/Float/predicate-base) and recursive hydration of nested
+> class fields. Spec rows in module-struct.tsv.
 >
 > **Phase A increment 2 LANDED (2026-06-09):** strict field typing
 > at make AND set via `MakeClassFieldValue` — typed fields reject

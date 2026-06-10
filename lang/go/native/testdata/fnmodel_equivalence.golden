@@ -381,6 +381,9 @@ WORD referent
 WORD refine
   [Any Node] barrier=2 runcheck returns=[Type]
   [Any] barrier=1 runcheck returns=[Type]
+WORD reify
+  [Any Node/Map] barrier=2
+  [Any Scalar/String] barrier=2
 WORD remove
   [Node/Map Ideal/Object/Resource/Entity] barrier=2
   [Node/Map Node/Map] barrier=2
