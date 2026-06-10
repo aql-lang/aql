@@ -356,7 +356,10 @@ reconciles them: it reports dangling metadata (an alias with no
 secret), orphaned keyring entries (a secret with no metadata, file
 backend only), capabilities bound to a vanished alias, and stale
 `.tmp` files, exiting non-zero when anything is found; `--prune`
-repairs them. The mutating commands are ordered to fail safe (a crash
+repairs them. Verify runs under the same vault lock as the writers,
+so its snapshot is consistent — a half-committed `add` can never show
+up as a false orphan — and a repair can never clobber a concurrent
+command. The mutating commands are ordered to fail safe (a crash
 leaves a harmless orphan, never a dangling reference), so in practice
 `verify` should find nothing — it's the audit that proves it.
 

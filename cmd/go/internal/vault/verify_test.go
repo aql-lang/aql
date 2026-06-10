@@ -104,6 +104,50 @@ func TestVerifyCapabilityForMissingAlias(t *testing.T) {
 	}
 }
 
+// TestVerifyTakesVaultLock pins that verify's check-and-repair waits
+// for the vault lock: while another holder has it, verify must not
+// complete; once released, it finishes normally.
+func TestVerifyTakesVaultLock(t *testing.T) {
+	testHome(t)
+	mustInit(t)
+	if code, _, e := runVault(t, "v\n", "add", "--from-stdin", "k"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+
+	release := make(chan struct{})
+	held := make(chan struct{})
+	go func() {
+		_ = withVaultLock(os.Getenv(EnvHome), func() error {
+			close(held)
+			<-release
+			return nil
+		})
+	}()
+	<-held
+
+	done := make(chan int, 1)
+	go func() {
+		code, _, _ := runVault(t, "", "verify", "--prune")
+		done <- code
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("verify completed while the vault lock was held")
+	case <-time.After(250 * time.Millisecond):
+		// Still blocked on the lock — expected.
+	}
+	close(release)
+	select {
+	case code := <-done:
+		if code != 0 {
+			t.Errorf("verify after lock release: code %d", code)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("verify did not complete after the lock was released")
+	}
+}
+
 func TestVerifyStaleTempFile(t *testing.T) {
 	home := testHome(t)
 	mustInit(t)

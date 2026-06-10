@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -44,6 +45,8 @@ func runVerify(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	// The passphrase prompt happens here, OUTSIDE the vault lock, so a
+	// human at the prompt can never stall the broker's counter writes.
 	kr, err := openKeyring(s, homeDir, stdin, stdout, "Vault passphrase: ")
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
@@ -63,99 +66,119 @@ func runVerify(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		fmt.Fprintf(stdout, prefix+format+"\n", a...)
 	}
 
-	// Enumerate the keyring once when the backend supports it; this
-	// drives both dangling and orphan detection by set difference.
-	var keyKeys map[string]bool
-	if lister, ok := kr.(keyringLister); ok {
-		keys, err := lister.list()
+	// The whole check-and-repair runs under the vault lock, against a
+	// freshly-loaded store: a writer mid-sequence (add has written the
+	// keyring but not yet the store) would otherwise show up as a false
+	// orphan, and a --prune save could clobber a concurrent commit. The
+	// lock also makes the report mode an actually-consistent snapshot.
+	verifyErr := withVaultLock(homeDir, func() error {
+		s, err := LoadStore(homeDir)
 		if err != nil {
-			fmt.Fprintf(stderr, "error: listing keyring: %s\n", err)
-			return 1
+			return err
 		}
-		keyKeys = make(map[string]bool, len(keys))
-		for _, k := range keys {
-			keyKeys[k] = true
+		if s == nil {
+			return errors.New("vault not initialized; run `aql vault init`")
 		}
-	}
 
-	// 1. Dangling metadata — an alias with no secret behind it.
-	for _, a := range s.SortedAliases() {
-		missing := false
-		if keyKeys != nil {
-			missing = !keyKeys[a.Name]
-		} else if _, err := kr.Get(a.Name); err == ErrNotFound {
-			missing = true
-		} else if err != nil {
-			fmt.Fprintf(stderr, "warning: could not check %s: %s\n", a.Name, err)
-			continue
-		}
-		if missing {
-			report(true, "dangling metadata (no secret): %s", a.Name)
-			if *prune {
-				s.RemoveAlias(a.Name)
+		// Enumerate the keyring once when the backend supports it; this
+		// drives both dangling and orphan detection by set difference.
+		var keyKeys map[string]bool
+		if lister, ok := kr.(keyringLister); ok {
+			keys, err := lister.list()
+			if err != nil {
+				return fmt.Errorf("listing keyring: %w", err)
+			}
+			keyKeys = make(map[string]bool, len(keys))
+			for _, k := range keys {
+				keyKeys[k] = true
 			}
 		}
-	}
 
-	// 2. Orphaned keyring entries — a secret with no metadata (only
-	//    detectable when the backend can enumerate).
-	if keyKeys != nil {
-		orphans := make([]string, 0)
-		for k := range keyKeys {
-			if a, _ := s.FindAlias(k); a == nil {
-				orphans = append(orphans, k)
+		// 1. Dangling metadata — an alias with no secret behind it.
+		for _, a := range s.SortedAliases() {
+			missing := false
+			if keyKeys != nil {
+				missing = !keyKeys[a.Name]
+			} else if _, err := kr.Get(a.Name); err == ErrNotFound {
+				missing = true
+			} else if err != nil {
+				fmt.Fprintf(stderr, "warning: could not check %s: %s\n", a.Name, err)
+				continue
 			}
-		}
-		sort.Strings(orphans)
-		for _, k := range orphans {
-			report(true, "orphaned keyring entry (no metadata): %s", k)
-			if *prune {
-				if err := kr.Delete(k); err != nil {
-					fmt.Fprintf(stderr, "warning: deleting orphan %s: %s\n", k, err)
-					pruned--
+			if missing {
+				report(true, "dangling metadata (no secret): %s", a.Name)
+				if *prune {
+					s.RemoveAlias(a.Name)
 				}
 			}
 		}
-	} else {
-		fmt.Fprintf(stdout, "note: orphan detection is unavailable for the %s backend\n", kr.Name())
-	}
 
-	// 3. Capabilities bound to an alias that no longer exists.
-	for i := range s.Capabilities {
-		c := &s.Capabilities[i]
-		if c.Revoked {
-			continue
-		}
-		if a, _ := s.FindAlias(c.Alias); a == nil {
-			report(true, "capability %s references missing alias %q", shortCap(c.ID), c.Alias)
-			if *prune {
-				c.Revoked = true
+		// 2. Orphaned keyring entries — a secret with no metadata (only
+		//    detectable when the backend can enumerate).
+		if keyKeys != nil {
+			orphans := make([]string, 0)
+			for k := range keyKeys {
+				if a, _ := s.FindAlias(k); a == nil {
+					orphans = append(orphans, k)
+				}
 			}
-		}
-	}
-
-	// 4. Stale temp files from an interrupted atomic write.
-	dir := fileDir(homeDir)
-	if entries, err := os.ReadDir(dir); err == nil {
-		for _, e := range entries {
-			n := e.Name()
-			if e.Type().IsRegular() && strings.HasPrefix(n, ".") && strings.HasSuffix(n, ".tmp") {
-				report(true, "stale temp file: %s", n)
+			sort.Strings(orphans)
+			for _, k := range orphans {
+				report(true, "orphaned keyring entry (no metadata): %s", k)
 				if *prune {
-					if err := os.Remove(filepath.Join(dir, n)); err != nil {
-						fmt.Fprintf(stderr, "warning: removing %s: %s\n", n, err)
+					if err := kr.Delete(k); err != nil {
+						fmt.Fprintf(stderr, "warning: deleting orphan %s: %s\n", k, err)
 						pruned--
 					}
 				}
 			}
+		} else {
+			fmt.Fprintf(stdout, "note: orphan detection is unavailable for the %s backend\n", kr.Name())
 		}
-	}
 
-	if *prune && pruned > 0 {
-		if err := SaveStore(homeDir, s); err != nil {
-			fmt.Fprintf(stderr, "error: %s\n", err)
-			return 1
+		// 3. Capabilities bound to an alias that no longer exists.
+		for i := range s.Capabilities {
+			c := &s.Capabilities[i]
+			if c.Revoked {
+				continue
+			}
+			if a, _ := s.FindAlias(c.Alias); a == nil {
+				report(true, "capability %s references missing alias %q", shortCap(c.ID), c.Alias)
+				if *prune {
+					c.Revoked = true
+				}
+			}
 		}
+
+		// 4. Stale temp files from an interrupted atomic write. The
+		//    in-flight temp of a concurrent writer can't be mistaken for
+		//    a stale one: writers hold this same lock.
+		dir := fileDir(homeDir)
+		if entries, err := os.ReadDir(dir); err == nil {
+			for _, e := range entries {
+				n := e.Name()
+				if e.Type().IsRegular() && strings.HasPrefix(n, ".") && strings.HasSuffix(n, ".tmp") {
+					report(true, "stale temp file: %s", n)
+					if *prune {
+						if err := os.Remove(filepath.Join(dir, n)); err != nil {
+							fmt.Fprintf(stderr, "warning: removing %s: %s\n", n, err)
+							pruned--
+						}
+					}
+				}
+			}
+		}
+
+		if *prune && pruned > 0 {
+			return SaveStore(homeDir, s)
+		}
+		return nil
+	})
+	if verifyErr != nil {
+		fmt.Fprintf(stderr, "error: %s\n", verifyErr)
+		return 1
+	}
+	if *prune && pruned > 0 {
 		_ = appendAudit(homeDir, AuditEvent{
 			Action: "vault.verify", Outcome: "ok",
 			Reason: fmt.Sprintf("repaired=%d", pruned),
