@@ -71,13 +71,34 @@ func parseObjectFields(fieldsMap *OrderedMap, r *Registry) *OrderedMap {
 func classHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	fieldsVal := args[0]
 	if !fieldsVal.Parent.Equal(TMap) {
+		if spec := r.TakePendingGen(); spec != nil {
+			PopGenBindings(r, spec)
+		}
 		return nil, r.AqlError("class_error",
 			fmt.Sprintf("class: argument must be a map of field definitions, got %s", fieldsVal.String()), "class")
 	}
 	m, err := AsMutableMap(fieldsVal)
 	if err != nil {
+		if spec := r.TakePendingGen(); spec != nil {
+			PopGenBindings(r, spec)
+		}
 		return nil, r.AqlError("class_error",
 			fmt.Sprintf("class: argument must be a concrete map, got %s", fieldsVal.String()), "class")
+	}
+	// A pending gen spec (`def Box gen [T] class {value:T}`) turns
+	// this into a generic CLASS SCHEMA: the field map is parsed with
+	// the placeholder bindings live (so {value:T} declares a required
+	// T-typed field), no node is minted here — `of` mints one
+	// instantiation node per (schema, args) so instances get nominal
+	// identity (deq "same exact class", is-by-ancestry).
+	if spec := r.TakePendingGen(); spec != nil {
+		fields := parseObjectFields(m, r)
+		body := NewValueRaw(TClass, ObjectTypeInfo{
+			Fields: fields,
+			ID:     GenerateObjectTypeID(),
+			Class:  true,
+		})
+		return genWrapSchema(r, spec, body, SchemaClass)
 	}
 	fields := parseObjectFields(m, r)
 	id := GenerateObjectTypeID()

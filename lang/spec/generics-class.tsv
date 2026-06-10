@@ -1,0 +1,46 @@
+# AQL Language Specification: generic classes — gen [...] class {...}
+# Format: input<TAB>expected<TAB>description
+#
+# `def Box gen [T] class {value:T}` declares a generic CLASS schema.
+# `of` mints ONE instantiation node per (schema, canonical args) as a
+# child of the schema node under Ideal/Class, so instances get nominal
+# identity: `typeof` renders `Box of [Integer]`, `is Box` admits any
+# instantiation by ancestry, `deq` requires the same exact
+# instantiation, and v1 `is` between sibling instantiations is FALSE
+# (invariant — deviates from the doc's §5.6 covariance example; see
+# GENERICS.0.md §15a). Strict field typing, sealing, and the
+# $class/jsonify/reify serialization contract all carry over from
+# plain classes. See design/GENERICS.0.md + design/CLASS-OBJECT.0.md.
+#
+# §1  declare + make + identity
+def Box gen [T] class {value:T} end Box	schema<Class/Box>[T]	a class schema renders with its parameter list
+def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:42}) typeof	Box of [Integer]	instances carry the instantiation as their nominal type
+def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:42}) get value	42	field reads work
+def Box gen [T] class {value:T count:0} end (make (Box of [Integer]) {value:1}) get count	0	defaults mix with parameterised fields
+def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:1}) is Box	true	bare schema name admits any instantiation (ancestry)
+def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:1}) is (Box of [Integer])	true	exact instantiation membership
+def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:1}) is (Box of [String])	false	sibling instantiations are distinct classes
+def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:1}) is (Box of [Number])	false	v1 is invariant — no covariant admission (§15a pin)
+def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:1}) is Class	true	instantiations live under Ideal/Class
+#
+# §2  equality
+def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:1}) deq (make (Box of [Integer]) {value:1})	true	same instantiation + same fields are deq-equal
+def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:1}) deq (make (Box of [String]) {value:'1'})	false	cross-instantiation instances never deq
+def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:1}) eq (make (Box of [Integer]) {value:1})	false	eq stays identity
+#
+# §3  strict typing + sealing carry over
+def Box gen [T] class {value:T} end make (Box of [Integer]) {value:'no'}	ERROR:expected Integer	the substituted field type is enforced at make
+def Box gen [T] class {value:T} end def b (make (Box of [Integer]) {value:1}) b set value 'no'	ERROR:expected Integer	…and at set
+def Box gen [T] class {value:T} end def b (make (Box of [Integer]) {value:1}) b set extra 9	ERROR:sealed_field	instances stay sealed, with the canonical name in the error
+def Stack gen [T] class {items:[:T]} end (make (Stack of [Integer]) {items:[1 2]}) get items	[1 2]	a typed-list field substitutes and constructs
+def Stack gen [T] class {items:[:T]} end make (Stack of [Integer]) {items:['x']}	ERROR:incompatible	…and rejects off-type elements
+def Pos (Float gte 0.0) def G gen [(T extends Number)] class {v:T r:Pos} end make (G of [Integer]) {v:1 r:-1.0}	ERROR:does not satisfy	predicate-typed fields still run their predicate
+#
+# §4  subclassing
+def Box gen [T] class {value:T} def P refine (Box of [Integer]) {tag:'x'} end (make P {value:1}) is (Box of [Integer])	true	an instantiation subclasses like any class
+def Box gen [T] class {value:T} def P refine (Box of [Integer]) {tag:'x'} end (make P {value:1}) is Box	true	…and reaches the schema by ancestry
+def Box gen [T] class {value:T} def Sub refine Box {extra:1}	ERROR:type_error	subclassing the SCHEMA itself is rejected (instantiate first)
+#
+# §5  serialization — $class carries the canonical instantiation name
+"aql:struct-util" import end  def Box gen [T] class {value:T} def a (make (Box of [Integer]) {value:42}) (StructUtil.reify (Box of [Integer]) (StructUtil.jsonify a)) deq a	true	jsonify→reify round-trips an instantiated class
+"aql:struct-util" import end  def Box gen [T] class {value:T} def a (make (Box of [Integer]) {value:1}) StructUtil.reify (Box of [String]) (StructUtil.jsonify a)	ERROR:does not match	a $class/target mismatch is loud

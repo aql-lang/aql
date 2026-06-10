@@ -1114,6 +1114,31 @@ unconstrained-param strictness, per-schema disjunct collapse).
 > words. Phases 2+ (classes, integration, generic fns, checker,
 > sugar, inference, retrofit, docs) follow.
 
+## 15b. Landed state — Phase 2: generic classes (2026-06-10)
+
+> **Phase 2 LANDED:** `def Box gen [T] class {value:T}` end-to-end.
+> The class constructor consumes the pending spec (fields parsed with
+> placeholders live — the typed=required / valued=default rule reads
+> naturally: `{value:T count:0}`); minting defers to `of`, whose
+> SchemaClass case stamps the instantiation node + the canonical
+> Name onto the substituted ObjectTypeInfo. Verified pins: `typeof`
+> → `Box of [Integer]`; `is Box` true by ancestry, exact
+> instantiation true, sibling AND wider instantiation false (the D10
+> invariance pin — doc §5.6's covariant `is (Box of [Number])
+> → true` example is superseded); `deq` same-instantiation
+> structural, cross-instantiation never; strict make/set typing and
+> `sealed_field` carry over with the canonical name in errors;
+> `[:T]` fields element-check at make; predicate-typed fields run
+> their predicate. Subclassing an INSTANTIATION rides
+> objectWithParentHandler unchanged (`refine (Box of [Integer])
+> {…}`); subclassing the schema itself is rejected. Serialization
+> needed ZERO new code: jsonify's `$class` carries the canonical
+> instantiation string (= the node Name) and `reify` with the
+> instantiated type Value as target round-trips, with the
+> $class/target mismatch loud (D11 as planned; string-only
+> re-instantiation stays a fast-follow). Battery:
+> `lang/spec/generics-class.tsv` §1-§5.
+
 ## 15. Review (2026-06-10) — against the post-2026-06-04 landings
 
 Between the 2026-06-04 refresh and this review, the language landed:
