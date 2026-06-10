@@ -290,12 +290,14 @@ A local credentials vault, backed by the OS keyring where possible
 
 ```bash
 aql vault init                          # initialise, pick backend
-aql vault add github_token 'ghp_xxx'    # store a secret
+aql vault add --from-clipboard github_token   # read from clipboard, then wipe it
+aql vault add --from-stdin github_token       # read one line from stdin
+aql vault add github_token                     # prompt (input not echoed)
 aql vault list                          # aliases and metadata
 aql vault get github_token              # redacted by default
 aql vault get github_token --reveal     # show the value
 aql vault rm github_token               # remove (also: remove, delete)
-aql vault grant github_token <pid>      # issue scoped capability token
+aql vault grant --agent=ci --ttl=2h github_token   # issue scoped capability token
 aql vault revoke <token-id>             # revoke a token
 aql vault providers                     # list built-in provider presets
 aql vault scan .                        # scan files for leaked secrets
@@ -303,10 +305,19 @@ aql vault audit                         # show the structured audit log
 aql vault audit --action proxy.request --last 20
 aql vault audit --json                  # raw JSONL
 aql vault policy apply policy.aql       # declaratively apply policy
-aql vault proxy                         # run local credential broker
+aql vault proxy                         # run local credential broker (loopback only)
 aql vault mcp                           # stdio MCP server over aliases
 aql vault exec gh,openai -- mycmd       # run mycmd with secrets in env
 ```
+
+The secret value is never taken as a command-line argument — that
+would leak it into your shell history and the process listing.
+`vault add` (and `vault rotate`) read it from `--from-clipboard`,
+`--from-stdin`, `--from-env=VAR`, or, with none of those, an
+interactive no-echo prompt. `--from-clipboard` reads the value
+straight from the OS clipboard and wipes the clipboard afterwards;
+it works on macOS (pbpaste/pbcopy), Linux (wl-clipboard on Wayland,
+or xclip / xsel on X11), and Windows (PowerShell).
 
 `aql vault exec` resolves the listed aliases against the keyring
 and spawns the given command with each value injected as an

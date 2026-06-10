@@ -17,6 +17,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -147,8 +148,18 @@ type macKeychain struct{}
 func (*macKeychain) Name() string { return BackendKeychain }
 
 func (*macKeychain) Set(alias, value string) error {
-	// -U updates if the entry already exists; -w passes the value
-	// without echoing to the process listing on most macOS builds.
+	// -U updates if the entry already exists.
+	//
+	// NOTE(argv exposure): the secret is passed as the -w argument, so
+	// it is briefly visible to other *same-user* processes via `ps`
+	// while `security` runs. macOS does not expose another process's
+	// argv across users, and `security` reads its interactive password
+	// prompt from the controlling tty rather than stdin, so there is no
+	// reliable stdin hand-off for this subcommand. A fully argv-free
+	// path needs the native Keychain API (cgo) or a carefully escaped
+	// `security -i` command stream; both want testing on real macOS and
+	// are left as a follow-up. On a single-user machine the residual
+	// risk is small.
 	cmd := exec.Command("security", "add-generic-password",
 		"-s", keyringService, "-a", alias, "-w", value, "-U")
 	out, err := cmd.CombinedOutput()
@@ -240,6 +251,14 @@ type winCred struct{}
 func (*winCred) Name() string { return BackendWinCred }
 
 func (*winCred) Set(alias, value string) error {
+	// NOTE(argv exposure): cmdkey takes the password as the /pass:
+	// argument, briefly visible to same-user processes via Task
+	// Manager / WMI. cmdkey has no stdin input mode and cannot read a
+	// stored password back (see Get), so a robust fix means replacing
+	// this backend with a PowerShell PasswordVault / CredWrite
+	// implementation that also supports retrieval. That wants testing
+	// on real Windows and is left as a follow-up; prefer the file or
+	// 1password backend on Windows in the meantime.
 	cmd := exec.Command("cmdkey",
 		"/generic:"+keyringService+":"+alias,
 		"/user:"+alias, "/pass:"+value)
@@ -460,19 +479,48 @@ func (k *onePasswordKeyring) opVault() string {
 	return k.vault
 }
 
+// opItemTemplate / opField are the minimal subset of the 1Password
+// item-create JSON template needed to store a single concealed
+// credential. The value rides in this JSON (delivered on stdin), never
+// on argv.
+type opItemTemplate struct {
+	Title    string    `json:"title"`
+	Category string    `json:"category"`
+	Fields   []opField `json:"fields"`
+}
+
+type opField struct {
+	ID    string `json:"id"`
+	Type  string `json:"type"`
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
 func (k *onePasswordKeyring) Set(alias, value string) error {
-	// `op item delete` to clear any prior item, then `op item create`.
-	// The delete is best-effort: missing items return non-zero, which
-	// we ignore. Creating is the operation that matters.
+	// Best-effort delete of any prior item first. This uses the item
+	// title, not the secret, so nothing sensitive reaches argv here.
 	_ = exec.Command("op", "item", "delete", k.itemTitle(alias),
 		"--vault", k.opVault()).Run()
-	cmd := exec.Command("op", "item", "create",
-		"--category", "API Credential",
-		"--vault", k.opVault(),
-		"--title", k.itemTitle(alias),
-		"credential="+value)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("op item create: %s: %s", err, strings.TrimSpace(string(out)))
+
+	// Create from a JSON template piped on stdin (`op item create -`)
+	// so the credential value never appears on this process's — or
+	// op's — argv, where a same-user `ps` could read it. The label
+	// "credential" matches what Get reads back.
+	blob, err := json.Marshal(opItemTemplate{
+		Title:    k.itemTitle(alias),
+		Category: "API_CREDENTIAL",
+		Fields:   []opField{{ID: "credential", Type: "CONCEALED", Label: "credential", Value: value}},
+	})
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command("op", "item", "create", "--vault", k.opVault(), "-")
+	cmd.Stdin = bytes.NewReader(blob)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("op item create: %s: %s", err, strings.TrimSpace(out.String()))
 	}
 	return nil
 }

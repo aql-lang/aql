@@ -854,12 +854,27 @@ The `aql` binary ships with a local key vault:
 
 ```bash
 aql vault init
-aql vault add github_token 'ghp_xxx'
+
+# Paste a token you copied from a SaaS console: the value is read
+# from the OS clipboard and the clipboard is wiped immediately after.
+aql vault add --from-clipboard --provider=github github_token
+
+# ...or pipe it in without it touching your shell history:
+printf %s "$TOKEN" | aql vault add --from-stdin --provider=github github_token
+
 aql vault list
-aql vault get github_token
-aql vault grant github_token <process-id>
+aql vault get github_token                       # redacted
+aql vault grant --agent=ci --ttl=2h github_token # scoped capability
 aql vault exec github_token=GITHUB_TOKEN -- gh repo list
 ```
+
+The secret is never passed as a command-line argument (that would
+leak it into your shell history and the process listing). Use
+`--from-clipboard`, `--from-stdin`, `--from-env=VAR`, or the
+interactive no-echo prompt you get when you pass none of them.
+`--from-clipboard` works on macOS, Linux (Wayland or X11), and
+Windows; if you run a clipboard manager, clear its history too,
+since it may keep a copy the wipe cannot reach.
 
 `aql vault exec <alias[=ENV][,...]> -- <cmd> [args...]` runs an
 external command with vault secrets injected as environment

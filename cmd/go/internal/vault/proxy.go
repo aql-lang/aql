@@ -60,10 +60,15 @@ func runProxy(args []string, homeDir string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("vault proxy", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	listen := fs.String("listen", "127.0.0.1:8787", "address to listen on (loopback recommended)")
+	allowPublic := fs.Bool("allow-public", false, "permit binding to a non-loopback address (exposes the credential broker to the network)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	if !isLoopback(*listen) {
+		if !*allowPublic {
+			fmt.Fprintf(stderr, "error: %s is not a loopback address; refusing to expose the credential broker to the network. Re-run with --allow-public to override.\n", *listen)
+			return 1
+		}
 		fmt.Fprintf(stderr, "warning: %s is not a loopback address; the proxy will accept connections from other hosts\n", *listen)
 	}
 	s, err := requireStore(homeDir)
@@ -154,7 +159,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tok, _ := s.FindCapability(token)
+	tok, _ := s.FindCapabilityExact(token)
 	if tok == nil {
 		writeDenied(w, http.StatusUnauthorized, "unknown capability")
 		p.log(started, r, alias, http.StatusUnauthorized, "no-cap")
@@ -281,7 +286,7 @@ func (p *Proxy) recordUse(capID string, costCents int) {
 	if err != nil || s == nil {
 		return
 	}
-	c, idx := s.FindCapability(capID)
+	c, idx := s.FindCapabilityExact(capID)
 	if c == nil {
 		return
 	}

@@ -2,6 +2,7 @@ package vault
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -164,9 +165,33 @@ func (s *Store) SortedAliases() []Alias {
 
 // FindCapability returns the capability matching id (or its short
 // form, the first 8 hex chars) and its index, or (nil, -1).
+//
+// This prefix match is a CLI convenience for commands like `vault
+// revoke <short-id>`. It must NOT be used to authenticate a bearer
+// token — see FindCapabilityExact and the warning there.
 func (s *Store) FindCapability(id string) (*Capability, int) {
 	for i := range s.Capabilities {
 		if s.Capabilities[i].ID == id || strings.HasPrefix(s.Capabilities[i].ID, id) {
+			return &s.Capabilities[i], i
+		}
+	}
+	return nil, -1
+}
+
+// FindCapabilityExact returns the capability whose ID exactly equals
+// id, compared in constant time, or (nil, -1). The proxy authenticates
+// bearer tokens with this.
+//
+// Unlike FindCapability it never accepts a short prefix: as an
+// authentication check, prefix matching is a bypass — any prefix of a
+// live capability ID (in the extreme, a single hex character) would
+// authorize, so a caller could brute-force the 16 nibbles and match
+// almost any outstanding token. The constant-time compare also avoids
+// leaking how much of a guessed token was correct via timing.
+func (s *Store) FindCapabilityExact(id string) (*Capability, int) {
+	idb := []byte(id)
+	for i := range s.Capabilities {
+		if subtle.ConstantTimeCompare([]byte(s.Capabilities[i].ID), idb) == 1 {
 			return &s.Capabilities[i], i
 		}
 	}

@@ -234,7 +234,7 @@ func runInit(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 			pass = p1
 		}
 		if pass == "" {
-			fmt.Fprintln(stderr, "warning: file backend initialized without a passphrase; secrets at rest will be weakly protected")
+			fmt.Fprintln(stderr, "warning: empty passphrase — the file keyring is effectively unencrypted (its salt is stored alongside the ciphertext, so anyone who can read ~/.aql/vault.keyring can recover every secret). Re-run init with a passphrase, or set AQL_VAULT_PASSPHRASE.")
 		}
 		// Initialize an empty keyring file so its presence and
 		// passphrase are validated immediately.
@@ -300,13 +300,14 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 	fs.SetOutput(stderr)
 	fromEnv := fs.String("from-env", "", "read value from this environment variable instead of prompting")
 	fromStdin := fs.Bool("from-stdin", false, "read value from a single line on stdin")
+	fromClipboard := fs.Bool("from-clipboard", false, "read value from the OS clipboard, then wipe the clipboard")
 	provider := fs.String("provider", "", "tag this secret with a provider (openai, anthropic, github, ...)")
 	namespace := fs.String("namespace", "", "tag this secret with a project namespace")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintf(stderr, "error: usage: aql vault add [--from-env=VAR | --from-stdin | --provider=...] <alias>\n")
+		fmt.Fprintf(stderr, "error: usage: aql vault add [--from-env=VAR | --from-stdin | --from-clipboard | --provider=...] <alias>\n")
 		return 1
 	}
 	alias := fs.Arg(0)
@@ -324,7 +325,7 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 		return 1
 	}
 
-	value, source, err := readSecretValue(*fromEnv, *fromStdin, stdin, stdout)
+	value, source, err := readSecretValue(*fromEnv, *fromStdin, *fromClipboard, stdin, stdout)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -358,16 +359,50 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 		Reason: "source=" + source,
 	})
 	fmt.Fprintf(stdout, "stored %s (backend=%s, %d bytes)\n", alias, kr.Name(), len(value))
+	// Only wipe the clipboard once the secret is safely persisted, so a
+	// storage failure leaves the value available for the user to retry.
+	if *fromClipboard {
+		clearClipboardAfterStore(stdout, stderr)
+	}
 	return 0
 }
 
-func readSecretValue(fromEnv string, fromStdin bool, stdin io.Reader, stdout io.Writer) (string, string, error) {
+func readSecretValue(fromEnv string, fromStdin, fromClipboard bool, stdin io.Reader, stdout io.Writer) (string, string, error) {
+	// At most one explicit source may be selected; otherwise we fall
+	// back to an interactive prompt.
+	n := 0
+	if fromEnv != "" {
+		n++
+	}
+	if fromStdin {
+		n++
+	}
+	if fromClipboard {
+		n++
+	}
+	if n > 1 {
+		return "", "", fmt.Errorf("choose only one of --from-env, --from-stdin, --from-clipboard")
+	}
 	if fromEnv != "" {
 		v := os.Getenv(fromEnv)
 		if v == "" {
 			return "", "", fmt.Errorf("environment variable %s is empty or unset", fromEnv)
 		}
 		return v, "env:" + fromEnv, nil
+	}
+	if fromClipboard {
+		clip, err := detectClipboard(hostClipEnv())
+		if err != nil {
+			return "", "", fmt.Errorf("clipboard: %w", err)
+		}
+		v, err := clip.paste()
+		if err != nil {
+			return "", "", fmt.Errorf("reading clipboard: %w", err)
+		}
+		if v == "" {
+			return "", "", fmt.Errorf("clipboard is empty")
+		}
+		return v, "clipboard", nil
 	}
 	if fromStdin {
 		br := bufio.NewReader(stdin)
@@ -855,12 +890,13 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	fs.SetOutput(stderr)
 	fromEnv := fs.String("from-env", "", "read the new value from this environment variable")
 	fromStdin := fs.Bool("from-stdin", false, "read the new value from one line on stdin")
+	fromClipboard := fs.Bool("from-clipboard", false, "read the new value from the OS clipboard, then wipe the clipboard")
 	revokeCaps := fs.Bool("revoke-caps", false, "revoke all capabilities scoped to this alias")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintf(stderr, "error: usage: aql vault rotate [--from-env=VAR | --from-stdin | --revoke-caps] <alias>\n")
+		fmt.Fprintf(stderr, "error: usage: aql vault rotate [--from-env=VAR | --from-stdin | --from-clipboard | --revoke-caps] <alias>\n")
 		return 1
 	}
 	alias := fs.Arg(0)
@@ -879,7 +915,7 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		return 1
 	}
 
-	value, source, err := readSecretValue(*fromEnv, *fromStdin, stdin, stdout)
+	value, source, err := readSecretValue(*fromEnv, *fromStdin, *fromClipboard, stdin, stdout)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -923,6 +959,9 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		fmt.Fprintf(stdout, "; revoked %d capability(s)", revoked)
 	}
 	fmt.Fprintln(stdout)
+	if *fromClipboard {
+		clearClipboardAfterStore(stdout, stderr)
+	}
 	return 0
 }
 
