@@ -1,9 +1,13 @@
 # Generic Types — Design and Plan
 
 Status: design draft, no implementation. Refreshed 2026-06-04 against
-the current type system (the TYPE-UNIFORM `def`/`refine` surface and the
+the current type system (the TYPE-UNIFORM `def`/`refine` syntax and the
 `eng/go` + `lang/go/native` layout) and the set-theoretic extensions
-proposed in this design round.
+proposed in this design round. **Reviewed 2026-06-10 against the
+classes / surfaces / errors landings — see §15. The core design has
+aged well; §15 lists what is now cheaper, what is newly in scope
+(generic classes), and the revision pass needed before Phase 0
+lock-down.**
 
 Related design notes:
 - `elixir-types-in-aql-report.0.md` — set-theoretic refinements (`tnot`
@@ -1057,3 +1061,133 @@ unconstrained-param strictness, per-schema disjunct collapse).
 - **Phased rollout:** seven phases, with the canonical core landing
   before the sugar so the engine is exercised independently of the
   parser changes.
+
+## 15. Review (2026-06-10) — against the post-2026-06-04 landings
+
+Between the 2026-06-04 refresh and this review, the language landed:
+classes (`Ideal/Class`, sealed nominal records, strict field typing,
+`const`), the open Object / container 2×2, **surfaces** (`Ideal/
+Surface`, `Self`, `exposes`, S1+S2+S3 — `design/SURFACES.0.md`),
+`tnot` + `dynamic()` + dead-overload detection (the three
+elixir-report dependencies this note cites as future), `raise` + the
+loud-failure batch (`design/ERRORS.0.md`), BigInteger/BigDecimal, and
+in-memory parsing. The review below is against that state.
+
+### 15.1 What aged well — and is now cheaper
+
+1. **The four-word `RunInCheckMode` core is now routine, not novel.**
+   §10.1's "all four words execute during the carrier pass" pattern
+   has since been exercised by `class`, `surface`, `exposes`, `const`,
+   and `fnsig` — all install/construct statically today. Confidence
+   in Phase 1 should be high.
+2. **`TypeParam{name}` has a landed precedent: `Type/Self`**
+   (FixedID 104). A placeholder type node substituted at use time is
+   exactly how surfaces work, and the machinery generalises directly:
+   `eng.SubstituteSelf` is a one-parameter version of §9.2.1's
+   `substituteCarrier`; `eng.FnSigSatisfiesSpec` already implements
+   the contravariant-params / covariant-returns satisfaction check
+   §7.4 needs; and `engine.go::checkModeSurfaceShape` +
+   `spliceCheckResults` are a working miniature of §9.2's
+   "substitute the shape, synthesise carriers, splice" pipeline.
+   The §9.6 cost estimate for the substitution/satisfaction half
+   shrinks accordingly.
+3. **The landed dependencies are present-tense now.** `tnot` (so
+   negated bounds and the disjointness check of §4/§7.2 work today),
+   `dynamic()` (the §9.2.2 inference-failure fallback exists), and
+   dead-overload detection (§9.7's counterpart) are all on main.
+4. **`InstallType` per-kind branches are the established install
+   route.** TypeSchema installation (§7.1) slots in exactly like the
+   disjunct / negation / depscalar / class / surface branches — the
+   surface branch is a fresh template to copy, including the
+   shared-payload + unifier-on-the-minted-node discipline.
+5. **`of` naming still holds** (`apply` still taken), and all four
+   words (`gen`, `extends`, `default`, `of`) remain unclaimed as of
+   this review — verified, including module preambles (no `def gen /
+   of / extends / default` anywhere).
+
+### 15.2 What changed under the design — revision needed
+
+1. **Surfaces are the missing constraint story — §8.2 is superseded.**
+   `def Comparable (Integer tor Decimal tor String)` should be a
+   **surface** (`def Comparable surface {cmp: (fnsig [[Self Self]
+   [Integer]])}` …), and `T extends Shape` membership needs **zero
+   new machinery**: surface membership already rides `v.Is`/`unify`
+   via the surfaceUnifier, which is exactly the `isSubtype` predicate
+   §7.2 specifies. S4 of the surfaces plan and §7.2 here are the same
+   line of code. More importantly, §9.4's hardest subtlety —
+   *"operations on unconstrained TypeParam carriers"* — now has a
+   landed answer for surface-bounded parameters: give the `TypeParam`
+   carrier its bound as Parent and `checkModeSurfaceShape` (S2)
+   already types required-operation calls via the substituted shape.
+   The recommended strict rule ("a TypeParam carrier matches only
+   constraint-licensed operations") is precisely what S2 implements;
+   `<T extends Comparable>` licensing `cmp` falls out of it.
+2. **Generic classes are newly in scope — the doc must cover them.**
+   Every worked example parameterises `refine Record`; classes are
+   now the language's primary nominal record kind (sealed, strict
+   fields, eager defaults, `make`, `Ideal/Class` lattice). A revision
+   needs a section deciding: `def Box gen [T] class {value:T}`
+   (schema rule says a TYPE entry is a required field — a `TypeParam`
+   is a type, so `{value:T}` reads naturally); lattice placement of
+   instantiations (one minted node per memoised `(schema, args)`
+   under `Class/Box`?); `MakeClassFieldValue` against a substituted
+   constraint (should Just Work — it takes a constraint Value);
+   instance equality across instantiations (`deq` requires the same
+   exact class — is `Box of [Integer]` the "same exact class" per
+   memoised node? yes, if instantiation is memoised); and —
+   **entirely absent from this note** — serialization: what does
+   `$class` carry for an instantiated class, and what does
+   `StructUtil.reify` accept as a target? An instantiation-naming
+   scheme (`"Box of [Integer]"`? re-instantiation at reify time?)
+   is an open question to add to §12.
+3. **`extends` vs `exposes` vocabulary.** With `exposes` landed as
+   the conformance *declaration* verb, `extends` remains right for
+   the constraint *question* — but the doc should state the unifying
+   doctrine explicitly: `extends C` means **`Is`-membership in C**,
+   uniformly — lattice bound, predicate refinement, disjunct,
+   negation, or surface. The post-design `v.Is(t)` symmetry work
+   (REFINE-NEWTYPE-VS-SUBSET, surfaces) makes this one predicate;
+   the design gets simpler by saying so.
+4. **Stale references to refresh.** (a) `LANGREF.md` / `SIGNATURES.md`
+   / `TYPES.md` no longer exist — the user docs are now REFERENCE.md
+   / TUTORIAL.md / HOWTO.md / EXPLANATION.md (Phase 7 and the §4
+   survey citations need re-aiming). (b) `Decimal` (§8.2) is not a
+   type; `BigDecimal` landed (`0d` literals). (c) "soon closed under
+   negation via `tnot`" (§1) — landed. (d) `fnsig` is now the
+   canonical type-only shape word (and runs in check mode); examples
+   like `def Mapper gen [T U] fn [[T] [U]]` should standardise on
+   `fnsig [[T] [U]]`, noting the map-literal parens gotcha surfaces
+   hit (`{m: (fnsig …)}`).
+5. **Claiming core words now has a demonstrated migration hazard.**
+   Landing `case` broke the `aql:test` module preamble (`def case` →
+   reserved_word; renamed `test-case`). `default` is especially
+   collision-prone in user code. Phase 1 should include the sweep
+   step: grep module preambles + the spec corpus for bindings of the
+   four names before registration (clean as of this review).
+6. **Diagnostics must meet the Phase-D quality bar.** `raise`,
+   `def_error` / `no_value_error` blame-shifting, and runtime
+   `uncalled_function` set the expectation (ERRORS.0.md §7): the span
+   points at the causing site, a hint says what to do, the code is
+   dispatchable. §9.2's `constraint_violation` (pointing at the
+   parameter declaration via `WithPos`) and `unbound_param` (listing
+   the unbound parameters — open question 5) were already written in
+   this spirit; the error infrastructure they need (`AqlErrorHint`,
+   `makeAqlErrorAt`) exists now. Note `arity_mismatch` already exists
+   as a code — reuse is consistent.
+7. **Small synergy:** `case` matches via unify, so instantiations
+   work as `case` matches for free (`case v [(Box of [Integer])
+   "int-box" …]`) — worth a spec row when generics land.
+
+### 15.3 Verdict
+
+The architecture — concatenative core + sugar-as-rewrite, schemas as
+installed type-stack values, substitution through the carrier
+checker, monomorphization = the existing fn-summary memo — survives
+contact with six months of type-system landings untouched; nothing
+landed contradicts it, and three of its riskiest pieces (placeholder
+substitution, variance-aware satisfaction, check-mode shape splicing)
+now have working precedents to copy. The required revision pass is
+additive: a generic-classes section (with the serialization open
+question), the surface-based constraint story replacing §8.2's
+tor-alias, the doc-reference refresh, and the word-claim sweep.
+Recommend doing that revision as the Phase 0 lock-down artifact.
