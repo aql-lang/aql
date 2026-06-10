@@ -796,7 +796,7 @@ instance built with `make` carries the type's tag, so it satisfies
 both parameter and return slots of that type (and of any supertype):
 
 ```
-def Box (refine Object {v:0})
+def Box (class {v:0})
 def wrap fn [[n:Integer] [Box] [make Box {v:n}]]
 typeof (wrap 5)               # returns Box
 (wrap 5) get 'v'              # returns 5
@@ -1245,7 +1245,7 @@ consequences:
 | `is` | Type-compatibility test | `42 is Number` returns `true` |
 | `convert` | Parse/serialise a scalar to a type | `convert Integer "42"` returns `42` |
 | `base` | Zero / base value for a type | `base Integer` returns `0` |
-| `refine` | Build a refinement of a base type | `refine Object {count:0}` |
+| `refine` | Build a refinement of a base type | `class {count:0}` |
 | `make` | Construct typed value or instance | `make Point [1 2]` |
 
 > **`convert` parses text; it does not re-bucket numbers.** It turns a
@@ -1260,7 +1260,7 @@ consequences:
 
 Named types are introduced by pairing `def` with a `refine`
 expression: `def Point refine Record [x:Number y:Number]`,
-`def Counter refine Object {count: 0}`, `def Inventory refine Table
+`def Counter class {count: 0}`, `def Inventory refine Table
 Row`. See **[HOWTO: Define a record/table/object type](HOWTO.md#define-a-record-type)**.
 
 ### Inspection

@@ -344,12 +344,17 @@ func refineBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 func installIdeals(r *Registry) {
 	if obj := r.Ideals.Get("Object"); obj != nil {
 		obj.Construct = func(base, arg Value, r *Registry) ([]Value, error) {
-			// A bare Object literal builds a fresh object type; an
-			// existing object type builds a subtype of it.
+			// An existing class type builds a subtype of it
+			// (`def Bar refine Foo {…}`). The bare-Object form is
+			// REMOVED: classes are defined with the `class` word
+			// (design/CLASS-OBJECT.0.md — no deprecated aliases).
 			if IsObjectType(base) {
 				return objectWithParentHandler([]Value{arg, base}, nil, nil, r)
 			}
-			return objectHandler([]Value{arg}, nil, nil, r)
+			return nil, r.AqlErrorHint("refine_error",
+				"refine Object is no longer the class form",
+				"refine",
+				"define a class instead: def Foo class {…}; subclass with def Bar refine Foo {…}")
 		}
 	}
 	if rec := r.Ideals.Get("Record"); rec != nil {

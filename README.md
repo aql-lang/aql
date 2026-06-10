@@ -157,6 +157,14 @@ mid-2026 snapshots most commonly need these renames:
 - **Module fn exports use the referent form:**
   `export "Mod" {double: double/r}` (a bare fn name in an export map
   would be invoked, not referenced).
+- **`refine Object {…}` is removed — classes are defined with `class`:**
+  `def Foo class {x:1}` (paren-free), subclass via `def Bar refine Foo
+  {…}`. Class instances are flat (no prototype chain), **sealed**
+  (undeclared field writes raise `sealed_field`), strictly typed at
+  `make` and `set` (no silent conversion; predicate field types run),
+  root under `Ideal/Class` (so `p is Object` is now false), and
+  serialize as pure JSON with a `$class` key (`StructUtil.jsonify` /
+  `StructUtil.reify`).
 - **`set` mutates Store/Object/Array in place and returns nothing** —
   `def r (b set k v)` binds nothing; read the container back instead.
   On an immutable **Map**, `set` is copy-returning: `{a:1} set b 2`

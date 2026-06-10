@@ -453,7 +453,7 @@ see [Tutorial §3](TUTORIAL.md#the-argument-order-rule) for why):
 
 <!-- aql-test: skip -->
 ```
-def Counter (refine Object {count: 0})
+def Counter (class {count: 0})
 
 def c (make Counter {})
 c 1 "count" set                       # c.count := 1
@@ -470,7 +470,7 @@ The same parentheses are needed to read a field **straight off a fresh
 construct** — dotted access binds tightly to its immediate receiver:
 
 ```
-def Counter (refine Object {count: 0})
+def Counter (class {count: 0})
 (make Counter {}).count               # returns 0 — parenthesise the make
 make Counter {} .count                # returns error — parses as make Counter ({}.count)
 ```
@@ -488,8 +488,8 @@ NestedType {})`:
 
 <!-- aql-test: skip -->
 ```
-def Bits (refine Object {})
-def Foo  (refine Object {bits: (make Bits {})})   # construct the default
+def Bits (class {})
+def Foo  (class {bits: (make Bits {})})   # construct the default
 
 def inst (make Foo {})
 inst.bits 1 "0" set                               # mutate the nested object
@@ -506,7 +506,7 @@ object.
 
 AQL objects hold **fields, not methods**: the field map has no method
 slot and there is no inline dispatch. Putting a body in the map
-(`refine Object {count: 0, inc: [count 1 add]}`) does **not** create a
+(`class {count: 0, inc: [count 1 add]}`) does **not** create a
 callable — that just stores a list under the field `inc`, and `c inc`
 raises `undefined_word`. Model a method as an ordinary typed `fn`
 whose first parameter is the instance, then invoke it in stack form
@@ -516,7 +516,7 @@ A read-only accessor returns a value derived from the instance:
 
 <!-- aql-test: skip -->
 ```
-def Counter (refine Object {count: 0})
+def Counter (class {count: 0})
 def doubled fn [[c:Counter] [Integer] [c.count 2 mul]]
 
 def c (make Counter {})
@@ -530,7 +530,7 @@ end instead if you want to chain calls:
 
 <!-- aql-test: skip -->
 ```
-def Counter (refine Object {count: 0})
+def Counter (class {count: 0})
 def bump fn [[c:Counter] [] [c (c.count 1 add) "count" set]]
 
 def c (make Counter {})
@@ -596,7 +596,7 @@ the stack empty (no throwaway sentinel needed), and it produces no result:
 
 <!-- aql-test: skip -->
 ```
-def Box (refine Object {sum: 0})
+def Box (class {sum: 0})
 def b (make Box {})
 [1 2 3] for-each [var [[x] b (b.sum x add) "sum" set]]
 b.sum                         # returns 6

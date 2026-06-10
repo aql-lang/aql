@@ -57,7 +57,7 @@ func TestTypeTable(t *testing.T) {
 
 // type Object {fields} builds an object type; make + .field works.
 func TestTypeObject(t *testing.T) {
-	got := runOne(t, "def Acct (refine Object {bal:Number})\n( make Acct {bal:50} ) .bal")
+	got := runOne(t, "def Acct (class {bal:Number})\n( make Acct {bal:50} ) .bal")
 	if len(got) != 1 || got[0] != int64(50) {
 		t.Errorf("got %v, want [50]", got)
 	}
@@ -66,7 +66,7 @@ func TestTypeObject(t *testing.T) {
 // Inheritance: applying an existing object type extends it. The child
 // instance carries both the parent's and its own fields.
 func TestTypeObjectInheritance(t *testing.T) {
-	got := runOne(t, "def Animal (refine Object {legs:Integer})\n"+
+	got := runOne(t, "def Animal (class {legs:Integer})\n"+
 		"def Dog (refine Animal {breed:String})\n"+
 		"( make Dog {legs:4 breed:\"lab\"} ) .legs")
 	if len(got) != 1 || got[0] != int64(4) {
@@ -78,7 +78,7 @@ func TestTypeObjectInheritance(t *testing.T) {
 func TestTypeObjectInheritanceIsCheck(t *testing.T) {
 	// `is` yields a boolean; (*AQL).Run stringifies non-int/string
 	// results, so the boolean surfaces as the string "true".
-	got := runOne(t, "def Animal (refine Object {legs:Integer})\n"+
+	got := runOne(t, "def Animal (class {legs:Integer})\n"+
 		"def Dog (refine Animal {breed:String})\n"+
 		"make Dog {legs:4 breed:\"lab\"} is Animal")
 	if len(got) != 1 || got[0] != "true" {

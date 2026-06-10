@@ -376,6 +376,17 @@ func MakeClassFieldValue(val Value, constraint Value, r *Registry) (Value, error
 			constraint.Parent.Name, val.Parent.Name, val.String())
 	}
 
+	// Class-typed field ({i:Inner}) — nominal check: the value must be
+	// an instance of that class (or a subclass, via the lattice).
+	if IsObjectType(constraint) {
+		info, _ := AsObjectType(constraint)
+		if IsObjectInstance(val) && info.Type != nil && val.Parent.ConformsTo(info.Type) {
+			return val, nil
+		}
+		return Value{}, fmt.Errorf("expected a %s instance, got %s (%s)",
+			info.Name, val.Parent.Name, val.String())
+	}
+
 	// Type constraint — bare node, predicate type, disjunction.
 	// UnifyExplainR runs predicates and reports the reason on failure.
 	unified, uerr := UnifyExplainR(constraint, val, r)

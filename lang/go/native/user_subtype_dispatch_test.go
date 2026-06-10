@@ -7,7 +7,7 @@ import (
 )
 
 // User-defined refinement subtypes must dispatch like system types — a
-// fn parameter declared `[f:Foo]` (where Foo is `def Foo refine Object
+// fn parameter declared `[f:Foo]` (where Foo is `def Foo class
 // {...}`) accepts ONLY Foo instances and REJECTS unrelated values, just
 // as `[f:Integer]` does.
 //
@@ -55,7 +55,7 @@ func TestUserTypeBindingShape_ObjectRefinement(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Foo"),
 		NewOpenParen(),
-		NewWord("refine"), NewWord("Object"), NewMap(NewOrderedMap()),
+		NewWord("class"), NewMap(NewOrderedMap()),
 		NewCloseParen(),
 	})
 
@@ -111,9 +111,9 @@ func TestResolveSigType_AllUserTypeKinds(t *testing.T) {
 		defTail []Value
 	}{
 		{
-			name: "refine Object {}",
+			name: "class {}",
 			defTail: []Value{
-				NewWord("refine"), NewWord("Object"), NewMap(NewOrderedMap()),
+				NewWord("class"), NewMap(NewOrderedMap()),
 			},
 		},
 		{
@@ -208,7 +208,7 @@ func TestProbeFooInstance_DEBUG(t *testing.T) {
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Foo"),
 		NewOpenParen(),
-		NewWord("refine"), NewWord("Object"), NewMap(NewOrderedMap()),
+		NewWord("class"), NewMap(NewOrderedMap()),
 		NewCloseParen(),
 	})
 

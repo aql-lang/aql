@@ -9,7 +9,7 @@
 #
 # The earlier bug: `ResolveDefType` in eng/go/fn_params.go fell through
 # to `return TAny` for any populated type body other than Record /
-# Options — so `[f:Foo]` where Foo was a `refine Object` body became a
+# Options — so `[f:Foo]` where Foo was a `class` body became a
 # wildcard. Compounded by missing per-kind Behavior.Match wiring for
 # Disjunct / DepScalar / bare nominal subtypes (each minted a lattice
 # node with the default lattice-walk Match, which rejected every value
@@ -36,22 +36,22 @@
 
 
 # ====================================================================
-# 1. Object refinement — `def Foo (refine Object {…})`
+# 1. Object refinement — `def Foo (class {…})`
 # ====================================================================
 # A typed fn param [f:Foo] should accept Foo instances built with
 # `make Foo {…}` and reject unrelated values.
 
-def Foo (refine Object {}) def g fn [[f:Foo] [Integer] [99]] (make Foo {}) g	99	Foo accepts its own instance
-def Foo (refine Object {x:0}) def g fn [[f:Foo] [Integer] [99]] (make Foo {x:5}) g	99	Foo with field, accepts instance carrying field
-def Foo (refine Object {}) def g fn [[f:Foo] [Integer] [99]] 42 g	ERROR:signature	Foo rejects Integer
-def Foo (refine Object {}) def g fn [[f:Foo] [Integer] [99]] 'hi' g	ERROR:signature	Foo rejects String
-def Foo (refine Object {}) def g fn [[f:Foo] [Integer] [99]] [1,2,3] g	ERROR:signature	Foo rejects List
+def Foo (class {}) def g fn [[f:Foo] [Integer] [99]] (make Foo {}) g	99	Foo accepts its own instance
+def Foo (class {x:0}) def g fn [[f:Foo] [Integer] [99]] (make Foo {x:5}) g	99	Foo with field, accepts instance carrying field
+def Foo (class {}) def g fn [[f:Foo] [Integer] [99]] 42 g	ERROR:signature	Foo rejects Integer
+def Foo (class {}) def g fn [[f:Foo] [Integer] [99]] 'hi' g	ERROR:signature	Foo rejects String
+def Foo (class {}) def g fn [[f:Foo] [Integer] [99]] [1,2,3] g	ERROR:signature	Foo rejects List
 
 # Regression for §6.1 — with Foo dispatching correctly, no need for
 # `end` between `g` and the next native fn (`print`-equivalent). Before
 # the fix this leaked the user-fn call into the next word because the
 # wildcard match captured the next word as an argument.
-def Foo (refine Object {}) def g fn [[f:Foo] [Integer] [99]] (make Foo {}) g lengthq [ 1 ]	99 1	dispatch finishes before next word
+def Foo (class {}) def g fn [[f:Foo] [Integer] [99]] (make Foo {}) g lengthq [ 1 ]	99 1	dispatch finishes before next word
 
 
 # ====================================================================
@@ -157,8 +157,8 @@ def Pos refine Integer 42 is Pos	false	bare refine: 42's tag is Integer, not Pos
 
 # Object refine: an instance constructed via `make Foo {}` carries
 # the Foo tag. So `(make Foo {}) is Foo` is true.
-def Foo refine Object {} (make Foo {}) is Foo	true	Object: instance carries Foo tag
-def Foo refine Object {} 42 is Foo	false	Integer's tag is not Foo
+def Foo class {} (make Foo {}) is Foo	true	Object: instance carries Foo tag
+def Foo class {} 42 is Foo	false	Integer's tag is not Foo
 
 # Builtin: lattice subtyping. 42's tag is Integer; Integer ≤ Number ≤ Scalar.
 42 is Integer	true	exact tag match
@@ -212,12 +212,12 @@ def f fn [[x:Any] [Integer] [42]] none f	42	Any accepts None
 # return annotations: an instance satisfies its own type, and a wrong
 # value is now a real (not silent) type error.
 
-def Foo (refine Object {}) def mk fn [[] [Foo] [make Foo {}]] typeof (mk)	Foo	Object return: instance satisfies its own type
-def Foo (refine Object {x:0}) def mk fn [[] [Foo] [make Foo {x:5}]] (mk) get 'x'	5	Object return: returned instance is usable
-def Foo (refine Object {}) def id fn [[f:Foo] [Foo] [f]] typeof (id (make Foo {}))	Foo	Object param+return: pass-through keeps the type
-def Foo (refine Object {}) def mk fn [[] [Foo] [42]] mk	ERROR:return value	Object return rejects Integer (real static safety, not Any)
-def Foo (refine Object {}) def mk fn [[] [Foo] ['hi']] mk	ERROR:return value	Object return rejects String
-def Bar (refine Object {n:0}) def Foo (refine Bar {}) def mk fn [[] [Bar] [make Foo {n:1}]] typeof (mk)	Foo	Object return admits a subtype instance (Foo is-a Bar)
+def Foo (class {}) def mk fn [[] [Foo] [make Foo {}]] typeof (mk)	Foo	Object return: instance satisfies its own type
+def Foo (class {x:0}) def mk fn [[] [Foo] [make Foo {x:5}]] (mk) get 'x'	5	Object return: returned instance is usable
+def Foo (class {}) def id fn [[f:Foo] [Foo] [f]] typeof (id (make Foo {}))	Foo	Object param+return: pass-through keeps the type
+def Foo (class {}) def mk fn [[] [Foo] [42]] mk	ERROR:return value	Object return rejects Integer (real static safety, not Any)
+def Foo (class {}) def mk fn [[] [Foo] ['hi']] mk	ERROR:return value	Object return rejects String
+def Bar (class {n:0}) def Foo (refine Bar {}) def mk fn [[] [Bar] [make Foo {n:1}]] typeof (mk)	Foo	Object return admits a subtype instance (Foo is-a Bar)
 
 # ====================================================================
 # 8. User types in the RETURN position — negative cases
@@ -226,9 +226,9 @@ def Bar (refine Object {n:0}) def Foo (refine Bar {}) def mk fn [[] [Bar] [make 
 # these all degraded to `Any` and silently passed (or raised a bogus
 # arity error); each is now a precise, intentional type/word error.
 
-def A (refine Object {}) def B (refine Object {}) def mk fn [[] [A] [make B {}]] mk	ERROR:expected A, got B	sibling Object types are distinct in the return slot
-def Bar (refine Object {}) def Foo (refine Bar {}) def mk fn [[] [Foo] [make Bar {}]] mk	ERROR:expected Foo, got Bar	supertype instance is not the declared subtype return
+def A (class {}) def B (class {}) def mk fn [[] [A] [make B {}]] mk	ERROR:expected A, got B	sibling Object types are distinct in the return slot
+def Bar (class {}) def Foo (refine Bar {}) def mk fn [[] [Foo] [make Bar {}]] mk	ERROR:expected Foo, got Bar	supertype instance is not the declared subtype return
 def Pos (refine Integer) def mk fn [[] [Pos] [7]] mk	ERROR:expected Pos, got Integer	bare scalar refine return rejects a plain base value (nominal, matches param side)
-def Foo (refine Object {}) def mk fn [[] [Foo] [(make Foo {}) (make Foo {})]] mk	ERROR:return value(s)	arity check still fires for a user-typed return
-def Foo (refine Object {}) def mk fn [[] [Integer Foo] [1 2]] mk	ERROR:return value 2	per-slot return typing rejects the wrong type in a later slot
+def Foo (class {}) def mk fn [[] [Foo] [(make Foo {}) (make Foo {})]] mk	ERROR:return value(s)	arity check still fires for a user-typed return
+def Foo (class {}) def mk fn [[] [Integer Foo] [1 2]] mk	ERROR:return value 2	per-slot return typing rejects the wrong type in a later slot
 def mk fn [[] [Nope] [42]] mk	ERROR:undefined word	an unknown type name in the return slot errors, it does not silently become Any

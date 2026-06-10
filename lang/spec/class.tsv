@@ -63,3 +63,8 @@ def P class {x:1, y:2} (make P {}) size	2	size: the flat field count
 def P class {x:1} convert Map (make P {})	{x:1}	convert Map: the flat field map
 "aql:struct-util" import end  def P class {x:1, y:2} StructUtil.items (make P {y:9})	[['x' 1] ['y' 9]]	items: every field enumerates (defaults included)
 def P class {x:1} (make P {x:1}) cmp (make P {x:2})	-1	cmp: same-class instances order field-wise
+#
+# §8  the removed legacy form + paren-free def
+def Box class {v:0} def b make Box {v:9} b.v	9	def + make is paren-free — the nested-collection shape, like def name fn […]
+def Box (refine Object {v:0})	ERROR:refine_error	refine Object is removed — class {…} is the class form (no alias)
+refine Object {v:0}	ERROR:refine_error	…also without def
