@@ -1197,6 +1197,45 @@ unconstrained-param strictness, per-schema disjunct collapse).
 > Battery: lang/spec/generics-fn.tsv; Go lifecycle pins in
 > lang/go/test/generics_core_test.go (nested-call binding alignment).
 
+## 15e. Landed state — Phase 5: static check mode (2026-06-10)
+
+> **Phase 5 LANDED**, structurally lighter than §9's sketch because
+> schemas and `of` are REAL in check mode (RunInCheckMode) — no
+> carrier substitution machinery was needed for instantiation, and a
+> bound-violating `of` is loud in check mode exactly as at runtime
+> (`constraint_violation` aborts; the diagnostics registry already
+> carried the severities). What landed: (1) **call-site analysis** —
+> `buildFnBodyReturnsFn` infers the parameter bindings from the arg
+> carriers (`InferGenBindings` extended: a typed-list/map CARRIER —
+> what StripToCarriers makes of a list literal — binds T from its
+> child constraint; concrete maps bind from their values), installs
+> them around `AnalyseFnBody` (so body-internal `of [T]` resolves;
+> popped explicitly — no DefCleanup frame on this path), and
+> substitutes them into declared returns naming a parameter
+> (`GenBindingCarrier`: node → carrier, tor-merge → disjunct
+> carrier). The FnSummaries memo key already includes arg types, so
+> each instantiation analyses once — monomorphization for free, as
+> §9.6 hoped. An uninferable return parameter reports
+> `unbound_param` (deduped — the dynamic-help example generator's
+> synthetic install-time invocation would double it) and degrades to
+> dynamic(Any), never silent Any. (2) **Declaration-time abstract
+> check** — fnHandler analyses each generic body at construction
+> with carriers of the declared param types: placeholder-parent
+> carriers enforce §9.4 (ops on bare T flagged; `(T extends Number)`
+> reaches Number ops through the placeholder's lattice parent —
+> the D9 minting earns its keep), and undefined words surface at the
+> def. Non-generic fns get an EQUIVALENT analysis incidentally via
+> the dynamic-help example generator (synthesized example calls);
+> generic params have no synthesizable examples, hence the explicit
+> path. (3) `checkModeSurfaceShape`'s scan now resolves raw Word
+> tokens via the def stack, so a surface-bounded placeholder carrier
+> (S4×S2) types its contract ops inside body analysis. (4) The
+> per-schema disjunct collapse §10.4 anticipated is NOT needed:
+> JoinCarriers' existing cap widens sibling instantiations to their
+> common ancestor, which IS the schema node — a precise widening
+> (`TestGenCheckJoinNoExplosion` is the canary that would justify
+> revisiting). Battery: lang/go/test/generics_check_test.go.
+
 ## 15. Review (2026-06-10) — against the post-2026-06-04 landings
 
 Between the 2026-06-04 refresh and this review, the language landed:

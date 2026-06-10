@@ -112,47 +112,104 @@ func InferGenBindings(spec *GenSpecInfo, params []FnParam, args []Value) map[str
 			}
 			continue
 		}
-		// Typed-list pattern over a placeholder (`xs:[:T]`): T binds
-		// the union of the element types. The child survives schema
-		// parsing as either the placeholder literal or a raw Word.
-		if p.Pattern != nil && IsTypedList(*p.Pattern) {
-			ci, err := AsChildType(*p.Pattern)
-			if err != nil {
-				continue
-			}
-			name := TypeParamName(&ci.Child)
-			if name == "" && IsWord(ci.Child) {
-				if w, werr := AsWord(ci.Child); werr == nil {
-					name = w.Name
-				}
-			}
-			if name == "" || !isParam[name] {
-				continue
-			}
-			if arg.Parent != nil && arg.Parent.Equal(TList) && IsConcrete(arg) {
-				lst, lerr := AsList(arg)
-				if lerr == nil {
-					for j := 0; j < lst.Len(); j++ {
-						el := lst.Get(j)
-						if el.Parent != nil {
-							merge(name, NewTypeLiteral(el.Parent))
-						}
-					}
-				}
-			}
+		// Typed-list/map pattern over a placeholder (`xs:[:T]`,
+		// `m:{:T}`): T binds the union of the element types.
+		if p.Pattern != nil && (IsTypedList(*p.Pattern) || IsTypedMap(*p.Pattern)) {
+			inferFromChildPattern(merge, isParam, *p.Pattern, arg)
 		}
 	}
 	return bindings
 }
 
+// inferFromChildPattern handles one `[:T]` / `{:T}` param pattern
+// against its call argument. The pattern child survives signature
+// parsing as either the placeholder literal (ResolveSigChildParam) or
+// a raw Word naming the parameter. The argument contributes element
+// evidence three ways: a concrete list/map merges each element's
+// type; a typed-list/map value or CARRIER (check mode strips list
+// literals to typed-list carriers) merges the child constraint
+// directly.
+func inferFromChildPattern(merge func(string, Value), isParam map[string]bool, pattern, arg Value) {
+	ci, err := AsChildType(pattern)
+	if err != nil {
+		return
+	}
+	name := TypeParamName(&ci.Child)
+	if name == "" && IsWord(ci.Child) {
+		if w, werr := AsWord(ci.Child); werr == nil {
+			name = w.Name
+		}
+	}
+	if name == "" || !isParam[name] {
+		return
+	}
+	switch {
+	case IsTypedList(arg) || IsTypedMap(arg):
+		if aci, aerr := AsChildType(arg); aerr == nil {
+			switch {
+			case IsBareTypeNode(aci.Child):
+				merge(name, aci.Child)
+			case aci.Child.Parent != nil:
+				merge(name, NewTypeLiteral(aci.Child.Parent))
+			}
+		}
+	case arg.Parent != nil && arg.Parent.Equal(TList) && IsConcrete(arg):
+		if lst, lerr := AsList(arg); lerr == nil {
+			for j := 0; j < lst.Len(); j++ {
+				el := lst.Get(j)
+				if el.Parent != nil {
+					merge(name, NewTypeLiteral(el.Parent))
+				}
+			}
+		}
+	case arg.Parent != nil && arg.Parent.Equal(TMap) && IsConcrete(arg):
+		if m, merr := AsMap(arg); merr == nil && m != nil {
+			for _, k := range m.Keys() {
+				if v, ok := m.Get(k); ok && v.Parent != nil {
+					merge(name, NewTypeLiteral(v.Parent))
+				}
+			}
+		}
+	}
+}
+
+// GenBindingCarrier converts one inferred binding value into a
+// check-mode carrier: a binding that denotes a lattice node becomes a
+// carrier of that node; a tor-merged disjunct becomes a disjunct
+// carrier (the JoinCarriers representation); anything else falls back
+// to its Parent.
+func GenBindingCarrier(r *Registry, b Value) Value {
+	if node := typeArgNode(b); node != nil {
+		return NewCarrier(CanonicalType(r, node))
+	}
+	if IsDisjunct(b) {
+		c := b
+		c.Carrier = true
+		return c
+	}
+	if b.Parent != nil {
+		return NewCarrier(b.Parent)
+	}
+	return NewCarrier(TAny)
+}
+
 // InstallGenCallBindings infers and installs the body-scoped type
-// bindings for one generic-fn call. MUST be called AFTER the body's
-// def snapshot is taken: the bindings are then torn down by the
-// existing DefCleanup truncation — NOT by the undef tail, whose
-// capitalised-name path would Retire the bound type's canonical node
-// (undef T with T→Integer must never retire Integer).
-func InstallGenCallBindings(r *Registry, spec *GenSpecInfo, params []FnParam, args []Value) {
-	bindings := InferGenBindings(spec, params, args)
+// bindings for one generic-fn call. At RUNTIME it MUST be called
+// AFTER the body's def snapshot is taken: the bindings are then torn
+// down by the existing DefCleanup truncation — NOT by the undef tail,
+// whose capitalised-name path would Retire the bound type's canonical
+// node (undef T with T→Integer must never retire Integer). Returns
+// the installed names so check-mode callers (which have no DefCleanup
+// frame) can pop them explicitly via Defs.Pop — also non-retiring.
+func InstallGenCallBindings(r *Registry, spec *GenSpecInfo, params []FnParam, args []Value) []string {
+	return InstallGenBindingMap(r, spec, InferGenBindings(spec, params, args))
+}
+
+// InstallGenBindingMap installs an already-inferred binding map as
+// type bindings, in declared-parameter order. See
+// InstallGenCallBindings for the teardown contract.
+func InstallGenBindingMap(r *Registry, spec *GenSpecInfo, bindings map[string]Value) []string {
+	var installed []string
 	for _, p := range spec.Params {
 		b, ok := bindings[p.Name]
 		if !ok {
@@ -163,5 +220,7 @@ func InstallGenCallBindings(r *Registry, spec *GenSpecInfo, params []FnParam, ar
 			node = b.Parent
 		}
 		r.Defs.PushType(p.Name, CanonicalType(r, node), b)
+		installed = append(installed, p.Name)
 	}
+	return installed
 }

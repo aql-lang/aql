@@ -4669,6 +4669,20 @@ func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
 	var shape Value
 	for _, p := range e.checkModeFallbackPositions(4) {
 		v := e.stack[p]
+		// A position AFTER the pointer may still hold the raw Word
+		// token (forward args resolve during collection, which the
+		// fallback path bypasses). Resolve it the way the forward scan
+		// would — via the def stack — so a def-bound surface carrier
+		// (e.g. a generic fn's surface-bounded `x:T` param inside
+		// AnalyseFnBody, design/GENERICS.0.md Phase 5) is visible to
+		// the S2 scan.
+		if IsWord(v) {
+			if wv, werr := AsWord(v); werr == nil {
+				if top, ok := e.registry.Defs.Top(wv.Name); ok {
+					v = top
+				}
+			}
+		}
 		if v.Parent == nil {
 			continue
 		}

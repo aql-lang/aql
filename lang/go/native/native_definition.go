@@ -560,6 +560,42 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	}
 	fnDef.Captured = eng.MergeCaptures(perSig)
 
+	// Check mode, generic fns: declaration-time ABSTRACT check
+	// (Phase 5). Analyse each body once with carrier args of the
+	// declared param types — for a `x:T` param that is a carrier of
+	// the PLACEHOLDER node, so operations on it are admitted exactly
+	// when the parameter's bound justifies them (§9.4: a
+	// `(T extends Number)` carrier reaches Number ops through the
+	// placeholder's lattice parent; a bare T admits nothing it can't
+	// prove). Body diagnostics (undefined words, unjustified ops)
+	// surface at the definition instead of waiting for a first call.
+	// The placeholder bindings are re-pushed around the analysis so
+	// body-internal `of [T]` resolves (to a deferred GenInstRef).
+	// Non-generic fns get an equivalent construction-time analysis
+	// via the dynamic-help example generator; generic params have no
+	// synthesizable example values, hence this explicit path.
+	if r.Check.IsActive() && genSpec != nil {
+		PushGenBindings(r, genSpec)
+		for i := range fnDef.Signatures {
+			s := &fnDef.Signatures[i]
+			if len(s.Body) == 0 {
+				continue
+			}
+			paramNames := make([]string, len(s.Params))
+			carrierArgs := make([]Value, len(s.Params))
+			for j, p := range s.Params {
+				paramNames[j] = p.Name
+				t := p.Type
+				if t == nil {
+					t = TAny
+				}
+				carrierArgs[j] = NewCarrier(t)
+			}
+			eng.AnalyseFnBody(r, "", paramNames, s.Body, carrierArgs, fnDef.Captured)
+		}
+		PopGenBindings(r, genSpec)
+	}
+
 	// Check mode: flag overloads that an earlier, higher-priority
 	// signature already subsumes — under first-match-wins dispatch they
 	// can never fire (the dead-clause analogue). A static property of the
