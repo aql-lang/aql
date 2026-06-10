@@ -210,16 +210,31 @@ func TestNodeMapIsImmutable(t *testing.T) {
 }
 
 func TestNodeListIsImmutable(t *testing.T) {
-	// Attempting to set on a List should fail (no matching signature)
+	// `set` on a List is copy-returning (completing the immutable
+	// column: Map and List both return the updated copy). The result
+	// is a NEW list; the receiver is untouched. (The original
+	// contract — set rejects List outright — was replaced 2026-06-09.)
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	listVal := NewList([]Value{NewInteger(10), NewInteger(20)})
 
-	err := runAQLError(t, r, []Value{
+	result := runAQL(t, r, []Value{
 		listVal, NewWord("set"), NewInteger(0), NewInteger(99),
 	})
-	if err == nil {
-		t.Fatal("expected error: set should not work on List (Nodes are immutable)")
+	if len(result) != 1 {
+		t.Fatalf("expected one result (the new list), got %d", len(result))
+	}
+	out, err := AsList(result[0])
+	if err != nil || out.IsNil() {
+		t.Fatalf("expected a list result, got %v", result[0])
+	}
+	if n, _ := AsInteger(out.Get(0)); n != 99 {
+		t.Errorf("new list: expected [0]=99, got %d", n)
+	}
+	// The receiver is NOT mutated.
+	orig, _ := AsList(listVal)
+	if n, _ := AsInteger(orig.Get(0)); n != 10 {
+		t.Errorf("receiver list was mutated: [0]=%d, want 10", n)
 	}
 }
 

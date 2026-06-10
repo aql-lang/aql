@@ -145,3 +145,19 @@ func objectWithParentHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 	def := r.Types.MintType(id, parentDef)
 	return []Value{NewObjectType(def, info)}, nil
 }
+
+// objectSugarHandler backs the `object {…}` constructor sugar —
+// exactly `make Object {…}` (eng.MakeOpenObject).
+func objectSugarHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return MakeOpenObject(args[0])
+}
+
+// arraySugarHandler backs the `array […]` constructor sugar —
+// exactly `make Array […]`.
+func arraySugarHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if !IsConcrete(args[0]) {
+		return nil, r.AqlError("array_error", "array: needs a concrete list", "array")
+	}
+	lst, _ := AsList(args[0])
+	return []Value{NewArray(lst.Slice())}, nil
+}

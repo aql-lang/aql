@@ -118,3 +118,29 @@ def Foo (class { a:Integer }) def f ( make Foo { a:42 } ) f .a addq 8	50	field a
 # Each `make` call yields a fresh object value; they're independent.		
 		
 def Foo (class { a:Integer }) def x make Foo { a:1 } def y make Foo { a:2 } ( x .a ) addq ( y .a )	3	
+		
+# ====================================================================		
+# §  plain Object — the OPEN mutable keyed container (Phase B) and		
+#    the container-2x2 completion (Phase C). `object {…}` is sugar for		
+#    `make Object {…}`; `array […]` for `make Array […]`. Mutable		
+#    containers set in place and return nothing; immutable values		
+#    (Map, List) return the updated copy from set.		
+def o object {a:1} end o set b 2 end o.b	2	open in-place set; dot access reads it back
+def o object {} end o set a 1 end o.a	1	make Object {} / object {} construct an empty open container
+def o (make Object {a:1}) end o.a	1	make Object is the long form of the sugar
+def o object {a:1} end def k 'dyn' end o set (k) 3 end o get (k)	3	computed keys write and read
+def o object {a:1} end o set z 99 end o size	2	any key writes — Objects are open (no sealing) — and size counts all fields
+def o object {a:1} end def al o end al set a 9 end o.a	9	bindings share the container (mutable column aliasing)
+def o object {a:1} end (convert Map o) get a	1	freeze: convert Map projects the fields to an immutable Map
+(convert Object {x:1}) get x	1	thaw: convert Object seeds a fresh mutable container from a Map
+def o object {a:1} end o is Object	true	a plain Object is an Object…
+def o object {a:1} end o is Class	false	…and not a class instance
+object 5	ERROR:signature_error	the seed must be a map
+		
+# §  array + List copy-returning set (Phase C)		
+def a array [1 2 3] end a set 0 99 end a.0	99	array sugar; in-place indexed set; dot index
+def a array [1 2] end a set 5 9	ERROR:out of bounds	in-place Array set is bounds-checked
+(make Array [7 8]) size	2	make Array is the long form
+def xs [1 2 3] end def ys (xs set 0 99) end ys	[99 2 3]	List set is copy-returning — a NEW list
+def xs [1 2 3] end def ys (xs set 0 99) end xs	[1 2 3]	…and the receiver is untouched (immutable column)
+[1 2] set 5 9	ERROR:index_out_of_range	List set rejects out-of-range indices loudly

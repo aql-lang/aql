@@ -299,6 +299,7 @@ var (
 	IDPrefixForType           = eng.IDPrefixForType
 	CanonicalType             = eng.CanonicalType
 	MakeClassFieldValue       = eng.MakeClassFieldValue
+	MakeOpenObject            = eng.MakeOpenObject
 	ObjectFields              = eng.ObjectFields
 	ReparentValue             = eng.ReparentValue
 	InstallDef                = eng.InstallDef

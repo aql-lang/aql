@@ -606,7 +606,29 @@ Sub-questions resolved (2026-06-09, second pass):
 > makeObject; make-with-prototype on a class errors. Spec rows in
 > class.tsv §6.
 | B | `object {…}` sugar + `make Object {…}` construct plain open Objects; full enumeration; dot-access spec battery for Object receivers; docs lead with the 2×2 table | no (turns an error into a value) |
+
+> **Phase B LANDED (2026-06-10):** bare `make Object {…}` constructs a
+> plain open Object (`eng.MakeOpenObject`: concrete-map source, word
+> values resolved, fields in source order) instead of erroring; the
+> `object {…}` sugar word is exactly that make path; open instances
+> accept in-place `set` of existing AND new keys (returning nothing —
+> the mutable column's contract), alias on assignment (`eq` identity
+> via the shared field map), enumerate (items/size/keys), and
+> dot-access reads work. `p is Object` true / `is Class` false.
+> Spec battery in `lang/spec/object.tsv`; help entry for `object`.
+
 | C | Column completion: List copy-returning `set`; `array […]` sugar + `make Array […]`; dot-access battery for Array; `convert` freeze/thaw pair | no (additive) |
+
+> **Phase C LANDED (2026-06-10):** the 2×2 container table is now
+> complete and symmetric. List gained copy-returning `set` (sig
+> `[Integer Any List]` → new List, receiver untouched, bounds
+> checked — mirroring Map's copy-returning set); `array […]` sugar +
+> `make Array […]` (TypeArgs fix so the bare ideal constructs);
+> `convert Object` on a Map thaws (freeze = `convert Map` on an
+> Object already worked), completing the freeze/thaw pair both
+> directions; Array dot-access rows. The old "List is immutable: set
+> rejects" test re-pinned to the copy-returning contract. Spec rows
+> in object.tsv; help entries for `array`/`object`.
 
 Phase A bundles sealing with the rewrite on purpose: every
 `refine Object` site must be touched anyway, so the sealed contract

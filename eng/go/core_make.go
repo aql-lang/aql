@@ -631,6 +631,13 @@ func registerKernelIdeals(r *Registry) {
 			return (IsBareTypeNode(v) && v.Equal(TObject)) || IsObjectType(v)
 		},
 		Instantiate: func(typ, data Value, r *Registry) ([]Value, error) {
+			// Bare Object: construct a plain OPEN mutable keyed
+			// container — the 2x2's keyed sibling of Array (design/
+			// CLASS-OBJECT.0.md Phase B). Open (any key writes),
+			// fully enumerable, in-place set, no schema, no seal.
+			if IsBareTypeNode(typ) && typ.Equal(TObject) {
+				return MakeOpenObject(data)
+			}
 			objType, err := AsObjectType(typ)
 			if err != nil {
 				return nil, fmt.Errorf("make: expected a constructed object type, got %s", typ.String())
@@ -813,6 +820,24 @@ func MakeObjHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) 
 	// Not an object type and unclaimed by an Ideal kind (e.g.
 	// Options) — defer to the generic make dispatcher.
 	return MakeHandler([]Value{targetVal, srcVal}, nil, nil, reg)
+}
+
+// MakeOpenObject constructs a plain open Object instance — the
+// mutable keyed container — seeded from a concrete map. The field
+// map is copied so the new container is decoupled from the literal;
+// the instance has no TypeRef (no schema, no sealing) and no
+// prototype. `object {…}` and `make Object {…}` both route here.
+func MakeOpenObject(data Value) ([]Value, error) {
+	m, err := RequireConcreteMap(data, "make")
+	if err != nil {
+		return nil, fmt.Errorf("make: Object source must be a concrete map: %w", err)
+	}
+	fields := NewOrderedMap()
+	for _, k := range m.Keys() {
+		v, _ := m.Get(k)
+		fields.Set(k, ResolveWordValue(v))
+	}
+	return []Value{NewObjectInstance(TObject, ObjectInstanceInfo{Fields: fields})}, nil
 }
 
 // MakeArrayHandler is the 2-arg [Array, List] make handler.

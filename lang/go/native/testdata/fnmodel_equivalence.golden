@@ -26,6 +26,8 @@ WORD apply
   [Type/Function] barrier=0 returns=[Any]
 WORD args
   [] barrier=0 returns=[Node/List]
+WORD array
+  [Node/List] barrier=1 returns=[Ideal/Array]
 WORD await
   [Ideal/Options Node/List] barrier=2 noeval={1} returns=[Any]
   [Node/List] barrier=1 noeval={0} returns=[Any]
@@ -83,6 +85,7 @@ WORD continue
   [] barrier=0
 WORD convert
   [Scalar Node/Map Scalar] barrier=3 typearg={0} +returnsfn
+  [Ideal/Object Node/Map] barrier=2 typearg={0} returns=[Ideal/Object]
   [Node Ideal] barrier=2 typearg={0} +returnsfn
   [Scalar Scalar] barrier=2 typearg={0} +returnsfn
 WORD create
@@ -290,7 +293,7 @@ WORD make
   [Ideal/Object Any Ideal/Object] barrier=3 returns=[Ideal/Object]
   [Scalar Node/Map Any] barrier=3 typearg={0} +returnsfn
   [Any Any Node/Map] barrier=3 returns=[Any]
-  [Ideal/Array Node/List] barrier=2 returns=[Ideal/Array]
+  [Ideal/Array Node/List] barrier=2 typearg={0} returns=[Ideal/Array]
   [Ideal Node/Map] barrier=2 typearg={0} +returnsfn
   [Scalar Any] barrier=2 typearg={0} +returnsfn
   [Any Any] barrier=2 returns=[Any]
@@ -327,6 +330,8 @@ WORD not
   [Any] barrier=1 returns=[Scalar/Boolean]
 WORD now
   [] barrier=0 returns=[Scalar/Time/Instant]
+WORD object
+  [Node/Map] barrier=1 returns=[Ideal/Object]
 WORD or
   [Scalar/Boolean Scalar/Boolean] barrier=1 returns=[Scalar/Boolean]
   [Any Any] barrier=1 returns=[Any]
@@ -415,6 +420,7 @@ WORD set
   [Scalar/String Any Ideal/Object] barrier=3
   [Scalar/String Any Node/Map] barrier=3 returns=[Node/Map]
   [Scalar/Number/Integer Any Ideal/Array] barrier=3
+  [Scalar/Number/Integer Any Node/List] barrier=3 returns=[Node/List]
   [Scalar/Atom Any Ideal/Class] barrier=3 quote={0}
   [Scalar/Atom Any Ideal/Store] barrier=3 quote={0} +returnsfn
   [Scalar/Atom Any Ideal/Object] barrier=3 quote={0}

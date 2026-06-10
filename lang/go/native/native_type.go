@@ -75,6 +75,32 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
+		// object {…} — construct a plain OPEN mutable keyed container,
+		// sugar for `make Object {…}`. Open (any key writes, computed
+		// keys via parens), fully enumerable, in-place set returning
+		// nothing — the keyed sibling of Array in the container 2x2.
+		// See design/CLASS-OBJECT.0.md §2.3.
+		Name: "object",
+
+		Signatures: []NativeSig{{
+			Args:    []*Type{TMap},
+			Handler: objectSugarHandler,
+			Returns: []*Type{TObject}, BarrierPos: -1,
+		}},
+	},
+	{
+		// array […] — construct a mutable Array, sugar for
+		// `make Array […]`. In-place bounds-checked set returning
+		// nothing — the indexed sibling of Object.
+		Name: "array",
+
+		Signatures: []NativeSig{{
+			Args:    []*Type{TList},
+			Handler: arraySugarHandler,
+			Returns: []*Type{TArray}, BarrierPos: -1,
+		}},
+	},
+	{
 		Name: "pathof",
 
 		Signatures: []NativeSig{{
@@ -204,6 +230,17 @@ var typeNatives = []NativeFunc{
 				TypeArgs:  map[int]bool{0: true},
 				Handler:   convertIdealHandler,
 				ReturnsFn: ReturnsIdentity(0), BarrierPos: -1,
+			},
+			// Map → Object (thaw): a fresh open mutable container
+			// seeded from the map — the inverse of `convert Map o`
+			// (freeze). Shallow, like the rest of the copy semantics.
+			{
+				Args:     []*Type{TObject, TMap},
+				TypeArgs: map[int]bool{0: true},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+					return MakeOpenObject(args[1])
+				},
+				Returns: []*Type{TObject}, BarrierPos: -1,
 			},
 			{
 				Args:      []*Type{TScalar, TMap, TScalar},

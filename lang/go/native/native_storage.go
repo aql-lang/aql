@@ -79,6 +79,14 @@ var storageNatives = []NativeFunc{
 				Returns:   []*Type{TMap}, BarrierPos: -1,
 			},
 
+			// List (immutable — copy-returning, completing the column
+			// rule: Map and List both return the updated copy).
+			{
+				Args:    []*Type{TInteger, TAny, TList},
+				Handler: setListHandler,
+				Returns: []*Type{TList}, BarrierPos: -1,
+			},
+
 			// Class instance (in-place, SEALED): a declared field
 			// writes in place and returns nothing; an undeclared
 			// field is a loud sealed_field error — see
@@ -368,4 +376,31 @@ func contextHandler(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		return nil, reg.AqlError("context_error", "context: no active context", "context")
 	}
 	return []Value{NewStoreValue(TStore, store)}, nil
+}
+
+// setListHandler is the List form of set: copy-returning, like Map —
+// a NEW list with the element at the index replaced; the receiver is
+// untouched. Out-of-range indices are a loud error (edits, not
+// lookups). Completes the immutable column of the container 2x2.
+func setListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	_idx, err := args[0].AsConcreteInteger()
+	if err != nil {
+		return nil, r.AqlError("set_error", "set: expected a concrete Integer index", "set")
+	}
+	lst, err2 := RequireConcreteList(args[2], "set")
+	if err2 != nil {
+		return nil, err2
+	}
+	idx := int(_idx)
+	n := lst.Len()
+	if idx < 0 || idx >= n {
+		return nil, r.AqlError("index_out_of_range",
+			fmt.Sprintf("set: index %d out of range for list of length %d", idx, n), "set")
+	}
+	out := make([]Value, n)
+	for i := 0; i < n; i++ {
+		out[i] = lst.Get(i)
+	}
+	out[idx] = args[1]
+	return []Value{NewList(out)}, nil
 }
