@@ -1551,6 +1551,14 @@ func (e *Engine) stepWord(val Value) error {
 		// We bypass insertForward here because forward collection
 		// would re-trigger sigTypeMatches and loop indefinitely.
 		if e.registry.Check.IsActive() && len(fn.Signatures) > 0 {
+			// S2 (design/SURFACES.0.md): a required operation called on
+			// a SURFACE-typed carrier types via the contract's shape
+			// (Self := the surface node) — the contract guarantees the
+			// operation for every member, so this is a correct typing,
+			// not a degrade; no diagnostic.
+			if handled, herr := e.checkModeSurfaceShape(w, val.Pos); handled {
+				return herr
+			}
 			return e.checkModeAssumeSig(w, fn, &fn.Signatures[0], val.Pos)
 		}
 		return e.sigError(w.Name, fn, val.Pos)
@@ -4611,6 +4619,60 @@ func (e *Engine) checkModeFallbackPositions(n int) []int {
 // matching — both would cascade failures. The trade-off is that the
 // checker reports one diagnostic per site and keeps going with the
 // assumed signature's declared return types (or Any if unannotated).
+// checkModeSurfaceShape is the S2 typing path: when the concrete
+// overloads of w reject the candidate args but one of them is a
+// surface-typed carrier whose contract REQUIRES w, the call types as
+// the surface's fnsig shape with Self := the surface node — the
+// contract guarantees the operation exists for every member, so the
+// checker uses the declared shape instead of degrading through the
+// assume-sig path (which would emit a spurious no_signature and often
+// land on Any). Returns handled=false when no nearby candidate arg is
+// a surface carrier requiring w.
+func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
+	// Locate a surface-typed candidate arg requiring w among the
+	// nearby positions (same neighbourhood the assume-sig path
+	// gathers; MaxArgs would over-collect, 4 covers surface op
+	// arities in practice).
+	var sinfo *SurfaceInfo
+	var shape Value
+	for _, p := range e.checkModeFallbackPositions(4) {
+		v := e.stack[p]
+		if v.Parent == nil {
+			continue
+		}
+		info, ok := SurfaceInfoOf(v.Parent)
+		if !ok {
+			continue
+		}
+		sv, found := info.Required.Get(w.Name)
+		if !found {
+			continue
+		}
+		sinfo, shape = info, sv
+		break
+	}
+	if sinfo == nil {
+		return false, nil
+	}
+	undef, ok := shape.Data.(FnUndefInfo)
+	if !ok || len(undef.Sigs) == 0 {
+		return false, nil
+	}
+	spec := SubstituteSelf(undef.Sigs[0], sinfo.Type)
+	synth := &Signature{Params: spec.Params, Returns: spec.Returns}
+	normalizeSig(synth)
+
+	n := synth.TotalArgs()
+	positions := e.checkModeFallbackPositions(n)
+	args := make([]Value, len(positions))
+	for i, p := range positions {
+		args[i] = e.stack[p]
+	}
+	results := carrierResults(e.registry, w.Name, synth, args, pos)
+	e.spliceCheckResults(positions, results)
+	return true, nil
+}
+
 func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signature, pos SrcPos) error {
 	// Gather candidate positions once and try to pick a signature
 	// whose arity matches and whose declared types are compatible
@@ -4689,9 +4751,15 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		args[i] = e.stack[p]
 	}
 	results := carrierResults(e.registry, w.Name, sig, args, pos)
+	e.spliceCheckResults(positions, results)
+	return nil
+}
 
-	// Remove the word and any consumed positions, then splice results
-	// in at the word's slot. We rely on ascending order for removal.
+// spliceCheckResults removes the word at the pointer plus the consumed
+// candidate positions and splices the synthesised carrier results in
+// at the word's slot — the shared tail of the check-mode recovery
+// paths (assume-sig and the S2 surface-shape typing).
+func (e *Engine) spliceCheckResults(positions []int, results []Value) {
 	indices := append([]int{e.pointer}, positions...)
 	// Insertion sort (small n).
 	for i := 1; i < len(indices); i++ {
@@ -4718,5 +4786,4 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	}
 	stackSplice(&e.stack, insertAt, 0, results...)
 	e.pointer = insertAt
-	return nil
 }

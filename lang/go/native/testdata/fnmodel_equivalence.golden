@@ -157,7 +157,7 @@ WORD flatten
 WORD fn
   [Node/List] barrier=1 runcheck noeval={0} returns=[Type/Function]
 WORD fnsig
-  [Node/List] barrier=1 noeval={0} returns=[Type/FunctionSignature]
+  [Node/List] barrier=1 runcheck noeval={0} returns=[Type/FunctionSignature]
 WORD fold
   [Node/List Node/List Any] barrier=3 noeval={0} +returnsfn
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn

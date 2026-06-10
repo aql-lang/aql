@@ -122,7 +122,11 @@ var definitionNatives = []NativeFunc{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    fnsigHandler,
-			Returns:    []*Type{TFnUndef}, BarrierPos: -1,
+			// Pure construction — runs in check mode too, so surface
+			// schemas carry REAL shapes statically and `exposes` is
+			// fully static-checkable (design/SURFACES.0.md S2).
+			RunInCheckMode: true,
+			Returns:        []*Type{TFnUndef}, BarrierPos: -1,
 		}},
 	},
 	{

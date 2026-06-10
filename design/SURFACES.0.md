@@ -1,10 +1,10 @@
 # Surfaces — Named Contracts over Open Multimethods
 
-Status: **S1 + S3 LANDED (2026-06-10)** under the term **surface**
-(verbs: `<Type> exposes <Surface>`) — see the landed-state note below.
-Originally a discovery note (2026-06-09, language owner); **not an
-ADR** (ADRs are added only on explicit instruction). S2 (checker
-integration) and S4 (generics `T extends Shape`) remain future work
+Status: **S1 + S2 + S3 LANDED (2026-06-10)** under the term
+**surface** (verbs: `<Type> exposes <Surface>`) — see the landed-state
+notes below. Originally a discovery note (2026-06-09, language
+owner); **not an ADR** (ADRs are added only on explicit instruction).
+S4 (generics `T extends Shape`) rides the generics phase
 (`design/GENERICS.0.md`). The body below preserves the discovery
 analysis; "trait"/"implements" in the prose are the working terms the
 conversation used before §7a settled on surface/exposes.
@@ -27,6 +27,24 @@ conversation used before §7a settled on surface/exposes.
 > conformance only, declaration-time check (no undef re-verification),
 > registry-local conformance. One syntax note: inside a map literal
 > the fnsig call needs parens — `{area: (fnsig [[Self] [Float]])}`.
+>
+> **S2 landed (2026-06-10) — checker integration:** `fnsig` runs in
+> check mode (RunInCheckMode), so surface schemas carry REAL shapes
+> statically and `exposes` is fully static-checkable — a missing
+> operation or wrong-return overload fails `aql check` with the same
+> `surface_unsatisfied` gap listing the runtime raises. A required
+> operation called on a surface-typed carrier types via the
+> contract's shape with Self := the surface node
+> (`engine.go::checkModeSurfaceShape`) — a correct typing, not a
+> degrade: no spurious `no_signature`, and the result is the shape's
+> declared return (Float, not Any), so types propagate downstream.
+> unifySurface gained a carrier branch, so `def x:Shape (make Circle
+> {…})` unifies statically for exposers and is a `type_error` for
+> non-exposers. Non-required words on a surface carrier still degrade
+> loudly through the assume-sig path (pinned by negative tests —
+> `lang/go/test/surface_check_test.go`). This discharges the
+> declaration-time-check caveat's main hazard: a stale contract is
+> now caught by `aql check`.
 
 ## 1. Decisions
 

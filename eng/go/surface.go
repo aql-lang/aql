@@ -110,6 +110,11 @@ func unifySurface(a, b Value) (Value, *UnifyError) {
 		node = oi.Type
 	case IsBareTypeNode(other):
 		node = &other
+	case other.Carrier:
+		// A check-mode carrier denotes its Parent type — so
+		// `def x:Shape (make Circle {…})` unifies statically when
+		// Circle exposes Shape.
+		node = other.Parent
 	}
 	for p := node; p != nil; p = p.Parent {
 		if info.Conform[p.ID] {
@@ -169,6 +174,19 @@ func (s *surfaceUnifier) Equal(a, b Value) bool {
 		return s.prev.Equal(a, b)
 	}
 	return DefaultBehavior.Equal(a, b)
+}
+
+// SurfaceInfoOf returns the surface payload when t (or an ancestor)
+// is a surface-minted node — i.e. carries the surfaceUnifier. Used by
+// the check-mode dispatch path (S2) to type a required operation on a
+// surface-typed carrier via the contract's shape.
+func SurfaceInfoOf(t *Type) (*SurfaceInfo, bool) {
+	for p := t; p != nil; p = p.Parent {
+		if su, ok := p.Behavior.(*surfaceUnifier); ok {
+			return su.info, true
+		}
+	}
+	return nil, false
 }
 
 // installSurfaceUnifier attaches a surfaceUnifier to def, wrapping any

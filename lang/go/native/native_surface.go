@@ -79,6 +79,7 @@ func exposesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		shapeVal, _ := sinfo.Required.Get(op)
 		undef, ok := shapeVal.Data.(FnUndefInfo)
 		if !ok {
+			gaps = append(gaps, fmt.Sprintf("%s: required shape is not statically known (declare it with fnsig)", op))
 			continue
 		}
 		fn := r.Lookup(op)
