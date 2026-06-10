@@ -859,7 +859,7 @@ aql vault init
 # from the OS clipboard and the clipboard is wiped immediately after.
 aql vault add --from-clipboard --provider=github github_token
 
-# ...or pipe it in without it touching your shell history:
+# ...or, in scripts/CI, pipe it in without it touching shell history:
 printf %s "$TOKEN" | aql vault add --from-stdin --provider=github github_token
 
 aql vault list
@@ -875,6 +875,19 @@ interactive no-echo prompt you get when you pass none of them.
 `--from-clipboard` works on macOS, Linux (Wayland or X11), and
 Windows; if you run a clipboard manager, clear its history too,
 since it may keep a copy the wipe cannot reach.
+
+Passphrases work the same way: `vault init` and every command that
+opens the file keyring prompt for the vault passphrase with echo
+suppressed, and `vault export`/`import` prompt for the bundle
+passphrase — just run the command and type when asked. The
+environment variables `AQL_VAULT_PASSPHRASE` and
+`AQL_VAULT_EXPORT_PASSPHRASE` exist for contexts that cannot prompt:
+services (`vault proxy`, `vault mcp`), CI, and pipelines where stdin
+already carries the secret (`--from-stdin`, bundle import from
+stdin). Avoid `export`-ing them in an interactive shell — that puts
+the passphrase in your shell history and into the environment of
+every child process; set them per-invocation from a secrets source
+instead.
 
 `aql vault exec <alias[=ENV][,...]> -- <cmd> [args...]` runs an
 external command with vault secrets injected as environment

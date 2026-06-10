@@ -321,6 +321,15 @@ straight from the OS clipboard and wipes the clipboard afterwards;
 it works on macOS (pbpaste/pbcopy), Linux (wl-clipboard on Wayland,
 or xclip / xsel on X11), and Windows (PowerShell).
 
+Passphrases follow the same rule: every command that needs one (the
+vault passphrase for the file backend, the bundle passphrase for
+`export`/`import`) prompts for it interactively with echo suppressed —
+no flags or environment setup needed. `AQL_VAULT_PASSPHRASE` and
+`AQL_VAULT_EXPORT_PASSPHRASE` are the non-interactive overrides for
+services, CI, and stdin pipelines; prefer setting them per-invocation
+over `export`-ing them into an interactive shell, where they would
+land in shell history and every child process's environment.
+
 `aql vault grant` issues a scoped capability for an alias and prints
 a one-time bearer **token**; only the token's hash is stored, so save
 it when shown. The credential broker (`aql vault proxy`) authenticates
@@ -336,9 +345,9 @@ already portable: copy `~/.aql/vault.jsonic` and `~/.aql/vault.keyring`
 and bring the passphrase. Secrets stored in an OS keychain or 1Password
 do *not* live under `~/.aql`, so to move those — or to move to a
 different OS — use `aql vault export`, which writes a self-describing,
-passphrase-encrypted bundle (set `AQL_VAULT_EXPORT_PASSPHRASE` or be
-prompted) of the aliases and their values, independent of the source
-backend. `aql vault import` restores it into any backend on the target,
+passphrase-encrypted bundle (you are prompted for the bundle
+passphrase; `AQL_VAULT_EXPORT_PASSPHRASE` overrides for scripts) of
+the aliases and their values, independent of the source backend. `aql vault import` restores it into any backend on the target,
 skipping aliases that already exist unless you pass `--overwrite`.
 `import` reads a `.env` file or an export bundle, auto-detected. Both
 formats are versioned: an older `aql` refuses a newer bundle rather than

@@ -108,7 +108,7 @@ func printUsage(w io.Writer) {
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Backends: auto (default), keychain, secret-service, wincred, file, 1password.")
-	fmt.Fprintln(w, "Use AQL_VAULT_PASSPHRASE for non-interactive file-backend access.")
+	fmt.Fprintln(w, "Passphrases are prompted interactively (hidden); set AQL_VAULT_PASSPHRASE only for non-interactive use.")
 }
 
 type modeDoc struct{ name, summary string }
@@ -187,7 +187,7 @@ func openKeyring(s *Store, homeDir string, stdin io.Reader, stdout io.Writer, pr
 		pass = p
 	}
 	if pass == "" {
-		return nil, errors.New("file backend requires a passphrase; set AQL_VAULT_PASSPHRASE (or run interactively to be prompted)")
+		return nil, errors.New("file backend requires a passphrase; run interactively to be prompted, or set AQL_VAULT_PASSPHRASE for non-interactive use")
 	}
 	return selectKeyring(BackendFile, fileDir(homeDir), pass)
 }
@@ -217,13 +217,14 @@ func runInit(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 		chosen = autoBackend()
 	}
 	// For the file backend, capture a passphrase up front so future
-	// operations can require it. An empty passphrase is permitted
-	// but flagged with a warning.
+	// operations can require it. A non-empty passphrase is mandatory;
+	// it is read from AQL_VAULT_PASSPHRASE if set, otherwise prompted
+	// for twice with echo suppressed.
 	if chosen == BackendFile {
 		pass := os.Getenv(EnvPassphrase)
 		if pass == "" {
 			ir := auth.NewInputReader(stdin)
-			p1, err := ir.ReadPassword("Set vault passphrase (empty for none): ", stdout)
+			p1, err := ir.ReadPassword("Set vault passphrase: ", stdout)
 			if err != nil {
 				fmt.Fprintf(stderr, "error: %s\n", err)
 				return 1
