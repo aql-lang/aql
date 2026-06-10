@@ -113,6 +113,7 @@ func runPolicyApply(args []string, homeDir string, stdin io.Reader, stdout, stde
 	}
 
 	var changes []string
+	var grantedTokens []string
 	for _, a := range pol.Aliases {
 		if !validAlias(a.Name) {
 			fmt.Fprintf(stderr, "error: invalid alias %q\n", a.Name)
@@ -181,7 +182,7 @@ func runPolicyApply(args []string, homeDir string, stdin io.Reader, stdout, stde
 			changes = append(changes, "+capability "+c.Alias+"@"+c.Agent)
 		}
 		if !*dryRun {
-			tok, err := s.NewCapability(c.Alias, c.Agent, c.Hosts, c.Methods, ttl)
+			tok, token, err := s.NewCapability(c.Alias, c.Agent, c.Hosts, c.Methods, ttl)
 			if err != nil {
 				fmt.Fprintf(stderr, "error: granting capability for %s: %s\n", c.Alias, err)
 				return 1
@@ -190,6 +191,8 @@ func runPolicyApply(args []string, homeDir string, stdin io.Reader, stdout, stde
 			s.Capabilities[idx].MaxCalls = c.MaxCalls
 			s.Capabilities[idx].MaxCostCents = c.MaxCostCents
 			s.Capabilities[idx].RequireApproval = c.RequireApproval
+			grantedTokens = append(grantedTokens,
+				fmt.Sprintf("token %s@%s: %s", c.Alias, c.Agent, token))
 			_ = appendAudit(homeDir, AuditEvent{
 				Action: "vault.policy.apply", Alias: c.Alias, Agent: c.Agent,
 				Capability: tok.ID, Outcome: "ok",
@@ -211,6 +214,12 @@ func runPolicyApply(args []string, homeDir string, stdin io.Reader, stdout, stde
 	sort.Strings(changes)
 	for _, c := range changes {
 		fmt.Fprintln(stdout, c)
+	}
+	for _, line := range grantedTokens {
+		fmt.Fprintln(stdout, line)
+	}
+	if len(grantedTokens) > 0 {
+		fmt.Fprintln(stdout, "(capability tokens shown once; only their hashes are stored)")
 	}
 	if *dryRun {
 		fmt.Fprintln(stdout, "(dry-run; nothing written)")

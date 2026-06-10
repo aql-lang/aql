@@ -63,6 +63,23 @@ func TestInitRefusesReinitWithoutForce(t *testing.T) {
 	}
 }
 
+func TestInitRefusesEmptyPassphrase(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(EnvHome, dir)
+	t.Setenv(EnvPassphrase, "") // force the interactive prompt path
+	// Two empty lines answer the passphrase + confirmation prompts.
+	code, _, errOut := runVault(t, "\n\n", "init", "--backend=file")
+	if code == 0 {
+		t.Fatal("expected non-zero exit for an empty passphrase")
+	}
+	if !strings.Contains(errOut, "empty passphrase") {
+		t.Errorf("missing empty-passphrase error in %q", errOut)
+	}
+	if _, err := os.Stat(StorePath(dir)); err == nil {
+		t.Errorf("store was created despite empty passphrase")
+	}
+}
+
 func TestAddGetListRemove(t *testing.T) {
 	testHome(t)
 	mustInit(t)
@@ -262,7 +279,7 @@ func TestGrantAndRevoke(t *testing.T) {
 
 func TestCapabilityExpiry(t *testing.T) {
 	s := &Store{}
-	c, err := s.NewCapability("openai", "agent", nil, nil, time.Millisecond)
+	c, _, err := s.NewCapability("openai", "agent", nil, nil, time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}

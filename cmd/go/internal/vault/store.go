@@ -2,6 +2,7 @@ package vault
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
@@ -35,7 +36,12 @@ type Alias struct {
 // incremented on each successful proxy request and persisted so the
 // quotas survive proxy restarts.
 type Capability struct {
-	ID              string   `json:"id"`
+	ID string `json:"id"`
+	// TokenHash is the hex SHA-256 of the bearer token a proxy client
+	// presents. The token itself is shown once at grant time and never
+	// stored, so a reader of vault.jsonic cannot use a capability — only
+	// reference it by ID (to revoke or audit it).
+	TokenHash       string   `json:"token_hash,omitempty"`
 	Alias           string   `json:"alias"`
 	Agent           string   `json:"agent,omitempty"`
 	Hosts           []string `json:"hosts,omitempty"`
@@ -178,16 +184,11 @@ func (s *Store) FindCapability(id string) (*Capability, int) {
 	return nil, -1
 }
 
-// FindCapabilityExact returns the capability whose ID exactly equals
-// id, compared in constant time, or (nil, -1). The proxy authenticates
-// bearer tokens with this.
-//
-// Unlike FindCapability it never accepts a short prefix: as an
-// authentication check, prefix matching is a bypass — any prefix of a
-// live capability ID (in the extreme, a single hex character) would
-// authorize, so a caller could brute-force the 16 nibbles and match
-// almost any outstanding token. The constant-time compare also avoids
-// leaking how much of a guessed token was correct via timing.
+// FindCapabilityExact returns the capability whose public ID exactly
+// equals id, compared in constant time, or (nil, -1). This is internal
+// bookkeeping (e.g. debiting quota counters by the ID the proxy already
+// authenticated). It does NOT authenticate a bearer token — that is
+// FindCapabilityByToken, which matches the token hash.
 func (s *Store) FindCapabilityExact(id string) (*Capability, int) {
 	idb := []byte(id)
 	for i := range s.Capabilities {
@@ -198,15 +199,60 @@ func (s *Store) FindCapabilityExact(id string) (*Capability, int) {
 	return nil, -1
 }
 
-// NewCapability appends a fresh capability record. The caller is
-// responsible for persisting via SaveStore.
-func (s *Store) NewCapability(alias, agent string, hosts, methods []string, ttl time.Duration) (*Capability, error) {
+// FindCapabilityByToken authenticates a presented bearer token: it
+// hashes the token and constant-time compares against each stored
+// TokenHash, returning the matching capability or (nil, -1).
+//
+// Matching the hash (not the token, which is never stored) means a
+// reader of vault.jsonic cannot use a capability, and the constant-time
+// compare avoids leaking via timing how much of a guessed token was
+// correct. There is no prefix match: only the full token authenticates.
+func (s *Store) FindCapabilityByToken(token string) (*Capability, int) {
+	if token == "" {
+		return nil, -1
+	}
+	want := []byte(hashToken(token))
+	for i := range s.Capabilities {
+		if s.Capabilities[i].TokenHash == "" {
+			continue
+		}
+		if subtle.ConstantTimeCompare([]byte(s.Capabilities[i].TokenHash), want) == 1 {
+			return &s.Capabilities[i], i
+		}
+	}
+	return nil, -1
+}
+
+// FindActiveCapability returns the first capability granted to agent for
+// alias that is neither revoked nor expired at now, or (nil, -1). The
+// MCP server resolves capabilities this way (by identity) since, unlike
+// the proxy, its caller presents no bearer token.
+func (s *Store) FindActiveCapability(alias, agent string, now time.Time) (*Capability, int) {
+	for i := range s.Capabilities {
+		c := &s.Capabilities[i]
+		if c.Alias == alias && c.Agent == agent && !c.Revoked && capabilityActive(c, now) {
+			return c, i
+		}
+	}
+	return nil, -1
+}
+
+// NewCapability appends a fresh capability record and returns it along
+// with its one-time bearer token. Only the token's hash is persisted;
+// the plaintext token is returned to be shown to the operator once and
+// never again. The caller is responsible for persisting via SaveStore.
+func (s *Store) NewCapability(alias, agent string, hosts, methods []string, ttl time.Duration) (*Capability, string, error) {
 	id, err := randomID()
 	if err != nil {
-		return nil, err
+		return nil, "", err
+	}
+	token, err := randomToken()
+	if err != nil {
+		return nil, "", err
 	}
 	c := Capability{
 		ID:        id,
+		TokenHash: hashToken(token),
 		Alias:     alias,
 		Agent:     agent,
 		Hosts:     hosts,
@@ -217,7 +263,25 @@ func (s *Store) NewCapability(alias, agent string, hosts, methods []string, ttl 
 		c.ExpiresAt = time.Now().UTC().Add(ttl).Format(time.RFC3339)
 	}
 	s.Capabilities = append(s.Capabilities, c)
-	return &s.Capabilities[len(s.Capabilities)-1], nil
+	return &s.Capabilities[len(s.Capabilities)-1], token, nil
+}
+
+// recordCapabilityUse debits the call counter and cost meter on the
+// capability with the given public ID and persists the store. A missing
+// capability is a no-op. Shared by the proxy and the MCP server so both
+// enforce quotas the same way.
+func recordCapabilityUse(homeDir, capID string, costCents int) error {
+	s, err := LoadStore(homeDir)
+	if err != nil || s == nil {
+		return err
+	}
+	_, idx := s.FindCapabilityExact(capID)
+	if idx < 0 {
+		return nil
+	}
+	s.Capabilities[idx].UsedCalls++
+	s.Capabilities[idx].UsedCostCents += costCents
+	return SaveStore(homeDir, s)
 }
 
 // ActiveCapabilities returns capabilities that are neither revoked
@@ -245,4 +309,20 @@ func randomID() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+// randomToken returns a 256-bit random bearer token as hex.
+func randomToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// hashToken returns the hex SHA-256 of a bearer token, the form stored
+// in and compared against TokenHash.
+func hashToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
 }

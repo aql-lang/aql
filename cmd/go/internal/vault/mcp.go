@@ -166,12 +166,19 @@ func (s *mcpServer) listTools() ([]map[string]any, error) {
 	if st == nil {
 		return nil, errors.New("vault not initialized")
 	}
+	now := time.Now()
 	out := make([]map[string]any, 0, len(st.Aliases))
 	for _, a := range st.SortedAliases() {
 		prov := LookupProvider(a.Provider)
 		if prov.BaseURL == "" {
 			// Aliases without a provider preset cannot be brokered;
 			// skip rather than expose a half-working tool.
+			continue
+		}
+		if _, idx := st.FindActiveCapability(a.Name, s.agent, now); idx < 0 {
+			// Only expose tools this agent holds a live capability for,
+			// so tools/list never advertises something tools/call would
+			// then refuse.
 			continue
 		}
 		out = append(out, map[string]any{
@@ -233,6 +240,32 @@ func (s *mcpServer) callTool(req *mcpRequest) *mcpResponse {
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
+
+	// Authorize against a capability granted to this agent for the
+	// alias. The MCP server enforces the same policy as the proxy
+	// (TTL, method/host allowlists, call and cost quotas, approval),
+	// via the shared capabilityDenial; the difference is only how the
+	// capability is resolved — by agent identity here, by bearer token
+	// in the proxy.
+	now := time.Now()
+	capab, _ := st.FindActiveCapability(alias, s.agent, now)
+	if capab == nil {
+		_ = appendAudit(s.homeDir, AuditEvent{
+			Action: "mcp.request", Actor: "mcp", Agent: s.agent, Alias: alias,
+			Method: method, Path: path, Outcome: "no-cap",
+		})
+		return fail(req, -32603, fmt.Sprintf(
+			"no capability for alias %q granted to agent %q; run `aql vault grant --agent=%s %s`",
+			alias, s.agent, s.agent, alias))
+	}
+	if reason := capabilityDenial(capab, method, mustHost(prov.BaseURL), now); reason != "" {
+		_ = appendAudit(s.homeDir, AuditEvent{
+			Action: "mcp.request", Actor: "mcp", Agent: s.agent, Alias: alias,
+			Method: method, Path: path, Outcome: reason,
+		})
+		return fail(req, -32603, "capability denied: "+denialMessage(reason))
+	}
+
 	url := prov.BaseURL + path
 	if q, ok := params.Arguments["query"].(map[string]any); ok && len(q) > 0 {
 		sep := "?"
@@ -268,6 +301,13 @@ func (s *mcpServer) callTool(req *mcpRequest) *mcpResponse {
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
+
+	// Debit the capability the same way the proxy does, so call and
+	// cost quotas are enforced across MCP invocations too.
+	cost := parseCostHeader(resp.Header.Get("X-AQL-Vault-Cost-Cents"))
+	if err := recordCapabilityUse(s.homeDir, capab.ID, cost); err != nil {
+		fmt.Fprintf(s.stderr, "vault mcp: persisting capability counters: %s\n", err)
+	}
 
 	_ = appendAudit(s.homeDir, AuditEvent{
 		Action:  "mcp.request",

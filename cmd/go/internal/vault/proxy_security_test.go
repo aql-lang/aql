@@ -1,36 +1,45 @@
 package vault
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 )
 
-// TestFindCapabilityExactRejectsPrefix locks in the distinction between
-// the CLI convenience matcher (prefix) and the authentication matcher
-// (exact, constant-time).
-func TestFindCapabilityExactRejectsPrefix(t *testing.T) {
+// TestCapabilityTokenAuth locks in token-hash authentication: the full
+// token authenticates, prefixes do not (the old bypass), the plaintext
+// token is never stored, and the public ID still prefix-matches for the
+// CLI's convenience.
+func TestCapabilityTokenAuth(t *testing.T) {
 	s := &Store{}
-	c, err := s.NewCapability("alias", "agent", nil, nil, time.Hour)
+	c, token, err := s.NewCapability("alias", "agent", nil, nil, time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
-	full := c.ID
 
-	if got, _ := s.FindCapabilityExact(full); got == nil {
-		t.Fatalf("exact id should match")
+	if got, _ := s.FindCapabilityByToken(token); got == nil {
+		t.Fatalf("full token should authenticate")
 	}
 	// A prefix — even a single character — must NOT authenticate.
-	if got, _ := s.FindCapabilityExact(full[:1]); got != nil {
-		t.Errorf("single-char prefix authenticated via FindCapabilityExact")
+	if got, _ := s.FindCapabilityByToken(token[:1]); got != nil {
+		t.Errorf("single-char token prefix authenticated")
 	}
-	if got, _ := s.FindCapabilityExact(full[:8]); got != nil {
-		t.Errorf("8-char prefix authenticated via FindCapabilityExact")
+	if got, _ := s.FindCapabilityByToken(token[:8]); got != nil {
+		t.Errorf("8-char token prefix authenticated")
 	}
-	// The CLI convenience matcher still accepts the short prefix.
-	if got, _ := s.FindCapability(full[:8]); got == nil {
-		t.Errorf("FindCapability should still accept a short prefix for CLI use")
+	// The token is never stored in plaintext — only its hash.
+	if c.TokenHash == "" || c.TokenHash == token {
+		t.Errorf("token stored in plaintext or hash missing: hash=%q", c.TokenHash)
+	}
+	b, _ := json.Marshal(s)
+	if strings.Contains(string(b), token) {
+		t.Errorf("serialized store contains the plaintext token")
+	}
+	// The public ID still prefix-matches for CLI convenience (revoke).
+	if got, _ := s.FindCapability(c.ID[:8]); got == nil {
+		t.Errorf("FindCapability should accept a short public-ID prefix for CLI use")
 	}
 }
 

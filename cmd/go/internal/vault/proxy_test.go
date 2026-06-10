@@ -104,7 +104,8 @@ func startProxy(t *testing.T) string {
 	return ""
 }
 
-// grantOK creates a capability for alias and returns its id.
+// grantOK creates a capability for alias and returns its one-time
+// bearer token (what a proxy client presents as Bearer).
 func grantOK(t *testing.T, alias string, hosts, methods []string) string {
 	t.Helper()
 	home := os.Getenv(EnvHome)
@@ -112,14 +113,14 @@ func grantOK(t *testing.T, alias string, hosts, methods []string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tok, err := s.NewCapability(alias, "test-agent", hosts, methods, time.Hour)
+	_, token, err := s.NewCapability(alias, "test-agent", hosts, methods, time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := SaveStore(home, s); err != nil {
 		t.Fatal(err)
 	}
-	return tok.ID
+	return token
 }
 
 func TestProxyForwardsAndInjectsBearer(t *testing.T) {
@@ -256,7 +257,9 @@ func TestProxyRejectsRevokedToken(t *testing.T) {
 		t.Fatal("add")
 	}
 	tok := grantOK(t, "k", nil, nil)
-	if code, _, _ := runVault(t, "", "revoke", tok); code != 0 {
+	// Revoke by the capability's public ID (not the secret token).
+	s, _ := LoadStore(os.Getenv(EnvHome))
+	if code, _, _ := runVault(t, "", "revoke", s.Capabilities[0].ID); code != 0 {
 		t.Fatal("revoke")
 	}
 

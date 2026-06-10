@@ -319,6 +319,16 @@ straight from the OS clipboard and wipes the clipboard afterwards;
 it works on macOS (pbpaste/pbcopy), Linux (wl-clipboard on Wayland,
 or xclip / xsel on X11), and Windows (PowerShell).
 
+`aql vault grant` issues a scoped capability for an alias and prints
+a one-time bearer **token**; only the token's hash is stored, so save
+it when shown. The credential broker (`aql vault proxy`) authenticates
+that token and never accepts a prefix of it, and binds to loopback
+only unless you pass `--allow-public`. The MCP server (`aql vault mcp
+--agent=NAME`) is gated the same way: it exposes and forwards only
+aliases the named agent has been granted a capability for, enforcing
+the same TTL, host/method allowlists, and call/cost quotas. The file
+backend requires a non-empty passphrase.
+
 `aql vault exec` resolves the listed aliases against the keyring
 and spawns the given command with each value injected as an
 environment variable. The child inherits the caller's stdio and

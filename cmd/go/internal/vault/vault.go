@@ -183,6 +183,9 @@ func openKeyring(s *Store, homeDir string, stdin io.Reader, stdout io.Writer, pr
 		}
 		pass = p
 	}
+	if pass == "" {
+		return nil, errors.New("file backend requires a passphrase; set AQL_VAULT_PASSPHRASE (or run interactively to be prompted)")
+	}
 	return selectKeyring(BackendFile, fileDir(homeDir), pass)
 }
 
@@ -234,7 +237,8 @@ func runInit(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 			pass = p1
 		}
 		if pass == "" {
-			fmt.Fprintln(stderr, "warning: empty passphrase — the file keyring is effectively unencrypted (its salt is stored alongside the ciphertext, so anyone who can read ~/.aql/vault.keyring can recover every secret). Re-run init with a passphrase, or set AQL_VAULT_PASSPHRASE.")
+			fmt.Fprintln(stderr, "error: empty passphrase — the file keyring would be effectively unencrypted (its salt is stored alongside the ciphertext, so anyone who can read ~/.aql/vault.keyring could recover every secret). Choose a non-empty passphrase, or set AQL_VAULT_PASSPHRASE.")
+			return 1
 		}
 		// Initialize an empty keyring file so its presence and
 		// passphrase are validated immediately.
@@ -710,7 +714,8 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: no alias named %q\n", alias)
 		return 1
 	}
-	if _, err := s.NewCapability(alias, *agent, splitCSV(*hosts), splitCSV(*methods), *ttl); err != nil {
+	_, token, err := s.NewCapability(alias, *agent, splitCSV(*hosts), splitCSV(*methods), *ttl)
+	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
@@ -728,6 +733,8 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 		Agent: tok.Agent, Outcome: "ok",
 	})
 	fmt.Fprintf(stdout, "capability: %s\n", tok.ID)
+	fmt.Fprintf(stdout, "token:      %s\n", token)
+	fmt.Fprintln(stdout, "  (use this token as the proxy Bearer credential — it is shown once; only its hash is stored)")
 	fmt.Fprintf(stdout, "alias:      %s\n", tok.Alias)
 	if tok.Agent != "" {
 		fmt.Fprintf(stdout, "agent:      %s\n", tok.Agent)
