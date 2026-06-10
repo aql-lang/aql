@@ -460,6 +460,19 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 
 	targetVal = ResolveTypeLiteralDef(targetVal, reg)
 
+	// A generic SCHEMA as the make target — `make Box {value:42}` —
+	// infers its type arguments from the construction body and
+	// instantiates first (design/GENERICS.0.md Phase 7 / D12); the
+	// instantiation then takes the ordinary path below. Uninferable,
+	// undefaulted parameters error (unbound_param) — never silent Any.
+	if IsTypeSchema(targetVal) {
+		inst, err := InferAndInstantiateSchema(reg, targetVal, srcVal)
+		if err != nil {
+			return nil, err
+		}
+		return MakeHandler([]Value{inst, srcVal}, nil, nil, reg)
+	}
+
 	// Structural kinds (object / record / table) instantiate through
 	// the Ideal registry — see ideal.go and design/IDEAL.0.md.
 	if reg != nil {

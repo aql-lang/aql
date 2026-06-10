@@ -1275,6 +1275,32 @@ unconstrained-param strictness, per-schema disjunct collapse).
 > positions, D15 rows, negatives incl. the gate); generics.tsv §7
 > canonical rows for the three integration fixes.
 
+## 15g. Landed state — Phase 7: value-to-type inference (2026-06-10)
+
+> **Phase 7 LANDED**, resolving D12: a bare generic schema used as a
+> construction target — `make Box {value:42}`, `def b:Box {…}` —
+> infers its type arguments from the body and instantiates.
+> `InferSchemaBindings` (eng/go/generics_unify.go) mirrors the
+> call-site inference contract: a placeholder field constraint binds
+> typeof(field value); `[:T]`/`{:T}` child constraints bind the
+> tor-union of element types (the shared `inferFromChildPattern`);
+> conflicts merge per §9.2.2, never reject. `InferAndInstantiateSchema`
+> assembles the positional args (defaults fill behind the inferred
+> prefix; an inferred parameter AFTER an uninferable defaulted one is
+> rejected loudly rather than mis-positioned) and routes through the
+> ordinary `InstantiateSchema` — so memoisation, bound checks
+> (`constraint_violation` fires on inferred args too), and nominal
+> identity are untouched. Wiring: `MakeHandler` (before the Ideal
+> dispatch) and `defTypedHandler` (before the typed-def branches, so
+> the resulting instantiation constructs through the existing
+> ObjectType/record paths). An uninferable, undefaulted parameter is
+> `unbound_param` with an `of [...]` hint — never silent Any; an
+> explicit instantiation always wins over inference; a fully-
+> defaulted schema auto-instantiates with no evidence (the D12
+> arity_mismatch interim behaviour is gone). Nested instantiations
+> bind as parameters (`Outer of [Box of [Integer]]`). Battery:
+> generics.tsv §8.
+
 ## 15. Review (2026-06-10) — against the post-2026-06-04 landings
 
 Between the 2026-06-04 refresh and this review, the language landed:

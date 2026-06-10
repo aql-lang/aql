@@ -257,6 +257,18 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		return constraint.String()
 	}
 	body := args[1]
+	// A generic SCHEMA annotation — `def b:Box {value:42}` — infers
+	// its type arguments from the body and instantiates (Phase 7 /
+	// D12); the instantiation then flows through the ordinary typed-def
+	// branches below (the ObjectType branch constructs class
+	// instances, etc.). Uninferable, undefaulted parameters error.
+	if IsTypeSchema(constraint) {
+		inst, ierr := eng.InferAndInstantiateSchema(r, constraint, body)
+		if ierr != nil {
+			return nil, fmt.Errorf("def %s: %w", name, ierr)
+		}
+		constraint = inst
+	}
 	if constraint.Parent.Equal(TFnUndef) && IsAtom(body) {
 		atomName, _ := AsAtom(body)
 		if top, ok := r.Defs.Top(atomName); ok {

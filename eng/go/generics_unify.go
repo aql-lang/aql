@@ -218,6 +218,121 @@ func inferFromChildPattern(merge func(string, Value), isParam map[string]bool, p
 	}
 }
 
+// InferSchemaBindings infers a generic schema's type-parameter
+// bindings from a concrete construction body (Phase 7, §9.2.2 + D12):
+// each schema field whose declared constraint is a placeholder merges
+// typeof(field value); a `[:T]`/`{:T}` child constraint merges the
+// union of the element types. Conflicting evidence tor-merges — same
+// contract as call-site inference for generic fns.
+func InferSchemaBindings(info *TypeSchemaInfo, body Value) map[string]Value {
+	bindings := map[string]Value{}
+	if info == nil {
+		return bindings
+	}
+	isParam := map[string]bool{}
+	for _, p := range info.Params {
+		isParam[p.Name] = true
+	}
+	merge := func(name string, t Value) {
+		if !isParam[name] {
+			return
+		}
+		if prev, ok := bindings[name]; ok {
+			bindings[name] = unionType(prev, t)
+			return
+		}
+		bindings[name] = t
+	}
+	fields := schemaFields(info)
+	if fields == nil || body.Parent == nil || !body.Parent.Equal(TMap) || !IsConcrete(body) {
+		return bindings
+	}
+	bm, err := AsMap(body)
+	if err != nil || bm == nil {
+		return bindings
+	}
+	for _, fname := range fields.Keys() {
+		c, _ := fields.Get(fname)
+		v, ok := bm.Get(fname)
+		if !ok {
+			continue
+		}
+		// Direct placeholder constraint: the field survives schema
+		// construction as the placeholder literal (fields resolve while
+		// the gen bindings are live) or, defensively, a raw Word.
+		pname := TypeParamName(&c)
+		if pname == "" && IsWord(c) {
+			if w, werr := AsWord(c); werr == nil {
+				pname = w.Name
+			}
+		}
+		if pname != "" && isParam[pname] {
+			if v.Parent != nil {
+				merge(pname, NewTypeLiteral(v.Parent))
+			}
+			continue
+		}
+		if IsTypedList(c) || IsTypedMap(c) {
+			inferFromChildPattern(merge, isParam, c, v)
+		}
+	}
+	return bindings
+}
+
+// schemaFields returns the field-constraint map of a record or class
+// schema body, nil for fn-shape schemas (no fields to infer from).
+func schemaFields(info *TypeSchemaInfo) *OrderedMap {
+	if IsRecordType(info.Body) {
+		rt, _ := AsRecordType(info.Body)
+		return rt.Fields
+	}
+	if oi, err := AsObjectType(info.Body); err == nil {
+		return oi.Fields
+	}
+	return nil
+}
+
+// InferAndInstantiateSchema resolves a generic schema used directly as
+// a construction constraint — `make Box {value:42}` or `def b:Box
+// {value:42}` — by inferring the parameter bindings from the body and
+// instantiating (Phase 7, resolving D12: a fully-defaulted schema
+// auto-instantiates even without field evidence). An uninferable,
+// undefaulted parameter is a loud unbound_param — never a silent Any.
+func InferAndInstantiateSchema(r *Registry, schema Value, body Value) (Value, error) {
+	info, err := AsTypeSchema(schema)
+	if err != nil {
+		return Value{}, err
+	}
+	bindings := InferSchemaBindings(info, body)
+	args := make([]Value, 0, len(info.Params))
+	for i := range info.Params {
+		p := &info.Params[i]
+		if b, ok := bindings[p.Name]; ok {
+			args = append(args, b)
+			continue
+		}
+		if p.HasDefault {
+			// Defaults fill positionally at the tail inside
+			// InstantiateSchema — stop here, but a BOUND parameter
+			// after this one would be mis-positioned, so reject that
+			// mix loudly rather than guessing.
+			for j := i + 1; j < len(info.Params); j++ {
+				if _, later := bindings[info.Params[j].Name]; later {
+					return Value{}, r.AqlError("unbound_param",
+						fmt.Sprintf("%s: parameter %s could not be inferred but a later parameter could — instantiate explicitly with `%s of [...]`",
+							info.Name, p.Name, info.Name), "make")
+				}
+			}
+			break
+		}
+		return Value{}, r.AqlErrorHint("unbound_param",
+			fmt.Sprintf("%s: type parameter %s cannot be inferred from the construction body", info.Name, p.Name),
+			"make",
+			"instantiate explicitly: "+info.Name+" of [...]")
+	}
+	return InstantiateSchema(r, info, args)
+}
+
 // GenBindingCarrier converts one inferred binding value into a
 // check-mode carrier: a binding that denotes a lattice node becomes a
 // carrier of that node; a tor-merged disjunct becomes a disjunct

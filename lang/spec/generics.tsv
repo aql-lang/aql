@@ -67,3 +67,16 @@ def Box gen [T] class {value:T} def xs:[:(Box of [Integer])] [(make (Box of [Str
 def Box gen [T] class {value:T} def b (make (Box of [Integer]) {value:7}) end case b [(Box of [Integer]) 'int-box' 'other']	'int-box'	a case clause's paren pattern evaluates and matches the exact instantiation
 def Box gen [T] class {value:T} def b (make (Box of [String]) {value:'s'}) end case b [(Box of [Integer]) 'int-box' 'other']	'other'	…and not a sibling
 def Circle class {r:1.0} def c (make Circle {r:2.0}) end case c [Circle 'circle' 'other']	'circle'	a bare class name in a case clause admits its instances (the object-type unify fold)
+#
+# §8  value-to-type inference — a bare schema as a construction target
+def Box gen [T] class {value:T} end (make Box {value:42}) typeof	Box of [Integer]	make infers the type argument from the body
+def Box gen [T] class {value:T} def b:Box {value:'hi'} end b typeof	Box of [ProperString]	…and so does a bare-schema typed-def annotation (typeof-consistent)
+def Stack gen [T] class {items:[:T]} end (make Stack {items:[1 2]}) typeof	Stack of [Integer]	a [:T] field infers from its elements
+def Pair gen [K V] refine Record [key:K value:V] end make Pair {key:'a' value:1}	{key:'a' value:1}	record schemas construct through inference too
+def M gen [T] class {items:[:T]} end (make M {items:[1 'x']}) typeof	M of [Integer|ProperString]	conflicting field evidence tor-merges (§9.2.2) — never rejected
+def Q gen [T (E default Error)] class {a:T} end (make Q {a:1}) typeof	Q of [Integer Error]	defaults fill behind the inferred prefix
+def R gen [(T default Integer)] class {items:[:T]} end (make R {items:[]}) typeof	R of [Integer]	a fully-defaulted schema auto-instantiates without evidence (D12)
+def Box gen [T] class {value:T} def Outer gen [T] class {inner:T} end (make Outer {inner:(make (Box of [Integer]) {value:1})}) typeof	Outer of [Box of [Integer]]	a nested instantiation binds as the parameter
+def Box gen [T] class {value:T} def b:(Box of [Number]) {value:1} end b typeof	Box of [Number]	an EXPLICIT instantiation always wins over inference
+def Q gen [T U] class {a:T} end make Q {a:1}	ERROR:unbound_param	an uninferable, undefaulted parameter is loud — never silent Any
+def Sorted gen [(T extends Number)] class {items:[:T]} end make Sorted {items:['x']}	ERROR:constraint_violation	inferred arguments still run the bound check
