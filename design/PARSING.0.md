@@ -1,11 +1,22 @@
 # In-Memory Parsing — Decode and Parse Proposals
 
-Status: proposals (nothing here is implemented unless marked
-otherwise). Source material: VOXGIG-DX-REPORT.5.md T9.7 ("no
-in-memory parser"), moved here so the report tracks status and this
-document owns the design. The trie author wanted to turn text into
-data (and AQL source into inspectable structure) without touching the
-filesystem.
+Status: **both proposals LANDED (2026-06-10).** Source material:
+VOXGIG-DX-REPORT.5.md T9.7 ("no in-memory parser"), moved here so the
+report tracks status and this document owns the design. The trie
+author wanted to turn text into data (and AQL source into inspectable
+structure) without touching the filesystem.
+
+> **Landed state (2026-06-10):** §2 `StructUtil.parse` decodes
+> jsonic/JSON text via `jsonic.Make().Parse` + the same data-context
+> conversion `read`/`import` use (text → strings, never words);
+> malformed AND empty input raise `[aql/parse_error]`. One leniency
+> note: jsonic itself is forgiving (e.g. `"{a:"` repairs to
+> `{a:none}`), so "malformed" means what jsonic rejects — the same
+> contract as `import "data.jsonic"`. §3 `Vm.parse` returns the
+> engine's parse values as a QUOTED list (canon renders it
+> `(quote [1 word(add) 2])`); element shapes are implementation-
+> defined as recommended. Spec rows in `lang/spec/module-struct.tsv`
+> and `lang/spec/module-vm.tsv`; module doc strings registered.
 
 ## 1. Current state
 

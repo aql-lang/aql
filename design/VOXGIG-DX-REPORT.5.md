@@ -128,7 +128,7 @@ isolation but surprising in combination (`merge` depth, ~~`do` evaluation~~
 | T9.1 | 🟡 | ✅ fixed (semantics) / 🟠 open (perf) | Maps with **computed keys** now work end-to-end: `{[k]: v}` literals evaluate the key, `m get (k)` reads, and `set` gained a **copy-returning Map form** — `{a:1} set (k) 2` returns a new map with the receiver untouched, and calls chain (`{} set a 1 set b 2`). Together with `StructUtil.items` for enumeration, the association-list workaround is retired. Residual: each set copies the map (O(n) per insert, like setpath), so bulk incremental construction still wants the P4 native persistent map (HAMT Level B). Side gap still open: `refine Object` *dynamic* fields remain non-enumerable (`StructUtil.items` returns `[]` for them) — slated for removal under the class/object split: class instances become sealed (undeclared writes error) and plain Objects become fully enumerable (`design/CLASS-OBJECT.0.md`). |
 | T9.2 | 🟡 | ✅ fixed | `filter` now accepts a `[…]` quotation like `each`/`fold`: `filter [2 gt] [1 2 3 4]` → `[3 4]` (element pushed first, no `{key,value}` wrapper; maps filter by value to a map; a non-Boolean body result is a **loud error**, not a silent drop). The Reach lens (`filter $.active xs`) and Function-callback forms remain. Spec rows in `lang/spec/higher-order.tsv` §5b. |
 | T9.6 | 🟡 | ❌ missing → `design/ERRORS.0.md` §2 | `raise` is still undefined; the word is now fully specified (message / code+message / spec-map forms, `Ideal/Error` result, caught by the existing `do … error […]`) in the error design doc. |
-| T9.7 | 🟡 | ❌ missing → `design/PARSING.0.md` | Still no in-memory parser. Note `Vm.run "1 add 2"` → `3` covers *evaluate from a string*; the parse-without-eval gap is now specified as `StructUtil.parse` (jsonic text → data, the `jsonify` complement) and `Vm.parse` (AQL source → quoted structure) in the parsing design doc. |
+| T9.7 | 🟡 | ✅ fixed | In-memory parsing landed (2026-06-10) per `design/PARSING.0.md`: `StructUtil.parse` decodes jsonic/JSON text to data (the `jsonify` complement — data context, jsonic superset, loud `parse_error` on malformed/empty input) and `Vm.parse` parses AQL source to a quoted token list without evaluating it (element shapes are the engine's parse values, implementation-defined for now). Spec rows in `module-struct.tsv` / `module-vm.tsv`. |
 | — | 🟡 | ✅ closed (docs) | `with` / `assoc` are not words, by choice: `StructUtil.setpath` *is* the copy-returning single-key (and deep-path) update — `{a:1,b:2} StructUtil.setpath "b" 3` → `{a:1, b:3}` — and is now documented as such in REFERENCE.md (both the `set` callout and the merge gotcha point to it). Adding an alias was rejected as API duplication. |
 
 ### Theme H — HAMT case study (capability ceiling)
@@ -244,7 +244,7 @@ Confirmed still open (each now carries a written design):
   `design/ERRORS.0.md` §§3–6 (and per ADR-004, B2a's fix is sibling
   evaluation order, *not* a stack-first `print`).
 - **T9.6 `raise`** — `design/ERRORS.0.md` §2.
-- **T9.7 in-memory `parse`** — `design/PARSING.0.md`.
+- ~~**T9.7 in-memory `parse`**~~ — ✅ landed (`design/PARSING.0.md`).
 - **T9.1** map computed keys — engine/runtime work (HAMT Level B).
 
 Reclassified as docs / by design (docs landed):
@@ -300,9 +300,9 @@ Status after the second pass:
    as such; an alias was rejected as API duplication.
 2. **`raise` / `throw` with a message** (T9.6) — ❌ specified in
    `design/ERRORS.0.md` §2, not yet implemented.
-3. **In-memory jsonic `parse` / `decode`** to complement `jsonify`
-   (T9.7) — ❌ specified in `design/PARSING.0.md`, not yet
-   implemented.
+3. ~~**In-memory jsonic `parse` / `decode`** to complement `jsonify`~~
+   (T9.7) — ✅ done (`StructUtil.parse` + `Vm.parse`,
+   `design/PARSING.0.md`).
 4. ~~**`filter` accepts a `[…]` quotation** like `each`/`fold`~~
    (T9.2) — ✅ done.
 5. ~~**Native `popcount`**~~ ✅ (`BinUtil.popcount`) +
@@ -407,7 +407,7 @@ were moved out of this report into those documents):
 | runtime `uncalled_function` (T1 residual) | ERRORS.0.md §5 (option 2: end-of-run residue check) |
 | sibling forward groups evaluate in source order (B2a) | ERRORS.0.md §6 — note: per ADR-004 the original "make `print` stack-first" suggestion is **rejected**; the fix is evaluation order, not a per-word flip |
 | `mixed_form_call` check advisory (T9.4) | ERRORS.0.md §6 |
-| `StructUtil.parse` + `Vm.parse` (T9.7) | PARSING.0.md §2–3 |
+| ~~`StructUtil.parse` + `Vm.parse` (T9.7)~~ ✅ landed 2026-06-10 | PARSING.0.md §2–3 |
 
 **Real engine work (unchanged):**
 

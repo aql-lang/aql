@@ -13,6 +13,7 @@ func init() {
 		"validate":  "Check data against a shape spec.",
 		"selector":  "Query-select children matching a spec.",
 		"jsonify":   "Serialise a value to JSON text (class instances carry $class; user $-keys escape to $$).",
+		"parse":     "Decode jsonic/JSON text to data (the complement of jsonify) — data context, loud parse_error on malformed input.",
 		"reify":     "Hydrate a class instance from JSON text or a Node — explicit class or tor-union target.",
 		"nodify":    "Project a value to its Node/Scalar form.",
 	})

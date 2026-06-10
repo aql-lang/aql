@@ -59,6 +59,7 @@ func BuildVMModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("run-with", makeRunWithFnDef("vm-run-with", subReg))
 	exports.Set("run-sandbox", makeRunFnDef("vm-run-sandbox", subReg))
 	exports.Set("run-compute", makeRunFnDef("vm-run-compute", subReg))
+	exports.Set("parse", makeRunFnDef("vm-parse", subReg))
 
 	modID := parent.Modules.NextID()
 	return native.ModuleDesc{
@@ -126,6 +127,36 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 					return runInSubEngine(parent, code, pol)
 				},
 				Returns:    []*native.Type{native.TAny},
+				BarrierPos: -1,
+			}},
+		},
+		{
+			// vm-parse — AQL source → inspectable structure, a step
+			// below Vm.run: parse and return the token/value sequence
+			// as a QUOTED list (it never auto-evaluates), without
+			// running anything. The element shapes are the engine's
+			// own parse values (words, literals, structural markers)
+			// and are implementation-defined for now — see
+			// design/PARSING.0.md §3. Parse errors raise
+			// [aql/parse_error] with the same message the CLI prints.
+			Name: "vm-parse",
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TString},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+					code, err := args[0].AsConcreteString()
+					if err != nil {
+						return nil, err
+					}
+					tokens, perr := parent.ParseFunc(code)
+					if perr != nil {
+						return nil, r.AqlError("parse_error",
+							fmt.Sprintf("Vm.parse: %v", perr), "Vm.parse")
+					}
+					lst := native.NewList(tokens)
+					lst.Quoted = true
+					return []native.Value{lst}, nil
+				},
+				Returns:    []*native.Type{native.TList},
 				BarrierPos: -1,
 			}},
 		},

@@ -97,3 +97,15 @@ jsonify {a:1}	ERROR:undefined_word	jsonify also moved out of core
 "aql:struct-util" import end  (StructUtil.setpath (object {a:1}) "b" 2) typeof	Object	an open Object edit stays an Object
 "aql:struct-util" import end  (StructUtil.setpath (object {a:1}) "b" 2) get b	2	…and accepts new keys (open contract)
 "aql:struct-util" import end  def Point class {x:1} StructUtil.walk (make Point {})	[{path:'x' value:1}]	walk sees the instance's field projection
+#
+# §  parse — jsonic/JSON text → data (the decode complement of
+#    jsonify). DATA context: nothing evaluates; the jsonic superset is
+#    accepted (unquoted keys, optional commas), so strict JSON parses
+#    too. Malformed input raises [aql/parse_error].
+"aql:struct-util" import end StructUtil.parse "{a:1, b:[2,3]}"	{a:1 b:[2 3]}	jsonic text decodes to a Map
+"aql:struct-util" import end StructUtil.parse "[1, 2, 3]"	[1 2 3]	a JSON array decodes to a List
+"aql:struct-util" import end StructUtil.parse '{"a": 1}'	{a:1}	strict JSON is valid jsonic
+"aql:struct-util" import end StructUtil.parse "{val:'if'}"	{val:'if'}	data context — text stays a string, never a word
+"aql:struct-util" import end StructUtil.parse (StructUtil.jsonify {a:1 b:[2 3]})	{a:1 b:[2 3]}	jsonify→parse round trip
+"aql:struct-util" import end StructUtil.parse "{a:1]"	ERROR:parse_error	malformed input raises loudly
+"aql:struct-util" import end StructUtil.parse ""	ERROR:parse_error	empty input raises (never a silent none)
