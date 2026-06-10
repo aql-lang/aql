@@ -1,0 +1,50 @@
+# AQL Language Specification: the `case` word — dispatch on a value
+# Format: input<TAB>expected<TAB>description
+#
+# `case <value> [m1 b1 m2 b2 … default]` evaluates the value (a
+# code-body list executes and its LAST result is captured; parens
+# evaluate before collection; a plain value is used as-is), then walks
+# the match/block pairs in order. A match that is a code-body list
+# executes as if the value were already on the stack ([gt 3] runs
+# `v gt 3`) and the result coerces to boolean; any other match
+# UNIFIES with the value (equal scalars/atoms, a type literal —
+# builtin or def'd — matches its members). The first matching
+# clause's block runs the same way — value pushed first, like the
+# `error [handler]` block — so a block list can consume it; a plain
+# value block is the result as-is. The trailing odd element is the
+# optional default. No match and no default produces nothing. The
+# stack-value form `<value> case [clauses]` serves contexts where the
+# value is already on the stack (e.g. error handlers).
+#
+# §1  value matches (unify)
+case 2 [1 "one" 2 "two" "many"]	'two'	an equal scalar matches
+case 9 [1 "one" 2 "two" "many"]	'many'	no match takes the default
+case 9 [1 "one" 2 "two"]		no match and no default produces nothing
+case red/q [red/q "warm" blue/q "cool"]	'warm'	atoms match by equality
+case 2.0 [2 "int-two" "other"]	'other'	unify is exact across numeric leaves — 2.0 does not match 2
+#
+# §2  type matches
+case "x" [Integer "int" String "str" "other"]	'str'	a builtin type literal matches its members
+case 5 [Integer "int" String "str" "other"]	'int'	…tried in order
+case true [Integer "int" "other"]	'other'	non-members fall through
+def Pos refine Integer def x:Pos 5 case x [Pos "pos" Integer "plain-int" "other"]	'pos'	a def'd newtype matches nominally
+def Pos refine Integer case 5 [Pos "pos" Integer "plain-int" "other"]	'pos'	…matches follow UNIFY (construction compatibility): a newtype admits its base values here
+def Pos refine Integer case 5 [[is Pos] "pos" "other"]	'other'	…use an [is T] predicate match for nominal strictness
+def Big (Integer gt 10) case 50 [Big "big" Integer "small-int"]	'big'	a predicate refinement runs its predicate
+def Big (Integer gt 10) case 5 [Big "big" Integer "small-int"]	'small-int'	…and rejects values outside it
+#
+# §3  predicate matches (code-body lists run with the value on the stack)
+case 5 [[gt 3] "big" "small"]	'big'	[gt 3] executes as `5 gt 3`
+case 2 [[gt 3] "big" "small"]	'small'	a false predicate falls through
+case 5 [[gt 3] [mul 10] "small"]	50	a block list also sees the value — here consuming it
+case 7 [[lt 3] "low" [lt 10] "mid" "high"]	'mid'	predicates are tried in order
+#
+# §4  the value expression executes
+case (1 add 1) [2 "two" "other"]	'two'	a paren group evaluates before dispatch
+case [1 add 1] [2 "two" "other"]	'two'	a code-body value executes; the LAST result is captured
+def f fn [[x:Integer] [] []] case [f 1] [2 "two" "other"]	ERROR:case_error	a value expression that produces nothing is loud
+case 1 Integer	ERROR:case_error	the clause list must be a list
+#
+# §5  stack-value form — the value is already on the stack
+5 case [5 "five" "other"]	'five'	`v case [clauses]` reads the value from the stack
+def e (do [raise bad_input "nope"]) do [e get code case [bad_input/q "B" "other"]]	'B'	…the natural shape inside error handlers

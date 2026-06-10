@@ -1052,9 +1052,11 @@ before the call.
 | Word | Description | Example |
 |------|-------------|---------|
 | `if` | Conditional; else branch optional | `if (5 gt 3) ["y"] ["n"]` |
+| `case` | Dispatch on a value: match/block pairs + optional default | `case 2 [1 "one" 2 "two" "many"]` returns `'two'` |
 | `for` | Numeric loop (counter or range) | `for 5 [42]` |
 | `do` | Evaluate list as program | `do [1 add 2]` returns `3` |
-| `error` | Pattern-match an error value | `do [1 div 0] error [drop 42]` |
+| `error` | Handle an error value (a non-Error result passes through) | `do [1 div 0] error [drop 42]` |
+| `raise` | Raise an error (code, message, optional payload) | `raise bad_input "expected a list"` |
 | `break` | Exit `for` loop early | `for 10 [break]` |
 | `continue` | Skip to next iteration | `for 10 [continue]` |
 
@@ -1567,7 +1569,27 @@ reads `e.code`, `e.message`, and any payload keys (`e.got`), and
 | `cap_denied` | Operation needed a capability that wasn't enabled. |
 | `cancelled` | Operation cancelled (timer, await branch). |
 
-Use `do [...] error [...]` to catch them; dispatch on `.code`.
+Use `do [...] error [...]` to catch them — a successful body skips
+the handler and its value passes through. Inside the handler the
+Error value is on the stack; dispatch on the code with `case`:
+
+```
+def attempt fn [[x:Integer] [Any] [
+  do [risky x] error [
+    get code
+    case [
+      bad_input/q  "rejected: bad input"
+      too_big/q    "rejected: too large"
+      "unexpected failure"
+    ]
+  ]
+]]
+```
+
+A match may also be a predicate over the whole Error (`[get code eq
+bad_input/q] [get message]`), with the matched block reading the
+error's fields — the value is on the stack for both, exactly like
+the `error` handler itself.
 
 
 ## Capabilities

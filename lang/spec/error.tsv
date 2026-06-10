@@ -30,3 +30,14 @@ def f fn [[x:Integer] [] []] def r (f 1)	ERROR:def_error	def of a void expressio
 def f fn [[x:Integer] [] []] 3 add (f 1)	ERROR:no_value_error	a void group starving any word is named at the call
 (1 2 add ())	3	…but a void group with stack operands available stays valid
 (add () 5 6)	11	…and collection legitimately resumes past a void group
+#
+# §4  typed error handling — dispatch on the error with `case`
+#     (the error handler runs with the Error on the stack; `get code`
+#     consumes it and the stack-value form of case dispatches on the
+#     code; or keep the Error as the case value and match it with
+#     predicates, the blocks reading its fields).
+do [raise bad_input "nope"] error [get code case [bad_input/q "rejected" io_error/q "retry" "unexpected"]]	'rejected'	dispatch on the code atom
+do [raise io_error "disk"] error [get code case [bad_input/q "rejected" io_error/q "retry" "unexpected"]]	'retry'	…each code takes its own clause
+do [raise weird "?"] error [get code case [bad_input/q "rejected" io_error/q "retry" "unexpected"]]	'unexpected'	…unknown codes take the default
+do [raise {code: too_big/q, message: "out of range", limit: 99}] error [case [[get code eq bad_input/q] [get message] [get code eq too_big/q] [get limit] "unexpected"]]	99	predicate matches inspect the Error itself; the block reads its payload
+do [21 mul 2] error [get code case [bad_input/q "rejected" "unexpected"]]	42	a successful body skips the handler entirely (error passes the value through)

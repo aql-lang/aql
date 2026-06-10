@@ -76,6 +76,28 @@ func init() {
 	})
 
 	register(&Entry{
+		Word:    "case",
+		Summary: "Dispatch on a value: match/block pairs with an optional default.",
+		Description: "`case <value> [m1 b1 m2 b2 \u2026 default]` evaluates the value (a " +
+			"code-body list executes and its LAST result is captured) and walks the " +
+			"clauses in order. A match that is a code-body list executes as if the " +
+			"value were already on the stack ([gt 3] runs `v gt 3`) and coerces to " +
+			"boolean; any other match UNIFIES with the value (equal scalars/atoms, a " +
+			"type literal matches its members). The first matching block runs the " +
+			"same way \u2014 value pushed first, like the error handler \u2014 so a block " +
+			"list can consume it; a plain-value block is the result as-is. A trailing " +
+			"odd element is the default. The stack-value form `v case [clauses]` " +
+			"serves error handlers and pipelines.",
+		Examples: []string{
+			`case 2 [1 "one" 2 "two" "many"]            ;# 'two'`,
+			`case 5 [[gt 3] "big" "small"]              ;# 'big'`,
+			`case "x" [Integer "int" String "str"]      ;# 'str'`,
+			`case 5 [Integer [mul 10] "other"]          ;# 50 — the block sees the value`,
+			`do [risky] error [get code case [bad_input/q "rejected" "unexpected"]]`,
+		},
+	})
+
+	register(&Entry{
 		Word:    "for",
 		Summary: "Iterate over a numeric range.",
 		Description: "Iterates over a range and evaluates the body list for each step. " +

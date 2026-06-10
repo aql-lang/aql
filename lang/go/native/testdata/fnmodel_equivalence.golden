@@ -57,6 +57,8 @@ WORD bxor
 WORD cancel
   [Ideal/Timeout] barrier=1
   [Ideal/Interval] barrier=1
+WORD case
+  [Any Any] barrier=2 noeval={0,1} returns=[Any]
 WORD changecase
   [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
   [Scalar/Atom Node/Map] barrier=2 returns=[Scalar/String]
@@ -132,6 +134,7 @@ WORD eq
   [Any Any] barrier=2 returns=[Scalar/Boolean]
 WORD error
   [Node/List Ideal/Error] barrier=2 noeval={0} returns=[Ideal/Error]
+  [Node/List Any] barrier=2 noeval={0} returns=[Any]
 WORD escape
   [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
   [Scalar/String] barrier=1 returns=[Scalar/String]
