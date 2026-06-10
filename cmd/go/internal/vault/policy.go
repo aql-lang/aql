@@ -26,6 +26,11 @@ type Policy struct {
 	Capabilities []PolicyCapability `json:"capabilities,omitempty"`
 }
 
+// policyVersion is the policy-file schema this binary understands. A
+// file may omit the field (treated as v1); a file declaring a newer
+// version is rejected rather than applied partially.
+const policyVersion = 1
+
 // PolicyAlias declares one alias and where its value should come
 // from if it is not already in the keyring. FromEnv reads from
 // an environment variable at apply time, leaving the value out of
@@ -93,6 +98,10 @@ func runPolicyApply(args []string, homeDir string, stdin io.Reader, stdout, stde
 	var pol Policy
 	if err := json.Unmarshal(data, &pol); err != nil {
 		fmt.Fprintf(stderr, "error: parsing %s: %s\n", path, err)
+		return 1
+	}
+	if pol.Version > policyVersion {
+		fmt.Fprintf(stderr, "error: policy %s is version %d but this aql understands up to version %d; upgrade aql\n", path, pol.Version, policyVersion)
 		return 1
 	}
 
@@ -233,7 +242,7 @@ func runPolicyShow(homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
-	pol := Policy{Version: 1}
+	pol := Policy{Version: policyVersion}
 	for _, a := range s.SortedAliases() {
 		pol.Aliases = append(pol.Aliases, PolicyAlias{
 			Name:      a.Name,

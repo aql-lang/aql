@@ -399,9 +399,27 @@ func scryptKey(passphrase string, salt []byte) ([]byte, error) {
 	return scrypt.Key([]byte(passphrase), salt, 1<<15, 8, 1, 32)
 }
 
-// File layout: 16-byte salt | 12-byte nonce | ciphertext|tag.
+const (
+	// keyringMagic prefixes a self-describing keyring file. Older files
+	// were written without it (a raw salt|nonce|ciphertext blob) and are
+	// still readable; they are re-written in the current format on the
+	// next save.
+	keyringMagic = "AQLK"
+	// keyringFormat is the keyring layout version this binary writes.
+	// Bump it (and add a branch in decryptHeadered) when the KDF,
+	// cipher, or byte layout changes.
+	//
+	//	1 — scrypt(N=2^15,r=8,p=1) + AES-256-GCM, header-bound AAD.
+	keyringFormat   = 1
+	keyringSaltLen  = 16
+	keyringNonceLen = 12
+)
+
+// Headered layout: "AQLK" | format(1 byte) | salt(16) | nonce(12) | ciphertext|tag.
+// The GCM additional data is the header bytes + salt, so the format
+// byte is authenticated and cannot be downgraded by tampering.
 func encryptBlob(plain []byte, passphrase string) ([]byte, error) {
-	salt := make([]byte, 16)
+	salt := make([]byte, keyringSaltLen)
 	if _, err := rand.Read(salt); err != nil {
 		return nil, err
 	}
@@ -421,21 +439,72 @@ func encryptBlob(plain []byte, passphrase string) ([]byte, error) {
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, err
 	}
-	ct := gcm.Seal(nil, nonce, plain, salt)
-	out := make([]byte, 0, len(salt)+len(nonce)+len(ct))
+	header := append([]byte(keyringMagic), byte(keyringFormat))
+	ct := gcm.Seal(nil, nonce, plain, keyringAAD(header, salt))
+	out := make([]byte, 0, len(header)+len(salt)+len(nonce)+len(ct))
+	out = append(out, header...)
 	out = append(out, salt...)
 	out = append(out, nonce...)
 	out = append(out, ct...)
 	return out, nil
 }
 
+// keyringAAD binds the header and salt into the AEAD additional data.
+func keyringAAD(header, salt []byte) []byte {
+	aad := make([]byte, 0, len(header)+len(salt))
+	aad = append(aad, header...)
+	aad = append(aad, salt...)
+	return aad
+}
+
 func decryptBlob(blob []byte, passphrase string) ([]byte, error) {
-	if len(blob) < 16+12+16 {
+	if len(blob) >= len(keyringMagic)+1 && string(blob[:len(keyringMagic)]) == keyringMagic {
+		return decryptHeadered(blob, passphrase)
+	}
+	return decryptLegacy(blob, passphrase)
+}
+
+// decryptHeadered reads the self-describing format, dispatching on the
+// format byte. A newer format than this binary understands is reported
+// clearly rather than surfaced as a generic "corrupt keyring".
+func decryptHeadered(blob []byte, passphrase string) ([]byte, error) {
+	const off = len(keyringMagic) + 1 // magic + format byte
+	format := int(blob[len(keyringMagic)])
+	if format > keyringFormat {
+		return nil, fmt.Errorf("vault: keyring is format %d but this aql understands up to %d; upgrade aql", format, keyringFormat)
+	}
+	if format != 1 {
+		return nil, fmt.Errorf("vault: unknown keyring format %d", format)
+	}
+	if len(blob) < off+keyringSaltLen+keyringNonceLen+16 {
 		return nil, errors.New("vault: keyring file is truncated")
 	}
-	salt := blob[:16]
-	nonce := blob[16:28]
-	ct := blob[28:]
+	salt := blob[off : off+keyringSaltLen]
+	nonce := blob[off+keyringSaltLen : off+keyringSaltLen+keyringNonceLen]
+	ct := blob[off+keyringSaltLen+keyringNonceLen:]
+	plain, err := aesGCMOpen(passphrase, salt, nonce, ct, keyringAAD(blob[:off], salt))
+	if err != nil {
+		return nil, err
+	}
+	return plain, nil
+}
+
+// decryptLegacy reads the original headerless salt|nonce|ciphertext
+// layout (AAD = salt). Retained so vaults written before the format
+// header remain readable; they are upgraded on the next save.
+func decryptLegacy(blob []byte, passphrase string) ([]byte, error) {
+	if len(blob) < keyringSaltLen+keyringNonceLen+16 {
+		return nil, errors.New("vault: keyring file is truncated")
+	}
+	salt := blob[:keyringSaltLen]
+	nonce := blob[keyringSaltLen : keyringSaltLen+keyringNonceLen]
+	ct := blob[keyringSaltLen+keyringNonceLen:]
+	return aesGCMOpen(passphrase, salt, nonce, ct, salt)
+}
+
+// aesGCMOpen derives the scrypt key and opens the GCM ciphertext,
+// mapping any authentication failure to a single non-revealing error.
+func aesGCMOpen(passphrase string, salt, nonce, ct, aad []byte) ([]byte, error) {
 	key, err := scryptKey(passphrase, salt)
 	if err != nil {
 		return nil, err
@@ -448,7 +517,7 @@ func decryptBlob(blob []byte, passphrase string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	plain, err := gcm.Open(nil, nonce, ct, salt)
+	plain, err := gcm.Open(nil, nonce, ct, aad)
 	if err != nil {
 		return nil, errors.New("vault: wrong passphrase or corrupt keyring")
 	}

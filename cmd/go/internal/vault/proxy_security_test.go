@@ -80,6 +80,45 @@ func TestProxyRejectsTokenPrefix(t *testing.T) {
 	}
 }
 
+// TestProxyProtocolHeader checks the broker advertises its protocol
+// version on responses and refuses a client that declares a newer one.
+func TestProxyProtocolHeader(t *testing.T) {
+	testHome(t)
+	mustInit(t)
+	fu := newFakeUpstream(t)
+	registerTestProvider(t, "fake", fu, "bearer")
+	if code, _, _ := runVault(t, "v\n", "add", "--from-stdin", "--provider=fake", "k"); code != 0 {
+		t.Fatal("add")
+	}
+	tok := grantOK(t, "k", nil, nil)
+	base := startProxy(t)
+
+	// A normal request carries the protocol header on the response.
+	req, _ := http.NewRequest("GET", base+"/k/foo", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if got := resp.Header.Get(headerProtocol); got != "1" {
+		t.Errorf("response %s = %q, want 1", headerProtocol, got)
+	}
+
+	// A client declaring a newer protocol is refused.
+	req2, _ := http.NewRequest("GET", base+"/k/foo", nil)
+	req2.Header.Set("Authorization", "Bearer "+tok)
+	req2.Header.Set(headerProtocol, "99")
+	resp2, err := http.DefaultClient.Do(req2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusBadRequest {
+		t.Errorf("newer client protocol: status=%d, want 400", resp2.StatusCode)
+	}
+}
+
 // TestProxyRefusesPublicBindWithoutFlag verifies the broker will not
 // bind to a non-loopback address unless --allow-public is given.
 func TestProxyRefusesPublicBindWithoutFlag(t *testing.T) {

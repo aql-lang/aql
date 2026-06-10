@@ -69,7 +69,60 @@ type Store struct {
 	Config       map[string]any `json:"config,omitempty"`
 }
 
-const storeVersion = 1
+// storeVersion is the on-disk schema version this binary writes. Bump
+// it in the same commit as any change to the Store/Capability/Alias
+// shape that an older binary could mishandle, and add a migration to
+// storeMigrations plus a golden-file test (see store_version_test.go).
+//
+//	v1 — initial schema.
+//	v2 — capability bearer tokens are hashed (TokenHash). Capabilities
+//	     minted under v1 carry no TokenHash and can no longer
+//	     authenticate, so the v1->v2 migration revokes them explicitly
+//	     instead of leaving them as silent 401s.
+const storeVersion = 2
+
+// storeMigrations[i] upgrades a store from schema version i+1 to i+2.
+// Each is a pure, in-place transform; the slice length must be
+// storeVersion-1.
+var storeMigrations = []func(*Store) error{
+	migrateStoreV1ToV2, // index 0: v1 -> v2
+}
+
+// migrateStoreV1ToV2 revokes capabilities that predate token hashing.
+// They have an empty TokenHash and therefore cannot be presented as a
+// bearer token any more; revoking makes the security transition
+// explicit (and visible in `vault status`) rather than a mysterious
+// authentication failure.
+func migrateStoreV1ToV2(s *Store) error {
+	for i := range s.Capabilities {
+		if s.Capabilities[i].TokenHash == "" && !s.Capabilities[i].Revoked {
+			s.Capabilities[i].Revoked = true
+		}
+	}
+	return nil
+}
+
+// migrateStore brings s up to storeVersion in place, or returns an
+// error if s was written by a newer binary than this one. A zero
+// version is treated as v1 (the pre-versioning baseline). Migrations
+// are applied in memory; they become durable on the next SaveStore.
+func migrateStore(s *Store) error {
+	v := s.Version
+	if v == 0 {
+		v = 1
+	}
+	if v > storeVersion {
+		return fmt.Errorf("vault: store is version %d but this aql understands up to version %d; upgrade aql", v, storeVersion)
+	}
+	for v < storeVersion {
+		if err := storeMigrations[v-1](s); err != nil {
+			return fmt.Errorf("vault: migrating store v%d->v%d: %w", v, v+1, err)
+		}
+		v++
+	}
+	s.Version = v
+	return nil
+}
 
 // StorePath returns the on-disk metadata path for the vault rooted
 // at homeDir/.aql.
@@ -81,6 +134,11 @@ func StorePath(homeDir string) string {
 // (nil, nil) — not an error — if the file does not exist; callers
 // distinguish "not initialized" from "broken file" by inspecting
 // the returned pointer.
+//
+// A store written by a newer aql is rejected rather than parsed
+// leniently: Go's json drops unknown fields, so loading-then-saving a
+// future-version file with this binary would silently strip data it
+// does not understand. Older stores are migrated forward in memory.
 func LoadStore(homeDir string) (*Store, error) {
 	path := StorePath(homeDir)
 	data, err := os.ReadFile(path)
@@ -93,6 +151,9 @@ func LoadStore(homeDir string) (*Store, error) {
 	s := &Store{}
 	if err := json.Unmarshal(data, s); err != nil {
 		return nil, fmt.Errorf("vault: parsing %s: %w", path, err)
+	}
+	if err := migrateStore(s); err != nil {
+		return nil, err
 	}
 	return s, nil
 }

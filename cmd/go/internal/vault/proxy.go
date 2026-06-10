@@ -11,9 +11,20 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
+)
+
+const (
+	// proxyProtocol is the credential-broker wire protocol version. It
+	// is advertised on every response via headerProtocol; a client that
+	// sends headerProtocol declaring a newer protocol than this broker
+	// supports is refused, so a stale agent fails loudly instead of
+	// silently misbehaving.
+	proxyProtocol  = 1
+	headerProtocol = "X-AQL-Vault-Protocol"
 )
 
 // Proxy is the local credential broker. It listens on a loopback
@@ -133,6 +144,15 @@ func (p *Proxy) Serve(ctx context.Context) error {
 // 4xx responses with a short, secret-free body.
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
+	w.Header().Set(headerProtocol, strconv.Itoa(proxyProtocol))
+	if v := r.Header.Get(headerProtocol); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > proxyProtocol {
+			writeDenied(w, http.StatusBadRequest, fmt.Sprintf(
+				"client speaks vault protocol %d but this broker supports up to %d; upgrade the broker", n, proxyProtocol))
+			p.log(started, r, "", http.StatusBadRequest, "protocol-mismatch")
+			return
+		}
+	}
 	alias, upstreamPath, ok := splitAliasPath(r.URL.Path)
 	if !ok {
 		writeDenied(w, http.StatusBadRequest, "path must be /<alias>/<upstream-path>")

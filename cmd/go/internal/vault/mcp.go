@@ -29,6 +29,17 @@ import (
 	"time"
 )
 
+const (
+	// mcpProtocolVersion is the MCP spec revision this server implements
+	// and reports from `initialize`.
+	mcpProtocolVersion = "2024-11-05"
+	// mcpServerVersion is this vault MCP server's own version, bumped
+	// when its tool surface or behavior changes. It is "2" since the
+	// server now gates tools on capabilities rather than exposing every
+	// provider-tagged alias.
+	mcpServerVersion = "2"
+)
+
 // mcpRequest mirrors a JSON-RPC 2.0 request frame. ID is decoded
 // as json.RawMessage so we can echo it back unchanged regardless
 // of whether the client sent a string, number, or null.
@@ -125,10 +136,10 @@ func (s *mcpServer) dispatch(req *mcpRequest) *mcpResponse {
 	switch req.Method {
 	case "initialize":
 		return ok(req, map[string]any{
-			"protocolVersion": "2024-11-05",
+			"protocolVersion": mcpProtocolVersion,
 			"serverInfo": map[string]string{
 				"name":    "aql-vault",
-				"version": "1",
+				"version": mcpServerVersion,
 			},
 			"capabilities": map[string]any{
 				"tools": map[string]any{},
