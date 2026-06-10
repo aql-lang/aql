@@ -107,6 +107,14 @@ func (objectConvertBehavior) ToList(v Value) (Value, error) {
 	return NewList(orderedMapValues(objectFieldMap(&oi))), nil
 }
 
+// ObjectFields is the exported view of objectFieldMap — the flattened
+// field map of an object or class instance (prototype chain base-first
+// for legacy object instances; class instances are already flat). Used
+// by the lang layer for items / transform / serialization projections.
+func ObjectFields(oi *ObjectInstanceInfo) *OrderedMap {
+	return objectFieldMap(oi)
+}
+
 // objectFieldMap flattens an object's prototype chain (base first) then
 // its own fields into a fresh OrderedMap.
 func objectFieldMap(oi *ObjectInstanceInfo) *OrderedMap {
@@ -272,6 +280,12 @@ func (reachConvertBehavior) ToList(v Value) (Value, error) {
 
 func init() {
 	TObject.Behavior = objectConvertBehavior{}
+	// Class instances project to maps/lists the same way Object
+	// instances do — flat field maps (class instances have no
+	// prototype chain, so the flatten is a single pass). The behavior
+	// carries no Sizer, so the SizeOf walk continues past Class to the
+	// Ideal root's payload-switch Sizer.
+	TClass.Behavior = objectConvertBehavior{}
 	TArray.Behavior = arrayConvertBehavior{}
 	TStore.Behavior = storeConvertBehavior{}
 	TError.Behavior = errorConvertBehavior{}

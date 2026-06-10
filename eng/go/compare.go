@@ -218,6 +218,13 @@ func ExactEqual(a, b Value) bool {
 	if a.Parent.Equal(TMap) && b.Parent.Equal(TMap) {
 		return sameContainer(a.Data, b.Data)
 	}
+	// Object / class instances identify by their underlying field map —
+	// the same aliasing rule as Map: two bindings to one instance are
+	// eq, two structurally-equal instances are not (that's deq).
+	if ai, aok := a.Data.(ObjectInstanceInfo); aok {
+		bi, bok := b.Data.(ObjectInstanceInfo)
+		return bok && ai.Fields != nil && ai.Fields == bi.Fields
+	}
 
 	return false
 }
@@ -336,6 +343,50 @@ func DeepEqual(a, b Value) bool {
 				return false
 			}
 			if !DeepEqual(aVal, bVal) {
+				return false
+			}
+		}
+		return true
+	}
+
+	// Class / object instances: structural equality requires the SAME
+	// (exact) type — a Point3 is never deq-equal to a Point even with
+	// equal visible fields — and field-wise deep equality. The key set
+	// is the union of schema fields and own fields (covering legacy
+	// object instances with dynamic fields); GetField walks the legacy
+	// prototype chain, and class instances are flat so it is a plain
+	// map hit. See design/CLASS-OBJECT.0.md.
+	if IsObjectInstance(a) && IsObjectInstance(b) {
+		if !a.Parent.Equal(b.Parent) {
+			return false
+		}
+		ai, aErr := AsObjectInstance(a)
+		bi, bErr := AsObjectInstance(b)
+		if aErr != nil || bErr != nil {
+			return false
+		}
+		seen := map[string]bool{}
+		var keys []string
+		addKeys := func(ks []string) {
+			for _, k := range ks {
+				if !seen[k] {
+					seen[k] = true
+					keys = append(keys, k)
+				}
+			}
+		}
+		if ai.TypeRef != nil {
+			addKeys(ai.TypeRef.AllFields().Keys())
+		}
+		addKeys(ai.Fields.Keys())
+		addKeys(bi.Fields.Keys())
+		for _, k := range keys {
+			av, aok := ai.GetField(k)
+			bv, bok := bi.GetField(k)
+			if aok != bok {
+				return false
+			}
+			if aok && !DeepEqual(av, bv) {
 				return false
 			}
 		}

@@ -48,3 +48,18 @@ def Radius (Float gte 0.0) def Circle class {r:Radius} (make Circle {r:2.0}) get
 def Radius (Float gte 0.0) def Circle class {r:Radius} make Circle {r:-1.0}	ERROR:does not satisfy	…and rejects a violating value loudly
 def Radius (Float gte 0.0) def Circle class {r:Radius} def c (make Circle {r:1.0}) c set r -5.0	ERROR:type_error	write-time enforcement matches construction (predicate runs at set)
 def Radius (Float gte 0.0) def Circle class {r:Radius} def c (make Circle {r:1.0}) c set r 3.0 end c.r	3.0	a conforming write succeeds
+#
+# §7  instance equality + enumeration
+# eq = identity (two bindings to ONE instance); deq = same class AND
+# structurally equal fields; cross-class and subclass-vs-parent twins
+# are never deq-equal. Enumeration sees the flat field map.
+def P class {x:1} (make P {x:5}) (make P {x:5}) deq	true	deq: same-class structural twins are equal
+def P class {x:1} (make P {x:5}) (make P {x:6}) deq	false	deq: differing field values are not
+def P class {x:1} def Q class {x:1} (make P {}) (make Q {}) deq	false	deq: different classes never compare equal, even with equal fields
+def P class {x:1} def P2 refine P {} (make P {}) (make P2 {}) deq	false	deq: a subclass instance is not deq-equal to a parent instance
+def P class {x:1} def a (make P {}) def b a a b eq	true	eq: two bindings to one instance are identical
+def P class {x:1} (make P {}) (make P {}) eq	false	eq: structural twins are NOT identical (that is deq's job)
+def P class {x:1, y:2} (make P {}) size	2	size: the flat field count
+def P class {x:1} convert Map (make P {})	{x:1}	convert Map: the flat field map
+"aql:struct-util" import end  def P class {x:1, y:2} StructUtil.items (make P {y:9})	[['x' 1] ['y' 9]]	items: every field enumerates (defaults included)
+def P class {x:1} (make P {x:1}) cmp (make P {x:2})	-1	cmp: same-class instances order field-wise
