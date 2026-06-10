@@ -179,7 +179,7 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 			}
 			if pattern.Parent.Equal(TMap) && ordered[idx].Parent.Equal(TMap) &&
 				pattern.Data != nil && ordered[idx].Data != nil &&
-				!IsOptionsType(pattern) &&
+				!IsOptionsType(pattern) && !IsTypedMap(pattern) &&
 				!IsRecordType(ordered[idx]) && !IsTypedMap(ordered[idx]) && !IsOptionsType(ordered[idx]) {
 				if !OpenUnifyMap(pattern, ordered[idx]) {
 					patternOk = false

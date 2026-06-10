@@ -518,21 +518,38 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 // separate `fnsig` word — registered via eng.RegisterCoreFnSig
 // from register.go.
 func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	// A pending gen spec (`def identity gen [T] fn [[x:T] [T] [x]]`)
+	// makes this a GENERIC fn: the placeholders stay bound while
+	// ParseFnParams resolves the sigs (so `x:T` types against the
+	// placeholder node, whose Behavior handles dispatch admission),
+	// then pop; the spec rides FnDefInfo.Gen so each call installs
+	// the inferred body-scoped type bindings.
+	genSpec := r.TakePendingGen()
+	failGen := func(err error) ([]Value, error) {
+		if genSpec != nil {
+			PopGenBindings(r, genSpec)
+		}
+		return nil, err
+	}
 	list := args[0]
 	if !list.Parent.Equal(TList) {
-		return nil, r.AqlError("fn_error", "fn: argument must be a list", "fn")
+		return failGen(r.AqlError("fn_error", "fn: argument must be a list", "fn"))
 	}
 	if !IsConcrete(list) {
-		return nil, r.AqlError("fn_error", "fn: argument must be a concrete list, got type literal", "fn")
+		return failGen(r.AqlError("fn_error", "fn: argument must be a concrete list, got type literal", "fn"))
 	}
 	_lst, _ := AsList(list)
 	elems := _lst.Slice()
 	if len(elems) == 0 || len(elems)%3 != 0 {
-		return nil, r.AqlError("fn_error", "fn: list length must be a non-zero multiple of 3 (input output body triples); use `fnsig` for the type-only form", "fn")
+		return failGen(r.AqlError("fn_error", "fn: list length must be a non-zero multiple of 3 (input output body triples); use `fnsig` for the type-only form", "fn"))
 	}
 	fnDef, err := parseFnDef(r, elems)
 	if err != nil {
-		return nil, err
+		return failGen(err)
+	}
+	if genSpec != nil {
+		PopGenBindings(r, genSpec)
+		fnDef.Gen = genSpec
 	}
 	// Compute lexical captures: per-sig walks merged into one list.
 	// Nil at top-level (no enclosing fn) — natural no-op via

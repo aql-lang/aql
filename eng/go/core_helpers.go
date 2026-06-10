@@ -221,6 +221,15 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo) 
 		// (fixes def leakage from fn bodies — DX-REPORT Issue 2).
 		defSnapshot := r.Defs.Snapshot()
 
+		// Generic fn: install the inferred type-parameter bindings for
+		// the body (`of [T]`, `make (Box of [T])`). AFTER the snapshot,
+		// so the existing DefCleanup truncation tears them down — the
+		// undef tail's capitalised path would Retire the bound type's
+		// canonical node (design/GENERICS.0.md Phase 4).
+		if fnDefCopy.Gen != nil {
+			InstallGenCallBindings(r, fnDefCopy.Gen, s.Params, args)
+		}
+
 		body := make([]Value, len(s.Body))
 		copy(body, s.Body)
 		result = append(result, body...)

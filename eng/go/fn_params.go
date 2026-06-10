@@ -346,9 +346,21 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 		return kind, &pattern, nil
 	}
 	if v.Parent.Equal(TMap) {
+		if IsTypedMap(v) {
+			resolved := ResolveSigChildParam(r, v)
+			return TMap, &resolved, nil
+		}
 		return TMap, &v, nil
 	}
 	if v.Parent.Equal(TList) {
+		if IsTypedList(v) {
+			// `xs:[:T]` with a gen placeholder live: resolve the child
+			// Word to the placeholder literal NOW — the binding pops
+			// when the def completes, so dispatch-time resolution is
+			// impossible (see ResolveSigChildParam).
+			resolved := ResolveSigChildParam(r, v)
+			return TList, &resolved, nil
+		}
 		return TList, &v, nil
 	}
 	return TAny, nil, nil

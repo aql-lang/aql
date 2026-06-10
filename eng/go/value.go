@@ -361,6 +361,13 @@ type FnDefInfo struct {
 	// expander before normal forward collection. Unlike Anonymous (check-mode
 	// only), Macro gates runtime dispatch.
 	Macro bool
+	// Gen carries the generic-parameter spec for a generic fn
+	// (`def identity gen [T] fn [[x:T] [T] [x]]`). Nil for ordinary
+	// fns. Dispatch admission rides the placeholder nodes' Behaviors;
+	// at each call the inferred bindings are installed as body-scoped
+	// type bindings so `of [T]` / `make (Box of [T])` resolve. See
+	// design/GENERICS.0.md Phase 4.
+	Gen *GenSpecInfo
 	// Captured holds enclosing-fn-local bindings snapshotted at fn-
 	// construction time — the implementation of lexical closures.
 	// Populated by computeCaptures during afn / fn handler execution

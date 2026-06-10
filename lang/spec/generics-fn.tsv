@@ -1,0 +1,53 @@
+# AQL Language Specification: generic functions — gen [...] fn [...]
+# Format: input<TAB>expected<TAB>description
+#
+# `def idg gen [T] fn [[x:T] [T] [x]]` declares a generic FUNCTION:
+# the placeholders are live while the signature parses (so `x:T`,
+# `xs:[:T]`, `m:{:T}` and the return list resolve), and at each CALL
+# the parameters bind from the actual arguments' types (§9.2.2):
+# a `x:T` slot binds typeof(arg); a `[:T]`/`{:T}` pattern binds the
+# union of the element types (tor-merge — runtime calls are never
+# rejected for parameter inconsistency). The bindings are installed
+# in the per-call scope, so body-internal `of [T]` / `make (Box of
+# [T])` resolve, and torn down with the body's locals. Bounds reject
+# at dispatch (no matching signature) and at the return check.
+# See design/GENERICS.0.md.
+#
+# §1  basics — one definition, every type
+def idg gen [T] fn [[x:T] [T] [x]] end idg 5	5	a generic identity passes an Integer through
+def idg gen [T] fn [[x:T] [T] [x]] end idg "hi"	'hi'	…and a String — one definition serves every type
+def idg gen [T] fn [[x:T] [T] [x]] end typeof (idg "hi")	ProperString	T binds typeof(arg) — consistent with the language's own typeof
+def second gen [K V] fn [[k:K v:V] [V] [v]] end second a/q 42	42	two parameters bind independently
+def second gen [K V] fn [[k:K v:V] [V] [v]] end typeof (second a/q 42)	Integer	…each from its own argument
+#
+# §2  mirror call forms — forward / stack / mixed dispatch identically
+def pick2 gen [T] fn [[a:T b:T] [T] [a]] end pick2 1 2	1	forward form
+def pick2 gen [T] fn [[a:T b:T] [T] [a]] end 2 pick2 1	1	swap form binds sig[0] forward, sig[1] from the stack
+def pick2 gen [T] fn [[a:T b:T] [T] [a]] end 2 1 pick2	1	stack form is mirror-equivalent
+#
+# §3  element binding — [:T] and {:T} patterns
+def first1 gen [T] fn [[xs:[:T]] [T] [xs get 0]] end first1 [10 20 30]	10	a typed-list param dispatches on a concrete list
+def first1 gen [T] fn [[xs:[:T]] [T] [xs get 0]] end first1 ["a" "b"]	'a'	…for any element type
+def first1 gen [T] fn [[xs:[:T]] [T] [xs get 0]] end first1 [1 "x"]	1	mixed elements tor-merge into T — never rejected at runtime
+def vals1 gen [T] fn [[m:{:T}] [T] [m get a/q]] end vals1 {a:1 b:2}	1	a typed-map param dispatches on a concrete map
+#
+# §4  body-internal bindings — of [T] resolves per call
+def Box gen [T] class {value:T} def boxit gen [T] fn [[x:T] [Any] [make (Box of [T]) {value:x}]] end typeof (boxit 42)	Box of [Integer]	the call's T binding reaches a body-internal instantiation
+def Box gen [T] class {value:T} def boxfirst gen [T] fn [[xs:[:T]] [Any] [make (Box of [T]) {value:(xs get 0)}]] end typeof (boxfirst [1 2 3])	Box of [Integer]	…including T inferred from list elements
+def Pair gen [K V] refine Record [key:K value:V] def pairup gen [K V] fn [[k:K v:V] [Any] [make (Pair of [K V]) {key:k value:v}]] end pairup a/q 1	{key:a/q value:1}	multi-parameter bindings reach a record instantiation
+#
+# §5  bounds — reject at dispatch and at return
+def bnd gen [(T extends Number)] fn [[x:T] [T] [x]] end bnd 5	5	a lattice bound admits a subtype
+def bnd gen [(T extends Number)] fn [[x:T] [T] [x]] end bnd 1.5	1.5	…any subtype
+def bnd gen [(T extends Number)] fn [[x:T] [T] [x]] end bnd "no"	ERROR:signature	…and rejects a non-member at dispatch
+def summit gen [(T extends Number)] fn [[xs:[:T]] [T] [xs get 0]] end summit [1 2 3]	1	a bounded [:T] param admits a conforming list
+def summit gen [(T extends Number)] fn [[xs:[:T]] [T] [xs get 0]] end summit ["x" "y"]	ERROR:signature	…and rejects off-bound elements at dispatch
+def badret gen [(T extends Number)] fn [[x:T] [T] ["oops"]] end badret 5	ERROR:expected T	the return check enforces the bound (the message names the parameter)
+#
+# §6  recursion + closures
+def repeat gen [T] fn [[x:T n:Integer] [Integer] [if (n lte 0) [0] [1 add (repeat x (n sub 1))]]] end repeat "a" 3	3	a generic fn calls itself
+def mka gen [T] fn [[x:T] [Function] [fn [[y:Integer] [Integer] [x add y]]]] def add5 (mka 5) end add5 3	8	an inner fn captures a generic fn's param
+#
+# §7  hygiene — bindings never leak; loose unbound return is pinned
+def idg gen [T] fn [[x:T] [T] [x]] def r (idg 5) end T	ERROR:undefined word	the per-call T binding tears down with the body's locals
+def loose gen [T] fn [[x:Integer] [T] [x]] end loose 1	1	an unbindable UNCONSTRAINED parameter passes the loose runtime return check (the checker reports the precision loss — Phase 5)

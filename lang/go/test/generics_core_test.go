@@ -78,6 +78,41 @@ func TestGenNestedSchemaBindings(t *testing.T) {
 	}
 }
 
+// TestGenFnCallBindingAlignment pins the Phase-4 per-call lifecycle:
+// nested generic calls install their T bindings AFTER the body's def
+// snapshot (InstallGenCallBindings) so the existing DefCleanup
+// truncation tears them down in lockstep with params and locals —
+// the inner call's binding must not survive into the outer body, and
+// nothing leaks after the outermost call returns.
+func TestGenFnCallBindingAlignment(t *testing.T) {
+	res, err := runNativeSteps(t, nil, []string{
+		`def Box gen [T] class {value:T}`,
+		`def boxfirst gen [T] fn [[xs:[:T]] [Any] [make (Box of [T]) {value:(xs get 0)}]]`,
+		// outerg calls boxfirst with a STRING list mid-body, then
+		// resolves its own T again — the outer binding (Integer) must
+		// still be in force after the inner call returns.
+		`def outerg gen [T] fn [[x:T] [Any] [(boxfirst ["s"]) drop (typeof (make (Box of [T]) {value:x}))]]`,
+		`outerg 7`,
+	})
+	if err != nil {
+		t.Fatalf("nested generic calls: %v", err)
+	}
+	if len(res) != 1 || res[0].String() != "Box of [Integer]" {
+		t.Errorf("outer T binding corrupted by inner call: got %v", res)
+	}
+
+	// After the calls, T is gone from the surrounding scope.
+	err = genSteps(t, []string{
+		`def Box gen [T] class {value:T}`,
+		`def boxit gen [T] fn [[x:T] [Any] [make (Box of [T]) {value:x}]]`,
+		`def b (boxit 42)`,
+		`T`,
+	})
+	if err == nil || !strings.Contains(err.Error(), "undefined word") {
+		t.Errorf("per-call T binding leaked past the call (err=%v)", err)
+	}
+}
+
 // TestGenMemoIdentity pins D4: repeated instantiation with the same
 // canonical args yields the same body value (teq via the spec rows;
 // here the Go-side identity of the memoised instantiation).

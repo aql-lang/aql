@@ -336,6 +336,20 @@ func unifyInner(a, b Value) (Value, *UnifyError) {
 		return a, nil
 	}
 
+	// Type-parameter fold — a bare placeholder literal (a minted
+	// gen-param node, design/GENERICS.0.md) admits the other side by
+	// the parameter's bound, mirroring the surface fold above. Placed
+	// after the degenerate roots so Never/None/Any keep their rules,
+	// and before the family handlers so a placeholder embedded as a
+	// typed-list/map child constraint admits elements. See
+	// unifyTypeParam (generics_unify.go).
+	if n := typeParamLitNode(a); n != nil {
+		return unifyTypeParam(a, n, b)
+	}
+	if n := typeParamLitNode(b); n != nil {
+		return unifyTypeParam(b, n, a)
+	}
+
 	// Behavior-driven dispatch: walk the LCA of the two operand types
 	// looking for a Unifier capability. The first non-opt-out Unifier
 	// owns the result — same pattern CompareValues uses for Comparer.

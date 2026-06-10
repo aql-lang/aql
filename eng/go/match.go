@@ -74,6 +74,17 @@ func OpenUnifyMap(pattern, candidate Value) bool {
 	pMap, _ := AsMap(pattern)
 	cMap, _ := AsMap(candidate)
 
+	// Non-concrete map shapes (a typed map's ChildTypeInfo, record /
+	// options bodies) have no OrderedMap to walk — AsMap returns nil
+	// for them. Route those pairs through the full unifier, whose map
+	// family owns typed-vs-concrete and record matching, rather than
+	// panicking on pMap.Keys(). Callers' guards vary; this is the
+	// single defensive boundary.
+	if pMap == nil || cMap == nil {
+		_, ok := Unify(pattern, candidate)
+		return ok
+	}
+
 	absentVal := NewTypeLiteral(TAbsent)
 	for _, key := range pMap.Keys() {
 		pVal, _ := pMap.Get(key)

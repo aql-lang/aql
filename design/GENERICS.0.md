@@ -1162,6 +1162,41 @@ unconstrained-param strictness, per-schema disjunct collapse).
 > same; the §15.2.7 synergy row waits on that. Battery: generics.tsv
 > §7.
 
+## 15d. Landed state — Phase 4: generic fn definitions, runtime (2026-06-10)
+
+> **Phase 4 LANDED:** `def idg gen [T] fn [[x:T] [T] [x]]` works at
+> runtime. `FnDefInfo` carries `Gen *GenSpecInfo`; `fn`'s handler
+> consumes the pending spec and pops the placeholder bindings after
+> the signature parses. Per call, `InferGenBindings`
+> (eng/go/generics_unify.go) binds each parameter from the actual
+> args — a `x:T` slot binds **typeof(arg)** (so `idg "hi"` binds
+> `T=ProperString`, consistent with the language's own `typeof`);
+> a `[:T]`/`{:T}` pattern binds the tor-union of element types
+> (§9.2.2 — conflicts merge, runtime calls are never rejected for
+> parameter inconsistency). `InstallGenCallBindings` installs the
+> bindings AFTER the body's def snapshot, so the existing DefCleanup
+> truncation tears them down in lockstep with params/locals — and
+> crucially NOT via the undef tail, whose capitalised-name path would
+> retire the bound type's canonical lattice node. Two kernel gaps the
+> phase surfaced: (1) typed-list/map param patterns kept a raw
+> `word(T)` child (resolvable only at definition time, while the
+> placeholders are live) — `ResolveSigType` now routes them through
+> `ResolveSigChildParam`; and dispatch-side, `unifyInner` gained a
+> **type-parameter fold** (mirroring the surface fold) so a
+> placeholder literal embedded in a structural pattern admits values
+> by its bound via `genParamUnifier.Match` — plain `ConformsTo` has
+> no admission path into a `Type/TypeParam` node. (2) `OpenUnifyMap`
+> panicked on any non-OrderedMap pattern (`m:{:Integer}` params —
+> pre-existing, not generics); it now falls back to the unifier.
+> Bounds reject at dispatch (signature_error) and at the return
+> check, where the error names the parameter (`expected T, got
+> ProperString`) via genParamUnifier.Format. The UNCONSTRAINED
+> unbindable-parameter return check is deliberately loose at runtime
+> (pinned in generics-fn.tsv §7); the checker reports the precision
+> loss in Phase 5, and `unbound_param` diagnostics land there.
+> Battery: lang/spec/generics-fn.tsv; Go lifecycle pins in
+> lang/go/test/generics_core_test.go (nested-call binding alignment).
+
 ## 15. Review (2026-06-10) — against the post-2026-06-04 landings
 
 Between the 2026-06-04 refresh and this review, the language landed:
