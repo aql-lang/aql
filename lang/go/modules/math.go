@@ -273,7 +273,7 @@ var MathNatives = func() []native.NativeFunc {
 		// is NaN the other is returned, so the result is order-independent
 		// (`min nan 5` and `min 5 nan` both give 5). Only when BOTH are
 		// NaN is the result NaN. This treats NaN as "missing", which suits
-		// a data/query language; see design/IEEE-754-COMPLIANCE.0.md.
+		// a data/query language; see design/IEEE-754-COMPLIANCE.8.md.
 		mergeBinaryNumNatives("min",
 			native.BinaryIntOpNative("min", func(a, b int64) (int64, error) {
 				if a < b {

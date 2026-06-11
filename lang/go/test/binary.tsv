@@ -1,6 +1,6 @@
 # =====================================================================
 # Core binary (bitwise) operators — band, bor, bxor, bnot, bsl, bsr, busr
-# See design/BINARY-OPERATIONS.0.md
+# See design/BINARY-OPERATIONS.10.md
 # =====================================================================
 
 # --- band ---

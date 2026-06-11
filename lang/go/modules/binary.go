@@ -23,7 +23,7 @@ const sign63Mask = 0x7FFFFFFFFFFFFFFF
 // BinUtil.rotl, BinUtil.test, etc. The `b` prefix is dropped on module words
 // because the `bin.` qualifier disambiguates.
 //
-// See design/BINARY-OPERATIONS.0.md.
+// See design/BINARY-OPERATIONS.10.md.
 func BuildBinaryModule(parent *native.Registry) (native.ModuleDesc, error) {
 	subReg, err := native.DefaultRegistry()
 	if err != nil {

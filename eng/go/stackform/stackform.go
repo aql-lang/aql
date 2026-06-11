@@ -1,6 +1,6 @@
 // Package stackform defines a canonical strict-stack representation
 // of an AQL program. It is the form the property-based-testing
-// reducer operates on (design/PBT-PLAN.0.md) and the first half of
+// reducer operates on (design/PBT-PLAN.10.md) and the first half of
 // the work the bytecode-emission proposal in
 // design/aql-bytecode-report.0.md needs.
 //
@@ -60,7 +60,7 @@ func (Call) opMarker() {}
 // emitted by the engine's primary recorder — quoted bodies stay as
 // PushLit of the raw list. A future enhancement can promote those
 // to Quote when the body is later executed via call/do. See
-// design/PBT-PLAN.0.md "Out of scope".
+// design/PBT-PLAN.10.md "Out of scope".
 type Quote struct {
 	Body *StackForm
 }

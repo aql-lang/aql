@@ -26,7 +26,7 @@
 #
 # The result is a strict total order over distinct lattice nodes; the
 # only equivalence is cross-leaf numeric magnitude (1 == 1.0). See
-# design/TYPE-ORDERING.0.md.
+# design/TYPE-ORDERING.10.md.
 
 # a = 5
 5 tcmp 5	0
@@ -696,17 +696,17 @@ Path tcmp Path	0	# self-equal
 # sorts strictly below any concrete instance of that user type.
 # =============================================================================
 
-# --- Object-subtype kind (lattice-minted via `refine Object`) ---
-def Cat refine Object {color:String} def Dog refine Object {breed:String} Cat tcmp Dog	-1
-def Cat refine Object {color:String} def Dog refine Object {breed:String} Dog tcmp Cat	1
-def Cat refine Object {color:String} def Dog refine Object {breed:String} Cat tcmp Cat	0
-def Cat refine Object {color:String} Cat tcmp Object	1
-def Cat refine Object {color:String} Object tcmp Cat	-1
-def Cat refine Object {color:String} (make Cat {color:'orange'}) tcmp Cat	1
-def Cat refine Object {color:String} Cat tcmp (make Cat {color:'orange'})	-1
-def Cat refine Object {color:String} (make Cat {color:'a'}) tcmp (make Cat {color:'b'})	-1
-def Cat refine Object {color:String} (make Cat {color:'b'}) tcmp (make Cat {color:'a'})	1
-def Cat refine Object {color:String} (make Cat {color:'a'}) tcmp (make Cat {color:'a'})	0
+# --- Object-subtype kind (lattice-minted via `class`) ---
+def Cat class {color:String} def Dog class {breed:String} Cat tcmp Dog	-1
+def Cat class {color:String} def Dog class {breed:String} Dog tcmp Cat	1
+def Cat class {color:String} def Dog class {breed:String} Cat tcmp Cat	0
+def Cat class {color:String} Cat tcmp Object	1
+def Cat class {color:String} Object tcmp Cat	-1
+def Cat class {color:String} (make Cat {color:'orange'}) tcmp Cat	1
+def Cat class {color:String} Cat tcmp (make Cat {color:'orange'})	-1
+def Cat class {color:String} (make Cat {color:'a'}) tcmp (make Cat {color:'b'})	-1
+def Cat class {color:String} (make Cat {color:'b'}) tcmp (make Cat {color:'a'})	1
+def Cat class {color:String} (make Cat {color:'a'}) tcmp (make Cat {color:'a'})	0
 
 # --- Record kind (Value-typed — RecordTypeInfo body) ---
 def Person refine Record [name:String age:Integer] Person tcmp Person	0
@@ -738,16 +738,16 @@ def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] Positive tcmp Funct
 def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] Function tcmp Positive	-1
 
 # --- Cross-kind user types (Rank bands decide) ---
-def Cat refine Object {x:Integer} def Maybe (String tor None) Cat tcmp Maybe	-1
-def Cat refine Object {x:Integer} def Maybe (String tor None) Maybe tcmp Cat	1
-def Cat refine Object {x:Integer} def Color enum [a b] Cat tcmp Color	-1
-def Cat refine Object {x:Integer} def Color enum [a b] Color tcmp Cat	1
+def Cat class {x:Integer} def Maybe (String tor None) Cat tcmp Maybe	-1
+def Cat class {x:Integer} def Maybe (String tor None) Maybe tcmp Cat	1
+def Cat class {x:Integer} def Color enum [a b] Cat tcmp Color	-1
+def Cat class {x:Integer} def Color enum [a b] Color tcmp Cat	1
 
 # --- Transitivity across user types ---
-def Cat refine Object {x:Integer} def Dog refine Object {y:Integer} (((Cat tcmp Dog) lt 0) and ((Dog tcmp (make Dog {y:1})) lt 0) and ((Cat tcmp (make Dog {y:1})) lt 0))	true	# transitive: Cat < Dog < Dog-instance, so Cat < Dog-instance
-def Cat refine Object {x:Integer} def Dog refine Object {y:Integer} (((Object tcmp Cat) lt 0) and ((Cat tcmp Dog) lt 0) and ((Object tcmp Dog) lt 0))	true
-def A refine Object {x:Integer} def B refine Object {x:Integer} def C refine Object {x:Integer} (((A tcmp B) lt 0) and ((B tcmp C) lt 0) and ((A tcmp C) lt 0))	true
+def Cat class {x:Integer} def Dog class {y:Integer} (((Cat tcmp Dog) lt 0) and ((Dog tcmp (make Dog {y:1})) lt 0) and ((Cat tcmp (make Dog {y:1})) lt 0))	true	# transitive: Cat < Dog < Dog-instance, so Cat < Dog-instance
+def Cat class {x:Integer} def Dog class {y:Integer} (((Object tcmp Cat) lt 0) and ((Cat tcmp Dog) lt 0) and ((Object tcmp Dog) lt 0))	true
+def A class {x:Integer} def B class {x:Integer} def C class {x:Integer} (((A tcmp B) lt 0) and ((B tcmp C) lt 0) and ((A tcmp C) lt 0))	true
 
 # --- User type sorts after every kernel type in its branch ---
-def Cat refine Object {x:Integer} (((Object tcmp Cat) lt 0) and ((Resource tcmp Cat) lt 0) and ((Entity tcmp Cat) lt 0))	true
+def Cat class {x:Integer} (((Object tcmp Cat) lt 0) and ((Resource tcmp Cat) lt 0) and ((Entity tcmp Cat) lt 0))	true
 def Maybe (String tor None) (((Disjunct tcmp Maybe) lt 0) and ((Function tcmp Maybe) lt 0))	true

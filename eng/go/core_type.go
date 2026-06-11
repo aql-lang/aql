@@ -309,21 +309,70 @@ func InstallType(r *Registry, name string, body Value) error {
 	}
 	if IsObjectType(body) {
 		info, _ := AsObjectType(body)
+		// Class types root under Ideal/Class, not Object — classes are
+		// sealed nominal records, Object is the open mutable container
+		// (design/CLASS-OBJECT.10.md).
+		rootName := "Object"
+		rootDef := TObject
+		if info.Class {
+			rootName = "Class"
+			rootDef = TClass
+		}
 		if info.Parent != nil {
 			info.Name = info.Parent.Name + "/" + name
 		} else {
-			info.Name = "Object/" + name
+			info.Name = rootName + "/" + name
 		}
 		for _, p := range strings.Split(info.Name, "/") {
 			r.RegisterPart(p)
 		}
-		parentDef := TObject
+		parentDef := rootDef
 		if info.Parent != nil && info.Parent.Type != nil {
 			parentDef = info.Parent.Type
 		}
 		def := r.Types.MintType(name, parentDef)
 		body = NewObjectType(def, info)
 		r.Defs.PushType(name, def, body)
+	} else if IsTypeSchema(body) {
+		// `def Box gen [T] class {…}` route: mint the SCHEMA node where
+		// the non-generic equivalent would mint (D3 — class schemas
+		// under Ideal/Class, record schemas under the body's parent,
+		// fnsig schemas under FunctionSignature) and attach a
+		// schemaUnifier sharing the *TypeSchemaInfo payload.
+		// Instantiation nodes mint as CHILDREN of this node at `of`
+		// time, so bare `Box` admits any instantiation by plain
+		// lattice ancestry.
+		info, _ := AsTypeSchema(body)
+		parent := TType
+		switch info.Kind {
+		case SchemaClass:
+			parent = TClass
+			r.RegisterPart("Class")
+		case SchemaRecord:
+			parent = TRecord
+		case SchemaFnSig, SchemaFn:
+			parent = TFnUndef
+		}
+		def := r.Types.MintType(name, parent)
+		info.Name = parent.Name + "/" + name
+		info.Type = def
+		InstallSchemaUnifier(def, info)
+		r.RegisterPart(name)
+		r.Defs.PushType(name, def, NewValueRaw(def, info))
+	} else if IsSurfaceType(body) {
+		// `def Shape surface {…}` route: mint a lattice node under
+		// Ideal/Surface and attach a surfaceUnifier so dispatch / `is`
+		// consult the conformance set `exposes` fills in. The payload
+		// pointer is shared between body and unifier — a post-mint
+		// `exposes` is visible through both.
+		info, _ := AsSurfaceType(body)
+		info.Name = "Surface/" + name
+		r.RegisterPart("Surface")
+		r.RegisterPart(name)
+		def := r.Types.MintType(name, TSurface)
+		info.Type = def
+		installSurfaceUnifier(def, info, name)
+		r.Defs.PushType(name, def, NewValueRaw(def, info))
 	} else if inputT := PredicateInputType(body); inputT != nil {
 		// Predicate type with a concrete input type: mint the *Type
 		// parented at the input rather than at TFnDef so values

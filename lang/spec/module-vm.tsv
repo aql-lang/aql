@@ -18,3 +18,11 @@
 #
 # §3  run-with — explicit policy supplied as a data map
 "aql:vm" import end { scopes: { engine: { words: { default: "allow" } } } } "10 sub 3" Vm.run-with	7	policy map + code; an allow-all engine scope runs the arithmetic
+#
+# §4  parse — AQL source → inspectable structure (no evaluation).
+#     Returns a QUOTED list of the engine's parse values; element
+#     shapes are implementation-defined for now (design/PARSING.10.md
+#     §3). Parse errors raise [aql/parse_error].
+"aql:vm" import end Vm.parse "1 add 2"	(quote [1 word(add) 2])	parses source to a quoted token list without running it
+"aql:vm" import end size (Vm.parse "1 add 2")	3	the structure is ordinary data
+"aql:vm" import end Vm.parse "1 add ((("	ERROR:parse_error	malformed source raises loudly

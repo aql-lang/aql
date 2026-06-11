@@ -6,7 +6,7 @@ import (
 	"github.com/aql-lang/aql/eng/go/parser"
 )
 
-// Phase 1b (design/MACROS-PHASE1.0.md §3): FormArgs raw-form capture, tested in
+// Phase 1b (design/MACROS-PHASE1.10.md §3): FormArgs raw-form capture, tested in
 // isolation with a temp native that records its operands. The macro definer
 // (1c) reuses this; here we prove the capture mechanism independently.
 //

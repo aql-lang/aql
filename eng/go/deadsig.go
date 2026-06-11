@@ -4,7 +4,7 @@ package eng
 // first-match-wins over SortSignatures' most-specific-first order, so a
 // signature S is unreachable when an earlier, higher-priority signature
 // S' accepts every call S accepts — S' always wins and S never fires.
-// See design/checker-loud-diagnostics-report.0.md Phase 2.
+// See design/checker-loud-diagnostics-report.10.md Phase 2.
 
 // DeadSig records an unreachable signature and the earlier one that
 // shadows it.

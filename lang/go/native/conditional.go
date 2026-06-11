@@ -64,3 +64,86 @@ func ifClause(elems []Value) []Value {
 	}
 	return elseBranch
 }
+
+// caseClauses runs the `case` word's clause walk (see caseHandler):
+// v is the captured value; elems are the raw clause-list elements —
+// match/block pairs with an optional trailing default. Returns the
+// matched block's result stack.
+func caseClauses(r *Registry, v Value, elems []Value) ([]Value, error) {
+	i := 0
+	for ; i+1 < len(elems); i += 2 {
+		match := elems[i]
+		matched := false
+		if isCodeBody(match) {
+			// Predicate match: the match list executes as if the value
+			// were already on the stack ([gt 3] runs as `v gt 3`), and
+			// the result coerces to boolean.
+			out, err := runCaseBody(r, v, match)
+			if err != nil {
+				return nil, err
+			}
+			if len(out) > 0 {
+				matched = CoerceBoolean(out[len(out)-1])
+			}
+		} else {
+			// Value / type match: the clause unifies with the value —
+			// equal scalars and atoms match, a type literal (builtin or
+			// def'd) matches its members, a map pattern matches
+			// structurally. A bare word resolves through the def table
+			// first so user types and def'd values work as matches.
+			m := match
+			if IsWord(m) {
+				w, _ := AsWord(m)
+				if bound, ok := r.ResolveTypedName(w.Name); ok {
+					m = bound
+				} else {
+					m = ResolveWordValue(m)
+				}
+			}
+			// A parenthesised match — `case b [(Box of [Integer]) […]]`
+			// — evaluates inline, the same contract paren annotations
+			// follow in typed defs. Generic instantiations are the main
+			// client; any expression producing one value works. An
+			// evaluation error or multi-value result keeps the raw
+			// ParenExpr (which then simply fails to unify).
+			if IsParenExpr(m) {
+				if toks, perr := AsParenExpr(m); perr == nil {
+					input := make([]Value, 0, len(toks)+2)
+					input = append(input, NewOpenParen())
+					input = append(input, toks...)
+					input = append(input, NewCloseParen())
+					sub := New(r)
+					if out, rerr := sub.Run(input); rerr == nil && len(out) == 1 {
+						m = out[0]
+					}
+				}
+			}
+			_, ok := UnifyR(m, v, r)
+			matched = ok
+		}
+		if matched {
+			return runCaseBody(r, v, elems[i+1])
+		}
+	}
+	if i < len(elems) {
+		// Trailing odd element: the default clause.
+		return runCaseBody(r, v, elems[i])
+	}
+	return nil, nil
+}
+
+// runCaseBody executes a case block (or default): a code-body list
+// runs in a sub-engine with the captured value pushed first — the
+// same convention as the `error [handler]` block — so the block can
+// consume it; any other value is the result as-is.
+func runCaseBody(r *Registry, v Value, body Value) ([]Value, error) {
+	if !isCodeBody(body) {
+		return []Value{body}, nil
+	}
+	sub := New(r)
+	lst, _ := AsList(body)
+	input := make([]Value, 0, 1+lst.Len())
+	input = append(input, v)
+	input = append(input, lst.Slice()...)
+	return sub.Run(input)
+}

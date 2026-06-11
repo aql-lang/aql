@@ -74,10 +74,15 @@ func Register(r *Registry) {
 	}
 
 	// *Type
+	for _, n := range genNatives {
+		r.RegisterNativeFunc(n)
+	}
+
 	for _, n := range typeNatives {
 		r.RegisterNativeFunc(n)
 	}
 	r.RegisterNativeFunc(behaveNative)
+	r.RegisterNativeFunc(constNative)
 	// nodify moved to the aql:struct module (see struct_module.go).
 	r.RegisterNativeFunc(sortNative)
 	installResourceTypes(r)
@@ -85,6 +90,11 @@ func Register(r *Registry) {
 
 	// Control flow
 	for _, n := range controlNatives {
+		r.RegisterNativeFunc(n)
+	}
+
+	// Error raising (raise) + Error-value field access
+	for _, n := range errorNatives {
 		r.RegisterNativeFunc(n)
 	}
 

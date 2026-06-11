@@ -75,6 +75,77 @@ func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 	return []Value{val}, nil
 }
 
+// filterBodyHandler is the quotation form of filter: `filter [body] xs`
+// runs the quoted body once per element — the element is pushed first,
+// then the body tokens, exactly as each/fold run their bodies — and keeps
+// the elements whose body result is Boolean true. Unlike the Function
+// form there is no {key, value} wrapper: the body sees the element
+// directly, so `filter [2 gt] [1 2 3 4]` keeps the elements greater
+// than 2. A body result that is not a Boolean is a loud error rather
+// than a silent drop (voxgig DX report T9.2 — silent failures are the
+// expensive ones). Lists filter to lists; maps filter to maps by value
+// (matching the Reach form, filterReachHandler).
+func filterBodyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if !IsConcrete(args[0]) {
+		return nil, r.AqlError("filter_error", "filter: expected a concrete body list", "filter")
+	}
+	bodyList, _ := AsList(args[0])
+	body := bodyList.Slice()
+
+	keep := func(elem Value, label string) (bool, error) {
+		input := make([]Value, len(body)+1)
+		input[0] = elem
+		copy(input[1:], body)
+		sub := New(r)
+		res, err := sub.Run(input)
+		if err != nil {
+			return false, fmt.Errorf("filter: %s: %w", label, err)
+		}
+		if len(res) == 0 {
+			return false, r.AqlError("filter_error", fmt.Sprintf("filter: %s: body produced no result", label), "filter")
+		}
+		top := res[len(res)-1]
+		if !top.Parent.ConformsTo(TBoolean) || !IsConcrete(top) {
+			return false, r.AqlError("filter_error", fmt.Sprintf("filter: %s: body must produce a Boolean, got %s", label, top.Parent.Name), "filter")
+		}
+		b, _ := AsBoolean(top)
+		return b, nil
+	}
+
+	switch {
+	case args[1].Parent.ConformsTo(TList) && IsConcrete(args[1]):
+		data, _ := AsList(args[1])
+		out := make([]Value, 0, data.Len())
+		for i := 0; i < data.Len(); i++ {
+			elem := data.Get(i)
+			ok, err := keep(elem, fmt.Sprintf("element %d", i))
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				out = append(out, elem)
+			}
+		}
+		return []Value{NewList(out)}, nil
+	case args[1].Parent.ConformsTo(TMap) && IsConcrete(args[1]):
+		data, _ := AsMap(args[1])
+		out := NewOrderedMap()
+		for _, k := range data.Keys() {
+			v, _ := data.Get(k)
+			ok, err := keep(v, fmt.Sprintf("key %q", k))
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				out.Set(k, v)
+			}
+		}
+		return []Value{NewMap(out)}, nil
+	default:
+		return nil, r.AqlError("filter_error", "filter: quotation form expects a concrete list or map", "filter")
+	}
+}
+
 // filterReachHandler is the lens form of filter: it keeps the elements of a
 // list (or the values of a map) for which the receiverless Reach (args[0])
 // applies to Boolean true. Unlike the Function form, the reach reads the

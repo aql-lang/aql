@@ -28,7 +28,7 @@ import (
 //     written with args[0] = surface-LEFT (top of stack), args[1]
 //     = surface-RIGHT (deeper).
 //
-// See design/TYPE-OPERATIONS.0.md.
+// See design/TYPE-OPERATIONS.8.md.
 func BuildTypeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	subReg, err := native.DefaultRegistry()
 	if err != nil {

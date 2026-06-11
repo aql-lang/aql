@@ -290,7 +290,7 @@ Consequences for sig design:
 | `neq` | `[Any, Any]` | `[B]` | Not equal (negation of eq) | — |
 
 All ordering words use one unified total order — see
-`lang/doc/design/TYPE-ORDERING.0.md`. The dep-sig overload of
+`lang/doc/design/TYPE-ORDERING.10.md`. The dep-sig overload of
 `lt`/`gt`/`lte`/`gte` fires when the deeper (stack) arg is a bare
 scalar type literal AND the forward arg is concrete; otherwise the
 `[Any, Any]` boolean handler runs.

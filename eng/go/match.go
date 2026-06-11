@@ -19,7 +19,7 @@ package eng
 //     Tightening it would break callers like `create` whose 1-arg
 //     `(Map) Patterns={kind:"api"}` sig was previously matched on
 //     non-api maps when the handler then routed by stack contents.
-func patternsOk(sig *Signature, positions []int, stack []Value, fwd int) bool {
+func patternsOk(sig *Signature, positions []int, stack []Value, fwd int, r *Registry) bool {
 	for idx := 0; idx < sig.TotalArgs(); idx++ {
 		pattern, ok := sigPattern(sig, idx)
 		if !ok {
@@ -30,6 +30,19 @@ func patternsOk(sig *Signature, positions []int, stack []Value, fwd int) bool {
 		}
 		isForward := idx < fwd
 		val := stack[positions[idx]]
+		// A forward position may still hold the unresolved Word token
+		// for a def-bound value (the forward scan plans against
+		// Defs.Top but does not rewrite the tape). Resolve it the same
+		// way before unifying — otherwise a typed-list/map pattern
+		// (`xs:[:Integer]`) rejects `f zs` while accepting the literal
+		// `f [1 2]`, purely by spelling.
+		if isForward && r != nil && IsWord(val) {
+			if w, werr := AsWord(val); werr == nil {
+				if top, ok := r.Defs.Top(w.Name); ok {
+					val = top
+				}
+			}
+		}
 		if pattern.Parent.Equal(TMap) && val.Parent.Equal(TMap) &&
 			pattern.Data != nil && val.Data != nil &&
 			!IsOptionsType(pattern) &&
@@ -73,6 +86,17 @@ func patternsOk(sig *Signature, positions []int, stack []Value, fwd int) bool {
 func OpenUnifyMap(pattern, candidate Value) bool {
 	pMap, _ := AsMap(pattern)
 	cMap, _ := AsMap(candidate)
+
+	// Non-concrete map shapes (a typed map's ChildTypeInfo, record /
+	// options bodies) have no OrderedMap to walk — AsMap returns nil
+	// for them. Route those pairs through the full unifier, whose map
+	// family owns typed-vs-concrete and record matching, rather than
+	// panicking on pMap.Keys(). Callers' guards vary; this is the
+	// single defensive boundary.
+	if pMap == nil || cMap == nil {
+		_, ok := Unify(pattern, candidate)
+		return ok
+	}
 
 	absentVal := NewTypeLiteral(TAbsent)
 	for _, key := range pMap.Keys() {

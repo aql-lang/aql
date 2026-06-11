@@ -140,7 +140,7 @@ func buildRandExportsForState(state *randState) (*native.OrderedMap, error) {
 
 	exports := native.NewOrderedMap()
 	// Wrapper FnSig Params match the inner NativeSig.Args order
-	// (top-first per SIG-ORDER-REFACTOR.0.md). Aligned with the
+	// (top-first per SIG-ORDER-REFACTOR.10.md). Aligned with the
 	// FORWARD canonical surface — sig[0] is the first arg written
 	// after the word: `Rand.int LO HI`, `Rand.string CHARSET LEN`.
 	exports.Set("int", wrapRandFnDef("rand-int",

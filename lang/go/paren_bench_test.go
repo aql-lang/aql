@@ -2,7 +2,7 @@ package lang
 
 import "testing"
 
-// Paren-representation benchmark (PAREN-REPRESENTATION.0.md Step 7): measure
+// Paren-representation benchmark (PAREN-REPRESENTATION.9.md Step 7): measure
 // the per-paren cost of the nested-ParenExpr representation vs. the former
 // inline-marker form. Uses only the public New()/Run() API so the same file
 // runs unchanged on the pre-change baseline commit for an A/B comparison.

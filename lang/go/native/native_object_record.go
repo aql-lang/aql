@@ -61,24 +61,53 @@ func parseObjectFields(fieldsMap *OrderedMap, r *Registry) *OrderedMap {
 	return fields
 }
 
-func objectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+// classHandler implements `class {schema}` — a sealed nominal record
+// type minted under Ideal/Class (NOT under Object: classes and the
+// open mutable Object container are separate branches — see
+// design/CLASS-OBJECT.10.md). The schema map follows the object rules:
+// a type value declares a required field, a concrete value declares a
+// default. Subclassing reuses `refine <ClassType> {…}`, which routes
+// through objectWithParentHandler and propagates the Class flag.
+func classHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	fieldsVal := args[0]
 	if !fieldsVal.Parent.Equal(TMap) {
-		return nil, fmt.Errorf("object: argument must be a map of field definitions, got %s", fieldsVal.String())
+		if spec := r.TakePendingGen(); spec != nil {
+			PopGenBindings(r, spec)
+		}
+		return nil, r.AqlError("class_error",
+			fmt.Sprintf("class: argument must be a map of field definitions, got %s", fieldsVal.String()), "class")
 	}
 	m, err := AsMutableMap(fieldsVal)
 	if err != nil {
-		return nil, fmt.Errorf("object: argument must be a concrete map, got %s", fieldsVal.String())
+		if spec := r.TakePendingGen(); spec != nil {
+			PopGenBindings(r, spec)
+		}
+		return nil, r.AqlError("class_error",
+			fmt.Sprintf("class: argument must be a concrete map, got %s", fieldsVal.String()), "class")
+	}
+	// A pending gen spec (`def Box gen [T] class {value:T}`) turns
+	// this into a generic CLASS SCHEMA: the field map is parsed with
+	// the placeholder bindings live (so {value:T} declares a required
+	// T-typed field), no node is minted here — `of` mints one
+	// instantiation node per (schema, args) so instances get nominal
+	// identity (deq "same exact class", is-by-ancestry).
+	if spec := r.TakePendingGen(); spec != nil {
+		fields := parseObjectFields(m, r)
+		body := NewValueRaw(TClass, ObjectTypeInfo{
+			Fields: fields,
+			ID:     GenerateObjectTypeID(),
+			Class:  true,
+		})
+		return genWrapSchema(r, spec, body, SchemaClass)
 	}
 	fields := parseObjectFields(m, r)
 	id := GenerateObjectTypeID()
 	info := ObjectTypeInfo{
 		Fields: fields,
-		Parent: nil,
 		ID:     id,
-		Name:   "",
+		Class:  true,
 	}
-	def := r.Types.MintType(id, TObject)
+	def := r.Types.MintType(id, TClass)
 	return []Value{NewObjectType(def, info)}, nil
 }
 
@@ -121,11 +150,35 @@ func objectWithParentHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 		Parent: &parentInfo,
 		ID:     id,
 		Name:   "",
+		// Subclassing a class type (refine Foo {…}) yields a class
+		// type: sealed, flat instances, minted under the parent's
+		// Class-branch node.
+		Class: parentInfo.Class,
 	}
 	parentDef := parentInfo.Type
 	if parentDef == nil {
-		parentDef = TObject
+		if parentInfo.Class {
+			parentDef = TClass
+		} else {
+			parentDef = TObject
+		}
 	}
 	def := r.Types.MintType(id, parentDef)
 	return []Value{NewObjectType(def, info)}, nil
+}
+
+// objectSugarHandler backs the `object {…}` constructor sugar —
+// exactly `make Object {…}` (eng.MakeOpenObject).
+func objectSugarHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return MakeOpenObject(args[0])
+}
+
+// arraySugarHandler backs the `array […]` constructor sugar —
+// exactly `make Array […]`.
+func arraySugarHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if !IsConcrete(args[0]) {
+		return nil, r.AqlError("array_error", "array: needs a concrete list", "array")
+	}
+	lst, _ := AsList(args[0])
+	return []Value{NewArray(lst.Slice())}, nil
 }

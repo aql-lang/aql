@@ -540,7 +540,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		//   appends it to the active testRun.
 		//
 		// The `max-shrinks` arg is reserved for the Stage-5 reducer
-		// (PBT-PLAN.0.md) — Stage 3 ignores it and reports the raw
+		// (PBT-PLAN.10.md) — Stage 3 ignores it and reports the raw
 		// failing input verbatim.
 		{
 			Name: "test-check-prop",
@@ -1293,7 +1293,9 @@ def TestResult refine Record [
 # Helpers to construct specs declaratively
 # ============================================================
 
-def case fn [[out:Any in:List name:String] [Map] [
+# (named test-case internally: 'case' is a core word and module
+# preambles cannot redefine builtins; the export key stays 'case'.)
+def test-case fn [[out:Any in:List name:String] [Map] [
   make TestCase {name:name in:in out:out}
 ]]
 
@@ -1382,7 +1384,7 @@ export "Test" {
   PropertyResult:  PropertyResult
 
   # spec constructors
-  case:           case/r
+  case:           test-case/r
   spec:           spec/r
   spec-with-subs: spec-with-subs/r
   prop:           test-prop/r

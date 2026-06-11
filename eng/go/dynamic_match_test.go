@@ -3,7 +3,7 @@ package eng
 import "testing"
 
 // TestDynamicCarrierMatch pins the not-disjoint matching rule for the
-// bounded dynamic(T) modality (design/dynamic-modality-report.0.md): a
+// bounded dynamic(T) modality (design/dynamic-modality-report.10.md): a
 // dynamic carrier matches a signature slot unless its bound is PROVABLY
 // disjoint from the slot, the optimistic dual of strict ConformsTo. The
 // contrast block proves the modality is what flips the behaviour — a

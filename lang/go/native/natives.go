@@ -43,7 +43,7 @@ var Natives = []NativeFunc{
 	// `quote (expr)` evaluates expr then quotes the result (the inert-value
 	// idiom); `codequote (expr)` keeps the paren as code — the structural
 	// quotability the macro layer wants. Words → atoms and lists → raw list
-	// behave exactly like `quote`. See design/PAREN-REPRESENTATION.0.md §2.2.
+	// behave exactly like `quote`. See design/PAREN-REPRESENTATION.9.md §2.2.
 	{
 		Name: "codequote",
 
@@ -69,7 +69,7 @@ var Natives = []NativeFunc{
 	// programmatically: an inert (non-evaluating) dot-access over the
 	// receiver with literal `get` segments. Unlike a parsed m.a.b (which
 	// evaluates eagerly), a constructed reach is data you can inspect,
-	// pass, and convert (see design/REACH.0.md §7). getr/computed segments
+	// pass, and convert (see design/REACH.10.md §7). getr/computed segments
 	// come from source via codequote; the list-encoding for them is TBD.
 	{
 		Name: "reach",
@@ -229,6 +229,10 @@ var Natives = []NativeFunc{
 			// applies to a truthy value (the reach reads the ELEMENT, not the
 			// {key,value} wrapper the Function form receives).
 			{Args: []*Type{TReach, TAny}, Handler: filterReachHandler, BarrierPos: -1},
+			// Quotation form: `filter [body] xs` runs the quoted body once
+			// per element (element pushed first, like each/fold) and keeps
+			// the elements whose body result is Boolean true.
+			{Args: []*Type{TList, TAny}, NoEvalArgs: map[int]bool{0: true}, Handler: filterBodyHandler, BarrierPos: -1},
 		},
 	},
 

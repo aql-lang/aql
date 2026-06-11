@@ -11,12 +11,12 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  Object → its fields
-def Foo (refine Object {x:Integer}) convert Map (make Foo {x:5})	{x:5}	an object projects to its fields
-def Foo (refine Object {x:Integer}) convert List (make Foo {x:5})	[5]	…and to its field values
-def Foo (refine Object {x:Integer}) typeof (convert Map (make Foo {x:5}))	Map	result is a Map
-def Foo (refine Object {x:Integer}) typeof (convert List (make Foo {x:5}))	List	result is a List
-def E (refine Object {}) convert Map (make E {})	{}	an empty object → empty Map
-def E (refine Object {}) convert List (make E {})	[]	an empty object → empty List
+def Foo (class {x:Integer}) convert Map (make Foo {x:5})	{x:5}	an object projects to its fields
+def Foo (class {x:Integer}) convert List (make Foo {x:5})	[5]	…and to its field values
+def Foo (class {x:Integer}) typeof (convert Map (make Foo {x:5}))	Map	result is a Map
+def Foo (class {x:Integer}) typeof (convert List (make Foo {x:5}))	List	result is a List
+def E (class {}) convert Map (make E {})	{}	an empty object → empty Map
+def E (class {}) convert List (make E {})	[]	an empty object → empty List
 #
 # §2  ModuleExport → its exported fields
 module [export "Foo" {a:1 b:2}] import end convert Map Foo	{a:1 b:2}	a ModuleExport projects to its exports
@@ -27,7 +27,7 @@ module [export "Foo" {a:1}] import end convert Map Foo.$module	{name:'' kind:'in
 module [export "Foo" {a:1}] import end convert List Foo.$module	['Foo']	…and to its export names
 #
 # §4  negative — an Ideal converts only to Map or List
-def Foo (refine Object {}) convert Integer (make Foo {})	ERROR:signature	no Ideal→Scalar convert
+def Foo (class {}) convert Integer (make Foo {})	ERROR:signature	no Ideal→Scalar convert
 #
 # §5  Matrix / Tensor → nested rows (List) and {shape values} (Map)
 "aql:matrix-util" import end convert List (MatrixUtil.eye 2)	[[1.0 0.0] [0.0 1.0]]	a matrix → nested rows

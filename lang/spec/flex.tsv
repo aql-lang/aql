@@ -100,8 +100,10 @@ def l [1 2] def f (flex l) push 9 f drop l	[1 2]	list sources are isolated as we
 # 5. Plain Map/List stay immutable; FlexList bounds		
 # ====================================================================		
 		
-set a/q 1 {a:0}	ERROR:signature	no set on a plain Map — Node immutability is intact
-set 0 9 [1 2]	ERROR:signature	no set on a plain List
+set a/q 1 {a:0}	{a:1}	set on a plain Map is COPY-RETURNING (a new map; see maps spec)
+def m {a:0} (set a/q 1 m) drop m	{a:0}	…the receiver itself is untouched — Node immutability is intact
+set 0 9 [1 2]	[9 2]	set on a plain List is copy-returning too
+def l [1 2] (set 0 9 l) drop l	[1 2]	…and the receiver list is untouched
 set 3 99 (flex [1 2 3])	ERROR:out of bounds	index == length is out of bounds — use append
 set 9 99 (flex [1 2 3])	ERROR:out of bounds	sparse FlexLists are an error — never pad with None
 set 0 9 (flex [])	ERROR:out of bounds	empty list has no slot 0

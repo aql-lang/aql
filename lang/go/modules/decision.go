@@ -52,13 +52,31 @@ const decisionAQL = `
 # aql:decision — Record types and builder functions
 # ============================================================
 
+# Comparable is the SURFACE the relational operators require
+# (design/GENERICS.10.md Phase 8, superseding §8.2's tor-alias): a
+# type is Comparable iff it exposes the cmp contract. The scalar
+# builtins the decision operators compare are declared here; user
+# types join by exposing Comparable themselves.
+def Comparable surface {cmp: (fnsig [[Self Self] [Integer]])}
+Integer exposes Comparable
+Float exposes Comparable
+String exposes Comparable
+Boolean exposes Comparable
+Atom exposes Comparable
+
 def Cond refine Record [field:Atom op:String value:Any]
 def Pred refine Record [kind:String op:String children:Any]
-def Rule refine Record [when:Map then:Map]
-def DTable refine Record [kind:String rules:List hit-policy:String]
+
+# Rule/LeafNode are generic in the RESULT type R; builders construct
+# through the bare-schema form, so R infers from the rule's output
+# (then/result) per Phase 7. DTable/DTree carry R as a defaulted
+# parameter (their fields hold rule/node LISTS, which give no direct
+# evidence) so bare construction still works.
+def Rule gen [R] refine Record [when:Map then:R]
+def DTable gen [(R default Any)] refine Record [kind:String rules:List hit-policy:String]
 def BranchNode refine Record [id:Atom kind:String branches:List]
-def LeafNode refine Record [id:Atom kind:String result:Any]
-def DTree refine Record [kind:String root:Atom nodes:List]
+def LeafNode gen [R] refine Record [id:Atom kind:String result:R]
+def DTree gen [(R default Any)] refine Record [kind:String root:Atom nodes:List]
 
 def cond fn [[field:Atom op:String value:Any] [Map] [
   make Cond {field:field op:op value:value}
@@ -106,9 +124,19 @@ def make-tree fn [[root:Atom nodes:List] [Map] [
 
 # --- apply-op ---
 
-def apply-op fn [[rhs:Any op:String lhs:Any] [Boolean] [if (op "eq" eq) [lhs rhs eq] [if (op "neq" eq) [lhs rhs neq] [if (op "lt" eq) [lhs rhs lt] [if (op "lte" eq) [lhs rhs lte] [if (op "gt" eq) [lhs rhs gt] [if (op "gte" eq) [lhs rhs gte] [false]]]]]]]]
+# The binary form is GENERIC over Comparable (Phase 8): the ORDERING
+# ops (lt/lte/gt/gte) require both operands in the surface, while
+# eq/neq are equality — defined for everything — so the Any overload
+# (sorted after the bounded sig) handles them and RAISES when an
+# ordering op reaches it with non-Comparable operands, instead of the
+# old silent false.
+def apply-op gen [(T extends Comparable)] fn [[rhs:T op:String lhs:T] [Boolean] [if (op "eq" eq) [lhs rhs eq] [if (op "neq" eq) [lhs rhs neq] [if (op "lt" eq) [lhs rhs lt] [if (op "lte" eq) [lhs rhs lte] [if (op "gt" eq) [lhs rhs gt] [if (op "gte" eq) [lhs rhs gte] [raise unknown_op op]]]]]]] [rhs:Any op:String lhs:Any] [Boolean] [if (op "eq" eq) [lhs rhs eq] [if (op "neq" eq) [lhs rhs neq] [raise not_comparable op]]]]
 
-def apply-op fn [[rhs:Any op:String] [Boolean] [if (op "is_true" eq) [rhs] [if (op "is_false" eq) [rhs not] [if (op "is_null" eq) [false] [if (op "is_not_null" eq) [true] [false]]]]]]
+# The unary form recognises its four ops and RAISES on anything
+# else — so an unknown op (or a relational op whose non-Comparable
+# operand fell past the generic sig above into this catch-all) is a
+# loud unknown_op error rather than a silent false.
+def apply-op fn [[rhs:Any op:String] [Boolean] [if (op "is_true" eq) [rhs] [if (op "is_false" eq) [rhs not] [if (op "is_null" eq) [false] [if (op "is_not_null" eq) [true] [raise unknown_op op]]]]]]
 
 # --- eval-cond ---
 
@@ -164,6 +192,7 @@ def decide fn [[model:Map input:Map] [Any] [if ((model get "kind") "table" eq) [
 # ============================================================
 
 export "Decision" {
+  Comparable:  Comparable
   Cond:        Cond
   Pred:        Pred
   Rule:        Rule

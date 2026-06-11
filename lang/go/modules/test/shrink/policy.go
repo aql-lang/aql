@@ -1,13 +1,13 @@
 // Package shrink layers PBT-specific policy on top of the kernel
 // eng/go/stackform package. The shrinker (Stage 5 of
-// design/PBT-PLAN.0.md) uses the Policy here to decide which Ops in
+// design/PBT-PLAN.10.md) uses the Policy here to decide which Ops in
 // a failing StackForm are safe to delete, replace, or simplify, and
 // the cost adjustments to drive failure-preserving minimisation.
 //
 // Two pieces:
 //
 //   - Transparency annotations (per-word) — Transparent | Generator |
-//     Frozen | Opaque, per design/aql_property_based_reduction_report.md §8.
+//     Frozen | Opaque, per design/aql_property_based_reduction_report.10.md §8.
 //   - ShrinkCost — wraps stackform.Cost with policy weights, per
 //     report §9. Frozen words price high to discourage rewriting;
 //     Transparent words price low so the reducer eagerly drops them.
@@ -108,7 +108,7 @@ func (p *Policy) Weight(t Transparency) int {
 }
 
 // DefaultPolicy returns the canonical PBT classification + weights
-// (per design/aql_property_based_reduction_report.md §8-9 and the
+// (per design/aql_property_based_reduction_report.10.md §8-9 and the
 // PBT plan's Stage-4 reference table).
 //
 // Calibration:

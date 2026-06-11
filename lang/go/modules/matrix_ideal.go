@@ -8,7 +8,7 @@ import (
 )
 
 // This file makes Tensor, Matrix and Vector first-class type-kinds —
-// Ideals (see eng/go/ideal.go and design/IDEAL.0.md). Matrix
+// Ideals (see eng/go/ideal.go and design/IDEAL.10.md). Matrix
 // and Vector refine Tensor: a Matrix is a rank-2 tensor, a Vector a
 // rank-1 tensor. The kinds are registered when `aql:matrix` is
 // imported, after which `type` constructs shaped tensor types and

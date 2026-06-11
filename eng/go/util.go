@@ -225,7 +225,7 @@ func WithPos(v, src Value) Value {
 // the integer body. Using this helper makes the by-value copy
 // explicit and the mistake unreachable.
 //
-// See `design/TYPE-CANONICALIZATION.0.md`.
+// See `design/TYPE-CANONICALIZATION.10.md`.
 func ReparentValue(v Value, def *Type) Value {
 	v.Parent = def
 	return v
@@ -246,7 +246,7 @@ func ReparentValue(v Value, def *Type) Value {
 // resolution, refine subtype minting, behave validation — routes
 // through this helper so identity stays canonical at every hop.
 //
-// See `design/TYPE-CANONICALIZATION.0.md`.
+// See `design/TYPE-CANONICALIZATION.10.md`.
 func CanonicalType(r *Registry, t *Type) *Type {
 	if t == nil || r == nil || t.ID == "" {
 		return t

@@ -179,7 +179,7 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 			}
 			if pattern.Parent.Equal(TMap) && ordered[idx].Parent.Equal(TMap) &&
 				pattern.Data != nil && ordered[idx].Data != nil &&
-				!IsOptionsType(pattern) &&
+				!IsOptionsType(pattern) && !IsTypedMap(pattern) &&
 				!IsRecordType(ordered[idx]) && !IsTypedMap(ordered[idx]) && !IsOptionsType(ordered[idx]) {
 				if !OpenUnifyMap(pattern, ordered[idx]) {
 					patternOk = false
@@ -236,7 +236,7 @@ func FlexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
 func sigTypeMatches(v Value, t *Type) bool {
 	// Gradual (dynamic) carrier: matches the slot unless its bound is
 	// PROVABLY disjoint from t — the not-disjoint rule, the optimistic
-	// dual of strict ConformsTo (design/dynamic-modality-report.0.md).
+	// dual of strict ConformsTo (design/dynamic-modality-report.10.md).
 	// Reuses `tand` for the disjointness proof; dynamic(Any) matches
 	// every inhabited slot, dynamic(Integer) fails only provably-disjoint
 	// slots (String, Atom, …). Checked first so a dynamic carrier never

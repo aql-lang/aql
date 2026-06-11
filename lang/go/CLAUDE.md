@@ -90,6 +90,14 @@ Language-agnostic content stays at the top of each component:
   All moved words are no longer available unqualified.
 - `test/` — integration tests and TSV spec runners.
 
+## ADRs — only on explicit instruction
+
+**Never add an entry to `ADR.md` unless the maintainer explicitly
+instructs it** ("add an ADR for X"). Design conversations, reviews,
+and directions accepted in discussion are *discovery* — they are
+captured in `design/*.md` notes, not as ADR entries, however settled
+they sound. The same rule is stated in the `ADR.md` header.
+
 ## Build & Test
 
 ```bash
@@ -325,7 +333,7 @@ Module FnDef wrappers (`makeXxxFnDef` helpers) get a special
 short-circuit in `execFnDefLiteral`: trivial single-word delegation
 bodies (`[Word(inner-name)]`) dispatch the inner native directly via
 `execMatch`, skipping CallAQL entirely. See
-`design/SIG-ORDER-REFACTOR.0.md`.
+`design/SIG-ORDER-REFACTOR.10.md`.
 
 ### The unified algorithm
 
@@ -389,7 +397,7 @@ sub 10 3    → forward [10,3]                  → sig=[10,3] → 3-10 = -7
 (b) and sig[1] from the prefix (a). The mirror equivalence
 `f a b ≡ b f a ≡ b a f` holds; `a f b` is the only non-equivalent
 two-arg arrangement. The phase-4 handler convention picks the swap
-form as the canonical surface syntax: `10 sub 3 = 7` matches how
+form as the canonical syntax: `10 sub 3 = 7` matches how
 a reader scans left-to-right.
 
 ### Implementation
@@ -411,7 +419,7 @@ runtime path, and no rewrite pass.
 
 `afn` has signature `[Any Any |]` (both args forward-eligible, both
 typed `Any`, body and sig captured via `NoEvalArgs`). The canonical
-surface form is the swap `input afn body` (i.e. `input => body`),
+call form is the swap `input afn body` (i.e. `input => body`),
 mirroring the AQL `args[1] op args[0]` reading convention — afn
 collects the body as the forward arg and the input sig from the
 stack.
@@ -707,7 +715,7 @@ position 0 (= top of stack under matchSignature).
 
 This is uniform with everywhere else in the kernel — there is
 ONE convention. The wrapper's `Params` types are only used for
-the static analyser and surface display; at runtime,
+the static analyser and user-facing display; at runtime,
 `execFnDefLiteral` detects the trivial-delegation shape
 (`Body=[Word(fnDef.Name)]`, all-unnamed Params) and calls
 `execMatch` on the inner native directly via the matched sig.
@@ -807,7 +815,7 @@ methods on `Value`; only `Is(t)` and `String()` remain as methods.)
   `Value` since they're the canonical handler-side error path; the
   low-level accessors were drained to free functions in `eng/` as part
   of the type-decoupling work — see
-  `design/TYPE-DECOUPLING.0.md`.
+  `design/TYPE-DECOUPLING.10.md`.
 
 **Check mode**:
 - `r.IsCheckMode()` — read-side helper. Replaces `r.Check.Mode` and
@@ -843,7 +851,7 @@ methods on `Value`; only `Is(t)` and `String()` remain as methods.)
   from `&v` of a by-value type-literal Value — `behave` Behavior
   installs and LCA-walk identity must reach the canonical pointer,
   not a stack-local copy. See
-  `design/TYPE-CANONICALIZATION.0.md`.
+  `design/TYPE-CANONICALIZATION.10.md`.
 
 **Typed-def reparent**:
 - `ReparentValue(v, def) Value` — return a fresh copy of v with
@@ -895,7 +903,7 @@ to the corresponding Atom position. Without `/q`, callers will see an
 ## Value Comparison & Ordering
 
 `cmp` / `lt` / `gt` / `lte` / `gte` / `sort` route through one total
-order — see `design/TYPE-ORDERING.0.md` for the canonical
+order — see `design/TYPE-ORDERING.10.md` for the canonical
 design. The kernel-side implementation lives in `eng/go/compare.go`
 and `eng/go/compare_scalar_behaviors.go`; this section captures
 what handler authors and word implementers need to know.

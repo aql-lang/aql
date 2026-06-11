@@ -9,7 +9,7 @@ import (
 // FormatFloat keeps the everyday range in plain decimal and only switches
 // to scientific notation for genuinely extreme magnitudes (>= 1e21 or
 // < 1e-10). Special values render as the parseable inf/-inf/nan literals.
-// See design/IEEE-754-COMPLIANCE.0.md.
+// See design/IEEE-754-COMPLIANCE.8.md.
 func TestFormatFloat(t *testing.T) {
 	cases := []struct {
 		in   float64

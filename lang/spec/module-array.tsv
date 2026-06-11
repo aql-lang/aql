@@ -23,6 +23,20 @@
 "aql:array-util" import end  ArrayUtil.expand [true false true] [7 8]	[7 0 8]	expand: spread data into true slots, 0 into false slots
 "aql:array-util" import end  ArrayUtil.compress [true false true] [1 2 3]	[1 3]	compress: keep data where the mask is true
 #
+# §2b editing — copy-returning single-element edits (HAMT Level A primitives)
+"aql:array-util" import end  ArrayUtil.insert-at 1 99 [1 2 3]	[1 99 2 3]	insert-at: insert the element before index 1
+"aql:array-util" import end  ArrayUtil.insert-at 0 99 [1 2 3]	[99 1 2 3]	insert-at: index 0 prepends
+"aql:array-util" import end  ArrayUtil.insert-at 3 99 [1 2 3]	[1 2 3 99]	insert-at: index == length appends
+"aql:array-util" import end  [1 2 3] ArrayUtil.insert-at 1 99	[1 99 2 3]	insert-at: pipeline form (subject from the stack)
+"aql:array-util" import end  def xs [1 2 3] end def ys (ArrayUtil.insert-at 1 99 xs) end xs	[1 2 3]	insert-at is copy-returning — the source list is unchanged
+"aql:array-util" import end  ArrayUtil.insert-at 4 99 [1 2 3]	ERROR:index_out_of_range	insert-at: index past length is a loud error, not a silent no-op
+"aql:array-util" import end  ArrayUtil.insert-at -1 99 [1 2 3]	ERROR:index_out_of_range	insert-at: negative index is a loud error
+"aql:array-util" import end  ArrayUtil.remove-at 1 [1 2 3]	[1 3]	remove-at: drop the element at index 1
+"aql:array-util" import end  ArrayUtil.remove-at 0 [1 2 3]	[2 3]	remove-at: index 0 drops the head
+"aql:array-util" import end  [1 2 3] ArrayUtil.remove-at 2	[1 2]	remove-at: pipeline form (subject from the stack)
+"aql:array-util" import end  ArrayUtil.remove-at 3 [1 2 3]	ERROR:index_out_of_range	remove-at: index == length is a loud error
+"aql:array-util" import end  ArrayUtil.remove-at 0 []	ERROR:index_out_of_range	remove-at: any index into an empty list is a loud error
+#
 # §3  membership / grouping
 "aql:array-util" import end  ArrayUtil.member [1 5 3] [1 2 3]	[true false true]	member: is each needle present in the haystack
 "aql:array-util" import end  ArrayUtil.unique [1 2 2 3 3 3]	[1 2 3]	unique: distinct elements, first-seen order

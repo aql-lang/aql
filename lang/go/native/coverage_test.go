@@ -534,6 +534,23 @@ func TestOpenUnifyMap(t *testing.T) {
 	}
 }
 
+// A typed-map pattern (`m:{:Integer}` fn param) has ChildTypeInfo
+// data, not an OrderedMap — OpenUnifyMap must route it through the
+// unifier instead of panicking on a nil Keys() walk.
+func TestOpenUnifyMapTypedMapPatternNoPanic(t *testing.T) {
+	pattern := NewTypedMap(NewTypeLiteral(TInteger))
+	candidate := NewOrderedMap()
+	candidate.Set("a", NewInteger(1))
+	if !OpenUnifyMap(pattern, NewMap(candidate)) {
+		t.Error("typed-map pattern should admit a conforming concrete map")
+	}
+	bad := NewOrderedMap()
+	bad.Set("a", NewString("no"))
+	if OpenUnifyMap(pattern, NewMap(bad)) {
+		t.Error("typed-map pattern should reject an off-type value")
+	}
+}
+
 func TestOpenUnifyMapMissingKey(t *testing.T) {
 	pattern := NewOrderedMap()
 	pattern.Set("z", NewTypeLiteral(TNumber))

@@ -122,7 +122,13 @@ var definitionNatives = []NativeFunc{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    fnsigHandler,
-			Returns:    []*Type{TFnUndef}, BarrierPos: -1,
+			// Pure construction — runs in check mode too, so surface
+			// schemas carry REAL shapes statically and `exposes` is
+			// fully static-checkable (design/SURFACES.10.md S2). A
+			// pending gen spec turns the result into a generic
+			// fn-shape schema (see the handler).
+			RunInCheckMode: true,
+			Returns:        []*Type{TFnUndef}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -161,7 +167,7 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	stackOnly := defStackOnly(args[0])
 	body := args[1]
 	if IsCapitalisedName(name) {
-		// `def` is the universal binder (design/TYPE-UNIFORM.0.md
+		// `def` is the universal binder (design/TYPE-UNIFORM.10.md
 		// Phase 2): a capitalised name is a TYPE binding. Delegate to
 		// the kernel type installer — the same path the `type` word
 		// uses — so object/predicate lattice-minting and all
@@ -211,6 +217,34 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		return nil, r.AqlError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
 	}
 	constraint, _ := nameMap.Get(name)
+	// A parenthesised annotation — `def b:(Box of [Integer]) {…}` —
+	// evaluates inline (def's NoEvalMapArgs keeps the typed-name map
+	// raw, so the ParenExpr arrives unevaluated). Generic
+	// instantiations are the main client; any expression producing a
+	// single type value works.
+	if IsParenExpr(constraint) {
+		toks, _ := AsParenExpr(constraint)
+		body := make([]Value, len(toks))
+		copy(body, toks)
+		sub := New(r)
+		out, err := sub.Run(body)
+		if err != nil {
+			return nil, fmt.Errorf("def %s: type annotation: %w", name, err)
+		}
+		if len(out) != 1 {
+			return nil, fmt.Errorf("def %s: type annotation must produce one type, got %d values", name, len(out))
+		}
+		constraint = out[0]
+	}
+	// A typed-list/map annotation whose CHILD is a paren expression —
+	// `def xs:[:(Pair of [String Integer])] […]` — needs the child
+	// evaluated the same way a top-level paren annotation is (the
+	// parser leaves it as a raw ParenExpr payload).
+	if evaluated, cerr := eng.ResolveChildTypeExpr(r, constraint); cerr != nil {
+		return nil, fmt.Errorf("def %s: type annotation: %w", name, cerr)
+	} else {
+		constraint = evaluated
+	}
 	var typeName string
 	constraint, typeName, _ = r.ResolveTypedNameValue(constraint)
 	if !IsTypeBody(constraint) {
@@ -223,6 +257,18 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		return constraint.String()
 	}
 	body := args[1]
+	// A generic SCHEMA annotation — `def b:Box {value:42}` — infers
+	// its type arguments from the body and instantiates (Phase 7 /
+	// D12); the instantiation then flows through the ordinary typed-def
+	// branches below (the ObjectType branch constructs class
+	// instances, etc.). Uninferable, undefaulted parameters error.
+	if IsTypeSchema(constraint) {
+		inst, ierr := eng.InferAndInstantiateSchema(r, constraint, body)
+		if ierr != nil {
+			return nil, fmt.Errorf("def %s: %w", name, ierr)
+		}
+		constraint = inst
+	}
 	if constraint.Parent.Equal(TFnUndef) && IsAtom(body) {
 		atomName, _ := AsAtom(body)
 		if top, ok := r.Defs.Top(atomName); ok {
@@ -280,7 +326,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if IsObjectType(constraint) {
 		info, _ := AsObjectType(constraint)
 		if body.Parent.Equal(TMap) {
-			result, err := eng.MakeObject(info, body, nil)
+			result, err := eng.MakeObject(info, body, nil, r)
 			if err != nil {
 				return nil, fmt.Errorf("def %s: %w", name, err)
 			}
@@ -387,7 +433,7 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	}
 	if IsCapitalisedName(name) {
 		// `undef` is the universal unbinder (the symmetric completion
-		// of Phase 2's universal `def` — design/TYPE-UNIFORM.0.md):
+		// of Phase 2's universal `def` — design/TYPE-UNIFORM.10.md):
 		// a capitalised name is a TYPE binding, so pop it from the single
 		// binding store and retire the minted lattice type.
 		entry, ok := r.Defs.PopEntry(name)
@@ -493,21 +539,38 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 // separate `fnsig` word — registered via eng.RegisterCoreFnSig
 // from register.go.
 func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	// A pending gen spec (`def identity gen [T] fn [[x:T] [T] [x]]`)
+	// makes this a GENERIC fn: the placeholders stay bound while
+	// ParseFnParams resolves the sigs (so `x:T` types against the
+	// placeholder node, whose Behavior handles dispatch admission),
+	// then pop; the spec rides FnDefInfo.Gen so each call installs
+	// the inferred body-scoped type bindings.
+	genSpec := r.TakePendingGen()
+	failGen := func(err error) ([]Value, error) {
+		if genSpec != nil {
+			PopGenBindings(r, genSpec)
+		}
+		return nil, err
+	}
 	list := args[0]
 	if !list.Parent.Equal(TList) {
-		return nil, r.AqlError("fn_error", "fn: argument must be a list", "fn")
+		return failGen(r.AqlError("fn_error", "fn: argument must be a list", "fn"))
 	}
 	if !IsConcrete(list) {
-		return nil, r.AqlError("fn_error", "fn: argument must be a concrete list, got type literal", "fn")
+		return failGen(r.AqlError("fn_error", "fn: argument must be a concrete list, got type literal", "fn"))
 	}
 	_lst, _ := AsList(list)
 	elems := _lst.Slice()
 	if len(elems) == 0 || len(elems)%3 != 0 {
-		return nil, r.AqlError("fn_error", "fn: list length must be a non-zero multiple of 3 (input output body triples); use `fnsig` for the type-only form", "fn")
+		return failGen(r.AqlError("fn_error", "fn: list length must be a non-zero multiple of 3 (input output body triples); use `fnsig` for the type-only form", "fn"))
 	}
 	fnDef, err := parseFnDef(r, elems)
 	if err != nil {
-		return nil, err
+		return failGen(err)
+	}
+	if genSpec != nil {
+		PopGenBindings(r, genSpec)
+		fnDef.Gen = genSpec
 	}
 	// Compute lexical captures: per-sig walks merged into one list.
 	// Nil at top-level (no enclosing fn) — natural no-op via
@@ -517,6 +580,42 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		perSig[i] = eng.ComputeCaptures(r, &fnDef.Signatures[i])
 	}
 	fnDef.Captured = eng.MergeCaptures(perSig)
+
+	// Check mode, generic fns: declaration-time ABSTRACT check
+	// (Phase 5). Analyse each body once with carrier args of the
+	// declared param types — for a `x:T` param that is a carrier of
+	// the PLACEHOLDER node, so operations on it are admitted exactly
+	// when the parameter's bound justifies them (§9.4: a
+	// `(T extends Number)` carrier reaches Number ops through the
+	// placeholder's lattice parent; a bare T admits nothing it can't
+	// prove). Body diagnostics (undefined words, unjustified ops)
+	// surface at the definition instead of waiting for a first call.
+	// The placeholder bindings are re-pushed around the analysis so
+	// body-internal `of [T]` resolves (to a deferred GenInstRef).
+	// Non-generic fns get an equivalent construction-time analysis
+	// via the dynamic-help example generator; generic params have no
+	// synthesizable example values, hence this explicit path.
+	if r.Check.IsActive() && genSpec != nil {
+		PushGenBindings(r, genSpec)
+		for i := range fnDef.Signatures {
+			s := &fnDef.Signatures[i]
+			if len(s.Body) == 0 {
+				continue
+			}
+			paramNames := make([]string, len(s.Params))
+			carrierArgs := make([]Value, len(s.Params))
+			for j, p := range s.Params {
+				paramNames[j] = p.Name
+				t := p.Type
+				if t == nil {
+					t = TAny
+				}
+				carrierArgs[j] = NewCarrier(t)
+			}
+			eng.AnalyseFnBody(r, "", paramNames, s.Body, carrierArgs, fnDef.Captured)
+		}
+		PopGenBindings(r, genSpec)
+	}
 
 	// Check mode: flag overloads that an earlier, higher-priority
 	// signature already subsumes — under first-match-wins dispatch they
@@ -625,7 +724,16 @@ func fnsigHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	}
 	info, err := parseFnUndefSpec(r, spec)
 	if err != nil {
+		if g := r.TakePendingGen(); g != nil {
+			PopGenBindings(r, g)
+		}
 		return nil, err
+	}
+	// A pending gen spec turns the shape into a generic fn-shape
+	// schema (`def Mapper gen [T U] fnsig [[T] [U]]`): the
+	// placeholders were live while ParseFnParams resolved T/U above.
+	if g := r.TakePendingGen(); g != nil {
+		return genWrapSchema(r, g, NewFnUndef(info), SchemaFnSig)
 	}
 	return []Value{NewFnUndef(info)}, nil
 }

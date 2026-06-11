@@ -92,7 +92,7 @@ every named type you define with `def`.
   precision. (This includes the hex int64 minimum `-0x8000000000000000`.)
 
 **Float** is IEEE-754 `binary64` (see
-[design/IEEE-754-COMPLIANCE.0.md](design/IEEE-754-COMPLIANCE.0.md)):
+[design/IEEE-754-COMPLIANCE.8.md](design/IEEE-754-COMPLIANCE.8.md)):
 
 - Any literal with a `.` is a `Float`, parsed correctly-rounded
   (round-ties-to-even): `3.14`, `-0.5`, trailing-dot `5.` → `5.0`.
@@ -412,6 +412,8 @@ Any
 │       └── FlexMap                  -- mutable map (see Flex nodes)
 ├── Ideal
 │   ├── Object (Resource (Entity))
+│   ├── Class                       -- user classes root here
+│   ├── Surface                     -- user surfaces (operation contracts)
 │   ├── Array, Record, Options, Error
 │   ├── Store, Table
 │   ├── Fetch (Request | Response)
@@ -521,6 +523,187 @@ Integer lt 0                  # returns true
 [1,2] cmp [1,3]               # returns -1
 ```
 
+### Classes
+
+`class {schema}` mints a sealed nominal record type under
+`Ideal/Class`. The schema map declares each field once: a **type**
+value declares a required field, a **concrete** value declares a
+default (and the default's own type becomes the field's type).
+`make` constructs flat instances — every field resolved eagerly,
+no prototypes:
+
+```
+def Point class {x:Float y:0.0}     # x required, y defaults to 0.0
+def p (make Point {x:1.0})
+p.x                                  # returns 1.0 — dot access reads fields
+p get y                              # returns 0.0
+describe Point                       # prints the schema view
+```
+
+Field typing is **strict**, at `make` and at `set` alike — no silent
+conversion. Predicate types run their predicate, refined types
+enforce the refinement, and `const v` pins a field to exactly one
+value:
+
+```
+def Radius (Float gte 0.0)
+def Circle class {r:Radius}
+make Circle {r:-1.0}                # error — predicate fields run their predicate
+def Tagged class {kind:(const 'point')}   # kind can only ever be 'point'
+def Foo refine Integer
+def S class {x:(make Foo 1)}        # a Foo-typed field defaulting to Foo(1)
+```
+
+Instances are **sealed**: `set` re-types an existing field, and a
+new key is a loud `sealed_field` error. Subclass with
+`refine <Class> {…}` — child fields must unify with the parent's,
+and instances resolve the whole chain flat:
+
+```
+def Point3 refine Point {z:Float}   # Class/Point/Point3
+```
+
+Equality: `deq` is structural within the same exact class (a
+subclass instance never equals a parent instance); `eq` is identity
+(two names alias the same instance only if they share its fields).
+`undef <Class>` removes the *name* (construction errors), but live
+instances keep their identity, reads, and typed writes.
+
+Serialization: `StructUtil.jsonify` emits a `$class` marker on
+instances (user keys starting with `$` are escaped to `$$`), and
+`StructUtil.reify Target json-or-node` hydrates back through `make`
+— defaults fill, required fields and predicates enforce, unknown
+keys error. The target is an explicit class or a `tor` union the
+`$class` selects within. `StructUtil.clone` copies an instance
+type-preservingly; `StructUtil.setpath` returns a *new* instance
+with the edit applied, schema-checked.
+
+Classes complete a 2×2 container table:
+
+|  | immutable (`set` returns a copy) | mutable (`set` writes in place) |
+|---|---|---|
+| **open keys** | `Map` `{…}` | `Object` — `object {…}` |
+| **fixed shape** | `List` `[…]` | `Array` — `array […]`; class instances (typed, sealed) |
+
+`object {…}` / `array […]` are sugar for `make Object {…}` /
+`make Array […]`. `convert Map <obj>` freezes an Object to a Map;
+`convert Object <map>` thaws. Note that Object, Array, and class
+instances are shared mutable state: writes are visible through
+every alias, and concurrent writers (e.g. inside `parallel`
+branches) must coordinate — prefer the immutable column for data
+that crosses branch boundaries.
+
+### Surfaces
+
+A surface is a pure operation contract: a named set of required
+signatures with no bodies and no state, minted under
+`Ideal/Surface`. `Self` marks the positions the conforming type
+occupies. Conformance is **explicit** — a type joins a surface only
+by declaring `exposes`, which checks the word's overload table
+(with `Self` substituted; contravariant parameters, covariant
+returns) and raises `surface_unsatisfied` listing every gap:
+
+```
+def Shape surface {area: (fnsig [[Self] [Float]])}
+def Circle class {r:1.0}
+def area fn [[c:Circle] [Float] [(c get r) mul 6.28]]
+Circle exposes Shape
+def total fn [[s:Shape] [Float] [area s]]
+total (make Circle {r:2.0})   # 12.56
+(make Circle {}) is Shape     # true
+5 is Shape                    # false — no exposes, no membership
+```
+
+A surface is a normal type after that: surface-typed fn parameters
+dispatch on membership, subclass instances of an exposer conform,
+and the type algebra applies (`Shape tor none`, `tnot Shape`,
+`Circle tand Shape` → `Circle` for an exposer). The conformance
+check runs at declaration time; `describe Shape` prints the
+contract.
+
+### Generic types
+
+A generic type is a **schema**: a class, record, or fn-shape
+declared over one or more type parameters, instantiated with
+concrete type arguments. The angle-bracket form is the usual
+spelling — a capitalised name directly before `<` opens the
+parameter or argument list (commas between entries are optional,
+like list elements):
+
+```
+def Box<T> class {value:T}
+def b:Box<Integer> {value:42}
+typeof b                                   # returns Box of [Integer]
+b is Box                                   # returns true
+b is Box<Integer>                          # returns true
+b is Box<String>                           # returns false
+```
+
+Each distinct instantiation is minted **once** (`Box<Integer> teq
+(Box of [Integer])` returns `true`) as a nominal child of the
+schema, so instances get real type identity: `typeof` names the
+instantiation, a bare `Box` in any type position means "any
+instantiation of Box", and sibling instantiations are distinct
+types — v1 generics are **invariant**, so `Box<Integer>` is not a
+`Box<Number>`. Class instantiations keep the full class contract
+(strict field typing, sealing, `deq` per-instantiation,
+jsonify/reify serialization).
+
+The angle form is pure sugar over four ordinary words, desugared at
+parse time — `def Name<…>` is `def Name gen [...]`, and a use-site
+`Name<…>` is `( Name of [...] )` — so macros, `quote`, and
+`Vm.parse` only ever see the canonical paren form. (`<` and `>` are
+general-purpose parser tokens; the generics rule is their only
+current consumer, and comparisons stay on `lt`/`gt`.) The canonical
+form is needed for generic **functions**, whose names are lowercase:
+
+```
+def Pair<K, V> refine Record [key:K value:V]
+Pair of [String Integer]                   # returns record{key:String value:Integer}
+def first gen [T] fn [[xs:[:T]] [T] [xs get 0]]
+first [10 20 30]                           # returns 10
+```
+
+A generic fn binds its parameters per call from the arguments —
+`x:T` binds `typeof(arg)`, a `[:T]`/`{:T}` pattern binds the union
+of the element types — and the bindings are in scope inside the
+body, so `make (Box of [T]) {…}` constructs the caller's
+instantiation. Bounds constrain parameters with `extends`
+(`T extends C` inside angles); membership is the ordinary `is`
+test, so lattice types, predicate refinements, disjunctions, and
+**surfaces** all work as bounds, and violations reject at dispatch
+and instantiation (`constraint_violation`). Defaults are declared
+with `=` in angle form (`(T default D)` canonically) and may
+reference earlier parameters:
+
+```
+def Sorted<T extends Number> class {items:[:T]}
+def Result<T, E = Error> refine Record [ok:T err:E]
+(Result of [Integer])                      # returns record{ok:Integer err:Error}
+```
+
+A schema's own name is unbound while its body builds; recursion is
+written `Self of [...]`:
+
+```
+def Tree<T> refine Record [value:T left:(Self of [T])]
+Tree of [Integer]                          # returns record{value:Integer left:Tree of [Integer]}
+```
+
+A bare schema used as a construction target **infers** its
+arguments from the body (an uninferable, undefaulted parameter is a
+loud `unbound_param`, never a silent `Any`; explicit instantiation
+always wins):
+
+```
+def Box<T> class {value:T}
+typeof (make Box {value:42})               # returns Box of [Integer]
+```
+
+In `aql check`, a generic fn's body is checked once at the
+definition against its parameter bounds (operations on a bare `T`
+must be justified by the bound), and each call site refines the
+declared return through the inferred bindings.
 
 ## Word reference
 
@@ -594,7 +777,7 @@ Two further sharp edges on numbers:
   degrading to a `Float`: `2 pow 63` and `9223372036854775807 add 1` both
   error. Make an operand a `Float` (e.g. `9223372036854775807 add 1.0`)
   for an approximate IEEE-754 result. (Arbitrary-precision integers are a
-  planned future change — see `design/INTEGER-OVERFLOW-STRATEGY.0.md`.)
+  planned future change — see `design/INTEGER-OVERFLOW-STRATEGY.5.md`.)
 * `Float` is an IEEE-754 binary `float64`, **not** a base-10
   decimal — `0.1 add 0.2` returns `0.30000000000000004` and `1 eq 1.0`
   returns `true` even though the two divide differently. See
@@ -799,7 +982,7 @@ instance built with `make` carries the type's tag, so it satisfies
 both parameter and return slots of that type (and of any supertype):
 
 ```
-def Box (refine Object {v:0})
+def Box (class {v:0})
 def wrap fn [[n:Integer] [Box] [make Box {v:n}]]
 typeof (wrap 5)               # returns Box
 (wrap 5) get 'v'              # returns 5
@@ -845,7 +1028,7 @@ mkbad                                              # returns [aql/type_error] re
 
 The newtype-vs-subset distinction and its cross-language rationale are
 explained in **[Explanation: Function signatures](EXPLANATION.md#function-signatures-and-refinement-types)**
-and pinned in `design/REFINE-NEWTYPE-VS-SUBSET.0.md`.
+and pinned in `design/REFINE-NEWTYPE-VS-SUBSET.10.md`.
 
 ### Macros
 
@@ -949,16 +1132,18 @@ before the call.
 
 > **Deferred.** A `` `[ … ] `` quasiquote sugar (Phase 3) and compiled-mode
 > expansion / `eval-when` staging (Phase 5, awaiting the IR backend) are
-> designed but not yet shipped. See `design/MACROS.0.md`.
+> designed but not yet shipped. See `design/MACROS.8.md`.
 
 ### Control flow
 
 | Word | Description | Example |
 |------|-------------|---------|
 | `if` | Conditional; else branch optional | `if (5 gt 3) ["y"] ["n"]` |
+| `case` | Dispatch on a value: match/block pairs + optional default | `case 2 [1 "one" 2 "two" "many"]` returns `'two'` |
 | `for` | Numeric loop (counter or range) | `for 5 [42]` |
 | `do` | Evaluate list as program | `do [1 add 2]` returns `3` |
-| `error` | Pattern-match an error value | `do [1 div 0] error [drop 42]` |
+| `error` | Handle an error value (a non-Error result passes through) | `do [1 div 0] error [drop 42]` |
+| `raise` | Raise an error (code, message, optional payload) | `raise bad_input "expected a list"` |
 | `break` | Exit `for` loop early | `for 10 [break]` |
 | `continue` | Skip to next iteration | `for 10 [continue]` |
 
@@ -1042,6 +1227,8 @@ iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 | `ArrayUtil.where` | Indices of truthy elements | `ArrayUtil.where [true,false,true]` returns `[0,2]` |
 | `ArrayUtil.grade` | Indices that would sort | `ArrayUtil.grade [3,1,2]` returns `[1,2,0]` |
 | `ArrayUtil.at` | Select by index list | `[10,20,30] ArrayUtil.at [2,0]` returns `[30,10]` |
+| `ArrayUtil.insert-at` | New list with an element inserted at an index (`insert-at idx elem list`; index `len` appends; out of range errors) | `ArrayUtil.insert-at 1 99 [1,2,3]` returns `[1,99,2,3]` |
+| `ArrayUtil.remove-at` | New list with the element at an index removed (out of range errors) | `ArrayUtil.remove-at 1 [1,2,3]` returns `[1,3]` |
 | `ArrayUtil.sortby` | Sort by parallel key list | `["b","a","c"] ArrayUtil.sortby [2,1,3]` |
 | `ArrayUtil.replicate` | Repeat each element N times | `[1,2,3] ArrayUtil.replicate [2,1,3]` |
 | `ArrayUtil.expand` | Expand by Boolean mask | `[1,2,3] ArrayUtil.expand [true,false,true]` |
@@ -1062,6 +1249,7 @@ iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 | `each` | Map a function | `[1,2,3] each [dup mul]` |
 | `fold` | Reduce with accumulator | `fold [add] [1,2,3] 0` returns `6` |
 | `scan` | Running fold | `scan [add] [1,2,3]` |
+| `filter` | Keep elements where a predicate holds | `filter [2 gt] [1,2,3,4]` returns `[3,4]` |
 | `outer` | Outer product | `outer [mul] [3,4] [1,2]` |
 | `inner` | Inner product | `inner [add] [mul] [3,4] [1,2]` |
 
@@ -1071,6 +1259,33 @@ all-forward form shown above maps each list argument left-to-right
 into the signature: `fold` takes `body data init`, `scan` takes
 `body data`, `outer` takes `body listB listA`, `inner` takes
 `combineBody productBody listB listA`.
+
+> **`fold` body stack order.** The body runs with the **accumulator
+> pushed first and the current element on top of it**, so a two-arg
+> word in the body sees `(element, accumulator)` as `(top, deeper)`:
+>
+> ```
+> 0 fold [add] [1 2 3]      # returns 6
+> 0 fold [sub] [10]         # returns -10  — acc minus element (0 - 10)
+> [] fold [push] [1 2 3]    # returns [1 2 3] — element pushed onto the acc list
+> ```
+
+> **`filter` takes three predicate forms.** A quotation `[body]` runs
+> once per element with the element on the stack — exactly like
+> `each`/`fold` — and keeps the elements whose result is Boolean
+> `true` (a non-Boolean result is an **error**, not a silent drop). A
+> receiverless Reach lens keeps elements whose field is true. A
+> Function callback receives a `{key value}` pair map per element —
+> read the element via `.value`:
+>
+> ```
+> filter [2 gt] [1 2 3 4]                          # returns [3 4]
+> filter [2 gt] {a:1 b:5 c:3}                      # returns {b:5 c:3} — maps filter by value
+> filter ([p:Any] => [p.value gt 3]) [1 2 3 4 5]   # returns [4 5]
+> ```
+>
+> The lens form reads a field: `filter $.active accounts` keeps the
+> elements whose `.active` is `true`.
 
 ### Size
 
@@ -1111,8 +1326,28 @@ word — `size` subsumes it.
 |------|-------------|---------|
 | `get` / `.` | Lookup field/key, or index a list | `{x:1} . x` returns `1`; `[10,20,30] 0 get` returns `10` |
 | `getr` / `!.` | Strict lookup (errors if missing) | `{x:1} !. y` returns `error` |
-| `set` | Set a key in a Store / Object / Array, or in-place on a FlexMap / FlexList (see [Flex nodes](#flex-nodes--flexmap-and-flexlist)) | `context set foo 99`; `set a/q 1 (flex {})` |
+| `set` | Set a key — in place on Store / Object / Array and on FlexMap / FlexList (see [Flex nodes](#flex-nodes--flexmap-and-flexlist)); copy-returning on Map | `{a:1} set b 2` returns `{a:1 b:2}`; `set a/q 1 (flex {})` |
 | `context` | Push the current context Store | `context` |
+
+> **`set` has two contracts, decided by the receiver's mutability.**
+> On the **mutable** containers — Store, Object instance, Array — both
+> the forward form (`b set flag 1`) and the stack form
+> (`b 1 'flag' set`) write into the receiver itself and produce **no
+> value**; read the container back to observe the write (so
+> `def r (b set k v)` binds nothing). On an **immutable Map**, `set`
+> returns a **new map** with the key bound and leaves the receiver
+> untouched — the same copy-returning contract as `push`, so calls
+> chain:
+>
+> ```
+> {a:1} set b 2                 # returns {a:1 b:2} — new map; the literal is unchanged
+> def k 'dyn'
+> {a:1} set (k) 2               # returns {a:1 dyn:2} — computed key, like get (k)
+> {} set a 1 set b 2            # returns {a:1 b:2} — incremental build chains
+> ```
+>
+> For deep-path updates on plain data, `StructUtil.setpath` remains
+> the tool (`{a:{b:1}} StructUtil.setpath "a/b" 2`).
 
 > **`get`/`.` return `none` for anything not found — silently.** A
 > missing map key (`{a:1} . b` returns `None`), an out-of-range list index
@@ -1208,7 +1443,7 @@ dispatch into `Map`/`List` signature slots — is inherited unchanged.
 | `append` | Grow a FlexList in place: a list argument concatenates its elements; anything else appends as one element; wrap to append a list *as* an element | `append 4 fl`; `append [3 4] fl`; `append [[3 4]] fl` |
 | `push` / `pop` / `unshift` / `shift` | On a FlexList: mutate in place and return the node (`pop`/`shift` also return the removed element). On a plain List: unchanged copy semantics | `push 3 (flex [1 2])`; `pop (flex [1 2])` returns `(flex [1]) 2` |
 
-Key semantics (full design note: `design/FLEX-NODES.0.md`):
+Key semantics (full design note: `design/FLEX-NODES.10.md`):
 
 - **Conversions deep-copy.** `flex m` never aliases `m`'s entries, so
   mutating the flex copy cannot leak into the immutable source; `node f`
@@ -1244,7 +1479,7 @@ not — project with `convert List` for content semantics). Use Array
 for shared mutable state addressed by index and bulk/numeric
 workloads; use FlexList to build structural data incrementally and
 flow it through the list words. See `lang/spec/array.tsv` and
-`design/FLEX-NODES.0.md`.
+`design/FLEX-NODES.10.md`.
 
 **Record and Table.** Both are Ideal type *descriptors*; their `make`
 instances are plain immutable Map / List-of-Map shapes. Flex nodes give
@@ -1261,8 +1496,12 @@ converts back through validation.
 | `is` | Type-compatibility test | `42 is Number` returns `true` |
 | `convert` | Parse/serialise a scalar to a type | `convert Integer "42"` returns `42` |
 | `base` | Zero / base value for a type | `base Integer` returns `0` |
-| `refine` | Build a refinement of a base type | `refine Object {count:0}` |
+| `refine` | Build a refinement of a base type | `class {count:0}` |
 | `make` | Construct typed value or instance | `make Point [1 2]` |
+| `gen` | Declare type parameters for the next constructor | `def Box gen [T] class {value:T}` |
+| `of` | Instantiate a generic schema | `Box of [Integer]` |
+| `extends` | Bound a parameter inside a `gen` entry | `gen [(T extends Number)]` |
+| `default` | Default a parameter inside a `gen` entry | `gen [T (E default Error)]` |
 
 > **`convert` parses text; it does not re-bucket numbers.** It turns a
 > `String` into a number (`convert Integer "42"` returns `42`) or a number
@@ -1276,7 +1515,7 @@ converts back through validation.
 
 Named types are introduced by pairing `def` with a `refine`
 expression: `def Point refine Record [x:Number y:Number]`,
-`def Counter refine Object {count: 0}`, `def Inventory refine Table
+`def Counter class {count: 0}`, `def Inventory refine Table
 Row`. See **[HOWTO: Define a record/table/object type](HOWTO.md#define-a-record-type)**.
 
 ### Inspection
@@ -1417,25 +1656,66 @@ while `aql describe [word\|module]` documents the language. In the REPL,
 ## Built-in modules
 
 Built-in modules ship with the binary but are not auto-loaded —
-`import aql:xxx` to enable.
+`import aql:xxx` to enable. Each binds one capital-initial namespace
+(`"aql:math-util" import` → `MathUtil.sqrt`). The `-util` suffix marks
+a utility library of pure helper functions; capability / framework
+modules keep plain names.
 
-| Module | What's inside |
-|--------|---------------|
-| `aql:math` | Extended numerics: complex math, statistics, special functions. |
-| `aql:time-util` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`. |
-| `aql:matrix-util` | Tensor / Matrix / Vector types and linear algebra. |
-| `aql:decision` | Decision tables (rules engine). |
+| Module | Namespace | What's inside |
+|--------|-----------|---------------|
+| `aql:math-util` | `MathUtil` | Extended numerics: trig, statistics, special functions, IEEE-754 classifiers. |
+| `aql:array-util` | `ArrayUtil` | Specialised APL-style array vocabulary (see above). |
+| `aql:string-util` | `StringUtil` | String words — `upper`, `split`, `indexof` (haystack-last), `replace`, … all subject-last. |
+| `aql:struct-util` | `StructUtil` | voxgig-struct data words — `clone`, `getpath`, `setpath`, `merge`, `walk`, `transform`, `jsonify`, … |
+| `aql:bin-util` | `BinUtil` | Bitwise ops plus `popcount`, `clz`, `ctz`, `bitlen`, `fnv32`/`fnv64`. |
+| `aql:logic-util` | `LogicUtil` | Derived boolean connectives — `nand`, `nor`, `xnor`, `iff`, `implies`. |
+| `aql:type-util` | `TypeUtil` | Type utilities — `tpartial`, … |
+| `aql:time-util` | `TimeUtil` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`, timers. |
+| `aql:matrix-util` | `MatrixUtil` | Tensor / Matrix / Vector types and linear algebra. |
+| `aql:io` | `IO` | File and stream I/O — `read`, `write`, `stdin`, `stdout`, `trace` (only `print` stays in core). |
+| `aql:net` | `Net` | HTTP / API words — `fetch`, `prepare`, `direct`. |
+| `aql:decision` | `Decision` | Decision tables (rules engine). |
+| `aql:test` | `Test`, `Assert` | Unit tests, declarative specs, property-based testing. |
+| `aql:rand` | `Rand` | Seeded random generators (drives `Test.check-prop`). |
+| `aql:query` | `Query` | SQL-flavoured query pipeline. |
+| `aql:report` | `Report` | Tabular result reporting. |
+| `aql:vm` | `Vm` | Run AQL source in-memory — `run`, `run-with`, `run-sandbox`, `run-compute`. |
+
+> **`StructUtil.merge` is a deep, index-wise merge** — lists merge
+> element-by-element (`{kids:[99]} {kids:[10,20]} StructUtil.merge`
+> returns `{kids:[99,20]}`), so using it as a one-field update can fuse
+> sibling structures. For a single-field edit, use the copy-returning
+> `StructUtil.setpath`: `{a:1,b:2} StructUtil.setpath "b" 3` returns
+> `{a:1, b:3}` (deep paths work too: `setpath "a/b/c" v`).
 
 
 ## Error codes
 
 Errors are values of type `Ideal/Error` with a `code` atom and a
-`message` string. Common codes:
+`message` string. Raise your own with `raise`:
+
+```
+raise "boom"                          # code user_error
+raise bad_input "expected a list"     # a bare word names the code
+raise {code: bad_input/q, message: "expected a list", got: 42}
+```
+
+The map form's extra keys ride along on the Error value: a handler
+reads `e.code`, `e.message`, and any payload keys (`e.got`), and
+`convert Map e` projects them all. Common codes:
 
 | Code | Meaning |
 |------|---------|
 | `undefined_word` | A bare name was used outside a quoted slot. |
+| `user_error` | Default code for `raise "message"`. |
+| `def_error` | `def`'s value expression produced no value to bind. |
+| `no_value_error` | A parenthesised argument expression produced no value for a call. |
+| `uncalled_function` | A call matched no signature and its function value was never consumed. |
 | `reserved_word` | `def`/`undef` targeted a built-in word or the literal `true`/`false`/`none`. |
+| `constraint_violation` | A generic type argument does not satisfy its `extends` bound. |
+| `arity_mismatch` | `of` received the wrong number of type arguments (defaults fill only the tail). |
+| `unbound_param` | A generic parameter could not be inferred and has no default. |
+| `gen_without_constructor` | A `gen [...]` was never consumed by a type constructor. |
 | `incomparable` | `cmp`/`lt`/`lte`/`gt`/`gte` got cross-family operands — use `tcmp`. |
 | `type_mismatch` | A value didn't match an expected signature slot. |
 | `arity_mismatch` | Wrong number of arguments. |
@@ -1447,7 +1727,27 @@ Errors are values of type `Ideal/Error` with a `code` atom and a
 | `cap_denied` | Operation needed a capability that wasn't enabled. |
 | `cancelled` | Operation cancelled (timer, await branch). |
 
-Use `do [...] error [...]` to catch them; dispatch on `.code`.
+Use `do [...] error [...]` to catch them — a successful body skips
+the handler and its value passes through. Inside the handler the
+Error value is on the stack; dispatch on the code with `case`:
+
+```
+def attempt fn [[x:Integer] [Any] [
+  do [risky x] error [
+    get code
+    case [
+      bad_input/q  "rejected: bad input"
+      too_big/q    "rejected: too large"
+      "unexpected failure"
+    ]
+  ]
+]]
+```
+
+A match may also be a predicate over the whole Error (`[get code eq
+bad_input/q] [get message]`), with the matched block reading the
+error's fields — the value is on the stack for both, exactly like
+the `error` handler itself.
 
 
 ## Capabilities

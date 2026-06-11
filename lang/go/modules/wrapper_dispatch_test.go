@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
@@ -20,7 +21,11 @@ import (
 // note. Before the fix, a sub-registry native with BarrierPos=0
 // (stack-only) silently broke swap-form callers of the wrapper
 // — the FnDef would just sit on the stack with the args around
-// it, never invoked.
+// it, never invoked. That residue is no longer silent: the
+// end-of-run drain raises [aql/uncalled_function] for a named
+// Function value a failed dispatch left unconsumed
+// (design/ERRORS.8.md §5), so the broken-wiring case now pins
+// the LOUD error rather than the quiet no-invoke.
 func TestModuleWrapperInnerSigBarrierPos(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -40,14 +45,22 @@ func TestModuleWrapperInnerSigBarrierPos(t *testing.T) {
 			}
 			e := native.NewTop(r)
 			result, err := e.Run(tokens)
+
+			if !c.wantInvoke {
+				if err == nil {
+					t.Fatalf("with inner BarrierPos=%d the dispatch fails — want the loud uncalled_function error, got result=%v", c.innerBP, result)
+				}
+				if !strings.Contains(err.Error(), "uncalled_function") {
+					t.Fatalf("want uncalled_function, got: %v", err)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("run: %v", err)
 			}
-
 			invoked := len(result) == 1 && result[0].Parent.Equal(native.TInteger)
-			if invoked != c.wantInvoke {
-				t.Errorf("with inner BarrierPos=%d, wantInvoke=%v, gotInvoke=%v (result=%v)",
-					c.innerBP, c.wantInvoke, invoked, result)
+			if !invoked {
+				t.Errorf("with inner BarrierPos=%d, want invoked, got result=%v", c.innerBP, result)
 			}
 		})
 	}

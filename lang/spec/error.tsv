@@ -1,0 +1,43 @@
+# AQL Language Specification: error raising and loud failures
+# Format: input<TAB>expected<TAB>description
+#
+# `raise` constructs the same Ideal/Error the runtime produces and
+# raises it: uncaught it aborts with [aql/<code>]; `do [body] error
+# [handler]` catches it as an Error value carrying code, message, and
+# any extra spec-map payload keys (design/ERRORS.8.md §2, T9.6).
+# Also pinned here: the §3 blame-shift fix (a paren expression that
+# produces NO value is reported at the causing site) and the §5
+# runtime uncalled_function residue check.
+#
+# §1  raise — three forms
+raise "boom"	ERROR:user_error	a bare message raises code user_error
+raise bad_input "expected a list"	ERROR:bad_input	a bare word names the code
+raise {code: nope/q, message: "m"}	ERROR:nope	the spec-map form
+raise {message: "no code"}	ERROR:raise_error	code and message are both required in the map form
+raise 42	ERROR:no matching signature	a non-string/map operand has no raise sig
+#
+# §2  catching — one error [handler] form for native AND user errors
+do [raise "boom"] error [get message] end	'boom'	a raised error is caught like a native one
+def e (do [raise bad_input "nope"]) e get code	bad_input/q	the code is dispatchable on the caught value
+def e (do [raise bad_input "nope"]) e.message	'nope'	…and the message reads via dot access
+def e (do [raise {code: bad_input/q, message: "m", got: 42}]) e get got	42	extra spec-map keys ride along for the handler
+def e (do [raise {code: bad_input/q, message: "m", got: 42}]) convert Map e	{code:bad_input/q message:'m' got:42}	convert Map projects code, message, and payload
+def e (do [1 div 0]) convert Map e	{message:'division by zero'}	a plain Go-error stays {message:…} (no code to project)
+def e (do [raise "x"]) e get nothere	None	an unknown key reads as none, mirroring map reads
+#
+# §3  void argument expressions are blamed at the causing site
+def f fn [[x:Integer] [] []] def r (f 1)	ERROR:def_error	def of a void expression errors at the def, naming the binding
+def f fn [[x:Integer] [] []] 3 add (f 1)	ERROR:no_value_error	a void group starving any word is named at the call
+(1 2 add ())	3	…but a void group with stack operands available stays valid
+(add () 5 6)	11	…and collection legitimately resumes past a void group
+#
+# §4  typed error handling — dispatch on the error with `case`
+#     (the error handler runs with the Error on the stack; `get code`
+#     consumes it and the stack-value form of case dispatches on the
+#     code; or keep the Error as the case value and match it with
+#     predicates, the blocks reading its fields).
+do [raise bad_input "nope"] error [get code case [bad_input/q "rejected" io_error/q "retry" "unexpected"]]	'rejected'	dispatch on the code atom
+do [raise io_error "disk"] error [get code case [bad_input/q "rejected" io_error/q "retry" "unexpected"]]	'retry'	…each code takes its own clause
+do [raise weird "?"] error [get code case [bad_input/q "rejected" io_error/q "retry" "unexpected"]]	'unexpected'	…unknown codes take the default
+do [raise {code: too_big/q, message: "out of range", limit: 99}] error [case [[get code eq bad_input/q] [get message] [get code eq too_big/q] [get limit] "unexpected"]]	99	predicate matches inspect the Error itself; the block reads its payload
+do [21 mul 2] error [get code case [bad_input/q "rejected" "unexpected"]]	42	a successful body skips the handler entirely (error passes the value through)

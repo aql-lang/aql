@@ -34,7 +34,7 @@ func NewCarrier(t *Type) Value {
 
 // NewDynamicCarrier constructs a bounded gradual carrier dynamic(t):
 // a carrier whose Parent is the BOUND t and whose Dynamic flag flips
-// matching to the not-disjoint rule (design/dynamic-modality-report.0.md).
+// matching to the not-disjoint rule (design/dynamic-modality-report.10.md).
 // dynamic(Any) is the classic gradual `any` — compatible with every
 // slot. Use this at an escape hatch where the checker has a best static
 // bound but cannot prove the exact type.
@@ -312,7 +312,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 			out[i] = NewCarrier(t)
 		}
 	}
-	// Gradual contagion (design/dynamic-modality-report.0.md): a result
+	// Gradual contagion (design/dynamic-modality-report.10.md): a result
 	// derived from a dynamic carrier is itself dynamic, so the modality
 	// flows downstream instead of dying after one dispatch. The bound is
 	// the sig's declared return (the first-cut result; the full
@@ -325,7 +325,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 			out[i].Carrier = true
 			out[i].Dynamic = true
 		}
-		// First-match partition (design/dynamic-modality-report.0.md): a
+		// First-match partition (design/dynamic-modality-report.10.md): a
 		// dynamic bound can reach MULTIPLE of the word's overloads, whose
 		// returns may differ. The single matched-sig return is then too
 		// narrow — it would wrongly reject a downstream use of one of the
@@ -386,7 +386,7 @@ func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
 }
 
 // narrowDynamicUses implements narrowing-through-use
-// (design/dynamic-modality-report.0.md): when a dynamic carrier resolved
+// (design/dynamic-modality-report.10.md): when a dynamic carrier resolved
 // from a binding is consumed by a typed slot, the binding tightens to
 // dynamic(bound ∩ slot) for downstream uses, so a later provably-disjoint
 // use of the same name fails the match rule and is flagged — no explicit

@@ -29,6 +29,7 @@ syntax, the type system, and the runtime. It complements the
 * [Store and context](#store-and-context)
 * [Module system](#module-system)
 * [Ideals and type-kinds](#ideals-and-type-kinds)
+* [Generics as memoised type construction](#generics-as-memoised-type-construction)
 * [Capabilities](#capabilities)
 * [Design influences](#design-influences)
 
@@ -111,6 +112,29 @@ You never have to mentally reverse-engineer `10 3 -`. (String words
 like `upper`/`lower`/`split` are not built in — they live in
 `aql:string-util`; see the [Reference](REFERENCE.md). Only words such
 as `add`, `sub`, `mul`, `not`, `dup` are available without an import.)
+
+### Forward by default — a cultural rule
+
+Forward collection is not just available, it is the **language
+default**, pinned as [ADR-004](ADR.md#adr-004): every word — core,
+module, and your own `fn` definitions — collects forward unless its
+semantics are intrinsically about the stack. The only standing
+exception is the traditional Forth stack vocabulary (`dup`, `swap`,
+`drop`, `over`, `rot`, …), which is stack-only because manipulating
+the stack *is* what those words mean.
+
+Two practical consequences:
+
+- **Write the forward form first.** `word arg1 arg2` is the canonical
+  call shape in code, docs, and examples; the pipeline form
+  (`arg2 arg1 word`) is an equivalent you reach for when a value is
+  already flowing on the stack.
+- **Don't ask for a word to be flipped.** When forward collection is
+  awkward at one call site, the per-call levers are grouping
+  (`(…)`, `end`, `;`) and the modifiers `/s` (stack-only here),
+  `/f` (forward-only here), and `/N` (exactly N args) — not a change
+  to the word's default. `(1 add 1) print/s`, for instance, prints a
+  value that is already on the stack.
 
 ### How collection works
 
@@ -328,7 +352,7 @@ way in, strict on the way out (or vice-versa). No mainstream language
 does that on purpose; each picks one discipline per kind and applies
 it at every boundary. AQL does the same: newtypes are nominal and
 symmetric, subset types are value-sensitive and symmetric. The full
-rationale is in `design/REFINE-NEWTYPE-VS-SUBSET.0.md`.
+rationale is in `design/REFINE-NEWTYPE-VS-SUBSET.10.md`.
 
 
 ## Type ordering
@@ -475,7 +499,7 @@ LISP problems come along for free:
 
 Reference details and the full operator set are in
 **[Reference: Macros](REFERENCE.md#macros)**; the design and its LISP
-lineage are in `design/MACROS.0.md`.
+lineage are in `design/MACROS.8.md`.
 
 
 ## The Options pattern
@@ -601,7 +625,7 @@ dot is just field access on the module's exported map.
 File imports load source from disk; renaming on import (`import
 [helper as h] "..."`) prevents collisions; built-in modules
 (`aql:math`, `aql:time-util`, `aql:matrix-util`, `aql:decision`) are
-host-provided and follow the same surface.
+host-provided and follow the same shape.
 
 There is no global namespace flattening: every imported binding
 lives under the module's prefix until you alias it explicitly.
@@ -631,6 +655,28 @@ You usually don't write Ideals — you use them via `refine`
 extending the language with a new kind of typed container.
 
 
+## Generics as memoised type construction
+
+Generic types follow the same "types are values" doctrine as the
+rest of the system. A schema (`def Box<T> class {value:T}`) is a
+value holding a type body with placeholder nodes embedded;
+instantiation (`Box of [Integer]`, or the sugar `Box<Integer>`) is
+ordinary execution that substitutes the placeholders and **interns
+the result** — one lattice node per (schema, arguments), minted as
+a child of the schema. That one decision buys most of the
+semantics for free: `typeof` names the instantiation because it IS
+a type; `is Box` works by plain ancestry; two mentions of
+`Box<Integer>` are `teq` because they're the same node; and the
+checker gets monomorphization without new machinery, because its
+per-call memo keys on argument types that now include the
+instantiation's identity. Bounds reuse the membership question the
+whole system already answers — `extends C` admits exactly what
+`is C` admits, so predicates, disjunctions, and surfaces are all
+valid bounds with zero special cases. The trade-off chosen for v1
+is **invariance**: `Box<Integer>` is not a `Box<Number>`, the same
+conservative default the nominal class system uses.
+
+
 ## Capabilities
 
 Side-effecting words (`read`, `write`, `fetch`, `sqlite-*`,
@@ -640,7 +686,7 @@ turns them all on by default; embeddings (Wasm playground, an
 LLM tool host) can disable any of them.
 
 When a disabled word runs, it raises `Error{code:'cap_denied}`.
-This is the same surface as any other error: the calling code can
+This is the same shape as any other error: the calling code can
 catch it with `do ... error [...]` and react appropriately.
 
 Capabilities are deliberately coarse — one flag per system —

@@ -8,7 +8,7 @@
 # content; content comparison goes through `convert List`. An Array		
 # is FIXED-EXTENT: `set` replaces in-bounds slots only and there is		
 # deliberately no growth word — growth is FlexList's job (see		
-# lang/spec/flex.tsv and design/FLEX-NODES.0.md for the		
+# lang/spec/flex.tsv and design/FLEX-NODES.10.md for the		
 # identity-vs-content rule: if the data's identity is its contents,		
 # it's a (Flex)List; if its identity is the container, it's an Array).		
 #		

@@ -111,6 +111,28 @@ var StructModuleNatives = []NativeFunc{
 		},
 	},
 	{
+		// parse — jsonic/JSON text → data, the decode complement of
+		// jsonify. DATA context (nothing evaluates: unquoted text →
+		// strings, numbers → numbers, true/false → booleans); accepts
+		// the jsonic superset so strict JSON parses too; malformed
+		// input raises [aql/parse_error]. See design/PARSING.10.md §2.
+		Name: "parse",
+		Signatures: []NativeSig{
+			{Args: []*Type{TString}, Handler: parseTextHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+		},
+	},
+	{
+		// reify — hydrate a class instance from JSON text or a Node.
+		// The inverse of the instance-aware jsonify; the target is an
+		// explicit class type or a tor union of classes ($class then
+		// selects the member). See reify.go + design/CLASS-OBJECT.10.md §3e.
+		Name: "reify",
+		Signatures: []NativeSig{
+			{Args: []*Type{TAny, TMap}, Handler: reifyHandler, BarrierPos: -1},
+			{Args: []*Type{TAny, TString}, Handler: reifyHandler, BarrierPos: -1},
+		},
+	},
+	{
 		Name: "nodify",
 		Signatures: []NativeSig{
 			{Args: []*Type{TAny}, Handler: nodifyHandler, BarrierPos: -1},

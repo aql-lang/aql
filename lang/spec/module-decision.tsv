@@ -12,11 +12,16 @@
 # §1  exported record types — each evaluates to its refine-Record shape
 "aql:decision" import end Decision.Cond	record{field:Atom op:String value:Any}	Cond: a single field/op/value condition
 "aql:decision" import end Decision.Pred	record{kind:String op:String children:Any}	Pred: a compound (all/any/not) predicate group
-"aql:decision" import end Decision.Rule	record{when:Map then:Map}	Rule: a when→then pairing for tables
-"aql:decision" import end Decision.DTable	record{kind:String rules:List hit-policy:String}	DTable: a decision table with a hit policy
-"aql:decision" import end Decision.DTree	record{kind:String root:Atom nodes:List}	DTree: a decision tree rooted at a node id
+"aql:decision" import end Decision.Rule	schema<Record/Rule>[R]	Rule: a GENERIC when→then pairing — R is the result type
+"aql:decision" import end Decision.Rule of [Map]	record{when:Map then:Map}	…instantiating recovers the concrete record shape
+"aql:decision" import end Decision.DTable	schema<Record/DTable>[R]	DTable: generic in R (defaulted — rule lists give no direct evidence)
+"aql:decision" import end Decision.DTable of []	record{kind:String rules:List hit-policy:String}	…and fully defaults to the Any-result table
+"aql:decision" import end Decision.DTree	schema<Record/DTree>[R]	DTree: generic in R, defaulted like DTable
 "aql:decision" import end Decision.BranchNode	record{id:Atom kind:String branches:List}	BranchNode: an interior tree node
-"aql:decision" import end Decision.LeafNode	record{id:Atom kind:String result:Any}	LeafNode: a terminal tree node carrying a result
+"aql:decision" import end Decision.LeafNode	schema<Record/LeafNode>[R]	LeafNode: a terminal node, generic in its result type
+"aql:decision" import end Decision.LeafNode of [Integer]	record{id:Atom kind:String result:Integer}	…instantiating pins the result field
+"aql:decision" import end (5 is Decision.Comparable)	true	the scalar builtins expose the Comparable surface
+"aql:decision" import end ({a:1} is Decision.Comparable)	false	…a map is not Comparable (no cmp contract)
 #
 # §2  builders — construct condition / predicate / rule records
 "aql:decision" import end Decision.cond age/q "gte" 18	{field:age/q op:'gte' value:18}	cond field op value → a Cond record
@@ -32,9 +37,14 @@
 "aql:decision" import end Decision.make-leaf adult/q {category:"adult"}	{id:adult/q kind:'leaf' result:{category:'adult'}}	make-leaf id result → a LeafNode record
 "aql:decision" import end Decision.make-tree root/q [{id:"root" kind:"leaf" result:"x"}]	{kind:'tree' root:root/q nodes:(quote [{id:'root' kind:'leaf' result:'x'}])}	make-tree root nodes → a DTree record
 #
-# §4  apply-op — the primitive comparison applied by eval-cond
+# §4  apply-op — the primitive comparison applied by eval-cond.
+# The relational form is generic over the Comparable SURFACE
+# (gen [(T extends Comparable)]) — non-Comparable operands are a loud
+# signature error, not a silent false.
 "aql:decision" import end Decision.apply-op 18 "gte" 25	true	lhs=25 gte rhs=18 → true
 "aql:decision" import end Decision.apply-op 25 "gte" 18	false	lhs=18 gte rhs=25 → false
+"aql:decision" import end Decision.apply-op "a" "lt" "b"	false	Strings are Comparable (lhs='b' lt rhs='a' → false)
+"aql:decision" import end Decision.apply-op {a:1} "lt" 5	ERROR:not_comparable	a map is not Comparable — the bounded sig rejects it and the Any overload raises on the ordering op
 #
 # §5  eval-cond — test one condition against an input map
 "aql:decision" import end {age:25} {field:"age" op:"gte" value:18} Decision.eval-cond	true	age 25 satisfies gte 18

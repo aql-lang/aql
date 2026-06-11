@@ -10,7 +10,7 @@ silently match them.
 
 For the comparison total order (`cmp` / `sort` / `lt` / `gt`) and
 the per-family `Comparer` cascade, see
-[`TYPE-ORDERING.0.md`](TYPE-ORDERING.0.md).
+[`TYPE-ORDERING.10.md`](TYPE-ORDERING.10.md).
 
 ## Type Tree
 
@@ -173,5 +173,5 @@ magnitude (`1 cmp 1.0 → 0`), preserved so traditional arithmetic
 semantics survive the Integer/Decimal split.
 
 Full design + verification at
-[`TYPE-ORDERING.0.md`](TYPE-ORDERING.0.md). Test matrix at
+[`TYPE-ORDERING.10.md`](TYPE-ORDERING.10.md). Test matrix at
 `lang/spec/compare.tsv`.

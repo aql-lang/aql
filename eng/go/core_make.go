@@ -210,17 +210,24 @@ func buildBasePrototype(objType ObjectTypeInfo) (*ObjectInstanceInfo, error) {
 // Person-typed ObjectInstance from a raw Map body when the typed
 // binding's constraint is an ObjectType — closes the
 // structural-vs-nominal dispatch gap for object types.
-func MakeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceInfo) ([]Value, error) {
-	return makeObject(objType, srcVal, prototype)
+func MakeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceInfo, r *Registry) ([]Value, error) {
+	return makeObject(objType, srcVal, prototype, r)
 }
 
-func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceInfo) ([]Value, error) {
+func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceInfo, r *Registry) ([]Value, error) {
 	if !srcVal.Parent.ConformsTo(TMap) {
 		return nil, fmt.Errorf("make: object values must be a map, got %s", srcVal.String())
 	}
 	provided, err := AsMutableMap(srcVal)
 	if err != nil {
 		return nil, fmt.Errorf("make: expected concrete map, got %s", srcVal.String())
+	}
+
+	// Class types take the flat path: every field (own + inherited)
+	// resolves eagerly into one field map — no prototype chain, no
+	// delegation at get. See design/CLASS-OBJECT.10.md §3.
+	if objType.Class {
+		return makeClassInstance(objType, provided, r)
 	}
 
 	if prototype == nil && objType.Parent != nil {
@@ -294,6 +301,119 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 	})}, nil
 }
 
+// makeClassInstance constructs a flat, sealed class instance: the
+// full field set (inherited first, then own — AllFields order) is
+// resolved eagerly into a single field map. A provided key the schema
+// doesn't declare is an error; a missing field takes its schema
+// default when one exists (constraint with a concrete payload) and is
+// otherwise a loud missing-field error. The instance carries no
+// Prototype — reads are a single map lookup.
+//
+// Field validation is STRICT (no silent conversion — unlike the
+// legacy object path): a typed field rejects non-conforming values
+// loudly, predicate-typed fields run their predicate via Unify, and
+// a defaulted field rejects values outside the default's own type.
+// See design/CLASS-OBJECT.10.md §3c.
+func makeClassInstance(objType ObjectTypeInfo, provided *OrderedMap, r *Registry) ([]Value, error) {
+	allFields := objType.AllFields()
+
+	for _, key := range provided.Keys() {
+		if _, ok := allFields.Get(key); !ok {
+			return nil, fmt.Errorf("make: unknown field %q for class %s", key, objType.Name)
+		}
+	}
+
+	result := NewOrderedMap()
+	for _, key := range allFields.Keys() {
+		constraint, _ := allFields.Get(key)
+		val, hasVal := provided.Get(key)
+
+		if !hasVal {
+			if constraint.Data != nil {
+				result.Set(key, constraint)
+				continue
+			}
+			return nil, fmt.Errorf("make: missing field %q for class %s", key, objType.Name)
+		}
+
+		checked, err := MakeClassFieldValue(val, constraint, r)
+		if err != nil {
+			return nil, fmt.Errorf("make: field %q: %w", key, err)
+		}
+		result.Set(key, checked)
+	}
+
+	instanceType := objType.Type
+	if instanceType == nil {
+		instanceType = TClass
+	}
+	return []Value{NewObjectInstance(instanceType, ObjectInstanceInfo{
+		TypeRef: &objType,
+		Fields:  result,
+	})}, nil
+}
+
+// MakeClassInstance constructs a class instance from a field map,
+// running the same strict validation as `make` — exported for the
+// struct-utility writers (StructUtil.setpath, clone) whose instance
+// edits round-trip through construction so schema checks run.
+func MakeClassInstance(objType ObjectTypeInfo, provided *OrderedMap, r *Registry) (Value, error) {
+	vals, err := makeClassInstance(objType, provided, r)
+	if err != nil {
+		return Value{}, err
+	}
+	return vals[0], nil
+}
+
+// MakeClassFieldValue validates one value against a class-schema
+// field constraint, strictly: a bare type-node constraint requires a
+// conforming value (no conversion fallback — a Float is not an
+// Integer; say so); a predicate / disjunction constraint runs through
+// Unify so the predicate body executes; a concrete default constrains
+// the field to the default's own (declared) type, which makes
+// refined-typed defaults enforce their refinement. Shared by `make`
+// and the class-instance `set` handler so write-time enforcement
+// matches construction.
+func MakeClassFieldValue(val Value, constraint Value, r *Registry) (Value, error) {
+	val = ResolveWordValue(val)
+
+	// Concrete default — the field's type is the default value's own
+	// type (its Parent), so {x:1} accepts Integers and rejects the
+	// rest, a default carrying a refined type enforces it, and a
+	// const-singleton default admits exactly its inhabitant. The
+	// membership question routes through v.Is(t) — the one-predicate
+	// rule — so the type's Behavior decides: DefaultBehavior is plain
+	// lattice conformance, bareRefineUnifier stays nominal, and a
+	// const singleton's Behavior matches by value equality.
+	if constraint.Data != nil && !IsTypeBody(constraint) {
+		if val.Is(constraint.Parent) {
+			return val, nil
+		}
+		return Value{}, fmt.Errorf("expected %s (the default's type), got %s (%s)",
+			constraint.Parent.Name, val.Parent.Name, val.String())
+	}
+
+	// Class-typed field ({i:Inner}) — nominal check: the value must be
+	// an instance of that class (or a subclass, via the lattice).
+	if IsObjectType(constraint) {
+		info, _ := AsObjectType(constraint)
+		if IsObjectInstance(val) && info.Type != nil && val.Parent.ConformsTo(info.Type) {
+			return val, nil
+		}
+		return Value{}, fmt.Errorf("expected a %s instance, got %s (%s)",
+			info.Name, val.Parent.Name, val.String())
+	}
+
+	// Type constraint — bare node, predicate type, disjunction.
+	// UnifyExplainR runs predicates and reports the reason on failure.
+	unified, uerr := UnifyExplainR(constraint, val, r)
+	if uerr != nil {
+		return Value{}, fmt.Errorf("expected %s, got %s (%s): %s",
+			constraint.String(), val.Parent.Name, val.String(), uerr.Error())
+	}
+	return unified, nil
+}
+
 // makePath creates a Path value from a source: a string ("a/b") or a
 // list of segments (["a" "b"]). Slashes are normalised — every "/"
 // separates segments and empty segments (from a "//" run, or a
@@ -340,8 +460,21 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 
 	targetVal = ResolveTypeLiteralDef(targetVal, reg)
 
+	// A generic SCHEMA as the make target — `make Box {value:42}` —
+	// infers its type arguments from the construction body and
+	// instantiates first (design/GENERICS.10.md Phase 7 / D12); the
+	// instantiation then takes the ordinary path below. Uninferable,
+	// undefaulted parameters error (unbound_param) — never silent Any.
+	if IsTypeSchema(targetVal) {
+		inst, err := InferAndInstantiateSchema(reg, targetVal, srcVal)
+		if err != nil {
+			return nil, err
+		}
+		return MakeHandler([]Value{inst, srcVal}, nil, nil, reg)
+	}
+
 	// Structural kinds (object / record / table) instantiate through
-	// the Ideal registry — see ideal.go and design/IDEAL.0.md.
+	// the Ideal registry — see ideal.go and design/IDEAL.10.md.
 	if reg != nil {
 		if ideal := reg.Ideals.For(targetVal); ideal != nil && ideal.Instantiate != nil {
 			return ideal.Instantiate(targetVal, srcVal, reg)
@@ -375,11 +508,46 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		return []Value{srcVal}, nil
 	}
 
+	// A user-minted scalar refinement (def Foo refine Integer) is a
+	// nominal newtype, and `make Foo v` is its constructor: cast v to
+	// the BASE type if needed, then tag the result with the refinement
+	// — the same reparent the typed-def path (`def x:Foo v`) performs.
+	// Without this, make silently returned a base-tagged value
+	// (design/CLASS-OBJECT.10.md §3c typed-defaults gap 1), so
+	// `(make Foo 1) is Foo` was false and a Foo-typed schema default
+	// could not be expressed.
+	if canon := CanonicalType(reg, targetType); reg != nil && canon != nil && canon.Origin == OriginUserDef {
+		targetType = canon
+		base := builtinBaseOf(targetType)
+		if base != nil && base.ConformsTo(TScalar) {
+			conv := srcVal
+			if !srcVal.Parent.ConformsTo(base) {
+				c, cerr := MakeConvert(srcVal, base)
+				if cerr != nil {
+					return nil, cerr
+				}
+				conv = c
+			}
+			return []Value{ReparentValue(conv, targetType)}, nil
+		}
+	}
+
 	result, err := MakeConvert(srcVal, targetType)
 	if err != nil {
 		return nil, err
 	}
 	return []Value{result}, nil
+}
+
+// builtinBaseOf walks a user-minted type's parent chain to the first
+// builtin ancestor — the conversion base for `make <Refinement> v`.
+func builtinBaseOf(t *Type) *Type {
+	for p := t.Parent; p != nil; p = p.Parent {
+		if p.Origin == OriginBuiltin {
+			return p
+		}
+	}
+	return nil
 }
 
 // MakeTable instantiates a table value — a list of record-conforming
@@ -487,12 +655,19 @@ func registerKernelIdeals(r *Registry) {
 		Accepts: func(v Value) bool {
 			return (IsBareTypeNode(v) && v.Equal(TObject)) || IsObjectType(v)
 		},
-		Instantiate: func(typ, data Value, _ *Registry) ([]Value, error) {
+		Instantiate: func(typ, data Value, r *Registry) ([]Value, error) {
+			// Bare Object: construct a plain OPEN mutable keyed
+			// container — the 2x2's keyed sibling of Array (design/
+			// CLASS-OBJECT.10.md Phase B). Open (any key writes),
+			// fully enumerable, in-place set, no schema, no seal.
+			if IsBareTypeNode(typ) && typ.Equal(TObject) {
+				return MakeOpenObject(data)
+			}
 			objType, err := AsObjectType(typ)
 			if err != nil {
 				return nil, fmt.Errorf("make: expected a constructed object type, got %s", typ.String())
 			}
-			return makeObject(objType, data, nil)
+			return makeObject(objType, data, nil, r)
 		},
 	})
 	r.Ideals.Register(&Ideal{
@@ -552,7 +727,10 @@ func MakeWithPrototype(args []Value, _ map[string]Value, _ []Value, reg *Registr
 
 	objType, _ := AsObjectType(targetVal)
 	protoInfo, _ := AsObjectInstance(protoVal)
-	return makeObject(objType, srcVal, &protoInfo)
+	if objType.Class {
+		return nil, fmt.Errorf("make: a class has no prototypes — instances are flat; construct with `make %s {…}`", objType.Name)
+	}
+	return makeObject(objType, srcVal, &protoInfo, reg)
 }
 
 // MakeWithOpts is the 3-arg make-with-options dispatcher.
@@ -582,7 +760,7 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 
 	if IsObjectType(targetVal) {
 		objType, _ := AsObjectType(targetVal)
-		return makeObject(objType, srcVal, nil)
+		return makeObject(objType, srcVal, nil, reg)
 	}
 
 	if IsRecordType(targetVal) {
@@ -606,7 +784,7 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 }
 
 // MakeScalarHandler converts a scalar value to a target scalar type.
-func MakeScalarHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func MakeScalarHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	targetVal, srcVal := args[0], args[1]
 	if targetVal.Data != nil {
 		return nil, fmt.Errorf("make: expected a type literal, got %s", targetVal.String())
@@ -617,6 +795,26 @@ func MakeScalarHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 	}
 	if srcVal.Parent.ConformsTo(targetType) {
 		return []Value{srcVal}, nil
+	}
+	// A user-minted scalar refinement (def Foo refine Integer) is a
+	// nominal newtype, and `make Foo v` is its constructor: cast v to
+	// the BASE type if needed, then tag the result with the refinement
+	// — the same reparent the typed-def path (`def x:Foo v`) performs.
+	// Without this, make silently returned a base-tagged value, so
+	// `(make Foo 1) is Foo` was false and a Foo-typed schema default
+	// could not be expressed (design/CLASS-OBJECT.10.md §3c gap 1).
+	if canon := CanonicalType(reg, targetType); reg != nil && canon != nil && canon.Origin == OriginUserDef {
+		if base := builtinBaseOf(canon); base != nil && base.ConformsTo(TScalar) {
+			conv := srcVal
+			if !srcVal.Parent.ConformsTo(base) {
+				c, cerr := MakeConvert(srcVal, base)
+				if cerr != nil {
+					return nil, cerr
+				}
+				conv = c
+			}
+			return []Value{ReparentValue(conv, canon)}, nil
+		}
 	}
 	result, err := MakeConvert(srcVal, targetType)
 	if err != nil {
@@ -642,11 +840,29 @@ func MakeObjHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) 
 	}
 	if IsObjectType(targetVal) {
 		objType, _ := AsObjectType(targetVal)
-		return makeObject(objType, srcVal, nil)
+		return makeObject(objType, srcVal, nil, reg)
 	}
 	// Not an object type and unclaimed by an Ideal kind (e.g.
 	// Options) — defer to the generic make dispatcher.
 	return MakeHandler([]Value{targetVal, srcVal}, nil, nil, reg)
+}
+
+// MakeOpenObject constructs a plain open Object instance — the
+// mutable keyed container — seeded from a concrete map. The field
+// map is copied so the new container is decoupled from the literal;
+// the instance has no TypeRef (no schema, no sealing) and no
+// prototype. `object {…}` and `make Object {…}` both route here.
+func MakeOpenObject(data Value) ([]Value, error) {
+	m, err := RequireConcreteMap(data, "make")
+	if err != nil {
+		return nil, fmt.Errorf("make: Object source must be a concrete map: %w", err)
+	}
+	fields := NewOrderedMap()
+	for _, k := range m.Keys() {
+		v, _ := m.Get(k)
+		fields.Set(k, ResolveWordValue(v))
+	}
+	return []Value{NewObjectInstance(TObject, ObjectInstanceInfo{Fields: fields})}, nil
 }
 
 // MakeArrayHandler is the 2-arg [Array, List] make handler.
@@ -788,6 +1004,16 @@ func ResolveFieldType(r *Registry, v Value) Value {
 			name = _as2.Name
 		} else {
 			name, _ = AsString(v)
+		}
+		// Only CAPITALISED names are type references (the type-name
+		// convention). Without this gate, a lowercase string default
+		// that happens to spell a registered word name resolved to
+		// that word's FnDef — `class {op:"add"}` seeded the field
+		// with add's function value instead of the string "add"
+		// (IsTypeBody admits FnDef values because predicate types are
+		// fn-bodied).
+		if !IsCapitalisedName(name) {
+			return v
 		}
 		if tv, ok := r.TopTypeBody(name); ok {
 			if IsTypeBody(tv) {

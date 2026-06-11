@@ -107,6 +107,14 @@ func (objectConvertBehavior) ToList(v Value) (Value, error) {
 	return NewList(orderedMapValues(objectFieldMap(&oi))), nil
 }
 
+// ObjectFields is the exported view of objectFieldMap — the flattened
+// field map of an object or class instance (prototype chain base-first
+// for legacy object instances; class instances are already flat). Used
+// by the lang layer for items / transform / serialization projections.
+func ObjectFields(oi *ObjectInstanceInfo) *OrderedMap {
+	return objectFieldMap(oi)
+}
+
 // objectFieldMap flattens an object's prototype chain (base first) then
 // its own fields into a fresh OrderedMap.
 func objectFieldMap(oi *ObjectInstanceInfo) *OrderedMap {
@@ -203,7 +211,18 @@ func (errorConvertBehavior) Format(v Value) string       { return kernelFormatDe
 func (errorConvertBehavior) ToMap(v Value) (Value, error) {
 	m := NewOrderedMap()
 	if ei, err := AsError(v); err == nil {
+		// Code first when present (an AqlError-backed or `raise`d
+		// error); a plain Go error stays {message:…} as before.
+		if ei.Code != "" {
+			m.Set("code", NewAtom(ei.Code))
+		}
 		m.Set("message", NewString(ei.Message))
+		if ei.Data != nil {
+			for _, k := range ei.Data.Keys() {
+				dv, _ := ei.Data.Get(k)
+				m.Set(k, dv)
+			}
+		}
 	}
 	return NewMap(m), nil
 }
@@ -216,7 +235,7 @@ func (errorConvertBehavior) ToList(v Value) (Value, error) {
 
 // reachConvertBehavior: an Ideal/Reach → an inspectable map describing its
 // receiver and segments, and a list of its segment keys. Format renders the
-// dotted surface (m.a.b) so Value.String() matches canon. See REACH.0.md §7.
+// dotted surface (m.a.b) so Value.String() matches canon. See REACH.10.md §7.
 type reachConvertBehavior struct{}
 
 func (reachConvertBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
@@ -272,6 +291,12 @@ func (reachConvertBehavior) ToList(v Value) (Value, error) {
 
 func init() {
 	TObject.Behavior = objectConvertBehavior{}
+	// Class instances project to maps/lists the same way Object
+	// instances do — flat field maps (class instances have no
+	// prototype chain, so the flatten is a single pass). The behavior
+	// carries no Sizer, so the SizeOf walk continues past Class to the
+	// Ideal root's payload-switch Sizer.
+	TClass.Behavior = objectConvertBehavior{}
 	TArray.Behavior = arrayConvertBehavior{}
 	TStore.Behavior = storeConvertBehavior{}
 	TError.Behavior = errorConvertBehavior{}

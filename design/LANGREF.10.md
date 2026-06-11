@@ -1253,7 +1253,7 @@ element, or the last truthy element if all are truthy). Returns
 
 Comparison words take two arguments with forward arg collection.
 They route through a single unified total order
-(`eng.CompareValues`); see `lang/doc/design/TYPE-ORDERING.0.md` for
+(`eng.CompareValues`); see `lang/doc/design/TYPE-ORDERING.10.md` for
 the full design and `lang/spec/compare.tsv` for the test matrix.
 
 **Same-family pairs** settle through per-family `Comparer`s on the
@@ -1355,7 +1355,7 @@ Greater than or equal.
 Three-way comparison: `a cmp b` returns `-1` if `a` sorts before
 `b`, `0` if they compare equal, `1` if `a` sorts after. This is the
 underlying total order — `lt` / `gt` / `lte` / `gte` and `sort`
-all build on it. See `lang/doc/design/TYPE-ORDERING.0.md` for the
+all build on it. See `lang/doc/design/TYPE-ORDERING.10.md` for the
 full Comparer cascade and the type-literal-first rule, and
 `lang/spec/compare.tsv` for the test matrix.
 

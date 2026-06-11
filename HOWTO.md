@@ -30,6 +30,7 @@ through the **[Tutorial](TUTORIAL.md)** and just need an answer to
 * [Define a record type](#define-a-record-type)
 * [Define a table type](#define-a-table-type)
 * [Define an object type with methods](#define-an-object-type-with-methods)
+* [Define a generic type](#define-a-generic-type)
 * [Use scoped variables](#use-scoped-variables)
 * [Iterate with `for`](#iterate-with-for)
 * [Check types and convert values](#check-types-and-convert-values)
@@ -453,7 +454,7 @@ see [Tutorial §3](TUTORIAL.md#the-argument-order-rule) for why):
 
 <!-- aql-test: skip -->
 ```
-def Counter (refine Object {count: 0})
+def Counter (class {count: 0})
 
 def c (make Counter {})
 c 1 "count" set                       # c.count := 1
@@ -470,7 +471,7 @@ The same parentheses are needed to read a field **straight off a fresh
 construct** — dotted access binds tightly to its immediate receiver:
 
 ```
-def Counter (refine Object {count: 0})
+def Counter (class {count: 0})
 (make Counter {}).count               # returns 0 — parenthesise the make
 make Counter {} .count                # returns error — parses as make Counter ({}.count)
 ```
@@ -488,8 +489,8 @@ NestedType {})`:
 
 <!-- aql-test: skip -->
 ```
-def Bits (refine Object {})
-def Foo  (refine Object {bits: (make Bits {})})   # construct the default
+def Bits (class {})
+def Foo  (class {bits: (make Bits {})})   # construct the default
 
 def inst (make Foo {})
 inst.bits 1 "0" set                               # mutate the nested object
@@ -506,7 +507,7 @@ object.
 
 AQL objects hold **fields, not methods**: the field map has no method
 slot and there is no inline dispatch. Putting a body in the map
-(`refine Object {count: 0, inc: [count 1 add]}`) does **not** create a
+(`class {count: 0, inc: [count 1 add]}`) does **not** create a
 callable — that just stores a list under the field `inc`, and `c inc`
 raises `undefined_word`. Model a method as an ordinary typed `fn`
 whose first parameter is the instance, then invoke it in stack form
@@ -516,7 +517,7 @@ A read-only accessor returns a value derived from the instance:
 
 <!-- aql-test: skip -->
 ```
-def Counter (refine Object {count: 0})
+def Counter (class {count: 0})
 def doubled fn [[c:Counter] [Integer] [c.count 2 mul]]
 
 def c (make Counter {})
@@ -530,7 +531,7 @@ end instead if you want to chain calls:
 
 <!-- aql-test: skip -->
 ```
-def Counter (refine Object {count: 0})
+def Counter (class {count: 0})
 def bump fn [[c:Counter] [] [c (c.count 1 add) "count" set]]
 
 def c (make Counter {})
@@ -541,6 +542,46 @@ c.count                               # returns 2
 
 Because methods are just typed functions, they overload, type-check,
 and compose like any other word.
+
+
+## Define a generic type
+
+Put type parameters in angle brackets after the name; instantiate
+by filling them in. Each instantiation is a distinct nominal type
+with the full class contract (strict fields, sealing, `deq`):
+
+```
+def Box<T> class {value:T}
+
+def bi (make Box<Integer> {value:42})
+typeof bi                             # returns Box of [Integer]
+bi is Box                             # returns true
+bi is Box<String>                     # returns false
+```
+
+Bound a parameter with `extends` (any type works as a bound —
+including predicates and surfaces) and default one with `=`:
+
+```
+def Sorted<T extends Number> class {items:[:T]}
+def Result<T, E = Error> refine Record [ok:T err:E]
+(Result of [Integer])                 # returns record{ok:Integer err:Error}
+```
+
+A bare schema as a construction target infers its arguments from
+the body (`make Box {value:42}` is a `Box of [Integer]`), and a
+generic **function** uses the spelled-out `gen` form, binding its
+parameters from each call's arguments:
+
+```
+def Box<T> class {value:T}
+def boxit gen [T] fn [[x:T] [Any] [make (Box of [T]) {value:x}]]
+typeof (boxit "hi")                   # returns Box of [ProperString]
+```
+
+For recursion use `Self of [...]` (the schema's own name is unbound
+while its body builds). See **[Reference: Generic
+types](REFERENCE.md#generic-types)**.
 
 
 ## Use scoped variables
@@ -596,7 +637,7 @@ the stack empty (no throwaway sentinel needed), and it produces no result:
 
 <!-- aql-test: skip -->
 ```
-def Box (refine Object {sum: 0})
+def Box (class {sum: 0})
 def b (make Box {})
 [1 2 3] for-each [var [[x] b (b.sum x add) "sum" set]]
 b.sum                         # returns 6
@@ -645,6 +686,21 @@ aql check -e '1 2 add 3 mul'
 
 Group the operands you mean to combine — `(1 2 add) 3 mul` returns `9`
 and the advisory clears. Advisories never fail the check (only errors do).
+
+The checker also catches the one silent failure mode the runtime still
+permits: a **namespace word whose arguments match no signature**. At
+runtime the function value is left on the stack as data (it might be a
+deliberate higher-order use); `aql check` flags it as an **error**:
+
+```bash
+aql check script.aql
+# check: [error] uncalled_function: call to 'my-get' matched no
+#   signature and was left on the stack as data (arguments: Map, String)
+```
+
+This is almost always an argument-order or arity bug. Because it is
+silent at runtime, **run `aql check` as a matter of course** — in CI,
+and before committing — the same way you'd run a linter.
 
 To both type-check and then run:
 
@@ -848,6 +904,48 @@ A property body may `import` a native module (e.g. `"aql:math-util" import`)
 and use it across every run.
 
 
+## Write unit tests and declarative specs
+
+For example-based tests, `aql:test` provides `Test.test` (run a body,
+catch assertion failures) and the `Assert` namespace. A failing case is
+reported **loudly and by name**, and later cases still run:
+
+<!-- aql-test: skip -->
+```
+"aql:test" import end
+[ 1 1 Assert.equal ] "identity holds" Test.test end
+[ 1 2 Assert.equal ] "this one fails" Test.test end
+# FAIL this one fails — [aql/assertion_failure]: Assert.equal: expected 2, got 1
+0 Test.fail-count end Assert.equal end       # gate: no failures allowed
+```
+
+For table-driven suites, the **declarative spec form** separates the
+cases (data) from the runner. A spec names a subject (the word under
+test, passed as `subject/q`) and a list of `{name in out}` cases;
+`Test.run-spec` invokes the subject on each case's `in` list and
+checks the result against `out`:
+
+<!-- aql-test: skip -->
+```
+"aql:test" import end
+def double fn [[n:Integer] [Integer] [n 2 mul]] end
+
+def s (Test.spec [
+  {name: "d3", in: [3], out: 6}
+  {name: "d0", in: [0], out: 0}
+] double/q "doubling") end
+
+s Test.run-spec end
+Test.summary end print                # returns {total:2 passed:2 failed:0}
+```
+
+`Test.spec-with-subs` nests sub-specs for grouped suites, and
+`Test.describe "group" [ … ]` prefixes every failure inside the body
+with the group path. Prefer the spec form whenever the cases are
+naturally a table — the data reads at a glance and new cases are
+one-line edits.
+
+
 ## Store secrets in the vault
 
 The `aql` binary ships with a local key vault:
@@ -1046,7 +1144,7 @@ aql policy explain sandbox fileops.write path=/etc/passwd
 Profiles are jsonic documents. Drop one in
 `~/.config/aql/policies/<name>.jsonic` to make it loadable by short
 name. See `aql policy show sandbox --json` for a starting point and
-**[design/PERMISSIONS.0.md](design/PERMISSIONS.0.md)**
+**[design/PERMISSIONS.10.md](design/PERMISSIONS.10.md)**
 for the full schema.
 
 ### What the model gates

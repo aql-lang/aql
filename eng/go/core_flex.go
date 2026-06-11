@@ -13,7 +13,7 @@ import "fmt"
 // the entries of an immutable source (plain Map literals are also
 // *OrderedMap-backed, so sharing the pointer would let mutation leak
 // into "immutable" data), and a `node` result must be transitively
-// immutable. See design/FLEX-NODES.0.md.
+// immutable. See design/FLEX-NODES.10.md.
 
 // FlexDeepCopy returns a mutable flex copy of a Node value: maps
 // (plain or flex) become fresh FlexMaps, lists become fresh FlexLists,

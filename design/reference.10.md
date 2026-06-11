@@ -98,7 +98,7 @@ structural root; its name is omitted from rendered paths so
 `gt` / `sort` run a LCA-Comparer-then-Rank cascade. Type literals
 sort before concrete inhabitants of the same family
 (`Integer cmp 0 → -1`). Full design in
-`lang/doc/design/TYPE-ORDERING.0.md`.
+`lang/doc/design/TYPE-ORDERING.10.md`.
 
 ### Short Names
 
@@ -298,7 +298,7 @@ All comparison words route through one total order
 and maps are ordered (length-first then element-wise / key-wise),
 and a bare type literal sorts strictly below every concrete
 inhabitant in the same family. See
-`lang/doc/design/TYPE-ORDERING.0.md`.
+`lang/doc/design/TYPE-ORDERING.10.md`.
 
 | Word | Description | Example |
 |------|-------------|---------|

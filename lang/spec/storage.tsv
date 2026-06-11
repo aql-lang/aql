@@ -14,6 +14,8 @@
 #                          {'key':v}, propagates up the parent chain.		
 #   set field v object     in-place field mutation on an Object instance.		
 #   set i v array          in-place set at index i (bounds-checked).		
+#   set key v map           copy-returning: a NEW map with the key		
+#                          bound; the receiver Map is untouched (§7).		
 #		
 #   get 'key' store        Store lookup; errors on missing key.		
 #   get key node           Map/List/Options lookup; missing keys yield		
@@ -69,11 +71,11 @@ context get quote nope	ERROR:unknown key
 # observes the change on subsequent reads.		
 		
 # String-key set		
-def Foo (refine Object { a:String b:Integer }) def f make Foo { a:'hi' b:1 } set 'a' 'bye' f f .a	'bye'	String key updates the field
-def Foo (refine Object { a:String b:Integer }) def f make Foo { a:'hi' b:1 } set 'a' 'bye' f f .b	1	other fields are untouched
+def Foo (class { a:String b:Integer }) def f make Foo { a:'hi' b:1 } set 'a' 'bye' f f .a	'bye'	String key updates the field
+def Foo (class { a:String b:Integer }) def f make Foo { a:'hi' b:1 } set 'a' 'bye' f f .b	1	other fields are untouched
 		
 # Numeric field via String value — set replaces the value verbatim.		
-def Foo (refine Object { a:Integer }) def f make Foo { a:5 } set 'a' 99 f f .a	99	
+def Foo (class { a:Integer }) def f make Foo { a:5 } set 'a' 99 f f .a	99	
 		
 # ====================================================================		
 # 3. None propagation		
@@ -119,3 +121,22 @@ get 0 List	ERROR:signature_error	bare List type literal cannot be indexed
 context set 'n' 5 end ( context get 'n' ) add ( context get 'n' )	10	parens isolate each context-get; result is 5+5
 context set 'n' 7 end def x ( context get 'n' ) x	7	def captures the looked-up value (paren keeps body coherent)
 context set 'msg' 'hi' end def s ( context get 'msg' ) s	'hi'	
+		
+# ====================================================================		
+# 7. Map set — copy-returning (Map stays immutable)		
+# ====================================================================		
+# `set` on a Map returns a NEW map with the key bound and leaves the		
+# receiver untouched — the copy-returning contract of push/setpath,		
+# in contrast to the in-place Store/Object/Array forms above (which		
+# return nothing). Keys are strings or atoms; computed keys via		
+# parens. Calls chain, so maps build incrementally in a pipeline.		
+		
+{a:1} set b 2	{a:1 b:2}	bare-word key binds literally (like Object set)
+{a:1} set 'b' 2	{a:1 b:2}	string key
+def k 'dyn' {a:1} set (k) 2	{a:1 dyn:2}	computed key — parens take the VALUE of k
+{a:1} 2 'b' set	{a:1 b:2}	stack form is equivalent
+{a:1} set a 9	{a:9}	setting an existing key overwrites
+{} set a 1 set b 2	{a:1 b:2}	copy-returning means calls chain
+def m {a:1} def m2 (m set b 2) m	{a:1}	the receiver is NOT mutated — m is unchanged
+def m {a:1} def m2 (m set b 2) m2	{a:1 b:2}	…the new binding carries the update
+Map 1 'a' set	ERROR:signature_error	a bare Map type literal cannot be set

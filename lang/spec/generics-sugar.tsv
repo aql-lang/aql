@@ -1,0 +1,52 @@
+# AQL Language Specification: generics angle-bracket sugar — Box<T>
+# Format: input<TAB>expected<TAB>description
+#
+# `<` and `>` are GENERAL-PURPOSE parser tokens (D14): the generics
+# angle rule is their only v1 consumer, gated on a CAPITALISED name
+# immediately before the `<` (the type-name convention) — so a `<`
+# anywhere else is a syntax error in v1 only because no other
+# consumer exists yet, and comparisons stay on lt/gt. Desugaring
+# happens at parse time in the conversion walks (D15): a def head
+# `def Name<params>` emits the canonical `Name gen [params]`; every
+# other position emits the paren span `( Name of [args] )`. No angle
+# marker ever reaches the engine value stream — macros, quote, and
+# Vm.parse see the canonical form. Commas between entries/args are
+# optional separators, exactly like list elements.
+# See design/GENERICS.10.md §6 + the Phase 6 landed-state note.
+#
+# §1  declarations — sugar/canonical twins
+def Box<T> class {value:T} end Box	schema<Class/Box>[T]	a sugared class-schema head
+def Box gen [T] class {value:T} end Box	schema<Class/Box>[T]	…identical to its canonical twin
+def Pair<K, V> refine Record [key:K value:V] end Pair of [String Integer]	record{key:String value:Integer}	two parameters, comma-separated
+def Pair<K V> refine Record [key:K value:V] end Pair of [String Integer]	record{key:String value:Integer}	…commas are optional, like list elements
+def Sorted<T extends Number> refine Record [items:[:T]] end Sorted of [Integer]	record{items:[:Integer]}	a bound rides the entry
+def Sorted<T extends Number> refine Record [items:[:T]] end Sorted of [String]	ERROR:constraint_violation	…and still rejects at instantiation
+def Result<T, E = Error> refine Record [ok:T err:E] end Result of [Integer]	record{ok:Integer err:Error}	`=` declares a default
+def Mapper<T U> fnsig [[T] [U]] end (Mapper of [Integer String]) typeof	FunctionSignature	a sugared fn-shape schema
+#
+# §2  use sites — every position the canonical paren span works in
+def Box<T> class {value:T} end Box<Integer> teq (Box of [Integer])	true	a use-site is IDENTICAL to its canonical twin (one memoised node)
+def Box<T> class {value:T} def b:Box<Integer> {value:42} end b typeof	Box of [Integer]	a typed-def annotation
+def Box<T> class {value:T} end (make Box<Integer> {value:42}) get value	42	construction through make
+def Box<T> class {value:T} end (make Box<Integer> {value:1}) is Box	true	bare schema name admits any instantiation
+def Box<T> class {value:T} end (make Box<Integer> {value:1}) is Box<Integer>	true	exact instantiation membership
+def Box<T> class {value:T} end (make Box<Integer> {value:1}) is Box<Number>	false	v1 invariance holds in sugar form too
+def Box<T> class {value:T} def Outer<T> refine Record [inner:Box<T> tag:String] end Outer of [Integer]	record{inner:object<Box of [Integer]>{value:Integer} tag:String}	sugar nests inside a schema body (the field renders the embedded class body)
+def Box<T> class {value:T} def Pair<K, V> refine Record [key:K value:V] end (Box of [(Pair of [String Integer])]) teq Box<Pair<String, Integer>>	true	nested sugar (no `>>` shift problem — `>` is a standalone token)
+def Box<T> class {value:T} def f fn [[x:Box<Integer>] [Integer] [x get value]] end f (make Box<Integer> {value:7})	7	a sugared fn-param annotation dispatches
+def Box<T> class {value:T} def f fn [[x:Box<Integer>] [Integer] [x get value]] end f (make Box<String> {value:'s'})	ERROR:signature	…and rejects a sibling instantiation
+def Box<T> class {value:T} def xs:[:Box<Integer>] [(make Box<Integer> {value:1})] end (xs get 0) get value	1	a child-type constraint position
+def Box<T> class {value:T} def xs:[:Box<Integer>] [(make Box<String> {value:'s'})]	ERROR:does not unify	…enforced against off-type elements
+def Box<T> class {value:T} def b (make Box<Integer> {value:7}) end case b [Box<Integer> 'int-box' 'other']	'int-box'	a case clause matches the exact instantiation
+def Box<T> class {value:T} def b (make Box<String> {value:'s'}) end case b [Box<Integer> 'int-box' 'other']	'other'	…and not a sibling
+#
+# §3  canonical-stream visibility (D15) — macros and Vm.parse see parens
+def Box<T> class {value:T} def m (macro [[e] [ quote [ unquote e ] ]]) end macroexpand (m Box<Integer>)	[paren([word(Box) word(of) [Integer]])]	a raw-capturing macro receives the canonical paren span, never an angle form
+"aql:vm" import end def Box<T> class {value:T} end Vm.parse "Box<Integer>"	(quote [paren([word(Box) word(of) [Integer]])])	Vm.parse of sugared source emits the canonical stream
+#
+# §4  negatives — the gate and the entry grammar are loud
+5 < 3	ERROR:unexpected	`<` after a non-type value is a syntax error (comparisons are lt/gt)
+box<Integer>	ERROR:unexpected	the gate requires a CAPITALISED name before `<`
+def Box<t> class {value:t}	ERROR:capitalised	parameters follow the type-name convention
+def Box<T class {value:T}	ERROR:unclosed angle	a missing `>` is a parse error, not a silent re-lex
+def Sorted<T extends> refine Record [x:T]	ERROR:needs a value	a dangling `extends` is rejected at parse time

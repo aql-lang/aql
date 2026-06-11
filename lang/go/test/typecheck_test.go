@@ -1717,7 +1717,7 @@ func TestCheckUndefinedWordTypoNextToValid(t *testing.T) {
 }
 
 // TestCheckIndexOutOfRange pins the static index/size check
-// (design/elixir-types-in-aql-report.0.md item 4). A provably
+// (design/elixir-types-in-aql-report.10.md item 4). A provably
 // out-of-range list index — past the end, equal to the length, or
 // negative — is flagged at `aql check` with an index_out_of_range
 // warning; in-bounds, unknown-length, and non-list accesses stay

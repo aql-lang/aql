@@ -48,7 +48,7 @@ mod 7 0	0	`mod 7 0` = 0 mod 7 = 0 (divisor is the swapped operand, no error)
 add 1 'x' 'y'	'x1' 'y'	add is binary: the third value is left on the stack
 #
 # §6  integer overflow — a uniform error, never a silent wrap or Float
-#     (WAT Exhibit K; see design/INTEGER-OVERFLOW-STRATEGY.0.md).
+#     (WAT Exhibit K; see design/INTEGER-OVERFLOW-STRATEGY.5.md).
 9223372036854775807 add 1	ERROR:integer_overflow	maxint + 1 overflows rather than wrapping/promoting
 9223372036854775806 add 1	9223372036854775807	one below maxint is still in range — no error
 -9223372036854775808 sub 1	ERROR:integer_overflow	minint - 1 underflows

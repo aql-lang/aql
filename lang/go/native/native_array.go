@@ -175,6 +175,33 @@ var allArrayNatives = []NativeFunc{
 		}},
 	},
 	{
+		// insert-at: copy-returning single-element insertion. Sig order is
+		// [index, element, list] — subject last, like set — so the forward
+		// form reads `insert-at 1 99 [1 2 3]` and the pipeline form
+		// `[1 2 3] insert-at 1 99`. The HAMT feasibility study (voxgig DX
+		// report, Theme H) asked for this as a cleaner primitive than the
+		// take/concat/shed composition.
+		Name: "insert-at",
+
+		Signatures: []NativeSig{{
+			Args:    []*Type{TInteger, TAny, TList},
+			Handler: insertAtHandler,
+			Returns: []*Type{TList}, BarrierPos: -1,
+		}},
+	},
+	{
+		// remove-at: copy-returning single-element removal. Sig order is
+		// [index, list]: forward `remove-at 1 [1 2 3]`, pipeline
+		// `[1 2 3] remove-at 1`.
+		Name: "remove-at",
+
+		Signatures: []NativeSig{{
+			Args:      []*Type{TInteger, TList},
+			Handler:   removeAtHandler,
+			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
+		}},
+	},
+	{
 		Name: "sortby",
 
 		Signatures: []NativeSig{
@@ -832,6 +859,68 @@ func atHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 			return nil, r.AqlError("at_error", fmt.Sprintf("at: index %d out of bounds (length %d)", idx, dataLen), "at")
 		}
 		result[i] = data.Get(idx)
+	}
+	return []Value{NewList(result)}, nil
+}
+
+// ---- insert-at / remove-at ----
+
+// insertAtHandler returns a new list with the element (args[1]) inserted
+// at index args[0] of the list args[2]. Index 0..len is valid — index ==
+// len appends. An out-of-range index is a loud error: these are edits,
+// not lookups, so the silent None-for-missing convention of `get` does
+// not apply.
+func insertAtHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	_idx, err := args[0].AsConcreteInteger()
+	if err != nil {
+		return nil, r.AqlError("insert_at_error", "insert-at: expected a concrete Integer index", "insert-at")
+	}
+	if !IsConcrete(args[2]) {
+		return nil, r.AqlError("insert_at_error", "insert-at: expected a concrete data list", "insert-at")
+	}
+	data, _ := AsList(args[2])
+	idx := int(_idx)
+	n := data.Len()
+	if idx < 0 || idx > n {
+		return nil, r.AqlError("index_out_of_range", fmt.Sprintf("insert-at: index %d out of range for list of length %d (valid: 0..%d)", idx, n, n), "insert-at")
+	}
+	result := make([]Value, 0, n+1)
+	for i := 0; i < idx; i++ {
+		result = append(result, data.Get(i))
+	}
+	result = append(result, args[1])
+	for i := idx; i < n; i++ {
+		result = append(result, data.Get(i))
+	}
+	return []Value{NewList(result)}, nil
+}
+
+// removeAtHandler returns a new list with the element at index args[0]
+// of the list args[1] removed. Valid indices are 0..len-1; out of range
+// is a loud error (same rationale as insert-at).
+func removeAtHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	_idx, err := args[0].AsConcreteInteger()
+	if err != nil {
+		return nil, r.AqlError("remove_at_error", "remove-at: expected a concrete Integer index", "remove-at")
+	}
+	if !IsConcrete(args[1]) {
+		return nil, r.AqlError("remove_at_error", "remove-at: expected a concrete data list", "remove-at")
+	}
+	data, _ := AsList(args[1])
+	idx := int(_idx)
+	n := data.Len()
+	if n == 0 {
+		return nil, r.AqlError("index_out_of_range", "remove-at: cannot remove from an empty list", "remove-at")
+	}
+	if idx < 0 || idx >= n {
+		return nil, r.AqlError("index_out_of_range", fmt.Sprintf("remove-at: index %d out of range for list of length %d (valid: 0..%d)", idx, n, n-1), "remove-at")
+	}
+	result := make([]Value, 0, n-1)
+	for i := 0; i < n; i++ {
+		if i == idx {
+			continue
+		}
+		result = append(result, data.Get(i))
 	}
 	return []Value{NewList(result)}, nil
 }

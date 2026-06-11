@@ -1,4 +1,4 @@
-# Reach — first-class dot-access lens (design/REACH.0.md §7, §11).
+# Reach — first-class dot-access lens (design/REACH.10.md §7, §11).
 #
 # Columns: <input><TAB><expected>[<TAB><note>]. Output is rendered through
 # eng.Canon, so strings render single-quoted ('ada') and a reach renders as

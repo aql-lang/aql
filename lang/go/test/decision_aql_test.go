@@ -33,6 +33,9 @@ type decisionTestCase struct {
 	expr string
 	// check validates the result.
 	check func(t *testing.T, result []native.Value)
+	// wantErr, when non-empty, asserts expr raises an error containing
+	// this substring (check is then ignored).
+	wantErr string
 }
 
 func checkBool(want bool) func(t *testing.T, result []native.Value) {
@@ -281,9 +284,12 @@ var decisionTests = []decisionTestCase{
 		check: checkBool(false),
 	},
 	{
-		name:  "EvalCondUnknownOpReturnsFalse",
-		expr:  `{age:25} {field:"age",op:"weird",value:18} Decision.eval-cond`,
-		check: checkBool(false),
+		// An unrecognised op RAISES (Phase-8 retrofit: apply-op is
+		// generic over Comparable and unknown ops are loud, replacing
+		// the historic silent false).
+		name:    "EvalCondUnknownOpRaises",
+		expr:    `{age:25} {field:"age",op:"weird",value:18} Decision.eval-cond`,
+		wantErr: "unknown_op",
 	},
 
 	// --- eval-pred edge cases ---
@@ -539,6 +545,12 @@ func runDecisionTest(t *testing.T, tc decisionTestCase, reg *native.Registry) {
 		t.Fatalf("expr parse: %v", err)
 	}
 	result, err := eng.Run(vals)
+	if tc.wantErr != "" {
+		if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+			t.Fatalf("expr run: want error containing %q, got %v", tc.wantErr, err)
+		}
+		return
+	}
 	if err != nil {
 		t.Fatalf("expr run: %v", err)
 	}
@@ -648,6 +660,12 @@ func TestFileDecision(t *testing.T) {
 			steps = append(steps, tc.expr)
 
 			result, err := runRealFileSteps(t, dir, steps)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("want error containing %q, got %v", tc.wantErr, err)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatal(err)
 			}

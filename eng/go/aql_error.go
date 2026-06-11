@@ -22,6 +22,10 @@ type AqlError struct {
 	Col    int    // 1-based column number (0 = unknown)
 	Src    string // Source fragment at the error (the token/word text)
 	Hint   string // Additional explanatory text
+	// Data carries the extra keys of a `raise {code:… message:… …}`
+	// spec map, so a catching handler can read them off the Error
+	// value (ErrorInfo.Data via NewError). Nil for every other error.
+	Data *OrderedMap
 	// fullSource is the complete source text for generating context extracts.
 	fullSource string
 }

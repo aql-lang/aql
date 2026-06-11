@@ -64,6 +64,36 @@ var controlNatives = []NativeFunc{
 		},
 	},
 	{
+		// case <value> [m1 b1 m2 b2 … default] — dispatch on a value.
+		// The value expression is executed and its result captured
+		// (a code-body list evaluates; parens evaluate before
+		// collection; a plain value is used as-is). Clauses are
+		// match/block pairs with an optional trailing default. A
+		// match that is a code-body list executes as if the value
+		// were already on the stack ([gt 3] runs `v gt 3`) and the
+		// result coerces to boolean; any other match UNIFIES with
+		// the value (equal scalars/atoms, a type literal matches its
+		// members). The first matching clause's block runs the same
+		// way — value pushed first, like the `error [handler]` block
+		// — and its result is case's result. No match and no default
+		// produces nothing, like `if` without an else.
+		Name: "case",
+
+		Signatures: []NativeSig{
+			// One Any/Any sig; the handler disambiguates the two call
+			// shapes (forward `case v [clauses]` vs stack-value
+			// `v case [clauses]`) by which arg is the clause list —
+			// a type-level split mis-sorts because both shapes are
+			// (List, List) when the value is itself a code body.
+			{
+				Args:       []*Type{TAny, TAny},
+				NoEvalArgs: map[int]bool{0: true, 1: true},
+				Handler:    caseHandler,
+				Returns:    []*Type{TAny}, BarrierPos: -1,
+			},
+		},
+	},
+	{
 		Name: "for",
 
 		Signatures: []NativeSig{
@@ -115,6 +145,18 @@ var controlNatives = []NativeFunc{
 				Handler:    errorHandler,
 				Returns:    []*Type{TError}, BarrierPos: -1,
 			},
+			// Success pass-through: `do [risky] error [handler]` must
+			// compose when risky SUCCEEDS too — a non-Error result
+			// skips the handler and passes through unchanged. Without
+			// this, attaching a handler made the success path a loud
+			// signature_error, so the documented pattern only worked
+			// when the body failed.
+			{
+				Args:       []*Type{TList, TAny},
+				NoEvalArgs: map[int]bool{0: true},
+				Handler:    errorPassHandler,
+				Returns:    []*Type{TAny}, BarrierPos: -1,
+			},
 		},
 	},
 }
@@ -141,7 +183,7 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 	// list carrier rather than concrete tokens) has a genuinely unknown
 	// residual, so emit a bounded gradual dynamic(Any) — optimistically
 	// usable downstream — rather than strict Carry<Any>.
-	// (design/dynamic-modality-report.0.md, do/eval hatch.) A concrete
+	// (design/dynamic-modality-report.10.md, do/eval hatch.) A concrete
 	// body is analyzed normally; one that runs to nothing stays strict.
 	if !(IsConcrete(body) && body.Parent.ConformsTo(TList)) {
 		return []Value{NewDynamicCarrier(TAny)}
@@ -344,6 +386,47 @@ func ifListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	return ifClause(_lst.Slice()), nil
 }
 
+// caseHandler implements both call shapes of `case`:
+//
+//	case <value> [m1 b1 … default]    forward form (canonical)
+//	<value> case [m1 b1 … default]    stack-value form
+//
+// Disambiguation: in the forward form args[0]=value, args[1]=clause
+// list; in the stack form the matcher delivers args[0]=clause list
+// (forward) and args[1]=value (stack). When exactly one arg is a
+// plain list it is the clause list; when BOTH are lists the forward
+// reading wins (args[0] is the value — so `case [1 add 1] [clauses]`
+// evaluates the code body; dispatching on a LIST value requires the
+// forward form). The value, if a code body, is executed and its LAST
+// result captured — it must produce one, loudly.
+func caseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	v, clauses := args[0], args[1]
+	if isCodeBody(v) && !isCodeBody(clauses) {
+		v, clauses = clauses, v
+	}
+	if isCodeBody(v) {
+		sub := New(r)
+		lst, _ := AsList(v)
+		input := make([]Value, lst.Len())
+		copy(input, lst.Slice())
+		out, err := sub.Run(input)
+		if err != nil {
+			return nil, err
+		}
+		if len(out) == 0 {
+			return nil, r.AqlError("case_error",
+				"case: value expression produced no value to dispatch on", "case")
+		}
+		v = out[len(out)-1]
+	}
+	if !isCodeBody(clauses) {
+		return nil, r.AqlError("case_error",
+			"case: clause list must be a concrete list of match/block pairs (optional trailing default)", "case")
+	}
+	lst, _ := AsList(clauses)
+	return caseClauses(r, v, lst.Slice())
+}
+
 // ifListReturnsFn type-checks the clause-list form: the result is the
 // join of every clause body's last value plus the else clause (or None
 // when there is no else, since an unmatched `if` produces nothing).
@@ -430,6 +513,13 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 }
 
 // ---- error handler ----
+
+// errorPassHandler is `error`'s success path: the guarded body
+// produced a normal value, so the handler list is discarded and the
+// value passes through unchanged.
+func errorPassHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	return []Value{args[1]}, nil
+}
 
 func errorHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {

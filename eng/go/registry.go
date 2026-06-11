@@ -43,7 +43,7 @@ type Registry struct {
 	Capabilities *CapabilityRegistry
 	// Ideals holds the type-kind descriptors — the registered,
 	// dynamically controllable constructors `type` dispatches through.
-	// See ideal.go and design/IDEAL.0.md.
+	// See ideal.go and design/IDEAL.10.md.
 	Ideals    *IdealRegistry
 	Output    io.Writer // output writer for print/printstr and stdout
 	ErrOutput io.Writer // error output writer for stderr
@@ -81,6 +81,18 @@ type Registry struct {
 	// See flowctrl.go.
 	FlowCtrl FlowCtrl
 
+	// pendingGen holds the GenSpec the `gen [...]` word produced,
+	// awaiting consumption by the NEXT type constructor (refine /
+	// class / fnsig / fn). `gen` returns no value precisely so that
+	// `def Box gen [T] refine Record [...]` collection flows past it
+	// to the constructor's result; the spec travels out-of-band
+	// through this slot (generics plan D2, revised — the
+	// trailing-stack delivery was defeated by def's forward
+	// collection, which captures a produced value before the next
+	// constructor can see the stack). Orphans are drained loudly at
+	// end-of-Run.
+	pendingGen *GenSpecInfo
+
 	// FnBaselines is a stack of def-depth snapshots, one per currently
 	// active fn-body execution. Pushed at every body-entry point that
 	// also takes a defSnapshot for body-local-def cleanup; popped at
@@ -98,7 +110,7 @@ type Registry struct {
 	// gensymN is the monotonic counter behind the `gensym` word: each call
 	// mints a fresh, never-colliding atom name `tmp$g<n>`. Used for
 	// capture-free temporaries in (hand-written and, later, expanded) macros.
-	// See design/MACROS-PHASE1.0.md §7. The name is lowercase + mixed-`$` so
+	// See design/MACROS-PHASE1.10.md §7. The name is lowercase + mixed-`$` so
 	// it is a LEGAL word name (ValidateWordName: lowercase-only, all-`$`
 	// reserved) — gensyms are used as binders (`def <gensym> …`).
 	gensymN uint64
@@ -116,7 +128,7 @@ func (r *Registry) NextGensym() string {
 	return fmt.Sprintf("tmp$g%d", r.gensymN)
 }
 
-// macroCache memoizes macro expansions (design/MACROS-PHASE1.0.md §8). A
+// macroCache memoizes macro expansions (design/MACROS-PHASE1.10.md §8). A
 // macro's expansion depends ONLY on its template and the operand FORMS — never
 // on runtime state — so it is deterministic and cacheable. The key is the
 // macro name + the canon of its operands (NOT source Pos, which can collide
@@ -253,8 +265,14 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"missing_returns":       SeverityWarning,
 	"step_budget_exceeded":  SeverityWarning,
 	"body_error":            SeverityWarning,
+	// Generics (design/GENERICS.10.md §9.2).
+	"constraint_violation": SeverityError,
+	"unbound_param":        SeverityError,
+	"arity_mismatch":       SeverityError,
+	"static_warning":       SeverityWarning,
 	// Advisory (non-gating): a readability nudge, not a defect.
 	"forward_strands_operand": SeverityInfo,
+	"mixed_form_call":         SeverityInfo,
 }
 
 // SeverityFor returns the default severity classification for a

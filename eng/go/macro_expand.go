@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Macro expansion (design/MACROS-PHASE1.0.md §6). A macro is an FnDef flagged
+// Macro expansion (design/MACROS-PHASE1.10.md §6). A macro is an FnDef flagged
 // Macro=true whose every param is FormArgs raw-capture. At dispatch the
 // operands are captured unevaluated, the template body is run, the returned
 // token list is walked to resolve `unquote`/`splice`, and the result is
@@ -33,7 +33,7 @@ func (e *Engine) execMacro(valIdx int, fnDef *FnDefInfo) error {
 	}
 	// Memoize on (name + operand canon): the expansion is deterministic, so a
 	// macro re-applied to the same operand forms (e.g. in a loop) expands once
-	// and re-splices the cached tokens. See design/MACROS-PHASE1.0.md §8.
+	// and re-splices the cached tokens. See design/MACROS-PHASE1.10.md §8.
 	key := macroOperandsKey(fnDef.Name, operands)
 	expanded, ok := e.registry.macroCacheGet(key)
 	if !ok {
@@ -142,14 +142,14 @@ func expandMacroWith(r *Registry, fnDef *FnDefInfo, operands []Value) ([]Value, 
 		tmpl = []Value{template}
 	}
 
-	// Automatic hygiene (design/MACROS.0.md §5.2 #1): rename every
+	// Automatic hygiene (design/MACROS.8.md §5.2 #1): rename every
 	// template-origin `def` binder to a fresh gensym, consistently across the
 	// template, so an introduced name can't capture a same-named use-site
 	// variable. User-origin names — those supplied through unquote/splice,
 	// including the `def unquote <name>` escape — are NOT in this set and pass
 	// through unchanged, so a macro that intentionally binds a user-visible
 	// name still can. (Free-word capture-pinning (#2) and DefCleanup teardown
-	// are refinements — see MACROS-PHASE1.0.md.)
+	// are refinements — see MACROS-PHASE1.10.md.)
 	renames := map[string]string{}
 	binders := map[string]bool{}
 	collectTemplateBinders(tmpl, binders)

@@ -6,5 +6,6 @@ func init() {
 		"run-sandbox": "Run code under the 'sandbox' profile (pure computation).",
 		"run-compute": "Run code under the 'compute' profile (arithmetic).",
 		"run-with":    "Run code under an explicit policy supplied as a data map.",
+		"parse":       "Parse AQL source to a quoted token list without running it (loud parse_error on malformed source).",
 	})
 }

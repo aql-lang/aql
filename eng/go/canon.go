@@ -184,7 +184,7 @@ func canonReachTokens(toks []Value) string {
 }
 
 // canonReach renders a Reach back to its dotted surface — m.a.b, m!.x,
-// m.'k', m.(expr), (expr).k — the read∘print round-trip (design/REACH.0.md
+// m.'k', m.(expr), (expr).k — the read∘print round-trip (design/REACH.10.md
 // §6). A Quoted (codequote-captured) reach wraps in (codequote …) so it
 // round-trips, mirroring the list quote convention.
 func canonReach(v Value) string {

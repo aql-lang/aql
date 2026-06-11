@@ -1,6 +1,9 @@
 package native
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // storageNatives covers `set` / `get` / `context`. The unified
 // dispatch table mixes Node / Object / Array (kernel-territory
@@ -60,6 +63,46 @@ var storageNatives = []NativeFunc{
 				ReturnsFn: setStoreReturnsFn, BarrierPos: -1,
 			},
 
+			// Map (immutable — copy-returning). Unlike the three
+			// mutable containers above, a Map is a value: set returns
+			// a NEW map with the key bound and leaves the receiver
+			// untouched — the same contract as push / StructUtil.setpath.
+			{
+				Args:    []*Type{TString, TAny, TMap},
+				Handler: setMapHandler,
+				Returns: []*Type{TMap}, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TAtom, TAny, TMap},
+				QuoteArgs: map[int]bool{0: true},
+				Handler:   setMapHandler,
+				Returns:   []*Type{TMap}, BarrierPos: -1,
+			},
+
+			// List (immutable — copy-returning, completing the column
+			// rule: Map and List both return the updated copy).
+			{
+				Args:    []*Type{TInteger, TAny, TList},
+				Handler: setListHandler,
+				Returns: []*Type{TList}, BarrierPos: -1,
+			},
+
+			// Class instance (in-place, SEALED): a declared field
+			// writes in place and returns nothing; an undeclared
+			// field is a loud sealed_field error — see
+			// design/CLASS-OBJECT.10.md §3.3.
+			{
+				Args:    []*Type{TString, TAny, TClass},
+				Handler: setClassInstanceHandler,
+				Returns: []*Type{}, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TAtom, TAny, TClass},
+				QuoteArgs: map[int]bool{0: true},
+				Handler:   setClassInstanceHandler,
+				Returns:   []*Type{}, BarrierPos: -1,
+			},
+
 			// FlexMap (in-place key set; returns the node for chaining)
 			{
 				Args:    []*Type{TString, TAny, TFlexMap},
@@ -102,6 +145,10 @@ var storageNatives = []NativeFunc{
 			// [Key | Module] — descriptor fields (id/kind/file/folder/exports)
 			{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getModuleInstHandler, Returns: []*Type{TAny}},
 			{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Handler: getModuleInstHandler, Returns: []*Type{TAny}},
+			// [Key | Class instance] — flat field read (no prototype
+			// chain; class instances resolve every field at make).
+			{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TString, TClass}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
 			// [Key | None] — chained-read propagation
 			{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: getNoneHandler, Returns: []*Type{TNone}},
 			// [Key | Store] — check-mode-aware ReturnsFn picks up a
@@ -140,6 +187,71 @@ func setObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 		return nil, fmt.Errorf("set: expected an Object instance, got %s", container.Parent.String())
 	}
 	oi.Fields.Set(key, args[1])
+	return nil, nil
+}
+
+// setMapHandler is the Map form of set. A Map stays immutable: the
+// handler returns a NEW map with the key bound (overwriting an existing
+// entry), leaving the receiver untouched. This is the language's rule
+// of thumb made concrete — mutable containers (Store / Object / Array)
+// mutate in place and return nothing; immutable values return the
+// updated copy. Keys are strings or atoms, computed keys via parens:
+// `m set (k) v`.
+func setMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	m, err := RequireConcreteMap(args[2], "set")
+	if err != nil {
+		return nil, err
+	}
+	key := StoreKey(args[0])
+	out := NewOrderedMap()
+	for _, k := range m.Keys() {
+		v, _ := m.Get(k)
+		out.Set(k, v)
+	}
+	out.Set(key, args[1])
+	return []Value{NewMap(out)}, nil
+}
+
+// setClassInstanceHandler is the sealed in-place write for class
+// instances: a field declared in the class schema (own or inherited)
+// writes into the flat field map and returns nothing; an undeclared
+// field raises sealed_field loudly — the open-bag use case belongs to
+// plain maps/Objects, not class instances (design/CLASS-OBJECT.10.md).
+func setClassInstanceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	container := args[2]
+	if !IsConcrete(container) {
+		return nil, r.AqlError("set_error", "set: cannot set field on type literal", "set")
+	}
+	oi, ok := container.Data.(ObjectInstanceInfo)
+	if !ok {
+		return nil, fmt.Errorf("set: expected a class instance, got %s", container.Parent.String())
+	}
+	key := StoreKey(args[0])
+	val := args[1]
+	if oi.TypeRef != nil {
+		all := oi.TypeRef.AllFields()
+		constraint, declared := all.Get(key)
+		if !declared {
+			name := oi.TypeRef.Name
+			if name == "" {
+				name = container.Parent.Name
+			}
+			return nil, r.AqlErrorHint("sealed_field",
+				fmt.Sprintf("set: %q is not a field of %s (fields: %s)", key, name, strings.Join(all.Keys(), " ")),
+				"set",
+				"class instances are sealed — declare the field in the class schema, or use a plain map for open data")
+		}
+		// Write-time enforcement matches construction: the same strict
+		// field check make runs (typed fields conform, predicates run,
+		// defaulted fields constrain to the default's own type).
+		checked, err := MakeClassFieldValue(val, constraint, r)
+		if err != nil {
+			return nil, r.AqlError("type_error",
+				fmt.Sprintf("set: field %q: %s", key, err.Error()), "set")
+		}
+		val = checked
+	}
+	oi.Fields.Set(key, val)
 	return nil, nil
 }
 
@@ -294,7 +406,7 @@ func getStoreReturnsFn(args []Value, r *Registry) []Value {
 		// Emit a bounded gradual carrier dynamic(Any) — optimistically
 		// compatible with any slot — rather than strict Carry<Any>, which
 		// would fail every typed slot downstream and force a no_signature
-		// or Any catch-all. (design/dynamic-modality-report.0.md, escape
+		// or Any catch-all. (design/dynamic-modality-report.10.md, escape
 		// hatch 1.) A key recorded by a prior `set` keeps its real, strict
 		// carrier.
 		return []Value{NewDynamicCarrier(TAny)}
@@ -315,4 +427,31 @@ func contextHandler(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		return nil, reg.AqlError("context_error", "context: no active context", "context")
 	}
 	return []Value{NewStoreValue(TStore, store)}, nil
+}
+
+// setListHandler is the List form of set: copy-returning, like Map —
+// a NEW list with the element at the index replaced; the receiver is
+// untouched. Out-of-range indices are a loud error (edits, not
+// lookups). Completes the immutable column of the container 2x2.
+func setListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	_idx, err := args[0].AsConcreteInteger()
+	if err != nil {
+		return nil, r.AqlError("set_error", "set: expected a concrete Integer index", "set")
+	}
+	lst, err2 := RequireConcreteList(args[2], "set")
+	if err2 != nil {
+		return nil, err2
+	}
+	idx := int(_idx)
+	n := lst.Len()
+	if idx < 0 || idx >= n {
+		return nil, r.AqlError("index_out_of_range",
+			fmt.Sprintf("set: index %d out of range for list of length %d", idx, n), "set")
+	}
+	out := make([]Value, n)
+	for i := 0; i < n; i++ {
+		out[i] = lst.Get(i)
+	}
+	out[idx] = args[1]
+	return []Value{NewList(out)}, nil
 }

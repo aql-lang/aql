@@ -11,7 +11,7 @@
 # pins the full 6-ops × 4-type-combos (II, IF, FI, FF) cross product for
 # both the value and its type, plus the edge cases where the result is
 # more surprising than "same number, wider type" (see
-# design/INTEGER-OVERFLOW-STRATEGY.0.md and WAT-AUDIT Exhibit H/L).
+# design/INTEGER-OVERFLOW-STRATEGY.5.md and WAT-AUDIT Exhibit H/L).
 
 # ───────────────────────── add ─────────────────────────
 7 2 add	9	II → Integer

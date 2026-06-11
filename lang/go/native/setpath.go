@@ -70,7 +70,7 @@ func setpathHandler(args []Value, ctx map[string]Value, stack []Value, r *Regist
 		if err != nil {
 			return nil, err
 		}
-		out, err := setReachNative(data, keys, newVal)
+		out, err := setReachNative(data, keys, newVal, r)
 		if err != nil {
 			return nil, err
 		}
@@ -86,7 +86,7 @@ func setpathHandler(args []Value, ctx map[string]Value, stack []Value, r *Regist
 	// rather than the updated root, so any nested set lost the outer
 	// structure (`setpath {a:{b:1}} "a.b" 99` → {b:99} instead of
 	// {a:{b:99}}). The native setter deep-sets correctly + immutably.
-	out, err := setReachNative(data, stringPathKeys(path), newVal)
+	out, err := setReachNative(data, stringPathKeys(path), newVal, r)
 	if err != nil {
 		return nil, err
 	}
@@ -149,15 +149,54 @@ func reachPathKeys(r *Registry, info ReachInfo) ([]Value, error) {
 
 // setReachNative immutably sets val at the key-path within data, returning a
 // new structure. A numeric key into a concrete list updates that index (in a
-// copy); any other key updates a map (shallow-cloned). Missing intermediate
-// maps are created. Sibling values are shared by reference — safe because
-// nothing is mutated in place.
-func setReachNative(data Value, keys []Value, val Value) (Value, error) {
+// copy); any other key updates a map (shallow-cloned); a class / Object
+// instance level round-trips through construction (a new instance of the
+// same type, schema checks enforced for classes). Missing intermediate maps
+// are created. Sibling values are shared by reference — safe because nothing
+// is mutated in place.
+func setReachNative(data Value, keys []Value, val Value, r *Registry) (Value, error) {
 	if len(keys) == 0 {
 		return val, nil
 	}
 	k := keys[0]
 	rest := keys[1:]
+
+	// Class / Object instance: edit the projected field map, then
+	// rebuild type-preservingly. A class instance re-makes through
+	// MakeClassInstance, so the same strict validation `make` runs
+	// applies to the edit — an unknown top-level field or an
+	// off-schema value errors loudly rather than degrading to a Map.
+	if IsObjectInstance(data) {
+		info, _ := AsObjectInstance(data)
+		fields := ObjectFields(&info)
+		out := NewOrderedMap()
+		for _, key := range fields.Keys() {
+			v, _ := fields.Get(key)
+			out.Set(key, v)
+		}
+		keyStr := reachKeyString(k)
+		if len(rest) == 0 {
+			out.Set(keyStr, val)
+		} else {
+			existing, _ := out.Get(keyStr)
+			child, err := setReachNative(existing, rest, val, r)
+			if err != nil {
+				return Value{}, err
+			}
+			out.Set(keyStr, child)
+		}
+		if info.TypeRef != nil && info.TypeRef.Class {
+			inst, err := MakeClassInstance(*info.TypeRef, out, r)
+			if err != nil {
+				return Value{}, fmt.Errorf("setpath: %w", err)
+			}
+			return inst, nil
+		}
+		return NewObjectInstance(data.Parent, ObjectInstanceInfo{
+			TypeRef: info.TypeRef,
+			Fields:  out,
+		}), nil
+	}
 
 	// List index.
 	if k.Parent.ConformsTo(TInteger) && data.Parent.ConformsTo(TList) && IsConcrete(data) {
@@ -172,7 +211,7 @@ func setReachNative(data Value, keys []Value, val Value) (Value, error) {
 		for i := 0; i < n; i++ {
 			cp[i] = lst.Get(i)
 		}
-		child, err := setReachNative(cp[idx], rest, val)
+		child, err := setReachNative(cp[idx], rest, val, r)
 		if err != nil {
 			return Value{}, err
 		}
@@ -195,7 +234,7 @@ func setReachNative(data Value, keys []Value, val Value) (Value, error) {
 		out.Set(keyStr, val)
 	} else {
 		existing, _ := out.Get(keyStr)
-		child, err := setReachNative(existing, rest, val)
+		child, err := setReachNative(existing, rest, val, r)
 		if err != nil {
 			return Value{}, err
 		}

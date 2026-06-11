@@ -29,6 +29,8 @@ WORD apply
   [Type/Function] barrier=0 returns=[Any]
 WORD args
   [] barrier=0 returns=[Node/List]
+WORD array
+  [Node/List] barrier=1 returns=[Ideal/Array]
 WORD await
   [Ideal/Options Node/List] barrier=2 noeval={1} returns=[Any]
   [Node/List] barrier=1 noeval={0} returns=[Any]
@@ -58,11 +60,15 @@ WORD bxor
 WORD cancel
   [Ideal/Timeout] barrier=1
   [Ideal/Interval] barrier=1
+WORD case
+  [Any Any] barrier=2 noeval={0,1} returns=[Any]
 WORD changecase
   [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
   [Scalar/Atom Node/Map] barrier=2 returns=[Scalar/String]
   [Scalar/String] barrier=1 returns=[Scalar/String]
   [Scalar/Atom] barrier=1 returns=[Scalar/String]
+WORD class
+  [Node/Map] barrier=1 runcheck returns=[Type]
 WORD clone
   [Any] barrier=1
 WORD cmp
@@ -73,6 +79,8 @@ WORD codequote
 WORD concat
   [Node/Map Node/List] barrier=2 returns=[Scalar/String]
   [Node/List] barrier=1 returns=[Scalar/String]
+WORD const
+  [Any] barrier=1 runcheck returns=[Any]
 WORD contains
   [Scalar/String Scalar/String Node/Map] barrier=3 returns=[Scalar/Boolean]
   [Scalar/String Scalar/String] barrier=2 returns=[Scalar/Boolean]
@@ -82,6 +90,7 @@ WORD continue
   [] barrier=0
 WORD convert
   [Scalar Node/Map Scalar] barrier=3 typearg={0} +returnsfn
+  [Ideal/Object Node/Map] barrier=2 typearg={0} returns=[Ideal/Object]
   [Node Ideal] barrier=2 typearg={0} +returnsfn
   [Scalar Scalar] barrier=2 typearg={0} +returnsfn
 WORD create
@@ -95,6 +104,9 @@ WORD def
   [Node/Map Any] barrier=2 runcheck noevalmap={0}
   [Scalar/String Any] barrier=2 runcheck
   [Scalar/Atom Any] barrier=2 runcheck quote={0}
+WORD default
+  [Any Type/GenParam] barrier=1 runcheck returns=[Type/GenParam]
+  [Any Type] barrier=1 runcheck typearg={1} returns=[Type/GenParam]
 WORD depth
   [] barrier=0 fullstack
 WORD deq
@@ -128,12 +140,17 @@ WORD eq
   [Any Any] barrier=2 returns=[Scalar/Boolean]
 WORD error
   [Node/List Ideal/Error] barrier=2 noeval={0} returns=[Ideal/Error]
+  [Node/List Any] barrier=2 noeval={0} returns=[Any]
 WORD escape
   [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
   [Scalar/String] barrier=1 returns=[Scalar/String]
 WORD export
   [Scalar/String Node/Map] barrier=2 runcheck
   [Scalar/Atom Node/Map] barrier=2 runcheck
+WORD exposes
+  [Any Any] barrier=1 runcheck
+WORD extends
+  [Any Type] barrier=1 runcheck typearg={1} returns=[Type/GenParam]
 WORD fetch
   [Scalar/String Node/Map] barrier=2
   [Node/Map] barrier=1
@@ -141,6 +158,7 @@ WORD fetch
 WORD filter
   [Type/Function Any] barrier=2
   [Ideal/Reach Any] barrier=2
+  [Node/List Any] barrier=2 noeval={0}
 WORD flatten
   [Scalar/Number/Integer Node/List] barrier=2
   [Node/List] barrier=1
@@ -149,7 +167,7 @@ WORD flex
 WORD fn
   [Node/List] barrier=1 runcheck noeval={0} returns=[Type/Function]
 WORD fnsig
-  [Node/List] barrier=1 noeval={0} returns=[Type/FunctionSignature]
+  [Node/List] barrier=1 runcheck noeval={0} returns=[Type/FunctionSignature]
 WORD fold
   [Node/List Node/List Any] barrier=3 noeval={0} +returnsfn
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
@@ -167,12 +185,16 @@ WORD force-arity
 WORD forward-args
   [Type/Function] barrier=1 runcheck returns=[Type/Function]
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Type/Function]
+WORD gen
+  [Node/List] barrier=1 runcheck noeval={0}
 WORD gensym
   [] barrier=0 returns=[Scalar/Atom]
 WORD get
   [Scalar/String Ideal/ModuleExport] barrier=1 +returnsfn
   [Scalar/String Ideal/Module] barrier=1 returns=[Any]
+  [Scalar/String Ideal/Class] barrier=1 returns=[Any]
   [Scalar/String Ideal/Store] barrier=1 +returnsfn
+  [Scalar/String Ideal/Error] barrier=2 returns=[Any]
   [Scalar/String Ideal/Object] barrier=1 returns=[Any]
   [Scalar/String Node] barrier=1 returns=[Any]
   [Scalar/Number/Integer Ideal/Array] barrier=1 returns=[Any]
@@ -180,7 +202,9 @@ WORD get
   [Scalar/Number/Integer Node] barrier=1 returns=[Any]
   [Scalar/Atom Ideal/ModuleExport] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Ideal/Module] barrier=1 quote={0} returns=[Any]
+  [Scalar/Atom Ideal/Class] barrier=1 quote={0} returns=[Any]
   [Scalar/Atom Ideal/Store] barrier=1 quote={0} +returnsfn
+  [Scalar/Atom Ideal/Error] barrier=2 quote={0} returns=[Any]
   [Scalar/Atom Ideal/Object] barrier=1 quote={0} returns=[Any]
   [Scalar/Atom Node] barrier=1 quote={0} returns=[Any]
   [Any None] barrier=1 returns=[None]
@@ -328,6 +352,10 @@ WORD not
   [Any] barrier=1 returns=[Scalar/Boolean]
 WORD now
   [] barrier=0 returns=[Scalar/Time/Instant]
+WORD object
+  [Node/Map] barrier=1 returns=[Ideal/Object]
+WORD of
+  [Node/List Any] barrier=1 runcheck typearg={1} returns=[Type]
 WORD or
   [Scalar/Boolean Scalar/Boolean] barrier=1 returns=[Scalar/Boolean]
   [Any Any] barrier=1 returns=[Any]
@@ -344,6 +372,8 @@ WORD pad
   [Scalar/Number/Integer Scalar/String] barrier=2 returns=[Scalar/String]
   [Scalar/Number/Integer Any] barrier=2
   [Any] barrier=1
+WORD parse
+  [Scalar/String] barrier=1 returns=[Any]
 WORD pathof
   [Any] barrier=1 typearg={0} returns=[Node/List]
 WORD pick
@@ -365,6 +395,10 @@ WORD push
 WORD quote
   [Scalar/Atom] barrier=1 quote={0} returns=[Scalar/Atom]
   [Any] barrier=1 runcheck noeval={0} +returnsfn
+WORD raise
+  [Scalar/Atom Scalar/String] barrier=2 quote={0}
+  [Node/Map] barrier=1
+  [Scalar/String] barrier=1
 WORD range
   [Scalar/Number/Integer Scalar/Number/Integer Scalar/Number/Integer] barrier=3 +returnsfn
   [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 +returnsfn
@@ -386,6 +420,9 @@ WORD referent
 WORD refine
   [Any Node] barrier=2 runcheck returns=[Type]
   [Any] barrier=1 runcheck returns=[Type]
+WORD reify
+  [Any Node/Map] barrier=2
+  [Any Scalar/String] barrier=2
 WORD remove
   [Node/Map Ideal/Object/Resource/Entity] barrier=2
   [Node/Map Node/Map] barrier=2
@@ -410,14 +447,19 @@ WORD scan
 WORD selector
   [Node/Map Any] barrier=2
 WORD set
+  [Scalar/String Any Ideal/Class] barrier=3
   [Scalar/String Any Ideal/Store] barrier=3 +returnsfn
   [Scalar/String Any Ideal/Object] barrier=3
   [Scalar/String Any Node/Map/FlexMap] barrier=3 returns=[Node/Map/FlexMap]
+  [Scalar/String Any Node/Map] barrier=3 returns=[Node/Map]
   [Scalar/Number/Integer Any Ideal/Array] barrier=3
   [Scalar/Number/Integer Any Node/List/FlexList] barrier=3 returns=[Node/List/FlexList]
+  [Scalar/Number/Integer Any Node/List] barrier=3 returns=[Node/List]
+  [Scalar/Atom Any Ideal/Class] barrier=3 quote={0}
   [Scalar/Atom Any Ideal/Store] barrier=3 quote={0} +returnsfn
   [Scalar/Atom Any Ideal/Object] barrier=3 quote={0}
   [Scalar/Atom Any Node/Map/FlexMap] barrier=3 quote={0} returns=[Node/Map/FlexMap]
+  [Scalar/Atom Any Node/Map] barrier=3 quote={0} returns=[Node/Map]
 WORD setpath
   [Ideal/Reach Any Any] barrier=3
   [Scalar/String Any Any] barrier=3
@@ -463,6 +505,8 @@ WORD sub
   [Scalar/Time/DateTime Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/DateTime]
   [Scalar/Time/Date Scalar/Time/Duration/CalDuration] barrier=2 returns=[Scalar/Time/Date]
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn
+WORD surface
+  [Node/Map] barrier=1 runcheck returns=[Type]
 WORD swap
   [Any Any] barrier=0 +returnsfn
 WORD swap2

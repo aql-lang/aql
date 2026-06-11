@@ -23,7 +23,7 @@ import (
 // produce the reversed result.
 // integerOverflowError reports an int64 arithmetic overflow. Until
 // Integer becomes arbitrary-precision (Phase 1 of
-// design/INTEGER-OVERFLOW-STRATEGY.0.md), integer add/sub/mul/pow that
+// design/INTEGER-OVERFLOW-STRATEGY.5.md), integer add/sub/mul/pow that
 // cross the int64 range raise this rather than silently wrapping
 // two's-complement (the WAT Exhibit K bug). The policy is uniform across
 // every integer arithmetic word, mirroring the existing division-by-zero

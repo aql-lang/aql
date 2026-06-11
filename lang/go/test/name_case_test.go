@@ -8,7 +8,7 @@ import (
 
 // --- Naming rule: capitalisation selects type vs value binding ---
 //
-// `def` is the universal binder (design/TYPE-UNIFORM.0.md).
+// `def` is the universal binder (design/TYPE-UNIFORM.10.md).
 // The *name's capitalisation* selects what is bound: a capitalised
 // name is a TYPE binding, a lowercase name is a VALUE binding.
 
@@ -57,7 +57,7 @@ n`)
 // A capitalised def binding an object type absorbs the lattice-minting
 // that `type` does: typeof reports the bound name.
 func TestNameCase_DefUpperObjectMints(t *testing.T) {
-	got := runOne(t, `def Acct (refine Object {bal:Number})
+	got := runOne(t, `def Acct (class {bal:Number})
 make Acct {bal:1} typeof`)
 	if len(got) != 1 || got[0] != "Acct" {
 		t.Errorf("got %v, want [Acct]", got)

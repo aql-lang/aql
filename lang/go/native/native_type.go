@@ -13,7 +13,7 @@ import (
 // typeNatives covers the type-system words: refine, pathof, enum,
 // typeof, is, teq, tpartial, guard, base, tor, tand, tany, tall,
 // convert. New type ops follow the `t`-prefix convention — see
-// design/TYPE-OPERATIONS.0.md.
+// design/TYPE-OPERATIONS.8.md.
 //
 // `Resource` and `Entity` (the builtin object types) are NOT installed
 // via NativeFunc — they are user-typed values pushed onto the type
@@ -21,7 +21,7 @@ import (
 var typeNatives = []NativeFunc{
 	{
 		// refine is the uniform type constructor — see
-		// design/TYPE-UNIFORM.0.md. `refine BaseType arg`
+		// design/TYPE-UNIFORM.10.md. `refine BaseType arg`
 		// builds a (sub)type:
 		//   refine Object {fields}     → object type
 		//   refine <objtype> {fields}  → object subtype (inheritance)
@@ -55,6 +55,80 @@ var typeNatives = []NativeFunc{
 				RunInCheckMode: true, BarrierPos: -1,
 			},
 		},
+	},
+	{
+		// class {schema} — define a class type: a sealed nominal record
+		// minted under Ideal/Class. Schema entries: a TYPE value
+		// (`{name:String}`) declares a required field; a CONCRETE value
+		// (`{retries:3}`) declares a default (and the field's type is
+		// the value's own type). Instances are flat (defaults resolved
+		// eagerly at make) and sealed (writing an undeclared field is a
+		// sealed_field error). Subclassing reuses refine:
+		// `def Bar refine Foo {…}`. See design/CLASS-OBJECT.10.md.
+		Name: "class",
+
+		Signatures: []NativeSig{{
+			Args:           []*Type{TMap},
+			Handler:        classHandler,
+			Returns:        []*Type{TType},
+			RunInCheckMode: true, BarrierPos: -1,
+		}},
+	},
+	{
+		// surface {schema} — declare a pure operation contract: a map
+		// of operation name → fnsig shape with Self marking the
+		// conforming type's positions. `def Shape surface {…}` mints it
+		// under Ideal/Surface; `<Type> exposes Shape` declares (and
+		// loudly checks) conformance. See design/SURFACES.10.md.
+		Name: "surface",
+
+		Signatures: []NativeSig{{
+			Args:           []*Type{TMap},
+			Handler:        surfaceHandler,
+			Returns:        []*Type{TType},
+			RunInCheckMode: true, BarrierPos: -1,
+		}},
+	},
+	{
+		// <Type> exposes <Surface> — explicit conformance: check the
+		// overload table against every required shape (Self := Type;
+		// contravariant params, covariant returns) and register the
+		// type in the surface's conformance set. All-or-nothing, loud
+		// (surface_unsatisfied lists every gap), idempotent.
+		Name: "exposes",
+
+		Signatures: []NativeSig{{
+			Args:           []*Type{TAny, TAny},
+			Handler:        exposesHandler,
+			Returns:        []*Type{},
+			RunInCheckMode: true, BarrierPos: 1,
+		}},
+	},
+	{
+		// object {…} — construct a plain OPEN mutable keyed container,
+		// sugar for `make Object {…}`. Open (any key writes, computed
+		// keys via parens), fully enumerable, in-place set returning
+		// nothing — the keyed sibling of Array in the container 2x2.
+		// See design/CLASS-OBJECT.10.md §2.3.
+		Name: "object",
+
+		Signatures: []NativeSig{{
+			Args:    []*Type{TMap},
+			Handler: objectSugarHandler,
+			Returns: []*Type{TObject}, BarrierPos: -1,
+		}},
+	},
+	{
+		// array […] — construct a mutable Array, sugar for
+		// `make Array […]`. In-place bounds-checked set returning
+		// nothing — the indexed sibling of Object.
+		Name: "array",
+
+		Signatures: []NativeSig{{
+			Args:    []*Type{TList},
+			Handler: arraySugarHandler,
+			Returns: []*Type{TArray}, BarrierPos: -1,
+		}},
 	},
 	{
 		Name: "pathof",
@@ -187,6 +261,17 @@ var typeNatives = []NativeFunc{
 				Handler:   convertIdealHandler,
 				ReturnsFn: ReturnsIdentity(0), BarrierPos: -1,
 			},
+			// Map → Object (thaw): a fresh open mutable container
+			// seeded from the map — the inverse of `convert Map o`
+			// (freeze). Shallow, like the rest of the copy semantics.
+			{
+				Args:     []*Type{TObject, TMap},
+				TypeArgs: map[int]bool{0: true},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+					return MakeOpenObject(args[1])
+				},
+				Returns: []*Type{TObject}, BarrierPos: -1,
+			},
 			{
 				Args:      []*Type{TScalar, TMap, TScalar},
 				TypeArgs:  map[int]bool{0: true},
@@ -259,11 +344,32 @@ func tableHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 // constructor. It does not branch on the base type itself — dispatch
 // is data-driven through the Ideal registry (r.Ideals): whichever
 // type-kind claims the base value supplies the construction logic.
-// See design/IDEAL.0.md. `refine` does not bind — pair it
+// See design/IDEAL.10.md. `refine` does not bind — pair it
 // with `def` (`def Foo (refine …)`).
 func refineHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	base := args[0]
 	arg := args[1]
+	// A pending gen spec (the preceding `gen [...]`) turns this
+	// construction into a generic SCHEMA: the body is built with the
+	// placeholder bindings still live (so [value:T] resolves), then
+	// the bindings pop and the result wraps as a TypeSchema for
+	// InstallType. v1 supports Record schemas through refine; classes
+	// go through `class {...}`, fn shapes through `fnsig [...]`.
+	if spec := r.TakePendingGen(); spec != nil {
+		out, err := refinePlain(base, arg, r)
+		if err != nil {
+			PopGenBindings(r, spec)
+			return nil, err
+		}
+		if !IsRecordType(out[0]) {
+			return nil, genUnsupported(r, spec, "refine", out[0].String())
+		}
+		return genWrapSchema(r, spec, out[0], SchemaRecord)
+	}
+	return refinePlain(base, arg, r)
+}
+
+func refinePlain(base, arg Value, r *Registry) ([]Value, error) {
 	ideal := r.Ideals.For(base)
 	if ideal == nil {
 		// Distinguish a disabled kind from an unknown base.
@@ -290,7 +396,7 @@ func refineHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 // paired `def Name` then mints a fresh subtype parented at BaseType
 // (InstallType → MintType). `def Foo refine List` thus produces a
 // distinct List subtype that can serve as a dispatch surface for
-// `behave` — see design/TYPE-UNIFORM.0.md.
+// `behave` — see design/TYPE-UNIFORM.10.md.
 func refineBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	base := args[0]
 	if !IsTypeBody(base) {
@@ -322,16 +428,21 @@ func refineBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 // predicate, and the value-level Instantiate — are registered by the
 // eng kernel (registerKernelIdeals); type construction additionally
 // reuses the surface object/record/table handlers, wired here. See
-// design/IDEAL.0.md.
+// design/IDEAL.10.md.
 func installIdeals(r *Registry) {
 	if obj := r.Ideals.Get("Object"); obj != nil {
 		obj.Construct = func(base, arg Value, r *Registry) ([]Value, error) {
-			// A bare Object literal builds a fresh object type; an
-			// existing object type builds a subtype of it.
+			// An existing class type builds a subtype of it
+			// (`def Bar refine Foo {…}`). The bare-Object form is
+			// REMOVED: classes are defined with the `class` word
+			// (design/CLASS-OBJECT.10.md — no deprecated aliases).
 			if IsObjectType(base) {
 				return objectWithParentHandler([]Value{arg, base}, nil, nil, r)
 			}
-			return objectHandler([]Value{arg}, nil, nil, r)
+			return nil, r.AqlErrorHint("refine_error",
+				"refine Object is no longer the class form",
+				"refine",
+				"define a class instead: def Foo class {…}; subclass with def Bar refine Foo {…}")
 		}
 	}
 	if rec := r.Ideals.Get("Record"); rec != nil {
@@ -436,6 +547,13 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		latticeNode := b.Parent
 		return []Value{NewBoolean(a.Parent.Equal(latticeNode) || a.Parent.IsSubtypeOf(latticeNode))}, nil
 	}
+	// Surface RHS: membership is the conformance set, answered by the
+	// minted node's surfaceUnifier via the v.Is(t) doctrine — explicit
+	// `exposes` declarations only, walking a's parent chain so subclass
+	// instances of an exposer conform.
+	if IsSurfaceType(b) && b.Parent != nil {
+		return []Value{NewBoolean(a.Is(b.Parent))}, nil
+	}
 	// Note: a consolidation attempt to delegate structural-pattern
 	// RHS (typed list, typed map, record shape) to IsValueOfType was
 	// tried and reverted. `IsValueOfType` uses subset semantics on
@@ -483,6 +601,18 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 			// / `FunctionSignature`): plain subtype check on the
 			// value's Parent.
 			return []Value{NewBoolean(a.Parent.ConformsTo(bNode))}, nil
+		}
+		// A const singleton RHS answers membership through its own
+		// Behavior (the v.Is(t) doctrine): the plain inhabitant is a
+		// member (`1 is (typeof (const 1))` → true), everything else —
+		// including the cross-leaf 1.0 — is not. Other custom
+		// behaviors deliberately do NOT route here: bare-refine
+		// newtypes keep their strict-identity `is` via the Unify path
+		// below.
+		if canon := CanonicalType(r, bNode); canon != nil {
+			if cb, isConst := canon.Behavior.(constBehavior); isConst {
+				return []Value{NewBoolean(cb.Match(a, canon))}, nil
+			}
 		}
 		// Both sides are bare type literals: the question is purely
 		// lattice subtyping. Settle directly via IsSubtypeOf rather

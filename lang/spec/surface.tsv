@@ -1,0 +1,48 @@
+# AQL Language Specification: surfaces — pure operation contracts
+# Format: input<TAB>expected<TAB>description
+#
+# `def Shape surface {area: (fnsig [[Self] [Float]])}` declares a
+# surface: a named set of required operation shapes with no bodies and
+# no state, minted under Ideal/Surface. `Self` marks the positions the
+# conforming type occupies. Conformance is EXPLICIT — `Circle exposes
+# Shape` checks the overload table with Self := Circle substituted
+# (contravariant params, covariant returns) and errors loudly
+# (surface_unsatisfied, listing every gap) unless every operation is
+# satisfied. Membership (sig dispatch, `is`, unify, the tor/tand/tnot
+# algebra) is a parent-chain probe of the conformance set — no
+# structural duck typing. See design/SURFACES.10.md.
+#
+# §1  declaration
+def Shape surface {area: (fnsig [[Self] [Float]])} end Shape	surface<Surface/Shape>{area}	a surface renders as its contract
+def Shape surface {area: (fnsig [[Self] [Float]])} end typeof Shape	Shape	the def'd name is the type
+surface {}	ERROR:at least one operation	an empty schema is rejected
+surface {area: 1.0}	ERROR:must be an fnsig shape	operations must be fnsig shapes, not values
+surface [1 2]	ERROR:no matching signature	the schema must be a map (a list has no surface sig)
+#
+# §2  exposes — explicit conformance, checked loudly
+def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [(c get r) mul 2.0]] Circle exposes Shape end (make Circle {r:3.0}) is Shape	true	a checked exposer's instances are members
+def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} end (make Circle {}) is Shape	false	no exposes, no membership — even with the schema in reach
+def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} Circle exposes Shape	ERROR:no such word	a missing operation is a loud gap (name listed)
+def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [String] ['big']] Circle exposes Shape	ERROR:no signature satisfies	a wrong return type is a loud gap
+def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [1.0]] Circle exposes Shape Circle exposes Shape end (make Circle {}) is Shape	true	re-exposing is idempotent
+def Shape surface {area: (fnsig [[Self] [Float]])} 5 exposes Shape	ERROR:must be a named type	the left side must be a type
+def Circle class {r:1.0} Circle exposes Integer	ERROR:must be a surface	the right side must be a surface
+#
+# §3  membership — dispatch, subclasses, refined scalars
+def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [(c get r) mul 2.0]] Circle exposes Shape def total fn [[s:Shape] [Float] [area s]] end total (make Circle {r:4.0})	8.0	a surface-typed param dispatches on membership
+def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [1.0]] Circle exposes Shape def Disc refine Circle {} end (make Disc {r:1.0}) is Shape	true	subclass instances of an exposer conform
+def Shape surface {area: (fnsig [[Self] [Float]])} def Pos refine Integer def area fn [[p:Pos] [Float] [1.0]] Pos exposes Shape def x:Pos 5 end x is Shape	true	a refined scalar can expose a surface
+def Shape surface {area: (fnsig [[Self] [Float]])} def Pos refine Integer def area fn [[p:Pos] [Float] [1.0]] Pos exposes Shape end 5 is Shape	false	…and the bare base value does not conform (newtypes stay nominal)
+def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [1.0]] Circle exposes Shape end unify Shape (make Circle {})	Class/Circle{r:1.0} true	unify admits a member
+def Shape surface {area: (fnsig [[Self] [Float]])} unify Shape 5	'~unify-fail' false	unify rejects a non-member
+#
+# §4  algebra — tor / tand / tnot ride the same membership
+def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [1.0]] Circle exposes Shape def MaybeShape (Shape tor none) end (make Circle {}) is MaybeShape	true	a surface works as a disjunct alternative
+def Shape surface {area: (fnsig [[Self] [Float]])} def MaybeShape (Shape tor none) end none is MaybeShape	true	…with the other alternative intact
+def Shape surface {area: (fnsig [[Self] [Float]])} def MaybeShape (Shape tor none) end 5 is MaybeShape	false	…and non-members rejected
+def Shape surface {area: (fnsig [[Self] [Float]])} end Shape tand Shape	surface<Surface/Shape>{area}	a surface intersected with itself is itself
+def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [1.0]] Circle exposes Shape end Circle tand Shape	object<Class/Circle>{r:1.0}	an exposer is wholly contained — the type side wins
+def Shape surface {area: (fnsig [[Self] [Float]])} end Integer tand Shape	Never	a non-exposer intersects to Never
+def Shape surface {area: (fnsig [[Self] [Float]])} def Other surface {bulk: (fnsig [[Self] [Float]])} end Shape tand Other	Never	distinct surfaces have no representable intersection
+def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [1.0]] Circle exposes Shape def NotShape (tnot Shape) end (make Circle {}) is NotShape	false	the complement excludes members
+def Shape surface {area: (fnsig [[Self] [Float]])} def NotShape (tnot Shape) end 5 is NotShape	true	…and admits non-members

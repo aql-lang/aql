@@ -92,7 +92,7 @@ func DefaultProfile() *Profile {
 // NOT fail under `eval`, returns it unchanged — Reduce only shrinks
 // known counterexamples.
 //
-// Algorithms mirror design/aql_property_based_reduction_report.md:
+// Algorithms mirror design/aql_property_based_reduction_report.10.md:
 // §11 (greedy failure-preserving reduction) and §15 (best-first
 // search). Exact small-program enumeration (§16) remains future
 // work.

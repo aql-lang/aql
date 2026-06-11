@@ -221,6 +221,15 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo) 
 		// (fixes def leakage from fn bodies — DX-REPORT Issue 2).
 		defSnapshot := r.Defs.Snapshot()
 
+		// Generic fn: install the inferred type-parameter bindings for
+		// the body (`of [T]`, `make (Box of [T])`). AFTER the snapshot,
+		// so the existing DefCleanup truncation tears them down — the
+		// undef tail's capitalised path would Retire the bound type's
+		// canonical node (design/GENERICS.10.md Phase 4).
+		if fnDefCopy.Gen != nil {
+			InstallGenCallBindings(r, fnDefCopy.Gen, s.Params, args)
+		}
+
 		body := make([]Value, len(s.Body))
 		copy(body, s.Body)
 		result = append(result, body...)
@@ -282,6 +291,8 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 	bodyCopy := append([]Value(nil), s.Body...)
 	nameCopy := name
 	capturesCopy := fnDef.Captured
+	genSpec := fnDef.Gen
+	sigParams := append([]FnParam(nil), s.Params...)
 	return func(args []Value, _ *Registry) []Value {
 		// Pattern / record-shape check: for each declared
 		// record-typed param, verify the arg map carries each
@@ -337,6 +348,20 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				}
 			}
 		}
+		// Generic fns (Phase 5): infer the parameter bindings from the
+		// call's arg carriers and install them around the body
+		// analysis, so body-internal `of [T]` / `make (Box of [T])`
+		// resolve per call site — the FnSummaries memo key already
+		// includes the arg types, so each distinct instantiation is
+		// analysed once (monomorphization for free). The bindings are
+		// popped explicitly (Defs.Pop is non-retiring); there is no
+		// DefCleanup frame on this path.
+		var genBindings map[string]Value
+		var genNames []string
+		if genSpec != nil {
+			genBindings = InferGenBindings(genSpec, sigParams, args)
+			genNames = InstallGenBindingMap(r, genSpec, genBindings)
+		}
 		// Always analyse the body so diagnostics emitted by stepWord
 		// (undefined_word, no_signature, …) inside the body propagate
 		// up to the parent registry. When the fn declares an explicit
@@ -345,9 +370,51 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		// for its side-effecting diagnostic collection. Memoisation
 		// inside AnalyseFnBody keeps recursive / repeated calls cheap.
 		stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args, capturesCopy)
+		for i := len(genNames) - 1; i >= 0; i-- {
+			r.Defs.Pop(genNames[i])
+		}
 		if len(declaredReturns) > 0 {
 			out := make([]Value, len(declaredReturns))
 			for i, t := range declaredReturns {
+				// A return slot naming a type parameter refines to the
+				// call's inferred binding. An uninferable parameter is
+				// reported (unbound_param) and degrades to dynamic(Any)
+				// — never a silent strict Any.
+				if genSpec != nil {
+					if pname := TypeParamName(t); pname != "" {
+						if b, ok := genBindings[pname]; ok {
+							out[i] = GenBindingCarrier(r, b)
+							continue
+						}
+						// Dedupe identical emissions: the ReturnsFn runs
+						// once per analysed call shape AND once for the
+						// dynamic-help example generator's synthetic
+						// invocation at install — the same text twice
+						// helps nobody (the FnSummaries memo dedupes the
+						// body analysis but not this substitution).
+						detail := fmt.Sprintf(
+							"%s: type parameter %s cannot be inferred from this call's arguments — the declared return type is unknown here",
+							nameCopy, pname)
+						dup := false
+						for _, d := range r.Check.Diagnostics {
+							if d.Code == "unbound_param" && d.Detail == detail {
+								dup = true
+								break
+							}
+						}
+						if !dup {
+							r.Check.AddDiagnostic(CheckDiagnostic{
+								Code:   "unbound_param",
+								Detail: detail,
+								Word:   nameCopy,
+							})
+						}
+						c := NewCarrier(TAny)
+						c.Dynamic = true
+						out[i] = c
+						continue
+					}
+				}
 				out[i] = NewCarrier(t)
 			}
 			return out
@@ -559,7 +626,7 @@ func CowSet(store *StoreInstanceInfo, key string, val Value, r *Registry) {
 // host Ideal: an ExtensionPayload whose Body embeds eng.HostTypeBody.
 // The kernel recognises such a value as a type without inspecting its
 // concrete shape (the payload Body being opaque). See
-// design/IDEAL.0.md §6.
+// design/IDEAL.10.md §6.
 func IsHostTypeBody(v Value) bool {
 	ep, ok := v.Data.(ExtensionPayload)
 	if !ok {
@@ -623,6 +690,14 @@ func IsTypeBody(v Value) bool {
 	}
 	// Object type
 	if IsObjectType(v) {
+		return true
+	}
+	// Surface type (pure operation contract)
+	if IsSurfaceType(v) {
+		return true
+	}
+	// Generic type schema (gen [...] + constructor)
+	if IsTypeSchema(v) {
 		return true
 	}
 	// Dependent scalar type (Integer gt 10, String lt "z", …)
