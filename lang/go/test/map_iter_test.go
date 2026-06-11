@@ -106,6 +106,27 @@ func TestMapFold(t *testing.T) {
 	}
 }
 
+// scan is the running fold over a map's values, keeping the keys; the first
+// value seeds and is its key's output. scan's last value equals fold's result.
+func TestMapScan(t *testing.T) {
+	if got, _ := runMapIter(t, "{a:1 b:2 c:3} scan [add]"); got != "{a:1 b:3 c:6}" {
+		t.Errorf("scan [add] over a map = %q, want {a:1 b:3 c:6}", got)
+	}
+	if got, _ := runMapIter(t, "{a:1 b:2 c:3} scan ([acc:Integer kv:KeyVal] => [acc add kv.v])"); got != "{a:1 b:3 c:6}" {
+		t.Errorf("scan lambda over a map = %q, want {a:1 b:3 c:6}", got)
+	}
+	if got, _ := runMapIter(t, "{a:5} scan [add]"); got != "{a:5}" {
+		t.Errorf("scan over a singleton map = %q, want {a:5}", got)
+	}
+	if got, _ := runMapIter(t, "{} scan [add]"); got != "{}" {
+		t.Errorf("scan over an empty map = %q, want {}", got)
+	}
+	// A scan body that leaves nothing is an error (scan's body has two values).
+	if msg := runMapIterErr(t, "{a:1 b:2} scan [drop drop]"); !strings.Contains(msg, "body produced no result") {
+		t.Errorf("scan no-result error = %q, want 'body produced no result'", msg)
+	}
+}
+
 // keys / vals project a map to a list, in insertion order.
 func TestMapKeysVals(t *testing.T) {
 	if got, _ := runMapIter(t, "{a:1 b:2 c:3} keys"); got != "['a' 'b' 'c']" {

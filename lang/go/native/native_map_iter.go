@@ -206,6 +206,43 @@ func doFoldMap(reg *Registry, body, acc Value, data ReadMap, start int) ([]Value
 	return []Value{acc}, nil
 }
 
+// scanMapHandler is the running (prefix) fold over a map's values: the first
+// value seeds the accumulator and is the first output, then each later entry's
+// body result becomes that key's output. Keeps the map shape (keys preserved).
+// Backs the `[TList, TMap]` (quotation) and `[TFunction, TMap]` (lambda) sigs.
+func scanMapHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	data, err := requireConcreteMap(reg, args[1], "scan")
+	if err != nil {
+		return nil, err
+	}
+	mb, err := newMapBody(reg, args[0], "scan")
+	if err != nil {
+		return nil, err
+	}
+	keys := data.Keys()
+	out := NewOrderedMap()
+	if len(keys) == 0 {
+		return []Value{NewMap(out)}, nil
+	}
+	n := int64(len(keys))
+	acc, _ := data.Get(keys[0])
+	out.Set(keys[0], acc) // first value seeds and is the first output
+	for idx := 1; idx < len(keys); idx++ {
+		k := keys[idx]
+		v, _ := data.Get(k)
+		res, ok, err := mb.fold(reg, acc, k, v, int64(idx), n)
+		if err != nil {
+			return nil, fmt.Errorf("scan: key %q: %w", k, err)
+		}
+		if !ok {
+			return nil, reg.AqlError("scan_error", fmt.Sprintf("scan: key %q: body produced no result", k), "scan")
+		}
+		acc = res
+		out.Set(k, acc)
+	}
+	return []Value{NewMap(out)}, nil
+}
+
 // keysHandler returns a map's keys as a list, in insertion order.
 func keysHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	data, err := requireConcreteMap(reg, args[0], "keys")

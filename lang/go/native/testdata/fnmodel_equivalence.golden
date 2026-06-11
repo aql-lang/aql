@@ -453,6 +453,8 @@ WORD roll
 WORD rot
   [Any Any Any] barrier=0 +returnsfn
 WORD scan
+  [Type/Function Node/Map] barrier=2 returns=[Node/Map]
+  [Node/List Node/Map] barrier=2 noeval={0} returns=[Node/Map]
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
 WORD selector
   [Node/Map Any] barrier=2

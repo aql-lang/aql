@@ -359,12 +359,19 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "scan",
 
-		Signatures: []NativeSig{{
-			Args:       []*Type{TList, TList},
-			NoEvalArgs: map[int]bool{0: true},
-			Handler:    scanHandler,
-			ReturnsFn:  scanReturnsFn, BarrierPos: -1,
-		}},
+		Signatures: []NativeSig{
+			{
+				Args:       []*Type{TList, TList},
+				NoEvalArgs: map[int]bool{0: true},
+				Handler:    scanHandler,
+				ReturnsFn:  scanReturnsFn, BarrierPos: -1,
+			},
+			// Map forms — running fold over a map's values (the first value
+			// seeds), keeping the map shape. Quotation: acc beneath, value on
+			// top; lambda: (acc, KeyVal).
+			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Handler: scanMapHandler, Returns: []*Type{TMap}, BarrierPos: -1},
+			{Args: []*Type{TFunction, TMap}, Handler: scanMapHandler, Returns: []*Type{TMap}, BarrierPos: -1},
+		},
 	},
 	{
 		Name: "outer",

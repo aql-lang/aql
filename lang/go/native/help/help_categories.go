@@ -59,7 +59,7 @@ var categories = []Category{
 	{"query", "Query pipelines, iteration, and modules.", []string{
 		"select", "from", "where", "order", "limit", "offset", "distinct",
 		"group", "having", "join", "union", "unify", "module", "import",
-		"export", "each", "for-each", "fold", "filter",
+		"export", "each", "for-each", "fold", "scan", "filter",
 	}},
 	{"io", "Input and output.", []string{
 		"print", "printstr", "read", "write", "trace", "stdin", "stdout",

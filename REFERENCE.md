@@ -1248,7 +1248,7 @@ iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 |------|-------------|---------|
 | `each` | Map a function | `[1,2,3] each [dup mul]` |
 | `fold` | Reduce with accumulator | `fold [add] [1,2,3] 0` returns `6` |
-| `scan` | Running fold | `scan [add] [1,2,3]` |
+| `scan` | Running (prefix) fold | `scan [add] [1,2,3]` returns `[1,3,6]` |
 | `filter` | Keep elements where a predicate holds | `filter [2 gt] [1,2,3,4]` returns `[3,4]` |
 | `outer` | Outer product | `outer [mul] [3,4] [1,2]` |
 | `inner` | Inner product | `inner [add] [mul] [3,4] [1,2]` |
@@ -1289,18 +1289,20 @@ into the signature: `fold` takes `body data init`, `scan` takes
 > The lens form reads a field: `filter $.active accounts` keeps the
 > elements whose `.active` is `true`.
 
-> **Map iteration.** `each`, `for-each`, and `fold` also take a map,
-> iterating its entries in insertion order. The quotation form gets each
-> entry's **value** (the key is preserved); a lambda gets a `KeyVal`
-> `{k v i n}` — `k` key, `v` value, `i` 0-based index, `n` total — so it
-> can use the key/index/total. `each` and `filter` keep the map shape,
-> `fold` reduces to one value, `for-each` produces nothing. To leave the
-> map and get a list, use `keys` / `vals`:
+> **Map iteration.** `each`, `for-each`, `fold`, `scan`, and `filter`
+> also take a map, iterating its entries in insertion order. The
+> quotation form gets each entry's **value** (the key is preserved); a
+> lambda gets a `KeyVal` `{k v i n}` — `k` key, `v` value, `i` 0-based
+> index, `n` total — so it can use the key/index/total. `each`, `scan`,
+> and `filter` keep the map shape, `fold` reduces to one value,
+> `for-each` produces nothing. To leave the map and get a list, use
+> `keys` / `vals`:
 >
 > ```
 > {a:1 b:2 c:3} each [mul 10]                       # returns {a:10 b:20 c:30}
 > {a:1 b:2} each ([kv:KeyVal] => [kv.v add kv.i])   # returns {a:1 b:3}
 > fold [add] {a:1 b:2 c:3} 0                        # returns 6
+> {a:1 b:2 c:3} scan [add]                          # returns {a:1 b:3 c:6}  (running fold)
 > {a:1 b:2 c:3} keys                                # returns ['a' 'b' 'c']
 > {a:1 b:2 c:3} vals                                # returns [1 2 3]
 > ```

@@ -181,6 +181,23 @@ func init() {
 	})
 
 	register(&Entry{
+		Word:    "scan",
+		Summary: "Running (prefix) fold: every intermediate accumulator, as a list or map.",
+		Description: "Like fold, but returns each successive accumulator instead of only the " +
+			"final one — a running total. The first element seeds the accumulator and is the " +
+			"first output; each later step runs the body with (accumulator, element) — same " +
+			"stack order as fold — and records the new accumulator. scan's last element " +
+			"equals fold's result. Unlike fold there is no init form: scan always seeds from " +
+			"the first element (empty input gives an empty result). Over a map it scans the " +
+			"values, keeping the keys; a lambda body gets (accumulator, KeyVal).",
+		Examples: []string{
+			`scan [add] [1 2 3]        ;# => [1 3 6]   (running sums)`,
+			`scan [mul] [1 2 3 4]      ;# => [1 2 6 24]  (running products)`,
+			`{a:1 b:2 c:3} scan [add]  ;# => {a:1 b:3 c:6}  (map: running fold over values)`,
+		},
+	})
+
+	register(&Entry{
 		Word:    "filter",
 		Summary: "Keep the elements (or map entries) for which a predicate holds.",
 		Description: "Three predicate forms. Quotation: `filter [body] xs` runs the body " +
