@@ -2333,6 +2333,11 @@ func kernelFormatDefault(v Value) string {
 	case IsError(v):
 		_as3, _ := AsError(v)
 		return fmt.Sprintf("error(%s)", _as3.Message)
+	case IsNone(v):
+		// The VALUE none (NonePayload, Data non-nil) — lowercase, like
+		// the source literal and eng.Canon. The None TYPE literal has
+		// Data==nil and takes the next arm, rendering capital `None`.
+		return "none"
 	case v.Data == nil:
 		// Type literal (or carrier) with no specific value — render as
 		// the type's leaf name; type names are globally unique so the
