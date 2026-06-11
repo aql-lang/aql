@@ -139,6 +139,58 @@ func containsFlex(v Value) bool {
 	return false
 }
 
+// AdoptIntoFlex normalises a value being STORED INTO a flex container
+// (set / push / unshift / append) so a flex tree stays ENTIRELY
+// mutable — the flex column's half of the "never mixed" invariant
+// (design/FLEX-NODES.10.md):
+//
+//   - a concrete plain Map/List is deep-flex-copied. Without this the
+//     tree goes mixed, and a later write into the immutable inner is
+//     COPY-RETURNING and silently lost: `set a {b:1} f` then
+//     `set b 9 f.a` left f.a.b at 1. The copy also keeps the
+//     no-aliasing construction rule — the source literal/value is
+//     never shared.
+//   - a value that is already a flex node passes through as a SHARED
+//     handle: both trees stay entirely mutable, and sharing what the
+//     caller explicitly passes mirrors the class-default rule
+//     (schema defaults freshen; provided values share).
+//   - scalars, Ideal instances (Array/Store/objects — the documented
+//     shared-identity column), and map/list-family TYPE BODIES
+//     (records, options, child constraints — values here, nothing to
+//     flex) pass through unchanged.
+func AdoptIntoFlex(v Value) (Value, error) {
+	if IsFlexNode(v) {
+		return v, nil
+	}
+	if !IsConcrete(v) {
+		return v, nil
+	}
+	if v.Parent.ConformsTo(TMap) {
+		if m, err := AsMap(v); err == nil && m != nil {
+			return FlexDeepCopy(v)
+		}
+		return v, nil
+	}
+	if v.Parent.ConformsTo(TList) {
+		if lst, err := AsList(v); err == nil && !lst.IsNil() {
+			return FlexDeepCopy(v)
+		}
+		return v, nil
+	}
+	return v, nil
+}
+
+// AdoptIntoNode is the dual for values stored into PLAIN Map/List
+// containers (the copy-returning set / push / unshift): any flex
+// inside is deep-copied to its immutable shape, so an "immutable"
+// container can never change underneath through a live flex handle.
+// A value with no flex anywhere inside is returned unchanged —
+// sharing immutable structure is safe (NodeDeepCopy's identity fast
+// path).
+func AdoptIntoNode(v Value) (Value, error) {
+	return NodeDeepCopy(v)
+}
+
 // MakeNodeHandler is the 2-arg [Node, Any] make handler (TypeArgs at
 // position 0). It owns the Node-family targets:
 //

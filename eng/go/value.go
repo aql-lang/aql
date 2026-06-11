@@ -209,6 +209,14 @@ type FnParam struct {
 	Type     *Type
 	Pattern  *Value // optional: map/list pattern for structural matching
 	Optional bool   // true if this param was marked optional via ?
+	// Quote marks a /q param (`name:Atom/q` in an AQL input sig): the
+	// slot captures an upcoming bare Word as its Atom NAME during
+	// collection — the arg is presented as if quoted — with the same
+	// binding-agnostic rule native QuoteArgs slots follow (`def`,
+	// `inspect`, `quote`: the capture trumps any def binding of the
+	// word). normalizeSig merges the flag into Signature.QuoteArgs,
+	// which is the field every dispatch-side reader consults.
+	Quote bool
 }
 
 // BarrierAllForward is the canonical sentinel for "no `|` boundary
@@ -749,6 +757,24 @@ type ForwardInfo struct {
 	FuncIndex int
 	Sig       *Signature // the matched signature, for direct execution on completion
 	Pos       SrcPos     // source position of the forward-collecting word, for errors
+
+	// Speculative records the planner's stop condition for the arrival
+	// loop (design/FORWARD-COLLECTION-PHASES.10.md): matchSignature
+	// filled at least one forward slot with a WORD bound to a
+	// dispatching definition (an FnDefInfo binding accepted through the
+	// Any-slot escape) — the plan treats that token as an operand, but
+	// at runtime it dispatches as an operator. SpeculativeAt is the
+	// sig-order index of the first such slot and is meaningful only
+	// when Speculative is set (the bool guards the int so the struct's
+	// zero value means "none" — No-Zero-Overload rule). The index is
+	// plan-side bookkeeping: under zero/multi-value paren collapse the
+	// arrival count can drift from plan positions, so consumers may use
+	// it for tracing/diagnostics, never for slot arithmetic. The
+	// commitBarrierForward scan must NOT be gated on this field — the
+	// barrier commit doubles as zero-value-collapse recovery where the
+	// plan had no speculative word at all.
+	Speculative   bool
+	SpeculativeAt int
 }
 
 // Value is the single node type of the AQL kernel: it is at once a
@@ -2304,6 +2330,14 @@ type formatDelegatesToDefault interface {
 // without recursing through Value.String.
 func kernelFormatDefault(v Value) string {
 	switch {
+	case IsBoundedType(v):
+		// `Type of [B]` renders as the suffix sugar B/t — the shortest
+		// round-trippable spelling, mirroring atoms rendering as name/q.
+		n, err := AsBoundedType(v)
+		if err != nil {
+			return "Type"
+		}
+		return n.Leaf() + "/t"
 	case IsWord(v):
 		w, _ := AsWord(v)
 		return fmt.Sprintf("word(%s)", w.Name)
@@ -2333,6 +2367,11 @@ func kernelFormatDefault(v Value) string {
 	case IsError(v):
 		_as3, _ := AsError(v)
 		return fmt.Sprintf("error(%s)", _as3.Message)
+	case IsNone(v):
+		// The VALUE none (NonePayload, Data non-nil) — lowercase, like
+		// the source literal and eng.Canon. The None TYPE literal has
+		// Data==nil and takes the next arm, rendering capital `None`.
+		return "none"
 	case v.Data == nil:
 		// Type literal (or carrier) with no specific value — render as
 		// the type's leaf name; type names are globally unique so the
@@ -2401,9 +2440,19 @@ func kernelFormatDefault(v Value) string {
 			val, _ := allFields.Get(k)
 			parts = append(parts, k+":"+val.String())
 		}
-		name := oi.TypeRef.Name
-		if name == "" {
+		// An OPEN object (`object {…}` / `make Object {…}`) carries no
+		// TypeRef by design — render it under its lattice leaf instead
+		// of dereferencing the absent schema (was a SIGSEGV).
+		name := ""
+		switch {
+		case oi.TypeRef != nil && oi.TypeRef.Name != "":
+			name = oi.TypeRef.Name
+		case oi.TypeRef != nil:
 			name = "Ideal/Object/" + oi.TypeRef.ID
+		case v.Parent != nil:
+			name = v.Parent.Leaf()
+		default:
+			name = "Object"
 		}
 		return name + "{" + strings.Join(parts, " ") + "}"
 	case IsObjectType(v):

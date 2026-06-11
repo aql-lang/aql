@@ -35,6 +35,14 @@ func TraceColorize(v Value) string {
 		return cYellow + w.Name + cReset
 	case IsForward(v):
 		f, _ := AsForward(v)
+		// A speculative forward (a slot the plan filled with a word
+		// that will dispatch rather than arrive) is marked spec@k so
+		// the plan-vs-arrival divergence is visible in traces. See
+		// design/FORWARD-COLLECTION-PHASES.10.md.
+		if f.Speculative {
+			return cMagenta + fmt.Sprintf("→%s(%d/%d spec@%d)",
+				f.FuncName, f.CollectedArgs, f.ExpectedArgs, f.SpeculativeAt) + cReset
+		}
 		return cMagenta + fmt.Sprintf("→%s(%d/%d)", f.FuncName, f.CollectedArgs, f.ExpectedArgs) + cReset
 	case IsOpenParen(v):
 		return cDim + "(" + cReset

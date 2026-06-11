@@ -53,7 +53,7 @@ cd aql/cmd/go && go install ./aql
 
 aql -version
 aql                                 # start the REPL
-aql do '1 add 2'                    # one-shot expression
+aql do 'add 1 2'                    # one-shot expression
 aql script.aql                      # run a file
 aql check script.aql                # type-check without running
 aql fmt script.aql                  # format in place (always rewrites)
@@ -90,7 +90,7 @@ nothing is supplied.
 
 ```bash
 aql                         # REPL
-aql -e '1 add 2'            # prints "3"
+aql -e 'add 1 2'            # prints "3"
 aql script.aql              # runs the file
 aql -check script.aql       # type-check first, then run
 aql -e '...' -r ./registry  # with a custom registry
@@ -106,7 +106,7 @@ shell-friendly than `aql -e` because positional words don't need
 extra quoting.
 
 ```bash
-aql do 1 add 2                  # prints 3
+aql do add 1 2                  # prints 3
 aql do '"aql:string-util" import end "hello" StringUtil.upper'  # prints HELLO
 aql do 'iota 5 each [dup mul]'  # prints [0 1 4 9 16]
 ```
@@ -163,7 +163,7 @@ program's own output:
 
 ```bash
 aql --check script.aql       # check, then run; abort on any error
-aql --check -e '1 add 2'     # one-shot, checked first
+aql --check -e 'add 1 2'     # one-shot, checked first
 ```
 
 **In your editor.** `aql lsp` publishes these same diagnostics as you
@@ -337,9 +337,15 @@ aql vault init                          # initialise, pick backend
 aql vault add --from-clipboard github_token   # read from clipboard, then wipe it
 aql vault add --from-stdin github_token       # read one line from stdin
 aql vault add github_token                     # prompt (input not echoed)
-aql vault list                          # aliases and metadata
+aql vault add --expiry=90d --from-stdin github_token  # optional expiry reminder
+aql vault list                          # aliases and metadata (incl. EXPIRES)
 aql vault get github_token              # redacted by default
 aql vault get github_token --reveal     # show the value
+aql vault expiry                        # list pending key expiries, soonest first
+aql vault expiry --namespace=proj       # filter expiries by namespace
+aql vault expiry --within=30d           # only keys due within 30 days (or overdue)
+aql vault expiry set github_token 2026-12-31  # set/replace an expiry
+aql vault expiry clear github_token     # remove an expiry
 aql vault rm github_token               # remove (also: remove, delete)
 aql vault mv github_token proj:gh       # rename / move between namespaces (also: rename)
 aql vault mv proj: team:                # rename a whole namespace
@@ -357,6 +363,10 @@ aql vault policy apply policy.aql       # declaratively apply policy
 aql vault proxy                         # run local credential broker (loopback only)
 aql vault mcp                           # stdio MCP server over aliases
 aql vault exec gh,openai -- mycmd       # run mycmd with secrets in env
+
+# Custom location: a folder and/or an inner file-name suffix, by flag or env.
+aql vault --folder=/secure/vault --suffix=work init   # vault at /secure/vault/vault.work.*
+AQL_VAULT_FOLDER=/secure/vault AQL_VAULT_SUFFIX=work aql vault list
 ```
 
 The secret value is never taken as a command-line argument — that
@@ -387,6 +397,31 @@ namespace. `vault exec proj:key -- cmd` injects the secret as `$key` —
 the env name derives from the base name. Policy files take names
 literally (no default applied), so a committed policy means the same
 thing on every machine.
+
+**Expiries.** A key can carry an optional expiry — a reminder of when
+the upstream credential lapses so you can rotate it in time. Set one at
+`add` time with `--expiry`, on rotation with `rotate --expiry`, or any
+time with `vault expiry set <alias> <when>`; clear it with `vault
+expiry clear`. `<when>` is a calendar date (`2026-12-31`), an RFC3339
+timestamp, or a duration from now with day support (`90d`, `720h`,
+`30d12h`). Expiry is purely informational and **never enforced** — an
+expired alias still resolves, since the real key may outlive the
+estimate. `vault list` shows an `EXPIRES` column, and `vault expiry`
+reports the keys that have one, soonest (and most overdue) first, with
+a human status (`in 90d`, `expired 3d ago`). Narrow it with
+`--namespace=NS` (`:` = root) or `--within=DURATION` (keys due inside a
+window, plus anything already overdue).
+
+**Custom location.** By default the vault lives in `~/.aql` with files
+named `vault.<part>` (`vault.jsonic`, `vault.keyring`, `vault.lock`,
+`vault.audit.jsonl`). Two knobs override this: `--folder`/`AQL_VAULT_FOLDER`
+puts the vault in a folder you choose, and `--suffix`/`AQL_VAULT_SUFFIX`
+names the files `vault.<suffix>.<part>` so several vaults can share one
+folder without colliding (a flag wins over the matching env var). The
+flags are global — place them before the mode (`aql vault --folder=PATH
+add …`) — and apply to one invocation, so pass the same folder and
+suffix (or export the env vars) to every command that touches that
+vault.
 
 The store (`vault.jsonic`) and the secret keyring are separate files,
 written one after the other; each write is atomic and fsync-durable
@@ -519,15 +554,15 @@ Every command that builds a `lang.AQL` accepts these flags:
 Environment fallbacks (consulted when no `--perms*` flag is set):
 
 ```bash
-AQL_POLICY=sandbox aql do '1 add 2'
+AQL_POLICY=sandbox aql do 'add 1 2'
 AQL_POLICY_FILE=./prod.jsonic aql script.aql
 ```
 
 Examples:
 
 ```bash
-aql do --perms=sandbox 1 add 2
-aql -e '1 add 2' --perms=read-only
+aql do --perms=sandbox add 1 2
+aql -e 'add 1 2' --perms=read-only
 aql exec -p 8091 --perms=sandbox          # bound at startup; immutable per request
 aql do --perms=sandbox --allow=engine.shell true
 aql exec --perms=trusted --no-install=network --no-install=sqlite
@@ -628,7 +663,7 @@ Example:
 ```bash
 curl -s -X POST http://127.0.0.1:8091/v1/exec \
   -H 'Content-Type: application/json' \
-  -d '{"code": "1 add 2"}'
+  -d '{"code": "add 1 2"}'
 # {"result":3,"stack":[3]}
 ```
 
@@ -694,7 +729,7 @@ there.
 Plain AQL expressions work as usual; exit with Ctrl-D (EOF):
 
 ```
->> 1 add 2
+>> add 1 2
 3
 >> /stack
   [0] 3

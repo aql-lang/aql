@@ -274,6 +274,54 @@ func ofHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		return []Value{NewGenInstRef(GenInstRef{Head: head, Args: argv})}, nil
 	}
 
+	// `Type of [B]` — Type as a builtin schema: the type of TYPE
+	// LITERALS conforming to B. This is the referent of the /t word
+	// suffix and the angle form (`Map/t` ≡ `Type<Map>` ≡
+	// `(Type of [Map])`). The bound must denote a single lattice node
+	// (a builtin or a NAMED user type, including named disjuncts);
+	// structural bodies have no single node to conform to.
+	if IsBareTypeNode(head) && head.ID == TType.ID {
+		if len(argv) != 1 {
+			return nil, r.AqlError("type_error",
+				fmt.Sprintf("of: Type takes exactly one bound, got %d", len(argv)), "of")
+		}
+		// A NAMED type as the bound (incl. a named disjunct) must bind
+		// to its MINTED lattice node — resolveTypeArg resolves a name
+		// to its BODY (the right thing for schema instantiation), but
+		// ConformsTo needs the node identity. The /t desugar delivers
+		// the name as an ATOM precisely so it reaches here unresolved.
+		var boundName string
+		switch raw := lst.Get(0); {
+		case IsAtom(raw):
+			boundName, _ = AsAtom(raw)
+		case IsWord(raw):
+			w, _ := AsWord(raw)
+			boundName = w.Name
+		}
+		if boundName != "" {
+			// Minted user types first: a BODY type (named disjunct,
+			// predicate) carries its body so satisfaction can unify
+			// against it; a nominal type (refine) carries its literal.
+			if def := r.LookupTypeName(boundName); def != nil {
+				if body, ok := r.TopTypeBody(boundName); ok && !IsBareTypeNode(body) {
+					return []Value{NewBoundedTypeBody(def, body)}, nil
+				}
+				return []Value{NewBoundedType(def)}, nil
+			}
+			// Kernel / builtin names.
+			if bt, terr := resolveTypeName(boundName); terr == nil && bt != nil {
+				return []Value{NewBoundedType(bt)}, nil
+			}
+		}
+		bound := argv[0]
+		if !IsBareTypeNode(bound) {
+			return nil, r.AqlErrorHint("type_error",
+				fmt.Sprintf("of: Type bound must be a named type, got %s", bound.String()), "of",
+				"hint: name a structural bound first — def MapOrList (Map tor List), then MapOrList/t")
+		}
+		return []Value{NewBoundedType(CanonicalType(r, &bound))}, nil
+	}
+
 	var info *TypeSchemaInfo
 	switch {
 	case IsTypeSchema(head):

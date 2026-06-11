@@ -11,8 +11,8 @@ includes a REPL, a type checker, a formatter, an LSP server, a
 registry client, a secrets vault, and a multi-service supervisor.
 
 > **Notation.** In code, a trailing `# returns …` comment shows what an
-> expression evaluates to (`4 square  # returns 16`); in prose we say
-> "`4 square` returns `16`". The comment is ordinary documentation — `#`
+> expression evaluates to (`square 4  # returns 16`); in prose we say
+> "`square 4` returns `16`". The comment is ordinary documentation — `#`
 > just begins a line comment — not special syntax. (We deliberately
 > avoid an `=>` arrow for results: `=>` is real syntax in AQL, the
 > anonymous-function arrow, sugar for the word `afn`.)
@@ -24,8 +24,8 @@ registry client, a secrets vault, and a multi-service supervisor.
 sub 3 10                             # all-forward
 
 # typed functions, lists, maps, records, concurrency
-def square fn [[x:Number] [Number] [x mul x]]
-4 square                             # returns 16
+def square fn [[x:Number] [Number] [mul x x]]
+square 4                             # returns 16
 
 [1, 2, 3] each [dup mul]             # returns [1 4 9]
 {name: "Ada"} . name                 # returns 'Ada'
@@ -33,7 +33,7 @@ def square fn [[x:Number] [Number] [x mul x]]
 def Point refine Record [x:Number y:Number]
 make Point [3 4]                     # returns {x:3 y:4}
 
-"aql:time-util" import end TimeUtil.await [[1 add 2] [3 add 4]]    # returns [3 7]
+"aql:time-util" import end TimeUtil.await [[add 1 2] [add 3 4]]    # returns [3 7]
 
 # macros: add new syntax in AQL itself (hygienic; this one expands to an `if`)
 def unless (macro [[c body] [quote [if unquote c [] unquote body]]])
@@ -58,7 +58,7 @@ Then:
 
 ```bash
 aql                                  # start the REPL
-aql do '1 add 2'                     # one-shot expression
+aql do 'add 1 2'                     # one-shot expression
 aql script.aql                       # run a file
 aql check script.aql                 # type-check, don't run
 aql fmt script.aql                   # format in place (always rewrites)

@@ -93,6 +93,7 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 			Returns:    returns,
 			Body:       bodyElems,
 			BarrierPos: barrierPos,
+			QuoteArgs:  QuoteArgsFromParams(params),
 		})
 	}
 	return FnDefInfo{Signatures: sigs}, nil

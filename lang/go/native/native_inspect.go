@@ -1,5 +1,7 @@
 package native
 
+import "github.com/aql-lang/aql/eng/go"
+
 // inspectNatives installs `inspect` — the machine-readable
 // counterpart of `help` for words, values, and types.
 //
@@ -44,6 +46,28 @@ var inspectNatives = []NativeFunc{
 			{Args: []*Type{TAny}, Handler: inspectTypeHandler, Returns: []*Type{TInspect}, BarrierPos: -1},
 		},
 	},
+
+	// canon — render any value as canonical AQL source (eng.CanonValue):
+	// the same renderer the spec suites and the doc-example harness
+	// compare against. For DATA values — scalars, atoms (`name/q`),
+	// paths, none, type literals, plain and flex Node trees — the
+	// result is ROUND-TRIPPABLE source: evaluating it (e.g. via
+	// `Vm.run`) reproduces an equivalent value, with flexness marked at
+	// every level (`(flex {a:(flex [1])})`). Values whose identity is
+	// the live container (Store, Array, object instances, functions,
+	// timers) still render, but rebuilding them from source produces a
+	// FRESH thing — identity does not round-trip, only the rendering.
+	{
+		Name: "canon",
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TAny}, Handler: canonHandler, Returns: []*Type{TString}, BarrierPos: -1},
+		},
+	},
+}
+
+func canonHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	return []Value{NewString(eng.CanonValue(args[0]))}, nil
 }
 
 func inspectAtomHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

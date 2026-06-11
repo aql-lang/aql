@@ -975,6 +975,96 @@ def dblcall2 fn [[n:Number, cb:Function] [Number] [n add n cb]] dblcall2 4 (fn [
 # args works alongside named params: x by name, z via args.2
 def add3 fn [[x:Number, y:Number, z:Number] [Number] [x add y add (args.2)]] 1 2 3 add3	6
 
+# === Lambda arrow: SIG => BODY groups as (SIG afn BODY) ===
+
+# single typed param without brackets — the pair closes on =>
+def double (x:Integer => [x mul 2]) double 1	2
+(x:Integer => [x mul 2]) 5	10
+5 (x:Integer => [x mul 2])	10
+# …equivalent to the bracketed form
+def double ([x:Integer] => [x mul 2]) double 1	2
+# the arrow binds tighter than the enclosing word's collection, so the
+# parens are optional: def binds the LAMBDA, not the sig literal
+def double x:Integer => [x mul 2] end double 7	14
+def d [x:Integer] => [x mul 2] end d 3	6
+def f x:Integer => [x mul 2] def g y:Integer => [y add 1] g (f 5)	11
+# parenless lambda as a higher-order argument
+filter p:Any => [p.value gt 3] [1 2 3 4 5]	[4 5]
+# currying: the chain nests right-associatively, and afn's body slot
+# captures parens RAW (per-call code), so the inner lambda constructs
+# inside the outer body with x bound
+def mk x:Integer => y:Integer => [x add y] end def a2 (mk 2) end a2 3	5
+def mk a:Integer => b:Integer => c:Integer => [a add b add c] end ((mk 1) 2) 3	6
+# …the explicit list-wrapped inner form still works
+def mk x:Integer => [(y:Integer => [x add y])] end def a2 (mk 2) end a2 3	5
+# a raw paren body may reference params (it runs per call)
+(x:Integer => (x mul 2)) 5	10
+# multi-param needs brackets: in the bare form each pair closes
+# separately, so the first param strands as a stray map and the body's
+# reference to it is undefined — write ([x:Integer y:Integer] => body)
+(x:Integer y:Integer => [x add y]) 2 3		undefined_word
+([x:Integer y:Integer] => [x add y]) 2 3	5
+
+# === /q signature params: name:Atom/q captures the upcoming word ===
+
+# the slot takes a bare word as its atom name (native QuoteArgs parity)
+def f fn [[n:Atom/q] [Atom] [n]] f hello	hello
+# Atom/q subsumes Atom: an explicit atom is accepted too
+def f fn [[n:Atom/q] [Atom] [n]] f hello/q	hello
+# the capture trumps any def binding of the word
+def hello 99 def f fn [[n:Atom/q] [Atom] [n]] f hello	hello
+def vs word [2,3] def f fn [[n:Atom/q] [Atom] [n]] f vs	vs
+# unnamed form
+def f fn [[Atom/q] [Atom] [args.0]] f world	world
+# a following param collects normally after the captured name
+def kv fn [[k:Atom/q v:Any] [Any] [v]] kv color 7	7
+# lambda sigs share the same param parser
+(k:Atom/q => [k]) hi	hi
+# an atom that names no type is NOT a /q declaration (reserved space)
+def f fn [[foo/q] [Any] [args.0]] f x		fn_spec_error
+
+# === Type-valued params: t:Type, the /t bound, and Type<B> ===
+
+# t:Type admits exactly what `is Type` admits (one membership question
+# at params, is, and returns — the refine doctrine)
+def f fn [[t:Type] [Any] [t]] f Map	Map
+def f fn [[t:Type] [Any] [t]] f 5		signature_error
+def f fn [[t:Type] [Any] [t]] f {a:1}		signature_error
+def fresh fn [[t:Type coll:List] [Any] [make t coll]] fresh List [1,2]	[1 2]
+def choose fn [[b:Boolean] [Type] [if b [Map] [List]]] choose true	Map
+# /t bounds the slot to literals conforming to B: Map/t ≡ Type<Map>
+# ≡ (Type of [Map])
+def f fn [[t:Map/t] [Any] [t]] f Map	Map
+def f fn [[t:Map/t] [Any] [t]] f List		signature_error
+def f fn [[t:Map/t] [Any] [t]] f {a:1}		signature_error
+def Pos (refine Integer) def f fn [[t:Integer/t] [Any] [t]] f Pos	Pos
+# a named disjunct bound admits exactly its alternatives' literals
+def MapOrList (Map tor List) def f fn [[t:MapOrList/t] [Any] [t]] f List	List
+def MapOrList (Map tor List) def f fn [[t:MapOrList/t] [Any] [t]] f Map	Map
+def MapOrList (Map tor List) def f fn [[t:MapOrList/t] [Any] [t]] f Integer		signature_error
+def MapOrList (Map tor List) def f fn [[t:MapOrList/t] [Any] [t]] f {a:1}		signature_error
+def MapOrList (Map tor List) def fresh fn [[t:MapOrList/t x:Any] [Any] [make t x]] fresh Map {a:1}	{a:1}
+# the same question everywhere: is
+Map is Type	true
+Map is Map/t	true
+List is Map/t	false
+5 is Map/t	false
+def MapOrList (Map tor List) List is MapOrList/t	true
+def MapOrList (Map tor List) Integer is MapOrList/t	false
+# the sugar chain is real, with structural identity
+Type<Map>	Map/t
+Type of [Map]	Map/t
+Map/t eq (Type of [Map])	true
+Map/t eq List/t	false
+# /t combines with no other modifier; a non-type bound errors in `of`
+Map/tq		undefined_word
+foo/t		type_error
+# inline disjuncts now CONSTRAIN (previously a silent Any wildcard)
+def g fn [[x:(Integer tor String)] [Any] [x]] g 5	5
+def g fn [[x:(Integer tor String)] [Any] [x]] g true		signature_error
+# a failed paren annotation is a def-time error (previously silent Any)
+def g fn [[x:(Map|List)] [Any] [x]] g 5		fn_spec_error
+
 # === Forward argument distribution (forward-first, then stack reversed) ===
 
 # 1-arg forward function: all calling patterns

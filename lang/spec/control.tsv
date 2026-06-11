@@ -26,3 +26,24 @@ false guard 42	None	yields None when the condition fails
 # §5  truthiness — if coerces its condition
 if 1 [1] [2]	1	non-zero is truthy → then
 if none [1] [2]	2	None is falsy → else
+#
+# §6  statement-boundary commit — an else-less `if` whose args arrived
+# via evaluation (a paren condition) fires when the NEXT function word
+# begins its own dispatch, instead of waiting to swallow that
+# statement's result as a phantom else. A guard therefore raises
+# BEFORE a following def's body can run (the bloom-filter report #1),
+# and a value-producing statement after the guard keeps its result.
+def n 0 if (n eq 0) [99] add 1 2	99 3	guard fires at the barrier; add's result is not swallowed as the else
+def n 5 if (n eq 0) [99] add 1 2	3	false guard: then-branch skipped, the next statement still runs
+def f fn [[n:Integer] [Integer] [ if (n eq 0) [raise "zero"] def q (10 div n) q ]] f 0	ERROR:zero	the guard's raise pre-empts the def body's division by zero
+def f fn [[n:Integer] [Integer] [ if (n eq 0) [raise "zero"] def q (10 div n) q ]] f 5	2	the unguarded path still computes through the def
+def n 0 if (n eq 0) [99] def q 1 q	99 1	a following def runs AFTER the guard, not before
+# a parenthesised expression is NOT a barrier — it still arrives as the else
+if (1 eq 1) [99] (add 1 2)	99	paren else collected; true discards it
+if (1 eq 2) [99] (add 1 2)	3	paren else collected; false yields it
+# …and the statement-boundary commit composes with the core definition
+# idiom: a def-fn AFTER the guard still defines (fn's speculative fill
+# is untouched — the smaller-arity probe fails for def, so it waits for
+# fn's result as always).
+def n 0 if (n eq 0) [99] def sq fn [[x:Integer] [Integer] [mul x x]] sq 5	99 25	guard fires first, then the def-fn idiom proceeds
+def n 5 if (n eq 0) [99] def sq fn [[x:Integer] [Integer] [mul x x]] sq 5	25	false guard: definition and call unaffected

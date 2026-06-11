@@ -71,6 +71,35 @@ transitively immutable. A container with **no** flex anywhere inside is
 returned unchanged (identity), preserving container-identity equality
 for `node plainmap`.
 
+### Writes ADOPT — trees stay entirely one column
+
+Conversion alone doesn't keep the invariant: every Node-column WRITE
+also normalises the value it stores (June 2026; the bloom-filter
+follow-up "flex and node must not be shallow"). Two adopters in
+`eng/go/core_flex.go`, applied in every Node-column write handler
+(`set` on FlexMap/FlexList/Map/List, `push`/`unshift` in both columns,
+`append` element and list-splat):
+
+- **`AdoptIntoFlex`** — a plain concrete Map/List stored into a flex
+  container is `FlexDeepCopy`'d. Without it the tree went MIXED and a
+  later write into the immutable inner was copy-returning and
+  silently lost (`set a {b:1} f` then `set b 9 f.a` left `f.a.b` at
+  1). An already-flex value passes through as a SHARED handle — both
+  trees stay entirely mutable, and sharing what the caller explicitly
+  passes mirrors the class-default rule (schema defaults freshen,
+  provided values share). Scalars, Ideal instances (the identity
+  column), and map/list-family type bodies pass through.
+- **`AdoptIntoNode`** — a value stored into a PLAIN Map/List is
+  `NodeDeepCopy`'d, so an "immutable" container can never change
+  underneath through a live flex handle; flex-free values share
+  structure unchanged (the identity fast path).
+
+The asymmetry (flex-into-flex shares; flex-into-plain snapshots) is
+forced by the invariants themselves: a shared handle keeps a flex
+tree entirely mutable, but would break a plain tree's immutability.
+Construction literals (`[h 2]` embedding a live handle) are NOT
+adopted — `node` exists for that. Pinned in `lang/spec/flex.tsv` §12.
+
 Scalars and non-Node payloads (Object, Array, Store, Function, …) pass
 through both conversions unchanged: scalars are immutable, and
 pointer-backed Ideals already have documented shared-mutation

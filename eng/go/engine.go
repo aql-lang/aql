@@ -853,6 +853,43 @@ func rawFormForward(fn *FnDefInfo, pos int) bool {
 	return false
 }
 
+// bindsReferent reports whether the named word is a BINDER whose operand
+// slot copies a word's binding rather than its expansion. `def y xs` with
+// xs splice-bound must rebind the marker itself — the new name ALIASES the
+// splice — because expanding there would lose the referent (and code-bearing
+// splices already alias on def by skipping expansion, so this keeps data and
+// code splices consistent at binders). This is the one deliberate exception
+// to the `f w ≡ f (w)` equivalence; write `def y (xs)` to force expansion.
+// def is frozen (reserved_word), so the name is a reliable identity.
+func bindsReferent(name string) bool {
+	return name == "def"
+}
+
+// capturesForward reports whether any of fn's signatures captures the
+// forward operand at sig position pos STRUCTURALLY — /q word-name capture
+// (QuoteArgs), raw paren capture (RawParens), macro form capture (FormArgs),
+// or type-literal capture (TypeArgs) — rather than as an ordinary value.
+// Gates the splice-word paren expansion in resolveForwardArgs: capture slots
+// take the token itself (the word's name, the raw form) regardless of any
+// def binding, so the `f w ≡ f (w)` equivalence deliberately does not apply
+// there (`quote vs` captures the NAME vs even when vs is splice-bound —
+// word-splice spec §3).
+func capturesForward(fn *FnDefInfo, pos int) bool {
+	if fn == nil {
+		return false
+	}
+	for i := range fn.Signatures {
+		sig := &fn.Signatures[i]
+		if sig.QuoteArgs != nil && sig.QuoteArgs[pos] {
+			return true
+		}
+		if sigRawSlot(sig, pos) {
+			return true
+		}
+	}
+	return false
+}
+
 // pendingForwardWantsRawParen reports whether the nearest enclosing pending
 // Forward (collecting args at the pointer) was matched to a signature that
 // captures a ParenExpr raw. When true, a ParenExpr reached during forward
@@ -1006,6 +1043,30 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 			continue
 		}
 
+		// Interpolated template string: an expression, not a value — its
+		// type is only knowable after evaluation (always a String).
+		// Treated like a paren group: when a still-viable overload
+		// consumes this position, evaluate it in place so a typed slot
+		// (`raise` msg:String, `add`'s Scalar overload) sees the String
+		// it will actually receive. Left raw, the token's internal
+		// InterpString type would prune every typed signature and a
+		// `raise `bad: ${x}`` mis-dispatched to the 0-arg fallback.
+		if IsInterpString(tok) {
+			if !viableConsumes(pos) {
+				break
+			}
+			result, err := e.evalInterpString(tok)
+			if err != nil {
+				return err
+			}
+			result.Pos = tok.Pos
+			e.stack[scanIdx] = result
+			pruneViable(pos, result)
+			pos++
+			scanIdx++
+			continue
+		}
+
 		// Paren expression value (paren-nesting Step 3): expand it back to
 		// its OpenParen … CloseParen marker span in place, then re-process
 		// — the IsOpenParen branch above collapses it on THIS engine. See
@@ -1037,6 +1098,32 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 			info, _ := AsReach(tok)
 			stackSplice(&e.stack, scanIdx, 1, expandReach(info)...)
 			continue
+		}
+
+		// A word def-bound to a DATA __SP splice marker occupies its
+		// forward position as the paren group (w) — the `f w ≡ f (w)`
+		// equivalence: a plain (non-function) def-bound word expands into
+		// the token stream wherever it stands. Rewriting the token to
+		// ParenExpr([w]) and reprocessing routes it through the ParenExpr/
+		// OpenParen branches above, so evaluation gating, multi-value
+		// collapse, and raw-capture handling are byte-identical to a
+		// written (w). Two exemptions: structural-capture slots (/q takes
+		// the word's NAME, form/raw/type slots take the raw token — see
+		// capturesForward), code-bearing splices (Forth-style macros
+		// that must run against the live stack — see spliceIsData), and
+		// binder operands (`def y xs` rebinds the MARKER so y aliases the
+		// splice — see bindsReferent).
+		if IsWord(tok) && !bindsReferent(fn.Name) && !capturesForward(fn, pos) {
+			if wi, werr := AsWord(tok); werr == nil {
+				if top, ok := e.registry.Defs.Top(wi.Name); ok && IsSplice(top) {
+					if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {
+						pe := NewParenExpr([]Value{tok})
+						pe.Pos = tok.Pos
+						e.stack[scanIdx] = pe
+						continue
+					}
+				}
+			}
 		}
 
 		// Non-group token. A concrete literal carries a final type that
@@ -1169,6 +1256,18 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 		case IsDefCleanup(v):
 			e.stepDefCleanup(v)
 			e.pointer++
+		case IsInterpString(v):
+			// Mirror the main loop: evaluate the template in place and
+			// re-step the resulting string (no pointer advance), so a
+			// paren-wrapped template — `raise (`bad: ${x}`)` — collapses
+			// to a String rather than a raw InterpString token.
+			result, err := e.evalInterpString(v)
+			if err != nil {
+				e.pointer = savedPointer
+				return err
+			}
+			result.Pos = v.Pos
+			e.stack[e.pointer] = result
 		default:
 			if err := e.stepLiteral(); err != nil {
 				e.pointer = savedPointer
@@ -1193,84 +1292,102 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 // here: the parser emits them as typed OpenParen / CloseParen / End
 // values, and the Run-loop switch dispatches them directly. stepWord
 // therefore deals only with regular named words.
+// stepWordUsurp handles the /u (ForceUsurp) word modifier: resolve the
+// name to its bound Function value and wrap it so its signature
+// argument order is reversed (usurped a b c ≡ f c b a). Like /r, /u is
+// legal only for function words. /u alone dispatches the wrapper
+// immediately (like a bare word); /ur (combined with /r) leaves the
+// wrapper on the stack as inert data.
+func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
+	v, ok := ResolveUsurp(e.registry, w.Name)
+	if !ok {
+		if e.registry != nil && e.registry.Check.IsActive() {
+			e.registry.Check.AddDiagnostic(CheckDiagnostic{
+				Code:   "undefined_word",
+				Detail: "undefined word: " + w.Name,
+				Word:   w.Name,
+				Row:    val.Pos.Row,
+				Col:    val.Pos.Col,
+			})
+			placeholder := NewAtom(w.Name)
+			placeholder.Pos = val.Pos
+			placeholder.Undefined = true
+			e.stack[e.pointer] = placeholder
+			return e.stepLiteral()
+		}
+		return &AqlError{
+			Code:       "undefined_word",
+			Detail:     "undefined word: " + w.Name,
+			Src:        w.Name,
+			Row:        val.Pos.Row,
+			Col:        val.Pos.Col,
+			fullSource: e.effectiveSource(),
+		}
+	}
+	// /u may usurp only function words — a non-fn binding has no
+	// signature to reverse. ResolveUsurp returns the raw binding in
+	// that case so the IsFunctionRef check below raises illegal_ref.
+	if !IsFunctionRef(v) {
+		detail := "/u requires a function word: " + w.Name + " is bound to " + v.Parent.String()
+		if e.registry != nil && e.registry.Check.IsActive() {
+			e.registry.Check.AddDiagnostic(CheckDiagnostic{
+				Code:   "illegal_ref",
+				Detail: detail,
+				Word:   w.Name,
+				Row:    val.Pos.Row,
+				Col:    val.Pos.Col,
+			})
+			placeholder := NewAtom(w.Name)
+			placeholder.Pos = val.Pos
+			placeholder.Undefined = true
+			e.stack[e.pointer] = placeholder
+			return e.stepLiteral()
+		}
+		return &AqlError{
+			Code:       "illegal_ref",
+			Detail:     detail,
+			Src:        w.Name,
+			Row:        val.Pos.Row,
+			Col:        val.Pos.Col,
+			fullSource: e.effectiveSource(),
+		}
+	}
+	v.Pos = val.Pos
+	if w.ForceRef {
+		// /ur: leave the usurped wrapper as inert data (mirrors /r) — it
+		// still dispatches if args follow or it is later stepped. As
+		// DATA it is a legitimate arrival for a pending forward, so no
+		// barrier commit here.
+		e.stack[e.pointer] = v
+		if e.recorder != nil && isRecordableLiteral(v) {
+			e.recorder.OnPushLit(v)
+		}
+		e.pointer++
+		return nil
+	}
+	// /u alone dispatches the wrapper like a bare function word — a
+	// statement boundary. Commit the nearest parked forward that can
+	// already fire BEFORE rewriting the token (mirroring the bare-word
+	// hook in stepWord); without this, the /u path bypassed the
+	// barrier and `if (c) [t] sub/u 10 3` swallowed the usurped
+	// wrapper as a phantom else instead of running it. On commit the
+	// loop re-steps this /u word with no forward pending.
+	if e.commitBarrierForward() {
+		return nil
+	}
+	e.stack[e.pointer] = v
+	// Dispatch the unquoted wrapper now: stepLiteral routes it through
+	// execFnDefLiteral, which forward-collects any trailing args.
+	return e.stepLiteral()
+}
+
 func (e *Engine) stepWord(val Value) error {
 	w, _ := AsWord(val)
 
-	// /u modifier: resolve the name to its bound Function value and wrap it
-	// so its signature argument order is reversed (usurped a b c ≡ f c b a).
-	// Like /r, /u is legal only for function words. /u alone dispatches the
-	// wrapper immediately (like a bare word); /ur (combined with /r) leaves
-	// the wrapper on the stack as inert data. Handled before the /r branch
+	// /u modifier — see stepWordUsurp. Handled before the /r branch
 	// so the /ur combo usurps rather than plain-referencing.
 	if w.ForceUsurp {
-		v, ok := ResolveUsurp(e.registry, w.Name)
-		if !ok {
-			if e.registry != nil && e.registry.Check.IsActive() {
-				e.registry.Check.AddDiagnostic(CheckDiagnostic{
-					Code:   "undefined_word",
-					Detail: "undefined word: " + w.Name,
-					Word:   w.Name,
-					Row:    val.Pos.Row,
-					Col:    val.Pos.Col,
-				})
-				placeholder := NewAtom(w.Name)
-				placeholder.Pos = val.Pos
-				placeholder.Undefined = true
-				e.stack[e.pointer] = placeholder
-				return e.stepLiteral()
-			}
-			return &AqlError{
-				Code:       "undefined_word",
-				Detail:     "undefined word: " + w.Name,
-				Src:        w.Name,
-				Row:        val.Pos.Row,
-				Col:        val.Pos.Col,
-				fullSource: e.effectiveSource(),
-			}
-		}
-		// /u may usurp only function words — a non-fn binding has no
-		// signature to reverse. ResolveUsurp returns the raw binding in
-		// that case so the IsFunctionRef check below raises illegal_ref.
-		if !IsFunctionRef(v) {
-			detail := "/u requires a function word: " + w.Name + " is bound to " + v.Parent.String()
-			if e.registry != nil && e.registry.Check.IsActive() {
-				e.registry.Check.AddDiagnostic(CheckDiagnostic{
-					Code:   "illegal_ref",
-					Detail: detail,
-					Word:   w.Name,
-					Row:    val.Pos.Row,
-					Col:    val.Pos.Col,
-				})
-				placeholder := NewAtom(w.Name)
-				placeholder.Pos = val.Pos
-				placeholder.Undefined = true
-				e.stack[e.pointer] = placeholder
-				return e.stepLiteral()
-			}
-			return &AqlError{
-				Code:       "illegal_ref",
-				Detail:     detail,
-				Src:        w.Name,
-				Row:        val.Pos.Row,
-				Col:        val.Pos.Col,
-				fullSource: e.effectiveSource(),
-			}
-		}
-		v.Pos = val.Pos
-		e.stack[e.pointer] = v
-		if w.ForceRef {
-			// /ur: leave the usurped wrapper as inert data (mirrors /r) — it
-			// still dispatches if args follow or it is later stepped.
-			if e.recorder != nil && isRecordableLiteral(v) {
-				e.recorder.OnPushLit(v)
-			}
-			e.pointer++
-			return nil
-		}
-		// /u alone: dispatch the unquoted wrapper now, exactly like a bare
-		// function word — stepLiteral routes it through execFnDefLiteral,
-		// which forward-collects any trailing args.
-		return e.stepLiteral()
+		return e.stepWordUsurp(val, w)
 	}
 
 	// /r modifier: resolve the name to its bound Function value as data,
@@ -1410,6 +1527,33 @@ func (e *Engine) stepWord(val Value) error {
 		case FnDefInfo, *ObjectTypeInfo:
 			// Not a simple value — fall through to Lookup.
 		default:
+			// f w ≡ f (w): a word bound to a DATA __SP splice marker that
+			// is being collected by a pending forward expands as the paren
+			// group (w) instead of substituting the raw marker — the
+			// payload's values arrive from a barrier-protected segment (a
+			// multi-value splice fills several slots, exactly as the
+			// written form does; without this the marker itself would be
+			// collected into an Any slot or implicit-end a typed one). The
+			// /q and FormArgs intercepts above this block keep their
+			// word-capture semantics; a raw-paren-capturing forward
+			// collects the wrapped (w) as code via stepLiteral's existing
+			// ParenExpr gate; code-bearing splices keep their live-stack
+			// macro semantics (spliceIsData); and a pending BINDER
+			// collects the raw marker so `def y xs` rebinds it — the new
+			// name aliases the splice (bindsReferent). Inside the group
+			// the OpenParen barrier hides the pending forward, so the
+			// re-stepped word takes the standalone splice-fire path — no
+			// recursion (and recordUse fires on that inner step).
+			if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {
+				if fwdIdx := e.pendingForwardIdx(); fwdIdx >= 0 {
+					if fwd, ferr := AsForward(e.stack[fwdIdx]); ferr == nil && !bindsReferent(fwd.FuncName) {
+						pe := NewParenExpr([]Value{val})
+						pe.Pos = val.Pos
+						e.stack[e.pointer] = pe
+						return e.stepLiteral()
+					}
+				}
+			}
 			// Record the substitution as a "use" for unused-def
 			// tracking in check mode.
 			e.registry.Check.recordUse(w.Name)
@@ -1434,17 +1578,18 @@ func (e *Engine) stepWord(val Value) error {
 		// User-code dispatch — record the name as "used" for
 		// unused-def analysis in check mode.
 		e.registry.Check.recordUse(w.Name)
-		// Policy gate: consult the engine scope before dispatching.
-		// Skips check mode (static analysis should see every word so
-		// type-checking remains meaningful) and engine markers
-		// (`__`-prefixed, used by internal lowering — never directly
-		// addressable from user code).
-		if !e.registry.Check.IsActive() && !isInternalMarker(w.Name) {
-			if wc := LookupWordChecker(e.registry); wc != nil {
-				if err := wc.CheckWord(w.Name); err != nil {
-					return err
-				}
-			}
+		if err := e.policyGateWord(w.Name); err != nil {
+			return err
+		}
+		// Statement boundary: a function word beginning its own dispatch
+		// is a forward-collection barrier (the argument-order rule), so
+		// first commit the nearest ARRIVAL-parked forward that can
+		// already fire — otherwise an optional trailing slot (an
+		// else-less `if`'s else) swallows this statement's result, or
+		// this statement runs before a guard's then-branch does. See
+		// commitBarrierForward.
+		if e.commitBarrierForward() {
+			return nil
 		}
 		// Macro dispatch (design/MACROS-PHASE1.10.md §5): a macro word is
 		// applied to its raw operands ahead on the tape — BEFORE preEvalParens
@@ -1536,7 +1681,7 @@ func (e *Engine) stepWord(val Value) error {
 
 	// Unified signature matching: one path for all words.
 	resolved := e.effectiveResolved()
-	sig, positions := e.matchSignature(fn, w, resolved)
+	sig, positions, specAt := e.matchSignature(fn, w, resolved)
 
 	// Retry fallback for words with forward-collecting sigs: when
 	// nearest-first matching fails, retry with deepest-first
@@ -1545,7 +1690,7 @@ func (e *Engine) stepWord(val Value) error {
 	if sig == nil && fn.HasForwardSigs() && !w.ForceStack {
 		wDeep := w
 		wDeep.ForceStack = true
-		sig, positions = e.matchSignature(fn, wDeep, resolved)
+		sig, positions, specAt = e.matchSignature(fn, wDeep, resolved)
 	}
 
 	// In check mode, if matchSignature fell through to the 0-arg /
@@ -1631,7 +1776,7 @@ func (e *Engine) stepWord(val Value) error {
 	// Forward collection needed: defer execution.
 	if fwdCount > 0 {
 		e.traceNote = "forward→ " + traceSigStr(w.Name, sig)
-		return e.insertForward(w, sig, fwdCount, stkCount)
+		return e.insertForward(w, sig, fwdCount, stkCount, specAt)
 	}
 
 	// Immediate execution: read args from recorded positions.
@@ -2063,11 +2208,7 @@ func (e *Engine) forceStackWord(idx int, w WordInfo) {
 	e.stack[idx].Pos = pos // preserve source position across force-stack rewrite
 }
 
-func (e *Engine) insertForward(w WordInfo, sig *Signature, forwardNeeded int, stackArgs ...int) error {
-	pArgs := 0
-	if len(stackArgs) > 0 {
-		pArgs = stackArgs[0]
-	}
+func (e *Engine) insertForward(w WordInfo, sig *Signature, forwardNeeded, stackArgs, specAt int) error {
 	var pos SrcPos
 	if e.pointer >= 0 && e.pointer < len(e.stack) {
 		pos = e.stack[e.pointer].Pos
@@ -2075,10 +2216,15 @@ func (e *Engine) insertForward(w WordInfo, sig *Signature, forwardNeeded int, st
 	fwd := NewForward(ForwardInfo{
 		FuncName:     w.Name,
 		ExpectedArgs: forwardNeeded,
-		StackArgs:    pArgs,
+		StackArgs:    stackArgs,
 		FuncIndex:    e.pointer,
 		Sig:          sig,
 		Pos:          pos,
+		// The plan's stop condition, threaded from matchSignature:
+		// specAt >= 0 means slot specAt was planned from a word that
+		// will DISPATCH rather than arrive (see ForwardInfo docs).
+		Speculative:   specAt >= 0,
+		SpeculativeAt: max(specAt, 0),
 	})
 
 	stackInsert(&e.stack, e.pointer+1, fwd)
@@ -2101,6 +2247,42 @@ func spliceExpand(data Value) []Value {
 		return out
 	}
 	return []Value{data}
+}
+
+// spliceIsData reports whether an __SP marker's payload expands to plain
+// VALUES only — no words, paren groups, reaches, or interpolated strings at
+// the top level (the level `word` splices; nested lists stay values). A data
+// splice contributes the same values in any context, so the `f w ≡ f (w)`
+// paren expansion of a splice-bound word in a forward-argument position is
+// sound for it. A code-bearing splice is a Forth-style macro that runs
+// against the LIVE stack — paren isolation would change its meaning (`def
+// inc word [1 add]  1 inc inc inc` needs each `add` to see the caller's
+// values) — so it stays on the existing standalone-fire / boundary-word
+// paths; group explicitly (`f (p)`) to use its result as an operand.
+func spliceIsData(info SpliceInfo) bool {
+	for _, el := range spliceExpand(info.Data) {
+		if IsWord(el) || IsParenExpr(el) || IsReach(el) || IsInterpString(el) || IsSplice(el) {
+			return false
+		}
+	}
+	return true
+}
+
+// pendingForwardIdx returns the stack index of the nearest pending Forward
+// below the pointer, stopping at an OpenParen barrier; -1 when none. This is
+// the "is the value at the pointer being collected?" probe shared by
+// stepLiteral's collection dispatch and the splice-word paren expansion in
+// stepWord's def-substitution branch.
+func (e *Engine) pendingForwardIdx() int {
+	for i := e.pointer - 1; i >= 0; i-- {
+		if IsOpenParen(e.stack[i]) {
+			return -1
+		}
+		if IsForward(e.stack[i]) {
+			return i
+		}
+	}
+	return -1
 }
 
 func (e *Engine) stepLiteral() error {
@@ -2133,16 +2315,7 @@ func (e *Engine) stepLiteral() error {
 	}
 
 	// Look backwards for the nearest forward entry, stopping at open-paren barriers.
-	fwdIdx := -1
-	for i := valIdx - 1; i >= 0; i-- {
-		if IsOpenParen(e.stack[i]) {
-			break
-		}
-		if IsForward(e.stack[i]) {
-			fwdIdx = i
-			break
-		}
-	}
+	fwdIdx := e.pendingForwardIdx()
 
 	if fwdIdx < 0 {
 		// __SP (splice) marker: replace it, unevaluated, with its payload
@@ -2640,7 +2813,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	}
 
 	resolved := e.effectiveResolved()
-	sig, positions := e.matchSignature(fn, w, resolved)
+	sig, positions, specAt := e.matchSignature(fn, w, resolved)
 
 	// Retry fallback for words with forward-collecting sigs: when
 	// nearest-first matching fails, retry with deepest-first
@@ -2648,7 +2821,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	if sig == nil && fn.HasForwardSigs() && !w.ForceStack {
 		wDeep := w
 		wDeep.ForceStack = true
-		sig, positions = e.matchSignature(fn, wDeep, resolved)
+		sig, positions, specAt = e.matchSignature(fn, wDeep, resolved)
 	}
 
 	// Function-value dispatch does NOT fire Fallback sigs. Fallback
@@ -2706,7 +2879,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// the body / handler runs.
 	if fwdCount > 0 {
 		stkCount := len(positions) - fwdCount
-		return e.insertForward(w, sig, fwdCount, stkCount)
+		return e.insertForward(w, sig, fwdCount, stkCount, specAt)
 	}
 
 	// All args resolved on the stack. Anonymous FnDefs (no Go
@@ -3396,6 +3569,172 @@ func (e *Engine) implicitEnd(fwdIdx int) error {
 
 	e.curryOrStack(funcIdx, collectedCount, stackArgCount)
 	return nil
+}
+
+// policyGateWord consults the engine scope's word policy before a
+// registered word dispatches. Skips check mode (static analysis should
+// see every word so type-checking remains meaningful) and engine
+// markers (`__`-prefixed, used by internal lowering — never directly
+// addressable from user code).
+func (e *Engine) policyGateWord(name string) error {
+	if e.registry.Check.IsActive() || isInternalMarker(name) {
+		return nil
+	}
+	if wc := LookupWordChecker(e.registry); wc != nil {
+		return wc.CheckWord(name)
+	}
+	return nil
+}
+
+// commitBarrierForward applies the argument-order rule's "another
+// function word is a barrier" to a Forward that is parked waiting for
+// ARRIVALS (its args came from paren results rather than the token
+// walk, so the walk-time barrier check never saw the boundary). Called
+// from stepWord when a function word is about to begin its own
+// dispatch: if the nearest pending forward in the current paren scope
+// can already fire with the args it holds — the same dispatch an
+// explicit `end` would trigger — it is committed NOW, and the current
+// word re-steps afterwards.
+//
+// This is what makes an else-less guard fire before the next statement
+// runs: in `if (bad) [raise …] def q (10 div n)`, the parked `if`
+// previously kept waiting for a possible else while `def` ran first —
+// so the div-by-zero pre-empted the guard's raise, and any
+// value-producing statement could be swallowed into the else slot. A
+// pending forward that CANNOT yet fire keeps waiting, since its
+// missing args may be the very results the stepping word produces
+// (`add 1 def x 5 x` still binds x and completes add).
+//
+// Returns true when a forward was committed; the caller must return
+// to the engine loop (the pointer has moved to the committed word).
+func (e *Engine) commitBarrierForward() bool {
+	// Nearest pending forward, stopping at open-paren scope barriers —
+	// the same scan stepEnd performs.
+	fwdIdx := -1
+	for i := e.pointer - 1; i >= 0; i-- {
+		if IsOpenParen(e.stack[i]) {
+			break
+		}
+		if IsForward(e.stack[i]) {
+			fwdIdx = i
+			break
+		}
+	}
+	if fwdIdx < 0 {
+		return false
+	}
+
+	fwd, _ := AsForward(e.stack[fwdIdx])
+	funcIdx := fwd.FuncIndex
+	claimed := fwd.CollectedArgs + fwd.StackArgs
+	if claimed == 0 {
+		// Nothing collected yet — no smaller-arity dispatch to commit.
+		return false
+	}
+	if funcIdx < 0 || funcIdx >= len(e.stack) || !IsWord(e.stack[funcIdx]) {
+		return false
+	}
+	w, _ := AsWord(e.stack[funcIdx])
+	fn := e.registry.Lookup(w.Name)
+	if fn == nil {
+		return false
+	}
+
+	// Probe: would the parked word dispatch with ONLY its claimed args
+	// (collected forward + claimed stack)? Deliberately tighter than a
+	// whole-scope match — an implicit commit must not reach below the
+	// args the word actually claimed. The claimed region sits directly
+	// below the word: stack args first, then collected forward args in
+	// arrival order (first-collected deepest) — which IS sig order, the
+	// layout MatchSignature reads bottom-first.
+	start := funcIdx - claimed
+	if start < 0 {
+		return false
+	}
+	var resolved []Value
+	for i := start; i < funcIdx; i++ {
+		v := e.stack[i]
+		if IsForward(v) || IsOpenParen(v) || IsMark(v) || IsMove(v) {
+			continue
+		}
+		resolved = append(resolved, v)
+	}
+	if len(resolved) == 0 {
+		return false
+	}
+	testW := WordInfo{Name: w.Name, ArgCount: -1, ForceStack: true}
+	m := MatchSignature(fn.Signatures, resolved, testW)
+	if m == nil || m.Sig == nil {
+		return false
+	}
+	// The commit must consume EXACTLY the claimed args through a real
+	// overload. AQL-bodied fns carry a synthetic 0-arg Fallback in the
+	// aggregate dispatch table (it exists to raise a clean
+	// "no matching signature" error); matching it here would commit a
+	// waiting word to its own failure — `g 1 def x 5 x` must keep
+	// waiting for def's result when g has only a 2-arg overload, not
+	// error at the boundary. Likewise a shorter real overload must not
+	// fire while claimed args would be stranded.
+	if m.Sig.Fallback || m.Sig.TotalArgs() != len(resolved) {
+		return false
+	}
+
+	// The commit is correct; in check mode additionally leave a
+	// non-gating note when the parked plan was SPECULATIVE — the
+	// else-less-guard shape, where the planner had filled a trailing
+	// slot from the very word now acting as the boundary. Emitted
+	// before the mechanics below so e.pointer still names the
+	// boundary word.
+	e.noteSpeculativeBarrierCommit(fwd)
+
+	// Commit exactly like the collection-complete path (stepLiteral's
+	// CollectedArgs >= ExpectedArgs branch): drop the marker, force the
+	// word to stack mode, and rearrange so the first-collected forward
+	// arg sits on top — the engine matcher's top-first read then sees
+	// the args in sig order. (NOT curryOrStack: its rearrange is gated
+	// on StackArgs > 0, so a purely-arrival forward would re-dispatch
+	// with its collected args reversed.)
+	stackRemove(&e.stack, fwdIdx)
+	if fwdIdx < funcIdx {
+		funcIdx--
+	}
+	if funcIdx < len(e.stack) && IsWord(e.stack[funcIdx]) {
+		e.forceStackWord(funcIdx, w)
+	}
+	e.pointer = funcIdx
+	e.rearrangeForForward(fwd.StackArgs, fwd.CollectedArgs)
+	return true
+}
+
+// noteSpeculativeBarrierCommit emits the speculative_forward_commit
+// advisory (check mode only, info severity, never gating): a parked
+// word committed at a statement boundary AND its plan had filled a
+// forward slot with a dispatching word — the else-less-guard shape.
+// The commit resolves it correctly; the note exists because the
+// source reads ambiguously, and an explicit `[]` else (or `end`)
+// states the intent. Structurally silent on the `def name fn […]`
+// idiom: there the smaller-arity probe FAILS, no commit happens, and
+// this helper is never reached.
+func (e *Engine) noteSpeculativeBarrierCommit(fwd ForwardInfo) {
+	if e.registry == nil || !e.registry.Check.IsActive() || !fwd.Speculative {
+		return
+	}
+	detail := fwd.FuncName + " committed with " +
+		strconv.Itoa(fwd.CollectedArgs+fwd.StackArgs) + " argument(s) at a statement boundary"
+	if e.pointer >= 0 && e.pointer < len(e.stack) {
+		if bw, err := AsWord(e.stack[e.pointer]); err == nil {
+			detail += " (`" + bw.Name + "`)"
+		}
+	}
+	detail += " — its trailing slot " + strconv.Itoa(fwd.SpeculativeAt) +
+		" was planned from the following word; an explicit `[]` else or `end` makes the intent loud"
+	e.registry.Check.AddDiagnostic(CheckDiagnostic{
+		Code:   "speculative_forward_commit",
+		Detail: detail,
+		Word:   fwd.FuncName,
+		Row:    fwd.Pos.Row,
+		Col:    fwd.Pos.Col,
+	})
 }
 
 // stepEnd handles the "end" keyword.
@@ -4289,13 +4628,22 @@ func (e *Engine) hasPendingForwardExpectingFunction() bool {
 // This is implemented as one outer loop over signatures and one inner
 // loop over parameters. No separate functions are called for matching.
 //
-// Returns: matched signature and arg positions (absolute stack indices
-// in signature order). Positions > pointer are forward args that need
-// deferred collection. Positions < pointer are stack args. Returns nil
-// sig if no signature matches.
+// Returns: matched signature, arg positions (absolute stack indices
+// in signature order), and the speculation marker. Positions > pointer
+// are forward args that need deferred collection. Positions < pointer
+// are stack args. Returns nil sig if no signature matches.
+//
+// The third return is the sig-order index of the FIRST forward slot
+// the plan filled with a WORD bound to a dispatching definition (an
+// FnDefInfo binding accepted as an operand — typically through an
+// Any-typed slot), or -1 when no slot was filled that way. Such a
+// token is planned as an operand but DISPATCHES at runtime — the
+// plan-time stop condition insertForward records on ForwardInfo so
+// the arrival side can observe it. See
+// design/FORWARD-COLLECTION-PHASES.10.md.
 //
 //nolint:gocyclo,gocognit // dispatch is inherently a big switch; see STATIC_ANALYSIS_REPORT.10.md
-func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*Signature, []int) {
+func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*Signature, []int, int) {
 
 	// Unified dispatch (post §1.4 fix): no more stackOnly/forward-prec
 	// dichotomy at the word level. Each sig declares its own boundary
@@ -4331,6 +4679,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 	type matchResult struct {
 		sig       *Signature
 		positions []int
+		specAt    int
 	}
 	var bestDeferred *matchResult
 
@@ -4369,7 +4718,8 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		// ── Step 1: forward matching ─────────────────────────────
 
 		positions := make([]int, nArgs)
-		fwd := 0 // number of params matched by forward tokens
+		fwd := 0     // number of params matched by forward tokens
+		specAt := -1 // first slot filled by a dispatching word, -1 = none
 
 		// Always run the forward scan up to forwardLimit; if it's 0
 		// the loop simply doesn't execute and all args come from
@@ -4430,6 +4780,21 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					// Defined word: resolves to its def type.
 					if top, ok := e.registry.Defs.Top(ww.Name); ok {
 						if sigArgMatches(sig, fwd, top) || expectedType.Equal(TAny) {
+							// A dispatching binding (FnDefInfo) planned as an
+							// operand is SPECULATIVE: at runtime this token
+							// dispatches rather than arriving as a value
+							// (the `def name fn […]` idiom relies on exactly
+							// that — fn runs and its result completes def).
+							// Record the first such slot so the parked
+							// ForwardInfo carries the plan's stop condition.
+							// A slot that specifically expects a Function
+							// gets the word as a resolved REFERENCE at
+							// collection time (stepWord's TFunction
+							// intercept) — consistent, not speculative.
+							if _, isFn := top.Data.(FnDefInfo); isFn &&
+								specAt == -1 && !expectedType.Equal(TFunction) {
+								specAt = fwd
+							}
 							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
@@ -4535,11 +4900,11 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			}
 			if preferWordSig && !isPreferred {
 				if bestDeferred == nil {
-					bestDeferred = &matchResult{sig, append([]int(nil), positions...)}
+					bestDeferred = &matchResult{sig, append([]int(nil), positions...), specAt}
 				}
 				continue
 			}
-			return sig, positions
+			return sig, positions, specAt
 		}
 
 		// Inside a pending forward scope: all args must come from
@@ -4563,11 +4928,11 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					}
 					if preferWordSig && !isPreferred {
 						if bestDeferred == nil {
-							bestDeferred = &matchResult{sig, append([]int(nil), positions...)}
+							bestDeferred = &matchResult{sig, append([]int(nil), positions...), specAt}
 						}
 						continue
 					}
-					return sig, positions
+					return sig, positions, specAt
 				}
 			}
 			continue
@@ -4639,16 +5004,16 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		// Full match found.
 		if preferWordSig && !isPreferred {
 			if bestDeferred == nil {
-				bestDeferred = &matchResult{sig, append([]int(nil), positions...)}
+				bestDeferred = &matchResult{sig, append([]int(nil), positions...), specAt}
 			}
 			continue
 		}
-		return sig, positions
+		return sig, positions, specAt
 	}
 
 	// Return deferred non-preferred match if one was found.
 	if bestDeferred != nil {
-		return bestDeferred.sig, bestDeferred.positions
+		return bestDeferred.sig, bestDeferred.positions, bestDeferred.specAt
 	}
 
 	// Try fallback (0-arg or Fallback handler).
@@ -4658,11 +5023,11 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			continue
 		}
 		if sig.TotalArgs() == 0 || sig.Fallback {
-			return sig, nil
+			return sig, nil, -1
 		}
 	}
 
-	return nil, nil
+	return nil, nil, -1
 }
 
 // checkModeFallbackPositions returns up to n stack indices to use as

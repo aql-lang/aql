@@ -262,6 +262,11 @@ func TestTypeLiteralNoPanic(t *testing.T) {
 		{"convert-type-literal", `Map convert String`},
 		{"make-list", `Integer make List`},
 
+		// Inspection / rendering (TAny sigs)
+		{"canon-map-literal", `canon Map`},
+		{"canon-list-literal", `canon List`},
+		{"canon-any-literal", `canon Any`},
+
 		// Comparison (TAny sigs)
 		{"eq-map", `Map eq Map`},
 		{"lt-map", `Map lt 1`},

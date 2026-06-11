@@ -42,4 +42,4 @@ module [export "Foo" {a:1}] import [Foo Bar] end  Bar.a	1	renamed binding still 
 module [export "Foo" {a:1}] import [Foo Bar] end  Bar.$name	'Foo'	$name is the declared export name, not the alias
 #
 # §6  negative — a missing export via getr (!.) errors
-"aql:math-util" import end  MathUtil!.nope	ERROR:getr_error	unknown export raises getr_error
+"aql:math-util" import end  MathUtil!.nope	ERROR:not_found	unknown export raises not_found (the documented strict-lookup code)

@@ -3,6 +3,8 @@ package native
 import (
 	"fmt"
 	"strings"
+
+	"github.com/aql-lang/aql/eng/go"
 )
 
 // storageNatives covers `set` / `get` / `context`. The unified
@@ -203,12 +205,20 @@ func setMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 		return nil, err
 	}
 	key := StoreKey(args[0])
+	// The copy-returning column stays ENTIRELY immutable: a value with
+	// flex inside is snapshot to its plain shape (eng.AdoptIntoNode),
+	// so the "immutable" result can never change underneath through a
+	// live flex handle. Flex-free values pass through untouched.
+	val, aerr := eng.AdoptIntoNode(args[1])
+	if aerr != nil {
+		return nil, aerr
+	}
 	out := NewOrderedMap()
 	for _, k := range m.Keys() {
 		v, _ := m.Get(k)
 		out.Set(k, v)
 	}
-	out.Set(key, args[1])
+	out.Set(key, val)
 	return []Value{NewMap(out)}, nil
 }
 
@@ -261,7 +271,14 @@ func setFlexMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	if err != nil {
 		return nil, r.AqlError("set_error", "set: expected a FlexMap, got "+container.Parent.String(), "set")
 	}
-	m.Set(StoreKey(args[0]), args[1])
+	// A flex tree stays ENTIRELY mutable: a plain Node value is deep-
+	// flexed on the way in — otherwise a later write into the immutable
+	// inner is copy-returning and silently lost. Flex handles share.
+	val, aerr := eng.AdoptIntoFlex(args[1])
+	if aerr != nil {
+		return nil, r.AqlError("set_error", aerr.Error(), "set")
+	}
+	m.Set(StoreKey(args[0]), val)
 	return []Value{container}, nil
 }
 
@@ -281,7 +298,12 @@ func setFlexListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 			fmt.Sprintf("set: index %d out of bounds for FlexList (length %d)", idx, len(fd.Elems)),
 			"set", "use append to grow a FlexList; sparse FlexLists are an error")
 	}
-	fd.Elems[idx] = args[1]
+	// Entirely-mutable invariant: adopt a plain Node element into flex.
+	val, aerr := eng.AdoptIntoFlex(args[1])
+	if aerr != nil {
+		return nil, r.AqlError("set_error", aerr.Error(), "set")
+	}
+	fd.Elems[idx] = val
 	return []Value{container}, nil
 }
 
@@ -448,10 +470,16 @@ func setListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		return nil, r.AqlError("index_out_of_range",
 			fmt.Sprintf("set: index %d out of range for list of length %d", idx, n), "set")
 	}
+	// Entirely-immutable invariant for the copy-returning column: see
+	// setMapHandler.
+	val, aerr := eng.AdoptIntoNode(args[1])
+	if aerr != nil {
+		return nil, aerr
+	}
 	out := make([]Value, n)
 	for i := 0; i < n; i++ {
 		out[i] = lst.Get(i)
 	}
-	out[idx] = args[1]
+	out[idx] = val
 	return []Value{NewList(out)}, nil
 }

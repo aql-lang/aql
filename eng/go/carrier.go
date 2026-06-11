@@ -305,11 +305,33 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 			Row:    pos.Row,
 			Col:    pos.Col,
 		})
-		out = []Value{NewCarrier(TAny)}
+		// The assumed result is a DYNAMIC Any carrier — "type unknown",
+		// not "type is the Any root". A plain Any carrier fails every
+		// typed slot (Any conforms only to Any), so one unannotated
+		// word used to cascade false no_signature errors through every
+		// downstream consumer (`mod (size s) 4` errored on mod). The
+		// dynamic bound matches optimistically, the one real diagnostic
+		// (this missing_returns) remains, and a guard discharges the
+		// modality back to strict.
+		c := NewCarrier(TAny)
+		c.Dynamic = true
+		out = []Value{c}
 	default:
 		out = make([]Value, len(sig.Returns))
 		for i, t := range sig.Returns {
-			out[i] = NewCarrier(t)
+			c := NewCarrier(t)
+			// A declared `Any` return means "statically unknown", not
+			// "inhabits only the Any root": a STRICT Any carrier
+			// conforms to no typed slot, so accessor words declared
+			// `Returns: [Any]` (`get`, dotted field reads) poisoned
+			// every typed consumer downstream with false no_signature
+			// errors (`set 0 1 f.bits` errored because `f.bits` typed
+			// as strict Any). Mark it dynamic: optimistic matching,
+			// discharged back to strict by a guard.
+			if t.Equal(TAny) {
+				c.Dynamic = true
+			}
+			out[i] = c
 		}
 	}
 	// Gradual contagion (design/dynamic-modality-report.10.md): a result

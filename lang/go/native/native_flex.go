@@ -94,7 +94,13 @@ func appendElemHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	if err != nil {
 		return nil, r.AqlError("append_error", "append: expected a FlexList, got "+args[1].Parent.String(), "append")
 	}
-	fd.Elems = append(fd.Elems, args[0])
+	// A flex tree stays ENTIRELY mutable: a plain Node element is deep-
+	// flexed on the way in (eng.AdoptIntoFlex; flex handles share).
+	elem, aerr := eng.AdoptIntoFlex(args[0])
+	if aerr != nil {
+		return nil, r.AqlError("append_error", aerr.Error(), "append")
+	}
+	fd.Elems = append(fd.Elems, elem)
 	return []Value{args[1]}, nil
 }
 
@@ -108,7 +114,17 @@ func appendListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		return nil, r.AqlError("append_error", err.Error(), "append")
 	}
 	// Slice() snapshots before the grow, so `append f f` (self-concat)
-	// is well-defined.
-	fd.Elems = append(fd.Elems, src.Slice()...)
+	// is well-defined. Each appended element is adopted so the tree
+	// stays entirely mutable.
+	elems := src.Slice()
+	adopted := make([]Value, len(elems))
+	for i, el := range elems {
+		a, aerr := eng.AdoptIntoFlex(el)
+		if aerr != nil {
+			return nil, r.AqlError("append_error", aerr.Error(), "append")
+		}
+		adopted[i] = a
+	}
+	fd.Elems = append(fd.Elems, adopted...)
 	return []Value{args[1]}, nil
 }

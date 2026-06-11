@@ -101,15 +101,24 @@ var definitionNatives = []NativeFunc{
 	},
 	{
 		// `afn` is the canonical anonymous-fn constructor. The parser
-		// lexes `=>` as the word `afn` so `a => b` desugars to `a afn b`.
-		// Sig is [Any Any |] — both args forward-eligible, both typed
-		// Any. NoEvalArgs on both so the input sig isn't auto-evaluated
-		// and the body's words aren't dispatched before construction.
+		// folds `A => B` into the group `(A afn B)`. Sig is [Any Any |]
+		// — both args forward-eligible, both typed Any. NoEvalArgs on
+		// both so the input sig isn't auto-evaluated and the body's
+		// words aren't dispatched before construction. RawParens on the
+		// body slot (position 0): a function body is CODE, so a paren
+		// body is captured RAW and evaluates per CALL with the params
+		// bound — this is what makes the chained arrow curry,
+		// `x:Integer => y:Integer => [x add y]` ≡
+		// (x ⇒ (y ⇒ body)): the inner lambda constructs inside the
+		// outer body, capturing x, instead of eagerly at outer-
+		// construction time when x doesn't exist yet. It also lets a
+		// paren body reference params at all: `x:Integer => (x mul 2)`.
 		Name: "afn",
 
 		Signatures: []NativeSig{{
 			Args:           []*Type{TAny, TAny},
 			NoEvalArgs:     map[int]bool{0: true, 1: true},
+			RawParens:      map[int]bool{0: true},
 			Handler:        afnHandler,
 			Returns:        []*Type{TFunction},
 			RunInCheckMode: true, BarrierPos: -1,
@@ -687,6 +696,7 @@ func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 		Returns:    []*Type{TAny},
 		Body:       bodyElems,
 		BarrierPos: barrierPos,
+		QuoteArgs:  eng.QuoteArgsFromParams(params),
 	}
 	fnDef := FnDefInfo{
 		Signatures: []FnSig{sig},

@@ -368,6 +368,172 @@ func TestQueryUnpackClauseCoverage(t *testing.T) {
 	}
 }
 
+// --- where: full comparison-operator coverage ---
+// (Ported from the pre-module global-word tests in lang/go/native — the
+// unqualified `from people where […]` surface was removed when query
+// moved into this module's sub-registry.)
+
+func TestQueryWhereOperators(t *testing.T) {
+	// people: Alice 30 London, Bob 25 Paris, Carol 40 London, Dave 18 Berlin.
+	cases := []struct {
+		name string
+		src  string
+		rows int
+	}{
+		{"lt", `Query.select [] Query.from people Query.where [age lt 30]`, 2},
+		{"gte", `Query.select [] Query.from people Query.where [age gte 30]`, 2},
+		{"lte", `Query.select [] Query.from people Query.where [age lte 25]`, 2},
+		{"neq", `Query.select [] Query.from people Query.where [name neq 'Alice']`, 3},
+		{"eq-none-match", `Query.select [] Query.from people Query.where [age gt 99]`, 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := rowCount(t, c.src); got != c.rows {
+				t.Errorf("%s: expected %d rows, got %d", c.src, c.rows, got)
+			}
+		})
+	}
+}
+
+// TestQueryWhereUnknownColumn pins the negative: a filter naming a
+// column the table doesn't have errors at materialization, not silently.
+func TestQueryWhereUnknownColumn(t *testing.T) {
+	r := queryRegistry(t)
+	result, err := runQuerySrc(t, r, `Query.select [] Query.from people Query.where [bogus gt 1]`)
+	if err != nil {
+		t.Fatalf("building the query should not error eagerly: %v", err)
+	}
+	mp, ok := result[0].Data.(native.MaterializerPayload)
+	if !ok {
+		t.Fatalf("expected a lazy query, got %T", result[0].Data)
+	}
+	if _, mErr := mp.M.Materialize(); mErr == nil {
+		t.Fatal("expected an error materializing a filter on an unknown column")
+	}
+}
+
+// --- order: ascending (the bare-column form, no desc flag) ---
+
+func TestQueryOrderAscending(t *testing.T) {
+	r := queryRegistry(t)
+	result, err := runQuerySrc(t, r, `Query.select [name age] Query.from people Query.order [age]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	td := materialize(t, result[0])
+	if len(td.Rows) != 4 {
+		t.Fatalf("expected all 4 rows, got %d", len(td.Rows))
+	}
+	first, _ := native.AsMap(td.Rows[0])
+	nameVal, _ := first.Get("name")
+	if got, _ := native.AsString(nameVal); got != "Dave" {
+		t.Errorf("ascending order: expected youngest (Dave, 18) first, got %q", got)
+	}
+}
+
+// --- offset, alone and with limit ---
+
+func TestQueryOffset(t *testing.T) {
+	if got := rowCount(t, `Query.select [] Query.from people Query.order [age desc] Query.offset 1`); got != 3 {
+		t.Errorf("offset 1: expected 3 rows, got %d", got)
+	}
+}
+
+func TestQueryLimitOffsetPagination(t *testing.T) {
+	r := queryRegistry(t)
+	// Page 2 of size 2 by descending age: full order is Carol(40),
+	// Alice(30), Bob(25), Dave(18) — skip 1, take 2 → Alice, Bob.
+	src := `Query.select [name] Query.from people Query.order [age desc] Query.limit 2 Query.offset 1`
+	result, err := runQuerySrc(t, r, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	td := materialize(t, result[0])
+	if len(td.Rows) != 2 {
+		t.Fatalf("limit 2 offset 1: expected 2 rows, got %d", len(td.Rows))
+	}
+	first, _ := native.AsMap(td.Rows[0])
+	nameVal, _ := first.Get("name")
+	if got, _ := native.AsString(nameVal); got != "Alice" {
+		t.Errorf("expected page to start at Alice (2nd by age desc), got %q", got)
+	}
+}
+
+// --- join … using (shared column name) ---
+
+func TestQueryJoinUsing(t *testing.T) {
+	r := queryRegistry(t)
+	// scores shares the `name` column with people.
+	fields := native.NewOrderedMap()
+	fields.Set("name", native.NewTypeLiteral(native.TString))
+	fields.Set("score", native.NewTypeLiteral(native.TInteger))
+	rec := native.RecordTypeInfo{Fields: fields}
+	mkRow := func(name string, score int64) native.Value {
+		om := native.NewOrderedMap()
+		om.Set("name", native.NewString(name))
+		om.Set("score", native.NewInteger(score))
+		return native.NewMap(om)
+	}
+	td := native.TableData{Record: rec, Rows: []native.Value{
+		mkRow("Alice", 95),
+		mkRow("Bob", 88),
+	}}
+	r.ContextSet("scores", native.NewValueRaw(native.TList, td))
+
+	src := `Query.select [name score] Query.from people Query.join scores Query.using [name]`
+	result, err := runQuerySrc(t, r, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(materialize(t, result[0]).Rows); got != 2 {
+		t.Errorf("join using [name]: expected 2 rows (Alice, Bob), got %d", got)
+	}
+}
+
+// TestQueryAsListMaterializes pins the list-projection path: AsList on
+// a lazy query value materializes it and exposes the rows, so list
+// words can consume a query result directly.
+func TestQueryAsListMaterializes(t *testing.T) {
+	r := queryRegistry(t)
+	result, err := runQuerySrc(t, r, `Query.select [] Query.from people`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lst, lerr := native.AsList(result[0])
+	if lerr != nil {
+		t.Fatalf("AsList did not accept a lazy query value: %v", lerr)
+	}
+	if got := len(lst.Slice()); got != 4 {
+		t.Errorf("expected 4 rows via AsList, got %d", got)
+	}
+}
+
+// --- remaining set operations: unionall, intersect, except ---
+
+func TestQuerySetOperations(t *testing.T) {
+	londoners := `Query.select [] Query.from people Query.where [city eq 'London']`
+	cases := []struct {
+		name string
+		src  string
+		rows int
+	}{
+		// union dedupes (2 Londoners twice → 2); unionall keeps both copies.
+		{"union-dedupe", londoners + ` Query.union (` + londoners + `)`, 2},
+		{"unionall", londoners + ` Query.unionall (` + londoners + `)`, 4},
+		// Londoners ∩ age≥30 = {Alice, Carol}.
+		{"intersect", londoners + ` Query.intersect (Query.select [] Query.from people Query.where [age gte 30])`, 2},
+		// Londoners \ age≥35 = {Alice}.
+		{"except", londoners + ` Query.except (Query.select [] Query.from people Query.where [age gte 35])`, 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := rowCount(t, c.src); got != c.rows {
+				t.Errorf("%s: expected %d rows, got %d", c.name, c.rows, got)
+			}
+		})
+	}
+}
+
 // TestQueryUnpackRename confirms a wrapper rebound under a DIFFERENT name
 // (def w Query.where) still dispatches via the inner native, including its
 // NoEvalArgs — the body word names the original inner native to look up.

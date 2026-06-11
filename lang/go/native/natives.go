@@ -200,7 +200,7 @@ var Natives = []NativeFunc{
 		Name: "size",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TAny}, Handler: sizeHandler, BarrierPos: -1},
+			{Args: []*Type{TAny}, Handler: sizeHandler, BarrierPos: -1, Returns: []*Type{TInteger}},
 		},
 	},
 

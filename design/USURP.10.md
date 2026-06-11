@@ -92,52 +92,57 @@ strictly smaller than the alternative considered (a `/u` suffix
 *modifier* that would have threaded a new flag through every core
 dispatch path).
 
-The wrapper delegates through an **AQL body** (`if p2 p1 p0`)
-rather than wrapping the Go handler directly. That choice means
-both the runtime handler **and** the check-mode return-type
-inference (`ReturnsFn`) are reused for free, because the body is
-dispatched normally. It is the same pattern already proven by:
-
-- module FnDef wrappers — `lang/go/modules/binary.go::makeBinUnaryFnDef`;
-- returned-function closures — `def add5 (make-adder 5)` then
-  `add5 3` (see lang/go/CLAUDE.md, "Closures and Capture").
+The wrapper **re-dispatches the original function value** through a
+small Go handler (`usurpDispatchHandler`, `eng/go/core_ref.go`)
+rather than delegating through a synthesized AQL body. (The v0
+design used an AQL body, `if p2 p1 p0`; the handler form replaced
+it when stack-only and mixed-barrier originals were brought into
+scope — see "Scope and limitations".) The handler receives the
+wrapper's reversed args and lays them out *around* the original
+according to the ORIGINAL signature's barrier, so the original
+collects them exactly as a direct call would. Per-position
+semantics (NoEval code bodies, quoted atoms, patterns) are then
+applied by the original signature itself on re-dispatch.
 
 ## Mechanics
 
-`usurp` reads the target's `FnDefInfo` (eng/go/value.go:261) and
-emits a new one. `FnDefInfo` carries both representations:
+`usurp` reads the target's `FnDefInfo` and emits a new one.
+`FnDefInfo` carries ONE full-fidelity signature slice —
+`Signatures []Signature`, where `type Signature = FnSig` (see
+`design/FUNCTION-MODEL.10.md`). The wrapper walks
+`fnDef.OwnSigs()`: the authored overloads with any synthetic
+fallback filtered out.
 
-- builtins (e.g. `if`) expose compiled `Signatures []Signature`;
-- AQL `def` fns expose `Sigs []FnSig`.
-
-For each source signature (`N` params) the wrapper builds one
-reversed `FnSig` (eng/go/value.go:209):
+For each source signature (`N` params), `UsurpFunction`
+(`eng/go/core_ref.go`) builds one reversed `Signature`:
 
 | Source field | Wrapper field |
 | --- | --- |
-| `Params` / `Args` (types) | reversed; synthetic names `p0..p_{N-1}` so the body can reference them |
-| `NoEvalArgs`, `NoEvalMapArgs`, `QuoteArgs`, `TypeArgs` (index-keyed) | remapped `k → N-1-k` |
+| `Params` (names, types, patterns) | reversed |
 | `Returns` | copied unchanged (return type is independent of arg order) |
-| `BarrierPos` | `N` (stays all-forward) |
-| `Body` | `[Word(inner), Word(p_{N-1}), …, Word(p_0)]` |
+| `BarrierPos` | `N` (the wrapper itself is all-forward: `usurped a b c`) |
+| `Handler` | `usurpDispatchHandler(orig, origBarrier)` — re-dispatches the original, laying args out per the original's own barrier |
+| index-keyed metadata (`NoEvalArgs`, `NoEvalMapArgs`, `QuoteArgs`, `TypeArgs`, `Patterns`) and `Body`/`ReturnsFn` | dropped — they would be mis-indexed on the wrapper, and the original sig re-applies them on re-dispatch |
 
-The result is wrapped with `native.NewFnDef(...)` and returned.
-Bound via `def ifu (usurp if)`, it dispatches through the standard
-user-fn path (`InstallFnDef` / `execFnDefSig` / `CallAQL`).
+Each wrapped sig is normalized (`normalizeSig` rebuilds the
+positional `Args`/`Patterns` mirrors from `Params`), the set is
+sorted, and the result is returned as a fresh Function value with
+its own single-slice `FnDefInfo`. Bound via `def ifu (usurp if)`,
+it dispatches through the uniform `execMatch` path like any other
+function.
 
 ### Preserving code-body (NoEval) semantics — CRITICAL
 
-`if`'s branches are unevaluated code bodies (`if3` has
-`NoEvalArgs{0,1,2}`, lang/go/native/native_control.go:31-64). The
-wrapper **must** copy the reversed `NoEvalArgs` onto its `FnSig`
-(the field exists on `FnSig`), so the branches bind to the wrapper
-params **unevaluated**. The delegating body then re-forwards them
-and `if`'s own `NoEvalArgs` keeps them unevaluated through to the
-handler's mark/move. Without this, a naive wrapper would auto-
-evaluate `[then]`/`[else]` at param-binding time and break `if`.
-This is the primary correctness risk and the focus of testing — in
-particular a **list-valued condition** (`[1 gt 0] ifu fail pass`)
-must still flow through `if`'s mark/move evaluation.
+`if`'s branches are unevaluated code bodies. Because the wrapper
+re-dispatches the original — rather than binding args to wrapper
+params and re-forwarding them through an AQL body — the branch
+lists reach `if`'s own collection raw, and its `NoEvalArgs` keep
+them unevaluated through to the handler's mark/move. The hazard
+this section originally tracked (a naive AQL-body wrapper
+auto-evaluating `[then]`/`[else]` at param-binding time) is
+structurally avoided by the handler design. The spec rows in
+`lang/spec/usurp.tsv` — including a list-valued condition — pin
+this behaviour.
 
 ## Scope and limitations
 

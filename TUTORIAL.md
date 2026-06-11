@@ -12,10 +12,10 @@ If you only want a recipe for a specific task, see the
 a word, see the **[Reference](REFERENCE.md)**.
 
 > **Notation.** In code, a trailing `# returns …` comment shows what an
-> expression evaluates to — `4 square  # returns 16` — and in a REPL
-> transcript the same appears after the prompt: `aql> 4 square  #
+> expression evaluates to — `square 4  # returns 16` — and in a REPL
+> transcript the same appears after the prompt: `aql> square 4  #
 > returns 16`. The comment is ordinary documentation (`#` begins a line
-> comment), not special syntax; in prose we just say "`4 square`
+> comment), not special syntax; in prose we just say "`square 4`
 > returns `16`". (AQL has no result arrow — `=>` is real syntax, the
 > anonymous-function word `afn` — which is why results are written as
 > comments here.) Note also that the REPL clears the stack after each
@@ -48,7 +48,7 @@ The prompt accepts AQL expressions. Press `Enter` to evaluate.
 You can also evaluate a one-liner from the shell:
 
 ```bash
-aql do '1 add 2'
+aql do 'add 1 2'
 # 3
 ```
 
@@ -56,7 +56,7 @@ Or run a file:
 
 ```bash
 aql script.aql
-aql -e '10 3 sub'
+aql -e '10 sub 3'
 ```
 
 (`-e` evaluates one expression and exits. Uppercasing a string needs
@@ -157,7 +157,7 @@ type. Arithmetic auto-promotes. The core arithmetic words live at
 the top level:
 
 ```
-aql> 4 mul 5            # returns 20
+aql> mul 4 5            # returns 20
 aql> 2 pow 10           # returns 1024
 aql> 7 div 2            # returns 3 — integer division
 aql> 7.0 div 2          # returns 3.5 — float: real division
@@ -166,8 +166,10 @@ aql> 10 sub 3           # returns 7 — a sub b ≡ a - b (see §3)
 ```
 
 For absolute value, rounding, roots, logs, trig, and the standard
-constants, import the `aql:math` module — words register under the
-`math.` prefix:
+constants, import the `aql:math-util` module — its words register
+under the `MathUtil.` namespace (the pattern for every built-in
+module: the `aql:NAME-util` id binds the `NameUtil` namespace; see
+the [module table in §20](#20-modules--namespaces-and-imports)):
 
 ```
 aql> "aql:math-util" import end
@@ -179,7 +181,7 @@ aql> MathUtil.ceil 3.2      # returns 4
 aql> MathUtil.round 3.5     # returns 4
 aql> MathUtil.trunc 3.9     # returns 3
 aql> MathUtil.sqrt 16       # returns 4.0
-aql> MathUtil.log 2.718281828   # returns 1.0
+aql> MathUtil.log MathUtil.e    # returns 1.0
 aql> MathUtil.sin 0         # returns 0.0
 aql> MathUtil.hypot 3 4     # returns 5.0
 aql> MathUtil.pi            # returns 3.141592653589793
@@ -216,13 +218,13 @@ Backtick template strings interpolate `${...}` expressions:
 ```
 aql> def name "world"
 aql> `hello ${name}`               # returns 'hello world'
-aql> `2 + 3 = ${2 add 3}`         # returns '2 + 3 = 5'
+aql> `2 + 3 = ${add 2 3}`         # returns '2 + 3 = 5'
 ```
 
 Templates nest:
 
 ```
-aql> `a${`inner ${1 add 2}`}b`     # returns 'ainner 3b'
+aql> `a${`inner ${add 1 2}`}b`     # returns 'ainner 3b'
 ```
 
 
@@ -331,9 +333,9 @@ aql> undef x
 `[input-sig] [output-sig] [body]` triples:
 
 ```
-aql> def square fn [[x:Number] [Number] [x mul x]]
-aql> 5 square                        # returns 25
-aql> 2.5 square                      # returns 6.25
+aql> def square fn [[x:Number] [Number] [mul x x]]
+aql> square 5                        # returns 25
+aql> square 2.5                      # returns 6.25
 ```
 
 Named parameters (like `x:Number`) bind to stack values automatically
@@ -348,12 +350,22 @@ Multiple signatures give you ad-hoc polymorphism — first match wins:
 
 ```
 aql> def inc fn [
-  [Integer] [Integer] [1 add]
-  [Float] [Float] [1.0 add]
+  [Integer] [Integer] [add 1]
+  [Float] [Float] [add 1.0]
 ]
 aql> inc 5                           # returns 6
 aql> inc 2.5                         # returns 3.5
 ```
+
+From here on, make **`aql check`** part of your loop: it type-checks
+a file (or a one-liner via `aql check -e '…'`) without running it,
+and it catches exactly the mistakes typed functions introduce —
+no-matching-signature calls, a function value left uncalled on the
+stack, a body that can't produce the declared return type. Some of
+its diagnostics are *more* informative than a run: where running
+leaves a named function value sitting on the stack, `aql check`
+reports `uncalled_function` and points at the call site. Check
+first, then run.
 
 
 ## 10. Conditionals and loops
@@ -412,7 +424,7 @@ aql> [1, 2, 3] reverse                # returns [3 2 1]
 ```
 
 Reshaping, ordering, and grouping live in the `aql:array-util` module
-(reached via the `array.` prefix after importing):
+(reached via the `ArrayUtil.` prefix after importing):
 
 ```
 aql> "aql:array-util" import end
@@ -482,8 +494,14 @@ Field constraints can be disjunctive — `(String tor none)` means
 ```
 aql> def Person refine Record [name:String nick:(String tor none)]
 aql> make Person {name:"Alice" nick:"ace"}     # returns {name:'Alice' nick:'ace'}
-aql> make Person {name:"Bob"}                  # returns {name:'Bob' nick:none}
+aql> make Person {name:"Bob"}                  # returns {name:'Bob' nick:None}
 ```
+
+The omitted field holds the absence marker, which canonical rendering
+shows as capital-`N` `None`. In source you write (and test with) the
+lowercase value: `(make Person {name:"Bob"}) . nick eq none` returns
+`true`. See **[Reference: Absence — `none` and
+`None`](REFERENCE.md#absence--none-and-none)** for the full story.
 
 Types can also be **generic** — declared over type parameters in
 angle brackets and instantiated with concrete arguments. Each
@@ -521,17 +539,17 @@ elements are the body. `a` here binds to `4` (top of stack), `b` to
 `3`. Inline values:
 
 ```
-aql> var [[[x 2] [y 10]] x add y]               # returns 12
+aql> var [[[x 2] [y 10]] add x y]               # returns 12
 ```
 
 
 ## 15. Evaluation with `do` and `quote`
 
 A list literal evaluates its contents by default and keeps the
-results *as a list* — `[1 add 2]` becomes `[3]`, not `3`:
+results *as a list* — `[add 1 2]` becomes `[3]`, not `3`:
 
 ```
-aql> [1 add 2]                       # returns [3]
+aql> [add 1 2]                       # returns [3]
 ```
 
 Use `quote` to hold a list as unevaluated data instead (see below).
@@ -539,8 +557,8 @@ Use `quote` to hold a list as unevaluated data instead (see below).
 rather than in a list:
 
 ```
-aql> do [1 add 2]                    # returns 3
-aql> do {x: [3 add 4], y: 5}        # returns {x:7 y:5}
+aql> do [add 1 2]                    # returns 3
+aql> do {x: [add 3 4], y: 5}        # returns {x:7 y:5}
 ```
 
 `quote` prevents a single token from being interpreted:
@@ -632,7 +650,7 @@ or inspect its fields with `.`.
 in parallel and collects the results:
 
 ```
-aql> "aql:time-util" import end TimeUtil.await [[1 add 2] [3 add 4]]     # returns [3 7]
+aql> "aql:time-util" import end TimeUtil.await [[add 1 2] [add 3 4]]     # returns [3 7]
 ```
 
 Pick a mode via an options map — these mirror JavaScript Promise
@@ -701,37 +719,59 @@ Import from a file (path must start with `./`, `../`, or `/`):
 aql> "./lib/utils.aql" import
 ```
 
-Built-in native modules: `aql:math`, `aql:time-util`, `aql:matrix-util`,
-`aql:decision`. Import them as quoted strings; the words register
-under a namespace prefix (e.g. `math.`, `time.`):
+Built-in native modules are imported as quoted `aql:` ids; each one
+binds a single capital-initial namespace. The rule of thumb: a
+`-util` id binds the matching `NameUtil` namespace; capability and
+framework modules keep plain names:
+
+| Import id | Namespace | | Import id | Namespace |
+|-----------|-----------|-|-----------|-----------|
+| `aql:math-util` | `MathUtil` | | `aql:io` | `IO` |
+| `aql:array-util` | `ArrayUtil` | | `aql:net` | `Net` |
+| `aql:string-util` | `StringUtil` | | `aql:decision` | `Decision` |
+| `aql:struct-util` | `StructUtil` | | `aql:test` | `Test`, `Assert` |
+| `aql:time-util` | `TimeUtil` | | `aql:rand` | `Rand` |
+| `aql:type-util` | `TypeUtil` | | `aql:query` | `Query` |
+| `aql:matrix-util` | `MatrixUtil` | | `aql:report` | `Report` |
+| `aql:bin-util` | `BinUtil` | | `aql:vm` | `Vm` |
+| `aql:logic-util` | `LogicUtil` | | | |
+
+(The full per-module word lists are in
+**[Reference: Built-in modules](REFERENCE.md#built-in-modules)**.)
 
 ```
 aql> "aql:math-util" import end
-aql> 5 MathUtil.log                      # returns 1.6094379124341003
+aql> MathUtil.log 5                      # returns 1.6094379124341003
 ```
 
-The trailing `end` here is optional — `import` takes its path and stops,
-so the namespace is ready to use on the next line:
+The trailing `end` is needed only when the token after `import`
+*could* be one of its arguments. Collection is type-directed: here
+`5` fits none of `import`'s argument shapes (a path string, a rename
+list), so `import` takes its path and stops with no `end`:
 
 ```
 aql> "aql:math-util" import
 aql> 5 MathUtil.log                      # returns 1.6094379124341003
 ```
 
-You only need `end` when the token right after `import` could itself be a
-module path, e.g. `"aql:math-util" import end "foo" print` (without `end`,
-`import` would try to load `"foo"`).
+But a word (`MathUtil.…`) or a string right after `import` *would* be
+collected — `"aql:math-util" import end "foo" print` needs the `end`,
+or `import` would try to load `"foo"`. Note that in a script file a
+line break does **not** stop collection (the REPL evaluates line by
+line, a file is one program) — so in files, the robust habit is
+`import end`.
 
 
 ## 21. Manage secrets with the vault
 
 `aql` ships a local secrets vault for third-party API keys and tokens.
-This walkthrough creates a vault, adds keys by typing or pasting them,
-moves the vault to another machine, and injects the secrets into other
-programs — all without a secret, a passphrase, or a key value ever
-touching your shell history, the process command line, or an
-environment variable you set by hand. Every `(hidden)` line below is a
-no-echo prompt.
+This walkthrough creates a vault — under `~/.aql` or a folder you
+choose — adds keys by typing or pasting them, tags them with optional
+expiry reminders, moves the vault to another machine, and injects the
+secrets into other programs — all without a secret, a passphrase, or a
+key value ever touching your shell history, the process command line,
+or an environment variable you set by hand. Every `(hidden)` line below
+is a no-echo prompt.
 
 Two passphrases appear: the **vault passphrase** unlocks the local
 keyring, and a separate **export passphrase** protects a bundle in
@@ -751,6 +791,25 @@ aql vault init --backend=file
 #   Confirm passphrase:          (hidden)
 ```
 
+Prefer a different location? Point the vault at a folder of your choice
+with `--folder`, and give its files an inner suffix with `--suffix`
+(`vault.work.jsonic`, `vault.work.keyring`, …) so several vaults can sit
+side by side in one folder:
+
+```bash
+aql vault --folder=./team-vault --suffix=work init --backend=file
+#   Set vault passphrase:        (hidden)
+#   Confirm passphrase:          (hidden)
+#   vault initialized: backend=file store=team-vault/vault.work.jsonic
+```
+
+The `--folder`/`--suffix` flags are global, so they go *before* the
+mode, and they describe *where the vault is* — pass the same pair to
+every command that touches it (or export `AQL_VAULT_FOLDER` /
+`AQL_VAULT_SUFFIX` for the session). A flag wins over the matching
+environment variable. The rest of this walkthrough uses the default
+`~/.aql` vault.
+
 ### Add keys — paste or type
 
 Paste a token you just copied from a SaaS console. The value is read
@@ -766,12 +825,16 @@ aql vault add --from-clipboard --provider=github github_token
 
 Clipboard support works on macOS (pbpaste/pbcopy), Linux (wl-clipboard
 on Wayland, or xclip / xsel on X11), and Windows (PowerShell). Or type
-the value directly — the input is not echoed:
+the value directly — the input is not echoed. Add `--expiry` to record
+when the key should be rotated (a date, an RFC3339 timestamp, or a
+duration from now like `90d` or `720h`):
 
 ```bash
-aql vault add --provider=openai openai_key
+aql vault add --provider=openai --expiry=2026-12-31 openai_key
 #   Secret value:                (hidden)
 #   Vault passphrase:            (hidden)
+#   stored openai_key (backend=file, 51 bytes)
+#   expires 2026-12-31T00:00:00Z
 ```
 
 Namespacing lets two projects share a key name: a `ns:` prefix becomes
@@ -782,7 +845,8 @@ then makes bare names resolve into `proj` automatically.)
 aql vault add --from-clipboard proj:deploy_key
 ```
 
-Inspect what's stored — names and metadata only, never values:
+Inspect what's stored — names and metadata only, never values. The
+listing includes an `EXPIRES` column (a dash when no expiry is set):
 
 ```bash
 aql vault list
@@ -793,6 +857,35 @@ aql vault get github_token            # redacted; add --reveal to spot-check
 > `aql vault add github_token 'ghp_...'` — that would leak it to your
 > shell history. Use `--from-clipboard`, the prompt, or (for scripts)
 > `--from-stdin`.
+
+### Track key expiries
+
+An expiry is a rotation reminder — it is **never enforced**, so an
+expired key still works; it just shows up as overdue. Set or replace one
+any time without touching the secret, and clear it when the key is
+rotated:
+
+```bash
+aql vault expiry set github_token 90d     # also accepts a date or RFC3339 stamp
+aql vault expiry clear github_token       # drop the reminder
+```
+
+Review what's pending with `vault expiry`. It lists only keys that carry
+an expiry, soonest (and most overdue) first, with a human status; narrow
+it by namespace or to a due-soon window:
+
+```bash
+aql vault expiry
+#   ALIAS                    NAMESPACE        EXPIRES               STATUS
+#   openai_key               (root)           2026-12-31T00:00:00Z  in 203d
+
+aql vault expiry --within=30d             # only keys due within 30 days (or overdue)
+aql vault expiry --namespace=proj         # only the proj namespace (':' = root)
+```
+
+You can also pin an expiry while rotating a key — `aql vault rotate
+--expiry=90d openai_key` — and a rotation without `--expiry` keeps the
+existing reminder.
 
 ### Export the vault to a portable bundle
 
@@ -832,8 +925,21 @@ aql vault import vault.aqlx
 aql vault list                            # confirm the keys arrived
 ```
 
+The destination vault can also live wherever you like. Supply the same
+`--folder`/`--suffix` (before the mode) on each command, and they target
+that one vault throughout:
+
+```bash
+aql vault --folder=/srv/vault --suffix=prod init --backend=file
+aql vault --folder=/srv/vault --suffix=prod import vault.aqlx
+aql vault --folder=/srv/vault --suffix=prod list
+```
+
 Existing aliases are skipped unless you pass `--overwrite`. Once
 imported, securely delete the transit file (`shred -u vault.aqlx`).
+Expiry reminders are local to a vault and aren't carried in the bundle,
+so re-set them on the destination (`vault expiry set …`) if you want
+them there too.
 
 ### Inject secrets into other commands
 

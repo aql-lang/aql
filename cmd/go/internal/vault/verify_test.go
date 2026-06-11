@@ -12,7 +12,7 @@ import (
 // manufacturing inconsistencies directly.
 func testKeyring(t *testing.T) *fileKeyring {
 	t.Helper()
-	return &fileKeyring{dir: filepath.Join(os.Getenv(EnvHome), ".aql"), pass: "test-pass"}
+	return &fileKeyring{folder: filepath.Join(os.Getenv(EnvHome), ".aql"), pass: "test-pass"}
 }
 
 func TestVerifyHealthyVault(t *testing.T) {

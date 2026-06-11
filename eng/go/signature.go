@@ -71,7 +71,7 @@ func normalizeSig(s *Signature) {
 	if len(s.Params) == 0 && len(s.Args) > 0 {
 		s.Params = make([]FnParam, len(s.Args))
 		for i, t := range s.Args {
-			s.Params[i] = FnParam{Type: t}
+			s.Params[i] = FnParam{Type: t, Quote: s.QuoteArgs[i]}
 			if s.Patterns != nil {
 				if pat, ok := s.Patterns[i]; ok {
 					p := pat
@@ -90,6 +90,16 @@ func normalizeSig(s *Signature) {
 				patterns = make(map[int]Value)
 			}
 			patterns[i] = *p.Pattern
+		}
+		// AQL-declared /q params (FnParam.Quote, from `name:Atom/q`)
+		// merge INTO QuoteArgs — the field every dispatch-side reader
+		// consults — without disturbing native-set entries (two
+		// declaration surfaces, one per-position property).
+		if p.Quote {
+			if s.QuoteArgs == nil {
+				s.QuoteArgs = make(map[int]bool)
+			}
+			s.QuoteArgs[i] = true
 		}
 	}
 	s.Patterns = patterns
@@ -370,6 +380,13 @@ func rejectsTypeLiteral(v Value, expectedType *Type) bool {
 		// At a TNone slot, the None type literal is the canonical
 		// inhabitant; sigTypeMatches has already verified the value
 		// is None-typed.
+		return false
+	}
+	if expectedType.Equal(TType) {
+		// At a Type slot, type literals are the canonical inhabitants —
+		// `t:Type` params (and the bounded `Map/t` pattern over them)
+		// exist exactly to receive them. Mirrors the TNone carve;
+		// membership was already verified by typeMembershipBehavior.
 		return false
 	}
 	return true

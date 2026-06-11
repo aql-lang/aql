@@ -6,8 +6,8 @@ syntax, the type system, and the runtime. It complements the
 (tasks), and **[Reference](REFERENCE.md)** (precise behaviour).
 
 > **Notation.** In code, a `# returns …` comment shows what an
-> expression evaluates to (`4 square  # returns 16`); in prose we say
-> "`4 square` returns `16`". The comment is ordinary documentation, not
+> expression evaluates to (`square 4  # returns 16`); in prose we say
+> "`square 4` returns `16`". The comment is ordinary documentation, not
 > special syntax. (AQL has no result arrow — `=>` is the
 > anonymous-function word `afn` — so results are written as comments.)
 
@@ -133,7 +133,7 @@ Two practical consequences:
   awkward at one call site, the per-call levers are grouping
   (`(…)`, `end`, `;`) and the modifiers `/s` (stack-only here),
   `/f` (forward-only here), and `/N` (exactly N args) — not a change
-  to the word's default. `(1 add 1) print/s`, for instance, prints a
+  to the word's default. `(add 1 1) print/s`, for instance, prints a
   value that is already on the stack.
 
 ### How collection works
@@ -225,21 +225,46 @@ deeper stack such as `1 2 3 add` stay quiet.
 ## The `end` keyword
 
 `end` is the escape hatch for the rare case where forward collection
-goes too far. It stops the nearest waiting word, forcing any
-remaining arguments to come from the stack:
+would go too far. It stops the nearest waiting word: collection
+ceases, any unfilled argument slots fall back to the stack, and the
+word runs with what it has:
 
 ```
-set foo 99 end get foo            # returns 99
+"aql:math-util" import end MathUtil.sqrt 16        # returns 4.0
 ```
 
-Without `end`, `set` would try to collect `get` and `foo` as
-additional arguments. With `end`, `set` stops collecting after
-two arguments and `get foo` is free to run.
+`import` accepts optional arguments after the module id — a rename
+list, another path — so without `end` it reaches forward and tries
+to take `MathUtil` as one of them. That fails with `undefined word:
+MathUtil`, because the module that would define the name hasn't
+loaded yet. With `end`, `import` stops at the module id, runs,
+installs the `MathUtil` namespace, and `MathUtil.sqrt 16` evaluates
+next.
 
 It's needed less often than you might think — type-directed
 collection cuts most of the cases — but when the type system can't
 disambiguate (e.g., two adjacent words that both happen to accept
 the same type), `end` is the simple, explicit fix.
+
+A **function word** beginning the next statement acts as an implicit
+`end` for a waiting word that can already fire. The practical case is
+the else-less guard: in
+
+```
+def f fn [[n:Integer] [Integer] [
+  if (n eq 0) [raise "n must not be zero"]
+  def q (10 div n)
+  q
+]]
+```
+
+`if` has an optional third (else) argument, but `def` starting its
+own statement commits the two-argument form first — the guard raises
+*before* the `def` body can divide by zero, and a value-producing
+statement after the guard keeps its result instead of being
+swallowed as a phantom else. Only a **value** (a literal, or a
+parenthesised expression like `if (c) [t] (e)`) following the
+then-branch is taken as the else.
 
 ### A word only reaches for what it can use
 
@@ -286,7 +311,7 @@ separate dispatch construct:
 ```
 add 1 2                           # returns 3 — Integer + Integer
 add 1.0 2                         # returns 3.0 — Float + Number, promotes
-"a" "b" add                       # returns 'ab' — Scalar + Scalar, concatenates
+"a" add "b"                       # returns 'ab' — Scalar + Scalar, concatenates
 ```
 
 The same `add` covers numeric addition and string concatenation —
@@ -302,7 +327,7 @@ it drives behaviour.
 A `fn` declares types for both its inputs and its outputs:
 
 ```
-def avg fn [[a:Number b:Number] [Float] [(a add b) div 2.0]]
+def avg fn [[a:Number b:Number] [Float] [(add a b) div 2.0]]
 ```
 
 Inputs are checked when the function is called; outputs are checked
@@ -390,10 +415,16 @@ freely — values of different types are simply not equal (`1 eq "1"`
 returns `false`), which is safe and needs no escape hatch.
 
 A bare type literal sorts strictly below every concrete inhabitant
-of its family (same-family, so the restricted words allow it):
+of its family (same-family, so the restricted words allow it — but
+write the literal on the *right*: a type literal on the **left** of
+`lt`/`gt`/`lte`/`gte` constructs a predicate refinement instead, so
+`Integer lt 0` returns the subset type `(Integer lt 0)`, not a
+boolean — see [Function signatures and refinement
+types](#function-signatures-and-refinement-types)):
 
 ```
-Integer lt 0                      # returns true
+0 gt Integer                      # returns true
+Integer tcmp 0                    # returns -1
 ```
 
 Lists are length-first then element-wise; maps are key-set then
@@ -431,7 +462,7 @@ default a list literal is **evaluated** — its elements run and the
 list holds the results:
 
 ```
-[1 add 2]                         # returns [3] — evaluated by default
+[add 1 2]                         # returns [3] — evaluated by default
 [1 2 3]                           # returns [1 2 3] — plain data, nothing to run
 ```
 
@@ -440,23 +471,23 @@ unevaluated, as data — so the elements stay as written (words become
 atoms) and can be run later with `do`:
 
 ```
-[1 add 2] size                    # returns 1 — already evaluated: one element, 3
-quote [1 add 2] do                # returns 3 — held as data, then run
+[add 1 2] size                    # returns 1 — already evaluated: one element, 3
+quote [add 1 2] do                # returns 3 — held as data, then run
 ```
 
 Some positions are *implicitly* quoted — they take a list as code to
 run later, not a value to evaluate now: all branches of `if`, the
 body of `for`, the function passed to `each` / `fold`, and the body
-list of a `fn` definition. That is why `fn [[n:Integer] [Integer] [n
-add 1]]` stores `[n add 1]` as the function body instead of trying to
-run it at definition time. (A plain `def name [body]` is *not* one of
+list of a `fn` definition. That is why `fn [[n:Integer] [Integer]
+[add n 1]]` stores `[add n 1]` as the function body instead of trying
+to run it at definition time. (A plain `def name [body]` is *not* one of
 these positions — it evaluates the list and binds the result, so a
 Forth-style splice uses the explicit `word` form: `def double word
 [dup add]`.)
 
 To evaluate a held list at the point of use, use `do`:
 
-* `do [1 add 2]` — runs it as a sub-program, leaving results on the
+* `do [add 1 2]` — runs it as a sub-program, leaving results on the
   stack.
 
 The duality — lists as both data and code — is the homoiconic core
