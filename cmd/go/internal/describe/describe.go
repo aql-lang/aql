@@ -26,28 +26,9 @@ import (
 	helppkg "github.com/aql-lang/aql/lang/go/native/help"
 )
 
-// moduleSummaries gives a one-line description for each built-in module.
-// Keys are the bare module ids returned by modules.Names() (the part after
-// "aql:"), so they must carry the "-util" suffix where the module has one.
-var moduleSummaries = map[string]string{
-	"math-util":   "Floating-point math: trig, logs, roots, constants.",
-	"array-util":  "APL-style array vocabulary: shape, select, group, windows.",
-	"time-util":   "Dates, durations, timezones, clocks, timers, and intervals.",
-	"matrix-util": "Tensors, matrices, and vectors with linear algebra.",
-	"decision":    "Decision tables and rule evaluation.",
-	"bin-util":    "Bitwise and byte-buffer helpers: masks, rotates, hashes.",
-	"type-util":   "Type introspection and construction utilities.",
-	"vm":          "Low-level virtual-machine primitives.",
-	"report":      "Tabular reporting and formatting.",
-	"test":        "Assertions and helpers for in-language tests.",
-	"rand":        "Pseudo-random number generation.",
-	"query":       "SQL-style query pipelines: from, where, join, group, order.",
-	"struct-util": "Structured-data utilities: merge, walk, transform, jsonify, ….",
-	"io":          "I/O: read, write, stdin/stdout/stderr, printstr, trace.",
-	"net":         "HTTP requests and API access: fetch, prepare, direct.",
-	"logic-util":  "Derived boolean connectives: nand, nor, xnor, iff, implies.",
-	"string-util": "String manipulation: concat, split, trim, upper, lower, ….",
-}
+// The built-in module catalog (names + one-line summaries) lives in the help
+// package — see help.ModuleCatalog / help.ModuleSummary — so the CLI here and
+// the `describe` language word render the same module index.
 
 type cmd struct{}
 
@@ -209,18 +190,11 @@ func writeIndex(w io.Writer) {
 	fmt.Fprintln(w)
 
 	fmt.Fprintln(w, "Words:")
-	for _, cat := range helppkg.Categories() {
-		fmt.Fprintf(w, "  %-9s %s\n", cat.Name, cat.Summary)
-		writeWordGrid(w, cat.Words)
-	}
+	helppkg.WriteWordsByCategory(w)
 
-	mods := modules.Names()
-	sort.Strings(mods)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Modules (import with \"aql:<name>\" import):")
-	for _, m := range mods {
-		fmt.Fprintf(w, "  %-12s %s\n", m, moduleSummaries[m])
-	}
+	helppkg.WriteModuleCatalog(w)
 
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Drill in:")
@@ -231,39 +205,10 @@ func writeIndex(w io.Writer) {
 	fmt.Fprintln(w, "Docs: "+helppkg.ReferenceURL)
 }
 
-// writeWordGrid prints a category's words wrapped under a 4-space indent.
-func writeWordGrid(w io.Writer, words []string) {
-	const indent = "    "
-	const width = 72
-	line := indent
-	for _, word := range words {
-		if len(line) > len(indent) && len(line)+1+len(word) > width {
-			fmt.Fprintln(w, line)
-			line = indent
-		}
-		if len(line) > len(indent) {
-			line += " "
-		}
-		line += word
-	}
-	if len(line) > len(indent) {
-		fmt.Fprintln(w, line)
-	}
-}
-
-// writeCategory prints one category and the words it contains, each with its
-// one-line summary.
+// writeCategory prints one category and the words it contains (shared body),
+// then a CLI-flavoured footer.
 func writeCategory(w io.Writer, cat helppkg.Category) {
-	fmt.Fprintf(w, "%s — %s\n", cat.Name, cat.Summary)
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Words:")
-	for _, word := range cat.Words {
-		summary := ""
-		if entry := helppkg.Lookup(word); entry != nil {
-			summary = entry.Summary
-		}
-		fmt.Fprintf(w, "  %-12s %s\n", word, summary)
-	}
+	helppkg.WriteCategory(w, cat)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Use 'aql describe <word>' for full docs (signatures, examples) on any of these.")
 	fmt.Fprintln(w, "Docs: "+helppkg.ReferenceURL)
@@ -272,7 +217,7 @@ func writeCategory(w io.Writer, cat helppkg.Category) {
 // renderModuleDesc prints a module's summary (when built-in) and the words it
 // exports, plus how to import and drill into them.
 func renderModuleDesc(w io.Writer, ref string, desc native.ModuleDesc) int {
-	if summary := moduleSummaries[strings.TrimPrefix(ref, "aql:")]; summary != "" {
+	if summary := helppkg.ModuleSummary(strings.TrimPrefix(ref, "aql:")); summary != "" {
 		fmt.Fprintf(w, "%s — %s\n", ref, summary)
 	} else {
 		fmt.Fprintf(w, "%s\n", ref)

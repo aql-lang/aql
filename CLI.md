@@ -660,33 +660,44 @@ Keys: ↑/↓ move, `p` pause, `r` resume, `x` stop, `q` quit.
 
 ## REPL meta-commands
 
-Inside the REPL, lines that begin with `:` are *meta-commands*
+Inside the REPL, lines that begin with `/` are *meta-commands*
 (handled by the REPL, not the language):
 
 | Meta-command | Effect |
 |--------------|--------|
-| `:help` | Print meta-command list |
-| `:stack` | Print the current stack with indices |
-| `:drop` | Drop the top of stack |
-| `:clear` | Clear the stack |
-| `:reset` | Reset the engine (clear stack and definitions) |
-| `:trace on` | Enable per-expression tracing |
-| `:trace off` | Disable tracing |
-| `:check on` | Run the type-checker before each evaluation |
-| `:check off` | Disable inline type-checking |
-| `:load PATH` | Read and evaluate a file |
-| `:save PATH` | Save the session's history to a file |
-| `:quit` | Exit the REPL |
+| `/help` | Print the language overview and the meta-command list |
+| `/describe [name]` | Same as the `describe` word — the categorised guide, or one word / category / module |
+| `/stack [n]` | Print the current stack (optionally just the top `n` entries) |
 
-Plain AQL expressions work as usual:
+Help in the REPL mirrors the CLI, with one substitution: where
+[`aql help`](#aql-help) lists the tool's subcommands, the REPL's `/help`
+lists the REPL's meta-commands. Everything under
+[`aql describe`](#aql-describe) — the categorised index, categories,
+`aql:<module>` and `aql:<module>:<word>` — works the same at the prompt,
+both as the `describe` *word* and as `/describe`:
 
 ```
-aql> 1 add 2
+>> describe                       # categorised guide to words and modules
+>> describe add                   # full docs for one word
+>> describe math                  # the words in one category
+>> /describe aql:type-util:tpartial   # a module word (no quoting needed via /describe)
+```
+
+The `describe` and `help` *words* are ordinary AQL, so an argument that
+contains punctuation must be quoted: a module reference carries `:`
+(`describe "aql:type-util"`), and a dotted namespace export carries `.`
+— which is otherwise the `get` operator — so it too is quoted
+(`describe "ArrayUtil.indices"`, after `"aql:array-util" import`). The
+`/describe` meta-command takes its argument raw, so no quoting is needed
+there.
+
+Plain AQL expressions work as usual; exit with Ctrl-D (EOF):
+
+```
+>> 1 add 2
 3
-aql> :stack
+>> /stack
   [0] 3
-aql> :drop
-aql> :quit
 ```
 
 

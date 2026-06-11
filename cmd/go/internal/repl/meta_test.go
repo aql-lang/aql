@@ -276,6 +276,64 @@ func TestMetaDescribeUnknownWord(t *testing.T) {
 	}
 }
 
+// /describe with no argument prints the categorised guide, matching the
+// `describe` word and the CLI.
+func TestMetaDescribeIndexCategorised(t *testing.T) {
+	mr := NewMetaRegistry()
+	out := &bytes.Buffer{}
+	if _, err := mr.ParseAndRun("/describe", &MetaContext{Out: out}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, want := range []string{"Words:", "math", "compare", "Modules", "type-util"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("expected %q in /describe index", want)
+		}
+	}
+}
+
+// /describe <category> lists that category's words.
+func TestMetaDescribeCategory(t *testing.T) {
+	mr := NewMetaRegistry()
+	out := &bytes.Buffer{}
+	if _, err := mr.ParseAndRun("/describe math", &MetaContext{Out: out}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.String(), "math —") || !strings.Contains(out.String(), "add") {
+		t.Errorf("expected math category listing, got:\n%s", out.String())
+	}
+}
+
+// /describe aql:<module>:<word> reaches describe verbatim — the colon form is
+// not mangled by the meta-arg parser — and resolves through the wired resolver.
+func TestMetaDescribeModuleWord(t *testing.T) {
+	reg, err := newRegistry()
+	if err != nil {
+		t.Fatalf("newRegistry: %v", err)
+	}
+	mr := NewMetaRegistry()
+	out := &bytes.Buffer{}
+	ctx := &MetaContext{Out: out, Registry: reg}
+	if _, err := mr.ParseAndRun("/describe aql:type-util:tpartial", ctx); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	o := out.String()
+	if !strings.Contains(o, "TypeUtil.tpartial") || !strings.Contains(o, "Module: aql:type-util") {
+		t.Errorf("expected module-word docs, got:\n%s", o)
+	}
+}
+
+// The resolver is wired into the REPL registry, so `import "aql:<name>"` works
+// at the prompt (regression: it used to fail with "resolver not configured").
+func TestReplRegistryResolvesNativeModules(t *testing.T) {
+	reg, err := newRegistry()
+	if err != nil {
+		t.Fatalf("newRegistry: %v", err)
+	}
+	if reg.Modules.Resolver == nil {
+		t.Fatal("expected the native module resolver to be installed on the REPL registry")
+	}
+}
+
 // --- /stack tests ---
 
 func TestMetaStackEmpty(t *testing.T) {

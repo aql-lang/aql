@@ -17,6 +17,7 @@ type MetaContext struct {
 	Out      io.Writer        // output writer
 	Registry *native.Registry // the engine registry
 	Stack    []native.Value   // last evaluation result (the "stack")
+	RawArgs  string           // the unparsed argument text after the command name
 }
 
 // MetaHandler is the function signature for a meta command.
@@ -87,6 +88,11 @@ func (mr *MetaRegistry) ParseAndRun(line string, ctx *MetaContext) (bool, error)
 	if err != nil {
 		return true, fmt.Errorf("/%s: %w", name, err)
 	}
+
+	// Expose the raw argument text too, for handlers (like /describe) whose
+	// argument is a single token that must NOT go through jsonic — a module
+	// reference such as "aql:type-util:foo" would otherwise be misread as a map.
+	ctx.RawArgs = argStr
 
 	return true, cmd.Handler(args, ctx)
 }
@@ -160,34 +166,22 @@ func metaHelp(mr *MetaRegistry) MetaHandler {
 	}
 }
 
-// metaDescribe implements /describe: with no argument it lists every
-// documented word; with a word name it prints that word's docs, using
-// live registry data when available and the static entry otherwise.
-func metaDescribe(args []any, ctx *MetaContext) error {
-	if len(args) == 0 {
-		fmt.Fprintln(ctx.Out, "Words (type /describe <word>):")
-		words := help.Words()
-		sort.Strings(words)
-		for _, w := range words {
-			e := help.Lookup(w)
-			fmt.Fprintf(ctx.Out, "  %-12s %s\n", w, e.Summary)
-		}
+// metaDescribe implements /describe by delegating to the shared describe
+// implementation, so it renders identically to the `describe` word (and the
+// CLI `aql describe`): no argument prints the categorised guide; a name
+// resolves to a word, category, module, or module word. It accepts the colon
+// module forms directly (e.g. /describe aql:type-util:tpartial), since the
+// meta-command parser hands them through without the source-level quoting the
+// `describe` word needs.
+func metaDescribe(_ []any, ctx *MetaContext) error {
+	// Take the first raw token, not the jsonic-parsed args: a module reference
+	// like "aql:type-util:tpartial" must reach describe verbatim.
+	fields := strings.Fields(ctx.RawArgs)
+	if len(fields) == 0 {
+		native.DescribeIndex(ctx.Out)
 		return nil
 	}
-
-	name := fmt.Sprint(args[0])
-	if ctx.Registry != nil {
-		if info := native.BuildFuncInfo(ctx.Registry, name); info != nil {
-			fmt.Fprint(ctx.Out, help.FormatDynamic(*info))
-			return nil
-		}
-	}
-	entry := help.Lookup(name)
-	if entry == nil {
-		fmt.Fprintf(ctx.Out, "describe: no description available for %q\n", name)
-		return nil
-	}
-	fmt.Fprint(ctx.Out, help.Format(entry))
+	native.DescribeName(ctx.Registry, ctx.Out, fields[0])
 	return nil
 }
 
