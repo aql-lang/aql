@@ -1081,7 +1081,7 @@ filter p:Any => [p.value gt 3] [1 2 3 4 5]    # returns [4 5]
 def double x:Integer => [x mul 2]
 double 7                                      # returns 14
 
-def make-adder x:Integer => [(y:Integer => [x add y])]
+def make-adder x:Integer => y:Integer => [x add y]
 def add5 (make-adder 5)
 add5 3                                        # returns 8
 ```
@@ -1094,12 +1094,13 @@ The signature spellings:
   (everything `fn`'s input list accepts).
 * `[] => …` — zero params.
 
-The body must be **one** token — wrap multi-token bodies as
-`[…]` (a bare-word body like `=> x` fails; write `=> [x]`). For a
-curried chain, list-wrap the inner lambda as in `make-adder` above —
-the list defers construction to call time, when the outer param is
-bound. The arrow produces exactly one signature with return type
-`Any`; for declared returns or multiple overloads use the full
+The body must be **one** token — wrap multi-token bodies as `[…]` or
+`(…)`, both captured as code and run per call (a bare-word body like
+`=> x` fails; write `=> [x]`). Chained arrows curry right-
+associatively, as in `make-adder` above: each inner lambda is
+constructed at call time with the outer params bound and captured.
+The arrow produces exactly one signature with return type `Any`; for
+declared returns or multiple overloads use the full
 `fn [[input] [output] [body] …]` form.
 
 Parameter and return annotations may name **any** type — builtins,

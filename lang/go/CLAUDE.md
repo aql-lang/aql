@@ -466,17 +466,18 @@ a named fn's body does.
   explicit map builds a single Map-typed param (`fn (Map)`).
 - **Single-value body rule.** afn captures one forward token as the
   body. Multi-token bodies must wrap as `[token1 token2 …]` or
-  `(token1 token2 …)`. A bare-word body (e.g. `[x:Any] => x`) fails
-  because the engine dispatches the word as it walks past it during
-  forward collection — wrap as `[x]` to keep the word as data inside
-  the body list.
-- **Currying needs a list-wrapped inner lambda.** `x:Integer =>
-  y:Integer => [x add y]` parses right-associatively, but afn's body
-  PAREN evaluates during forward collection (afn has NoEvalArgs, not
-  RawParens), so the inner lambda is constructed at outer-DEF time —
-  before `x` exists — and capture misses. Write the inner lambda
-  inside the body list: `x:Integer => [(y:Integer => [x add y])]`
-  (the list defers evaluation to call time, when `x` is bound).
+  `(token1 token2 …)` — both are CODE, captured unevaluated (the body
+  slot is NoEvalArgs for lists and RawParens for parens) and run per
+  call with params bound, so `x:Integer => (x mul 2)` works. A
+  bare-word body (e.g. `[x:Any] => x`) fails because the engine
+  dispatches the word as it walks past it during forward collection —
+  wrap as `[x]` to keep the word as data inside the body list.
+- **Currying just chains.** `x:Integer => y:Integer => [x add y]`
+  parses right-associatively as `(x ⇒ (y ⇒ body))`, and because the
+  body paren is raw the inner lambda constructs INSIDE the outer body
+  — at call time, with `x` bound and captured. The older list-wrapped
+  spelling `x:Integer => [(y:Integer => [x add y])]` remains
+  equivalent.
 - **Single sig only.** `=>` produces exactly one `FnSig`. For
   multi-overload fns, use the verbose `fn [[input1] [output1] [body1]
   [input2] …]` form.

@@ -990,9 +990,15 @@ def d [x:Integer] => [x mul 2] end d 3	6
 def f x:Integer => [x mul 2] def g y:Integer => [y add 1] g (f 5)	11
 # parenless lambda as a higher-order argument
 filter p:Any => [p.value gt 3] [1 2 3 4 5]	[4 5]
-# currying: the chain nests right-associatively, but afn's body paren
-# evaluates at construction (before x binds) — list-wrap the inner
+# currying: the chain nests right-associatively, and afn's body slot
+# captures parens RAW (per-call code), so the inner lambda constructs
+# inside the outer body with x bound
+def mk x:Integer => y:Integer => [x add y] end def a2 (mk 2) end a2 3	5
+def mk a:Integer => b:Integer => c:Integer => [a add b add c] end ((mk 1) 2) 3	6
+# …the explicit list-wrapped inner form still works
 def mk x:Integer => [(y:Integer => [x add y])] end def a2 (mk 2) end a2 3	5
+# a raw paren body may reference params (it runs per call)
+(x:Integer => (x mul 2)) 5	10
 # multi-param needs brackets: in the bare form each pair closes
 # separately, so the first param strands as a stray map and the body's
 # reference to it is undefined — write ([x:Integer y:Integer] => body)
