@@ -49,6 +49,13 @@ import (
 //     is also auto-treated as optional).
 //   - Concrete-value patterns (Integer / Boolean / String literals)
 //     that anchor the param to that exact value.
+//   - /q params — `name:Atom/q` (or bare `Atom/q` for unnamed): the
+//     slot captures an upcoming bare Word as its Atom name during
+//     collection, exactly like a native QuoteArgs slot, binding-
+//     agnostic. The /q word suffix parses the type name to a concrete
+//     atom, so an atom in type position IS the declaration; an atom
+//     that names no type is an invalid parameter (the value-pattern
+//     space stays reserved).
 //   - The Word `?` — marks the PRECEDING param as optional. This
 //     is the canonical post-name optionality marker.
 //   - The Word `|` — sets the BarrierPos to the current param count.
@@ -78,6 +85,25 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 				params[len(params)-1].Optional = true
 			}
 			continue
+		}
+
+		// Bare `T/q` — an unnamed /q param. The /q word suffix parses
+		// `Atom/q` to the concrete atom "Atom"; an atom in sig position
+		// whose name is a type therefore IS the quote declaration: the
+		// slot captures an upcoming bare Word as its Atom name during
+		// collection (presented as if quoted), like a native QuoteArgs
+		// slot. An atom that does NOT name a type falls through to the
+		// invalid-parameter error below, preserving that space.
+		// DepScalars are excluded (a dependent atom type like
+		// `(Atom gt foo/q)` shares Parent=TAtom but is a predicate
+		// constraint, handled by ResolveSigType's pattern path).
+		if elem.Parent.Equal(TAtom) && IsConcrete(elem) && !elem.IsDepScalar() {
+			if tn, aerr := AsAtom(elem); aerr == nil {
+				if qt, qerr := lookupTypeNameInRegistry(r, tn); qerr == nil {
+					params = append(params, FnParam{Type: qt, Quote: true})
+					continue
+				}
+			}
 		}
 
 		_as2, _ := AsWord(elem)
@@ -134,6 +160,27 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 						}
 					}
 				}
+				// `name:T/q` — the named /q param. The /q suffix turns
+				// the type word into a concrete atom, the only surface
+				// that puts a plain atom in the pair's type slot (a
+				// dependent atom type like `(Atom gt foo/q)` shares
+				// Parent=TAtom but is a DepScalar predicate — excluded,
+				// it takes ResolveSigType's pattern path). See the
+				// unnamed `T/q` branch above for the capture semantics.
+				if typeVal.Parent.Equal(TAtom) && IsConcrete(typeVal) && !typeVal.IsDepScalar() {
+					tn, aerr := AsAtom(typeVal)
+					if aerr == nil {
+						qt, qerr := lookupTypeNameInRegistry(r, tn)
+						if qerr != nil {
+							return nil, 0, fmt.Errorf("function spec: invalid type for %q: %w", name, qerr)
+						}
+						if err := ValidateWordName(name); err != nil {
+							return nil, 0, fmt.Errorf("function spec: %w", err)
+						}
+						params = append(params, FnParam{Name: name, Type: qt, Optional: optional, Quote: true})
+						continue
+					}
+				}
 				paramType, pattern, err := ResolveSigType(r, typeVal)
 				if err != nil {
 					return nil, 0, fmt.Errorf("function spec: invalid type for %q: %w", name, err)
@@ -168,6 +215,14 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 					paramName = strings.TrimSuffix(paramName, "?")
 					optional = true
 				}
+				// `name:T/q` in the single-Word colon form (minimal
+				// tokenizers) — same /q param declaration as the
+				// implicit-pair form above.
+				quote := false
+				if strings.HasSuffix(typeName, "/q") {
+					typeName = strings.TrimSuffix(typeName, "/q")
+					quote = true
+				}
 				paramType, err := lookupTypeNameInRegistry(r, typeName)
 				if err != nil {
 					return nil, 0, fmt.Errorf("function spec: invalid type %q: %w", typeName, err)
@@ -175,7 +230,7 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 				if err := ValidateWordName(paramName); err != nil {
 					return nil, 0, fmt.Errorf("function spec: %w", err)
 				}
-				params = append(params, FnParam{Name: paramName, Type: paramType, Optional: optional})
+				params = append(params, FnParam{Name: paramName, Type: paramType, Optional: optional, Quote: quote})
 				continue
 			}
 			// Bare type-name Word: unnamed positional param.
@@ -207,6 +262,25 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 	}
 
 	return params, barrierPos, nil
+}
+
+// QuoteArgsFromParams derives the Signature.QuoteArgs map from /q-marked
+// FnParams (`name:Atom/q`). Single derivation point for FnSig
+// constructors that don't pass through InstallFnDef's normalizeSig —
+// anonymous fns (afn) and bare fn literals dispatch from their authored
+// FnSig directly, so the dispatch-side field must be populated at
+// construction. Returns nil when no param is /q-marked.
+func QuoteArgsFromParams(params []FnParam) map[int]bool {
+	var qa map[int]bool
+	for i, p := range params {
+		if p.Quote {
+			if qa == nil {
+				qa = make(map[int]bool)
+			}
+			qa[i] = true
+		}
+	}
+	return qa
 }
 
 // ParseFnReturns extracts return types from an output signature.

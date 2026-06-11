@@ -22,6 +22,7 @@ var errorPatterns = map[string]string{
 	"unify_error":      "cannot unify",
 	"binary_error":     "binary_error",
 	"no_value_error":   "no_value_error",
+	"fn_spec_error":    "function spec",
 }
 
 func TestSyntax(t *testing.T) {

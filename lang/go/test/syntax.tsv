@@ -999,6 +999,24 @@ def mk x:Integer => [(y:Integer => [x add y])] end def a2 (mk 2) end a2 3	5
 (x:Integer y:Integer => [x add y]) 2 3		undefined_word
 ([x:Integer y:Integer] => [x add y]) 2 3	5
 
+# === /q signature params: name:Atom/q captures the upcoming word ===
+
+# the slot takes a bare word as its atom name (native QuoteArgs parity)
+def f fn [[n:Atom/q] [Atom] [n]] f hello	hello
+# Atom/q subsumes Atom: an explicit atom is accepted too
+def f fn [[n:Atom/q] [Atom] [n]] f hello/q	hello
+# the capture trumps any def binding of the word
+def hello 99 def f fn [[n:Atom/q] [Atom] [n]] f hello	hello
+def vs word [2,3] def f fn [[n:Atom/q] [Atom] [n]] f vs	vs
+# unnamed form
+def f fn [[Atom/q] [Atom] [args.0]] f world	world
+# a following param collects normally after the captured name
+def kv fn [[k:Atom/q v:Any] [Any] [v]] kv color 7	7
+# lambda sigs share the same param parser
+(k:Atom/q => [k]) hi	hi
+# an atom that names no type is NOT a /q declaration (reserved space)
+def f fn [[foo/q] [Any] [args.0]] f x		fn_spec_error
+
 # === Forward argument distribution (forward-first, then stack reversed) ===
 
 # 1-arg forward function: all calling patterns

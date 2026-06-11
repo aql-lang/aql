@@ -209,6 +209,14 @@ type FnParam struct {
 	Type     *Type
 	Pattern  *Value // optional: map/list pattern for structural matching
 	Optional bool   // true if this param was marked optional via ?
+	// Quote marks a /q param (`name:Atom/q` in an AQL input sig): the
+	// slot captures an upcoming bare Word as its Atom NAME during
+	// collection — the arg is presented as if quoted — with the same
+	// binding-agnostic rule native QuoteArgs slots follow (`def`,
+	// `inspect`, `quote`: the capture trumps any def binding of the
+	// word). normalizeSig merges the flag into Signature.QuoteArgs,
+	// which is the field every dispatch-side reader consults.
+	Quote bool
 }
 
 // BarrierAllForward is the canonical sentinel for "no `|` boundary

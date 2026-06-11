@@ -916,6 +916,11 @@ diagnostic + `Any` carrier in the end-of-`Run()` drain in
 When adding a sig that should accept a bare-word name as data, add `/q`
 to the corresponding Atom position. Without `/q`, callers will see an
 `undefined_word` error and must wrap the name in `quote` themselves.
+AQL-defined fns declare the same capability as `name:Atom/q` (or bare
+`Atom/q` for an unnamed param) — ParseFnParams sets `FnParam.Quote`,
+which flows into `Signature.QuoteArgs` at construction/normalizeSig,
+so the dispatch-side behaviour (binding-agnostic word capture) is
+identical to a native QuoteArgs slot.
 
 ## Value Comparison & Ordering
 

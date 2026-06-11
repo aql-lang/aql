@@ -687,6 +687,7 @@ func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 		Returns:    []*Type{TAny},
 		Body:       bodyElems,
 		BarrierPos: barrierPos,
+		QuoteArgs:  eng.QuoteArgsFromParams(params),
 	}
 	fnDef := FnDefInfo{
 		Signatures: []FnSig{sig},

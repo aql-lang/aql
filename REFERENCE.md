@@ -1053,6 +1053,19 @@ bad                           # returns [aql/type_error] return value 1: expecte
 Multiple triples declare overloads (the engine tries each in order);
 multiple output types declare multiple return values.
 
+**`/q` params capture names.** A param typed `Atom/q` takes the next
+*bare word* as its atom name — the argument is presented as if quoted,
+exactly like the built-in name-takers (`def`, `inspect`, `quote`) —
+and the capture wins over any binding the word currently has:
+
+```
+def greet fn [[n:Atom/q] [String] [`hi ${n}`]]
+greet world                   # returns 'hi world' — no quoting needed
+def world 99
+greet world                   # returns 'hi world' — capture trumps the binding
+greet world/q                 # returns 'hi world' — an explicit atom works too
+```
+
 #### Anonymous functions — `=>`
 
 `sig => body` builds an anonymous `Function`: signature on the left,
