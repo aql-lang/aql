@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -847,7 +848,15 @@ type Value struct {
 
 // idRand is the package-level RNG used for ID generation.
 // Defaults to time-seeded; can be overridden via SetIDSeed.
-var idRand = rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0))
+//
+// idRandMu guards it: GenerateID is called from concurrently-running
+// engine forks (await branches, timer callbacks), and an *rand.Rand is
+// not safe for concurrent use. The mutex keeps ID generation race-free
+// without each call paying for its own RNG.
+var (
+	idRandMu sync.Mutex
+	idRand   = rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0))
+)
 
 // idMin is the minimum random value for generated IDs (0x100000000000).
 const idMin uint64 = 0x100000000000
@@ -857,13 +866,17 @@ const idMax uint64 = 0x1000000000000 - 0x100000000000
 
 // SetIDSeed configures the package-level RNG with the given seed.
 func SetIDSeed(seed int64) {
+	idRandMu.Lock()
+	defer idRandMu.Unlock()
 	idRand = rand.New(rand.NewPCG(uint64(seed), 0))
 }
 
 // GenerateID creates a unique ID with the given prefix followed by 12
 // lowercase hex characters. The random value is >= 0x100000000000.
 func GenerateID(prefix string) string {
+	idRandMu.Lock()
 	n := idMin + idRand.Uint64N(idMax)
+	idRandMu.Unlock()
 	var buf [6]byte
 	buf[0] = byte(n >> 40)
 	buf[1] = byte(n >> 32)

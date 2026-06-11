@@ -696,8 +696,12 @@ func doTimeout(r *Registry, args []Value, isList bool) ([]Value, error) {
 	callback := args[1]
 
 	id := GenerateID("T_")
+	// Fork now, on the scheduling goroutine, so the callback runs on an
+	// isolated registry and cannot race the main interpreter when it
+	// fires later on the timer goroutine.
+	fork := r.ForkConcurrent()
 	timer := time.AfterFunc(time.Duration(ms)*time.Millisecond, func() {
-		RunTimerCallback(r, callback, isList)
+		RunTimerCallback(fork, callback, isList)
 	})
 
 	info := &TimeoutInfo{

@@ -587,13 +587,18 @@ func startInterval(args []Value, r *Registry, isList bool) ([]Value, error) {
 	ticker := time.NewTicker(time.Duration(ms) * time.Millisecond)
 	done := make(chan struct{})
 
+	// Fork now, on the scheduling goroutine, so every tick runs the
+	// callback on an isolated registry and never races the main
+	// interpreter. The fork is reused across ticks; its private scopes
+	// persist between invocations like a long-lived handler's state.
+	fork := r.ForkConcurrent()
 	go func() {
 		for {
 			select {
 			case <-done:
 				return
 			case <-ticker.C:
-				RunTimerCallback(r, callback, isList)
+				RunTimerCallback(fork, callback, isList)
 			}
 		}
 	}()

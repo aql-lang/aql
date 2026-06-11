@@ -263,3 +263,23 @@ func (dt *DefTable) Restore(snap map[string]int) {
 		dt.Truncate(name, want)
 	}
 }
+
+// Clone returns a deep copy of the def table: every name's binding
+// stack is copied into a fresh slice so the clone and the original can
+// be pushed to and popped from independently. DefEntry values are
+// copied shallowly — a bound Body Value and its *Type identity are
+// immutable snapshots, so sharing them across the clone boundary is
+// safe. Used by Registry.ForkConcurrent to give a concurrently-running
+// fork its own binding scope seeded from the parent's current bindings.
+func (dt *DefTable) Clone() *DefTable {
+	if dt == nil {
+		return NewDefTable()
+	}
+	stacks := make(map[string][]DefEntry, len(dt.stacks))
+	for name, st := range dt.stacks {
+		cp := make([]DefEntry, len(st))
+		copy(cp, st)
+		stacks[name] = cp
+	}
+	return &DefTable{stacks: stacks}
+}

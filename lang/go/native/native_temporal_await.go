@@ -14,12 +14,32 @@ type parallelResult struct {
 	err    bool // true if the branch produced an error value or runtime error
 }
 
-// runParallelBranch executes one element with do semantics.
-// If the element is a list, it runs as a sub-program.
-// Otherwise, it is returned as a single value.
-func runParallelBranch(r *Registry, elem Value) parallelResult {
+// makeBranchForks builds one isolated registry per branch so the
+// branches can run concurrently without racing on the shared registry's
+// mutable stacks. A single SyncWriter is shared across the forks so
+// concurrent prints to the parent's output are serialized rather than
+// interleaved or raced. Forking happens here, on the dispatching
+// goroutine, while the parent is not yet parked — ForkConcurrent's
+// reads of the parent state are therefore race-free.
+func makeBranchForks(r *Registry, n int) []*Registry {
+	out := NewSyncWriter(r.Output)
+	errOut := NewSyncWriter(r.ErrOutput)
+	forks := make([]*Registry, n)
+	for i := range forks {
+		f := r.ForkConcurrent()
+		f.Output = out
+		f.ErrOutput = errOut
+		forks[i] = f
+	}
+	return forks
+}
+
+// runParallelBranch executes one element with do semantics on its own
+// isolated registry fork. If the element is a list, it runs as a
+// sub-program. Otherwise, it is returned as a single value.
+func runParallelBranch(reg *Registry, elem Value) parallelResult {
 	if elem.Parent.ConformsTo(TList) && elem.Data != nil && !IsTypedList(elem) && !IsTableType(elem) {
-		sub := New(r)
+		sub := New(reg)
 		_lst, _ := AsList(elem)
 		body := _lst.Slice()
 		input := make([]Value, len(body))
@@ -41,16 +61,17 @@ func runParallelBranch(r *Registry, elem Value) parallelResult {
 // awaitAll waits for all branches to succeed. Returns the first error if any reject.
 func awaitAll(r *Registry, elems []Value) ([]Value, error) {
 	results := make([]parallelResult, len(elems))
+	forks := makeBranchForks(r, len(elems))
 	var wg sync.WaitGroup
 	wg.Add(len(elems))
 
 	for i, elem := range elems {
-		go func(idx int, e Value) {
+		go func(idx int, e Value, reg *Registry) {
 			defer wg.Done()
-			pr := runParallelBranch(r, e)
+			pr := runParallelBranch(reg, e)
 			pr.index = idx
 			results[idx] = pr
-		}(i, elem)
+		}(i, elem, forks[i])
 	}
 	wg.Wait()
 
@@ -78,16 +99,17 @@ func awaitAll(r *Registry, elems []Value) ([]Value, error) {
 // {status:'ok, value:...} or {status:'error, value:...} maps.
 func awaitFull(r *Registry, elems []Value) ([]Value, error) {
 	results := make([]parallelResult, len(elems))
+	forks := makeBranchForks(r, len(elems))
 	var wg sync.WaitGroup
 	wg.Add(len(elems))
 
 	for i, elem := range elems {
-		go func(idx int, e Value) {
+		go func(idx int, e Value, reg *Registry) {
 			defer wg.Done()
-			pr := runParallelBranch(r, e)
+			pr := runParallelBranch(reg, e)
 			pr.index = idx
 			results[idx] = pr
-		}(i, elem)
+		}(i, elem, forks[i])
 	}
 	wg.Wait()
 
@@ -111,13 +133,14 @@ func awaitFull(r *Registry, elems []Value) ([]Value, error) {
 
 // awaitFirst returns the result of whichever branch finishes first.
 func awaitFirst(r *Registry, elems []Value) ([]Value, error) {
+	forks := makeBranchForks(r, len(elems))
 	ch := make(chan parallelResult, len(elems))
 	for i, elem := range elems {
-		go func(idx int, e Value) {
-			pr := runParallelBranch(r, e)
+		go func(idx int, e Value, reg *Registry) {
+			pr := runParallelBranch(reg, e)
 			pr.index = idx
 			ch <- pr
-		}(i, elem)
+		}(i, elem, forks[i])
 	}
 	first := <-ch
 	return first.values, nil
@@ -130,13 +153,14 @@ func awaitAny(r *Registry, elems []Value) ([]Value, error) {
 		pr parallelResult
 	}
 
+	forks := makeBranchForks(r, len(elems))
 	ch := make(chan indexedResult, len(elems))
 	for i, elem := range elems {
-		go func(idx int, e Value) {
-			pr := runParallelBranch(r, e)
+		go func(idx int, e Value, reg *Registry) {
+			pr := runParallelBranch(reg, e)
 			pr.index = idx
 			ch <- indexedResult{pr: pr}
-		}(i, elem)
+		}(i, elem, forks[i])
 	}
 
 	var lastErr parallelResult

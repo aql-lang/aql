@@ -824,3 +824,51 @@ func mustBuiltinType(path string) *Type {
 	}
 	return def
 }
+
+// CloneDynamic returns a copy of a per-Registry dynamic type table for a
+// concurrently-running fork. The lookup maps are copied so a mint in the
+// fork (which writes byID/byName/parts) cannot race the parent's maps;
+// the *Type pointers are shared, since a minted type's identity is
+// stable and concurrent forks only read pre-existing types. Builtins are
+// unaffected — they live in the package-level Builtin table, which is
+// read-only after init and safe to share. Used by
+// Registry.ForkConcurrent.
+func (tt *TypeTable) CloneDynamic() *TypeTable {
+	if tt == nil {
+		return NewDynamicTypeTable()
+	}
+	cp := &TypeTable{
+		byID:   make(map[string]*Type, len(tt.byID)),
+		byName: make(map[string]*Type, len(tt.byName)),
+		parts:  make(map[string]bool, len(tt.parts)),
+		seq:    tt.seq,
+	}
+	for k, v := range tt.byID {
+		cp.byID[k] = v
+	}
+	for k, v := range tt.byName {
+		cp.byName[k] = v
+	}
+	for k, v := range tt.parts {
+		cp.parts[k] = v
+	}
+	if tt.bypath != nil {
+		cp.bypath = make(map[string]*Type, len(tt.bypath))
+		for k, v := range tt.bypath {
+			cp.bypath[k] = v
+		}
+	}
+	if tt.rootSet != nil {
+		cp.rootSet = make(map[string]bool, len(tt.rootSet))
+		for k, v := range tt.rootSet {
+			cp.rootSet[k] = v
+		}
+	}
+	if tt.leafIndex != nil {
+		cp.leafIndex = make(map[string]string, len(tt.leafIndex))
+		for k, v := range tt.leafIndex {
+			cp.leafIndex[k] = v
+		}
+	}
+	return cp
+}

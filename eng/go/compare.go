@@ -200,6 +200,15 @@ func ExactEqual(a, b Value) bool {
 			br, bok := toRatExact(b)
 			return aok && bok && ar.Cmp(br) == 0
 		}
+		// Two int64-backed Integers compare EXACTLY as int64; the float64
+		// projection below rounds magnitudes above 2^53 and would report
+		// distinct large integers as equal. A Float on either side keeps
+		// the float comparison (cross-leaf magnitude: 1 == 1.0).
+		if a.Parent.ConformsTo(TInteger) && b.Parent.ConformsTo(TInteger) {
+			ai, _ := AsInteger(a)
+			bi, _ := AsInteger(b)
+			return ai == bi
+		}
 		_as9, _ := AsNumber(a)
 		_as8, _ := AsNumber(b)
 		return _as9 == _as8
