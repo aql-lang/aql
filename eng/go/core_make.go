@@ -238,6 +238,13 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 	}
 
 	if prototype != nil && objType.Parent != nil {
+		// An open object (nil TypeRef) can never satisfy a typed
+		// parent requirement — report it rather than dereferencing
+		// the absent schema.
+		if prototype.TypeRef == nil {
+			return nil, fmt.Errorf("make: prototype is an open Object (no type) — expected a %s instance",
+				objType.Parent.Name)
+		}
 		if prototype.TypeRef.ID != objType.Parent.ID {
 			return nil, fmt.Errorf("make: prototype type %s does not match parent type %s",
 				prototype.TypeRef.Name, objType.Parent.Name)
@@ -330,7 +337,14 @@ func makeClassInstance(objType ObjectTypeInfo, provided *OrderedMap, r *Registry
 
 		if !hasVal {
 			if constraint.Data != nil {
-				result.Set(key, constraint)
+				// A concrete default fills the omitted field — as a
+				// FRESH copy when it is (or contains) shared-mutable
+				// state, so every instance gets its own FlexList /
+				// FlexMap / Array / Store / instance rather than all
+				// instances aliasing the single schema value (the
+				// Python mutable-default trap, silent until two
+				// instances cross-talk).
+				result.Set(key, FreshenDefault(constraint))
 				continue
 			}
 			return nil, fmt.Errorf("make: missing field %q for class %s", key, objType.Name)
@@ -363,6 +377,130 @@ func MakeClassInstance(objType ObjectTypeInfo, provided *OrderedMap, r *Registry
 		return Value{}, err
 	}
 	return vals[0], nil
+}
+
+// containsSharedMutable reports whether v is — or transitively
+// contains — a payload whose mutations are visible through shared
+// Value copies: a flex node (FlexList's *FlexListData, FlexMap's
+// pointer-backed *OrderedMap), an Array (*ArrayInstanceInfo), a Store
+// (*StoreInstanceInfo), or an object/class instance (whose Fields
+// *OrderedMap `set` writes in place). Drives FreshenDefault's
+// identity fast path: scalars and purely-immutable nodes share
+// safely and are returned unchanged.
+func containsSharedMutable(v Value) bool {
+	if IsFlexNode(v) || IsArray(v) || IsStore(v) || IsObjectInstance(v) {
+		return true
+	}
+	if !IsConcrete(v) {
+		return false
+	}
+	if v.Parent.ConformsTo(TMap) {
+		if m, err := AsMap(v); err == nil && m != nil {
+			for _, k := range m.Keys() {
+				val, _ := m.Get(k)
+				if containsSharedMutable(val) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	if v.Parent.ConformsTo(TList) {
+		if lst, err := AsList(v); err == nil && !lst.IsNil() {
+			for i := 0; i < lst.Len(); i++ {
+				if containsSharedMutable(lst.Get(i)) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return false
+}
+
+// FreshenDefault returns v with every shared-mutable container payload
+// it transitively contains replaced by a fresh, independent copy —
+// same kind, same type tag, new identity. Flex nodes copy to flex
+// nodes, Arrays to Arrays, Stores to a fresh own-data layer, and
+// instances to a fresh Fields map; immutable containers are rebuilt
+// only on the path down to a mutable payload, and a value with no
+// shared-mutable state anywhere inside is returned unchanged.
+//
+// This is what makes a concrete mutable default in a class schema
+// per-instance: `def Foo class {items:(flex [])}` hands each `make`
+// its own FlexList instead of aliasing the schema's single one.
+// (Pointer payloads the kernel cannot meaningfully duplicate — a
+// running Timer/Interval, module/extension payloads — pass through
+// unchanged.)
+func FreshenDefault(v Value) Value {
+	if !containsSharedMutable(v) {
+		return v
+	}
+	out := v
+	switch {
+	case IsObjectInstance(v):
+		info, err := AsObjectInstance(v)
+		if err != nil {
+			return v
+		}
+		fields := NewOrderedMap()
+		for _, k := range info.Fields.Keys() {
+			fv, _ := info.Fields.Get(k)
+			fields.Set(k, FreshenDefault(fv))
+		}
+		ninfo := info // struct copy: TypeRef / Prototype stay shared
+		ninfo.Fields = fields
+		out.Data = ninfo
+	case IsArray(v):
+		ai, err := AsArray(v)
+		if err != nil || ai == nil {
+			return v
+		}
+		elems := make([]Value, len(ai.Elems))
+		for i := range ai.Elems {
+			elems[i] = FreshenDefault(ai.Elems[i])
+		}
+		out.Data = &ArrayInstanceInfo{Elems: elems}
+	case IsStore(v):
+		si, err := AsStore(v)
+		if err != nil || si == nil {
+			return v
+		}
+		nsi := *si // Prototype chain stays shared (read-only fallback)
+		nsi.Data = make(map[string]Value, len(si.Data))
+		for k, val := range si.Data {
+			nsi.Data[k] = FreshenDefault(val)
+		}
+		out.Data = &nsi
+	case v.Parent.ConformsTo(TMap):
+		// Plain Map and FlexMap share the MapPayload shape; the Parent
+		// tag (kept by the struct copy) preserves the flavor.
+		m, err := AsMap(v)
+		if err != nil || m == nil {
+			return v
+		}
+		om := NewOrderedMap()
+		for _, k := range m.Keys() {
+			val, _ := m.Get(k)
+			om.Set(k, FreshenDefault(val))
+		}
+		out.Data = MapPayload{M: om}
+	case v.Parent.ConformsTo(TList):
+		lst, err := AsList(v)
+		if err != nil || lst.IsNil() {
+			return v
+		}
+		elems := make([]Value, lst.Len())
+		for i := 0; i < lst.Len(); i++ {
+			elems[i] = FreshenDefault(lst.Get(i))
+		}
+		if IsFlexList(v) {
+			out.Data = &FlexListData{Elems: elems}
+		} else {
+			out.Data = ListPayload{Elems: elems}
+		}
+	}
+	return out
 }
 
 // MakeClassFieldValue validates one value against a class-schema
@@ -1053,10 +1191,18 @@ func ResolveFieldType(r *Registry, v Value) Value {
 }
 
 // setPrototypeField sets a field value on the appropriate level of a
-// prototype chain.
+// prototype chain. A level's declared fields come from its schema
+// (TypeRef); an OPEN object level (nil TypeRef — no schema) declares
+// whatever its own field map currently holds.
 func setPrototypeField(proto *ObjectInstanceInfo, key string, val Value) {
 	for p := proto; p != nil; p = p.Prototype {
-		if _, ok := p.TypeRef.Fields.Get(key); ok {
+		declared := false
+		if p.TypeRef != nil {
+			_, declared = p.TypeRef.Fields.Get(key)
+		} else if p.Fields != nil {
+			_, declared = p.Fields.Get(key)
+		}
+		if declared {
 			p.Fields.Set(key, val)
 			return
 		}

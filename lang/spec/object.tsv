@@ -144,3 +144,9 @@ def a array [1 2] end a set 5 9	ERROR:out of bounds	in-place Array set is bounds
 def xs [1 2 3] end def ys (xs set 0 99) end ys	[99 2 3]	List set is copy-returning — a NEW list
 def xs [1 2 3] end def ys (xs set 0 99) end xs	[1 2 3]	…and the receiver is untouched (immutable column)
 [1 2] set 5 9	ERROR:index_out_of_range	List set rejects out-of-range indices loudly
+#
+# §X  open objects (no schema, nil TypeRef) must render, not crash —
+#     formatting any open instance was a SIGSEGV (bloom report #3)
+make Object {x:1}	Object{x:1}	an open object renders under its lattice leaf
+object {x:1 y:2}	Object{x:1 y:2}	the object builder form renders the same way
+def o (make Object {x:1}) set y 2 o end o	Object{x:1 y:2}	an open object accepts new fields and re-renders

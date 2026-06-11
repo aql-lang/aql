@@ -2406,9 +2406,19 @@ func kernelFormatDefault(v Value) string {
 			val, _ := allFields.Get(k)
 			parts = append(parts, k+":"+val.String())
 		}
-		name := oi.TypeRef.Name
-		if name == "" {
+		// An OPEN object (`object {…}` / `make Object {…}`) carries no
+		// TypeRef by design — render it under its lattice leaf instead
+		// of dereferencing the absent schema (was a SIGSEGV).
+		name := ""
+		switch {
+		case oi.TypeRef != nil && oi.TypeRef.Name != "":
+			name = oi.TypeRef.Name
+		case oi.TypeRef != nil:
 			name = "Ideal/Object/" + oi.TypeRef.ID
+		case v.Parent != nil:
+			name = v.Parent.Leaf()
+		default:
+			name = "Object"
 		}
 		return name + "{" + strings.Join(parts, " ") + "}"
 	case IsObjectType(v):

@@ -578,7 +578,11 @@ sort [Integer 0 5 -3]         # returns [Integer -3 0 5]
 value declares a required field, a **concrete** value declares a
 default (and the default's own type becomes the field's type).
 `make` constructs flat instances — every field resolved eagerly,
-no prototypes:
+no prototypes. A **mutable** default — a flex node, `Array`,
+`Store`, or instance — is copied fresh for each `make`, so
+instances never share one underlying container (no Python-style
+mutable-default trap); a mutable value you **pass in** is taken
+as-is, so deliberate sharing stays available:
 
 ```
 def Point class {x:Float y:0.0}     # x required, y defaults to 0.0
