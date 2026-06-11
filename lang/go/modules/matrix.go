@@ -167,6 +167,27 @@ func newMatrix(rows, cols int, data []float64) native.Value {
 	return tensorValue(TMatrix, TensorData{Shape: []int{rows, cols}, Data: data})
 }
 
+// maxMatrixElems caps the number of entries a constructor will allocate
+// from user-supplied dimensions (~134M float64 ≈ 1 GiB). It bounds the
+// memory a single `zeros`/`ones`/`fill`/`eye` call can demand.
+const maxMatrixElems = 1 << 27
+
+// validDims rejects dimensions that would make matrix allocation unsafe:
+// a negative size (make([]float64, neg) panics), an int overflow in
+// rows*cols, or a product beyond the element cap (OOM). Returning an
+// error here keeps these user-reachable conditions out of the panicking
+// allocation path — see ADR-005.
+func validDims(rows, cols int) error {
+	if rows < 0 || cols < 0 {
+		return fmt.Errorf("matrix: dimensions must be non-negative, got %dx%d", rows, cols)
+	}
+	// Check the product without overflowing: rows*cols > cap ⇔ cols > cap/rows.
+	if rows != 0 && cols > maxMatrixElems/rows {
+		return fmt.Errorf("matrix: %dx%d (%d elements) exceeds the cap of %d", rows, cols, rows*cols, maxMatrixElems)
+	}
+	return nil
+}
+
 // BuildMatrixModule creates the "aql:matrix-util" native module. It registers
 // Go-implemented matrix words into an isolated sub-registry and returns a
 // ModuleDesc with a "matrix" export containing FnDef wrappers for each word.
@@ -428,6 +449,9 @@ var MatrixNatives = []native.NativeFunc{
 					return nil, err
 				}
 				rows, cols := int(r64), int(c64)
+				if err := validDims(rows, cols); err != nil {
+					return nil, err
+				}
 				data := make([]float64, rows*cols)
 				return []native.Value{newMatrix(rows, cols, data)}, nil
 			},
@@ -450,6 +474,9 @@ var MatrixNatives = []native.NativeFunc{
 					return nil, err
 				}
 				rows, cols := int(r64), int(c64)
+				if err := validDims(rows, cols); err != nil {
+					return nil, err
+				}
 				data := make([]float64, rows*cols)
 				for i := range data {
 					data[i] = 1.0
@@ -470,6 +497,9 @@ var MatrixNatives = []native.NativeFunc{
 					return nil, err
 				}
 				n := int(n64)
+				if err := validDims(n, n); err != nil {
+					return nil, err
+				}
 				data := make([]float64, n*n)
 				for i := 0; i < n; i++ {
 					data[i*n+i] = 1.0
@@ -498,6 +528,9 @@ var MatrixNatives = []native.NativeFunc{
 					return nil, err
 				}
 				rows, cols := int(r64), int(c64)
+				if err := validDims(rows, cols); err != nil {
+					return nil, err
+				}
 				data := make([]float64, rows*cols)
 				for i := range data {
 					data[i] = val
