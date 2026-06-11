@@ -1887,7 +1887,6 @@ modules keep plain names.
 | `aql:matrix-util` | `MatrixUtil` | Tensor / Matrix / Vector types and linear algebra. |
 | `aql:io` | `IO` | File and stream I/O — `read`, `write`, `stdin`, `stdout`, `trace` (only `print` stays in core). |
 | `aql:net` | `Net` | HTTP / API words — `fetch`, `prepare`, `direct`. |
-| `aql:decision` | `Decision` | Decision tables (rules engine). |
 | `aql:test` | `Test`, `Assert` | Unit tests, declarative specs, property-based testing. |
 | `aql:rand` | `Rand` | Seeded random generators (drives `Test.check-prop`). |
 | `aql:query` | `Query` | SQL-flavoured query pipeline. |

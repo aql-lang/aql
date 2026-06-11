@@ -23,7 +23,6 @@ var moduleCatalog = []ModuleInfo{
 	{"array-util", "APL-style array vocabulary: shape, select, group, windows."},
 	{"time-util", "Dates, durations, timezones, clocks, timers, and intervals."},
 	{"matrix-util", "Tensors, matrices, and vectors with linear algebra."},
-	{"decision", "Decision tables and rule evaluation."},
 	{"bin-util", "Bitwise and byte-buffer helpers: masks, rotates, hashes."},
 	{"type-util", "Type introspection and construction utilities."},
 	{"vm", "Low-level virtual-machine primitives."},

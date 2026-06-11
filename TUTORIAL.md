@@ -728,13 +728,12 @@ framework modules keep plain names:
 |-----------|-----------|-|-----------|-----------|
 | `aql:math-util` | `MathUtil` | | `aql:io` | `IO` |
 | `aql:array-util` | `ArrayUtil` | | `aql:net` | `Net` |
-| `aql:string-util` | `StringUtil` | | `aql:decision` | `Decision` |
-| `aql:struct-util` | `StructUtil` | | `aql:test` | `Test`, `Assert` |
-| `aql:time-util` | `TimeUtil` | | `aql:rand` | `Rand` |
-| `aql:type-util` | `TypeUtil` | | `aql:query` | `Query` |
-| `aql:matrix-util` | `MatrixUtil` | | `aql:report` | `Report` |
-| `aql:bin-util` | `BinUtil` | | `aql:vm` | `Vm` |
-| `aql:logic-util` | `LogicUtil` | | | |
+| `aql:string-util` | `StringUtil` | | `aql:test` | `Test`, `Assert` |
+| `aql:struct-util` | `StructUtil` | | `aql:rand` | `Rand` |
+| `aql:time-util` | `TimeUtil` | | `aql:query` | `Query` |
+| `aql:type-util` | `TypeUtil` | | `aql:report` | `Report` |
+| `aql:matrix-util` | `MatrixUtil` | | `aql:vm` | `Vm` |
+| `aql:bin-util` | `BinUtil` | | `aql:logic-util` | `LogicUtil` |
 
 (The full per-module word lists are in
 **[Reference: Built-in modules](REFERENCE.md#built-in-modules)**.)

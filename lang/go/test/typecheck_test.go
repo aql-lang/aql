@@ -102,9 +102,9 @@ func TestCheckUncalledFunction(t *testing.T) {
 		want int
 		desc string
 	}{
-		{`import "aql:decision" end  Decision.cond 5 6 7`, 1, "module namespace call, mismatched args"},
-		{`import "aql:decision" end  Decision.cond age/q "gt" 18`, 0, "module namespace call, correct args"},
-		{`import "aql:decision" end  Decision.cond`, 0, "bare module reference, no args"},
+		{`import "aql:math-util" end  MathUtil.sqrt "x"`, 1, "module namespace call, mismatched args"},
+		{`import "aql:math-util" end  MathUtil.sqrt 4.0`, 0, "module namespace call, correct args"},
+		{`import "aql:math-util" end  MathUtil.sqrt`, 0, "bare module reference, no args"},
 		{`def f fn [[x:Integer] [Integer] [x mul x]]  (usurp f) "hello"`, 1, "local fn value, wrong-typed arg"},
 		{`def f fn [[x:Integer] [Integer] [x mul x]]  (usurp f) 5`, 0, "local fn value, correct arg"},
 		{`def f fn [[x:Integer] [Integer] [x mul x]]  f/r "hello"`, 0, "genuinely inert /r ref (no paren) is not a call"},

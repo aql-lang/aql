@@ -1164,10 +1164,10 @@ func invokeSubject(parent *native.Registry, name string, inputArg native.Value) 
 
 // dottedWordTokens returns the token sequence the engine would
 // produce for a dotted reference. A plain "foo" lexes to [Word(foo)];
-// "Decision.eval-cond" lexes to [Word(decision), Word(get),
-// Atom(eval-cond)]. Test.invoke uses this so a spec can name its
-// subject as either `eval-cond/q` (when the user has imported the
-// module's words flat) or `Decision.eval-cond/q` (the more common
+// "MathUtil.sqrt" lexes to [Word(MathUtil), Word(get),
+// Atom(sqrt)]. Test.invoke uses this so a spec can name its
+// subject as either `sqrt/q` (when the user has imported the
+// module's words flat) or `MathUtil.sqrt/q` (the more common
 // form, when the user has the bare module import).
 func dottedWordTokens(name string) []native.Value {
 	parts := strings.Split(name, ".")
@@ -1228,7 +1228,7 @@ def TestSet refine Table (refine Record [name:String in:List out:Any])
 # name referring to a word resolvable in the def stack at run time)
 # and either inline cases or sub-specs (or both).
 # - subject:  Atom or String naming the word under test. Strings
-#             support dotted names like "Decision.eval-cond" so a
+#             support dotted names like "MathUtil.sqrt" so a
 #             spec can target a module export without first flat-
 #             importing the word.
 # - cases:    inline TestSet (may be empty)

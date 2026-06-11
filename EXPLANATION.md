@@ -655,7 +655,7 @@ dot is just field access on the module's exported map.
 
 File imports load source from disk; renaming on import (`import
 [helper as h] "..."`) prevents collisions; built-in modules
-(`aql:math`, `aql:time-util`, `aql:matrix-util`, `aql:decision`) are
+(`aql:math-util`, `aql:time-util`, `aql:matrix-util`) are
 host-provided and follow the same shape.
 
 There is no global namespace flattening: every imported binding

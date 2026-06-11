@@ -15,8 +15,8 @@ import (
 // doc table from falling behind the export set — a new export without a doc
 // fails here, the describe-DX analogue of the ADR-003 spec-coverage guard.
 //
-// Type exports (capitalised names like Decision.Cond) are not functions and
-// are intentionally not required to carry a Doc.
+// Type exports (capitalised names) are not functions and are
+// intentionally not required to carry a Doc.
 func TestModuleExportDocs(t *testing.T) {
 	reg, err := native.DefaultRegistry()
 	if err != nil {

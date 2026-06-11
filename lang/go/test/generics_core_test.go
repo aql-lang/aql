@@ -118,7 +118,7 @@ func TestGenFnCallBindingAlignment(t *testing.T) {
 // overloads must run the body belonging to the signature
 // matchSignature selected — the old arity-only pick ran the FIRST
 // 3-arg body with the OTHER sig's args (surfaced by Phase 8's
-// generic-plus-catch-all apply-op shape in aql:decision).
+// generic-plus-catch-all apply-op shape).
 func TestModuleWrapperSigBodyPairing(t *testing.T) {
 	res, err := runNativeSteps(t, nil, []string{
 		`module [
