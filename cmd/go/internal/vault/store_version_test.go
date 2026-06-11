@@ -53,6 +53,42 @@ func TestLoadMigratesV1Golden(t *testing.T) {
 	}
 }
 
+// TestLoadMigratesV2Golden loads a checked-in v2 store and asserts the
+// v2->v3 bump is a clean no-op: version advances, aliases survive with
+// no expiry conjured onto them, and a v2 (token-hashed) capability stays
+// valid rather than being revoked like the pre-hash v1 ones.
+func TestLoadMigratesV2Golden(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "vault.v2.jsonic"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := writeStoreFile(t, data)
+
+	s, err := LoadStore(dir)
+	if err != nil {
+		t.Fatalf("LoadStore: %s", err)
+	}
+	if s.Version != storeVersion {
+		t.Errorf("version = %d after migration, want %d", s.Version, storeVersion)
+	}
+	a, _ := s.FindAlias("openai")
+	if a == nil {
+		t.Fatalf("alias lost during migration")
+	}
+	if a.ExpiresAt != "" {
+		t.Errorf("migration invented an expiry %q on a v2 alias", a.ExpiresAt)
+	}
+	if len(s.Capabilities) != 1 {
+		t.Fatalf("expected 1 capability, got %d", len(s.Capabilities))
+	}
+	if s.Capabilities[0].Revoked {
+		t.Errorf("v2 token-hashed capability should not be revoked by v2->v3")
+	}
+	if len(s.ActiveCapabilities(nowUTC())) != 1 {
+		t.Errorf("v2 capability should remain active after migration")
+	}
+}
+
 // TestLoadRejectsFutureVersion ensures a store written by a newer aql
 // is refused, not parsed leniently (which would silently strip unknown
 // fields on the next save).

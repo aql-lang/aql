@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -33,17 +32,50 @@ func (*cmd) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return Run(args, stdin, stdout, stderr)
 }
 
-// Run handles `aql vault <mode> [args...]`.
+// Run handles `aql vault [--folder=F] [--suffix=S] <mode> [args...]`.
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		printUsage(stderr)
-		return 1
-	}
-	mode, rest := args[0], args[1:]
-	homeDir, err := homeDir()
+	// Pull the global --folder/--suffix location flags out first; what
+	// remains is the mode and its own arguments.
+	folder, folderSet, suffix, suffixSet, rest, err := splitLocationArgs(args)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
+	}
+	// A flag, when given, overrides the matching env var for this
+	// process — the path resolvers in location.go read only the env, so
+	// promoting the flag keeps a single source of truth.
+	if folderSet {
+		if err := os.Setenv(EnvFolder, folder); err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+	}
+	if suffixSet {
+		if err := os.Setenv(EnvSuffix, suffix); err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+	}
+	if s := os.Getenv(EnvSuffix); s != "" && !validSuffix(s) {
+		fmt.Fprintf(stderr, "error: invalid vault suffix %q (allowed: letters, digits, dot, dash, underscore; must start with a letter or digit)\n", s)
+		return 1
+	}
+	if len(rest) == 0 {
+		printUsage(stderr)
+		return 1
+	}
+	mode, rest := rest[0], rest[1:]
+
+	homeDir, err := homeDir()
+	if err != nil {
+		// A folder override makes the home location irrelevant — every
+		// vault path resolves from AQL_VAULT_FOLDER instead — so don't
+		// fail just because the OS can't report a home folder.
+		if os.Getenv(EnvFolder) == "" {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+		homeDir = ""
 	}
 
 	switch mode {
@@ -60,6 +92,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runGet(rest, homeDir, stdout, stderr)
 	case "list", "ls":
 		return runList(rest, homeDir, stdout, stderr)
+	case "expiry", "expires":
+		return runExpiry(rest, homeDir, stdout, stderr)
 	case "rm", "remove", "delete":
 		return runRemove(rest, homeDir, stdout, stderr)
 	case "mv", "rename":
@@ -104,7 +138,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aql vault <mode> [args...]")
+	fmt.Fprintln(w, "Usage: aql vault [--folder=PATH] [--suffix=NAME] <mode> [args...]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Modes:")
 	for _, m := range modeDocs {
@@ -115,6 +149,9 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Passphrases are prompted interactively (hidden); set AQL_VAULT_PASSPHRASE only for non-interactive use.")
 	fmt.Fprintln(w, "Namespaces: qualify aliases as ns:name; bare names use the default namespace")
 	fmt.Fprintln(w, "  (vault config --set namespace.default=NS, or AQL_VAULT_NAMESPACE; ':' = root, :name forces root).")
+	fmt.Fprintln(w, "Location: the vault lives in ~/.aql with files vault.<part> by default. Override the")
+	fmt.Fprintln(w, "  folder with --folder/AQL_VAULT_FOLDER and the file suffix (vault.<suffix>.jsonic)")
+	fmt.Fprintln(w, "  with --suffix/AQL_VAULT_SUFFIX; pass the same values to every command on that vault.")
 }
 
 type modeDoc struct{ name, summary string }
@@ -125,6 +162,7 @@ var modeDocs = []modeDoc{
 	{"add", "store a secret under an alias"},
 	{"get", "retrieve a secret (redacted unless --reveal)"},
 	{"list", "list aliases and metadata (no values)"},
+	{"expiry", "list pending key expiries; set/clear them (filter by namespace)"},
 	{"rm", "remove a secret"},
 	{"mv", "rename a key, move it between namespaces, or rename a namespace (ns:)"},
 	{"verify", "reconcile the store and keyring; --prune repairs (also: fsck)"},
@@ -183,7 +221,7 @@ func openKeyring(s *Store, homeDir string, stdin io.Reader, stdout io.Writer, pr
 		resolved = autoBackend()
 	}
 	if resolved != BackendFile {
-		return selectKeyring(backend, fileDir(homeDir), "")
+		return selectKeyring(backend, vaultFolder(homeDir), "")
 	}
 	pass := os.Getenv(EnvPassphrase)
 	if pass == "" && stdin != nil {
@@ -197,11 +235,7 @@ func openKeyring(s *Store, homeDir string, stdin io.Reader, stdout io.Writer, pr
 	if pass == "" {
 		return nil, errors.New("file backend requires a passphrase; run interactively to be prompted, or set AQL_VAULT_PASSPHRASE for non-interactive use")
 	}
-	return selectKeyring(BackendFile, fileDir(homeDir), pass)
-}
-
-func fileDir(homeDir string) string {
-	return filepath.Join(homeDir, ".aql")
+	return selectKeyring(BackendFile, vaultFolder(homeDir), pass)
 }
 
 // --- init ------------------------------------------------------------------
@@ -254,7 +288,7 @@ func runInit(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 		}
 		// Initialize an empty keyring file so its presence and
 		// passphrase are validated immediately.
-		kr := &fileKeyring{dir: fileDir(homeDir), pass: pass}
+		kr := &fileKeyring{folder: vaultFolder(homeDir), pass: pass}
 		if err := kr.save(map[string]string{}); err != nil {
 			fmt.Fprintf(stderr, "error: writing keyring: %s\n", err)
 			return 1
@@ -262,7 +296,7 @@ func runInit(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 	} else {
 		// Probe the host backend so we fail loudly here, not later
 		// during the first `vault add`.
-		if _, err := selectKeyring(chosen, fileDir(homeDir), ""); err != nil {
+		if _, err := selectKeyring(chosen, vaultFolder(homeDir), ""); err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}
@@ -355,11 +389,17 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 	fromClipboard := fs.Bool("from-clipboard", false, "read value from the OS clipboard, then wipe the clipboard")
 	provider := fs.String("provider", "", "tag this secret with a provider (openai, anthropic, github, ...)")
 	namespace := fs.String("namespace", "", "store under this namespace (same as the ns: prefix; ':' = root)")
+	expiry := fs.String("expiry", "", "optional expiry reminder: YYYY-MM-DD, an RFC3339 timestamp, or a duration like 90d / 720h")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintf(stderr, "error: usage: aql vault add [--from-env=VAR | --from-stdin | --from-clipboard | --provider=...] [--namespace=NS] <[ns:]alias>\n")
+		fmt.Fprintf(stderr, "error: usage: aql vault add [--from-env=VAR | --from-stdin | --from-clipboard | --provider=...] [--namespace=NS] [--expiry=WHEN] <[ns:]alias>\n")
+		return 1
+	}
+	expiresAt, err := parseExpiryFlag(*expiry)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
 	aliasRef := fs.Arg(0)
@@ -423,6 +463,7 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 			Provider:  *provider,
 			Namespace: ns, // derived from the name so the two can't disagree
 			Source:    source,
+			ExpiresAt: expiresAt,
 		})
 		return nil
 	}); err != nil {
@@ -434,6 +475,9 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 		Reason: "source=" + source,
 	})
 	fmt.Fprintf(stdout, "stored %s (backend=%s, %d bytes)\n", alias, kr.Name(), len(value))
+	if expiresAt != "" {
+		fmt.Fprintf(stdout, "  expires %s\n", expiresAt)
+	}
 	// Only wipe the clipboard once the secret is safely persisted, so a
 	// storage failure leaves the value available for the user to retry.
 	if *fromClipboard {
@@ -578,13 +622,13 @@ func runList(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "(no aliases)")
 		return 0
 	}
-	fmt.Fprintf(stdout, "%-24s %-12s %-16s %-20s %s\n", "ALIAS", "PROVIDER", "NAMESPACE", "CREATED", "SOURCE")
+	fmt.Fprintf(stdout, "%-24s %-12s %-16s %-20s %-20s %s\n", "ALIAS", "PROVIDER", "NAMESPACE", "CREATED", "EXPIRES", "SOURCE")
 	for _, a := range aliases {
 		if nsFiltered && aliasNamespace(a) != nsFilter {
 			continue
 		}
-		fmt.Fprintf(stdout, "%-24s %-12s %-16s %-20s %s\n",
-			a.Name, dash(a.Provider), dash(aliasNamespace(a)), a.CreatedAt, dash(a.Source))
+		fmt.Fprintf(stdout, "%-24s %-12s %-16s %-20s %-20s %s\n",
+			a.Name, dash(a.Provider), dash(aliasNamespace(a)), a.CreatedAt, dash(a.ExpiresAt), dash(a.Source))
 	}
 	return 0
 }
@@ -1042,11 +1086,17 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	fromStdin := fs.Bool("from-stdin", false, "read the new value from one line on stdin")
 	fromClipboard := fs.Bool("from-clipboard", false, "read the new value from the OS clipboard, then wipe the clipboard")
 	revokeCaps := fs.Bool("revoke-caps", false, "revoke all capabilities scoped to this alias")
+	expiry := fs.String("expiry", "", "update the expiry reminder (YYYY-MM-DD, RFC3339, or a duration like 90d); omitted = keep the current one")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintf(stderr, "error: usage: aql vault rotate [--from-env=VAR | --from-stdin | --from-clipboard | --revoke-caps] <alias>\n")
+		fmt.Fprintf(stderr, "error: usage: aql vault rotate [--from-env=VAR | --from-stdin | --from-clipboard | --revoke-caps] [--expiry=WHEN] <alias>\n")
+		return 1
+	}
+	expiresAt, err := parseExpiryFlag(*expiry)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
 	s, err := requireStore(homeDir)
@@ -1112,6 +1162,11 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		}
 		a.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 		a.Source = source
+		// Only touch the expiry when --expiry was given; a bare rotation
+		// preserves the existing reminder.
+		if expiresAt != "" {
+			a.ExpiresAt = expiresAt
+		}
 		return nil
 	}); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)

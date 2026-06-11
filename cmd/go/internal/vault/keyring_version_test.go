@@ -111,7 +111,7 @@ func TestKeyringRejectsNewerFormat(t *testing.T) {
 // header on the next mutation.
 func TestFileKeyringUpgradesLegacyOnSave(t *testing.T) {
 	dir := t.TempDir()
-	kr := &fileKeyring{dir: dir, pass: "pw"}
+	kr := &fileKeyring{folder: dir, pass: "pw"}
 
 	// Seed the on-disk file with a legacy-format single entry.
 	legacy := legacyEncrypt(t, []byte(keyringEntry("a", "first")), "pw")

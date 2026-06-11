@@ -24,6 +24,12 @@ type Alias struct {
 	Source    string `json:"source,omitempty"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at,omitempty"`
+	// ExpiresAt is an optional RFC3339 timestamp marking when the
+	// underlying key expires upstream. It is informational — a reminder
+	// surfaced by `vault list` and `vault expiry`, used to flag keys due
+	// for rotation. It is never enforced: an expired alias still
+	// resolves, since the secret may well outlive the recorded estimate.
+	ExpiresAt string `json:"expires_at,omitempty"`
 }
 
 // Capability is a short-lived, scoped permission to use one alias.
@@ -79,13 +85,17 @@ type Store struct {
 //	     minted under v1 carry no TokenHash and can no longer
 //	     authenticate, so the v1->v2 migration revokes them explicitly
 //	     instead of leaving them as silent 401s.
-const storeVersion = 2
+//	v3 — aliases gain the optional ExpiresAt field. The bump exists only
+//	     so an older binary refuses a store that may carry alias expiries
+//	     rather than silently dropping them on its next save.
+const storeVersion = 3
 
 // storeMigrations[i] upgrades a store from schema version i+1 to i+2.
 // Each is a pure, in-place transform; the slice length must be
 // storeVersion-1.
 var storeMigrations = []func(*Store) error{
 	migrateStoreV1ToV2, // index 0: v1 -> v2
+	migrateStoreV2ToV3, // index 1: v2 -> v3
 }
 
 // migrateStoreV1ToV2 revokes capabilities that predate token hashing.
@@ -99,6 +109,15 @@ func migrateStoreV1ToV2(s *Store) error {
 			s.Capabilities[i].Revoked = true
 		}
 	}
+	return nil
+}
+
+// migrateStoreV2ToV3 is a no-op. v3 only adds the optional
+// Alias.ExpiresAt field, which is absent on every v2 alias and
+// correctly reads as "no expiry"; there is nothing to transform. The
+// version bump alone is the migration — it makes an older binary fail
+// loud on a v3 store instead of stripping expiries it cannot model.
+func migrateStoreV2ToV3(s *Store) error {
 	return nil
 }
 
@@ -124,10 +143,12 @@ func migrateStore(s *Store) error {
 	return nil
 }
 
-// StorePath returns the on-disk metadata path for the vault rooted
-// at homeDir/.aql.
+// StorePath returns the on-disk metadata path for the vault: the
+// vault folder (homeDir/.aql by default, or AQL_VAULT_FOLDER) joined
+// with the metadata file name (vault.jsonic, or vault.<suffix>.jsonic
+// when AQL_VAULT_SUFFIX is set).
 func StorePath(homeDir string) string {
-	return filepath.Join(homeDir, ".aql", "vault.jsonic")
+	return filepath.Join(vaultFolder(homeDir), vaultFileName("jsonic"))
 }
 
 // LoadStore reads and parses the vault metadata file. Returns
@@ -159,14 +180,12 @@ func LoadStore(homeDir string) (*Store, error) {
 }
 
 // SaveStore writes the metadata file atomically and durably with mode
-// 0600. The parent directory ~/.aql is created with mode 0700 if
-// absent.
+// 0600. The vault folder is created with mode 0700 if absent.
 func SaveStore(homeDir string, s *Store) error {
 	if s.Version == 0 {
 		s.Version = storeVersion
 	}
-	dir := filepath.Join(homeDir, ".aql")
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(vaultFolder(homeDir), 0700); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(s, "", "  ")
@@ -188,13 +207,20 @@ func (s *Store) FindAlias(name string) (*Alias, int) {
 }
 
 // UpsertAlias inserts a new alias or updates the timestamps and
-// provenance of an existing one.
+// provenance of an existing one. A non-empty ExpiresAt updates the
+// recorded expiry; an empty one preserves whatever expiry the existing
+// alias already had, so a bare re-add or a bulk import never silently
+// wipes a previously set expiry (use `vault expiry clear` to remove
+// one).
 func (s *Store) UpsertAlias(a Alias) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	if existing, idx := s.FindAlias(a.Name); existing != nil {
 		s.Aliases[idx].Provider = a.Provider
 		s.Aliases[idx].Namespace = a.Namespace
 		s.Aliases[idx].Source = a.Source
+		if a.ExpiresAt != "" {
+			s.Aliases[idx].ExpiresAt = a.ExpiresAt
+		}
 		s.Aliases[idx].UpdatedAt = now
 		return
 	}
