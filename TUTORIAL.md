@@ -723,7 +723,152 @@ module path, e.g. `"aql:math-util" import end "foo" print` (without `end`,
 `import` would try to load `"foo"`).
 
 
-## 21. Where to next
+## 21. Manage secrets with the vault
+
+`aql` ships a local secrets vault for third-party API keys and tokens.
+This walkthrough creates a vault, adds keys by typing or pasting them,
+moves the vault to another machine, and injects the secrets into other
+programs — all without a secret, a passphrase, or a key value ever
+touching your shell history, the process command line, or an
+environment variable you set by hand. Every `(hidden)` line below is a
+no-echo prompt.
+
+Two passphrases appear: the **vault passphrase** unlocks the local
+keyring, and a separate **export passphrase** protects a bundle in
+transit. Both are always prompted; the `AQL_VAULT_PASSPHRASE` /
+`AQL_VAULT_EXPORT_PASSPHRASE` environment variables exist only for
+non-interactive use (services, CI) and are intentionally avoided here.
+
+### Create the vault
+
+The `file` backend stores everything under `~/.aql`, which is what
+makes a vault portable. The passphrase is typed, confirmed, and may
+not be empty.
+
+```bash
+aql vault init --backend=file
+#   Set vault passphrase:        (hidden)
+#   Confirm passphrase:          (hidden)
+```
+
+### Add keys — paste or type
+
+Paste a token you just copied from a SaaS console. The value is read
+straight from the OS clipboard and the clipboard is wiped afterwards:
+
+```bash
+aql vault add --from-clipboard --provider=github github_token
+#   Vault passphrase:            (hidden)
+#   stored github_token (backend=file, 40 bytes)
+#   clipboard cleared (pbpaste/pbcopy)
+#   note: a clipboard manager, if you run one, may still hold a copy — clear its history too
+```
+
+Clipboard support works on macOS (pbpaste/pbcopy), Linux (wl-clipboard
+on Wayland, or xclip / xsel on X11), and Windows (PowerShell). Or type
+the value directly — the input is not echoed:
+
+```bash
+aql vault add --provider=openai openai_key
+#   Secret value:                (hidden)
+#   Vault passphrase:            (hidden)
+```
+
+Namespacing lets two projects share a key name: a `ns:` prefix becomes
+part of the stored name. (`aql vault config --set namespace.default=proj`
+then makes bare names resolve into `proj` automatically.)
+
+```bash
+aql vault add --from-clipboard proj:deploy_key
+```
+
+Inspect what's stored — names and metadata only, never values:
+
+```bash
+aql vault list
+aql vault get github_token            # redacted; add --reveal to spot-check
+```
+
+> The secret is never a command-line argument, so don't write
+> `aql vault add github_token 'ghp_...'` — that would leak it to your
+> shell history. Use `--from-clipboard`, the prompt, or (for scripts)
+> `--from-stdin`.
+
+### Export the vault to a portable bundle
+
+`export` re-encrypts the keys and metadata under the separate export
+passphrase, independent of the host keystore, into one file:
+
+```bash
+aql vault export --out=vault.aqlx
+#   Vault passphrase:            (hidden)   # unlock the source vault
+#   Set export passphrase:       (hidden)   # protects the bundle in transit
+#   Confirm export passphrase:   (hidden)
+#   exported 3 secret(s) to vault.aqlx
+```
+
+Copy `vault.aqlx` to the other machine by any means (scp, USB, …).
+
+### Import on a different machine
+
+The destination vault can use its own vault passphrase, and even a
+different backend (say, the macOS Keychain) — only the export
+passphrase has to match what you set above. `import` auto-detects a
+bundle versus a `.env` file.
+
+```bash
+aql vault init --backend=file
+#   Set vault passphrase:        (hidden)
+#   Confirm passphrase:          (hidden)
+
+aql vault import vault.aqlx
+#   Export passphrase:           (hidden)   # the bundle passphrase from export
+#   Vault passphrase:            (hidden)   # this machine's vault passphrase
+#   imported github_token
+#   imported openai_key
+#   imported proj:deploy_key
+#   imported 3 secret(s)
+
+aql vault list                            # confirm the keys arrived
+```
+
+Existing aliases are skipped unless you pass `--overwrite`. Once
+imported, securely delete the transit file (`shred -u vault.aqlx`).
+
+### Inject secrets into other commands
+
+`vault exec` resolves the named aliases, runs the command with each
+value placed in its **environment block** — never on the command line,
+never logged — and propagates the child's exit code.
+
+```bash
+# alias `github_token` becomes $github_token in the child process:
+aql vault exec github_token -- gh repo list
+#   Vault passphrase:            (hidden)
+
+# Remap to the env-var name a tool expects:
+aql vault exec github_token=GITHUB_TOKEN -- gh auth status
+
+# Inject several at once; --upper derives UPPERCASE names:
+aql vault exec --upper github_token,openai_key -- ./deploy.sh
+#   → $GITHUB_TOKEN and $OPENAI_KEY in the child
+
+# A namespaced alias surfaces under its base name ($deploy_key):
+aql vault exec proj:deploy_key -- terraform apply
+
+# --clear-env runs in a sanitized environment (keeps only
+# PATH/HOME/USER/SHELL/TERM/LANG/LC_ALL/TMPDIR plus the injected keys):
+aql vault exec --clear-env openai_key=OPENAI_API_KEY -- ./untrusted-tool
+```
+
+To run many commands without retyping the vault passphrase each time,
+start the loopback broker (`aql vault proxy`) and hand tools scoped,
+expiring capability tokens instead of the secrets themselves — see the
+**[CLI Reference](CLI.md#aql-vault)** for the proxy, capabilities,
+`vault mv`, and `vault verify`.
+
+
+## 22. Where to next
 
 - **[How-To Guides](HOWTO.md)** — practical recipes by task.
 - **[Reference](REFERENCE.md)** — every word, every type.

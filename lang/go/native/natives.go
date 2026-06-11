@@ -249,10 +249,16 @@ var Natives = []NativeFunc{
 	// jsonify moved to the aql:struct module — see struct_module.go.
 
 	// ---- listops (push/pop/unshift/shift) ----
+	// Each word carries a FlexList sig alongside the plain List sig.
+	// The FlexList sig is more specific (deeper lattice Rank) so it
+	// wins for flex inputs and mutates IN PLACE, returning the same
+	// node (pop/shift additionally return the removed element on
+	// top). Plain lists keep the immutable new-copy semantics.
 	{
 		Name: "push",
 
 		Signatures: []NativeSig{
+			{Args: []*Type{TAny, TFlexList}, Handler: pushFlexHandler, Returns: []*Type{TFlexList}, BarrierPos: -1},
 			{Args: []*Type{TAny, TList}, Handler: pushHandler, BarrierPos: -1},
 		},
 	},
@@ -260,6 +266,7 @@ var Natives = []NativeFunc{
 		Name: "pop",
 
 		Signatures: []NativeSig{
+			{Args: []*Type{TFlexList}, Handler: popFlexHandler, Returns: []*Type{TFlexList, TAny}, BarrierPos: -1},
 			{Args: []*Type{TList}, Handler: popHandler, BarrierPos: -1},
 		},
 	},
@@ -267,6 +274,7 @@ var Natives = []NativeFunc{
 		Name: "unshift",
 
 		Signatures: []NativeSig{
+			{Args: []*Type{TAny, TFlexList}, Handler: unshiftFlexHandler, Returns: []*Type{TFlexList}, BarrierPos: -1},
 			{Args: []*Type{TAny, TList}, Handler: unshiftHandler, BarrierPos: -1},
 		},
 	},
@@ -274,6 +282,7 @@ var Natives = []NativeFunc{
 		Name: "shift",
 
 		Signatures: []NativeSig{
+			{Args: []*Type{TFlexList}, Handler: shiftFlexHandler, Returns: []*Type{TFlexList, TAny}, BarrierPos: -1},
 			{Args: []*Type{TList}, Handler: shiftHandler, BarrierPos: -1},
 		},
 	},

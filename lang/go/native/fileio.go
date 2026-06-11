@@ -182,7 +182,7 @@ func valueToJsonic(v Value) string {
 	case v.Parent.Equal(TAtom):
 		_as4, _ := AsAtom(v)
 		return fmt.Sprintf("%q", _as4)
-	case v.Parent.Equal(TList):
+	case v.Parent.ConformsTo(TList):
 		if elems, err := AsMutableList(v); err == nil {
 			parts := make([]string, len(elems))
 			for i, e := range elems {
@@ -191,7 +191,7 @@ func valueToJsonic(v Value) string {
 			return "[" + strings.Join(parts, ",") + "]"
 		}
 		return "[]"
-	case v.Parent.Equal(TMap):
+	case v.Parent.ConformsTo(TMap):
 		if om, err := AsMutableMap(v); err == nil {
 			parts := make([]string, 0, om.Len())
 			for _, k := range om.Keys() {

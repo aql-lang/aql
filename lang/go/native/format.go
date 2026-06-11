@@ -145,7 +145,7 @@ func (f *LinesFormat) Decode(content string) ([]Value, error) {
 }
 
 func (f *LinesFormat) Encode(v Value) (string, error) {
-	if v.Parent.Equal(TList) {
+	if v.Parent.ConformsTo(TList) {
 		if elems, err := AsMutableList(v); err == nil {
 			parts := make([]string, len(elems))
 			for i, e := range elems {
@@ -285,6 +285,13 @@ func encodeDelimited(v Value, sep string) (string, error) {
 		columns = td.Record.Fields.Keys()
 		rows = td.Rows
 	case ListPayload:
+		rows = data.Elems
+		if len(rows) > 0 {
+			if m, err := AsMutableMap(rows[0]); err == nil {
+				columns = m.Keys()
+			}
+		}
+	case *FlexListData:
 		rows = data.Elems
 		if len(rows) > 0 {
 			if m, err := AsMutableMap(rows[0]); err == nil {

@@ -9,6 +9,26 @@ package eng
 // `lit` slot, exclusive shapes (Record, Options) only unify with their
 // own kind, and typed-vs-concrete arms are collapsed by ordering.
 func unifyMapFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *UnifyError) {
+	// Bare FlexMap type literal: nominal-subtype rule — unifies only
+	// with a concrete FlexMap (or another FlexMap literal). A plain
+	// map is NOT a FlexMap; the supertype literal `Map` accepts flex
+	// values below via the ordinary family rule.
+	aFlexLit := sa == ShapeTypeLiteral && denotedType(a).Equal(TFlexMap)
+	bFlexLit := sb == ShapeTypeLiteral && denotedType(b).Equal(TFlexMap)
+	if aFlexLit || bFlexLit {
+		if aFlexLit && bFlexLit {
+			return a, nil
+		}
+		lit, other := a, b
+		if bFlexLit {
+			lit, other = b, a
+		}
+		if IsFlexMap(other) {
+			return other, nil
+		}
+		return Value{}, unifyFail("FlexMap type literal needs a concrete FlexMap", lit, other)
+	}
+
 	// Bare Map type literal: unifies with any Map-family value except
 	// a record (records are nominal).
 	aLit := sa == ShapeTypeLiteral && denotedType(a).Equal(TMap)

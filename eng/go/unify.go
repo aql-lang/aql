@@ -375,17 +375,52 @@ func unifyInner(a, b Value) (Value, *UnifyError) {
 		return v, err
 	}
 
+	// Bare Node type literal: the abstract family root. A concrete
+	// container would otherwise route to its family handler below,
+	// which doesn't know the Node literal and would reject the pair —
+	// breaking lattice transitivity (`{} is Map` is true and Map is a
+	// child of Node, so `{} is Node` must be true too). Delegate to
+	// the family handler with the corresponding family literal so the
+	// per-family rules (Record/Table exclusions, Options projection)
+	// stay in one place.
+	aNodeLit := sa == ShapeTypeLiteral && denotedType(a).Equal(TNode)
+	bNodeLit := sb == ShapeTypeLiteral && denotedType(b).Equal(TNode)
+	if aNodeLit || bNodeLit {
+		if aNodeLit && bNodeLit {
+			return a, nil
+		}
+		other, so := b, sb
+		if bNodeLit {
+			other, so = a, sa
+		}
+		if IsMapShape(so) {
+			return unifyMapFamily(NewTypeLiteral(TMap), ShapeTypeLiteral, other, so)
+		}
+		if IsListShape(so) {
+			return unifyListFamily(NewTypeLiteral(TList), ShapeTypeLiteral, other, so)
+		}
+		// Node vs a narrower node-family type literal (Map, List,
+		// FlexMap, FlexList, …) — the narrower literal wins.
+		if so == ShapeTypeLiteral && denotedType(other).ConformsTo(TNode) {
+			return other, nil
+		}
+		return Value{}, unifyFail("Node type literal needs a node-family value", a, b)
+	}
+
 	// Family handlers — any side in the family routes to that family's
 	// owner, which canonicalizes argument order internally. A bare
 	// type literal whose denoted type is List/Map also routes to the
 	// corresponding family (e.g. `List unify [1,2]`).
-	aListLit := sa == ShapeTypeLiteral && denotedType(a).Equal(TList)
-	bListLit := sb == ShapeTypeLiteral && denotedType(b).Equal(TList)
+	// nodeFamily folds the Flex literals into their family: a bare
+	// `FlexList` / `FlexMap` literal routes to the same family handler,
+	// which applies the nominal-subtype rule internally.
+	aListLit := sa == ShapeTypeLiteral && nodeFamily(denotedType(a)).Equal(TList)
+	bListLit := sb == ShapeTypeLiteral && nodeFamily(denotedType(b)).Equal(TList)
 	if IsListShape(sa) || IsListShape(sb) || aListLit || bListLit {
 		return unifyListFamily(a, sa, b, sb)
 	}
-	aMapLit := sa == ShapeTypeLiteral && denotedType(a).Equal(TMap)
-	bMapLit := sb == ShapeTypeLiteral && denotedType(b).Equal(TMap)
+	aMapLit := sa == ShapeTypeLiteral && nodeFamily(denotedType(a)).Equal(TMap)
+	bMapLit := sb == ShapeTypeLiteral && nodeFamily(denotedType(b)).Equal(TMap)
 	if IsMapShape(sa) || IsMapShape(sb) || aMapLit || bMapLit {
 		return unifyMapFamily(a, sa, b, sb)
 	}

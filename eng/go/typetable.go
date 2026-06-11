@@ -528,8 +528,10 @@ var builtinDecls = []builtinDecl{
 	// Node branch.
 	{Path: "Node/List", FixedID: 12, Rank: 30_100_000_000},
 	{Path: "Node/List/Args", FixedID: 13, Rank: 30_110_000_000},
+	{Path: "Node/List/FlexList", FixedID: 79, Rank: 30_120_000_000},
 	{Path: "Node/Map", FixedID: 14, Rank: 30_200_000_000},
 	{Path: "Node/Map/Inspect", FixedID: 31, Rank: 30_210_000_000},
+	{Path: "Node/Map/FlexMap", FixedID: 78, Rank: 30_220_000_000},
 
 	// Ideal branch — the structural type-kinds (Object, Array, Record,
 	// Options, Error, Store, Table) are direct children of Ideal: peer

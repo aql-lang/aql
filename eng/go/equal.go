@@ -12,6 +12,25 @@ import "fmt"
 // per-type Behaviors that override only Format. listsEqual and
 // mapsEqual are the structural helpers.
 
+// nodeFamily normalises a flex node type to its immutable family root:
+// TFlexMap → TMap, TFlexList → TList, anything else unchanged.
+// Flexness is a mutability mode, not part of value identity — equality
+// and ordering compare flex nodes by content, exactly like their plain
+// counterparts. Deliberately exact (not ConformsTo) so other Node
+// subtypes (Inspect, Args) keep their own identity.
+func nodeFamily(t *Type) *Type {
+	if t == nil {
+		return nil
+	}
+	if t.Equal(TFlexMap) {
+		return TMap
+	}
+	if t.Equal(TFlexList) {
+		return TList
+	}
+	return t
+}
+
 // ValuesEqual compares the data payloads of two values with the same type.
 //
 // Routes through Behavior.Equal for the same-Parent case so types
@@ -91,7 +110,7 @@ func valuesEqualDefault(a, b Value) bool {
 		an, _ := AsAtom(a)
 		bn, _ := AsAtom(b)
 		return an == bn
-	case a.Parent.Equal(TList):
+	case nodeFamily(a.Parent).Equal(TList):
 		aTT, aTbl := a.Data.(TableTypeInfo)
 		bTT, bTbl := b.Data.(TableTypeInfo)
 		if aTbl && bTbl {
@@ -111,7 +130,7 @@ func valuesEqualDefault(a, b Value) bool {
 		aLst, _ := AsList(a)
 		bLst, _ := AsList(b)
 		return listsEqual(aLst.Slice(), bLst.Slice())
-	case a.Parent.Equal(TMap):
+	case nodeFamily(a.Parent).Equal(TMap):
 		aRT, aRec := a.Data.(RecordTypeInfo)
 		bRT, bRec := b.Data.(RecordTypeInfo)
 		if aRec && bRec {
@@ -150,7 +169,7 @@ func listsEqual(a, b []Value) bool {
 		return false
 	}
 	for i := range a {
-		if !a[i].Parent.Equal(b[i].Parent) || !ValuesEqual(a[i], b[i]) {
+		if !nodeFamily(a[i].Parent).Equal(nodeFamily(b[i].Parent)) || !ValuesEqual(a[i], b[i]) {
 			return false
 		}
 	}
@@ -168,7 +187,7 @@ func mapsEqual(a, b ReadMap) bool {
 		if !ok {
 			return false
 		}
-		if !aVal.Parent.Equal(bVal.Parent) || !ValuesEqual(aVal, bVal) {
+		if !nodeFamily(aVal.Parent).Equal(nodeFamily(bVal.Parent)) || !ValuesEqual(aVal, bVal) {
 			return false
 		}
 	}

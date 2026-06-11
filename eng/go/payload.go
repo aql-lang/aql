@@ -103,6 +103,14 @@ type ListPayload struct{ Elems []Value }
 // Constructed by NewMap. Same wrapping motivation as ListPayload.
 type MapPayload struct{ M *OrderedMap }
 
+// FlexListData is the mutable element store for a Node/List/FlexList
+// value. It is pointer-backed (stored as *FlexListData, like
+// *ArrayInstanceInfo) so in-place growth — append/push — is visible
+// through every Value copy sharing the payload. FlexMap needs no
+// counterpart: MapPayload's *OrderedMap is already pointer-backed.
+// Constructed by NewFlexList.
+type FlexListData struct{ Elems []Value }
+
 // ParenExprPayload carries the unevaluated tokens of a paren-expression
 // awaiting inline evaluation. Wrapping []Value.
 type ParenExprPayload struct{ Toks []Value }
@@ -290,6 +298,7 @@ func (*GenSpecInfo) payloadMarker()       {}
 func (GenParam) payloadMarker()           {}
 func (*TypeSchemaInfo) payloadMarker()    {}
 func (GenInstRef) payloadMarker()         {}
+func (*FlexListData) payloadMarker()      {}
 func (*StoreInstanceInfo) payloadMarker() {}
 func (*ArrayInstanceInfo) payloadMarker() {}
 func (*TimeoutInfo) payloadMarker()       {}

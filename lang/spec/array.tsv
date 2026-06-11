@@ -1,0 +1,58 @@
+# tokens	expected	note
+# =====================================================================		
+# Array — Ideal/Array, the fixed-extent mutable indexed store		
+# =====================================================================		
+# An Array is an Ideal: a reference container with in-place indexed		
+# mutation, opaque to Node structural behavior. Its identity IS the		
+# container — `eq` is true only for the SAME array instance, never by		
+# content; content comparison goes through `convert List`. An Array		
+# is FIXED-EXTENT: `set` replaces in-bounds slots only and there is		
+# deliberately no growth word — growth is FlexList's job (see		
+# lang/spec/flex.tsv and design/FLEX-NODES.10.md for the		
+# identity-vs-content rule: if the data's identity is its contents,		
+# it's a (Flex)List; if its identity is the container, it's an Array).		
+#		
+# This file covers:		
+#   1. Construction via make (incl. the FlexList source).		
+#   2. Indexed get / in-place set, bounds errors.		
+#   3. Reference semantics: aliasing, eq identity.		
+#   4. Conversion to List and content comparison.		
+		
+# ====================================================================		
+# 1. Construction		
+# ====================================================================		
+		
+make Array [1 2 3]	Array[1 2 3]	construct from a list literal
+make Array []	Array[]	empty array
+typeof (make Array [1 2 3])	Array	
+make Array (flex [1 2])	Array[1 2]	a FlexList source works (conforms to List)
+make Array {a:1}	ERROR:make	a map is not a list source
+make Array 1	ERROR:make	scalars are not a list source
+		
+# ====================================================================		
+# 2. Indexed access and in-place set		
+# ====================================================================		
+		
+(make Array [10 20 30]) get 1	20	zero-based indexed get
+(make Array [10 20 30]) get 5	None	out-of-range get is None (like list get)
+def a (make Array [1 2 3]) set 1 99 a a	Array[1 99 3]	set mutates in place (returns nothing; a shows the change)
+def a (make Array [1 2 3]) set 3 99 a	ERROR:out of bounds	fixed extent — index == length never grows
+def a (make Array [1]) set -1 9 a	ERROR:out of bounds	
+		
+# ====================================================================		
+# 3. Reference semantics — identity IS the container		
+# ====================================================================		
+		
+def a (make Array [1 2]) def b a set 0 9 a b	Array[9 2]	aliased bindings share the instance
+def a (make Array [1 2]) a eq a	true	same instance is eq
+def a (make Array [1 2]) def b a a eq b	true	alias is eq — identity, not content
+(make Array [1 2]) eq (make Array [1 2])	false	equal content, different instances — not eq
+(make Array [1 2]) deq (make Array [1 2])	false	no content equality on Arrays — convert first
+		
+# ====================================================================		
+# 4. Conversion to List — where content semantics live		
+# ====================================================================		
+		
+convert List (make Array [1 2 3])	[1 2 3]	project to a plain list
+(convert List (make Array [1 2])) deq [1 2]	true	content comparison via the List projection
+typeof (convert List (make Array [1]))	List	

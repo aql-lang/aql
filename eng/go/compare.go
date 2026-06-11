@@ -60,6 +60,16 @@ func compareValuesClassified(a, b Value) (n int, viaFamily bool, err error) {
 	if aType == nil || bType == nil {
 		return 0, false, fmt.Errorf("cannot compare values with nil type")
 	}
+	// Concrete flex nodes order by content exactly like their immutable
+	// family (flexness is a mutability mode, not value identity), so a
+	// deq-equal flex/plain pair also cmp-equals. Bare type literals are
+	// NOT normalised — `FlexList cmp List` stays a Rank ordering.
+	if IsConcrete(a) {
+		aType = nodeFamily(aType)
+	}
+	if IsConcrete(b) {
+		bType = nodeFamily(bType)
+	}
 	sameType := aType.Equal(bType)
 	for t := lowestCommonAncestor(aType, bType); t != nil; t = t.Parent {
 		cmp, ok := t.Behavior.(Comparer)
@@ -211,11 +221,21 @@ func ExactEqual(a, b Value) bool {
 	}
 
 	// Non-scalars: identity comparison — both values must refer to the
-	// same underlying container.
-	if a.Parent.Equal(TList) && b.Parent.Equal(TList) {
-		return sameContainer(a.Data, b.Data)
+	// same underlying container. Flexness is part of identity here:
+	// nodeFamily-normalised comparison would still fail on container
+	// identity (a flex copy is a fresh container), but normalising the
+	// family keeps the dispatch uniform for flex-vs-flex pairs.
+	if nodeFamily(a.Parent).Equal(TList) && nodeFamily(b.Parent).Equal(TList) {
+		return a.Parent.Equal(b.Parent) && sameContainer(a.Data, b.Data)
 	}
-	if a.Parent.Equal(TMap) && b.Parent.Equal(TMap) {
+	if nodeFamily(a.Parent).Equal(TMap) && nodeFamily(b.Parent).Equal(TMap) {
+		return a.Parent.Equal(b.Parent) && sameContainer(a.Data, b.Data)
+	}
+	// Ideal/Array: identity IS the container — two Arrays are equal
+	// only when they are the same array instance (aliased bindings),
+	// never by content. Content comparison goes through
+	// `convert List`. See design/FLEX-NODES.10.md (identity-vs-content).
+	if a.Parent.Equal(TArray) && b.Parent.Equal(TArray) {
 		return sameContainer(a.Data, b.Data)
 	}
 	// Object / class instances identify by their underlying field map —
@@ -256,6 +276,14 @@ func sameContainer(a, b Payload) bool {
 			return len(av.Elems) == len(bv.Elems)
 		}
 		return &av.Elems[0] == &bv.Elems[0]
+	case *FlexListData:
+		// Pointer identity — simpler and stronger than the
+		// backing-array probe: the store pointer IS the container.
+		bv, ok := b.(*FlexListData)
+		return ok && av == bv
+	case *ArrayInstanceInfo:
+		bv, ok := b.(*ArrayInstanceInfo)
+		return ok && av == bv
 	default:
 		return false
 	}
@@ -306,8 +334,10 @@ func DeepEqual(a, b Value) bool {
 		return _as23 == _as22
 	}
 
-	// Lists: same length, each element deeply equal.
-	if a.Parent.Equal(TList) && b.Parent.Equal(TList) {
+	// Lists: same length, each element deeply equal. Flex nodes are
+	// normalised to their family — a FlexList deep-equals a plain List
+	// of the same content.
+	if nodeFamily(a.Parent).Equal(TList) && nodeFamily(b.Parent).Equal(TList) {
 		aElems, aErr := AsMutableList(a)
 		bElems, bErr := AsMutableList(b)
 		if aErr != nil || bErr != nil {
@@ -326,7 +356,7 @@ func DeepEqual(a, b Value) bool {
 	}
 
 	// Maps: same keys, each value deeply equal.
-	if a.Parent.Equal(TMap) && b.Parent.Equal(TMap) {
+	if nodeFamily(a.Parent).Equal(TMap) && nodeFamily(b.Parent).Equal(TMap) {
 		aMap, aErr := AsMutableMap(a)
 		bMap, bErr := AsMutableMap(b)
 		if aErr != nil || bErr != nil {

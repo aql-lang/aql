@@ -262,7 +262,9 @@ func sigTypeMatches(v Value, t *Type) bool {
 		if IsOptionsType(v) {
 			return true
 		}
-		if v.Parent.Equal(TMap) && IsConcrete(v) {
+		// ConformsTo (not Equal) so a FlexMap also passes where an
+		// Options map is expected.
+		if v.Parent.ConformsTo(TMap) && IsConcrete(v) {
 			return true
 		}
 	}
@@ -396,10 +398,11 @@ func positionalMatch(values []Value, sig *Signature) bool {
 		if !sigArgMatches(sig, i, v) {
 			return false
 		}
-		// Reject type literals (Data==nil) for concrete Map/List signatures
+		// Reject type literals (Data==nil) for concrete Map/List
+		// signatures — including the FlexMap/FlexList subtypes —
 		// unless this slot explicitly wants a type literal.
 		isTypeArg := sig.TypeArgs != nil && sig.TypeArgs[i]
-		if !isTypeArg && IsBareTypeNode(v) && (t.Equal(TMap) || t.Equal(TList)) {
+		if !isTypeArg && IsBareTypeNode(v) && (t.ConformsTo(TMap) || t.ConformsTo(TList)) {
 			return false
 		}
 	}
