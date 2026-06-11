@@ -1006,7 +1006,7 @@ equivalent to the written paren group wherever it stands as an
 argument: `f w ≡ f (w)`. A multi-value spread fills several parameter
 slots; an empty one (`def e word []`) contributes nothing.
 
-Two deliberate exceptions:
+Three deliberate exceptions:
 
 * **Name-capture slots win.** `/q` slots take the word's *name*
   regardless of its binding — `quote vs` is the atom `vs`, and
@@ -1016,6 +1016,9 @@ Two deliberate exceptions:
   when it fires (`1 inc inc inc` returns `4`); it is *not* expanded in
   argument positions. Group it explicitly — `f (p)` — to pass its
   result as an argument.
+* **Rebinding aliases.** `def y vs` copies the *binding* — the marker
+  itself — so `y` is the same splice as `vs` (and spreads everywhere
+  `vs` does). Write `def y (vs)` to force expansion at a `def`.
 
 (For spreading *tokens into generated code* at expansion time, see
 `splice` under **[Macros](#macros)**; for concatenating into a

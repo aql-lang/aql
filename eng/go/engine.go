@@ -853,6 +853,18 @@ func rawFormForward(fn *FnDefInfo, pos int) bool {
 	return false
 }
 
+// bindsReferent reports whether the named word is a BINDER whose operand
+// slot copies a word's binding rather than its expansion. `def y xs` with
+// xs splice-bound must rebind the marker itself — the new name ALIASES the
+// splice — because expanding there would lose the referent (and code-bearing
+// splices already alias on def by skipping expansion, so this keeps data and
+// code splices consistent at binders). This is the one deliberate exception
+// to the `f w ≡ f (w)` equivalence; write `def y (xs)` to force expansion.
+// def is frozen (reserved_word), so the name is a reliable identity.
+func bindsReferent(name string) bool {
+	return name == "def"
+}
+
 // capturesForward reports whether any of fn's signatures captures the
 // forward operand at sig position pos STRUCTURALLY — /q word-name capture
 // (QuoteArgs), raw paren capture (RawParens), macro form capture (FormArgs),
@@ -1097,9 +1109,11 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		// collapse, and raw-capture handling are byte-identical to a
 		// written (w). Two exemptions: structural-capture slots (/q takes
 		// the word's NAME, form/raw/type slots take the raw token — see
-		// capturesForward), and code-bearing splices (Forth-style macros
-		// that must run against the live stack — see spliceIsData).
-		if IsWord(tok) && !capturesForward(fn, pos) {
+		// capturesForward), code-bearing splices (Forth-style macros
+		// that must run against the live stack — see spliceIsData), and
+		// binder operands (`def y xs` rebinds the MARKER so y aliases the
+		// splice — see bindsReferent).
+		if IsWord(tok) && !bindsReferent(fn.Name) && !capturesForward(fn, pos) {
 			if wi, werr := AsWord(tok); werr == nil {
 				if top, ok := e.registry.Defs.Top(wi.Name); ok && IsSplice(top) {
 					if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {
@@ -1523,16 +1537,22 @@ func (e *Engine) stepWord(val Value) error {
 			// /q and FormArgs intercepts above this block keep their
 			// word-capture semantics; a raw-paren-capturing forward
 			// collects the wrapped (w) as code via stepLiteral's existing
-			// ParenExpr gate; and code-bearing splices keep their live-
-			// stack macro semantics (spliceIsData). Inside the group the
-			// OpenParen barrier hides the pending forward, so the
+			// ParenExpr gate; code-bearing splices keep their live-stack
+			// macro semantics (spliceIsData); and a pending BINDER
+			// collects the raw marker so `def y xs` rebinds it — the new
+			// name aliases the splice (bindsReferent). Inside the group
+			// the OpenParen barrier hides the pending forward, so the
 			// re-stepped word takes the standalone splice-fire path — no
 			// recursion (and recordUse fires on that inner step).
-			if info, serr := AsSplice(top); serr == nil && spliceIsData(info) && e.pendingForwardIdx() >= 0 {
-				pe := NewParenExpr([]Value{val})
-				pe.Pos = val.Pos
-				e.stack[e.pointer] = pe
-				return e.stepLiteral()
+			if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {
+				if fwdIdx := e.pendingForwardIdx(); fwdIdx >= 0 {
+					if fwd, ferr := AsForward(e.stack[fwdIdx]); ferr == nil && !bindsReferent(fwd.FuncName) {
+						pe := NewParenExpr([]Value{val})
+						pe.Pos = val.Pos
+						e.stack[e.pointer] = pe
+						return e.stepLiteral()
+					}
+				}
 			}
 			// Record the substitution as a "use" for unused-def
 			// tracking in check mode.

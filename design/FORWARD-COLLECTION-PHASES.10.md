@@ -302,12 +302,17 @@ gating, zero/multi-value collapse, raw-capture collection) takes over:
 
 Because both sites delegate to one mechanism (the paren path), this
 rule cannot drift between phases the way the original stop conditions
-did. Exemptions, both deliberate: structural-capture slots
+did. Exemptions, all deliberate: structural-capture slots
 (`capturesForward` — /q takes the word's NAME, form/raw/type slots the
-raw token), and **code**-bearing splices (`spliceIsData` false — `def
+raw token); **code**-bearing splices (`spliceIsData` false — `def
 inc word [1 add]` is a Forth-style macro whose tokens must run against
 the LIVE stack; paren isolation would change its meaning, so it stays
-a boundary word and `f (p)` is the explicit opt-in). Pinned in
+a boundary word and `f (p)` is the explicit opt-in); and **binders**
+(`bindsReferent` — `def y xs` collects the raw marker so the new name
+ALIASES the splice; expansion there would lose the referent, and code
+splices already alias at def by skipping expansion, so data and code
+splices behave identically at binders. `def y (xs)` forces expansion —
+the one place `f w` and `f (w)` differ, by design). Pinned in
 `lang/spec/word-splice.tsv` §7.
 
 Related: `design/LAZY-ARG-RESOLUTION.0.md` (phase 1's structure-first
