@@ -246,6 +246,26 @@ collection cuts most of the cases — but when the type system can't
 disambiguate (e.g., two adjacent words that both happen to accept
 the same type), `end` is the simple, explicit fix.
 
+A **function word** beginning the next statement acts as an implicit
+`end` for a waiting word that can already fire. The practical case is
+the else-less guard: in
+
+```
+def f fn [[n:Integer] [Integer] [
+  if (n eq 0) [raise "n must not be zero"]
+  def q (10 div n)
+  q
+]]
+```
+
+`if` has an optional third (else) argument, but `def` starting its
+own statement commits the two-argument form first — the guard raises
+*before* the `def` body can divide by zero, and a value-producing
+statement after the guard keeps its result instead of being
+swallowed as a phantom else. Only a **value** (a literal, or a
+parenthesised expression like `if (c) [t] (e)`) following the
+then-branch is taken as the else.
+
 ### A word only reaches for what it can use
 
 Collection is *structure-first*: a word forward-collects a following token

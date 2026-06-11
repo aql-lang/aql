@@ -1006,6 +1006,30 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 			continue
 		}
 
+		// Interpolated template string: an expression, not a value — its
+		// type is only knowable after evaluation (always a String).
+		// Treated like a paren group: when a still-viable overload
+		// consumes this position, evaluate it in place so a typed slot
+		// (`raise` msg:String, `add`'s Scalar overload) sees the String
+		// it will actually receive. Left raw, the token's internal
+		// InterpString type would prune every typed signature and a
+		// `raise `bad: ${x}`` mis-dispatched to the 0-arg fallback.
+		if IsInterpString(tok) {
+			if !viableConsumes(pos) {
+				break
+			}
+			result, err := e.evalInterpString(tok)
+			if err != nil {
+				return err
+			}
+			result.Pos = tok.Pos
+			e.stack[scanIdx] = result
+			pruneViable(pos, result)
+			pos++
+			scanIdx++
+			continue
+		}
+
 		// Paren expression value (paren-nesting Step 3): expand it back to
 		// its OpenParen … CloseParen marker span in place, then re-process
 		// — the IsOpenParen branch above collapses it on THIS engine. See
@@ -1169,6 +1193,18 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 		case IsDefCleanup(v):
 			e.stepDefCleanup(v)
 			e.pointer++
+		case IsInterpString(v):
+			// Mirror the main loop: evaluate the template in place and
+			// re-step the resulting string (no pointer advance), so a
+			// paren-wrapped template — `raise (`bad: ${x}`)` — collapses
+			// to a String rather than a raw InterpString token.
+			result, err := e.evalInterpString(v)
+			if err != nil {
+				e.pointer = savedPointer
+				return err
+			}
+			result.Pos = v.Pos
+			e.stack[e.pointer] = result
 		default:
 			if err := e.stepLiteral(); err != nil {
 				e.pointer = savedPointer
@@ -1434,17 +1470,18 @@ func (e *Engine) stepWord(val Value) error {
 		// User-code dispatch — record the name as "used" for
 		// unused-def analysis in check mode.
 		e.registry.Check.recordUse(w.Name)
-		// Policy gate: consult the engine scope before dispatching.
-		// Skips check mode (static analysis should see every word so
-		// type-checking remains meaningful) and engine markers
-		// (`__`-prefixed, used by internal lowering — never directly
-		// addressable from user code).
-		if !e.registry.Check.IsActive() && !isInternalMarker(w.Name) {
-			if wc := LookupWordChecker(e.registry); wc != nil {
-				if err := wc.CheckWord(w.Name); err != nil {
-					return err
-				}
-			}
+		if err := e.policyGateWord(w.Name); err != nil {
+			return err
+		}
+		// Statement boundary: a function word beginning its own dispatch
+		// is a forward-collection barrier (the argument-order rule), so
+		// first commit the nearest ARRIVAL-parked forward that can
+		// already fire — otherwise an optional trailing slot (an
+		// else-less `if`'s else) swallows this statement's result, or
+		// this statement runs before a guard's then-branch does. See
+		// commitBarrierForward.
+		if e.commitBarrierForward() {
+			return nil
 		}
 		// Macro dispatch (design/MACROS-PHASE1.10.md §5): a macro word is
 		// applied to its raw operands ahead on the tape — BEFORE preEvalParens
@@ -3396,6 +3433,121 @@ func (e *Engine) implicitEnd(fwdIdx int) error {
 
 	e.curryOrStack(funcIdx, collectedCount, stackArgCount)
 	return nil
+}
+
+// policyGateWord consults the engine scope's word policy before a
+// registered word dispatches. Skips check mode (static analysis should
+// see every word so type-checking remains meaningful) and engine
+// markers (`__`-prefixed, used by internal lowering — never directly
+// addressable from user code).
+func (e *Engine) policyGateWord(name string) error {
+	if e.registry.Check.IsActive() || isInternalMarker(name) {
+		return nil
+	}
+	if wc := LookupWordChecker(e.registry); wc != nil {
+		return wc.CheckWord(name)
+	}
+	return nil
+}
+
+// commitBarrierForward applies the argument-order rule's "another
+// function word is a barrier" to a Forward that is parked waiting for
+// ARRIVALS (its args came from paren results rather than the token
+// walk, so the walk-time barrier check never saw the boundary). Called
+// from stepWord when a function word is about to begin its own
+// dispatch: if the nearest pending forward in the current paren scope
+// can already fire with the args it holds — the same dispatch an
+// explicit `end` would trigger — it is committed NOW, and the current
+// word re-steps afterwards.
+//
+// This is what makes an else-less guard fire before the next statement
+// runs: in `if (bad) [raise …] def q (10 div n)`, the parked `if`
+// previously kept waiting for a possible else while `def` ran first —
+// so the div-by-zero pre-empted the guard's raise, and any
+// value-producing statement could be swallowed into the else slot. A
+// pending forward that CANNOT yet fire keeps waiting, since its
+// missing args may be the very results the stepping word produces
+// (`add 1 def x 5 x` still binds x and completes add).
+//
+// Returns true when a forward was committed; the caller must return
+// to the engine loop (the pointer has moved to the committed word).
+func (e *Engine) commitBarrierForward() bool {
+	// Nearest pending forward, stopping at open-paren scope barriers —
+	// the same scan stepEnd performs.
+	fwdIdx := -1
+	for i := e.pointer - 1; i >= 0; i-- {
+		if IsOpenParen(e.stack[i]) {
+			break
+		}
+		if IsForward(e.stack[i]) {
+			fwdIdx = i
+			break
+		}
+	}
+	if fwdIdx < 0 {
+		return false
+	}
+
+	fwd, _ := AsForward(e.stack[fwdIdx])
+	funcIdx := fwd.FuncIndex
+	claimed := fwd.CollectedArgs + fwd.StackArgs
+	if claimed == 0 {
+		// Nothing collected yet — no smaller-arity dispatch to commit.
+		return false
+	}
+	if funcIdx < 0 || funcIdx >= len(e.stack) || !IsWord(e.stack[funcIdx]) {
+		return false
+	}
+	w, _ := AsWord(e.stack[funcIdx])
+	fn := e.registry.Lookup(w.Name)
+	if fn == nil {
+		return false
+	}
+
+	// Probe: would the parked word dispatch with ONLY its claimed args
+	// (collected forward + claimed stack)? Deliberately tighter than a
+	// whole-scope match — an implicit commit must not reach below the
+	// args the word actually claimed. The claimed region sits directly
+	// below the word: stack args first, then collected forward args in
+	// arrival order (first-collected deepest) — which IS sig order, the
+	// layout MatchSignature reads bottom-first.
+	start := funcIdx - claimed
+	if start < 0 {
+		return false
+	}
+	var resolved []Value
+	for i := start; i < funcIdx; i++ {
+		v := e.stack[i]
+		if IsForward(v) || IsOpenParen(v) || IsMark(v) || IsMove(v) {
+			continue
+		}
+		resolved = append(resolved, v)
+	}
+	if len(resolved) == 0 {
+		return false
+	}
+	testW := WordInfo{Name: w.Name, ArgCount: -1, ForceStack: true}
+	if MatchSignature(fn.Signatures, resolved, testW) == nil {
+		return false
+	}
+
+	// Commit exactly like the collection-complete path (stepLiteral's
+	// CollectedArgs >= ExpectedArgs branch): drop the marker, force the
+	// word to stack mode, and rearrange so the first-collected forward
+	// arg sits on top — the engine matcher's top-first read then sees
+	// the args in sig order. (NOT curryOrStack: its rearrange is gated
+	// on StackArgs > 0, so a purely-arrival forward would re-dispatch
+	// with its collected args reversed.)
+	stackRemove(&e.stack, fwdIdx)
+	if fwdIdx < funcIdx {
+		funcIdx--
+	}
+	if funcIdx < len(e.stack) && IsWord(e.stack[funcIdx]) {
+		e.forceStackWord(funcIdx, w)
+	}
+	e.pointer = funcIdx
+	e.rearrangeForForward(fwd.StackArgs, fwd.CollectedArgs)
+	return true
 }
 
 // stepEnd handles the "end" keyword.
