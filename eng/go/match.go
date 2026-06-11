@@ -19,7 +19,7 @@ package eng
 //     Tightening it would break callers like `create` whose 1-arg
 //     `(Map) Patterns={kind:"api"}` sig was previously matched on
 //     non-api maps when the handler then routed by stack contents.
-func patternsOk(sig *Signature, positions []int, stack []Value, fwd int) bool {
+func patternsOk(sig *Signature, positions []int, stack []Value, fwd int, r *Registry) bool {
 	for idx := 0; idx < sig.TotalArgs(); idx++ {
 		pattern, ok := sigPattern(sig, idx)
 		if !ok {
@@ -30,6 +30,19 @@ func patternsOk(sig *Signature, positions []int, stack []Value, fwd int) bool {
 		}
 		isForward := idx < fwd
 		val := stack[positions[idx]]
+		// A forward position may still hold the unresolved Word token
+		// for a def-bound value (the forward scan plans against
+		// Defs.Top but does not rewrite the tape). Resolve it the same
+		// way before unifying — otherwise a typed-list/map pattern
+		// (`xs:[:Integer]`) rejects `f zs` while accepting the literal
+		// `f [1 2]`, purely by spelling.
+		if isForward && r != nil && IsWord(val) {
+			if w, werr := AsWord(val); werr == nil {
+				if top, ok := r.Defs.Top(w.Name); ok {
+					val = top
+				}
+			}
+		}
 		if pattern.Parent.Equal(TMap) && val.Parent.Equal(TMap) &&
 			pattern.Data != nil && val.Data != nil &&
 			!IsOptionsType(pattern) &&

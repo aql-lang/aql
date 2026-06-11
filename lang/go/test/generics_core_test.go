@@ -113,6 +113,30 @@ func TestGenFnCallBindingAlignment(t *testing.T) {
 	}
 }
 
+// TestModuleWrapperSigBodyPairing pins the execFnDefLiteral
+// sub-registry fix: a module-preamble fn with two SAME-ARITY
+// overloads must run the body belonging to the signature
+// matchSignature selected — the old arity-only pick ran the FIRST
+// 3-arg body with the OTHER sig's args (surfaced by Phase 8's
+// generic-plus-catch-all apply-op shape in aql:decision).
+func TestModuleWrapperSigBodyPairing(t *testing.T) {
+	res, err := runNativeSteps(t, nil, []string{
+		`module [
+		   def Comparable surface {cmp: (fnsig [[Self Self] [Integer]])}
+		   Integer exposes Comparable
+		   def aop gen [(T extends Comparable)] fn [[rhs:T op:String lhs:T] [Boolean] ["bounded"] [rhs:Any op:String lhs:Any] [Boolean] ["catchall"]]
+		   export "M" {aop: aop/r}
+		 ] import`,
+		`[(M.aop 3 "x" 5) (M.aop {a:1} "x" 5)]`,
+	})
+	if err != nil {
+		t.Fatalf("module two-overload dispatch: %v", err)
+	}
+	if len(res) != 1 || res[0].String() != `['bounded' 'catchall']` {
+		t.Errorf("sig/body pairing: got %v, want ['bounded' 'catchall']", res)
+	}
+}
+
 // TestGenMemoIdentity pins D4: repeated instantiation with the same
 // canonical args yields the same body value (teq via the spec rows;
 // here the Go-side identity of the memoised instantiation).

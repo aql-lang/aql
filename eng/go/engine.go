@@ -2743,17 +2743,35 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	if fnDef.Registry != nil && fnDef.Registry != e.registry {
 		ownSigs := fnDef.OwnSigs()
 		var wrapperSig *FnSig
+		// Select the own sig CORRESPONDING TO THE MATCHED sig — same
+		// param names and types, not merely the same arity. With two
+		// same-arity overloads (e.g. a generic `[rhs:T op:String
+		// lhs:T]` sig and its `[rhs:Any op:String lhs:Any]` catch-all)
+		// the old arity-only pick ran the FIRST body with the OTHER
+		// sig's matched args — the exact body/sig mis-pairing the
+		// per-sig handler attachment exists to prevent. Arity remains
+		// the fallback when no exact correspondence is found.
+		var arityPick *FnSig
 		for i := range ownSigs {
 			if len(ownSigs[i].Body) == 0 {
 				continue // native ref sig — not a wrapper/preamble body
 			}
 			if wrapperSig == nil {
-				wrapperSig = &ownSigs[i]
+				wrapperSig = &ownSigs[i] // last resort: first body-bearing sig
 			}
-			if len(ownSigs[i].Params) == len(positions) {
-				wrapperSig = &ownSigs[i]
+			if len(ownSigs[i].Params) != len(positions) {
+				continue
+			}
+			if arityPick == nil {
+				arityPick = &ownSigs[i]
+			}
+			if sig != nil && sigParamsCorrespond(ownSigs[i].Params, sig.Params) {
+				arityPick = &ownSigs[i]
 				break
 			}
+		}
+		if arityPick != nil {
+			wrapperSig = arityPick
 		}
 		if wrapperSig != nil {
 			trivialDelegation := isTrivialDelegationBody(wrapperSig, fnDef.Name)
@@ -2788,6 +2806,30 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		}
 	}
 	return e.execMatch(match)
+}
+
+// sigParamsCorrespond reports whether an authored FnSig's params and
+// a compiled Signature's params describe the same overload: same
+// count, same names, same declared types. Used by execFnDefLiteral's
+// sub-registry path to run the body belonging to the signature
+// matchSignature actually selected.
+func sigParamsCorrespond(a, b []FnParam) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Name != b[i].Name {
+			return false
+		}
+		at, bt := a[i].Type, b[i].Type
+		if (at == nil) != (bt == nil) {
+			return false
+		}
+		if at != nil && !at.Equal(bt) {
+			return false
+		}
+	}
+	return true
 }
 
 // isRecordableLiteral reports whether a stepLiteral value should be
@@ -4485,7 +4527,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			// forward-matched positions too. The previous code
 			// short-circuited here without consulting Patterns,
 			// which made `def fact[0] (1)` fire for any integer.
-			if !patternsOk(sig, positions, e.stack, fwd) {
+			if !patternsOk(sig, positions, e.stack, fwd, e.registry) {
 				continue
 			}
 			if preferWordSig && !isPreferred {
@@ -4587,7 +4629,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		// §1.1 fix: scalar literals route through Patterns regardless
 		// of whether they came from forward or stack matching, so the
 		// pattern check no longer skips forward positions.
-		if !patternsOk(sig, positions, e.stack, fwd) {
+		if !patternsOk(sig, positions, e.stack, fwd, e.registry) {
 			continue
 		}
 

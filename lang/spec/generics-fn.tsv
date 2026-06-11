@@ -48,6 +48,13 @@ def badret gen [(T extends Number)] fn [[x:T] [T] ["oops"]] end badret 5	ERROR:e
 def repeat gen [T] fn [[x:T n:Integer] [Integer] [if (n lte 0) [0] [1 add (repeat x (n sub 1))]]] end repeat "a" 3	3	a generic fn calls itself
 def mka gen [T] fn [[x:T] [Function] [fn [[y:Integer] [Integer] [x add y]]]] def add5 (mka 5) end add5 3	8	an inner fn captures a generic fn's param
 #
-# §7  hygiene — bindings never leak; loose unbound return is pinned
+# §7  higher-order composition — instantiation lists through each/fold
+def Box gen [T] class {value:T} def xs [(make (Box of [Integer]) {value:10}) (make (Box of [Integer]) {value:20})] end xs each [get value]	[10 20]	each iterates instantiation instances precisely
+def Box gen [T] class {value:T} def xs [(make (Box of [Integer]) {value:10}) (make (Box of [Integer]) {value:20})] end 0 fold [get value add] xs	30	fold reduces over them
+def Box gen [T] class {value:T} def unbox gen [T] fn [[b:T] [Any] [b get value]] end [(make (Box of [Integer]) {value:1})] each [unbox]	[1]	a generic fn works as a higher-order body
+def Box gen [T] class {value:T} def sumvals gen [T] fn [[bs:[:T]] [Integer] [0 fold [get value add] bs]] def xs [(make (Box of [Integer]) {value:10}) (make (Box of [Integer]) {value:20})] end sumvals xs	30	a [:T] param accepts a DEF-BOUND list (the forward pattern check resolves word args)
+def f2 fn [[xs:[:Integer]] [Integer] [xs size]] def zs [1 2] end f2 zs	2	…the same fix for plain typed-list params (was literal-only)
+#
+# §8  hygiene — bindings never leak; loose unbound return is pinned
 def idg gen [T] fn [[x:T] [T] [x]] def r (idg 5) end T	ERROR:undefined word	the per-call T binding tears down with the body's locals
 def loose gen [T] fn [[x:Integer] [T] [x]] end loose 1	1	an unbindable UNCONSTRAINED parameter passes the loose runtime return check (the checker reports the precision loss — Phase 5)

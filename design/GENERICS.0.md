@@ -1301,6 +1301,39 @@ unconstrained-param strictness, per-schema disjunct collapse).
 > bind as parameters (`Outer of [Box of [Integer]]`). Battery:
 > generics.tsv §8.
 
+## 15h. Landed state — Phase 8: higher-order verification + aql:decision retrofit (2026-06-11)
+
+> **Phase 8 LANDED**, with one plan adjustment and two upstream
+> dispatch fixes the dogfood surfaced. Higher-order verification:
+> each/fold compose with instantiation lists and generic-fn bodies
+> (generics-fn.tsv §7) — element precision INTO bodies holds; the
+> known looseness (`get N` after `each` degrades even for plain
+> Integers) is pre-existing and not generics. The dogfood exposed:
+> (1) typed-list/map param PATTERNS rejected DEF-BOUND args while
+> accepting literals (`f zs` vs `f [1 2]`) — `patternsOk` now
+> resolves forward Word tokens via the def stack before unifying,
+> exactly like the forward type scan; (2) execFnDefLiteral's
+> sub-registry path picked the wrapper body by ARITY ONLY, so a
+> module fn with two same-arity overloads ran the FIRST body with
+> the OTHER sig's matched args — it now selects by param
+> correspondence with the matched signature
+> (`TestModuleWrapperSigBodyPairing`). Retrofit: `Comparable` is a
+> SURFACE in aql:decision (superseding §8.2's tor-alias) with the
+> scalar builtins declared via `exposes`; `apply-op` is
+> `gen [(T extends Comparable)]` for the ORDERING ops with an Any
+> overload for eq/neq (equality is universal) that RAISES
+> `not_comparable`/`unknown_op` instead of the historic silent
+> false; Rule/LeafNode are `gen [R]` (builders ride Phase-7
+> inference), DTable/DTree carry `(R default Any)` (rule lists give
+> no direct evidence). PLAN ADJUSTMENT: `decide gen [R]` with a
+> checker-visible refined return needs parameter binding from
+> INSTANTIATION-typed args (decomposing `DTable of [R]` against an
+> argument's instantiation node) — machinery deliberately deferred;
+> decide keeps `[Any]` and the fixture is dropped, noted here
+> honestly rather than half-landed. Battery: module-decision.tsv
+> (schema renders + instantiation rows, Comparable membership,
+> not_comparable negative), generics-fn.tsv §7.
+
 ## 15. Review (2026-06-10) — against the post-2026-06-04 landings
 
 Between the 2026-06-04 refresh and this review, the language landed:
