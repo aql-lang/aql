@@ -50,4 +50,24 @@ func init() {
 			"that supports prototype chain resolution for nested scopes. " +
 			"Use 'context set key value' to store and 'context get key' to retrieve.",
 	})
+
+	register(&Entry{
+		Word:    "keys",
+		Summary: "The keys of a map, as a list (insertion order).",
+		Description: "Projects a map to the list of its keys, in insertion order. The " +
+			"complement to vals; for [key value] pairs use StructUtil.items.",
+		Examples: []string{
+			`{a:1 b:2 c:3} keys  ;# => ['a' 'b' 'c']`,
+		},
+	})
+
+	register(&Entry{
+		Word:    "vals",
+		Summary: "The values of a map, as a list (insertion order).",
+		Description: "Projects a map to the list of its values, in insertion order. The " +
+			"complement to keys; for [key value] pairs use StructUtil.items.",
+		Examples: []string{
+			`{a:1 b:2 c:3} vals  ;# => [1 2 3]`,
+		},
+	})
 }

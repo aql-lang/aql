@@ -45,7 +45,7 @@ var categories = []Category{
 		"drop2", "over2", "depth", "pick", "roll",
 	}},
 	{"storage", "Variables, value access, and context.", []string{
-		"set", "get", "getr", "context",
+		"set", "get", "getr", "context", "keys", "vals",
 	}},
 	{"control", "Control flow and definitions.", []string{
 		"unpack", "codequote", "do", "raise", "if", "case", "for", "break",

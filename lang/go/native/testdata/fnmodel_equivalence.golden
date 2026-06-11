@@ -132,7 +132,9 @@ WORD dup
 WORD dup2
   [Any Any] barrier=0 +returnsfn
 WORD each
+  [Type/Function Node/Map] barrier=2 returns=[Node/Map]
   [Ideal/Reach Node/List] barrier=2 returns=[Node/List]
+  [Node/List Node/Map] barrier=2 noeval={0} returns=[Node/Map]
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
 WORD enum
   [Node/List] barrier=1 noeval={0} returns=[Type/Disjunct/Enum]
@@ -169,7 +171,11 @@ WORD fn
 WORD fnsig
   [Node/List] barrier=1 runcheck noeval={0} returns=[Type/FunctionSignature]
 WORD fold
+  [Type/Function Node/Map Any] barrier=3 returns=[Any]
+  [Node/List Node/Map Any] barrier=3 noeval={0} returns=[Any]
   [Node/List Node/List Any] barrier=3 noeval={0} +returnsfn
+  [Type/Function Node/Map] barrier=2 returns=[Any]
+  [Node/List Node/Map] barrier=2 noeval={0} returns=[Any]
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
 WORD folder
   [Ideal/Options Scalar/Path] barrier=2 returns=[Node/List]
@@ -178,6 +184,8 @@ WORD for
   [Node/List Node/List] barrier=2 noeval={1} +returnsfn
   [Scalar/Number/Integer Node/List] barrier=2 noeval={1} +returnsfn
 WORD for-each
+  [Type/Function Node/Map] barrier=2
+  [Node/List Node/Map] barrier=2 noeval={0}
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
 WORD force-arity
   [Scalar/Number/Integer Type/Function] barrier=2 runcheck returns=[Type/Function]
@@ -279,6 +287,8 @@ WORD join
 WORD jsonify
   [Node/Map Any] barrier=2
   [Any] barrier=1
+WORD keys
+  [Node/Map] barrier=1 returns=[Node/List]
 WORD list
   [Node/Map Ideal/Object/Resource/Entity] barrier=2
   [Node/Map Node/Map] barrier=2
@@ -578,6 +588,8 @@ WORD usurp
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Type/Function]
 WORD validate
   [Node/Map Any] barrier=2
+WORD vals
+  [Node/Map] barrier=1 returns=[Node/List]
 WORD var
   [Node/List] barrier=1 noeval={0} returns=[Any]
 WORD walk

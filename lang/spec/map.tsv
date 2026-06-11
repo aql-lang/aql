@@ -180,3 +180,9 @@ def foo 5 {a:{foo}}	{a:{foo:5}}	nested shorthand
 def f fn [[x:Integer] [Integer] [add x 1]] {f}	ERROR:signature	bare 1-arg fn shorthand cannot dispatch 0-arg
 def f fn [[x:Integer] [Integer] [add x 1]] ({f/r}).f 2	3	/r shorthand stores the fn as data; the arg calls it
 def foo 1 ({foo/q}).foo is Atom	true	/q shorthand stores a bare word as atom data
+# keys / vals — project a map to a list (insertion order)		
+{a:1 b:2 c:3} keys	['a' 'b' 'c']	keys returns the list of keys
+{a:1 b:2 c:3} vals	[1 2 3]	vals returns the list of values
+{} keys	[]	empty map has no keys
+{} vals	[]	empty map has no values
+keys [1 2]	ERROR:signature	keys requires a map, not a list

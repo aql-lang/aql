@@ -299,6 +299,11 @@ var allArrayNatives = []NativeFunc{
 				Handler: eachReachHandler,
 				Returns: []*Type{TList}, BarrierPos: -1,
 			},
+			// Map forms — iterate entries in key order, keeping the map shape
+			// (mapValues). Quotation pushes the value; a lambda receives a
+			// KeyVal {k v i n}. See native_map_iter.go.
+			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Handler: eachMapHandler, Returns: []*Type{TMap}, BarrierPos: -1},
+			{Args: []*Type{TFunction, TMap}, Handler: eachMapHandler, Returns: []*Type{TMap}, BarrierPos: -1},
 		},
 	},
 	{
@@ -310,12 +315,17 @@ var allArrayNatives = []NativeFunc{
 		// result" rule. See §7.4 in the DX report.
 		Name: "for-each",
 
-		Signatures: []NativeSig{{
-			Args:       []*Type{TList, TList},
-			NoEvalArgs: map[int]bool{0: true},
-			Handler:    forEachHandler,
-			ReturnsFn:  forEachReturnsFn, BarrierPos: -1,
-		}},
+		Signatures: []NativeSig{
+			{
+				Args:       []*Type{TList, TList},
+				NoEvalArgs: map[int]bool{0: true},
+				Handler:    forEachHandler,
+				ReturnsFn:  forEachReturnsFn, BarrierPos: -1,
+			},
+			// Map forms — iterate entries for side effects, produce nothing.
+			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Handler: forEachMapHandler, BarrierPos: -1},
+			{Args: []*Type{TFunction, TMap}, Handler: forEachMapHandler, BarrierPos: -1},
+		},
 	},
 	{
 		Name: "fold",
@@ -338,6 +348,12 @@ var allArrayNatives = []NativeFunc{
 				Handler:    foldNoInitHandler,
 				ReturnsFn:  foldNoInitReturnsFn, BarrierPos: -1,
 			},
+			// Map forms — reduce entries (quotation: acc beneath, value on top;
+			// lambda: (acc, KeyVal)). Seeded explicitly, or by the first value.
+			{Args: []*Type{TList, TMap, TAny}, NoEvalArgs: map[int]bool{0: true}, Handler: foldMapInitHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Handler: foldMapNoInitHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TFunction, TMap, TAny}, Handler: foldMapInitHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TFunction, TMap}, Handler: foldMapNoInitHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{

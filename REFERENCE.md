@@ -1275,17 +1275,35 @@ into the signature: `fold` takes `body data init`, `scan` takes
 > `each`/`fold` — and keeps the elements whose result is Boolean
 > `true` (a non-Boolean result is an **error**, not a silent drop). A
 > receiverless Reach lens keeps elements whose field is true. A
-> Function callback receives a `{key value}` pair map per element —
-> read the element via `.value`:
+> Function callback over a **list** receives a `{key value}` pair map
+> (read the element via `.value`); over a **map** it receives a `KeyVal`
+> (read the value via `.v`) and the result keeps the map shape:
 >
 > ```
-> filter [2 gt] [1 2 3 4]                          # returns [3 4]
-> filter [2 gt] {a:1 b:5 c:3}                      # returns {b:5 c:3} — maps filter by value
-> filter ([p:Any] => [p.value gt 3]) [1 2 3 4 5]   # returns [4 5]
+> filter [2 gt] [1 2 3 4]                            # returns [3 4]
+> filter [2 gt] {a:1 b:5 c:3}                        # returns {b:5 c:3} — maps filter by value
+> filter ([p:Any] => [p.value gt 3]) [1 2 3 4 5]     # returns [4 5]      (list: {key value} pair)
+> filter ([kv:KeyVal] => [kv.v gt 2]) {a:1 b:5 c:3}  # returns {b:5 c:3}  (map: KeyVal)
 > ```
 >
 > The lens form reads a field: `filter $.active accounts` keeps the
 > elements whose `.active` is `true`.
+
+> **Map iteration.** `each`, `for-each`, and `fold` also take a map,
+> iterating its entries in insertion order. The quotation form gets each
+> entry's **value** (the key is preserved); a lambda gets a `KeyVal`
+> `{k v i n}` — `k` key, `v` value, `i` 0-based index, `n` total — so it
+> can use the key/index/total. `each` and `filter` keep the map shape,
+> `fold` reduces to one value, `for-each` produces nothing. To leave the
+> map and get a list, use `keys` / `vals`:
+>
+> ```
+> {a:1 b:2 c:3} each [mul 10]                       # returns {a:10 b:20 c:30}
+> {a:1 b:2} each ([kv:KeyVal] => [kv.v add kv.i])   # returns {a:1 b:3}
+> fold [add] {a:1 b:2 c:3} 0                        # returns 6
+> {a:1 b:2 c:3} keys                                # returns ['a' 'b' 'c']
+> {a:1 b:2 c:3} vals                                # returns [1 2 3]
+> ```
 
 ### Size
 
