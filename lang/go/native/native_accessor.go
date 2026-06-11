@@ -77,7 +77,7 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	}
 	val, ok := m.Get(k)
 	if !ok {
-		return nil, r.AqlError("getr_error", fmt.Sprintf("getr: key %q not found in map", k), "getr")
+		return nil, r.AqlError("not_found", fmt.Sprintf("getr: key %q not found in map", k), "getr")
 	}
 	return []Value{val}, nil
 }
@@ -92,18 +92,18 @@ func getrObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	if m, err := AsMutableMap(container); err == nil {
 		val, found := m.Get(k)
 		if !found {
-			return nil, r.AqlError("getr_error", fmt.Sprintf("getr: key %q not found in object", k), "getr")
+			return nil, r.AqlError("not_found", fmt.Sprintf("getr: key %q not found in object", k), "getr")
 		}
 		return []Value{val}, nil
 	}
 	oi, _ := AsObjectInstance(container)
 	val, ok := oi.GetField(k)
 	if !ok {
-		return nil, r.AqlError("getr_error", fmt.Sprintf("getr: field %q not found in object", k), "getr")
+		return nil, r.AqlError("not_found", fmt.Sprintf("getr: field %q not found in object", k), "getr")
 	}
 	return []Value{val}, nil
 }
 
 func getrNoneHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	return nil, r.AqlError("getr_error", "getr: parent is None", "getr")
+	return nil, r.AqlError("not_found", "getr: parent is None — nothing to read a key from", "getr")
 }
