@@ -1959,6 +1959,17 @@ func TestEdgeForwardInfoFields(t *testing.T) {
 	if got.FuncIndex != 5 {
 		t.Errorf("FuncIndex = %d, want 5", got.FuncIndex)
 	}
+	// The zero value of the speculation pair means "none" (the bool
+	// guards the int — No-Zero-Overload rule), so raw literals like
+	// the one above stay valid.
+	if got.Speculative || got.SpeculativeAt != 0 {
+		t.Errorf("zero-value speculation = (%v,%d), want (false,0)", got.Speculative, got.SpeculativeAt)
+	}
+	spec := ForwardInfo{FuncName: "g", ExpectedArgs: 3, Speculative: true, SpeculativeAt: 2}
+	got2, _ := AsForward(NewForward(spec))
+	if !got2.Speculative || got2.SpeculativeAt != 2 {
+		t.Errorf("speculation round-trip = (%v,%d), want (true,2)", got2.Speculative, got2.SpeculativeAt)
+	}
 }
 
 // --- Edge: signature edge cases ---

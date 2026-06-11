@@ -1,12 +1,15 @@
 # Forward Collection Is Two Phases
 
 Status: **documents shipped behaviour** (the statement-boundary commit
-and template evaluation landed in `00cb7a7`, June 2026). This note is
-the map of how forward arguments are actually gathered — written
-because the guard-pre-emption bug (bloom-filter report #1) survived as
-long as it did on the assumption that there is ONE code path enforcing
-the collection barriers. There are two, and they can diverge. Keep
-this note current when touching either.
+and template evaluation landed in `00cb7a7`; the speculation recording
+— ForwardInfo.Speculative/SpeculativeAt, the trace marker, the
+`speculative_forward_commit` advisory, and the `/u` barrier hook —
+followed in the same June 2026 series). This note is the map of how
+forward arguments are actually gathered — written because the
+guard-pre-emption bug (bloom-filter report #1) survived as long as it
+did on the assumption that there is ONE code path enforcing the
+collection barriers. There are two, and they can diverge. Keep this
+note current when touching either.
 
 ## The question
 
@@ -180,17 +183,88 @@ false-guard path, the kept statement result, and the paren-else
 non-barrier; `lang/spec/error.tsv` pins the template forms. The
 behaviour ships with the full eng + lang suites green.
 
-## Residual
+## Speculation is recorded (the follow-up unification)
 
-The two phases can still drift — the fix routes the barrier through
-the `stepWord` chokepoint, it does not make divergence impossible. If
-this bites again, the candidate unifications are: (a) record the
-plan-time stop conditions on `ForwardInfo` and have the arrival loop
-honour them, or (b) demote overload arity at plan time when the next
-token is a function word. (b) was considered and rejected here:
-words-as-positions is load-bearing for `def x (expr)` pre-evaluation,
-and a plan-time demotion decides sight-unseen what the runtime
-satisfiability gate can arbitrate with the actual values in hand.
+The "record the plan-time stop conditions on ForwardInfo" follow-up
+was investigated and implemented; this section replaces the original
+Residual with what was actually found.
+
+**The single divergence point.** The plan accepts a word as an
+operand in matchSignature's word branch when the name has a Defs
+binding and `sigArgMatches(…) || expectedType.Equal(TAny)` holds.
+Registered natives and def'd fns ARE Defs entries (Registry.Lookup
+reads `r.Defs.Stack`), so an Any-typed slot — an `if`'s else — plans
+any defined function word as an operand, and the nominal "function
+word — boundary" check a few branches later is unreachable for Any
+slots. Plan says *operand*; runtime says *operator*. Everything else
+(`/q` name capture, FormArgs, TFunction-typed slots, value defs) is
+consistent by construction.
+
+**ForwardInfo now records it.** When the plan fills a forward slot
+with a word bound to a dispatching definition (an FnDefInfo binding,
+at a non-TFunction slot), matchSignature reports the first such slot
+and insertForward stores it as `Speculative bool` +
+`SpeculativeAt int` (the bool guards the int, so the struct's zero
+value means "none" — No-Zero-Overload rule). Consumers:
+
+- **Trace** renders parked speculative forwards as `→if(2/3 spec@2)`,
+  making the divergence visible in step traces.
+- **Check mode** emits the non-gating `speculative_forward_commit`
+  info advisory when a speculative forward actually commits at a
+  statement boundary — exactly the else-less-guard shape, where an
+  explicit `[]` else or `end` states the intent. It is structurally
+  silent on the definition idiom (below).
+- The index is plan-side bookkeeping only: under zero/multi-value
+  paren collapse the arrival count can drift from plan positions, so
+  nothing may use it for slot arithmetic, and the
+  commitBarrierForward scan stays UNCONDITIONAL — the barrier commit
+  doubles as zero-value-collapse recovery (Trap 1) where the plan had
+  no speculative word at all.
+
+**Why the arrival loop has nothing further to honour.** Arrivals
+cannot jump past the speculative word (there are no tokens between
+the last planned value and it), so the only meaningful runtime event
+for a speculative slot is the word itself reaching a dispatch point —
+and every dispatch point passes the commit probe: bare words and
+def'd fns through stepWord's hook; dot-access through the lowered
+`get` word; and `/u` through its own hook (below). `/q`, FormArgs,
+and TFunction-slot words arrive as data and are excluded from the
+speculation predicate by construction.
+
+**Speculative fill is a FEATURE, not only a hazard.** `def name fn
+[…]` — the language's core definition idiom — IS the speculative
+pattern working: `fn` is planned as def's Any-slot operand, def parks
+at 2 expected, the barrier probe FAILS (def has no 1-arg overload),
+fn dispatches, and its Function result arrives to complete def. This
+is the proof that the deeper unification — refusing dispatching words
+as Any-slot operands at selection time — is wrong: it would break
+every `def name fn […]` in the corpus, and the carve-out ("boundary
+only when a smaller arity is satisfiable") needs two-pass cross-sig
+matching plus exposes the stack phase to claiming values the word
+never owned. Rejected.
+
+**Corrections to earlier claims.**
+
+- An earlier draft named execFnDefLiteral (Function values
+  auto-dispatching) as a barrier-hook gap. It is NOT one: its only
+  call site sits inside stepLiteral's no-pending-forward branch, so
+  it is structurally unreachable while a forward pends.
+- The REAL gap was the `/u` (ForceUsurp) path, which dispatched via
+  `stepLiteral()` directly: `if (c) [t] sub/u 10 3` swallowed the
+  usurped wrapper into the else slot as data. stepWordUsurp now
+  commits the pending forward before dispatching (`/ur` is exempt —
+  it deliberately produces inert data, a legitimate arrival).
+  Pinned in `lang/spec/usurp.tsv`.
+
+**Known edges, deliberately left.**
+
+- `/r` pushes the referenced Function and steps past it
+  (`pointer++`): in an argument position it is an arrival; a pending
+  forward whose slot it doesn't fit simply stays pending. Pre-existing
+  behaviour, unchanged.
+- A parked forward whose word token was replaced by a non-word can
+  never barrier-commit (commitBarrierForward requires `IsWord` at
+  FuncIndex) — defensive guard, not a reachable shape today.
 
 Related: `design/LAZY-ARG-RESOLUTION.0.md` (phase 1's structure-first
 scan), `design/FORWARD-COLLECTION-TRAPS.0.md` (zero-value arrivals and

@@ -100,3 +100,12 @@ def s fn [[| a:Integer b:Integer][Integer][a sub b]]  10 3 s/u	7	/u reverses a s
 def s fn [[| a:Integer b:Integer][Integer][a sub b]]  def su (usurp s)  10 3 su	7	named stack-only wrapper dispatches as a word
 def m fn [[a:Integer | b:Integer][Integer][a sub b]]  3 m 10	7	mixed-barrier baseline: a=forward 10, b=stack 3 → 10-3
 def m fn [[a:Integer | b:Integer][Integer][a sub b]]  usurp m 10 3	-7	usurp reverses a mixed-barrier fn
+#
+# ─── /u at a statement boundary commits a parked forward ───
+# /u dispatches like a bare function word, so it is a statement
+# boundary for an else-less guard parked above it: the guard fires
+# FIRST and the usurped call runs as its own statement. (Before the
+# barrier hook covered the /u path, the wrapper was swallowed into the
+# guard's else slot as data and never ran.)
+def n 0 if (n eq 0) [99] sub/u 10 3	99 7	guard fires, then the usurped sub runs (sub/u 10 3 ≡ sub 3 10)
+def n 5 if (n eq 0) [99] sub/u 10 3	7	false guard: the usurped call alone remains

@@ -41,3 +41,9 @@ def n 0 if (n eq 0) [99] def q 1 q	99 1	a following def runs AFTER the guard, no
 # a parenthesised expression is NOT a barrier — it still arrives as the else
 if (1 eq 1) [99] (add 1 2)	99	paren else collected; true discards it
 if (1 eq 2) [99] (add 1 2)	3	paren else collected; false yields it
+# …and the statement-boundary commit composes with the core definition
+# idiom: a def-fn AFTER the guard still defines (fn's speculative fill
+# is untouched — the smaller-arity probe fails for def, so it waits for
+# fn's result as always).
+def n 0 if (n eq 0) [99] def sq fn [[x:Integer] [Integer] [mul x x]] sq 5	99 25	guard fires first, then the def-fn idiom proceeds
+def n 5 if (n eq 0) [99] def sq fn [[x:Integer] [Integer] [mul x x]] sq 5	25	false guard: definition and call unaffected

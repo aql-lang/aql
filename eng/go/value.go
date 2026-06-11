@@ -749,6 +749,24 @@ type ForwardInfo struct {
 	FuncIndex int
 	Sig       *Signature // the matched signature, for direct execution on completion
 	Pos       SrcPos     // source position of the forward-collecting word, for errors
+
+	// Speculative records the planner's stop condition for the arrival
+	// loop (design/FORWARD-COLLECTION-PHASES.10.md): matchSignature
+	// filled at least one forward slot with a WORD bound to a
+	// dispatching definition (an FnDefInfo binding accepted through the
+	// Any-slot escape) — the plan treats that token as an operand, but
+	// at runtime it dispatches as an operator. SpeculativeAt is the
+	// sig-order index of the first such slot and is meaningful only
+	// when Speculative is set (the bool guards the int so the struct's
+	// zero value means "none" — No-Zero-Overload rule). The index is
+	// plan-side bookkeeping: under zero/multi-value paren collapse the
+	// arrival count can drift from plan positions, so consumers may use
+	// it for tracing/diagnostics, never for slot arithmetic. The
+	// commitBarrierForward scan must NOT be gated on this field — the
+	// barrier commit doubles as zero-value-collapse recovery where the
+	// plan had no speculative word at all.
+	Speculative   bool
+	SpeculativeAt int
 }
 
 // Value is the single node type of the AQL kernel: it is at once a
