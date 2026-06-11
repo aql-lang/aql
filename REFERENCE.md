@@ -248,6 +248,10 @@ A trailing `/...` suffix overrides a word's default argument shape:
 | `/N` | Force exactly N arguments |
 | `/Nf` | N arguments, forward only |
 | `/Ns` | N arguments, stack only |
+| `/q` | The name as an atom — `foo/q` ≡ `(quote foo)` |
+| `/r` | A reference — the function as inert data, not a call |
+| `/u` | Usurp — `f/u` ≡ `usurp f` |
+| `/t` | A type bound — `Map/t` ≡ `Type<Map>` ≡ `(Type of [Map])`; combines with no other modifier |
 
 <!-- aql-test: skip -->
 ```
@@ -1065,6 +1069,34 @@ def world 99
 greet world                   # returns 'hi world' — capture trumps the binding
 greet world/q                 # returns 'hi world' — an explicit atom works too
 ```
+
+**Type-valued params take type literals.** A param typed `Type`
+admits exactly what `is Type` admits — the one membership question,
+asked identically at params, `is`, and returns:
+
+```
+def fresh fn [[t:Type coll:List] [Any] [make t coll]]
+fresh FlexList [1,2]          # returns (flex [1 2]) — the literal drives construction
+Map is Type                   # returns true
+```
+
+The `/t` suffix bounds the slot: `Map/t` is sugar for `Type<Map>`,
+itself sugar for `(Type of [Map])` — the type of type literals
+conforming to `Map`. Bounds compose with named types, including named
+disjunctions:
+
+```
+def MapOrList (Map tor List)
+def container fn [[t:MapOrList/t x:Any] [Any] [make t x]]
+container Map {a:1}           # returns {a:1}
+container List [1,2,3] size   # returns 3
+List is MapOrList/t           # returns true
+Integer is MapOrList/t        # returns false — and `container Integer …` is a signature error
+```
+
+A bare structural bound must be named first (`def MapOrList (Map tor
+List)`, then `MapOrList/t`); inline disjunctions in ordinary value
+slots (`x:(Integer tor String)`) constrain values as written.
 
 #### Anonymous functions — `=>`
 

@@ -135,6 +135,13 @@ func CanonValue(v Value) string {
 	case v.Parent.Equal(TAtom):
 		s, _ := AsAtom(v)
 		return s + "/q"
+	case IsBoundedType(v):
+		// `Type of [B]` canons as the suffix sugar B/t (the shortest
+		// round-trippable spelling — the /q-for-atoms convention).
+		if n, err := AsBoundedType(v); err == nil {
+			return n.Leaf() + "/t"
+		}
+		return v.String()
 	case IsFlexList(v):
 		// Round-trippable source form — a plain `[...]` would parse
 		// back as an immutable List and lose the flexness.

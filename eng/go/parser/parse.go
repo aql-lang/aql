@@ -476,7 +476,7 @@ func groupModifier(item any) (base string, prefix, suffix []eng.Value, ok bool) 
 	if !isText || t.Quote != "" {
 		return "", nil, nil, false
 	}
-	b, argCount, fs, ff, q, r, u, valid := scanWordModifier(t.Str)
+	b, argCount, fs, ff, q, r, u, _, valid := scanWordModifier(t.Str)
 	if !valid {
 		return "", nil, nil, false
 	}
@@ -724,7 +724,7 @@ func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (en
 		if qkSet[key] || ckSet[key] {
 			continue
 		}
-		if _, _, _, _, _, _, _, hasMod := scanWordModifier(key); hasMod {
+		if _, _, _, _, _, _, _, _, hasMod := scanWordModifier(key); hasMod {
 			return eng.Value{}, fmt.Errorf(
 				"[aql/illegal_key]: word modifier not allowed on map key %q (modifiers qualify values, not keys; quote the key as '%s' for a literal slash)",
 				key, key)
@@ -1129,19 +1129,21 @@ func sortedKeys(m map[string]any) []string {
 // the argCount digits form a single number. When the token has no `/` or a
 // malformed modifier suffix, valid is false, base is the whole text, and
 // every flag is at its zero value (argCount -1).
-func scanWordModifier(text string) (base string, argCount int, forceStack, forceForward, quoteFlag, refFlag, usurpFlag, valid bool) {
+func scanWordModifier(text string) (base string, argCount int, forceStack, forceForward, quoteFlag, refFlag, usurpFlag, typeFlag, valid bool) {
 	argCount = -1
 
 	idx := strings.LastIndex(text, "/")
 	if idx < 0 || idx >= len(text)-1 {
-		return text, argCount, false, false, false, false, false, false
+		return text, argCount, false, false, false, false, false, false, false
 	}
 	mod := text[idx+1:]
 	baseName := text[:idx]
 
-	// Scan modifier chars in any order: digits, 'f', 's', 'q', 'r', 'u'.
-	// Each letter appears at most once; f/s are mutually exclusive; q is
-	// mutually exclusive with r and u; digits run contiguously and form a
+	// Scan modifier chars in any order: digits, 'f', 's', 'q', 'r', 'u',
+	// 't'. Each letter appears at most once; f/s are mutually exclusive;
+	// q is mutually exclusive with r and u; t (the type-bound sugar,
+	// `Map/t` ≡ `(Type of [Map])`) combines with nothing — it produces a
+	// type expression, not a word; digits run contiguously and form a
 	// single argCount value.
 	valid = true
 	seenDigits := false
@@ -1197,6 +1199,12 @@ func scanWordModifier(text string) (base string, argCount int, forceStack, force
 			} else {
 				usurpFlag = true
 			}
+		case c == 't':
+			if typeFlag {
+				valid = false
+			} else {
+				typeFlag = true
+			}
 		default:
 			valid = false
 		}
@@ -1206,18 +1214,23 @@ func scanWordModifier(text string) (base string, argCount int, forceStack, force
 		i++
 	}
 
+	// /t combines with nothing — any companion flag invalidates, in
+	// either order.
+	if typeFlag && (quoteFlag || refFlag || usurpFlag || forceStack || forceForward || argCount >= 0) {
+		valid = false
+	}
 	if !valid {
 		// Unrecognized / malformed modifier — treat entire token as plain word.
-		return text, -1, false, false, false, false, false, false
+		return text, -1, false, false, false, false, false, false, false
 	}
-	return baseName, argCount, forceStack, forceForward, quoteFlag, refFlag, usurpFlag, true
+	return baseName, argCount, forceStack, forceForward, quoteFlag, refFlag, usurpFlag, typeFlag, true
 }
 
 // wordBaseName returns the base name of an unquoted word token, stripping
 // a valid `/...` modifier suffix (foo/r → foo, foo → foo). Used to derive
 // the key of a shorthand map entry, whose value keeps the full token.
 func wordBaseName(text string) string {
-	base, _, _, _, _, _, _, _ := scanWordModifier(text)
+	base, _, _, _, _, _, _, _, _ := scanWordModifier(text)
 	return base
 }
 
@@ -1226,10 +1239,23 @@ func wordBaseName(text string) string {
 // overrides the other modifiers; u emits a usurp-word and r emits a
 // ref-word, both of which short-circuit the rest.
 func parseWord(text string) (eng.Value, error) {
-	name, argCount, forceStack, forceForward, quoteFlag, refFlag, usurpFlag, _ := scanWordModifier(text)
+	name, argCount, forceStack, forceForward, quoteFlag, refFlag, usurpFlag, typeFlag, _ := scanWordModifier(text)
 
 	if name == "" {
 		return eng.Value{}, fmt.Errorf("empty word")
+	}
+
+	// `X/t` — the type-bound sugar: desugars to the paren group
+	// `(Type of [X/q])`, the bounded-Type application (≡ `Type<X>`).
+	// X rides as an ATOM inside the argument list: it survives list
+	// auto-eval untouched, so `of` sees the NAME and can bind a named
+	// structural type (a disjunct, a record) to its MINTED lattice
+	// node — a word would resolve to the body first. Resolution
+	// happens entirely inside `of`; a non-type X fails there with
+	// of's error — the parser owns no semantics.
+	if typeFlag {
+		bound := eng.NewList([]eng.Value{eng.NewAtom(name)})
+		return eng.NewParenExpr([]eng.Value{eng.NewWord("Type"), eng.NewWord("of"), bound}), nil
 	}
 
 	// `0d…` arbitrary-precision literals (BigInteger / BigDecimal). The

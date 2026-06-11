@@ -2330,6 +2330,14 @@ type formatDelegatesToDefault interface {
 // without recursing through Value.String.
 func kernelFormatDefault(v Value) string {
 	switch {
+	case IsBoundedType(v):
+		// `Type of [B]` renders as the suffix sugar B/t — the shortest
+		// round-trippable spelling, mirroring atoms rendering as name/q.
+		n, err := AsBoundedType(v)
+		if err != nil {
+			return "Type"
+		}
+		return n.Leaf() + "/t"
 	case IsWord(v):
 		w, _ := AsWord(v)
 		return fmt.Sprintf("word(%s)", w.Name)

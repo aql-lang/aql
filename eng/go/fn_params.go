@@ -137,10 +137,19 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 					input = append(input, NewOpenParen())
 					input = append(input, items...)
 					input = append(input, NewCloseParen())
-					result, err := sub.Run(input)
-					if err == nil && len(result) == 1 {
-						typeVal = result[0]
+					result, rerr := sub.Run(input)
+					// A failed or multi-valued paren annotation is a
+					// def-time ERROR — previously it silently kept the
+					// raw ParenExpr, which fell to the TAny tail and
+					// made the slot a wildcard (`x:(Map|List)` accepted
+					// everything because `|` is not a word).
+					if rerr != nil {
+						return nil, 0, fmt.Errorf("function spec: invalid type for %q: %w", name, rerr)
 					}
+					if len(result) != 1 {
+						return nil, 0, fmt.Errorf("function spec: type annotation for %q must produce one type, got %d values", name, len(result))
+					}
+					typeVal = result[0]
 				}
 				if IsDisjunct(typeVal) {
 					_as3, _ := AsDisjunct(typeVal)
@@ -394,6 +403,22 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 		if ti, aerr := AsTypeSchema(v); aerr == nil && ti.Type != nil {
 			return CanonicalType(r, ti.Type), nil, nil
 		}
+	}
+	// Bounded Type — `x:Map/t` ≡ `x:(Type of [Map])`: the slot takes
+	// TYPE LITERALS conforming to the bound. Slot type TType admits
+	// types (typeMembershipBehavior); the body rides as the Pattern so
+	// both dispatch paths enforce the bound through Unify.
+	if IsBoundedType(v) {
+		pattern := v
+		return TType, &pattern, nil
+	}
+	// Inline disjunct — `x:(Integer tor String)`: constrain through the
+	// pattern path (Unify's disjunct fold), exactly like the named form
+	// constrains through its minted Behavior. Previously this fell to
+	// the TAny tail: a silent wildcard that dispatched EVERYTHING.
+	if IsDisjunct(v) {
+		pattern := v
+		return TAny, &pattern, nil
 	}
 	if IsRecordType(v) {
 		return ResolveDefType(r, v)

@@ -382,6 +382,13 @@ func rejectsTypeLiteral(v Value, expectedType *Type) bool {
 		// is None-typed.
 		return false
 	}
+	if expectedType.Equal(TType) {
+		// At a Type slot, type literals are the canonical inhabitants —
+		// `t:Type` params (and the bounded `Map/t` pattern over them)
+		// exist exactly to receive them. Mirrors the TNone carve;
+		// membership was already verified by typeMembershipBehavior.
+		return false
+	}
 	return true
 }
 

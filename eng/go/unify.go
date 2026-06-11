@@ -264,6 +264,16 @@ func unifyInner(a, b Value) (Value, *UnifyError) {
 			}
 		}
 	}
+	// Bounded Type — `Type of [B]` (the /t / Type<B> surface): unifies
+	// with a TYPE value whose denoted node conforms to the bound; the
+	// type value wins (it is the narrower side). Two bounded Types
+	// unify to the narrower bound. Checked before Shape dispatch — the
+	// body's ChildTypeInfo payload would otherwise be misread by the
+	// family handlers.
+	if IsBoundedType(a) || IsBoundedType(b) {
+		return unifyBoundedType(a, b)
+	}
+
 	sa := Shape(a)
 	sb := Shape(b)
 

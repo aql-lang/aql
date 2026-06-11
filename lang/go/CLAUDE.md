@@ -260,6 +260,13 @@ Key conversion functions in `parse.go`:
   group; `execFnDefLiteral` peeks+consumes it to leave the function as
   inert data, and `stepLiteral` drops an unconsumed marker (a modifier
   on a non-function result is a no-op). See `lang/spec/path-modifier.tsv`.
+  `/t` on a WORD is the type-bound sugar: `X/t` desugars in `parseWord`
+  to the paren group `(Type of [X/q])` — the bound rides as an ATOM so
+  `of` sees the NAME and can bind a named structural type (disjunct,
+  predicate) to its minted node rather than its body. It combines with
+  no other modifier and is word-only (no group form; computed bounds
+  spell `(Type of [expr])` directly). The bounded-Type body itself
+  lives in `eng/go/core_boundedtype.go`.
 
 ## Argument Ordering (CRITICAL)
 
