@@ -6,7 +6,15 @@ func init() {
 		Summary: "Print a value to stdout followed by a newline.",
 		Description: "Consumes the top value and writes its formatted representation to the output, " +
 			"followed by a newline. Strings are printed as-is; maps and lists as JSON-like text; " +
-			"tables are formatted with column headers.",
+			"tables are formatted with column headers. ORDERING PITFALL: print is " +
+			"forward-precedent, so in a sequence like `\"a\" print \"b\" print` each print " +
+			"grabs the NEXT statement's value and output comes out scrambled. For " +
+			"sequential prints use the stack-only modifier print/s, or terminate each " +
+			"statement with `end` / `;` — `\"a\" print; \"b\" print;`.",
+		Examples: []string{
+			`"a" print/s  "b" print/s   ;# a then b — stack-only, in order`,
+			`"a" print; "b" print;      ;# same, via statement terminators`,
+		},
 	})
 
 	register(&Entry{

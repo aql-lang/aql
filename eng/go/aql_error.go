@@ -22,6 +22,13 @@ type AqlError struct {
 	Col    int    // 1-based column number (0 = unknown)
 	Src    string // Source fragment at the error (the token/word text)
 	Hint   string // Additional explanatory text
+	// File is the path of the source file the Row/Col point into, when
+	// known — set by the executing engine (stampErrPos) from the
+	// registry's BaseFile so an error raised inside an IMPORTED module
+	// renders `--> /path/mod.aql:130:9` instead of a bare position
+	// into an unnamed file (decision DX report finding 4). Empty for
+	// -e / REPL input.
+	File string
 	// Data carries the extra keys of a `raise {code:… message:… …}`
 	// spec map, so a catching handler can read them off the Error
 	// value (ErrorInfo.Data via NewError). Nil for every other error.
@@ -49,6 +56,10 @@ func (e *AqlError) Error() string {
 	// a word appears more than once).
 	if e.Row > 0 {
 		b.WriteString("\n  --> ")
+		if e.File != "" {
+			b.WriteString(e.File)
+			b.WriteString(":")
+		}
 		b.WriteString(strconv.Itoa(e.Row))
 		b.WriteString(":")
 		if e.Col > 0 {

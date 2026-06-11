@@ -57,7 +57,7 @@ func init() {
 		Examples: []string{
 			`raise "boom"                          ;# [aql/user_error]: boom`,
 			`raise bad_input "expected a list"     ;# [aql/bad_input]: …`,
-			`do [raise {code: nope/q, message: "m", got: 42}] error [dup.got print]`,
+			`do [raise {code: nope/q, message: "m", got: 42}] error [var [[e] e.got print]]`,
 		},
 	})
 

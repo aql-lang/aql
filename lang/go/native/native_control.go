@@ -143,7 +143,11 @@ var controlNatives = []NativeFunc{
 				Args:       []*Type{TList, TError},
 				NoEvalArgs: map[int]bool{0: true},
 				Handler:    errorHandler,
-				Returns:    []*Type{TError}, BarrierPos: -1,
+				// The error branch leaves the HANDLER's result (the
+				// caught error only when the handler passes it
+				// through), so the static return is Any, like the
+				// success pass-through.
+				Returns: []*Type{TAny}, BarrierPos: -1,
 			},
 			// Success pass-through: `do [risky] error [handler]` must
 			// compose when risky SUCCEEDS too — a non-Error result
@@ -531,5 +535,23 @@ func errorHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	input := make([]Value, 0, 1+len(body))
 	input = append(input, args[1])
 	input = append(input, body...)
-	return sub.Run(input)
+	out, err := sub.Run(input)
+	if err != nil {
+		return nil, err
+	}
+	// Stack-neutrality (decision DX report finding 6): the caught error
+	// is PUSHED so the handler can bind it (`var [[e] …]`, `get code`,
+	// `dup`, …), but a handler that ignores it must not leak it beneath
+	// its result — `def r do [risky] error ["fallback"]` used to bind r
+	// to the error's neighbour and auto-print the stray error. If the
+	// pushed error is still sitting unconsumed at the BOTTOM of the
+	// handler's stack, strip it, so the error branch leaves exactly the
+	// handler's result — mirroring the success pass-through. (A bare
+	// `error []` handler keeps the error as the result: pass-through.
+	// The identity probe compares ErrorInfo payloads; a non-ErrorInfo
+	// bottom is a different dynamic type and compares false.)
+	if len(out) >= 2 && out[0].Data == args[1].Data {
+		out = out[1:]
+	}
+	return out, nil
 }

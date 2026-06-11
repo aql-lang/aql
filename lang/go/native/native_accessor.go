@@ -37,6 +37,110 @@ var accessorNatives = []NativeFunc{
 			{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: getrNoneHandler},
 		},
 	},
+	{
+		// `has` is the Boolean presence predicate — the missing third
+		// sibling of `get` (None on miss) and `getr` (raise on miss):
+		// "is this key/index BOUND, regardless of value", so a
+		// present-but-None entry is distinguishable from an absent one
+		// (decision DX report finding 3). TOTAL within its container
+		// table: a missing key, an out-of-range index, a None parent,
+		// or a type-literal container all answer false — it never
+		// raises, so it composes inside if/filter/conditions.
+		//
+		//	{a:None} has a       → true   (present, value is None)
+		//	{a:1}    has b       → false  (absent)
+		//	[10,20]  has 1       → true
+		//	none     has a       → false
+		Name: "has",
+
+		Signatures: []NativeSig{
+			// [Key | Node] — Map, List, Options, record-shape
+			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasNodeHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: hasNodeHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: hasNodeHandler, Returns: []*Type{TBoolean}},
+			// [Index | Array]
+			{Args: []*Type{TInteger, TArray}, BarrierPos: 1, Handler: hasArrayHandler, Returns: []*Type{TBoolean}},
+			// [Key | Object / Class instance]
+			{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TString, TClass}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
+			// [Key | Store]
+			{Args: []*Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasStoreHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TString, TStore}, BarrierPos: 1, Handler: hasStoreHandler, Returns: []*Type{TBoolean}},
+			// [Key | None] — total: an absent parent answers false.
+			// The Atom/q overload captures a bare-word key (`none has
+			// a`, `(m get sub) has k`), going one better than get/getr,
+			// whose None sigs take only an evaluated key.
+			{Args: []*Type{TAtom, TNone}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasNoneHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: hasNoneHandler, Returns: []*Type{TBoolean}},
+		},
+	},
+}
+
+// ---- has handlers (the get lookups, returning presence as Boolean) ----
+
+func hasNodeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	key := args[0]
+	container := args[1]
+	if !IsConcrete(container) {
+		return []Value{NewBoolean(false)}, nil
+	}
+	if key.Parent.ConformsTo(TInteger) {
+		idx, _ := AsInteger(key)
+		if list, _ := AsList(container); !list.IsNil() && container.Parent.ConformsTo(TList) {
+			i := int(idx)
+			return []Value{NewBoolean(i >= 0 && i < list.Len())}, nil
+		}
+		// Fall through to map lookup with stringified key (get parity).
+	}
+	k := getKey(key)
+	if m, _ := AsMap(container); m != nil {
+		_, ok := m.Get(k)
+		return []Value{NewBoolean(ok)}, nil
+	}
+	return []Value{NewBoolean(false)}, nil
+}
+
+func hasArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	arr, err := AsArray(args[1])
+	if err != nil {
+		return []Value{NewBoolean(false)}, nil
+	}
+	idx, _ := args[0].AsConcreteInteger()
+	_, ok := arr.Get(int(idx))
+	return []Value{NewBoolean(ok)}, nil
+}
+
+func hasObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	container := args[1]
+	if !IsConcrete(container) {
+		return []Value{NewBoolean(false)}, nil
+	}
+	k := getKey(args[0])
+	if m, err := AsMutableMap(container); err == nil {
+		_, found := m.Get(k)
+		return []Value{NewBoolean(found)}, nil
+	}
+	oi, err := AsObjectInstance(container)
+	if err != nil {
+		return []Value{NewBoolean(false)}, nil
+	}
+	_, ok := oi.GetField(k)
+	return []Value{NewBoolean(ok)}, nil
+}
+
+func hasStoreHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	store, err := AsStore(args[1])
+	if err != nil {
+		return []Value{NewBoolean(false)}, nil
+	}
+	_, ok := store.Get(getKey(args[0]))
+	return []Value{NewBoolean(ok)}, nil
+}
+
+func hasNoneHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	return []Value{NewBoolean(false)}, nil
 }
 
 // returnsGetrIndexChecked is the check-mode ReturnsFn for the

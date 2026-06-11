@@ -1102,3 +1102,28 @@ def x 1 {a:(x add 1)}	{a:2}
 def x 1 {a:{b:x}}	{a:{b:1}}
 def x 1 def f word [do {a:x}] f	{a:1}
 def x 1 ; x:x	{x:1}
+
+# === has: Boolean key/index presence — get/getr's third sibling ===
+# "is this key BOUND, regardless of value": present-but-none is
+# distinguishable from absent. Total: never raises.
+{a:None} has a	true
+{a:1} has b	false
+{a:1} "a" has	true
+[10,20] has 1	true
+[10,20] has 5	false
+none has a	false
+({a:None} get b) has k	false
+
+# === do/error is stack-neutral (decision DX report finding 6) ===
+# The caught error is pushed for the handler to bind, but a handler
+# that ignores it must not leak it beneath its result.
+do [ raise "boom" ] error [ "recovered" ]	'recovered'
+def result (do [ raise "boom" ] error [ "recovered" ]) end result	'recovered'
+do [ 42 ] error [ "fallback" ]	42
+do [ raise "boom" ] error [ var [[e] e.message] ]	'boom'
+do [ raise "boom" ] error [ get code ]	user_error
+do [raise {code: nope/q, message: "m", got: 42}] error [var [[e] e.got]]	42
+
+# === swapped arguments get a dedicated hint (finding 2) ===
+def wp fn [[p:String t:Map] [Map] [t]] wp {a:1} "collect"		swap_hint
+def wp fn [[p:String t:Map] [Map] [t]] {a:1} "collect" wp	{a:1}

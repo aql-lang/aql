@@ -129,6 +129,135 @@ func (e *Engine) effectiveSource() string {
 	return e.registry.Source
 }
 
+// reorderHint reports a "did you swap the arguments?" hint when the
+// values the failed dispatch saw match one of fn's signatures under a
+// non-identity PERMUTATION (decision DX report finding 2): the caller
+// of `with-policy policy:String table:Map` who writes
+// `with-policy table "collect"` gets the declared order spelled out
+// instead of the forward-grouping hint, which points at parsing.
+// Conservative: plain value sigs only (no quote/raw/form/type capture,
+// no patterns), 2–4 args, first matching signature wins. Returns ""
+// when no reorder explains the failure.
+func (e *Engine) reorderHint(name string, fn *FnDefInfo) string {
+	return reorderHintFor(name, fn, reorderCandidates(e.stack[:e.pointer]))
+}
+
+// reorderCandidates collects up to 4 plain values from the top of the
+// stack (walking down, stopping at engine markers / words) — the tuple
+// a failed STACK dispatch saw, in the assignment order matchSignature
+// uses (top-first: sig[i] ↔ vals[i]).
+func reorderCandidates(stack []Value) []Value {
+	var vals []Value
+	for i := len(stack) - 1; i >= 0 && len(vals) < 4; i-- {
+		v := stack[i]
+		if IsOpenParen(v) || IsForward(v) || IsWord(v) || IsEnd(v) ||
+			v.Parent.ConformsTo(TMark) || v.Parent.ConformsTo(TMove) ||
+			v.Parent.ConformsTo(TInternal) {
+			break
+		}
+		vals = append(vals, v)
+	}
+	return vals
+}
+
+// reorderForwardCandidates collects up to 4 UNCLAIMED forward value
+// tokens after the word — concrete literals only; words, parens, and
+// markers stop the scan. The result is in SOURCE order, which is the
+// assignment order the forward plan would have used (sig[i] ↔
+// token[i]) — exactly the failing-tuple view reorderHintFor wants.
+func reorderForwardCandidates(stack []Value, pointer int) []Value {
+	var written []Value
+	for i := pointer + 1; i < len(stack) && len(written) < 4; i++ {
+		v := stack[i]
+		if !IsConcrete(v) || IsWord(v) || IsParenExpr(v) || IsForward(v) ||
+			IsOpenParen(v) || IsEnd(v) {
+			break
+		}
+		written = append(written, v)
+	}
+	return written
+}
+
+// reorderHintFor is the shared probe behind the signature errors.
+// written is the failing tuple in the ASSIGNMENT order the dispatch
+// used (sig[i] ↔ written[i]): source order for forward tokens,
+// top-first for stack values.
+func reorderHintFor(name string, fn *FnDefInfo, written []Value) string {
+	if fn == nil {
+		return ""
+	}
+	for si := range fn.Signatures {
+		sig := &fn.Signatures[si]
+		n := sig.TotalArgs()
+		if sig.Fallback || n < 2 || n > 4 || n != len(written) {
+			continue
+		}
+		if len(sig.QuoteArgs) > 0 || len(sig.RawParens) > 0 ||
+			len(sig.FormArgs) > 0 || len(sig.TypeArgs) > 0 || sig.Patterns != nil {
+			continue
+		}
+		// The identity assignment must FAIL (otherwise this sig would
+		// have matched) and some permutation must succeed.
+		if assignsPositionally(written, sig, true) || !assignsPositionally(written, sig, false) {
+			continue
+		}
+		got := make([]string, n)
+		want := make([]string, n)
+		params := make([]string, n)
+		for i := 0; i < n; i++ {
+			got[i] = ValueType(written[i]).Leaf()
+			t := sigArgType(sig, i)
+			want[i] = t.Leaf()
+			if i < len(sig.Params) && sig.Params[i].Name != "" {
+				params[i] = sig.Params[i].Name + ":" + t.Leaf()
+			} else {
+				params[i] = t.Leaf()
+			}
+		}
+		return "no signature matches (" + strings.Join(got, ", ") +
+			"); one exists for (" + strings.Join(want, ", ") +
+			") — did you swap the arguments? expected: " + name + " " +
+			strings.Join(params, " ")
+	}
+	return ""
+}
+
+// assignsPositionally reports whether written (caller order, =
+// reversed sig order) satisfies sig either positionally (identity =
+// true) or under SOME assignment of distinct written args to sig
+// slots (identity = false; backtracking over n ≤ 4 slots).
+func assignsPositionally(written []Value, sig *Signature, identity bool) bool {
+	n := sig.TotalArgs()
+	if identity {
+		for i := 0; i < n; i++ {
+			if !sigTypeMatches(written[i], sigArgType(sig, i)) {
+				return false
+			}
+		}
+		return true
+	}
+	used := make([]bool, n)
+	var try func(slot int) bool
+	try = func(slot int) bool {
+		if slot == n {
+			return true
+		}
+		t := sigArgType(sig, slot)
+		for j := 0; j < n; j++ {
+			if used[j] || !sigTypeMatches(written[j], t) {
+				continue
+			}
+			used[j] = true
+			if try(slot + 1) {
+				return true
+			}
+			used[j] = false
+		}
+		return false
+	}
+	return try(0)
+}
+
 // sigError builds a detailed AqlError for a signature mismatch.
 // It includes the word name, available signatures, and the actual
 // types found on the stack near the word.
@@ -148,14 +277,26 @@ func (e *Engine) sigError(name string, fn *FnDefInfo, pos SrcPos) *AqlError {
 		hint.WriteString("expected: " + name + " " + describeAllSigs(fn))
 	}
 
-	// Forward-precedence hint: when the word has forward-collecting
-	// signatures, the most common cause of this error is that forward
-	// collection ran into a following word (another call, a builtin)
-	// before it could gather enough arguments — e.g. `inc inc 5` or
-	// `f a g b`. Point the user at the fixes (group with parens, or
-	// terminate collection with `end` / `;`) so they aren't left to
-	// guess from a bare "no matching signature".
-	if fn != nil && fn.HasForwardSigs() {
+	// Reorder hint: when the actual argument types match some declared
+	// signature under a PERMUTATION, the arguments are almost certainly
+	// swapped — say so, with the declared parameter order, and suppress
+	// the forward-grouping hint, which would point at parsing (the
+	// wrong fix). Decision DX report finding 2.
+	reorder := e.reorderHint(name, fn)
+	switch {
+	case reorder != "":
+		if hint.Len() > 0 {
+			hint.WriteString("\n  = ")
+		}
+		hint.WriteString(reorder)
+	case fn != nil && fn.HasForwardSigs():
+		// Forward-precedence hint: when the word has forward-collecting
+		// signatures, the most common cause of this error is that forward
+		// collection ran into a following word (another call, a builtin)
+		// before it could gather enough arguments — e.g. `inc inc 5` or
+		// `f a g b`. Point the user at the fixes (group with parens, or
+		// terminate collection with `end` / `;`) so they aren't left to
+		// guess from a bare "no matching signature".
 		if hint.Len() > 0 {
 			hint.WriteString("\n  = ")
 		}
@@ -366,15 +507,29 @@ func stampResultPos(vals []Value, pos SrcPos) {
 // untouched.
 func (e *Engine) stampErrPos(err error) error {
 	ae, ok := err.(*AqlError)
-	if !ok || ae.Row != 0 {
+	if !ok {
 		return err
 	}
-	pos := e.currentPos()
-	if pos.Row != 0 {
-		ae.Row, ae.Col = pos.Row, pos.Col
-		if pos.Src != "" {
-			ae.Src = pos.Src
+	if ae.Row == 0 {
+		pos := e.currentPos()
+		if pos.Row != 0 {
+			ae.Row, ae.Col = pos.Row, pos.Col
+			if pos.Src != "" {
+				ae.Src = pos.Src
+			}
+			// The position comes from THIS engine's tokens, so this
+			// engine's source is the text it points into — attach it
+			// (with the originating file) so an error raised inside an
+			// imported module renders with the module's excerpt and
+			// filename rather than a bare position (decision DX report
+			// finding 4).
+			if ae.fullSource == "" {
+				ae.fullSource = e.effectiveSource()
+			}
 		}
+	}
+	if ae.File == "" && ae.Row != 0 && e.registry != nil {
+		ae.File = e.registry.BaseFile
 	}
 	return err
 }
@@ -1708,6 +1863,26 @@ func (e *Engine) stepWord(val Value) error {
 		}
 		if hasTyped {
 			sig = nil
+		}
+	}
+
+	// Run-mode reorder probe (decision DX report finding 2): the
+	// fallback is about to raise "no matching signature" — but when
+	// the UNCLAIMED forward tokens (the plan pruned every typed sig,
+	// so they were never collected) match a real signature under a
+	// permutation, the arguments are swapped. Raise the dedicated
+	// hint instead of dispatching the fallback's generic error.
+	if sig != nil && sig.Fallback && !e.registry.Check.IsActive() {
+		hint := reorderHintFor(w.Name, fn, reorderForwardCandidates(e.stack, e.pointer))
+		if hint == "" {
+			// Stack-form swap: the misordered values are already on
+			// the stack below the word.
+			hint = reorderHintFor(w.Name, fn, reorderCandidates(e.stack[:e.pointer]))
+		}
+		if hint != "" {
+			return makeAqlErrorAt("signature_error",
+				"no matching signature for "+w.Name, w.Name,
+				e.effectiveSource(), hint, val.Pos)
 		}
 	}
 

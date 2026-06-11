@@ -59,8 +59,9 @@ func init() {
 			"equal-looking lists are NOT eq. This is by design — use deq for a " +
 			"deep, structural comparison of contents.",
 		Notes: []string{
-			"`[\"a\" \"b\"] eq [\"a\" \"b\"]` is `false` (distinct list values); " +
-				"`deq` returns `true`.",
+			"`{a:1} eq {a:1}` is `false` and `[\"a\" \"b\"] eq [\"a\" \"b\"]` is `false` " +
+				"(distinct compound values, identity compare); `deq` returns `true` " +
+				"for both — in tests, assert maps/lists with `deq`, not `eq`.",
 		},
 	})
 

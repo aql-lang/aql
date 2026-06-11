@@ -512,6 +512,18 @@ make P {name:"Bob"}           # returns {name:'Bob' nick:None}
 (make P {name:"Bob"}) . nick eq none      # returns true
 ```
 
+To distinguish *absent* from *present-but-`none`*, ask `has` — the
+Boolean presence predicate (`get` returns `None` on a miss, `getr`
+raises, `has` answers whether the key is **bound** at all):
+
+```
+{a:None} has a                # returns true  — present, value is none
+{a:None} get a                # returns None  — indistinguishable from…
+{a:1}    get b                # returns None  — …an absent key
+{a:1}    has b                # returns false
+none     has a                # returns false — total: composes in conditions
+```
+
 Because the two spellings compare equal under `eq` and both satisfy
 `is None`, the distinction never changes what a test answers — it is
 visible only in rendering.
@@ -1499,6 +1511,7 @@ word — `size` subsumes it.
 |------|-------------|---------|
 | `get` / `.` | Lookup field/key, or index a list | `{x:1} . x` returns `1`; `[10,20,30] 0 get` returns `10` |
 | `getr` / `!.` | Strict lookup (errors if missing) | `{x:1} !. y` returns `error` |
+| `has` | Key/index presence as a Boolean — true when **bound**, even to `none`; total (never raises, `none` parent answers `false`) | `{a:None} has a` returns `true`; `{a:1} has b` returns `false`; `[10,20] has 1` returns `true` |
 | `set` | Set a key — in place on Store / Object / Array and on FlexMap / FlexList (see [Flex nodes](#flex-nodes--flexmap-and-flexlist)); copy-returning on Map | `{a:1} set b 2` returns `{a:1 b:2}`; `set a/q 1 (flex {})` |
 | `context` | Push the current context Store | `context` |
 
@@ -1921,8 +1934,13 @@ reads `e.code`, `e.message`, and any payload keys (`e.got`), and
 | `cancelled` | Operation cancelled (timer, await branch). |
 
 Use `do [...] error [...]` to catch them — a successful body skips
-the handler and its value passes through. Inside the handler the
-Error value is on the stack; dispatch on the code with `case`:
+the handler and its value passes through. The error branch is
+**stack-neutral**: it leaves exactly the handler's result, like the
+success path. Inside the handler the caught Error is on the stack —
+bind it with `var [[e] …]`, read fields with `get`, or ignore it (an
+unconsumed error is dropped, not leaked beneath the result); an empty
+handler `error []` passes the Error through as the result. Dispatch
+on the code with `case`:
 
 ```
 def attempt fn [[x:Integer] [Any] [
