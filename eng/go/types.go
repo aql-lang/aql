@@ -136,9 +136,12 @@ func TypeNameByID(id string) string {
 	return def.Name
 }
 
-// mustType is used only for well-known type constants at init time.
-// It panics on invalid paths — acceptable because these are compile-time
-// constants whose correctness is verified by tests.
+// mustType resolves a well-known builtin type constant at init time. An
+// invalid path can only mean a programmer error in the T* constant list
+// or builtinDecls; rather than panic, it records the error (surfaced by
+// NewRegistry via BuiltinInitError) and returns a degenerate placeholder
+// so other package-level var initialisers stay non-nil. The name is kept
+// for source familiarity; it no longer panics. See ADR-005.
 func mustType(path string) *Type {
 	return mustBuiltinType(path)
 }

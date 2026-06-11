@@ -1,8 +1,6 @@
 package stackform
 
 import (
-	"fmt"
-
 	"github.com/aql-lang/aql/eng/go"
 )
 
@@ -53,13 +51,4 @@ func Eval(reg *eng.Registry, form *StackForm) ([]eng.Value, error) {
 	tokens := Flatten(form)
 	e := eng.NewTop(reg)
 	return e.Run(tokens)
-}
-
-// MustEval is the panic-on-error variant for use in tests.
-func MustEval(reg *eng.Registry, form *StackForm) []eng.Value {
-	result, err := Eval(reg, form)
-	if err != nil {
-		panic(fmt.Sprintf("MustEval: %v", err))
-	}
-	return result
 }

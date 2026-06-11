@@ -45,9 +45,9 @@ var TModuleExport = registerModuleType("Ideal/ModuleExport", 5001)
 func registerModuleType(path string, fixedID int) *Type {
 	t, err := eng.Builtin.RegisterExternalBuiltin(path, fixedID, moduleTypeBehavior{path: path})
 	if err != nil {
-		// lint:allow-panic — init-time builtin registration; see
-		// registerTimerType in native_misc.go for rationale.
-		panic(fmt.Sprintf("native: register %s: %v", path, err))
+		// Init-time registration error — recorded, not panicked.
+		// See ADR-005 and typeinit.go.
+		recordTypeInitErr(fmt.Errorf("native: register %s: %w", path, err))
 	}
 	return t
 }

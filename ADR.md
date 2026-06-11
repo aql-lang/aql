@@ -374,3 +374,80 @@ modes motivated formalizing this:
   Because the bundle is versioned the same way, an older `aql` refuses a
   newer bundle rather than mishandling it. `import` auto-detects whether
   its input is a bundle or a `.env` file.
+
+---
+
+## ADR-005 — No deliberate panics; infrastructure code always returns errors {#adr-005}
+
+**Status:** Accepted · **Date:** 2026-06-11
+
+### Decision
+
+The AQL implementation **never panics deliberately**. Every error
+condition — including build-time programmer errors such as a malformed
+type path or a duplicate `FixedID` — is reported as a returned `error`,
+surfaced at a checkable boundary, not raised as a `panic`. This is
+infrastructure code: a panic crashes the host process that embeds the
+engine (a server, an editor's LSP, a supervisor), which is never an
+acceptable outcome for a library.
+
+Concretely:
+
+- Runtime handlers return errors (the existing "Panic Prevention" rule).
+- **Init-time type registration also returns errors.** The previous
+  carve-out — `// lint:allow-panic` on the hardcoded type-registration
+  paths — is withdrawn. Those helpers now record the error into a
+  package-level accumulator and the engine surfaces it the first time a
+  registry is constructed:
+  - `eng`: `BuiltinInitError()` is checked by `NewRegistry()`.
+  - `native`: `TypeInitError()` is checked by `DefaultRegistryWithPolicy`.
+  - `modules/matrix`: `tensorTypeInitErr` is checked by
+    `BuildMatrixModule`.
+- The well-known `T*` constant resolver (`mustType`) records its error
+  and returns a degenerate placeholder `*Type` so other package-level
+  `var` initialisers stay non-nil; the recorded error is then returned by
+  `NewRegistry` before the registry is ever used.
+
+The only remaining `panic`/`recover` in the codebase are: Go standard-
+library `Must*` calls on compile-time-constant inputs (e.g.
+`regexp.MustCompile` of a literal pattern), and `recover()` guards in
+tests that *assert* no panic occurs. Neither is a deliberate failure
+signal in our own logic.
+
+### Context
+
+The kernel historically permitted init-time panics on the type-
+registration paths, reasoning that a `FixedID` collision or a bad path is
+a build-time programmer error caught by tests, not a runtime condition.
+That reasoning has two holes:
+
+1. **The engine is embedded.** `lang.New()` is called from long-lived
+   host processes. A panic in a package `init()` or in `NewRegistry`
+   takes the whole host down with a stack trace instead of a handled
+   error the host can log and refuse cleanly.
+2. **The carve-out leaked.** "Allowed only at init time" is not a
+   property the compiler checks; it relied on a comment convention.
+   Auditing the tree turned up a genuine latent nil-map panic in
+   `TypeTable.RegisterExternalBuiltin` (writing the builtin-only indexes
+   on a dynamic table), reachable by any caller — exactly the class of
+   bug a blanket no-panic rule prevents.
+
+A single rule ("return errors, always") is simpler to follow and to
+audit than a rule with an init-time exception, and it composes with the
+error-returning constructors the codebase already has.
+
+### Consequences
+
+- `NewRegistry`, `DefaultRegistry[WithPolicy]`, and `BuildMatrixModule`
+  already return `error`; the registration errors ride those existing
+  channels, so no new failure surface is introduced for callers.
+- A malformed `builtinDecls`, a duplicate external `FixedID`, or a bad
+  registered path now fails the *first registry construction* with a
+  descriptive error, instead of panicking during package import. Tests
+  assert this (`eng/go/registration_error_test.go`), including a
+  `recover()`-based guard that the conversion holds.
+- New externally-registered types must still pick a unique `FixedID`
+  from their documented range; the difference is only in how a mistake
+  is reported.
+- The `// lint:allow-panic` annotations are removed. Any new `panic` in
+  non-test, non-`Must*`-constant code is a defect.

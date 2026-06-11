@@ -25,27 +25,29 @@ import (
 // IDs stay wire-compatible.
 var TTensor, TMatrix, TVector = registerTensorTypes()
 
+// tensorTypeInitErr records any error from the init-time tensor-type
+// registration. It can only be a programmer error (duplicate FixedID or
+// malformed path); per ADR-005 it is recorded here and surfaced by
+// BuildMatrixModule rather than panicked at package import.
+var tensorTypeInitErr error
+
 func registerTensorTypes() (*eng.Type, *eng.Type, *eng.Type) {
 	// Tensor first — Matrix and Vector register as its lattice
 	// children and so need it present in eng.Builtin.
 	tensor, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Tensor", 2001, tensorFormatBehavior{})
 	if err != nil {
-		// lint:allow-panic — init-time builtin registration; see
-		// registerTimerType in native/native_misc.go for rationale.
-		panic(fmt.Sprintf("matrix: register TTensor: %v", err))
+		tensorTypeInitErr = fmt.Errorf("matrix: register TTensor: %w", err)
 	}
 	// Tensor inherits Ideal's unified Rank from RegisterExternalBuiltin
 	// (external types take no positional slot — see builtinDecls in
 	// eng/go/typetable.go); Matrix and Vector inherit it in turn.
 	matrix, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Tensor/Matrix", 2000, tensorFormatBehavior{})
-	if err != nil {
-		// lint:allow-panic — see above.
-		panic(fmt.Sprintf("matrix: register TMatrix: %v", err))
+	if err != nil && tensorTypeInitErr == nil {
+		tensorTypeInitErr = fmt.Errorf("matrix: register TMatrix: %w", err)
 	}
 	vector, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Tensor/Vector", 2002, tensorFormatBehavior{})
-	if err != nil {
-		// lint:allow-panic — see above.
-		panic(fmt.Sprintf("matrix: register TVector: %v", err))
+	if err != nil && tensorTypeInitErr == nil {
+		tensorTypeInitErr = fmt.Errorf("matrix: register TVector: %w", err)
 	}
 	return tensor, matrix, vector
 }
@@ -169,6 +171,11 @@ func newMatrix(rows, cols int, data []float64) native.Value {
 // Go-implemented matrix words into an isolated sub-registry and returns a
 // ModuleDesc with a "matrix" export containing FnDef wrappers for each word.
 func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
+	// Surface any init-time tensor-type registration error (recorded
+	// instead of panicked — see registerTensorTypes / ADR-005).
+	if tensorTypeInitErr != nil {
+		return native.ModuleDesc{}, tensorTypeInitErr
+	}
 	subReg, err := native.DefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err

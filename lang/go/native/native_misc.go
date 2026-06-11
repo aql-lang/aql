@@ -23,11 +23,10 @@ var (
 func registerTimerType(path string, fixedID int, behavior eng.TypeBehavior) *eng.Type {
 	t, err := eng.Builtin.RegisterExternalBuiltin(path, fixedID, behavior)
 	if err != nil {
-		// lint:allow-panic — init-time builtin registration with
-		// hardcoded path and FixedID; failure indicates a build-time
-		// programmer error (collision or malformed path), not a
-		// runtime condition. See CLAUDE.md "Panic Prevention".
-		panic(fmt.Sprintf("native_misc: register %s: %v", path, err))
+		// Init-time registration error (duplicate FixedID / malformed
+		// path) — record it for NewRegistry/DefaultRegistry to surface
+		// rather than panicking. See ADR-005 and typeinit.go.
+		recordTypeInitErr(fmt.Errorf("native_misc: register %s: %w", path, err))
 	}
 	return t
 }
