@@ -153,6 +153,19 @@ node 1	ERROR:signature	scalars are not nodes
 node Map	ERROR:signature	bare type literal rejected
 		
 # ====================================================================		
+# 8b. Truthiness — empty flex containers are falsey, like plain ones		
+# ====================================================================		
+		
+not (flex [])	true	empty FlexList is falsey
+not (flex {})	true	empty FlexMap is falsey
+not (flex [1])	false	non-empty FlexList is truthy
+not (flex {a:1})	false	non-empty FlexMap is truthy
+if (flex {}) [1] [2]	2	empty flex map takes the else branch
+if (flex [9]) [1] [2]	1	non-empty flex list takes the then branch
+not []	true	parity: plain empties are falsey the same way
+not {}	true	
+		
+# ====================================================================		
 # 9. Equality and ordering		
 # ====================================================================		
 		
