@@ -853,6 +853,31 @@ func rawFormForward(fn *FnDefInfo, pos int) bool {
 	return false
 }
 
+// capturesForward reports whether any of fn's signatures captures the
+// forward operand at sig position pos STRUCTURALLY — /q word-name capture
+// (QuoteArgs), raw paren capture (RawParens), macro form capture (FormArgs),
+// or type-literal capture (TypeArgs) — rather than as an ordinary value.
+// Gates the splice-word paren expansion in resolveForwardArgs: capture slots
+// take the token itself (the word's name, the raw form) regardless of any
+// def binding, so the `f w ≡ f (w)` equivalence deliberately does not apply
+// there (`quote vs` captures the NAME vs even when vs is splice-bound —
+// word-splice spec §3).
+func capturesForward(fn *FnDefInfo, pos int) bool {
+	if fn == nil {
+		return false
+	}
+	for i := range fn.Signatures {
+		sig := &fn.Signatures[i]
+		if sig.QuoteArgs != nil && sig.QuoteArgs[pos] {
+			return true
+		}
+		if sigRawSlot(sig, pos) {
+			return true
+		}
+	}
+	return false
+}
+
 // pendingForwardWantsRawParen reports whether the nearest enclosing pending
 // Forward (collecting args at the pointer) was matched to a signature that
 // captures a ParenExpr raw. When true, a ParenExpr reached during forward
@@ -1061,6 +1086,30 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 			info, _ := AsReach(tok)
 			stackSplice(&e.stack, scanIdx, 1, expandReach(info)...)
 			continue
+		}
+
+		// A word def-bound to a DATA __SP splice marker occupies its
+		// forward position as the paren group (w) — the `f w ≡ f (w)`
+		// equivalence: a plain (non-function) def-bound word expands into
+		// the token stream wherever it stands. Rewriting the token to
+		// ParenExpr([w]) and reprocessing routes it through the ParenExpr/
+		// OpenParen branches above, so evaluation gating, multi-value
+		// collapse, and raw-capture handling are byte-identical to a
+		// written (w). Two exemptions: structural-capture slots (/q takes
+		// the word's NAME, form/raw/type slots take the raw token — see
+		// capturesForward), and code-bearing splices (Forth-style macros
+		// that must run against the live stack — see spliceIsData).
+		if IsWord(tok) && !capturesForward(fn, pos) {
+			if wi, werr := AsWord(tok); werr == nil {
+				if top, ok := e.registry.Defs.Top(wi.Name); ok && IsSplice(top) {
+					if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {
+						pe := NewParenExpr([]Value{tok})
+						pe.Pos = tok.Pos
+						e.stack[scanIdx] = pe
+						continue
+					}
+				}
+			}
 		}
 
 		// Non-group token. A concrete literal carries a final type that
@@ -1464,6 +1513,27 @@ func (e *Engine) stepWord(val Value) error {
 		case FnDefInfo, *ObjectTypeInfo:
 			// Not a simple value — fall through to Lookup.
 		default:
+			// f w ≡ f (w): a word bound to a DATA __SP splice marker that
+			// is being collected by a pending forward expands as the paren
+			// group (w) instead of substituting the raw marker — the
+			// payload's values arrive from a barrier-protected segment (a
+			// multi-value splice fills several slots, exactly as the
+			// written form does; without this the marker itself would be
+			// collected into an Any slot or implicit-end a typed one). The
+			// /q and FormArgs intercepts above this block keep their
+			// word-capture semantics; a raw-paren-capturing forward
+			// collects the wrapped (w) as code via stepLiteral's existing
+			// ParenExpr gate; and code-bearing splices keep their live-
+			// stack macro semantics (spliceIsData). Inside the group the
+			// OpenParen barrier hides the pending forward, so the
+			// re-stepped word takes the standalone splice-fire path — no
+			// recursion (and recordUse fires on that inner step).
+			if info, serr := AsSplice(top); serr == nil && spliceIsData(info) && e.pendingForwardIdx() >= 0 {
+				pe := NewParenExpr([]Value{val})
+				pe.Pos = val.Pos
+				e.stack[e.pointer] = pe
+				return e.stepLiteral()
+			}
 			// Record the substitution as a "use" for unused-def
 			// tracking in check mode.
 			e.registry.Check.recordUse(w.Name)
@@ -2159,6 +2229,42 @@ func spliceExpand(data Value) []Value {
 	return []Value{data}
 }
 
+// spliceIsData reports whether an __SP marker's payload expands to plain
+// VALUES only — no words, paren groups, reaches, or interpolated strings at
+// the top level (the level `word` splices; nested lists stay values). A data
+// splice contributes the same values in any context, so the `f w ≡ f (w)`
+// paren expansion of a splice-bound word in a forward-argument position is
+// sound for it. A code-bearing splice is a Forth-style macro that runs
+// against the LIVE stack — paren isolation would change its meaning (`def
+// inc word [1 add]  1 inc inc inc` needs each `add` to see the caller's
+// values) — so it stays on the existing standalone-fire / boundary-word
+// paths; group explicitly (`f (p)`) to use its result as an operand.
+func spliceIsData(info SpliceInfo) bool {
+	for _, el := range spliceExpand(info.Data) {
+		if IsWord(el) || IsParenExpr(el) || IsReach(el) || IsInterpString(el) || IsSplice(el) {
+			return false
+		}
+	}
+	return true
+}
+
+// pendingForwardIdx returns the stack index of the nearest pending Forward
+// below the pointer, stopping at an OpenParen barrier; -1 when none. This is
+// the "is the value at the pointer being collected?" probe shared by
+// stepLiteral's collection dispatch and the splice-word paren expansion in
+// stepWord's def-substitution branch.
+func (e *Engine) pendingForwardIdx() int {
+	for i := e.pointer - 1; i >= 0; i-- {
+		if IsOpenParen(e.stack[i]) {
+			return -1
+		}
+		if IsForward(e.stack[i]) {
+			return i
+		}
+	}
+	return -1
+}
+
 func (e *Engine) stepLiteral() error {
 	valIdx := e.pointer
 
@@ -2189,16 +2295,7 @@ func (e *Engine) stepLiteral() error {
 	}
 
 	// Look backwards for the nearest forward entry, stopping at open-paren barriers.
-	fwdIdx := -1
-	for i := valIdx - 1; i >= 0; i-- {
-		if IsOpenParen(e.stack[i]) {
-			break
-		}
-		if IsForward(e.stack[i]) {
-			fwdIdx = i
-			break
-		}
-	}
+	fwdIdx := e.pendingForwardIdx()
 
 	if fwdIdx < 0 {
 		// __SP (splice) marker: replace it, unevaluated, with its payload

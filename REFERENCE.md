@@ -975,6 +975,7 @@ restricted words refuse. See
 | `args` | Current `fn` args list (inside body) | `args . 0` |
 | `quote` | Prevent evaluation of next token | `quote [add 1 2]` |
 | `referent` | What a quoted atom's name refers to | `def x 5  (quote x) referent` returns `5` |
+| `word` | Splice marker: spreads a list's elements (any other value: itself) into the token stream | `[0 word [1,2,3] 4]` returns `[0 1 2 3 4]` |
 
 > **Core words are frozen.** `def`/`undef` may not redefine a built-in
 > word, nor the literals `true`/`false`/`none` — `def add …`,
@@ -983,6 +984,43 @@ restricted words refuse. See
 > Re-`def`ing your **own** words still shadows as before (`def x 1; def
 > x 2` ⇒ `x` is `2`), and a built-in *type* name (`Integer`, …) was
 > already unusable as a `def` target.
+
+#### Splices and spread — `word`
+
+`word v` wraps its (unevaluated) argument in a splice marker. When the
+marker reaches the evaluation pointer it is replaced by its payload: a
+plain list contributes its **top-level elements**, any other value
+contributes itself. This is AQL's spread operator, and it works inline,
+bound, and in argument positions:
+
+```
+[0 word [1,2,3] 4]            # returns [0 1 2 3 4]      — inline spread
+def vs word [2,3]             # bind a spread
+[1 vs 4]                      # returns [1 2 3 4]        — spread in a literal
+add3 1 vs                     # ≡ add3 1 2 3             — spread into a call
+add vs                        # ≡ add 2 3 — returns 5
+```
+
+A **data**-splice-bound word (the payload holds only values) is
+equivalent to the written paren group wherever it stands as an
+argument: `f w ≡ f (w)`. A multi-value spread fills several parameter
+slots; an empty one (`def e word []`) contributes nothing.
+
+Two deliberate exceptions:
+
+* **Name-capture slots win.** `/q` slots take the word's *name*
+  regardless of its binding — `quote vs` is the atom `vs`, and
+  `inspect vs` inspects the definition.
+* **Code splices are macros, not spreads.** A payload containing words
+  (`def inc word [1 add]`) runs Forth-style against the **live** stack
+  when it fires (`1 inc inc inc` returns `4`); it is *not* expanded in
+  argument positions. Group it explicitly — `f (p)` — to pass its
+  result as an argument.
+
+(For spreading *tokens into generated code* at expansion time, see
+`splice` under **[Macros](#macros)**; for concatenating into a
+FlexList in place, `append [3,4] fl` already spreads its list
+argument's elements.)
 
 #### `fn` shape
 

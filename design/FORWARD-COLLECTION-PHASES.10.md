@@ -55,9 +55,12 @@ Phase-1 stop/skip conditions:
 - `end`, `)`, engine markers — hard stop.
 - A paren group no viable overload consumes — left raw, hard stop.
 - A concrete literal that rules out every overload — type prune.
-- **A word — counted as one optimistically-filled position and the
-  walk continues** (`staticForwardType`, engine.go:1114, classifies it
-  `fwdBoundary` but the scan does `pos++`).
+- A word def-bound to a **data** `__SP` splice marker — rewritten in
+  place to `ParenExpr([w])` and reprocessed through the paren branches
+  (the `f w ≡ f (w)` equivalence; see "Splice-bound words" below).
+- **Any other word — counted as one optimistically-filled position and
+  the walk continues** (`staticForwardType`, engine.go:1114, classifies
+  it `fwdBoundary` but the scan does `pos++`).
 
 That last line is deliberate and load-bearing: `def x (expr)` needs
 the planner to look *past* the name `x` — a word — to find and
@@ -279,6 +282,33 @@ never owned. Rejected.
 - A parked forward whose word token was replaced by a non-word can
   never barrier-commit (commitBarrierForward requires `IsWord` at
   FuncIndex) — defensive guard, not a reachable shape today.
+
+## Splice-bound words expand in both phases (`f w ≡ f (w)`)
+
+A word def-bound to a **data** `__SP` splice marker (`def vs word
+[2,3]` — payload holds only values) occupies a forward-argument
+position exactly as the written paren group `(w)` would: `add2 vs` ≡
+`add2 (vs)` → both args from the spread. The rule is enforced by the
+SAME transform at both phase sites — the token/value is rewritten in
+place to `ParenExpr([w])` and the existing paren machinery (evaluation
+gating, zero/multi-value collapse, raw-capture collection) takes over:
+
+- Phase 1: `resolveForwardArgs`' walk, before the `staticForwardType`
+  fall-through.
+- Phase 2: `stepWord`'s Defs-substitution branch, gated on
+  `pendingForwardIdx() >= 0`. Inside the wrapped group the OpenParen
+  barrier hides the pending forward, so the re-stepped word takes the
+  standalone splice-fire path — no recursion.
+
+Because both sites delegate to one mechanism (the paren path), this
+rule cannot drift between phases the way the original stop conditions
+did. Exemptions, both deliberate: structural-capture slots
+(`capturesForward` — /q takes the word's NAME, form/raw/type slots the
+raw token), and **code**-bearing splices (`spliceIsData` false — `def
+inc word [1 add]` is a Forth-style macro whose tokens must run against
+the LIVE stack; paren isolation would change its meaning, so it stays
+a boundary word and `f (p)` is the explicit opt-in). Pinned in
+`lang/spec/word-splice.tsv` §7.
 
 Related: `design/LAZY-ARG-RESOLUTION.0.md` (phase 1's structure-first
 scan), `design/FORWARD-COLLECTION-TRAPS.0.md` (zero-value arrivals and
