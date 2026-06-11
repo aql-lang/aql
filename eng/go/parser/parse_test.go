@@ -2704,6 +2704,39 @@ func TestNoSitedLeak(t *testing.T) {
 	}
 }
 
+// TestParseArrowPairDive pins the lambda-arrow convenience form
+// `(x:Integer => body)`: inside a paren, `x:Integer` parses via the
+// pair-dive (pk > 0), and the #AR Close alternates on the pair/map rules
+// end the dive so the implicit one-entry map becomes the lambda's input
+// sig — equivalent to the bracketed `([x:Integer] => body)`. The
+// alternates are scoped to dives: explicit-map pairs and the top-level
+// implicit map (both pk ≤ 0 / pk-less) keep erroring exactly as before.
+func TestParseArrowPairDive(t *testing.T) {
+	ok := []string{
+		`(x:Integer => [x mul 2])`,
+		`(p:Any => [p.value gt 3])`,
+		`def double (x:Integer => [x mul 2])`,
+		`filter (p:Any => [p.value gt 3]) [1 2 3 4 5]`,
+		`(x:Integer => [x mul 2]) 5`,
+	}
+	for _, src := range ok {
+		if _, err := Parse(src); err != nil {
+			t.Errorf("Parse(%q): unexpected error: %v", src, err)
+		}
+	}
+	// The arrow must NOT close explicit-map pairs or the top-level
+	// implicit map — those parse states stay fatal (the alternates'
+	// pk > 0 condition).
+	for _, src := range []string{
+		`{a:1 => 2}`,
+		`x:Integer => [x mul 2]`,
+	} {
+		if _, err := Parse(src); err == nil {
+			t.Errorf("Parse(%q): expected a syntax error, got none", src)
+		}
+	}
+}
+
 // TestParseNestedEmptyParen pins the fix for a grammar bug where an empty
 // paren `()` as the LAST element of an enclosing paren made the enclosing
 // paren appear unclosed (`(())`, `(1 ())`, `( () )` → bogus

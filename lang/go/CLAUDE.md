@@ -447,10 +447,19 @@ a named fn's body does.
 
 ### Syntactic gotchas
 
-- **Typed-param shorthand must be list-wrapped.** `x:Integer => body`
-  doesn't parse because `x:Integer` at top level starts an implicit
-  map and the rest collapses into the map's value position. Write
-  `[x:Integer] => body` (or `{x: Integer} => body`) instead.
+- **Bare typed-param shorthand works only inside parens, one param.**
+  `(x:Integer => [x mul 2])` parses: inside a paren the pair-dive's
+  pair/map rules close on the arrow (`setupPairGrammar`'s #AR Close
+  alternates, scoped `pk > 0`), so the implicit one-entry map becomes
+  the input sig — equivalent to `([x:Integer] => …)`. At TOP LEVEL
+  `x:Integer => body` still doesn't parse (`x:Integer` starts the
+  top-level implicit map, which is not a dive). Multi-param needs the
+  bracket form `([x:Integer y:Integer] => …)`: in the bare form each
+  pair dives separately and the first strands as a stray map
+  (`syntax.tsv` pins the `undefined_word` failure). An explicit map
+  sig `{x:Integer} => body` is NOT the named-param form — ParseFnParams
+  keys named params on jsonic's Implicit flag, so an explicit map
+  builds a single Map-typed param (`fn (Map)`).
 - **Single-value body rule.** afn captures one forward token as the
   body. Multi-token bodies must wrap as `[token1 token2 …]` or
   `(token1 token2 …)`. A bare-word body (e.g. `[x:Any] => x`) fails

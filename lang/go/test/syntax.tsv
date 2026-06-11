@@ -975,6 +975,20 @@ def dblcall2 fn [[n:Number, cb:Function] [Number] [n add n cb]] dblcall2 4 (fn [
 # args works alongside named params: x by name, z via args.2
 def add3 fn [[x:Number, y:Number, z:Number] [Number] [x add y add (args.2)]] 1 2 3 add3	6
 
+# === Lambda arrow convenience form: (x:Type => body) ===
+
+# single typed param without brackets — the pair-dive closes on =>
+def double (x:Integer => [x mul 2]) double 1	2
+(x:Integer => [x mul 2]) 5	10
+5 (x:Integer => [x mul 2])	10
+# …equivalent to the bracketed form
+def double ([x:Integer] => [x mul 2]) double 1	2
+# multi-param needs brackets: in the convenience form each pair dives
+# separately, so the first param strands as a stray map and the body's
+# reference to it is undefined — write ([x:Integer y:Integer] => body)
+(x:Integer y:Integer => [x add y]) 2 3		undefined_word
+([x:Integer y:Integer] => [x add y]) 2 3	5
+
 # === Forward argument distribution (forward-first, then stack reversed) ===
 
 # 1-arg forward function: all calling patterns

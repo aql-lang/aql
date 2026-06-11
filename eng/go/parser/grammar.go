@@ -608,6 +608,39 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 			}
 		})
 	})
+
+	// --- Lambda arrow closes an implicit pair-dive: (x:Integer => body) ---
+	//
+	// Inside a paren, `x:Integer` parses via val's pair-dive alternate
+	// (pk > 0), and the dive's pair/map rules have no alternative for the
+	// arrow token — pair.Close falls to the implicit-continuation
+	// fallback, re-opens `pair` on `=>`, and errors with "unexpected
+	// character". These two Close alternates end the dive instead
+	// (backtracking the arrow), so the implicit one-entry map
+	// {x:Integer} completes as the preceding value and the arrow
+	// re-reads in the enclosing context, where val's #AR alternate emits
+	// `afn`. ParseFnParams reads the Implicit map as a named param, so
+	// `(x:Integer => [x mul 2])` ≡ `([x:Integer] => [x mul 2])`.
+	//
+	// The pk > 0 condition scopes both alternates to pair-DIVES: pairs
+	// of an explicit `{…}` map run with pk = 0 (set at the OB open), so
+	// `{a: 1 => 2}` keeps erroring exactly as before. The matched parse
+	// state was unconditionally fatal before these alternates, so they
+	// are additive — nothing that parsed previously changes shape.
+	arrowEndsDive := func(r *jsonic.Rule, ctx *jsonic.Context) bool {
+		pk, ok := r.N["pk"]
+		return ok && pk > 0
+	}
+	j.Rule("pair", func(rs *jsonic.RuleSpec) {
+		rs.Close = append([]*jsonic.AltSpec{
+			{S: [][]jsonic.Tin{{t.AR}}, C: arrowEndsDive, B: 1},
+		}, rs.Close...)
+	})
+	j.Rule("map", func(rs *jsonic.RuleSpec) {
+		rs.Close = append([]*jsonic.AltSpec{
+			{S: [][]jsonic.Tin{{t.AR}}, C: arrowEndsDive, B: 1},
+		}, rs.Close...)
+	})
 }
 
 // setupParenGrammar defines the "paren" and "pelem" rules that collect
