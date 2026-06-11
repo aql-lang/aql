@@ -41,6 +41,7 @@ func (*cmd) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("lsp", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	port := fs.Int("p", 0, "TCP port to listen on (0 = stdio mode)")
+	host := fs.String("host", "127.0.0.1", "TCP host to bind (loopback by default; the server evaluates arbitrary buffers — only widen this on a trusted network)")
 
 	if err := fs.Parse(args); err != nil {
 		return 1
@@ -50,7 +51,7 @@ func (*cmd) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if *port == 0 {
 		srv = NewStdioServer(stdin, stdout, stderr)
 	} else {
-		srv = NewTCPServer(*port, stderr)
+		srv = NewTCPServer(*host, *port, stderr)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

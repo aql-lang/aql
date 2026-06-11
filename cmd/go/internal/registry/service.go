@@ -55,6 +55,14 @@ func NewServer(dir string, port int) (*Server, error) {
 	s.srv = &http.Server{
 		Addr:    s.addr,
 		Handler: http.HandlerFunc(s.serveHTTP),
+		// Bound the slow-client surface (slowloris): the registry serves
+		// uploads and is the most network-facing service, so it must set
+		// the same timeouts as exec/api/proxy rather than rely on the
+		// unbounded net/http defaults.
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 	s.state.Store(int32(service.StateStopped))
 	return s, nil
