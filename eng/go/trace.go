@@ -58,7 +58,7 @@ func TraceColorize(v Value) string {
 			return cRed + fmt.Sprintf("%v", v.Data) + cReset
 		}
 		return cRed + s + cReset
-	case v.Parent.Equal(TList):
+	case v.Parent.ConformsTo(TList):
 		_lst, _ := AsList(v)
 		elems := _lst.Slice()
 		parts := make([]string, len(elems))
@@ -66,8 +66,11 @@ func TraceColorize(v Value) string {
 			parts[i] = TraceColorize(e)
 		}
 		return cDim + "[" + cReset + strings.Join(parts, " ") + cDim + "]" + cReset
-	case v.Parent.Equal(TMap):
+	case v.Parent.ConformsTo(TMap):
 		m, _ := AsMap(v)
+		if m == nil {
+			return cWhite + v.String() + cReset
+		}
 		parts := make([]string, 0, m.Len())
 		for _, k := range m.Keys() {
 			val, _ := m.Get(k)

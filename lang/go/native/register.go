@@ -113,6 +113,11 @@ func Register(r *Registry) {
 		r.RegisterNativeFunc(n)
 	}
 
+	// Flex nodes (flex / node / append)
+	for _, n := range flexNatives {
+		r.RegisterNativeFunc(n)
+	}
+
 	// Macro system (gensym; macro/unquote/splice/macroexpand in later phases)
 	for _, n := range macroNatives {
 		r.RegisterNativeFunc(n)

@@ -103,6 +103,32 @@ func RequireConcreteMap(v Value, op string) (ReadMap, error) {
 	return m, nil
 }
 
+// IsFlexMap reports whether v is a concrete FlexMap — a mutable
+// Node/Map/FlexMap value with a real MapPayload (type literals and
+// carriers are excluded).
+func IsFlexMap(v Value) bool {
+	if v.Parent == nil || !v.Parent.Equal(TFlexMap) || !IsConcrete(v) {
+		return false
+	}
+	_, ok := v.Data.(MapPayload)
+	return ok
+}
+
+// IsFlexList reports whether v is a concrete FlexList — a mutable
+// Node/List/FlexList value with a pointer-backed FlexListData store.
+func IsFlexList(v Value) bool {
+	if v.Parent == nil || !v.Parent.Equal(TFlexList) || !IsConcrete(v) {
+		return false
+	}
+	_, ok := v.Data.(*FlexListData)
+	return ok
+}
+
+// IsFlexNode reports whether v is a concrete flex node of either kind.
+func IsFlexNode(v Value) bool {
+	return IsFlexMap(v) || IsFlexList(v)
+}
+
 // MapFieldString fetches a String-valued field from a ReadMap.
 // Returns the string and true on hit; "" and false when the key is
 // absent OR the value's type is not String. Replaces the

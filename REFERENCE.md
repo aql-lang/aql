@@ -34,6 +34,7 @@ is, see the **[Explanation](EXPLANATION.md)**.
   * [List and array words](#list-and-array-words)
   * [Higher-order array words](#higher-order-array-words)
   * [Maps and access](#maps-and-access)
+  * [Flex nodes — FlexMap and FlexList](#flex-nodes--flexmap-and-flexlist)
   * [Type words](#type-words)
   * [Inspection](#inspection)
   * [I/O](#io)
@@ -406,7 +407,9 @@ Any
 │       └── Timezone
 ├── Node
 │   ├── List
+│   │   └── FlexList                 -- mutable list (see Flex nodes)
 │   └── Map
+│       └── FlexMap                  -- mutable map (see Flex nodes)
 ├── Ideal
 │   ├── Object (Resource (Entity))
 │   ├── Array, Record, Options, Error
@@ -1108,7 +1111,7 @@ word — `size` subsumes it.
 |------|-------------|---------|
 | `get` / `.` | Lookup field/key, or index a list | `{x:1} . x` returns `1`; `[10,20,30] 0 get` returns `10` |
 | `getr` / `!.` | Strict lookup (errors if missing) | `{x:1} !. y` returns `error` |
-| `set` | Set a key in a Store | `context set foo 99` |
+| `set` | Set a key in a Store / Object / Array, or in-place on a FlexMap / FlexList (see [Flex nodes](#flex-nodes--flexmap-and-flexlist)) | `context set foo 99`; `set a/q 1 (flex {})` |
 | `context` | Push the current context Store | `context` |
 
 > **`get`/`.` return `none` for anything not found — silently.** A
@@ -1185,6 +1188,69 @@ consequences:
   bare `{fn: fn}` export errors for the same reason). The distinction is
   whether the value is *brought live*: `/r` itself holds; member access
   (`get`) and bare words dispatch.
+
+### Flex nodes — FlexMap and FlexList
+
+`Map` and `List` are immutable: the mutation words return new copies and
+`set` has no Map/List signatures at all. **FlexMap** (`Node/Map/FlexMap`)
+and **FlexList** (`Node/List/FlexList`) are their *mutable* child types:
+`set` and the list-mutation family change the node **in place**, while
+everything else — `get`/`.`, `each`, `sort`, `is`, `typeof`, `deq`,
+dispatch into `Map`/`List` signature slots — is inherited unchanged.
+
+| Word | Description | Example |
+|------|-------------|---------|
+| `flex` | Deep mutable copy of any Node: Map→FlexMap, List→FlexList, nested Nodes converted recursively | `flex {a:1}`; `flex [1 2]` |
+| `node` | The inverse: deep immutable conversion (identity when nothing inside is flex) | `node (flex {a:1})` returns `{a:1}` |
+| `make FlexMap m` / `make FlexList l` | Same conversions via the universal constructor; `make Map v` / `make List v` are the inverse (and work symmetrically on plain literals) | `make FlexMap {a:1}`; `make Map (flex {a:1})` |
+| `set key val flexmap` | In-place key set (atom or string key); returns the node | `set b/q 2 (flex {a:1})` returns `(flex {a:1 b:2})` |
+| `set idx val flexlist` | In-place index set, `0..len-1` only — out-of-range errors (**sparse FlexLists are an error**; use `append` to grow) | `set 1 99 (flex [1 2 3])` |
+| `append` | Grow a FlexList in place: a list argument concatenates its elements; anything else appends as one element; wrap to append a list *as* an element | `append 4 fl`; `append [3 4] fl`; `append [[3 4]] fl` |
+| `push` / `pop` / `unshift` / `shift` | On a FlexList: mutate in place and return the node (`pop`/`shift` also return the removed element). On a plain List: unchanged copy semantics | `push 3 (flex [1 2])`; `pop (flex [1 2])` returns `(flex [1]) 2` |
+
+Key semantics (full design note: `design/FLEX-NODES.0.md`):
+
+- **Conversions deep-copy.** `flex m` never aliases `m`'s entries, so
+  mutating the flex copy cannot leak into the immutable source; `node f`
+  snapshots, so later mutation of `f` cannot reach the result.
+- **Mutators return the node** — calls chain:
+  `set c/q 3 (set b/q 2 (flex {a:1}))`.
+- **Bindings share the node.** `def g f` aliases the same container;
+  mutation through either is visible through both (this is reference
+  semantics, like Store/Object/Array).
+- **Storage is by reference.** `set`/`append` store the value as given —
+  a plain map appended into a FlexList stays immutable inside it; `flex`
+  it first if it must be mutable.
+- **Equality ignores flexness**: `(flex {a:1}) deq {a:1}` is `true` and
+  `cmp` orders flex/plain pairs by content. `eq` remains container
+  identity (two separate `flex [1]` nodes are not `eq`).
+- **`is` is nominal-subtype**: `(flex {}) is Map` and `… is FlexMap` are
+  both true; `{} is FlexMap` is false.
+- **Non-mutating words return plain nodes** (by design): `sort`, `each`,
+  `filter`, `unify` on a flex input produce ordinary `List`/`Map` results.
+- Canon renders flex nodes round-trippable: `(flex {a:1})`.
+
+**FlexList vs Array.** The rule of thumb: *if the data's identity is
+its contents, it's a (Flex)List; if its identity is the container,
+it's an Array.* `FlexList` is a *Node* — it participates in everything
+List does (each/sort/format/unify/`deq`, every `List` signature slot),
+grows and shrinks in place, compares by content, and graduates to an
+immutable List via `node`. `Array` (`Ideal/Array`, `make Array
+[1 2 3]`) is the *identity-like* indexed store: opaque to Node
+structure, **fixed extent** (`set` replaces in-bounds slots only —
+there is deliberately no growth word), and `eq` only to itself (an
+aliased binding is `eq`; equal content in a different instance is
+not — project with `convert List` for content semantics). Use Array
+for shared mutable state addressed by index and bulk/numeric
+workloads; use FlexList to build structural data incrementally and
+flow it through the list words. See `lang/spec/array.tsv` and
+`design/FLEX-NODES.0.md`.
+
+**Record and Table.** Both are Ideal type *descriptors*; their `make`
+instances are plain immutable Map / List-of-Map shapes. Flex nodes give
+the sanctioned mutable escape: `flex (make R {…})` is a mutable copy
+(unvalidated while flex — mutation is unchecked), and `make R (node f)`
+converts back through validation.
 
 ### Type words
 

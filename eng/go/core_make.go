@@ -89,7 +89,7 @@ func MakeRecordR(recType RecordTypeInfo, srcVal Value, useBase bool, r *Registry
 		return nil
 	}
 
-	if srcVal.Parent.Equal(TMap) {
+	if srcVal.Parent.ConformsTo(TMap) {
 		provided, err := AsMutableMap(srcVal)
 		if err != nil {
 			return nil, fmt.Errorf("make: expected concrete map, got %s", srcVal.String())
@@ -100,7 +100,7 @@ func MakeRecordR(recType RecordTypeInfo, srcVal Value, useBase bool, r *Registry
 		return []Value{NewMap(result)}, nil
 	}
 
-	if !srcVal.Parent.Equal(TList) {
+	if !srcVal.Parent.ConformsTo(TList) {
 		return nil, fmt.Errorf("make: record values must be a list or map, got %s", srcVal.String())
 	}
 	if !IsConcrete(srcVal) {
@@ -108,7 +108,7 @@ func MakeRecordR(recType RecordTypeInfo, srcVal Value, useBase bool, r *Registry
 	}
 	elems, _ := AsList(srcVal)
 
-	isNamed := elems.Len() > 0 && elems.Get(0).Parent.Equal(TMap)
+	isNamed := elems.Len() > 0 && elems.Get(0).Parent.ConformsTo(TMap)
 	if isNamed {
 		if _, err := AsMutableMap(elems.Get(0)); err != nil {
 			isNamed = false
@@ -118,7 +118,7 @@ func MakeRecordR(recType RecordTypeInfo, srcVal Value, useBase bool, r *Registry
 	if isNamed {
 		provided := NewOrderedMap()
 		for _, elem := range elems.Slice() {
-			if !elem.Parent.Equal(TMap) {
+			if !elem.Parent.ConformsTo(TMap) {
 				return nil, fmt.Errorf("make: mixed named and positional fields")
 			}
 			m, err := AsMutableMap(elem)
@@ -153,7 +153,7 @@ func MakeRecordR(recType RecordTypeInfo, srcVal Value, useBase bool, r *Registry
 
 // parseMakeOptions extracts make options from an options map.
 func parseMakeOptions(opts Value) (useBase bool, err error) {
-	if !opts.Parent.Equal(TMap) {
+	if !opts.Parent.ConformsTo(TMap) {
 		return false, fmt.Errorf("make: options must be a map, got %s", opts.String())
 	}
 	m, err := AsMutableMap(opts)
@@ -215,7 +215,7 @@ func MakeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 }
 
 func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceInfo) ([]Value, error) {
-	if !srcVal.Parent.Equal(TMap) {
+	if !srcVal.Parent.ConformsTo(TMap) {
 		return nil, fmt.Errorf("make: object values must be a map, got %s", srcVal.String())
 	}
 	provided, err := AsMutableMap(srcVal)
@@ -393,7 +393,7 @@ func MakeTable(tt TableTypeInfo, srcVal Value) ([]Value, error) {
 // field constraints in table rows. See MakeFieldValueR.
 func MakeTableR(tt TableTypeInfo, srcVal Value, r *Registry) ([]Value, error) {
 	recType := tt.Record
-	if !srcVal.Parent.Equal(TList) {
+	if !srcVal.Parent.ConformsTo(TList) {
 		return nil, fmt.Errorf("make: table values must be a list of row lists, got %s", srcVal.String())
 	}
 	if !IsConcrete(srcVal) {
@@ -404,7 +404,7 @@ func MakeTableR(tt TableTypeInfo, srcVal Value, r *Registry) ([]Value, error) {
 	resultRows := make([]Value, 0, rows.Len())
 
 	for rowIdx, rowVal := range rows.Slice() {
-		if !rowVal.Parent.Equal(TList) {
+		if !rowVal.Parent.ConformsTo(TList) {
 			return nil, fmt.Errorf("make: table row %d must be a list, got %s", rowIdx, rowVal.String())
 		}
 		if !IsConcrete(rowVal) {
@@ -412,7 +412,7 @@ func MakeTableR(tt TableTypeInfo, srcVal Value, r *Registry) ([]Value, error) {
 		}
 		rowElems, _ := AsList(rowVal)
 
-		isNamed := rowElems.Len() > 0 && rowElems.Get(0).Parent.Equal(TMap)
+		isNamed := rowElems.Len() > 0 && rowElems.Get(0).Parent.ConformsTo(TMap)
 		if isNamed {
 			if _, err := AsMutableMap(rowElems.Get(0)); err != nil {
 				isNamed = false
@@ -423,7 +423,7 @@ func MakeTableR(tt TableTypeInfo, srcVal Value, r *Registry) ([]Value, error) {
 		if isNamed {
 			provided := NewOrderedMap()
 			for _, elem := range rowElems.Slice() {
-				if !elem.Parent.Equal(TMap) {
+				if !elem.Parent.ConformsTo(TMap) {
 					return nil, fmt.Errorf("make: table row %d: mixed named and positional fields", rowIdx)
 				}
 				m, err := AsMutableMap(elem)
@@ -571,7 +571,7 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 			}
 		}
 	}
-	if optsVal.Parent.Equal(TList) && srcVal.Parent.Equal(TMap) && srcVal.Data != nil {
+	if optsVal.Parent.ConformsTo(TList) && srcVal.Parent.ConformsTo(TMap) && srcVal.Data != nil {
 		srcVal, optsVal = optsVal, srcVal
 	}
 
@@ -652,7 +652,7 @@ func MakeObjHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) 
 // MakeArrayHandler is the 2-arg [Array, List] make handler.
 func MakeArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	srcVal := args[1]
-	if !srcVal.Parent.Equal(TList) || !IsConcrete(srcVal) {
+	if !srcVal.Parent.ConformsTo(TList) || !IsConcrete(srcVal) {
 		return nil, fmt.Errorf("make: Array source must be a concrete list, got %s", srcVal.String())
 	}
 	srcList, _ := AsList(srcVal)

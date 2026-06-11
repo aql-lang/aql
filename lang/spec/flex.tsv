@@ -1,0 +1,215 @@
+# tokens	expected	note
+# =====================================================================		
+# flex nodes — FlexMap and FlexList		
+# =====================================================================		
+# FlexMap (Node/Map/FlexMap) and FlexList (Node/List/FlexList) are		
+# MUTABLE child types of Map and List. `set` and the list-mutation		
+# family (append/push/pop/unshift/shift) change a flex node IN PLACE		
+# and return the node itself (pop/shift additionally return the		
+# removed element on top). Everything else — get, each, sort, is,		
+# typeof, deq, sig dispatch into Map/List slots — is inherited from		
+# the immutable parents.		
+#		
+# Construction: `flex <node>` (sugar) or `make FlexMap m` /		
+# `make FlexList l`; both DEEP-COPY, so mutation never leaks into the		
+# immutable source. The inverse `node <val>` (= `make Map v` /		
+# `make List v`) deep-converts back to immutable Map/List.		
+#		
+# Canon renders flex nodes round-trippable: `(flex {…})` / `(flex […])`.		
+#		
+# This file covers:		
+#   1. Construction, typeof, rendering.		
+#   2. make symmetry and conversion (FlexMap/FlexList/Map/List).		
+#   3. In-place set, aliasing, chaining.		
+#   4. Deep-copy isolation (no mutation leaks, either direction).		
+#   5. FlexList set bounds — sparse is an error.		
+#   6. append (element, list-concat, wrapped-list).		
+#   7. push/pop/unshift/shift — in place on flex, copying on plain.		
+#   8. node — deep immutable conversion, round trip.		
+#   9. Equality and ordering across flex/plain.		
+#  10. is / unify — nominal subtype rules.		
+#  11. Inherited non-mutating words (results are plain — by design).		
+		
+# ====================================================================		
+# 1. Construction, typeof, rendering		
+# ====================================================================		
+		
+typeof (flex {})	FlexMap	flex on a map yields a FlexMap
+typeof (flex [])	FlexList	flex on a list yields a FlexList
+flex {a:1}	(flex {a:1})	canon renders flex maps round-trippable
+flex [1 2]	(flex [1 2])	canon renders flex lists round-trippable
+flex {a:(1 add 2)}	(flex {a:3})	map values evaluate before the copy
+flex [1 add 2]	(flex [3])	list bodies auto-evaluate before the copy
+flex 1	ERROR:signature	scalars are not flexable
+flex 'x'	ERROR:signature	strings are not flexable
+flex Map	ERROR:signature	bare type literal rejected — needs a concrete node
+flex List	ERROR:signature	bare type literal rejected
+typeof ((flex {a:[1]}).a)	FlexList	flex conversion is deep — nested list becomes flex
+typeof ((flex [{a:1}]) get 0)	FlexMap	deep in the list direction too
+		
+# ====================================================================		
+# 2. make symmetry and conversion		
+# ====================================================================		
+		
+make FlexMap {}	(flex {})	make constructs a FlexMap
+make FlexList []	(flex [])	make constructs a FlexList
+typeof (make FlexMap {a:1})	FlexMap	
+typeof (make FlexList [1])	FlexList	
+make Map {}	{}	symmetric: make Map works (same as the literal)
+make List []	[]	symmetric: make List works
+typeof (make Map {a:1})	Map	
+typeof (make List [1])	List	
+make FlexMap (flex {a:1})	(flex {a:1})	an existing flex node copies
+make FlexMap {a:1}	(flex {a:1})	any existing Node with data flexes
+make FlexList [1 2]	(flex [1 2])	
+make Map (flex {a:1})	{a:1}	make Map is the inverse — back to immutable
+make List (flex [1 2])	[1 2]	
+typeof (make Map (flex {a:1}))	Map	
+typeof ((make Map (flex {a:[1]})) get a/q)	List	inverse conversion is deep — nested flex gone
+make FlexMap [1 2]	ERROR:make	a list is not a map — family mismatch
+make FlexList {a:1}	ERROR:make	a map is not a list
+make FlexMap 1	ERROR:make	scalars have no flex version
+make Map [1 2]	ERROR:make	make Map needs a map-family source
+def R (refine Record [ { a:Integer } ]) make R (flex { a:5 })	{a:5}	record instantiation accepts a flex source
+def R (refine Record [ { a:Integer } ]) make R { a:5 }	{a:5}	regression: plain record make is unchanged
+		
+# ====================================================================		
+# 3. In-place set, aliasing, chaining		
+# ====================================================================		
+		
+set b/q 2 (flex {a:1})	(flex {a:1 b:2})	set mutates and returns the node
+set 'b' 2 (flex {a:1})	(flex {a:1 b:2})	string key form
+set a/q 9 (flex {a:1})	(flex {a:9})	overwrite an existing key
+def f (flex {a:1}) set b/q 2 f drop f	(flex {a:1 b:2})	the binding sees the mutation — same node
+def f (flex {}) def g f set a/q 1 g drop f	(flex {a:1})	two bindings share one node
+set c/q 3 (set b/q 2 (flex {a:1}))	(flex {a:1 b:2 c:3})	returned node chains into the next set
+set 1 99 (flex [1 2 3])	(flex [1 99 3])	integer index set on a FlexList
+set 0 9 (flex [1])	(flex [9])	first element
+def m {a:{b:1}} def f (flex m) set b/q 9 f.a drop f.a.b	9	nested flex maps are mutable too (deep flex)
+		
+# ====================================================================		
+# 4. Deep-copy isolation — mutation never leaks		
+# ====================================================================		
+		
+def m {a:1} def f (flex m) set a/q 9 f drop m.a	1	mutating the flex copy leaves the source map untouched
+def m {a:{b:1}} def f (flex m) set b/q 9 f.a drop m.a.b	1	deep: nested source maps are isolated too
+def f (flex {a:1}) def n (node f) set a/q 9 f drop n.a	1	a node snapshot is isolated from later mutation
+def l [1 2] def f (flex l) push 9 f drop l	[1 2]	list sources are isolated as well
+		
+# ====================================================================		
+# 5. Plain Map/List stay immutable; FlexList bounds		
+# ====================================================================		
+		
+set a/q 1 {a:0}	ERROR:signature	no set on a plain Map — Node immutability is intact
+set 0 9 [1 2]	ERROR:signature	no set on a plain List
+set 3 99 (flex [1 2 3])	ERROR:out of bounds	index == length is out of bounds — use append
+set 9 99 (flex [1 2 3])	ERROR:out of bounds	sparse FlexLists are an error — never pad with None
+set 0 9 (flex [])	ERROR:out of bounds	empty list has no slot 0
+		
+# ====================================================================		
+# 6. append		
+# ====================================================================		
+		
+append 4 (flex [1 2])	(flex [1 2 4])	append one element
+append 'x' (flex [])	(flex ['x'])	append to empty
+append [3 4] (flex [1 2])	(flex [1 2 3 4])	a list argument concatenates its elements
+append (flex [3]) (flex [1 2])	(flex [1 2 3])	a FlexList argument concatenates too
+append [[3 4]] (flex [1 2])	(flex [1 2 [3 4]])	wrap a list to append it AS one element
+append {a:1} (flex [1])	(flex [1 {a:1}])	non-list values append as elements
+def l (flex [1 2]) append l l	(flex [1 2 1 2])	self-concat snapshots before growing
+append 4 (flex [1]) append 5	(flex [1 4 5])	returned node chains
+append 1 [1 2]	ERROR:signature	append needs a FlexList — plain lists are immutable
+append 1 {a:1}	ERROR:signature	append does not apply to maps
+		
+# ====================================================================		
+# 7. push / pop / unshift / shift		
+# ====================================================================		
+		
+push 3 (flex [1 2])	(flex [1 2 3])	push mutates in place and returns the node
+def l (flex [1 2]) push 3 l drop l	(flex [1 2 3])	the binding sees the push
+pop (flex [1 2])	(flex [1]) 2	pop returns the node and the removed element
+def l (flex [1 2]) pop l drop drop l	(flex [1])	the binding sees the pop
+unshift 0 (flex [1 2])	(flex [0 1 2])	
+shift (flex [1 2])	(flex [2]) 1	
+pop (flex [])	ERROR:pop	cannot pop an empty FlexList
+shift (flex [])	ERROR:shift	cannot shift an empty FlexList
+def l [1 2] push 3 l drop l	[1 2]	plain lists keep copy semantics — original unchanged
+push 3 [1 2]	[1 2 3]	plain push still returns a new plain list
+typeof (push 3 [1 2])	List	
+pop [1 2]	[1] 2	plain pop unchanged
+		
+# ====================================================================		
+# 8. node — deep immutable conversion		
+# ====================================================================		
+		
+node (flex {a:1})	{a:1}	flex map back to immutable map
+node (flex [1 2])	[1 2]	flex list back to immutable list
+typeof (node (flex {a:1}))	Map	
+typeof (node (flex [1]))	List	
+typeof ((node (flex {a:[1]})) get a/q)	List	deep: nested flex converted too
+node {a:1}	{a:1}	identity on an already-plain map
+node [1 2]	[1 2]	identity on a plain list
+node 1	ERROR:signature	scalars are not nodes
+node Map	ERROR:signature	bare type literal rejected
+		
+# ====================================================================		
+# 8b. Truthiness — empty flex containers are falsey, like plain ones		
+# ====================================================================		
+		
+not (flex [])	true	empty FlexList is falsey
+not (flex {})	true	empty FlexMap is falsey
+not (flex [1])	false	non-empty FlexList is truthy
+not (flex {a:1})	false	non-empty FlexMap is truthy
+if (flex {}) [1] [2]	2	empty flex map takes the else branch
+if (flex [9]) [1] [2]	1	non-empty flex list takes the then branch
+not []	true	parity: plain empties are falsey the same way
+not {}	true	
+		
+# ====================================================================		
+# 9. Equality and ordering		
+# ====================================================================		
+		
+(flex {a:1}) deq {a:1}	true	deep equality ignores flexness
+{a:1} deq (flex {a:1})	true	both directions
+(flex [1 [2]]) deq [1 [2]]	true	deep — nested flex lists compare by content
+(flex {a:1}) deq {a:2}	false	different content still differs
+(flex [1]) eq (flex [1])	false	eq is container identity — two distinct nodes
+def f (flex [1]) f eq f	true	same node is eq to itself
+def f (flex {a:1}) def g f f eq g	true	aliases share the container
+(flex [1 2]) cmp [1 2]	0	cmp normalises flexness — equal content orders equal
+[1 2] cmp (flex [1 3])	-1	content ordering still applies
+List tcmp FlexList	-1	bare type literals keep their lattice Rank order
+		
+# ====================================================================		
+# 10. is / unify — nominal subtype rules		
+# ====================================================================		
+		
+(flex {}) is FlexMap	true	
+(flex {}) is Map	true	a FlexMap IS a Map (child type)
+(flex {}) is Node	true	lattice transitivity: FlexMap < Map < Node
+(flex []) is Node	true	
+{} is Node	true	plain containers are Nodes too
+[] is Node	true	
+1 is Node	false	scalars are not Nodes
+Node unify (flex [1 2])	(flex [1 2]) true	the Node literal accepts and keeps a flex value
+Node unify {a:1}	{a:1} true	
+Node unify 1	'~unify-fail' false	no scalar passes the Node literal
+{} is FlexMap	false	a plain map is NOT a FlexMap
+(flex []) is FlexList	true	
+(flex []) is List	true	
+[] is FlexList	false	
+(flex [1 2]) unify [1 2]	[1 2] true	unify output is a plain node (by design)
+List unify (flex [1 2])	(flex [1 2]) true	the List literal accepts a flex value and keeps it
+		
+# ====================================================================		
+# 11. Inherited non-mutating words — results are PLAIN (by design)		
+# ====================================================================		
+		
+(flex [10 20]) get 1	20	indexed get
+(flex {a:7}).a	7	dot access
+(flex {a:7}) get a/q	7	keyed get
+size (flex [1 2 3])	3	
+sort (flex [3 1 2])	[1 2 3]	sort returns a new PLAIN list
+typeof (sort (flex [3 1 2]))	List	
+reverse (flex [1 2])	[2 1]	
+each [ add 1 ] (flex [1 2 3])	[2 3 4]	higher-order traversal works unchanged

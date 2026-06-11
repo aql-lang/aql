@@ -92,7 +92,10 @@ func Shape(v Value) ValueShape {
 	}
 
 	// Map family — every map-Parent value falls into one of these.
-	if t.Equal(TMap) {
+	// FlexMap is included explicitly (NOT via ConformsTo, which would
+	// silently reclassify other Node/Map descendants like Inspect);
+	// a concrete FlexMap carries a MapPayload and lands on ShapeMap.
+	if t.Equal(TMap) || t.Equal(TFlexMap) {
 		switch {
 		case v.Data == nil:
 			if v.Carrier {
@@ -110,8 +113,9 @@ func Shape(v Value) ValueShape {
 		}
 	}
 
-	// List family.
-	if t.Equal(TList) {
+	// List family. FlexList included explicitly, as above; a concrete
+	// FlexList carries *FlexListData and lands on ShapeList.
+	if t.Equal(TList) || t.Equal(TFlexList) {
 		switch {
 		case v.Data == nil:
 			if v.Carrier {

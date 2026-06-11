@@ -366,6 +366,9 @@ func resolveAtomReferents(r *Registry, vals []Value) {
 				vals[i] = SetAtomReferent(vals[i], bound)
 			}
 		case ListPayload:
+			// FlexListData is deliberately not handled: this walk runs
+			// on loaded program tapes, and flex nodes exist only at
+			// runtime — they can never appear here.
 			resolveAtomReferents(r, data.Elems)
 		}
 	}

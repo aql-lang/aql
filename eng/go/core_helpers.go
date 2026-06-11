@@ -468,7 +468,10 @@ func CoerceBoolean(v Value) bool {
 		return n != 0
 	case ValueType(v).Equal(TNone):
 		return false
-	case ValueType(v).Equal(TList):
+	// nodeFamily folds FlexList / FlexMap into their immutable parents
+	// so empty flex containers are falsey exactly like empty plain
+	// ones (PR #123 review note).
+	case nodeFamily(ValueType(v)).Equal(TList):
 		if !IsConcrete(v) {
 			return false
 		}
@@ -477,7 +480,7 @@ func CoerceBoolean(v Value) bool {
 		}
 		// Non-[]Value list backings (table types, query builders) are truthy.
 		return true
-	case ValueType(v).Equal(TMap):
+	case nodeFamily(ValueType(v)).Equal(TMap):
 		if !IsConcrete(v) {
 			return false
 		}

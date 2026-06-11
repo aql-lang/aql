@@ -347,7 +347,9 @@ Any
 │   └── Path
 ├── Node
 │   ├── List
+│   │   └── FlexList
 │   └── Map
+│       └── FlexMap
 ├── Ideal
 │   ├── Object
 │   │   └── Resource

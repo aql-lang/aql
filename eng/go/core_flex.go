@@ -1,0 +1,216 @@
+package eng
+
+import "fmt"
+
+// Flex node conversion primitives — the algorithms behind the `flex`
+// and `node` words and the Node-targeted `make` overloads
+// (`make FlexMap m`, `make Map flexmap`, …). The word names and
+// dispatch wiring live in lang/go/native/native_flex.go and
+// native_make.go; only the algorithms live kernel-side, mirroring
+// core_make.go.
+//
+// Both conversions are DEEP and COPYING: a flex node must never alias
+// the entries of an immutable source (plain Map literals are also
+// *OrderedMap-backed, so sharing the pointer would let mutation leak
+// into "immutable" data), and a `node` result must be transitively
+// immutable. See design/FLEX-NODES.0.md.
+
+// FlexDeepCopy returns a mutable flex copy of a Node value: maps
+// (plain or flex) become fresh FlexMaps, lists become fresh FlexLists,
+// and nested Nodes are converted recursively so in-place mutation is
+// available at every depth. Non-Node values (scalars, Functions,
+// Ideal instances, …) pass through unchanged — scalars are immutable
+// and pointer-backed Ideals already have shared-mutation semantics.
+//
+// Map/list-family values whose payload is not a readable container
+// (record/options/table type bodies, bare child-type constraints) are
+// an error: flexing a type body is meaningless. A typed list/map that
+// carries concrete elements alongside its constraint flexes to a plain
+// flex node — the child constraint is dropped (documented limitation).
+func FlexDeepCopy(v Value) (Value, error) {
+	if v.Parent.ConformsTo(TMap) && IsConcrete(v) {
+		m, err := AsMap(v)
+		if err != nil || m == nil {
+			return Value{}, fmt.Errorf("flex: cannot make a flex copy of %s", v.String())
+		}
+		om := NewOrderedMap()
+		for _, k := range m.Keys() {
+			val, _ := m.Get(k)
+			fv, ferr := FlexDeepCopy(val)
+			if ferr != nil {
+				return Value{}, ferr
+			}
+			om.Set(k, fv)
+		}
+		return WithPos(NewFlexMap(om), v), nil
+	}
+	if v.Parent.ConformsTo(TList) && IsConcrete(v) {
+		lst, err := AsList(v)
+		if err != nil || lst.IsNil() {
+			return Value{}, fmt.Errorf("flex: cannot make a flex copy of %s", v.String())
+		}
+		elems := make([]Value, lst.Len())
+		for i := 0; i < lst.Len(); i++ {
+			fv, ferr := FlexDeepCopy(lst.Get(i))
+			if ferr != nil {
+				return Value{}, ferr
+			}
+			elems[i] = fv
+		}
+		return WithPos(NewFlexList(elems), v), nil
+	}
+	return v, nil
+}
+
+// NodeDeepCopy is the inverse of FlexDeepCopy: FlexMaps become plain
+// immutable Maps, FlexLists become plain Lists, recursing through
+// plain containers too so nested flex nodes are normalised at every
+// depth. A container with no flex anywhere inside is returned
+// UNCHANGED (same underlying container) — `node plainmap` is identity,
+// which keeps container-identity equality (ExactEqual / `eq`) stable.
+func NodeDeepCopy(v Value) (Value, error) {
+	if !containsFlex(v) {
+		return v, nil
+	}
+	if v.Parent.ConformsTo(TMap) && IsConcrete(v) {
+		m, err := AsMap(v)
+		if err != nil || m == nil {
+			return Value{}, fmt.Errorf("node: cannot convert %s to an immutable node", v.String())
+		}
+		om := NewOrderedMap()
+		for _, k := range m.Keys() {
+			val, _ := m.Get(k)
+			nv, nerr := NodeDeepCopy(val)
+			if nerr != nil {
+				return Value{}, nerr
+			}
+			om.Set(k, nv)
+		}
+		return WithPos(NewMap(om), v), nil
+	}
+	if v.Parent.ConformsTo(TList) && IsConcrete(v) {
+		lst, err := AsList(v)
+		if err != nil || lst.IsNil() {
+			return Value{}, fmt.Errorf("node: cannot convert %s to an immutable node", v.String())
+		}
+		elems := make([]Value, lst.Len())
+		for i := 0; i < lst.Len(); i++ {
+			nv, nerr := NodeDeepCopy(lst.Get(i))
+			if nerr != nil {
+				return Value{}, nerr
+			}
+			elems[i] = nv
+		}
+		return WithPos(NewList(elems), v), nil
+	}
+	return v, nil
+}
+
+// containsFlex reports whether v is a flex node or transitively
+// contains one. Drives NodeDeepCopy's identity fast path.
+func containsFlex(v Value) bool {
+	if IsFlexNode(v) {
+		return true
+	}
+	if !IsConcrete(v) {
+		return false
+	}
+	if v.Parent.ConformsTo(TMap) {
+		if m, err := AsMap(v); err == nil && m != nil {
+			for _, k := range m.Keys() {
+				val, _ := m.Get(k)
+				if containsFlex(val) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	if v.Parent.ConformsTo(TList) {
+		if lst, err := AsList(v); err == nil && !lst.IsNil() {
+			for i := 0; i < lst.Len(); i++ {
+				if containsFlex(lst.Get(i)) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return false
+}
+
+// MakeNodeHandler is the 2-arg [Node, Any] make handler (TypeArgs at
+// position 0). It owns the Node-family targets:
+//
+//	make FlexMap m    — deep mutable copy of a map-family Node
+//	make FlexList l   — deep mutable copy of a list-family Node
+//	make Map v        — deep immutable conversion (identity when v
+//	                    contains no flex nodes); `make Map flexmap`
+//	                    is the inverse of `make FlexMap m`
+//	make List v       — same for lists
+//
+// Anything else that lands here — a structural type body in the
+// TypeArgs slot (RecordTypeInfo etc. have Parent=TMap, which conforms
+// to Node), or a Node target this handler doesn't own (Node itself,
+// Inspect, Args) — defers to the generic MakeHandler so the Ideal
+// instantiation paths are never hijacked.
+func MakeNodeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	targetVal, srcVal := args[0], args[1]
+	targetVal = ResolveTypeLiteralDef(targetVal, reg)
+	if !IsBareTypeNode(targetVal) {
+		return MakeHandler([]Value{targetVal, srcVal}, nil, nil, reg)
+	}
+	// Host-registered Ideal kinds keep precedence over the kernel Node
+	// conversions — same registry-first dispatch as MakeHandler /
+	// MakeObjHandler, so a host that claims a Node-family target still
+	// owns its instantiation.
+	if reg != nil {
+		if ideal := reg.Ideals.For(targetVal); ideal != nil && ideal.Instantiate != nil {
+			return ideal.Instantiate(targetVal, srcVal, reg)
+		}
+		if m := reg.Ideals.Match(targetVal); m != nil && !m.available() {
+			return nil, fmt.Errorf("make: the %s type-kind is not available in this registry", m.Name)
+		}
+	}
+	target := &targetVal
+	switch {
+	case target.Equal(TFlexMap):
+		if !srcVal.Parent.ConformsTo(TMap) || !IsConcrete(srcVal) {
+			return nil, fmt.Errorf("make: FlexMap source must be a concrete map, got %s", srcVal.String())
+		}
+		out, err := FlexDeepCopy(srcVal)
+		if err != nil {
+			return nil, err
+		}
+		return []Value{out}, nil
+	case target.Equal(TFlexList):
+		if !srcVal.Parent.ConformsTo(TList) || !IsConcrete(srcVal) {
+			return nil, fmt.Errorf("make: FlexList source must be a concrete list, got %s", srcVal.String())
+		}
+		out, err := FlexDeepCopy(srcVal)
+		if err != nil {
+			return nil, err
+		}
+		return []Value{out}, nil
+	case target.Equal(TMap):
+		if !srcVal.Parent.ConformsTo(TMap) || !IsConcrete(srcVal) {
+			return nil, fmt.Errorf("make: Map source must be a concrete map, got %s", srcVal.String())
+		}
+		out, err := NodeDeepCopy(srcVal)
+		if err != nil {
+			return nil, err
+		}
+		return []Value{out}, nil
+	case target.Equal(TList):
+		if !srcVal.Parent.ConformsTo(TList) || !IsConcrete(srcVal) {
+			return nil, fmt.Errorf("make: List source must be a concrete list, got %s", srcVal.String())
+		}
+		out, err := NodeDeepCopy(srcVal)
+		if err != nil {
+			return nil, err
+		}
+		return []Value{out}, nil
+	default:
+		return MakeHandler([]Value{targetVal, srcVal}, nil, nil, reg)
+	}
+}

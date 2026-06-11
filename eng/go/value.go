@@ -604,9 +604,13 @@ func (si *StoreInstanceInfo) Set(key string, val Value) {
 	}
 }
 
-// ArrayInstanceInfo is a mutable ordered array (Object/Array).
+// ArrayInstanceInfo is a mutable ordered array (Ideal/Array).
 // Unlike immutable Node/List values, Array instances can be modified
-// in place via set (index assignment), append, etc.
+// in place via set (index assignment). An Array is FIXED-EXTENT:
+// there is deliberately no growth operation — `set` is in-bounds
+// replacement only, and growth is FlexList's job (the former Append
+// method was dead code and was removed to make the contract explicit;
+// see design/FLEX-NODES.0.md).
 type ArrayInstanceInfo struct {
 	Elems []Value
 }
@@ -631,11 +635,6 @@ func (ai *ArrayInstanceInfo) Set(i int, val Value) bool {
 // Len returns the number of elements.
 func (ai *ArrayInstanceInfo) Len() int {
 	return len(ai.Elems)
-}
-
-// Append adds a value to the end of the array.
-func (ai *ArrayInstanceInfo) Append(val Value) {
-	ai.Elems = append(ai.Elems, val)
 }
 
 // "T_" followed by 12 lowercase hex characters (6 random bytes).
@@ -1014,6 +1013,21 @@ func NewTypedList(child Value) Value {
 // NewMap creates a map value from an ordered map of string keys to Values.
 func NewMap(entries *OrderedMap) Value {
 	return NewValueRaw(TMap, MapPayload{M: entries})
+}
+
+// NewFlexList creates a mutable FlexList value over a pointer-backed
+// element store. Flex nodes are runtime data, never parser output, so
+// Eval is never set on them.
+func NewFlexList(elems []Value) Value {
+	return NewValueRaw(TFlexList, &FlexListData{Elems: elems})
+}
+
+// NewFlexMap creates a mutable FlexMap value. It reuses MapPayload —
+// the *OrderedMap is pointer-backed, so in-place mutation is visible
+// through every Value copy sharing the payload. Like NewFlexList,
+// Eval is never set.
+func NewFlexMap(entries *OrderedMap) Value {
+	return NewValueRaw(TFlexMap, MapPayload{M: entries})
 }
 
 // NewEvalMap creates a map value marked for auto-evaluation at end of
@@ -2102,6 +2116,9 @@ func AsList(v Value) (ReadList, error) {
 	if lp, ok := v.Data.(ListPayload); ok {
 		return ReadList{elems: lp.Elems}, nil
 	}
+	if fd, ok := v.Data.(*FlexListData); ok {
+		return ReadList{elems: fd.Elems}, nil
+	}
 	if td, ok := v.Data.(TableData); ok {
 		return ReadList{elems: td.Rows}, nil
 	}
@@ -2138,7 +2155,25 @@ func AsMutableList(v Value) ([]Value, error) {
 	if lp, ok := v.Data.(ListPayload); ok {
 		return lp.Elems, nil
 	}
+	if fd, ok := v.Data.(*FlexListData); ok {
+		return fd.Elems, nil
+	}
 	return nil, fmt.Errorf("AsMutableList: not a list payload (got %T)", v.Data)
+}
+
+// AsFlexList returns the pointer-backed element store of a FlexList
+// value. Mutating words need the pointer — element growth (append,
+// push) must reassign fd.Elems through it so every Value copy sharing
+// the payload observes the change. Returns an error for anything that
+// is not a concrete FlexList.
+func AsFlexList(v Value) (*FlexListData, error) {
+	if v.Data == nil {
+		return nil, fmt.Errorf("AsFlexList: nil data")
+	}
+	if fd, ok := v.Data.(*FlexListData); ok {
+		return fd, nil
+	}
+	return nil, fmt.Errorf("AsFlexList: not a flex list payload (got %T)", v.Data)
 }
 
 // AsMap returns a read-only view of the map payload.
