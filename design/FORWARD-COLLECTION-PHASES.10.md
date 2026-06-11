@@ -221,6 +221,20 @@ value means "none" — No-Zero-Overload rule). Consumers:
   doubles as zero-value-collapse recovery (Trap 1) where the plan had
   no speculative word at all.
 
+**The commit needs a real overload consuming EXACTLY the claimed
+args.** AQL-bodied fns carry a synthetic 0-arg Fallback in their
+aggregate dispatch table (it exists to raise a clean "no matching
+signature" error); the first probe implementation matched it, which
+committed a waiting call to its own failure — `g 1 def x 5 x` errored
+at the boundary instead of letting def's result feed g's second slot.
+The probe now requires a non-Fallback signature whose arity equals
+the claimed args: an exact smaller overload commits (`1 5`, mirroring
+plan-time typed-overload behaviour), anything else keeps waiting.
+The full combination matrix lives in `lang/spec/forward-barrier.tsv`
+(boundary kinds × condition shapes × polarity, arrival follows,
+silencers, the exact-arity rule, known swallow shapes, chained
+guards, end-of-program drain).
+
 **Why the arrival loop has nothing further to honour.** Arrivals
 cannot jump past the speculative word (there are no tokens between
 the last planned value and it), so the only meaningful runtime event

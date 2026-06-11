@@ -3546,7 +3546,19 @@ func (e *Engine) commitBarrierForward() bool {
 		return false
 	}
 	testW := WordInfo{Name: w.Name, ArgCount: -1, ForceStack: true}
-	if MatchSignature(fn.Signatures, resolved, testW) == nil {
+	m := MatchSignature(fn.Signatures, resolved, testW)
+	if m == nil || m.Sig == nil {
+		return false
+	}
+	// The commit must consume EXACTLY the claimed args through a real
+	// overload. AQL-bodied fns carry a synthetic 0-arg Fallback in the
+	// aggregate dispatch table (it exists to raise a clean
+	// "no matching signature" error); matching it here would commit a
+	// waiting word to its own failure — `g 1 def x 5 x` must keep
+	// waiting for def's result when g has only a 2-arg overload, not
+	// error at the boundary. Likewise a shorter real overload must not
+	// fire while claimed args would be stranded.
+	if m.Sig.Fallback || m.Sig.TotalArgs() != len(resolved) {
 		return false
 	}
 

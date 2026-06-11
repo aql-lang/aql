@@ -1,0 +1,89 @@
+# AQL Language Specification: Statement-boundary commit of parked forwards
+#
+# The barrier-commit matrix (design/FORWARD-COLLECTION-PHASES.10.md).
+# Forward args are gathered in two phases — a plan-time token walk and
+# a run-time arrival loop. A word parked for arrivals whose plan filled
+# a trailing slot SPECULATIVELY (from the next statement's word) is
+# committed when that function word begins its own dispatch, PROVIDED a
+# real overload consumes exactly the args it holds. These rows pin the
+# whole combination space: boundary kinds × condition shapes × guard
+# polarity, the arrival (non-barrier) follows, the explicit silencers,
+# the exact-arity commit rule, and the known swallow shapes. Sibling
+# rows: control.tsv §6 (the original guard fixes), usurp.tsv (/u as a
+# boundary), error.tsv (template messages).
+#
+# §1  boundary kinds — a function word starting the next statement
+#     commits an else-less guard FIRST; the statement then runs intact.
+def n 0 if (n eq 0) [99] def q 1 q	99 1	def boundary: guard fires, then the binding statement
+def n 5 if (n eq 0) [99] def q 1 q	1	false guard: binding statement alone
+def n 0 if (n eq 0) [99] add 1 2	99 3	value-producing boundary: result NOT swallowed as the else
+def n 5 if (n eq 0) [99] add 1 2	3	false guard: the next statement's value survives
+def n 0 if (n eq 0) [99] iota 2	99 [0 1]	builtin generator boundary
+def n 5 if (n eq 0) [99] iota 2	[0 1]	false polarity of the same
+def n 0 if (n eq 0) [99] for 2 [7]	99 7 7	control-word boundary: the loop runs after the guard
+def twice (macro [[e] [ quote [ unquote e add unquote e ] ]]) def n 0 if (n eq 0) [99] twice 5	99 10	macro boundary: commit runs before macro expansion
+def n 0 if (n eq 0) [raise "zero"] def q (10 div n) q	ERROR:zero	the guard's raise pre-empts the next statement's div-by-zero
+def n 5 if (n eq 0) [raise "zero"] def q (10 div n) q	2	false guard: the def body computes
+def f fn [[n:Integer] [Integer] [ if (n eq 0) [raise "zero"] def q (10 div n) q ]] f 0	ERROR:zero	same shape inside a fn body (the original report)
+def f fn [[n:Integer] [Integer] [ if (n eq 0) [raise "zero"] def q (10 div n) q ]] f 5	2	fn-body false polarity
+#
+# §2  condition shapes — paren, literal, and def-bound word conditions
+#     all park-and-commit the same way (the word-bound condition covers
+#     the matcher's deferred /q-preference path).
+if true [99] add 1 2	99 3	literal true condition
+if false [99] add 1 2	3	literal false condition
+def ok true if ok [99] add 1 2	99 3	word-bound condition (bestDeferred path carries the speculation)
+def ok false if ok [99] add 1 2	3	word-bound false condition
+#
+# §3  plan-claimed stack slots stay plan-consistent — a value BELOW the
+#     guard is claimed as the else at plan time (it is not speculative),
+#     so true discards it and false yields it.
+5 if (1 eq 1) [99] def x 1	99	a stack value claimed as the else is consumed (true: discarded)
+5 if (1 eq 2) [99] def x 1	5	…and yielded when the condition is false
+#
+# §4  arrivals are NOT barriers — a value-shaped follow fills the else
+#     slot exactly as planned: literals, parens, value-def words, type
+#     names, templates, and list literals.
+if (1 eq 1) [99] 42	99	a literal after the branches is the else (true: discarded)
+if (1 eq 2) [99] 42	42	…and runs when false
+if (1 eq 1) [99] (add 1 2)	99	a parenthesised expression is an arrival, not a barrier
+if (1 eq 2) [99] (add 1 2)	3	…its result is the else
+def v 42 if (1 eq 1) [99] v	99	a value-def word arrives as the else (plan-consistent)
+def v 42 if (1 eq 2) [99] v	42	…and yields its value when false
+if (1 eq 1) [99] Integer	99	a type name arrives as the else
+if (1 eq 2) [99] Integer	Integer	…and is the result when false
+if (1 eq 1) [99] `x`	99	a template string arrives as the else
+if (1 eq 2) [99] `x`	'x'	…evaluated, when false
+if (1 eq 1) [99] [7]	99	a list literal after the branches IS the else
+if (1 eq 2) [99] [7]	7	…and runs as the else branch when false
+#
+# §5  the explicit silencers all behave identically to the commit.
+def n 0 if (n eq 0) [99] [] add 1 2	99 3	explicit empty else
+def n 0 if (n eq 0) [99] end add 1 2	99 3	explicit end
+def n 0 if (n eq 0) [99] ; add 1 2	99 3	; is end
+#
+# §6  the commit needs a REAL overload consuming EXACTLY the claimed
+#     args. An AQL fn with only a bigger arity keeps waiting for the
+#     next statement's result (its synthetic 0-arg fallback must never
+#     be committed — that would turn a waiting call into an error), and
+#     a smaller real overload fires at the boundary, mirroring the
+#     plan-time behaviour of typed overloads.
+def g fn [[a:Any b:Any] [Any] [add a b]] g 1 def x 5 x	6	exact-arity only: 2-arg g waits; def's x feeds the second slot
+def g fn [[a:Any] [Any] [a] [a:Any b:Any] [Any] [add a b]] g 1 def x 5 x	1 5	a real smaller overload commits at the boundary
+def g fn [[a:Integer] [Integer] [a] [a:Integer b:Integer] [Integer] [add a b]] g 1 def x 5 x	1 5	typed overloads resolve the same way at plan time
+add 1 def x 5 x	ERROR:signature	a typed 2-arg native with no smaller overload fails loudly at plan time
+#
+# §7  known swallow shapes — value arrivals (§4) mean a guard followed
+#     by a pipeline whose FIRST token is a value eats that value as the
+#     else; the explicit [] restores the pipeline. Pinned so any change
+#     to arrival semantics shows up here loudly.
+def n 0 if (n eq 0) [99] [1 2] each [dup mul]	ERROR:signature	the [1 2] is consumed as the else — each starves
+def n 0 if (n eq 0) [99] [] [1 2] each [dup mul]	99 [1 4]	…the explicit [] keeps the pipeline intact
+"aql:math-util" import end def n 0 if (n eq 0) [99] [] MathUtil.sqrt 16	99 4.0	module call after a guard needs the [] (the export VALUE would arrive as the else)
+"aql:math-util" import end def n 5 if (n eq 0) [99] MathUtil.sqrt 16	4.0	false polarity: the export lands in the else and the chain proceeds
+#
+# §8  chained guards and end-of-program.
+def n 0 if (n eq 0) [98] [] if (n eq 0) [99] [] add 1 2	98 99 3	two guards, both silenced explicitly: every result survives
+def n 0 if (n eq 0) [98] if (n eq 0) [99] add 1 2	99 3	unsilenced chain: the second guard claims the first's 98 as its else (plan-consistent stack claim, §3)
+def n 0 if (n eq 0) [99]	99	end-of-program drains a parked guard: then-branch runs
+def n 5 if (n eq 0) [99]		…and a false guard leaves nothing
