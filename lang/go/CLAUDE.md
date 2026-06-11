@@ -412,10 +412,17 @@ top-down in sig order.
 
 ## Lambda Syntax (`=>` / `afn`)
 
-`=>` is a parser token that lexes directly to the word `afn`. The
-source `a => b` is the same value sequence as `a afn b`. `afn` is a
-regular registered word — there is no lambda type, no separate
-runtime path, and no rewrite pass.
+`=>` is a parser token (#AR) that GROUPS: `A => B` parses as the
+paren group `(A afn B)` — the arrow binds tighter than any enclosing
+word's forward collection, so `def double x:Integer => [x mul 2]`
+binds the LAMBDA, not the sig literal (without the fold, def's Any
+slot claimed the sig at plan time and the lambda evaporated as an
+orphaned anonymous value). The fold is grammar-level
+(`setupValRule`'s arrowfold/arrowfoldelem rules plus the
+implicit-pair #AR Close alternates in `setupPairGrammar`); `afn`
+itself is a regular registered word — there is no lambda type, no
+separate runtime path, and typing the word `afn` directly keeps the
+old flat (ungrouped) behaviour.
 
 `afn` has signature `[Any Any |]` (both args forward-eligible, both
 typed `Any`, body and sig captured via `NoEvalArgs`). The canonical
@@ -447,29 +454,29 @@ a named fn's body does.
 
 ### Syntactic gotchas
 
-- **Bare typed-param shorthand works only inside parens, one param.**
-  `(x:Integer => [x mul 2])` parses: inside a paren the pair-dive's
-  pair/map rules close on the arrow (`setupPairGrammar`'s #AR Close
-  alternates, scoped `pk > 0`), so the implicit one-entry map becomes
-  the input sig — equivalent to `([x:Integer] => …)`. At TOP LEVEL
-  `x:Integer => body` still doesn't parse (`x:Integer` starts the
-  top-level implicit map, which is not a dive). Multi-param needs the
-  bracket form `([x:Integer y:Integer] => …)`: in the bare form each
-  pair dives separately and the first strands as a stray map
-  (`syntax.tsv` pins the `undefined_word` failure). An explicit map
-  sig `{x:Integer} => body` is NOT the named-param form — ParseFnParams
-  keys named params on jsonic's Implicit flag, so an explicit map
-  builds a single Map-typed param (`fn (Map)`).
+- **Bare typed-param shorthand takes ONE param.** `x:Integer => body`
+  parses everywhere (parens optional — top level, paren contents,
+  def operands): the implicit pair closes on the arrow and becomes
+  the input sig, equivalent to `[x:Integer] => body`. Multi-param
+  needs the bracket form `([x:Integer y:Integer] => …)`: in the bare
+  form each pair closes separately and the first strands as a stray
+  map (`syntax.tsv` pins the `undefined_word` failure). An explicit
+  map sig `{x:Integer} => body` is NOT the named-param form —
+  ParseFnParams keys named params on jsonic's Implicit flag, so an
+  explicit map builds a single Map-typed param (`fn (Map)`).
 - **Single-value body rule.** afn captures one forward token as the
   body. Multi-token bodies must wrap as `[token1 token2 …]` or
   `(token1 token2 …)`. A bare-word body (e.g. `[x:Any] => x`) fails
   because the engine dispatches the word as it walks past it during
   forward collection — wrap as `[x]` to keep the word as data inside
   the body list.
-- **`def name x => body` (no parens) doesn't work** because `def`
-  forward-collects the body as its second argument and afn forward-
-  collects a body of its own — the precedence overlaps. Always wrap:
-  `def name (x:Integer => [x mul 2])`.
+- **Currying needs a list-wrapped inner lambda.** `x:Integer =>
+  y:Integer => [x add y]` parses right-associatively, but afn's body
+  PAREN evaluates during forward collection (afn has NoEvalArgs, not
+  RawParens), so the inner lambda is constructed at outer-DEF time —
+  before `x` exists — and capture misses. Write the inner lambda
+  inside the body list: `x:Integer => [(y:Integer => [x add y])]`
+  (the list defers evaluation to call time, when `x` is bound).
 - **Single sig only.** `=>` produces exactly one `FnSig`. For
   multi-overload fns, use the verbose `fn [[input1] [output1] [body1]
   [input2] …]` form.

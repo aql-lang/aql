@@ -316,6 +316,214 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 		}
 	})
 
+	// Arrow fold. `SIG => BODY` groups as `(SIG afn BODY)` — the arrow
+	// binds TIGHTER than any enclosing word's forward collection, so
+	// `def double x:Integer => [x mul 2]` is by construction the same
+	// program as `def double (x:Integer => [x mul 2])`. Without the
+	// fold, the flat token run `SIG afn BODY` races the enclosing word:
+	// def's Any slot claims the SIG literal at plan time, binding the
+	// name to the sig map/list while the lambda evaporates as an
+	// orphaned anonymous value (the parenless forms previously "worked"
+	// exactly once by feeding that orphan).
+	//
+	// Mirrors the dotchain fold above: the val whose Close sees the
+	// arrow pushes "arrowfold", which seeds the val's Node as
+	// parenGroup{SIG, afn}, consumes the arrow, parses ONE following
+	// val as the body, and appends it. Gates:
+	//
+	//   - parent elem / pelem — word contexts (top-level items, list
+	//     elements, paren contents), where the flat run is what races;
+	//   - parent arrowfold — the BODY of an enclosing fold, so
+	//     `x:Integer => y:Integer => [x add y]` curries
+	//     right-associatively: (x ⇒ (y ⇒ body));
+	//   - NOT a list-pair value (parent elem with U["pair"]) — `[k:v]`
+	//     forms keep their flat shape;
+	//   - NOT when the previous sibling is a `.`/`!` marker — a flat
+	//     dot-chain (`m.k => body`) is folded into `(m get k)` by
+	//     convertTopLevelItems, and folding here would capture only the
+	//     final key as the sig.
+	//
+	// Everywhere else (map-pair values, template exprs, degenerate
+	// leading arrows) the val.Open #AR alternate still produces the
+	// bare `afn` word, exactly as before.
+	arrowFoldable := func(r *jsonic.Rule, ctx *jsonic.Context) bool {
+		p := r.Parent
+		if p == nil || p == jsonic.NoRule {
+			return false
+		}
+		switch p.Name {
+		case "pelem", "arrowfold", "arrowfoldelem":
+			// ok — paren contents and fold bodies (the latter make
+			// `x => y => body` curry right-associatively).
+		case "elem":
+			// A list-PAIR's value val must not fold (the sig is the
+			// whole pair, which only exists on the elem — see the
+			// elem-level fold below). Plain elems fold here.
+			if pair, ok := p.U["pair"]; ok && pair == true {
+				return false
+			}
+		default:
+			return false
+		}
+		if r.Prev != nil && r.Prev != jsonic.NoRule {
+			prev := r.Prev.Node
+			if s, ok := prev.(sited); ok {
+				prev = s.Node
+			}
+			if txt, ok := prev.(jsonic.Text); ok && (txt.Str == "." || txt.Str == "!") {
+				return false
+			}
+		}
+		return true
+	}
+	j.Rule("val", func(rs *jsonic.RuleSpec) {
+		rs.Close = append([]*jsonic.AltSpec{
+			{S: [][]jsonic.Tin{{t.AR}}, C: arrowFoldable, P: "arrowfold", B: 1},
+		}, rs.Close...)
+	})
+
+	j.Rule("arrowfold", func(rs *jsonic.RuleSpec) {
+		rs.BO = []jsonic.StateAction{
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				// Seed the parent val's Node: the already-parsed value
+				// becomes the sig half of (SIG afn BODY). deSite the
+				// receiver — the parent val's BC re-sites the whole group.
+				if r.Parent == nil || r.Parent == jsonic.NoRule {
+					return
+				}
+				recv := r.Parent.Node
+				if s, ok := recv.(sited); ok {
+					recv = s.Node
+				}
+				r.Parent.Node = parenGroup{recv, jsonic.Text{Str: "afn", Quote: ""}}
+			},
+		}
+		rs.BC = []jsonic.StateAction{
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				// Append the body val to the parent's parenGroup.
+				if r.Parent == nil || r.Parent == jsonic.NoRule {
+					return
+				}
+				if jsonic.IsUndefined(r.Child.Node) {
+					return
+				}
+				if pg, ok := r.Parent.Node.(parenGroup); ok {
+					r.Parent.Node = parenGroup(append([]any(pg), r.Child.Node))
+				}
+			},
+		}
+		rs.Open = []*jsonic.AltSpec{
+			// Consume the arrow, parse exactly one following val as the body.
+			{S: [][]jsonic.Tin{{t.AR}}, P: "val"},
+		}
+		rs.Close = []*jsonic.AltSpec{
+			// Single shot — chaining is the BODY val's own fold (see the
+			// arrowfold parent gate above). Backtrack so the enclosing
+			// context consumes the next token.
+			{B: 1},
+		}
+	})
+
+	// Elem-level arrow fold. A bare pair OUTSIDE parens — `def double
+	// x:Integer => [x mul 2]` at top level, or inside an explicit list —
+	// parses via the elem rule's list-pair alternate, NOT via the val
+	// dive: the value val sees the arrow first (its fold is gated off
+	// above — the sig is the whole pair, not the value), and by the time
+	// elem.Close examines the arrow, the elem's BC has already appended
+	// the assembled one-entry pair map as the list node's LAST element.
+	// So the elem-level fold pops that element, seeds (PAIR afn …), and
+	// appends the folded group back. Gated on U["pair"] — a plain elem's
+	// val folds at the val level, and a flat dot-chain that declined the
+	// val fold must not be re-folded here.
+	elemPairArrow := func(r *jsonic.Rule, ctx *jsonic.Context) bool {
+		pair, ok := r.U["pair"]
+		return ok && pair == true
+	}
+	j.Rule("elem", func(rs *jsonic.RuleSpec) {
+		rs.Close = append([]*jsonic.AltSpec{
+			{S: [][]jsonic.Tin{{t.AR}}, C: elemPairArrow, P: "arrowfoldelem", B: 1,
+				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+					// The elem's BC runs AGAIN when the elem finally
+					// closes after the pushed fold returns; clear the
+					// pair flag so that second pass doesn't rebuild a
+					// pair from the fold rule's node (the first pass
+					// already appended the real pair, which the fold's
+					// BO pops as the sig).
+					r.U["pair"] = false
+				}},
+		}, rs.Close...)
+	})
+
+	j.Rule("arrowfoldelem", func(rs *jsonic.RuleSpec) {
+		rs.BO = []jsonic.StateAction{
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				// Pop the just-appended pair map off the parent elem's
+				// list node and hold it as the sig half. The elem and its
+				// list share the slice, so propagate the shortened node
+				// to both.
+				if r.Parent == nil || r.Parent == jsonic.NoRule {
+					return
+				}
+				switch n := r.Parent.Node.(type) {
+				case jsonic.ListRef:
+					if len(n.Val) == 0 {
+						return
+					}
+					r.U["af_sig"] = n.Val[len(n.Val)-1]
+					n.Val = n.Val[:len(n.Val)-1]
+					r.Parent.Node = n
+					if r.Parent.Parent != nil && r.Parent.Parent != jsonic.NoRule {
+						r.Parent.Parent.Node = n
+					}
+				case []any:
+					if len(n) == 0 {
+						return
+					}
+					r.U["af_sig"] = n[len(n)-1]
+					rest := n[:len(n)-1]
+					r.Parent.Node = rest
+					if r.Parent.Parent != nil && r.Parent.Parent != jsonic.NoRule {
+						r.Parent.Parent.Node = rest
+					}
+				}
+			},
+		}
+		rs.BC = []jsonic.StateAction{
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				// Append (SIG afn BODY) where the bare pair sat.
+				sig, ok := r.U["af_sig"]
+				if !ok || r.Parent == nil || r.Parent == jsonic.NoRule {
+					return
+				}
+				body := r.Child.Node
+				if jsonic.IsUndefined(body) {
+					return
+				}
+				group := parenGroup{sig, jsonic.Text{Str: "afn", Quote: ""}, body}
+				switch n := r.Parent.Node.(type) {
+				case jsonic.ListRef:
+					n.Val = append(n.Val, group)
+					r.Parent.Node = n
+					if r.Parent.Parent != nil && r.Parent.Parent != jsonic.NoRule {
+						r.Parent.Parent.Node = n
+					}
+				case []any:
+					grown := append(n, group)
+					r.Parent.Node = grown
+					if r.Parent.Parent != nil && r.Parent.Parent != jsonic.NoRule {
+						r.Parent.Parent.Node = grown
+					}
+				}
+			},
+		}
+		rs.Open = []*jsonic.AltSpec{
+			{S: [][]jsonic.Tin{{t.AR}}, P: "val"},
+		}
+		rs.Close = []*jsonic.AltSpec{
+			{B: 1},
+		}
+	})
+
 	// Capture source position: wrap every value node with the row/col of its
 	// opening token, so the converter can stamp eng.Value.Pos for precise
 	// error reporting (mirrors aontu's addsite). The BC fires on val-rule
@@ -622,14 +830,16 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 	// `afn`. ParseFnParams reads the Implicit map as a named param, so
 	// `(x:Integer => [x mul 2])` ≡ `([x:Integer] => [x mul 2])`.
 	//
-	// The pk > 0 condition scopes both alternates to pair-DIVES: pairs
-	// of an explicit `{…}` map run with pk = 0 (set at the OB open), so
-	// `{a: 1 => 2}` keeps erroring exactly as before. The matched parse
-	// state was unconditionally fatal before these alternates, so they
-	// are additive — nothing that parsed previously changes shape.
+	// The pk condition scopes both alternates to IMPLICIT pairs: a
+	// pair-dive runs with pk > 0, the top-level implicit map runs with
+	// pk ABSENT, and pairs of an explicit `{…}` map run with pk = 0
+	// (set at the OB open) — so `{a: 1 => 2}` keeps erroring exactly as
+	// before. The matched parse state was unconditionally fatal before
+	// these alternates, so they are additive — nothing that parsed
+	// previously changes shape.
 	arrowEndsDive := func(r *jsonic.Rule, ctx *jsonic.Context) bool {
 		pk, ok := r.N["pk"]
-		return ok && pk > 0
+		return !ok || pk > 0
 	}
 	j.Rule("pair", func(rs *jsonic.RuleSpec) {
 		rs.Close = append([]*jsonic.AltSpec{

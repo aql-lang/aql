@@ -1055,36 +1055,38 @@ multiple output types declare multiple return values.
 
 #### Anonymous functions — `=>`
 
-`sig => body` builds an anonymous `Function` (the arrow is sugar for
-the word `afn`): signature on the left, a single body token on the
-right. It is the inline-lambda form for higher-order words, and it
-closes over enclosing fn bindings lexically:
+`sig => body` builds an anonymous `Function`: signature on the left,
+a single body token on the right. The arrow **groups itself** — it
+parses as `(sig afn body)`, binding tighter than the surrounding
+call — so it works with or without explicit parens, including as a
+`def` operand or a higher-order argument. It closes over enclosing
+fn bindings lexically:
 
 ```
 (x:Integer => [x mul 2]) 5                    # returns 10
-filter (p:Any => [p.value gt 3]) [1 2 3 4 5]  # returns [4 5]
-def double (x:Integer => [x mul 2])
+filter p:Any => [p.value gt 3] [1 2 3 4 5]    # returns [4 5]
+def double x:Integer => [x mul 2]
 double 7                                      # returns 14
 
-def make-adder (x:Integer => [(y:Integer => [x add y])])
+def make-adder x:Integer => [(y:Integer => [x add y])]
 def add5 (make-adder 5)
 add5 3                                        # returns 8
 ```
 
 The signature spellings:
 
-* `(x:Integer => …)` — bare convenience form, **one** typed param,
-  only inside parens (at top level `x:Integer` starts an implicit
-  map and does not parse).
-* `([x:Integer y:Integer] => …)` — the bracket form; required for
+* `x:Integer => …` — bare convenience form, **one** typed param.
+* `[x:Integer y:Integer] => …` — the bracket form; required for
   multiple params, value patterns, optionals, and `|` barriers
   (everything `fn`'s input list accepts).
-* `([] => …)` — zero params.
+* `[] => …` — zero params.
 
 The body must be **one** token — wrap multi-token bodies as
-`[…]` (a bare-word body like `=> x` fails; write `=> [x]`). The
-arrow produces exactly one signature with return type `Any`; for
-declared returns or multiple overloads use the full
+`[…]` (a bare-word body like `=> x` fails; write `=> [x]`). For a
+curried chain, list-wrap the inner lambda as in `make-adder` above —
+the list defers construction to call time, when the outer param is
+bound. The arrow produces exactly one signature with return type
+`Any`; for declared returns or multiple overloads use the full
 `fn [[input] [output] [body] …]` form.
 
 Parameter and return annotations may name **any** type — builtins,

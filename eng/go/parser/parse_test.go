@@ -2705,34 +2705,67 @@ func TestNoSitedLeak(t *testing.T) {
 }
 
 // TestParseArrowPairDive pins the lambda-arrow convenience form
-// `(x:Integer => body)`: inside a paren, `x:Integer` parses via the
-// pair-dive (pk > 0), and the #AR Close alternates on the pair/map rules
-// end the dive so the implicit one-entry map becomes the lambda's input
-// sig — equivalent to the bracketed `([x:Integer] => body)`. The
-// alternates are scoped to dives: explicit-map pairs and the top-level
-// implicit map (both pk ≤ 0 / pk-less) keep erroring exactly as before.
+// `x:Integer => body`: an implicit pair before the arrow (a paren
+// pair-dive, the top-level implicit map, or a list-pair elem) closes on
+// the #AR token, so the one-entry map becomes the lambda's input sig —
+// equivalent to the bracketed `[x:Integer] => body`. Explicit-map pairs
+// (pk = 0, set at the `{` open) keep erroring exactly as before.
 func TestParseArrowPairDive(t *testing.T) {
 	ok := []string{
 		`(x:Integer => [x mul 2])`,
 		`(p:Any => [p.value gt 3])`,
 		`def double (x:Integer => [x mul 2])`,
+		`def double x:Integer => [x mul 2]`,
 		`filter (p:Any => [p.value gt 3]) [1 2 3 4 5]`,
+		`filter p:Any => [p.value gt 3] [1 2 3 4 5]`,
 		`(x:Integer => [x mul 2]) 5`,
+		`x:Integer => [x mul 2]`,
 	}
 	for _, src := range ok {
 		if _, err := Parse(src); err != nil {
 			t.Errorf("Parse(%q): unexpected error: %v", src, err)
 		}
 	}
-	// The arrow must NOT close explicit-map pairs or the top-level
-	// implicit map — those parse states stay fatal (the alternates'
-	// pk > 0 condition).
+	// The arrow must NOT close explicit-map pairs — that parse state
+	// stays fatal.
 	for _, src := range []string{
 		`{a:1 => 2}`,
-		`x:Integer => [x mul 2]`,
 	} {
 		if _, err := Parse(src); err == nil {
 			t.Errorf("Parse(%q): expected a syntax error, got none", src)
+		}
+	}
+}
+
+// TestParseArrowFold pins the arrow's GROUPING: `SIG => BODY` parses as
+// the single paren group `(SIG afn BODY)` — the arrow binds tighter
+// than any enclosing word's forward collection, so
+// `def double x:Integer => [x mul 2]` is the same program as the
+// explicitly-parenthesised form (def's value operand is the group,
+// which evaluates to the Function — NOT the bare sig map followed by a
+// flat afn call that def's Any slot would race for and win).
+func TestParseArrowFold(t *testing.T) {
+	for _, tc := range []struct {
+		src  string
+		want int // expected top-level item count after the fold
+	}{
+		{`def double x:Integer => [x mul 2]`, 3}, // def double (group)
+		{`def d [x:Integer] => [x mul 2]`, 3},    // def d (group)
+		{`f p:Any => [p] [1 2]`, 3},              // f (group) [1 2]
+		// Right-assoc currying: the chained arrow nests INSIDE the value
+		// group — def mk ({x…} afn ({y…} afn [body])) — so the count
+		// stays 3. (As the program's FIRST tokens a chained arrow stays
+		// flat-outer — no enclosing collector exists to race — with the
+		// inner arrow folded; semantics are identical.)
+		{`def mk x:Integer => y:Integer => [x add y]`, 3},
+	} {
+		vals, err := Parse(tc.src)
+		if err != nil {
+			t.Fatalf("Parse(%q): %v", tc.src, err)
+		}
+		if len(vals) != tc.want {
+			t.Errorf("Parse(%q): got %d top-level items, want %d (arrow did not fold)",
+				tc.src, len(vals), tc.want)
 		}
 	}
 }

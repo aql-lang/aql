@@ -975,15 +975,25 @@ def dblcall2 fn [[n:Number, cb:Function] [Number] [n add n cb]] dblcall2 4 (fn [
 # args works alongside named params: x by name, z via args.2
 def add3 fn [[x:Number, y:Number, z:Number] [Number] [x add y add (args.2)]] 1 2 3 add3	6
 
-# === Lambda arrow convenience form: (x:Type => body) ===
+# === Lambda arrow: SIG => BODY groups as (SIG afn BODY) ===
 
-# single typed param without brackets — the pair-dive closes on =>
+# single typed param without brackets — the pair closes on =>
 def double (x:Integer => [x mul 2]) double 1	2
 (x:Integer => [x mul 2]) 5	10
 5 (x:Integer => [x mul 2])	10
 # …equivalent to the bracketed form
 def double ([x:Integer] => [x mul 2]) double 1	2
-# multi-param needs brackets: in the convenience form each pair dives
+# the arrow binds tighter than the enclosing word's collection, so the
+# parens are optional: def binds the LAMBDA, not the sig literal
+def double x:Integer => [x mul 2] end double 7	14
+def d [x:Integer] => [x mul 2] end d 3	6
+def f x:Integer => [x mul 2] def g y:Integer => [y add 1] g (f 5)	11
+# parenless lambda as a higher-order argument
+filter p:Any => [p.value gt 3] [1 2 3 4 5]	[4 5]
+# currying: the chain nests right-associatively, but afn's body paren
+# evaluates at construction (before x binds) — list-wrap the inner
+def mk x:Integer => [(y:Integer => [x add y])] end def a2 (mk 2) end a2 3	5
+# multi-param needs brackets: in the bare form each pair closes
 # separately, so the first param strands as a stray map and the body's
 # reference to it is undefined — write ([x:Integer y:Integer] => body)
 (x:Integer y:Integer => [x add y]) 2 3		undefined_word
