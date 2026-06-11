@@ -1505,9 +1505,15 @@ Key semantics (full design note: `design/FLEX-NODES.10.md`):
 - **Bindings share the node.** `def g f` aliases the same container;
   mutation through either is visible through both (this is reference
   semantics, like Store/Object/Array).
-- **Storage is by reference.** `set`/`append` store the value as given —
-  a plain map appended into a FlexList stays immutable inside it; `flex`
-  it first if it must be mutable.
+- **Writes adopt — trees stay entirely one column.** A plain map/list
+  stored into a flex container (`set`, `push`, `unshift`, `append`) is
+  deep-flexed on the way in, so a flex tree is mutable at every depth
+  (`set a {b:1} f` then `set b 9 f.a` sticks — it was silently lost
+  when the inner stayed immutable). A flex value stored into a flex
+  container stays a **shared handle** (what you pass explicitly is
+  shared). Symmetrically, a flex value stored into a plain `Map`/`List`
+  is snapshot to its immutable shape, so an immutable container can
+  never change underneath through a live handle.
 - **Equality ignores flexness**: `(flex {a:1}) deq {a:1}` is `true` and
   `cmp` orders flex/plain pairs by content. `eq` remains container
   identity (two separate `flex [1]` nodes are not `eq`).
