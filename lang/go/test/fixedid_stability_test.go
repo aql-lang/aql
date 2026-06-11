@@ -88,6 +88,7 @@ func TestFixedIDStability(t *testing.T) {
 		"Ideal/Tensor/Vector": 2002,
 		"Ideal/Module":        5000,
 		"Ideal/ModuleExport":  5001,
+		"Node/Map/KeyVal":     5002, // map-iteration entry — lang/go/native/native_keyval.go
 		"Word/__IS":           51,
 		"Type/Disjunct/Enum":  62,
 		"Word/__PE":           63,
