@@ -29,6 +29,7 @@ syntax, the type system, and the runtime. It complements the
 * [Store and context](#store-and-context)
 * [Module system](#module-system)
 * [Ideals and type-kinds](#ideals-and-type-kinds)
+* [Generics as memoised type construction](#generics-as-memoised-type-construction)
 * [Capabilities](#capabilities)
 * [Design influences](#design-influences)
 
@@ -652,6 +653,28 @@ module does exactly this for `Matrix` and `Vector`.
 You usually don't write Ideals — you use them via `refine`
 (Record / Table / Object) and `make`. The framework matters only if you're
 extending the language with a new kind of typed container.
+
+
+## Generics as memoised type construction
+
+Generic types follow the same "types are values" doctrine as the
+rest of the system. A schema (`def Box<T> class {value:T}`) is a
+value holding a type body with placeholder nodes embedded;
+instantiation (`Box of [Integer]`, or the sugar `Box<Integer>`) is
+ordinary execution that substitutes the placeholders and **interns
+the result** — one lattice node per (schema, arguments), minted as
+a child of the schema. That one decision buys most of the
+semantics for free: `typeof` names the instantiation because it IS
+a type; `is Box` works by plain ancestry; two mentions of
+`Box<Integer>` are `teq` because they're the same node; and the
+checker gets monomorphization without new machinery, because its
+per-call memo keys on argument types that now include the
+instantiation's identity. Bounds reuse the membership question the
+whole system already answers — `extends C` admits exactly what
+`is C` admits, so predicates, disjunctions, and surfaces are all
+valid bounds with zero special cases. The trade-off chosen for v1
+is **invariance**: `Box<Integer>` is not a `Box<Number>`, the same
+conservative default the nominal class system uses.
 
 
 ## Capabilities

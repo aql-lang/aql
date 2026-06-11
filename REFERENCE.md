@@ -618,6 +618,90 @@ and the type algebra applies (`Shape tor none`, `tnot Shape`,
 check runs at declaration time; `describe Shape` prints the
 contract.
 
+### Generic types
+
+A generic type is a **schema**: a class, record, or fn-shape
+declared over one or more type parameters, instantiated with
+concrete type arguments. The angle-bracket form is the usual
+spelling — a capitalised name directly before `<` opens the
+parameter or argument list (commas between entries are optional,
+like list elements):
+
+```
+def Box<T> class {value:T}
+def b:Box<Integer> {value:42}
+typeof b                                   # returns Box of [Integer]
+b is Box                                   # returns true
+b is Box<Integer>                          # returns true
+b is Box<String>                           # returns false
+```
+
+Each distinct instantiation is minted **once** (`Box<Integer> teq
+(Box of [Integer])` returns `true`) as a nominal child of the
+schema, so instances get real type identity: `typeof` names the
+instantiation, a bare `Box` in any type position means "any
+instantiation of Box", and sibling instantiations are distinct
+types — v1 generics are **invariant**, so `Box<Integer>` is not a
+`Box<Number>`. Class instantiations keep the full class contract
+(strict field typing, sealing, `deq` per-instantiation,
+jsonify/reify serialization).
+
+The angle form is pure sugar over four ordinary words, desugared at
+parse time — `def Name<…>` is `def Name gen [...]`, and a use-site
+`Name<…>` is `( Name of [...] )` — so macros, `quote`, and
+`Vm.parse` only ever see the canonical paren form. (`<` and `>` are
+general-purpose parser tokens; the generics rule is their only
+current consumer, and comparisons stay on `lt`/`gt`.) The canonical
+form is needed for generic **functions**, whose names are lowercase:
+
+```
+def Pair<K, V> refine Record [key:K value:V]
+Pair of [String Integer]                   # returns record{key:String value:Integer}
+def first gen [T] fn [[xs:[:T]] [T] [xs get 0]]
+first [10 20 30]                           # returns 10
+```
+
+A generic fn binds its parameters per call from the arguments —
+`x:T` binds `typeof(arg)`, a `[:T]`/`{:T}` pattern binds the union
+of the element types — and the bindings are in scope inside the
+body, so `make (Box of [T]) {…}` constructs the caller's
+instantiation. Bounds constrain parameters with `extends`
+(`T extends C` inside angles); membership is the ordinary `is`
+test, so lattice types, predicate refinements, disjunctions, and
+**surfaces** all work as bounds, and violations reject at dispatch
+and instantiation (`constraint_violation`). Defaults are declared
+with `=` in angle form (`(T default D)` canonically) and may
+reference earlier parameters:
+
+```
+def Sorted<T extends Number> class {items:[:T]}
+def Result<T, E = Error> refine Record [ok:T err:E]
+(Result of [Integer])                      # returns record{ok:Integer err:Error}
+```
+
+A schema's own name is unbound while its body builds; recursion is
+written `Self of [...]`:
+
+```
+def Tree<T> refine Record [value:T left:(Self of [T])]
+Tree of [Integer]                          # returns record{value:Integer left:Tree of [Integer]}
+```
+
+A bare schema used as a construction target **infers** its
+arguments from the body (an uninferable, undefaulted parameter is a
+loud `unbound_param`, never a silent `Any`; explicit instantiation
+always wins):
+
+```
+def Box<T> class {value:T}
+typeof (make Box {value:42})               # returns Box of [Integer]
+```
+
+In `aql check`, a generic fn's body is checked once at the
+definition against its parameter bounds (operations on a bare `T`
+must be justified by the bound), and each call site refines the
+declared return through the inferred bindings.
+
 ## Word reference
 
 Each entry lists the word, its signature(s), and one or more
@@ -1348,6 +1432,10 @@ consequences:
 | `base` | Zero / base value for a type | `base Integer` returns `0` |
 | `refine` | Build a refinement of a base type | `class {count:0}` |
 | `make` | Construct typed value or instance | `make Point [1 2]` |
+| `gen` | Declare type parameters for the next constructor | `def Box gen [T] class {value:T}` |
+| `of` | Instantiate a generic schema | `Box of [Integer]` |
+| `extends` | Bound a parameter inside a `gen` entry | `gen [(T extends Number)]` |
+| `default` | Default a parameter inside a `gen` entry | `gen [T (E default Error)]` |
 
 > **`convert` parses text; it does not re-bucket numbers.** It turns a
 > `String` into a number (`convert Integer "42"` returns `42`) or a number
@@ -1558,6 +1646,10 @@ reads `e.code`, `e.message`, and any payload keys (`e.got`), and
 | `no_value_error` | A parenthesised argument expression produced no value for a call. |
 | `uncalled_function` | A call matched no signature and its function value was never consumed. |
 | `reserved_word` | `def`/`undef` targeted a built-in word or the literal `true`/`false`/`none`. |
+| `constraint_violation` | A generic type argument does not satisfy its `extends` bound. |
+| `arity_mismatch` | `of` received the wrong number of type arguments (defaults fill only the tail). |
+| `unbound_param` | A generic parameter could not be inferred and has no default. |
+| `gen_without_constructor` | A `gen [...]` was never consumed by a type constructor. |
 | `incomparable` | `cmp`/`lt`/`lte`/`gt`/`gte` got cross-family operands — use `tcmp`. |
 | `type_mismatch` | A value didn't match an expected signature slot. |
 | `arity_mismatch` | Wrong number of arguments. |

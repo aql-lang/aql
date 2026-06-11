@@ -1,6 +1,30 @@
 # Generic Types — Design and Plan
 
-Status: design draft, no implementation. Refreshed 2026-06-04 against
+Status: **LANDED (2026-06-10/11), all phases.** This document is the
+design record; the authoritative landed state is §15a–§15h (one note
+per implementation phase, each marking where the landing deviates
+from the original text below). The load-bearing deviations:
+
+- **D2/§5** — `gen` returns NOTHING; the spec rides a registry
+  pending-slot to the next constructor (§15a). `of` evaluates its
+  argument list (no NoEvalArgs).
+- **D5/§5.5** — recursion is `Self of [...]`; the schema's own name
+  is unbound while its body builds (§15a).
+- **D10/§5.6** — v1 is INVARIANT: `intBox is (Box of [Number])` is
+  `false`, inverting this document's covariance example (§15b).
+- **D14/§6.4** — `<`/`>` are GENERAL-PURPOSE parser tokens with the
+  generics rule as one contextual consumer, not an exclusive
+  reservation (§15f).
+- **D15** — sugar desugars at parse time; macros/quote/Vm.parse see
+  only the canonical stream (§15f).
+- **§8.2** — `Comparable` landed as a SURFACE in aql:decision, not a
+  tor-alias (§15h).
+
+User-facing docs: REFERENCE.md "Generic types", TUTORIAL §13,
+HOWTO "Define a generic type", EXPLANATION "Generics as memoised
+type construction".
+
+Originally: design draft refreshed 2026-06-04 against
 the current type system (the TYPE-UNIFORM `def`/`refine` syntax and the
 `eng/go` + `lang/go/native` layout) and the set-theoretic extensions
 proposed in this design round. **Reviewed 2026-06-10 against the

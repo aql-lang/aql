@@ -30,6 +30,7 @@ through the **[Tutorial](TUTORIAL.md)** and just need an answer to
 * [Define a record type](#define-a-record-type)
 * [Define a table type](#define-a-table-type)
 * [Define an object type with methods](#define-an-object-type-with-methods)
+* [Define a generic type](#define-a-generic-type)
 * [Use scoped variables](#use-scoped-variables)
 * [Iterate with `for`](#iterate-with-for)
 * [Check types and convert values](#check-types-and-convert-values)
@@ -541,6 +542,46 @@ c.count                               # returns 2
 
 Because methods are just typed functions, they overload, type-check,
 and compose like any other word.
+
+
+## Define a generic type
+
+Put type parameters in angle brackets after the name; instantiate
+by filling them in. Each instantiation is a distinct nominal type
+with the full class contract (strict fields, sealing, `deq`):
+
+```
+def Box<T> class {value:T}
+
+def bi (make Box<Integer> {value:42})
+typeof bi                             # returns Box of [Integer]
+bi is Box                             # returns true
+bi is Box<String>                     # returns false
+```
+
+Bound a parameter with `extends` (any type works as a bound —
+including predicates and surfaces) and default one with `=`:
+
+```
+def Sorted<T extends Number> class {items:[:T]}
+def Result<T, E = Error> refine Record [ok:T err:E]
+(Result of [Integer])                 # returns record{ok:Integer err:Error}
+```
+
+A bare schema as a construction target infers its arguments from
+the body (`make Box {value:42}` is a `Box of [Integer]`), and a
+generic **function** uses the spelled-out `gen` form, binding its
+parameters from each call's arguments:
+
+```
+def Box<T> class {value:T}
+def boxit gen [T] fn [[x:T] [Any] [make (Box of [T]) {value:x}]]
+typeof (boxit "hi")                   # returns Box of [ProperString]
+```
+
+For recursion use `Self of [...]` (the schema's own name is unbound
+while its body builds). See **[Reference: Generic
+types](REFERENCE.md#generic-types)**.
 
 
 ## Use scoped variables

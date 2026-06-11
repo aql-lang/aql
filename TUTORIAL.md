@@ -485,6 +485,24 @@ aql> make Person {name:"Alice" nick:"ace"}     # returns {name:'Alice' nick:'ace
 aql> make Person {name:"Bob"}                  # returns {name:'Bob' nick:none}
 ```
 
+Types can also be **generic** — declared over type parameters in
+angle brackets and instantiated with concrete arguments. Each
+instantiation is a real, distinct type:
+
+```
+aql> def Box<T> class {value:T}
+aql> def b:Box<Integer> {value:42}
+aql> typeof b                        # returns Box of [Integer]
+aql> b is Box                        # returns true
+aql> b is Box<String>                # returns false
+```
+
+Generic *functions* use the spelled-out form — `def first gen [T]
+fn [[xs:[:T]] [T] [xs get 0]]` works over a list of any element
+type. See **[Reference: Generic types](REFERENCE.md#generic-types)**
+for bounds (`T extends Number`), defaults, recursion via `Self`,
+and inference.
+
 
 ## 14. Scoped variables with `var`
 
