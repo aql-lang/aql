@@ -153,7 +153,7 @@ func runVerify(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		// 4. Stale temp files from an interrupted atomic write. The
 		//    in-flight temp of a concurrent writer can't be mistaken for
 		//    a stale one: writers hold this same lock.
-		dir := fileDir(homeDir)
+		dir := vaultFolder(homeDir)
 		if entries, err := os.ReadDir(dir); err == nil {
 			for _, e := range entries {
 				n := e.Name()

@@ -37,9 +37,10 @@ type AuditEvent struct {
 	Reason     string `json:"reason,omitempty"`
 }
 
-// auditPath is the on-disk JSONL log location.
+// auditPath is the on-disk JSONL log location, inside the vault folder
+// and honoring the configured file-name suffix.
 func auditPath(homeDir string) string {
-	return filepath.Join(homeDir, ".aql", "vault.audit.jsonl")
+	return filepath.Join(vaultFolder(homeDir), vaultFileName("audit.jsonl"))
 }
 
 // appendAudit writes one event to the log. Errors are reported to
@@ -69,8 +70,7 @@ func appendAudit(homeDir string, ev AuditEvent) error {
 		}
 	}
 
-	dir := filepath.Join(homeDir, ".aql")
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(vaultFolder(homeDir), 0700); err != nil {
 		return err
 	}
 	f, err := os.OpenFile(auditPath(homeDir),

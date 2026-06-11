@@ -14,7 +14,7 @@ var errLocked = errors.New("vault is locked; run `aql vault unlock`")
 // dedicated file (not vault.jsonic itself) so the lock is independent
 // of the atomic-rename dance that replaces the store.
 func lockPath(homeDir string) string {
-	return filepath.Join(fileDir(homeDir), "vault.lock")
+	return filepath.Join(vaultFolder(homeDir), vaultFileName("lock"))
 }
 
 // withVaultLock runs fn while holding an exclusive cross-process lock
@@ -30,7 +30,7 @@ func lockPath(homeDir string) string {
 // never stall on human input. mutateStore is the intended entry point;
 // it keeps the locked section to a bare load-modify-save.
 func withVaultLock(homeDir string, fn func() error) error {
-	if err := os.MkdirAll(fileDir(homeDir), 0700); err != nil {
+	if err := os.MkdirAll(vaultFolder(homeDir), 0700); err != nil {
 		return err
 	}
 	f, err := os.OpenFile(lockPath(homeDir), os.O_CREATE|os.O_RDWR, 0600)

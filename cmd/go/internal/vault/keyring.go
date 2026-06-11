@@ -92,7 +92,7 @@ type keyring interface {
 // underlying file does not yet exist (in which case Set will
 // initialize it with the given passphrase, even if empty — empty
 // passphrases are permitted but produce a clear warning at init).
-func selectKeyring(backend string, fileDir, passphrase string) (keyring, error) {
+func selectKeyring(backend string, folder, passphrase string) (keyring, error) {
 	if backend == "" || backend == BackendAuto {
 		backend = autoBackend()
 	}
@@ -119,7 +119,7 @@ func selectKeyring(backend string, fileDir, passphrase string) (keyring, error) 
 		}
 		return &winCred{}, nil
 	case BackendFile:
-		return &fileKeyring{dir: fileDir, pass: passphrase}, nil
+		return &fileKeyring{folder: folder, pass: passphrase}, nil
 	case BackendOnePassword:
 		if _, err := exec.LookPath("op"); err != nil {
 			return nil, fmt.Errorf("vault: 1password CLI `op` not found")
@@ -466,18 +466,18 @@ switch ($op) {
 // --- File-backed AES-256-GCM fallback ---------------------------------------
 
 // fileKeyring stores aliases in a single AES-256-GCM encrypted JSON
-// blob at {dir}/vault.keyring. Each Set/Delete reads the file,
-// mutates the map, and rewrites it; this is acceptable for the
-// expected ~tens of secrets and avoids partial writes leaving
-// readable plaintext on disk.
+// blob at {folder}/vault.keyring (or vault.<suffix>.keyring). Each
+// Set/Delete reads the file, mutates the map, and rewrites it; this is
+// acceptable for the expected ~tens of secrets and avoids partial
+// writes leaving readable plaintext on disk.
 type fileKeyring struct {
-	dir  string
-	pass string
+	folder string
+	pass   string
 }
 
 func (f *fileKeyring) Name() string { return BackendFile }
 
-func (f *fileKeyring) path() string { return filepath.Join(f.dir, "vault.keyring") }
+func (f *fileKeyring) path() string { return filepath.Join(f.folder, vaultFileName("keyring")) }
 
 func (f *fileKeyring) load() (map[string]string, error) {
 	data, err := os.ReadFile(f.path())
@@ -517,7 +517,7 @@ func (f *fileKeyring) load() (map[string]string, error) {
 }
 
 func (f *fileKeyring) save(m map[string]string) error {
-	if err := os.MkdirAll(f.dir, 0700); err != nil {
+	if err := os.MkdirAll(f.folder, 0700); err != nil {
 		return err
 	}
 	var buf bytes.Buffer

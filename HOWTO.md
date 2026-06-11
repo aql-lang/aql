@@ -964,6 +964,12 @@ aql vault list
 aql vault get github_token                       # redacted
 aql vault grant --agent=ci --ttl=2h github_token # scoped capability
 aql vault exec github_token=GITHUB_TOKEN -- gh repo list
+
+# Track when a key needs rotating: attach an optional expiry, then
+# review what is coming due (or overdue).
+aql vault add --expiry=90d --from-stdin --provider=github github_token
+aql vault expiry                                 # pending expiries, soonest first
+aql vault expiry --within=14d                    # only what's due soon
 ```
 
 The secret is never passed as a command-line argument (that would
@@ -984,6 +990,24 @@ reads it back); `:key` forces the root namespace. Filter reports with
 moves one key, `vault mv proj1: team:` renames a whole namespace —
 capabilities follow the key, values are copy-verified before the old
 entry is removed, and `--dry-run` previews.
+
+Keys can carry an optional expiry so you remember to rotate before the
+upstream credential lapses. Attach one when adding (`--expiry`), when
+rotating (`rotate --expiry`), or later (`vault expiry set key 2026-12-31`),
+and remove it with `vault expiry clear key`. The value is a date
+(`2026-12-31`), an RFC3339 timestamp, or a duration from now with day
+support (`90d`, `720h`). It is a reminder only — never enforced, so an
+expired alias still resolves. `vault list` shows an `EXPIRES` column,
+and `vault expiry` lists the keys that have one, soonest (and most
+overdue) first, filterable with `--namespace` and `--within`.
+
+By default the vault sits in `~/.aql`; point it elsewhere with
+`--folder`/`AQL_VAULT_FOLDER`, and give the files an inner suffix
+(`vault.work.jsonic`) with `--suffix`/`AQL_VAULT_SUFFIX` so a project or
+team vault can live beside the default one. The flags go before the
+mode (`aql vault --folder=./vault --suffix=team init`); supply the same
+folder and suffix on every command for that vault, or export the env
+vars for the session.
 
 Passphrases work the same way: `vault init` and every command that
 opens the file keyring prompt for the vault passphrase with echo

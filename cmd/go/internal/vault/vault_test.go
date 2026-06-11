@@ -15,6 +15,12 @@ func testHome(t *testing.T) string {
 	dir := t.TempDir()
 	t.Setenv(EnvHome, dir)
 	t.Setenv(EnvPassphrase, "test-pass")
+	// Neutralize the location overrides so tests are hermetic and a
+	// flag-driven os.Setenv in one test cannot leak into the next; an
+	// empty value reads as "use the default" everywhere. Tests that
+	// exercise customization set these after calling testHome.
+	t.Setenv(EnvFolder, "")
+	t.Setenv(EnvSuffix, "")
 	return dir
 }
 
@@ -375,7 +381,7 @@ func TestRequireStoreFailsBeforeInit(t *testing.T) {
 
 func TestFileKeyringRoundtripDetectsWrongPassphrase(t *testing.T) {
 	dir := t.TempDir()
-	kr := &fileKeyring{dir: dir, pass: "good"}
+	kr := &fileKeyring{folder: dir, pass: "good"}
 	if err := kr.Set("a", "alpha"); err != nil {
 		t.Fatal(err)
 	}
@@ -386,7 +392,7 @@ func TestFileKeyringRoundtripDetectsWrongPassphrase(t *testing.T) {
 	if v != "alpha" {
 		t.Errorf("got %q, want alpha", v)
 	}
-	bad := &fileKeyring{dir: dir, pass: "wrong"}
+	bad := &fileKeyring{folder: dir, pass: "wrong"}
 	if _, err := bad.Get("a"); err == nil {
 		t.Error("expected wrong-passphrase error")
 	}
