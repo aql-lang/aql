@@ -596,7 +596,9 @@ func (r *Registry) fnFallbackSig(name string) Signature {
 			// which means forward collection couldn't gather them —
 			// almost always because the next word (another call, a
 			// builtin) was hit first, e.g. `inc inc 5` or `f a g b`.
-			// Point at the fixes rather than leaving a bare error.
+			// (Swapped-argument tuples are intercepted with a
+			// dedicated hint BEFORE this fallback dispatches — see
+			// the reorder probe in engine.go.)
 			if hasForwardSig {
 				return nil, r.AqlErrorHint("signature_error",
 					"no matching signature for "+name, name,
@@ -1035,7 +1037,11 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("CallAQL: %w", err)
+		// Return the body's error UNWRAPPED: the historical `CallAQL:`
+		// prefix leaked an internal name into every error that crossed
+		// a fn-call / import boundary and broke *AqlError type
+		// assertions downstream (decision DX report finding 4).
+		return nil, err
 	}
 	return result, nil
 }

@@ -8,6 +8,7 @@ package aql
 import (
 	"io"
 	"os"
+	"runtime/debug"
 
 	"github.com/aql-lang/aql/cmd/go/internal/api"
 	"github.com/aql-lang/aql/cmd/go/internal/check"
@@ -40,13 +41,50 @@ import (
 // with `-ldflags "-X github.com/aql-lang/aql/cmd/go.Version=x.y.z"`.
 var Version = "0.1.0-dev"
 
+// versionString returns the CLI version, augmenting the dev default
+// with the VCS stamp the Go toolchain already embeds (decision DX
+// report finding 8): a from-source build reports
+// `0.1.0-dev (git 958c379b1229, dirty)` instead of an
+// unidentifiable `0.1.0-dev`, so consumers pinning a commit can tell
+// which build is on PATH. Published builds (ldflags-stamped Version)
+// pass through untouched.
+func versionString() string {
+	if Version != "0.1.0-dev" {
+		return Version
+	}
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		return Version
+	}
+	var rev, modified string
+	for _, s := range bi.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			rev = s.Value
+		case "vcs.modified":
+			modified = s.Value
+		}
+	}
+	if rev == "" {
+		return Version
+	}
+	if len(rev) > 12 {
+		rev = rev[:12]
+	}
+	if modified == "true" {
+		return Version + " (git " + rev + ", dirty)"
+	}
+	return Version + " (git " + rev + ")"
+}
+
 // Run is the binary entrypoint. The thin main package at
 // cmd/go/aql calls this so the installed binary is named `aql`
 // rather than `go`.
 func Run() {
-	// Publish the version constant to the api package so the
-	// /v1/server endpoint can report it without an import cycle.
-	api.SetSupervisorVersion(Version)
+	// Publish the version (with VCS stamp for dev builds) to the api
+	// package so the /v1/server endpoint can report it without an
+	// import cycle.
+	api.SetSupervisorVersion(versionString())
 	os.Exit(execute(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
@@ -55,7 +93,7 @@ func Run() {
 // falls through to the run subcommand, which owns the legacy
 // `aql [-e expr] [script.aql]` shape and the no-args REPL drop-in.
 func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	run.SetVersion(Version)
+	run.SetVersion(versionString())
 	reg := buildRegistry()
 
 	if len(args) > 0 {

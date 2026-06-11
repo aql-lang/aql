@@ -41,6 +41,10 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
 	modReg.BaseFile = parent.BaseFile
+	// The module's own source text, for error excerpts from fns that
+	// run later via CallAQL on this sub-registry (file imports set it
+	// to the module file; inline modules inherit the entry source).
+	modReg.Source = parent.Source
 	// CheckMode is deliberately NOT propagated to the module sub-
 	// registry. Module bodies need concrete string literals (used as
 	// export names / map keys) which carrier-stripping under CheckMode
@@ -263,14 +267,18 @@ func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 		return ModuleDesc{}, fmt.Errorf("import: parse %s: %w", resolved, err)
 	}
 
-	// Temporarily set parent BaseDir so the child module inherits the
-	// loaded file's directory (RunModuleBody copies BaseDir).
+	// Temporarily set parent BaseDir / BaseFile / Source so the child
+	// module inherits the loaded file's directory, path, and SOURCE
+	// TEXT (RunModuleBody copies all three; the source is what lets an
+	// error raised later inside the module's fns render the module
+	// file's excerpt — decision DX report finding 4).
 	modDir := filepath.Dir(resolved)
-	savedDir, savedFile := parent.BaseDir, parent.BaseFile
+	savedDir, savedFile, savedSrc := parent.BaseDir, parent.BaseFile, parent.Source
 	parent.BaseDir = modDir
 	parent.BaseFile = resolved
+	parent.Source = string(data)
 	desc, err := RunModuleBody(parent, parsed)
-	parent.BaseDir, parent.BaseFile = savedDir, savedFile
+	parent.BaseDir, parent.BaseFile, parent.Source = savedDir, savedFile, savedSrc
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("import: %s: %w", resolved, err)
 	}

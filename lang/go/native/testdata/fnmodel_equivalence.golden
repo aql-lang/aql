@@ -143,7 +143,7 @@ WORD enum
 WORD eq
   [Any Any] barrier=2 returns=[Scalar/Boolean]
 WORD error
-  [Node/List Ideal/Error] barrier=2 noeval={0} returns=[Ideal/Error]
+  [Node/List Ideal/Error] barrier=2 noeval={0} returns=[Any]
   [Node/List Any] barrier=2 noeval={0} returns=[Any]
 WORD escape
   [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
@@ -241,6 +241,19 @@ WORD gte
   [Any Any] barrier=2 returns=[Scalar/Boolean]
 WORD guard
   [Any Scalar/Boolean] barrier=1 returns=[Any]
+WORD has
+  [Scalar/String Ideal/Class] barrier=1 returns=[Scalar/Boolean]
+  [Scalar/String Ideal/Store] barrier=1 returns=[Scalar/Boolean]
+  [Scalar/String Ideal/Object] barrier=1 returns=[Scalar/Boolean]
+  [Scalar/String Node] barrier=1 returns=[Scalar/Boolean]
+  [Scalar/Number/Integer Ideal/Array] barrier=1 returns=[Scalar/Boolean]
+  [Scalar/Number/Integer Node] barrier=1 returns=[Scalar/Boolean]
+  [Scalar/Atom Ideal/Class] barrier=1 quote={0} returns=[Scalar/Boolean]
+  [Scalar/Atom Ideal/Store] barrier=1 quote={0} returns=[Scalar/Boolean]
+  [Scalar/Atom Ideal/Object] barrier=1 quote={0} returns=[Scalar/Boolean]
+  [Scalar/Atom Node] barrier=1 quote={0} returns=[Scalar/Boolean]
+  [Scalar/Atom None] barrier=1 quote={0} returns=[Scalar/Boolean]
+  [Any None] barrier=1 returns=[Scalar/Boolean]
 WORD help
   [] barrier=0
 WORD if
