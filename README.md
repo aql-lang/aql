@@ -84,6 +84,7 @@ learning need, plus a CLI reference and the architecture record:
 | **[Explanation](EXPLANATION.md)** | You want to understand *why* AQL is the way it is. |
 | **[CLI Reference](CLI.md)** | You want to drive the `aql` binary from the shell. |
 | **[Architecture Design Record](ADR.md)** | You want the key architectural decisions and the reasoning behind them. |
+| **[Agent Guide](AGENTS.md)** | You are an AI agent (or new contributor) and want a map of the docs, the tooling, and how to discover the language with `aql describe`/`aql help`. |
 
 Suggested reading orders:
 

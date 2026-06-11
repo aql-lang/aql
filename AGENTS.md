@@ -1,0 +1,142 @@
+# AGENTS.md — agent guide to the AQL repository
+
+**AQL** is a concatenative, strongly-typed query language implemented in
+Go: programs are sequences of *words* that transform a *stack*. The
+reference implementation ships as a single `aql` binary (REPL, type
+checker, formatter, LSP, registry client, vault, supervisor). New to the
+repo? Skim [README.md](README.md) first.
+
+This file is a **router**. It points you at the right documentation and
+tools for the task in front of you; it does not duplicate them. Read the
+linked source — it is authoritative, this page is just the index.
+
+
+## First: let the tool document itself (`aql describe` / `aql help`)
+
+Before grepping source or guessing a word's signature, **ask the binary**.
+The `aql` CLI documents both the language and itself, and that output is
+generated from the *live engine* — signatures, precedence, type lattice,
+and worked examples are the real ones the runtime uses, so they cannot
+drift from the code the way prose can. For "what does this word do / what
+are its signatures / which module is it in", `aql describe` is the source
+of truth; reach for it first.
+
+Run it without building anything:
+
+```bash
+cd cmd/go && go run ./aql <args>      # e.g. go run ./aql describe add
+```
+
+or build the binary once and call it directly:
+
+```bash
+cd cmd/go && make build               # → cmd/go/bin/aql
+./bin/aql describe add
+```
+
+There are **two** discovery systems.
+
+### `aql describe` — the *language* (words, categories, modules)
+
+| Command | Shows |
+|---------|-------|
+| `aql describe` | A categorised guide: every built-in word grouped by category, then the loadable modules. Start here. |
+| `aql describe <word>` | One word in full: summary, precedence, all signatures, worked examples, notes. e.g. `aql describe add` |
+| `aql describe <category>` | The words in one category. e.g. `aql describe math` (categories: math, compare, boolean, binary, string, stack, storage, control, type, query, io, help) |
+| `aql describe aql:<module>` | A module's summary and the words it exports. e.g. `aql describe aql:type-util` |
+| `aql describe aql:<module>:<word>` | One exported word of a module, with provenance. e.g. `aql describe aql:type-util:tpartial` |
+
+If the name isn't a known word/category/module, `describe` tries to **load
+it as a module** (installed package or `./file.aql`) and document that. So
+`aql describe ./mylib.aql` works too.
+
+### `aql help` — the *CLI* (subcommands and their flags)
+
+| Command | Shows |
+|---------|-------|
+| `aql help` | An introduction plus every subcommand (run, do, check, fmt, vault, lsp, serve, …). |
+| `aql help <subcommand>` | One subcommand's summary; then run `aql <subcommand> -h` for its full flag set. e.g. `aql help vault` |
+
+Rule of thumb: **`help` = the tool, `describe` = the language.**
+
+### In the REPL
+
+`aql repl` (or just `aql` with no args). The same two systems are at the
+prompt, plus REPL meta-commands:
+
+- Words: `describe` and `help` are ordinary AQL words. An argument that
+  contains `:` or `.` (a module ref or a dotted export) is source syntax,
+  so quote it: `describe "aql:type-util"`, `describe "aql:type-util:tpartial"`.
+- Meta-commands (lines starting with `/`): `/describe [name]` (takes its
+  argument raw — no quoting), `/help` (overview + the meta-command list),
+  `/stack [n]`.
+
+Full REPL reference: [CLI.md → REPL meta-commands](CLI.md#repl-meta-commands).
+
+
+## Task router — where to read
+
+| If you want to … | Read |
+|------------------|------|
+| Learn AQL step by step | [TUTORIAL.md](TUTORIAL.md) |
+| A recipe for a specific task | [HOWTO.md](HOWTO.md) |
+| The precise behaviour of a syntax form, type, or word | [REFERENCE.md](REFERENCE.md) — or `aql describe <word>` for one word |
+| Understand *why* AQL is designed the way it is | [EXPLANATION.md](EXPLANATION.md) |
+| Drive the `aql` binary (every subcommand, REPL) | [CLI.md](CLI.md) |
+| The key architectural decisions and their rationale | [ADR.md](ADR.md) |
+| The formal semantics | [FORMAL-SPEC.md](FORMAL-SPEC.md) |
+| The executable language spec (the rows tests run against) | [`lang/spec/*.tsv`](lang/spec/) |
+
+
+## Build, test, verify
+
+From the repo root, the **pre-commit checklist** (run all four before every
+commit — `make lint` catches what `vet` and `test` miss):
+
+```bash
+make fmt && make vet && make lint && make test
+```
+
+Faster, scoped iteration:
+
+```bash
+cd lang/go && go test ./native/ -run TestSomething -v
+cd cmd/go  && make build        # builds cmd/go/bin/aql
+cd wpg     && make wasm          # builds the docs/ wasm playground
+```
+
+
+## Working in the code — module deep guides
+
+The detailed, **must-read** conventions live next to the code they govern.
+Read the relevant one before changing that module:
+
+| Area | Guide |
+|------|-------|
+| Engine kernel — types, values, signatures, matching, the step loop, the parser bridge | [eng/go/CLAUDE.md](eng/go/CLAUDE.md) |
+| Language layer — native words, modules, registry, help/describe, capabilities | [lang/go/CLAUDE.md](lang/go/CLAUDE.md) |
+
+A few rules from those guides that bite hardest when missed:
+
+- **Never** add an entry to `ADR.md` unless a maintainer explicitly says so;
+  design discussion is captured in `design/*.md`, not the ADR.
+- **Pair every positive test with a negative one** — assert what must be
+  *rejected*, not just what passes.
+- **Panics are forbidden** outside annotated init-time type registration;
+  return errors instead.
+- **Forward call form is canonical**: write `f a b c`, not the
+  mirror-equivalent stack forms, in new code and examples.
+
+
+## Repository layout
+
+| Path | What it is |
+|------|------------|
+| `cmd/go/` | The `aql` CLI / REPL (and the `help`/`describe` plumbing). |
+| `lang/go/` | The language layer: public `lang` API + the `native` word library + loadable `modules`. |
+| `eng/go/` | Engine kernel, jsonic parser, kernel spec runner. |
+| `lang/spec/` | The executable language spec (TSV files). |
+| `calc/go/` | A small calculator built on `eng` (learning example). |
+| `wpg/` | The wasm web playground. |
+| `test/` | Shared TSV spec-runner scaffolding and HTTP fixtures. |
+| `design/` | Internal design notes and proposals (historical record). |
