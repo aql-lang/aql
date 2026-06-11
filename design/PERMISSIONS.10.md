@@ -1,4 +1,4 @@
-# PERMISSIONS.0 — Capability-Scoped Permissions for AQL
+# PERMISSIONS.10 — Capability-Scoped Permissions for AQL
 
 ## Status: Implemented (Phases 1–8 landed; PR-by-PR on `claude/sleepy-hamilton-7OYSz`)
 

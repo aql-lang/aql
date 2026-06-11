@@ -13,7 +13,7 @@ import (
 // typeNatives covers the type-system words: refine, pathof, enum,
 // typeof, is, teq, tpartial, guard, base, tor, tand, tany, tall,
 // convert. New type ops follow the `t`-prefix convention — see
-// design/TYPE-OPERATIONS.0.md.
+// design/TYPE-OPERATIONS.8.md.
 //
 // `Resource` and `Entity` (the builtin object types) are NOT installed
 // via NativeFunc — they are user-typed values pushed onto the type
@@ -21,7 +21,7 @@ import (
 var typeNatives = []NativeFunc{
 	{
 		// refine is the uniform type constructor — see
-		// design/TYPE-UNIFORM.0.md. `refine BaseType arg`
+		// design/TYPE-UNIFORM.10.md. `refine BaseType arg`
 		// builds a (sub)type:
 		//   refine Object {fields}     → object type
 		//   refine <objtype> {fields}  → object subtype (inheritance)
@@ -64,7 +64,7 @@ var typeNatives = []NativeFunc{
 		// the value's own type). Instances are flat (defaults resolved
 		// eagerly at make) and sealed (writing an undeclared field is a
 		// sealed_field error). Subclassing reuses refine:
-		// `def Bar refine Foo {…}`. See design/CLASS-OBJECT.0.md.
+		// `def Bar refine Foo {…}`. See design/CLASS-OBJECT.10.md.
 		Name: "class",
 
 		Signatures: []NativeSig{{
@@ -79,7 +79,7 @@ var typeNatives = []NativeFunc{
 		// of operation name → fnsig shape with Self marking the
 		// conforming type's positions. `def Shape surface {…}` mints it
 		// under Ideal/Surface; `<Type> exposes Shape` declares (and
-		// loudly checks) conformance. See design/SURFACES.0.md.
+		// loudly checks) conformance. See design/SURFACES.10.md.
 		Name: "surface",
 
 		Signatures: []NativeSig{{
@@ -109,7 +109,7 @@ var typeNatives = []NativeFunc{
 		// sugar for `make Object {…}`. Open (any key writes, computed
 		// keys via parens), fully enumerable, in-place set returning
 		// nothing — the keyed sibling of Array in the container 2x2.
-		// See design/CLASS-OBJECT.0.md §2.3.
+		// See design/CLASS-OBJECT.10.md §2.3.
 		Name: "object",
 
 		Signatures: []NativeSig{{
@@ -344,7 +344,7 @@ func tableHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 // constructor. It does not branch on the base type itself — dispatch
 // is data-driven through the Ideal registry (r.Ideals): whichever
 // type-kind claims the base value supplies the construction logic.
-// See design/IDEAL.0.md. `refine` does not bind — pair it
+// See design/IDEAL.10.md. `refine` does not bind — pair it
 // with `def` (`def Foo (refine …)`).
 func refineHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	base := args[0]
@@ -396,7 +396,7 @@ func refinePlain(base, arg Value, r *Registry) ([]Value, error) {
 // paired `def Name` then mints a fresh subtype parented at BaseType
 // (InstallType → MintType). `def Foo refine List` thus produces a
 // distinct List subtype that can serve as a dispatch surface for
-// `behave` — see design/TYPE-UNIFORM.0.md.
+// `behave` — see design/TYPE-UNIFORM.10.md.
 func refineBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	base := args[0]
 	if !IsTypeBody(base) {
@@ -428,14 +428,14 @@ func refineBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 // predicate, and the value-level Instantiate — are registered by the
 // eng kernel (registerKernelIdeals); type construction additionally
 // reuses the surface object/record/table handlers, wired here. See
-// design/IDEAL.0.md.
+// design/IDEAL.10.md.
 func installIdeals(r *Registry) {
 	if obj := r.Ideals.Get("Object"); obj != nil {
 		obj.Construct = func(base, arg Value, r *Registry) ([]Value, error) {
 			// An existing class type builds a subtype of it
 			// (`def Bar refine Foo {…}`). The bare-Object form is
 			// REMOVED: classes are defined with the `class` word
-			// (design/CLASS-OBJECT.0.md — no deprecated aliases).
+			// (design/CLASS-OBJECT.10.md — no deprecated aliases).
 			if IsObjectType(base) {
 				return objectWithParentHandler([]Value{arg, base}, nil, nil, r)
 			}

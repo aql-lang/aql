@@ -2,7 +2,7 @@ package eng
 
 import "testing"
 
-// Phase A of design/REACH.0.md: the Ideal/Reach type, payload, and accessors.
+// Phase A of design/REACH.10.md: the Ideal/Reach type, payload, and accessors.
 // The parser does not emit Reach yet (Phase B), so these construct it directly.
 
 func TestReachConstructAndAccess(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 // the reducer should consider. Each candidate is a NEW StackForm —
 // `form` is not mutated.
 //
-// Rewrite families implemented today (per PBT-PLAN.0.md Stage 5):
+// Rewrite families implemented today (per PBT-PLAN.10.md Stage 5):
 //
 //  1. Drop-one-op: N candidates each missing one Op.
 //  2. Literal shrinking: per PushLit, try cheaper alternatives:

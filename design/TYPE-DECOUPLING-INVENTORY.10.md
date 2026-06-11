@@ -1,7 +1,7 @@
 # Type-Decoupling Inventory (Step 0)
 
 Catalogue of every closed-enumeration call site the
-TYPE-DECOUPLING.0.md plan touches. Counts taken against the repo
+TYPE-DECOUPLING.10.md plan touches. Counts taken against the repo
 at the start of Step 0 (this commit). Used by subsequent steps as
 the "what we need to move" reference.
 

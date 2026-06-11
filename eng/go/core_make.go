@@ -225,7 +225,7 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 
 	// Class types take the flat path: every field (own + inherited)
 	// resolves eagerly into one field map — no prototype chain, no
-	// delegation at get. See design/CLASS-OBJECT.0.md §3.
+	// delegation at get. See design/CLASS-OBJECT.10.md §3.
 	if objType.Class {
 		return makeClassInstance(objType, provided, r)
 	}
@@ -313,7 +313,7 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 // legacy object path): a typed field rejects non-conforming values
 // loudly, predicate-typed fields run their predicate via Unify, and
 // a defaulted field rejects values outside the default's own type.
-// See design/CLASS-OBJECT.0.md §3c.
+// See design/CLASS-OBJECT.10.md §3c.
 func makeClassInstance(objType ObjectTypeInfo, provided *OrderedMap, r *Registry) ([]Value, error) {
 	allFields := objType.AllFields()
 
@@ -462,7 +462,7 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 
 	// A generic SCHEMA as the make target — `make Box {value:42}` —
 	// infers its type arguments from the construction body and
-	// instantiates first (design/GENERICS.0.md Phase 7 / D12); the
+	// instantiates first (design/GENERICS.10.md Phase 7 / D12); the
 	// instantiation then takes the ordinary path below. Uninferable,
 	// undefaulted parameters error (unbound_param) — never silent Any.
 	if IsTypeSchema(targetVal) {
@@ -474,7 +474,7 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 	}
 
 	// Structural kinds (object / record / table) instantiate through
-	// the Ideal registry — see ideal.go and design/IDEAL.0.md.
+	// the Ideal registry — see ideal.go and design/IDEAL.10.md.
 	if reg != nil {
 		if ideal := reg.Ideals.For(targetVal); ideal != nil && ideal.Instantiate != nil {
 			return ideal.Instantiate(targetVal, srcVal, reg)
@@ -513,7 +513,7 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 	// the BASE type if needed, then tag the result with the refinement
 	// — the same reparent the typed-def path (`def x:Foo v`) performs.
 	// Without this, make silently returned a base-tagged value
-	// (design/CLASS-OBJECT.0.md §3c typed-defaults gap 1), so
+	// (design/CLASS-OBJECT.10.md §3c typed-defaults gap 1), so
 	// `(make Foo 1) is Foo` was false and a Foo-typed schema default
 	// could not be expressed.
 	if canon := CanonicalType(reg, targetType); reg != nil && canon != nil && canon.Origin == OriginUserDef {
@@ -658,7 +658,7 @@ func registerKernelIdeals(r *Registry) {
 		Instantiate: func(typ, data Value, r *Registry) ([]Value, error) {
 			// Bare Object: construct a plain OPEN mutable keyed
 			// container — the 2x2's keyed sibling of Array (design/
-			// CLASS-OBJECT.0.md Phase B). Open (any key writes),
+			// CLASS-OBJECT.10.md Phase B). Open (any key writes),
 			// fully enumerable, in-place set, no schema, no seal.
 			if IsBareTypeNode(typ) && typ.Equal(TObject) {
 				return MakeOpenObject(data)
@@ -802,7 +802,7 @@ func MakeScalarHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 	// — the same reparent the typed-def path (`def x:Foo v`) performs.
 	// Without this, make silently returned a base-tagged value, so
 	// `(make Foo 1) is Foo` was false and a Foo-typed schema default
-	// could not be expressed (design/CLASS-OBJECT.0.md §3c gap 1).
+	// could not be expressed (design/CLASS-OBJECT.10.md §3c gap 1).
 	if canon := CanonicalType(reg, targetType); reg != nil && canon != nil && canon.Origin == OriginUserDef {
 		if base := builtinBaseOf(canon); base != nil && base.ConformsTo(TScalar) {
 			conv := srcVal

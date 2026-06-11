@@ -1,6 +1,6 @@
 # Macros Phase 1 — Implementation Scope
 
-**Status:** **Phase 1 COMPLETE (1a–1e, green).** Companion to `MACROS.0.md` (the overall plan);
+**Status:** **Phase 1 COMPLETE (1a–1e, green).** Companion to `MACROS.8.md` (the overall plan);
 this doc turns its Phase 0+1 row into a concrete, line-level build order
 grounded in the current code.
 
@@ -27,7 +27,7 @@ out of scope here.
 
 ## 1. Key finding — most of the "new" machinery already exists
 
-The `MACROS.0.md` thesis ("assembling existing primitives") is *stronger* than
+The `MACROS.8.md` thesis ("assembling existing primitives") is *stronger* than
 it claimed. Verified on this branch:
 
 | Plan called it "new" | Reality | Evidence |
@@ -167,7 +167,7 @@ if fn != nil && fn.Macro {
 This guarantees operands are still raw on the tape (no pre-eval, no
 collection) when the macro runs.
 
-**Bypass guards (MACROS.0.md §9 risk #3).** A macro `FnDefInfo` can also reach
+**Bypass guards (MACROS.8.md §9 risk #3).** A macro `FnDefInfo` can also reach
 the stack *as a value* and dispatch via `execFnDefLiteral` (`engine.go:2124`).
 Three paths there must not silently run a macro as a normal fn — add a guard at
 the **top** of `execFnDefLiteral`, before the own-sig/registry split
@@ -227,7 +227,7 @@ ethos); revisit if a use case appears.
    — deferral to generated code, exactly as intended).
 
 **Errors are loud:** the expander uses `CallAQL` (propagates errors), never
-routes through `do` (which catches+reifies) — MACROS.0.md fact 6.
+routes through `do` (which catches+reifies) — MACROS.8.md fact 6.
 
 **Model decision (D3):** the template is **data walked by the expander** (Model
 A), not live `unquote`/`splice` words run during the body. `unquote`/`splice`
@@ -278,7 +278,7 @@ into `register.go`).
 | 1a | `gensym` + counter + spec/tests | S | unblocks hand-written macros |
 | 1b | `FnDefInfo.Macro` + `FnSig.FormArgs` fields + `registry.go` copy-through + `rawFormForward` + `preEvalParens`/`matchSignature` hooks | M | `FormArgs` capture unit-tested in isolation (a temp native that echoes its raw args) |
 | 1c | `macro` definer + `stepWord` branch + `execFnDefLiteral` guard | M | a no-template identity macro splices its operands |
-| 1d | expander + `unquote`/`splice` + `__SP` output | M | `unless` expands + runs (the §3 walk in MACROS.0.md) |
+| 1d | expander + `unquote`/`splice` + `__SP` output | M | `unless` expands + runs (the §3 walk in MACROS.8.md) |
 | 1e | `macroexpand` (minimal) + expansion cache | S–M | cache correctness under a loop; redefinition invalidation |
 
 **Smallest shippable:** 1a then 1b–1d. 1e is an optimization/tooling tail.

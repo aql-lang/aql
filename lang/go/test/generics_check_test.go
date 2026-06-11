@@ -7,7 +7,7 @@ import (
 	"github.com/aql-lang/aql/lang/go"
 )
 
-// Static check mode for generics (design/GENERICS.0.md Phase 5).
+// Static check mode for generics (design/GENERICS.10.md Phase 5).
 // Three pillars:
 //
 //  1. CALL-SITE refinement — a generic fn call's declared `[T]`

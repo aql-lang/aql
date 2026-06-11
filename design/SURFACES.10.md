@@ -5,7 +5,7 @@ Status: **S1 + S2 + S3 LANDED (2026-06-10)** under the term
 notes below. Originally a discovery note (2026-06-09, language
 owner); **not an ADR** (ADRs are added only on explicit instruction).
 S4 (generics `T extends Shape`) rides the generics phase
-(`design/GENERICS.0.md`). The body below preserves the discovery
+(`design/GENERICS.10.md`). The body below preserves the discovery
 analysis; "trait"/"implements" in the prose are the working terms the
 conversation used before §7a settled on surface/exposes.
 
@@ -87,7 +87,7 @@ Traits therefore **constrain and check; they never dispatch**.
 Calling a required word on a trait-typed value is ordinary
 multimethod dispatch. One dispatch mechanism — the same principle
 ADR-004 applies to argument collection, and the class/object
-discovery note (`design/CLASS-OBJECT.0.md`) applies to prototypes —
+discovery note (`design/CLASS-OBJECT.10.md`) applies to prototypes —
 applied a third time.
 
 ## 3. Surface
@@ -223,7 +223,7 @@ solved here.)
 | `trait_unsatisfied` | `implements` finds missing/mismatched overloads — message lists each required name with the expected substituted sig |
 | `trait_error` | malformed trait body (non-fn value, missing Self, etc.) |
 
-Both meet the `design/ERRORS.0.md` §7 quality bar: blame at the
+Both meet the `design/ERRORS.8.md` §7 quality bar: blame at the
 declaration site, actionable hint, dispatchable code.
 
 ## 6. Non-goals (v1)
@@ -311,7 +311,7 @@ Circle exposes Shape          # immediate loud completeness check
 def total fn [[s:Shape] [Float] [(s area) add (s perimeter)]]
 ```
 
-Rename this file to `SURFACES.0.md` when the term is confirmed.
+Rename this file to `SURFACES.10.md` when the term is confirmed.
 
 ## 7c. Implementation plan sketch + blast radius (2026-06-09)
 
@@ -322,7 +322,7 @@ Rename this file to `SURFACES.0.md` when the term is confirmed.
 1. `surface {schema}` word: paren-free `def Shape surface {…}` (the
    proven nested-collection path). The handler evaluates the schema
    map with **`Self` pushed as a placeholder type binding** for the
-   duration (the §7.3 `gen` technique from GENERICS.0.md — note gen
+   duration (the §7.3 `gen` technique from GENERICS.10.md — note gen
    itself is unimplemented, so this is new-but-precedented
    machinery), yielding `SurfaceInfo{required: name → []FnShape}`
    minted under a new `Ideal/Surface` node. `Self` is scoped to the

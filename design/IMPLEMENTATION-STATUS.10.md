@@ -27,8 +27,8 @@ version.
 | ENGINE.10.md | Stack machine, forward scanning, argument equivalence | Working. /s /f modifiers, Forth primitives. |
 | ENGINE-UNIFIED-ALGO.8.md | Unified signature matching algorithm | Pending call frames, incremental constraint solving. |
 | SIGNATURE-MATCHING-PSEUDOCODE.10.md | Type matching, scoring, positional/forward/prefix matching | /q modifier, fallback signatures, specificity scoring. |
-| TYPES.10.md | Hierarchical type system | Any-root lattice; branches Scalar/Node/Ideal/Word/Type; degenerate roots None/Never; Ideal kinds (Object/Resource/Entity/Array/Record/Options/Error/Store/Table) + external (Time/Tensor/Fetch/Timeout/Interval). Metatypes retired; see TYPE-ORDERING.0.md for ordering. |
-| TYPE-ORDERING.0.md | Value lattice, Rank scheme, Comparer cascade, type-literal-first rule | Strict total order over distinct lattice nodes; one deliberate value-level equivalence (1 ≡ 1.0). Verified by lang/spec/compare.tsv (748 rows incl. transitivity + user-defined-type coverage). |
+| TYPES.10.md | Hierarchical type system | Any-root lattice; branches Scalar/Node/Ideal/Word/Type; degenerate roots None/Never; Ideal kinds (Object/Resource/Entity/Array/Record/Options/Error/Store/Table) + external (Time/Tensor/Fetch/Timeout/Interval). Metatypes retired; see TYPE-ORDERING.10.md for ordering. |
+| TYPE-ORDERING.10.md | Value lattice, Rank scheme, Comparer cascade, type-literal-first rule | Strict total order over distinct lattice nodes; one deliberate value-level equivalence (1 ≡ 1.0). Verified by lang/spec/compare.tsv (748 rows incl. transitivity + user-defined-type coverage). |
 | SIGNATURES.10.md | All 100+ builtin word signatures | Full match-order signatures with returns and notes. |
 | LANGREF.10.md | Language reference for all builtin words | All documented words registered in native_*.go. |
 | IMPORTS.10.md | Module system: descriptors, file imports, renaming | Bare name resolution, `aql:` prefix, isolation. |
@@ -72,7 +72,7 @@ word: deep flatten is the core `flatten -1` and list lookup is the core
 
 ## Not Implemented
 
-### DATAFRAME-WORDS.0.md — 28+ words
+### DATAFRAME-WORDS.3.md — 28+ words
 
 SQL-style tabular data manipulation. Planned words:
 
@@ -93,7 +93,7 @@ SQL-style tabular data manipulation. Planned words:
 | Apply | `apply` (per column/element) |
 | Row access | `row`, `slice` (extend) |
 
-### MATRIX-WORDS.0.md — 83 words + 22 overloads
+### MATRIX-WORDS.7.md — 83 words + 22 overloads
 
 Linear algebra operations (gonum dependency). Planned words:
 
@@ -112,14 +112,14 @@ Linear algebra operations (gonum dependency). Planned words:
 | Comparison | `mat-eq?`, `mat-close?`, `mat-gt`, `mat-lt`, `mat-any?`, `mat-all?` |
 | Advanced | `mat-dot`, `mat-cross`, `mat-outer`, `mat-kron`, `mat-conv`, `mat-apply`, `mat-map-row`, `mat-map-col` |
 
-### TEMPORAL-WORDS.1.md — ~70 words (partially implemented)
+### TEMPORAL-WORDS.9.md — ~70 words (partially implemented)
 
 Date/time types and operations. Types implemented: Instant, DateTime,
 Date, TimeOfDay, CalDuration, ClkDuration, Timezone, Timeout, Interval.
 Core timer words implemented: `now`, `sleep`, `timeout`, `interval`,
 `cancel`, `await`. Remaining ~64 temporal module words not yet implemented.
 
-Per the Step 11 resolution of TYPE-DECOUPLING.0.md, free-form
+Per the Step 11 resolution of TYPE-DECOUPLING.10.md, free-form
 text/ISO parsing was **removed** as a feature rather than reimplemented.
 Construction is via numeric (`unix` / `unix-ms` / `unix-ns`) or
 wall-clock (`now-local` / `today` / `today-utc`); output-only
@@ -137,7 +137,7 @@ words appear stricken through below.
 | Conversion | `to-date`, `to-time-of-day`, `to-datetime`, `to-instant`, `to-local`, `to-utc`, `to-string`, `format`, `to-iso` |
 | Rounding | `round`/`truncate` (extend), `start-of`, `end-of` |
 | Timezone | `tz`, `tz-utc`, `tz-local`, `tz-name`, `tz-offset`, `is-dst` |
-| Parsing | ~~`parse-date`, `parse-datetime`, `auto-date`~~ (removed — see TYPE-DECOUPLING.0.md Step 11) |
+| Parsing | ~~`parse-date`, `parse-datetime`, `auto-date`~~ (removed — see TYPE-DECOUPLING.10.md Step 11) |
 
 ### MINILANG.0.md — 10+ inline DSLs
 
@@ -161,7 +161,7 @@ Requires lexer integration for prefix detection.
 | `ur/` | URL pattern | URL template matching |
 | `dt/` | Date/time format | Temporal formatting |
 
-### GENERICS.0.md — generic types
+### GENERICS.10.md — generic types
 
 Algebraic generics with concatenative core and a sugar layer. No
 implementation yet — design draft only.
@@ -204,7 +204,7 @@ parity with the codebase, not pending work.
 | LANGREF.10.md | Language reference — all builtins. |
 | SIGNATURES.10.md | Builtin word signatures. |
 | TYPES.10.md | Type system — Any-root lattice, branches, kinds. |
-| TYPE-ORDERING.0.md | Comparison total order — `cmp`, `sort`, `lt`/`gt`. |
+| TYPE-ORDERING.10.md | Comparison total order — `cmp`, `sort`, `lt`/`gt`. |
 | ENGINE.10.md | Stack machine. |
 | IMPORTS.10.md | Module / import system. |
 | NATIVE-MODULES.10.md | Native Go modules. |

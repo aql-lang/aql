@@ -1,7 +1,7 @@
 <!--
 Provenance: downloaded from voxgig-aql/bloom-filter @ 4b208cb
   proposals/lazy-arg-resolution.md (2026-06-06), surfaced as gotcha N1 in
-  that project's dx-report.md (see design/VOXGIG-AQL-REPORTS.0.md, Part 1,
+  that project's dx-report.md (see design/VOXGIG-AQL-REPORTS.5.md, Part 1,
   "N1. import now requires a terminator").
 This is the verbatim downstream proposal. An assessment grounded in the
 current engine (eng/go/engine.go) was provided separately to the team.

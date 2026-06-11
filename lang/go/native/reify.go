@@ -20,7 +20,7 @@ import (
 //	                                        member to construct — and
 //	                                        nothing outside the union
 //
-// Rules (design/CLASS-OBJECT.0.md §3e):
+// Rules (design/CLASS-OBJECT.10.md §3e):
 //   - the target is explicit: a class type, or a tor union of class
 //     types ($class then selects the member). There is no unbounded
 //     "instantiate whatever $class names" form.

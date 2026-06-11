@@ -5,7 +5,7 @@
 # ============================================================
 
 # Comparable is the SURFACE the relational operators require
-# (design/GENERICS.0.md Phase 8, superseding §8.2's tor-alias): a
+# (design/GENERICS.10.md Phase 8, superseding §8.2's tor-alias): a
 # type is Comparable iff it exposes the cmp contract. The scalar
 # builtins the decision operators compare are declared here; user
 # types join by exposing Comparable themselves.

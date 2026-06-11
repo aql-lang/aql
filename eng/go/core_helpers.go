@@ -225,7 +225,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo) 
 		// the body (`of [T]`, `make (Box of [T])`). AFTER the snapshot,
 		// so the existing DefCleanup truncation tears them down — the
 		// undef tail's capitalised path would Retire the bound type's
-		// canonical node (design/GENERICS.0.md Phase 4).
+		// canonical node (design/GENERICS.10.md Phase 4).
 		if fnDefCopy.Gen != nil {
 			InstallGenCallBindings(r, fnDefCopy.Gen, s.Params, args)
 		}
@@ -623,7 +623,7 @@ func CowSet(store *StoreInstanceInfo, key string, val Value, r *Registry) {
 // host Ideal: an ExtensionPayload whose Body embeds eng.HostTypeBody.
 // The kernel recognises such a value as a type without inspecting its
 // concrete shape (the payload Body being opaque). See
-// design/IDEAL.0.md §6.
+// design/IDEAL.10.md §6.
 func IsHostTypeBody(v Value) bool {
 	ep, ok := v.Data.(ExtensionPayload)
 	if !ok {

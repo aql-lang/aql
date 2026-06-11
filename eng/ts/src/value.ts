@@ -253,7 +253,7 @@ export class Value {
  * false for any concrete integer, bloated the type lattice per
  * literal payload, and forced consumers to use `matches` everywhere.
  * Specific-value dispatch now goes through `Signature.patterns`
- * instead — see PORT_OBSERVATIONS.md §1.1.
+ * instead — see PORT_OBSERVATIONS.5.md §1.1.
  *
  * BigInt is used because the Go engine carries int64 — TS's number
  * loses precision past 2^53.

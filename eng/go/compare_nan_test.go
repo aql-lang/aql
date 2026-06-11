@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// NaN comparison has two regimes (design/IEEE-754-COMPLIANCE.0.md Tier 0):
+// NaN comparison has two regimes (design/IEEE-754-COMPLIANCE.8.md Tier 0):
 // the relational handlers lt/lte/gt/gte are IEEE-unordered (always false
 // when a NaN is involved), while CompareValues — the total order behind
 // cmp/tcmp/sort — gives NaN a defined slot (greatest). These tests pin

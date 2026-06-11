@@ -1,7 +1,7 @@
 # Integer Overflow — Strategy
 
 Status: **Phase 0 implemented; Phase 1 proposed**. This document expands
-[WAT-AUDIT](WAT-AUDIT.0.md) Exhibit K ("Integer overflow has two
+[WAT-AUDIT](WAT-AUDIT.5.md) Exhibit K ("Integer overflow has two
 contradictory silent behaviours"), establishes what AQL did before the
 fix (which was worse than the audit recorded), surveys what other
 languages do, and recommends a phased strategy. **Phase 0 (the real

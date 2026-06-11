@@ -112,7 +112,7 @@ def R (refine Record [ { a:Integer } ]) { a:5 } is R	false	even named, plain map
 # ====================================================================		
 # `def name body` captures the record TYPE as a value. A lowercase		
 # name is a value binding; a capitalised name would be a type		
-# binding (def is the universal binder — see TYPE-UNIFORM.0.md).		
+# binding (def is the universal binder — see TYPE-UNIFORM.10.md).		
 		
 def sch (refine Record [ { x:Integer } { y:Integer } ]) sch	record{x:Integer y:Integer}	
 		

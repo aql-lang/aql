@@ -8,7 +8,7 @@ import (
 
 // Payload is the static type of Value.Data — the kernel-known shape
 // of the data a Value carries. During the type-decoupling migration
-// (Step 5 of TYPE-DECOUPLING.0.md), Payload is a `= any` alias so
+// (Step 5 of TYPE-DECOUPLING.10.md), Payload is a `= any` alias so
 // constructors and type assertions can migrate one batch at a time
 // without breaking the build. The final commit of Step 5 will
 // rename this to a sealed interface (an unexported marker method
@@ -37,7 +37,7 @@ import (
 // mismatched-shape constructions are rejected at the type-check
 // level. The seal is the kernel guarantee that fulfils the
 // "make illegal values unrepresentable" goal stated in
-// design/TYPE-DECOUPLING.0.md.
+// design/TYPE-DECOUPLING.10.md.
 type Payload interface {
 	payloadMarker()
 }
@@ -110,7 +110,7 @@ type ParenExprPayload struct{ Toks []Value }
 // ReachInfo is the payload of an Ideal/Reach value — a first-class dot-access
 // node (m.a.b). Receiver is the token sequence of the base expression (empty
 // for a receiverless reach); Segments are the .key / !.key steps. See
-// design/REACH.0.md.
+// design/REACH.10.md.
 type ReachInfo struct {
 	Receiver []Value
 	Segments []ReachSeg
@@ -205,7 +205,7 @@ func NewExtension(t *Type, body any) Value {
 // (IsTypeBody, TypeOf, isTypeLike, InstallType) then recognises the
 // value as a type without inspecting its concrete shape, which it
 // cannot — the payload Body is opaque to the kernel. See
-// design/IDEAL.0.md §6.
+// design/IDEAL.10.md §6.
 type HostTypeBody struct{}
 
 func (HostTypeBody) hostTypeBody() {}

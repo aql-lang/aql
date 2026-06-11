@@ -257,7 +257,7 @@ int64 arithmetic that silently overflows two's-complement. Neither path
 flags anything.
 
 > **Fix.** ✅ **Phase 0 done** (see
-> [INTEGER-OVERFLOW-STRATEGY](INTEGER-OVERFLOW-STRATEGY.0.md), which also
+> [INTEGER-OVERFLOW-STRATEGY](INTEGER-OVERFLOW-STRATEGY.5.md), which also
 > documents that the lexer defect was worse than recorded — sub-2⁵³
 > literals were silently *value-corrupted*, not just floated). (1) Lexer:
 > plain decimal integer literals are now parsed from their exact digits
@@ -686,7 +686,7 @@ the docs already discuss the topic) were edited:
 No engine behaviour was changed *by the documentation pass*. Engine
 fixes have since landed for several items under their own changes —
 including **K** (integer overflow, Phase 0: see
-[INTEGER-OVERFLOW-STRATEGY](INTEGER-OVERFLOW-STRATEGY.0.md)) — as noted
+[INTEGER-OVERFLOW-STRATEGY](INTEGER-OVERFLOW-STRATEGY.5.md)) — as noted
 in each exhibit's ✅ markers above.
 
 ## Suggested remediation priority

@@ -1,6 +1,6 @@
 # Numeric Tower — adding a true `Decimal` to AQL
 
-Status: **superseded by [BIGNUM-0D.0.md](BIGNUM-0D.0.md)** (the exact
+Status: **superseded by [BIGNUM-0D.10.md](BIGNUM-0D.10.md)** (the exact
 leaves shipped as `BigInteger`/`BigDecimal` opted into via the `0d`
 literal prefix, rather than the single `Decimal`/`d`-suffix sketched
 here). Retained for the motivation and the units-of-measure interaction.

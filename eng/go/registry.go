@@ -43,7 +43,7 @@ type Registry struct {
 	Capabilities *CapabilityRegistry
 	// Ideals holds the type-kind descriptors — the registered,
 	// dynamically controllable constructors `type` dispatches through.
-	// See ideal.go and design/IDEAL.0.md.
+	// See ideal.go and design/IDEAL.10.md.
 	Ideals    *IdealRegistry
 	Output    io.Writer // output writer for print/printstr and stdout
 	ErrOutput io.Writer // error output writer for stderr
@@ -110,7 +110,7 @@ type Registry struct {
 	// gensymN is the monotonic counter behind the `gensym` word: each call
 	// mints a fresh, never-colliding atom name `tmp$g<n>`. Used for
 	// capture-free temporaries in (hand-written and, later, expanded) macros.
-	// See design/MACROS-PHASE1.0.md §7. The name is lowercase + mixed-`$` so
+	// See design/MACROS-PHASE1.10.md §7. The name is lowercase + mixed-`$` so
 	// it is a LEGAL word name (ValidateWordName: lowercase-only, all-`$`
 	// reserved) — gensyms are used as binders (`def <gensym> …`).
 	gensymN uint64
@@ -128,7 +128,7 @@ func (r *Registry) NextGensym() string {
 	return fmt.Sprintf("tmp$g%d", r.gensymN)
 }
 
-// macroCache memoizes macro expansions (design/MACROS-PHASE1.0.md §8). A
+// macroCache memoizes macro expansions (design/MACROS-PHASE1.10.md §8). A
 // macro's expansion depends ONLY on its template and the operand FORMS — never
 // on runtime state — so it is deterministic and cacheable. The key is the
 // macro name + the canon of its operands (NOT source Pos, which can collide
@@ -265,7 +265,7 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"missing_returns":       SeverityWarning,
 	"step_budget_exceeded":  SeverityWarning,
 	"body_error":            SeverityWarning,
-	// Generics (design/GENERICS.0.md §9.2).
+	// Generics (design/GENERICS.10.md §9.2).
 	"constraint_violation": SeverityError,
 	"unbound_param":        SeverityError,
 	"arity_mismatch":       SeverityError,

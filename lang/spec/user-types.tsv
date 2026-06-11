@@ -63,7 +63,7 @@ def Foo (class {}) def g fn [[f:Foo] [Integer] [99]] (make Foo {}) g lengthq [ 1
 # base value is NOT a Pos — construct one explicitly with `def x:Pos …`
 # (which reparents via Unify). Matching is symmetric: the same rule
 # holds at params, returns, and `is`. See
-# design/REFINE-NEWTYPE-VS-SUBSET.0.md.
+# design/REFINE-NEWTYPE-VS-SUBSET.10.md.
 
 def Pos (refine Integer) def g fn [[n:Pos] [Integer] [99]] 42 g	ERROR:signature	a plain Integer is NOT a Pos (newtype): param rejects it
 def Pos (refine Integer) def g fn [[n:Pos] [Integer] [99]] def x:Pos 42 x g	99	an explicitly-constructed Pos is admitted
@@ -111,7 +111,7 @@ def Small (Integer lt 0) def g fn [[n:Small] [Integer] [99]] 5 g	ERROR:signature
 # The return boundary runs the same predicate as the param, so a base
 # value is admitted as the return iff it satisfies the constraint — no
 # explicit construction needed (unlike a bare newtype). The value keeps
-# its base tag. See design/REFINE-NEWTYPE-VS-SUBSET.0.md.
+# its base tag. See design/REFINE-NEWTYPE-VS-SUBSET.10.md.
 def Big (Integer gt 10) def mk fn [[] [Big] [50]] mk	50	predicate refine return admits a base value that satisfies the predicate
 def Big (Integer gt 10) def mk fn [[] [Big] [5]] mk	ERROR:return value	predicate refine return rejects a base value that fails the predicate
 def Big (Integer gt 10) def mk fn [[] [Big] [50]] def use fn [[n:Big] [Integer] [n]] use (mk)	50	value-sensitive return feeds a value-sensitive param (symmetric)

@@ -355,7 +355,7 @@ func DeepEqual(a, b Value) bool {
 	// is the union of schema fields and own fields (covering legacy
 	// object instances with dynamic fields); GetField walks the legacy
 	// prototype chain, and class instances are flat so it is a plain
-	// map hit. See design/CLASS-OBJECT.0.md.
+	// map hit. See design/CLASS-OBJECT.10.md.
 	if IsObjectInstance(a) && IsObjectInstance(b) {
 		if !a.Parent.Equal(b.Parent) {
 			return false

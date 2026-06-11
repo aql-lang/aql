@@ -235,7 +235,7 @@ func (errorConvertBehavior) ToList(v Value) (Value, error) {
 
 // reachConvertBehavior: an Ideal/Reach → an inspectable map describing its
 // receiver and segments, and a list of its segment keys. Format renders the
-// dotted surface (m.a.b) so Value.String() matches canon. See REACH.0.md §7.
+// dotted surface (m.a.b) so Value.String() matches canon. See REACH.10.md §7.
 type reachConvertBehavior struct{}
 
 func (reachConvertBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }

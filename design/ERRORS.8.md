@@ -140,7 +140,7 @@ so `def r (b set k v)` is exactly the shape the new error catches.
 ## 4. ~~Proposal: actionable hint on `make Object {}`~~ (VOXGIG B5) — superseded
 
 > **Superseded 2026-06-09 by the class/object discovery note,
-> `design/CLASS-OBJECT.0.md`.**
+> `design/CLASS-OBJECT.10.md`.**
 > Under the container-symmetry decision, `make Object {}` becomes
 > *valid* — it constructs an empty, open, mutable Object (Phase 2 of
 > the class/object split). B5 is resolved by design rather than by a
@@ -229,7 +229,7 @@ well-pointed"):
 
 | Item | Effort | Retires |
 |------|--------|---------|
-| ~~§4 make-hint~~ | — | B5 — superseded: resolved by design under the class/object plan (`make Object {}` becomes valid; `design/CLASS-OBJECT.0.md`) |
+| ~~§4 make-hint~~ | — | B5 — superseded: resolved by design under the class/object plan (`make Object {}` becomes valid; `design/CLASS-OBJECT.10.md`) |
 | §2 `raise` | small | T9.6 (+ unblocks library-side validation everywhere) |
 | §3 void-def error | small-medium (collection-boundary check) | B3 |
 | §6.1 sibling-group source order | medium (engine) | B2a |

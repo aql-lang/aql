@@ -26,7 +26,7 @@
 #
 # The result is a strict total order over distinct lattice nodes; the
 # only equivalence is cross-leaf numeric magnitude (1 == 1.0). See
-# design/TYPE-ORDERING.0.md.
+# design/TYPE-ORDERING.10.md.
 
 # a = 5
 5 tcmp 5	0

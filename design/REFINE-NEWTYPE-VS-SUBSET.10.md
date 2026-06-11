@@ -1,4 +1,4 @@
-# REFINE-NEWTYPE-VS-SUBSET.0 — Symmetric refine matching at every type boundary
+# REFINE-NEWTYPE-VS-SUBSET.10 — Symmetric refine matching at every type boundary
 
 This document records a semantics decision and refactor for how
 `refine` types match values at function **parameter** and **return**

@@ -5,7 +5,7 @@ import "fmt"
 // BitwiseModuleNatives covers the bitwise / binary operators on the 64-bit
 // signed Integer type — moved OUT of core into the aql:bin module (see
 // modules/binary.go), reached as `BinUtil.band`, `BinUtil.bsl`, ….
-// See design/BINARY-OPERATIONS.0.md.
+// See design/BINARY-OPERATIONS.10.md.
 //
 // Word names are `b`-prefixed to disambiguate from the boolean
 // connectives (`and`, `or`, `xor`, `not`) which short-circuit on

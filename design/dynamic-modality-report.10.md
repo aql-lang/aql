@@ -4,14 +4,14 @@
 
 This is a focused design note for one idea: a **bounded dynamic
 modality** over AQL's existing type lattice. It expands item 2 of
-`design/elixir-types-in-aql-report.0.md` (the analysis of Elixir
+`design/elixir-types-in-aql-report.10.md` (the analysis of Elixir
 v1.20's set-theoretic types) into an implementable design, and pins
 the two decisions that item flagged as load-bearing but left open:
 the **dispatch-determinism rule** and the **escape-hatch bound
 sources**.
 
 It is the type-system half of the same story the checker note
-(`design/checker-loud-diagnostics-report.0.md`) tells operationally:
+(`design/checker-loud-diagnostics-report.10.md`) tells operationally:
 that report makes silent dispatch failures *loud*; this one gives the
 checker a way to stay *quiet and correct* exactly where today it must
 either give up (`Carry<Any>`) or cry wolf.

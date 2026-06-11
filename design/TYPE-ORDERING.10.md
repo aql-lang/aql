@@ -1,4 +1,4 @@
-# TYPE-ORDERING.0 — The Value Lattice & Comparison Total Order
+# TYPE-ORDERING.10 — The Value Lattice & Comparison Total Order
 
 This document records the design of AQL's value ordering: the lattice
 that places every Value in a total preorder, the cascade
@@ -327,7 +327,7 @@ This is deliberately **separate** from the relational words `lt` / `lte`
 / `gt` / `gte`, which keep the IEEE *unordered* semantics (false whenever
 a NaN is involved) via `numericUnordered` in `eng/go/compare.go` — they
 do **not** read the total-order slot. `eq` stays false for NaN (so `neq`
-is true). See `design/IEEE-754-COMPLIANCE.0.md` Tier 0.
+is true). See `design/IEEE-754-COMPLIANCE.8.md` Tier 0.
 
 ### `none` and `Never`
 

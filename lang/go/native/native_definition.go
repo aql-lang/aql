@@ -124,7 +124,7 @@ var definitionNatives = []NativeFunc{
 			Handler:    fnsigHandler,
 			// Pure construction — runs in check mode too, so surface
 			// schemas carry REAL shapes statically and `exposes` is
-			// fully static-checkable (design/SURFACES.0.md S2). A
+			// fully static-checkable (design/SURFACES.10.md S2). A
 			// pending gen spec turns the result into a generic
 			// fn-shape schema (see the handler).
 			RunInCheckMode: true,
@@ -167,7 +167,7 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	stackOnly := defStackOnly(args[0])
 	body := args[1]
 	if IsCapitalisedName(name) {
-		// `def` is the universal binder (design/TYPE-UNIFORM.0.md
+		// `def` is the universal binder (design/TYPE-UNIFORM.10.md
 		// Phase 2): a capitalised name is a TYPE binding. Delegate to
 		// the kernel type installer — the same path the `type` word
 		// uses — so object/predicate lattice-minting and all
@@ -433,7 +433,7 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	}
 	if IsCapitalisedName(name) {
 		// `undef` is the universal unbinder (the symmetric completion
-		// of Phase 2's universal `def` — design/TYPE-UNIFORM.0.md):
+		// of Phase 2's universal `def` — design/TYPE-UNIFORM.10.md):
 		// a capitalised name is a TYPE binding, so pop it from the single
 		// binding store and retire the minted lattice type.
 		entry, ok := r.Defs.PopEntry(name)

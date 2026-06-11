@@ -442,7 +442,7 @@ leaking.
 Result is a strict total order over distinct lattice nodes, with
 one deliberate value-level equivalence: cross-leaf numeric
 magnitude (`1 cmp 1.0 → 0`). Full design at
-`design/TYPE-ORDERING.0.md`; verification at
+`design/TYPE-ORDERING.10.md`; verification at
 `lang/spec/compare.tsv`.
 
 ## Value Has Two Methods
@@ -511,7 +511,7 @@ Current call sites that must canonicalize:
 - `lang/native/native_type.go::refineBareHandler` — `MintRefinePrefab`
   parent.
 
-See `design/TYPE-CANONICALIZATION.0.md`.
+See `design/TYPE-CANONICALIZATION.10.md`.
 
 ## Typed-Def Reparent
 
@@ -571,7 +571,7 @@ predicate — `v.Is(t)` (routed through the type's Behavior) — applied
 check (`engine.go`, which uses `v.Is(exp)` for exactly this reason).
 Never reintroduce a boundary that asks a different question (e.g. a raw
 `v.Parent.ConformsTo(exp)` on returns) — that is the param/return
-asymmetry that `design/REFINE-NEWTYPE-VS-SUBSET.0.md` removed.
+asymmetry that `design/REFINE-NEWTYPE-VS-SUBSET.10.md` removed.
 
 - **Bare refine** (`def Pos (refine Integer)` — no payload,
   `IsBareTypeNode(body)`): a **nominal newtype**.

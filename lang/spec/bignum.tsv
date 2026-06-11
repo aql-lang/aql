@@ -6,7 +6,7 @@
 #   0d123    → BigInteger (math/big, unbounded, exact integers)
 #   0d12.5   → BigDecimal (cockroachdb/apd, exact base-10)
 # A `.` OR an exponent makes a 0d literal a BigDecimal.
-# Integer/Float are unchanged. See design/BIGNUM-0D.0.md.
+# Integer/Float are unchanged. See design/BIGNUM-0D.10.md.
 
 # ───────── literals & typeof ─────────
 0d123	0d123	BigInteger literal round-trips

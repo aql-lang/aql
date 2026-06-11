@@ -1,7 +1,7 @@
 # Signature-Order Refactor: Unify FnSig and NativeSig on Top-First
 
 > **Status: implemented** (this branch). The PBT plan in
-> `design/PBT-PLAN.0.md` is unblocked.
+> `design/PBT-PLAN.10.md` is unblocked.
 >
 > ## What landed (diff from this design doc)
 >
@@ -332,7 +332,7 @@ In `eng/go/CLAUDE.md`:
   one rule and pointing to `engine.go::matchSignature` as the
   single source of truth.
 
-In a new section of `design/SIG-ORDER-REFACTOR.0.md`:
+In a new section of `design/SIG-ORDER-REFACTOR.10.md`:
 - Mark this doc as "Status: merged" and link the PR.
 
 ## Verification

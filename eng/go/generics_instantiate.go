@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Instantiation of generic schemas (`of`, design/GENERICS.0.md; plan
+// Instantiation of generic schemas (`of`, design/GENERICS.10.md; plan
 // decisions D4/D5/D7/D8). The lang `of` word is a thin wrapper over
 // InstantiateSchema; substitution recursion (nested `X of […]`,
 // `Self of [T]`) re-enters here through GenInstRef resolution.
@@ -336,7 +336,7 @@ func SubstituteTypeParams(r *Registry, v Value, bindings map[string]Value, selfN
 // substituteParamNode swaps a *Type slot (an fn-shape param/return)
 // when it is a placeholder or Self. The binding must denote a lattice
 // node — fn-shape slots hold *Type, so a structural binding (a record
-// literal) cannot occupy one (v1 pin; noted in GENERICS.0.md).
+// literal) cannot occupy one (v1 pin; noted in GENERICS.10.md).
 func substituteParamNode(r *Registry, t *Type, bindings map[string]Value, selfNode *Type) (*Type, error) {
 	if t == nil {
 		return nil, nil

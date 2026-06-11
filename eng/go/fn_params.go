@@ -316,7 +316,7 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 	}
 	if IsTypeSchema(v) {
 		// A bare schema as a param type means "any instantiation"
-		// (family membership by ancestry — D3 in GENERICS.0.md).
+		// (family membership by ancestry — D3 in GENERICS.10.md).
 		if ti, aerr := AsTypeSchema(v); aerr == nil && ti.Type != nil {
 			return CanonicalType(r, ti.Type), nil, nil
 		}

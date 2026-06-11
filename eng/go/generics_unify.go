@@ -2,7 +2,7 @@ package eng
 
 import "fmt"
 
-// Binding inference for generic fns (design/GENERICS.0.md §9.2.2,
+// Binding inference for generic fns (design/GENERICS.10.md §9.2.2,
 // Phase 4): at each call of a generic fn, the type parameters bind
 // from the actual arguments' types — a placeholder param slot binds
 // typeof(arg); a typed-list pattern over a placeholder binds the

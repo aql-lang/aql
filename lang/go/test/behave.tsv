@@ -227,7 +227,7 @@ def Foo class {x:Integer} behave nodify/q (fn [[Foo Foo] [Any] [42]])	ERROR:1 ar
 # parent=Integer (because PredicateInputType returns the concrete
 # input type). `def x:Positive 5` validates via the predicate body
 # and then rewraps x with VType=Positive — the carrier idea from
-# BEHAVIORS.0.md.
+# BEHAVIORS.10.md.
 #
 # Result: behaviors installed on Positive dispatch on values
 # bound through typed-def; the structural-vs-nominal gotcha is

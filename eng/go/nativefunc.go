@@ -43,14 +43,14 @@ type NativeSig struct {
 	// captured RAW (not pre-evaluated), so the handler receives the paren
 	// as code/data. Opt-in (currently only `codequote`); distinct from
 	// NoEvalArgs, which control words use on conditions/bodies that must
-	// still pre-evaluate a paren. See design/PAREN-REPRESENTATION.0.md
+	// still pre-evaluate a paren. See design/PAREN-REPRESENTATION.9.md
 	// Step 4.
 	RawParens map[int]bool
 
 	// FormArgs marks arg positions captured as a raw FORM (word stays a
 	// Word; paren/list/literal captured unevaluated; no resolution, dispatch,
 	// or Word→Atom coercion). See Signature.FormArgs and
-	// design/MACROS-PHASE1.0.md §3.
+	// design/MACROS-PHASE1.10.md §3.
 	FormArgs map[int]bool
 
 	// NoEvalMapArgs marks arg positions where map auto-evaluation

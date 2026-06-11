@@ -90,7 +90,7 @@ var storageNatives = []NativeFunc{
 			// Class instance (in-place, SEALED): a declared field
 			// writes in place and returns nothing; an undeclared
 			// field is a loud sealed_field error — see
-			// design/CLASS-OBJECT.0.md §3.3.
+			// design/CLASS-OBJECT.10.md §3.3.
 			{
 				Args:    []*Type{TString, TAny, TClass},
 				Handler: setClassInstanceHandler,
@@ -195,7 +195,7 @@ func setMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 // instances: a field declared in the class schema (own or inherited)
 // writes into the flat field map and returns nothing; an undeclared
 // field raises sealed_field loudly — the open-bag use case belongs to
-// plain maps/Objects, not class instances (design/CLASS-OBJECT.0.md).
+// plain maps/Objects, not class instances (design/CLASS-OBJECT.10.md).
 func setClassInstanceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	container := args[2]
 	if !IsConcrete(container) {
@@ -355,7 +355,7 @@ func getStoreReturnsFn(args []Value, r *Registry) []Value {
 		// Emit a bounded gradual carrier dynamic(Any) — optimistically
 		// compatible with any slot — rather than strict Carry<Any>, which
 		// would fail every typed slot downstream and force a no_signature
-		// or Any catch-all. (design/dynamic-modality-report.0.md, escape
+		// or Any catch-all. (design/dynamic-modality-report.10.md, escape
 		// hatch 1.) A key recorded by a prior `set` keeps its real, strict
 		// carrier.
 		return []Value{NewDynamicCarrier(TAny)}

@@ -8,7 +8,7 @@ has anything to teach AQL's type system. The honest framing up front:
 **AQL has independently arrived at most of what the article describes.**
 The value is not a new paradigm — it is four specific places where AQL's
 version is currently *weaker* than Elixir's, plus a real-world data point
-on the exact frontier `GENERICS.0.md` is parked at.
+on the exact frontier `GENERICS.10.md` is parked at.
 
 This report ranks the four genuine applications by leverage, ties each to
 concrete AQL machinery, and states plainly what does **not** transfer.
@@ -273,7 +273,7 @@ join all candidates. Document the policy alongside `SortSignatures`.
 items 1 and 3.
 
 **Status (slice 1 landed 2026-06-05). Foundation + match rule + first
-escape hatch.** The full design is `design/dynamic-modality-report.0.md`.
+escape hatch.** The full design is `design/dynamic-modality-report.10.md`.
 Shipped:
 
 - *Representation.* A `Dynamic bool` modality on the carrier
@@ -444,16 +444,16 @@ each needs an exact (never under-) length to stay sound. Coverage:
 
 The article's own "pending" list — recursive types, parametric types,
 efficient map enumeration — is **almost verbatim** the open problems in
-`design/GENERICS.0.md`, which proposes parametric polymorphism over the
+`design/GENERICS.10.md`, which proposes parametric polymorphism over the
 same `tand`/`tor`/`Never`/`Any` algebra and handles recursive/F-bounded
 types via `(schema, normalised args)` memoisation (§7.7). Elixir hitting
 the same wall is direct evidence for:
 
-- **Sequencing.** Generics before signatures, as `GENERICS.0.md` already
+- **Sequencing.** Generics before signatures, as `GENERICS.10.md` already
   plans — Elixir is shipping inference and narrowing *ahead of* full
   signatures for the same reason.
 - **The hard parts.** Recursive types and variance are where Elixir is
-  blocked; `GENERICS.0.md` §7.4/§9.4 should treat those as the risk
+  blocked; `GENERICS.10.md` §7.4/§9.4 should treat those as the risk
   centre, and the per-schema disjunct collapse (§9.4) is the kind of
   pragmatic narrowing Elixir's `dynamic()` narrowing validates.
 
@@ -471,7 +471,7 @@ aimed correctly.
   already partway: `tand`/`tor` with `Never`-on-disjoint), but they must
   not be lifted wholesale without respecting the lattice's nominal core
   (`refine` newtypes are nominal by design — see
-  `design/REFINE-NEWTYPE-VS-SUBSET.0.md`).
+  `design/REFINE-NEWTYPE-VS-SUBSET.10.md`).
 - **Parallel compile-time / `:module_definition`.** Not type-system; no
   AQL analogue beyond the loose echo that AQL's planned bytecode compiler
   is "the carrier checker with a recording side effect"
@@ -487,7 +487,7 @@ aimed correctly.
 | 3. Dead-overload detection | High — pure tooling win | None (analysis only) | Sound | ~2 d | **Second** |
 | 2. `dynamic(T)` modality | Highest — fixes strict-top `Any` | Moderate (matching rule) | Gradual (by design) | ~6–10 d | Third |
 | 4. Static size/index check | Medium — composes existing features | Moderate | Sound | ~3–4 d | Fourth |
-| Recursive/parametric frontier | — corroborates `GENERICS.0.md` | n/a | n/a | n/a | (roadmap) |
+| Recursive/parametric frontier | — corroborates `GENERICS.10.md` | n/a | n/a | n/a | (roadmap) |
 
 ## Recommended first cut
 

@@ -311,7 +311,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		info, _ := AsObjectType(body)
 		// Class types root under Ideal/Class, not Object — classes are
 		// sealed nominal records, Object is the open mutable container
-		// (design/CLASS-OBJECT.0.md).
+		// (design/CLASS-OBJECT.10.md).
 		rootName := "Object"
 		rootDef := TObject
 		if info.Class {

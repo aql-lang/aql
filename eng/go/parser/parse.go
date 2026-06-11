@@ -28,7 +28,7 @@ type parenGroup []any
 type unclosedParen struct{ items []any }
 
 // angleGroup represents a generics angle-bracket sugar group
-// (design/GENERICS.0.md Phase 6): `Box<Integer>` folds the receiver
+// (design/GENERICS.10.md Phase 6): `Box<Integer>` folds the receiver
 // name and the collected items into one node. The conversion walks
 // desugar it to the canonical stream (D15): a def head emits
 // `Name gen [params]`, every other position the paren span
@@ -268,7 +268,7 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 			// group so it forward-collects the result (the result must not
 			// auto-dispatch first), while the Word/__DM marker (/N /r /q)
 			// is emitted AFTER for execFnDefLiteral to peek.
-			// Build a first-class Reach node (design/REACH.0.md Phase B):
+			// Build a first-class Reach node (design/REACH.10.md Phase B):
 			// receiver tokens + per-segment {op, literal-or-computed key}.
 			var recv []eng.Value
 			if err := emitPrimary(&recv, items[i], poss[i]); err != nil {
@@ -501,7 +501,7 @@ func groupModifier(item any) (base string, prefix, suffix []eng.Value, ok bool) 
 // pos is the source position of item (caller has already deSited it).
 //
 // Word-context paren groups become a single ParenExpr value (paren-nesting
-// Step 1, design/PAREN-REPRESENTATION.0.md), the same representation data
+// Step 1, design/PAREN-REPRESENTATION.9.md), the same representation data
 // context already uses. The engine evaluates it via evalParenExprResults
 // (Step 2 at the pointer, Step 3 in a forward window).
 func emitPrimary(dst *[]eng.Value, item any, pos eng.SrcPos) error {
@@ -1504,7 +1504,7 @@ func floatToValue(f float64) eng.Value {
 //     like 0x10 / 0o17 / 0b101) keeps the existing float64-derived path,
 //     which already matches jsonic's own base interpretation.
 //
-// See design/INTEGER-OVERFLOW-STRATEGY.0.md.
+// See design/INTEGER-OVERFLOW-STRATEGY.5.md.
 func numberValToValue(nv numberVal) (eng.Value, error) {
 	// `_` is a single digit-separator only: it must sit between two
 	// digits (no leading, trailing, or repeated underscores). `1__0` and
@@ -1699,7 +1699,7 @@ func stripUnderscores(src string) string {
 // integerLiteralOverflowError reports an integer literal (decimal or
 // base-prefixed) that does not fit in int64, located at the literal's
 // source position when known (row/col 0 = unknown). Until Integer becomes
-// arbitrary-precision (Phase 1 of design/INTEGER-OVERFLOW-STRATEGY.0.md),
+// arbitrary-precision (Phase 1 of design/INTEGER-OVERFLOW-STRATEGY.5.md),
 // this is a hard parse error rather than a silent fall-back to Float.
 func integerLiteralOverflowError(src string, row, col int) error {
 	return &eng.AqlError{

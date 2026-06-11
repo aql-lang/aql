@@ -281,7 +281,7 @@ are stack-only").
   The *residual* problem — chained un-separated forward calls
   evaluating right-to-left — is an evaluation-order question to fix
   (or diagnose via `aql check`) without changing any word's default;
-  see `design/ERRORS.0.md` §"Chained forward calls".
+  see `design/ERRORS.8.md` §"Chained forward calls".
 - **Mixed-form calls are user error territory, diagnosed not blessed.**
   Forms that split one call's args across both sides without grouping
   (`(x 3 gt) if [a] [b]` — VOXGIG T9.4) are not given bespoke per-word

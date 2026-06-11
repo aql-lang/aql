@@ -11,7 +11,7 @@ This document proposes the **Ideal**: a struct that describes a
 type-*kind* (Object, Record, Table, Array, …) and lives in a
 per-`Registry` registry with the same first-class, dynamically
 controllable status as a capability. It builds directly on the
-`def` / `make` / `type` surface established by `TYPE-UNIFORM.0.md`.
+`def` / `make` / `type` surface established by `TYPE-UNIFORM.10.md`.
 It does **not** change behaviour by itself.
 
 ## 1. Motivation

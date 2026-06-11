@@ -352,7 +352,7 @@ way in, strict on the way out (or vice-versa). No mainstream language
 does that on purpose; each picks one discipline per kind and applies
 it at every boundary. AQL does the same: newtypes are nominal and
 symmetric, subset types are value-sensitive and symmetric. The full
-rationale is in `design/REFINE-NEWTYPE-VS-SUBSET.0.md`.
+rationale is in `design/REFINE-NEWTYPE-VS-SUBSET.10.md`.
 
 
 ## Type ordering
@@ -499,7 +499,7 @@ LISP problems come along for free:
 
 Reference details and the full operator set are in
 **[Reference: Macros](REFERENCE.md#macros)**; the design and its LISP
-lineage are in `design/MACROS.0.md`.
+lineage are in `design/MACROS.8.md`.
 
 
 ## The Options pattern

@@ -2,7 +2,7 @@ package native
 
 import "fmt"
 
-// This file holds the user-facing error words (design/ERRORS.0.md §2,
+// This file holds the user-facing error words (design/ERRORS.8.md §2,
 // retiring DX report T9.6):
 //
 //	raise "boom"                          code user_error

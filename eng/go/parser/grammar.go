@@ -44,7 +44,7 @@ func setupBaseTokens(j *jsonic.Jsonic) parserTokens {
 		BT: j.Token("#BT", "`"),
 		IS: j.Token("#IS", "${"),
 		TL: j.Token("#TL"),
-		// `<` / `>` are GENERAL-PURPOSE tokens (design/GENERICS.0.md
+		// `<` / `>` are GENERAL-PURPOSE tokens (design/GENERICS.10.md
 		// D14): independent fixed tokens with contextual consumers.
 		// The generics angle rule (setupAngleGrammar) is the only v1
 		// consumer; future rules (e.g. embedded XML) can register
@@ -851,7 +851,7 @@ func setupInterpGrammar(j *jsonic.Jsonic, t parserTokens) {
 }
 
 // setupAngleGrammar defines the generics angle-bracket sugar rules
-// (design/GENERICS.0.md Phase 6, decisions D14/D15): `Box<Integer>`.
+// (design/GENERICS.10.md Phase 6, decisions D14/D15): `Box<Integer>`.
 //
 // The consumer is CONTEXTUALLY GATED (D14): an angle group opens only
 // when the value that just closed is a capitalised bare name — the
@@ -998,7 +998,7 @@ func setupAngleGrammar(j *jsonic.Jsonic, t parserTokens) {
 // digits via strconv.ParseInt rather than round-tripping through the
 // float64 jsonic already produced — float64 silently corrupts any
 // integer above 2^53, so the source string is the only exact record.
-// See numberValToValue and design/INTEGER-OVERFLOW-STRATEGY.0.md.
+// See numberValToValue and design/INTEGER-OVERFLOW-STRATEGY.5.md.
 func setupNumberSub(j *jsonic.Jsonic) {
 	j.Sub(func(tkn *jsonic.Token, rule *jsonic.Rule, ctx *jsonic.Context) {
 		if tkn.Tin == jsonic.TinNR {

@@ -137,7 +137,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 			// running anything. The element shapes are the engine's
 			// own parse values (words, literals, structural markers)
 			// and are implementation-defined for now — see
-			// design/PARSING.0.md §3. Parse errors raise
+			// design/PARSING.10.md §3. Parse errors raise
 			// [aql/parse_error] with the same message the CLI prints.
 			Name: "vm-parse",
 			Signatures: []native.NativeSig{{

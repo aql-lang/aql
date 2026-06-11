@@ -1,7 +1,7 @@
 # Silent forward-collection traps (DX investigations)
 
 **Status:** investigations only — no code change. Two silent-failure traps
-surfaced by the voxgig trie/bloom DX reports (`design/VOXGIG-AQL-REPORTS.0.md`,
+surfaced by the voxgig trie/bloom DX reports (`design/VOXGIG-AQL-REPORTS.5.md`,
 bloom #3 and trie #6), both reproduced on the current build. Each is a case
 where forward collection does something locally reasonable but globally
 surprising, and fails **quietly** rather than loudly — the dominant cost the
@@ -169,7 +169,7 @@ different in kind:
   the result is a wrong binding or a mislocated error — the class the DX reports
   flag as costliest. Worth a fix (loud error for binding words; advisory
   elsewhere), in the spirit of the shipped `forward_strands_operand` advisory
-  (`design/FORWARD-STRAND-ADVISORY.0.md`).
+  (`design/FORWARD-STRAND-ADVISORY.10.md`).
 - **Trap 2 is working as intended** — JS `.key` vs `[expr]`, with `()` for `[]`.
   The only gap is that the mental model wasn't written down. Documentation
   closes it; no code change.

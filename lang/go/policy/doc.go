@@ -20,6 +20,6 @@
 // Defaults are allow-everything: a *lang.AQL with no policy runs
 // without any check, and any absent scope in a policy is treated as
 // allow-all. Permissions are opt-in; existing callers are
-// unaffected. See design/PERMISSIONS.0.md for the full
+// unaffected. See design/PERMISSIONS.10.md for the full
 // design document.
 package policy

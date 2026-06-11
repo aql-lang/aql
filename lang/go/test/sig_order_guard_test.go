@@ -1,5 +1,5 @@
 // Guard tests for the FnSig/NativeSig argument-ordering unification
-// (design/SIG-ORDER-REFACTOR.0.md). These pin behavior that must
+// (design/SIG-ORDER-REFACTOR.10.md). These pin behavior that must
 // survive the refactor (top-first via matchSignature) and lock in the
 // fix for the module-closure branch in execFnDefLiteral.
 //

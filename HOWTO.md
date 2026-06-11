@@ -1144,7 +1144,7 @@ aql policy explain sandbox fileops.write path=/etc/passwd
 Profiles are jsonic documents. Drop one in
 `~/.config/aql/policies/<name>.jsonic` to make it loadable by short
 name. See `aql policy show sandbox --json` for a starting point and
-**[design/PERMISSIONS.0.md](design/PERMISSIONS.0.md)**
+**[design/PERMISSIONS.10.md](design/PERMISSIONS.10.md)**
 for the full schema.
 
 ### What the model gates

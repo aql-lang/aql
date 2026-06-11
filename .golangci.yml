@@ -6,7 +6,7 @@
 # Deliberately conservative: the `standard` preset (errcheck, govet,
 # ineffassign, staticcheck, unused) plus a few low-false-positive extras.
 # Heavier or stylistic linters (gosec, revive, gocritic, nilerr, …) are
-# left for opt-in / ad-hoc passes — see STATIC_ANALYSIS_REPORT.md.
+# left for opt-in / ad-hoc passes — see STATIC_ANALYSIS_REPORT.10.md.
 version: "2"
 
 linters:
@@ -18,7 +18,7 @@ linters:
     # Complexity / duplication ratchets — thresholds are set just above
     # the worst current function so the gate is green today but a new
     # catastrophically-complex/duplicated function would fail it. See
-    # STATIC_ANALYSIS_REPORT.md ("Complexity, size, duplication") for the
+    # STATIC_ANALYSIS_REPORT.10.md ("Complexity, size, duplication") for the
     # full hotspot list and the recommendation to ratchet these down.
     - gocyclo
     - gocognit

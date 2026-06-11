@@ -351,7 +351,7 @@ func unifyInner(a, b Value) (Value, *UnifyError) {
 	}
 
 	// Type-parameter fold — a bare placeholder literal (a minted
-	// gen-param node, design/GENERICS.0.md) admits the other side by
+	// gen-param node, design/GENERICS.10.md) admits the other side by
 	// the parameter's bound, mirroring the surface fold above. Placed
 	// after the degenerate roots so Never/None/Any keep their rules,
 	// and before the family handlers so a placeholder embedded as a

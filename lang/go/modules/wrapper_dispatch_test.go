@@ -24,7 +24,7 @@ import (
 // it, never invoked. That residue is no longer silent: the
 // end-of-run drain raises [aql/uncalled_function] for a named
 // Function value a failed dispatch left unconsumed
-// (design/ERRORS.0.md §5), so the broken-wiring case now pins
+// (design/ERRORS.8.md §5), so the broken-wiring case now pins
 // the LOUD error rather than the quiet no-invoke.
 func TestModuleWrapperInnerSigBarrierPos(t *testing.T) {
 	cases := []struct {

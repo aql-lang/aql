@@ -164,7 +164,7 @@ NativeFunc sig [Int,Int,Matrix] matches stack [mat,1,0]
 | **add-days / add-months / add-years** | was [Date, Int] → now [Int, Date] | **REORDERED** |
 | years/months/weeks/days/hours/minutes/seconds/ms/us/ns | [Int]/[Number] | OK |
 | cal-dur | [Int, Int, Int] | VACUOUS |
-| ~~time-duration~~ (ISO form) | ~~[String]~~ | **REMOVED** (TYPE-DECOUPLING.0.md Step 11) |
+| ~~time-duration~~ (ISO form) | ~~[String]~~ | **REMOVED** (TYPE-DECOUPLING.10.md Step 11) |
 | total-hours / total-minutes / total-seconds / total-ms / dur-years / dur-months / dur-days / dur-sign | [Duration] | OK |
 | is-between | [Date, Date, Date] | VACUOUS |
 | to-date | [DateTime] / [Instant] | OK |
@@ -176,8 +176,8 @@ NativeFunc sig [Int,Int,Matrix] matches stack [mat,1,0]
 | tz-utc / tz-local | [] | OK |
 | tz-name | [Timezone] | OK |
 | tz-offset / is-dst | [Timezone, Instant] | OK |
-| ~~parse-date / parse-datetime~~ | ~~[String, String]~~ | **REMOVED** (TYPE-DECOUPLING.0.md Step 11) |
-| ~~auto-date~~ | ~~[String]~~ | **REMOVED** (TYPE-DECOUPLING.0.md Step 11) |
+| ~~parse-date / parse-datetime~~ | ~~[String, String]~~ | **REMOVED** (TYPE-DECOUPLING.10.md Step 11) |
+| ~~auto-date~~ | ~~[String]~~ | **REMOVED** (TYPE-DECOUPLING.10.md Step 11) |
 
 For the time module, FnDef wrapper params keep the user-facing order
 (`date n add-days`, `date "month" start-of`); the NativeFunc sig is

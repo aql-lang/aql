@@ -8,7 +8,7 @@ dominates every DX report — dispatch that fails **quietly** instead of
 loudly — slips straight through it. This note plans the additive "loud
 diagnostics" layer that closes that gap. It is the operational companion
 to items 2 (`dynamic(T)`) and 3 (dead-overload detection) of
-`elixir-types-in-aql-report.0.md`; where that report argues *what* the
+`elixir-types-in-aql-report.10.md`; where that report argues *what* the
 type system should gain, this one plans *how* the checker starts catching
 the bugs users actually hit.
 

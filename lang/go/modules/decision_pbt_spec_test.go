@@ -1,4 +1,4 @@
-// Stage 6 of PBT-PLAN.0.md: end-to-end demos exercising the PBT
+// Stage 6 of PBT-PLAN.10.md: end-to-end demos exercising the PBT
 // framework (Test.check-prop + the shrink reducer) against the
 // aql:decision module. These are the proof-of-life that the whole
 // stack works together — a generator that produces random decision

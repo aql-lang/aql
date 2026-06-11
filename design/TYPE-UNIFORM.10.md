@@ -462,12 +462,12 @@ Phase 3 was wrong.
   registered lowercase word. A genuinely new *kind* still requires
   Go. This proposal does not deliver user-definable kinds.
 - **Not generics, not HKT.** Parametric polymorphism is a separate
-  proposal (`GENERICS.0.md`). However, this design is *consistent
+  proposal (`GENERICS.10.md`). However, this design is *consistent
   with* and *friendly to* that direction: treating `type` as a
   type-level constructor word is the same "type constructors are
   ordinary applicable things" stance that higher-kinded types need.
   A future reconciliation should align this `type` operator with
-  `GENERICS.0.md`'s `apply`.
+  `GENERICS.10.md`'s `apply`.
 - **`make` stays the sole type→value seam.** No implicit coercion.
 
 ## 10. Decision summary

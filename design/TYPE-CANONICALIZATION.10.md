@@ -1,4 +1,4 @@
-# TYPE-CANONICALIZATION.0 — Canonical Pointers, Unified Resolve, Unified Reparent
+# TYPE-CANONICALIZATION.10 — Canonical Pointers, Unified Resolve, Unified Reparent
 
 This document captures a refactor that closes the third generation of
 type-system fractures the prior two refactors didn't reach.

@@ -8,7 +8,7 @@ Tier 1 landed alongside it — see [Tier-0 status](#tier-0-status). The
 pre-fix transcripts in §"The three deviations" are retained as the record
 of what was fixed. It is a companion to
 [NUMERIC-TOWER](NUMERIC-TOWER.0.md) and
-[INTEGER-OVERFLOW-STRATEGY](INTEGER-OVERFLOW-STRATEGY.0.md); the
+[INTEGER-OVERFLOW-STRATEGY](INTEGER-OVERFLOW-STRATEGY.5.md); the
 WAT-AUDIT Exhibits H (eq-but-not-substitutable) and L (Decimal-is-float)
 are the surface symptoms this document's gaps explain.
 
@@ -109,7 +109,7 @@ true — and it silently corrupts `sort`/`min`/`max`/`dedup` for any list
 containing NaN (the comparator violates transitivity and antisymmetry,
 so the result order is undefined). This bug exists **independently of any
 IEEE ambition** and should be fixed regardless. See
-`design/TYPE-ORDERING.0.md` — the fix is to give NaN a defined slot via
+`design/TYPE-ORDERING.10.md` — the fix is to give NaN a defined slot via
 IEEE `totalOrder` for `cmp`/`sort`, while keeping the relational
 predicates unordered.
 

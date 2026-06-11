@@ -6,8 +6,8 @@
 instead of inline `OpenParen … CloseParen` markers on the tape. Records the
 empirical semantics that constrain the change, a preservation checklist,
 and the residual **dotted-access** problem.
-**Related:** `MACROS.0.md` (the marker-tape note this refines),
-`LISP-ANALYSIS.0.md` §2 + §8 #5 (uniform code-as-data).
+**Related:** `MACROS.8.md` (the marker-tape note this refines),
+`LISP-ANALYSIS.5.md` §2 + §8 #5 (uniform code-as-data).
 
 > The motivating context is the macro system: a quoted program is only a
 > clean tree if grouping is structural. Today it isn't — paren grouping is
@@ -47,7 +47,7 @@ representation must reproduce.
 | 5 | `(def x 1) x` | `1` | defs **leak** to the enclosing scope |
 | 6 | `(1 div 0) 99` | **halts** | errors **propagate** (unlike `do`, which catches) |
 
-**The key correction to the MACROS.0.md note:** a word-context paren is
+**The key correction to the MACROS.8.md note:** a word-context paren is
 *already* a semantically **isolated sub-expression** for consumption — its
 contents cannot reach back and pop values pushed before the `(`. The
 `OpenParen` acts as a stack barrier; only *results* splice back out. So the
@@ -82,7 +82,7 @@ Two facts fall out:
    quoted paren is *quotable-but-not-walkable*: a code walker must still
    understand the `OpenParen`/`CloseParen` markers.
 
-This is why the macro template (MACROS.0.md) is `quote [ ... ]`, **never**
+This is why the macro template (MACROS.8.md) is `quote [ ... ]`, **never**
 `quote ( ... )` — the list is the boundary that keeps inner forms (parens
 included) as data. Under the §3 nesting change the *same* `quote [(1 add 2)]`
 would yield `[[1 add 2]]` — a clean nested tree — which is exactly the
@@ -273,7 +273,7 @@ within the tree."
 
 ## 7. Verdict
 
-The marker-tape note in MACROS.0.md undersold the paren change: because the
+The marker-tape note in MACROS.8.md undersold the paren change: because the
 consumption-isolation it would seem to break is **already the live
 semantics** (§2), nesting parens is a *simplifying* engine change (delete
 two big mechanisms, unify the two contexts) whose payoff is the homoiconic
@@ -387,8 +387,8 @@ lightweight recursive eval frame on the same registry rather than a full
 sub-engine (§5 cost #1).
 
 **Step 8 — Downstream: simplify the macro walker.**
-With parens as nested values, the MACROS.0.md `unquote`/`splice` expander
-recurses on sub-lists; `WalkBodyWords` simplifies. Update MACROS.0.md
+With parens as nested values, the MACROS.8.md `unquote`/`splice` expander
+recurses on sub-lists; `WalkBodyWords` simplifies. Update MACROS.8.md
 risk #1 (marker-tape) to "resolved for parens."
 
 **Step 9 — Later / separate: dotted access as a structural `Path` node.**

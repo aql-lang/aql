@@ -27,7 +27,7 @@ Status: **IMPLEMENTATION COMPLETE — Steps 0-11 landed**.
 
 | Step | Status | Notes |
 |---|---|---|
-| 0  Inventory | ✅ landed | `lang/doc/design/TYPE-DECOUPLING-INVENTORY.md` |
+| 0  Inventory | ✅ landed | `lang/doc/design/TYPE-DECOUPLING-INVENTORY.10.md` |
 | 1  TypeBehavior + defaults | ✅ landed | `eng/go/typebehavior.go` |
 | 2  v.Is(t) + canonical dispatch routing | ✅ landed | |
 | 3  Pluggable Format (10 domain render arms) | ✅ landed | `eng/go/coretype_format_behaviors.go` (placeholder file; Behaviors moved to owning modules at Step 8) |
@@ -426,7 +426,7 @@ The plan groups into four PR-sized chunks:
 code moves.
 
 **Work**: grep for the four enumerations and write
-`lang/doc/design/TYPE-DECOUPLING-INVENTORY.md`:
+`lang/doc/design/TYPE-DECOUPLING-INVENTORY.10.md`:
 
 1. `Value.IsX` callers outside `eng/go/value.go` (~120 sites).
 2. `Value.AsX` callers outside `eng/go/value.go` (~600 sites).
@@ -436,7 +436,7 @@ code moves.
    TCalDuration, TClkDuration, TTimezone, TMatrix, TTimeout,
    TInterval, TFetch* — 200+ sites across `lang/`).
 
-**Done when**: `lang/doc/design/TYPE-DECOUPLING-INVENTORY.md` exists.
+**Done when**: `lang/doc/design/TYPE-DECOUPLING-INVENTORY.10.md` exists.
 `make test` unchanged.
 
 ### Step 1 — Add `TypeBehavior` with default implementation

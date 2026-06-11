@@ -7,7 +7,7 @@ import (
 
 // SurfaceInfo is the payload of a surface type — a pure contract: a
 // named set of required operation shapes with no bodies and no state
-// (design/SURFACES.0.md). Required maps each operation name to its
+// (design/SURFACES.10.md). Required maps each operation name to its
 // FnUndef shape Value (the `fnsig` form), with TSelf marking the
 // positions the conforming type must occupy.
 //

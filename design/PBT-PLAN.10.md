@@ -65,7 +65,7 @@
 >   shrunk-* fields populated as placeholders (mirror failing-input)
 >   until Stage 5.
 >
-> The argument-ordering refactor (`design/SIG-ORDER-REFACTOR.0.md`)
+> The argument-ordering refactor (`design/SIG-ORDER-REFACTOR.10.md`)
 > that was blocking Stage 0 has landed too — every dispatch path
 > agrees on top-first sig order.
 >
@@ -83,7 +83,7 @@
 > applied: replace `rand.seed` / `rand.fresh-seed` with
 > `rand.with-seed N → Map`. The `rand.list-of` and `rand.map-from`
 > rows still apply for future work — they remain deferred (FnSig has
-> no NoEvalArgs equivalent yet; see `SIG-ORDER-REFACTOR.0.md`'s
+> no NoEvalArgs equivalent yet; see `SIG-ORDER-REFACTOR.10.md`'s
 > "Out-of-scope follow-ups").
 >
 > For PBT determinism, generators MUST use `rand.with-seed N`
@@ -108,13 +108,13 @@
 |---------|------------|--------------|
 | **PBT** | Property-Based Testing | Run a predicate against N randomly-generated inputs; on failure, shrink. |
 | **PRNG** | Pseudo-Random Number Generator | Seeded deterministic source of randomness (Go's `math/rand`). |
-| **Stack form** | (no abbreviation) | A canonical, surface-syntax-free representation of an AQL program — every word call is in strict-stack order, no forward collection, no dotted access, no paren regrouping. The form the shrinker operates on. This plan uses **"stack form"** (not "IR") for two reasons: (a) it matches the terminology in `design/aql-bytecode-report.0.md` (the parent design doc this aligns with — see below) and `design/aql_property_based_reduction_report.md:229`; (b) "IR" is overloaded compiler jargon implying SSA-like passes that don't apply here. |
+| **Stack form** | (no abbreviation) | A canonical, surface-syntax-free representation of an AQL program — every word call is in strict-stack order, no forward collection, no dotted access, no paren regrouping. The form the shrinker operates on. This plan uses **"stack form"** (not "IR") for two reasons: (a) it matches the terminology in `design/aql-bytecode-report.0.md` (the parent design doc this aligns with — see below) and `design/aql_property_based_reduction_report.10.md:229`; (b) "IR" is overloaded compiler jargon implying SSA-like passes that don't apply here. |
 | **MDL** | Minimum Description Length | Cost-model principle: prefer the program with the smallest description (under a fixed cost table) that still triggers the failure. |
 | **AQL-G** | AQL **G**enerator profile | A restricted policy profile (the report's name) that permits math + `aql:rand` + `aql:decision` and denies side-effecting words. The reducer re-evaluates candidates under this profile. |
 
 ### Why the 4-layer design
 
-The design in `design/aql_property_based_reduction_report.md` argues that the most interesting PBT formulation for AQL is **counterexample shrinking as failure-preserving program compression**: don't shrink the JSON value, shrink the *generator program* that produced it, using an MDL cost model over the program's stack form. The four layers are:
+The design in `design/aql_property_based_reduction_report.10.md` argues that the most interesting PBT formulation for AQL is **counterexample shrinking as failure-preserving program compression**: don't shrink the JSON value, shrink the *generator program* that produced it, using an MDL cost model over the program's stack form. The four layers are:
 
 ```
 1  Surface AQL authoring                              (existing)

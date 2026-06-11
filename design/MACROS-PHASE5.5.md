@@ -1,8 +1,8 @@
 # Macros Phase 5 — Compiled-Mode Expander & Staging
 
 **Status:** **Interpreter staging: LANDED + tested. Compiled-mode expander:
-BLOCKED on the IR backend (not yet built).** Companion to `MACROS.0.md` §4 (the
-compiled-mode design) and `MACROS-PHASE1.0.md` (the interpreter implementation).
+BLOCKED on the IR backend (not yet built).** Companion to `MACROS.8.md` §4 (the
+compiled-mode design) and `MACROS-PHASE1.10.md` (the interpreter implementation).
 
 ---
 
@@ -29,7 +29,7 @@ runtime fexpr whose action is "splice code" (`execMacro` →`__SP`). Phase 5's
 
 A strict stack-machine IR cannot splice ahead of the program counter without
 embedding a runtime compiler, so expansion **must move to compile time**
-(`MACROS.0.md` §4). The design is unchanged; only *timing* and *memoization*
+(`MACROS.8.md` §4). The design is unchanged; only *timing* and *memoization*
 move. None of this can be built until the IR backend exists:
 
 - **Compile pass.** Walk tokens; on a `Macro`-tagged word, run the **existing

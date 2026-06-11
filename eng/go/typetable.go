@@ -548,20 +548,20 @@ var builtinDecls = []builtinDecl{
 	{Path: "Ideal/Store/System", FixedID: 43, Rank: 40_610_000_000},
 	{Path: "Ideal/Table", FixedID: 15, Rank: 40_700_000_000},
 	// Ideal/Reach — a first-class dot-access node (m.a.b). The parser emits
-	// it, so it is kernel-declared. See design/REACH.0.md.
+	// it, so it is kernel-declared. See design/REACH.10.md.
 	{Path: "Ideal/Reach", FixedID: 29, Rank: 40_800_000_000},
 	// Ideal/Class — the root of user-defined class types (the nominal
 	// record kinds minted by the `class` word). Class types are minted
 	// as children of this node; instances are children of their class.
 	// Classes are NOT Object subtypes — Object is the open mutable
 	// keyed container, classes are sealed nominal records. See
-	// design/CLASS-OBJECT.0.md.
+	// design/CLASS-OBJECT.10.md.
 	{Path: "Ideal/Class", FixedID: 102, Rank: 40_900_000_000},
 	// Ideal/Surface — the root of user-defined surface types (the
 	// pure-contract operation sets minted by the `surface` word).
 	// Conformance is explicit (`<Type> exposes <Surface>`) and checked
 	// loudly at declaration; membership is a conformance-set probe via
-	// surfaceUnifier. See design/SURFACES.0.md.
+	// surfaceUnifier. See design/SURFACES.10.md.
 	{Path: "Ideal/Surface", FixedID: 103, Rank: 40_910_000_000},
 
 	// Word branch — Word/__XX entries are internal runtime markers,
@@ -595,9 +595,9 @@ var builtinDecls = []builtinDecl{
 	// conformance. As a constraint outside a surface schema, no value
 	// matches Self — it is a placeholder, not a category. Generic
 	// schemas reuse it for self-reference (`Self of [T]` — D5 in
-	// design/GENERICS.0.md).
+	// design/GENERICS.10.md).
 	{Path: "Type/Self", FixedID: 104, Rank: 60_500_000_000},
-	// Generics metatypes (design/GENERICS.0.md): TypeParam is the root
+	// Generics metatypes (design/GENERICS.10.md): TypeParam is the root
 	// unconstrained type-parameter placeholders mint under (bounded
 	// ones mint under their bound's node); GenSpec is the value `gen
 	// […]` produces and the GenSpec-aware constructor overloads

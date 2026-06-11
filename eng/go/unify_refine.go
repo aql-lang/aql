@@ -13,7 +13,7 @@ package eng
 // boundary that asks `v.Is(Pos)` — sig dispatch, the `is` word, and
 // the fn return check — in agreement, and matches the newtype
 // discipline of Haskell/Rust/Go/Scala. See
-// design/REFINE-NEWTYPE-VS-SUBSET.0.md.
+// design/REFINE-NEWTYPE-VS-SUBSET.10.md.
 //
 // (An earlier revision made Match lenient — admitting any base-family
 // value — which split param matching from the nominal `is`/return

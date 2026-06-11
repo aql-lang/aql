@@ -540,7 +540,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		//   appends it to the active testRun.
 		//
 		// The `max-shrinks` arg is reserved for the Stage-5 reducer
-		// (PBT-PLAN.0.md) — Stage 3 ignores it and reports the raw
+		// (PBT-PLAN.10.md) — Stage 3 ignores it and reports the raw
 		// failing input verbatim.
 		{
 			Name: "test-check-prop",

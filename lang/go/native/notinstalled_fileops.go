@@ -13,7 +13,7 @@ import (
 // permission-denied-shaped error so consumer sites that forgot to
 // nil-check still get a clean error instead of a nil deref.
 //
-// This is the "structural denial" pattern from PERMISSIONS.0 — the
+// This is the "structural denial" pattern from PERMISSIONS.10 — the
 // only FileOps reachable to handlers either does I/O or refuses; it
 // never crashes.
 type notInstalledFileOps struct{}

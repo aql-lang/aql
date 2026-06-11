@@ -34,11 +34,11 @@ aged well; §15 lists what is now cheaper, what is newly in scope
 lock-down.**
 
 Related design notes:
-- `elixir-types-in-aql-report.0.md` — set-theoretic refinements (`tnot`
+- `elixir-types-in-aql-report.10.md` — set-theoretic refinements (`tnot`
   negation, the `dynamic(T)` modality, dead-overload detection). It names
   generics the *convergent frontier*; this note is the parametric half of
   that frontier.
-- `checker-loud-diagnostics-report.0.md` — the `aql check` diagnostic
+- `checker-loud-diagnostics-report.10.md` — the `aql check` diagnostic
   framework the generics diagnostics slot into.
 - `aql-bytecode-report.0.md` — the compiler thesis §10 builds on.
 
@@ -150,7 +150,7 @@ What the parser and engine already use, that bears on the design:
 - **Type algebra uses `tand` / `tor`** — `Integer tor String`. The
   `extends` constraint takes any type expression, so the algebra
   composes for free: `(T extends Number tand Comparable)`. With
-  **negation** (`tnot`, per `elixir-types-in-aql-report.0.md` item 1)
+  **negation** (`tnot`, per `elixir-types-in-aql-report.10.md` item 1)
   the bound may also exclude — `(T extends Number tand tnot Integer)`.
   Checking a negated bound is a *disjointness* test
   (`arg tand bound ≠ Never`), which is exactly the decision procedure
@@ -406,7 +406,7 @@ Both forms degrade gracefully — explicit annotation always works.
   (`Box of [dynamic(Integer tor String)]`); both flow through
   substitution as ordinary type values. A `dynamic()` argument makes
   the instantiation gradually-typed in that parameter — the
-  compatibility/narrowing rules of `elixir-types-in-aql-report.0.md`
+  compatibility/narrowing rules of `elixir-types-in-aql-report.10.md`
   item 2 then apply per field, rather than the strict invariance above.
 
 ### 7.7 Recursion and F-bounds
@@ -626,7 +626,7 @@ carriers and capture the bindings:
 If the same parameter unifies against two incompatible types, take
 their `tor`. If unification fails outright, emit a diagnostic and
 fall back to **`dynamic()`** for that binding (per
-`elixir-types-in-aql-report.0.md` item 2) so analysis continues with
+`elixir-types-in-aql-report.10.md` item 2) so analysis continues with
 a gradually-compatible type rather than a strict-top `Any` that would
 spuriously fail every downstream concrete slot.
 
@@ -645,7 +645,7 @@ test of §4). Failure is a diagnostic, not a panic.
 
 All three slot into the existing `CheckDiagnostic` structure and the
 `LANGREF` diagnostics table — alongside `uncalled_function` and
-`unreachable_signature` from `checker-loud-diagnostics-report.0.md`.
+`unreachable_signature` from `checker-loud-diagnostics-report.10.md`.
 
 ### 9.3 What gets better for check-mode users
 
@@ -683,7 +683,7 @@ branch joins? TypeScript's pragmatic answer is "covariant by default,
 fix it later" — recommendation is to do the same and revisit if
 mutation patterns make it unsound in practice. Note that once `tnot`
 lands, the algebra is the **Boolean closure** of the lattice
-(`elixir-types-in-aql-report.0.md` item 1), which is the proper
+(`elixir-types-in-aql-report.10.md` item 1), which is the proper
 framework to decide variance *semantically* — a parameter is
 covariant iff substituting a subtype yields a denotational subtype —
 rather than by the TypeScript default. Worth revisiting then.
@@ -742,7 +742,7 @@ and the `lang/go/native/native_type*.go` word registrations.
 
 ### 9.7 Interaction with dead-overload detection
 
-`checker-loud-diagnostics-report.0.md` Phase 2 adds an
+`checker-loud-diagnostics-report.10.md` Phase 2 adds an
 `unreachable_signature` check that flags an overload subsumed by an
 earlier, higher-priority one. Two points of contact:
 
@@ -1125,7 +1125,7 @@ unconstrained-param strictness, per-schema disjunct collapse).
 >   the memo registers the in-flight node before substituting.
 > - **Bounds verified end-to-end** for lattice types, refine
 >   newtypes, predicate refinements (`(Integer gt 0)`), and SURFACES
->   (`(T extends Shape)`) — S4 of SURFACES.0.md confirmed: zero new
+>   (`(T extends Shape)`) — S4 of SURFACES.10.md confirmed: zero new
 >   membership machinery.
 > - **Rode along:** `ResolveFieldType` now resolves only CAPITALISED
 >   names as type references — a lowercase string field default that
@@ -1363,10 +1363,10 @@ unconstrained-param strictness, per-schema disjunct collapse).
 Between the 2026-06-04 refresh and this review, the language landed:
 classes (`Ideal/Class`, sealed nominal records, strict field typing,
 `const`), the open Object / container 2×2, **surfaces** (`Ideal/
-Surface`, `Self`, `exposes`, S1+S2+S3 — `design/SURFACES.0.md`),
+Surface`, `Self`, `exposes`, S1+S2+S3 — `design/SURFACES.10.md`),
 `tnot` + `dynamic()` + dead-overload detection (the three
 elixir-report dependencies this note cites as future), `raise` + the
-loud-failure batch (`design/ERRORS.0.md`), BigInteger/BigDecimal, and
+loud-failure batch (`design/ERRORS.8.md`), BigInteger/BigDecimal, and
 in-memory parsing. The review below is against that state.
 
 ### 15.1 What aged well — and is now cheaper
@@ -1462,7 +1462,7 @@ in-memory parsing. The review below is against that state.
    four names before registration (clean as of this review).
 6. **Diagnostics must meet the Phase-D quality bar.** `raise`,
    `def_error` / `no_value_error` blame-shifting, and runtime
-   `uncalled_function` set the expectation (ERRORS.0.md §7): the span
+   `uncalled_function` set the expectation (ERRORS.8.md §7): the span
    points at the causing site, a hint says what to do, the code is
    dispatchable. §9.2's `constraint_violation` (pointing at the
    parameter declaration via `WithPos`) and `unbound_param` (listing

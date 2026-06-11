@@ -41,7 +41,7 @@ type Engine struct {
 	// following signature failure on one of those words is reported
 	// as "argument expression produced no value" at the causing site
 	// rather than as a generic mismatch — the blame-shift fix of
-	// design/ERRORS.0.md §3 (VOXGIG B3). Cleared at every statement
+	// design/ERRORS.8.md §3 (VOXGIG B3). Cleared at every statement
 	// boundary (stepEnd).
 	voidGroups []string
 }
@@ -58,7 +58,7 @@ type RecorderSkipper interface {
 
 // Recorder receives events as the Engine executes a program. Used by
 // the eng/go/stackform package to build a canonical strict-stack
-// representation of a program (see design/PBT-PLAN.0.md and
+// representation of a program (see design/PBT-PLAN.10.md and
 // design/aql-bytecode-report.0.md). Nil by default; install via
 // Engine.SetRecorder.
 //
@@ -136,7 +136,7 @@ func (e *Engine) sigError(name string, fn *FnDefInfo, pos SrcPos) *AqlError {
 	// A word starved by a VOID argument group (a parenthesised call in
 	// its argument range that produced no value, recorded by
 	// stepCloseParen) reports the causing expression, not the generic
-	// mismatch (ERRORS.0.md §3).
+	// mismatch (ERRORS.8.md §3).
 	if verr := e.voidArgErrorFor(name, pos); verr != nil {
 		return verr
 	}
@@ -273,7 +273,7 @@ func (e *Engine) insufficientArgsError(name string, expected int, pos SrcPos) *A
 //   - The undefined name was pending next to a paren group that
 //     produced NO value (`def r (returns-nothing …)` — the def
 //     silently never bound, and this reference is the blame-shifted
-//     victim). Name the real cause (ERRORS.0.md §3, VOXGIG B3).
+//     victim). Name the real cause (ERRORS.8.md §3, VOXGIG B3).
 func (e *Engine) undefinedWordHint(name string) string {
 	if e.pendingForwardFunc() == "def" {
 		return "did you mean `def … (" + name + ")` to bind its value, " +
@@ -581,7 +581,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 
 		case IsParenExpr(val):
 			// A word-context ParenExpr (paren-nesting work, Step 2 —
-			// design/PAREN-REPRESENTATION.0.md): expand it back to its
+			// design/PAREN-REPRESENTATION.9.md): expand it back to its
 			// OpenParen … CloseParen marker span in place and let the
 			// existing in-place collapse machinery evaluate it on THIS
 			// engine. That keeps exact parity with the former marker
@@ -713,7 +713,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 		}
 	}
 
-	// Runtime uncalled-function residue (ERRORS.0.md §5, VOXGIG T1): a
+	// Runtime uncalled-function residue (ERRORS.8.md §5, VOXGIG T1): a
 	// named Function value placed by a FAILED dispatch that nothing
 	// ever consumed. Higher-order uses consume the value, so they never
 	// reach here; only at the top level — where no consumer can exist
@@ -821,7 +821,7 @@ func (e *Engine) resolveOrphanedForwards() error {
 
 // rawParenForward reports whether any of fn's signatures captures a forward
 // ParenExpr RAW at sig position pos (RawParens[pos]). See
-// design/PAREN-REPRESENTATION.0.md Step 4.
+// design/PAREN-REPRESENTATION.9.md Step 4.
 func rawParenForward(fn *FnDefInfo, pos int) bool {
 	if fn == nil {
 		return false
@@ -837,7 +837,7 @@ func rawParenForward(fn *FnDefInfo, pos int) bool {
 // rawFormForward reports whether any of fn's signatures captures the forward
 // operand at sig position pos as a raw FORM (FormArgs[pos]) — the macro
 // raw-capture mode. Like rawParenForward, it gates preEvalParens so a paren /
-// reach at that position is left unevaluated. See design/MACROS-PHASE1.0.md §3.
+// reach at that position is left unevaluated. See design/MACROS-PHASE1.10.md §3.
 func rawFormForward(fn *FnDefInfo, pos int) bool {
 	if fn == nil {
 		return false
@@ -1006,7 +1006,7 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		// Paren expression value (paren-nesting Step 3): expand it back to
 		// its OpenParen … CloseParen marker span in place, then re-process
 		// — the IsOpenParen branch above collapses it on THIS engine. See
-		// design/PAREN-REPRESENTATION.0.md Step 3.
+		// design/PAREN-REPRESENTATION.9.md Step 3.
 		if IsParenExpr(tok) {
 			// Step 4: a quote-captured ParenExpr (already Quoted) or a
 			// raw-capture forward position is left unevaluated so the
@@ -1358,7 +1358,7 @@ func (e *Engine) stepWord(val Value) error {
 	// collect this Word as a raw Word — do NOT execute it, and (unlike
 	// QuoteArgs) do NOT coerce it to an Atom. stepLiteral collects the value
 	// at the pointer; the Word matches the macro's Any-typed slot, so no
-	// conversion fires. See design/MACROS-PHASE1.0.md §3.
+	// conversion fires. See design/MACROS-PHASE1.10.md §3.
 	if e.hasPendingForwardFormArg() {
 		return e.stepLiteral()
 	}
@@ -1443,7 +1443,7 @@ func (e *Engine) stepWord(val Value) error {
 				}
 			}
 		}
-		// Macro dispatch (design/MACROS-PHASE1.0.md §5): a macro word is
+		// Macro dispatch (design/MACROS-PHASE1.10.md §5): a macro word is
 		// applied to its raw operands ahead on the tape — BEFORE preEvalParens
 		// (1228) or any forward collection, so operands arrive as code. The
 		// word sits at e.pointer; execMacro replaces `mac operand…` with the
@@ -1571,7 +1571,7 @@ func (e *Engine) stepWord(val Value) error {
 		// We bypass insertForward here because forward collection
 		// would re-trigger sigTypeMatches and loop indefinitely.
 		if e.registry.Check.IsActive() && len(fn.Signatures) > 0 {
-			// S2 (design/SURFACES.0.md): a required operation called on
+			// S2 (design/SURFACES.10.md): a required operation called on
 			// a SURFACE-typed carrier types via the contract's shape
 			// (Self := the surface node) — the contract guarantees the
 			// operation for every member, so this is a correct typing,
@@ -1602,10 +1602,10 @@ func (e *Engine) stepWord(val Value) error {
 	// it, the author likely meant the stacked operands to be consumed
 	// together (the `1 2 add 3 mul → 5` surprise: `add` grabs the forward
 	// `3` and strands the `1`). Advisory only (info severity), emitted in
-	// check mode, never gating. See design/FORWARD-STRAND-ADVISORY.0.md.
+	// check mode, never gating. See design/FORWARD-STRAND-ADVISORY.10.md.
 	if e.registry.Check.IsActive() && fwdCount > 0 && stkCount > 0 {
 		e.checkForwardStrandsOperand(w, sig, positions, val.Pos)
-		// Mixed-form advisory (ERRORS.0.md §6.2, VOXGIG T9.4): a call
+		// Mixed-form advisory (ERRORS.8.md §6.2, VOXGIG T9.4): a call
 		// of three or more args that takes operand(s) from a PRECEDING
 		// expression while also forward-collecting binds differently
 		// from the all-forward reading — `(cond) if [a] [b]` is the
@@ -2108,7 +2108,7 @@ func (e *Engine) stepLiteral() error {
 	// stepCloseParen fall through to here) is expanded to its marker span
 	// in place and re-stepped — the surrounding loop's OpenParen handling
 	// then collapses it on this engine. Without this, a nested ParenExpr
-	// would be pushed unevaluated. See design/PAREN-REPRESENTATION.0.md
+	// would be pushed unevaluated. See design/PAREN-REPRESENTATION.9.md
 	// (paren-nesting Steps 2/3).
 	// Step 4: a Quoted ParenExpr (codequote-captured data) and a ParenExpr
 	// being collected by a raw-capture pending forward are NOT expanded —
@@ -2374,7 +2374,7 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 // (stepCloseParen / preEvalParens) evaluates. Used to expand a word-context
 // ParenExpr value back to markers on encounter (paren-nesting Steps 2/3),
 // keeping exact parity with the former marker representation. See
-// design/PAREN-REPRESENTATION.0.md.
+// design/PAREN-REPRESENTATION.9.md.
 func expandParenExpr(items []Value) []Value {
 	span := make([]Value, 0, len(items)+2)
 	span = append(span, NewOpenParen())
@@ -2386,7 +2386,7 @@ func expandParenExpr(items []Value) []Value {
 // lowerReach turns a Reach into its equivalent get/getr chain tokens:
 // `recv get k1 getr k2 …`. A computed segment's key becomes a ParenExpr so
 // the chain evaluates it before get/getr consumes it. This is the Stage-1
-// evaluator (design/REACH.0.md §4): the chain is identical to the former
+// evaluator (design/REACH.10.md §4): the chain is identical to the former
 // dot-access ParenExpr, so wrapping it with expandParenExpr and running it
 // in place reproduces exact get/getr semantics.
 func lowerReach(info ReachInfo) []Value {
@@ -2427,7 +2427,7 @@ func expandReach(info ReachInfo) []Value {
 }
 
 // ApplyReach evaluates a Reach against a concrete receiver value — the lens
-// "get" (design/REACH.0.md §7). The reach's own Receiver tokens are ignored
+// "get" (design/REACH.10.md §7). The reach's own Receiver tokens are ignored
 // (a receiverless lens has none); recv becomes the base and the segments
 // (get/getr, literal/computed, in order) walk from it via the same Stage-1
 // lowering bare m.a.b uses, so getr strictness and computed-key evaluation
@@ -2573,7 +2573,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// stay as DATA: a macro is applied only by name (the stepWord branch
 	// captures its raw operands before collection). The anonymous-0-arg
 	// short-circuit below also returns macros as data. (Applying a macro is
-	// never a stack-value dispatch — design/MACROS-PHASE1.0.md §5, D4.)
+	// never a stack-value dispatch — design/MACROS-PHASE1.10.md §5, D4.)
 
 	// Resolve the dispatchable signatures. A self-contained Function value
 	// (an anonymous closure, or a fn defined in THIS registry) is a STABLE
@@ -2686,7 +2686,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// bind f to the Function value instead of to the body's result.
 	// Macro values are likewise data here — a `(macro …)` result must bind
 	// to its name, not auto-expand (it expands only via the named stepWord
-	// branch). See design/MACROS-PHASE1.0.md §5.
+	// branch). See design/MACROS-PHASE1.10.md §5.
 	if (fnDef.Anonymous || fnDef.Macro) && fwdCount == 0 && len(positions) == 0 {
 		e.pointer++
 		return nil
@@ -2732,7 +2732,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	//     params, so CallAQL's named-param binding (InstallDef by
 	//     name) sidesteps any unnamed-param push ordering issues.
 	//
-	// See design/SIG-ORDER-REFACTOR.0.md for the architecture history.
+	// See design/SIG-ORDER-REFACTOR.10.md for the architecture history.
 	//
 	// Only AQL-BODIED definitions take the sub-registry path: a trivial-
 	// delegation wrapper (Body=[Word(inner)]) or a module-preamble fn (real
@@ -3038,7 +3038,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 	// runtime the value MAY still be a legitimate higher-order operand
 	// (`filter f xs`), so it is only marked here; the top-level
 	// end-of-Run drain raises uncalled_function if nothing consumed it
-	// (ERRORS.0.md §5 option 2) — check and runtime name the same bug
+	// (ERRORS.8.md §5 option 2) — check and runtime name the same bug
 	// the same way.
 	if e.registry != nil &&
 		fnDef.Name != "" && !fnDef.Anonymous &&
@@ -3317,7 +3317,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	// args in top-first sig order (matchSignature convention).
 	// Named params bind by name; unnamed params push to body tokens in
 	// i-order. No reordering — same convention as InstallFnDef and
-	// CallAQL. See design/SIG-ORDER-REFACTOR.0.md.
+	// CallAQL. See design/SIG-ORDER-REFACTOR.10.md.
 	unnamedCount := 0
 	for i, p := range sig.Params {
 		if p.Name != "" {
@@ -3398,7 +3398,7 @@ func (e *Engine) implicitEnd(fwdIdx int) error {
 // stepEnd handles the "end" keyword.
 func (e *Engine) stepEnd() error {
 	// Statement boundary: void-group records do not blame failures
-	// across statements (ERRORS.0.md §3).
+	// across statements (ERRORS.8.md §3).
 	e.voidGroups = e.voidGroups[:0]
 	endIdx := e.pointer
 
@@ -3882,7 +3882,7 @@ func (e *Engine) stepCloseParen() error {
 
 	// A group that resolved to ZERO values is recorded together with
 	// its candidate consumers — the pending words below it on the
-	// stack — for the blame-shift shape of ERRORS.0.md §3 (VOXGIG B3):
+	// stack — for the blame-shift shape of ERRORS.8.md §3 (VOXGIG B3):
 	// a void call in an argument position starves the consuming word,
 	// which then fails LATER with a generic error at an innocent site.
 	// Collection may legitimately resume past a void group
@@ -3949,7 +3949,7 @@ func (e *Engine) stepCloseParen() error {
 			// refine runs its predicate on the way out (subset semantics),
 			// a bare refine stays nominal (newtype), and builtins/objects
 			// are unchanged (v.Is ≡ v.Parent.ConformsTo on concrete values).
-			// See design/REFINE-NEWTYPE-VS-SUBSET.0.md.
+			// See design/REFINE-NEWTYPE-VS-SUBSET.10.md.
 			for k, exp := range rc.Returns {
 				if !results[extra+k].Is(exp) {
 					return e.returnTypeError(rc.FuncName, k+1, exp, results[extra+k], rc.Pos)
@@ -4228,7 +4228,7 @@ func (e *Engine) hasPendingForwardQuoteArg() bool {
 // hasPendingForwardFormArg reports whether the nearest enclosing pending
 // Forward's next slot is FormArgs — meaning the upcoming Word should be
 // collected as a raw Word (not executed, not coerced to an Atom). Mirrors
-// hasPendingForwardQuoteArg. See design/MACROS-PHASE1.0.md §3.
+// hasPendingForwardQuoteArg. See design/MACROS-PHASE1.10.md §3.
 func (e *Engine) hasPendingForwardFormArg() bool {
 	for i := e.pointer - 1; i >= 0; i-- {
 		if IsOpenParen(e.stack[i]) {
@@ -4291,7 +4291,7 @@ func (e *Engine) hasPendingForwardExpectingFunction() bool {
 // deferred collection. Positions < pointer are stack args. Returns nil
 // sig if no signature matches.
 //
-//nolint:gocyclo,gocognit // dispatch is inherently a big switch; see STATIC_ANALYSIS_REPORT.md
+//nolint:gocyclo,gocognit // dispatch is inherently a big switch; see STATIC_ANALYSIS_REPORT.10.md
 func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*Signature, []int) {
 
 	// Unified dispatch (post §1.4 fix): no more stackOnly/forward-prec
@@ -4401,7 +4401,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				// position — a word stays a Word, a paren/list/literal stays
 				// as-is — with no resolution, no dispatch, no Word→Atom
 				// coercion, and no function-word boundary. The operand is
-				// captured unevaluated. See design/MACROS-PHASE1.0.md §3.
+				// captured unevaluated. See design/MACROS-PHASE1.10.md §3.
 				if sig.FormArgs != nil && sig.FormArgs[fwd] {
 					positions[fwd] = scanIdx
 					fwd++
@@ -4716,7 +4716,7 @@ func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
 		// fallback path bypasses). Resolve it the way the forward scan
 		// would — via the def stack — so a def-bound surface carrier
 		// (e.g. a generic fn's surface-bounded `x:T` param inside
-		// AnalyseFnBody, design/GENERICS.0.md Phase 5) is visible to
+		// AnalyseFnBody, design/GENERICS.10.md Phase 5) is visible to
 		// the S2 scan.
 		if IsWord(v) {
 			if wv, werr := AsWord(v); werr == nil {

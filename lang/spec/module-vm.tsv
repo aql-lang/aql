@@ -21,7 +21,7 @@
 #
 # §4  parse — AQL source → inspectable structure (no evaluation).
 #     Returns a QUOTED list of the engine's parse values; element
-#     shapes are implementation-defined for now (design/PARSING.0.md
+#     shapes are implementation-defined for now (design/PARSING.10.md
 #     §3). Parse errors raise [aql/parse_error].
 "aql:vm" import end Vm.parse "1 add 2"	(quote [1 word(add) 2])	parses source to a quoted token list without running it
 "aql:vm" import end size (Vm.parse "1 add 2")	3	the structure is ordinary data

@@ -333,7 +333,7 @@ Module FnDef wrappers (`makeXxxFnDef` helpers) get a special
 short-circuit in `execFnDefLiteral`: trivial single-word delegation
 bodies (`[Word(inner-name)]`) dispatch the inner native directly via
 `execMatch`, skipping CallAQL entirely. See
-`design/SIG-ORDER-REFACTOR.0.md`.
+`design/SIG-ORDER-REFACTOR.10.md`.
 
 ### The unified algorithm
 
@@ -815,7 +815,7 @@ methods on `Value`; only `Is(t)` and `String()` remain as methods.)
   `Value` since they're the canonical handler-side error path; the
   low-level accessors were drained to free functions in `eng/` as part
   of the type-decoupling work — see
-  `design/TYPE-DECOUPLING.0.md`.
+  `design/TYPE-DECOUPLING.10.md`.
 
 **Check mode**:
 - `r.IsCheckMode()` — read-side helper. Replaces `r.Check.Mode` and
@@ -851,7 +851,7 @@ methods on `Value`; only `Is(t)` and `String()` remain as methods.)
   from `&v` of a by-value type-literal Value — `behave` Behavior
   installs and LCA-walk identity must reach the canonical pointer,
   not a stack-local copy. See
-  `design/TYPE-CANONICALIZATION.0.md`.
+  `design/TYPE-CANONICALIZATION.10.md`.
 
 **Typed-def reparent**:
 - `ReparentValue(v, def) Value` — return a fresh copy of v with
@@ -903,7 +903,7 @@ to the corresponding Atom position. Without `/q`, callers will see an
 ## Value Comparison & Ordering
 
 `cmp` / `lt` / `gt` / `lte` / `gte` / `sort` route through one total
-order — see `design/TYPE-ORDERING.0.md` for the canonical
+order — see `design/TYPE-ORDERING.10.md` for the canonical
 design. The kernel-side implementation lives in `eng/go/compare.go`
 and `eng/go/compare_scalar_behaviors.go`; this section captures
 what handler authors and word implementers need to know.

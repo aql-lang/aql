@@ -183,7 +183,7 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 	// list carrier rather than concrete tokens) has a genuinely unknown
 	// residual, so emit a bounded gradual dynamic(Any) — optimistically
 	// usable downstream — rather than strict Carry<Any>.
-	// (design/dynamic-modality-report.0.md, do/eval hatch.) A concrete
+	// (design/dynamic-modality-report.10.md, do/eval hatch.) A concrete
 	// body is analyzed normally; one that runs to nothing stays strict.
 	if !(IsConcrete(body) && body.Parent.ConformsTo(TList)) {
 		return []Value{NewDynamicCarrier(TAny)}

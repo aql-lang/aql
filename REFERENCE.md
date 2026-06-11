@@ -91,7 +91,7 @@ every named type you define with `def`.
   precision. (This includes the hex int64 minimum `-0x8000000000000000`.)
 
 **Float** is IEEE-754 `binary64` (see
-[design/IEEE-754-COMPLIANCE.0.md](design/IEEE-754-COMPLIANCE.0.md)):
+[design/IEEE-754-COMPLIANCE.8.md](design/IEEE-754-COMPLIANCE.8.md)):
 
 - Any literal with a `.` is a `Float`, parsed correctly-rounded
   (round-ties-to-even): `3.14`, `-0.5`, trailing-dot `5.` → `5.0`.
@@ -774,7 +774,7 @@ Two further sharp edges on numbers:
   degrading to a `Float`: `2 pow 63` and `9223372036854775807 add 1` both
   error. Make an operand a `Float` (e.g. `9223372036854775807 add 1.0`)
   for an approximate IEEE-754 result. (Arbitrary-precision integers are a
-  planned future change — see `design/INTEGER-OVERFLOW-STRATEGY.0.md`.)
+  planned future change — see `design/INTEGER-OVERFLOW-STRATEGY.5.md`.)
 * `Float` is an IEEE-754 binary `float64`, **not** a base-10
   decimal — `0.1 add 0.2` returns `0.30000000000000004` and `1 eq 1.0`
   returns `true` even though the two divide differently. See
@@ -1025,7 +1025,7 @@ mkbad                                              # returns [aql/type_error] re
 
 The newtype-vs-subset distinction and its cross-language rationale are
 explained in **[Explanation: Function signatures](EXPLANATION.md#function-signatures-and-refinement-types)**
-and pinned in `design/REFINE-NEWTYPE-VS-SUBSET.0.md`.
+and pinned in `design/REFINE-NEWTYPE-VS-SUBSET.10.md`.
 
 ### Macros
 
@@ -1129,7 +1129,7 @@ before the call.
 
 > **Deferred.** A `` `[ … ] `` quasiquote sugar (Phase 3) and compiled-mode
 > expansion / `eval-when` staging (Phase 5, awaiting the IR backend) are
-> designed but not yet shipped. See `design/MACROS.0.md`.
+> designed but not yet shipped. See `design/MACROS.8.md`.
 
 ### Control flow
 

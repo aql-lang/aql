@@ -260,14 +260,14 @@ type FnSig struct {
 	NoEvalMapArgs map[int]bool
 	// RawParens marks arg positions where a forward ParenExpr is captured
 	// RAW (not pre-evaluated) so the handler receives the paren as code.
-	// Opt-in; see NativeSig.RawParens and design/PAREN-REPRESENTATION.0.md.
+	// Opt-in; see NativeSig.RawParens and design/PAREN-REPRESENTATION.9.md.
 	RawParens map[int]bool
 	// FormArgs marks arg positions captured as a raw FORM — a generalization
 	// of RawParens (don't pre-eval a paren) and QuoteArgs (capture a bare word
 	// as data) to ANY operand: a word stays a Word, a paren/list/literal is
 	// captured unevaluated, with no def resolution, no dispatch, and no
 	// Word→Atom coercion. The macro definer sets it on every param so a macro
-	// receives its operands as code. See design/MACROS-PHASE1.0.md §3.
+	// receives its operands as code. See design/MACROS-PHASE1.10.md §3.
 	FormArgs map[int]bool
 
 	// --- Dispatch fields (folded in from the former Signature struct;
@@ -355,7 +355,7 @@ type FnDefInfo struct {
 	Anonymous bool
 	// Macro is true iff the FnDef was produced by the `macro` definer. A
 	// macro is an fn the expander runs on UNEVALUATED operand forms (every
-	// param is FormArgs raw-capture; §3 of design/MACROS-PHASE1.0.md), whose
+	// param is FormArgs raw-capture; §3 of design/MACROS-PHASE1.10.md), whose
 	// returned token list is spliced into the call site rather than left as a
 	// value. Read at dispatch (stepWord / execFnDefLiteral) to branch to the
 	// expander before normal forward collection. Unlike Anonymous (check-mode
@@ -366,7 +366,7 @@ type FnDefInfo struct {
 	// fns. Dispatch admission rides the placeholder nodes' Behaviors;
 	// at each call the inferred bindings are installed as body-scoped
 	// type bindings so `of [T]` / `make (Box of [T])` resolve. See
-	// design/GENERICS.0.md Phase 4.
+	// design/GENERICS.10.md Phase 4.
 	Gen *GenSpecInfo
 	// Captured holds enclosing-fn-local bindings snapshotted at fn-
 	// construction time — the implementation of lexical closures.
@@ -487,7 +487,7 @@ type DisjunctInfo struct {
 // negation is the kernel's set-theoretic complement; together with
 // DisjunctInfo (union) and TandValues (intersection) it closes the type
 // algebra under Boolean operations — see
-// design/elixir-types-in-aql-report.0.md.
+// design/elixir-types-in-aql-report.10.md.
 type NegationInfo struct {
 	Inner Value
 }
@@ -506,7 +506,7 @@ type ObjectTypeInfo struct {
 	ID              string          // unique internal ID: "T_" + 12 hex chars
 	Name            string          // full type path (e.g. "Object/Foo/Bar")
 	Type            *Type           // canonical *Type identity; populated by MintType during installation
-	Class           bool            // class-rooted (minted under Ideal/Class): sealed, flat instances — see design/CLASS-OBJECT.0.md
+	Class           bool            // class-rooted (minted under Ideal/Class): sealed, flat instances — see design/CLASS-OBJECT.10.md
 	cachedAllFields *OrderedMap     // lazily computed merged field map (immutable after first call)
 }
 
@@ -797,7 +797,7 @@ type Value struct {
 	Undefined bool    // atom created from an undefined word (error if left on result stack)
 	// FailedDispatch marks a named Function value that a dispatch
 	// attempt left on the stack as data because no signature matched
-	// (the silent-failure shape of design/ERRORS.0.md §5, VOXGIG T1).
+	// (the silent-failure shape of design/ERRORS.8.md §5, VOXGIG T1).
 	// Harmless while anything consumes the value (higher-order use,
 	// def); if it survives unconsumed to the top-level end-of-Run
 	// drain, the engine raises uncalled_function at the original call
@@ -805,7 +805,7 @@ type Value struct {
 	FailedDispatch bool
 	Carrier        bool // static-typecheck carrier (type-only, Data stripped of concrete payload)
 	// Dynamic marks a carrier as a bounded gradual value (Elixir-style
-	// dynamic(T) — design/dynamic-modality-report.0.md). Implies Carrier.
+	// dynamic(T) — design/dynamic-modality-report.10.md). Implies Carrier.
 	// Its Parent/Data is a BOUND, not a proven type: at a signature
 	// boundary it matches the slot unless PROVABLY disjoint from it
 	// (not-disjoint rule), rather than by strict ConformsTo. Set only on
@@ -1349,7 +1349,7 @@ func NewParenExpr(items []Value) Value {
 // NewReach creates an Ideal/Reach value — a first-class dot-access node
 // (m.a.b). receiver is the base expression's tokens (nil/empty for a
 // receiverless reach); segments are the .key / !.key steps; eval marks it
-// evaluate-by-default. See design/REACH.0.md.
+// evaluate-by-default. See design/REACH.10.md.
 func NewReach(info ReachInfo) Value {
 	return NewValueRaw(TReach, info)
 }
@@ -1357,7 +1357,7 @@ func NewReach(info ReachInfo) Value {
 // NewReachFromKeys builds an inert (non-evaluating, Eval=false) Reach over a
 // concrete receiver value with literal `get` segments — the programmatic
 // `reach` constructor. The result is data (a lens): it does not auto-evaluate
-// like a parsed m.a.b. See design/REACH.0.md §7.
+// like a parsed m.a.b. See design/REACH.10.md §7.
 func NewReachFromKeys(receiver Value, keys []Value) Value {
 	segs := make([]ReachSeg, len(keys))
 	for i, k := range keys {
@@ -2220,7 +2220,7 @@ func AsMutableMap(v Value) (*OrderedMap, error) {
 func (v Value) String() string {
 	// A dynamic carrier renders as dynamic(<bound>) so the gradual
 	// modality is legible in traces / `aql check` output instead of
-	// masquerading as its bare bound (design/dynamic-modality-report.0.md).
+	// masquerading as its bare bound (design/dynamic-modality-report.10.md).
 	// Render the bound by clearing the flag and recursing.
 	if v.Dynamic {
 		inner := v

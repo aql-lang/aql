@@ -69,7 +69,7 @@ cost; both lost time to bugs that produced wrong values with no error.
 | Tag | Sev | Status | Issue |
 |-----|-----|--------|-------|
 | B1 | 🔴 | ✅ fixed | Forward `set` (`b set k v`) on a `refine Object` store silently did **not** mutate. **Now:** `set` is an in-place mutator in *both* forms — forward `b set flag 1` writes (read-back returns `1`), and so does the stack form. Note the semantics also changed: `set` returns **nothing**, so `def r (b set k v)` no longer binds anything; read the store back instead. |
-| T1 | 🔴 | ✅ fixed | Landed (2026-06-10) per `design/ERRORS.0.md` §5 (option 2): a named Function value left by a failed dispatch is marked, and if nothing consumes it by the top-level end-of-Run drain, the runtime raises `[aql/uncalled_function]` with the original call-site span — the same name `aql check` uses. Higher-order and function-as-value uses are unaffected (consumption clears the residue). |
+| T1 | 🔴 | ✅ fixed | Landed (2026-06-10) per `design/ERRORS.8.md` §5 (option 2): a named Function value left by a failed dispatch is marked, and if nothing consumes it by the top-level end-of-Run drain, the runtime raises `[aql/uncalled_function]` with the original call-site span — the same name `aql check` uses. Higher-order and function-as-value uses are unaffected (consumption clears the residue). |
 | T3 | 🟠 | ✅ closed (docs) | `merge` is still a **deep, index-wise** merge by design, but it is **no longer a core word** (it moved to `aql:struct-util`) and `StructUtil.setpath` is the copy-returning one-field update. The steering docs landed: REFERENCE.md "Built-in modules" carries the merge-is-deep gotcha pointing one-field edits at `setpath`, and the `set` callout cross-references it. |
 | T4 | 🔴 | ✅ fixed | `do {k:[v]}` no longer dispatches a string that names a word: `do {val:["if"]}` → `{"val": "if"}` (commits `99de896`, `3eb461f` — the last string→word promotion was removed and pinned). The box-every-value workaround is obsolete. |
 | T5 | 🟡 | 📖 by design | `eq` on lists is **identity** — now documented as intended (commit `0fedfc0`), and the structural form **`deq` exists**: `["a" "b"] ["a" "b"] eq` → `false`, `… deq` → `true`. REFERENCE.md carries the property-body-with-eq-passes-vacuously caveat. |
@@ -89,18 +89,18 @@ isolation but surprising in combination (`merge` depth, ~~`do` evaluation~~
 
 | Tag | Sev | Status | Issue |
 |-----|-----|--------|-------|
-| B2a | 🟡 | ❌ open → `design/ERRORS.0.md` §6 | Chained forward prints reverse: `(1 add 1) print (2 add 2) print` prints **4 then 2**; not flagged by `aql check` either. Beware: this reordering silently scrambles the apparent results of *any* multi-statement repro that omits `end` separators. **Per ADR-004 (all words forward by default) the report's original fix — make `print` stack-first — is rejected**; the adopted direction is to evaluate sibling forward groups in source order (engine), with `end`/`;`/`print/s` as the documented call-site forms meanwhile. |
+| B2a | 🟡 | ❌ open → `design/ERRORS.8.md` §6 | Chained forward prints reverse: `(1 add 1) print (2 add 2) print` prints **4 then 2**; not flagged by `aql check` either. Beware: this reordering silently scrambles the apparent results of *any* multi-statement repro that omits `end` separators. **Per ADR-004 (all words forward by default) the report's original fix — make `print` stack-first — is rejected**; the adopted direction is to evaluate sibling forward groups in source order (engine), with `end`/`;`/`print/s` as the documented call-site forms meanwhile. |
 | B2b | 🟡 | ✅ fixed | Trailing `(expr) print` at EOF no longer raises. (Repro: `b2_print_trailing.aql` runs cleanly and prints `value 1`.) |
 | T8 | 🟡 | ✅ fixed | `` `${…}` `` inside a recursive fn body now expands correctly — a genuinely recursive interpolation (`` `step-${n} then ${(n 1 sub) walk}` ``) prints `step-3 then step-2 then step-1 then done`. The raw-template-AST leak from the first verification pass is gone. (Repro: `t8_rec.aql`.) |
 | T9.3 | 🟢 | ✅ fixed | The basic shape "user-defined word followed by another word" works (`xs [add-one] each print` → `[11, 21, 31]`, re-confirmed on `8fdd4e1` after the lazy forward-resolution rework). No tighter repro from the trie source has surfaced a remaining failure mode. |
-| T9.4 | 🟢 | ✅ diagnosed | The `mixed_form_call` check advisory landed (2026-06-10, `design/ERRORS.0.md` §6.2): `aql check` now flags ≥3-arg calls that mix stack and forward collection (`(x 3 gt) if […] […]`) with an info-severity advisory recommending the all-forward form. Runtime semantics unchanged per ADR-004 (no per-word flips); the deeper B2a sibling-order fix rides the structure-first rework. |
+| T9.4 | 🟢 | ✅ diagnosed | The `mixed_form_call` check advisory landed (2026-06-10, `design/ERRORS.8.md` §6.2): `aql check` now flags ≥3-arg calls that mix stack and forward collection (`(x 3 gt) if […] […]`) with an info-severity advisory recommending the all-forward form. Runtime semantics unchanged per ADR-004 (no per-word flips); the deeper B2a sibling-order fix rides the structure-first rework. |
 
 ### Theme C — Dispatch residue & overloads
 
 | Tag | Sev | Status | Issue |
 |-----|-----|--------|-------|
-| B3 | 🟡 | ✅ fixed | Landed (2026-06-10) per `design/ERRORS.0.md` §3: `def r (void-call)` now raises `[aql/def_error] def: expression produced no value to bind to 'r'` at the def (with the returns-nothing hint); a void group starving any other word raises `[aql/no_value_error]` at the causing call; and an undefined reference to a never-bound name explains the real cause. Legitimate void groups (`1 2 add ()`, `add () 5 6`) are untouched. Spec rows in `lang/spec/error.tsv` §3. |
-| B5 | 🟢 | ✅ fixed | Resolved by design under the container symmetry (class/object split, `design/CLASS-OBJECT.0.md`): `make Object {}` is now *valid* — it constructs an empty, open, mutable Object (Phase B landed 2026-06-10, with the `object {…}` sugar). The hint proposal that briefly lived in `design/ERRORS.0.md` §4 stays superseded. |
+| B3 | 🟡 | ✅ fixed | Landed (2026-06-10) per `design/ERRORS.8.md` §3: `def r (void-call)` now raises `[aql/def_error] def: expression produced no value to bind to 'r'` at the def (with the returns-nothing hint); a void group starving any other word raises `[aql/no_value_error]` at the causing call; and an undefined reference to a never-bound name explains the real cause. Legitimate void groups (`1 2 add ()`, `add () 5 6`) are untouched. Spec rows in `lang/spec/error.tsv` §3. |
+| B5 | 🟢 | ✅ fixed | Resolved by design under the container symmetry (class/object split, `design/CLASS-OBJECT.10.md`): `make Object {}` is now *valid* — it constructs an empty, open, mutable Object (Phase B landed 2026-06-10, with the `object {…}` sugar). The hint proposal that briefly lived in `design/ERRORS.8.md` §4 stays superseded. |
 | B6 | 🟢 | ✅ fixed | `indexof` is now **haystack-last**, on the data-last grain: it moved to `aql:string-util` as `StringUtil.indexof needle haystack` (`StringUtil.indexof "ll" "hello"` → `2`), with the list form split out as `ArrayUtil.indices` (commits `3b3316c`, `0fedfc0`, `ec5aa25` — the whole string module is now subject-last). The bare core word is gone, so old haystack-first call sites fail loudly rather than answering `-1`. |
 
 ### Theme D — Reserved identifiers
@@ -125,10 +125,10 @@ isolation but surprising in combination (`merge` depth, ~~`do` evaluation~~
 
 | Tag | Sev | Status | Issue |
 |-----|-----|--------|-------|
-| T9.1 | 🟡 | ✅ fixed (semantics) / 🟠 open (perf) | Maps with **computed keys** now work end-to-end: `{[k]: v}` literals evaluate the key, `m get (k)` reads, and `set` gained a **copy-returning Map form** — `{a:1} set (k) 2` returns a new map with the receiver untouched, and calls chain (`{} set a 1 set b 2`). Together with `StructUtil.items` for enumeration, the association-list workaround is retired. Residual: each set copies the map (O(n) per insert, like setpath), so bulk incremental construction still wants the P4 native persistent map (HAMT Level B). The former side gap (`refine Object` dynamic fields non-enumerable) is gone structurally: `refine Object` was removed under the class/object split (2026-06-09) — class instances are sealed and enumerate their flat field map, and plain Objects are fully enumerable (`design/CLASS-OBJECT.0.md`). |
+| T9.1 | 🟡 | ✅ fixed (semantics) / 🟠 open (perf) | Maps with **computed keys** now work end-to-end: `{[k]: v}` literals evaluate the key, `m get (k)` reads, and `set` gained a **copy-returning Map form** — `{a:1} set (k) 2` returns a new map with the receiver untouched, and calls chain (`{} set a 1 set b 2`). Together with `StructUtil.items` for enumeration, the association-list workaround is retired. Residual: each set copies the map (O(n) per insert, like setpath), so bulk incremental construction still wants the P4 native persistent map (HAMT Level B). The former side gap (`refine Object` dynamic fields non-enumerable) is gone structurally: `refine Object` was removed under the class/object split (2026-06-09) — class instances are sealed and enumerate their flat field map, and plain Objects are fully enumerable (`design/CLASS-OBJECT.10.md`). |
 | T9.2 | 🟡 | ✅ fixed | `filter` now accepts a `[…]` quotation like `each`/`fold`: `filter [2 gt] [1 2 3 4]` → `[3 4]` (element pushed first, no `{key,value}` wrapper; maps filter by value to a map; a non-Boolean body result is a **loud error**, not a silent drop). The Reach lens (`filter $.active xs`) and Function-callback forms remain. Spec rows in `lang/spec/higher-order.tsv` §5b. |
-| T9.6 | 🟡 | ✅ fixed | `raise` landed (2026-06-10) per `design/ERRORS.0.md` §2: message / code+message / spec-map forms, raising the same `Ideal/Error` natives produce, caught by the existing `do … error […]`; handlers read `e.code` / `e.message` / payload keys, `convert Map` projects them. Spec rows in `lang/spec/error.tsv`. |
-| T9.7 | 🟡 | ✅ fixed | In-memory parsing landed (2026-06-10) per `design/PARSING.0.md`: `StructUtil.parse` decodes jsonic/JSON text to data (the `jsonify` complement — data context, jsonic superset, loud `parse_error` on malformed/empty input) and `Vm.parse` parses AQL source to a quoted token list without evaluating it (element shapes are the engine's parse values, implementation-defined for now). Spec rows in `module-struct.tsv` / `module-vm.tsv`. |
+| T9.6 | 🟡 | ✅ fixed | `raise` landed (2026-06-10) per `design/ERRORS.8.md` §2: message / code+message / spec-map forms, raising the same `Ideal/Error` natives produce, caught by the existing `do … error […]`; handlers read `e.code` / `e.message` / payload keys, `convert Map` projects them. Spec rows in `lang/spec/error.tsv`. |
+| T9.7 | 🟡 | ✅ fixed | In-memory parsing landed (2026-06-10) per `design/PARSING.10.md`: `StructUtil.parse` decodes jsonic/JSON text to data (the `jsonify` complement — data context, jsonic superset, loud `parse_error` on malformed/empty input) and `Vm.parse` parses AQL source to a quoted token list without evaluating it (element shapes are the engine's parse values, implementation-defined for now). Spec rows in `module-struct.tsv` / `module-vm.tsv`. |
 | — | 🟡 | ✅ closed (docs) | `with` / `assoc` are not words, by choice: `StructUtil.setpath` *is* the copy-returning single-key (and deep-path) update — `{a:1,b:2} StructUtil.setpath "b" 3` → `{a:1, b:3}` — and is now documented as such in REFERENCE.md (both the `set` callout and the merge gotcha point to it). Adding an alias was rejected as API duplication. |
 
 ### Theme H — HAMT case study (capability ceiling)
@@ -235,16 +235,16 @@ Mitigated (real change landed; residual gap remains):
 
 - **T1** — runtime dispatch still silently leaves the fn value as data,
   but `aql check` reports it as an `uncalled_function` **error**; the
-  runtime fix is designed in `design/ERRORS.0.md` §5.
+  runtime fix is designed in `design/ERRORS.8.md` §5.
 
 Confirmed still open (each now carries a written design):
 
 - **B2a** chained-print reversal, **B3** void-call residue, **T9.4**
   mixed-form `if`, **B5** `make Object {}` hint —
-  `design/ERRORS.0.md` §§3–6 (and per ADR-004, B2a's fix is sibling
+  `design/ERRORS.8.md` §§3–6 (and per ADR-004, B2a's fix is sibling
   evaluation order, *not* a stack-first `print`).
-- ~~**T9.6 `raise`**~~ — ✅ landed (`design/ERRORS.0.md` §2).
-- ~~**T9.7 in-memory `parse`**~~ — ✅ landed (`design/PARSING.0.md`).
+- ~~**T9.6 `raise`**~~ — ✅ landed (`design/ERRORS.8.md` §2).
+- ~~**T9.7 in-memory `parse`**~~ — ✅ landed (`design/PARSING.10.md`).
 - **T9.1** map computed keys — engine/runtime work (HAMT Level B).
 
 Reclassified as docs / by design (docs landed):
@@ -281,7 +281,7 @@ Status after the second pass:
    and the *runtime* is now loud too: a named Function value left by a
    failed dispatch raises `uncalled_function` at the top-level
    end-of-run drain if nothing consumed it, with the original call-site
-   span (`design/ERRORS.0.md` §5). B1, which looked like the same
+   span (`design/ERRORS.8.md` §5). B1, which looked like the same
    mechanism, turned out separable and is ✅ fixed: `set` now mutates
    in place in both forms.)
 2. **`get` on a bare undefined word should error, not return `none`**
@@ -293,9 +293,9 @@ Status after the second pass:
    `uncalled_function`, `forward_strands_operand`, `mixed_form_call`
    (the T9.4 shape), and dead-overload detection; T4 was fixed
    outright; B3 void-`def` residue and the runtime uncalled-function
-   case are now loud at runtime (`design/ERRORS.0.md` §3/§5). The one
+   case are now loud at runtime (`design/ERRORS.8.md` §3/§5). The one
    survivor is B2a print reversal — sibling-group source order rides
-   the structure-first rework (`ERRORS.0.md` §6.1).
+   the structure-first rework (`ERRORS.8.md` §6.1).
 
 ### P1 — A small set of new primitives that retire workarounds
 
@@ -303,10 +303,10 @@ Status after the second pass:
    ✅ done: `StructUtil.setpath` is the answer and is now documented
    as such; an alias was rejected as API duplication.
 2. ~~**`raise` / `throw` with a message**~~ (T9.6) — ✅ done
-   (`raise`, `design/ERRORS.0.md` §2).
+   (`raise`, `design/ERRORS.8.md` §2).
 3. ~~**In-memory jsonic `parse` / `decode`** to complement `jsonify`~~
    (T9.7) — ✅ done (`StructUtil.parse` + `Vm.parse`,
-   `design/PARSING.0.md`).
+   `design/PARSING.10.md`).
 4. ~~**`filter` accepts a `[…]` quotation** like `each`/`fold`~~
    (T9.2) — ✅ done.
 5. ~~**Native `popcount`**~~ ✅ (`BinUtil.popcount`) +
@@ -399,19 +399,19 @@ doc gaps. Status after the follow-up batch:
   traditional Forth stack vocabulary is stack-only.* This is the
   cultural ruling that re-scopes B2a (below).
 
-**Designed, awaiting implementation** (specs in `design/ERRORS.0.md`
-and `design/PARSING.0.md` — the error- and parsing-shaped proposals
+**Designed, awaiting implementation** (specs in `design/ERRORS.8.md`
+and `design/PARSING.10.md` — the error- and parsing-shaped proposals
 were moved out of this report into those documents):
 
 | Item | Where specified |
 |------|-----------------|
-| `raise` (T9.6) | ERRORS.0.md §2 |
-| void-`def` loud error (B3) | ERRORS.0.md §3 |
-| `make Object {}` hint (B5) | ERRORS.0.md §4 |
-| runtime `uncalled_function` (T1 residual) | ERRORS.0.md §5 (option 2: end-of-run residue check) |
-| sibling forward groups evaluate in source order (B2a) | ERRORS.0.md §6 — note: per ADR-004 the original "make `print` stack-first" suggestion is **rejected**; the fix is evaluation order, not a per-word flip |
-| `mixed_form_call` check advisory (T9.4) | ERRORS.0.md §6 |
-| ~~`StructUtil.parse` + `Vm.parse` (T9.7)~~ ✅ landed 2026-06-10 | PARSING.0.md §2–3 |
+| `raise` (T9.6) | ERRORS.8.md §2 |
+| void-`def` loud error (B3) | ERRORS.8.md §3 |
+| `make Object {}` hint (B5) | ERRORS.8.md §4 |
+| runtime `uncalled_function` (T1 residual) | ERRORS.8.md §5 (option 2: end-of-run residue check) |
+| sibling forward groups evaluate in source order (B2a) | ERRORS.8.md §6 — note: per ADR-004 the original "make `print` stack-first" suggestion is **rejected**; the fix is evaluation order, not a per-word flip |
+| `mixed_form_call` check advisory (T9.4) | ERRORS.8.md §6 |
+| ~~`StructUtil.parse` + `Vm.parse` (T9.7)~~ ✅ landed 2026-06-10 | PARSING.10.md §2–3 |
 
 **Real engine work (unchanged):**
 

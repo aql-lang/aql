@@ -8,7 +8,7 @@ import (
 )
 
 // Reach Phase D: the `reach` constructor (an inert lens value) and
-// inspection via convert Map / convert List. See design/REACH.0.md §7.
+// inspection via convert Map / convert List. See design/REACH.10.md §7.
 
 func TestReachConstructorIsInert(t *testing.T) {
 	// `reach` builds a Reach value that does NOT auto-evaluate.

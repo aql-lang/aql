@@ -487,7 +487,7 @@ reify Point3 "…json…"   # hydrate from JSON text
 - Cycles among instances: `jsonify` errors loudly (pure JSON has no
   references).
 - Synergy: `reify` from text needs in-memory JSON parsing — the same
-  machinery as `StructUtil.parse` (`design/PARSING.0.md` §2); one
+  machinery as `StructUtil.parse` (`design/PARSING.10.md` §2); one
   implementation serves both.
 
 Sub-questions resolved (2026-06-09, second pass):
@@ -509,16 +509,16 @@ Sub-questions resolved (2026-06-09, second pass):
   sealing. Schema evolution is handled by adding *defaulted* fields —
   old data lacking them still reifies.
 - **Home: `StructUtil.reify`**, paired with `jsonify` and sharing the
-  module's parse machinery (`design/PARSING.0.md` §2).
+  module's parse machinery (`design/PARSING.10.md` §2).
 
 ## 4. Interactions with open proposals
 
 - **B5 (`make Object {}`)** — resolved by design in Phase B (becomes
-  a value, not an error). The ERRORS.0.md §4 hint proposal stays
+  a value, not an error). The ERRORS.8.md §4 hint proposal stays
   superseded.
 - **T9.1 side gap (non-enumerable dynamic fields)** — dies
   structurally with flat instances + open Objects.
-- **`raise` (ERRORS.0.md §2)** — `sealed_field` and `refine_error`
+- **`raise` (ERRORS.8.md §2)** — `sealed_field` and `refine_error`
   arrive through the normal native error path; no dependency.
 
 ## 5. Implementation phases
