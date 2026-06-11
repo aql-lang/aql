@@ -1581,7 +1581,21 @@ Row`. See **[HOWTO: Define a record/table/object type](HOWTO.md#define-a-record-
 | Word | Description |
 |------|-------------|
 | `inspect` | Structured view of a value, word, or type |
+| `canon` | Render a value as canonical AQL source (a String) |
 | `trace` | Evaluate a list with step-by-step tracing |
+
+**`canon` is round-trippable for data.** The result is the same
+canonical rendering the executable spec compares against, and for data
+values — scalars, atoms (`foo/q`), `none`, type literals, paths, and
+plain or flex Node trees — evaluating it reproduces an equivalent
+value. Flexness is marked at every level (`canon (flex {a:[1]})`
+returns `'(flex {a:(flex [1])})'`), strings pick a quoting that
+re-parses exactly (`canon "it's"` returns `"it's"` double-quoted, and
+content with both quote kinds or backslashes is escaped), and a plain
+list renders bare. Identity-bearing values — `Store`, `Array`, object
+instances, functions, timers — still render, but rebuilding them from
+the source produces a *fresh* container: data round-trips, identity
+does not.
 
 ### I/O
 

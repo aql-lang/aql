@@ -5,6 +5,46 @@ import (
 	"strings"
 )
 
+// canonString renders a String payload as parseable AQL source — the
+// round-trip half of the canon contract. The plain single-quoted form
+// is kept verbatim for ordinary content (the form every spec row and
+// doc example pins); content containing a single quote switches to
+// double quotes; content with both quote kinds, backslashes, or
+// control characters falls back to single quotes with backslash
+// escapes. Whatever is emitted re-parses to the same string —
+// previously `it's` rendered as 'it's', which re-parsed wrongly.
+func canonString(s string) string {
+	hasSingle := strings.ContainsRune(s, '\'')
+	hasEscape := strings.ContainsAny(s, "\\\n\t\r")
+	switch {
+	case !hasSingle && !hasEscape:
+		return "'" + s + "'"
+	case !strings.ContainsRune(s, '"') && !hasEscape:
+		return `"` + s + `"`
+	default:
+		var b strings.Builder
+		b.WriteByte('\'')
+		for _, r := range s {
+			switch r {
+			case '\\':
+				b.WriteString(`\\`)
+			case '\'':
+				b.WriteString(`\'`)
+			case '\n':
+				b.WriteString(`\n`)
+			case '\t':
+				b.WriteString(`\t`)
+			case '\r':
+				b.WriteString(`\r`)
+			default:
+				b.WriteRune(r)
+			}
+		}
+		b.WriteByte('\'')
+		return b.String()
+	}
+}
+
 // Canon renders a stack of values as canonical AQL source — a string
 // that, when parsed and evaluated, reproduces the input stack. Where it
 // diverges from Value.String:
@@ -85,7 +125,7 @@ func CanonValue(v Value) string {
 		return FormatFloat(f)
 	case v.Parent.ConformsTo(TString):
 		s, _ := AsString(v)
-		return "'" + s + "'"
+		return canonString(s)
 	case v.Parent.ConformsTo(TBoolean):
 		b, _ := AsBoolean(v)
 		if b {

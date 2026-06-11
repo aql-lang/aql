@@ -60,6 +60,8 @@ WORD bxor
 WORD cancel
   [Ideal/Timeout] barrier=1
   [Ideal/Interval] barrier=1
+WORD canon
+  [Any] barrier=1 returns=[Scalar/String]
 WORD case
   [Any Any] barrier=2 noeval={0,1} returns=[Any]
 WORD changecase

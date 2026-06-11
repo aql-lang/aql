@@ -44,7 +44,7 @@
 # §7  repeat / pad / escape — repeat is subject-last: `repeat count input`
 "aql:string-util" import end StringUtil.repeat 3 'ab'	'ababab'	repeat n times
 "aql:string-util" import end StringUtil.pad 5 'x'	'x    '	pad string to a width (right-padded)
-"aql:string-util" import end StringUtil.escape 'a<b'	'a\<b'	escape special characters
+"aql:string-util" import end StringUtil.escape 'a<b'	'a\\<b'	escape special characters (canon renders the literal backslash escaped, so the output re-parses to the same 4-char string)
 #
 # §8  match — literal substring search; subject (input) LAST: `match pattern input`
 "aql:string-util" import end (StringUtil.match '123' 'abc123').ok	true	a match was found
