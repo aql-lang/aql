@@ -1230,14 +1230,21 @@ Key semantics (full design note: `design/FLEX-NODES.0.md`):
   `filter`, `unify` on a flex input produce ordinary `List`/`Map` results.
 - Canon renders flex nodes round-trippable: `(flex {a:1})`.
 
-**FlexList vs Array.** Both grow and mutate, but they serve different
-jobs: `Array` (`Ideal/Array`) is the bulk *indexed store* behind the
-APL-style vocabulary (`iota`, `reshape`, `transpose`, …) and is opaque to
-Node structural behavior, while `FlexList` is a *Node* — it participates
-in everything List does (each/sort/format/unify/`deq`, every `List`
-signature slot) and converts to/from immutable List via `node`/`flex`.
-Use Array for numeric/bulk indexed workloads; use FlexList to build
-structural data incrementally and then flow it through the list words.
+**FlexList vs Array.** The rule of thumb: *if the data's identity is
+its contents, it's a (Flex)List; if its identity is the container,
+it's an Array.* `FlexList` is a *Node* — it participates in everything
+List does (each/sort/format/unify/`deq`, every `List` signature slot),
+grows and shrinks in place, compares by content, and graduates to an
+immutable List via `node`. `Array` (`Ideal/Array`, `make Array
+[1 2 3]`) is the *identity-like* indexed store: opaque to Node
+structure, **fixed extent** (`set` replaces in-bounds slots only —
+there is deliberately no growth word), and `eq` only to itself (an
+aliased binding is `eq`; equal content in a different instance is
+not — project with `convert List` for content semantics). Use Array
+for shared mutable state addressed by index and bulk/numeric
+workloads; use FlexList to build structural data incrementally and
+flow it through the list words. See `lang/spec/array.tsv` and
+`design/FLEX-NODES.0.md`.
 
 **Record and Table.** Both are Ideal type *descriptors*; their `make`
 instances are plain immutable Map / List-of-Map shapes. Flex nodes give

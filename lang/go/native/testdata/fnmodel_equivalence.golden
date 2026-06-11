@@ -288,7 +288,7 @@ WORD make
   [Ideal/Object Any Ideal/Object] barrier=3 returns=[Ideal/Object]
   [Scalar Node/Map Any] barrier=3 typearg={0} +returnsfn
   [Any Any Node/Map] barrier=3 returns=[Any]
-  [Ideal/Array Node/List] barrier=2 returns=[Ideal/Array]
+  [Ideal/Array Node/List] barrier=2 typearg={0} returns=[Ideal/Array]
   [Ideal Node/Map] barrier=2 typearg={0} +returnsfn
   [Node Any] barrier=2 typearg={0} +returnsfn
   [Scalar Any] barrier=2 typearg={0} +returnsfn

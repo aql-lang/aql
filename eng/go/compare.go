@@ -231,6 +231,13 @@ func ExactEqual(a, b Value) bool {
 	if nodeFamily(a.Parent).Equal(TMap) && nodeFamily(b.Parent).Equal(TMap) {
 		return a.Parent.Equal(b.Parent) && sameContainer(a.Data, b.Data)
 	}
+	// Ideal/Array: identity IS the container — two Arrays are equal
+	// only when they are the same array instance (aliased bindings),
+	// never by content. Content comparison goes through
+	// `convert List`. See design/FLEX-NODES.0.md (identity-vs-content).
+	if a.Parent.Equal(TArray) && b.Parent.Equal(TArray) {
+		return sameContainer(a.Data, b.Data)
+	}
 
 	return false
 }
@@ -266,6 +273,9 @@ func sameContainer(a, b Payload) bool {
 		// Pointer identity — simpler and stronger than the
 		// backing-array probe: the store pointer IS the container.
 		bv, ok := b.(*FlexListData)
+		return ok && av == bv
+	case *ArrayInstanceInfo:
+		bv, ok := b.(*ArrayInstanceInfo)
 		return ok && av == bv
 	default:
 		return false

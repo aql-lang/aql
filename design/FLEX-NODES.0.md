@@ -152,15 +152,33 @@ normalising identity on a plain literal).
 
 ## FlexList vs Array — purpose and abilities
 
+The rule of thumb: **if the data's identity is its contents, it's a
+(Flex)List; if its identity is the container, it's an Array.**
+
 | | `FlexList` (Node) | `Array` (Ideal) |
 |---|---|---|
 | World | Node — full structural list behavior | Ideal — opaque to Node structure |
-| Dispatch | matches every `List` sig slot | only `Array` slots |
-| Vocabulary | all list words (each/sort/take/reverse/…) + append/push/pop/unshift/shift in place | `set`/`get` by index + APL vocabulary (iota, reshape, transpose, where, …) |
-| Growth | `append`/`push`/`unshift` | fixed length per instance (`set` is in-bounds only) |
-| Equality | structural (`deq` by content, family-normalised) | reference semantics |
-| Conversion | `node`/`flex` round-trip with List | `make Array list` / `convert List arr` |
-| Use for | incrementally building structural data that flows through list words and unification | bulk numeric/indexed workloads, APL-style transforms |
+| Dispatch | matches every `List` sig slot | only `Array` slots (`get`/`set` by index) |
+| Vocabulary | all list words (each/sort/take/reverse/…) + append/push/pop/unshift/shift in place | indexed `get`/`set`; content ops via `convert List` |
+| Growth | `append`/`push`/`unshift` grow, `pop`/`shift` shrink | **fixed extent** — `set` is in-bounds replacement only, deliberately no growth word |
+| Equality | structural — `deq`/`cmp` by content (family-normalised); `eq` is container identity | identity only — `eq` is true iff the SAME instance (aliases); never by content; no `deq` |
+| Conversion | `node`/`flex` deep round-trip with List | `make Array list` (incl. FlexList sources) / `convert List arr` |
+| Immutable counterpart | List, by construction | none — Array has no frozen form |
+| Use for | incrementally building structural data that flows through list words and unification | shared mutable state addressed by index; bulk/numeric workloads |
+
+FlexList deliberately leans value-like (content equality, structural
+participation, a frozen form to graduate into); Array deliberately
+leans identity-like (a register file, not a value). Array's
+fixed-extent rule is part of that contract: the Go-level
+`ArrayInstanceInfo.Append` was dead code and was removed so growth
+is unambiguously FlexList territory. `make Array [1 2 3]` is the
+constructor (the historical dispatch bug — the bare `Array` literal
+rejected at a non-TypeArgs slot — is fixed; the sig carries
+`TypeArgs{0}` like the other make targets), and a FlexList works as
+the source since it conforms to List. Longer-term, Array's Ideal
+opacity is what frees it to adopt unboxed numeric backing for the
+Tensor/Matrix family — a specialisation FlexList can never make
+without breaking Node semantics. Verified at `lang/spec/array.tsv`.
 
 ## Record and Table mutability
 

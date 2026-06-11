@@ -26,7 +26,11 @@ var makeNatives = []NativeFunc{
 		Signatures: []NativeSig{
 			{Args: []*Type{TScalar, TMap, TAny}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeScalarOptsHandler, ReturnsFn: ReturnsIdentity(0), BarrierPos: -1},
 			{Args: []*Type{TIdeal, TMap}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeObjHandler, ReturnsFn: ReturnsIdentity(0), BarrierPos: -1},
-			{Args: []*Type{TArray, TList}, Handler: eng.MakeArrayHandler, Returns: []*Type{TArray}, BarrierPos: -1},
+			// TypeArgs on position 0 is required: without it the bare
+			// `Array` literal is rejected at the TArray slot by the
+			// matcher's type-literal rule and `make Array [1 2 3]`
+			// never dispatches.
+			{Args: []*Type{TArray, TList}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeArrayHandler, Returns: []*Type{TArray}, BarrierPos: -1},
 			// Node-family targets: make FlexMap/FlexList (mutable deep
 			// copy) and make Map/List (deep immutable conversion — the
 			// inverse). Structural type bodies that land in the Node

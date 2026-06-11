@@ -604,9 +604,13 @@ func (si *StoreInstanceInfo) Set(key string, val Value) {
 	}
 }
 
-// ArrayInstanceInfo is a mutable ordered array (Object/Array).
+// ArrayInstanceInfo is a mutable ordered array (Ideal/Array).
 // Unlike immutable Node/List values, Array instances can be modified
-// in place via set (index assignment), append, etc.
+// in place via set (index assignment). An Array is FIXED-EXTENT:
+// there is deliberately no growth operation — `set` is in-bounds
+// replacement only, and growth is FlexList's job (the former Append
+// method was dead code and was removed to make the contract explicit;
+// see design/FLEX-NODES.0.md).
 type ArrayInstanceInfo struct {
 	Elems []Value
 }
@@ -631,11 +635,6 @@ func (ai *ArrayInstanceInfo) Set(i int, val Value) bool {
 // Len returns the number of elements.
 func (ai *ArrayInstanceInfo) Len() int {
 	return len(ai.Elems)
-}
-
-// Append adds a value to the end of the array.
-func (ai *ArrayInstanceInfo) Append(val Value) {
-	ai.Elems = append(ai.Elems, val)
 }
 
 // "T_" followed by 12 lowercase hex characters (6 random bytes).
