@@ -215,3 +215,47 @@ func init() {
 		},
 	})
 }
+
+func init() {
+	register(&Entry{
+		Word:        "list",
+		Summary:     "List records from a resource, or filter a record set (CRUD read-many).",
+		Description: "The read-many verb over a Resource entity or a list of records; with an options map it filters. Part of the resource/API access vocabulary alongside create / load / update / remove.",
+	})
+	register(&Entry{
+		Word:        "create",
+		Summary:     "Create a record in a resource (the CRUD create verb).",
+		Description: "Inserts a new record into a Resource entity (or via an API pattern), returning the created record.",
+	})
+	register(&Entry{
+		Word:        "load",
+		Summary:     "Load a single record from a resource (the CRUD read verb).",
+		Description: "Fetches one record from a Resource entity or API by its key — the read counterpart of create.",
+	})
+	register(&Entry{
+		Word:        "update",
+		Summary:     "Update a record in a resource (the CRUD update verb).",
+		Description: "Writes changes to an existing record in a Resource entity or API.",
+	})
+	register(&Entry{
+		Word:        "remove",
+		Summary:     "Remove a record from a resource (the CRUD delete verb).",
+		Description: "Deletes a record from a Resource entity or API.",
+	})
+	register(&Entry{
+		Word:        "between",
+		Summary:     "Query range predicate: `col between lo hi` (inclusive).",
+		Description: "Used inside the where clause of a query pipeline; compiles to SQL col BETWEEN lo AND hi.",
+	})
+	register(&Entry{
+		Word:        "outer",
+		Summary:     "Outer product: apply a body to every pair drawn from two lists.",
+		Description: "`outer [body] listB listA` builds the matrix of body results across all pairs (listA down the rows, listB across the columns).",
+		Examples:    []string{`outer [mul] [1 2] [3 4]   ;# => [[3 4] [6 8]]`},
+	})
+	register(&Entry{
+		Word:        "inner",
+		Summary:     "Generalized inner (matrix) product of two lists.",
+		Description: "`inner [combine] [product] listB listA` pairs elements with product then reduces them with combine — the dot-product generalisation (combine=add, product=mul gives the usual dot product).",
+	})
+}

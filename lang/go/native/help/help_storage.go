@@ -71,3 +71,32 @@ func init() {
 		},
 	})
 }
+
+func init() {
+	register(&Entry{
+		Word:        "reach",
+		Summary:     "Build a reusable Reach lens from a path: `reach [keys…]`.",
+		Description: "A reach is a first-class accessor over nested data. Build one from a path list, then apply it with apply, read with get, or write through it with rebind. The $.a.b syntax is sugar for a reach.",
+	})
+	register(&Entry{
+		Word:        "apply",
+		Summary:     "Apply a referenced function or a reach lens to stack arguments.",
+		Description: "x inc/r apply calls the referenced fn inc on x; xs apply $.1 reads index 1 via a reach lens. The general invoke-this-fn-or-lens word.",
+		Examples:    []string{`def inc fn [[n:Integer] [Integer] [n add 1]]  5 inc/r apply   ;# => 6`},
+	})
+	register(&Entry{
+		Word:        "rebind",
+		Summary:     "Bind a reach lens to a receiver, returning the bound lens.",
+		Description: "`rebind $.name p` returns a Reach anchored at p — the writeable counterpart of apply/get. typeof of the result is Reach.",
+	})
+	register(&Entry{
+		Word:        "ref",
+		Summary:     "Reference a word's function value without invoking it.",
+		Description: "`ref add` yields add's fn value as data (like the /r suffix), so it can be passed around and later applied.",
+	})
+	register(&Entry{
+		Word:        "referent",
+		Summary:     "Resolve what a quoted atom refers to in the current scope.",
+		Description: "`referent add/q` returns the value currently bound to the name add — the def, fn, or word it denotes.",
+	})
+}

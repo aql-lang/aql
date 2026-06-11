@@ -180,3 +180,44 @@ func init() {
 			"Stack-only.",
 	})
 }
+
+func init() {
+	register(&Entry{
+		Word:        "afn",
+		Summary:     "Build an anonymous function (lambda). `=>` is sugar for afn.",
+		Description: "`input afn body` — written input => body — makes a one-signature anonymous fn. Params follow fn's abbreviations: ([x:Integer] => [mul x 2]). Used wherever a fn value is expected.",
+	})
+	register(&Entry{
+		Word:        "guard",
+		Summary:     "Pass a value through only when a condition holds: `cond guard value`.",
+		Description: "Returns the value when the condition is true, and none when it is false — a concise conditional gate.",
+		Examples:    []string{`true guard 42    ;# => 42`, `false guard 42   ;# => None`},
+	})
+	register(&Entry{
+		Word:        "error",
+		Summary:     "Recover from an error: `value error [handler]`.",
+		Description: "If the value is an Error, the handler list runs (with the error on the stack) to produce a fallback; otherwise the value passes through unchanged. AQL's try/catch combinator.",
+	})
+	register(&Entry{
+		Word:        "force-arity",
+		Summary:     "Wrap a function to collect exactly n forward arguments (the /N suffix).",
+		Description: "`force-arity n fn` fixes how many arguments the fn forward-collects, overriding its declared arity.",
+		Examples:    []string{`3 (force-arity 1 add) 4   ;# => 7`},
+	})
+	register(&Entry{
+		Word:        "usurp",
+		Summary:     "Wrap a function so it forward-collects its arguments (the /u suffix).",
+		Description: "`usurp fn` returns a new fn that reads its args from the tokens ahead — handy for invoking a referenced fn in forward form.",
+		Examples:    []string{`def f fn [[x:Integer] [Integer] [mul x 2]]  3 (usurp f)   ;# => 6`},
+	})
+	register(&Entry{
+		Word:        "forward-args",
+		Summary:     "Wrap a function to force forward argument collection (the /f suffix).",
+		Description: "Forces the fn to take its arguments from the following tokens regardless of its declared barrier.",
+	})
+	register(&Entry{
+		Word:        "stack-args",
+		Summary:     "Wrap a function to force stack argument collection (the /s suffix).",
+		Description: "Forces the fn to take its arguments from the stack only, never from forward tokens.",
+	})
+}

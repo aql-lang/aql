@@ -323,3 +323,12 @@ func init() {
 		Notes:       []string{"Requires: \"aql:math\" import"},
 	})
 }
+
+func init() {
+	register(&Entry{
+		Word:        "with-decimal",
+		Summary:     "Run a block under decimal precision / rounding overrides.",
+		Description: "with-decimal {precision: n rounding: \"...\"} [body] evaluates the body with the given arbitrary-precision decimal context, so 0d-literal arithmetic rounds as specified.",
+		Examples:    []string{`with-decimal {precision: 5} [0d1.0 div 0d3.0]   ;# => 0d0.33333`},
+	})
+}

@@ -25,6 +25,7 @@ var categories = []Category{
 		"fma", "sqrt", "cbrt", "exp", "log", "log2", "log10", "sin", "cos", "tan",
 		"asin", "acos", "atan", "atan2", "hypot", "is-nan", "is-inf", "is-finite",
 		"signbit", "remainder", "copysign", "nextafter", "math-pi", "math-e",
+		"with-decimal",
 	}},
 	{"compare", "Comparison and ordering.", []string{
 		"lt", "gt", "lte", "gte", "cmp", "tcmp", "eq", "neq", "deq",
@@ -42,24 +43,38 @@ var categories = []Category{
 	}},
 	{"stack", "Stack shuffling and inspection.", []string{
 		"dup", "swap", "drop", "over", "rot", "nip", "tuck", "dup2", "swap2",
-		"drop2", "over2", "depth", "pick", "roll",
+		"drop2", "over2", "depth", "pick", "roll", "stack",
 	}},
-	{"storage", "Variables, value access, and context.", []string{
+	{"list", "Lists and sequences: build, slice, and grow.", []string{
+		"iota", "range", "reverse", "sort", "flatten", "slice", "take", "shed",
+		"append", "push", "pop", "shift", "unshift", "size", "enum", "node",
+		"flex",
+	}},
+	{"storage", "Variables, value access, references, and lenses.", []string{
 		"set", "get", "getr", "context", "keys", "vals",
+		"reach", "apply", "rebind", "ref", "referent",
 	}},
-	{"control", "Control flow and definitions.", []string{
+	{"control", "Control flow, definitions, and functions.", []string{
 		"unpack", "codequote", "do", "raise", "if", "case", "for", "break",
 		"continue", "def", "undef", "var", "fn", "args",
+		"afn", "guard", "error", "force-arity", "usurp", "forward-args",
+		"stack-args",
+	}},
+	{"macro", "Quotation, splicing, and macros.", []string{
+		"quote", "unquote", "splice", "word", "macro", "macroexpand", "gensym",
+		"canon",
 	}},
 	{"type", "Types: introspection and construction.", []string{
 		"convert", "typeof", "inspect", "make", "refine", "class", "surface",
 		"exposes", "gen", "of", "extends", "default", "const", "object", "array",
 		"base", "tor", "tand", "tany", "tall", "teq", "tpartial",
+		"is", "istype", "behave", "fnsig", "tnot", "pathof",
 	}},
-	{"query", "Query pipelines, iteration, and modules.", []string{
+	{"query", "Query pipelines, iteration, resources, and modules.", []string{
 		"select", "from", "where", "order", "limit", "offset", "distinct",
 		"group", "having", "join", "union", "unify", "module", "import",
 		"export", "each", "for-each", "fold", "scan", "filter",
+		"list", "create", "load", "update", "remove", "between", "outer", "inner",
 	}},
 	{"io", "Input and output.", []string{
 		"print", "printstr", "read", "write", "trace", "stdin", "stdout",
