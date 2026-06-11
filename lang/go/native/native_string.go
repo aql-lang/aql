@@ -926,9 +926,25 @@ func repeatOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 	return doRepeat(input, count, opts)
 }
 
+// maxStringResultBytes caps the size of a string a single builder word
+// (repeat / pad) will allocate from a user-supplied count or length.
+// Without it, strings.Repeat overflows (panic) or the allocation OOMs
+// the process. 256 MiB is far beyond any legitimate use. See ADR-005.
+const maxStringResultBytes = 1 << 28
+
 func doRepeat(input string, count int64, o strOpts) ([]Value, error) {
 	if count < 0 {
 		return nil, fmt.Errorf("repeat: count must be non-negative, got %d", count)
+	}
+	// Bound the result size (and the per-copy slice in the separator
+	// branch) without overflowing the multiplication. perRep is at least
+	// 1 so this also caps the number of repetitions.
+	perRep := len(input) + len(o.sep)
+	if perRep < 1 {
+		perRep = 1
+	}
+	if count > int64(maxStringResultBytes)/int64(perRep) {
+		return nil, fmt.Errorf("repeat: result would exceed %d bytes", maxStringResultBytes)
 	}
 
 	if !o.hasSep || o.sep == "" {
@@ -978,6 +994,12 @@ func padOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 }
 
 func doPad(input string, targetLen int64, o strOpts) ([]Value, error) {
+	if targetLen < 0 {
+		return nil, fmt.Errorf("pad: target length must be non-negative, got %d", targetLen)
+	}
+	if targetLen > int64(maxStringResultBytes) {
+		return nil, fmt.Errorf("pad: target length %d exceeds %d bytes", targetLen, maxStringResultBytes)
+	}
 	current := len(input)
 	target := int(targetLen)
 

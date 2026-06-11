@@ -100,3 +100,33 @@ func TestFindLiteralMatchesInsensitiveValidUTF8(t *testing.T) {
 		t.Errorf("findLiteralMatches(hello,l,all) = %d matches, want 2", len(matches))
 	}
 }
+
+// Builder words must bound user-supplied sizes (ADR-005): a huge count
+// or length returns an error instead of overflowing strings.Repeat or
+// OOMing, and a negative pad length is rejected rather than panicking on
+// a negative slice.
+func TestRepeatPadBounds(t *testing.T) {
+	if _, err := doRepeat("ab", 9999999999, strOpts{}); err == nil {
+		t.Error("doRepeat huge count: expected error, got nil")
+	}
+	if _, err := doRepeat("ab", -1, strOpts{}); err == nil {
+		t.Error("doRepeat negative count: expected error, got nil")
+	}
+	if out, err := doRepeat("ab", 3, strOpts{}); err != nil {
+		t.Errorf("doRepeat(ab,3) = %v, want ababab", err)
+	} else if s, _ := out[0].AsConcreteString(); s != "ababab" {
+		t.Errorf("doRepeat(ab,3) = %q, want ababab", s)
+	}
+
+	if _, err := doPad("x", 9999999999, strOpts{fill: "-"}); err == nil {
+		t.Error("doPad huge length: expected error, got nil")
+	}
+	if _, err := doPad("x", -5, strOpts{fill: "-"}); err == nil {
+		t.Error("doPad negative length: expected error, got nil")
+	}
+	if out, err := doPad("x", 5, strOpts{fill: "-", side: "right"}); err != nil {
+		t.Errorf("doPad(x,5) = %v", err)
+	} else if s, _ := out[0].AsConcreteString(); s != "x----" {
+		t.Errorf("doPad(x,5) = %q, want x----", s)
+	}
+}
