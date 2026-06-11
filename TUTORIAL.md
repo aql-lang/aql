@@ -726,12 +726,13 @@ module path, e.g. `"aql:math-util" import end "foo" print` (without `end`,
 ## 21. Manage secrets with the vault
 
 `aql` ships a local secrets vault for third-party API keys and tokens.
-This walkthrough creates a vault, adds keys by typing or pasting them,
-moves the vault to another machine, and injects the secrets into other
-programs — all without a secret, a passphrase, or a key value ever
-touching your shell history, the process command line, or an
-environment variable you set by hand. Every `(hidden)` line below is a
-no-echo prompt.
+This walkthrough creates a vault — under `~/.aql` or a folder you
+choose — adds keys by typing or pasting them, tags them with optional
+expiry reminders, moves the vault to another machine, and injects the
+secrets into other programs — all without a secret, a passphrase, or a
+key value ever touching your shell history, the process command line,
+or an environment variable you set by hand. Every `(hidden)` line below
+is a no-echo prompt.
 
 Two passphrases appear: the **vault passphrase** unlocks the local
 keyring, and a separate **export passphrase** protects a bundle in
@@ -751,6 +752,25 @@ aql vault init --backend=file
 #   Confirm passphrase:          (hidden)
 ```
 
+Prefer a different location? Point the vault at a folder of your choice
+with `--folder`, and give its files an inner suffix with `--suffix`
+(`vault.work.jsonic`, `vault.work.keyring`, …) so several vaults can sit
+side by side in one folder:
+
+```bash
+aql vault --folder=./team-vault --suffix=work init --backend=file
+#   Set vault passphrase:        (hidden)
+#   Confirm passphrase:          (hidden)
+#   vault initialized: backend=file store=team-vault/vault.work.jsonic
+```
+
+The `--folder`/`--suffix` flags are global, so they go *before* the
+mode, and they describe *where the vault is* — pass the same pair to
+every command that touches it (or export `AQL_VAULT_FOLDER` /
+`AQL_VAULT_SUFFIX` for the session). A flag wins over the matching
+environment variable. The rest of this walkthrough uses the default
+`~/.aql` vault.
+
 ### Add keys — paste or type
 
 Paste a token you just copied from a SaaS console. The value is read
@@ -766,12 +786,16 @@ aql vault add --from-clipboard --provider=github github_token
 
 Clipboard support works on macOS (pbpaste/pbcopy), Linux (wl-clipboard
 on Wayland, or xclip / xsel on X11), and Windows (PowerShell). Or type
-the value directly — the input is not echoed:
+the value directly — the input is not echoed. Add `--expiry` to record
+when the key should be rotated (a date, an RFC3339 timestamp, or a
+duration from now like `90d` or `720h`):
 
 ```bash
-aql vault add --provider=openai openai_key
+aql vault add --provider=openai --expiry=2026-12-31 openai_key
 #   Secret value:                (hidden)
 #   Vault passphrase:            (hidden)
+#   stored openai_key (backend=file, 51 bytes)
+#   expires 2026-12-31T00:00:00Z
 ```
 
 Namespacing lets two projects share a key name: a `ns:` prefix becomes
@@ -782,7 +806,8 @@ then makes bare names resolve into `proj` automatically.)
 aql vault add --from-clipboard proj:deploy_key
 ```
 
-Inspect what's stored — names and metadata only, never values:
+Inspect what's stored — names and metadata only, never values. The
+listing includes an `EXPIRES` column (a dash when no expiry is set):
 
 ```bash
 aql vault list
@@ -793,6 +818,35 @@ aql vault get github_token            # redacted; add --reveal to spot-check
 > `aql vault add github_token 'ghp_...'` — that would leak it to your
 > shell history. Use `--from-clipboard`, the prompt, or (for scripts)
 > `--from-stdin`.
+
+### Track key expiries
+
+An expiry is a rotation reminder — it is **never enforced**, so an
+expired key still works; it just shows up as overdue. Set or replace one
+any time without touching the secret, and clear it when the key is
+rotated:
+
+```bash
+aql vault expiry set github_token 90d     # also accepts a date or RFC3339 stamp
+aql vault expiry clear github_token       # drop the reminder
+```
+
+Review what's pending with `vault expiry`. It lists only keys that carry
+an expiry, soonest (and most overdue) first, with a human status; narrow
+it by namespace or to a due-soon window:
+
+```bash
+aql vault expiry
+#   ALIAS                    NAMESPACE        EXPIRES               STATUS
+#   openai_key               (root)           2026-12-31T00:00:00Z  in 203d
+
+aql vault expiry --within=30d             # only keys due within 30 days (or overdue)
+aql vault expiry --namespace=proj         # only the proj namespace (':' = root)
+```
+
+You can also pin an expiry while rotating a key — `aql vault rotate
+--expiry=90d openai_key` — and a rotation without `--expiry` keeps the
+existing reminder.
 
 ### Export the vault to a portable bundle
 
@@ -832,8 +886,21 @@ aql vault import vault.aqlx
 aql vault list                            # confirm the keys arrived
 ```
 
+The destination vault can also live wherever you like. Supply the same
+`--folder`/`--suffix` (before the mode) on each command, and they target
+that one vault throughout:
+
+```bash
+aql vault --folder=/srv/vault --suffix=prod init --backend=file
+aql vault --folder=/srv/vault --suffix=prod import vault.aqlx
+aql vault --folder=/srv/vault --suffix=prod list
+```
+
 Existing aliases are skipped unless you pass `--overwrite`. Once
 imported, securely delete the transit file (`shred -u vault.aqlx`).
+Expiry reminders are local to a vault and aren't carried in the bundle,
+so re-set them on the destination (`vault expiry set …`) if you want
+them there too.
 
 ### Inject secrets into other commands
 
