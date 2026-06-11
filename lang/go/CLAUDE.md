@@ -681,7 +681,8 @@ inner natives there, and exports FnDef wrappers (carrying
 wrapper is invoked via `pkg.word` dot-access, dispatch flows
 through `eng/go/engine.go::execFnDefLiteral`, which calls
 `reg.Lookup(fnDef.Name)` and uses the **looked-up native's
-`Signatures`** for `matchSignature` — NOT the wrapper's own Sigs.
+`Signatures`** for `matchSignature` — NOT the wrapper's own
+`Signatures`.
 
 **Consequence:** the inner native's `BarrierPos` controls whether
 the wrapper's swap-form `a pkg.word b` dispatches.
