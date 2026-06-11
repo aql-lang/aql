@@ -1,0 +1,46 @@
+# AQL Language Specification: the `canon` word
+#
+# `canon v` renders any value as canonical AQL source — the same
+# renderer (eng.CanonValue) the spec suites and the doc-example
+# harness compare against. For DATA values (scalars, atoms, paths,
+# none, type literals, plain and flex Node trees) the result is
+# ROUND-TRIPPABLE: evaluating it reproduces an equivalent value, with
+# flexness marked at every level. Identity-bearing values (Array,
+# Store, instances, functions) render too, but rebuilding from source
+# yields a FRESH container — only data round-trips, not identity.
+#
+# NOTE on expectations: the spec runner itself canon-renders the
+# result stack, and canon returns a String — so the expected fields
+# below are the canon rendering OF that string (one extra quote layer).
+#
+# §1  scalar / atom / absence / type-literal renderings
+canon 42	'42'	integer
+canon 1.5	'1.5'	float
+canon true	'true'	boolean
+canon none	'none'	the absence value renders lowercase
+canon foo/q	'foo/q'	atoms render in /q form (a bare name would re-parse as a word)
+canon Integer	'Integer'	type literals render as their name
+canon "plain"	"'plain'"	an ordinary string keeps the single-quoted form
+#
+# §2  string quoting is chosen so the output RE-PARSES: content with a
+#     single quote switches to double quotes; content with both kinds
+#     (or backslashes) escapes. Previously `it's` rendered as 'it's',
+#     which re-parsed wrongly — canon was not round-trippable for it.
+canon "it's"	'"it\'s"'	single quote in content → double-quoted output
+canon "say \"hi\""	'\'say "hi"\''	double quote in content → single-quoted output
+def s "it's \"q\" \\ ok" canon s	'\'it\\\'s "q" \\\\ ok\''	both kinds + backslash → escaped single-quoted output
+#
+# §3  Node trees — flexness is marked at every level
+canon {a:1 b:[1 2]}	'{a:1 b:[1 2]}'	plain trees render bare
+canon (flex {a:{b:[1]}})	'(flex {a:(flex {b:(flex [1])})})'	an entirely-flex tree is (flex …) all the way down
+def h (flex [1]) canon [h 2]	'[(flex [1]) 2]'	a literal-embedded live handle is visible in the rendering
+#
+# §4  round-trips: evaluating the canon string reproduces the value
+"aql:vm" import end def v (flex {a:[1]}) (Vm.run (canon v)) deq v	true	a flex tree round-trips structurally
+"aql:vm" import end def v (flex {a:[1]}) typeof (Vm.run (canon v))	FlexMap	…and stays FLEX through the round-trip
+"aql:vm" import end def s "it's \"q\" \\ ok" (Vm.run (canon s)) eq s	true	the escaped string round-trips exactly
+"aql:vm" import end (Vm.run (canon [1 {a:none} x/q])) deq [1 {a:none} x/q]	true	mixed data (none, atom) round-trips
+#
+# §5  totality and limits
+canon (make Array [1 2])	'Array[1 2]'	identity values render — but rebuilding from source is a FRESH container, identity does not round-trip
+canon	ERROR:signature	canon needs a value

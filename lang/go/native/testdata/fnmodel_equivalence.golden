@@ -60,6 +60,8 @@ WORD bxor
 WORD cancel
   [Ideal/Timeout] barrier=1
   [Ideal/Interval] barrier=1
+WORD canon
+  [Any] barrier=1 returns=[Scalar/String]
 WORD case
   [Any Any] barrier=2 noeval={0,1} returns=[Any]
 WORD changecase
@@ -471,7 +473,7 @@ WORD shift
   [Node/List/FlexList] barrier=1 returns=[Node/List/FlexList Any]
   [Node/List] barrier=1
 WORD size
-  [Any] barrier=1
+  [Any] barrier=1 returns=[Scalar/Number/Integer]
 WORD sleep
   [Scalar/Number/Integer] barrier=1
 WORD slice

@@ -52,7 +52,7 @@ cd aql/cmd/go && go install ./aql
 
 aql -version
 aql                                 # start the REPL
-aql do '1 add 2'                    # one-shot expression
+aql do 'add 1 2'                    # one-shot expression
 aql script.aql                      # run a file
 aql check script.aql                # type-check without running
 aql fmt script.aql                  # format in place (always rewrites)
@@ -89,7 +89,7 @@ nothing is supplied.
 
 ```bash
 aql                         # REPL
-aql -e '1 add 2'            # prints "3"
+aql -e 'add 1 2'            # prints "3"
 aql script.aql              # runs the file
 aql -check script.aql       # type-check first, then run
 aql -e '...' -r ./registry  # with a custom registry
@@ -105,7 +105,7 @@ shell-friendly than `aql -e` because positional words don't need
 extra quoting.
 
 ```bash
-aql do 1 add 2                  # prints 3
+aql do add 1 2                  # prints 3
 aql do '"aql:string-util" import end "hello" StringUtil.upper'  # prints HELLO
 aql do 'iota 5 each [dup mul]'  # prints [0 1 4 9 16]
 ```
@@ -162,7 +162,7 @@ program's own output:
 
 ```bash
 aql --check script.aql       # check, then run; abort on any error
-aql --check -e '1 add 2'     # one-shot, checked first
+aql --check -e 'add 1 2'     # one-shot, checked first
 ```
 
 **In your editor.** `aql lsp` publishes these same diagnostics as you
@@ -510,15 +510,15 @@ Every command that builds a `lang.AQL` accepts these flags:
 Environment fallbacks (consulted when no `--perms*` flag is set):
 
 ```bash
-AQL_POLICY=sandbox aql do '1 add 2'
+AQL_POLICY=sandbox aql do 'add 1 2'
 AQL_POLICY_FILE=./prod.jsonic aql script.aql
 ```
 
 Examples:
 
 ```bash
-aql do --perms=sandbox 1 add 2
-aql -e '1 add 2' --perms=read-only
+aql do --perms=sandbox add 1 2
+aql -e 'add 1 2' --perms=read-only
 aql exec -p 8091 --perms=sandbox          # bound at startup; immutable per request
 aql do --perms=sandbox --allow=engine.shell true
 aql exec --perms=trusted --no-install=network --no-install=sqlite
@@ -619,7 +619,7 @@ Example:
 ```bash
 curl -s -X POST http://127.0.0.1:8091/v1/exec \
   -H 'Content-Type: application/json' \
-  -d '{"code": "1 add 2"}'
+  -d '{"code": "add 1 2"}'
 # {"result":3,"stack":[3]}
 ```
 
@@ -672,7 +672,7 @@ Inside the REPL, lines that begin with `:` are *meta-commands*
 Plain AQL expressions work as usual:
 
 ```
-aql> 1 add 2
+aql> add 1 2
 3
 aql> :stack
   [0] 3

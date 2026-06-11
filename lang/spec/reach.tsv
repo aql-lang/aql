@@ -48,7 +48,7 @@ def p {x:{y:9}}  def k "y"  apply (reach 0 [x (k)]) p	9	computed key evaluated a
 reach 5 [a !]	ERROR:reach_error	trailing `!` with no following key
 #
 # §7  Negatives
-def p {name:"ada"}  apply $!.missing p	ERROR:getr_error	getr strictness: missing key errors through apply
+def p {name:"ada"}  apply $!.missing p	ERROR:not_found	getr strictness: missing key errors through apply
 apply $.name 5	ERROR:	applying a field lens to a non-map yields no field (None/​error)
 # A leading / receiverless `.` (or `!.`) is a syntax error — member access
 # must follow a value; `$.key` is the supported detached-accessor form.

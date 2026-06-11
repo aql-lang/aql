@@ -116,8 +116,8 @@ append 4 (flex [1 2])	(flex [1 2 4])	append one element
 append 'x' (flex [])	(flex ['x'])	append to empty
 append [3 4] (flex [1 2])	(flex [1 2 3 4])	a list argument concatenates its elements
 append (flex [3]) (flex [1 2])	(flex [1 2 3])	a FlexList argument concatenates too
-append [[3 4]] (flex [1 2])	(flex [1 2 [3 4]])	wrap a list to append it AS one element
-append {a:1} (flex [1])	(flex [1 {a:1}])	non-list values append as elements
+append [[3 4]] (flex [1 2])	(flex [1 2 (flex [3 4])])	wrap a list to append it AS one element — adopted to flex (entirely-mutable tree)
+append {a:1} (flex [1])	(flex [1 (flex {a:1})])	non-list Node values append as elements — adopted to flex
 def l (flex [1 2]) append l l	(flex [1 2 1 2])	self-concat snapshots before growing
 append 4 (flex [1]) append 5	(flex [1 4 5])	returned node chains
 append 1 [1 2]	ERROR:signature	append needs a FlexList — plain lists are immutable
@@ -215,3 +215,26 @@ sort (flex [3 1 2])	[1 2 3]	sort returns a new PLAIN list
 typeof (sort (flex [3 1 2]))	List	
 reverse (flex [1 2])	[2 1]	
 each [ add 1 ] (flex [1 2 3])	[2 3 4]	higher-order traversal works unchanged
+#
+# §12  writes keep trees ENTIRELY one column (the adoption rule).
+# Storing a plain Node INTO a flex container deep-flexes it — otherwise
+# the tree goes mixed and a later inner write is copy-returning and
+# silently lost. Storing a flex value INTO a plain Map/List snapshots
+# it to its immutable shape — an "immutable" container must never
+# change underneath through a live handle. A flex value stored into a
+# FLEX container stays a SHARED handle (sharing what the caller
+# explicitly passes, like class-default provided values).
+def f (flex {}) set a {b:1} f end typeof f.a	(flex {a:(flex {b:1})}) FlexMap	a plain map stored into a FlexMap becomes flex (set returns the node for chaining)
+def f (flex {}) set a {b:1} f end set b 9 f.a end f.a.b	(flex {a:(flex {b:9})}) (flex {b:9}) 9	…so the nested write STICKS (was silently lost on a mixed tree)
+def f (flex []) push {x:1} f end typeof f.0	(flex [(flex {x:1})]) FlexMap	push adopts a plain map element
+def f (flex []) push {x:1} f end set x 9 (f get 0) end (f get 0).x	(flex [(flex {x:9})]) (flex {x:9}) 9	…and the pushed element is writable in place
+def f (flex []) append {x:1} f end typeof f.0	(flex [(flex {x:1})]) FlexMap	append (single element) adopts
+def f (flex []) append [{a:1} [2]] f end typeof f.1	(flex [(flex {a:1}) (flex [2])]) FlexList	append (list splat) adopts every element
+def f (flex []) unshift {x:1} f end typeof f.0	(flex [(flex {x:1})]) FlexMap	unshift adopts
+def f (flex [0]) set 0 {b:1} f end typeof f.0	(flex [(flex {b:1})]) FlexMap	indexed FlexList set adopts
+def f (flex {}) set a "s" f end f.a	(flex {a:'s'}) 's'	scalars pass through untouched
+def h (flex {z:1}) def f (flex {}) set a h f end set z 9 f.a end h.z	(flex {a:(flex {z:9})}) (flex {z:9}) 9	a FLEX value stored into flex stays a shared handle — both views mutate
+def iv (flex {b:1}) typeof ({} set a iv).a	Map	a flex value stored into a PLAIN map is snapshot to its immutable shape
+def iv (flex {b:1}) def m ({} set a iv) set b 9 iv end m.a.b	(flex {b:9}) 1	…so mutating the handle afterwards does NOT change the "immutable" map
+def iv (flex [1]) typeof (push iv []).0	List	plain-list push snapshots a flex element
+def iv (flex [1]) typeof (unshift iv []).0	List	plain-list unshift snapshots too

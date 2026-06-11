@@ -688,6 +688,10 @@ func IsTypeBody(v Value) bool {
 	if IsTypedMap(v) {
 		return true
 	}
+	// Bounded Type (`Type of [B]` / `B/t`)
+	if IsBoundedType(v) {
+		return true
+	}
 	// Object type
 	if IsObjectType(v) {
 		return true

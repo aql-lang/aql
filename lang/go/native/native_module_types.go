@@ -206,7 +206,7 @@ func getrModuleExportHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 	if val, ok := moduleExportGet(args[1], k); ok {
 		return []Value{val}, nil
 	}
-	return nil, r.AqlError("getr_error", fmt.Sprintf("getr: export %q not found in module", k), "getr")
+	return nil, r.AqlError("not_found", fmt.Sprintf("getr: export %q not found in module", k), "getr")
 }
 
 // moduleExportGetReturns is the check-mode counterpart for `get`/`getr`
@@ -251,7 +251,7 @@ func getrModuleInstHandler(args []Value, _ map[string]Value, _ []Value, r *Regis
 	if val, ok := moduleGet(args[1], k); ok {
 		return []Value{val}, nil
 	}
-	return nil, r.AqlError("getr_error", fmt.Sprintf("getr: field %q not found in Module", k), "getr")
+	return nil, r.AqlError("not_found", fmt.Sprintf("getr: field %q not found in Module", k), "getr")
 }
 
 // AsModuleDesc unwraps the ModuleDesc carried by an Ideal/Module value

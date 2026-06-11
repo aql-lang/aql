@@ -1,5 +1,7 @@
 package native
 
+import "github.com/aql-lang/aql/eng/go"
+
 // The list-mutation words (push/pop/unshift/shift) are registered via the
 // consolidated Natives slice in natives.go.
 //
@@ -8,7 +10,12 @@ package native
 //	push 99 [1,2,3] → [1,2,3,99]
 //	[1,2,3] 99 push → [1,2,3,99]
 func pushHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
-	newElem := args[0]
+	// The copy-returning column stays ENTIRELY immutable: an element
+	// with flex inside is snapshot to its plain shape (AdoptIntoNode).
+	newElem, aerr := eng.AdoptIntoNode(args[0])
+	if aerr != nil {
+		return nil, r.AqlError("push_error", aerr.Error(), "push")
+	}
 	_lst, _ := AsList(args[1])
 	list := _lst.Slice()
 	if list == nil {
@@ -46,7 +53,12 @@ func popHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) 
 //	unshift 99 [1,2,3] → [99,1,2,3]
 //	[1,2,3] 99 unshift → [99,1,2,3]
 func unshiftHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
-	newElem := args[0]
+	// Entirely-immutable invariant for the copy-returning column: see
+	// pushHandler.
+	newElem, aerr := eng.AdoptIntoNode(args[0])
+	if aerr != nil {
+		return nil, r.AqlError("unshift_error", aerr.Error(), "unshift")
+	}
 	_lst, _ := AsList(args[1])
 	list := _lst.Slice()
 	if list == nil {
@@ -89,7 +101,13 @@ func pushFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if err != nil {
 		return nil, r.AqlError("push_error", "push: expected a FlexList, got "+args[1].Parent.String(), "push")
 	}
-	fd.Elems = append(fd.Elems, args[0])
+	// A flex tree stays ENTIRELY mutable: a plain Node element is deep-
+	// flexed on the way in (eng.AdoptIntoFlex; flex handles share).
+	elem, aerr := eng.AdoptIntoFlex(args[0])
+	if aerr != nil {
+		return nil, r.AqlError("push_error", aerr.Error(), "push")
+	}
+	fd.Elems = append(fd.Elems, elem)
 	return []Value{args[1]}, nil
 }
 
@@ -111,7 +129,12 @@ func unshiftFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 	if err != nil {
 		return nil, r.AqlError("unshift_error", "unshift: expected a FlexList, got "+args[1].Parent.String(), "unshift")
 	}
-	fd.Elems = append([]Value{args[0]}, fd.Elems...)
+	// Entirely-mutable invariant: adopt a plain Node element into flex.
+	elem, aerr := eng.AdoptIntoFlex(args[0])
+	if aerr != nil {
+		return nil, r.AqlError("unshift_error", aerr.Error(), "unshift")
+	}
+	fd.Elems = append([]Value{elem}, fd.Elems...)
 	return []Value{args[1]}, nil
 }
 

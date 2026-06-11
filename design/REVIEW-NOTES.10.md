@@ -2,6 +2,68 @@
 
 Date: 2026-06-11
 
+Status: **implemented** (same day). Every finding below was resolved
+or explicitly decided; the analysis text is kept as written, with
+this block recording the outcomes.
+
+- **knownMismatch doc examples (finding 1, action 1)** — all four
+  fixed as doc bugs (`tcmp`/literal-on-the-right for type ordering,
+  `MathUtil.log MathUtil.e`, `nick:None`, the `import … end` demo
+  replacing the bare `set`/`get` one); the xfail registry is empty
+  and the doc harness is a zero-xfail gate. One engine bug surfaced
+  alongside: `Value.String` rendered the value `none` as the debug
+  form `None({})` — fixed to lowercase `none`, matching Canon.
+- **aql:query (finding 2, action 2)** — maintainer decision:
+  **supported, module-only**. The 21 native tests skipped as "query
+  words disabled" tested the deliberately-removed unqualified words;
+  they were deleted, their unique coverage ported to
+  `lang/go/modules/query_test.go` in module form, and a pin added
+  that the words stay out of the global registry. Porting exposed
+  two real bugs, both fixed: bare `Query.offset` generated invalid
+  SQL (`OFFSET` without `LIMIT`), and double-quoted identifiers let
+  SQLite's legacy fallback turn an unknown column into a string
+  literal (now backtick-quoted, so typos error).
+- **CLI `--` audit (finding 3, action n/a)** — audited; the only
+  leading-negative example already demonstrates the `--` guard.
+- **Cognitive load 1 (call-style)** — maintainer decision: examples
+  default to the **forward form** (per ADR-004), with the swap form
+  kept for predicates (`n gt 0`) and non-commutative operations
+  (`10 sub 3`, `7 div 2`, string concat), data-first pipelines kept,
+  Forth stack words kept, and the sections that teach the three call
+  forms untouched. Applied across README/TUTORIAL/HOWTO/REFERENCE/
+  EXPLANATION/CLI.
+- **Cognitive load 2 (`Integer lt 0`)** — the ordering sections now
+  use `tcmp` / literal-on-the-right and cross-reference the
+  predicate-refinement section for the constructor overload.
+- **Cognitive load 3 (`none`/`None`), action 3** — REFERENCE gained
+  the "Absence — `none` and `None`" subsection; TUTORIAL explains
+  the rendering at the optional-field example.
+- **Cognitive load 4 (module names)** — TUTORIAL's modules section
+  gained the compact import-id → namespace table; stale `aql:math` /
+  `math.` spellings fixed.
+- **Cognitive load 5 (`aql check`)** — TUTORIAL now folds
+  `aql check` into the workflow where typed functions appear.
+- **Code anomaly 3 (`_DEBUG` tests), action 4** — the three log-only
+  probes are now asserting tests named for the invariants they pin
+  (nominal newtype membership, canonical lattice-node identity for
+  class instances, disjunct membership through the canonical node).
+- **Code anomalies 4–5 (function model / legacy markers), action 5**
+  — investigation showed the consolidation tracked by the root-level
+  `REFACTOR_PROGRESS.md` had already **landed**:
+  `type Signature = FnSig`, the single-slice `FnDefInfo`,
+  `compileFnDef`, and `aggregateDispatch` are all in the tree, the
+  two equivalence harnesses pass, and `design/FUNCTION-MODEL.10.md`
+  records the completed design (including the deliberate deviation
+  that non-anonymous FnDef values keep `Handler == nil` to stay
+  inert). The stale tracker was removed; the stale dual-`Sigs`
+  passages in `design/USURP.10.md` and `lang/go/CLAUDE.md` — the
+  plan's last unticked cleanup item — were brought in line with the
+  single-slice model.
+- **Code anomaly 6 (panics)** — audited: every panic outside tests
+  is an annotated init-time type-registration path (plus the
+  Must-style `stackform.MustEval`); no user-triggerable path reaches
+  one.
+
 ## Scope and verification performed
 
 This review compared the public prose documentation against the executable documentation harness, the language tests, and implementation notes in the repository. It focused on correctness drift, language-design cognitive load, surprising behavior, dead or disabled code paths, and general maintainability risks.

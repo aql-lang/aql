@@ -457,6 +457,8 @@ var (
 	NewTop                 = eng.NewTop
 	NewType                = eng.NewType
 	NewTypeLiteral         = eng.NewTypeLiteral
+	NewBoundedType         = eng.NewBoundedType
+	NewBoundedTypeBody     = eng.NewBoundedTypeBody
 	NewTypedList           = eng.NewTypedList
 	NewTypedMap            = eng.NewTypedMap
 	NewWord                = eng.NewWord

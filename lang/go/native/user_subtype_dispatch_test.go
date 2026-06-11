@@ -170,7 +170,13 @@ func TestResolveSigType_AllUserTypeKinds(t *testing.T) {
 	}
 }
 
-func TestProbeIsHandlerPath_DEBUG(t *testing.T) {
+// TestRefineNewtypeMembershipIsNominal pins the bare-refine (newtype)
+// membership rule on the dispatch-side lattice node: `def Pos refine
+// Integer` mints a nominal subtype, so an untagged base value is NOT a
+// member — `42 Is Pos` is false through both the minted node
+// (LookupTypeName, what dispatch sees) and the def-table body. See
+// design/REFINE-NEWTYPE-VS-SUBSET.10.md.
+func TestRefineNewtypeMembershipIsNominal(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	runAQL(t, r, []Value{
@@ -178,31 +184,35 @@ func TestProbeIsHandlerPath_DEBUG(t *testing.T) {
 		NewWord("refine"), NewWord("Integer"),
 	})
 
-	// What's in Defs.Top("Pos")?
 	body, ok := r.TopTypeBody("Pos")
 	if !ok {
 		t.Fatal("Pos not installed")
 	}
-	t.Logf("body for Pos: Data==nil=%v Behavior type=%T leaf=%s",
-		IsBareTypeNode(body), body.Behavior, body.Leaf())
-
-	// What's the lattice node from LookupTypeName?
+	if !IsBareTypeNode(body) {
+		t.Errorf("bare-refine body should be a bare type node, got Data=%T", body.Data)
+	}
 	def := r.LookupTypeName("Pos")
-	t.Logf("lattice def: Behavior type=%T", def.Behavior)
-
-	// Same Behavior? Or different?
-	t.Logf("body.Behavior == def.Behavior: %v",
-		body.Behavior == def.Behavior)
-
-	// Direct membership check via v.Is(t) on the lattice node.
-	t.Logf("42.Is(def-lattice-node) = %v", NewInteger(42).Is(def))
-
-	// And on &body (what isHandler does).
+	if def == nil {
+		t.Fatal("LookupTypeName(Pos) = nil")
+	}
+	if NewInteger(42).Is(def) {
+		t.Error("42.Is(Pos lattice node) = true — newtype membership must be nominal, a plain Integer is not a Pos")
+	}
 	bNode := body
-	t.Logf("42.Is(&body) = %v", NewInteger(42).Is(&bNode))
+	if NewInteger(42).Is(&bNode) {
+		t.Error("42.Is(&body) = true — the def-table body must not admit untagged base values either")
+	}
 }
 
-func TestProbeFooInstance_DEBUG(t *testing.T) {
+// TestClassInstanceTaggedWithCanonicalLatticeNode pins the identity
+// chain for class instances: `make Foo {}` tags the instance with the
+// SAME minted lattice node that LookupTypeName returns, so membership
+// (`Is`, ConformsTo) holds through that node. The def-table body is a
+// different value (the class schema payload, its own ID) and is NOT a
+// dispatchable stand-in — which is exactly why dispatch must resolve
+// names via LookupTypeName / CanonicalType, never via `&body`. See
+// eng/go/CLAUDE.md "Canonical *Type Pointers".
+func TestClassInstanceTaggedWithCanonicalLatticeNode(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	runAQL(t, r, []Value{
@@ -217,32 +227,42 @@ func TestProbeFooInstance_DEBUG(t *testing.T) {
 		NewWord("make"), NewWord("Foo"), NewMap(NewOrderedMap()),
 		NewCloseParen(),
 	})
+	if len(result) != 1 {
+		t.Fatalf("make Foo: expected 1 result, got %d", len(result))
+	}
 	inst := result[0]
-	t.Logf("instance: Parent.ID=%q Parent.Name=%q Behavior=%T",
-		inst.Parent.ID, inst.Parent.Name, inst.Parent.Behavior)
 
-	// What does Foo type literal look like (via Defs.Top, i.e. what
-	// isHandler sees in args[0])?
-	body, _ := r.TopTypeBody("Foo")
-	t.Logf("body: ID=%q Name=%q Behavior=%T", body.ID, body.Name, body.Behavior)
-
-	// And LookupTypeName (what dispatch sees).
 	def := r.LookupTypeName("Foo")
-	t.Logf("def lattice: ID=%q Name=%q Behavior=%T", def.ID, def.Name, def.Behavior)
+	if def == nil {
+		t.Fatal("LookupTypeName(Foo) = nil")
+	}
+	if inst.Parent.ID != def.ID {
+		t.Errorf("instance tag %q is not the minted lattice node %q", inst.Parent.ID, def.ID)
+	}
+	if !inst.Is(def) {
+		t.Error("instance.Is(Foo lattice node) = false — class membership broken")
+	}
+	if !inst.Parent.ConformsTo(def) {
+		t.Error("instance.Parent.ConformsTo(Foo lattice node) = false")
+	}
 
-	// Are they the SAME lattice node by ID?
-	t.Logf("inst.Parent.ID == def.ID: %v", inst.Parent.ID == def.ID)
-	t.Logf("inst.Parent.ID == body.ID: %v", inst.Parent.ID == body.ID)
-
-	// Is the membership check working at the lattice node level?
-	t.Logf("inst.Is(def): %v", inst.Is(def))
-	bNode := body
-	t.Logf("inst.Is(&body): %v", inst.Is(&bNode))
-	t.Logf("inst.Parent.ConformsTo(def): %v", inst.Parent.ConformsTo(def))
-	t.Logf("inst.Parent.ConformsTo(&body): %v", inst.Parent.ConformsTo(&bNode))
+	// The def-table body (the schema payload) is a distinct value with
+	// its own ID — a non-canonical stand-in that membership checks must
+	// not be routed through.
+	body, _ := r.TopTypeBody("Foo")
+	if inst.Parent.ID == body.ID {
+		t.Errorf("def-table body unexpectedly IS the lattice node (%q) — canonical-pointer docs need updating", body.ID)
+	}
 }
 
-func TestProbeMaybe_DEBUG(t *testing.T) {
+// TestDisjunctMembershipRequiresCanonicalNode pins the disjunct
+// (`def Maybe (Integer tor none)`) membership rule and the canonical-
+// pointer asymmetry that motivates it: the minted node from
+// LookupTypeName carries the disjunct unifier, so an Integer is
+// admitted (and a String rejected) through it — while `&body` from the
+// def table is a raw DisjunctInfo value with no unifier Behavior and
+// admits nothing. Membership must go through the canonical node.
+func TestDisjunctMembershipRequiresCanonicalNode(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	runAQL(t, r, []Value{
@@ -251,14 +271,24 @@ func TestProbeMaybe_DEBUG(t *testing.T) {
 		NewWord("Integer"), NewWord("tor"), NewWord("none"),
 		NewCloseParen(),
 	})
-	body, _ := r.TopTypeBody("Maybe")
-	t.Logf("body: Data==nil=%v Behavior=%T ID=%q Name=%q Parent.Leaf=%s",
-		IsBareTypeNode(body), body.Behavior, body.ID, body.Name, body.Parent.Leaf())
-	def := r.LookupTypeName("Maybe")
-	t.Logf("def: Behavior=%T", def.Behavior)
-	t.Logf("body.Behavior == def.Behavior: %v", body.Behavior == def.Behavior)
 
+	def := r.LookupTypeName("Maybe")
+	if def == nil {
+		t.Fatal("LookupTypeName(Maybe) = nil")
+	}
+	if !NewInteger(42).Is(def) {
+		t.Error("42.Is(Maybe) = false — the Integer alternative must be admitted")
+	}
+	if NewString("x").Is(def) {
+		t.Error(`"x".Is(Maybe) = true — String is not an alternative and must be rejected`)
+	}
+
+	// The orphan `&body` pointer carries no unifier: it must not admit
+	// members. If this changes, dispatch through bodies has been made
+	// canonical — update eng/go/CLAUDE.md "Canonical *Type Pointers".
+	body, _ := r.TopTypeBody("Maybe")
 	bNode := body
-	t.Logf("42.Is(&body): %v", NewInteger(42).Is(&bNode))
-	t.Logf("42.Is(def):   %v", NewInteger(42).Is(def))
+	if NewInteger(42).Is(&bNode) {
+		t.Error("42.Is(&body) = true — non-canonical body pointer unexpectedly dispatches membership")
+	}
 }

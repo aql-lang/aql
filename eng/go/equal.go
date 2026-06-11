@@ -71,6 +71,17 @@ func valuesEqualDefault(a, b Value) bool {
 	if a.Data == nil || b.Data == nil {
 		return false
 	}
+	// Bounded Type (`Type of [B]` / `B/t`): equal iff the bounds are
+	// the same lattice identity — structural identity, no minting, so
+	// `Map/t eq (Type of [Map])` holds however each side was built.
+	if IsBoundedType(a) || IsBoundedType(b) {
+		an, aerr := AsBoundedType(a)
+		bn, berr := AsBoundedType(b)
+		if aerr != nil || berr != nil {
+			return false
+		}
+		return an.Equal(bn)
+	}
 	// Dependent scalar: route to payload comparison BEFORE the
 	// ConformsTo(TString)/ConformsTo(TInteger)/... dispatch below. The
 	// lattice override makes DepString.ConformsTo(TString)=true, so

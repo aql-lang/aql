@@ -10,7 +10,9 @@
 #   - any other value contributes itself.
 # `def name word value` binds the marker, giving an explicit splice
 # (the type-agnostic counterpart of the implicit `def name [list]`
-# splice, which is unchanged). Expected values use the canon renderer
+# splice, which is unchanged). In a forward-argument position a
+# DATA-splice-bound word expands like the written paren group —
+# f w ≡ f (w) — see §7. Expected values use the canon renderer
 # (containers are space-separated).
 # =====================================================================
 
@@ -72,3 +74,44 @@ def xs [1,2,3] size xs	3	a def'd list is a value, not a splice
 def xs [1 add 2] xs	[3]	the list is evaluated at def time (like a map)
 size [1,2,3]	3	list-as-arg auto-eval unaffected
 [1 add 2]	[3]	bare-list auto-eval unaffected
+
+
+# =====================================================================
+# 7. Forward-argument positions: f w ≡ f (w) for DATA splices
+# =====================================================================
+# A word bound to a DATA splice (payload holds only values — no words,
+# parens, or reaches at the top level) occupies a forward-argument
+# position exactly as the written paren group (w) would: the payload's
+# values arrive in place, a multi-value splice fills several slots, an
+# empty splice contributes nothing. This is the JS-spread call form:
+# `f 1 vs` ≡ `f 1 (vs)` ≡ `f 1 2 3`.
+#
+# Three exemptions keep their existing semantics:
+#   - /q and raw-capture slots take the word/token itself, binding
+#     notwithstanding (quote vs captures the NAME — see §3);
+#   - CODE-bearing splices ([1 add], [dup add]) are Forth-style macros
+#     that run against the LIVE stack; paren isolation would change
+#     their meaning, so they stay boundary words in forward scans.
+#     Group explicitly — f (p) — to use a code splice's result;
+#   - BINDERS alias: def's value slot collects the marker itself, so
+#     `def y xs` makes y the same splice (rebinding = aliasing).
+#     Write `def y (xs)` to force expansion at a binder.
+# =====================================================================
+def vs word [2,3] def add2 fn [[x:Integer y:Integer][Integer][x add y]] add2 vs	5	multi-value data splice fills both forward slots
+def vs word [2,3] def add2 fn [[x:Integer y:Integer][Integer][x add y]] add2 (vs)	5	…identical to the written paren form
+def vs word [2,3] def add3 fn [[x:Integer y:Integer z:Integer][Integer][x add y add z]] add3 1 vs	6	mixed: literal then spread — add3 1 2 3
+def n word 42 add n 3	45	scalar data splice as a native word's forward arg
+def e word [] def add2 fn [[x:Integer y:Integer][Integer][x add y]] add2 1 e 5	6	empty splice contributes nothing; scan reaches the 5
+def kv word [{a:1},{b:2}] def both fn [[x:Map y:Map][Integer][(size x) add (size y)]] both kv	2	non-scalar elements spread too (maps fill Map slots)
+def vs word [2,3] def add2 fn [[x:Integer y:Integer][Integer][x add y]] 1 add2 vs	1 5	swap form: both args from the spread; prefix 1 untouched (= 1 add2 (vs))
+def vs word [2,3] def add2 fn [[x:Integer y:Integer][Integer][x add y]] vs add2	5	stack form unchanged: splice fires standalone, add2 collects
+def vs word [2,3] def g fn [[x:Any][Any][x]] g vs 9	2 3 9	one-slot fn takes the first value; the rest spill (= g (vs) 9)
+def xs word [1,2,3] def y xs [y]	[1 2 3]	rebinding ALIASES: def collects the marker itself; y is the same splice
+def xs word [1,2,3] def y xs [0 y 4]	[0 1 2 3 4]	the alias spreads exactly like the original
+def vs word [2,3] def y vs def add2 fn [[x:Integer y2:Integer][Integer][x add y2]] add2 y	5	the alias spreads in call positions too
+def xs word [1,2,3] def y xs def z y [z]	[1 2 3]	aliases chain
+def xs word [1,2,3] def y (xs) [y]	2 3 [1]	parens force expansion at a binder: binds the FIRST value — the one place f w and f (w) differ, by design
+def vs word [2,3] quote vs	vs/q	/q exemption: quote captures the NAME, binding notwithstanding
+def p word [1 add 2] def f fn [[x:Integer][Integer][x mul 10]] f p	ERROR:signature	code splice is NOT spread (live-stack macro semantics)
+def p word [1 add 2] def f fn [[x:Integer][Integer][x mul 10]] f (p)	30	…group a code splice explicitly to use its result
+def inc word [1 add] 1 inc inc inc	4	code-splice macro chain: each add sees the live stack

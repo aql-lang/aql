@@ -628,6 +628,15 @@ func newBuiltinTypeTable() *TypeTable {
 	for _, d := range builtinDecls {
 		tt.registerBuiltin(d)
 	}
+	// Type answers membership (`v is Type`, `t:Type` params, `[Type]`
+	// returns) via typeMembershipBehavior — one question at every
+	// boundary, per the refine doctrine (the membership set strictly
+	// contains the default Parent-conformance set, so this only widens
+	// acceptance to the literals and bodies `is Type` already admits).
+	// Installed on the canonical node here so every lookup sees it.
+	if t := tt.bypath["Type"]; t != nil {
+		t.Behavior = typeMembershipBehavior{}
+	}
 	return tt
 }
 

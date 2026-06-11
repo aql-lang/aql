@@ -131,6 +131,10 @@ func (qb *QueryBuilder) buildSQL(tableName string, colSQL string) string {
 	}
 	if qb.Limit >= 0 {
 		fmt.Fprintf(&buf, " LIMIT %d", qb.Limit)
+	} else if qb.Offset >= 0 {
+		// SQLite has no bare OFFSET clause — an offset without a limit
+		// must ride on the unlimited LIMIT -1.
+		buf.WriteString(" LIMIT -1")
 	}
 	if qb.Offset >= 0 {
 		fmt.Fprintf(&buf, " OFFSET %d", qb.Offset)

@@ -89,6 +89,13 @@ There is **no exception path**. Anything that looks like a
   handler INTERPRETS its received args for natural source
   reading — args are still delivered in sig order.
 
+Forward-argument gathering itself is TWO phases — a plan-time token
+walk (`resolveForwardArgs` + `matchSignature`) and a run-time arrival
+loop for parked Forwards (`stepLiteral`'s collection block, committed
+early at statement boundaries by `commitBarrierForward`). They enforce
+coordinated stop conditions that can drift apart — read
+`design/FORWARD-COLLECTION-PHASES.10.md` before touching either phase.
+
 ### Surface form recommendation
 
 **Always use forward form**: `f a b c`. It reads naturally

@@ -7,8 +7,8 @@ built-in word library. For learning AQL, start with the
 is, see the **[Explanation](EXPLANATION.md)**.
 
 > **Notation.** Throughout, a trailing `# returns …` comment shows what
-> an expression evaluates to (`2 mul 3  # returns 6`); in prose we say
-> "`2 mul 3` returns `6`". The comment is ordinary documentation (`#`
+> an expression evaluates to (`mul 2 3  # returns 6`); in prose we say
+> "`mul 2 3` returns `6`". The comment is ordinary documentation (`#`
 > begins a line comment), not special syntax. AQL has no result arrow:
 > `=>` is itself a word — the anonymous-function arrow, sugar for `afn`
 > — so results are written as comments rather than with `=>`.
@@ -115,7 +115,7 @@ every named type you define with `def`.
 - **Infinity:** write the `inf` / `-inf` literal. An *overflowing*
   float literal such as `1e309` raises `[aql/float_overflow]` (you cannot
   spell ±∞ by overflowing a literal); use `inf`, or compute it
-  (`1e308 mul 10`).
+  (`mul 1e308 10`).
 - **Tiny values:** the smallest positive subnormal is `5e-324`; a literal
   that underflows below that (e.g. `1e-400`) rounds to `0`. If you mean
   zero, write `0.0`.
@@ -149,13 +149,13 @@ the `0d` prefix so they re-parse to the same value.
 
 **Type infection — widest exact leaf wins.** Among the exact leaves the
 ladder is `Integer < BigInteger < BigDecimal`, so a mixed-leaf operation
-promotes to the widest operand: `1 add 0d2` → `0d3` (BigInteger),
-`0d2 add 0d0.5` → `0d2.5` (BigDecimal), `1 add 0d0.5` → `0d1.5`. The
-existing `Integer ⊕ Float` rule is **unchanged** (`1 add 2.0` → `3.0`).
+promotes to the widest operand: `add 1 0d2` → `0d3` (BigInteger),
+`add 0d2 0d0.5` → `0d2.5` (BigDecimal), `add 1 0d0.5` → `0d1.5`. The
+existing `Integer ⊕ Float` rule is **unchanged** (`add 1 2.0` → `3.0`).
 
 **A Big type never silently becomes a `Float`.** Mixing an exact Big
 type with a binary `Float` in arithmetic is an `[aql/type_error]`
-(`0d2 add 1.0`, `0d0.1 add 0.2`) — degrading to `Float` would throw away
+(`add 0d2 1.0`, `add 0d0.1 0.2`) — degrading to `Float` would throw away
 the exactness the Big types exist to provide. Convert one operand
 explicitly first. For the same reason `convert BigInteger 3.14` and
 `convert BigDecimal 3.14` are **refused** (build a BigDecimal from a
@@ -230,7 +230,7 @@ Commas are optional inside list and map literals — `[1 2 3]` and
 collection:
 
 ```
-2 mul (3 add 4)               # returns 14
+mul 2 (add 3 4)               # returns 14
 ```
 
 ### Template-string escapes
@@ -248,6 +248,10 @@ A trailing `/...` suffix overrides a word's default argument shape:
 | `/N` | Force exactly N arguments |
 | `/Nf` | N arguments, forward only |
 | `/Ns` | N arguments, stack only |
+| `/q` | The name as an atom — `foo/q` ≡ `(quote foo)` |
+| `/r` | A reference — the function as inert data, not a call |
+| `/u` | Usurp — `f/u` ≡ `usurp f` |
+| `/t` | A type bound — `Map/t` ≡ `Type<Map>` ≡ `(Type of [Map])`; combines with no other modifier |
 
 <!-- aql-test: skip -->
 ```
@@ -288,7 +292,7 @@ function dispatches, and a function that needs arguments must be held as
 data with `/r` (or stored as an atom with `/q`):
 
 ```
-def inc fn [[n:Integer] [Integer] [n add 1]]
+def inc fn [[n:Integer] [Integer] [add n 1]]
 {inc}                         # returns build error — inc dispatched 0-arg, fails its signature
 {inc/r} . inc 5               # returns 6 — /r holds the function as data
 {inc/q} . inc is Atom         # returns true — /q stores the bare name as an atom
@@ -340,10 +344,10 @@ quoted key (`{'a/b': 1}`) or a computed key (`{[a/b]: 1}`).
   in source order. Use `(...)` to override.
 * **Quotation.** A `[ … ]` literal **evaluates its contents** as a
   sub-program and collects the resulting stack into the list — so
-  `[1 2 add]` returns `[3]`, not `[1 2 add]`, and a bare `[dup mul]` errors
+  `[add 1 2]` returns `[3]`, not `[add 1 2]`, and a bare `[dup mul]` errors
   (it runs `dup` on an empty stack). To hold code *unevaluated*, use
-  `quote` (`quote [1 2 add]` returns `[1 2 word(add)]`). `do` runs a list as
-  a program and leaves its result stack (`do [1 2 add]` returns `3`). The one
+  `quote` (`quote [add 1 2]` returns `[word(add) 1 2]`). `do` runs a list as
+  a program and leaves its result stack (`do [add 1 2]` returns `3`). The one
   subtlety: when a `[ … ]` is written **directly as the block
   argument** of a word that expects code — `do`, `each`, `if`/`for`
   branches, `fn`/`macro` bodies — it is held deferred and run by that
@@ -454,7 +458,7 @@ slash-separated paths in `pathof`; short names like `Number` or
 
 > **`Float` is IEEE-754 `float64`.** A fractional literal like `3.14`
 > is a `Float`, so expect binary-floating-point behaviour, not exact
-> base-10: `0.1 add 0.2` returns `0.30000000000000004`. `Integer` and
+> base-10: `add 0.1 0.2` returns `0.30000000000000004`. `Integer` and
 > `Float` are distinct nodes but compare equal by magnitude (`1 eq 1.0`
 > returns `true`, `1 cmp 1.0` returns `0`); they are **not**
 > interchangeable, because integer `div` truncates while float `div`
@@ -473,6 +477,44 @@ OptInt unify 5                # returns 5 true
 OptInt unify none             # returns none true
 OptInt unify "x"              # returns '~unify-fail' false
 ```
+
+### Absence — `none` and `None`
+
+One absence concept, two spellings with distinct roles:
+
+* **`none`** (lowercase) is the **value** — the sole inhabitant of
+  the `None` type. It is what you write in source: the literal
+  itself, optional-field constraints (`(String tor none)`, "string
+  or absent"), and tests (`x eq none`).
+* **`None`** (capital) is the **type** — a type literal usable
+  anywhere a type goes (`x is None`, signature slots), and also the
+  form the engine **returns** at absence sites.
+
+```
+typeof none                   # returns None
+none eq None                  # returns true — value and type compare equal
+none is None                  # returns true
+5 eq none                     # returns false — absence equals nothing else
+if none [1] [2]               # returns 2 — none is falsy
+```
+
+Words that *produce* absence — `get`/`.` on a missing key, an
+out-of-range index, an omitted optional record field — return the
+`None` type literal. So in canonical rendering, capital `None` marks
+absence the **engine** produced, and lowercase `none` marks the
+value your **source** wrote:
+
+```
+{a:1} get b                   # returns None — engine-produced absence
+{a:none}                      # returns {a:none} — source-written value
+def P refine Record [name:String nick:(String tor none)]
+make P {name:"Bob"}           # returns {name:'Bob' nick:None}
+(make P {name:"Bob"}) . nick eq none      # returns true
+```
+
+Because the two spellings compare equal under `eq` and both satisfy
+`is None`, the distinction never changes what a test answers — it is
+visible only in rendering.
 
 ### Negation
 
@@ -513,15 +555,25 @@ Integer tand (tnot (between 5 10 Integer))  # returns (Integer lt 5)|(Integer gt
 
 ### Type ordering
 
-Every type has a unified integer rank. `cmp` / `lt` / `gt` / `sort`
-all run a single LCA-Comparer-then-Rank cascade, so cross-type
-comparisons are well-defined and total. Type literals sort strictly
+Every type has a unified integer rank. `tcmp` and `sort` expose a
+single LCA-Comparer-then-Rank cascade, so cross-type comparisons are
+well-defined and total (`cmp` / `lt` / `gt` run the same cascade but
+are restricted to same-family pairs). Type literals sort strictly
 below their concrete inhabitants of the same family:
 
 ```
-Integer lt 0                  # returns true
+Integer tcmp 0                # returns -1
+0 gt Integer                  # returns true
+sort [Integer 0 5 -3]         # returns [Integer -3 0 5]
 [1,2] cmp [1,3]               # returns -1
 ```
+
+> **`lt`/`gt`/`lte`/`gte` with a type-literal *left* operand do not
+> compare — they construct.** `Integer lt 0` builds the predicate
+> refinement `(Integer lt 0)` (see
+> [`fn` type semantics](#fn-type-semantics)). To ask
+> the ordering question, put the literal on the right (`0 gt Integer`)
+> or use `tcmp` (`(Integer tcmp 0) lt 0` returns `true`).
 
 ### Classes
 
@@ -530,7 +582,11 @@ Integer lt 0                  # returns true
 value declares a required field, a **concrete** value declares a
 default (and the default's own type becomes the field's type).
 `make` constructs flat instances — every field resolved eagerly,
-no prototypes:
+no prototypes. A **mutable** default — a flex node, `Array`,
+`Store`, or instance — is copied fresh for each `make`, so
+instances never share one underlying container (no Python-style
+mutable-default trap); a mutable value you **pass in** is taken
+as-is, so deliberate sharing stays available:
 
 ```
 def Point class {x:Float y:0.0}     # x required, y defaults to 0.0
@@ -743,9 +799,9 @@ forms `a b sub`, `a sub b`, and `sub b a` compute `a - b`.
 
 | Word | Operation | Example |
 |------|-----------|---------|
-| `add` | `a + b` (commutative) | `1 add 2` returns `3` |
+| `add` | `a + b` (commutative) | `add 1 2` returns `3` |
 | `sub` | `a - b` | `10 sub 3` returns `7` |
-| `mul` | `a * b` (commutative) | `4 mul 5` returns `20` |
+| `mul` | `a * b` (commutative) | `mul 4 5` returns `20` |
 | `div` | `a / b` | `10 div 2` returns `5` |
 | `mod` | `a % b` | `10 mod 3` returns `1` |
 | `pow` | `a ^ b` | `2 pow 10` returns `1024` |
@@ -753,7 +809,7 @@ forms `a b sub`, `a sub b`, and `sub b a` compute `a - b`.
 `add` on non-numeric scalars performs string concatenation:
 `"a" add "b"` returns `'ab'`. This wins whenever **either** operand is
 non-numeric: the other operand is rendered to text and the result is
-a `String`, so `1 add "x"` returns `'1x'` and `true 1 add` returns `'true1'` (no
+a `String`, so `1 add "x"` returns `'1x'` and `true add 1` returns `'true1'` (no
 type error — `add` simply concatenates). Use it deliberately, not as
 a guard against mixed-type mistakes.
 
@@ -774,12 +830,12 @@ Two further sharp edges on numbers:
   `-9223372036854775808..9223372036854775807` (int64). A literal outside
   that range, or an `add`/`sub`/`mul`/`pow` whose result would leave it,
   raises `[aql/integer_overflow]` rather than silently wrapping or
-  degrading to a `Float`: `2 pow 63` and `9223372036854775807 add 1` both
-  error. Make an operand a `Float` (e.g. `9223372036854775807 add 1.0`)
+  degrading to a `Float`: `2 pow 63` and `add 9223372036854775807 1` both
+  error. Make an operand a `Float` (e.g. `add 9223372036854775807 1.0`)
   for an approximate IEEE-754 result. (Arbitrary-precision integers are a
   planned future change — see `design/INTEGER-OVERFLOW-STRATEGY.5.md`.)
 * `Float` is an IEEE-754 binary `float64`, **not** a base-10
-  decimal — `0.1 add 0.2` returns `0.30000000000000004` and `1 eq 1.0`
+  decimal — `add 0.1 0.2` returns `0.30000000000000004` and `1 eq 1.0`
   returns `true` even though the two divide differently. See
   [Type system](#type-system).
 * **Special Float values** are written with the lowercase literals
@@ -919,10 +975,11 @@ restricted words refuse. See
 | `def` | Define a word | `def x 42` |
 | `undef` | Remove the latest definition | `undef x` |
 | `fn` | Create typed function | `fn [[Integer] [Integer] [dup mul]]` |
-| `var` | Scoped variable block | `5 var [[x] x mul x]` returns `25` |
+| `var` | Scoped variable block | `5 var [[x] mul x x]` returns `25` |
 | `args` | Current `fn` args list (inside body) | `args . 0` |
-| `quote` | Prevent evaluation of next token | `quote [1 add 2]` |
+| `quote` | Prevent evaluation of next token | `quote [add 1 2]` |
 | `referent` | What a quoted atom's name refers to | `def x 5  (quote x) referent` returns `5` |
+| `word` | Splice marker: spreads a list's elements (any other value: itself) into the token stream | `[0 word [1,2,3] 4]` returns `[0 1 2 3 4]` |
 
 > **Core words are frozen.** `def`/`undef` may not redefine a built-in
 > word, nor the literals `true`/`false`/`none` — `def add …`,
@@ -932,6 +989,46 @@ restricted words refuse. See
 > x 2` ⇒ `x` is `2`), and a built-in *type* name (`Integer`, …) was
 > already unusable as a `def` target.
 
+#### Splices and spread — `word`
+
+`word v` wraps its (unevaluated) argument in a splice marker. When the
+marker reaches the evaluation pointer it is replaced by its payload: a
+plain list contributes its **top-level elements**, any other value
+contributes itself. This is AQL's spread operator, and it works inline,
+bound, and in argument positions:
+
+```
+[0 word [1,2,3] 4]            # returns [0 1 2 3 4]      — inline spread
+def vs word [2,3]             # bind a spread
+[1 vs 4]                      # returns [1 2 3 4]        — spread in a literal
+add3 1 vs                     # ≡ add3 1 2 3             — spread into a call
+add vs                        # ≡ add 2 3 — returns 5
+```
+
+A **data**-splice-bound word (the payload holds only values) is
+equivalent to the written paren group wherever it stands as an
+argument: `f w ≡ f (w)`. A multi-value spread fills several parameter
+slots; an empty one (`def e word []`) contributes nothing.
+
+Three deliberate exceptions:
+
+* **Name-capture slots win.** `/q` slots take the word's *name*
+  regardless of its binding — `quote vs` is the atom `vs`, and
+  `inspect vs` inspects the definition.
+* **Code splices are macros, not spreads.** A payload containing words
+  (`def inc word [1 add]`) runs Forth-style against the **live** stack
+  when it fires (`1 inc inc inc` returns `4`); it is *not* expanded in
+  argument positions. Group it explicitly — `f (p)` — to pass its
+  result as an argument.
+* **Rebinding aliases.** `def y vs` copies the *binding* — the marker
+  itself — so `y` is the same splice as `vs` (and spreads everywhere
+  `vs` does). Write `def y (vs)` to force expansion at a `def`.
+
+(For spreading *tokens into generated code* at expansion time, see
+`splice` under **[Macros](#macros)**; for concatenating into a
+FlexList in place, `append [3,4] fl` already spreads its list
+argument's elements.)
+
 #### `fn` shape
 
 A `fn` body is a flat list of `[input-sig] [output-sig] [body]`
@@ -940,10 +1037,10 @@ become local bindings during the body); the output-sig declares the
 return type(s):
 
 ```
-def inc fn [[n:Integer] [Integer] [n add 1]]
+def inc fn [[n:Integer] [Integer] [add n 1]]
 inc 5                         # returns 6
 
-def avg fn [[a:Number b:Number] [Float] [(a add b) div 2.0]]
+def avg fn [[a:Number b:Number] [Float] [(add a b) div 2.0]]
 avg 3 4                       # returns 3.5
 ```
 
@@ -960,7 +1057,83 @@ bad                           # returns [aql/type_error] return value 1: expecte
 Multiple triples declare overloads (the engine tries each in order);
 multiple output types declare multiple return values.
 
-#### `fn` type semantics
+**`/q` params capture names.** A param typed `Atom/q` takes the next
+*bare word* as its atom name — the argument is presented as if quoted,
+exactly like the built-in name-takers (`def`, `inspect`, `quote`) —
+and the capture wins over any binding the word currently has:
+
+```
+def greet fn [[n:Atom/q] [String] [`hi ${n}`]]
+greet world                   # returns 'hi world' — no quoting needed
+def world 99
+greet world                   # returns 'hi world' — capture trumps the binding
+greet world/q                 # returns 'hi world' — an explicit atom works too
+```
+
+**Type-valued params take type literals.** A param typed `Type`
+admits exactly what `is Type` admits — the one membership question,
+asked identically at params, `is`, and returns:
+
+```
+def fresh fn [[t:Type coll:List] [Any] [make t coll]]
+fresh FlexList [1,2]          # returns (flex [1 2]) — the literal drives construction
+Map is Type                   # returns true
+```
+
+The `/t` suffix bounds the slot: `Map/t` is sugar for `Type<Map>`,
+itself sugar for `(Type of [Map])` — the type of type literals
+conforming to `Map`. Bounds compose with named types, including named
+disjunctions:
+
+```
+def MapOrList (Map tor List)
+def container fn [[t:MapOrList/t x:Any] [Any] [make t x]]
+container Map {a:1}           # returns {a:1}
+container List [1,2,3] size   # returns 3
+List is MapOrList/t           # returns true
+Integer is MapOrList/t        # returns false — and `container Integer …` is a signature error
+```
+
+A bare structural bound must be named first (`def MapOrList (Map tor
+List)`, then `MapOrList/t`); inline disjunctions in ordinary value
+slots (`x:(Integer tor String)`) constrain values as written.
+
+#### Anonymous functions — `=>`
+
+`sig => body` builds an anonymous `Function`: signature on the left,
+a single body token on the right. The arrow **groups itself** — it
+parses as `(sig afn body)`, binding tighter than the surrounding
+call — so it works with or without explicit parens, including as a
+`def` operand or a higher-order argument. It closes over enclosing
+fn bindings lexically:
+
+```
+(x:Integer => [x mul 2]) 5                    # returns 10
+filter p:Any => [p.value gt 3] [1 2 3 4 5]    # returns [4 5]
+def double x:Integer => [x mul 2]
+double 7                                      # returns 14
+
+def make-adder x:Integer => y:Integer => [x add y]
+def add5 (make-adder 5)
+add5 3                                        # returns 8
+```
+
+The signature spellings:
+
+* `x:Integer => …` — bare convenience form, **one** typed param.
+* `[x:Integer y:Integer] => …` — the bracket form; required for
+  multiple params, value patterns, optionals, and `|` barriers
+  (everything `fn`'s input list accepts).
+* `[] => …` — zero params.
+
+The body must be **one** token — wrap multi-token bodies as `[…]` or
+`(…)`, both captured as code and run per call (a bare-word body like
+`=> x` fails; write `=> [x]`). Chained arrows curry right-
+associatively, as in `make-adder` above: each inner lambda is
+constructed at call time with the outer params bound and captured.
+The arrow produces exactly one signature with return type `Any`; for
+declared returns or multiple overloads use the full
+`fn [[input] [output] [body] …]` form.
 
 Parameter and return annotations may name **any** type — builtins,
 and user-defined types introduced with `def NAME refine …`. A value
@@ -1141,7 +1314,7 @@ before the call.
 | `if` | Conditional; else branch optional | `if (5 gt 3) ["y"] ["n"]` |
 | `case` | Dispatch on a value: match/block pairs + optional default | `case 2 [1 "one" 2 "two" "many"]` returns `'two'` |
 | `for` | Numeric loop (counter or range) | `for 5 [42]` |
-| `do` | Evaluate list as program | `do [1 add 2]` returns `3` |
+| `do` | Evaluate list as program | `do [add 1 2]` returns `3` |
 | `error` | Handle an error value (a non-Error result passes through) | `do [1 div 0] error [drop 42]` |
 | `raise` | Raise an error (code, message, optional payload) | `raise bad_input "expected a list"` |
 | `break` | Exit `for` loop early | `for 10 [break]` |
@@ -1453,9 +1626,15 @@ Key semantics (full design note: `design/FLEX-NODES.10.md`):
 - **Bindings share the node.** `def g f` aliases the same container;
   mutation through either is visible through both (this is reference
   semantics, like Store/Object/Array).
-- **Storage is by reference.** `set`/`append` store the value as given —
-  a plain map appended into a FlexList stays immutable inside it; `flex`
-  it first if it must be mutable.
+- **Writes adopt — trees stay entirely one column.** A plain map/list
+  stored into a flex container (`set`, `push`, `unshift`, `append`) is
+  deep-flexed on the way in, so a flex tree is mutable at every depth
+  (`set a {b:1} f` then `set b 9 f.a` sticks — it was silently lost
+  when the inner stayed immutable). A flex value stored into a flex
+  container stays a **shared handle** (what you pass explicitly is
+  shared). Symmetrically, a flex value stored into a plain `Map`/`List`
+  is snapshot to its immutable shape, so an immutable container can
+  never change underneath through a live handle.
 - **Equality ignores flexness**: `(flex {a:1}) deq {a:1}` is `true` and
   `cmp` orders flex/plain pairs by content. `eq` remains container
   identity (two separate `flex [1]` nodes are not `eq`).
@@ -1523,7 +1702,21 @@ Row`. See **[HOWTO: Define a record/table/object type](HOWTO.md#define-a-record-
 | Word | Description |
 |------|-------------|
 | `inspect` | Structured view of a value, word, or type |
+| `canon` | Render a value as canonical AQL source (a String) |
 | `trace` | Evaluate a list with step-by-step tracing |
+
+**`canon` is round-trippable for data.** The result is the same
+canonical rendering the executable spec compares against, and for data
+values — scalars, atoms (`foo/q`), `none`, type literals, paths, and
+plain or flex Node trees — evaluating it reproduces an equivalent
+value. Flexness is marked at every level (`canon (flex {a:[1]})`
+returns `'(flex {a:(flex [1])})'`), strings pick a quoting that
+re-parses exactly (`canon "it's"` returns `"it's"` double-quoted, and
+content with both quote kinds or backslashes is escaped), and a plain
+list renders bare. Identity-bearing values — `Store`, `Array`, object
+instances, functions, timers — still render, but rebuilding them from
+the source produces a *fresh* container: data round-trips, identity
+does not.
 
 ### I/O
 

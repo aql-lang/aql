@@ -51,30 +51,15 @@ type mismatchKey struct {
 // PASSES fails loudly ("stale xfail") and an entry that matches no example
 // fails loudly too, so the list can't rot. See the package's completion
 // report for the triage rationale behind each entry.
-var knownMismatch = map[mismatchKey]string{
-	// `lt` with a type-literal left operand builds a DepScalar refinement
-	// `(Integer lt 0)`, it does not perform a boolean ordering compare —
-	// so the doc's `# returns true` (illustrating type-literal-sorts-low) never
-	// matches. Needs author decision: change the example to `cmp`, or
-	// reconsider `lt`'s type-literal overload.
-	{"REFERENCE.md", "Integer lt 0"}:   "Integer lt 0 builds a DepScalar refinement, not a boolean; doc shows true",
-	{"EXPLANATION.md", "Integer lt 0"}: "Integer lt 0 builds a DepScalar refinement, not a boolean; doc shows true",
-
-	// MathUtil.log of e is 0.9999999998311266 (float), not the exact 1.0 the
-	// doc shows. Either round in the example or accept the float form.
-	{"TUTORIAL.md", "MathUtil.log 2.718281828"}: "MathUtil.log float precision: engine 0.9999999998311266 vs doc 1.0",
-
-	// An absent optional record field renders as the None type literal
-	// (Canon: `None`); the doc writes lowercase `none`. Render-convention
-	// call for the author (None type-literal vs none value).
-	{"TUTORIAL.md", `make Person {name:"Bob"}`}: "absent optional renders as None type-literal; doc shows lowercase none",
-
-	// `set foo 99 end get foo` has no matching `set` signature (bare
-	// set/get need a context store). The example illustrates `end` but
-	// uses a non-working set/get form; author should pick an `end` demo
-	// that runs.
-	{"EXPLANATION.md", "set foo 99 end get foo"}: "set/get need a context store; bare form has no signature",
-}
+// The registry is currently EMPTY — the documentation gate runs at
+// zero xfails, and it should stay that way: resolve a new mismatch as
+// a doc bug or an engine bug promptly rather than letting entries
+// accumulate. (The four historical entries — the `Integer lt 0`
+// refinement-vs-ordering confusion, MathUtil.log float precision, the
+// absent-optional `none`/`None` render convention, and the bare
+// `set`/`get` `end` demo — were resolved in the June 2026 doc review;
+// see design/REVIEW-NOTES.*.md.)
+var knownMismatch = map[mismatchKey]string{}
 
 func docRoot() string { return filepath.Join("..", "..", "..") }
 

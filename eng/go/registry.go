@@ -273,6 +273,12 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	// Advisory (non-gating): a readability nudge, not a defect.
 	"forward_strands_operand": SeverityInfo,
 	"mixed_form_call":         SeverityInfo,
+	// A parked word whose plan filled a slot with a dispatching word
+	// committed early at a statement boundary (the else-less-guard
+	// shape) — correct, but the source reads ambiguously; an explicit
+	// `[]` else or `end` makes the intent loud. See
+	// design/FORWARD-COLLECTION-PHASES.10.md.
+	"speculative_forward_commit": SeverityInfo,
 }
 
 // SeverityFor returns the default severity classification for a

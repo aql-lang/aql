@@ -260,6 +260,13 @@ Key conversion functions in `parse.go`:
   group; `execFnDefLiteral` peeks+consumes it to leave the function as
   inert data, and `stepLiteral` drops an unconsumed marker (a modifier
   on a non-function result is a no-op). See `lang/spec/path-modifier.tsv`.
+  `/t` on a WORD is the type-bound sugar: `X/t` desugars in `parseWord`
+  to the paren group `(Type of [X/q])` — the bound rides as an ATOM so
+  `of` sees the NAME and can bind a named structural type (disjunct,
+  predicate) to its minted node rather than its body. It combines with
+  no other modifier and is word-only (no group form; computed bounds
+  spell `(Type of [expr])` directly). The bounded-Type body itself
+  lives in `eng/go/core_boundedtype.go`.
 
 ## Argument Ordering (CRITICAL)
 
@@ -412,10 +419,17 @@ top-down in sig order.
 
 ## Lambda Syntax (`=>` / `afn`)
 
-`=>` is a parser token that lexes directly to the word `afn`. The
-source `a => b` is the same value sequence as `a afn b`. `afn` is a
-regular registered word — there is no lambda type, no separate
-runtime path, and no rewrite pass.
+`=>` is a parser token (#AR) that GROUPS: `A => B` parses as the
+paren group `(A afn B)` — the arrow binds tighter than any enclosing
+word's forward collection, so `def double x:Integer => [x mul 2]`
+binds the LAMBDA, not the sig literal (without the fold, def's Any
+slot claimed the sig at plan time and the lambda evaporated as an
+orphaned anonymous value). The fold is grammar-level
+(`setupValRule`'s arrowfold/arrowfoldelem rules plus the
+implicit-pair #AR Close alternates in `setupPairGrammar`); `afn`
+itself is a regular registered word — there is no lambda type, no
+separate runtime path, and typing the word `afn` directly keeps the
+old flat (ungrouped) behaviour.
 
 `afn` has signature `[Any Any |]` (both args forward-eligible, both
 typed `Any`, body and sig captured via `NoEvalArgs`). The canonical
@@ -447,20 +461,30 @@ a named fn's body does.
 
 ### Syntactic gotchas
 
-- **Typed-param shorthand must be list-wrapped.** `x:Integer => body`
-  doesn't parse because `x:Integer` at top level starts an implicit
-  map and the rest collapses into the map's value position. Write
-  `[x:Integer] => body` (or `{x: Integer} => body`) instead.
+- **Bare typed-param shorthand takes ONE param.** `x:Integer => body`
+  parses everywhere (parens optional — top level, paren contents,
+  def operands): the implicit pair closes on the arrow and becomes
+  the input sig, equivalent to `[x:Integer] => body`. Multi-param
+  needs the bracket form `([x:Integer y:Integer] => …)`: in the bare
+  form each pair closes separately and the first strands as a stray
+  map (`syntax.tsv` pins the `undefined_word` failure). An explicit
+  map sig `{x:Integer} => body` is NOT the named-param form —
+  ParseFnParams keys named params on jsonic's Implicit flag, so an
+  explicit map builds a single Map-typed param (`fn (Map)`).
 - **Single-value body rule.** afn captures one forward token as the
   body. Multi-token bodies must wrap as `[token1 token2 …]` or
-  `(token1 token2 …)`. A bare-word body (e.g. `[x:Any] => x`) fails
-  because the engine dispatches the word as it walks past it during
-  forward collection — wrap as `[x]` to keep the word as data inside
-  the body list.
-- **`def name x => body` (no parens) doesn't work** because `def`
-  forward-collects the body as its second argument and afn forward-
-  collects a body of its own — the precedence overlaps. Always wrap:
-  `def name (x:Integer => [x mul 2])`.
+  `(token1 token2 …)` — both are CODE, captured unevaluated (the body
+  slot is NoEvalArgs for lists and RawParens for parens) and run per
+  call with params bound, so `x:Integer => (x mul 2)` works. A
+  bare-word body (e.g. `[x:Any] => x`) fails because the engine
+  dispatches the word as it walks past it during forward collection —
+  wrap as `[x]` to keep the word as data inside the body list.
+- **Currying just chains.** `x:Integer => y:Integer => [x add y]`
+  parses right-associatively as `(x ⇒ (y ⇒ body))`, and because the
+  body paren is raw the inner lambda constructs INSIDE the outer body
+  — at call time, with `x` bound and captured. The older list-wrapped
+  spelling `x:Integer => [(y:Integer => [x add y])]` remains
+  equivalent.
 - **Single sig only.** `=>` produces exactly one `FnSig`. For
   multi-overload fns, use the verbose `fn [[input1] [output1] [body1]
   [input2] …]` form.
@@ -681,7 +705,8 @@ inner natives there, and exports FnDef wrappers (carrying
 wrapper is invoked via `pkg.word` dot-access, dispatch flows
 through `eng/go/engine.go::execFnDefLiteral`, which calls
 `reg.Lookup(fnDef.Name)` and uses the **looked-up native's
-`Signatures`** for `matchSignature` — NOT the wrapper's own Sigs.
+`Signatures`** for `matchSignature` — NOT the wrapper's own
+`Signatures`.
 
 **Consequence:** the inner native's `BarrierPos` controls whether
 the wrapper's swap-form `a pkg.word b` dispatches.
@@ -899,6 +924,11 @@ diagnostic + `Any` carrier in the end-of-`Run()` drain in
 When adding a sig that should accept a bare-word name as data, add `/q`
 to the corresponding Atom position. Without `/q`, callers will see an
 `undefined_word` error and must wrap the name in `quote` themselves.
+AQL-defined fns declare the same capability as `name:Atom/q` (or bare
+`Atom/q` for an unnamed param) — ParseFnParams sets `FnParam.Quote`,
+which flows into `Signature.QuoteArgs` at construction/normalizeSig,
+so the dispatch-side behaviour (binding-agnostic word capture) is
+identical to a native QuoteArgs slot.
 
 ## Value Comparison & Ordering
 

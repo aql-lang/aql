@@ -77,8 +77,8 @@ foo                           # returns 1
 `[input] [output] [body]`. Pair it with `def` to install it:
 
 ```
-def square fn [[x:Number] [Number] [x mul x]]
-5 square                      # returns 25
+def square fn [[x:Number] [Number] [mul x x]]
+square 5                      # returns 25
 ```
 
 Inside the body, named parameters (`x:Number`) bind to argument
@@ -106,8 +106,8 @@ wins:
 
 ```
 def add1 fn [
-  [Integer] [Integer] [1 add]
-  [Float] [Float] [1.0 add]
+  [Integer] [Integer] [add 1]
+  [Float] [Float] [add 1.0]
   [String]  [String]  [`${args.0}_1`]
 ]
 add1 5                        # returns 6
@@ -223,14 +223,14 @@ identifiers qualify; quoted keys like `{'foo'}` stay errors. See
 `do` evaluates list-valued entries inside a map:
 
 ```
-do {x: [1 add 2], y: [3 mul 4]}        # returns {x:3 y:12}
+do {x: [add 1 2], y: [mul 3 4]}        # returns {x:3 y:12}
 ```
 
 A function stored in a map is callable through the dotted accessor when
 you store it with the `/r` ref modifier, which keeps it as a data value:
 
 ```
-def inc fn [[n:Integer] [Integer] [n add 1]]
+def inc fn [[n:Integer] [Integer] [add n 1]]
 def m {inc: inc/r}
 m.inc 5                                # returns 6
 ```
@@ -248,13 +248,13 @@ Backtick strings interpolate `${...}` expressions:
 ```
 def name "world"
 `hello ${name}`                       # returns 'hello world'
-`2 + 3 = ${2 add 3}`                  # returns '2 + 3 = 5'
+`2 + 3 = ${add 2 3}`                  # returns '2 + 3 = 5'
 ```
 
 Nest as deep as needed:
 
 ```
-`a${`inner ${1 add 2}`}b`             # returns 'ainner 3b'
+`a${`inner ${add 1 2}`}b`             # returns 'ainner 3b'
 ```
 
 Escapes inside templates: `\\`, `` \` ``, `\$`, `\n`, `\t`, `\r`.
@@ -311,7 +311,7 @@ If there is no error, the `error` word is a no-op.
 gathers the results:
 
 ```
-"aql:time-util" import end TimeUtil.await [[1 add 2] [3 add 4]]           # returns [3 7]
+"aql:time-util" import end TimeUtil.await [[add 1 2] [add 3 4]]           # returns [3 7]
 ```
 
 Choose a mode via an Options map; these mirror JavaScript Promise
@@ -598,13 +598,13 @@ Bare-word declarations pop from the stack:
 the argument-order rule. Inline values are also accepted:
 
 ```
-var [[[x 2] [y 10]] x add y]          # returns 12
+var [[[x 2] [y 10]] add x y]          # returns 12
 ```
 
 Mix the two:
 
 ```
-10 var [[[x 2] y] x add y]            # returns 12 — x=2 inline, y=10 from stack
+10 var [[[x 2] y] add x y]            # returns 12 — x=2 inline, y=10 from stack
 ```
 
 
@@ -1083,7 +1083,7 @@ sits next to a value of a type it would accept.
 `;` is a synonym for `end`, handy between statements:
 
 ```
-1 add 2 ; 3 add 4                          # returns 3 7 — two statements
+add 1 2 ; add 3 4                          # returns 3 7 — two statements
 ```
 
 Read more in
@@ -1118,8 +1118,8 @@ Common profiles, most-permissive first:
 ### Run code under a profile
 
 ```bash
-aql do --perms=sandbox 1 add 2                   # 3
-aql -e '1 add 2' --perms=read-only               # 3
+aql do --perms=sandbox add 1 2                   # 3
+aql -e 'add 1 2' --perms=read-only               # 3
 aql script.aql --perms-file=./prod-policy.jsonic
 aql exec -p 8091 --perms=sandbox                 # bound at startup
 ```
@@ -1133,7 +1133,7 @@ FileOps / SQLite / etc. is never constructed).
 ```bash
 aql do --perms=sandbox --allow=engine.shell true
 aql exec --perms=trusted --no-install=network --no-install=sqlite
-aql do --perms-inline='{ scopes: { engine: { words: { default: "deny", rules: [{ allow: ["add"] }] } } } }' 1 add 2
+aql do --perms-inline='{ scopes: { engine: { words: { default: "deny", rules: [{ allow: ["add"] }] } } } }' add 1 2
 ```
 
 For where-bearing rules (paths, hosts), use `--perms-inline` or a

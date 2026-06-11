@@ -41,3 +41,16 @@ do [raise io_error "disk"] error [get code case [bad_input/q "rejected" io_error
 do [raise weird "?"] error [get code case [bad_input/q "rejected" io_error/q "retry" "unexpected"]]	'unexpected'	…unknown codes take the default
 do [raise {code: too_big/q, message: "out of range", limit: 99}] error [case [[get code eq bad_input/q] [get message] [get code eq too_big/q] [get limit] "unexpected"]]	99	predicate matches inspect the Error itself; the block reads its payload
 do [21 mul 2] error [get code case [bad_input/q "rejected" "unexpected"]]	42	a successful body skips the handler entirely (error passes the value through)
+#
+# §X  template-string messages — an interpolated template in a typed
+#     argument slot evaluates to its String during collection, so
+#     `raise` (and any typed word) accepts it directly (bloom report:
+#     previously required binding the message with def first)
+def x 5 raise `bad: ${x}`	ERROR:bad: 5	interpolated template as the raise message
+def x 5 raise (`bad: ${x}`)	ERROR:bad: 5	paren-wrapped template evaluates inside the group
+def x 5 raise bad_input `oops ${x}`	ERROR:oops 5	template message with an explicit code
+def x 5 add "a" `v ${x}`	'v 5a'	any typed slot sees the evaluated String, not the raw template
+# strict lookup misses raise the documented not_found code; misuse on a
+# type literal stays getr_error
+{x:1} getr y	ERROR:not_found	missing map key is not_found per the error-codes table
+do [{x:1} !. y] error [get code]	not_found/q	the code atom a handler dispatches on
