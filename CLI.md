@@ -15,6 +15,7 @@ supports.
   * [`aql do`](#aql-do)
   * [`aql check`](#aql-check)
   * [`aql help`](#aql-help)
+  * [`aql describe`](#aql-describe)
   * [`aql fmt`](#aql-fmt)
 * [Project lifecycle](#project-lifecycle)
   * [`aql prep`](#aql-prep)
@@ -170,17 +171,60 @@ type — see [`aql lsp`](#aql-lsp).
 
 ### `aql help`
 
-List the available words, or describe one.
+`help` documents the **aql tool**: its subcommands and their flags.
+(For the **language** — words, categories, and modules — use
+[`aql describe`](#aql-describe).)
 
 ```bash
-aql help                    # full word list
-aql help add                # signature and example for `add`
-aql help fn
-aql help record
+aql help                    # introduction + the subcommand list (this overview)
+aql help vault              # one subcommand: summary, and where its flags live
+aql help check
 ```
 
-Inside the REPL the `help` *word* is also available — typing
-`help` at the prompt does the same thing.
+With no argument it prints an orientation to the tool — the two kinds
+of help (`help` for the CLI, `describe` for the language), the usage
+forms, and every subcommand. With a subcommand name it prints that
+command's one-line summary and points at `aql <subcommand> -h` for the
+full flag set. An unknown name exits non-zero and suggests
+`aql describe <name>` in case a language word was meant.
+
+### `aql describe`
+
+`describe` documents the **AQL language**: its built-in words, the
+categories they fall into, and the loadable modules.
+
+```bash
+aql describe                       # a categorised guide to every word and module
+aql describe add                   # full docs for one word: signatures, examples, notes
+aql describe math                  # the words in one category
+aql describe aql:type-util         # a module and the words it exports
+aql describe aql:type-util:tpartial   # one exported word of a module
+```
+
+The forms:
+
+* **no argument** — every built-in word grouped by category (math,
+  compare, boolean, string, type, …), then the loadable modules, then
+  the drill-in forms below.
+* **`<word>`** — the word's signatures, precedence, description, and
+  examples (the same data the REPL `describe` word and the LSP hover
+  show). A bare name is matched as a category first, so `describe type`
+  opens the *type* category; use `describe typeof` for the word.
+* **`<category>`** — the words in that category, each with its one-line
+  summary.
+* **`aql:<module>`** (or a bare built-in module id like `math-util`) —
+  the module's summary and exported words.
+* **`aql:<module>:<word>`** — a single exported word, with its module
+  provenance.
+
+A name that matches none of these is given one more chance: `describe`
+tries to **load it as a module** — a native `aql:` module, an installed
+module, or a file path (`./lib.aql`) — and describes it if the load
+succeeds. Only when that fails does it report that nothing is known by
+that name.
+
+Inside the REPL the `describe` *word* and `/describe` meta-command look
+up a single word the same way.
 
 ### `aql fmt`
 

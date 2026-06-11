@@ -507,6 +507,37 @@ func resolveNativeMod(r *Registry, path string) error {
 	return nil
 }
 
+// ResolveAnyModule resolves a module reference to its descriptor WITHOUT
+// installing its exports, mirroring import's native / bare / file dispatch. It
+// lets tooling — notably `aql describe` — load and introspect a module that is
+// not one of the resolver's compiled-in builtins ("attempt to load a module if
+// unknown"). For an "aql:" reference the registry must have a module Resolver
+// installed (modules.InstallResolver). Data-file references are rejected: they
+// have no exports to describe.
+func ResolveAnyModule(r *Registry, ref string) (ModuleDesc, error) {
+	if isNativeModImport(ref) {
+		name := strings.TrimPrefix(ref, "aql:")
+		if name == "" {
+			return ModuleDesc{}, fmt.Errorf("empty native module name in %q", ref)
+		}
+		if r.Modules.Resolver == nil {
+			return ModuleDesc{}, fmt.Errorf("native module resolver not configured (cannot resolve %q)", ref)
+		}
+		return r.Modules.Resolver(name, r)
+	}
+	if isDataFile(ref) {
+		return ModuleDesc{}, fmt.Errorf("%q is a data file, not a module", ref)
+	}
+	if !isFilePath(ref) {
+		resolved, err := resolveBareModule(r, ref)
+		if err != nil {
+			return ModuleDesc{}, err
+		}
+		return loadFileModule(r, resolved)
+	}
+	return loadFileModule(r, ref)
+}
+
 // ensureExportsBound re-installs any module-namespace defs that are not
 // currently bound. Used when re-importing an already-resolved native
 // module whose namespace binding was torn down (e.g. by CallAQL's

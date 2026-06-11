@@ -35,15 +35,26 @@ func (c *cmd) Run(args []string, _ io.Reader, stdout, _ io.Writer) int {
 	return helpCommand(stdout, reg, args[0])
 }
 
-// writeOverview prints the top-level command overview: usage forms,
-// the one-shot commands, the long-running services, and pointers at
-// per-subcommand and per-word help.
+// writeOverview prints the top-level introduction: usage forms, the two ways
+// to get help (`help` for the CLI, `describe` for the language), the one-shot
+// commands, the long-running services, and pointers at the deeper help.
 func writeOverview(w io.Writer, reg *command.Registry, services map[string]bool) {
 	fmt.Fprintln(w, "aql — command-line tool for the AQL query language.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  aql [options] [script.aql]   Run a script, an -e expression, or the REPL.")
 	fmt.Fprintln(w, "  aql <subcommand> [args...]   Run one of the subcommands below.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Two kinds of help — pick by what you're asking about:")
+	fmt.Fprintln(w, "  help      drives the aql tool      — its subcommands and their flags.")
+	fmt.Fprintln(w, "  describe  documents the language   — its words, categories, and modules.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  aql help                List the subcommands below (this screen).")
+	fmt.Fprintln(w, "  aql help <subcommand>   Summary and flags for one subcommand, e.g. aql help vault.")
+	fmt.Fprintln(w, "  aql describe            A categorised guide to every word and module.")
+	fmt.Fprintln(w, "  aql describe <word>     Full docs for one word, e.g. aql describe add.")
+	fmt.Fprintln(w, "  aql describe <category> The words in one category, e.g. aql describe math.")
+	fmt.Fprintln(w, "  aql describe aql:<module>[:<word>]   A module, or one of its words.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Commands:")
 	for _, c := range reg.Commands() {
@@ -58,11 +69,6 @@ func writeOverview(w io.Writer, reg *command.Registry, services map[string]bool)
 			fmt.Fprintf(w, "  %-10s %s\n", c.Name(), c.Synopsis())
 		}
 	}
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Getting more help:")
-	fmt.Fprintln(w, "  aql help <subcommand>   Summary and flags for one subcommand.")
-	fmt.Fprintln(w, "  aql describe <word>     Documentation for an AQL language word.")
-	fmt.Fprintln(w, "  aql describe            List language words and built-in modules.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Docs: "+helppkg.RepoURL)
 }

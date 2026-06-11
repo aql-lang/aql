@@ -62,7 +62,8 @@ aql do '1 add 2'                     # one-shot expression
 aql script.aql                       # run a file
 aql check script.aql                 # type-check, don't run
 aql fmt script.aql                   # format in place (always rewrites)
-aql help                             # list every built-in word
+aql help                             # introduction + the subcommand list
+aql describe                         # a categorised guide to every built-in word
 ```
 
 A wasm-powered browser playground is bundled in
