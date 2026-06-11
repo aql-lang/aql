@@ -68,7 +68,7 @@ Language-agnostic content stays at the top of each component:
   `aql:matrix-util` (`MatrixUtil`), `aql:string-util` (`StringUtil`),
   `aql:bin-util` (`BinUtil`), `aql:struct-util` (`StructUtil`),
   `aql:logic-util` (`LogicUtil`). Capability / framework / DSL modules
-  stay plain: `aql:io` (`IO`), `aql:net` (`Net`), `aql:decision`,
+  stay plain: `aql:io` (`IO`), `aql:net` (`Net`),
   `aql:vm`, `aql:report`, `aql:test`, `aql:rand`, `aql:query`.
   (The `-util` suffix also conveniently avoids the type-name clashes for
   `Array`/`Time`/`Type`/`Matrix`/`String`, which are builtin types.)
@@ -747,9 +747,8 @@ the static analyser and user-facing display; at runtime,
 No body execution, no token splicing, no push reordering.
 
 AQL fns defined inside a module preamble (named params + real
-body — e.g. `Decision.cond`) take a different path: their body
-runs via `CallAQL` in the captured sub-registry so module-private
-words resolve correctly. Named params bind via `InstallDef`, so
+body) take a different path: their body runs via `CallAQL` in the
+captured sub-registry so module-private words resolve correctly. Named params bind via `InstallDef`, so
 push ordering doesn't apply.
 
 Test: `lang/go/test/sig_order_guard_test.go` pins this convention.
@@ -1006,6 +1005,7 @@ a `// lint:allow-panic` comment. The current set:
 - `native/native_temporal.go::registerTemporalType` — TDate, TDateTime, …
 - `native/fetch.go::registerFetchType` — TFetchFunction, TFetchRequest, …
 - `modules/matrix.go::registerTensorTypes` — TTensor, TMatrix, TVector.
+- `native/native_keyval.go::registerKeyValType` — TKeyVal.
 
 Do not add new init-time panics without also annotating them
 `// lint:allow-panic` and listing them here.

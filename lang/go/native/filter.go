@@ -12,14 +12,23 @@ import (
 // filterHandler calls voxgigstruct.Filter with an AQL callback as predicate.
 // The callback receives a map with "key" and "value" fields and should return
 // a boolean indicating whether to keep the item.
-// filterHandler keeps the elements of a list/map for which the callback
-// returns true. The callback (args[0]) is a Function VALUE invoked once per
-// element with a SINGLE {key, value} pair Map — key is the list index (or
-// map key) and value is the element. A predicate therefore reads the
-// element via `.value`, e.g. `filter ([p:Any] => [p.value gt 3]) xs`. (The
-// afn param must be typed — a bare `[p]` parses as a type name.)
+// filterHandler keeps the elements for which the callback returns true. The
+// callback (args[0]) is a Function VALUE invoked once per element. Over a LIST
+// it receives a {key, value} pair Map (key = index); a predicate reads the
+// element via `.value`, e.g. `filter ([p:Any] => [p.value gt 3]) xs`. Over a
+// MAP it receives a KeyVal {k v i n} (read the value via `.v`) and the result
+// keeps the map shape — see filterMapFunction. (The afn param must be typed —
+// a bare `[p]` parses as a type name.)
 func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	cb := args[0]
+
+	// Map input: hand the callback a KeyVal {k v i n} and keep the map shape,
+	// consistent with filter's quotation and lens forms. (List input keeps the
+	// legacy {key, value} pair with an index key, below.)
+	if args[1].Parent.ConformsTo(TMap) && IsConcrete(args[1]) {
+		return filterMapFunction(cb, args[1], r)
+	}
+
 	data := valueToAny(args[1])
 
 	var callErr error
@@ -73,6 +82,45 @@ func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 		return nil, fmt.Errorf("filter: %w", err)
 	}
 	return []Value{val}, nil
+}
+
+// filterMapFunction is the Function form of filter over a map: it calls the
+// callback once per entry with a KeyVal {k v i n}, keeping the entries whose
+// result is Boolean true and returning a Map (shape-preserving, like the
+// quotation and lens forms). A non-Boolean result is a loud error, matching the
+// quotation map form rather than dropping silently.
+func filterMapFunction(cb Value, mapVal Value, r *Registry) ([]Value, error) {
+	data, _ := AsMap(mapVal)
+	var caps []CapturedBinding
+	if fd, ok := cb.Data.(FnDefInfo); ok {
+		caps = fd.Captured
+	}
+	keys := data.Keys()
+	n := int64(len(keys))
+	out := NewOrderedMap()
+	for idx, k := range keys {
+		v, _ := data.Get(k)
+		cbArgs := []Value{NewKeyVal(k, v, int64(idx), n)}
+		sig := MatchFnSig(cb, cbArgs)
+		if sig == nil {
+			return nil, fmt.Errorf("filter: no matching callback signature")
+		}
+		res, err := r.CallAQL(sig, cbArgs, caps)
+		if err != nil {
+			return nil, fmt.Errorf("filter: key %q: %w", k, err)
+		}
+		if len(res) == 0 {
+			return nil, r.AqlError("filter_error", fmt.Sprintf("filter: key %q: predicate produced no result", k), "filter")
+		}
+		top := res[len(res)-1]
+		if !top.Parent.ConformsTo(TBoolean) || !IsConcrete(top) {
+			return nil, r.AqlError("filter_error", fmt.Sprintf("filter: key %q: predicate must produce a Boolean, got %s", k, top.Parent.Name), "filter")
+		}
+		if b, _ := AsBoolean(top); b {
+			out.Set(k, v)
+		}
+	}
+	return []Value{NewMap(out)}, nil
 }
 
 // filterBodyHandler is the quotation form of filter: `filter [body] xs`

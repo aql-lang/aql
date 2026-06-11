@@ -3,9 +3,10 @@
 #
 # each / fold / scan take an unevaluated CODE BODY (NoEvalArgs) as their
 # first argument and a collection as the second; the body runs against
-# each element on the stack. fold/scan optionally take an initial
-# accumulator. (filter, which takes a Function callback, and the richer
-# combinators — where/group/unique/sortby — live in the aql:array module.)
+# each element on the stack. fold optionally takes an initial accumulator;
+# scan has no init form — it always seeds from the first element. (filter,
+# which takes a Function callback, and the richer combinators —
+# where/group/unique/sortby — live in the aql:array module.)
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  each — map a code body over a list
@@ -21,18 +22,22 @@ fold [mul] [1 2 3 4] 1	24	product
 #
 # §3  scan — running (prefix) reduction
 scan [add] [1 2 3]	[1 3 6]	running sums
+scan [mul] [1 2 3 4]	[1 2 6 24]	running products
+scan [add] [42]	[42]	a singleton is just its seed (scan has no init form)
+scan [add] []	[]	empty in, empty out
 #
 # §4  join — concatenate list elements into a String
 join ',' ['a' 'b' 'c']	'a,b,c'	join with a separator
 join ['a' 'b' 'c']	'a,b,c'	default separator is a comma
 #
 # §5  filter — keep elements whose callback returns true. The callback is
-#     a Function (not a code body) and receives a {key value} PAIR map per
-#     element (key = index for a list, the map key for a map); read the
-#     element via `.value`. The afn param must be typed, e.g. [p:Any].
+#     a Function (not a code body). Over a LIST it receives a {key value}
+#     pair map (key = index); read the element via `.value`. Over a MAP it
+#     receives a KeyVal {k v i n} (read the value via `.v`) and the result
+#     keeps the map shape. The afn param must be typed, e.g. [kv:KeyVal].
 filter ([p:Any] => [(p.value mod 2) eq 0]) [1 2 3 4 5 6]	[2 4 6]	keep even elements (pair.value)
 filter ([p:Any] => [p.value gt 3]) [1 2 3 4 5]	[4 5]	keep elements greater than 3
-filter ([p:Any] => [(p.value mod 2) eq 0]) {a:1 b:2 c:3 d:4}	[2 4]	filter also walks a map's values
+filter ([kv:KeyVal] => [(kv.v mod 2) eq 0]) {a:1 b:2 c:3 d:4}	{b:2 d:4}	map: keeps entries by value, returns a map; the lambda gets a KeyVal
 #
 # §5b filter quotation form — like each/fold, a [body] runs once per
 #     element with the ELEMENT pushed first (no {key value} wrapper).
@@ -47,3 +52,24 @@ filter [add 1] [1 2 3]	ERROR:filter_error	a body that yields a non-Boolean is a 
 # §6  errors
 each [mul 2] 5	ERROR:signature_error	each requires a list collection
 fold [add] 5 0	ERROR:signature_error	fold requires a list collection
+#
+# §7  map forms — each / for-each / fold / filter over a map. The quotation
+#     form gets the VALUE (key preserved); the lambda form gets a KeyVal
+#     {k v i n}. each/filter keep the map shape; fold reduces. keys/vals
+#     (map.tsv) project a map to a list.
+{a:1 b:2 c:3} each [mul 10]	{a:10 b:20 c:30}	each over a map: quotation transforms values, keeps keys
+each [mul 10] {a:1 b:2}	{a:10 b:20}	forward form
+{a:1 b:2} each ([kv:KeyVal] => [kv.v add kv.i])	{a:1 b:3}	each lambda receives a KeyVal (value + iteration index)
+{a:1 b:5 c:3} filter ([kv:KeyVal] => [kv.v gt 2])	{b:5 c:3}	filter lambda receives a KeyVal, keeps the map shape
+fold [add] {a:1 b:2 c:3} 0	6	fold over a map sums the values (explicit seed)
+fold [add] {a:10 b:20 c:5}	35	no-init form folds from the first value
+0 fold ([acc:Integer kv:KeyVal] => [acc add kv.v]) {a:1 b:2 c:3}	6	fold lambda receives (accumulator, KeyVal)
+{a:1} each [drop]	ERROR:each_error	a map each body that produces nothing is an error
+{a:1 b:5} filter ([kv:KeyVal] => [kv.v])	ERROR:filter_error	a non-Boolean map predicate is a loud error
+fold [add] {}	ERROR:fold_error	empty map with no initial value is an error
+#
+# §8  scan over a map — running fold over the values, keeping the keys
+{a:1 b:2 c:3} scan [add]	{a:1 b:3 c:6}	scan over a map: running fold over the values, keeps keys
+{a:1 b:2 c:3} scan ([acc:Integer kv:KeyVal] => [acc add kv.v])	{a:1 b:3 c:6}	scan lambda gets (accumulator, KeyVal)
+{a:5} scan [add]	{a:5}	a singleton map is its seed
+{a:1 b:2} scan [drop drop]	ERROR:scan_error	a scan body that leaves nothing is an error

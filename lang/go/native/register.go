@@ -123,6 +123,12 @@ func Register(r *Registry) {
 		r.RegisterNativeFunc(n)
 	}
 
+	// Map projections (keys / vals); the each/for-each/fold/filter Map
+	// overloads live on those words' own signatures.
+	for _, n := range mapNatives {
+		r.RegisterNativeFunc(n)
+	}
+
 	// Flex nodes (flex / node / append)
 	for _, n := range flexNatives {
 		r.RegisterNativeFunc(n)

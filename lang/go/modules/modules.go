@@ -25,7 +25,6 @@ var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error
 	"array-util":  BuildArrayModule,
 	"time-util":   BuildTimeModule,
 	"matrix-util": BuildMatrixModule,
-	"decision":    BuildDecisionModule,
 	"bin-util":    BuildBinaryModule,
 	"type-util":   BuildTypeModule,
 	"vm":          BuildVMModule,
@@ -184,18 +183,6 @@ func InstallMatrixExports(r *native.Registry) error {
 	return nil
 }
 
-// InstallDecisionExports builds the decision module and installs its exports as defs.
-func InstallDecisionExports(r *native.Registry) error {
-	desc, err := BuildDecisionModule(r)
-	if err != nil {
-		return err
-	}
-	for name, exportMap := range desc.Exports {
-		r.Defs.Push(name, native.NewMap(exportMap))
-	}
-	return nil
-}
-
 // InstallRandExports builds the rand module and installs its exports as defs.
 func InstallRandExports(r *native.Registry) error {
 	desc, err := BuildRandModule(r)
@@ -269,11 +256,4 @@ func Names() []string {
 		names = append(names, name)
 	}
 	return names
-}
-
-// DecisionAQL returns the complete AQL source for the decision module.
-// This is the single source of truth — the pure-AQL file module and
-// module [...] inline tests are generated from this.
-func DecisionAQL() string {
-	return decisionAQL
 }

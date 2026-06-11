@@ -1421,7 +1421,7 @@ iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 |------|-------------|---------|
 | `each` | Map a function | `[1,2,3] each [dup mul]` |
 | `fold` | Reduce with accumulator | `fold [add] [1,2,3] 0` returns `6` |
-| `scan` | Running fold | `scan [add] [1,2,3]` |
+| `scan` | Running (prefix) fold | `scan [add] [1,2,3]` returns `[1,3,6]` |
 | `filter` | Keep elements where a predicate holds | `filter [2 gt] [1,2,3,4]` returns `[3,4]` |
 | `outer` | Outer product | `outer [mul] [3,4] [1,2]` |
 | `inner` | Inner product | `inner [add] [mul] [3,4] [1,2]` |
@@ -1448,17 +1448,37 @@ into the signature: `fold` takes `body data init`, `scan` takes
 > `each`/`fold` — and keeps the elements whose result is Boolean
 > `true` (a non-Boolean result is an **error**, not a silent drop). A
 > receiverless Reach lens keeps elements whose field is true. A
-> Function callback receives a `{key value}` pair map per element —
-> read the element via `.value`:
+> Function callback over a **list** receives a `{key value}` pair map
+> (read the element via `.value`); over a **map** it receives a `KeyVal`
+> (read the value via `.v`) and the result keeps the map shape:
 >
 > ```
-> filter [2 gt] [1 2 3 4]                          # returns [3 4]
-> filter [2 gt] {a:1 b:5 c:3}                      # returns {b:5 c:3} — maps filter by value
-> filter ([p:Any] => [p.value gt 3]) [1 2 3 4 5]   # returns [4 5]
+> filter [2 gt] [1 2 3 4]                            # returns [3 4]
+> filter [2 gt] {a:1 b:5 c:3}                        # returns {b:5 c:3} — maps filter by value
+> filter ([p:Any] => [p.value gt 3]) [1 2 3 4 5]     # returns [4 5]      (list: {key value} pair)
+> filter ([kv:KeyVal] => [kv.v gt 2]) {a:1 b:5 c:3}  # returns {b:5 c:3}  (map: KeyVal)
 > ```
 >
 > The lens form reads a field: `filter $.active accounts` keeps the
 > elements whose `.active` is `true`.
+
+> **Map iteration.** `each`, `for-each`, `fold`, `scan`, and `filter`
+> also take a map, iterating its entries in insertion order. The
+> quotation form gets each entry's **value** (the key is preserved); a
+> lambda gets a `KeyVal` `{k v i n}` — `k` key, `v` value, `i` 0-based
+> index, `n` total — so it can use the key/index/total. `each`, `scan`,
+> and `filter` keep the map shape, `fold` reduces to one value,
+> `for-each` produces nothing. To leave the map and get a list, use
+> `keys` / `vals`:
+>
+> ```
+> {a:1 b:2 c:3} each [mul 10]                       # returns {a:10 b:20 c:30}
+> {a:1 b:2} each ([kv:KeyVal] => [kv.v add kv.i])   # returns {a:1 b:3}
+> fold [add] {a:1 b:2 c:3} 0                        # returns 6
+> {a:1 b:2 c:3} scan [add]                          # returns {a:1 b:3 c:6}  (running fold)
+> {a:1 b:2 c:3} keys                                # returns ['a' 'b' 'c']
+> {a:1 b:2 c:3} vals                                # returns [1 2 3]
+> ```
 
 ### Size
 
@@ -1867,7 +1887,6 @@ modules keep plain names.
 | `aql:matrix-util` | `MatrixUtil` | Tensor / Matrix / Vector types and linear algebra. |
 | `aql:io` | `IO` | File and stream I/O — `read`, `write`, `stdin`, `stdout`, `trace` (only `print` stays in core). |
 | `aql:net` | `Net` | HTTP / API words — `fetch`, `prepare`, `direct`. |
-| `aql:decision` | `Decision` | Decision tables (rules engine). |
 | `aql:test` | `Test`, `Assert` | Unit tests, declarative specs, property-based testing. |
 | `aql:rand` | `Rand` | Seeded random generators (drives `Test.check-prop`). |
 | `aql:query` | `Query` | SQL-flavoured query pipeline. |

@@ -11,6 +11,7 @@ import (
 	"github.com/chzyer/readline"
 
 	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/aql-lang/aql/lang/go/modules"
 	"github.com/aql-lang/aql/lang/go/native"
 
 	udk "voxgiguniversalsdk"
@@ -25,7 +26,15 @@ var newReadline = func(cfg *readline.Config) (readliner, error) {
 }
 
 var newRegistry = func() (*native.Registry, error) {
-	return native.DefaultRegistry()
+	reg, err := native.DefaultRegistry()
+	if err != nil {
+		return nil, err
+	}
+	// Wire the native-module resolver so `import "aql:<name>"` works at the
+	// prompt (and so `describe` can load and document modules) — the same
+	// wiring lang.New does for one-shot runs.
+	modules.InstallResolver(reg)
+	return reg, nil
 }
 
 // readliner abstracts the readline interface for testing.

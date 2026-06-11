@@ -89,3 +89,11 @@ func init() {
 		Notes: []string{"Index out of range produces an error."},
 	})
 }
+
+func init() {
+	register(&Entry{
+		Word:        "stack",
+		Summary:     "Push a snapshot of the current evaluation stack as a list.",
+		Description: "Returns the stack contents as a List without consuming them — an introspection and debugging aid.",
+	})
+}

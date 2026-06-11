@@ -17,7 +17,7 @@ package modules
 // and can be authored independently. Each summary is a single line: a terse
 // statement of what the word does, matching the verified
 // lang/spec/module-*.tsv row descriptions where one exists. Type exports
-// (capitalised names like Decision.Cond) are not functions and carry no entry.
+// (capitalised names) are not functions and carry no entry.
 var moduleDocs = map[string]map[string]string{}
 
 // registerDocs records the per-export doc summaries for one module, keyed by

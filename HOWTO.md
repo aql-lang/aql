@@ -39,7 +39,6 @@ through the **[Tutorial](TUTORIAL.md)** and just need an answer to
 * [Build, install, and publish a module](#build-install-and-publish-a-module)
 * [Use the built-in `aql:time-util` module](#use-the-built-in-aqltime-module)
 * [Use the built-in `aql:matrix-util` module](#use-the-built-in-aqlmatrix-module)
-* [Use the built-in `aql:decision` module](#use-the-built-in-aqldecision-module)
 * [Store secrets in the vault](#store-secrets-in-the-vault)
 * [Trace and debug](#trace-and-debug)
 * [Use `end` to stop forward collection](#use-end-to-stop-forward-collection)
@@ -823,16 +822,6 @@ MatrixUtil.make-vector [1, 2, 3]          # Vector(3)
 
 Provides `Tensor`, `Matrix`, `Vector` type-kinds and the standard
 linear-algebra operations under the `matrix.` namespace.
-
-
-## Use the built-in `aql:decision` module
-
-```
-"aql:decision" import end
-```
-
-Decision tables compile to a single dispatch, type-checked against
-the input record. See the module source for the full API.
 
 
 ## Write property tests

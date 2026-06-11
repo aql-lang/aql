@@ -348,54 +348,20 @@ func helpOverviewHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) 
 	return nil, nil
 }
 
-// describeSelfHandler implements the 0-arg `describe` word: a reminder
-// of how to call describe on a specific word.
+// describeSelfHandler implements the 0-arg `describe` word: a categorised
+// guide to every built-in word and loadable module (the same guide the CLI
+// `aql describe` prints).
 func describeSelfHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	fmt.Fprintln(r.Output, "describe — Describe an AQL word: signatures, examples, and notes.")
-	fmt.Fprintln(r.Output, "")
-	fmt.Fprintln(r.Output, "Usage:")
-	fmt.Fprintln(r.Output, "  describe <word>     Describe a word (e.g. describe add).")
-	fmt.Fprintln(r.Output, "  \"<name>\" describe   Describe by string name (e.g. \"concat\" describe).")
-	fmt.Fprintln(r.Output, "")
-	fmt.Fprintln(r.Output, "Run `help` for a language overview.")
+	DescribeIndex(r.Output)
 	return nil, nil
 }
 
+// describeWordHandler implements `describe <name>` for a word, category,
+// module, or module word. The full dispatch — including class/surface schema
+// views, module resolution, and load-if-unknown — lives in DescribeName so the
+// `/describe` meta-command shares one implementation. See describe.go.
 func describeWordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	name := ValToString(args[0])
-	// A dotted name (ArrayUtil.indices) describes a module export: resolve
-	// it from the namespace binding `import` installed, rendering the
-	// export's own doc + module provenance + signatures.
-	if info := BuildQualifiedFuncInfo(r, name); info != nil {
-		fmt.Fprint(r.Output, help.FormatDynamic(*info))
-		return nil, nil
-	}
-	// A name def'd to a class (or object) type is not a word — the
-	// word-help view has nothing to say about it. Render the schema
-	// view instead: kind, lattice path, ancestry, field table with
-	// required-vs-default annotations.
-	if bound, ok := r.Defs.Top(name); ok && IsObjectType(bound) {
-		fmt.Fprint(r.Output, formatTypeSchema(name, bound))
-		return nil, nil
-	}
-	// Same for a surface: render its contract (required operations)
-	// rather than the empty word-help view.
-	if bound, ok := r.Defs.Top(name); ok && IsSurfaceType(bound) {
-		fmt.Fprint(r.Output, formatSurfaceSchema(name, bound))
-		return nil, nil
-	}
-	// Prefer live registry data (signatures + examples). Fall back to
-	// the static entry for words that are documented but not registered
-	// in this build, then report nothing if neither exists.
-	if info := BuildFuncInfo(r, name); info != nil {
-		fmt.Fprint(r.Output, help.FormatDynamic(*info))
-		return nil, nil
-	}
-	if entry := help.Lookup(name); entry != nil {
-		fmt.Fprint(r.Output, help.Format(entry))
-		return nil, nil
-	}
-	fmt.Fprintf(r.Output, "describe: no description available for %q\n", name)
+	DescribeName(r, r.Output, ValToString(args[0]))
 	return nil, nil
 }
 

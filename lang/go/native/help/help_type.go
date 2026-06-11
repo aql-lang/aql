@@ -277,3 +277,40 @@ func init() {
 			"inherited fields are flattened into the result.",
 	})
 }
+
+func init() {
+	register(&Entry{
+		Word:        "is",
+		Summary:     "Test whether a value is of a given type: `value is Type`.",
+		Description: "True when the value conforms to (is an inhabitant of) the type — 5 is Integer, 'x' is String. Routes through the type's matching behaviour, so refine and predicate types are honoured.",
+		Examples:    []string{`5 is Integer     ;# => true`, `'x' is Integer   ;# => false`},
+	})
+	register(&Entry{
+		Word:        "istype",
+		Summary:     "Test whether a value is a type literal rather than a concrete value.",
+		Description: "True for a bare type node like Integer or a user-defined type; false for concrete values like 5.",
+		Examples:    []string{`istype Integer   ;# => true`, `istype 5         ;# => false`},
+	})
+	register(&Entry{
+		Word:        "behave",
+		Summary:     "Install custom behaviour (compare / format / match) on a type.",
+		Description: "`behave Type fn` attaches a behaviour function so the type participates in cmp/sort, rendering, or `is` with custom semantics — how a user or external type opts into kernel operations.",
+	})
+	register(&Entry{
+		Word:        "fnsig",
+		Summary:     "Build a function-signature selector from a [[args] [returns]] shape.",
+		Description: "Constructs the signature value used by targeted undef to remove one overload of a multi-signature fn: undef name fnsig [[Number] [Number]].",
+	})
+	register(&Entry{
+		Word:        "tnot",
+		Summary:     "The negation of a type: the type of every value that is NOT of it.",
+		Description: "`tnot Integer` is a Type/Negation matching anything that is not an Integer. Combine with type unions and intersections for precise constraints.",
+		Examples:    []string{`typeof (tnot Integer)   ;# => Negation`},
+	})
+	register(&Entry{
+		Word:        "pathof",
+		Summary:     "The lattice path of a value's type, as a list of names.",
+		Description: "`pathof Integer` is [Scalar Number Integer] — the chain from the branch root down to the type. The structural complement of typeof.",
+		Examples:    []string{`pathof Integer   ;# => [Scalar Number Integer]`},
+	})
+}

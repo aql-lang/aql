@@ -62,7 +62,8 @@ aql do 'add 1 2'                     # one-shot expression
 aql script.aql                       # run a file
 aql check script.aql                 # type-check, don't run
 aql fmt script.aql                   # format in place (always rewrites)
-aql help                             # list every built-in word
+aql help                             # introduction + the subcommand list
+aql describe                         # a categorised guide to every built-in word
 ```
 
 A wasm-powered browser playground is bundled in
@@ -83,6 +84,7 @@ learning need, plus a CLI reference and the architecture record:
 | **[Explanation](EXPLANATION.md)** | You want to understand *why* AQL is the way it is. |
 | **[CLI Reference](CLI.md)** | You want to drive the `aql` binary from the shell. |
 | **[Architecture Design Record](ADR.md)** | You want the key architectural decisions and the reasoning behind them. |
+| **[Agent Guide](AGENTS.md)** | You are an AI agent (or new contributor) and want a map of the docs, the tooling, and how to discover the language with `aql describe`/`aql help`. |
 
 Suggested reading orders:
 

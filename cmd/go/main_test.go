@@ -261,6 +261,143 @@ func TestExecuteDescribeUnknownWord(t *testing.T) {
 	}
 }
 
+// The no-argument index is grouped by category: category names head the word
+// listing, and the drill-in footer points at every describe form.
+func TestExecuteDescribeIndexIsCategorised(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"describe"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"math", "compare", "boolean", "type", // category headers
+		"aql describe <category>",          // drill-in guidance
+		"aql describe aql:<module>:<word>", // module-word guidance
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in categorised index, got:\n%s", want, out)
+		}
+	}
+}
+
+// `aql describe <category>` lists that category's words with summaries.
+func TestExecuteDescribeCategory(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"describe", "math"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "math —") {
+		t.Errorf("expected 'math —' category header, got:\n%s", out)
+	}
+	for _, want := range []string{"add", "sqrt", "math-pi"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q listed in math category, got:\n%s", want, out)
+		}
+	}
+	// A word from another category must not leak into the listing. Anchor on
+	// the "  <word> " line format so we don't trip over the substring "concat"
+	// inside add's "concatenate" summary.
+	if strings.Contains(out, "\n  concat ") {
+		t.Errorf("string word 'concat' should not be listed in the math category")
+	}
+}
+
+// `aql describe aql:<module>` describes a module via its prefixed id.
+func TestExecuteDescribeModulePrefixed(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"describe", "aql:type-util"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "aql:type-util") || !strings.Contains(out, "TypeUtil.tpartial") {
+		t.Errorf("expected module header and an export, got:\n%s", out)
+	}
+}
+
+// `aql describe aql:<module>:<word>` documents a single module export.
+func TestExecuteDescribeModuleWord(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"describe", "aql:type-util:tpartial"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	out := stdout.String()
+	for _, section := range []string{"TypeUtil.tpartial —", "Module: aql:type-util", "Signatures:"} {
+		if !strings.Contains(out, section) {
+			t.Errorf("expected %q in module-word output, got:\n%s", section, out)
+		}
+	}
+}
+
+// An unknown native module reports a load error, not "no description".
+func TestExecuteDescribeUnknownModule(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"describe", "aql:nope"}, nil, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stdout.String(), "cannot load module") {
+		t.Errorf("expected 'cannot load module' message, got %q", stdout.String())
+	}
+}
+
+// A known module asked for a word it does not export reports the miss and
+// hints at the words it does export.
+func TestExecuteDescribeModuleMissingWord(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"describe", "aql:type-util:nosuchword"}, nil, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "no exported word") {
+		t.Errorf("expected 'no exported word' message, got %q", out)
+	}
+	if !strings.Contains(out, "TypeUtil.tpartial") {
+		t.Errorf("expected an exported-words hint, got %q", out)
+	}
+}
+
+// `aql describe <file.aql>` loads and describes a module that is not compiled
+// in — the "attempt to load a module if unknown" path.
+func TestExecuteDescribeLoadsFileModule(t *testing.T) {
+	dir := t.TempDir()
+	lib := filepath.Join(dir, "lib.aql")
+	src := "def double fn [[n:Integer] [Integer] [n mul 2]]\n" +
+		"export \"Lib\" {double: double/r}\n"
+	if err := os.WriteFile(lib, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"describe", lib}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Lib.double") {
+		t.Errorf("expected loaded module export 'Lib.double', got:\n%s", stdout.String())
+	}
+}
+
+// `aql help` introduces both help (the tool) and describe (the language).
+func TestExecuteHelpGuidesHelpAndDescribe(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"help"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{"aql help vault", "aql describe <category>", "documents the language"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in help overview, got:\n%s", want, out)
+		}
+	}
+}
+
 // --- prep subcommand ---
 
 func TestExecutePrepBasic(t *testing.T) {
