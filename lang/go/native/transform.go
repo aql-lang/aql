@@ -2,6 +2,7 @@ package native
 
 import (
 	"fmt"
+	"math"
 
 	voxgigstruct "github.com/voxgig/struct"
 )
@@ -43,6 +44,14 @@ func valueToAny(v Value) any {
 	case v.Parent.ConformsTo(TInteger):
 		i, _ := AsInteger(v)
 		return float64(i)
+	case v.Parent.ConformsTo(TFloat):
+		// A Float is a JSON number, not a string (a missing case here
+		// made jsonify emit "x": "1.5"). DepScalar payloads decline the
+		// concrete accessor and keep the rendering fallback.
+		if f, err := v.AsConcreteFloat(); err == nil {
+			return f
+		}
+		return v.String()
 	case v.Parent.ConformsTo(TString):
 		s, _ := AsString(v)
 		return s
@@ -100,7 +109,14 @@ func anyToValue(v any) (Value, error) {
 	case bool:
 		return NewBoolean(val), nil
 	case float64:
-		return NewInteger(int64(val)), nil
+		// A whole-valued JSON number stays an Integer (the historical
+		// behaviour every reify of {"n": 2} relies on); a fractional one
+		// is a Float — int64(1.5) silently truncated it to 1 before.
+		if val == math.Trunc(val) &&
+			val >= float64(math.MinInt64) && val < float64(math.MaxInt64) {
+			return NewInteger(int64(val)), nil
+		}
+		return NewFloat(val), nil
 	case int:
 		return NewInteger(int64(val)), nil
 	case int64:

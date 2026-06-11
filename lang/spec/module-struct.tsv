@@ -110,3 +110,11 @@ jsonify {a:1}	ERROR:undefined_word	jsonify also moved out of core
 "aql:struct-util" import end StructUtil.parse (StructUtil.jsonify {a:1 b:[2 3]})	{a:1 b:[2 3]}	jsonify→parse round trip
 "aql:struct-util" import end StructUtil.parse "{a:1]"	ERROR:parse_error	malformed input raises loudly
 "aql:struct-util" import end StructUtil.parse ""	ERROR:parse_error	empty input raises (never a silent none)
+#
+# §X  Floats serialize as JSON numbers, not strings (bloom report:
+#     jsonify emitted "x": "1.5"), and reify keeps the fraction —
+#     whole-valued JSON numbers still come back as Integers.
+"aql:struct-util" import end  "aql:string-util" import end  StringUtil.contains '"x": 1.5' (StructUtil.jsonify {x:1.5})	true	a Float field serializes as a bare JSON number
+"aql:struct-util" import end  "aql:string-util" import end  StringUtil.contains '"1.5"' (StructUtil.jsonify {x:1.5})	false	and never as a quoted string
+def P class {x:0.0} "aql:struct-util" import end  (StructUtil.reify P "{\"x\": 1.5}").x	1.5	reify keeps the fraction (was truncated to Integer 1)
+def P class {n:0} "aql:struct-util" import end  (StructUtil.reify P "{\"n\": 2}").n typeof	Integer	whole-valued JSON numbers still reify as Integers

@@ -138,9 +138,25 @@ func TestValueToAnyNone(t *testing.T) {
 	}
 }
 
-func TestValueToAnyDefault(t *testing.T) {
-	// A decimal value should fall through to default and return String()
+func TestValueToAnyFloat(t *testing.T) {
+	// A Float maps to a JSON number — this test previously PINNED the
+	// bug that floats fell through to the default branch and were
+	// stringified ({"x": "1.5"} from jsonify).
 	v := NewFloat(3.14)
+	result := valueToAny(v)
+	f, ok := result.(float64)
+	if !ok {
+		t.Fatalf("expected float64, got %T", result)
+	}
+	if f != 3.14 {
+		t.Errorf("expected 3.14, got %v", f)
+	}
+}
+
+func TestValueToAnyDefault(t *testing.T) {
+	// A value with no JSON projection (an unevaluated word) falls
+	// through to the default branch and renders via String().
+	v := NewWord("mystery")
 	result := valueToAny(v)
 	s, ok := result.(string)
 	if !ok {
@@ -148,6 +164,22 @@ func TestValueToAnyDefault(t *testing.T) {
 	}
 	if s == "" {
 		t.Error("expected non-empty string")
+	}
+}
+
+func TestAnyToValueFractionalFloat(t *testing.T) {
+	// 1.5 must come back as a Float — int64(1.5) used to truncate it
+	// to Integer 1. Whole-valued JSON numbers keep the historical
+	// Integer mapping (TestAnyToValue covers that side).
+	v, err := anyToValue(1.5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.Parent.Equal(TFloat) {
+		t.Fatalf("expected Float, got %s", v.Parent.Name)
+	}
+	if f, _ := AsFloat(v); f != 1.5 {
+		t.Errorf("expected 1.5, got %v", f)
 	}
 }
 
