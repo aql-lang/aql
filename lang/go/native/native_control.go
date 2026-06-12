@@ -509,11 +509,14 @@ func forRangeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 }
 
 func forIntegerListReturnsFn(args []Value, r *Registry) []Value {
-	return forCarrierAnalyse(r, "i", TInteger, args)
+	return forCarrierAnalyse(r, "i", TInteger, args, 0)
 }
 
 func forListListReturnsFn(args []Value, r *Registry) []Value {
-	return forCarrierAnalyse(r, "i", TInteger, args)
+	// Range form: not lowered yet (the range spec needs decomposition
+	// into start/end/step) — countArg -1 leaves the dispatch to the
+	// generic refusal path.
+	return forCarrierAnalyse(r, "i", TInteger, args, -1)
 }
 
 // forCarrierAnalyse analyses the body to a bounded fixed point with
@@ -523,17 +526,34 @@ func forListListReturnsFn(args []Value, r *Registry) []Value {
 // the body re-runs until the bindings stabilise, so post-loop reads
 // see Integer|Float, not the pre-loop Integer. Returns a typed list
 // whose element type mirrors the final round's residual top.
-func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Value) []Value {
+//
+// countArg >= 0 names the iteration-count operand and arms bytecode
+// loop recording: the final round's events are captured as a
+// fragment and RecordLoop lowers the counted loop (FOR_SETUP /
+// FOR_NEXT with the iterator as a VM local). countArg -1 (the range
+// form) records nothing — the generic path refuses the dispatch.
+func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Value, countArg int) []Value {
 	body := args[len(args)-1]
-	stk := AnalyseLoopBody(r, body, []string{iterName}, []Value{NewCarrier(iterType)})
-	if len(stk) == 0 {
-		return []Value{NewCarrier(TList)}
+	iter := NewCarrier(iterType)
+	es := r.Check.Emit
+	if countArg >= 0 {
+		es.ArmLoopCapture()
 	}
-	top := stk[len(stk)-1]
-	if IsDisjunct(top) {
-		return []Value{NewCarrierTypedListValue(top)}
+	stk := AnalyseLoopBody(r, body, []string{iterName}, []Value{iter})
+	out := NewCarrier(TList)
+	if len(stk) > 0 {
+		top := stk[len(stk)-1]
+		if IsDisjunct(top) {
+			out = NewCarrierTypedListValue(top)
+		} else {
+			out = NewCarrierTypedList(top.Parent)
+		}
 	}
-	return []Value{NewCarrierTypedList(top.Parent)}
+	if countArg >= 0 {
+		frag := es.TakeFragment()
+		es.RecordLoop(args[countArg], frag, stk, iter.ID, out, args[countArg].Pos)
+	}
+	return []Value{out}
 }
 
 // ---- error handler ----

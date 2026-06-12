@@ -38,6 +38,16 @@ const (
 	// falsy under the engine's CoerceBoolean — the same truthiness
 	// stepMove applies to a MoveIf condition.
 	OpJmpIfFalse
+	// OpPushLocal pushes locals[Arg] (loop iterator bindings).
+	OpPushLocal
+	// OpForSetup pops the iteration count and opens a counted loop
+	// whose iterator writes locals[Arg].
+	OpForSetup
+	// OpForNext advances the innermost loop: binds the iterator and
+	// falls through into the body, or closes the loop and jumps to
+	// Arg when exhausted. The body's trailing JMP back to this
+	// instruction is the program's only back-edge.
+	OpForNext
 )
 
 func (o Opcode) String() string {
@@ -52,6 +62,12 @@ func (o Opcode) String() string {
 		return "JMP"
 	case OpJmpIfFalse:
 		return "JMP_IF_FALSE"
+	case OpPushLocal:
+		return "PUSH_LOCAL"
+	case OpForSetup:
+		return "FOR_SETUP"
+	case OpForNext:
+		return "FOR_NEXT"
 	}
 	return fmt.Sprintf("OP(%d)", uint8(o))
 }
@@ -72,11 +88,12 @@ type SigRef struct {
 // Program is a compiled unit: code, interned constants, the signature
 // table, a pc → source-position map, and the precomputed stack bound.
 type Program struct {
-	Code     []Instr
-	Consts   []Value
-	Sigs     []SigRef
-	Debug    []SrcPos // 1:1 with Code
-	MaxStack int
+	Code      []Instr
+	Consts    []Value
+	Sigs      []SigRef
+	Debug     []SrcPos // 1:1 with Code
+	MaxStack  int      // a floor when the program loops (results accumulate)
+	NumLocals int
 }
 
 // Disassemble renders the program for golden tests and debugging.
@@ -95,12 +112,14 @@ func (p *Program) Disassemble() string {
 				names[j] = t.Leaf()
 			}
 			fmt.Fprintf(&sb, " s%-3d ; %s (%s)", in.Arg, s.Word, strings.Join(names, ", "))
-		case OpJmp, OpJmpIfFalse:
+		case OpJmp, OpJmpIfFalse, OpForNext:
 			fmt.Fprintf(&sb, " -> %04d", in.Arg)
+		case OpPushLocal, OpForSetup:
+			fmt.Fprintf(&sb, " l%d", in.Arg)
 		}
 		sb.WriteByte('\n')
 	}
-	fmt.Fprintf(&sb, "; consts=%d sigs=%d max-stack=%d\n",
-		len(p.Consts), len(p.Sigs), p.MaxStack)
+	fmt.Fprintf(&sb, "; consts=%d sigs=%d max-stack=%d locals=%d\n",
+		len(p.Consts), len(p.Sigs), p.MaxStack, p.NumLocals)
 	return sb.String()
 }

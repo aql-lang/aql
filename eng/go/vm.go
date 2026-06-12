@@ -5,12 +5,14 @@ package eng
 // instruction set (straight-line PUSH_CONST / SWAP / CALL_NATIVE).
 // Control-flow opcodes arrive with the rest of Stage 2.
 //
-// Termination note: all jumps are FORWARD (if-lowering produces no
-// back-edges), and the VM enforces that, so a Program of N
-// instructions still executes at most N steps — the interpreter's
-// evaluation-limit parity obligation (plan R6 #27) remains
-// structurally met. The step budget becomes load-bearing the moment
-// the loop stage lands a back-edge and MUST ship in that change.
+// Termination and resource parity (plan R6 #27): the only back-edge
+// the emitter produces is a counted loop's trailing JMP to its
+// FOR_NEXT, and the VM enforces exactly that shape — so every loop
+// is bounded by its popped count, and an emitted body nets one value
+// per iteration. Unbounded value accumulation (`for huge [i]`) hits
+// the same growth ceiling the tape enforces: the VM stack's ceiling
+// is computed from the registry's TapeConfig and overflowing it
+// raises the interpreter's tape_exhausted taxonomy.
 
 import "fmt"
 
@@ -21,12 +23,47 @@ func RunProgram(p *Program, r *Registry) ([]Value, error) {
 	if p == nil {
 		return nil, fmt.Errorf("bytecode: nil program")
 	}
+	ceiling := vmStackCeiling(r)
 	stack := make([]Value, 0, p.MaxStack)
+	locals := make([]Value, p.NumLocals)
+	type vmLoop struct {
+		limit, i int64
+		slot     int
+	}
+	var loops []vmLoop
 	for pc := 0; pc < len(p.Code); pc++ {
+		if len(stack) > ceiling {
+			return nil, vmExhausted(p, pc, r, ceiling)
+		}
 		in := p.Code[pc]
 		switch in.Op {
 		case OpPushConst:
 			stack = append(stack, p.Consts[in.Arg])
+		case OpPushLocal:
+			stack = append(stack, locals[in.Arg])
+		case OpForSetup:
+			if len(stack) < 1 {
+				return nil, vmInternalError(p, pc, "FOR_SETUP underflow")
+			}
+			cnt := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			n, err := cnt.AsConcreteInteger()
+			if err != nil {
+				return nil, stampProgramPos(r.AqlError("for_error", "for: count must be a concrete Integer", "for"), p, pc, r)
+			}
+			loops = append(loops, vmLoop{limit: n, slot: int(in.Arg)})
+		case OpForNext:
+			if len(loops) == 0 {
+				return nil, vmInternalError(p, pc, "FOR_NEXT without a loop")
+			}
+			lp := &loops[len(loops)-1]
+			if lp.i >= lp.limit {
+				loops = loops[:len(loops)-1]
+				pc = int(in.Arg) - 1
+				continue
+			}
+			locals[lp.slot] = NewInteger(lp.i)
+			lp.i++
 		case OpSwap:
 			if len(stack) < 2 {
 				return nil, vmInternalError(p, pc, "SWAP underflow")
@@ -61,10 +98,14 @@ func RunProgram(p *Program, r *Registry) ([]Value, error) {
 			}
 			stack = append(stack, results...)
 		case OpJmp:
-			if int(in.Arg) <= pc {
-				return nil, vmInternalError(p, pc, "backward jump (loop stage not landed)")
+			t := int(in.Arg)
+			// The only legal back-edge is a counted loop's trailing
+			// jump to its FOR_NEXT — termination then rides the loop
+			// counter.
+			if t <= pc && (t < 0 || t >= len(p.Code) || p.Code[t].Op != OpForNext) {
+				return nil, vmInternalError(p, pc, "backward jump not to a FOR_NEXT")
 			}
-			pc = int(in.Arg) - 1
+			pc = t - 1
 		case OpJmpIfFalse:
 			if len(stack) < 1 {
 				return nil, vmInternalError(p, pc, "JMP_IF_FALSE underflow")
@@ -73,7 +114,7 @@ func RunProgram(p *Program, r *Registry) ([]Value, error) {
 			stack = stack[:len(stack)-1]
 			if !CoerceBoolean(cond) {
 				if int(in.Arg) <= pc {
-					return nil, vmInternalError(p, pc, "backward jump (loop stage not landed)")
+					return nil, vmInternalError(p, pc, "backward conditional jump")
 				}
 				pc = int(in.Arg) - 1
 			}
@@ -100,6 +141,40 @@ func stampProgramPos(err error, p *Program, pc int, r *Registry) error {
 		ae.fullSource = r.Source
 	}
 	return ae
+}
+
+// vmStackCeiling mirrors the tape's bounded-growth ceiling for the
+// VM value stack: initial · factorᴺ entries from the registry's
+// TapeConfig, exactly NewTapeWith's arithmetic, so a program that
+// accumulates without bound fails with the same resource taxonomy in
+// both engines.
+func vmStackCeiling(r *Registry) int {
+	var cfg TapeConfig
+	if r != nil {
+		cfg = r.TapeConfig
+	}
+	initial, maxGrows, factor := cfg.resolve(0)
+	ceil := float64(initial)
+	for i := 0; i < maxGrows; i++ {
+		ceil *= factor
+	}
+	if ceil >= float64(maxIntCap) {
+		return maxIntCap
+	}
+	if int(ceil) < initial {
+		return initial
+	}
+	return int(ceil)
+}
+
+// vmExhausted is the VM's tape_exhausted analogue — same code, same
+// remedy hint, so tooling and users see one taxonomy.
+func vmExhausted(p *Program, pc int, r *Registry, ceiling int) error {
+	err := r.AqlErrorHint("tape_exhausted",
+		fmt.Sprintf("evaluation stack exhausted its growth ceiling of %d entries — the program consumed unbounded space (an unbounded loop accumulating results?)", ceiling),
+		"",
+		"raise the tape size via options (initial size / grow count / growth factor) for a legitimately large program; otherwise check the loop bounds")
+	return stampProgramPos(err, p, pc, r)
 }
 
 // vmInternalError reports a stack-discipline violation — impossible

@@ -34,7 +34,7 @@ func TestEmitGoldens(t *testing.T) {
 		{`add 1 2`, `0000 PUSH_CONST  k1   ; 2 (Integer)
 0001 PUSH_CONST  k0   ; 1 (Integer)
 0002 CALL_NATIVE s0   ; add (Number, Number)
-; consts=2 sigs=1 max-stack=2
+; consts=2 sigs=1 max-stack=2 locals=0
 `},
 		// `1 add 2` is the k=1 split of the (2,1) assignment — the
 		// forward 2 fills sig[0], the stack-prefix 1 fills sig[1]
@@ -45,14 +45,14 @@ func TestEmitGoldens(t *testing.T) {
 		{`1 add 2`, `0000 PUSH_CONST  k1   ; 1 (Integer)
 0001 PUSH_CONST  k0   ; 2 (Integer)
 0002 CALL_NATIVE s0   ; add (Number, Number)
-; consts=2 sigs=1 max-stack=2
+; consts=2 sigs=1 max-stack=2 locals=0
 `},
 		{`0 add 7 sub 3`, `0000 PUSH_CONST  k1   ; 0 (Integer)
 0001 PUSH_CONST  k0   ; 7 (Integer)
 0002 CALL_NATIVE s0   ; add (Number, Number)
 0003 PUSH_CONST  k2   ; 3 (Integer)
 0004 CALL_NATIVE s1   ; sub (Number, Number)
-; consts=3 sigs=2 max-stack=2
+; consts=3 sigs=2 max-stack=2 locals=0
 `},
 		// A paren result feeding the next call: the prior result stays
 		// on the simulated stack; only the literal is pushed.
@@ -61,14 +61,14 @@ func TestEmitGoldens(t *testing.T) {
 0002 CALL_NATIVE s0   ; add (Number, Number)
 0003 PUSH_CONST  k2   ; 3 (Integer)
 0004 CALL_NATIVE s1   ; mul (Number, Number)
-; consts=3 sigs=2 max-stack=2
+; consts=3 sigs=2 max-stack=2 locals=0
 `},
 		// Top-level strings are stripped to carriers by check mode;
 		// RecordStrip preserves the originals for interning.
 		{`'a' add 'b'`, `0000 PUSH_CONST  k1   ; 'a' (ProperString)
 0001 PUSH_CONST  k0   ; 'b' (ProperString)
 0002 CALL_NATIVE s0   ; add (Scalar, Scalar)
-; consts=2 sigs=1 max-stack=2
+; consts=2 sigs=1 max-stack=2 locals=0
 `},
 		// `if` lowers to JMP_IF_FALSE / JMP: condition code first, a
 		// branch per fragment, the join value on the stack for the
@@ -80,7 +80,7 @@ func TestEmitGoldens(t *testing.T) {
 0004 PUSH_CONST  k2   ; 10 (Integer)
 0005 JMP         -> 0007
 0006 PUSH_CONST  k3   ; 20 (Integer)
-; consts=4 sigs=1 max-stack=2
+; consts=4 sigs=1 max-stack=2 locals=0
 `},
 		// The branch result feeds the downstream mul; a stripped
 		// Boolean literal condition compiles as PUSH_CONST + jump
@@ -96,14 +96,14 @@ func TestEmitGoldens(t *testing.T) {
 0008 PUSH_CONST  k2   ; 9 (Integer)
 0009 PUSH_CONST  k1   ; 2 (Integer)
 0010 CALL_NATIVE s2   ; mul (Number, Number)
-; consts=3 sigs=3 max-stack=2
+; consts=3 sigs=3 max-stack=2 locals=0
 `},
 		// Literal-substitution def: x resolves to the interned literal
 		// through value provenance — the report's §5.2 inline case.
 		{`def x 1 x add 2`, `0000 PUSH_CONST  k1   ; 1 (Integer)
 0001 PUSH_CONST  k0   ; 2 (Integer)
 0002 CALL_NATIVE s0   ; add (Number, Number)
-; consts=2 sigs=1 max-stack=2
+; consts=2 sigs=1 max-stack=2 locals=0
 `},
 	}
 	for _, c := range cases {
@@ -150,6 +150,42 @@ func TestEmitSplitFormsIdentical(t *testing.T) {
 	}
 }
 
+// Counted loops lower to FOR_SETUP / FOR_NEXT with the iterator as a
+// VM local and the body's trailing JMP as the program's only
+// back-edge; one value per iteration accumulates on the stack,
+// matching the interpreter (`for 3 [i]` → 0 1 2).
+func TestEmitForLoopGolden(t *testing.T) {
+	got, reason := compile(t, `for 3 [i add 10]`)
+	if reason != "" {
+		t.Fatalf("for-loop unexpectedly uncompilable: %s", reason)
+	}
+	want := `0000 PUSH_CONST  k1   ; 3 (Integer)
+0001 FOR_SETUP   l0
+0002 FOR_NEXT    -> 0007
+0003 PUSH_LOCAL  l0
+0004 PUSH_CONST  k0   ; 10 (Integer)
+0005 CALL_NATIVE s0   ; add (Number, Number)
+0006 JMP         -> 0002
+; consts=2 sigs=1 max-stack=2 locals=1
+`
+	if got != want {
+		t.Errorf("for lowering changed:\n--- got\n%s--- want\n%s", got, want)
+	}
+}
+
+// Loop results are VARIADIC at run time (one value per iteration):
+// downstream calls must refuse to consume them — only the program
+// residual may absorb the accumulation.
+func TestEmitRefusesLoopResultConsumption(t *testing.T) {
+	got, reason := compile(t, `(for 3 [i]) size`)
+	if got != "" {
+		t.Fatalf("loop-result consumption compiled but must refuse:\n%s", got)
+	}
+	if !strings.Contains(reason, "loop") && !strings.Contains(reason, "provenance") {
+		t.Errorf("unexpected refusal reason %q", reason)
+	}
+}
+
 // Negative: every beyond-Stage-1 construct is refused with a precise
 // reason — never lowered wrongly.
 func TestEmitRefusals(t *testing.T) {
@@ -167,7 +203,8 @@ func TestEmitRefusals(t *testing.T) {
 		// fragment rule (Stage 3, with locals).
 		{`def y (1 add 2) if (1 gt 0) [y mul 2] [0]`, "branch reads enclosing computation"},
 		{`def f fn [[n:Integer] [Integer] [n add 1]] f 1`, "user fn call f"},
-		{`for 3 [i]`, "code-body word for"},
+		// The range form needs start/end/step decomposition (follow-on).
+		{`for [1,3] [i]`, "code-body word for"},
 		{`do [1 add 2]`, "code-body word do"},
 	}
 	for _, c := range cases {

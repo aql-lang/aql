@@ -171,8 +171,8 @@ and nothing else — any other construct flags the program
 
 ## Stage 2 — VM core + control flow
 
-**Status: VM CORE + `if` LOWERING LANDED (June 2026); loops not
-started.** `if` (3-arg, value/paren conditions) lowers to
+**Status: VM CORE + `if` + counted `for` LOWERING LANDED (June
+2026).** `if` (3-arg, value/paren conditions) lowers to
 JMP_IF_FALSE / JMP via fragment-scoped recording: the branch
 ReturnsFn arms a capture so each branch body's events record into an
 EmitFragment instead of suspending, and RecordBranch composes them
@@ -184,7 +184,23 @@ refuse (no checker provenance — follow-on); 2-arg `if` refuses.
 Conditions use the engine's CoerceBoolean truthiness. All jumps are
 forward and the VM enforces that, so the structural step bound
 still holds; the budget ships with the first back-edge (loops).
-Differential: 548 rows / 0 mismatches, floor raised to 500. `eng/go/vm.go` executes the straight-line
+Counted loops (`for n [body]`) lower to FOR_SETUP / FOR_NEXT with
+the iterator as a VM local (PUSH_LOCAL; AnalyseLoopBody registers
+the binding and captures the FINAL fixed-point round as the body
+fragment) and the body's trailing JMP as the program's only
+back-edge — the VM enforces that back-edges target FOR_NEXT, so
+termination rides the loop counter. Loop results are VARIADIC (one
+value per iteration accumulates, matching the interpreter); the
+emitter refuses downstream consumption and only the program residual
+absorbs them. Resource parity: the VM stack has the tape's
+bounded-growth ceiling (same TapeConfig arithmetic) and overflowing
+raises tape_exhausted. Known PRE-EXISTING interpreter divergence
+discovered here: under a tiny ceiling the interpreter SILENTLY DROPS
+a huge loop's results (exit 0, no output — the "ceiling-dropped
+splice" misdiagnosis genre pinned in TCO Stage 0) where the VM errs
+loudly; the VM keeps the loud behaviour. Range-form `for`, bodies
+netting ≠1 value, and `break`/`continue` are follow-ons.
+Differential: 549 rows / 0 mismatches, floor 500. `eng/go/vm.go` executes the straight-line
 instruction set (handler errors stamped with `Debug[pc]` + source; a
 belt-and-braces guard refuses tape-coupled handler results). CLI
 opt-in shipped: `aql run --compile` / `aql do --compile`

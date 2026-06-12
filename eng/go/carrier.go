@@ -969,6 +969,17 @@ const FnAnalysisQuota = 64
 // post-loop environment); the loop-local binds are popped. Returns
 // the final round's residual carrier stack.
 func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Value) []Value {
+	// Loop-lowering hook (`for`): when armed, register the loop
+	// bindings as VM locals and capture each round's events as a
+	// fragment — the final round's capture (the stable one) is what
+	// the caller's RecordLoop consumes via TakeFragment.
+	es := r.Check.Emit
+	loopCapture := es.ConsumeLoopArm()
+	if loopCapture {
+		for _, v := range bindVals {
+			es.RegisterLocal(v.ID)
+		}
+	}
 	var stk []Value
 	var installed []string
 	diagBase := len(r.Check.Diagnostics)
@@ -977,6 +988,9 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 		r.Check.TruncateDiagnostics(diagBase)
 		for i, n := range bindNames {
 			r.Defs.Push(n, bindVals[i])
+		}
+		if loopCapture {
+			es.ArmBranchCapture()
 		}
 		var adds map[string]Value
 		stk, adds = RunCarrierBodyWithDefs(r, body)

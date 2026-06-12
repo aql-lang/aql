@@ -35,8 +35,9 @@ const (
 )
 
 type emitOperand struct {
-	constIdx int // >=0: Consts index
-	fromSeq  int // >=0: producing event sequence number
+	constIdx  int // >=0: Consts index
+	fromSeq   int // >=0: producing event sequence number
+	localSlot int // >=0: loop-iterator local slot
 }
 
 type emitCall struct {
@@ -59,9 +60,24 @@ type emitBranch struct {
 	pos       SrcPos
 }
 
+// emitLoop is a recorded counted `for`: the count operand, the
+// captured body fragment (final fixed-point round), its single
+// per-iteration result, and the iterator's local slot. The loop's
+// runtime contribution is VARIADIC — one value per iteration stays
+// on the stack — so downstream consumption refuses; only the
+// residual may absorb it.
+type emitLoop struct {
+	count    emitOperand
+	body     *EmitFragment
+	bodyOut  emitOperand
+	iterSlot int
+	pos      SrcPos
+}
+
 const (
 	evCall = iota + 1
 	evBranch
+	evLoop
 )
 
 type emitEvent struct {
@@ -69,6 +85,7 @@ type emitEvent struct {
 	kind int
 	call emitCall
 	br   emitBranch
+	loop emitLoop
 }
 
 // EmitFragment is a captured sub-trace: the events a branch body
@@ -99,7 +116,10 @@ type EmitState struct {
 	frames     [][]emitEvent  // frames[0] = top level; fragments push
 	fragFloors []int          // startSeq per open fragment frame
 	captureArm bool           // next RunCarrierBodyWithDefs records a fragment
+	loopArm    bool           // next AnalyseLoopBody records its final round
 	captured   *EmitFragment  // last completed fragment, until TakeFragment
+	localByID  map[string]int // iterator carrier ID → local slot
+	numLocals  int
 	producedBy map[string]int // value ID → producing event seq
 	consts     []Value
 	constIdx   map[string]int   // CanonValue → Consts index
@@ -113,6 +133,7 @@ func NewEmitState() *EmitState {
 		SiteCounts: map[string]int{},
 		frames:     [][]emitEvent{nil},
 		producedBy: map[string]int{},
+		localByID:  map[string]int{},
 		constIdx:   map[string]int{},
 		origByID:   map[string]Value{},
 	}
@@ -213,8 +234,11 @@ func (es *EmitState) appendEvent(ev emitEvent) int {
 // event's output, or an inert constant (concrete at the dispatch, or
 // a stripped literal whose original RecordStrip saved).
 func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
+	if slot, ok := es.localByID[v.ID]; ok {
+		return emitOperand{constIdx: -1, fromSeq: -1, localSlot: slot}, true
+	}
 	if idx, ok := es.producedBy[v.ID]; ok {
-		return emitOperand{constIdx: -1, fromSeq: idx}, true
+		return emitOperand{constIdx: -1, fromSeq: idx, localSlot: -1}, true
 	}
 	lit := v
 	if !IsConcrete(v) {
@@ -227,7 +251,7 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	if !isInertConst(lit) {
 		return emitOperand{}, false
 	}
-	return emitOperand{constIdx: es.intern(lit), fromSeq: -1}, true
+	return emitOperand{constIdx: es.intern(lit), fromSeq: -1, localSlot: -1}, true
 }
 
 // RecordBranch records an `if` dispatch: cond plus captured then /
@@ -283,6 +307,81 @@ func (es *EmitState) RecordBranch(cond Value, constCond *bool, then, els *EmitFr
 		ev.br.thenOut = thenOut
 	}
 	seq := es.appendEvent(ev)
+	es.SiteCounts[SiteMono]++
+	es.producedBy[out.ID] = seq
+}
+
+// ArmLoopCapture makes the NEXT AnalyseLoopBody record its final
+// fixed-point round as a fragment with the loop bindings registered
+// as locals — the loop-lowering hook (`for`). One-shot.
+func (es *EmitState) ArmLoopCapture() {
+	if !es.active() {
+		return
+	}
+	es.loopArm = true
+}
+
+// ConsumeLoopArm reports and clears the one-shot loop-capture flag.
+func (es *EmitState) ConsumeLoopArm() bool {
+	if es == nil || !es.loopArm {
+		return false
+	}
+	es.loopArm = false
+	return es.active()
+}
+
+// RegisterLocal assigns (or returns) the local slot backing a loop
+// binding's carrier, keyed by the carrier's value ID — body
+// references to the binding resolve to PUSH_LOCAL.
+func (es *EmitState) RegisterLocal(id string) int {
+	if es == nil {
+		return -1
+	}
+	if slot, ok := es.localByID[id]; ok {
+		return slot
+	}
+	slot := es.numLocals
+	es.numLocals++
+	es.localByID[id] = slot
+	return slot
+}
+
+// RecordLoop records a counted `for`: the count operand, the body
+// fragment (final round), its per-iteration result, and the
+// iterator's slot. out is the dispatch's result carrier — it is
+// registered so the dispatch isn't re-recorded, and marked VARIADIC
+// at lowering (one value per iteration stays on the stack), so only
+// the program residual may absorb it.
+func (es *EmitState) RecordLoop(count Value, body *EmitFragment, bodyStk []Value, iterID string, out Value, pos SrcPos) {
+	if !es.active() {
+		return
+	}
+	if body == nil {
+		es.MarkUncompilable("for: body not captured")
+		return
+	}
+	countOp, ok := es.resolveOperand(count)
+	if !ok {
+		es.MarkUncompilable("for: count of unknown provenance")
+		return
+	}
+	if len(bodyStk) == 0 {
+		es.MarkUncompilable("for: body produces no value per iteration (Stage 2 lowers single-result bodies)")
+		return
+	}
+	bodyOut, ok := es.resolveOperand(bodyStk[len(bodyStk)-1])
+	if !ok {
+		es.MarkUncompilable("for: body result of unknown provenance")
+		return
+	}
+	slot, ok := es.localByID[iterID]
+	if !ok {
+		es.MarkUncompilable("for: iterator slot not registered")
+		return
+	}
+	seq := es.appendEvent(emitEvent{kind: evLoop, loop: emitLoop{
+		count: countOp, body: body, bodyOut: bodyOut, iterSlot: slot, pos: pos,
+	}})
 	es.SiteCounts[SiteMono]++
 	es.producedBy[out.ID] = seq
 }
@@ -476,6 +575,44 @@ func isInertConst(v Value) bool {
 	}
 }
 
+// lowerLoop lowers a counted for:
+//
+//	…count…  FOR_SETUP slot
+//	head: FOR_NEXT -> end   ; bind iterator or exit
+//	…body…                  ; net one value per iteration, kept
+//	JMP -> head             ; the back-edge
+//	end:
+//
+// The loop's stack contribution is variadic (count values at run
+// time); the simulated stack carries one marker entry flagged in
+// lw.variadic so only the program residual may absorb it.
+func (lw *lowerer) lowerLoop(ev *emitEvent) string {
+	lp := &ev.loop
+	if lp.count.fromSeq >= 0 {
+		if lw.variadic[lp.count.fromSeq] {
+			return "loop results as a loop count (Stage 2)"
+		}
+		if len(lw.vm) == 0 || lw.vm[len(lw.vm)-1] != lp.count.fromSeq {
+			return "for: count is not on top of the stack"
+		}
+	} else {
+		lw.pushOperand(lp.count, lp.pos)
+	}
+	lw.emit(OpForSetup, lp.iterSlot, lp.pos)
+	lw.vm = lw.vm[:len(lw.vm)-1] // count consumed
+	head := len(lw.p.Code)
+	fn := lw.emit(OpForNext, 0, lp.pos)
+	if reason := lw.lowerFragment(lp.body, lp.bodyOut, lp.pos); reason != "" {
+		return reason
+	}
+	lw.emit(OpJmp, head, lp.pos)
+	lw.p.Code[fn].Arg = int32(len(lw.p.Code))
+	lw.vm = append(lw.vm, ev.seq)
+	lw.variadic[ev.seq] = true
+	lw.note()
+	return ""
+}
+
 // Finalize linearises the recorded events into a Program. residual
 // is the check run's final carrier stack — the program's declared
 // result: event-produced entries must match the simulated stack in
@@ -490,7 +627,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	if !es.Compilable {
 		return nil, es.Reason, false
 	}
-	lw := &lowerer{es: es, p: &Program{}, sigIdx: map[*Signature]int{}}
+	lw := &lowerer{es: es, p: &Program{}, sigIdx: map[*Signature]int{}, variadic: map[int]bool{}}
 	if reason := lw.lowerEvents(es.frames[0], 0); reason != "" {
 		return nil, reason, false
 	}
@@ -536,6 +673,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	lw.note()
 	lw.p.Consts = es.consts // interning may have grown during reconciliation
 	lw.p.MaxStack = lw.maxDepth
+	lw.p.NumLocals = es.numLocals
 	return lw.p, "", true
 }
 
@@ -553,7 +691,19 @@ type lowerer struct {
 	p        *Program
 	sigIdx   map[*Signature]int
 	vm       []int
+	variadic map[int]bool // loop seqs: N runtime values, not one
 	maxDepth int
+}
+
+// pushOperand emits the push for a const or local operand.
+func (lw *lowerer) pushOperand(op emitOperand, pos SrcPos) {
+	if op.localSlot >= 0 {
+		lw.emit(OpPushLocal, op.localSlot, pos)
+	} else {
+		lw.emit(OpPushConst, op.constIdx, pos)
+	}
+	lw.vm = append(lw.vm, -1)
+	lw.note()
 }
 
 func (lw *lowerer) note() {
@@ -587,6 +737,8 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 			reason = lw.lowerCall(ev)
 		case evBranch:
 			reason = lw.lowerBranch(ev)
+		case evLoop:
+			reason = lw.lowerLoop(ev)
 		default:
 			reason = "unknown event kind"
 		}
@@ -598,11 +750,13 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 }
 
 func collectOperands(ev *emitEvent) []emitOperand {
-	if ev.kind == evCall {
+	switch ev.kind {
+	case evCall:
 		return ev.call.ops
+	case evLoop:
+		return []emitOperand{ev.loop.count, ev.loop.bodyOut}
 	}
-	ops := []emitOperand{ev.br.cond, ev.br.thenOut, ev.br.elsOut}
-	return ops
+	return []emitOperand{ev.br.cond, ev.br.thenOut, ev.br.elsOut}
 }
 
 func (lw *lowerer) lowerCall(ev *emitEvent) string {
@@ -611,16 +765,18 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 	results := []int{}
 	for i, op := range c.ops {
 		if op.fromSeq >= 0 {
+			if lw.variadic[op.fromSeq] {
+				return "consumes loop results (Stage 2 loops only feed the program residual)"
+			}
 			results = append(results, i)
 		}
 	}
 	switch len(results) {
 	case 0:
-		// Push consts deepest-first so sig position 0 lands on top.
+		// Push consts/locals deepest-first so sig position 0 lands on
+		// top.
 		for i := n - 1; i >= 0; i-- {
-			lw.emit(OpPushConst, c.ops[i].constIdx, c.pos)
-			lw.vm = append(lw.vm, -1)
-			lw.note()
+			lw.pushOperand(c.ops[i], c.pos)
 		}
 	case 1:
 		ri := results[0]
@@ -635,9 +791,7 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 			if i == ri {
 				continue
 			}
-			lw.emit(OpPushConst, c.ops[i].constIdx, c.pos)
-			lw.vm = append(lw.vm, -1)
-			lw.note()
+			lw.pushOperand(c.ops[i], c.pos)
 		}
 		if ri == 0 && n == 2 {
 			lw.emit(OpSwap, 0, c.pos)
@@ -689,6 +843,9 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out emitOperand, pos SrcPos
 	}
 	switch {
 	case out.fromSeq >= 0:
+		if lw.variadic[out.fromSeq] {
+			return "loop results as a branch/body result (Stage 2)"
+		}
 		if len(lw.vm) != 1 || lw.vm[0] != out.fromSeq {
 			return "if: branch leaves extra values (Stage 2 lowers single-result branches)"
 		}
@@ -696,7 +853,8 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out emitOperand, pos SrcPos
 		if len(lw.vm) != 0 {
 			return "if: branch leaves extra values (Stage 2 lowers single-result branches)"
 		}
-		lw.emit(OpPushConst, out.constIdx, pos)
+		lw.pushOperand(out, pos)
+		lw.vm = lw.vm[:len(lw.vm)-1] // pushOperand tracked it; the scope check above owns the count
 	}
 	lw.vm = parent
 	return ""
@@ -715,13 +873,14 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 	}
 	// Condition on top of stack.
 	if br.cond.fromSeq >= 0 {
+		if lw.variadic[br.cond.fromSeq] {
+			return "loop results as a condition (Stage 2)"
+		}
 		if len(lw.vm) == 0 || lw.vm[len(lw.vm)-1] != br.cond.fromSeq {
 			return "if: condition is not on top of the stack"
 		}
 	} else {
-		lw.emit(OpPushConst, br.cond.constIdx, br.pos)
-		lw.vm = append(lw.vm, -1)
-		lw.note()
+		lw.pushOperand(br.cond, br.pos)
 	}
 	jf := lw.emit(OpJmpIfFalse, 0, br.pos)
 	lw.vm = lw.vm[:len(lw.vm)-1] // cond consumed
