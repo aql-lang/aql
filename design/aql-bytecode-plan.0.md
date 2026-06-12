@@ -194,11 +194,13 @@ value per iteration accumulates, matching the interpreter); the
 emitter refuses downstream consumption and only the program residual
 absorbs them. Resource parity: the VM stack has the tape's
 bounded-growth ceiling (same TapeConfig arithmetic) and overflowing
-raises tape_exhausted. Known PRE-EXISTING interpreter divergence
-discovered here: under a tiny ceiling the interpreter SILENTLY DROPS
-a huge loop's results (exit 0, no output — the "ceiling-dropped
-splice" misdiagnosis genre pinned in TCO Stage 0) where the VM errs
-loudly; the VM keeps the loud behaviour. Range-form `for`, bodies
+raises tape_exhausted. The pre-existing interpreter divergence discovered
+here — under a tiny ceiling the interpreter SILENTLY DROPPED a huge
+loop's results (exit 0, no output; the "ceiling-dropped splice"
+misdiagnosis genre pinned in TCO Stage 0) — is FIXED on this branch:
+the Run loop checks exhaustion before completion and a deferred
+truth-over-symptom rewrite prefers tape_exhausted whenever the tape
+latched, so both engines now share one loud taxonomy. Range-form `for`, bodies
 netting ≠1 value, and `break`/`continue` are follow-ons.
 Differential: 549 rows / 0 mismatches, floor 500. `eng/go/vm.go` executes the straight-line
 instruction set (handler errors stamped with `Debug[pc]` + source; a
