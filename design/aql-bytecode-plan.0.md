@@ -1,7 +1,8 @@
 # AQL Bytecode — staged implementation plan
 
-**Status:** proposal — Stage 0 DONE with a GO result
-(`aql-bytecode-baseline.0.md`); Stages 1+ not started. Companion to
+**Status:** in progress — Stage 0 DONE with a GO result
+(`aql-bytecode-baseline.0.md`); Stage 1 recording pass LANDED (see
+the Stage 1 section); Stages 2+ not started. Companion to
 `aql-bytecode-report.0.md` (the design) and
 `aql-bytecode-revisions.0.md` (the June 2026 re-review that this plan
 incorporates; read it first — it changes two requirements). Written
