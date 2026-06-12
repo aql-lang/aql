@@ -476,12 +476,28 @@ Empirical findings the design must respect:
   (`'\d+'` → `d+`): regex sources need `'\\d+'` or an
   interpolation-free backtick string (backslash-raw, verified). The
   `re` family's docs and `mini_parse_error` hint must say so.
-- **F4 — raw fn exports don't dispatch.** A plain Function value in
-  an inline-module export map does not forward-collect via dot access
-  (silent T1-shape residue); module-word calls dispatch through
-  FnDef *wrappers* (inner `BarrierPos: -1`). Both registration paths
-  therefore install wrappers; `MiniLang.register` is native for this
-  reason.
+- **F4 — raw `fn` values don't forward-dispatch as values (`afn`
+  lambdas do).** With `def m {f: (fn [[a:Integer][Integer][a add 1]])}`,
+  the call `m.f 5` leaves `fn (Integer)` and `5` as silent residue,
+  while the same shape with `([a:Integer] => [a add 1])` dispatches
+  to `6` — including through a real `module [export …]` import.
+  Mechanism: `m.f 5` is the token chain `m get f 5`; `get` returns
+  the raw value, which dispatches via `execFnDefLiteral`'s own-sig
+  path (`engine.go:3011`). `compileFnDef` (`engine.go:3605`)
+  barrier-resolves the authored sigs **but attaches a runnable
+  Handler only when `fnDef.Anonymous`** (`engine.go:3619`), so a
+  non-anonymous match falls through to the legacy pure-stack FnSig
+  path (`engine.go:~3110`), which never reads forward tokens — the
+  value stays as data and the operand pushes on top of it. The
+  residue is *unnamed*, so even the end-of-run `uncalled_function`
+  net (which flags named values, ERRORS.8 §5) stays silent. Named
+  defs avoid the path entirely (`stepWord` → the InstallFnDef
+  handler, barrier-resolved at registration), and native-module
+  words avoid it too (a foreign sub-registry FnDef is not a stable
+  own-sig handle — `engine.go:3040` — so the inner native is looked
+  up and its registration-resolved sigs dispatch; the
+  `BarrierPos: -1` wrapper rule). Both registration paths therefore
+  install wrappers; `MiniLang.register` is native for this reason.
 - **F5 — check-mode macro gap.** `aql check` does not expand
   user-level macros (a `def m (macro …)` use reports
   `undefined_word`). Native splice integrates today (see §9); native
@@ -498,10 +514,28 @@ Empirical findings the design must respect:
   macros currently have no clean route from a captured Word to its
   name (the prototype stripped the `word(…)` wrapper — a stopgap;
   `quote`/`inspect`/`convert` don't reach it). The native `mini`
-  reads `WordInfo.Name` directly and never touches this. A small
-  primitive (`convert Atom <word-value>`, the Atom being the
-  round-trippable data form of a name) would make the pure-AQL
-  equivalent idiomatic — desirable but not a dependency.
+  reads `WordInfo.Name` directly and never touches this.
+  **Remedy (recommended, not a dependency):** extend `convert`
+  (`lang/go/native/native_type.go:254`) with two Word-source sigs —
+
+  ```go
+  // Word → Atom / String: the data forms of a code identifier.
+  // Completes the existing round trip: an Atom spliced via unquote
+  // already becomes a Word (the gensym mechanism); this is the
+  // inverse, and the Atom form canon-renders round-trippably (re/q).
+  {Args: []*Type{TAtom, TWord},   TypeArgs: map[int]bool{0: true},
+   Handler: convertWordHandler, Returns: []*Type{TAtom},   BarrierPos: -1},
+  {Args: []*Type{TString, TWord}, TypeArgs: map[int]bool{0: true},
+   Handler: convertWordHandler, Returns: []*Type{TString}, BarrierPos: -1},
+  ```
+
+  after which a pure-AQL `mini` reads cleanly
+  (`def wn (convert Atom ("lang_" add (convert String kind)))`).
+  `convert` is the right home (the established cross-type gateway
+  with TypeArgs target dispatch); overloading `quote` would conflate
+  token capture with binding reads, and `inspect` is diagnostics.
+  Pair the negative: `convert Integer <word>` stays a signature
+  error.
 
 ---
 
