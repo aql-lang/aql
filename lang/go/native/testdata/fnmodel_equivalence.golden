@@ -349,6 +349,9 @@ WORD merge
   [Node/Map Node/List] barrier=2
   [Node/List Node/Map] barrier=2
   [Any Any] barrier=2
+WORD mini
+  [Scalar/Atom Scalar/String Node/Map] barrier=3 runcheck quote={0} returns=[Any]
+  [Scalar/Atom Scalar/String] barrier=2 runcheck quote={0} returns=[Any]
 WORD mod
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn
 WORD module
