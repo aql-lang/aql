@@ -1,0 +1,249 @@
+# AQL Bytecode — staged implementation plan
+
+**Status:** proposal — not started. Companion to
+`aql-bytecode-report.0.md` (the design) and
+`aql-bytecode-revisions.0.md` (the June 2026 re-review that this plan
+incorporates; read it first — it changes two requirements). Written
+against main @ `6fe4b96`.
+
+The plan follows the discipline that worked for TCO
+(`TCO-STAGED.0.md`): independently shippable stages, nothing changes
+default behaviour until late, every behavioural stage behind a kill
+switch with a dual-mode differential gate, and a measurement gate
+*before* the build-out so the investment decision is made on current
+numbers, not the original report's stale ones.
+
+## Ground rules
+
+- **Two execution modes, one semantics.** The interpreter remains the
+  default and the reference. Compiled mode is opt-in (`aql run
+  --compile` / `AQL_COMPILE=1`) until the graduation criteria in
+  Stage 7 are met.
+- **The compiler is the checker.** The emitter is a recording side
+  effect on the existing check pass (`eng/go/check.go`,
+  `CheckState`); it must not fork the dispatch logic. Any construct
+  the emitter can't lower marks its span for interpreter fallback —
+  never a third semantics.
+- **Differential gate from day one.** The TSV spec suites
+  (`lang/spec/*.tsv`) run dual-mode (the `TestSpecProdTCODisabled`
+  pattern): identical results, identical error taxonomy, or the stage
+  doesn't ship.
+- **Mandatory from v1** (per the revisions note): `TAIL_CALL_USER`
+  with the interpreter's eligibility conditions (R2), the
+  dynamic-resolution soundness condition on locals promotion (R3),
+  and budget/taxonomy parity (`evaluation_limit` /
+  resource-exhaustion errors) (R6 #27).
+- **Placement.** VM + emitter live in the engine kernel:
+  `eng/go/bytecode.go` (Program/Instr/opcodes), `eng/go/emit*.go`
+  (the recording pass), `eng/go/vm*.go` (the loop), with the CLI flag
+  in `cmd/go` and dual-mode spec wiring in `lang/go`. Follow
+  `eng/go/CLAUDE.md` before touching the kernel.
+
+## Stage 0 — re-baseline and go/no-go (measurement only)
+
+No engine changes. Build the benchmark corpus and measure the
+*current* interpreter, because the tape rewrite (`9903045`) and TCO
+(`92a5931`…`5b1537c`) invalidated the report's §7 numbers.
+
+- Microbenchmarks, one per dispatch shape (report §7.5): arithmetic
+  chain, comparison chain, `if` scalar/list cond, counted `for`,
+  `each`/`fold` over typed lists, record field access, string ops,
+  deep and tail recursion, a `do`-heavy orchestration script.
+- `pprof` the interpreter on the corpus; record the share of runtime
+  in `matchSignature`, forward collection, splice bookkeeping, and
+  small per-call allocations (`-benchmem`). That share is the
+  theoretical ceiling of the whole project.
+- **Gate (go/no-go):** dispatch + collection + splice ≥ ~40% of
+  runtime on the compute-shaped benchmarks. Below that, v1's realistic
+  win is <2× and the maintenance cost of a second execution mode is
+  not justified — stop here and record the numbers.
+
+Deliverable: `design/aql-bytecode-baseline.0.md` with the corpus, the
+profile, and the decision. *~1 week.*
+
+## Stage 1 — Program model + recording pass, straight-line only
+
+Introduce `Program` (code, constants, sig table, debug spans,
+max-stack) and the emitter as a side effect of the check pass:
+literal pushes (`PUSH_CONST` with interning), monomorphic
+`CALL_NATIVE` at sites where `execMatch` resolved a single signature,
+and nothing else — any other construct flags the program
+"uncompilable" and `--compile` silently runs the interpreter
+(whole-program fallback; span-level fallback comes in Stage 5).
+
+- Operand sourcing comes from the checker's `MatchResult`
+  positions; prefer emit-order choices that make
+  `rearrangeForForward` a no-op, else emit `SWAP`/`ROLL`.
+- Label/constant resolution as a final pass; `MaxStack` computed
+  during emission.
+- **Gate:** a `Program` disassembler (`aql check --emit` or similar,
+  debug-only) + golden tests for the lowering of each spec row the
+  emitter accepts. No VM yet — emission correctness is checked
+  structurally.
+
+*~1–2 weeks.*
+
+## Stage 2 — VM core + control flow
+
+The `for { switch op }` loop over `Program`, with the operand stack,
+and the mark/move lowerings: `if` → `JMP_IF_FALSE`/`JMP`, `for` →
+`FOR_SETUP`/`FOR_NEXT` (hidden iterator + accumulator slots), `break`
+/`continue` → static jumps. Errors wrap `DebugInfo[pc]` and must
+render identically to interpreter errors (report §10.5: shared
+error-format path).
+
+- **Budget parity from this stage:** the VM counts steps against the
+  same `TapeConfig`/`lang.Options`-derived limits and raises the same
+  `evaluation_limit` taxonomy (R6 #27). Pre-size the operand stack
+  from `MaxStack`; frame-depth and growth ceilings mirror the tape's
+  bounded-growth behaviour (loud failure, never unbounded
+  allocation).
+- **Gate:** dual-mode run of the control-flow and arithmetic spec
+  TSVs — identical values *and* identical error taxonomy, including
+  the runaway cases. Kill switch: `--compile` off by default.
+
+*~2 weeks.*
+
+## Stage 3 — user fns, frames, and mandatory tail calls
+
+`CALL_USER`/`RET` with call frames (return PC, locals base), param
+*and capture* slots (`fn_capture.go` computes captures at
+construction), recursion by `fn_id` — and `TAIL_CALL_USER` in the
+same stage, because tail-call elimination is a language guarantee
+(`TCO.10.md`), not an optimisation to defer.
+
+- **Eligibility at emit time** reuses the interpreter's conditions
+  (`fn_frame_probe.go` / `fn_frame_elide.go`): tail position by
+  structural analysis, identity via `FnFrameMeta`, generic frames
+  excluded (`HasGen`), name-coverage over torn-down bindings, and the
+  Stage 4b `returnsConform` split — FULL tail call (drop the caller's
+  return check) when callee returns conform, else a checked variant
+  that preserves the caller's `__RC` semantics.
+- **Locals promotion under the R3 condition:** a `def`/param/capture
+  becomes a frame slot only when the checker proves no dynamically
+  reached callee resolves the name (`DefsUsed` analysis); otherwise
+  emit `REG_DEF_PUSH`/`REG_DEF_POP` registry ops, which preserve the
+  interpreter's innermost-binding-wins visibility exactly. Benchmark
+  both paths; expect registry ops to be common at first.
+- Stage-5 residual boundaries (module pins, foreign frames,
+  same-registry `CallAQL`) decline tail treatment, same as the
+  interpreter (R6 #30).
+- **Gate:** dual-mode `lang/spec/recursion.tsv` (the TCO Stage 0
+  pins) including the taxonomy rows: tail runaway →
+  `evaluation_limit`, non-tail → resource exhaustion, in *both*
+  modes. Depth-10000 tail chains run in O(1) frames under a small
+  ceiling, matching the interpreter's Stage 4 results.
+
+*~2–3 weeks. This is the stage with real correctness risk; do not
+compress it.*
+
+## Stage 4 — the compile-time meta layer
+
+Everything that runs during the check pass and emits (almost)
+nothing: `RunInCheckMode` words (`def`/`fn`/`type`/`import`/
+`module`/`var`), **macro and minilang expansion** (run
+`execMacro`-equivalent expansion during the recording pass — it is
+deterministic and memoised by operand canon — and lower the expanded
+stream; raw-form operand spans are never lowered pre-expansion, R6
+#29), **generics** (one `CompiledFn` per memoised instantiation,
+bounded by the existing `of` interning; generic fns stay excluded
+from tail elision), multi-signature fns (`CompiledFnSet`,
+`CALL_USER_POLY`), function-value call sites (F4: emit poly dispatch
+or fallback where the checker couldn't resolve the callee), and
+module imports (per-module compile cache; expansion and import inputs
+hashed into the program identity, R6 #25).
+
+- **Gate:** dual-mode runs of the fn-model, macro, minilang,
+  generics, and module spec suites. Golden tests that a macro/mini
+  site lowers to its expansion and an import compiles once.
+
+*~3–4 weeks.*
+
+## Stage 5 — dynamic fallback + concurrency
+
+Span-level `FALLBACK_INTERP`: `do` on computed lists, unresolved
+`context get`, leaky runtime `def`, and any site the checker widened
+to `Any`. The VM hands the relevant values to an engine instance over
+the recorded token span and resumes; `TYPE_CHECK` ops guard every
+fallback→compiled boundary with the checker's expected carrier
+(report §9.1). `break`/`continue`/`return` sentinels crossing the
+boundary translate to the enclosing loop labels / frame unwind
+(report §10.6).
+
+Concurrency: `Program` and all its tables are immutable after
+compile — `ForkConcurrent` branches share them; all mutable VM state
+(stacks, frames, any caches) lives per-registry/per-fork (R6 #28).
+v1 runs `await`/timer branch bodies as interpreter fallbacks;
+compiled per-fork entry points are a later optimisation.
+
+- **Gate:** dual-mode runs of the full spec corpus — at this point
+  every program either compiles or falls back, so the whole suite
+  must pass in compiled mode. Race detector (`go test -race`) over
+  the concurrent spec rows in compiled mode.
+
+*~2 weeks.*
+
+## Stage 6 — specialisation (benchmark-driven, each independent)
+
+Only after Stage 5 is green, and only as the Stage-0 corpus directs:
+
+- **Sig splitting for `ReturnsFn`** (report §9.4) — the single
+  biggest lever: auto-generate monomorphic sig_ids (`add_i_i`, …) so
+  integer chains stay monomorphic. Regression-test mono propagation
+  on chains explicitly.
+- `CALL_NATIVE1_1`/`CALL_NATIVE2_1` fast paths; compact encoding.
+- Inline caches at `CALL_NATIVE_POLY`/`CALL_USER_POLY` sites —
+  per-fork cache storage only (R6 #28).
+- Typed opcodes / unboxed cells remain v2+; do not start them here.
+- **Gate:** each item lands with before/after numbers against the
+  Stage-0 baseline on the same corpus.
+
+*~1–2 weeks per item taken.*
+
+## Stage 7 — graduation criteria (compiled mode by default)
+
+Flip the default only when all of:
+
+1. Differential gate (full spec corpus, dual-mode, values + error
+   taxonomy) clean in CI for a sustained period across language
+   changes — not just at a point in time.
+2. Compiled ≥ the Stage-0 go/no-go multiplier on the compute
+   benchmarks; ≤10% regression on the fallback-heavy benchmarks
+   (compile cost included).
+3. Tooling parity for the supported surface: PC→span error rendering
+   byte-identical, `aql check` diagnostics unchanged, trace mode has
+   a PC-level equivalent or compiled mode disables itself under
+   `--trace`.
+4. A documented kill switch (env var) that survives graduation, the
+   way `Registry.TCO.Disable` did — demoted to diagnostic later, not
+   removed early.
+
+## What is explicitly out of scope
+
+`.aqlc` persistence (compile in memory per run; staleness class
+eliminated per report §9.2), partial recompilation, JIT/tracing,
+typed opcodes and unboxed stack cells (v2+ per report §7.6), and
+compiled `await` branch bodies.
+
+## Risk register (delta to report §12.4)
+
+1. **Stage 0 says no.** Entirely possible post-tape/TCO — that is
+   the point of the gate. The fallback position is to keep the
+   baseline doc and revisit when workloads change.
+2. **R3 makes locals promotion rare**, dragging fn-heavy benchmarks
+   toward registry-op cost. Mitigation: measure in Stage 3; invest
+   in the `DefsUsed` proof precision before reaching for Stage 6
+   toys.
+3. **TCO parity bugs** (R6 #23) — the only stage that can silently
+   change documented resource semantics. Mitigation: Stage 3's
+   taxonomy gate runs the interpreter's own pin suite in both modes.
+4. **Two-mode maintenance drag** — every language change must keep
+   the differential gate green. Mitigation: the emitter rides the
+   checker, so changes that bypass the checker can't ship anyway;
+   budget the gate into CI from Stage 2.
+
+## Rough total
+
+~12–15 weeks of focused work to Stage 5 (feature parity, opt-in),
+plus benchmark-driven Stage 6 items. Stage 0 is ~1 week and can be
+done immediately; nothing else should start until its numbers are in.
