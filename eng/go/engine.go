@@ -1765,6 +1765,19 @@ func (e *Engine) stepWord(val Value) error {
 		if tv, ok := e.registry.TopTypeBody(w.Name); ok {
 			push := tv
 			push.Pos = val.Pos
+			// A fn-shape type body (a predicate type, e.g. `def Bbd
+			// fn […]`) is pushed Quoted so stepLiteral's Function gate
+			// leaves it as DATA: type-defining functions participate
+			// in type operations (`def p:Bbd v`, `v is Bbd`, `inspect
+			// Bbd`) and are never free-standing calls. Without the
+			// mark, value dispatch — which collects forward args like
+			// a word — would run the predicate on whatever follows
+			// (`Bbd "c"`). Collection-time consumers are unaffected:
+			// the forward planner resolves type names itself (see the
+			// TopTypeBody block in the matchSignature scan).
+			if _, isFn := push.Data.(FnDefInfo); isFn {
+				push.Quoted = true
+			}
 			e.tape.Set(e.pointer, push)
 			return e.stepLiteral()
 		}
@@ -3052,6 +3065,16 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		}
 		fn = reg.Lookup(fnDef.Name)
 	}
+	if fn == nil && len(fnDef.Signatures) > 0 {
+		// An UNNAMED value from a foreign sub-registry — e.g. an
+		// anonymous `fn` literal placed in a module export map. There
+		// is nothing to look up, so its authored sigs are the only
+		// description there is: compile and dispatch on them. The
+		// body still runs with module scope — execFnDefSig /
+		// execFnDefSigStackMatch receive fnDef.Registry, and the
+		// sub-registry branch below handles handler-bearing matches.
+		fn = compileFnDef(fnDef.Registry, fnDef)
+	}
 	if fn == nil {
 		e.pointer++
 		return nil
@@ -3107,22 +3130,33 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		sig = nil
 	}
 
+	// Count forward vs stack positions of the matched sig (nil-safe:
+	// positions is empty when sig == nil).
+	fwdCount := 0
+	for _, pos := range positions {
+		if pos > e.pointer {
+			fwdCount++
+		}
+	}
+
 	// Fall through to FnSig-based pure-stack matching when
 	// matchSignature finds nothing — this preserves the legacy
 	// anonymous-fn-on-stack dispatch for AQL fns whose Sigs carry
 	// named params. The same path runs when matched but the sig
 	// has no Go Handler AND this isn't an `afn`-produced lambda:
 	// predicate-type FnDefs landing bare are intentionally inert.
-	if sig == nil || (sig.Handler == nil && !fnDef.Anonymous) {
+	//
+	// EXCEPT when the handler-less match includes FORWARD positions:
+	// a non-anonymous `fn` value at the pointer (typically a `get`
+	// result — `m.f 5`, `Mod.word arg`) must collect its forward args
+	// like any word (the unified rule above). It proceeds to the
+	// insertForward branch below, which parks the future tokens and
+	// re-processes this value with all args on the stack — landing
+	// back here with fwdCount == 0 and dispatching via the stack
+	// path. Macro values are excluded: they stay on the legacy path
+	// (data — applied only by name; MACROS-PHASE1.10.md §5).
+	if sig == nil || (sig.Handler == nil && !fnDef.Anonymous && (fwdCount == 0 || fnDef.Macro)) {
 		return e.execFnDefSigStackMatch(valIdx, fnDef, resolved)
-	}
-
-	// Count forward vs stack positions.
-	fwdCount := 0
-	for _, pos := range positions {
-		if pos > e.pointer {
-			fwdCount++
-		}
 	}
 
 	// Anonymous lambdas (afn / =>) are VALUES that auto-dispatch only

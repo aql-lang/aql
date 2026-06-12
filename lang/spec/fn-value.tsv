@@ -1,0 +1,29 @@
+# AQL Language Specification: Function VALUES at the pointer dispatch like words
+# Format: input<TAB>expected<TAB>description
+#
+# A Function value that reaches the pointer (typically a `get` result — a
+# map field, a module export) dispatches with the same forward+stack
+# matching as a named word (the unified collection rule). Historically a
+# non-anonymous `fn` value whose match needed FORWARD tokens silently
+# stayed on the stack as data while the equivalent afn lambda dispatched
+# (the F4 finding, design/MINILANG.0.md §10); execFnDefLiteral now routes
+# such a match through forward parking and re-processes it against the
+# stack. No-match cases still leave the value as data, and macro values
+# stay data (lang/spec/macro.tsv §5).
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  forward dispatch of stored fn values
+def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f 5	6	a stored fn collects its forward arg like a word
+def m {f: (fn [[a:Integer][Integer][a add 1]])}  5 m.f	6	stack form (mirror equivalence)
+def m {f: (fn [[a:Integer b:Integer][Integer][(a mul 100) add b]])}  m.f 2 3	203	two forward args bind in sig order
+def m {f: (fn [[a:Integer b:Integer][Integer][(a mul 100) add b]])}  3 m.f 2	203	mixed form: sig[0] forward, sig[1] stack
+def m {f: ([a:Integer] => [a add 1])}  m.f 5	6	afn parity — lambdas dispatched this way already
+#
+# §2  module exports — fn values exported by inline modules call like words
+module [export "X" {f: (fn [[a:Integer][Integer][a add 1]])}] import end  X.f 5	6	a module-exported fn collects forward args
+module ["aql:string-util" import end export "X" {up: (fn [[s:String][String][StringUtil.upper s]])}] import end  X.up 'ab'	'AB'	the export body runs in MODULE scope (module-private import resolves)
+#
+# §3  negatives — no match leaves the value as data; module scope is sealed
+def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f	fn [[a:Integer][Integer][word(a) word(add) 1]]	bare value, no args: stays data
+def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f 'x'	fn [[a:Integer][Integer][word(a) word(add) 1]] 'x'	type mismatch: no dispatch — the fn stays data, 'x' strands on top
+"aql:string-util" import end  module [export "X" {up: (fn [[s:String][String][StringUtil.upper s]])}] import end  X.up 'ab'	ERROR:undefined_word	an OUTER import does not leak into the module body's scope
