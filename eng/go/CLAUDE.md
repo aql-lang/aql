@@ -106,11 +106,19 @@ The Phase-4 unified rule says `f a b ≡ b f a ≡ b a f`, so any of
 those work, but forward form is the recommended canonical form
 for new code, examples, and documentation.
 
-The swap form `a f b` is the ONE non-equivalent two-arg
-arrangement — there it binds sig[0] from the forward side and
-sig[1] from the prefix stack. Useful for non-commutative ops
-that read better swap-style (`10 sub 3 = 7`), but forward form
-(`sub 10 3` = `3 sub 10` ≡ `3 10 sub`) is always safe and clear.
+There is no separate "swap form" — every arrangement is the same
+ONE split rule: collection moves forward until the barrier, then
+backward. Forward args fill sig positions 0..k-1 in written
+order; the remaining positions fill backward from the stack
+prefix. For sig order (a, b, c) with barrier 3, all of
+`f a b c ≡ c f a b ≡ c b f a ≡ c b a f` are the same call. The
+mixed two-arg split `a f b` is just k=1: b → sig[0], a → sig[1]
+— so `a f b ≡ f b a ≡ a b f` (e.g. `10 sub 3 ≡ sub 3 10 ≡
+10 3 sub = 7`). What trips readers is that `a f b` and `f a b`
+are DIFFERENT assignments (different splits of the same
+operands): `sub 10 3 ≡ 3 sub 10 ≡ 3 10 sub = -7`. Mixed splits
+read naturally for non-commutative ops; the all-forward spelling
+of the same assignment just lists the operands in sig order.
 
 ### Trivial-delegation wrapper short-circuit
 

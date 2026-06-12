@@ -36,9 +36,12 @@ func TestEmitGoldens(t *testing.T) {
 0002 CALL_NATIVE s0   ; add (Number, Number)
 ; consts=2 sigs=1 max-stack=2
 `},
-		// Swap form `a f b` binds sig[0] from the forward side — the
-		// lowering reflects the binding, so the push order differs
-		// from `add 1 2` while computing the same sum.
+		// `1 add 2` is the k=1 split of the (2,1) assignment — the
+		// forward 2 fills sig[0], the stack-prefix 1 fills sig[1]
+		// (one uniform rule: forward until the barrier, then
+		// backward). Its push order therefore differs from
+		// `add 1 2`, the all-forward spelling of the (1,2)
+		// assignment; same sum only because add commutes.
 		{`1 add 2`, `0000 PUSH_CONST  k1   ; 1 (Integer)
 0001 PUSH_CONST  k0   ; 2 (Integer)
 0002 CALL_NATIVE s0   ; add (Number, Number)
@@ -99,22 +102,23 @@ func TestEmitMirrorFormsIdentical(t *testing.T) {
 	}
 }
 
-// The swap form `1 add 2` and ITS mirror `1 2 add` also lower
-// identically — but to DIFFERENT code than `add 1 2`: the swap form
-// binds sig[0] from the forward side (the 2), the forward form binds
-// sig[0] to the first forward arg (the 1). Two equivalence classes,
-// one per binding; identical results here only because add is
-// commutative. Canonicalising them to one form would change the
-// semantics of non-commutative words.
-func TestEmitSwapFormClassIdentical(t *testing.T) {
+// One split rule, one bytecode per ASSIGNMENT: every split of the
+// same sig-order assignment lowers identically. `1 add 2` (k=1
+// split), `add 2 1` (all-forward), and `1 2 add` (all-stack) all
+// assign sig[0]=2, sig[1]=1 — identical code. `add 1 2` is the
+// (1,2) assignment — a different program (observable on
+// non-commutative words: `10 sub 3` = 7, `sub 10 3` = -7), so it
+// must NOT be conflated with the other class.
+func TestEmitSplitFormsIdentical(t *testing.T) {
 	a, _ := compile(t, `1 add 2`)
 	b, _ := compile(t, `1 2 add`)
-	if a == "" || a != b {
-		t.Errorf("swap-form class diverged:\nswap:\n%s\nstack:\n%s", a, b)
+	c, _ := compile(t, `add 2 1`)
+	if a == "" || a != b || a != c {
+		t.Errorf("splits of one assignment diverged:\nmixed:\n%s\nstack:\n%s\nforward:\n%s", a, b, c)
 	}
 	fwd, _ := compile(t, `add 1 2`)
 	if fwd == a {
-		t.Errorf("forward and swap forms lowered identically — distinct bindings must not be conflated")
+		t.Errorf("the (1,2) and (2,1) assignments lowered identically — distinct assignments must not be conflated")
 	}
 }
 
