@@ -209,6 +209,15 @@ type CheckState struct {
 	// before being cached (design/checker-accuracy-review.0.md A2).
 	InflightBails int
 
+	// FnAnalysisCounts tracks distinct body analyses (memo misses)
+	// per fn name. Past FnAnalysisQuota the analyser stops re-running
+	// the body for new arg shapes — it answers from the declaration
+	// or dynamic(Any) — and emits ONE analysis_truncated diagnostic
+	// naming the fn, so heavy polymorphic use degrades loudly instead
+	// of silently eating the whole step budget
+	// (design/checker-accuracy-review.0.md A9).
+	FnAnalysisCounts map[string]int
+
 	// StepCount is the running total of engine steps consumed by
 	// the current check run, summed across every sub-engine. Used
 	// with StepBudget to cap total analysis effort.
@@ -279,6 +288,7 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"uncalled_function":     SeverityError,
 	"unreachable_signature": SeverityWarning,
 	"partial_dispatch":      SeverityWarning,
+	"analysis_truncated":    SeverityInfo,
 	"index_out_of_range":    SeverityWarning,
 	"missing_returns":       SeverityWarning,
 	"step_budget_exceeded":  SeverityWarning,

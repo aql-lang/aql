@@ -1,6 +1,9 @@
 package eng
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // Carrier-based static type-checking support.
 //
@@ -936,6 +939,10 @@ func JoinCarrierStacks(a, b []Value) []Value {
 // join-semilattice whose height is bounded by CarrierDisjunctCap.
 const loopAnalysisRounds = 3
 
+// FnAnalysisQuota caps how many distinct call shapes one fn's body is
+// analysed for before the checker answers from the declaration (A9).
+const FnAnalysisQuota = 64
+
 // AnalyseLoopBody analyses a loop body to a bounded fixed point
 // (design/checker-accuracy-review.0.md A4). Each round binds the
 // loop's own names (iterator …) as carriers, runs the body, and
@@ -1270,6 +1277,37 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	}
 	if cached, ok := r.Check.FnSummaries[key]; ok {
 		return cached
+	}
+	// Per-fn analysis quota (A9): a polymorphic helper reached with
+	// many distinct arg shapes re-analyses once per shape; past the
+	// quota, answer from the declaration (or dynamic Any) and say so
+	// once, instead of silently consuming the global step budget.
+	if r.Check.FnAnalysisCounts == nil {
+		r.Check.FnAnalysisCounts = map[string]int{}
+	}
+	quotaKey := name
+	if quotaKey == "" {
+		quotaKey = "<anon>"
+	}
+	r.Check.FnAnalysisCounts[quotaKey]++
+	if n := r.Check.FnAnalysisCounts[quotaKey]; n > FnAnalysisQuota {
+		if n == FnAnalysisQuota+1 {
+			r.Check.AddDiagnostic(CheckDiagnostic{
+				Code: "analysis_truncated",
+				Detail: "fn " + quotaKey + " was analysed for more than " +
+					strconv.Itoa(FnAnalysisQuota) + " distinct call shapes; later shapes are typed from the declaration (or dynamic Any) without body re-analysis",
+				Word:     name,
+				Severity: SeverityInfo,
+			})
+		}
+		if len(declared) > 0 {
+			out := make([]Value, len(declared))
+			for i, t := range declared {
+				out[i] = NewCarrier(t)
+			}
+			return out
+		}
+		return []Value{NewDynamicCarrier(TAny)}
 	}
 	if r.Check.FnInflight[key] {
 		// Recursion detected. With declared returns, the declaration

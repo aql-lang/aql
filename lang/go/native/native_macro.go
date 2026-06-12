@@ -235,8 +235,11 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 		if r.Check.IsActive() && !miniNamespaceBound(r) {
 			// The import may be outside the checked fragment; degrade to a
 			// dynamic value rather than a false-positive diagnostic. A bound
-			// namespace WITHOUT the kind is a real bug in any mode.
-			return []Value{NewCarrier(TAny)}, nil
+			// namespace WITHOUT the kind is a real bug in any mode. The
+			// carrier is dynamic(Any) — the documented escape-hatch
+			// modality — not strict Any, which would poison every typed
+			// consumer downstream (checker-accuracy-review.0.md A8).
+			return []Value{NewDynamicCarrier(TAny)}, nil
 		}
 		return nil, r.AqlErrorHint("mini_unknown_lang",
 			fmt.Sprintf("mini: no mini-language %q is registered", kind), "mini",
