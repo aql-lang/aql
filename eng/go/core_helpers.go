@@ -1004,12 +1004,33 @@ func ExpandOptionalSigs(name string, sigs []FnSig) []FnSig {
 
 			var body []Value
 			body = append(body, NewWord(name))
+			// invalid latches when an omitted param has no usable
+			// default: either none can be synthesized, or the synthesized
+			// value fails the param's own pattern — the SAME Unify
+			// predicate dispatch applies (patternsOk), so the two can't
+			// drift. In either case the omission combination is skipped
+			// entirely below. The historical bug here `continue`d on a
+			// synthesis error, DROPPING the argument from the body: the
+			// 0-arg overload then re-dispatched the word with the arg
+			// still missing (or with a default the original sig rejects),
+			// which matched the same 0-arg overload again — an infinite
+			// self-recursion that ground the tape until exhaustion.
+			// Skipping the overload makes the omission fail dispatch
+			// honestly instead ("matched no signature").
+			invalid := false
 			presentIdx := 0
 			for i, p := range sig.Params {
 				if omitted[i] {
 					bv, err := omittedDefaultValue(p)
 					if err != nil {
-						continue
+						invalid = true
+						break
+					}
+					if p.Pattern != nil {
+						if _, ok := Unify(bv, *p.Pattern); !ok {
+							invalid = true
+							break
+						}
 					}
 					body = append(body, bv)
 				} else {
@@ -1026,6 +1047,13 @@ func ExpandOptionalSigs(name string, sigs []FnSig) []FnSig {
 					}
 					presentIdx++
 				}
+			}
+
+			// An omitted param with no valid default: this omission
+			// combination cannot be satisfied — generate NO overload for
+			// it, so calls relying on the omission fail dispatch cleanly.
+			if invalid {
+				continue
 			}
 
 			// Propagate the parent sig's BarrierPos so an
