@@ -762,14 +762,12 @@ func argsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value
 }
 
 func popArgsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if _, err := r.Args.Pop(); err != nil {
+	// The Args pop and the FnBaseline pop must move together (closure-
+	// capture detection on subsequent fn constructions reads the
+	// baseline). eng.PopFrameArgs is the single home of that pairing,
+	// shared with any eager frame teardown, so the two cannot drift.
+	if err := eng.PopFrameArgs(r); err != nil {
 		return nil, err
 	}
-	// FnBaseline is pushed in lockstep with the args list at every fn
-	// entry that uses the __pa cleanup convention (InstallFnDef handler
-	// + execFnDefSig body splice). Pop here so closure-capture
-	// detection on subsequent fn constructions sees the correct
-	// enclosing-fn baseline.
-	r.PopFnBaseline()
 	return nil, nil
 }

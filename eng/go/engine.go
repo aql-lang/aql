@@ -3617,7 +3617,9 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 		compiled.Params = append([]FnParam(nil), sig.Params...)
 		compiled.BarrierPos = barrier
 		if fnDef.Anonymous {
-			compiled.Handler = buildFnBodyHandler(r, fnDef.Name, sig, fnDef)
+			meta := &FnFrameMeta{Name: fnDef.Name}
+			compiled.FnFrame = meta
+			compiled.Handler = buildFnBodyHandler(r, fnDef.Name, sig, fnDef, meta)
 			compiled.ReturnsFn = buildFnBodyReturnsFn(r, fnDef.Name, sig, fnDef)
 		}
 		normalizeSig(&compiled)
@@ -3733,7 +3735,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 
 	// No captured registry — splice body tokens into the current stack.
 	var tokens []Value
-	tokens = append(tokens, NewOpenParen())
+	tokens = append(tokens, NewFrameOpen(fnValueFrameMeta))
 
 	// Push the fn-entry baseline before installing anything. Inner
 	// fn/afn constructions inside this body consult TopFnBaseline
@@ -3778,25 +3780,26 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 			unnamedCount++
 		}
 	}
+	// Snapshot AFTER captures+params so the tail's DefCleanup tears
+	// down only body-local defs — the same placement as
+	// buildFnBodyHandler. (This tail historically omitted the
+	// DefCleanup marker; it is synthesized by the shared
+	// AppendFrameTail now, so the two splice paths cannot diverge.)
+	defSnapshot := e.registry.Defs.Snapshot()
+
 	body := make([]Value, len(sig.Body))
 	copy(body, sig.Body)
 	tokens = append(tokens, body...)
 
-	tokens = append(tokens, NewWord("__pa"))
-	for i := len(names) - 1; i >= 0; i-- {
-		tokens = append(tokens,
-			NewWordModified("undef", -1, false, true),
-			NewWord(names[i]),
-		)
-	}
-	if len(sig.Returns) > 0 {
-		tokens = append(tokens, NewReturnCheck(ReturnCheckInfo{
-			FuncName:     "<fn>",
-			Returns:      sig.Returns,
-			UnnamedCount: unnamedCount,
-			Pos:          callPos,
-		}))
-	}
+	tokens = AppendFrameTail(tokens, FrameTailSpec{
+		Registry:     e.registry,
+		Snapshot:     defSnapshot,
+		Names:        names,
+		Returns:      sig.Returns,
+		UnnamedCount: unnamedCount,
+		FuncName:     "<fn>",
+		Pos:          callPos,
+	})
 	tokens = append(tokens, NewCloseParen())
 
 	if len(indices) == nArgs && nArgs > 0 {

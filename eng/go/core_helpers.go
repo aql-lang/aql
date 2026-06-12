@@ -155,8 +155,11 @@ func UninstallDef(r *Registry, name string) {
 //
 // Extracted verbatim from InstallFnDef so the same body-runner can be
 // shared with the Function-value dispatch path (function-model
-// consolidation). `s` is the signature; `fnDefCopy` supplies Captured.
-func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo) Handler {
+// consolidation). `s` is the signature; `fnDefCopy` supplies Captured;
+// `meta` is the overload identity stamped on each spliced frame's open
+// paren (the same pointer the compile boundary stores in
+// Signature.FnFrame — see eng/go/fn_frame.go).
+func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, meta *FnFrameMeta) Handler {
 	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		var result []Value
 		var names []string
@@ -167,7 +170,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo) 
 		// finishes executing (e.g. recursive factorial: the outer
 		// mul's forward grabs x=1 from the inner body instead of
 		// waiting for the full result).
-		result = append(result, NewOpenParen())
+		result = append(result, NewFrameOpen(meta))
 
 		// Push the fn-entry baseline BEFORE installing anything
 		// for this call. Closure-capture detection on inner fn
@@ -233,30 +236,18 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo) 
 		body := make([]Value, len(s.Body))
 		copy(body, s.Body)
 		result = append(result, body...)
-		// Clean up defs created during body execution, then pop
-		// the args stack to restore the previous args (for nesting).
-		result = append(result, NewDefCleanup(DefCleanupInfo{
-			Snapshot: defSnapshot,
-			Registry: r,
-		}))
-		result = append(result, NewWord("__pa"))
-		for i := len(names) - 1; i >= 0; i-- {
-			// Force forward so undef takes the name word that follows,
-			// not a same-typed value from the prefix stack (e.g. a
-			// string return value when the param is also a string).
-			result = append(result,
-				NewWordModified("undef", -1, false, true),
-				NewWord(names[i]),
-			)
-		}
-		// Inject return-check if return types are declared.
-		if len(s.Returns) > 0 {
-			result = append(result, NewReturnCheck(ReturnCheckInfo{
-				FuncName:     name,
-				Returns:      s.Returns,
-				UnnamedCount: unnamedCount,
-			}))
-		}
+		// The canonical cleanup tail: DefCleanup (undoes body-local
+		// defs), __pa (pops Args + FnBaseline), the undef pairs for
+		// captures+params, and the ReturnCheck when returns are
+		// declared (Pos left zero — execMatch stamps the call site).
+		result = AppendFrameTail(result, FrameTailSpec{
+			Registry:     r,
+			Snapshot:     defSnapshot,
+			Names:        names,
+			Returns:      s.Returns,
+			UnnamedCount: unnamedCount,
+			FuncName:     name,
+		})
 		result = append(result, NewCloseParen())
 		return result, nil
 	}
@@ -466,7 +457,9 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 		// fn re-bound by name still has Body>0, so it correctly gets a fresh
 		// body-runner — only Body-less handler sigs are preserved.)
 		if s.Handler == nil || len(s.Body) > 0 {
-			cs.Handler = buildFnBodyHandler(r, name, s, fnDefCopy)
+			meta := &FnFrameMeta{Name: name}
+			cs.FnFrame = meta
+			cs.Handler = buildFnBodyHandler(r, name, s, fnDefCopy, meta)
 			cs.ReturnsFn = buildFnBodyReturnsFn(r, name, s, fnDefCopy)
 		}
 		cs.BarrierPos = barrier

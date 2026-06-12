@@ -239,7 +239,7 @@ Payload variants live in `eng/go/payload.go`. Two flavours:
 2. **Direct variants** — eng-defined struct/pointer types with
    `payloadMarker()` added in payload.go: `WordInfo`,
    `ForwardInfo`, `MarkInfo`, `MoveInfo`, `ReturnCheckInfo`,
-   `DefCleanupInfo`, `ModuleDesc`, `FnDefInfo`, `FnUndefInfo`,
+   `DefCleanupInfo`, `FrameOpenInfo`, `ModuleDesc`, `FnDefInfo`, `FnUndefInfo`,
    `DisjunctInfo`, `ChildTypeInfo`, `RecordTypeInfo`,
    `OptionsTypeInfo`, `TableTypeInfo`, `TableData`,
    `ObjectTypeInfo`, `ObjectInstanceInfo`, `*StoreInstanceInfo`,
