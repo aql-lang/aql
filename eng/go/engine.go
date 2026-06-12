@@ -1437,6 +1437,41 @@ func (e *Engine) staticForwardType(tok Value) (match Value, kind fwdKind) {
 // raised inside the paren is left on the registry for the outer Run frame.
 func (e *Engine) evalParenGroupAt(scanIdx int) error {
 	savedPointer := e.pointer
+
+	// Check mode: snapshot the group's inner tokens before evaluation
+	// reduces them. If the group collapses to a single Boolean
+	// carrier, the tokens are attached as a GuardFactInfo payload so
+	// guard narrowing can recover the `x is T` structure from the
+	// canonical paren condition form (checker-accuracy-review.0.md A3).
+	var guardToks []Value
+	var groupSpan, lenBefore int
+	if e.registry.Check.IsActive() {
+		gdepth := 0
+		for i := scanIdx; i < e.tape.Len(); i++ {
+			v := e.tape.At(i)
+			if IsOpenParen(v) {
+				gdepth++
+				if i > scanIdx {
+					guardToks = append(guardToks, v)
+				}
+				continue
+			}
+			if IsCloseParen(v) {
+				gdepth--
+				if gdepth == 0 {
+					groupSpan = i - scanIdx + 1
+					break
+				}
+				guardToks = append(guardToks, v)
+				continue
+			}
+			if i > scanIdx {
+				guardToks = append(guardToks, v)
+			}
+		}
+		lenBefore = e.tape.Len()
+	}
+
 	e.pointer = scanIdx
 
 	// Advance past the OpenParen marker.
@@ -1531,6 +1566,22 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 	if depth > 0 && e.pointer < e.tape.Len() {
 		e.pointer = savedPointer
 		return e.evalLimitError(maxParenGroupSteps)
+	}
+
+	// Guard-fact attachment (A3): the group reduced to exactly one
+	// value and it is a Boolean carrier — keep the original tokens on
+	// it for guard narrowing. Booleans never carry another payload at
+	// this point (ChildTypeInfo is List/Map-only), so the write is
+	// non-destructive.
+	if groupSpan > 0 && len(guardToks) >= 3 {
+		nResults := e.tape.Len() - lenBefore + groupSpan
+		if nResults == 1 && scanIdx < e.tape.Len() {
+			res := e.tape.At(scanIdx)
+			if res.Carrier && !res.Dynamic && res.Parent.ConformsTo(TBoolean) {
+				res.Data = GuardFactInfo{Toks: guardToks}
+				e.tape.Set(scanIdx, res)
+			}
+		}
 	}
 
 	e.pointer = savedPointer

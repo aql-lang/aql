@@ -281,6 +281,7 @@ func (MoveInfo) payloadMarker()           {}
 func (SpliceInfo) payloadMarker()         {}
 func (ReturnCheckInfo) payloadMarker()    {}
 func (DefCleanupInfo) payloadMarker()     {}
+func (GuardFactInfo) payloadMarker()      {}
 func (FrameOpenInfo) payloadMarker()      {}
 func (ModuleDesc) payloadMarker()         {}
 func (FnDefInfo) payloadMarker()          {}

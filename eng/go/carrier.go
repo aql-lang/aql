@@ -1006,6 +1006,18 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 	return stk
 }
 
+// GuardFactInfo is the payload a check-mode paren evaluation attaches
+// to a single Boolean carrier result: the group's ORIGINAL tokens,
+// preserved so guard narrowing can see the `x is T` structure that
+// evaluation reduced to a bare Boolean
+// (design/checker-accuracy-review.0.md A3 — without it, the canonical
+// `if (x is T) …` paren form narrowed nothing while the list form
+// `if [x is T] …` narrowed fine). Check-mode only; the runtime never
+// produces carriers.
+type GuardFactInfo struct {
+	Toks []Value
+}
+
 // GuardClause describes one `x is T` clause detected in a condition.
 type GuardClause struct {
 	Name string
@@ -1021,11 +1033,22 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 	if r == nil || condList.Data == nil {
 		return nil
 	}
-	list, err := AsList(condList)
-	if err != nil || list.IsNil() || list.Len() < 3 {
+	// A pre-evaluated paren condition arrives as a Boolean carrier
+	// whose GuardFactInfo payload preserves the group's original
+	// tokens (A3) — extract from those exactly as from a list body.
+	var elems []Value
+	if gf, ok := condList.Data.(GuardFactInfo); ok {
+		elems = gf.Toks
+	} else {
+		list, err := AsList(condList)
+		if err != nil || list.IsNil() || list.Len() < 3 {
+			return nil
+		}
+		elems = list.Slice()
+	}
+	if len(elems) < 3 {
 		return nil
 	}
-	elems := list.Slice()
 	var out []GuardClause
 	for i := 0; i+2 < len(elems); i++ {
 		if !elems[i].Parent.Equal(TWord) || !elems[i+1].Parent.Equal(TWord) {
