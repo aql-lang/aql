@@ -1,9 +1,9 @@
 # AQL Bytecode — staged implementation plan
 
 **Status:** in progress — Stage 0 DONE with a GO result
-(`aql-bytecode-baseline.0.md`); Stage 1 recording pass LANDED; Stage
-2 VM core + CLI opt-in + `if` and counted-`for` lowering LANDED
-(range `for`, list conditions, break/continue pending). Companion to
+(`aql-bytecode-baseline.0.md`); Stage 1 recording pass LANDED;
+Stage 2 COMPLETE for the v1 scope (VM core, CLI opt-in, `if` in all
+forms, counted+range `for`, break/continue); Stage 3 next. Companion to
 `aql-bytecode-report.0.md` (the design) and
 `aql-bytecode-revisions.0.md` (the June 2026 re-review that this plan
 incorporates; read it first — it changes two requirements). Written
