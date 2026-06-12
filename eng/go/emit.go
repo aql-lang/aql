@@ -52,12 +52,15 @@ type emitCall struct {
 // operand. constCond non-nil means the condition was statically
 // known and only the taken fragment was captured.
 type emitBranch struct {
-	cond      emitOperand
-	constCond *bool
-	then, els *EmitFragment
-	thenOut   emitOperand
-	elsOut    emitOperand
-	pos       SrcPos
+	cond                  emitOperand
+	condFrag              *EmitFragment // list-form condition: lower inline, ends with one Boolean
+	condOut               emitOperand
+	constCond             *bool
+	hasElse               bool // false = 2-arg if; its result is VARIADIC (0 or 1 values)
+	then, els             *EmitFragment
+	thenOut, elsOut       emitOperand
+	hasThenOut, hasElsOut bool // false when the arm DIVERGES (ends in break/continue)
+	pos                   SrcPos
 }
 
 // emitLoop is a recorded counted `for`: the count operand, the
@@ -67,17 +70,20 @@ type emitBranch struct {
 // on the stack — so downstream consumption refuses; only the
 // residual may absorb it.
 type emitLoop struct {
-	count    emitOperand
-	body     *EmitFragment
-	bodyOut  emitOperand
-	iterSlot int
-	pos      SrcPos
+	start, end, step emitOperand // start/step are always consts in Stage 2
+	body             *EmitFragment
+	bodyOut          emitOperand
+	hasBodyOut       bool // false: the body nets no value per iteration (or diverges)
+	iterSlot         int
+	pos              SrcPos
 }
 
 const (
 	evCall = iota + 1
 	evBranch
 	evLoop
+	evBreak
+	evContinue
 )
 
 type emitEvent struct {
@@ -254,61 +260,115 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	return emitOperand{constIdx: es.intern(lit), fromSeq: -1, localSlot: -1}, true
 }
 
-// RecordBranch records an `if` dispatch: cond plus captured then /
-// else fragments and their residual stacks. Pass constCond non-nil
-// (with the taken fragment in `then`) when the condition was a
-// literal and only one branch was analysed. out is the dispatch's
-// joined result carrier. Any shape Stage 2 cannot lower marks the
-// program uncompilable.
-func (es *EmitState) RecordBranch(cond Value, constCond *bool, then, els *EmitFragment, thenStk, elsStk []Value, out Value, pos SrcPos) {
+// fragDiverges reports whether a captured fragment's trailing event
+// is a flow-control terminator — the arm never reaches the branch
+// join (its lowering emitted the loop jump).
+func fragDiverges(frag *EmitFragment) bool {
+	if frag == nil || len(frag.events) == 0 {
+		return false
+	}
+	k := frag.events[len(frag.events)-1].kind
+	return k == evBreak || k == evContinue
+}
+
+// BranchRecord carries one `if` dispatch into RecordBranch.
+type BranchRecord struct {
+	Cond            Value         // pre-evaluated condition (paren/value form)
+	CondFrag        *EmitFragment // list-form condition body, when analysed
+	CondStk         []Value       // its residual stack
+	ConstCond       *bool         // statically-known condition: only Then captured
+	HasElse         bool
+	Then, Els       *EmitFragment
+	ThenStk, ElsStk []Value
+	Out             Value
+	Pos             SrcPos
+}
+
+// RecordBranch records an `if` dispatch: condition (pre-evaluated,
+// list-form fragment, or statically known), the captured arm
+// fragments and their residual stacks, and the dispatch's joined
+// result carrier. An arm may DIVERGE (end in break/continue) — it
+// then contributes no value and never reaches the join. The 2-arg
+// form (HasElse=false) has a VARIADIC result (0 or 1 values), which
+// only the program residual may absorb. Any shape Stage 2 cannot
+// lower marks the program uncompilable.
+func (es *EmitState) RecordBranch(b BranchRecord) {
 	if !es.active() {
 		return
 	}
-	ev := emitEvent{kind: evBranch, br: emitBranch{constCond: constCond, pos: pos}}
-	resolveFragOut := func(frag *EmitFragment, stk []Value, name string) (emitOperand, bool) {
+	ev := emitEvent{kind: evBranch, br: emitBranch{
+		constCond: b.ConstCond, hasElse: b.HasElse, pos: b.Pos,
+	}}
+	resolveArm := func(frag *EmitFragment, stk []Value, name string) (emitOperand, bool, bool) {
 		if frag == nil {
 			es.MarkUncompilable("if: " + name + "-branch not captured")
-			return emitOperand{}, false
+			return emitOperand{}, false, false
+		}
+		if fragDiverges(frag) {
+			return emitOperand{}, false, true
 		}
 		if len(stk) == 0 {
 			es.MarkUncompilable("if: " + name + "-branch produces no value (Stage 2 lowers single-result branches)")
-			return emitOperand{}, false
+			return emitOperand{}, false, false
 		}
 		op, ok := es.resolveOperand(stk[len(stk)-1])
 		if !ok {
 			es.MarkUncompilable("if: " + name + "-branch result of unknown provenance")
-			return emitOperand{}, false
+			return emitOperand{}, false, false
 		}
-		return op, true
+		return op, true, true
 	}
-	if constCond == nil {
-		condOp, ok := es.resolveOperand(cond)
+	// Condition.
+	if b.ConstCond == nil {
+		switch {
+		case b.CondFrag != nil:
+			if fragDiverges(b.CondFrag) || len(b.CondStk) == 0 {
+				es.MarkUncompilable("if: condition body produces no value")
+				return
+			}
+			op, ok := es.resolveOperand(b.CondStk[len(b.CondStk)-1])
+			if !ok {
+				es.MarkUncompilable("if: condition result of unknown provenance")
+				return
+			}
+			ev.br.condFrag, ev.br.condOut = b.CondFrag, op
+		default:
+			condOp, ok := es.resolveOperand(b.Cond)
+			if !ok {
+				es.MarkUncompilable("if: condition of unknown provenance")
+				return
+			}
+			ev.br.cond = condOp
+		}
+	}
+	// Arms.
+	if b.ConstCond != nil {
+		out, has, ok := resolveArm(b.Then, b.ThenStk, "taken")
 		if !ok {
-			es.MarkUncompilable("if: condition of unknown provenance (list-form conditions are Stage 2 follow-on)")
 			return
 		}
-		ev.br.cond = condOp
-		thenOut, ok := resolveFragOut(then, thenStk, "then")
-		if !ok {
-			return
-		}
-		elsOut, ok := resolveFragOut(els, elsStk, "else")
-		if !ok {
-			return
-		}
-		ev.br.then, ev.br.els = then, els
-		ev.br.thenOut, ev.br.elsOut = thenOut, elsOut
+		ev.br.then, ev.br.thenOut, ev.br.hasThenOut = b.Then, out, has
 	} else {
-		thenOut, ok := resolveFragOut(then, thenStk, "taken")
+		thenOut, hasThen, ok := resolveArm(b.Then, b.ThenStk, "then")
 		if !ok {
 			return
 		}
-		ev.br.then = then
-		ev.br.thenOut = thenOut
+		ev.br.then, ev.br.thenOut, ev.br.hasThenOut = b.Then, thenOut, hasThen
+		if b.HasElse {
+			elsOut, hasEls, ok := resolveArm(b.Els, b.ElsStk, "else")
+			if !ok {
+				return
+			}
+			ev.br.els, ev.br.elsOut, ev.br.hasElsOut = b.Els, elsOut, hasEls
+			if !hasThen && !hasEls {
+				es.MarkUncompilable("if: both branches diverge (Stage 2)")
+				return
+			}
+		}
 	}
 	seq := es.appendEvent(ev)
 	es.SiteCounts[SiteMono]++
-	es.producedBy[out.ID] = seq
+	es.producedBy[b.Out.ID] = seq
 }
 
 // ArmLoopCapture makes the NEXT AnalyseLoopBody record its final
@@ -346,13 +406,15 @@ func (es *EmitState) RegisterLocal(id string) int {
 	return slot
 }
 
-// RecordLoop records a counted `for`: the count operand, the body
-// fragment (final round), its per-iteration result, and the
-// iterator's slot. out is the dispatch's result carrier — it is
-// registered so the dispatch isn't re-recorded, and marked VARIADIC
-// at lowering (one value per iteration stays on the stack), so only
-// the program residual may absorb it.
-func (es *EmitState) RecordLoop(count Value, body *EmitFragment, bodyStk []Value, iterID string, out Value, pos SrcPos) {
+// RecordLoop records a counted/range `for`: start/end/step operand
+// values (start and step must resolve to constants in Stage 2; the
+// end may be computed), the body fragment (final fixed-point round),
+// and the iterator's slot. The body either nets exactly one value
+// per iteration or nothing (a net-0 or diverging body). out is the
+// dispatch's result carrier — registered so the dispatch isn't
+// re-recorded, and marked VARIADIC at lowering, so only the program
+// residual may absorb the accumulation.
+func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, bodyStk []Value, iterID string, out Value, pos SrcPos) {
 	if !es.active() {
 		return
 	}
@@ -360,28 +422,33 @@ func (es *EmitState) RecordLoop(count Value, body *EmitFragment, bodyStk []Value
 		es.MarkUncompilable("for: body not captured")
 		return
 	}
-	countOp, ok := es.resolveOperand(count)
-	if !ok {
-		es.MarkUncompilable("for: count of unknown provenance")
+	startOp, ok1 := es.resolveOperand(start)
+	endOp, ok2 := es.resolveOperand(end)
+	stepOp, ok3 := es.resolveOperand(step)
+	if !ok1 || !ok2 || !ok3 {
+		es.MarkUncompilable("for: range of unknown provenance")
 		return
 	}
-	if len(bodyStk) == 0 {
-		es.MarkUncompilable("for: body produces no value per iteration (Stage 2 lowers single-result bodies)")
+	if startOp.constIdx < 0 || stepOp.constIdx < 0 {
+		es.MarkUncompilable("for: computed range start/step (Stage 2 follow-on)")
 		return
 	}
-	bodyOut, ok := es.resolveOperand(bodyStk[len(bodyStk)-1])
-	if !ok {
-		es.MarkUncompilable("for: body result of unknown provenance")
-		return
+	lp := emitLoop{start: startOp, end: endOp, step: stepOp, iterSlot: -1, pos: pos}
+	if len(bodyStk) > 0 && !fragDiverges(body) {
+		bodyOut, ok := es.resolveOperand(bodyStk[len(bodyStk)-1])
+		if !ok {
+			es.MarkUncompilable("for: body result of unknown provenance")
+			return
+		}
+		lp.bodyOut, lp.hasBodyOut = bodyOut, true
 	}
 	slot, ok := es.localByID[iterID]
 	if !ok {
 		es.MarkUncompilable("for: iterator slot not registered")
 		return
 	}
-	seq := es.appendEvent(emitEvent{kind: evLoop, loop: emitLoop{
-		count: countOp, body: body, bodyOut: bodyOut, iterSlot: slot, pos: pos,
-	}})
+	lp.body, lp.iterSlot = body, slot
+	seq := es.appendEvent(emitEvent{kind: evLoop, loop: lp})
 	es.SiteCounts[SiteMono]++
 	es.producedBy[out.ID] = seq
 }
@@ -475,6 +542,14 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		// proof — don't bake it in.
 		es.SiteCounts[SiteDynamic]++
 		es.MarkUncompilable("unannotated or opaque word " + word)
+		return
+	case word == "break" && len(outs) == 0:
+		// A flow-control terminator, not a call: the enclosing loop's
+		// lowering turns it into a JMP to the loop end.
+		es.appendEvent(emitEvent{kind: evBreak, call: emitCall{word: word, pos: pos}})
+		return
+	case word == "continue" && len(outs) == 0:
+		es.appendEvent(emitEvent{kind: evContinue, call: emitCall{word: word, pos: pos}})
 		return
 	case len(outs) != 1:
 		es.SiteCounts[SiteMeta]++
@@ -575,38 +650,60 @@ func isInertConst(v Value) bool {
 	}
 }
 
-// lowerLoop lowers a counted for:
+// lowerLoop lowers a counted/range for:
 //
-//	…count…  FOR_SETUP slot
-//	head: FOR_NEXT -> end   ; bind iterator or exit
-//	…body…                  ; net one value per iteration, kept
-//	JMP -> head             ; the back-edge
-//	end:
+//	…step end start…  FOR_SETUP slot   ; pops start, end, step
+//	head: FOR_NEXT -> end_pc           ; bind iterator or exit
+//	…body…                             ; net ≤1 value per iteration
+//	JMP -> head                        ; the back-edge
+//	end_pc:
 //
-// The loop's stack contribution is variadic (count values at run
-// time); the simulated stack carries one marker entry flagged in
-// lw.variadic so only the program residual may absorb it.
+// The loop's stack contribution is variadic; the simulated stack
+// carries one marker entry flagged in lw.variadic so only the
+// program residual may absorb it. break/continue inside the body
+// jump to end_pc / head via the lowerer's loop-context stack.
 func (lw *lowerer) lowerLoop(ev *emitEvent) string {
 	lp := &ev.loop
-	if lp.count.fromSeq >= 0 {
-		if lw.variadic[lp.count.fromSeq] {
-			return "loop results as a loop count (Stage 2)"
+	// Operand layout for FOR_SETUP: start on top, then end, then
+	// step. start/step are consts (RecordLoop enforced); the end may
+	// be a computed value already on top of the simulated stack — a
+	// SWAP threads it under the step push.
+	if lp.end.fromSeq >= 0 {
+		if lw.variadic[lp.end.fromSeq] {
+			return "loop results as a loop bound (Stage 2)"
 		}
-		if len(lw.vm) == 0 || lw.vm[len(lw.vm)-1] != lp.count.fromSeq {
+		if len(lw.vm) == 0 || lw.vm[len(lw.vm)-1] != lp.end.fromSeq {
 			return "for: count is not on top of the stack"
 		}
+		lw.pushOperand(lp.step, lp.pos) // [end step]
+		lw.emit(OpSwap, 0, lp.pos)      // [step end]
+		lw.vm[len(lw.vm)-1], lw.vm[len(lw.vm)-2] = lw.vm[len(lw.vm)-2], lw.vm[len(lw.vm)-1]
 	} else {
-		lw.pushOperand(lp.count, lp.pos)
+		lw.pushOperand(lp.step, lp.pos)
+		lw.pushOperand(lp.end, lp.pos)
 	}
+	lw.pushOperand(lp.start, lp.pos)
 	lw.emit(OpForSetup, lp.iterSlot, lp.pos)
-	lw.vm = lw.vm[:len(lw.vm)-1] // count consumed
+	lw.vm = lw.vm[:len(lw.vm)-3] // start, end, step consumed
 	head := len(lw.p.Code)
 	fn := lw.emit(OpForNext, 0, lp.pos)
-	if reason := lw.lowerFragment(lp.body, lp.bodyOut, lp.pos); reason != "" {
+	endHoles := []int{}
+	lw.loops = append(lw.loops, loopCtx{nextPC: head, endHoles: &endHoles})
+	var out *emitOperand
+	if lp.hasBodyOut {
+		out = &lp.bodyOut
+	}
+	reason := lw.lowerFragment(lp.body, out, lp.pos)
+	lw.loops = lw.loops[:len(lw.loops)-1]
+	if reason != "" {
 		return reason
 	}
 	lw.emit(OpJmp, head, lp.pos)
-	lw.p.Code[fn].Arg = int32(len(lw.p.Code))
+	endPC := len(lw.p.Code)
+	lw.p.Code[fn].Arg = int32(endPC)
+	for _, h := range endHoles {
+		lw.p.Code[h].Arg = int32(endPC)
+	}
 	lw.vm = append(lw.vm, ev.seq)
 	lw.variadic[ev.seq] = true
 	lw.note()
@@ -686,12 +783,21 @@ func eventPos(ev emitEvent) SrcPos {
 
 // lowerer walks an event trace emitting instructions over a simulated
 // stack of producing event seqs (-1 = const).
+// loopCtx is the lowering context of one open loop: the FOR_NEXT pc
+// (continue's target, and the back-edge) and the holes to patch with
+// the loop's end pc (break's targets).
+type loopCtx struct {
+	nextPC   int
+	endHoles *[]int
+}
+
 type lowerer struct {
 	es       *EmitState
 	p        *Program
 	sigIdx   map[*Signature]int
 	vm       []int
 	variadic map[int]bool // loop seqs: N runtime values, not one
+	loops    []loopCtx
 	maxDepth int
 }
 
@@ -739,6 +845,10 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 			reason = lw.lowerBranch(ev)
 		case evLoop:
 			reason = lw.lowerLoop(ev)
+		case evBreak:
+			reason = lw.lowerBreak(ev)
+		case evContinue:
+			reason = lw.lowerContinue(ev)
 		default:
 			reason = "unknown event kind"
 		}
@@ -754,9 +864,11 @@ func collectOperands(ev *emitEvent) []emitOperand {
 	case evCall:
 		return ev.call.ops
 	case evLoop:
-		return []emitOperand{ev.loop.count, ev.loop.bodyOut}
+		return []emitOperand{ev.loop.start, ev.loop.end, ev.loop.step, ev.loop.bodyOut}
+	case evBreak, evContinue:
+		return nil
 	}
-	return []emitOperand{ev.br.cond, ev.br.thenOut, ev.br.elsOut}
+	return []emitOperand{ev.br.cond, ev.br.condOut, ev.br.thenOut, ev.br.elsOut}
 }
 
 func (lw *lowerer) lowerCall(ev *emitEvent) string {
@@ -832,69 +944,158 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 	return ""
 }
 
-// lowerFragment lowers a closed branch body: a fresh stack scope that
-// must end as exactly [out]. Restores the parent scope afterwards,
-// leaving the net +1 to the caller.
-func (lw *lowerer) lowerFragment(frag *EmitFragment, out emitOperand, pos SrcPos) string {
+// lowerFragment lowers a closed body: a fresh stack scope that must
+// end as exactly [out] (out non-nil), or empty (out nil — a net-0 or
+// diverging fragment; a diverging fragment's terminator already
+// emitted its jump, so whatever its scope holds is unreachable and
+// ignored). Restores the parent scope afterwards.
+func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, pos SrcPos) string {
 	parent := lw.vm
 	lw.vm = nil
 	if reason := lw.lowerEvents(frag.events, frag.startSeq); reason != "" {
 		return reason
 	}
 	switch {
+	case fragDiverges(frag):
+		// Control left via break/continue; the residual scope is
+		// unreachable.
+	case out == nil:
+		if len(lw.vm) != 0 {
+			return "body leaves extra values (Stage 2 lowers single-result bodies)"
+		}
 	case out.fromSeq >= 0:
 		if lw.variadic[out.fromSeq] {
 			return "loop results as a branch/body result (Stage 2)"
 		}
 		if len(lw.vm) != 1 || lw.vm[0] != out.fromSeq {
-			return "if: branch leaves extra values (Stage 2 lowers single-result branches)"
+			return "branch leaves extra values (Stage 2 lowers single-result branches)"
 		}
 	default:
 		if len(lw.vm) != 0 {
-			return "if: branch leaves extra values (Stage 2 lowers single-result branches)"
+			return "branch leaves extra values (Stage 2 lowers single-result branches)"
 		}
-		lw.pushOperand(out, pos)
-		lw.vm = lw.vm[:len(lw.vm)-1] // pushOperand tracked it; the scope check above owns the count
+		lw.pushOperand(*out, pos)
+		lw.vm = lw.vm[:len(lw.vm)-1] // pushOperand tracked it; the scope owns the count
 	}
 	lw.vm = parent
 	return ""
 }
 
+// lowerBreak / lowerContinue: flow-control terminators inside a loop
+// body fragment. break jumps to the loop end (hole patched by
+// lowerLoop); continue jumps back to FOR_NEXT — a back-edge the VM
+// accepts because it targets the loop header.
+func (lw *lowerer) lowerBreak(ev *emitEvent) string {
+	if len(lw.loops) == 0 {
+		return "break outside a compiled loop (Stage 2)"
+	}
+	h := lw.emit(OpJmp, 0, ev.call.pos)
+	ctx := lw.loops[len(lw.loops)-1]
+	*ctx.endHoles = append(*ctx.endHoles, h)
+	return ""
+}
+
+func (lw *lowerer) lowerContinue(ev *emitEvent) string {
+	if len(lw.loops) == 0 {
+		return "continue outside a compiled loop (Stage 2)"
+	}
+	lw.emit(OpJmp, lw.loops[len(lw.loops)-1].nextPC, ev.call.pos)
+	return ""
+}
+
 func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 	br := &ev.br
+	armOut := func(has bool, op *emitOperand) *emitOperand {
+		if has {
+			return op
+		}
+		return nil
+	}
 	if br.constCond != nil {
 		// Statically-taken branch: inline the taken fragment.
-		if reason := lw.lowerFragment(br.then, br.thenOut, br.pos); reason != "" {
+		if reason := lw.lowerFragment(br.then, armOut(br.hasThenOut, &br.thenOut), br.pos); reason != "" {
 			return reason
 		}
-		lw.vm = append(lw.vm, ev.seq)
-		lw.note()
+		if br.hasThenOut {
+			lw.vm = append(lw.vm, ev.seq)
+			lw.note()
+		}
 		return ""
 	}
-	// Condition on top of stack.
-	if br.cond.fromSeq >= 0 {
+	// Condition on top of stack: a pre-evaluated value, or an inline
+	// list-form condition body lowered here (it nets one Boolean).
+	switch {
+	case br.condFrag != nil:
+		if reason := lw.lowerFragment(br.condFrag, &br.condOut, br.pos); reason != "" {
+			return reason
+		}
+		// The Boolean is on the runtime stack but not in the parent
+		// scope's sim — JMP_IF_FALSE consumes it net-zero.
+		jf := lw.emit(OpJmpIfFalse, 0, br.pos)
+		return lw.lowerArms(ev, jf)
+	case br.cond.fromSeq >= 0:
 		if lw.variadic[br.cond.fromSeq] {
 			return "loop results as a condition (Stage 2)"
 		}
 		if len(lw.vm) == 0 || lw.vm[len(lw.vm)-1] != br.cond.fromSeq {
 			return "if: condition is not on top of the stack"
 		}
-	} else {
+		jf := lw.emit(OpJmpIfFalse, 0, br.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1] // cond consumed
+		return lw.lowerArms(ev, jf)
+	default:
 		lw.pushOperand(br.cond, br.pos)
+		jf := lw.emit(OpJmpIfFalse, 0, br.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1]
+		return lw.lowerArms(ev, jf)
 	}
-	jf := lw.emit(OpJmpIfFalse, 0, br.pos)
-	lw.vm = lw.vm[:len(lw.vm)-1] // cond consumed
-	if reason := lw.lowerFragment(br.then, br.thenOut, br.pos); reason != "" {
+}
+
+// lowerArms emits the then/else arms after the JMP_IF_FALSE at jf.
+// A diverging arm's terminator already jumped out of the construct,
+// so it needs no jump-to-end and contributes no value; the merge
+// point then carries only the surviving arm's value. The 2-arg form
+// (no else) merges with 0-or-1 values — a VARIADIC result.
+func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
+	br := &ev.br
+	thenOut := func() *emitOperand {
+		if br.hasThenOut {
+			return &br.thenOut
+		}
+		return nil
+	}()
+	if reason := lw.lowerFragment(br.then, thenOut, br.pos); reason != "" {
 		return reason
 	}
-	jend := lw.emit(OpJmp, 0, br.pos)
+	if !br.hasElse {
+		// 2-arg if: false path jumps straight to the merge.
+		lw.p.Code[jf].Arg = int32(len(lw.p.Code))
+		lw.vm = append(lw.vm, ev.seq)
+		lw.variadic[ev.seq] = true
+		lw.note()
+		return ""
+	}
+	jend := -1
+	if !fragDiverges(br.then) {
+		jend = lw.emit(OpJmp, 0, br.pos)
+	}
 	lw.p.Code[jf].Arg = int32(len(lw.p.Code))
-	if reason := lw.lowerFragment(br.els, br.elsOut, br.pos); reason != "" {
+	elsOut := func() *emitOperand {
+		if br.hasElsOut {
+			return &br.elsOut
+		}
+		return nil
+	}()
+	if reason := lw.lowerFragment(br.els, elsOut, br.pos); reason != "" {
 		return reason
 	}
-	lw.p.Code[jend].Arg = int32(len(lw.p.Code))
-	lw.vm = append(lw.vm, ev.seq)
-	lw.note()
+	if jend >= 0 {
+		lw.p.Code[jend].Arg = int32(len(lw.p.Code))
+	}
+	if br.hasThenOut || br.hasElsOut {
+		lw.vm = append(lw.vm, ev.seq)
+		lw.note()
+	}
 	return ""
 }
 

@@ -159,17 +159,56 @@ func TestEmitForLoopGolden(t *testing.T) {
 	if reason != "" {
 		t.Fatalf("for-loop unexpectedly uncompilable: %s", reason)
 	}
-	want := `0000 PUSH_CONST  k1   ; 3 (Integer)
-0001 FOR_SETUP   l0
-0002 FOR_NEXT    -> 0007
-0003 PUSH_LOCAL  l0
-0004 PUSH_CONST  k0   ; 10 (Integer)
-0005 CALL_NATIVE s0   ; add (Number, Number)
-0006 JMP         -> 0002
-; consts=2 sigs=1 max-stack=2 locals=1
+	// The count form lowers as the range [0, 3, 1]: FOR_SETUP pops
+	// start (top), end, step — the parseRange triple.
+	want := `0000 PUSH_CONST  k3   ; 1 (Integer)
+0001 PUSH_CONST  k2   ; 3 (Integer)
+0002 PUSH_CONST  k1   ; 0 (Integer)
+0003 FOR_SETUP   l0
+0004 FOR_NEXT    -> 0009
+0005 PUSH_LOCAL  l0
+0006 PUSH_CONST  k0   ; 10 (Integer)
+0007 CALL_NATIVE s0   ; add (Number, Number)
+0008 JMP         -> 0004
+; consts=4 sigs=1 max-stack=3 locals=1
 `
 	if got != want {
 		t.Errorf("for lowering changed:\n--- got\n%s--- want\n%s", got, want)
+	}
+}
+
+// Stage-2 completion shapes: range/negative-step loops, list-form
+// conditions, the 2-arg if, and break/continue all compile and any
+// downstream consumption of the variadic results refuses.
+func TestEmitStage2CompletionShapes(t *testing.T) {
+	for _, src := range []string{
+		`for [2,5] [i]`,
+		`for [5,0,-1] [i]`,
+		`if [1 lt 2] [10] [20]`,
+		`if (1 gt 0) [7]`,
+		`for 5 [if (i gt 2) [break] [i]]`,
+		`for 5 [if (i eq 2) [continue] [i]]`,
+		// A def-bound range is CONCRETE at check time (def evaluates
+		// its body) — statically known bounds compile.
+		`def r [1,3] for r [i]`,
+	} {
+		if got, reason := compile(t, src); got == "" {
+			t.Errorf("%q unexpectedly uncompilable: %s", src, reason)
+		}
+	}
+	// Negative: the 2-arg if's result is VARIADIC — consuming it must
+	// refuse (only the program residual may absorb it).
+	if got, _ := compile(t, `(if (1 gt 0) [7]) add 1`); got != "" {
+		t.Errorf("2-arg if result consumption compiled but must refuse:\n%s", got)
+	}
+	// Negative: break outside any loop refuses.
+	if got, _ := compile(t, `if (1 gt 0) [break] [1]`); got != "" {
+		t.Errorf("break outside a loop compiled but must refuse:\n%s", got)
+	}
+	// Negative: a range with a computed element refuses — its bounds
+	// are carriers at check time, not literals.
+	if got, _ := compile(t, `for [1, (1 add 2)] [i]`); got != "" {
+		t.Errorf("computed range compiled but must refuse:\n%s", got)
 	}
 }
 
@@ -193,18 +232,10 @@ func TestEmitRefusals(t *testing.T) {
 		src        string
 		wantReason string
 	}{
-		// List-form conditions are evaluated by mark/move at runtime;
-		// the checker never analyses them as a value, so there is no
-		// provenance to lower (Stage 2 follow-on).
-		{`if [1 lt 2] [1] [2]`, "condition of unknown provenance"},
-		// 2-arg if (no else) is not lowered yet.
-		{`if (1 gt 0) [1]`, "code-body word if"},
 		// A branch reading an enclosing computation breaks the closed-
 		// fragment rule (Stage 3, with locals).
 		{`def y (1 add 2) if (1 gt 0) [y mul 2] [0]`, "branch reads enclosing computation"},
 		{`def f fn [[n:Integer] [Integer] [n add 1]] f 1`, "user fn call f"},
-		// The range form needs start/end/step decomposition (follow-on).
-		{`for [1,3] [i]`, "code-body word for"},
 		{`do [1 add 2]`, "code-body word do"},
 	}
 	for _, c := range cases {

@@ -171,8 +171,20 @@ and nothing else — any other construct flags the program
 
 ## Stage 2 — VM core + control flow
 
-**Status: VM CORE + `if` + counted `for` LOWERING LANDED (June
-2026).** `if` (3-arg, value/paren conditions) lowers to
+**Status: COMPLETE for the v1 scope (June 2026).** Everything this
+stage names is lowered: `if` in all value-condition forms PLUS
+list-form conditions (the condition body is captured as its own
+fragment, emit-gated so plain checks are unchanged, and lowered
+inline before JMP_IF_FALSE) and the 2-arg form (a VARIADIC result —
+0 or 1 values — absorbed only by the program residual); counted AND
+range `for` (FOR_SETUP pops the parseRange start/end/step triple;
+literal ranges including negative steps; def-bound concrete ranges
+compile, computed elements refuse); and `break`/`continue` as
+fragment TERMINATORS — recorded as events, lowered to a JMP to the
+loop end (patched holes) or back to FOR_NEXT, with diverging branch
+arms contributing no value and skipping the merge jump
+("both branches diverge" refuses). Remaining beyond-v1 control
+flow (each/fold inlining, case, error) belongs to Stages 4–5. `if` (3-arg, value/paren conditions) lowers to
 JMP_IF_FALSE / JMP via fragment-scoped recording: the branch
 ReturnsFn arms a capture so each branch body's events record into an
 EmitFragment instead of suspending, and RecordBranch composes them
@@ -184,25 +196,9 @@ refuse (no checker provenance — follow-on); 2-arg `if` refuses.
 Conditions use the engine's CoerceBoolean truthiness. All jumps are
 forward and the VM enforces that, so the structural step bound
 still holds; the budget ships with the first back-edge (loops).
-Counted loops (`for n [body]`) lower to FOR_SETUP / FOR_NEXT with
-the iterator as a VM local (PUSH_LOCAL; AnalyseLoopBody registers
-the binding and captures the FINAL fixed-point round as the body
-fragment) and the body's trailing JMP as the program's only
-back-edge — the VM enforces that back-edges target FOR_NEXT, so
-termination rides the loop counter. Loop results are VARIADIC (one
-value per iteration accumulates, matching the interpreter); the
-emitter refuses downstream consumption and only the program residual
-absorbs them. Resource parity: the VM stack has the tape's
-bounded-growth ceiling (same TapeConfig arithmetic) and overflowing
-raises tape_exhausted. The pre-existing interpreter divergence discovered
-here — under a tiny ceiling the interpreter SILENTLY DROPPED a huge
-loop's results (exit 0, no output; the "ceiling-dropped splice"
-misdiagnosis genre pinned in TCO Stage 0) — is FIXED on this branch:
-the Run loop checks exhaustion before completion and a deferred
-truth-over-symptom rewrite prefers tape_exhausted whenever the tape
-latched, so both engines now share one loud taxonomy. Range-form `for`, bodies
-netting ≠1 value, and `break`/`continue` are follow-ons.
-Differential: 549 rows / 0 mismatches, floor 500. `eng/go/vm.go` executes the straight-line
+Differential: 568 rows / 0 mismatches, floor 550. The
+silent-drop interpreter divergence found during this stage is fixed
+(see the engine commit "ceiling-dropped tape edits err loudly"). `eng/go/vm.go` executes the straight-line
 instruction set (handler errors stamped with `Debug[pc]` + source; a
 belt-and-braces guard refuses tape-coupled handler results). CLI
 opt-in shipped: `aql run --compile` / `aql do --compile`

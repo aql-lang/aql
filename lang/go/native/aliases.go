@@ -15,6 +15,8 @@ import (
 
 // *Type aliases — every exported type from aqleng is re-exported here.
 type (
+	BranchRecord       = eng.BranchRecord
+	EmitFragment       = eng.EmitFragment
 	AqlError           = eng.AqlError
 	ArrayInstanceInfo  = eng.ArrayInstanceInfo
 	CalDurationData    = eng.CalDurationData

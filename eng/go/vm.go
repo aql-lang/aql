@@ -27,8 +27,8 @@ func RunProgram(p *Program, r *Registry) ([]Value, error) {
 	stack := make([]Value, 0, p.MaxStack)
 	locals := make([]Value, p.NumLocals)
 	type vmLoop struct {
-		limit, i int64
-		slot     int
+		cur, end, step int64
+		slot           int
 	}
 	var loops []vmLoop
 	for pc := 0; pc < len(p.Code); pc++ {
@@ -42,28 +42,39 @@ func RunProgram(p *Program, r *Registry) ([]Value, error) {
 		case OpPushLocal:
 			stack = append(stack, locals[in.Arg])
 		case OpForSetup:
-			if len(stack) < 1 {
+			if len(stack) < 3 {
 				return nil, vmInternalError(p, pc, "FOR_SETUP underflow")
 			}
-			cnt := stack[len(stack)-1]
-			stack = stack[:len(stack)-1]
-			n, err := cnt.AsConcreteInteger()
-			if err != nil {
-				return nil, stampProgramPos(r.AqlError("for_error", "for: count must be a concrete Integer", "for"), p, pc, r)
+			// Pops start (top), end, step — the same range triple
+			// parseRange yields; step semantics match runForLoop,
+			// including the zero-step error and negative steps.
+			start, err1 := stack[len(stack)-1].AsConcreteInteger()
+			endV, err2 := stack[len(stack)-2].AsConcreteInteger()
+			stepV, err3 := stack[len(stack)-3].AsConcreteInteger()
+			stack = stack[:len(stack)-3]
+			if err1 != nil || err2 != nil || err3 != nil {
+				return nil, stampProgramPos(r.AqlError("for_error", "for: range must be concrete Integers", "for"), p, pc, r)
 			}
-			loops = append(loops, vmLoop{limit: n, slot: int(in.Arg)})
+			if stepV == 0 {
+				return nil, stampProgramPos(r.AqlError("for_error", "for: step cannot be zero", "for"), p, pc, r)
+			}
+			loops = append(loops, vmLoop{cur: start, end: endV, step: stepV, slot: int(in.Arg)})
 		case OpForNext:
 			if len(loops) == 0 {
 				return nil, vmInternalError(p, pc, "FOR_NEXT without a loop")
 			}
 			lp := &loops[len(loops)-1]
-			if lp.i >= lp.limit {
+			done := lp.cur >= lp.end
+			if lp.step < 0 {
+				done = lp.cur <= lp.end
+			}
+			if done {
 				loops = loops[:len(loops)-1]
 				pc = int(in.Arg) - 1
 				continue
 			}
-			locals[lp.slot] = NewInteger(lp.i)
-			lp.i++
+			locals[lp.slot] = NewInteger(lp.cur)
+			lp.cur += lp.step
 		case OpSwap:
 			if len(stack) < 2 {
 				return nil, vmInternalError(p, pc, "SWAP underflow")
