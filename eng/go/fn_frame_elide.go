@@ -1,15 +1,14 @@
 package eng
 
-// Shell-variant tail-call elision (design/TCO-STAGED.0.md Stage 3).
+// Tail-call elimination for direct self-recursion
+// (design/TCO-STAGED.0.md Stages 3 and 4a).
 //
 // When a fn-body dispatch is a direct self-recursive tail call, the
 // enclosing frame's cleanup tail — already on the tape, already
-// scheduled to run after the callee returns — is executed NOW instead,
-// and its marker tokens are deleted. The callee then splices into the
-// emptied shell exactly as it would have nested. Nothing about the
-// callee's execution changes; the caller's teardown just runs before
-// it instead of after, which the gate proves the callee cannot
-// observe:
+// scheduled to run after the callee returns — is executed NOW instead.
+// Nothing about the callee's execution changes; the caller's teardown
+// just runs before it instead of after, which the gate proves the
+// callee cannot observe:
 //
 //   - the callee's args are already concrete values (auto-eval ran);
 //   - captures are construction-time snapshots, reinstalled per call;
@@ -18,16 +17,29 @@ package eng
 //   - the gate proved arg auto-evaluation touched no bindings, so
 //     teardown-now removes exactly what teardown-later would have.
 //
-// The frame's SHELL — its marked open paren, its ReturnCheck, and its
-// close paren — stays in place, so return checking and leftover-value
-// semantics are byte-identical to nesting. What the elision buys:
-// the three per-call stacks (Args, def snapshot, FnBaselines) stay
-// O(1) across any self-recursive tail chain, and the parked tail
-// markers (2 + 2·names tokens per call) stop accumulating. The shell
-// itself (paren pair + ReturnCheck) still accretes per call — full
-// frame replacement (Stage 4) removes that residue; until then the
-// tape-exhaustion guard still bounds a runaway, just several times
-// deeper.
+// Two tape treatments, chosen by frame-interior cleanliness:
+//
+// FULL REPLACEMENT (Stage 4a, the clean case — nothing parked below
+// the call): after the handler produces the callee's frame tokens,
+// the caller's ENTIRE frame region — open paren through close paren,
+// ReturnCheck included — is replaced by the callee's frame. Zero
+// residue: tape, paren depth, and all three per-call stacks are O(1)
+// across any self-recursive tail chain, so tail recursion is a real
+// iteration construct and a tail runaway is CPU-bound
+// (evaluation_limit), not memory-bound. Dropping the caller's
+// ReturnCheck is sound precisely because the callee is the SAME
+// compiled overload: its own ReturnCheck arrives with its frame and
+// enforces the identical declared returns.
+//
+// SHELL ELISION (Stage 3, the values-below case): inert values parked
+// below the call belong to the caller's result scope, so the frame's
+// shell — open paren, ReturnCheck, close paren — stays in place and
+// only the marker run is deleted; the callee splices into the shell at
+// the call region. Leftover-value and return semantics are
+// byte-identical to nesting; the shell still accretes per call, so
+// the tape-exhaustion guard bounds a values-below runaway as before
+// (such frames accrete real values and are not constant-space-able
+// anyway).
 
 // tcoEligible decides whether a detected tail call may be elided.
 // Everything here is deny-by-default on top of the probe's own
@@ -70,16 +82,13 @@ func (e *Engine) tcoEligible(scan frameTailScan, sig *Signature, defMutsBefore i
 	return true
 }
 
-// elideTailFrame executes the scanned frame tail eagerly — the same
-// operations the parked markers would have performed, via the same
-// helpers — then deletes the marker run from the tape. The frame's
-// ReturnCheck (when present) and close paren are deliberately kept;
-// the callee splices into the shell at the call region as usual.
-//
-// All tape edits here sit strictly AHEAD of the pointer (the marker
-// run lies beyond the call region), so the pointer, the matched arg
-// positions, and every index below them are untouched.
-func (e *Engine) elideTailFrame(scan frameTailScan) error {
+// teardownFrameState executes the scanned frame tail's REGISTRY
+// effects eagerly — the same operations the parked markers would have
+// performed, via the same helpers. Tape edits are the caller's
+// business: the shell variant deletes just the marker run, the full
+// replacement deletes the whole frame after the callee's tokens are
+// in hand.
+func (e *Engine) teardownFrameState(scan frameTailScan) error {
 	// __DC: truncate body-local defs to the frame's entry snapshot.
 	e.stepDefCleanup(e.tape.At(scan.TailStart))
 	// __pa: pop the per-call Args list and FnBaseline, paired.
@@ -91,6 +100,23 @@ func (e *Engine) elideTailFrame(scan frameTailScan) error {
 	// plain UninstallDef path.
 	for _, name := range scan.UndefNames {
 		UninstallDef(e.registry, name)
+	}
+	return nil
+}
+
+// elideTailFrame is the SHELL variant: run the frame tail's registry
+// effects eagerly, then delete the marker run from the tape. The
+// frame's ReturnCheck (when present) and close paren are deliberately
+// kept; the callee splices into the shell at the call region as usual.
+// Used for frames with inert values parked below the call — the shell
+// keeps them, so leftover-value semantics are identical to nesting.
+//
+// All tape edits here sit strictly AHEAD of the pointer (the marker
+// run lies beyond the call region), so the pointer, the matched arg
+// positions, and every index below them are untouched.
+func (e *Engine) elideTailFrame(scan frameTailScan) error {
+	if err := e.teardownFrameState(scan); err != nil {
+		return err
 	}
 	// Delete the executed markers; keep the ReturnCheck (when
 	// declared) and the frame's close paren — the shell.

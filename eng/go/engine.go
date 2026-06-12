@@ -2293,18 +2293,34 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// tail position of an enclosing fn frame is counted; when the
 	// eligibility gate passes (direct self-recursion, no binding
 	// mutations during arg auto-eval, plain teardown names, kill
-	// switch off) the enclosing frame's cleanup tail runs eagerly and
-	// its markers are deleted before the callee splices in — the
-	// shell-variant elision that keeps the per-call stacks O(1) across
-	// a tail chain. A declined call nests exactly as before.
+	// switch off) the enclosing frame's teardown runs eagerly, before
+	// the handler pushes the callee's per-call state — replacement by
+	// ordering. Clean frames (nothing parked below the call) then take
+	// FULL replacement: the callee's frame tokens replace the caller's
+	// entire frame region after the handler returns, keeping tape and
+	// stacks O(1) across the chain. Values-below frames take the shell
+	// variant (marker run deleted, shell kept). A declined call nests
+	// exactly as before — correctness never depends on firing.
+	var fullReplace *frameTailScan
 	if match.Sig.FnFrame != nil {
 		if scan, ok := e.probeTailCall(sortedIndices, n); ok {
 			e.registry.TCO.Detected++
 			if e.tcoEligible(scan, match.Sig, defMutsBefore) {
-				if err := e.elideTailFrame(scan); err != nil {
-					return err
+				if scan.ValuesBelow {
+					if err := e.elideTailFrame(scan); err != nil {
+						return err
+					}
+					e.registry.TCO.Elided++
+				} else {
+					// State teardown now; the frame-region splice
+					// happens below, once the handler has produced
+					// the replacement tokens. The handler edits no
+					// tape, so the scan's indices stay valid.
+					if err := e.teardownFrameState(scan); err != nil {
+						return err
+					}
+					fullReplace = &scan
 				}
-				e.registry.TCO.Elided++
 			}
 		}
 	}
@@ -2323,6 +2339,19 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// call/construction rather than the last textual occurrence of the name.
 	if e.pointer >= 0 && e.pointer < e.tape.Len() {
 		stampResultPos(results, e.tape.At(e.pointer).Pos)
+	}
+
+	// Full frame replacement: the callee's frame (the handler result,
+	// a complete `( body… tail )` carrying its own ReturnCheck)
+	// replaces the caller's entire frame region. The pointer lands on
+	// the new frame's open paren — the same re-step position a normal
+	// splice would give relative to the spliced tokens. Fn-body sigs
+	// never set ParkResult, so skipping that block is moot.
+	if fullReplace != nil {
+		e.tape.Splice(fullReplace.FrameOpen, fullReplace.CloseIdx+1-fullReplace.FrameOpen, results...)
+		e.pointer = fullReplace.FrameOpen
+		e.registry.TCO.Replaced++
+		return nil
 	}
 
 	if err := e.spliceMatchResults(match, sortedIndices, n, results); err != nil {
