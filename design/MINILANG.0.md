@@ -231,6 +231,35 @@ Free variables in `src` that are missing from `opts` (and, advisably,
 unused `opts` keys) are loud errors. With a compile hook (§11) the
 parse happens once, at expansion time.
 
+### No auto-import
+
+`aql:minilang` is **not** implicitly imported, even though the core
+`mini` word is useless without it. Deliberate, for four reasons:
+
+1. **Policy/capability discipline.** Module imports are policy-checked
+   (`modules.go::Resolve` consults the host policy; profiles
+   allow/deny per module id). An implicit import would acquire a
+   capability the program never stated — and every policy profile
+   would have to account for `aql:minilang` whether or not the
+   program uses `mini`.
+2. **The unbound-until-imported contract.** Every module's spec
+   battery pins a negative row of the form "`X.word` errors before
+   import". Auto-importing one module breaks the uniformity and
+   silently reserves the `MiniLang` namespace in every program.
+3. **It buys almost nothing.** A `mini` call without the import is a
+   loud expansion-time `mini_unknown_lang` whose hint names the one
+   missing line. Programs that don't use `mini` pay nothing either
+   way; user-registered kinds need their own defining module imported
+   regardless, so auto-import could never cover the general case.
+4. **Staging stays uniform.** Define-before-use already governs
+   macros (interpreter: left-to-right; future compiled mode: imports
+   are compile-time effects preceding expansion). `mini` kinds follow
+   the same rule with no special case.
+
+Conveniences that do *not* require auto-import: a REPL profile may
+preload the module (the REPL already binds things a script must
+import), and a project prelude can import it once.
+
 ---
 
 ## 6. Registering a minilang — native Go
@@ -382,12 +411,14 @@ MiniLang.register : [name:Atom/q  f:Function]  []
 - `f` — every signature must start `[String, Map, …]`; otherwise
   `[aql/mini_bad_signature]` with the expected prefix in the hint.
 - Effect: installs the function under `lang_<name>` in the `MiniLang`
-  export map **wrapped as a dispatching FnDef** — see F4: a raw
-  Function value placed in an export map does **not** forward-collect
-  args through dot access today; only wrapper-backed exports do.
-  `register` is a native word precisely so it can build that wrapper
-  (the same one §6's `AddMiniLang` builds). This is also why
-  registration is a word and not "set a key in a map".
+  export map. Since the F4 engine fix, a raw fn value in an export
+  map dispatches like any word (`lang/spec/fn-value.tsv`), so no
+  wrapper is *required* for dispatch; `register` is still a native
+  word because it owns the **contract** — standard-prefix signature
+  validation, kind-name validation, collision checks
+  (`mini_kind_exists`), and help/describe metadata. Registration
+  stays a word, not "set a key in a map", so those checks cannot be
+  bypassed.
 
 Scoping follows module-binding scope: kinds registered in a module
 body are visible wherever that module's import is; `undef`-style
@@ -444,12 +475,18 @@ Two facts gate / support this (verified):
 ## 10. Validated by prototype (2026-06-12)
 
 A pure-AQL prototype of the full rev 2 pipeline ran against the live
-engine (built from this branch): a `mini` macro that raw-captures
-`kind`/`src`/`opts`, builds the `lang_<kind>` word from the kind atom
-at expansion time, and splices `<word> <src> <opts> end`; with
-standard-signature kinds `lang_re` (filter — subject from stack,
-backed by `StringUtil.match` literal matching) and `lang_poly`
-(generator — inputs from `opts`).
+engine (built from this branch; source in Appendix B): a `mini` macro
+that raw-captures `kind`/`src`/`opts`, builds `lang_<kind>` from the
+kind atom at expansion time, and splices
+`MiniLang get lang_<kind> <src> <opts> end` — dispatching through a
+real `module [export "MiniLang" {…}] import` (post-F4-fix; earlier
+runs used flat `def lang_re …` stand-ins) — with standard-signature
+kinds `lang_re` (filter — subject from stack, backed by
+`StringUtil.match` literal matching) and `lang_poly` (generator —
+inputs from `opts`). One scoping fact the module form surfaces: the
+kind body runs in **module scope**, so its dependencies are imported
+inside the module body, not inherited from the caller (pinned in
+`fn-value.tsv` §3).
 
 Proven ✓: kind→word dispatch by name atom; subject-from-stack through
 the standard signature (swap form); opts values as literals,
@@ -476,28 +513,32 @@ Empirical findings the design must respect:
   (`'\d+'` → `d+`): regex sources need `'\\d+'` or an
   interpolation-free backtick string (backslash-raw, verified). The
   `re` family's docs and `mini_parse_error` hint must say so.
-- **F4 — raw `fn` values don't forward-dispatch as values (`afn`
-  lambdas do).** With `def m {f: (fn [[a:Integer][Integer][a add 1]])}`,
-  the call `m.f 5` leaves `fn (Integer)` and `5` as silent residue,
-  while the same shape with `([a:Integer] => [a add 1])` dispatches
-  to `6` — including through a real `module [export …]` import.
-  Mechanism: `m.f 5` is the token chain `m get f 5`; `get` returns
-  the raw value, which dispatches via `execFnDefLiteral`'s own-sig
-  path (`engine.go:3011`). `compileFnDef` (`engine.go:3605`)
-  barrier-resolves the authored sigs **but attaches a runnable
-  Handler only when `fnDef.Anonymous`** (`engine.go:3619`), so a
-  non-anonymous match falls through to the legacy pure-stack FnSig
-  path (`engine.go:~3110`), which never reads forward tokens — the
-  value stays as data and the operand pushes on top of it. The
-  residue is *unnamed*, so even the end-of-run `uncalled_function`
-  net (which flags named values, ERRORS.8 §5) stays silent. Named
-  defs avoid the path entirely (`stepWord` → the InstallFnDef
-  handler, barrier-resolved at registration), and native-module
-  words avoid it too (a foreign sub-registry FnDef is not a stable
-  own-sig handle — `engine.go:3040` — so the inner native is looked
-  up and its registration-resolved sigs dispatch; the
-  `BarrierPos: -1` wrapper rule). Both registration paths therefore
-  install wrappers; `MiniLang.register` is native for this reason.
+- **F4 — raw `fn` values didn't forward-dispatch as values — FIXED
+  (engine), pinned by `lang/spec/fn-value.tsv`.** As found: with
+  `def m {f: (fn [[a:Integer][Integer][a add 1]])}`, the call
+  `m.f 5` left `fn …` and `5` as silent residue (while an `afn`/`=>`
+  lambda dispatched), and a `module [export …]` fn export was inert.
+  Mechanism: `m.f 5` is the token chain `m get f 5`; the `get` result
+  dispatches via `execFnDefLiteral`, where (a) a matched handler-less
+  non-anonymous sig was sent to the legacy *pure-stack* FnSig path
+  even when the match included forward positions, and (b) an unnamed
+  FnDef carrying a foreign sub-registry (an anonymous fn in a module
+  export map) had nothing to name-look-up and went inert before
+  matching at all. The fix (engine.go::execFnDefLiteral): a matched
+  handler-less sig with forward positions now proceeds to the
+  existing `insertForward` parking branch (which re-processes the
+  value with all args on the stack, landing in the legacy stack path
+  that already dispatched correctly), and an unnamed foreign-registry
+  FnDef falls back to compiling its own authored sigs — its body
+  still runs in module scope via `fnDef.Registry`. Macro values stay
+  data (unchanged), bare/unmatched values stay data (unchanged,
+  pinned), and an outer import still does not leak into a module
+  body (pinned). Consequence for this design: a plain
+  `module [export "MiniLang" {lang_re: (fn …)}]` works directly —
+  the §B prototype runs the real `MiniLang get lang_<kind>` chain.
+  `MiniLang.register` remains a native word for the *contract*
+  (standard-prefix validation, collision checks, help metadata), no
+  longer out of dispatch necessity.
 - **F5 — check-mode macro gap.** `aql check` does not expand
   user-level macros (a `def m (macro …)` use reports
   `undefined_word`). Native splice integrates today (see §9); native
@@ -584,3 +625,56 @@ values arrive with compile hooks (Phase 3) or per-domain modules
 (e.g. a future full `aql:regexp` with a `compile → instance` API in
 the `Rand.with-seed` style). Rev 1's kind catalogue is retained as
 §5's standard library.
+
+---
+
+## Appendix B — the validated pure-AQL prototype
+
+The §10 prototype, verbatim as last run (green). This is *model*
+code: the real `mini` is native (`lang/go/native/native_macro.go`,
+beside the macro words) and the standard kinds are Go
+(`lang/go/modules/minilang.go`) — there is no AQL implementation of
+`mini` in the tree, and this appendix is its executable
+specification until the native lands.
+
+```
+# Pure-AQL prototype of the rev-2 minilang design (validated 2026-06-12).
+# Models the native mini exactly, except the F6 name-construction wart
+# (the canon strip below; native mini reads WordInfo.Name).
+
+"aql:string-util" import end
+
+# --- the MiniLang module: kinds carry the STANDARD signature
+#     [src:String opts:Map ...inputs] [...outputs], exported as lang_<name>.
+#     NB: kind bodies run in MODULE scope — import dependencies here.
+module [
+  "aql:string-util" import end
+  export "MiniLang" {
+    lang_re:   (fn [[src:String opts:Map subject:String] [Map]
+                   [ StringUtil.match src subject ]]),
+    lang_poly: (fn [[src:String opts:Map] [Integer]
+                   [ ((opts.x pow 2) add (3 mul opts.y)) ]])
+  }
+] import end
+
+# --- the mini macro: kind atom -> MiniLang.lang_<kind>, auto-`end`.
+def mini (macro [[kind src opts] [
+  def kn (StringUtil.replace ')' '' (StringUtil.replace 'word(' '' (canon kind))) end
+  def wn (convert Atom ("lang_" add kn)) end
+  quote [ MiniLang get unquote wn unquote src unquote opts end ]
+]]) end
+
+def r ("AbcD" mini re 'bc' {}) end
+print r.fst end                              # {m:'bc' i:1 e:3}
+print (mini poly 'x^2 + 3*y' {x:10, y:2}) end   # 106
+"cAaB" mini re 'Aa' {} "ZZ" end              # theft guard: ZZ untouched
+print (macroexpand (mini re 'bc' {})) end    # [MiniLang get lang_re "bc" {} end]
+```
+
+Differences from the real thing, all noted in the body: fixed
+3-arity (native `mini` has the 2-sig optional-`opts` surface and
+normalizes `{}`), the F6 canon strip for the kind name, if/registry
+dispatch done by the module export map directly (native adds the
+expansion-time `mini_unknown_lang` check with a call-site span), and
+`StringUtil.match` literal matching standing in for a real regexp
+backend.
