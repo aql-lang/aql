@@ -1,12 +1,41 @@
 # Checker accuracy review — findings and solutions
 
-**Status:** review — June 2026, against main @ `6fe4b96`. Code review
-of `eng/go/check.go` / `carrier.go` / the check-mode engine paths,
-plus **empirical probes against the built `aql check`** (each finding
-below quotes a reproducible probe). Companion to
-`CARRIER-STATIC-TYPECHECK-REPORT.10.md` (the design),
-`dynamic-modality-report.10.md` (the gradual-typing layer), and
-`aql-bytecode-plan.0.md` (which consumes checker accuracy — see §4).
+**Status:** review June 2026 against main @ `6fe4b96`; **follow-up
+implementation landed on this branch** — see "Status of findings"
+below for the per-finding outcome, including two corrections to the
+original analysis. Code review of `eng/go/check.go` / `carrier.go` /
+the check-mode engine paths, plus **empirical probes against the
+built `aql check`** (each finding below quotes a reproducible
+probe). Companion to `CARRIER-STATIC-TYPECHECK-REPORT.10.md` (the
+design), `dynamic-modality-report.10.md` (the gradual-typing layer),
+and `aql-bytecode-plan.0.md` (which consumes checker accuracy — see
+§4).
+
+## Status of findings (June 2026 follow-up)
+
+| Finding | Outcome |
+|---|---|
+| §5 harness | **LANDED** — `test/go/langspec/check_accuracy_test.go`, ratchet pinned at the 132 FP / 132 unflagged baseline. |
+| A1 disjunct dispatch | **FIXED** — `disjunctPartitionReturns` + all-alternatives `sigTypeMatches` rule + no-match rescue with `partial_dispatch`; `JoinCarriers` no longer collapses distant cousins (also fixed a latent one-level up-shift in `flattenAlternatives` and the single-alt collapse). |
+| A2 recursion | **CORRECTED then FIXED.** Correction: the original probe was invalid (`size` takes `[Any]`), and declared-returns assume-guarantee ALREADY existed at call sites (`core_helpers.go` uses `declaredReturns`); a declared fn's in-body misuse of the recursive result was already flagged. The genuine residue — Any bail-outs for UNCHECKED/anonymous fns and summaries cached under them — is fixed: `AnalyseFnBody` takes `declared`, uses it at the in-flight bail, and refines unchecked summaries (`InflightBails` + seeded re-analysis) before caching. |
+| A3 guard form | **FIXED** — check-mode paren evaluation attaches a `GuardFactInfo` payload (the group's original tokens) to a single-Boolean-carrier result; guard extraction reads it, so `(x is T)` narrows (and complement-narrows) exactly like `[x is T]`. |
+| A4 loop fixed point | **FIXED** — `eng.AnalyseLoopBody` (bounded Kleene, def-adds joined back, final-round diagnostics only) wired into `for`; `foldAccumFixedPoint` for fold/scan accumulators. |
+| A5 context | **DISPOSITIONED, partially stale finding.** `get`/`set` already round-trip recorded types with a dynamic(Any) fallback for unknown keys — better than the review assumed. The flat key namespace stands as the documented design: stores are CARRIERS at check time (`toCarrier` strips `StoreInstanceInfo`), so identity keying is unreachable until store values survive check mode or stores get typed declarations. Future work, not a quick fix. |
+| A6 ReturnsFn gaps | **STALE FINDING** — `window`/`pairs` already return typed list-of-list; `outer`/`inner` conservative-Any applies only to genuinely non-analysable bodies. No action. |
+| A7 numeric value-dependence | Already correct; no action. |
+| A8 macro/mini silence | **FIXED (modality)** — mini's unknown-namespace fallback now returns dynamic(Any) instead of poisoning strict Any; the documented no-diagnostic decision kept. |
+| A9 summary explosion | **FIXED** — `FnAnalysisQuota` (64 shapes/fn) with one info `analysis_truncated` diagnostic. |
+
+Note on the ratchet: it stayed at 132/132 through A1–A4 because those
+were wrong-TYPE bugs — spec rows pin runtime VALUES, which don't
+observe the checked type. The §5 follow-on (assert
+`typeof(actual) ⊑ checked` per value row) is what would have caught
+A1/A4 mechanically and remains the next harness improvement. The
+remaining 132 false positives cluster in: `/r` refs through map
+fields (path-modifier), `make Entity` field access (resource),
+`word`-splice dynamic token injection, `unpack`, and user-type `tor`
+params vs carriers (user-types) — each a candidate for its own
+follow-up.
 
 **Bottom line:** the checker's architecture is considerably stronger
 than its design report's "limitations" section suggests — dynamic
