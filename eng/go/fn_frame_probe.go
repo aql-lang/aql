@@ -28,12 +28,16 @@ package eng
 // accepted ahead must equal the open parens passed below, or the scan
 // is looking at a shape it doesn't understand and declines.
 
-// TCOState is the registry's tail-call-optimisation surface.
+// TCOState is the registry's tail-call-elimination surface.
 type TCOState struct {
-	// Disable is the kill switch consulted by the optimisation stages
-	// before acting on a detected tail call (default off = TCO active
-	// once those stages land). The detection probe itself ignores it,
-	// so Detected stays meaningful either way.
+	// Disable turns frame elision/replacement off. DIAGNOSTIC ONLY
+	// since Stage 6: tail-call elimination is a documented language
+	// guarantee (REFERENCE.md "Recursion and tail calls"), so running
+	// with Disable set changes the resource semantics programs are
+	// entitled to rely on — deep tail chains will exhaust the tape.
+	// Use it to bisect a suspected elision bug, never in production.
+	// The detection probe ignores it, so Detected stays meaningful
+	// either way.
 	Disable bool
 	// Detected counts fn-body dispatches found in tail position since
 	// the registry was built. Detection-only telemetry: cheap,

@@ -38,7 +38,7 @@ import "fmt"
 // the tape without bound — latches `exhausted`; the engine detects that
 // and fails loudly with a tape_exhausted error rather than allocating
 // without limit. Crossing 90/95/99% of the ceiling emits a one-time
-// warning. The defaults (N=7, M=2.7) and the initial size are
+// warning. The defaults (N=6, M=2.7) and the initial size are
 // configurable via TapeConfig / lang.Options.
 type Tape struct {
 	buf      []Value
@@ -55,12 +55,18 @@ type Tape struct {
 
 // Bounded-growth defaults.
 const (
-	DefaultTapeMaxGrows     = 7   // N: maximum reallocations
+	DefaultTapeMaxGrows     = 6   // N: maximum reallocations
 	DefaultTapeGrowthFactor = 2.7 // M: per-grow size multiplier
 	// DefaultTapeInitialFloor is the minimum initial capacity (entries)
 	// when the caller does not pin one: small programs still get enough
-	// headroom that the growth ceiling (floor·Mᴺ ≈ floor·1046) comfortably
-	// covers deep-but-real recursion while bounding a runaway's memory.
+	// headroom that the growth ceiling (floor·Mᴺ ≈ floor·387, ~397k
+	// entries ≈ 64MB of 160-byte Values) comfortably covers deep-but-
+	// real NON-tail recursion (~13 parked tokens per level ⇒ ~30k
+	// depth) while bounding a runaway's memory. Tail recursion needs
+	// no headroom at all under tail-call elimination
+	// (design/TCO-STAGED.0.md Stage 6); that guarantee is what brought
+	// the ceiling down from N=7 (~1.07M entries, ~171MB), whose extra
+	// range existed for deep tail chains that now run in O(1).
 	DefaultTapeInitialFloor = 1024
 	// maxIntCap clamps the computed ceiling so an absurd factor/N cannot
 	// overflow int. ~268M entries is far past any real need and a hard stop.

@@ -1215,6 +1215,64 @@ The newtype-vs-subset distinction and its cross-language rationale are
 explained in **[Explanation: Function signatures](EXPLANATION.md#function-signatures-and-refinement-types)**
 and pinned in `design/REFINE-NEWTYPE-VS-SUBSET.10.md`.
 
+#### Recursion and tail calls
+
+Functions recurse freely — a body's reference to its own (or a
+not-yet-defined) name resolves at call time, so the standard idioms
+need no forward declarations:
+
+```
+def fact fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fact (n sub 1))]]]
+fact 10                                            # returns 3628800
+```
+
+**Tail-call elimination is guaranteed.** A call in **tail position**
+— the last thing a body does, with nothing of the caller's frame
+pending — replaces the caller's frame instead of stacking a new one.
+Tail recursion is therefore a real iteration construct: constant
+space at any depth, exactly like `for`. Write the accumulator idiom
+without a depth budget in mind:
+
+```
+def sum fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [sum (n sub 1) (acc add n)]]]
+sum 10000 0                                        # returns 50005000 — constant space at any depth
+```
+
+The guarantee covers a tail call from fn `f` to fn `g` — self-recursion
+(`f` = `g`) and mutual recursion alike — when all of:
+
+* **Nothing pends below the call.** A call whose result feeds a
+  waiting word is not a tail call: in `n add (f (n sub 1))` the parked
+  `add` still consumes the frame's result, so the frames nest (that
+  shape is linear-space by nature).
+* **`g` re-binds every name `f`'s frame holds.** Parameters and
+  captures cover themselves in self-recursion, and in mutual recursion
+  between fns with the same parameter names. A body-local `def` that
+  survives to the call keeps the frame alive instead (an enclosing
+  frame's bindings stay visible to callees until the frame exits —
+  the locally-defined-recursive-fn idiom `def go fn […] go 3` depends
+  on exactly that, so such frames must nest).
+* **Returns conform.** `g`'s declared returns equal `f`'s, or refine
+  them position-wise (trivially true for self-recursion) — or `f`
+  declares none.
+* **Neither fn is generic.**
+
+A tail call outside these conditions nests as an ordinary call —
+results are always identical either way; only the resource profile
+differs.
+
+**Runaway taxonomy.** The two non-terminating shapes fail on the
+resource they actually consume: an infinite *tail* loop is pure CPU
+and trips the step budget (`[aql/evaluation_limit]`); unbounded
+*non-tail* recursion grows the evaluation tape and trips its ceiling
+(`[aql/tape_exhausted]`). Non-tail recursion is linear time and
+linear space in the depth — fine to four-to-five-digit depths under
+the default tape ceiling, but prefer a tail accumulator (or `for`)
+when the depth is unbounded.
+
+Module functions participate fully: a call into a module crosses the
+module boundary once, and recursion inside it is eliminated as above.
+
 ### Macros
 
 A **macro** is `fn`'s expand-time sibling: a transformer the engine runs on

@@ -1,9 +1,19 @@
 # Tail-Call Optimisation for the AQL Tape Machine
 
-**Status:** Discovery note — design only, **deferred** (maintainer
-decision, after the dispatch path was traced and found materially more
-invasive than the first draft of this note assumed; see "Implementation
-reality" below). Follows `RECURSION-PERFORMANCE.10.md` (which made
+**Status:** **IMPLEMENTED** (June 2026) — via the staged plan in
+`TCO-STAGED.0.md`, which re-reviewed this note, corrected three points
+in it (the hook landed in `execMatch` before the handler rather than
+restructuring `buildFnBodyHandler`; the keep-caller's-`__RC` rule
+became the shell variant with full replacement keeping the callee's;
+the tail probe gained a mandatory frame-interior backward scan plus a
+name-coverage condition this note's safety argument missed — dynamic
+reads of the torn frame's bindings), and shipped tail-call elimination
+as a documented language guarantee. The analysis below is the
+original deferred design, kept as written; the earlier status was:
+discovery note — design only, **deferred** (maintainer decision, after
+the dispatch path was traced and found materially more invasive than
+the first draft of this note assumed; see "Implementation reality"
+below). Follows `RECURSION-PERFORMANCE.10.md` (which made
 recursion linear-time via the gap-buffer tape) and
 `TAPE-DATA-STRUCTURE.10.md`. TCO is the remaining step that would make
 tail recursion **constant-space**, equivalent to iteration. The

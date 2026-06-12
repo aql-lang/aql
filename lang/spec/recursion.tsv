@@ -18,10 +18,13 @@ def s fn [[n:Integer] [Integer] [if (n lte 0) [0] [n add (s (n sub 1))]]] s 500	
 def inc fn [[n:Integer] [Integer] [n add 1]] 5 add (inc 1)	7	minimal pending-forward-below shape: add must consume the frame result
 def g fn [[n:Integer] [Integer] [n add 1]] def x (g 41) x	42	def parked below a call consumes the frame result and binds AFTER frame teardown
 #
-# §2  self-recursion, tail position — the accumulator idiom TCO targets;
-#     results must be identical with TCO on or off
+# §2  self-recursion, tail position — the accumulator idiom; covered by
+#     the tail-call elimination guarantee (REFERENCE.md "Recursion and
+#     tail calls"), so depth is bounded by CPU, not space. Results must
+#     be identical with elimination on or off
 def s2 fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [s2 (n sub 1) (acc add n)]]] s2 10 0	55	tail self-recursion (accumulator idiom)
 def s2 fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [s2 (n sub 1) (acc add n)]]] s2 500 0	125250	deeper tail self-recursion
+def s2 fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [s2 (n sub 1) (acc add n)]]] s2 5000 0	12502500	guarantee witness: depth past any per-frame budget (the resource proofs at depth 10000+ under tiny tape ceilings live in the Go pins)
 #
 # §3  mutual recursion — tail calls whose callee differs from the caller
 def isod fn [[n:Integer] [Boolean] [if (n eq 0) [false] [isev (n sub 1)]]] def isev fn [[n:Integer] [Boolean] [if (n eq 0) [true] [isod (n sub 1)]]] isev 10	true	mutual tail recursion, even probe

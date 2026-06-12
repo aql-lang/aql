@@ -1,12 +1,20 @@
 # TCO, staged — a safety-first implementation path
 
-**Status:** Stages 0–4b **IMPLEMENTED** (June 2026; one commit per
-stage on this branch — see the implementation record below). Self AND
-mutual fn→fn tail calls now run in **O(1) tape and per-call stacks**
-(full replacement under the return-conformance + name-coverage gates;
-shell elision otherwise). The CallAQL trampoline (5) and the
-documented-guarantee step (6) remain open; the Stage-5 trace findings
-are recorded below. Companion to `TCO.10.md`
+**Status:** **ALL STAGES IMPLEMENTED** (June 2026; one commit per
+stage on this branch — see the implementation record below).
+Tail-call elimination is now a **documented language guarantee**
+(REFERENCE.md "Recursion and tail calls", EXPLANATION.md "Tail calls
+and the tape"): self and mutual fn→fn tail calls run in O(1) tape and
+per-call stacks under the conditions stated there, the runaway
+taxonomy is honest (tail → `evaluation_limit`, non-tail →
+`tape_exhausted`), the default tape ceiling was tightened
+(`DefaultTapeMaxGrows` 7→6, ~171MB→~64MB worst case — the extra range
+existed for deep tail chains that now run in O(1)), and
+`Registry.TCO.Disable` is demoted to a diagnostic (turning it off now
+breaks the documented resource semantics). Residual non-guarantee
+items (the same-registry CallAQL value branch, an `execFnDefSig`
+probe hook, native-module config propagation) are recorded under the
+Stage-5 findings. Companion to `TCO.10.md`
 (the deferred frame-replacement design): this note re-reviews that
 design against the traced code, corrects three points in it, and breaks
 the work into independently shippable stages, each gated so that a slip
@@ -86,6 +94,20 @@ What landed, one commit per stage:
   declines under this gate even for self-recursion (its body-local is
   not a callee param); lifting that needs a defs-before-reads body
   analysis — a candidate follow-up, not a blocker.
+
+- **Stage 6** — the guarantee, on maintainer instruction.
+  REFERENCE.md gained "Recursion and tail calls" (the precise
+  conditions, the runaway taxonomy, an executed accumulator example);
+  EXPLANATION.md gained "Tail calls and the tape" (the
+  tape-as-continuation mechanism and WHY dynamic name resolution
+  shapes the conditions — the locally-defined-recursive-fn example is
+  executed by the doc harness). The default ceiling came down
+  (`DefaultTapeMaxGrows` 7→6: floor·387 ≈ 397k entries ≈ 64MB, still
+  ~30k-deep non-tail headroom); `TCO.Disable` is documented as
+  diagnostic-only — past this point turning it off is a semantics
+  break, exactly as this plan predicted; recursion.tsv carries a
+  depth-5000 guarantee-witness row (the real resource proofs stay in
+  the Go pins, which run at depth 10000+ under 1024-entry ceilings).
 
 Findings for the remaining stages:
 
