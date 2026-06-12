@@ -63,6 +63,17 @@ type TensorData struct {
 	Data  []float64
 }
 
+// DeepClone satisfies eng.DeepCloner so the universal `clone` word
+// produces an independent tensor: the Shape and Data slices are copied
+// rather than shared, so mutating the clone cannot touch the original.
+func (t TensorData) DeepClone() any {
+	shape := make([]int, len(t.Shape))
+	copy(shape, t.Shape)
+	data := make([]float64, len(t.Data))
+	copy(data, t.Data)
+	return TensorData{Shape: shape, Data: data}
+}
+
 // Rank reports the number of dimensions.
 func (t TensorData) Rank() int { return len(t.Shape) }
 

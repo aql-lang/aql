@@ -379,6 +379,7 @@ var (
 	RunCarrierBodyWithDefs    = eng.RunCarrierBodyWithDefs
 	InstallJoinedDefs         = eng.InstallJoinedDefs
 	New                       = eng.New
+	CloneValue                = eng.CloneValue
 	NewSyncWriter             = eng.NewSyncWriter
 	NewArray                  = eng.NewArray
 	NewArrayEmpty             = eng.NewArrayEmpty
