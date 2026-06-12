@@ -41,6 +41,12 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
 	modReg.BaseFile = parent.BaseFile
+	// The TCO kill switch must follow module code: intra-module tail
+	// recursion runs on THIS registry (module fns are InstallFnDef'd
+	// here and dispatch via execMatch inside CallAQL's sub-engine), so
+	// a host that disables elision on the parent expects module frames
+	// to nest too. Counters stay per-registry.
+	modReg.TCO.Disable = parent.TCO.Disable
 	// The module's own source text, for error excerpts from fns that
 	// run later via CallAQL on this sub-registry (file imports set it
 	// to the module file; inline modules inherit the entry source).

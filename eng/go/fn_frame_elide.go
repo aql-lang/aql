@@ -102,6 +102,16 @@ func (e *Engine) tcoEligible(scan frameTailScan, sig *Signature, defMutsBefore i
 	if err != nil {
 		return false
 	}
+	// The frame's per-call state must live on THIS engine's registry:
+	// teardown pops e.registry's Args/baseline and undefs against its
+	// def table. A frame spliced by a handler closed over a FOREIGN
+	// registry (a compiled fn value carrying a module sub-registry —
+	// see compileFnDef's foreign-value path) keeps its state there;
+	// decline rather than pop the wrong stacks. The DefCleanup marker
+	// carries the frame's registry, so the check is one comparison.
+	if dcInfo.Registry != e.registry {
+		return false
+	}
 	if !e.registry.Defs.TruncationCoveredBy(dcInfo.Snapshot, covered) {
 		return false
 	}

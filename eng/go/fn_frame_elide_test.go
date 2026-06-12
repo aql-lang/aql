@@ -185,6 +185,24 @@ func TestTCOEligibleNameCoverage(t *testing.T) {
 	}
 }
 
+func TestTCOEligibleDeclinesForeignRegistryFrames(t *testing.T) {
+	// A frame whose DefCleanup carries a DIFFERENT registry than the
+	// executing engine's (a handler closed over a module sub-registry
+	// splicing onto this tape) must decline: the eager teardown pops
+	// e.registry's per-call stacks, which such a frame never pushed.
+	f := newProbeFixture(t)
+	e := NewTop(f.r)
+	foreign, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.tape = NewTape([]Value{NewDefCleanup(DefCleanupInfo{Snapshot: foreign.Defs.Snapshot(), Registry: foreign})}, 4)
+	scan := frameTailScan{Meta: f.meta, TailStart: 0}
+	if e.tcoEligible(scan, &Signature{FnFrame: f.meta}, f.r.Defs.Mutations()) {
+		t.Error("a foreign-registry frame must decline")
+	}
+}
+
 func TestReturnsConform(t *testing.T) {
 	f := newProbeFixture(t)
 	e := NewTop(f.r)

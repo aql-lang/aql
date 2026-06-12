@@ -89,28 +89,45 @@ What landed, one commit per stage:
 
 Findings for the remaining stages:
 
-- **Stage 5 trace (recorded, not yet implemented).** `Registry.CallAQL`
-  builds the body tokens (the same shape as the splice paths, Go-side
-  cleanup instead of tail markers) and runs them in a **fresh
-  sub-engine per call** on the captured registry — so module-fn
-  recursion is Go-stack recursion, one sub-engine and one CallAQL Go
-  frame per level, invisible to the tape machinery. Two candidate
-  shapes:
-  (a) a true trampoline inside CallAQL — detect the body's tail
-  self-call and loop within one invocation; contained, but needs its
-  own detection machinery since the sub-engine's tape ends where the
-  body ends;
-  (b) unify the `capturedReg == e.registry` case in `execFnDefSig`
-  onto the SPLICE path — when module code is already executing in the
-  module's registry (every intra-module call, including all module-fn
-  recursion), splice the body as an ordinary frame instead of
-  recursing into CallAQL. Stages 1–4b then apply unchanged, and TCO
-  falls out for free. Sharper but semantically delicate: a sub-Run is
-  also a drain boundary (orphaned-forward resolution, auto-eval of
-  leftovers) and a flow-control boundary, so equivalence needs the
-  module spec suites plus targeted rows around bodies that END with
-  pending forwards. Trace before choosing; (b) is the better
-  destination if the boundary semantics hold.
+- **Stage 5 — traced again, and the first trace was WRONG.** The
+  earlier record claimed module-fn recursion is Go-stack recursion,
+  one sub-engine per level. That conclusion came from a CLI probe run
+  against a **stale binary** built before Stages 3–4 — a confound
+  worth recording as a lesson (rebuild before measuring). The
+  corrected trace, verified by instrumentation and pinned by tests
+  (`lang/go/test/tco_module_test.go`, recursion.tsv §11):
+  module-preamble fns are `InstallFnDef`'d **in the module registry**,
+  so intra-module calls — including all module-fn self/mutual
+  recursion — dispatch by NAME through `execMatch` inside `CallAQL`'s
+  sub-engine, and **Stages 1–4b already apply**: one CallAQL boundary
+  crossing per entry, the first in-body call declined (the CallAQL
+  body is unwrapped — no enclosing frame), every further call
+  replaced. Depth 100000 runs in O(1) tape through the module
+  boundary; counters live on the module registry (per import
+  universe). What option (b) was for had, in effect, already been
+  built. Shipped for Stage 5 instead:
+  - `RunModuleBody` now propagates `TCO.Disable` to module registries
+    (a host's kill switch must follow module code); counters stay
+    per-registry.
+  - `tcoEligible` declines frames whose DefCleanup carries a foreign
+    registry — a handler compiled over a module sub-registry splicing
+    onto another engine's tape must never have e.registry's stacks
+    popped on its behalf (hardening motivated by the F4 fn-value
+    dispatch fix, which compiles foreign-registry values).
+  Residual, separately gateable, deliberately not rushed:
+  - `execFnDefSig`'s CallAQL branch when `capturedReg == e.registry`
+    (a module-fn VALUE applied inside its own module — callbacks
+    passed back in): one sub-engine per call today. Routing it onto
+    the splice branch is a small flip, but it moves the drain/flow
+    boundary for that class; needs its own boundary rows first.
+  - The `execFnDefSig` splice path has no TCO hook: value-dispatched
+    tail recursion (rare) splices frames but never elides. Symmetric
+    hook is mechanical once wanted.
+  - Go-built native-module sub-registries (modules/*.go) are created
+    at resolver time without a parent; Disable does not reach them.
+    Same for `TapeConfig` — a pre-existing propagation gap worth its
+    own decision (a host's resource bounds do not follow module
+    sub-engines).
 - The "initial call into a locally-defined fn" shape (`def go fn […]
   go 3`) is detected but correctly declined by the name-coverage gate
   (the teardown would remove the binding of `go` itself). It can never
