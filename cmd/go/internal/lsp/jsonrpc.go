@@ -99,6 +99,12 @@ func (c *conn) readMessage() ([]byte, error) {
 	if contentLength < 0 {
 		return nil, fmt.Errorf("missing Content-Length header")
 	}
+	// Cap the declared length so a hostile or buggy client cannot make us
+	// allocate an unbounded buffer (a single header claiming gigabytes
+	// would OOM the process). LSP messages are small; the cap is generous.
+	if contentLength > maxMessageBytes {
+		return nil, fmt.Errorf("Content-Length %d exceeds limit %d", contentLength, maxMessageBytes)
+	}
 
 	buf := make([]byte, contentLength)
 	if _, err := io.ReadFull(c.br, buf); err != nil {
@@ -106,6 +112,11 @@ func (c *conn) readMessage() ([]byte, error) {
 	}
 	return buf, nil
 }
+
+// maxMessageBytes bounds a single LSP message body. 64 MiB is far larger
+// than any real editor request yet small enough that an absurd
+// Content-Length is rejected instead of allocated.
+const maxMessageBytes = 64 << 20
 
 // writeMessage frames payload with the LSP base protocol header and
 // writes it. Safe to call from multiple goroutines.

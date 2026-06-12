@@ -109,6 +109,24 @@ func (numberCompareBehavior) Compare(a, b Value) (int, error) {
 		}
 		return 0, ErrNoComparer
 	}
+	// Two int64-backed Integers compare EXACTLY as int64. Projecting them
+	// through float64 (the cross-leaf path below) silently rounds any
+	// magnitude above 2^53, which collapses distinct integers to "equal"
+	// and breaks the sort order. Only the Integer/Integer case is exact in
+	// int64; a Float on either side keeps the float projection, where the
+	// float is already the honest representation of that operand.
+	if a.Parent.ConformsTo(TInteger) && b.Parent.ConformsTo(TInteger) {
+		ai, _ := AsInteger(a)
+		bi, _ := AsInteger(b)
+		switch {
+		case ai < bi:
+			return -1, nil
+		case ai > bi:
+			return 1, nil
+		default:
+			return 0, nil
+		}
+	}
 	af, _ := AsNumber(a)
 	bf, _ := AsNumber(b)
 	// IEEE-754 has no native order for NaN, but `cmp`/`tcmp`/`sort` need a

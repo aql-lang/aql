@@ -30,11 +30,9 @@ var TKeyVal = registerKeyValType()
 func registerKeyValType() *eng.Type {
 	t, err := eng.Builtin.RegisterExternalBuiltin("Node/Map/KeyVal", 5002, nil)
 	if err != nil {
-		// lint:allow-panic — init-time builtin registration with a hardcoded
-		// path and FixedID; a failure is a build-time programmer error
-		// (collision or malformed path), not a runtime condition. See
-		// CLAUDE.md "Panic Prevention".
-		panic(fmt.Sprintf("native_keyval: register Node/Map/KeyVal: %v", err))
+		// Init-time registration error — recorded, not panicked.
+		// See ADR-005 and typeinit.go.
+		recordTypeInitErr(fmt.Errorf("native_keyval: register Node/Map/KeyVal: %w", err))
 	}
 	return t
 }

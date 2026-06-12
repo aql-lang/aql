@@ -1,0 +1,214 @@
+package eng
+
+// Universal deep clone.
+//
+// CloneValue returns a deep, independent copy of any Value. The rule is
+// payload-driven: every kernel payload variant (see payload.go) is
+// classified as either MUTABLE — a container whose contents can change
+// after construction, which must be duplicated so the clone and the
+// original cannot alias — or IMMUTABLE — a scalar, time, type body,
+// function, or engine marker that is safe to share because nothing can
+// mutate it in place.
+//
+//   - Mutable, deep-copied: List, Map, FlexList, Array, Store, Object
+//     instance, Table, and an Error's raise-payload map. Pointer-backed
+//     graphs (Store/Array/FlexList/Object via their prototype or element
+//     links) are cloned cycle-safely — a self-referential or shared node
+//     is reproduced with the SAME sharing, never expanded infinitely.
+//   - Immutable, shared: Integer/Float/Big*/String/Boolean/Atom/Path/
+//     None, the Time family, every type body / descriptor, functions
+//     (FnDef/FnUndef), and control markers. Sharing them is correct
+//     because AQL never mutates them in place.
+//   - ExtensionPayload (host types): cloned via the optional DeepCloner
+//     capability if the body implements it; otherwise shared.
+//
+// The clone preserves the original's Parent type, so a refine subtype, a
+// typed list/map, or an object type survives the copy. Container clones
+// receive a fresh ID (they are independent values), matching the kernel
+// constructors. CloneValue never panics (ADR-005).
+
+// DeepCloner is the optional capability a host type stored in an
+// ExtensionPayload implements to take part in deep cloning. DeepClone
+// must return a fully independent copy of the body. Bodies that do not
+// implement it are shared by the clone — safe for immutable host types,
+// and the explicit, documented fallback for the kernel's opaque escape
+// hatch.
+type DeepCloner interface {
+	DeepClone() any
+}
+
+// CloneValue returns a deep, independent copy of v. See the file comment
+// for the per-payload contract.
+func CloneValue(v Value) Value {
+	c := cloner{seen: make(map[any]any)}
+	return c.clone(v)
+}
+
+// cloner carries the identity map that makes pointer-backed graphs
+// clone cycle-safely: each original pointer payload maps to its single
+// clone, so shared substructure stays shared and cycles terminate.
+type cloner struct {
+	seen map[any]any
+}
+
+// withPayload returns a copy of v carrying a new payload and a fresh ID,
+// preserving Parent/Quoted/Eval/Pos/Carrier. Used for the mutable
+// containers, whose clone is a distinct value from the original.
+func (c *cloner) withPayload(v Value, data Payload) Value {
+	v.Data = data
+	v.ID = GenerateID(IDPrefixForType(v.Parent))
+	return v
+}
+
+func (c *cloner) clone(v Value) Value {
+	switch p := v.Data.(type) {
+	case nil:
+		// Type literal / bare lattice node — no payload to copy.
+		return v
+
+	case ListPayload:
+		return c.withPayload(v, ListPayload{Elems: c.cloneSlice(p.Elems)})
+
+	case MapPayload:
+		return c.withPayload(v, MapPayload{M: c.cloneOrderedMap(p.M)})
+
+	case *FlexListData:
+		if cp, ok := c.seen[p]; ok {
+			return c.withPayload(v, cp.(*FlexListData))
+		}
+		nd := &FlexListData{}
+		c.seen[p] = nd
+		nd.Elems = c.cloneSlice(p.Elems)
+		return c.withPayload(v, nd)
+
+	case *ArrayInstanceInfo:
+		if cp, ok := c.seen[p]; ok {
+			return c.withPayload(v, cp.(*ArrayInstanceInfo))
+		}
+		nd := &ArrayInstanceInfo{}
+		c.seen[p] = nd
+		nd.Elems = c.cloneSlice(p.Elems)
+		return c.withPayload(v, nd)
+
+	case *StoreInstanceInfo:
+		return c.withPayload(v, c.cloneStore(p))
+
+	case ObjectInstanceInfo:
+		return c.withPayload(v, c.cloneObject(p))
+
+	case TableData:
+		nd := p                        // copy the value struct (Record/flags/name)
+		nd.Rows = c.cloneSlice(p.Rows) // duplicate the row values
+		return c.withPayload(v, nd)
+
+	case ErrorInfo:
+		nd := p // Message/Code are immutable strings
+		if p.Data != nil {
+			nd.Data = c.cloneOrderedMap(p.Data)
+		}
+		return c.withPayload(v, nd)
+
+	case ExtensionPayload:
+		if dc, ok := p.Body.(DeepCloner); ok {
+			return c.withPayload(v, ExtensionPayload{Body: dc.DeepClone()})
+		}
+		// Opaque host body with no DeepCloner — share it (immutable by
+		// contract, or the host opted out of deep cloning).
+		return v
+
+	default:
+		// Immutable payload (scalars, time family, type bodies,
+		// functions, markers) — sharing is correct; nothing mutates it.
+		return v
+	}
+}
+
+// cloneSlice deep-clones each element of a []Value into a fresh slice.
+func (c *cloner) cloneSlice(src []Value) []Value {
+	if src == nil {
+		return nil
+	}
+	out := make([]Value, len(src))
+	for i, e := range src {
+		out[i] = c.clone(e)
+	}
+	return out
+}
+
+// cloneOrderedMap deep-clones an *OrderedMap, preserving key order and
+// cloning each value. Pointer identity is tracked so a map shared by two
+// branches of the graph (or a cycle through a map) clones once.
+func (c *cloner) cloneOrderedMap(m *OrderedMap) *OrderedMap {
+	if m == nil {
+		return nil
+	}
+	if cp, ok := c.seen[m]; ok {
+		return cp.(*OrderedMap)
+	}
+	out := NewOrderedMap()
+	out.Implicit = m.Implicit
+	c.seen[m] = out
+	for _, k := range m.Keys() {
+		mv, _ := m.Get(k)
+		out.Set(k, c.clone(mv))
+	}
+	if m.Meta != nil {
+		out.Meta = make(map[string]any, len(m.Meta))
+		for k, mv := range m.Meta {
+			out.Meta[k] = mv
+		}
+	}
+	return out
+}
+
+// cloneStore deep-clones a *StoreInstanceInfo. The own Data layer is
+// duplicated and its values cloned; the prototype chain is cloned too
+// (cycle-guarded) so the copy inherits the same scope structure without
+// aliasing it. The clone is detached — Parent/ParentKey reset — so it is
+// a fresh root until re-inserted into a container, exactly like a store
+// from `make Store`.
+func (c *cloner) cloneStore(s *StoreInstanceInfo) *StoreInstanceInfo {
+	if s == nil {
+		return nil
+	}
+	if cp, ok := c.seen[s]; ok {
+		return cp.(*StoreInstanceInfo)
+	}
+	out := &StoreInstanceInfo{TypeName: s.TypeName}
+	c.seen[s] = out
+	if s.Data != nil {
+		out.Data = make(map[string]Value, len(s.Data))
+		for k, mv := range s.Data {
+			cv := c.clone(mv)
+			out.Data[k] = cv
+			// Re-establish the COW back-link for nested stores so the
+			// clone's own propagation stays internally consistent.
+			if child, ok := cv.Data.(*StoreInstanceInfo); ok {
+				child.Parent = out
+				child.ParentKey = k
+			}
+		}
+	}
+	out.Prototype = c.cloneStore(s.Prototype)
+	return out
+}
+
+// cloneObject deep-clones an ObjectInstanceInfo: the field map is
+// duplicated value-by-value and the prototype instance cloned
+// (cycle-guarded). TypeRef is a shared type descriptor (immutable).
+func (c *cloner) cloneObject(o ObjectInstanceInfo) ObjectInstanceInfo {
+	out := ObjectInstanceInfo{TypeRef: o.TypeRef}
+	if o.Fields != nil {
+		out.Fields = c.cloneOrderedMap(o.Fields)
+	}
+	if o.Prototype != nil {
+		if cp, ok := c.seen[o.Prototype]; ok {
+			proto := cp.(ObjectInstanceInfo)
+			out.Prototype = &proto
+		} else {
+			proto := c.cloneObject(*o.Prototype)
+			out.Prototype = &proto
+		}
+	}
+	return out
+}

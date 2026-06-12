@@ -99,7 +99,17 @@ type Options struct {
 	// installed before host capabilities so SetHostX hooks can
 	// auto-wrap or skip-install per the profile.
 	Policy policy.Policy
+	// Tape bounds the execution tape's growth (initial size, max grows,
+	// growth factor). The zero value uses the engine defaults. Set via
+	// the CLI's --options flag (e.g. `--options tape:initial:65536`) or
+	// directly by a host.
+	Tape TapeOptions
 }
+
+// TapeOptions configures the execution tape's bounded growth — see
+// eng/go/tape.go. InitialSize 0 derives from the program; MaxGrows 0 and
+// GrowthFactor 0 use the defaults (7 and 2.7).
+type TapeOptions = native.TapeConfig
 
 // AQL is an independent AQL execution instance.
 // Each instance has its own state (set/get storage is isolated).
@@ -131,6 +141,7 @@ func New(opts ...Options) (*AQL, error) {
 	if err != nil {
 		return nil, err
 	}
+	reg.TapeConfig = o.Tape
 	reg.SetParseFunc(parser.Parse)
 	modules.InstallResolver(reg)
 

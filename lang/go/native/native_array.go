@@ -498,6 +498,9 @@ func iotaHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	if n < 0 {
 		return nil, r.AqlError("iota_error", fmt.Sprintf("iota: negative count %d", n), "iota")
 	}
+	if n > maxArrayElems {
+		return nil, r.AqlError("iota_error", fmt.Sprintf("iota: count %d exceeds the cap of %d", n, maxArrayElems), "iota")
+	}
 	elems := make([]Value, n)
 	for i := 0; i < n; i++ {
 		elems[i] = NewInteger(int64(i))
@@ -593,6 +596,12 @@ func rankHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 
 // ---- reshape ----
 
+// maxArrayElems caps a single dimension and the total element count a
+// reshape (and iota) will allocate, bounding the memory one call can
+// demand and keeping a crafted shape out of the panicking allocation
+// path. ~16M Value entries.
+const maxArrayElems = 1 << 24
+
 func reshapeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
 		return nil, r.AqlError("reshape_error", "reshape: expected concrete shape list", "reshape")
@@ -608,10 +617,27 @@ func reshapeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		if dims[i] < 0 {
 			return nil, r.AqlError("reshape_error", fmt.Sprintf("reshape: negative dimension %d", dims[i]), "reshape")
 		}
+		// Bound each dimension. Without this, a single huge dim (e.g. 2^62)
+		// drives buildNested's make([]Value, dims[0]) into a panicking /
+		// OOMing allocation even when the overall product passes the
+		// length check (e.g. [2^62, 0] over empty data). See ADR-005.
+		if dims[i] > maxArrayElems {
+			return nil, r.AqlError("reshape_error", fmt.Sprintf("reshape: dimension %d exceeds the cap of %d", dims[i], maxArrayElems), "reshape")
+		}
 	}
 	flat := flattenList(args[1])
+	// Compute the product with overflow detection: int64 wraparound used
+	// to let a crafted shape (whose product overflows to len(flat)) pass
+	// the check and then panic in buildNested's allocation.
 	product := 1
 	for _, d := range dims {
+		if d == 0 {
+			product = 0
+			break
+		}
+		if product > maxArrayElems/d {
+			return nil, fmt.Errorf("reshape: shape product exceeds the cap of %d", maxArrayElems)
+		}
 		product *= d
 	}
 	if product != len(flat) {

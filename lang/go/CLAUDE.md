@@ -993,22 +993,25 @@ the LCA walk — no separate registration.
 **Panics must never occur in this codebase.** All code must be defensive
 against unexpected input. Return errors instead of panicking — user
 errors must be reported as error return values that are printed to the
-user, never as panics. This is a hard rule.
+user, never as panics. This is a hard rule, and per **ADR-005** it has
+**no init-time exception**.
 
-The only permitted panics are at **init time**, on hardcoded type-registration
-paths — they signal a build-time programmer error (FixedID collision or
-malformed type path), not a runtime condition. Each such call site carries
-a `// lint:allow-panic` comment. The current set:
+The previous carve-out for init-time type registration is withdrawn.
+Those helpers now record their error and surface it at the first registry
+construction instead of panicking:
 
-- `eng/types.go::mustType` — eng's hardcoded built-in types.
-- `native/native_misc.go::registerTimerType` — TTimeout, TInterval.
-- `native/native_temporal.go::registerTemporalType` — TDate, TDateTime, …
-- `native/fetch.go::registerFetchType` — TFetchFunction, TFetchRequest, …
-- `modules/matrix.go::registerTensorTypes` — TTensor, TMatrix, TVector.
-- `native/native_keyval.go::registerKeyValType` — TKeyVal.
+- `eng`: `BuiltinInitError()` is checked by `NewRegistry()` (covers
+  `mustType` / `builtinDecls`).
+- `native`: `TypeInitError()` is checked by `DefaultRegistryWithPolicy`
+  (covers `registerTimerType`, `registerTemporalType`,
+  `registerFetchType`, `registerKeyValType`, `registerModuleType`).
+- `modules/matrix`: `tensorTypeInitErr` is checked by `BuildMatrixModule`.
 
-Do not add new init-time panics without also annotating them
-`// lint:allow-panic` and listing them here.
+The only `panic`/`recover` left in the tree are Go standard-library
+`Must*` calls on compile-time-constant inputs (e.g. `regexp.MustCompile`
+of a literal) and `recover()` guards in tests that *assert* no panic.
+Any new `panic` in non-test, non-`Must*`-constant code is a defect — do
+not reintroduce `// lint:allow-panic`.
 
 Key patterns to follow:
 

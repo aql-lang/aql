@@ -436,3 +436,49 @@ func TestMatrixMulIdentity(t *testing.T) {
 		}
 	}
 }
+
+// TestValidDims pins the matrix-constructor dimension guard: negative,
+// overflowing, and oversized dimensions return errors instead of
+// panicking in make([]float64, …) or allocating gigabytes. See ADR-005.
+func TestValidDims(t *testing.T) {
+	if err := validDims(3, 4); err != nil {
+		t.Errorf("validDims(3,4) = %v, want nil", err)
+	}
+	if err := validDims(0, 0); err != nil {
+		t.Errorf("validDims(0,0) = %v, want nil", err)
+	}
+	for _, d := range [][2]int{{-1, 5}, {5, -1}, {-3, -3}} {
+		if err := validDims(d[0], d[1]); err == nil {
+			t.Errorf("validDims(%d,%d) = nil, want non-negative error", d[0], d[1])
+		}
+	}
+	if err := validDims(100000, 100000); err == nil {
+		t.Error("validDims(100000,100000) = nil, want element-cap error")
+	}
+	// Overflow guard: rows*cols would wrap to a small/negative int.
+	if err := validDims(1<<40, 1<<40); err == nil {
+		t.Error("validDims(2^40,2^40) = nil, want overflow rejection")
+	}
+}
+
+// TestMatrixConstructorsRejectBadDims drives the guard through the real
+// words and asserts a negative dimension returns an error rather than
+// reaching the panicking make([]float64, neg) path.
+func TestMatrixConstructorsRejectBadDims(t *testing.T) {
+	r := matrixRegistry(t)
+	cases := []struct {
+		word string
+		args []native.Value
+	}{
+		{"zeros", []native.Value{native.NewInteger(5), native.NewInteger(-1)}},
+		{"ones", []native.Value{native.NewInteger(-2), native.NewInteger(5)}},
+		{"eye", []native.Value{native.NewInteger(-3)}},
+	}
+	for _, tc := range cases {
+		input := append(append([]native.Value{}, tc.args...), matGet(tc.word)...)
+		e := native.New(r)
+		if _, err := e.Run(input); err == nil {
+			t.Errorf("MatrixUtil.%s with negative dim: expected error, got nil", tc.word)
+		}
+	}
+}

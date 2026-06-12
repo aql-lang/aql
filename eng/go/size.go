@@ -30,9 +30,14 @@ func SizeOf(v Value) int {
 // Gathering them keeps the one size rule auditable in one place.
 
 // Size of a Number is its floored magnitude: an Integer floors to
-// itself, a Float drops its fraction (7.9 → 7).
+// itself, a Float drops its fraction (7.9 → 7). A non-finite Float
+// (NaN/±Inf) has no integer magnitude — int(math.Floor(NaN)) is
+// implementation-defined garbage — so it sizes to 0.
 func (numberCompareBehavior) Size(v Value) int {
 	n, _ := AsNumber(v)
+	if math.IsNaN(n) || math.IsInf(n, 0) {
+		return 0
+	}
 	return int(math.Floor(n))
 }
 

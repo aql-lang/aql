@@ -76,13 +76,14 @@ func lspFactory(args []string, stdin io.Reader, stdout, stderr io.Writer) (servi
 	fs := flag.NewFlagSet("lsp", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	port := fs.Int("p", 0, "TCP port to listen on (0 = stdio mode)")
+	host := fs.String("host", "127.0.0.1", "TCP host to bind (loopback by default)")
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
 	if *port == 0 {
 		return lsp.NewStdioServer(stdin, stdout, stderr), nil
 	}
-	return lsp.NewTCPServer(*port, stderr), nil
+	return lsp.NewTCPServer(*host, *port, stderr), nil
 }
 
 func execFactory(args []string, _ io.Reader, _, stderr io.Writer) (service.Service, error) {

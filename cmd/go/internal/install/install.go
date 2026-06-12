@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/aql-lang/aql/cmd/go/internal/command"
 	"github.com/aql-lang/aql/cmd/go/internal/prep"
@@ -21,6 +22,14 @@ import (
 
 // moduleIDPattern matches <name>-<major>.<minor>.<patch>.
 var moduleIDPattern = regexp.MustCompile(`^(.+)-(\d+\.\d+\.\d+)$`)
+
+// Download / extraction bounds. A module is small; these caps keep a
+// malicious or compromised registry from exhausting memory via an
+// unbounded body or a zip bomb.
+const (
+	maxDownloadBytes int64 = 64 << 20 // whole archive
+	maxEntryBytes    int64 = 64 << 20 // single extracted file
+)
 
 type cmd struct{}
 
@@ -65,7 +74,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	url := strings.TrimRight(*registryURL, "/") + "/module/" + moduleID
-	resp, err := http.Get(url)
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Get(url)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -77,9 +87,16 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	// Bound the download so a malicious or compromised registry cannot
+	// stream an unbounded body into memory. The cap mirrors the server's
+	// own upload limit with headroom.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDownloadBytes+1))
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	if int64(len(body)) > maxDownloadBytes {
+		fmt.Fprintf(stderr, "error: module download exceeds %d bytes\n", maxDownloadBytes)
 		return 1
 	}
 
@@ -96,8 +113,13 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	for _, f := range zr.File {
-		if strings.Contains(f.Name, "..") {
-			continue
+		// Reject anything that is not a clean relative path contained in
+		// destDir (zip-slip). filepath.IsLocal catches "..", absolute
+		// paths, and (on Windows) drive/volume-relative names — a more
+		// robust guard than a "contains .." substring test.
+		if !filepath.IsLocal(f.Name) {
+			fmt.Fprintf(stderr, "error: refusing unsafe path in archive: %q\n", f.Name)
+			return 1
 		}
 		destPath := filepath.Join(destDir, f.Name)
 		if f.FileInfo().IsDir() {
@@ -116,10 +138,15 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}
-		data, err := io.ReadAll(rc)
+		// Bound each entry so a zip bomb cannot exhaust memory/disk.
+		data, err := io.ReadAll(io.LimitReader(rc, maxEntryBytes+1))
 		rc.Close()
 		if err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+		if int64(len(data)) > maxEntryBytes {
+			fmt.Fprintf(stderr, "error: archive entry %q exceeds %d bytes\n", f.Name, maxEntryBytes)
 			return 1
 		}
 		if err := os.WriteFile(destPath, data, 0644); err != nil {

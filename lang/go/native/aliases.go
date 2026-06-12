@@ -87,6 +87,7 @@ type (
 	ReadMap             = eng.ReadMap
 	RecordTypeInfo      = eng.RecordTypeInfo
 	Registry            = eng.Registry
+	TapeConfig          = eng.TapeConfig
 	DefTable            = eng.DefTable
 	ReturnCheckInfo     = eng.ReturnCheckInfo
 	ReturnsFunc         = eng.ReturnsFunc
@@ -379,6 +380,8 @@ var (
 	RunCarrierBodyWithDefs    = eng.RunCarrierBodyWithDefs
 	InstallJoinedDefs         = eng.InstallJoinedDefs
 	New                       = eng.New
+	CloneValue                = eng.CloneValue
+	NewSyncWriter             = eng.NewSyncWriter
 	NewArray                  = eng.NewArray
 	NewArrayEmpty             = eng.NewArrayEmpty
 	NewReadList               = eng.NewReadList

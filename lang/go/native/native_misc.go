@@ -23,11 +23,10 @@ var (
 func registerTimerType(path string, fixedID int, behavior eng.TypeBehavior) *eng.Type {
 	t, err := eng.Builtin.RegisterExternalBuiltin(path, fixedID, behavior)
 	if err != nil {
-		// lint:allow-panic — init-time builtin registration with
-		// hardcoded path and FixedID; failure indicates a build-time
-		// programmer error (collision or malformed path), not a
-		// runtime condition. See CLAUDE.md "Panic Prevention".
-		panic(fmt.Sprintf("native_misc: register %s: %v", path, err))
+		// Init-time registration error (duplicate FixedID / malformed
+		// path) — record it for NewRegistry/DefaultRegistry to surface
+		// rather than panicking. See ADR-005 and typeinit.go.
+		recordTypeInitErr(fmt.Errorf("native_misc: register %s: %w", path, err))
 	}
 	return t
 }
@@ -696,8 +695,12 @@ func doTimeout(r *Registry, args []Value, isList bool) ([]Value, error) {
 	callback := args[1]
 
 	id := GenerateID("T_")
+	// Fork now, on the scheduling goroutine, so the callback runs on an
+	// isolated registry and cannot race the main interpreter when it
+	// fires later on the timer goroutine.
+	fork := r.ForkConcurrent()
 	timer := time.AfterFunc(time.Duration(ms)*time.Millisecond, func() {
-		RunTimerCallback(r, callback, isList)
+		RunTimerCallback(fork, callback, isList)
 	})
 
 	info := &TimeoutInfo{

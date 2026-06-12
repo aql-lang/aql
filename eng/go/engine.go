@@ -17,15 +17,21 @@ type TraceCallback func(step int, pointer int, stack []Value, note string)
 
 // Engine is the AQL stack machine.
 //
-// Execution model: `stack` is a rewriting tape, not a LIFO stack. The
+// Execution model: `tape` is a rewriting tape, not a LIFO stack. The
 // input program is loaded onto it whole; `pointer` then walks forward
 // and the value under the pointer dispatches (word → run, forward →
 // advance, open-paren → group, ...). A dispatched word may splice
 // values into the tape in place — consuming neighbours, inserting
 // results. Execution ends when the pointer walks off the end; the
 // residual tape is the result.
+//
+// The tape is a gap buffer (eng/go/tape.go): edits land at or near the
+// pointer, and the gap riding the edit sites makes them O(edit size)
+// instead of O(tail length) — the fix for the O(depth²) recursion cost
+// measured in design/RECURSION-PERFORMANCE.10.md and benchmarked in
+// design/TAPE-DATA-STRUCTURE.10.md.
 type Engine struct {
-	stack     []Value
+	tape      *Tape
 	pointer   int
 	registry  *Registry
 	trace     TraceCallback
@@ -95,9 +101,35 @@ func (e *Engine) SetRecorder(r Recorder) { e.recorder = r }
 // every Engine constructor names them explicitly — there is no
 // "zero means default" sentinel on `stepLimit`; the field is always
 // set to a positive value by the constructors below.
+//
+// These are runaway-program guards (a genuinely non-terminating program
+// must fail rather than hang forever), NOT a budget real programs are
+// expected to brush against. The old values (22222 / 2222) were tuned
+// for the pre-gap-buffer engine, where deep work was quadratic and so
+// self-limiting; they capped a plain `for` loop at ~3700 iterations.
+// With the gap-buffer tape (design/TAPE-DATA-STRUCTURE.10.md) loops and
+// tail recursion are linear, so the cap is raised to a generous ceiling.
+//
+// Calibration (measured): a `for` loop costs ~6 top-level steps per
+// iteration, tail recursion ~24 per level; data-bulk words (each/sort/
+// map ops) do their work inside handlers and cost O(1) top-level steps.
+// 10M steps therefore admits ~1.6M loop iterations / ~400k recursion
+// levels — far beyond any real workload — while a genuine infinite loop
+// trips in a few seconds and within tens of MB of tape growth (a higher
+// ceiling like 100M lets a runaway run ~100s and balloon to ~600MB
+// before tripping, which is worse than the cure). When the cap IS hit it
+// now raises an explicit `evaluation_limit` error (see the Run loop and
+// evalParenGroupAt), never the old phantom "unmatched opening
+// parenthesis". Callers that genuinely need more can raise the budget
+// per engine.
 const (
-	DefaultStepLimit    = 22222 // top-level engine cap
-	DefaultSubStepLimit = 2222  // sub-engine cap (autoEvalMap, CallAQL, etc.)
+	DefaultStepLimit    = 10_000_000 // top-level engine cap
+	DefaultSubStepLimit = 10_000_000 // sub-engine cap (autoEvalMap, CallAQL, etc.)
+
+	// maxParenGroupSteps bounds a single paren-group evaluation in
+	// evalParenGroupAt. Same role and ceiling as the Run-loop cap, for
+	// the nested-evaluation path.
+	maxParenGroupSteps = 10_000_000
 )
 
 // New creates an Engine with the given function registry.
@@ -139,7 +171,7 @@ func (e *Engine) effectiveSource() string {
 // no patterns), 2–4 args, first matching signature wins. Returns ""
 // when no reorder explains the failure.
 func (e *Engine) reorderHint(name string, fn *FnDefInfo) string {
-	return reorderHintFor(name, fn, reorderCandidates(e.stack[:e.pointer]))
+	return reorderHintFor(name, fn, reorderCandidates(e.tape.Prefix(e.pointer)))
 }
 
 // reorderCandidates collects up to 4 plain values from the top of the
@@ -165,10 +197,10 @@ func reorderCandidates(stack []Value) []Value {
 // markers stop the scan. The result is in SOURCE order, which is the
 // assignment order the forward plan would have used (sig[i] ↔
 // token[i]) — exactly the failing-tuple view reorderHintFor wants.
-func reorderForwardCandidates(stack []Value, pointer int) []Value {
+func reorderForwardCandidates(tape *Tape, pointer int) []Value {
 	var written []Value
-	for i := pointer + 1; i < len(stack) && len(written) < 4; i++ {
-		v := stack[i]
+	for i := pointer + 1; i < tape.Len() && len(written) < 4; i++ {
+		v := tape.At(i)
 		if !IsConcrete(v) || IsWord(v) || IsParenExpr(v) || IsForward(v) ||
 			IsOpenParen(v) || IsEnd(v) {
 			break
@@ -305,11 +337,11 @@ func (e *Engine) sigError(name string, fn *FnDefInfo, pos SrcPos) *AqlError {
 			"— (" + name + " …) — or end it with `end` or `;`")
 	}
 
-	if len(e.stack) > 0 {
+	if e.tape.Len() > 0 {
 		if hint.Len() > 0 {
 			hint.WriteString("\n  = ")
 		}
-		hint.WriteString("stack: " + describeStackTypes(e.stack, e.pointer))
+		hint.WriteString("stack: " + describeStackTypes(e.tape, e.pointer))
 	}
 
 	src := e.effectiveSource()
@@ -336,13 +368,13 @@ func (e *Engine) isFnShapeTypedBindingContext() bool {
 		return false
 	}
 	for i := e.pointer - 1; i >= 0; i-- {
-		if IsOpenParen(e.stack[i]) {
+		if IsOpenParen(e.tape.At(i)) {
 			return false
 		}
-		if !IsForward(e.stack[i]) {
+		if !IsForward(e.tape.At(i)) {
 			continue
 		}
-		fwd, _ := AsForward(e.stack[i])
+		fwd, _ := AsForward(e.tape.At(i))
 		if fwd.FuncName != "def" || fwd.Sig == nil {
 			return false
 		}
@@ -358,10 +390,10 @@ func (e *Engine) isFnShapeTypedBindingContext() bool {
 			return false
 		}
 		mapIdx := fwd.FuncIndex - fwd.CollectedArgs
-		if mapIdx < 0 || mapIdx >= len(e.stack) {
+		if mapIdx < 0 || mapIdx >= e.tape.Len() {
 			return false
 		}
-		m, _ := AsMap(e.stack[mapIdx])
+		m, _ := AsMap(e.tape.At(mapIdx))
 		if m == nil || m.Len() != 1 {
 			return false
 		}
@@ -384,11 +416,11 @@ func (e *Engine) isFnShapeTypedBindingContext() bool {
 // undefined word being collected as `def`'s body).
 func (e *Engine) pendingForwardFunc() string {
 	for i := e.pointer - 1; i >= 0; i-- {
-		if IsOpenParen(e.stack[i]) {
+		if IsOpenParen(e.tape.At(i)) {
 			return ""
 		}
-		if IsForward(e.stack[i]) {
-			fwd, _ := AsForward(e.stack[i])
+		if IsForward(e.tape.At(i)) {
+			fwd, _ := AsForward(e.tape.At(i))
 			return fwd.FuncName
 		}
 	}
@@ -399,7 +431,7 @@ func (e *Engine) pendingForwardFunc() string {
 // collection failure (not enough arguments after the word).
 func (e *Engine) insufficientArgsError(name string, expected int, pos SrcPos) *AqlError {
 	detail := fmt.Sprintf("insufficient arguments for %s (expected %d forward args)", name, expected)
-	hint := "stack: " + describeStackTypes(e.stack, e.pointer)
+	hint := "stack: " + describeStackTypes(e.tape, e.pointer)
 	src := e.effectiveSource()
 	return makeAqlErrorAt("signature_error", detail, name, src, hint, pos)
 }
@@ -452,11 +484,11 @@ func (e *Engine) voidArgErrorFor(name string, pos SrcPos) *AqlError {
 	if name == "def" {
 		n := "<name>"
 		for i := e.pointer - 1; i >= 0; i-- {
-			if IsOpenParen(e.stack[i]) {
+			if IsOpenParen(e.tape.At(i)) {
 				break
 			}
-			if IsAtom(e.stack[i]) {
-				n, _ = AsAtom(e.stack[i])
+			if IsAtom(e.tape.At(i)) {
+				n, _ = AsAtom(e.tape.At(i))
 				break
 			}
 		}
@@ -555,8 +587,8 @@ func (e *Engine) returnTypeError(funcName string, index int, expected *Type, got
 // is out of range. Engine-side error builders use it so an error is located
 // at the token that triggered it.
 func (e *Engine) currentPos() SrcPos {
-	if e.pointer >= 0 && e.pointer < len(e.stack) {
-		return e.stack[e.pointer].Pos
+	if e.pointer >= 0 && e.pointer < e.tape.Len() {
+		return e.tape.At(e.pointer).Pos
 	}
 	return SrcPos{}
 }
@@ -571,6 +603,37 @@ func (e *Engine) syntaxError(msg, token string) *AqlError {
 func (e *Engine) runtimeError(code, detail, word, hint string) *AqlError {
 	src := e.effectiveSource()
 	return makeAqlErrorAt(code, detail, word, src, hint, e.currentPos())
+}
+
+// evalLimitError reports that evaluation hit the step-count guard before
+// the program finished — the explicit, honest diagnosis for a runaway
+// (non-terminating or pathologically deep) program, replacing the
+// phantom "unmatched opening parenthesis" the old silent break produced.
+func (e *Engine) evalLimitError(limit int) *AqlError {
+	return e.runtimeError("evaluation_limit",
+		fmt.Sprintf("evaluation exceeded the step limit of %d — the program ran too long (an infinite loop or unbounded recursion?)", limit),
+		"",
+		"if this is a legitimately long computation, raise the limit via the engine's step budget; otherwise check for a loop or recursion that never terminates")
+}
+
+// tapeExhaustedError reports that the tape hit its growth ceiling — the
+// loud failure for unbounded consumption (a runaway splicing onto the
+// tape without bound). Distinct from evalLimitError, which is the
+// step-count (CPU) guard; this is the memory guard.
+func (e *Engine) tapeExhaustedError() *AqlError {
+	return e.runtimeError("tape_exhausted",
+		fmt.Sprintf("evaluation tape exhausted its growth ceiling of %d entries — the program consumed unbounded space (an infinite loop or unbounded recursion?)", e.tape.MaxCap()),
+		"",
+		"raise the tape size via options (initial size / grow count / growth factor) for a legitimately large program; otherwise check for a loop or recursion that never terminates")
+}
+
+// tapeWarn forwards a tape capacity warning to the registry's error
+// writer. Wired as the Tape's warn sink so 90/95/99% crossings surface
+// without the tape importing io.
+func (e *Engine) tapeWarn(msg string) {
+	if e.registry != nil && e.registry.ErrOutput != nil {
+		fmt.Fprintf(e.registry.ErrOutput, "aql: warning: %s\n", msg)
+	}
 }
 
 // traceSigStr formats a signature as "name(type, type) prec=N" for trace annotations.
@@ -647,37 +710,48 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 		input = StripToCarriers(input)
 	}
 
-	// Load the program onto the tape. Reuse the existing backing array
-	// when it already fits; otherwise allocate len(input)+stackHeadroom
-	// so the first few in-place splices don't have to grow the slice.
-	// `copy` (not alias) — later mutations don't touch the caller's input.
-	if cap(e.stack) >= len(input) {
-		e.stack = e.stack[:len(input)]
-	} else {
-		e.stack = make([]Value, len(input), len(input)+stackHeadroom)
-	}
-	copy(e.stack, input)
-	e.pointer = 0
-
-	// Post-parse referent resolution: stamp each /q-style atom in the loaded
-	// top-level program with a snapshot of what its name refers to, for any
-	// name already bound when the program loads (pre-installed module/global
+	// Post-parse referent resolution: stamp each /q-style atom in the
+	// program with a snapshot of what its name refers to, for any name
+	// already bound when the program loads (pre-installed module/global
 	// defs). Names bound only later, during execution, stay unresolved here —
 	// the `quote` word captures those at quote time instead. Top engine only
 	// (sub-engines run fragments already walked) and not in check mode (the
-	// program has been stripped to carriers).
+	// program has been stripped to carriers). Stamping happens on a private
+	// copy of the input BEFORE the tape is built, so the caller's slice is
+	// never mutated and the tape constructor owns a fully-prepared program.
+	prog := input
 	if e.isTop && !e.registry.Check.IsActive() {
-		resolveAtomReferents(e.registry, e.stack)
+		prog = make([]Value, len(input))
+		copy(prog, input)
+		resolveAtomReferents(e.registry, prog)
 	}
+
+	// Load the program onto the gap-buffer tape with bounded growth
+	// (NewTapeWith copies, so later splices never touch the caller's input
+	// slice). The tape grows at most N times by factor M and then fails
+	// loudly — see TapeConfig / the tape_exhausted check below. The
+	// registry's TapeConfig (zero value = defaults) flows through
+	// unchanged so resolve() applies the initial-size floor.
+	e.tape = NewTapeWith(prog, e.registry.TapeConfig, e.tapeWarn)
+	e.pointer = 0
 
 	// stepLimit is always set by the constructors (New / NewTop); the
 	// defensive check that used to substitute a default if the field
 	// was zero was load-bearing for callers that built Engine{}
 	// directly, but no longer — the constructors are the only entry.
 	limit := e.stepLimit
+	completed := false
 	for step := 0; step < limit; step++ {
-		if e.pointer >= len(e.stack) {
+		if e.pointer >= e.tape.Len() {
+			completed = true
 			break
+		}
+
+		// Memory guard: a previous edit hit the tape's growth ceiling
+		// (and was dropped to avoid an out-of-bounds write). Fail loudly
+		// rather than continue on a truncated tape.
+		if e.tape.Exhausted() {
+			return nil, e.tapeExhaustedError()
 		}
 
 		// Check-mode global step budget: abort the whole run
@@ -701,15 +775,18 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 						Detail: fmt.Sprintf("check mode aborted: step budget of %d exceeded", budget),
 					})
 				}
+				// The check-mode budget is a deliberate, already-reported
+				// stop — not the runtime step-limit exhaustion below. Mark
+				// it complete so the drain proceeds normally.
+				completed = true
 				break
 			}
 		}
 
-		val := e.stack[e.pointer]
+		val := e.tape.At(e.pointer)
 
 		if e.trace != nil {
-			snapshot := make([]Value, len(e.stack))
-			copy(snapshot, e.stack)
+			snapshot := e.tape.Snapshot()
 			note := e.traceNote
 			e.traceNote = ""
 			e.trace(step, e.pointer, snapshot, note)
@@ -759,7 +836,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 				}
 			} else {
 				items, _ := AsParenExpr(val)
-				stackSplice(&e.stack, e.pointer, 1, expandParenExpr(items)...)
+				e.tape.Splice(e.pointer, 1, expandParenExpr(items)...)
 			}
 
 		case IsReach(val):
@@ -769,7 +846,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			// or a codequote'd one (Quoted) is data — left via stepLiteral.
 			if isEvalReach(val) && !e.pendingForwardWantsRawParen() {
 				info, _ := AsReach(val)
-				stackSplice(&e.stack, e.pointer, 1, expandReach(info)...)
+				e.tape.Splice(e.pointer, 1, expandReach(info)...)
 			} else {
 				if err := e.stepLiteral(); err != nil {
 					return nil, err
@@ -784,7 +861,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			// Replace with the evaluated string but do NOT advance the
 			// pointer. The resulting string value needs to go through
 			// stepLiteral so forward collection works correctly.
-			e.stack[e.pointer] = result
+			e.tape.Set(e.pointer, result)
 
 		case IsMark(val):
 			e.stepMark(val)
@@ -829,13 +906,22 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 		return e.exitWithFlowCtrl()
 	}
 
+	// The loop ran out of step budget before the program finished. Report
+	// it explicitly: the program was cut off mid-evaluation, so the drain
+	// below would otherwise see a half-processed tape (e.g. an open paren
+	// the run never reached) and blame a phantom "unmatched opening
+	// parenthesis". This is the honest diagnosis instead.
+	if !completed {
+		return nil, e.evalLimitError(limit)
+	}
+
 	// Implicit end-of-input: resolve any pending forwards from the stack.
 	if err := e.resolveOrphanedForwards(); err != nil {
 		return nil, err
 	}
 
-	for _, v := range e.stack {
-		if IsOpenParen(v) {
+	for i := 0; i < e.tape.Len(); i++ {
+		if IsOpenParen(e.tape.At(i)) {
 			return nil, e.syntaxError("unmatched opening parenthesis", "(")
 		}
 	}
@@ -878,7 +964,8 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// anymore — does the residue become an error, with the original
 	// call-site span. The same bug check mode names uncalled_function.
 	if e.isTop && !e.registry.Check.IsActive() {
-		for _, v := range e.stack {
+		for i := 0; i < e.tape.Len(); i++ {
+			v := e.tape.At(i)
 			if v.FailedDispatch && (v.Parent.Equal(TFnDef) || v.Parent.Equal(TFunction)) {
 				name := ""
 				if info, ok := v.Data.(FnDefInfo); ok {
@@ -899,24 +986,24 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// at the source token; here we only need to replace any dangling
 	// Undefined atoms with `Any` carriers so the residual stack stays
 	// type-clean for downstream consumers of CheckResult.Stack.
-	for i, v := range e.stack {
-		if !v.Undefined {
+	for i := 0; i < e.tape.Len(); i++ {
+		if !e.tape.At(i).Undefined {
 			continue
 		}
 		if e.registry.Check.IsActive() {
-			e.stack[i] = NewCarrier(TAny)
+			e.tape.Set(i, NewCarrier(TAny))
 		}
 	}
 
-	return e.stack, nil
+	return e.tape.TakeAll(), nil
 }
 
 // resolveOrphanedForwards handles end-of-input by resolving pending forwards.
 func (e *Engine) resolveOrphanedForwards() error {
 	for attempt := 0; attempt < 222; attempt++ {
 		fwdIdx := -1
-		for i, v := range e.stack {
-			if IsForward(v) {
+		for i := 0; i < e.tape.Len(); i++ {
+			if IsForward(e.tape.At(i)) {
 				fwdIdx = i
 				break
 			}
@@ -925,13 +1012,13 @@ func (e *Engine) resolveOrphanedForwards() error {
 			return nil
 		}
 
-		fwd, _ := AsForward(e.stack[fwdIdx])
+		fwd, _ := AsForward(e.tape.At(fwdIdx))
 		funcIdx := fwd.FuncIndex
 		collectedCount := fwd.CollectedArgs
 		stackArgCount := fwd.StackArgs
 
 		// Remove the forward marker.
-		stackRemove(&e.stack, fwdIdx)
+		e.tape.Remove(fwdIdx)
 		if fwdIdx < funcIdx {
 			funcIdx--
 		}
@@ -941,10 +1028,10 @@ func (e *Engine) resolveOrphanedForwards() error {
 
 		// Retry from the current pointer position.
 		for step := 0; step < 100; step++ {
-			if e.pointer >= len(e.stack) {
+			if e.pointer >= e.tape.Len() {
 				break
 			}
-			val := e.stack[e.pointer]
+			val := e.tape.At(e.pointer)
 			switch {
 			case IsWord(val):
 				if err := e.stepWord(val); err != nil {
@@ -1052,11 +1139,11 @@ func capturesForward(fn *FnDefInfo, pos int) bool {
 // Stops at an OpenParen barrier. See Step 4.
 func (e *Engine) pendingForwardWantsRawParen() bool {
 	for i := e.pointer - 1; i >= 0; i-- {
-		if IsOpenParen(e.stack[i]) {
+		if IsOpenParen(e.tape.At(i)) {
 			return false
 		}
-		if IsForward(e.stack[i]) {
-			fwd, _ := AsForward(e.stack[i])
+		if IsForward(e.tape.At(i)) {
+			fwd, _ := AsForward(e.tape.At(i))
 			// RawParens or FormArgs (macro raw capture) both want a forward
 			// ParenExpr / Reach left raw at the pointer rather than evaluated
 			// during collection.
@@ -1157,8 +1244,8 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 
 	pos := 0
 	scanIdx := e.pointer + 1
-	for pos < maxBarrier && scanIdx < len(e.stack) {
-		tok := e.stack[scanIdx]
+	for pos < maxBarrier && scanIdx < e.tape.Len() {
+		tok := e.tape.At(scanIdx)
 
 		// Boundary conditions: stop scanning.
 		if IsForward(tok) || tok.Parent.ConformsTo(TMark) || tok.Parent.ConformsTo(TMove) ||
@@ -1215,7 +1302,7 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 				return err
 			}
 			result.Pos = tok.Pos
-			e.stack[scanIdx] = result
+			e.tape.Set(scanIdx, result)
 			pruneViable(pos, result)
 			pos++
 			scanIdx++
@@ -1236,7 +1323,7 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 				continue
 			}
 			peItems, _ := AsParenExpr(tok)
-			stackSplice(&e.stack, scanIdx, 1, expandParenExpr(peItems)...)
+			e.tape.Splice(scanIdx, 1, expandParenExpr(peItems)...)
 			continue
 		}
 
@@ -1251,7 +1338,7 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 				continue
 			}
 			info, _ := AsReach(tok)
-			stackSplice(&e.stack, scanIdx, 1, expandReach(info)...)
+			e.tape.Splice(scanIdx, 1, expandReach(info)...)
 			continue
 		}
 
@@ -1274,7 +1361,7 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 					if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {
 						pe := NewParenExpr([]Value{tok})
 						pe.Pos = tok.Pos
-						e.stack[scanIdx] = pe
+						e.tape.Set(scanIdx, pe)
 						continue
 					}
 				}
@@ -1362,11 +1449,11 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 	// depth so inner parens are processed without prematurely breaking on
 	// their ")" tokens.
 	depth := 1
-	for limit := 0; limit < 2222 && depth > 0; limit++ {
-		if e.pointer >= len(e.stack) {
+	for limit := 0; limit < maxParenGroupSteps && depth > 0; limit++ {
+		if e.pointer >= e.tape.Len() {
 			break
 		}
-		v := e.stack[e.pointer]
+		v := e.tape.At(e.pointer)
 
 		if IsOpenParen(v) {
 			depth++
@@ -1422,7 +1509,7 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 				return err
 			}
 			result.Pos = v.Pos
-			e.stack[e.pointer] = result
+			e.tape.Set(e.pointer, result)
 		default:
 			if err := e.stepLiteral(); err != nil {
 				e.pointer = savedPointer
@@ -1435,6 +1522,15 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 			e.pointer = savedPointer
 			return nil
 		}
+	}
+
+	// Budget exhausted before the group closed (depth still open with tape
+	// left to process). Report it explicitly rather than silently
+	// returning a half-evaluated group, which would later surface as a
+	// phantom "unmatched opening parenthesis" at the top-level drain.
+	if depth > 0 && e.pointer < e.tape.Len() {
+		e.pointer = savedPointer
+		return e.evalLimitError(maxParenGroupSteps)
 	}
 
 	e.pointer = savedPointer
@@ -1467,7 +1563,7 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 			placeholder := NewAtom(w.Name)
 			placeholder.Pos = val.Pos
 			placeholder.Undefined = true
-			e.stack[e.pointer] = placeholder
+			e.tape.Set(e.pointer, placeholder)
 			return e.stepLiteral()
 		}
 		return &AqlError{
@@ -1495,7 +1591,7 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 			placeholder := NewAtom(w.Name)
 			placeholder.Pos = val.Pos
 			placeholder.Undefined = true
-			e.stack[e.pointer] = placeholder
+			e.tape.Set(e.pointer, placeholder)
 			return e.stepLiteral()
 		}
 		return &AqlError{
@@ -1513,7 +1609,7 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 		// still dispatches if args follow or it is later stepped. As
 		// DATA it is a legitimate arrival for a pending forward, so no
 		// barrier commit here.
-		e.stack[e.pointer] = v
+		e.tape.Set(e.pointer, v)
 		if e.recorder != nil && isRecordableLiteral(v) {
 			e.recorder.OnPushLit(v)
 		}
@@ -1530,7 +1626,7 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 	if e.commitBarrierForward() {
 		return nil
 	}
-	e.stack[e.pointer] = v
+	e.tape.Set(e.pointer, v)
 	// Dispatch the unquoted wrapper now: stepLiteral routes it through
 	// execFnDefLiteral, which forward-collects any trailing args.
 	return e.stepLiteral()
@@ -1564,7 +1660,7 @@ func (e *Engine) stepWord(val Value) error {
 				placeholder := NewAtom(w.Name)
 				placeholder.Pos = val.Pos
 				placeholder.Undefined = true
-				e.stack[e.pointer] = placeholder
+				e.tape.Set(e.pointer, placeholder)
 				return e.stepLiteral()
 			}
 			return &AqlError{
@@ -1592,7 +1688,7 @@ func (e *Engine) stepWord(val Value) error {
 				placeholder := NewAtom(w.Name)
 				placeholder.Pos = val.Pos
 				placeholder.Undefined = true
-				e.stack[e.pointer] = placeholder
+				e.tape.Set(e.pointer, placeholder)
 				return e.stepLiteral()
 			}
 			return &AqlError{
@@ -1605,7 +1701,7 @@ func (e *Engine) stepWord(val Value) error {
 			}
 		}
 		v.Pos = val.Pos
-		e.stack[e.pointer] = v
+		e.tape.Set(e.pointer, v)
 		// `/r` resolves the name to its bound value and ADVANCES the
 		// pointer, exactly like pushing a literal — it does NOT dispatch a
 		// resolved function (that is what a bare word does). The value
@@ -1646,7 +1742,7 @@ func (e *Engine) stepWord(val Value) error {
 		// overload of the name (across stacked defs), not just the topmost
 		// entry's own sigs.
 		if fnDef := e.registry.Lookup(w.Name); fnDef != nil {
-			e.stack[e.pointer] = NewFunction(*fnDef)
+			e.tape.Set(e.pointer, NewFunction(*fnDef))
 			return e.stepLiteral()
 		}
 		// Not a def fn — fall through to normal execution.
@@ -1669,7 +1765,7 @@ func (e *Engine) stepWord(val Value) error {
 		if tv, ok := e.registry.TopTypeBody(w.Name); ok {
 			push := tv
 			push.Pos = val.Pos
-			e.stack[e.pointer] = push
+			e.tape.Set(e.pointer, push)
 			return e.stepLiteral()
 		}
 	}
@@ -1701,10 +1797,10 @@ func (e *Engine) stepWord(val Value) error {
 			// recursion (and recordUse fires on that inner step).
 			if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {
 				if fwdIdx := e.pendingForwardIdx(); fwdIdx >= 0 {
-					if fwd, ferr := AsForward(e.stack[fwdIdx]); ferr == nil && !bindsReferent(fwd.FuncName) {
+					if fwd, ferr := AsForward(e.tape.At(fwdIdx)); ferr == nil && !bindsReferent(fwd.FuncName) {
 						pe := NewParenExpr([]Value{val})
 						pe.Pos = val.Pos
-						e.stack[e.pointer] = pe
+						e.tape.Set(e.pointer, pe)
 						return e.stepLiteral()
 					}
 				}
@@ -1723,7 +1819,7 @@ func (e *Engine) stepWord(val Value) error {
 				// downstream narrows the binding (narrowing-through-use).
 				top.DynFrom = w.Name
 			}
-			e.stack[e.pointer] = top
+			e.tape.Set(e.pointer, top)
 			return e.stepLiteral()
 		}
 	}
@@ -1758,27 +1854,27 @@ func (e *Engine) stepWord(val Value) error {
 
 	if fn == nil {
 		if w.Name == "true" {
-			e.stack[e.pointer] = NewBoolean(true)
+			e.tape.Set(e.pointer, NewBoolean(true))
 			return nil
 		}
 		if w.Name == "false" {
-			e.stack[e.pointer] = NewBoolean(false)
+			e.tape.Set(e.pointer, NewBoolean(false))
 			return nil
 		}
 		if w.Name == "none" {
-			e.stack[e.pointer] = NewNone()
+			e.tape.Set(e.pointer, NewNone())
 			return nil
 		}
 		if w.Name == "null" {
-			e.stack[e.pointer] = NewAtom("null")
+			e.tape.Set(e.pointer, NewAtom("null"))
 			return nil
 		}
 		if t, ok := typeNames[w.Name]; ok {
-			e.stack[e.pointer] = NewTypeLiteral(t)
+			e.tape.Set(e.pointer, NewTypeLiteral(t))
 			return nil
 		}
 		if t, ok := ResolveTypePath(w.Name); ok {
-			e.stack[e.pointer] = NewTypeLiteral(t)
+			e.tape.Set(e.pointer, NewTypeLiteral(t))
 			return nil
 		}
 		// (r.Types resolution lives in the priority block at the
@@ -1819,7 +1915,7 @@ func (e *Engine) stepWord(val Value) error {
 		v := NewAtom(w.Name)
 		v.Pos = val.Pos
 		v.Undefined = true
-		e.stack[e.pointer] = v
+		e.tape.Set(e.pointer, v)
 		return nil
 	}
 
@@ -1873,11 +1969,11 @@ func (e *Engine) stepWord(val Value) error {
 	// permutation, the arguments are swapped. Raise the dedicated
 	// hint instead of dispatching the fallback's generic error.
 	if sig != nil && sig.Fallback && !e.registry.Check.IsActive() {
-		hint := reorderHintFor(w.Name, fn, reorderForwardCandidates(e.stack, e.pointer))
+		hint := reorderHintFor(w.Name, fn, reorderForwardCandidates(e.tape, e.pointer))
 		if hint == "" {
 			// Stack-form swap: the misordered values are already on
 			// the stack below the word.
-			hint = reorderHintFor(w.Name, fn, reorderCandidates(e.stack[:e.pointer]))
+			hint = reorderHintFor(w.Name, fn, reorderCandidates(e.tape.Prefix(e.pointer)))
 		}
 		if hint != "" {
 			return makeAqlErrorAt("signature_error",
@@ -1959,7 +2055,7 @@ func (e *Engine) stepWord(val Value) error {
 	if stkCount > 0 {
 		match.Args = make([]Value, stkCount)
 		for i, pos := range positions {
-			match.Args[i] = e.stack[pos]
+			match.Args[i] = e.tape.At(pos)
 		}
 	}
 	e.traceNote = "stack " + traceSigStr(w.Name, sig)
@@ -2000,7 +2096,7 @@ func (e *Engine) checkForwardStrandsOperand(w WordInfo, sig *Signature, position
 	// Scan downward from just below the consumed stack args, stopping at the
 	// nearest scope boundary. The first data value found is "stranded".
 	for i := minStack - 1; i >= 0; i-- {
-		v := e.stack[i]
+		v := e.tape.At(i)
 		if IsOpenParen(v) || IsCloseParen(v) || IsForward(v) || IsDefCleanup(v) ||
 			v.Parent.ConformsTo(TMark) || v.Parent.ConformsTo(TMove) ||
 			v.Parent.ConformsTo(TInternal) || v.Parent.ConformsTo(TReturnCheck) {
@@ -2115,9 +2211,9 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	if e.registry.Check.IsActive() && !match.Sig.RunInCheckMode {
 		name := ""
 		var pos SrcPos
-		if e.pointer < len(e.stack) && IsWord(e.stack[e.pointer]) {
-			pos = e.stack[e.pointer].Pos
-			if w, err := AsWord(e.stack[e.pointer]); err == nil {
+		if e.pointer < e.tape.Len() && IsWord(e.tape.At(e.pointer)) {
+			pos = e.tape.At(e.pointer).Pos
+			if w, err := AsWord(e.tape.At(e.pointer)); err == nil {
 				name = w.Name
 			}
 		}
@@ -2132,7 +2228,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		if match.Sig.FullStack && match.Sig.CheckFullStackFn != nil {
 			base := 0
 			for i := e.pointer - 1; i >= 0; i-- {
-				if IsOpenParen(e.stack[i]) {
+				if IsOpenParen(e.tape.At(i)) {
 					base = i + 1
 					break
 				}
@@ -2145,7 +2241,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 			}
 			preserved := e.resolvedStackBeforeFrom(base, sortedIndices)
 			results := match.Sig.CheckFullStackFn(match.Args, preserved, e.registry)
-			stackSplice(&e.stack, base, end+1-base, results...)
+			e.tape.Splice(base, end+1-base, results...)
 			e.pointer = base
 			return nil
 		}
@@ -2163,7 +2259,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		// only replace within the current paren scope, not below it.
 		base := 0
 		for i := e.pointer - 1; i >= 0; i-- {
-			if IsOpenParen(e.stack[i]) {
+			if IsOpenParen(e.tape.At(i)) {
 				base = i + 1
 				break
 			}
@@ -2180,7 +2276,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		}
 		// FullStack handler returns the complete replacement for
 		// everything from base through the pointer (inclusive).
-		stackSplice(&e.stack, base, e.pointer+1-base, results...)
+		e.tape.Splice(base, e.pointer+1-base, results...)
 		e.pointer = base
 		return nil
 	}
@@ -2197,8 +2293,8 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// values that lack a position with the call-site word's position, so a
 	// return-type error (named-fn body or anonymous fn value) points at the
 	// call/construction rather than the last textual occurrence of the name.
-	if e.pointer >= 0 && e.pointer < len(e.stack) {
-		stampResultPos(results, e.stack[e.pointer].Pos)
+	if e.pointer >= 0 && e.pointer < e.tape.Len() {
+		stampResultPos(results, e.tape.At(e.pointer).Pos)
 	}
 
 	if err := e.spliceMatchResults(match, sortedIndices, n, results); err != nil {
@@ -2259,16 +2355,16 @@ func (e *Engine) spliceMatchResults(match *MatchResult, sortedIndices []int, n i
 		dst := firstArgIdx
 		for i := firstArgIdx; i <= e.pointer; i++ {
 			if !skipSet[i] {
-				e.stack[dst] = e.stack[i]
+				e.tape.Set(dst, e.tape.At(i))
 				dst++
 			}
 		}
 		// Splice out the compacted garbage, insert results.
-		stackSplice(&e.stack, dst, e.pointer+1-dst, results...)
+		e.tape.Splice(dst, e.pointer+1-dst, results...)
 		e.pointer = firstArgIdx
 	} else if n == 0 {
 		// No args, just replace the word with results.
-		stackSplice(&e.stack, e.pointer, 1, results...)
+		e.tape.Splice(e.pointer, 1, results...)
 		// Pointer stays at same position to re-examine results.
 	} else {
 		// Fallback: simple contiguous splice.
@@ -2276,7 +2372,7 @@ func (e *Engine) spliceMatchResults(match *MatchResult, sortedIndices []int, n i
 		if argStart < 0 {
 			argStart = 0
 		}
-		stackSplice(&e.stack, argStart, e.pointer+1-argStart, results...)
+		e.tape.Splice(argStart, e.pointer+1-argStart, results...)
 		e.pointer = argStart
 	}
 
@@ -2311,7 +2407,7 @@ func (e *Engine) rearrangeForForward(stackArgs, forwardArgs int) {
 	// Extract values in current order.
 	values := make([]Value, total)
 	for i, idx := range indices {
-		values[i] = e.stack[idx]
+		values[i] = e.tape.At(idx)
 	}
 
 	// Reorder: stack args stay in source order; forward args go after
@@ -2326,7 +2422,7 @@ func (e *Engine) rearrangeForForward(stackArgs, forwardArgs int) {
 
 	// Write back.
 	for i, idx := range indices {
-		e.stack[idx] = reordered[i]
+		e.tape.Set(idx, reordered[i])
 	}
 }
 
@@ -2335,10 +2431,10 @@ func (e *Engine) rearrangeForForward(stackArgs, forwardArgs int) {
 func (e *Engine) resolvedIndicesBefore(n int) []int {
 	var indices []int
 	for i := e.pointer - 1; i >= 0 && len(indices) < n; i-- {
-		if IsOpenParen(e.stack[i]) {
+		if IsOpenParen(e.tape.At(i)) {
 			break
 		}
-		if IsForward(e.stack[i]) || IsMark(e.stack[i]) || IsMove(e.stack[i]) {
+		if IsForward(e.tape.At(i)) || IsMark(e.tape.At(i)) || IsMove(e.tape.At(i)) {
 			continue
 		}
 		indices = append(indices, i)
@@ -2360,10 +2456,10 @@ func (e *Engine) resolvedStackBeforeFrom(from int, excludeIndices []int) []Value
 	}
 	var stack []Value
 	for i := from; i < e.pointer; i++ {
-		if exclude[i] || IsForward(e.stack[i]) || IsOpenParen(e.stack[i]) || IsMark(e.stack[i]) || IsMove(e.stack[i]) {
+		if exclude[i] || IsForward(e.tape.At(i)) || IsOpenParen(e.tape.At(i)) || IsMark(e.tape.At(i)) || IsMove(e.tape.At(i)) {
 			continue
 		}
-		stack = append(stack, e.stack[i])
+		stack = append(stack, e.tape.At(i))
 	}
 	return stack
 }
@@ -2378,15 +2474,16 @@ func (e *Engine) resolvedStackBeforeFrom(from int, excludeIndices []int) []Value
 // forward-collection completion points where the word must re-dispatch
 // against the stack; callers set e.pointer themselves as needed.
 func (e *Engine) forceStackWord(idx int, w WordInfo) {
-	pos := e.stack[idx].Pos
-	e.stack[idx] = NewWordModified(w.Name, w.ArgCount, true, false)
-	e.stack[idx].Pos = pos // preserve source position across force-stack rewrite
+	pos := e.tape.At(idx).Pos
+	nw := NewWordModified(w.Name, w.ArgCount, true, false)
+	nw.Pos = pos // preserve source position across force-stack rewrite
+	e.tape.Set(idx, nw)
 }
 
 func (e *Engine) insertForward(w WordInfo, sig *Signature, forwardNeeded, stackArgs, specAt int) error {
 	var pos SrcPos
-	if e.pointer >= 0 && e.pointer < len(e.stack) {
-		pos = e.stack[e.pointer].Pos
+	if e.pointer >= 0 && e.pointer < e.tape.Len() {
+		pos = e.tape.At(e.pointer).Pos
 	}
 	fwd := NewForward(ForwardInfo{
 		FuncName:     w.Name,
@@ -2402,7 +2499,7 @@ func (e *Engine) insertForward(w WordInfo, sig *Signature, forwardNeeded, stackA
 		SpeculativeAt: max(specAt, 0),
 	})
 
-	stackInsert(&e.stack, e.pointer+1, fwd)
+	e.tape.Insert(e.pointer+1, fwd)
 
 	e.pointer += 2
 	return nil
@@ -2450,10 +2547,10 @@ func spliceIsData(info SpliceInfo) bool {
 // stepWord's def-substitution branch.
 func (e *Engine) pendingForwardIdx() int {
 	for i := e.pointer - 1; i >= 0; i-- {
-		if IsOpenParen(e.stack[i]) {
+		if IsOpenParen(e.tape.At(i)) {
 			return -1
 		}
-		if IsForward(e.stack[i]) {
+		if IsForward(e.tape.At(i)) {
 			return i
 		}
 	}
@@ -2475,17 +2572,17 @@ func (e *Engine) stepLiteral() error {
 	// they fall through to normal literal handling (pushed as data /
 	// collected as the forward arg). Otherwise expand and re-step (the
 	// nested-paren case).
-	if IsParenExpr(e.stack[valIdx]) && !e.stack[valIdx].Quoted && !e.pendingForwardWantsRawParen() {
-		items, _ := AsParenExpr(e.stack[valIdx])
-		stackSplice(&e.stack, valIdx, 1, expandParenExpr(items)...)
+	if IsParenExpr(e.tape.At(valIdx)) && !e.tape.At(valIdx).Quoted && !e.pendingForwardWantsRawParen() {
+		items, _ := AsParenExpr(e.tape.At(valIdx))
+		e.tape.Splice(valIdx, 1, expandParenExpr(items)...)
 		return nil
 	}
 	// A Reach reaching stepLiteral (nested in a collapsing span, or a
 	// collected list/map element) lowers to its get-chain in place, like a
 	// ParenExpr (Reach Phase B). Quoted/raw-pending reaches fall through.
-	if isEvalReach(e.stack[valIdx]) && !e.pendingForwardWantsRawParen() {
-		info, _ := AsReach(e.stack[valIdx])
-		stackSplice(&e.stack, valIdx, 1, expandReach(info)...)
+	if isEvalReach(e.tape.At(valIdx)) && !e.pendingForwardWantsRawParen() {
+		info, _ := AsReach(e.tape.At(valIdx))
+		e.tape.Splice(valIdx, 1, expandReach(info)...)
 		return nil
 	}
 
@@ -2500,22 +2597,22 @@ func (e *Engine) stepLiteral() error {
 		// means it is being processed as a standalone stack entry — the
 		// only place a splice should fire (as an arg it is collected by
 		// value via the TAny match in the collection branch below).
-		if IsSplice(e.stack[valIdx]) {
-			info, _ := AsSplice(e.stack[valIdx])
-			stackSplice(&e.stack, valIdx, 1, spliceExpand(info.Data)...)
+		if IsSplice(e.tape.At(valIdx)) {
+			info, _ := AsSplice(e.tape.At(valIdx))
+			e.tape.Splice(valIdx, 1, spliceExpand(info.Data)...)
 			return nil
 		}
 		// A dispatch-modifier marker reaching the pointer standalone means
 		// the preceding value was NOT a pending function (so execFnDefLiteral
 		// never consumed it) — e.g. `(1 add 2)/s`. The modifier is a no-op on
 		// a non-function result: drop the marker.
-		if IsDispatchMod(e.stack[valIdx]) {
-			e.stack = append(e.stack[:valIdx], e.stack[valIdx+1:]...)
+		if IsDispatchMod(e.tape.At(valIdx)) {
+			e.tape.Remove(valIdx)
 			return nil
 		}
 		// If the value is a FnDef/TFunction, execute it. Quoted function
 		// values are treated as data (not executed).
-		val := e.stack[valIdx]
+		val := e.tape.At(valIdx)
 		if (val.Parent.Equal(TFnDef) || val.Parent.Equal(TFunction)) &&
 			val.Data != nil && !val.Quoted {
 			if _, ok := val.Data.(FnDefInfo); ok {
@@ -2532,7 +2629,7 @@ func (e *Engine) stepLiteral() error {
 		return nil
 	}
 
-	fwd, _ := AsForward(e.stack[fwdIdx])
+	fwd, _ := AsForward(e.tape.At(fwdIdx))
 	funcIdx := fwd.FuncIndex
 
 	// Check if the value matches the next expected arg positionally.
@@ -2544,7 +2641,7 @@ func (e *Engine) stepLiteral() error {
 	// value rather than having to polymorphically extract a name from
 	// either shape.
 	if fwd.CollectedArgs < fwd.ExpectedArgs {
-		val := e.stack[valIdx]
+		val := e.tape.At(valIdx)
 		nextIdx := fwd.CollectedArgs
 		matches := sigArgMatches(fwd.Sig, nextIdx, val)
 		if !matches && fwd.Sig.QuoteArgs != nil && fwd.Sig.QuoteArgs[nextIdx] &&
@@ -2552,7 +2649,7 @@ func (e *Engine) stepLiteral() error {
 			w, _ := AsWord(val)
 			atom := NewAtom(w.Name)
 			atom.Pos = val.Pos // preserve source position across /q Word→Atom conversion
-			e.stack[valIdx] = atom
+			e.tape.Set(valIdx, atom)
 			matches = true
 		}
 		if !matches {
@@ -2562,8 +2659,8 @@ func (e *Engine) stepLiteral() error {
 	}
 
 	// Remove the value from its current position.
-	val := e.stack[valIdx]
-	stackRemove(&e.stack, valIdx)
+	val := e.tape.At(valIdx)
+	e.tape.Remove(valIdx)
 
 	// After removal, adjust indices if valIdx was before them.
 	if valIdx < funcIdx {
@@ -2581,7 +2678,7 @@ func (e *Engine) stepLiteral() error {
 	// [..., fwd0, fwd1, ..., stack_reversed..., func_word]
 	insertIdx := funcIdx
 
-	stackInsert(&e.stack, insertIdx, val)
+	e.tape.Insert(insertIdx, val)
 
 	funcIdx++
 	fwdIdx++
@@ -2594,14 +2691,14 @@ func (e *Engine) stepLiteral() error {
 
 	if fwd.CollectedArgs >= fwd.ExpectedArgs {
 		// All forward args collected. Remove forward, force stack, retry.
-		stackRemove(&e.stack, fwdIdx)
+		e.tape.Remove(fwdIdx)
 		// Adjust funcIdx if forward was before it (shouldn't normally happen).
 		if fwdIdx < funcIdx {
 			funcIdx--
 		}
 
-		if funcIdx < len(e.stack) && IsWord(e.stack[funcIdx]) {
-			w, _ := AsWord(e.stack[funcIdx])
+		if funcIdx < e.tape.Len() && IsWord(e.tape.At(funcIdx)) {
+			w, _ := AsWord(e.tape.At(funcIdx))
 			e.forceStackWord(funcIdx, w)
 		}
 
@@ -2623,8 +2720,8 @@ func (e *Engine) stepLiteral() error {
 		if e.recorder != nil && fwd.CollectedArgs > 0 {
 			start := funcIdx - fwd.CollectedArgs
 			for i := start; i < funcIdx; i++ {
-				if i >= 0 && i < len(e.stack) {
-					v := e.stack[i]
+				if i >= 0 && i < e.tape.Len() {
+					v := e.tape.At(i)
 					if isRecordableLiteral(v) {
 						e.recorder.OnPushLit(v)
 					}
@@ -2632,7 +2729,7 @@ func (e *Engine) stepLiteral() error {
 			}
 		}
 	} else {
-		e.stack[fwdIdx] = NewForward(fwd)
+		e.tape.Set(fwdIdx, NewForward(fwd))
 		e.pointer = fwdIdx + 1
 	}
 
@@ -2647,8 +2744,8 @@ func (e *Engine) stepLiteral() error {
 // Runtime-created values (from word handlers, def bodies, etc.) are
 // not auto-evaluated. This is called at the end of Run().
 func (e *Engine) autoEvalStack() error {
-	for i := 0; i < len(e.stack); i++ {
-		val := e.stack[i]
+	for i := 0; i < e.tape.Len(); i++ {
+		val := e.tape.At(i)
 		if !val.Eval || val.Quoted {
 			continue
 		}
@@ -2657,13 +2754,13 @@ func (e *Engine) autoEvalStack() error {
 			if err != nil {
 				return err
 			}
-			e.stack[i] = result
+			e.tape.Set(i, result)
 		} else if val.Parent.Equal(TMap) && val.Data != nil && !IsTypedMap(val) && !IsRecordType(val) && !IsOptionsType(val) {
 			result, err := e.autoEvalMap(val)
 			if err != nil {
 				return err
 			}
-			e.stack[i] = result
+			e.tape.Set(i, result)
 		}
 	}
 	return nil
@@ -2912,7 +3009,7 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 // module-internal words are available. Otherwise, body tokens are spliced
 // into the current engine's stack.
 func (e *Engine) execFnDefLiteral(valIdx int) error {
-	val := e.stack[valIdx]
+	val := e.tape.At(valIdx)
 	fnDef, ok := val.Data.(FnDefInfo)
 	if !ok {
 		e.pointer++
@@ -2966,12 +3063,12 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// the parser as a Word/__DM marker right after the group (/u /s /f /N
 	// are the usurp / stack-args / forward-args / force-arity words). Peek
 	// and consume it: it leaves the function inert (data).
-	if valIdx+1 < len(e.stack) {
-		if _, ok := AsDispatchMod(e.stack[valIdx+1]); ok {
-			e.stack = append(e.stack[:valIdx+1], e.stack[valIdx+2:]...)
-			v := e.stack[valIdx]
+	if valIdx+1 < e.tape.Len() {
+		if _, ok := AsDispatchMod(e.tape.At(valIdx + 1)); ok {
+			e.tape.Remove(valIdx + 1)
+			v := e.tape.At(valIdx)
 			v.Quoted = true
-			e.stack[valIdx] = v
+			e.tape.Set(valIdx, v)
 			e.pointer++
 			return nil
 		}
@@ -3131,7 +3228,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 				if len(positions) > 0 {
 					match.Args = make([]Value, len(positions))
 					for i, pos := range positions {
-						match.Args[i] = e.stack[pos]
+						match.Args[i] = e.tape.At(pos)
 					}
 				}
 				return e.execMatch(match)
@@ -3141,7 +3238,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 			// that need fnDef.Registry's scope for resolution.
 			args := make([]Value, len(positions))
 			for i, pos := range positions {
-				args[i] = e.stack[pos]
+				args[i] = e.tape.At(pos)
 			}
 			return e.execFnDefSig(valIdx, wrapperSig, args, fnDef.Registry)
 		}
@@ -3153,7 +3250,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	if len(positions) > 0 {
 		match.Args = make([]Value, len(positions))
 		for i, pos := range positions {
-			match.Args[i] = e.stack[pos]
+			match.Args[i] = e.tape.At(pos)
 		}
 	}
 	return e.execMatch(match)
@@ -3260,8 +3357,8 @@ func argTypeList(vals []Value) string {
 // (`Pkg.fn a b`) be recognised as a call, not a bare value reference.
 func (e *Engine) upcomingArgs(valIdx int) []Value {
 	var out []Value
-	for i := valIdx + 1; i < len(e.stack); i++ {
-		v := e.stack[i]
+	for i := valIdx + 1; i < e.tape.Len(); i++ {
+		v := e.tape.At(i)
 		switch {
 		case IsForward(v):
 			continue
@@ -3331,7 +3428,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 				args := make([]Value, nArgs)
 				for j := 0; j < nArgs; j++ {
 					ri := len(resolvedIdx) - 1 - j
-					args[j] = e.stack[resolvedIdx[ri]]
+					args[j] = e.tape.At(resolvedIdx[ri])
 				}
 				if checkMode {
 					return e.spliceAnonCheckResult(valIdx, nArgs, sig, args, fnDef.Captured)
@@ -3366,7 +3463,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 				args := make([]Value, nArgs)
 				startIdx := len(resolvedIdx) - nArgs
 				for j := 0; j < nArgs; j++ {
-					args[j] = e.stack[resolvedIdx[startIdx+j]]
+					args[j] = e.tape.At(resolvedIdx[startIdx+j])
 				}
 				if checkMode {
 					return e.spliceAnonCheckResult(valIdx, nArgs, sig, args, fnDef.Captured)
@@ -3393,11 +3490,11 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 	// the same way.
 	if e.registry != nil &&
 		fnDef.Name != "" && !fnDef.Anonymous &&
-		valIdx < len(e.stack) && !e.stack[valIdx].Quoted {
+		valIdx < e.tape.Len() && !e.tape.At(valIdx).Quoted {
 		candidates := append(append([]Value{}, resolved...), e.upcomingArgs(valIdx)...)
 		if len(candidates) > 0 {
 			if e.registry.Check.IsActive() {
-				pos := e.stack[valIdx].Pos
+				pos := e.tape.At(valIdx).Pos
 				e.registry.Check.AddDiagnostic(CheckDiagnostic{
 					Code:   "uncalled_function",
 					Detail: "call to '" + fnDef.Name + "' matched no signature and was left on the stack as data (arguments: " + argTypeList(candidates) + ")",
@@ -3406,18 +3503,20 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 					Col:    pos.Col,
 				})
 			} else {
-				e.stack[valIdx].FailedDispatch = true
+				fv := e.tape.At(valIdx)
+				fv.FailedDispatch = true
 				// Borrow a span from the nearest argument when the
 				// FnDef value itself carries none, so the end-of-run
 				// report can point somewhere real.
-				if e.stack[valIdx].Pos.Row == 0 {
+				if fv.Pos.Row == 0 {
 					for _, c := range candidates {
 						if c.Pos.Row > 0 {
-							e.stack[valIdx].Pos = c.Pos
+							fv.Pos = c.Pos
 							break
 						}
 					}
 				}
+				e.tape.Set(valIdx, fv)
 			}
 		}
 	}
@@ -3453,20 +3552,20 @@ func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Val
 		dst := firstArgIdx
 		for i := firstArgIdx; i <= valIdx; i++ {
 			if !skipSet[i] {
-				e.stack[dst] = e.stack[i]
+				e.tape.Set(dst, e.tape.At(i))
 				dst++
 			}
 		}
-		stackSplice(&e.stack, dst, valIdx+1-dst, result...)
+		e.tape.Splice(dst, valIdx+1-dst, result...)
 		e.pointer = firstArgIdx
 	} else if nArgs == 0 {
-		stackSplice(&e.stack, valIdx, 1, result...)
+		e.tape.Splice(valIdx, 1, result...)
 	} else {
 		argStart := valIdx - nArgs
 		if argStart < 0 {
 			argStart = 0
 		}
-		stackSplice(&e.stack, argStart, valIdx+1-argStart, result...)
+		e.tape.Splice(argStart, valIdx+1-argStart, result...)
 		e.pointer = argStart
 	}
 	return nil
@@ -3545,8 +3644,8 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	// Capture the call-site position (the fn value being invoked) before the
 	// stack is mutated, so a return-type error can point at the call.
 	var callPos SrcPos
-	if valIdx >= 0 && valIdx < len(e.stack) {
-		callPos = e.stack[valIdx].Pos
+	if valIdx >= 0 && valIdx < e.tape.Len() {
+		callPos = e.tape.At(valIdx).Pos
 	}
 
 	// Auto-evaluate consumed arguments with Eval=true so FnDef handlers
@@ -3593,8 +3692,8 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		// Pass the FnDef's lexical captures so the body sees them as
 		// defs (alongside the module-registry's own bindings).
 		var captures []CapturedBinding
-		if valIdx < len(e.stack) {
-			if fd, ok := e.stack[valIdx].Data.(FnDefInfo); ok {
+		if valIdx < e.tape.Len() {
+			if fd, ok := e.tape.At(valIdx).Data.(FnDefInfo); ok {
 				captures = fd.Captured
 			}
 		}
@@ -3613,20 +3712,20 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 			dst := firstArgIdx
 			for i := firstArgIdx; i <= valIdx; i++ {
 				if !skipSet[i] {
-					e.stack[dst] = e.stack[i]
+					e.tape.Set(dst, e.tape.At(i))
 					dst++
 				}
 			}
-			stackSplice(&e.stack, dst, valIdx+1-dst, result...)
+			e.tape.Splice(dst, valIdx+1-dst, result...)
 			e.pointer = firstArgIdx
 		} else if nArgs == 0 {
-			stackSplice(&e.stack, valIdx, 1, result...)
+			e.tape.Splice(valIdx, 1, result...)
 		} else {
 			argStart := valIdx - nArgs
 			if argStart < 0 {
 				argStart = 0
 			}
-			stackSplice(&e.stack, argStart, valIdx+1-argStart, result...)
+			e.tape.Splice(argStart, valIdx+1-argStart, result...)
 			e.pointer = argStart
 		}
 		return nil
@@ -3654,8 +3753,8 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	// doesn't carry the FnDefInfo directly. Install before params so
 	// params shadow same-named captures (innermost wins).
 	var captures []CapturedBinding
-	if valIdx < len(e.stack) {
-		if fd, ok := e.stack[valIdx].Data.(FnDefInfo); ok {
+	if valIdx < e.tape.Len() {
+		if fd, ok := e.tape.At(valIdx).Data.(FnDefInfo); ok {
 			captures = fd.Captured
 		}
 	}
@@ -3710,20 +3809,20 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		dst := firstArgIdx
 		for i := firstArgIdx; i <= valIdx; i++ {
 			if !skipSet[i] {
-				e.stack[dst] = e.stack[i]
+				e.tape.Set(dst, e.tape.At(i))
 				dst++
 			}
 		}
-		stackSplice(&e.stack, dst, valIdx+1-dst, tokens...)
+		e.tape.Splice(dst, valIdx+1-dst, tokens...)
 		e.pointer = firstArgIdx
 	} else if nArgs == 0 {
-		stackSplice(&e.stack, valIdx, 1, tokens...)
+		e.tape.Splice(valIdx, 1, tokens...)
 	} else {
 		argStart := valIdx - nArgs
 		if argStart < 0 {
 			argStart = 0
 		}
-		stackSplice(&e.stack, argStart, valIdx+1-argStart, tokens...)
+		e.tape.Splice(argStart, valIdx+1-argStart, tokens...)
 		e.pointer = argStart
 	}
 
@@ -3732,12 +3831,12 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 
 // implicitEnd resolves a forward early when a type mismatch occurs.
 func (e *Engine) implicitEnd(fwdIdx int) error {
-	fwd, _ := AsForward(e.stack[fwdIdx])
+	fwd, _ := AsForward(e.tape.At(fwdIdx))
 	funcIdx := fwd.FuncIndex
 	collectedCount := fwd.CollectedArgs
 	stackArgCount := fwd.StackArgs
 
-	stackRemove(&e.stack, fwdIdx)
+	e.tape.Remove(fwdIdx)
 	if fwdIdx < funcIdx {
 		funcIdx--
 	}
@@ -3787,10 +3886,10 @@ func (e *Engine) commitBarrierForward() bool {
 	// the same scan stepEnd performs.
 	fwdIdx := -1
 	for i := e.pointer - 1; i >= 0; i-- {
-		if IsOpenParen(e.stack[i]) {
+		if IsOpenParen(e.tape.At(i)) {
 			break
 		}
-		if IsForward(e.stack[i]) {
+		if IsForward(e.tape.At(i)) {
 			fwdIdx = i
 			break
 		}
@@ -3799,17 +3898,17 @@ func (e *Engine) commitBarrierForward() bool {
 		return false
 	}
 
-	fwd, _ := AsForward(e.stack[fwdIdx])
+	fwd, _ := AsForward(e.tape.At(fwdIdx))
 	funcIdx := fwd.FuncIndex
 	claimed := fwd.CollectedArgs + fwd.StackArgs
 	if claimed == 0 {
 		// Nothing collected yet — no smaller-arity dispatch to commit.
 		return false
 	}
-	if funcIdx < 0 || funcIdx >= len(e.stack) || !IsWord(e.stack[funcIdx]) {
+	if funcIdx < 0 || funcIdx >= e.tape.Len() || !IsWord(e.tape.At(funcIdx)) {
 		return false
 	}
-	w, _ := AsWord(e.stack[funcIdx])
+	w, _ := AsWord(e.tape.At(funcIdx))
 	fn := e.registry.Lookup(w.Name)
 	if fn == nil {
 		return false
@@ -3828,7 +3927,7 @@ func (e *Engine) commitBarrierForward() bool {
 	}
 	var resolved []Value
 	for i := start; i < funcIdx; i++ {
-		v := e.stack[i]
+		v := e.tape.At(i)
 		if IsForward(v) || IsOpenParen(v) || IsMark(v) || IsMove(v) {
 			continue
 		}
@@ -3869,11 +3968,11 @@ func (e *Engine) commitBarrierForward() bool {
 	// the args in sig order. (NOT curryOrStack: its rearrange is gated
 	// on StackArgs > 0, so a purely-arrival forward would re-dispatch
 	// with its collected args reversed.)
-	stackRemove(&e.stack, fwdIdx)
+	e.tape.Remove(fwdIdx)
 	if fwdIdx < funcIdx {
 		funcIdx--
 	}
-	if funcIdx < len(e.stack) && IsWord(e.stack[funcIdx]) {
+	if funcIdx < e.tape.Len() && IsWord(e.tape.At(funcIdx)) {
 		e.forceStackWord(funcIdx, w)
 	}
 	e.pointer = funcIdx
@@ -3896,8 +3995,8 @@ func (e *Engine) noteSpeculativeBarrierCommit(fwd ForwardInfo) {
 	}
 	detail := fwd.FuncName + " committed with " +
 		strconv.Itoa(fwd.CollectedArgs+fwd.StackArgs) + " argument(s) at a statement boundary"
-	if e.pointer >= 0 && e.pointer < len(e.stack) {
-		if bw, err := AsWord(e.stack[e.pointer]); err == nil {
+	if e.pointer >= 0 && e.pointer < e.tape.Len() {
+		if bw, err := AsWord(e.tape.At(e.pointer)); err == nil {
 			detail += " (`" + bw.Name + "`)"
 		}
 	}
@@ -3922,39 +4021,39 @@ func (e *Engine) stepEnd() error {
 	// Find nearest pending forward, stopping at open-paren barriers.
 	fwdIdx := -1
 	for i := endIdx - 1; i >= 0; i-- {
-		if IsOpenParen(e.stack[i]) {
+		if IsOpenParen(e.tape.At(i)) {
 			break
 		}
-		if IsForward(e.stack[i]) {
+		if IsForward(e.tape.At(i)) {
 			fwdIdx = i
 			break
 		}
 	}
 
 	if fwdIdx < 0 {
-		stackRemove(&e.stack, endIdx)
+		e.tape.Remove(endIdx)
 		return nil
 	}
 
-	fwd, _ := AsForward(e.stack[fwdIdx])
+	fwd, _ := AsForward(e.tape.At(fwdIdx))
 	funcIdx := fwd.FuncIndex
 
 	// Remove forward and end from the stack.
 	// Remove higher index first to preserve lower indices.
 	if endIdx > fwdIdx {
-		stackRemove(&e.stack, endIdx)
-		stackRemove(&e.stack, fwdIdx)
+		e.tape.Remove(endIdx)
+		e.tape.Remove(fwdIdx)
 		if fwdIdx < funcIdx {
 			funcIdx-- // forward removal
 		}
 		// end was already removed (endIdx > fwdIdx), endIdx > funcIdx always
 	} else {
-		stackRemove(&e.stack, fwdIdx)
+		e.tape.Remove(fwdIdx)
 		newEndIdx := endIdx
 		if fwdIdx < endIdx {
 			newEndIdx--
 		}
-		stackRemove(&e.stack, newEndIdx)
+		e.tape.Remove(newEndIdx)
 		if fwdIdx < funcIdx {
 			funcIdx--
 		}
@@ -4009,9 +4108,9 @@ func (e *Engine) stepMove(val Value) error {
 
 	// Scan the stack to find the mark's current position.
 	markIdx := -1
-	for i := 0; i < len(e.stack); i++ {
-		_as2, _ := AsMark(e.stack[i])
-		if IsMark(e.stack[i]) && _as2.ID == info.To {
+	for i := 0; i < e.tape.Len(); i++ {
+		_as2, _ := AsMark(e.tape.At(i))
+		if IsMark(e.tape.At(i)) && _as2.ID == info.To {
 			markIdx = i
 			break
 		}
@@ -4020,7 +4119,7 @@ func (e *Engine) stepMove(val Value) error {
 		// Mark was removed from the stack (e.g. by a for-loop controller
 		// signalling loop completion). Remove this orphaned move quietly.
 		delete(e.marks, info.To)
-		stackRemove(&e.stack, e.pointer)
+		e.tape.Remove(e.pointer)
 		e.traceNote = fmt.Sprintf("move orphan %s", info.To)
 		return nil
 	}
@@ -4036,7 +4135,7 @@ func (e *Engine) stepMove(val Value) error {
 	}
 
 	// Get the saved body from the mark.
-	markInfo, _ := AsMark(e.stack[markIdx])
+	markInfo, _ := AsMark(e.tape.At(markIdx))
 
 	// Remove from hash table.
 	delete(e.marks, info.To)
@@ -4044,7 +4143,7 @@ func (e *Engine) stepMove(val Value) error {
 	// Replace everything from mark through move (inclusive) with the body copy.
 	body := make([]Value, len(markInfo.Body))
 	copy(body, markInfo.Body)
-	stackSplice(&e.stack, markIdx, moveIdx-markIdx+1, body...)
+	e.tape.Splice(markIdx, moveIdx-markIdx+1, body...)
 
 	e.traceNote = fmt.Sprintf("move→mark %s", info.To)
 
@@ -4061,7 +4160,7 @@ func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
 
 	// Collect resolved values between mark and move (this iteration's output).
 	for j := markIdx + 1; j < moveIdx; j++ {
-		cont.Results = append(cont.Results, e.stack[j])
+		cont.Results = append(cont.Results, e.tape.At(j))
 	}
 
 	// Advance iterator.
@@ -4091,7 +4190,7 @@ func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
 
 		// Remove old mark ID, register new one.
 		delete(e.marks, info.To)
-		stackSplice(&e.stack, markIdx, moveIdx-markIdx+1, tokens...)
+		e.tape.Splice(markIdx, moveIdx-markIdx+1, tokens...)
 		if e.marks == nil {
 			e.marks = make(map[string]bool)
 		}
@@ -4106,7 +4205,7 @@ func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
 	// Done — uninstall iterator, splice in accumulated results.
 	UninstallDef(cont.Registry, cont.IterName)
 	delete(e.marks, info.To)
-	stackSplice(&e.stack, markIdx, moveIdx-markIdx+1, cont.Results...)
+	e.tape.Splice(markIdx, moveIdx-markIdx+1, cont.Results...)
 	e.pointer = markIdx
 	e.traceNote = "for done"
 	return nil
@@ -4121,7 +4220,7 @@ func (e *Engine) stepMoveIf(markIdx, moveIdx int, info MoveInfo) error {
 	// Collect condition results between mark and move.
 	var condResult Value
 	for j := markIdx + 1; j < moveIdx; j++ {
-		condResult = e.stack[j]
+		condResult = e.tape.At(j)
 	}
 
 	// Remove mark from hash table.
@@ -4129,7 +4228,7 @@ func (e *Engine) stepMoveIf(markIdx, moveIdx int, info MoveInfo) error {
 
 	// Check if condition produced a value.
 	if condResult.Parent == nil {
-		stackSplice(&e.stack, markIdx, moveIdx-markIdx+1)
+		e.tape.Splice(markIdx, moveIdx-markIdx+1)
 		e.pointer = markIdx
 		return e.runtimeError("runtime_error", "if: condition produced no value", "if", "")
 	}
@@ -4145,7 +4244,7 @@ func (e *Engine) stepMoveIf(markIdx, moveIdx int, info MoveInfo) error {
 	}
 
 	// Splice chosen branch (or nothing) in place of mark+condition+move.
-	stackSplice(&e.stack, markIdx, moveIdx-markIdx+1, branch...)
+	e.tape.Splice(markIdx, moveIdx-markIdx+1, branch...)
 	e.pointer = markIdx
 	e.traceNote = fmt.Sprintf("if %v", cond)
 	return nil
@@ -4183,7 +4282,7 @@ func (e *Engine) exitWithFlowCtrl() ([]Value, error) {
 		e.registry.FlowCtrl = FlowNone
 		return nil, e.runtimeError("halt", fmt.Sprintf("%s outside loop", ctrl), ctrl.String(), "")
 	}
-	return e.stack, nil
+	return e.tape.TakeAll(), nil
 }
 
 // handleLoopBreak resolves a FlowBreak signal by finding the nearest
@@ -4192,15 +4291,15 @@ func (e *Engine) exitWithFlowCtrl() ([]Value, error) {
 // false if no enclosing loop was on the tape.
 func (e *Engine) handleLoopBreak() bool {
 	// Scan forward from current pointer for a move with continuation.
-	for i := e.pointer; i < len(e.stack); i++ {
-		if IsMove(e.stack[i]) {
-			info, _ := AsMove(e.stack[i])
+	for i := e.pointer; i < e.tape.Len(); i++ {
+		if IsMove(e.tape.At(i)) {
+			info, _ := AsMove(e.tape.At(i))
 			if info.Cont != nil {
 				// Found the for-loop's move. Find its mark.
 				markIdx := -1
 				for j := 0; j < i; j++ {
-					_as3, _ := AsMark(e.stack[j])
-					if IsMark(e.stack[j]) && _as3.ID == info.To {
+					_as3, _ := AsMark(e.tape.At(j))
+					if IsMark(e.tape.At(j)) && _as3.ID == info.To {
 						markIdx = j
 						break
 					}
@@ -4213,7 +4312,7 @@ func (e *Engine) handleLoopBreak() bool {
 				// Uninstall iterator, splice in accumulated results.
 				UninstallDef(info.Cont.Registry, info.Cont.IterName)
 				delete(e.marks, info.To)
-				stackSplice(&e.stack, markIdx, i-markIdx+1, info.Cont.Results...)
+				e.tape.Splice(markIdx, i-markIdx+1, info.Cont.Results...)
 				e.pointer = markIdx
 				return true
 			}
@@ -4228,15 +4327,15 @@ func (e *Engine) handleLoopBreak() bool {
 // if a loop was found, false if no enclosing loop was on the tape.
 func (e *Engine) handleLoopContinue() bool {
 	// Scan forward from current pointer for a move with continuation.
-	for i := e.pointer; i < len(e.stack); i++ {
-		if IsMove(e.stack[i]) {
-			info, _ := AsMove(e.stack[i])
+	for i := e.pointer; i < e.tape.Len(); i++ {
+		if IsMove(e.tape.At(i)) {
+			info, _ := AsMove(e.tape.At(i))
 			if info.Cont != nil {
 				// Found the for-loop's move. Find its mark.
 				markIdx := -1
 				for j := 0; j < i; j++ {
-					_as4, _ := AsMark(e.stack[j])
-					if IsMark(e.stack[j]) && _as4.ID == info.To {
+					_as4, _ := AsMark(e.tape.At(j))
+					if IsMark(e.tape.At(j)) && _as4.ID == info.To {
 						markIdx = j
 						break
 					}
@@ -4248,7 +4347,7 @@ func (e *Engine) handleLoopContinue() bool {
 
 				// Remove values between mark and move (discard partial results).
 				if i-markIdx > 1 {
-					stackSplice(&e.stack, markIdx+1, i-markIdx-1)
+					e.tape.Splice(markIdx+1, i-markIdx-1)
 					// Recalculate move position.
 					i = markIdx + 1
 				}
@@ -4264,9 +4363,9 @@ func (e *Engine) handleLoopContinue() bool {
 // cleanMarks removes any leftover mark and move entries from the stack.
 func (e *Engine) cleanMarks() {
 	i := 0
-	for i < len(e.stack) {
-		if IsMark(e.stack[i]) || IsMove(e.stack[i]) {
-			stackRemove(&e.stack, i)
+	for i < e.tape.Len() {
+		if IsMark(e.tape.At(i)) || IsMove(e.tape.At(i)) {
+			e.tape.Remove(i)
 		} else {
 			i++
 		}
@@ -4276,7 +4375,7 @@ func (e *Engine) cleanMarks() {
 
 // stepOpenParen replaces the "(" word with an open-paren marker.
 func (e *Engine) stepOpenParen() error {
-	e.stack[e.pointer] = NewOpenParen()
+	e.tape.Set(e.pointer, NewOpenParen())
 	e.pointer++
 	return nil
 }
@@ -4288,7 +4387,7 @@ func (e *Engine) stepCloseParen() error {
 
 	openIdx := -1
 	for i := closeIdx - 1; i >= 0; i-- {
-		if IsOpenParen(e.stack[i]) {
+		if IsOpenParen(e.tape.At(i)) {
 			openIdx = i
 			break
 		}
@@ -4303,15 +4402,15 @@ func (e *Engine) stepCloseParen() error {
 	for attempt := 0; attempt < 222; attempt++ {
 		hasFwd := false
 		for i := openIdx + 1; i < closeIdx; i++ {
-			if IsForward(e.stack[i]) {
+			if IsForward(e.tape.At(i)) {
 				hasFwd = true
-				fwd, _ := AsForward(e.stack[i])
+				fwd, _ := AsForward(e.tape.At(i))
 				funcIdx := fwd.FuncIndex
 				collectedCount := fwd.CollectedArgs
 				stackArgCount := fwd.StackArgs
 
 				// Remove the forward.
-				stackRemove(&e.stack, i)
+				e.tape.Remove(i)
 				if i < funcIdx {
 					funcIdx--
 				}
@@ -4327,7 +4426,7 @@ func (e *Engine) stepCloseParen() error {
 
 				// Re-evaluate from current pointer up to closeIdx.
 				for e.pointer < closeIdx {
-					val := e.stack[e.pointer]
+					val := e.tape.At(e.pointer)
 					switch {
 					case IsWord(val):
 						if err := e.stepWord(val); err != nil {
@@ -4388,8 +4487,8 @@ func (e *Engine) stepCloseParen() error {
 
 	// Check for any remaining orphaned forwards.
 	for i := openIdx + 1; i < closeIdx; i++ {
-		if IsForward(e.stack[i]) {
-			fwd, _ := AsForward(e.stack[i])
+		if IsForward(e.tape.At(i)) {
+			fwd, _ := AsForward(e.tape.At(i))
 			if verr := e.voidArgErrorFor(fwd.FuncName, fwd.Pos); verr != nil {
 				return verr
 			}
@@ -4409,7 +4508,7 @@ func (e *Engine) stepCloseParen() error {
 	// via voidArgErrorFor).
 	if closeIdx == openIdx+1 {
 		for i := openIdx - 1; i >= 0; i-- {
-			v := e.stack[i]
+			v := e.tape.At(i)
 			if IsOpenParen(v) {
 				break
 			}
@@ -4426,9 +4525,9 @@ func (e *Engine) stepCloseParen() error {
 
 	// Remove any surviving def-cleanup markers.
 	for i := openIdx + 1; i < closeIdx; i++ {
-		if IsDefCleanup(e.stack[i]) {
-			e.stepDefCleanup(e.stack[i])
-			stackRemove(&e.stack, i)
+		if IsDefCleanup(e.tape.At(i)) {
+			e.stepDefCleanup(e.tape.At(i))
+			e.tape.Remove(i)
 			closeIdx--
 			i--
 		}
@@ -4436,15 +4535,15 @@ func (e *Engine) stepCloseParen() error {
 
 	// Check for return type validation.
 	for i := openIdx + 1; i < closeIdx; i++ {
-		if IsReturnCheck(e.stack[i]) {
-			rc, _ := AsReturnCheck(e.stack[i])
-			stackRemove(&e.stack, i)
+		if IsReturnCheck(e.tape.At(i)) {
+			rc, _ := AsReturnCheck(e.tape.At(i))
+			e.tape.Remove(i)
 			closeIdx--
 
 			// Collect resolved values in scope.
 			var results []Value
 			for j := openIdx + 1; j < closeIdx; j++ {
-				results = append(results, e.stack[j])
+				results = append(results, e.tape.At(j))
 			}
 
 			// Unconsumed unnamed args sit at the bottom of the scope,
@@ -4475,7 +4574,7 @@ func (e *Engine) stepCloseParen() error {
 
 			// Discard unconsumed unnamed args from the bottom of the scope.
 			for j := 0; j < extra; j++ {
-				stackRemove(&e.stack, openIdx+1)
+				e.tape.Remove(openIdx + 1)
 				closeIdx--
 			}
 			break
@@ -4484,8 +4583,8 @@ func (e *Engine) stepCloseParen() error {
 
 	// Remove the close paren (higher index first) and open paren.
 	// The values between them are already in place.
-	stackRemove(&e.stack, closeIdx)
-	stackRemove(&e.stack, openIdx)
+	e.tape.Remove(closeIdx)
+	e.tape.Remove(openIdx)
 
 	// Recorder hook: the values that survived inside the paren will
 	// be re-encountered by the main loop after we set pointer back
@@ -4503,11 +4602,11 @@ func (e *Engine) stepCloseParen() error {
 		// in the original stack indices, minus 1 for the removed
 		// OpenParen.)
 		end := closeIdx - 1
-		if end > len(e.stack) {
-			end = len(e.stack)
+		if end > e.tape.Len() {
+			end = e.tape.Len()
 		}
 		for i := openIdx; i < end; i++ {
-			if isRecordableLiteral(e.stack[i]) {
+			if isRecordableLiteral(e.tape.At(i)) {
 				survived++
 			}
 		}
@@ -4524,10 +4623,10 @@ func (e *Engine) stepCloseParen() error {
 // after the given openIdx.
 func (e *Engine) findCloseParenAfter(openIdx int) int {
 	depth := 0
-	for i := openIdx + 1; i < len(e.stack); i++ {
-		if IsOpenParen(e.stack[i]) {
+	for i := openIdx + 1; i < e.tape.Len(); i++ {
+		if IsOpenParen(e.tape.At(i)) {
 			depth++
-		} else if IsCloseParen(e.stack[i]) {
+		} else if IsCloseParen(e.tape.At(i)) {
 			if depth == 0 {
 				return i
 			}
@@ -4545,12 +4644,12 @@ func (e *Engine) effectiveResolved() []Value {
 	start := 0
 	excludeIndices := make(map[int]bool)
 	for i := e.pointer - 1; i >= 0; i-- {
-		if IsOpenParen(e.stack[i]) {
+		if IsOpenParen(e.tape.At(i)) {
 			start = i + 1
 			break
 		}
-		if IsForward(e.stack[i]) {
-			fwd, _ := AsForward(e.stack[i])
+		if IsForward(e.tape.At(i)) {
+			fwd, _ := AsForward(e.tape.At(i))
 			// Exclude the function word itself.
 			excludeIndices[fwd.FuncIndex] = true
 			// Exclude collected forward args (positioned before function word).
@@ -4571,7 +4670,7 @@ func (e *Engine) effectiveResolved() []Value {
 	}
 	var resolved []Value
 	for i := start; i < e.pointer; i++ {
-		v := e.stack[i]
+		v := e.tape.At(i)
 		if IsForward(v) || IsOpenParen(v) || IsMark(v) || IsMove(v) || excludeIndices[i] {
 			continue
 		}
@@ -4585,10 +4684,10 @@ func (e *Engine) effectiveResolved() []Value {
 // to collect this function's result as a forward arg).
 func (e *Engine) isInsidePendingForward() bool {
 	for i := e.pointer - 1; i >= 0; i-- {
-		if IsOpenParen(e.stack[i]) {
+		if IsOpenParen(e.tape.At(i)) {
 			return false
 		}
-		if IsForward(e.stack[i]) {
+		if IsForward(e.tape.At(i)) {
 			return true
 		}
 	}
@@ -4607,12 +4706,12 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 		sac = stackArgCount[0]
 	}
 
-	if funcIdx >= len(e.stack) || !IsWord(e.stack[funcIdx]) {
+	if funcIdx >= e.tape.Len() || !IsWord(e.tape.At(funcIdx)) {
 		e.pointer = funcIdx
 		return
 	}
 
-	w, _ := AsWord(e.stack[funcIdx])
+	w, _ := AsWord(e.tape.At(funcIdx))
 	fn := e.registry.Lookup(w.Name)
 
 	// Check if stack match exists with current resolved values.
@@ -4624,12 +4723,12 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 		start := 0
 		excludeIndices := make(map[int]bool)
 		for i := funcIdx - 1; i >= 0; i-- {
-			if IsOpenParen(e.stack[i]) {
+			if IsOpenParen(e.tape.At(i)) {
 				start = i + 1
 				break
 			}
-			if IsForward(e.stack[i]) {
-				fwd, _ := AsForward(e.stack[i])
+			if IsForward(e.tape.At(i)) {
+				fwd, _ := AsForward(e.tape.At(i))
 				// Exclude the function word itself.
 				excludeIndices[fwd.FuncIndex] = true
 				// Exclude collected forward args (before function word).
@@ -4650,7 +4749,7 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 		}
 		var resolved []Value
 		for i := start; i < funcIdx; i++ {
-			v := e.stack[i]
+			v := e.tape.At(i)
 			if IsForward(v) || IsOpenParen(v) || excludeIndices[i] {
 				continue
 			}
@@ -4684,10 +4783,10 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 		checkStart = 0
 	}
 	for i := checkStart - 1; i >= 0; i-- {
-		if IsOpenParen(e.stack[i]) {
+		if IsOpenParen(e.tape.At(i)) {
 			break
 		}
-		if IsForward(e.stack[i]) {
+		if IsForward(e.tape.At(i)) {
 			hasOuterForward = true
 			break
 		}
@@ -4705,10 +4804,10 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 		elems := make([]Value, 0, 1+collectedCount)
 		elems = append(elems, NewWord(w.Name))
 		for i := startIdx; i < funcIdx; i++ {
-			elems = append(elems, e.stack[i])
+			elems = append(elems, e.tape.At(i))
 		}
 
-		stackSplice(&e.stack, startIdx, collectedCount+1, NewList(elems))
+		e.tape.Splice(startIdx, collectedCount+1, NewList(elems))
 		e.pointer = startIdx
 		return
 	}
@@ -4725,11 +4824,11 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 // quote, inspect, etc.; see signature.go §1.5 on /q.
 func (e *Engine) hasPendingForwardQuoteArg() bool {
 	for i := e.pointer - 1; i >= 0; i-- {
-		if IsOpenParen(e.stack[i]) {
+		if IsOpenParen(e.tape.At(i)) {
 			break
 		}
-		if IsForward(e.stack[i]) {
-			fwd, _ := AsForward(e.stack[i])
+		if IsForward(e.tape.At(i)) {
+			fwd, _ := AsForward(e.tape.At(i))
 			// Forward args fill from sigArgs[0]; the next forward slot
 			// is at index CollectedArgs.
 			nextIdx := fwd.CollectedArgs
@@ -4748,11 +4847,11 @@ func (e *Engine) hasPendingForwardQuoteArg() bool {
 // hasPendingForwardQuoteArg. See design/MACROS-PHASE1.10.md §3.
 func (e *Engine) hasPendingForwardFormArg() bool {
 	for i := e.pointer - 1; i >= 0; i-- {
-		if IsOpenParen(e.stack[i]) {
+		if IsOpenParen(e.tape.At(i)) {
 			break
 		}
-		if IsForward(e.stack[i]) {
-			fwd, _ := AsForward(e.stack[i])
+		if IsForward(e.tape.At(i)) {
+			fwd, _ := AsForward(e.tape.At(i))
 			nextIdx := fwd.CollectedArgs
 			if nextIdx < fwd.Sig.TotalArgs() {
 				return fwd.Sig.FormArgs != nil && fwd.Sig.FormArgs[nextIdx]
@@ -4767,11 +4866,11 @@ func (e *Engine) hasPendingForwardFormArg() bool {
 // whose next expected argument is TFunction.
 func (e *Engine) hasPendingForwardExpectingFunction() bool {
 	for i := e.pointer - 1; i >= 0; i-- {
-		if IsOpenParen(e.stack[i]) {
+		if IsOpenParen(e.tape.At(i)) {
 			break
 		}
-		if IsForward(e.stack[i]) {
-			fwd, _ := AsForward(e.stack[i])
+		if IsForward(e.tape.At(i)) {
+			fwd, _ := AsForward(e.tape.At(i))
 			// Forward args fill from sigArgs[0].
 			nextIdx := fwd.CollectedArgs
 			if nextIdx < fwd.Sig.TotalArgs() {
@@ -4838,8 +4937,8 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 	// untype Foo (Foo in r.Types), `m.Color` after import (Color is a
 	// key in the imported map), and inspect-style name capture.
 	preferWordSig := false
-	if e.pointer+1 < len(e.stack) {
-		next := e.stack[e.pointer+1]
+	if e.pointer+1 < e.tape.Len() {
+		next := e.tape.At(e.pointer + 1)
 		if IsWord(next) {
 			preferWordSig = true
 		}
@@ -4903,9 +5002,9 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			scanIdx := e.pointer + 1
 
 			// One inner loop over parameters, matching forward tokens.
-			for fwd < forwardLimit && scanIdx < len(e.stack) {
+			for fwd < forwardLimit && scanIdx < e.tape.Len() {
 
-				tok := e.stack[scanIdx]
+				tok := e.tape.At(scanIdx)
 				expectedType := sigArgType(sig, fwd)
 
 				// 1.4: structural boundaries — stop forward scan.
@@ -5070,7 +5169,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			// forward-matched positions too. The previous code
 			// short-circuited here without consulting Patterns,
 			// which made `def fact[0] (1)` fire for any integer.
-			if !patternsOk(sig, positions, e.stack, fwd, e.registry) {
+			if !patternsOk(sig, positions, e.tape, fwd, e.registry) {
 				continue
 			}
 			if preferWordSig && !isPreferred {
@@ -5172,7 +5271,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		// §1.1 fix: scalar literals route through Patterns regardless
 		// of whether they came from forward or stack matching, so the
 		// pattern check no longer skips forward positions.
-		if !patternsOk(sig, positions, e.stack, fwd, e.registry) {
+		if !patternsOk(sig, positions, e.tape, fwd, e.registry) {
 			continue
 		}
 
@@ -5214,8 +5313,8 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 func (e *Engine) checkModeFallbackPositions(n int) []int {
 	positions := e.resolvedIndicesBefore(n)
 	remaining := n - len(positions)
-	for i := e.pointer + 1; remaining > 0 && i < len(e.stack); i++ {
-		v := e.stack[i]
+	for i := e.pointer + 1; remaining > 0 && i < e.tape.Len(); i++ {
+		v := e.tape.At(i)
 		if IsForward(v) || IsMark(v) || IsMove(v) ||
 			IsOpenParen(v) || IsReturnCheck(v) || IsDefCleanup(v) {
 			continue
@@ -5253,7 +5352,7 @@ func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
 	var sinfo *SurfaceInfo
 	var shape Value
 	for _, p := range e.checkModeFallbackPositions(4) {
-		v := e.stack[p]
+		v := e.tape.At(p)
 		// A position AFTER the pointer may still hold the raw Word
 		// token (forward args resolve during collection, which the
 		// fallback path bypasses). Resolve it the way the forward scan
@@ -5297,7 +5396,7 @@ func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
 	positions := e.checkModeFallbackPositions(n)
 	args := make([]Value, len(positions))
 	for i, p := range positions {
-		args[i] = e.stack[p]
+		args[i] = e.tape.At(p)
 	}
 	results := carrierResults(e.registry, w.Name, synth, args, pos)
 	e.spliceCheckResults(positions, results)
@@ -5332,7 +5431,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		score := 0
 		compatible := true
 		for j, p := range pos {
-			av := e.stack[p]
+			av := e.tape.At(p)
 			if av.Parent.Equal(TAny) {
 				continue
 			}
@@ -5379,7 +5478,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	positions := e.checkModeFallbackPositions(n)
 	args := make([]Value, len(positions))
 	for i, p := range positions {
-		args[i] = e.stack[p]
+		args[i] = e.tape.At(p)
 	}
 	results := carrierResults(e.registry, w.Name, sig, args, pos)
 	e.spliceCheckResults(positions, results)
@@ -5413,8 +5512,8 @@ func (e *Engine) spliceCheckResults(positions []int, results []Value) {
 		if uniq[i] < insertAt {
 			insertAt--
 		}
-		stackRemove(&e.stack, uniq[i])
+		e.tape.Remove(uniq[i])
 	}
-	stackSplice(&e.stack, insertAt, 0, results...)
+	e.tape.Splice(insertAt, 0, results...)
 	e.pointer = insertAt
 }

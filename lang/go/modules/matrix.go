@@ -25,27 +25,29 @@ import (
 // IDs stay wire-compatible.
 var TTensor, TMatrix, TVector = registerTensorTypes()
 
+// tensorTypeInitErr records any error from the init-time tensor-type
+// registration. It can only be a programmer error (duplicate FixedID or
+// malformed path); per ADR-005 it is recorded here and surfaced by
+// BuildMatrixModule rather than panicked at package import.
+var tensorTypeInitErr error
+
 func registerTensorTypes() (*eng.Type, *eng.Type, *eng.Type) {
 	// Tensor first — Matrix and Vector register as its lattice
 	// children and so need it present in eng.Builtin.
 	tensor, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Tensor", 2001, tensorFormatBehavior{})
 	if err != nil {
-		// lint:allow-panic — init-time builtin registration; see
-		// registerTimerType in native/native_misc.go for rationale.
-		panic(fmt.Sprintf("matrix: register TTensor: %v", err))
+		tensorTypeInitErr = fmt.Errorf("matrix: register TTensor: %w", err)
 	}
 	// Tensor inherits Ideal's unified Rank from RegisterExternalBuiltin
 	// (external types take no positional slot — see builtinDecls in
 	// eng/go/typetable.go); Matrix and Vector inherit it in turn.
 	matrix, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Tensor/Matrix", 2000, tensorFormatBehavior{})
-	if err != nil {
-		// lint:allow-panic — see above.
-		panic(fmt.Sprintf("matrix: register TMatrix: %v", err))
+	if err != nil && tensorTypeInitErr == nil {
+		tensorTypeInitErr = fmt.Errorf("matrix: register TMatrix: %w", err)
 	}
 	vector, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Tensor/Vector", 2002, tensorFormatBehavior{})
-	if err != nil {
-		// lint:allow-panic — see above.
-		panic(fmt.Sprintf("matrix: register TVector: %v", err))
+	if err != nil && tensorTypeInitErr == nil {
+		tensorTypeInitErr = fmt.Errorf("matrix: register TVector: %w", err)
 	}
 	return tensor, matrix, vector
 }
@@ -59,6 +61,17 @@ func registerTensorTypes() (*eng.Type, *eng.Type, *eng.Type) {
 type TensorData struct {
 	Shape []int
 	Data  []float64
+}
+
+// DeepClone satisfies eng.DeepCloner so the universal `clone` word
+// produces an independent tensor: the Shape and Data slices are copied
+// rather than shared, so mutating the clone cannot touch the original.
+func (t TensorData) DeepClone() any {
+	shape := make([]int, len(t.Shape))
+	copy(shape, t.Shape)
+	data := make([]float64, len(t.Data))
+	copy(data, t.Data)
+	return TensorData{Shape: shape, Data: data}
 }
 
 // Rank reports the number of dimensions.
@@ -165,10 +178,36 @@ func newMatrix(rows, cols int, data []float64) native.Value {
 	return tensorValue(TMatrix, TensorData{Shape: []int{rows, cols}, Data: data})
 }
 
+// maxMatrixElems caps the number of entries a constructor will allocate
+// from user-supplied dimensions (~134M float64 ≈ 1 GiB). It bounds the
+// memory a single `zeros`/`ones`/`fill`/`eye` call can demand.
+const maxMatrixElems = 1 << 27
+
+// validDims rejects dimensions that would make matrix allocation unsafe:
+// a negative size (make([]float64, neg) panics), an int overflow in
+// rows*cols, or a product beyond the element cap (OOM). Returning an
+// error here keeps these user-reachable conditions out of the panicking
+// allocation path — see ADR-005.
+func validDims(rows, cols int) error {
+	if rows < 0 || cols < 0 {
+		return fmt.Errorf("matrix: dimensions must be non-negative, got %dx%d", rows, cols)
+	}
+	// Check the product without overflowing: rows*cols > cap ⇔ cols > cap/rows.
+	if rows != 0 && cols > maxMatrixElems/rows {
+		return fmt.Errorf("matrix: %dx%d (%d elements) exceeds the cap of %d", rows, cols, rows*cols, maxMatrixElems)
+	}
+	return nil
+}
+
 // BuildMatrixModule creates the "aql:matrix-util" native module. It registers
 // Go-implemented matrix words into an isolated sub-registry and returns a
 // ModuleDesc with a "matrix" export containing FnDef wrappers for each word.
 func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
+	// Surface any init-time tensor-type registration error (recorded
+	// instead of panicked — see registerTensorTypes / ADR-005).
+	if tensorTypeInitErr != nil {
+		return native.ModuleDesc{}, tensorTypeInitErr
+	}
 	subReg, err := native.DefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
@@ -421,6 +460,9 @@ var MatrixNatives = []native.NativeFunc{
 					return nil, err
 				}
 				rows, cols := int(r64), int(c64)
+				if err := validDims(rows, cols); err != nil {
+					return nil, err
+				}
 				data := make([]float64, rows*cols)
 				return []native.Value{newMatrix(rows, cols, data)}, nil
 			},
@@ -443,6 +485,9 @@ var MatrixNatives = []native.NativeFunc{
 					return nil, err
 				}
 				rows, cols := int(r64), int(c64)
+				if err := validDims(rows, cols); err != nil {
+					return nil, err
+				}
 				data := make([]float64, rows*cols)
 				for i := range data {
 					data[i] = 1.0
@@ -463,6 +508,9 @@ var MatrixNatives = []native.NativeFunc{
 					return nil, err
 				}
 				n := int(n64)
+				if err := validDims(n, n); err != nil {
+					return nil, err
+				}
 				data := make([]float64, n*n)
 				for i := 0; i < n; i++ {
 					data[i*n+i] = 1.0
@@ -491,6 +539,9 @@ var MatrixNatives = []native.NativeFunc{
 					return nil, err
 				}
 				rows, cols := int(r64), int(c64)
+				if err := validDims(rows, cols); err != nil {
+					return nil, err
+				}
 				data := make([]float64, rows*cols)
 				for i := range data {
 					data[i] = val

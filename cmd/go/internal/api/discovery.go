@@ -60,10 +60,28 @@ func (s *Server) writeDiscoveryFile() error {
 	if err != nil {
 		return err
 	}
-	// Write atomically: create tmp + rename so a concurrent reader
-	// never sees a half-written file.
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, body, 0600); err != nil {
+	// Write atomically: create a temp file with a random, exclusive name
+	// (O_EXCL) in the same directory, then rename over the target. A fixed
+	// "<path>.tmp" name in a shared temp dir is a symlink-TOCTOU footgun —
+	// os.WriteFile would follow a pre-planted symlink and leak the token.
+	// os.CreateTemp uses O_CREATE|O_EXCL with an unpredictable suffix.
+	f, err := os.CreateTemp(filepath.Dir(path), "aql-api-*.json.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	if err := f.Chmod(0600); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if _, err := f.Write(body); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
 		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {

@@ -19,7 +19,7 @@ package eng
 //     Tightening it would break callers like `create` whose 1-arg
 //     `(Map) Patterns={kind:"api"}` sig was previously matched on
 //     non-api maps when the handler then routed by stack contents.
-func patternsOk(sig *Signature, positions []int, stack []Value, fwd int, r *Registry) bool {
+func patternsOk(sig *Signature, positions []int, tape *Tape, fwd int, r *Registry) bool {
 	for idx := 0; idx < sig.TotalArgs(); idx++ {
 		pattern, ok := sigPattern(sig, idx)
 		if !ok {
@@ -29,7 +29,7 @@ func patternsOk(sig *Signature, positions []int, stack []Value, fwd int, r *Regi
 			continue
 		}
 		isForward := idx < fwd
-		val := stack[positions[idx]]
+		val := tape.At(positions[idx])
 		// A forward position may still hold the unresolved Word token
 		// for a def-bound value (the forward scan plans against
 		// Defs.Top but does not rewrite the tape). Resolve it the same

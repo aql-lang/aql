@@ -868,3 +868,48 @@ func TestCompositionSumOfSquares(t *testing.T) {
 		t.Errorf("sum of squares = %v, want 30", result[0])
 	}
 }
+
+// reshape and iota must bound their allocation against user-supplied
+// dimensions: a huge dimension, an overflowing shape product, or a huge
+// iota count must return an error rather than reach the panicking
+// make([]Value, …) path. Drive the handlers directly so we observe the
+// returned error. See ADR-005.
+func intList(ns ...int64) Value {
+	elems := make([]Value, len(ns))
+	for i, n := range ns {
+		elems[i] = NewInteger(n)
+	}
+	return NewList(elems)
+}
+
+func TestReshapeBounds(t *testing.T) {
+	r := arrayTestReg()
+	bad := [][2]Value{
+		{intList(4611686018427387904, 4), intList()}, // product overflows to 0
+		{intList(99999999, 2), intList()},            // single dim over the cap
+		{intList(-1, 2), intList(1, 2)},              // negative dim
+	}
+	for _, c := range bad {
+		if _, err := reshapeHandler([]Value{c[0], c[1]}, nil, nil, r); err == nil {
+			t.Errorf("reshape(%v, %v): expected error, got nil", c[0], c[1])
+		}
+	}
+	// A valid reshape still works.
+	out, err := reshapeHandler([]Value{intList(2, 3), intList(1, 2, 3, 4, 5, 6)}, nil, nil, r)
+	if err != nil || len(out) != 1 {
+		t.Errorf("valid reshape = (%v, %v), want one result", out, err)
+	}
+}
+
+func TestIotaBounds(t *testing.T) {
+	r := arrayTestReg()
+	if _, err := iotaHandler([]Value{NewInteger(999999999)}, nil, nil, r); err == nil {
+		t.Error("iota over cap: expected error, got nil")
+	}
+	if _, err := iotaHandler([]Value{NewInteger(-1)}, nil, nil, r); err == nil {
+		t.Error("iota negative: expected error, got nil")
+	}
+	if out, err := iotaHandler([]Value{NewInteger(5)}, nil, nil, r); err != nil || len(out) != 1 {
+		t.Errorf("iota 5 = (%v, %v), want one list", out, err)
+	}
+}

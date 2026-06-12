@@ -51,7 +51,7 @@ var categories = []Category{
 		"flex",
 	}},
 	{"storage", "Variables, value access, references, and lenses.", []string{
-		"set", "get", "getr", "context", "keys", "vals",
+		"set", "get", "getr", "has", "context", "keys", "vals",
 		"reach", "apply", "rebind", "ref", "referent",
 	}},
 	{"control", "Control flow, definitions, and functions.", []string{

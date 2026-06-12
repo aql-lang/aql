@@ -34,6 +34,11 @@ func DefaultRegistry(providers ...func(*Registry)) (*Registry, error) {
 // permissions policy before host capabilities. Pass nil for p to
 // mean "no policy" (allow-everything, the historical default).
 func DefaultRegistryWithPolicy(p policy.Policy, providers ...func(*Registry)) (*Registry, error) {
+	// Surface any init-time external-type registration error (recorded at
+	// package import instead of panicking — see typeinit.go / ADR-005).
+	if err := TypeInitError(); err != nil {
+		return nil, err
+	}
 	r, err := NewRegistry()
 	if err != nil {
 		return nil, err

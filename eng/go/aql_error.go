@@ -224,8 +224,8 @@ func diagValue(v Value) string {
 
 // describeStackTypes returns a human-readable description of the types
 // on the stack around a given position, for inclusion in error messages.
-func describeStackTypes(stack []Value, pointer int) string {
-	if len(stack) == 0 {
+func describeStackTypes(tape *Tape, pointer int) string {
+	if tape.Len() == 0 {
 		return "stack is empty"
 	}
 	// Show types of up to 3 values before and after the pointer.
@@ -235,11 +235,11 @@ func describeStackTypes(stack []Value, pointer int) string {
 		start = 0
 	}
 	end := pointer + 4
-	if end > len(stack) {
-		end = len(stack)
+	if end > tape.Len() {
+		end = tape.Len()
 	}
 	for i := start; i < end; i++ {
-		v := stack[i]
+		v := tape.At(i)
 		label := "?"
 		if t := ValueType(v); t != nil {
 			label = t.String()

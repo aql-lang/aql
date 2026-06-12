@@ -48,6 +48,10 @@ type Registry struct {
 	Output    io.Writer // output writer for print/printstr and stdout
 	ErrOutput io.Writer // error output writer for stderr
 	Input     io.Reader // input reader for stdin
+	// TapeConfig bounds the execution tape's growth (initial size, max
+	// grows, growth factor). The zero value uses the defaults; hosts set
+	// it via lang.Options. See eng/go/tape.go.
+	TapeConfig TapeConfig
 	// Modules owns module-loading state: the load set, the
 	// module-ID counter, the host's init callback, and the native-
 	// module resolver. See modules.go.
@@ -307,6 +311,13 @@ type CheckDiagnostic struct {
 // installs those via Registry.SetCapability before running user code.
 // See capability.go for the plugin contract.
 func NewRegistry() (*Registry, error) {
+	// Surface any error accumulated while building the package-level
+	// builtin type table (a malformed builtinDecls or an unknown
+	// well-known path). These are init-time programmer errors that used
+	// to panic; per ADR-005 they are reported here instead.
+	if err := BuiltinInitError(); err != nil {
+		return nil, err
+	}
 	r := &Registry{
 		Defs:         NewDefTable(),
 		Contexts:     NewContextStack(),

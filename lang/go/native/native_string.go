@@ -4,7 +4,92 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
+
+// Case-insensitive matching that preserves original byte offsets.
+//
+// strings.ToLower can change a string's byte length (e.g. Turkish İ
+// U+0130 lowercases to the two-rune "i̇"), so an index found in a
+// lowercased copy does NOT line up with the original string. Slicing the
+// original with such an index cuts through a multi-byte rune and yields
+// invalid UTF-8. These helpers match rune-by-rune under simple (1:1)
+// case folding and return offsets into the ORIGINAL string, so every
+// slice lands on a rune boundary.
+
+// foldEqualRune reports whether a and b are equal under simple Unicode
+// case folding (rune-for-rune, never changing byte length).
+func foldEqualRune(a, b rune) bool {
+	return a == b || unicode.ToLower(a) == unicode.ToLower(b)
+}
+
+// foldMatchAt reports whether s begins with a case-insensitive match of
+// substr, returning the number of bytes of s the match spans (which can
+// differ from len(substr) when casing changes byte length).
+func foldMatchAt(s, substr string) (int, bool) {
+	si := 0
+	for _, pr := range substr {
+		if si >= len(s) {
+			return 0, false
+		}
+		sr, size := utf8.DecodeRuneInString(s[si:])
+		if !foldEqualRune(sr, pr) {
+			return 0, false
+		}
+		si += size
+	}
+	return si, true
+}
+
+// foldIndex returns the byte offset in s (at or after from) of the first
+// case-insensitive match of substr, plus the number of bytes of s the
+// match spans. Returns (-1, 0) when absent. Both values are offsets into
+// s, so slicing s with them never produces invalid UTF-8.
+func foldIndex(s, substr string, from int) (start, span int) {
+	if from < 0 {
+		from = 0
+	}
+	if substr == "" {
+		return from, 0
+	}
+	for i := from; i <= len(s); {
+		if sp, ok := foldMatchAt(s[i:], substr); ok {
+			return i, sp
+		}
+		if i >= len(s) {
+			break
+		}
+		_, size := utf8.DecodeRuneInString(s[i:])
+		if size == 0 {
+			break
+		}
+		i += size
+	}
+	return -1, 0
+}
+
+// foldLastIndex is the case-insensitive analogue of strings.LastIndex,
+// returning the original-string byte offset of the last match, or -1.
+func foldLastIndex(s, substr string) int {
+	last := -1
+	from := 0
+	for {
+		idx, span := foldIndex(s, substr, from)
+		if idx < 0 {
+			return last
+		}
+		last = idx
+		if span == 0 {
+			_, size := utf8.DecodeRuneInString(s[idx:])
+			if size == 0 {
+				return last
+			}
+			from = idx + size
+		} else {
+			from = idx + span
+		}
+	}
+}
 
 // StringModuleNatives covers the string-manipulation words, moved OUT of core
 // into the aql:string-util module (StringUtil namespace). Formerly stringNatives. Each entry uses
@@ -282,18 +367,16 @@ func splitInsensitive(input, sep string) []string {
 	if sep == "" {
 		return strings.Split(input, "")
 	}
-	lower := strings.ToLower(input)
-	lowerSep := strings.ToLower(sep)
 	var parts []string
 	start := 0
 	for {
-		idx := strings.Index(lower[start:], lowerSep)
+		idx, span := foldIndex(input, sep, start)
 		if idx < 0 {
 			parts = append(parts, input[start:])
 			break
 		}
-		parts = append(parts, input[start:start+idx])
-		start += idx + len(sep)
+		parts = append(parts, input[start:idx])
+		start = idx + span
 	}
 	return parts
 }
@@ -513,20 +596,23 @@ func doIndexOf(input, search string, o strOpts) ([]Value, error) {
 		return []Value{NewInteger(int64(idx))}, nil
 	}
 
-	// Literal matching
-	haystack := input
-	needle := search
+	// Literal matching. Case-insensitive search goes through foldIndex so
+	// the returned offset is a position in the ORIGINAL string (not a
+	// lowercased copy whose byte offsets can drift).
 	if ci {
-		haystack = strings.ToLower(haystack)
-		needle = strings.ToLower(needle)
-	}
-
-	if o.occ == "last" {
-		idx := strings.LastIndex(haystack, needle)
+		if o.occ == "last" {
+			return []Value{NewInteger(int64(foldLastIndex(input, search)))}, nil
+		}
+		idx, _ := foldIndex(input, search, from)
 		return []Value{NewInteger(int64(idx))}, nil
 	}
 
-	idx := strings.Index(haystack[from:], needle)
+	if o.occ == "last" {
+		idx := strings.LastIndex(input, search)
+		return []Value{NewInteger(int64(idx))}, nil
+	}
+
+	idx := strings.Index(input[from:], search)
 	if idx >= 0 {
 		idx += from
 	}
@@ -617,38 +703,32 @@ func doReplace(input, search, repl string, o strOpts) ([]Value, error) {
 }
 
 func replaceFirstInsensitive(input, search, repl string, from int) string {
-	lower := strings.ToLower(input)
-	lowerSearch := strings.ToLower(search)
-	idx := strings.Index(lower[from:], lowerSearch)
+	idx, span := foldIndex(input, search, from)
 	if idx < 0 {
 		return input
 	}
-	absIdx := from + idx
-	return input[:absIdx] + repl + input[absIdx+len(search):]
+	return input[:idx] + repl + input[idx+span:]
 }
 
 func replaceAllInsensitive(input, search, repl string, from, maxCount int) string {
-	lower := strings.ToLower(input)
-	lowerSearch := strings.ToLower(search)
 	var b strings.Builder
 	b.WriteString(input[:from])
-	remaining := input[from:]
-	lowerRemaining := lower[from:]
+	pos := from
 	count := 0
 	for {
 		if maxCount >= 0 && count >= maxCount {
-			b.WriteString(remaining)
+			b.WriteString(input[pos:])
 			break
 		}
-		idx := strings.Index(lowerRemaining, lowerSearch)
-		if idx < 0 {
-			b.WriteString(remaining)
+		idx, span := foldIndex(input, search, pos)
+		if idx < 0 || span == 0 {
+			// span == 0 only for an empty search; stop rather than spin.
+			b.WriteString(input[pos:])
 			break
 		}
-		b.WriteString(remaining[:idx])
+		b.WriteString(input[pos:idx])
 		b.WriteString(repl)
-		remaining = remaining[idx+len(search):]
-		lowerRemaining = lowerRemaining[idx+len(lowerSearch):]
+		pos = idx + span
 		count++
 	}
 	return b.String()
@@ -846,9 +926,25 @@ func repeatOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 	return doRepeat(input, count, opts)
 }
 
+// maxStringResultBytes caps the size of a string a single builder word
+// (repeat / pad) will allocate from a user-supplied count or length.
+// Without it, strings.Repeat overflows (panic) or the allocation OOMs
+// the process. 256 MiB is far beyond any legitimate use. See ADR-005.
+const maxStringResultBytes = 1 << 28
+
 func doRepeat(input string, count int64, o strOpts) ([]Value, error) {
 	if count < 0 {
 		return nil, fmt.Errorf("repeat: count must be non-negative, got %d", count)
+	}
+	// Bound the result size (and the per-copy slice in the separator
+	// branch) without overflowing the multiplication. perRep is at least
+	// 1 so this also caps the number of repetitions.
+	perRep := len(input) + len(o.sep)
+	if perRep < 1 {
+		perRep = 1
+	}
+	if count > int64(maxStringResultBytes)/int64(perRep) {
+		return nil, fmt.Errorf("repeat: result would exceed %d bytes", maxStringResultBytes)
 	}
 
 	if !o.hasSep || o.sep == "" {
@@ -898,6 +994,12 @@ func padOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 }
 
 func doPad(input string, targetLen int64, o strOpts) ([]Value, error) {
+	if targetLen < 0 {
+		return nil, fmt.Errorf("pad: target length must be non-negative, got %d", targetLen)
+	}
+	if targetLen > int64(maxStringResultBytes) {
+		return nil, fmt.Errorf("pad: target length %d exceeds %d bytes", targetLen, maxStringResultBytes)
+	}
 	current := len(input)
 	target := int(targetLen)
 
@@ -975,17 +1077,37 @@ type matchEntry struct {
 }
 
 func findLiteralMatches(input, pattern string, ci bool, all bool) []matchEntry {
-	haystack := input
-	needle := pattern
 	if ci {
-		haystack = strings.ToLower(haystack)
-		needle = strings.ToLower(needle)
+		// Case-insensitive: match through foldIndex so offsets and the
+		// captured substring come from the ORIGINAL string (a lowercased
+		// copy can have different byte offsets and corrupt the slice).
+		var matches []matchEntry
+		start := 0
+		for {
+			idx, span := foldIndex(input, pattern, start)
+			if idx < 0 || span == 0 {
+				break
+			}
+			matches = append(matches, matchEntry{
+				m: input[idx : idx+span],
+				i: idx,
+				e: idx + span,
+			})
+			if !all {
+				break
+			}
+			start = idx + span
+			if start > len(input) {
+				break
+			}
+		}
+		return matches
 	}
 
 	var matches []matchEntry
 	start := 0
 	for {
-		idx := strings.Index(haystack[start:], needle)
+		idx := strings.Index(input[start:], pattern)
 		if idx < 0 {
 			break
 		}
@@ -1000,7 +1122,7 @@ func findLiteralMatches(input, pattern string, ci bool, all bool) []matchEntry {
 			break
 		}
 		start = absIdx + 1
-		if start >= len(haystack) {
+		if start >= len(input) {
 			break
 		}
 	}

@@ -358,6 +358,19 @@ func (tt *TypeTable) RegisterExternalBuiltin(path string, fixedID int, behavior 
 		behavior = DefaultBehavior
 	}
 
+	// A dynamic table (NewDynamicTypeTable) leaves the builtin-only
+	// indexes nil; initialise on demand so registering into one writes a
+	// real map instead of panicking on a nil-map assignment below.
+	if tt.bypath == nil {
+		tt.bypath = make(map[string]*Type)
+	}
+	if tt.rootSet == nil {
+		tt.rootSet = make(map[string]bool)
+	}
+	if tt.leafIndex == nil {
+		tt.leafIndex = make(map[string]string)
+	}
+
 	def := &Type{
 		ID:       id,
 		Name:     parts[len(parts)-1],
@@ -616,6 +629,30 @@ var builtinDecls = []builtinDecl{
 // thereafter — per-Registry dynamic tables extend it via PushType.
 var Builtin = newBuiltinTypeTable()
 
+// builtinInitErrs collects any error hit while building the Builtin
+// table or resolving a well-known T* constant. These can only arise
+// from a programmer error in builtinDecls — a missing parent, a
+// duplicate FixedID, an unknown well-known path — never from runtime
+// input. Per ADR-005 (no deliberate panics; infrastructure code always
+// returns errors) they are accumulated here at init and surfaced as an
+// error from NewRegistry rather than crashing the process.
+var builtinInitErrs []error
+
+func recordBuiltinInitErr(err error) {
+	builtinInitErrs = append(builtinInitErrs, err)
+}
+
+// BuiltinInitError returns the first error accumulated while building the
+// builtin type table, or nil. NewRegistry consults it so a malformed
+// builtinDecls or a bad well-known path is reported as an error at
+// construction time instead of panicking during package init.
+func BuiltinInitError() error {
+	if len(builtinInitErrs) == 0 {
+		return nil
+	}
+	return builtinInitErrs[0]
+}
+
 func newBuiltinTypeTable() *TypeTable {
 	tt := &TypeTable{
 		byID:      make(map[string]*Type, len(builtinDecls)),
@@ -647,18 +684,21 @@ func (tt *TypeTable) registerBuiltin(d builtinDecl) {
 	case d.ParentPath != "":
 		parent = tt.bypath[d.ParentPath]
 		if parent == nil {
-			panic(fmt.Sprintf("typetable: ParentPath %q not registered before %q (declare parents first in builtinDecls)", d.ParentPath, d.Path))
+			recordBuiltinInitErr(fmt.Errorf("typetable: ParentPath %q not registered before %q (declare parents first in builtinDecls)", d.ParentPath, d.Path))
+			return
 		}
 	case len(parts) > 1:
 		parentPath := strings.Join(parts[:len(parts)-1], "/")
 		parent = tt.bypath[parentPath]
 		if parent == nil {
-			panic(fmt.Sprintf("typetable: parent %q not registered before %q (declare parents first in builtinDecls)", parentPath, d.Path))
+			recordBuiltinInitErr(fmt.Errorf("typetable: parent %q not registered before %q (declare parents first in builtinDecls)", parentPath, d.Path))
+			return
 		}
 	}
 	id := formatFixedID(d.Path, d.FixedID)
 	if existing, dup := tt.byID[id]; dup {
-		panic(fmt.Sprintf("typetable: duplicate FixedID %d for %q (already used by %q)", d.FixedID, d.Path, existing.Path()))
+		recordBuiltinInitErr(fmt.Errorf("typetable: duplicate FixedID %d for %q (already used by %q)", d.FixedID, d.Path, existing.Path()))
+		return
 	}
 	def := &Type{
 		ID:         id,
@@ -820,7 +860,61 @@ func BuiltinIDForPath(path string) string {
 func mustBuiltinType(path string) *Type {
 	def := Builtin.bypath[path]
 	if def == nil {
-		panic(fmt.Sprintf("typetable: builtin %q not in Builtin table", path))
+		recordBuiltinInitErr(fmt.Errorf("typetable: builtin %q not in Builtin table", path))
+		// Return a degenerate placeholder so package-level var-init
+		// signature slices that reference this T* constant stay non-nil.
+		// The recorded error is surfaced at NewRegistry, which returns it
+		// before the registry is ever used, so the placeholder is never
+		// actually dispatched against.
+		return &Type{Name: path, Origin: OriginBuiltin}
 	}
 	return def
+}
+
+// CloneDynamic returns a copy of a per-Registry dynamic type table for a
+// concurrently-running fork. The lookup maps are copied so a mint in the
+// fork (which writes byID/byName/parts) cannot race the parent's maps;
+// the *Type pointers are shared, since a minted type's identity is
+// stable and concurrent forks only read pre-existing types. Builtins are
+// unaffected — they live in the package-level Builtin table, which is
+// read-only after init and safe to share. Used by
+// Registry.ForkConcurrent.
+func (tt *TypeTable) CloneDynamic() *TypeTable {
+	if tt == nil {
+		return NewDynamicTypeTable()
+	}
+	cp := &TypeTable{
+		byID:   make(map[string]*Type, len(tt.byID)),
+		byName: make(map[string]*Type, len(tt.byName)),
+		parts:  make(map[string]bool, len(tt.parts)),
+		seq:    tt.seq,
+	}
+	for k, v := range tt.byID {
+		cp.byID[k] = v
+	}
+	for k, v := range tt.byName {
+		cp.byName[k] = v
+	}
+	for k, v := range tt.parts {
+		cp.parts[k] = v
+	}
+	if tt.bypath != nil {
+		cp.bypath = make(map[string]*Type, len(tt.bypath))
+		for k, v := range tt.bypath {
+			cp.bypath[k] = v
+		}
+	}
+	if tt.rootSet != nil {
+		cp.rootSet = make(map[string]bool, len(tt.rootSet))
+		for k, v := range tt.rootSet {
+			cp.rootSet[k] = v
+		}
+	}
+	if tt.leafIndex != nil {
+		cp.leafIndex = make(map[string]string, len(tt.leafIndex))
+		for k, v := range tt.leafIndex {
+			cp.leafIndex[k] = v
+		}
+	}
+	return cp
 }

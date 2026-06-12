@@ -50,14 +50,22 @@ func NewStdioServer(stdin io.Reader, stdout, stderr io.Writer) *Server {
 }
 
 // NewTCPServer constructs an LSP server that binds a TCP listener on
-// the given port and serves the first accepted connection. Diagnostic
+// host:port and serves the first accepted connection. Diagnostic
 // logging goes to stderr; the listener stays open across the
 // connection lifetime so the next client can reconnect after the
 // current one closes.
-func NewTCPServer(port int, stderr io.Writer) *Server {
+//
+// host should default to a loopback address: the server evaluates
+// arbitrary AQL buffers, so exposing it on all interfaces would let any
+// reachable client drive the parser/evaluator unauthenticated. An empty
+// host falls back to 127.0.0.1 rather than the all-interfaces ":port".
+func NewTCPServer(host string, port int, stderr io.Writer) *Server {
+	if host == "" {
+		host = "127.0.0.1"
+	}
 	s := &Server{
 		stderr:  stderr,
-		tcpAddr: fmt.Sprintf(":%d", port),
+		tcpAddr: fmt.Sprintf("%s:%d", host, port),
 	}
 	s.state.Store(int32(service.StateStopped))
 	return s

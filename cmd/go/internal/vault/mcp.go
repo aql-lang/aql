@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"strings"
 	"time"
 )
@@ -326,11 +327,19 @@ func (s *mcpServer) callTool(req *mcpRequest) *mcpResponse {
 
 	url := prov.BaseURL + path
 	if q, ok := params.Arguments["query"].(map[string]any); ok && len(q) > 0 {
-		sep := "?"
+		// Encode through url.Values so keys/values containing &, #, =, or
+		// spaces are escaped rather than spliced raw into the query
+		// string (which would malform the URL or let a value smuggle
+		// extra parameters).
+		vals := neturl.Values{}
 		for k, v := range q {
-			url += sep + k + "=" + fmt.Sprint(v)
+			vals.Set(k, fmt.Sprint(v))
+		}
+		sep := "?"
+		if strings.Contains(url, "?") {
 			sep = "&"
 		}
+		url += sep + vals.Encode()
 	}
 
 	kr, err := openKeyring(st, s.homeDir, nil, io.Discard, "")
