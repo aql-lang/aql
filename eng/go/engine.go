@@ -3631,7 +3631,7 @@ func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Val
 	for i, p := range sig.Params {
 		paramNames[i] = p.Name
 	}
-	result := AnalyseFnBody(e.registry, "", paramNames, sig.Body, args, captures)
+	result := AnalyseFnBody(e.registry, "", paramNames, sig.Body, args, captures, sig.Returns)
 	if len(result) == 0 {
 		result = []Value{NewCarrier(TAny)}
 	}

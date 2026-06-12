@@ -621,7 +621,7 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 				}
 				carrierArgs[j] = NewCarrier(t)
 			}
-			eng.AnalyseFnBody(r, "", paramNames, s.Body, carrierArgs, fnDef.Captured)
+			eng.AnalyseFnBody(r, "", paramNames, s.Body, carrierArgs, fnDef.Captured, s.Returns)
 		}
 		PopGenBindings(r, genSpec)
 	}

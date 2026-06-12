@@ -1201,10 +1201,20 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 // values. Results are cached on the registry keyed by (name,
 // arg-types) so recursive functions converge instead of looping.
 //
+// declared is the signature's declared return types (nil =
+// unchecked). It is the induction hypothesis for recursion
+// (design/checker-accuracy-review.0.md A2): an in-flight recursive
+// call yields carriers of the DECLARED returns — the end-of-body
+// return check is the matching proof obligation — instead of the
+// everything-matches Any. For unchecked fns the Any bail-out
+// remains, but a summary computed under it is refined by bounded
+// re-analysis (the bail's result seeds the memo as the hypothesis
+// for the next round) rather than cached as final.
+//
 // Returns the residual carrier stack. An empty or nil return means
 // the analyser aborted (recursion detected or body not available) —
 // callers should treat that as an Any carrier.
-func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, args []Value, captures []CapturedBinding) []Value {
+func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, args []Value, captures []CapturedBinding, declared []*Type) []Value {
 	if len(body) == 0 {
 		return nil
 	}
@@ -1239,55 +1249,107 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 		return cached
 	}
 	if r.Check.FnInflight[key] {
-		// Recursion detected — break the cycle with an Any carrier.
+		// Recursion detected. With declared returns, the declaration
+		// is the induction hypothesis (assume-guarantee) — precise,
+		// and the body's return check is the proof obligation. Without
+		// it, break the cycle with an Any carrier and count the bail
+		// so the enclosing analysis knows its result needs refinement.
+		if len(declared) > 0 {
+			out := make([]Value, len(declared))
+			for i, t := range declared {
+				out[i] = NewCarrier(t)
+			}
+			return out
+		}
+		r.Check.InflightBails++
 		return []Value{NewCarrier(TAny)}
 	}
 	r.Check.FnInflight[key] = true
 	defer delete(r.Check.FnInflight, key)
 
-	// Snapshot def-stack depths so we can unwind any defs the body,
-	// captures, or parameter bindings created. The same snapshot is
-	// pushed as the fn-entry baseline so any inner fn/afn construction
-	// inside the body sees this scope as its enclosing-fn baseline —
-	// without it, ComputeCaptures would treat outer params as if they
-	// lived at module/global scope and miss the capture.
-	snapshot := r.Defs.Snapshot()
-	r.PushFnBaseline(snapshot)
-	defer r.PopFnBaseline()
+	// runOnce performs one full body analysis: snapshot def-stack
+	// depths so any defs the body, captures, or parameter bindings
+	// created unwind afterwards. The same snapshot is pushed as the
+	// fn-entry baseline so any inner fn/afn construction inside the
+	// body sees this scope as its enclosing-fn baseline — without it,
+	// ComputeCaptures would treat outer params as if they lived at
+	// module/global scope and miss the capture.
+	runOnce := func() []Value {
+		snapshot := r.Defs.Snapshot()
+		r.PushFnBaseline(snapshot)
+		defer r.PopFnBaseline()
 
-	// Install lexical captures first so params (installed below)
-	// shadow same-named captures — innermost binding wins, matching
-	// runtime dispatch.
-	for _, cb := range captures {
-		r.Defs.Push(cb.Name, cb.Value)
+		// Install lexical captures first so params (installed below)
+		// shadow same-named captures — innermost binding wins,
+		// matching runtime dispatch.
+		for _, cb := range captures {
+			r.Defs.Push(cb.Name, cb.Value)
+		}
+
+		// Bind named parameters as simple defs (carrier-typed).
+		// Unnamed parameters flow through the stack — push them
+		// before the body.
+		var input []Value
+		for i, arg := range args {
+			if i < len(paramNames) && paramNames[i] != "" {
+				r.Defs.Push(paramNames[i], arg)
+			} else {
+				input = append(input, arg)
+			}
+		}
+		input = append(input, body...)
+
+		sub := New(r)
+		result, err := sub.Run(input)
+		if err != nil {
+			r.Check.AddDiagnostic(CheckDiagnostic{
+				Code:   "fn_body_error",
+				Detail: "fn body analysis error for " + name + ": " + err.Error(),
+				Word:   name,
+			})
+			result = nil
+		}
+		r.Defs.Restore(snapshot)
+		return result
 	}
 
-	// Bind named parameters as simple defs (carrier-typed). Unnamed
-	// parameters flow through the stack — push them before the body.
-	var input []Value
-	for i, arg := range args {
-		if i < len(paramNames) && paramNames[i] != "" {
-			r.Defs.Push(paramNames[i], arg)
-		} else {
-			input = append(input, arg)
+	bailsBefore := r.Check.InflightBails
+	diagBase := len(r.Check.Diagnostics)
+	result := runOnce()
+
+	// Refinement (A2): the run consumed an Any in-flight bail, so the
+	// summary was computed under the weakest hypothesis. Seed the memo
+	// with it and re-analyse — the recursive call now reads the seeded
+	// hypothesis from the cache — joining each round's result into the
+	// hypothesis until stable, up to two extra rounds. Only the final
+	// round's diagnostics are kept.
+	if r.Check.InflightBails > bailsBefore && len(result) > 0 {
+		for round := 0; round < 2; round++ {
+			r.Check.FnSummaries[key] = result
+			r.Check.TruncateDiagnostics(diagBase)
+			next := runOnce()
+			joined := JoinCarrierStacks(result, next)
+			if carrierStacksEqual(joined, result) {
+				break
+			}
+			result = joined
 		}
 	}
-	input = append(input, body...)
-
-	sub := New(r)
-	result, err := sub.Run(input)
-	if err != nil {
-		r.Check.AddDiagnostic(CheckDiagnostic{
-			Code:   "fn_body_error",
-			Detail: "fn body analysis error for " + name + ": " + err.Error(),
-			Word:   name,
-		})
-		result = nil
-	}
-
-	// Restore def-stacks to snapshot.
-	r.Defs.Restore(snapshot)
 
 	r.Check.FnSummaries[key] = result
 	return result
+}
+
+// carrierStacksEqual reports whether two carrier stacks agree
+// position-for-position — the fixed-point stability test.
+func carrierStacksEqual(a, b []Value) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !ValuesEqual(a[i], b[i]) {
+			return false
+		}
+	}
+	return true
 }

@@ -201,6 +201,14 @@ type CheckState struct {
 	// a placeholder instead of looping.
 	FnInflight map[string]bool
 
+	// InflightBails counts Any-placeholder bail-outs taken by
+	// recursive calls of UNCHECKED fns (declared returns use the
+	// declaration instead and don't count). AnalyseFnBody compares
+	// the counter around a body run to know whether its summary was
+	// computed under the weakest hypothesis and needs refinement
+	// before being cached (design/checker-accuracy-review.0.md A2).
+	InflightBails int
+
 	// StepCount is the running total of engine steps consumed by
 	// the current check run, summed across every sub-engine. Used
 	// with StepBudget to cap total analysis effort.

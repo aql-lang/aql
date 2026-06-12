@@ -43,6 +43,7 @@ func (c *CheckState) Begin() func() {
 	c.DefsInstalled = nil
 	c.DefsUsed = nil
 	c.ContextTypes = nil
+	c.InflightBails = 0
 	return func() {
 		c.Mode = false
 	}

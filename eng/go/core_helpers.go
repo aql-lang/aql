@@ -360,7 +360,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		// the analyser's residual stack — the analyser is run purely
 		// for its side-effecting diagnostic collection. Memoisation
 		// inside AnalyseFnBody keeps recursive / repeated calls cheap.
-		stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args, capturesCopy)
+		stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args, capturesCopy, declaredReturns)
 		for i := len(genNames) - 1; i >= 0; i-- {
 			r.Defs.Pop(genNames[i])
 		}

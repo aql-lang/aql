@@ -309,7 +309,7 @@ func TestClosureCheckModeAnalyseFnBodyUsesCaptures(t *testing.T) {
 		{Name: "x", Value: eng.NewCarrier(eng.TInteger)},
 	}
 
-	result := eng.AnalyseFnBody(reg, "test", nil, body, nil, captures)
+	result := eng.AnalyseFnBody(reg, "test", nil, body, nil, captures, nil)
 	if len(result) != 1 {
 		t.Fatalf("got %d residual values, want 1: %v", len(result), result)
 	}
@@ -343,7 +343,7 @@ func TestClosureCheckModeAnalyseFnBodyWithoutCaptures(t *testing.T) {
 		eng.NewInteger(1),
 	}
 	// Same body, no captures — x is undefined in body's scope.
-	result := eng.AnalyseFnBody(reg, "test", nil, body, nil, nil)
+	result := eng.AnalyseFnBody(reg, "test", nil, body, nil, nil, nil)
 	// We expect either an empty/Any residual or a non-Integer carrier
 	// because x doesn't resolve; the analyser falls back to lenient
 	// undefined-word handling.
