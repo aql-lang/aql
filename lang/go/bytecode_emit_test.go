@@ -99,6 +99,25 @@ func TestEmitMirrorFormsIdentical(t *testing.T) {
 	}
 }
 
+// The swap form `1 add 2` and ITS mirror `1 2 add` also lower
+// identically — but to DIFFERENT code than `add 1 2`: the swap form
+// binds sig[0] from the forward side (the 2), the forward form binds
+// sig[0] to the first forward arg (the 1). Two equivalence classes,
+// one per binding; identical results here only because add is
+// commutative. Canonicalising them to one form would change the
+// semantics of non-commutative words.
+func TestEmitSwapFormClassIdentical(t *testing.T) {
+	a, _ := compile(t, `1 add 2`)
+	b, _ := compile(t, `1 2 add`)
+	if a == "" || a != b {
+		t.Errorf("swap-form class diverged:\nswap:\n%s\nstack:\n%s", a, b)
+	}
+	fwd, _ := compile(t, `add 1 2`)
+	if fwd == a {
+		t.Errorf("forward and swap forms lowered identically — distinct bindings must not be conflated")
+	}
+}
+
 // Negative: every beyond-Stage-1 construct is refused with a precise
 // reason — never lowered wrongly.
 func TestEmitRefusals(t *testing.T) {

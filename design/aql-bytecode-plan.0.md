@@ -41,6 +41,58 @@ numbers, not the original report's stale ones.
   in `cmd/go` and dual-mode spec wiring in `lang/go`. Follow
   `eng/go/CLAUDE.md` before touching the kernel.
 
+## Developer experience
+
+Bytecode is an **execution mode, not a build artifact** — the DX
+model is a JIT's, not a compiler's. Decisions (several restate
+report §7.7 and the readiness note; collected here as the
+user-facing contract):
+
+**Trigger.** Eager compile-at-load, riding the check pre-flight
+`aql run` already performs; no build step, no persisted `.aqlc`
+(which eliminates the staleness gotcha class). Rollout:
+
+1. *Now (Stage 1):* tooling-only — `lang.(*AQL).CompileCheck` and
+   the planned `aql check --emit` disassembly. Execution unchanged.
+2. *Opt-in (Stages 2–6):* `aql run --compile` / `AQL_COMPILE=1`.
+   Uncompilable programs run on the interpreter SILENTLY — same
+   results either way, by the differential gate.
+3. *Default-on (Stage 7):* the flag inverts into a long-lived kill
+   switch (`AQL_NO_COMPILE`), the `Registry.TCO.Disable` pattern.
+
+Embedding hosts get the same via `lang.Options`; modules compile
+once per import and cache in-process. The REPL stays interpreted
+(one-shot lines; cold-start cost exceeds the win; mode consistency
+within a session beats µs).
+
+**Explainability.** Because fallback is silent, the load-bearing DX
+is answering "why didn't my hot loop compile?". The emitter's
+four-class site taxonomy and first-offender refusal reasons
+("code-body word if (Stage 2)", "polymorphic dispatch at add") are
+that answer; surface them via `aql check --emit` (disassembly +
+site-class counts) and a compile report (info-severity diagnostics
+naming each fallback span and its reason) so "make this compile"
+becomes an actionable refactor.
+
+**Debugging and source maps.** Required, and structural:
+`Program.Debug` is the source map — a 1:1 pc → SrcPos table; every
+instruction carries the dispatching word's position; it lives inside
+the in-memory Program (no external map files, nothing persisted).
+Per stage:
+
+- *Stage 2 (hard requirement):* on a handler error the VM wraps
+  `Debug[pc]` and routes through the SAME error-format path as the
+  interpreter — error text byte-identical, so error-scraping tooling
+  never learns which mode ran.
+- *Stage 5:* mixed-mode stack traces — each frame (compiled or
+  fallback span) renders from its own map.
+- *Trace mode:* compiled mode disables itself under `--trace` until
+  a PC-level trace that renders spans exists (semantics are
+  identical, so tracing the interpreter is tracing the program).
+- *Stage 3 follow-on:* a slot → name table per CompiledFn once
+  locals exist, so a future debugger can show bindings. Pointless
+  before locals; cheap after.
+
 ## Stage 0 — re-baseline and go/no-go (measurement only)
 
 **Status: DONE (June 2026) — gate result GO.** Corpus:
