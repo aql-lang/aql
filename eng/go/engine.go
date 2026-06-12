@@ -697,6 +697,21 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 		}()
 	}
 
+	// Truth-over-symptom guard: once any tape edit hit the growth
+	// ceiling (and was dropped to avoid an out-of-bounds write), every
+	// later behaviour runs on a TRUNCATED tape — downstream errors are
+	// phantoms of the drop (a starved ReturnCheck's "expected 1 return
+	// value(s), got 0", the genre the recursion pins documented), and a
+	// "successful" completion may have silently lost results. Whatever
+	// this Run was about to report, the truthful diagnosis is
+	// tape_exhausted.
+	defer func() {
+		if e.tape != nil && e.tape.Exhausted() {
+			result = nil
+			runErr = e.tapeExhaustedError()
+		}
+	}()
+
 	// Push a scoped context Store whose prototype is the parent context.
 	parent := e.registry.Contexts.Top()
 	e.registry.Contexts.Push(parent)
@@ -750,16 +765,18 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	limit := e.stepLimit
 	completed := false
 	for step := 0; step < limit; step++ {
+		// Memory guard FIRST: a previous edit hit the tape's growth
+		// ceiling (and was dropped to avoid an out-of-bounds write).
+		// This must precede the completion check — a dropped FINAL
+		// splice leaves the pointer past the truncated tape, which is
+		// indistinguishable from normal completion and used to return
+		// success with the results silently gone.
+		if e.tape.Exhausted() {
+			return nil, e.tapeExhaustedError()
+		}
 		if e.pointer >= e.tape.Len() {
 			completed = true
 			break
-		}
-
-		// Memory guard: a previous edit hit the tape's growth ceiling
-		// (and was dropped to avoid an out-of-bounds write). Fail loudly
-		// rather than continue on a truncated tape.
-		if e.tape.Exhausted() {
-			return nil, e.tapeExhaustedError()
 		}
 
 		// Check-mode global step budget: abort the whole run
