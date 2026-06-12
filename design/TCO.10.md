@@ -1,10 +1,16 @@
 # Tail-Call Optimisation for the AQL Tape Machine
 
-**Status:** Discovery note — design only, nothing implemented. Follows
-`RECURSION-PERFORMANCE.10.md` (which made recursion linear-time via the
-gap-buffer tape) and `TAPE-DATA-STRUCTURE.10.md`. TCO is the remaining
-step that would make tail recursion **constant-space**, equivalent to
-iteration.
+**Status:** Discovery note — design only, **deferred** (maintainer
+decision, after the dispatch path was traced and found materially more
+invasive than the first draft of this note assumed; see "Implementation
+reality" below). Follows `RECURSION-PERFORMANCE.10.md` (which made
+recursion linear-time via the gap-buffer tape) and
+`TAPE-DATA-STRUCTURE.10.md`. TCO is the remaining step that would make
+tail recursion **constant-space**, equivalent to iteration. The
+tape-exhaustion guard (`TAPE-DATA-STRUCTURE.10.md`) already makes
+unbounded tail recursion fail loudly and bounded in the meantime, so
+nothing is unsafe without TCO — it is a performance/expressiveness
+improvement, not a correctness fix.
 
 ## Why tail recursion still grows the tape
 
@@ -51,24 +57,69 @@ moment:
 
 ## The mechanism (frame replacement)
 
-In `execFnDefSig` / `execFnDefLiteral`, after the sig is matched and
-args are in hand, add one probe:
+The idea: at a tail call, run the enclosing frame's teardown eagerly,
+splice the callee body OVER the frame region, and *replace* (not nest)
+the per-call state, so tape length and all three per-call stacks
+(`Args`, def-snapshot, `FnBaselines`) stay **O(1)** across any chain of
+tail calls — self-recursion or mutual recursion alike, since the probe
+never asks who the callee is.
 
 ```
-if isTailPosition(valIdx):           # only cleanup markers remain ahead
-    runFrameCleanupNow()             # __DC semantics: undef params/locals;
-                                     # __pa semantics: pop Args + FnBaseline
+if isTailPosition():                 # only cleanup markers remain ahead
+    runFrameCleanupNow()             # __DC: undef params/locals;
+                                     # __pa: pop Args + FnBaseline
     splice the callee body OVER the remaining frame region
-    push the callee's Args/snapshot/baseline (replacing, not nesting)
+    install the callee's Args/snapshot/baseline (replacing, not nesting)
 else:
     nest as today
 ```
 
-The cleanup logic already exists (`stepDefCleanup`, the `__pa` handler);
-TCO calls it eagerly instead of leaving the markers parked. Tape length
-and all three per-call stacks then stay **O(1)** across any chain of
-tail calls — self-recursion or mutual recursion alike, since the probe
-never asks who the callee is.
+The cleanup logic already exists (`stepDefCleanup`, the `__pa` handler
+`popArgsHandler`); TCO would call it eagerly instead of leaving the
+markers parked.
+
+### Implementation reality (traced June 2026 — why this is bigger than it first looked)
+
+The first draft of this note placed the hook in `execFnDefSig`. That is
+**not** the path a `def f fn […]` call actually takes. Tracing it:
+
+- `def f fn […]` registers, via `InstallFnDef` →
+  `buildFnBodyHandler` (`core_helpers.go`), a **native handler** bound to
+  the name `f`. The handler is what runs on each call.
+- A call to `f` dispatches through the ordinary native path:
+  `stepWord` → `execMatch` → `match.Sig.Handler` (the
+  `buildFnBodyHandler` closure) → `spliceMatchResults`.
+- The handler **pushes the per-call state itself** (`PushFnBaseline`,
+  `Args.Push`, `InstallDef` of captures + params) and **returns the body
+  tokens** `( [unnamed args] body… __DC __pa undef…  [__RC] )`.
+  `execMatch` then splices those tokens over the call region.
+
+Three consequences make frame-replacement TCO substantially more
+invasive than a single probe in one function:
+
+1. **State-push ordering is backwards for replacement.** The new frame's
+   `Args`/`FnBaseline`/param-defs are pushed *inside the handler, before*
+   the splice — i.e. on top of the still-live previous frame. Eager
+   replacement has to interleave "tear down the previous frame" with
+   "the handler already stacked the new one," which means restructuring
+   `buildFnBodyHandler` / the `execMatch` splice rather than adding a
+   leaf probe.
+2. **No frame-extent tracking exists.** `isTailPosition` must find the
+   enclosing fn frame's bounds on the tape. The recursive call sits
+   *inside* an `if`-result paren (`if`'s `if3Handler` splices the chosen
+   branch as `( … )` via `spliceArg`), so the forward scan from the call
+   to the frame's closing `)` must see through arbitrary control-flow
+   paren nesting and match the cleanup-tail markers exactly. There is no
+   frame-position stack today to anchor that scan; one would have to be
+   added and kept in lockstep with the tape's `__pa`/`)` tokens.
+3. **It is the hottest path in the kernel.** `execMatch` runs for every
+   word dispatch and is covered by thousands of spec rows; a subtle slip
+   is a core-dispatch correctness regression.
+
+None of this defeats the approach — the safety arguments above still
+hold — but it makes TCO a multi-increment change to the dispatch core
+with heavy spec-suite gating, not the leaf insertion first sketched.
+Hence the deferral.
 
 ### Return-type checking
 
@@ -124,18 +175,31 @@ correctness never depends on TCO firing.
 
 ## Sketch of the work
 
-1. `isTailPosition(valIdx)` — structural probe in engine.go: scan from
-   the dispatch site to the frame end accepting only `__DC` / `__pa` /
-   `__RC` / closing-paren tokens.
-2. Factor the eager teardown out of `stepDefCleanup` + the `__pa`
-   handler so dispatch can invoke it directly.
-3. The frame-replacement splice in `execFnDefSig` (and the trivial-
-   delegation path in `execFnDefLiteral` if it can carry AQL bodies).
-4. Return-conformance gate (callee ⊑ caller) using the existing
-   `v.Is`/ConformsTo machinery.
-5. Spec rows: deep tail recursion at depths far past the tape ceiling
+Refer to "Implementation reality" above for why these touch
+`buildFnBodyHandler` / `execMatch` rather than `execFnDefSig`.
+
+1. **Frame-extent tracking.** Add a small per-frame stack to the Engine
+   recording each live fn frame's open-paren tape index (pushed when
+   `buildFnBodyHandler`'s result is spliced; popped at `__pa`). This
+   anchors the tail scan; without it the scan cannot reliably find the
+   enclosing frame's close across `if`-result paren nesting.
+2. `isTailPosition()` — structural probe in engine.go: from the dispatch
+   site, scan forward to the tracked frame-close index accepting only
+   close-parens and the cleanup-tail markers (`__DC` / `__pa` /
+   `undef name` / `__RC`); any other token ⇒ not a tail call.
+3. Factor the eager teardown out of `stepDefCleanup` + `popArgsHandler`
+   (the `__pa` handler) + the `undef` tail so dispatch can invoke it
+   directly, then restructure `buildFnBodyHandler` / the `execMatch`
+   splice so the new frame's state replaces — rather than stacks on top
+   of — the torn-down frame's.
+4. The frame-replacement splice at the `execMatch` →
+   `spliceMatchResults` boundary for fn-body handlers.
+5. Return-conformance gate (callee ⊑ caller) using the existing
+   `v.Is`/ConformsTo machinery; keep the caller's `__RC`.
+6. Spec rows: deep tail recursion at depths far past the tape ceiling
    (e.g. `s2 1_000_000`), mutual tail recursion, NON-tail recursion
    unchanged (`n add (s …)` still nests), `args` visibility, capture
    shadowing across a TCO'd call, and a return-type-mismatch case that
    must nest rather than mis-fire.
-6. The `CallAQL` trampoline as a follow-up.
+7. The `CallAQL` trampoline (module fns in a captured sub-registry) as a
+   follow-up.
