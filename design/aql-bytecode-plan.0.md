@@ -2,8 +2,8 @@
 
 **Status:** in progress — Stage 0 DONE with a GO result
 (`aql-bytecode-baseline.0.md`); Stage 1 recording pass LANDED; Stage
-2 VM core + CLI opt-in LANDED for the straight-line subset (control
-flow pending). Companion to
+2 VM core + CLI opt-in + `if` and counted-`for` lowering LANDED
+(range `for`, list conditions, break/continue pending). Companion to
 `aql-bytecode-report.0.md` (the design) and
 `aql-bytecode-revisions.0.md` (the June 2026 re-review that this plan
 incorporates; read it first — it changes two requirements). Written
