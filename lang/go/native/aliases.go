@@ -214,6 +214,7 @@ const (
 // Function re-exports — every exported aqleng function.
 var (
 	AnalyseFnBody             = eng.AnalyseFnBody
+	AnalyseLoopBody           = eng.AnalyseLoopBody
 	AsAtom                    = eng.AsAtom
 	AsArray                   = eng.AsArray
 	AsChildType               = eng.AsChildType

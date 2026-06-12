@@ -502,18 +502,24 @@ func forListListReturnsFn(args []Value, r *Registry) []Value {
 	return forCarrierAnalyse(r, "i", TInteger, args)
 }
 
-// forCarrierAnalyse runs the body once with the iterator bound as a
-// typed carrier and returns a typed list whose element type mirrors
-// the body's residual top-of-stack.
+// forCarrierAnalyse analyses the body to a bounded fixed point with
+// the iterator bound as a typed carrier (AnalyseLoopBody —
+// design/checker-accuracy-review.0.md A4): body rebindings like
+// `def acc (acc add 0.5)` join back into the enclosing binding and
+// the body re-runs until the bindings stabilise, so post-loop reads
+// see Integer|Float, not the pre-loop Integer. Returns a typed list
+// whose element type mirrors the final round's residual top.
 func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Value) []Value {
 	body := args[len(args)-1]
-	r.Defs.Push(iterName, NewCarrier(iterType))
-	stk, _ := RunCarrierBodyWithDefs(r, body)
-	r.Defs.Pop(iterName)
+	stk := AnalyseLoopBody(r, body, []string{iterName}, []Value{NewCarrier(iterType)})
 	if len(stk) == 0 {
 		return []Value{NewCarrier(TList)}
 	}
-	return []Value{NewCarrierTypedList(stk[len(stk)-1].Parent)}
+	top := stk[len(stk)-1]
+	if IsDisjunct(top) {
+		return []Value{NewCarrierTypedListValue(top)}
+	}
+	return []Value{NewCarrierTypedList(top.Parent)}
 }
 
 // ---- error handler ----

@@ -930,6 +930,82 @@ func JoinCarrierStacks(a, b []Value) []Value {
 	return out
 }
 
+// loopAnalysisRounds bounds the Kleene iteration for loop-body
+// analysis: round 1 with the pre-loop bindings, then re-runs with the
+// joined bindings until stable. Three rounds suffice for ascent in a
+// join-semilattice whose height is bounded by CarrierDisjunctCap.
+const loopAnalysisRounds = 3
+
+// AnalyseLoopBody analyses a loop body to a bounded fixed point
+// (design/checker-accuracy-review.0.md A4). Each round binds the
+// loop's own names (iterator …) as carriers, runs the body, and
+// JOINS the body's net def additions back into the enclosing
+// bindings — "the loop may run zero times" is the join with the
+// pre-loop binding, exactly InstallJoinedDefs' one-branch rule. If
+// the joined bindings changed, the body is re-analysed with them (a
+// rebinding like `def acc (acc add 0.5)` needs the second round to
+// see Integer|Float), up to loopAnalysisRounds.
+//
+// Only the FINAL round's diagnostics are kept — earlier rounds run
+// against not-yet-stable bindings and would both duplicate and
+// misreport.
+//
+// The joined post-loop bindings are left installed (they ARE the
+// post-loop environment); the loop-local binds are popped. Returns
+// the final round's residual carrier stack.
+func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Value) []Value {
+	var stk []Value
+	var installed []string
+	diagBase := len(r.Check.Diagnostics)
+	prev := map[string]Value{}
+	for round := 0; round < loopAnalysisRounds; round++ {
+		r.Check.TruncateDiagnostics(diagBase)
+		for i, n := range bindNames {
+			r.Defs.Push(n, bindVals[i])
+		}
+		var adds map[string]Value
+		stk, adds = RunCarrierBodyWithDefs(r, body)
+		for i := len(bindNames) - 1; i >= 0; i-- {
+			r.Defs.Pop(bindNames[i])
+		}
+		// Expose the original pre-loop bindings before re-joining.
+		for i := len(installed) - 1; i >= 0; i-- {
+			r.Defs.Pop(installed[i])
+		}
+		installed = installed[:0]
+		joined := map[string]Value{}
+		for k, v := range adds {
+			if pre, ok := r.Defs.Top(k); ok {
+				joined[k] = JoinCarriers(v, pre)
+			} else {
+				joined[k] = v
+			}
+		}
+		for k, v := range joined {
+			r.Defs.Push(k, v)
+			installed = append(installed, k)
+		}
+		if len(joined) == 0 {
+			break
+		}
+		stable := len(joined) == len(prev)
+		if stable {
+			for k, v := range joined {
+				pv, ok := prev[k]
+				if !ok || !ValuesEqual(pv, v) {
+					stable = false
+					break
+				}
+			}
+		}
+		prev = joined
+		if stable {
+			break
+		}
+	}
+	return stk
+}
+
 // GuardClause describes one `x is T` clause detected in a condition.
 type GuardClause struct {
 	Name string

@@ -62,6 +62,17 @@ func (c *CheckState) AddDiagnostic(d CheckDiagnostic) {
 	c.Diagnostics = append(c.Diagnostics, d)
 }
 
+// TruncateDiagnostics drops every diagnostic recorded after position
+// n. Used by bounded fixed-point analyses (AnalyseLoopBody, the fold
+// accumulator iteration) so that only the FINAL round's diagnostics
+// survive — earlier rounds run against not-yet-stable bindings.
+func (c *CheckState) TruncateDiagnostics(n int) {
+	if c == nil || n < 0 || n >= len(c.Diagnostics) {
+		return
+	}
+	c.Diagnostics = c.Diagnostics[:n]
+}
+
 // RecordDef remembers a name the user bound during a check run so
 // end-of-run analysis can flag defs that were never referenced. Names
 // starting with "_" (engine internals) are ignored.
