@@ -141,25 +141,29 @@ words appear stricken through below.
 
 ### MINILANG.0.md — 10+ inline DSLs
 
-Mini-language literals with `xy/...` two-letter prefix syntax.
-Requires lexer integration for prefix detection.
+Rev 2: a core `mini` macro expanding `mini <kind> <src> <opts?>` to
+the standard call `MiniLang.lang_<kind> <src> <opts> end`, with kinds
+registered in the `aql:minilang` module (native Go or pure AQL). No
+lexer changes — rev 1's `xy/...` two-letter prefix literals are
+superseded (kept as optional future sugar). Kinds are ordinary atoms:
 
-| Prefix | Language | Purpose |
-|--------|----------|---------|
-| `rm/` | Regexp match | Return match structure |
-| `rs/` | Regexp substitute | Backreference replacement |
-| `rt/` | Regexp test | Boolean match test |
-| `rf/` | Regexp find-all | List of all matches |
-| `xp/` | XPath | XML querying |
-| `jp/` | JsonPath | Map/list querying |
-| `jq/` | jq | Filter expressions |
-| `cs/` | CSS selectors | DOM-style selection |
-| `tr/` | Transliterate | Perl tr/y semantics |
-| `fm/` | Format | String interpolation with `{}` |
-| `sh/` | Shell pattern | POSIX glob matching |
-| `gl/` | Glob | File glob matching |
-| `ur/` | URL pattern | URL template matching |
-| `dt/` | Date/time format | Temporal formatting |
+| Kind | Language | Purpose |
+|------|----------|---------|
+| `re` | Regexp match | Return match structure |
+| `re-sub` | Regexp substitute | Backreference replacement (`opts.repl`) |
+| `re-test` | Regexp test | Boolean match test |
+| `re-all` | Regexp find-all | List of all matches |
+| `xp` | XPath | XML querying |
+| `jp` | JsonPath | Map/list querying |
+| `jq` | jq | Filter expressions |
+| `cs` | CSS selectors | DOM-style selection |
+| `tr` | Transliterate | Perl tr/y semantics |
+| `fm` | Format | String interpolation with `{}` |
+| `sh` | Shell pattern | POSIX glob matching |
+| `gl` | Glob | File glob matching |
+| `ur` | URL pattern | URL template matching |
+| `dt` | Date/time format | Temporal formatting |
+| `math` | Natural infix maths | Variables from named params (`opts`) |
 
 ### GENERICS.10.md — generic types
 
