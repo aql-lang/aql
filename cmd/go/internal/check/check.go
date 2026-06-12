@@ -34,6 +34,7 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 func RunCLI(args []string, stdout, stderr io.Writer) int {
 	jsonOut := false
 	soft := false
+	emit := false
 	for len(args) > 0 {
 		switch args[0] {
 		case "--json", "-json":
@@ -41,6 +42,9 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			args = args[1:]
 		case "--soft", "-soft":
 			soft = true
+			args = args[1:]
+		case "--emit", "-emit":
+			emit = true
 			args = args[1:]
 		default:
 			goto done
@@ -68,11 +72,50 @@ done:
 		source = string(data)
 	}
 
+	if emit {
+		if err := Emit(stdout, stderr, source); err != nil {
+			fmt.Fprintf(stderr, "%s\n", err)
+			return 1
+		}
+		return 0
+	}
 	if err := Run(stdout, stderr, source, "", 0, jsonOut, soft); err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)
 		return 1
 	}
 	return 0
+}
+
+// Emit runs the bytecode recording pass over source and prints the
+// Program disassembly to stdout, or the precise refusal reason when
+// the emitter cannot lower the program (debug/tooling surface —
+// design/aql-bytecode-plan.0.md, Stage 1 gate and the DX section).
+func Emit(stdout, stderr io.Writer, source string) error {
+	a, err := lang.New()
+	if err != nil {
+		return fmt.Errorf("init error: %s", err)
+	}
+	prog, reason, res, err := a.CompileCheck(source)
+	for i := range res.Diagnostics {
+		d := &res.Diagnostics[i]
+		fmt.Fprintf(stderr, "check: %s [%s] %s: %s\n", atPos(d.Row, d.Col), d.Severity, d.Code, d.Detail)
+	}
+	if err != nil {
+		return fmt.Errorf("error: %s", err)
+	}
+	if prog == nil {
+		fmt.Fprintf(stdout, "uncompilable: %s\n", reason)
+		return nil
+	}
+	fmt.Fprint(stdout, prog.Disassemble())
+	return nil
+}
+
+func atPos(row, col int) string {
+	if row == 0 {
+		return "-"
+	}
+	return fmt.Sprintf("%d:%d", row, col)
 }
 
 // Run executes the static type-checker over source and writes the

@@ -255,7 +255,7 @@ func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
 
 	engine := native.NewTop(a.registry)
 	engine.SetSource(src)
-	_, runErr := engine.Run(values)
+	residual, runErr := engine.Run(values)
 	a.registry.Check.EmitUnusedDefDiagnostics()
 
 	res := CheckResult{Diagnostics: a.registry.Check.Diagnostics}
@@ -267,7 +267,7 @@ func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
 			return nil, "check diagnostics", res, nil
 		}
 	}
-	prog, reason, ok := a.registry.Check.Emit.Finalize()
+	prog, reason, ok := a.registry.Check.Emit.Finalize(residual)
 	if !ok {
 		return nil, reason, res, nil
 	}
@@ -355,7 +355,12 @@ func (a *AQL) Run(src string) ([]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	return convertResults(result), nil
+}
 
+// convertResults maps a residual engine stack to host-friendly Go
+// values — the same projection Run has always applied.
+func convertResults(result []eng.Value) []any {
 	out := make([]any, len(result))
 	for i, v := range result {
 		switch {
@@ -382,7 +387,26 @@ func (a *AQL) Run(src string) ([]any, error) {
 			out[i] = v.String()
 		}
 	}
-	return out, nil
+	return out
+}
+
+// RunCompiled executes src in compiled (bytecode) mode when the
+// emitter can lower it, and SILENTLY falls back to the interpreter
+// otherwise — the plan's opt-in contract: identical results either
+// way, the flag only changes the execution engine. The second return
+// reports which path ran (for tooling; never branch program logic on
+// it).
+func (a *AQL) RunCompiled(src string) ([]any, bool, error) {
+	prog, _, _, err := a.CompileCheck(src)
+	if err != nil || prog == nil {
+		out, rerr := a.Run(src)
+		return out, false, rerr
+	}
+	result, err := eng.RunProgram(prog, a.registry)
+	if err != nil {
+		return nil, true, err
+	}
+	return convertResults(result), true, nil
 }
 
 // CheckResult is the outcome of a static type-check run.

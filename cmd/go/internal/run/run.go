@@ -53,6 +53,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	seed := fs.Int64("s", 0, "random seed for ID generation (default: current time)")
 	showVersion := fs.Bool("version", false, "print version and exit")
 	checkFirst := fs.Bool("check", false, "run static type-check before execution; abort on error")
+	compileMode := fs.Bool("compile", false, "EXPERIMENTAL: execute via the bytecode compiler when the program is compilable; silently falls back to the interpreter otherwise")
 	optionsStr := fs.String("options", "", "engine options as jsonic (e.g. tape:initial:65536,tape:grows:9)")
 	var pf permsflags.Flags
 	permsflags.Register(fs, &pf)
@@ -117,7 +118,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				return 1
 			}
 		}
-		if err := EvalOptions(stdout, source, o); err != nil {
+		if err := EvalOptionsMode(stdout, source, o, *compileMode); err != nil {
 			fmt.Fprintf(stderr, "%s\n", err)
 			return 1
 		}
@@ -138,6 +139,13 @@ func Eval(w io.Writer, source string, registry string, seed int64) error {
 	return EvalWithPolicy(w, source, registry, seed, nil)
 }
 
+// OptionsFor assembles the lang.Options the legacy positional CLI
+// arguments map to. Exposed for sibling subcommands (do) so they
+// don't import lang directly.
+func OptionsFor(registry string, seed int64, pol lang.Policy) lang.Options {
+	return lang.Options{Registry: registry, Seed: seed, Policy: pol}
+}
+
 // EvalWithPolicy is Eval with an explicit Policy. Pass nil for pol
 // to preserve the historical default (no checks).
 func EvalWithPolicy(w io.Writer, source string, registry string, seed int64, pol lang.Policy) error {
@@ -148,12 +156,26 @@ func EvalWithPolicy(w io.Writer, source string, registry string, seed int64, pol
 // policy, tape bounds). The CLI builds Options from its flags —
 // including --options — and calls this.
 func EvalOptions(w io.Writer, source string, o lang.Options) error {
+	return EvalOptionsMode(w, source, o, false)
+}
+
+// EvalOptionsMode is EvalOptions with the execution engine selected:
+// compile=true runs the bytecode path when the emitter can lower the
+// program, silently falling back to the interpreter otherwise.
+// Results are identical either way — the flag is opt-in performance,
+// never semantics (design/aql-bytecode-plan.0.md, ground rules).
+func EvalOptionsMode(w io.Writer, source string, o lang.Options, compile bool) error {
 	a, err := lang.New(o)
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
 	}
 
-	result, err := a.Run(source)
+	var result []any
+	if compile {
+		result, _, err = a.RunCompiled(source)
+	} else {
+		result, err = a.Run(source)
+	}
 	if err != nil {
 		return fmt.Errorf("error: %s", err)
 	}

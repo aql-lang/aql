@@ -1,8 +1,9 @@
 # AQL Bytecode — staged implementation plan
 
 **Status:** in progress — Stage 0 DONE with a GO result
-(`aql-bytecode-baseline.0.md`); Stage 1 recording pass LANDED (see
-the Stage 1 section); Stages 2+ not started. Companion to
+(`aql-bytecode-baseline.0.md`); Stage 1 recording pass LANDED; Stage
+2 VM core + CLI opt-in LANDED for the straight-line subset (control
+flow pending). Companion to
 `aql-bytecode-report.0.md` (the design) and
 `aql-bytecode-revisions.0.md` (the June 2026 re-review that this plan
 incorporates; read it first — it changes two requirements). Written
@@ -169,6 +170,29 @@ and nothing else — any other construct flags the program
 *~1–2 weeks.*
 
 ## Stage 2 — VM core + control flow
+
+**Status: VM CORE LANDED for the Stage-1 subset (June 2026); control
+flow not started.** `eng/go/vm.go` executes the straight-line
+instruction set (handler errors stamped with `Debug[pc]` + source; a
+belt-and-braces guard refuses tape-coupled handler results). CLI
+opt-in shipped: `aql run --compile` / `aql do --compile`
+(`lang.(*AQL).RunCompiled`, silent interpreter fallback) and `aql
+check --emit` (disassembly or the refusal reason). **The compiled
+path is NEVER the default** — flag-only, per the ground rules.
+
+The differential gate is live
+(`test/go/langspec/compiled_differential_test.go`): every spec value
+row the emitter accepts runs through BOTH engines — 537 rows
+compiled, 0 mismatches, with a 150-row floor so a regression to
+refusing the corpus is caught. Getting to 0 hardened the emitter
+with guards the gate itself discovered: per-occurrence (non-pooled)
+compound constants (`eq` identity — the report's gotcha #13, caught
+empirically), a plain-data whitelist for the constant pool (carriers,
+type bodies, reaches, splices refused — canonical-pointer staleness),
+refusals for function-valued operands, quoted-operand and
+type-operand words, anonymous fn-value dispatch, dynamic outputs,
+and residual-stack reconciliation (bare-literal programs compile to
+`PUSH_CONST`).
 
 The `for { switch op }` loop over `Program`, with the operand stack,
 and the mark/move lowerings: `if` → `JMP_IF_FALSE`/`JMP`, `for` →

@@ -139,6 +139,12 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	case sig == nil:
 		es.MarkUncompilable("dispatch without a signature at " + word)
 		return
+	case word == "":
+		// Anonymous / fn-value dispatch (usurp wrappers, F4 value
+		// calls): the callee is a runtime value, Stage 3 territory.
+		es.SiteCounts[SiteMeta]++
+		es.MarkUncompilable("anonymous function dispatch (Stage 3)")
+		return
 	case sig.RunInCheckMode:
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("compile-time word " + word)
@@ -147,18 +153,63 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("user fn call " + word + " (Stage 3)")
 		return
+	case sig.FullStack:
+		es.SiteCounts[SiteMeta]++
+		es.MarkUncompilable("full-stack word " + word)
+		return
 	case len(sig.NoEvalArgs) > 0:
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
+		return
+	case len(sig.QuoteArgs) > 0:
+		// Implicit-quote operands (usurp, force-arity, ref-family):
+		// dispatch-manipulating meta words whose results the engine
+		// re-steps.
+		es.SiteCounts[SiteMeta]++
+		es.MarkUncompilable("quoted-operand word " + word)
+		return
+	case len(sig.TypeArgs) > 0:
+		// Type-literal operands (make, is, convert, tand, …): the
+		// operand must be the CANONICAL registry type node — a
+		// constant-pool copy goes stale against later behaviour/field
+		// installs (eng/go/CLAUDE.md, Canonical *Type Pointers).
+		es.SiteCounts[SiteMeta]++
+		es.MarkUncompilable("type-operand word " + word + " (Stage 4)")
 		return
 	case anyDynamicCarrier(args):
 		es.SiteCounts[SiteDynamic]++
 		es.MarkUncompilable("dynamic input at " + word)
 		return
+	case anyDynamicCarrier(outs):
+		// Dynamic outputs mean the checker could not type the word
+		// (missing annotations, opaque wrappers like a def-bound
+		// usurp value): the recorded signature is a best guess, not a
+		// proof — don't bake it in.
+		es.SiteCounts[SiteDynamic]++
+		es.MarkUncompilable("unannotated or opaque word " + word)
+		return
 	case len(outs) != 1:
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable(word + " returns " + itoaSmall(len(outs)) + " values (Stage 1 lowers single-result calls)")
 		return
+	}
+	// Function-valued operands mean a fn-invoking word (apply, usurp,
+	// higher-order forms): their handlers return values the ENGINE
+	// re-steps on the tape, which a VM cannot honour. Stage 3
+	// territory.
+	for _, t := range sig.Args {
+		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
+			es.SiteCounts[SiteMeta]++
+			es.MarkUncompilable("function-valued operand at " + word + " (Stage 3)")
+			return
+		}
+	}
+	for _, a := range args {
+		if _, ok := a.Data.(FnDefInfo); ok {
+			es.SiteCounts[SiteMeta]++
+			es.MarkUncompilable("function value reaches " + word + " (Stage 3)")
+			return
+		}
 	}
 	ops := make([]emitOperand, len(args))
 	for i, a := range args {
@@ -176,6 +227,10 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 			}
 			lit = orig
 		}
+		if !isInertConst(lit) {
+			es.MarkUncompilable("operand not statically materialisable at " + word)
+			return
+		}
 		ops[i].constIdx = es.intern(lit)
 	}
 	es.SiteCounts[SiteMono]++
@@ -183,8 +238,17 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	es.producedBy[outs[0].ID] = len(es.calls) - 1
 }
 
-// intern pools a constant by canonical form.
+// intern pools a constant by canonical form. Compounds (lists,
+// maps) are NEVER pooled: `eq` on compounds compares by identity
+// (compare-restrict), so two source literals must stay two constants
+// with their two distinct IDs — pooling them made `[1] eq [1]` true
+// under the VM where the interpreter says false (the report's
+// gotcha #13, caught by the differential gate).
 func (es *EmitState) intern(v Value) int {
+	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) {
+		es.consts = append(es.consts, v)
+		return len(es.consts) - 1
+	}
 	key := CanonValue(v)
 	if i, ok := es.constIdx[key]; ok {
 		return i
@@ -194,12 +258,59 @@ func (es *EmitState) intern(v Value) int {
 	return len(es.consts) - 1
 }
 
+// isInertConst reports whether v can live in a Program's constant
+// pool: a fully concrete value whose payload is PLAIN DATA. The rule
+// is a whitelist — scalars, temporal values, and lists/maps of the
+// same — because anything else is engine-coupled in some way: a
+// check-mode carrier must not be materialised; structural tokens
+// (Word, Splice, Reach, ParenExpr) would be expanded or re-stepped
+// by the engine; type literals and type bodies (class, surface,
+// record) are registry nodes whose by-value copies go stale against
+// the canonical pointer (eng/go/CLAUDE.md, Canonical *Type
+// Pointers); function values are Stage 3.
+func isInertConst(v Value) bool {
+	if v.Carrier || v.Dynamic || IsBareTypeNode(v) {
+		return false
+	}
+	switch d := v.Data.(type) {
+	case IntPayload, FloatPayload, StrPayload, BoolPayload, AtomPayload,
+		PathPayload, NonePayload, BigIntPayload, DecimalPayload,
+		TimePayload, DurationPayload, TimezonePayload:
+		return true
+	case ListPayload:
+		for _, e := range d.Elems {
+			if !isInertConst(e) {
+				return false
+			}
+		}
+		return true
+	case MapPayload:
+		if d.M == nil {
+			return false
+		}
+		for _, k := range d.M.Keys() {
+			mv, _ := d.M.Get(k)
+			if !isInertConst(mv) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
+}
+
 // Finalize linearises the recorded events into a Program. ok=false
 // (with reason) when the source was marked uncompilable or the
 // linear stack discipline doesn't hold under Stage 1's operand
 // shapes (all-const; one prior result plus consts; two prior
 // results, optionally SWAPped).
-func (es *EmitState) Finalize() (*Program, string, bool) {
+// residual is the check run's final carrier stack: the program's
+// declared result. Call-produced entries must match the simulated
+// stack in order; literal entries may only sit ABOVE the last
+// call-produced entry and are pushed at the end (a bare literal
+// program like `5` compiles to one PUSH_CONST).
+func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	if es == nil {
 		return nil, "no emit state", false
 	}
@@ -297,6 +408,48 @@ func (es *EmitState) Finalize() (*Program, string, bool) {
 		if depth > maxDepth {
 			maxDepth = depth
 		}
+	}
+	// Residual reconciliation: the program must end with exactly the
+	// check run's residual stack.
+	lastPos := SrcPos{}
+	if len(es.calls) > 0 {
+		lastPos = es.calls[len(es.calls)-1].pos
+	}
+	vi := 0
+	constTail := []int{}
+	for _, rv := range residual {
+		if idx, ok := es.producedBy[rv.ID]; ok {
+			if len(constTail) > 0 {
+				return nil, "residual shape beyond Stage 1 (call result above a literal)", false
+			}
+			if vi >= len(vm) || vm[vi] != idx {
+				return nil, "residual shape beyond Stage 1 (call results reordered)", false
+			}
+			vi++
+			continue
+		}
+		lit := rv
+		if !IsConcrete(rv) {
+			orig, ok := es.origByID[rv.ID]
+			if !ok {
+				return nil, "residual value of unknown provenance", false
+			}
+			lit = orig
+		}
+		if !isInertConst(lit) {
+			return nil, "residual value not statically materialisable", false
+		}
+		constTail = append(constTail, es.intern(lit))
+	}
+	if vi != len(vm) {
+		return nil, "residual shape beyond Stage 1 (unconsumed call results)", false
+	}
+	p.Consts = es.consts // interning may have grown during reconciliation
+	for _, k := range constTail {
+		emit(OpPushConst, k, lastPos)
+	}
+	if d := len(vm) + len(constTail); d > maxDepth {
+		maxDepth = d
 	}
 	p.MaxStack = maxDepth
 	return p, "", true

@@ -28,6 +28,7 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	// so this works as long as users put flags first.
 	fs := flag.NewFlagSet("do", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	compileMode := fs.Bool("compile", false, "EXPERIMENTAL: execute via the bytecode compiler when possible; silent interpreter fallback")
 	var pf permsflags.Flags
 	permsflags.Register(fs, &pf)
 	if err := fs.Parse(args); err != nil {
@@ -46,7 +47,7 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	if err := run.EvalWithPolicy(stdout, source, "", 0, pol); err != nil {
+	if err := run.EvalOptionsMode(stdout, source, run.OptionsFor("", 0, pol), *compileMode); err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)
 		return 1
 	}
