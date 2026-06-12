@@ -84,7 +84,19 @@ const (
 	evLoop
 	evBreak
 	evContinue
+	evCallUser
 )
+
+// emitUserCall is a recorded call of a compiled AQL fn: the target
+// unit index, the args in sig order, and whether the lowering marked
+// it a TAIL call (it then replaces the frame and control never
+// returns to the site).
+type emitUserCall struct {
+	unit int
+	ops  []emitOperand
+	tail bool
+	pos  SrcPos
+}
 
 type emitEvent struct {
 	seq  int
@@ -92,6 +104,7 @@ type emitEvent struct {
 	call emitCall
 	br   emitBranch
 	loop emitLoop
+	uc   emitUserCall
 }
 
 // EmitFragment is a captured sub-trace: the events a branch body
@@ -123,13 +136,36 @@ type EmitState struct {
 	fragFloors []int          // startSeq per open fragment frame
 	captureArm bool           // next RunCarrierBodyWithDefs records a fragment
 	loopArm    bool           // next AnalyseLoopBody records its final round
+	fnArm      bool           // next AnalyseFnBody records (fn compilation open)
 	captured   *EmitFragment  // last completed fragment, until TakeFragment
-	localByID  map[string]int // iterator carrier ID → local slot
-	numLocals  int
+	units      []*emitUnit    // units[0] = top level; fn compilations push
+	fnUnits    map[string]int // fn memo key → Program.Fns index
+	fnRecs     []*fnUnitRec
 	producedBy map[string]int // value ID → producing event seq
 	consts     []Value
 	constIdx   map[string]int   // CanonValue → Consts index
 	origByID   map[string]Value // stripped literal ID → original value
+}
+
+// emitUnit scopes local-slot numbering to one code unit (the
+// top-level program, or one compiled fn body — locals are
+// frame-relative at run time).
+type emitUnit struct {
+	localByID map[string]int
+	numLocals int
+}
+
+// fnUnitRec is one compiled fn body awaiting (or holding) its
+// lowered form.
+type fnUnitRec struct {
+	name     string
+	nParams  int
+	frag     *EmitFragment
+	outOp    emitOperand
+	hasOut   bool
+	numLoc   int
+	pos      SrcPos
+	finished bool
 }
 
 // NewEmitState returns a fresh recording state.
@@ -138,8 +174,9 @@ func NewEmitState() *EmitState {
 		Compilable: true,
 		SiteCounts: map[string]int{},
 		frames:     [][]emitEvent{nil},
+		units:      []*emitUnit{{localByID: map[string]int{}}},
+		fnUnits:    map[string]int{},
 		producedBy: map[string]int{},
-		localByID:  map[string]int{},
 		constIdx:   map[string]int{},
 		origByID:   map[string]Value{},
 	}
@@ -240,11 +277,16 @@ func (es *EmitState) appendEvent(ev emitEvent) int {
 // event's output, or an inert constant (concrete at the dispatch, or
 // a stripped literal whose original RecordStrip saved).
 func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
-	if slot, ok := es.localByID[v.ID]; ok {
-		return emitOperand{constIdx: -1, fromSeq: -1, localSlot: slot}, true
-	}
+	// Events first, locals second: a join can REUSE a local's value ID
+	// for its result (JoinCarriers keeps the then-side ID when types
+	// agree), and the event is then the value's stack-discipline truth
+	// — the branch pushed it. A plain param/iterator reference has no
+	// producing event and resolves to its local slot.
 	if idx, ok := es.producedBy[v.ID]; ok {
 		return emitOperand{constIdx: -1, fromSeq: idx, localSlot: -1}, true
+	}
+	if slot, ok := es.units[len(es.units)-1].localByID[v.ID]; ok {
+		return emitOperand{constIdx: -1, fromSeq: -1, localSlot: slot}, true
 	}
 	lit := v
 	if !IsConcrete(v) {
@@ -267,8 +309,11 @@ func fragDiverges(frag *EmitFragment) bool {
 	if frag == nil || len(frag.events) == 0 {
 		return false
 	}
-	k := frag.events[len(frag.events)-1].kind
-	return k == evBreak || k == evContinue
+	last := &frag.events[len(frag.events)-1]
+	if last.kind == evCallUser && last.uc.tail {
+		return true
+	}
+	return last.kind == evBreak || last.kind == evContinue
 }
 
 // BranchRecord carries one `if` dispatch into RecordBranch.
@@ -397,13 +442,102 @@ func (es *EmitState) RegisterLocal(id string) int {
 	if es == nil {
 		return -1
 	}
-	if slot, ok := es.localByID[id]; ok {
+	u := es.units[len(es.units)-1]
+	if slot, ok := u.localByID[id]; ok {
 		return slot
 	}
-	slot := es.numLocals
-	es.numLocals++
-	es.localByID[id] = slot
+	slot := u.numLocals
+	u.numLocals++
+	u.localByID[id] = slot
 	return slot
+}
+
+// fnArm bypasses AnalyseFnBody's suspension exactly once — set by
+// StartFnCompile so the armed body analysis records into the open
+// fn fragment.
+func (es *EmitState) fnBodyGuard() func() {
+	if es != nil && es.fnArm {
+		es.fnArm = false
+		return func() {}
+	}
+	return es.Suspend()
+}
+
+// StartFnCompile reserves (or finds) the compiled unit for one fn
+// overload at one arg shape and, when fresh, opens a fn recording
+// scope: a new local-numbering unit with the arg carriers registered
+// as param slots 0..n-1 (sig order — frame locals at run time), and
+// a fragment capturing the body analysis that the caller runs next.
+// finish (non-nil only when fresh) closes the scope with the body's
+// residual stack. ok=false when the fn is beyond Stage 3 (closures,
+// generics, unchecked or multi-value returns) — the program is then
+// marked uncompilable.
+func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*Type, nCaptures int, generic bool) (unit int, finish func([]Value), ok bool) {
+	if !es.active() {
+		return -1, nil, false
+	}
+	switch {
+	case nCaptures > 0:
+		es.MarkUncompilable("closure " + name + " (Stage 3 follow-on)")
+		return -1, nil, false
+	case generic:
+		es.MarkUncompilable("generic fn " + name + " (Stage 4)")
+		return -1, nil, false
+	case len(declared) != 1:
+		es.MarkUncompilable("fn " + name + " without exactly one declared return (Stage 3 lowers single-return fns)")
+		return -1, nil, false
+	}
+	if u, hit := es.fnUnits[key]; hit {
+		return u, nil, true
+	}
+	unit = len(es.fnRecs)
+	rec := &fnUnitRec{name: name, nParams: len(args)}
+	es.fnRecs = append(es.fnRecs, rec)
+	es.fnUnits[key] = unit
+	u := &emitUnit{localByID: map[string]int{}}
+	es.units = append(es.units, u)
+	for _, a := range args {
+		es.RegisterLocal(a.ID)
+	}
+	resume := es.beginFragment()
+	es.fnArm = true
+	finish = func(bodyStk []Value) {
+		resume()
+		rec.frag = es.TakeFragment()
+		if len(bodyStk) > 0 && !fragDiverges(rec.frag) {
+			if op, okOut := es.resolveOperand(bodyStk[len(bodyStk)-1]); okOut {
+				rec.outOp, rec.hasOut = op, true
+			} else {
+				es.MarkUncompilable("fn " + name + ": body result of unknown provenance")
+			}
+		} else if !fragDiverges(rec.frag) {
+			es.MarkUncompilable("fn " + name + ": body produces no value")
+		}
+		rec.numLoc = u.numLocals
+		rec.finished = true
+		es.units = es.units[:len(es.units)-1]
+	}
+	return unit, finish, true
+}
+
+// RecordUserCall records one call of a compiled fn unit. args are in
+// signature order; out is the dispatch's declared-return carrier.
+func (es *EmitState) RecordUserCall(unit int, args []Value, out Value, pos SrcPos) {
+	if !es.active() || unit < 0 {
+		return
+	}
+	ops := make([]emitOperand, len(args))
+	for i, a := range args {
+		op, ok := es.resolveOperand(a)
+		if !ok {
+			es.MarkUncompilable("fn call operand of unknown provenance")
+			return
+		}
+		ops[i] = op
+	}
+	seq := es.appendEvent(emitEvent{kind: evCallUser, uc: emitUserCall{unit: unit, ops: ops, pos: pos}})
+	es.SiteCounts[SiteMono]++
+	es.producedBy[out.ID] = seq
 }
 
 // RecordLoop records a counted/range `for`: start/end/step operand
@@ -442,7 +576,7 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 		}
 		lp.bodyOut, lp.hasBodyOut = bodyOut, true
 	}
-	slot, ok := es.localByID[iterID]
+	slot, ok := es.units[len(es.units)-1].localByID[iterID]
 	if !ok {
 		es.MarkUncompilable("for: iterator slot not registered")
 		return
@@ -685,7 +819,7 @@ func (lw *lowerer) lowerLoop(ev *emitEvent) string {
 	lw.pushOperand(lp.start, lp.pos)
 	lw.emit(OpForSetup, lp.iterSlot, lp.pos)
 	lw.vm = lw.vm[:len(lw.vm)-3] // start, end, step consumed
-	head := len(lw.p.Code)
+	head := len(*lw.code)
 	fn := lw.emit(OpForNext, 0, lp.pos)
 	endHoles := []int{}
 	lw.loops = append(lw.loops, loopCtx{nextPC: head, endHoles: &endHoles})
@@ -699,10 +833,10 @@ func (lw *lowerer) lowerLoop(ev *emitEvent) string {
 		return reason
 	}
 	lw.emit(OpJmp, head, lp.pos)
-	endPC := len(lw.p.Code)
-	lw.p.Code[fn].Arg = int32(endPC)
+	endPC := len(*lw.code)
+	(*lw.code)[fn].Arg = int32(endPC)
 	for _, h := range endHoles {
-		lw.p.Code[h].Arg = int32(endPC)
+		(*lw.code)[h].Arg = int32(endPC)
 	}
 	lw.vm = append(lw.vm, ev.seq)
 	lw.variadic[ev.seq] = true
@@ -724,7 +858,8 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	if !es.Compilable {
 		return nil, es.Reason, false
 	}
-	lw := &lowerer{es: es, p: &Program{}, sigIdx: map[*Signature]int{}, variadic: map[int]bool{}}
+	p := &Program{}
+	lw := &lowerer{es: es, p: p, code: &p.Code, debug: &p.Debug, sigIdx: map[*Signature]int{}, variadic: map[int]bool{}}
 	if reason := lw.lowerEvents(es.frames[0], 0); reason != "" {
 		return nil, reason, false
 	}
@@ -768,9 +903,43 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		lw.vm = append(lw.vm, -1)
 	}
 	lw.note()
+
+	// Lower the compiled fn units. Tail positions are marked first so
+	// the lowering emits TAIL_CALL_USER (frame replacement — the
+	// language's tail-call guarantee carries into compiled mode).
+	for i, rec := range es.fnRecs {
+		if !rec.finished {
+			return nil, "fn " + rec.name + " was never compiled", false
+		}
+		rec.hasOut = markTailCalls(rec.frag, &rec.outOp, rec.hasOut)
+		cf := CompiledFn{Name: rec.name, NParams: rec.nParams, NLocals: rec.numLoc}
+		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}}
+		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
+			return nil, "fn " + rec.name + ": " + reason, false
+		}
+		switch {
+		case rec.hasOut && rec.outOp.fromSeq >= 0:
+			if len(flw.vm) != 1 || flw.vm[0] != rec.outOp.fromSeq {
+				return nil, "fn " + rec.name + ": body leaves extra values (Stage 3 lowers single-result bodies)", false
+			}
+			flw.emit(OpRet, 0, rec.pos)
+		case rec.hasOut:
+			if len(flw.vm) != 0 {
+				return nil, "fn " + rec.name + ": body leaves extra values (Stage 3 lowers single-result bodies)", false
+			}
+			flw.pushOperand(rec.outOp, rec.pos)
+			flw.emit(OpRet, 0, rec.pos)
+		default:
+			// Fully diverging body (every path tail-calls): the RET is
+			// unreachable; nothing to emit.
+		}
+		p.Fns = append(p.Fns, cf)
+		_ = i
+	}
+
 	lw.p.Consts = es.consts // interning may have grown during reconciliation
 	lw.p.MaxStack = lw.maxDepth
-	lw.p.NumLocals = es.numLocals
+	lw.p.NumLocals = es.units[0].numLocals
 	return lw.p, "", true
 }
 
@@ -794,6 +963,8 @@ type loopCtx struct {
 type lowerer struct {
 	es       *EmitState
 	p        *Program
+	code     *[]Instr  // current emission target (main or one fn unit)
+	debug    *[]SrcPos // 1:1 with code
 	sigIdx   map[*Signature]int
 	vm       []int
 	variadic map[int]bool // loop seqs: N runtime values, not one
@@ -819,9 +990,9 @@ func (lw *lowerer) note() {
 }
 
 func (lw *lowerer) emit(op Opcode, arg int, pos SrcPos) int {
-	lw.p.Code = append(lw.p.Code, Instr{Op: op, Arg: int32(arg)})
-	lw.p.Debug = append(lw.p.Debug, pos)
-	return len(lw.p.Code) - 1
+	*lw.code = append(*lw.code, Instr{Op: op, Arg: int32(arg)})
+	*lw.debug = append(*lw.debug, pos)
+	return len(*lw.code) - 1
 }
 
 // lowerEvents lowers a trace. scopeFloor is the closed-fragment rule:
@@ -849,6 +1020,8 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 			reason = lw.lowerBreak(ev)
 		case evContinue:
 			reason = lw.lowerContinue(ev)
+		case evCallUser:
+			reason = lw.lowerUserCall(ev)
 		default:
 			reason = "unknown event kind"
 		}
@@ -867,6 +1040,8 @@ func collectOperands(ev *emitEvent) []emitOperand {
 		return []emitOperand{ev.loop.start, ev.loop.end, ev.loop.step, ev.loop.bodyOut}
 	case evBreak, evContinue:
 		return nil
+	case evCallUser:
+		return ev.uc.ops
 	}
 	return []emitOperand{ev.br.cond, ev.br.condOut, ev.br.thenOut, ev.br.elsOut}
 }
@@ -1003,6 +1178,117 @@ func (lw *lowerer) lowerContinue(ev *emitEvent) string {
 	return ""
 }
 
+// lowerUserCall pushes the args (sig position 0 on top — frame
+// locals bind by pop order) and calls or tail-calls the unit. A tail
+// call replaces the frame: control never returns here, so nothing is
+// pushed to the simulated stack (the marking pass already cleared
+// the consumer's out expectation).
+func (lw *lowerer) lowerUserCall(ev *emitEvent) string {
+	uc := &ev.uc
+	n := len(uc.ops)
+	// Stage 3 operand shape: all args const/local (results-on-stack
+	// shapes work when the single result operand is on top, mirroring
+	// lowerCall's n<=2 rules — keep it simple: allow one trailing
+	// result operand at position 0).
+	results := []int{}
+	for i, op := range uc.ops {
+		if op.fromSeq >= 0 {
+			if lw.variadic[op.fromSeq] {
+				return "loop results as fn args (Stage 3)"
+			}
+			results = append(results, i)
+		}
+	}
+	switch len(results) {
+	case 0:
+		for i := n - 1; i >= 0; i-- {
+			lw.pushOperand(uc.ops[i], uc.pos)
+		}
+	case 1:
+		ri := results[0]
+		if len(lw.vm) == 0 || lw.vm[len(lw.vm)-1] != uc.ops[ri].fromSeq {
+			return "stack discipline: fn arg result is not on top (call of " + lw.es.fnRecs[uc.unit].name + ")"
+		}
+		for i := n - 1; i >= 0; i-- {
+			if i == ri {
+				continue
+			}
+			lw.pushOperand(uc.ops[i], uc.pos)
+		}
+		if ri == 0 && n == 2 {
+			lw.emit(OpSwap, 0, uc.pos)
+			lw.vm[len(lw.vm)-1], lw.vm[len(lw.vm)-2] = lw.vm[len(lw.vm)-2], lw.vm[len(lw.vm)-1]
+		} else if ri != n-1 && n > 1 {
+			return "fn arg shape needs reordering beyond Stage 3"
+		}
+	case 2:
+		if n != 2 {
+			return "fn arg shape beyond Stage 3"
+		}
+		if len(lw.vm) < 2 {
+			return "stack discipline underflow at fn call"
+		}
+		top, below := lw.vm[len(lw.vm)-1], lw.vm[len(lw.vm)-2]
+		switch {
+		case top == uc.ops[0].fromSeq && below == uc.ops[1].fromSeq:
+			// already in layout
+		case top == uc.ops[1].fromSeq && below == uc.ops[0].fromSeq:
+			lw.emit(OpSwap, 0, uc.pos)
+			lw.vm[len(lw.vm)-1], lw.vm[len(lw.vm)-2] = lw.vm[len(lw.vm)-2], lw.vm[len(lw.vm)-1]
+		default:
+			return "stack discipline: fn args not adjacent on top"
+		}
+	default:
+		return "fn arg shape beyond Stage 3"
+	}
+	if uc.tail {
+		lw.emit(OpTailCallUser, uc.unit, uc.pos)
+		lw.vm = lw.vm[:len(lw.vm)-n]
+		return ""
+	}
+	lw.emit(OpCallUser, uc.unit, uc.pos)
+	lw.vm = lw.vm[:len(lw.vm)-n]
+	lw.vm = append(lw.vm, ev.seq)
+	lw.note()
+	return ""
+}
+
+// markTailCalls rewrites tail-position user calls in a fn body
+// fragment: the final event when it produces the body's result, and
+// recursively the final event of branch arms whose result is that
+// arm's own trailing call. Marked calls lower as TAIL_CALL_USER and
+// count as divergence (control leaves via the callee's eventual RET),
+// so the arm/body contributes no merge value.
+func markTailCalls(frag *EmitFragment, out *emitOperand, hasOut bool) (stillHasOut bool) {
+	if frag == nil || len(frag.events) == 0 || !hasOut || out.fromSeq < 0 {
+		return hasOut
+	}
+	last := &frag.events[len(frag.events)-1]
+	switch last.kind {
+	case evCallUser:
+		if last.seq == out.fromSeq {
+			last.uc.tail = true
+			return false
+		}
+	case evBranch:
+		if last.seq == out.fromSeq && last.br.constCond == nil && last.br.hasElse {
+			if last.br.hasThenOut {
+				last.br.hasThenOut = markTailCalls(last.br.then, &last.br.thenOut, true)
+			}
+			if last.br.hasElsOut {
+				last.br.hasElsOut = markTailCalls(last.br.els, &last.br.elsOut, true)
+			}
+			// The branch still merges normally for non-tail arms; if
+			// EVERY arm tail-calls, control never reaches the merge —
+			// the whole body diverges.
+			if !last.br.hasThenOut && !last.br.hasElsOut {
+				return false
+			}
+		}
+	}
+	return hasOut
+}
+
 func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 	br := &ev.br
 	armOut := func(has bool, op *emitOperand) *emitOperand {
@@ -1069,7 +1355,7 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 	}
 	if !br.hasElse {
 		// 2-arg if: false path jumps straight to the merge.
-		lw.p.Code[jf].Arg = int32(len(lw.p.Code))
+		(*lw.code)[jf].Arg = int32(len(*lw.code))
 		lw.vm = append(lw.vm, ev.seq)
 		lw.variadic[ev.seq] = true
 		lw.note()
@@ -1079,7 +1365,7 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 	if !fragDiverges(br.then) {
 		jend = lw.emit(OpJmp, 0, br.pos)
 	}
-	lw.p.Code[jf].Arg = int32(len(lw.p.Code))
+	(*lw.code)[jf].Arg = int32(len(*lw.code))
 	elsOut := func() *emitOperand {
 		if br.hasElsOut {
 			return &br.elsOut
@@ -1090,7 +1376,7 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 		return reason
 	}
 	if jend >= 0 {
-		lw.p.Code[jend].Arg = int32(len(lw.p.Code))
+		(*lw.code)[jend].Arg = int32(len(*lw.code))
 	}
 	if br.hasThenOut || br.hasElsOut {
 		lw.vm = append(lw.vm, ev.seq)

@@ -1351,8 +1351,10 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	defer delete(r.Check.FnInflight, key)
 
 	// Fn-body analysis runs nested sub-engines — not part of the
-	// caller's straight line; pause bytecode recording.
-	defer r.Check.Emit.Suspend()()
+	// caller's straight line; pause bytecode recording, UNLESS a fn
+	// compilation armed capture (StartFnCompile): the body's events
+	// then record into the open fn fragment.
+	defer r.Check.Emit.fnBodyGuard()()
 
 	// runOnce performs one full body analysis: snapshot def-stack
 	// depths so any defs the body, captures, or parameter bindings

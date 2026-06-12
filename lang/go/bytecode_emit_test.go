@@ -34,7 +34,7 @@ func TestEmitGoldens(t *testing.T) {
 		{`add 1 2`, `0000 PUSH_CONST  k1   ; 2 (Integer)
 0001 PUSH_CONST  k0   ; 1 (Integer)
 0002 CALL_NATIVE s0   ; add (Number, Number)
-; consts=2 sigs=1 max-stack=2 locals=0
+; consts=2 sigs=1 fns=0 max-stack=2 locals=0
 `},
 		// `1 add 2` is the k=1 split of the (2,1) assignment — the
 		// forward 2 fills sig[0], the stack-prefix 1 fills sig[1]
@@ -45,14 +45,14 @@ func TestEmitGoldens(t *testing.T) {
 		{`1 add 2`, `0000 PUSH_CONST  k1   ; 1 (Integer)
 0001 PUSH_CONST  k0   ; 2 (Integer)
 0002 CALL_NATIVE s0   ; add (Number, Number)
-; consts=2 sigs=1 max-stack=2 locals=0
+; consts=2 sigs=1 fns=0 max-stack=2 locals=0
 `},
 		{`0 add 7 sub 3`, `0000 PUSH_CONST  k1   ; 0 (Integer)
 0001 PUSH_CONST  k0   ; 7 (Integer)
 0002 CALL_NATIVE s0   ; add (Number, Number)
 0003 PUSH_CONST  k2   ; 3 (Integer)
 0004 CALL_NATIVE s1   ; sub (Number, Number)
-; consts=3 sigs=2 max-stack=2 locals=0
+; consts=3 sigs=2 fns=0 max-stack=2 locals=0
 `},
 		// A paren result feeding the next call: the prior result stays
 		// on the simulated stack; only the literal is pushed.
@@ -61,14 +61,14 @@ func TestEmitGoldens(t *testing.T) {
 0002 CALL_NATIVE s0   ; add (Number, Number)
 0003 PUSH_CONST  k2   ; 3 (Integer)
 0004 CALL_NATIVE s1   ; mul (Number, Number)
-; consts=3 sigs=2 max-stack=2 locals=0
+; consts=3 sigs=2 fns=0 max-stack=2 locals=0
 `},
 		// Top-level strings are stripped to carriers by check mode;
 		// RecordStrip preserves the originals for interning.
 		{`'a' add 'b'`, `0000 PUSH_CONST  k1   ; 'a' (ProperString)
 0001 PUSH_CONST  k0   ; 'b' (ProperString)
 0002 CALL_NATIVE s0   ; add (Scalar, Scalar)
-; consts=2 sigs=1 max-stack=2 locals=0
+; consts=2 sigs=1 fns=0 max-stack=2 locals=0
 `},
 		// `if` lowers to JMP_IF_FALSE / JMP: condition code first, a
 		// branch per fragment, the join value on the stack for the
@@ -80,7 +80,7 @@ func TestEmitGoldens(t *testing.T) {
 0004 PUSH_CONST  k2   ; 10 (Integer)
 0005 JMP         -> 0007
 0006 PUSH_CONST  k3   ; 20 (Integer)
-; consts=4 sigs=1 max-stack=2 locals=0
+; consts=4 sigs=1 fns=0 max-stack=2 locals=0
 `},
 		// The branch result feeds the downstream mul; a stripped
 		// Boolean literal condition compiles as PUSH_CONST + jump
@@ -96,14 +96,14 @@ func TestEmitGoldens(t *testing.T) {
 0008 PUSH_CONST  k2   ; 9 (Integer)
 0009 PUSH_CONST  k1   ; 2 (Integer)
 0010 CALL_NATIVE s2   ; mul (Number, Number)
-; consts=3 sigs=3 max-stack=2 locals=0
+; consts=3 sigs=3 fns=0 max-stack=2 locals=0
 `},
 		// Literal-substitution def: x resolves to the interned literal
 		// through value provenance — the report's §5.2 inline case.
 		{`def x 1 x add 2`, `0000 PUSH_CONST  k1   ; 1 (Integer)
 0001 PUSH_CONST  k0   ; 2 (Integer)
 0002 CALL_NATIVE s0   ; add (Number, Number)
-; consts=2 sigs=1 max-stack=2 locals=0
+; consts=2 sigs=1 fns=0 max-stack=2 locals=0
 `},
 	}
 	for _, c := range cases {
@@ -170,7 +170,7 @@ func TestEmitForLoopGolden(t *testing.T) {
 0006 PUSH_CONST  k0   ; 10 (Integer)
 0007 CALL_NATIVE s0   ; add (Number, Number)
 0008 JMP         -> 0004
-; consts=4 sigs=1 max-stack=3 locals=1
+; consts=4 sigs=1 fns=0 max-stack=3 locals=1
 `
 	if got != want {
 		t.Errorf("for lowering changed:\n--- got\n%s--- want\n%s", got, want)
@@ -235,7 +235,6 @@ func TestEmitRefusals(t *testing.T) {
 		// A branch reading an enclosing computation breaks the closed-
 		// fragment rule (Stage 3, with locals).
 		{`def y (1 add 2) if (1 gt 0) [y mul 2] [0]`, "branch reads enclosing computation"},
-		{`def f fn [[n:Integer] [Integer] [n add 1]] f 1`, "user fn call f"},
 		{`do [1 add 2]`, "code-body word do"},
 	}
 	for _, c := range cases {
@@ -268,5 +267,78 @@ func TestEmitRefusesPolySite(t *testing.T) {
 	// refusal, with either the control-flow or the poly reason.
 	if !strings.Contains(reason, "code-body") && !strings.Contains(reason, "polymorphic") {
 		t.Errorf("unexpected refusal reason %q", reason)
+	}
+}
+
+// Stage 3: user fns compile as their own code units with params as
+// frame locals; the body is compiled against GENERALISED carrier
+// args (a call's concrete values must not constant-fold into the
+// shared unit); tail-position recursive calls lower to
+// TAIL_CALL_USER — the language's tail-call guarantee in compiled
+// form.
+func TestEmitUserFnAndTailCall(t *testing.T) {
+	got, reason := compile(t, `def s2 fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [s2 (n sub 1) (acc add n)]]] s2 10 0`)
+	if reason != "" {
+		t.Fatalf("tail-recursive fn unexpectedly uncompilable: %s", reason)
+	}
+	if !strings.Contains(got, "TAIL_CALL_USER") {
+		t.Errorf("tail call not lowered as TAIL_CALL_USER:\n%s", got)
+	}
+	if !strings.Contains(got, "CALL_USER") || !strings.Contains(got, "RET") {
+		t.Errorf("user-fn frame opcodes missing:\n%s", got)
+	}
+	// The generalisation guard: the body must reference its params as
+	// locals, never the outer call's constants (n sub 1 with n=10
+	// must NOT fold to 9).
+	if strings.Contains(got, "; 9 (Integer)") {
+		t.Errorf("call-site constant folded into the shared fn unit:\n%s", got)
+	}
+
+	// Non-tail recursion also compiles (frames stack).
+	got2, reason2 := compile(t, `def fact fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fact (n sub 1))]]] fact 10`)
+	if reason2 != "" {
+		t.Fatalf("factorial unexpectedly uncompilable: %s", reason2)
+	}
+	if strings.Contains(got2, "TAIL_CALL_USER") {
+		t.Errorf("non-tail recursive call wrongly marked tail:\n%s", got2)
+	}
+
+	// Refusals: closures and unchecked fns are beyond this slice.
+	if _, r3 := compile(t, `def mk fn [[x:Integer] [Function] [fn [[y:Integer] [Integer] [x add y]]]] def a5 (mk 5) a5 3`); r3 == "" {
+		t.Error("closure compiled but must refuse")
+	}
+}
+
+// Runtime equality + the tail guarantee under a tight ceiling: deep
+// self tail-recursion runs in O(1) frames in compiled mode, while
+// equally deep NON-tail recursion exhausts loudly with the shared
+// taxonomy.
+func TestRunCompiledTailGuarantee(t *testing.T) {
+	tight := Options{Tape: TapeOptions{InitialSize: 64, MaxGrows: 1, GrowthFactor: 2.7}}
+	a, err := New(tight)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, compiled, err := a.RunCompiled(`def s2 fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [s2 (n sub 1) (acc add n)]]] s2 100000 0`)
+	if err != nil {
+		t.Fatalf("deep tail recursion: %v", err)
+	}
+	if !compiled {
+		t.Fatal("tail-recursive program fell back to the interpreter")
+	}
+	if len(out) != 1 || out[0] != int64(5000050000) {
+		t.Fatalf("s2 100000 0 = %v, want 5000050000", out)
+	}
+
+	b, err := New(tight)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, compiled2, err2 := b.RunCompiled(`def f fn [[n:Integer] [Integer] [if (n lte 0) [0] [n add (f (n sub 1))]]] f 100000`)
+	if !compiled2 {
+		t.Fatal("non-tail program fell back to the interpreter")
+	}
+	if err2 == nil || !strings.Contains(err2.Error(), "tape_exhausted") {
+		t.Fatalf("deep non-tail recursion under tight ceiling = %v, want tape_exhausted", err2)
 	}
 }

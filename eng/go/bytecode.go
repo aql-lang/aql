@@ -48,6 +48,16 @@ const (
 	// Arg when exhausted. The body's trailing JMP back to this
 	// instruction is the program's only back-edge.
 	OpForNext
+	// OpCallUser pops Fns[Arg].NParams args (sig position 0 on top)
+	// into a fresh frame's locals and enters the unit.
+	OpCallUser
+	// OpTailCallUser binds args like OpCallUser but REPLACES the
+	// current frame — the language's tail-call guarantee: self and
+	// mutual tail recursion run in O(1) frames.
+	OpTailCallUser
+	// OpRet pops the frame; the unit's single result stays on the
+	// shared operand stack for the caller.
+	OpRet
 )
 
 func (o Opcode) String() string {
@@ -68,6 +78,12 @@ func (o Opcode) String() string {
 		return "FOR_SETUP"
 	case OpForNext:
 		return "FOR_NEXT"
+	case OpCallUser:
+		return "CALL_USER"
+	case OpTailCallUser:
+		return "TAIL_CALL_USER"
+	case OpRet:
+		return "RET"
 	}
 	return fmt.Sprintf("OP(%d)", uint8(o))
 }
@@ -91,35 +107,57 @@ type Program struct {
 	Code      []Instr
 	Consts    []Value
 	Sigs      []SigRef
+	Fns       []CompiledFn
 	Debug     []SrcPos // 1:1 with Code
 	MaxStack  int      // a floor when the program loops (results accumulate)
 	NumLocals int
 }
 
+// CompiledFn is one compiled AQL fn overload at one arg shape: its
+// own code unit with frame-relative locals (params in slots 0..N-1,
+// sig order).
+type CompiledFn struct {
+	Name    string
+	NParams int
+	NLocals int
+	Code    []Instr
+	Debug   []SrcPos
+}
+
 // Disassemble renders the program for golden tests and debugging.
 func (p *Program) Disassemble() string {
 	var sb strings.Builder
-	for i, in := range p.Code {
-		fmt.Fprintf(&sb, "%04d %-11s", i, in.Op.String())
+	p.disasmUnit(&sb, p.Code)
+	for fi := range p.Fns {
+		fmt.Fprintf(&sb, "fn f%d %s/%d (locals=%d):\n", fi, p.Fns[fi].Name, p.Fns[fi].NParams, p.Fns[fi].NLocals)
+		p.disasmUnit(&sb, p.Fns[fi].Code)
+	}
+	fmt.Fprintf(&sb, "; consts=%d sigs=%d fns=%d max-stack=%d locals=%d\n",
+		len(p.Consts), len(p.Sigs), len(p.Fns), p.MaxStack, p.NumLocals)
+	return sb.String()
+}
+
+func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
+	for i, in := range code {
+		fmt.Fprintf(sb, "%04d %-11s", i, in.Op.String())
 		switch in.Op {
 		case OpPushConst:
 			c := p.Consts[in.Arg]
-			fmt.Fprintf(&sb, " k%-3d ; %s (%s)", in.Arg, CanonValue(c), c.Parent.Leaf())
+			fmt.Fprintf(sb, " k%-3d ; %s (%s)", in.Arg, CanonValue(c), c.Parent.Leaf())
 		case OpCallNative:
 			s := p.Sigs[in.Arg]
 			names := make([]string, len(s.Sig.Args))
 			for j, t := range s.Sig.Args {
 				names[j] = t.Leaf()
 			}
-			fmt.Fprintf(&sb, " s%-3d ; %s (%s)", in.Arg, s.Word, strings.Join(names, ", "))
+			fmt.Fprintf(sb, " s%-3d ; %s (%s)", in.Arg, s.Word, strings.Join(names, ", "))
 		case OpJmp, OpJmpIfFalse, OpForNext:
-			fmt.Fprintf(&sb, " -> %04d", in.Arg)
+			fmt.Fprintf(sb, " -> %04d", in.Arg)
 		case OpPushLocal, OpForSetup:
-			fmt.Fprintf(&sb, " l%d", in.Arg)
+			fmt.Fprintf(sb, " l%d", in.Arg)
+		case OpCallUser, OpTailCallUser:
+			fmt.Fprintf(sb, " f%-3d ; %s/%d", in.Arg, p.Fns[in.Arg].Name, p.Fns[in.Arg].NParams)
 		}
 		sb.WriteByte('\n')
 	}
-	fmt.Fprintf(&sb, "; consts=%d sigs=%d max-stack=%d locals=%d\n",
-		len(p.Consts), len(p.Sigs), p.MaxStack, p.NumLocals)
-	return sb.String()
 }

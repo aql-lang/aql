@@ -39,6 +39,9 @@ func makeDynamicEval(r *Registry) func(string) (string, error) {
 		savedOut := r.Output
 		r.Output = io.Discard
 		defer func() { r.Output = savedOut }()
+		// The synthetic example evaluation is documentation, not the
+		// user's program — never record its dispatches as bytecode.
+		defer r.Check.Emit.Suspend()()
 
 		eng := NewTop(r)
 		result, err := eng.Run(vals)

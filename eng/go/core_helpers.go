@@ -360,6 +360,46 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		// the analyser's residual stack — the analyser is run purely
 		// for its side-effecting diagnostic collection. Memoisation
 		// inside AnalyseFnBody keeps recursive / repeated calls cheap.
+		// Bytecode (Stage 3): compile this overload's body as its own
+		// code unit (params as frame locals) and record the call site.
+		// The memo key mirrors AnalyseFnBody's so the unit is compiled
+		// exactly when the body is analysed.
+		es := r.Check.Emit
+		fnUnit := -1
+		var finishFn func([]Value)
+		if es != nil {
+			var kb strings.Builder
+			kb.WriteString(nameCopy)
+			kb.WriteByte('#')
+			for _, a := range args {
+				kb.WriteString(a.Parent.String())
+				kb.WriteByte(',')
+			}
+			// The body unit must be compiled against GENERALISED args
+			// — pure carriers of the call's arg types. The call's
+			// kept-concrete values would constant-fold inside the body
+			// (`n sub 1` with n=10 folds to 9), baking one call's
+			// constants into the shared unit. Same Parents → same memo
+			// key, so the generalised analysis is the one that caches.
+			genArgs := make([]Value, len(args))
+			for i, a := range args {
+				genArgs[i] = NewCarrier(a.Parent)
+			}
+			var okFn bool
+			fnUnit, finishFn, okFn = es.StartFnCompile(kb.String(), nameCopy, genArgs, declaredReturns, len(capturesCopy), genSpec != nil)
+			if !okFn {
+				fnUnit = -1
+			}
+			if finishFn != nil {
+				// A fresh compilation must RECORD the body — drop any
+				// summary cached by a suspended analysis (the install-
+				// time synthetic example eval) so AnalyseFnBody re-runs
+				// under the armed capture, with the generalised args.
+				delete(r.Check.FnSummaries, kb.String())
+				stkGen := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, genArgs, capturesCopy, declaredReturns)
+				finishFn(stkGen)
+			}
+		}
 		stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args, capturesCopy, declaredReturns)
 		for i := len(genNames) - 1; i >= 0; i-- {
 			r.Defs.Pop(genNames[i])
@@ -407,6 +447,13 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 					}
 				}
 				out[i] = NewCarrier(t)
+			}
+			if fnUnit >= 0 && len(out) == 1 {
+				pos := SrcPos{}
+				if len(args) > 0 {
+					pos = args[0].Pos
+				}
+				es.RecordUserCall(fnUnit, args, out[0], pos)
 			}
 			return out
 		}

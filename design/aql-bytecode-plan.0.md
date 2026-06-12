@@ -2,8 +2,9 @@
 
 **Status:** in progress — Stage 0 DONE with a GO result
 (`aql-bytecode-baseline.0.md`); Stage 1 recording pass LANDED;
-Stage 2 COMPLETE for the v1 scope (VM core, CLI opt-in, `if` in all
-forms, counted+range `for`, break/continue); Stage 3 next. Companion to
+Stage 2 COMPLETE; Stage 3 CORE LANDED (user fns, frames, mandatory
+TAIL_CALL_USER — tail recursion at depth 1M under a tight ceiling in
+compiled mode). Companion to
 `aql-bytecode-report.0.md` (the design) and
 `aql-bytecode-revisions.0.md` (the June 2026 re-review that this plan
 incorporates; read it first — it changes two requirements). Written
@@ -240,6 +241,30 @@ error-format path).
 *~2 weeks.*
 
 ## Stage 3 — user fns, frames, and mandatory tail calls
+
+**Status: CORE LANDED (June 2026).** Named, capture-free,
+single-declared-return fns compile as their own code units
+(`Program.Fns`, params as frame locals in sig order) via the fn-body
+analysis hook: `StartFnCompile` reserves the unit, registers
+GENERALISED carrier args as param slots (a call's kept-concrete
+values must not constant-fold into the shared unit — found and
+fixed), arms the body capture, and `RecordUserCall` records call
+sites. The VM runs real frames (per-frame locals, shared operand
+stack, loop-state bases) with `CALL_USER`/`RET`, a frame-depth
+ceiling sharing the tape_exhausted taxonomy — and `TAIL_CALL_USER`:
+tail positions are marked structurally (body-final calls, and
+branch arms whose result is their own trailing call — tail arms
+reuse the divergence machinery and skip the merge), and the VM
+replaces the frame. **Witnessed: self tail-recursion at depth
+1,000,000 under a 172-entry ceiling in compiled mode**; equally deep
+non-tail recursion exhausts loudly. The install-time synthetic
+example evaluation no longer records phantom events (suspended).
+Differential: 612 rows / 0 mismatches, floor 600. Follow-ons:
+closures (capture slots), mutual tails via `fnsig` pre-declaration
+(FnUndef-aware unit resolution; BARE mutual forward refs are blocked
+by a pre-existing checker undefined_word FP — burn-down list),
+multi-overload selection beyond the checker-matched sig, fn-value
+args.
 
 `CALL_USER`/`RET` with call frames (return PC, locals base), param
 *and capture* slots (`fn_capture.go` computes captures at
