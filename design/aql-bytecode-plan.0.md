@@ -84,6 +84,13 @@ and nothing else — any other construct flags the program
   `rearrangeForForward` a no-op, else emit `SWAP`/`ROLL`.
 - Label/constant resolution as a final pass; `MaxStack` computed
   during emission.
+- **Prerequisite (added June 2026):** the checker's per-alternative
+  disjunct dispatch fix — finding A1 of
+  `checker-accuracy-review.0.md`. Today a strict disjunct input
+  first-matches as a whole, selecting a signature the runtime may
+  not take; baking that `sig_id` into `CALL_NATIVE` would call the
+  wrong handler. Emit `CALL_NATIVE_POLY` exactly where the
+  alternatives' signature choices diverge.
 - **Gate:** a `Program` disassembler (`aql check --emit` or similar,
   debug-only) + golden tests for the lowering of each spec row the
   emitter accepts. No VM yet — emission correctness is checked
