@@ -2281,6 +2281,17 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		return nil
 	}
 
+	// Tail-call detection (design/TCO-STAGED.0.md Stage 2): an AQL
+	// fn-body dispatch (Sig.FnFrame non-nil — natives skip on the nil
+	// check) sitting in tail position of an enclosing fn frame is
+	// counted on the registry. Detection only; frame replacement is a
+	// later stage, gated by Registry.TCO.Disable.
+	if match.Sig.FnFrame != nil {
+		if _, ok := e.probeTailCall(sortedIndices, n); ok {
+			e.registry.TCO.Detected++
+		}
+	}
+
 	results, err := match.Sig.Handler(match.Args, ctx, nil, e.registry)
 	if err != nil {
 		return e.stampErrPos(e.maybeAddFnShapeHint(err))
