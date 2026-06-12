@@ -2,10 +2,10 @@
 
 This tutorial teaches AQL from the ground up. It is meant to be read
 in order, with the REPL open at your side — type every example and
-poke at it. By the end you'll be comfortable with the stack model,
-the type system, defining typed functions, working with records and
-tables, doing concurrent work with `await`, and packaging code as
-modules.
+poke at it. By the end you'll be comfortable with forward calls and
+the underlying stack model, the type system, defining typed
+functions, working with records and tables, doing concurrent work
+with `await`, and packaging code as modules.
 
 If you only want a recipe for a specific task, see the
 **[How-To Guides](HOWTO.md)**. If you want the precise behaviour of
@@ -64,46 +64,73 @@ the string-util module — `aql -e '"aql:string-util" import end
 StringUtil.upper "hello"'` — see [§5: Strings](#5-strings).)
 
 
-## 2. The stack — your first expression
+## 2. Your first expressions
 
-AQL is a *stack machine*. Each token does one of two things:
-
-* a **literal** pushes itself onto the stack,
-* a **word** pops arguments off the stack and pushes results.
-
-Try it:
+A program is a sequence of *words* and *values*. A word takes its
+arguments where you write them, so a call reads left to right, and a
+value by itself is just itself — whatever your line leaves behind is
+what the REPL prints:
 
 ```
-aql> 1 2 add
-3
+aql> add 1 2                         # returns 3
+aql> mul 4 5                         # returns 20
+aql> 42                              # returns 42
 ```
 
-Step by step: `1` is pushed, `2` is pushed, `add` pops both and
-pushes their sum.
+Two pieces of punctuation you'll use from the start:
 
-Values not consumed are left on the stack:
+**Parens group a sub-expression.** The group is evaluated first and
+its result feeds the surrounding call — exactly what you'd expect
+from a conventional language:
+
+```
+aql> add 1 (mul 2 3)                 # returns 7
+aql> mul (add 1 2) (10 sub 3)        # returns 21
+```
+
+(`10 sub 3` is `10 - 3` written infix — more on that in §3.)
+
+**`;` ends a statement.** Several statements can share a line; each
+runs in order, and the line's combined results are printed. `;` is
+just punctuation for the word `end` — the two are interchangeable:
+
+```
+aql> add 1 2; mul 3 4
+3 12
+aql> def x 5; mul x x                # returns 25
+```
+
+You'll see `;` (or `end`) constantly after `def` and `import` lines,
+separating setup from the expression that uses it.
+
+
+## 3. Three ways to call a word
+
+You've been writing the **forward** form — arguments after the word —
+which is the recommended style for new code. The same `add` also
+works **infix** and, because AQL is concatenative under the hood,
+**all-stack**:
+
+```
+aql> add 1 2        # returns 3 — forward: both args after the word
+aql> 1 add 2        # returns 3 — infix: one before, one after
+aql> 1 2 add        # returns 3 — all-stack: both args before the word
+```
+
+The all-stack form is the *stack machine* showing through: a literal
+pushes itself onto a value stack, and a word pops what it needs.
+Step by step in `1 2 add`: `1` is pushed, `2` is pushed, `add` pops
+both and pushes their sum. Values nothing consumes stay on the
+stack — that's what the REPL prints:
 
 ```
 aql> 1 2 3
 1 2 3
 ```
 
-The final stack is the result you see printed.
-
-
-## 3. Three ways to call a word
-
-Unlike Forth, AQL words can collect arguments from after themselves
-as well as from the stack. The same `add` works in three positions:
-
-```
-aql> 1 2 add        # all-stack — both args from stack
-3
-aql> add 1 2        # all-forward — both args after the word
-3
-aql> 1 add 2        # mixed — one from stack, one forward
-3
-```
+Pipelines lean on this (a value left by one word is picked up by the
+next), and §6 covers the words that rearrange the stack directly.
+Until then, forward form does everything you need.
 
 ### The argument-order rule
 
@@ -121,18 +148,16 @@ So for an asymmetric operation like `sub` (whose handler computes
 "a minus b"), all three call forms compute the same thing:
 
 ```
-aql> 10 3 sub       # all-stack: args[0]=top=3, args[1]=10  →  10 - 3
-7
-aql> 10 sub 3       # mixed:    args[0]=3 (forward), args[1]=10 (stack)  →  10 - 3
-7
-aql> sub 3 10       # all-forward: args[0]=3 (first), args[1]=10 (second)  →  10 - 3
-7
+aql> 10 sub 3       # returns 7 — infix: args[0]=3 (forward), args[1]=10 (stack) → 10 - 3
+aql> sub 3 10       # returns 7 — all-forward: args[0]=3 (first), args[1]=10 (second) → 10 - 3
+aql> 10 3 sub       # returns 7 — all-stack: args[0]=top=3, args[1]=10 → 10 - 3
 ```
 
 The pattern: `a sub b` always means `a - b`, no matter where `a` and
 `b` are written. The three forms above all encode `a=10, b=3`. Note
 that `sub 10 3` is *not* the same expression — it encodes `a=3,
-b=10`, giving `-7`.
+b=10`, giving `-7`. For non-commutative operations, the infix form
+(`10 sub 3`) is the one that reads the way it computes.
 
 User-defined functions follow the same rule. For
 `def show fn [[a:Number b:Number] [String] [`${a} and ${b}`]]`:

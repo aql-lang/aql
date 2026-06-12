@@ -1,14 +1,18 @@
 # AQL
 
-**AQL** is a concatenative query language: programs are sequences
-of *words* that transform a *stack*. Every value carries a
-hierarchical type, every word declares typed signatures, and most
-words can be called in prefix, infix, or suffix position (the
-exceptions are stack-shuffling words like `dup` and `swap`, which
-only take their arguments from the stack). The reference
-implementation is in Go and ships as a single `aql` binary that
-includes a REPL, a type checker, a formatter, an LSP server, a
-registry client, a secrets vault, and a multi-service supervisor.
+**AQL** is a typed, word-based query language. A program is a sequence
+of *words*, and a word takes its arguments where you write them —
+`add 1 2` reads left to right, like a conventional call — while binary
+operations also read naturally in infix position (`10 sub 3`). Every
+value carries a hierarchical type, and every word declares typed
+signatures that drive dispatch. Underneath, AQL is concatenative: words
+can equally take their arguments from a value stack, which is what
+makes point-free pipelines compose — but you can write a lot of AQL
+before thinking about the stack, so start with the forward forms below
+and meet the stack later. The reference implementation is in Go and
+ships as a single `aql` binary that includes a REPL, a type checker, a
+formatter, an LSP server, a registry client, a secrets vault, and a
+multi-service supervisor.
 
 > **Notation.** In code, a trailing `# returns …` comment shows what an
 > expression evaluates to (`square 4  # returns 16`); in prose we say
@@ -18,16 +22,15 @@ registry client, a secrets vault, and a multi-service supervisor.
 > anonymous-function arrow, sugar for the word `afn`.)
 
 ```aql
-# stack-based arithmetic — three equivalent forms (all compute a-b)
-10 3 sub                             # all-stack
-10 sub 3                             # mixed
-sub 3 10                             # all-forward
+# words take their arguments where you write them
+add 1 2                              # returns 3
+10 sub 3                             # returns 7
 
 # typed functions, lists, maps, records, concurrency
 def square fn [[x:Number] [Number] [mul x x]]
 square 4                             # returns 16
 
-[1, 2, 3] each [dup mul]             # returns [1 4 9]
+[1, 2, 3] each [square]              # returns [1 4 9]
 {name: "Ada"} . name                 # returns 'Ada'
 
 def Point refine Record [x:Number y:Number]
@@ -39,6 +42,14 @@ make Point [3 4]                     # returns {x:3 y:4}
 def unless (macro [[c body] [quote [if unquote c [] unquote body]]])
 unless false [42]                    # returns 42
 ```
+
+The stack is still there when you want it: `10 3 sub` is the all-stack
+spelling of `10 sub 3`, and pipeline-style code leaves intermediate
+values on the stack between words (stack-shuffling words like `dup` and
+`swap` work only that way). The **[Tutorial](TUTORIAL.md)** introduces
+the stack model when you need it, and the
+**[Explanation](EXPLANATION.md)** covers how forward collection changes
+the feel of stack code.
 
 
 ## Install
