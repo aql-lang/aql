@@ -156,10 +156,16 @@ type emitUnit struct {
 }
 
 // fnUnitRec is one compiled fn body awaiting (or holding) its
-// lowered form.
+// lowered form. caps are the fn's construction-time captures: they
+// ride as hidden trailing parameters (slots nParams…), so every call
+// site re-supplies the captured values from ITS scope — inside the
+// fn's own body a recursive call resolves them to the frame's own
+// capture slots, which is exactly the snapshot semantics (captures
+// are fixed at construction; the same values flow through).
 type fnUnitRec struct {
 	name     string
 	nParams  int
+	caps     []CapturedBinding
 	frag     *EmitFragment
 	outOp    emitOperand
 	hasOut   bool
@@ -466,20 +472,17 @@ func (es *EmitState) fnBodyGuard() func() {
 // StartFnCompile reserves (or finds) the compiled unit for one fn
 // overload at one arg shape and, when fresh, opens a fn recording
 // scope: a new local-numbering unit with the arg carriers registered
-// as param slots 0..n-1 (sig order — frame locals at run time), and
-// a fragment capturing the body analysis that the caller runs next.
-// finish (non-nil only when fresh) closes the scope with the body's
-// residual stack. ok=false when the fn is beyond Stage 3 (closures,
-// generics, unchecked or multi-value returns) — the program is then
-// marked uncompilable.
-func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*Type, nCaptures int, generic bool) (unit int, finish func([]Value), ok bool) {
+// as param slots 0..n-1 (sig order — frame locals at run time) and
+// the captures as hidden trailing slots, and a fragment capturing
+// the body analysis that the caller runs next. finish (non-nil only
+// when fresh) closes the scope with the body's residual stack.
+// ok=false when the fn is beyond Stage 3 (generics, unchecked or
+// multi-value returns) — the program is then marked uncompilable.
+func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*Type, captures []CapturedBinding, generic bool) (unit int, finish func([]Value), ok bool) {
 	if !es.active() {
 		return -1, nil, false
 	}
 	switch {
-	case nCaptures > 0:
-		es.MarkUncompilable("closure " + name + " (Stage 3 follow-on)")
-		return -1, nil, false
 	case generic:
 		es.MarkUncompilable("generic fn " + name + " (Stage 4)")
 		return -1, nil, false
@@ -491,13 +494,20 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 		return u, nil, true
 	}
 	unit = len(es.fnRecs)
-	rec := &fnUnitRec{name: name, nParams: len(args)}
+	rec := &fnUnitRec{name: name, nParams: len(args), caps: captures}
 	es.fnRecs = append(es.fnRecs, rec)
 	es.fnUnits[key] = unit
 	u := &emitUnit{localByID: map[string]int{}}
 	es.units = append(es.units, u)
 	for _, a := range args {
 		es.RegisterLocal(a.ID)
+	}
+	// Capture slots: the body analysis binds each captured name to
+	// cb.Value (the construction-time snapshot — AnalyseFnBody pushes
+	// the SAME Value), so body references resolve to these slots by
+	// ID. Registered after params, locals nParams…nParams+nCaps-1.
+	for _, cb := range captures {
+		es.RegisterLocal(cb.Value.ID)
 	}
 	resume := es.beginFragment()
 	es.fnArm = true
@@ -513,6 +523,18 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 		} else if !fragDiverges(rec.frag) {
 			es.MarkUncompilable("fn " + name + ": body produces no value")
 		}
+		// The unit is closed: its events' outputs cannot be stack
+		// values in the enclosing scope, so drop their provenance
+		// entries (after resolving the body result above, which DOES
+		// reference them). Without this, a join inside the body that
+		// reused a capture/param ID (JoinCarriers keeps the then-side
+		// ID) would make an ENCLOSING call site resolve that value to
+		// an event of this closed unit.
+		for id, seq := range es.producedBy {
+			if seq > rec.frag.startSeq {
+				delete(es.producedBy, id)
+			}
+		}
 		rec.numLoc = u.numLocals
 		rec.finished = true
 		es.units = es.units[:len(es.units)-1]
@@ -522,11 +544,18 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 
 // RecordUserCall records one call of a compiled fn unit. args are in
 // signature order; out is the dispatch's declared-return carrier.
+// The unit's captures ride as hidden trailing operands, resolved in
+// the CALLER's scope: at the construction site they are the enclosing
+// frame's values; inside the fn's own body (recursion) they resolve
+// to the frame's own capture slots and re-flow unchanged. A capture
+// unreachable from the call site marks the program uncompilable —
+// the interpreter keeps owning that shape.
 func (es *EmitState) RecordUserCall(unit int, args []Value, out Value, pos SrcPos) {
 	if !es.active() || unit < 0 {
 		return
 	}
-	ops := make([]emitOperand, len(args))
+	rec := es.fnRecs[unit]
+	ops := make([]emitOperand, len(args), len(args)+len(rec.caps))
 	for i, a := range args {
 		op, ok := es.resolveOperand(a)
 		if !ok {
@@ -534,6 +563,14 @@ func (es *EmitState) RecordUserCall(unit int, args []Value, out Value, pos SrcPo
 			return
 		}
 		ops[i] = op
+	}
+	for _, cb := range rec.caps {
+		op, ok := es.resolveOperand(cb.Value)
+		if !ok {
+			es.MarkUncompilable("capture " + cb.Name + " of " + rec.name + " unreachable at a call site")
+			return
+		}
+		ops = append(ops, op)
 	}
 	seq := es.appendEvent(emitEvent{kind: evCallUser, uc: emitUserCall{unit: unit, ops: ops, pos: pos}})
 	es.SiteCounts[SiteMono]++
@@ -912,7 +949,10 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			return nil, "fn " + rec.name + " was never compiled", false
 		}
 		rec.hasOut = markTailCalls(rec.frag, &rec.outOp, rec.hasOut)
-		cf := CompiledFn{Name: rec.name, NParams: rec.nParams, NLocals: rec.numLoc}
+		// NParams counts everything the call site pushes — declared
+		// params AND hidden capture slots; the VM pops them into frame
+		// locals uniformly.
+		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NLocals: rec.numLoc}
 		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}}
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
 			return nil, "fn " + rec.name + ": " + reason, false

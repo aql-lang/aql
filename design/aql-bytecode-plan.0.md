@@ -2,9 +2,10 @@
 
 **Status:** in progress — Stage 0 DONE with a GO result
 (`aql-bytecode-baseline.0.md`); Stage 1 recording pass LANDED;
-Stage 2 COMPLETE; Stage 3 CORE LANDED (user fns, frames, mandatory
-TAIL_CALL_USER — tail recursion at depth 1M under a tight ceiling in
-compiled mode). Companion to
+Stage 2 COMPLETE; Stage 3 COMPLETE (user fns, frames, mandatory
+TAIL_CALL_USER incl. mutual tails, closures via capture slots, VM
+step budget — self AND mutual tail recursion at depth 1M under a
+tight ceiling in compiled mode). Companion to
 `aql-bytecode-report.0.md` (the design) and
 `aql-bytecode-revisions.0.md` (the June 2026 re-review that this plan
 incorporates; read it first — it changes two requirements). Written
@@ -91,9 +92,10 @@ Per stage:
 - *Trace mode:* compiled mode disables itself under `--trace` until
   a PC-level trace that renders spans exists (semantics are
   identical, so tracing the interpreter is tracing the program).
-- *Stage 3 follow-on:* a slot → name table per CompiledFn once
-  locals exist, so a future debugger can show bindings. Pointless
-  before locals; cheap after.
+- *Debugger follow-on (with Stage 5's mixed-mode traces):* a slot →
+  name table per CompiledFn so a future debugger can show bindings.
+  Locals exist now (params, captures, iterators); the table is cheap
+  whenever a consumer appears.
 
 ## Stage 0 — re-baseline and go/no-go (measurement only)
 
@@ -242,29 +244,63 @@ error-format path).
 
 ## Stage 3 — user fns, frames, and mandatory tail calls
 
-**Status: CORE LANDED (June 2026).** Named, capture-free,
-single-declared-return fns compile as their own code units
-(`Program.Fns`, params as frame locals in sig order) via the fn-body
-analysis hook: `StartFnCompile` reserves the unit, registers
-GENERALISED carrier args as param slots (a call's kept-concrete
-values must not constant-fold into the shared unit — found and
-fixed), arms the body capture, and `RecordUserCall` records call
-sites. The VM runs real frames (per-frame locals, shared operand
-stack, loop-state bases) with `CALL_USER`/`RET`, a frame-depth
-ceiling sharing the tape_exhausted taxonomy — and `TAIL_CALL_USER`:
-tail positions are marked structurally (body-final calls, and
-branch arms whose result is their own trailing call — tail arms
-reuse the divergence machinery and skip the merge), and the VM
-replaces the frame. **Witnessed: self tail-recursion at depth
-1,000,000 under a 172-entry ceiling in compiled mode**; equally deep
-non-tail recursion exhausts loudly. The install-time synthetic
-example evaluation no longer records phantom events (suspended).
-Differential: 612 rows / 0 mismatches, floor 600. Follow-ons:
-closures (capture slots), mutual tails via `fnsig` pre-declaration
-(FnUndef-aware unit resolution; BARE mutual forward refs are blocked
-by a pre-existing checker undefined_word FP — burn-down list),
-multi-overload selection beyond the checker-matched sig, fn-value
-args.
+**Status: COMPLETE (June 2026).** Named, single-declared-return fns
+compile as their own code units (`Program.Fns`, params as frame
+locals in sig order) via the fn-body analysis hook: `StartFnCompile`
+reserves the unit, registers GENERALISED carrier args as param slots
+(a call's kept-concrete values must not constant-fold into the
+shared unit — found and fixed), arms the body capture, and
+`RecordUserCall` records call sites. The VM runs real frames
+(per-frame locals, shared operand stack, loop-state bases) with
+`CALL_USER`/`RET`, a frame-depth ceiling sharing the tape_exhausted
+taxonomy, a step budget sharing the evaluation_limit taxonomy (a
+tail spin trips neither ceiling) — and `TAIL_CALL_USER`: tail
+positions are marked structurally (body-final calls, and branch arms
+whose result is their own trailing call — tail arms reuse the
+divergence machinery and skip the merge), and the VM replaces the
+frame. The completion pass landed:
+
+- **Mutual tail recursion** — the blocker was a checker FP, not a
+  bytecode gap: at the top-level call site every fn is already
+  defined, so the nested `StartFnCompile` machinery compiles both
+  units and the arm tails lower as cross-unit `TAIL_CALL_USER`. The
+  FP (`undefined_word` for a body's forward reference, flagged by
+  the install-time analysis that runs before the later `def`) is
+  fixed by tagging diagnostics emitted inside `AnalyseFnBody`
+  (`CheckDiagnostic.FnBody`) and rescuing tagged undefined_word
+  entries at end of pass when the name has a binding by then
+  (`RescueForwardRefDiagnostics`) — call-time resolution is the
+  documented idiom (recursion.tsv §3). Top-level use-before-def and
+  never-defined names keep their diagnostics. (The plan's earlier
+  `fnsig` pre-declaration sketch was wrong: `def g fnsig […]` means
+  targeted sig REMOVAL — `UninstallFnSigs` — not forward
+  declaration.)
+- **Closures (capture slots)** — captures ride as hidden trailing
+  param slots: the construction site supplies the enclosing frame's
+  values (param local / produced value / const), a recursive call
+  re-passes the frame's own capture slots — construction-time
+  snapshot semantics by construction. `CompiledFn.NParams` counts
+  params + captures; the VM pops them uniformly. A capture
+  unreachable at a call site, and a closure ESCAPING as a value
+  (fn-value call, Stage 4), refuse. Required a provenance sweep:
+  when a fn unit's recording closes, its events' producedBy entries
+  are dropped (a join inside the body reusing a capture/param ID
+  — JoinCarriers keeps the then-side ID — made enclosing call sites
+  resolve the capture to a closed unit's event).
+- **Unit identity bugfix** — the fn-unit/memo key now includes the
+  construction site (`FnAnalysisKey`, first body token's position):
+  redefining a same-name same-sig fn used to bind every call to the
+  FIRST definition's unit (compiled `2 2` vs interpreted `2 3`;
+  no spec row exercised it — now pinned).
+
+**Witnessed: self AND mutual tail-recursion at depth 1,000,000
+under a 172-entry ceiling in compiled mode**; equally deep non-tail
+recursion (self and mutual) exhausts loudly; a tail SPIN fails with
+evaluation_limit in both modes. The install-time synthetic example
+evaluation no longer records phantom events (suspended).
+Differential: 614 rows / 0 mismatches, floor 610. Deferred to Stage
+4 (as planned there): generics, multi-overload selection beyond the
+checker-matched sig, fn-value call sites (escaping closures).
 
 `CALL_USER`/`RET` with call frames (return PC, locals base), param
 *and capture* slots (`fn_capture.go` computes captures at

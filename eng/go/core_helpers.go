@@ -368,13 +368,6 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		fnUnit := -1
 		var finishFn func([]Value)
 		if es != nil {
-			var kb strings.Builder
-			kb.WriteString(nameCopy)
-			kb.WriteByte('#')
-			for _, a := range args {
-				kb.WriteString(a.Parent.String())
-				kb.WriteByte(',')
-			}
 			// The body unit must be compiled against GENERALISED args
 			// — pure carriers of the call's arg types. The call's
 			// kept-concrete values would constant-fold inside the body
@@ -385,8 +378,9 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			for i, a := range args {
 				genArgs[i] = NewCarrier(a.Parent)
 			}
+			key := FnAnalysisKey(nameCopy, args, capturesCopy, bodyCopy)
 			var okFn bool
-			fnUnit, finishFn, okFn = es.StartFnCompile(kb.String(), nameCopy, genArgs, declaredReturns, len(capturesCopy), genSpec != nil)
+			fnUnit, finishFn, okFn = es.StartFnCompile(key, nameCopy, genArgs, declaredReturns, capturesCopy, genSpec != nil)
 			if !okFn {
 				fnUnit = -1
 			}
@@ -395,7 +389,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				// summary cached by a suspended analysis (the install-
 				// time synthetic example eval) so AnalyseFnBody re-runs
 				// under the armed capture, with the generalised args.
-				delete(r.Check.FnSummaries, kb.String())
+				delete(r.Check.FnSummaries, key)
 				stkGen := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, genArgs, capturesCopy, declaredReturns)
 				finishFn(stkGen)
 			}

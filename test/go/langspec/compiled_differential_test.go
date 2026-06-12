@@ -21,7 +21,7 @@ import (
 // take the compiled path for the gate to be meaningful. Raise it as
 // later stages widen the compilable subset; never lower it without a
 // documented decision.
-const minCompiledRows = 600 // raised with Stage-3 user fns (612 compiled June 2026)
+const minCompiledRows = 610 // raised with Stage-3 completion: mutual tails + closures (614 compiled June 2026)
 
 func TestSpecCompiledDifferential(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

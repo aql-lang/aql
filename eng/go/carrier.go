@@ -1247,6 +1247,45 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 	}
 }
 
+// FnAnalysisKey builds the memo key for one fn-body analysis: name +
+// arg type paths + captured-name set + the body's construction site.
+// The captures are included so two anonymous lambdas with identical
+// bodies but different capture sets don't collide; the construction
+// site (the first body token's source position) so two DIFFERENT
+// definitions sharing a name and arg types — `def f fn […] … def f
+// fn […]` — don't collide either (without it the compile pass bound
+// every call to the FIRST definition's code unit). The same
+// construction re-analysed (recursion, repeated calls) carries the
+// same body tokens, so memoisation and in-flight recursion detection
+// are unaffected. core_helpers' compile hook must build the SAME key
+// (its FnSummaries delete relies on the match) — that's why this is
+// a named helper, not two inlined loops.
+func FnAnalysisKey(name string, args []Value, captures []CapturedBinding, body []Value) string {
+	var sb strings.Builder
+	sb.WriteString(name)
+	sb.WriteByte('#')
+	for _, a := range args {
+		sb.WriteString(a.Parent.String())
+		sb.WriteByte(',')
+	}
+	if len(captures) > 0 {
+		sb.WriteByte('|')
+		for _, cb := range captures {
+			sb.WriteString(cb.Name)
+			sb.WriteByte(':')
+			sb.WriteString(cb.Value.Parent.String())
+			sb.WriteByte(',')
+		}
+	}
+	if len(body) > 0 {
+		sb.WriteByte('@')
+		sb.WriteString(strconv.Itoa(body[0].Pos.Row))
+		sb.WriteByte(':')
+		sb.WriteString(strconv.Itoa(body[0].Pos.Col))
+	}
+	return sb.String()
+}
+
 // AnalyseFnBody runs a user-defined fn body through a sub-engine in
 // check mode, treating named parameters as deffed values bound to
 // their arg carriers and unnamed parameters as pre-pushed stack
@@ -1270,26 +1309,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	if len(body) == 0 {
 		return nil
 	}
-	// Memoisation key: name + arg type paths + captured-name set.
-	// The captures are included so two anonymous lambdas with
-	// identical bodies but different capture sets don't collide.
-	var sb strings.Builder
-	sb.WriteString(name)
-	sb.WriteByte('#')
-	for _, a := range args {
-		sb.WriteString(a.Parent.String())
-		sb.WriteByte(',')
-	}
-	if len(captures) > 0 {
-		sb.WriteByte('|')
-		for _, cb := range captures {
-			sb.WriteString(cb.Name)
-			sb.WriteByte(':')
-			sb.WriteString(cb.Value.Parent.String())
-			sb.WriteByte(',')
-		}
-	}
-	key := sb.String()
+	key := FnAnalysisKey(name, args, captures, body)
 
 	if r.Check.FnSummaries == nil {
 		r.Check.FnSummaries = map[string][]Value{}
@@ -1349,6 +1369,13 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	}
 	r.Check.FnInflight[key] = true
 	defer delete(r.Check.FnInflight, key)
+
+	// Diagnostics emitted from here down come from CALL-TIME code —
+	// tag them FnBody so an undefined_word that turns out to be a
+	// forward reference can be rescued at end of pass
+	// (RescueForwardRefDiagnostics).
+	r.Check.FnBodyDepth++
+	defer func() { r.Check.FnBodyDepth-- }()
 
 	// Fn-body analysis runs nested sub-engines — not part of the
 	// caller's straight line; pause bytecode recording, UNLESS a fn

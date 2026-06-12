@@ -1,9 +1,9 @@
 package eng
 
-// The bytecode VM — the execution half of Stage 2 of
-// design/aql-bytecode-plan.0.md, currently covering the Stage-1
-// instruction set (straight-line PUSH_CONST / SWAP / CALL_NATIVE).
-// Control-flow opcodes arrive with the rest of Stage 2.
+// The bytecode VM — the execution half of Stages 1–3 of
+// design/aql-bytecode-plan.0.md: straight-line natives, control flow
+// (JMP / JMP_IF_FALSE / FOR_SETUP / FOR_NEXT), and user-fn frames
+// with CALL_USER / TAIL_CALL_USER / RET.
 //
 // Termination and resource parity (plan R6 #27): the only back-edge
 // the emitter produces is a counted loop's trailing JMP to its
@@ -12,18 +12,30 @@ package eng
 // per iteration. Unbounded value accumulation (`for huge [i]`) hits
 // the same growth ceiling the tape enforces: the VM stack's ceiling
 // is computed from the registry's TapeConfig and overflowing it
-// raises the interpreter's tape_exhausted taxonomy.
+// raises the interpreter's tape_exhausted taxonomy; frame depth
+// shares the same ceiling. A runaway that consumes neither (a
+// tail-call spin) trips the step budget with the interpreter's
+// evaluation_limit taxonomy.
 
 import "fmt"
 
 // RunProgram executes a compiled Program against a registry and
 // returns the residual value stack (bottom → top), matching what the
-// interpreter's Run returns for the same source.
+// interpreter's Run returns for the same source. The step budget is
+// the interpreter's DefaultStepLimit: a runaway that never grows the
+// stack (a tail-recursive spin — frames are REPLACED, so neither
+// ceiling trips) fails with the same evaluation_limit taxonomy the
+// interpreter raises, instead of hanging.
 func RunProgram(p *Program, r *Registry) ([]Value, error) {
+	return runProgram(p, r, DefaultStepLimit)
+}
+
+func runProgram(p *Program, r *Registry, stepLimit int) ([]Value, error) {
 	if p == nil {
 		return nil, fmt.Errorf("bytecode: nil program")
 	}
 	ceiling := vmStackCeiling(r)
+	steps := 0
 	stack := make([]Value, 0, p.MaxStack)
 	locals := make([]Value, p.NumLocals)
 	type vmLoop struct {
@@ -55,6 +67,10 @@ func RunProgram(p *Program, r *Registry) ([]Value, error) {
 	for pc := 0; pc < len(curCode); pc++ {
 		if len(stack) > ceiling || len(frames) > ceiling {
 			return nil, vmExhaustedAt(curDebug, pc, r, ceiling)
+		}
+		steps++
+		if steps > stepLimit {
+			return nil, vmEvalLimitAt(curDebug, pc, r, stepLimit)
 		}
 		in := curCode[pc]
 		switch in.Op {
@@ -219,6 +235,17 @@ func vmErrAt(debug []SrcPos, pc int, msg string) error {
 		pos = debug[pc]
 	}
 	return fmt.Errorf("bytecode: internal: %s (pc=%d, src %d:%d)", msg, pc, pos.Row, pos.Col)
+}
+
+// vmEvalLimitAt mirrors the interpreter's evalLimitError: the
+// step-count (CPU) guard, distinct from the stack/frame ceiling
+// (the memory guard).
+func vmEvalLimitAt(debug []SrcPos, pc int, r *Registry, limit int) error {
+	err := r.AqlErrorHint("evaluation_limit",
+		fmt.Sprintf("evaluation exceeded the step limit of %d — the program ran too long (an infinite loop or unbounded recursion?)", limit),
+		"",
+		"if this is a legitimately long computation, raise the limit via the engine's step budget; otherwise check for a loop or recursion that never terminates")
+	return stampAt(err, debug, pc, r)
 }
 
 func vmExhaustedAt(debug []SrcPos, pc int, r *Registry, ceiling int) error {

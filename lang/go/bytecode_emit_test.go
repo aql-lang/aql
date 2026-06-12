@@ -303,9 +303,12 @@ func TestEmitUserFnAndTailCall(t *testing.T) {
 		t.Errorf("non-tail recursive call wrongly marked tail:\n%s", got2)
 	}
 
-	// Refusals: closures and unchecked fns are beyond this slice.
+	// Refusal: a closure ESCAPING as a value (returned, then called
+	// through the binding) is a fn-value call site — Stage 4
+	// territory. Locally-called closures compile (capture slots);
+	// see TestEmitClosureCaptureSlots.
 	if _, r3 := compile(t, `def mk fn [[x:Integer] [Function] [fn [[y:Integer] [Integer] [x add y]]]] def a5 (mk 5) a5 3`); r3 == "" {
-		t.Error("closure compiled but must refuse")
+		t.Error("escaping closure compiled but must refuse")
 	}
 }
 
@@ -340,5 +343,135 @@ func TestRunCompiledTailGuarantee(t *testing.T) {
 	}
 	if err2 == nil || !strings.Contains(err2.Error(), "tape_exhausted") {
 		t.Fatalf("deep non-tail recursion under tight ceiling = %v, want tape_exhausted", err2)
+	}
+}
+
+// Stage 3 completion: mutual tail recursion. The forward-reference
+// rescue clears the checker FP, both bodies compile as units at the
+// top-level call site (each is fully defined by then), and the arm
+// tail calls lower as cross-unit TAIL_CALL_USER.
+func TestEmitMutualTailRecursion(t *testing.T) {
+	got, reason := compile(t, `def isod fn [[n:Integer] [Boolean] [if (n eq 0) [false] [isev (n sub 1)]]] def isev fn [[n:Integer] [Boolean] [if (n eq 0) [true] [isod (n sub 1)]]] isev 10`)
+	if reason != "" {
+		t.Fatalf("mutual tail recursion uncompilable: %s", reason)
+	}
+	if !strings.Contains(got, "TAIL_CALL_USER f1") || !strings.Contains(got, "TAIL_CALL_USER f0") {
+		t.Errorf("mutual tails not lowered as cross-unit TAIL_CALL_USER:\n%s", got)
+	}
+	if !strings.Contains(got, "fns=2") {
+		t.Errorf("expected two fn units:\n%s", got)
+	}
+}
+
+// Mutual tail recursion runs in O(1) frames under a tight ceiling
+// (the language guarantee crosses units); mutual NON-tail recursion
+// (a pending add below each call) stacks frames and exhausts loudly.
+func TestRunCompiledMutualTailGuarantee(t *testing.T) {
+	tight := Options{Tape: TapeOptions{InitialSize: 64, MaxGrows: 1, GrowthFactor: 2.7}}
+	a, err := New(tight)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, compiled, err := a.RunCompiled(`def isod fn [[n:Integer] [Boolean] [if (n eq 0) [false] [isev (n sub 1)]]] def isev fn [[n:Integer] [Boolean] [if (n eq 0) [true] [isod (n sub 1)]]] isev 1000000`)
+	if err != nil {
+		t.Fatalf("deep mutual tail recursion: %v", err)
+	}
+	if !compiled {
+		t.Fatal("mutual tail recursion fell back to the interpreter")
+	}
+	// convertResults renders Booleans as strings.
+	if len(out) != 1 || out[0] != "true" {
+		t.Fatalf("isev 1000000 = %v, want true", out)
+	}
+
+	b, err := New(tight)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, compiled2, err2 := b.RunCompiled(`def od fn [[n:Integer] [Integer] [if (n eq 0) [0] [1 add (ev (n sub 1))]]] def ev fn [[n:Integer] [Integer] [if (n eq 0) [0] [1 add (od (n sub 1))]]] ev 100000`)
+	if !compiled2 {
+		t.Fatal("mutual non-tail program fell back to the interpreter")
+	}
+	if err2 == nil || !strings.Contains(err2.Error(), "tape_exhausted") {
+		t.Fatalf("deep mutual non-tail recursion under tight ceiling = %v, want tape_exhausted", err2)
+	}
+}
+
+// Stage 3 completion: closures. Captures ride as hidden trailing
+// param slots — the construction site supplies the enclosing frame's
+// values, a recursive call re-passes the frame's own capture slots
+// (construction-time snapshot semantics).
+func TestEmitClosureCaptureSlots(t *testing.T) {
+	// lang/spec/recursion.tsv §6: a captured body-local stays visible
+	// through a chain of recursive tail calls.
+	got, reason := compile(t, `def outc fn [[] [Integer] [def x 7 def goc fn [[n:Integer] [Integer] [if (n lte 0) [x] [goc (n sub 1)]]] goc 3]] outc`)
+	if reason != "" {
+		t.Fatalf("recursive closure uncompilable: %s", reason)
+	}
+	if !strings.Contains(got, "goc/2") {
+		t.Errorf("capture slot not added to the unit's params:\n%s", got)
+	}
+
+	// Runtime parity, with a non-commutative op so slot ORDER is
+	// pinned, and a param (not a literal) as the captured value.
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, compiled, err := a.RunCompiled(`def oc fn [[m:Integer] [Integer] [def gc fn [[n:Integer] [Integer] [m sub n]] gc 3]] oc 10`)
+	if err != nil {
+		t.Fatalf("closure over param: %v", err)
+	}
+	if !compiled {
+		t.Fatal("closure fell back to the interpreter")
+	}
+	b, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := b.Run(`def oc fn [[m:Integer] [Integer] [def gc fn [[n:Integer] [Integer] [m sub n]] gc 3]] oc 10`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 1 || len(want) != 1 || out[0] != want[0] {
+		t.Fatalf("compiled %v != interpreted %v", out, want)
+	}
+}
+
+// The fn-unit key includes the construction site: redefining a
+// same-name same-sig fn must bind later call sites to the LATER
+// body. (Without the site in the key, both calls ran the FIRST
+// definition's unit — caught against the interpreter's 2 3.)
+func TestCompiledFnRedefinitionBindsLatest(t *testing.T) {
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, compiled, err := a.RunCompiled(`def rdf fn [[n:Integer] [Integer] [n add 1]] (rdf 1) def rdf fn [[n:Integer] [Integer] [n add 2]] (rdf 1)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !compiled {
+		t.Fatal("redefinition program fell back to the interpreter")
+	}
+	if len(out) != 2 || out[0] != int64(2) || out[1] != int64(3) {
+		t.Fatalf("redefined fn calls = %v, want [2 3]", out)
+	}
+}
+
+// A tail-recursive SPIN never grows the stack or the frame list, so
+// neither ceiling trips — the VM's step budget must catch it with
+// the interpreter's evaluation_limit taxonomy instead of hanging.
+func TestRunCompiledStepBudget(t *testing.T) {
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, compiled, err := a.RunCompiled(`def spinf fn [[n:Integer] [Integer] [spinf n]] spinf 0`)
+	if !compiled {
+		t.Fatal("tail spin fell back to the interpreter")
+	}
+	if err == nil || !strings.Contains(err.Error(), "evaluation_limit") {
+		t.Fatalf("tail spin = %v, want evaluation_limit", err)
 	}
 }

@@ -263,6 +263,16 @@ type CheckState struct {
 	// identity — to keep the model simple for the common
 	// "one context store" usage pattern.
 	ContextTypes map[string]Value
+
+	// FnBodyDepth counts the AnalyseFnBody nesting around the
+	// current dispatch. Diagnostics emitted while it is positive
+	// come from a fn BODY — code that runs at call time, not at the
+	// point of analysis — so an undefined_word there may be a legal
+	// forward reference (the documented mutual-recursion idiom:
+	// `def isod fn […isev…] def isev fn […isod…]`). Such
+	// diagnostics are tagged FnBody and rescued at end of pass when
+	// the name has a binding by then (RescueForwardRefDiagnostics).
+	FnBodyDepth int
 }
 
 // DefaultCheckStepBudget caps total check-mode steps across all
@@ -333,6 +343,7 @@ type CheckDiagnostic struct {
 	Row      int           `json:"row,omitempty"`      // 1-based line number, 0 if unknown
 	Col      int           `json:"col,omitempty"`      // 1-based column number, 0 if unknown
 	Severity CheckSeverity `json:"severity,omitempty"` // default severity from checkCodeSeverity; empty = info
+	FnBody   bool          `json:"fnBody,omitempty"`   // emitted during fn-body analysis (call-time code) — see RescueForwardRefDiagnostics
 }
 
 // NewRegistry creates an empty registry.

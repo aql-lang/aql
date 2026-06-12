@@ -193,8 +193,10 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 	eng := native.NewTop(a.registry)
 	eng.SetSource(src)
 	result, err := eng.Run(values)
-	// Emit unused-def warnings after all execution has completed
-	// so the Used map has been fully populated.
+	// Drop fn-body forward-reference false positives (the name is
+	// defined by now), then emit unused-def warnings — both need the
+	// fully-populated end-of-pass state.
+	a.registry.RescueForwardRefDiagnostics()
 	a.registry.Check.EmitUnusedDefDiagnostics()
 	if err != nil {
 		return CheckResult{Diagnostics: a.registry.Check.Diagnostics}, err
@@ -261,6 +263,7 @@ func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
 	engine := native.NewTop(a.registry)
 	engine.SetSource(src)
 	residual, runErr := engine.Run(values)
+	a.registry.RescueForwardRefDiagnostics()
 	a.registry.Check.EmitUnusedDefDiagnostics()
 
 	res := CheckResult{Diagnostics: a.registry.Check.Diagnostics}
