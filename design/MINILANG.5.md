@@ -1,10 +1,16 @@
 # AQL Mini-Languages — the `mini` macro and the MiniLang module
 
-**Status:** design (rev 2, 2026-06-12) — supersedes rev 1's `xy/`
-lexer-literal design (condensed in Appendix A; its kind catalogue is
-retained in §5). Core mechanics of rev 2 were validated against the
-live engine with a pure-AQL prototype — every claim marked ✓ ran; the
-empirical findings are in §10.
+**Status:** Phase 1 **LANDED** (2026-06-12) with two kinds: the core
+`mini` word (`lang/go/native/native_macro.go`), the `aql:minilang`
+module with `re` (Go regexp) and `bf` (brainfuck) plus
+`MiniLang.register` / `MiniLang.kinds` (`lang/go/modules/minilang.go`),
+static checking through the expansion, and the
+`lang/spec/module-minilang.tsv` battery. The rest of the kind
+catalogue (§5), compile hooks, and the optional lexer sugar remain
+design-only. Rev 2 supersedes rev 1's `xy/` lexer-literal design
+(condensed in Appendix A). Core mechanics were first validated with a
+pure-AQL prototype — every claim marked ✓ ran; the empirical findings
+are in §10.
 
 Embedded domain notations — regular expressions, path queries,
 transliteration, "natural" infix maths — delivered through one word,
@@ -208,6 +214,11 @@ becoming ordinary kind atoms (no lexer involvement):
 | `ur` | URL pattern | `url:String` → `[Any]` |
 | `dt` | date/time format | `text:String` → `[Any]` |
 | `math` | natural infix maths | *(generator — no stack input)* → `[Number]`; variables from `opts` |
+| `bf` ✅ | brainfuck | `input:String` → `[String]` (filter), or *(generator)* with `opts.in`; `opts.steps` execution budget — **landed** |
+
+(`re` ✅ is also landed — all matches by default, `{ok ms fst lst n}`
+with capture groups `g` per match, `opts.limit`; the other `re-*`
+forms remain future kinds.)
 
 (Names are atoms, so longer readable names are free where the
 two-letter forms are cryptic — `re-sub` rather than rev 1's `rs/`.
@@ -584,7 +595,7 @@ Empirical findings the design must respect:
 
 | Phase | Deliverable |
 |-------|-------------|
-| 1 | native `mini` (two sigs: `[Atom/q String]`, `[Atom/q String Map]`; raw capture; `lang_` resolution; auto-`end`; expansion cache; call-site error spans) + `aql:minilang` module with `re` / `re-sub` / `re-test` / `re-all` (Go `regexp` backend, per-src compile memo) + `MiniLang.register` / `MiniLang.kinds` + spec battery `lang/spec/minilang.tsv` (positive/negative pairs per F1–F4) |
+| 1 | **LANDED 2026-06-12** (scoped to two kinds): native `mini` (two sigs `[Atom/q String]` / `[Atom/q String Map]`; `lang_` resolution with expansion-time `mini_unknown_lang`; auto-`end`; opts normalized to `{}`; `RunInCheckMode` so the checker steps the expansion) + `aql:minilang` with `re` (Go `regexp`, per-src compile memo) and `bf` (brainfuck — filter + generator forms, `opts.steps` budget) + `MiniLang.register` / `MiniLang.kinds` + battery `lang/spec/module-minilang.tsv`. Implementation notes: `mini` returns an `__SP` splice of the standard-call tokens (the `word` mechanism) rather than going through the macro expander — so there is no expansion cache (the `re` compile memo covers the hot cost) and `macroexpand` does not apply to `mini`; src is spliced as collected, so dynamic src works for runtime kinds. Deferred from the original Phase-1 row: `re-sub` / `re-test` / `re-all` |
 | 2 | `math` kind (Pratt parser; F2-aware emission), `tr`, `jp`, `fm`, `gl` |
 | 3 | **compile hooks**: a kind may register an expansion-time compiler `(src, opts-form) → token list` that `mini` splices *instead of* the standard call — staged compilation of the DSL (parse once ever, splice precompiled carrier values, surface `src` syntax errors at expansion time with call-site spans; requires literal `src`). The standard call remains the semantic reference and the dynamic-src fallback |
 | 4 | remaining catalogue kinds (`jq`, `xp`, `cs`, `ur`, `dt`, `sh`); optionally revisit rev 1's `xy/` literal as *pure lexer sugar desugaring to `mini`* if terseness demand materializes |
@@ -632,10 +643,10 @@ the `Rand.with-seed` style). Rev 1's kind catalogue is retained as
 
 The §10 prototype, verbatim as last run (green). This is *model*
 code: the real `mini` is native (`lang/go/native/native_macro.go`,
-beside the macro words) and the standard kinds are Go
-(`lang/go/modules/minilang.go`) — there is no AQL implementation of
-`mini` in the tree, and this appendix is its executable
-specification until the native lands.
+beside the macro words — **landed**) and the standard kinds are Go
+(`lang/go/modules/minilang.go` — **landed**); the executable spec is
+now `lang/spec/module-minilang.tsv`. The appendix remains as the
+record of the design-validation prototype.
 
 ```
 # Pure-AQL prototype of the rev-2 minilang design (validated 2026-06-12).

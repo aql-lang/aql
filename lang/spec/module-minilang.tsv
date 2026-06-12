@@ -1,0 +1,49 @@
+# AQL Language Specification: the aql:minilang module + the core `mini` word
+# Format: input<TAB>expected<TAB>description
+#
+# `mini <kind> <src> <opts?>` expands at the call site to the STANDARD
+# minilang call `MiniLang.lang_<kind> <src> <opts> end` (design/MINILANG.0.md).
+# The trailing `end` stops the generated word's forward collection, so
+# kind-declared inputs always come from the STACK and tokens after the mini
+# call are never stolen. Kinds: `re` (Go regexp match — subject from stack,
+# match structure out) and `bf` (brainfuck — output String; `,` reads the
+# stack input or opts.in). `MiniLang.register` installs AQL fns as new kinds;
+# `MiniLang.kinds` lists them. NB backslashes in '…' strings need doubling
+# ('\\d' below is the pattern \d) — backtick strings are backslash-safe.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  re — Go regular expressions
+"aql:minilang" import end  def r ("AbcD" mini re '[a-z]+') end  r.fst.m	'bc'	first match text (the design doc's headline example)
+"aql:minilang" import end  ("a1b2c3" mini re '\\d').n	3	all matches counted by default
+"aql:minilang" import end  ("a1b2c3" mini re '\\d' {limit:2}).n	2	opts.limit caps the match count
+"aql:minilang" import end  ("zz" mini re 'a+').ok	false	no match → ok:false
+"aql:minilang" import end  def g ('abc-123' mini re '([a-z]+)-(\\d+)') end  g.fst.g	['abc' '123']	capture groups ride on each match as g
+"aql:minilang" import end  def d ("AbcD" MiniLang.lang_re '[a-z]+' {} end) end  d.fst.m	'bc'	mini is pure sugar — the desugared standard call is equivalent
+#
+# §2  bf — brainfuck
+"aql:minilang" import end  mini bf '++++++++[>++++++++<-]>+.'	'A'	generator form: 8*8+1 = 65 = 'A'
+"aql:minilang" import end  "hi" mini bf ',.,.'	'hi'	filter form: `,` reads the STACK input (standard-sig stack input)
+"aql:minilang" import end  mini bf ',.+.' {in:'A'}	'AB'	generator form reads opts.in
+"aql:minilang" import end  "hi" MiniLang.lang_bf ',.,.' {} end	'hi'	desugared standard call, filter form
+#
+# §3  register / kinds — out-of-band exports (not mini-callable)
+"aql:minilang" import end  MiniLang.kinds	[re/q bf/q]	the registered kind atoms, in registration order
+"aql:minilang" import end  MiniLang.register poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]]) end  mini poly 'x^2 + 3*y' {x:10, y:2}	106	an AQL-registered generator kind: named params via opts
+"aql:minilang" import end  MiniLang.register count (fn [[src:String opts:Map subject:String] [Integer] [def m (subject mini re src)  m.n]]) end  "banana" mini count 'an'	2	an AQL-registered filter kind: subject from the stack (and a dynamic src)
+#
+# §4  the auto-`end` theft guard
+"aql:minilang" import end  "x1" mini re '\\d' "ZZ"	{ok:true ms:[{m:'1' i:1 e:2 g:[]}] fst:{m:'1' i:1 e:2 g:[]} lst:{m:'1' i:1 e:2 g:[]} n:1} 'ZZ'	the token after the mini call is NOT stolen as the subject
+"aql:minilang" import end  def a ("x1" mini re '\\d') end  def b ("y22" mini re '\\d+') end  b.fst.m	'22'	chained mini calls each bind their own stack subject
+#
+# §5  negatives
+"aql:minilang" import end  mini nope 'x'	ERROR:mini_unknown_lang	unknown kind: expansion-time error at the call site
+mini re 'a'	ERROR:mini_unknown_lang	mini is core but kinds need the import (no auto-import)
+MiniLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
+"aql:minilang" import end  "x" mini re '('	ERROR:mini_parse_error	a malformed pattern fails when the kind runs
+"aql:minilang" import end  mini bf '['	ERROR:mini_parse_error	unbalanced brackets
+"aql:minilang" import end  mini bf '+[]' {steps:100}	ERROR:mini_eval_error	a runaway program hits the step budget instead of hanging
+"aql:minilang" import end  mini bf '<'	ERROR:mini_eval_error	leaving the tape is loud
+"aql:minilang" import end  MiniLang.register re (fn [[s:String o:Map] [Integer] [1]])	ERROR:mini_kind_exists	collision with a registered kind
+"aql:minilang" import end  MiniLang.register bad (fn [[a:Integer] [Integer] [a]])	ERROR:mini_bad_signature	the standard prefix [src:String opts:Map …] is enforced
+"aql:minilang" import end  MiniLang.register lang_x (fn [[s:String o:Map] [Integer] [1]])	ERROR:mini_bad_name	the lang_ prefix is register's job, not the caller's
+"aql:minilang" import end  MiniLang.register Bad (fn [[s:String o:Map] [Integer] [1]])	ERROR:mini_bad_name	capitalised kind names are rejected (types)

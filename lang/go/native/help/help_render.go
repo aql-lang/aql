@@ -35,6 +35,7 @@ var moduleCatalog = []ModuleInfo{
 	{"net", "HTTP requests and API access: fetch, prepare, direct."},
 	{"logic-util", "Derived boolean connectives: nand, nor, xnor, iff, implies."},
 	{"string-util", "String manipulation: concat, split, trim, upper, lower, …."},
+	{"minilang", "Embedded mini-languages behind the `mini` word: re (Go regexp), bf (brainfuck), register."},
 }
 
 // ModuleCatalog returns the built-in module catalog sorted by name. The

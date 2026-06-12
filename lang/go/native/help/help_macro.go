@@ -62,4 +62,18 @@ func init() {
 			"normalising sugar (dotted access, `/q`, `=>`) to its underlying words. Useful for serialising code or " +
 			"data back to source.",
 	})
+
+	register(&Entry{
+		Word:    "mini",
+		Summary: "Call an embedded mini-language: mini <kind> <src> <opts?>.",
+		Description: "Expands to the standard call `MiniLang.lang_<kind> <src> <opts> end` at the call site — " +
+			"kind-declared inputs come from the stack, results are whatever the kind leaves. Kinds live in the " +
+			"aql:minilang module (import it first; MiniLang.kinds lists them; register your own with " +
+			"MiniLang.register). An unknown kind is an expansion-time error. Note backslashes in quoted strings " +
+			"need doubling ('\\\\d'); backtick strings are backslash-safe.",
+		Examples: []string{
+			`"aql:minilang" import end  def r ("AbcD" mini re '[a-z]+') end  r.fst.m   ;# => 'bc'`,
+			`"aql:minilang" import end  mini bf '++++++++[>++++++++<-]>+.'   ;# => 'A'`,
+		},
+	})
 }

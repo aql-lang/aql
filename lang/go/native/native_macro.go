@@ -73,6 +73,43 @@ var macroNatives = []NativeFunc{
 			Returns:  []*Type{TList}, BarrierPos: -1,
 		}},
 	},
+	{
+		Name: "mini",
+		// `mini <kind> <src> <opts?>` — embedded mini-languages
+		// (design/MINILANG.5.md). A macro in effect: the call expands to the
+		// STANDARD minilang call
+		//
+		//	MiniLang.lang_<kind> <src> <opts> end
+		//
+		// spliced at the call site (the trailing `end` stops the generated
+		// word's forward collection, so kind-declared inputs always come
+		// from the STACK and the tokens after the mini call are never
+		// stolen). The kind names the expansion target and must be a
+		// literal; it is resolved against the imported `MiniLang` namespace
+		// at expansion time — unknown kinds fail loudly here, not
+		// downstream. A missing opts is normalized to {}.
+		//
+		// RunInCheckMode: the handler is check-safe (the splice is built
+		// from the collected values whether or not they are concrete), so
+		// the checker steps the expansion and validates the call against
+		// the kind's standard signature.
+		Signatures: []NativeSig{
+			{
+				Args:           []*Type{TAtom, TString, TMap},
+				QuoteArgs:      map[int]bool{0: true},
+				Handler:        miniHandler,
+				RunInCheckMode: true,
+				Returns:        []*Type{TAny}, BarrierPos: -1,
+			},
+			{
+				Args:           []*Type{TAtom, TString},
+				QuoteArgs:      map[int]bool{0: true},
+				Handler:        miniHandler,
+				RunInCheckMode: true,
+				Returns:        []*Type{TAny}, BarrierPos: -1,
+			},
+		},
+	},
 }
 
 // gensymHandler returns a fresh atom whose name is guaranteed not to collide
@@ -175,4 +212,70 @@ func macroexpandHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 		return nil, err
 	}
 	return []Value{NewList(toks)}, nil
+}
+
+// miniHandler expands `mini <kind> <src> <opts?>` into the standard minilang
+// call `MiniLang.lang_<kind> <src> <opts> end`, returned as an __SP splice so
+// the generated tokens re-step at the call site (the `word` mechanism).
+// args[0]=kind (Atom via /q — must be literal), args[1]=src, args[2]=opts
+// (2-arg form normalizes to {}). src/opts are spliced as collected — they may
+// be carriers in check mode; only the kind must be concrete.
+func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	kind, err := args[0].AsConcreteAtom()
+	if err != nil {
+		return nil, r.AqlErrorHint("mini_error",
+			"mini: the kind must be a literal name", "mini",
+			"write the kind as a bare word: mini re '[a-z]+'")
+	}
+	target := "lang_" + kind
+
+	// Resolve the kind against the imported MiniLang namespace NOW —
+	// unknown kinds are expansion-time errors at the call site.
+	if !miniKindRegistered(r, target) {
+		if r.Check.IsActive() && !miniNamespaceBound(r) {
+			// The import may be outside the checked fragment; degrade to a
+			// dynamic value rather than a false-positive diagnostic. A bound
+			// namespace WITHOUT the kind is a real bug in any mode.
+			return []Value{NewCarrier(TAny)}, nil
+		}
+		return nil, r.AqlErrorHint("mini_unknown_lang",
+			fmt.Sprintf("mini: no mini-language %q is registered", kind), "mini",
+			`import "aql:minilang" first; register custom kinds with MiniLang.register; MiniLang.kinds lists what is loaded`)
+	}
+
+	opts := NewMap(NewOrderedMap())
+	if len(args) == 3 {
+		opts = args[2]
+	}
+	toks := []Value{
+		NewWord("MiniLang"), NewWord("get"), NewWord(target),
+		args[1], opts, NewEnd(),
+	}
+	return []Value{NewSplice(NewList(toks))}, nil
+}
+
+// miniNamespaceBound reports whether the `MiniLang` namespace is bound to a
+// ModuleExport in the current scope.
+func miniNamespaceBound(r *Registry) bool {
+	top, ok := r.Defs.Top("MiniLang")
+	if !ok {
+		return false
+	}
+	_, ok = asModuleExportInfo(top)
+	return ok
+}
+
+// miniKindRegistered reports whether `lang_<kind>` is an export of the bound
+// MiniLang namespace.
+func miniKindRegistered(r *Registry, target string) bool {
+	top, ok := r.Defs.Top("MiniLang")
+	if !ok {
+		return false
+	}
+	info, ok := asModuleExportInfo(top)
+	if !ok || info.Fields == nil {
+		return false
+	}
+	_, ok = info.Fields.Get(target)
+	return ok
 }

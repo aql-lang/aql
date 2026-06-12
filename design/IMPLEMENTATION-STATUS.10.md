@@ -4,7 +4,7 @@ Cross-reference of design documents in `lang/doc/design/` against the
 current codebase. Last updated: 2026-05-06.
 
 Filenames are suffixed with a 0–10 implementation completeness
-indicator (e.g. `PLAN.10.md` is fully implemented, `MINILANG.0.md`
+indicator (e.g. `PLAN.10.md` is fully implemented, `XML.0.md`
 is design-only). The number after the dot is the indicator, not a
 version.
 
@@ -139,13 +139,19 @@ words appear stricken through below.
 | Timezone | `tz`, `tz-utc`, `tz-local`, `tz-name`, `tz-offset`, `is-dst` |
 | Parsing | ~~`parse-date`, `parse-datetime`, `auto-date`~~ (removed — see TYPE-DECOUPLING.10.md Step 11) |
 
-### MINILANG.0.md — 10+ inline DSLs
+### MINILANG.5.md — 10+ inline DSLs
 
 Rev 2: a core `mini` macro expanding `mini <kind> <src> <opts?>` to
 the standard call `MiniLang.lang_<kind> <src> <opts> end`, with kinds
 registered in the `aql:minilang` module (native Go or pure AQL). No
 lexer changes — rev 1's `xy/...` two-letter prefix literals are
-superseded (kept as optional future sugar). Kinds are ordinary atoms:
+superseded (kept as optional future sugar). **LANDED 2026-06-12:**
+the core `mini` word, the `aql:minilang` module with the `re` (Go
+regexp) and `bf` (brainfuck) kinds, `MiniLang.register` /
+`MiniLang.kinds`, static checking through the expansion, and the
+`lang/spec/module-minilang.tsv` battery. Remaining: the rest of the
+kind catalogue, compile hooks, optional lexer sugar. Kinds are
+ordinary atoms:
 
 | Kind | Language | Purpose |
 |------|----------|---------|
