@@ -78,7 +78,47 @@ Global flags accepted by `aql` (and equivalently by `aql run`):
 | `-r PATH` | Path to a local registry (used by import and install). |
 | `-s INT` | Random seed for ID generation. Default: current time. |
 | `-check` | Run static type-check before execution; abort on error. |
+| `-options OPTS` | Engine options as a jsonic blob (see below). |
 | `-version` | Print the version and exit. |
+
+
+### `--options` — engine options as jsonic
+
+`--options` takes a single **jsonic** value — relaxed JSON where a bare
+`key:value,key:value` is an implicit map and a **colon chain nests**, so
+options read like dotted paths:
+
+```bash
+aql --options tape:initial:65536 script.aql          # {tape:{initial:65536}}
+aql --options 'tape:initial:65536,tape:grows:9'      # two tape knobs
+aql --options 'tape:{initial:65536,grows:9,factor:3}' # explicit nested map
+```
+
+The blob is a **nested map**; the same jsonic that parses AQL data parses
+it (`a:1,b:c:2` → `{a:1, b:{c:2}}`). Option handling is **strict** — an
+unknown key or a wrong-typed value is an error, not a silent no-op, so a
+typo fails loudly:
+
+```
+$ aql --options tape:boguskey:10 -e 'add 1 2'
+error: unknown tape option "boguskey" (known: initial, grows, factor)
+```
+
+Recognised options:
+
+| Path | Type | Meaning | Default |
+|------|------|---------|---------|
+| `tape:initial` | int | Initial execution-tape capacity, in entries. | program size, floored at 1024 |
+| `tape:grows`   | int | Max number of tape reallocations (N). | 7 |
+| `tape:factor`  | number | Per-grow size multiplier (M). | 2.7 |
+
+The tape is the engine's execution buffer. It grows at most `grows`
+times by `factor` from `initial`, a hard ceiling of `initial · factorᴺ`
+entries; crossing 90/95/99% of it warns on stderr and exceeding it fails
+loudly with `[aql/tape_exhausted]` — the engine never consumes unbounded
+space. Raise `tape:initial` (or `tape:grows`) for a legitimately large
+program (deep recursion, huge generated programs); lower it to trip a
+runaway sooner. See `design/TAPE-DATA-STRUCTURE.10.md`.
 
 
 ## Language execution

@@ -53,6 +53,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	seed := fs.Int64("s", 0, "random seed for ID generation (default: current time)")
 	showVersion := fs.Bool("version", false, "print version and exit")
 	checkFirst := fs.Bool("check", false, "run static type-check before execution; abort on error")
+	optionsStr := fs.String("options", "", "engine options as jsonic (e.g. tape:initial:65536,tape:grows:9)")
 	var pf permsflags.Flags
 	permsflags.Register(fs, &pf)
 
@@ -104,7 +105,19 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}
-		if err := EvalWithPolicy(stdout, source, *registry, *seed, pol); err != nil {
+		o := lang.Options{Registry: *registry, Seed: *seed, Policy: pol}
+		if *optionsStr != "" {
+			m, perr := lang.ParseOptions(*optionsStr)
+			if perr != nil {
+				fmt.Fprintf(stderr, "error: %s\n", perr)
+				return 1
+			}
+			if aerr := lang.ApplyOptions(&o, m); aerr != nil {
+				fmt.Fprintf(stderr, "error: %s\n", aerr)
+				return 1
+			}
+		}
+		if err := EvalOptions(stdout, source, o); err != nil {
 			fmt.Fprintf(stderr, "%s\n", err)
 			return 1
 		}
@@ -128,7 +141,14 @@ func Eval(w io.Writer, source string, registry string, seed int64) error {
 // EvalWithPolicy is Eval with an explicit Policy. Pass nil for pol
 // to preserve the historical default (no checks).
 func EvalWithPolicy(w io.Writer, source string, registry string, seed int64, pol lang.Policy) error {
-	a, err := lang.New(lang.Options{Registry: registry, Seed: seed, Policy: pol})
+	return EvalOptions(w, source, lang.Options{Registry: registry, Seed: seed, Policy: pol})
+}
+
+// EvalOptions runs source under the full Options set (registry, seed,
+// policy, tape bounds). The CLI builds Options from its flags —
+// including --options — and calls this.
+func EvalOptions(w io.Writer, source string, o lang.Options) error {
+	a, err := lang.New(o)
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
 	}

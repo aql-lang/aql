@@ -87,6 +87,7 @@ type (
 	ReadMap             = eng.ReadMap
 	RecordTypeInfo      = eng.RecordTypeInfo
 	Registry            = eng.Registry
+	TapeConfig          = eng.TapeConfig
 	DefTable            = eng.DefTable
 	ReturnCheckInfo     = eng.ReturnCheckInfo
 	ReturnsFunc         = eng.ReturnsFunc
