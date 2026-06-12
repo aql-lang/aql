@@ -1,12 +1,73 @@
 # TCO, staged — a safety-first implementation path
 
-**Status:** Discovery note / proposal. Companion to `TCO.10.md` (the
-deferred frame-replacement design): this note re-reviews that design
-against the traced code, corrects three points in it, and breaks the
-work into independently shippable stages, each gated so that a slip in
-the dispatch core is caught by machinery rather than by luck. Nothing
-here changes behaviour until Stage 3, and every behavioural stage lands
-behind a kill switch with a dual-mode differential gate.
+**Status:** Stages 0–4a **IMPLEMENTED** (June 2026; one commit per
+stage on this branch — see the implementation record below). Direct
+self-recursive tail calls now run in **O(1) tape and per-call stacks**;
+mutual/general tail calls (4b), the CallAQL trampoline (5), and the
+documented-guarantee step (6) remain open. Companion to `TCO.10.md`
+(the deferred frame-replacement design): this note re-reviews that
+design against the traced code, corrects three points in it, and breaks
+the work into independently shippable stages, each gated so that a slip
+in the dispatch core is caught by machinery rather than by luck.
+Nothing changes behaviour until Stage 3, and every behavioural stage
+lands behind a kill switch with a dual-mode differential gate.
+
+## 0. Implementation record (June 2026, Stages 0–4a)
+
+What landed, one commit per stage:
+
+- **Stage 0** — `lang/spec/recursion.tsv` (24 rows) +
+  `lang/go/recursion_pin_test.go`. Found while pinning: a
+  ceiling-dropped splice can starve a frame's ReturnCheck, surfacing a
+  phantom `type_error: expected 1 return value(s), got 0` instead of
+  `tape_exhausted` — same genre as the phantom-paren bug
+  `evaluation_limit` fixed. Pinned as a documented misdiagnosis for the
+  Stage 6 taxonomy cleanup.
+- **Stage 1** — `eng/go/fn_frame.go`: marked frame-open paren
+  (`FrameOpenInfo`, meta pointer shared with `Signature.FnFrame`),
+  single tail synthesizer (`AppendFrameTail`), `PopFrameArgs`. Option B
+  was chosen (keep the `__DC __pa undef…` token shapes; share the Go
+  helpers) — the probe handles the existing shapes and no sweep-site
+  audit was needed. The `execFnDefSig` missing-`__DC` divergence is
+  fixed by construction.
+- **Stage 2** — `eng/go/fn_frame_probe.go`: the two-halved probe,
+  detection-only, `Registry.TCO.Detected`. The backward half's
+  default-deny proved load-bearing exactly as predicted (`IsConcrete`
+  is true for a parked Forward's payload — the reject list, not the
+  concreteness check, is what stops the `n add (f …)` false positive).
+  E2e counts matched the predicted tape geometry on first run. Probe
+  cost: unmeasurable on the deep-recursion workload; one nil check on
+  non-fn dispatch.
+- **Stage 3** — `eng/go/fn_frame_elide.go`: shell elision behind
+  `Registry.TCO.Disable`, eligibility gate (self-recursion by meta
+  pointer, no generics, `DefTable.Mutations` unchanged across arg
+  auto-eval, no capitalised/builtin teardown names). Dual-mode spec
+  suite (`TestSpecProdTCODisabled`) green. Measured headroom under a
+  4096-entry ceiling: exhaustion moved from depth ~300–500 to ~800–1200
+  (~2.5×), degrading gracefully.
+- **Stage 4a** — full frame replacement for clean frames (`ValuesBelow`
+  → shell, else full): the caller's whole frame region is replaced by
+  the callee's frame after the handler returns; the callee's own
+  ReturnCheck (same overload, identical returns) replaces the caller's.
+  Depth 10000 runs under a 1024-entry ceiling; an infinite tail loop
+  trips `evaluation_limit` with TCO on and `tape_exhausted` with it off
+  (pure-kernel taxonomy test). Deep recursion got faster as a side
+  effect (s2 2000: ~0.31s → ~0.21s).
+
+Findings for the remaining stages:
+
+- The "initial call into a locally-defined fn" shape (`def go fn […]
+  go 3` as the last action of an enclosing body) is detected as a tail
+  call but declined — it is the mutual shape (caller frame belongs to a
+  different overload). Stage 4b's conformance gate would fire on it; a
+  useful first test case there.
+- Go-constructed `FnSig`s must set `BarrierPos: BarrierAllForward`
+  explicitly (the Go zero means all-stack) — bit the taxonomy test;
+  already documented in the kernel guide.
+- `lang.AQL` exposes no registry accessor, so kill-switch tests live in
+  `lang/go/test` (registry-level harness) rather than against the
+  public API. If hosts need the switch, `lang.Options` would grow a
+  field — defer until someone asks.
 
 Code referenced below: `eng/go/core_helpers.go` (`buildFnBodyHandler`,
 `InstallFnDef`), `eng/go/engine.go` (`execMatch`, `spliceMatchResults`,
