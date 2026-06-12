@@ -2291,22 +2291,26 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// Tail calls (design/TCO-STAGED.0.md): an AQL fn-body dispatch
 	// (Sig.FnFrame non-nil — natives skip on the nil check) sitting in
 	// tail position of an enclosing fn frame is counted; when the
-	// eligibility gate passes (direct self-recursion, no binding
-	// mutations during arg auto-eval, plain teardown names, kill
-	// switch off) the enclosing frame's teardown runs eagerly, before
-	// the handler pushes the callee's per-call state — replacement by
-	// ordering. Clean frames (nothing parked below the call) then take
-	// FULL replacement: the callee's frame tokens replace the caller's
-	// entire frame region after the handler returns, keeping tape and
-	// stacks O(1) across the chain. Values-below frames take the shell
-	// variant (marker run deleted, shell kept). A declined call nests
-	// exactly as before — correctness never depends on firing.
+	// eligibility gate passes (no binding mutations during arg
+	// auto-eval, plain teardown names, no generics, kill switch off)
+	// the enclosing frame's teardown runs eagerly, before the handler
+	// pushes the callee's per-call state — replacement by ordering,
+	// for self AND mutual tail calls alike. Clean frames whose
+	// ReturnCheck the callee's own check subsumes (returnsConform)
+	// take FULL replacement: the callee's frame tokens replace the
+	// caller's entire frame region after the handler returns, keeping
+	// tape and stacks O(1) across the chain. Values-below frames and
+	// non-conforming returns take the shell variant — the marker run
+	// is deleted but the caller's shell (parens + ReturnCheck) stays,
+	// so leftover values and the caller's return contract behave
+	// exactly as under nesting. A declined call nests as before —
+	// correctness never depends on firing.
 	var fullReplace *frameTailScan
 	if match.Sig.FnFrame != nil {
 		if scan, ok := e.probeTailCall(sortedIndices, n); ok {
 			e.registry.TCO.Detected++
 			if e.tcoEligible(scan, match.Sig, defMutsBefore) {
-				if scan.ValuesBelow {
+				if scan.ValuesBelow || !e.returnsConform(scan, match.Sig) {
 					if err := e.elideTailFrame(scan); err != nil {
 						return err
 					}
@@ -3674,7 +3678,11 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 		compiled.Params = append([]FnParam(nil), sig.Params...)
 		compiled.BarrierPos = barrier
 		if fnDef.Anonymous {
-			meta := &FnFrameMeta{Name: fnDef.Name, HasGen: fnDef.Gen != nil}
+			meta := &FnFrameMeta{
+				Name:         fnDef.Name,
+				HasGen:       fnDef.Gen != nil,
+				InstallNames: fnInstallNames(sig, fnDef.Captured),
+			}
 			compiled.FnFrame = meta
 			compiled.Handler = buildFnBodyHandler(r, fnDef.Name, sig, fnDef, meta)
 			compiled.ReturnsFn = buildFnBodyReturnsFn(r, fnDef.Name, sig, fnDef)

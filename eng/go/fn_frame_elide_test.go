@@ -102,8 +102,13 @@ func TestElideTailFrameNoReturnCheck(t *testing.T) {
 func TestTCOEligibleGates(t *testing.T) {
 	f := newProbeFixture(t)
 	e := NewTop(f.r)
+	// Every scan needs a real DefCleanup token for the coverage walk;
+	// the snapshot is taken with no bindings installed, so truncation
+	// is empty unless a case installs one.
+	snap := f.r.Defs.Snapshot()
+	e.tape = NewTape([]Value{NewDefCleanup(DefCleanupInfo{Snapshot: snap, Registry: f.r})}, 4)
+	base := frameTailScan{Meta: f.meta, TailStart: 0}
 	sig := &Signature{FnFrame: f.meta}
-	base := frameTailScan{Meta: f.meta}
 	muts := f.r.Defs.Mutations()
 
 	if !e.tcoEligible(base, sig, muts) {
@@ -115,24 +120,109 @@ func TestTCOEligibleGates(t *testing.T) {
 		t.Error("Disable must gate elision off")
 	}
 	f.r.TCO.Disable = false
-	// Not self-recursion: a different overload's frame.
-	other := frameTailScan{Meta: &FnFrameMeta{Name: "g"}}
-	if e.tcoEligible(other, sig, muts) {
-		t.Error("a different overload's frame must decline (mutual recursion nests at this stage)")
+	// A different overload's frame (the mutual shape) is eligible
+	// since Stage 4b — which tape treatment it gets is decided by
+	// ValuesBelow + returnsConform, not here.
+	other := frameTailScan{Meta: &FnFrameMeta{Name: "g"}, TailStart: 0}
+	if !e.tcoEligible(other, sig, muts) {
+		t.Error("a different overload's frame must be eligible (mutual tail calls, Stage 4b)")
 	}
-	// Generic fn.
+	// Generic fns decline — caller frame or callee, either side.
 	genMeta := &FnFrameMeta{Name: "h", HasGen: true}
-	if e.tcoEligible(frameTailScan{Meta: genMeta}, &Signature{FnFrame: genMeta}, muts) {
-		t.Error("generic fns must decline")
+	if e.tcoEligible(frameTailScan{Meta: genMeta, TailStart: 0}, sig, muts) {
+		t.Error("a generic enclosing frame must decline")
+	}
+	if e.tcoEligible(base, &Signature{FnFrame: genMeta}, muts) {
+		t.Error("a generic callee must decline")
 	}
 	// Binding mutation during arg auto-eval.
 	if e.tcoEligible(base, sig, muts-1) {
 		t.Error("binding mutations during auto-eval must decline")
 	}
-	// Capitalised / builtin teardown names.
+	// Capitalised teardown names decline (type-retire path) even when
+	// the callee would rebind them.
 	capScan := base
 	capScan.UndefNames = []string{"Foo"}
-	if e.tcoEligible(capScan, sig, muts) {
+	capSig := &Signature{FnFrame: &FnFrameMeta{Name: "f", InstallNames: []string{"Foo"}}}
+	if e.tcoEligible(capScan, capSig, muts) {
 		t.Error("capitalised teardown names must decline (type-retire path)")
+	}
+}
+
+func TestTCOEligibleNameCoverage(t *testing.T) {
+	f := newProbeFixture(t)
+	e := NewTop(f.r)
+	snap := f.r.Defs.Snapshot()
+	e.tape = NewTape([]Value{NewDefCleanup(DefCleanupInfo{Snapshot: snap, Registry: f.r})}, 4)
+	muts := f.r.Defs.Mutations()
+
+	// A torn-down param the callee rebinds is covered…
+	scan := frameTailScan{Meta: f.meta, TailStart: 0, UndefNames: []string{"n"}}
+	rebinds := &Signature{FnFrame: &FnFrameMeta{Name: "g", InstallNames: []string{"n"}}}
+	if !e.tcoEligible(scan, rebinds, muts) {
+		t.Error("a param the callee rebinds must be eligible")
+	}
+	// …but a callee that does NOT rebind it must decline: a dynamic
+	// read of the caller's param anywhere in the callee chain would
+	// see undefined where nesting shows the live binding.
+	noRebind := &Signature{FnFrame: &FnFrameMeta{Name: "g"}}
+	if e.tcoEligible(scan, noRebind, muts) {
+		t.Error("a torn-down param the callee does not rebind must decline")
+	}
+
+	// Body-local bindings above the frame's snapshot: same rule via
+	// the DefCleanup truncation walk. The recursive-local-fn idiom and
+	// loop-carried base-branch reads depend on these staying live.
+	InstallDef(f.r, "tmp", NewInteger(1))
+	muts = f.r.Defs.Mutations()
+	clean := frameTailScan{Meta: f.meta, TailStart: 0}
+	if e.tcoEligible(clean, noRebind, muts) {
+		t.Error("a body-local the callee does not rebind must decline")
+	}
+	rebindsTmp := &Signature{FnFrame: &FnFrameMeta{Name: "g", InstallNames: []string{"tmp"}}}
+	if !e.tcoEligible(clean, rebindsTmp, muts) {
+		t.Error("a body-local the callee rebinds must be eligible")
+	}
+}
+
+func TestReturnsConform(t *testing.T) {
+	f := newProbeFixture(t)
+	e := NewTop(f.r)
+
+	// Helper: an engine whose tape holds one ReturnCheck with the
+	// given caller returns; scan.RCIdx points at it.
+	scanWithCallerRC := func(returns []*Type) frameTailScan {
+		rc := NewReturnCheck(ReturnCheckInfo{FuncName: "caller", Returns: returns})
+		e.tape = NewTape([]Value{rc}, 4)
+		return frameTailScan{RCIdx: 0}
+	}
+
+	cases := []struct {
+		name   string
+		caller []*Type // nil = caller declares no returns (RCIdx -1)
+		callee []*Type
+		want   bool
+	}{
+		{"caller unchecked admits anything", nil, nil, true},
+		{"caller unchecked, callee checked", nil, []*Type{TInteger}, true},
+		{"identical returns", []*Type{TInteger}, []*Type{TInteger}, true},
+		{"widening callee (Integer into Number)", []*Type{TNumber}, []*Type{TInteger}, true},
+		{"narrowing callee (Number into Integer)", []*Type{TInteger}, []*Type{TNumber}, false},
+		{"checked caller, unchecked callee", []*Type{TInteger}, nil, false},
+		{"count mismatch", []*Type{TInteger}, []*Type{TInteger, TInteger}, false},
+		{"anonymous placeholder Any against stricter caller", []*Type{TInteger}, []*Type{TAny}, false},
+		{"Any caller accepts Any callee", []*Type{TAny}, []*Type{TAny}, true},
+	}
+	for _, tc := range cases {
+		var scan frameTailScan
+		if tc.caller == nil {
+			scan = frameTailScan{RCIdx: -1}
+		} else {
+			scan = scanWithCallerRC(tc.caller)
+		}
+		sig := &Signature{Returns: tc.callee}
+		if got := e.returnsConform(scan, sig); got != tc.want {
+			t.Errorf("%s: returnsConform = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }

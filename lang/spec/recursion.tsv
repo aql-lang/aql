@@ -59,3 +59,12 @@ def r2 fn [[n:Integer] [Integer] [n n]] r2 1	ERROR:expected 1 return value	surpl
 #     callee unwind through the frame to the enclosing loop
 def b fn [[n:Integer] [] [if (n gt 1) [break] []]] for [1 5] [b i i]	1	break inside a callee exits the enclosing for
 def c fn [[n:Integer] [] [if (n eq 2) [continue] []]] for [1 4] [c i i]	1 3	continue inside a callee skips the current iteration
+#
+# §10 dynamic reads of an enclosing frame's bindings — outer frames'
+#     params and body-locals stay visible to the callee chain until
+#     the frame unwinds (innermost binding wins). The recursive-local-
+#     fn idiom and loop-carried reads depend on this; any eager frame
+#     teardown must decline these shapes (the TCO name-coverage gate)
+def f fn [[n:Integer] [Integer] [if (n lte 0) [acc2] [def acc2 n f (n sub 1)]]] f 2	1	the base branch reads the PREVIOUS frame's body-local (loop-carried dynamic read)
+def g fn [[] [Integer] [n]] def f2 fn [[n:Integer] [Integer] [g]] f2 42	42	a callee dynamically reads the caller's param (no capture: g is module-level)
+def out2 fn [[] [Integer] [def go2 fn [[n:Integer] [Integer] [if (n lte 0) [99] [go2 (n sub 1)]]] go2 3]] out2	99	a locally-defined fn resolves its own name through the enclosing frame's binding while recursing

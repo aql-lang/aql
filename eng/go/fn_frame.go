@@ -37,6 +37,35 @@ type FnFrameMeta struct {
 	// interaction is separately proven (design/TCO-STAGED.0.md
 	// Stage 4).
 	HasGen bool
+	// InstallNames are the binding names this overload's handler
+	// installs at every call: capture names plus named params — the
+	// same list the synthesized undef tail tears down. The
+	// eager-teardown gate requires the CALLER frame's removed names to
+	// be a subset of the CALLEE's InstallNames: bindings are then
+	// rebound before the callee body runs, so a dynamic read anywhere
+	// in the callee chain sees exactly what it would have seen under
+	// nesting (where the callee's bindings shadow the caller's).
+	// Without this, tearing down a frame whose body-locals or params
+	// the callee reads dynamically — the recursive-local-fn idiom
+	// (`def go fn […] go 3`), a loop-carried base-branch read —
+	// breaks with undefined_word.
+	InstallNames []string
+}
+
+// fnInstallNames computes the binding names a fn-body handler installs
+// per call — captures first, then named params, mirroring
+// buildFnBodyHandler's install order — for FnFrameMeta.InstallNames.
+func fnInstallNames(s FnSig, captured []CapturedBinding) []string {
+	names := make([]string, 0, len(captured)+len(s.Params))
+	for _, cb := range captured {
+		names = append(names, cb.Name)
+	}
+	for _, p := range s.Params {
+		if p.Name != "" {
+			names = append(names, p.Name)
+		}
+	}
+	return names
 }
 
 // fnValueFrameMeta marks frames spliced by execFnDefSig for a Function

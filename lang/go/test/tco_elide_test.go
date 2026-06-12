@@ -84,12 +84,52 @@ func TestElideKeepsArgsPerFrame(t *testing.T) {
 func TestElideKeepsCapturesAcrossChain(t *testing.T) {
 	// The recursive inner fn captures an enclosing local; every
 	// replaced call reinstalls the same construction-time snapshot.
-	// Detected is 4: the initial `go 3` is itself a tail call of
-	// out1's frame — detected, but declined (different overload, the
-	// mutual shape); the 3 self-recursive calls replace.
+	// Detected is 4: the initial `go 3` is a tail call of out1's frame
+	// but must DECLINE — out1's teardown would remove the body-local
+	// binding of `go` itself, which the recursive body resolves
+	// dynamically (the forward-reference idiom). The name-coverage
+	// gate catches it; the 3 self-recursive calls replace (go's own
+	// teardown removes only {x, n}, both reinstalled per call).
 	assertDual(t, "captured local",
 		`def out1 fn [[] [Integer] [def x 7 def go fn [[n:Integer] [Integer] [if (n lte 0) [x] [go (n sub 1)]]] go 3]] out1`,
 		"7", 4, 0, 3)
+}
+
+func TestNestWhenDynamicReadsNeedCallerBindings(t *testing.T) {
+	// The two shapes the name-coverage gate exists for. Both rely on
+	// dynamic resolution reaching a torn frame's bindings; both must
+	// produce identical results with TCO on (by declining) and off.
+	cases := []struct {
+		name, src, want string
+	}{
+		{
+			// The base branch reads acc2 from the PREVIOUS frame —
+			// a loop-carried dynamic read of a body-local.
+			"loop-carried body-local",
+			`def f fn [[n:Integer] [Integer] [if (n lte 0) [acc2] [def acc2 n f (n sub 1)]]] f 2`,
+			"1",
+		},
+		{
+			// The callee reads the caller's param dynamically (no
+			// capture: g is module-level, n unbound at construction).
+			"caller param read by callee",
+			`def g fn [[] [Integer] [n]] def f2 fn [[n:Integer] [Integer] [g]] f2 42`,
+			"42",
+		},
+	}
+	for _, tc := range cases {
+		got, _, elided, replaced := runTCO(t, tc.src, false)
+		if got != tc.want {
+			t.Errorf("%s: result %q, want %q", tc.name, got, tc.want)
+		}
+		if elided != 0 || replaced != 0 {
+			t.Errorf("%s: fired %d/%d, want 0/0 (must nest: the callee chain reads the caller's bindings)", tc.name, elided, replaced)
+		}
+		off, _, _, _ := runTCO(t, tc.src, true)
+		if off != got {
+			t.Errorf("%s: result differs with TCO disabled: %q vs %q", tc.name, off, got)
+		}
+	}
 }
 
 func TestElideValueAccretingBodyKeepsValues(t *testing.T) {
@@ -101,13 +141,64 @@ func TestElideValueAccretingBodyKeepsValues(t *testing.T) {
 		"6 4 2", 3, 3, 0)
 }
 
-func TestElideDeclinesMutualRecursion(t *testing.T) {
-	// Tail calls, detected — but the callee is a different overload,
-	// so this stage nests them.
+func TestReplaceMutualRecursion(t *testing.T) {
+	// Mutual tail recursion (Stage 4b): different overloads, returns
+	// conform (Boolean = Boolean), clean frames — every alternating
+	// call takes full replacement.
 	assertDual(t, "mutual",
 		`def isod fn [[n:Integer] [Boolean] [if (n eq 0) [false] [isev (n sub 1)]]] `+
 			`def isev fn [[n:Integer] [Boolean] [if (n eq 0) [true] [isod (n sub 1)]]] isev 4`,
-		"true", 4, 0, 0)
+		"true", 4, 0, 4)
+}
+
+func TestShellWhenCalleeUnchecked(t *testing.T) {
+	// g1 declares [Integer]; g2 declares nothing. A g1→g2 tail call
+	// cannot drop g1's ReturnCheck (the callee brings none), so it
+	// takes the SHELL path — g1's check stays in place and the result
+	// is identical to nesting. The g2→g1 direction has no caller check
+	// to preserve, so it replaces fully. 6 calls alternate: 3 shells,
+	// 3 fulls.
+	assertDual(t, "callee unchecked",
+		`def g1 fn [[n:Integer] [Integer] [if (n lte 0) [0] [g2 (n sub 1)]]] `+
+			`def g2 fn [[n:Integer] [] [g1 (n sub 1)]] g1 5`,
+		"0", 6, 3, 3)
+}
+
+func TestShellWhenCalleeWidens(t *testing.T) {
+	// h2 declares [Number] — WIDER than h1's [Integer]. Dropping h1's
+	// check would let a Float escape a frame that promised Integer, so
+	// h1→h2 takes the shell; h2→h1 narrows (Integer ⊑ Number) and
+	// replaces fully. 4 calls alternate: 2 shells, 2 fulls.
+	assertDual(t, "callee widens",
+		`def h1 fn [[n:Integer] [Integer] [if (n lte 0) [0] [h2 (n sub 1)]]] `+
+			`def h2 fn [[n:Integer] [Number] [h1 (n sub 1)]] h1 4`,
+		"0", 4, 2, 2)
+}
+
+func TestMutualConstantSpace(t *testing.T) {
+	// The Stage-4b claim at depth: a conforming mutual chain runs in
+	// O(1) tape, depth 10000 under a 1024-entry ceiling.
+	src := `def isod fn [[n:Integer] [Boolean] [if (n eq 0) [false] [isev (n sub 1)]]] ` +
+		`def isev fn [[n:Integer] [Boolean] [if (n eq 0) [true] [isod (n sub 1)]]] isev 10000`
+	reg, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.TapeConfig = native.TapeConfig{InitialSize: 512, MaxGrows: 1, GrowthFactor: 2.0}
+	values, err := parser.Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := native.NewTop(reg).Run(values)
+	if err != nil {
+		t.Fatalf("mutual depth 10000 under a 1024-entry ceiling: %v", err)
+	}
+	if len(res) != 1 || res[0].String() != "true" {
+		t.Fatalf("isev 10000 = %v, want true", res)
+	}
+	if reg.TCO.Replaced != 10000 {
+		t.Errorf("replaced = %d, want 10000", reg.TCO.Replaced)
+	}
 }
 
 func TestElideDeclinesArgAutoEvalMutations(t *testing.T) {

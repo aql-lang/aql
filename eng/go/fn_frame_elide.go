@@ -41,25 +41,27 @@ package eng
 // (such frames accrete real values and are not constant-space-able
 // anyway).
 
-// tcoEligible decides whether a detected tail call may be elided.
-// Everything here is deny-by-default on top of the probe's own
-// default-deny; a declined call simply nests, so correctness never
-// depends on firing.
+// tcoEligible decides whether a detected tail call's enclosing frame
+// may be torn down eagerly at all (Stage 4b: ANY fn→fn tail call —
+// self or mutual — the teardown's soundness conditions never
+// referenced the callee's identity). Which tape treatment applies is
+// the caller's next decision: full replacement needs the
+// return-conformance check (returnsConform) on top; the shell keeps
+// the caller's ReturnCheck so it is sound for any callee. Everything
+// here is deny-by-default on top of the probe's own default-deny; a
+// declined call simply nests, so correctness never depends on firing.
 func (e *Engine) tcoEligible(scan frameTailScan, sig *Signature, defMutsBefore int64) bool {
 	if e.registry.TCO.Disable {
 		return false
 	}
-	// Direct self-recursion only: the dispatching overload IS the
-	// overload that opened the enclosing frame. Pointer identity —
-	// same compiled sig, so params, returns, and ReturnCheck are
-	// identical and the kept shell checks exactly what the callee's
-	// own shell would have.
-	if scan.Meta == nil || scan.Meta != sig.FnFrame {
+	if scan.Meta == nil {
 		return false
 	}
 	// Generic fns install per-call type-parameter bindings; their
-	// teardown/Retire interaction is not yet proven under elision.
-	if scan.Meta.HasGen {
+	// teardown/Retire interaction is not yet proven under elision —
+	// decline when either the enclosing frame or the callee is
+	// generic.
+	if scan.Meta.HasGen || sig.FnFrame.HasGen {
 		return false
 	}
 	// Arg auto-evaluation ran code (evaluated list/map args) between
@@ -73,9 +75,64 @@ func (e *Engine) tcoEligible(scan frameTailScan, sig *Signature, defMutsBefore i
 	// alone: a capitalised name takes undef's type-retire path, and a
 	// builtin-shadowing name would ERROR at the parked token — both
 	// decline so eager teardown matches the token-by-token behaviour
-	// exactly.
+	// exactly. Each name must ALSO be one the callee immediately
+	// reinstalls (see coverage below).
+	covered := func(name string) bool {
+		for _, n := range sig.FnFrame.InstallNames {
+			if n == name {
+				return true
+			}
+		}
+		return false
+	}
 	for _, name := range scan.UndefNames {
-		if IsCapitalisedName(name) || e.registry.IsBuiltinWord(name) {
+		if IsCapitalisedName(name) || e.registry.IsBuiltinWord(name) || !covered(name) {
+			return false
+		}
+	}
+	// Teardown-coverage for the DefCleanup truncation: body-local
+	// bindings the caller's frame created are visible to the callee
+	// chain via dynamic resolution under nesting (innermost binding
+	// wins, outer frames' bindings stay live until unwind) — the
+	// recursive-local-fn idiom (`def go fn […] go 3`) and loop-carried
+	// base-branch reads depend on it. Eager teardown may therefore
+	// remove ONLY names the callee rebinds before its body runs;
+	// anything else declines and nests.
+	dcInfo, err := AsDefCleanup(e.tape.At(scan.TailStart))
+	if err != nil {
+		return false
+	}
+	if !e.registry.Defs.TruncationCoveredBy(dcInfo.Snapshot, covered) {
+		return false
+	}
+	return true
+}
+
+// returnsConform reports whether dropping the enclosing frame's
+// ReturnCheck in favour of the callee's is sound: every value the
+// callee's check admits must also satisfy the caller's. Holds when the
+// caller declares no returns at all, or when the callee declares the
+// same NUMBER of returns, each conforming (callee[k] ⊑ caller[k] on
+// the type lattice). Identical overloads (self-recursion) hold
+// trivially. A placeholder-Any callee return against a stricter caller
+// declines here (Any ⊄ Integer), as does an unchecked callee against a
+// checked caller — those take the shell path, where the caller's
+// ReturnCheck stays in place and enforces its contract exactly as
+// under nesting.
+func (e *Engine) returnsConform(scan frameTailScan, sig *Signature) bool {
+	if scan.RCIdx < 0 {
+		return true
+	}
+	rc, err := AsReturnCheck(e.tape.At(scan.RCIdx))
+	if err != nil {
+		return false
+	}
+	if len(sig.Returns) == 0 || len(sig.Returns) != len(rc.Returns) {
+		return false
+	}
+	for k := range sig.Returns {
+		if sig.Returns[k] == nil || rc.Returns[k] == nil ||
+			!sig.Returns[k].ConformsTo(rc.Returns[k]) {
 			return false
 		}
 	}

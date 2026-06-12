@@ -123,6 +123,23 @@ func (dt *DefTable) Mutations() int64 {
 	return dt.mutations
 }
 
+// TruncationCoveredBy reports whether truncating every name's stack to
+// the depth recorded in snapshot (the DefCleanup operation) would
+// remove only bindings whose names satisfy allowed. Allocation-free —
+// the TCO eligibility gate runs this per detected tail call to prove
+// the eager teardown removes nothing a dynamic read could miss.
+func (dt *DefTable) TruncationCoveredBy(snapshot map[string]int, allowed func(string) bool) bool {
+	if dt == nil {
+		return true
+	}
+	for name, ds := range dt.stacks {
+		if len(ds) > snapshot[name] && !allowed(name) {
+			return false
+		}
+	}
+	return true
+}
+
 // Has reports whether name has any active binding.
 func (dt *DefTable) Has(name string) bool {
 	if dt == nil {

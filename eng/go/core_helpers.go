@@ -457,7 +457,11 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 		// fn re-bound by name still has Body>0, so it correctly gets a fresh
 		// body-runner — only Body-less handler sigs are preserved.)
 		if s.Handler == nil || len(s.Body) > 0 {
-			meta := &FnFrameMeta{Name: name, HasGen: fnDefCopy.Gen != nil}
+			meta := &FnFrameMeta{
+				Name:         name,
+				HasGen:       fnDefCopy.Gen != nil,
+				InstallNames: fnInstallNames(s, fnDefCopy.Captured),
+			}
 			cs.FnFrame = meta
 			cs.Handler = buildFnBodyHandler(r, name, s, fnDefCopy, meta)
 			cs.ReturnsFn = buildFnBodyReturnsFn(r, name, s, fnDefCopy)
