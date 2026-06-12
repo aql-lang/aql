@@ -207,3 +207,39 @@ func BenchmarkTapeGapRecursion(b *testing.B) {
 		})
 	}
 }
+
+// ---- former engine primitives (engine_stack.go), retained as the
+// benchmark baseline after the engine moved to the gap-buffer Tape ----
+
+func stackInsert(s *[]Value, i int, val Value) {
+	*s = append(*s, Value{})
+	copy((*s)[i+1:], (*s)[i:len(*s)-1])
+	(*s)[i] = val
+}
+
+func stackRemove(s *[]Value, i int) {
+	copy((*s)[i:], (*s)[i+1:])
+	(*s)[len(*s)-1] = Value{}
+	*s = (*s)[:len(*s)-1]
+}
+
+func stackSplice(s *[]Value, i, count int, replacements ...Value) {
+	delta := len(replacements) - count
+	oldLen := len(*s)
+	newLen := oldLen + delta
+
+	if delta > 0 {
+		for cap(*s) < newLen {
+			*s = append(*s, Value{})
+		}
+		*s = (*s)[:newLen]
+		copy((*s)[i+len(replacements):], (*s)[i+count:oldLen])
+	} else if delta < 0 {
+		copy((*s)[i+len(replacements):], (*s)[i+count:])
+		for j := newLen; j < oldLen; j++ {
+			(*s)[j] = Value{}
+		}
+		*s = (*s)[:newLen]
+	}
+	copy((*s)[i:], replacements)
+}

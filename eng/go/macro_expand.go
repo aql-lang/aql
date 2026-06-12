@@ -46,7 +46,7 @@ func (e *Engine) execMacro(valIdx int, fnDef *FnDefInfo) error {
 	// Replace the whole `mac operand…` span (valIdx..endIdx) with one __SP
 	// marker; e.pointer == valIdx is left unchanged so the Run loop steps the
 	// marker next, splicing the expansion onto the live tape and re-stepping.
-	stackSplice(&e.stack, valIdx, endIdx-valIdx+1, NewSplice(NewList(expanded)))
+	e.tape.Splice(valIdx, endIdx-valIdx+1, NewSplice(NewList(expanded)))
 	return nil
 }
 
@@ -72,8 +72,8 @@ func (e *Engine) scanMacroOperands(fnDef *FnDefInfo, arity, valIdx int) ([]Value
 	operands := make([]Value, 0, arity)
 	idx := valIdx + 1
 	last := valIdx
-	for len(operands) < arity && idx < len(e.stack) {
-		t := e.stack[idx]
+	for len(operands) < arity && idx < e.tape.Len() {
+		t := e.tape.At(idx)
 		if IsEnd(t) || IsCloseParen(t) || IsOpenParen(t) || IsForward(t) ||
 			t.Parent.ConformsTo(TMark) || t.Parent.ConformsTo(TMove) ||
 			t.Parent.ConformsTo(TInternal) || t.Parent.ConformsTo(TReturnCheck) {

@@ -211,3 +211,13 @@ func zero(s []Value) {
 		s[i] = Value{}
 	}
 }
+
+// TakeAll moves the gap to the end and returns the full logical content
+// as one contiguous slice — the Engine's end-of-Run handoff. Ownership
+// transfers to the caller: the tape must not be edited afterwards (the
+// Engine builds a fresh tape on every Run, so the lifetimes never
+// overlap).
+func (t *Tape) TakeAll() []Value {
+	t.MoveGap(t.Len())
+	return t.buf[:t.gapStart]
+}

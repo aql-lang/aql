@@ -1,11 +1,30 @@
 # Tape Data Structure — fixing the O(depth²) recursion cost
 
-**Status:** Discovery note + working prototype (`eng/go/tape.go`). Follows
-up `RECURSION-PERFORMANCE.10.md`, which diagnosed the cost; this note
-explores replacement data structures for the engine tape, benchmarks
-them against the engine's *measured* access pattern, and lands on a
-recommendation with an integration plan. The prototype `eng.Tape` is in
-the tree, fully tested, but **not yet wired into the Engine**.
+**Status:** IMPLEMENTED — the Engine now runs on the gap-buffer
+`eng.Tape` (`eng/go/tape.go`); the flat `[]Value` + `stackInsert/Remove/
+Splice` representation is retired (the old primitives survive only as
+the benchmark baseline in `tape_test.go`). Follows up
+`RECURSION-PERFORMANCE.10.md`, which diagnosed the cost; this note
+records the data structure exploration, the benchmarks, and the
+integration results.
+
+End-to-end acceptance (the recursion from the diagnosis note, real
+binary):
+
+| depth | slice engine | gap-buffer engine | speedup |
+|---|---|---|---|
+| 1000 | 1.49 s | 189 ms | 7.9× |
+| 2000 | 10.1 s | 312 ms | 32× |
+| 4000 | 47.4 s | 646 ms | 73× |
+| 8000 | 196.7 s | **1.18 s** | **166×** |
+
+Time now doubles per doubling of depth — linear, as designed. Loops are
+unchanged (`for 16000` ≈ 120 ms), results are bit-identical (full spec
+suite green; deep results verified: `s 8000` = 32004000), `-race` stays
+clean, and the pre-existing tail-recursion depth cliff (step limits
+surfacing as a phantom paren error, ~n=1000) reproduces identically on
+both engines — same behaviour, reached 40× faster. That misleading
+error remains the orthogonal follow-up flagged below.
 
 ## The measured access pattern
 
@@ -155,7 +174,7 @@ the trace can't show, and that decides for the gap buffer.
   plain-slice reference model (`TestTapeDifferential`), plus
   out-of-range no-panic guards per ADR-005.
 
-## Integration plan (follow-up work)
+## Integration plan (as executed)
 
 The blast radius is contained: **engine.go (277 `e.stack` references)
 plus 3 in macro_expand.go**. Nothing else touches the tape —
