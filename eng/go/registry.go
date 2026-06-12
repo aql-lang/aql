@@ -270,6 +270,7 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"type_error":            SeverityError,
 	"uncalled_function":     SeverityError,
 	"unreachable_signature": SeverityWarning,
+	"partial_dispatch":      SeverityWarning,
 	"index_out_of_range":    SeverityWarning,
 	"missing_returns":       SeverityWarning,
 	"step_budget_exceeded":  SeverityWarning,

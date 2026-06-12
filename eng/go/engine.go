@@ -5569,6 +5569,36 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		}
 	}
 	sig := best
+	n := sig.TotalArgs()
+	positions := e.checkModeFallbackPositions(n)
+	args := make([]Value, len(positions))
+	for i, p := range positions {
+		av := e.tape.At(p)
+		// Resolve simple word references to their def bindings — the
+		// tape still holds raw Words for forward operands at this
+		// recovery point, and both the partition probe below and the
+		// assumed sig's ReturnsFn want values, not names.
+		if IsWord(av) {
+			if wi, werr := AsWord(av); werr == nil {
+				if top, ok := e.registry.Defs.Top(wi.Name); ok {
+					av = top
+					e.registry.Check.recordUse(wi.Name)
+				}
+			}
+		}
+		args[i] = av
+	}
+	// Strict disjunct rescue (design/checker-accuracy-review.0.md A1):
+	// the whole disjunct matched no signature, but individual
+	// alternatives may dispatch fine. If at least one does, splice the
+	// per-alternative join — the failing alternatives have already
+	// been flagged with partial_dispatch warnings, which name the
+	// exact path that would fail; the blanket no_signature error
+	// would be wrong for the paths that DO dispatch.
+	if out, ok := disjunctPartitionReturns(e.registry, w.Name, args, pos); ok {
+		e.spliceCheckResults(positions, out)
+		return nil
+	}
 	e.registry.Check.AddDiagnostic(CheckDiagnostic{
 		Code:   "no_signature",
 		Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
@@ -5576,12 +5606,6 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		Row:    pos.Row,
 		Col:    pos.Col,
 	})
-	n := sig.TotalArgs()
-	positions := e.checkModeFallbackPositions(n)
-	args := make([]Value, len(positions))
-	for i, p := range positions {
-		args[i] = e.tape.At(p)
-	}
 	results := carrierResults(e.registry, w.Name, sig, args, pos)
 	e.spliceCheckResults(positions, results)
 	return nil

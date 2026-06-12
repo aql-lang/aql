@@ -261,6 +261,30 @@ func sigTypeMatches(v Value, t *Type) bool {
 	if v.Is(t) {
 		return true
 	}
+	// Strict disjunct carrier (check mode only — runtime values are
+	// never carriers): matches iff EVERY alternative matches, so
+	// dispatch distributes over the abstract domain. The selected
+	// signature's returns are then refined per alternative by
+	// disjunctPartitionReturns (design/checker-accuracy-review.0.md A1).
+	if v.Carrier && !v.Dynamic && IsDisjunct(v) {
+		di, err := AsDisjunct(v)
+		if err == nil && len(di.Alternatives) > 0 {
+			all := true
+			for _, alt := range di.Alternatives {
+				probe := alt
+				if IsBareTypeNode(alt) {
+					probe = carrierOfLiteral(alt)
+				}
+				if !sigTypeMatches(probe, t) {
+					all = false
+					break
+				}
+			}
+			if all {
+				return true
+			}
+		}
+	}
 	// Options is structurally a keyword-args map. A parameter typed
 	// `Options` (a bare `opts:Options` annotation → TOptions slot)
 	// accepts both an Options-tagged value AND a plain concrete map —
