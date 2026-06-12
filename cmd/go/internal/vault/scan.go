@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 )
 
 // secretPattern is one named regex over file contents. The Name
@@ -77,6 +79,11 @@ func runScan(args []string, homeDir string, stdout, stderr io.Writer) int {
 	paths := fs.Args()
 	if len(paths) == 0 {
 		paths = []string{"."}
+	} else {
+		// Expand a leading ~ the shell left verbatim (e.g. a quoted path).
+		for i, p := range paths {
+			paths[i] = pathutil.ExpandTilde(p, homeDir)
+		}
 	}
 
 	// Optional vault cross-reference. Failing to load the vault

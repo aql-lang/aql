@@ -29,6 +29,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 	"github.com/aql-lang/aql/lang/go/policy"
 )
 
@@ -93,19 +94,25 @@ func (f *Flags) Resolve() (policy.Policy, error) {
 
 	var base policy.Policy
 	var err error
+	// A leading ~ in a policy path that the shell left verbatim (e.g.
+	// --perms-file=~/p.jsonic, a quoted path, or an AQL_POLICY_FILE env
+	// value) must resolve under the home folder. LoadAuto only treats a
+	// value as a file when it can stat it, so expanding first is also what
+	// makes ~ paths detectable; a leading ~ never names a profile or
+	// inline policy, so expansion is a no-op for those.
 	switch {
 	case f.Perms != "":
-		base, err = policy.LoadAuto(f.Perms)
+		base, err = policy.LoadAuto(pathutil.Expand(f.Perms))
 	case f.PermsFile != "":
-		base, err = policy.LoadFile(f.PermsFile)
+		base, err = policy.LoadFile(pathutil.Expand(f.PermsFile))
 	case f.PermsInline != "":
 		base, err = policy.LoadInline(f.PermsInline)
 	default:
 		// No explicit flag — try env fallbacks.
 		if v := os.Getenv("AQL_POLICY_FILE"); v != "" {
-			base, err = policy.LoadFile(v)
+			base, err = policy.LoadFile(pathutil.Expand(v))
 		} else if v := os.Getenv("AQL_POLICY"); v != "" {
-			base, err = policy.LoadAuto(v)
+			base, err = policy.LoadAuto(pathutil.Expand(v))
 		}
 	}
 	if err != nil {

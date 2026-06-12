@@ -25,6 +25,7 @@ import (
 	"syscall"
 
 	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 	"github.com/aql-lang/aql/cmd/go/internal/permsflags"
 	lang "github.com/aql-lang/aql/lang/go"
 	"github.com/aql-lang/aql/lang/go/policy"
@@ -76,7 +77,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		addr = fmt.Sprintf(":%d", *port)
 	}
 
-	srv, err := NewServer(addr, *registry, pol)
+	// Expand a leading ~ the shell left verbatim (e.g. -r=~/reg).
+	srv, err := NewServer(addr, pathutil.Expand(*registry), pol)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", strings.TrimPrefix(err.Error(), "exec: "))
 		return 1

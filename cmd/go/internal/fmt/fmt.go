@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 	"github.com/aql-lang/aql/lang/go/formatter"
 )
 
@@ -48,7 +49,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 	} else {
-		files = args
+		// Expand a leading ~ the shell left verbatim (e.g. a quoted
+		// "~/proj/x.aql") on each positional file path.
+		files = make([]string, len(args))
+		for i, a := range args {
+			files[i] = pathutil.Expand(a)
+		}
 	}
 
 	if len(files) == 0 {

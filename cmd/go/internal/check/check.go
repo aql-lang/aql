@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 	lang "github.com/aql-lang/aql/lang/go"
 )
 
@@ -60,7 +61,8 @@ done:
 		}
 		source = args[1]
 	} else {
-		data, err := os.ReadFile(args[0])
+		// Expand a leading ~ the shell left verbatim (e.g. a quoted path).
+		data, err := os.ReadFile(pathutil.Expand(args[0]))
 		if err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1

@@ -27,8 +27,13 @@ func Load(name string) (Policy, error) {
 	return p.Compile(loadProfileByName)
 }
 
-// LoadFile loads a profile from a filesystem path.
+// LoadFile loads a profile from a filesystem path. A leading ~ is
+// expanded to the user's home directory, so a policy path written as
+// ~/p.jsonic — including the "@~/p.jsonic" inline form, where the ~ is
+// not at the start of the argument and the shell never expands it —
+// resolves under $HOME rather than a literal "~" directory.
 func LoadFile(path string) (Policy, error) {
+	path = expandTilde(path)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("policy: read %s: %w", path, err)
@@ -168,4 +173,30 @@ func userPolicyDirs() []string {
 
 func isSpace(r rune) bool {
 	return r == ' ' || r == '\t' || r == '\n' || r == '\r'
+}
+
+// expandTilde replaces a leading ~ (alone, or immediately before a path
+// separator) with the user's home directory. A bare "~" and "~/sub"
+// expand; "~user" is left untouched (we do not resolve other users'
+// homes), as is any path with no leading tilde or when the home folder
+// is unknown. The cmd/go CLI carries an equivalent pathutil helper for
+// its flags; this keeps the policy loader self-contained within the lang
+// module (which cannot import cmd/go).
+func expandTilde(path string) string {
+	if path == "" || path[0] != '~' {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	if path == "~" {
+		return home
+	}
+	// path != "~" with path[0]=='~' guarantees len(path) >= 2, so path[1]
+	// is safe. os.IsPathSeparator covers both '/' and, on Windows, '\\'.
+	if os.IsPathSeparator(path[1]) {
+		return filepath.Join(home, path[2:])
+	}
+	return path
 }

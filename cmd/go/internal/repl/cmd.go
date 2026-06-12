@@ -9,6 +9,7 @@ import (
 	"io"
 
 	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 )
 
 type cmd struct{}
@@ -32,6 +33,6 @@ func (*cmd) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Print a small banner so explicit `aql repl` matches the
 	// no-arg invocation, which prints the version line.
 	fmt.Fprintf(stdout, "aql repl\n")
-	Start(stdin, stdout, *registryPath)
+	Start(stdin, stdout, pathutil.Expand(*registryPath))
 	return 0
 }

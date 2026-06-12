@@ -13,6 +13,7 @@ import (
 
 	"github.com/aql-lang/aql/cmd/go/internal/auth"
 	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 )
 
 // Env names recognised by every mode.
@@ -710,7 +711,8 @@ func runImport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	fromStdin := true
 	var data []byte
 	if fs.NArg() >= 1 {
-		srcName = fs.Arg(0)
+		// Expand a leading ~ the shell left verbatim (quoted path, etc.).
+		srcName = pathutil.ExpandTilde(fs.Arg(0), homeDir)
 		fromStdin = false
 		b, err := os.ReadFile(srcName)
 		if err != nil {

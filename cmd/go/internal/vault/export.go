@@ -16,6 +16,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/aql-lang/aql/cmd/go/internal/auth"
+	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 )
 
 // Export bundles let a vault be moved between machines and backends:
@@ -77,6 +78,9 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
+	// A leading ~ that the shell did not expand (e.g. --out=~/bundle.aqlx)
+	// must resolve under the home folder, not a literal "~" directory.
+	outPath := pathutil.ExpandTilde(*out, homeDir)
 	nsFilter, nsFiltered, err := normalizeNSFilter(*namespace)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
@@ -103,7 +107,7 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	}
 
 	// Never spew a binary bundle onto an interactive terminal.
-	if *out == "" && isTerminalWriter(stdout) {
+	if outPath == "" && isTerminalWriter(stdout) {
 		fmt.Fprintln(stderr, "error: refusing to write a binary bundle to the terminal; use --out=FILE or redirect stdout")
 		return 1
 	}
@@ -151,12 +155,12 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		return 1
 	}
 
-	if *out != "" {
-		if err := writeFileAtomic(*out, blob, 0600); err != nil {
+	if outPath != "" {
+		if err := writeFileAtomic(outPath, blob, 0600); err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}
-		fmt.Fprintf(stderr, "exported %d secret(s) to %s\n", len(bundle.Aliases), *out)
+		fmt.Fprintf(stderr, "exported %d secret(s) to %s\n", len(bundle.Aliases), outPath)
 	} else {
 		if _, err := stdout.Write(blob); err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)

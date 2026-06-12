@@ -8,6 +8,8 @@ import (
 	"os"
 	"sort"
 	"time"
+
+	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 )
 
 // Policy is the declarative shape of a vault policy file. A team
@@ -95,7 +97,8 @@ func runPolicyApply(args []string, homeDir string, stdin io.Reader, stdout, stde
 		fmt.Fprintln(stderr, "error: usage: aql vault policy apply [--dry-run] <policy.json>")
 		return 1
 	}
-	path := fs.Arg(0)
+	// Expand a leading ~ the shell left verbatim (e.g. a quoted path).
+	path := pathutil.ExpandTilde(fs.Arg(0), homeDir)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)

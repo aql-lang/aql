@@ -16,6 +16,7 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/auth"
 	"github.com/aql-lang/aql/cmd/go/internal/command"
 	"github.com/aql-lang/aql/cmd/go/internal/pack"
+	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 )
 
 type cmd struct{}
@@ -41,7 +42,8 @@ func Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 
 	dir := "."
 	if fs.NArg() > 0 {
-		dir = fs.Arg(0)
+		// Expand a leading ~ the shell left verbatim (e.g. a quoted dir).
+		dir = pathutil.Expand(fs.Arg(0))
 	}
 
 	homeDir, err := os.UserHomeDir()
