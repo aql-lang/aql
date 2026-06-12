@@ -31,6 +31,12 @@ type FnFrameMeta struct {
 	// Name is the fn's registered name; "<fn>" for frames spliced from
 	// an unregistered Function value (execFnDefSig's splice branch).
 	Name string
+	// HasGen marks a generic fn (the handler installs inferred
+	// type-parameter bindings per call). The eager-teardown gate
+	// declines generic frames until the bind/teardown/Retire
+	// interaction is separately proven (design/TCO-STAGED.0.md
+	// Stage 4).
+	HasGen bool
 }
 
 // fnValueFrameMeta marks frames spliced by execFnDefSig for a Function

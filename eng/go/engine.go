@@ -2155,6 +2155,13 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// fn-shape, not steal the spec.
 	restoreGen := e.registry.SuspendPendingGen()
 	defer restoreGen()
+	// For fn-body dispatches, snapshot the binding-mutation counter
+	// before arg auto-evaluation: the TCO eligibility gate declines
+	// eager teardown when the auto-eval below touched any binding.
+	var defMutsBefore int64
+	if match.Sig.FnFrame != nil {
+		defMutsBefore = e.registry.Defs.Mutations()
+	}
 	for i := range match.Args {
 		if match.Args[i].Eval && !match.Args[i].Quoted {
 			if match.Args[i].Parent.Equal(TMap) &&
@@ -2281,14 +2288,24 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		return nil
 	}
 
-	// Tail-call detection (design/TCO-STAGED.0.md Stage 2): an AQL
-	// fn-body dispatch (Sig.FnFrame non-nil — natives skip on the nil
-	// check) sitting in tail position of an enclosing fn frame is
-	// counted on the registry. Detection only; frame replacement is a
-	// later stage, gated by Registry.TCO.Disable.
+	// Tail calls (design/TCO-STAGED.0.md): an AQL fn-body dispatch
+	// (Sig.FnFrame non-nil — natives skip on the nil check) sitting in
+	// tail position of an enclosing fn frame is counted; when the
+	// eligibility gate passes (direct self-recursion, no binding
+	// mutations during arg auto-eval, plain teardown names, kill
+	// switch off) the enclosing frame's cleanup tail runs eagerly and
+	// its markers are deleted before the callee splices in — the
+	// shell-variant elision that keeps the per-call stacks O(1) across
+	// a tail chain. A declined call nests exactly as before.
 	if match.Sig.FnFrame != nil {
-		if _, ok := e.probeTailCall(sortedIndices, n); ok {
+		if scan, ok := e.probeTailCall(sortedIndices, n); ok {
 			e.registry.TCO.Detected++
+			if e.tcoEligible(scan, match.Sig, defMutsBefore) {
+				if err := e.elideTailFrame(scan); err != nil {
+					return err
+				}
+				e.registry.TCO.Elided++
+			}
 		}
 	}
 
@@ -3628,7 +3645,7 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 		compiled.Params = append([]FnParam(nil), sig.Params...)
 		compiled.BarrierPos = barrier
 		if fnDef.Anonymous {
-			meta := &FnFrameMeta{Name: fnDef.Name}
+			meta := &FnFrameMeta{Name: fnDef.Name, HasGen: fnDef.Gen != nil}
 			compiled.FnFrame = meta
 			compiled.Handler = buildFnBodyHandler(r, fnDef.Name, sig, fnDef, meta)
 			compiled.ReturnsFn = buildFnBodyReturnsFn(r, fnDef.Name, sig, fnDef)

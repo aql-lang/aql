@@ -37,8 +37,13 @@ type TCOState struct {
 	Disable bool
 	// Detected counts fn-body dispatches found in tail position since
 	// the registry was built. Detection-only telemetry: cheap,
-	// read-only, always on.
+	// read-only, always on (Disable does not affect it).
 	Detected int64
+	// Elided counts detected tail calls whose enclosing frame was
+	// actually torn down eagerly (the shell-variant elision,
+	// fn_frame_elide.go). Always ≤ Detected; the gap is the calls the
+	// eligibility gate declined.
+	Elided int64
 }
 
 // frameTailScan reports the innermost enclosing frame as found by
