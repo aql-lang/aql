@@ -5,12 +5,12 @@ package eng
 // instruction set (straight-line PUSH_CONST / SWAP / CALL_NATIVE).
 // Control-flow opcodes arrive with the rest of Stage 2.
 //
-// Termination note: with no branch opcodes the instruction stream IS
-// the step bound — a Program of N instructions executes at most N
-// steps, so the interpreter's evaluation-limit parity obligation
-// (plan R6 #27) is vacuously met for this subset. The step budget
-// becomes load-bearing the moment JMP lands and MUST be added in the
-// same change.
+// Termination note: all jumps are FORWARD (if-lowering produces no
+// back-edges), and the VM enforces that, so a Program of N
+// instructions still executes at most N steps — the interpreter's
+// evaluation-limit parity obligation (plan R6 #27) remains
+// structurally met. The step budget becomes load-bearing the moment
+// the loop stage lands a back-edge and MUST ship in that change.
 
 import "fmt"
 
@@ -60,6 +60,23 @@ func RunProgram(p *Program, r *Registry) ([]Value, error) {
 				}
 			}
 			stack = append(stack, results...)
+		case OpJmp:
+			if int(in.Arg) <= pc {
+				return nil, vmInternalError(p, pc, "backward jump (loop stage not landed)")
+			}
+			pc = int(in.Arg) - 1
+		case OpJmpIfFalse:
+			if len(stack) < 1 {
+				return nil, vmInternalError(p, pc, "JMP_IF_FALSE underflow")
+			}
+			cond := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			if !CoerceBoolean(cond) {
+				if int(in.Arg) <= pc {
+					return nil, vmInternalError(p, pc, "backward jump (loop stage not landed)")
+				}
+				pc = int(in.Arg) - 1
+			}
 		default:
 			return nil, vmInternalError(p, pc, "unknown opcode")
 		}

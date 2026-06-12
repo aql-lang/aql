@@ -70,6 +70,34 @@ func TestEmitGoldens(t *testing.T) {
 0002 CALL_NATIVE s0   ; add (Scalar, Scalar)
 ; consts=2 sigs=1 max-stack=2
 `},
+		// `if` lowers to JMP_IF_FALSE / JMP: condition code first, a
+		// branch per fragment, the join value on the stack for the
+		// downstream call. Const-only branches are single pushes.
+		{`if (1 gt 0) [10] [20]`, `0000 PUSH_CONST  k1   ; 1 (Integer)
+0001 PUSH_CONST  k0   ; 0 (Integer)
+0002 CALL_NATIVE s0   ; gt (Any, Any)
+0003 JMP_IF_FALSE -> 0006
+0004 PUSH_CONST  k2   ; 10 (Integer)
+0005 JMP         -> 0007
+0006 PUSH_CONST  k3   ; 20 (Integer)
+; consts=4 sigs=1 max-stack=2
+`},
+		// The branch result feeds the downstream mul; a stripped
+		// Boolean literal condition compiles as PUSH_CONST + jump
+		// (CoerceBoolean truthiness at run time).
+		{`def y if (2 gt 1) [1 add 2] [9] y mul 2`, `0000 PUSH_CONST  k1   ; 2 (Integer)
+0001 PUSH_CONST  k0   ; 1 (Integer)
+0002 CALL_NATIVE s0   ; gt (Any, Any)
+0003 JMP_IF_FALSE -> 0008
+0004 PUSH_CONST  k0   ; 1 (Integer)
+0005 PUSH_CONST  k1   ; 2 (Integer)
+0006 CALL_NATIVE s1   ; add (Number, Number)
+0007 JMP         -> 0009
+0008 PUSH_CONST  k2   ; 9 (Integer)
+0009 PUSH_CONST  k1   ; 2 (Integer)
+0010 CALL_NATIVE s2   ; mul (Number, Number)
+; consts=3 sigs=3 max-stack=2
+`},
 		// Literal-substitution def: x resolves to the interned literal
 		// through value provenance — the report's §5.2 inline case.
 		{`def x 1 x add 2`, `0000 PUSH_CONST  k1   ; 1 (Integer)
@@ -129,7 +157,15 @@ func TestEmitRefusals(t *testing.T) {
 		src        string
 		wantReason string
 	}{
-		{`if true [1] [2]`, "code-body word if"},
+		// List-form conditions are evaluated by mark/move at runtime;
+		// the checker never analyses them as a value, so there is no
+		// provenance to lower (Stage 2 follow-on).
+		{`if [1 lt 2] [1] [2]`, "condition of unknown provenance"},
+		// 2-arg if (no else) is not lowered yet.
+		{`if (1 gt 0) [1]`, "code-body word if"},
+		// A branch reading an enclosing computation breaks the closed-
+		// fragment rule (Stage 3, with locals).
+		{`def y (1 add 2) if (1 gt 0) [y mul 2] [0]`, "branch reads enclosing computation"},
 		{`def f fn [[n:Integer] [Integer] [n add 1]] f 1`, "user fn call f"},
 		{`for 3 [i]`, "code-body word for"},
 		{`do [1 add 2]`, "code-body word do"},

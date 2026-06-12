@@ -36,15 +36,48 @@ const (
 
 type emitOperand struct {
 	constIdx int // >=0: Consts index
-	fromCall int // >=0: producing call event index
+	fromSeq  int // >=0: producing event sequence number
 }
 
 type emitCall struct {
-	word  string
-	sig   *Signature
-	ops   []emitOperand
-	outID string
-	pos   SrcPos
+	word string
+	sig  *Signature
+	ops  []emitOperand
+	pos  SrcPos
+}
+
+// emitBranch is a recorded `if`: a resolved condition operand, the
+// captured then/else fragments, and each fragment's single result
+// operand. constCond non-nil means the condition was statically
+// known and only the taken fragment was captured.
+type emitBranch struct {
+	cond      emitOperand
+	constCond *bool
+	then, els *EmitFragment
+	thenOut   emitOperand
+	elsOut    emitOperand
+	pos       SrcPos
+}
+
+const (
+	evCall = iota + 1
+	evBranch
+)
+
+type emitEvent struct {
+	seq  int
+	kind int
+	call emitCall
+	br   emitBranch
+}
+
+// EmitFragment is a captured sub-trace: the events a branch body
+// recorded, plus the sequence floor — operands inside the fragment
+// referencing events BELOW the floor read enclosing computation,
+// which Stage 2's closed-branch lowering refuses.
+type EmitFragment struct {
+	events   []emitEvent
+	startSeq int
 }
 
 // EmitState is the recording side of the compile pass. Set
@@ -62,8 +95,12 @@ type EmitState struct {
 	SiteCounts map[string]int
 
 	suspended  int
-	calls      []emitCall
-	producedBy map[string]int // value ID → call index
+	seq        int            // monotonic event sequence
+	frames     [][]emitEvent  // frames[0] = top level; fragments push
+	fragFloors []int          // startSeq per open fragment frame
+	captureArm bool           // next RunCarrierBodyWithDefs records a fragment
+	captured   *EmitFragment  // last completed fragment, until TakeFragment
+	producedBy map[string]int // value ID → producing event seq
 	consts     []Value
 	constIdx   map[string]int   // CanonValue → Consts index
 	origByID   map[string]Value // stripped literal ID → original value
@@ -74,6 +111,7 @@ func NewEmitState() *EmitState {
 	return &EmitState{
 		Compilable: true,
 		SiteCounts: map[string]int{},
+		frames:     [][]emitEvent{nil},
 		producedBy: map[string]int{},
 		constIdx:   map[string]int{},
 		origByID:   map[string]Value{},
@@ -106,6 +144,149 @@ func (es *EmitState) Suspend() func() {
 	return func() { es.suspended-- }
 }
 
+// ArmBranchCapture makes the NEXT RunCarrierBodyWithDefs record its
+// body into a fragment instead of suspending — the branch-lowering
+// hook (`if`). One-shot; consumed by the body run.
+func (es *EmitState) ArmBranchCapture() {
+	if !es.active() {
+		return
+	}
+	es.captureArm = true
+}
+
+// consumeCaptureArm reports and clears the one-shot capture flag.
+func (es *EmitState) consumeCaptureArm() bool {
+	if es == nil || !es.captureArm {
+		return false
+	}
+	es.captureArm = false
+	return es.active()
+}
+
+// beginFragment opens a recording frame; the returned func closes it
+// into es.captured.
+func (es *EmitState) beginFragment() func() {
+	es.frames = append(es.frames, nil)
+	es.fragFloors = append(es.fragFloors, es.seq)
+	return func() {
+		n := len(es.frames) - 1
+		es.captured = &EmitFragment{
+			events:   es.frames[n],
+			startSeq: es.fragFloors[len(es.fragFloors)-1],
+		}
+		es.frames = es.frames[:n]
+		es.fragFloors = es.fragFloors[:len(es.fragFloors)-1]
+	}
+}
+
+// bodyAnalysisGuard is called by RunCarrierBodyWithDefs: capture a
+// fragment when armed, otherwise suspend recording for the nested
+// body. Nil-safe.
+func (es *EmitState) bodyAnalysisGuard() func() {
+	if es.consumeCaptureArm() {
+		return es.beginFragment()
+	}
+	return es.Suspend()
+}
+
+// TakeFragment returns the last captured fragment (nil when the
+// capture never armed — plain check runs, suspended recordings).
+func (es *EmitState) TakeFragment() *EmitFragment {
+	if es == nil {
+		return nil
+	}
+	f := es.captured
+	es.captured = nil
+	return f
+}
+
+// appendEvent adds an event to the current frame and returns its seq.
+func (es *EmitState) appendEvent(ev emitEvent) int {
+	es.seq++
+	ev.seq = es.seq
+	n := len(es.frames) - 1
+	es.frames[n] = append(es.frames[n], ev)
+	return ev.seq
+}
+
+// resolveOperand maps a dispatch value to its provenance: a prior
+// event's output, or an inert constant (concrete at the dispatch, or
+// a stripped literal whose original RecordStrip saved).
+func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
+	if idx, ok := es.producedBy[v.ID]; ok {
+		return emitOperand{constIdx: -1, fromSeq: idx}, true
+	}
+	lit := v
+	if !IsConcrete(v) {
+		orig, ok := es.origByID[v.ID]
+		if !ok {
+			return emitOperand{}, false
+		}
+		lit = orig
+	}
+	if !isInertConst(lit) {
+		return emitOperand{}, false
+	}
+	return emitOperand{constIdx: es.intern(lit), fromSeq: -1}, true
+}
+
+// RecordBranch records an `if` dispatch: cond plus captured then /
+// else fragments and their residual stacks. Pass constCond non-nil
+// (with the taken fragment in `then`) when the condition was a
+// literal and only one branch was analysed. out is the dispatch's
+// joined result carrier. Any shape Stage 2 cannot lower marks the
+// program uncompilable.
+func (es *EmitState) RecordBranch(cond Value, constCond *bool, then, els *EmitFragment, thenStk, elsStk []Value, out Value, pos SrcPos) {
+	if !es.active() {
+		return
+	}
+	ev := emitEvent{kind: evBranch, br: emitBranch{constCond: constCond, pos: pos}}
+	resolveFragOut := func(frag *EmitFragment, stk []Value, name string) (emitOperand, bool) {
+		if frag == nil {
+			es.MarkUncompilable("if: " + name + "-branch not captured")
+			return emitOperand{}, false
+		}
+		if len(stk) == 0 {
+			es.MarkUncompilable("if: " + name + "-branch produces no value (Stage 2 lowers single-result branches)")
+			return emitOperand{}, false
+		}
+		op, ok := es.resolveOperand(stk[len(stk)-1])
+		if !ok {
+			es.MarkUncompilable("if: " + name + "-branch result of unknown provenance")
+			return emitOperand{}, false
+		}
+		return op, true
+	}
+	if constCond == nil {
+		condOp, ok := es.resolveOperand(cond)
+		if !ok {
+			es.MarkUncompilable("if: condition of unknown provenance (list-form conditions are Stage 2 follow-on)")
+			return
+		}
+		ev.br.cond = condOp
+		thenOut, ok := resolveFragOut(then, thenStk, "then")
+		if !ok {
+			return
+		}
+		elsOut, ok := resolveFragOut(els, elsStk, "else")
+		if !ok {
+			return
+		}
+		ev.br.then, ev.br.els = then, els
+		ev.br.thenOut, ev.br.elsOut = thenOut, elsOut
+	} else {
+		thenOut, ok := resolveFragOut(then, thenStk, "taken")
+		if !ok {
+			return
+		}
+		ev.br.then = then
+		ev.br.thenOut = thenOut
+	}
+	seq := es.appendEvent(ev)
+	es.SiteCounts[SiteMono]++
+	es.producedBy[out.ID] = seq
+}
+
 // RecordStrip remembers the original concrete value behind a
 // top-level literal that StripToCarriers reduced to a carrier — the
 // ID is preserved by the strip, so a later dispatch arg with this ID
@@ -134,6 +315,14 @@ func (es *EmitState) RecordPoly(word string) {
 func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value, pos SrcPos) {
 	if !es.active() {
 		return
+	}
+	// A dispatch whose output is already registered was recorded by a
+	// structured hook (RecordBranch owns the `if` dispatch) — the
+	// generic path must not double-record or refuse it.
+	if len(outs) == 1 {
+		if _, ok := es.producedBy[outs[0].ID]; ok {
+			return
+		}
 	}
 	switch {
 	case sig == nil:
@@ -213,29 +402,16 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	}
 	ops := make([]emitOperand, len(args))
 	for i, a := range args {
-		ops[i] = emitOperand{constIdx: -1, fromCall: -1}
-		if idx, ok := es.producedBy[a.ID]; ok {
-			ops[i].fromCall = idx
-			continue
-		}
-		lit := a
-		if !IsConcrete(a) {
-			orig, ok := es.origByID[a.ID]
-			if !ok {
-				es.MarkUncompilable("operand of unknown provenance at " + word)
-				return
-			}
-			lit = orig
-		}
-		if !isInertConst(lit) {
-			es.MarkUncompilable("operand not statically materialisable at " + word)
+		op, ok := es.resolveOperand(a)
+		if !ok {
+			es.MarkUncompilable("operand of unknown provenance or not statically materialisable at " + word)
 			return
 		}
-		ops[i].constIdx = es.intern(lit)
+		ops[i] = op
 	}
 	es.SiteCounts[SiteMono]++
-	es.calls = append(es.calls, emitCall{word: word, sig: sig, ops: ops, outID: outs[0].ID, pos: pos})
-	es.producedBy[outs[0].ID] = len(es.calls) - 1
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, pos: pos}})
+	es.producedBy[outs[0].ID] = seq
 }
 
 // intern pools a constant by canonical form. Compounds (lists,
@@ -300,16 +476,13 @@ func isInertConst(v Value) bool {
 	}
 }
 
-// Finalize linearises the recorded events into a Program. ok=false
-// (with reason) when the source was marked uncompilable or the
-// linear stack discipline doesn't hold under Stage 1's operand
-// shapes (all-const; one prior result plus consts; two prior
-// results, optionally SWAPped).
-// residual is the check run's final carrier stack: the program's
-// declared result. Call-produced entries must match the simulated
-// stack in order; literal entries may only sit ABOVE the last
-// call-produced entry and are pushed at the end (a bare literal
-// program like `5` compiles to one PUSH_CONST).
+// Finalize linearises the recorded events into a Program. residual
+// is the check run's final carrier stack — the program's declared
+// result: event-produced entries must match the simulated stack in
+// order; literal entries may only sit above the last event-produced
+// entry and are pushed at the end. ok=false (with reason) when the
+// source was marked uncompilable or a shape is beyond the current
+// stage's lowering.
 func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	if es == nil {
 		return nil, "no emit state", false
@@ -317,112 +490,24 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	if !es.Compilable {
 		return nil, es.Reason, false
 	}
-	p := &Program{Consts: es.consts}
-	var vm []int // simulated stack of producing call indices; -1 = const
-	vmCall := func(depth int) int { return vm[len(vm)-1-depth] }
-	sigIdx := map[*Signature]int{}
-	depth, maxDepth := 0, 0
-	emit := func(op Opcode, arg int, pos SrcPos) {
-		p.Code = append(p.Code, Instr{Op: op, Arg: int32(arg)})
-		p.Debug = append(p.Debug, pos)
-		switch op {
-		case OpPushConst:
-			depth++
-		case OpCallNative:
-			// arity-1 pops + 1 push applied by caller
-		}
-		if depth > maxDepth {
-			maxDepth = depth
-		}
+	lw := &lowerer{es: es, p: &Program{}, sigIdx: map[*Signature]int{}}
+	if reason := lw.lowerEvents(es.frames[0], 0); reason != "" {
+		return nil, reason, false
 	}
-	for ci, c := range es.calls {
-		n := len(c.ops)
-		// Partition operands: prior results must already sit on the
-		// simulated stack; consts get pushed now.
-		results := []int{} // positions i (sig order) sourced from calls
-		for i, op := range c.ops {
-			if op.fromCall >= 0 {
-				results = append(results, i)
-			}
-		}
-		switch len(results) {
-		case 0:
-			// Push consts deepest-first so sig position 0 lands on top.
-			for i := n - 1; i >= 0; i-- {
-				emit(OpPushConst, c.ops[i].constIdx, c.pos)
-				vm = append(vm, -1)
-			}
-		case 1:
-			ri := results[0]
-			if len(vm) == 0 || vmCall(0) != c.ops[ri].fromCall {
-				return nil, "stack discipline: result operand of " + c.word + " is not on top", false
-			}
-			// The prior result is on top. Push the const operands
-			// deepest-first; they land ABOVE the result, so when the
-			// result must be sig position 0 (top) a final SWAP
-			// restores the layout — only the 2-arg shape is fixable.
-			for i := n - 1; i >= 0; i-- {
-				if i == ri {
-					continue
-				}
-				emit(OpPushConst, c.ops[i].constIdx, c.pos)
-				vm = append(vm, -1)
-			}
-			if ri == 0 && n == 2 {
-				emit(OpSwap, 0, c.pos)
-				vm[len(vm)-1], vm[len(vm)-2] = vm[len(vm)-2], vm[len(vm)-1]
-			} else if ri != n-1 && n > 1 {
-				return nil, "operand shape at " + c.word + " needs reordering beyond Stage 1", false
-			}
-		case 2:
-			if n != 2 {
-				return nil, "operand shape at " + c.word + " beyond Stage 1", false
-			}
-			if len(vm) < 2 {
-				return nil, "stack discipline underflow at " + c.word, false
-			}
-			top, below := vmCall(0), vmCall(1)
-			switch {
-			case top == c.ops[0].fromCall && below == c.ops[1].fromCall:
-				// already in layout
-			case top == c.ops[1].fromCall && below == c.ops[0].fromCall:
-				emit(OpSwap, 0, c.pos)
-				vm[len(vm)-1], vm[len(vm)-2] = vm[len(vm)-2], vm[len(vm)-1]
-			default:
-				return nil, "stack discipline: operands of " + c.word + " not adjacent on top", false
-			}
-		default:
-			return nil, "operand shape at " + c.word + " beyond Stage 1", false
-		}
-		// The call: pop n, push the result.
-		si, ok := sigIdx[c.sig]
-		if !ok {
-			p.Sigs = append(p.Sigs, SigRef{Word: c.word, Sig: c.sig})
-			si = len(p.Sigs) - 1
-			sigIdx[c.sig] = si
-		}
-		emit(OpCallNative, si, c.pos)
-		vm = vm[:len(vm)-n]
-		vm = append(vm, ci)
-		depth = depth - n + 1
-		if depth > maxDepth {
-			maxDepth = depth
-		}
-	}
-	// Residual reconciliation: the program must end with exactly the
-	// check run's residual stack.
+
+	// Residual reconciliation.
 	lastPos := SrcPos{}
-	if len(es.calls) > 0 {
-		lastPos = es.calls[len(es.calls)-1].pos
+	if n := len(es.frames[0]); n > 0 {
+		lastPos = eventPos(es.frames[0][n-1])
 	}
 	vi := 0
 	constTail := []int{}
 	for _, rv := range residual {
-		if idx, ok := es.producedBy[rv.ID]; ok {
+		if seq, ok := es.producedBy[rv.ID]; ok {
 			if len(constTail) > 0 {
 				return nil, "residual shape beyond Stage 1 (call result above a literal)", false
 			}
-			if vi >= len(vm) || vm[vi] != idx {
+			if vi >= len(lw.vm) || lw.vm[vi] != seq {
 				return nil, "residual shape beyond Stage 1 (call results reordered)", false
 			}
 			vi++
@@ -441,18 +526,217 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		}
 		constTail = append(constTail, es.intern(lit))
 	}
-	if vi != len(vm) {
+	if vi != len(lw.vm) {
 		return nil, "residual shape beyond Stage 1 (unconsumed call results)", false
 	}
-	p.Consts = es.consts // interning may have grown during reconciliation
 	for _, k := range constTail {
-		emit(OpPushConst, k, lastPos)
+		lw.emit(OpPushConst, k, lastPos)
+		lw.vm = append(lw.vm, -1)
 	}
-	if d := len(vm) + len(constTail); d > maxDepth {
-		maxDepth = d
+	lw.note()
+	lw.p.Consts = es.consts // interning may have grown during reconciliation
+	lw.p.MaxStack = lw.maxDepth
+	return lw.p, "", true
+}
+
+func eventPos(ev emitEvent) SrcPos {
+	if ev.kind == evCall {
+		return ev.call.pos
 	}
-	p.MaxStack = maxDepth
-	return p, "", true
+	return ev.br.pos
+}
+
+// lowerer walks an event trace emitting instructions over a simulated
+// stack of producing event seqs (-1 = const).
+type lowerer struct {
+	es       *EmitState
+	p        *Program
+	sigIdx   map[*Signature]int
+	vm       []int
+	maxDepth int
+}
+
+func (lw *lowerer) note() {
+	if len(lw.vm) > lw.maxDepth {
+		lw.maxDepth = len(lw.vm)
+	}
+}
+
+func (lw *lowerer) emit(op Opcode, arg int, pos SrcPos) int {
+	lw.p.Code = append(lw.p.Code, Instr{Op: op, Arg: int32(arg)})
+	lw.p.Debug = append(lw.p.Debug, pos)
+	return len(lw.p.Code) - 1
+}
+
+// lowerEvents lowers a trace. scopeFloor is the closed-fragment rule:
+// an operand produced by an event with seq <= scopeFloor lives in the
+// enclosing scope, which Stage 2 branch fragments must not read.
+func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
+	for i := range events {
+		ev := &events[i]
+		if scopeFloor > 0 {
+			for _, op := range collectOperands(ev) {
+				if op.fromSeq > 0 && op.fromSeq <= scopeFloor {
+					return "branch reads enclosing computation (Stage 3)"
+				}
+			}
+		}
+		var reason string
+		switch ev.kind {
+		case evCall:
+			reason = lw.lowerCall(ev)
+		case evBranch:
+			reason = lw.lowerBranch(ev)
+		default:
+			reason = "unknown event kind"
+		}
+		if reason != "" {
+			return reason
+		}
+	}
+	return ""
+}
+
+func collectOperands(ev *emitEvent) []emitOperand {
+	if ev.kind == evCall {
+		return ev.call.ops
+	}
+	ops := []emitOperand{ev.br.cond, ev.br.thenOut, ev.br.elsOut}
+	return ops
+}
+
+func (lw *lowerer) lowerCall(ev *emitEvent) string {
+	c := &ev.call
+	n := len(c.ops)
+	results := []int{}
+	for i, op := range c.ops {
+		if op.fromSeq >= 0 {
+			results = append(results, i)
+		}
+	}
+	switch len(results) {
+	case 0:
+		// Push consts deepest-first so sig position 0 lands on top.
+		for i := n - 1; i >= 0; i-- {
+			lw.emit(OpPushConst, c.ops[i].constIdx, c.pos)
+			lw.vm = append(lw.vm, -1)
+			lw.note()
+		}
+	case 1:
+		ri := results[0]
+		if len(lw.vm) == 0 || lw.vm[len(lw.vm)-1] != c.ops[ri].fromSeq {
+			return "stack discipline: result operand of " + c.word + " is not on top"
+		}
+		// The prior result is on top. Push the const operands
+		// deepest-first; they land ABOVE the result, so when the
+		// result must be sig position 0 (top) a final SWAP restores
+		// the layout — only the 2-arg shape is fixable.
+		for i := n - 1; i >= 0; i-- {
+			if i == ri {
+				continue
+			}
+			lw.emit(OpPushConst, c.ops[i].constIdx, c.pos)
+			lw.vm = append(lw.vm, -1)
+			lw.note()
+		}
+		if ri == 0 && n == 2 {
+			lw.emit(OpSwap, 0, c.pos)
+			lw.vm[len(lw.vm)-1], lw.vm[len(lw.vm)-2] = lw.vm[len(lw.vm)-2], lw.vm[len(lw.vm)-1]
+		} else if ri != n-1 && n > 1 {
+			return "operand shape at " + c.word + " needs reordering beyond Stage 1"
+		}
+	case 2:
+		if n != 2 {
+			return "operand shape at " + c.word + " beyond Stage 1"
+		}
+		if len(lw.vm) < 2 {
+			return "stack discipline underflow at " + c.word
+		}
+		top, below := lw.vm[len(lw.vm)-1], lw.vm[len(lw.vm)-2]
+		switch {
+		case top == c.ops[0].fromSeq && below == c.ops[1].fromSeq:
+			// already in layout
+		case top == c.ops[1].fromSeq && below == c.ops[0].fromSeq:
+			lw.emit(OpSwap, 0, c.pos)
+			lw.vm[len(lw.vm)-1], lw.vm[len(lw.vm)-2] = lw.vm[len(lw.vm)-2], lw.vm[len(lw.vm)-1]
+		default:
+			return "stack discipline: operands of " + c.word + " not adjacent on top"
+		}
+	default:
+		return "operand shape at " + c.word + " beyond Stage 1"
+	}
+	si, ok := lw.sigIdx[c.sig]
+	if !ok {
+		lw.p.Sigs = append(lw.p.Sigs, SigRef{Word: c.word, Sig: c.sig})
+		si = len(lw.p.Sigs) - 1
+		lw.sigIdx[c.sig] = si
+	}
+	lw.emit(OpCallNative, si, c.pos)
+	lw.vm = lw.vm[:len(lw.vm)-n]
+	lw.vm = append(lw.vm, ev.seq)
+	lw.note()
+	return ""
+}
+
+// lowerFragment lowers a closed branch body: a fresh stack scope that
+// must end as exactly [out]. Restores the parent scope afterwards,
+// leaving the net +1 to the caller.
+func (lw *lowerer) lowerFragment(frag *EmitFragment, out emitOperand, pos SrcPos) string {
+	parent := lw.vm
+	lw.vm = nil
+	if reason := lw.lowerEvents(frag.events, frag.startSeq); reason != "" {
+		return reason
+	}
+	switch {
+	case out.fromSeq >= 0:
+		if len(lw.vm) != 1 || lw.vm[0] != out.fromSeq {
+			return "if: branch leaves extra values (Stage 2 lowers single-result branches)"
+		}
+	default:
+		if len(lw.vm) != 0 {
+			return "if: branch leaves extra values (Stage 2 lowers single-result branches)"
+		}
+		lw.emit(OpPushConst, out.constIdx, pos)
+	}
+	lw.vm = parent
+	return ""
+}
+
+func (lw *lowerer) lowerBranch(ev *emitEvent) string {
+	br := &ev.br
+	if br.constCond != nil {
+		// Statically-taken branch: inline the taken fragment.
+		if reason := lw.lowerFragment(br.then, br.thenOut, br.pos); reason != "" {
+			return reason
+		}
+		lw.vm = append(lw.vm, ev.seq)
+		lw.note()
+		return ""
+	}
+	// Condition on top of stack.
+	if br.cond.fromSeq >= 0 {
+		if len(lw.vm) == 0 || lw.vm[len(lw.vm)-1] != br.cond.fromSeq {
+			return "if: condition is not on top of the stack"
+		}
+	} else {
+		lw.emit(OpPushConst, br.cond.constIdx, br.pos)
+		lw.vm = append(lw.vm, -1)
+		lw.note()
+	}
+	jf := lw.emit(OpJmpIfFalse, 0, br.pos)
+	lw.vm = lw.vm[:len(lw.vm)-1] // cond consumed
+	if reason := lw.lowerFragment(br.then, br.thenOut, br.pos); reason != "" {
+		return reason
+	}
+	jend := lw.emit(OpJmp, 0, br.pos)
+	lw.p.Code[jf].Arg = int32(len(lw.p.Code))
+	if reason := lw.lowerFragment(br.els, br.elsOut, br.pos); reason != "" {
+		return reason
+	}
+	lw.p.Code[jend].Arg = int32(len(lw.p.Code))
+	lw.vm = append(lw.vm, ev.seq)
+	lw.note()
+	return ""
 }
 
 func itoaSmall(n int) string {

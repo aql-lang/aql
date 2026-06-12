@@ -171,8 +171,20 @@ and nothing else — any other construct flags the program
 
 ## Stage 2 — VM core + control flow
 
-**Status: VM CORE LANDED for the Stage-1 subset (June 2026); control
-flow not started.** `eng/go/vm.go` executes the straight-line
+**Status: VM CORE + `if` LOWERING LANDED (June 2026); loops not
+started.** `if` (3-arg, value/paren conditions) lowers to
+JMP_IF_FALSE / JMP via fragment-scoped recording: the branch
+ReturnsFn arms a capture so each branch body's events record into an
+EmitFragment instead of suspending, and RecordBranch composes them
+into a branch event the lowerer emits with patched forward jumps.
+Closed-branch rule: a fragment may consume only its own productions
+and constants and must net exactly one value (reads of enclosing
+computation refuse — Stage 3, with locals); list-form conditions
+refuse (no checker provenance — follow-on); 2-arg `if` refuses.
+Conditions use the engine's CoerceBoolean truthiness. All jumps are
+forward and the VM enforces that, so the structural step bound
+still holds; the budget ships with the first back-edge (loops).
+Differential: 548 rows / 0 mismatches, floor raised to 500. `eng/go/vm.go` executes the straight-line
 instruction set (handler errors stamped with `Debug[pc]` + source; a
 belt-and-braces guard refuses tape-coupled handler results). CLI
 opt-in shipped: `aql run --compile` / `aql do --compile`

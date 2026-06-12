@@ -846,8 +846,10 @@ func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 	}
 
 	// Nested body analysis is not part of the enclosing straight
-	// line — pause bytecode recording for its duration.
-	defer r.Check.Emit.Suspend()()
+	// line: pause bytecode recording — unless a branch-lowering hook
+	// armed fragment capture (the `if` ReturnsFn), in which case the
+	// body's events record into a fragment for structured lowering.
+	defer r.Check.Emit.bodyAnalysisGuard()()
 
 	// Snapshot def-stack depths (all known names).
 	snapshot := r.Defs.Snapshot()

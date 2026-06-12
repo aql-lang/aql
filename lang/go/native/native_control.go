@@ -318,6 +318,7 @@ func if2Handler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 }
 
 func if3ReturnsFn(args []Value, r *Registry) []Value {
+	es := &r.Check
 	if lit, ok := LiteralCondValue(args[0]); ok {
 		branch := "else"
 		if !lit {
@@ -328,37 +329,50 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 			Detail:   "if condition is a constant " + BoolWord(lit) + "; " + branch + "-branch is unreachable",
 			Severity: SeverityWarning,
 		})
+		var stk []Value
+		var defs map[string]Value
 		if lit {
 			restoreThen := ApplyGuardNarrowing(r, args[0])
-			stk, defs := RunCarrierBodyWithDefs(r, args[1])
+			es.Emit.ArmBranchCapture()
+			stk, defs = RunCarrierBodyWithDefs(r, args[1])
 			restoreThen()
 			InstallJoinedDefs(r, defs, nil)
-			if len(stk) == 0 {
-				return nil
-			}
-			return []Value{stk[len(stk)-1]}
+		} else {
+			restoreElse := ApplyComplementNarrowing(r, args[0])
+			es.Emit.ArmBranchCapture()
+			stk, defs = RunCarrierBodyWithDefs(r, args[2])
+			restoreElse()
+			InstallJoinedDefs(r, nil, defs)
 		}
-		restoreElse := ApplyComplementNarrowing(r, args[0])
-		stk, defs := RunCarrierBodyWithDefs(r, args[2])
-		restoreElse()
-		InstallJoinedDefs(r, nil, defs)
+		frag := es.Emit.TakeFragment()
 		if len(stk) == 0 {
+			es.Emit.MarkUncompilable("if: branch produces no value (Stage 2 lowers single-result branches)")
 			return nil
 		}
-		return []Value{stk[len(stk)-1]}
+		out := stk[len(stk)-1]
+		taken := lit
+		es.Emit.RecordBranch(args[0], &taken, frag, nil, stk, nil, out, args[0].Pos)
+		return []Value{out}
 	}
 	restoreThen := ApplyGuardNarrowing(r, args[0])
+	es.Emit.ArmBranchCapture()
 	thenStk, thenDefs := RunCarrierBodyWithDefs(r, args[1])
+	thenFrag := es.Emit.TakeFragment()
 	restoreThen()
 	restoreElse := ApplyComplementNarrowing(r, args[0])
+	es.Emit.ArmBranchCapture()
 	elseStk, elseDefs := RunCarrierBodyWithDefs(r, args[2])
+	elseFrag := es.Emit.TakeFragment()
 	restoreElse()
 	InstallJoinedDefs(r, thenDefs, elseDefs)
 	joined := JoinCarrierStacks(thenStk, elseStk)
 	if len(joined) == 0 {
+		es.Emit.MarkUncompilable("if: branches produce no value (Stage 2 lowers single-result branches)")
 		return nil
 	}
-	return []Value{joined[len(joined)-1]}
+	out := joined[len(joined)-1]
+	es.Emit.RecordBranch(args[0], nil, thenFrag, elseFrag, thenStk, elseStk, out, args[0].Pos)
+	return []Value{out}
 }
 
 func if2ReturnsFn(args []Value, r *Registry) []Value {

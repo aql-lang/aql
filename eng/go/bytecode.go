@@ -31,6 +31,13 @@ const (
 	OpSwap
 	// OpCallNative pops Sigs[Arg].Sig's arity, calls, pushes one result.
 	OpCallNative
+	// OpJmp jumps to the absolute pc in Arg (forward-only until the
+	// loop stage lands the step budget).
+	OpJmp
+	// OpJmpIfFalse pops the condition and jumps to Arg when it is
+	// falsy under the engine's CoerceBoolean — the same truthiness
+	// stepMove applies to a MoveIf condition.
+	OpJmpIfFalse
 )
 
 func (o Opcode) String() string {
@@ -41,6 +48,10 @@ func (o Opcode) String() string {
 		return "SWAP"
 	case OpCallNative:
 		return "CALL_NATIVE"
+	case OpJmp:
+		return "JMP"
+	case OpJmpIfFalse:
+		return "JMP_IF_FALSE"
 	}
 	return fmt.Sprintf("OP(%d)", uint8(o))
 }
@@ -84,6 +95,8 @@ func (p *Program) Disassemble() string {
 				names[j] = t.Leaf()
 			}
 			fmt.Fprintf(&sb, " s%-3d ; %s (%s)", in.Arg, s.Word, strings.Join(names, ", "))
+		case OpJmp, OpJmpIfFalse:
+			fmt.Fprintf(&sb, " -> %04d", in.Arg)
 		}
 		sb.WriteByte('\n')
 	}
