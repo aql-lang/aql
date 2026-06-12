@@ -1,10 +1,12 @@
 # TCO, staged — a safety-first implementation path
 
-**Status:** Stages 0–4a **IMPLEMENTED** (June 2026; one commit per
-stage on this branch — see the implementation record below). Direct
-self-recursive tail calls now run in **O(1) tape and per-call stacks**;
-mutual/general tail calls (4b), the CallAQL trampoline (5), and the
-documented-guarantee step (6) remain open. Companion to `TCO.10.md`
+**Status:** Stages 0–4b **IMPLEMENTED** (June 2026; one commit per
+stage on this branch — see the implementation record below). Self AND
+mutual fn→fn tail calls now run in **O(1) tape and per-call stacks**
+(full replacement under the return-conformance + name-coverage gates;
+shell elision otherwise). The CallAQL trampoline (5) and the
+documented-guarantee step (6) remain open; the Stage-5 trace findings
+are recorded below. Companion to `TCO.10.md`
 (the deferred frame-replacement design): this note re-reviews that
 design against the traced code, corrects three points in it, and breaks
 the work into independently shippable stages, each gated so that a slip
@@ -54,13 +56,66 @@ What landed, one commit per stage:
   (pure-kernel taxonomy test). Deep recursion got faster as a side
   effect (s2 2000: ~0.31s → ~0.21s).
 
+- **Stage 4b** — mutual/general tail calls. The eligibility gate
+  dropped the self-recursion requirement; the tape treatment is chosen
+  per call: FULL replacement when the frame interior is clean AND
+  `returnsConform` holds (caller unchecked, or callee declares the
+  same count with callee[k] ⊑ caller[k] — so dropping the caller's
+  ReturnCheck loses nothing); SHELL elision otherwise (the caller's
+  ReturnCheck stays, so unchecked/wider callees are checked exactly as
+  under nesting). Mutual chains run at depth 10000 under a 1024-entry
+  ceiling; alternating conformance shapes pin the shell/full split.
+
+  **The finding that matters: eager teardown was observable through
+  dynamic resolution, and §2's condition list was incomplete.** Outer
+  frames' params and body-locals stay visible to the callee chain
+  until the frame unwinds (innermost binding wins): the
+  recursive-local-fn idiom resolves its own name through the enclosing
+  frame's binding (`def go fn […] go 3` broke outright under the
+  mutual path), and a base branch can read the previous frame's
+  body-local — a loop-carried dynamic read that **Stage 4a had
+  silently broken for self-recursion**. The dual-mode differential
+  missed it because no spec row exercised the idiom — the corpus is
+  only as strong as its coverage. The fix is condition 5, the
+  **name-coverage gate**: the teardown may remove only names the
+  callee immediately reinstalls (`FnFrameMeta.InstallNames` = captures
+  + named params; `DefTable.TruncationCoveredBy` checks the body-local
+  truncation set allocation-free). Spec rows §10 now pin three
+  dynamic-read idioms dual-mode, so the class cannot silently regress.
+  Cost note: the local-temp accumulator shape (`def t (…) f …`)
+  declines under this gate even for self-recursion (its body-local is
+  not a callee param); lifting that needs a defs-before-reads body
+  analysis — a candidate follow-up, not a blocker.
+
 Findings for the remaining stages:
 
+- **Stage 5 trace (recorded, not yet implemented).** `Registry.CallAQL`
+  builds the body tokens (the same shape as the splice paths, Go-side
+  cleanup instead of tail markers) and runs them in a **fresh
+  sub-engine per call** on the captured registry — so module-fn
+  recursion is Go-stack recursion, one sub-engine and one CallAQL Go
+  frame per level, invisible to the tape machinery. Two candidate
+  shapes:
+  (a) a true trampoline inside CallAQL — detect the body's tail
+  self-call and loop within one invocation; contained, but needs its
+  own detection machinery since the sub-engine's tape ends where the
+  body ends;
+  (b) unify the `capturedReg == e.registry` case in `execFnDefSig`
+  onto the SPLICE path — when module code is already executing in the
+  module's registry (every intra-module call, including all module-fn
+  recursion), splice the body as an ordinary frame instead of
+  recursing into CallAQL. Stages 1–4b then apply unchanged, and TCO
+  falls out for free. Sharper but semantically delicate: a sub-Run is
+  also a drain boundary (orphaned-forward resolution, auto-eval of
+  leftovers) and a flow-control boundary, so equivalence needs the
+  module spec suites plus targeted rows around bodies that END with
+  pending forwards. Trace before choosing; (b) is the better
+  destination if the boundary semantics hold.
 - The "initial call into a locally-defined fn" shape (`def go fn […]
-  go 3` as the last action of an enclosing body) is detected as a tail
-  call but declined — it is the mutual shape (caller frame belongs to a
-  different overload). Stage 4b's conformance gate would fire on it; a
-  useful first test case there.
+  go 3`) is detected but correctly declined by the name-coverage gate
+  (the teardown would remove the binding of `go` itself). It can never
+  fire under eager teardown; only a frame-replacement design that
+  RELOCATES caller bindings could optimise it.
 - Go-constructed `FnSig`s must set `BarrierPos: BarrierAllForward`
   explicitly (the Go zero means all-stack) — bit the taxonomy test;
   already documented in the kernel guide.
