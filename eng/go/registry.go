@@ -85,6 +85,11 @@ type Registry struct {
 	// See flowctrl.go.
 	FlowCtrl FlowCtrl
 
+	// TCO is the tail-call-optimisation surface (design/TCO-STAGED.0.md).
+	// Lives on the registry (not the engine) so sub-engines sharing the
+	// registry contribute to one count and obey one switch.
+	TCO TCOState
+
 	// pendingGen holds the GenSpec the `gen [...]` word produced,
 	// awaiting consumption by the NEXT type constructor (refine /
 	// class / fnsig / fn). `gen` returns no value precisely so that

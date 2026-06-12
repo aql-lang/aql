@@ -39,6 +39,19 @@ var specClock = capabilities.FixedClock{T: time.Date(2021, 1, 1, 0, 0, 0, 0, tim
 // Stores, Resource / Entity, …). They sit at lang/spec/ to mirror the
 // engine kernel's eng/spec/ layout.
 func TestSpecProd(t *testing.T) {
+	runSpecProd(t, false)
+}
+
+// TestSpecProdTCODisabled re-runs the entire production spec suite
+// with tail-call elision switched off (Registry.TCO.Disable). Every
+// row pins an exact output, so green in BOTH modes is the dual-mode
+// differential gate of design/TCO-STAGED.0.md: elision must be
+// observationally invisible row-for-row.
+func TestSpecProdTCODisabled(t *testing.T) {
+	runSpecProd(t, true)
+}
+
+func runSpecProd(t *testing.T, tcoDisabled bool) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
 	specrunner.RunDir(t, specDir, func(input string) ([]eng.Value, error) {
 		values, err := parser.Parse(input)
@@ -49,6 +62,7 @@ func TestSpecProd(t *testing.T) {
 		if err != nil {
 			return nil, err
 		}
+		reg.TCO.Disable = tcoDisabled
 		// Install the shared q-suffixed spec fixtures so tsv files
 		// originally written for engspec (object, record, inspect, …)
 		// can run under the production setup too.

@@ -19,6 +19,7 @@ syntax, the type system, and the runtime. It complements the
 * [The `end` keyword](#the-end-keyword)
 * [Type-directed dispatch](#type-directed-dispatch)
 * [Function signatures and refinement types](#function-signatures-and-refinement-types)
+* [Tail calls and the tape](#tail-calls-and-the-tape)
 * [Type ordering](#type-ordering)
 * [Immutability and mutability](#immutability-and-mutability)
 * [Quotation and evaluation](#quotation-and-evaluation)
@@ -379,6 +380,59 @@ it at every boundary. AQL does the same: newtypes are nominal and
 symmetric, subset types are value-sensitive and symmetric. The full
 rationale is in `design/REFINE-NEWTYPE-VS-SUBSET.10.md`.
 
+
+## Tail calls and the tape
+
+AQL guarantees tail-call elimination — the precise conditions are in
+**[Reference: Recursion and tail calls](REFERENCE.md#recursion-and-tail-calls)**.
+The mechanism falls out of the execution model rather than being
+bolted on.
+
+The engine runs a program on a single *tape* of tokens and walks a
+pointer across it. A function call does not push a frame onto a call
+stack — it **splices the body into the tape** at the call site,
+bracketed as a frame: an open paren, the body, a synthesized cleanup
+tail (un-define the parameters, pop the per-call state), and the
+close paren. The tape *is* the continuation: everything beyond the
+pointer is exactly the work that remains.
+
+That makes tail position visible rather than inferred. At the moment
+a call dispatches, it is a tail call precisely when the only tokens
+between it and the enclosing frame's close are that frame's own
+cleanup tail — "nothing left to do afterwards" is literally readable
+off the tape. And because the callee's arguments are concrete values
+by dispatch time, and closures snapshotted their captures at
+construction, the caller's cleanup can simply run *early*: the engine
+executes the parked tail now and the callee's frame takes over the
+caller's region. Frames replace instead of stacking, so depth never
+accumulates — elimination is a reordering of work the tape had
+already scheduled, not a new semantics.
+
+One AQL-specific boundary shapes the conditions. Name resolution is
+dynamic — an enclosing frame's bindings stay visible to everything it
+calls, until the frame exits. The locally-defined-recursive-fn idiom
+depends on that:
+
+```
+def out fn [[] [Integer] [def go fn [[n:Integer] [Integer] [if (n lte 0) [99] [go (n sub 1)]]] go 3]]
+out                               # returns 99
+```
+
+`go`'s body finds `go` through the *enclosing frame's* binding (the
+name was unbound when the inner fn was constructed — the standard
+forward-reference idiom). A frame holding a binding its callee does
+not re-bind must therefore stay alive: the initial `go 3` call nests,
+while `go`'s own self-recursion — which re-binds everything its
+frames hold — eliminates. This is why the guarantee asks the callee
+to re-bind what the caller's frame binds: elimination must be
+unobservable, and under dynamic resolution "unobservable" includes
+every name a deeper callee might still read.
+
+The failure taxonomy at the limits is a corollary. An infinite tail
+loop re-uses one frame forever — pure CPU, caught by the step budget
+as `[aql/evaluation_limit]`. Unbounded non-tail recursion grows the
+tape — caught by its growth ceiling as `[aql/tape_exhausted]`. Each
+guard names the resource the program actually consumed.
 
 ## Type ordering
 

@@ -25,6 +25,13 @@ type DefEntry struct {
 // a region of pushes wholesale.
 type DefTable struct {
 	stacks map[string][]DefEntry
+	// mutations counts binding pushes and pops since construction.
+	// Monotone; never reset. Consumers compare two readings to detect
+	// "did any binding change in between" — the TCO gate uses it to
+	// decline eager frame teardown when arg auto-evaluation installed
+	// or removed a binding the parked teardown would have sequenced
+	// differently (design/TCO-STAGED.0.md Stage 3).
+	mutations int64
 }
 
 // NewDefTable returns an empty def table ready for use.
@@ -64,6 +71,7 @@ func (dt *DefTable) Push(name string, v Value) {
 	if dt == nil {
 		return
 	}
+	dt.mutations++
 	dt.stacks[name] = append(dt.stacks[name], DefEntry{Body: v})
 }
 
@@ -73,6 +81,7 @@ func (dt *DefTable) PushType(name string, def *Type, body Value) {
 	if dt == nil {
 		return
 	}
+	dt.mutations++
 	dt.stacks[name] = append(dt.stacks[name], DefEntry{Body: body, TypeDef: def})
 }
 
@@ -95,6 +104,7 @@ func (dt *DefTable) PopEntry(name string) (DefEntry, bool) {
 	if len(ds) == 0 {
 		return DefEntry{}, false
 	}
+	dt.mutations++
 	top := ds[len(ds)-1]
 	if len(ds) == 1 {
 		delete(dt.stacks, name)
@@ -102,6 +112,32 @@ func (dt *DefTable) PopEntry(name string) (DefEntry, bool) {
 		dt.stacks[name] = ds[:len(ds)-1]
 	}
 	return top, true
+}
+
+// Mutations returns the monotone count of binding pushes and pops.
+// Compare two readings to detect intervening binding changes.
+func (dt *DefTable) Mutations() int64 {
+	if dt == nil {
+		return 0
+	}
+	return dt.mutations
+}
+
+// TruncationCoveredBy reports whether truncating every name's stack to
+// the depth recorded in snapshot (the DefCleanup operation) would
+// remove only bindings whose names satisfy allowed. Allocation-free —
+// the TCO eligibility gate runs this per detected tail call to prove
+// the eager teardown removes nothing a dynamic read could miss.
+func (dt *DefTable) TruncationCoveredBy(snapshot map[string]int, allowed func(string) bool) bool {
+	if dt == nil {
+		return true
+	}
+	for name, ds := range dt.stacks {
+		if len(ds) > snapshot[name] && !allowed(name) {
+			return false
+		}
+	}
+	return true
 }
 
 // Has reports whether name has any active binding.

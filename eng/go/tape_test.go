@@ -295,7 +295,7 @@ func TestTapeWarnings(t *testing.T) {
 // documented defaults and the initial-size floor.
 func TestTapeConfigDefaults(t *testing.T) {
 	tp := NewTapeWith(nil, TapeConfig{}, nil)
-	// initial floor 1024, ceiling 1024 * 2.7^7.
+	// initial floor 1024, ceiling 1024 * 2.7^6.
 	if got := tp.Cap(); got != DefaultTapeInitialFloor {
 		t.Errorf("default initial cap = %d, want floor %d", got, DefaultTapeInitialFloor)
 	}

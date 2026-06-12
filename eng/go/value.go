@@ -289,6 +289,13 @@ type FnSig struct {
 	// Handler is the Go implementation for a native sig (nil for an
 	// un-compiled AQL sig; the compile boundary attaches one).
 	Handler Handler
+	// FnFrame marks this sig as an AQL fn-body overload whose dispatch
+	// splices a tape frame (buildFnBodyHandler). Attached at the same
+	// compile boundary as the body-splicing Handler; nil on natives and
+	// un-compiled sigs. The SAME pointer is stamped on the frame-open
+	// paren of every frame this sig splices (FrameOpenInfo.Meta), so
+	// frame provenance is pointer-comparable — see eng/go/fn_frame.go.
+	FnFrame *FnFrameMeta
 	// Args / Patterns are the exported positional constructor-convenience
 	// mirrors of Params (see signature.go; kernel reads Params).
 	Args     []*Type

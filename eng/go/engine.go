@@ -2155,6 +2155,13 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// fn-shape, not steal the spec.
 	restoreGen := e.registry.SuspendPendingGen()
 	defer restoreGen()
+	// For fn-body dispatches, snapshot the binding-mutation counter
+	// before arg auto-evaluation: the TCO eligibility gate declines
+	// eager teardown when the auto-eval below touched any binding.
+	var defMutsBefore int64
+	if match.Sig.FnFrame != nil {
+		defMutsBefore = e.registry.Defs.Mutations()
+	}
 	for i := range match.Args {
 		if match.Args[i].Eval && !match.Args[i].Quoted {
 			if match.Args[i].Parent.Equal(TMap) &&
@@ -2281,6 +2288,47 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		return nil
 	}
 
+	// Tail calls (design/TCO-STAGED.0.md): an AQL fn-body dispatch
+	// (Sig.FnFrame non-nil — natives skip on the nil check) sitting in
+	// tail position of an enclosing fn frame is counted; when the
+	// eligibility gate passes (no binding mutations during arg
+	// auto-eval, plain teardown names, no generics, kill switch off)
+	// the enclosing frame's teardown runs eagerly, before the handler
+	// pushes the callee's per-call state — replacement by ordering,
+	// for self AND mutual tail calls alike. Clean frames whose
+	// ReturnCheck the callee's own check subsumes (returnsConform)
+	// take FULL replacement: the callee's frame tokens replace the
+	// caller's entire frame region after the handler returns, keeping
+	// tape and stacks O(1) across the chain. Values-below frames and
+	// non-conforming returns take the shell variant — the marker run
+	// is deleted but the caller's shell (parens + ReturnCheck) stays,
+	// so leftover values and the caller's return contract behave
+	// exactly as under nesting. A declined call nests as before —
+	// correctness never depends on firing.
+	var fullReplace *frameTailScan
+	if match.Sig.FnFrame != nil {
+		if scan, ok := e.probeTailCall(sortedIndices, n); ok {
+			e.registry.TCO.Detected++
+			if e.tcoEligible(scan, match.Sig, defMutsBefore) {
+				if scan.ValuesBelow || !e.returnsConform(scan, match.Sig) {
+					if err := e.elideTailFrame(scan); err != nil {
+						return err
+					}
+					e.registry.TCO.Elided++
+				} else {
+					// State teardown now; the frame-region splice
+					// happens below, once the handler has produced
+					// the replacement tokens. The handler edits no
+					// tape, so the scan's indices stay valid.
+					if err := e.teardownFrameState(scan); err != nil {
+						return err
+					}
+					fullReplace = &scan
+				}
+			}
+		}
+	}
+
 	results, err := match.Sig.Handler(match.Args, ctx, nil, e.registry)
 	if err != nil {
 		return e.stampErrPos(e.maybeAddFnShapeHint(err))
@@ -2295,6 +2343,19 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// call/construction rather than the last textual occurrence of the name.
 	if e.pointer >= 0 && e.pointer < e.tape.Len() {
 		stampResultPos(results, e.tape.At(e.pointer).Pos)
+	}
+
+	// Full frame replacement: the callee's frame (the handler result,
+	// a complete `( body… tail )` carrying its own ReturnCheck)
+	// replaces the caller's entire frame region. The pointer lands on
+	// the new frame's open paren — the same re-step position a normal
+	// splice would give relative to the spliced tokens. Fn-body sigs
+	// never set ParkResult, so skipping that block is moot.
+	if fullReplace != nil {
+		e.tape.Splice(fullReplace.FrameOpen, fullReplace.CloseIdx+1-fullReplace.FrameOpen, results...)
+		e.pointer = fullReplace.FrameOpen
+		e.registry.TCO.Replaced++
+		return nil
 	}
 
 	if err := e.spliceMatchResults(match, sortedIndices, n, results); err != nil {
@@ -3617,7 +3678,13 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 		compiled.Params = append([]FnParam(nil), sig.Params...)
 		compiled.BarrierPos = barrier
 		if fnDef.Anonymous {
-			compiled.Handler = buildFnBodyHandler(r, fnDef.Name, sig, fnDef)
+			meta := &FnFrameMeta{
+				Name:         fnDef.Name,
+				HasGen:       fnDef.Gen != nil,
+				InstallNames: fnInstallNames(sig, fnDef.Captured),
+			}
+			compiled.FnFrame = meta
+			compiled.Handler = buildFnBodyHandler(r, fnDef.Name, sig, fnDef, meta)
 			compiled.ReturnsFn = buildFnBodyReturnsFn(r, fnDef.Name, sig, fnDef)
 		}
 		normalizeSig(&compiled)
@@ -3733,7 +3800,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 
 	// No captured registry — splice body tokens into the current stack.
 	var tokens []Value
-	tokens = append(tokens, NewOpenParen())
+	tokens = append(tokens, NewFrameOpen(fnValueFrameMeta))
 
 	// Push the fn-entry baseline before installing anything. Inner
 	// fn/afn constructions inside this body consult TopFnBaseline
@@ -3778,25 +3845,26 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 			unnamedCount++
 		}
 	}
+	// Snapshot AFTER captures+params so the tail's DefCleanup tears
+	// down only body-local defs — the same placement as
+	// buildFnBodyHandler. (This tail historically omitted the
+	// DefCleanup marker; it is synthesized by the shared
+	// AppendFrameTail now, so the two splice paths cannot diverge.)
+	defSnapshot := e.registry.Defs.Snapshot()
+
 	body := make([]Value, len(sig.Body))
 	copy(body, sig.Body)
 	tokens = append(tokens, body...)
 
-	tokens = append(tokens, NewWord("__pa"))
-	for i := len(names) - 1; i >= 0; i-- {
-		tokens = append(tokens,
-			NewWordModified("undef", -1, false, true),
-			NewWord(names[i]),
-		)
-	}
-	if len(sig.Returns) > 0 {
-		tokens = append(tokens, NewReturnCheck(ReturnCheckInfo{
-			FuncName:     "<fn>",
-			Returns:      sig.Returns,
-			UnnamedCount: unnamedCount,
-			Pos:          callPos,
-		}))
-	}
+	tokens = AppendFrameTail(tokens, FrameTailSpec{
+		Registry:     e.registry,
+		Snapshot:     defSnapshot,
+		Names:        names,
+		Returns:      sig.Returns,
+		UnnamedCount: unnamedCount,
+		FuncName:     "<fn>",
+		Pos:          callPos,
+	})
 	tokens = append(tokens, NewCloseParen())
 
 	if len(indices) == nArgs && nArgs > 0 {
