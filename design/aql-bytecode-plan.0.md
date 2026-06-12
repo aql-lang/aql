@@ -71,6 +71,20 @@ profile, and the decision. *~1 week.*
 
 ## Stage 1 — Program model + recording pass, straight-line only
 
+**Status: RECORDING PASS LANDED (June 2026).** `eng/go/bytecode.go`
+(Program/Instr/opcodes/disassembler) and `eng/go/emit.go` (EmitState:
+ID-based operand provenance, the four-class site taxonomy, Stage-1
+linearizer with simulated-stack discipline checks) ship with
+`lang.(*AQL).CompileCheck` as the entry point and golden tests
+(`lang/go/bytecode_emit_test.go`): the mirror forms `add 1 2` /
+`2 1 add` lower identically, paren results chain through the
+simulated stack, literal-substitution defs inline via provenance,
+top-level stripped literals intern via RecordStrip, and every
+beyond-Stage-1 construct (code-body words, user fns, polymorphic and
+dynamic sites, recovered dispatches) is refused with a precise
+reason. Remaining Stage-1 items: the CLI surface (`aql check
+--emit`) and broadening the accepted operand shapes.
+
 Introduce `Program` (code, constants, sig table, debug spans,
 max-stack) and the emitter as a side effect of the check pass:
 literal pushes (`PUSH_CONST` with interning), monomorphic

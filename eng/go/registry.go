@@ -209,6 +209,13 @@ type CheckState struct {
 	// before being cached (design/checker-accuracy-review.0.md A2).
 	InflightBails int
 
+	// Emit, when non-nil, turns the check pass into the bytecode
+	// recording pass (Stage 1 of design/aql-bytecode-plan.0.md): every
+	// dispatch through carrierResults records a classified call event
+	// and EmitState.Finalize linearises the trace into a Program. Set
+	// by the compile entry points after Begin; nil for plain checks.
+	Emit *EmitState
+
 	// FnAnalysisCounts tracks distinct body analyses (memo misses)
 	// per fn name. Past FnAnalysisQuota the analyser stops re-running
 	// the body for new arg shapes — it answers from the declaration

@@ -707,7 +707,15 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// then runs over carrier values; execMatch short-circuits handler
 	// calls to push carrier return values declared on the signature.
 	if e.registry.Check.IsActive() {
-		input = StripToCarriers(input)
+		if es := e.registry.Check.Emit; es != nil {
+			pre := input
+			input = StripToCarriers(input)
+			for i := range input {
+				es.RecordStrip(pre[i], input[i])
+			}
+		} else {
+			input = StripToCarriers(input)
+		}
 	}
 
 	// Post-parse referent resolution: stamp each /q-style atom in the
@@ -5542,6 +5550,7 @@ func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
 		return false, nil
 	}
 	spec := SubstituteSelf(undef.Sigs[0], sinfo.Type)
+	e.registry.Check.Emit.MarkUncompilable("surface-shape typed dispatch at " + w.Name)
 	synth := &Signature{Params: spec.Params, Returns: spec.Returns}
 	normalizeSig(synth)
 
@@ -5620,6 +5629,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		}
 	}
 	sig := best
+	e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
 	n := sig.TotalArgs()
 	positions := e.checkModeFallbackPositions(n)
 	args := make([]Value, len(positions))

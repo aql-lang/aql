@@ -1384,6 +1384,10 @@ func analyseHigherOrderBody(r *Registry, body Value, elems ...*Type) []Value {
 // accumulator fixed point, whose accumulator may widen to a disjunct
 // between rounds.
 func analyseHigherOrderBodyVals(r *Registry, body Value, vals ...Value) []Value {
+	// Higher-order bodies run nested sub-engines — pause bytecode
+	// recording for their duration (they are not part of the
+	// enclosing straight line).
+	defer r.Check.Emit.Suspend()()
 	if !IsConcrete(body) {
 		return nil
 	}

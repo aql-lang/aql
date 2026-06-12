@@ -1,6 +1,7 @@
 package lang
 
 import (
+	"github.com/aql-lang/aql/eng/go"
 	"io"
 
 	"github.com/aql-lang/aql/eng/go/parser"
@@ -228,6 +229,49 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 		}
 	}
 	return CheckResult{Stack: stack, Diagnostics: diags, Summary: summary}, nil
+}
+
+// Program is the bytecode unit the compile pass produces — re-exported
+// from the engine kernel for host callers (Stage 1 of
+// design/aql-bytecode-plan.0.md).
+type Program = eng.Program
+
+// CompileCheck runs the source through the checker with the bytecode
+// recording pass enabled (Stage 1: straight-line, monomorphic native
+// calls only) and linearises the trace into a Program. When the
+// source contains a construct Stage 1 cannot lower — control flow,
+// user fns, polymorphic or dynamic dispatch, compile-time words —
+// the Program is nil and reason names the first offender; the
+// CheckResult is valid either way.
+func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
+	values, err := parser.Parse(src)
+	if err != nil {
+		return nil, "parse error", CheckResult{}, err
+	}
+
+	a.registry.Source = src
+	defer a.registry.Check.Begin()()
+	a.registry.Check.Emit = eng.NewEmitState()
+
+	engine := native.NewTop(a.registry)
+	engine.SetSource(src)
+	_, runErr := engine.Run(values)
+	a.registry.Check.EmitUnusedDefDiagnostics()
+
+	res := CheckResult{Diagnostics: a.registry.Check.Diagnostics}
+	if runErr != nil {
+		return nil, "check error", res, runErr
+	}
+	for _, d := range res.Diagnostics {
+		if d.Severity == SeverityError {
+			return nil, "check diagnostics", res, nil
+		}
+	}
+	prog, reason, ok := a.registry.Check.Emit.Finalize()
+	if !ok {
+		return nil, reason, res, nil
+	}
+	return prog, "", res, nil
 }
 
 // SetFileOps replaces the file operations implementation used by read/write.

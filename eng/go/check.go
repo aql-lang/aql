@@ -45,6 +45,7 @@ func (c *CheckState) Begin() func() {
 	c.ContextTypes = nil
 	c.InflightBails = 0
 	c.FnAnalysisCounts = nil
+	c.Emit = nil
 	return func() {
 		c.Mode = false
 	}

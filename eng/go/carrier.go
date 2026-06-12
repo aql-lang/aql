@@ -298,6 +298,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	// although the Integer path takes [Number Number]. Resolve each
 	// alternative independently and join the per-alternative returns.
 	if out, ok := disjunctPartitionReturns(r, word, args, pos); ok {
+		r.Check.Emit.RecordPoly(word)
 		return out
 	}
 	var out []Value
@@ -377,6 +378,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 			}
 		}
 	}
+	r.Check.Emit.RecordCall(word, sig, args, out, pos)
 	return out
 }
 
@@ -842,6 +844,10 @@ func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 	if err != nil || elems.IsNil() {
 		return nil, nil
 	}
+
+	// Nested body analysis is not part of the enclosing straight
+	// line — pause bytecode recording for its duration.
+	defer r.Check.Emit.Suspend()()
 
 	// Snapshot def-stack depths (all known names).
 	snapshot := r.Defs.Snapshot()
@@ -1327,6 +1333,10 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	}
 	r.Check.FnInflight[key] = true
 	defer delete(r.Check.FnInflight, key)
+
+	// Fn-body analysis runs nested sub-engines — not part of the
+	// caller's straight line; pause bytecode recording.
+	defer r.Check.Emit.Suspend()()
 
 	// runOnce performs one full body analysis: snapshot def-stack
 	// depths so any defs the body, captures, or parameter bindings
