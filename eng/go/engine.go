@@ -101,9 +101,35 @@ func (e *Engine) SetRecorder(r Recorder) { e.recorder = r }
 // every Engine constructor names them explicitly — there is no
 // "zero means default" sentinel on `stepLimit`; the field is always
 // set to a positive value by the constructors below.
+//
+// These are runaway-program guards (a genuinely non-terminating program
+// must fail rather than hang forever), NOT a budget real programs are
+// expected to brush against. The old values (22222 / 2222) were tuned
+// for the pre-gap-buffer engine, where deep work was quadratic and so
+// self-limiting; they capped a plain `for` loop at ~3700 iterations.
+// With the gap-buffer tape (design/TAPE-DATA-STRUCTURE.10.md) loops and
+// tail recursion are linear, so the cap is raised to a generous ceiling.
+//
+// Calibration (measured): a `for` loop costs ~6 top-level steps per
+// iteration, tail recursion ~24 per level; data-bulk words (each/sort/
+// map ops) do their work inside handlers and cost O(1) top-level steps.
+// 10M steps therefore admits ~1.6M loop iterations / ~400k recursion
+// levels — far beyond any real workload — while a genuine infinite loop
+// trips in a few seconds and within tens of MB of tape growth (a higher
+// ceiling like 100M lets a runaway run ~100s and balloon to ~600MB
+// before tripping, which is worse than the cure). When the cap IS hit it
+// now raises an explicit `evaluation_limit` error (see the Run loop and
+// evalParenGroupAt), never the old phantom "unmatched opening
+// parenthesis". Callers that genuinely need more can raise the budget
+// per engine.
 const (
-	DefaultStepLimit    = 22222 // top-level engine cap
-	DefaultSubStepLimit = 2222  // sub-engine cap (autoEvalMap, CallAQL, etc.)
+	DefaultStepLimit    = 10_000_000 // top-level engine cap
+	DefaultSubStepLimit = 10_000_000 // sub-engine cap (autoEvalMap, CallAQL, etc.)
+
+	// maxParenGroupSteps bounds a single paren-group evaluation in
+	// evalParenGroupAt. Same role and ceiling as the Run-loop cap, for
+	// the nested-evaluation path.
+	maxParenGroupSteps = 10_000_000
 )
 
 // New creates an Engine with the given function registry.
@@ -579,6 +605,37 @@ func (e *Engine) runtimeError(code, detail, word, hint string) *AqlError {
 	return makeAqlErrorAt(code, detail, word, src, hint, e.currentPos())
 }
 
+// evalLimitError reports that evaluation hit the step-count guard before
+// the program finished — the explicit, honest diagnosis for a runaway
+// (non-terminating or pathologically deep) program, replacing the
+// phantom "unmatched opening parenthesis" the old silent break produced.
+func (e *Engine) evalLimitError(limit int) *AqlError {
+	return e.runtimeError("evaluation_limit",
+		fmt.Sprintf("evaluation exceeded the step limit of %d — the program ran too long (an infinite loop or unbounded recursion?)", limit),
+		"",
+		"if this is a legitimately long computation, raise the limit via the engine's step budget; otherwise check for a loop or recursion that never terminates")
+}
+
+// tapeExhaustedError reports that the tape hit its growth ceiling — the
+// loud failure for unbounded consumption (a runaway splicing onto the
+// tape without bound). Distinct from evalLimitError, which is the
+// step-count (CPU) guard; this is the memory guard.
+func (e *Engine) tapeExhaustedError() *AqlError {
+	return e.runtimeError("tape_exhausted",
+		fmt.Sprintf("evaluation tape exhausted its growth ceiling of %d entries — the program consumed unbounded space (an infinite loop or unbounded recursion?)", e.tape.MaxCap()),
+		"",
+		"raise the tape size via options (initial size / grow count / growth factor) for a legitimately large program; otherwise check for a loop or recursion that never terminates")
+}
+
+// tapeWarn forwards a tape capacity warning to the registry's error
+// writer. Wired as the Tape's warn sink so 90/95/99% crossings surface
+// without the tape importing io.
+func (e *Engine) tapeWarn(msg string) {
+	if e.registry != nil && e.registry.ErrOutput != nil {
+		fmt.Fprintf(e.registry.ErrOutput, "aql: warning: %s\n", msg)
+	}
+}
+
 // traceSigStr formats a signature as "name(type, type) prec=N" for trace annotations.
 func traceSigStr(name string, sig *Signature) string {
 	args := make([]string, sig.TotalArgs())
@@ -669,9 +726,13 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 		resolveAtomReferents(e.registry, prog)
 	}
 
-	// Load the program onto the gap-buffer tape (NewTape copies, so
-	// later splices never touch the caller's input slice).
-	e.tape = NewTape(prog, stackHeadroom)
+	// Load the program onto the gap-buffer tape with bounded growth
+	// (NewTapeWith copies, so later splices never touch the caller's input
+	// slice). The tape grows at most N times by factor M and then fails
+	// loudly — see TapeConfig / the tape_exhausted check below. The
+	// registry's TapeConfig (zero value = defaults) flows through
+	// unchanged so resolve() applies the initial-size floor.
+	e.tape = NewTapeWith(prog, e.registry.TapeConfig, e.tapeWarn)
 	e.pointer = 0
 
 	// stepLimit is always set by the constructors (New / NewTop); the
@@ -679,9 +740,18 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// was zero was load-bearing for callers that built Engine{}
 	// directly, but no longer — the constructors are the only entry.
 	limit := e.stepLimit
+	completed := false
 	for step := 0; step < limit; step++ {
 		if e.pointer >= e.tape.Len() {
+			completed = true
 			break
+		}
+
+		// Memory guard: a previous edit hit the tape's growth ceiling
+		// (and was dropped to avoid an out-of-bounds write). Fail loudly
+		// rather than continue on a truncated tape.
+		if e.tape.Exhausted() {
+			return nil, e.tapeExhaustedError()
 		}
 
 		// Check-mode global step budget: abort the whole run
@@ -705,6 +775,10 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 						Detail: fmt.Sprintf("check mode aborted: step budget of %d exceeded", budget),
 					})
 				}
+				// The check-mode budget is a deliberate, already-reported
+				// stop — not the runtime step-limit exhaustion below. Mark
+				// it complete so the drain proceeds normally.
+				completed = true
 				break
 			}
 		}
@@ -830,6 +904,15 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// signal still set, fall through to the same handler.
 	if e.registry.FlowCtrl != FlowNone {
 		return e.exitWithFlowCtrl()
+	}
+
+	// The loop ran out of step budget before the program finished. Report
+	// it explicitly: the program was cut off mid-evaluation, so the drain
+	// below would otherwise see a half-processed tape (e.g. an open paren
+	// the run never reached) and blame a phantom "unmatched opening
+	// parenthesis". This is the honest diagnosis instead.
+	if !completed {
+		return nil, e.evalLimitError(limit)
 	}
 
 	// Implicit end-of-input: resolve any pending forwards from the stack.
@@ -1366,7 +1449,7 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 	// depth so inner parens are processed without prematurely breaking on
 	// their ")" tokens.
 	depth := 1
-	for limit := 0; limit < 2222 && depth > 0; limit++ {
+	for limit := 0; limit < maxParenGroupSteps && depth > 0; limit++ {
 		if e.pointer >= e.tape.Len() {
 			break
 		}
@@ -1439,6 +1522,15 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 			e.pointer = savedPointer
 			return nil
 		}
+	}
+
+	// Budget exhausted before the group closed (depth still open with tape
+	// left to process). Report it explicitly rather than silently
+	// returning a half-evaluated group, which would later surface as a
+	// phantom "unmatched opening parenthesis" at the top-level drain.
+	if depth > 0 && e.pointer < e.tape.Len() {
+		e.pointer = savedPointer
+		return e.evalLimitError(maxParenGroupSteps)
 	}
 
 	e.pointer = savedPointer

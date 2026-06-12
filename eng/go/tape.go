@@ -1,16 +1,17 @@
 package eng
 
-// Tape — a gap-buffer tape for the engine. PROTOTYPE (not yet wired
-// into Engine; see design/TAPE-DATA-STRUCTURE.10.md).
+import "fmt"
+
+// Tape — the engine's gap-buffer tape (see design/TAPE-DATA-STRUCTURE.10.md).
 //
 // The engine executes on a tape of Values with a cursor (Engine.pointer)
 // that mostly moves forward, and every structural edit — body splice,
 // forward parking, result splice — lands at or within a few tokens of
-// the cursor. The current []Value representation makes each such edit
-// memmove the entire tail beyond the edit point; during recursion the
-// tail holds every enclosing call's pending continuation, so the cost is
-// O(depth) per edit and O(depth²) overall (measured: 95.9% of a deep
-// recursion's runtime is runtime.memmove — design/RECURSION-PERFORMANCE.10.md).
+// the cursor. The previous flat []Value representation made each such
+// edit memmove the entire tail beyond the edit point; during recursion
+// the tail held every enclosing call's pending continuation, so the cost
+// was O(depth) per edit and O(depth²) overall (measured: 95.9% of a deep
+// recursion's runtime was runtime.memmove — design/RECURSION-PERFORMANCE.10.md).
 //
 // A gap buffer is the text-editor answer to exactly this access pattern
 // (Emacs uses one per buffer): the storage keeps one hole (the gap) at
@@ -29,22 +30,128 @@ package eng
 // the gap), and both regions are contiguous, so the two scan directions
 // the engine uses (backward over collected values, forward over future
 // tokens) remain cache-friendly contiguous walks.
+//
+// Bounded growth (never allow infinite consumption). The buffer starts
+// at an initial capacity and may grow at most MaxGrows times, each by
+// GrowthFactor, giving a hard ceiling of InitialSize·GrowthFactorᴺ
+// entries. A program that would exceed it — a runaway that splices onto
+// the tape without bound — latches `exhausted`; the engine detects that
+// and fails loudly with a tape_exhausted error rather than allocating
+// without limit. Crossing 90/95/99% of the ceiling emits a one-time
+// warning. The defaults (N=7, M=2.7) and the initial size are
+// configurable via TapeConfig / lang.Options.
 type Tape struct {
 	buf      []Value
 	gapStart int // physical index of the first gap slot == logical gap position
 	gapEnd   int // physical index one past the last gap slot
+
+	maxCap    int          // hard ceiling on len(buf) (entries)
+	maxGrows  int          // remaining reallocations allowed
+	factor    float64      // per-grow multiplier
+	exhausted bool         // set once the ceiling is hit; engine fails loudly
+	warned    [3]bool      // 90% / 95% / 99% warnings emitted
+	warn      func(string) // sink for capacity warnings (nil = silent)
 }
 
-// NewTape builds a tape holding the given values with the gap at the
-// end. The input is copied, mirroring Engine.Run's copy of its program.
+// Bounded-growth defaults.
+const (
+	DefaultTapeMaxGrows     = 7   // N: maximum reallocations
+	DefaultTapeGrowthFactor = 2.7 // M: per-grow size multiplier
+	// DefaultTapeInitialFloor is the minimum initial capacity (entries)
+	// when the caller does not pin one: small programs still get enough
+	// headroom that the growth ceiling (floor·Mᴺ ≈ floor·1046) comfortably
+	// covers deep-but-real recursion while bounding a runaway's memory.
+	DefaultTapeInitialFloor = 1024
+	// maxIntCap clamps the computed ceiling so an absurd factor/N cannot
+	// overflow int. ~268M entries is far past any real need and a hard stop.
+	maxIntCap = 1 << 28
+)
+
+// TapeConfig parameterises a Tape's bounded growth. The zero value means
+// "use defaults": InitialSize 0 derives from the program size, MaxGrows
+// 0 → DefaultTapeMaxGrows, GrowthFactor 0 → DefaultTapeGrowthFactor.
+type TapeConfig struct {
+	InitialSize  int     // starting capacity in entries; 0 = derive from program
+	MaxGrows     int     // N: max reallocations; 0 = default
+	GrowthFactor float64 // M: per-grow multiplier; 0 = default
+}
+
+// resolve fills zero fields with defaults given the program length.
+func (c TapeConfig) resolve(progLen int) (initial, maxGrows int, factor float64) {
+	maxGrows = c.MaxGrows
+	if maxGrows <= 0 {
+		maxGrows = DefaultTapeMaxGrows
+	}
+	factor = c.GrowthFactor
+	if factor <= 1 {
+		factor = DefaultTapeGrowthFactor
+	}
+	initial = c.InitialSize
+	if initial <= 0 {
+		initial = progLen + stackHeadroom
+		if initial < DefaultTapeInitialFloor {
+			initial = DefaultTapeInitialFloor
+		}
+	}
+	if initial < progLen {
+		initial = progLen // must at least hold the program
+	}
+	return initial, maxGrows, factor
+}
+
+// NewTape builds a tape holding vals with the gap at the end and DEFAULT
+// growth bounds. The input is copied, mirroring Engine.Run's copy of its
+// program. headroom only nudges the initial size; the bounded-growth
+// ceiling comes from the defaults.
 func NewTape(vals []Value, headroom int) *Tape {
 	if headroom < 0 {
 		headroom = 0
 	}
-	buf := make([]Value, len(vals)+headroom)
-	copy(buf, vals)
-	return &Tape{buf: buf, gapStart: len(vals), gapEnd: len(buf)}
+	return NewTapeWith(vals, TapeConfig{InitialSize: len(vals) + headroom}, nil)
 }
+
+// NewTapeWith builds a tape holding vals with bounded growth configured
+// by cfg. warn (may be nil) receives one-time 90/95/99% capacity
+// warnings.
+func NewTapeWith(vals []Value, cfg TapeConfig, warn func(string)) *Tape {
+	initial, maxGrows, factor := cfg.resolve(len(vals))
+	if initial < len(vals) {
+		initial = len(vals)
+	}
+	buf := make([]Value, initial)
+	copy(buf, vals)
+	// Ceiling = initial · factorᴺ, in float to avoid overflow, clamped.
+	ceil := float64(initial)
+	for i := 0; i < maxGrows; i++ {
+		ceil *= factor
+	}
+	maxCap := maxIntCap
+	if ceil < float64(maxIntCap) {
+		maxCap = int(ceil)
+	}
+	if maxCap < initial {
+		maxCap = initial
+	}
+	return &Tape{
+		buf:      buf,
+		gapStart: len(vals),
+		gapEnd:   initial,
+		maxCap:   maxCap,
+		maxGrows: maxGrows,
+		factor:   factor,
+		warn:     warn,
+	}
+}
+
+// Exhausted reports whether the tape hit its growth ceiling. The engine
+// checks this each step and fails loudly when set.
+func (t *Tape) Exhausted() bool { return t.exhausted }
+
+// Cap returns the current buffer capacity in entries.
+func (t *Tape) Cap() int { return len(t.buf) }
+
+// MaxCap returns the hard growth ceiling in entries.
+func (t *Tape) MaxCap() int { return t.maxCap }
 
 // Len reports the number of logical elements.
 func (t *Tape) Len() int { return len(t.buf) - (t.gapEnd - t.gapStart) }
@@ -100,18 +207,57 @@ func (t *Tape) MoveGap(i int) {
 	}
 }
 
-// grow widens the gap to at least need slots, reallocating once.
-func (t *Tape) grow(need int) {
+// grow widens the gap to at least need slots, reallocating by GrowthFactor
+// up to MaxGrows times. Returns false when the growth ceiling is reached:
+// the tape latches `exhausted` and the edit that called grow becomes a
+// no-op (the engine aborts loudly on the next step, so dropping one edit
+// is harmless and avoids any out-of-bounds write). When grow succeeds it
+// reports capacity-threshold crossings via the warn sink.
+func (t *Tape) grow(need int) bool {
 	if t.gapEnd-t.gapStart >= need {
-		return
+		return true
 	}
-	newCap := len(t.buf)*2 + need
+	if t.maxGrows <= 0 || len(t.buf) >= t.maxCap {
+		t.exhausted = true
+		return false
+	}
+	newCap := int(float64(len(t.buf))*t.factor) + need
+	if newCap > t.maxCap {
+		newCap = t.maxCap
+	}
+	if newCap-(len(t.buf)-(t.gapEnd-t.gapStart)) < need {
+		// Even the ceiling cannot fit this edit's payload.
+		t.exhausted = true
+		return false
+	}
 	nb := make([]Value, newCap)
 	copy(nb, t.buf[:t.gapStart])
 	tail := len(t.buf) - t.gapEnd
 	copy(nb[newCap-tail:], t.buf[t.gapEnd:])
 	t.buf = nb
 	t.gapEnd = newCap - tail
+	t.maxGrows--
+	t.maybeWarn()
+	return true
+}
+
+// maybeWarn emits a one-time warning when the buffer capacity first
+// crosses 90%, 95%, then 99% of the ceiling. Warning on capacity (not
+// live length) gives advance notice while reallocations are still
+// possible, before the final fill exhausts the tape.
+func (t *Tape) maybeWarn() {
+	if t.warn == nil || t.maxCap <= 0 {
+		return
+	}
+	frac := float64(len(t.buf)) / float64(t.maxCap)
+	thresholds := [3]float64{0.90, 0.95, 0.99}
+	for i, th := range thresholds {
+		if !t.warned[i] && frac >= th {
+			t.warned[i] = true
+			t.warn(fmt.Sprintf("tape at %.0f%% of its %d-entry ceiling (%d entries); raise the initial size or grow count if this is a legitimately large program",
+				th*100, t.maxCap, len(t.buf)))
+		}
+	}
 }
 
 // Insert places v at logical index i, shifting later elements right
@@ -124,7 +270,9 @@ func (t *Tape) Insert(i int, v Value) {
 		i = max
 	}
 	t.MoveGap(i)
-	t.grow(1)
+	if !t.grow(1) {
+		return // ceiling hit; engine aborts loudly on the next step
+	}
 	t.buf[t.gapStart] = v
 	t.gapStart++
 }
@@ -161,7 +309,9 @@ func (t *Tape) Splice(i, count int, repl ...Value) {
 		t.buf[t.gapEnd+k] = Value{}
 	}
 	t.gapEnd += count
-	t.grow(len(repl))
+	if !t.grow(len(repl)) {
+		return // ceiling hit; engine aborts loudly on the next step
+	}
 	copy(t.buf[t.gapStart:], repl)
 	t.gapStart += len(repl)
 }

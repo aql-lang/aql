@@ -48,6 +48,10 @@ type Registry struct {
 	Output    io.Writer // output writer for print/printstr and stdout
 	ErrOutput io.Writer // error output writer for stderr
 	Input     io.Reader // input reader for stdin
+	// TapeConfig bounds the execution tape's growth (initial size, max
+	// grows, growth factor). The zero value uses the defaults; hosts set
+	// it via lang.Options. See eng/go/tape.go.
+	TapeConfig TapeConfig
 	// Modules owns module-loading state: the load set, the
 	// module-ID counter, the host's init callback, and the native-
 	// module resolver. See modules.go.

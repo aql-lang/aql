@@ -2,6 +2,7 @@ package eng
 
 import (
 	"math/rand/v2"
+	"strings"
 	"testing"
 )
 
@@ -242,4 +243,83 @@ func stackSplice(s *[]Value, i, count int, replacements ...Value) {
 		*s = (*s)[:newLen]
 	}
 	copy((*s)[i:], replacements)
+}
+
+// ---- bounded growth ----
+
+// TestTapeBoundedGrowthCeiling verifies the tape grows at most MaxGrows
+// times by GrowthFactor, latches Exhausted at the ceiling, and never
+// allocates past it.
+func TestTapeBoundedGrowthCeiling(t *testing.T) {
+	cfg := TapeConfig{InitialSize: 10, MaxGrows: 3, GrowthFactor: 2.0}
+	tp := NewTapeWith(nil, cfg, nil)
+	// ceiling = 10 * 2^3 = 80
+	if tp.MaxCap() != 80 {
+		t.Fatalf("MaxCap = %d, want 80", tp.MaxCap())
+	}
+	// Fill well past the ceiling; inserts past it must be dropped and the
+	// tape must latch Exhausted rather than grow without bound.
+	for i := 0; i < 1000; i++ {
+		tp.Insert(tp.Len(), NewInteger(int64(i)))
+	}
+	if !tp.Exhausted() {
+		t.Error("tape did not latch Exhausted past its ceiling")
+	}
+	if tp.Cap() > tp.MaxCap() {
+		t.Errorf("buffer cap %d exceeded ceiling %d", tp.Cap(), tp.MaxCap())
+	}
+	if tp.Len() > tp.MaxCap() {
+		t.Errorf("logical len %d exceeded ceiling %d", tp.Len(), tp.MaxCap())
+	}
+}
+
+// TestTapeWarnings verifies one-time 90/95/99% warnings fire in order.
+func TestTapeWarnings(t *testing.T) {
+	var msgs []string
+	cfg := TapeConfig{InitialSize: 10, MaxGrows: 20, GrowthFactor: 1.2}
+	tp := NewTapeWith(nil, cfg, func(s string) { msgs = append(msgs, s) })
+	for i := 0; i < 5000 && !tp.Exhausted(); i++ {
+		tp.Insert(tp.Len(), NewInteger(int64(i)))
+	}
+	if len(msgs) != 3 {
+		t.Fatalf("got %d warnings, want exactly 3 (90/95/99%%): %v", len(msgs), msgs)
+	}
+	for i, want := range []string{"90%", "95%", "99%"} {
+		if !strings.Contains(msgs[i], want) {
+			t.Errorf("warning %d = %q, want it to mention %s", i, msgs[i], want)
+		}
+	}
+}
+
+// TestTapeConfigDefaults verifies the zero config resolves to the
+// documented defaults and the initial-size floor.
+func TestTapeConfigDefaults(t *testing.T) {
+	tp := NewTapeWith(nil, TapeConfig{}, nil)
+	// initial floor 1024, ceiling 1024 * 2.7^7.
+	if got := tp.Cap(); got != DefaultTapeInitialFloor {
+		t.Errorf("default initial cap = %d, want floor %d", got, DefaultTapeInitialFloor)
+	}
+	want := float64(DefaultTapeInitialFloor)
+	for i := 0; i < DefaultTapeMaxGrows; i++ {
+		want *= DefaultTapeGrowthFactor
+	}
+	if got := tp.MaxCap(); got != int(want) {
+		t.Errorf("default ceiling = %d, want %d", got, int(want))
+	}
+}
+
+// TestTapeInitialSizeAtLeastProgram: the initial capacity must hold the
+// whole program even if the configured initial is smaller.
+func TestTapeInitialSizeAtLeastProgram(t *testing.T) {
+	prog := make([]Value, 50)
+	for i := range prog {
+		prog[i] = NewInteger(int64(i))
+	}
+	tp := NewTapeWith(prog, TapeConfig{InitialSize: 10}, nil)
+	if tp.Len() != 50 {
+		t.Fatalf("Len = %d, want 50", tp.Len())
+	}
+	if tp.Cap() < 50 {
+		t.Errorf("initial cap %d does not hold the %d-entry program", tp.Cap(), 50)
+	}
 }
