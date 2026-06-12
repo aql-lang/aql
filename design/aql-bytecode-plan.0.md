@@ -1,6 +1,7 @@
 # AQL Bytecode — staged implementation plan
 
-**Status:** proposal — not started. Companion to
+**Status:** proposal — Stage 0 DONE with a GO result
+(`aql-bytecode-baseline.0.md`); Stages 1+ not started. Companion to
 `aql-bytecode-report.0.md` (the design) and
 `aql-bytecode-revisions.0.md` (the June 2026 re-review that this plan
 incorporates; read it first — it changes two requirements). Written
@@ -40,6 +41,13 @@ numbers, not the original report's stale ones.
   `eng/go/CLAUDE.md` before touching the kernel.
 
 ## Stage 0 — re-baseline and go/no-go (measurement only)
+
+**Status: DONE (June 2026) — gate result GO.** Corpus:
+`lang/go/bytecode_baseline_bench_test.go`; results and attribution:
+`aql-bytecode-baseline.0.md`. Dispatch machinery measured at ~96% of
+engine execution on the straight-line arithmetic shape (~3.5% actual
+arithmetic), ~22µs and ~100 allocs per dispatch, ~340 allocs per fn
+call frame — far above the 40% gate below.
 
 No engine changes. Build the benchmark corpus and measure the
 *current* interpreter, because the tape rewrite (`9903045`) and TCO
