@@ -86,6 +86,7 @@ const (
 	evBreak
 	evContinue
 	evCallUser
+	evFallback
 )
 
 // emitUserCall is a recorded call of a compiled AQL fn: the target
@@ -99,6 +100,15 @@ type emitUserCall struct {
 	pos  SrcPos
 }
 
+// emitFallback is a recorded interpreter-island fallback (Stage 5): a
+// construct the compiler can't lower, captured as a self-contained
+// re-runnable token span plus its threaded stack inputs.
+type emitFallback struct {
+	spanIdx int
+	ins     []emitOperand
+	pos     SrcPos
+}
+
 type emitEvent struct {
 	seq  int
 	kind int
@@ -106,6 +116,7 @@ type emitEvent struct {
 	br   emitBranch
 	loop emitLoop
 	uc   emitUserCall
+	fb   emitFallback
 }
 
 // EmitFragment is a captured sub-trace: the events a branch body
@@ -147,6 +158,7 @@ type EmitState struct {
 	constIdx   map[string]int // CanonValue → Consts index
 	types      []TypeRef
 	typeIdx    map[string]int   // type ID → Types index
+	fallbacks  []FallbackSpan   // Stage 5 interpreter islands
 	origByID   map[string]Value // stripped literal ID → original value
 }
 
@@ -705,6 +717,36 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 	es.producedBy[out.ID] = seq
 }
 
+// RecordFallback records an interpreter-island fallback (Stage 5). span
+// is the self-contained re-runnable token sequence; ins are the threaded
+// stack inputs (sig order, deepest first) — empty for a fully-baked
+// span; out is the dispatch's single result carrier, registered so the
+// island's result flows downstream (to the residual, or another
+// fallback; a downstream TYPED dispatch consuming a dynamic result still
+// refuses via anyDynamicCarrier, preserving soundness). Returns false
+// when an input's provenance is unknown — the caller then lets the
+// normal refusal stand.
+func (es *EmitState) RecordFallback(span FallbackSpan, ins []Value, out Value, pos SrcPos) bool {
+	if !es.active() {
+		return false
+	}
+	ops := make([]emitOperand, len(ins))
+	for i, in := range ins {
+		op, ok := es.resolveOperand(in)
+		if !ok {
+			return false
+		}
+		ops[i] = op
+	}
+	span.NIn = len(ins)
+	idx := len(es.fallbacks)
+	es.fallbacks = append(es.fallbacks, span)
+	seq := es.appendEvent(emitEvent{kind: evFallback, fb: emitFallback{spanIdx: idx, ins: ops, pos: pos}})
+	es.SiteCounts[SiteDynamic]++
+	es.producedBy[out.ID] = seq
+	return true
+}
+
 // RecordStrip remembers the original concrete value behind a
 // top-level literal that StripToCarriers reduced to a carrier — the
 // ID is preserved by the strip, so a later dispatch arg with this ID
@@ -1162,14 +1204,22 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 
 	lw.p.Consts = es.consts // interning may have grown during reconciliation
 	lw.p.Types = es.types
+	lw.p.Fallbacks = es.fallbacks
 	lw.p.MaxStack = lw.maxDepth
 	lw.p.NumLocals = es.units[0].numLocals
 	return lw.p, "", true
 }
 
 func eventPos(ev emitEvent) SrcPos {
-	if ev.kind == evCall {
+	switch ev.kind {
+	case evCall:
 		return ev.call.pos
+	case evFallback:
+		return ev.fb.pos
+	case evLoop:
+		return ev.loop.pos
+	case evCallUser:
+		return ev.uc.pos
 	}
 	return ev.br.pos
 }
@@ -1249,6 +1299,8 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 			reason = lw.lowerContinue(ev)
 		case evCallUser:
 			reason = lw.lowerUserCall(ev)
+		case evFallback:
+			reason = lw.lowerFallback(ev)
 		default:
 			reason = "unknown event kind"
 		}
@@ -1269,6 +1321,8 @@ func collectOperands(ev *emitEvent) []emitOperand {
 		return nil
 	case evCallUser:
 		return ev.uc.ops
+	case evFallback:
+		return ev.fb.ins
 	}
 	return []emitOperand{ev.br.cond, ev.br.condOut, ev.br.thenOut, ev.br.elsOut}
 }
@@ -1475,6 +1529,22 @@ func (lw *lowerer) lowerUserCall(ev *emitEvent) string {
 	}
 	lw.emit(OpCallUser, uc.unit, uc.pos)
 	lw.vm = lw.vm[:len(lw.vm)-n]
+	lw.vm = append(lw.vm, ev.seq)
+	lw.note()
+	return ""
+}
+
+// lowerFallback emits OpFallback. v1 handles only fully-baked islands
+// (no threaded inputs); a threaded island is a documented follow-on.
+// The island's single residual lands on the simulated stack as this
+// event's product, so a downstream consumer (or the program residual)
+// reads it like any computed value.
+func (lw *lowerer) lowerFallback(ev *emitEvent) string {
+	fb := &ev.fb
+	if len(fb.ins) != 0 {
+		return "fallback island with threaded inputs (Stage 5 follow-on)"
+	}
+	lw.emit(OpFallback, fb.spanIdx, fb.pos)
 	lw.vm = append(lw.vm, ev.seq)
 	lw.note()
 	return ""

@@ -161,6 +161,36 @@ func runProgram(p *Program, r *Registry, stepLimit int) ([]Value, error) {
 				}
 			}
 			stack = append(stack, results...)
+		case OpFallback:
+			fb := &p.Fallbacks[in.Arg]
+			if len(stack) < fb.NIn {
+				return nil, vmErrAt(curDebug, pc, "FALLBACK underflow at "+fb.Desc)
+			}
+			// Build the island token stream: the NIn threaded inputs
+			// (deepest-first, exactly their operand-stack order) preloaded
+			// as literals, then the recorded span tokens. The island's
+			// sub-engine re-derives the construct's result the same way
+			// the interpreter does — soundness rides on the differential
+			// gate. break/continue/return raised across the island
+			// boundary propagate via the shared registry FlowCtrl, the
+			// same as any nested Run.
+			island := make([]Value, 0, fb.NIn+len(fb.Tokens))
+			island = append(island, stack[len(stack)-fb.NIn:]...)
+			island = append(island, fb.Tokens...)
+			stack = stack[:len(stack)-fb.NIn]
+			sub := New(r)
+			sub.SetSource(r.Source)
+			results, err := sub.Run(island)
+			if err != nil {
+				return nil, stampAt(err, curDebug, pc, r)
+			}
+			for _, rv := range results {
+				if IsWord(rv) || IsMark(rv) || IsMove(rv) || IsForward(rv) ||
+					IsOpenParen(rv) || IsSplice(rv) {
+					return nil, vmErrAt(curDebug, pc, "tape-coupled island result at "+fb.Desc)
+				}
+			}
+			stack = append(stack, results...)
 		case OpJmp:
 			t := int(in.Arg)
 			// The only legal back-edge is a counted loop's trailing

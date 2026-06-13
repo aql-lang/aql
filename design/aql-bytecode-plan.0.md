@@ -401,6 +401,40 @@ that is a fallback-boundary concern, which Stage 5 owns.
 
 ## Stage 5 — dynamic fallback + concurrency
 
+**Status: IN PROGRESS — span-level FALLBACK_INTERP landed for
+self-contained code-body words.** The `OpFallback` opcode +
+`Program.Fallbacks` table is the interpreter-island mechanism: a
+construct the compiler can't lower re-runs through a sub-engine over a
+recorded token span, threading the operand stack (NIn inputs popped
+deepest-first and pre-loaded, the island's residual pushed back), with
+the compiled code on either side intact. The VM handles NIn>0
+threading; the emitter currently emits only fully-baked (NIn=0)
+islands.
+
+First words wired: the code-body higher-order data transforms
+(`each`/`fold`/`scan`/`for-each`/`select`/`group`). A refused dispatch
+becomes an island iff — allow-listed, single-result, fully
+forward-eligible, **core dispatch** (the matched sig is pointer-identical
+to the word's main-registry binding, so a module-qualified inner native
+through a sub-registry is rejected — baking its bare name would re-run
+a different word), every arg materialises **deeply concrete** (a data
+arg with any carrier element refuses — a stripped def-bound list would
+bake `[ProperString …]` instead of the values), and every code-body
+word is **VM-resolvable** (a registered native/fn-def or known literal;
+a value-`def` reference refuses, because that binding is a check-time
+carrier at run time). The island's dynamic result flows to the residual
+or another fallback; a downstream TYPED dispatch consuming it still
+refuses via `anyDynamicCarrier`, so soundness holds. Differential:
+1434 rows / 0 mismatches (+22), floor 1430. Soundness is gate-proven
+across the corpus.
+
+**Remaining (follow-on):** emit NIn>0 threaded islands (computed
+receivers like `(iota 5) each […]`); widen the allow-set
+(`do`/`case`/`select`-query/…) as the gate stays green; the general
+dynamic-dispatch fallback for `get`-returns-`Any` and fn-value call
+sites (F4) via `TYPE_CHECK`-guarded boundaries; `break`/`continue`/
+`return` sentinels crossing an island. The original Stage-5 scope:
+
 Span-level `FALLBACK_INTERP`: `do` on computed lists, unresolved
 `context get`, leaky runtime `def`, and any site the checker widened
 to `Any`. The VM hands the relevant values to an engine instance over

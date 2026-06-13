@@ -378,8 +378,115 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 			}
 		}
 	}
-	r.Check.Emit.RecordCall(word, sig, args, out, pos)
+	if !tryRecordFallback(r, word, sig, args, out, pos) {
+		r.Check.Emit.RecordCall(word, sig, args, out, pos)
+	}
 	return out
+}
+
+// fallbackWords is the allow-set of code-body higher-order words that
+// may compile as Stage-5 interpreter islands: pure data transforms
+// that apply a code body to data and return data, with no registry
+// mutation. Conservative — expand only with the differential gate
+// green. Words with compile-time / registry-mutating semantics (do,
+// var, module, word-splice, def, case/select dispatch) stay out.
+var fallbackWords = map[string]bool{
+	"each": true, "fold": true, "scan": true,
+	"for-each": true, "select": true, "group": true,
+}
+
+// tryRecordFallback attempts to compile a refused code-body higher-order
+// word as a fully-baked (nIn=0) interpreter island: the construct
+// re-runs through a sub-engine over `word arg0 arg1 …` in forward form.
+// Eligible iff the word is allow-listed, fully forward-eligible (so the
+// forward-form span is faithful), single-result, every arg materialises
+// concrete, and every code-body arg is FREE of references the VM can't
+// honour (only registered words / known literals — a check-time `def`
+// binding is a carrier at run time and would diverge). Returns true when
+// recorded; false leaves the normal refusal (whole-program fallback) to
+// stand. Soundness rides on the differential gate.
+func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
+	es := r.Check.Emit
+	if !es.active() || !fallbackWords[word] || len(outs) != 1 || sig == nil {
+		return false
+	}
+	// Fully forward-eligible: BarrierPos -1 (sentinel) or >= arity.
+	if sig.BarrierPos >= 0 && sig.BarrierPos < len(sig.Args) {
+		return false
+	}
+	// CORE-dispatch guard: the matched sig must belong to the word's
+	// MAIN-registry binding (pointer identity into its sig backing
+	// array). A module-qualified call (`ArrayUtil.group`) dispatches
+	// the inner native through a SUB-registry, so its sig is a
+	// different pointer — baking the bare name would re-run the core
+	// word of that name (different semantics). The guard rejects those
+	// so only a faithful bare-name re-run compiles.
+	fn := r.Lookup(word)
+	if fn == nil {
+		return false
+	}
+	sigOK := false
+	for i := range fn.Signatures {
+		if &fn.Signatures[i] == sig {
+			sigOK = true
+			break
+		}
+	}
+	if !sigOK {
+		return false
+	}
+	span := make([]Value, 0, len(args)+1)
+	span = append(span, NewWord(word))
+	for i, a := range args {
+		cv, ok := es.materialise(a)
+		if !ok || !IsConcrete(cv) {
+			return false
+		}
+		if sig.NoEvalArgs[i] {
+			// A code body: legitimately contains words, but every one
+			// must be VM-resolvable (no check-time def carriers).
+			if !bodyFreeForFallback(r, cv) {
+				return false
+			}
+		} else if !isInertConst(cv) {
+			// A data arg must be DEEPLY concrete plain data — a carrier
+			// element anywhere (e.g. a def-bound list whose interior the
+			// check pass stripped) would bake a type-only artefact into
+			// the island and diverge (`[ProperString …]` vs the real
+			// strings). isInertConst rejects any carrier/dynamic/bare
+			// node in the tree.
+			return false
+		}
+		span = append(span, cv)
+	}
+	return es.RecordFallback(FallbackSpan{Tokens: span, Desc: word}, nil, outs[0], pos)
+}
+
+// bodyFreeForFallback reports whether a code body references only words
+// the VM's sub-engine can resolve at run time: registered natives /
+// fn-defs (r.Lookup non-nil) and the known bare literals. A bare word
+// bound by a value `def` resolves via Defs substitution, NOT Lookup, so
+// it fails here — correctly, since at VM run time that binding is the
+// check pass's CARRIER, not a concrete value.
+func bodyFreeForFallback(r *Registry, body Value) bool {
+	free := true
+	WalkBodyWords([]Value{body}, func(w WordInfo, _ Value) {
+		if !free {
+			return
+		}
+		switch w.Name {
+		case "true", "false", "none", "null":
+			return
+		}
+		if r.Lookup(w.Name) != nil {
+			return
+		}
+		if _, ok := typeNames[w.Name]; ok {
+			return
+		}
+		free = false
+	})
+	return free
 }
 
 // disjunctPartitionCap bounds the alternative cross product a

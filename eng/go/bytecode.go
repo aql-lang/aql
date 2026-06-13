@@ -65,6 +65,16 @@ const (
 	// *Type Pointers); the ID lookup always yields the canonical
 	// node, including types the check pass minted (def Foo …).
 	OpPushType
+	// OpFallback runs Fallbacks[Arg] as an interpreter island: a
+	// construct the checker could not type (a dynamic dispatch, a
+	// code-body higher-order word) re-executes through a sub-engine
+	// over its recorded tokens, threading the operand stack. The
+	// compiled code on either side keeps running — this is Stage 5's
+	// span-level FALLBACK_INTERP (plan §Stage 5). NIn values are
+	// popped (top of stack = sig position NIn-of-the-span's first
+	// threaded arg) and pushed onto the island; the island's residual
+	// is pushed back.
+	OpFallback
 )
 
 func (o Opcode) String() string {
@@ -93,6 +103,8 @@ func (o Opcode) String() string {
 		return "RET"
 	case OpPushType:
 		return "PUSH_TYPE"
+	case OpFallback:
+		return "FALLBACK"
 	}
 	return fmt.Sprintf("OP(%d)", uint8(o))
 }
@@ -118,6 +130,18 @@ type TypeRef struct {
 	ID   string
 }
 
+// FallbackSpan is one interpreter island: a recorded token sequence
+// the VM re-runs through a sub-engine for a construct the compiler
+// could not lower (Stage 5 FALLBACK_INTERP). NIn operand-stack values
+// are popped and pre-loaded onto the island (deepest first), the
+// island runs Tokens, and its residual is pushed back. Desc is a
+// human label for the disassembler.
+type FallbackSpan struct {
+	Tokens []Value
+	NIn    int
+	Desc   string
+}
+
 // Program is a compiled unit: code, interned constants, the signature
 // table, a pc → source-position map, and the precomputed stack bound.
 type Program struct {
@@ -125,6 +149,7 @@ type Program struct {
 	Consts    []Value
 	Types     []TypeRef
 	Sigs      []SigRef
+	Fallbacks []FallbackSpan
 	Fns       []CompiledFn
 	Debug     []SrcPos // 1:1 with Code
 	MaxStack  int      // a floor when the program loops (results accumulate)
@@ -150,8 +175,8 @@ func (p *Program) Disassemble() string {
 		fmt.Fprintf(&sb, "fn f%d %s/%d (locals=%d):\n", fi, p.Fns[fi].Name, p.Fns[fi].NParams, p.Fns[fi].NLocals)
 		p.disasmUnit(&sb, p.Fns[fi].Code)
 	}
-	fmt.Fprintf(&sb, "; consts=%d types=%d sigs=%d fns=%d max-stack=%d locals=%d\n",
-		len(p.Consts), len(p.Types), len(p.Sigs), len(p.Fns), p.MaxStack, p.NumLocals)
+	fmt.Fprintf(&sb, "; consts=%d types=%d sigs=%d fallbacks=%d fns=%d max-stack=%d locals=%d\n",
+		len(p.Consts), len(p.Types), len(p.Sigs), len(p.Fallbacks), len(p.Fns), p.MaxStack, p.NumLocals)
 	return sb.String()
 }
 
@@ -175,6 +200,9 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 			fmt.Fprintf(sb, " l%d", in.Arg)
 		case OpPushType:
 			fmt.Fprintf(sb, " t%-3d ; %s", in.Arg, p.Types[in.Arg].Name)
+		case OpFallback:
+			fb := p.Fallbacks[in.Arg]
+			fmt.Fprintf(sb, " b%-3d ; %s (nin=%d)", in.Arg, fb.Desc, fb.NIn)
 		case OpCallUser, OpTailCallUser:
 			fmt.Fprintf(sb, " f%-3d ; %s/%d", in.Arg, p.Fns[in.Arg].Name, p.Fns[in.Arg].NParams)
 		}

@@ -34,7 +34,7 @@ func TestEmitGoldens(t *testing.T) {
 		{`add 1 2`, `0000 PUSH_CONST  k1   ; 2 (Integer)
 0001 PUSH_CONST  k0   ; 1 (Integer)
 0002 CALL_NATIVE s0   ; add (Number, Number)
-; consts=2 types=0 sigs=1 fns=0 max-stack=2 locals=0
+; consts=2 types=0 sigs=1 fallbacks=0 fns=0 max-stack=2 locals=0
 `},
 		// `1 add 2` is the k=1 split of the (2,1) assignment — the
 		// forward 2 fills sig[0], the stack-prefix 1 fills sig[1]
@@ -45,14 +45,14 @@ func TestEmitGoldens(t *testing.T) {
 		{`1 add 2`, `0000 PUSH_CONST  k1   ; 1 (Integer)
 0001 PUSH_CONST  k0   ; 2 (Integer)
 0002 CALL_NATIVE s0   ; add (Number, Number)
-; consts=2 types=0 sigs=1 fns=0 max-stack=2 locals=0
+; consts=2 types=0 sigs=1 fallbacks=0 fns=0 max-stack=2 locals=0
 `},
 		{`0 add 7 sub 3`, `0000 PUSH_CONST  k1   ; 0 (Integer)
 0001 PUSH_CONST  k0   ; 7 (Integer)
 0002 CALL_NATIVE s0   ; add (Number, Number)
 0003 PUSH_CONST  k2   ; 3 (Integer)
 0004 CALL_NATIVE s1   ; sub (Number, Number)
-; consts=3 types=0 sigs=2 fns=0 max-stack=2 locals=0
+; consts=3 types=0 sigs=2 fallbacks=0 fns=0 max-stack=2 locals=0
 `},
 		// A paren result feeding the next call: the prior result stays
 		// on the simulated stack; only the literal is pushed.
@@ -61,14 +61,14 @@ func TestEmitGoldens(t *testing.T) {
 0002 CALL_NATIVE s0   ; add (Number, Number)
 0003 PUSH_CONST  k2   ; 3 (Integer)
 0004 CALL_NATIVE s1   ; mul (Number, Number)
-; consts=3 types=0 sigs=2 fns=0 max-stack=2 locals=0
+; consts=3 types=0 sigs=2 fallbacks=0 fns=0 max-stack=2 locals=0
 `},
 		// Top-level strings are stripped to carriers by check mode;
 		// RecordStrip preserves the originals for interning.
 		{`'a' add 'b'`, `0000 PUSH_CONST  k1   ; 'a' (ProperString)
 0001 PUSH_CONST  k0   ; 'b' (ProperString)
 0002 CALL_NATIVE s0   ; add (Scalar, Scalar)
-; consts=2 types=0 sigs=1 fns=0 max-stack=2 locals=0
+; consts=2 types=0 sigs=1 fallbacks=0 fns=0 max-stack=2 locals=0
 `},
 		// `if` lowers to JMP_IF_FALSE / JMP: condition code first, a
 		// branch per fragment, the join value on the stack for the
@@ -80,7 +80,7 @@ func TestEmitGoldens(t *testing.T) {
 0004 PUSH_CONST  k2   ; 10 (Integer)
 0005 JMP         -> 0007
 0006 PUSH_CONST  k3   ; 20 (Integer)
-; consts=4 types=0 sigs=1 fns=0 max-stack=2 locals=0
+; consts=4 types=0 sigs=1 fallbacks=0 fns=0 max-stack=2 locals=0
 `},
 		// The branch result feeds the downstream mul; a stripped
 		// Boolean literal condition compiles as PUSH_CONST + jump
@@ -96,14 +96,14 @@ func TestEmitGoldens(t *testing.T) {
 0008 PUSH_CONST  k2   ; 9 (Integer)
 0009 PUSH_CONST  k1   ; 2 (Integer)
 0010 CALL_NATIVE s2   ; mul (Number, Number)
-; consts=3 types=0 sigs=3 fns=0 max-stack=2 locals=0
+; consts=3 types=0 sigs=3 fallbacks=0 fns=0 max-stack=2 locals=0
 `},
 		// Literal-substitution def: x resolves to the interned literal
 		// through value provenance — the report's §5.2 inline case.
 		{`def x 1 x add 2`, `0000 PUSH_CONST  k1   ; 1 (Integer)
 0001 PUSH_CONST  k0   ; 2 (Integer)
 0002 CALL_NATIVE s0   ; add (Number, Number)
-; consts=2 types=0 sigs=1 fns=0 max-stack=2 locals=0
+; consts=2 types=0 sigs=1 fallbacks=0 fns=0 max-stack=2 locals=0
 `},
 	}
 	for _, c := range cases {
@@ -170,7 +170,7 @@ func TestEmitForLoopGolden(t *testing.T) {
 0006 PUSH_CONST  k0   ; 10 (Integer)
 0007 CALL_NATIVE s0   ; add (Number, Number)
 0008 JMP         -> 0004
-; consts=4 types=0 sigs=1 fns=0 max-stack=3 locals=1
+; consts=4 types=0 sigs=1 fallbacks=0 fns=0 max-stack=3 locals=1
 `
 	if got != want {
 		t.Errorf("for lowering changed:\n--- got\n%s--- want\n%s", got, want)
@@ -574,7 +574,7 @@ func TestEmitMacroExpansionGolden(t *testing.T) {
 	want := `0000 PUSH_CONST  k0   ; 5 (Integer)
 0001 PUSH_CONST  k0   ; 5 (Integer)
 0002 CALL_NATIVE s0   ; add (Number, Number)
-; consts=1 types=0 sigs=1 fns=0 max-stack=2 locals=0
+; consts=1 types=0 sigs=1 fallbacks=0 fns=0 max-stack=2 locals=0
 `
 	if got != want {
 		t.Errorf("macro expansion lowering changed:\n--- got\n%s--- want\n%s", got, want)
@@ -606,7 +606,7 @@ func TestEmitModuleCallLowering(t *testing.T) {
 	}
 	want := `0000 PUSH_CONST  k0   ; 16.0 (Float)
 0001 CALL_NATIVE s0   ; sqrt (Float)
-; consts=1 types=0 sigs=1 fns=0 max-stack=1 locals=0
+; consts=1 types=0 sigs=1 fallbacks=0 fns=0 max-stack=1 locals=0
 `
 	if got != want {
 		t.Errorf("module call lowering changed:\n--- got\n%s--- want\n%s", got, want)
@@ -706,5 +706,77 @@ func TestEmitFnValueCallFallsBack(t *testing.T) {
 	}
 	if len(out) != 1 || out[0] != int64(6) {
 		t.Fatalf("m.f 5 fallback = %v, want 6", out)
+	}
+}
+
+// Stage 5: a code-body higher-order word compiles as an interpreter
+// ISLAND (OpFallback) — a self-contained span re-run through a
+// sub-engine, with the compiled code on either side intact. The body
+// must reference only VM-resolvable words; a body reading a check-time
+// `def` (a carrier at run time) refuses to whole-program fallback.
+func TestEmitFallbackIsland(t *testing.T) {
+	got, reason := compile(t, `each [mul 2] [1 2 3]`)
+	if reason != "" {
+		t.Fatalf("each island uncompilable: %s", reason)
+	}
+	if !strings.Contains(got, "FALLBACK") || !strings.Contains(got, "fallbacks=1") {
+		t.Errorf("each did not lower to a FALLBACK island:\n%s", got)
+	}
+
+	// Runtime parity across each / fold / scan.
+	for _, c := range []struct {
+		src  string
+		want any
+	}{
+		{`each [mul 2] [1 2 3]`, "[2 4 6]"},
+		{`[1 2 3] each [mul 2]`, "[2 4 6]"},
+		{`fold [add] [1 2 3 4] 0`, int64(10)},
+		{`scan [add] [1 2 3]`, "[1 3 6]"},
+	} {
+		a, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, compiled, err := a.RunCompiled(c.src)
+		if err != nil || !compiled {
+			t.Fatalf("%q: compiled=%v err=%v", c.src, compiled, err)
+		}
+		if len(out) != 1 || out[0] != c.want {
+			t.Fatalf("%q compiled = %v, want %v", c.src, out, c.want)
+		}
+	}
+
+	// Negative: a body reading a value-def refuses (the def is a carrier
+	// at VM run time) — whole-program fallback, correct result.
+	if _, r := compile(t, `def n 10 each [add n] [1 2 3]`); r == "" {
+		t.Error("each with a def-referencing body compiled but must refuse")
+	}
+	b, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, compiled, err := b.RunCompiled(`def n 10 each [add n] [1 2 3]`)
+	if err != nil || compiled {
+		t.Fatalf("def-body fallback: compiled=%v err=%v", compiled, err)
+	}
+	if len(out) != 1 || out[0] != "[11 12 13]" {
+		t.Fatalf("def-body fallback = %v, want [11 12 13]", out)
+	}
+
+	// A module-qualified higher-order word with a code body dispatches
+	// the inner native through a sub-registry; the core-dispatch guard
+	// keeps any bare-name re-run faithful. It runs correctly either way.
+	c, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mout, _, merr := c.RunCompiled(`"aql:array-util" import end ArrayUtil.group ['a' 'b' 'a'] [1 2 3]`)
+	if merr != nil {
+		t.Fatalf("module group: %v", merr)
+	}
+	d, _ := New()
+	iout, _ := d.Run(`"aql:array-util" import end ArrayUtil.group ['a' 'b' 'a'] [1 2 3]`)
+	if len(mout) != len(iout) || (len(mout) == 1 && mout[0] != iout[0]) {
+		t.Fatalf("module group compiled=%v interpreted=%v", mout, iout)
 	}
 }
