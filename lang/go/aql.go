@@ -415,8 +415,19 @@ func convertResults(result []eng.Value) []any {
 // reports which path ran (for tooling; never branch program logic on
 // it).
 func (a *AQL) RunCompiled(src string) ([]any, bool, error) {
+	// CompileCheck executes the program in check mode, so its
+	// RunInCheckMode words (def/import/type/macro, the Test harness)
+	// leave real side effects on the registry. The COMPILED path needs
+	// those to persist (OpPushType resolves minted IDs; islands re-run
+	// through a sub-engine over the same registry). But the interpreter
+	// FALLBACK re-runs the whole source, so it must NOT see them or it
+	// double-applies a re-mint / re-import / re-run Test spec. Snapshot
+	// the mutable scopes before the check pass and roll them back on the
+	// fallback path; keep them on the compiled path.
+	snap := a.registry.SnapshotForCompile()
 	prog, _, _, err := a.CompileCheck(src)
 	if err != nil || prog == nil {
+		a.registry.RestoreForCompile(snap)
 		out, rerr := a.Run(src)
 		return out, false, rerr
 	}

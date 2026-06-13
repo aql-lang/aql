@@ -11,10 +11,10 @@ operands, multi-overload monomorphization, module dot-access calls —
 1412 spec rows compiled, 0 mismatches); Stage 5 SPAN-FALLBACK
 SUBSTANTIALLY LANDED (interpreter islands incl. threaded
 computed-receivers, widened allow-set, concurrency race-safety gate,
-whole-corpus compile-or-fallback ratchet — 1438 spec rows compiled,
-0 mismatches; the dynamic-dispatch F4 boundary, sentinel-crossing,
-and fallback registry-isolation remain as documented follow-ons).
-Companion to
+fallback registry-isolation so the WHOLE corpus compiles-or-falls-back
+with 0 divergences — 1438 spec rows compiled span-level, 0 mismatches;
+the dynamic-dispatch F4 boundary and sentinel-crossing remain as
+documented follow-ons). Companion to
 `aql-bytecode-report.0.md` (the design) and
 `aql-bytecode-revisions.0.md` (the June 2026 re-review that this plan
 incorporates; read it first — it changes two requirements). Written
@@ -456,26 +456,33 @@ against its own `ForkConcurrent` registry. The race-detector gate
 with no data race. `await`/timer branch bodies still run as interpreter
 fallbacks (v1, per below).
 
-**Whole-corpus compile-or-fallback gate LANDED** as a ratchet
+**Whole-corpus compile-or-fallback gate LANDED, 0 divergences**
 (`compiled_fullcorpus_test.go`): every VALUE row runs through
 `RunCompiled` — compiling what it can, silently falling back otherwise —
-and must match the interpreter. The divergence set is pinned to exactly
-10 rows, all on the FALLBACK path, all the same PRE-EXISTING
-`RunCompiled` limitation (independent of span fallback): `CompileCheck`
-executes the program in check mode, so a subsequent interpreter
-fallback double-applies its `def`/`import`/`type`/Test side effects. A
-faithful fix needs registry-state isolation between the check pass and
-the fallback (a naive `ForkConcurrent` loses module-import fidelity) —
-tracked below. The ratchet fails on any NEW divergence.
+and matches the interpreter row-for-row (2292 value rows, 1440 compiled,
+0 mismatches). This required the **fallback registry-isolation** fix:
+`CompileCheck` executes the program in check mode, so its RunInCheckMode
+words (def/import/type/macro, the Test harness) leave real side effects
+on the registry; the COMPILED path needs those (OpPushType resolves
+minted IDs, islands re-run over the same registry), but the interpreter
+FALLBACK must not re-apply them or it double-mints / re-imports / re-runs
+a Test spec. `RunCompiled` now snapshots the mutable registry scopes
+(`Registry.SnapshotForCompile`: Defs, Types, Contexts, Modules load set,
+builtin-word set, capability slots, check state) before the check pass
+and rolls them back on the fallback path (`RestoreForCompile`); the
+compiled path keeps them. An in-place snapshot was the right tool — a
+`ForkConcurrent` shares the parent's `Modules`/`Capabilities` pointers,
+so the check pass on a fork still pollutes the real registry's module
+cache (it lost module-import fidelity in testing); restoring the SAME
+registry is faithful where a separate one is not.
 
-**Remaining (follow-on):** the fallback **registry-isolation** fix that
-clears the 10 pinned double-exec rows; multi-threaded islands (the
-trailing run laid out deepest-first on the operand stack); the general
-dynamic-dispatch fallback for `get`-returns-`Any` and fn-value call
-sites (F4) via `TYPE_CHECK`-guarded boundaries; `break`/`continue`/
-`return` sentinels crossing an island; widening the allow-set into the
-query-DSL words (`where`/`having`/`order`/`select`-query) once their
-pipeline-receiver semantics are proven island-faithful. The original
+**Remaining (follow-on):** multi-threaded islands (the trailing run laid
+out deepest-first on the operand stack); the general dynamic-dispatch
+fallback for `get`-returns-`Any` and fn-value call sites (F4) via
+`TYPE_CHECK`-guarded boundaries; `break`/`continue`/`return` sentinels
+crossing an island; widening the allow-set into the query-DSL words
+(`where`/`having`/`order`/`select`-query) once their pipeline-receiver
+semantics are proven island-faithful. The original
 Stage-5 scope:
 
 Span-level `FALLBACK_INTERP`: `do` on computed lists, unresolved
