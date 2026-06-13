@@ -625,6 +625,62 @@ numbers against the Stage-0 baseline on the same corpus.
 
 *~1–2 weeks per item taken.*
 
+### Residuals hardening (Stage-6 follow-on) — status
+
+A pass over the Stage 0–6 residuals: harden the regression net first,
+then take each residual gate-clean-or-defer.
+
+**Landed:**
+
+- **Curated combination matrix + strict verification gate.**
+  `lang/spec/bytecode-combinations.tsv` (interpreter-pinned + compiled
+  differential) and `compiled_combinations_test.go` (parity + compilation
+  PATH pins) cross the feature axes the per-feature specs test in
+  isolation; `make verify-bytecode` runs the differential, whole-corpus,
+  combination, -race, and deterministic alloc-ceiling gates as one
+  command (CI runs the -race step). Differential 1455 → 1511.
+- **Tooling/DX:** `AQL_COMPILE`/`AQL_NO_COMPILE` env (the rollout
+  contract + forward kill switch); `trace` falls back so the step trace
+  renders (the "disable under trace" contract via fallback); a compile
+  report (`aql check --emit` prints `sites: mono/poly/dynamic/meta` +
+  `islands:`); a slot→name table per `CompiledFn`; and byte-identical
+  mixed-mode island error rendering. All pinned.
+- **`args`/`__pa` refused** — they read the interpreter's per-call args
+  stack, which the VM's `CALL_USER` frame doesn't maintain; a compiled fn
+  reading `args` failed at run time, so refuse and fall back (latent
+  soundness fix).
+- **Per-dispatch args scratch buffer** — reuse one buffer across
+  `OpCallNative` instead of allocating per call (the result is copied onto
+  the stack before reuse; monomorphic natives don't retain it). Compiled
+  allocs: arith 257 → 194, recursion_tail 18757 → 15756 (~16–25%), time
+  ~20% faster; gate-clean.
+
+**Deferred (gate-clean-or-defer — the hard, interlocking F4 frontier):**
+
+- **F4 operand coverage (`make` 148 rows, `get` 119 rows).** These were
+  diagnosed precisely and are blocked by three interlocking issues:
+  (1) the **fn-value-call boundary** — a `get` returning a module/instance
+  METHOD (`r.int`) is auto-applied by the interpreter to the args that
+  follow, but the island captures only the get and leaves the method
+  unapplied (`[fn rand-int … 0 100]` vs `75`); the method result is
+  dynamic `Any`, statically indistinguishable from a data `get`, so it
+  can't be cheaply refused. (2) **Barriered baked islands** — a `get` with
+  a literal receiver needs a STACK-form span (`{m} get a`), not the
+  forward-form span the island builder emits; relaxing the forward-
+  eligibility check helps only the THREADED shape, which is exactly the
+  method case. (3) **`make` operand representation** — a class operand is
+  an `ObjectType` value, not a bare type node, and `make`'s 3-arg sigs add
+  a non-materialisable slot. Each needs real design (the report-§9.1
+  fn-value `TYPE_CHECK` boundary), not a quick guard.
+- **`CALL_NATIVE_POLY`** (truly-polymorphic dispatch) — recipe is clear
+  (runtime `matchSignature` over the word's sigs, faithful by reuse) but
+  the corpus has ~no such sites, so it adds unexercised surface; deferred.
+- **Multi-threaded islands (NIn>1)** — 0 corpus coverage (confirmed).
+- **Fast-path opcodes / compact encoding** — the scratch buffer captured
+  the dominant per-dispatch alloc; the residual (result-slice + boxing)
+  is smaller and the opcodes add dispatch complexity. Benchmark-gated,
+  not yet worth it.
+
 ## Stage 7 — graduation criteria (compiled mode by default)
 
 Flip the default only when all of:
