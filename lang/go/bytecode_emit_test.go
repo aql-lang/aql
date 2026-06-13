@@ -560,3 +560,85 @@ func TestEmitTypeOperands(t *testing.T) {
 		t.Error("carrier-tainted type body compiled but must refuse")
 	}
 }
+
+// Stage 4: a macro call site lowers to its EXPANSION — the macro
+// installs during the check pass (RunInCheckMode construction, like
+// fn/fnsig), its use expands on the tape (execMacro), and the
+// recording pass sees only the expanded stream (plan R6 #29: raw-form
+// operand spans are never lowered pre-expansion).
+func TestEmitMacroExpansionGolden(t *testing.T) {
+	got, reason := compile(t, `def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])  twice 5`)
+	if reason != "" {
+		t.Fatalf("macro site uncompilable: %s", reason)
+	}
+	want := `0000 PUSH_CONST  k0   ; 5 (Integer)
+0001 PUSH_CONST  k0   ; 5 (Integer)
+0002 CALL_NATIVE s0   ; add (Number, Number)
+; consts=1 types=0 sigs=1 fns=0 max-stack=2 locals=0
+`
+	if got != want {
+		t.Errorf("macro expansion lowering changed:\n--- got\n%s--- want\n%s", got, want)
+	}
+
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, compiled, err := a.RunCompiled(`def unless (macro [[c body] [ quote [ if unquote c [0] unquote body ] ]])  unless false [42]`)
+	if err != nil || !compiled {
+		t.Fatalf("unless macro: compiled=%v err=%v", compiled, err)
+	}
+	if len(out) != 1 || out[0] != int64(42) {
+		t.Fatalf("unless false [42] = %v, want 42", out)
+	}
+}
+
+// Stage 4: a module dot-access call compiles to a bare CALL_NATIVE on
+// the INNER native's signature — `MathUtil.sqrt 16.0` is the tokens
+// `MathUtil get sqrt 16.0`; the import and the get resolution run
+// during the check pass and are ELIDED (the resolved wrapper's
+// trivial-delegation dispatch records the real call, through the same
+// engine/registry the interpreter's short-circuit uses).
+func TestEmitModuleCallLowering(t *testing.T) {
+	got, reason := compile(t, `"aql:math-util" import end MathUtil.sqrt 16.0`)
+	if reason != "" {
+		t.Fatalf("module call uncompilable: %s", reason)
+	}
+	want := `0000 PUSH_CONST  k0   ; 16.0 (Float)
+0001 CALL_NATIVE s0   ; sqrt (Float)
+; consts=1 types=0 sigs=1 fns=0 max-stack=1 locals=0
+`
+	if got != want {
+		t.Errorf("module call lowering changed:\n--- got\n%s--- want\n%s", got, want)
+	}
+
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, compiled, err := a.RunCompiled(`"aql:math-util" import end MathUtil.max 5.0 9.0`)
+	if err != nil || !compiled {
+		t.Fatalf("MathUtil.max: compiled=%v err=%v", compiled, err)
+	}
+	if len(out) != 1 || out[0] != "9.0" {
+		t.Fatalf("max 5.0 9.0 = %v, want 9.0", out)
+	}
+
+	// Negative: a get whose RESULT the checker cannot type (dynamic
+	// Any — a runtime field read) refuses and falls back; the program
+	// still runs correctly through the interpreter.
+	if _, r := compile(t, `def m {a:1} m.a`); r == "" {
+		t.Error("dynamic-result get compiled but must refuse (checker types it Any)")
+	}
+	b, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out2, compiled2, err := b.RunCompiled(`def m {a:1} m.a`)
+	if err != nil || compiled2 {
+		t.Fatalf("dynamic get fallback: compiled=%v err=%v", compiled2, err)
+	}
+	if len(out2) != 1 || out2[0] != int64(1) {
+		t.Fatalf("m.a fallback = %v, want 1", out2)
+	}
+}

@@ -17,11 +17,25 @@ import (
 	lang "github.com/aql-lang/aql/lang/go"
 )
 
+// newDifferentialInstance builds one side of the comparison with the
+// SAME frozen clock the spec runner uses (langspec_test.go), so
+// clock-seeded rows (rand, now) are deterministic and comparable
+// across the two runs.
+func newDifferentialInstance(t *testing.T) *lang.AQL {
+	t.Helper()
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("lang.New: %v", err)
+	}
+	a.SetClock(specClock)
+	return a
+}
+
 // minCompiledRows is the floor: at least this many spec rows must
 // take the compiled path for the gate to be meaningful. Raise it as
 // later stages widen the compilable subset; never lower it without a
 // documented decision.
-const minCompiledRows = 1100 // raised with Stage-4 generics + type operands (1124 compiled June 2026)
+const minCompiledRows = 1400 // raised with Stage-4 macros + module calls (1412 compiled June 2026)
 
 func TestSpecCompiledDifferential(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
@@ -59,10 +73,7 @@ func TestSpecCompiledDifferential(t *testing.T) {
 			}
 
 			// Compiled path on a fresh instance.
-			ac, err := lang.New()
-			if err != nil {
-				t.Fatalf("lang.New: %v", err)
-			}
+			ac := newDifferentialInstance(t)
 			gotC, wasCompiled, errC := ac.RunCompiled(input)
 			if !wasCompiled {
 				continue // beyond the current stage's subset
@@ -70,10 +81,7 @@ func TestSpecCompiledDifferential(t *testing.T) {
 			compiled++
 
 			// Interpreter path on another fresh instance.
-			ai, err := lang.New()
-			if err != nil {
-				t.Fatalf("lang.New: %v", err)
-			}
+			ai := newDifferentialInstance(t)
 			gotI, errI := ai.Run(input)
 
 			if (errC != nil) != (errI != nil) {

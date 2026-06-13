@@ -2305,7 +2305,12 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// used by words whose side effects (def, undef, fn, type, …)
 	// are prerequisites for subsequent analysis.
 	if e.registry.Check.IsActive() && !match.Sig.RunInCheckMode {
-		name := ""
+		// The dispatch name: the word at the pointer, or — for a
+		// VALUE dispatch (a module wrapper's trivial-delegation
+		// short-circuit steps the Function literal, not a Word) — the
+		// match's own name. A true anonymous lambda has both empty,
+		// which is what the emit pass keys its fn-value refusal on.
+		name := match.Name
 		var pos SrcPos
 		if e.pointer < e.tape.Len() && IsWord(e.tape.At(e.pointer)) {
 			pos = e.tape.At(e.pointer).Pos

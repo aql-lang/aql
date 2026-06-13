@@ -287,6 +287,16 @@ func (a *AQL) SetFileOps(ops FileOps) {
 	native.SetHostFileOps(a.registry, ops)
 }
 
+// Clock is the time source used by temporal and random words —
+// re-exported so hosts and tests can freeze it (capabilities.FixedClock)
+// for reproducible runs.
+type Clock = capabilities.Clock
+
+// SetClock replaces the instance's clock.
+func (a *AQL) SetClock(clk Clock) {
+	native.SetHostClock(a.registry, clk)
+}
+
 // SetOutput replaces the writer used by print, help, and other output words.
 func (a *AQL) SetOutput(w io.Writer) {
 	a.registry.Output = w

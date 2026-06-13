@@ -39,7 +39,13 @@ var macroNatives = []NativeFunc{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    macroHandler,
-			Returns:    []*Type{TFunction}, BarrierPos: -1,
+			// Pure construction, like fn/fnsig — runs in check mode so
+			// the macro INSTALLS during the check pass: its uses then
+			// expand on the tape (execMacro) and the checker (and the
+			// bytecode recording pass) see the expanded stream, never
+			// the raw-form operand span (plan R6 #29).
+			Returns: []*Type{TFunction}, BarrierPos: -1,
+			RunInCheckMode: true,
 		}},
 	},
 	{

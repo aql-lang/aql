@@ -742,6 +742,21 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 			return
 		}
 	}
+	// Compile-time NAME RESOLUTION: a get/getr whose result is a
+	// statically-known callable or namespace (a module export wrapper,
+	// a module-export instance) executed during the check pass —
+	// `MathUtil.sqrt 16.0` is the tokens `MathUtil get sqrt 16.0`, and
+	// the resolved wrapper's own dispatch records the REAL call (the
+	// inner native's sig through execMatch on this engine, so CALL_
+	// NATIVE parity holds). Elide the resolution event; if the value
+	// instead flows somewhere data-like, downstream provenance refuses
+	// and the program falls back.
+	if (word == "get" || word == "getr") && len(outs) == 1 && IsConcrete(outs[0]) {
+		switch outs[0].Data.(type) {
+		case FnDefInfo, ExtensionPayload:
+			return
+		}
+	}
 	switch {
 	case sig == nil:
 		es.MarkUncompilable("dispatch without a signature at " + word)
@@ -768,10 +783,13 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
 		return
-	case len(sig.QuoteArgs) > 0:
+	case len(sig.QuoteArgs) > 0 && word != "get" && word != "getr":
 		// Implicit-quote operands (usurp, force-arity, ref-family):
 		// dispatch-manipulating meta words whose results the engine
-		// re-steps.
+		// re-steps. get/getr are exempt — plain accessors whose quoted
+		// key is an inert Atom const and whose results are data (their
+		// fn-valued module-resolution case is elided above; a dynamic
+		// or fn-valued result still refuses via the later cases).
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("quoted-operand word " + word)
 		return

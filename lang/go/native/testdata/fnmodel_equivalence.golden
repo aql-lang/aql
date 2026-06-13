@@ -330,7 +330,7 @@ WORD lte
   [Scalar Scalar] barrier=2 runcheck typearg={1} returns=[Scalar]
   [Any Any] barrier=2 returns=[Scalar/Boolean]
 WORD macro
-  [Node/List] barrier=1 noeval={0} returns=[Type/Function]
+  [Node/List] barrier=1 runcheck noeval={0} returns=[Type/Function]
 WORD macroexpand
   [Any] barrier=1 returns=[Node/List]
 WORD make
