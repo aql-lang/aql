@@ -728,18 +728,17 @@ func TestEmitFnValueCallFallsBack(t *testing.T) {
 	}
 }
 
-// Stage 5: a code-body higher-order word compiles as an interpreter
-// ISLAND (OpFallback) — a self-contained span re-run through a
-// sub-engine, with the compiled code on either side intact. The body
-// must reference only VM-resolvable words; a body reading a check-time
-// `def` (a carrier at run time) refuses to whole-program fallback.
+// Plan P2: a code-body higher-order word compiles its body to a CLOSURE
+// unit (PUSH_CLOSURE) and runs it through the VM — no interpreter island.
+// The body must reference only VM-resolvable words; a body reading a
+// check-time `def` (a carrier at run time) keeps the island/fallback path.
 func TestEmitFallbackIsland(t *testing.T) {
 	got, reason := compile(t, `each [mul 2] [1 2 3]`)
 	if reason != "" {
-		t.Fatalf("each island uncompilable: %s", reason)
+		t.Fatalf("each closure uncompilable: %s", reason)
 	}
-	if !strings.Contains(got, "FALLBACK") || !strings.Contains(got, "fallbacks=1") {
-		t.Errorf("each did not lower to a FALLBACK island:\n%s", got)
+	if !strings.Contains(got, "PUSH_CLOSURE") || strings.Contains(got, "FALLBACK") {
+		t.Errorf("each did not lower to a closure (expected PUSH_CLOSURE, no FALLBACK):\n%s", got)
 	}
 
 	// Runtime parity across each / fold / scan.
@@ -842,16 +841,13 @@ func TestEmitWidenedAllowSet(t *testing.T) {
 }
 
 // Stage 5 (F4 — general dynamic dispatch): a typed query word
-// (get/size/is/typeof/make/type-algebra) on a DYNAMIC operand — a value
-// the checker widened to Any, e.g. a prior island's result — islands and
-// re-DISPATCHES through the sub-engine, threading the runtime value. The
-// island is the runtime guard: it picks the overload at run time exactly
-// as the interpreter would, so no static sig is committed. Islands
-// compose: each → size/typeof/is/make all island over the dynamic list.
-// A concrete-operand query is NOT islanded (it lowers to CALL_NATIVE);
-// islanding it would poison the result to dynamic and lose coverage.
+// (get/size/is/typeof/make/type-algebra) on a now-native each result is
+// itself native: with the each body compiled to a closure (plan P2) its
+// result is a concrete typed List, so the typed query lowers to CALL_NATIVE
+// rather than re-dispatching through an island. (A genuinely-dynamic
+// operand — a threaded get's Any result — still islands; that path is
+// covered by the combination-path pins and the full-corpus gate.)
 func TestEmitF4DynamicDispatch(t *testing.T) {
-	// Dynamic operand (the each island's result) → typed query islands.
 	for _, c := range []struct {
 		src  string
 		want any
@@ -864,8 +860,8 @@ func TestEmitF4DynamicDispatch(t *testing.T) {
 		got, reason := compile(t, c.src)
 		if reason != "" {
 			t.Errorf("%q F4 dispatch refused: %s", c.src, reason)
-		} else if !strings.Contains(got, "FALLBACK") {
-			t.Errorf("%q did not island the dynamic dispatch:\n%s", c.src, got)
+		} else if strings.Contains(got, "FALLBACK") {
+			t.Errorf("%q islanded but a native-each result is a concrete query:\n%s", c.src, got)
 		}
 		a, err := New()
 		if err != nil {
@@ -922,14 +918,12 @@ func TestEmitIslandSentinelRefusal(t *testing.T) {
 	}
 }
 
-// Stage 5 (threaded islands): a COMPUTED receiver — a data arg that is a
-// prior compiled event's result rather than a baked literal — threads
-// its runtime value onto the island (NIn=1). `(iota 4) each [body]`
-// compiles to `… CALL_NATIVE iota; FALLBACK (nin=1)`: the VM preloads
-// the iota result and the island re-runs `each [body] <value>`.
+// Plan P2: a COMPUTED receiver — a data arg that is a prior compiled
+// event's result rather than a baked literal — flows as a normal operand
+// to the native higher-order call, with the body compiled to a closure.
+// `(iota 4) each [body]` compiles to `… CALL_NATIVE iota; PUSH_CLOSURE;
+// CALL_NATIVE each` — no island, the iota result is the each data operand.
 func TestEmitThreadedFallbackIsland(t *testing.T) {
-	// The computed receiver lowers to a threaded (nin=1) island, both
-	// in forward and stack form.
 	for _, src := range []string{
 		`each [mul 2] (iota 4)`,
 		`(iota 4) each [mul 2]`,
@@ -938,10 +932,10 @@ func TestEmitThreadedFallbackIsland(t *testing.T) {
 	} {
 		got, reason := compile(t, src)
 		if reason != "" {
-			t.Fatalf("%q threaded island uncompilable: %s", src, reason)
+			t.Fatalf("%q computed-receiver closure uncompilable: %s", src, reason)
 		}
-		if !strings.Contains(got, "FALLBACK") || !strings.Contains(got, "nin=1") {
-			t.Errorf("%q did not lower to a threaded (nin=1) island:\n%s", src, got)
+		if !strings.Contains(got, "PUSH_CLOSURE") || strings.Contains(got, "FALLBACK") {
+			t.Errorf("%q did not lower to a native closure call with a computed data operand:\n%s", src, got)
 		}
 	}
 

@@ -378,7 +378,8 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 			}
 		}
 	}
-	if !tryRecordFallback(r, word, sig, args, out, pos) {
+	if !tryRecordClosure(r, word, sig, args, out, pos) &&
+		!tryRecordFallback(r, word, sig, args, out, pos) {
 		r.Check.Emit.RecordCall(word, sig, args, out, pos)
 	}
 	return out

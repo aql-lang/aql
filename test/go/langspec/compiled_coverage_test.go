@@ -32,6 +32,13 @@ import (
 // interpreter fallback can be deleted (plan P7). Never raise it.
 const refusalCeiling = 651 // P0 baseline (June 2026): 2671 rows, 1706 compiled, 314 statically-invalid, 651 refused
 
+// islandCeiling is the maximum number of compiled programs allowed to embed an
+// interpreter island (OpFallback). Islands re-enter the interpreter sub-engine
+// at run time, so this is the second downward ratchet toward run-time
+// independence (plan): each phase that compiles an island shape natively lowers
+// it, and it must reach 0 before the OpFallback machinery can be deleted (P7).
+const islandCeiling = 115 // after P2b each/fold/scan/filter closures (June 2026); lower as more island shapes compile natively
+
 // normaliseReason buckets a refusal reason into a stable category by
 // stripping the row-specific tail (word names, counts), so the histogram is
 // comparable across rows.
@@ -97,7 +104,7 @@ func TestCompiledCoverage(t *testing.T) {
 		t.Fatalf("read %s: %v", specDir, err)
 	}
 
-	var rows, compiled, checkErr, refused int
+	var rows, compiled, checkErr, refused, islanded int
 	buckets := map[string]int{}
 
 	for _, e := range entries {
@@ -134,6 +141,13 @@ func TestCompiledCoverage(t *testing.T) {
 				checkErr++
 			case prog != nil:
 				compiled++
+				// An islanded program still re-enters the interpreter at run
+				// time (OpFallback → sub-engine). Driving this to zero — by
+				// compiling each island shape natively — is the run-time-
+				// independence goal; track it as a downward ratchet.
+				if strings.Contains(prog.Disassemble(), "FALLBACK") {
+					islanded++
+				}
 			default:
 				refused++
 				buckets[normaliseReason(reason)]++
@@ -161,13 +175,16 @@ func TestCompiledCoverage(t *testing.T) {
 		return hist[i].reason < hist[j].reason
 	})
 
-	t.Logf("compiled coverage: %d rows — %d compiled, %d check-errors, %d refused",
-		rows, compiled, checkErr, refused)
+	t.Logf("compiled coverage: %d rows — %d compiled (%d islanded), %d check-errors, %d refused",
+		rows, compiled, islanded, checkErr, refused)
 	for _, h := range hist {
 		t.Logf("  refusal %4d  %s", h.n, h.reason)
 	}
 
 	if refused > refusalCeiling {
 		t.Errorf("compile refusals %d exceed ceiling %d — coverage regressed", refused, refusalCeiling)
+	}
+	if islanded > islandCeiling {
+		t.Errorf("islanded programs %d exceed ceiling %d — interpreter-island use regressed", islanded, islandCeiling)
 	}
 }

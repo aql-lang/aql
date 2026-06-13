@@ -52,13 +52,12 @@ type vmFrame struct {
 // frames, open loops, pc) lives in run() so a body closure invoked
 // mid-dispatch executes on its own stack without disturbing the caller.
 type vmContext struct {
-	p          *Program
-	r          *Registry
-	ceiling    int
-	stepLimit  int
-	steps      int
-	islandEng  *Engine
-	argScratch []Value
+	p         *Program
+	r         *Registry
+	ceiling   int
+	stepLimit int
+	steps     int
+	islandEng *Engine
 }
 
 func runProgram(p *Program, r *Registry, stepLimit int) ([]Value, error) {
@@ -120,6 +119,12 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 	ceiling := vc.ceiling
 	var loops []vmLoop
 	var frames []vmFrame
+	// argScratch is per-run (NOT shared on vc): a re-entrant closure run's
+	// CALL_NATIVE must not clobber an outer handler's args slice, which
+	// aliases this buffer until the handler returns (a higher-order handler
+	// holds its data arg across the InvokeBody call that drives the nested
+	// run).
+	var argScratch []Value
 	curUnit := startUnit
 	var curCode []Instr
 	var curDebug []SrcPos
@@ -218,10 +223,10 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			// natives (the monomorphic math/compare/etc. words the emitter
 			// admits) do not retain the args slice. The 0-divergence gate
 			// + combination matrix catch any handler that does.
-			if cap(vc.argScratch) < n {
-				vc.argScratch = make([]Value, n)
+			if cap(argScratch) < n {
+				argScratch = make([]Value, n)
 			}
-			args := vc.argScratch[:n]
+			args := argScratch[:n]
 			for i := 0; i < n; i++ {
 				args[i] = stack[len(stack)-1-i]
 			}
@@ -326,9 +331,6 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			enterUnit(int(in.Arg))
 			pc = -1
 		case OpRet:
-			if len(frames) == 0 {
-				return nil, vmErrAt(curDebug, pc, "RET without a frame")
-			}
 			// Return-type check — the compiled mirror of the interpreter's
 			// ReturnCheck (__RC, engine.go): the body's result must satisfy
 			// each declared return type via v.Is(exp), the SAME membership
@@ -336,6 +338,8 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			// predicate, a bare refine stays nominal, and builtins are
 			// unchanged. The body nets exactly len(Returns) values (the
 			// lowerer enforces single-result bodies), sitting on top.
+			// Applies to a nested RET (back to a CALL_USER caller) AND the
+			// top RET of a re-entrant unit run.
 			if curUnit >= 0 {
 				rets := p.Fns[curUnit].Returns
 				if len(rets) > 0 {
@@ -349,6 +353,14 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 						}
 					}
 				}
+			}
+			if len(frames) == 0 {
+				// Top RET of a re-entrant unit run (a body closure invoked
+				// via invokeClosure): the residual stack is the unit's
+				// result, threaded back through the InvokeBody seam. The
+				// main program (unit -1) never RETs — it runs off the end —
+				// so this path is closure/fn-root only.
+				return stack, nil
 			}
 			f := frames[len(frames)-1]
 			frames = frames[:len(frames)-1]

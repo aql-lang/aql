@@ -180,12 +180,14 @@ func TestCompiledCombinationPath(t *testing.T) {
 		{`for 5 [mul i 2]`, "native"},
 		{`def db fn [[n:Integer] [Integer] [n mul 2]] db 21`, "native"},
 		// Code-body higher-order words island.
-		{`each [mul 2] [1 2 3]`, "island"},
-		{`each [mul 2] (iota 4)`, "island"}, // threaded
-		{`do [add 1 2]`, "island"},
-		// F4 over a dynamic (island) result islands; concrete operand does not.
-		{`size (each [mul 2] [1 2 3])`, "island"},
-		{`make Array (each [mul 2] [1 2 3])`, "island"},
+		// Code-body higher-order words compile their body to a CLOSURE unit
+		// and run it through the VM (plan P2) — pure CALL_NATIVE, no island.
+		{`each [mul 2] [1 2 3]`, "native"},
+		{`each [mul 2] (iota 4)`, "native"}, // threaded data
+		{`do [add 1 2]`, "island"},          // do not yet closure-compiled
+		// F4 over a now-native each result is itself native (no dynamic island).
+		{`size (each [mul 2] [1 2 3])`, "native"},
+		{`make Array (each [mul 2] [1 2 3])`, "native"},
 		// F4 get on a dynamic (threaded) receiver islands.
 		{`(make Array [10 20 30]) get 1`, "island"},
 		// F4 barriered get on a literal / def-bound receiver islands via a

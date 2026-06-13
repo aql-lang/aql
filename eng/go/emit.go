@@ -39,6 +39,11 @@ type emitOperand struct {
 	fromSeq   int // >=0: producing event sequence number
 	localSlot int // >=0: loop-iterator local slot
 	typeIdx   int // >=0: Types index (canonical type operand)
+	// isClosure marks a compiled code-BODY operand: closureUnit indexes
+	// Program.Fns and lowers to OpPushClosure (plan P2). A bool flag (not a
+	// sentinel) so existing operand literals stay valid by zero value.
+	isClosure   bool
+	closureUnit int
 }
 
 type emitCall struct {
@@ -946,6 +951,37 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	es.setProduced(outs[0], seq)
 }
 
+// RecordClosureCall records a higher-order word's dispatch where the code BODY
+// at position bodyPos was compiled to closure unit `unit` (plan P2). The body
+// operand lowers to OpPushClosure (the handler invokes it through the VM via
+// the InvokeBody seam); the other operands resolve normally. Returns false,
+// leaving es UNTOUCHED, when an operand is dynamic or of unknown provenance —
+// the caller then keeps the island path.
+func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value, bodyPos, unit int, outs []Value, pos SrcPos) bool {
+	if !es.active() || sig == nil || len(outs) != 1 {
+		return false
+	}
+	if anyDynamicCarrier(args) || anyDynamicCarrier(outs) {
+		return false
+	}
+	ops := make([]emitOperand, len(args))
+	for i := range args {
+		if i == bodyPos {
+			ops[i] = emitOperand{constIdx: -1, fromSeq: -1, localSlot: -1, typeIdx: -1, isClosure: true, closureUnit: unit}
+			continue
+		}
+		op, ok := es.resolveOperand(args[i])
+		if !ok {
+			return false
+		}
+		ops[i] = op
+	}
+	es.SiteCounts[SiteMono]++
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, pos: pos}})
+	es.setProduced(outs[0], seq)
+	return true
+}
+
 // internType pools a type operand by canonical ID.
 func (es *EmitState) internType(v Value) int {
 	if i, ok := es.typeIdx[v.ID]; ok {
@@ -1331,6 +1367,8 @@ type lowerer struct {
 // pushOperand emits the push for a const, local, or type operand.
 func (lw *lowerer) pushOperand(op emitOperand, pos SrcPos) {
 	switch {
+	case op.isClosure:
+		lw.emit(OpPushClosure, op.closureUnit, pos)
 	case op.localSlot >= 0:
 		lw.emit(OpPushLocal, op.localSlot, pos)
 	case op.typeIdx >= 0:
