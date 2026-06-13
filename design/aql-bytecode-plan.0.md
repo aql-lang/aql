@@ -655,31 +655,42 @@ then take each residual gate-clean-or-defer.
   allocs: arith 257 → 194, recursion_tail 18757 → 15756 (~16–25%), time
   ~20% faster; gate-clean.
 
-**Deferred (gate-clean-or-defer — the hard, interlocking F4 frontier):**
+**F4 dynamic dispatch — SUBSTANTIALLY LANDED** (the `make`/`get` operand
+frontier, +130 compiled rows, 0 divergences). The three interlocking
+issues were each solved:
 
-- **F4 operand coverage (`make` 148 rows, `get` 119 rows).** These were
-  diagnosed precisely and are blocked by three interlocking issues:
-  (1) the **fn-value-call boundary** — a `get` returning a module/instance
-  METHOD (`r.int`) is auto-applied by the interpreter to the args that
-  follow, but the island captures only the get and leaves the method
-  unapplied (`[fn rand-int … 0 100]` vs `75`); the method result is
-  dynamic `Any`, statically indistinguishable from a data `get`, so it
-  can't be cheaply refused. (2) **Barriered baked islands** — a `get` with
-  a literal receiver needs a STACK-form span (`{m} get a`), not the
-  forward-form span the island builder emits; relaxing the forward-
-  eligibility check helps only the THREADED shape, which is exactly the
-  method case. (3) **`make` operand representation** — a class operand is
-  an `ObjectType` value, not a bare type node, and `make`'s 3-arg sigs add
-  a non-materialisable slot. Each needs real design (the report-§9.1
-  fn-value `TYPE_CHECK` boundary), not a quick guard.
-- **`CALL_NATIVE_POLY`** (truly-polymorphic dispatch) — recipe is clear
-  (runtime `matchSignature` over the word's sigs, faithful by reuse) but
-  the corpus has ~no such sites, so it adds unexercised surface; deferred.
-- **Multi-threaded islands (NIn>1)** — 0 corpus coverage (confirmed).
-- **Fast-path opcodes / compact encoding** — the scratch buffer captured
-  the dominant per-dispatch alloc; the residual (result-slice + boxing)
-  is smaller and the opcodes add dispatch complexity. Benchmark-gated,
-  not yet worth it.
+- **Fn-value-call boundary (the conceptual crux).** A `get` returning a
+  Function (a map field that is a method — `r.int`) is auto-applied by
+  the interpreter to the args that follow, but the compiled island would
+  leave it unapplied (`[fn rand-int … 0 100]` vs `75`). The result is
+  dynamic `Any`, statically indistinguishable from a data get — but the
+  shape IS detectable in the RESIDUAL: a dynamic value followed by more
+  residual values is the auto-application signal. `Finalize` refuses when
+  a dynamic value precedes residual args (a dynamic value LAST is fine —
+  nothing follows it). Sound and precise; subsumed a coarser receiver
+  guard.
+- **Barriered stack-form spans.** A barriered word like `get` (key
+  forward, receiver stack) islands a THREADED receiver via the forward
+  span, and an ALL-BAKED island now rebuilds a STACK-form span
+  (`{m} get a`) for pure typed words. Combined with `origByID` recovery
+  of def-bound literals, this islands the data-access bulk:
+  `{a:1} get a`, `m.a.b.c`, `def xs […] xs get 1`, the `m.a` field read.
+- **Class/object `make`.** `ObjectTypeInfo` joined the structural-type-
+  body const whitelist: a plain-data class body bakes as a program
+  constant (a method-field class still refuses via the field walk), so
+  `make Point {x:9}` lowers to `CALL_NATIVE` and its chains compile —
+  `(make Point {}) get x`, `def p (make Point {x:9}) p.y`.
+
+Net: differential 1511 → 1629, whole-corpus 1571 → 1701.
+
+**Remaining (incremental, diminishing):** record-type `make` naming,
+refine/predicate/dependent-type operands, the `is`/`typeof`-on-
+make-result lowering shape (a 2-result-operand `lowerCall` edge), and
+the general `get`-returns-callable / `apply` fn-value site (the boundary
+conservatively defers it). **`CALL_NATIVE_POLY`** (~0 corpus sites),
+**multi-threaded islands** (0 coverage), and **fast-path opcodes /
+compact encoding** (scratch buffer captured the dominant alloc) stay
+deferred as documented.
 
 ## Stage 7 — graduation criteria (compiled mode by default)
 
