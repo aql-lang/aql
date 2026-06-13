@@ -44,13 +44,13 @@ func TestCompiledAllocCeilings(t *testing.T) {
 		src     string
 		ceiling int64
 	}{
-		{"arith_chain64", "", arithChain(64), 290},
-		{"compare_loop", "", `for 200 [gt i 100]`, 2100},
-		{"if_scalar", "", `for 200 [if (gt i 100) [1] [0]]`, 2100},
-		{"if_listcond", "", `for 200 [if [i gt 100] [1] [0]]`, 2100},
-		{"for_tight", "", `for 200 [add (mul i 3) 7]`, 2350},
-		{"recursion_nontail", `def s fn [[n:Integer] [Integer] [if (n lte 0) [0] [n add (s (n sub 1))]]] end`, `s 200`, 3800},
-		{"recursion_tail", `def s2 fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [s2 (n sub 1) (acc add n)]]] end`, `s2 1000 0`, 19500},
+		{"arith_chain64", "", arithChain(64), 210},
+		{"compare_loop", "", `for 200 [gt i 100]`, 1900},
+		{"if_scalar", "", `for 200 [if (gt i 100) [1] [0]]`, 1900},
+		{"if_listcond", "", `for 200 [if [i gt 100] [1] [0]]`, 1900},
+		{"for_tight", "", `for 200 [add (mul i 3) 7]`, 1950},
+		{"recursion_nontail", `def s fn [[n:Integer] [Integer] [if (n lte 0) [0] [n add (s (n sub 1))]]] end`, `s 200`, 3150},
+		{"recursion_tail", `def s2 fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [s2 (n sub 1) (acc add n)]]] end`, `s2 1000 0`, 16500},
 		// Island reuse keeps a hot island in a loop at interpreter-level
 		// allocation; a regression that re-allocates a sub-engine per
 		// island would roughly double this (≈5000 → ≈10000).

@@ -56,6 +56,9 @@ func runProgram(p *Program, r *Registry, stepLimit int) ([]Value, error) {
 	// islandEng is the lazily-created, reused sub-engine for OpFallback
 	// islands (one per RunProgram; reloads its tape in place).
 	var islandEng *Engine
+	// argScratch is reused across OpCallNative dispatches to avoid a
+	// per-call args-slice allocation (grows to the widest arity seen).
+	var argScratch []Value
 	curUnit := -1
 	curCode := p.Code
 	curDebug := p.Debug
@@ -143,7 +146,18 @@ func runProgram(p *Program, r *Registry, stepLimit int) ([]Value, error) {
 				return nil, vmErrAt(curDebug, pc, "CALL_NATIVE underflow at "+s.Word)
 			}
 			// One argument convention: position 0 is the top of stack.
-			args := make([]Value, n)
+			// Reuse a per-RunProgram scratch buffer instead of allocating
+			// an args slice every dispatch — the dominant per-CALL_NATIVE
+			// allocation on the compute path. Safe: the handler's result
+			// is COPIED into the operand stack by the append below before
+			// the next call reuses the buffer, and compiled-reachable
+			// natives (the monomorphic math/compare/etc. words the emitter
+			// admits) do not retain the args slice. The 0-divergence gate
+			// + combination matrix catch any handler that does.
+			if cap(argScratch) < n {
+				argScratch = make([]Value, n)
+			}
+			args := argScratch[:n]
 			for i := 0; i < n; i++ {
 				args[i] = stack[len(stack)-1-i]
 			}
