@@ -823,6 +823,36 @@ func TestEmitWidenedAllowSet(t *testing.T) {
 	}
 }
 
+// Stage 5: a flow-control sentinel (break/continue/return) inside an
+// island body cannot cross the island boundary to an enclosing compiled
+// loop — the sub-engine would set FlowCtrl that the VM can't propagate.
+// Such a body refuses to island; the whole program falls back and the
+// interpreter unwinds the sentinel correctly.
+func TestEmitIslandSentinelRefusal(t *testing.T) {
+	// `each [break]` inside a compiled `for`: the break targets the for,
+	// not each — it must NOT be islanded.
+	src := `for 3 [each [break] [1 2]]`
+	if _, reason := compile(t, src); reason == "" {
+		t.Errorf("%q islanded a sentinel body but must refuse", src)
+	}
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, compiled, err := a.RunCompiled(src)
+	if err != nil {
+		t.Fatalf("%q: %v", src, err)
+	}
+	if compiled {
+		t.Errorf("%q took the compiled path but a sentinel island must fall back", src)
+	}
+	b, _ := New()
+	iout, _ := b.Run(src)
+	if len(out) != len(iout) {
+		t.Fatalf("%q: compiled-fallback %v != interpreter %v", src, out, iout)
+	}
+}
+
 // Stage 5 (threaded islands): a COMPUTED receiver — a data arg that is a
 // prior compiled event's result rather than a baked literal — threads
 // its runtime value onto the island (NIn=1). `(iota 4) each [body]`

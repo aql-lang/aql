@@ -515,6 +515,18 @@ func bodyFreeForFallback(r *Registry, body Value) bool {
 		switch w.Name {
 		case "true", "false", "none", "null":
 			return
+		case "break", "continue", "return":
+			// A flow-control sentinel inside the body would set the shared
+			// registry's FlowCtrl when the island's sub-engine runs it; the
+			// VM cannot propagate that to an ENCLOSING compiled loop/frame
+			// across the island boundary (the sentinel surfaces as a
+			// tape-coupled island result and the VM rejects it). Refuse so
+			// the whole program falls back, where the interpreter unwinds
+			// it correctly. (Sentinels targeting a loop WITHIN the body are
+			// rarer than this conservative rule loses; the gate stays
+			// green either way.)
+			free = false
+			return
 		}
 		if r.Lookup(w.Name) != nil {
 			return
