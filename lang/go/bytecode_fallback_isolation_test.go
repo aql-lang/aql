@@ -182,3 +182,35 @@ func TestCompiledIslandErrorRendering(t *testing.T) {
 		}
 	}
 }
+
+// `args` (and `__pa`) read the interpreter's per-call args stack, which
+// the bytecode VM's CALL_USER frame does not maintain — it binds params
+// to frame locals. A compiled fn body that reads `args` would fail at run
+// time with "args: not inside a function", so the emitter refuses it and
+// the program falls back. Pinned because it is a latent soundness gap no
+// spec row currently triggers (a future change that let `args` compile
+// would silently break it).
+func TestCompiledArgsWordFallsBack(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want any
+	}{
+		{`def g fn [[n:Integer] [List] [args]] g 7`, "[7]"},
+		{`def f fn [[n:Integer] [Integer] [args.0]] f 3`, int64(3)},
+	} {
+		ac, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, compiled, err := ac.RunCompiled(c.src)
+		if err != nil {
+			t.Fatalf("%q: %v", c.src, err)
+		}
+		if compiled {
+			t.Errorf("%q took the compiled path; a fn reading `args` must fall back", c.src)
+		}
+		if len(out) != 1 || out[0] != c.want {
+			t.Fatalf("%q = %v, want %v", c.src, out, c.want)
+		}
+	}
+}

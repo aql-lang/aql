@@ -843,6 +843,15 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("full-stack word " + word)
 		return
+	case word == "args" || word == "__pa":
+		// `args` reads the interpreter's per-call args stack, which the
+		// VM's CALL_USER frame does not maintain (it binds params to
+		// frame locals instead). A compiled fn body that reads `args`
+		// would fail with "args: not inside a function" — refuse so the
+		// program falls back to the interpreter.
+		es.SiteCounts[SiteMeta]++
+		es.MarkUncompilable("context-dependent word " + word)
+		return
 	case len(sig.NoEvalArgs) > 0:
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
