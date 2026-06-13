@@ -520,18 +520,32 @@ compiled). Three compiled-mode soundness gaps were closed to get there:
   so it would add risk with no gate benefit. Revisit if a workload needs
   it.
 
-**Remaining — the one large item: F4 general dynamic dispatch.** The
-~285 rows that whole-program-fall-back today (`get`/`apply` returning
-`Any`, fn-value call sites, dynamic-receiver `make`/`get`/`is`/`typeof`)
-need the report-§9.1 `TYPE_CHECK`-guarded boundary: a dynamic value
-flows into a typed dispatch behind a runtime guard that discharges the
-gradual modality back to strict (and a `CALL_NATIVE_POLY` for the
-genuinely multi-overload case). This is deeply tied to the gradual-
-modality contagion in `carrierResults` and is the natural lead-in to
-Stage 6's sig-splitting / inline-cache work; it is deliberately deferred
-rather than landed partially, since a half-correct guard would breach
-the 0-divergence gate. Every such program already runs correctly via
-whole-program fallback. The original Stage-5 scope:
+**F4 general dynamic dispatch — LANDED as interpreter islands.** A typed
+query word (`get`/`getr`/`make`/`is`/`typeof`/`size` and the type-algebra
+words `teq`/`tcmp`/`tnot`/`tor`/`tand`) on a value the checker widened to
+a dynamic carrier now islands and re-DISPATCHES through the sub-engine,
+threading the runtime value (`islandPureWords`). The island IS the
+report-§9.1 `TYPE_CHECK` boundary realised faithfully: it picks the
+overload at run time exactly as the interpreter does, so no static
+signature is committed and the gradual modality discharges naturally. A
+type operand (`make Point …`, `x is Foo`) bakes as a token in the span
+and re-resolves against the registry lattice at run time. Islands
+compose — `each […]` → `size`/`typeof`/`is`/`make` over the dynamic list
+all island and chain. The guard is deliberately tight: a CONCRETE-operand
+query keeps its `CALL_NATIVE` (islanding it would poison the result to
+dynamic and refuse downstream typed dispatch — a net loss), so only the
+genuinely-dynamic sites convert. Differential 1454 → 1455, whole-corpus
+1511 → 1514, 0 divergences.
+
+The remaining dynamic-operand rows that still whole-program-fall-back are
+the ones whose dynamic operand cannot be threaded: a value-`def`
+receiver (bound to a check-pass carrier, not a concrete value, at VM run
+time) and a class-type `make` operand (the class literal is not a bare
+type node, so it is not baked as a type token). Both run correctly via
+fallback today; recovering them needs def-value materialisation and
+class-type-operand baking respectively — incremental extensions of the
+now-in-place F4 island mechanism, not new machinery. The original
+Stage-5 scope:
 
 Span-level `FALLBACK_INTERP`: `do` on computed lists, unresolved
 `context get`, leaky runtime `def`, and any site the checker widened

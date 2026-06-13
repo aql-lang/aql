@@ -823,6 +823,57 @@ func TestEmitWidenedAllowSet(t *testing.T) {
 	}
 }
 
+// Stage 5 (F4 — general dynamic dispatch): a typed query word
+// (get/size/is/typeof/make/type-algebra) on a DYNAMIC operand — a value
+// the checker widened to Any, e.g. a prior island's result — islands and
+// re-DISPATCHES through the sub-engine, threading the runtime value. The
+// island is the runtime guard: it picks the overload at run time exactly
+// as the interpreter would, so no static sig is committed. Islands
+// compose: each → size/typeof/is/make all island over the dynamic list.
+// A concrete-operand query is NOT islanded (it lowers to CALL_NATIVE);
+// islanding it would poison the result to dynamic and lose coverage.
+func TestEmitF4DynamicDispatch(t *testing.T) {
+	// Dynamic operand (the each island's result) → typed query islands.
+	for _, c := range []struct {
+		src  string
+		want any
+	}{
+		{`size (each [mul 2] [1 2 3])`, int64(3)},
+		{`typeof (each [mul 2] [1 2 3])`, "List"},
+		{`(each [mul 2] [1 2 3]) is List`, "true"},
+		{`make Array (each [mul 2] [1 2 3])`, "Array[2 4 6]"},
+	} {
+		got, reason := compile(t, c.src)
+		if reason != "" {
+			t.Errorf("%q F4 dispatch refused: %s", c.src, reason)
+		} else if !strings.Contains(got, "FALLBACK") {
+			t.Errorf("%q did not island the dynamic dispatch:\n%s", c.src, got)
+		}
+		a, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, compiled, err := a.RunCompiled(c.src)
+		if err != nil || !compiled {
+			t.Fatalf("%q: compiled=%v err=%v", c.src, compiled, err)
+		}
+		if len(out) != 1 || out[0] != c.want {
+			t.Fatalf("%q = %v, want %v", c.src, out, c.want)
+		}
+	}
+
+	// Negative: a CONCRETE-operand query keeps the normal CALL_NATIVE
+	// path — it must NOT become a FALLBACK island (which would poison the
+	// result to dynamic). `size [1 2 3]` lowers to a native call.
+	got, reason := compile(t, `size [1 2 3]`)
+	if reason != "" {
+		t.Fatalf("size of a concrete list refused: %s", reason)
+	}
+	if strings.Contains(got, "FALLBACK") {
+		t.Errorf("concrete `size [1 2 3]` was islanded but must lower to CALL_NATIVE:\n%s", got)
+	}
+}
+
 // Stage 5: a flow-control sentinel (break/continue/return) inside an
 // island body cannot cross the island boundary to an enclosing compiled
 // loop — the sub-engine would set FlowCtrl that the VM can't propagate.

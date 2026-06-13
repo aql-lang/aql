@@ -398,6 +398,24 @@ var fallbackWords = map[string]bool{
 	"having": true, "order": true,
 }
 
+// islandPureWords are the F4 general dynamic-dispatch words: pure typed
+// dispatches (no side effects, no registry mutation, no fn-value
+// re-stepping) whose forward-form span re-DISPATCHES faithfully through a
+// sub-engine. A site the checker widened to a dynamic carrier — a `get`
+// returning Any, a dynamic-receiver `make`/`is`/`typeof`/`size`, a type-
+// algebra query — re-runs the construct against the REAL runtime value
+// instead of baking a static signature the value might not match. The
+// sub-engine picks the overload at run time exactly as the interpreter
+// would, so soundness holds without a static sig commitment; the dynamic
+// result flows on and a downstream TYPED dispatch still refuses via
+// anyDynamicCarrier. (Report §9.1's TYPE_CHECK boundary, realised as an
+// interpreter island — the island IS the runtime guard.)
+var islandPureWords = map[string]bool{
+	"get": true, "getr": true, "size": true, "make": true,
+	"is": true, "typeof": true,
+	"teq": true, "tcmp": true, "tnot": true, "tor": true, "tand": true,
+}
+
 // tryRecordFallback attempts to compile a refused code-body higher-order
 // word as an interpreter island: the construct re-runs through a
 // sub-engine over `word arg0 arg1 …` in forward form. The baked args
@@ -422,7 +440,19 @@ var fallbackWords = map[string]bool{
 // TYPED dispatch via anyDynamicCarrier.
 func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
 	es := r.Check.Emit
-	if !es.active() || !fallbackWords[word] || len(outs) != 1 || sig == nil {
+	if !es.active() || !(fallbackWords[word] || islandPureWords[word]) || len(outs) != 1 || sig == nil {
+		return false
+	}
+	// A pure typed word (get/make/is/typeof/size/type-algebra) is
+	// islanded ONLY when the dispatch is genuinely dynamic — a dynamic
+	// operand or a dynamic (Any-widened) result the normal path would
+	// refuse anyway. A concrete-operand one compiles as a faithful
+	// CALL_NATIVE and must NOT be islanded: islanding poisons its result
+	// to dynamic, refusing every downstream typed dispatch (a net
+	// coverage LOSS). The code-body words always island (they never lower
+	// to CALL_NATIVE).
+	if islandPureWords[word] && !fallbackWords[word] &&
+		!anyDynamicCarrier(args) && !anyDynamicCarrier(outs) {
 		return false
 	}
 	// Fully forward-eligible: BarrierPos -1 (sentinel) or >= arity.
@@ -454,6 +484,18 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 	span = append(span, NewWord(word))
 	var ins []Value
 	for i, a := range args {
+		// A TYPE operand (a bare type node — `make Point …`, `x is Foo`,
+		// the type-algebra args) bakes as a token in the span: the island
+		// re-resolves it against the registry's lattice at run time, the
+		// same place OpPushType resolves canonical types. It is never
+		// threaded (a stack PUSH_TYPE would mis-order the dispatch).
+		if IsBareTypeNode(a) && a.ID != "" {
+			if len(ins) > 0 {
+				return false
+			}
+			span = append(span, a)
+			continue
+		}
 		cv, ok := es.materialise(a)
 		baked := ok && IsConcrete(cv)
 		if baked && sig.NoEvalArgs[i] {
