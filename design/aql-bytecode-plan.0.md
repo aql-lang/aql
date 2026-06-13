@@ -8,7 +8,13 @@ step budget — self AND mutual tail recursion at depth 1M under a
 tight ceiling in compiled mode); Stage 4 COMPLETE (the compile-time
 meta layer: macro + minilang expansion, generic instantiations, type
 operands, multi-overload monomorphization, module dot-access calls —
-1412 spec rows compiled, 0 mismatches). Companion to
+1412 spec rows compiled, 0 mismatches); Stage 5 SPAN-FALLBACK
+SUBSTANTIALLY LANDED (interpreter islands incl. threaded
+computed-receivers, widened allow-set, concurrency race-safety gate,
+whole-corpus compile-or-fallback ratchet — 1438 spec rows compiled,
+0 mismatches; the dynamic-dispatch F4 boundary, sentinel-crossing,
+and fallback registry-isolation remain as documented follow-ons).
+Companion to
 `aql-bytecode-report.0.md` (the design) and
 `aql-bytecode-revisions.0.md` (the June 2026 re-review that this plan
 incorporates; read it first — it changes two requirements). Written
@@ -411,29 +417,66 @@ the compiled code on either side intact. The VM handles NIn>0
 threading; the emitter currently emits only fully-baked (NIn=0)
 islands.
 
-First words wired: the code-body higher-order data transforms
-(`each`/`fold`/`scan`/`for-each`/`select`/`group`). A refused dispatch
-becomes an island iff — allow-listed, single-result, fully
-forward-eligible, **core dispatch** (the matched sig is pointer-identical
-to the word's main-registry binding, so a module-qualified inner native
-through a sub-registry is rejected — baking its bare name would re-run
-a different word), every arg materialises **deeply concrete** (a data
-arg with any carrier element refuses — a stripped def-bound list would
-bake `[ProperString …]` instead of the values), and every code-body
-word is **VM-resolvable** (a registered native/fn-def or known literal;
-a value-`def` reference refuses, because that binding is a check-time
-carrier at run time). The island's dynamic result flows to the residual
-or another fallback; a downstream TYPED dispatch consuming it still
-refuses via `anyDynamicCarrier`, so soundness holds. Differential:
-1434 rows / 0 mismatches (+22), floor 1430. Soundness is gate-proven
-across the corpus.
+Words wired: the code-body higher-order data transforms
+(`each`/`fold`/`scan`/`for-each`/`select`/`group`, plus
+`filter`/`outer`/`inner` — the allow-set widened with the gate green).
+A refused dispatch becomes an island iff — allow-listed, single-result,
+fully forward-eligible, **core dispatch** (the matched sig is
+pointer-identical to the word's main-registry binding, so a
+module-qualified inner native through a sub-registry is rejected —
+baking its bare name would re-run a different word), every BAKED arg
+materialises **deeply concrete** (a data arg with any carrier element
+refuses — a stripped def-bound list would bake `[ProperString …]`
+instead of the values), and every code-body word is **VM-resolvable**
+(a registered native/fn-def or known literal; a value-`def` reference
+refuses, because that binding is a check-time carrier at run time). The
+island's dynamic result flows to the residual or another fallback; a
+downstream TYPED dispatch consuming it still refuses via
+`anyDynamicCarrier`, so soundness holds.
 
-**Remaining (follow-on):** emit NIn>0 threaded islands (computed
-receivers like `(iota 5) each […]`); widen the allow-set
-(`do`/`case`/`select`-query/…) as the gate stays green; the general
+**Threaded computed-receiver islands LANDED.** A data arg the check
+pass can't materialise — a prior compiled event's result or a loop
+local, e.g. `(iota 5) each […]` — is THREADED instead of baked: it must
+be the trailing run of sig positions (so the baked args fill the
+forward prefix and the one threaded value back-fills the deepest sig
+position, positionally faithful by the split rule), capped at one
+threaded value for now (multi-threaded layout is a follow-on). The VM
+preloads its real runtime value onto the island and re-runs the span;
+nested islands compose (`each […] (each […] …)`). Differential: 1438
+rows / 0 mismatches, floor 1430. Soundness is gate-proven across the
+corpus.
+
+**Concurrency gate LANDED.** `Program` and all its tables are immutable
+after compile; every mutable VM scope (operand stack, locals, frames,
+loop state) is allocated per `RunProgram` call, and each goroutine runs
+against its own `ForkConcurrent` registry. The race-detector gate
+(`bytecode_concurrency_test.go`, `go test -race`) drives one shared
+`*Program` from 16 goroutines across the compiled surface
+(straight-line, loop, tail-recursive fn, baked AND threaded islands)
+with no data race. `await`/timer branch bodies still run as interpreter
+fallbacks (v1, per below).
+
+**Whole-corpus compile-or-fallback gate LANDED** as a ratchet
+(`compiled_fullcorpus_test.go`): every VALUE row runs through
+`RunCompiled` — compiling what it can, silently falling back otherwise —
+and must match the interpreter. The divergence set is pinned to exactly
+10 rows, all on the FALLBACK path, all the same PRE-EXISTING
+`RunCompiled` limitation (independent of span fallback): `CompileCheck`
+executes the program in check mode, so a subsequent interpreter
+fallback double-applies its `def`/`import`/`type`/Test side effects. A
+faithful fix needs registry-state isolation between the check pass and
+the fallback (a naive `ForkConcurrent` loses module-import fidelity) —
+tracked below. The ratchet fails on any NEW divergence.
+
+**Remaining (follow-on):** the fallback **registry-isolation** fix that
+clears the 10 pinned double-exec rows; multi-threaded islands (the
+trailing run laid out deepest-first on the operand stack); the general
 dynamic-dispatch fallback for `get`-returns-`Any` and fn-value call
 sites (F4) via `TYPE_CHECK`-guarded boundaries; `break`/`continue`/
-`return` sentinels crossing an island. The original Stage-5 scope:
+`return` sentinels crossing an island; widening the allow-set into the
+query-DSL words (`where`/`having`/`order`/`select`-query) once their
+pipeline-receiver semantics are proven island-faithful. The original
+Stage-5 scope:
 
 Span-level `FALLBACK_INTERP`: `do` on computed lists, unresolved
 `context get`, leaky runtime `def`, and any site the checker widened

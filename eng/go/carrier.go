@@ -393,18 +393,31 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 var fallbackWords = map[string]bool{
 	"each": true, "fold": true, "scan": true,
 	"for-each": true, "select": true, "group": true,
+	"filter": true, "outer": true, "inner": true,
 }
 
 // tryRecordFallback attempts to compile a refused code-body higher-order
-// word as a fully-baked (nIn=0) interpreter island: the construct
-// re-runs through a sub-engine over `word arg0 arg1 …` in forward form.
+// word as an interpreter island: the construct re-runs through a
+// sub-engine over `word arg0 arg1 …` in forward form. The baked args
+// ride inside the island token span; a COMPUTED data arg (a prior
+// compiled event's result, or a loop local) whose value the check pass
+// can't materialise is THREADED instead — the VM preloads its runtime
+// value onto the island and the span re-runs against it ("computed
+// receiver" islands, e.g. `(iota 5) each […]`).
+//
 // Eligible iff the word is allow-listed, fully forward-eligible (so the
-// forward-form span is faithful), single-result, every arg materialises
-// concrete, and every code-body arg is FREE of references the VM can't
-// honour (only registered words / known literals — a check-time `def`
-// binding is a carrier at run time and would diverge). Returns true when
-// recorded; false leaves the normal refusal (whole-program fallback) to
-// stand. Soundness rides on the differential gate.
+// forward-form span is faithful), single-result, every code-body arg is
+// concrete AND free of references the VM can't honour (only registered
+// words / known literals — a check-time `def` binding is a carrier at
+// run time and would diverge), and at most ONE data arg is threaded and
+// it is the TRAILING run of positions (so the baked args fill the
+// forward prefix and the one threaded value back-fills the deepest sig
+// position — positionally faithful by the split rule). A baked data arg
+// must be deeply concrete. Returns true when recorded; false leaves the
+// normal refusal (whole-program fallback) to stand. Soundness rides on
+// the differential gate: a threaded value is the program's real runtime
+// value, and the island's dynamic result still refuses any downstream
+// TYPED dispatch via anyDynamicCarrier.
 func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
 	es := r.Check.Emit
 	if !es.active() || !fallbackWords[word] || len(outs) != 1 || sig == nil {
@@ -437,29 +450,52 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 	}
 	span := make([]Value, 0, len(args)+1)
 	span = append(span, NewWord(word))
+	var ins []Value
 	for i, a := range args {
 		cv, ok := es.materialise(a)
-		if !ok || !IsConcrete(cv) {
-			return false
-		}
-		if sig.NoEvalArgs[i] {
+		baked := ok && IsConcrete(cv)
+		if baked && sig.NoEvalArgs[i] {
 			// A code body: legitimately contains words, but every one
 			// must be VM-resolvable (no check-time def carriers).
 			if !bodyFreeForFallback(r, cv) {
 				return false
 			}
-		} else if !isInertConst(cv) {
-			// A data arg must be DEEPLY concrete plain data — a carrier
-			// element anywhere (e.g. a def-bound list whose interior the
-			// check pass stripped) would bake a type-only artefact into
-			// the island and diverge (`[ProperString …]` vs the real
-			// strings). isInertConst rejects any carrier/dynamic/bare
-			// node in the tree.
+		} else if baked && !isInertConst(cv) {
+			// A baked data arg must be DEEPLY concrete plain data — a
+			// carrier element anywhere (e.g. a def-bound list whose
+			// interior the check pass stripped) would bake a type-only
+			// artefact into the island and diverge (`[ProperString …]`
+			// vs the real strings). isInertConst rejects any
+			// carrier/dynamic/bare node in the tree.
 			return false
 		}
-		span = append(span, cv)
+		if baked {
+			if len(ins) > 0 {
+				// A baked arg AFTER a threaded one would break the
+				// forward-prefix / stack-suffix split — the threaded
+				// values must be the trailing run. Refuse.
+				return false
+			}
+			span = append(span, cv)
+			continue
+		}
+		// Not bakeable: thread the runtime value. A code body must be
+		// baked (its tokens carry the island's program); only a data
+		// arg can thread. resolveOperand (in RecordFallback) refuses
+		// anything without compiled provenance.
+		if sig.NoEvalArgs[i] {
+			return false
+		}
+		ins = append(ins, a)
 	}
-	return es.RecordFallback(FallbackSpan{Tokens: span, Desc: word}, nil, outs[0], pos)
+	if len(ins) > 1 {
+		// Multi-threaded islands need the trailing run laid out on the
+		// operand stack deepest-first; that ordering is a Stage-5
+		// follow-on. One threaded value (the common computed-receiver
+		// shape) is positionally unambiguous.
+		return false
+	}
+	return es.RecordFallback(FallbackSpan{Tokens: span, Desc: word}, ins, outs[0], pos)
 }
 
 // bodyFreeForFallback reports whether a code body references only words

@@ -1,0 +1,101 @@
+package lang
+
+import (
+	"fmt"
+	"strings"
+	"sync"
+	"testing"
+
+	eng "github.com/aql-lang/aql/eng/go"
+)
+
+// Stage 5 concurrency (design/aql-bytecode-plan.0.md §Stage 5): a
+// compiled Program and all its tables (Code, Consts, Types, Sigs,
+// Fallbacks, Fns, Debug) are IMMUTABLE after compile, so concurrent
+// executions can share one *Program. All mutable VM state — the
+// operand stack, locals, frames, loop state — is allocated per call
+// inside RunProgram, and each goroutine runs against its OWN forked
+// registry (ForkConcurrent), so no two executions touch the same
+// mutable scope.
+//
+// This is the race-detector gate: run under `go test -race`. A shared
+// Program driven from many goroutines must produce identical results
+// with no data race. Programs span the compiled surface — straight-line
+// natives, a counted loop, a user fn with tail recursion, a baked
+// interpreter island, and a threaded computed-receiver island.
+func TestCompiledConcurrencyRaceFree(t *testing.T) {
+	cases := []struct {
+		src  string
+		want string
+	}{
+		{`add 1 (mul 2 3)`, "7"},
+		{`for 4 [i mul 2]`, "0 2 4 6"}, // one residual value per iteration
+		{`def f fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [f (n sub 1) (acc add n)]]] f 10 0`, "55"},
+		{`each [mul 2] [1 2 3]`, "[2 4 6]"},    // baked island
+		{`each [mul 2] (iota 4)`, "[0 2 4 6]"}, // threaded island
+	}
+
+	for _, c := range cases {
+		c := c
+		t.Run(c.src, func(t *testing.T) {
+			// Compile ONCE; the resulting Program is shared read-only.
+			a, err := New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			prog, reason, _, err := a.CompileCheck(c.src)
+			if err != nil {
+				t.Fatalf("CompileCheck(%q): %v", c.src, err)
+			}
+			if prog == nil {
+				t.Fatalf("%q did not compile (reason %q) — concurrency gate needs a compiled program", c.src, reason)
+			}
+
+			const goroutines = 16
+			const iters = 40
+			var wg sync.WaitGroup
+			errs := make([]error, goroutines)
+			mismatch := make([]string, goroutines)
+			for g := 0; g < goroutines; g++ {
+				wg.Add(1)
+				go func(g int) {
+					defer wg.Done()
+					for i := 0; i < iters; i++ {
+						// Each execution gets its own isolated registry;
+						// the *Program is shared across all of them.
+						fork := a.registry.ForkConcurrent()
+						out, rerr := eng.RunProgram(prog, fork)
+						if rerr != nil {
+							errs[g] = rerr
+							return
+						}
+						if got := renderResidual(out); got != c.want {
+							mismatch[g] = got
+							return
+						}
+					}
+				}(g)
+			}
+			wg.Wait()
+			for g := 0; g < goroutines; g++ {
+				if errs[g] != nil {
+					t.Fatalf("goroutine %d: %v", g, errs[g])
+				}
+				if mismatch[g] != "" {
+					t.Fatalf("goroutine %d: got %q, want %q", g, mismatch[g], c.want)
+				}
+			}
+		})
+	}
+}
+
+// renderResidual renders a residual engine stack the way convertResults
+// does, joined into one comparable string.
+func renderResidual(vs []eng.Value) string {
+	out := convertResults(vs)
+	parts := make([]string, len(out))
+	for i, v := range out {
+		parts[i] = fmt.Sprint(v)
+	}
+	return strings.Join(parts, " ")
+}

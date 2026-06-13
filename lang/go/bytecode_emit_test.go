@@ -780,3 +780,71 @@ func TestEmitFallbackIsland(t *testing.T) {
 		t.Fatalf("module group compiled=%v interpreted=%v", mout, iout)
 	}
 }
+
+// Stage 5 (threaded islands): a COMPUTED receiver — a data arg that is a
+// prior compiled event's result rather than a baked literal — threads
+// its runtime value onto the island (NIn=1). `(iota 4) each [body]`
+// compiles to `… CALL_NATIVE iota; FALLBACK (nin=1)`: the VM preloads
+// the iota result and the island re-runs `each [body] <value>`.
+func TestEmitThreadedFallbackIsland(t *testing.T) {
+	// The computed receiver lowers to a threaded (nin=1) island, both
+	// in forward and stack form.
+	for _, src := range []string{
+		`each [mul 2] (iota 4)`,
+		`(iota 4) each [mul 2]`,
+		`scan [add] (iota 4)`,
+		`each [mul 2] (range 1 5)`,
+	} {
+		got, reason := compile(t, src)
+		if reason != "" {
+			t.Fatalf("%q threaded island uncompilable: %s", src, reason)
+		}
+		if !strings.Contains(got, "FALLBACK") || !strings.Contains(got, "nin=1") {
+			t.Errorf("%q did not lower to a threaded (nin=1) island:\n%s", src, got)
+		}
+	}
+
+	// Runtime parity: compiled (threaded island) == interpreter.
+	for _, c := range []struct {
+		src  string
+		want any
+	}{
+		{`each [mul 2] (iota 4)`, "[0 2 4 6]"},
+		{`(iota 4) each [mul 2]`, "[0 2 4 6]"},
+		{`scan [add] (iota 4)`, "[0 1 3 6]"},
+		{`each [mul 2] (range 1 5)`, "[2 4 6 8]"},
+		// A threaded island whose dynamic result feeds a second island:
+		// the first each's result threads into the second.
+		{`each [add 1] (each [mul 2] (iota 3))`, "[1 3 5]"},
+	} {
+		a, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, compiled, err := a.RunCompiled(c.src)
+		if err != nil || !compiled {
+			t.Fatalf("%q: compiled=%v err=%v", c.src, compiled, err)
+		}
+		if len(out) != 1 || out[0] != c.want {
+			t.Fatalf("%q compiled = %v, want %v", c.src, out, c.want)
+		}
+	}
+
+	// Negative: a computed receiver with a def-referencing body still
+	// refuses (the def is a carrier at run time) — whole-program
+	// fallback, correct result.
+	if _, r := compile(t, `def n 10 each [add n] (iota 3)`); r == "" {
+		t.Error("threaded each with a def-referencing body compiled but must refuse")
+	}
+	b, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, compiled, err := b.RunCompiled(`def n 10 each [add n] (iota 3)`)
+	if err != nil || compiled {
+		t.Fatalf("def-body threaded fallback: compiled=%v err=%v", compiled, err)
+	}
+	if len(out) != 1 || out[0] != "[10 11 12]" {
+		t.Fatalf("def-body threaded fallback = %v, want [10 11 12]", out)
+	}
+}

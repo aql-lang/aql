@@ -1534,20 +1534,47 @@ func (lw *lowerer) lowerUserCall(ev *emitEvent) string {
 	return ""
 }
 
-// lowerFallback emits OpFallback. v1 handles only fully-baked islands
-// (no threaded inputs); a threaded island is a documented follow-on.
-// The island's single residual lands on the simulated stack as this
-// event's product, so a downstream consumer (or the program residual)
-// reads it like any computed value.
+// lowerFallback emits OpFallback. A fully-baked island (no threaded
+// inputs) just runs its span; a single threaded input is the computed
+// data arg (a "computed receiver" like `(iota 5) each […]`): its
+// runtime value must sit on top of the operand stack when OpFallback
+// runs, so the VM can preload it onto the island and back-fill the
+// deepest sig position. A result operand is already on top; a
+// const/local operand is pushed first. The island's single residual
+// lands on the simulated stack as this event's product, read by a
+// downstream consumer (or the program residual) like any computed
+// value. Multiple threaded inputs are a documented follow-on.
 func (lw *lowerer) lowerFallback(ev *emitEvent) string {
 	fb := &ev.fb
-	if len(fb.ins) != 0 {
-		return "fallback island with threaded inputs (Stage 5 follow-on)"
+	switch len(fb.ins) {
+	case 0:
+		lw.emit(OpFallback, fb.spanIdx, fb.pos)
+		lw.vm = append(lw.vm, ev.seq)
+		lw.note()
+		return ""
+	case 1:
+		op := fb.ins[0]
+		if op.fromSeq >= 0 {
+			if lw.variadic[op.fromSeq] {
+				return "fallback threads a loop result (Stage 5 follow-on)"
+			}
+			// The computed value is already on top of the simulated
+			// stack; OpFallback consumes it as the threaded input.
+			if len(lw.vm) == 0 || lw.vm[len(lw.vm)-1] != op.fromSeq {
+				return "stack discipline: fallback input is not on top"
+			}
+		} else {
+			// A const / local / type input: materialise it on top first.
+			lw.pushOperand(op, fb.pos)
+		}
+		lw.emit(OpFallback, fb.spanIdx, fb.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1]
+		lw.vm = append(lw.vm, ev.seq)
+		lw.note()
+		return ""
+	default:
+		return "fallback island with multiple threaded inputs (Stage 5 follow-on)"
 	}
-	lw.emit(OpFallback, fb.spanIdx, fb.pos)
-	lw.vm = append(lw.vm, ev.seq)
-	lw.note()
-	return ""
 }
 
 // markTailCalls rewrites tail-position user calls in a fn body
