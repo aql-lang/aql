@@ -394,6 +394,8 @@ var fallbackWords = map[string]bool{
 	"each": true, "fold": true, "scan": true,
 	"for-each": true, "select": true, "group": true,
 	"filter": true, "outer": true, "inner": true,
+	"do": true, "case": true, "where": true,
+	"having": true, "order": true,
 }
 
 // tryRecordFallback attempts to compile a refused code-body higher-order

@@ -235,7 +235,8 @@ func TestEmitRefusals(t *testing.T) {
 		// A branch reading an enclosing computation breaks the closed-
 		// fragment rule (Stage 3, with locals).
 		{`def y (1 add 2) if (1 gt 0) [y mul 2] [0]`, "branch reads enclosing computation"},
-		{`do [1 add 2]`, "code-body word do"},
+		// `word` is the splice marker, not an islandable data transform.
+		{`word [1 add 2]`, "code-body word word"},
 	}
 	for _, c := range cases {
 		got, reason := compile(t, c.src)
@@ -778,6 +779,47 @@ func TestEmitFallbackIsland(t *testing.T) {
 	iout, _ := d.Run(`"aql:array-util" import end ArrayUtil.group ['a' 'b' 'a'] [1 2 3]`)
 	if len(mout) != len(iout) || (len(mout) == 1 && mout[0] != iout[0]) {
 		t.Fatalf("module group compiled=%v interpreted=%v", mout, iout)
+	}
+}
+
+// Stage 5: the island allow-set widened beyond the higher-order data
+// transforms to the body-running words do/case/where/having/order, each
+// guarded by the same core-dispatch / deeply-concrete / VM-resolvable
+// rules and gate-proven sound. A pure body islands and runs identically;
+// the splice word `word` stays OUT (not a data transform).
+func TestEmitWidenedAllowSet(t *testing.T) {
+	for _, c := range []struct {
+		src      string
+		want     any
+		isIsland bool
+	}{
+		{`do [1 add 2]`, int64(3), true},
+		{`do [mul 2 (add 3 4)]`, int64(14), true},
+		// `word` is the splice marker — refused, runs via whole-program
+		// fallback to the identical result (splices [3] → 3).
+		{`word [1 add 2]`, int64(3), false},
+	} {
+		got, reason := compile(t, c.src)
+		if c.isIsland {
+			if reason != "" {
+				t.Errorf("%q expected to island, refused: %s", c.src, reason)
+			} else if !strings.Contains(got, "FALLBACK") {
+				t.Errorf("%q expected a FALLBACK island:\n%s", c.src, got)
+			}
+		} else if reason == "" {
+			t.Errorf("%q expected refusal (whole-program fallback), but compiled:\n%s", c.src, got)
+		}
+		a, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, _, err := a.RunCompiled(c.src)
+		if err != nil {
+			t.Fatalf("%q: %v", c.src, err)
+		}
+		if len(out) != 1 || out[0] != c.want {
+			t.Fatalf("%q = %v, want %v", c.src, out, c.want)
+		}
 	}
 }
 
