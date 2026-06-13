@@ -571,18 +571,57 @@ compiled per-fork entry points are a later optimisation.
 
 ## Stage 6 — specialisation (benchmark-driven, each independent)
 
-Only after Stage 5 is green, and only as the Stage-0 corpus directs:
+**Status: MEASURED; the corpus redirected the work.** The Stage-6
+measurement harness landed (`bytecode_stage6_bench_test.go`): each
+Stage-0 shape runs compiled vs interpreted with parse/compile cost
+amortised out, isolating execution. The numbers (per-op, ~1.5s
+benchtime) reset the priorities the plan guessed at:
 
-- **Sig splitting for `ReturnsFn`** (report §9.4) — the single
-  biggest lever: auto-generate monomorphic sig_ids (`add_i_i`, …) so
-  integer chains stay monomorphic. Regression-test mono propagation
-  on chains explicitly.
-- `CALL_NATIVE1_1`/`CALL_NATIVE2_1` fast paths; compact encoding.
-- Inline caches at `CALL_NATIVE_POLY`/`CALL_USER_POLY` sites —
-  per-fork cache storage only (R6 #28).
-- Typed opcodes / unboxed cells remain v2+; do not start them here.
-- **Gate:** each item lands with before/after numbers against the
-  Stage-0 baseline on the same corpus.
+| shape | interp | compiled | speedup |
+|---|---|---|---|
+| arith_chain64 | 732µs | 44µs | **16.8×** |
+| if_scalar / if_listcond | ~6.3ms | ~0.31ms | **~20×** |
+| for_tight | 5.5ms | 0.34ms | **16×** |
+| recursion_nontail | 23ms | 0.64ms | **36×** |
+| recursion_tail | 99ms | 3.4ms | **30×** |
+
+The compute path is already **10–36× faster compiled**, far past the
+Stage-0 go/no-go gate. Crucially, the plan's headline lever —
+**sig-splitting for `ReturnsFn`** (avoid `matchSignature` so integer
+chains stay monomorphic) — is **already realised by compilation**: the
+emitter bakes the checker-selected sig into `CALL_NATIVE`, so there is
+NO runtime dispatch to split. The remaining compute cost is per-dispatch
+boxing/allocation (arith: ~4 allocs/dispatch), where `CALL_NATIVE1_1`/
+`2_1` fast paths and unboxed cells would help — but those carry handler-
+aliasing risk against the 0-divergence gate and target an already-fast
+path; deferred until a workload demands them.
+
+The corpus's one clear signal was the **island shapes regressing** in
+compiled mode — a fallback island re-runs through a sub-engine, and
+`OpFallback` created a fresh engine+tape on EVERY execution, so a hot
+island in a loop allocated one per iteration:
+
+| shape | interp | compiled (before) | compiled (after) |
+|---|---|---|---|
+| do_body `for 100 [do body]` | 11.7ms | 21.5ms (0.54×, 33MB) | ~10.3ms (1.1×, 16.9MB) |
+
+**Item landed — island sub-engine reuse.** The VM now reuses ONE
+sub-engine across every `OpFallback` in a `RunProgram`, reloading its
+tape in place (`Tape.Reload`, gated by `Engine.reuseTape`) instead of
+allocating. `do_body` went from a **2× regression to parity** with the
+interpreter and its allocations **halved** (33MB → 16.9MB,
+deterministic); single-island shapes are allocation-neutral. The reuse
+carries no state across island executions (per-run scratch — marks,
+voidGroups, pointer — is cleared on reload); proven by the 0-divergence
+gate and a varying-threaded-input loop test
+(`TestCompiledIslandReuseNoStateLeak`).
+
+Remaining Stage-6 items (`CALL_NATIVE1_1`/`2_1` fast paths, inline caches
+at poly sites, compact encoding) stay benchmark-gated and unstarted —
+the measured win there is small relative to the compute path's existing
+10–36× and the risk against the strict gate is real. Typed opcodes /
+unboxed cells remain v2+. **Gate:** each item lands with before/after
+numbers against the Stage-0 baseline on the same corpus.
 
 *~1–2 weeks per item taken.*
 

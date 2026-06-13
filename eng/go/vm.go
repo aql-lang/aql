@@ -53,6 +53,9 @@ func runProgram(p *Program, r *Registry, stepLimit int) ([]Value, error) {
 		loopBase       int
 	}
 	var frames []vmFrame
+	// islandEng is the lazily-created, reused sub-engine for OpFallback
+	// islands (one per RunProgram; reloads its tape in place).
+	var islandEng *Engine
 	curUnit := -1
 	curCode := p.Code
 	curDebug := p.Debug
@@ -178,9 +181,15 @@ func runProgram(p *Program, r *Registry, stepLimit int) ([]Value, error) {
 			island = append(island, stack[len(stack)-fb.NIn:]...)
 			island = append(island, fb.Tokens...)
 			stack = stack[:len(stack)-fb.NIn]
-			sub := New(r)
-			sub.SetSource(r.Source)
-			results, err := sub.Run(island)
+			// Reuse one island sub-engine across every OpFallback in this
+			// RunProgram: it reloads its tape in place, so a hot island in
+			// a loop does not allocate a fresh engine+tape per iteration.
+			if islandEng == nil {
+				islandEng = New(r)
+				islandEng.SetSource(r.Source)
+				islandEng.reuseTape = true
+			}
+			results, err := islandEng.Run(island)
 			if err != nil {
 				return nil, stampAt(err, curDebug, pc, r)
 			}

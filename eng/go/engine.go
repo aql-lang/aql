@@ -41,6 +41,7 @@ type Engine struct {
 	marks     map[string]bool // active mark IDs (for mark/move control flow)
 	source    string          // original source text for error reporting
 	isTop     bool            // true for engines created via NewTop; an unhandled FlowCtrl at end-of-Run is an error here, propagates upward otherwise
+	reuseTape bool            // when set, Run reloads the existing tape in place instead of allocating (the VM's reusable island engine)
 	// voidGroups records the candidate consumers of paren groups that
 	// resolved to ZERO values in the current statement: the pending
 	// word names sitting below such a group when it closed. A
@@ -755,7 +756,18 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// loudly — see TapeConfig / the tape_exhausted check below. The
 	// registry's TapeConfig (zero value = defaults) flows through
 	// unchanged so resolve() applies the initial-size floor.
-	e.tape = NewTapeWith(prog, e.registry.TapeConfig, e.tapeWarn)
+	// A reusable island engine reloads its tape in place (no per-island
+	// allocation); a hot fallback island in a loop would otherwise spin
+	// up a fresh tape every execution. Falls back to a fresh tape when
+	// the existing buffer is too small. Per-run scratch state is cleared
+	// so nothing leaks across reuses.
+	if e.reuseTape && e.tape != nil && e.tape.Reload(prog) {
+		e.marks = nil
+		e.voidGroups = nil
+		e.traceNote = ""
+	} else {
+		e.tape = NewTapeWith(prog, e.registry.TapeConfig, e.tapeWarn)
+	}
 	e.pointer = 0
 
 	// stepLimit is always set by the constructors (New / NewTop); the

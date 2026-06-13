@@ -47,6 +47,7 @@ type Tape struct {
 
 	maxCap    int          // hard ceiling on len(buf) (entries)
 	maxGrows  int          // remaining reallocations allowed
+	grows0    int          // original maxGrows, restored by Reload
 	factor    float64      // per-grow multiplier
 	exhausted bool         // set once the ceiling is hit; engine fails loudly
 	warned    [3]bool      // 90% / 95% / 99% warnings emitted
@@ -144,9 +145,35 @@ func NewTapeWith(vals []Value, cfg TapeConfig, warn func(string)) *Tape {
 		gapEnd:   initial,
 		maxCap:   maxCap,
 		maxGrows: maxGrows,
+		grows0:   maxGrows,
 		factor:   factor,
 		warn:     warn,
 	}
+}
+
+// Reload re-seeds the tape with a new program IN PLACE, reusing the
+// existing backing array when it is large enough. It returns false when
+// the array is too small (the caller then builds a fresh tape). Used by
+// a reusable sub-engine (the bytecode VM's island runner) so a hot
+// fallback island in a loop does not allocate a tape per execution. The
+// grow budget and exhaustion/warn flags reset to their original state;
+// vals is copied, so the caller's slice is never mutated.
+func (t *Tape) Reload(vals []Value) bool {
+	if cap(t.buf) < len(vals) {
+		return false
+	}
+	n := cap(t.buf)
+	t.buf = t.buf[:n]
+	copy(t.buf, vals)
+	for i := len(vals); i < n; i++ {
+		t.buf[i] = Value{} // clear stale entries in the gap region
+	}
+	t.gapStart = len(vals)
+	t.gapEnd = n
+	t.maxGrows = t.grows0
+	t.exhausted = false
+	t.warned = [3]bool{}
+	return true
 }
 
 // Exhausted reports whether the tape hit its growth ceiling. The engine

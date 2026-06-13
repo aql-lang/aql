@@ -9,6 +9,46 @@ import (
 	eng "github.com/aql-lang/aql/eng/go"
 )
 
+// Stage 6 island reuse (design/aql-bytecode-plan.0.md Stage 6): the VM
+// reuses ONE sub-engine across every OpFallback in a RunProgram,
+// reloading its tape in place rather than allocating a fresh engine+tape
+// per island — a hot fallback island in a loop is no longer a
+// compiled-mode regression (do_body: ~2x faster, allocations halved).
+// Correctness rides on the reused engine carrying NO state across island
+// executions: each island in a loop, fed a VARYING threaded input, must
+// produce its own result, identical to the interpreter.
+func TestCompiledIslandReuseNoStateLeak(t *testing.T) {
+	cases := []string{
+		// Varying threaded receiver per iteration (iota i): each island
+		// over a different list — a leaked tape/stack would corrupt these.
+		`for 4 [each [mul 2] (iota i)]`,
+		// Repeated identical island in a tight loop (the do_body shape).
+		`for 3 [do [add 1 2]]`,
+		// Chained islands (each -> size) in a loop, varying.
+		`for 4 [size (each [add 1] (iota i))]`,
+	}
+	for _, src := range cases {
+		a, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, compiled, err := a.RunCompiled(src)
+		if err != nil || !compiled {
+			t.Fatalf("%q: compiled=%v err=%v", src, compiled, err)
+		}
+		b, _ := New()
+		iout, _ := b.Run(src)
+		if len(out) != len(iout) {
+			t.Fatalf("%q: length %d != %d (%v vs %v)", src, len(out), len(iout), out, iout)
+		}
+		for i := range out {
+			if out[i] != iout[i] {
+				t.Fatalf("%q at %d: compiled=%v interpreter=%v", src, i, out, iout)
+			}
+		}
+	}
+}
+
 // Stage 5 concurrency (design/aql-bytecode-plan.0.md §Stage 5): a
 // compiled Program and all its tables (Code, Consts, Types, Sigs,
 // Fallbacks, Fns, Debug) are IMMUTABLE after compile, so concurrent
