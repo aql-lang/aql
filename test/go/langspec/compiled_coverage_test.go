@@ -1,0 +1,173 @@
+// Compiled-coverage ratchet (design plan: "Make the AQL bytecode VM fully
+// independent of the interpreter at runtime", phase P0). The runtime-
+// independence work drives every supported program to compile to bytecode
+// that runs entirely in the VM, so that BOTH interpreter dependencies — the
+// OpFallback island and the whole-program fallback — can be deleted.
+//
+// This test is the objective measure of that goal. It runs EVERY spec value
+// row through CompileCheck and counts the rows that REFUSE (no Program, no
+// check error), bucketed by a normalised refusal reason. The total refusal
+// count is a downward ratchet: it must never rise above the recorded ceiling,
+// and each phase (P2..P6) lowers the ceiling as a refusal category is
+// eliminated. P7 (delete the fallback) is gated on this reaching ZERO.
+//
+// Rows that error during the check pass itself (parse errors, type-error
+// rows) are NOT refusals — the program is statically invalid in both engines
+// — and are reported separately, not counted against the ceiling.
+package langspec
+
+import (
+	"bufio"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"testing"
+)
+
+// refusalCeiling is the maximum number of spec value rows allowed to refuse
+// compilation (CompileCheck returns a nil Program with no check error AND the
+// row is not a statically-invalid check-diagnostics row). The runtime-
+// independence phases lower it monotonically; it must reach 0 before the
+// interpreter fallback can be deleted (plan P7). Never raise it.
+const refusalCeiling = 651 // P0 baseline (June 2026): 2671 rows, 1706 compiled, 314 statically-invalid, 651 refused
+
+// normaliseReason buckets a refusal reason into a stable category by
+// stripping the row-specific tail (word names, counts), so the histogram is
+// comparable across rows.
+func normaliseReason(reason string) string {
+	switch {
+	case strings.HasPrefix(reason, "code-body word"):
+		return "code-body word (NoEvalArgs)"
+	case strings.HasPrefix(reason, "quoted-operand word"):
+		return "quoted-operand word"
+	case strings.HasPrefix(reason, "compile-time word"):
+		return "compile-time word (RunInCheckMode)"
+	case strings.HasPrefix(reason, "full-stack word"):
+		return "full-stack word (depth/pick/roll)"
+	case strings.HasPrefix(reason, "context-dependent word"):
+		return "context-dependent word (args/__pa)"
+	case strings.HasPrefix(reason, "user fn call"):
+		return "user fn call (Stage 3)"
+	case strings.HasPrefix(reason, "function-valued operand"):
+		return "function-valued operand (Stage 3)"
+	case strings.HasPrefix(reason, "function value reaches"):
+		return "function value reaches word (Stage 3)"
+	case strings.HasPrefix(reason, "anonymous function dispatch"):
+		return "anonymous fn dispatch (Stage 3)"
+	case strings.HasPrefix(reason, "dynamic input at"):
+		return "dynamic input"
+	case strings.HasPrefix(reason, "unannotated or opaque word"):
+		return "dynamic/opaque output"
+	case strings.HasPrefix(reason, "polymorphic dispatch"):
+		return "polymorphic dispatch"
+	case strings.Contains(reason, "surface-shape typed dispatch"),
+		strings.Contains(reason, "unmatched dispatch recovered"):
+		return "dispatch recovery (best guess)"
+	case strings.Contains(reason, "returns ") && strings.Contains(reason, "values"):
+		return "multi-result call"
+	case strings.HasPrefix(reason, "dynamic value precedes residual"):
+		return "fn-value-call boundary"
+	case strings.Contains(reason, "operand of unknown provenance"),
+		strings.Contains(reason, "of unknown provenance"):
+		return "operand provenance"
+	case strings.Contains(reason, "suppressed a runtime error"):
+		return "suppressed runtime error"
+	case strings.Contains(reason, "without exactly one declared return"),
+		strings.Contains(reason, "body value count differs"):
+		return "multi-return fn"
+	case strings.HasPrefix(reason, "residual shape beyond Stage 1"),
+		strings.Contains(reason, "residual value not statically materialisable"):
+		return "residual lowering (Stage 1 limit)"
+	case strings.HasPrefix(reason, "if:"):
+		return "if-branch lowering"
+	case strings.HasPrefix(reason, "stack discipline"):
+		return "stack discipline (lowering)"
+	case strings.HasPrefix(reason, "operand shape at"):
+		return "operand shape (Stage 1 limit)"
+	default:
+		return "other: " + reason
+	}
+}
+
+func TestCompiledCoverage(t *testing.T) {
+	specDir := filepath.Join("..", "..", "..", "lang", "spec")
+	entries, err := os.ReadDir(specDir)
+	if err != nil {
+		t.Fatalf("read %s: %v", specDir, err)
+	}
+
+	var rows, compiled, checkErr, refused int
+	buckets := map[string]int{}
+
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
+			continue
+		}
+		path := filepath.Join(specDir, e.Name())
+		f, err := os.Open(path)
+		if err != nil {
+			t.Fatalf("open %s: %v", path, err)
+		}
+		scanner := bufio.NewScanner(f)
+		scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+		for scanner.Scan() {
+			line := strings.TrimRight(scanner.Text(), " \t")
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.Split(line, "\t")
+			if len(parts) < 2 {
+				continue
+			}
+			input := strings.TrimSpace(parts[0])
+			rows++
+
+			a := newDifferentialInstance(t)
+			prog, reason, _, cerr := a.CompileCheck(input)
+			switch {
+			case cerr != nil, reason == "check diagnostics":
+				// Statically invalid in both engines: a parse/check Go error,
+				// or error-severity check diagnostics (a type-error row).
+				// CompileCheck returns a nil Program for these with the row
+				// genuinely erroring in the interpreter too — not a refusal.
+				checkErr++
+			case prog != nil:
+				compiled++
+			default:
+				refused++
+				buckets[normaliseReason(reason)]++
+			}
+		}
+		f.Close()
+		if err := scanner.Err(); err != nil {
+			t.Fatalf("scanner error in %s: %v", path, err)
+		}
+	}
+
+	// Histogram, most-frequent first.
+	type kv struct {
+		reason string
+		n      int
+	}
+	hist := make([]kv, 0, len(buckets))
+	for r, n := range buckets {
+		hist = append(hist, kv{r, n})
+	}
+	sort.Slice(hist, func(i, j int) bool {
+		if hist[i].n != hist[j].n {
+			return hist[i].n > hist[j].n
+		}
+		return hist[i].reason < hist[j].reason
+	})
+
+	t.Logf("compiled coverage: %d rows — %d compiled, %d check-errors, %d refused",
+		rows, compiled, checkErr, refused)
+	for _, h := range hist {
+		t.Logf("  refusal %4d  %s", h.n, h.reason)
+	}
+
+	if refused > refusalCeiling {
+		t.Errorf("compile refusals %d exceed ceiling %d — coverage regressed", refused, refusalCeiling)
+	}
+}
