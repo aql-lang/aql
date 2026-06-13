@@ -127,6 +127,16 @@ type Registry struct {
 	// macroCache memoizes macro expansions keyed on (macro name + operand
 	// canon). See macroCacheGet / MacroCacheClear. Nil until first use.
 	macroCache map[string][]Value
+
+	// Invoker, when non-nil, executes a code BODY through the bytecode VM
+	// instead of a fresh interpreter sub-engine. The body-running native
+	// handlers (each/fold/scan/do/filter/… — every word that today spins up
+	// `New(r).Run([inputs… body…])`) call InvokeBody, which routes here when
+	// the VM is driving so the body runs as a compiled closure WITHOUT
+	// re-entering the interpreter. Nil on a plain interpreter run, where
+	// InvokeBody falls back to a sub-engine and behaviour is unchanged. The
+	// VM installs and restores this around its run. See invoke.go.
+	Invoker func(body Value, inputs []Value) ([]Value, error)
 }
 
 // NextGensym mints the next fresh gensym name (`tmp$g<n>`, n starting at 1).

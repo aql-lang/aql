@@ -171,8 +171,15 @@ func doListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	if !IsConcrete(args[0]) {
 		return nil, r.AqlError("do_error", "do: argument must be a concrete list, got type literal", "do")
 	}
-	_lst, _ := AsList(args[0])
-	return doEvalList(r, _lst.Slice())
+	// `do` runs its body with no per-call inputs and catches a body error,
+	// surfacing it as an Error VALUE rather than propagating (the escape
+	// hatch semantics). Routed through the InvokeBody seam so the VM can run
+	// the body as a compiled closure.
+	result, err := InvokeBody(r, args[0], nil)
+	if err != nil {
+		return []Value{NewError(err)}, nil
+	}
+	return result, nil
 }
 
 func doListReturnsFn(args []Value, r *Registry) []Value {

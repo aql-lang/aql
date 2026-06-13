@@ -137,15 +137,8 @@ func filterBodyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	if !IsConcrete(args[0]) {
 		return nil, r.AqlError("filter_error", "filter: expected a concrete body list", "filter")
 	}
-	bodyList, _ := AsList(args[0])
-	body := bodyList.Slice()
-
 	keep := func(elem Value, label string) (bool, error) {
-		input := make([]Value, len(body)+1)
-		input[0] = elem
-		copy(input[1:], body)
-		sub := New(r)
-		res, err := sub.Run(input)
+		res, err := InvokeBody(r, args[0], []Value{elem})
 		if err != nil {
 			return false, fmt.Errorf("filter: %s: %w", label, err)
 		}
