@@ -61,8 +61,10 @@ func TestRunCompiledFallbackIsolation(t *testing.T) {
 	// side-effecting (so a double-execution would corrupt the result).
 	// RunCompiled must equal a clean interpreter Run.
 	cases := []string{
-		// type mint + undef, then reuse — a re-mint would clash.
-		`def Point class {x:1} def p (make Point {x:5}) undef Point end p typeof`,
+		// type mint + undef, then reuse — a re-mint would clash. The
+		// method field keeps make uncompilable so this stays on the
+		// fallback path (a plain-data class now compiles).
+		`def C class {x:1 f:(fn [[][Integer][2]])} def p (make C {x:5}) undef C end p get x`,
 		// fn registration under a capitalised name — a re-register clashes.
 		`def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] Positive tcmp Positive`,
 		// native-module import whose namespace metadata a re-import degrades.

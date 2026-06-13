@@ -1020,6 +1020,15 @@ func typeBodyConstOK(v Value) bool {
 			}
 		}
 		return true
+	case ObjectTypeInfo:
+		// A class / object type body is const-bakeable iff every field
+		// default is plain data — a method (fn-value) field is not, so a
+		// class with methods (the surface-body case) still refuses. The
+		// canonical *Type rides the body's payload pointer (shared, not
+		// copied), so it stays canonical at run time; `make` recovers the
+		// field schema from the baked body. The parent chain's fields must
+		// be data too (AllFields merges them).
+		return fieldsOK(d.AllFields())
 	}
 	return false
 }
@@ -1044,13 +1053,14 @@ func isInertConst(v Value) bool {
 		PathPayload, NonePayload, BigIntPayload, DecimalPayload,
 		TimePayload, DurationPayload, TimezonePayload:
 		return true
-	case RecordTypeInfo, OptionsTypeInfo, ChildTypeInfo, DisjunctInfo:
+	case RecordTypeInfo, OptionsTypeInfo, ChildTypeInfo, DisjunctInfo, ObjectTypeInfo:
 		// STRUCTURAL type bodies (what a bound type name pushes at a
 		// use site — make's operand). Sound as consts when their
 		// interior is carrier-free (typeBodyConstOK): the payload is
 		// pointer-backed (shared, not copied) and the minted lattice
 		// node rides the body's Parent POINTER, which stays
-		// canonical. Never deduped.
+		// canonical. Never deduped. A class/object body qualifies only
+		// when every field default is data (no method fn-values).
 		return typeBodyConstOK(v)
 	case ListPayload:
 		for _, e := range d.Elems {

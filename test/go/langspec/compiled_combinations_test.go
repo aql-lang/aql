@@ -97,6 +97,15 @@ var comboParity = []string{
 	// back (parity holds, value matches).
 	`"aql:rand" import end def r (Rand.with-seed 42) r.int 0 100`,
 
+	// --- F4: class/object `make` — a plain-data class compiles + chains;
+	// a class with a METHOD field stays on the fallback path ---
+	`def Point class {x:1, y:2} make Point {x:9}`,
+	`def Point class {x:1} (make Point {}) typeof`,
+	`def Point class {x:1} (make Point {}) get x`,
+	`def Point class {x:1, y:2} def p (make Point {x:9}) p.y`,
+	`def Point class {x:1} (make Point {}) is Point`,
+	`def C class {x:1 f:(fn [[][Integer][2]])} (make C {x:5}) get x`, // method field → fallback
+
 	// --- error rows: same taxonomy in both engines ---
 	`add 1 'x'`, // type_error
 	`def f fn [[n:Integer] [String] [n]] f 1`,      // return type_error
@@ -174,6 +183,10 @@ func TestCompiledCombinationPath(t *testing.T) {
 		{`{a:1 b:2} get a`, "island"},
 		{`def m {a:{b:7}} m.a.b`, "island"},
 		{`def xs [10 20 30] xs get 1`, "island"},
+		// Class `make` with plain-data fields compiles (the body bakes as a
+		// const); a class with a method field must fall back.
+		{`def Point class {x:1, y:2} make Point {x:9}`, "native"},
+		{`def C class {x:1 f:(fn [[][Integer][2]])} make C {}`, "fallback"},
 		// fn-value-call boundary: a get whose result is a method applied to
 		// trailing args must fall back (the method would be left unapplied).
 		{`"aql:rand" import end def r (Rand.with-seed 42) r.int 0 100`, "fallback"},
