@@ -642,3 +642,69 @@ func TestEmitModuleCallLowering(t *testing.T) {
 		t.Fatalf("m.a fallback = %v, want 1", out2)
 	}
 }
+
+// Stage 4: a multi-overload user fn monomorphizes per call SHAPE —
+// the checker resolves which overload each statically-typed call site
+// selects, and each becomes its own code unit (the memo key carries
+// the arg types). No runtime poly dispatch is needed when the checker
+// can pick; the genuinely-polymorphic case (a dynamic arg reaching
+// several overloads) is Stage-5 fallback territory.
+func TestEmitMultiOverloadMonomorphises(t *testing.T) {
+	got, reason := compile(t, `def f fn [[a:Integer][Integer][a add 1] [a:String][String][a add "!"]] (f 5) (f "x")`)
+	if reason != "" {
+		t.Fatalf("multi-overload fn uncompilable: %s", reason)
+	}
+	if !strings.Contains(got, "fns=2") {
+		t.Errorf("two call shapes must compile two units:\n%s", got)
+	}
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, compiled, err := a.RunCompiled(`def f fn [[a:Integer][Integer][a add 1] [a:String][String][a add "!"]] (f 5) (f "x")`)
+	if err != nil || !compiled {
+		t.Fatalf("multi-overload run: compiled=%v err=%v", compiled, err)
+	}
+	if len(out) != 2 || out[0] != int64(6) || out[1] != "x!" {
+		t.Fatalf("multi-overload = %v, want [6 x!]", out)
+	}
+}
+
+// Stage 4: the minilang `mini` word lowers to a bare CALL_NATIVE —
+// it is a deterministic expansion the recording pass treats like any
+// other native. (A trailing dynamic accessor on the result — `.n` —
+// is Stage-5 fallback territory, asserted as a refusal here.)
+func TestEmitMinilangCompiles(t *testing.T) {
+	got, reason := compile(t, `"aql:minilang" import end "a1b2c3" mini re "\\d"`)
+	if reason != "" {
+		t.Fatalf("mini expansion uncompilable: %s", reason)
+	}
+	if !strings.Contains(got, "CALL_NATIVE") || strings.Contains(got, "CALL_USER") {
+		t.Errorf("mini did not lower to a native call:\n%s", got)
+	}
+	// The dynamic-result accessor refuses (Stage-5 fallback boundary).
+	if _, r := compile(t, `"aql:minilang" import end ("a1b2c3" mini re "\\d").n`); r == "" {
+		t.Error("dynamic accessor on mini result compiled but must refuse")
+	}
+}
+
+// Stage 4: an fn-value pulled from a map field and called (`m.f 5`)
+// is F4 — the checker types the get result as dynamic Any, so the
+// recorder refuses and the program falls back to the interpreter with
+// the correct result (the plan's sanctioned F4 fallback).
+func TestEmitFnValueCallFallsBack(t *testing.T) {
+	if _, r := compile(t, `def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f 5`); r == "" {
+		t.Error("fn-value-from-map call compiled but must fall back (F4)")
+	}
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, compiled, err := a.RunCompiled(`def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f 5`)
+	if err != nil || compiled {
+		t.Fatalf("fn-value fallback: compiled=%v err=%v", compiled, err)
+	}
+	if len(out) != 1 || out[0] != int64(6) {
+		t.Fatalf("m.f 5 fallback = %v, want 6", out)
+	}
+}

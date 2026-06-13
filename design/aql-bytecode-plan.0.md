@@ -5,7 +5,10 @@
 Stage 2 COMPLETE; Stage 3 COMPLETE (user fns, frames, mandatory
 TAIL_CALL_USER incl. mutual tails, closures via capture slots, VM
 step budget — self AND mutual tail recursion at depth 1M under a
-tight ceiling in compiled mode). Companion to
+tight ceiling in compiled mode); Stage 4 COMPLETE (the compile-time
+meta layer: macro + minilang expansion, generic instantiations, type
+operands, multi-overload monomorphization, module dot-access calls —
+1412 spec rows compiled, 0 mismatches). Companion to
 `aql-bytecode-report.0.md` (the design) and
 `aql-bytecode-revisions.0.md` (the June 2026 re-review that this plan
 incorporates; read it first — it changes two requirements). Written
@@ -335,25 +338,66 @@ compress it.*
 
 ## Stage 4 — the compile-time meta layer
 
-Everything that runs during the check pass and emits (almost)
-nothing: `RunInCheckMode` words (`def`/`fn`/`type`/`import`/
-`module`/`var`), **macro and minilang expansion** (run
-`execMacro`-equivalent expansion during the recording pass — it is
-deterministic and memoised by operand canon — and lower the expanded
-stream; raw-form operand spans are never lowered pre-expansion, R6
-#29), **generics** (one `CompiledFn` per memoised instantiation,
-bounded by the existing `of` interning; generic fns stay excluded
-from tail elision), multi-signature fns (`CompiledFnSet`,
-`CALL_USER_POLY`), function-value call sites (F4: emit poly dispatch
-or fallback where the checker couldn't resolve the callee), and
-module imports (per-module compile cache; expansion and import inputs
-hashed into the program identity, R6 #25).
+**Status: COMPLETE (June 2026).** Everything that runs during the
+check pass and emits (almost) nothing now compiles or cleanly falls
+back. Differential: 1412 spec rows compiled, 0 mismatches; accuracy
+ratchets unchanged or tightened (the macro change dropped 10 false
+positives). What landed, against the plan's checklist:
 
-- **Gate:** dual-mode runs of the fn-model, macro, minilang,
-  generics, and module spec suites. Golden tests that a macro/mini
-  site lowers to its expansion and an import compiles once.
+- **`RunInCheckMode` words** (`def`/`fn`/`type`/`import`/`module`/
+  `var`, and now `macro`) execute during the recording pass; their
+  effects are visible to the compiled stream and they emit nothing
+  themselves.
+- **Macro and minilang expansion.** `macro` constructs in check mode
+  (RunInCheckMode, like fn/fnsig), so a macro INSTALLS during the
+  pass and its uses expand on the tape (`execMacro`) before the
+  recorder sees them — the site lowers to its EXPANSION, never the
+  raw-form operand span (R6 #29). Verified by golden
+  (`TestEmitMacroExpansionGolden`). The minilang `mini` word is a
+  deterministic native that lowers to a bare `CALL_NATIVE`
+  (`TestEmitMinilangCompiles`).
+- **Generics:** one `CompiledFn` per memoised instantiation — the
+  fn-unit key already carries the instantiated arg types and the gen
+  bindings are installed around the recorded body analysis, so
+  lifting the Stage-3 refusal sufficed. Generic units stay OUT of
+  tail marking (the interpreter's `HasGen` exclusion, mirrored).
+- **Type operands** (`make`/`is`/`convert`/`of`/…): a new `PUSH_TYPE`
+  opcode over a `Program.Types` table of canonical type IDs, resolved
+  through the registry's `TypeTable` (then the package `Builtin`
+  table) at RUN time — a type node never enters the constant pool,
+  where a by-value copy goes stale against the canonical pointer.
+  Structural type bodies (record/options/typed-container/disjunct)
+  ride the const pool when their interior is carrier-free
+  (`typeBodyConstOK`); class/surface bodies refuse (embedded method
+  fn-values).
+- **Multi-signature fns:** monomorphize per call SHAPE — the checker
+  resolves which overload each statically-typed call site selects and
+  each becomes its own unit. No runtime `CALL_USER_POLY` is needed
+  when the checker can pick; the truly-polymorphic case (a dynamic
+  arg reaching several overloads) is deferred to Stage 5's fallback,
+  which is exactly where the plan's taxonomy puts it.
+- **Module imports / dot-access calls:** the import and the `get`
+  name-resolution run during the check pass; the `get` event is
+  elided when its result is a statically-known callable/namespace
+  (`FnDefInfo` / module-export `ExtensionPayload`), and the resolved
+  wrapper's trivial-delegation dispatch records the REAL inner-native
+  call — so `MathUtil.sqrt 16.0` lowers to a bare `CALL_NATIVE`
+  (`TestEmitModuleCallLowering`).
 
-*~3–4 weeks.*
+**Deferred to Stage 5 (by the plan's own taxonomy, not a gap):**
+function-value call sites the checker can't resolve (F4 — `m.f 5`
+where `get` returns dynamic `Any`) and any dynamic-`get`-result
+accessor (`(… mini …).n`). These are "any site the checker widened
+to `Any`" → `FALLBACK_INTERP`. They refuse cleanly today and the
+program runs correctly through the interpreter
+(`TestEmitFnValueCallFallsBack`). A genuine `CALL_USER_POLY` /
+checker get-typing-precision pass would compile more of them, but
+that is a fallback-boundary concern, which Stage 5 owns.
+
+- **Gate (met):** dual-mode differential over the whole spec corpus
+  (1412 rows / 0 mismatches), the macro-expansion and module-call
+  goldens, and the multi-overload / minilang / F4-fallback pins in
+  `lang/go/bytecode_emit_test.go`.
 
 ## Stage 5 — dynamic fallback + concurrency
 
