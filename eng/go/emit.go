@@ -1160,6 +1160,20 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	if n := len(es.frames[0]); n > 0 {
 		lastPos = eventPos(es.frames[0][n-1])
 	}
+	// Fn-value-call boundary (report §9.1): the interpreter auto-applies
+	// a FUNCTION value sitting in the residual to the values that follow
+	// it (`r.int 0 100` — a map field that is a method, applied to 0
+	// 100). A dynamic carrier is statically Any, so the checker cannot
+	// tell a Function from data; if a dynamic value appears BEFORE the
+	// last residual position, the runtime auto-application would diverge
+	// from the compiled program, which leaves it unapplied. Refuse so the
+	// program falls back. A dynamic value as the LAST residual is fine —
+	// nothing follows it to apply.
+	for i := 0; i+1 < len(residual); i++ {
+		if residual[i].Dynamic {
+			return nil, "dynamic value precedes residual args (fn-value-call boundary)", false
+		}
+	}
 	vi := 0
 	tail := []emitOperand{}
 	for _, rv := range residual {

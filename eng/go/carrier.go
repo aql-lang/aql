@@ -455,10 +455,6 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 		!anyDynamicCarrier(args) && !anyDynamicCarrier(outs) {
 		return false
 	}
-	// Fully forward-eligible: BarrierPos -1 (sentinel) or >= arity.
-	if sig.BarrierPos >= 0 && sig.BarrierPos < len(sig.Args) {
-		return false
-	}
 	// CORE-dispatch guard: the matched sig must belong to the word's
 	// MAIN-registry binding (pointer identity into its sig backing
 	// array). A module-qualified call (`ArrayUtil.group`) dispatches
@@ -531,6 +527,21 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 			return false
 		}
 		ins = append(ins, a)
+	}
+	// Forward-form span faithfulness: the baked args ride after the word
+	// as forward tokens (positions 0..k-1); the threaded values back-fill
+	// the trailing positions from the stack. Valid only when every baked
+	// position is forward-eligible — k <= the sig's barrier. A fully-
+	// forward sig admits every position; a barriered sig like `get` (key
+	// forward, receiver stack) then needs its stack arg THREADED, not
+	// baked (an all-baked barriered island would need a stack-form span,
+	// a follow-on).
+	barrier := sig.BarrierPos
+	if barrier < 0 || barrier > len(sig.Args) {
+		barrier = len(sig.Args)
+	}
+	if len(args)-len(ins) > barrier {
+		return false
 	}
 	if len(ins) > 1 {
 		// Multi-threaded islands need the trailing run laid out on the

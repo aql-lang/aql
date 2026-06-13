@@ -88,6 +88,15 @@ var comboParity = []string{
 	`def m {a: {b: {c: 7}}} m.a.b.c`,
 	`{a:1 b:2} get a`,
 
+	// --- F4: get on a dynamic (island/computed) receiver islands ---
+	`(make Array [10 20 30]) get 1`,
+	`(each [add 1] [1 2 3]) get 0`,
+	`get 1 (make Array [5 6 7])`,
+	// fn-value-call boundary: a map field that is a method, applied to
+	// trailing args — the interpreter auto-applies; compiled must fall
+	// back (parity holds, value matches).
+	`"aql:rand" import end def r (Rand.with-seed 42) r.int 0 100`,
+
 	// --- error rows: same taxonomy in both engines ---
 	`add 1 'x'`, // type_error
 	`def f fn [[n:Integer] [String] [n]] f 1`,      // return type_error
@@ -158,6 +167,11 @@ func TestCompiledCombinationPath(t *testing.T) {
 		// F4 over a dynamic (island) result islands; concrete operand does not.
 		{`size (each [mul 2] [1 2 3])`, "island"},
 		{`make Array (each [mul 2] [1 2 3])`, "island"},
+		// F4 get on a dynamic (threaded) receiver islands.
+		{`(make Array [10 20 30]) get 1`, "island"},
+		// fn-value-call boundary: a get whose result is a method applied to
+		// trailing args must fall back (the method would be left unapplied).
+		{`"aql:rand" import end def r (Rand.with-seed 42) r.int 0 100`, "fallback"},
 		// Sentinel inside an island body must NOT island (falls back so the
 		// interpreter can unwind across the boundary).
 		{`for 3 [each [break] [1 2]]`, "fallback"},

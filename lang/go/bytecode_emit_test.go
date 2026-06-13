@@ -673,8 +673,9 @@ func TestEmitMultiOverloadMonomorphises(t *testing.T) {
 
 // Stage 4: the minilang `mini` word lowers to a bare CALL_NATIVE —
 // it is a deterministic expansion the recording pass treats like any
-// other native. (A trailing dynamic accessor on the result — `.n` —
-// is Stage-5 fallback territory, asserted as a refusal here.)
+// other native. A trailing dynamic accessor on the result — `.n` —
+// is the F4 data-get case: the dynamic `mini` result threads into a
+// `get` island and re-dispatches faithfully (Stage-6 F4 follow-on).
 func TestEmitMinilangCompiles(t *testing.T) {
 	got, reason := compile(t, `"aql:minilang" import end "a1b2c3" mini re "\\d"`)
 	if reason != "" {
@@ -683,9 +684,21 @@ func TestEmitMinilangCompiles(t *testing.T) {
 	if !strings.Contains(got, "CALL_NATIVE") || strings.Contains(got, "CALL_USER") {
 		t.Errorf("mini did not lower to a native call:\n%s", got)
 	}
-	// The dynamic-result accessor refuses (Stage-5 fallback boundary).
-	if _, r := compile(t, `"aql:minilang" import end ("a1b2c3" mini re "\\d").n`); r == "" {
-		t.Error("dynamic accessor on mini result compiled but must refuse")
+	// The dynamic-result data accessor now islands (F4); the result
+	// must match the interpreter.
+	src := `"aql:minilang" import end ("a1b2c3" mini re "\\d").n`
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gc, _, ec := a.RunCompiled(src)
+	b, _ := New()
+	gi, ei := b.Run(src)
+	if (ec == nil) != (ei == nil) {
+		t.Fatalf("mini accessor error divergence: compiled=%v interp=%v", ec, ei)
+	}
+	if ec == nil && (len(gc) != len(gi) || (len(gc) == 1 && gc[0] != gi[0])) {
+		t.Errorf("mini accessor F4: compiled=%v interp=%v", gc, gi)
 	}
 }
 

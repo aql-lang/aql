@@ -35,7 +35,7 @@ func newDifferentialInstance(t *testing.T) *lang.AQL {
 // take the compiled path for the gate to be meaningful. Raise it as
 // later stages widen the compilable subset; never lower it without a
 // documented decision.
-const minCompiledRows = 1500 // Stage-5 islands + F4 dynamic dispatch + the curated bytecode-combinations.tsv matrix: 1511 compiled June 2026
+const minCompiledRows = 1530 // + F4 fn-value boundary + threaded-receiver data gets: 1535 compiled June 2026
 
 func TestSpecCompiledDifferential(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
