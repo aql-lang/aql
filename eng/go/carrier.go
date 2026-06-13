@@ -528,27 +528,44 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 		}
 		ins = append(ins, a)
 	}
-	// Forward-form span faithfulness: the baked args ride after the word
-	// as forward tokens (positions 0..k-1); the threaded values back-fill
-	// the trailing positions from the stack. Valid only when every baked
-	// position is forward-eligible — k <= the sig's barrier. A fully-
-	// forward sig admits every position; a barriered sig like `get` (key
-	// forward, receiver stack) then needs its stack arg THREADED, not
-	// baked (an all-baked barriered island would need a stack-form span,
-	// a follow-on).
-	barrier := sig.BarrierPos
-	if barrier < 0 || barrier > len(sig.Args) {
-		barrier = len(sig.Args)
-	}
-	if len(args)-len(ins) > barrier {
-		return false
-	}
 	if len(ins) > 1 {
 		// Multi-threaded islands need the trailing run laid out on the
 		// operand stack deepest-first; that ordering is a Stage-5
 		// follow-on. One threaded value (the common computed-receiver
 		// shape) is positionally unambiguous.
 		return false
+	}
+	barrier := sig.BarrierPos
+	if barrier < 0 || barrier > len(sig.Args) {
+		barrier = len(sig.Args)
+	}
+	// Span faithfulness for a BARRIERED sig (e.g. `get`: key forward,
+	// receiver stack). The forward-form span `word arg0 arg1 …` can only
+	// place forward-eligible (position < barrier) args after the word; a
+	// stack arg must reach the dispatch from the operand stack.
+	//   - A THREADED stack arg already does (the island preloads it), so
+	//     the baked args must all be forward-eligible (k <= barrier).
+	//   - An ALL-BAKED island (no thread) on a PURE typed word with no
+	//     code body rebuilds the span in STACK form: the stack args (B..N)
+	//     ride before the word deepest-first, then the word, then the
+	//     forward args — `{m} get a` instead of `get a {m}`. Code-body
+	//     words can't (a baked body list would auto-evaluate when stepped
+	//     on the stack), so they keep the forward-eligible constraint.
+	canStackForm := len(ins) == 0 && islandPureWords[word] && !fallbackWords[word]
+	if !canStackForm && len(args)-len(ins) > barrier {
+		return false
+	}
+	if canStackForm && barrier < len(args) {
+		baked := span[1:] // sig order, parallel to args
+		ns := make([]Value, 0, len(span))
+		for i := len(baked) - 1; i >= barrier; i-- { // stack args, deepest first
+			ns = append(ns, baked[i])
+		}
+		ns = append(ns, NewWord(word))
+		for i := 0; i < barrier; i++ { // forward args, in order
+			ns = append(ns, baked[i])
+		}
+		span = ns
 	}
 	return es.RecordFallback(FallbackSpan{Tokens: span, Desc: word}, ins, outs[0], pos)
 }

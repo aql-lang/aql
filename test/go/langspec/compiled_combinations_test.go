@@ -169,6 +169,11 @@ func TestCompiledCombinationPath(t *testing.T) {
 		{`make Array (each [mul 2] [1 2 3])`, "island"},
 		// F4 get on a dynamic (threaded) receiver islands.
 		{`(make Array [10 20 30]) get 1`, "island"},
+		// F4 barriered get on a literal / def-bound receiver islands via a
+		// stack-form span (`{m} get a`), the def value recovered.
+		{`{a:1 b:2} get a`, "island"},
+		{`def m {a:{b:7}} m.a.b`, "island"},
+		{`def xs [10 20 30] xs get 1`, "island"},
 		// fn-value-call boundary: a get whose result is a method applied to
 		// trailing args must fall back (the method would be left unapplied).
 		{`"aql:rand" import end def r (Rand.with-seed 42) r.int 0 100`, "fallback"},

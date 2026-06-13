@@ -625,22 +625,27 @@ func TestEmitModuleCallLowering(t *testing.T) {
 		t.Fatalf("max 5.0 9.0 = %v, want 9.0", out)
 	}
 
-	// Negative: a get whose RESULT the checker cannot type (dynamic
-	// Any — a runtime field read) refuses and falls back; the program
-	// still runs correctly through the interpreter.
-	if _, r := compile(t, `def m {a:1} m.a`); r == "" {
-		t.Error("dynamic-result get compiled but must refuse (checker types it Any)")
+	// F4: a get whose RESULT the checker types dynamic Any (a runtime
+	// field read on a def-bound map) now ISLANDS — the def map's value is
+	// recovered and the barriered `get` re-runs in a stack-form span
+	// (`{a:1} get a`). The result must match the interpreter.
+	got2, reason2 := compile(t, `def m {a:1} m.a`)
+	if reason2 != "" {
+		t.Fatalf("dynamic-result get refused: %s", reason2)
+	}
+	if !strings.Contains(got2, "FALLBACK") {
+		t.Errorf("dynamic-result get did not island:\n%s", got2)
 	}
 	b, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	out2, compiled2, err := b.RunCompiled(`def m {a:1} m.a`)
-	if err != nil || compiled2 {
-		t.Fatalf("dynamic get fallback: compiled=%v err=%v", compiled2, err)
+	out2, _, err := b.RunCompiled(`def m {a:1} m.a`)
+	if err != nil {
+		t.Fatalf("dynamic get: %v", err)
 	}
 	if len(out2) != 1 || out2[0] != int64(1) {
-		t.Fatalf("m.a fallback = %v, want 1", out2)
+		t.Fatalf("m.a = %v, want 1", out2)
 	}
 }
 
