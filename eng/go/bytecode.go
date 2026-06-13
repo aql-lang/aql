@@ -58,6 +58,13 @@ const (
 	// OpRet pops the frame; the unit's single result stays on the
 	// shared operand stack for the caller.
 	OpRet
+	// OpPushType pushes the type literal for Types[Arg], resolved
+	// through the registry's TypeTable at RUN time — type nodes are
+	// never pooled as constants because a by-value copy goes stale
+	// against the canonical pointer (eng/go/CLAUDE.md, Canonical
+	// *Type Pointers); the ID lookup always yields the canonical
+	// node, including types the check pass minted (def Foo …).
+	OpPushType
 )
 
 func (o Opcode) String() string {
@@ -84,6 +91,8 @@ func (o Opcode) String() string {
 		return "TAIL_CALL_USER"
 	case OpRet:
 		return "RET"
+	case OpPushType:
+		return "PUSH_TYPE"
 	}
 	return fmt.Sprintf("OP(%d)", uint8(o))
 }
@@ -101,11 +110,20 @@ type SigRef struct {
 	Sig  *Signature
 }
 
+// TypeRef names one type operand: the canonical type ID (resolved
+// through the registry at run time) plus the display name for the
+// disassembler.
+type TypeRef struct {
+	Name string
+	ID   string
+}
+
 // Program is a compiled unit: code, interned constants, the signature
 // table, a pc → source-position map, and the precomputed stack bound.
 type Program struct {
 	Code      []Instr
 	Consts    []Value
+	Types     []TypeRef
 	Sigs      []SigRef
 	Fns       []CompiledFn
 	Debug     []SrcPos // 1:1 with Code
@@ -132,8 +150,8 @@ func (p *Program) Disassemble() string {
 		fmt.Fprintf(&sb, "fn f%d %s/%d (locals=%d):\n", fi, p.Fns[fi].Name, p.Fns[fi].NParams, p.Fns[fi].NLocals)
 		p.disasmUnit(&sb, p.Fns[fi].Code)
 	}
-	fmt.Fprintf(&sb, "; consts=%d sigs=%d fns=%d max-stack=%d locals=%d\n",
-		len(p.Consts), len(p.Sigs), len(p.Fns), p.MaxStack, p.NumLocals)
+	fmt.Fprintf(&sb, "; consts=%d types=%d sigs=%d fns=%d max-stack=%d locals=%d\n",
+		len(p.Consts), len(p.Types), len(p.Sigs), len(p.Fns), p.MaxStack, p.NumLocals)
 	return sb.String()
 }
 
@@ -155,6 +173,8 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 			fmt.Fprintf(sb, " -> %04d", in.Arg)
 		case OpPushLocal, OpForSetup:
 			fmt.Fprintf(sb, " l%d", in.Arg)
+		case OpPushType:
+			fmt.Fprintf(sb, " t%-3d ; %s", in.Arg, p.Types[in.Arg].Name)
 		case OpCallUser, OpTailCallUser:
 			fmt.Fprintf(sb, " f%-3d ; %s/%d", in.Arg, p.Fns[in.Arg].Name, p.Fns[in.Arg].NParams)
 		}

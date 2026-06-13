@@ -34,7 +34,7 @@ func TestEmitGoldens(t *testing.T) {
 		{`add 1 2`, `0000 PUSH_CONST  k1   ; 2 (Integer)
 0001 PUSH_CONST  k0   ; 1 (Integer)
 0002 CALL_NATIVE s0   ; add (Number, Number)
-; consts=2 sigs=1 fns=0 max-stack=2 locals=0
+; consts=2 types=0 sigs=1 fns=0 max-stack=2 locals=0
 `},
 		// `1 add 2` is the k=1 split of the (2,1) assignment — the
 		// forward 2 fills sig[0], the stack-prefix 1 fills sig[1]
@@ -45,14 +45,14 @@ func TestEmitGoldens(t *testing.T) {
 		{`1 add 2`, `0000 PUSH_CONST  k1   ; 1 (Integer)
 0001 PUSH_CONST  k0   ; 2 (Integer)
 0002 CALL_NATIVE s0   ; add (Number, Number)
-; consts=2 sigs=1 fns=0 max-stack=2 locals=0
+; consts=2 types=0 sigs=1 fns=0 max-stack=2 locals=0
 `},
 		{`0 add 7 sub 3`, `0000 PUSH_CONST  k1   ; 0 (Integer)
 0001 PUSH_CONST  k0   ; 7 (Integer)
 0002 CALL_NATIVE s0   ; add (Number, Number)
 0003 PUSH_CONST  k2   ; 3 (Integer)
 0004 CALL_NATIVE s1   ; sub (Number, Number)
-; consts=3 sigs=2 fns=0 max-stack=2 locals=0
+; consts=3 types=0 sigs=2 fns=0 max-stack=2 locals=0
 `},
 		// A paren result feeding the next call: the prior result stays
 		// on the simulated stack; only the literal is pushed.
@@ -61,14 +61,14 @@ func TestEmitGoldens(t *testing.T) {
 0002 CALL_NATIVE s0   ; add (Number, Number)
 0003 PUSH_CONST  k2   ; 3 (Integer)
 0004 CALL_NATIVE s1   ; mul (Number, Number)
-; consts=3 sigs=2 fns=0 max-stack=2 locals=0
+; consts=3 types=0 sigs=2 fns=0 max-stack=2 locals=0
 `},
 		// Top-level strings are stripped to carriers by check mode;
 		// RecordStrip preserves the originals for interning.
 		{`'a' add 'b'`, `0000 PUSH_CONST  k1   ; 'a' (ProperString)
 0001 PUSH_CONST  k0   ; 'b' (ProperString)
 0002 CALL_NATIVE s0   ; add (Scalar, Scalar)
-; consts=2 sigs=1 fns=0 max-stack=2 locals=0
+; consts=2 types=0 sigs=1 fns=0 max-stack=2 locals=0
 `},
 		// `if` lowers to JMP_IF_FALSE / JMP: condition code first, a
 		// branch per fragment, the join value on the stack for the
@@ -80,7 +80,7 @@ func TestEmitGoldens(t *testing.T) {
 0004 PUSH_CONST  k2   ; 10 (Integer)
 0005 JMP         -> 0007
 0006 PUSH_CONST  k3   ; 20 (Integer)
-; consts=4 sigs=1 fns=0 max-stack=2 locals=0
+; consts=4 types=0 sigs=1 fns=0 max-stack=2 locals=0
 `},
 		// The branch result feeds the downstream mul; a stripped
 		// Boolean literal condition compiles as PUSH_CONST + jump
@@ -96,14 +96,14 @@ func TestEmitGoldens(t *testing.T) {
 0008 PUSH_CONST  k2   ; 9 (Integer)
 0009 PUSH_CONST  k1   ; 2 (Integer)
 0010 CALL_NATIVE s2   ; mul (Number, Number)
-; consts=3 sigs=3 fns=0 max-stack=2 locals=0
+; consts=3 types=0 sigs=3 fns=0 max-stack=2 locals=0
 `},
 		// Literal-substitution def: x resolves to the interned literal
 		// through value provenance — the report's §5.2 inline case.
 		{`def x 1 x add 2`, `0000 PUSH_CONST  k1   ; 1 (Integer)
 0001 PUSH_CONST  k0   ; 2 (Integer)
 0002 CALL_NATIVE s0   ; add (Number, Number)
-; consts=2 sigs=1 fns=0 max-stack=2 locals=0
+; consts=2 types=0 sigs=1 fns=0 max-stack=2 locals=0
 `},
 	}
 	for _, c := range cases {
@@ -170,7 +170,7 @@ func TestEmitForLoopGolden(t *testing.T) {
 0006 PUSH_CONST  k0   ; 10 (Integer)
 0007 CALL_NATIVE s0   ; add (Number, Number)
 0008 JMP         -> 0004
-; consts=4 sigs=1 fns=0 max-stack=3 locals=1
+; consts=4 types=0 sigs=1 fns=0 max-stack=3 locals=1
 `
 	if got != want {
 		t.Errorf("for lowering changed:\n--- got\n%s--- want\n%s", got, want)
@@ -473,5 +473,90 @@ func TestRunCompiledStepBudget(t *testing.T) {
 	}
 	if err == nil || !strings.Contains(err.Error(), "evaluation_limit") {
 		t.Fatalf("tail spin = %v, want evaluation_limit", err)
+	}
+}
+
+// Stage 4: generic fns compile one unit per memoised instantiation
+// (the unit key carries the instantiated arg types); generic units
+// stay OUT of tail marking, mirroring the interpreter's HasGen
+// exclusion from frame elision.
+func TestEmitGenericInstantiation(t *testing.T) {
+	got, reason := compile(t, `def idg gen [T] fn [[x:T] [T] [x]] (idg 5) (idg "a")`)
+	if reason != "" {
+		t.Fatalf("generic fn uncompilable: %s", reason)
+	}
+	if !strings.Contains(got, "fns=2") {
+		t.Errorf("two instantiations must compile two units:\n%s", got)
+	}
+
+	// Generic recursion compiles but is NOT tail-marked.
+	got2, reason2 := compile(t, `def cntg gen [T] fn [[x:T n:Integer] [Integer] [if (n lte 0) [n] [cntg x (n sub 1)]]] cntg "a" 5`)
+	if reason2 != "" {
+		t.Fatalf("generic recursion uncompilable: %s", reason2)
+	}
+	if strings.Contains(got2, "TAIL_CALL_USER") {
+		t.Errorf("generic unit was tail-marked (HasGen exclusion):\n%s", got2)
+	}
+
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, compiled, err := a.RunCompiled(`def pickg gen [T U] fn [[a:T b:U] [U] [b]] pickg 1 "x"`)
+	if err != nil || !compiled {
+		t.Fatalf("generic call: compiled=%v err=%v", compiled, err)
+	}
+	if len(out) != 1 || out[0] != "x" {
+		t.Fatalf("pickg 1 \"x\" = %v, want x", out)
+	}
+}
+
+// Stage 4: type operands lower as PUSH_TYPE — resolved through the
+// registry's TypeTable at RUN time so the handler always receives
+// the CANONICAL node (never a stale pooled copy), for builtins and
+// check-pass-minted user types alike.
+func TestEmitTypeOperands(t *testing.T) {
+	got, reason := compile(t, `5 is Integer`)
+	if reason != "" {
+		t.Fatalf("is-with-type-operand uncompilable: %s", reason)
+	}
+	if !strings.Contains(got, "PUSH_TYPE") || !strings.Contains(got, "; Integer") {
+		t.Errorf("type operand not lowered as PUSH_TYPE:\n%s", got)
+	}
+
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, compiled, err := a.RunCompiled(`def Pt refine Integer def p:Pt 5 p is Pt`)
+	if err != nil || !compiled {
+		t.Fatalf("minted-type operand: compiled=%v err=%v", compiled, err)
+	}
+	if len(out) != 1 || out[0] != "true" {
+		t.Fatalf("p is Pt = %v, want true", out)
+	}
+
+	// Structural type bodies (make's operand) ride the const pool —
+	// payloads are pointer-backed and the minted node is reached via
+	// the Parent pointer, which stays canonical.
+	b, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out2, compiled2, err := b.RunCompiled(`def M refine Record [k:String] end make M {k:"x"}`)
+	if err != nil || !compiled2 {
+		t.Fatalf("make with record body: compiled=%v err=%v", compiled2, err)
+	}
+	if len(out2) != 1 || out2[0] != "{k:'x'}" {
+		t.Fatalf("make M = %v, want {k:'x'}", out2)
+	}
+
+	// Negative: a type body whose interior holds a check-mode CARRIER
+	// (a generic instantiation over a class body with a stripped
+	// default) must refuse — baking the analysis artefact in would
+	// render `r:Float` where the interpreter rebuilds `r:1.0` (caught
+	// by the differential gate).
+	if _, r := compile(t, `def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [1.0]] Circle exposes Shape def Holder gen [(T extends Shape)] refine Record [item:T] end Holder of [Circle]`); r == "" {
+		t.Error("carrier-tainted type body compiled but must refuse")
 	}
 }

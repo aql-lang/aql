@@ -78,6 +78,22 @@ func runProgram(p *Program, r *Registry, stepLimit int) ([]Value, error) {
 			stack = append(stack, p.Consts[in.Arg])
 		case OpPushLocal:
 			stack = append(stack, locals[in.Arg])
+		case OpPushType:
+			// Resolve the CANONICAL node at run time — never a pooled
+			// copy (eng/go/CLAUDE.md, Canonical *Type Pointers). Types
+			// the check pass minted (def Foo …) live in the registry's
+			// table; kernel builtins in the package Builtin table.
+			var t *Type
+			if r != nil {
+				t = r.Types.LookupByID(p.Types[in.Arg].ID)
+			}
+			if t == nil {
+				t = Builtin.LookupByID(p.Types[in.Arg].ID)
+			}
+			if t == nil {
+				return nil, vmErrAt(curDebug, pc, "unresolvable type operand "+p.Types[in.Arg].Name)
+			}
+			stack = append(stack, NewTypeLiteral(t))
 		case OpForSetup:
 			if len(stack) < 3 {
 				return nil, vmErrAt(curDebug, pc, "FOR_SETUP underflow")

@@ -38,6 +38,7 @@ type emitOperand struct {
 	constIdx  int // >=0: Consts index
 	fromSeq   int // >=0: producing event sequence number
 	localSlot int // >=0: loop-iterator local slot
+	typeIdx   int // >=0: Types index (canonical type operand)
 }
 
 type emitCall struct {
@@ -143,7 +144,9 @@ type EmitState struct {
 	fnRecs     []*fnUnitRec
 	producedBy map[string]int // value ID → producing event seq
 	consts     []Value
-	constIdx   map[string]int   // CanonValue → Consts index
+	constIdx   map[string]int // CanonValue → Consts index
+	types      []TypeRef
+	typeIdx    map[string]int   // type ID → Types index
 	origByID   map[string]Value // stripped literal ID → original value
 }
 
@@ -162,10 +165,15 @@ type emitUnit struct {
 // fn's own body a recursive call resolves them to the frame's own
 // capture slots, which is exactly the snapshot semantics (captures
 // are fixed at construction; the same values flow through).
+// generic marks an instantiation of a gen fn — one unit per memoised
+// instantiation (the key carries the instantiated arg types), kept
+// OUT of tail marking, mirroring the interpreter's HasGen exclusion
+// from frame elision (plan Stage 4).
 type fnUnitRec struct {
 	name     string
 	nParams  int
 	caps     []CapturedBinding
+	generic  bool
 	frag     *EmitFragment
 	outOp    emitOperand
 	hasOut   bool
@@ -184,6 +192,7 @@ func NewEmitState() *EmitState {
 		fnUnits:    map[string]int{},
 		producedBy: map[string]int{},
 		constIdx:   map[string]int{},
+		typeIdx:    map[string]int{},
 		origByID:   map[string]Value{},
 	}
 }
@@ -289,23 +298,96 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	// — the branch pushed it. A plain param/iterator reference has no
 	// producing event and resolves to its local slot.
 	if idx, ok := es.producedBy[v.ID]; ok {
-		return emitOperand{constIdx: -1, fromSeq: idx, localSlot: -1}, true
+		return emitOperand{constIdx: -1, fromSeq: idx, localSlot: -1, typeIdx: -1}, true
 	}
 	if slot, ok := es.units[len(es.units)-1].localByID[v.ID]; ok {
-		return emitOperand{constIdx: -1, fromSeq: -1, localSlot: slot}, true
+		return emitOperand{constIdx: -1, fromSeq: -1, localSlot: slot, typeIdx: -1}, true
 	}
-	lit := v
-	if !IsConcrete(v) {
-		orig, ok := es.origByID[v.ID]
-		if !ok {
-			return emitOperand{}, false
-		}
-		lit = orig
+	// A bare type node is a TYPE operand: it must reach the runtime
+	// as the CANONICAL registry node (a pooled by-value copy goes
+	// stale against behaviour/field installs), so it gets its own
+	// table, resolved by ID at run time via OpPushType.
+	if IsBareTypeNode(v) && v.ID != "" {
+		return emitOperand{constIdx: -1, fromSeq: -1, localSlot: -1, typeIdx: es.internType(v)}, true
 	}
-	if !isInertConst(lit) {
+	lit, ok := es.materialise(v)
+	if !ok || !isInertConst(lit) {
 		return emitOperand{}, false
 	}
-	return emitOperand{constIdx: es.intern(lit), fromSeq: -1, localSlot: -1}, true
+	return emitOperand{constIdx: es.intern(lit), fromSeq: -1, localSlot: -1, typeIdx: -1}, true
+}
+
+// materialise recovers the fully concrete value behind a stripped
+// literal: the value itself, its RecordStrip original, or — for a
+// concrete container whose MEMBERS were stripped by a sub-engine run
+// (autoEvalMap evaluates each field through Run, which strips) — a
+// rebuilt copy with each carrier member replaced by its recorded
+// original, recursively. ok=false when any member's original is
+// unknown.
+func (es *EmitState) materialise(v Value) (Value, bool) {
+	if v.Carrier || v.Dynamic {
+		orig, ok := es.origByID[v.ID]
+		if !ok {
+			return v, false
+		}
+		return orig, true
+	}
+	switch d := v.Data.(type) {
+	case ListPayload:
+		rebuilt := false
+		elems := d.Elems
+		for i, e := range elems {
+			m, ok := es.materialise(e)
+			if !ok {
+				return v, false
+			}
+			if m.Carrier != e.Carrier || m.ID != e.ID {
+				if !rebuilt {
+					elems = append([]Value(nil), d.Elems...)
+					rebuilt = true
+				}
+				elems[i] = m
+			}
+		}
+		if rebuilt {
+			nv := v
+			nv.Data = ListPayload{Elems: elems}
+			return nv, true
+		}
+		return v, true
+	case MapPayload:
+		if d.M == nil {
+			return v, false
+		}
+		var nm *OrderedMap
+		for _, k := range d.M.Keys() {
+			mv, _ := d.M.Get(k)
+			m, ok := es.materialise(mv)
+			if !ok {
+				return v, false
+			}
+			if nm == nil && (m.Carrier != mv.Carrier || m.ID != mv.ID) {
+				nm = NewOrderedMap()
+				for _, pk := range d.M.Keys() {
+					if pk == k {
+						break
+					}
+					pv, _ := d.M.Get(pk)
+					nm.Set(pk, pv)
+				}
+			}
+			if nm != nil {
+				nm.Set(k, m)
+			}
+		}
+		if nm != nil {
+			nv := v
+			nv.Data = MapPayload{M: nm}
+			return nv, true
+		}
+		return v, true
+	}
+	return v, true
 }
 
 // fragDiverges reports whether a captured fragment's trailing event
@@ -476,17 +558,16 @@ func (es *EmitState) fnBodyGuard() func() {
 // the captures as hidden trailing slots, and a fragment capturing
 // the body analysis that the caller runs next. finish (non-nil only
 // when fresh) closes the scope with the body's residual stack.
-// ok=false when the fn is beyond Stage 3 (generics, unchecked or
-// multi-value returns) — the program is then marked uncompilable.
+// Generic fns compile one unit per memoised instantiation — the key
+// carries the instantiated arg types, and the caller has the gen
+// bindings installed around the recorded analysis. ok=false when the
+// fn is beyond Stage 4 (unchecked or multi-value returns) — the
+// program is then marked uncompilable.
 func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*Type, captures []CapturedBinding, generic bool) (unit int, finish func([]Value), ok bool) {
 	if !es.active() {
 		return -1, nil, false
 	}
-	switch {
-	case generic:
-		es.MarkUncompilable("generic fn " + name + " (Stage 4)")
-		return -1, nil, false
-	case len(declared) != 1:
+	if len(declared) != 1 {
 		es.MarkUncompilable("fn " + name + " without exactly one declared return (Stage 3 lowers single-return fns)")
 		return -1, nil, false
 	}
@@ -494,7 +575,7 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 		return u, nil, true
 	}
 	unit = len(es.fnRecs)
-	rec := &fnUnitRec{name: name, nParams: len(args), caps: captures}
+	rec := &fnUnitRec{name: name, nParams: len(args), caps: captures, generic: generic}
 	es.fnRecs = append(es.fnRecs, rec)
 	es.fnUnits[key] = unit
 	u := &emitUnit{localByID: map[string]int{}}
@@ -694,14 +775,6 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("quoted-operand word " + word)
 		return
-	case len(sig.TypeArgs) > 0:
-		// Type-literal operands (make, is, convert, tand, …): the
-		// operand must be the CANONICAL registry type node — a
-		// constant-pool copy goes stale against later behaviour/field
-		// installs (eng/go/CLAUDE.md, Canonical *Type Pointers).
-		es.SiteCounts[SiteMeta]++
-		es.MarkUncompilable("type-operand word " + word + " (Stage 4)")
-		return
 	case anyDynamicCarrier(args):
 		es.SiteCounts[SiteDynamic]++
 		es.MarkUncompilable("dynamic input at " + word)
@@ -759,6 +832,16 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	es.producedBy[outs[0].ID] = seq
 }
 
+// internType pools a type operand by canonical ID.
+func (es *EmitState) internType(v Value) int {
+	if i, ok := es.typeIdx[v.ID]; ok {
+		return i
+	}
+	es.types = append(es.types, TypeRef{Name: v.String(), ID: v.ID})
+	es.typeIdx[v.ID] = len(es.types) - 1
+	return len(es.types) - 1
+}
+
 // intern pools a constant by canonical form. Compounds (lists,
 // maps) are NEVER pooled: `eq` on compounds compares by identity
 // (compare-restrict), so two source literals must stay two constants
@@ -766,7 +849,7 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 // under the VM where the interpreter says false (the report's
 // gotcha #13, caught by the differential gate).
 func (es *EmitState) intern(v Value) int {
-	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) {
+	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) || isTypeBodyPayload(v) {
 		es.consts = append(es.consts, v)
 		return len(es.consts) - 1
 	}
@@ -779,16 +862,88 @@ func (es *EmitState) intern(v Value) int {
 	return len(es.consts) - 1
 }
 
+// isTypeBodyPayload reports a structural type-body payload — pooled
+// without dedup, like compounds (identity must not merge).
+func isTypeBodyPayload(v Value) bool {
+	switch v.Data.(type) {
+	case RecordTypeInfo, OptionsTypeInfo, ChildTypeInfo, DisjunctInfo:
+		return true
+	}
+	return false
+}
+
+// typeBodyConstOK walks a structural type body's interior: every
+// reachable constraint/default must be a bare type node, an inert
+// constant, or another clean type body. A check-mode CARRIER inside
+// (a generic instantiation built over a class body whose default was
+// stripped) would bake the analysis artefact into the const — the
+// caught differential mismatch rendered `r:Float` where the
+// interpreter rebuilds `r:1.0` — so any carrier, or any payload this
+// walk doesn't know, refuses.
+func typeBodyConstOK(v Value) bool {
+	if v.Carrier || v.Dynamic {
+		return false
+	}
+	if IsBareTypeNode(v) {
+		return true
+	}
+	memberOK := func(m Value) bool {
+		return typeBodyConstOK(m) || isInertConst(m)
+	}
+	fieldsOK := func(m *OrderedMap) bool {
+		if m == nil {
+			return false
+		}
+		for _, k := range m.Keys() {
+			fv, _ := m.Get(k)
+			if !memberOK(fv) {
+				return false
+			}
+		}
+		return true
+	}
+	switch d := v.Data.(type) {
+	case RecordTypeInfo:
+		return fieldsOK(d.Fields)
+	case OptionsTypeInfo:
+		return fieldsOK(d.Fields)
+	case ChildTypeInfo:
+		if !memberOK(d.Child) {
+			return false
+		}
+		for _, e := range d.Elements {
+			if !memberOK(e) {
+				return false
+			}
+		}
+		for _, en := range d.Entries {
+			if !memberOK(en.Value) {
+				return false
+			}
+		}
+		return true
+	case DisjunctInfo:
+		for _, a := range d.Alternatives {
+			if !memberOK(a) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
 // isInertConst reports whether v can live in a Program's constant
 // pool: a fully concrete value whose payload is PLAIN DATA. The rule
-// is a whitelist — scalars, temporal values, and lists/maps of the
-// same — because anything else is engine-coupled in some way: a
-// check-mode carrier must not be materialised; structural tokens
-// (Word, Splice, Reach, ParenExpr) would be expanded or re-stepped
-// by the engine; type literals and type bodies (class, surface,
-// record) are registry nodes whose by-value copies go stale against
-// the canonical pointer (eng/go/CLAUDE.md, Canonical *Type
-// Pointers); function values are Stage 3.
+// is a whitelist — scalars, temporal values, structural type bodies,
+// and lists/maps of the same — because anything else is
+// engine-coupled in some way: a check-mode carrier must not be
+// materialised; structural tokens (Word, Splice, Reach, ParenExpr)
+// would be expanded or re-stepped by the engine; bare type NODES go
+// stale by value-copy against the canonical pointer (eng/go/
+// CLAUDE.md, Canonical *Type Pointers — they route through
+// OpPushType instead); class/surface bodies can embed method
+// fn-values; function values are fn-value call sites (Stage 4 F4).
 func isInertConst(v Value) bool {
 	if v.Carrier || v.Dynamic || IsBareTypeNode(v) {
 		return false
@@ -798,6 +953,14 @@ func isInertConst(v Value) bool {
 		PathPayload, NonePayload, BigIntPayload, DecimalPayload,
 		TimePayload, DurationPayload, TimezonePayload:
 		return true
+	case RecordTypeInfo, OptionsTypeInfo, ChildTypeInfo, DisjunctInfo:
+		// STRUCTURAL type bodies (what a bound type name pushes at a
+		// use site — make's operand). Sound as consts when their
+		// interior is carrier-free (typeBodyConstOK): the payload is
+		// pointer-backed (shared, not copied) and the minted lattice
+		// node rides the body's Parent POINTER, which stays
+		// canonical. Never deduped.
+		return typeBodyConstOK(v)
 	case ListPayload:
 		for _, e := range d.Elems {
 			if !isInertConst(e) {
@@ -907,10 +1070,10 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		lastPos = eventPos(es.frames[0][n-1])
 	}
 	vi := 0
-	constTail := []int{}
+	tail := []emitOperand{}
 	for _, rv := range residual {
 		if seq, ok := es.producedBy[rv.ID]; ok {
-			if len(constTail) > 0 {
+			if len(tail) > 0 {
 				return nil, "residual shape beyond Stage 1 (call result above a literal)", false
 			}
 			if vi >= len(lw.vm) || lw.vm[vi] != seq {
@@ -919,27 +1082,25 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			vi++
 			continue
 		}
-		lit := rv
-		if !IsConcrete(rv) {
-			orig, ok := es.origByID[rv.ID]
-			if !ok {
-				return nil, "residual value of unknown provenance", false
-			}
-			lit = orig
+		if IsBareTypeNode(rv) && rv.ID != "" {
+			tail = append(tail, emitOperand{constIdx: -1, fromSeq: -1, localSlot: -1, typeIdx: es.internType(rv)})
+			continue
+		}
+		lit, okLit := es.materialise(rv)
+		if !okLit {
+			return nil, "residual value of unknown provenance", false
 		}
 		if !isInertConst(lit) {
 			return nil, "residual value not statically materialisable", false
 		}
-		constTail = append(constTail, es.intern(lit))
+		tail = append(tail, emitOperand{constIdx: es.intern(lit), fromSeq: -1, localSlot: -1, typeIdx: -1})
 	}
 	if vi != len(lw.vm) {
 		return nil, "residual shape beyond Stage 1 (unconsumed call results)", false
 	}
-	for _, k := range constTail {
-		lw.emit(OpPushConst, k, lastPos)
-		lw.vm = append(lw.vm, -1)
+	for _, op := range tail {
+		lw.pushOperand(op, lastPos)
 	}
-	lw.note()
 
 	// Lower the compiled fn units. Tail positions are marked first so
 	// the lowering emits TAIL_CALL_USER (frame replacement — the
@@ -948,7 +1109,11 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		if !rec.finished {
 			return nil, "fn " + rec.name + " was never compiled", false
 		}
-		rec.hasOut = markTailCalls(rec.frag, &rec.outOp, rec.hasOut)
+		if !rec.generic {
+			// Generic instantiations stay out of tail marking — the
+			// interpreter's HasGen exclusion, mirrored (plan Stage 4).
+			rec.hasOut = markTailCalls(rec.frag, &rec.outOp, rec.hasOut)
+		}
 		// NParams counts everything the call site pushes — declared
 		// params AND hidden capture slots; the VM pops them into frame
 		// locals uniformly.
@@ -978,6 +1143,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	}
 
 	lw.p.Consts = es.consts // interning may have grown during reconciliation
+	lw.p.Types = es.types
 	lw.p.MaxStack = lw.maxDepth
 	lw.p.NumLocals = es.units[0].numLocals
 	return lw.p, "", true
@@ -1012,11 +1178,14 @@ type lowerer struct {
 	maxDepth int
 }
 
-// pushOperand emits the push for a const or local operand.
+// pushOperand emits the push for a const, local, or type operand.
 func (lw *lowerer) pushOperand(op emitOperand, pos SrcPos) {
-	if op.localSlot >= 0 {
+	switch {
+	case op.localSlot >= 0:
 		lw.emit(OpPushLocal, op.localSlot, pos)
-	} else {
+	case op.typeIdx >= 0:
+		lw.emit(OpPushType, op.typeIdx, pos)
+	default:
 		lw.emit(OpPushConst, op.constIdx, pos)
 	}
 	lw.vm = append(lw.vm, -1)
