@@ -500,15 +500,38 @@ compiled). Three compiled-mode soundness gaps were closed to get there:
   refuses to compile and the interpreter raises the real error on the
   fallback.
 
-**Remaining (native-coverage follow-on; every such program already runs
-correctly via fallback):** multi-threaded islands (the trailing run laid
-out deepest-first on the operand stack); the general dynamic-dispatch
-fallback for `get`-returns-`Any` and fn-value call sites (F4) via
-`TYPE_CHECK`-guarded boundaries; `break`/`continue`/`return` sentinels
-crossing an island; widening the allow-set into the query-DSL words
-(`where`/`having`/`order`/`select`-query) once their pipeline-receiver
-semantics are proven island-faithful. The original
-Stage-5 scope:
+**Coverage follow-ons — status.** The bounded, gate-safe ones landed:
+
+- **Query-DSL / body-running allow-set DONE.** `do`/`case`/`where`/
+  `having`/`order` joined the island allow-set under the same guards
+  (differential 1438 → 1454, whole-corpus 1494 → 1511, 0 divergences).
+  The splice word `word` stays out (not a data transform).
+- **Sentinel-crossing-island made SOUND.** A `break`/`continue`/`return`
+  inside an island body sets the shared registry's FlowCtrl when the
+  sub-engine runs it, which the VM cannot propagate to an ENCLOSING
+  compiled loop/frame — it surfaced as a tape-coupled island result the
+  VM rejected (`for 3 [each [break] …]` errored vs the interpreter's
+  `[]`). `bodyFreeForFallback` now refuses such bodies, so they fall back
+  and the interpreter unwinds correctly. No spec row exercised it — a
+  latent gap, now pinned.
+- **Multi-threaded islands (NIn>1): not implemented — 0 spec coverage.**
+  The trailing-run deepest-first operand layout is a clean extension, but
+  no corpus row uses more than one computed arg to an allow-listed word,
+  so it would add risk with no gate benefit. Revisit if a workload needs
+  it.
+
+**Remaining — the one large item: F4 general dynamic dispatch.** The
+~285 rows that whole-program-fall-back today (`get`/`apply` returning
+`Any`, fn-value call sites, dynamic-receiver `make`/`get`/`is`/`typeof`)
+need the report-§9.1 `TYPE_CHECK`-guarded boundary: a dynamic value
+flows into a typed dispatch behind a runtime guard that discharges the
+gradual modality back to strict (and a `CALL_NATIVE_POLY` for the
+genuinely multi-overload case). This is deeply tied to the gradual-
+modality contagion in `carrierResults` and is the natural lead-in to
+Stage 6's sig-splitting / inline-cache work; it is deliberately deferred
+rather than landed partially, since a half-correct guard would breach
+the 0-divergence gate. Every such program already runs correctly via
+whole-program fallback. The original Stage-5 scope:
 
 Span-level `FALLBACK_INTERP`: `do` on computed lists, unresolved
 `context get`, leaky runtime `def`, and any site the checker widened
