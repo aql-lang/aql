@@ -8,13 +8,19 @@ step budget — self AND mutual tail recursion at depth 1M under a
 tight ceiling in compiled mode); Stage 4 COMPLETE (the compile-time
 meta layer: macro + minilang expansion, generic instantiations, type
 operands, multi-overload monomorphization, module dot-access calls —
-1412 spec rows compiled, 0 mismatches); Stage 5 SPAN-FALLBACK
-SUBSTANTIALLY LANDED (interpreter islands incl. threaded
-computed-receivers, widened allow-set, concurrency race-safety gate,
-fallback registry-isolation so the WHOLE corpus compiles-or-falls-back
-with 0 divergences — 1438 spec rows compiled span-level, 0 mismatches;
-the dynamic-dispatch F4 boundary and sentinel-crossing remain as
-documented follow-ons). Companion to
+1412 spec rows compiled, 0 mismatches); Stage 5 GATE MET (the whole
+spec corpus — 2607 rows — compiles-or-falls-back with 0 divergences in
+BOTH values and error taxonomy; concurrent spec rows race-free in
+compiled mode under `-race`; 1494 rows take the compiled path). Reaching
+it closed two compiled-mode soundness gaps beyond the span-fallback
+islands themselves: the fallback no longer double-executes check-pass
+side effects (registry snapshot/restore), and the compiled path now
+reproduces the interpreter's runtime guards (declared return type/count
+enforced at RET; check-mode-suppressed strict errors — orphan gen,
+unpack of a missing key — refuse compilation and fall back). The
+native-compilation coverage follow-ons (F4 dynamic dispatch,
+sentinel-crossing, multi-threaded islands, query-DSL words) remain —
+every such program already runs correctly via fallback. Companion to
 `aql-bytecode-report.0.md` (the design) and
 `aql-bytecode-revisions.0.md` (the June 2026 re-review that this plan
 incorporates; read it first — it changes two requirements). Written
@@ -446,37 +452,56 @@ nested islands compose (`each […] (each […] …)`). Differential: 1438
 rows / 0 mismatches, floor 1430. Soundness is gate-proven across the
 corpus.
 
-**Concurrency gate LANDED.** `Program` and all its tables are immutable
+**Concurrency gates LANDED.** `Program` and all its tables are immutable
 after compile; every mutable VM scope (operand stack, locals, frames,
 loop state) is allocated per `RunProgram` call, and each goroutine runs
-against its own `ForkConcurrent` registry. The race-detector gate
-(`bytecode_concurrency_test.go`, `go test -race`) drives one shared
-`*Program` from 16 goroutines across the compiled surface
-(straight-line, loop, tail-recursive fn, baked AND threaded islands)
-with no data race. `await`/timer branch bodies still run as interpreter
-fallbacks (v1, per below).
+against its own `ForkConcurrent` registry. Two `-race` gates: a
+synthetic one (`bytecode_concurrency_test.go`) drives one shared
+`*Program` from 16 goroutines across the compiled surface (straight-line,
+loop, tail-recursive fn, baked AND threaded islands), and the
+plan-mandated one (`compiled_concurrent_test.go`) drives the CONCURRENT
+SPEC ROWS (`await` parallel bodies, `timeout`/`interval`/`cancel`)
+through `RunCompiled` under load — both data-race-free, results matching
+the interpreter. `await`/timer branch bodies run as interpreter
+fallbacks (v1), forking an isolated registry per branch.
 
-**Whole-corpus compile-or-fallback gate LANDED, 0 divergences**
-(`compiled_fullcorpus_test.go`): every VALUE row runs through
+**Whole-corpus gate MET, 0 divergences in values AND error taxonomy**
+(`compiled_fullcorpus_test.go`): every row (2607) runs through
 `RunCompiled` — compiling what it can, silently falling back otherwise —
-and matches the interpreter row-for-row (2292 value rows, 1440 compiled,
-0 mismatches). This required the **fallback registry-isolation** fix:
-`CompileCheck` executes the program in check mode, so its RunInCheckMode
-words (def/import/type/macro, the Test harness) leave real side effects
-on the registry; the COMPILED path needs those (OpPushType resolves
-minted IDs, islands re-run over the same registry), but the interpreter
-FALLBACK must not re-apply them or it double-mints / re-imports / re-runs
-a Test spec. `RunCompiled` now snapshots the mutable registry scopes
-(`Registry.SnapshotForCompile`: Defs, Types, Contexts, Modules load set,
-builtin-word set, capability slots, check state) before the check pass
-and rolls them back on the fallback path (`RestoreForCompile`); the
-compiled path keeps them. An in-place snapshot was the right tool — a
-`ForkConcurrent` shares the parent's `Modules`/`Capabilities` pointers,
-so the check pass on a fork still pollutes the real registry's module
-cache (it lost module-import fidelity in testing); restoring the SAME
-registry is faithful where a separate one is not.
+and matches the interpreter on both the value and the error code (1494
+compiled). Three compiled-mode soundness gaps were closed to get there:
 
-**Remaining (follow-on):** multi-threaded islands (the trailing run laid
+- **Fallback registry-isolation.** `CompileCheck` executes the program
+  in check mode, so its RunInCheckMode words (def/import/type/macro, the
+  Test harness) leave real side effects; the COMPILED path needs those
+  (OpPushType resolves minted IDs, islands re-run over the same
+  registry), but the FALLBACK must not re-apply them or it double-mints /
+  re-imports / re-runs a Test spec. `RunCompiled` snapshots the mutable
+  scopes (`Registry.SnapshotForCompile`: Defs, Types, Contexts, Modules
+  load set, builtin-word set, capability slots, check state) and rolls
+  them back on the fallback path; the compiled path keeps them. An
+  in-place snapshot was the right tool — a `ForkConcurrent` shares the
+  parent's `Modules`/`Capabilities` pointers, so a fork's check pass
+  still pollutes the real registry's module cache; restoring the SAME
+  registry is faithful where a separate one is not.
+- **Return type/count check at RET.** The interpreter enforces a fn's
+  declared return via a ReturnCheck (`__RC`) token; the compiled fn
+  skipped it. The VM now checks the body's result against
+  `CompiledFn.Returns` with the same `v.Is(exp)` membership (predicate
+  refines run their predicate, bare refines stay nominal, builtins
+  unchanged), raising the byte-identical `type_error`. A body whose
+  value COUNT differs from the declared returns refuses to compile (the
+  single-result lowering would otherwise drop the extras) and falls back.
+- **Check-mode-suppressed strict errors.** Some words are lenient in
+  check mode but raise at runtime — an orphan `gen [...]`
+  (gen_without_constructor), an `unpack` of a missing key (unpack_error).
+  The compiled stream IS the check pass, so it would silently succeed.
+  Such a word now sets `Check.SuppressedRuntimeError`; `CompileCheck`
+  refuses to compile and the interpreter raises the real error on the
+  fallback.
+
+**Remaining (native-coverage follow-on; every such program already runs
+correctly via fallback):** multi-threaded islands (the trailing run laid
 out deepest-first on the operand stack); the general dynamic-dispatch
 fallback for `get`-returns-`Any` and fn-value call sites (F4) via
 `TYPE_CHECK`-guarded boundaries; `break`/`continue`/`return` sentinels

@@ -165,6 +165,12 @@ type CompiledFn struct {
 	NLocals int
 	Code    []Instr
 	Debug   []SrcPos
+	// Returns are the declared return types, enforced at RET against the
+	// body's result the same way the interpreter's ReturnCheck (__RC)
+	// does — via v.Is(exp), so a predicate refine runs its predicate, a
+	// bare refine stays nominal, and builtins are unchanged. Empty for a
+	// fn with no declared return (no check runs).
+	Returns []*Type
 }
 
 // Disassemble renders the program for golden tests and debugging.

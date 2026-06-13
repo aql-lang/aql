@@ -243,6 +243,15 @@ type CheckState struct {
 	// so we emit at most one diagnostic per check run.
 	BudgetTripped bool
 
+	// SuppressedRuntimeError is set when a word that is deliberately
+	// lenient in check mode skips an error the interpreter raises at
+	// runtime — an orphan `gen [...]` (gen_without_constructor), an
+	// `unpack` of a missing key (unpack_error). The bytecode compiler
+	// reads it after the check pass: the compiled stream elides such
+	// words, so it would silently succeed where the interpreter errors —
+	// the program is therefore uncompilable and must fall back.
+	SuppressedRuntimeError bool
+
 	// DefsInstalled records the names (and source positions) that
 	// the user's program defined during a check run via the def
 	// word. Populated by RecordCheckDef; consulted at end of run

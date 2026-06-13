@@ -1,6 +1,52 @@
 package lang
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+// The compiled VM enforces a fn's declared return type/count at RET, the
+// mirror of the interpreter's ReturnCheck (__RC). A conforming body
+// compiles and runs; a non-conforming one must produce the SAME
+// type_error the interpreter raises — whether the VM raises it directly
+// (return-type mismatch) or the program refuses to compile and the
+// interpreter raises it on the fallback path (return-count mismatch).
+func TestCompiledReturnCheck(t *testing.T) {
+	// Positive: a conforming fn compiles and returns its value.
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, compiled, err := a.RunCompiled(`def dbl fn [[n:Integer] [Integer] [n mul 2]] dbl 21`)
+	if err != nil || !compiled {
+		t.Fatalf("conforming fn: compiled=%v err=%v", compiled, err)
+	}
+	if len(out) != 1 || out[0] != int64(42) {
+		t.Fatalf("dbl 21 = %v, want 42", out)
+	}
+
+	// Negative: the VM raises the return-type error directly (the fn
+	// compiles, the wrong value reaches RET). Same type_error as interp.
+	for _, src := range []string{
+		`def f fn [[n:Integer] [String] [n]] f 1`,              // Integer body, String return
+		`def Big (Integer gt 10) def mk fn [[] [Big] [5]] mk`,  // 5 fails the predicate
+		`def Pos (refine Integer) def mk fn [[] [Pos] [7]] mk`, // nominal newtype mismatch
+		`def r2 fn [[n:Integer] [Integer] [n n]] r2 1`,         // return COUNT mismatch
+	} {
+		ac, _ := New()
+		_, _, errC := ac.RunCompiled(src)
+		ai, _ := New()
+		_, errI := ai.Run(src)
+		if errC == nil || errI == nil {
+			t.Errorf("%q: expected both to error, compiled=%v interp=%v", src, errC, errI)
+			continue
+		}
+		if !strings.Contains(errC.Error(), "type_error") && !strings.Contains(errC.Error(), errI.Error()) {
+			// errC should be the same type_error taxonomy as the interpreter.
+			t.Errorf("%q: compiled error %q does not match interpreter %q", src, errC, errI)
+		}
+	}
+}
 
 // RunCompiled compiles the program in check mode, which executes its
 // RunInCheckMode words (def/import/type, the Test harness) for real.

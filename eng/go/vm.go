@@ -242,6 +242,27 @@ func runProgram(p *Program, r *Registry, stepLimit int) ([]Value, error) {
 			if len(frames) == 0 {
 				return nil, vmErrAt(curDebug, pc, "RET without a frame")
 			}
+			// Return-type check — the compiled mirror of the interpreter's
+			// ReturnCheck (__RC, engine.go): the body's result must satisfy
+			// each declared return type via v.Is(exp), the SAME membership
+			// the parameter boundary asks, so a predicate refine runs its
+			// predicate, a bare refine stays nominal, and builtins are
+			// unchanged. The body nets exactly len(Returns) values (the
+			// lowerer enforces single-result bodies), sitting on top.
+			if curUnit >= 0 {
+				rets := p.Fns[curUnit].Returns
+				if len(rets) > 0 {
+					if len(stack) < len(rets) {
+						return nil, stampAt(vmReturnCountErr(r, p.Fns[curUnit].Name, len(rets), len(stack)), curDebug, pc, r)
+					}
+					base := len(stack) - len(rets)
+					for k, exp := range rets {
+						if !stack[base+k].Is(CanonicalType(r, exp)) {
+							return nil, stampAt(vmReturnTypeErr(r, p.Fns[curUnit].Name, k+1, exp, stack[base+k]), curDebug, pc, r)
+						}
+					}
+				}
+			}
 			f := frames[len(frames)-1]
 			frames = frames[:len(frames)-1]
 			loops = loops[:f.loopBase]
@@ -273,6 +294,20 @@ func stampAt(err error, debug []SrcPos, pc int, r *Registry) error {
 		ae.fullSource = r.Source
 	}
 	return ae
+}
+
+// vmReturnTypeErr / vmReturnCountErr mirror the interpreter's
+// returnTypeError / returnCountError (engine.go) byte-for-byte — same
+// detail text, same type_error taxonomy — so error-scraping tooling
+// never learns which engine ran.
+func vmReturnTypeErr(r *Registry, funcName string, index int, expected *Type, got Value) error {
+	detail := fmt.Sprintf("%s: return value %d: expected %s, got %s", funcName, index, expected, got.Parent)
+	return r.AqlErrorHint("type_error", detail, funcName, "value: "+diagValue(got))
+}
+
+func vmReturnCountErr(r *Registry, funcName string, expected, got int) error {
+	detail := fmt.Sprintf("%s: expected %d return value(s), got %d", funcName, expected, got)
+	return r.AqlError("type_error", detail, funcName)
 }
 
 func vmErrAt(debug []SrcPos, pc int, msg string) error {

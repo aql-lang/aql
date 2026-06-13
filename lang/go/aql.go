@@ -275,6 +275,15 @@ func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
 			return nil, "check diagnostics", res, nil
 		}
 	}
+	// Some words are deliberately lenient in check mode but raise a
+	// strict error at runtime (an orphan `gen [...]`, an `unpack` of a
+	// missing key). The compiled stream IS the check pass, so it would
+	// silently succeed where the interpreter errors. Such a word flags
+	// the suppression; refuse to compile and let the interpreter raise
+	// the real error on the fallback path.
+	if a.registry.Check.SuppressedRuntimeError {
+		return nil, "check-mode suppressed a runtime error (uncompilable)", res, nil
+	}
 	prog, reason, ok := a.registry.Check.Emit.Finalize(residual)
 	if !ok {
 		return nil, reason, res, nil

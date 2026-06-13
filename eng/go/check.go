@@ -40,6 +40,7 @@ func (c *CheckState) Begin() func() {
 	c.Diagnostics = nil
 	c.StepCount = 0
 	c.BudgetTripped = false
+	c.SuppressedRuntimeError = false
 	c.DefsInstalled = nil
 	c.DefsUsed = nil
 	c.ContextTypes = nil

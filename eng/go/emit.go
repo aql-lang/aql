@@ -186,6 +186,7 @@ type fnUnitRec struct {
 	nParams  int
 	caps     []CapturedBinding
 	generic  bool
+	returns  []*Type // declared return types — enforced at the VM's RET
 	frag     *EmitFragment
 	outOp    emitOperand
 	hasOut   bool
@@ -587,7 +588,7 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 		return u, nil, true
 	}
 	unit = len(es.fnRecs)
-	rec := &fnUnitRec{name: name, nParams: len(args), caps: captures, generic: generic}
+	rec := &fnUnitRec{name: name, nParams: len(args), caps: captures, generic: generic, returns: declared}
 	es.fnRecs = append(es.fnRecs, rec)
 	es.fnUnits[key] = unit
 	u := &emitUnit{localByID: map[string]int{}}
@@ -607,6 +608,14 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 	finish = func(bodyStk []Value) {
 		resume()
 		rec.frag = es.TakeFragment()
+		// The body must leave exactly the declared number of values. A
+		// different count is a return-COUNT error the interpreter raises;
+		// the single-result lowering would otherwise silently keep just
+		// the last value, so refuse and let the program fall back.
+		if !fragDiverges(rec.frag) && len(bodyStk) != len(rec.returns) {
+			es.MarkUncompilable("fn " + name + ": body value count differs from declared returns")
+			return
+		}
 		if len(bodyStk) > 0 && !fragDiverges(rec.frag) {
 			if op, okOut := es.resolveOperand(bodyStk[len(bodyStk)-1]); okOut {
 				rec.outOp, rec.hasOut = op, true
@@ -1177,7 +1186,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		// NParams counts everything the call site pushes — declared
 		// params AND hidden capture slots; the VM pops them into frame
 		// locals uniformly.
-		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NLocals: rec.numLoc}
+		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NLocals: rec.numLoc, Returns: rec.returns}
 		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}}
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
 			return nil, "fn " + rec.name + ": " + reason, false

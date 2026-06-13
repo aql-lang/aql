@@ -2,25 +2,48 @@
 // §Stage 5: "every program either compiles or falls back, so the whole
 // suite must pass in compiled mode"). Where the span-level differential
 // gate (compiled_differential_test.go) checks ONLY the rows the emitter
-// accepts, this gate runs EVERY value row through RunCompiled — which
-// compiles what it can and SILENTLY falls back to the interpreter for
-// the rest — and asserts the result matches the interpreter row-for-row.
+// accepts, this gate runs EVERY row through RunCompiled — which compiles
+// what it can and SILENTLY falls back to the interpreter for the rest —
+// and asserts FULL parity with the interpreter: identical values, AND
+// identical error taxonomy (presence + code). This is the plan's ground
+// rule: "identical results, identical error taxonomy, or the stage
+// doesn't ship."
 //
-// Zero divergences is the bar. The fallback path no longer
-// double-executes check-pass side effects: RunCompiled snapshots the
-// registry's mutable scopes before the check pass and rolls them back
-// (Registry.SnapshotForCompile / RestoreForCompile) when it falls back,
-// so the interpreter runs on pristine state — no re-mint, re-import, or
-// re-run Test spec.
+// Zero divergences is the bar. Two classes of compiled-mode unsoundness
+// were closed to reach it:
+//   - the fallback no longer double-executes check-pass side effects
+//     (RunCompiled snapshots/rolls back the registry — no re-mint,
+//     re-import, re-run Test spec);
+//   - the compiled path reproduces the interpreter's runtime guards: the
+//     VM enforces declared return types/counts at RET (the __RC mirror),
+//     and a check-mode word that suppresses a strict runtime error (an
+//     orphan gen, an unpack of a missing key) marks the program
+//     uncompilable so it falls back and errors faithfully.
 package langspec
 
 import (
 	"bufio"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	eng "github.com/aql-lang/aql/eng/go"
 )
+
+// errCode returns an AQL error's taxonomy code (or "" for nil, "non-aql"
+// for a foreign error) so the gate compares taxonomy, not message text.
+func errCode(e error) string {
+	if e == nil {
+		return ""
+	}
+	var ae *eng.AqlError
+	if errors.As(e, &ae) {
+		return ae.Code
+	}
+	return "non-aql"
+}
 
 func TestSpecCompiledOrFallback(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
@@ -53,11 +76,6 @@ func TestSpecCompiledOrFallback(t *testing.T) {
 				continue
 			}
 			input := strings.TrimSpace(parts[0])
-			// Error rows are covered by the dedicated error-taxonomy
-			// pins; this gate is VALUE-row compile-or-fallback parity.
-			if strings.HasPrefix(strings.TrimSpace(parts[1]), "ERROR:") {
-				continue
-			}
 			rows++
 
 			ac := newDifferentialInstance(t)
@@ -68,10 +86,11 @@ func TestSpecCompiledOrFallback(t *testing.T) {
 			ai := newDifferentialInstance(t)
 			gotI, errI := ai.Run(input)
 
-			if (errC != nil) != (errI != nil) {
+			// Error taxonomy parity: same presence AND same code.
+			if cdC, cdI := errCode(errC), errCode(errI); cdC != cdI {
 				mismatches++
-				t.Errorf("%s:L%d (wasCompiled=%v): %s\n  error divergence: compiled=%v interpreted=%v",
-					e.Name(), lineNum, wasCompiled, input, errC, errI)
+				t.Errorf("%s:L%d (wasCompiled=%v): %s\n  error divergence: compiled=[%s]%v interpreted=[%s]%v",
+					e.Name(), lineNum, wasCompiled, input, cdC, errC, cdI, errI)
 				continue
 			}
 			if errC != nil {
@@ -89,8 +108,8 @@ func TestSpecCompiledOrFallback(t *testing.T) {
 		}
 	}
 
-	t.Logf("compile-or-fallback: %d value rows, %d compiled, %d mismatches", rows, compiledPath, mismatches)
+	t.Logf("compile-or-fallback: %d rows, %d compiled, %d divergences (values + error taxonomy)", rows, compiledPath, mismatches)
 	if mismatches != 0 {
-		t.Errorf("%d compile-or-fallback divergences — every program must compile or fall back to an identical result", mismatches)
+		t.Errorf("%d compile-or-fallback divergences — every program must compile or fall back to an identical result and error taxonomy", mismatches)
 	}
 }

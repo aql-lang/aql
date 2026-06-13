@@ -979,6 +979,10 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 					"gen", e.effectiveSource(),
 					"hint: follow gen [...] with refine Record [...], class {...}, fnsig [...], or fn [...]")
 			}
+			// Check mode is lenient (no error), but the compiled stream
+			// elides gen — flag the suppression so the program refuses to
+			// compile and the interpreter raises the real error.
+			e.registry.Check.SuppressedRuntimeError = true
 		}
 	}
 
