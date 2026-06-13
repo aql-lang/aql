@@ -308,6 +308,7 @@ func (*IntervalInfo) payloadMarker()      {}
 func (ErrorInfo) payloadMarker()          {}
 func (CalDurationData) payloadMarker()    {}
 func (DepScalarInfo) payloadMarker()      {}
+func (ClosurePayload) payloadMarker()     {}
 func (PathInfo) payloadMarker()           {} // legacy; replaced by PathPayload at Step 5b but may still flow through some paths
 
 // noneSentinel is kept for backward compat with code that reads it

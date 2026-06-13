@@ -66,7 +66,46 @@ func runProgram(p *Program, r *Registry, stepLimit int) ([]Value, error) {
 		return nil, fmt.Errorf("bytecode: nil program")
 	}
 	vc := &vmContext{p: p, r: r, ceiling: vmStackCeiling(r), stepLimit: stepLimit}
+	// Install the body-closure invoker so a higher-order word's handler runs
+	// its body through the VM (InvokeBody → r.Invoker → invokeClosure). The
+	// shared registry means the island sub-engine inherits it too, so the
+	// invoker dispatches on the body VALUE: a compiled closure runs in the
+	// VM, a raw token-list body (an island's interpreter run reaching a
+	// handler) runs through a sub-engine — identical to InvokeBody's nil
+	// branch. Restored on exit so nested RunProgram calls nest cleanly.
+	prevInvoker := r.Invoker
+	r.Invoker = vc.invokeClosure
+	defer func() { r.Invoker = prevInvoker }()
 	return vc.run(-1, make([]Value, p.NumLocals), make([]Value, 0, p.MaxStack))
+}
+
+// invokeClosure runs a code body for the InvokeBody seam. A compiled closure
+// (OpPushClosure's value) executes in the VM's re-entrant runner: its inputs
+// bind to the body unit's leading param slots and its captures to the trailing
+// slots, then the unit runs on a fresh operand stack. Any other body value (a
+// raw token list — an island's interpreter run reaching a higher-order
+// handler) runs through a sub-engine exactly as InvokeBody does with no
+// Invoker, so the island path is unchanged.
+func (vc *vmContext) invokeClosure(body Value, inputs []Value) ([]Value, error) {
+	cl, ok := body.Data.(ClosurePayload)
+	if !ok {
+		toks := bodyTokens(body)
+		input := make([]Value, len(inputs)+len(toks))
+		copy(input, inputs)
+		copy(input[len(inputs):], toks)
+		return New(vc.r).Run(input)
+	}
+	fn := &vc.p.Fns[cl.Unit]
+	locals := make([]Value, fn.NLocals)
+	for i := 0; i < len(inputs) && i < fn.NParams; i++ {
+		locals[i] = inputs[i]
+	}
+	for i, cv := range cl.Captures {
+		if slot := fn.NParams + i; slot < len(locals) {
+			locals[slot] = cv
+		}
+	}
+	return vc.run(cl.Unit, locals, nil)
 }
 
 // run executes from startUnit (unit -1 is the main program; >=0 indexes
@@ -107,6 +146,8 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			stack = append(stack, p.Consts[in.Arg])
 		case OpPushLocal:
 			stack = append(stack, locals[in.Arg])
+		case OpPushClosure:
+			stack = append(stack, NewClosure(int(in.Arg), nil))
 		case OpPushType:
 			// Resolve the CANONICAL node at run time — never a pooled
 			// copy (eng/go/CLAUDE.md, Canonical *Type Pointers). Types

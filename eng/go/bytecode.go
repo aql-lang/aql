@@ -75,6 +75,15 @@ const (
 	// threaded arg) and pushed onto the island; the island's residual
 	// is pushed back.
 	OpFallback
+	// OpPushClosure pushes a Closure VALUE over the compiled body unit
+	// Fns[Arg] (Value{Parent: TFunction, Data: ClosurePayload}). A
+	// higher-order word's CODE body compiles to its own unit and rides
+	// as the word's operand; at run time the word's native handler
+	// invokes it through the VM's re-entrant runner via the InvokeBody
+	// seam — never the interpreter (plan P2). Capture-carrying closures
+	// take their captures from the operand stack below the closure (not
+	// yet emitted; capture-free bodies only for now).
+	OpPushClosure
 )
 
 func (o Opcode) String() string {
@@ -105,8 +114,26 @@ func (o Opcode) String() string {
 		return "PUSH_TYPE"
 	case OpFallback:
 		return "FALLBACK"
+	case OpPushClosure:
+		return "PUSH_CLOSURE"
 	}
 	return fmt.Sprintf("OP(%d)", uint8(o))
+}
+
+// ClosurePayload is a runtime fn VALUE backed by a compiled body unit:
+// OpPushClosure pushes one, and a higher-order word's native handler invokes
+// it through the VM's re-entrant runner (via the InvokeBody seam) — never the
+// interpreter (plan P2). Unit indexes Program.Fns; Captures are the
+// construction-time lexical captures bound into the body's trailing local
+// slots at invocation (empty for a capture-free body).
+type ClosurePayload struct {
+	Unit     int
+	Captures []Value
+}
+
+// NewClosure builds a closure Value over a compiled body unit.
+func NewClosure(unit int, captures []Value) Value {
+	return Value{Parent: TFunction, Data: ClosurePayload{Unit: unit, Captures: captures}}
 }
 
 // Instr is one fixed-width instruction.
@@ -234,6 +261,8 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 			fmt.Fprintf(sb, " b%-3d ; %s (nin=%d)", in.Arg, fb.Desc, fb.NIn)
 		case OpCallUser, OpTailCallUser:
 			fmt.Fprintf(sb, " f%-3d ; %s/%d", in.Arg, p.Fns[in.Arg].Name, p.Fns[in.Arg].NParams)
+		case OpPushClosure:
+			fmt.Fprintf(sb, " f%-3d ; closure %s/%d", in.Arg, p.Fns[in.Arg].Name, p.Fns[in.Arg].NParams)
 		}
 		sb.WriteByte('\n')
 	}
