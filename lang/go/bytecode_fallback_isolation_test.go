@@ -1,6 +1,7 @@
 package lang
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 )
@@ -117,5 +118,67 @@ func TestRunCompiledFallbackIsolation(t *testing.T) {
 	_ = compiled // may compile or fall back depending on the emitter; result is what matters
 	if len(out) != 1 || out[0] != int64(7) {
 		t.Fatalf("user-type field access = %v, want 7", out)
+	}
+}
+
+// Compiled mode must not swallow a trace: the `trace` word (IO.trace)
+// renders the interpreter's step-by-step execution, which the bytecode
+// VM has no equivalent for. It refuses to compile ("unannotated or
+// opaque word trace"), so a traced program whole-program-falls-back to
+// the interpreter and the trace renders — exactly the plan's "compiled
+// mode disables itself under trace" contract, realised via fallback.
+// Pin it so making `trace` compilable can't silently lose the trace.
+func TestCompiledTraceFallsBack(t *testing.T) {
+	src := `"aql:io" import end IO.trace [add 1 2]`
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	a.SetOutput(&buf)
+	out, compiled, err := a.RunCompiled(src)
+	if err != nil {
+		t.Fatalf("traced program: %v", err)
+	}
+	if compiled {
+		t.Error("a traced program took the compiled path; it must fall back so the trace renders")
+	}
+	if len(out) != 1 || out[0] != int64(3) {
+		t.Fatalf("traced result = %v, want 3", out)
+	}
+	if !strings.Contains(buf.String(), "trace") {
+		t.Errorf("no trace output captured: %q", buf.String())
+	}
+}
+
+// Mixed-mode error rendering: when a fallback island errors, the message
+// must read byte-identically to the interpreter — the island re-runs the
+// SAME tokens through a sub-engine, so its AqlError carries the island's
+// own frame attribution ("each: element 0: …"), and the VM stamps it
+// through the shared error path (stampAt) without overwriting that
+// position. A regression that mangled island-error attribution (e.g.
+// overstamping with the OpFallback pc) would diverge here.
+func TestCompiledIslandErrorRendering(t *testing.T) {
+	cases := []string{
+		`each [convert Integer] ['x' 'y']`,
+		`fold [convert Integer] ['a'] 0`,
+		`scan [convert Integer] ['a' 'b']`,
+		`filter [convert Integer] ['a']`,
+	}
+	for _, src := range cases {
+		ac, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _, errC := ac.RunCompiled(src)
+		ai, _ := New()
+		_, errI := ai.Run(src)
+		if errC == nil || errI == nil {
+			t.Errorf("%q: expected both to error, compiled=%v interp=%v", src, errC, errI)
+			continue
+		}
+		if errC.Error() != errI.Error() {
+			t.Errorf("%q: island error text differs\n  compiled: %s\n  interp:   %s", src, errC.Error(), errI.Error())
+		}
 	}
 }

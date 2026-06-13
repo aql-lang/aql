@@ -379,8 +379,12 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				genArgs[i] = NewCarrier(a.Parent)
 			}
 			key := FnAnalysisKey(nameCopy, args, capturesCopy, bodyCopy)
+			paramNames := make([]string, len(sigParams))
+			for i, p := range sigParams {
+				paramNames[i] = p.Name
+			}
 			var okFn bool
-			fnUnit, finishFn, okFn = es.StartFnCompile(key, nameCopy, genArgs, declaredReturns, capturesCopy, genSpec != nil)
+			fnUnit, finishFn, okFn = es.StartFnCompile(key, nameCopy, genArgs, declaredReturns, paramNames, capturesCopy, genSpec != nil)
 			if !okFn {
 				fnUnit = -1
 			}

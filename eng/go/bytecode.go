@@ -171,6 +171,29 @@ type CompiledFn struct {
 	// bare refine stays nominal, and builtins are unchanged. Empty for a
 	// fn with no declared return (no check runs).
 	Returns []*Type
+	// LocalNames maps a frame local slot to its source name (params in
+	// slots 0..NParams-1, then captures), for a debugger / disassembler.
+	// Body-local iterator slots have no name (empty string). Purely
+	// metadata — the VM never reads it.
+	LocalNames []string
+}
+
+// slotNames renders a CompiledFn's slot→name table for the
+// disassembler: " [n acc]" with empty (anonymous body-local) slots shown
+// as "_". Empty string when no names are known.
+func slotNames(names []string) string {
+	if len(names) == 0 {
+		return ""
+	}
+	parts := make([]string, len(names))
+	for i, n := range names {
+		if n == "" {
+			parts[i] = "_"
+		} else {
+			parts[i] = n
+		}
+	}
+	return " [" + strings.Join(parts, " ") + "]"
 }
 
 // Disassemble renders the program for golden tests and debugging.
@@ -178,7 +201,7 @@ func (p *Program) Disassemble() string {
 	var sb strings.Builder
 	p.disasmUnit(&sb, p.Code)
 	for fi := range p.Fns {
-		fmt.Fprintf(&sb, "fn f%d %s/%d (locals=%d):\n", fi, p.Fns[fi].Name, p.Fns[fi].NParams, p.Fns[fi].NLocals)
+		fmt.Fprintf(&sb, "fn f%d %s/%d (locals=%d)%s:\n", fi, p.Fns[fi].Name, p.Fns[fi].NParams, p.Fns[fi].NLocals, slotNames(p.Fns[fi].LocalNames))
 		p.disasmUnit(&sb, p.Fns[fi].Code)
 	}
 	fmt.Fprintf(&sb, "; consts=%d types=%d sigs=%d fallbacks=%d fns=%d max-stack=%d locals=%d\n",

@@ -186,7 +186,8 @@ type fnUnitRec struct {
 	nParams  int
 	caps     []CapturedBinding
 	generic  bool
-	returns  []*Type // declared return types — enforced at the VM's RET
+	returns  []*Type  // declared return types — enforced at the VM's RET
+	locals   []string // slot→name table (params then captures); debug only
 	frag     *EmitFragment
 	outOp    emitOperand
 	hasOut   bool
@@ -576,7 +577,7 @@ func (es *EmitState) fnBodyGuard() func() {
 // bindings installed around the recorded analysis. ok=false when the
 // fn is beyond Stage 4 (unchecked or multi-value returns) — the
 // program is then marked uncompilable.
-func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*Type, captures []CapturedBinding, generic bool) (unit int, finish func([]Value), ok bool) {
+func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*Type, paramNames []string, captures []CapturedBinding, generic bool) (unit int, finish func([]Value), ok bool) {
 	if !es.active() {
 		return -1, nil, false
 	}
@@ -588,7 +589,19 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 		return u, nil, true
 	}
 	unit = len(es.fnRecs)
-	rec := &fnUnitRec{name: name, nParams: len(args), caps: captures, generic: generic, returns: declared}
+	// Slot→name table (debug only): params in slots 0..n-1, then captures.
+	locals := make([]string, 0, len(args)+len(captures))
+	for i := range args {
+		if i < len(paramNames) {
+			locals = append(locals, paramNames[i])
+		} else {
+			locals = append(locals, "")
+		}
+	}
+	for _, cb := range captures {
+		locals = append(locals, cb.Name)
+	}
+	rec := &fnUnitRec{name: name, nParams: len(args), caps: captures, generic: generic, returns: declared, locals: locals}
 	es.fnRecs = append(es.fnRecs, rec)
 	es.fnUnits[key] = unit
 	u := &emitUnit{localByID: map[string]int{}}
@@ -1186,7 +1199,11 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		// NParams counts everything the call site pushes — declared
 		// params AND hidden capture slots; the VM pops them into frame
 		// locals uniformly.
-		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NLocals: rec.numLoc, Returns: rec.returns}
+		// Pad the slot→name table to NLocals; body-local iterator slots
+		// (added during loop lowering) stay anonymous.
+		names := make([]string, rec.numLoc)
+		copy(names, rec.locals)
+		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NLocals: rec.numLoc, Returns: rec.returns, LocalNames: names}
 		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}}
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
 			return nil, "fn " + rec.name + ": " + reason, false

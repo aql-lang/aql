@@ -53,7 +53,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	seed := fs.Int64("s", 0, "random seed for ID generation (default: current time)")
 	showVersion := fs.Bool("version", false, "print version and exit")
 	checkFirst := fs.Bool("check", false, "run static type-check before execution; abort on error")
-	compileMode := fs.Bool("compile", false, "EXPERIMENTAL: execute via the bytecode compiler when the program is compilable; silently falls back to the interpreter otherwise")
+	compileMode := fs.Bool("compile", false, "EXPERIMENTAL: execute via the bytecode compiler when the program is compilable; silently falls back to the interpreter otherwise (also enabled by AQL_COMPILE; AQL_NO_COMPILE disables)")
 	optionsStr := fs.String("options", "", "engine options as jsonic (e.g. tape:initial:65536,tape:grows:9)")
 	var pf permsflags.Flags
 	permsflags.Register(fs, &pf)
@@ -118,7 +118,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				return 1
 			}
 		}
-		if err := EvalOptionsMode(stdout, source, o, *compileMode); err != nil {
+		if err := EvalOptionsMode(stdout, source, o, resolveCompileMode(*compileMode)); err != nil {
 			fmt.Fprintf(stderr, "%s\n", err)
 			return 1
 		}
@@ -157,6 +157,30 @@ func EvalWithPolicy(w io.Writer, source string, registry string, seed int64, pol
 // including --options — and calls this.
 func EvalOptions(w io.Writer, source string, o lang.Options) error {
 	return EvalOptionsMode(w, source, o, false)
+}
+
+// resolveCompileMode applies the bytecode-mode rollout contract
+// (design/aql-bytecode-plan.0.md, "Developer experience"): compiled mode
+// is opt-in via the `--compile` flag OR `AQL_COMPILE` in the environment,
+// and `AQL_NO_COMPILE` is the forward-compatible kill switch that wins
+// over both (it becomes the lone control when the default flips in Stage
+// 7). Results are identical to the interpreter either way.
+func resolveCompileMode(flag bool) bool {
+	if envEnabled("AQL_NO_COMPILE") {
+		return false
+	}
+	return flag || envEnabled("AQL_COMPILE")
+}
+
+// envEnabled reports whether an env var is set to a truthy value
+// (present and not one of the empty/0/false/no forms).
+func envEnabled(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
+	case "", "0", "false", "no", "off":
+		return false
+	default:
+		return true
+	}
 }
 
 // EvalOptionsMode is EvalOptions with the execution engine selected:

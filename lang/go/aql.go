@@ -267,6 +267,12 @@ func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
 	a.registry.Check.EmitUnusedDefDiagnostics()
 
 	res := CheckResult{Diagnostics: a.registry.Check.Diagnostics}
+	if es := a.registry.Check.Emit; es != nil && len(es.SiteCounts) > 0 {
+		res.SiteCounts = make(map[string]int, len(es.SiteCounts))
+		for k, v := range es.SiteCounts {
+			res.SiteCounts[k] = v
+		}
+	}
 	if runErr != nil {
 		return nil, "check error", res, runErr
 	}
@@ -459,6 +465,14 @@ type CheckResult struct {
 	Stack       []string          `json:"stack"`
 	Diagnostics []CheckDiagnostic `json:"diagnostics"`
 	Summary     CheckSummary      `json:"summary"`
+	// SiteCounts tallies dispatch sites by compilation class during the
+	// bytecode recording pass — "mono" (a single resolved signature,
+	// compiles to CALL_NATIVE), "poly" (polymorphic, not lowered),
+	// "dynamic" (a dynamic carrier / interpreter-island site), and
+	// "meta" (compile-time / fn-invoking / higher-order words). Populated
+	// only by CompileCheck (the recording pass); nil for a plain Check.
+	// It answers "why didn't my hot loop compile to a single path?".
+	SiteCounts map[string]int `json:"site_counts,omitempty"`
 }
 
 // CheckSummary reports the per-severity count of diagnostics from
