@@ -30,38 +30,60 @@ func RunProgram(p *Program, r *Registry) ([]Value, error) {
 	return runProgram(p, r, DefaultStepLimit)
 }
 
+// vmLoop is one open counted loop's iteration state.
+type vmLoop struct {
+	cur, end, step int64
+	slot           int
+}
+
+// vmFrame remembers a caller's resumption point across a CALL_USER: the
+// unit and pc to return to, the caller's frame locals, and the open-loop
+// count so RET cannot leak loop state.
+type vmFrame struct {
+	retUnit, retPC int
+	locals         []Value
+	loopBase       int
+}
+
+// vmContext holds the state SHARED across a program run and every re-entrant
+// closure invocation it spawns: the program, the registry, the resource
+// ceilings, the running step count (one global budget), and the reused island
+// sub-engine / args scratch. Per-run state (operand stack, frame locals,
+// frames, open loops, pc) lives in run() so a body closure invoked
+// mid-dispatch executes on its own stack without disturbing the caller.
+type vmContext struct {
+	p          *Program
+	r          *Registry
+	ceiling    int
+	stepLimit  int
+	steps      int
+	islandEng  *Engine
+	argScratch []Value
+}
+
 func runProgram(p *Program, r *Registry, stepLimit int) ([]Value, error) {
 	if p == nil {
 		return nil, fmt.Errorf("bytecode: nil program")
 	}
-	ceiling := vmStackCeiling(r)
-	steps := 0
-	stack := make([]Value, 0, p.MaxStack)
-	locals := make([]Value, p.NumLocals)
-	type vmLoop struct {
-		cur, end, step int64
-		slot           int
-	}
+	vc := &vmContext{p: p, r: r, ceiling: vmStackCeiling(r), stepLimit: stepLimit}
+	return vc.run(-1, make([]Value, p.NumLocals), make([]Value, 0, p.MaxStack))
+}
+
+// run executes from startUnit (unit -1 is the main program; >=0 indexes
+// p.Fns) with the given frame locals and initial operand stack, returning the
+// residual stack when the unit runs off the end of its code (the main program
+// — and body closures, which carry no trailing RET). A RET propagates back to
+// its CALL_USER caller within this run. Re-entrant: a body closure invoked
+// from a native handler calls run() again on a fresh stack, sharing vc's step
+// budget and island engine.
+func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value, error) {
+	p, r := vc.p, vc.r
+	ceiling := vc.ceiling
 	var loops []vmLoop
-	// Frames: unit -1 is the main program; >=0 indexes p.Fns. The
-	// operand stack is shared across frames (results flow to the
-	// caller); locals are per-frame. A frame also remembers the
-	// caller's open-loop count so RET cannot leak loop state.
-	type vmFrame struct {
-		retUnit, retPC int
-		locals         []Value
-		loopBase       int
-	}
 	var frames []vmFrame
-	// islandEng is the lazily-created, reused sub-engine for OpFallback
-	// islands (one per RunProgram; reloads its tape in place).
-	var islandEng *Engine
-	// argScratch is reused across OpCallNative dispatches to avoid a
-	// per-call args-slice allocation (grows to the widest arity seen).
-	var argScratch []Value
-	curUnit := -1
-	curCode := p.Code
-	curDebug := p.Debug
+	curUnit := startUnit
+	var curCode []Instr
+	var curDebug []SrcPos
 	enterUnit := func(u int) {
 		curUnit = u
 		if u < 0 {
@@ -70,13 +92,14 @@ func runProgram(p *Program, r *Registry, stepLimit int) ([]Value, error) {
 			curCode, curDebug = p.Fns[u].Code, p.Fns[u].Debug
 		}
 	}
+	enterUnit(startUnit)
 	for pc := 0; pc < len(curCode); pc++ {
 		if len(stack) > ceiling || len(frames) > ceiling {
 			return nil, vmExhaustedAt(curDebug, pc, r, ceiling)
 		}
-		steps++
-		if steps > stepLimit {
-			return nil, vmEvalLimitAt(curDebug, pc, r, stepLimit)
+		vc.steps++
+		if vc.steps > vc.stepLimit {
+			return nil, vmEvalLimitAt(curDebug, pc, r, vc.stepLimit)
 		}
 		in := curCode[pc]
 		switch in.Op {
@@ -154,10 +177,10 @@ func runProgram(p *Program, r *Registry, stepLimit int) ([]Value, error) {
 			// natives (the monomorphic math/compare/etc. words the emitter
 			// admits) do not retain the args slice. The 0-divergence gate
 			// + combination matrix catch any handler that does.
-			if cap(argScratch) < n {
-				argScratch = make([]Value, n)
+			if cap(vc.argScratch) < n {
+				vc.argScratch = make([]Value, n)
 			}
-			args := argScratch[:n]
+			args := vc.argScratch[:n]
 			for i := 0; i < n; i++ {
 				args[i] = stack[len(stack)-1-i]
 			}
@@ -198,12 +221,12 @@ func runProgram(p *Program, r *Registry, stepLimit int) ([]Value, error) {
 			// Reuse one island sub-engine across every OpFallback in this
 			// RunProgram: it reloads its tape in place, so a hot island in
 			// a loop does not allocate a fresh engine+tape per iteration.
-			if islandEng == nil {
-				islandEng = New(r)
-				islandEng.SetSource(r.Source)
-				islandEng.reuseTape = true
+			if vc.islandEng == nil {
+				vc.islandEng = New(r)
+				vc.islandEng.SetSource(r.Source)
+				vc.islandEng.reuseTape = true
 			}
-			results, err := islandEng.Run(island)
+			results, err := vc.islandEng.Run(island)
 			if err != nil {
 				return nil, stampAt(err, curDebug, pc, r)
 			}
