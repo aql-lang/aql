@@ -154,6 +154,7 @@ type EmitState struct {
 	fnUnits    map[string]int // fn memo key → Program.Fns index
 	fnRecs     []*fnUnitRec
 	producedBy map[string]int // value ID → producing event seq
+	typeOut    map[int]bool   // event seq → its output is itself a type body
 	consts     []Value
 	constIdx   map[string]int // CanonValue → Consts index
 	types      []TypeRef
@@ -205,6 +206,7 @@ func NewEmitState() *EmitState {
 		units:      []*emitUnit{{localByID: map[string]int{}}},
 		fnUnits:    map[string]int{},
 		producedBy: map[string]int{},
+		typeOut:    map[int]bool{},
 		constIdx:   map[string]int{},
 		typeIdx:    map[string]int{},
 		origByID:   map[string]Value{},
@@ -302,6 +304,21 @@ func (es *EmitState) appendEvent(ev emitEvent) int {
 	return ev.seq
 }
 
+// setProduced registers an event's output ID against its sequence,
+// recording whether that output is itself a type body (a bare type
+// node, or a structural/nominal type literal like an ObjectType). The
+// flag lets resolveOperand tell a real type-producing event (typeof,
+// type algebra) apart from an ID COLLISION — a `make` result is an
+// ObjectInstance that can inherit the type literal's ID, so a later
+// type operand (`(make Point {}) is Point`) would otherwise resolve
+// the `Point` literal to the make event.
+func (es *EmitState) setProduced(out Value, seq int) {
+	es.producedBy[out.ID] = seq
+	if IsTypeBody(out) {
+		es.typeOut[seq] = true
+	}
+}
+
 // resolveOperand maps a dispatch value to its provenance: a prior
 // event's output, or an inert constant (concrete at the dispatch, or
 // a stripped literal whose original RecordStrip saved).
@@ -312,7 +329,13 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	// — the branch pushed it. A plain param/iterator reference has no
 	// producing event and resolves to its local slot.
 	if idx, ok := es.producedBy[v.ID]; ok {
-		return emitOperand{constIdx: -1, fromSeq: idx, localSlot: -1, typeIdx: -1}, true
+		// A type operand whose ID matches a producing event whose own
+		// output was NOT a type is an ID collision (a `make` result
+		// inheriting the type literal's ID): resolve it as its own type
+		// operand / const below, not the unrelated event.
+		if !IsTypeBody(v) || es.typeOut[idx] {
+			return emitOperand{constIdx: -1, fromSeq: idx, localSlot: -1, typeIdx: -1}, true
+		}
 	}
 	if slot, ok := es.units[len(es.units)-1].localByID[v.ID]; ok {
 		return emitOperand{constIdx: -1, fromSeq: -1, localSlot: slot, typeIdx: -1}, true
@@ -515,7 +538,7 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 	}
 	seq := es.appendEvent(ev)
 	es.SiteCounts[SiteMono]++
-	es.producedBy[b.Out.ID] = seq
+	es.setProduced(b.Out, seq)
 }
 
 // ArmLoopCapture makes the NEXT AnalyseLoopBody record its final
@@ -689,7 +712,7 @@ func (es *EmitState) RecordUserCall(unit int, args []Value, out Value, pos SrcPo
 	}
 	seq := es.appendEvent(emitEvent{kind: evCallUser, uc: emitUserCall{unit: unit, ops: ops, pos: pos}})
 	es.SiteCounts[SiteMono]++
-	es.producedBy[out.ID] = seq
+	es.setProduced(out, seq)
 }
 
 // RecordLoop records a counted/range `for`: start/end/step operand
@@ -736,7 +759,7 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 	lp.body, lp.iterSlot = body, slot
 	seq := es.appendEvent(emitEvent{kind: evLoop, loop: lp})
 	es.SiteCounts[SiteMono]++
-	es.producedBy[out.ID] = seq
+	es.setProduced(out, seq)
 }
 
 // RecordFallback records an interpreter-island fallback (Stage 5). span
@@ -765,7 +788,7 @@ func (es *EmitState) RecordFallback(span FallbackSpan, ins []Value, out Value, p
 	es.fallbacks = append(es.fallbacks, span)
 	seq := es.appendEvent(emitEvent{kind: evFallback, fb: emitFallback{spanIdx: idx, ins: ops, pos: pos}})
 	es.SiteCounts[SiteDynamic]++
-	es.producedBy[out.ID] = seq
+	es.setProduced(out, seq)
 	return true
 }
 
@@ -920,7 +943,7 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	}
 	es.SiteCounts[SiteMono]++
 	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, pos: pos}})
-	es.producedBy[outs[0].ID] = seq
+	es.setProduced(outs[0], seq)
 }
 
 // internType pools a type operand by canonical ID.

@@ -187,6 +187,12 @@ func TestCompiledCombinationPath(t *testing.T) {
 		// const); a class with a method field must fall back.
 		{`def Point class {x:1, y:2} make Point {x:9}`, "native"},
 		{`def C class {x:1 f:(fn [[][Integer][2]])} make C {}`, "fallback"},
+		// is / typeof on a make-result: the type operand shares the make
+		// result's ID, but the type-operand ID-collision guard resolves the
+		// `Point` literal to its own type, not the make event — so it compiles
+		// instead of failing stack discipline.
+		{`def Point class {x:1} (make Point {}) is Point`, "native"},
+		{`def Point class {x:1} (make Point {}) typeof`, "native"},
 		// fn-value-call boundary: a get whose result is a method applied to
 		// trailing args must fall back (the method would be left unapplied).
 		{`"aql:rand" import end def r (Rand.with-seed 42) r.int 0 100`, "fallback"},

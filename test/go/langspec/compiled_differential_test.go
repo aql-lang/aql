@@ -35,7 +35,7 @@ func newDifferentialInstance(t *testing.T) *lang.AQL {
 // take the compiled path for the gate to be meaningful. Raise it as
 // later stages widen the compilable subset; never lower it without a
 // documented decision.
-const minCompiledRows = 1620 // + F4 class/object make (plain-data const-bake) + get islands + fn-value boundary: 1629 compiled June 2026
+const minCompiledRows = 1630 // + F4 class/object make (plain-data const-bake) + get islands + fn-value boundary + is/typeof on make-result (type-operand ID-collision guard): 1636 compiled June 2026
 
 func TestSpecCompiledDifferential(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
