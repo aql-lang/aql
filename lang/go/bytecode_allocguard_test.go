@@ -1,0 +1,85 @@
+package lang
+
+import (
+	"runtime"
+	"testing"
+
+	eng "github.com/aql-lang/aql/eng/go"
+)
+
+// allocsPerOp runs fn a fixed number of times and returns the mean heap
+// allocations per call. Allocation counts are deterministic for a given
+// compiled Program, so a small fixed sample is exact and fast (no
+// benchmark auto-scaling).
+func allocsPerOp(fn func()) int64 {
+	const iters = 64
+	fn() // warm up (lazy one-time allocations)
+	runtime.GC()
+	var m0, m1 runtime.MemStats
+	runtime.ReadMemStats(&m0)
+	for i := 0; i < iters; i++ {
+		fn()
+	}
+	runtime.ReadMemStats(&m1)
+	return int64(m1.Mallocs-m0.Mallocs) / iters
+}
+
+// Compiled-mode allocation guard (design/aql-bytecode-plan.0.md Stage 6
+// verification). Allocations per RunProgram are DETERMINISTIC, so they
+// are the hard regression signal (execution time is GC-noisy and only
+// advisory). Each compute/island shape has a ceiling pinned slightly
+// above its measured allocations; a change that regresses compiled-mode
+// allocation — e.g. removing the island sub-engine reuse, or adding a
+// per-dispatch allocation — trips the ceiling here, in `make test`, long
+// before anyone runs the benchmarks. Lower a ceiling when an
+// optimization reduces allocations; never raise one without a documented
+// reason.
+func TestCompiledAllocCeilings(t *testing.T) {
+	if testing.Short() {
+		t.Skip("alloc guard runs a micro-benchmark; skipped under -short")
+	}
+	guards := []struct {
+		name    string
+		setup   string
+		src     string
+		ceiling int64
+	}{
+		{"arith_chain64", "", arithChain(64), 290},
+		{"compare_loop", "", `for 200 [gt i 100]`, 2100},
+		{"if_scalar", "", `for 200 [if (gt i 100) [1] [0]]`, 2100},
+		{"if_listcond", "", `for 200 [if [i gt 100] [1] [0]]`, 2100},
+		{"for_tight", "", `for 200 [add (mul i 3) 7]`, 2350},
+		{"recursion_nontail", `def s fn [[n:Integer] [Integer] [if (n lte 0) [0] [n add (s (n sub 1))]]] end`, `s 200`, 3800},
+		{"recursion_tail", `def s2 fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [s2 (n sub 1) (acc add n)]]] end`, `s2 1000 0`, 19500},
+		// Island reuse keeps a hot island in a loop at interpreter-level
+		// allocation; a regression that re-allocates a sub-engine per
+		// island would roughly double this (≈5000 → ≈10000).
+		{"do_body", `def body [add 1 2]`, `for 100 [do body]`, 4800},
+	}
+	for _, g := range guards {
+		a, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if g.setup != "" {
+			if _, err := a.Run(g.setup); err != nil {
+				t.Fatalf("%s setup: %v", g.name, err)
+			}
+		}
+		prog, reason, _, err := a.CompileCheck(g.src)
+		if err != nil || prog == nil {
+			t.Fatalf("%s did not compile (reason %q) — alloc guard needs a compiled program", g.name, reason)
+		}
+		reg := a.registry
+		got := allocsPerOp(func() {
+			if _, err := eng.RunProgram(prog, reg); err != nil {
+				t.Fatalf("%s: %v", g.name, err)
+			}
+		})
+		if got > g.ceiling {
+			t.Errorf("%s: %d allocs/op exceeds ceiling %d — compiled-mode allocation regressed", g.name, got, g.ceiling)
+		} else {
+			t.Logf("%s: %d allocs/op (ceiling %d)", g.name, got, g.ceiling)
+		}
+	}
+}

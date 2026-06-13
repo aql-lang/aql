@@ -1,4 +1,5 @@
 .PHONY: all build install test vet fmt lint vuln clean cover cover-html cover-html-open \
+        verify-bytecode \
         publish publish-eng publish-lang publish-cmd tags \
         viz viz-tools viz-clean viz-index \
         viz-callvis viz-callgraph viz-goda viz-godepgraph \
@@ -71,6 +72,36 @@ vuln:
 	  echo "==> vuln $$m"; \
 	  ( cd $$m && govulncheck ./... ); \
 	done
+
+# ---- bytecode verification gate ----------------------------------------
+#
+# The strict, runnable regression gate for the bytecode compiler
+# (design/aql-bytecode-plan.0.md). It is the single command to validate a
+# change to the compiler/VM and catch regressions:
+#
+#   1. fmt / vet / lint across every module.
+#   2. The dual-mode differential gate (>= minCompiledRows compile) and
+#      the whole-corpus compile-or-fallback gate (0 divergences in values
+#      AND error taxonomy over the full spec corpus + the curated
+#      bytecode-combinations matrix).
+#   3. The Go-driven combination matrix (parity + compilation-path pins).
+#   4. The emitter goldens, return-check, isolation, and Tape.Reload pins.
+#   5. The deterministic compiled-mode allocation ceilings (catches a
+#      per-dispatch or island-reuse allocation regression).
+#   6. The -race concurrency gates (shared immutable Program across forks;
+#      island sub-engine reuse with no state leak; concurrent spec rows).
+#
+# Any divergence, race, or allocation regression fails the gate.
+verify-bytecode: fmt vet lint
+	@echo "==> bytecode: differential + whole-corpus + combination matrix"
+	cd test/go && go test ./langspec/ -run 'TestSpecCompiledDifferential|TestSpecCompiledOrFallback|TestCompiledCombination'
+	@echo "==> bytecode: emitter / return-check / isolation / reuse / alloc pins"
+	cd lang/go && go test . -run 'TestEmit|TestRunCompiled|TestCompiled|TestTapeReload'
+	cd eng/go  && go test . -run 'TestTapeReload|TestVM'
+	@echo "==> bytecode: -race concurrency gates"
+	cd lang/go && go test . -run 'TestCompiledConcurrencyRaceFree|TestCompiledIslandReuseNoStateLeak' -race
+	cd test/go && go test ./langspec/ -run 'TestSpecCompiledConcurrentRowsRaceFree' -race
+	@echo "==> bytecode: VERIFY PASSED"
 
 clean:
 	@set -e; for m in $(MODULES); do \

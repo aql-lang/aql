@@ -47,6 +47,17 @@ jobs:
       - name: Test (all modules)
         run: make test
 
+      # The bytecode compiler's correctness gates (differential,
+      # whole-corpus parity, combination matrix, alloc ceilings) run as
+      # part of `make test`. The race-detector gates do not, so run them
+      # explicitly: a shared immutable Program driven across forks, the
+      # island sub-engine reuse, and the concurrent spec rows in compiled
+      # mode must be data-race-free.
+      - name: Bytecode race gates
+        run: |
+          cd lang/go && go test . -run 'TestCompiledConcurrencyRaceFree|TestCompiledIslandReuseNoStateLeak' -race
+          cd ../test/go && go test ./langspec/ -run 'TestSpecCompiledConcurrentRowsRaceFree' -race
+
       - name: Build WASM
         run: make -C wpg wasm
 
