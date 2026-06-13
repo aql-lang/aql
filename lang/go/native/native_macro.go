@@ -39,7 +39,13 @@ var macroNatives = []NativeFunc{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    macroHandler,
-			Returns:    []*Type{TFunction}, BarrierPos: -1,
+			// Pure construction, like fn/fnsig — runs in check mode so
+			// the macro INSTALLS during the check pass: its uses then
+			// expand on the tape (execMacro) and the checker (and the
+			// bytecode recording pass) see the expanded stream, never
+			// the raw-form operand span (plan R6 #29).
+			Returns: []*Type{TFunction}, BarrierPos: -1,
+			RunInCheckMode: true,
 		}},
 	},
 	{
@@ -235,8 +241,11 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 		if r.Check.IsActive() && !miniNamespaceBound(r) {
 			// The import may be outside the checked fragment; degrade to a
 			// dynamic value rather than a false-positive diagnostic. A bound
-			// namespace WITHOUT the kind is a real bug in any mode.
-			return []Value{NewCarrier(TAny)}, nil
+			// namespace WITHOUT the kind is a real bug in any mode. The
+			// carrier is dynamic(Any) — the documented escape-hatch
+			// modality — not strict Any, which would poison every typed
+			// consumer downstream (checker-accuracy-review.0.md A8).
+			return []Value{NewDynamicCarrier(TAny)}, nil
 		}
 		return nil, r.AqlErrorHint("mini_unknown_lang",
 			fmt.Sprintf("mini: no mini-language %q is registered", kind), "mini",

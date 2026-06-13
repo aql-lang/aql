@@ -43,6 +43,10 @@ func (c *CheckState) Begin() func() {
 	c.DefsInstalled = nil
 	c.DefsUsed = nil
 	c.ContextTypes = nil
+	c.InflightBails = 0
+	c.FnAnalysisCounts = nil
+	c.Emit = nil
+	c.FnBodyDepth = 0
 	return func() {
 		c.Mode = false
 	}
@@ -59,7 +63,21 @@ func (c *CheckState) AddDiagnostic(d CheckDiagnostic) {
 	if d.Severity == "" {
 		d.Severity = SeverityFor(d.Code)
 	}
+	if c.FnBodyDepth > 0 {
+		d.FnBody = true
+	}
 	c.Diagnostics = append(c.Diagnostics, d)
+}
+
+// TruncateDiagnostics drops every diagnostic recorded after position
+// n. Used by bounded fixed-point analyses (AnalyseLoopBody, the fold
+// accumulator iteration) so that only the FINAL round's diagnostics
+// survive — earlier rounds run against not-yet-stable bindings.
+func (c *CheckState) TruncateDiagnostics(n int) {
+	if c == nil || n < 0 || n >= len(c.Diagnostics) {
+		return
+	}
+	c.Diagnostics = c.Diagnostics[:n]
 }
 
 // RecordDef remembers a name the user bound during a check run so
@@ -113,6 +131,39 @@ func (c *CheckState) EmitUnusedDefDiagnostics() {
 			Severity: SeverityWarning,
 		})
 	}
+}
+
+// RescueForwardRefDiagnostics drops undefined_word diagnostics that
+// were emitted INSIDE a fn-body analysis (FnBody tag) for names that
+// have a binding by the end of the pass. A fn body runs at CALL
+// time, when the whole program's defs exist — so a body reference to
+// a later definition is the documented forward-reference idiom
+// (recursion via forward ref, mutual recursion: lang/spec/
+// recursion.tsv §3), not a defect; the install-time body analysis
+// just runs too early to see it. Names still unbound at end of pass
+// keep their diagnostic (a genuine typo). Top-level (non-FnBody)
+// uses before a def keep theirs too — those genuinely error at run
+// time.
+//
+// Known limitation: a top-level CALL placed before the dependent
+// def (`def f fn […g…] f 1 def g …`) errors at run time but is
+// rescued here — the checker doesn't order call sites against defs.
+//
+// Call at end of a check pass, before reading Diagnostics.
+func (r *Registry) RescueForwardRefDiagnostics() {
+	if r == nil || r.Check.Diagnostics == nil {
+		return
+	}
+	kept := r.Check.Diagnostics[:0]
+	for _, d := range r.Check.Diagnostics {
+		if d.Code == "undefined_word" && d.FnBody && d.Word != "" {
+			if _, bound := r.Defs.Top(d.Word); bound || r.Lookup(d.Word) != nil {
+				continue
+			}
+		}
+		kept = append(kept, d)
+	}
+	r.Check.Diagnostics = kept
 }
 
 // RecordContextSet records (key → carrier) for the given store-set

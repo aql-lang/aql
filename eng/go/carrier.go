@@ -1,6 +1,9 @@
 package eng
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // Carrier-based static type-checking support.
 //
@@ -287,6 +290,17 @@ func isLiteralWord(v Value) bool {
 // word's source location so diagnostics can point at it.
 func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos SrcPos) []Value {
 	narrowDynamicUses(r, sig, args)
+	// Per-alternative dispatch for strict disjunct inputs
+	// (design/checker-accuracy-review.0.md A1). matchSignature tested
+	// the disjunct as a single value, so the matched sig may not be
+	// the one runtime dispatch takes for every alternative — e.g.
+	// Integer|String reaches add's [Scalar Scalar]→String catch-all
+	// although the Integer path takes [Number Number]. Resolve each
+	// alternative independently and join the per-alternative returns.
+	if out, ok := disjunctPartitionReturns(r, word, args, pos); ok {
+		r.Check.Emit.RecordPoly(word)
+		return out
+	}
 	var out []Value
 	switch {
 	case sig.ReturnsFn != nil:
@@ -364,7 +378,270 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 			}
 		}
 	}
+	if !tryRecordFallback(r, word, sig, args, out, pos) {
+		r.Check.Emit.RecordCall(word, sig, args, out, pos)
+	}
 	return out
+}
+
+// fallbackWords is the allow-set of code-body higher-order words that
+// may compile as Stage-5 interpreter islands: pure data transforms
+// that apply a code body to data and return data, with no registry
+// mutation. Conservative — expand only with the differential gate
+// green. Words with compile-time / registry-mutating semantics (do,
+// var, module, word-splice, def, case/select dispatch) stay out.
+var fallbackWords = map[string]bool{
+	"each": true, "fold": true, "scan": true,
+	"for-each": true, "select": true, "group": true,
+}
+
+// tryRecordFallback attempts to compile a refused code-body higher-order
+// word as a fully-baked (nIn=0) interpreter island: the construct
+// re-runs through a sub-engine over `word arg0 arg1 …` in forward form.
+// Eligible iff the word is allow-listed, fully forward-eligible (so the
+// forward-form span is faithful), single-result, every arg materialises
+// concrete, and every code-body arg is FREE of references the VM can't
+// honour (only registered words / known literals — a check-time `def`
+// binding is a carrier at run time and would diverge). Returns true when
+// recorded; false leaves the normal refusal (whole-program fallback) to
+// stand. Soundness rides on the differential gate.
+func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
+	es := r.Check.Emit
+	if !es.active() || !fallbackWords[word] || len(outs) != 1 || sig == nil {
+		return false
+	}
+	// Fully forward-eligible: BarrierPos -1 (sentinel) or >= arity.
+	if sig.BarrierPos >= 0 && sig.BarrierPos < len(sig.Args) {
+		return false
+	}
+	// CORE-dispatch guard: the matched sig must belong to the word's
+	// MAIN-registry binding (pointer identity into its sig backing
+	// array). A module-qualified call (`ArrayUtil.group`) dispatches
+	// the inner native through a SUB-registry, so its sig is a
+	// different pointer — baking the bare name would re-run the core
+	// word of that name (different semantics). The guard rejects those
+	// so only a faithful bare-name re-run compiles.
+	fn := r.Lookup(word)
+	if fn == nil {
+		return false
+	}
+	sigOK := false
+	for i := range fn.Signatures {
+		if &fn.Signatures[i] == sig {
+			sigOK = true
+			break
+		}
+	}
+	if !sigOK {
+		return false
+	}
+	span := make([]Value, 0, len(args)+1)
+	span = append(span, NewWord(word))
+	for i, a := range args {
+		cv, ok := es.materialise(a)
+		if !ok || !IsConcrete(cv) {
+			return false
+		}
+		if sig.NoEvalArgs[i] {
+			// A code body: legitimately contains words, but every one
+			// must be VM-resolvable (no check-time def carriers).
+			if !bodyFreeForFallback(r, cv) {
+				return false
+			}
+		} else if !isInertConst(cv) {
+			// A data arg must be DEEPLY concrete plain data — a carrier
+			// element anywhere (e.g. a def-bound list whose interior the
+			// check pass stripped) would bake a type-only artefact into
+			// the island and diverge (`[ProperString …]` vs the real
+			// strings). isInertConst rejects any carrier/dynamic/bare
+			// node in the tree.
+			return false
+		}
+		span = append(span, cv)
+	}
+	return es.RecordFallback(FallbackSpan{Tokens: span, Desc: word}, nil, outs[0], pos)
+}
+
+// bodyFreeForFallback reports whether a code body references only words
+// the VM's sub-engine can resolve at run time: registered natives /
+// fn-defs (r.Lookup non-nil) and the known bare literals. A bare word
+// bound by a value `def` resolves via Defs substitution, NOT Lookup, so
+// it fails here — correctly, since at VM run time that binding is the
+// check pass's CARRIER, not a concrete value.
+func bodyFreeForFallback(r *Registry, body Value) bool {
+	free := true
+	WalkBodyWords([]Value{body}, func(w WordInfo, _ Value) {
+		if !free {
+			return
+		}
+		switch w.Name {
+		case "true", "false", "none", "null":
+			return
+		}
+		if r.Lookup(w.Name) != nil {
+			return
+		}
+		if _, ok := typeNames[w.Name]; ok {
+			return
+		}
+		free = false
+	})
+	return free
+}
+
+// disjunctPartitionCap bounds the alternative cross product a
+// partitioned dispatch will enumerate; beyond it the analysis falls
+// back to the whole-disjunct match (wide but terminating).
+const disjunctPartitionCap = 16
+
+// disjunctPartitionReturns dispatches each alternative of strict
+// disjunct args independently and joins the resulting return
+// carriers — the abstract domain distributing over first-match
+// dispatch. Returns ok=false when the partition does not apply and
+// the caller should use the whole-disjunct path: no strict disjunct
+// arg, an unknown or single-signature word, a concrete list/map arg
+// (body-running ReturnsFns must not be re-entered per alternative),
+// mismatched return arity across alternatives, or a cross product
+// over the cap.
+//
+// Alternatives that reach NO signature get a partial_dispatch
+// warning (that path would fail dispatch at runtime) and do not
+// contribute to the join; if no alternative matches anything the
+// partition declines and the engine's no_signature handling stands.
+func disjunctPartitionReturns(r *Registry, word string, args []Value, pos SrcPos) ([]Value, bool) {
+	if r == nil || !r.Check.IsActive() {
+		return nil, false
+	}
+	hasStrictDisjunct := false
+	for _, a := range args {
+		if IsDisjunct(a) && a.Carrier && !a.Dynamic {
+			hasStrictDisjunct = true
+		}
+		// Body-running ReturnsFns (if, each, fold, do, …) take
+		// concrete list/map operands; re-running them per alternative
+		// would duplicate branch analysis and its diagnostics.
+		if IsConcrete(a) && (a.Parent.ConformsTo(TList) || a.Parent.ConformsTo(TMap)) {
+			return nil, false
+		}
+	}
+	if !hasStrictDisjunct {
+		return nil, false
+	}
+	fn := r.Lookup(word)
+	if fn == nil || len(fn.Signatures) == 0 {
+		return nil, false
+	}
+
+	// Cross product of alternatives, bounded.
+	combos := [][]Value{nil}
+	for i, a := range args {
+		var alts []Value
+		if IsDisjunct(a) && a.Carrier && !a.Dynamic {
+			for _, lit := range flattenAlternatives(a) {
+				alts = append(alts, carrierOfLiteral(lit))
+			}
+		} else {
+			alts = []Value{a}
+		}
+		if len(combos)*len(alts) > disjunctPartitionCap {
+			return nil, false
+		}
+		next := make([][]Value, 0, len(combos)*len(alts))
+		for _, c := range combos {
+			for _, alt := range alts {
+				row := make([]Value, i+1)
+				copy(row, c)
+				row[i] = alt
+				next = append(next, row)
+			}
+		}
+		combos = next
+	}
+
+	var joined []Value
+	matchedAny := false
+	for _, combo := range combos {
+		comboSig := firstMatchingSig(fn, combo)
+		if comboSig == nil {
+			r.Check.AddDiagnostic(CheckDiagnostic{
+				Code: "partial_dispatch",
+				Detail: word + " has no overload for alternative (" +
+					comboTypeNames(combo) + ") of a disjunct input — that path would fail dispatch at runtime",
+				Word:     word,
+				Row:      pos.Row,
+				Col:      pos.Col,
+				Severity: SeverityWarning,
+			})
+			continue
+		}
+		var rets []Value
+		if comboSig.ReturnsFn != nil {
+			raw := comboSig.ReturnsFn(combo, r)
+			rets = make([]Value, len(raw))
+			for i, v := range raw {
+				rets[i] = toCarrier(v)
+			}
+		} else if comboSig.Returns != nil {
+			rets = make([]Value, len(comboSig.Returns))
+			for i, t := range comboSig.Returns {
+				rets[i] = NewCarrier(t)
+			}
+		} else {
+			// Unannotated overload on one path: the whole-disjunct
+			// fallback (missing_returns + dynamic Any) is the better
+			// behaviour than a partial join.
+			return nil, false
+		}
+		if !matchedAny {
+			joined = rets
+			matchedAny = true
+			continue
+		}
+		if len(rets) != len(joined) {
+			return nil, false
+		}
+		for i := range joined {
+			joined[i] = JoinCarriers(joined[i], rets[i])
+		}
+	}
+	if !matchedAny {
+		return nil, false
+	}
+	return joined, true
+}
+
+// firstMatchingSig returns the first signature of fn (registration
+// keeps Signatures in SortSignatures match order) whose arity equals
+// len(args) and whose every positional type admits the corresponding
+// arg, or nil. Mirrors matchSignature's per-arg type test for the
+// already-collected case.
+func firstMatchingSig(fn *FnDefInfo, args []Value) *Signature {
+	for i := range fn.Signatures {
+		s := &fn.Signatures[i]
+		if len(s.Args) != len(args) {
+			continue
+		}
+		ok := true
+		for j := range args {
+			if !sigTypeMatches(args[j], s.Args[j]) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return s
+		}
+	}
+	return nil
+}
+
+// comboTypeNames renders a combo's types for diagnostics: "Integer, String".
+func comboTypeNames(combo []Value) string {
+	parts := make([]string, len(combo))
+	for i, v := range combo {
+		parts[i] = v.Parent.Leaf()
+	}
+	return strings.Join(parts, ", ")
 }
 
 // dynamicReachableReturns returns the distinct single-position return
@@ -555,7 +832,23 @@ func flattenAlternatives(v Value) []Value {
 		}
 		return out
 	}
+	// A bare type literal IS its node — return it as-is. Taking
+	// v.Parent of a literal would shift one lattice level up (the
+	// node's parent), silently widening every stored alternative on
+	// re-join. Carriers and concrete values stand for their Parent.
+	if IsBareTypeNode(v) {
+		return []Value{v}
+	}
 	return []Value{NewTypeLiteral(v.Parent)}
+}
+
+// carrierOfLiteral converts a bare type-literal value (the node
+// itself, as stored in DisjunctInfo.Alternatives) into a carrier OF
+// that node — i.e. Parent points at the literal's type, not at the
+// literal's lattice parent.
+func carrierOfLiteral(lit Value) Value {
+	lt := lit
+	return NewCarrier(&lt)
 }
 
 // JoinCarriers folds two carriers into a single carrier that
@@ -588,11 +881,21 @@ func JoinCarriers(a, b Value) Value {
 		if b.Parent.ConformsTo(a.Parent) {
 			return NewCarrier(a.Parent)
 		}
-		// Check for a non-trivial common ancestor (shared prefix of at
-		// least one part). This collapses value-tagged literals (e.g.
-		// Number/Integer/42 vs Number/Integer/99 → Number/Integer).
+		// Collapse DIRECT siblings to their shared parent — the case
+		// this was built for is value-tagged literals (Number/Integer/42
+		// vs Number/Integer/99 → Number/Integer), and it also folds
+		// Integer|Float → Number, where every dispatch the parent
+		// reaches is one the alternatives reach identically. Distant
+		// cousins (Integer vs String → Scalar) must NOT collapse: the
+		// widened type changes first-match dispatch (Integer|String
+		// reaching `add` picks the Scalar catch-all although the
+		// Integer path takes [Number Number]) — keep them as a
+		// disjunct so per-alternative dispatch
+		// (disjunctPartitionReturns) sees the real alternatives.
 		anc := CommonAncestorType(a.Parent, b.Parent)
-		if anc != nil && !anc.Equal(TAny) {
+		if anc != nil && !anc.Equal(TAny) &&
+			a.Parent.Parent != nil && anc.Equal(a.Parent.Parent) &&
+			b.Parent.Parent != nil && anc.Equal(b.Parent.Parent) {
 			return NewCarrier(anc)
 		}
 	}
@@ -604,12 +907,12 @@ func JoinCarriers(a, b Value) Value {
 	combined = append(combined, flattenAlternatives(b)...)
 	alts := SimplifyDisjunctAlts(combined)
 	if len(alts) == 1 {
-		return NewCarrier(alts[0].Parent)
+		return carrierOfLiteral(alts[0])
 	}
 	if len(alts) > CarrierDisjunctCap {
-		t := alts[0].Parent
+		t := typeNodeOf(alts[0])
 		for i := 1; i < len(alts); i++ {
-			t = CommonAncestorType(t, alts[i].Parent)
+			t = CommonAncestorType(t, typeNodeOf(alts[i]))
 		}
 		return NewCarrier(t)
 	}
@@ -648,6 +951,12 @@ func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 	if err != nil || elems.IsNil() {
 		return nil, nil
 	}
+
+	// Nested body analysis is not part of the enclosing straight
+	// line: pause bytecode recording — unless a branch-lowering hook
+	// armed fragment capture (the `if` ReturnsFn), in which case the
+	// body's events record into a fragment for structured lowering.
+	defer r.Check.Emit.bodyAnalysisGuard()()
 
 	// Snapshot def-stack depths (all known names).
 	snapshot := r.Defs.Snapshot()
@@ -739,6 +1048,112 @@ func JoinCarrierStacks(a, b []Value) []Value {
 	return out
 }
 
+// loopAnalysisRounds bounds the Kleene iteration for loop-body
+// analysis: round 1 with the pre-loop bindings, then re-runs with the
+// joined bindings until stable. Three rounds suffice for ascent in a
+// join-semilattice whose height is bounded by CarrierDisjunctCap.
+const loopAnalysisRounds = 3
+
+// FnAnalysisQuota caps how many distinct call shapes one fn's body is
+// analysed for before the checker answers from the declaration (A9).
+const FnAnalysisQuota = 64
+
+// AnalyseLoopBody analyses a loop body to a bounded fixed point
+// (design/checker-accuracy-review.0.md A4). Each round binds the
+// loop's own names (iterator …) as carriers, runs the body, and
+// JOINS the body's net def additions back into the enclosing
+// bindings — "the loop may run zero times" is the join with the
+// pre-loop binding, exactly InstallJoinedDefs' one-branch rule. If
+// the joined bindings changed, the body is re-analysed with them (a
+// rebinding like `def acc (acc add 0.5)` needs the second round to
+// see Integer|Float), up to loopAnalysisRounds.
+//
+// Only the FINAL round's diagnostics are kept — earlier rounds run
+// against not-yet-stable bindings and would both duplicate and
+// misreport.
+//
+// The joined post-loop bindings are left installed (they ARE the
+// post-loop environment); the loop-local binds are popped. Returns
+// the final round's residual carrier stack.
+func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Value) []Value {
+	// Loop-lowering hook (`for`): when armed, register the loop
+	// bindings as VM locals and capture each round's events as a
+	// fragment — the final round's capture (the stable one) is what
+	// the caller's RecordLoop consumes via TakeFragment.
+	es := r.Check.Emit
+	loopCapture := es.ConsumeLoopArm()
+	if loopCapture {
+		for _, v := range bindVals {
+			es.RegisterLocal(v.ID)
+		}
+	}
+	var stk []Value
+	var installed []string
+	diagBase := len(r.Check.Diagnostics)
+	prev := map[string]Value{}
+	for round := 0; round < loopAnalysisRounds; round++ {
+		r.Check.TruncateDiagnostics(diagBase)
+		for i, n := range bindNames {
+			r.Defs.Push(n, bindVals[i])
+		}
+		if loopCapture {
+			es.ArmBranchCapture()
+		}
+		var adds map[string]Value
+		stk, adds = RunCarrierBodyWithDefs(r, body)
+		for i := len(bindNames) - 1; i >= 0; i-- {
+			r.Defs.Pop(bindNames[i])
+		}
+		// Expose the original pre-loop bindings before re-joining.
+		for i := len(installed) - 1; i >= 0; i-- {
+			r.Defs.Pop(installed[i])
+		}
+		installed = installed[:0]
+		joined := map[string]Value{}
+		for k, v := range adds {
+			if pre, ok := r.Defs.Top(k); ok {
+				joined[k] = JoinCarriers(v, pre)
+			} else {
+				joined[k] = v
+			}
+		}
+		for k, v := range joined {
+			r.Defs.Push(k, v)
+			installed = append(installed, k)
+		}
+		if len(joined) == 0 {
+			break
+		}
+		stable := len(joined) == len(prev)
+		if stable {
+			for k, v := range joined {
+				pv, ok := prev[k]
+				if !ok || !ValuesEqual(pv, v) {
+					stable = false
+					break
+				}
+			}
+		}
+		prev = joined
+		if stable {
+			break
+		}
+	}
+	return stk
+}
+
+// GuardFactInfo is the payload a check-mode paren evaluation attaches
+// to a single Boolean carrier result: the group's ORIGINAL tokens,
+// preserved so guard narrowing can see the `x is T` structure that
+// evaluation reduced to a bare Boolean
+// (design/checker-accuracy-review.0.md A3 — without it, the canonical
+// `if (x is T) …` paren form narrowed nothing while the list form
+// `if [x is T] …` narrowed fine). Check-mode only; the runtime never
+// produces carriers.
+type GuardFactInfo struct {
+	Toks []Value
+}
+
 // GuardClause describes one `x is T` clause detected in a condition.
 type GuardClause struct {
 	Name string
@@ -754,11 +1169,22 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 	if r == nil || condList.Data == nil {
 		return nil
 	}
-	list, err := AsList(condList)
-	if err != nil || list.IsNil() || list.Len() < 3 {
+	// A pre-evaluated paren condition arrives as a Boolean carrier
+	// whose GuardFactInfo payload preserves the group's original
+	// tokens (A3) — extract from those exactly as from a list body.
+	var elems []Value
+	if gf, ok := condList.Data.(GuardFactInfo); ok {
+		elems = gf.Toks
+	} else {
+		list, err := AsList(condList)
+		if err != nil || list.IsNil() || list.Len() < 3 {
+			return nil
+		}
+		elems = list.Slice()
+	}
+	if len(elems) < 3 {
 		return nil
 	}
-	elems := list.Slice()
 	var out []GuardClause
 	for i := 0; i+2 < len(elems); i++ {
 		if !elems[i].Parent.Equal(TWord) || !elems[i+1].Parent.Equal(TWord) {
@@ -928,22 +1354,20 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 	}
 }
 
-// AnalyseFnBody runs a user-defined fn body through a sub-engine in
-// check mode, treating named parameters as deffed values bound to
-// their arg carriers and unnamed parameters as pre-pushed stack
-// values. Results are cached on the registry keyed by (name,
-// arg-types) so recursive functions converge instead of looping.
-//
-// Returns the residual carrier stack. An empty or nil return means
-// the analyser aborted (recursion detected or body not available) —
-// callers should treat that as an Any carrier.
-func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, args []Value, captures []CapturedBinding) []Value {
-	if len(body) == 0 {
-		return nil
-	}
-	// Memoisation key: name + arg type paths + captured-name set.
-	// The captures are included so two anonymous lambdas with
-	// identical bodies but different capture sets don't collide.
+// FnAnalysisKey builds the memo key for one fn-body analysis: name +
+// arg type paths + captured-name set + the body's construction site.
+// The captures are included so two anonymous lambdas with identical
+// bodies but different capture sets don't collide; the construction
+// site (the first body token's source position) so two DIFFERENT
+// definitions sharing a name and arg types — `def f fn […] … def f
+// fn […]` — don't collide either (without it the compile pass bound
+// every call to the FIRST definition's code unit). The same
+// construction re-analysed (recursion, repeated calls) carries the
+// same body tokens, so memoisation and in-flight recursion detection
+// are unaffected. core_helpers' compile hook must build the SAME key
+// (its FnSummaries delete relies on the match) — that's why this is
+// a named helper, not two inlined loops.
+func FnAnalysisKey(name string, args []Value, captures []CapturedBinding, body []Value) string {
 	var sb strings.Builder
 	sb.WriteString(name)
 	sb.WriteByte('#')
@@ -960,7 +1384,39 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 			sb.WriteByte(',')
 		}
 	}
-	key := sb.String()
+	if len(body) > 0 {
+		sb.WriteByte('@')
+		sb.WriteString(strconv.Itoa(body[0].Pos.Row))
+		sb.WriteByte(':')
+		sb.WriteString(strconv.Itoa(body[0].Pos.Col))
+	}
+	return sb.String()
+}
+
+// AnalyseFnBody runs a user-defined fn body through a sub-engine in
+// check mode, treating named parameters as deffed values bound to
+// their arg carriers and unnamed parameters as pre-pushed stack
+// values. Results are cached on the registry keyed by (name,
+// arg-types) so recursive functions converge instead of looping.
+//
+// declared is the signature's declared return types (nil =
+// unchecked). It is the induction hypothesis for recursion
+// (design/checker-accuracy-review.0.md A2): an in-flight recursive
+// call yields carriers of the DECLARED returns — the end-of-body
+// return check is the matching proof obligation — instead of the
+// everything-matches Any. For unchecked fns the Any bail-out
+// remains, but a summary computed under it is refined by bounded
+// re-analysis (the bail's result seeds the memo as the hypothesis
+// for the next round) rather than cached as final.
+//
+// Returns the residual carrier stack. An empty or nil return means
+// the analyser aborted (recursion detected or body not available) —
+// callers should treat that as an Any carrier.
+func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, args []Value, captures []CapturedBinding, declared []*Type) []Value {
+	if len(body) == 0 {
+		return nil
+	}
+	key := FnAnalysisKey(name, args, captures, body)
 
 	if r.Check.FnSummaries == nil {
 		r.Check.FnSummaries = map[string][]Value{}
@@ -971,56 +1427,152 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	if cached, ok := r.Check.FnSummaries[key]; ok {
 		return cached
 	}
+	// Per-fn analysis quota (A9): a polymorphic helper reached with
+	// many distinct arg shapes re-analyses once per shape; past the
+	// quota, answer from the declaration (or dynamic Any) and say so
+	// once, instead of silently consuming the global step budget.
+	if r.Check.FnAnalysisCounts == nil {
+		r.Check.FnAnalysisCounts = map[string]int{}
+	}
+	quotaKey := name
+	if quotaKey == "" {
+		quotaKey = "<anon>"
+	}
+	r.Check.FnAnalysisCounts[quotaKey]++
+	if n := r.Check.FnAnalysisCounts[quotaKey]; n > FnAnalysisQuota {
+		if n == FnAnalysisQuota+1 {
+			r.Check.AddDiagnostic(CheckDiagnostic{
+				Code: "analysis_truncated",
+				Detail: "fn " + quotaKey + " was analysed for more than " +
+					strconv.Itoa(FnAnalysisQuota) + " distinct call shapes; later shapes are typed from the declaration (or dynamic Any) without body re-analysis",
+				Word:     name,
+				Severity: SeverityInfo,
+			})
+		}
+		if len(declared) > 0 {
+			out := make([]Value, len(declared))
+			for i, t := range declared {
+				out[i] = NewCarrier(t)
+			}
+			return out
+		}
+		return []Value{NewDynamicCarrier(TAny)}
+	}
 	if r.Check.FnInflight[key] {
-		// Recursion detected — break the cycle with an Any carrier.
+		// Recursion detected. With declared returns, the declaration
+		// is the induction hypothesis (assume-guarantee) — precise,
+		// and the body's return check is the proof obligation. Without
+		// it, break the cycle with an Any carrier and count the bail
+		// so the enclosing analysis knows its result needs refinement.
+		if len(declared) > 0 {
+			out := make([]Value, len(declared))
+			for i, t := range declared {
+				out[i] = NewCarrier(t)
+			}
+			return out
+		}
+		r.Check.InflightBails++
 		return []Value{NewCarrier(TAny)}
 	}
 	r.Check.FnInflight[key] = true
 	defer delete(r.Check.FnInflight, key)
 
-	// Snapshot def-stack depths so we can unwind any defs the body,
-	// captures, or parameter bindings created. The same snapshot is
-	// pushed as the fn-entry baseline so any inner fn/afn construction
-	// inside the body sees this scope as its enclosing-fn baseline —
-	// without it, ComputeCaptures would treat outer params as if they
-	// lived at module/global scope and miss the capture.
-	snapshot := r.Defs.Snapshot()
-	r.PushFnBaseline(snapshot)
-	defer r.PopFnBaseline()
+	// Diagnostics emitted from here down come from CALL-TIME code —
+	// tag them FnBody so an undefined_word that turns out to be a
+	// forward reference can be rescued at end of pass
+	// (RescueForwardRefDiagnostics).
+	r.Check.FnBodyDepth++
+	defer func() { r.Check.FnBodyDepth-- }()
 
-	// Install lexical captures first so params (installed below)
-	// shadow same-named captures — innermost binding wins, matching
-	// runtime dispatch.
-	for _, cb := range captures {
-		r.Defs.Push(cb.Name, cb.Value)
+	// Fn-body analysis runs nested sub-engines — not part of the
+	// caller's straight line; pause bytecode recording, UNLESS a fn
+	// compilation armed capture (StartFnCompile): the body's events
+	// then record into the open fn fragment.
+	defer r.Check.Emit.fnBodyGuard()()
+
+	// runOnce performs one full body analysis: snapshot def-stack
+	// depths so any defs the body, captures, or parameter bindings
+	// created unwind afterwards. The same snapshot is pushed as the
+	// fn-entry baseline so any inner fn/afn construction inside the
+	// body sees this scope as its enclosing-fn baseline — without it,
+	// ComputeCaptures would treat outer params as if they lived at
+	// module/global scope and miss the capture.
+	runOnce := func() []Value {
+		snapshot := r.Defs.Snapshot()
+		r.PushFnBaseline(snapshot)
+		defer r.PopFnBaseline()
+
+		// Install lexical captures first so params (installed below)
+		// shadow same-named captures — innermost binding wins,
+		// matching runtime dispatch.
+		for _, cb := range captures {
+			r.Defs.Push(cb.Name, cb.Value)
+		}
+
+		// Bind named parameters as simple defs (carrier-typed).
+		// Unnamed parameters flow through the stack — push them
+		// before the body.
+		var input []Value
+		for i, arg := range args {
+			if i < len(paramNames) && paramNames[i] != "" {
+				r.Defs.Push(paramNames[i], arg)
+			} else {
+				input = append(input, arg)
+			}
+		}
+		input = append(input, body...)
+
+		sub := New(r)
+		result, err := sub.Run(input)
+		if err != nil {
+			r.Check.AddDiagnostic(CheckDiagnostic{
+				Code:   "fn_body_error",
+				Detail: "fn body analysis error for " + name + ": " + err.Error(),
+				Word:   name,
+			})
+			result = nil
+		}
+		r.Defs.Restore(snapshot)
+		return result
 	}
 
-	// Bind named parameters as simple defs (carrier-typed). Unnamed
-	// parameters flow through the stack — push them before the body.
-	var input []Value
-	for i, arg := range args {
-		if i < len(paramNames) && paramNames[i] != "" {
-			r.Defs.Push(paramNames[i], arg)
-		} else {
-			input = append(input, arg)
+	bailsBefore := r.Check.InflightBails
+	diagBase := len(r.Check.Diagnostics)
+	result := runOnce()
+
+	// Refinement (A2): the run consumed an Any in-flight bail, so the
+	// summary was computed under the weakest hypothesis. Seed the memo
+	// with it and re-analyse — the recursive call now reads the seeded
+	// hypothesis from the cache — joining each round's result into the
+	// hypothesis until stable, up to two extra rounds. Only the final
+	// round's diagnostics are kept.
+	if r.Check.InflightBails > bailsBefore && len(result) > 0 {
+		for round := 0; round < 2; round++ {
+			r.Check.FnSummaries[key] = result
+			r.Check.TruncateDiagnostics(diagBase)
+			next := runOnce()
+			joined := JoinCarrierStacks(result, next)
+			if carrierStacksEqual(joined, result) {
+				break
+			}
+			result = joined
 		}
 	}
-	input = append(input, body...)
-
-	sub := New(r)
-	result, err := sub.Run(input)
-	if err != nil {
-		r.Check.AddDiagnostic(CheckDiagnostic{
-			Code:   "fn_body_error",
-			Detail: "fn body analysis error for " + name + ": " + err.Error(),
-			Word:   name,
-		})
-		result = nil
-	}
-
-	// Restore def-stacks to snapshot.
-	r.Defs.Restore(snapshot)
 
 	r.Check.FnSummaries[key] = result
 	return result
+}
+
+// carrierStacksEqual reports whether two carrier stacks agree
+// position-for-position — the fixed-point stability test.
+func carrierStacksEqual(a, b []Value) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !ValuesEqual(a[i], b[i]) {
+			return false
+		}
+	}
+	return true
 }

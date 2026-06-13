@@ -318,6 +318,7 @@ func if2Handler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 }
 
 func if3ReturnsFn(args []Value, r *Registry) []Value {
+	es := &r.Check
 	if lit, ok := LiteralCondValue(args[0]); ok {
 		branch := "else"
 		if !lit {
@@ -328,40 +329,80 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 			Detail:   "if condition is a constant " + BoolWord(lit) + "; " + branch + "-branch is unreachable",
 			Severity: SeverityWarning,
 		})
+		var stk []Value
+		var defs map[string]Value
 		if lit {
 			restoreThen := ApplyGuardNarrowing(r, args[0])
-			stk, defs := RunCarrierBodyWithDefs(r, args[1])
+			es.Emit.ArmBranchCapture()
+			stk, defs = RunCarrierBodyWithDefs(r, args[1])
 			restoreThen()
 			InstallJoinedDefs(r, defs, nil)
-			if len(stk) == 0 {
-				return nil
-			}
-			return []Value{stk[len(stk)-1]}
+		} else {
+			restoreElse := ApplyComplementNarrowing(r, args[0])
+			es.Emit.ArmBranchCapture()
+			stk, defs = RunCarrierBodyWithDefs(r, args[2])
+			restoreElse()
+			InstallJoinedDefs(r, nil, defs)
 		}
-		restoreElse := ApplyComplementNarrowing(r, args[0])
-		stk, defs := RunCarrierBodyWithDefs(r, args[2])
-		restoreElse()
-		InstallJoinedDefs(r, nil, defs)
+		frag := es.Emit.TakeFragment()
 		if len(stk) == 0 {
+			es.Emit.MarkUncompilable("if: branch produces no value (Stage 2 lowers single-result branches)")
 			return nil
 		}
-		return []Value{stk[len(stk)-1]}
+		out := stk[len(stk)-1]
+		taken := lit
+		es.Emit.RecordBranch(BranchRecord{
+			ConstCond: &taken, HasElse: true,
+			Then: frag, ThenStk: stk, Out: out, Pos: args[0].Pos,
+		})
+		return []Value{out}
 	}
+	// List-form condition: when emitting, analyse the condition body
+	// as its own fragment so the lowering can run it inline before
+	// JMP_IF_FALSE (the checker otherwise never evaluates if3
+	// conditions — guard extraction is syntactic). Emit-gated so
+	// plain checks keep their diagnostics surface unchanged.
+	condFrag, condStk := analyseCondFragment(r, args[0])
 	restoreThen := ApplyGuardNarrowing(r, args[0])
+	es.Emit.ArmBranchCapture()
 	thenStk, thenDefs := RunCarrierBodyWithDefs(r, args[1])
+	thenFrag := es.Emit.TakeFragment()
 	restoreThen()
 	restoreElse := ApplyComplementNarrowing(r, args[0])
+	es.Emit.ArmBranchCapture()
 	elseStk, elseDefs := RunCarrierBodyWithDefs(r, args[2])
+	elseFrag := es.Emit.TakeFragment()
 	restoreElse()
 	InstallJoinedDefs(r, thenDefs, elseDefs)
 	joined := JoinCarrierStacks(thenStk, elseStk)
 	if len(joined) == 0 {
+		es.Emit.MarkUncompilable("if: branches produce no value (Stage 2 lowers single-result branches)")
 		return nil
 	}
-	return []Value{joined[len(joined)-1]}
+	out := joined[len(joined)-1]
+	es.Emit.RecordBranch(BranchRecord{
+		Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: true,
+		Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
+		Out: out, Pos: args[0].Pos,
+	})
+	return []Value{out}
+}
+
+// analyseCondFragment captures a list-form `if` condition body as an
+// emit fragment (nil when the condition is a pre-evaluated value, or
+// when no bytecode recording is active).
+func analyseCondFragment(r *Registry, cond Value) (*EmitFragment, []Value) {
+	es := r.Check.Emit
+	if es == nil || !IsConcrete(cond) || !cond.Parent.ConformsTo(TList) {
+		return nil, nil
+	}
+	es.ArmBranchCapture()
+	stk, _ := RunCarrierBodyWithDefs(r, cond)
+	return es.TakeFragment(), stk
 }
 
 func if2ReturnsFn(args []Value, r *Registry) []Value {
+	es := &r.Check
 	if lit, ok := LiteralCondValue(args[0]); ok && !lit {
 		r.Check.AddDiagnostic(CheckDiagnostic{
 			Code:     "unreachable_branch",
@@ -369,14 +410,25 @@ func if2ReturnsFn(args []Value, r *Registry) []Value {
 			Severity: SeverityWarning,
 		})
 	}
+	condFrag, condStk := analyseCondFragment(r, args[0])
 	restore := ApplyGuardNarrowing(r, args[0])
+	es.Emit.ArmBranchCapture()
 	thenStk, thenDefs := RunCarrierBodyWithDefs(r, args[1])
+	thenFrag := es.Emit.TakeFragment()
 	restore()
 	InstallJoinedDefs(r, thenDefs, nil)
+	var out Value
 	if len(thenStk) == 0 {
-		return []Value{NewCarrier(TNone)}
+		out = NewCarrier(TNone)
+	} else {
+		out = JoinCarriers(thenStk[len(thenStk)-1], NewCarrier(TNone))
 	}
-	return []Value{JoinCarriers(thenStk[len(thenStk)-1], NewCarrier(TNone))}
+	// 2-arg if: a VARIADIC result (0 or 1 values at run time).
+	es.Emit.RecordBranch(BranchRecord{
+		Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: false,
+		Then: thenFrag, ThenStk: thenStk, Out: out, Pos: args[0].Pos,
+	})
+	return []Value{out}
 }
 
 // ifListHandler implements the clause-list form `if [c1 b1 c2 b2 … else]`.
@@ -495,25 +547,68 @@ func forRangeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 }
 
 func forIntegerListReturnsFn(args []Value, r *Registry) []Value {
-	return forCarrierAnalyse(r, "i", TInteger, args)
+	return forCarrierAnalyse(r, "i", TInteger, args, 0)
 }
 
 func forListListReturnsFn(args []Value, r *Registry) []Value {
-	return forCarrierAnalyse(r, "i", TInteger, args)
+	return forCarrierAnalyse(r, "i", TInteger, args, 0)
 }
 
-// forCarrierAnalyse runs the body once with the iterator bound as a
-// typed carrier and returns a typed list whose element type mirrors
-// the body's residual top-of-stack.
-func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Value) []Value {
+// forCarrierAnalyse analyses the body to a bounded fixed point with
+// the iterator bound as a typed carrier (AnalyseLoopBody —
+// design/checker-accuracy-review.0.md A4): body rebindings like
+// `def acc (acc add 0.5)` join back into the enclosing binding and
+// the body re-runs until the bindings stabilise, so post-loop reads
+// see Integer|Float, not the pre-loop Integer. Returns a typed list
+// whose element type mirrors the final round's residual top.
+//
+// countArg >= 0 names the count/range operand and arms bytecode loop
+// recording: the final round's events are captured as a fragment and
+// RecordLoop lowers the loop (FOR_SETUP/FOR_NEXT with the iterator
+// as a VM local). The count form lowers as the range [0, n, 1]; the
+// range form decomposes a LITERAL integer range via parseRange
+// (computed ranges record nothing and the generic path refuses).
+func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Value, countArg int) []Value {
 	body := args[len(args)-1]
-	r.Defs.Push(iterName, NewCarrier(iterType))
-	stk, _ := RunCarrierBodyWithDefs(r, body)
-	r.Defs.Pop(iterName)
-	if len(stk) == 0 {
-		return []Value{NewCarrier(TList)}
+	iter := NewCarrier(iterType)
+	es := r.Check.Emit
+
+	// Decompose the loop bounds for recording.
+	var startV, endV, stepV Value
+	lowerable := false
+	if countArg >= 0 {
+		cv := args[countArg]
+		switch {
+		case cv.Parent.ConformsTo(TInteger):
+			startV, endV, stepV = NewInteger(0), cv, NewInteger(1)
+			lowerable = true
+		case IsConcrete(cv) && cv.Parent.ConformsTo(TList):
+			if lst, err := AsList(cv); err == nil && !lst.IsNil() {
+				if st, en, sp, perr := parseRange(lst.Slice()); perr == nil {
+					startV, endV, stepV = NewInteger(st), NewInteger(en), NewInteger(sp)
+					lowerable = true
+				}
+			}
+		}
 	}
-	return []Value{NewCarrierTypedList(stk[len(stk)-1].Parent)}
+	if lowerable {
+		es.ArmLoopCapture()
+	}
+	stk := AnalyseLoopBody(r, body, []string{iterName}, []Value{iter})
+	out := NewCarrier(TList)
+	if len(stk) > 0 {
+		top := stk[len(stk)-1]
+		if IsDisjunct(top) {
+			out = NewCarrierTypedListValue(top)
+		} else {
+			out = NewCarrierTypedList(top.Parent)
+		}
+	}
+	if lowerable {
+		frag := es.TakeFragment()
+		es.RecordLoop(startV, endV, stepV, frag, stk, iter.ID, out, args[countArg].Pos)
+	}
+	return []Value{out}
 }
 
 // ---- error handler ----

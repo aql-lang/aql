@@ -1371,6 +1371,23 @@ func eachReturnsFn(args []Value, r *Registry) []Value {
 // primary purpose is side-effect: any diagnostics the body produces
 // (type mismatches, undefined words) are accumulated on the registry.
 func analyseHigherOrderBody(r *Registry, body Value, elems ...*Type) []Value {
+	vals := make([]Value, len(elems))
+	for i, t := range elems {
+		vals[i] = NewCarrier(t)
+	}
+	return analyseHigherOrderBodyVals(r, body, vals...)
+}
+
+// analyseHigherOrderBodyVals is the carrier-Value variant of
+// analyseHigherOrderBody: the prefix inputs are arbitrary carriers
+// (disjuncts, typed lists), not just bare types. Used by the fold
+// accumulator fixed point, whose accumulator may widen to a disjunct
+// between rounds.
+func analyseHigherOrderBodyVals(r *Registry, body Value, vals ...Value) []Value {
+	// Higher-order bodies run nested sub-engines — pause bytecode
+	// recording for their duration (they are not part of the
+	// enclosing straight line).
+	defer r.Check.Emit.Suspend()()
 	if !IsConcrete(body) {
 		return nil
 	}
@@ -1378,10 +1395,8 @@ func analyseHigherOrderBody(r *Registry, body Value, elems ...*Type) []Value {
 	if bodyList.IsNil() {
 		return nil
 	}
-	input := make([]Value, 0, len(elems)+bodyList.Len())
-	for _, t := range elems {
-		input = append(input, NewCarrier(t))
-	}
+	input := make([]Value, 0, len(vals)+bodyList.Len())
+	input = append(input, vals...)
 	input = append(input, bodyList.Slice()...)
 	sub := New(r)
 	result, err := sub.Run(input)
@@ -1393,6 +1408,34 @@ func analyseHigherOrderBody(r *Registry, body Value, elems ...*Type) []Value {
 		return nil
 	}
 	return result
+}
+
+// foldAccumFixedPoint iterates the fold/scan body analysis until the
+// accumulator type stabilises (design/checker-accuracy-review.0.md
+// A4): a body like [add 0.5] widens an Integer accumulator to Float
+// on the first round, and the second round must see the widened
+// accumulator or downstream consumers type against the init only.
+// Bounded by the same round count as AnalyseLoopBody; only the final
+// round's diagnostics are kept. Returns the stabilised accumulator
+// carrier, or ok=false when the body is not analysable.
+func foldAccumFixedPoint(r *Registry, body Value, initAcc Value, elem *Type) (Value, bool) {
+	acc := initAcc
+	if !acc.Carrier {
+		acc = NewCarrier(acc.Parent)
+	}
+	diagBase := len(r.Check.Diagnostics)
+	for round := 0; ; round++ {
+		r.Check.TruncateDiagnostics(diagBase)
+		stk := analyseHigherOrderBodyVals(r, body, acc, NewCarrier(elem))
+		if len(stk) == 0 {
+			return Value{}, false
+		}
+		joined := JoinCarriers(acc, stk[len(stk)-1])
+		if ValuesEqual(joined, acc) || round >= 2 {
+			return joined, true
+		}
+		acc = joined
+	}
 }
 
 // ---- fold ----
@@ -1409,18 +1452,18 @@ func foldWithInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Regis
 	return doFold(reg, init, bodySlice, dataList)
 }
 
-// Fold result type is the body's output. Analyse the body once with
-// (init, element) as carrier inputs; use the residual top-of-stack
-// carrier as the result. A proper fixed-point would iterate until
-// the accumulator type stabilises — one pass is a close
-// approximation for bounded-lattice types.
+// Fold result type is the stabilised accumulator: the body is
+// analysed with (accumulator, element) carriers and iterated to a
+// bounded fixed point (foldAccumFixedPoint) so a body that widens
+// its accumulator types correctly. The join with the init covers the
+// empty-list case (result IS the init).
 func foldWithInitReturnsFn(args []Value, r *Registry) []Value {
 	elem := DataListElemTypeFromValue(args[1])
-	stk := analyseHigherOrderBody(r, args[0], args[2].Parent, elem)
-	if len(stk) == 0 {
+	acc, ok := foldAccumFixedPoint(r, args[0], args[2], elem)
+	if !ok {
 		return []Value{NewCarrier(TAny)}
 	}
-	return []Value{stk[len(stk)-1]}
+	return []Value{acc}
 }
 
 func foldNoInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
@@ -1444,14 +1487,14 @@ func foldNoInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 }
 
 // No init — accumulator type and element type both come from the
-// data list.
+// data list; same bounded fixed point as the init form.
 func foldNoInitReturnsFn(args []Value, r *Registry) []Value {
 	elem := DataListElemTypeFromValue(args[1])
-	stk := analyseHigherOrderBody(r, args[0], elem, elem)
-	if len(stk) == 0 {
+	acc, ok := foldAccumFixedPoint(r, args[0], NewCarrier(elem), elem)
+	if !ok {
 		return []Value{NewCarrier(TAny)}
 	}
-	return []Value{stk[len(stk)-1]}
+	return []Value{acc}
 }
 
 // doFold is the shared fold implementation used by both fold signatures.
@@ -1514,13 +1557,18 @@ func scanHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 	return []Value{NewList(results)}, nil
 }
 
+// scan returns the list of accumulator states, so its element type
+// is the stabilised accumulator (same fixed point as fold).
 func scanReturnsFn(args []Value, r *Registry) []Value {
 	elem := DataListElemTypeFromValue(args[1])
-	stk := analyseHigherOrderBody(r, args[0], elem, elem)
-	if len(stk) == 0 {
+	acc, ok := foldAccumFixedPoint(r, args[0], NewCarrier(elem), elem)
+	if !ok {
 		return []Value{NewCarrier(TList)}
 	}
-	return []Value{NewCarrierTypedList(stk[len(stk)-1].Parent)}
+	if IsDisjunct(acc) {
+		return []Value{NewCarrierTypedListValue(acc)}
+	}
+	return []Value{NewCarrierTypedList(acc.Parent)}
 }
 
 // ---- outer ----

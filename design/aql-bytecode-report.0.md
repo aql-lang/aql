@@ -1,5 +1,13 @@
 # AQL Bytecode Compilation — Full Report
 
+**Status:** re-reviewed against main June 2026 — see
+`aql-bytecode-revisions.0.md` (what changed underneath this report:
+TCO is now a language guarantee so §5.6 is invalid; §7's baseline
+moved with the gap-buffer tape; locals promotion in §2.6/§9.3 has a
+stricter soundness condition; macros/minilang/generics/closures/
+concurrency post-date this text) and `aql-bytecode-plan.0.md` (the
+staged implementation plan). This report is kept as written.
+
 This report evaluates compiling AQL to a bytecode for a simple
 stack VM in Go, driven by the existing carrier-based static type
 checker. The shape of the argument: the checker already resolves

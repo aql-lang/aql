@@ -697,6 +697,21 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 		}()
 	}
 
+	// Truth-over-symptom guard: once any tape edit hit the growth
+	// ceiling (and was dropped to avoid an out-of-bounds write), every
+	// later behaviour runs on a TRUNCATED tape — downstream errors are
+	// phantoms of the drop (a starved ReturnCheck's "expected 1 return
+	// value(s), got 0", the genre the recursion pins documented), and a
+	// "successful" completion may have silently lost results. Whatever
+	// this Run was about to report, the truthful diagnosis is
+	// tape_exhausted.
+	defer func() {
+		if e.tape != nil && e.tape.Exhausted() {
+			result = nil
+			runErr = e.tapeExhaustedError()
+		}
+	}()
+
 	// Push a scoped context Store whose prototype is the parent context.
 	parent := e.registry.Contexts.Top()
 	e.registry.Contexts.Push(parent)
@@ -707,7 +722,15 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// then runs over carrier values; execMatch short-circuits handler
 	// calls to push carrier return values declared on the signature.
 	if e.registry.Check.IsActive() {
-		input = StripToCarriers(input)
+		if es := e.registry.Check.Emit; es != nil {
+			pre := input
+			input = StripToCarriers(input)
+			for i := range input {
+				es.RecordStrip(pre[i], input[i])
+			}
+		} else {
+			input = StripToCarriers(input)
+		}
 	}
 
 	// Post-parse referent resolution: stamp each /q-style atom in the
@@ -742,16 +765,18 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	limit := e.stepLimit
 	completed := false
 	for step := 0; step < limit; step++ {
+		// Memory guard FIRST: a previous edit hit the tape's growth
+		// ceiling (and was dropped to avoid an out-of-bounds write).
+		// This must precede the completion check — a dropped FINAL
+		// splice leaves the pointer past the truncated tape, which is
+		// indistinguishable from normal completion and used to return
+		// success with the results silently gone.
+		if e.tape.Exhausted() {
+			return nil, e.tapeExhaustedError()
+		}
 		if e.pointer >= e.tape.Len() {
 			completed = true
 			break
-		}
-
-		// Memory guard: a previous edit hit the tape's growth ceiling
-		// (and was dropped to avoid an out-of-bounds write). Fail loudly
-		// rather than continue on a truncated tape.
-		if e.tape.Exhausted() {
-			return nil, e.tapeExhaustedError()
 		}
 
 		// Check-mode global step budget: abort the whole run
@@ -1437,6 +1462,41 @@ func (e *Engine) staticForwardType(tok Value) (match Value, kind fwdKind) {
 // raised inside the paren is left on the registry for the outer Run frame.
 func (e *Engine) evalParenGroupAt(scanIdx int) error {
 	savedPointer := e.pointer
+
+	// Check mode: snapshot the group's inner tokens before evaluation
+	// reduces them. If the group collapses to a single Boolean
+	// carrier, the tokens are attached as a GuardFactInfo payload so
+	// guard narrowing can recover the `x is T` structure from the
+	// canonical paren condition form (checker-accuracy-review.0.md A3).
+	var guardToks []Value
+	var groupSpan, lenBefore int
+	if e.registry.Check.IsActive() {
+		gdepth := 0
+		for i := scanIdx; i < e.tape.Len(); i++ {
+			v := e.tape.At(i)
+			if IsOpenParen(v) {
+				gdepth++
+				if i > scanIdx {
+					guardToks = append(guardToks, v)
+				}
+				continue
+			}
+			if IsCloseParen(v) {
+				gdepth--
+				if gdepth == 0 {
+					groupSpan = i - scanIdx + 1
+					break
+				}
+				guardToks = append(guardToks, v)
+				continue
+			}
+			if i > scanIdx {
+				guardToks = append(guardToks, v)
+			}
+		}
+		lenBefore = e.tape.Len()
+	}
+
 	e.pointer = scanIdx
 
 	// Advance past the OpenParen marker.
@@ -1531,6 +1591,22 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 	if depth > 0 && e.pointer < e.tape.Len() {
 		e.pointer = savedPointer
 		return e.evalLimitError(maxParenGroupSteps)
+	}
+
+	// Guard-fact attachment (A3): the group reduced to exactly one
+	// value and it is a Boolean carrier — keep the original tokens on
+	// it for guard narrowing. Booleans never carry another payload at
+	// this point (ChildTypeInfo is List/Map-only), so the write is
+	// non-destructive.
+	if groupSpan > 0 && len(guardToks) >= 3 {
+		nResults := e.tape.Len() - lenBefore + groupSpan
+		if nResults == 1 && scanIdx < e.tape.Len() {
+			res := e.tape.At(scanIdx)
+			if res.Carrier && !res.Dynamic && res.Parent.ConformsTo(TBoolean) {
+				res.Data = GuardFactInfo{Toks: guardToks}
+				e.tape.Set(scanIdx, res)
+			}
+		}
 	}
 
 	e.pointer = savedPointer
@@ -2229,7 +2305,12 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// used by words whose side effects (def, undef, fn, type, …)
 	// are prerequisites for subsequent analysis.
 	if e.registry.Check.IsActive() && !match.Sig.RunInCheckMode {
-		name := ""
+		// The dispatch name: the word at the pointer, or — for a
+		// VALUE dispatch (a module wrapper's trivial-delegation
+		// short-circuit steps the Function literal, not a Word) — the
+		// match's own name. A true anonymous lambda has both empty,
+		// which is what the emit pass keys its fn-value refusal on.
+		name := match.Name
 		var pos SrcPos
 		if e.pointer < e.tape.Len() && IsWord(e.tape.At(e.pointer)) {
 			pos = e.tape.At(e.pointer).Pos
@@ -3631,7 +3712,7 @@ func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Val
 	for i, p := range sig.Params {
 		paramNames[i] = p.Name
 	}
-	result := AnalyseFnBody(e.registry, "", paramNames, sig.Body, args, captures)
+	result := AnalyseFnBody(e.registry, "", paramNames, sig.Body, args, captures, sig.Returns)
 	if len(result) == 0 {
 		result = []Value{NewCarrier(TAny)}
 	}
@@ -5491,6 +5572,7 @@ func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
 		return false, nil
 	}
 	spec := SubstituteSelf(undef.Sigs[0], sinfo.Type)
+	e.registry.Check.Emit.MarkUncompilable("surface-shape typed dispatch at " + w.Name)
 	synth := &Signature{Params: spec.Params, Returns: spec.Returns}
 	normalizeSig(synth)
 
@@ -5569,6 +5651,37 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		}
 	}
 	sig := best
+	e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
+	n := sig.TotalArgs()
+	positions := e.checkModeFallbackPositions(n)
+	args := make([]Value, len(positions))
+	for i, p := range positions {
+		av := e.tape.At(p)
+		// Resolve simple word references to their def bindings — the
+		// tape still holds raw Words for forward operands at this
+		// recovery point, and both the partition probe below and the
+		// assumed sig's ReturnsFn want values, not names.
+		if IsWord(av) {
+			if wi, werr := AsWord(av); werr == nil {
+				if top, ok := e.registry.Defs.Top(wi.Name); ok {
+					av = top
+					e.registry.Check.recordUse(wi.Name)
+				}
+			}
+		}
+		args[i] = av
+	}
+	// Strict disjunct rescue (design/checker-accuracy-review.0.md A1):
+	// the whole disjunct matched no signature, but individual
+	// alternatives may dispatch fine. If at least one does, splice the
+	// per-alternative join — the failing alternatives have already
+	// been flagged with partial_dispatch warnings, which name the
+	// exact path that would fail; the blanket no_signature error
+	// would be wrong for the paths that DO dispatch.
+	if out, ok := disjunctPartitionReturns(e.registry, w.Name, args, pos); ok {
+		e.spliceCheckResults(positions, out)
+		return nil
+	}
 	e.registry.Check.AddDiagnostic(CheckDiagnostic{
 		Code:   "no_signature",
 		Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
@@ -5576,12 +5689,6 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		Row:    pos.Row,
 		Col:    pos.Col,
 	})
-	n := sig.TotalArgs()
-	positions := e.checkModeFallbackPositions(n)
-	args := make([]Value, len(positions))
-	for i, p := range positions {
-		args[i] = e.tape.At(p)
-	}
 	results := carrierResults(e.registry, w.Name, sig, args, pos)
 	e.spliceCheckResults(positions, results)
 	return nil

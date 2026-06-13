@@ -337,7 +337,11 @@ func TestCheckIfJoinsBranches(t *testing.T) {
 }
 
 // TestCheckIfMixedBranchesWidenToScalar checks that heterogeneous
-// branches widen to their common ancestor (Scalar for Integer|String).
+// branches join WITHOUT collapsing to a distant common ancestor:
+// Integer|String stays a Disjunct (design/checker-accuracy-review.0.md
+// A1 — collapsing to Scalar changed first-match dispatch downstream).
+// Direct siblings (value-tagged literals) still collapse to their
+// shared parent — see TestCheckConditionalDefSameBranch.
 func TestCheckIfMixedBranchesWidenToScalar(t *testing.T) {
 	a, err := lang.New()
 	if err != nil {
@@ -353,8 +357,8 @@ func TestCheckIfMixedBranchesWidenToScalar(t *testing.T) {
 	if len(res.Stack) != 1 {
 		t.Fatalf("expected 1 carrier, got %v", res.Stack)
 	}
-	if res.Stack[0] != "Scalar" {
-		t.Fatalf("expected Scalar (common ancestor), got %q", res.Stack[0])
+	if res.Stack[0] != "Disjunct" {
+		t.Fatalf("expected Disjunct (Integer|String preserved for per-alternative dispatch), got %q", res.Stack[0])
 	}
 }
 
@@ -731,8 +735,9 @@ func TestCheckDiagnosticPosition(t *testing.T) {
 
 // TestCheckConditionalDefJoin verifies that a def in each branch of
 // an if is joined across branches: after
-// `if [cond] [def x 1] [def x "hi"]`, x should be Scalar
-// (common ancestor of Integer and String), not whichever branch
+// `if [cond] [def x 1] [def x "hi"]`, x should be the
+// Integer|String disjunct (preserved for per-alternative dispatch,
+// design/checker-accuracy-review.0.md A1), not whichever branch
 // ran last.
 func TestCheckConditionalDefJoin(t *testing.T) {
 	a, err := lang.New()
@@ -750,8 +755,8 @@ func TestCheckConditionalDefJoin(t *testing.T) {
 	if len(res.Stack) != 1 {
 		t.Fatalf("expected 1 carrier, got %v", res.Stack)
 	}
-	if res.Stack[0] != "Scalar" {
-		t.Errorf("expected Scalar ancestor after if-def-join, got %q", res.Stack[0])
+	if res.Stack[0] != "Disjunct" {
+		t.Errorf("expected Integer|String disjunct after if-def-join, got %q", res.Stack[0])
 	}
 }
 

@@ -1,6 +1,8 @@
 # AQL Bytecode Compilation — Outline
 
-Short outline of the full report (see `aql-bytecode-report.md`).
+Short outline of the full report (see `aql-bytecode-report.0.md`;
+revisions against main June 2026 in `aql-bytecode-revisions.0.md`,
+implementation plan in `aql-bytecode-plan.0.md`).
 
 ## 1. Premise
 

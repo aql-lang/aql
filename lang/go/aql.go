@@ -1,6 +1,7 @@
 package lang
 
 import (
+	"github.com/aql-lang/aql/eng/go"
 	"io"
 
 	"github.com/aql-lang/aql/eng/go/parser"
@@ -192,8 +193,10 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 	eng := native.NewTop(a.registry)
 	eng.SetSource(src)
 	result, err := eng.Run(values)
-	// Emit unused-def warnings after all execution has completed
-	// so the Used map has been fully populated.
+	// Drop fn-body forward-reference false positives (the name is
+	// defined by now), then emit unused-def warnings — both need the
+	// fully-populated end-of-pass state.
+	a.registry.RescueForwardRefDiagnostics()
 	a.registry.Check.EmitUnusedDefDiagnostics()
 	if err != nil {
 		return CheckResult{Diagnostics: a.registry.Check.Diagnostics}, err
@@ -230,9 +233,68 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 	return CheckResult{Stack: stack, Diagnostics: diags, Summary: summary}, nil
 }
 
+// Program is the bytecode unit the compile pass produces — re-exported
+// from the engine kernel for host callers (Stage 1 of
+// design/aql-bytecode-plan.0.md).
+type Program = eng.Program
+
+// CompileCheck runs the source through the checker with the bytecode
+// recording pass enabled (Stage 1: straight-line, monomorphic native
+// calls only) and linearises the trace into a Program. When the
+// source contains a construct Stage 1 cannot lower — control flow,
+// user fns, polymorphic or dynamic dispatch, compile-time words —
+// the Program is nil and reason names the first offender; the
+// CheckResult is valid either way.
+func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
+	values, err := parser.Parse(src)
+	if err != nil {
+		return nil, "parse error", CheckResult{}, err
+	}
+
+	a.registry.Source = src
+	defer a.registry.Check.Begin()()
+	a.registry.Check.Emit = eng.NewEmitState()
+	// Fn-body analyses must run (and record) under THIS emit pass —
+	// a summary cached by an earlier plain Check on the same instance
+	// would skip the body and leave its compiled unit empty.
+	a.registry.Check.FnSummaries = nil
+	a.registry.Check.FnInflight = nil
+
+	engine := native.NewTop(a.registry)
+	engine.SetSource(src)
+	residual, runErr := engine.Run(values)
+	a.registry.RescueForwardRefDiagnostics()
+	a.registry.Check.EmitUnusedDefDiagnostics()
+
+	res := CheckResult{Diagnostics: a.registry.Check.Diagnostics}
+	if runErr != nil {
+		return nil, "check error", res, runErr
+	}
+	for _, d := range res.Diagnostics {
+		if d.Severity == SeverityError {
+			return nil, "check diagnostics", res, nil
+		}
+	}
+	prog, reason, ok := a.registry.Check.Emit.Finalize(residual)
+	if !ok {
+		return nil, reason, res, nil
+	}
+	return prog, "", res, nil
+}
+
 // SetFileOps replaces the file operations implementation used by read/write.
 func (a *AQL) SetFileOps(ops FileOps) {
 	native.SetHostFileOps(a.registry, ops)
+}
+
+// Clock is the time source used by temporal and random words —
+// re-exported so hosts and tests can freeze it (capabilities.FixedClock)
+// for reproducible runs.
+type Clock = capabilities.Clock
+
+// SetClock replaces the instance's clock.
+func (a *AQL) SetClock(clk Clock) {
+	native.SetHostClock(a.registry, clk)
 }
 
 // SetOutput replaces the writer used by print, help, and other output words.
@@ -311,7 +373,12 @@ func (a *AQL) Run(src string) ([]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	return convertResults(result), nil
+}
 
+// convertResults maps a residual engine stack to host-friendly Go
+// values — the same projection Run has always applied.
+func convertResults(result []eng.Value) []any {
 	out := make([]any, len(result))
 	for i, v := range result {
 		switch {
@@ -338,7 +405,26 @@ func (a *AQL) Run(src string) ([]any, error) {
 			out[i] = v.String()
 		}
 	}
-	return out, nil
+	return out
+}
+
+// RunCompiled executes src in compiled (bytecode) mode when the
+// emitter can lower it, and SILENTLY falls back to the interpreter
+// otherwise — the plan's opt-in contract: identical results either
+// way, the flag only changes the execution engine. The second return
+// reports which path ran (for tooling; never branch program logic on
+// it).
+func (a *AQL) RunCompiled(src string) ([]any, bool, error) {
+	prog, _, _, err := a.CompileCheck(src)
+	if err != nil || prog == nil {
+		out, rerr := a.Run(src)
+		return out, false, rerr
+	}
+	result, err := eng.RunProgram(prog, a.registry)
+	if err != nil {
+		return nil, true, err
+	}
+	return convertResults(result), true, nil
 }
 
 // CheckResult is the outcome of a static type-check run.

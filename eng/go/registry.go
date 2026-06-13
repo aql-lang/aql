@@ -201,6 +201,30 @@ type CheckState struct {
 	// a placeholder instead of looping.
 	FnInflight map[string]bool
 
+	// InflightBails counts Any-placeholder bail-outs taken by
+	// recursive calls of UNCHECKED fns (declared returns use the
+	// declaration instead and don't count). AnalyseFnBody compares
+	// the counter around a body run to know whether its summary was
+	// computed under the weakest hypothesis and needs refinement
+	// before being cached (design/checker-accuracy-review.0.md A2).
+	InflightBails int
+
+	// Emit, when non-nil, turns the check pass into the bytecode
+	// recording pass (Stage 1 of design/aql-bytecode-plan.0.md): every
+	// dispatch through carrierResults records a classified call event
+	// and EmitState.Finalize linearises the trace into a Program. Set
+	// by the compile entry points after Begin; nil for plain checks.
+	Emit *EmitState
+
+	// FnAnalysisCounts tracks distinct body analyses (memo misses)
+	// per fn name. Past FnAnalysisQuota the analyser stops re-running
+	// the body for new arg shapes — it answers from the declaration
+	// or dynamic(Any) — and emits ONE analysis_truncated diagnostic
+	// naming the fn, so heavy polymorphic use degrades loudly instead
+	// of silently eating the whole step budget
+	// (design/checker-accuracy-review.0.md A9).
+	FnAnalysisCounts map[string]int
+
 	// StepCount is the running total of engine steps consumed by
 	// the current check run, summed across every sub-engine. Used
 	// with StepBudget to cap total analysis effort.
@@ -239,6 +263,16 @@ type CheckState struct {
 	// identity — to keep the model simple for the common
 	// "one context store" usage pattern.
 	ContextTypes map[string]Value
+
+	// FnBodyDepth counts the AnalyseFnBody nesting around the
+	// current dispatch. Diagnostics emitted while it is positive
+	// come from a fn BODY — code that runs at call time, not at the
+	// point of analysis — so an undefined_word there may be a legal
+	// forward reference (the documented mutual-recursion idiom:
+	// `def isod fn […isev…] def isev fn […isod…]`). Such
+	// diagnostics are tagged FnBody and rescued at end of pass when
+	// the name has a binding by then (RescueForwardRefDiagnostics).
+	FnBodyDepth int
 }
 
 // DefaultCheckStepBudget caps total check-mode steps across all
@@ -270,6 +304,8 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"type_error":            SeverityError,
 	"uncalled_function":     SeverityError,
 	"unreachable_signature": SeverityWarning,
+	"partial_dispatch":      SeverityWarning,
+	"analysis_truncated":    SeverityInfo,
 	"index_out_of_range":    SeverityWarning,
 	"missing_returns":       SeverityWarning,
 	"step_budget_exceeded":  SeverityWarning,
@@ -307,6 +343,7 @@ type CheckDiagnostic struct {
 	Row      int           `json:"row,omitempty"`      // 1-based line number, 0 if unknown
 	Col      int           `json:"col,omitempty"`      // 1-based column number, 0 if unknown
 	Severity CheckSeverity `json:"severity,omitempty"` // default severity from checkCodeSeverity; empty = info
+	FnBody   bool          `json:"fnBody,omitempty"`   // emitted during fn-body analysis (call-time code) — see RescueForwardRefDiagnostics
 }
 
 // NewRegistry creates an empty registry.

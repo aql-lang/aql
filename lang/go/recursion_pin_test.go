@@ -1,6 +1,7 @@
 package lang_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/aql-lang/aql/lang/go"
@@ -65,22 +66,41 @@ func TestNonTailRecursionParksTapePerCall(t *testing.T) {
 	// (it is never a candidate: the parked add consumes each frame's
 	// result).
 	//
-	// KNOWN MISDIAGNOSIS (pinned as-is): the error surfaced today is
-	// not always tape_exhausted but can be a phantom downstream error —
-	// the ceiling-dropped splice starves the frame's ReturnCheck,
-	// which reports `type_error: expected 1 return value(s), got 0`
-	// before the Run loop's Exhausted() check gets a chance. The same
-	// genre as the phantom "unmatched opening parenthesis" the
-	// evaluation_limit fix removed (RECURSION-PERFORMANCE.10.md
-	// §secondary issue). The TCO taxonomy cleanup
-	// (design/TCO-STAGED.0.md Stage 6) should make this reliably
-	// tape_exhausted; until then only the FAILURE is pinned, not the
-	// code.
+	// The misdiagnosis this test used to pin is FIXED: a
+	// ceiling-dropped splice used to starve the frame's ReturnCheck
+	// and surface a phantom `type_error: expected 1 return value(s),
+	// got 0` before the Run loop's Exhausted() check got a chance.
+	// Run now prefers the truthful diagnosis whenever the tape
+	// latched exhausted (the deferred rewrite in engine.go), so the
+	// code is pinned, not just the failure.
 	_, err := runWithTape(t, tightTape, defNonTailSum+`s 2000`)
 	if err == nil {
 		t.Fatal("deep non-tail recursion under tight tape succeeded; it should exhaust the tape regardless of TCO")
 	}
-	t.Logf("non-tail exhaustion surfaced as: %v", err)
+	if !strings.Contains(err.Error(), "tape_exhausted") {
+		t.Fatalf("non-tail exhaustion misdiagnosed as %v, want tape_exhausted", err)
+	}
+}
+
+func TestCeilingDroppedFinalSpliceErrsLoudly(t *testing.T) {
+	// The silent-drop bug: a loop whose accumulated results exceed
+	// the ceiling used to return SUCCESS with the results gone — the
+	// dropped final splice left the pointer past the truncated tape,
+	// indistinguishable from normal completion. It must be a loud
+	// tape_exhausted.
+	res, err := runWithTape(t, tightTape, `for 100000 [i]`)
+	if err == nil {
+		t.Fatalf("oversized loop accumulation returned success with %d results — the ceiling-dropped splice must err loudly", len(res))
+	}
+	if !strings.Contains(err.Error(), "tape_exhausted") {
+		t.Fatalf("oversized loop accumulation errored as %v, want tape_exhausted", err)
+	}
+	// Negative control: the same ceiling comfortably fits a small
+	// accumulation — the guard must not over-fire.
+	out, err := runWithTape(t, tightTape, `for 10 [i]`)
+	if err != nil || len(out) != 10 {
+		t.Fatalf("small loop under tight tape: %v (len=%d), want 10 clean results", err, len(out))
+	}
 }
 
 func TestIterationRunsInConstantTapeSpace(t *testing.T) {
