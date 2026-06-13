@@ -681,16 +681,49 @@ issues were each solved:
   `make Point {x:9}` lowers to `CALL_NATIVE` and its chains compile —
   `(make Point {}) get x`, `def p (make Point {x:9}) p.y`.
 
-Net: differential 1511 → 1629, whole-corpus 1571 → 1701.
+- **`is`/`typeof` on a make-result (LANDED).** A `make` result is an
+  ObjectInstance that inherits the type literal's value ID. A downstream
+  type operand sharing that ID — `(make Point {}) is Point`,
+  `(make Point {}) typeof` — was hijacked by `resolveOperand`'s
+  `producedBy` lookup, mapping the `Point` literal to the make event;
+  both `is` operands then pointed at one event and `lowerCall` hit "stack
+  discipline underflow at is". The fix tracks per-event whether the
+  output is *itself* a type body (`setProduced`/`typeOut`) and skips the
+  `producedBy` hijack when the operand is a type body but the event
+  produced a non-type value — an ID collision. A genuine type-producing
+  event (typeof, type algebra) keeps its `fromSeq` provenance, so stack
+  discipline is preserved.
 
-**Remaining (incremental, diminishing):** record-type `make` naming,
-refine/predicate/dependent-type operands, the `is`/`typeof`-on-
-make-result lowering shape (a 2-result-operand `lowerCall` edge), and
-the general `get`-returns-callable / `apply` fn-value site (the boundary
-conservatively defers it). **`CALL_NATIVE_POLY`** (~0 corpus sites),
-**multi-threaded islands** (0 coverage), and **fast-path opcodes /
-compact encoding** (scratch buffer captured the dominant alloc) stay
-deferred as documented.
+Net: differential 1511 → 1636, whole-corpus 1571 → 1708.
+
+**Remaining frontier items — investigated, resolved or deferred:**
+
+- **Record-type `make` naming — MOOT (no compilable shape).** There is
+  no current AQL syntax where `make R {…}` over a record/map-shape binding
+  yields a valid instance: a plain implicit-map binding
+  (`def R {x:Integer} make R {…}`) errors *identically in both engines*
+  ("make: first argument must be a type literal or record type"), and the
+  legacy `record`/`object` constructors were removed in Phase 3 (`refine`
+  takes a type, not a map shape). Parity holds via whole-program fallback;
+  the working structural-make path is the class form, already landed.
+- **Refine / predicate / dependent-type `make` — DONE / MOOT.**
+  `def Pos refine Integer make Pos 5` compiles native. Predicate and
+  dependent-scalar types (`def Big (Integer gt 10) make Big 20`) cannot be
+  `make`'d in *either* engine — `make` rejects the non-type-literal first
+  argument identically; error-taxonomy parity holds via fallback.
+- **General `get`-returns-callable / `apply` fn-value site — DEFERRED
+  (Stage-3 frontier).** Both `r.int 0 100` (a map-method field auto-applied
+  to trailing args) and `(m get f) 5` (a fn-valued field then applied) hold
+  value + error parity via whole-program fallback, but compiling them needs
+  a Function value to cross the compiled boundary — either dynamic dispatch
+  (the VM has no `CALL_DYNAMIC`) or a whole-expression island that bakes a
+  fn-containing map as a const (a fn body is not inert). Neither is
+  gate-clean-trivial; the fn-value-call boundary conservatively defers it,
+  and it stays the documented Stage-3 dynamic-dispatch residual.
+
+**`CALL_NATIVE_POLY`** (~0 corpus sites), **multi-threaded islands**
+(0 coverage), and **fast-path opcodes / compact encoding** (scratch buffer
+captured the dominant alloc) stay deferred as documented.
 
 ## Stage 7 — graduation criteria (compiled mode by default)
 

@@ -106,6 +106,16 @@ var comboParity = []string{
 	`def Point class {x:1} (make Point {}) is Point`,
 	`def C class {x:1 f:(fn [[][Integer][2]])} (make C {x:5}) get x`, // method field → fallback
 
+	// --- F4: refine `make` compiles native; predicate/dependent make
+	// errors identically in both engines (parity via fallback) ---
+	`def Pos refine Integer make Pos 5`,
+	`def Big (Integer gt 10) make Big 20`,          // make rejects non-type-literal → error parity
+	`def R {x:Integer y:Integer} make R {x:1 y:2}`, // map-shape binding → error parity
+
+	// --- F4: fn-value apply sites — value + error parity via fallback
+	// (the Stage-3 dynamic-dispatch frontier, conservatively deferred) ---
+	`def m {f:(fn [[a:Integer][Integer][a mul 2]])} (m get f) 5`,
+
 	// --- error rows: same taxonomy in both engines ---
 	`add 1 'x'`, // type_error
 	`def f fn [[n:Integer] [String] [n]] f 1`,      // return type_error
