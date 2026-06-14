@@ -725,6 +725,61 @@ Net: differential 1511 → 1636, whole-corpus 1571 → 1708.
 (0 coverage), and **fast-path opcodes / compact encoding** (scratch buffer
 captured the dominant alloc) stay deferred as documented.
 
+## Runtime independence (P0–P7) — progress
+
+Goal: a compiled `Program` executes ENTIRELY in the VM — no `OpFallback`
+island, no whole-program fallback. Compile-time recording through the
+checker stays. Two downward ratchets gate the deletion (P7): the spec-row
+COMPILE-REFUSAL count and the ISLANDED-program count, both in
+`test/go/langspec/compiled_coverage_test.go` (`TestCompiledCoverage`).
+
+Landed (each gate-clean: differential + whole-corpus at 0 divergences,
+race-clean, alloc ceilings held):
+
+- **P0 — coverage ratchet.** `TestCompiledCoverage` buckets every refusal;
+  baseline 651 refused / 115 islanded.
+- **P1 — `InvokeBody` seam.** One choke point (`eng/go/invoke.go`,
+  `Registry.Invoker`) all code-body words run their body through, so the VM
+  can drive body execution without the interpreter.
+- **P2a — re-entrant VM runner.** `runProgram`'s loop extracted to
+  `vmContext.run(startUnit, locals, stack)`; step budget / island engine
+  shared, per-run stack/frames isolated.
+- **P2b — code bodies → closures.** `each`/`fold`/`scan`/`filter`/`do`
+  compile their body to a `CompiledFn` unit (`OpPushClosure`,
+  `ClosurePayload`, `vmContext.invokeClosure`); a throwaway-EmitState PROBE
+  compiles speculatively so a refusal falls back to the island untouched.
+  Plus **closure capture** (`CompiledFn.NCaptures`, `ComputeCaptures`):
+  bodies capturing an enclosing fn's binding compile; a concrete module-def
+  bakes as a const.
+- **P3 — `CALL_NATIVE_POLY`.** A dynamic typed dispatch the checker could
+  not pin to one overload runs the kernel's own `MatchSignature` at run
+  time (the same first-match the interpreter takes) instead of islanding.
+  Widened to ANY registered builtin native over a dynamic operand (guards:
+  builtin-only, no code-body/quoted/fn-frame/full-stack/fn-valued; integer-
+  keyed get only).
+- **P4 — `CALL_DYNAMIC`.** The fn-value-call boundary (`r.int 0 100`)
+  compiles: a dynamic value leading the residual is applied to its args at
+  run time IFF callable (closure → VM-native; FnDef → island sub-engine;
+  non-callable → left untouched, faithful to the interpreter).
+
+Ratchets now: **616 refused / 102 islanded** (refusals −35 from baseline).
+Compiled rows 1706 → 1741.
+
+**Remaining buckets (each a dedicated unit, root cause identified):**
+
+- **Predicate-type operands (~157, "operand provenance").** Type-algebra
+  over `(Integer gt 10)` — a check-mode `DepScalarInfo` CARRIER with no
+  recoverable original; needs carrier provenance, not const-baking.
+- **`apply` / fn-value flow (~148, "dynamic/opaque output").** `apply`
+  takes a fn VALUE operand; fn values can't bake as consts (code) nor
+  resolve. Needs fn-values-on-the-stack — i.e. compiling all user fns to
+  closures and a VM-native FnDef dispatch (which would also de-island the
+  P4 CALL_DYNAMIC apply and the atom-keyed method gets).
+- **Multi-result / multi-return (~44).** P5: generalise the deeply single-
+  result lowerer (the plan's top risk hotspot).
+- **`case` clause compilation (~16 islands), context words (with-decimal),
+  Stage-1/2 lowering edges (if-branch, stack-discipline, residual shape).**
+
 ## Stage 7 — graduation criteria (compiled mode by default)
 
 Flip the default only when all of:
