@@ -210,10 +210,11 @@ func TestCompiledCombinationPath(t *testing.T) {
 		// dispatches via CALL_NATIVE_POLY (plan P3) — never returns a method.
 		{`(make Array [10 20 30]) get 1`, "native"},
 		{`def xs [10 20 30] xs get 1`, "native"},
-		// An ATOM-keyed field get could return a Function (method); it stays on
-		// the island until the fn-value boundary lands (P4).
-		{`{a:1 b:2} get a`, "island"},
-		{`def m {a:{b:7}} m.a.b`, "island"},
+		// An ATOM-keyed field get now polys too: a data field is returned
+		// directly, a named 0-arg method result is auto-applied VM-native, and
+		// a method needing args flows to CALL_DYNAMIC (plan P3+P4).
+		{`{a:1 b:2} get a`, "native"},
+		{`def m {a:{b:7}} m.a.b`, "native"},
 		// Class `make` with plain-data fields compiles (the body bakes as a
 		// const); a class with a method field must fall back.
 		{`def Point class {x:1, y:2} make Point {x:9}`, "native"},
@@ -224,11 +225,10 @@ func TestCompiledCombinationPath(t *testing.T) {
 		// instead of failing stack discipline.
 		{`def Point class {x:1} (make Point {}) is Point`, "native"},
 		{`def Point class {x:1} (make Point {}) typeof`, "native"},
-		// fn-value-call boundary: a get whose result is a method applied to
-		// trailing args now compiles — OpCallDynamic applies the Function at
-		// run time (plan P4). The atom-keyed get still islands, so the whole
-		// program islands rather than lowering fully native.
-		{`"aql:rand" import end def r (Rand.with-seed 42) r.int 0 100`, "island"},
+		// fn-value-call boundary, fully native now: the atom-keyed get polys
+		// (the method stays a value, no 0-arg sig), then OpCallDynamic applies
+		// it to 0 100 VM-native (a trivial-delegation method) — plan P3+P4.
+		{`"aql:rand" import end def r (Rand.with-seed 42) r.int 0 100`, "native"},
 		// Sentinel inside a closure body must NOT compile (falls back so the
 		// interpreter can unwind break/continue across the boundary).
 		{`for 3 [each [break] [1 2]]`, "fallback"},

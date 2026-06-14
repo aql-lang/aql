@@ -438,16 +438,10 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 		}
 	}
 	// get/getr over a Map/Object/Module receiver can return a Function FIELD
-	// (a method) that the interpreter AUTO-APPLIES — `r.bool` → the rand-bool
-	// method applied to no args. The poly dispatch runs only the get (no
-	// auto-apply), leaving the Function unapplied (a divergence; the
-	// fn-value-call boundary is P4). An INTEGER-keyed get is a sequence INDEX
-	// (List/Array) and only ever yields an element, never a method, so poly
-	// is safe; an Atom-keyed field/method access stays on the island, which
-	// re-runs the full dispatch (auto-apply included).
-	if (word == "get" || word == "getr") && (len(args) == 0 || !args[0].Parent.ConformsTo(TInteger)) {
-		return false
-	}
+	// (a method). The VM handles that faithfully now: callPoly auto-applies a
+	// named 0-arg method result (`r.bool`), and a method needing args
+	// (`r.int`) stays a value and flows to CALL_DYNAMIC — so both atom- and
+	// integer-keyed gets poly.
 	// CORE-dispatch guard: the matched sig must be the word's main-registry
 	// binding, since the runtime MatchSignature re-matches over r.Lookup's
 	// signatures (a module-qualified sub-registry sig would re-run the core

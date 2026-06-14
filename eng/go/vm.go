@@ -140,6 +140,22 @@ func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc 
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
+	// A get/getr whose result is a NAMED method with a 0-arg overload is
+	// auto-applied by the interpreter the instant it is produced (`r.bool`).
+	// Mirror that: dispatch it 0-arg VM-native. A method needing args
+	// (`r.int`) has no 0-arg sig, so it stays a value and flows to a later
+	// CALL_DYNAMIC; an anonymous fn stays data (the interpreter does not
+	// auto-invoke a 0-arg anonymous value).
+	if (pr.Word == "get" || pr.Word == "getr") && len(results) == 1 {
+		if fnDef, ok := results[0].Data.(FnDefInfo); ok && !fnDef.Anonymous {
+			if applied, done, aerr := vc.tryNativeFnApply(fnDef, nil); done {
+				if aerr != nil {
+					return nil, stampAt(aerr, curDebug, pc, r)
+				}
+				results = applied
+			}
+		}
+	}
 	for _, rv := range results {
 		if IsWord(rv) || IsMark(rv) || IsMove(rv) || IsForward(rv) ||
 			IsOpenParen(rv) || IsSplice(rv) {

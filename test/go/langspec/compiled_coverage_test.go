@@ -37,7 +37,7 @@ const refusalCeiling = 616 // P0 651 -> P3 642 -> wide poly 618 -> P4 CALL_DYNAM
 // at run time, so this is the second downward ratchet toward run-time
 // independence (plan): each phase that compiles an island shape natively lowers
 // it, and it must reach 0 before the OpFallback machinery can be deleted (P7).
-const islandCeiling = 102 // P3 98; wider poly + P4 CALL_DYNAMIC net +4 as previously-REFUSED programs now compile (a few with a residual island) — a net win (refusals 651->616)
+const islandCeiling = 36 // P4 atom-keyed gets poly with VM-native method auto-apply (102 -> 36); lower as more island shapes compile natively
 
 // normaliseReason buckets a refusal reason into a stable category by
 // stripping the row-specific tail (word names, counts), so the histogram is

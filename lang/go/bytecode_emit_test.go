@@ -625,16 +625,15 @@ func TestEmitModuleCallLowering(t *testing.T) {
 		t.Fatalf("max 5.0 9.0 = %v, want 9.0", out)
 	}
 
-	// F4: a get whose RESULT the checker types dynamic Any (a runtime
-	// field read on a def-bound map) now ISLANDS — the def map's value is
-	// recovered and the barriered `get` re-runs in a stack-form span
-	// (`{a:1} get a`). The result must match the interpreter.
+	// F4: a get whose RESULT the checker types dynamic Any (a runtime field
+	// read on a def-bound map) now runtime-dispatches via CALL_NATIVE_POLY
+	// (plan P3/P4) — no island. The result must match the interpreter.
 	got2, reason2 := compile(t, `def m {a:1} m.a`)
 	if reason2 != "" {
 		t.Fatalf("dynamic-result get refused: %s", reason2)
 	}
-	if !strings.Contains(got2, "FALLBACK") {
-		t.Errorf("dynamic-result get did not island:\n%s", got2)
+	if strings.Contains(got2, "FALLBACK") || !strings.Contains(got2, "CALL_NATIVE_POLY") {
+		t.Errorf("dynamic-result get did not lower to CALL_NATIVE_POLY:\n%s", got2)
 	}
 	b, err := New()
 	if err != nil {
