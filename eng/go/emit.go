@@ -1272,6 +1272,17 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	}
 	p := &Program{}
 	lw := &lowerer{es: es, p: p, code: &p.Code, debug: &p.Debug, sigIdx: map[*Signature]int{}, variadic: map[int]bool{}}
+	// Value-def locals: a top-level computed result referenced more than once
+	// (counting the program residual) is promoted to a frame local so the
+	// single-consume stack discipline holds. Count the residual references,
+	// then plan + rewrite before lowering.
+	var residualSeqs []int
+	for _, rv := range residual {
+		if pr, ok := es.producedBy[rv.ID]; ok && pr.idx == 0 {
+			residualSeqs = append(residualSeqs, pr.seq)
+		}
+	}
+	lw.promoted = es.planValueDefLocals(es.units[0], es.frames[0], residualSeqs)
 	if reason := lw.lowerEvents(es.frames[0], 0); reason != "" {
 		return nil, reason, false
 	}
@@ -1312,6 +1323,13 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	tail := []emitOperand{}
 	for _, rv := range residual {
 		if pr, ok := es.producedBy[rv.ID]; ok {
+			// A promoted value-def local is no longer on the simulated stack
+			// (STORE_LOCAL consumed it); re-push it from its slot like any
+			// other materialised tail operand.
+			if slot, isProm := lw.promoted[pr.seq]; isProm {
+				tail = append(tail, localOperand(slot))
+				continue
+			}
 			if len(tail) > 0 {
 				return nil, "residual shape beyond Stage 1 (call result above a literal)", false
 			}

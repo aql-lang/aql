@@ -87,6 +87,7 @@ type lowerer struct {
 	sigIdx   map[*Signature]int
 	vm       []vmSlot
 	variadic map[int]bool // loop seqs: N runtime values, not one
+	promoted map[int]int  // value-def locals: producing event seq → frame local slot
 	loops    []loopCtx
 	maxDepth int
 }
@@ -203,6 +204,93 @@ func collectOperands(ev *emitEvent) []emitOperand {
 	return []emitOperand{ev.br.cond, ev.br.condOut, ev.br.thenOut, ev.br.elsOut}
 }
 
+// promoteOperand rewrites one ENCLOSING-scope operand: a single-result
+// event reference whose producer was promoted to a value-def local becomes
+// a local push. Inner-fragment result operands (a branch arm's / loop body's
+// out) are never enclosing references and are left untouched.
+func promoteOperand(op *emitOperand, promoted map[int]int) {
+	if op.kind == opEvent && op.resIdx == 0 {
+		if slot, ok := promoted[op.idx]; ok {
+			*op = localOperand(slot)
+		}
+	}
+}
+
+// rewritePromotedRefs redirects an event's enclosing-scope operands (call /
+// user-call / fallback args, a branch condition, a loop count) to value-def
+// locals. Only enclosing references are rewritten — the producing event of a
+// promoted value lives at the same scope, so its consumers do too.
+func rewritePromotedRefs(ev *emitEvent, promoted map[int]int) {
+	switch ev.kind {
+	case evCall:
+		for i := range ev.call.ops {
+			promoteOperand(&ev.call.ops[i], promoted)
+		}
+	case evCallUser:
+		for i := range ev.uc.ops {
+			promoteOperand(&ev.uc.ops[i], promoted)
+		}
+	case evFallback:
+		for i := range ev.fb.ins {
+			promoteOperand(&ev.fb.ins[i], promoted)
+		}
+	case evBranch:
+		promoteOperand(&ev.br.cond, promoted)
+	case evLoop:
+		promoteOperand(&ev.loop.end, promoted)
+	}
+}
+
+// planValueDefLocals decides which of a unit's top-level computed results are
+// referenced more than once and so must be promoted to a frame local (the
+// carrier-identity item's value-def locals). A single VM-stack copy of a
+// COMPUTED value is consumed by its first use; a `def`-bound result used
+// several times (`def a (make …) a eq a`) needs it stored once and re-pushed.
+//
+// References are counted across the unit's top-level event operands AND the
+// extra references (the program residual, for frame 0). Only single-result
+// native-call events are promotable — a multi-result word (dup) needs the
+// carrier-identity DUP path, not a single local; branch/loop variadic results
+// never reach here. Slots are allocated from the unit's local namespace.
+// Returns seq → slot and rewrites every reference in place to a local operand.
+func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extra []int) map[int]int {
+	refs := map[int]int{}
+	for i := range events {
+		for _, op := range collectOperands(&events[i]) {
+			if op.kind == opEvent && op.resIdx == 0 {
+				refs[op.idx]++
+			}
+		}
+	}
+	for _, seq := range extra {
+		refs[seq]++
+	}
+	var promoted map[int]int
+	for i := range events {
+		ev := &events[i]
+		if ev.kind != evCall || ev.call.nout != 1 {
+			continue
+		}
+		if refs[ev.seq] <= 1 {
+			continue
+		}
+		if promoted == nil {
+			promoted = map[int]int{}
+		}
+		if _, done := promoted[ev.seq]; !done {
+			promoted[ev.seq] = unit.numLocals
+			unit.numLocals++
+		}
+	}
+	if promoted == nil {
+		return nil
+	}
+	for i := range events {
+		rewritePromotedRefs(&events[i], promoted)
+	}
+	return promoted
+}
+
 // layoutMsgs holds the call-site-specific diagnostic wording for
 // layoutOperands, so the shared engine can stay word/fn-agnostic while
 // preserving each caller's exact reason strings.
@@ -317,6 +405,15 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 		lw.emit(OpCallNative, si, c.pos)
 	}
 	lw.vm = lw.vm[:len(lw.vm)-n]
+	// A value-def local: this single result is referenced more than once, so
+	// store it into a frame slot now and re-push it per reference (the
+	// references were rewritten to local operands). The promotion pre-pass
+	// only marks single-result events, so nothing is left on the stack.
+	if slot, ok := lw.promoted[ev.seq]; ok {
+		lw.emit(OpStoreLocal, slot, c.pos)
+		lw.note()
+		return ""
+	}
 	// Push one simulated slot per result the call leaves (P5): 0 for a
 	// side-effect word, N for a multi-result word — idx 0..N-1 deepest-first,
 	// matching the VM's append of the handler's results (results[N-1] on top).

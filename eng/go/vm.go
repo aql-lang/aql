@@ -370,6 +370,14 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			stack = append(stack, p.Consts[in.Arg])
 		case OpPushLocal:
 			stack = append(stack, locals[in.Arg])
+		case OpStoreLocal:
+			// Pop the producing event's single result into a frame local;
+			// each reference re-pushes it via PUSH_LOCAL (value-def locals).
+			if len(stack) == 0 {
+				return nil, vmErrAt(curDebug, pc, "STORE_LOCAL stack underflow")
+			}
+			locals[in.Arg] = stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
 		case OpPushClosure:
 			nc := p.Fns[in.Arg].NCaptures
 			if len(stack) < nc {
