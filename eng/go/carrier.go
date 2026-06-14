@@ -974,6 +974,60 @@ func ReturnsIdentity(mapping ...int) ReturnsFunc {
 	}
 }
 
+// ReturnsFreshInstance is a ReturnsFunc for IMPURE constructors (make):
+// each result is a fresh VALUE carrier of the TYPE named by args[mapping[i]],
+// mirroring the runtime where every construction mints a new value
+// (NewValueRaw). ReturnsIdentity returns args[m] verbatim — for `make` that
+// is the requested TYPE LITERAL, which is wrong twice over:
+//
+//   - Identity. A type literal is dual (eng CLAUDE.md "Canonical *Type
+//     Pointers"): its Value.ID IS the type's lattice identity, so every
+//     `make P {}` returns the SAME P-literal value (one Value.ID). The
+//     bytecode lowerer's per-value provenance (emit.go's producedBy) then
+//     cannot tell two instances apart — it resolves both operands of a
+//     downstream `(make P {}) (make P {}) eq` onto the LAST make, leaving
+//     one simulated-stack slot where the binary op needs two ("stack
+//     discipline underflow"). A fresh carrier ID keeps each construction a
+//     distinct operand.
+//   - Faithfulness. The runtime result is a VALUE of type P, not the type
+//     literal P; a carrier of P is the same shape carrierResults gives every
+//     other declared return, and conformance sees the instance's type.
+//
+// (Minting a fresh ID on the type literal itself is NOT viable: it severs
+// the literal↔type ID duality, so ValueType can no longer resolve the made
+// type and conformance checks fail.)
+//
+// Only a concrete bare-type-node target is converted; a dynamic/computed
+// target (a carrier already) keeps the prior identity behaviour.
+func ReturnsFreshInstance(mapping ...int) ReturnsFunc {
+	return func(args []Value, r *Registry) []Value {
+		out := make([]Value, len(mapping))
+		for i, m := range mapping {
+			switch {
+			case m < 0 || m >= len(args):
+				out[i] = NewCarrier(TAny)
+			case !args[m].Carrier && !args[m].Dynamic:
+				// A concrete constructor target — a bare type node
+				// (`make Path …`, `make Foo …`) or a structural type body
+				// (`make P {}` for a class/record, whose literal carries an
+				// ObjectTypeInfo/RecordTypeInfo payload). ValueType yields the
+				// made *Type in both cases (the node itself, or the body's
+				// Parent); a fresh carrier of it is the per-call instance.
+				t := ValueType(args[m])
+				if r != nil {
+					t = CanonicalType(r, t)
+				}
+				out[i] = NewCarrier(t)
+			default:
+				// Dynamic / computed target (a carrier already): keep the
+				// prior identity behaviour.
+				out[i] = args[m]
+			}
+		}
+		return out
+	}
+}
+
 // ReturnsStatic builds a ReturnsFunc that always produces a fixed list
 // of carrier types, independent of args. Equivalent to setting Returns
 // directly; provided so ReturnsFn call sites can be uniform.
