@@ -29,8 +29,10 @@ race-clean, alloc ceilings held). The runtime-independence machinery exists:
   (compiled programs still containing an `OpFallback`). Both are downward;
   P7 is gated on both reaching **0**.
 
-Current ratchets: **598 refused / 26 islanded** (from 651 / 115 at P0;
-616 / 29 before P5). Compiled rows 1706 → 1759, 0 divergences throughout.
+Current ratchets: **565 refused / 26 islanded** (from 651 / 115 at P0;
+616 / 29 before P5; 598 / 26 after P5; 580 / 26 after make carrier-identity;
+568 / 26 after value-def locals). Compiled rows 1706 → 1800, 0 divergences
+throughout.
 
 ## The recorder/lowerer model (shared context for the work below)
 
@@ -122,6 +124,39 @@ mechanical (no fn-value/type subtlety).
 ---
 
 ## Carrier-identity for `make` + value-def locals (stack-discipline ~24)
+
+**Status — LANDED (598/26 → 565/26), gate-clean across three commits.**
+All three steps below shipped; the dup-body case (the deferred P5 item) came
+with it. What actually landed, with the empirical corrections:
+
+- **Step 1 — make carrier-identity (598 → 580, FP 122 → 114).** `make`'s
+  constructor sigs moved from `ReturnsIdentity(0)` to a new
+  `ReturnsFreshInstance(0)` (`eng/go/carrier.go`). The correction to the plan:
+  returning the type literal with a **fresh ID** is NOT viable — a type
+  literal is dual (its `Value.ID` IS the type's lattice identity), so a fresh
+  ID severs the literal↔type link and `ValueType` can no longer resolve the
+  made type (conformance fails, soundness regressed +10). The fix returns a
+  fresh **value carrier** of the made type (`ValueType` + `NewCarrier`, for
+  both bare type nodes AND structural type bodies like a class's
+  `ObjectTypeInfo` literal). This is also more faithful than the type literal
+  — conformance sees the instance's type — which DROPPED 8 false positives.
+- **Step 2 — value-def locals (580 → 568).** `OpStoreLocal`
+  (`eng/go/bytecode.go` + `vm.go`) plus a frame-0 promotion pre-pass
+  (`planValueDefLocals` in `eng/go/lower.go`): a single-result native-call
+  result referenced more than once — counting the program residual — is
+  promoted to a frame local. The producing event emits `STORE_LOCAL` instead
+  of leaving its result on the stack; references (rewritten in place to local
+  operands) and promoted residual values re-push via `PUSH_LOCAL`.
+- **Step 3 — dup carrier-identity (568 → 565).** A duplicating stack word
+  (`dup` `(0,0)`, `over` `(0,1,0)`) returned the same `Value.ID` for several
+  outputs; `ReturnsIdentity` now gives each output of a **repeated** source
+  index a fresh ID, leaving the source's own provenance untouched. This is
+  the dup-body case (`each [dup add]`) — a simple identity fix, no `OpDup`
+  opcode needed.
+
+**Deferred / not needed:** `OpDup` (step 3's "optional fast path") — the
+distinct-id fix made the dup body compile without it; fn-unit value-def
+promotion (the pre-pass is frame-0; no spec row needs it).
 
 **Symptom.** `stack discipline underflow at eq/cmp/deq/is` for
 `def a (make Array [1 2]) a eq a`, `(make P {}) (make P {}) eq`,
@@ -332,12 +367,14 @@ simplify).
 Each lands gate-clean (differential + full-corpus 0 divergences, race, alloc,
 lint) and lowers a ratchet monotonically.
 
-1. **Multi-result lowering (P5).** Foundational, mechanical; unlocks dup-body
-   islands + 44 refusals; the `(seq, idx)` operand model the next items reuse.
-2. **Carrier-identity for `make` + value-def locals.** Unblocks the stack-
-   discipline bucket; makes `OpDup`/`OpStoreLocal` sound.
-3. **Fn-values-on-the-stack.** Biggest refusal unlock (~148); de-islands the
-   `callDynamic` user-fn apply.
+1. **Multi-result lowering (P5).** ✅ DONE (616/29 → 598/26). Foundational,
+   mechanical; the `(seq, idx)` operand model the next items reuse.
+2. **Carrier-identity for `make` + value-def locals.** ✅ DONE (598/26 →
+   565/26). Cleared the stack-discipline bucket (make-vs-make/type via fresh
+   value carriers, value-def `OpStoreLocal`, dup distinct-ids) and dropped 8
+   false positives.
+3. **Fn-values-on-the-stack.** ← NEXT. Biggest refusal unlock (~148);
+   de-islands the `callDynamic` user-fn apply.
 4. **`case` clause compilation.** Reuses value-def locals + branch lowering.
 5. **Predicate-type operands.** Lowest leverage/effort; sequence late.
 6. **P7 deletion** — once both ratchets hit 0.
