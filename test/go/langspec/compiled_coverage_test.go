@@ -37,7 +37,7 @@ const refusalCeiling = 651 // P0 baseline (June 2026): 2671 rows, 1706 compiled,
 // at run time, so this is the second downward ratchet toward run-time
 // independence (plan): each phase that compiles an island shape natively lowers
 // it, and it must reach 0 before the OpFallback machinery can be deleted (P7).
-const islandCeiling = 115 // after P2b each/fold/scan/filter closures (June 2026); lower as more island shapes compile natively
+const islandCeiling = 112 // after P2b each/fold/scan/filter/do closures (June 2026); lower as more island shapes compile natively
 
 // normaliseReason buckets a refusal reason into a stable category by
 // stripping the row-specific tail (word names, counts), so the histogram is

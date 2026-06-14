@@ -43,6 +43,11 @@ var callableWords = map[string]callableWord{
 		e := DataListElemTypeFromValue(a[1])
 		return []Value{NewCarrier(e), NewCarrier(e)}
 	}},
+	// do [body] — runs the body with no inputs and returns its single
+	// residual value (a multi-value body nets != 1 and refuses to the island).
+	"do": {0, func(a []Value) []Value {
+		return []Value{}
+	}},
 }
 
 // compileClosureBody compiles a code body (bodyToks) consuming the given input

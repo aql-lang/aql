@@ -799,16 +799,14 @@ func TestEmitFallbackIsland(t *testing.T) {
 	}
 }
 
-// Stage 5: the island allow-set widened beyond the higher-order data
-// transforms to the body-running words do/case/where/having/order, each
-// guarded by the same core-dispatch / deeply-concrete / VM-resolvable
-// rules and gate-proven sound. A pure body islands and runs identically;
-// the splice word `word` stays OUT (not a data transform).
+// Plan P2: a single-result `do` body compiles to a CLOSURE unit (native),
+// not an island. The splice word `word` stays OUT (not a data transform) —
+// it refuses to whole-program fallback.
 func TestEmitWidenedAllowSet(t *testing.T) {
 	for _, c := range []struct {
-		src      string
-		want     any
-		isIsland bool
+		src  string
+		want any
+		isFn bool // compiles native via a closure (no island, no refusal)
 	}{
 		{`do [1 add 2]`, int64(3), true},
 		{`do [mul 2 (add 3 4)]`, int64(14), true},
@@ -817,11 +815,13 @@ func TestEmitWidenedAllowSet(t *testing.T) {
 		{`word [1 add 2]`, int64(3), false},
 	} {
 		got, reason := compile(t, c.src)
-		if c.isIsland {
+		if c.isFn {
 			if reason != "" {
-				t.Errorf("%q expected to island, refused: %s", c.src, reason)
-			} else if !strings.Contains(got, "FALLBACK") {
-				t.Errorf("%q expected a FALLBACK island:\n%s", c.src, got)
+				t.Errorf("%q expected a native closure, refused: %s", c.src, reason)
+			} else if strings.Contains(got, "FALLBACK") {
+				t.Errorf("%q expected a native closure, islanded:\n%s", c.src, got)
+			} else if !strings.Contains(got, "PUSH_CLOSURE") {
+				t.Errorf("%q expected a PUSH_CLOSURE:\n%s", c.src, got)
 			}
 		} else if reason == "" {
 			t.Errorf("%q expected refusal (whole-program fallback), but compiled:\n%s", c.src, got)

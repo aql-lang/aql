@@ -58,6 +58,7 @@ var comboParity = []string{
 	`fold [add] [1 2 3 4] 0`, `scan [add] [1 2 3]`,
 	`each [mul 2] (iota 4)`, `scan [add] (iota 4)`, // threaded receiver
 	`filter [gt 2] [1 2 3 4]`, `do [add 1 2]`,
+	`add 100 (do [mul 6 7])`, `do [1 2 3]`, // single-result do → closure; multi-result do → island (parity holds)
 	`each [add 1] (each [mul 2] (iota 3))`, // nested + threaded
 	`size (each [mul 2] [1 2 3])`,          // F4 over island result
 	`typeof (fold [add] [1 2 3] 0)`,
@@ -184,7 +185,7 @@ func TestCompiledCombinationPath(t *testing.T) {
 		// and run it through the VM (plan P2) — pure CALL_NATIVE, no island.
 		{`each [mul 2] [1 2 3]`, "native"},
 		{`each [mul 2] (iota 4)`, "native"}, // threaded data
-		{`do [add 1 2]`, "island"},          // do not yet closure-compiled
+		{`do [add 1 2]`, "native"},          // single-result do body → closure
 		// F4 over a now-native each result is itself native (no dynamic island).
 		{`size (each [mul 2] [1 2 3])`, "native"},
 		{`make Array (each [mul 2] [1 2 3])`, "native"},
