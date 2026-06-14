@@ -318,6 +318,33 @@ operand site it is a check-mode **carrier** with no recovered original, so
 
 ## `case` clause compilation (islands ~16)
 
+**Status — ATTEMPTED, REVERTED (deferred).** A token-desugar to a nested
+`if` chain (a `caseReturnsFn` calling `if3ReturnsFn` with constructed list
+args, so the branches record in the enclosing scope and nested clauses ride
+the else BODY) compiled the with-default, const-value cases and was
+**differential-clean**. Two findings worth keeping for the next attempt:
+
+- **Match faithfulness (solved).** `case` matches via `UnifyR`, which is
+  LENIENT for a bare-refine newtype — `case 5 [Pos …]` matches `Pos`
+  (`def Pos refine Integer`) — whereas `5 is Pos` is nominal-FALSE. So a
+  desugar to `is` diverges. The fix is a dedicated internal word
+  (`__casematch v m` → `UnifyR(m, v)`) that the guard emits for non-
+  predicate clauses; a code-body predicate clause `[pred]` stays `(v pred…)`.
+- **The blocker (unsolved).** Shapes the branch lowering can't take — a
+  COMPUTED case value (an event referenced in every clause → reads enclosing
+  computation inside the else fragments), a no-default tail (a 2-arg `if` →
+  variadic result) — must fall back. Detecting them needs to RUN the desugar
+  (a probe), but probing mid-recording cannot roll back cleanly: a def-only
+  `Defs.Restore` leaves guard-narrowing pollution that makes the island's
+  `bodyFreeForFallback` reject the row, and a full `RestoreForCompile` clones
+  `Types`, breaking canonical-pointer identity for the rest of the program's
+  recording. Either way ~7 previously-ISLANDED case rows turn into refusals
+  (545 → 552), failing the refusal ratchet. A clean landing needs a way to
+  classify a case as un-compilable WITHOUT running the desugar (e.g. an
+  exported "does this operand resolve to a computed event?" emitter query,
+  plus the static no-default check), so the probe is never needed for the
+  fall-back shapes.
+
 **Symptom.** `code-body word case (Stage 2)` — `case v [m1 b1 m2 b2 … default]`
 islands (a structured match/block clause list, not a single body).
 
