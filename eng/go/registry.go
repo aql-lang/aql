@@ -136,6 +136,11 @@ type Registry struct {
 	// re-entering the interpreter. Nil on a plain interpreter run, where
 	// InvokeBody falls back to a sub-engine and behaviour is unchanged. The
 	// VM installs and restores this around its run. See invoke.go.
+	//
+	// Because this is mutated (install/restore) on the shared registry for
+	// the duration of a RunProgram, a single registry cannot drive two
+	// compiled runs concurrently — see RunProgram's concurrency note. Each
+	// concurrent run needs its own *Registry (ForkConcurrent / per-instance).
 	Invoker func(body Value, inputs []Value) ([]Value, error)
 }
 
