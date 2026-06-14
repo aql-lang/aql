@@ -177,7 +177,19 @@ func (vc *vmContext) callDynamic(n int, stack []Value, curDebug []SrcPos, pc int
 		// matching the interpreter (it does not apply a non-Function).
 		return stack, nil
 	}
-	// FnDef (e.g. a method field): apply via the island sub-engine, which
+	// A trivial-delegation native method (its dispatchable sig carries a
+	// Handler) dispatches VM-NATIVE: MatchSignature picks the overload the
+	// interpreter would and the handler runs directly — no sub-engine. A
+	// non-trivial body (a user fn) falls through to the island.
+	if fnDef, ok := fnVal.Data.(FnDefInfo); ok {
+		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
+			if err != nil {
+				return nil, stampAt(err, curDebug, pc, r)
+			}
+			return append(stack[:base], results...), nil
+		}
+	}
+	// Non-trivial fn (user body): apply via the island sub-engine, which
 	// auto-applies the Function to the forward args exactly as a nested Run.
 	island := make([]Value, 0, n+1)
 	island = append(island, fnVal)
@@ -198,6 +210,35 @@ func (vc *vmContext) callDynamic(n int, stack []Value, curDebug []SrcPos, pc int
 		}
 	}
 	return append(stack[:base], results...), nil
+}
+
+// tryNativeFnApply dispatches a Function VALUE VM-native when it resolves to a
+// handler-bearing signature (a trivial-delegation native — a method field like
+// rand-int): MatchSignature over the dispatchable signatures picks the
+// overload the interpreter would, and the handler runs directly. done is false
+// when the fn has a non-trivial (user) body that needs the interpreter — the
+// caller then islands. The island stays the correctness backstop, so any
+// divergence from this fast path is caught by the differential gate.
+func (vc *vmContext) tryNativeFnApply(fnDef FnDefInfo, args []Value) ([]Value, bool, error) {
+	reg := fnDef.Registry
+	if reg == nil {
+		reg = vc.r
+	}
+	var sigs []Signature
+	if inner := reg.Lookup(fnDef.Name); inner != nil {
+		sigs = inner.Signatures
+	} else if len(fnDef.Signatures) > 0 {
+		sigs = fnDef.Signatures
+	}
+	if len(sigs) == 0 {
+		return nil, false, nil
+	}
+	mr := MatchSignature(sigs, args, WordInfo{ArgCount: len(args)})
+	if mr == nil || mr.Sig == nil || mr.Sig.Handler == nil {
+		return nil, false, nil
+	}
+	results, err := mr.Sig.Handler(mr.Args, reg.Contexts.TopData(), nil, reg)
+	return results, true, err
 }
 
 // isAppliableFn reports whether a runtime value is a callable the interpreter
