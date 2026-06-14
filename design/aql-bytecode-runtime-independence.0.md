@@ -29,10 +29,10 @@ race-clean, alloc ceilings held). The runtime-independence machinery exists:
   (compiled programs still containing an `OpFallback`). Both are downward;
   P7 is gated on both reaching **0**.
 
-Current ratchets: **565 refused / 26 islanded** (from 651 / 115 at P0;
+Current ratchets: **555 refused / 26 islanded** (from 651 / 115 at P0;
 616 / 29 before P5; 598 / 26 after P5; 580 / 26 after make carrier-identity;
-568 / 26 after value-def locals). Compiled rows 1706 → 1800, 0 divergences
-throughout.
+568 / 26 after value-def locals; 565 / 26 after dup carrier-identity).
+Compiled rows 1706 → 1810, 0 divergences throughout.
 
 ## The recorder/lowerer model (shared context for the work below)
 
@@ -264,6 +264,18 @@ the stack-form calling convention.
 
 ## Predicate-type operands (refusals ~157, "operand provenance")
 
+**Status — LANDED (565/26 → 555/26).** Both steps below shipped. Empirical
+correction: the operand is ALWAYS a carrier at the type-algebra site (step 2
+is the load-bearing half, not step 1) — `MakeDepScalarSig` is already
+`RunInCheckMode`, so `Integer gt 10` produces a concrete `DepScalar` during
+the check pass, but `toCarrier` strips its `DepScalarInfo` to a bare base
+carrier (preserving the `Value.ID`) before it reaches `tcmp`. The constructor
+now records the concrete predicate against its ID
+(`EmitState.RememberOriginal`); the same-ID strip then recovers it via
+`origByID`/`materialise`, and `isInertConst` admits `DepScalarInfo` so it
+bakes into the const pool. The "operand provenance" bucket (which is broader
+than predicate types — also generics/module/class) dropped 159 → 142.
+
 **Symptom.** `operand of unknown provenance … at tcmp/teq/lt` for
 `(Integer gt 10) tcmp (Integer gt 10)`, `(Integer gt 10) lt (Integer gt 20)`
 — type-algebra and comparison over predicate (refinement) types.
@@ -373,10 +385,14 @@ lint) and lowers a ratchet monotonically.
    565/26). Cleared the stack-discipline bucket (make-vs-make/type via fresh
    value carriers, value-def `OpStoreLocal`, dup distinct-ids) and dropped 8
    false positives.
-3. **Fn-values-on-the-stack.** ← NEXT. Biggest refusal unlock (~148);
-   de-islands the `callDynamic` user-fn apply.
-4. **`case` clause compilation.** Reuses value-def locals + branch lowering.
-5. **Predicate-type operands.** Lowest leverage/effort; sequence late.
+3. **Predicate-type operands.** ✅ DONE (565/26 → 555/26). Predicate
+   constructor records its concrete value (`RememberOriginal`); `isInertConst`
+   admits `DepScalarInfo`. (Done out of order — small, self-contained, low
+   risk — while fn-values is the larger remaining semantic item.)
+4. **Fn-values-on-the-stack.** ← NEXT. The remaining big semantic item
+   (`apply` + higher-order fn args); de-islands the `callDynamic` user-fn
+   apply. Higher risk (engine re-stepping, stack-form calling convention).
+5. **`case` clause compilation.** Reuses value-def locals + branch lowering.
 6. **P7 deletion** — once both ratchets hit 0.
 
 ## Verification discipline (unchanged contract)
