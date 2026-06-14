@@ -95,10 +95,13 @@ var comboParity = []string{
 	`def m {a: {b: {c: 7}}} m.a.b.c`,
 	`{a:1 b:2} get a`,
 
-	// --- F4: get on a dynamic (island/computed) receiver islands ---
+	// --- F4: integer-keyed get on a dynamic receiver → CALL_NATIVE_POLY
+	// (runtime sig match); atom-keyed field get stays islanded ---
 	`(make Array [10 20 30]) get 1`,
 	`(each [add 1] [1 2 3]) get 0`,
 	`get 1 (make Array [5 6 7])`,
+	`def xs [10 20 30] xs get 2`,
+	`(make Array [1 2 3]) is Array`, // typed query on a dynamic result via poly
 	// fn-value-call boundary: a map field that is a method, applied to
 	// trailing args — the interpreter auto-applies; compiled must fall
 	// back (parity holds, value matches).
@@ -195,13 +198,14 @@ func TestCompiledCombinationPath(t *testing.T) {
 		// F4 over a now-native each result is itself native (no dynamic island).
 		{`size (each [mul 2] [1 2 3])`, "native"},
 		{`make Array (each [mul 2] [1 2 3])`, "native"},
-		// F4 get on a dynamic (threaded) receiver islands.
-		{`(make Array [10 20 30]) get 1`, "island"},
-		// F4 barriered get on a literal / def-bound receiver islands via a
-		// stack-form span (`{m} get a`), the def value recovered.
+		// F4 INTEGER-keyed (sequence index) get on a dynamic receiver runtime-
+		// dispatches via CALL_NATIVE_POLY (plan P3) — never returns a method.
+		{`(make Array [10 20 30]) get 1`, "native"},
+		{`def xs [10 20 30] xs get 1`, "native"},
+		// An ATOM-keyed field get could return a Function (method); it stays on
+		// the island until the fn-value boundary lands (P4).
 		{`{a:1 b:2} get a`, "island"},
 		{`def m {a:{b:7}} m.a.b`, "island"},
-		{`def xs [10 20 30] xs get 1`, "island"},
 		// Class `make` with plain-data fields compiles (the body bakes as a
 		// const); a class with a method field must fall back.
 		{`def Point class {x:1, y:2} make Point {x:9}`, "native"},

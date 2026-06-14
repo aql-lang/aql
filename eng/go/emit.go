@@ -55,6 +55,7 @@ type emitCall struct {
 	sig  *Signature
 	ops  []emitOperand
 	pos  SrcPos
+	poly bool // dispatch via OpCallNativePoly (runtime MatchSignature)
 }
 
 // emitBranch is a recorded `if`: a resolved condition operand, the
@@ -955,6 +956,29 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	es.setProduced(outs[0], seq)
 }
 
+// RecordPolyCall records a native dispatch the checker could not commit to
+// one overload for (a dynamic operand widened to Any): the call lowers to
+// OpCallNativePoly, which re-matches the word's signatures at run time (plan
+// P3). Operands resolve normally (the dynamic one is a prior event's result);
+// returns false, leaving es untouched, when one is of unknown provenance.
+func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos) bool {
+	if !es.active() || len(outs) != 1 {
+		return false
+	}
+	ops := make([]emitOperand, len(args))
+	for i := range args {
+		op, ok := es.resolveOperand(args[i])
+		if !ok {
+			return false
+		}
+		ops[i] = op
+	}
+	es.SiteCounts[SiteDynamic]++
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, ops: ops, pos: pos, poly: true}})
+	es.setProduced(outs[0], seq)
+	return true
+}
+
 // RecordClosureCall records a higher-order word's dispatch where the code BODY
 // at position bodyPos was compiled to closure unit `unit` (plan P2). The body
 // operand lowers to OpPushClosure (the handler invokes it through the VM via
@@ -1521,13 +1545,21 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 	default:
 		return "operand shape at " + c.word + " beyond Stage 1"
 	}
-	si, ok := lw.sigIdx[c.sig]
-	if !ok {
-		lw.p.Sigs = append(lw.p.Sigs, SigRef{Word: c.word, Sig: c.sig})
-		si = len(lw.p.Sigs) - 1
-		lw.sigIdx[c.sig] = si
+	if c.poly {
+		// Runtime-matched dispatch: no baked sig, the VM re-matches over the
+		// word's signatures against the n stack values.
+		pi := len(lw.p.PolyRefs)
+		lw.p.PolyRefs = append(lw.p.PolyRefs, PolyRef{Word: c.word, Arity: n})
+		lw.emit(OpCallNativePoly, pi, c.pos)
+	} else {
+		si, ok := lw.sigIdx[c.sig]
+		if !ok {
+			lw.p.Sigs = append(lw.p.Sigs, SigRef{Word: c.word, Sig: c.sig})
+			si = len(lw.p.Sigs) - 1
+			lw.sigIdx[c.sig] = si
+		}
+		lw.emit(OpCallNative, si, c.pos)
 	}
-	lw.emit(OpCallNative, si, c.pos)
 	lw.vm = lw.vm[:len(lw.vm)-n]
 	lw.vm = append(lw.vm, ev.seq)
 	lw.note()

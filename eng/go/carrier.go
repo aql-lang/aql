@@ -379,10 +379,62 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 		}
 	}
 	if !tryRecordClosure(r, word, sig, args, out, pos) &&
+		!tryRecordPoly(r, word, sig, args, out, pos) &&
 		!tryRecordFallback(r, word, sig, args, out, pos) {
 		r.Check.Emit.RecordCall(word, sig, args, out, pos)
 	}
 	return out
+}
+
+// tryRecordPoly records a genuinely-dynamic typed dispatch (get/size/is/
+// make/typeof/type-algebra over an Any-widened operand) as an
+// OpCallNativePoly that re-matches the word's signatures at run time — the
+// SAME first-match the interpreter takes — instead of islanding through a
+// sub-engine (plan P3). Returns false (leaving the island path) for a
+// concrete-operand call, a non-core sig, or an operand of unknown provenance.
+func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
+	es := r.Check.Emit
+	if !es.active() || sig == nil || len(outs) != 1 {
+		return false
+	}
+	if !islandPureWords[word] || fallbackWords[word] {
+		return false
+	}
+	// Only a genuinely dynamic dispatch (the case that islands today). A
+	// concrete-operand call lowers to a faithful baked CALL_NATIVE.
+	if !anyDynamicCarrier(args) && !anyDynamicCarrier(outs) {
+		return false
+	}
+	// get/getr over a Map/Object/Module receiver can return a Function FIELD
+	// (a method) that the interpreter AUTO-APPLIES — `r.bool` → the rand-bool
+	// method applied to no args. The poly dispatch runs only the get (no
+	// auto-apply), leaving the Function unapplied (a divergence; the
+	// fn-value-call boundary is P4). An INTEGER-keyed get is a sequence INDEX
+	// (List/Array) and only ever yields an element, never a method, so poly
+	// is safe; an Atom-keyed field/method access stays on the island, which
+	// re-runs the full dispatch (auto-apply included).
+	if (word == "get" || word == "getr") && (len(args) == 0 || !args[0].Parent.ConformsTo(TInteger)) {
+		return false
+	}
+	// CORE-dispatch guard: the matched sig must be the word's main-registry
+	// binding, since the runtime MatchSignature re-matches over r.Lookup's
+	// signatures (a module-qualified sub-registry sig would re-run the core
+	// word of that name).
+	fn := r.Lookup(word)
+	if fn == nil {
+		return false
+	}
+	sigOK := false
+	for i := range fn.Signatures {
+		if &fn.Signatures[i] == sig {
+			sigOK = true
+			break
+		}
+	}
+	if !sigOK {
+		return false
+	}
+	return es.RecordPolyCall(word, args, outs, pos)
 }
 
 // fallbackWords is the allow-set of code-body higher-order words that

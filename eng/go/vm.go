@@ -110,6 +110,45 @@ func (vc *vmContext) invokeClosure(body Value, inputs []Value) ([]Value, error) 
 	return vc.run(cl.Unit, locals, nil)
 }
 
+// callPoly dispatches a native word by matching the kernel's own
+// MatchSignature over the word's signatures against the top Arity stack
+// values — the same first-match the interpreter takes — then calls the
+// matched handler (plan P3). A no-match raises signature_error, the same
+// taxonomy the interpreter's sigError raises.
+func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	r := vc.r
+	n := pr.Arity
+	if len(stack) < n {
+		return nil, vmErrAt(curDebug, pc, "CALL_NATIVE_POLY underflow at "+pr.Word)
+	}
+	var sigs []Signature
+	if fn := r.Lookup(pr.Word); fn != nil {
+		sigs = fn.Signatures
+	}
+	// Build the args in sig order (position 0 = top of stack, as OpCallNative
+	// does), then match: MatchSignature's positionalMatch reads values[i] as
+	// sig position i.
+	window := make([]Value, n)
+	for i := 0; i < n; i++ {
+		window[i] = stack[len(stack)-1-i]
+	}
+	mr := MatchSignature(sigs, window, WordInfo{ArgCount: n})
+	if mr == nil || mr.Sig == nil || mr.Sig.Handler == nil {
+		return nil, stampAt(makeAqlError("signature_error", "no matching signature for "+pr.Word, pr.Word, r.Source, ""), curDebug, pc, r)
+	}
+	results, err := mr.Sig.Handler(mr.Args, r.Contexts.TopData(), nil, r)
+	if err != nil {
+		return nil, stampAt(err, curDebug, pc, r)
+	}
+	for _, rv := range results {
+		if IsWord(rv) || IsMark(rv) || IsMove(rv) || IsForward(rv) ||
+			IsOpenParen(rv) || IsSplice(rv) {
+			return nil, vmErrAt(curDebug, pc, "tape-coupled poly result at "+pr.Word)
+		}
+	}
+	return append(stack[:len(stack)-n], results...), nil
+}
+
 // runFallback executes one interpreter island (OpFallback): it preloads the
 // NIn threaded inputs (deepest-first) then the recorded span tokens onto a
 // reused sub-engine, runs it, and returns the operand stack with the island's
@@ -298,6 +337,12 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			stack = append(stack, results...)
 		case OpFallback:
 			ns, err := vc.runFallback(&p.Fallbacks[in.Arg], stack, curDebug, pc)
+			if err != nil {
+				return nil, err
+			}
+			stack = ns
+		case OpCallNativePoly:
+			ns, err := vc.callPoly(&p.PolyRefs[in.Arg], stack, curDebug, pc)
 			if err != nil {
 				return nil, err
 			}

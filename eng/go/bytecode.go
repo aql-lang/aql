@@ -84,6 +84,15 @@ const (
 	// take their captures from the operand stack below the closure (not
 	// yet emitted; capture-free bodies only for now).
 	OpPushClosure
+	// OpCallNativePoly dispatches PolyRefs[Arg].Word at RUN time: it runs
+	// the kernel's own MatchSignature over the word's signatures against the
+	// Arity values on top of the stack — the SAME first-match the
+	// interpreter takes — then calls the matched handler. Used where the
+	// checker could not commit to one overload (a dynamic operand the
+	// checker widened to Any), so the VM selects faithfully at run time
+	// instead of islanding through a sub-engine (plan P3). Pops Arity,
+	// pushes one result; a no-match raises signature_error.
+	OpCallNativePoly
 )
 
 func (o Opcode) String() string {
@@ -116,8 +125,18 @@ func (o Opcode) String() string {
 		return "FALLBACK"
 	case OpPushClosure:
 		return "PUSH_CLOSURE"
+	case OpCallNativePoly:
+		return "CALL_NATIVE_POLY"
 	}
 	return fmt.Sprintf("OP(%d)", uint8(o))
+}
+
+// PolyRef names one runtime-dispatched native call: the word and the arity
+// (operand count) the checker fixed at the call site. OpCallNativePoly runs
+// MatchSignature over the word's signatures against that many stack values.
+type PolyRef struct {
+	Word  string
+	Arity int
 }
 
 // ClosurePayload is a runtime fn VALUE backed by a compiled body unit:
@@ -176,6 +195,7 @@ type Program struct {
 	Consts    []Value
 	Types     []TypeRef
 	Sigs      []SigRef
+	PolyRefs  []PolyRef
 	Fallbacks []FallbackSpan
 	Fns       []CompiledFn
 	Debug     []SrcPos // 1:1 with Code
@@ -271,6 +291,9 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 			fmt.Fprintf(sb, " f%-3d ; %s/%d", in.Arg, p.Fns[in.Arg].Name, p.Fns[in.Arg].NParams)
 		case OpPushClosure:
 			fmt.Fprintf(sb, " f%-3d ; closure %s/%d", in.Arg, p.Fns[in.Arg].Name, p.Fns[in.Arg].NParams)
+		case OpCallNativePoly:
+			pr := p.PolyRefs[in.Arg]
+			fmt.Fprintf(sb, " p%-3d ; %s/%d (poly)", in.Arg, pr.Word, pr.Arity)
 		}
 		sb.WriteByte('\n')
 	}
