@@ -774,6 +774,12 @@ race-clean, alloc ceilings held):
 Ratchets now: **616 refused / 29 islanded** (islands 115 → 29 — the atom-keyed
 get bucket eliminated). Compiled rows 1706 → 1741.
 
+**The remaining work (P5–P7) is specified in detail in
+`design/aql-bytecode-runtime-independence.0.md`** — multi-result lowering,
+carrier-identity for `make` + value-def locals, fn-values-on-the-stack
+(`apply`), predicate-type operands, `case` clause compilation, and the final
+fallback deletion, each with root cause, plan, files, risk, and sequencing.
+
 **Remaining buckets (each a dedicated unit, root cause identified):**
 
 - **Predicate-type operands (~157, "operand provenance").** Type-algebra
