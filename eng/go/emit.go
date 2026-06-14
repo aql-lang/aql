@@ -56,9 +56,16 @@ const (
 // opClosure the single idx field carries the kind-specific index/seq; the
 // constructors below are the only construction sites for the indexed kinds, so
 // the kind↔idx pairing can never drift.
+//
+// resIdx is meaningful only for opEvent (P5 multi-result lowering): it names
+// WHICH of the producing event's results this operand is. A single-result
+// event uses resIdx 0; a multi-result call (e.g. `swap`, a multi-return fn)
+// distinguishes its N outputs by 0..N-1, matching the order the VM pushes the
+// handler's results (results[0] deepest, results[N-1] on top).
 type emitOperand struct {
-	kind operandKind
-	idx  int
+	kind   operandKind
+	idx    int
+	resIdx int
 	// closureUnit indexes Program.Fns and lowers to OpPushClosure (plan P2);
 	// closureCaps are the body's lexical captures, resolved in the ENCLOSING
 	// scope and pushed (in CapturedBinding order) just before OpPushClosure,
@@ -69,16 +76,26 @@ type emitOperand struct {
 }
 
 // constOperand / eventOperand / localOperand / typeOperand build the indexed
-// operand kinds — the only places that pair a kind with its idx.
-func constOperand(idx int) emitOperand  { return emitOperand{kind: opConst, idx: idx} }
-func eventOperand(seq int) emitOperand  { return emitOperand{kind: opEvent, idx: seq} }
+// operand kinds — the only places that pair a kind with its idx. eventOperand
+// additionally carries the result index within the producing event (P5).
+func constOperand(idx int) emitOperand { return emitOperand{kind: opConst, idx: idx} }
+func eventOperand(seq, resIdx int) emitOperand {
+	return emitOperand{kind: opEvent, idx: seq, resIdx: resIdx}
+}
 func localOperand(slot int) emitOperand { return emitOperand{kind: opLocal, idx: slot} }
 func typeOperand(idx int) emitOperand   { return emitOperand{kind: opType, idx: idx} }
+
+// producer locates a recorded value: the producing event's seq and which of
+// that event's results it is (idx 0 for the common single-result case). P5
+// generalised producedBy from a bare seq so a multi-result call's N outputs
+// stay distinguishable when a downstream operand resolves one of them.
+type producer struct{ seq, idx int }
 
 type emitCall struct {
 	word string
 	sig  *Signature
 	ops  []emitOperand
+	nout int // number of results the call pushes (0 for a side-effect word, N for multi-result)
 	pos  SrcPos
 	poly bool // dispatch via OpCallNativePoly (runtime MatchSignature)
 }
@@ -188,8 +205,8 @@ type EmitState struct {
 	units      []*emitUnit    // units[0] = top level; fn compilations push
 	fnUnits    map[string]int // fn memo key → Program.Fns index
 	fnRecs     []*fnUnitRec
-	producedBy map[string]int // value ID → producing event seq
-	typeOut    map[int]bool   // event seq → its output is itself a type body
+	producedBy map[string]producer // value ID → producing (event seq, result idx)
+	typeOut    map[int]bool        // event seq → its output is itself a type body
 	consts     []Value
 	constIdx   map[string]int // CanonValue → Consts index
 	types      []TypeRef
@@ -240,7 +257,7 @@ func NewEmitState() *EmitState {
 		frames:     [][]emitEvent{nil},
 		units:      []*emitUnit{{localByID: map[string]int{}}},
 		fnUnits:    map[string]int{},
-		producedBy: map[string]int{},
+		producedBy: map[string]producer{},
 		typeOut:    map[int]bool{},
 		constIdx:   map[string]int{},
 		typeIdx:    map[string]int{},
@@ -348,7 +365,17 @@ func (es *EmitState) appendEvent(ev emitEvent) int {
 // type operand (`(make Point {}) is Point`) would otherwise resolve
 // the `Point` literal to the make event.
 func (es *EmitState) setProduced(out Value, seq int) {
-	es.producedBy[out.ID] = seq
+	es.setProducedAt(out, seq, 0)
+}
+
+// setProducedAt is setProduced for the idx-th result of a multi-result event
+// (P5). idx 0 is the single-result case. When two outputs share an ID — a
+// stack word like `dup` returns `[args[0], args[0]]`, both the same Value —
+// the LAST registration wins; the lowerer's operand layout then refuses the
+// ambiguous consume (sound: the program falls back) until carrier-identity
+// (the next runtime-independence item) mints distinct ids.
+func (es *EmitState) setProducedAt(out Value, seq, idx int) {
+	es.producedBy[out.ID] = producer{seq: seq, idx: idx}
 	if IsTypeBody(out) {
 		es.typeOut[seq] = true
 	}
@@ -363,13 +390,13 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	// agree), and the event is then the value's stack-discipline truth
 	// — the branch pushed it. A plain param/iterator reference has no
 	// producing event and resolves to its local slot.
-	if idx, ok := es.producedBy[v.ID]; ok {
+	if pr, ok := es.producedBy[v.ID]; ok {
 		// A type operand whose ID matches a producing event whose own
 		// output was NOT a type is an ID collision (a `make` result
 		// inheriting the type literal's ID): resolve it as its own type
 		// operand / const below, not the unrelated event.
-		if !IsTypeBody(v) || es.typeOut[idx] {
-			return eventOperand(idx), true
+		if !IsTypeBody(v) || es.typeOut[pr.seq] {
+			return eventOperand(pr.seq, pr.idx), true
 		}
 	}
 	if slot, ok := es.units[len(es.units)-1].localByID[v.ID]; ok {
@@ -708,8 +735,8 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 		// compile. Negligible at current fn densities; revisit (e.g. track
 		// per-unit produced IDs) if deeply nested fn-heavy programs make
 		// compile time bite.
-		for id, seq := range es.producedBy {
-			if seq > rec.frag.startSeq {
+		for id, pr := range es.producedBy {
+			if pr.seq > rec.frag.startSeq {
 				delete(es.producedBy, id)
 			}
 		}
@@ -949,11 +976,15 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	case word == "continue" && len(outs) == 0:
 		es.appendEvent(emitEvent{kind: evContinue, call: emitCall{word: word, pos: pos}})
 		return
-	case len(outs) != 1:
-		es.SiteCounts[SiteMeta]++
-		es.MarkUncompilable(word + " returns " + itoaSmall(len(outs)) + " values (Stage 1 lowers single-result calls)")
-		return
 	}
+	// P5 multi-result lowering: a 0-result side-effect word (set/raise/drop/
+	// printstr/sleep…) or a genuine N-result word records like any call — the
+	// VM's OpCallNative already pushes every handler result, so no VM change is
+	// needed. MUTATION-SAFETY (load-bearing, see isInertConst): the only
+	// 0-result words are in-place mutators on Array/Object/Store/context
+	// receivers, and those instance types are NOT const-bakeable (absent from
+	// isInertConst's whitelist), so a pooled compound const can never reach one
+	// — the receiver is always a computed event or a frame local.
 	// Function-valued operands mean a fn-invoking word (apply, usurp,
 	// higher-order forms): their handlers return values the ENGINE
 	// re-steps on the tape, which a VM cannot honour. Stage 3
@@ -982,8 +1013,10 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		ops[i] = op
 	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, pos: pos}})
-	es.setProduced(outs[0], seq)
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos}})
+	for i := range outs {
+		es.setProducedAt(outs[i], seq, i)
+	}
 }
 
 // RecordPolyCall records a native dispatch the checker could not commit to
@@ -1004,7 +1037,7 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos)
 		ops[i] = op
 	}
 	es.SiteCounts[SiteDynamic]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, ops: ops, pos: pos, poly: true}})
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, ops: ops, nout: 1, pos: pos, poly: true}})
 	es.setProduced(outs[0], seq)
 	return true
 }
@@ -1042,7 +1075,7 @@ func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value
 		ops[i] = op
 	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, pos: pos}})
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: 1, pos: pos}})
 	es.setProduced(outs[0], seq)
 	return true
 }
@@ -1174,11 +1207,13 @@ func typeBodyConstOK(v Value) bool {
 // including each iteration of a loop, so it must never reach a word that
 // mutates it in place. That holds because the whitelist admits only
 // immutable shapes: the mutable containers (Array/Object/Store instances)
-// are absent, so their constructors never produce an inert const, and the
-// in-place mutators (Array/Object/Store `set`) return 0 values, which
-// RecordCall refuses (it lowers only single-result calls). Map/List `set`
-// is copy-returning. If a future stage compiles 0-result words, re-audit
-// this: an in-place mutator reaching a pooled compound const would corrupt
+// are absent, so their constructors never produce an inert const. The
+// in-place mutators (Array/Object/Store `set`) return 0 values and DO now
+// compile (P5 multi-result lowering), but their receiver is always a
+// computed event (the constructor) or a frame local — never a pooled const,
+// precisely because those instance types are absent here. Map/List `set` is
+// copy-returning. Keep this whitelist free of mutable instance types: adding
+// one would let a pooled compound const reach an in-place mutator and corrupt
 // it across iterations.
 func isInertConst(v Value) bool {
 	if v.Carrier || v.Dynamic || IsBareTypeNode(v) {
@@ -1276,11 +1311,11 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	vi := 0
 	tail := []emitOperand{}
 	for _, rv := range residual {
-		if seq, ok := es.producedBy[rv.ID]; ok {
+		if pr, ok := es.producedBy[rv.ID]; ok {
 			if len(tail) > 0 {
 				return nil, "residual shape beyond Stage 1 (call result above a literal)", false
 			}
-			if vi >= len(lw.vm) || lw.vm[vi] != seq {
+			if vi >= len(lw.vm) || lw.vm[vi].seq != pr.seq || lw.vm[vi].idx != pr.idx {
 				return nil, "residual shape beyond Stage 1 (call results reordered)", false
 			}
 			vi++
@@ -1337,7 +1372,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		}
 		switch {
 		case rec.hasOut && rec.outOp.kind == opEvent:
-			if len(flw.vm) != 1 || flw.vm[0] != rec.outOp.idx {
+			if len(flw.vm) != 1 || !slotIs(flw.vm[0], rec.outOp) {
 				return nil, "fn " + rec.name + ": body leaves extra values (Stage 3 lowers single-result bodies)", false
 			}
 			flw.emit(OpRet, 0, rec.pos)

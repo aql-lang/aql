@@ -31,7 +31,7 @@ func (lw *lowerer) lowerLoop(ev *emitEvent) string {
 		if lw.variadic[lp.end.idx] {
 			return "loop results as a loop bound (Stage 2)"
 		}
-		if len(lw.vm) == 0 || lw.vm[len(lw.vm)-1] != lp.end.idx {
+		if len(lw.vm) == 0 || !slotIs(lw.vm[len(lw.vm)-1], lp.end) {
 			return "for: count is not on top of the stack"
 		}
 		lw.pushOperand(lp.step, lp.pos) // [end step]
@@ -63,7 +63,7 @@ func (lw *lowerer) lowerLoop(ev *emitEvent) string {
 	for _, h := range endHoles {
 		(*lw.code)[h].Arg = int32(endPC)
 	}
-	lw.vm = append(lw.vm, ev.seq)
+	lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
 	lw.variadic[ev.seq] = true
 	lw.note()
 	return ""
@@ -85,10 +85,27 @@ type lowerer struct {
 	code     *[]Instr  // current emission target (main or one fn unit)
 	debug    *[]SrcPos // 1:1 with code
 	sigIdx   map[*Signature]int
-	vm       []int
+	vm       []vmSlot
 	variadic map[int]bool // loop seqs: N runtime values, not one
 	loops    []loopCtx
 	maxDepth int
+}
+
+// vmSlot is one entry on the lowerer's simulated operand stack: the producing
+// event seq and which of that event's results it is (P5 multi-result lowering).
+// A const / local / type / closure push uses seq=-1 (no producing event); a
+// single-result event uses idx 0; a multi-result call pushes one slot per
+// result, idx 0..N-1 deepest-first.
+type vmSlot struct{ seq, idx int }
+
+// nonEventSlot is the simulated-stack entry for a freshly pushed const / local
+// / type / closure value — no producing event (seq -1).
+var nonEventSlot = vmSlot{seq: -1}
+
+// slotIs reports whether a simulated-stack slot is the value an event operand
+// names: same producing event seq AND same result index.
+func slotIs(slot vmSlot, op emitOperand) bool {
+	return slot.seq == op.idx && slot.idx == op.resIdx
 }
 
 // pushOperand emits the push for a const, local, or type operand.
@@ -101,7 +118,7 @@ func (lw *lowerer) pushOperand(op emitOperand, pos SrcPos) {
 		}
 		lw.emit(OpPushClosure, op.closureUnit, pos)
 		lw.vm = lw.vm[:len(lw.vm)-len(op.closureCaps)]
-		lw.vm = append(lw.vm, -1)
+		lw.vm = append(lw.vm, nonEventSlot)
 		lw.note()
 		return
 	}
@@ -115,7 +132,7 @@ func (lw *lowerer) pushOperand(op emitOperand, pos SrcPos) {
 	default: // opConst
 		lw.emit(OpPushConst, op.idx, pos)
 	}
-	lw.vm = append(lw.vm, -1)
+	lw.vm = append(lw.vm, nonEventSlot)
 	lw.note()
 }
 
@@ -231,7 +248,7 @@ func (lw *lowerer) layoutOperands(ops []emitOperand, pos SrcPos, msg layoutMsgs)
 		}
 	case 1:
 		ri := results[0]
-		if len(lw.vm) == 0 || lw.vm[len(lw.vm)-1] != ops[ri].idx {
+		if len(lw.vm) == 0 || !slotIs(lw.vm[len(lw.vm)-1], ops[ri]) {
 			return msg.resultNotTop
 		}
 		// The prior result is on top. Push the const operands deepest-first;
@@ -258,9 +275,9 @@ func (lw *lowerer) layoutOperands(ops []emitOperand, pos SrcPos, msg layoutMsgs)
 		}
 		top, below := lw.vm[len(lw.vm)-1], lw.vm[len(lw.vm)-2]
 		switch {
-		case top == ops[0].idx && below == ops[1].idx:
+		case slotIs(top, ops[0]) && slotIs(below, ops[1]):
 			// already in layout
-		case top == ops[1].idx && below == ops[0].idx:
+		case slotIs(top, ops[1]) && slotIs(below, ops[0]):
 			lw.swapTop2(pos)
 		default:
 			return msg.notAdjacent
@@ -300,7 +317,12 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 		lw.emit(OpCallNative, si, c.pos)
 	}
 	lw.vm = lw.vm[:len(lw.vm)-n]
-	lw.vm = append(lw.vm, ev.seq)
+	// Push one simulated slot per result the call leaves (P5): 0 for a
+	// side-effect word, N for a multi-result word — idx 0..N-1 deepest-first,
+	// matching the VM's append of the handler's results (results[N-1] on top).
+	for i := 0; i < c.nout; i++ {
+		lw.vm = append(lw.vm, vmSlot{seq: ev.seq, idx: i})
+	}
 	lw.note()
 	return ""
 }
@@ -328,7 +350,7 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, pos SrcPo
 		if lw.variadic[out.idx] {
 			return "loop results as a branch/body result (Stage 2)"
 		}
-		if len(lw.vm) != 1 || lw.vm[0] != out.idx {
+		if len(lw.vm) != 1 || !slotIs(lw.vm[0], *out) {
 			return "branch leaves extra values (Stage 2 lowers single-result branches)"
 		}
 	default:
@@ -394,7 +416,7 @@ func (lw *lowerer) lowerUserCall(ev *emitEvent) string {
 	}
 	lw.emit(OpCallUser, uc.unit, uc.pos)
 	lw.vm = lw.vm[:len(lw.vm)-n]
-	lw.vm = append(lw.vm, ev.seq)
+	lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
 	lw.note()
 	return ""
 }
@@ -414,7 +436,7 @@ func (lw *lowerer) lowerFallback(ev *emitEvent) string {
 	switch len(fb.ins) {
 	case 0:
 		lw.emit(OpFallback, fb.spanIdx, fb.pos)
-		lw.vm = append(lw.vm, ev.seq)
+		lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
 		lw.note()
 		return ""
 	case 1:
@@ -425,7 +447,7 @@ func (lw *lowerer) lowerFallback(ev *emitEvent) string {
 			}
 			// The computed value is already on top of the simulated
 			// stack; OpFallback consumes it as the threaded input.
-			if len(lw.vm) == 0 || lw.vm[len(lw.vm)-1] != op.idx {
+			if len(lw.vm) == 0 || !slotIs(lw.vm[len(lw.vm)-1], op) {
 				return "stack discipline: fallback input is not on top"
 			}
 		} else {
@@ -434,7 +456,7 @@ func (lw *lowerer) lowerFallback(ev *emitEvent) string {
 		}
 		lw.emit(OpFallback, fb.spanIdx, fb.pos)
 		lw.vm = lw.vm[:len(lw.vm)-1]
-		lw.vm = append(lw.vm, ev.seq)
+		lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
 		lw.note()
 		return ""
 	default:
@@ -492,7 +514,7 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 			return reason
 		}
 		if br.hasThenOut {
-			lw.vm = append(lw.vm, ev.seq)
+			lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
 			lw.note()
 		}
 		return ""
@@ -512,7 +534,7 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 		if lw.variadic[br.cond.idx] {
 			return "loop results as a condition (Stage 2)"
 		}
-		if len(lw.vm) == 0 || lw.vm[len(lw.vm)-1] != br.cond.idx {
+		if len(lw.vm) == 0 || !slotIs(lw.vm[len(lw.vm)-1], br.cond) {
 			return "if: condition is not on top of the stack"
 		}
 		jf := lw.emit(OpJmpIfFalse, 0, br.pos)
@@ -545,7 +567,7 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 	if !br.hasElse {
 		// 2-arg if: false path jumps straight to the merge.
 		(*lw.code)[jf].Arg = int32(len(*lw.code))
-		lw.vm = append(lw.vm, ev.seq)
+		lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
 		lw.variadic[ev.seq] = true
 		lw.note()
 		return ""
@@ -568,15 +590,8 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 		(*lw.code)[jend].Arg = int32(len(*lw.code))
 	}
 	if br.hasThenOut || br.hasElsOut {
-		lw.vm = append(lw.vm, ev.seq)
+		lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
 		lw.note()
 	}
 	return ""
-}
-
-func itoaSmall(n int) string {
-	if n >= 0 && n < 10 {
-		return string(rune('0' + n))
-	}
-	return "many"
 }

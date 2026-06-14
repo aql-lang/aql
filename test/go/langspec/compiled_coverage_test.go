@@ -30,14 +30,14 @@ import (
 // row is not a statically-invalid check-diagnostics row). The runtime-
 // independence phases lower it monotonically; it must reach 0 before the
 // interpreter fallback can be deleted (plan P7). Never raise it.
-const refusalCeiling = 616 // P0 651 -> P3 642 -> wide poly 618 -> P4 CALL_DYNAMIC (fn-value apply) 616
+const refusalCeiling = 598 // P0 651 -> P3 642 -> wide poly 618 -> P4 CALL_DYNAMIC (fn-value apply) 616 -> P5 multi/0-result calls 598
 
 // islandCeiling is the maximum number of compiled programs allowed to embed an
 // interpreter island (OpFallback). Islands re-enter the interpreter sub-engine
 // at run time, so this is the second downward ratchet toward run-time
 // independence (plan): each phase that compiles an island shape natively lowers
 // it, and it must reach 0 before the OpFallback machinery can be deleted (P7).
-const islandCeiling = 29 // atom-keyed gets 102->36; fold-no-init + filter (dynamic-output) closures 36->29; lower as more island shapes compile natively
+const islandCeiling = 26 // atom-keyed gets 102->36; fold-no-init + filter (dynamic-output) closures 36->29; P5 multi/0-result calls 29->26; lower as more island shapes compile natively
 
 // normaliseReason buckets a refusal reason into a stable category by
 // stripping the row-specific tail (word names, counts), so the histogram is

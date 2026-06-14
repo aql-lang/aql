@@ -31,7 +31,7 @@ func TestOperandConstructors(t *testing.T) {
 		idx  int
 	}{
 		{"const", constOperand(7), opConst, 7},
-		{"event", eventOperand(3), opEvent, 3},
+		{"event", eventOperand(3, 0), opEvent, 3},
 		{"local", localOperand(2), opLocal, 2},
 		{"type", typeOperand(5), opType, 5},
 	}

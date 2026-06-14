@@ -29,8 +29,8 @@ race-clean, alloc ceilings held). The runtime-independence machinery exists:
   (compiled programs still containing an `OpFallback`). Both are downward;
   P7 is gated on both reaching **0**.
 
-Current ratchets: **616 refused / 29 islanded** (from 651 / 115 at P0).
-Compiled rows 1706 → 1741, 0 divergences throughout.
+Current ratchets: **598 refused / 26 islanded** (from 651 / 115 at P0;
+616 / 29 before P5). Compiled rows 1706 → 1759, 0 divergences throughout.
 
 ## The recorder/lowerer model (shared context for the work below)
 
@@ -53,6 +53,30 @@ and the stack-discipline item.
 ---
 
 ## P5 — Multi-result lowering (refusals ~44 + dup-body islands)
+
+**Status — partially landed (616/29 → 598/26).** The `(seq, idx)` foundation
+(steps 1–3 below) plus **0-result and N-result native calls** landed
+gate-clean: `producedBy` is now `map[string]producer{seq,idx}`, the lowerer's
+simulated stack is `[]vmSlot{seq,idx}`, an `emitOperand` carries a `resIdx`,
+and `RecordCall` records side-effect (`set`/`raise`/`drop`/`printstr`/`sleep`)
+and genuine multi-result words instead of refusing `len(outs) != 1`. The
+empirical breakdown corrected the plan's framing: the "multi-result" refusal
+bucket (34 rows) was dominated by **0-result** side-effect calls, not N-output
+calls — those drove most of the −18 refusals.
+
+**Deferred (still refused, soundly):**
+
+- **Multi-RETURN / 0-return fns** (step 4 — the "multi-return fn" bucket, ~10
+  rows): `StartFnCompile` still requires exactly one declared return; the fn
+  unit's single `outOp` and `RecordUserCall`'s single `out` need generalising
+  to N results, and `Finalize`'s fn-unit RET check to N (`OpRet` already loops
+  over `Returns`). Mechanical follow-on on the same `(seq, idx)` base.
+- **dup-body islands** (`each [dup add]`): `dup` returns `[args[0], args[0]]` —
+  the SAME `Value.ID` twice (`spliceMatchResults` does not re-mint), so the two
+  outputs collapse in the ID-keyed `producedBy` and the operand layout refuses
+  the consume as "not adjacent." This is the **carrier-identity** item's
+  territory (the next section): a multiply-emitted identical value needs
+  distinct ids (or a value-def local / `DUP`), not the `(seq, idx)` machinery.
 
 **Symptom.** `X returns N values (Stage 1 lowers single-result calls)`
 (`emit.go::RecordCall`, `len(outs) != 1`), `fn … without exactly one declared
