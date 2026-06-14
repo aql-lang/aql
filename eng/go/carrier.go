@@ -397,13 +397,45 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	if !es.active() || sig == nil || len(outs) != 1 {
 		return false
 	}
-	if !islandPureWords[word] || fallbackWords[word] {
+	// Code-body higher-order words compile to closures, not poly.
+	if fallbackWords[word] {
 		return false
 	}
-	// Only a genuinely dynamic dispatch (the case that islands today). A
-	// concrete-operand call lowers to a faithful baked CALL_NATIVE.
+	// Only a REGISTERED builtin native — never a user-def fn or a usurp/ref
+	// wrapper (`def ifu (usurp if)`), whose dispatch re-steps tokens and
+	// returns tape-coupled values the VM cannot push. The runtime
+	// MatchSignature re-dispatches over the builtin's own signatures.
+	if !r.IsBuiltinWord(word) {
+		return false
+	}
+	// Only a genuinely dynamic dispatch (the case the checker could not
+	// commit to one overload — an island or a refusal today). A fully
+	// concrete call lowers to a faithful baked CALL_NATIVE.
 	if !anyDynamicCarrier(args) && !anyDynamicCarrier(outs) {
 		return false
+	}
+	// Shapes the VM re-match cannot faithfully dispatch: code bodies,
+	// quoted/meta operands, user-fn frames, full-stack words, compile-time
+	// words. (islandPureWords/get pass these — get's key is its only
+	// QuoteArg and is handled below.)
+	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode || len(sig.NoEvalArgs) > 0 {
+		return false
+	}
+	if len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" {
+		return false
+	}
+	// A fn-valued operand or result means a fn-invoking / fn-returning word
+	// (apply/usurp, an atom-keyed method get): the value would need dynamic
+	// INVOCATION (the fn-value-call boundary, P4). Keep those out of poly.
+	for _, t := range sig.Args {
+		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
+			return false
+		}
+	}
+	for _, a := range args {
+		if _, ok := a.Data.(FnDefInfo); ok {
+			return false
+		}
 	}
 	// get/getr over a Map/Object/Module receiver can return a Function FIELD
 	// (a method) that the interpreter AUTO-APPLIES — `r.bool` → the rand-bool

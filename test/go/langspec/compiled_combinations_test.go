@@ -102,6 +102,11 @@ var comboParity = []string{
 	`get 1 (make Array [5 6 7])`,
 	`def xs [10 20 30] xs get 2`,
 	`(make Array [1 2 3]) is Array`, // typed query on a dynamic result via poly
+	// dynamic-INPUT poly: a builtin native over a dynamic operand re-matches
+	// its signature at run time (plan P3/P4 widening) instead of refusing.
+	`add (do [add 1 2]) 10`,
+	`mul 2 (do [mul 2 3])`,
+	`size (do [iota 5])`,
 	// fn-value-call boundary: a map field that is a method, applied to
 	// trailing args — the interpreter auto-applies; compiled must fall
 	// back (parity holds, value matches).
