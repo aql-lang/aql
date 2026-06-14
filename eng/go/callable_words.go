@@ -30,12 +30,15 @@ var callableWords = map[string]callableWord{
 		return []Value{NewCarrier(DataListElemTypeFromValue(a[1]))}
 	}},
 	// fold [body] data init — body sees (accumulator, element). InvokeBody
-	// supplies [acc, elem]; acc generalises to the init's type.
+	// supplies [acc, elem]; acc generalises to the init's type, or (no-init
+	// 2-arg form) to the element type, since the accumulator starts as the
+	// first element.
 	"fold": {0, func(a []Value) []Value {
-		if len(a) < 3 {
-			return nil
+		elem := DataListElemTypeFromValue(a[1])
+		if len(a) >= 3 {
+			return []Value{NewCarrier(a[2].Parent), NewCarrier(elem)}
 		}
-		return []Value{NewCarrier(a[2].Parent), NewCarrier(DataListElemTypeFromValue(a[1]))}
+		return []Value{NewCarrier(elem), NewCarrier(elem)}
 	}},
 	// scan [body] data — body sees (accumulator, element); the accumulator
 	// starts as the first element, so both inputs carry the element type.

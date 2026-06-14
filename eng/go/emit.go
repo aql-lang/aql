@@ -989,8 +989,15 @@ func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value
 	if !es.active() || sig == nil || len(outs) != 1 {
 		return false
 	}
-	if anyDynamicCarrier(args) || anyDynamicCarrier(outs) {
-		return false
+	// A DYNAMIC non-body operand can't resolve; refuse. A dynamic OUTPUT is
+	// fine — the body is compiled and the data operand concrete, so the
+	// dispatch is faithful; the result type being Any only means a downstream
+	// typed dispatch over it polys or refuses (e.g. filter's element-typed
+	// result). So check inputs, not the output.
+	for i := range args {
+		if i != bodyPos && (args[i].Carrier && args[i].Dynamic) {
+			return false
+		}
 	}
 	ops := make([]emitOperand, len(args))
 	for i := range args {
