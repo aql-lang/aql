@@ -762,8 +762,17 @@ race-clean, alloc ceilings held):
   run time IFF callable (closure → VM-native; FnDef → island sub-engine;
   non-callable → left untouched, faithful to the interpreter).
 
-Ratchets now: **616 refused / 102 islanded** (refusals −35 from baseline).
-Compiled rows 1706 → 1741.
+- **P4 follow-on — VM-native fn-value dispatch.** `callDynamic` dispatches a
+  trivial-delegation native method (rand-int) VM-native via MatchSignature +
+  handler (the island stays the backstop for user-fn bodies). And **atom-keyed
+  gets now poly**: a data field returns directly, a named 0-arg method result
+  is auto-applied VM-native (`r.bool` — matching the interpreter's re-step), an
+  anonymous fn stays data, and a method needing args (`r.int`) flows to
+  CALL_DYNAMIC. Plus the no-init `fold` and dynamic-output `filter` closure
+  gaps closed.
+
+Ratchets now: **616 refused / 29 islanded** (islands 115 → 29 — the atom-keyed
+get bucket eliminated). Compiled rows 1706 → 1741.
 
 **Remaining buckets (each a dedicated unit, root cause identified):**
 
