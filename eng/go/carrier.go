@@ -960,15 +960,33 @@ func anyDynamicCarrier(vs []Value) bool {
 //
 // The mapping is a permutation-description slice: result[i] = args[mapping[i]].
 // Example: swap is ReturnsIdentity(1, 0); over is ReturnsIdentity(0, 1, 0).
+//
+// A DUPLICATED source index (dup `(0, 0)`, over `(0, 1, 0)`) would otherwise
+// return the same Value — one Value.ID — for several stack outputs, which
+// the bytecode emitter's per-value provenance (emit.go producedBy) cannot
+// tell apart: a `dup`-bodied higher-order word (`each [dup add]`) records
+// both of add's operands onto the LAST output, so the operand layout refuses
+// them as "not adjacent." Each output of a repeated source gets a fresh
+// identity (the carrier-identity DUP path) so the N copies stay distinct;
+// the source's own provenance is left untouched (no output keeps its ID).
+// Identity-only — runtime dispatch is unaffected (ReturnsFn is check-mode).
 func ReturnsIdentity(mapping ...int) ReturnsFunc {
 	return func(args []Value, _ *Registry) []Value {
+		counts := make(map[int]int, len(mapping))
+		for _, m := range mapping {
+			counts[m]++
+		}
 		out := make([]Value, len(mapping))
 		for i, m := range mapping {
 			if m < 0 || m >= len(args) {
 				out[i] = NewCarrier(TAny)
 				continue
 			}
-			out[i] = args[m]
+			v := args[m] // struct copy: the ID write below is local to v.
+			if counts[m] > 1 {
+				v.ID = GenerateID(IDPrefixForType(v.Parent))
+			}
+			out[i] = v
 		}
 		return out
 	}
