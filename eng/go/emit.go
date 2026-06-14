@@ -112,7 +112,9 @@ type emitBranch struct {
 	hasElse               bool // false = 2-arg if; its result is VARIADIC (0 or 1 values)
 	then, els             *EmitFragment
 	thenOut, elsOut       emitOperand
-	hasThenOut, hasElsOut bool // false when the arm DIVERGES (ends in break/continue)
+	hasThenOut, hasElsOut bool        // false when the arm DIVERGES (ends in break/continue)
+	elsIsVal              bool        // else arm is a plain VALUE operand (not a body fragment)
+	elsVal                emitOperand // the value-else operand (const/local/type) when elsIsVal
 	pos                   SrcPos
 }
 
@@ -512,6 +514,7 @@ type BranchRecord struct {
 	HasElse         bool
 	Then, Els       *EmitFragment
 	ThenStk, ElsStk []Value
+	ElsValue        *Value // non-nil: the else arm is this already-evaluated VALUE, not a body
 	Out             Value
 	Pos             SrcPos
 }
@@ -587,14 +590,33 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 		}
 		ev.br.then, ev.br.thenOut, ev.br.hasThenOut = b.Then, thenOut, hasThen
 		if b.HasElse {
-			elsOut, hasEls, ok := resolveArm(b.Els, b.ElsStk, "else")
-			if !ok {
-				return
-			}
-			ev.br.els, ev.br.elsOut, ev.br.hasElsOut = b.Els, elsOut, hasEls
-			if !hasThen && !hasEls {
-				es.MarkUncompilable("if: both branches diverge (Stage 2)")
-				return
+			if b.ElsValue != nil {
+				// Value-else: the else arm is an already-evaluated value
+				// (`if cond [then] 42`), not a `[…]` body. It lowers to a
+				// single push in the else arm. A COMPUTED else (an event
+				// result of a paren like `(add 1 2)`) is eagerly on the
+				// stack BEFORE the branch — that needs stack juggling the
+				// current single-result lowering doesn't do, so refuse it.
+				op, ok := es.resolveOperand(*b.ElsValue)
+				if !ok {
+					es.MarkUncompilable("if: else value of unknown provenance")
+					return
+				}
+				if op.kind == opEvent {
+					es.MarkUncompilable("if: computed else value (Stage 2 lowers literal/local else)")
+					return
+				}
+				ev.br.elsIsVal, ev.br.elsVal, ev.br.hasElsOut = true, op, true
+			} else {
+				elsOut, hasEls, ok := resolveArm(b.Els, b.ElsStk, "else")
+				if !ok {
+					return
+				}
+				ev.br.els, ev.br.elsOut, ev.br.hasElsOut = b.Els, elsOut, hasEls
+				if !hasThen && !hasEls {
+					es.MarkUncompilable("if: both branches diverge (Stage 2)")
+					return
+				}
 			}
 		}
 	}

@@ -674,14 +674,22 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 		jend = lw.emit(OpJmp, 0, br.pos)
 	}
 	(*lw.code)[jf].Arg = int32(len(*lw.code))
-	elsOut := func() *emitOperand {
-		if br.hasElsOut {
-			return &br.elsOut
+	if br.elsIsVal {
+		// Value-else: push the literal/local/type operand as the arm's
+		// single result (mirrors lowerFragment's const-out accounting —
+		// pushOperand tracked it; the merge slot below owns the count).
+		lw.pushOperand(br.elsVal, br.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1]
+	} else {
+		elsOut := func() *emitOperand {
+			if br.hasElsOut {
+				return &br.elsOut
+			}
+			return nil
+		}()
+		if reason := lw.lowerFragment(br.els, elsOut, br.pos); reason != "" {
+			return reason
 		}
-		return nil
-	}()
-	if reason := lw.lowerFragment(br.els, elsOut, br.pos); reason != "" {
-		return reason
 	}
 	if jend >= 0 {
 		(*lw.code)[jend].Arg = int32(len(*lw.code))
