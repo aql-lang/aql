@@ -58,13 +58,13 @@ var callableWords = map[string]callableWord{
 // unit, AnalyseFnBody records the body under it, finish closes it. ok is false
 // when the body refuses (StartFnCompile declined, or the analysis marked the
 // state uncompilable).
-func compileClosureBody(r *Registry, word string, bodyToks, inputs []Value, pos SrcPos) (int, bool) {
+func compileClosureBody(r *Registry, word string, bodyToks, inputs []Value, captures []CapturedBinding, pos SrcPos) (int, bool) {
 	es := r.Check.Emit
 	declared := []*Type{TAny}
 	paramNames := make([]string, len(inputs)) // all unnamed: body reads inputs off the stack
 	name := word + "$body"
-	key := FnAnalysisKey(name, inputs, nil, bodyToks)
-	unit, finish, ok := es.StartFnCompile(key, name, inputs, declared, paramNames, nil, false)
+	key := FnAnalysisKey(name, inputs, captures, bodyToks)
+	unit, finish, ok := es.StartFnCompile(key, name, inputs, declared, paramNames, captures, false)
 	if !ok {
 		return -1, false
 	}
@@ -75,7 +75,7 @@ func compileClosureBody(r *Registry, word string, bodyToks, inputs []Value, pos 
 	// Drop any summary a suspended (non-recording) analysis cached so the
 	// body re-runs under the armed unit and records.
 	delete(r.Check.FnSummaries, key)
-	stk := AnalyseFnBody(r, name, paramNames, bodyToks, inputs, nil, declared)
+	stk := AnalyseFnBody(r, name, paramNames, bodyToks, inputs, captures, declared)
 	finish(stk)
 	return unit, es.Compilable
 }
@@ -102,9 +102,10 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	if err != nil || bodyList.IsNil() {
 		return false
 	}
-	// A body referencing a check-time def / capture cannot bake into a unit
-	// the VM resolves; keep those on the island path for now.
-	if !bodyFreeForFallback(r, body) {
+	// A body with a flow-control sentinel (break/continue/return) targets an
+	// enclosing loop the VM can't reach across the call boundary — keep it on
+	// the whole-program fallback path.
+	if bodyHasSentinel(body) {
 		return false
 	}
 	inputs := spec.inputs(args)
@@ -112,6 +113,21 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 		return false
 	}
 	bodyToks := bodyList.Slice()
+
+	// Lexical captures: body words resolving to an ENCLOSING fn's binding
+	// (a param or body-local of a fn currently being compiled) ride as the
+	// closure's captures — resolved here in the enclosing scope, bound into
+	// the body unit's trailing slots at invocation. A module/global ref is
+	// not a capture (it bakes as a const in the body, or refuses the probe).
+	captures := ComputeCaptures(r, &FnSig{Body: bodyToks})
+	capOps := make([]emitOperand, len(captures))
+	for i, cb := range captures {
+		op, ok := r.Check.Emit.resolveOperand(cb.Value)
+		if !ok {
+			return false // an unreachable capture — keep the island path
+		}
+		capOps[i] = op
+	}
 
 	// The body compile re-runs the body (the ReturnsFn pass already emitted
 	// its diagnostics); drop any it re-emits so counts do not double.
@@ -122,7 +138,7 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// real program untouched (graceful fall-through to the island).
 	real := r.Check.Emit
 	r.Check.Emit = NewEmitState()
-	_, probeOk := compileClosureBody(r, word, bodyToks, inputs, pos)
+	_, probeOk := compileClosureBody(r, word, bodyToks, inputs, captures, pos)
 	r.Check.Emit = real
 	if !probeOk {
 		return false
@@ -130,9 +146,9 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 
 	// REAL: compile the body into the program (deterministic success after a
 	// clean probe), then record the dispatch with the body as a closure.
-	unit, realOk := compileClosureBody(r, word, bodyToks, inputs, pos)
+	unit, realOk := compileClosureBody(r, word, bodyToks, inputs, captures, pos)
 	if !realOk || unit < 0 {
 		return false
 	}
-	return real.RecordClosureCall(word, sig, args, spec.bodyPos, unit, outs, pos)
+	return real.RecordClosureCall(word, sig, args, spec.bodyPos, unit, capOps, outs, pos)
 }

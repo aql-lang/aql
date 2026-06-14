@@ -189,9 +189,17 @@ type Program struct {
 type CompiledFn struct {
 	Name    string
 	NParams int
-	NLocals int
-	Code    []Instr
-	Debug   []SrcPos
+	// NCaptures is how many of the NParams leading slots are CAPTURES (for a
+	// closure body unit): the per-invocation inputs fill slots
+	// 0..NParams-NCaptures-1, the captures fill the trailing NCaptures slots.
+	// OpPushClosure pops NCaptures values off the stack into the closure's
+	// captures; 0 for an ordinary user fn or a capture-free body. (For a user
+	// fn the captures still ride as trailing CALL_USER args, so NCaptures
+	// stays 0 there — it is closure-specific.)
+	NCaptures int
+	NLocals   int
+	Code      []Instr
+	Debug     []SrcPos
 	// Returns are the declared return types, enforced at RET against the
 	// body's result the same way the interpreter's ReturnCheck (__RC)
 	// does — via v.Is(exp), so a predicate refine runs its predicate, a

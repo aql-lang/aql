@@ -74,6 +74,12 @@ var comboParity = []string{
 	// --- closures captured in a loop ---
 	`def mk fn [[x:Integer] [Function] [([y:Integer] => [x add y])]] for 3 [(mk i) 10]`,
 
+	// --- code-body closures capturing an enclosing fn's param (plan P2) ---
+	`def f fn [[k:Integer] [List] [each [add k] [1 2 3]]] f 10`,
+	`def g fn [[k:Integer] [Integer] [fold [add] [1 2 3] k]] g 100`,
+	`def h fn [[m:Integer] [List] [each [mul m] (iota 3)]] h 5`,
+	`def n 10 each [add n] [1 2 3]`, // concrete module-def bakes as a const
+
 	// --- generics feeding islands ---
 	`def idg gen [(T extends Any)] fn [[x:T] [T] [x]] end each [idg] [1 2 3]`,
 
@@ -209,11 +215,15 @@ func TestCompiledCombinationPath(t *testing.T) {
 		// fn-value-call boundary: a get whose result is a method applied to
 		// trailing args must fall back (the method would be left unapplied).
 		{`"aql:rand" import end def r (Rand.with-seed 42) r.int 0 100`, "fallback"},
-		// Sentinel inside an island body must NOT island (falls back so the
-		// interpreter can unwind across the boundary).
+		// Sentinel inside a closure body must NOT compile (falls back so the
+		// interpreter can unwind break/continue across the boundary).
 		{`for 3 [each [break] [1 2]]`, "fallback"},
-		// A body reading a value-def reference falls back.
-		{`def n 10 each [add n] [1 2 3]`, "fallback"},
+		// A body reading a CONCRETE module-def bakes it as a const (native).
+		{`def n 10 each [add n] [1 2 3]`, "native"},
+		// A higher-order body capturing an enclosing fn's param compiles as a
+		// closure that threads the capture (plan P2 closure-capture).
+		{`def f fn [[k:Integer] [List] [each [add k] [1 2 3]]] f 10`, "native"},
+		{`def g fn [[k:Integer] [Integer] [fold [add] [1 2 3] k]] g 7`, "native"},
 	}
 	for _, c := range cases {
 		if got := pathOf(t, c.src); got != c.want {

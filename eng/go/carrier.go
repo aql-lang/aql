@@ -610,6 +610,25 @@ func bodyFreeForFallback(r *Registry, body Value) bool {
 	return free
 }
 
+// bodyHasSentinel reports whether a code body contains a flow-control
+// sentinel (break/continue/return). Such a body cannot compile to a closure
+// (or island): the sentinel targets an ENCLOSING loop/frame the VM cannot
+// reach across the call boundary, so the whole program must fall back and let
+// the interpreter unwind it. Unlike bodyFreeForFallback this does NOT reject
+// def references — the closure compile bakes a concrete def as a const or
+// threads an enclosing-fn binding as a capture, and the probe compile refuses
+// anything it cannot resolve.
+func bodyHasSentinel(body Value) bool {
+	found := false
+	WalkBodyWords([]Value{body}, func(w WordInfo, _ Value) {
+		switch w.Name {
+		case "break", "continue", "return":
+			found = true
+		}
+	})
+	return found
+}
+
 // disjunctPartitionCap bounds the alternative cross product a
 // partitioned dispatch will enumerate; beyond it the analysis falls
 // back to the whole-disjunct match (wide but terminating).

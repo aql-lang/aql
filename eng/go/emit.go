@@ -42,8 +42,12 @@ type emitOperand struct {
 	// isClosure marks a compiled code-BODY operand: closureUnit indexes
 	// Program.Fns and lowers to OpPushClosure (plan P2). A bool flag (not a
 	// sentinel) so existing operand literals stay valid by zero value.
+	// closureCaps are the body's lexical captures, resolved in the ENCLOSING
+	// scope and pushed (in CapturedBinding order) just before OpPushClosure,
+	// which pops them into the closure value.
 	isClosure   bool
 	closureUnit int
+	closureCaps []emitOperand
 }
 
 type emitCall struct {
@@ -957,7 +961,7 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 // the InvokeBody seam); the other operands resolve normally. Returns false,
 // leaving es UNTOUCHED, when an operand is dynamic or of unknown provenance —
 // the caller then keeps the island path.
-func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value, bodyPos, unit int, outs []Value, pos SrcPos) bool {
+func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value, bodyPos, unit int, capOps []emitOperand, outs []Value, pos SrcPos) bool {
 	if !es.active() || sig == nil || len(outs) != 1 {
 		return false
 	}
@@ -967,7 +971,7 @@ func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value
 	ops := make([]emitOperand, len(args))
 	for i := range args {
 		if i == bodyPos {
-			ops[i] = emitOperand{constIdx: -1, fromSeq: -1, localSlot: -1, typeIdx: -1, isClosure: true, closureUnit: unit}
+			ops[i] = emitOperand{constIdx: -1, fromSeq: -1, localSlot: -1, typeIdx: -1, isClosure: true, closureUnit: unit, closureCaps: capOps}
 			continue
 		}
 		op, ok := es.resolveOperand(args[i])
@@ -1295,7 +1299,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		// (added during loop lowering) stay anonymous.
 		names := make([]string, rec.numLoc)
 		copy(names, rec.locals)
-		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NLocals: rec.numLoc, Returns: rec.returns, LocalNames: names}
+		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NLocals: rec.numLoc, Returns: rec.returns, LocalNames: names}
 		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}}
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
 			return nil, "fn " + rec.name + ": " + reason, false
@@ -1366,9 +1370,19 @@ type lowerer struct {
 
 // pushOperand emits the push for a const, local, or type operand.
 func (lw *lowerer) pushOperand(op emitOperand, pos SrcPos) {
-	switch {
-	case op.isClosure:
+	if op.isClosure {
+		// Push the captures (enclosing-scope operands), then OpPushClosure
+		// pops them into the closure value. Net stack effect: +1.
+		for i := range op.closureCaps {
+			lw.pushOperand(op.closureCaps[i], pos)
+		}
 		lw.emit(OpPushClosure, op.closureUnit, pos)
+		lw.vm = lw.vm[:len(lw.vm)-len(op.closureCaps)]
+		lw.vm = append(lw.vm, -1)
+		lw.note()
+		return
+	}
+	switch {
 	case op.localSlot >= 0:
 		lw.emit(OpPushLocal, op.localSlot, pos)
 	case op.typeIdx >= 0:

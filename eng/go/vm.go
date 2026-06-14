@@ -96,15 +96,54 @@ func (vc *vmContext) invokeClosure(body Value, inputs []Value) ([]Value, error) 
 	}
 	fn := &vc.p.Fns[cl.Unit]
 	locals := make([]Value, fn.NLocals)
-	for i := 0; i < len(inputs) && i < fn.NParams; i++ {
+	// Inputs fill the leading param slots, captures the trailing ones
+	// (StartFnCompile registers params before captures).
+	nInputs := fn.NParams - len(cl.Captures)
+	for i := 0; i < len(inputs) && i < nInputs; i++ {
 		locals[i] = inputs[i]
 	}
 	for i, cv := range cl.Captures {
-		if slot := fn.NParams + i; slot < len(locals) {
+		if slot := nInputs + i; slot < len(locals) {
 			locals[slot] = cv
 		}
 	}
 	return vc.run(cl.Unit, locals, nil)
+}
+
+// runFallback executes one interpreter island (OpFallback): it preloads the
+// NIn threaded inputs (deepest-first) then the recorded span tokens onto a
+// reused sub-engine, runs it, and returns the operand stack with the island's
+// residual pushed. break/continue/return raised across the boundary propagate
+// via the shared registry FlowCtrl, as in any nested Run. (Deleted in plan
+// P7 once every shape compiles natively.)
+func (vc *vmContext) runFallback(fb *FallbackSpan, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	r := vc.r
+	if len(stack) < fb.NIn {
+		return nil, vmErrAt(curDebug, pc, "FALLBACK underflow at "+fb.Desc)
+	}
+	island := make([]Value, 0, fb.NIn+len(fb.Tokens))
+	island = append(island, stack[len(stack)-fb.NIn:]...)
+	island = append(island, fb.Tokens...)
+	stack = stack[:len(stack)-fb.NIn]
+	// Reuse one island sub-engine across every OpFallback in this run: it
+	// reloads its tape in place, so a hot island in a loop does not allocate
+	// a fresh engine+tape per iteration.
+	if vc.islandEng == nil {
+		vc.islandEng = New(r)
+		vc.islandEng.SetSource(r.Source)
+		vc.islandEng.reuseTape = true
+	}
+	results, err := vc.islandEng.Run(island)
+	if err != nil {
+		return nil, stampAt(err, curDebug, pc, r)
+	}
+	for _, rv := range results {
+		if IsWord(rv) || IsMark(rv) || IsMove(rv) || IsForward(rv) ||
+			IsOpenParen(rv) || IsSplice(rv) {
+			return nil, vmErrAt(curDebug, pc, "tape-coupled island result at "+fb.Desc)
+		}
+	}
+	return append(stack, results...), nil
 }
 
 // run executes from startUnit (unit -1 is the main program; >=0 indexes
@@ -152,7 +191,17 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 		case OpPushLocal:
 			stack = append(stack, locals[in.Arg])
 		case OpPushClosure:
-			stack = append(stack, NewClosure(int(in.Arg), nil))
+			nc := p.Fns[in.Arg].NCaptures
+			if len(stack) < nc {
+				return nil, vmErrAt(curDebug, pc, "PUSH_CLOSURE capture underflow")
+			}
+			var caps []Value
+			if nc > 0 {
+				caps = make([]Value, nc)
+				copy(caps, stack[len(stack)-nc:])
+				stack = stack[:len(stack)-nc]
+			}
+			stack = append(stack, NewClosure(int(in.Arg), caps))
 		case OpPushType:
 			// Resolve the CANONICAL node at run time — never a pooled
 			// copy (eng/go/CLAUDE.md, Canonical *Type Pointers). Types
@@ -248,41 +297,11 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			}
 			stack = append(stack, results...)
 		case OpFallback:
-			fb := &p.Fallbacks[in.Arg]
-			if len(stack) < fb.NIn {
-				return nil, vmErrAt(curDebug, pc, "FALLBACK underflow at "+fb.Desc)
-			}
-			// Build the island token stream: the NIn threaded inputs
-			// (deepest-first, exactly their operand-stack order) preloaded
-			// as literals, then the recorded span tokens. The island's
-			// sub-engine re-derives the construct's result the same way
-			// the interpreter does — soundness rides on the differential
-			// gate. break/continue/return raised across the island
-			// boundary propagate via the shared registry FlowCtrl, the
-			// same as any nested Run.
-			island := make([]Value, 0, fb.NIn+len(fb.Tokens))
-			island = append(island, stack[len(stack)-fb.NIn:]...)
-			island = append(island, fb.Tokens...)
-			stack = stack[:len(stack)-fb.NIn]
-			// Reuse one island sub-engine across every OpFallback in this
-			// RunProgram: it reloads its tape in place, so a hot island in
-			// a loop does not allocate a fresh engine+tape per iteration.
-			if vc.islandEng == nil {
-				vc.islandEng = New(r)
-				vc.islandEng.SetSource(r.Source)
-				vc.islandEng.reuseTape = true
-			}
-			results, err := vc.islandEng.Run(island)
+			ns, err := vc.runFallback(&p.Fallbacks[in.Arg], stack, curDebug, pc)
 			if err != nil {
-				return nil, stampAt(err, curDebug, pc, r)
+				return nil, err
 			}
-			for _, rv := range results {
-				if IsWord(rv) || IsMark(rv) || IsMove(rv) || IsForward(rv) ||
-					IsOpenParen(rv) || IsSplice(rv) {
-					return nil, vmErrAt(curDebug, pc, "tape-coupled island result at "+fb.Desc)
-				}
-			}
-			stack = append(stack, results...)
+			stack = ns
 		case OpJmp:
 			t := int(in.Arg)
 			// The only legal back-edge is a counted loop's trailing

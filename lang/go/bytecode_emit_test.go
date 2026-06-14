@@ -764,21 +764,23 @@ func TestEmitFallbackIsland(t *testing.T) {
 		}
 	}
 
-	// Negative: a body reading a value-def refuses (the def is a carrier
-	// at VM run time) — whole-program fallback, correct result.
-	if _, r := compile(t, `def n 10 each [add n] [1 2 3]`); r == "" {
-		t.Error("each with a def-referencing body compiled but must refuse")
+	// A body reading a CONCRETE module-def bakes it as a const in the
+	// closure body (plan P2 closure-capture / const-bake) — compiles native.
+	if got, r := compile(t, `def n 10 each [add n] [1 2 3]`); r != "" {
+		t.Errorf("each with a concrete def-referencing body refused: %s", r)
+	} else if strings.Contains(got, "FALLBACK") {
+		t.Errorf("each with a concrete def-referencing body islanded:\n%s", got)
 	}
 	b, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	out, compiled, err := b.RunCompiled(`def n 10 each [add n] [1 2 3]`)
-	if err != nil || compiled {
-		t.Fatalf("def-body fallback: compiled=%v err=%v", compiled, err)
+	if err != nil || !compiled {
+		t.Fatalf("def-body closure: compiled=%v err=%v", compiled, err)
 	}
 	if len(out) != 1 || out[0] != "[11 12 13]" {
-		t.Fatalf("def-body fallback = %v, want [11 12 13]", out)
+		t.Fatalf("def-body closure = %v, want [11 12 13]", out)
 	}
 
 	// A module-qualified higher-order word with a code body dispatches
@@ -965,21 +967,23 @@ func TestEmitThreadedFallbackIsland(t *testing.T) {
 		}
 	}
 
-	// Negative: a computed receiver with a def-referencing body still
-	// refuses (the def is a carrier at run time) — whole-program
-	// fallback, correct result.
-	if _, r := compile(t, `def n 10 each [add n] (iota 3)`); r == "" {
-		t.Error("threaded each with a def-referencing body compiled but must refuse")
+	// A computed receiver with a concrete def-referencing body compiles
+	// native: the def bakes as a const, the data threads as a computed
+	// operand (plan P2).
+	if got, r := compile(t, `def n 10 each [add n] (iota 3)`); r != "" {
+		t.Errorf("threaded each with a concrete def-referencing body refused: %s", r)
+	} else if strings.Contains(got, "FALLBACK") {
+		t.Errorf("threaded each with a concrete def-referencing body islanded:\n%s", got)
 	}
 	b, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	out, compiled, err := b.RunCompiled(`def n 10 each [add n] (iota 3)`)
-	if err != nil || compiled {
-		t.Fatalf("def-body threaded fallback: compiled=%v err=%v", compiled, err)
+	if err != nil || !compiled {
+		t.Fatalf("def-body threaded closure: compiled=%v err=%v", compiled, err)
 	}
 	if len(out) != 1 || out[0] != "[10 11 12]" {
-		t.Fatalf("def-body threaded fallback = %v, want [10 11 12]", out)
+		t.Fatalf("def-body threaded closure = %v, want [10 11 12]", out)
 	}
 }
