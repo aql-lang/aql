@@ -29,10 +29,18 @@ race-clean, alloc ceilings held). The runtime-independence machinery exists:
   (compiled programs still containing an `OpFallback`). Both are downward;
   P7 is gated on both reaching **0**.
 
-Current ratchets: **555 refused / 26 islanded** (from 651 / 115 at P0;
-616 / 29 before P5; 598 / 26 after P5; 580 / 26 after make carrier-identity;
-568 / 26 after value-def locals; 565 / 26 after dup carrier-identity).
-Compiled rows 1706 → 1810, 0 divergences throughout.
+Current ratchets: **545 refused / 26 islanded** (from 651 / 115 at P0;
+616 / 29 before P5; 598 / 26 after P5; 580 → 568 → 565 across carrier-identity;
+555 after predicate-type provenance). Compiled rows 1706 → 1820, 0 divergences
+throughout.
+
+Stage-2 lowering edges also closed this pass: a 3-arg `if` whose else arm is
+a plain VALUE (`if cond [then] 42` — literal / local / type, not a `[…]`
+body) now compiles (the else arm lowers to a single push). A COMPUTED else
+(a paren result eagerly on the stack before the branch) and a variadic
+STATEMENT-if (`if cond [raise …]` used as a guard, result discarded) still
+refuse — both need stack juggling the single-result branch lowering doesn't
+do yet.
 
 ## The recorder/lowerer model (shared context for the work below)
 
