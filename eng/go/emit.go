@@ -872,6 +872,24 @@ func (es *EmitState) RecordStrip(orig, stripped Value) {
 	}
 }
 
+// RememberOriginal records a CONCRETE value produced during the check
+// pass against its own ID, so that when a later carrier-strip reduces it
+// (preserving the ID — toCarrier keeps Value.ID) the lowerer can recover
+// the original via materialise/origByID. Used by impure-but-pure-data
+// constructors that run in check mode and whose result is otherwise
+// stripped before reaching a downstream operand — notably the predicate
+// constructors (`Integer gt 10`), whose DepScalarInfo payload toCarrier
+// strips to a bare base-type carrier, losing the bound.
+func (es *EmitState) RememberOriginal(v Value) {
+	if es == nil || es.suspended > 0 || !es.active() {
+		return
+	}
+	if v.Carrier || v.Dynamic || v.ID == "" {
+		return
+	}
+	es.origByID[v.ID] = v
+}
+
 // RecordPoly classifies a partitioned (per-alternative) dispatch.
 // Stage 1 cannot lower it; later stages emit CALL_NATIVE_POLY.
 func (es *EmitState) RecordPoly(word string) {
@@ -1223,6 +1241,15 @@ func isInertConst(v Value) bool {
 	case IntPayload, FloatPayload, StrPayload, BoolPayload, AtomPayload,
 		PathPayload, NonePayload, BigIntPayload, DecimalPayload,
 		TimePayload, DurationPayload, TimezonePayload:
+		return true
+	case DepScalarInfo:
+		// A predicate / refinement type (`Integer gt 10`): self-contained
+		// (base family + bound, no registry, no canonical-pointer hazard per
+		// eng CLAUDE.md), so the value bakes by value into the const pool.
+		// The bound is recovered for a stripped operand via origByID
+		// (RememberOriginal at the constructor); type-algebra words
+		// (tcmp/teq/tand/…) then run over the baked predicate at run time.
+		_ = d
 		return true
 	case RecordTypeInfo, OptionsTypeInfo, ChildTypeInfo, DisjunctInfo, ObjectTypeInfo:
 		// STRUCTURAL type bodies (what a bound type name pushes at a

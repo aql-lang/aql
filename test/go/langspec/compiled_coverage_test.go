@@ -30,7 +30,7 @@ import (
 // row is not a statically-invalid check-diagnostics row). The runtime-
 // independence phases lower it monotonically; it must reach 0 before the
 // interpreter fallback can be deleted (plan P7). Never raise it.
-const refusalCeiling = 565 // P0 651 -> P3 642 -> wide poly 618 -> P4 CALL_DYNAMIC (fn-value apply) 616 -> P5 multi/0-result calls 598 -> make carrier-identity (impure constructor fresh-id) 580 -> value-def locals (OpStoreLocal) 568 -> dup carrier-identity (distinct ids for repeated outputs) 565
+const refusalCeiling = 555 // P0 651 -> P3 642 -> wide poly 618 -> P4 CALL_DYNAMIC (fn-value apply) 616 -> P5 multi/0-result calls 598 -> make carrier-identity (impure constructor fresh-id) 580 -> value-def locals (OpStoreLocal) 568 -> dup carrier-identity (distinct ids for repeated outputs) 565 -> predicate-type operand provenance (DepScalar const-bake) 555
 
 // islandCeiling is the maximum number of compiled programs allowed to embed an
 // interpreter island (OpFallback). Islands re-enter the interpreter sub-engine
