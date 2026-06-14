@@ -111,6 +111,9 @@ var comboParity = []string{
 	// trailing args — the interpreter auto-applies; compiled must fall
 	// back (parity holds, value matches).
 	`"aql:rand" import end def r (Rand.with-seed 42) r.int 0 100`,
+	// CALL_DYNAMIC (plan P4): a fn-value applied to trailing args. A dynamic
+	// value that is NOT callable leaves value+args as the residual (parity).
+	`(do [iota 3]) 5`,
 
 	// --- F4: class/object `make` — a plain-data class compiles + chains;
 	// a class with a METHOD field stays on the fallback path ---
@@ -222,8 +225,10 @@ func TestCompiledCombinationPath(t *testing.T) {
 		{`def Point class {x:1} (make Point {}) is Point`, "native"},
 		{`def Point class {x:1} (make Point {}) typeof`, "native"},
 		// fn-value-call boundary: a get whose result is a method applied to
-		// trailing args must fall back (the method would be left unapplied).
-		{`"aql:rand" import end def r (Rand.with-seed 42) r.int 0 100`, "fallback"},
+		// trailing args now compiles — OpCallDynamic applies the Function at
+		// run time (plan P4). The atom-keyed get still islands, so the whole
+		// program islands rather than lowering fully native.
+		{`"aql:rand" import end def r (Rand.with-seed 42) r.int 0 100`, "island"},
 		// Sentinel inside a closure body must NOT compile (falls back so the
 		// interpreter can unwind break/continue across the boundary).
 		{`for 3 [each [break] [1 2]]`, "fallback"},

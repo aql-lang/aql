@@ -93,6 +93,15 @@ const (
 	// instead of islanding through a sub-engine (plan P3). Pops Arity,
 	// pushes one result; a no-match raises signature_error.
 	OpCallNativePoly
+	// OpCallDynamic applies a runtime FUNCTION value to Arg trailing args:
+	// the value sits below the Arg args on the stack. If it is callable (a
+	// compiled closure, or an FnDef the interpreter auto-applies — a method
+	// field like `r.int`), it is invoked and the result replaces value+args;
+	// if it is NOT callable, the value and args stay on the stack unchanged
+	// (matching the interpreter, which leaves a non-callable residual). This
+	// is the fn-value-call boundary (plan P4): a dynamic value preceding
+	// residual args.
+	OpCallDynamic
 )
 
 func (o Opcode) String() string {
@@ -127,6 +136,8 @@ func (o Opcode) String() string {
 		return "PUSH_CLOSURE"
 	case OpCallNativePoly:
 		return "CALL_NATIVE_POLY"
+	case OpCallDynamic:
+		return "CALL_DYNAMIC"
 	}
 	return fmt.Sprintf("OP(%d)", uint8(o))
 }
@@ -294,6 +305,8 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 		case OpCallNativePoly:
 			pr := p.PolyRefs[in.Arg]
 			fmt.Fprintf(sb, " p%-3d ; %s/%d (poly)", in.Arg, pr.Word, pr.Arity)
+		case OpCallDynamic:
+			fmt.Fprintf(sb, " /%d ; apply fn-value", in.Arg)
 		}
 		sb.WriteByte('\n')
 	}

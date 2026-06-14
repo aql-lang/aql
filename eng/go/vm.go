@@ -149,6 +149,66 @@ func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc 
 	return append(stack[:len(stack)-n], results...), nil
 }
 
+// callDynamic applies a runtime fn VALUE (sitting below n trailing args) to
+// those args — the fn-value-call boundary (plan P4). A compiled closure runs
+// VM-native via the re-entrant runner; any other callable (an FnDef method
+// like `r.int`) is applied through the island sub-engine, which auto-applies
+// it exactly as the interpreter does. A NON-callable value is left on the
+// stack with its args (the interpreter leaves a non-callable residual
+// untouched), so a dynamic value that turns out to be data does not diverge.
+func (vc *vmContext) callDynamic(n int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	r := vc.r
+	if len(stack) < n+1 {
+		return nil, vmErrAt(curDebug, pc, "CALL_DYNAMIC underflow")
+	}
+	base := len(stack) - n - 1
+	fnVal := stack[base]
+	args := stack[base+1:]
+
+	if cl, ok := fnVal.Data.(ClosurePayload); ok {
+		results, err := vc.invokeClosure(NewClosure(cl.Unit, cl.Captures), append([]Value(nil), args...))
+		if err != nil {
+			return nil, stampAt(err, curDebug, pc, r)
+		}
+		return append(stack[:base], results...), nil
+	}
+	if !isAppliableFn(fnVal) {
+		// Not callable: leave the value and its args as the residual,
+		// matching the interpreter (it does not apply a non-Function).
+		return stack, nil
+	}
+	// FnDef (e.g. a method field): apply via the island sub-engine, which
+	// auto-applies the Function to the forward args exactly as a nested Run.
+	island := make([]Value, 0, n+1)
+	island = append(island, fnVal)
+	island = append(island, args...)
+	if vc.islandEng == nil {
+		vc.islandEng = New(r)
+		vc.islandEng.SetSource(r.Source)
+		vc.islandEng.reuseTape = true
+	}
+	results, err := vc.islandEng.Run(island)
+	if err != nil {
+		return nil, stampAt(err, curDebug, pc, r)
+	}
+	for _, rv := range results {
+		if IsWord(rv) || IsMark(rv) || IsMove(rv) || IsForward(rv) ||
+			IsOpenParen(rv) || IsSplice(rv) {
+			return nil, vmErrAt(curDebug, pc, "tape-coupled dynamic result")
+		}
+	}
+	return append(stack[:base], results...), nil
+}
+
+// isAppliableFn reports whether a runtime value is a callable the interpreter
+// would auto-apply: a Function-typed value or an FnDef payload.
+func isAppliableFn(v Value) bool {
+	if _, ok := v.Data.(FnDefInfo); ok {
+		return true
+	}
+	return v.Parent != nil && v.Parent.ConformsTo(TFunction)
+}
+
 // runFallback executes one interpreter island (OpFallback): it preloads the
 // NIn threaded inputs (deepest-first) then the recorded span tokens onto a
 // reused sub-engine, runs it, and returns the operand stack with the island's
@@ -343,6 +403,12 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			stack = ns
 		case OpCallNativePoly:
 			ns, err := vc.callPoly(&p.PolyRefs[in.Arg], stack, curDebug, pc)
+			if err != nil {
+				return nil, err
+			}
+			stack = ns
+		case OpCallDynamic:
+			ns, err := vc.callDynamic(int(in.Arg), stack, curDebug, pc)
 			if err != nil {
 				return nil, err
 			}

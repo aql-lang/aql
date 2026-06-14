@@ -1257,18 +1257,31 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	if n := len(es.frames[0]); n > 0 {
 		lastPos = eventPos(es.frames[0][n-1])
 	}
-	// Fn-value-call boundary (report §9.1): the interpreter auto-applies
-	// a FUNCTION value sitting in the residual to the values that follow
-	// it (`r.int 0 100` — a map field that is a method, applied to 0
-	// 100). A dynamic carrier is statically Any, so the checker cannot
-	// tell a Function from data; if a dynamic value appears BEFORE the
-	// last residual position, the runtime auto-application would diverge
-	// from the compiled program, which leaves it unapplied. Refuse so the
-	// program falls back. A dynamic value as the LAST residual is fine —
-	// nothing follows it to apply.
-	for i := 0; i+1 < len(residual); i++ {
-		if residual[i].Dynamic {
-			return nil, "dynamic value precedes residual args (fn-value-call boundary)", false
+	// Fn-value-call boundary (report §9.1): the interpreter auto-applies a
+	// FUNCTION value sitting in the residual to the values that follow it
+	// (`r.int 0 100` — a method field applied to 0 100). A dynamic carrier
+	// is statically Any, so the checker cannot tell a Function from data.
+	// When a dynamic value leads the residual and the rest are non-dynamic
+	// args, emit OpCallDynamic: at run time it applies the value IF it is a
+	// Function, else leaves value+args as-is — faithful either way (plan
+	// P4). Any OTHER dynamic-precedes-args shape (a dynamic value mid-
+	// residual, or dynamic args) refuses.
+	applyDynamic := false
+	if len(residual) >= 2 && residual[0].Dynamic {
+		restStatic := true
+		for i := 1; i < len(residual); i++ {
+			if residual[i].Dynamic {
+				restStatic = false
+				break
+			}
+		}
+		applyDynamic = restStatic
+	}
+	if !applyDynamic {
+		for i := 0; i+1 < len(residual); i++ {
+			if residual[i].Dynamic {
+				return nil, "dynamic value precedes residual args (fn-value-call boundary)", false
+			}
 		}
 	}
 	vi := 0
@@ -1302,6 +1315,11 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	}
 	for _, op := range tail {
 		lw.pushOperand(op, lastPos)
+	}
+	if applyDynamic {
+		// The leading dynamic value (residual[0]) and its args are now on
+		// the stack; apply the value to the trailing args at run time.
+		lw.emit(OpCallDynamic, len(residual)-1, lastPos)
 	}
 
 	// Lower the compiled fn units. Tail positions are marked first so
